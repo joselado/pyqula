@@ -107,6 +107,21 @@ pip install pyqula-joselado
 ```
 
 ## Manual installation ##
+Clone this repository with
+
+```bash
+git clone https://github.com/joselado/pyqula
+```
+
+and "pyqula/src/pyqula" path to your Python script with
+
+```python
+import sys
+sys.path.append(PATH_TO_PYQULA)
+```
+
+
+
 Parts of the code are written in Fortran for a matter of performance.
 To compile those functions you need to execute "install.sh" In case
 they are not compiled, the library will still work but certain parts
