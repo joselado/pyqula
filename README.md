@@ -1,8 +1,6 @@
 # SUMMARY #
-This is a <span style="color:blue">**Py**</span>thon library to compute
-<span style="color:blue">**qu**</span>antum-<span style="color:blue">**la**</span>ttice 
-tight-binding models in different
-dimensionalities.
+This is a**Py**thon library to compute **qu**antum-**la**ttice 
+tight-binding models in different dimensionalities.
 
 # CAPABILITIES #
 - 0d, 1d, 2d and 3d systems
