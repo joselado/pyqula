@@ -1652,5 +1652,6 @@ def array2function_jit(r,v,ir):
 from .sculpt import image2island
 
 
-from .geometrytk.readgeometry import read_xyz
+from .geometrytk import readgeometry 
+read_xyz = readgeometry.read_xyz
 

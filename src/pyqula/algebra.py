@@ -4,7 +4,7 @@ from scipy.sparse import csc_matrix
 import scipy.linalg as dlg
 import scipy.sparse.linalg as slg
 import numpy as np
-from .algebratk import sparsetensor
+#from .algebratk import sparsetensor
 from numba import jit
 from . import parallel
 
