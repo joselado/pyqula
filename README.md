@@ -113,7 +113,7 @@ Clone this repository with
 git clone https://github.com/joselado/pyqula
 ```
 
-and "pyqula/src/pyqula" path to your Python script with
+and add the "pyqula/src/pyqula" path to your Python script with
 
 ```python
 import sys
