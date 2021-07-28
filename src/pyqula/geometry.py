@@ -1180,7 +1180,7 @@ def write_xyz(gin,output_file = "crystal.xyz",units=0.529,nsuper=1):
     names = ["C" for ix in x ] # create names
   # check that there are as many names as positions
   if len(names)!=len(x): raise
-  fg.write(str(len(x))+"\nGenerated with pyqula\n") # number of atoms
+  fg.write(str(len(x))+"\nGenerated with Python\n") # number of atoms
   for (n,ix,iy,iz) in zip(names,x,y,z):
     fg.write(n+"   "+str(ix)+ "     "+str(iy)+"   "+str(iz)+"  \n")
   fg.close()
