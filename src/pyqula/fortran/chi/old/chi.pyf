@@ -1,0 +1,28 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module fib2 ! in 
+    interface  ! in :fib2
+        subroutine calculate_xychi(wf_chi_i,ene_chi_i,wf_chi_j,ene_chi_j,ene_chi,temperature_chi,chi_total,norbitals,num_wf_i,num_wf_j,num_ene_chi) ! in :fib2:calculate_chi.f90
+            complex(kind=8) dimension(num_wf_i,norbitals),intent(in) :: wf_chi_i
+            real(kind=8) dimension(num_wf_i),intent(in),depend(num_wf_i) :: ene_chi_i
+            complex(kind=8) dimension(num_wf_j,norbitals),intent(in),depend(norbitals) :: wf_chi_j
+            real(kind=8) dimension(num_wf_j),intent(in),depend(num_wf_j) :: ene_chi_j
+            real(kind=8) dimension(num_ene_chi),intent(in) :: ene_chi
+            real(kind=8) intent(in) :: temperature_chi
+            complex(kind=8) dimension(num_ene_chi,0.5 * norbitals),intent(out),depend(num_ene_chi,norbitals) :: chi_total
+            integer, optional,intent(in),check(shape(wf_chi_i,1)==norbitals),depend(wf_chi_i) :: norbitals=shape(wf_chi_i,1)
+            integer, optional,intent(in),check(shape(wf_chi_i,0)==num_wf_i),depend(wf_chi_i) :: num_wf_i=shape(wf_chi_i,0)
+            integer, optional,intent(in),check(shape(wf_chi_j,0)==num_wf_j),depend(wf_chi_j) :: num_wf_j=shape(wf_chi_j,0)
+            integer, optional,intent(in),check(len(ene_chi)>=num_ene_chi),depend(ene_chi) :: num_ene_chi=len(ene_chi)
+        end subroutine calculate_xychi
+        subroutine occupation(energy,temperature,occ) ! in :fib2:calculate_chi.f90
+            real(kind=8) intent(in) :: energy
+            real(kind=8) intent(in) :: temperature
+            real(kind=8) intent(out) :: occ
+        end subroutine occupation
+    end interface 
+end python module fib2
+
+! This file was auto-generated with f2py (version:2).
+! See http://cens.ioc.ee/projects/f2py2e/

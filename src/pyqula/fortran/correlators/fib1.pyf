@@ -1,0 +1,18 @@
+!    -*- f90 -*-
+! Note: the context of this file is case sensitive.
+
+python module fib2 ! in 
+    interface  ! in :fib2
+        subroutine correlators(vecs,pairs,numv,dimv,numc,corr) ! in :fib2:correlatorsf90.f90
+            complex(kind=16) dimension(numv,dimv),intent(in) :: vecs
+            integer dimension(numc,2),intent(in) :: pairs
+            integer, optional,intent(in),check(shape(vecs,0)==numv),depend(vecs) :: numv=shape(vecs,0)
+            integer, optional,intent(in),check(shape(vecs,1)==dimv),depend(vecs) :: dimv=shape(vecs,1)
+            integer, optional,intent(in),check(shape(pairs,0)==numc),depend(pairs) :: numc=shape(pairs,0)
+            complex(kind=16) dimension(numc),intent(out),depend(numc) :: corr
+        end subroutine correlators
+    end interface 
+end python module fib2
+
+! This file was auto-generated with f2py (version:2).
+! See http://cens.ioc.ee/projects/f2py2e/
