@@ -16,13 +16,7 @@ dimensionalities and based on a variety of different lattices.
 - Quantum Transport
 
 # EXAMPLES #
-In the examples folder there are several examples of usage of the
-library. You will find among others:
-- Chern insulators, topological insulators and topological superconductors
-- Defects in lattice models
-- Magnetism, charge order and superconductivity stemming from interactions
-- Twisted van der Waals multilayers
-- Nodal-line semimetals 
+A variety of examples can be found in pyqula/examples
 
 ## Band structure of a honeycomb lattice
 ```python
