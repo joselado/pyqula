@@ -18,13 +18,13 @@ dimensionalities and based on a variety of different lattices.
 # EXAMPLES #
 In the examples folder there are several examples of usage of the
 library. You will find among others:
-- Quantum anomalous Hall and topological insulators
-- Topological superconductors and Shiba lattices
-- Magnetism in graphene materials
-- Twisted graphene multilayers
+- Chern insulators, topological insulators and topological superconductors
+- Defects in lattice models
+- Magnetism, charge order and superconductivity stemming from interactions
+- Twisted van der Waals multilayers
 - Nodal-line semimetals 
 
-## Band structure of graphene
+## Band structure of a honeycomb lattice
 ```python
 from pyqula import geometry
 g = geometry.honeycomb_lattice() # get the geometry object
@@ -32,7 +32,7 @@ h = g.get_hamiltonian() # get the Hamiltonian object
 h.get_bands() # compute the band structure
 ```
 
-## Mean field Hubbard model of a zigzag graphene ribbon
+## Mean field Hubbard model of a zigzag honeycomb ribbon
 ```python
 from pyqula import geometry
 from pyqula import scftypes
@@ -53,7 +53,7 @@ h = g.get_hamiltonian(mgenerator=twisted_matrix(ti=0.12))
 h.get_bands(nk=100)
 ```
 
-## Chern number of a quantum anomalous Hall insulator
+## Chern number of a Chern insulator
 ```python
 from pyqula import geometry
 from pyqula import topology
