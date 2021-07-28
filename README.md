@@ -1,5 +1,5 @@
 # SUMMARY #
-This is a**Py**thon library to compute **qu**antum-**la**ttice 
+This is a **Py**thon library to compute **qu**antum-**la**ttice 
 tight-binding models in different dimensionalities.
 
 # CAPABILITIES #
