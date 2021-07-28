@@ -1,7 +1,7 @@
 # SUMMARY #
-This is a Python library to compute quantum-lattice 
+This is a **Py**thon library to compute **qu**antum-**la**ttice 
 tight-binding models in different
-dimensionalities and based on a variety of different lattices.
+dimensionalities.
 
 # CAPABILITIES #
 - 0d, 1d, 2d and 3d systems
