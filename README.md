@@ -101,7 +101,7 @@ spectrum.multi_fermi_surface(h,nk=60,energies=np.linspace(-4,4,100),
 
 
 # INSTALLATION #
-# With pip #
+## With pip ##
 ```bash
 pip install pyqula-joselado
 ```
