@@ -1,5 +1,6 @@
-# AIM #
-This is a Python library to compute tight binding models in different
+# SUMMARY #
+This is a Python library to compute quantum-lattice 
+tight-binding models in different
 dimensionalities and based on a variety of different lattices.
 
 # CAPABILITIES #
@@ -7,7 +8,7 @@ dimensionalities and based on a variety of different lattices.
 - Band structures
 - Density of states
 - Include magnetism, spin-orbit coupling and superconductivity
-- Selfconsistent mean field calculations
+- Selfconsistent mean-field calculations with local/non-local interactions
 - Topological characterization of electronic structures
 - Green's function formalism for semi-infinite systems
 - Spectral functions
@@ -20,8 +21,8 @@ library. You will find among others:
 - Quantum anomalous Hall and topological insulators
 - Topological superconductors and Shiba lattices
 - Magnetism in graphene materials
-- Twisted bilayer graphene
-- Nodal line semimetals 
+- Twisted graphene multilayers
+- Nodal-line semimetals 
 
 ## Band structure of graphene
 ```python
