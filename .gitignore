@@ -1,0 +1,13 @@
+*.so
+*.dat
+*.swp
+*.pyc
+*.o
+*.OUT*
+*.in
+*.pkl
+__pycache__/
+*.npz
+*.in
+*.xyz
+docs/
