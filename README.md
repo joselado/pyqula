@@ -101,6 +101,12 @@ spectrum.multi_fermi_surface(h,nk=60,energies=np.linspace(-4,4,100),
 
 
 # INSTALLATION #
+# With pip #
+```bash
+pip install pyqula-joselado
+```
+
+## Manual installation ##
 Parts of the code are written in Fortran for a matter of performance.
 To compile those functions you need to execute "install.sh" In case
 they are not compiled, the library will still work but certain parts
