@@ -15,7 +15,7 @@ try:
   use_fortran = True
 except: 
   use_fortran = False
-  print("FORTRAN routines not present in geometry.py")
+#  print("FORTRAN routines not present in geometry.py")
 
 class Geometry:
   """ Class for a geometry in a system """

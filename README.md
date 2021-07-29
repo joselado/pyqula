@@ -103,7 +103,7 @@ spectrum.multi_fermi_surface(h,nk=60,energies=np.linspace(-4,4,100),
 # INSTALLATION #
 ## With pip (release version) ##
 ```bash
-pip install pyqula-joselado
+pip install pyqula
 ```
 
 ## Manual installation (most recent version) ##
@@ -113,24 +113,10 @@ Clone this repository with
 git clone https://github.com/joselado/pyqula
 ```
 
-and add the "pyqula/src/pyqula" path to your Python script with
+and add the "pyqula/src" path to your Python script with
 
 ```python
 import sys
-sys.path.append(PATH_TO_PYQULA)
+sys.path.append(PATH_TO_PYQULA+"/src")
 ```
-
-
-
-Parts of the code are written in Fortran for a matter of performance.
-To compile those functions you need to execute "install.sh" In case
-they are not compiled, the library will still work but certain parts
-will be substantially slower. Compiling the fortran routines requires
-having a fortran compiler, such as gfortran.
-
-Parts of the code rely on Python libraries
- - numpy
- - scipy
- - multiprocess
- - numba
 

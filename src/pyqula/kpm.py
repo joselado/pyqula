@@ -14,7 +14,7 @@ try:
   use_fortran = True
 except:
   use_fortran = False # use python routines
-  print("FORTRAN library not present, using default python one")
+#  print("FORTRAN library not present, using default python one")
 
 
 

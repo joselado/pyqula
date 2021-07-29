@@ -7,7 +7,7 @@ try:
     use_fortran=True
 except:
     use_fortran=False
-    print("FORTRAN not working in specialhopping")
+#    print("FORTRAN not working in specialhopping")
 
 
 

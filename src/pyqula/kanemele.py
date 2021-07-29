@@ -9,7 +9,7 @@ try:
   from . import kanemelef90
   use_fortran = True
 except:
-  print("Not possible to use FORTRAN rutines, kanemele.py")
+#  print("Not possible to use FORTRAN rutines, kanemele.py")
   use_fortran = False
 
 import numbers 
