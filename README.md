@@ -2,17 +2,41 @@
 This is a **Py**thon library to compute **qu**antum-**la**ttice 
 tight-binding models in different dimensionalities.
 
-# CAPABILITIES #
-- 0d, 1d, 2d and 3d systems
-- Band structures
-- Density of states
+
+# INSTALLATION #
+## With pip (release version) ##
+```bash
+pip install pyqula
+```
+
+## Manual installation (most recent version) ##
+Clone the Github repository with
+
+```bash
+git clone https://github.com/joselado/pyqula
+```
+
+and add the "pyqula/src" path to your Python script with
+
+```python
+import sys
+sys.path.append(PATH_TO_PYQULA+"/src")
+```
+
+
+
+
+# FUNCTIONALITIES #
+- Spinless, spinful and Nambu basis for orbitals
 - Include magnetism, spin-orbit coupling and superconductivity
+- Band structures and density of states
 - Selfconsistent mean-field calculations with local/non-local interactions
 - Topological characterization of electronic structures
 - Green's function formalism for semi-infinite systems
-- Spectral functions
-- Kernel polynomial techniques
+- Spectral functions in infinite geometries
+- Kernel polynomial based-methods
 - Quantum Transport
+- 0d, 1d, 2d and 3d tight binding models 
 
 # EXAMPLES #
 A variety of examples can be found in pyqula/examples
@@ -99,24 +123,4 @@ spectrum.multi_fermi_surface(h,nk=60,energies=np.linspace(-4,4,100),
         delta=0.1,nsuper=1)
 ```
 
-
-# INSTALLATION #
-## With pip (release version) ##
-```bash
-pip install pyqula
-```
-
-## Manual installation (most recent version) ##
-Clone this repository with
-
-```bash
-git clone https://github.com/joselado/pyqula
-```
-
-and add the "pyqula/src" path to your Python script with
-
-```python
-import sys
-sys.path.append(PATH_TO_PYQULA+"/src")
-```
 
