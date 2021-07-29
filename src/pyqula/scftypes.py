@@ -20,7 +20,7 @@ try:
   multicorrelator_bloch = correlatorsf90.multicorrelator_bloch
   use_multicorrelator = True
 except:
-  print("WARNING, FORTRAN not working in scftypes.py")
+#  print("WARNING, FORTRAN not working in scftypes.py")
   use_multicorrelator = False
 #  raise
 #  def multicorrelator

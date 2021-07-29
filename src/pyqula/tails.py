@@ -8,7 +8,7 @@ try:
   use_fortran = True
 except:
   use_fortran=False
-  print("WARNING, Fortran functions not working in tails")
+#  print("WARNING, Fortran functions not working in tails")
 
 
 

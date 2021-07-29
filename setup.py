@@ -4,11 +4,11 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="pyqula-joselado",
-    version="0.0.3",
+    name="pyqula",
+    version="0.0.2",
     author="Jose Lado",
     author_email="joselado@aalto.fi",
-    description="Python library for tight binding model",
+    description="Python library for quantum lattice tight binding models",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/joselado/pyqula",

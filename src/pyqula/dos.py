@@ -17,7 +17,7 @@ try:
   from . import dosf90 
   use_fortran = True
 except:
-  print("Something wrong with FORTRAN in DOS")
+#  print("Something wrong with FORTRAN in DOS")
   use_fortran = False
 
 
