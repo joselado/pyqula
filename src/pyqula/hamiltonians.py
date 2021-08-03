@@ -441,7 +441,7 @@ class Hamiltonian():
     def generate_spin_spiral(self,**kwargs):
         """ Generate a spin spiral antsaz in the Hamiltonian """
         return rotate_spin.generate_spin_spiral(self,**kwargs)
-    def get_magnetization(self,nkp=10):
+    def get_magnetization(self,**kwargs):
         """ Return the magnetization """
         mx = self.extract(name="mx")
         my = self.extract(name="my")
