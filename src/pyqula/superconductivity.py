@@ -582,7 +582,8 @@ def identify_superconductivity(h,tol=1e-5):
     if np.max(uum)>tol: out.append("up-up pairing")
     if np.max(ddm)>tol: out.append("down-down pairing")
     if np.max(udm)>tol: out.append("up-down pairing")
-
+    if np.sqrt(np.sum(h.get_average_dvector(non_unitarity=True)))>tol:
+        out.append("Non-unitary superconductivity")
     if h.dimensionality==0: return out
     k = np.random.random(3) # random k-vector
     m1 = h.get_hk_gen()(k) # get the Bloch hamiltonian
@@ -590,8 +591,8 @@ def identify_superconductivity(h,tol=1e-5):
     # now check if it has some symmetry
     singletp = np.sum(np.abs(extract_singlet_pairing(m1))) # singlet
     tripletp = np.sum(np.abs(extract_triplet_pairing(m1))) # triplet
-    if singletp>tol: out.append("Even superconductivity")
-    if tripletp>tol: out.append("Odd superconductivity")
+    if singletp>tol: out.append("Spin-singlet superconductivity")
+    if tripletp>tol: out.append("Spin-triplet superconductivity")
 #    print(np.round(d1-d2,2),tol)
     return out
 
