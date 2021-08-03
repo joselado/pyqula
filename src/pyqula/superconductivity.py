@@ -573,7 +573,7 @@ def identify_superconductivity(h,tol=1e-5):
     dd = h.get_multihopping()
     if dd.norm()<tol: return [] # nothing
     out = [] # initialize the list
-    out.append("Superconductivity") # is superconducting
+#    out.append("Superconductivity") # is superconducting
     dv = h.get_average_dvector() # get the average d-vector
     if dv[0]>tol: out.append("dx SC")
     if dv[1]>tol: out.append("dy SC")
