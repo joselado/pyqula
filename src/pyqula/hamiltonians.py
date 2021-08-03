@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import division
+from .helptk import get_docstring
 import numpy as np
 from scipy.sparse import csc_matrix,bmat,csr_matrix
 import scipy.linalg as lg
@@ -540,8 +541,8 @@ class Hamiltonian():
         """Return the density matrix"""
         from . import densitymatrix
         return densitymatrix.full_dm(self,**kwargs)
+    @get_docstring(superconductivity.average_hamiltonian_dvector)
     def get_average_dvector(self,**kwargs):
-        """Return a square average of the d-vector in the BZ"""
         return superconductivity.average_hamiltonian_dvector(self,**kwargs)
 
 
