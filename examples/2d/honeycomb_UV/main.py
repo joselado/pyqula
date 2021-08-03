@@ -16,7 +16,7 @@ g = geometry.honeycomb_lattice()
 filling = 0.5
 nk = 10
 h = g.get_hamiltonian(has_spin=True) # create hamiltonian of the system
-help(g.get_hamiltonian) ; exit()
+help(h.get_average_dvector) ; exit()
 mf = meanfield.guess(h,"random")
 scf = meanfield.Vinteraction(h,U=0.0,V1=4.0,nk=nk,filling=filling,mf=mf)
 from pyqula import scftypes

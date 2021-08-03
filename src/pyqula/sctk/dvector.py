@@ -31,7 +31,10 @@ def matrix2dvector(m):
 
 
 def average_hamiltonian_dvector(h,nk=10,spatial_sum=True):
-    """Compute the average d-vector of a Hamiltonian"""
+    """Compute the average d-vector of a Hamiltonian. Optional arguments
+       - nk = 10, number of kpoints in each direction
+       - spatial_sum = True, return sum over sites
+    """
     if not h.has_eh: raise
     f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
     ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
