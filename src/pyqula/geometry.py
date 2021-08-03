@@ -9,6 +9,9 @@ from . import supercell as supercelltk
 from . import checkclass
 import scipy.linalg as lg
 from numba import jit
+from .htk.g2h import get_hamiltonian
+from .helptk import get_docstring
+
 
 try:
   from . import supercellf90
@@ -125,9 +128,8 @@ class Geometry:
     self.x = r[0]
     self.y = r[1]
     self.z = r[2]
+  @get_docstring(get_hamiltonian) # inherint docstring
   def get_hamiltonian(self,**kwargs):
-    """ Create the hamiltonian for this geometry"""
-    from .htk.g2h import get_hamiltonian
     return get_hamiltonian(self,**kwargs)
   def write(self,**kwargs):
       """ Writes the geometry in file"""

@@ -2,6 +2,7 @@ import numpy as np
 from ..superconductivity import get_eh_sector
 from ..superconductivity import build_nambu_matrix
 from ..multihopping import MultiHopping
+from .. import algebra
 
 def extract_anomalous_dict(dd):
     """Given a dictionary, extract the anomalous part"""
@@ -69,6 +70,7 @@ def extract_pairing(m):
 
 def extract_triplet_pairing(m):
   """Extract the pairing from a matrix, assuming it has the Nambu form"""
+  m = algebra.todense(m) # dense matrix
   nr = m.shape[0]//4 # number of positions
   uu = np.array(np.zeros((nr,nr),dtype=np.complex)) # zero matrix
   dd = np.array(np.zeros((nr,nr),dtype=np.complex)) # zero matrix

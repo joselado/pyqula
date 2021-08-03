@@ -4,7 +4,11 @@ import numpy as np
 def get_hamiltonian(self,fun=None,has_spin=True,
                         is_sparse=False,spinful_generator=False,
                         is_multicell=False,mgenerator=None,**kwargs):
-    """ Create the hamiltonian for this geometry"""
+    """ Create the hamiltonian for this geometry. By default, it assumes
+    first neighbor hopping
+        - has_spin = True, whether if to include spin degree of freedom
+        - is_sparse = False, use sparse representation
+    """
     if self.dimensionality==3: is_multicell=True
     from ..hamiltonians import hamiltonian
     h = hamiltonian(self)  # create the object
