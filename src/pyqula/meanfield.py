@@ -301,7 +301,9 @@ def guess(h,mode="ferro",fun=0.1):
     hop[(0,0,0)] = h0.intra
     for t in h0.hopping: hop[tuple(t.dir)] = t.m
     return hop
-  else: raise
+  else:
+      print("Unrecognized initialization")
+      raise
   return h0.intra # return matrix
 
 from .algebra import braket_wAw

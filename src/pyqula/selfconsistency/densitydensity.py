@@ -295,7 +295,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
           mf = dict()
           for d in v: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))
           mf[(0,0,0)] = mf[(0,0,0)] + mf[(0,0,0)].T.conjugate()
-    elif type(mf):
+    elif type(mf)==str:
         from ..meanfield import guess
         mf = guess(h0,mode=mf) # overwrite
     else: pass # assume that it is a valid mf
