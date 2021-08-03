@@ -30,7 +30,21 @@ def matrix2dvector(m):
     return delta2dvector(uu,dd,ud) # return d-vector
 
 
-def average_hamiltonian_dvector(h,nk=10,spatial_sum=True):
+def dvector2nonunitarity(m):
+    """Given a matrix of dvectors, compute the non-unitarity"""
+    out = np.zeros(m.shape,dtype=np.complex)
+    n = m.shape[1]
+    for i in range(n): # loop over sites
+        for j in range(n): # loop over sites
+            d = m[:,i,j]
+            out[:,i,j] = 1j*np.cross(np.conjugate(d),d)
+    return out.real
+
+
+def average_hamiltonian_dvector(h,nk=10,
+    spatial_sum=True,
+    non_unitarity=False
+    ):
     """Compute the average d-vector of a Hamiltonian. Optional arguments
        - nk = 10, number of kpoints in each direction
        - spatial_sum = True, return sum over sites
@@ -39,6 +53,8 @@ def average_hamiltonian_dvector(h,nk=10,spatial_sum=True):
     f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
     ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
     out = np.array([f(k) for k in ks]) # compute d-vector matrices
+    # redefine in case you want the non-unitarity
+    if non_unitarity: out = [dvector2nonunitarity(o) for o in out]
     out = np.abs(out)**2 # square each term
     out = np.mean(out,axis=0) # average over k-points
     out = np.sum(out,axis=1) # sum over rows
