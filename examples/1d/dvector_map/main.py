@@ -9,15 +9,15 @@ g = geometry.chain()
 h = g.get_hamiltonian() # create hamiltonian of the system
 def J(r):
   return [0.,0.,2.]
-  return 2.*np.array([np.sin(r[0]*np.pi*2),np.cos(r[0]*np.pi*2),0.0])
+  return 2.*np.array([np.sin(r[0]*np.pi),np.cos(r[0]*np.pi),0.0])
 h.add_zeeman(J)
 h.write_magnetization()
 #h.get_bands() ; exit()
 h.add_swave(0.0)
-scf = meanfield.Vinteraction(h,V1=-1.0,nk=20,filling=0.2,mf=None)
+scf = meanfield.Vinteraction(h,V1=-1.0,nk=20,filling=0.2,mf="random")
 print("Triplet",scf.order_parameter("odd_SC"))
 print("Singlet",scf.order_parameter("even_SC"))
-print("Average d-vector",scf.hamiltonian.get_average_dvector(non_unitarity=True))
+print("Average non-unitarity of the d-vector",scf.hamiltonian.get_average_dvector(non_unitarity=True))
 from pyqula import scftypes
 print("Symmetry breaking",scf.identify_symmetry_breaking()) 
 scf.hamiltonian.get_bands(operator="electron") # get the Hamiltonian
