@@ -3,16 +3,17 @@ from . import extract
 
 def delta2dvector(uu,dd,ud):
     """Transform Deltas to dvectors"""
-    out = [(dd - uu)/2.,(dd+uu)/2j,ud] # compute the d-vector
+    out = [(dd + uu)/2.,-1j*(dd-uu)/2,ud] # compute the d-vector
     return np.array(out) # return dvectors (three matrices)
 
 def dvector2deltas(ds):
-  """Transform a certain dvector into deltauu, deltadd and deltaud"""
-  deltas = [0.,0.,0.]
-  deltas[0] = ds[0]+ds[1]
-  deltas[1] = -1j*(ds[0]-ds[1]) # this sign might not be ok
-  deltas[2] = ds[2]
-  return np.array(deltas)
+    """Transform a certain dvector into deltauu, deltadd and deltaud"""
+    # this function has probably a missing sign somewhere
+    deltas = [0.,0.,0.]
+    deltas[0] = ds[0]+ds[1]
+    deltas[1] = -1j*(ds[0]-ds[1]) # this sign might not be ok
+    deltas[2] = ds[2]
+    return np.array(deltas)
 
 
 def extract_dvector_from_hamiltonian(h):
@@ -90,4 +91,32 @@ def dvector_times_mij_map(h,nrep=4):
     m = np.array([rs[:,0],rs[:,1],rs[:,2],ds[:,0],ds[:,1],ds[:,2]]).T.real
     m = np.round(m,5) # round values
     np.savetxt("DxR_MAP.OUT",m) # write in the file
+
+
+def dvector_non_unitarity_map(h,nk=10,nrep=2):
+    """Compute a map of the d-vector non-unitarity"""
+    h = h.supercell(nrep) # make a supercell
+    f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
+    ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
+    out = np.array([f(k) for k in ks]) # compute d-vector matrices
+    # redefine in case you want the non-unitarity
+    out = [dvector2nonunitarity(o) for o in out] # non-unitarity
+    out = np.mean(out,axis=0) # average over k-points
+    ds = np.sum(out,axis=1).T # sum over rows
+    rs = h.geometry.r
+    m = np.array([rs[:,0],rs[:,1],rs[:,2],ds[:,0],ds[:,1],ds[:,2]]).T.real
+    m = np.round(m,5) # round values
+    np.savetxt("NON_UNITARITY_MAP.OUT",m) # write in the file
+
+
+def dvector_non_unitarity(h,nk=10,nrep=2):
+    """Compute the non-unitarity"""
+    f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
+    ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
+    out = np.array([f(k) for k in ks]) # compute d-vector matrices
+    # redefine in case you want the non-unitarity
+    out = [dvector2nonunitarity(o) for o in out] # non-unitarity
+    out = np.mean(out,axis=0) # average over k-points
+    ds = np.sum(out,axis=1).T # sum over rows
+    return ds
 

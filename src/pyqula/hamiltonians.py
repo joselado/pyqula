@@ -22,6 +22,7 @@ from . import rotate_spin
 from . import topology
 from . import ldos
 from . import increase_hilbert
+from .sctk import dvector
 from .algebratk import hamiltonianalgebra
 from .bandstructure import get_bands_nd
 
@@ -537,6 +538,9 @@ class Hamiltonian():
         if self.dimensionality==0:
             return ipr.ipr(self.intra,**kwargs) 
         else: raise # not implemented
+    @get_docstring(dvector.dvector_non_unitarity)
+    def get_dvector_non_unitarity(self,**kwargs):
+        return dvector.dvector_non_unitarity(self,**kwargs)
     def get_density_matrix(self,**kwargs):
         """Return the density matrix"""
         from . import densitymatrix
