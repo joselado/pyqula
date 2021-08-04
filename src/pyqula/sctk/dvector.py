@@ -99,7 +99,6 @@ def dvector_non_unitarity_map(h,nrep=2,**kwargs):
     rs = h.geometry.supercell(nrep).r # supercell positions
     from ..geometry import replicate_array
     ds = replicate_array(h.geometry,ds,nrep=nrep) # replicate
-    print(rs.shape,ds.shape)
     m = np.array([rs[:,0],rs[:,1],rs[:,2],ds[:,0],ds[:,1],ds[:,2]]).T
     np.savetxt("NON_UNITARITY_MAP.OUT",m) # write in the file
 
