@@ -93,23 +93,15 @@ def dvector_times_mij_map(h,nrep=4):
     np.savetxt("DxR_MAP.OUT",m) # write in the file
 
 
-def dvector_non_unitarity_map(h,nk=10,nrep=2):
+def dvector_non_unitarity_map(h,nrep=2,**kwargs):
     """Compute a map of the d-vector non-unitarity"""
-    h = h.supercell(nrep) # make a supercell
-    f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
-    ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
-    out = np.array([f(k) for k in ks]) # compute d-vector matrices
-    # redefine in case you want the non-unitarity
-    out = [dvector2nonunitarity(o) for o in out] # non-unitarity
-    out = np.mean(out,axis=0) # average over k-points
-    ds = np.sum(out,axis=1).T # sum over rows
+    ds = dvector_non_unitarity(h,**kwargs) # dvectors
     rs = h.geometry.r
-    m = np.array([rs[:,0],rs[:,1],rs[:,2],ds[:,0],ds[:,1],ds[:,2]]).T.real
-    m = np.round(m,5) # round values
+    m = np.array([rs[:,0],rs[:,1],rs[:,2],ds[:,0],ds[:,1],ds[:,2]]).T
     np.savetxt("NON_UNITARITY_MAP.OUT",m) # write in the file
 
 
-def dvector_non_unitarity(h,nk=10,nrep=2):
+def dvector_non_unitarity(h,nk=10):
     """Compute the non-unitarity"""
     f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
     ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
