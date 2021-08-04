@@ -39,7 +39,7 @@ def mz(m):
   n = m.shape[0]//2 # number of sites
   ds = np.zeros(n).real # pairing
   for i in range(n):
-    ds[i] = (m[2*i+1,2*i+1] - m[2*i,2*i]).real/2. # get the pairing
+    ds[i] = -(m[2*i+1,2*i+1] - m[2*i,2*i]).real/2. # get the pairing
   return ds
 
 

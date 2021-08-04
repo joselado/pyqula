@@ -503,6 +503,9 @@ class Hamiltonian():
     def extract(self,name): 
         """Extract something from the Hamiltonian"""
         return extract.extract_from_hamiltonian(self,name)
+    @get_docstring(dvector.dvector_non_unitarity_map)
+    def write_non_unitarity(self,**kwargs):
+        dvector.dvector_non_unitarity_map(self,**kwargs)
     def write_magnetization(self,nrep=5):
         """Extract the magnetization and write it in a file"""
         mx = self.extract("mx")
