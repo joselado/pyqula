@@ -1489,6 +1489,12 @@ from .neighbor import neighbor_directions
 from .neighbor import neighbor_cells
 
 
+def replicate_array(g,v,nrep=1):
+   """Replicate a certain array in a supercell"""
+   if len(np.array(v).shape)>1: # not one dimensional
+       return np.array([replicate_array(g,vi,nrep=nrep) for vi in v.T]).T
+   else: return np.array(v.tolist()*(nrep**g.dimensionality))
+
 
 def write_profile(g,d,name="PROFILE.OUT",nrep=3,normal_order=False):
   """Write a certain profile in a file"""
@@ -1497,11 +1503,12 @@ def write_profile(g,d,name="PROFILE.OUT",nrep=3,normal_order=False):
   else: d = np.array(d)
   go = g.copy() # copy geometry
   go = go.supercell(nrep) # create supercell
+  d = replicate_array(g,d,nrep=nrep) # replicate
   if normal_order:
-      m = np.array([go.x,go.y,go.z,d.tolist()*(nrep**g.dimensionality)]).T
+      m = np.array([go.x,go.y,go.z,d]).T
       header = "x        y       z        profile"
   else:
-      m = np.array([go.x,go.y,d.tolist()*(nrep**g.dimensionality),go.z]).T
+      m = np.array([go.x,go.y,d,go.z]).T
       header = "x        y     profile      z"
   np.savetxt(name,m,fmt='%.5f',delimiter="    ",header=header) # save in file
 
