@@ -29,6 +29,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 # FUNCTIONALITIES #
 ## Single particle Hamiltonians ##
 - Spinless, spinful and Nambu basis for orbitals
+- Full non-collinear electron and Nambu formalism
 - Include magnetism, spin-orbit coupling and superconductivity
 - Band structures with state-resolved expectation values
 - Momentum-resolved spectral functions
