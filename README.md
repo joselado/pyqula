@@ -31,6 +31,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 - Spinless, spinful and Nambu basis for orbitals
 - Include magnetism, spin-orbit coupling and superconductivity
 - Band structures with state-resolved expectation values
+- Momentum-resolved spectral functions
 - Local and full operator-resolved density of states
 - 0d, 1d, 2d and 3d tight binding models 
 
@@ -39,6 +40,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 - Both collinear and non-collinear formalism
 - Anomalous mean-field for non-collinear superconductors
 - Full selfconsistency with all Wick terms for non-collinear superconductors
+- Constrained and unconstrained mean-field calculations
 - Automatic identification of order parameters for symmetry broken states
 
 ## Topological characterization ##
