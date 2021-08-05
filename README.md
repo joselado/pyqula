@@ -57,12 +57,12 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 - Operator-resolved spectral fucntions
 - Green's function renormalization algorithm
 
-## Kernel polynomial based-methods ##
+## Chebyshev kernel polynomial based-algorithms ##
 - Local and full spectral functions
 - Non-local correlators and Green's functions
 - Locally resolved expectation values
 - Operator resolved spectral functions
-- Reaching system sizes of 10000000 atoms on a laptop
+- Reaching system sizes up to 10000000 atoms on a single-core laptop
 
 ## Quantum transport ##
 - Metal-metal transport
