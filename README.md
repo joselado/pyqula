@@ -68,7 +68,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 - Metal-metal transport
 - Metal-superconductor transport
 - Fully non-collinear Nambu basis
-- Non-equilibrium Green's fucntion formalism
+- Non-equilibrium Green's function formalism
 - Operator-resolved transport
 
 # EXAMPLES #
