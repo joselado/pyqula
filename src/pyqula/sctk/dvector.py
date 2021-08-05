@@ -8,6 +8,7 @@ def delta2dvector(uu,dd,ud):
 
 def dvector2deltas(ds):
     """Transform a certain dvector into deltauu, deltadd and deltaud"""
+    raise # this must be checked
     # this function has probably a missing sign somewhere
     deltas = [0.,0.,0.]
     deltas[0] = ds[0]+ds[1]
