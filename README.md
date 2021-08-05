@@ -30,7 +30,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 ## Single particle Hamiltonians ##
 - Spinless, spinful and Nambu basis for orbitals
 - Include magnetism, spin-orbit coupling and superconductivity
-- Band structures with state-resolved expectation vlaues
+- Band structures with state-resolved expectation values
 - Local and full operator-resolved density of states
 - 0d, 1d, 2d and 3d tight binding models 
 
