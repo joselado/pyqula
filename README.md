@@ -27,16 +27,49 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 
 
 # FUNCTIONALITIES #
+## Single particle Hamiltonians ##
 - Spinless, spinful and Nambu basis for orbitals
 - Include magnetism, spin-orbit coupling and superconductivity
-- Band structures and density of states
-- Selfconsistent mean-field calculations with local/non-local interactions
-- Topological characterization of electronic structures
-- Green's function formalism for semi-infinite systems
-- Spectral functions in infinite geometries
-- Kernel polynomial based-methods
-- Quantum Transport
+- Band structures with state-resolved expectation vlaues
+- Local and full operator-resolved density of states
 - 0d, 1d, 2d and 3d tight binding models 
+
+## Interacting mean-field Hamiltonians ##
+- Selfconsistent mean-field calculations with local/non-local interactions
+- Both collinear and non-collinear formalism
+- Anomalous mean-field for non-collinear superconductors
+- Full selfconsistency with all Wick terms for non-collinear superconductors
+- Automatic identification of order parameters for symmetry broken states
+
+## Topological characterization ##
+- Berry phases, Berry curvatures, Chern numbers and Z2 invariants
+- Operator-resolved Chern numbers and Berry density
+- Frequency resolved topological density
+- Spatially resolved topological flux
+- Real-space Chern density for amorphous systems
+- Wilson loop and Green's function formalism
+
+## Spectral functions ##
+- Spectral functions in infinite geometries
+- Surface spectral functions for semi-infinite systems
+- Interfacial spectral function in semi-infintie junctions
+- Single impurities in infinite systems
+- Operator-resolved spectral fucntions
+- Green's function renormalization algorithm
+
+## Kernel polynomial based-methods ##
+- Local and full spectral functions
+- Non-local correlators and Green's functions
+- Locally resolved expectation values
+- Operator resolved spectral functions
+- Reaching system sizes of 10000000 atoms on a laptop
+
+## Quantum transport ##
+- Metal-metal transport
+- Metal-superconductor transport
+- Fully non-collinear Nambu basis
+- Non-equilibrium Green's fucntion formalism
+- Operator-resolved transport
 
 # EXAMPLES #
 A variety of examples can be found in pyqula/examples
