@@ -42,7 +42,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 A variety of examples can be found in pyqula/examples
 
 
-## Band structure of a kagome lattice
+## Band structure of a Kagome lattice
 ```python
 from pyqula import geometry
 g = geometry.kagome_lattice() # get the geometry object
@@ -50,7 +50,7 @@ h = g.get_hamiltonian() # get the Hamiltonian object
 h.get_bands() # compute the band structure
 ```
 
-## d-vector non-unitarity of an interaction-driven spin-triplet superconductor
+## Non-unitarity of a spin-triplet superconductor
 ```python
 from pyqula import geometry
 from pyqula import meanfield
