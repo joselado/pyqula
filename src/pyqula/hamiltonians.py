@@ -200,6 +200,7 @@ class Hamiltonian():
     def add_swave(self,*args,**kwargs):
         """ Adds swave superconducting pairing"""
         superconductivity.add_swave_to_hamiltonian(self,*args,**kwargs)
+    def setup_nambu_spinor(self): self.add_swave(0.0)
     def get_anomalous_hamiltonian(self):
         """Return a Hamiltonian only with the anomalous part"""
         return superconductivity.get_anomalous_hamiltonian(self)
@@ -252,6 +253,7 @@ class Hamiltonian():
         self.turn_spinful()
         from .magnetism import add_magnetism
         add_magnetism(self,m)
+    def add_exchange(self,m): self.add_magnetism(m)
     def turn_spinful(self,enforce_tr=False):
       """Turn the hamiltonian spinful""" 
       if self.has_spin: return # already spinful
