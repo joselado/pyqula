@@ -50,7 +50,7 @@ h = g.get_hamiltonian() # get the Hamiltonian object
 h.get_bands() # compute the band structure
 ```
 
-## Non-unitarity of a spin-triplet superconductor
+## Non-unitarity of an interacting spin-triplet superconductor
 ```python
 from pyqula import geometry
 from pyqula import meanfield
