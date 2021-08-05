@@ -364,48 +364,12 @@ def nambu2block(m):
 from .sctk.extract import extract_pairing
 from .sctk.extract import extract_singlet_pairing
 from .sctk.extract import extract_triplet_pairing
+from .sctk.pairing import pairing_generator
 
-
-def add_pairing_to_hamiltonian(self,delta=0.0,mode="swave"):
+def add_pairing_to_hamiltonian(self,**kwargs):
     """ Add a general pairing matrix to a Hamiltonian"""
 #    self.get_eh_sector = get_eh_sector_odd_even # assign function
-#    if mode is None: df = delta # assume function is given
-    from .geometry import same_site
-    if callable(delta): deltaf = delta # input is a function
-    else: deltaf = lambda x: delta
-    if callable(mode):
-        weightf = mode # mode is a function
-    elif mode=="swave":
-        weightf = lambda r1,r2: same_site(r1,r2)*np.identity(2)
-    elif mode=="antihaldane":
-        from .kanemele import get_haldane_function
-        f = get_haldane_function(self.geometry,stagger=True)
-        weightf = lambda r1,r2: f(r1,r2)*np.identity(2)
-    elif mode=="haldane":
-        from .kanemele import get_haldane_function
-        f = get_haldane_function(self.geometry,stagger=False)
-        weightf = lambda r1,r2: f(r1,r2)*np.identity(2)
-    elif mode=="swavez":
-        weightf = lambda r1,r2: same_site(r1,r2)*tauz
-    elif mode=="px":
-        weightf = lambda r1,r2: px(r1,r2)
-    elif mode=="swaveA":
-        weightf = lambda r1,r2: swaveA(self.geometry,r1,r2)
-    elif mode=="swaveB":
-        weightf = lambda r1,r2: swaveB(self.geometry,r1,r2)
-    elif mode=="swavesublattice":
-        def weightf(r1,r2):
-          return swaveB(self.geometry,r1,r2) - swaveA(self.geometry,r1,r2)
-    elif mode=="dx2y2":
-        weightf = lambda r1,r2: dx2y2(r1,r2)
-    elif mode=="snn":
-        weightf = lambda r1,r2: swavenn(r1,r2)
-    elif mode=="C3nn":
-        weightf = lambda r1,r2: C3nn(r1,r2)
-    elif mode=="SnnAB":
-        weightf = lambda r1,r2: SnnAB(self.geometry,r1,r2)
-    else: raise
-    df = lambda r1,r2: deltaf((r1+r2)/2.)*weightf(r1,r2) # delta times weight
+    df = pairing_generator(self,**kwargs) # function that outputs a 2x2 matrix
     self.turn_nambu() # add electron hole terms
     r = self.geometry.r # positions 
     m = add_pairing(df,r1=r,r2=r) # intra cell
@@ -413,7 +377,7 @@ def add_pairing_to_hamiltonian(self,delta=0.0,mode="swave"):
     if self.dimensionality>0:
       if not self.is_multicell: # for multicell hamiltonians
         self.turn_multicell()
-        print("Converting Hamiltonian to multicell")
+#        print("Converting Hamiltonian to multicell")
       from .multicell import Hopping
       for d in self.geometry.neighbor_directions(): # loop over directions
         # this is a workaround to be able to do triplets
@@ -434,81 +398,6 @@ def add_pairing_to_hamiltonian(self,delta=0.0,mode="swave"):
 iden = np.matrix([[1.,0.],[0.,1.]],dtype=np.complex)
 taux = np.matrix([[0.,1.],[1.,0.]],dtype=np.complex)
 tauz = np.matrix([[1.,0.],[0.,-1.]],dtype=np.complex)
-
-def px(r1,r2):
-    """Function with first neighbor px profile"""
-    dr = r1-r2 ; dr2 = dr.dot(dr)
-    if 0.99<dr2<1.001: return dr[0]*tauz
-    return 0.0*tauz
-
-
-
-def dx2y2(r1,r2):
-    """Function with first neighbor dx2y2 profile"""
-    dr = r1-r2
-    dr2 = dr.dot(dr)
-    if 0.99<dr2<1.001: # first neighbor
-        return (dr[0]**2 - dr[1]**2)*iden
-    return 0.0*iden
-
-
-
-def swavenn(r1,r2):
-    """Function with first neighbor dx2y2 profile"""
-    dr = r1-r2
-    dr2 = dr.dot(dr)
-    if 0.99<dr2<1.001: # first neighbor
-        return 1.0*iden
-    return 0.0*iden
-
-
-def C3nn(r1,r2):
-    """Function with first neighbor C3 profile"""
-    dr = r1-r2
-    dr2 = dr.dot(dr)
-    if 0.99<dr2<1.001: # first neighbor
-#        return dr[0]
-        phi = np.arctan2(dr[1],dr[0]) # angle
-        return 1.0*np.exp(1j*phi)*tauz
-    return 0.0*tauz
-
-
-def SnnAB(g,r1,r2):
-    """Swave between AB"""
-    dr = r1-r2
-    dr2 = dr.dot(dr)
-    if 0.99<dr2<1.001: # first neighbor
-        i = g.get_index(r1,replicas=True)
-        j = g.get_index(r2,replicas=True)
-        if g.sublattice[i]==1 and g.sublattice[j]==-1:
-          return 1.0*tauz
-        else: return -1.0*tauz
-#          return 1.0*np.matrix([[1.,0.],[0.,0.]])
-    return 0.0*iden
-
-def swaveA(g,r1,r2):
-    """Swave only in A"""
-    dr = r1-r2
-    dr2 = dr.dot(dr)
-    if dr2<0.001: # first neighbor
-        i = g.get_index(r1,replicas=False)
-        if i is None: return 0.0
-        if g.sublattice[i]==1:
-          return 1.0*iden
-    return 0.0*iden
-
-
-def swaveB(g,r1,r2):
-    """Swave only in A"""
-    dr = r1-r2
-    dr2 = dr.dot(dr)
-    if dr2<0.001: # first neighbor
-        i = g.get_index(r1,replicas=False)
-        if i is None: return 0.0
-        if g.sublattice[i]==-1:
-          return 1.0*iden
-    return 0.0*iden
-
 
 
 

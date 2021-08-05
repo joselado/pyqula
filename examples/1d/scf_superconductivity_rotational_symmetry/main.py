@@ -6,14 +6,14 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 import numpy as np
 from pyqula import geometry,meanfield
 def get():
-    g = geometry.single_square_lattice()
+    g = geometry.chain()
     h = g.get_hamiltonian() # create hamiltonian of the system
     J = np.random.random(3) - 0.5
     J = J/np.sqrt(J.dot(J))
     print("Exchange",J)
     J = J*2
     h.add_zeeman(J)
-    h.add_swave(0.0)
+    h.add_swave(0.1)
     scf = meanfield.Vinteraction(h,V1=-1.0,nk=10,filling=0.1,mf="random",
         constrains = ["no_normal_term"],
         verbosity=1)

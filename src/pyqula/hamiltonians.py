@@ -204,9 +204,9 @@ class Hamiltonian():
     def get_anomalous_hamiltonian(self):
         """Return a Hamiltonian only with the anomalous part"""
         return superconductivity.get_anomalous_hamiltonian(self)
-    def add_pairing(self,delta=0.0,**kwargs):
+    def add_pairing(self,**kwargs):
       """ Add a general pairing matrix, uu,dd,ud"""
-      superconductivity.add_pairing_to_hamiltonian(self,delta=delta,**kwargs)
+      superconductivity.add_pairing_to_hamiltonian(self,**kwargs)
     def same_hamiltonian(self,*args,**kwargs):
         """Check if two hamiltonians are the same"""
         return hamiltonianmode.same_hamiltonian(self,*args,**kwargs)
