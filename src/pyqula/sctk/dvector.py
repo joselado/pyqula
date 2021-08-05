@@ -6,7 +6,19 @@ def delta2dvector(uu,dd,ud):
     out = [(dd + uu)/2.,-1j*(dd-uu)/2,ud] # compute the d-vector
     return np.array(out) # return dvectors (three matrices)
 
-def dvector2deltas(ds):
+
+def dvector2delta(ds):
+    """Transform a certain dvector into deltauu, deltadd and deltaud"""
+    ds = np.array(ds)
+    delta = [0.,0.,0.]
+    delta[0] = ds[0]-1j*ds[1] # up up
+    delta[1] = ds[0]+1j*ds[1] # down down
+    delta[2] = ds[2] # up down
+    return np.array(delta) # return the delta
+
+dvector2deltas = dvector2delta
+
+def dvector2deltas_old(ds):
     """Transform a certain dvector into deltauu, deltadd and deltaud"""
     raise # this must be checked
     # this function has probably a missing sign somewhere
