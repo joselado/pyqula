@@ -489,7 +489,11 @@ def hubbard(h,U=1.0,constrains=[],**kwargs):
 
 def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
         constrains=[],Vr=None,**kwargs):
-    """Wrapper to perform a Hubbard model calculation"""
+    """Perform a mean-field calculation with density-density interactions
+    - U, local Hubbard interaction
+    - V1, first neighbor interaction
+    - V2, second neighbor interaction
+    """
     h = h.get_multicell() # multicell Hamiltonian
     h.turn_dense()
     # define the function

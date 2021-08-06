@@ -55,6 +55,8 @@ class Operator():
                 return self*Operator(a) # convert to operator
         else:
             return self*Operator(a) # convert to operator
+    def __rmul__(self,a):
+        return Operator(a)*self
     def __add__(self,a):
         """Define the add method"""
         if type(a)==Operator:
