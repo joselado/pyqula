@@ -103,7 +103,6 @@ d = h.get_dvector_non_unitarity() # non-unitarity of spin-triplet
 ## Mean-field with local interactions of a zigzag honeycomb ribbon
 ```python
 from pyqula import geometry
-from pyqula import scftypes
 g = geometry.honeycomb_zigzag_ribbon(10) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian() # create hamiltonian of the system
 h = h.get_mean_field_hamiltonian(U=1.0,filling=0.5,mf="ferro")
