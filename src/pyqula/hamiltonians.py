@@ -22,6 +22,7 @@ from . import rotate_spin
 from . import topology
 from . import ldos
 from . import increase_hilbert
+from .meanfield import Vinteraction
 from .sctk import dvector
 from .algebratk import hamiltonianalgebra
 from .bandstructure import get_bands_nd
@@ -345,6 +346,9 @@ class Hamiltonian():
         """Return a multihopping object"""
         from .multihopping import MultiHopping
         return MultiHopping(self.get_dict())
+    @get_docstring(Vinteraction)
+    def get_mean_field_hamiltonian(self,**kwargs):
+        return Vinteraction(self,**kwargs).hamiltonian
     def copy(self):
         """
         Return a copy of the hamiltonian

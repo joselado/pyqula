@@ -10,11 +10,17 @@ def get():
 #    g = g.supercell(4) ; g.dimensionality = 0
     h = g.get_hamiltonian() # create hamiltonian of the system
     J = np.random.random(3) - 0.5
-    J = np.array([0.,0.,1.])
     J = J/np.sqrt(J.dot(J))
-#    print("Exchange",J)
-#    h.add_zeeman(J)
     h.shift_fermi(1.0)
+    h.add_zeeman(J)
+#    O = J[0]*h.get_operator("sx") + J[1]*h.get_operator("sy") + J[2]*h.get_operator("sz")
+#    h.get_bands(operator=O) ; exit()
+#    h = h.get_mean_field_hamiltonian(U=1.0,filling=0.1)
+#    Jo = h.get_magnetization()[0]
+#    Jo = Jo/np.sqrt(Jo.dot(Jo))
+#    print("Input exchange",J)
+#    print("Output exchange",Jo)
+#    exit()
     dr = np.random.random(3) ; dr = dr/np.sqrt(dr.dot(dr)) # first vector
     di = np.random.random(3) ; di = np.cross(dr,di)
     di = di/np.sqrt(di.dot(di)) # second vector

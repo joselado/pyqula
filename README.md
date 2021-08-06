@@ -89,15 +89,14 @@ h.get_bands() # compute the band structure
 ## Non-unitarity of an interacting spin-triplet superconductor
 ```python
 from pyqula import geometry
-from pyqula import meanfield
 g = geometry.triangular_lattice() # generate the geometry
 h = g.get_hamiltonian() # create Hamiltonian of the system
 h.add_exchange([3.,3.,3.]) # add exchange field
 h.setup_nambu_spinor() # initialize the Nambu basis
 # perform a superconducting non-collinear mean-field calculation
-scf = meanfield.Vinteraction(h,V1=-1.0,filling=0.3,mf="random")
+h = h.get_mean_field_hamiltonian(V1=-1.0,filling=0.3,mf="random")
 # compute the non-unitarity of the spin-triplet superconducting d-vector
-d = scf.hamiltonian.get_dvector_non_unitarity() # non-unitarity of spin-triplet
+d = h.get_dvector_non_unitarity() # non-unitarity of spin-triplet
 ```
 
 
@@ -107,9 +106,7 @@ from pyqula import geometry
 from pyqula import scftypes
 g = geometry.honeycomb_zigzag_ribbon(10) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian() # create hamiltonian of the system
-mf = scftypes.guess(h,"ferro",fun=lambda r: [0.,0.,1.])
-scf = scftypes.hubbardscf(h,nkp=30,filling=0.5,mf=mf)
-h = scf.hamiltonian # get the Hamiltonian
+h = h.get_mean_field_hamiltonian(U=1.0,filling=0.5,mf="ferro")
 h.get_bands(operator="sz") # calculate band structure
 ```
 
@@ -125,12 +122,11 @@ h.get_bands(nk=100)
 ## Chern number of a Chern insulator
 ```python
 from pyqula import geometry
-from pyqula import topology
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian()
 h.add_rashba(0.3) # Rashba spin-orbit coupling
 h.add_zeeman([0.,0.,0.3]) # Zeeman field
-c = topology.chern(h) # compute Chern number
+c = h.get_chern(h) # compute Chern number
 print("Chern number is ",c)
 ```
 
