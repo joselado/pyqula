@@ -408,7 +408,12 @@ def singlet_map(h,nk=40,nsuper=3,mode="abs"):
 
 
 def set_filling(h,filling=0.5,nk=10,extrae=0.,delta=1e-1):
-    """Set the filling of a Hamiltonian"""
+    """
+    Set the filling of a Hamiltonian
+    - nk = 10, number of kpoints in each direction
+    - filling = 0.5, filling of the lattice
+    - extrae = 0.0, number of extra electrons
+    """
     if h.has_eh: # quick workaround
         ef = h.get_fermi4filling(filling,nk=nk) # fermi energy
         h.add_onsite(-ef)
