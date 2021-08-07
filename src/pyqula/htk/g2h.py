@@ -3,7 +3,7 @@ import numpy as np
 from .. import specialhopping
 
 def get_hamiltonian(self,fun=None,has_spin=True,ts=None,
-                        is_sparse=False,spinful_generator=False,
+                        is_sparse=False,spinful_generator=False,nc=2,
                         is_multicell=False,mgenerator=None,**kwargs):
     """ Create the hamiltonian for this geometry. By default, it assumes
     first neighbor hopping
@@ -13,7 +13,8 @@ def get_hamiltonian(self,fun=None,has_spin=True,ts=None,
     """
     if ts is not None: # if hoppings given, overwrite mgenerator
         mgenerator = specialhopping.neighbor_hopping_matrix(self,ts)
-        is_multicell = True
+        is_multicell = True # overwrite
+        nc = len(ts) + 1 # overwrite
     if self.dimensionality==3: is_multicell=True
     from ..hamiltonians import Hamiltonian
     h = Hamiltonian(self)  # create the object
@@ -24,7 +25,7 @@ def get_hamiltonian(self,fun=None,has_spin=True,ts=None,
       from ..multicell import parametric_hopping_hamiltonian
       if mgenerator is not None:
           from ..multicell import parametric_matrix # not implemented
-          h = parametric_matrix(h,fm=mgenerator)
+          h = parametric_matrix(h,fm=mgenerator,cutoff=nc)
       else: h = parametric_hopping_hamiltonian(h,fc=fun) # add hopping
       return h
     if fun is None and mgenerator is None: # no function given
