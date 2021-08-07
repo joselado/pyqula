@@ -6,6 +6,7 @@ from scipy.sparse import csc_matrix,bmat,csr_matrix
 import scipy.linalg as lg
 import scipy.sparse.linalg as slg
 import numpy as np
+from . import ldos
 from . import operators
 from . import inout
 from . import superconductivity
@@ -86,24 +87,31 @@ class Hamiltonian():
         return Vijkl(self,**kwargs)
     def reduce(self):
         return hamiltonianmode.reduce_hamiltonian(self)
+
     def full2profile(self,x,**kwargs):
         """Transform a 1D array in the full space to the spatial basis"""
         from .htk.matrixcomponent import full2profile
         return full2profile(self,x,**kwargs)
+
     def get_chern(h,**kwargs):
         return topology.chern(h,**kwargs)
+
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)
+
     def get_multihopping(self):
         out = multicell.get_hopping_dict(self)
         return multicell.MultiHopping(out) # return the object
+
     def set_multihopping(self,mh):
         """Set a multihopping as the Hamiltonian"""
         multicell.set_multihopping(self,mh)
+
+    @get_docstring(spectrum.set_filling)
     def set_filling(self,filling,**kwargs):
-      """Set the filling of the Hamiltonian"""
-      spectrum.set_filling(self,filling=filling,**kwargs)
+        spectrum.set_filling(self,filling=filling,**kwargs)
+
     def __init__(self,geometry=None):
       self.data = dict() # empty dictionary with various data
       self.has_spin = True # has spin degree of freedom
@@ -128,15 +136,18 @@ class Hamiltonian():
         """ Generate kdependent hamiltonian"""
         if self.is_multicell: return multicell.hk_gen(self) # for multicell
         else: return hk_gen(self) # for normal cells
+
     def has_time_reversal_symmetry(self):
         """Check if a Hamiltonian has time reversal symmetry"""
         from .htk import symmetry
         return symmetry.has_time_reversal_symmetry(self)
+
     def get_qpi(self,**kwargs):
         from .chitk import qpi
         return qpi.get_qpi(self,**kwargs)
+
+    @get_docstring(ldos.get_ldos)
     def get_ldos(self,**kwargs):
-        from . import ldos
         return ldos.get_ldos(self,**kwargs)
     def get_gk_gen(self,delta=0.05,operator=None,canonical_phase=False):
       """Return the Green function generator"""
@@ -238,12 +249,15 @@ class Hamiltonian():
     def read(self,output_file="hamiltonian.pkl"):
       """ Read the Hamiltonian"""
       return load(output_file) # read Hamiltonian
+
     def load(self,**kwargs): return self.read(**kwargs)
+
+    @get_docstring(spectrum.total_energy)
     def get_total_energy(self,**kwargs):
-      """ Get total energy of the system"""
-      from .spectrum import total_energy
-      return total_energy(self,**kwargs)
+      return spectrum.total_energy(self,**kwargs)
+
     def total_energy(self,**kwargs): return self.get_total_energy(**kwargs)
+
     def add_zeeman(self,zeeman):
         """Adds zeeman to the matrix """
         self.turn_spinful()
@@ -340,12 +354,15 @@ class Hamiltonian():
         for t in self.hopping: hop[tuple(np.array(t.dir))] = t.m
         for t in self.hopping: hop[tuple(-np.array(t.dir))] = np.conjugate(t.m).T
         return hop # return dictionary
+
+    @get_docstring(ldos.multi_ldos)
     def get_multildos(self,**kwargs):
         return ldos.multi_ldos(self,**kwargs)
     def get_multihopping(self):
         """Return a multihopping object"""
         from .multihopping import MultiHopping
         return MultiHopping(self.get_dict())
+
     @get_docstring(Vinteraction)
     def get_mean_field_hamiltonian(self,**kwargs):
         return Vinteraction(self,**kwargs).hamiltonian
@@ -368,14 +385,14 @@ class Hamiltonian():
         f = eh_operator(self.intra) # electron hole operator
         raise # not implemented
     def turn_sparse(self):
-      """
-      Transforms the hamiltonian into a sparse hamiltonian
-      """
-      from scipy.sparse import csc_matrix
-      def f(m):
-          return csc_matrix(m)
-      self.modify_hamiltonian_matrices(f) # modify the matrices
-      self.is_sparse = True # sparse flag to true
+        """
+        Transforms the hamiltonian into a sparse hamiltonian
+        """
+        from scipy.sparse import csc_matrix
+        def f(m):
+            return csc_matrix(m)
+        self.modify_hamiltonian_matrices(f) # modify the matrices
+        self.is_sparse = True # sparse flag to true
     def turn_dense(self):
       """ Transforms the hamiltonian into a sparse hamiltonian"""
       def f(m):

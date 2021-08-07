@@ -13,6 +13,7 @@ def get_hamiltonian(self,fun=None,has_spin=True,ts=None,
     """
     if ts is not None: # if hoppings given, overwrite mgenerator
         mgenerator = specialhopping.neighbor_hopping_matrix(self,ts)
+        is_multicell = True
     if self.dimensionality==3: is_multicell=True
     from ..hamiltonians import Hamiltonian
     h = Hamiltonian(self)  # create the object
