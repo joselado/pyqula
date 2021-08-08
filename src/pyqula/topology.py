@@ -281,7 +281,7 @@ def smooth_gauge(w1,w2):
   m = uij(w1,w2) # matrix of wavefunctions
   U, s, V = np.linalg.svd(m, full_matrices=True) # sing val decomp
   R = (U@V).H # rotation matrix
-  wnew = w2.copy()*0. # initialize
+  wnew = w2.copy()*0j # initialize
   wold = w2.copy() # old waves
   for ii in range(R.shape[0]):
     for jj in range(R.shape[0]):
