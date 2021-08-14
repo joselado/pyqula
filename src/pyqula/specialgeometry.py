@@ -302,13 +302,13 @@ def parse_twisted_multimultilayer(name,n=3):
     # thirs element determines whether if they are rotated
     gs = [] # empty list
     for ni in name[0]: # loop over names of the layers
-            if ni in ["","A"]: gi = multilayer_graphene([0]) # normal honeycomb
-            elif ni=="AA": gi = multilayer_graphene([0,0]) 
-            elif ni=="AB": gi = multilayer_graphene([0,1]) 
-            elif ni=="BA": gi = multilayer_graphene([1,0]) 
-            elif ni=="ABC": gi = multilayer_graphene([0,1,2]) 
-            elif ni=="ABAB": gi = multilayer_graphene([0,1,0,1]) 
-            elif ni=="ABBA": gi = multilayer_graphene([0,1,1,0]) 
+            if ni in ["","A"]: gi = multilayer_graphene(l=[0]) # normal honeycomb
+            elif ni=="AA": gi = multilayer_graphene(l=[0,0]) 
+            elif ni=="AB": gi = multilayer_graphene(l=[0,1]) 
+            elif ni=="BA": gi = multilayer_graphene(l=[1,0]) 
+            elif ni=="ABC": gi = multilayer_graphene(l=[0,1,2]) 
+            elif ni=="ABAB": gi = multilayer_graphene(l=[0,1,0,1]) 
+            elif ni=="ABBA": gi = multilayer_graphene(l=[0,1,1,0]) 
             else: raise
             gs.append(gi) # store
     rot = name[1] # rotations
