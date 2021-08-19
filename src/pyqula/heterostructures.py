@@ -11,7 +11,7 @@ from . import green
 
 
 
-class heterostructure():
+class Heterostructure():
   """Class for a heterostructure"""
   def copy(self):
     """Copy the heterostructure"""
@@ -261,7 +261,7 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
   ht.central_geometry.supercell(num_central) 
   return ht
 
-
+heterostructure = Heterostructure
 
 def central_dos(hetero,energies=[0.0],num_rep=100,project=None):
    """ Calculates the density of states 
@@ -849,13 +849,16 @@ def get_smatrix(ht,energy=0.0,delta=0.000001,as_matrix=False,check=True):
   smatrix[1][0] = 1j*sqrtm(gammar)*g21*sqrtm(gammal) # transmission matrix
   smatrix[1][1] = -iden + 1j*sqrtm(gammar)*g22*sqrtm(gammar) # matrix
   if check: # check whether the matrix is unitary
-      from scipy.sparse import bmat,csc_matrix
-      smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]
-      smatrix2 = bmat(smatrix2).todense()
-  #    print("Determinant",np.abs(np.linalg.det(smatrix2)))
-      error = np.max(np.abs(lg.inv(smatrix2) -smatrix2.H)) #  check unitarity
-      if error> 100*delta: 
-        print("S-matrix is not unitary",error)
+      from .transporttk.unitarize import check_and_fix
+      smatrix = check_and_fix(smatrix,error=100*delta)
+#      smatrix = check_and_fix(smatrix,error=100*delta)
+#      from scipy.sparse import bmat,csc_matrix
+#      smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]
+#      smatrix2 = bmat(smatrix2).todense()
+#  #    print("Determinant",np.abs(np.linalg.det(smatrix2)))
+#      error = np.max(np.abs(lg.inv(smatrix2) -smatrix2.H)) #  check unitarity
+#      if error> 100*delta: 
+#        print("S-matrix is not unitary",error)
 #        raise
   if as_matrix: 
     from scipy.sparse import bmat,csc_matrix
@@ -920,7 +923,7 @@ def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
 def sqrtm(M):
     """Square root for Hermitian matrix"""
     (m2,evecs) = sqrtm_rotated(M)
-    m2 = evecs.H * m2 * evecs  # change of basis
+    m2 = np.conjugate(evecs).T @ m2 @ evecs  # change of basis
     return m2 # return matrix
 
 
@@ -935,11 +938,12 @@ def sqrtm_rotated(M,positive=True):
     if positive:
         if np.min(evals)<0.: 
             print("Matrix is not positive defined")
-            evals[evals<0.] = 0.
+            evals[evals<0.] = 1e-7
     #  raise  # if it is not positive defined
     evecs = np.matrix(evecs).H # change of basis
     m2 = np.matrix([[0.0 for i in evals] for j in evals]) # create matrix
-    for i in range(len(evals)):  m2[i,i] = np.sqrt(np.abs(evals[i])) # square root
+    for i in range(len(evals)):  
+        m2[i,i] = np.sqrt(np.abs(evals[i])) # square root
 #    m2 = evecs.H * m2 * evecs  # change of basis
     return (m2,evecs) # return matrix
 
@@ -1038,31 +1042,9 @@ def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
 
 
 
+from .transporttk.builder import build
 
-
-def build(h1,h2,central=None,**kwargs):
-  """Create a heterostructure, works also for 2d"""
-  if central is None: central = [h1,h2] # list
-  if h1.dimensionality==1: # one dimensional
-    return create_leads_and_central_list(h1,h2,central,**kwargs) # standard way
-  elif h1.dimensionality==2:  # two dimensional
-    def fun(k,lc,rc):
-      # evaluate at a particular k point
-      h1p = h1.get_1dh(k)
-      h2p = h2.get_1dh(k)
-      centralp = [hc.get_1dh(k) for hc in central]
-      out = create_leads_and_central_list(h1p,h2p,centralp,**kwargs) # standard way
-      out.scale_lc = lc
-      out.scale_rc = rc
-      return out # return 1d heterostructure
-    hout = heterostructure() # create
-    hout.dimensionality = 2 # two dimensional
-    hout.generate = fun # function that generates the heterostructure
-    return hout # function that return a heterostructure
-  else: raise
-
-
-
-def get_full_sparse():
-  """Return a heterostrure in full sparse form"""
-  
+#
+#def get_full_sparse():
+#  """Return a heterostrure in full sparse form"""
+#  
