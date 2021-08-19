@@ -2,6 +2,7 @@ from __future__ import print_function
 import numpy as np
 import pylab as py
 from copy import deepcopy as dc
+import scipy.linalg as lg
 from scipy.sparse import bmat,coo_matrix,csc_matrix
 from . import green
 
@@ -25,6 +26,7 @@ class heterostructure():
     self.is_sparse = False
     self.dimensionality = 1 # default is one dimensional
     self.delta = 0.0001
+    self.extra_delta_central = 0. # additional delta in the central region
     self.interpolated_selfenergy = False
     self.block_diagonal = False
     if h is not None:
@@ -142,8 +144,10 @@ class heterostructure():
     elif self.dimensionality==2: # two dimensional
       # function to integrate
       print("Computing",energy)
-      f = lambda k: self.generate(k).didv(energy=energy,delta=delta)
-      return np.mean([f(x) for x in np.linspace(0.,1.,nk,endpoint=False)])
+      f = lambda k: self.generate(k,self.scale_lc,self.scale_rc).didv(energy=energy,delta=delta)
+      from .parallel import pcall
+      out = pcall(f,np.linspace(0.,1.,nk,endpoint=False))
+      return np.trapz(out,dx=1./nk)
     else: raise
   def block2full(self,sparse=False):
     """Put in full form"""
@@ -598,62 +602,65 @@ def plot_local_central_dos(hetero,energies=0.0,gf=None):
 
 def create_leads_and_central_list(h_right,h_left,list_h_central,
         right_coupling = None,left_coupling = None,
+        scale_right_coupling = 1.0,
+        scale_left_coupling = 1.0,
         coupling=lambda i,j: 1.0):
-  """ Creates an heterojunction by giving the hamiltonian
-     of the leads and the list of the center """
-  # check the hamiltonians
-#  h_right.check()
-#  h_left.check()
-  # convert to the classical way
-  h_right = h_right.get_no_multicell()
-  h_left = h_left.get_no_multicell()
-  list_h_central = [h.get_no_multicell() for h in list_h_central]
-  if len(list_h_central)==1: # only one central part
-    return create_leads_and_central(h_right,h_left,list_h_central[0])
-  ht = heterostructure(h_right) # create heterostructure
-  # assign matrices of the leads
-  ht.right_intra = h_right.intra.copy() 
-  ht.right_inter = h_right.inter.copy()  
-  ht.left_intra = h_left.intra.copy()  
-  ht.left_inter = h_left.inter.H.copy() 
-  # elecron hole stuff
-  ht.has_eh = h_right.has_eh # if it has electron-hole
-  ht.get_eh_sector = h_right.get_eh_sector # if it has electron-hole
-  # create matrix of the central part and couplings to the leads
-  from scipy.sparse import csc_matrix,bmat
-  z = csc_matrix(h_right.intra*0.0j) # zero matrix
-  num_central = len(list_h_central) # length of the central hamiltonian
-  # create list of lists for the central part
-  hc = [[None for i in range(num_central)] for j in range(num_central)]
-  # create elements of the central hamiltonian
-  for i in range(num_central):  # intra term of the central blocks
-    hc[i][i] = list_h_central[i].intra.copy()  # intra term of the iesim
-  for i in range(num_central-1):  # intra term of the central blocks
-    tr = list_h_central[i].inter + list_h_central[i+1].inter
-    tr = tr/2.*coupling(i,i+1)   # mean value of the hoppings
-    hc[i][i+1] = tr # inter term of the iesim
-    hc[i+1][i] = tr.H # inter term of the iesim
-
-  # hoppings to the leads
-  tcr = h_right.inter.copy()    # this is a matrix
-  tcl = h_left.inter.H.copy()   # this is a matrix
-  ht.block_diagonal = True
-  # hoppings from the center to the leads
-  if right_coupling is not None:
-    ht.right_coupling = right_coupling
-  else:
-    ht.right_coupling = h_right.inter.copy() 
-  if left_coupling is not None:
-    ht.left_coupling = left_coupling
-  else:
-    ht.left_coupling = h_left.inter.H.copy() 
-  # assign central hamiltonian
-  ht.central_intra = hc
-  # and modify the geometry of the central part
-  ht.central_geometry.supercell(num_central) 
-  # put if it si sparse
-  ht.is_sparse = list_h_central[0].is_sparse
-  return ht
+    """ Creates an heterojunction by giving the hamiltonian
+       of the leads and the list of the center """
+    # check the hamiltonians
+  #  h_right.check()
+  #  h_left.check()
+    # convert to the classical way
+    h_right = h_right.get_no_multicell()
+    h_left = h_left.get_no_multicell()
+    list_h_central = [h.get_no_multicell() for h in list_h_central]
+    if len(list_h_central)==1: # only one central part
+      return create_leads_and_central(h_right,h_left,list_h_central[0])
+    ht = heterostructure(h_right) # create heterostructure
+    # assign matrices of the leads
+    ht.right_intra = h_right.intra.copy() 
+    ht.right_inter = h_right.inter.copy()  
+    ht.left_intra = h_left.intra.copy()  
+    ht.left_inter = h_left.inter.H.copy() 
+    # elecron hole stuff
+    ht.has_eh = h_right.has_eh # if it has electron-hole
+    ht.get_eh_sector = h_right.get_eh_sector # if it has electron-hole
+    # create matrix of the central part and couplings to the leads
+    from scipy.sparse import csc_matrix,bmat
+    z = csc_matrix(h_right.intra*0.0j) # zero matrix
+    num_central = len(list_h_central) # length of the central hamiltonian
+    # create list of lists for the central part
+    hc = [[None for i in range(num_central)] for j in range(num_central)]
+    # create elements of the central hamiltonian
+    for i in range(num_central):  # intra term of the central blocks
+      hc[i][i] = list_h_central[i].intra.copy()  # intra term of the iesim
+    for i in range(num_central-1):  # intra term of the central blocks
+      tr = list_h_central[i].inter + list_h_central[i+1].inter
+      tr = tr/2.*coupling(i,i+1)   # mean value of the hoppings
+      hc[i][i+1] = tr # inter term of the iesim
+      hc[i+1][i] = tr.H # inter term of the iesim
+  
+    # hoppings to the leads
+    tcr = h_right.inter.copy()    # this is a matrix
+    tcl = h_left.inter.H.copy()   # this is a matrix
+    ht.block_diagonal = True
+    # hoppings from the center to the leads
+    if right_coupling is not None:
+      ht.right_coupling = right_coupling*scale_right_coupling
+    else:
+      ht.right_coupling = h_right.inter.copy()*scale_right_coupling
+    if left_coupling is not None:
+      ht.left_coupling = left_coupling*scale_left_coupling
+    else:
+      ht.left_coupling = h_left.inter.H.copy()*scale_left_coupling
+  
+    # assign central hamiltonian
+    ht.central_intra = hc
+    # and modify the geometry of the central part
+    ht.central_geometry.supercell(num_central) 
+    # put if it si sparse
+    ht.is_sparse = list_h_central[0].is_sparse
+    return ht
 
 
 def eigenvalues(hetero,numeig=10,effective=False,gf=None,full=False):
@@ -765,7 +772,9 @@ def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None):
     # r1 is normal
     if np.sum(np.abs(get_eh(ht.left_intra,i=0,j=1)))<0.0001: r = r1 
     elif np.sum(np.abs(get_eh(ht.right_intra,i=0,j=1)))<0.0001: r = r2
-    else: raise
+    else:
+        print("There is SC in both leads, aborting")
+        raise
     ree = get_eh(r,i=0,j=0) # reflection e-e
     reh = get_eh(r,i=0,j=1) # reflection e-h
     Ree = (ree.H*ree).trace()[0,0] # total e-e reflection 
@@ -822,7 +831,8 @@ def get_smatrix(ht,energy=0.0,delta=0.000001,as_matrix=False,check=True):
     ht2 = enlarge_hlist(ht) # get the enlaged hlist with the leads
 # selfenergy of the leads (coupled to another cell of the lead)
     gmatrix = effective_tridiagonal_hamiltonian(ht2.central_intra,selfl,selfr,
-                                                 energy=energy,delta=delta) 
+                                    energy=energy,
+                                    delta=delta + ht.extra_delta_central) 
     test_gauss = False # do the tridiagonal inversion
 #    print(selfr)
   else: # not block diagonal
@@ -854,7 +864,7 @@ def get_smatrix(ht,energy=0.0,delta=0.000001,as_matrix=False,check=True):
       smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]
       smatrix2 = bmat(smatrix2).todense()
   #    print("Determinant",np.abs(np.linalg.det(smatrix2)))
-      error = np.max(np.abs(smatrix2.I -smatrix2.H)) #  check unitarity
+      error = np.max(np.abs(lg.inv(smatrix2) -smatrix2.H)) #  check unitarity
       if error> 100*delta: 
         print("S-matrix is not unitary",error)
 #        raise
@@ -894,7 +904,8 @@ def enlarge_hlist(ht):
 def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
   """ Calculate list of effective Hamiltonian which will be inverted"""
   if (selfl is None) or (selfr is None):
-    (selfl,selfr) = get_surface_selfenergies(ht,energy=energy,delta=delta) 
+    (selfl,selfr) = get_surface_selfenergies(ht,energy=energy,delta=delta,
+                      pristine=True) 
   intra = ht.central_intra # central intracell hamiltonian
   ce = energy +1j*delta
   idenc = np.matrix(np.identity(len(ht.central_intra),dtype=complex))*ce
@@ -907,10 +918,10 @@ def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
   hlist[1][1] = idenc - ht.central_intra
   hlist[2][2] = idenr - ht.right_intra - selfr
   # now the inter cell
-  hlist[0][1] = -ht.left_coupling.H
-  hlist[1][0] = -ht.left_coupling
-  hlist[2][1] = -ht.right_coupling.H
-  hlist[1][2] = -ht.right_coupling
+  hlist[0][1] = -np.conjugate(ht.left_coupling).T*ht.scale_lc
+  hlist[1][0] = -ht.left_coupling*ht.scale_lc
+  hlist[2][1] = -np.conjugate(ht.right_coupling).T*ht.scale_rc
+  hlist[1][2] = -ht.right_coupling*ht.scale_rc
   return hlist
 
 
@@ -927,13 +938,16 @@ def sqrtm(M):
 #from scipy.linalg import sqrtm
 
 
-def sqrtm_rotated(M):
+def sqrtm_rotated(M,positive=True):
     """Square root for Hermitian matrix in the diagonal basis,
     and rotation matrix"""
-    import scipy.linalg as lg
+    M = (M + np.conjugate(M.T))/2. # make Hermitian
     (evals,evecs) = lg.eigh(M) # eigenvals and eigenvecs
-    if np.min(evals)<-0.001: 
-      raise  # if it is not positive defined
+    if positive:
+        if np.min(evals)<0.: 
+            print("Matrix is not positive defined")
+            evals[evals<0.] = 0.
+    #  raise  # if it is not positive defined
     evecs = np.matrix(evecs).H # change of basis
     m2 = np.matrix([[0.0 for i in evals] for j in evals]) # create matrix
     for i in range(len(evals)):  m2[i,i] = np.sqrt(np.abs(evals[i])) # square root
@@ -1005,13 +1019,13 @@ def get_surface_selfenergies(hetero,energy=0.0,delta=0.0001,pristine=False):
      inter = hetero.left_inter
    else:
      inter = hetero.left_coupling
-   selfl = inter*gl*inter.H # left selfenergy
+   selfl = inter@gl@np.conjugate(inter).T # left selfenergy
    # right selfenergy
    if pristine:
      inter = hetero.right_inter
    else:
      inter = hetero.right_coupling
-   selfr = inter*gr*inter.H # right selfenergy
+   selfr = inter@gr@np.conjugate(inter).T # right selfenergy
    return (selfl,selfr) # return selfenergies
 
 
@@ -1037,18 +1051,18 @@ def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
 
 
 
-def build(h1,h2,central=None,lc=1.0,rc=1.0,**kwargs):
+def build(h1,h2,central=None,**kwargs):
   """Create a heterostructure, works also for 2d"""
   if central is None: central = [h1,h2] # list
   if h1.dimensionality==1: # one dimensional
-    return create_leads_and_central_list(h1,h2,central) # standard way
+    return create_leads_and_central_list(h1,h2,central,**kwargs) # standard way
   elif h1.dimensionality==2:  # two dimensional
-    def fun(k):
+    def fun(k,lc,rc):
       # evaluate at a particular k point
       h1p = h1.get_1dh(k)
       h2p = h2.get_1dh(k)
       centralp = [hc.get_1dh(k) for hc in central]
-      out = create_leads_and_central_list(h1p,h2p,centralp) # standard way
+      out = create_leads_and_central_list(h1p,h2p,centralp,**kwargs) # standard way
       out.scale_lc = lc
       out.scale_rc = rc
       return out # return 1d heterostructure
