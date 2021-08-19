@@ -15,7 +15,7 @@ def generic_didv(self,energy=0.0,delta=None,error=1e-4,nk=10,kwant=False,
               opl=opl,opr=opr) # return value
         except: 
             print("Something wrong in didv, returning 0")
-            return 0.0
+            return 1e-10
     elif self.dimensionality==2: # two dimensional
       # function to integrate
       print("Computing",energy)
