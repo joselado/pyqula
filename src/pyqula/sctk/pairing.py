@@ -37,6 +37,8 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.]):
           return swaveB(self.geometry,r1,r2) - swaveA(self.geometry,r1,r2)
     elif mode=="dx2y2":
         weightf = lambda r1,r2: dx2y2(r1,r2)
+    elif mode=="dxy":
+        weightf = lambda r1,r2: dxy(r1,r2)
     elif mode=="snn":
         weightf = lambda r1,r2: swavenn(r1,r2)
     elif mode=="C3nn":
@@ -71,6 +73,18 @@ def dx2y2(r1,r2):
     if 0.99<dr2<1.001: # first neighbor
         return (dr[0]**2 - dr[1]**2)*iden
     return 0.0*iden
+
+
+def dxy(r1,r2):
+    """Function with first neighbor dx2y2 profile"""
+    dr = r1-r2
+    dr2 = dr.dot(dr)
+    if 0.99<dr2<1.001: # first neighbor
+        return (dr[0]*dr[1])*iden
+    return 0.0*iden
+
+
+
 
 
 def C3nn(r1,r2):

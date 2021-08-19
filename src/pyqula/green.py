@@ -332,7 +332,7 @@ def green_renormalization(intra,inter,energy=0.0,nite=None,
                             use_fortran = use_fortran):
   """ Calculates bulk and surface Green function by a renormalization
   algorithm, as described in I. Phys. F: Met. Phys. 15 (1985) 851-858 """
-  error = delta/100
+  error = delta*1e-6 # overwrite error
   if use_fortran: # use the fortran implementation
     (ge,gb) = greenf90.renormalization(intra,inter,energy,error,delta)
     return np.matrix(gb),np.matrix(ge)
