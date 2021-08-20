@@ -6,7 +6,7 @@ def build(h1,h2,central=None,**kwargs):
   """Create a heterostructure, works also for 2d"""
   if central is None: central = [h1,h2] # list
   if h1.dimensionality==1: # one dimensional
-    return create_leads_and_central_list(h1,h2,central,**kwargs) # standard way
+    return create_leads_and_central_list(h2,h1,central,**kwargs) # standard way
   elif h1.dimensionality==2:  # two dimensional
     def fun(k,lc,rc):
       # evaluate at a particular k point
