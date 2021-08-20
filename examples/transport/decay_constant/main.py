@@ -20,7 +20,7 @@ es = np.linspace(-.2,.2,100) # grid of energies
 T = 1e-2 # reference transparency 
 ht.scale_rc = T # set the transparency for dIdV
 ts = [ht.didv(energy=e) for e in es] # calculate transmission
-ks = [ht.get_kappa(energy=e,T=1e-2) for e in es] # compute kappa
+ks = [ht.get_kappa(energy=e,T=T) for e in es] # compute kappa
 plt.subplot(121)
 plt.plot(es,ts,marker="o")
 plt.subplot(122)
