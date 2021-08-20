@@ -25,6 +25,7 @@ class Heterostructure():
     self.scale_lc = 1.0 # scale coupling to the left lead
     self.is_sparse = False
     self.dimensionality = 1 # default is one dimensional
+    self.transparency = 1.0 # reference transparency (for kappa)
     self.delta = 0.0001
     self.extra_delta_central = 0. # additional delta in the central region
     self.interpolated_selfenergy = False
@@ -139,8 +140,12 @@ class Heterostructure():
       from .transporttk.didv import generic_didv
       return generic_didv(self,**kwargs)
   def block2full(self,sparse=False):
-    """Put in full form"""
-    return block2full(self,sparse=sparse)
+      """Put in full form"""
+      return block2full(self,sparse=sparse)
+  def get_kappa(self,energy=[0.],**kwargs):
+      from .transporttk.kappa import get_kappa_ratio
+      return get_kappa_ratio(self,energies=[energy],**kwargs)
+  
 
 
 
@@ -606,6 +611,8 @@ def create_leads_and_central_list(h_right,h_left,list_h_central,
     if len(list_h_central)==1: # only one central part
       return create_leads_and_central(h_right,h_left,list_h_central[0])
     ht = heterostructure(h_right) # create heterostructure
+    ht.Hr = h_right # store
+    ht.Hl = h_left # store
     # assign matrices of the leads
     ht.right_intra = h_right.intra.copy() 
     ht.right_inter = h_right.inter.copy()  
@@ -645,10 +652,10 @@ def create_leads_and_central_list(h_right,h_left,list_h_central,
   
     # assign central hamiltonian
     ht.central_intra = hc
-    # and modify the geometry of the central part
-    ht.central_geometry.supercell(num_central) 
-    # put if it si sparse
-    ht.is_sparse = list_h_central[0].is_sparse
+#    # and modify the geometry of the central part
+#    ht.central_geometry.supercell(num_central) 
+#    # put if it si sparse
+#    ht.is_sparse = list_h_central[0].is_sparse
     return ht
 
 
@@ -844,10 +851,10 @@ def get_smatrix(ht,energy=0.0,delta=0.000001,as_matrix=False,check=True):
   iden = np.matrix(np.identity(g11.shape[0],dtype=complex)) # create identity
   iden11 = np.matrix(np.identity(g11.shape[0],dtype=complex)) # create identity
   iden22 = np.matrix(np.identity(g22.shape[0],dtype=complex)) # create identity
-  smatrix[0][0] = -iden + 1j*sqrtm(gammal)*g11*sqrtm(gammal) # matrix
-  smatrix[0][1] = 1j*sqrtm(gammal)*g12*sqrtm(gammar) # transmission matrix
-  smatrix[1][0] = 1j*sqrtm(gammar)*g21*sqrtm(gammal) # transmission matrix
-  smatrix[1][1] = -iden + 1j*sqrtm(gammar)*g22*sqrtm(gammar) # matrix
+  smatrix[0][0] = -iden + 1j*sqrtm(gammal)@g11@sqrtm(gammal) # matrix
+  smatrix[0][1] = 1j*sqrtm(gammal)@g12@sqrtm(gammar) # transmission matrix
+  smatrix[1][0] = 1j*sqrtm(gammar)@g21@sqrtm(gammal) # transmission matrix
+  smatrix[1][1] = -iden + 1j*sqrtm(gammar)@g22@sqrtm(gammar) # matrix
   if check: # check whether the matrix is unitary
       from .transporttk.unitarize import check_and_fix
       smatrix = check_and_fix(smatrix,error=100*delta)
