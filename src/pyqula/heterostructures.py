@@ -885,13 +885,13 @@ def enlarge_hlist(ht):
   nc = len(ht.central_intra) # number of cells in the central
   hcentral = [[None for i in range(nc+2)] for j in range(nc+2)]
   for i in range(nc): # intraterm
-    hcentral[i+1][i+1] = ht.central_intra[i][i] # common
+    hcentral[i+1][i+1] = ht.central_intra[i][i].copy() # common
   for i in range(nc-1): # interterm
-    hcentral[i+1][i+2] = ht.central_intra[i][i+1] # common
-    hcentral[i+2][i+1] = ht.central_intra[i+1][i] # common
+    hcentral[i+1][i+2] = ht.central_intra[i][i+1].copy() # common
+    hcentral[i+2][i+1] = ht.central_intra[i+1][i].copy() # common
   # now the new terms
-  hcentral[0][0] = ht.left_intra # left
-  hcentral[-1][-1] = ht.right_intra # right
+  hcentral[0][0] = ht.left_intra.copy() # left
+  hcentral[-1][-1] = ht.right_intra.copy() # right
   if nc>0: # more than two cells in the center
       hcentral[0][1] = dagger(ht.left_coupling)*ht.scale_lc # left
       hcentral[1][0] = ht.left_coupling*ht.scale_lc # left
