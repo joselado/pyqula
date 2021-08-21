@@ -5,7 +5,7 @@ from ..parallel import pcall
 def get_single(HT=None,c=1.0,energies=[0.0],**kwargs):
     """Get a single conductance"""
     HT.scale_rc = c # scaling
-    return np.array([HT.didv(energy=e) for e in energies]) # loop over Ts
+    return np.array([HT.didv(energy=e,**kwargs) for e in energies]) # loop over Ts
 
 
 def get_conductances(T=1e-2,**kwargs):
@@ -39,7 +39,7 @@ def get_kappa_ratio(HT,**kwargs):
     return ks1/ks2
 
 
-def generate_HT(ht,SC=True,delta=1e-12,temperature=0.,**kwargs):
+def generate_HT(ht,SC=True,temperature=0.,**kwargs):
     """Given a heterostructure, generate a new one to compute kappa"""
     def f(h):
         h = h.copy()
@@ -51,7 +51,7 @@ def generate_HT(ht,SC=True,delta=1e-12,temperature=0.,**kwargs):
     Hr = f(ht.Hr)
     Hl = f(ht.Hl)
     hto = build(Hl,Hr) # create a new heterostructure
-    hto.delta = delta
+    hto.delta = ht.delta
 #    hto.extra_delta_right = temperature
 #    hto.extra_delta_left = temperature
     return hto
