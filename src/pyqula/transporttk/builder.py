@@ -4,7 +4,8 @@ from ..heterostructures import Heterostructure
 
 def build(h1,h2,central=None,**kwargs):
   """Create a heterostructure, works also for 2d"""
-  if central is None: central = [h1,h2] # list
+#  if central is None: central = [h1,h2] # list
+  if central is None: central = [] # list
   if h1.dimensionality==1: # one dimensional
     return create_leads_and_central_list(h2,h1,central,**kwargs) # standard way
   elif h1.dimensionality==2:  # two dimensional
