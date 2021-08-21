@@ -934,7 +934,7 @@ def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
 def sqrtm(M):
     """Square root for Hermitian matrix"""
     (m2,evecs) = sqrtm_rotated(M)
-    m2 = np.conjugate(evecs).T @ m2 @ evecs  # change of basis
+    m2 = dagger(evecs) @ m2 @ evecs  # change of basis
     return m2 # return matrix
 
 
