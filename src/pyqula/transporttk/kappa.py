@@ -2,7 +2,7 @@
 import numpy as np
 from ..parallel import pcall
 
-def get_single(HT=None,c=1.0,energies=[0.0]):
+def get_single(HT=None,c=1.0,energies=[0.0],**kwargs):
     """Get a single conductance"""
     HT.scale_rc = c # scaling
     return np.array([HT.didv(energy=e) for e in energies]) # loop over Ts
@@ -33,13 +33,13 @@ def get_kappa(**kwargs):
     return np.array(ks) # return kappa
 
 
-def get_kappa_ratio(HT,delta=1e-10,**kwargs):
-    ks1 = get_kappa(HT=generate_HT(HT,delta=delta,SC=True),**kwargs)
-    ks2 = get_kappa(HT=generate_HT(HT,delta=delta,SC=False),**kwargs)
+def get_kappa_ratio(HT,**kwargs):
+    ks1 = get_kappa(HT=generate_HT(HT,SC=True,**kwargs),**kwargs)
+    ks2 = get_kappa(HT=generate_HT(HT,SC=False,**kwargs),**kwargs)
     return ks1/ks2
 
 
-def generate_HT(ht,SC=True,delta=1e-10):
+def generate_HT(ht,SC=True,delta=1e-12,temperature=0.,**kwargs):
     """Given a heterostructure, generate a new one to compute kappa"""
     def f(h):
         h = h.copy()
@@ -52,6 +52,8 @@ def generate_HT(ht,SC=True,delta=1e-10):
     Hl = f(ht.Hl)
     hto = build(Hr,Hl) # create a new heterostructure
     hto.delta = delta
+#    hto.extra_delta_right = temperature
+#    hto.extra_delta_left = temperature
     return hto
 
 

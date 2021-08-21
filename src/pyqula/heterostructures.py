@@ -5,9 +5,9 @@ from copy import deepcopy as dc
 import scipy.linalg as lg
 from scipy.sparse import bmat,coo_matrix,csc_matrix
 from . import green
+from .algebra import dagger
 
-
-
+dag = dagger
 
 
 
@@ -28,6 +28,8 @@ class Heterostructure():
     self.transparency = 1.0 # reference transparency (for kappa)
     self.delta = 0.0001
     self.extra_delta_central = 0. # additional delta in the central region
+    self.extra_delta_right = 0. # additional delta in the right region
+    self.extra_delta_left = 0. # additional delta in the left region
     self.interpolated_selfenergy = False
     self.block_diagonal = False
     if h is not None:
@@ -117,12 +119,14 @@ class Heterostructure():
        inter = self.left_inter
        if pristine: cou = self.left_inter
        else: cou = self.left_coupling*self.scale_lc
+       deltal = delta + self.extra_delta_left # new delta left
      if lead==1:
        intra = self.right_intra
        inter = self.right_inter
        if pristine: cou = self.right_inter
        else: cou = self.right_coupling*self.scale_rc
-     ggg,gr = green_renormalization(intra,inter,energy=energy,delta=delta)
+       deltal = delta + self.extra_delta_right # new delta right
+     ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal)
      selfr = cou*gr*cou.H # selfenergy
      return selfr # return selfenergy
   def setup_selfenergy_interpolation(self,es=np.linspace(-4.0,4.0,100),
@@ -761,7 +765,7 @@ def effective_central_hamiltonian(hetero,energy=0.0,delta=0.0001,write=False):
 def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None):
   """Calculate differential conductance"""
   if ht.has_eh: # for systems with electons and holes
-    s = get_smatrix(ht,energy=energy,delta=delta,check=True) # get the smatrix
+    s = get_smatrix(ht,energy=energy,check=True) # get the smatrix
     r1,r2 = s[0][0],s[1][1] # get the reflection matrices
     get_eh = ht.get_eh_sector # function to read either electron or hole
     # select the normal lead
@@ -773,9 +777,8 @@ def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None):
         raise
     ree = get_eh(r,i=0,j=0) # reflection e-e
     reh = get_eh(r,i=0,j=1) # reflection e-h
-    Ree = (ree.H*ree).trace()[0,0] # total e-e reflection 
-    Reh = (reh.H*reh).trace()[0,0] # total e-h reflection 
-#    print("ee=",Ree,"eh=",Reh,ree.shape)
+    Ree = np.trace(dagger(ree)@ree) # total e-e reflection 
+    Reh = np.trace(dagger(reh)@reh) # total e-h reflection 
     G = (ree.shape[0] - Ree + Reh).real # conductance
     return G
   else: 
@@ -791,17 +794,17 @@ def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None):
       if opl is not None: U[0][0] = opl # assign this matrix
       if opr is not None: U[1][1] = opr # assign this matrix
       #### those formulas are not ok
-      s[0][0] = U[0][0]*s[0][0]*U[0][0] # new smatrix
-      s[0][1] = U[0][0]*s[0][1]*U[1][1] # new smatrix
-      s[1][0] = U[1][1]*s[1][0]*U[0][0] # new smatrix
-      s[1][1] = U[1][1]*s[1][1]*U[1][1] # new smatrix
+      s[0][0] = U[0][0]@s[0][0]@U[0][0] # new smatrix
+      s[0][1] = U[0][0]@s[0][1]@U[1][1] # new smatrix
+      s[1][0] = U[1][1]@s[1][0]@U[0][0] # new smatrix
+      s[1][1] = U[1][1]@s[1][1]@U[1][1] # new smatrix
     r1,r2,t = s[0][0],s[1][1],s[0][1] # get the reflection matrices
     # select a normal lead (both of them are)
     # r1 is normal
     ree = r1
-    Ree = (ree.H*ree).trace()[0,0] # total e-e reflection 
+    Ree = np.trace(ree.H*ree) # total e-e reflection 
     G1 = (ree.shape[0] - Ree).real # conductance
-    G2 = (s[0][1]*s[0][1].H).trace()[0,0].real # total e-e transmission
+    G2 = np.trace(s[0][1]*s[0][1].H).real # total e-e transmission
     return (G1+G2)/2.
 #return landauer(ht,energy=energy,delta=delta) # call usual landauer 
     
@@ -810,14 +813,15 @@ def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None):
 def get_tmatrix(ht,energy=0.0,delta=0.0001):
   """Calculate the S-matrix of an heterostructure"""
   if ht.block_diagonal: raise  # not implemented
-  smatrix = get_smatrix(ht,energy=energy,delta=delta)
+  smatrix = get_smatrix(ht,energy=energy)
   return smatrix[0][1]
 
 
 
-def get_smatrix(ht,energy=0.0,delta=0.000001,as_matrix=False,check=True):
+def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
   """Calculate the S-matrix of an heterostructure"""
   # now do the Fisher Lee trick
+  delta = ht.delta
   smatrix = [[None,None],[None,None]] # smatrix in list form
   from .green import gauss_inverse # calculate the desired green functions
   # get the selfenergies, using the same coupling as the lead
@@ -837,8 +841,8 @@ def get_smatrix(ht,energy=0.0,delta=0.000001,as_matrix=False,check=True):
     test_gauss = True # gauss only works with square matrices
 #    print(selfr)
   # gamma functions
-  gammar = 1j*(selfr-selfr.H)
-  gammal = 1j*(selfl-selfl.H)
+  gammar = 1j*(selfr-dagger(selfr))
+  gammal = 1j*(selfl-dagger(selfl))
   # calculate the relevant terms of the Green function
   g11 = gauss_inverse(gmatrix,0,0,test=test_gauss)
   g12 = gauss_inverse(gmatrix,0,-1,test=test_gauss)
@@ -887,11 +891,11 @@ def enlarge_hlist(ht):
     hcentral[i+2][i+1] = ht.central_intra[i+1][i] # common
   # now the new terms
   hcentral[0][0] = ht.left_intra # left
-  hcentral[0][1] = ht.left_coupling.H*ht.scale_lc # left
+  hcentral[0][1] = dagger(ht.left_coupling)*ht.scale_lc # left
   hcentral[1][0] = ht.left_coupling*ht.scale_lc # left
   hcentral[-1][-1] = ht.right_intra # right
   hcentral[-2][-1] = ht.right_coupling*ht.scale_rc # right
-  hcentral[-1][-2] = ht.right_coupling.H*ht.scale_rc # right
+  hcentral[-1][-2] = dagger(ht.right_coupling)*ht.scale_rc # right
   # store in the object
   ho.central_intra = hcentral    
   # and redefine the new lead couplings
@@ -940,15 +944,15 @@ def sqrtm(M):
 def sqrtm_rotated(M,positive=True):
     """Square root for Hermitian matrix in the diagonal basis,
     and rotation matrix"""
-    M = (M + np.conjugate(M.T))/2. # make Hermitian
+    M = (M + dagger(M))/2. # make Hermitian
     (evals,evecs) = lg.eigh(M) # eigenvals and eigenvecs
     if positive:
         if np.min(evals)<0.: 
             print("Matrix is not positive defined")
             evals[evals<0.] = 1e-7
     #  raise  # if it is not positive defined
-    evecs = np.matrix(evecs).H # change of basis
-    m2 = np.matrix([[0.0 for i in evals] for j in evals]) # create matrix
+    evecs = dagger(np.matrix(evecs)) # change of basis
+    m2 = np.matrix([[0.0j for i in evals] for j in evals]) # create matrix
     for i in range(len(evals)):  
         m2[i,i] = np.sqrt(np.abs(evals[i])) # square root
 #    m2 = evecs.H * m2 * evecs  # change of basis
