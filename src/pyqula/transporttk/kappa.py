@@ -11,7 +11,7 @@ def get_single(HT=None,c=1.0,energies=[0.0],**kwargs):
 def get_conductances(T=1e-2,**kwargs):
     """Compute Kappa by doing a log-log plot"""
     cref = T
-    ts = np.exp(np.linspace(np.log(cref*0.9),np.log(cref*1.1),4)) # hoppings
+    ts = np.exp(np.linspace(np.log(cref*0.9),np.log(cref*1.1),2)) # hoppings
 #    ts = [cref*0.9,cref*1.1]
     Gs = np.array([get_single(c=t,**kwargs) for t in ts]) # compute conductance
     return ts,Gs

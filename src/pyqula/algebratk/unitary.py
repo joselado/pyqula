@@ -3,6 +3,9 @@ import scipy.linalg as lg
 
 def make_unitary(M):
     """Given a non-unitary matrix, make it unitary"""
+    (u,s,vh) = lg.svd(M) # perform the SVD
+    s = s/np.abs(s) # normalize singular values
+    M = u@np.diag(s)@vh # return the unitarized matrix
     return M
 #    return M/np.abs(lg.det(M))
 #    (evals,evecs) = lg.eig(M) # eigenvals and eigenvecs

@@ -17,7 +17,7 @@ def finite_T_didv(self,temp,energy=0.0,**kwargs):
     """Finite temperature dIdV"""
 #    return zero_T_didv(self,energy=energy,**kwargs)
     from .fermidirac import fermidirac as FD
-    dt = 8 # max T range
+    dt = 20 # max T range
     de = temp # energy difference to compute the derivative
     ### Use simpson integration
     def f(e):
