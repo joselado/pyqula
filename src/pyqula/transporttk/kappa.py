@@ -12,7 +12,7 @@ def get_conductances(T=1e-2,**kwargs):
     """Compute Kappa by doing a log-log plot"""
     cref = T
     ts = np.exp(np.linspace(np.log(cref*0.9),np.log(cref*1.1),4)) # hoppings
-#    ts = [cref*0.99,cref*1.01]
+#    ts = [cref*0.9,cref*1.1]
     Gs = np.array([get_single(c=t,**kwargs) for t in ts]) # compute conductance
     return ts,Gs
 
@@ -50,7 +50,7 @@ def generate_HT(ht,SC=True,delta=1e-12,temperature=0.,**kwargs):
     from ..heterostructures import build
     Hr = f(ht.Hr)
     Hl = f(ht.Hl)
-    hto = build(Hr,Hl) # create a new heterostructure
+    hto = build(Hl,Hr) # create a new heterostructure
     hto.delta = delta
 #    hto.extra_delta_right = temperature
 #    hto.extra_delta_left = temperature

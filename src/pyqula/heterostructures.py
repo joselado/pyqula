@@ -621,7 +621,7 @@ def create_leads_and_central_list(h_right,h_left,list_h_central,
     ht.right_intra = h_right.intra.copy() 
     ht.right_inter = h_right.inter.copy()  
     ht.left_intra = h_left.intra.copy()  
-    ht.left_inter = h_left.inter.H.copy() 
+    ht.left_inter = dagger(h_left.inter).copy() 
     # elecron hole stuff
     ht.has_eh = h_right.has_eh # if it has electron-hole
     ht.get_eh_sector = h_right.get_eh_sector # if it has electron-hole
@@ -642,17 +642,17 @@ def create_leads_and_central_list(h_right,h_left,list_h_central,
   
     # hoppings to the leads
     tcr = h_right.inter.copy()    # this is a matrix
-    tcl = h_left.inter.H.copy()   # this is a matrix
+    tcl = dagger(h_left.inter).copy()   # this is a matrix
     ht.block_diagonal = True
     # hoppings from the center to the leads
     if right_coupling is not None:
       ht.right_coupling = right_coupling*scale_right_coupling
     else:
-      ht.right_coupling = h_right.inter.copy()*scale_right_coupling
+      ht.right_coupling = h_right.inter*scale_right_coupling
     if left_coupling is not None:
       ht.left_coupling = left_coupling*scale_left_coupling
     else:
-      ht.left_coupling = h_left.inter.H.copy()*scale_left_coupling
+      ht.left_coupling = dagger(h_left.inter)*scale_left_coupling
   
     # assign central hamiltonian
     ht.central_intra = hc
@@ -891,17 +891,25 @@ def enlarge_hlist(ht):
     hcentral[i+2][i+1] = ht.central_intra[i+1][i] # common
   # now the new terms
   hcentral[0][0] = ht.left_intra # left
-  hcentral[0][1] = dagger(ht.left_coupling)*ht.scale_lc # left
-  hcentral[1][0] = ht.left_coupling*ht.scale_lc # left
   hcentral[-1][-1] = ht.right_intra # right
-  hcentral[-2][-1] = ht.right_coupling*ht.scale_rc # right
-  hcentral[-1][-2] = dagger(ht.right_coupling)*ht.scale_rc # right
+  if nc>0: # more than two cells in the center
+      hcentral[0][1] = dagger(ht.left_coupling)*ht.scale_lc # left
+      hcentral[1][0] = ht.left_coupling*ht.scale_lc # left
+      hcentral[-2][-1] = ht.right_coupling*ht.scale_rc # right
+      hcentral[-1][-2] = dagger(ht.right_coupling)*ht.scale_rc # right
+  else: # no original central part
+      hcentral[0][1] = dagger(ht.left_coupling) # left
+      hcentral[1][0] = ht.left_coupling # left
+      hcentral[-2][-1] += ht.right_coupling # right
+      hcentral[-1][-2] += dagger(ht.right_coupling) # right
+      hcentral[0][1] *= ht.scale_rc*ht.scale_lc/2.
+      hcentral[1][0] *= ht.scale_rc*ht.scale_lc/2.
   # store in the object
   ho.central_intra = hcentral    
   # and redefine the new lead couplings
   ho.right_coupling = ht.right_inter
   ho.left_coupling = ht.left_inter
-  return ho
+  return ho # return the new heterostructure
 
 
 def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
@@ -921,9 +929,9 @@ def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
   hlist[1][1] = idenc - ht.central_intra
   hlist[2][2] = idenr - ht.right_intra - selfr
   # now the inter cell
-  hlist[0][1] = -np.conjugate(ht.left_coupling).T*ht.scale_lc
+  hlist[0][1] = -dagger(ht.left_coupling)*ht.scale_lc
   hlist[1][0] = -ht.left_coupling*ht.scale_lc
-  hlist[2][1] = -np.conjugate(ht.right_coupling).T*ht.scale_rc
+  hlist[2][1] = -dagger(ht.right_coupling)*ht.scale_rc
   hlist[1][2] = -ht.right_coupling*ht.scale_rc
   return hlist
 

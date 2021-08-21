@@ -14,20 +14,23 @@ h.shift_fermi(1.0) # shift the chemical potential
 h1 = h.copy() # copy
 h2 = h.copy() # copy
 h1.add_swave(.0) # add electron hole symmetry
-#h2.add_swave(.1) # pairing gap of 0.01
-h2.add_pairing(mode="triplet",delta=0.05) # pairing gap of 0.01
-ht = heterostructures.build(h1,h2) # create the junction
+h2.add_swave(.1) # pairing gap of 0.01
+#h2.add_pairing(mode="triplet",delta=0.05) # pairing gap of 0.01
+ht = heterostructures.build(h2,h1) # create the junction
 ht.delta = 1e-12 # analytic continuation of the Green's functions
-es = np.linspace(-.2,.2,200) # grid of energies
-T = 1e-1 # reference transparency 
-ht.scale_rc = T # set the transparency for dIdV
-ts = [ht.didv(energy=e) for e in es] # calculate transmission
-ks = [ht.get_kappa(energy=e,T=T) for e in es] # compute kappa
+
+ts = np.linspace(1e-3,1.0,30)
+gs = [] # empty list
+e = 0.07
+for t in ts:
+    ht.scale_rc = t # set the transparency for dIdV
+    g = ht.didv(energy=e)
+    gs.append(g)
+
 plt.subplot(121)
-plt.plot(es,ts,marker="o")
+#plt.plot(es,ts,marker="o")
 plt.subplot(122)
-plt.plot(es,ks,marker="o")
-plt.ylim([0,4.1])
+plt.plot(np.log(ts),np.log(gs),marker="o")
 plt.show()
 
 
