@@ -339,29 +339,67 @@ def green_renormalization(intra,inter,energy=0.0,nite=None,
     (ge,gb) = greenf90.renormalization(intra,inter,energy,error,delta)
     return np.matrix(gb),np.matrix(ge)
   else:
-    e = np.matrix(np.identity(intra.shape[0])) * (energy + 1j*delta)
+#      g0,g1 = intra*0j,intra*0j
+#      e = np.identity(intra.shape[0],dtype=np.complex) * (energy + 1j*delta)
+#      g0,g1 = green_renormalization_jit(g0,g1,intra,inter,e,nite,
+#                            error,delta)
+#      return np.matrix(g0),np.matrix(g1)
+      e = np.matrix(np.identity(intra.shape[0])) * (energy + 1j*delta)
+      ite = 0
+      alpha = inter.copy()
+      beta = inter.H.copy()
+      epsilon = intra.copy()
+      epsilon_s = intra.copy()
+      while True: # implementation of Eq 11
+        einv = algebra.inv(e - epsilon) # inverse
+        epsilon_s = epsilon_s + alpha @ einv @ beta
+        epsilon = epsilon + alpha * einv @ beta + beta @ einv @ alpha
+        alpha = alpha @ einv @ alpha  # new alpha
+        beta = beta @ einv @ beta  # new beta
+        ite += 1
+        # stop conditions
+        if not nite is None:
+          if ite > nite:  break 
+        else:
+          if np.max(np.abs(alpha))<error and np.max(np.abs(beta))<error: break
+      if info:
+        print("Converged in ",ite,"iterations")
+      g_surf = algebra.inv(e - epsilon_s) # surface green function
+      g_bulk = algebra.inv(e - epsilon)  # bulk green function 
+      return g_bulk,g_surf
+
+
+
+
+from numba import jit
+
+#@jit(nopython=True)
+def green_renormalization_jit(g0,g1,intra,inter,e,nite,error,delta):
     ite = 0
     alpha = inter.copy()
-    beta = inter.H.copy()
+    beta = np.conjugate(inter).T.copy()
     epsilon = intra.copy()
     epsilon_s = intra.copy()
     while True: # implementation of Eq 11
-      einv = algebra.inv(e - epsilon) # inverse
+      einv = np.linalg.inv(e - epsilon) # inverse
       epsilon_s = epsilon_s + alpha @ einv @ beta
       epsilon = epsilon + alpha * einv @ beta + beta @ einv @ alpha
       alpha = alpha @ einv @ alpha  # new alpha
       beta = beta @ einv @ beta  # new beta
       ite += 1
       # stop conditions
-      if not nite is None:
-        if ite > nite:  break 
-      else:
-        if np.max(np.abs(alpha))<error and np.max(np.abs(beta))<error: break
-    if info:
-      print("Converged in ",ite,"iterations")
-    g_surf = algebra.inv(e - epsilon_s) # surface green function
-    g_bulk = algebra.inv(e - epsilon)  # bulk green function 
-    return g_bulk,g_surf
+      if np.max(np.abs(alpha))<error and np.max(np.abs(beta))<error: break
+    g_surf = np.linalg.inv(e - epsilon_s) # surface green function
+    g_bulk = np.linalg.inv(e - epsilon)  # bulk green function 
+    g0,g1 = g_bulk*1,g_surf*1
+    return g0,g1
+
+
+
+
+
+
+
 
 
 
