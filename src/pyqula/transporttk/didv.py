@@ -86,7 +86,7 @@ def zero_T_didv_1D(self,energy=0.0,delta=None,**kwargs):
 
 
 def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
-                   imode="grid",**kwargs):
+                   imode="quad",**kwargs):
     """Wrapper for the dIdV in two-dimensions"""
     if delta is None: delta = self.delta # set the own delta
     if not self.dimensionality==2: raise # only for two dimensional
