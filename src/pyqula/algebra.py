@@ -237,3 +237,31 @@ def spectral_gap(m,numw=10,**kwargs):
 
 
 
+
+
+
+
+def sqrtm(M):
+    """Square root for Hermitian matrix"""
+    (m2,evecs) = sqrtm_rotated(M)
+    m2 = dagger(evecs) @ m2 @ evecs  # change of basis
+    return m2 # return matrix
+
+
+
+def sqrtm_rotated(M,positive=True):
+    """Square root for Hermitian matrix in the diagonal basis,
+    and rotation matrix"""
+    M = (M + dagger(M))/2. # make Hermitian
+    (evals,evecs) = dlg.eigh(M) # eigenvals and eigenvecs
+    if positive:
+        if np.min(evals)<0.:
+            print("Matrix is not positive defined")
+            evals[evals<0.] = 1e-7
+    evecs = dagger(np.matrix(evecs)) # change of basis
+    m2 = np.matrix([[0.0j for i in evals] for j in evals]) # create matrix
+    for i in range(len(evals)):
+        m2[i,i] = np.sqrt(np.abs(evals[i])) # square root
+    return (m2,evecs) # return matrix
+
+

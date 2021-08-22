@@ -325,8 +325,8 @@ def landauer(hetero,energy=0.0,delta = 0.0001,error=0.0000001,do_leads=True,
    #################################
    # calculate Gammas 
    #################################
-   gammar = 1j*(selfr-selfr.H)
-   gammal = 1j*(selfl-selfl.H)
+   gammar = 1j*(selfr-dagger(selfr))
+   gammal = 1j*(selfl-dagger(selfl))
 
    #################################
    # dyson equation for the center     
@@ -340,7 +340,7 @@ def landauer(hetero,energy=0.0,delta = 0.0001,error=0.0000001,do_leads=True,
      gc = (energy+1j*delta)*iden - heff
      gc = gc.I # calculate inverse
      if has_eh: raise # if it has electron-hole, trace over electrons
-     G = (gammar*gc*gammal*gc.H).trace()[0,0].real
+     G = np.trace(gammar@gc@gammal@dagger(gc)).real
      return G
    # reduced matrix
    if hetero.block_diagonal: 
@@ -361,7 +361,7 @@ def landauer(hetero,energy=0.0,delta = 0.0001,error=0.0000001,do_leads=True,
      # calculate only some elements of the central green function
      gcn1 = gauss_inverse(heff,len(heff)-1,0) # calculate element 1,n 
      # and apply Landauer formula
-     G = (gammar*gcn1*gammal*gcn1.H).trace()[0,0].real
+     G = np.trace(gammar@gcn1@gammal@dagger(gcn1)).real
    return G # return transmission
 
 
@@ -401,176 +401,176 @@ def block2full(ht,sparse=False):
 
 
 
+#
+#def plot_landauer(ht,energy=[0.0],delta=0.001,has_eh=False):
+#   """ Plots the density of states and Landauer transmission
+#    by using a 
+#    green function approach"""
+#   # get the transmission
+#   trans = landauer(ht,energy=energy,delta=delta,has_eh=has_eh)
+#   # plot the figure
+#   fig = py.figure() # create figure
+#   fig.subplots_adjust(0.2,0.2)
+#   fig.set_facecolor("white") # face in white
+#   strans = fig.add_subplot(111) # create subplot for the transmission
+#
+#   # transport graph
+#   strans.set_xlabel("Energy",size=20)
+#   strans.set_ylabel("Transmission",size=20)
+#   strans.plot(energy,trans,color="green") # create the plot
+#   strans.fill_between(energy,0,trans,color="green")
+#   strans.set_ylim([0.0,max(trans)+0.5])
+#   strans.set_xlim([min(energy),max(energy)])
+#   strans.tick_params(labelsize=20)
+#   return fig
+#
+#
 
-def plot_landauer(ht,energy=[0.0],delta=0.001,has_eh=False):
-   """ Plots the density of states and Landauer transmission
-    by using a 
-    green function approach"""
-   # get the transmission
-   trans = landauer(ht,energy=energy,delta=delta,has_eh=has_eh)
-   # plot the figure
-   fig = py.figure() # create figure
-   fig.subplots_adjust(0.2,0.2)
-   fig.set_facecolor("white") # face in white
-   strans = fig.add_subplot(111) # create subplot for the transmission
-
-   # transport graph
-   strans.set_xlabel("Energy",size=20)
-   strans.set_ylabel("Transmission",size=20)
-   strans.plot(energy,trans,color="green") # create the plot
-   strans.fill_between(energy,0,trans,color="green")
-   strans.set_ylim([0.0,max(trans)+0.5])
-   strans.set_xlim([min(energy),max(energy)])
-   strans.tick_params(labelsize=20)
-   return fig
-
-
-
-
-def plot_local_central_dos(hetero,energies=0.0,gf=None):
-   """ Plots the local density of states in the central part"""
-   from .green import dyson
-   from .green import gf_convergence
-   from .hamiltonians import is_number
-   if gf==None: gf = gf_convergence("lead")
-   if not hetero.block_diagonal:
-     intra = hetero.central_intra # central intraterm   
-     dimhc = len(intra) # dimension of the central part
-   if hetero.block_diagonal:
-     intra = hetero.central_intra[0][0] # when it is diagonal
-# dimension of the central part
-     dimhc = len(hetero.central_intra)*len(intra)  
-   iden = np.matrix(np.identity(len(intra),dtype=complex)) # create idntity
-   ldos = np.array([0.0 for i in range(dimhc)]) # initialice ldos
-   # initialize ldos
-   for energy in energies: # loop over energies
-     # right green function
-     gr = None
-     gl = None
-     # perform dyson calculation
-
-     intra = hetero.right_intra
-     inter = hetero.right_inter
-     gr = dyson(intra,inter,energy=energy,gf=gf)
-     hetero.right_green = gr # save green function
-     # left green function
-     intra = hetero.left_intra
-     inter = hetero.left_inter
-     gl = dyson(intra,inter,energy=energy,gf=gf)
-     hetero.left_green = gl # save green function
-     # save green functions
-#     hetero.write_green()
-     # left selfenergy
-     inter = hetero.left_coupling
-     selfl = inter*gl*inter.H # left selfenergy
-     # right selfenergy
-     inter = hetero.right_coupling
-     selfr = inter*gr*inter.H # right selfenergy
-     # central green function
-     intra = hetero.central_intra
-# dyson equation for the center     
-     # full matrix
-     if not hetero.block_diagonal:
-       heff = intra + selfl + selfr
-       hetero.heff = heff
-       gc = (energy+1j*eps)*iden - heff
-       gc = gc.I # calculate inverse
-       # get the local density of states
-       ldos += np.array([-gc[i,i].imag for i in range(len(gc))])
-#       if save_heff:
-#         hetero.write_heff() 
-     # reduced matrix
-     if hetero.block_diagonal: 
-       from copy import deepcopy
-       heff = deepcopy(intra)
-       heff[0][0] = intra[0][0] + selfl
-       heff[-1][-1] = intra[-1][-1] + selfr
-       dd = (energy+1j*gf.eps)*iden
-       for i in range(len(intra)):  # add the diagonal energy part
-         heff[i][i] = heff[i][i] - dd  # this has the wrong sign!!
-      # now change the sign
-       for i in range(len(intra)):  
-         for j in range(len(intra)):  
-           try:
-             heff[i][j] = -heff[i][j]
-           except:
-             heff[i][j] = heff[i][j]
-      # save the green function
-       hetero.heff = heff
-#       if save_heff:
-#         from scipy.sparse import bmat
-#         hetero.heff = bmat(heff)
-#         hetero.write_heff() 
-      # calculate the inverse
-       from .green import gauss_inverse  # routine to invert the matrix
-       # list with the diagonal matrices
-       ldos_e = ldos*0.0 # initialice ldos at this energy
-       ii = 0 # counter for the element
-       for i in range(len(heff)): # loop over blocks
-         gci = gauss_inverse(heff,i,i) # calculate each block element      
-         for j in range(len(heff[0][0])): # loop over each block
-           ldos_e[ii] = -gci[j,j].imag 
-           ii += 1 # increase counter
-       if not ii==dimhc:
-         print("Wrong dimensions",ii,dimhc)
-         raise
-       ldos += ldos_e # add to the total ldos
-# save the effective hamiltonian
-
-   if hetero.has_spin: # resum ldos if there is spin degree of freedom
-     ldos = [ldos[2*i]+ldos[2*i+1] for i in range(len(ldos)/2)]
-   if hetero.has_eh: # resum ldos if there is eh 
-     ldos = [ldos[2*i]+ldos[2*i+1] for i in range(len(ldos)/2)]
-  #   ne = len(ldos)/2
-  #   ldos = [ldos[i]+ldos[ne+i] for i in range(ne)]
-
-
-   ldos = np.array(ldos) # transform into an array
-
-   if min(ldos)<0.0:
-     print("Negative density of states")
-     raise
-
-   g = hetero.central_geometry # geometry of the central part
-   fldos = open("LDOS.OUT","w") # open file for ldos
-   fldos.write("# X   Y    LDOS\n")
-   for (ix,iy,il) in zip(g.x,g.y,ldos):
-     fldos.write(str(ix)+"  "+str(iy)+"  "+str(il)+"\n")
-   fldos.close()
-   # scale the ldos
-   # save the LDOS in a file
-   if True:
-#   if True>0.001:
-#     ldos = np.sqrt(ldos)
-#     ldos = np.arctan(7.*ldos/max(ldos))
-     print("Sum of the LDOS =",sum(ldos))
-     ldos = ldos*300/max(ldos)
-   else:
-     ldos = ldos*0.0
-
-
-
-
-
-   # now create the figure
-   fig = py.figure() # create figure
-   fig.subplots_adjust(0.2,0.2)
-   fig.set_facecolor("white") # face in white
-   sldos = fig.add_subplot(111) # create subplot for the DOS
-
-   # plot the lattice
-   if not len(g.x)==len(ldos):
-     raise 
-   sldos.scatter(g.x,g.y,color="red",s=ldos) # plot the lattice
-   sldos.scatter(g.x,g.y,color="black",s=4) # plot the lattice
-   sldos.set_xlabel("X")
-   sldos.set_xlabel("Y")
-   sldos.axis("equal") # same scale in axes
-
-
-
-   return fig
-
+#
+#def plot_local_central_dos(hetero,energies=0.0,gf=None):
+#   """ Plots the local density of states in the central part"""
+#   from .green import dyson
+#   from .green import gf_convergence
+#   from .hamiltonians import is_number
+#   if gf==None: gf = gf_convergence("lead")
+#   if not hetero.block_diagonal:
+#     intra = hetero.central_intra # central intraterm   
+#     dimhc = len(intra) # dimension of the central part
+#   if hetero.block_diagonal:
+#     intra = hetero.central_intra[0][0] # when it is diagonal
+## dimension of the central part
+#     dimhc = len(hetero.central_intra)*len(intra)  
+#   iden = np.matrix(np.identity(len(intra),dtype=complex)) # create idntity
+#   ldos = np.array([0.0 for i in range(dimhc)]) # initialice ldos
+#   # initialize ldos
+#   for energy in energies: # loop over energies
+#     # right green function
+#     gr = None
+#     gl = None
+#     # perform dyson calculation
+#
+#     intra = hetero.right_intra
+#     inter = hetero.right_inter
+#     gr = dyson(intra,inter,energy=energy,gf=gf)
+#     hetero.right_green = gr # save green function
+#     # left green function
+#     intra = hetero.left_intra
+#     inter = hetero.left_inter
+#     gl = dyson(intra,inter,energy=energy,gf=gf)
+#     hetero.left_green = gl # save green function
+#     # save green functions
+##     hetero.write_green()
+#     # left selfenergy
+#     inter = hetero.left_coupling
+#     selfl = inter*gl*inter.H # left selfenergy
+#     # right selfenergy
+#     inter = hetero.right_coupling
+#     selfr = inter*gr*inter.H # right selfenergy
+#     # central green function
+#     intra = hetero.central_intra
+## dyson equation for the center     
+#     # full matrix
+#     if not hetero.block_diagonal:
+#       heff = intra + selfl + selfr
+#       hetero.heff = heff
+#       gc = (energy+1j*eps)*iden - heff
+#       gc = gc.I # calculate inverse
+#       # get the local density of states
+#       ldos += np.array([-gc[i,i].imag for i in range(len(gc))])
+##       if save_heff:
+##         hetero.write_heff() 
+#     # reduced matrix
+#     if hetero.block_diagonal: 
+#       from copy import deepcopy
+#       heff = deepcopy(intra)
+#       heff[0][0] = intra[0][0] + selfl
+#       heff[-1][-1] = intra[-1][-1] + selfr
+#       dd = (energy+1j*gf.eps)*iden
+#       for i in range(len(intra)):  # add the diagonal energy part
+#         heff[i][i] = heff[i][i] - dd  # this has the wrong sign!!
+#      # now change the sign
+#       for i in range(len(intra)):  
+#         for j in range(len(intra)):  
+#           try:
+#             heff[i][j] = -heff[i][j]
+#           except:
+#             heff[i][j] = heff[i][j]
+#      # save the green function
+#       hetero.heff = heff
+##       if save_heff:
+##         from scipy.sparse import bmat
+##         hetero.heff = bmat(heff)
+##         hetero.write_heff() 
+#      # calculate the inverse
+#       from .green import gauss_inverse  # routine to invert the matrix
+#       # list with the diagonal matrices
+#       ldos_e = ldos*0.0 # initialice ldos at this energy
+#       ii = 0 # counter for the element
+#       for i in range(len(heff)): # loop over blocks
+#         gci = gauss_inverse(heff,i,i) # calculate each block element      
+#         for j in range(len(heff[0][0])): # loop over each block
+#           ldos_e[ii] = -gci[j,j].imag 
+#           ii += 1 # increase counter
+#       if not ii==dimhc:
+#         print("Wrong dimensions",ii,dimhc)
+#         raise
+#       ldos += ldos_e # add to the total ldos
+## save the effective hamiltonian
+#
+#   if hetero.has_spin: # resum ldos if there is spin degree of freedom
+#     ldos = [ldos[2*i]+ldos[2*i+1] for i in range(len(ldos)/2)]
+#   if hetero.has_eh: # resum ldos if there is eh 
+#     ldos = [ldos[2*i]+ldos[2*i+1] for i in range(len(ldos)/2)]
+#  #   ne = len(ldos)/2
+#  #   ldos = [ldos[i]+ldos[ne+i] for i in range(ne)]
+#
+#
+#   ldos = np.array(ldos) # transform into an array
+#
+#   if min(ldos)<0.0:
+#     print("Negative density of states")
+#     raise
+#
+#   g = hetero.central_geometry # geometry of the central part
+#   fldos = open("LDOS.OUT","w") # open file for ldos
+#   fldos.write("# X   Y    LDOS\n")
+#   for (ix,iy,il) in zip(g.x,g.y,ldos):
+#     fldos.write(str(ix)+"  "+str(iy)+"  "+str(il)+"\n")
+#   fldos.close()
+#   # scale the ldos
+#   # save the LDOS in a file
+#   if True:
+##   if True>0.001:
+##     ldos = np.sqrt(ldos)
+##     ldos = np.arctan(7.*ldos/max(ldos))
+#     print("Sum of the LDOS =",sum(ldos))
+#     ldos = ldos*300/max(ldos)
+#   else:
+#     ldos = ldos*0.0
+#
+#
+#
+#
+#
+#   # now create the figure
+#   fig = py.figure() # create figure
+#   fig.subplots_adjust(0.2,0.2)
+#   fig.set_facecolor("white") # face in white
+#   sldos = fig.add_subplot(111) # create subplot for the DOS
+#
+#   # plot the lattice
+#   if not len(g.x)==len(ldos):
+#     raise 
+#   sldos.scatter(g.x,g.y,color="red",s=ldos) # plot the lattice
+#   sldos.scatter(g.x,g.y,color="black",s=4) # plot the lattice
+#   sldos.set_xlabel("X")
+#   sldos.set_xlabel("Y")
+#   sldos.axis("equal") # same scale in axes
+#
+#
+#
+#   return fig
+#
 
 
 
@@ -741,7 +741,7 @@ def effective_central_hamiltonian(hetero,energy=0.0,delta=0.0001,write=False):
    return heff
 
 
-def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None):
+def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None,**kwargs):
   """Calculate differential conductance"""
   if ht.has_eh: # for systems with electons and holes
     s = get_smatrix(ht,energy=energy,check=True) # get the smatrix
@@ -765,7 +765,7 @@ def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None):
       if opl is not None or opr is not None: raise # not implemented
       from . import kwantlink 
       return kwantlink.transport(ht,energy)
-    s = get_smatrix(ht,energy=energy,delta=delta,check=True) # get the smatrix
+    s = get_smatrix(ht,energy=energy) # get the smatrix
     if opl is not None or opr is not None: # some projector given
       raise # this does not make sense
       U = [[np.identity(s[0][0].shape[0]),None],
@@ -781,9 +781,9 @@ def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None):
     # select a normal lead (both of them are)
     # r1 is normal
     ree = r1
-    Ree = np.trace(ree.H*ree) # total e-e reflection 
+    Ree = np.trace(dagger(ree)@ree) # total e-e reflection 
     G1 = (ree.shape[0] - Ree).real # conductance
-    G2 = np.trace(s[0][1]*s[0][1].H).real # total e-e transmission
+    G2 = np.trace(s[0][1]@dagger(s[0][1])).real # total e-e transmission
     return (G1+G2)/2.
 #return landauer(ht,energy=energy,delta=delta) # call usual landauer 
     
@@ -796,154 +796,6 @@ def get_tmatrix(ht,energy=0.0,delta=0.0001):
   return smatrix[0][1]
 
 
-
-def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
-  """Calculate the S-matrix of an heterostructure"""
-  # now do the Fisher Lee trick
-  delta = ht.delta
-  smatrix = [[None,None],[None,None]] # smatrix in list form
-  from .green import gauss_inverse # calculate the desired green functions
-  # get the selfenergies, using the same coupling as the lead
-  selfl = ht.get_selfenergy(energy,delta=delta,lead=0,pristine=True)
-  selfr = ht.get_selfenergy(energy,delta=delta,lead=1,pristine=True)
-  if ht.block_diagonal:
-    ht2 = enlarge_hlist(ht) # get the enlaged hlist with the leads
-# selfenergy of the leads (coupled to another cell of the lead)
-    gmatrix = effective_tridiagonal_hamiltonian(ht2.central_intra,selfl,selfr,
-                                    energy=energy,
-                                    delta=delta + ht.extra_delta_central) 
-    test_gauss = False # do the tridiagonal inversion
-#    print(selfr)
-  else: # not block diagonal
-    gmatrix = build_effective_hlist(ht,energy=energy,delta=delta,selfl=selfl,
-                                    selfr=selfr)
-    test_gauss = True # gauss only works with square matrices
-#    print(selfr)
-  # gamma functions
-  gammar = 1j*(selfr-dagger(selfr))
-  gammal = 1j*(selfl-dagger(selfl))
-  # calculate the relevant terms of the Green function
-  g11 = gauss_inverse(gmatrix,0,0,test=test_gauss)
-  g12 = gauss_inverse(gmatrix,0,-1,test=test_gauss)
-  g21 = gauss_inverse(gmatrix,-1,0,test=test_gauss)
-  g22 = gauss_inverse(gmatrix,-1,-1,test=test_gauss)
-#  print("NAN",np.sum(np.isnan(g12)))
-#  print (gammal*g12*gammar*g21).trace()
-  ######## now build up the s matrix with the fisher trick
-  # the identity can have different dimension ignore for now....
-  iden = np.matrix(np.identity(g11.shape[0],dtype=complex)) # create identity
-  iden11 = np.matrix(np.identity(g11.shape[0],dtype=complex)) # create identity
-  iden22 = np.matrix(np.identity(g22.shape[0],dtype=complex)) # create identity
-  smatrix[0][0] = -iden + 1j*sqrtm(gammal)@g11@sqrtm(gammal) # matrix
-  smatrix[0][1] = 1j*sqrtm(gammal)@g12@sqrtm(gammar) # transmission matrix
-  smatrix[1][0] = 1j*sqrtm(gammar)@g21@sqrtm(gammal) # transmission matrix
-  smatrix[1][1] = -iden + 1j*sqrtm(gammar)@g22@sqrtm(gammar) # matrix
-  if check: # check whether the matrix is unitary
-      from .transporttk.unitarize import check_and_fix
-      smatrix = check_and_fix(smatrix,error=100*delta)
-#      smatrix = check_and_fix(smatrix,error=100*delta)
-#      from scipy.sparse import bmat,csc_matrix
-#      smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]
-#      smatrix2 = bmat(smatrix2).todense()
-#  #    print("Determinant",np.abs(np.linalg.det(smatrix2)))
-#      error = np.max(np.abs(lg.inv(smatrix2) -smatrix2.H)) #  check unitarity
-#      if error> 100*delta: 
-#        print("S-matrix is not unitary",error)
-#        raise
-  if as_matrix: 
-    from scipy.sparse import bmat,csc_matrix
-    smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]
-    smatrix = bmat(smatrix2).todense()
-  return smatrix
-
-
-def enlarge_hlist(ht):
-  """Add a single cell of the leads to the central part"""
-  ho = ht.copy() # copy heterostructure
-  if not ht.block_diagonal: raise # check that is in block diagonal form
-  nc = len(ht.central_intra) # number of cells in the central
-  hcentral = [[None for i in range(nc+2)] for j in range(nc+2)]
-  for i in range(nc): # intraterm
-    hcentral[i+1][i+1] = ht.central_intra[i][i].copy() # common
-  for i in range(nc-1): # interterm
-    hcentral[i+1][i+2] = ht.central_intra[i][i+1].copy() # common
-    hcentral[i+2][i+1] = ht.central_intra[i+1][i].copy() # common
-  # now the new terms
-  hcentral[0][0] = ht.left_intra.copy() # left
-  hcentral[-1][-1] = ht.right_intra.copy() # right
-  if nc>0: # more than two cells in the center
-      hcentral[0][1] = dagger(ht.left_coupling)*ht.scale_lc # left
-      hcentral[1][0] = ht.left_coupling*ht.scale_lc # left
-      hcentral[-2][-1] = ht.right_coupling*ht.scale_rc # right
-      hcentral[-1][-2] = dagger(ht.right_coupling)*ht.scale_rc # right
-  else: # no original central part
-      hcentral[0][1] = dagger(ht.left_coupling) # left
-      hcentral[1][0] = ht.left_coupling.copy() # left
-      hcentral[-2][-1] += ht.right_coupling # right
-      hcentral[-1][-2] += dagger(ht.right_coupling) # right
-      hcentral[0][1] *= ht.scale_rc*ht.scale_lc/2.
-      hcentral[1][0] *= ht.scale_rc*ht.scale_lc/2.
-  # store in the object
-  ho.central_intra = hcentral    
-  # and redefine the new lead couplings
-  ho.right_coupling = ht.right_inter
-  ho.left_coupling = ht.left_inter
-  return ho # return the new heterostructure
-
-
-def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
-  """ Calculate list of effective Hamiltonian which will be inverted"""
-  if (selfl is None) or (selfr is None):
-    (selfl,selfr) = get_surface_selfenergies(ht,energy=energy,delta=delta,
-                      pristine=True) 
-  intra = ht.central_intra # central intracell hamiltonian
-  ce = energy +1j*delta
-  idenc = np.matrix(np.identity(len(ht.central_intra),dtype=complex))*ce
-  idenl = np.matrix(np.identity(len(ht.left_intra),dtype=complex))*ce 
-  idenr = np.matrix(np.identity(len(ht.right_intra),dtype=complex))*ce 
-  hlist = [[None for i in range(3)] for j in range(3)] # list of matrices
-  # set up the different elements
-  # first the intra terms
-  hlist[0][0] = idenl - ht.left_intra - selfl
-  hlist[1][1] = idenc - ht.central_intra
-  hlist[2][2] = idenr - ht.right_intra - selfr
-  # now the inter cell
-  hlist[0][1] = -dagger(ht.left_coupling)*ht.scale_lc
-  hlist[1][0] = -ht.left_coupling*ht.scale_lc
-  hlist[2][1] = -dagger(ht.right_coupling)*ht.scale_rc
-  hlist[1][2] = -ht.right_coupling*ht.scale_rc
-  return hlist
-
-
-
-
-
-def sqrtm(M):
-    """Square root for Hermitian matrix"""
-    (m2,evecs) = sqrtm_rotated(M)
-    m2 = dagger(evecs) @ m2 @ evecs  # change of basis
-    return m2 # return matrix
-
-
-#from scipy.linalg import sqrtm
-
-
-def sqrtm_rotated(M,positive=True):
-    """Square root for Hermitian matrix in the diagonal basis,
-    and rotation matrix"""
-    M = (M + dagger(M))/2. # make Hermitian
-    (evals,evecs) = lg.eigh(M) # eigenvals and eigenvecs
-    if positive:
-        if np.min(evals)<0.: 
-            print("Matrix is not positive defined")
-            evals[evals<0.] = 1e-7
-    #  raise  # if it is not positive defined
-    evecs = dagger(np.matrix(evecs)) # change of basis
-    m2 = np.matrix([[0.0j for i in evals] for j in evals]) # create matrix
-    for i in range(len(evals)):  
-        m2[i,i] = np.sqrt(np.abs(evals[i])) # square root
-#    m2 = evecs.H * m2 * evecs  # change of basis
-    return (m2,evecs) # return matrix
 
 
 
@@ -1020,29 +872,8 @@ def get_surface_selfenergies(hetero,energy=0.0,delta=0.0001,pristine=False):
    return (selfl,selfr) # return selfenergies
 
 
-def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
-                                        energy = 0.0, delta=0.00001):
-  """ Calculate effective Hamiltonian""" 
-  if not type(intra) is list: raise # assume is list
-  n = len(intra) # number of blocks
-  iout = [[None for i in range(n)] for j in range(n)] # empty list
-  iden = np.matrix(np.identity(intra[0][0].shape[0],dtype=np.complex))
-  ez = iden*(energy +1j*delta) # complex energy
-  for i in range(n):
-    iout[i][i] = ez - intra[i][i] # simply E -H
-  for i in range(n-1):
-    iout[i][i+1] = -intra[i][i+1] # simply E -H
-    iout[i+1][i] = -intra[i+1][i] # simply E -H
-  # and now the selfenergies
-  iout[0][0] = iout[0][0] -selfl
-  iout[-1][-1] = iout[-1][-1] -selfr
-  return iout
-
 
 
 from .transporttk.builder import build
 
-#
-#def get_full_sparse():
-#  """Return a heterostrure in full sparse form"""
-#  
+from .transporttk.smatrix import get_smatrix
