@@ -104,35 +104,14 @@ class Heterostructure():
     self.energy_green = ht.energy_green
     self.left_green = ht.left_green
     self.right_green = ht.right_green
-  def get_selfenergy(self,energy,lead=0,delta=None,pristine=False):
-   """Return self energy of iesim lead"""
-   if delta is None:  delta = self.delta
-# if the interpolation function has been created
-   if self.interpolated_selfenergy: 
-     if lead==0: return np.matrix(self.selfgen[0](energy)) # return selfenergy
-     if lead==1: return np.matrix(self.selfgen[1](energy)) # return selfenergy
-# run the calculation
-   else:
-     from .green import green_renormalization
-     if lead==0:
-       intra = self.left_intra
-       inter = self.left_inter
-       if pristine: cou = self.left_inter
-       else: cou = self.left_coupling*self.scale_lc
-       deltal = delta + self.extra_delta_left # new delta left
-     if lead==1:
-       intra = self.right_intra
-       inter = self.right_inter
-       if pristine: cou = self.right_inter
-       else: cou = self.right_coupling*self.scale_rc
-       deltal = delta + self.extra_delta_right # new delta right
-     ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal)
-     selfr = cou*gr*cou.H # selfenergy
-     return selfr # return selfenergy
+  def get_selfenergy(self,energy,**kwargs):
+     """Return selfenergy of iesim lead"""
+     from .transporttk.selfenergy import get_selfenergy
+     return get_selfenergy(self,energy,**kwargs)
   def setup_selfenergy_interpolation(self,es=np.linspace(-4.0,4.0,100),
            delta=0.0001,pristine=False):
     """Create the functions that interpolate the selfenergy"""
-    from interpolation import intermatrix
+    from .interpolation import intermatrix
     self.interpolated_selfenergy = False # set as False
     fsl = lambda e: self.get_selfenergy(e,delta=delta,lead=0,pristine=pristine)
     fsr = lambda e: self.get_selfenergy(e,delta=delta,lead=1,pristine=pristine)
