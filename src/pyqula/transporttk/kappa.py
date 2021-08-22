@@ -57,6 +57,23 @@ def generate_HT(ht,SC=True,temperature=0.,**kwargs):
     return hto
 
 
+#### These are workrounds for more efficient finite temperature calculations ##
+## Not yet finished! ##
+
+def get_kappa_finite_temperature_energies(**kwargs):
+    """Compute kappa using temperature convolution"""
+    ts,Gs = get_conductances_finite_temp(energies=energies,**kwargs) # G at T=0
+    ks = []
+    for g in Gs.T: # loop over energies
+        k = get_power(ts,g)
+        ks.append(k)
+    return np.array(ks) # return kappa
 
 
+def get_kappa_finite_temperature_energies(HT,**kwargs):
+    ks1 = get_kappa_finite_temperature_energies(
+                     HT=generate_HT(HT,SC=True,**kwargs),**kwargs)
+    ks2 = get_kappa_finite_temperature_energies(
+                     HT=generate_HT(HT,SC=False,**kwargs),**kwargs)
+    return ks1/ks2
 

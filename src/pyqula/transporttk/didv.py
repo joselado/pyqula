@@ -3,9 +3,19 @@ from ..heterostructures import didv
 import numpy as np
 from ..integration import simpson
 from scipy.integrate import quad
+from .. import parallel
 
-
-# wrapper to compute the dIdV curve
+# wrapper to compute the dIdV curve for different energies
+#
+#def generic_didv(self,energies=None,**kwargs):
+#   """Gneeric dIdV, wrapping for multiple energies"""
+#   if energies is not None: # parallelize on energies
+#       fg = lambda e: generic_didv_single_energy(self,energy=e,**kwargs)
+#       return parallel.pcall(fg,energies) # parallelize
+#   else: # single energy provided
+#       return generic_didv_single_energy(self,**kwargs)
+#
+#
 
 def generic_didv(self,temp=0.,**kwargs):
     """Wrapper to compute the dIdV at finite temperature"""
