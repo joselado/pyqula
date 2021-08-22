@@ -18,8 +18,8 @@ h1.add_swave(.0) # add electron hole symmetry
 h2.add_pairing(mode="triplet",delta=0.05,d=[0.,0.,1.]) # pairing gap of 0.01
 ht = heterostructures.build(h1,h2) # create the junction
 ht.delta = 1e-6 # analytic continuation of the Green's functions
-temps = np.linspace(0.,.01,20) # grid of energies
-T = 1e-1 # reference transparency 
+temps = np.linspace(0.,.04,20) # grid of energies
+T = 2e-1 # reference transparency 
 ht.scale_lc = T # set the transparency for dIdV
 from pyqula import parallel
 parallel.cores = 6
