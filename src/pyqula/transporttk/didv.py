@@ -2,6 +2,7 @@ from ..parallel import pcall
 from ..heterostructures import didv
 import numpy as np
 from ..integration import simpson
+from scipy.integrate import quad
 
 
 # wrapper to compute the dIdV curve
@@ -24,7 +25,6 @@ def finite_T_didv(self,temp,energy=0.0,**kwargs):
         out = zero_T_didv(self,energy=energy+e,**kwargs) 
         out *= FD(e-de,temp=temp) - FD(e+de,temp=temp) 
         return out/de
-    from scipy.integrate import quad
     return quad(f,-dt*temp,dt*temp,epsrel=1e-2,limit=20)[0]
 #    ne = 79 # number of energies
 #    from ..integration import simpson
@@ -67,6 +67,7 @@ def zero_T_didv_1D(self,energy=0.0,delta=None,**kwargs):
     """Wrapper for the dIdV in one dimension"""
     if delta is None: delta = self.delta # set the own delta
     if not self.dimensionality==1: raise # only for one dimensional
+    return didv(self,energy=energy,delta=delta,**kwargs)
     try:
         return didv(self,energy=energy,delta=delta,**kwargs)
     except:
@@ -74,16 +75,24 @@ def zero_T_didv_1D(self,energy=0.0,delta=None,**kwargs):
         return 1e-10
 
 
-def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,**kwargs):
+def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
+                   imode="grid",**kwargs):
     """Wrapper for the dIdV in two-dimensions"""
     if delta is None: delta = self.delta # set the own delta
     if not self.dimensionality==2: raise # only for two dimensional
     # function to integrate
     print("Computing",energy)
     f = lambda k: self.generate(k,self.scale_lc,self.scale_rc).didv(energy=energy,delta=delta,**kwargs)
-    out = pcall(f,np.linspace(0.,1.,nk,endpoint=False))
-#    return simpson(f,eps=np.mean(out))
-    return np.trapz(out,dx=1./nk)
+    if imode=="grid":
+        out = pcall(f,np.linspace(0.,1.,nk,endpoint=False))
+        return np.trapz(out,dx=1./nk)
+    elif imode=="simpson":
+        return simpson(f,eps=1e-4,xlim=[0.,1.])
+    elif imode=="quad":
+        return quad(f,0.,1.,epsrel=1e-1,limit=20)[0]
+    else: 
+        print("Unrecognized imode")
+        raise
 
 
 

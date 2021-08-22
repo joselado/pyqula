@@ -14,12 +14,12 @@ def check_and_fix(smatrix,error=1e-7):
     sH = np.conjugate(smatrix2).T
     merror = np.max(np.abs(lg.inv(smatrix2)-sH)) #  check unitarity
     if merror> error:
-        print("S-matrix is not unitary",error,"Determinant",np.abs(lg.det(sH)))
+#        print("S-matrix is not unitary",error,"Determinant",np.abs(lg.det(sH)))
 #        if abs(np.abs(lg.det(sH))-1.0)>1e-2: raise
 #    print("S-matrix is unitary",error,"Determinant",np.abs(lg.det(sH)))
 #    else: s3 = smatrix2
         smatrix2 = make_unitary(smatrix2)
-        print("Unitarized determinant",np.abs(lg.det(smatrix2)))
+#        print("Unitarized determinant",np.abs(lg.det(smatrix2)))
     s3 = np.matrix(smatrix2) # unitarized
     sout = [[s3[0:n,0:n],s3[n:2*n,0:n]],[s3[0:n,n:2*n],s3[n:2*n,n:2*n]]]
     return sout
