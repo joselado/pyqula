@@ -46,4 +46,17 @@ def same_hamiltonian(self,h,ntries=10):
     return True
 
 
-
+def turn_spinful(self,enforce_tr=False):
+    """Turn the hamiltonian spinful"""
+    if self.has_spin: return # already spinful
+    if self.is_sparse: # sparse Hamiltonian
+      self.turn_dense() # dense Hamiltonian
+      self.turn_spinful(enforce_tr=enforce_tr) # spinful
+      self.turn_sparse()
+    else: # dense Hamiltonian
+      from ..increase_hilbert import spinful
+      def fun(m):
+          if enforce_tr: return spinful(m,np.conjugate(m))
+          else: return spinful(m)
+      self.modify_hamiltonian_matrices(fun) # modify the matrices
+      self.has_spin = True # set spinful
