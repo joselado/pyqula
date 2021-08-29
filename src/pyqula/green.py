@@ -374,6 +374,7 @@ def green_renormalization(intra,inter,energy=0.0,nite=None,
 from numba import jit
 
 #@jit(nopython=True)
+### this seems to not work with numba ###
 def green_renormalization_jit(g0,g1,intra,inter,e,nite,error,delta):
     ite = 0
     alpha = inter.copy()

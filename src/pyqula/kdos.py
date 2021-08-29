@@ -290,9 +290,6 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
   for o in out: fo.write(o)
   fo.close()
 
-#      fo.flush() # flush
-#  fo.close()
-
 
 
 

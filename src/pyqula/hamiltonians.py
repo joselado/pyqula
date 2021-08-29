@@ -217,8 +217,8 @@ class Hamiltonian():
         """Return a Hamiltonian only with the anomalous part"""
         return superconductivity.get_anomalous_hamiltonian(self)
     def add_pairing(self,**kwargs):
-      """ Add a general pairing matrix, uu,dd,ud"""
-      superconductivity.add_pairing_to_hamiltonian(self,**kwargs)
+        """ Add a general pairing matrix, uu,dd,ud"""
+        superconductivity.add_pairing_to_hamiltonian(self,**kwargs)
     def same_hamiltonian(self,*args,**kwargs):
         """Check if two hamiltonians are the same"""
         return hamiltonianmode.same_hamiltonian(self,*args,**kwargs)
@@ -269,20 +269,9 @@ class Hamiltonian():
         from .magnetism import add_magnetism
         add_magnetism(self,m)
     def add_exchange(self,m): self.add_magnetism(m)
-    def turn_spinful(self,enforce_tr=False):
-      """Turn the hamiltonian spinful""" 
-      if self.has_spin: return # already spinful
-      if self.is_sparse: # sparse Hamiltonian
-        self.turn_dense() # dense Hamiltonian
-        self.turn_spinful(enforce_tr=enforce_tr) # spinful
-        self.turn_sparse()
-      else: # dense Hamiltonian
-        from .increase_hilbert import spinful
-        def fun(m):
-            if enforce_tr: return spinful(m,np.conjugate(m))
-            else: return spinful(m)
-        self.modify_hamiltonian_matrices(fun) # modify the matrices
-        self.has_spin = True # set spinful
+    def turn_spinful(self,**kwargs):
+        from .htk.mode import turn_spinful
+        turn_spinful(self,**kwargs)
     def remove_spin(self):
       """Removes spin degree of freedom"""
       if self.check_mode("spinless"): return # do nothing
@@ -584,34 +573,9 @@ hamiltonian = Hamiltonian
 
 def get_first_neighbors(r1,r2):
     """Gets the fist neighbors, input are arrays"""
-#  if optimal:
     from . import neighbor
     pairs = neighbor.find_first_neighbor(r1,r2)
     return pairs
-#  else:
-#    from numpy import array
-#    n=len(r1)
-#    pairs = [] # pairs of neighbors
-#    for i in range(n):
-#      ri=r1[i]
-#      for j in range(n):
-#        rj=r2[j]
-#        dr = ri - rj ; dr = dr.dot(dr)
-#        if .9<dr<1.1 : # check if distance is 1
-#          pairs.append([i,j])  # add to the list
-#    return pairs # return pairs of first neighbors
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -725,29 +689,7 @@ def print_hamiltonian(h):
   return
 
 
-
-def add_sublattice_imbalance(h,mass):
-  """ Adds to the intracell matrix a sublattice imbalance """
-  if h.geometry.has_sublattice:  # if has sublattice
-    def ab(i): 
-      return h.geometry.sublattice[i]
-  else: 
-    print("WARNING, no sublattice present")
-    return 0. # if does not have sublattice
-  natoms = len(h.geometry.r) # assume spinpolarized calculation 
-  rows = range(natoms)
-  if callable(mass):  # if mass is a function
-    r = h.geometry.r
-    data = [mass(r[i])*ab(i) for i in range(natoms)]
-  else: data = [mass*ab(i) for i in range(natoms)]
-  massterm = csc_matrix((data,(rows,rows)),shape=(natoms,natoms)) # matrix
-  h.intra = h.intra + h.spinless2full(massterm)
-
-
-
-
-
-
+from .htk.cdw import add_sublattice_imbalance
 
 
 def build_eh_nonh(hin,c1=None,c2=None):
@@ -951,26 +893,7 @@ def kchain(h,k):
 
 # import the function written in the library
 from .kanemele import generalized_kane_mele
-
-
-def modify_hamiltonian_matrices(self,f):
-  """Apply a certain function to all the matrices"""
-  self.intra = f(self.intra)
-  if self.is_multicell: # for multicell hamiltonians
-    for i in range(len(self.hopping)): # loop over hoppings
-      self.hopping[i].m = f(self.hopping[i].m) # put in nambu form
-  else: # conventional way
-    if self.dimensionality==0: pass # one dimensional systems
-    elif self.dimensionality==1: # one dimensional systems
-      self.inter = f(self.inter)
-    elif self.dimensionality==2: # two dimensional systems
-      self.tx = f(self.tx)
-      self.ty = f(self.ty)
-      self.txy = f(self.txy)
-      self.txmy = f(self.txmy)
-    else: raise
-
-
+from .htk.modify import modify_hamiltonian_matrices
 
 from . import inout
 

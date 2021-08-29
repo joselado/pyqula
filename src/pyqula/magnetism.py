@@ -30,20 +30,17 @@ def add_zeeman(h,zeeman=[0.0,0.0,0.0]):
     else: return np.array([0.,0.,z]) # just a number
   from scipy.sparse import coo_matrix as coo
   from scipy.sparse import bmat
-  if h.has_spin: # only if the system has spin
-   # no = h.num_orbitals # number of orbitals (without spin)
-    no = len(h.geometry.r) # number of orbitals (without spin)
-    # create matrix to add to the hamiltonian
-    bzee = [[None for i in range(no)] for j in range(no)]
-    # assign diagonal terms
-    r = h.geometry.r  # z position
-    for i in range(no):
-        JJ = evaluate_J(zeeman,r[i],i) # evaluate the exchange
-        bzee[i][i] = JJ[0]*sx+JJ[1]*sy+JJ[2]*sz
-    bzee = bmat(bzee) # create matrix
-    h.intra = h.intra + h.spinful2full(bzee) # Add matrix 
-  if not h.has_spin:  # still have to implement this...
-    raise
+  if not h.has_spin:  h.turn_spinful()
+  no = len(h.geometry.r) # number of orbitals (without spin)
+  # create matrix to add to the hamiltonian
+  bzee = [[None for i in range(no)] for j in range(no)]
+  # assign diagonal terms
+  r = h.geometry.r  # z position
+  for i in range(no):
+      JJ = evaluate_J(zeeman,r[i],i) # evaluate the exchange
+      bzee[i][i] = JJ[0]*sx+JJ[1]*sy+JJ[2]*sz
+  bzee = bmat(bzee) # create matrix
+  h.intra = h.intra + h.spinful2full(bzee) # Add matrix 
 
 
 
