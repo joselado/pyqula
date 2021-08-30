@@ -919,5 +919,6 @@ def print_hopping(h):
 
 
 from .htk.dummy import generate_dummy_hamiltonian
+generate_hamiltonian_from_dict = generate_dummy_hamiltonian
 
 

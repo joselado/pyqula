@@ -14,7 +14,7 @@ d = {(0,0,0):[[0.0,1.0],[1.0,0.0]],
      }
 
 # create a dummy Hamiltonian for those hopping matrices
-h = hamiltonians.generate_dummy_hamiltonian(d)
+h = hamiltonians.generate_hamiltonian_from_dict(d)
 
 
 # this Hamiltonian will work as a typical one
