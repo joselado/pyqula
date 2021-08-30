@@ -918,6 +918,6 @@ def print_hopping(h):
 
 
 
-
+from .htk.dummy import generate_dummy_hamiltonian
 
 
