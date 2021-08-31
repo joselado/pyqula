@@ -34,7 +34,7 @@ def pcall_single(fin,xs,time=10,error=None):
     n = len(xs) # number of calculations
     f = lambda x: fin(x)
     main = "import dill as pickle\nimport os\n"
-    main += "import sys ; sys.path.append("+srcpath+")\n"
+    main += "import sys ; sys.path.append('"+srcpath+"')\n"
     main += "try: ii = int(os.environ['SLURM_ARRAY_TASK_ID'])\n"
     main += "except: ii = 0\n"
     main += "f = pickle.load(open('function.obj','rb'))\n"
