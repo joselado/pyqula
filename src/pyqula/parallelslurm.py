@@ -6,7 +6,7 @@ from . import filesystem as fs
 import signal
 import subprocess
 
-srcpath = os.path.dirname(os.path.realpath(__file__)) 
+srcpath = os.path.dirname(os.path.realpath(__file__))+"/.." 
 
 #pickle.settings['recurse'] = True
 
