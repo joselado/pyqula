@@ -19,7 +19,7 @@ def selfconvolve_jit(ds,out):
               out[ii,jj] = ds[(i+ii)%nx,(j+jj)%nx]*ds[i,j] + out[ii,jj]
     return out
 
-
+from .temperaturetk.convolution import temperature_convolution
 
 
 

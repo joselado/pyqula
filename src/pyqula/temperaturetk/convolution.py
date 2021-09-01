@@ -8,7 +8,6 @@ def temperature_convolution(x,y,temp=1e-1):
     dt = 20 # hwo many times the temperature
     x = np.array(x)
     y = np.array(y)
-    print(len(x),len(y))
     fy = interp1d(x,y,bounds_error=False,fill_value=(y[0],y[len(y)-1]))
     de = temp/10
     def g(e0):
