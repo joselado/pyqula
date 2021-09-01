@@ -81,8 +81,13 @@ def random_integrate(f,df=1e-4):
 
 
 
-
-
+def peak_integrate(f,x0,x1,xp=0.0,dp=1e-6,**kwargs):
+    """Wrapper to quad, for function that has a peak"""
+    from scipy.integrate import quad
+    i0 = quad(f,x0,xp-dp,**kwargs) # first interval
+    i1 = quad(f,xp-dp,xp+dp,**kwargs) # second interval
+    i2 = quad(f,xp+dp,x1,**kwargs) # third interval
+    return i1+i2+i2
   
 
 
