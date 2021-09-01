@@ -35,7 +35,7 @@ def finite_T_didv(self,temp,energy=0.0,**kwargs):
         out = zero_T_didv(self,energy=energy+e,**kwargs) 
         out *= FD(e-de,temp=temp) - FD(e+de,temp=temp) 
         return out/de
-    return quad(f,-dt*temp,dt*temp,epsrel=1e-2,limit=30)[0]/2.
+    return quad(f,-dt*temp,dt*temp,epsrel=1e-2,limit=20)[0]/2.
 #    ne = 79 # number of energies
 #    from ..integration import simpson
 ##    return simpson(f,xlim=[-dt*temp,dt*temp],eps=1e-3)
