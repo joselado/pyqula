@@ -24,7 +24,7 @@ ht.delta = 1e-6 # analytic continuation of the Green's functions
 es = np.linspace(-.2,.2,41) # grid of energies
 T = 4e-1 # reference transparency 
 ht.scale_lc = T # set the transparency for dIdV
-temp = 0.0
+temp = 0.02
 from pyqula import parallel
 parallel.cores = 6
 ts = parallel.pcall(lambda e: ht.didv(energy=e,temp=temp),es)
