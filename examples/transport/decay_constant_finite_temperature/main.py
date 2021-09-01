@@ -30,7 +30,7 @@ parallel.cores = 6
 ts = parallel.pcall(lambda e: ht.didv(energy=e,temp=temp),es)
 ks = parallel.pcall(lambda e: ht.get_kappa(energy=e,T=T,temp=temp),es)
 from pyqula.temperaturetk.convolution import temperature_convolution
-es,ks = temperature_convolution(es,ks,temp=.1*9e-1)
+#es,ks = temperature_convolution(es,ks,temp=.1*9e-1)
 
 plt.subplot(121)
 plt.plot(es,ts,marker="o")
