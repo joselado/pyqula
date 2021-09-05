@@ -176,8 +176,9 @@ class Geometry:
       """
       return self.get_k2K_generator()(v)
   def get_fractional(self,center=False):
-    """Fractional coordinates"""
-    get_fractional(self,center=center) # get fractional coordinates
+      """Fractional coordinates"""
+      self.update_reciprocal() # update reciprocal lattice vectors
+      get_fractional(self,center=center) # get fractional coordinates
   def rotate(self,angle):
     """Rotate the geometry"""
     return sculpt.rotate(self,angle*np.pi/180)
@@ -200,7 +201,7 @@ class Geometry:
     self.z[:] -= r0[2]
     self.xyz2r() # update
     if self.dimensionality>0:
-      self.get_fractional(center=True)
+      self.et_fractional(center=True)
       self.fractional2real()
   def write_function(self,fun,name="FUNCTION.OUT"):
     """Write a certain function"""
@@ -276,19 +277,19 @@ class Geometry:
       """
       self.b1,self.b2,self.b3 = get_reciprocal(self.a1,self.a2,self.a3)
   def get_k2K_generator(self,toreal=False):
-    """
-    Function to turn a reciprocal lattice vector to natural units
-    """
-    R = self.get_k2K() # get matrix
-    if toreal: R = R.H # transform to real coordinates
-    def fun(k0):
-      if len(k0)==3: k = k0 # do nothing
-      elif len(k0)==2: k = np.array([k0[0],k0[1],0.]) # convert to three comp
-      r = np.matrix(k).T # real space vectors
-      out = np.array((R*r).T)[0] # change of basis
-      if len(k0)==2: return np.array([out[0],out[1]]) # return two
-      return out
-    return fun
+      """
+      Function to turn a reciprocal lattice vector to natural units
+      """
+      R = self.get_k2K() # get matrix
+      if toreal: R = R.H # transform to real coordinates
+      def fun(k0):
+        if len(k0)==3: k = k0 # do nothing
+        elif len(k0)==2: k = np.array([k0[0],k0[1],0.]) # convert to three comp
+        r = np.matrix(k).T # real space vectors
+        out = np.array((R*r).T)[0] # change of basis
+        if len(k0)==2: return np.array([out[0],out[1]]) # return two
+        return out
+      return fun
   def fractional2real(self):
     """
     Convert fractional coordinates to real coordinates
@@ -696,7 +697,7 @@ def triangular_lattice(n=1):
   g.dimensionality = 2 # two dimensional system
   g.xyz2r() # create r coordinates
   g.has_sublattice = False # has sublattice index
-  g.update_reciprocal() # update reciprocal lattice vectors
+  g.get_fractional() # update reciprocal lattice vectors
   if n>1: return supercelltk.target_angle_volume(g,angle=1./3.,volume=int(n),
           same_length=True) 
   g = sculpt.rotate_a2b(g,g.a1,np.array([1.,0.,0.]))
@@ -947,16 +948,6 @@ def honeycomb_lattice_C6():
   g = honeycomb_lattice() # create geometry
   return supercelltk.target_angle_volume(g,angle=1./3.,volume=3,
           same_length=True)
-#  m = [[2,1,0],[1,2,0],[0,0,1]]
-#  g = non_orthogonal_supercell(g,m)
-#  g.r[0] = g.r[0] + g.a2
-#  g.r[1] = g.r[1] + g.a2
-#  g.r[4] = g.r[4] - g.a2 + g.a1
-#  # if it looks stupid but it works, it is not stupid
-#  g.r2xyz()
-#  g.update_reciprocal() # update reciprocal lattice vectors
-#  return g
- 
 
 
 
@@ -987,10 +978,9 @@ def supercell2d(g,n1=1,n2=1,use_fortran=use_fortran):
   if use_fortran:
     from . import supercellf90
     go.r = supercellf90.supercell2d(g.r,g.a1,g.a2,n1,n2)
-    go.r2xyz() # update xyz
 #    print("Using FORTRAN")
   else:
-    nc = len(g.x) # number of atoms in a cell
+    nc = len(g.r) # number of atoms in a cell
     n = nc*n1*n2 # total number of positions
     a1 = g.a1 # first vector
     a2 = g.a2 # second vector
@@ -1001,7 +991,7 @@ def supercell2d(g,n1=1,n2=1,use_fortran=use_fortran):
           ri = i*a1 + j*a2 + g.r[k] 
           rs.append(ri) # store
     go.r = np.array(rs) # store
-    go.r2xyz()
+  go.r2xyz()
   go.a1 = go.a1*n1
   go.a2 = go.a2*n2
   # shift to zero
@@ -1236,13 +1226,11 @@ def get_k2K(g):
 
 
 def get_reciprocal(a1,a2,a3):
-  """Return a matrix that converts vectors
-  in the reciprocal space into natural units, useful for drawing
-  2D quantities"""
+  """Return the reciprocal lattice vector"""
   (ux,uy,uz) = (a1,a2,a3)
-  ux = ux/np.sqrt(ux.dot(ux))
-  uy = uy/np.sqrt(uy.dot(uy))
-  uz = uz/np.sqrt(uz.dot(uz))
+#  ux = ux/np.sqrt(ux.dot(ux))
+#  uy = uy/np.sqrt(uy.dot(uy))
+#  uz = uz/np.sqrt(uz.dot(uz))
   a2kn = np.matrix([ux,uy,uz]) # matrix for the change of basis
   r2a = np.matrix([ux,uy,uz]).T.I # from real space to lattice vectors
   b1,b2,b3 = r2a[0,:],r2a[1,:],r2a[2,:]
