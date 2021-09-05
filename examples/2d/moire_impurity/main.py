@@ -30,7 +30,7 @@ k1,k2,k3 = g.b1,g.b2,g.b2-g.b1 # wavevectors for the potential
 
 def potential(r):
     """Potential commensurate with the unit cell"""
-    v = 1.0 # strength of the potential
+    v = 0.3 # strength of the potential
     p = 2*np.pi # two pi factor
     vk = lambda k: v*np.cos(k.dot(r)*np.pi*2) # function for one contribution
     return vk(k1) + vk(k2) + vk(k3) # evaluation of the three contributions
@@ -57,7 +57,7 @@ def impurity(r):
   else: return 0.0
 
 
-# add the moire in the onsite energies
+# add the impurity in the onsite energies
 h.add_onsite(impurity) # add the impurity potential
 
 h.get_bands()
