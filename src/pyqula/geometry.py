@@ -1226,7 +1226,8 @@ def get_k2K(g):
 
 
 def get_reciprocal(a1,a2,a3):
-  """Return the reciprocal lattice vector"""
+  """Return the reciprocal lattice vectors
+  By definition, ai*bj = delta_ij"""
   (ux,uy,uz) = (a1,a2,a3)
 #  ux = ux/np.sqrt(ux.dot(ux))
 #  uy = uy/np.sqrt(uy.dot(uy))
