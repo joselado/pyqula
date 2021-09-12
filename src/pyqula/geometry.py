@@ -1209,7 +1209,7 @@ def remove_duplicated_positions(r):
 def get_k2K(g):
   """Return a matrix that converts vectors
   in the reciprocal space into natural units, useful for drawing
-  2D quantities"""
+  2D/3D quantities"""
   if g.dimensionality == 2:
     (ux,uy,uz) = (g.a1,g.a2,np.array([0.,0.,1]))
   elif g.dimensionality == 3:
