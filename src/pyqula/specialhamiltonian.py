@@ -70,11 +70,8 @@ def TMDC_MX2(soc=0.0,cdw=0.0,g=None,ts=[1.0]):
     if g is None: 
         g = geometry.triangular_lattice()  # triangular lattice
         if cdw!=0.0: g = g.supercell(3)
-#    ts = np.array([86.8,139.9,29.6,3.5,3.3])
-#    ts = np.array([46.,257.5,4.4,-15,6])
     ts = np.array(ts)
     t = ts[0]/np.max(ts) # 1NN 
-#    ts[0] = 0.0 # set to zero
     ts = ts/np.max(ts) # normalize
     fm = specialhopping.neighbor_hopping_matrix(g,ts) # function for hoppings
     h = g.get_hamiltonian(mgenerator=fm,is_multicell=True,has_spin=False,
@@ -109,7 +106,7 @@ def TMDC_MX2(soc=0.0,cdw=0.0,g=None,ts=[1.0]):
 def triangular_pi_flux(g=None,**kwargs):
     """Return a pi-flux Hamiltonian"""
     if g is None: # no geometry given
-        g = geometry.triangular_lattice() # geometry of a traingular lattice
+        g = geometry.triangular_lattice() # geometry of a triangular lattice
     g = g.supercell((2,1)) # create a supercell with 2 atoms
     ft = specialhopping.phase_C3_matrix(g,phi=.5)
     h = g.get_hamiltonian(mgenerator=ft,is_multicell=True,**kwargs) # return the Hamiltonian
