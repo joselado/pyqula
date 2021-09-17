@@ -192,10 +192,12 @@ def ldos_diagonalization(m,e=0.0,**kwargs):
 def ldosmap(h,energies=np.linspace(-1.0,1.0,40),delta=None,
         nk=40,operator=None,**kwargs):
   """Write a map of the ldos using full diagonalization"""
+  if h.dimensionality == 0: nk = 1
   if delta is None:
     delta = (np.max(energies)-np.min(energies))/len(energies) # delta
   hkgen = h.get_hk_gen() # get generator
   dstot = np.zeros((len(energies),h.intra.shape[0])) # initialize
+  operator = h.get_operator(operator)
   def getd(k): # get LDOS
     hk = hkgen(k) # get Hamiltonian
     # LDOS for this kpoint
@@ -213,10 +215,9 @@ def ldosmap(h,energies=np.linspace(-1.0,1.0,40),delta=None,
 def spatial_energy_profile(h,**kwargs):
   """Computes the DOS for each site of an slab, only for 2d"""
   if h.dimensionality==0:
-      pos = h.geometry.x
-      nk = 1
-  elif h.dimensionality==1: pos = h.geometry.y
-  elif h.dimensionality==2: pos = h.geometry.z
+      pos = h.geometry.r[:,0]
+  elif h.dimensionality==1: pos = h.geometry.r[:,1]
+  elif h.dimensionality==2: pos = h.geometry.r[:,2]
   else: raise
   es,ds = ldosmap(h,**kwargs)
   if len(ds[0])!=len(pos): 
