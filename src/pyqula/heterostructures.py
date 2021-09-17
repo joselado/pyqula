@@ -56,6 +56,9 @@ class Heterostructure():
     return plot_central_dos(self,energies=energies,num_rep=num_rep,
                       mixing=mixing,eps=eps,green_guess=green_guess,
                       max_error=max_error)
+  def surface_dos(self,**kwargs):
+      from .transporttk import sdos
+      return sdos.surface_dos(self,**kwargs)
   def landauer(self,energy=[0.],delta=0.0001,do_leads=True,left_channel=None,
                 right_channel=None):
     """ Return the Landauer transmission"""

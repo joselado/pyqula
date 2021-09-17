@@ -19,6 +19,8 @@ def build(h1,h2,central=None,**kwargs):
       out.scale_rc = rc
       return out # return 1d heterostructure
     hout = Heterostructure() # create
+    hout.Hr = h2.copy() # store Hamiltonian
+    hout.Hl = h1.copy() # store Hamiltonian
     hout.dimensionality = 2 # two dimensional
     hout.generate = fun # function that generates the heterostructure
     return hout # function that return a heterostructure

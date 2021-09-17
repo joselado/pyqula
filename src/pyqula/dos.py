@@ -53,8 +53,8 @@ def dos_surface(h,output_file="DOS.OUT",
   for e in energies: # loop over energies
     print("Done",e)
     gb,gs = green.green_renormalization(h.intra,h.inter,energy=e,delta=delta)
-    gb = -gb.trace()[0,0].imag
-    gs = -gs.trace()[0,0].imag
+    gb = -np.trace(gb).imag
+    gs = -np.trace(gs).imag
     fo.write(str(e)+"     "+str(gs)+"    "+str(gb)+"\n")
   fo.close()
 
@@ -498,7 +498,7 @@ def autodos(h,auto=True,**kwargs):
 
 
 def bulkandsurface(h1,energies=np.linspace(-1.,1.,100),operator=None,
-                    delta=0.01,hs=None,nk=30):
+                    delta=0.01,hs=None,nk=30,write=True):
   """Compute the DOS of the bulk and the surface"""
   tr = timing.Testimator("KDOS") # generate object
   ik = 0
@@ -514,15 +514,17 @@ def bulkandsurface(h1,energies=np.linspace(-1.,1.,100),operator=None,
       # compute dos
       ig = 0
       for g in out: # loop
-        if operator is None: d = -g.trace()[0,0].imag # only the trace 
+        if operator is None: d = -np.trace(g).imag # only the trace 
         elif callable(operator): d = operator(g,k=k) # call the operator
-        else:  d = -(g*operator).trace()[0,0].imag # assume it is a matrix
+        else:  d = -np.trace(g*operator).imag # assume it is a matrix
         dosout[ig,ie] += d # store
         ig += 1 # increase site
       ie += 1 # increase energy
   # write in file
   dosout/=nk # normalize
-  np.savetxt("DOS_BULK_SURFACE.OUT",np.matrix([energies,dosout[0],dosout[1]]).T)
+  if write:
+    np.savetxt("DOS_BULK_SURFACE.OUT",np.array([energies,dosout[0],dosout[1]]).T)
+  return energies,dosout[0],dosout[1]
 
 
 
@@ -544,4 +546,27 @@ def surface2bulk(h,n=50,nk=3000,delta=1e-3,e=0.0,**kwargs):
 
 
 
+
+def surface_dos(h,energies=None,klist=None,delta=0.01,
+                         operator=None):
+    bout = [] # empty list, bulk
+    sout = [] # empty list, surface
+    if klist is None:
+        klist = [[i,0.,0.] for i in np.linspace(-.5,.5,50)]
+    if energies is None: energies = np.linspace(-.5,.5,50)
+    h = h.get_no_multicell()
+    def sdos(energy):
+        if h.dimensionality==1:
+            gs,sf = green.green_renormalization(h.intra,h.inter,
+                energy=energy,delta=delta) # surface green function
+            return -np.trace(sf).imag # return result
+        elif h.dimensionality==2:
+            out = 0.0
+            for k in klist: # loop over kpoints
+                gs,sf = green.green_kchain(h,k=k,energy=energy,delta=delta,
+                         only_bulk=False) # surface green function
+                out += -np.trace(sf).imag
+            return out/len(klist)
+        else: raise # not implemented
+    return energies,np.array([sdos(e) for e in energies])          
 
