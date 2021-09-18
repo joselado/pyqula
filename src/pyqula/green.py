@@ -330,43 +330,43 @@ def block_inverse(m,i=0,j=0):
 def green_renormalization(intra,inter,energy=0.0,nite=None,
                             error=0.000001,info=False,delta=0.001,
                             use_fortran = use_fortran):
-  """ Calculates bulk and surface Green function by a renormalization
-  algorithm, as described in I. Phys. F: Met. Phys. 15 (1985) 851-858 """
-  intra = np.matrix(intra)
-  inter = np.matrix(inter)
-  error = delta*1e-6 # overwrite error
-  if use_fortran: # use the fortran implementation
-    (ge,gb) = greenf90.renormalization(intra,inter,energy,error,delta)
-    return np.matrix(gb),np.matrix(ge)
-  else:
+    """ Calculates bulk and surface Green function by a renormalization
+    algorithm, as described in I. Phys. F: Met. Phys. 15 (1985) 851-858 """
+    intra = algebra.todense(intra)
+    inter = algebra.todense(inter)
+    error = delta*1e-6 # overwrite error
+#  if use_fortran: # use the fortran implementation
+#    (ge,gb) = greenf90.renormalization(intra,inter,energy,error,delta)
+#    return np.matrix(gb),np.matrix(ge)
+#  else:
 #      g0,g1 = intra*0j,intra*0j
 #      e = np.identity(intra.shape[0],dtype=np.complex) * (energy + 1j*delta)
 #      g0,g1 = green_renormalization_jit(g0,g1,intra,inter,e,nite,
 #                            error,delta)
 #      return np.matrix(g0),np.matrix(g1)
-      e = np.matrix(np.identity(intra.shape[0])) * (energy + 1j*delta)
-      ite = 0
-      alpha = inter.copy()
-      beta = inter.H.copy()
-      epsilon = intra.copy()
-      epsilon_s = intra.copy()
-      while True: # implementation of Eq 11
-        einv = algebra.inv(e - epsilon) # inverse
-        epsilon_s = epsilon_s + alpha @ einv @ beta
-        epsilon = epsilon + alpha * einv @ beta + beta @ einv @ alpha
-        alpha = alpha @ einv @ alpha  # new alpha
-        beta = beta @ einv @ beta  # new beta
-        ite += 1
-        # stop conditions
-        if not nite is None:
-          if ite > nite:  break 
-        else:
-          if np.max(np.abs(alpha))<error and np.max(np.abs(beta))<error: break
-      if info:
-        print("Converged in ",ite,"iterations")
-      g_surf = algebra.inv(e - epsilon_s) # surface green function
-      g_bulk = algebra.inv(e - epsilon)  # bulk green function 
-      return g_bulk,g_surf
+    e = np.matrix(np.identity(intra.shape[0])) * (energy + 1j*delta)
+    ite = 0
+    alpha = inter.copy()
+    beta = algebra.dagger(inter).copy()
+    epsilon = intra.copy()
+    epsilon_s = intra.copy()
+    while True: # implementation of Eq 11
+      einv = algebra.inv(e - epsilon) # inverse
+      epsilon_s = epsilon_s + alpha @ einv @ beta
+      epsilon = epsilon + alpha * einv @ beta + beta @ einv @ alpha
+      alpha = alpha @ einv @ alpha  # new alpha
+      beta = beta @ einv @ beta  # new beta
+      ite += 1
+      # stop conditions
+      if not nite is None:
+        if ite > nite:  break 
+      else:
+        if np.max(np.abs(alpha))<error and np.max(np.abs(beta))<error: break
+    if info:
+      print("Converged in ",ite,"iterations")
+    g_surf = algebra.inv(e - epsilon_s) # surface green function
+    g_bulk = algebra.inv(e - epsilon)  # bulk green function 
+    return g_bulk,g_surf
 
 
 
