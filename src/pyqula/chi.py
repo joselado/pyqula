@@ -3,12 +3,15 @@ import scipy.linalg as lg
 from . import parallel
 from numba import jit
 
+
 try:
     from . import chif90
     use_fortran = True
 except:
     use_fortran = False
-    print("Error, chif90 not found")
+#    print("Error, chif90 not found")
+
+use_fortran = False
 
 
 def chargechi(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
@@ -20,11 +23,11 @@ def chargechi(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
     ws = np.transpose(ws)
     if i<0: raise
     if j<0: raise
-    if use_fortran:
-      return es,chif90.elementchi(ws,esh,ws,esh,es,i+1,j+1,temp,delta)
-    else:
-      out = 0*es + 0j # initialize
-      return es,elementchi(ws,esh,ws,esh,es,i,j,temp,delta,out)
+#    if use_fortran:
+#      return es,chif90.elementchi(ws,esh,ws,esh,es,i+1,j+1,temp,delta)
+#    else:
+    out = 0*es + 0j # initialize
+    return es,elementchi(ws,esh,ws,esh,es,i,j,temp,delta,out)
 
 @jit(nopython=True)
 def elementchi(ws1,es1,ws2,es2,omegas,ii,jj,T,delta,out):
@@ -67,7 +70,7 @@ def chargechi_row(h,i=0,es=np.linspace(-3.0,3.0,100),delta=1e-6,temp=1e-7):
     ws = np.transpose(ws)
     out = [] # store
     if i<0: raise
-    f = lambda j: chif90.elementchi(ws,esh,ws,esh,es,i+1,j+1,temp,delta)
+    f = lambda j: elementchi(ws,esh,ws,esh,es,i+1,j+1,temp,delta)
     out = parallel.pcall(f,range(m.shape[0])) # parallel call
     return np.array(out)
 
@@ -112,6 +115,27 @@ def chargechi_reciprocal(h,i=None,
           fo.write(str(es[j])+"  ")
           fo.write(str(np.abs(fcs[j][i]))+"\n")
     fo.close()
+
+
+
+
+@jit(nopython=True)
+def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta,out):
+    """Compute the response function"""
+    raise # this is not double checked yet
+    out  = out*0.0 # initialize
+    n = len(ws1) # number of wavefunctions
+    for i in range(n):
+      oi = es1[i]<0.0 # first occupation
+      for j in range(n):
+          oj = es2[j]<0.0 # second occupation
+          fac = np.conjugate(ws1[i]).dot(A@ws2[j]) # add the factor
+          fac *= np.conjugate(ws1[i]).dot(B@ws2[j]) # add the factor
+          fac *= oi - oj # occupation factor
+          out = out + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
+    return out
+
+
 
 
 
