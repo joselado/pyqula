@@ -63,10 +63,7 @@ def current_bands(h,klist=None):
 
 
 def ket_Aw(A,w):
-  w = np.matrix([w]).T # transpose()
-  wo = A*w # get a vector
-  wo = np.array(wo)[:,0] # wo
-  return wo
+  return A@w
 
 
 
@@ -102,7 +99,6 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
   if kpath is None:
     from . import klist
     kpath = klist.default(h.geometry,nk=nk) # generate default klist
-#    print("Bands in kpoint",k,"of",len(kpath),end="\r")
   def getek(k):
     """Compute this k-point"""
     out = "" # output string
@@ -153,7 +149,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
       esk = "".join(esk) # concatenate all
       if write: f.write(esk)
   if write: f.close()
-  print("\nBANDS finished")
+#  print("\nBANDS finished")
   esk = esk.split("\n") # split
   del esk[-1] # remove last one
   esk = np.array([[float(i) for i in ek.split()] for ek in esk]).T
