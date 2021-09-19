@@ -119,15 +119,16 @@ def chargechi_reciprocal(h,i=None,
 
 
 def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
-               delta=0.1,temp=1e-7,A=None,B=None):
+               delta=0.1,temp=1e-7,A=None,B=None,projs=None):
     """Compute AB response function"""
     hk = h.get_hk_gen() # get generator
     if A is None or B is None:
         A = np.identity(h.intra.shape[0],dtype=np.complex)
         B = A # initial operator
     # generate the projectors
-    from . import operators
-    projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
+    if projs is None:
+        from . import operators
+        projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
     def getk(k):
         m1 = hk(k) # get Hamiltonian
         es1,ws1 = lg.eigh(m1)
