@@ -118,19 +118,55 @@ def chargechi_reciprocal(h,i=None,
 
 
 
+def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
+               delta=0.1,temp=1e-7,A=None,B=None):
+    """Compute AB response function"""
+    hk = h.get_hk_gen() # get generator
+    if A is None or B is None:
+        A = np.identity(h.intra.shape[0],dtype=np.complex)
+        B = A # initial operator
+    # generate the projectors
+    from . import operators
+    projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
+    def getk(k):
+        m1 = hk(k) # get Hamiltonian
+        es1,ws1 = lg.eigh(m1)
+        ws1 = ws1.T
+        m2 = hk(k+q) # get Hamiltonian
+        es2,ws2 = lg.eigh(m2)
+        ws2 = ws2.T
+        def getAB(Ai,Bj): # compute for a single operator
+            out = 0*energies + 0j # initialize
+            return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta,out)
+        out = np.array([[getAB(pi@A,pj@B) for pi in projs] for pj in projs])
+        return np.transpose(out,(2,0,1)) # return array of matrices
+    ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
+    out = np.mean([getk(k) for k in ks],axis=0) # sum over kpoints
+    return out
+
+
+
+def chiABmap(h,energies=np.linspace(-3.0,3.0,100),nq=30,
+                qpath=None,**kwargs):
+    """Return the map for the response function"""
+    if qpath is None: qpath = h.geometry.get_default_kpath(nk=nq)
+    return None
+
+
 
 @jit(nopython=True)
 def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta,out):
     """Compute the response function"""
-    raise # this is not double checked yet
     out  = out*0.0 # initialize
     n = len(ws1) # number of wavefunctions
     for i in range(n):
-      oi = es1[i]<0.0 # first occupation
+      if es1[i]<0.0: oi = 1.0 # first occupation
+      else: oi = 0.0
       for j in range(n):
-          oj = es2[j]<0.0 # second occupation
+          if es2[j]<0.0: oj = 1.0 # second occupation
+          else: oj = 0.0
           fac = np.conjugate(ws1[i]).dot(A@ws2[j]) # add the factor
-          fac *= np.conjugate(ws1[i]).dot(B@ws2[j]) # add the factor
+          fac *= np.conjugate(ws2[j]).dot(B@ws1[i]) # add the factor
           fac *= oi - oj # occupation factor
           out = out + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
     return out

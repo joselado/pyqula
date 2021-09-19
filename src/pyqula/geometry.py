@@ -69,6 +69,9 @@ class Geometry:
       """Return the k-mesh"""
       from . import klist
       return klist.kmesh(self.dimensionality,**kwargs)
+  def get_default_kpath(self,**kwargs):
+      from . import klist
+      return klist.default(self,**kwargs)
   def set_finite(self,periodic=False):
     """ Transfrom the geometry into a finite system"""
     if periodic:
