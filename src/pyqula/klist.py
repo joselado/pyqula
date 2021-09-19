@@ -63,7 +63,7 @@ def py_ang(v1, v2):
 
 
 
-def default(g,nk=400):
+def default_kpath(g,nk=400):
   """ Input is geometry"""
   if g.dimensionality==0: return [0.] # return gamma point
   elif g.dimensionality==1: 
@@ -111,6 +111,9 @@ def default(g,nk=400):
       fbl.write(str(nk)+"   \Gamma\n")
     fbl.close()
     return kout
+
+
+default = default_kpath # for compatibility
 
 # def full_bz(g)
 
