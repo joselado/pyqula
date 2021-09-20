@@ -401,8 +401,22 @@ def singlet_map(h,nk=40,nsuper=3,mode="abs"):
       if mode=="trace": return ud.trace()[0,0] # trace
       elif mode=="det": return np.linalg.det(ud) # trace
       elif mode=="abs": return np.sum(np.abs(ud)) # trace
-    reciprocal_map(h,f,nk=nk,nsuper=nsuper,filename="PAIRING_MAP.OUT")
+    reciprocal_map(h,f,nk=nk,nsuper=nsuper,filename="SINGLET_MAP.OUT")
 
+
+
+def pairing_map(h,**kwargs):
+    """Compute a map with the superconducting singlet pairing"""
+    h0 = h.copy()
+    h0.remove_nambu()
+    h0.setup_nambu_spinor()
+    h = h - h0 # get only the pairing
+    hk = h.get_hk_gen() # get function
+    def f(k): # define function
+        m = hk(k) # call Hamiltonian
+        es = algebra.eigvalsh(m)
+        return np.max(np.abs(es))
+    reciprocal_map(h,f,filename="PAIRING_MAP.OUT",**kwargs)
 
 
 
