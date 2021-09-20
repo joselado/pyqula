@@ -6,8 +6,9 @@ from ..utilities import get_callable
 from .dvector import dvector2delta
 
 
-def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.]):
-    """Create a geenrator, taking as input two positions, and returning
+def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
+    **kwargs):
+    """Create a generator, taking as input two positions, and returning
     the 2x2 pairing matrix"""
     # wrapper for the amplitude and d-vector
     deltaf = get_callable(delta) # callable for the amplitude
@@ -17,7 +18,9 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.]):
     elif mode=="swave":
         weightf = lambda r1,r2: same_site(r1,r2)*np.identity(2)
     elif mode=="triplet": 
-        weightf = lambda r1,r2: pwave(r1,r2,df)
+        weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
+    elif mode=="nodal_fwave":
+        weightf = lambda r1,r2: nodal_fwave(r1,r2,df,**kwargs)
     elif mode=="antihaldane":
         f = get_haldane_function(self.geometry,stagger=True)
         weightf = lambda r1,r2: f(r1,r2)*np.identity(2)
@@ -158,13 +161,21 @@ def px(r1,r2):
     return 0.0*tauz
 
 
-def pwave(r1,r2,df):
-    """Function with first neighbor px profile"""
+def get_triplet(r1,r2,df,L=1):
+    """Function for p-wave order"""
     dr = r1-r2 ; dr2 = dr.dot(dr)
     if 0.99<dr2<1.001: 
-        d = df((r1+r2)/2.)
+        phi = np.arctan2(dr[1],dr[0])
+        d = df((r1+r2)/2.) # evaluate dvector
         delta = dvector2delta(d) # compute the local deltas
         ms = np.array([[delta[2],delta[0]],[delta[1],-delta[2]]])
-        return (dr[0]+1j*dr[1])*ms
+        return np.exp(1j*phi*L)*ms
     return 0.0*tauz
 
+
+def pwave(*args,**kwargs): 
+    return get_triplet(*args,L=1,**kwargs)
+
+
+def nodal_fwave(*args,**kwargs): 
+    return get_triplet(*args,L=3,**kwargs) + get_triplet(*args,L=-3,**kwargs)

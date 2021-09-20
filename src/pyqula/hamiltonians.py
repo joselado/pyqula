@@ -54,13 +54,13 @@ class Hamiltonian():
     def __neg__(self):  return (-1)*self
     def __sub__(self,a):  return self + (-a)
     def spinless2full(self,m,time_reversal=False):
-      """Transform a spinless matrix in its full form"""
-      return get_spinless2full(self,time_reversal=time_reversal)(m) # return
+        """Transform a spinless matrix in its full form"""
+        return get_spinless2full(self,time_reversal=time_reversal)(m) # return
     def spinful2full(self,m):
-      """Transform a spinless matrix in its full form"""
-      return get_spinful2full(self)(m) # return
+        """Transform a spinless matrix in its full form"""
+        return get_spinful2full(self)(m) # return
     def kchain(self,k=0.):
-      return kchain(self,k)
+        return kchain(self,k)
     def get_fermi_surface(self,**kwargs):
         return spectrum.fermi_surface(self,**kwargs)
     def get_multi_fermi_surface(self,**kwargs):
