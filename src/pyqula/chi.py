@@ -119,8 +119,17 @@ def chargechi_reciprocal(h,i=None,
 
 
 def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
-               delta=0.1,temp=1e-7,A=None,B=None,projs=None):
-    """Compute AB response function"""
+               delta=0.1,temp=1e-7,A=None,B=None,projs=None,
+               mode="matrix"):
+    """Compute AB response function
+       - energies: energies of the dynamical response
+       - q: q-vector of the response
+       - nk: number of k-points for the integration
+       - delta: imaginary part
+       - A: first operator
+       - B: second operator
+       - projs: projection operators
+       - mode: response to compute"""
     hk = h.get_hk_gen() # get generator
     if A is None or B is None:
         A = np.identity(h.intra.shape[0],dtype=np.complex)
@@ -139,11 +148,22 @@ def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         def getAB(Ai,Bj): # compute for a single operator
             out = 0*energies + 0j # initialize
             return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta,out)
-        out = np.array([[getAB(pi@A,pj@B) for pi in projs] for pj in projs])
-        return np.transpose(out,(2,0,1)) # return array of matrices
+        if mode=="matrix": # return a matrix
+            out = np.array([[getAB(pi@A,pj@B) for pi in projs] for pj in projs])
+            return np.transpose(out,(2,0,1)) # return array of matrices
+        elif mode=="trace": # return the trace
+            out = np.array([getAB(pi@A,pi@B) for pi in projs])
+            return np.mean(out,axis=0) # sum over the first axis
+        else: raise # not implemented
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     out = np.mean([getk(k) for k in ks],axis=0) # sum over kpoints
     return out
+
+
+def chiAB_trace(h,**kwargs):
+    """Compute the trace of chiAB"""
+    return chiAB(h,mode="trace",**kwargs)
+
 
 
 
