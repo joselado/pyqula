@@ -96,6 +96,10 @@ class Hamiltonian():
     def get_chern(h,**kwargs):
         return topology.chern(h,**kwargs)
 
+    def get_chi(self,**kwargs):
+        from . import chi
+        return chi.chiAB_trace(self,**kwargs)
+
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)
