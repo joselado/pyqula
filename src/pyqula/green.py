@@ -416,8 +416,10 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 0.01,mode="full",
     return gf,sf
   hk_gen = h.get_hk_gen()  # generator of k dependent hamiltonian
   if h.is_multicell: 
-    mode = "full" # multicell hamiltonians only have full mode
-    print("Changed to full mode in selfenergy")
+      try: h = h.get_no_multicell()
+      except:
+          mode = "full" # multicell hamiltonians only have full mode
+          print("Changed to full mode in selfenergy")
   d = h.dimensionality # dimensionality of the system
   g = h.intra *0.0j # initialize green function
   e = np.matrix(np.identity(len(g)))*(energy + delta*1j) # complex energy
