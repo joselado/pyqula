@@ -526,7 +526,9 @@ def turn_nambu(self):
   """Turn a Hamiltonian an Nambu Hamiltonian"""
   nambu = build_eh
   if self.check_mode("spinful_nambu"): return # do nothing
-  if not self.check_mode("spinful"): raise # error
+  elif self.check_mode("spinless"): self.turn_spinful() # error
+  elif self.check_mode("spinful"): pass # error
+  else: raise
   def f(m): return nambu(m,is_sparse=self.is_sparse)
   self.modify_hamiltonian_matrices(f) # modify all the matrices
   self.has_eh = True
