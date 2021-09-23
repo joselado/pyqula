@@ -9,10 +9,10 @@ from .. import parallel
 from .. import interpolation
 
 
-def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
-        output_folder="MULTIQPI",nsuper=3,integrate=False,
+def get_qpi(h,reciprocal=True,nk=80,energies=np.linspace(-4.0,4.0,80),
+        output_folder="MULTIQPI",nsuper=2,integrate=False,
         mode = "response",
-        delta=2e-2,**kwargs):
+        delta=1e-1,**kwargs):
     """Compute the QPI using a poor-mans convolution of the k-DOS"""
     if h.dimensionality!=2: raise
     if reciprocal: fR = h.geometry.get_k2K_generator() # get matrix
@@ -35,6 +35,7 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
         out = epsilonk(h,energies=energies,nk=nk,delta=delta,qs=qs) # output
         es = energies # redefine the energies
         dosa = np.sum([o[1] for o in out],axis=1) # DOS
+    else: raise
 #    print(np.array(out).shape) ; exit()
     # now write everything #
     ########################################
