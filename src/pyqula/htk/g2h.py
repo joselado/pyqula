@@ -25,8 +25,8 @@ def get_hamiltonian(self,fun=None,has_spin=True,ts=None,
       from ..multicell import parametric_hopping_hamiltonian
       if mgenerator is not None:
           from ..multicell import parametric_matrix # not implemented
-          h = parametric_matrix(h,fm=mgenerator,cutoff=nc)
-      else: h = parametric_hopping_hamiltonian(h,fc=fun) # add hopping
+          h = parametric_matrix(h,fm=mgenerator,cutoff=nc,**kwargs)
+      else: h = parametric_hopping_hamiltonian(h,fc=fun,**kwargs) # add hopping
       return h
     if fun is None and mgenerator is None: # no function given
       h.first_neighbors()  # create first neighbor hopping
