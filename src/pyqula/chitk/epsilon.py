@@ -10,16 +10,15 @@ def epsilonk(h,energies=np.linspace(-4.0,4.0,100),nk=40,delta=2e-3,
         qs=None):
     """Compute the dielectric response function in reciprocal space"""
     es = eigenvalues_kmesh(h,nk=nk) # get eigenvalues in a mesh
-    fp = lambda omega: epsilonk_fs_2d(es,omega,delta,qs=qs)
+    fp = lambda omega: epsilonk_fs_2d(es,omega,delta,qs=qs,nk=nk)
     out = parallel.pcall(fp,energies) # call in parallel
     return np.array(out)
 
 
 
-def epsilonk_fs_2d(es,omega,delta,qs=None):
+def epsilonk_fs_2d(es,omega,delta,qs=None,nk=40):
     """Compute the response function in a 2d grid"""
     print("Doing",omega)
-    nk = es.shape[0]
     out = epsilonk_2d_jit(es,omega,delta,np.zeros((nk,nk)))
     fs = fermisurface_2d_jit(es,omega,delta,np.zeros((nk,nk)))
     if qs is not None: 

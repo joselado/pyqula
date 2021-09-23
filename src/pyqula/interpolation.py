@@ -47,7 +47,7 @@ def interpolator2d(x,y,z,mode=None):
     from scipy.interpolate import griddata
     from scipy.interpolate import NearestNDInterpolator
     def f(p):
-        return griddata((x,y), z,p[0:2], method='nearest')
+        return griddata((x,y), z,p[:,0:2], method='nearest')
     if mode is None: return f
     elif mode=="periodic":
         def f0(k):
@@ -66,7 +66,9 @@ def periodic_grid2mesh(ds,qs):
     ny = ds.shape[1]
     grid_kx, grid_ky = np.mgrid[0:1:nx*1j, 0:1:ny*1j] # kx and ky
     ksg = np.array([grid_kx, grid_ky]).reshape((2,nx*ny)).T # create points
-    return interpolator2d(ksg[:,0],ksg[:,1],ds.reshape((nx*ny)),mode="periodic")(qs[:,0:2])
+    fo = interpolator2d(ksg[:,0],ksg[:,1],ds.reshape((nx*ny)),mode="periodic")
+    out = fo(qs[:,0:2])
+    return out
 
 
 
