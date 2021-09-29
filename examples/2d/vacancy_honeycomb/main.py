@@ -5,12 +5,21 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 
-#g = geometry.square_lattice()
+
 from pyqula import geometry
-g = geometry.triangular_lattice() # create a triangular lattice
-g = g.supercell(10) # create a supercell for the moire
+from pyqula import topology
+from pyqula import dos
+from pyqula import operators
+g = geometry.honeycomb_lattice()
+g = g.supercell(2)
+g = g.remove(0)
+h = g.get_hamiltonian(has_spin=True)
+h.get_bands()
+#dos.dos(h,nk=100,use_kpm=True)
 
 
-print("Reciprocal lattice vectors")
-print("B1 = ",g.b1)
-print("B2 = ",g.b2)
+
+
+
+
+
