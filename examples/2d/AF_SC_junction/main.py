@@ -29,7 +29,6 @@ def get_hamiltonian():
   return h
 h = get_hamiltonian()
 h.get_bands(operator="sz",nk=100)
-#kdos.kdos_bands(h,delta=0.01)
 
 
 

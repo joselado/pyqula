@@ -111,7 +111,8 @@ class Hamiltonian():
     def set_multihopping(self,mh):
         """Set a multihopping as the Hamiltonian"""
         multicell.set_multihopping(self,mh)
-
+    def get_berry_curvature(self,**kwargs):
+        return topology.write_berry(self,**kwargs)
     @get_docstring(spectrum.set_filling)
     def set_filling(self,filling,**kwargs):
         spectrum.set_filling(self,filling=filling,**kwargs)
