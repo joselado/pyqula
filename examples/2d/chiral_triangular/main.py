@@ -10,8 +10,8 @@ from pyqula import geometry
 from pyqula import specialhopping
 import numpy as np
 g = geometry.triangular_lattice()
-fun = specialhopping.phase_C3(g,phi=1.0)
-h = g.get_hamiltonian(has_spin=False,fun=fun)
+tij = specialhopping.phase_C3(g,phi=0.3)
+h = g.get_hamiltonian(has_spin=False,tij=tij)
 h.turn_spinful(enforce_tr=True)
 h.turn_dense()
 h.get_bands(operator="sz")
