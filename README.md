@@ -106,7 +106,7 @@ from pyqula import geometry
 g = geometry.honeycomb_zigzag_ribbon(10) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian() # create hamiltonian of the system
 h = h.get_mean_field_hamiltonian(U=1.0,filling=0.5,mf="ferro")
-h.get_bands(operator="sz") # calculate band structure
+(k,e) = h.get_bands(operator="sz") # calculate band structure
 ```
 
 ## Band structure of twisted bilayer graphene
@@ -134,7 +134,7 @@ from pyqula import films
 g = geometry.diamond_lattice_minimal()
 g = films.geometry_film(g,nz=20)
 h = g.get_hamiltonian()
-h.get_bands()
+(k,e) = h.get_bands()
 ```
 
 ## Surface spectral function of a Chern insulator
