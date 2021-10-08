@@ -173,7 +173,6 @@ def indirect_gap(h,robust=True,**kwargs):
         res = minimize(f,x0,method="Powell",bounds=bounds,**kwargs)
     return f(res.x)
   ev = opte(funv) # optimize valence band
-#  return ev
   if h.has_eh: ec = ev # workaround for SC
   else: ec = opte(func) # optimize conduction band
   return ec+ev # return result
@@ -183,4 +182,7 @@ def indirect_gap(h,robust=True,**kwargs):
 
 
 
+def get_gap(self,ntries=1,**kwargs):
+    """Returns the gap of the Hamiltonian"""
+    return np.min([indirect_gap(self,**kwargs) for i in range(ntries)]) 
 
