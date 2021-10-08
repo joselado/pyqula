@@ -111,11 +111,9 @@ h.get_bands(operator="sz") # calculate band structure
 
 ## Band structure of twisted bilayer graphene
 ```python
-from pyqula import specialgeometry
-from pyqula.specialhopping import twisted_matrix
-g = specialgeometry.twisted_bilayer(3)
-h = g.get_hamiltonian(mgenerator=twisted_matrix(ti=0.12))
-h.get_bands(nk=100)
+from pyqula import specialhamiltonian # special Hamiltonians library
+h = specialhamiltonian.twisted_bilayer_graphene() # TBG Hamiltonian
+(k,e) = h.get_bands() # compute band structure
 ```
 
 ## Chern number of a Chern insulator
@@ -143,9 +141,9 @@ h.get_bands()
 ```python
 from pyqula import geometry
 from pyqula import kdos
-g = geometry.honeycomb_lattice()
-h = g.get_hamiltonian()
-h.add_haldane(0.05)
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_haldane(0.05) # Add Haldane coupling
 kdos.surface(h)
 ```
 
@@ -156,7 +154,7 @@ g = geometry.honeycomb_zigzag_ribbon(10) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian(has_spin=True) # create hamiltonian of the system
 h.add_antiferromagnetism(lambda r: (r[1]>0)*0.5) # add antiferromagnetism
 h.add_swave(lambda r: (r[1]<0)*0.3) # add superconductivity
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
 ```
 
 ## Fermi surface of a Kagome lattice
@@ -164,8 +162,8 @@ h.get_bands() # calculate band structure
 from pyqula import geometry
 from pyqula import spectrum
 import numpy as np
-g = geometry.kagome_lattice()
-h = g.get_hamiltonian()
+g = geometry.kagome_lattice() # create geometry of the system
+h = g.get_hamiltonian() # create hamiltonian of the system
 spectrum.multi_fermi_surface(h,nk=60,energies=np.linspace(-4,4,100),
         delta=0.1,nsuper=1)
 ```

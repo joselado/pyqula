@@ -16,6 +16,8 @@ def tbg(n=7,ti=0.12,lambi=3.0,lamb=3.0,is_sparse=True,
             is_multicell=True,mgenerator=mgenerator)
     return h
 
+twisted_bilayer_graphene = tbg
+
 
 def multilayer_graphene(l=[0],real=False,**kwargs):
   """Return the hamiltonian of multilayer graphene"""

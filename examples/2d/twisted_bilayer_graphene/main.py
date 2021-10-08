@@ -5,11 +5,9 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 
-from pyqula import specialgeometry
-from pyqula.specialhopping import twisted_matrix
-g = specialgeometry.twisted_bilayer(3)
-h = g.get_hamiltonian(mgenerator=twisted_matrix(ti=0.12))
-h.get_bands(nk=100)
+from pyqula import specialhamiltonian # special Hamiltonians library
+h = specialhamiltonian.twisted_bilayer_graphene() # TBG Hamiltonian
+(k,e) = h.get_bands() # compute band structure
 
 
 
