@@ -83,7 +83,7 @@ A variety of examples can be found in pyqula/examples
 from pyqula import geometry
 g = geometry.kagome_lattice() # get the geometry object
 h = g.get_hamiltonian() # get the Hamiltonian object
-h.get_bands() # compute the band structure
+(k,e) = h.get_bands() # compute the band structure
 ```
 
 ## Non-unitarity of an interacting spin-triplet superconductor
