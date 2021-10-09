@@ -72,7 +72,7 @@ def ket_Aw(A,w):
 def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                     callback=None,central_energy=0.0,nk=400,
                     output_file="BANDS.OUT",write=True,
-                    silent=False):
+                    silent=True):
   """
   Get an n-dimensional bandstructure
   """
