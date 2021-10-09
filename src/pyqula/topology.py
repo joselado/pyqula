@@ -17,12 +17,13 @@ arpack_tol = 1e-5
 arpack_maxiter = 10000
 
 
-def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=300,
-      mode="Wilson",delta=0.001,reciprocal=False,operator=None):
+def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=600,
+      mode="Wilson",delta=0.001,reciprocal=False,operator=None,
+      silent = True):
   """Calculate and write in file the Berry curvature"""
   operator = get_operator(h,operator)
   if kpath is None: kpath = klist.default(h.geometry,nk=nk) # take default kpath
-  tr = timing.Testimator("BERRY CURVATURE")
+  tr = timing.Testimator("BERRY CURVATURE",silent=silent)
   ik = 0
   if operator is not None: mode="Green" # Green function mode
   def getb(k):
@@ -45,7 +46,7 @@ def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=300,
       for o in out: fo.write(o) # write
   fo.close() # close file
   m = np.genfromtxt("BERRY_CURVATURE.OUT").transpose()
-  return range(len(m[0])),m[2]
+  return np.array(range(len(m[0]))),m[2]
 
 
 
