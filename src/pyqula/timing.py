@@ -23,8 +23,9 @@ class Testimator:
     trem = dt/(i+1)*(tot-i) # remaining time
     out += " remaining time "+str(round(trem,1))+"s"
     out += ", total time "+str(round(dt,1))+"s"
-    if printall: print(out)
-    else: print(out,end="\r")
+    if not self.silent:
+        if printall: print(out)
+        else: print(out,end="\r")
   def iterate(self):
       if self.silent: return
       if self.maxite is not None: # of it has been provided
