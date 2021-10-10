@@ -15,3 +15,4 @@ docs/
 dist/
 *.cfg.*
 MULTI*
+.ipynb_checkpoints
