@@ -397,6 +397,8 @@ class Hamiltonian():
       """Adds Rashba coupling"""
       from . import rashba
       rashba.add_rashba(self,c)
+    def add_soc(self,t,**kwargs):
+      self.add_kane_mele(t,**kwargs)
     def add_kane_mele(self,t,**kwargs):
       """ Adds a Kane-Mele SOC term"""  
       kanemele.add_kane_mele(self,t,**kwargs) # return kane-mele SOC
