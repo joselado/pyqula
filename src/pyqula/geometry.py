@@ -882,34 +882,9 @@ def honeycomb_lattice_square_cell():
   """
   Creates a honeycomb lattice
   """
+  from .supercell import target_angle_volume
   g = honeycomb_lattice() # create geometry
-  go = deepcopy(g)
-  go.a1 =  g.a1 + g.a2
-  go.a2 = g.a1 - g.a2
-  go.x = np.concatenate([g.x,g.x-g.a1[0]])  # new x coordinates
-  go.y = np.concatenate([g.y,g.y-g.a1[1]])  # new y coordinates
-  go.z = np.concatenate([g.z,g.z])  # new z coordinates
-  go.has_sublattice = True # does not have sublattice index
-  go.sublattice = [1.,-1.,1.,-1.] # sublattice index
-  go.xyz2r() # create r coordinates
-  go.center()
-  g.update_reciprocal() # update reciprocal lattice vectors
-  return go
-
-def honeycomb_lattice_square_cell_v2():
-  """
-  Creates a honeycomb lattice
-  """
-  g = honeycomb_lattice() # create geometry
-  go = deepcopy(g)
-  go.a1 =  g.a1
-  go.a2 = - g.a1 + 2*g.a2
-  go.x = np.concatenate([g.x,g.x+g.a2[0]])  # new x coordinates
-  go.y = np.concatenate([g.y,g.y+g.a2[1]])  # new y coordinates
-  go.z = np.concatenate([g.z,g.z])  # new z coordinates
-  go.xyz2r() # create r coordinates
-  return go
-
+  return target_angle_volume(g,volume=2,angle=.5)
 
 
 

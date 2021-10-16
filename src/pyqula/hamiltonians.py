@@ -68,9 +68,12 @@ class Hamiltonian():
     def get_eigenvectors(self,**kwargs):
         from .htk.eigenvectors import get_eigenvectors
         return get_eigenvectors(self,**kwargs)
-    def modify_hamiltonian_matrices(self,f):
+    def modify_hamiltonian_matrices(self,f,**kwargs):
         """Modify all the matrices of a Hamiltonian"""
-        modify_hamiltonian_matrices(self,f)
+        modify_hamiltonian_matrices(self,f,**kwargs)
+    def add_strain(self,fs):
+        from .strain import add_strain
+        add_strain(self,fs) 
     def remove_sites(self,store):
         from . import sculpt
         self.geometry = sculpt.remove_sites(self.geometry,store)
