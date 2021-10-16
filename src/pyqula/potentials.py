@@ -40,6 +40,7 @@ class Potential():
 def cnpot(n=4,k=None,v=1.0,angle=0.):
   """Returns a function that generates a potential
   with C_n symmetry"""
+  if k is None: raise
   if n==0: return lambda r: v
   if n%2==0: f = np.cos # even 
   if n%2==1: f = np.sin # even 
