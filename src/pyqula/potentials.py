@@ -37,7 +37,7 @@ class Potential():
 
 
 
-def cnpot(n=4,k=0.0,v=1.0,angle=0.):
+def cnpot(n=4,k=None,v=1.0,angle=0.):
   """Returns a function that generates a potential
   with C_n symmetry"""
   if n==0: return lambda r: v
@@ -46,12 +46,15 @@ def cnpot(n=4,k=0.0,v=1.0,angle=0.):
   def fun(r):
     """Function with the potential"""
     x0,y0 = r[0],r[1]
-    acu = 0. # result
-    for i in range(n):
+    def Rk(k0,angle):
+      x0,y0 = k0[0],k0[1] # components
       x = np.cos(angle)*x0 + np.sin(angle)*y0
       y = np.cos(angle)*y0 - np.sin(angle)*x0
-      arg = np.cos(i*np.pi*2/n)*x+np.sin(i*np.pi*2/n)*y
-      acu += f(k*arg) 
+      return np.array([x,y,k0[2]]) # return rotated vector
+    acu = 0. # result
+    for i in range(n):
+      ki = Rk(k,np.pi*2*i/n)
+      acu += f(2.*np.pi*ki.dot(r)) 
     return v*acu/n
   return Potential(fun)
 
@@ -84,7 +87,7 @@ def commensurate_potential(g,k=1,amplitude=1.0,n=None,
         if 0.49<abs(a12)<0.51: n = 6
         elif abs(a12)<0.01: n = 4
         else: n = 3
-      f = cnpot(n=n,k=k*2.*np.pi/np.sqrt(g.a1.dot(g.a1)),**kwargs)
+      f = cnpot(n=n,k=g.b1,**kwargs)
     elif g.dimensionality==1: 
         raise # not implemented
     else: raise
