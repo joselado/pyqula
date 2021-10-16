@@ -6,8 +6,8 @@ def add_strain(h,f):
     with applied strain"""
     h.turn_multicell() # multicell Hamiltonian
     if not h.has_eh:
-      if not h.has_spin: indg = lambda i: [i]
-      elif h.has_spin: indg = lambda i: [2*i,2*i+1]
+      if not h.has_spin: indg = lambda i: i
+      elif h.has_spin: indg = lambda i: i//2
       else: raise
     else: raise
     def fm(m,r1,r2): # function to modify hopping
@@ -16,10 +16,19 @@ def add_strain(h,f):
 
 
 
-
-
-
 def strain_matrix(m,rs1,rs2,indg,fs): # function to apply strain to a matrix
+    mo = m.copy() # copy matrix
+    from scipy.sparse import coo_matrix,csc_matrix
+    mo = coo_matrix(mo) # turn sparse
+    for k in range(len(mo.data)):
+        r0 = (rs1[indg(mo.col[k])] + rs2[indg(mo.row[k])])/2.
+        mo.data[k] = fs(r0)*mo.data[k]
+    from .algebra import issparse
+    if issparse(m): return csc_matrix(mo)
+    else: return mo.todense()
+
+
+def simple_strain_matrix(m,rs1,rs2,indg,fs): # function to apply strain to a matrix
     mo = m.copy() # copy matrix
     for i in range(len(rs1)): # loop over sites
         for j in range(len(rs2)): # loop over sites
@@ -29,4 +38,5 @@ def strain_matrix(m,rs1,rs2,indg,fs): # function to apply strain to a matrix
                 for jj in indg(j): # generate indexes for site j
                     mo[ii,jj] = fac*m[ii,jj] # strain the matrix
     return mo
+
 
