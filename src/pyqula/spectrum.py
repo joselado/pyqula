@@ -46,7 +46,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
       if callable(operator):
         tdos = -(operator(x,y)*gf).imag # get imaginary part
       else: tdos = -(operator*gf).imag # get imaginary part
-      return np.trace(tdos).real # return traze
+      return np.trace(tdos).real # return trace
   elif mode=='eigen': # use full diagonalization
     def get_weight(hk):
       es = algebra.eigvalsh(hk)

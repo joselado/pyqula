@@ -71,9 +71,9 @@ class Hamiltonian():
     def modify_hamiltonian_matrices(self,f,**kwargs):
         """Modify all the matrices of a Hamiltonian"""
         modify_hamiltonian_matrices(self,f,**kwargs)
-    def add_strain(self,fs):
+    def add_strain(self,fs,**kwargs):
         from .strain import add_strain
-        add_strain(self,fs) 
+        add_strain(self,fs,**kwargs) 
     def remove_sites(self,store):
         from . import sculpt
         self.geometry = sculpt.remove_sites(self.geometry,store)

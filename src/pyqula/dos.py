@@ -229,6 +229,7 @@ def calculate_dos_hkgen(hkgen,ks,ndos=100,delta=None,
 
 
 def dos_kmesh(h,nk=10,delta=1e-3,random=False,ks=None,
+        write=True,
         energies=np.linspace(-1,1,200),**kwargs):
     """Compute the DOS in a k-mesh by using the bandstructure function"""
     if ks is None:  ks = kmesh(h.dimensionality,nk=nk)
@@ -239,8 +240,8 @@ def dos_kmesh(h,nk=10,delta=1e-3,random=False,ks=None,
     else: w = out[2]
     ys = calculate_dos(out[1],energies,delta,w=w)/len(ks)
     ys *= 1./np.pi # normalization of the Lorentzian
-    write_dos(energies,ys) # write in file
-    print("\nDOS finished")
+    if write: write_dos(energies,ys) # write in file
+#    print("\nDOS finished")
     return (energies,ys) # return result
 
 
