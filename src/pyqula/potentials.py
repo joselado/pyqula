@@ -214,13 +214,4 @@ def object2potential(V,r=None):
     return V
 
 
-
-def radial_decay(v0=2.0,rl=1.0,voo=1.0):
-    """Create a fucntion that implements a radial decay
-    at a certain distance"""
-    def fs(r):
-        r2 = r.dot(r)
-        return voo + (v0-voo)*np.exp(-(1./rl)*np.sqrt(r2))
-    return fs
-
-
+from .potentialtk.profiles import radial_decay

@@ -14,7 +14,7 @@ arpack_tol = 1e-5
 arpack_maxiter = 10000
 
 def fermi_surface_generator(h,
-                    energies=[0.0],nk=50,nsuper=2,reciprocal=True,
+                    energies=[0.0],nk=50,nsuper=1,reciprocal=True,
                     delta=1e-2,refine_delta=1.0,operator=None,
                     numw=20,info=True):
   """Calculates the Fermi surface of a 2d system"""
