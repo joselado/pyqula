@@ -13,8 +13,8 @@ h = specialhamiltonian.TaS2_SOC()
 h.get_bands(operator="sz") 
 #; exit()
 #h.get_fermi_surface(e=0.0,nk=60,delta=6e-1,mode="eigen") ; exit()
-h.get_multi_fermi_surface(energies=np.linspace(-6.,6.,100),
-        delta=3e-1,nk=100)
+#h.get_multi_fermi_surface(energies=np.linspace(-6.,6.,100),
+#        delta=3e-1,nk=100)
 
 
 
