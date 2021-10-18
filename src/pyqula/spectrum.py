@@ -369,8 +369,8 @@ def eigenvalues(h0,nk=10,notime=False):
 
 def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,filename="MAP.OUT"):
   """ Calculates the reciprocal map of something"""
-  if reciprocal: R = h.geometry.get_k2K()
-  else: R = np.matrix(np.identity(3))
+  if reciprocal: fR = h.geometry.get_k2K_generator()
+  else: fR = lambda x: x
   fo = open(filename,"w") # open file
   nt = nk*nk # total number of points
   ik = 0
@@ -383,8 +383,7 @@ def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,filename="MAP.OUT"):
   def fp(ki): # function to compute the quantity
       if parallel.cores == 1: tr.iterate()
       else: print("Doing",ki)
-      r = np.matrix(ki).T # real space vectors
-      k = np.array((R*r).T)[0] # change of basis
+      k = fR(ki)
       return f(k) # call function
   bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
   for (b,k) in zip(bs,ks): # write everything
