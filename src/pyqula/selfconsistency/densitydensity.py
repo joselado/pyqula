@@ -504,14 +504,13 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
             mgenerator=mgenerator) 
     if Vr is not None:
       hv1 = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
-              fun=Vr)
+              tij=Vr)
       hv = hv + hv1 # add the two Hamiltonians
     v = hv.get_hopping_dict() # hopping dictionary
     U = obj2geometryarray(U,h.geometry) # convert to array
     if h.has_spin: #raise # not implemented
         for d in v: # loop
             m = v[d] ; n = m.shape[0]
-    #        print(m)
             m1 = np.zeros((2*n,2*n),dtype=np.complex)
             for i in range(n):
               for j in range(n): 
