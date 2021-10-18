@@ -16,11 +16,16 @@ def get_hamiltonian(self,tij=None,fun=None,has_spin=True,ts=None,
     if fun is not None: 
         print("fun will be deprecated, use instead tij")
         tij = fun # overwrite
+    ## in case tij is an iterable with hoppings
+    from ..checkclass import is_iterable
+    if is_iterable(tij): # tij is an iterable
+        ts = tij # overwrite
+        tij = None
     #####
     if ts is not None: # if hoppings given, overwrite mgenerator
         mgenerator = specialhopping.neighbor_hopping_matrix(self,ts)
         is_multicell = True # overwrite
-        nc = len(ts) + 1 # overwrite
+        nc = 2*len(ts) + 1 # overwrite
     if self.dimensionality==3: is_multicell=True
     from ..hamiltonians import Hamiltonian
     h = Hamiltonian(self)  # create the object
