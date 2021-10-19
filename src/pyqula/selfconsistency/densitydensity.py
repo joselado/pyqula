@@ -111,26 +111,11 @@ def normal_term_ji_jit(v,dm,out):
 def update_hamiltonian(tdict,mf):
     """Update the hoppings with the mean field"""
     return (MultiHopping(tdict) + MultiHopping(mf)).get_dict()
-#    out = deepcopy(tdict) # copy
-#    for key in mf:
-#        if key in tdict: out[key] = tdict[key] + mf[key] # add contribution
-#        else: out[key] = mf[key]
-#    return out # return dictionary
 
 
 def mix_mf(mf,mf0,mix=0.8):
     """Mix mean fields"""
     return ((1-mix)*MultiHopping(mf0) + mix*MultiHopping(mf)).get_dict()
-#    out = dict() # initialize
-#    for key in mf: # loop
-#        if key not in mf0: out[key] = mf[key]
-#        else:
-#            #v0 = np.tanh(mf0[key]/mix)
-#            #v1 = np.tanh(mf[key]/mix)
-#            #out[key] = np.arctanh((v0+v1)/2.)*mix
-#            out[key] = mf0[key]*(1.-mix) + mf[key]*mix # add contribution
-#        #out[key] = mf0[key]*(1.-mix) + mf[key]*mix # add contribution
-#    return out
 
 
 
@@ -146,11 +131,6 @@ def diff_mf(mf0,mf):
 
 def hamiltonian2dict(h):
     return h.get_dict() # return dictionary
-#    out = dict() # create dictionary
-#    if not h.is_multicell: raise
-#    out[(0,0,0)] = h.intra
-#    for t in h.hopping: out[tuple(t.dir)] = t.m # store
-#    return out
 
 
 def set_hoppings(h,hop):
