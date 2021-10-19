@@ -116,6 +116,8 @@ def enforce_constrains(mf,h,constrains=[]):
 
 def obj2mf(mf):
     from ..algebra import ismatrix
+    from ..hamiltonians import Hamiltonian
     if ismatrix(mf): return {(0,0,0):mf}
-    else: return mf
+    elif type(mf)==Hamiltonian: return mf.get_dict()
+    else: return mf # assume it is a valid dictionary
 

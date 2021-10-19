@@ -18,7 +18,7 @@ hscf = h.get_mean_field_hamiltonian(filling=0.5,nk=30,
                         Vr = [1.0], # first neighbor interaction
                         verbose=1,
                         mix=0.9, # mixing
-                        mf = "random" # random initial guess
+                        mf = h # random initial guess
                         )
 (k,e) = h.get_bands()
 (kscf,escf) = hscf.get_bands()
