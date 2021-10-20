@@ -61,7 +61,7 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None):
     mins = int((time-int(time))*60)
     mins = str(max([mins,1])) # at least 1 minute
     runsh = "#!/bin/bash\n#SBATCH -n 1\n#SBATCH -t "+str(int(time))+":"+str(mins)+":00\n"
-    runsh += "#SBATCH --mem-per-cpu=\n"+str(memory)+"\n"
+    runsh += "#SBATCH --mem-per-cpu="+str(memory)+"\n"
     runsh += "#SBATCH --array=0-"+str(n-1)+"\n"
     runsh += "srun python run.py\n"
     open(pfolder+"/run.sh","w").write(runsh) # parallel file
