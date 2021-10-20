@@ -29,7 +29,7 @@ def pcall(fin,xs,batch_size=1,**kwargs):
         return out
 
 
-def pcall_single(fin,xs,time=10,error=None):
+def pcall_single(fin,xs,time=10,memory=5000,error=None):
     """Run a parallel calculation with slurm"""
     n = len(xs) # number of calculations
     f = lambda x: fin(x)
@@ -61,7 +61,7 @@ def pcall_single(fin,xs,time=10,error=None):
     mins = int((time-int(time))*60)
     mins = str(max([mins,1])) # at least 1 minute
     runsh = "#!/bin/bash\n#SBATCH -n 1\n#SBATCH -t "+str(int(time))+":"+str(mins)+":00\n"
-    runsh += "#SBATCH --mem-per-cpu=5000\n"
+    runsh += "#SBATCH --mem-per-cpu=\n"+str(memory)+"\n"
     runsh += "#SBATCH --array=0-"+str(n-1)+"\n"
     runsh += "srun python run.py\n"
     open(pfolder+"/run.sh","w").write(runsh) # parallel file
