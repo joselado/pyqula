@@ -100,8 +100,14 @@ def twisted_multilayer(m0=3,rotate=True,shift=None,
   sublattice=True,r=1,rot=[1,1,0,0],g=None,dz=3.0):
   """Return the geometry for twisted multilayer graphene"""
   if g is None: g = geometry.honeycomb_lattice() # default is honeycomb
+  else: g = geometry.get_geometry(g) # get the geometry
 #  g.has_sublattice = False # no sublattice
-  g = geometry.non_orthogonal_supercell(g,m=[[-1,0,0],[0,1,0],[0,0,1]])
+  from . import supercell as supercelltk
+# put the right angle between lattice vectors
+  g = supercelltk.target_angle_volume(g,angle=1./3.,volume=1)
+# old version
+#  g = geometry.non_orthogonal_supercell(g,m=[[-1,0,0],[0,1,0],[0,0,1]])
+#  print(g.a1,g.a2,g.a1.dot(g.a2)) ; exit()
   g0 = g.copy() # copy geometry
   theta = np.arccos((3.*m0**2+3*m0*r+r**2/2.)/(3.*m0**2+3*m0*r+r**2))
   if shift is None:

@@ -230,20 +230,21 @@ def neighbor_cells(num,dim=3):
 
 
 def neighbor_directions(g,cutoff=3):
-  """Return the vectors pointing to neighbors"""
-  dirs = []
-  if g.dimensionality==0: return [[0.,0.,0.]] # zero dimensional
-  elif g.dimensionality==1: # one dimensional
-    for i1 in range(-cutoff,cutoff+1): dirs.append([i1,0,0])
-  elif g.dimensionality==2: # two dimensional
-    for i1 in range(-cutoff,cutoff+1):
-      for i2 in range(-cutoff,cutoff+1):
-        dirs.append([i1,i2,0])
-  elif g.dimensionality==3: # three dimensional
-    for i1 in range(-cutoff,cutoff+1):
-      for i2 in range(-cutoff,cutoff+1):
-        for i3 in range(-cutoff,cutoff+1):
-          dirs.append([i1,i2,i3])
-  dirs = [np.array(d) for d in dirs]
-  return dirs # return directions
+    """Return the vectors pointing to neighbors"""
+    dirs = []
+    if g.dimensionality==0: return [[0.,0.,0.]] # zero dimensional
+    elif g.dimensionality==1: # one dimensional
+      for i1 in range(-cutoff,cutoff+1): dirs.append([i1,0,0])
+    elif g.dimensionality==2: # two dimensional
+      for i1 in range(-cutoff,cutoff+1):
+        for i2 in range(-cutoff,cutoff+1):
+          dirs.append([i1,i2,0])
+    elif g.dimensionality==3: # three dimensional
+      for i1 in range(-cutoff,cutoff+1):
+        for i2 in range(-cutoff,cutoff+1):
+          for i3 in range(-cutoff,cutoff+1):
+            dirs.append([i1,i2,i3])
+    else: raise # not implemented
+    dirs = [np.array(d) for d in dirs]
+    return dirs # return directions
 

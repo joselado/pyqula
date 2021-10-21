@@ -439,10 +439,10 @@ class Hamiltonian():
     def add_antihaldane(self,t): 
         """Add an anti-Haldane term"""
         self.add_modified_haldane(t) # second name
-    def add_crystal_field(self,v):
+    def add_crystal_field(self,v,**kwargs):
         """Add a crystal field term to the Hamiltonian"""
         from . import crystalfield
-        crystalfield.hartree(self,v=v) 
+        crystalfield.hartree(self,v=v,**kwargs) 
     def add_peierls(self,mag_field,**kwargs):
         """
         Add magnetic field
