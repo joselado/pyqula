@@ -4,18 +4,19 @@ import numpy as np
 from . import geometry
 
 
-def tbg(n=7,ti=0.12,lambi=3.0,lamb=3.0,is_sparse=True,
-        has_spin=False,dl=3.0):
+def twisted_bilayer(n=7,ti=0.12,lambi=3.0,lamb=3.0,is_sparse=True,
+        has_spin=False,dl=3.0,**kwargs):
     """
     Return the Hamiltonian of twisted bilayer graphene
     """
-    g = specialgeometry.twisted_bilayer(n,dz=dl/2.0)
+    g = specialgeometry.twisted_bilayer(n,dz=dl,**kwargs)
     mgenerator = specialhopping.twisted_matrix(ti=ti,
             lambi=lambi,lamb=lamb,dl=dl)
     h = g.get_hamiltonian(is_sparse=is_sparse,has_spin=has_spin,
             is_multicell=True,mgenerator=mgenerator)
     return h
 
+tbg = twisted_bilayer
 twisted_bilayer_graphene = tbg
 
 

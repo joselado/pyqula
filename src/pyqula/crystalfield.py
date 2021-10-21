@@ -2,10 +2,12 @@ import numpy as np
 from scipy.sparse import csc_matrix
 
 
-def hartree(h,v=0.0):
+def hartree(h,v=0.0,**kwargs):
     """Add a crystal field to a Hamiltonian"""
     if v==0.0: return
-    m = hartree_onsite(h.geometry,vc=v) # get array
+    m = cf_potential(h.geometry,vc=v,**kwargs) # get array
+    m = m - np.min(m) # shift to zero
+    if np.max(np.abs(m))>1e-7: m = m/np.max(np.abs(m)) # normalize
     m = m - np.mean(m) # remove average
     nat = len(h.geometry.r) # number of atoms
     ind = range(nat) # indexes
@@ -13,18 +15,28 @@ def hartree(h,v=0.0):
     h.intra = h.intra + h.spinless2full(mat) # add contribution
 
 
+def hartree_onsite(g,**kwargs):
+    return cf_potential(g,**kwargs,mode="full")
 
 
 
-
-def hartree_onsite(g,rcut=6.0,vc=0.0):
+def cf_potential(g,rcut=6.0,vc=0.0,mode="full"):
     """Return an array with the Hartree terms"""
+# create fucntions to compute effective distance
+    if mode=="full": # full mode
+        def getd(dr,dx,dy,dz): return dr
+    elif mode=="stacking": # stacking mode
+        def getd(dr,dx,dy,dz):
+            dr[np.abs(dz)<1e-3] = 1e10
+            return dr
+    else: raise # not implemented
     g = g.copy() # copy geometry
     interactions = [] # empty list
     nat = len(g.r) # number of atoms
     mout = np.zeros(nat) # initialize matrix
-    lat = np.sqrt(g.a1.dot(g.a1)) # size of the unit cell
-    g.ncells = int(2*rcut/lat)+1 # number of unit cells to consider
+    if g.dimensionality>0:
+      lat = np.sqrt(g.a1.dot(g.a1)) # size of the unit cell
+      g.ncells = int(2*rcut/lat)+2 # number of unit cells to consider
     ri = g.r # positions
     for d in g.neighbor_directions(): # loop
         rj = np.array(g.replicas(d)) # positions
@@ -34,11 +46,13 @@ def hartree_onsite(g,rcut=6.0,vc=0.0):
             dz = rj[:,2] - ri[i,2]
             dr = dx*dx + dy*dy + dz*dz
             dr = np.sqrt(dr) # square root
+            dr = getd(dr,dx,dy,dz) # effective distance
             dr[dr<1e-4] = 1e10
-            v = vc/dr # Coulomb interaction
+#            v = vc/dr # Coulomb interaction
+            v = vc*np.exp(-dr/rcut) # quench interaction
+            #v = v*1./(dr/rcut) # quench interaction
             v[dr<1e-4] = 0.0
             v[dr>rcut] = 0.0
-            v = v*np.exp(-dr/rcut) # quench interaction
             mout[i] += np.sum(v) # store contribution
     return mout # return
 

@@ -462,6 +462,7 @@ def set_filling(h,filling=0.5,nk=10,extrae=0.,delta=1e-1):
 def get_fermi_energy(es,filling,fermi_shift=0.0):
   """Return the Fermi energy"""
   ne = len(es) ; ifermi = int(round(ne*filling)) # index for fermi
+  if ifermi>=ne: ifermi = ne-1
   sorte = np.sort(es) # sorted eigenvalues
   if ifermi==0: return sorte[0] + fermi_shift
   fermi = (sorte[ifermi-1] + sorte[ifermi])/2.+fermi_shift # fermi energy

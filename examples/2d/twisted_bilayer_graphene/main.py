@@ -7,7 +7,8 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 from pyqula import specialhamiltonian # special Hamiltonians library
 h = specialhamiltonian.twisted_bilayer_graphene() # TBG Hamiltonian
-(k,e) = h.get_bands() # compute band structure
+h.set_filling(0.5,nk=1)
+(k,e) = h.get_bands(num_bands=20) # compute band structure
 
 
 

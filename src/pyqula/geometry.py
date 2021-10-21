@@ -1638,3 +1638,13 @@ def get_supercell(self,nsuper):
     return s
 
 
+
+
+
+def get_geometry(g):
+    """Return a certain geometry"""
+    if type(g)==str:
+        if g=="honeycomb": return honeycomb_lattice()
+        elif g=="triangular": return triangular_lattice()
+        else: raise
+    else: raise
