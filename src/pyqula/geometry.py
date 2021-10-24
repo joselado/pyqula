@@ -135,14 +135,8 @@ class Geometry:
       else:
         self.lattice_name = "triangular"
   def get_k2K(self):
-    return get_k2K(self)
-  def get_k2K_generator(self):
-    R = self.get_k2K() # get the matrix
-    def f(k):
-#      return R@np.array(k) # to natural coordinates
-      r = np.matrix(k).T # real space vectors
-      return np.array((R*r).T)[0]
-    return f # return function
+      from .kpointstk.mapping import get_k2K
+      return get_k2K(self)
   def reciprocal2natural(self,v):
       """
       Return a natural vector in real reciprocal coordinates
@@ -162,8 +156,6 @@ class Geometry:
     return get_diameter(self)  
   def periodic_vector(self):
     return periodic_vector(self)
-#  def fn_distance(self):
-#    return fn_distance(self)
   def get_sublattice(self):
     """Initialize the sublattice"""
     if self.has_sublattice: self.sublattice = get_sublattice(self.r)
@@ -249,20 +241,10 @@ class Geometry:
       Update reciprocal lattice vectors
       """
       self.b1,self.b2,self.b3 = get_reciprocal(self.a1,self.a2,self.a3)
-  def get_k2K_generator(self,toreal=False):
-      """
-      Function to turn a reciprocal lattice vector to natural units
-      """
-      R = self.get_k2K() # get matrix
-      if toreal: R = R.H # transform to real coordinates
-      def fun(k0):
-        if len(k0)==3: k = k0 # do nothing
-        elif len(k0)==2: k = np.array([k0[0],k0[1],0.]) # convert to three comp
-        r = np.matrix(k).T # real space vectors
-        out = np.array((R*r).T)[0] # change of basis
-        if len(k0)==2: return np.array([out[0],out[1]]) # return two
-        return out
-      return fun
+  def get_k2K_generator(self,**kwargs):
+      return get_k2K_generator(self,**kwargs)
+  def k2K(self,k): return get_k2K_generator(self,toreal=False)(k)
+  def K2k(self,k): return get_k2K_generator(self,toreal=True)(k)
   def fractional2real(self):
     """
     Convert fractional coordinates to real coordinates
@@ -280,20 +262,6 @@ class Geometry:
       self.connections = neighbor.connections(self.r,self.r)
       return self.connections # return list
     else: raise
-
-
-def add(g1,g2):
-  """
-  Adds two geometries
-  """
-  raise
-  gs = Geometry()
-  gs.x = np.array(g1.x.tolist() + g2.x.tolist())  
-  gs.y = np.array(g1.y.tolist() + g2.y.tolist())  
-  gs.z = np.array(g1.z.tolist() + g2.z.tolist())  
-  gs.celldis = max([g1.celldis,g2.celldis]) 
-  return gs
-
 
 
 
@@ -1154,25 +1122,6 @@ def remove_duplicated_positions(r):
 
 
 
-def get_k2K(g):
-  """Return a matrix that converts vectors
-  in the reciprocal space into natural units, useful for drawing
-  2D/3D quantities"""
-  if g.dimensionality == 2:
-    (ux,uy,uz) = (g.a1,g.a2,np.array([0.,0.,1]))
-  elif g.dimensionality == 3:
-    (ux,uy,uz) = (g.a1,g.a2,g.a3)
-  else: raise
-  ux = ux/np.sqrt(ux.dot(ux))
-  uy = uy/np.sqrt(uy.dot(uy))
-  uz = uz/np.sqrt(uz.dot(uz))
-  a2kn = np.matrix([ux,uy,uz]) # matrix for the change of basis
-  r2a = np.matrix([ux,uy,uz]).T.I # from real space to lattice vectors
-  R = a2kn@r2a@a2kn.T # rotation matrix
-  return R
-
-
-
 def get_reciprocal(a1,a2,a3):
   """Return the reciprocal lattice vectors
   By definition, ai*bj = delta_ij"""
@@ -1648,3 +1597,7 @@ def get_geometry(g):
         elif g=="triangular": return triangular_lattice()
         else: raise
     else: raise
+
+
+
+from .kpointstk.mapping import get_k2K_generator
