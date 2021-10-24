@@ -20,75 +20,74 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                     e=0.0,nk=50,nsuper=1,reciprocal=True,
                     delta=None,refine_delta=1.0,operator=None,
                     mode='eigen',num_waves=2,info=True):
-  """Calculates the Fermi surface of a 2d system"""
-  if operator is not None: # operator given
-      if mode=="eigen": mode = "full" # redefine
-  else: # no operator given
-      if mode=="full":
-          operator = np.matrix(np.identity(h.intra.shape[0]))
-  if h.dimensionality!=2: raise  # continue if two dimensional
-  hk_gen = h.get_hk_gen() # gets the function to generate h(k)
-  kxs = np.linspace(-nsuper,nsuper,nk)  # generate kx
-  kys = np.linspace(-nsuper,nsuper,nk)  # generate ky
-  iden = np.identity(h.intra.shape[0],dtype=np.complex)
-  kxout = []
-  kyout = []
-  if reciprocal: R = h.geometry.get_k2K() # get matrix
-  else:  R = np.matrix(np.identity(3)) # get identity
-  # setup a reasonable value for delta
-  if delta is None:
- #   delta = 1./refine_delta*2.*np.max(np.abs(h.intra))/nk
-    delta = 1./refine_delta*2./nk
-  #### function to calculate the weight ###
-  if mode=='full': # use full inversion
-    def get_weight(hk):
-      gf = algebra.inv((e+1j*delta)*iden - hk) # get green function
-      if callable(operator):
-        tdos = -(operator(x,y)*gf).imag # get imaginary part
-      else: tdos = -(operator*gf).imag # get imaginary part
-      return np.trace(tdos).real # return trace
-  elif mode=='eigen': # use full diagonalization
-    def get_weight(hk):
-      es = algebra.eigvalsh(hk)
-      return np.sum(delta/((e-es)**2+delta**2)) # return weight
-  elif mode=='lowest': # use sparse diagonalization
-    def get_weight(hk):
-      es,waves = slg.eigsh(hk,k=num_waves,sigma=e,tol=arpack_tol,which="LM",
-                            maxiter = arpack_maxiter)
-      return np.sum(delta/((e-es)**2+delta**2)) # return weight
-  else: raise
-
-##############################################
-
-
-  ts = timing.Testimator()
-  # setup the operator
-  rs = [] # empty list
-  for x in kxs:
-    for y in kxs:
-      rs.append([x,y,0.]) # store
-  def getf(r): # function to compute FS
-      if info: print("Doing",r)
-      rm = np.matrix(r).T
-      k = np.array((R*rm).T)[0] # change of basis
-      hk = hk_gen(k) # get hamiltonian
-      return get_weight(hk)
-  rs = np.array(rs) # transform into array
-  from . import parallel
-  kxout = rs[:,0] # x coordinate
-  kyout = rs[:,1] # y coordinate
-  if parallel.cores==1: # serial execution
-      kdos = [] # empty list
-      for r in rs: # loop
-        kdos.append(getf(r)) # add to the list
-  else: # parallel execution
-      kdos = parallel.pcall(getf,rs) # compute all
-  if write:  # optionally, write in file
-    f = open(output_file,"w") 
-    for (x,y,d) in zip(kxout,kyout,kdos):
-      f.write(str(x)+ "   "+str(y)+"   "+str(d)+"\n")
-    f.close() # close the file
-  return (kxout,kyout,d) # return result
+    """Calculates the Fermi surface of a 2d system"""
+    if operator is not None: # operator given
+        if mode=="eigen": mode = "full" # redefine
+        operator = h.get_operator(operator) # get the operator
+    else: # no operator given
+        if mode=="full":
+            operator = np.matrix(np.identity(h.intra.shape[0]))
+    if h.dimensionality!=2: raise  # continue if two dimensional
+    hk_gen = h.get_hk_gen() # gets the function to generate h(k)
+    kxs = np.linspace(-nsuper,nsuper,nk)  # generate kx
+    kys = np.linspace(-nsuper,nsuper,nk)  # generate ky
+    iden = np.identity(h.intra.shape[0],dtype=np.complex)
+    kxout = []
+    kyout = []
+    if reciprocal: R = h.geometry.get_k2K_generator() # get function
+    else:  R = lambda x: x
+    # setup a reasonable value for delta
+    if delta is None:  delta = 3./refine_delta*2./nk
+    #### function to calculate the weight ###
+    if mode=='full': # use full inversion
+      def get_weight(hk,k=None):
+        gf = algebra.inv((e+1j*delta)*iden - hk) # get green function
+        gf = gf - algebra.inv((e-1j*delta)*iden - hk) # get green function
+        if callable(operator): # callable operator
+           tdos = -(operator(gf,k=k)).imag # get imaginary part
+        else: tdos = -(operator*gf).imag # get imaginary part
+        return np.trace(tdos).real # return trace
+    elif mode=='eigen': # use full diagonalization
+      def get_weight(hk,**kwargs):
+        es = algebra.eigvalsh(hk)
+        return np.sum(delta/((e-es)**2+delta**2)) # return weight
+    elif mode=='lowest': # use sparse diagonalization
+      def get_weight(hk,**kwargs):
+        es,waves = slg.eigsh(hk,k=num_waves,sigma=e,tol=arpack_tol,which="LM",
+                              maxiter = arpack_maxiter)
+        return np.sum(delta/((e-es)**2+delta**2)) # return weight
+    else: raise
+  
+  ##############################################
+  
+  
+    # setup the operator
+    rs = [] # empty list
+    for x in kxs:
+      for y in kxs:
+        rs.append([x,y,0.]) # store
+    def getf(r): # function to compute FS
+        k = R(r)
+        hk = hk_gen(k) # get hamiltonian
+        return get_weight(hk,k=k)
+    rs = np.array(rs) # transform into array
+    from . import parallel
+    kxout = rs[:,0] # x coordinate
+    kyout = rs[:,1] # y coordinate
+    if parallel.cores==1: # serial execution
+        if info: ts = timing.Testimator(maxite=len(kxs)*len(kys),title="FS")
+        kdos = [] # empty list
+        for r in rs: # loop
+          if info: ts.iterate()
+          kdos.append(getf(r)) # add to the list
+    else: # parallel execution
+        kdos = parallel.pcall(getf,rs) # compute all
+    if write:  # optionally, write in file
+      f = open(output_file,"w") 
+      for (x,y,d) in zip(kxout,kyout,kdos):
+        f.write(str(x)+ "   "+str(y)+"   "+str(d)+"\n")
+      f.close() # close the file
+    return (kxout,kyout,d) # return result
 
 
 
@@ -96,36 +95,36 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
 def boolean_fermi_surface(h,write=True,output_file="BOOL_FERMI_MAP.OUT",
                     e=0.0,nk=50,nsuper=1,reciprocal=False,
                     delta=None):
-  """Calculates the Fermi surface of a 2d system"""
-  if h.dimensionality!=2: raise  # continue if two dimensional
-  hk_gen = h.get_hk_gen() # gets the function to generate h(k)
-  kxs = np.linspace(-nsuper,nsuper,nk)  # generate kx
-  kys = np.linspace(-nsuper,nsuper,nk)  # generate ky
-  kdos = [] # empty list
-  kxout = []
-  kyout = []
-  if reciprocal: R = h.geometry.get_k2K() # get matrix
-  # setup a reasonable value for delta
-  if delta is None:
-    delta = 8./np.max(np.abs(h.intra))/nk
-  for x in kxs:
-    for y in kxs:
-      r = np.matrix([x,y,0.]).T # real space vectors
-      k = np.array((R*r).T)[0] # change of basis
-      hk = hk_gen(k) # get hamiltonian
-      evals = lg.eigvalsh(hk) # diagonalize
-      de = np.abs(evals - e) # difference with respect to fermi
-      de = de[de<delta] # energies close to fermi
-      if len(de)>0: kdos.append(1.0) # add to the list
-      else: kdos.append(0.0) # add to the list
-      kxout.append(x)
-      kyout.append(y)
-  if write:  # optionally, write in file
-    f = open(output_file,"w") 
-    for (x,y,d) in zip(kxout,kyout,kdos):
-      f.write(str(x)+ "   "+str(y)+"   "+str(d)+"\n")
-    f.close() # close the file
-  return (kxout,kyout,d) # return result
+    """Calculates the Fermi surface of a 2d system"""
+    if h.dimensionality!=2: raise  # continue if two dimensional
+    hk_gen = h.get_hk_gen() # gets the function to generate h(k)
+    kxs = np.linspace(-nsuper,nsuper,nk)  # generate kx
+    kys = np.linspace(-nsuper,nsuper,nk)  # generate ky
+    kdos = [] # empty list
+    kxout = []
+    kyout = []
+    if reciprocal: R = h.geometry.get_k2K() # get matrix
+    # setup a reasonable value for delta
+    if delta is None:
+      delta = 8./np.max(np.abs(h.intra))/nk
+    for x in kxs:
+      for y in kxs:
+        r = np.matrix([x,y,0.]).T # real space vectors
+        k = np.array((R*r).T)[0] # change of basis
+        hk = hk_gen(k) # get hamiltonian
+        evals = lg.eigvalsh(hk) # diagonalize
+        de = np.abs(evals - e) # difference with respect to fermi
+        de = de[de<delta] # energies close to fermi
+        if len(de)>0: kdos.append(1.0) # add to the list
+        else: kdos.append(0.0) # add to the list
+        kxout.append(x)
+        kyout.append(y)
+    if write:  # optionally, write in file
+      f = open(output_file,"w") 
+      for (x,y,d) in zip(kxout,kyout,kdos):
+        f.write(str(x)+ "   "+str(y)+"   "+str(d)+"\n")
+      f.close() # close the file
+    return (kxout,kyout,d) # return result
 
 
 
@@ -171,10 +170,10 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
   fo = [open(output_file+"_"+str(i)+".OUT","w") for i in nindex] # files        
   for x in kxs:
     for y in kxs:
-      print("Doing",x,y)
+#      print("Doing",x,y)
       r = np.array([x,y,0.]) # real space vectors
       k = np.array(R)@r # change of basis
-      print(k)
+#      print(k)
       hk = hk_gen(k) # get hamiltonian
       if not h.is_sparse: evals,waves = lg.eigh(hk) # eigenvalues
       else: evals,waves = slg.eigsh(hk,k=max(np.abs(nindex))*2,sigma=0.0,
