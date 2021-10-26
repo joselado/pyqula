@@ -428,14 +428,18 @@ def convolve(x,y,delta=None):
 
 def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
         delta=0.01,ntries=10,nk=100,operator=None,
-        random=True,
+        random=True,energies=None,
         **kwargs):
   """Calculate the KDOS bands using the KPM"""
+  if energies is not None: # energies provided
+      ewindow = np.max(np.abs(energies)) # true window
+      ne = len(energies) # number fo energies
+      if scale<ewindow: scale = ewindow*2 # redefine
   hkgen = h.get_hk_gen() # get generator
   ks = kmesh(h.dimensionality,nk=nk) # klist
   if random: ks = [np.random.random(3) for k in ks]
   ytot = np.zeros(ne) # initialize
-  npol = 5*int(scale/delta) # number of polynomials
+  npol = int(scale/delta) # number of polynomials
   def f(k):
     hk = hkgen(k) # get Hamiltonian
     if callable(operator): op = operator(k) # call the function if necessary
@@ -457,7 +461,14 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
     out = parallel.pcall(f,ks) # compute all
     ytot = np.mean([out[i][1] for i in range(numk)],axis=0) # average DOS
     x = out[0][0] # energies
-  np.savetxt("DOS.OUT",np.matrix([x,ytot]).T) # save in file
+  if energies is not None: # energies provided
+      from scipy.interpolate import interp1d
+      finter = interp1d(x,ytot,kind="linear",bounds_error=False,
+                    fill_value=0.) # interpolation
+      x = energies # redefine x
+      ytot = finter(energies) # redefine y
+  ytot = ytot*h.intra.shape[0] # by the dimension
+  np.savetxt("DOS.OUT",np.array([x,ytot]).T) # save in file
   return (x,ytot)
 
 
@@ -477,6 +488,8 @@ def get_dos(h,energies=np.linspace(-4.0,4.0,400),
           ds = parallel.pcall(fun,energies) # compute DOS with an operator
           np.savetxt("DOS.OUT",np.array([energies,ds]).T) # write in a file
           return (energies,ds)
+      if mode=="KPM": 
+          return dos_kpm(h,energies=energies,**kwargs)
       else: 
           print("Unrecognized option in DOS")
           raise
