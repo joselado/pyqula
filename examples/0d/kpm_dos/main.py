@@ -7,7 +7,7 @@ from pyqula import geometry  # library to create crystal geometries
 import numpy as np
 g = geometry.chain()
 g = g.supercell(10000) # big supercell
-g.dimensionality = 0
+g.dimensionality = 0 # make it zero dimensional
 h = g.get_hamiltonian(is_sparse=True,has_spin=False) # in sparse mode
 (x,y) = h.get_dos(mode="KPM",
             energies=np.linspace(-3.0,3.0,200), # energies
