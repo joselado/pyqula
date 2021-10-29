@@ -67,3 +67,14 @@ def save(self,output_file):
   """ Write an object"""
   with open(output_file, 'wb') as output:
     pickle.dump(self, output, pickle.HIGHEST_PROTOCOL)
+
+
+
+
+def writefile(original,write=True,filename="FILE.OUT"):
+  def wrapper(target):
+      out = target(*args,**kwargs)
+      if write: np.savetxt(filename,np.array(out).T)
+      return out
+  return wrapper
+

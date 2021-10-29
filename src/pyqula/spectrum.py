@@ -425,7 +425,8 @@ def pairing_map(h,**kwargs):
 
 
 
-def set_filling(h,filling=0.5,nk=10,extrae=0.,delta=1e-1):
+def set_filling(h,filling=0.5,nk=10,extrae=0.,
+    mode="ED",**kwargs):
     """
     Set the filling of a Hamiltonian
     - nk = 10, number of kpoints in each direction
@@ -440,11 +441,11 @@ def set_filling(h,filling=0.5,nk=10,extrae=0.,delta=1e-1):
     n = h.intra.shape[0]
     use_kpm = False
     if n>algebra.maxsize: # use the KPM method
-        use_kpm = True
+        mode="KPM"
         print("Using KPM in set_filling")
-    if use_kpm: # use KPM
+    if mode=="KPM": # use KPM
         es,ds = h.get_dos(energies=np.linspace(-5.0,5.0,1000),
-                use_kpm=True,delta=delta,nk=nk,random=False)
+                mode="KPM",nk=nk,**kwargs)
         from scipy.integrate import cumtrapz
         di = cumtrapz(ds,es)
         ei = (es[0:len(es)-1] + es[1:len(es)])/2.
@@ -452,9 +453,10 @@ def set_filling(h,filling=0.5,nk=10,extrae=0.,delta=1e-1):
         from scipy.interpolate import interp1d
         f = interp1d(di,ei) # interpolating function
         efermi = f(fill) # get the fermi energy
-    else: # dense Hamiltonian, use ED
+    elif mode=="ED": # dense Hamiltonian, use ED
         es = eigenvalues(h,nk=nk,notime=True)
         efermi = get_fermi_energy(es,fill)
+    else: raise
     h.shift_fermi(-efermi) # shift the fermi energy
 
 
