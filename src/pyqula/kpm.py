@@ -239,12 +239,26 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
     xx = abs(ewindow/scale) # scale
     xs = np.linspace(-xx,xx,ne,endpoint=True)*0.99 # energies
   ys = generate_profile(mus,xs,kernel=kernel).real
-  (xs,ys) = (scale*xs,ys*scale)
+  (xs,ys) = (scale*xs,ys/scale)
   if x is not None:
     from scipy.interpolate import interp1d
     f = interp1d(xs,ys,bounds_error=False,fill_value=0.0)
     return x,f(x)
   else: return xs,ys
+
+
+def pdos(m,operator=None,**kwargs):
+    """Compute the projected density of states, assuming the operator
+    fufills P^2 = P"""
+    from .randomtk import randomwf
+    fun0 = randomwf(m.shape[0]) # generator
+    if operator is not None: # operator provided
+        from .operators import Operator
+        op = Operator(operator).get_matrix() # redefine
+        fun = lambda : op@fun0() # define new generator
+    else: fun = fun0 # original generator
+    return tdos(m,frand=fun,**kwargs) # call TDOS with the generator
+
 
 
 tdos0d = tdos # redefine
@@ -259,16 +273,15 @@ def total_energy(m_in,scale=10.,npol=None,ne=500,ntries=20):
 
 def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
   """ Calculates local DOS using the KPM"""
+  m = csc(m_in) # sparse matrix
+  nd = m.shape[0] # length of the matrix
   if fun is not None: # check that dimensions are fine
     v0 = fun()
     if len(v0) != m_in.shape[0]: raise
   if fun is None:
 #    def fun(): return rand.random(nd) -.5 + 1j*rand.random(nd) -.5j
-    def fun(): 
-      v = (rand.random(nd) - 0.5)*np.exp(2*1j*np.pi*rand.random(nd))
-      return v/np.sqrt(np.sum(np.abs(v)**2)) # normalize
-  m = csc(m_in) # sparse matrix
-  nd = m.shape[0] # length of the matrix
+      from .randomtk import randomwf
+      fun = randomwf(nd) # generator
   def pfun(x):
     v = fun()
     v = v/np.sqrt(v.dot(np.conjugate(v))) # normalize the vector
