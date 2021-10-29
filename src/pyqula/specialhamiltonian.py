@@ -5,11 +5,11 @@ from . import geometry
 
 
 def twisted_bilayer(n=7,ti=0.12,lambi=3.0,lamb=3.0,is_sparse=True,
-        has_spin=False,dl=3.0,**kwargs):
+        g=None,has_spin=False,dl=3.0,**kwargs):
     """
     Return the Hamiltonian of twisted bilayer graphene
     """
-    g = specialgeometry.twisted_bilayer(n,dz=dl,**kwargs)
+    if g is None: g = specialgeometry.twisted_bilayer(n,dz=dl,**kwargs)
     mgenerator = specialhopping.twisted_matrix(ti=ti,
             lambi=lambi,lamb=lamb,dl=dl)
     h = g.get_hamiltonian(is_sparse=is_sparse,has_spin=has_spin,
@@ -30,7 +30,7 @@ def multilayer_graphene(l=[0],real=False,**kwargs):
           mgenerator=mgenerator)
   else:
     h = g.get_hamiltonian(has_spin=False,
-          fun=specialhopping.multilayer(**kwargs))
+          tij=specialhopping.multilayer(**kwargs))
   return h
 
 

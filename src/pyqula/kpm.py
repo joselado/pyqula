@@ -264,17 +264,20 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
     if len(v0) != m_in.shape[0]: raise
   if fun is None:
 #    def fun(): return rand.random(nd) -.5 + 1j*rand.random(nd) -.5j
-    def fun(): return (rand.random(nd) - 0.5)*np.exp(2*1j*np.pi*rand.random(nd))
-  m = csc(m_in) # saprse matrix
+    def fun(): 
+      v = (rand.random(nd) - 0.5)*np.exp(2*1j*np.pi*rand.random(nd))
+      return v/np.sqrt(np.sum(np.abs(v)**2)) # normalize
+  m = csc(m_in) # sparse matrix
   nd = m.shape[0] # length of the matrix
   def pfun(x):
     v = fun()
     v = v/np.sqrt(v.dot(np.conjugate(v))) # normalize the vector
 #    v = csc(v).transpose()
     if operator is None:
-      mus = get_moments(v,m,n=n) # get the chebychev moments
+        mus = get_moments(v,m,n=n) # get the chebychev moments
     else:
-      mus = get_momentsA(v,m,n=2*n,A=operator) # get the chebychev moments
+#        mus = get_moments_vivj(m,v,operator@v,n=2*n,use_fortran=False)
+        mus = get_momentsA(v,m,n=2*n,A=operator) # get the chebychev moments
     return mus
 #  from . import parallel
 #  out = [pfun(i) for i in range(ntries)] # perform all the computations
