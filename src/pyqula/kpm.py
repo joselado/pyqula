@@ -247,14 +247,14 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
   else: return xs,ys
 
 
-def pdos(m,operator=None,**kwargs):
+def pdos(m,P=None,**kwargs):
     """Compute the projected density of states, assuming the operator
     fufills P^2 = P"""
     from .randomtk import randomwf
     fun0 = randomwf(m.shape[0]) # generator
-    if operator is not None: # operator provided
+    if P is not None: # operator provided
         from .operators import Operator
-        op = Operator(operator).get_matrix() # redefine
+        op = Operator(P).get_matrix() # redefine
         fun = lambda : op@fun0() # define new generator
     else: fun = fun0 # original generator
     return tdos(m,frand=fun,**kwargs) # call TDOS with the generator

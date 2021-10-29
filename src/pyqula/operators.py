@@ -245,7 +245,7 @@ def get_hole(h):
   return bmat(out)
 
 
-def get_bulk(h,fac=0.2):
+def get_bulk(h,fac=0.8):
     """Return the bulk operator"""
     r = h.geometry.r # positions
     g = h.geometry
@@ -260,8 +260,8 @@ def get_bulk(h,fac=0.2):
         dr = r[:,1] # y positions
         dr = dr - np.min(dr)
         dr = dr/np.max(dr) # to interval 0,1
-        out[fac>dr] = 0.0 # set to zero
-        out[(1.-fac)<dr] = 0.0 # set to zero
+        dr2 = dr - np.mean(dr) # minus the average
+        out[fac/2.<np.abs(dr2)] = 0.0 # set to zero
     elif h.dimensionality==2:
         dr = r[:,2] # z positions
         dr = dr - np.min(dr)
@@ -271,7 +271,7 @@ def get_bulk(h,fac=0.2):
     else: return NotImplemented
     from scipy.sparse import diags
     n = len(r) # number of sites
-    out = diags([out],[0],shape=(n,n),dtype=np.complex) # create matrix
+    out = diags([out],offsets=[0],shape=(n,n),dtype=np.complex) # create matrix
     m = h.spinless2full(out) # return this matrix
     return m@m # return the square
 
