@@ -8,7 +8,7 @@ import subprocess
 
 srcpath = os.path.dirname(os.path.realpath(__file__))+"/.." 
 
-pickle.settings['recurse'] = True
+#pickle.settings['recurse'] = True
 
 def pcall(fin,xs,batch_size=1,**kwargs):
     """Wrapper to allow for a batch size"""
