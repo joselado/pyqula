@@ -49,9 +49,7 @@ def python_kpm_moments(v,m,n=100):
   for i in range(1,n): 
     ap = 2*m@a - am # recursion relation
     bk = algebra.braket_ww(a,a)
-#    bk = (np.transpose(np.conjugate(a))*a)[0,0] # scalar product
     bk1 = algebra.braket_ww(ap,a)
-#    bk1 = (np.transpose(np.conjugate(ap))*a)[0,0] # scalar product
     mus[2*i] = 2.*bk
     mus[2*i+1] = 2.*bk1
     am = a.copy() # new variables

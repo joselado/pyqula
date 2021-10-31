@@ -427,13 +427,13 @@ def convolve(x,y,delta=None):
 
 
 def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
-        delta=0.01,ntries=10,nk=100,operator=None,
-        random=True,energies=None,
+        delta=0.01,nk=100,operator=None,
+        random=True,energies=None,info=False,
         **kwargs):
   """Calculate the KDOS bands using the KPM"""
   if energies is not None: # energies provided
       ewindow = np.max(np.abs(energies)) # true window
-      ne = len(energies) # number fo energies
+      ne = len(energies) # number of energies
       if scale<ewindow: scale = ewindow*2 # redefine
   hkgen = h.get_hk_gen() # get generator
   ks = kmesh(h.dimensionality,nk=nk) # klist
@@ -441,11 +441,12 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   ytot = np.zeros(ne) # initialize
   npol = int(scale/delta) # number of polynomials
   def f(k):
+    if info: print("Doing",k)
     hk = hkgen(k) # get Hamiltonian
     if callable(operator): op = operator(k) # call the function if necessary
     else: op = operator # take the same operator
-    (x,y) = kpm.tdos(hk,scale=scale,npol=npol,ne=ne,operator=op,
-                   ewindow=ewindow,ntries=ntries,**kwargs) # compute
+    (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=ne,operator=op,
+                   ewindow=ewindow,**kwargs) # compute
     return (x,y)
   from . import parallel
   numk = len(ks)
