@@ -408,7 +408,8 @@ def multi_ldos_tb(h,es=np.linspace(-1.0,1.0,100),delta=0.01,
     out = outs[ie] ; ie += 1 # get and increase
     name0 = "LDOS_"+str(e)+"_.OUT" # name of the output
     name = "MULTILDOS/" + name0
-    write_ldos(go.x,go.y,out.tolist()*(nrep**h.dimensionality),
+    from .geometry import replicate_array
+    write_ldos(go.x,go.y,replicate_array(h.geometry,out,nrep=nrep),
                   output_file=name) # write in file
     fo.write(name0+"\n") # name of the file
     fo.flush() # flush
