@@ -1019,11 +1019,12 @@ def apilate(g,drs=[np.array([0.,0.,0.])]):
 
 
 
-def write_positions(g,output_file = "POSITIONS.OUT"):
+def write_positions(g,output_file = "POSITIONS.OUT",nrep=1):
   """Writes the geometry associatted with a hamiltonian in a file"""
-  x = g.x  # x posiions
-  y = g.y  # y posiions
-  z = g.z  # z posiions
+  if nrep>1: g = g.get_supercell(nrep)
+  x = g.x  # x positions
+  y = g.y  # y positions
+  z = g.z  # z positions
   fg = open(output_file,"w")
   fg.write(" # x    y     z   (without spin degree)\n")
   for (ix,iy,iz) in zip(x,y,z):
@@ -1379,7 +1380,12 @@ def replicate_array(g,v,nrep=1):
    """Replicate a certain array in a supercell"""
    if len(np.array(v).shape)>1: # not one dimensional
        return np.array([replicate_array(g,vi,nrep=nrep) for vi in v.T]).T
-   else: return np.array(v.tolist()*(nrep**g.dimensionality))
+   else: 
+       from .checkclass import number2array
+       nrep = number2array(nrep,d=g.dimensionality) # as array
+       nout = 1
+       for n in nrep: nout *= n # multiply
+       return np.array(v.tolist()*nout)
 
 
 def write_profile(g,d,name="PROFILE.OUT",nrep=3,normal_order=False):

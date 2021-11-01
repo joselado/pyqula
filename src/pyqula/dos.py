@@ -241,7 +241,6 @@ def dos_kmesh(h,nk=10,delta=1e-3,random=False,ks=None,
     ys = calculate_dos(out[1],energies,delta,w=w)/len(ks)
     ys *= 1./np.pi # normalization of the Lorentzian
     if write: write_dos(energies,ys) # write in file
-#    print("\nDOS finished")
     return (energies,ys) # return result
 
 
@@ -489,7 +488,7 @@ def get_dos(h,energies=np.linspace(-4.0,4.0,400),
           ds = parallel.pcall(fun,energies) # compute DOS with an operator
           np.savetxt("DOS.OUT",np.array([energies,ds]).T) # write in a file
           return (energies,ds)
-      if mode=="KPM": 
+      elif mode=="KPM": 
           return dos_kpm(h,energies=energies,**kwargs)
       else: 
           print("Unrecognized option in DOS")
