@@ -1019,12 +1019,12 @@ def apilate(g,drs=[np.array([0.,0.,0.])]):
 
 
 
-def write_positions(g,output_file = "POSITIONS.OUT",nrep=1):
+def write_positions(g,output_file = "POSITIONS.OUT",nrep=None):
   """Writes the geometry associatted with a hamiltonian in a file"""
-  if nrep>1: g = g.get_supercell(nrep)
-  x = g.x  # x positions
-  y = g.y  # y positions
-  z = g.z  # z positions
+  if nrep is not None: g = g.get_supercell(nrep)
+  x = g.r[:,0]  # x positions
+  y = g.r[:,1]  # y positions
+  z = g.r[:,2]  # z positions
   fg = open(output_file,"w")
   fg.write(" # x    y     z   (without spin degree)\n")
   for (ix,iy,iz) in zip(x,y,z):
