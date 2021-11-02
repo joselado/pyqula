@@ -196,6 +196,9 @@ class Hamiltonian():
     def get_dos(self,**kwargs):
         from . import dos
         return dos.get_dos(self,**kwargs)
+    def get_density(self,**kwargs):
+        from .ldostk import atomicmultildos
+        return atomicmultildos.get_density(self,**kwargs)
     def get_bands(self,**kwargs):
       """ Returns a figure with teh bandstructure"""
       return get_bands_nd(self,**kwargs)
