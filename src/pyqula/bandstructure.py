@@ -96,9 +96,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
       else: return (eig,eigvec)
   # open file and get generator
   hkgen = h.get_hk_gen() # generator hamiltonian
-  if kpath is None:
-    from . import klist
-    kpath = klist.default(h.geometry,nk=nk) # generate default klist
+  kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
   def getek(k):
     """Compute this k-point"""
     out = "" # output string

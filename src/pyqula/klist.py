@@ -312,11 +312,19 @@ def label2k(g,kl):
 
 
 
-def get_kpath(g,ks,**kwargs):
+def get_kpath_labels(g,ks,**kwargs):
     """Return the k-path"""
     kps = [label2k(g,k) for k in ks] # get the kpoints
     from .kpointstk.locate import k2path
     return k2path(g,kps,**kwargs) # closest path
+
+
+def get_kpath(g,kpath,**kwargs):
+    """Return a kpath"""
+    if kpath is None: return default(g,**kwargs)
+    elif type(kpath[0])==str: return get_kpath_labels(g,kpath,**kwargs)
+    else: return kpath # assume is a valid list of vectors
+
 
 
 

@@ -4,6 +4,7 @@ from copy import deepcopy
 from scipy.sparse import bmat
 from scipy.sparse import csc_matrix as csc
 from . import sculpt
+from . import klist
 from .supercell import non_orthogonal_supercell
 from . import supercell as supercelltk
 from . import checkclass
@@ -67,7 +68,6 @@ class Geometry:
     return plot_geometry(self)
   def get_kmesh(self,**kwargs):
       """Return the k-mesh"""
-      from . import klist
       return klist.kmesh(self.dimensionality,**kwargs)
   def get_default_kpath(self,**kwargs):
       from . import klist
@@ -110,6 +110,8 @@ class Geometry:
       write_xyz(self)
       write_lattice(self)
       write_sublattice(self)
+  def get_kpath(self,*args,**kwargs):
+      return klist.get_kpath(self,*args,**kwargs)
   def write_positions(self,**kwargs):
       """Write the positions in a file"""
       write_positions(self,**kwargs)
