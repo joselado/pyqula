@@ -8,7 +8,7 @@ import subprocess
 
 srcpath = os.path.dirname(os.path.realpath(__file__))+"/.." 
 
-#pickle.settings['recurse'] = True
+pickle.settings['recurse'] = True
 
 def pcall(fin,xs,batch_size=1,**kwargs):
     """Wrapper to allow for a batch size"""
@@ -29,7 +29,8 @@ def pcall(fin,xs,batch_size=1,**kwargs):
         return out
 
 
-def pcall_single(fin,xs,time=10,memory=5000,error=None):
+def pcall_single(fin,xs,time=10,memory=5000,error=None,
+    return_mode="list"):
     """Run a parallel calculation with slurm"""
     n = len(xs) # number of calculations
     f = lambda x: fin(x)
@@ -88,7 +89,11 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None):
         y = pickle.load(open(folder+'out.obj','rb'))
         if y is None: y = error # use this as backup variable
         ys.append(y)
-    return ys
+    if return_mode=="list": return ys
+    elif return_mode=="dict": 
+      outys = dict() # dictionary
+      for i in range(n): outys[x[i]] = ys[i]
+      return outys # return the dictionary
 
 
 

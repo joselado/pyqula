@@ -103,7 +103,7 @@ class Geometry:
     self.z = r[2]
   @get_docstring(get_hamiltonian) # inherint docstring
   def get_hamiltonian(self,**kwargs):
-    return get_hamiltonian(self,**kwargs)
+      return get_hamiltonian(self,**kwargs)
   def write(self,**kwargs):
       """ Writes the geometry in file"""
       write_positions(self,**kwargs)
@@ -131,11 +131,11 @@ class Geometry:
       self.z = self.z - sum(self.z)/len(self.z)
       self.xyz2r() # update r
   def get_lattice_name(self):
-    if self.dimensionality==2:
-      if np.abs(self.a1.dot(self.a2))<0.0001:        
-        self.lattice_name = "square"
-      else:
-        self.lattice_name = "triangular"
+      if self.dimensionality==2:
+          if np.abs(self.a1.dot(self.a2))<0.0001:        
+            self.lattice_name = "square"
+          else:
+            self.lattice_name = "triangular"
   def get_k2K(self):
       from .kpointstk.mapping import get_k2K
       return get_k2K(self)
