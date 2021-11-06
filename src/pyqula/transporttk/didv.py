@@ -38,7 +38,7 @@ def finite_T_didv(self,temp,energy=0.0,**kwargs):
     from ..integration import peak_integrate
 #    return peak_integrate(f,-dt*temp,dt*temp,xp=0.0,dp=temp,
 #                           epsrel=1e-2,limit=10)[0]/2.
-    return quad(f,-dt*temp,dt*temp,epsrel=1e-4,limit=60)[0]/2.
+    return quad(f,-dt*temp,dt*temp,epsrel=1e-3,limit=40)[0]/2.
 #    ne = 79 # number of energies
 #    from ..integration import simpson
 ##    return simpson(f,xlim=[-dt*temp,dt*temp],eps=1e-3)
