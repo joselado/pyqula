@@ -9,22 +9,24 @@ from .. import parallel
 from .. import interpolation
 
 
-def get_qpi(h,reciprocal=True,nk=80,energies=np.linspace(-4.0,4.0,80),
+def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
         output_folder="MULTIQPI",nsuper=2,integrate=False,
-        mode = "response",
+        mode = "response",info=False,
+        nunfold = 1, # flag for unfolding
         delta=1e-1,**kwargs):
     """Compute the QPI using a poor-mans convolution of the k-DOS"""
     if h.dimensionality!=2: raise
     if reciprocal: fR = h.geometry.get_k2K_generator() # get matrix
     else:  fR = lambda x: x # get identity
-    qs0 = h.geometry.get_kmesh(nk=nk,nsuper=nsuper)
+    qs0 = h.geometry.get_kmesh(nk=nk*nsuper,nsuper=nsuper)
     qs0 = qs0 - np.mean(qs0,axis=0)
     qs = np.array([fR(q) for q in qs0]) # convert
     if mode=="pm": # poor man mode
         from ..fermisurface import fermi_surface_generator
-        es,ks,ds = fermi_surface_generator(h,reciprocal=False,info=False,
+        es,ks,ds = fermi_surface_generator(h,reciprocal=False,info=info,
                 energies=energies,delta=delta,
-                nsuper=1,nk=2*nk,**kwargs)
+                full_bz=True, # flag for unfolding
+                nsuper=nunfold,nk=nk,**kwargs)
         # we now have the energies, k-points and DOS, lets do a convolution
         fp = lambda i: poor_man_qpi_single_energy(ks,ds[:,i],qs) # parallel function
         out = parallel.pcall(fp,range(len(es))) # compute in parallel
