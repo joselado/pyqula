@@ -4,23 +4,32 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 from pyqula import geometry
 g0 = geometry.honeycomb_lattice()
-g = g0.get_supercell(2)
+n  = 3
+g = g0.get_supercell(n)
 h = g.get_hamiltonian(has_spin=False)
 ns = int(len(g.r)/len(g0.r)) # number of supercells
 import numpy as np
 
 from pyqula import potentials
 v = potentials.commensurate_potential(g)
-h.add_onsite(v)
+def ons(r):
+  dr = r - g.r[0]
+  if dr.dot(dr)<1e-1: return 600.0
+  else: return 0.0
+
+h.add_onsite(ons)
 
 from pyqula import unfolding
 op = unfolding.bloch_projector(h,g0)
-kpath = np.array(g.get_kpath(nk=200))*2
+kpath = np.array(g.get_kpath(nk=200))*n
 #op = None
 #h.get_fermi_surface(operator=op,nsuper=2,e=0.5)
 #h.get_bands(operator=op,kpath=kpath)
 from pyqula import kdos
 kdos.kdos_bands(h,operator=op,kpath=kpath,delta=1e-1)
+#h.get_multi_fermi_surface(nk=100,energies=np.linspace(-4,4,100),
+#        delta=0.1,nsuper=3,operator=op)
+
 
 
 
