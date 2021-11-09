@@ -16,14 +16,20 @@ arpack_maxiter = 10000
 def fermi_surface_generator(h,
                     energies=[0.0],nk=50,nsuper=1,reciprocal=True,
                     delta=1e-2,refine_delta=1.0,operator=None,
+                    full_bz=False, # special flag for unfolding
                     numw=20,info=True):
   """Calculates the Fermi surface of a 2d system"""
+  if h.is_sparse: mode = "sparse"
+  else: mode = "full"
   energies = np.array(energies) # convert to array
-  if operator is not None: raise
   if h.dimensionality!=2: raise  # continue if two dimensional
   hk_gen = h.get_hk_gen() # gets the function to generate h(k)
-  kxs = np.linspace(-nsuper,nsuper,nk,endpoint=True)  # generate kx
-  kys = np.linspace(-nsuper,nsuper,nk,endpoint=True)  # generate ky
+  if full_bz:
+      kxs = np.linspace(0.,nsuper,nk,endpoint=True)  # generate kx
+      kys = np.linspace(0.,nsuper,nk,endpoint=True)  # generate ky
+  else:
+      kxs = np.linspace(-nsuper,nsuper,nk,endpoint=True)  # generate kx
+      kys = np.linspace(-nsuper,nsuper,nk,endpoint=True)  # generate ky
   iden = np.identity(h.intra.shape[0],dtype=np.complex)
   kxout = []
   kyout = []
@@ -31,13 +37,16 @@ def fermi_surface_generator(h,
   else:  fR = lambda x: x # get identity
   # setup a reasonable value for delta
   #### function to calculate the weight ###
-  if h.is_sparse: mode = "sparse"
-  else: mode = "full"
-  def get_weight(hk):
-      if mode=='full': es = algebra.eigvalsh(hk) # get eigenvalues
-      elif mode=='sparse': es = algebra.smalleig(hk,numw=numw)
-      ws = [np.sum(delta/((e-es)**2+delta**2)) for e in energies] # weights
-      return np.array(ws) # return weights
+  def get_weight(hk,k=None):
+      if operator is None:
+          if mode=='full': es = algebra.eigvalsh(hk) # get eigenvalues
+          elif mode=='sparse': es = algebra.smalleig(hk,numw=numw)
+          ws = [np.sum(delta/((e-es)**2+delta**2)) for e in energies] # weights
+          return np.array(ws) # return weights
+      else:
+          tmp,ds = h.get_dos(ks=[k],operator=operator,
+                        energies=energies,delta=delta)
+          return ds # return weight
 ##############################################
   ts = timing.Testimator()
   # setup the operator
@@ -48,7 +57,7 @@ def fermi_surface_generator(h,
   def getf(r): # function to compute FS
       k = fR(r) # get the reciprocal space vector
       hk = hk_gen(k) # get hamiltonian
-      return get_weight(hk) # get the array with the weights
+      return get_weight(hk,k=k) # get the array with the weights
   rs = np.array(rs) # transform into array
   from . import parallel
   kxout = rs[:,0] # x coordinate
