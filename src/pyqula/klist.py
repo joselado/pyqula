@@ -319,7 +319,7 @@ def get_kpath_labels(g,ks,**kwargs):
     return k2path(g,kps,**kwargs) # closest path
 
 
-def get_kpath(g,kpath,**kwargs):
+def get_kpath(g,kpath=None,**kwargs):
     """Return a kpath"""
     if kpath is None: return default(g,**kwargs)
     elif type(kpath[0])==str: return get_kpath_labels(g,kpath,**kwargs)

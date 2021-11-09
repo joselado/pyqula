@@ -4,6 +4,7 @@ import numpy as np
 
 def get_operator(self,name,**kwargs):
       """Return the conventional operator"""
+      if type(name) is operators.Operator: return name # return operator
       if name=="None": return None
       elif name in ["berry","Berry"]: 
           return operators.get_berry(self,**kwargs)

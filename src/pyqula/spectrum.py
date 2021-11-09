@@ -22,8 +22,9 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                     mode='eigen',num_waves=2,info=True):
     """Calculates the Fermi surface of a 2d system"""
     if operator is not None: # operator given
-        if mode=="eigen": mode = "full" # redefine
         operator = h.get_operator(operator) # get the operator
+        if not operator.linear:
+            if mode=="full": mode = "eigen"
     else: # no operator given
         if mode=="full":
             operator = np.matrix(np.identity(h.intra.shape[0]))
@@ -48,9 +49,14 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
         else: tdos = -(operator*gf).imag # get imaginary part
         return np.trace(tdos).real # return trace
     elif mode=='eigen': # use full diagonalization
-      def get_weight(hk,**kwargs):
-        es = algebra.eigvalsh(hk)
-        return np.sum(delta/((e-es)**2+delta**2)) # return weight
+      def get_weight(hk,k=None):
+        if operator is None:
+            es = algebra.eigvalsh(hk)
+            return np.sum(delta/((e-es)**2+delta**2)) # return weight
+        else: # using an operator
+            tmp,ds = h.get_dos(ks=[k],operator=operator,
+                        energies=[e],delta=delta)
+            return ds[0] # return weight
     elif mode=='lowest': # use sparse diagonalization
       def get_weight(hk,**kwargs):
         es,waves = slg.eigsh(hk,k=num_waves,sigma=e,tol=arpack_tol,which="LM",
