@@ -388,10 +388,10 @@ def chain(n=1):
 def bichain(n=1):
   """ Create a chain """
   g = square_ribbon(1) 
-  g = g.supercell(2)
+  g = g.get_supercell(2)
   g.has_sublattice = True
   g.sublattice = [(-1)**i for i in range(len(g.x))]
-  g = g.supercell(n)
+  g = g.get_supercell(n)
   return g
 
 
@@ -661,7 +661,7 @@ def triangular_lattice_tripartite():
 
 def triangular_lattice_pentapartite():
   """
-  Creates a triangular lattice with three sites per unit cell
+  Creates a triangular lattice with five sites per unit cell
   """
   g = triangular_lattice()
   return supercelltk.target_angle(g,angle=1./3.,volume=5,same_length=True)

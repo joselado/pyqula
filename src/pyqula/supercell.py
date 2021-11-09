@@ -186,3 +186,22 @@ def target_angle_volume(g,angle=None,n=5,volume=None,same_length=False):
 
 target_angle = target_angle_volume
 
+
+def infer_supercell(g,g0):
+    """Given two geometries, guess which supercell is associated"""
+    # this only works for orthgonal supercells
+    def norm(v): return np.sqrt(v.dot(v))
+    if g.dimensionality==1:
+        nx = int(norm(g.a1)/norm(g0.a1)) # out
+        ny = 1
+    elif g.dimensionality==2: # assume is orthogonal
+        nx = int(norm(g.a1)/norm(g0.a1)) # out
+        ny = int(norm(g.a2)/norm(g0.a2)) # out
+    else: raise
+    # probably a check should be added here
+    return (nx,ny,1)
+      
+
+
+
+
