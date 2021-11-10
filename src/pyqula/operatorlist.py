@@ -63,6 +63,9 @@ def get_operator(self,name,**kwargs):
         return operators.get_valley_layer(self,n=0)
       elif name in ["ipr","IPR"]: return operators.ipr
       elif name=="potential":  return operators.get_potential(self,**kwargs)
+      elif name=="unfold":  
+          from .unfolding import bloch_projector
+          return bloch_projector(self,**kwargs)
       else: raise
 
 

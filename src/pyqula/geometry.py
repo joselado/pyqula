@@ -42,6 +42,7 @@ class Geometry:
     self.b3 = np.array([0.0,0.0,1.])  # first vector to the nearest cell
     self.shift_kspace = False # shift the klist when plotting
     self.name = "None"
+    self.primal_geometry = None # store the primal geometry
     self.lattice_name = "" # lattice name
     self.atoms_names = [] # no name for the atoms
     self.atoms_have_names = False # atoms do not have names
@@ -89,8 +90,8 @@ class Geometry:
       else:
         iis = sculpt.get_closest(self,n=n,r0=r)
         return [self.r[ii] for ii in iis] # return positions
-  def get_supercell(self,nsuper):
-      return get_supercell(self,nsuper)
+  def get_supercell(self,nsuper,**kwargs):
+      return get_supercell(self,nsuper,**kwargs)
   supercell = get_supercell # backwards compatibility
   def xyz2r(self):
     """Updates r atributte according to xyz"""
@@ -1560,8 +1561,10 @@ read_xyz = readgeometry.read_xyz
 
 
 
-def get_supercell(self,nsuper):
+def get_supercell(self,nsuper,store_primal=False):
     """Creates a supercell"""
+    if store_primal: # store the primal geometry
+        self.primal_geometry = self.copy() 
     if self.dimensionality==0: return self # zero dimensional
     if np.array(nsuper).shape==(3,3):
       return supercelltk.non_orthogonal_supercell(self,nsuper)
