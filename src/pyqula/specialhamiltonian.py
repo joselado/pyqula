@@ -93,7 +93,7 @@ def TMDC_MX2(soc=0.0,cdw=0.0,g=None,ts=[1.0],normalize=True):
     """Return the Hamiltonian of NbSe2"""
     if g is None: 
         g = geometry.triangular_lattice()  # triangular lattice
-        if cdw!=0.0: g = g.supercell(3)
+        if cdw!=0.0: g = g.get_supercell(3,store_primal=True)
 #    ts = [1.0,0.3,0.6]
     ts = np.array(ts)
 #    t = ts[0]/np.max(ts) # 1NN 
