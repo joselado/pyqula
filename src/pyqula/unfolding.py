@@ -58,11 +58,16 @@ def perturb_bands(hprim,hper,kpath,inds_super=[]):
 
 
 
-def bloch_projector(h,g0):
+def bloch_projector(h,g0=None):
     """Given a certain Hamiltonian and minimal geometry, return
     a projector to the minimal BZ"""
-    h0 = g0.get_hamiltonian(has_spin=False) # spinless
-    if h.has_spin: h0.turn_spinful() # get spinfull
+    if g0 is None:
+        if h.geometry.primal_geometry is None: 
+            print("No primal geometry")
+            raise 
+        else: g0 = h.geometry.primal_geometry # get the primal geometry
+    h0 = g0.get_hamiltonian(has_spin=False)
+    if h.has_spin: h0.turn_spinful()
     if h.dimensionality<3: 
         from .supercell import infer_supercell
         nsuper = infer_supercell(h.geometry,g0) # get the supercell
@@ -70,7 +75,8 @@ def bloch_projector(h,g0):
     fs = bloch_phase_matrix(h0,nsuper=nsuper)
     def fun(v,k=0):
         vo = fs(k)@v # return vector
-        return v*np.abs(vo.dot(np.conjugate(v)))
+        out = np.abs(vo.dot(np.conjugate(v)))
+        return v*out
     from .operators import Operator
     return Operator(fun) # return operator
 
