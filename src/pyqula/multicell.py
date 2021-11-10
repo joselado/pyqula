@@ -256,7 +256,8 @@ def clean(h,cutoff=0.0001):
 
 
 
-def supercell_hamiltonian(hin,nsuper=[1,1,1],sparse=True,ncut=3):
+def supercell_hamiltonian(hin,nsuper=[1,1,1],sparse=True,ncut=3,
+                             **kwargs):
   """ Create a ribbon hamiltonian object"""
 #  raise # there is something wrong with this function
 #  print("This function might have something wrong")
@@ -265,7 +266,7 @@ def supercell_hamiltonian(hin,nsuper=[1,1,1],sparse=True,ncut=3):
   hr = h.copy() # copy hamiltonian
   if sparse: hr.is_sparse = True # sparse output
   # stuff about geometry
-  hr.geometry = h.geometry.supercell(nsuper) # create supercell
+  hr.geometry = h.geometry.get_supercell(nsuper,**kwargs) # create supercell
   n = nsuper[0]*nsuper[1]*nsuper[2] # number of cells in the supercell
   pos = [] # positions inside the supercell
   for i in range(nsuper[0]):

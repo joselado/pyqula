@@ -233,7 +233,7 @@ class Hamiltonian():
     def same_hamiltonian(self,*args,**kwargs):
         """Check if two hamiltonians are the same"""
         return hamiltonianmode.same_hamiltonian(self,*args,**kwargs)
-    def get_supercell(self,nsuper):
+    def get_supercell(self,nsuper,**kwargs):
       """ Creates a supercell of a one dimensional system"""
       if nsuper==1: return self
       if self.dimensionality==0: return self
@@ -245,7 +245,7 @@ class Hamiltonian():
           elif self.dimensionality==2: ns = [nsuper,nsuper,1]
           elif self.dimensionality==3: ns = [nsuper,nsuper,nsuper]
           else: raise
-      return multicell.supercell_hamiltonian(self,nsuper=ns)
+      return multicell.supercell_hamiltonian(self,nsuper=ns,**kwargs)
     def supercell(self,*args,**kwargs):
       return self.get_supercell(*args,**kwargs)
     def set_finite_system(self,periodic=True):
