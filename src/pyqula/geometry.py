@@ -381,6 +381,7 @@ def chain(n=1):
   g = square_ribbon(1) 
   g = g.supercell(n)
   g.has_sublattice = False
+  g.get_fractional()
 #  g.sublattice = [(-1)**i for i in range(len(g.x))]
   return g
 
@@ -584,6 +585,7 @@ def supercell1d(g,nsuper):
 #    print(nsuper)
   if g.atoms_have_names: # supercell sublattice
     go.atoms_names = g.atoms_names*nsuper
+  go.get_fractional()
   return go
 
 

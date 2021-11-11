@@ -75,8 +75,8 @@ def bloch_projector(h,g0=None):
     else: raise # not implemented
     fs = bloch_phase_matrix(h0,nsuper=nsuper)
     def fun(v,k=0):
-        vo = fs(k)@v # return vector
-        out = np.abs(vo.dot(np.conjugate(v)))
+        vo = np.conjugate(fs(k))@v # return vector
+        out = np.abs(vo.dot(np.conjugate(vo))) # overlap
         return v*out
     from .operators import Operator
     return Operator(fun) # return operator
@@ -95,8 +95,8 @@ def bloch_phase_matrix_simple(self,nsuper=[1,1,1]):
     nx = nsuper[0] # supercells in x
     ny = nsuper[1] # supercells in y
     def fun(k): # generator
-        out = [[None for i in range(ns)] for j in range(ns)] 
-        for ii in range(ns): out[ii][ii] = 0*iden # initialize
+        out = [[None for i in range(ns)] ] 
+#        for ii in range(ns): out[ii][ii] = 0*iden # initialize
         ii = 0 # counter
         for i in range(nx): # loop over x 
           for j in range(ny): # loop over y
@@ -107,7 +107,7 @@ def bloch_phase_matrix_simple(self,nsuper=[1,1,1]):
 #            U = np.conjugate(U).T
 #            U = self.spinless2full(U) # increase the space if necessary
             phi = np.exp(1j*np.pi*2.*np.array([i,j,0]).dot(ki)) # phase
-            out[ii][0] = iden*phi # multiply by phase
+            out[0][ii] = iden*phi # multiply by phase
             ii += 1 # increase counter
         out = bmat(out) # return matrix
         return out
@@ -134,10 +134,10 @@ def bloch_phase_matrix(self,nsuper=[1,1,1]):
     # generate all the matrices
     for i in range(nx): # loop over x 
       for j in range(ny): # loop over y
-        out = [[None for ij in range(ns)] for ji in range(ns)]
-        for ij in range(ns): out[ij][ij] = 0*iden # initialize
+        out = [[None for ij in range(ns)]]
+        for ij in range(ns): out[0][ij] = 0*iden # initialize
         dlist[ii] = np.array([i,j,0]) # list with dvectors
-        out[ii][0] = iden*(1.+0j) # identity
+        out[0][ii] = iden*(1.+0j) # identity
         outlist[ii] = bmat(out).todense() # store dense matrix
         ii += 1 # increase counter
     dlist = np.array(dlist) # to array

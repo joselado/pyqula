@@ -112,18 +112,13 @@ def hk_gen(h):
       """k dependent hamiltonian, k goes from 0 to 1"""
       mout = h.intra.copy() # intracell term
       for t in hopping: # loop over matrices
-        try: kp = k[0]  # extract the first component
-        except: kp = k  # assume it is a float
-#        phi = t.dir[0]*kp # phase
         tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
-#        tk = t.m * np.exp(1j*np.pi*2.*phi) # k hopping
         mout = mout + tk 
       return mout
     return hk  # return the function
   elif h.dimensionality == 2: # two dimensional
     def hk(k):
       """k dependent hamiltonian, k goes from 0 to 1"""
-#      k = np.array([k[0],k[1]]) # convert to array
       mout = h.intra.copy() # intracell term
       for t in hopping: # loop over matrices
         tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
