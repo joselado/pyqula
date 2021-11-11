@@ -90,7 +90,7 @@ def commensurate_potential(g,k=1,amplitude=1.0,n=None,
         else: n = 3
       f = cnpot(n=n,k=g.b1,**kwargs)
     elif g.dimensionality==1: 
-        raise # not implemented
+      f = cnpot(n=1,k=k*g.b1,**kwargs)
     else: raise
     f = enforce_amplitude(f,amplitude,g=g) # enforce the amplitude
     f = enforce_average(f,average,g=g) # enforce average

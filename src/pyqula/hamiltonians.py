@@ -142,8 +142,12 @@ class Hamiltonian():
         self.num_orbitals = len(geometry.x)
     def get_hk_gen(self):
         """ Generate kdependent hamiltonian"""
-        if self.is_multicell: return multicell.hk_gen(self) # for multicell
-        else: return hk_gen(self) # for normal cells
+        #if self.is_multicell:
+        out = multicell.hk_gen(self) # for multicell
+       # else: out = hk_gen(self) # for normal cells
+        from .htk.canonicalphase import canonical_unitary
+#        return canonical_unitary(self,out)
+        return out
 
     def has_time_reversal_symmetry(self):
         """Check if a Hamiltonian has time reversal symmetry"""
