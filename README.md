@@ -35,6 +35,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 - Momentum-resolved spectral functions
 - Local and full operator-resolved density of states
 - 0d, 1d, 2d and 3d tight binding models 
+- Electronic structure unfolding in supercells
 
 ## Interacting mean-field Hamiltonians ##
 - Selfconsistent mean-field calculations with local/non-local interactions

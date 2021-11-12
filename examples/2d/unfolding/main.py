@@ -3,25 +3,17 @@ import os ; import sys
 sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 from pyqula import geometry
+import numpy as np
 g0 = geometry.honeycomb_lattice()
 n  = 3
 g = g0.get_supercell(n,store_primal=True)
 h = g.get_hamiltonian(has_spin=False)
-ns = int(len(g.r)/len(g0.r)) # number of supercells
-import numpy as np
-
-from pyqula import potentials
-v = potentials.commensurate_potential(g)
 def ons(r):
-  dr = r - g.r[5]
+  dr = r - g.r[0]
   if dr.dot(dr)<1e-1: return 100.0
   else: return 0.0
 
 h.add_onsite(ons)
-h.geometry.write_profile(ons,nrep=1)
-#exit()
-#h.add_onsite(2.0)
-#h.add_swave(0.3)
 
 kpath = np.array(g.get_kpath(nk=200))*n
 #op = None
