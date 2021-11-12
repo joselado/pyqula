@@ -8,10 +8,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 import numpy as np
 from pyqula import geometry
-from pyqula import hamiltonians
-from pyqula import specialgeometry
 from pyqula import topology
-#raise # this does not work yet
 g = geometry.honeycomb_lattice()
 g = g.supercell(16)
 h = g.get_hamiltonian(has_spin=False)
