@@ -27,6 +27,9 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
                 energies=energies,delta=delta,
                 full_bz=True, # flag for unfolding
                 nsuper=nunfold,nk=nk,**kwargs)
+        # this is a quick fix for unfolding, 
+        # probably it should be better implemented
+        ks = ks/nunfold # redefine the kpoints for unfolding
         # we now have the energies, k-points and DOS, lets do a convolution
         fp = lambda i: poor_man_qpi_single_energy(ks,ds[:,i],qs) # parallel function
         out = parallel.pcall(fp,range(len(es))) # compute in parallel
