@@ -17,14 +17,14 @@ h.add_onsite(ons)
 
 kpath = np.array(g.get_kpath(nk=200))*n
 #op = None
-h.get_fermi_surface(operator="unfold",nsuper=3,delta=3e-2,e=2.0,nk=80)
-exit()
+#h.get_fermi_surface(operator="unfold",nsuper=3,delta=3e-2,e=2.0,nk=80)
+#exit()
 #h.get_bands(operator="unfold",kpath=kpath)
 op = h.get_operator("unfold")#*h.get_operator("electron")
 from pyqula import kdos
-#kdos.kdos_bands(h,operator=op,kpath=kpath,delta=1e-1)
-h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),
-        delta=0.1,nsuper=n,operator="unfold")
+kdos.kdos_bands(h,operator=op,kpath=kpath,delta=1e-1)
+#h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),
+#        delta=0.1,nsuper=n,operator="unfold")
 
 
 

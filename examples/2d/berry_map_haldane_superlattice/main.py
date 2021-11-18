@@ -26,7 +26,7 @@ topology.berry_green_map(h,
         delta=1e-2 # analytic continuation
         )
 
-# the result is printo to BERRY_MAP.OUT
+# the result is print to BERRY_MAP.OUT
 
 
 
