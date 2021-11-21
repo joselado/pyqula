@@ -43,7 +43,7 @@ def m2spin_sparse(matin,matin2=None):
 
 
 
-def get_spinless2full(h,time_reversal=False):
+def get_spinless2full(h,time_reversal=False,is_hamiltonian=True):
   """Function to transform a matrix into its full form"""
   if not h.has_spin and not h.has_eh: 
     def outf(m): return m # do nothing
@@ -56,8 +56,10 @@ def get_spinless2full(h,time_reversal=False):
     def outf(m): 
         if time_reversal: m2 = m2spin_sparse(m,np.conjugate(m)) # spinful
         else: m2 = m2spin_sparse(m) # spinful
-#        m2 = m2spin_sparse(m) # spinful
-        return build_eh(m2) # add e-h
+        if is_hamiltonian: # use the Nambu transformation
+            return build_eh(m2) # add e-h
+        else: # just replicate the matrix (this is a temporal fix)
+            return m2spin_sparse(m2) # replicate again
   elif h.check_mode("spinless_nambu"): 
       from .sctk import spinless
       return spinless.nambu
