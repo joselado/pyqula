@@ -53,9 +53,9 @@ class Hamiltonian():
     def __mul__(self,h):  return hamiltonianalgebra.mul(self,h)
     def __neg__(self):  return (-1)*self
     def __sub__(self,a):  return self + (-a)
-    def spinless2full(self,m,time_reversal=False):
+    def spinless2full(self,m,**kwargs):
         """Transform a spinless matrix in its full form"""
-        return get_spinless2full(self,time_reversal=time_reversal)(m) # return
+        return get_spinless2full(self,**kwargs)(m) # return
     def spinful2full(self,m):
         """Transform a spinless matrix in its full form"""
         return get_spinful2full(self)(m) # return
@@ -171,7 +171,8 @@ class Hamiltonian():
           # start in zero
           U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])
           U = np.matrix(U) # this is without .H
-          U = self.spinless2full(U) # increase the space if necessary
+          # increase the space if necessary
+          U = self.spinless2full(U,is_hamiltonian=False) 
           Ud = np.conjugate(U.T) # dagger
           hk = Ud@hk@U
   #        print(csc_matrix(np.angle(hk)))
