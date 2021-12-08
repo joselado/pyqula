@@ -204,7 +204,7 @@ def density_at_energy(evals,ds,e,delta):
 def ud_component(w,mode="up"):
     """Given a wavefunction, return the up components"""
     n = len(w)//2
-    wo = w.copy() # copy
+    wo = w.copy()+0j # copy
     if mode=="up": p = 0
     elif mode=="dn": p = 1
     else: raise
