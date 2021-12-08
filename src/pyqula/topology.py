@@ -612,7 +612,7 @@ def berry_green_map(h,nrep=5,k=[0.,0.,0.],operator=None,nk=None,**kwargs):
         from . import gauge
         operator = gauge.Operator2canonical_gauge(h,operator)
         print("Fixing the gauge in the operator")
-    ks = klist.kmesh(h.dimensionality,nk) # kpoints
+    ks = klist.kmesh(h.dimensionality,nk=nk) # kpoints
     def f(ki):
         print("kpoint",ki)
         return berry_green_map_kpoint(h,k=ki,operator=operator,**kwargs)

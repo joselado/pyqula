@@ -19,7 +19,7 @@ def read_xyz(input_file="positions.xyz",species=None):
         l = ls[i].split() # split the line
         if len(l)<4: continue
         s = l[0]
-        if fkeep(s):
+        if fkeep(s): # check if this site should be kept
           x,y,z = float(l[1]),float(l[2]),float(l[3])
           rs.append([x,y,z])
     rs = np.array(rs) # convert to array
@@ -28,7 +28,7 @@ def read_xyz(input_file="positions.xyz",species=None):
     g.dimensionality = 0
     g.r = rs # positions
     g.r2xyz()
-    g.normalize_nn_distance()
+    g.normalize_nn_distance() # set the minimum distance to 1
     return g
 
 
