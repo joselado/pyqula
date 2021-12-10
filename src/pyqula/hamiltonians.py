@@ -334,7 +334,9 @@ class Hamiltonian():
         """
         Add a certain hopping matrix to the Hamiltonian
         """
-        if not self.is_multicell: raise # this may not work for multicell
+        if not self.is_multicell: 
+            self.turn_multicell()
+            #raise # this may not work for multicell
         h = self.geometry.get_hamiltonian(has_spin=self.has_spin,
                 is_multicell=self.is_multicell,
                 mgenerator=fm) # generate a new Hamiltonian
