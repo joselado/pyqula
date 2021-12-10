@@ -345,7 +345,8 @@ class Hamiltonian():
         """
         Add the hoppings of another Hamiltonian
         """
-        if not self.is_multicell: raise # not implemented
+        if not self.is_multicell: # not implemented
+            self.turn_multicell()
         hd = h.get_dict() # get the dictionary
         self.intra = self.intra + hd[(0,0,0)] # add the matrix
         for i in range(len(self.hopping)):

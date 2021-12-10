@@ -51,7 +51,7 @@ def mz(h,name="MZ.OUT"):
 
 
 def hopping(h,name="HOPPING.OUT",nrep=3,skip = lambda r1,r2: False,
-        spin_imbalance=False,cutoff=1e-2):
+        spin_imbalance=False,cutoff=1e-2,mode="abs"):
   """Write the magnitude of the hopping in a file"""
   if h.has_eh: 
       h = h.copy()
@@ -68,9 +68,13 @@ def hopping(h,name="HOPPING.OUT",nrep=3,skip = lambda r1,r2: False,
   #        (ii,jj,ts) = extract.hopping_spinful(h.intra)
   else: (ii,jj,ts) = extract.hopping_spinless(h.intra)
   f = open(name,"w") # write file
-  for (i,j,t) in zip(ii,jj,np.abs(ts)):
+  if mode=="abs": tso = np.abs(ts) 
+  elif mode=="real": tso = ts.real 
+  elif mode=="imag": tso = ts.imag
+  else: raise
+  for (i,j,t) in zip(ii,jj,tso):
     if skip(h.geometry.r[i],h.geometry.r[j]): continue
-    if t<cutoff: continue
+    if np.abs(t)<cutoff: continue
     if i==j: continue
     f.write(str(h.geometry.r[i][0])+"  ")
     f.write(str(h.geometry.r[i][1])+"  ")
