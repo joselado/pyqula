@@ -4,9 +4,8 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 from pyqula import geometry
-g = geometry.honeycomb_lattice_C6()
 g = geometry.honeycomb_lattice()
-g = g.get_supercell(3)
+g = g.get_supercell(3) # create a 3x3 supercell
 h = g.get_hamiltonian(has_spin=False) # create hamiltonian of the system
 h.add_kekule(0.2) # add a Kekule distortion
 #h.add_sublattice_imbalance(0.2) # add sublattice imbalance
