@@ -58,7 +58,7 @@ class Geometry:
   def get_index(self,r,**kwargs):
     return get_index(self,r,**kwargs)
   def __add__(self,g1):
-      """Sum two geometries"""
+      from .geometrytk.galgebra import sum_geometries
       return sum_geometries(self,g1)
   def __sub__(self,a):
       return self + (-1)*a
@@ -169,7 +169,7 @@ class Geometry:
     self.z[:] -= r0[2]
     self.xyz2r() # update
     if self.dimensionality>0:
-      self.et_fractional(center=True)
+      self.get_fractional(center=True)
       self.fractional2real()
   def write_function(self,fun,name="FUNCTION.OUT"):
     """Write a certain function"""
@@ -194,13 +194,11 @@ class Geometry:
   def write_profile(self,d,**kwargs):
       """Write a profile in a file"""
       write_profile(self,d,**kwargs)
-  def replicas(self,d=[0.,0.,0.]):
-    """Return replicas of the atoms in the unit cell"""
-    return [ri + self.a1*d[0] + self.a2*d[1] + self.a3*d[2] for ri in self.r]
+  def replicas(self,**kwargs):
+      from .geometrytk.replicas import replicas
+      return replicas(self,**kwargs)
   def multireplicas(self,n):
-      """
-      Return several replicas of the unit cell
-      """
+      from .geometrytk.replicas import multireplicas
       return multireplicas(self,n)
   def bloch_phase(self,d,k):
     """
@@ -221,6 +219,7 @@ class Geometry:
       dt = np.array(d)[0:3]
       kt = np.array(k)[0:3]
       return np.exp(1j*dt.dot(kt)*np.pi*2.) 
+    else: raise
   def remove(self,i=0):
       """
       Remove one site
@@ -1452,22 +1451,6 @@ def hyperhoneycomb_lattice():
 
 
 
-def multireplicas(self,n):
-    """
-    Return several replicas of the unit cell, it is similar
-    to supercell but without the shift of the center and going to positive
-    and negative positions
-    """
-    if n==0: return self.r # return positions
-    out = [] # empty list with positions
-    dl = self.neighbor_directions(n) # list with neighboring cells to take
-    if self.dimensionality==0: return self.r
-    else: # bigger dimensionality
-        for d in dl:  out += self.replicas(d) # add this direction
-    return np.array(out)
-
-
-
 def write_vasp(g0,s=1.42):
     """Turn a geometry into vasp geometry"""
     g = g0.copy() # copy geometry
@@ -1512,28 +1495,6 @@ def write_vasp(g0,s=1.42):
               f.write("\n")
     f.close()
 
-
-
-def sum_geometries(g1,g2):
-    """Sum two geometries"""
-    if type(g2)==Geometry:
-        if g1.dimensionality!=g2.dimensionality: raise
-        g = g1.copy()
-        g.r = np.concatenate([g1.r,g2.r])
-        g.r2xyz()
-        if g.has_sublattice:
-            g.sublattice = np.concatenate([g1.sublattice,g2.sublattice])
-        if g.atoms_have_names:
-            g.atoms_names = np.concatenate([g1.atoms_names,g2.atoms_names])
-        return g
-    elif type(g2)==np.ndarray: # array input
-        g = g1.copy() # copy geometry
-        g.r = g.r + g2 # shift all the positions
-        g.r2xyz()
-        return g
-    else: 
-        print(type(g2))
-        raise
 
 from .neighbor import neighbor_distances
 
@@ -1605,10 +1566,13 @@ def get_supercell(self,nsuper,store_primal=False):
 
 def get_geometry(g):
     """Return a certain geometry"""
-    if type(g)==str:
+    if type(g)==Geometry: return g
+    elif type(g)==str:
         if g=="honeycomb": return honeycomb_lattice()
         elif g=="triangular": return triangular_lattice()
+        elif g=="square": return single_square_lattice()
         else: raise
+    elif g is None: return get_geometry("square") # default geometry
     else: raise
 
 
