@@ -150,6 +150,32 @@ def triangular_pi_flux(g=None,**kwargs):
 
 
 
+def excitonic_bilayer(gap=0.0,g=None,**kwargs):
+    """Return the Hamiltonian for a bilayer system for an excitonic system"""
+    from .geometry import get_geometry
+    g0 = get_geometry(g) # get the geometry
+    h0 = g0.get_hamiltonian(has_spin=False) # spinless
+    hv = h0.copy() # valence
+    hc = h0.copy() # conduction
+    fermiv = hv.get_fermi4filling(1.0,nk=40) # fermi for valence
+    fermic = hc.get_fermi4filling(0.0,nk=40) # fermi for conduction
+    gv = g0.copy() # valence geometry
+    gc = g0.copy() # conduction geometry
+    gv = gv + np.array([0.,0.,-1]) # valence
+    gc = gc + np.array([0.,0.,1]) # conduction
+    g = gv + gc # add geometries
+    def tij(r1,r2):
+      dr = r1 - r2
+      dr2 = dr.dot(dr)
+      if 0.99<dr2<1.01: return np.sign(r1[2])
+      return 0.0
+    h = g.get_hamiltonian(tij=tij,has_spin=False) # no spin
+    def fons(r):
+      if r[2]>0.0: return -fermiv - gap/2.
+      else: return fermiv + gap/2
+    h.add_onsite(fons)
+    return h
+
 
 
 

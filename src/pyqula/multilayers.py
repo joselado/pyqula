@@ -252,7 +252,7 @@ def get_geometry(name,dz=2.0,armchair=True):
 
 
 def multilayer_hopping(dz=2.0,ti=0.3):
-  """Function to calcualte the hopping in multilayer systems"""
+  """Function to calculate the hopping in multilayer systems"""
   def fun(r1,r2):
     dr = r1-r2
     if 0.9<dr.dot(dr)<1.1: return 1.0 # first neighbor

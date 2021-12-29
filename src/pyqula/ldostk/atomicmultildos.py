@@ -49,7 +49,7 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
         if r[1]-ymax>(fac*ratomic): return False # too right
         return True
     for d in dl: # loop over directions
-          rrep = h.geometry.replicas(d) # replicas in this direction
+          rrep = h.geometry.replicas(d=d) # replicas in this direction
           for i in range(len(rrep)): # loop over the atoms
               r0 = rrep[i] # get this center
               if not accept_center(r0): continue # skip this iteration

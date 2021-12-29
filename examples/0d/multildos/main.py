@@ -12,7 +12,7 @@ g = islands.get_geometry(name="honeycomb",n=4,nedges=3,rot=0.0) # get an island
 # maximum distance to the origin
 h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian
 #h.get_multildos(projection="atomic")
-#h.get_multildos(projection="atomic")
+h.get_multildos(projection="atomic")
 h.get_density()
 
 
