@@ -10,7 +10,7 @@ def current_operator(h):
   """Get the current operator"""
   h = h.get_multicell()
   def fj(k0):
-      return derivative(h,k0[0],order=[1])
+      return derivative(h,k0,order=[1])
   return fj
 
 
@@ -65,7 +65,7 @@ def derivative(h,k,order=None):
   elif h.dimensionality == 1: # one dimensional
       mout = h.intra*0.0 # initialize
       for t in h.hopping: # loop over matrices
-        phi = t.dir[0]*k # phase
+        phi = np.array(t.dir).dot(k) # phase
         pref = (t.dir[0]*1j)**order[0] # prefactor
         tk = pref*t.m * np.exp(1j*np.pi*2.*phi) # k hopping
         mout = mout + tk # add contribution
