@@ -60,7 +60,8 @@ def derivative(h,k,order=None):
   ## The order parameter is kind of weird now, this must be fixed ##
   h = h.get_multicell() # get multicell Hamiltonian
   if order is None:
-    order = [1 for i in range(h.dimensionality)] # order of the derivative
+#    order = [1 for i in range(h.dimensionality)] # order of the derivative
+    order = [1,0,0] # default
   if h.dimensionality == 0: return None
   elif h.dimensionality == 1: # one dimensional
       mout = h.intra*0.0 # initialize
