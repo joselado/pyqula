@@ -47,45 +47,45 @@ def effective_mass(h,k,dk=1e-2,**kwargs):
 
 def effective_mass_velocity(h,k,dk=1e-3,w0=None):
     """Given a Hamiltonian and a k-point, return the effective mass"""
-    from .topology import smooth_gauge # perform rotation if needed
-    from .algebra import eigh # function to diagonalize
+    from .algebra import eigh,eigvalsh # function to diagonalize
     from .algebra import braket_wAw # function to diagonalize
-    if h.dimensionality==1: # not implemented
-        k = np.array(k)
-        hk = h.get_hk_gen() # get generator
-        dkv = np.array([dk,0.,0.])
-        hk0 = hk(k)
-#        hkp = hk(k+dkv)
-#        hkm = hk(k-dkv)
-        if w0 is None: # initial waves not provided
-            e0,w0 = eigh(hk0) # central point 
-            w0 = w0.T.copy() # transpose
-        else:
-            w0 = w0.T.copy() # transpose
-            e0 = np.array([braket_wAw(w,hk0) for w in w0]) # w0 is given
-#        em,wm = eigh(hkm) # previous wavefunctions
-#        ep,wp = eigh(hkp) # next wavefunctions
-#        wm = wm.T
-#        wp = wp.T
-        from .current import current_operator
-        J = current_operator(h) # current generator
-        from .current import derivative
-        mass = lambda k: derivative(h,k,order=[2])
-        vm = np.array([braket_wAw(w,J(k-dkv)) for w in w0]) # velocity before
-        vp = np.array([braket_wAw(w,J(k+dkv)) for w in w0]) # velocity before
-#        wm = smooth_gauge(w0,wm).T # perform smooth rotation
-#        wp = smooth_gauge(w0,wp).T # perform smooth rotation
-#        em = np.array([braket_wAw(w,hkm) for w in wm]) # energies before
-#        ep = np.array([braket_wAw(w,hkp) for w in wp]) # energies after
-#        m = ((e0 - em) - (ep - e0))/(dk*dk) # array with effective mass
-        m = (vp-vm)/dk
+#    if not h.dimensionality==1: raise # not implemented
+    k = np.array(k)
+    hk = h.get_hk_gen() # get generator
+    dkv = np.array([dk,0.,0.])
+    hk0 = hk(k) # Hamiltonian
+    if w0 is None: # initial waves not provided
+        e0,w0 = eigh(hk0) # central point 
+        w0 = w0.T.copy() # transpose
+    else:
+        w0 = w0.T.copy() # transpose
+        e0 = np.array([braket_wAw(w,hk0) for w in w0]) # w0 is given
+    from .current import current_operator
+#    J = current_operator(h) # current generator
+    from .current import derivative
+    def d2edk2(i,j): # compute derivative
+        if i==0 and j==0: order = [2,0,0]
+        if i==0 and j==1: order = [1,1,0]
+        if i==1 and j==0: order = [1,1,0]
+        if i==1 and j==1: order = [0,2,0]
+        mass = lambda k: derivative(h,k,order=order)
+#        vm = np.array([braket_wAw(w,J(k-dkv)) for w in w0]) # velocity before
+#        vp = np.array([braket_wAw(w,J(k+dkv)) for w in w0]) # velocity before
+#        m = (vp-vm)/dk
         m = np.array([braket_wAw(w,mass(k)) for w in w0]) # velocity before
-#        print(e0.real)
-#        return (e0 - em)/(dk) # velocity
-        a1 = h.geometry.a1
-        v = np.sqrt(a1.dot(a1))
-        m = v*m/((2.*np.pi)**2) # renormalize by the pi factors
-        return m # return the array with masses in the diagonal basis
-    else: raise
+        return m
+    d = h.dimensionality
+    m = np.zeros((len(w0),d,d),dtype=np.complex)
+    for i in range(d):
+      for j in range(d):
+        m[:,i,j] = d2edk2(i,j) # get all the masses
+    m = np.array([np.trace(m[i,:,:]) for i in range(len(w0))]) # eigenmass
+#    m = [eigvalsh(m[i,:,:]) for i in range(len(w0))] # eigenmass
+#    m = np.array([np.sum(mi) for mi in m]) # sum of the mass
+    a1 = h.geometry.a1
+    v = np.sqrt(a1.dot(a1))
+    m = v*m/((2.*np.pi)**2) # renormalize by the pi factors
+#    return np.sign(m)
+    return m # return the array with masses in the diagonal basis
 
 
