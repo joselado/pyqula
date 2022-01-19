@@ -16,13 +16,14 @@ def func_to_parallelize(U):
     from pyqula import meanfield
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian() # create hamiltonian of the system
+    return 
     h.add_antiferromagnetism(U)
     return h.get_gap()
 
 from pyqula import parallelslurm
 
 Us = np.linspace(0.,3.0,10) # 10 different calculations
-gs = parallelslurm.pcall(func_to_parallelize,Us) # compute for all the inputs
+gs = parallelslurm.pcall(func_to_parallelize,Us,time=0.1) # compute for all the inputs
 np.savetxt("SWEEP.OUT",np.array([Us,gs]).T) # write in a file
 
 
