@@ -16,7 +16,6 @@ def func_to_parallelize(U):
     from pyqula import meanfield
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian() # create hamiltonian of the system
-    return 
     h.add_antiferromagnetism(U)
     return h.get_gap()
 
