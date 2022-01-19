@@ -16,14 +16,8 @@ def func_to_parallelize(U):
     from pyqula import meanfield
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian() # create hamiltonian of the system
-    mf = meanfield.guess(h,mode="antiferro") # antiferro initialization
-    # perform SCF with specialized routine for Hubbard
-    scf = meanfield.hubbardscf(h,nk=20,filling=0.5,U=U,verbose=1,
-                  mix=0.9,mf=mf)
-    # alternatively use
-    h = scf.hamiltonian # get the Hamiltonian
-    gap = h.get_gap() # compute the gap
-    return gap
+    h.add_antiferromagnetism(U)
+    return h.get_gap()
 
 from pyqula import parallelslurm
 
