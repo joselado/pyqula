@@ -211,14 +211,21 @@ def matrix2vector(v):
 
 
 def smalleig(m,numw=10,evecs=False,tol=1e-7):
-  """
-  Return the smallest eigenvalues using arpack
-  """
-  m = csc_matrix(m) # sparse matrix
-  eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=0.0,
-                                  tol=tol)
-  if evecs:  return eig,eigvec.transpose()  # return eigenvectors
-  else:  return eig  # return eigenvalues
+    """
+    Return the smallest eigenvalues using arpack
+    """
+    m = csc_matrix(m) # sparse matrix
+    try:
+        eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=0.0,
+                                        tol=tol)
+        if evecs:  return eig,eigvec.transpose()  # return eigenvectors
+        else:  return eig  # return eigenvalues
+    except:
+        print("Switch to dense")
+        if m.shape[0]>maxsize: raise
+        else:
+            if not evecs: return eigvalsh(todense(m))
+            else: return eigh(todense(m))
 
 
 
