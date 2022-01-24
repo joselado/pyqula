@@ -275,6 +275,7 @@ def add_haldane_like(self,t,spinless_generator,
         for i in range(-ncells,ncells+1): # loop over neighbouring cells
           rtmp = self.geometry.replicas(d=[i,0,0]) 
           if close_enough(g.r,rtmp,rcut=2.1): # if these positions are not too far
+            rtmp = [ri for ri in rtmp]
             rs += rtmp
       elif self.dimensionality==2:  # three dimensional
         rs = [] # all the cells
@@ -282,6 +283,7 @@ def add_haldane_like(self,t,spinless_generator,
           for j in range(-ncells,ncells+1):
             rtmp = self.geometry.replicas(d=[i,j,0]) 
             if close_enough(g.r,rtmp,rcut=2.1): # if this positions are not too far
+              rtmp = [ri for ri in rtmp]
               rs += rtmp
       elif self.dimensionality==3:  # three dimensional
         rs = [] # all the cells
@@ -290,6 +292,7 @@ def add_haldane_like(self,t,spinless_generator,
             for k in range(-ncells,ncells+1):
               rtmp = self.geometry.replicas(d=[i,j,k]) 
               if close_enough(g.r,rtmp,rcut=2.1): # if not too far
+                rtmp = [ri for ri in rtmp]
                 rs += rtmp
       else: raise
 
@@ -298,7 +301,7 @@ def add_haldane_like(self,t,spinless_generator,
     def pfun(d): # function to parallelize
 #    for i in range(len(self.hopping)): # loop over hoppings
 #      print("Generating Haldane-like",d)
-      r2 = self.geometry.replicas(d)
+      r2 = self.geometry.replicas(d=d)
       return generator(g.r,r2,rs,fun=t,sublattice=sublattice) 
     ms = parallel.pcall(pfun,dirs) # get matrices
     self.intra = self.intra + ms[0] # intracell matrix
