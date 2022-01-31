@@ -2,6 +2,7 @@
 from __future__ import print_function
 import scipy.linalg as lg
 import numpy as np
+from . import algebra
 
 
 def rkky_atom(hin,delta=0.001,i=None,filling=0.5):  
@@ -26,7 +27,7 @@ def rkky_atom(hin,delta=0.001,i=None,filling=0.5):
     # now perturb the hamiltonian
     h.shift_fermi(fermi)
     intra = h.intra # intraterm
-    (evals,evecs) = lg.eigh(intra)
+    (evals,evecs) = algebra.eigh(intra)
     evecs = evecs.transpose()
     eper = 0.0 # perturbed energy
     den = evecs[0]*0.0 # initializa density
@@ -76,7 +77,7 @@ def rkky_atom_v1(hin,delta=0.001,i=None,filling=0.5):
     # now perturb the hamiltonian
     h.shift_fermi(fermi)
     intra = h.intra # intraterm
-    (evals,evecs) = lg.eigh(intra)
+    (evals,evecs) = algebra.eigh(intra)
     evecs = evecs.transpose()
     return evals,evecs
   # get eigenvalues and eigenvectors for up/down

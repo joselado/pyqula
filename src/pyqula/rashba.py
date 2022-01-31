@@ -10,7 +10,7 @@ def add_rashba(self,c):
     from .operators import isnumber
     if isnumber(c):
         if c==0.0: return
-    if not self.has_spin: # not implemented
+    if not self.has_spin: # no spin degree of freedom
         self.turn_spinful() # spinful hamiltonian
     def rashba(*args,**kwargs):
         return self.spinful2full(rashba_matrix(*args,**kwargs))

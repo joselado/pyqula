@@ -2,6 +2,7 @@ import numpy as np
 import scipy.linalg as lg
 from . import parallel
 from numba import jit
+from . import algebra
 
 
 try:
@@ -19,7 +20,7 @@ def chargechi(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
     if h.dimensionality!=0: raise
     hk = h.get_hk_gen() # get generator
     m = hk(0) # get Hamiltonian
-    esh,ws = lg.eigh(m)
+    esh,ws = algebra.eigh(m)
     ws = np.transpose(ws)
     if i<0: raise
     if j<0: raise
@@ -49,7 +50,7 @@ def chargechi_nowf(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
     if h.dimensionality!=0: raise
     hk = h.get_hk_gen() # get generator
     m = hk(0) # get Hamiltonian
-    esh,ws = lg.eigh(m)
+    esh,ws = algebra.eigh(m)
     ws = np.transpose(ws)*0. + 1.
     if i<0: raise
     if j<0: raise
@@ -66,7 +67,7 @@ def chargechi_row(h,i=0,es=np.linspace(-3.0,3.0,100),delta=1e-6,temp=1e-7):
     if h.dimensionality!=0: raise
     hk = h.get_hk_gen() # get generator
     m = hk(0) # get Hamiltonian
-    esh,ws = lg.eigh(m)
+    esh,ws = algebra.eigh(m)
     ws = np.transpose(ws)
     out = [] # store
     if i<0: raise
@@ -81,7 +82,7 @@ def chargechi_nowf(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
     if h.dimensionality!=0: raise
     hk = h.get_hk_gen() # get generator
     m = hk(0) # get Hamiltonian
-    esh,ws = lg.eigh(m)
+    esh,ws = algebra.eigh(m)
     ws = np.transpose(ws)*0. + 1.
     if i<0: raise
     if j<0: raise
@@ -140,10 +141,10 @@ def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
     def getk(k):
         m1 = hk(k) # get Hamiltonian
-        es1,ws1 = lg.eigh(m1)
+        es1,ws1 = algebra.eigh(m1)
         ws1 = ws1.T
         m2 = hk(k+q) # get Hamiltonian
-        es2,ws2 = lg.eigh(m2)
+        es2,ws2 = algebra.eigh(m2)
         ws2 = ws2.T
         def getAB(Ai,Bj): # compute for a single operator
             out = 0*energies + 0j # initialize
