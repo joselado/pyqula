@@ -3,7 +3,9 @@ from numba import jit
 from ..spectrum import eigenvalues_kmesh
 from .. import parallel
 
-# routines to compute the dielectric response function
+# routines to compute the dielectric response function solely from eigenvalues
+# note that this will ignore form factors coming from
+# wavefunctions!
 
 
 def epsilonk(h,energies=np.linspace(-4.0,4.0,100),nk=40,delta=2e-3,

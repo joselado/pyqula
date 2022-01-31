@@ -38,11 +38,11 @@ class Heterostructure():
       self.right_inter = h.inter  # interterm in the right lead (to the right)
       self.right_green = None  # right green function
       self.left_intra = h.intra  # intraterm in the left lead
-      self.left_inter = h.inter.H  # interterm in the left lead (to the left)
+      self.left_inter = dagger(h.inter)  # interterm in the left lead (to the left)
       self.left_green = None  # left green function
       self.central_intra = h.intra  # intraterm in the center
       self.right_coupling = h.inter # coupling from the center to the right lead
-      self.left_coupling = h.inter.H # coupling from the center to the left lead
+      self.left_coupling = dagger(h.inter) # coupling from the center to the left lead
       # geometry of the central part
       gc = dc(h.geometry)
       self.central_geometry = gc # geometry of the central part
@@ -159,7 +159,7 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
   ht.right_intra = h_right.intra.copy()  
   ht.right_inter = h_right.inter.copy()  
   ht.left_intra = h_left.intra.copy()  
-  ht.left_inter = h_left.inter.H.copy() 
+  ht.left_inter = dagger(h_left.inter).copy() 
   # create matrix of the central part and couplings to the leads
   from scipy.sparse import csc_matrix,bmat
   z = csc_matrix(h_central.intra*0.0j) # zero matrix
@@ -237,7 +237,7 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
     tcl[i][0] = csc_matrix(z) 
 
   tcr[-1][0] = csc_matrix(h_right.inter) # hopping to the right lead
-  tcl[0][0] = csc_matrix(h_left.inter.H) # hopping to the left lead
+  tcl[0][0] = csc_matrix(dagger(h_left.inter)) # hopping to the left lead
   # create dense matrices
   if not block_diagonal:
     hc = bmat(hc).todense()

@@ -93,12 +93,17 @@ def enlarge_hlist(ht):
       hcentral[-2][-1] = ht.right_coupling*ht.scale_rc # right
       hcentral[-1][-2] = dagger(ht.right_coupling)*ht.scale_rc # right
   else: # no original central part
+      # here the average of the two hoppings will be performed
+      # if the Hamiltonian of the scattering region is not provided
+      # this may be not the optimal intuitive choice
+      # perhaps square root of the product is more natural
+      # gamma = sqrtm(dagger(ht.left_coupling)@ht.right_coupling)?
       hcentral[0][1] = dagger(ht.left_coupling) # left
       hcentral[1][0] = ht.left_coupling.copy() # left
       hcentral[-2][-1] += ht.right_coupling # right
       hcentral[-1][-2] += dagger(ht.right_coupling) # right
-      hcentral[0][1] *= ht.scale_rc*ht.scale_lc/2.
-      hcentral[1][0] *= ht.scale_rc*ht.scale_lc/2.
+      hcentral[0][1] *= ht.scale_rc*ht.scale_lc/2. # factor 1/2 for DC
+      hcentral[1][0] *= ht.scale_rc*ht.scale_lc/2. # factor 1/2 for DC
   # store in the object
   ho.central_intra = hcentral
   # and redefine the new lead couplings
