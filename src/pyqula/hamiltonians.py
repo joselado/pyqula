@@ -158,8 +158,9 @@ class Hamiltonian():
         from .chitk import qpi
         return qpi.get_qpi(self,**kwargs)
     def get_rkky(self,**kwargs):
-        from .chitk import magneticresponse
-        return magneticresponse.rkky(self,**kwargs)
+        #from .chitk import magneticresponse
+        from . import rkky
+        return rkky.rkky(self,**kwargs)
     @get_docstring(ldos.get_ldos)
     def get_ldos(self,**kwargs):
         return ldos.get_ldos(self,**kwargs)
