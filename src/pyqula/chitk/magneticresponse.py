@@ -2,30 +2,33 @@ import numpy as np
 from .. import algebra
 from numba import jit
 
-def rkky(h,delta=None,R=np.array([0.,0.,0.]),nk=100):
+def rkky(h,delta=None,ii=0,jj=0,R=np.array([0.,0.,0.]),nk=100):
     """Compute the RKKY interaction for the ground state
     - R location of the unit cell
     - delta analytic continuation
     """
     # R should be smaller than nk
+    h = h.copy()
+    h.remove_spin() # remove spin degree of freedom
     if delta is None: delta = 1./nk
     R = np.array(R)
     R2 = np.sqrt(R.dot(R)) # square root
     if R2>nk/5: 
         print("Warnign in RKKY, kmesh is too small, redefining")
-        nk = int(R2)
+#        nk = int(R2)
     es,ws,ks = h.get_eigenvectors(kpoints=True,nk=nk) # get eigenvectors
+    d1s = np.array([w[ii] for w in ws]) # densities
+    d2s = np.array([w[jj] for w in ws]) # densities
     phis = np.array([h.geometry.bloch_phase(R,k) for k in ks]) # phase
-    fs = (np.sign(es)+1.)/2. # occupation
     fs = (np.tanh(es/delta) + 1.0)/2. # smearing
-    nw = len(es)
-    print("Doing")
-    return rkky_loop(es,phis,fs,delta)/(nw**2) # return RKKY interaction
+    nw = len(es)/len(h.geometry.r)
+#    print("Doing")
+    return rkky_loop(es,phis,fs,d1s,d2s,delta)/(nw**2) # return RKKY int
 
 
 
 @jit(nopython=True)
-def rkky_loop(es,phis,fs,delta):
+def rkky_loop(es,phis,fs,d1s,d2s,delta):
     """Summation for the RKKY interaction"""
     n = len(es) # number of states
     out = 0.0j # output
@@ -35,7 +38,9 @@ def rkky_loop(es,phis,fs,delta):
         for j in range(n): # loop
             ej,phij,fj = es[j],phis[j],fs[j]
             phi = phii/phij # relative phase
-            out += phi*1./(ei-ej+1j*delta2)*(fi-fj)
+            dd = d1s[i]*np.conjugate(d1s[j])
+            dd *= np.conjugate(d2s[i])*d2s[j]
+            out += phi*1./(ei-ej+1j*delta2)*(fi-fj)*dd
     return out.real
 
 

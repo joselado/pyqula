@@ -84,6 +84,7 @@ class Geometry:
   def closest_index(self,r):
       return sculpt.get_closest(self,n=1,r0=r)[0]
   def get_closest_position(self,r,n=1):
+      r = np.array(r)
       if n==0:
         ii = self.closest_index(r)
         return self.r[ii] # return this position
