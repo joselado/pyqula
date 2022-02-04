@@ -15,9 +15,8 @@ def rkky(h,mode="pm",**kwargs):
 
 
 
-def rkky_map(h0,n=2,mode="pm",fsuper=3,**kwargs):
+def rkky_map(h0,n=2,mode="LR",info=False,fsuper=3,**kwargs):
     """Compute the RKKY map using a brute force algorithm"""
-    # this only computes the first site (!)
     h = h0.copy() # copy Hamiltonian
     g0 = h.geometry.copy() # copy initial geometry
     if mode=="pm":
@@ -30,10 +29,13 @@ def rkky_map(h0,n=2,mode="pm",fsuper=3,**kwargs):
             e = h.get_rkky(ri=ri,rj=rj+dr,mode="pm",**kwargs) # get the RKKY
             return e
     elif mode=="LR":
+        from .chitk.magneticresponse import rkky_generator
+        rkkgen = rkky_generator(h,**kwargs) # function to call 
         def get_rkky(d,ii,jj): # define routine
-            e = h.get_rkky(R=np.array(d),ii=ii,jj=jj,
-                             mode="LR",**kwargs) # get the RKKY
-            print(e)
+            e = rkkgen(R=d,ii=ii,jj=jj)
+#            e = h.get_rkky(R=np.array(d),ii=ii,jj=jj,
+#                             mode="LR",**kwargs) # get the RKKY
+            if info: print(d,ii,jj,e)
             return e
     else: raise # not implemented
 
@@ -43,9 +45,9 @@ def rkky_map(h0,n=2,mode="pm",fsuper=3,**kwargs):
         d = np.array(d)
         jj = 0
         for ii in range(len(g0.r)): # loop over indexes
+                if ii==jj and np.max(np.abs(d))==0: continue # same site
                 ri = g0.r[ii] # position
                 rj = g0.r[jj] # position
-#                if np.max(np.abs(d))==0.: continue
                 e = get_rkky(d,ii=ii,jj=jj)
                 dr = d[0]*g0.a1 + d[1]*g0.a2 + d[2]*g0.a3
                 eout.append(e) # store RKKY
