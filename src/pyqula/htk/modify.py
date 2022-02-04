@@ -4,7 +4,7 @@ def modify_hamiltonian_matrices(self,f0,use_geometry=False):
     if use_geometry: # use geometry
         g = self.geometry # get the geometry
         def f(m,dr): 
-            return f0(m,g.r,g.replicas(dr)) # use r1 and r2
+            return f0(m,g.r,g.replicas(d=dr)) # use r1 and r2
     else:
         def f(m,dr): return f0(m) # do not use geometry
     # apply the function
