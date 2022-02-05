@@ -89,7 +89,9 @@ def TaS2_SOC(**kwargs):
 
 
 
-def TMDC_MX2(soc=0.0,cdw=0.0,g=None,ts=[1.0],normalize=True):
+def TMDC_MX2(soc=0.0,cdw=0.0,g=None,ts=[1.0],
+              drcdw = np.array([0.,0.,0.]), # shift in the CDW profile
+              normalize=True):
     """Return the Hamiltonian of NbSe2"""
     if g is None: 
         g = geometry.triangular_lattice()  # triangular lattice
@@ -116,6 +118,7 @@ def TMDC_MX2(soc=0.0,cdw=0.0,g=None,ts=[1.0],normalize=True):
         f0 = f0.normalize()*cdw
         f0 = f0.set_average(0.)
         rc = np.mean(h.geometry.get_closest_position([.1,.1,0.],n=3),axis=0)
+        rc = rc - np.array(drcdw) # add the shift
         f = lambda r: f0(r-rc)
         h.geometry.write_profile(f)
         h.add_onsite(f)
