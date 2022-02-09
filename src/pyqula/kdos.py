@@ -123,7 +123,7 @@ def write_surface_2d(h,energies=None,klist=None,delta=0.01,
       else: op = operator # assume a matrix
       db = -algebra.trace(gs*op).imag # bulk
       ds = -algebra.trace(sf*op).imag # surface
-      fo.write(str(k)+"   "+str(energy)+"   "+str(ds)+"   "+str(db)+"\n")
+      fo.write(str(k[0])+"   "+str(energy)+"   "+str(ds)+"   "+str(db)+"\n")
       fo.flush()
   fo.close()
 
