@@ -18,7 +18,7 @@ h.shift_fermi(2.7)
 vintra = h.intra.copy() ; vintra[0,0] = 1000.0
 
 eb = embedding.Embedding(h,m=vintra)
-(x,y,d) = eb.ldos(nsuper=13)
+(x,y,d) = eb.ldos(nsuper=5,e=2.)
 np.savetxt("LDOS.OUT",np.array([x,y,d]).T)
 
 
