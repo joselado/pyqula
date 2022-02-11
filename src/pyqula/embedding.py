@@ -10,7 +10,7 @@ import scipy.linalg as lg
 import os
 from .increase_hilbert import full2profile
 from . import filesystem as fs
-
+from .hamiltonians import Hamiltonian
 
 
 class Embedding():
@@ -24,6 +24,9 @@ class Embedding():
         self.has_eh = self.h0.has_eh
         self.nsuper = None # supercell between original Hamiltonian
         if m is not None: 
+            if type(m)==Hamiltonian: 
+                print("Picking intracell in embedding")
+                m = m.intra # get the intracell
             self.m = m # provided matrix
             if m.shape[0]!=h.intra.shape[0]: 
                 if nsuper is None:
