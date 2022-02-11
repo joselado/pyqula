@@ -123,6 +123,9 @@ class Embedding():
     def copy(self):
         from copy import deepcopy
         return deepcopy(self)
+    def get_energy_ingap_state(EO,**kwargs):
+        from .embeddingtk import ingap
+        return ingap.energy_ingap_state(EO,**kwargs)
     # dummy methods for compatibility
     def turn_multicell(self): pass
     def get_multicell(self): return self

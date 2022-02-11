@@ -131,52 +131,57 @@ def optimize_gap(h,direct=True,ntries=10):
 
 
 
-def indirect_gap(h,robust=True,**kwargs):
-  """Calculates the gap for a 2d Hamiltonian by doing
-  a kmesh sampling. It will return the positive energy with smallest value"""
-  if h.intra.shape[0]>2000:
-      h = h.copy()
-      h.turn_sparse() # sparse Hamiltonian
-  from scipy.optimize import minimize
-  hk_gen = h.get_hk_gen() # generator
-  def gete(k): # return the energies
-    hk = hk_gen(k) # Hamiltonian 
-    if h.is_sparse: es = algebra.smalleig(hk,numw=3) # sparse
-    else: es = algebra.eigvalsh(hk) # get eigenvalues
-    return es # get the energies
-  # We will assume that the chemical potential is at zero
-  def func(k): # conduction band eigenvalues
-    es = gete(k) # get eigenvalues
-    try:
-        es = es[es>0.] # conduction band
-        return np.min(es) # minimum energy
-    except: return 0.0
-  def funv(k): # valence band eigenvalues
-    es = gete(k) # get eigenvalues
-    try:
-        es = -es[es<0.] # valence band
-        return np.min(es) # maximum energy
-    except: return 0.0
-  def funcv(k): # valence band eigenvalues
-    es = gete(k) # get eigenvalues
-    ec = np.min(es[es>0.0]) # conduction band
-    ev = np.min(-es[es<0.0]) # valence band
-    return ec+ev # energy difference
-  def opte(f):
-    """Optimize the eigenvalues"""
-    from scipy.optimize import differential_evolution
+def indirect_gap(h,robust=True,mode="full",**kwargs):
+    """Calculates the gap for a 2d Hamiltonian by doing
+    a kmesh sampling. It will return the positive energy with smallest value"""
+    if h.intra.shape[0]>2000:
+        h = h.copy()
+        h.turn_sparse() # sparse Hamiltonian
     from scipy.optimize import minimize
-    bounds = [(0.,1.) for i in range(h.dimensionality)]
-    if robust: res = differential_evolution(f,bounds=bounds,**kwargs)
-    else: 
-        x0 = np.random.random(h.dimensionality) # inital vector
-        res = minimize(f,x0,method="Powell",bounds=bounds,**kwargs)
-    return f(res.x)
-  ev = opte(funv) # optimize valence band
-  if h.has_eh: ec = ev # workaround for SC
-  else: ec = opte(func) # optimize conduction band
-  return ec+ev # return result
-#  return np.min(gaps)
+    hk_gen = h.get_hk_gen() # generator
+    def gete(k): # return the energies
+      hk = hk_gen(k) # Hamiltonian 
+      if h.is_sparse: es = algebra.smalleig(hk,numw=3) # sparse
+      else: es = algebra.eigvalsh(hk) # get eigenvalues
+      return es # get the energies
+    # We will assume that the chemical potential is at zero
+    def func(k): # conduction band eigenvalues
+      es = gete(k) # get eigenvalues
+      try:
+          es = es[es>0.] # conduction band
+          return np.min(es) # minimum energy
+      except: return 0.0
+    def funv(k): # valence band eigenvalues
+      es = gete(k) # get eigenvalues
+      try:
+          es = -es[es<0.] # valence band
+          return np.min(es) # maximum energy
+      except: return 0.0
+    def funcv(k): # valence band eigenvalues
+      es = gete(k) # get eigenvalues
+      ec = np.min(es[es>0.0]) # conduction band
+      ev = np.min(-es[es<0.0]) # valence band
+      return ec+ev # energy difference
+    def opte(f):
+      """Optimize the eigenvalues"""
+      from scipy.optimize import differential_evolution
+      from scipy.optimize import minimize
+      bounds = [(0.,1.) for i in range(h.dimensionality)]
+      if robust: res = differential_evolution(f,bounds=bounds,**kwargs)
+      else: 
+          x0 = np.random.random(h.dimensionality) # inital vector
+          res = minimize(f,x0,method="Powell",bounds=bounds,**kwargs)
+      return f(res.x)
+    if mode=="full":
+        ev = opte(funv) # optimize valence band
+        if h.has_eh: ec = ev # workaround for SC
+        else: ec = opte(func) # optimize conduction band
+        return ec+ev # return result
+    elif mode=="valence":
+        return opte(funv) # optimize valence band
+    elif mode=="conduction":
+        return opte(func) # optimize conduction band
+    else: raise
 
 
 
