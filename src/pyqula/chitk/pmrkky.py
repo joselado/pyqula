@@ -5,13 +5,14 @@ import numpy as np
 from .. import algebra
 
 
-def explicit_rkky(h,ri=None,rj=None,nk=1,dj=1e-1):
+def explicit_rkky(h,ri=None,rj=None,nk=10,dj=1e-1):
     """Compute the RKKY interaction explicitly by adding
     local exchange fields"""
     if ri is None: raise
     if rj is None: raise
     h0 = h.copy() # copy Hamiltonian
     h0.turn_spinful() # spinfull Hamiltonian
+    filling = h0.get_filling(nk=nk) # get the filling of the Hamiltonian
     hfe = h0.copy() # first Hamiltonian
     haf = h0.copy() # second Hamiltonian
     from ..potentials import delta
@@ -22,9 +23,15 @@ def explicit_rkky(h,ri=None,rj=None,nk=1,dj=1e-1):
     hfe.add_exchange(v2) # add exchange
     haf.add_exchange(v1) # add exchange
     haf.add_exchange(v3) # add exchange
-    efe = hfe.get_total_energy(nk=nk) # total energy
-    eaf = haf.get_total_energy(nk=nk) # total energy
-    de = efe - eaf # energy difference
+    # correction due to a potential shift of Fermi energy
+    fermife = hfe.get_fermi4filling(filling,nk=nk) # FE
+    fermiaf = haf.get_fermi4filling(filling,nk=nk) # FE
+#    hfe.shift_fermi(-fermife)
+#    haf.shift_fermi(-fermiaf)
+    efe = hfe.get_total_energy(nk=nk,fermi=fermife) # total energy
+    eaf = haf.get_total_energy(nk=nk,fermi=fermiaf) # total energy
+#    print("Fermi shift",fermife-fermiaf)
+    de = efe - eaf #+ (-fermife+fermiaf) # energy difference
     return -1./4.*de/dj**2 # return RKKY
 
 

@@ -15,7 +15,7 @@ def rkky(h,mode="pm",**kwargs):
 
 
 
-def rkky_map(h0,n=2,mode="LR",info=False,fsuper=3,**kwargs):
+def rkky_map(h0,n=2,mode="LR",info=False,fsuper=8,**kwargs):
     """Compute the RKKY map using a brute force algorithm"""
     h = h0.copy() # copy Hamiltonian
     g0 = h.geometry.copy() # copy initial geometry
@@ -25,7 +25,8 @@ def rkky_map(h0,n=2,mode="LR",info=False,fsuper=3,**kwargs):
         def get_rkky(d,ii,jj): # define routine
             ri = h.geometry.r[ii]
             rj = h.geometry.r[jj]
-            dr = d[0]*g0.a1 + d[1]*g0.a2 + d[2]*g0.a3
+            d = np.abs(d) # to the fundamental replica
+            dr = d[0]*g0.a1 + d[1]*g0.a2 + d[2]*g0.a3 # shift
             e = h.get_rkky(ri=ri,rj=rj+dr,mode="pm",**kwargs) # get the RKKY
             return e
     elif mode=="LR":
