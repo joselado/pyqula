@@ -35,9 +35,6 @@ def explicit_rkky(h,ri=None,rj=None,nk=10,dj=1e-1):
     return -1./4.*de/dj**2 # return RKKY
 
 
-
-
-
 # Poor man RKKY routines, using brute force energetics
 # mainly for 0d, yet it can apply to 2d with PBC
 

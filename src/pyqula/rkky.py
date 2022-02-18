@@ -6,6 +6,7 @@ from .chitk import pmrkky # poor man RKKY
 
 def rkky(h,mode="pm",**kwargs):
     """Compute the RKKY interaction using different methodologies"""
+    # this only works with spinless systems
     if mode=="pm": # poor man's methodology
         return pmrkky.explicit_rkky(h,**kwargs) # return explicitly the RKKY
     elif mode=="LR": # linear response theory

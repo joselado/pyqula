@@ -10,7 +10,7 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 
 h.add_onsite(1.)
 from pyqula import rkky
-out = rkky.rkky_map(h,n=10,mode="pm",fsuper=10).T
+out = rkky.rkky_map(h,n=10,mode="pm",fsuper=10,nk=1).T
 x0,e0 = out[0],out[3]
 
 out1 = rkky.rkky_map(h,n=10,mode="LR",nk=200).T
