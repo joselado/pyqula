@@ -9,7 +9,7 @@ warnings.filterwarnings("ignore", category=np.VisibleDeprecationWarning)
 # library to target ingap states
 
 
-def energy_ingap_state(EO,ne=11):
+def energy_ingap_state(EO,ne=51):
     """Return the energy of an in-gap state given an embedding object"""
     ev = EO.h0.get_gap(mode="valence")
     ec = EO.h0.get_gap(mode="conduction")
