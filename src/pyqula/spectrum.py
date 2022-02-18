@@ -300,7 +300,7 @@ def real_space_vev(h,operator=None,nk=1,nrep=3,name="REAL_SPACE_VEV.OUT",
 
 
 def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
-        kp=None,mode="mesh",tol=1e-1):
+        kp=None,mode="mesh",tol=1e-1,fermi=0.0):
   """Return the total energy"""
   if nbands is None: h.turn_dense()
   if h.is_sparse and not use_kpm: 
@@ -319,9 +319,9 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
       if nbands is None: vv = algebra.eigvalsh(hk) # diagonalize k hamiltonian
       else: 
           vv,aa = slg.eigsh(hk,k=4*nbands,which="LM",sigma=0.0) 
-          vv = -np.sort(-(vv[vv<0.0])) # negative eigenvalues
+          vv = -np.sort(-(vv[vv<fermi])) # negative eigenvalues
           vv = vv[0:nbands] # get the negative eigenvlaues closest to EF
-      return np.sum(vv[vv<0.0]) # sum energies below fermi energy
+      return np.sum(vv[vv<fermi]) # sum energies below fermi energy
   # compute energy using different modes
   if mode=="mesh":
     from .klist import kmesh
@@ -346,7 +346,7 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
 
 
 
-def eigenvalues(h0,nk=10,notime=False):
+def eigenvalues(h0,nk=10,notime=True):
     """Return all the eigenvalues of a Hamiltonian"""
     from . import klist
     h = h0.copy() # copy hamiltonian
