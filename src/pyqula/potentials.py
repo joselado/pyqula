@@ -196,7 +196,7 @@ def enforce_minmax(f,a,g=None):
     minv = np.min(vs)
     maxv = np.max(vs)
     dv = maxv-minv # amplitude
-    fout = lambda r: (f(r)-minv)*a[1]/dv + a[0] # return this value
+    fout = lambda r: (f(r)-minv)/dv*a[1] + (1.-(f(r)-minv)/dv)*a[0] # return this value
     return fout # return new function
 
 

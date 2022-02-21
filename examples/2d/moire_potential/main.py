@@ -9,15 +9,15 @@ h = g.get_hamiltonian(has_spin=False)
 
 from pyqula import potentials
 
-f = potentials.commensurate_potential(g,minmax=[-1,1.])*2 + 1
+f = potentials.commensurate_potential(g,minmax=[-1,1.])
 
+g.write_profile(f) ; exit()
 f = f*0.3
 
 h.add_sublattice_imbalance(f)
 h.turn_sparse()
 h.get_ldos(e=0.0,num_bands=20) ;exit()
 
-#g.write_profile(f) ; exit()
 
 h.get_bands()
 
