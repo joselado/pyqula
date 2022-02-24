@@ -14,6 +14,7 @@ class LocalProbe():
         self.H = h.copy() # store Hamiltonian
         self.has_eh = self.H.has_eh # electron-hole
         self.delta = delta
+        self.mode = "bulk"
         self.bulk_delta = delta
         self.frozen_lead = True
         self.i = i # this site
@@ -51,11 +52,16 @@ class LocalProbe():
 
 def generate_gf(self,energy=0.0,**kwargs):
     """Generate the specific Green's function"""
-    mode="bulk" 
+    mode=self.mode 
     if mode=="bulk":
         gf = green.bloch_selfenergy(self.H,energy=energy,
                                          mode="adaptive",
                                          delta=self.bulk_delta)[0]
+        return gf
+    elif mode=="surface":
+        gf = green.bloch_selfenergy(self.H,energy=energy,
+                                         mode="adaptive",
+                                         delta=self.bulk_delta)[1]
         return gf
     else: raise # not implemented
 
