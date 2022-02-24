@@ -16,7 +16,6 @@ g2 = geometry.single_square_lattice()
 h1 = g1.get_hamiltonian(has_spin=False)
 h1 = h1*10
 h2 = g2.get_hamiltonian(has_spin=False)
-h2.get_dos() ; exit()
 ht = heterostructures.build(h1,h2) # create the junction
 ht.delta = 1e-3 # imaginary part of the energy
 ht.scale_rc = 1e-1

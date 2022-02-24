@@ -11,19 +11,18 @@ from pyqula import geometry
 from pyqula import heterostructures
 import numpy as np
 import matplotlib.pyplot as plt
-g = geometry.square_ribbon(10)
-g = g.supercell(2)
+g = geometry.square_ribbon(6)
 h = g.get_hamiltonian()
-#h.add_peierls(.2)
 h.remove_spin()
-h = disorder.anderson(h,w=0.5)
-h.get_bands(nk=2000)
+h.get_bands()
 hr = h.copy()
 hl = h.copy()
 hcs = [h for i in range(10)]
-ht = heterostructures.create_leads_and_central_list(hr,hl,hcs)
-es = np.linspace(-.5,.5,500)
-ts = np.array([ht.didv(e,delta=1e-11,kwant=True) for e in es])
+ht = heterostructures.build(hr,hl,central=[hl,hr])
+es = np.linspace(-1.,1.,50)
+ht.delta = 1e-3
+#ts = np.array([ht.didv(energy=e) for e in es])
+ts = np.array([ht.landauer(energy=e) for e in es])
 m = np.genfromtxt("BANDS.OUT").transpose()
 plt.subplot(2,1,1)
 plt.plot(es,ts)
