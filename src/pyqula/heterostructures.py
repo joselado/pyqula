@@ -90,33 +90,40 @@ class Heterostructure():
     return eigenvalues(self,numeig=numeig,effective=effective,
                         full=full)
   def replace_center(self,ht_replacement):
-    """ Replaces the central part by the second argument"""
-    self.central_intra = ht_replacement.central_intra  # make the change
+      """ Replaces the central part by the second argument"""
+      self.central_intra = ht_replacement.central_intra  # make the change
   def calculate_surface_green(self,energy=0.0,delta=0.0001,error=0.0000001):
-    """Calculate the surface Green function"""
-    delta = self.delta
-    # Right
-    intra = self.right_intra
-    inter = self.right_inter
-    gbulk,g = green.green_renormalization(intra,inter,error=error,
-                                           energy=energy,delta=delta)
-    self.right_green = g # save green function
-    # Left
-    intra = self.left_intra
-    inter = self.left_inter
-    gbulk,g = green.green_renormalization(intra,inter,error=error,
-                                           energy=energy,delta=delta)
-    self.left_green = g # save green function
-    self.energy_green = energy # energy of the Green function
+      """Calculate the surface Green function"""
+      delta = self.delta
+      # Right
+      intra = self.right_intra
+      inter = self.right_inter
+      gbulk,g = green.green_renormalization(intra,inter,error=error,
+                                             energy=energy,delta=delta)
+      self.right_green = g # save green function
+      # Left
+      intra = self.left_intra
+      inter = self.left_inter
+      gbulk,g = green.green_renormalization(intra,inter,error=error,
+                                             energy=energy,delta=delta)
+      self.left_green = g # save green function
+      self.energy_green = energy # energy of the Green function
   def copy_surface_green(self,ht):
-    """Copy the surface Green fucntions"""
-    self.energy_green = ht.energy_green
-    self.left_green = ht.left_green
-    self.right_green = ht.right_green
+      """Copy the surface Green fucntions"""
+      self.energy_green = ht.energy_green
+      self.left_green = ht.left_green
+      self.right_green = ht.right_green
   def get_selfenergy(self,energy,**kwargs):
      """Return selfenergy of iesim lead"""
      from .transporttk.selfenergy import get_selfenergy
      return get_selfenergy(self,energy,**kwargs)
+  def get_reflection_normal_lead(self,s):
+     from .transporttk.builder import get_reflection_normal_lead
+     return get_reflection_normal_lead(self,s)
+  def get_central_gmatrix(self,**kwargs):
+     """Return the inverse central Green's function"""
+     from .transporttk.smatrix import get_central_gmatrix
+     return get_central_gmatrix(self,**kwargs) 
   def setup_selfenergy_interpolation(self,es=np.linspace(-4.0,4.0,100),
            delta=0.0001,pristine=False):
     """Create the functions that interpolate the selfenergy"""
@@ -475,10 +482,10 @@ def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=False):
 #   HT.write_green()
    # left selfenergy
    inter = HT.left_coupling
-   selfl = inter*gl*inter.H # left selfenergy
+   selfl = inter@gl@dagger(inter) # left selfenergy
    # right selfenergy
    inter = HT.right_coupling
-   selfr = inter*gr*inter.H # right selfenergy
+   selfr = inter@gr@dagger(inter) # right selfenergy
    # central green function
    intra = HT.central_intra
 # dyson equation for the center     
@@ -505,52 +512,6 @@ def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=False):
    return heff
 
 
-def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None,**kwargs):
-  """Calculate differential conductance"""
-  if ht.has_eh: # for systems with electons and holes
-    s = get_smatrix(ht,energy=energy,check=True) # get the smatrix
-    r1,r2 = s[0][0],s[1][1] # get the reflection matrices
-    get_eh = ht.get_eh_sector # function to read either electron or hole
-    # select the normal lead
-    # r1 is normal
-    if np.sum(np.abs(get_eh(ht.left_intra,i=0,j=1)))<0.0001: r = r1 
-    elif np.sum(np.abs(get_eh(ht.right_intra,i=0,j=1)))<0.0001: r = r2
-    else:
-        print("There is SC in both leads, aborting")
-        raise
-    ree = get_eh(r,i=0,j=0) # reflection e-e
-    reh = get_eh(r,i=0,j=1) # reflection e-h
-    Ree = np.trace(dagger(ree)@ree) # total e-e reflection 
-    Reh = np.trace(dagger(reh)@reh) # total e-h reflection 
-    G = (ree.shape[0] - Ree + Reh).real # conductance
-    return G
-  else: 
-    if kwant:
-      if opl is not None or opr is not None: raise # not implemented
-      from . import kwantlink 
-      return kwantlink.transport(ht,energy)
-    s = get_smatrix(ht,energy=energy) # get the smatrix
-    if opl is not None or opr is not None: # some projector given
-      raise # this does not make sense
-      U = [[np.identity(s[0][0].shape[0]),None],
-               [None,np.identity(s[1][1].shape[0])]] # projector
-      if opl is not None: U[0][0] = opl # assign this matrix
-      if opr is not None: U[1][1] = opr # assign this matrix
-      #### those formulas are not ok
-      s[0][0] = U[0][0]@s[0][0]@U[0][0] # new smatrix
-      s[0][1] = U[0][0]@s[0][1]@U[1][1] # new smatrix
-      s[1][0] = U[1][1]@s[1][0]@U[0][0] # new smatrix
-      s[1][1] = U[1][1]@s[1][1]@U[1][1] # new smatrix
-    r1,r2,t = s[0][0],s[1][1],s[0][1] # get the reflection matrices
-    # select a normal lead (both of them are)
-    # r1 is normal
-    ree = r1
-    Ree = np.trace(dagger(ree)@ree) # total e-e reflection 
-    G1 = (ree.shape[0] - Ree).real # conductance
-    G2 = np.trace(s[0][1]@dagger(s[0][1])).real # total e-e transmission
-    return (G1+G2)/2.
-#return landauer(ht,energy=energy,delta=delta) # call usual landauer 
-    
 
 
 def get_tmatrix(ht,energy=0.0,delta=0.0001):
@@ -564,12 +525,7 @@ def get_tmatrix(ht,energy=0.0,delta=0.0001):
 
 
 
-
-
-
-
-
-def get_surface_green(HT,energy=0.0,delta=0.0001):
+def get_surface_green(HT,energy=0.0,delta=1e-5):
    """Calculate left and right greeen functions"""
    from .green import green_renormalization
    # right lead
@@ -641,3 +597,5 @@ def get_surface_selfenergies(HT,energy=0.0,delta=0.0001,pristine=False):
 from .transporttk.builder import build
 
 from .transporttk.smatrix import get_smatrix
+
+from .transporttk.localprobe import LocalProbe

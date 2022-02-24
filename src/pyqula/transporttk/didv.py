@@ -1,21 +1,10 @@
 from ..parallel import pcall
-from ..heterostructures import didv
 import numpy as np
 from ..integration import simpson
 from scipy.integrate import quad
 from .. import parallel
 
-# wrapper to compute the dIdV curve for different energies
-#
-#def generic_didv(self,energies=None,**kwargs):
-#   """Gneeric dIdV, wrapping for multiple energies"""
-#   if energies is not None: # parallelize on energies
-#       fg = lambda e: generic_didv_single_energy(self,energy=e,**kwargs)
-#       return parallel.pcall(fg,energies) # parallelize
-#   else: # single energy provided
-#       return generic_didv_single_energy(self,**kwargs)
-#
-#
+
 
 def generic_didv(self,temp=0.,**kwargs):
     """Wrapper to compute the dIdV at finite temperature"""
@@ -39,28 +28,6 @@ def finite_T_didv(self,temp,energy=0.0,**kwargs):
 #    return peak_integrate(f,-dt*temp,dt*temp,xp=0.0,dp=temp,
 #                           epsrel=1e-2,limit=10)[0]/2.
     return quad(f,-dt*temp,dt*temp,epsrel=1e-4,limit=60)[0]/2.
-#    ne = 79 # number of energies
-#    from ..integration import simpson
-##    return simpson(f,xlim=[-dt*temp,dt*temp],eps=1e-3)
-#    es = np.linspace(-dt*temp,dt*temp,ne,endpoint=True) # energies
-#    gs = np.array([zero_T_didv(self,energy=energy+e,**kwargs) for e in es]) # conductance
-#    # discard extreme points for numerical stability
-#    from ..interpolatetk.outlier import discard_outliers
-#    es,gs = discard_outliers(es,gs)
-#    # weight for the integral
-#    weight = lambda x: FD(x-de,temp=temp) - FD(x+de,temp=temp) 
-#    from ..interpolatetk.constrainedinterpolation import positive_interpolator
-#    fg = positive_interpolator(es,gs) # interpolated gs
-#    # interpolated energies
-#    ewin = dt*temp
-#    ne2 = 100*ne
-#    es_int = np.linspace(-ewin,ewin,ne2,endpoint=True) # energies
-#    gs_int = fg(es_int) # interpolated gs
-#    weight = FD(es_int-de,temp=temp) - FD(es_int+de,temp=temp) 
-#    norm = np.trapz(weight,dx=2*ewin/ne2)/(2*de) # normalization
-#    integ = np.trapz(gs_int*weight,dx=2*ewin/ne2)/(2*de) # normalization
-#    print(norm)
-#    return integ/norm
 
 
 def zero_T_didv(self,delta=None,**kwargs):
@@ -106,6 +73,57 @@ def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
     else: 
         print("Unrecognized imode")
         raise
+
+
+
+from .smatrix import get_smatrix
+from .. import algebra
+dagger = algebra.dagger
+
+
+
+def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None,**kwargs):
+    """Calculate differential conductance"""
+    if ht.has_eh: # for systems with electons and holes
+        s = get_smatrix(ht,energy=energy,check=True) # get the smatrix
+        r1,r2 = s[0][0],s[1][1] # get the reflection matrices
+        get_eh = ht.get_eh_sector # function to read either electron or hole
+        # select the normal lead
+        # r1 is normal
+        r = ht.get_reflection_normal_lead(s) # return the reflection
+        ree = get_eh(r,i=0,j=0) # reflection e-e
+        reh = get_eh(r,i=0,j=1) # reflection e-h
+        Ree = np.trace(dagger(ree)@ree) # total e-e reflection 
+        Reh = np.trace(dagger(reh)@reh) # total e-h reflection 
+        G = (ree.shape[0] - Ree + Reh).real # conductance
+        return G
+    else:
+        if kwant:
+          if opl is not None or opr is not None: raise # not implemented
+          from . import kwantlink
+          return kwantlink.transport(ht,energy)
+        s = get_smatrix(ht,energy=energy) # get the smatrix
+        if opl is not None or opr is not None: # some projector given
+          raise # this does not make sense
+          U = [[np.identity(s[0][0].shape[0]),None],
+                   [None,np.identity(s[1][1].shape[0])]] # projector
+          if opl is not None: U[0][0] = opl # assign this matrix
+          if opr is not None: U[1][1] = opr # assign this matrix
+          #### those formulas are not ok
+          s[0][0] = U[0][0]@s[0][0]@U[0][0] # new smatrix
+          s[0][1] = U[0][0]@s[0][1]@U[1][1] # new smatrix
+          s[1][0] = U[1][1]@s[1][0]@U[0][0] # new smatrix
+          s[1][1] = U[1][1]@s[1][1]@U[1][1] # new smatrix
+        r1,r2,t = s[0][0],s[1][1],s[0][1] # get the reflection matrices
+        # select a normal lead (both of them are)
+        # r1 is normal
+        ree = r1
+        Ree = np.trace(dagger(ree)@ree) # total e-e reflection 
+        G1 = (ree.shape[0] - Ree).real # conductance
+        G2 = np.trace(s[0][1]@dagger(s[0][1])).real # total e-e transmission
+        return (G1+G2)/2.
+
+
 
 
 
