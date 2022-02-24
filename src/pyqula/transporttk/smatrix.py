@@ -2,6 +2,9 @@ import numpy as np
 from ..green import gauss_inverse # calculate the desired green functions
 from ..algebra import dagger,sqrtm
 
+delta_smatrix = 1e-12 # delta for the smatrix
+
+
 
 def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
     """Calculate the S-matrix of an heterostructure"""
@@ -61,22 +64,23 @@ def get_central_gmatrix(ht,selfl=None,selfr=None,energy=0.0):
 
 
 def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
-                                        energy = 0.0, delta=0.00001):
-  """ Calculate effective Hamiltonian"""
-  if not type(intra) is list: raise # assume is list
-  n = len(intra) # number of blocks
-  iout = [[None for i in range(n)] for j in range(n)] # empty list
-  iden = np.matrix(np.identity(intra[0][0].shape[0],dtype=np.complex))
-  ez = iden*(energy +1j*delta) # complex energy
-  for i in range(n):
-    iout[i][i] = ez - intra[i][i] # simply E -H
-  for i in range(n-1):
-    iout[i][i+1] = -intra[i][i+1] # simply E -H
-    iout[i+1][i] = -intra[i+1][i] # simply E -H
-  # and now the selfenergies
-  iout[0][0] = iout[0][0] -selfl
-  iout[-1][-1] = iout[-1][-1] -selfr
-  return iout
+                                        energy = 0.0, delta=1e-5):
+    """ Calculate effective Hamiltonian"""
+    if not type(intra) is list: raise # assume is list
+    n = len(intra) # number of blocks
+    iout = [[None for i in range(n)] for j in range(n)] # empty list
+    iden = np.matrix(np.identity(intra[0][0].shape[0],dtype=np.complex))
+    if delta>delta_smatrix: delta = delta_smatrix # small delta is critical!
+    ez = iden*(energy +1j*delta) # complex energy
+    for i in range(n):
+      iout[i][i] = ez - intra[i][i] # simply E -H
+    for i in range(n-1):
+      iout[i][i+1] = -intra[i][i+1] # simply E -H
+      iout[i+1][i] = -intra[i+1][i] # simply E -H
+    # and now the selfenergies
+    iout[0][0] = iout[0][0] -selfl
+    iout[-1][-1] = iout[-1][-1] -selfr
+    return iout
 
 
 

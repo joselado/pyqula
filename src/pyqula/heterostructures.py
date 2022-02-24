@@ -124,6 +124,9 @@ class Heterostructure():
      """Return the inverse central Green's function"""
      from .transporttk.smatrix import get_central_gmatrix
      return get_central_gmatrix(self,**kwargs) 
+  def set_coupling(self,c): 
+     """Coupling for kappa functionality"""
+     self.scale_rc = c
   def setup_selfenergy_interpolation(self,es=np.linspace(-4.0,4.0,100),
            delta=0.0001,pristine=False):
     """Create the functions that interpolate the selfenergy"""

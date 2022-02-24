@@ -4,7 +4,7 @@ from ..parallel import pcall
 
 def get_single(HT=None,c=1.0,energies=[0.0],**kwargs):
     """Get a single conductance"""
-    HT.scale_rc = c # scaling
+    HT.set_coupling(c) # scaling
     return np.array([HT.didv(energy=e,**kwargs) for e in energies]) # loop over Ts
 
 
@@ -52,8 +52,6 @@ def generate_HT(ht,SC=True,temperature=0.,**kwargs):
     Hl = f(ht.Hl)
     hto = build(Hl,Hr) # create a new heterostructure
     hto.delta = ht.delta
-#    hto.extra_delta_right = temperature
-#    hto.extra_delta_left = temperature
     return hto
 
 

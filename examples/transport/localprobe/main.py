@@ -11,13 +11,15 @@ from pyqula.heterostructures import LocalProbe
 import numpy as np
 import matplotlib.pyplot as plt
 g = geometry.chain()
+g = geometry.single_square_lattice()
 h = g.get_hamiltonian()
 h.add_onsite(1.0)
-h.add_swave(0.05)
+h.add_swave(0.2)
 lp = LocalProbe(h) # create a local probe object
-es = np.linspace(-0.1,0.1,200)
+lp.delta = 1e-5
+lp.delta_bulk = 1e-2
+es = np.linspace(-0.4,0.4,10)
 lp.T = 1e-2
-lp.T = 1.0
 ts = [lp.didv(energy=e) for e in es]
 
 import matplotlib.pyplot as plt
