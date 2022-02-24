@@ -12,7 +12,7 @@ def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
     selfl = ht.get_selfenergy(energy,delta=delta,lead=0,pristine=True)
     selfr = ht.get_selfenergy(energy,delta=delta,lead=1,pristine=True)
     # get the central Green's function
-    gmatrix = get_central_gmatrix(ht,selfl=selfl,selfr=selfr,
+    gmatrix = ht.get_central_gmatrix(selfl=selfl,selfr=selfr,
                                    energy=energy)
     # gamma functions
     test_gauss = True # gauss only works with square matrices
@@ -132,7 +132,7 @@ def enlarge_hlist(ht):
 def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
     """ Calculate list of effective Hamiltonian which will be inverted"""
     if (selfl is None) or (selfr is None):
-      (selfl,selfr) = get_surface_selfenergies(ht,energy=energy,delta=delta,
+        (selfl,selfr) = get_surface_selfenergies(ht,energy=energy,delta=delta,
                         pristine=True)
     intra = ht.central_intra # central intracell hamiltonian
     if len(ht.central_intra)==0: # no central part provided

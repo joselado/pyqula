@@ -1,6 +1,7 @@
 from ..heterostructures import create_leads_and_central_list
 from ..heterostructures import Heterostructure
 from ..algebra import dagger
+import numpy as np
 
 
 def build(h1,h2,central=None,**kwargs):
@@ -80,5 +81,34 @@ class Hybrid_Heterostructure(Heterostructure):
           HT.central_intra = h1.intra # intra cell
           HT.right_coupling = dagger(HT.left_coupling)
           raise # not finished
+
+
+
+def get_reflection_normal_lead(ht,s):
+    """Get reflection matrix of the normal lead"""
+    r1,r2 = s[0][0],s[1][1] # get the reflection matrices
+    get_eh = ht.get_eh_sector # function to read either electron or hole
+    # select the normal lead
+    # r1 is normal
+    if np.sum(np.abs(get_eh(ht.left_intra,i=0,j=1)))<0.0001: r = r1
+    elif np.sum(np.abs(get_eh(ht.right_intra,i=0,j=1)))<0.0001: r = r2
+    else:
+        print("There is SC in both leads, aborting")
+        raise
+    return r
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
