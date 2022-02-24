@@ -11,20 +11,11 @@ def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
     # get the selfenergies, using the same coupling as the lead
     selfl = ht.get_selfenergy(energy,delta=delta,lead=0,pristine=True)
     selfr = ht.get_selfenergy(energy,delta=delta,lead=1,pristine=True)
-    if ht.block_diagonal:
-      ht2 = enlarge_hlist(ht) # get the enlaged hlist with the leads
-  # selfenergy of the leads (coupled to another cell of the lead)
-      gmatrix = effective_tridiagonal_hamiltonian(ht2.central_intra,selfl,selfr,
-                                      energy=energy,
-                                      delta=delta + ht.extra_delta_central)
-      test_gauss = False # do the tridiagonal inversion
-  #    print(selfr)
-    else: # not block diagonal
-      gmatrix = build_effective_hlist(ht,energy=energy,delta=delta,selfl=selfl,
-                                      selfr=selfr)
-      test_gauss = True # gauss only works with square matrices
-  #    print(selfr)
+    # get the central Green's function
+    gmatrix = get_central_gmatrix(ht,selfl=selfl,selfr=selfr,
+                                   energy=energy)
     # gamma functions
+    test_gauss = True # gauss only works with square matrices
     gammar = 1j*(selfr-dagger(selfr))
     gammal = 1j*(selfl-dagger(selfl))
     # calculate the relevant terms of the Green function
@@ -49,6 +40,23 @@ def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
       smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]
       smatrix = bmat(smatrix2).todense()
     return smatrix
+
+
+def get_central_gmatrix(ht,selfl=None,selfr=None,energy=0.0):
+    """Return the central Green's function"""
+    delta = ht.delta
+    if ht.block_diagonal:
+        ht2 = enlarge_hlist(ht) # get the enlaged hlist with the leads
+        gmatrix = effective_tridiagonal_hamiltonian(ht2.central_intra,
+                                      selfl,selfr,
+                                      energy=energy,
+                                      delta=delta + ht.extra_delta_central)
+    else: # not block diagonal
+        gmatrix = build_effective_hlist(ht,energy=energy,delta=delta,
+                                       selfl=selfl,
+                                      selfr=selfr)
+    return gmatrix
+
 
 
 

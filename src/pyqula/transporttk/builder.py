@@ -57,6 +57,28 @@ def build(h1,h2,central=None,**kwargs):
 
 class Hybrid_Heterostructure(Heterostructure):
     """New class for hybrid heterostructures"""
-    def __init__(self): pass
+    def __init__(self,h1,h2):
+        if h1.dimensionality==1 and h2.dimensionality==2: # 1D to 2D
+          if len(central)!=0: raise # not implemented
+          h2t = h2.get_1dh(0.) # create a 1D Hamiltonian
+          HT = build(h1,h2t,central=central,**kwargs) # create a fake HT
+          HT0 = HT.copy() # copy the HT
+          def get_selfenergy(energy,nk=40,lead=0,delta=HT.delta,**kwargs):
+              if lead==0: return HT0.get_selfenergy(energy,lead=lead,
+                                          delta=delta,
+                                       **kwargs) # default
+              elif lead==1:
+                  from .. import green
+                  gf = green.bloch_selfenergy(h2,energy=energy,
+                                         nk=nk,mode="adaptive",
+                                         delta=delta)[0]
+                  gamma = dagger(HT0.left_inter)
+                  return gamma@gf@dagger(gamma)
+              else: raise
+          HT.get_selfenergy = get_selfenergy # overwrite
+          HT.block_diagonal = False # block diagonal
+          HT.central_intra = h1.intra # intra cell
+          HT.right_coupling = dagger(HT.left_coupling)
+          raise # not finished
 
 
