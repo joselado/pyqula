@@ -271,22 +271,6 @@ def device_dos(HT,energy=0.0,mode="central",operator=None):
        g = HT.Hr.get_operator(operator)*g
    d = -np.trace(g.imag)
    return d
-#   if HT.block_diagonal: HT = HT.block2full()
-#   dos = [] # list with the density of states
-#   intra = HT.central_intra # central intraterm
-#   iden = np.matrix(np.identity(len(intra),dtype=complex)) # create identity
-#   delta = HT.delta # analytic continuation
-#   for energy in energies: # loop over energies
-#       # central green function
-#       intra = HT.central_intra
-#       selfl = HT.get_selfenergy(energy,lead=0,pristine=False)
-#       selfr = HT.get_selfenergy(energy,lead=1,pristine=False)
-#       gc = (energy+1j*delta)*iden -intra -selfl -selfr # dyson equation for the center
-#       gc = lg.inv(gc) # calculate inverse
-#       if project is not None: gc = project(gc) # project on something
-#       dos.append(-np.trace(gc).imag)  # calculate the trace of the Green function
-#   return dos
-
 
 
 
@@ -316,6 +300,7 @@ def landauer(HT,energy=0.0,delta = 0.0001,error=0.0000001,do_leads=True,
              gr=None,gl=None,has_eh=False,right_channel=None,
              left_channel=None):
    """ Calculates transmission using Landauer formula"""
+   from . import algebra
    if not do_leads: # if use old Green function, ensure that they are right
      if energy != HT.energy_green: 
        do_leads = True
@@ -330,12 +315,15 @@ def landauer(HT,energy=0.0,delta = 0.0001,error=0.0000001,do_leads=True,
    from .hamiltonians import is_number
    if not HT.block_diagonal:
      intra = HT.central_intra # central intraterm   
-     dimhc = len(intra) # dimension of the central part
+     dimhc = intra.shape[0] # dimension of the central part
    if HT.block_diagonal:
-     intra = HT.central_intra[0][0] # when it is diagonal
+       if len(HT.central_intra)==0: # no central
+           print("No central region provided")
+           raise
+       intra = HT.central_intra[0][0] # when it is diagonal
 # dimension of the central part
-     dimhc = len(HT.central_intra)*intra.shape[0] 
-   iden = np.matrix(np.identity(len(intra),dtype=complex)) # create idntity
+       dimhc = len(HT.central_intra)*intra.shape[0] 
+   iden = np.matrix(np.identity(len(intra),dtype=complex)) # create identity
    selfl = HT.get_selfenergy(energy,lead=0,delta=delta,pristine=False) # left Sigma
    selfr = HT.get_selfenergy(energy,lead=1,delta=delta,pristine=False) # right Sigma
    #################################
@@ -354,8 +342,8 @@ def landauer(HT,energy=0.0,delta = 0.0001,error=0.0000001,do_leads=True,
      heff = intra + selfl + selfr
      HT.heff = heff
      gc = (energy+1j*delta)*iden - heff
-     gc = gc.I # calculate inverse
-     if has_eh: raise # if it has electron-hole, trace over electrons
+     gc = algebra.inv(gc) # calculate inverse
+     if has_eh: raise # if it has electron-hole, stop
      G = np.trace(gammar@gc@gammal@dagger(gc)).real
      return G
    # reduced matrix
@@ -614,8 +602,8 @@ def create_leads_and_central_list(h_right,h_left,list_h_central,
     if len(list_h_central)==1: # only one central part
       return create_leads_and_central(h_right,h_left,list_h_central[0])
     ht = HTstructure(h_right) # create HTstructure
-    ht.Hr = h_right # store
-    ht.Hl = h_left # store
+    ht.Hr = h_right.copy() # store
+    ht.Hl = h_left.copy() # store
     # assign matrices of the leads
     ht.right_intra = h_right.intra.copy() 
     ht.right_inter = h_right.inter.copy()  
