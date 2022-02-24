@@ -3,7 +3,7 @@ from .. import algebra
 from ..green import green_renormalization
 from .. import green
 
-
+delta_smatrix = 1e-12
 dagger = algebra.dagger
 
 # library to perform transport calculations using a local probe
@@ -14,6 +14,7 @@ class LocalProbe():
         self.H = h.copy() # store Hamiltonian
         self.has_eh = self.H.has_eh # electron-hole
         self.delta = delta
+        self.bulk_delta = delta
         self.frozen_lead = True
         self.i = i # this site
         self.T = T # transparency
@@ -42,6 +43,8 @@ class LocalProbe():
     def didv(self,**kwargs):
         from .didv import didv
         return didv(self,**kwargs)
+    def set_coupling(self,c):
+        self.T = c # set the coupling
 
 
 
@@ -52,7 +55,7 @@ def generate_gf(self,energy=0.0,**kwargs):
     if mode=="bulk":
         gf = green.bloch_selfenergy(self.H,energy=energy,
                                          mode="adaptive",
-                                         delta=self.delta)[0]
+                                         delta=self.bulk_delta)[0]
         return gf
     else: raise # not implemented
 
@@ -90,6 +93,7 @@ def get_central_gmatrix(P,selfl=None,selfr=None,energy=0.0):
     delta = P.delta # imaginary part
     if selfl is None: selfl = P.get_selfenergy(lead=0,energy=energy)
     if selfr is None: selfr = P.get_selfenergy(lead=1,energy=energy)
+    if delta>delta_smatrix: delta = delta_smatrix # small delta is critical!
     iden = np.identity(selfl.shape[0],dtype=complex)*(energy +1j*delta)
     if P.frozen_lead:
         idenl = np.identity(selfl.shape[0],dtype=complex)*1j*delta

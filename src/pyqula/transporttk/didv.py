@@ -82,7 +82,7 @@ dagger = algebra.dagger
 
 
 
-def didv(ht,energy=0.0,delta=0.00001,kwant=False,opl=None,opr=None,**kwargs):
+def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,**kwargs):
     """Calculate differential conductance"""
     if ht.has_eh: # for systems with electons and holes
         s = get_smatrix(ht,energy=energy,check=True) # get the smatrix
