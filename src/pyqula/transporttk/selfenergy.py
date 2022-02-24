@@ -13,21 +13,22 @@ def get_selfenergy(self,energy,lead=0,delta=None,pristine=False):
        if lead==1: return np.matrix(self.selfgen[1](energy)) # return selfenergy
 # run the calculation
    else:
-     if lead==0:
-       intra = self.left_intra
-       inter = self.left_inter
-       if pristine: cou = self.left_inter
-       else: cou = self.left_coupling*self.scale_lc
-       deltal = delta + self.extra_delta_left # new delta left
-     if lead==1:
-       intra = self.right_intra
-       inter = self.right_inter
-       if pristine: cou = self.right_inter
-       else: cou = self.right_coupling*self.scale_rc
-       deltal = delta + self.extra_delta_right # new delta right
-     ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal)
-     selfr = cou@gr@dagger(cou) # selfenergy
-     return selfr # return selfenergy
+       if lead==0:
+           intra = self.left_intra
+           inter = self.left_inter
+           if pristine: cou = self.left_inter
+           else: cou = self.left_coupling*self.scale_lc
+           deltal = delta + self.extra_delta_left # new delta left
+       elif lead==1:
+           intra = self.right_intra
+           inter = self.right_inter
+           if pristine: cou = self.right_inter
+           else: cou = self.right_coupling*self.scale_rc
+           deltal = delta + self.extra_delta_right # new delta right
+       else: raise # not implemented
+       ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal)
+       selfr = cou@gr@dagger(cou) # selfenergy
+       return selfr # return selfenergy
 
 
 

@@ -228,11 +228,12 @@ def calculate_dos_hkgen(hkgen,ks,ndos=100,delta=None,
 
 
 
-def dos_kmesh(h,nk=10,delta=1e-3,random=False,ks=None,
+def dos_kmesh(h,nk=100,delta=None,random=False,ks=None,
         write=True,
         energies=np.linspace(-1,1,200),**kwargs):
     """Compute the DOS in a k-mesh by using the bandstructure function"""
     if ks is None:  ks = kmesh(h.dimensionality,nk=nk)
+    if delta is None: delta = 5./nk # not provided
     if random: ks = [np.random.random(3) for k in ks]
     # compute band structure
     out = h.get_bands(kpath=ks,write=False,**kwargs) 
