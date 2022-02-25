@@ -88,6 +88,18 @@ h = g.get_hamiltonian() # get the Hamiltonian object
 (k,e) = h.get_bands() # compute the band structure
 ```
 
+
+## Valley-resolved band structure of a honeycomb superlattice
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # get the geometry object
+g = g.get_supercell(2) # create a supercell
+h = g.get_hamiltonian() # get the Hamiltonian object
+(k,e,v) = h.get_bands(operator="valley") # compute the band structure
+```
+
+
+
 ## Non-unitarity of an interacting spin-triplet superconductor
 ```python
 from pyqula import geometry

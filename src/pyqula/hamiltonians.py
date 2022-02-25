@@ -68,6 +68,9 @@ class Hamiltonian():
     def get_eigenvectors(self,**kwargs):
         from .htk.eigenvectors import get_eigenvectors
         return get_eigenvectors(self,**kwargs)
+    def get_gf(self,**kwargs):
+        from .htk.green import get_gf
+        return get_gf(self,**kwargs)
     def modify_hamiltonian_matrices(self,f,**kwargs):
         """Modify all the matrices of a Hamiltonian"""
         modify_hamiltonian_matrices(self,f,**kwargs)
@@ -168,22 +171,20 @@ class Hamiltonian():
       """Return the Green function generator"""
       hkgen = self.get_hk_gen() # Hamiltonian generator
       def f(k=[0.,0.,0.],e=0.0):
-        hk = hkgen(k) # get matrix
-        if canonical_phase: # use a Bloch phase in all the sites
-          frac_r = self.geometry.frac_r # fractional coordinates
-          # start in zero
-          U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])
-          U = np.matrix(U) # this is without .H
-          # increase the space if necessary
-          U = self.spinless2full(U,is_hamiltonian=False) 
-          Ud = np.conjugate(U.T) # dagger
-          hk = Ud@hk@U
-  #        print(csc_matrix(np.angle(hk)))
-  #        exit()
-        if operator is not None: 
-            hk = algebra.dagger(operator)@hk@operator # project
-        out = algebra.inv(np.identity(hk.shape[0])*(e+1j*delta) - hk)
-        return out
+          hk = hkgen(k) # get matrix
+          if canonical_phase: # use a Bloch phase in all the sites
+            frac_r = self.geometry.frac_r # fractional coordinates
+            # start in zero
+            U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])
+            U = np.matrix(U) # this is without .H
+            # increase the space if necessary
+            U = self.spinless2full(U,is_hamiltonian=False) 
+            Ud = np.conjugate(U.T) # dagger
+            hk = Ud@hk@U
+          if operator is not None: 
+              hk = algebra.dagger(operator)@hk@operator # project
+          out = algebra.inv(np.identity(hk.shape[0])*(e+1j*delta) - hk)
+          return out
       return f
     def to_canonical_gauge(self,m,k):
         """Return a matrix in the canonical gauge"""

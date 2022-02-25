@@ -53,19 +53,9 @@ class LocalProbe():
 def generate_gf(self,energy=0.0,**kwargs):
     """Generate the specific Green's function"""
     mode=self.mode 
-    if mode=="bulk":
-        gf = green.bloch_selfenergy(self.H,energy=energy,
-                                         mode="adaptive",
-                                         delta=self.bulk_delta)[0]
-        return gf
-    elif mode=="surface":
-        gf = green.bloch_selfenergy(self.H,energy=energy,
-                                         mode="adaptive",
-                                         delta=self.bulk_delta)[1]
-        return gf
-    else: raise # not implemented
-
-
+    gf = self.H.get_gf(energy=energy,delta=self.bulk_delta,
+                         gtype=mode)
+    return gf
 
 
 def lead_selfenergy(self,energy=0.0,**kwargs):
