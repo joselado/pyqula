@@ -8,6 +8,7 @@ from .greentk.rg import green_renormalization
 from .greentk.selfenergy import bloch_selfenergy
 from .greentk.kchain import green_kchain
 from .greentk.kchain import get1dhamiltonian
+from .greentk.kchain import green_kchain_evaluator
 
 
 use_fortran = False
@@ -347,40 +348,6 @@ def green_surface_cells(gs,hop,ons,delta=1e-2,e=0.0,n=0):
 
 
 
-def green_kchain_evaluator(h,k=0.,delta=0.01,only_bulk=True,
-                    error=0.0001,hs=None,reverse=False):
-  """ Calculates the green function of a kdependent chain for a 2d system """
-  def gr(ons,hop,energy):
-    """ Calculates G by renormalization"""
-    gf,sf = green_renormalization(ons,hop,energy=energy,nite=None,
-                            error=error,info=False,delta=delta)
-#    print(hs)
-    if hs is not None: # surface matrix provided
-      ez = (energy+1j*delta)*np.identity(h.intra.shape[0]) # energy
-      sigma = hop@sf@algebra.dagger(hop) # selfenergy
-      if callable(hs): ons2 = ons + hs(k)
-      else: ons2 = ons + hs
-      sf = algebra.inv(ez - ons2 - sigma) # return Dyson
-    # which green function to return
-    if only_bulk:  return gf
-    else:  return gf,sf
-  (ons,hop) = get1dhamiltonian(h,k,reverse=reverse) # get 1D Hamiltonian
-  def fun(energy): # evaluator
-    return gr(ons,hop,energy)  # return green function
-  return fun # return the function
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def interface(h1,h2,k=[0.0,0.,0.],energy=0.0,delta=0.01):
@@ -397,7 +364,7 @@ def interface(h1,h2,k=[0.0,0.,0.],energy=0.0,delta=0.01):
   # Now apply the Dyson equation
   (ons1,hop1) = get1dhamiltonian(h1,k,reverse=True) # get 1D Hamiltonian
   (ons2,hop2) = get1dhamiltonian(h2,k,reverse=False) # get 1D Hamiltonian
-  havg = (hop1.H + hop2)/2. # average hopping
+  havg = (algebra.dagger(hop1) + hop2)/2. # average hopping
   ons = bmat([[csc(ons1),csc(havg)],[csc(havg.H),csc(ons2)]]) # onsite
   self2 = bmat([[csc(ons1)*0.0,None],[None,csc(hop2@sf2@hop2.H)]])
   self1 = bmat([[csc(hop1@sf1@hop1.H),None],[None,csc(ons2)*0.0]])
@@ -427,7 +394,7 @@ def interface_multienergy(h1,h2,k=[0.0,0.,0.],energies=[0.0],delta=0.01,
     # Now apply the Dyson equation
     (ons1,hop1) = get1dhamiltonian(h1,k,reverse=True) # get 1D Hamiltonian
     (ons2,hop2) = get1dhamiltonian(h2,k,reverse=False) # get 1D Hamiltonian
-    havg = (hop1.H + hop2)/2. # average hopping
+    havg = (algebra.dagger(hop1) + hop2)/2. # average hopping
     if dh1 is not None: ons1 = ons1 + dh1
     if dh2 is not None: ons2 = ons2 + dh2
     ons = bmat([[csc(ons1),csc(havg)],[csc(havg.H),csc(ons2)]]) # onsite
@@ -435,7 +402,7 @@ def interface_multienergy(h1,h2,k=[0.0,0.,0.],energies=[0.0],delta=0.01,
     self1 = bmat([[csc(hop1@sf1@hop1.H),None],[None,csc(ons2)*0.0]])
     # Dyson equation
     ez = (energy+1j*delta)*np.identity(ons1.shape[0]+ons2.shape[0]) # energy
-    ginter = (ez - ons - self1 - self2).I # Green function
+    ginter = algebra.inv(ez - ons - self1 - self2) # Green function
     # now return everything, first, second and hybrid
     out.append([gs1,sf1,gs2,sf2,ginter])
   return out # return output
