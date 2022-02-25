@@ -397,7 +397,8 @@ def green_renormalization_jit(g0,g1,intra,inter,e,nite,error,delta):
 
 
 def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
-                         mode="full",
+                         mode="full", # algorithm for integration
+                         gtype="bulk", # bulk or surface
                          error=1e-6):
   """ Calculates the selfenergy of a cell defect,
       input is a hamiltonian class"""
@@ -413,10 +414,13 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
       except:
           mode = "full" # multicell hamiltonians only have full mode
           print("Changed to full mode in selfenergy")
+  # sanity check for surface mode
+  if gtype=="surface": mode = "adaptive" # only the adaptive mode
+  #######################################
   d = h.dimensionality # dimensionality of the system
   g = h.intra *0.0j # initialize green function
   e = np.matrix(np.identity(len(g)))*(energy + delta*1j) # complex energy
-  if mode=="full":  # full integration
+  if mode=="full":  # full integration in the BZ
     if d==1: # one dimensional
       ks = [[k,0.,0.] for k in np.linspace(0.,1.,nk,endpoint=False)]
     elif d==2: # two dimensional
@@ -447,14 +451,19 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
   if mode=="adaptive":
     if d==1: # full renormalization
       g,s = gr(h.intra,h.inter)  # perform renormalization
+      if gtype=="surface": g = s.copy() # take the surface one
+      elif gtype=="bulk": pass # do nothing
+      else: raise
     elif d==2: # two dimensional, loop over k's
       ks = [[k,0.,0.] for k in np.linspace(0.,1.,nk,endpoint=False)]
-#      ks = np.linspace(0.,1.,nk,endpoint=False) 
       from . import integration
+      if gtype=="surface": ig = 1 # take the surface one
+      elif gtype=="bulk": ig = 0 # take the bulk one
+      else: raise
       def fint(k):
         """ Function to integrate """
         return green_kchain(h,k=[k,0.,0.],energy=energy,
-                delta=delta,error=error) 
+                delta=delta,error=error,only_bulk=False)[ig] 
       # eps is error, might work....
       g = integration.integrate_matrix(fint,xlim=[0.,1.],eps=error) 
         # chain in the y direction
@@ -486,10 +495,10 @@ def green_kchain(h,k=0.,energy=0.,delta=0.01,only_bulk=True,
                             error=error,info=False,delta=delta)
     if hs is not None: # surface matrix provided
       ez = (energy+1j*delta)*np.identity(h.intra.shape[0]) # energy
-      sigma = hop@sf@hop.H # selfenergy
+      sigma = hop@sf@algebra.dagger(hop) # selfenergy
       if callable(hs): ons2 = hs(k)
       else: ons2 = hs
-      sf = (ez - ons2 - sigma).I # return Dyson
+      sf = algebra.inv(ez - ons2 - sigma) # return Dyson
     if only_bulk:  return gf
     else:  return gf,sf
   (ons,hop) = get1dhamiltonian(h,k,reverse=reverse) # get 1D Hamiltonian
@@ -736,12 +745,12 @@ def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=10,
         o0 = algebra.inv(iden*(e+1j*delta) - hk) # Green's function
         if callable(operator): o1 = operator(k)
         else: o1 = operator
-        out += -(o0@o1).trace().imag # Add contribution
+        out += -np.trace(o0@o1).imag # Add contribution
       out /= len(ks) # normalize
     else:
       g = bloch_selfenergy(h,energy=e,delta=delta,mode=gmode)[0] 
-      if operator is None: out = -(np.array(g)).trace().imag
-      else: out = -(np.array(g)@operator).trace().imag
+      if operator is None: out = -np.trace(np.array(g)).imag
+      else: out = -np.trace(np.array(g)@operator).imag
     return out
 
 

@@ -179,7 +179,7 @@ class Hamiltonian():
             U = np.matrix(U) # this is without .H
             # increase the space if necessary
             U = self.spinless2full(U,is_hamiltonian=False) 
-            Ud = np.conjugate(U.T) # dagger
+            Ud = algebra.dagger(U) # dagger
             hk = Ud@hk@U
           if operator is not None: 
               hk = algebra.dagger(operator)@hk@operator # project
