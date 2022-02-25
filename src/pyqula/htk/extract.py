@@ -6,7 +6,7 @@ from ..algebra import todense
 
 def local_hamiltonian(h,m,i=0):
     """Given a certain Hamiltonian and a matrix,
-    extract the local Hamiltonain"""
+    extract the local Hamiltonian"""
     m = todense(m) # dense array
     if not h.has_spin and not h.has_eh: # spinless and no e-h
         return np.array([[m[i,i]]]) # return a single number

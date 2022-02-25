@@ -6,19 +6,11 @@ from . import algebra
 from numba import jit
 
 
-#try:
-#  import greenf90
-#  use_fortran = True
-#except:
-#  use_fortran=False
-#  print("Ups, FORTRAN not working in, green.py")
-
 use_fortran = False
 
 try: from .gauss_invf90 import gauss_inv as ginv
 except: 
   pass
-#    print("FORTRAN gauss routines not ok in green.py")
 
 
 class gf_convergence():
@@ -404,8 +396,9 @@ def green_renormalization_jit(g0,g1,intra,inter,e,nite,error,delta):
 
 
 
-def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 0.01,mode="full",
-                         error=0.00001):
+def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
+                         mode="full",
+                         error=1e-6):
   """ Calculates the selfenergy of a cell defect,
       input is a hamiltonian class"""
   if mode=="adaptative": mode = "adaptive"
