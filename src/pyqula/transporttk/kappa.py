@@ -24,8 +24,8 @@ def get_power(ts,gs,delta=1e-8):
     k = p[0]
     return k
 
-def get_kappa(**kwargs):
-    ts,Gs = get_conductances(**kwargs)
+def get_kappa(energy=0.0,**kwargs):
+    ts,Gs = get_conductances(energies=[energy],**kwargs)
     ks = []
     for g in Gs.T: # loop over energies
         k = get_power(ts,g)
@@ -39,20 +39,30 @@ def get_kappa_ratio(HT,**kwargs):
     return ks1/ks2
 
 
-def generate_HT(ht,SC=True,temperature=0.,**kwargs):
+def generate_HT(ht,SC=True,**kwargs):
     """Given a heterostructure, generate a new one to compute kappa"""
+    # this is a workaround
+    from ..heterostructures import Heterostructure
+    from .localprobe import LocalProbe
     def f(h):
         h = h.copy()
         if not SC: # remove the SC order
             h.remove_nambu()
             h.setup_nambu_spinor()
         return h
-    from ..heterostructures import build
-    Hr = f(ht.Hr)
-    Hl = f(ht.Hl)
-    hto = build(Hl,Hr) # create a new heterostructure
-    hto.delta = ht.delta
-    return hto
+    if type(ht)==Heterostructure: # heterostructure type
+        from ..heterostructures import build
+        Hr = f(ht.Hr)
+        Hl = f(ht.Hl)
+        hto = build(Hl,Hr) # create a new heterostructure
+        hto.delta = ht.delta
+        return hto
+    elif type(ht)==LocalProbe: # Localprobe type
+        out = ht.copy() # make a copy
+        out.H = f(out.H)
+        out.lead = f(out.lead)
+        return out
+    else: raise
 
 
 #### These are workrounds for more efficient finite temperature calculations ##

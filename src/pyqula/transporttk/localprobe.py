@@ -2,9 +2,11 @@ import numpy as np
 from .. import algebra
 from ..green import green_renormalization
 from .. import green
+from copy import deepcopy
 
 delta_smatrix = 1e-12
 dagger = algebra.dagger
+gfmode = "adaptive"
 
 # library to perform transport calculations using a local probe
 
@@ -44,8 +46,13 @@ class LocalProbe():
     def didv(self,**kwargs):
         from .didv import didv
         return didv(self,**kwargs)
+    def copy(self): return deepcopy(self)
     def set_coupling(self,c):
         self.T = c # set the coupling
+    def get_kappa(self,T=None,**kwargs):
+        from .kappa import get_kappa_ratio
+        if T is None: T = self.T 
+        return get_kappa_ratio(self,T=T,**kwargs)
 
 
 
@@ -54,6 +61,7 @@ def generate_gf(self,energy=0.0,**kwargs):
     """Generate the specific Green's function"""
     mode=self.mode 
     gf = self.H.get_gf(energy=energy,delta=self.bulk_delta,
+                         mode=gfmode,
                          gtype=mode)
     return gf
 

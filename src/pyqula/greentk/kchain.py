@@ -2,7 +2,7 @@ from .rg import green_renormalization
 from .. import algebra
 
 def green_kchain(h,k=0.,energy=0.,delta=0.01,only_bulk=True,
-                    error=0.0001,hs=None,reverse=False):
+                    error=0.0001,hs=None,**kwargs):
   """ Calculates the green function of a kdependent chain for a 2d system """
   def gr(ons,hop):
     """ Calculates G by renormalization"""
@@ -16,17 +16,17 @@ def green_kchain(h,k=0.,energy=0.,delta=0.01,only_bulk=True,
       sf = algebra.inv(ez - ons2 - sigma) # return Dyson
     if only_bulk:  return gf
     else:  return gf,sf
-  (ons,hop) = get1dhamiltonian(h,k,reverse=reverse) # get 1D Hamiltonian
+  (ons,hop) = get1dhamiltonian(h,k,**kwargs) # get 1D Hamiltonian
   return gr(ons,hop)  # return green function
 
 
 
 
-def get1dhamiltonian(hin,k=[0.0,0.,0.],reverse=False):
+def get1dhamiltonian(hin,k=[0.0,0.,0.],reverse=False,**kwargs):
   """Return onsite and hopping matrix for a 1D Hamiltonian"""
   from .. import multicell
-  (ons,hop) = multicell.kchain(hin,k=k)
-  if reverse: return (ons,algebra.hermitian(hop)) # return 
+  (ons,hop) = multicell.kchain(hin,k=k,**kwargs)
+  if reverse: return (ons,algebra.dagger(hop)) # return 
   else: return (ons,hop) # return 
 
 

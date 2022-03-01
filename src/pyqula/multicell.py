@@ -207,7 +207,6 @@ def bulk2ribbon(hin,n=10,sparse=True,nxt=6,ncut=6):
 
 def rotate90(h):
   """ Rotate 90 degrees the Hamiltonian"""
-#  raise
   ho = turn_multicell(h) # copy Hamiltonian
   hoppings = []
   for i in range(len(ho.hopping)):
@@ -504,8 +503,6 @@ def turn_no_multicell(h):
 
 def kchain(h,k=[0.,0.,0.]):
   """Return the onsite and hopping for a particular k"""
-#  h = h0.copy() # copy Hamiltonian
-#  h = turn_multicell(h0) # multicell form
   if not h.is_multicell: h = h.get_multicell()
   dim = h.dimensionality # dimensionality
   if dim==1: # 1D
