@@ -383,7 +383,7 @@ def add_pairing_to_hamiltonian(self,**kwargs):
         # this is a workaround to be able to do triplets
         # do it for +k and -k
         if d.dot(d)<0.0001: continue # skip onsite
-        r2 = self.geometry.replicas(d) # positions
+        r2 = self.geometry.replicas(d=d) # positions
         m = add_pairing(df,r1=r,r2=r2) # new matrix
 #        m2 = add_pairing(df,r1=r,r2=r2) # new matrix, the other way
         m2 = m
