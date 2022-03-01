@@ -144,9 +144,9 @@ class Heterostructure():
   def block2full(self,sparse=False):
       """Put in full form"""
       return block2full(self,sparse=sparse)
-  def get_kappa(self,energy=[0.],**kwargs):
+  def get_kappa(self,**kwargs):
       from .transporttk.kappa import get_kappa_ratio
-      return get_kappa_ratio(self,energies=[energy],**kwargs)[0]
+      return get_kappa_ratio(self,**kwargs)
   
 
 

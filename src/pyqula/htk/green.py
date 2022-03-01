@@ -1,4 +1,4 @@
-from ..green import bloch_selfenergy
+from ..greentk.selfenergy import bloch_selfenergy
 
 
 def get_gf(H,energy=0.0,delta=1e-5,
@@ -14,4 +14,5 @@ def get_gf(H,energy=0.0,delta=1e-5,
         return gf
     elif H.dimensionality==0: # zero dimensional
         return H.get_gk_gen(delta=delta)(e=energy) 
+    else: raise
 

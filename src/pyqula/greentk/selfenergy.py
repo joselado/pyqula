@@ -6,10 +6,11 @@ from .rg import green_renormalization
 from .kchain import green_kchain
 
 
+
 def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
                          mode="full", # algorithm for integration
                          gtype="bulk", # bulk or surface
-                         error=1e-6):
+                         error=1e-3):
   """ Calculates the selfenergy of a cell defect,
       input is a hamiltonian class"""
   if mode=="adaptative": mode = "adaptive"
@@ -51,9 +52,12 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
       g,s = gr(h.intra,h.inter)  # perform renormalization
     elif d==2: # two dimensional, loop over k's
       ks = [[k,0.,0.] for k in np.linspace(0.,1.,nk,endpoint=False)]
+#      from ..multicell import rotate90
+#      h90 = rotate90(h) # rotated Hamiltonian
       for k in ks:  # loop over k in y direction
  # add contribution to green function
         g += green_kchain(h,k=k,energy=energy,delta=delta,error=error)
+#        g += green_kchain(h90,k=k,energy=energy,delta=delta,error=error)
       g = g/len(ks)
     else: raise
   #####################################################

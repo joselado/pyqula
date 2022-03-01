@@ -1,6 +1,10 @@
 
 import numpy as np
 
+
+adaptive_error = 1e-2 # error in adaptive algorithm
+
+
 def integrate_matrix(f,xlim=[0.,1.],eps=0.1,only_imag=False):
   """ Integrates a matrix, the measure is the maximun value of the matrix"""
   return adaptive_simpsons_rule(f,xlim[0],xlim[1],eps,only_imag=only_imag)
