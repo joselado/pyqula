@@ -30,7 +30,7 @@ def get_kappa(energy=0.0,**kwargs):
     for g in Gs.T: # loop over energies
         k = get_power(ts,g)
         ks.append(k)
-    return np.array(ks) # return kappa
+    return np.array(ks)[0] # return kappa
 
 
 def get_kappa_ratio(HT,**kwargs):
