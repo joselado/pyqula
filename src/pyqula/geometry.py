@@ -355,7 +355,7 @@ def square_ribbon(natoms):
   from numpy import array
   x=array([0.0 for i in range(natoms)]) # create x coordinates
   y=array([float(i) for i in range(natoms)])  # create y coordinates
-  y=y-sum(y)/float(natoms) # shift to the center
+  y=y-np.sum(y)/float(natoms) # shift to the center
   g = Geometry() # create geometry class
   g.x = x  # add to the x atribute
   g.y = y  # add to the y atribute
@@ -367,9 +367,10 @@ def square_ribbon(natoms):
   return g
 
 
+def ladder(): return square_ribbon(2)
 
 def bisquare_ribbon(ncells):
-  g = square_lattice()
+  g = square_lattice_bipartite()
   g = g.supercell((1,ncells))
   g.dimensionality = 1
   return g
@@ -379,7 +380,7 @@ def bisquare_ribbon(ncells):
 def chain(n=1):
   """ Create a chain """
   g = square_ribbon(1) 
-  g = g.supercell(n)
+  g = g.get_supercell(n)
   g.has_sublattice = False
   g.get_fractional()
 #  g.sublattice = [(-1)**i for i in range(len(g.x))]
@@ -532,26 +533,6 @@ def honeycomb_lattice_zigzag_cell():
 
 
 
-def plot_geometry(g):
-   """Shows a 2d plot of the current geometry,
-      returns a figure"""
-   import pylab
-   fig = pylab.figure() # create the figure
-   sp = fig.add_subplot(111)
-   x = g.x # x coordinates
-   y = g.y # y coordinates
-   sp.scatter(x,y,marker = "o",s=80,color="red") # create central cell
-   celldis = g.celldis # distance to neighboring cell
-   if not celldis== None: # if there is neighbor
-     sp.scatter(x+celldis,y,marker = "o",s=80,color="black") # create right cell
-     sp.scatter(x-celldis,y,marker = "o",s=80,color="black") # create left cell
-   sp.set_xlabel("X")
-   sp.set_xlabel("Y")
-   sp.axis("equal") # same scale in axes
-   fig.set_facecolor("white") # white figure  
-   return fig
-
-
 def supercell1d(g,nsuper):
   """
   Creates a supercell of the system
@@ -699,7 +680,7 @@ def triangular_ribbon(n):
 
 
 
-def square_lattice():
+def square_lattice_bipartite():
   """
   Creates a square lattice
   """
@@ -718,7 +699,7 @@ def square_lattice():
 
 
 
-def single_square_lattice():
+def square_lattice():
   """
   Creates a square lattice
   """
@@ -731,15 +712,15 @@ def single_square_lattice():
   g.dimensionality = 2 # two dimensional system
   g.xyz2r() # create r coordinates
   g.has_sublattice = False # has sublattice index
-  g.sublattice = [(-1.)**i for i in range(len(g.x))] # subattice number
+  g.sublattice = [0. for i in range(len(g.r))] # subattice number
   return g
 
 
+single_square_lattice = square_lattice # alias
 
 
 
-
-def cubic_lattice_minimal():
+def cubic_lattice():
   """
   Creates a cubic lattice
   """
@@ -753,11 +734,14 @@ def cubic_lattice_minimal():
   g.a3 = np.array([0.,0.,1.]) # second lattice vector
   g.dimensionality = 3 # three dimensional system
   g.has_sublattice = False # has sublattice index
-#  g.sublattice = [(-1.)**i for i in range(len(g.x))] # subattice number
+  g.sublattice = [0. for i in range(len(g.r))] # subattice number
   return g
 
 
-def cubic_lattice():
+cubic_lattice_minimal = cubic_lattice
+
+
+def cubic_lattice_bipartite():
   """
   Creates a cubic lattice
   """
@@ -788,7 +772,7 @@ def cubic_lieb_lattice():
   """
   Return a 3d Lieb lattice
   """
-  g = cubic_lattice()
+  g = cubic_lattice_bipartite()
   g = g.remove(0) # remove this atom
   return g
 
@@ -1023,83 +1007,11 @@ def apilate(g,drs=[np.array([0.,0.,0.])]):
 
 
 
-
-def write_positions(g,output_file = "POSITIONS.OUT",nrep=None):
-  """Writes the geometry associatted with a hamiltonian in a file"""
-  if nrep is not None: g = g.get_supercell(nrep)
-  x = g.r[:,0]  # x positions
-  y = g.r[:,1]  # y positions
-  z = g.r[:,2]  # z positions
-  fg = open(output_file,"w")
-  fg.write(" # x    y     z   (without spin degree)\n")
-  for (ix,iy,iz) in zip(x,y,z):
-    fg.write(str(ix)+ "     "+str(iy)+"   "+str(iz)+"  \n")
-  fg.close()
-
-
+from .geomeetrytk.write import write_xyz
+from .geomeetrytk.write import write_lattice
+from .geomeetrytk.write import write_sublattice
+from .geomeetrytk.write import write_positions
 write_geometry = write_positions
-
-
-def write_sublattice(g,output_file = "SUBLATTICE.OUT"):
-  """Writes the geometry associatted with a hamiltonian in a file"""
-  if not g.has_sublattice: return
-  fg = open(output_file,"w")
-  for i in g.sublattice:
-    fg.write(str(i)+"  \n")
-  fg.close()
-
-
-
-
-
-
-
-def write_lattice(g,output_file = "LATTICE.OUT"):
-  """Writes the lattice in a separte file"""
-  open("DIMENSIONALITY.OUT","w").write(str(g.dimensionality))
-  if g.dimensionality==0: return
-  fg = open(output_file,"w")
-  if g.dimensionality==1:
-    fg.write(str(g.a1[0])+"   "+str(g.a1[1])+"  "+str(g.a1[2])+"\n")
-  elif g.dimensionality==2:
-    fg.write(str(g.a1[0])+"   "+str(g.a1[1])+"  "+str(g.a1[2])+"\n")
-    fg.write(str(g.a2[0])+"   "+str(g.a2[1])+"  "+str(g.a2[2])+"\n")
-  elif g.dimensionality==3:
-    fg.write(str(g.a1[0])+"   "+str(g.a1[1])+"  "+str(g.a1[2])+"\n")
-    fg.write(str(g.a2[0])+"   "+str(g.a2[1])+"  "+str(g.a2[2])+"\n")
-    fg.write(str(g.a3[0])+"   "+str(g.a3[1])+"  "+str(g.a3[2])+"\n")
-  else: raise
-  fg.close()
-
-
-
-
-
-def write_xyz(gin,output_file = "crystal.xyz",units=0.529,nsuper=1):
-  """Writes the geometry associatted with a hamiltonian in a file"""
-  g = gin.copy() # copy geometry
-  if g.atoms_have_names: g = remove_duplicated(g)
-  else: g = gin.copy()
-  if g.dimensionality>0: # create supercell
-    if nsuper>1:
-      g = g.supercell(nsuper)
-  x = g.x*units  # x posiions
-  y = g.y*units  # y posiions
-  z = g.z*units  # z posiions
-  fg = open(output_file,"w")
-  # get hte names of the atoms
-  if g.atoms_have_names:
-    names = g.atoms_names
-  else:
-    names = ["C" for ix in x ] # create names
-  # check that there are as many names as positions
-  if len(names)!=len(x): raise
-  fg.write(str(len(x))+"\nGenerated with Python\n") # number of atoms
-  for (n,ix,iy,iz) in zip(names,x,y,z):
-    fg.write(n+"   "+str(ix)+ "     "+str(iy)+"   "+str(iz)+"  \n")
-  fg.close()
-
-
 
 
 def remove_duplicated(g):
@@ -1144,57 +1056,10 @@ def get_reciprocal(a1,a2,a3):
   return b1,b2,b3
 
 
-def get_fractional_function(g,center=False):
-  """Get fractional coordinates"""
-#  if g.dimensionality<2: raise # stop 
-  dim = g.dimensionality # dimensionality
-  if dim==0: return lambda x: x
-  elif dim==1: # one dimensional
-    R = np.array([g.a1,[0.,1.,0.],[0.,0.,1.]]).T # transformation matrix
-    if np.max(np.abs(g.a1[1:2]))>1e-6: raise
-  elif dim==2: # two dimensional
-    R = np.array([g.a1,g.a2,[0.,0.,1.]]).T # transformation matrix
-    if np.abs(g.a1[2])>1e-6 or np.abs(g.a2[2])>1e-6: raise
-  elif dim==3:
-    R = np.array([g.a1,g.a2,g.a3]).T # transformation matrix
-  else: raise
-  g.has_fractional = True # has fractional coordinates
-  L = lg.inv(R) # inverse matrix
-  def f(r):
-      if center: return (L@np.array(r))%1.0  # transform
-      else: return L@np.array(r)  # transform
-  return f
+from .geometrytk.fractional import get_fractional_function
+from .geometrytk.fractional import get_fractional
+from .geometrytk.fractional import fractional2real
 
-
-def get_fractional(g,center=False):
-  dim = g.dimensionality # dimensionality
-  if dim==0: return
-  f = get_fractional_function(g,center=center)
-  store = [f(r) for r in g.r] # empty list
-  store = np.array(store) # convert to array
-  # if you remove the shift the Berry Green formalism does not work
-  if dim>0: g.frac_x = store[:,0]
-  if dim>1: g.frac_y = store[:,1]
-  if dim>2: g.frac_z = store[:,2]
-  g.frac_r = store
-
-
-
-def fractional2real(self):
-  """Write real coordinates using the fractional ones"""
-  if self.dimensionality==0: raise
-  elif self.dimensionality==1: # 1D
-    self.x = self.frac_x*self.a1[0] 
-  elif self.dimensionality==2: # 2D
-    self.x = self.frac_x*self.a1[0] +  self.frac_y*self.a2[0] 
-    self.y = self.frac_x*self.a1[1] +  self.frac_y*self.a2[1] 
-  elif self.dimensionality==3: # 3D
-    self.x = self.frac_x*self.a1[0] +  self.frac_y*self.a2[0] + self.frac_z*self.a3[0] 
-    self.y = self.frac_x*self.a1[1] +  self.frac_y*self.a2[1] + self.frac_z*self.a3[1] 
-    self.z = self.frac_x*self.a1[2] +  self.frac_y*self.a2[2] + self.frac_z*self.a3[2] 
-  else: raise
-  self.xyz2r() # update xyz
-  self.center() # center
 
 
 
@@ -1355,26 +1220,7 @@ geometries2d += [triangular_lattice]
 
 
 
-
-
-def get_sublattice(rs):
-  """Return indexes of the sublattice, assuming that there is sublattice"""
-  n = len(rs) # loop over positions
-  sublattice = [0 for i in range(n)] # list for the sublattice
-  ii = np.random.randint(n)
-  sublattice[ii] = -1 # start with this atom
-  print("Looking for a sublattice")
-  while True: # infinite loop
-    for i in range(n): # look for a neighbor for site i
-      if sublattice[i]!=0: continue
-      for j in range(n): # loop over the rest of the atoms
-        if sublattice[j]==0: continue # next one
-        dr = rs[i] - rs[j] # distance to site i
-        if 0.9<dr.dot(dr)<1.01: # if NN and sublattice 
-          sublattice[i] = -sublattice[j] + 0 # opposite
-          continue # next one
-    if np.min(np.abs(sublattice))!=0: break
-  return sublattice
+from .geometrytk.sublattice import get_sublattice
 
 
 from .neighbor import neighbor_directions
@@ -1446,55 +1292,7 @@ def hyperhoneycomb_lattice():
 
 
 
-
-
-
-
-
-
-def write_vasp(g0,s=1.42):
-    """Turn a geometry into vasp geometry"""
-    g = g0.copy() # copy geometry
-    if g.dimensionality==3: pass
-    elif g.dimensionality==2:
-        g.r[:,2] -= np.min(g.r[:,2])
-        z = np.max(g.r[:,2]) - np.min(g.r[:,2])
-        a3 = np.array([0.,0.,z+9.0])
-        g.a3 = a3 # set the lattice vector
-        g.dimensionality = 3
-        g.get_fractional() # get fractional coordinates
-    else: raise # not implemented
-    f = open("vasp.vasp","w") # input file
-    f.write("Structure\n 1.0\n")
-    for i in range(3): f.write(str(s*g.a1[i])+"  ")
-    f.write("\n")
-    for i in range(3): f.write(str(s*g.a2[i])+"  ")
-    f.write("\n")
-    for i in range(3): f.write(str(s*g.a3[i])+"  ")
-    # write the atoms
-    if not g.atoms_have_names: # no name provided
-      f.write("\n C\n "+str(len(g.r))+"\n Direct\n")
-      # write all the atoms in fractional coordinates
-      for ir in g.frac_r:
-          for i in range(3): f.write(str(ir[i])+"  ")
-          f.write("\n")
-    else: # atoms have labels
-        namedict = dict() # dictionary
-        for (key,n) in zip(g.atoms_names,range(len(g.r))):
-            if not key in namedict: 
-                namedict[key] = [n] # store
-            else: namedict[key].append(n) # store
-        f.write("\n") # next line
-        for key in namedict: f.write(str(key)+"   ")
-        f.write("\n") # next line
-        for key in namedict: f.write(str(len(namedict[key]))+"   ")
-        f.write("\n Direct \n") # next line
-        for key in namedict: # loop over types
-            ns = namedict[key] # list with atoms
-            for ii in ns: # loop over atoms
-              for i in range(3): f.write(str(g.frac_r[ii][i])+"  ")
-              f.write("\n")
-    f.close()
+from .geometrytk.write import write_vasp
 
 
 from .neighbor import neighbor_distances
@@ -1565,17 +1363,30 @@ def get_supercell(self,nsuper,store_primal=False):
 
 
 
-def get_geometry(g):
-    """Return a certain geometry"""
-    if type(g)==Geometry: return g
-    elif type(g)==str:
-        if g=="honeycomb": return honeycomb_lattice()
-        elif g=="triangular": return triangular_lattice()
-        elif g=="square": return single_square_lattice()
-        else: raise
-    elif g is None: return get_geometry("square") # default geometry
-    else: raise
 
 
 
 from .kpointstk.mapping import get_k2K_generator
+
+
+gdict = dict() # dictionary
+gdict["chain"] = chain
+gdict["square"] = square_lattice
+gdict["honeycomb"] = honeycomb_lattice
+gdict["triangular"] = triangular_lattice
+gdict["kagome"] = kagome_lattice
+gdict["lieb"] = lieb_lattice
+gdict["pyrochlore"] = pyrochlore_lattice
+gdict["diamond"] = diamond_lattice
+gdict["cubic"] = cubic_lattice
+
+
+def get_geometry(g):
+    """Return a certain geometry"""
+    if type(g)==Geometry: return g
+    elif type(g)==str:
+    elif g in gdict: return gdict[g]() # return the geometry
+    elif g is None: return get_geometry("square") # default geometry
+    else: raise
+
+
