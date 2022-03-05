@@ -75,6 +75,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 - Non-equilibrium Green's function formalism
 - Operator-resolved transport
 - Differential decay rate
+- Tunneling and contact scanning probe spectroscopy
 
 # EXAMPLES #
 A variety of examples can be found in pyqula/examples

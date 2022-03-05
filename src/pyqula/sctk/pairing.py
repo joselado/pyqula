@@ -31,6 +31,8 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
         weightf = lambda r1,r2: same_site(r1,r2)*tauz
     elif mode=="px":
         weightf = lambda r1,r2: px(r1,r2)
+    elif mode=="dpid":
+        weightf = lambda r1,r2: dpid(r1,r2,**kwargs)
     elif mode=="swaveA":
         weightf = lambda r1,r2: swaveA(self.geometry,r1,r2)
     elif mode=="swaveB":
@@ -164,17 +166,34 @@ def px(r1,r2):
 def get_triplet(r1,r2,df,L=1):
     """Function for p-wave order"""
     dr = r1-r2 ; dr2 = dr.dot(dr)
+    if abs(L)%2!=1: raise
     if 0.99<dr2<1.001: 
         phi = np.arctan2(dr[1],dr[0])
         d = df((r1+r2)/2.) # evaluate dvector
         delta = dvector2delta(d) # compute the local deltas
         ms = np.array([[delta[2],delta[0]],[delta[1],-delta[2]]])
         return np.exp(1j*phi*L)*ms
-    return 0.0*tauz
+    else: return 0.0*tauz
+
+
+def get_singlet(r1,r2,L=2):
+    """Function for p-wave order"""
+    if L%2!=0: raise
+    dr = r1-r2 ; dr2 = dr.dot(dr)
+    if 0.99<dr2<1.001:
+        phi = np.arctan2(dr[1],dr[0])
+        out = np.exp(1j*phi*L)
+#        print(out)
+        return out*iden
+    else: return 0.0*tauz
 
 
 def pwave(*args,**kwargs): 
     return get_triplet(*args,L=1,**kwargs)
+
+
+def dpid(*args,**kwargs):
+    return get_singlet(*args,L=2,**kwargs)
 
 
 def nodal_fwave(*args,**kwargs): 
