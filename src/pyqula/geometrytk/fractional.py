@@ -1,5 +1,5 @@
 import numpy as np
-
+import scipy.linalg as lg
 
 def get_fractional_function(g,center=False):
     """Get fractional coordinates"""
