@@ -122,3 +122,18 @@ def write_vasp(g0,s=1.42):
     f.close()
 
 
+
+
+def write_function(self,fun,name="FUNCTION.OUT"):
+    """Write a certain function"""
+    f = open(name,"w")
+    ir = 0
+    for r in self.r: # loop over positions
+      o = fun(r) # evaluate
+      f.write(str(ir)+"  ")
+      for io in o:  f.write(str(io)+"  ")
+      f.write("\n")
+      ir += 1
+    f.close() # close file
+
+
