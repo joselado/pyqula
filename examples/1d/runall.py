@@ -8,5 +8,5 @@ for d in ds:
   if os.path.isfile("main.py"):
       print("Running")
       print(d)
-      os.system("python main.py")
+      os.system("timeout 1s python main.py")
 

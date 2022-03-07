@@ -22,7 +22,7 @@ h.add_sublattice_imbalance(0.1)
 #h.add_antihaldane(0.1)
 #h.add_zeeman(0.3)
 
-fv = operators.get_valley(h,projector=True)() # valley function
+fv = operators.get_valley(h,projector=True) # valley function
 #fv = h.get_operator("sz")
 #fv = None
 #fv = h.get_operator("sublattice")

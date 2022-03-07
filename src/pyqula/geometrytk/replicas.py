@@ -11,7 +11,8 @@ def multireplicas(self,n):
     dl = self.neighbor_directions(n) # list with neighboring cells to take
     if self.dimensionality==0: return self.r
     else: # bigger dimensionality
-        for d in dl:  out += self.replicas(d=d) # add this direction
+        for d in dl:  
+            out += self.replicas(d=d).tolist() # add this direction
     return np.array(out)
 
 def replicas(self,d=[0.,0.,0.]):

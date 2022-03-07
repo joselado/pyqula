@@ -28,7 +28,7 @@ h2.get_bands()
 ht = heterostructures.build(h1,h2,lc=0.2) # create the junction
 ht.delta = 1e-8 # imaginary part of the energy
 es = np.linspace(-0.5,0.5,100,endpoint=False) # grid of energies
-ts = [ht.didv(e,nk=20) for e in es] # calculate transmission
+ts = [ht.didv(energy=e,nk=20) for e in es] # calculate transmission
 plt.plot(es,ts,marker="o")
 plt.ylim([0,4.1])
 plt.show()

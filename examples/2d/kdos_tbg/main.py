@@ -6,12 +6,10 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 
-from pyqula importgeometry
-from pyqula importhamiltonians
+from pyqula import geometry
+from pyqula import hamiltonians
 import numpy as np
-import klist
-import sculpt
-import specialgeometry
+from pyqula import specialgeometry
 g = specialgeometry.twisted_bilayer(20)
 #g = geometry.honeycomb_lattice()
 g.write()

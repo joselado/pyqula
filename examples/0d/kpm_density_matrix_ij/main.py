@@ -24,13 +24,13 @@ h.add_zeeman([0.,1.,0.])
 h.intra += np.diag(np.random.random(h.intra.shape[0]))
 i = 0
 j = 9
-t1 = time.clock()
+t1 = time.time()
 rand = lambda : np.random.randint(0,40)
 pairs = [(i,i+np.random.randint(1,8)) for i in range(10,20)]
 y = densitymatrix.restricted_dm(h,mode="KPM",pairs=pairs)
-t2 = time.clock()
+t2 = time.time()
 y2 = densitymatrix.restricted_dm(h,mode="full",pairs=pairs)
-t3 = time.clock()
+t3 = time.time()
 print("Time KPM mode = ",t2-t1)
 print("Time in full mode = ",t3-t2)
 #print(np.trapz(y,x=x,dx=x[1]-x[0]))
