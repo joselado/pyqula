@@ -1312,7 +1312,7 @@ def get_geometry(g):
     """Return a certain geometry"""
     if type(g)==Geometry: return g
     elif type(g)==str:
-    elif g in gdict: return gdict[g]() # return the geometry
+        if g in gdict: return gdict[g]() # return the geometry
     elif g is None: return get_geometry("square") # default geometry
     else: raise
 
