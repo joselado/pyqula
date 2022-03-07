@@ -19,7 +19,7 @@ hfun = heterostructures.build(h1,h2) # build the heterostructure
 hfun.delta = 0.01 # imaginary part
 es = np.linspace(-.2,.2,21) # grid of energies
 # for a 2d system, the conductance is obtained by summing over k parallel
-ts = [hfun.didv(e,error=0.1,nk=500) for e in es] # calculate the transmissions
+ts = [hfun.didv(energy=e,error=0.1,nk=500) for e in es] # calculate the transmissions
 plt.plot(es,ts,marker="o") # plot result
 plt.show()
 

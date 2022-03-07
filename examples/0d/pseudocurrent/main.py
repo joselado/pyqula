@@ -6,12 +6,10 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 
-import neighbor
-import multiterminal
 import numpy as np
 from pyqula import geometry
-import sculpt
-import pseudocontact
+from pyqula import sculpt
+from pyqula import pseudocontact
 g = geometry.honeycomb_lattice()
 imfile = "color_island.png"
 imfile = "contact.png"

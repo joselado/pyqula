@@ -2,7 +2,7 @@
 # a constact in certain atoms, and putting other contact anywhere
 from __future__ import print_function
 from scipy.sparse import csc_matrix
-import correlator
+from . import correlator
 import numpy as np
 
 def write_correlator(h,index=None,e=0.0,delta=0.01):

@@ -6,7 +6,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 
-from pyqula importgeometry
+from pyqula import geometry
 import topology
 import klist
 g = geometry.honeycomb_lattice()
