@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 import neighbor
 import multiterminal
 import numpy as np
-from pyqula importgeometry
+from pyqula import geometry
 import sculpt
 import pseudocontact
 g = geometry.honeycomb_lattice()

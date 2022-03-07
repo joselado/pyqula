@@ -8,7 +8,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 # zigzag ribbon
 from pyqula import geometry
-import ribbon
+from pyqula import ribbon
 g = geometry.honeycomb_lattice()
 g = ribbon.bulk2ribbon(g,n=5,boundary=[6,1])
 h = g.get_hamiltonian(has_spin=False)

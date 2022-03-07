@@ -29,11 +29,11 @@ i = 20
 j = 9
 x = range(0,30)
 pairs = [(i,i+k) for k in x] # create pairs
-t1 = time.clock()
+t1 = time.time()
 y1 = densitymatrix.restricted_dm(h,mode="KPM",pairs=pairs,npol=1000)
-t2 = time.clock()
+t2 = time.time()
 y2 = densitymatrix.restricted_dm(h,mode="full",pairs=pairs)
-t3 = time.clock()
+t3 = time.time()
 print(y1-y2)
 print("Time KPM = ",t2-t1)
 print("Time in inversion = ",t3-t2)
