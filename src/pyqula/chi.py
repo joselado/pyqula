@@ -142,10 +142,10 @@ def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     def getk(k):
         m1 = hk(k) # get Hamiltonian
         es1,ws1 = algebra.eigh(m1)
-        ws1 = ws1.T
+        ws1 = np.array(ws1.T,dtype=np.complex)
         m2 = hk(k+q) # get Hamiltonian
         es2,ws2 = algebra.eigh(m2)
-        ws2 = ws2.T
+        ws2 = np.array(ws2.T,dtype=np.complex)
         def getAB(Ai,Bj): # compute for a single operator
             out = 0*energies + 0j # initialize
             return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta,out)

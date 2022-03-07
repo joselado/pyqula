@@ -23,8 +23,8 @@ h.shift_fermi(x) # shift the Fermi eenrgy
 ops = operators.get_envelop(h,sites=range(h.intra.shape[0]),d=0.3)
 
 #fv = operators.get_valley(h,projector=True) # valley function
-fv = operators.get_valley(h,projector=True) # valley function
-ops = [fv()@o for o in ops] # local times valley
+fv = operators.get_valley(h) # valley function
+ops = [fv*o for o in ops] # local times valley
 print(type(ops[0]))
 print(ops[0].shape)
 

@@ -42,10 +42,10 @@ def add_peierls(h,mag_field=0.0,new=False):
       else: raise
     h.intra = add_phase(h.intra,g.r,g.r,phasefun,has_spin) 
     if h.dimensionality==2:
-      h.tx = add_phase(h.tx,g.r,g.replicas([1.,0.,0.]),phasefun,has_spin) 
-      h.ty = add_phase(h.ty,g.r,g.replicas([0.,1.,0.]),phasefun,has_spin) 
-      h.txy = add_phase(h.txy,g.r,g.replicas([1.,1.,0.]),phasefun,has_spin) 
-      h.txmy = add_phase(h.txmy,g.r,g.replicas([1.,-1.,0.]),phasefun,has_spin) 
+      h.tx = add_phase(h.tx,g.r,g.replicas(d=[1.,0.,0.]),phasefun,has_spin) 
+      h.ty = add_phase(h.ty,g.r,g.replicas(d=[0.,1.,0.]),phasefun,has_spin) 
+      h.txy = add_phase(h.txy,g.r,g.replicas(d=[1.,1.,0.]),phasefun,has_spin) 
+      h.txmy = add_phase(h.txmy,g.r,g.replicas(d=[1.,-1.,0.]),phasefun,has_spin) 
       return
   else: # old method
 
@@ -176,7 +176,7 @@ def add_bfield(h,b=0.0,phi=0.0,mode="inplane",gauge="Landau"):
     h.intra = add_phase(h.intra,r,r) # add the phase
     for i in range(len(h.hopping)):
         t = h.hopping[i]
-        h.hopping[i].m = add_phase(t.m,r,g.replicas(t.dir))
+        h.hopping[i].m = add_phase(t.m,r,g.replicas(d=t.dir))
     return h
 
 
