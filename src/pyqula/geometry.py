@@ -22,294 +22,221 @@ except:
 #  print("FORTRAN routines not present in geometry.py")
 
 class Geometry:
-  """ Class for a geometry in a system """
-  def __init__(self):
-    self.data = dict() # empty dictionary with different data
-    self.has_sublattice = False # has sublattice index
-    self.sublattice_number = 2 # two sublattices
-    self.has_fractional = False
-    self.dimensionality = 1 # dimension of the hamiltonian
-    self.x = [] # positions in x
-    self.y = [] # positions in y
-    self.z = [] # positions in z
-    self.r = [] # full positions 
-    self.celldis = 1.0 # distance to the nearest cell (for 1d)
-    self.a1 = np.array([100.0,0.0,0.])  # first vector to the nearest cell
-    self.a2 = np.array([0.0,100.0,0.])  # first vector to the nearest cell
-    self.a3 = np.array([0.0,0.0,100.])  # first vector to the nearest cell
-    self.b1 = np.array([1.0,0.0,0.])  # first vector to the nearest cell
-    self.b2 = np.array([0.0,1.0,0.])  # first vector to the nearest cell
-    self.b3 = np.array([0.0,0.0,1.])  # first vector to the nearest cell
-    self.shift_kspace = False # shift the klist when plotting
-    self.name = "None"
-    self.primal_geometry = None # store the primal geometry
-    self.lattice_name = "" # lattice name
-    self.atoms_names = [] # no name for the atoms
-    self.atoms_have_names = False # atoms do not have names
-    self.ncells = 2 # number of neighboring cells returned
-  def neighbor_distances(self,**kwargs):
-      return neighbor_distances(self,**kwargs)
-  def normalize_nn_distance(self):
-      """Set the NN istance equal to 1"""
-      if self.dimensionality>0: raise
-      d = self.neighbor_distances(n=1)[0]
-      self.r = self.r/d
-      self.r2xyz()
-  def get_index(self,r,**kwargs):
-    return get_index(self,r,**kwargs)
-  def __add__(self,g1):
-      from .geometrytk.galgebra import sum_geometries
-      return sum_geometries(self,g1)
-  def __sub__(self,a):
-      return self + (-1)*a
-  def __radd__(self,g1):
-      return sum_geometries(self,g1)
-  def plot_geometry(self):
-    """Plots the system"""
-    return plot_geometry(self)
-  def get_kmesh(self,**kwargs):
-      """Return the k-mesh"""
-      return klist.kmesh(self.dimensionality,**kwargs)
-  def get_default_kpath(self,**kwargs):
-      from . import klist
-      return klist.default(self,**kwargs)
-  def set_finite(self,periodic=False):
-    """ Transfrom the geometry into a finite system"""
-    if periodic:
-      f = self.periodic_vector() # get the function
-      self.get_distance = f # store that function
-    self.dimensionality = 0 # set as finite
-  def get_orthogonal(self):
-      return supercelltk.target_angle_volume(self,angle=0.5)
-  def closest_index(self,r):
-      return sculpt.get_closest(self,n=1,r0=r)[0]
-  def get_closest_position(self,r,n=1):
-      r = np.array(r)
-      if n==0:
-        ii = self.closest_index(r)
-        return self.r[ii] # return this position
-      else:
-        iis = sculpt.get_closest(self,n=n,r0=r)
-        return [self.r[ii] for ii in iis] # return positions
-  def get_supercell(self,nsuper,**kwargs):
-      return get_supercell(self,nsuper,**kwargs)
-  supercell = get_supercell # backwards compatibility
-  def xyz2r(self):
-    """Updates r atributte according to xyz"""
-    self.r = np.array([self.x,self.y,self.z]).transpose()
-  def r2xyz(self):
-    """Updates x,y,z atributtes according to r"""
-    r = np.array(self.r).transpose()
-    self.x = r[0]
-    self.y = r[1]
-    self.z = r[2]
-  @get_docstring(get_hamiltonian) # inherint docstring
-  def get_hamiltonian(self,**kwargs):
-      return get_hamiltonian(self,**kwargs)
-  def write(self,**kwargs):
-      """ Writes the geometry in file"""
-      write_positions(self,**kwargs)
-      write_xyz(self)
-      write_lattice(self)
-      write_sublattice(self)
-  def get_kpath(self,*args,**kwargs):
-      return klist.get_kpath(self,*args,**kwargs)
-  def write_positions(self,**kwargs):
-      """Write the positions in a file"""
-      write_positions(self,**kwargs)
-  def copy(self):
-      """Copy the geometry"""
-      return deepcopy(self)
-  def set_origin(self,r=None):
-      if r is None: r = self.r[self.get_central()[0]]
-      self.x = self.x - r[0]
-      self.y = self.y - r[1]
-      self.z = self.z - r[2]
-      self.xyz2r() # update r
-  def center(self):
-      """ Centers the geometry in (0,0,0)"""
-      self.x = self.x - sum(self.x)/len(self.x)
-      self.y = self.y - sum(self.y)/len(self.y)
-      self.z = self.z - sum(self.z)/len(self.z)
-      self.xyz2r() # update r
-  def get_lattice_name(self):
-      if self.dimensionality==2:
-          if np.abs(self.a1.dot(self.a2))<0.0001:        
-            self.lattice_name = "square"
-          else:
-            self.lattice_name = "triangular"
-  def get_k2K(self):
-      from .kpointstk.mapping import get_k2K
-      return get_k2K(self)
-  def reciprocal2natural(self,v):
+    """ Class for a geometry in a system """
+    def __init__(self):
+        self.data = dict() # empty dictionary with different data
+        self.has_sublattice = False # has sublattice index
+        self.sublattice_number = 2 # two sublattices
+        self.has_fractional = False
+        self.dimensionality = 1 # dimension of the hamiltonian
+        self.x = [] # positions in x
+        self.y = [] # positions in y
+        self.z = [] # positions in z
+        self.r = [] # full positions 
+        self.celldis = 1.0 # distance to the nearest cell (for 1d)
+        self.a1 = np.array([100.0,0.0,0.])  # first vector to the nearest cell
+        self.a2 = np.array([0.0,100.0,0.])  # first vector to the nearest cell
+        self.a3 = np.array([0.0,0.0,100.])  # first vector to the nearest cell
+        self.b1 = np.array([1.0,0.0,0.])  # first vector to the nearest cell
+        self.b2 = np.array([0.0,1.0,0.])  # first vector to the nearest cell
+        self.b3 = np.array([0.0,0.0,1.])  # first vector to the nearest cell
+        self.shift_kspace = False # shift the klist when plotting
+        self.name = "None"
+        self.primal_geometry = None # store the primal geometry
+        self.lattice_name = "" # lattice name
+        self.atoms_names = [] # no name for the atoms
+        self.atoms_have_names = False # atoms do not have names
+        self.ncells = 2 # number of neighboring cells returned
+    def neighbor_distances(self,**kwargs):
+        return neighbor_distances(self,**kwargs)
+    def normalize_nn_distance(self):
+        """Set the NN istance equal to 1"""
+        if self.dimensionality>0: raise
+        d = self.neighbor_distances(n=1)[0]
+        self.r = self.r/d
+        self.r2xyz()
+    def get_index(self,r,**kwargs):
+      return get_index(self,r,**kwargs)
+    def __add__(self,g1):
+        from .geometrytk.galgebra import sum_geometries
+        return sum_geometries(self,g1)
+    def __sub__(self,a):
+        return self + (-1)*a
+    def __radd__(self,g1):
+        return sum_geometries(self,g1)
+    def get_kmesh(self,**kwargs):
+        """Return the k-mesh"""
+        return klist.kmesh(self.dimensionality,**kwargs)
+    def get_default_kpath(self,**kwargs):
+        from . import klist
+        return klist.default(self,**kwargs)
+    def set_finite(self,periodic=False):
+      """ Transfrom the geometry into a finite system"""
+      if periodic:
+        f = self.periodic_vector() # get the function
+        self.get_distance = f # store that function
+      self.dimensionality = 0 # set as finite
+    def get_orthogonal(self):
+        return supercelltk.target_angle_volume(self,angle=0.5)
+    def closest_index(self,r):
+        return sculpt.get_closest(self,n=1,r0=r)[0]
+    def get_closest_position(self,r,n=1):
+        r = np.array(r)
+        if n==0:
+          ii = self.closest_index(r)
+          return self.r[ii] # return this position
+        else:
+          iis = sculpt.get_closest(self,n=n,r0=r)
+          return [self.r[ii] for ii in iis] # return positions
+    def get_supercell(self,nsuper,**kwargs):
+        return get_supercell(self,nsuper,**kwargs)
+    supercell = get_supercell # backwards compatibility
+    def xyz2r(self):
+      """Updates r atributte according to xyz"""
+      self.r = np.array([self.x,self.y,self.z]).transpose()
+    def r2xyz(self):
+      """Updates x,y,z atributtes according to r"""
+      r = np.array(self.r).transpose()
+      self.x = r[0]
+      self.y = r[1]
+      self.z = r[2]
+    @get_docstring(get_hamiltonian) # inherint docstring
+    def get_hamiltonian(self,**kwargs):
+        return get_hamiltonian(self,**kwargs)
+    def write(self,**kwargs):
+        """ Writes the geometry in file"""
+        write_positions(self,**kwargs)
+        write_xyz(self)
+        write_lattice(self)
+        write_sublattice(self)
+    def get_kpath(self,*args,**kwargs):
+        return klist.get_kpath(self,*args,**kwargs)
+    def write_positions(self,**kwargs):
+        """Write the positions in a file"""
+        write_positions(self,**kwargs)
+    def copy(self):
+        """Copy the geometry"""
+        return deepcopy(self)
+    def set_origin(self,r=None):
+        if r is None: r = self.r[self.get_central()[0]]
+        self.x = self.x - r[0]
+        self.y = self.y - r[1]
+        self.z = self.z - r[2]
+        self.xyz2r() # update r
+    def center(self):
+        """ Centers the geometry in (0,0,0)"""
+        self.x = self.x - sum(self.x)/len(self.x)
+        self.y = self.y - sum(self.y)/len(self.y)
+        self.z = self.z - sum(self.z)/len(self.z)
+        self.xyz2r() # update r
+    def get_lattice_name(self):
+        if self.dimensionality==2:
+            if np.abs(self.a1.dot(self.a2))<0.0001:        
+              self.lattice_name = "square"
+            else:
+              self.lattice_name = "triangular"
+    def get_k2K(self):
+        from .kpointstk.mapping import get_k2K
+        return get_k2K(self)
+    def reciprocal2natural(self,v):
+        """
+        Return a natural vector in real reciprocal coordinates
+        """
+        return self.get_k2K_generator()(v)
+    def get_fractional(self,center=False):
+        """Fractional coordinates"""
+        self.update_reciprocal() # update reciprocal lattice vectors
+        get_fractional(self,center=center) # get fractional coordinates
+    def rotate(self,angle):
+      """Rotate the geometry"""
+      return sculpt.rotate(self,angle*np.pi/180)
+    def clean(self,iterative=False):
+      return sculpt.remove_unibonded(self,iterative=iterative)
+    def get_diameter(self):
+      """Return the maximum distance between two atoms"""
+      return get_diameter(self)  
+    def periodic_vector(self):
+      return periodic_vector(self)
+    def get_sublattice(self):
+      """Initialize the sublattice"""
+      if self.has_sublattice: self.sublattice = get_sublattice(self.r)
+    def shift(self,r0):
+      """Shift all the positions by r0"""
+      self.x[:] -= r0[0]
+      self.y[:] -= r0[1]
+      self.z[:] -= r0[2]
+      self.xyz2r() # update
+      if self.dimensionality>0:
+        self.get_fractional(center=True)
+        self.fractional2real()
+    def write_function(self,fun,**kwargs):
+        from .geometrytk.write import write_function
+        return write_function(self,fun,**kwargs)
+    def neighbor_directions(self,n=None):
+      """Return directions linking to neighbors"""
+      if n is None: n = self.ncells
+      return neighbor_directions(self,n)
+    def get_ncells(self):
+        if self.dimensionality==0: return 0
+        else:
+            n = int(10/np.sqrt(self.a1.dot(self.a1)))
+            return max([1,n])
+    def write_profile(self,d,**kwargs):
+        """Write a profile in a file"""
+        write_profile(self,d,**kwargs)
+    def replicas(self,**kwargs):
+        from .geometrytk.replicas import replicas
+        return replicas(self,**kwargs)
+    def multireplicas(self,n):
+        from .geometrytk.replicas import multireplicas
+        return multireplicas(self,n)
+    def bloch_phase(self,d,k):
+        from .geometrytk.bloch import bloch_phase
+        return bloch_phase(self,d,k)
+    def remove(self,i=0):
+        """
+        Remove one site
+        """
+        if type(i)==list: pass
+        else: i = [i]
+        return sculpt.remove(self,i)
+    def center_in_atom(self,n0=None):
+        """
+        Center the geometry in an atom
+        """
+        if n0 is None: n0 = sculpt.get_central(self)[0] # get the index
+        sculpt.shift(self,r=self.r[n0]) # shift the geometry
+    def get_central(self,n=1):
+        """
+        Return a list of central atoms
+        """
+        return sculpt.get_central(self,n=n) # get the index
+    def update_reciprocal(self):
+        """
+        Update reciprocal lattice vectors
+        """
+        self.b1,self.b2,self.b3 = get_reciprocal(self.a1,self.a2,self.a3)
+    def get_k2K_generator(self,**kwargs):
+        return get_k2K_generator(self,**kwargs)
+    def k2K(self,k): return get_k2K_generator(self,toreal=False)(k)
+    def K2k(self,k): return get_k2K_generator(self,toreal=True)(k)
+    def fractional2real(self):
       """
-      Return a natural vector in real reciprocal coordinates
+      Convert fractional coordinates to real coordinates
       """
-      return self.get_k2K_generator()(v)
-  def get_fractional(self,center=False):
-      """Fractional coordinates"""
-      self.update_reciprocal() # update reciprocal lattice vectors
-      get_fractional(self,center=center) # get fractional coordinates
-  def rotate(self,angle):
-    """Rotate the geometry"""
-    return sculpt.rotate(self,angle*np.pi/180)
-  def clean(self,iterative=False):
-    return sculpt.remove_unibonded(self,iterative=iterative)
-  def get_diameter(self):
-    """Return the maximum distance between two atoms"""
-    return get_diameter(self)  
-  def periodic_vector(self):
-    return periodic_vector(self)
-  def get_sublattice(self):
-    """Initialize the sublattice"""
-    if self.has_sublattice: self.sublattice = get_sublattice(self.r)
-  def shift(self,r0):
-    """Shift all the positions by r0"""
-    self.x[:] -= r0[0]
-    self.y[:] -= r0[1]
-    self.z[:] -= r0[2]
-    self.xyz2r() # update
-    if self.dimensionality>0:
-      self.get_fractional(center=True)
-      self.fractional2real()
-  def write_function(self,fun,name="FUNCTION.OUT"):
-    """Write a certain function"""
-    f = open(name,"w")
-    ir = 0
-    for r in self.r: # loop over positions
-      o = fun(r) # evaluate
-      f.write(str(ir)+"  ")
-      for io in o:  f.write(str(io)+"  ")
-      f.write("\n")
-      ir += 1
-    f.close() # close file
-  def neighbor_directions(self,n=None):
-    """Return directions linking to neighbors"""
-    if n is None: n = self.ncells
-    return neighbor_directions(self,n)
-  def get_ncells(self):
-      if self.dimensionality==0: return 0
-      else:
-          n = int(10/np.sqrt(self.a1.dot(self.a1)))
-          return max([1,n])
-  def write_profile(self,d,**kwargs):
-      """Write a profile in a file"""
-      write_profile(self,d,**kwargs)
-  def replicas(self,**kwargs):
-      from .geometrytk.replicas import replicas
-      return replicas(self,**kwargs)
-  def multireplicas(self,n):
-      from .geometrytk.replicas import multireplicas
-      return multireplicas(self,n)
-  def bloch_phase(self,d,k):
-    """
-    Return the Bloch phase for this d vector
-    """
-    if self.dimensionality == 0: return 1.0
-    elif self.dimensionality == 1: 
-      try: kp = k[0] # extract the first component
-      except: kp = k # ups, assume that it is a float
-      dt = np.array(d)[0]
-      kt = np.array([kp])[0]
-      return np.exp(1j*dt*kt*np.pi*2.) 
-    elif self.dimensionality == 2: 
-      dt = np.array(d)[0:2]
-      kt = np.array(k)[0:2]
-      return np.exp(1j*dt.dot(kt)*np.pi*2.) 
-    elif self.dimensionality == 3: 
-      dt = np.array(d)[0:3]
-      kt = np.array(k)[0:3]
-      return np.exp(1j*dt.dot(kt)*np.pi*2.) 
-    else: raise
-  def remove(self,i=0):
+      fractional2real(self)
+    def real2fractional(self):
+      self.get_fractional() # same function
+    def get_connections(self):
       """
-      Remove one site
+      Return the connections of each site
       """
-      if type(i)==list: pass
-      else: i = [i]
-      return sculpt.remove(self,i)
-  def center_in_atom(self,n0=None):
-      """
-      Center the geometry in an atom
-      """
-      if n0 is None: n0 = sculpt.get_central(self)[0] # get the index
-      sculpt.shift(self,r=self.r[n0]) # shift the geometry
-  def get_central(self,n=1):
-      """
-      Return a list of central atoms
-      """
-      return sculpt.get_central(self,n=n) # get the index
-  def update_reciprocal(self):
-      """
-      Update reciprocal lattice vectors
-      """
-      self.b1,self.b2,self.b3 = get_reciprocal(self.a1,self.a2,self.a3)
-  def get_k2K_generator(self,**kwargs):
-      return get_k2K_generator(self,**kwargs)
-  def k2K(self,k): return get_k2K_generator(self,toreal=False)(k)
-  def K2k(self,k): return get_k2K_generator(self,toreal=True)(k)
-  def fractional2real(self):
-    """
-    Convert fractional coordinates to real coordinates
-    """
-    fractional2real(self)
-  def real2fractional(self):
-    self.get_fractional() # same function
-  def get_connections(self):
-    """
-    Return the connections of each site
-    """
-    from . import neighbor
-#    if self.dimensionality==0:
-    if True:
-      self.connections = neighbor.connections(self.r,self.r)
-      return self.connections # return list
-    else: raise
-
-
-
-
-
-def squid_square(width=4,inner_radius=6,arm_length=8,arm_width=2,fill=False):
-  nt = width + inner_radius # half side of the big square
-  g = Geometry() # create the geometry of the system
-  xc = [] # empty list
-  yc = [] # empty list
-  shift_y = float(arm_width-1)/2.0
-  for i in range(-nt,nt+1): 
-    for j in range(-nt,nt+arm_width):
-      # if in the ring
-      yy = float(j)-shift_y  # temporal y
-      if abs(i)>inner_radius or abs(yy)>(inner_radius+shift_y) or fill: 
-        xc.append(float(i))  # add x coordinate
-        yc.append(yy)  # add y coordinate
-  # now add right and left parts
-  xr = [] # empty list
-  yr = [] # empty list
-  xl = [] # empty list
-  yl = [] # empty list
-  shift_y = float(arm_width-1)/2.0
-  min_x = min(xc) - 1.0
-  max_x = max(xc) + 1.0
-  for i in range(arm_length):
-    for j in range(arm_width): # double width of the arms
-      xr.append(float(i)+max_x)
-      xl.append(-float(i)+min_x)
-      yr.append(float(j)-shift_y)
-      yl.append(float(j)-shift_y)
-  x = np.array(xr+xc+xl)  # all the x positions
-  y = np.array(yr+yc+yl)  # all the y positions
-  g.x = x  # add positions in x
-  g.y = y  # add positions in y
-  g.celldis = max(x) - min(x) +1.0 # distance to neighbor +1.0
-  g.dimensionality = 1 # 0 dimensional system
-  return g
-
-
-
-
-
-
+      from . import neighbor
+  #    if self.dimensionality==0:
+      if True:
+        self.connections = neighbor.connections(self.r,self.r)
+        return self.connections # return list
+      else: raise
 
 
 
@@ -389,13 +316,13 @@ def chain(n=1):
 
 
 def bichain(n=1):
-  """ Create a chain """
-  g = square_ribbon(1) 
-  g = g.get_supercell(2)
-  g.has_sublattice = True
-  g.sublattice = [(-1)**i for i in range(len(g.x))]
-  g = g.get_supercell(n)
-  return g
+    """ Create a chain """
+    g = square_ribbon(1) 
+    g = g.get_supercell(2)
+    g.has_sublattice = True
+    g.sublattice = [(-1)**i for i in range(len(g.x))]
+    g = g.get_supercell(n)
+    return g
 
 
 def dimer():
@@ -408,34 +335,34 @@ def dimer():
 
 
 def square_tetramer_ribbon(ntetramers):
-  """ Creates the hamiltonian of a square tetramer ribbon lattice"""
-  from numpy import array
-  natoms = ntetramers*4
-  x=array([0.0 for i in range(natoms)]) # create x coordinates
-  y=array([0.0 for i in range(natoms)])  # create y coordinates
-  for i in range(ntetramers):
-    x[4*i] = 0.0
-    x[4*i+1] = 1.0
-    x[4*i+2] = 1.0
-    x[4*i+3] = 0.0
-    y[4*i] = 2.*i
-    y[4*i+1] = 2.*i
-    y[4*i+2] = 2.*i +1.0
-    y[4*i+3] = 2.*i +1.0
-  y=y-sum(y)/float(natoms) # shift to the center
-  x=x-sum(x)/float(natoms) # shift to the center
-  g = Geometry() # create geometry class
-  g.x = x  # add to the x atribute
-  g.y = y  # add to the y atribute
-  g.z = y*0.  # add to the z atribute
-  g.celldis = 2.0 # add distance to the nearest cell
-  g.a1 = np.array([2.0,0.,0.]) # add distance to the nearest cell
-  g.shift_kspace = True # add distance to the nearest cell
-  g.xyz2r() # create r coordinates
-  g.has_sublattice = True # has sublattice index
-  g.sublattice = [(-1.)**i for i in range(len(x))] # subattice number
-  g.dimensionality = 1
-  return g
+    """ Creates the hamiltonian of a square tetramer ribbon lattice"""
+    from numpy import array
+    natoms = ntetramers*4
+    x=array([0.0 for i in range(natoms)]) # create x coordinates
+    y=array([0.0 for i in range(natoms)])  # create y coordinates
+    for i in range(ntetramers):
+      x[4*i] = 0.0
+      x[4*i+1] = 1.0
+      x[4*i+2] = 1.0
+      x[4*i+3] = 0.0
+      y[4*i] = 2.*i
+      y[4*i+1] = 2.*i
+      y[4*i+2] = 2.*i +1.0
+      y[4*i+3] = 2.*i +1.0
+    y=y-sum(y)/float(natoms) # shift to the center
+    x=x-sum(x)/float(natoms) # shift to the center
+    g = Geometry() # create geometry class
+    g.x = x  # add to the x atribute
+    g.y = y  # add to the y atribute
+    g.z = y*0.  # add to the z atribute
+    g.celldis = 2.0 # add distance to the nearest cell
+    g.a1 = np.array([2.0,0.,0.]) # add distance to the nearest cell
+    g.shift_kspace = True # add distance to the nearest cell
+    g.xyz2r() # create r coordinates
+    g.has_sublattice = True # has sublattice index
+    g.sublattice = [(-1.)**i for i in range(len(x))] # subattice number
+    g.dimensionality = 1
+    return g
 
 
 
@@ -1007,10 +934,10 @@ def apilate(g,drs=[np.array([0.,0.,0.])]):
 
 
 
-from .geomeetrytk.write import write_xyz
-from .geomeetrytk.write import write_lattice
-from .geomeetrytk.write import write_sublattice
-from .geomeetrytk.write import write_positions
+from .geometrytk.write import write_xyz
+from .geometrytk.write import write_lattice
+from .geometrytk.write import write_sublattice
+from .geometrytk.write import write_positions
 write_geometry = write_positions
 
 
