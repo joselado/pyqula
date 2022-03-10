@@ -494,12 +494,8 @@ class Hamiltonian():
         """
         n = len(self.geometry.r) # number of sites
         ops = [operators.index(self,n=[i]) for i in range(n)]
-        if name=="sx": op = operators.get_sx(self)
-        elif name=="sy": op = operators.get_sy(self)
-        elif name=="sz": op = operators.get_sz(self)
-        elif name=="density": op = operators.index(self,n=range(n))
-        else: raise
-        ops = [o@op for o in ops] # define operators
+        op = self.get_operator(name) # get an operator
+        ops = [o*op for o in ops] # define operators
         return spectrum.ev(self,operator=ops,**kwargs).real
     def get_1dh(self,k=0.0):
         """Return a 1d Hamiltonian"""
@@ -545,22 +541,9 @@ class Hamiltonian():
     @get_docstring(dvector.dvector_non_unitarity_map)
     def write_non_unitarity(self,**kwargs):
         dvector.dvector_non_unitarity_map(self,**kwargs)
-    def write_magnetization(self,nrep=5):
-        """Extract the magnetization and write it in a file"""
-        mx = self.extract("mx")
-        my = self.extract("my")
-        mz = self.extract("mz")
-        g = self.geometry
-        g.write_profile(mx,name="MX.OUT",normal_order=True,nrep=nrep)
-        g.write_profile(my,name="MY.OUT",normal_order=True,nrep=nrep)
-        g.write_profile(mz,name="MZ.OUT",normal_order=True,nrep=nrep)
-        # this is just a workaround
-        m = np.genfromtxt("MX.OUT").transpose()
-        (x,y,z,mx) = m[0],m[1],m[2],m[3]
-        my = np.genfromtxt("MY.OUT").transpose()[3]
-        mz = np.genfromtxt("MZ.OUT").transpose()[3]
-        np.savetxt("MAGNETISM.OUT",np.array([x,y,z,mx,my,mz]).T)
-        return np.array([mx,my,mz])
+    def write_magnetization(self,**kwargs):
+        from .htk.write import write_magnetization
+        write_magnetization(self,**kwargs)
     def write_onsite(self,nrep=5,normal_order=False):
         """Extract onsite energy"""
         d = self.extract("density")
@@ -630,19 +613,6 @@ def vec_chi(r1,r2):
     if z<-0.01: # anticlockwise
       return -1.0
   return 0.0
-
-
-
-
-# routine to check if two atoms arein adistance d
-def is_neigh(r1,r2,d,tol):
-  r=r1-r2
-  x=r[0]
-  y=r[1]
-  dt=abs(d*d-x*x-y*y)
-  if dt<tol:
-    return True
-  return False
 
 
 

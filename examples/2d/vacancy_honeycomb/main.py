@@ -11,7 +11,9 @@ from pyqula import topology
 from pyqula import dos
 from pyqula import operators
 g = geometry.honeycomb_lattice()
-g = g.get_supercell(4)
+g = g.get_supercell(6)
+g = g.get_supercell(6)
+exit()
 g = g.remove(0)
 h = g.get_hamiltonian(has_spin=True)
 h.get_bands()

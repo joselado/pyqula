@@ -15,7 +15,7 @@ from pyqula import specialgeometry
 from pyqula import parallel
 parallel.cores = 7
 
-g = specialgeometry.multilayer_graphene([0,1])
+g = specialgeometry.multilayer_graphene(l=[0,1])
 g = specialgeometry.parse_twisted_multimultilayer([["AB","BA"],[0,1]],n=3)
 g.write()
 exit()

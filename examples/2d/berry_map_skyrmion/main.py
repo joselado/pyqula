@@ -6,10 +6,9 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 
-from pyqula importgeometry
-from pyqula importhamiltonians
+from pyqula import geometry
+from pyqula import hamiltonians
 import numpy as np
-import klist
 g = geometry.square_lattice()
 n = 6
 g = g.supercell(n)
@@ -28,7 +27,7 @@ h.write_magnetization()
 #h.get_bands()
 h.shift_fermi(4.0)
 #exit()
-import topology
+from pyqula import topology
 topology.berry_green_map(h,k=[0.0,0.0,0.0],nrep=1,integral=True)
 #topology.berry_green_map(h,k=[0.5,0.0,0.0],nrep=3,integral=False)
 #topology.berry_green_map(h,k=[0.0,-0.0,0.0],nrep=3,integral=False)
