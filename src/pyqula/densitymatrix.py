@@ -3,16 +3,16 @@ import numpy as np
 from numba import jit
 from . import parallel
 
-try:
-  from . import density_matrixf90
-  use_fortran = True
-except:
-  use_fortran = False
-#  print("Fortran routines not working in densitymatrix.py")
+#try:
+#  from . import density_matrixf90
+#  use_fortran = True
+#except:
+#  use_fortran = False
+##  print("Fortran routines not working in densitymatrix.py")
  
 use_fortran = False
 
-def full_dm(h,use_fortran=True,nk=10,fermi=0.0,delta=1e-2,ds=None):
+def full_dm(h,use_fortran=use_fortran,nk=10,fermi=0.0,delta=1e-6,ds=None):
   if h.dimensionality == 0: fac = 1.
   elif h.dimensionality == 1: fac = 1./nk
   elif h.dimensionality == 2: fac = 1./nk**2
@@ -25,7 +25,8 @@ def full_dm(h,use_fortran=True,nk=10,fermi=0.0,delta=1e-2,ds=None):
       dm = density_matrixf90.density_matrix(np.array(es),np.array(vs),delta)
       return dm*fac
     else:
-      return np.matrix(full_dm_python(h.intra.shape[0],es,np.array(vs)))*fac # call hte function
+      return np.matrix(full_dm_python(h.intra.shape[0],es,np.array(vs),
+                           delta=delta))*fac # call the function
   else: # directions required
     es,vs,ks = h.get_eigenvectors(nk=nk,kpoints=True) # get eigenvectors
     es = es - fermi # shift by the Fermi energy
@@ -40,10 +41,10 @@ def full_dm(h,use_fortran=True,nk=10,fermi=0.0,delta=1e-2,ds=None):
 
 
 
-def full_dm_python(n,es,vs):
+def full_dm_python(n,es,vs,delta=1e-6):
   """Calculate the density matrix"""
   dm = np.zeros((n,n),dtype=np.complex)
-  return full_dm_python_jit(n,es,vs,dm)
+  return full_dm_python_jit(n,es,vs,dm,delta)
 
 
 def full_dm_python_d(n,es,vs,ks,d):
@@ -54,13 +55,13 @@ def full_dm_python_d(n,es,vs,ks,d):
 
 
 @jit(nopython=True)
-def full_dm_python_jit(n,es,vs,dm):
+def full_dm_python_jit(n,es,vs,dm,delta):
   """Auxiliary function to compute the density matrix"""
   for ie in range(len(es)): # loop
-    if es[ie]<0.: # if below Fermi energy
+      occ = (1.0 - np.tanh(es[ie]/delta))/2. # occupation
       for i in range(n):
         for j in range(n): 
-          dm[i,j] = dm[i,j] + vs[ie][i].conjugate()*vs[ie][j] # add contribution
+          dm[i,j] = dm[i,j] + occ*vs[ie][i].conjugate()*vs[ie][j] # add contribution
   return dm
 
 

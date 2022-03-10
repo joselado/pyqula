@@ -20,6 +20,7 @@ try:
 except: 
   use_fortran = False
 #  print("FORTRAN routines not present in geometry.py")
+use_fortran = False
 
 class Geometry:
     """ Class for a geometry in a system """
@@ -797,76 +798,8 @@ def kagome_ribbon(n=5):
 
 
 
-
-
-
-
-
-
-def supercell2d(g,n1=1,n2=1,use_fortran=use_fortran):
-  """ Creates a supercell for a 2d system"""
-  go = g.copy() # copy geometry
-  use_fortran = False
-  if use_fortran:
-    from . import supercellf90
-    go.r = supercellf90.supercell2d(g.r,g.a1,g.a2,n1,n2)
-#    print("Using FORTRAN")
-  else:
-    nc = len(g.r) # number of atoms in a cell
-    n = nc*n1*n2 # total number of positions
-    a1 = g.a1 # first vector
-    a2 = g.a2 # second vector
-    rs = []
-    for i in range(n1): 
-      for j in range(n2): 
-        for k in range(nc): 
-          ri = i*a1 + j*a2 + g.r[k] 
-          rs.append(ri) # store
-    go.r = np.array(rs) # store
-  go.r2xyz()
-  go.a1 = go.a1*n1
-  go.a2 = go.a2*n2
-  # shift to zero
-  go.center() 
-  if g.has_sublattice: # supercell sublattice
-    go.sublattice = np.concatenate([g.sublattice for i in range(n1*n2)])
-  if g.atoms_have_names: # supercell sublattice
-    go.atoms_names = g.atoms_names*n1*n2
-  go.get_fractional() # get fractional coordinates
-  return go
-
-
-
-def supercell3d(g,n1=1,n2=1,n3=1):
-  """ Creates a supercell for a 3d system"""
-  nc = len(g.x) # number of atoms in a cell
-  n = nc*n1*n2*n3 # total number of positions
-  ro = np.array([[0.,0.,0.] for i in range(n)])
-  ik = 0 # index of the atom
-  a1 = g.a1 # first vector
-  a2 = g.a2 # second vector
-  a3 = g.a3 # third vector
-  for i in range(n1): 
-    for j in range(n2): 
-      for l in range(n3): 
-        for k in range(nc): 
-          ro[ik] = a1*i + a2*j + a3*l + g.r[k] # store position
-          ik += 1 # increase counter
-  go = deepcopy(g) # copy geometry
-  go.r = ro # store positions
-  go.r2xyz() # update xyz
-  go.a1 = a1*n1
-  go.a2 = a2*n2
-  go.a3 = a3*n3
-  # shift to zero
-  go.center() 
-  if g.has_sublattice: # supercell sublattice
-    go.sublattice = np.concatenate([g.sublattice for i in range(n1*n2*n3)])
-  if g.atoms_have_names: # supercell sublattice
-    go.atoms_names = g.atoms_names*n1*n2*n3
-  go.get_fractional() # get fractional coordinates
-  return go
-
+from .supercell import supercell2d
+from .supercell import supercell3d
 
 
 

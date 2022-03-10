@@ -17,7 +17,7 @@ g.write()
 from specialhopping import twisted,twisted_matrix
 h = g.get_hamiltonian(is_sparse=True,has_spin=False,is_multicell=False,
      mgenerator=twisted_matrix(ti=0.4,lambi=7.0))
-from pyqula importkdos
+from pyqula import kdos
 kdos.kdos_bands(h,ntries=1)
 #h.get_bands()
 
