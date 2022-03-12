@@ -133,6 +133,7 @@ from pyqula import specialhamiltonian # special Hamiltonians library
 h = specialhamiltonian.twisted_bilayer_graphene() # TBG Hamiltonian
 (k,e) = h.get_bands() # compute band structure
 ```
+![Alt text](images/tbg.png?raw=true "Band structure of twisted bilayer graphene")
 
 ## Chern number of a Chern insulator
 ```python
@@ -163,15 +164,16 @@ h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded bands
 
 
 
-## Band structure of a nodal line semimetal
+## Band structure of a nodal line semimetal slab
 ```python
 from pyqula import geometry
 from pyqula import films
-g = geometry.diamond_lattice_minimal()
+g = geometry.diamond_lattice()
 g = films.geometry_film(g,nz=20)
 h = g.get_hamiltonian()
 (k,e) = h.get_bands()
 ```
+![Alt text](images/NLSM.png?raw=true "Band structure of a nodal line semimetal slab")
 
 
 ## Local density of states with atomic orbitals of a honeycomb nanoisland
@@ -218,6 +220,24 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 h.get_multi_fermi_surface(energies=np.linspace(-4,4,100),delta=1e-1)
 ```
 ![Alt text](images/fermi_surface.png?raw=true "Fermi surface of a triangular lattice supercell")
+
+
+
+## Unfolded Fermi surface of a supercell with a defect
+```python
+from pyqula import geometry
+import numpy as np
+g0 = geometry.triangular_lattice()
+n = 3 # size of the supercell
+g = g0.get_supercell(n,store_primal=True) # create a supercell
+h = g.get_hamiltonian() # get the Hamiltonian
+fons = lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100 # onsite in the impurity
+h.add_onsite(fons) # add onsite energy
+kpath = np.array(g.get_kpath(nk=200))*n # enlarged k-path
+h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),
+        delta=0.1,nsuper=n,operator="unfold")
+```
+![Alt text](images/unfolded_FS.png?raw=true "Unfolded Fermi surface of a supercell with a defect")
 
 
 
