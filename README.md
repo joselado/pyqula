@@ -164,26 +164,30 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(0.05) # Add Haldane coupling
 kdos.surface(h) # surface spectral function
 ```
+![Alt text](images/kdos.png?raw=true "Surface spectral function of a Chern insulator")
 
 ## Antiferromagnet-superconductor interface
 ```python
 from pyqula import geometry
-g = geometry.honeycomb_zigzag_ribbon(10) # create geometry of a zigzag ribbon
+g = geometry.honeycomb_zigzag_ribbon(20) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian(has_spin=True) # create hamiltonian of the system
 h.add_antiferromagnetism(lambda r: (r[1]>0)*0.5) # add antiferromagnetism
+h.add_onsite(lambda r: (r[1]>0)*0.3) # add chemical potential
 h.add_swave(lambda r: (r[1]<0)*0.3) # add superconductivity
-(k,e) = h.get_bands() # calculate band structure
+(k,e,sz) = h.get_bands(operator="sz") # calculate band structure
 ```
+![Alt text](images/AF_SC.png?raw=true "Antiferromagnet-superconductor interface")
 
-## Fermi surface of a Kagome lattice
+## Fermi surface of a triangular lattice supercell
 ```python
 from pyqula import geometry
-from pyqula import spectrum
 import numpy as np
-g = geometry.kagome_lattice() # create geometry of the system
+g = geometry.triangular_lattice() # create geometry of the system
+g = g.get_supercell(2) # create a supercell
 h = g.get_hamiltonian() # create hamiltonian of the system
-spectrum.multi_fermi_surface(h,nk=60,energies=np.linspace(-4,4,100),
-        delta=0.1,nsuper=1)
+h.get_multi_fermi_surface(energies=np.linspace(-4,4,100),delta=1e-1)
 ```
+![Alt text](images/fermi_surface.png?raw=true "Fermi surface of a triangular lattice supercell")
+
 
 
