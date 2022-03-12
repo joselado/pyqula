@@ -73,9 +73,10 @@ def fermi_surface_generator(h,
   return energies,rs,kdos
 
 
-def multi_fermi_surface(h,nk=50,delta=1e-2,
+def multi_fermi_surface(h,nk=None,delta=1e-2,
         output_folder="MULTIFERMISURFACE",**kwargs):
     """Compute several fermi surfaces"""
+    if nk is None: nk = int(10./delta)
     energies,rs,kdos = fermi_surface_generator(h,nk=nk,delta=delta,**kwargs)
     fs.rmdir(output_folder) # remove folder
     fs.mkdir(output_folder) # create folder
