@@ -88,16 +88,18 @@ g = geometry.kagome_lattice() # get the geometry object
 h = g.get_hamiltonian() # get the Hamiltonian object
 (k,e) = h.get_bands() # compute the band structure
 ```
+![Alt text](images/kagome.png?raw=true "Band structure of a Kagome lattice")
 
 
 ## Valley-resolved band structure of a honeycomb superlattice
 ```python
 from pyqula import geometry
 g = geometry.honeycomb_lattice() # get the geometry object
-g = g.get_supercell(2) # create a supercell
+g = g.get_supercell(7) # create a supercell
 h = g.get_hamiltonian() # get the Hamiltonian object
 (k,e,v) = h.get_bands(operator="valley") # compute the band structure
 ```
+![Alt text](images/valley_supercell.png?raw=true "Valley-resolved band structure of a honeycomb superlattice")
 
 
 
@@ -121,8 +123,9 @@ from pyqula import geometry
 g = geometry.honeycomb_zigzag_ribbon(10) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian() # create hamiltonian of the system
 h = h.get_mean_field_hamiltonian(U=1.0,filling=0.5,mf="ferro")
-(k,e) = h.get_bands(operator="sz") # calculate band structure
+(k,e,sz) = h.get_bands(operator="sz") # calculate band structure
 ```
+![Alt text](images/scf_zigzag.png?raw=true "Mean-field with local interactions of a zigzag honeycomb ribbon")
 
 ## Band structure of twisted bilayer graphene
 ```python
@@ -159,7 +162,7 @@ from pyqula import kdos
 g = geometry.honeycomb_lattice() # create honeycomb lattice
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(0.05) # Add Haldane coupling
-kdos.surface(h)
+kdos.surface(h) # surface spectral function
 ```
 
 ## Antiferromagnet-superconductor interface
