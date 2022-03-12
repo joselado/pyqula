@@ -173,6 +173,7 @@ g = films.geometry_film(g,nz=20)
 h = g.get_hamiltonian()
 (k,e) = h.get_bands()
 ```
+
 ![Alt text](images/NLSM.png?raw=true "Band structure of a nodal line semimetal slab")
 
 
@@ -187,6 +188,18 @@ h.get_multildos(projection="atomic") # get the LDOS
 
 
 
+## Interaction-driven magnetism in a honeycomb nanoisland
+```python
+from pyqula import islands
+g = islands.get_geometry(name="honeycomb",n=3,nedges=3) # get an island
+h = g.get_hamiltonian() # get the Hamiltonian
+h = h.get_mean_field_hamiltonian(U=1.0,filling=0.5,mf="ferro") # perform SCF
+m = h.get_magnetization() # get the magnetization in each site
+```
+
+![Alt text](images/scf_island.png?raw=true "Interaction-driven magnetism in a honeycomb nanoisland")
+
+
 ## Surface spectral function of a Chern insulator
 ```python
 from pyqula import geometry
@@ -196,6 +209,7 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(0.05) # Add Haldane coupling
 kdos.surface(h) # surface spectral function
 ```
+
 ![Alt text](images/kdos.png?raw=true "Surface spectral function of a Chern insulator")
 
 ## Antiferromagnet-superconductor interface
@@ -208,6 +222,7 @@ h.add_onsite(lambda r: (r[1]>0)*0.3) # add chemical potential
 h.add_swave(lambda r: (r[1]<0)*0.3) # add superconductivity
 (k,e,sz) = h.get_bands(operator="sz") # calculate band structure
 ```
+
 ![Alt text](images/AF_SC.png?raw=true "Antiferromagnet-superconductor interface")
 
 ## Fermi surface of a triangular lattice supercell
@@ -219,6 +234,7 @@ g = g.get_supercell(2) # create a supercell
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.get_multi_fermi_surface(energies=np.linspace(-4,4,100),delta=1e-1)
 ```
+
 ![Alt text](images/fermi_surface.png?raw=true "Fermi surface of a triangular lattice supercell")
 
 
@@ -237,7 +253,42 @@ kpath = np.array(g.get_kpath(nk=200))*n # enlarged k-path
 h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),
         delta=0.1,nsuper=n,operator="unfold")
 ```
+
 ![Alt text](images/unfolded_FS.png?raw=true "Unfolded Fermi surface of a supercell with a defect")
 
 
+
+## Single impurity in an infinite honeycomb lattice
+```python
+from pyqula import geometry
+import numpy as np
+from pyqula import embedding
+g = geometry.honeycomb_lattice() # create geometry 
+h = g.get_hamiltonian() # get the Hamiltonian
+hv = h.copy() # copy Hamiltonian to create a defective one
+hv.add_onsite(lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100) # add a defect
+eb = embedding.Embedding(h,m=hv) # create an embedding object
+(x,y,d) = eb.ldos(nsuper=19,e=0.,delta=1e-2) # compute LDOS
+```
+
+![Alt text](images/single_vacancy.png?raw=true "Single impurity in an infinite honeycomb lattice")
+
+
+
+## Single magnetic impurity in an infinite superconductor
+```python
+from pyqula import geometry
+import numpy as np
+from pyqula import embedding
+g = geometry.square_lattice() # create geometry
+h = g.get_hamiltonian() # get the Hamiltonian
+h.add_swave(0.1) # add s-wave superconductivity
+h.add_onsite(3.0) # shift chemical potential
+hv = h.copy() # copy Hamiltonian to create a defective one
+hv.add_exchange(lambda r: [0.,0.,(np.sum((r - g.r[0])**2)<1e-2)*6.]) # add magnetic site
+eb = embedding.Embedding(h,m=hv) # create an embedding object
+ei = eb.get_energy_ingap_state() # get energy of the impurity state
+(x,y,d) = eb.ldos(nsuper=19,e=ei,delta=1e-3) # compute LDOS
+```
+![Alt text](images/single_YSR.png?raw=true "Single magnetic impurity in an infinite superconductor")
 

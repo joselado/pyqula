@@ -4,9 +4,6 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 
-
-
-# zigzag ribbon
 from pyqula import geometry
 import numpy as np
 from pyqula import embedding
