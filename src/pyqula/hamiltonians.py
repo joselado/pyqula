@@ -209,8 +209,11 @@ class Hamiltonian():
         from .ldostk import atomicmultildos
         return atomicmultildos.get_density(self,**kwargs)
     def get_bands(self,**kwargs):
-      """ Returns a figure with teh bandstructure"""
+      """ Returns a figure with the bandstructure"""
       return get_bands_nd(self,**kwargs)
+    def get_kdos_bands(self,**kwargs):
+        from .kdos import kdos_bands
+        return kdos_bands(self,**kwargs)
     def add_sublattice_imbalance(self,mass):
       """ Adds a sublattice imbalance """
       if self.geometry.has_sublattice and self.geometry.sublattice_number==2:
