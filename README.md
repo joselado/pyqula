@@ -145,6 +145,24 @@ c = h.get_chern(h) # compute Chern number
 print("Chern number is ",c)
 ```
 
+## Unfolded electronic structure of a supercell with a defect
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.honeycomb_lattice() # create a honeycomb lattice
+n = 3 # size of the supercell
+g = g.get_supercell(n,store_primal=True) # create a supercell
+h = g.get_hamiltonian() # get the Hamiltonian
+fons = lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100 # onsite in the impurity
+h.add_onsite(fons) # add onsite energy
+kpath = np.array(g.get_kpath(nk=200))*n # enlarged k-path
+h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded bands
+```
+![Alt text](images/unfolded.png?raw=true "Unfolded electronic structure of a supercell with a defect")
+
+
+
+
 ## Band structure of a nodal line semimetal
 ```python
 from pyqula import geometry
@@ -154,6 +172,18 @@ g = films.geometry_film(g,nz=20)
 h = g.get_hamiltonian()
 (k,e) = h.get_bands()
 ```
+
+
+## Local density of states with atomic orbitals of a honeycomb nanoisland
+```python
+from pyqula import islands
+g = islands.get_geometry(name="honeycomb",n=3,nedges=3) # get an island
+h = g.get_hamiltonian() # get the Hamiltonian
+h.get_multildos(projection="atomic") # get the LDOS
+```
+![Alt text](images/ldos_island.png?raw=true "Local density of states with atomic orbitals of a honeycomb nanoisland")
+
+
 
 ## Surface spectral function of a Chern insulator
 ```python
