@@ -265,11 +265,11 @@ from pyqula import geometry
 from pyqula import heterostructures
 import numpy as np
 g = geometry.chain() # create the geometry
-h = g.get_hamiltonian() # create teh Hamiltonian
+h = g.get_hamiltonian() # create the Hamiltonian
 h1 = h.copy() # first lead
 h2 = h.copy() # second lead
 h2.add_swave(.01) # the second lead is superconducting
-es = np.linspace(-.03,.03,100) # grid of energies
+es = np.linspace(-.03,.03,100) # set of energies for dIdV
 for T in np.linspace(1e-3,1.0,6): # loop over transparencies
     HT = heterostructures.build(h1,h2) # create the junction
     HT.set_coupling(T) # set the coupling between the leads
