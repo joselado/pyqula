@@ -60,3 +60,13 @@ def turn_spinful(self,enforce_tr=False):
           else: return spinful(m)
       self.modify_hamiltonian_matrices(fun) # modify the matrices
       self.has_spin = True # set spinful
+
+
+def make_compatible(h1,h2):
+    """Make a Hamiltonian h1 compatible with hamiltonian h2"""
+    ho = h1.copy() # copy Hamiltonian
+    if h1.has_spin: ho.turn_spinful() # make spinful
+    if h2.has_eh: ho.turn_nambu() # add e-h symmetry
+    return ho
+
+

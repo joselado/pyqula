@@ -8,6 +8,12 @@ def build(h1,h2,central=None,**kwargs):
   """Create a heterostructure, works also for 2d"""
 #  if central is None: central = [h1,h2] # list
   if central is None: central = [] # list
+  # make the Hamiltonians compatible
+  from ..htk.mode import make_compatible
+  h1 = make_compatible(h1,h2)
+  h2 = make_compatible(h2,h1)
+  central = [make_compatible(hi,h1) for hi in central]   
+  ###############
   if h1.dimensionality==h2.dimensionality: # same dimensionality
       if h1.dimensionality==1: # one dimensional
         return create_leads_and_central_list(h2,h1,central,**kwargs) # standard way
