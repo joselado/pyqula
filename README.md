@@ -290,5 +290,31 @@ eb = embedding.Embedding(h,m=hv) # create an embedding object
 ei = eb.get_energy_ingap_state() # get energy of the impurity state
 (x,y,d) = eb.ldos(nsuper=19,e=ei,delta=1e-3) # compute LDOS
 ```
+
 ![Alt text](images/single_YSR.png?raw=true "Single magnetic impurity in an infinite superconductor")
+
+
+## Tunneling and Andreev reflection in a metal-superconductor junction
+
+```python
+from pyqula import geometry
+from pyqula import heterostructures
+import numpy as np
+g = geometry.chain() # create the geometry
+h = g.get_hamiltonian() # create teh Hamiltonian
+h1 = h.copy() # first lead
+h2 = h.copy() # second lead
+h2.add_swave(.01) # the second lead is superconducting
+es = np.linspace(-.03,.03,100) # grid of energies
+for T in np.linspace(1e-3,1.0,6): # loop over transparencies
+    HT = heterostructures.build(h1,h2) # create the junction
+    HT.set_coupling(T) # set the coupling between the leads
+    Gs = [HT.didv(energy=e) for e in es] # calculate transmission
+```
+
+![Alt text](images/andreev.png?raw=true "Tunneling and Andreev reflection in a metal-superconductor junction")
+
+
+
+
 
