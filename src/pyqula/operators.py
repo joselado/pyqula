@@ -101,7 +101,8 @@ def index(h,n=[0]):
   num = len(h.geometry.r)
   val = [1. for i in n]
   m = csc((val,(n,n)),shape=(num,num),dtype=np.complex)
-  return h.spinless2full(m) # return matrix
+  m = h.spinless2full(m) # return matrix with e-h
+  return m@m
 
 
 
@@ -133,33 +134,6 @@ def operator2list(operator):
     operator = [operator] # convert to list
   return operator
 
-
-#
-#def get_surface(h,cut = 0.5,which="both"):
-#  """Return an operator which is non-zero in the upper surface"""
-#  zmax = np.max(h.geometry.r[:,2]) # maximum z
-#  zmin = np.min(h.geometry.r[:,2]) # maximum z
-#  dind = 1 # index to which divide the positions
-#  n = len(h.geometry.r) # number of elments of the hamiltonian
-#  data = [] # epmty list
-#  for i in range(n): # loop over elements
-#    z = h.geometry.z[i]
-#    if which=="upper": # only the upper surface
-#      if np.abs(z-zmax) < cut:  data.append(1.)
-#      else: data.append(0.)
-#    elif which=="lower": # only the upper surface
-#      if np.abs(z-zmin) < cut:  data.append(1.)
-#      else: data.append(0.)
-#    elif which=="both": # only the upper surface
-#      if np.abs(z-zmax) < cut:  data.append(1.)
-#      elif np.abs(z-zmin) < cut:  data.append(1.)
-#      else: data.append(0.)
-#    else: raise
-#  row, col = range(n),range(n)
-#  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex)
-#  m = h.spinless2full(m)
-#  return m # return the operator
-#
 
 
 def interface1d(h,cut = 3.):
@@ -473,8 +447,8 @@ def get_inplane_valley(h):
     if h.dimensionality>0 and k is None: raise # requires a kpoint
     hk = hkgen(k) # evaluate Hamiltonian
     hk0 = hkgen0(k) # evaluate Hamiltonian
-    A = hk*hk0 - hk0*hk # commutator
-    A = -A*A
+    A = hk@hk0 - hk0@hk # commutator
+    A = -A@A
     return abs(braket_wAw(w,A)) # return the braket
   return fun # return function
 
@@ -670,5 +644,14 @@ def get_potential(self,**kwargs):
     f = potentials.commensurate_potential(h.geometry,amplitude=1.0,**kwargs)
     h.add_onsite(f)
     return Operator(h.intra) # return the operator
+
+
+
+def get_location(self,r=[0.,0.,0.]):
+    ir = self.geometry.closest_index(r)
+    return index(self,n=[ir])
+
+
+
 
 

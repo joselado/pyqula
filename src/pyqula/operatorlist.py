@@ -16,6 +16,8 @@ def get_operator(self,name,**kwargs):
       elif name in ["sx","Sx"]: return operators.get_sx(self)
       elif name in ["sy","Sy"]: return operators.get_sy(self)
       elif name in ["sz","Sz"]: return operators.get_sz(self)
+      elif name=="location": # return a certain location
+          return operators.get_location(self,**kwargs)
       elif name=="current": return operators.get_current(self)
       elif name in ["bulk","Bulk"]: 
           return operators.get_bulk(self,**kwargs)
