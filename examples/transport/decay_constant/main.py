@@ -20,9 +20,9 @@ ht = heterostructures.build(h1,h2) # create the junction
 ht.delta = 1e-8 # analytic continuation of the Green's functions
 es = np.linspace(-.2,.2,101) # grid of energies
 T = 2e-2 # reference transparency 
-ht.scale_lc = T # set the transparency for dIdV
+ht.set_coupling(T) # set the transparency for dIdV
 ts = [ht.didv(energy=e) for e in es] # calculate transmission
-ks = [ht.get_kappa(energy=e,T=T) for e in es] # calculate transmission
+ks = [ht.get_kappa(energy=e) for e in es] # calculate decay rate
 plt.subplot(121)
 plt.plot(es,ts,marker="o")
 plt.subplot(122)

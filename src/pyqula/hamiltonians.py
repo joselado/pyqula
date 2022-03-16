@@ -102,6 +102,9 @@ class Hamiltonian():
     def get_chern(h,**kwargs):
         return topology.chern(h,**kwargs)
 
+    def get_berry_curvature(h,**kwargs):
+        return topology.get_berry_curvature(h,**kwargs)
+
     def get_chi(self,**kwargs):
         from . import chi
         return chi.chiAB_trace(self,**kwargs)
@@ -117,8 +120,8 @@ class Hamiltonian():
     def set_multihopping(self,mh):
         """Set a multihopping as the Hamiltonian"""
         multicell.set_multihopping(self,mh)
-    def get_berry_curvature(self,**kwargs):
-        return topology.write_berry(self,**kwargs)
+#    def get_berry_curvature(self,**kwargs):
+#        return topology.write_berry(self,**kwargs)
     @get_docstring(spectrum.set_filling)
     def set_filling(self,filling,**kwargs):
         spectrum.set_filling(self,filling=filling,**kwargs)

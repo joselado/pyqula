@@ -133,18 +133,22 @@ from pyqula import specialhamiltonian # special Hamiltonians library
 h = specialhamiltonian.twisted_bilayer_graphene() # TBG Hamiltonian
 (k,e) = h.get_bands() # compute band structure
 ```
+
 ![Alt text](images/tbg.png?raw=true "Band structure of twisted bilayer graphene")
 
-## Chern number of a Chern insulator
+## Chern number of an artificial Chern insulator
 ```python
 from pyqula import geometry
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian()
-h.add_rashba(0.3) # Rashba spin-orbit coupling
-h.add_zeeman([0.,0.,0.3]) # Zeeman field
-c = h.get_chern(h) # compute Chern number
-print("Chern number is ",c)
+h.add_rashba(0.2) # Rashba spin-orbit coupling
+h.add_zeeman([0.,0.,0.6]) # Zeeman field
+from pyqula import topology
+(kx,ky,omega) = h.get_berry_curvature() # compute Berry curvature
+c = h.get_chern() # compute the Chern number
 ```
+
+![Alt text](images/berry_curvature.png?raw=true "Chern number of an artificial Chern insulator")
 
 ## Unfolded electronic structure of a supercell with a defect
 ```python
