@@ -119,7 +119,7 @@ h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-1.0,1.0,100))
 ![Alt text](images/scf_SC.png?raw=true "Interaction-driven superconductivity")
 
 
-## Interaction driven spin-triplet superconductor
+## Interaction driven non-unitary spin-triplet superconductor
 ```python
 import numpy as np
 from pyqula import geometry
@@ -135,7 +135,7 @@ d = h.get_dvector_non_unitarity() # non-unitarity of spin-triplet
 h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-2.0,2.0,400))
 ```
 
-![Alt text](images/scf_SC_triplet.png?raw=true "Interaction driven spin-triplet superconductor")
+![Alt text](images/scf_SC_triplet.png?raw=true "Interaction driven non-unitary spin-triplet superconductor")
 
 
 ## Mean-field with local interactions of a zigzag honeycomb ribbon
