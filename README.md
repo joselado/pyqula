@@ -103,32 +103,39 @@ h = g.get_hamiltonian() # get the Hamiltonian object
 
 
 
-## Non-unitarity of an interacting spin-triplet superconductor
-```python
-from pyqula import geometry
-g = geometry.triangular_lattice() # generate the geometry
-h = g.get_hamiltonian() # create Hamiltonian of the system
-h.add_exchange([3.,3.,3.]) # add exchange field
-h.setup_nambu_spinor() # initialize the Nambu basis
-# perform a superconducting non-collinear mean-field calculation
-h = h.get_mean_field_hamiltonian(V1=-1.0,filling=0.3,mf="random")
-# compute the non-unitarity of the spin-triplet superconducting d-vector
-d = h.get_dvector_non_unitarity() # non-unitarity of spin-triplet
-```
 
-## Interaction-driven superconductivity
+## Interaction-driven spin-singlet superconductivity
 ```python
 from pyqula import geometry
 import numpy as np
 g = geometry.triangular_lattice() # geometry of a triangular lattice
 h = g.get_hamiltonian()  # get the Hamiltonian
-h.turn_nambu() # setup the Nambu form of the Hamiltonian
+h.setup_nambu_spinor() # setup the Nambu form of the Hamiltonian
 h = h.get_mean_field_hamiltonian(U=-1.0,filling=0.15,mf="swave") # perform SCF
 # electron spectral-function
 h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-1.0,1.0,100))
 ```
 
 ![Alt text](images/scf_SC.png?raw=true "Interaction-driven superconductivity")
+
+
+## Interaction driven spin-triplet superconductor
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.triangular_lattice() # generate the geometry
+h = g.get_hamiltonian() # create Hamiltonian of the system
+h.add_exchange([0.,0.,1.]) # add exchange field
+h.setup_nambu_spinor() # initialize the Nambu basis
+# perform a superconducting non-collinear mean-field calculation
+h = h.get_mean_field_hamiltonian(V1=-1.0,filling=0.3,mf="random")
+# compute the non-unitarity of the spin-triplet superconducting d-vector
+d = h.get_dvector_non_unitarity() # non-unitarity of spin-triplet
+# electron spectral-function
+h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-2.0,2.0,400))
+```
+
+![Alt text](images/scf_SC_triplet.png?raw=true "Interaction driven spin-triplet superconductor")
 
 
 ## Mean-field with local interactions of a zigzag honeycomb ribbon
