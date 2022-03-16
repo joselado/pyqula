@@ -116,6 +116,20 @@ h = h.get_mean_field_hamiltonian(V1=-1.0,filling=0.3,mf="random")
 d = h.get_dvector_non_unitarity() # non-unitarity of spin-triplet
 ```
 
+## Interaction-driven superconductivity
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.triangular_lattice() # geometry of a Lieb lattice
+h = g.get_hamiltonian()  # get the Hamiltonian
+h.turn_nambu() # setup the Nambu form of the Hamiltonian
+h = h.get_mean_field_hamiltonian(U=-1.0,filling=0.05,mf="swave") # perform SCF
+# electron spectral-funtion
+h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-1.0,1.0,100))
+```
+
+![Alt text](images/scf_SC.png?raw=true "Interaction-driven superconductivity")
+
 
 ## Mean-field with local interactions of a zigzag honeycomb ribbon
 ```python
