@@ -120,7 +120,7 @@ d = h.get_dvector_non_unitarity() # non-unitarity of spin-triplet
 ```python
 from pyqula import geometry
 import numpy as np
-g = geometry.triangular_lattice() # geometry of a triangularb lattice
+g = geometry.triangular_lattice() # geometry of a triangular lattice
 h = g.get_hamiltonian()  # get the Hamiltonian
 h.turn_nambu() # setup the Nambu form of the Hamiltonian
 h = h.get_mean_field_hamiltonian(U=-1.0,filling=0.15,mf="swave") # perform SCF
