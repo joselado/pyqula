@@ -85,29 +85,26 @@ def python_kpm_moments_clear(v,m,n=100):
 
 
 def get_momentsA(v,m,n=100,A=None):
-  """ Get the first n moments of a certain vector
-  using the Chebychev recursion relations"""
-  mus = np.array([0.0j for i in range(n)]) # empty arrray for the moments
-  am = algebra.matrix2vector(v) # zero vector
-  a = m@v  # vector number 1
-#  print(v.shape,A.shape)
-  bk = algebra.braket_wAw(v,A,v)
-#  bk = (np.transpose(np.conjugate(v))*A*v)[0,0] # scalar product
-  bk1 = algebra.braket_wAw(a,A,v)
-#  bk1 = (np.transpose(np.conjugate(a))*A*v)[0,0] # scalar product
-  mus[0] = bk  # mu0
-  mus[1] = bk1 # mu1
-  for i in range(2,n): 
-#    print(A)
-    ap = 2.*m@a - am # recursion relation
-    bk = algebra.braket_wAw(ap,A,v)
-#    bk = (np.transpose(np.conjugate(ap))*A*v)[0,0] # scalar product
-    mus[i] = bk
-    am = a.copy() # new variables
-    a = ap.copy() # new variables
-  mu0 = mus[0] # first
-  mu1 = mus[1] # second
-  return mus
+    """ Get the first n moments of a certain vector
+    using the Chebychev recursion relations"""
+    mus = np.array([0.0j for i in range(n)]) # empty arrray for the moments
+    am = algebra.matrix2vector(v) # zero vector
+    from .operators import Operator
+    m = Operator(m).get_matrix() # redefine
+    a = m@v  # vector number 1
+    bk = algebra.braket_wAw(v,A,v)
+    bk1 = algebra.braket_wAw(a,A,v)
+    mus[0] = bk  # mu0
+    mus[1] = bk1 # mu1
+    for i in range(2,n): 
+      ap = 2.*m@a - am # recursion relation
+      bk = algebra.braket_wAw(ap,A,v)
+      mus[i] = bk
+      am = a.copy() # new variables
+      a = ap.copy() # new variables
+    mu0 = mus[0] # first
+    mu1 = mus[1] # second
+    return mus
 
 
 

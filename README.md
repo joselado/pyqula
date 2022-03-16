@@ -307,6 +307,22 @@ for B in np.linspace(0.,1.0,300): # loop over magnetic field
 ![Alt text](images/hofstadter.png?raw=true "Hofstadter's butterfly of a square lattice")
 
 
+## Landau levels of a Dirac semimetal
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_ribbon(30) # create a honeycomb ribbon
+
+for B in np.linspace(0.,0.02,100): # loop over magnetic field
+    h = g.get_hamiltonian() # create a new hamiltonian
+    h.add_orbital_magnetic_field(B) # add an orbital magnetic field
+    # calculate DOS projected on the bulk
+    (e,d) = h.get_dos(operator="bulk",energies=np.linspace(-1.0,1.0,200),
+                       delta=1e-2)
+```
+
+![Alt text](images/LL_Dirac.png?raw=true "Landau levels of a Dirac semimetal")
+
 
 
 ## Surface spectral function of a Chern insulator

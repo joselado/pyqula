@@ -431,6 +431,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
         random=True,energies=None,info=False,
         **kwargs):
   """Calculate the KDOS bands using the KPM"""
+  operator = h.get_operator(operator)
   if energies is not None: # energies provided
       ewindow = np.max(np.abs(energies)) # true window
       ne = len(energies) # number of energies
@@ -475,7 +476,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
 
 
 def get_dos(h,energies=np.linspace(-4.0,4.0,400),
-            use_kpm=False,mode="ED",**kwargs):
+            use_kpm=False,mode="ED",operator=None,**kwargs):
   """Calculate the density of states"""
   if use_kpm: # KPM
       ewindow = max([abs(min(energies)),abs(min(energies))]) # window
