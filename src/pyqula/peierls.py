@@ -118,7 +118,7 @@ def peierls(x1,y1,x2,y2,mag_field):
       b = mag_field(np.array([x1,y1,0.0]),np.array([x2,y2,0.0]))
   else: raise
   phase = b*(x1-x2)*(y1+y2)/2.0
-  return np.exp(1j*phase)
+  return np.exp(1j*phase*2*np.pi)
 
 
 
@@ -168,7 +168,7 @@ def add_bfield(h,b=0.0,phi=0.0,mode="inplane",gauge="Landau"):
             r = (r1[gi(i)] + r2[gi(j)])/2.
             dr = r1[gi(i)] - r2[gi(j)]
             p = get_phase(r,dr)
-            data[k] *= np.exp(1j*b*p)
+            data[k] *= np.exp(1j*b*p*2.*np.pi)
             k += 1
         out = csc_matrix((data,(mo.row,mo.col)),shape=mo.shape) 
         return out.todense() # return matrix

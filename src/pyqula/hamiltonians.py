@@ -472,6 +472,8 @@ class Hamiltonian():
         """
         from .peierls import add_peierls
         add_peierls(self,mag_field=mag_field,**kwargs)
+    def add_orbital_magnetic_field(self,*args,**kwargs):
+        self.add_peierls(*args,**kwargs)
     def add_inplane_bfield(self,**kwargs):
         """Add in-plane magnetic field"""
         from .peierls import add_inplane_bfield
