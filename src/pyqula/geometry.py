@@ -278,6 +278,10 @@ def honeycomb_armchair_ribbon(ntetramers=10):
   return g
 
 
+honeycomb_ribbon = honeycomb_armchair_ribbon # alias
+
+
+
 def square_ribbon(natoms):
   """ Creates the hamiltonian of a square ribbon lattice"""
   from numpy import array
