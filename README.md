@@ -203,7 +203,7 @@ m = h.get_magnetization() # get the magnetization in each site
 
 ![Alt text](images/scf_island.png?raw=true "Interaction-driven magnetism in a honeycomb nanoisland")
 
-## Hofstadter butterfly of a square lattice
+## Hofstadter's butterfly of a square lattice
 ```python
 import numpy as np
 from pyqula import geometry
@@ -216,7 +216,7 @@ for B in np.linspace(0.,1.0,300): # loop over magnetic field
     (e,d) = h.get_dos(operator="bulk",energies=np.linspace(-4.5,4.5,200))
 ```
 
-![Alt text](images/hostadter.png?raw=true "Hofstadter butterfly of a square lattice")
+![Alt text](images/hofstadter.png?raw=true "Hofstadter's butterfly of a square lattice")
 
 
 
