@@ -237,16 +237,16 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",operator=None):
 
 
 
-def berry_map(h,dk=-1,nk=40,reciprocal=True,nsuper=1,window=None,
-               max_waves=None,mode="Wilson",delta=0.001,operator=None):
+def get_berry_curvature(h,dk=-1,nk=100,reciprocal=True,nsuper=1,window=None,
+               max_waves=None,mode="Wilson",delta=0.001,operator=None,
+               write=True):
   """ Calculates the chern number of a 2d system """
   if operator is not None: mode="Green" # Green function mode
   c = 0.0
   ks = [] # array for kpoints
-  if dk<0: dk = 5./float(2*nk) # automatic dk
-  if reciprocal: R = h.geometry.get_k2K()
-  else: R = np.matrix(np.identity(3))
-  fo = open("BERRY_MAP.OUT","w") # open file
+  if dk<0: dk = 1./float(2*nk) # automatic dk
+  if reciprocal: R = np.array(h.geometry.get_k2K())
+  else: R = np.array(np.identity(3))
   nt = nk*nk # total number of points
   ik = 0
   ks = [] # list with kpoints
@@ -254,12 +254,12 @@ def berry_map(h,dk=-1,nk=40,reciprocal=True,nsuper=1,window=None,
   for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
     for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
         ks.append([x,y,0.])
+  ks = np.array(ks) # convert to array
   tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
   def fp(ki): # function to compute the Berry curvature
       if parallel.cores == 1: tr.iterate()
       else: print("Doing",ki)
-      r = np.matrix(ki).T # real space vectors
-      k = np.array((R*r).T)[0] # change of basis
+      k = R@ki # change of basis
       if mode=="Wilson":
          b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
       if mode=="Green":
@@ -267,13 +267,16 @@ def berry_map(h,dk=-1,nk=40,reciprocal=True,nsuper=1,window=None,
          b = berry_green(f,k=k,operator=operator) 
       return b
   bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
-  for (b,k) in zip(bs,ks): # write everything
-      fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b)+"\n")
-      fo.flush()
-  fo.close() # close file
+  if write: # write result in a file
+      fo = open("BERRY_MAP.OUT","w") # open file
+      for (b,k) in zip(bs,ks): # write everything
+          fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b)+"\n")
+          fo.flush()
+      fo.close() # close file
+  return [ks[:,0],ks[:,1],bs] # return result
 
 
-
+berry_map = get_berry_curvature # alias
 
 
 def smooth_gauge(w1,w2):
