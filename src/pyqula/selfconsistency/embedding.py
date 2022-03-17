@@ -18,8 +18,6 @@ def hubbard_mf(EB,**kwargs):
     h.get_fermi4filling = types.MethodType(fermi,h) # overwrite
     h.shift_fermi = types.MethodType(shift_fermi,h) # overwrite
     h = h.get_mean_field_hamiltonian(**kwargs) # get the mean-field Hamiltonian
-    EB = EB.copy() # output
-    EB.m = h.intra # overwrite intracell
-    return EB # return object
+    return h.EB.copy() # return the new embedding object
 
 
