@@ -79,7 +79,7 @@ class Operator():
     def __call__(self,v,k=None):
         """Define the call method"""
         return self.m(v,k=k) 
-    def get_matrix(self):
+    def get_matrix(self,k=None):
         """Return matrix if possible"""
         if self.matrix is not None: return self.matrix
     def braket(self,w,**kwargs):

@@ -78,7 +78,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 - Tunneling and contact scanning probe spectroscopy
 
 # EXAMPLES #
-A variety of examples can be found in pyqula/examples
+A variety of examples can be found in pyqula/examples. Short examples are shown below
 
 
 ## Band structure of a Kagome lattice
@@ -406,7 +406,29 @@ for T in np.linspace(1e-3,1.0,6): # loop over transparencies
 
 
 
+## From tunneling to contact transport of a topological superconductor
 
+```python
+from pyqula import geometry
+from pyqula import heterostructures
+import numpy as np
+
+g = geometry.chain() # create the geometry
+h = g.get_hamiltonian() # create teh Hamiltonian
+h1 = h.copy() # first lead
+h2 = h.copy() # second lead
+h2.add_onsite(2.0) # shift chemical potential in the second lead
+h2.add_exchange([0.,0.,.3]) # add exchange in the second lead
+h2.add_rashba(.3) # add Rashba SOC in the second lead
+h2.add_swave(.05) # add s-wave SC in the second lead
+es = np.linspace(-.1,.1,100) # grid of energies
+for T in np.linspace(1e-3,0.5,10): # loop over transparencies
+    HT = heterostructures.build(h1,h2) # create the junction
+    HT.set_coupling(T) # set the coupling between the leads
+    Gs = [HT.didv(energy=e) for e in es] # calculate transmission
+```
+
+![Alt text](images/dIdV_TSC.png?raw=true "From tunneling to contact transport of a topological superconductor")
 
 
 
@@ -428,7 +450,7 @@ eb = embedding.Embedding(h,m=hv) # create an embedding object
 
 
 
-## Single magnetic impurity in an infinite superconductor
+## Bound state of a single magnetic impurity in an infinite superconductor
 ```python
 from pyqula import geometry
 import numpy as np
@@ -446,4 +468,27 @@ ei = eb.get_energy_ingap_state() # get energy of the impurity state
 
 ![Alt text](images/single_YSR.png?raw=true "Single magnetic impurity in an infinite superconductor")
 
+
+
+## Parity switching of a magnetic impurity in an infinite superconductor
+
+```python
+from pyqula import geometry
+from pyqula import embedding
+import numpy as np
+
+g = geometry.square_lattice() # create geometry
+for J in np.linspace(0.,4.0,100): # loop over exchange
+    h = g.get_hamiltonian() # get the Hamiltonian,spinless
+    h.add_onsite(3.0) # shift chemical potential
+    h.add_swave(0.2) # add s-wave superconductivity
+    hv = h.copy() # copy Hamiltonian to create a defective one
+    # add magnetic site
+    hv.add_exchange(lambda r: [0.,0.,(np.sum((r - g.r[0])**2)<1e-2)*J])
+    eb = embedding.Embedding(h,m=hv) # create an embedding object
+    energies = np.linspace(-0.4,0.4,100) # energies
+    d = [eb.dos(nsuper=2,delta=1e-2,e=ei) for ei in energies] # compute DOS
+```
+
+![Alt text](images/YSR.png?raw=true "Parity switching of a magnetic impurity in an infinite superconductor")
 

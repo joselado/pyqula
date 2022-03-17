@@ -7,6 +7,7 @@ from scipy.sparse import coo_matrix,csc_matrix,bmat
 import numpy as np
 from scipy.signal import hilbert
 from . import algebra
+from numba import jit
 
 # check that the fortran library exists
 try: 
@@ -14,52 +15,51 @@ try:
   use_fortran = True
 except:
   use_fortran = False # use python routines
-#  print("FORTRAN library not present, using default python one")
 
 
 
 
 def get_moments(v,m,n=100,use_fortran=use_fortran,test=False):
-  """ Get the first n moments of a certain vector
-  using the Chebychev recursion relations"""
-  if use_fortran:
-    from .kpmf90 import get_momentsf90 # fortran routine
-    mo = coo_matrix(m) # convert to coo matrix
-    v = algebra.matrix2vector(v)
-# call the fortran routine
-    mus = get_momentsf90(mo.row+1,mo.col+1,mo.data,v,n) 
-    return mus # return fortran result
-  else:
-   if test: return python_kpm_moments_clear(v,m,n=n)
-   else: return python_kpm_moments(v,m,n=n)
+    """ Get the first n moments of a certain vector
+    using the Chebychev recursion relations"""
+    if use_fortran:
+        from .kpmf90 import get_momentsf90 # fortran routine
+        mo = coo_matrix(m) # convert to coo matrix
+        v = algebra.matrix2vector(v)
+    # call the fortran routine
+        mus = get_momentsf90(mo.row+1,mo.col+1,mo.data,v,n) 
+        return mus # return fortran result
+    else:
+        if test: return python_kpm_moments_clear(v,m,n=n)
+        else: return python_kpm_moments(v,m,n=n)
 
 
 def python_kpm_moments(v,m,n=100):
-  """Python routine to calculate moments"""
-  mus = np.array([0.0j for i in range(2*n)]) # empty arrray for the moments
-  am = v.copy() # zero vector
-  a = m@v  # vector number 1
-  bk = algebra.braket_ww(v,v)
-#  bk = (np.transpose(np.conjugate(v))*v)[0,0] # scalar product
-  bk1 = algebra.braket_ww(a,v)
-#  bk1 = (np.transpose(np.conjugate(a))*v)[0,0] # scalar product
-  
-  mus[0] = bk.copy()  # mu0
-  mus[1] = bk1.copy() # mu1
-  for i in range(1,n): 
-    ap = 2*m@a - am # recursion relation
-    bk = algebra.braket_ww(a,a)
-    bk1 = algebra.braket_ww(ap,a)
-    mus[2*i] = 2.*bk
-    mus[2*i+1] = 2.*bk1
-    am = a.copy() # new variables
-    a = ap.copy() # new variables
-  mu0 = mus[0] # first
-  mu1 = mus[1] # second
-  for i in range(1,n): 
-    mus[2*i] +=  - mu0
-    mus[2*i+1] += -mu1 
-  return mus
+    """Python routine to calculate moments"""
+    mus = np.array([0.0j for i in range(2*n)]) # empty arrray for the moments
+    am = v.copy() # zero vector
+    a = m@v  # vector number 1
+    bk = algebra.braket_ww(v,v)
+  #  bk = (np.transpose(np.conjugate(v))*v)[0,0] # scalar product
+    bk1 = algebra.braket_ww(a,v)
+  #  bk1 = (np.transpose(np.conjugate(a))*v)[0,0] # scalar product
+    
+    mus[0] = bk.copy()  # mu0
+    mus[1] = bk1.copy() # mu1
+    for i in range(1,n): 
+      ap = 2*m@a - am # recursion relation
+      bk = algebra.braket_ww(a,a)
+      bk1 = algebra.braket_ww(ap,a)
+      mus[2*i] = 2.*bk
+      mus[2*i+1] = 2.*bk1
+      am = a.copy() # new variables
+      a = ap.copy() # new variables
+    mu0 = mus[0] # first
+    mu1 = mus[1] # second
+    for i in range(1,n): 
+      mus[2*i] +=  - mu0
+      mus[2*i+1] += -mu1 
+    return mus
 
 
 def python_kpm_moments_clear(v,m,n=100):
@@ -87,21 +87,27 @@ def python_kpm_moments_clear(v,m,n=100):
 def get_momentsA(v,m,n=100,A=None):
     """ Get the first n moments of a certain vector
     using the Chebychev recursion relations"""
+    if A is None: raise # only for a certain A
     mus = np.array([0.0j for i in range(n)]) # empty arrray for the moments
-    am = algebra.matrix2vector(v) # zero vector
-    from .operators import Operator
-    m = Operator(m).get_matrix() # redefine
+    v = algebra.matrix2vector(v) # zero vector
+    A = csc_matrix(A) # turn sparse
+    m = csc_matrix(m) # turn sparse
+    return get_momentsA_jit(v,m,n,A,mus)
+
+#@jit(nopython=True)
+def get_momentsA_jit(v,m,n,A,mus):
+    am = v*1.0
     a = m@v  # vector number 1
-    bk = algebra.braket_wAw(v,A,v)
-    bk1 = algebra.braket_wAw(a,A,v)
+    bk = np.conjugate(v).dot(A@v) 
+    bk1 = np.conjugate(a).dot(A@v)
     mus[0] = bk  # mu0
     mus[1] = bk1 # mu1
     for i in range(2,n): 
-      ap = 2.*m@a - am # recursion relation
-      bk = algebra.braket_wAw(ap,A,v)
-      mus[i] = bk
-      am = a.copy() # new variables
-      a = ap.copy() # new variables
+        ap = 2.*m@a - am # recursion relation
+        bk = np.conjugate(ap).dot(A@v) 
+        mus[i] = bk
+        am = a.copy() # new variables
+        a = ap.copy() # new variables
     mu0 = mus[0] # first
     mu1 = mus[1] # second
     return mus
@@ -287,8 +293,6 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
 #        mus = get_moments_vivj(m,v,operator@v,n=2*n,use_fortran=False)
         mus = get_momentsA(v,m,n=2*n,A=operator) # get the chebychev moments
     return mus
-#  from . import parallel
-#  out = [pfun(i) for i in range(ntries)] # perform all the computations
   from . import parallel
   out = parallel.pcall(pfun,range(ntries))
   mus = np.zeros(out[0].shape,dtype=np.complex)
@@ -443,40 +447,10 @@ def dos(m_in,xs,ntries=20,n=200,scale=10.):
 
 
 
-def jackson_kernel(mus):
-  """ Modify coeficient using the Jackson Kernel"""
-  mo = mus.copy() # copy array
-  n = len(mo)
-  pn = np.pi/(n+1.) # factor
-  for i in range(n):
-    fac = ((n-i+1)*np.cos(pn*i)+np.sin(pn*i)/np.tan(pn))/(n+1)
-    mo[i] *= fac
-  return mo
 
-
-
-def lorentz_kernel(mus):
-  """ Modify coeficient using the Jackson Kernel"""
-  mo = mus.copy() # copy array
-  n = len(mo)
-  pn = np.pi/(n+1.) # factor
-  lamb = 3.
-  for i in range(n):
-    fac = np.sinh(lamb*(1.-i/n))/np.sinh(lamb)
-    mo[i] *= fac
-  return mo
-
-
-
-
-
-def fejer_kernel(mus):
-  """Default kernel"""
-  n = len(mus)
-  mo = mus.copy()
-  for i in range(len(mus)):
-    mo[i] *= (1.-float(i)/n) 
-  return mo
+from .kpmtk.kernels import fejer_kernel
+from .kpmtk.kernels import lorentz_kernel
+from .kpmtk.kernels import jackson_kernel
 
 
 
