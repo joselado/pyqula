@@ -25,7 +25,7 @@ class Embedding():
         self.nsuper = None # supercell between original Hamiltonian
         if m is not None: 
             if type(m)==Hamiltonian: 
-                print("Picking intracell in embedding")
+#                print("Picking intracell in embedding")
                 m = m.intra # get the intracell
             self.m = m # provided matrix
             if m.shape[0]!=h.intra.shape[0]: 
