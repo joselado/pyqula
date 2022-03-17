@@ -140,8 +140,8 @@ def set_hoppings(h,hop):
 def get_dm(h,v,nk=1):
     """Get the density matrix"""
     ds = [(0,0,0)] # directions
-    if h.dimensionality>0:
-        for key in v: ds.append(key) # store
+#    if h.dimensionality>0:
+    for key in v: ds.append(key) # store the vector
     dms = h.get_density_matrix(ds=ds,nk=nk) # get all the density matrices
     return dms # return dictionary
 
@@ -255,7 +255,7 @@ from .mfconstrains import obj2mf
 mf_file = "MF.pkl" 
 
 def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
-        maxerror=1e-5,filling=None,callback_mf=None,callback_dm=None,
+        maxerror=1e-5,callback_mf=None,callback_dm=None,
         load_mf=True,compute_cross=True,compute_dd=True,verbose=1,
         compute_anomalous=True,compute_normal=True,info=False,
         callback_h=None,**kwargs):

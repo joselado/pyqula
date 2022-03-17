@@ -443,7 +443,7 @@ def surface_multienergy(h1,k=[0.0,0.,0.],energies=[0.0],reverse=True,**kwargs):
 
 
 
-def supercell_selfenergy(h,e=0.0,delta=0.001,nk=100,nsuper=[1,1]):
+def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1]):
   """Calculates the selfenergy of a certain supercell """
   if nsuper==1:
       return bloch_selfenergy(h,energy=e,delta=delta,nk=nk,

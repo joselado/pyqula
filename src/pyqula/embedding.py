@@ -41,19 +41,21 @@ class Embedding():
                         raise
             else: pass
         else: self.m = h.intra.copy() # pristine one
-    def get_gf(self,e=0.0,delta=1e-2,nk=100): 
-        """Return the bulk Green's function, only for the smallest UC"""
-        if self.nsuper is not None: raise
-        if not self.has_gf_generator: # if not present, create it
-            self.gf_generator = green.green_generator(self.h0,nk=nk)
-            self.has_gf_generator = True
-        gf,selfe = self.gf_generator(e,delta=delta) # return Green function
-        iden = np.identity(gf.shape[0],dtype=np.complex) # identity
-        emat = iden*(e + delta*1j) # energy matrix
-        gv = algebra.inv(emat - self.m -selfe)   # Defective Green function 
-        return gv
+#    def get_gf(self,e=0.0,delta=1e-2,nk=100): 
+#        """Return the bulk Green's function, only for the smallest UC"""
+#        if self.nsuper is not None: raise
+#        if not self.has_gf_generator: # if not present, create it
+#            self.gf_generator = green.green_generator(self.h0,nk=nk)
+#            self.has_gf_generator = True
+#        gf,selfe = self.gf_generator(e,delta=delta) # return Green function
+#        iden = np.identity(gf.shape[0],dtype=np.complex) # identity
+#        emat = iden*(e + delta*1j) # energy matrix
+#        gv = algebra.inv(emat - self.m -selfe)   # Defective Green function 
+#        return gv
     def get_gf(self,**kwargs):
         return get_gf(self,**kwargs)
+    def get_density_matrix(self,**kwargs):
+        return get_dm(self,**kwargs)
     def ldos(self,**kwargs):
         return get_ldos(self,**kwargs)
     def dos(self,**kwargs):
@@ -79,18 +81,18 @@ class Embedding():
             fo.write(name0+"\n") # name of the file
             np.savetxt(name,np.array([x,y,d]).T) # save data
         np.savetxt("MULTILDOS/DOS.OUT",np.array([es,ds]).T)
-    def get_density_matrix(self,nk=10,ds=[(0,0,0)],delta=1e-2):
-        """Return the density matrix"""
-        for d in ds: # loop over directions
-            if d not in [(0,0,0)]: raise # not implemented
-        out = dict() # dictionary
-        es = np.linspace(-4.0,0.0,30) # energies
-        dm = 0.0 # initialize
-        for e in es:
-            dm += 1j*self.get_gf(e,delta=delta,nk=nk) 
-            dm += -1j*self.get_gf(e,delta=-delta,nk=nk) 
-        out[(0,0,0)] = dm*(es[0]-es[1])
-        return out # return dictionary
+#    def get_density_matrix(self,nk=10,ds=[(0,0,0)],delta=1e-2):
+#        """Return the density matrix"""
+#        for d in ds: # loop over directions
+#            if d not in [(0,0,0)]: raise # not implemented
+#        out = dict() # dictionary
+#        es = np.linspace(-4.0,0.0,30) # energies
+#        dm = 0.0 # initialize
+#        for e in es:
+#            dm += 1j*self.get_gf(e,delta=delta,nk=nk) 
+#            dm += -1j*self.get_gf(e,delta=-delta,nk=nk) 
+#        out[(0,0,0)] = dm*(es[0]-es[1])
+#        return out # return dictionary
     def set_multihopping(self,mh):
         """Set a multihopping as the impurity"""
         dd = mh.get_dict() # get the dictionary
@@ -111,6 +113,9 @@ class Embedding():
     def get_dict(self): return self.h0.get_dict()
     def shift_fermi(self,mu): self.h0.shift_fermi(mu)
     def get_total_energy(self,**kwargs): return 0.0
+    def get_mean_field_hamiltonian(self,**kwargs):
+        from .selfconsistency.embedding import hubbard_mf
+        return hubbard_mf(self,**kwargs) # return Hubbard mean-field
 
 
 
@@ -240,6 +245,9 @@ def onsite_supercell(h,nsuper,mc=None):
 
 
 
+
+
+
 def get_gf(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
     """Return the Green's function"""
     h = self.h0
@@ -260,6 +268,19 @@ def get_gf(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
     emat = iden*(e + delta*1j) # energy matrix
     gv = algebra.inv(emat - ms -selfe)   # Defective Green function
     return gv
+
+
+
+def get_dm(self,delta=1e-2,**kwargs):
+    """Get the density matrix"""
+    fa = lambda e: self.get_gf(energy=e,delta=delta,**kwargs) # advanced
+    fr = lambda e: self.get_gf(energy=e,delta=-delta,**kwargs) # retarded
+    from .integration import complex_contour
+    Ra = complex_contour(fa,xmin=-10,xmax=0.,mode="upper") # return the integral
+    Rr = complex_contour(fr,xmin=-10,xmax=0.,mode="lower") # return the integral
+    return 1j*(Ra-Rr)/(2.*np.pi) # return the density matrix
+
+
 
 
 def get_ldos(self,e=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):

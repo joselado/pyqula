@@ -96,3 +96,28 @@ def peak_integrate(f,x0,x1,xp=0.0,dp=1e-6,**kwargs):
 
 
 
+def complex_contour(f,xmin=-5,xmax=0,eps=1e-2,mode="upper",
+                              **kwargs):
+    """Perform an integral using a complex contour"""
+#    return integrate_matrix(f,xlim=[xmin,xmax],**kwargs) # integrate matrix
+    def fint(x):
+        if mode=="upper": 
+            z0 = (xmin-xmax)*np.exp(-1j*x*np.pi)/2.
+            z = z0 + (xmin+xmax)/2.
+            return -1j*(f(z)*z0)*np.pi # integral after change of variables
+        elif mode=="lower": 
+            z0 = (xmin-xmax)*np.exp(1j*x*np.pi)/2.
+            z = z0 + (xmin+xmax)/2.
+            return 1j*(f(z)*z0)*np.pi # integral after change of variables
+    y = fint(xmin) # evaluate
+#    if type(y)=np.array:
+    return integrate_matrix(fint,xlim=[0.,1.],eps=eps,**kwargs) # integrate matrix
+#    else:
+#        import scipy.integrate as integrate
+#        return integrate.quad(fint2,0.,1.0,limit=60,epsabs=0.1,epsrel=0.1)[0]
+        
+
+
+
+
+
