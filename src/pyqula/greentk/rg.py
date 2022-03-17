@@ -21,7 +21,7 @@ def green_renormalization_python(intra,inter,energy=0.0,nite=None,
     algorithm, as described in I. Phys. F: Met. Phys. 15 (1985) 851-858 """
     intra = algebra.todense(intra)
     inter = algebra.todense(inter)
-    error = delta*1e-6 # overwrite error
+    error = np.abs(delta)*1e-6 # overwrite error
     e = np.matrix(np.identity(intra.shape[0])) * (energy + 1j*delta)
     ite = 0
     alpha = inter.copy()
