@@ -26,7 +26,6 @@ class Embedded_Hamiltonian():
         from copy import deepcopy
         return deepcopy(self)
     def get_ldos(self,**kwargs): 
-        print(type(self))
         A = get_A(self,**kwargs) # spectral function
         r = [A[i,i].real for i in range(A.shape[0])]
         r = self.H.full2profile(r) # resum components
