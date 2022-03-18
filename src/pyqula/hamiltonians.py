@@ -552,12 +552,11 @@ class Hamiltonian():
     def write_magnetization(self,**kwargs):
         from .htk.write import write_magnetization
         write_magnetization(self,**kwargs)
-    def write_onsite(self,nrep=5,normal_order=False):
+    def write_onsite(self,zero_average=False,**kwargs):
         """Extract onsite energy"""
         d = self.extract("density")
-        d = d - np.mean(d)
-        self.geometry.write_profile(d,name="ONSITE.OUT",
-                normal_order=normal_order,nrep=nrep)
+        if zero_average: d = d - np.mean(d)
+        self.geometry.write_profile(d,name="ONSITE.OUT",**kwargs)
     def write_hopping(self,**kwargs):
         groundstate.hopping(self,**kwargs)
     def write_anomalous_hopping(self,**kwargs):
