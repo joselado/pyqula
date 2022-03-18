@@ -16,12 +16,12 @@ from .hamiltonians import Hamiltonian
 class Embedding():
     """Define an embedding object"""
     def __init__(self,h,m=None,nsuper=None):
-        self.h0 = h.copy() # Pristine Hamiltonian
-        self.geometry = self.h0.geometry
-        self.dimensionality = self.h0.dimensionality
+        self.H = h.copy() # Pristine Hamiltonian
+        self.geometry = self.H.geometry
+        self.dimensionality = self.H.dimensionality
         self.has_gf_generator = False
-        self.has_spin = self.h0.has_spin
-        self.has_eh = self.h0.has_eh
+        self.has_spin = self.H.has_spin
+        self.has_eh = self.H.has_eh
         self.nsuper = None # supercell between original Hamiltonian
         if m is not None: 
             if type(m)==Hamiltonian: 
@@ -41,17 +41,6 @@ class Embedding():
                         raise
             else: pass
         else: self.m = h.intra.copy() # pristine one
-#    def get_gf(self,e=0.0,delta=1e-2,nk=100): 
-#        """Return the bulk Green's function, only for the smallest UC"""
-#        if self.nsuper is not None: raise
-#        if not self.has_gf_generator: # if not present, create it
-#            self.gf_generator = green.green_generator(self.h0,nk=nk)
-#            self.has_gf_generator = True
-#        gf,selfe = self.gf_generator(e,delta=delta) # return Green function
-#        iden = np.identity(gf.shape[0],dtype=np.complex) # identity
-#        emat = iden*(e + delta*1j) # energy matrix
-#        gv = algebra.inv(emat - self.m -selfe)   # Defective Green function 
-#        return gv
     def get_gf(self,**kwargs):
         return get_gf(self,**kwargs)
     def get_density_matrix(self,**kwargs):
@@ -81,18 +70,6 @@ class Embedding():
             fo.write(name0+"\n") # name of the file
             np.savetxt(name,np.array([x,y,d]).T) # save data
         np.savetxt("MULTILDOS/DOS.OUT",np.array([es,ds]).T)
-#    def get_density_matrix(self,nk=10,ds=[(0,0,0)],delta=1e-2):
-#        """Return the density matrix"""
-#        for d in ds: # loop over directions
-#            if d not in [(0,0,0)]: raise # not implemented
-#        out = dict() # dictionary
-#        es = np.linspace(-4.0,0.0,30) # energies
-#        dm = 0.0 # initialize
-#        for e in es:
-#            dm += 1j*self.get_gf(e,delta=delta,nk=nk) 
-#            dm += -1j*self.get_gf(e,delta=-delta,nk=nk) 
-#        out[(0,0,0)] = dm*(es[0]-es[1])
-#        return out # return dictionary
     def set_multihopping(self,mh):
         """Set a multihopping as the impurity"""
         dd = mh.get_dict() # get the dictionary
@@ -110,8 +87,8 @@ class Embedding():
     def turn_multicell(self): pass
     def get_multicell(self): return self
     def turn_dense(self): pass
-    def get_dict(self): return self.h0.get_dict()
-    def shift_fermi(self,mu): self.h0.shift_fermi(mu)
+    def get_dict(self): return self.H.get_dict()
+    def shift_fermi(self,mu): self.H.shift_fermi(mu)
     def get_total_energy(self,**kwargs): return 0.0
     def get_mean_field_hamiltonian(self,**kwargs):
         from .selfconsistency.embedding import hubbard_mf
@@ -250,7 +227,7 @@ def onsite_supercell(h,nsuper,mc=None):
 
 def get_gf(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
     """Return the Green's function"""
-    h = self.h0
+    h = self.H
     e = energy
     if self.nsuper is None: # old way
         g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,
@@ -270,22 +247,14 @@ def get_gf(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
     return gv
 
 
-
-def get_dm(self,delta=1e-2,**kwargs):
-    """Get the density matrix"""
-    fa = lambda e: self.get_gf(energy=e,delta=delta,**kwargs) # advanced
-    fr = lambda e: self.get_gf(energy=e,delta=-delta,**kwargs) # retarded
-    from .integration import complex_contour
-    Ra = complex_contour(fa,xmin=-10,xmax=0.,mode="upper") # return the integral
-    Rr = complex_contour(fr,xmin=-10,xmax=0.,mode="lower") # return the integral
-    return 1j*(Ra-Rr)/(2.*np.pi) # return the density matrix
-
+from .embeddingtk.embedded import get_dm
+from .embeddingtk.embedded import embed_hamiltonian
 
 
 
 def get_ldos(self,e=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
     """Compute the local density of states"""
-    h = self.h0
+    h = self.H
     # get the Green's function
     gv = self.get_gf(energy=e,delta=delta,nsuper=nsuper,nk=nk)
     if operator is not None:
@@ -296,3 +265,11 @@ def get_ldos(self,e=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
     gs = h.geometry.supercell(nsuper)
     x,y = gs.x,gs.y
     return x,y,ds
+
+
+
+
+
+
+
+

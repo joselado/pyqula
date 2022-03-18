@@ -1,11 +1,12 @@
 import numpy as np
 import types
 
+
 def hubbard_mf(EB,**kwargs):
     """Wrapper to perform a mean-field Hubbard calculation with an Embedding
     object."""
     ## This is just a workaround
-    h = EB.h0.copy() # copy Hamiltonian
+    h = EB.H.copy() # copy Hamiltonian
     h.EB = EB.copy() # copy the object
     def dm(self,**kwargs):
         return {(0,0,0):self.EB.get_density_matrix(**kwargs)}
