@@ -7,7 +7,9 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 from pyqula import geometry
 import numpy as np
 from pyqula import embedding
-from pyqula import islands
+
+
+
 g = geometry.bichain()
 h = g.get_hamiltonian() # get the Hamiltonian
 # perform a calculation for the isotaled system

@@ -227,3 +227,21 @@ def delta(r0,v0=1.0):
     return Potential(f) # return potential
 
 
+
+def edge_potential(g):
+    """Return potential for the edge sites"""
+    cs = g.get_connections() # get the connections
+    nn = np.max([len(c) for c in cs]) # maximum number of connections
+    v = [len(c)<nn for c in cs] # check if the atom is an edge 
+    fout = 0 # output function
+    for i in range(len(v)): # loop over locations
+        if v[i]: fout = fout + delta(g.r[i],v0=1.0)
+    return Potential(fout) # return the potential
+
+
+
+
+
+
+
+

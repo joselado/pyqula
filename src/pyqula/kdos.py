@@ -181,7 +181,8 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
                    operator=operator,
                    ewindow=ewindow,ntries=ntries,x=energies) # compute
       return (x,y)
-  kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
+  if kpath is None:
+      kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
   ### Now compute and write in a file
   ik = 0
   out = parallel.pcall(pfun,kpath) # compute all
