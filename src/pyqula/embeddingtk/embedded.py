@@ -44,7 +44,7 @@ def object2selfenergy(self,H,delta=1e-4,**kwargs):
             else: return np.conjugate(self)
         return f
       else: raise # unrecognized
-    if callable(self): return self # assume that it returns a matrix
+    elif callable(self): return self # assume that it returns a matrix
     else: 
         print("Selfenergy is not compatible with Hamiltonian")
         raise

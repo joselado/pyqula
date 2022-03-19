@@ -17,10 +17,13 @@ edge = potentials.edge_potential(g) # edge potential
 
 #edge = lambda r: r[1]>0.*edge0(r)
 
-# create a selfenergy in a single edge (the left one) to kill magnetism 
-hs = h.copy()*0.
-hs.add_onsite(edge)
-selfe = -0.2*1j*hs.intra # selfenergy on edge, beware of minus sign
+# create a selfenergy in a the edges
+selfe = embedding.get_selfenergy_from_potential(h,edge,mode="metal")
+
+# or do it explicitly by hand (careful with the sign) 
+#hs = h.copy()*0.
+#hs.add_onsite(edge)
+#selfe = -0.2*1j*hs.intra # selfenergy on edge, beware of minus sign
 
 
 # create an embedding object with that selfenergy
