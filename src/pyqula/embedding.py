@@ -249,6 +249,7 @@ def get_gf(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
 
 from .embeddingtk.embedded import get_dm
 from .embeddingtk.embedded import embed_hamiltonian
+from .embeddingtk.selfenergies import get_selfenergy_from_potential
 
 
 
