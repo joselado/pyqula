@@ -170,7 +170,7 @@ class Hamiltonian():
     @get_docstring(ldos.get_ldos)
     def get_ldos(self,**kwargs):
         return ldos.get_ldos(self,**kwargs)
-    def get_gk_gen(self,delta=0.05,operator=None,canonical_phase=False):
+    def get_gk_gen(self,delta=1e-3,operator=None,canonical_phase=False):
       """Return the Green function generator"""
       hkgen = self.get_hk_gen() # Hamiltonian generator
       def f(k=[0.,0.,0.],e=0.0):
