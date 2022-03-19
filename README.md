@@ -44,6 +44,7 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 - Full selfconsistency with all Wick terms for non-collinear superconductors
 - Constrained and unconstrained mean-field calculations
 - Automatic identification of order parameters for symmetry broken states
+- Hermitian and non-Hermitian mean-field calculations
 
 ## Topological characterization ##
 - Berry phases, Berry curvatures, Chern numbers and Z2 invariants
@@ -267,6 +268,23 @@ h = g.get_hamiltonian()
 ```
 
 ![Alt text](images/NLSM.png?raw=true "Band structure of a nodal line semimetal slab")
+
+
+## Band structure of a three dimensional topological insulator
+```python
+from pyqula import geometry
+from pyqula import films
+import numpy as np
+g = geometry.diamond_lattice() # create a diamond lattice
+g = films.geometry_film(g,nz=60) # create a thin film
+h = g.get_hamiltonian() # generate Hamiltonian
+h.add_strain(lambda r: 1.+abs(r[2])*0.8,mode="directional") # add axial strain
+h.add_kane_mele(0.1) # add intrinsic spin-orbit coupling
+h.get_bands(operator="surface") # compute band structure
+```
+
+![Alt text](images/3DTI.png?raw=true "Band structure of a three dimensional topological insulator")
+
 
 
 ## Local density of states with atomic orbitals of a honeycomb nanoisland

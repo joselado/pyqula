@@ -240,8 +240,8 @@ def get_bulk(h,fac=0.8):
         dr = r[:,2] # z positions
         dr = dr - np.min(dr)
         dr = dr/np.max(dr) # to interval 0,1
-        out[fac>dr] = 0.0 # set to zero
-        out[(1.-fac)<dr] = 0.0 # set to zero
+        dr2 = dr - np.mean(dr) # minus the average
+        out[fac/2.<np.abs(dr2)] = 0.0 # set to zero
     else: return NotImplemented
     from scipy.sparse import diags
     n = len(r) # number of sites
