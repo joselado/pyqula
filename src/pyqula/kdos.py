@@ -301,16 +301,18 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
 
 
 
-def surface(h1,energies=np.linspace(-1.,1.,100),operator=None,
+def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
                     delta=0.01,kpath=None,hs=None):
   """Get the surface DOS of an interface"""
   from scipy.sparse import csc_matrix,bmat
+#  kpath = h1.geometry.get_kpath(kpath,nk=len(energies)) # get kpath
   if kpath is None: 
     if h1.dimensionality==3:
       g2d = h1.geometry.copy() # copy Hamiltonian
       g2d = sculpt.set_xy_plane(g2d)
       kpath = klist.default(g2d,nk=len(energies))
     elif h1.dimensionality==2:
+#      kpath = klist.default(g2d,nk=len(energies))
       kpath = [[k,0.,0.] for k in np.linspace(0.,1.,len(energies))]
     elif h1.dimensionality==1: kpath = [[0.,0.,0.0]] # one dummy point
     else: raise
@@ -335,3 +337,7 @@ def surface(h1,energies=np.linspace(-1.,1.,100),operator=None,
       fo.write("\n") # next line
       fo.flush() # flush
   fo.close()
+
+
+
+surface = surface_kdos

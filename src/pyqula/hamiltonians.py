@@ -217,6 +217,9 @@ class Hamiltonian():
     def get_kdos_bands(self,**kwargs):
         from .kdos import kdos_bands
         return kdos_bands(self,**kwargs)
+    def get_surface_kdos(self,**kwargs):
+        from .kdos import surface_kdos
+        return surface_kdos(self,**kwargs)
     def add_sublattice_imbalance(self,mass):
       """ Adds a sublattice imbalance """
       if self.geometry.has_sublattice and self.geometry.sublattice_number==2:
