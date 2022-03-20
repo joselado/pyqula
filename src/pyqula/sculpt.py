@@ -4,6 +4,9 @@ from copy import deepcopy
 from . import algebra
 from numba import jit
 import numpy as np
+from . import algebra
+
+
 try: 
   import clean_geometryf90
   use_fortran = True
@@ -370,10 +373,10 @@ def set_xy_plane(g):
   cp,sp = np.cos(phi),np.sin(phi)
   Rt = np.matrix([[ct,0,st],[0.,1.,0],[-st,0,ct]]) # rotate along y
   Rp = np.matrix([[cp,-sp,0.],[sp,cp,0],[0.,0.,1.]]) # rotate along z
-  R = Rp*Rt # transforms (0,0,1) to nv
-  U = R.I # inverse transformation
+  R = Rp@Rt # transforms (0,0,1) to nv
+  U = algebra.inv(R) # inverse transformation
   # now transform everything
-  def transform(r): return np.array((U*np.matrix(r).T).T)[0] 
+  def transform(r): return U@r
   go.a1 = transform(g.a1)
   go.a2 = transform(g.a2)
   go.a3 = transform(g.a3)
