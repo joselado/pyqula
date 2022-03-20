@@ -19,9 +19,9 @@ def build(h,nz=1):
 
 def geometry_film(g,nz=1):
   """Create the geometry of a film"""
-  go = g.supercell([1,1,nz]) # create the supercell
+  g = sculpt.set_xy_plane(g) # put in the xy plane
+  go = g.get_supercell([1,1,nz]) # create the supercell
   go.dimensionality = 2 # reduce dimensionality
-  go = sculpt.set_xy_plane(go) # put in the xy plane
   go.get_fractional(center=True)
   go.fractional2real()
   return go

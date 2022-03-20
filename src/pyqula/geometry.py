@@ -1026,6 +1026,7 @@ def diamond_lattice_minimal():
   g.r = np.array(rs) # store
   g.r2xyz() # create r coordinates
   g.get_fractional()
+  g = sculpt.set_xy_plane(g) # a1 and a2 in the xy plane
   return g
 
 

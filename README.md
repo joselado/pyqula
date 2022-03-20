@@ -280,7 +280,7 @@ g = films.geometry_film(g,nz=60) # create a thin film
 h = g.get_hamiltonian() # generate Hamiltonian
 h.add_strain(lambda r: 1.+abs(r[2])*0.8,mode="directional") # add axial strain
 h.add_kane_mele(0.1) # add intrinsic spin-orbit coupling
-h.get_bands(operator="surface") # compute band structure
+(k,e,c) = h.get_bands(operator="surface") # compute band structure
 ```
 
 ![Alt text](images/3DTI.png?raw=true "Band structure of a three dimensional topological insulator")

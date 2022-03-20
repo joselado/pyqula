@@ -7,8 +7,8 @@ from pyqula import geometry
 from pyqula import films
 import numpy as np
 g = geometry.diamond_lattice() # create a diamond lattice
-g = films.geometry_film(g,nz=60) # create a thin film
+#g = films.geometry_film(g,nz=10) # create a thin film
 h = g.get_hamiltonian() # generate Hamiltonian
-h.add_strain(lambda r: 1.+abs(r[2])*0.8,mode="directional") # add axial strain
+h.add_strain(lambda r: 1.+abs(r[2])*0.3,mode="directional") # add axial strain
 h.add_kane_mele(0.1) # add intrinsic spin-orbit coupling
-(k,e,c) = h.get_bands(operator="surface") # compute band structure
+h.get_surface_kdos(delta=1e-2) # compute surface spectral function
