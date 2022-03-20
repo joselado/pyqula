@@ -302,8 +302,9 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
 
 
 def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
-                    delta=0.01,kpath=None,hs=None):
+                    delta=0.01,kpath=None,hs=None,nsuper=None):
   """Get the surface DOS of an interface"""
+  h1 = h1.get_supercell(nsuper)
   from scipy.sparse import csc_matrix,bmat
 #  kpath = h1.geometry.get_kpath(kpath,nk=len(energies)) # get kpath
   if kpath is None: 
