@@ -365,6 +365,7 @@ def set_xy_plane(g):
   go = g.copy() # copy geometry
   nv = np.cross(g.a1,g.a2)
   nv /= np.sqrt(nv.dot(nv)) # unitary normal vector
+  if (np.abs(np.abs(nv[2])-1.0)<1e-6): return go # do nothing
   rho = np.sqrt(nv[0]*nv[0] + nv[1]*nv[1]) # planar component
   theta = np.arctan2(rho,nv[2]) # theta angle
   phi = np.arctan2(nv[1],nv[0]) # phi angle

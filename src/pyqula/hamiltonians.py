@@ -253,6 +253,7 @@ class Hamiltonian():
         return hamiltonianmode.same_hamiltonian(self,*args,**kwargs)
     def get_supercell(self,nsuper,**kwargs):
       """ Creates a supercell of a one dimensional system"""
+      if nsuper is None: return self # do nothing
       if nsuper==1: return self
       if self.dimensionality==0: return self
       try: 

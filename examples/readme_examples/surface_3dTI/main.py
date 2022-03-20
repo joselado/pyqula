@@ -4,11 +4,9 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 from pyqula import geometry
-from pyqula import films
 import numpy as np
-g = geometry.diamond_lattice() # create a diamond lattice
-#g = films.geometry_film(g,nz=10) # create a thin film
+g = geometry.honeycomb_lattice() # create a honeycomb lattice
 h = g.get_hamiltonian() # generate Hamiltonian
-h.add_strain(lambda r: 1.+abs(r[2])*0.3,mode="directional") # add axial strain
-h.add_kane_mele(0.1) # add intrinsic spin-orbit coupling
+h.add_soc(0.15) # add intrinsic spin-orbit coupling
+h.add_rashba(0.1) # add Rashba spin-orbit coupling
 h.get_surface_kdos(delta=1e-2) # compute surface spectral function

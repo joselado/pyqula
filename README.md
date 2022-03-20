@@ -270,7 +270,7 @@ h = g.get_hamiltonian()
 ![Alt text](images/NLSM.png?raw=true "Band structure of a nodal line semimetal slab")
 
 
-## Band structure of a three dimensional topological insulator
+## Band structure of a three dimensional topological insulator slab
 ```python
 from pyqula import geometry
 from pyqula import films
@@ -280,10 +280,25 @@ g = films.geometry_film(g,nz=60) # create a thin film
 h = g.get_hamiltonian() # generate Hamiltonian
 h.add_strain(lambda r: 1.+abs(r[2])*0.8,mode="directional") # add axial strain
 h.add_kane_mele(0.1) # add intrinsic spin-orbit coupling
-(k,e,c) = h.get_bands(operator="surface") # compute band structure
+(k,e,c)= h.get_bands(operator="surface") # compute band structure
 ```
 
 ![Alt text](images/3DTI.png?raw=true "Band structure of a three dimensional topological insulator")
+
+
+
+## Surface spectral function of a 2D quantum spin-Hall insulator
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # create a honeycomb lattice
+h = g.get_hamiltonian() # generate Hamiltonian
+h.add_soc(0.15) # add intrinsic spin-orbit coupling
+h.add_rashba(0.1) # add Rashba spin-orbit coupling
+h.get_surface_kdos(delta=1e-2) # compute surface spectral function
+```
+
+![Alt text](images/2DTI.png?raw=true "Surface spectral function of a 2D quantum spin-Hall insulator")
 
 
 

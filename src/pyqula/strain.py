@@ -33,8 +33,10 @@ def strain_matrix(m,rs1,rs2,indg,fs): # function to apply strain to a matrix
     from scipy.sparse import coo_matrix,csc_matrix
     mo = coo_matrix(mo) # turn sparse
     for k in range(len(mo.data)):
-        r0 = (rs1[indg(mo.col[k])] + rs2[indg(mo.row[k])])/2.
-        dr0 = rs1[indg(mo.col[k])] - rs2[indg(mo.row[k])]
+        ii = indg(mo.col[k])
+        jj = indg(mo.row[k])
+        r0 = (rs1[ii] + rs2[jj])/2. # average location 
+        dr0 = rs1[ii] - rs2[jj] # distance difference
         mo.data[k] = fs(r0,dr0)*mo.data[k]
     from .algebra import issparse
     if issparse(m): return csc_matrix(mo)
