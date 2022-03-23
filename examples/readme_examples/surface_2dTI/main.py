@@ -4,7 +4,6 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 from pyqula import geometry
-import numpy as np
 g = geometry.honeycomb_lattice() # create a honeycomb lattice
 h = g.get_hamiltonian() # generate Hamiltonian
 h.add_soc(0.15) # add intrinsic spin-orbit coupling
