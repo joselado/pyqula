@@ -13,7 +13,11 @@ import numpy as np
 
 ts = [[1.0,0.0],[1.0,0.2],[1.0,0.38],[1.0,0.4],[1.0,0.6]]
 
-for t in ts:
+g = geometry.triangular_lattice() # triangular lattice geometry
+qpath = g.get_kpath(["G","K","M","G"],nk=100) # default qpath
+qs = np.linspace(0.,1.,len(qpath)) # loop over qvectors
+
+def get(t):
     g = geometry.triangular_lattice() # triangular lattice geometry
     h0 = g.get_hamiltonian(ts=t) # create hamiltonian of the system
     
@@ -21,8 +25,6 @@ for t in ts:
     # Now compute energies for different rotations
     # mesh of quvectors for the spin spiral
     from pyqula import klist
-    qpath = h0.geometry.get_kpath(["G","K","M","G"],nk=100) # default qpath
-    qs = np.linspace(0.,1.,len(qpath)) # loop over qvectors
     
     es = []
     
@@ -51,10 +53,17 @@ for t in ts:
         print("Doing",iq,e)
     #    fo.flush() # save result
     #fo.close()
+    return np.array(es)
     
-    
-    plt.plot(qs,es,label=str(t[1]))
 
+esfe = -get([1.0,0.]) # energy of the ferro
+esj2 = get([0.0,0.,1.]) # energy of the ferro
+
+
+for c in np.linspace(0.,2.0,10):
+    es = esj2 + c*esfe
+    es = es - es[0]
+    plt.plot(qs,es,label=str(c))
 
 plt.legend()
 plt.show()
