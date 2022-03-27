@@ -93,6 +93,10 @@ class Embedding():
     def get_mean_field_hamiltonian(self,**kwargs):
         from .selfconsistency.embedding import hubbard_mf
         return hubbard_mf(self,**kwargs) # return Hubbard mean-field
+    def didv(self,T=1e-2,i=0,**kwargs):
+        from .transporttk.localprobe import LocalProbe
+        lp = LocalProbe(self,T=T,i=i,**kwargs)
+        return lp.didv(**kwargs)
 
 
 
@@ -245,6 +249,13 @@ def get_gf(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
     emat = iden*(e + delta*1j) # energy matrix
     gv = algebra.inv(emat - ms -selfe)   # Defective Green function
     return gv
+
+
+def get_onsite(self,nsuper=1,**kwargs):
+    h = self.H
+    ms = onsite_defective_central(h,self.m,nsuper)
+    return ms
+
 
 
 from .embeddingtk.embedded import get_dm
