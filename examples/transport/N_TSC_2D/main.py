@@ -23,8 +23,8 @@ T = 1e-1 # reference transparency
 ht.scale_lc = T # set the transparency for dIdV
 from pyqula import parallel
 parallel.cores = 6
-#ts = parallel.pcall(lambda e: ht.didv(energy=e,imode="quad"),es)
-ts = ht.surface_dos(energies=es)[1]
+ts = parallel.pcall(lambda e: ht.didv(energy=e,imode="quad"),es)
+#ts = ht.surface_dos(energies=es)[1]
 plt.plot(es,ts,marker="o")
 plt.show()
 
