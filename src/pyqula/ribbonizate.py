@@ -1,27 +1,29 @@
 from __future__ import print_function
 import numpy as np
 
-def bulk2ribbon(g, n=5):
-  """ Transformas a 2D geometry into a ribbon"""
-  if not g.dimensionality == 2: raise # has to be two dimensional
-  if not np.abs(g.a1.dot(g.a2)) < 0.0001: raise # has to be orthogonal
-  go = g.copy() # create new geometry
-  go.dimensionality = 1 # ribbon
-  go.x = []
-  go.y = []
-  go.z = []
-  for i in range(n):
-    go.x += (g.x).tolist() # append x
-    go.z += (g.z).tolist() # append x
-    go.y += (g.y+i*g.a2[1]).tolist() # append x
-  go.x = np.array(go.x)
-  go.y = np.array(go.y)
-  go.z = np.array(go.z)
-  go.xyz2r()
-  go.celldis = g.a1[0]
-  go.center()
-  return go
+#def bulk2ribbon(g, n=5):
+#  """ Transformas a 2D geometry into a ribbon"""
+#  if not g.dimensionality == 2: raise # has to be two dimensional
+#  if not np.abs(g.a1.dot(g.a2)) < 0.0001: raise # has to be orthogonal
+#  go = g.copy() # create new geometry
+#  go.dimensionality = 1 # ribbon
+#  go.x = []
+#  go.y = []
+#  go.z = []
+#  for i in range(n):
+#    go.x += (g.x).tolist() # append x
+#    go.z += (g.z).tolist() # append x
+#    go.y += (g.y+i*g.a2[1]).tolist() # append x
+#  go.x = np.array(go.x)
+#  go.y = np.array(go.y)
+#  go.z = np.array(go.z)
+#  go.xyz2r()
+#  go.celldis = g.a1[0]
+#  go.center()
+#  return go
 
+
+from .ribbon import bulk2ribbon
 
 def reflect(g):
   """ Reflects a certain geometry with respect to the origin"""
