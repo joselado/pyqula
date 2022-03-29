@@ -4,7 +4,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 from pyqula import geometry
 g = geometry.honeycomb_lattice()
-g = g.get_supercell(40)
+g = g.get_supercell(4)
 h = g.get_hamiltonian(has_spin=False)
 
 from pyqula import potentials

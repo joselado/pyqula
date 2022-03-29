@@ -115,7 +115,7 @@ def rotate(g,angle):
       go.a1 = np.array([c*x + s*y,-s*x + c*y,z])
     elif go.dimensionality==0: pass
     else: raise # 
-#    go.get_fractional() # get fractional coordinates 
+    go.get_fractional() # get fractional coordinates 
     return go
 
 
