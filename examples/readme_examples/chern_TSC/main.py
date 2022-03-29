@@ -10,8 +10,7 @@ h.add_onsite(2.0) # shift chemical potential
 h.add_rashba(1.0) # Rashba spin-orbit coupling
 h.add_zeeman([0.,0.,0.6]) # Zeeman field
 h.add_swave(.3) # add superconductivity
-#(kx,ky,omega) = h.get_berry_curvature() # compute Berry curvature
-#c = h.get_chern() # compute the Chern number
+(kx,ky,omega) = h.get_berry_curvature() # compute Berry curvature
 h.get_surface_kdos(energies=np.linspace(-.4,.4,300)) # surface spectral function
 
 print(c) 
