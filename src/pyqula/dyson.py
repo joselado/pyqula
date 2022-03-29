@@ -10,7 +10,7 @@ try:
 except:
     use_fortran = False
 
-#use_fortran = False
+use_fortran = False # do not use the Fortran routines
 
 def dyson(h,nsuper,nk,ez):
     if h.is_multicell: h = h.get_no_multicell()

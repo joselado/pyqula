@@ -476,7 +476,7 @@ h = g.get_hamiltonian() # get the Hamiltonian
 hv = h.copy() # copy Hamiltonian to create a defective one
 hv.add_onsite(lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100) # add a defect
 eb = embedding.Embedding(h,m=hv) # create an embedding object
-(x,y,d) = eb.ldos(nsuper=19,e=0.,delta=1e-2) # compute LDOS
+(x,y,d) = eb.ldos(nsuper=19,energy=0.,delta=1e-2) # compute LDOS
 ```
 
 ![Alt text](images/single_vacancy.png?raw=true "Single impurity in an infinite honeycomb lattice")
@@ -496,7 +496,7 @@ hv = h.copy() # copy Hamiltonian to create a defective one
 hv.add_exchange(lambda r: [0.,0.,(np.sum((r - g.r[0])**2)<1e-2)*6.]) # add magnetic site
 eb = embedding.Embedding(h,m=hv) # create an embedding object
 ei = eb.get_energy_ingap_state() # get energy of the impurity state
-(x,y,d) = eb.ldos(nsuper=19,e=ei,delta=1e-3) # compute LDOS
+(x,y,d) = eb.ldos(nsuper=19,energy=ei,delta=1e-3) # compute LDOS
 ```
 
 ![Alt text](images/single_YSR.png?raw=true "Single magnetic impurity in an infinite superconductor")
@@ -520,7 +520,7 @@ for J in np.linspace(0.,4.0,100): # loop over exchange
     hv.add_exchange(lambda r: [0.,0.,(np.sum((r - g.r[0])**2)<1e-2)*J])
     eb = embedding.Embedding(h,m=hv) # create an embedding object
     energies = np.linspace(-0.4,0.4,100) # energies
-    d = [eb.dos(nsuper=2,delta=1e-2,e=ei) for ei in energies] # compute DOS
+    d = [eb.dos(nsuper=2,delta=1e-2,energy=ei) for ei in energies] # compute DOS
 ```
 
 ![Alt text](images/YSR.png?raw=true "Parity switching of a magnetic impurity in an infinite superconductor")

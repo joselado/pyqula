@@ -432,7 +432,7 @@ def honeycomb_zigzag_ribbon(ntetramers=10):
 
 
 
-def honeycomb_lattice_zigzag_cell():
+def honeycomb_lattice_zigzag():
   """ Return a honeyomb lattice with 4 atoms per unit cell"""
   from numpy import array, sqrt
   x=array([0.0 for i in range(4)])
@@ -463,6 +463,12 @@ def honeycomb_lattice_zigzag_cell():
   g.center()
   return g
 
+def honeycomb_lattice_armchair():
+    g = honeycomb_lattice_zigzag()
+    g.a1,g.a2 = g.a2,-g.a1 # switch axis
+    from . import sculpt
+    g = sculpt.rotate_a2b(g,g.a1,np.array([1.0,0.0,0.0]))
+    return g
 
 
 def supercell1d(g,nsuper):
