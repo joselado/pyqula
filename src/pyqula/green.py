@@ -443,11 +443,14 @@ def surface_multienergy(h1,k=[0.0,0.,0.],energies=[0.0],reverse=True,**kwargs):
 
 
 
-def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1]):
+def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1],
+                             gtype="bulk"):
   """Calculates the selfenergy of a certain supercell """
-  if nsuper==1:
+  h.turn_dense() # dense mode
+  if nsuper==1: # a single unit cell 
       return bloch_selfenergy(h,energy=e,delta=delta,nk=nk,
-              mode="renormalization")
+              mode="renormalization",gtype=gtype)
+  if gtype!="bulk": return NotImplemented # not implemented
   if h.dimensionality>2: return NotImplemented
   try:   # if two number given
     nsuper1 = nsuper[0]
@@ -463,7 +466,7 @@ def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1]):
   # create hamiltonian of the supercell
   from .embedding import onsite_supercell
   intrasuper = onsite_supercell(h,nsuper)
-  eop = np.matrix(np.identity(len(g),dtype=np.complex))*(ez)
+  eop = np.matrix(np.identity(g.shape[0],dtype=np.complex))*(ez)
   selfe = eop - intrasuper - algebra.inv(g)
   return g,selfe
 

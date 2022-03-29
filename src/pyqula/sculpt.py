@@ -94,29 +94,29 @@ def circle(r=1.0,out=False):
 
 
 def rotate(g,angle):
-  """ Rotates a geometry"""
-  if np.abs(angle)<0.0000001: 
-#    print("No rotation performed")
-    return g
-  phi = angle
-  go = g.copy()
-  # modify x and y, z is the same
-  c,s = np.cos(phi), np.sin(phi)  # sin and cos of the anggle
-  go.x = c*g.x + s*g.y    # x coordinate 
-  go.y = -s*g.x + c*g.y    # y coordinate
-  go.xyz2r() # update r
-  if go.dimensionality==2:  # two dimensional
-    x,y,z = go.a1
-    go.a1 = np.array([c*x + s*y,-s*x + c*y,z])
-    x,y,z = go.a2
-    go.a2 = np.array([c*x + s*y,-s*x + c*y,z])
-  elif go.dimensionality==1: 
-    x,y,z = go.a1
-    go.a1 = np.array([c*x + s*y,-s*x + c*y,z])
-  elif go.dimensionality==0: pass
-  else: raise # 
-  go.get_fractional() # get fractional coordinates 
-  return go
+    """ Rotates a geometry"""
+    if np.abs(angle)<0.0000001: 
+  #    print("No rotation performed")
+      return g
+    phi = angle
+    go = g.copy()
+    # modify x and y, z is the same
+    c,s = np.cos(phi), np.sin(phi)  # sin and cos of the anggle
+    go.x = c*g.x + s*g.y    # x coordinate 
+    go.y = -s*g.x + c*g.y    # y coordinate
+    go.xyz2r() # update r
+    if go.dimensionality==2:  # two dimensional
+      x,y,z = go.a1
+      go.a1 = np.array([c*x + s*y,-s*x + c*y,z])
+      x,y,z = go.a2
+      go.a2 = np.array([c*x + s*y,-s*x + c*y,z])
+    elif go.dimensionality==1: 
+      x,y,z = go.a1
+      go.a1 = np.array([c*x + s*y,-s*x + c*y,z])
+    elif go.dimensionality==0: pass
+    else: raise # 
+#    go.get_fractional() # get fractional coordinates 
+    return go
 
 
 def center(g,angle):
@@ -218,7 +218,7 @@ def get_furthest(g,n=1,angle=0.,tol=5.):
 
 
 def rotate_a2b(g,a,b):
-  """ Rotates the geometry making a original vector a pointing along b"""
+  """ Rotates the geometry making an original vector pointing along b"""
   da = a.dot(a)
   da = a/np.sqrt(da) # unit vector
   db = b.dot(b)

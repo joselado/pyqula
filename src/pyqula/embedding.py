@@ -22,6 +22,7 @@ class Embedding():
         self.has_gf_generator = False
         self.has_spin = self.H.has_spin
         self.has_eh = self.H.has_eh
+        self.mode = "bulk" # mode
         self.nsuper = None # supercell between original Hamiltonian
         if m is not None: 
             if type(m)==Hamiltonian: 
@@ -45,13 +46,14 @@ class Embedding():
         return get_gf(self,**kwargs)
     def get_density_matrix(self,**kwargs):
         return get_dm(self,**kwargs)
-    def ldos(self,**kwargs):
+    def get_ldos(self,**kwargs):
         return get_ldos(self,**kwargs)
+    def ldos(self,**kwargs):  self.get_ldos(**kwargs)
     def dos(self,**kwargs):
         (x,y,d) = self.ldos(**kwargs)
         return np.sum(d) # sum the DOS
     def multidos(self,es=np.linspace(-1.0,1.0,30),**kwargs):
-        ds = parallel.pcall(lambda e: self.dos(e=e,**kwargs),es)
+        ds = parallel.pcall(lambda e: self.dos(energy=e,**kwargs),es)
         return (es,np.array(ds))
     def multildos(self,es=np.linspace(-2.,2.,20),**kwargs):
         """Compute the ldos at different energies"""
@@ -60,7 +62,7 @@ class Embedding():
         ds = [] # total DOS
         fo = open("MULTILDOS/MULTILDOS.TXT","w")
         # parallel execution
-        out = parallel.pcall(lambda x: self.ldos(e=x,**kwargs),es) 
+        out = parallel.pcall(lambda x: self.ldos(energy=x,**kwargs),es) 
         for (e,o) in zip(es,out):
             (x,y,d) = o # extract
 #            (x,y,d) = self.ldos(e=e,**kwargs) # compute LDOS
@@ -235,7 +237,7 @@ def get_gf(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
     e = energy
     if self.nsuper is None: # old way
         g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,
-                nsuper=nsuper)
+                nsuper=nsuper,gtype=self.mode)
     else: # workaround for supercells
         raise # this does not work yet
         g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,
@@ -264,14 +266,15 @@ from .embeddingtk.selfenergies import get_selfenergy_from_potential
 
 
 
-def get_ldos(self,e=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
+def get_ldos(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,
+                    operator=None,**kwargs):
     """Compute the local density of states"""
     h = self.H
     # get the Green's function
-    gv = self.get_gf(energy=e,delta=delta,nsuper=nsuper,nk=nk)
+    gv = self.get_gf(energy=energy,delta=delta,nsuper=nsuper,nk=nk)
     if operator is not None:
         gv = operator*gv # multiply
-    ds = [-gv[i,i].imag for i in range(gv.shape[0])] # LDOS
+    ds = [-gv[i,i].imag/np.pi for i in range(gv.shape[0])] # LDOS
     ds = full2profile(h,ds,check=False) # resum if necessary
     ds = np.array(ds) # convert to array
     gs = h.geometry.supercell(nsuper)
