@@ -387,6 +387,29 @@ h.get_surface_kdos(energies=np.linspace(-.4,.4,300)) # surface spectral function
 
 ![Alt text](images/2DTSC.png?raw=true "Surface states and Berry curvature of a artificial 2D topological superconductor")
 
+
+
+# Surface states in a topological superconductor nanoisland
+
+```python
+from pyqula import islands
+import numpy as np
+g = islands.get_geometry(name="triangular",shape="flower",
+                           r=14.2,dr=2.0,nedges=6) # get a flower-shaped island
+h = g.get_hamiltonian() # get the Hamiltonian
+h.add_onsite(3.0) # shift chemical potential
+h.add_rashba(1.0) # Rashba spin-orbit coupling
+h.add_zeeman([0.,0.,0.6]) # Zeeman field
+h.add_swave(.3) # add superconductivity
+h.get_ldos() # Spatially resolved DOS
+```
+
+![Alt text](images/island_TSC.png?raw=true "Surface states in a topological superconductor nanoisland")
+
+
+
+
+
 ## Antiferromagnet-superconductor interface
 ```python
 from pyqula import geometry
@@ -397,6 +420,8 @@ h.add_onsite(lambda r: (r[1]>0)*0.3) # add chemical potential
 h.add_swave(lambda r: (r[1]<0)*0.3) # add superconductivity
 (k,e,sz) = h.get_bands(operator="sz") # calculate band structure
 ```
+
+
 
 ![Alt text](images/AF_SC.png?raw=true "Antiferromagnet-superconductor interface")
 
