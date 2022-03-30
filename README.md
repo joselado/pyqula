@@ -172,7 +172,7 @@ m = h.get_magnetization() # get the magnetization
 ```python
 from pyqula import geometry
 g = geometry.square_lattice() # geometry of a square lattice
-g = g.get_supercell([7,7]) # generate a 5x5 supercell
+g = g.get_supercell([7,7]) # generate a 7x7 supercell
 g = g.remove(i=g.get_central()[0]) # remove the central site
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_rashba(.4) # add Rashba spin-orbit coupling
