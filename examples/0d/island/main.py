@@ -15,7 +15,7 @@ h.add_onsite(3.0) # shift chemical potential
 h.add_rashba(1.0) # Rashba spin-orbit coupling
 h.add_zeeman([0.,0.,0.6]) # Zeeman field
 h.add_swave(.3) # add superconductivity
-h.get_ldos(e=0.0) # Spatially resolved DOS
+h.get_ldos(e=0.0,projection="TBRS") # Spatially resolved DOS
 
 
 

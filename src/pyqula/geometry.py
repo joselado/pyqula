@@ -161,6 +161,9 @@ class Geometry:
     def get_sublattice(self):
       """Initialize the sublattice"""
       if self.has_sublattice: self.sublattice = get_sublattice(self.r)
+      else: 
+          self.sublattice = get_sublattice(self.r)
+          self.has_sublattice = True
     def shift(self,r0):
       """Shift all the positions by r0"""
       self.x[:] -= r0[0]

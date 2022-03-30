@@ -139,6 +139,9 @@ h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-2.0,2.0,400))
 ![Alt text](images/scf_SC_triplet.png?raw=true "Interaction driven non-unitary spin-triplet superconductor")
 
 
+
+
+
 ## Mean-field with local interactions of a zigzag honeycomb ribbon
 ```python
 from pyqula import geometry
@@ -148,6 +151,24 @@ h = h.get_mean_field_hamiltonian(U=1.0,filling=0.5,mf="ferro")
 (k,e,sz) = h.get_bands(operator="sz") # calculate band structure
 ```
 ![Alt text](images/scf_zigzag.png?raw=true "Mean-field with local interactions of a zigzag honeycomb ribbon")
+
+
+## Non-collinear mean-field interactions with local interactions of a square lattice
+```python
+from pyqula import geometry
+g = geometry.square_lattice() # geometry of a square lattice
+g = g.get_supercell([2,2]) # generate a 2x2 supercell
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_zeeman([0.,0.,0.1]) # add in-plane Zeeman field
+h = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="random") # perform SCF
+(k,e,c) = h.get_bands(operator="sz") # calculate band structure
+m = h.get_magnetization() # get the magnetization
+```
+
+![Alt text](images/scf_square.png?raw=true "Non-collinear mean-field interactions with local interactions of a square lattice")
+
+
+
 
 ## Band structure of twisted bilayer graphene
 ```python
@@ -393,7 +414,6 @@ h.get_surface_kdos(energies=np.linspace(-.4,.4,300)) # surface spectral function
 
 ```python
 from pyqula import islands
-import numpy as np
 g = islands.get_geometry(name="triangular",shape="flower",
                            r=14.2,dr=2.0,nedges=6) # get a flower-shaped island
 h = g.get_hamiltonian() # get the Hamiltonian

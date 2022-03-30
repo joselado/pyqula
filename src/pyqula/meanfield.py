@@ -247,7 +247,7 @@ def guess(h,mode="ferro",fun=0.1):
       if h.has_spin: h0.add_zeeman([0.,fun,0.])
   elif mode=="ferroZ":
       if h.has_spin: h0.add_zeeman([0.,0.,fun])
-  elif mode=="randomXY":
+  elif mode=="randomXY" or mode=="XY":
       def f(r):
           m = [np.random.random()-0.5,np.random.random()-0.5,0.]
           m = np.array(m)

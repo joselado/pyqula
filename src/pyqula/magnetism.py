@@ -50,10 +50,13 @@ def add_antiferromagnetism(h,m):
   """ Adds to the intracell matrix an antiferromagnetic imbalance """
   if not h.has_spin: h.turn_spinful()
   intra = h.intra # intracell hopping
-  if h.geometry.has_sublattice: pass  # if has sublattice
+  if h.geometry.has_sublattice: pass
   else: # if does not have sublattice
-#    print("WARNING, no sublattice present")
-    return 0. # if does not have sublattice
+#      try:
+          h.geometry.get_sublattice() # generate the sublattice
+#      except: # try
+#          return 0
+  sublattice = h.geometry.sublattice  # if has sublattice
   if h.has_spin:
     natoms = len(h.geometry.x) # number of atoms
     out = [[None for j in range(natoms)] for i in range(natoms)] # output matrix
@@ -69,7 +72,7 @@ def add_antiferromagnetism(h,m):
       mi = mass[i] # select the element
       # add contribution to the Hamiltonian
       mi = float2array(mi) # convert to array
-      out[i][i] = (sx*mi[0] + sy*mi[1] + sz*mi[2])*h.geometry.sublattice[i]
+      out[i][i] = (sx*mi[0] + sy*mi[1] + sz*mi[2])*sublattice[i]
     out = bmat(out) # turn into a matrix
     h.intra = h.intra + h.spinful2full(out) # Add matrix 
   else:

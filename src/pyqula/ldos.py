@@ -139,7 +139,7 @@ def ldos_arpack(intra,num_wf=10,robust=False,tol=0,e=0.0,delta=0.01):
 
 
 def ldos_waves(intra,es = [0.0],delta=0.01,operator=None,
-        num_bands=None,k=None,delta_discard=None):
+        num_bands=None,k=None,delta_discard=None,**kwargs):
   """Calculate the DOS in a set of energies by full diagonalization"""
   es = np.array(es) # array with energies
   if num_bands is None:
@@ -284,6 +284,7 @@ def ldos_potential(h,**kwargs):
 def get_ldos(h,projection="TB",**kwargs):
     """ Calculate LDOS"""
     if projection=="TB": return get_ldos_tb(h,**kwargs)
+    elif projection=="TBRS": return get_ldos_tb(h,interpolate=True,**kwargs)
     elif projection=="atomic": 
         from .ldostk import atomicmultildos
         return atomicmultildos.get_ldos(h,**kwargs)
@@ -307,7 +308,7 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
     else:
       print("LDOS using renormalization adaptative Green function")
       gb,gs = green.bloch_selfenergy(h,energy=e,delta=delta,mode="adaptive")
-      d = [ -(gb[i,i]).imag for i in range(len(gb))] # get imaginary part
+      d = [ -(gb[i,i]).imag/np.pi for i in range(len(gb))] # get imaginary part
   elif mode=="arpack" or mode=="diagonalization": # arpack diagonalization
     from . import klist
     if nk is None: nk = 10
@@ -335,7 +336,7 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
       xo = go.x
       yo = go.y
       if interpolate:
-        xo,yo,do = atomic_interpolation(xo,yo,do)
+        xo,yo,do = atomic_interpolation(xo,yo,do,**kwargs)
       write_ldos(xo,yo,do) # write in file
   return (x,y,d) # return LDOS
 
