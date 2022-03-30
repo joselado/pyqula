@@ -153,7 +153,7 @@ h = h.get_mean_field_hamiltonian(U=1.0,filling=0.5,mf="ferro")
 ![Alt text](images/scf_zigzag.png?raw=true "Mean-field with local interactions of a zigzag honeycomb ribbon")
 
 
-## Non-collinear mean-field interactions with local interactions of a square lattice
+## Non-collinear mean-field with local interactions of a square lattice
 ```python
 from pyqula import geometry
 g = geometry.square_lattice() # geometry of a square lattice
