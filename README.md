@@ -179,6 +179,18 @@ h = specialhamiltonian.twisted_bilayer_graphene() # TBG Hamiltonian
 
 ![Alt text](images/tbg.png?raw=true "Band structure of twisted bilayer graphene")
 
+## Band structure of monolayer NbSe2
+```python
+from pyqula import specialhamiltonian # special Hamiltonians library
+h = specialhamiltonian.NbSe2(soc=0.5) # NbSe2 Hamiltonian
+(k,e,c) = h.get_bands(operator="sz",kpath=["G","K","M","G"]) # compute bands
+```
+
+![Alt text](images/NbSe2.png?raw=true "Band structure of monolayer NbSe2")
+
+
+
+
 ## Chern number of an artificial Chern insulator
 ```python
 from pyqula import geometry
