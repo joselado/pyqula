@@ -19,8 +19,8 @@ def wave_jit(x,y,centers,heights,facx,facy,z):
 
 
 def compute_interpolation(centers=[[0.,0.,0.]], heights=[10.0],name="",
-        nx=600,ny=600,smooth=2,smooth_nxny=False,xcut=None,ycut=None,
-        dx=None,dy=None):
+        nx=600,ny=600,smooth=.3,smooth_nxny=False,xcut=None,ycut=None,
+        dx=None,dy=None,**kwargs):
     """ Creates a set of gaussians at that position and with a height"""
     if len(heights)<len(centers): raise
     if smooth_nxny:

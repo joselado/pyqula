@@ -11,7 +11,7 @@ def get_sublattice(rs):
   if info: print("Looking for a sublattice")
   while True: # infinite loop
     for i in range(n): # look for a neighbor for site i
-      if sublattice[i]!=0: continue
+      if sublattice[i]!=0: continue # already assigned
       for j in range(n): # loop over the rest of the atoms
         if sublattice[j]==0: continue # next one
         dr = rs[i] - rs[j] # distance to site i
