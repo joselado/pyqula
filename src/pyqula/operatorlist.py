@@ -4,7 +4,12 @@ import numpy as np
 def get_operator(self,name,**kwargs):
       """Return the conventional operator"""
       from . import operators
+      from . import potentials
       if type(name) is operators.Operator: return name # return operator
+      if type(name) is potentials.Potential: 
+          out = self.copy()*0. # initialize
+          out.add_onsite(name) # add onsite
+          return out # return operator
       if name is None: return None # return operator
       if name=="None": return None
       elif name in ["berry","Berry"]: 
