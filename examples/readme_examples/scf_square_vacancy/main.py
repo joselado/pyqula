@@ -10,7 +10,6 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_rashba(.4) # add Rashba spin-orbit coupling
 h = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="random") # perform SCF
 (k,e,c) = h.get_bands(operator="sz") # calculate band structure
-h.write_magnetization(nrep=1) # get the magnetization
 m = h.get_magnetization() # get the magnetization
 
 

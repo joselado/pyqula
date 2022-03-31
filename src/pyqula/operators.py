@@ -23,6 +23,7 @@ isnumber = algebra.isnumber
 class Operator():
     def __init__(self,m,linear=True):
         """Initialization"""
+        from .hamiltonians import Hamiltonian
         self.linear = linear
         self.matrix = None
         if algebra.ismatrix(m):
@@ -35,6 +36,9 @@ class Operator():
             self.m = lambda v,k=None: m*v
         elif callable(m): 
             self.m = m # as function
+        elif type(m)==Hamiltonian: # Hamiltonian type 
+            self.m = lambda v,k=None: m.get_hk_gen()(k)@v
+            self.linear = True
         else: 
             print("Unrecognised type",type(m))
             raise

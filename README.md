@@ -281,6 +281,21 @@ h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded bands
 ![Alt text](images/unfolded.png?raw=true "Unfolded electronic structure of a supercell with a defect")
 
 
+## Moire band structure of a moire superlattice
+```python
+from pyqula import geometry
+from pyqula import potentials
+g = geometry.triangular_lattice() # create geometry
+g = g.get_supercell([7,7]) # create a supercell
+h = g.get_hamiltonian() # get the Hamiltonian
+fmoire = potentials.commensurate_potential(g,n=3,minmax=[0,1]) # morie potential
+h.add_onsite(fmoire) # add onsite energy following the moire
+h.get_bands(operator=fmoire) # project on the moire
+```
+
+![Alt text](images/moire_bands.png?raw=true "Moire band structure of a moire superstructure")
+
+
 ## Unfolded electronic structure of a moire superstructure
 ```python
 from pyqula import geometry
@@ -297,6 +312,7 @@ h.get_kdos_bands(operator="unfold",delta=2e-2,kpath=kpath,
                   energies=np.linspace(-3,-1,300)) # unfolded bands
 
 ```
+
 ![Alt text](images/unfolding_moire.png?raw=true "Unfolded electronic structure of a moire superstructure")
 
 
