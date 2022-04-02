@@ -4,7 +4,6 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 from pyqula import geometry
 from pyqula import potentials
-import numpy as np
 g = geometry.triangular_lattice() # create geometry
 g = g.get_supercell([7,7]) # create a supercell
 h = g.get_hamiltonian() # get the Hamiltonian
