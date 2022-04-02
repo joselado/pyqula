@@ -190,6 +190,7 @@ def kx(g,nk=400):
   return kout # return klist
 
 
+
 def tr_path(nk=100,d=20,write=True):
   """ Creates the special path to calculate the Z2 invariant"""
   # d is the number of divisions
@@ -290,34 +291,19 @@ def kmesh(dimensionality,nk=10,nsuper=1):
   return kp
 
 
-
-
-def label2k(g,kl):
-    """Given a kpoint label, return the kpoint"""
-    if kl=="G": return [0.,0.,0.]
-    elif kl=="M": return [0.5,0.,0.]
-    elif kl=="K":
-        from .kpointstk.locate import target_moduli
-        from .kpointstk.mapping import unitary
-        vm = np.sqrt(3) # moduli
-        k = g.k2K(target_moduli(unitary(g.b1),unitary(g.b2),vm))
-        return k*2/(3.*np.sqrt(3))
-    elif kl=="K'": return -label2k(g,"K")
-    elif kl=="M1": return [.5,.0,.0]
-    elif kl=="M2": return [.0,.5,.0]
-    elif kl=="M3": return [.5,.5,.0]
-    elif kl=="X": return [.5,.5,.0]
-    else: raise
+from .kpointstk.labels import label2k
 
 
 
-
-
-def get_kpath_labels(g,ks,**kwargs):
+def get_kpath_labels(g,ks,write=True,**kwargs):
     """Return the k-path"""
     kps = [label2k(g,k) for k in ks] # get the kpoints
     from .kpointstk.locate import k2path
-    return k2path(g,kps,**kwargs) # closest path
+    out = k2path(g,kps,**kwargs) # closest path
+    if write: 
+        from .kpointstk.bandlines import write_bandlines
+        write_bandlines(g,out,ks) # write the lines in a file
+    return out
 
 
 def get_kpath(g,kpath=None,**kwargs):

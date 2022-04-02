@@ -22,7 +22,7 @@ def closest_kreplica(g,v,v0):
                 wt = w + g.b1*i # compute replica
                 dw = wt - w0 # distance to reference point
                 dw = np.sqrt(dw.dot(dw)) # distance
-                if dw<dmax: 
+                if 1e-4<dw<dmax: 
                     vo = v + np.array([i,0.,0.])
                     dmax = dw
         return vo # return vo
@@ -36,11 +36,25 @@ def closest_kreplica(g,v,v0):
                 wt = w + g.b1*i + g.b2*j # compute replica
                 dw = wt - w0 # distance to reference point
                 dw = np.sqrt(dw.dot(dw)) # distance
-                if dw<dmax: 
+                if 1e-4<dw<dmax: 
                     vo = v + np.array([i,j,0.])
                     dmax = dw
         return vo # return vo
     else: raise
+
+
+
+
+def same_kpoint(k1,k2,tol=1e-6):
+    """Check if two kpoints are the same"""
+    dk = np.array(k1) - np.array(k2) # difference
+    dk = np.abs(dk) # absolute value
+    dk = np.exp(1j*dk*np.pi*2.) # to the unit circle
+    if np.max(np.abs(dk-1.))>tol: return False
+    else: return True
+
+
+
 
 
 
@@ -67,5 +81,6 @@ def k2path(g,kp,nk=100):
       steps = np.linspace(0.,1.,nk2,endpoint=False) # number of points
       for s in steps:
         ks += [kp[i] + dk0*s] # add kpoint
+    ks += [kp[len(kp)-1]] # add the last one
     return ks
 
