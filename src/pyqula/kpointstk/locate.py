@@ -12,20 +12,35 @@ def target_moduli(v1,v2,m):
 
 def closest_kreplica(g,v,v0):
     """Return the closest replica of a kpoint close to another one"""
-    if g.dimensionality!=2: raise # only for 2d so far
-    w = v[0]*g.b1 + v[1]*g.b2 # redefine
-    w0 = v0[0]*g.b1 + v0[1]*g.b2 # redefine
-    n = 2
-    dmax = 1e8
-    for i in range(-n,n+1):
-        for j in range(-n,n+1):
-            wt = w + g.b1*i + g.b2*j # compute replica
-            dw = wt - w0 # distance to reference point
-            dw = np.sqrt(dw.dot(dw)) # distance
-            if dw<dmax: 
-                vo = v + np.array([i,j,0.])
-                dmax = dw
-    return vo # return vo
+    if g.dimensionality==0: return v*0. # for 0d
+    elif g.dimensionality==1: # for 1d
+        w = v[0]*g.b1 # redefine
+        w0 = v0[0]*g.b1 # redefine
+        n = 2
+        dmax = 1e8
+        for i in range(-n,n+1):
+                wt = w + g.b1*i # compute replica
+                dw = wt - w0 # distance to reference point
+                dw = np.sqrt(dw.dot(dw)) # distance
+                if dw<dmax: 
+                    vo = v + np.array([i,0.,0.])
+                    dmax = dw
+        return vo # return vo
+    elif g.dimensionality==2: # for 2d
+        w = v[0]*g.b1 + v[1]*g.b2 # redefine
+        w0 = v0[0]*g.b1 + v0[1]*g.b2 # redefine
+        n = 2
+        dmax = 1e8
+        for i in range(-n,n+1):
+            for j in range(-n,n+1):
+                wt = w + g.b1*i + g.b2*j # compute replica
+                dw = wt - w0 # distance to reference point
+                dw = np.sqrt(dw.dot(dw)) # distance
+                if dw<dmax: 
+                    vo = v + np.array([i,j,0.])
+                    dmax = dw
+        return vo # return vo
+    else: raise
 
 
 
