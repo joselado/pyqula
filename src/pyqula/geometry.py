@@ -1264,3 +1264,9 @@ def get_geometry(g):
     else: raise
 
 
+def sierpinski(**kwargs):
+    from .geometrytk import fractals
+    return fractals.sierpinski(**kwargs)
+
+
+

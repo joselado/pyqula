@@ -199,6 +199,9 @@ class Hamiltonian():
     def check_mode(self,n):
         """Verify the type of Hamiltonian"""
         return hamiltonianmode.check_mode(self,n)
+    def get_bandwidth(self,**kwargs):
+        from .spectrum import get_bandwidth
+        return get_bandwidth(self,**kwargs)
     def diagonalize(self,nkpoints=100):
       """Return eigenvalues"""
       return diagonalize(self,nkpoints=nkpoints)

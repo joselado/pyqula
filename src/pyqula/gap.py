@@ -120,7 +120,10 @@ def optimize_gap_single(h,direct=True):
     result = opt.minimize(fg,x0,bounds=bounds,method="SLSQP")
     x = result.x # position of the minimum gap
     return (fg(x),x)
-     
+
+
+
+
 def optimize_gap(h,direct=True,ntries=10):
   """Return the gap, several times"""
   rs = [optimize_gap_single(h,direct=direct) for i in range(ntries)]
@@ -131,19 +134,22 @@ def optimize_gap(h,direct=True,ntries=10):
 
 
 
-def indirect_gap(h,robust=True,mode="full",**kwargs):
+def optimize_energy(h,robust=True,mode="full",**kwargs):
     """Calculates the gap for a 2d Hamiltonian by doing
     a kmesh sampling. It will return the positive energy with smallest value"""
     if h.intra.shape[0]>2000:
-        h = h.copy()
+        h = h.copy() # make a new copy
         h.turn_sparse() # sparse Hamiltonian
     from scipy.optimize import minimize
     hk_gen = h.get_hk_gen() # generator
     def gete(k): # return the energies
       hk = hk_gen(k) # Hamiltonian 
-      if h.is_sparse: es = algebra.smalleig(hk,numw=3) # sparse
+      if h.is_sparse: 
+          if mode in ["top","bottom"]: raise # this should be finished
+          else:
+              es = algebra.smalleig(hk,numw=3) # sparse mode
       else: es = algebra.eigvalsh(hk) # get eigenvalues
-      return es # get the energies
+      return es # return the energies
     # We will assume that the chemical potential is at zero
     def func(k): # conduction band eigenvalues
       es = gete(k) # get eigenvalues
@@ -162,13 +168,20 @@ def indirect_gap(h,robust=True,mode="full",**kwargs):
       ec = np.min(es[es>0.0]) # conduction band
       ev = np.min(-es[es<0.0]) # valence band
       return ec+ev # energy difference
+    def fbottom(k):
+      es = gete(k) # get eigenvalues
+      return np.min(es) # bottom
+    def ftop(k):
+      es = gete(k) # get eigenvalues
+      return -np.max(es) # bottom
     def opte(f):
       """Optimize the eigenvalues"""
       from scipy.optimize import differential_evolution
       from scipy.optimize import minimize
       bounds = [(0.,1.) for i in range(h.dimensionality)]
-      if robust: res = differential_evolution(f,bounds=bounds,**kwargs)
-      else: 
+      if robust: # use a robust optimization
+          res = differential_evolution(f,bounds=bounds,**kwargs)
+      else: # conventional optimization
           x0 = np.random.random(h.dimensionality) # inital vector
           res = minimize(f,x0,method="Powell",bounds=bounds,**kwargs)
       return f(res.x)
@@ -181,10 +194,14 @@ def indirect_gap(h,robust=True,mode="full",**kwargs):
         return opte(funv) # optimize valence band
     elif mode=="conduction":
         return opte(func) # optimize conduction band
+    elif mode=="bottom":
+        return opte(fbottom) # optimize bottom of the bands
+    elif mode=="top":
+        return -opte(ftop) # optimize top of the bands
     else: raise
 
 
-
+indirect_gap = optimize_energy # wrapper (for compatibility)
 
 
 def get_gap(self,ntries=1,**kwargs):
