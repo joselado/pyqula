@@ -531,3 +531,14 @@ def lowest_energies(h,n=4,k=None,**kwargs):
     return es
 
 
+
+def get_bandwidth(self,**kwargs):
+    """Return the bandwidth of the Hamiltonian"""
+    from .gap import optimize_energy 
+    self.turn_dense() # dense matrix
+    emin = optimize_energy(self,mode="bottom",**kwargs)
+    emax = optimize_energy(self,mode="top",**kwargs)
+    return (emin,emax)
+
+
+
