@@ -587,6 +587,9 @@ class Hamiltonian():
     @get_docstring(superconductivity.average_hamiltonian_dvector)
     def get_average_dvector(self,**kwargs):
         return superconductivity.average_hamiltonian_dvector(self,**kwargs)
+    def didv(self,**kwargs):
+        from .transporttk.localprobe import Hamiltonian_didv
+        return Hamiltonian_didv(self,**kwargs)
 
 
 hamiltonian = Hamiltonian

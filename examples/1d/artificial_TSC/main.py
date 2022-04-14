@@ -11,6 +11,13 @@ g.dimensionality = 0 # and make it finite
 h = g.get_hamiltonian() # generate a Hamiltonian with first neighbor hopping
 # now create an artificial TSC combining Zeeman, Rashba and SC
 h.add_rashba(.5) # add Rashba SOC
+
+# if you want a spatially dependent potential, just add a function as
+# fr = lambda r: np.cos(r[0]) # this will modulate energies in a cosine-like fashion
+# where "r" refers to the location of that site
+# h.add_onsite(fr) # shift the chamical potential
+# fyi, the positions of the 1d chain can be accessed as g.r
+
 h.add_onsite(2.0) # shift the chamical potential
 h.add_exchange([0.,0.,.5]) # add exchange field
 h.add_swave(0.2) # add swave SC order

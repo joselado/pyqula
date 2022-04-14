@@ -131,3 +131,13 @@ def get_intra(H):
     elif type(H)==Embedding: return H.m
     else: raise
 
+
+
+def Hamiltonian_didv(self,**kwargs):
+   """Wrapper to compute the didv for a Hamiltonian"""
+   lp = LocalProbe(self,**kwargs) # create the object
+   return lp.didv(**kwargs)
+
+
+
+
