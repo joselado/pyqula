@@ -15,7 +15,7 @@ h.add_rashba(.5) # add Rashba SOC
 # if you want a spatially dependent potential, just add a function as
 # fr = lambda r: np.cos(r[0]) # this will modulate energies in a cosine-like fashion
 # where "r" refers to the location of that site
-# h.add_onsite(fr) # shift the chamical potential
+# h.add_onsite(fr) # shift the chemical potential
 # fyi, the positions of the 1d chain can be accessed as g.r
 
 h.add_onsite(2.0) # shift the chamical potential

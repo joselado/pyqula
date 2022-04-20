@@ -1175,7 +1175,7 @@ from .neighbor import neighbor_distances
 def array2function(g,v):
     r = g.r # positions
     def f(ri):
-        return array2function_jit(r,v,ri)
+        return array2function_jit(r,v,np.array(ri))
     return f # return function
 
 
