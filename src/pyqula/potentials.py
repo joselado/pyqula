@@ -244,6 +244,7 @@ def edge_potential(g):
 def stacking_potential(g,**kwargs):
     """Given a certain geometry, return a function with that gives the
     stacking"""
+    # this function should be polished
     from .crystalfield import cf_potential
 #    g1 = g.copy() ; g1.r[:,2] = 0.0
     v = cf_potential(g,vc=2.0,mode="stacking",**kwargs)
