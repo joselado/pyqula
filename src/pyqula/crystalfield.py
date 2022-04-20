@@ -27,19 +27,19 @@ def cf_potential(g,rcut=6.0,vc=0.0,mode="full"):
         def getd(dr,dx,dy,dz): return dr
     elif mode=="stacking": # stacking mode
         def getd(dr,dx,dy,dz):
-            dr[np.abs(dz)<1e-3] = 1e10
+            dr = dx**2 + dy**2 + 0.1*dz**2
             return dr
     else: raise # not implemented
     g = g.copy() # copy geometry
     interactions = [] # empty list
     nat = len(g.r) # number of atoms
-    mout = np.zeros(nat) # initialize matrix
+    mout = np.zeros(nat) # initialize array
     if g.dimensionality>0:
       lat = np.sqrt(g.a1.dot(g.a1)) # size of the unit cell
       g.ncells = int(2*rcut/lat)+2 # number of unit cells to consider
     ri = g.r # positions
     for d in g.neighbor_directions(): # loop
-        rj = np.array(g.replicas(d)) # positions
+        rj = np.array(g.replicas(d=d)) # positions
         for i in range(nat):
             dx = rj[:,0] - ri[i,0]
             dy = rj[:,1] - ri[i,1]

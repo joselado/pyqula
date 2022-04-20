@@ -150,7 +150,7 @@ def tbgAA(g):
     funr = geometry.get_fractional_function(g,center=True)
     rf = np.array([funr(ri) for ri in g.r])
     fint = interpolate2d(rf[:,0:2],d) # interpolation
-    return lambda ri: fint(funr(ri))[0] 
+    return Potential(lambda ri: fint(funr(ri))[0])
 
 
 
@@ -211,6 +211,7 @@ def array2potential(x,y,v):
 
 def object2potential(V,r=None):
     """Transform a generic object into a callable potential"""
+    # this should be finished
     return V
 
 
@@ -239,6 +240,19 @@ def edge_potential(g):
     return Potential(fout) # return the potential
 
 
+
+def stacking_potential(g,**kwargs):
+    """Given a certain geometry, return a function with that gives the
+    stacking"""
+    from .crystalfield import cf_potential
+#    g1 = g.copy() ; g1.r[:,2] = 0.0
+    v = cf_potential(g,vc=2.0,mode="stacking",**kwargs)
+    v = v - np.min(v) # shift to zero
+    v = v/np.max(v) # normalize
+    v = v - 0.5 # between -0.5 and 0.5
+    from .geometry import array2function
+    fv = array2function(g,v)
+    return Potential(fv) # return the potential
 
 
 
