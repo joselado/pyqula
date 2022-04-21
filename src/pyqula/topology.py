@@ -514,7 +514,7 @@ def berry_green_generator(f,k=[0.,0.,0.],dk=0.05,operator=None,
     g = (gxp + gyp + gxm + gym)/4. # average Green function
     # Now apply the formula
     gI = algebra.inv(g) # inverse
-    # the derivative of g^-1 is -g^-1*g'g^-1
+    # the derivative of g^-1 is -g^-1*g'*g^-1
     omega = -(gxp-gxm)@gI@(gyp-gym) + (gyp-gym)@gI@(gxp-gxm)
 #    omega = ((gxp-gxm)@(gyp-gym) - (gyp-gym)@(gxp-gxm))@gI
 #    omega = g*((gxp.I-gxm.I)*(gyp-gym) -(gyp.I-gym.I)*(gxp-gxm))
