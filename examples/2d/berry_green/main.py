@@ -11,9 +11,6 @@ from pyqula import topology
 from pyqula import klist
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=False)
-#h.add_haldane(0.05)
-#h.add_zeeman(0.3)
-#h.add_rashba(0.3)
 h.add_sublattice_imbalance(0.6)
 from pyqula import dos
 from pyqula import topology

@@ -15,7 +15,7 @@ ts = [[1.0,0.0],[1.0,0.2],[1.0,0.38],[1.0,0.4],[1.0,0.6]]
 
 for t in ts:
     g = geometry.triangular_lattice() # triangular lattice geometry
-    h0 = g.get_hamiltonian(ts=t) # create hamiltonian of the system
+    h0 = g.get_hamiltonian(tij=t) # create hamiltonian of the system
     
     
     # Now compute energies for different rotations

@@ -18,7 +18,7 @@ def fit(x):
   from pyqula.specialhamiltonian import TMDC_MX2
   soc = x[1]
   ts = x[2:]
-  h = TMDC_MX2(ts=ts,normalize=False,soc=soc)
+  h = TMDC_MX2(tij=ts,normalize=False,soc=soc)
   h.remove_spin()
   h.turn_dense()
   h.add_onsite(x[0])
@@ -34,7 +34,7 @@ res = minimize(fit,x0)
 soc = res.x[1]
 ts = res.x[2:]
 print(ts,soc)
-h = TMDC_MX2(ts=ts,normalize=False,soc=soc)
+h = TMDC_MX2(tij=ts,normalize=False,soc=soc)
 h.get_bands()
 #import matplotlib.pyplot as plt
 #plt.scatter(k,e)

@@ -19,7 +19,7 @@ qs = np.linspace(0.,1.,len(qpath)) # loop over qvectors
 
 def get(t):
     g = geometry.triangular_lattice() # triangular lattice geometry
-    h0 = g.get_hamiltonian(ts=t) # create hamiltonian of the system
+    h0 = g.get_hamiltonian(tij=t) # create hamiltonian of the system
     
     
     # Now compute energies for different rotations
