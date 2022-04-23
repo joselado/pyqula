@@ -3,10 +3,14 @@ from . import classicalspinf90
 from . import neighbor
 from scipy.sparse import csr_matrix,csc_matrix,coo_matrix
 
+import jax
+jax.config.update('jax_platform_name', 'cpu')
+
 zero = np.matrix(np.zeros((3,3)))  # real matrix
 iden = np.matrix(np.identity(3))  # real matrix
 zzm = zero.copy() ; zzm[2,2] = 1.0 # matrix for ZZ interaction
 
+use_jax = True
 
 class SpinModel(): # class for a spin Hamiltonian
   def __init__(self,g): # geometry
@@ -30,8 +34,10 @@ class SpinModel(): # class for a spin Hamiltonian
   def energy(self,use_fortran=True):
     """ Calculate the energy"""
     if use_fortran:
-      eout = classicalspinf90.energy(self.theta,self.phi,self.b,self.j,
-               self.pairs)
+      eout = energy(self.theta,self.phi,self.b,self.j,self.pairs)
+   #   eout = classicalspinf90.energy(self.theta,self.phi,self.b,self.j,
+   #            self.pairs)
+
     return eout
   def minimize_energy(self,theta0=None,phi0=None,tries=10,calle=None):
     """Minimize the energy of the spin model"""
@@ -102,17 +108,114 @@ def add_heisenberg(r):
 
 def energy(thetas,phis,bs,js,indsjs):
   """Calculate the energy"""
-  eout = classicalspinf90.energy(thetas,phis,bs,js,indsjs)
+#  eout = classicalspinf90.energy(thetas,phis,bs,js,indsjs)
+  if use_jax:
+      eout = energy_jax(np.concatenate([thetas,phis]),bs,
+                        np.array(js),np.array(indsjs))
+  else:
+      eout = energy_jit(thetas,phis,bs,np.array(js),np.array(indsjs))
   return eout
+
+
+
+from numba import jit
+
+@jit(nopython=True)
+def energy_jit(thetas,phis,bs,js,indsjs):
+   mx = np.sin(thetas)*np.cos(phis)
+   my = np.sin(thetas)*np.sin(phis)
+   mz = np.cos(thetas)
+   ms = np.zeros(shape=(len(mx),3))
+   ms[:,0] = mx
+   ms[:,1] = my
+   ms[:,2] = mz
+   eout = 0.0 # total energy
+   eout += np.sum(mx*bs[:,0])
+   eout += np.sum(my*bs[:,1])
+   eout += np.sum(mz*bs[:,2])
+   ni = len(indsjs) # number of interactions
+   for kk in range(ni):
+       ii = indsjs[kk,0]
+       jj = indsjs[kk,1]
+       for i in range(3):
+           for j in range(3):
+               eout = eout + ms[ii,i]*ms[jj,j]*js[kk,i,j]
+   return eout
+
+
+
+
+#def jacobian_jit(thetas,phis,bs,js,indsjs,nspin,njs,jac):
+#   mx = np.sin(thetas)*np.cos(phis)
+#   my = np.sin(thetas)*np.sin(phis)
+#   mz = np.cos(thetas)
+#   ms = np.zeros(shape=(len(mx),3))
+#   n = len(mx) # number of spins
+#   ms[:,0] = mx
+#   ms[:,1] = my
+#   ms[:,2] = mz
+#   # the first ns components is derivative with respect to theta
+#   # the second ns with respect to phi
+#   # first the magnetic field
+#   jac[0:n] = jac[0:n] + np.cos(thetas[0:n])*np.cos(phis[0:n])*bs[0:n,0]
+#   jac[0:n] = jac[0:n] + np.cos(thetas[0:n])*np.sin(phis[0:n])*bs[0:n,1]
+#   jac[0:n] = jac[0:n] - np.sin(thetas[0:n])*bs[0:n,2]
+#   jac[n:2*n] = jac[n:2*n] - sin(thetas[0:n])*sin(phis[0:n])*bs[0:n,0]
+#   jac[n:2*n] = jac[n:2*n] + sin(thetas[0:n])*cos(phis[0:n])*bs[0:n,1]
+#   # now the exchange couplings
+#   ni = len(indsjs) # number of interactions
+#   for kk in range(ni): # loop over interactions
+#       ii = indsjs[kk,0]
+#       jj = indsjs[kk,1]
+#       for i in range(3):
+#           for j in range(3):
+
+import jax.numpy as jnp
+
+#jnp = np
+
+def energy_jax_master(thetaphi,bs,js,indsjs):
+   n = len(bs) # numbe rof sites
+   thetas = thetaphi[0:n]
+   phis = thetaphi[n:2*n]
+   mx = jnp.sin(thetas)*jnp.cos(phis)
+   my = jnp.sin(thetas)*jnp.sin(phis)
+   mz = jnp.cos(thetas)
+   ms = jnp.zeros(shape=(len(mx),3))
+   ms = ms.at[:,0].set(mx[:])
+   ms = ms.at[:,1].set(my[:])
+   ms = ms.at[:,2].set(mz[:])
+   eout = 0.0 # total energy
+   eout += jnp.sum(mx*bs[:,0])
+   eout += jnp.sum(my*bs[:,1])
+   eout += jnp.sum(mz*bs[:,2])
+   ni = len(indsjs) # number of interactions
+   ii = indsjs[:,0]
+   jj = indsjs[:,1]
+   for i in range(3):
+       for j in range(3):
+           eout = eout + jnp.sum(ms[ii,i]*ms[jj,j]*js[0:ni,i,j])
+   return eout
+
+
+from jax import jit
+from jax import grad
+energy_jax = jit(energy_jax_master)
+jacobian_jax = jit(grad(energy_jax_master))
 
 
 
 def get_jacobian(bs,js,indsjs):
   """Return the Jacobian"""
+  indsjs = np.array(indsjs)
+  js = np.array(js)
   def jacobian(thetaphi):
-    thetas = thetaphi[0:len(thetaphi)//2]
-    phis = thetaphi[len(thetaphi)//2:len(thetaphi)]
-    jac = classicalspinf90.jacobian(thetas,phis,bs,js,indsjs)
+    if use_jax:
+        jac = jacobian_jax(thetaphi,bs,js,indsjs)
+    else:
+        thetas = thetaphi[0:len(thetaphi)//2]
+        phis = thetaphi[len(thetaphi)//2:len(thetaphi)]
+        jac = classicalspinf90.jacobian(thetas,phis,bs,js,indsjs)
     return jac
   return jacobian
 

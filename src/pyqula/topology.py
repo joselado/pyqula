@@ -30,9 +30,10 @@ def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=600,
     if reciprocal:  k = h.geometry.get_k2K_generator()(k) # convert
     if mode=="Wilson":
       b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
-    if mode=="Green":
+    elif mode=="Green":
       f = h.get_gk_gen(delta=delta) # get generator
       b = berry_green(f,k=k,operator=operator) 
+    else: raise
     return str(k[0])+"   "+str(k[1])+"   "+str(b)+"\n"
   fo = open("BERRY_CURVATURE.OUT","w") # open file
   if parallel.cores==1: # serial execution
@@ -262,9 +263,10 @@ def get_berry_curvature(h,dk=-1,nk=100,reciprocal=True,nsuper=1,window=None,
       k = R@ki # change of basis
       if mode=="Wilson":
          b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
-      if mode=="Green":
+      elif mode=="Green":
          f = h.get_gk_gen(delta=delta) # get generator
          b = berry_green(f,k=k,operator=operator) 
+      else: raise
       return b
   bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
   if write: # write result in a file
