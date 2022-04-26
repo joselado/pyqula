@@ -8,38 +8,43 @@ try:
     use_fortran=True
 except:
     use_fortran=False
-#    print("FORTRAN not working in specialhopping")
 use_fortran=False
+
+
+def obj2callable(a):
+    if callable(a): return a # input is a function
+    else: return lambda x: a # input is a number
 
 
 
 def twisted(cutoff=5.0,ti=0.3,lambi=8.0,
         lamb=12.0,dl=3.0,lambz=10.0,b=0.0,phi=0.0):
   """Hopping for twisted bilayer graphene"""
+  ti = obj2callable(ti) # convert to callable
   cutoff2 = cutoff**2 # cutoff in distance
   def fun(r1,r2):
-    rr = (r1-r2) # distance
-    rr = rr.dot(rr) # distance
-    if rr>cutoff2: return 0.0 # too far
-    if rr<0.001: return 0.0 # same atom
-    dx = r1[0]-r2[0]
-    dy = r1[1]-r2[1]
-    dz = r1[2]-r2[2]
-    r = np.sqrt(rr)
-#    if r2>100.0: return 0.0 # too far
-    if (r-1.0)<-0.1: 
-      raise
-    out = -(dx*dx + dy*dy)/rr*np.exp(-lamb*(r-1.0))*np.exp(-lambz*dz*dz)
-    out += -ti*(dz*dz)/rr*np.exp(-lambi*(r-dl))
-    #### fix for magnetic field
-    cphi = np.cos(phi*np.pi)
-    sphi = np.sin(phi*np.pi)
-    r = (r1+r2)/2.
-    dr = r1-r2
-    p = 2*r[2]*(dr[0]*sphi - dr[1]*cphi)
-    out *= np.exp(1j*b*p)
-    #####
-    return out
+      rr = (r1-r2) # distance
+      rm  = (r1+r2)/2. # average location
+      rr = rr.dot(rr) # distance
+      if rr>cutoff2: return 0.0 # too far
+      if rr<0.001: return 0.0 # same atom
+      dx = r1[0]-r2[0]
+      dy = r1[1]-r2[1]
+      dz = r1[2]-r2[2]
+      r = np.sqrt(rr)
+      if (r-1.0)<-0.1: raise
+      out = -(dx*dx + dy*dy)/rr*np.exp(-lamb*(r-1.0))*np.exp(-lambz*dz*dz)
+      # interlayer hopping
+      out += -ti(rm)*(dz*dz)/rr*np.exp(-lambi*(r-dl))
+      #### fix for magnetic field
+#      cphi = np.cos(phi*np.pi)
+#      sphi = np.sin(phi*np.pi)
+#      r = (r1+r2)/2.
+#      dr = r1-r2
+#      p = 2*r[2]*(dr[0]*sphi - dr[1]*cphi)
+#      out *= np.exp(1j*b*p)
+      #####
+      return out
   return fun
 
 
@@ -63,19 +68,14 @@ def twisted_matrix(cutoff=5.0,ti=0.3,lambi=8.0,mint=1e-5,
       return out
     return funhop # return function
   else:
-    print("Using Python function in twisted")
-    return twisted_matrix_python(cutoff=cutoff,ti=ti,mint=mint,
+      if callable(ti): # workaround for callable hoppings
+          tij = twisted(cutoff=cutoff,ti=ti,
+                          lambi=lambi,lamb=lamb,dl=dl,lambz=lambz)
+          return entry2matrix(tij)
+      else: 
+          return twisted_matrix_python(cutoff=cutoff,ti=ti,mint=mint,
                                   lambi=lambi,lamb=lamb,lambz=lambz,
                                   dl=dl,**kwargs)
-#    def funhop(r1,r2):
-#      fh = twisted(cutoff=cutoff,ti=ti,lambi=lambi,lamb=lamb,dl=dl,**kwargs)
-#      m = np.array([[fh(r1i,r2j) for r1i in r1] for r2j in r2],dtype=np.complex)
-#      m = csc_matrix(m,dtype=np.complex).T
-#      m.eliminate_zeros()
-#      return m
-#  return funhop # function
-
-
 
 
 def multilayer(ti=0.3,dz=3.0):
@@ -200,19 +200,20 @@ class HoppingGenerator():
 def twisted_matrix_python(cutoff=10,**kwargs):
   """Function returning the hopping of a twisted matrix"""
   def tij(rs1,rs2): # function to return
-    nr = len(rs1) # length
-    nmax = nr*int(10*cutoff**2) # maximum number of hoppings
-    data = np.zeros(nmax,dtype=np.complex) # data
-    ii = np.zeros(nmax,dtype=int) # index
-    jj = np.zeros(nmax,dtype=int) # index
-    ii,jj,data,nk = twisted_matrix_jit(np.array(rs1),np.array(rs2),ii,jj,data,cutoff=cutoff,**kwargs) # call function
-    if nk>nmax: raise # sanity check
-    ii = ii[0:nk] # only nonzero
-    jj = jj[0:nk] # only nonzero
-    data = data[0:nk] # only nonzero
-    out = csc_matrix((data,(ii,jj)),shape=(nr,nr),dtype=np.complex) # matrix
-    out.eliminate_zeros()
-    return out
+      nr = len(rs1) # length
+      nmax = nr*int(10*cutoff**2) # maximum number of hoppings
+      data = np.zeros(nmax,dtype=np.complex) # data
+      ii = np.zeros(nmax,dtype=int) # index
+      jj = np.zeros(nmax,dtype=int) # index
+      ii,jj,data,nk = twisted_matrix_jit(np.array(rs1),np.array(rs2),
+                         ii,jj,data,cutoff=cutoff,**kwargs) # call function
+      if nk>nmax: raise # sanity check
+      ii = ii[0:nk] # only nonzero
+      jj = jj[0:nk] # only nonzero
+      data = data[0:nk] # only nonzero
+      out = csc_matrix((data,(ii,jj)),shape=(nr,nr),dtype=np.complex) # matrix
+      out.eliminate_zeros()
+      return out
   return tij
     
 

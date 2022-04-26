@@ -31,10 +31,9 @@ class SpinModel(): # class for a spin Hamiltonian
   def add_field(self,v):
     """Add magnetic field"""
     self.b += np.array([v for i in range(self.nspin)])
-  def energy(self,use_fortran=True):
+  def energy(self,**kwargs):
     """ Calculate the energy"""
-    if use_fortran:
-      eout = energy(self.theta,self.phi,self.b,self.j,self.pairs)
+    eout = energy(self.theta,self.phi,self.b,self.j,self.pairs)
    #   eout = classicalspinf90.energy(self.theta,self.phi,self.b,self.j,
    #            self.pairs)
 
@@ -170,38 +169,37 @@ def energy_jit(thetas,phis,bs,js,indsjs):
 #       for i in range(3):
 #           for j in range(3):
 
+
 import jax.numpy as jnp
 
-#jnp = np
-
 def energy_jax_master(thetaphi,bs,js,indsjs):
-   n = len(bs) # numbe rof sites
-   thetas = thetaphi[0:n]
-   phis = thetaphi[n:2*n]
-   mx = jnp.sin(thetas)*jnp.cos(phis)
-   my = jnp.sin(thetas)*jnp.sin(phis)
-   mz = jnp.cos(thetas)
-   ms = jnp.zeros(shape=(len(mx),3))
+   n = len(bs) # number of sites
+   thetas = thetaphi[0:n] # first half are the thetas
+   phis = thetaphi[n:2*n] # second half are the phis
+   mx = jnp.sin(thetas)*jnp.cos(phis) # Mx
+   my = jnp.sin(thetas)*jnp.sin(phis) # My
+   mz = jnp.cos(thetas) # Mz
+   ms = jnp.zeros(shape=(len(mx),3)) # total magnetization
+   # set the three componetns in the array
    ms = ms.at[:,0].set(mx[:])
    ms = ms.at[:,1].set(my[:])
    ms = ms.at[:,2].set(mz[:])
    eout = 0.0 # total energy
-   eout += jnp.sum(mx*bs[:,0])
-   eout += jnp.sum(my*bs[:,1])
-   eout += jnp.sum(mz*bs[:,2])
+   eout += jnp.sum(mx*bs[:,0]) # Zeeman energy Mx
+   eout += jnp.sum(my*bs[:,1]) # Zeeman energy My
+   eout += jnp.sum(mz*bs[:,2]) # Zeeman energy Mz
    ni = len(indsjs) # number of interactions
-   ii = indsjs[:,0]
-   jj = indsjs[:,1]
-   for i in range(3):
-       for j in range(3):
-           eout = eout + jnp.sum(ms[ii,i]*ms[jj,j]*js[0:ni,i,j])
-   return eout
-
+   ii = indsjs[:,0] # indexes of the Si
+   jj = indsjs[:,1] # indexes of the Sj
+   for i in range(3): # loop over components of exchange tensor
+       for j in range(3): # loop over components of exchange tensor
+           eout = eout + jnp.sum(ms[ii,i]*ms[jj,j]*js[0:ni,i,j]) # add
+   return eout # return total energy
 
 from jax import jit
 from jax import grad
-energy_jax = jit(energy_jax_master)
-jacobian_jax = jit(grad(energy_jax_master))
+energy_jax = jit(energy_jax_master) # jit jax function for energy
+jacobian_jax = jit(grad(energy_jax_master,argnums=0)) # jit jax gradient
 
 
 
