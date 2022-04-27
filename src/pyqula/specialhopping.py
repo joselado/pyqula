@@ -68,11 +68,11 @@ def twisted_matrix(cutoff=5.0,ti=0.3,lambi=8.0,mint=1e-5,
       return out
     return funhop # return function
   else:
-      if callable(ti): # workaround for callable hoppings
+      if callable(ti): # workaround for callable interlayer hopping
           tij = twisted(cutoff=cutoff,ti=ti,
                           lambi=lambi,lamb=lamb,dl=dl,lambz=lambz)
           return entry2matrix(tij)
-      else: 
+      else: # conventional JIT function
           return twisted_matrix_python(cutoff=cutoff,ti=ti,mint=mint,
                                   lambi=lambi,lamb=lamb,lambz=lambz,
                                   dl=dl,**kwargs)
