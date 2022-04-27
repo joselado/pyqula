@@ -29,7 +29,7 @@ def multilayer_graphene(l=[0],real=False,**kwargs):
       h = g.get_hamiltonian(has_spin=False,
           mgenerator=mgenerator)
   else:
-    h = g.get_hamiltonian(has_spin=False,
+      h = g.get_hamiltonian(has_spin=False,
           tij=specialhopping.multilayer(**kwargs))
   return h
 
