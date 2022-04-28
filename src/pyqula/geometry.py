@@ -57,7 +57,7 @@ class Geometry:
         self.r = self.r/d
         self.r2xyz()
     def get_index(self,r,**kwargs):
-      return get_index(self,r,**kwargs)
+        return get_index(self,r,**kwargs)
     def __add__(self,g1):
         from .geometrytk.galgebra import sum_geometries
         return sum_geometries(self,g1)
@@ -236,12 +236,8 @@ class Geometry:
       Return the connections of each site
       """
       from . import neighbor
-  #    if self.dimensionality==0:
-      if True:
-        self.connections = neighbor.connections(self.r,self.r)
-        return self.connections # return list
-      else: raise
-
+      self.connections = neighbor.connections(self.r,self.r)
+      return self.connections # return list
 
 
 

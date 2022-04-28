@@ -65,7 +65,7 @@ def find_first_neighbor_jit(r1,r2,pairs):
 
 
 
-def connections(r1,r2):
+def connections(r1,r2,dr=1.0):
   """Return a list with the connections of each atom"""
   pairs = find_first_neighbor(r1,r2) # get the pairs of first neighbors
   out = [[] for i in range(len(r1))] # output list
@@ -179,7 +179,8 @@ def generate_parametric_hopping(h,f=None,mgenerator=None,
 
 
 def neighbor_distances(g,n=4):
-    """Return distances to neighbors"""
+    """Return distances to neighbors:
+    - n: number of neighbors wanted"""
     nsuper = max([n//len(g.r)+3,3])
     g = g.supercell(nsuper) # create supercell
     r = g.r # positions
