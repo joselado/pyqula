@@ -2,12 +2,12 @@ import numpy as np
 from scipy.sparse import csc_matrix
 from numba import jit
 
-try:
-    from . import specialhoppingf90
-#    raise
-    use_fortran=True
-except:
-    use_fortran=False
+#try:
+#    from . import specialhoppingf90
+##    raise
+#    use_fortran=True
+#except:
+#    use_fortran=False
 use_fortran=False
 
 
@@ -101,7 +101,7 @@ def phase_C3_matrix(*args,**kwargs):
 
 
 def phase_C3(g,phi=0.5,t=1.0,d=1.0):
-    """Create a fucntion that computes hoppings that alternate
+    """Create a function that computes hoppings that alternate
     between +\phi and -\phi every 60 degrees"""
     if len(g.r)==1:
       g = g.supercell(2) # create a supercell
@@ -200,6 +200,7 @@ class HoppingGenerator():
             fout = lambda rs1,rs2: np.array(self(rs1,rs2))*np.array(m2(rs1,rs2))
         return HoppingGenerator(fout) # return new object
     def __rmul__(self,m): return self*m # commutative 
+    def __radd__(self,m): return self + m # commutative 
     def __add__(self,m):  
         m2 = HoppingGenerator(m) # transform to HoppingGenerator
         fout = lambda rs1,rs2: np.array(self(rs1,rs2)) + np.array(m2(rs1,rs2))
@@ -246,7 +247,8 @@ def twisted_matrix_python(cutoff=10,**kwargs):
 def twisted_matrix_jit(rs1,rs2,ii,jj,data,cutoff=5.0,ti=0.3,lambi=8.0,
         mint = 1e-5,t=1.0,
         lamb=12.0,dl=3.0,lambz=10.0):
-  """Hopping for twisted bilayer graphene, returning the indexes of a sparse matrix"""
+  """Hopping for twisted bilayer graphene, returning the indexes of a 
+  sparse matrix"""
   cutoff2 = cutoff**2 # cutoff in distance
   ik = 0 # counter
   for i1 in range(len(rs1)):
@@ -298,6 +300,7 @@ def ILG(g,ti,**kwargs):
     parametrization
     - g: geometry
     - ti: interlayer hopping
+    - **kawrgs: optional arguments for twisted hopping
     """
     fm = twisted_matrix(t=0.,ti=-ti,**kwargs) # interlayer hopping generator
     # return a generator

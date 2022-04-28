@@ -372,7 +372,7 @@ def get_velocity(h):
 #      R = algebra.inv(R) # not sure if this is ok
       v = [braket_wAw(w,vx),braket_wAw(w,vy),0]
       v = np.array(v).real
-      return R@v # return the scalar product
+      return (v@R@v)*w # return the scalar product
     return Operator(f)
   else: raise
 
