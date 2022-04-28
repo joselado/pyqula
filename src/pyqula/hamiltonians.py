@@ -781,10 +781,9 @@ def shift_fermi(h,fermi):
     return
 
 
+from .algebra import isnumber as is_number
 import numbers
 
-def is_number(s):
-    return isinstance(x, numbers.Number)
 
 def is_hermitic(m):
   mh = np.conjugate(m).T

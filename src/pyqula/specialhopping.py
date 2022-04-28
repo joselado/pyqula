@@ -181,20 +181,44 @@ def strained_hopping_matrix(*args,**kwargs):
     return entry2matrix(f) # return the matrix
 
 
+from .algebra import isnumber
 
 class HoppingGenerator():
     """Class for a Hopping generator"""
     def __init__(self,m):
         if type(m)==HoppingGenerator: self.f = m.f # redefine
         elif callable(m): self.f = m # define callable function
+        else: raise
     def __call__(self,rs1,rs2):
         """Call method"""
         return self.f(rs1,rs2)
     def __mul__(self,m):
-        m2 = HoppingGenerator(m) # transform to HoppingGenerator
-        fout = lambda rs1,rs2: np.array(self(rs1,rs2))*np.array(m2(rs1,rs2))
+        if isnumber(m): # number input 
+            fout = lambda rs1,rs2: np.array(m*np.array(self(rs1,rs2)))
+        else: # anything else
+            m2 = HoppingGenerator(m) # transform to HoppingGenerator
+            fout = lambda rs1,rs2: np.array(self(rs1,rs2))*np.array(m2(rs1,rs2))
         return HoppingGenerator(fout) # return new object
     def __rmul__(self,m): return self*m # commutative 
+    def __add__(self,m):  
+        m2 = HoppingGenerator(m) # transform to HoppingGenerator
+        fout = lambda rs1,rs2: np.array(self(rs1,rs2)) + np.array(m2(rs1,rs2))
+        return HoppingGenerator(fout) # return new object
+    def __neg__(self): return (-1)*self # minus
+    def __sub__(self,a): return self + (-1)*a # minus
+    def copy(self):
+        from copy import deepcopy
+        return deepcopy(self)
+    def apply(self,f):
+        """Given a certain function of the position, 
+        apply it to all the hoppings"""
+        def fm(rs1,rs2): # define a new function
+            m = self.f(rs1,rs2) # get the matrix
+            p = np.array([[f((r1+r2)/2.) for r1 in rs1] for r2 in rs2])
+            return m*p # return product
+        return HoppingGenerator(fm) # new generator
+
+
 
 
 def twisted_matrix_python(cutoff=10,**kwargs):
@@ -220,7 +244,7 @@ def twisted_matrix_python(cutoff=10,**kwargs):
 
 @jit(nopython=True)
 def twisted_matrix_jit(rs1,rs2,ii,jj,data,cutoff=5.0,ti=0.3,lambi=8.0,
-        mint = 1e-5,
+        mint = 1e-5,t=1.0,
         lamb=12.0,dl=3.0,lambz=10.0):
   """Hopping for twisted bilayer graphene, returning the indexes of a sparse matrix"""
   cutoff2 = cutoff**2 # cutoff in distance
@@ -240,7 +264,7 @@ def twisted_matrix_jit(rs1,rs2,ii,jj,data,cutoff=5.0,ti=0.3,lambi=8.0,
   #    if r2>100.0: return 0.0 # too far
       if (r-1.0)<-0.1:
         raise
-      out = -(dx*dx + dy*dy)/rr*np.exp(-lamb*(r-1.0))*np.exp(-lambz*dz*dz)
+      out = -t*(dx*dx + dy*dy)/rr*np.exp(-lamb*(r-1.0))*np.exp(-lambz*dz*dz)
       out += -ti*(dz*dz)/rr*np.exp(-lambi*(r-dl))
       #### fix for magnetic field
 #      cphi = np.cos(phi*np.pi)
@@ -257,3 +281,25 @@ def twisted_matrix_jit(rs1,rs2,ii,jj,data,cutoff=5.0,ti=0.3,lambi=8.0,
         ik += 1 # increase counter
   return ii,jj,data,ik
 
+
+
+
+
+def NNG(g,ts):
+    """Hopping generator for nearest neighbor hoppings
+    - g: geometry
+    - ts: hoppings for each neighbor
+    """
+    fm = neighbor_hopping_matrix(g,ts) # get the function
+    return HoppingGenerator(fm) # return a generator 
+
+def ILG(g,ti,**kwargs):
+    """Generator for an interlayer hopping using an exponential
+    parametrization
+    - g: geometry
+    - ti: interlayer hopping
+    """
+    fm = twisted_matrix(t=0.,ti=-ti,**kwargs) # interlayer hopping generator
+    # return a generator
+    from . import algebra
+    return HoppingGenerator(lambda *args: algebra.todense(fm(*args))) 

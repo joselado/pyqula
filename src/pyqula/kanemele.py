@@ -12,16 +12,12 @@ except:
 #  print("Not possible to use FORTRAN rutines, kanemele.py")
   use_fortran = False
 
-import numbers 
-def is_number(s):
-    return isinstance(s, numbers.Number)
-
-isnumber = is_number
+from .algebra import isnumber 
 
 def generalized_kane_mele(r1,r2,rm,fun=0.0,tol=1e-5):
   """Return the Kane-Mele generalized Hamiltonian"""
   if fun==0.0: return 0
-  if is_number(fun): kmfun = lambda r: fun # function that always returns fun
+  if isnumber(fun): kmfun = lambda r: fun # function that always returns fun
   elif callable(fun): kmfun = fun # callable function
   else: raise # no idea
   nsites = len(r1) # number of sites
@@ -81,7 +77,7 @@ def km_vector_jit(ri,rj,v,rm,tol=1e-5):
 def haldane(r1,r2,rm,fun=0.0,sublattice=None):
   """Return the Haldane coupling"""
   if sublattice is None: sublattice = np.zeros(len(r1)) + 1.0
-  if is_number(fun): 
+  if isnumber(fun): 
       if fun==0.0: return 0 # skip
       kmfun = lambda r: fun # function that always returns fun
   elif callable(fun): kmfun = fun # callable function

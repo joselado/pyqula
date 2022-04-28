@@ -121,14 +121,7 @@ def peierls(x1,y1,x2,y2,mag_field):
   return np.exp(1j*phase*2*np.pi)
 
 
-
-def is_number(s):
-    try:
-        float(s)
-        return True
-    except:
-        return False
-
+from .algebra import isnumber as is_number
 
 
 
