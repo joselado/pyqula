@@ -70,7 +70,7 @@ def todense(m):
     if issparse(m):
         if m.shape[0]<maxsize: return np.array(m.todense())
         else: raise
-    else: return np.array(m)
+    else: return np.array(m,dtype=np.complex)
 
 
 def braket_ww(w,wi):
