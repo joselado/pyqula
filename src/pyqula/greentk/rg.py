@@ -31,7 +31,7 @@ def green_renormalization_python(intra,inter,energy=0.0,nite=None,
     while True: # implementation of Eq 11
       einv = algebra.inv(e - epsilon) # inverse
       epsilon_s = epsilon_s + alpha @ einv @ beta
-      epsilon = epsilon + alpha * einv @ beta + beta @ einv @ alpha
+      epsilon = epsilon + alpha @ einv @ beta + beta @ einv @ alpha
       alpha = alpha @ einv @ alpha  # new alpha
       beta = beta @ einv @ beta  # new beta
       ite += 1
