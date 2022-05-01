@@ -47,13 +47,13 @@ def python_kpm_moments(v,m,n=100):
     mus[0] = bk.copy()  # mu0
     mus[1] = bk1.copy() # mu1
     for i in range(1,n): 
-      ap = 2*m@a - am # recursion relation
-      bk = algebra.braket_ww(a,a)
-      bk1 = algebra.braket_ww(ap,a)
-      mus[2*i] = 2.*bk
-      mus[2*i+1] = 2.*bk1
-      am = a.copy() # new variables
-      a = ap.copy() # new variables
+        ap = 2*m@a - am # recursion relation
+        bk = algebra.braket_ww(a,a)
+        bk1 = algebra.braket_ww(ap,a)
+        mus[2*i] = 2.*bk
+        mus[2*i+1] = 2.*bk1
+        am = a.copy() # new variables
+        a = ap.copy() # new variables
     mu0 = mus[0] # first
     mu1 = mus[1] # second
     for i in range(1,n): 
@@ -72,11 +72,11 @@ def python_kpm_moments_clear(v,m,n=100):
   mu = (np.transpose(np.conjugate(a0))*a)[0,0] # scalar product
   mus[1] = mu # mu1
   for i in range(1,2*n): 
-    ap = 2*m*a - am # recursion relation
-    mu = (np.transpose(np.conjugate(a0))*a)[0,0] # scalar product
-    mus[i] = mu # store
-    am = a.copy() # new variables
-    a = ap.copy() # new variables
+      ap = 2*m*a - am # recursion relation
+      mu = (np.transpose(np.conjugate(a0))*a)[0,0] # scalar product
+      mus[i] = mu # store
+      am = a.copy() # new variables
+      a = ap.copy() # new variables
   return mus
 
 

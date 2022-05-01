@@ -75,33 +75,33 @@ def km_vector_jit(ri,rj,v,rm,tol=1e-5):
 
 
 def haldane(r1,r2,rm,fun=0.0,sublattice=None):
-  """Return the Haldane coupling"""
-  if sublattice is None: sublattice = np.zeros(len(r1)) + 1.0
-  if isnumber(fun): 
-      if fun==0.0: return 0 # skip
-      kmfun = lambda r: fun # function that always returns fun
-  elif callable(fun): kmfun = fun # callable function
-  else: # anything else
-      from .potentials import array2potential
-      kmfun = array2potential(r1[:,0],r1[:,1],fun)
-  nsites = len(r1) # number of sites
-  mout = np.zeros((nsites,nsites),dtype=np.complex) # initialize
-  from . import neighbor
-  neighs = neighbor.connections(r1,rm) # list with neighbors of each site
-  for i in range(nsites): # loop over initial site
-    rijs = [rm[kk] for kk in neighs[i]] # loop over first neighbors
-    if len(rijs)==0: continue
-    for j in range(nsites): # loop over final site
-      dr = r1[i]-r2[j] # difference
-      if dr.dot(dr)>4.1:
-        continue # if too far away, next iteration
-#      ur = km_vector(r1[i],r2[j],rm) # kane mele vector
-#      print(rijs)
-      ur = km_vector(r1[i],r2[j],rijs) # kane mele vector
-      r3 = (r1[i] + r2[j])/2.0
-      sm = ur[2]*kmfun(r3) # clockwise or anticlockwise
-      mout[i,j] = 1j*sm*(sublattice[i]+sublattice[j])/2. # store
-  return csc_matrix(mout) # return matrix
+    """Return the Haldane coupling"""
+    if sublattice is None: sublattice = np.zeros(len(r1)) + 1.0
+    if isnumber(fun): 
+        if fun==0.0: return 0 # skip
+        kmfun = lambda r: fun # function that always returns fun
+    elif callable(fun): kmfun = fun # callable function
+    else: # anything else
+        from .potentials import array2potential
+        kmfun = array2potential(r1[:,0],r1[:,1],fun)
+    nsites = len(r1) # number of sites
+    mout = np.zeros((nsites,nsites),dtype=np.complex) # initialize
+    from . import neighbor
+    neighs = neighbor.connections(r1,rm) # list with neighbors of each site
+    for i in range(nsites): # loop over initial site
+      rijs = [rm[kk] for kk in neighs[i]] # loop over first neighbors
+      if len(rijs)==0: continue
+      for j in range(nsites): # loop over final site
+        dr = r1[i]-r2[j] # difference
+        if dr.dot(dr)>4.1:
+          continue # if too far away, next iteration
+  #      ur = km_vector(r1[i],r2[j],rm) # kane mele vector
+  #      print(rijs)
+        ur = km_vector(r1[i],r2[j],rijs) # kane mele vector
+        r3 = (r1[i] + r2[j])/2.0
+        sm = ur[2]*kmfun(r3) # clockwise or anticlockwise
+        mout[i,j] = 1j*sm*(sublattice[i]+sublattice[j])/2. # store
+    return csc_matrix(mout) # return matrix
 
 
 
