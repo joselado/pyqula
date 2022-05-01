@@ -1195,6 +1195,7 @@ read_xyz = readgeometry.read_xyz
 
 def get_supercell(self,nsuper,store_primal=False):
     """Creates a supercell"""
+    from .checkclass import number2array
     if store_primal: # store the primal geometry
         self.primal_geometry = self.copy() 
     if self.dimensionality==0: return self # zero dimensional
@@ -1204,26 +1205,19 @@ def get_supercell(self,nsuper,store_primal=False):
       if checkclass.is_iterable(nsuper): nsuper = nsuper[0]
       return supercell1d(self,nsuper)
     elif self.dimensionality==2:
-      try: # two numbers given
-        nsuper1 = nsuper[0]
-        nsuper2 = nsuper[1]
-      except: # one number given
-        nsuper1 = nsuper
-        nsuper2 = nsuper
+      nsuper = number2array(nsuper,d=2) # get an array
+      nsuper1 = nsuper[0] 
+      nsuper2 = nsuper[1]
       if abs(nsuper1-np.round(nsuper1))>1e-6 or abs(nsuper2-np.round(nsuper2))>1e-6:
           return supercelltk.target_angle_volume(self,angle=None,
                   volume=nsuper1*nsuper2)
       else: return supercell2d(self,n1=nsuper1,n2=nsuper2)
     elif self.dimensionality==3:
-      try: # two number given
+        nsuper = number2array(nsuper,d=3)
         nsuper1 = nsuper[0]
         nsuper2 = nsuper[1]
         nsuper3 = nsuper[2]
-      except: # one number given
-        nsuper1 = nsuper
-        nsuper2 = nsuper
-        nsuper3 = nsuper
-      s = supercell3d(self,n1=nsuper1,n2=nsuper2,n3=nsuper3)
+        s = supercell3d(self,n1=nsuper1,n2=nsuper2,n3=nsuper3)
     else: raise
     s.center()
     s.get_fractional()

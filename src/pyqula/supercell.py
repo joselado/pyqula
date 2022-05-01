@@ -105,8 +105,6 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
   return go # return new geometry
   
 
-# from numba import jit
-
 
 def replicate3d(rs,a1,a2,a3,n1,n2,n3):
   nc = len(rs)
@@ -215,18 +213,11 @@ def supercell2d(g,n1=1,n2=1):
 #    go.r = supercellf90.supercell2d(g.r,g.a1,g.a2,n1,n2)
 #    print("Using FORTRAN")
   if True: # brute force
-    nc = len(g.r) # number of atoms in a cell
-    n = nc*n1*n2 # total number of positions
-    a1 = g.a1 # first vector
-    a2 = g.a2 # second vector
-    rs = []
-    for i in range(n1):
-      for j in range(n2):
-        for k in range(nc):
-          ri = i*a1 + j*a2 + g.r[k]
-          rs.append(ri) # store
+      n = len(g.r)*n1*n2 # total number of positions
+      rs = np.zeros((n,3)) # storage
+      rs = supercell2d_jit(g.r,n1,n2,g.a1,g.a2,rs) # get the replicas
   else: # jit (not as fast for some reason)
-    rs = replicate3d(g.r,g.a1,g.a2,np.array([0.,0.,1.]),n1,n2,1)
+      rs = replicate3d(g.r,g.a1,g.a2,np.array([0.,0.,1.]),n1,n2,1)
   go.r = np.array(rs) # store
   go.r2xyz()
   go.a1 = go.a1*n1
@@ -239,6 +230,20 @@ def supercell2d(g,n1=1,n2=1):
     go.atoms_names = g.atoms_names*n1*n2
   go.get_fractional() # get fractional coordinates
   return go
+
+
+@jit(nopython=True)
+def supercell2d_jit(r,n1,n2,a1,a2,rs):
+    nc = len(r) # number of atoms in a cell
+    n = nc*n1*n2 # total number of positions
+    kk = 0
+    for i in range(n1):
+      for j in range(n2):
+        for k in range(nc):
+          ri = i*a1 + j*a2 + r[k]
+          rs[kk,:] = ri.copy() # store
+          kk += 1 # increase counter
+    return rs
 
 
 

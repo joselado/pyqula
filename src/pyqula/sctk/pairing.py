@@ -19,6 +19,8 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
         weightf = lambda r1,r2: same_site(r1,r2)*np.identity(2)
     elif mode=="triplet": 
         weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
+    elif mode=="pwave": 
+        weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
     elif mode=="nodal_fwave":
         weightf = lambda r1,r2: nodal_fwave(r1,r2,df,**kwargs)
     elif mode=="antihaldane":

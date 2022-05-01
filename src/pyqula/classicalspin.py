@@ -21,13 +21,13 @@ class SpinModel(): # class for a spin Hamiltonian
     self.b = np.zeros((len(g.r),3)) # magnetic field
     self.j = np.array([zero]) # empty list
     self.pairs = np.array([[0,0]]) # empty list
-  def add_heisenberg(self,fun=None):
-    h = self.geometry.get_hamiltonian(has_spin=False,fun=fun)
+  def add_heisenberg(self,Jij=None,**kwargs):
+    h = self.geometry.get_hamiltonian(has_spin=False,tij=Jij)
     m = coo_matrix(h.get_hk_gen()([0.,0.,0.])) # get onsite matrix
     (pairs,js) = add_heisenberg(self.geometry.r)
     pairs = np.array([m.row,m.col]).transpose() # convert to array
     self.pairs = pairs
-    self.j = [ j.real*np.identity(3) for j in m.data] # store
+    self.j = [j.real*np.identity(3) for j in m.data] # store
   def add_field(self,v):
     """Add magnetic field"""
     self.b += np.array([v for i in range(self.nspin)])

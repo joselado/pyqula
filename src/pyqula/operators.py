@@ -8,7 +8,6 @@ from scipy.sparse import identity
 from .superconductivity import build_eh
 from scipy.sparse import issparse
 import scipy.linalg as lg
-#from bandstructure import braket_wAw
 from . import current
 from . import algebra
 from . import topology
