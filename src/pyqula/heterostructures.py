@@ -392,7 +392,7 @@ def create_leads_and_central_list(h_right,h_left,list_h_central,
       tr = list_h_central[i].inter + list_h_central[i+1].inter
       tr = tr/2.*coupling(i,i+1)   # mean value of the hoppings
       hc[i][i+1] = tr # inter term of the iesim
-      hc[i+1][i] = tr.H # inter term of the iesim
+      hc[i+1][i] = dagger(tr) # inter term of the iesim
   
     # hoppings to the leads
     tcr = h_right.inter.copy()    # this is a matrix
