@@ -108,3 +108,86 @@ h = g.get_hamiltonian() # generate the Hamiltonian
 ```
 
 
+# Superconductivity
+Up to now we have focused on Hamiltonians that contain only normal terms,
+namely that the full Hamiltonian can be written as
+
+$$
+H_0 = \sum_{ijss'} t_{ijss'}c^\dagger_{i,s} c_{j,s'}
+$$
+
+where $ij$ runs onver sites and $ss'$ over spins.
+
+In the presence of superconductivity, an anomalous term appears in the
+Hamiltonian taking the form
+
+
+$$
+H_{SC} = \sum_{ijss'} \Delta_{ij}^{ss'}c_{i,s} c_{j,s'} + h.c.
+$$
+
+To solve the Hamiltonian
+
+$$
+H = H_0 + H_{SC}
+$$
+
+we define a Nambu spinor that takes the form
+
+$$
+\Psi_n =
+\begin{pmatrix}
+c_{n,\uparrow} \\
+c_{n,\downarrow} \\
+c^\dagger_{n,\downarrow} \\
+-c^\dagger_{n,\uparrow} \\
+\end{pmatrix}
+$$
+
+
+and rewrite the Hamiltonian as
+$$
+H = \Psi^\dagger \mathcal H \Psi
+$$
+
+where $\mathcal H$ is the nambu Hamiltonian. In this new basis, the
+Hamiltonian can be written in a diagonal form as
+
+$$
+H = \sum_\alpha \epsilon_\alpha \Psi^\dagger_\alpha \Psi_\alpha
+$$
+
+where $\epsilon_\alpha$ are the Nambu eigenvalues.
+
+
+## s-wave superconductivity
+
+The simplest form of superconductivity is spin-singlet
+s-wave superconductivity. A minimal superconducting term of this form
+can be written as
+$$
+H_{SC} = 
+\Delta_0
+\sum_n 
+c_{n,\uparrow} c_{n,\downarrow} + h.c.
+$$
+
+In the following, we address the electronic structure of a triangular
+lattice with s-wave superconductivity, whose Hamiltonian takes the form
+
+$$H = H_0 + H_{SC} $$
+
+with 
+
+$$H_0 = \sum_{\langle ij\rangle} c^\dagger_i c_{j} + h.c.$$
+
+The previous Hamiltonian can be computed for $\Delta_0=0.2$ as
+
+```python
+from pyqula import geometry
+g = geometry.triangular_lattice() # geometry of the 2D model
+h = g.get_hamiltonian() # generate the Hamiltonian
+h.add_swave(0.2) # add s-wave superconductivity
+(k,e) = h.get_bands() # compute band structure
+```
+Note that due to the BdG nature of the Hamiltonian, the bandstructure shows both the electron and hole states
