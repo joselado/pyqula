@@ -231,7 +231,7 @@ spinful_guesses = ["Fully random","dimerization"]
 spinful_guesses += symmetry_breaking
 
 
-def guess(h,mode="ferro",fun=0.1):
+def guess(h,mode="ferro",fun=1e-1):
   """Return a mean field matrix guess given a certain Hamiltonian"""
   h0 = h.copy() # copy Hamiltonian
   h0 = h0.get_multicell() # multicell

@@ -271,7 +271,7 @@ def ev(h,operator=None,nk=30,**kwargs):
     operator = [] # empty list
   elif not isinstance(operator,list): # if it is not a list
     operator = [operator] # convert to list
-  out = [(dm@op).trace() for op in operator] 
+  out = [np.trace(dm@op) for op in operator] 
   out = np.array(out) # return the result
   out = out.reshape(out.shape[0]) # reshape in case there are indexes
   return out # return array
