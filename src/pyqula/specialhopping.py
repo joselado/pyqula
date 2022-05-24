@@ -17,63 +17,64 @@ def obj2callable(a):
 
 
 
-def twisted(cutoff=5.0,ti=0.3,lambi=8.0,
+def twisted(cutoff=5.0,ti=0.3,lambi=8.0,t=1.0,
         lamb=12.0,dl=3.0,lambz=10.0,b=0.0,phi=0.0):
-  """Hopping for twisted bilayer graphene"""
-  ti = obj2callable(ti) # convert to callable
-  cutoff2 = cutoff**2 # cutoff in distance
-  def fun(r1,r2):
-      rr = (r1-r2) # distance
-      rm  = (r1+r2)/2. # average location
-      rr = rr.dot(rr) # distance
-      if rr>cutoff2: return 0.0 # too far
-      if rr<0.001: return 0.0 # same atom
-      dx = r1[0]-r2[0]
-      dy = r1[1]-r2[1]
-      dz = r1[2]-r2[2]
-      r = np.sqrt(rr)
-      if (r-1.0)<-0.1: raise
-      out = -(dx*dx + dy*dy)/rr*np.exp(-lamb*(r-1.0))*np.exp(-lambz*dz*dz)
-      # interlayer hopping
-      out += -ti(rm)*(dz*dz)/rr*np.exp(-lambi*(r-dl))
-      #### fix for magnetic field
-#      cphi = np.cos(phi*np.pi)
-#      sphi = np.sin(phi*np.pi)
-#      r = (r1+r2)/2.
-#      dr = r1-r2
-#      p = 2*r[2]*(dr[0]*sphi - dr[1]*cphi)
-#      out *= np.exp(1j*b*p)
-      #####
-      return out
-  return fun
+    """Hopping for twisted bilayer graphene"""
+    ti = obj2callable(ti) # convert to callable
+    cutoff2 = cutoff**2 # cutoff in distance
+    def fun(r1,r2):
+        rr = (r1-r2) # distance
+        rm  = (r1+r2)/2. # average location
+        rr = rr.dot(rr) # distance
+        if rr>cutoff2: return 0.0 # too far
+        if rr<0.001: return 0.0 # same atom
+        dx = r1[0]-r2[0]
+        dy = r1[1]-r2[1]
+        dz = r1[2]-r2[2]
+        r = np.sqrt(rr)
+        if (r-1.0)<-0.1: raise
+        out = -t*(dx*dx + dy*dy)/rr*np.exp(-lamb*(r-1.0))*np.exp(-lambz*dz*dz)
+        # interlayer hopping
+        out += -ti(rm)*(dz*dz)/rr*np.exp(-lambi*(r-dl))
+        #### fix for magnetic field
+  #      cphi = np.cos(phi*np.pi)
+  #      sphi = np.sin(phi*np.pi)
+  #      r = (r1+r2)/2.
+  #      dr = r1-r2
+  #      p = 2*r[2]*(dr[0]*sphi - dr[1]*cphi)
+  #      out *= np.exp(1j*b*p)
+        #####
+        return out
+    return fun
 
 
 def twisted_matrix(cutoff=5.0,ti=0.3,lambi=8.0,mint=1e-5,
-        lamb=12.0,dl=3.0,lambz=10.0,**kwargs):
+        t=1.0,lamb=12.0,dl=3.0,lambz=10.0,**kwargs):
   """Function capable of returning the hopping matrix
   for twisted bilayer graphene"""
-  if use_fortran:
-    from . import specialhoppingf90
-    def funhop(r1,r2):
-      """Function that returns a hopping matrix"""
-      nr = len(r1) # 
-      nmax = len(r1)*int(10*cutoff**2) # maximum number of hoppings
-      (ii,jj,ts,nout) = specialhoppingf90.twistedhopping(r1,r2,nmax,
-                                  cutoff,ti,lamb,lambi,lambz,mint,dl)
-      if nout>nmax: raise # sanity check
-      ts = ts[0:nout]
-      ii = ii[0:nout]
-      jj = jj[0:nout]
-      out = csc_matrix((ts,(ii-1,jj-1)),shape=(nr,nr),dtype=np.complex) # matrix
-      return out
-    return funhop # return function
-  else:
+#  if use_fortran:
+#    from . import specialhoppingf90
+#    def funhop(r1,r2):
+#      """Function that returns a hopping matrix"""
+#      nr = len(r1) # 
+#      nmax = len(r1)*int(10*cutoff**2) # maximum number of hoppings
+#      (ii,jj,ts,nout) = specialhoppingf90.twistedhopping(r1,r2,nmax,
+#                                  cutoff,ti,lamb,lambi,lambz,mint,dl)
+#      if nout>nmax: raise # sanity check
+#      ts = ts[0:nout]
+#      ii = ii[0:nout]
+#      jj = jj[0:nout]
+#      out = csc_matrix((ts,(ii-1,jj-1)),shape=(nr,nr),dtype=np.complex) # matrix
+#      return out
+#    return funhop # return function
+  if True:
       if callable(ti): # workaround for callable interlayer hopping
-          tij = twisted(cutoff=cutoff,ti=ti,
+          tij = twisted(cutoff=cutoff,ti=ti,t=t,
                           lambi=lambi,lamb=lamb,dl=dl,lambz=lambz)
           return entry2matrix(tij)
       else: # conventional JIT function
           return twisted_matrix_python(cutoff=cutoff,ti=ti,mint=mint,
+                                  t=t,
                                   lambi=lambi,lamb=lamb,lambz=lambz,
                                   dl=dl,**kwargs)
 
