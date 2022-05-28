@@ -1,17 +1,11 @@
 import collections
 import numpy as np
+from collections.abc import Iterable
 
 
 # function to check if inputs are of certain type
 
-def is_iterable(e): 
-    try: 
-       return isinstance(e, collections.Iterable)
-    except: # workaround
-       try: 
-           iter(e)
-           return True
-       except: return False
+def is_iterable(e): return isinstance(e,Iterable)
 
 def number2array(n,d=3):
     """Given a certain object, return an array"""
