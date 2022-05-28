@@ -301,7 +301,7 @@ def ILG(g,ti,**kwargs):
     parametrization
     - g: geometry
     - ti: interlayer hopping
-    - **kawrgs: optional arguments for twisted hopping
+    - **kwargs: optional arguments for twisted hopping
     """
     from .potentials import Potential
     from . import algebra
