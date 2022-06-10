@@ -49,16 +49,12 @@ class Heterostructure():
       # additional degrees of freedom
       self.has_spin = h.has_spin   # spin degree of freedom
       self.has_eh = h.has_eh   # electron hole pairs
-#  def plot_central_dos(self,energies=[0.0],num_rep=100,
-#                      mixing=0.7,eps=0.0001,green_guess=None,max_error=0.0001):
-#    """ Plots the density of states by using a 
-#    green function approach"""
-#    return plot_central_dos(self,energies=energies,num_rep=num_rep,
-#                      mixing=mixing,eps=eps,green_guess=green_guess,
-#                      max_error=max_error)
   def surface_dos(self,**kwargs):
       from .transporttk import sdos
       return sdos.surface_dos(self,**kwargs)
+  def get_kdos(self,**kwargs):
+      from .transporttk import kdos
+      return kdos.kdos(self,**kwargs)
   def get_coupled_central_dos(self,**kwargs):
       return device_dos(self,mode="central",**kwargs)
   def get_coupled_left_dos(self,**kwargs):
@@ -130,15 +126,15 @@ class Heterostructure():
      self.scale_rc = np.sqrt(c)
   def setup_selfenergy_interpolation(self,es=np.linspace(-4.0,4.0,100),
            delta=0.0001,pristine=False):
-    """Create the functions that interpolate the selfenergy"""
-    from .interpolation import intermatrix
-    self.interpolated_selfenergy = False # set as False
-    fsl = lambda e: self.get_selfenergy(e,delta=delta,lead=0,pristine=pristine)
-    fsr = lambda e: self.get_selfenergy(e,delta=delta,lead=1,pristine=pristine)
-    fun_sr = intermatrix(fsr,xs=es) # get the function
-    fun_sl = intermatrix(fsl,xs=es) # get the function
-    self.selfgen = [fun_sl,fun_sr] # store functions
-    self.interpolated_selfenergy = True # set as true
+      """Create the functions that interpolate the selfenergy"""
+      from .interpolation import intermatrix
+      self.interpolated_selfenergy = False # set as False
+      fsl = lambda e: self.get_selfenergy(e,delta=delta,lead=0,pristine=pristine)
+      fsr = lambda e: self.get_selfenergy(e,delta=delta,lead=1,pristine=pristine)
+      fun_sr = intermatrix(fsr,xs=es) # get the function
+      fun_sl = intermatrix(fsl,xs=es) # get the function
+      self.selfgen = [fun_sl,fun_sr] # store functions
+      self.interpolated_selfenergy = True # set as true
   def didv(self,**kwargs):
       from .transporttk.didv import generic_didv
       return generic_didv(self,**kwargs)
@@ -271,13 +267,13 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
 
 HTstructure = Heterostructure
 
-def device_dos(HT,energy=0.0,mode="central",operator=None):
+def device_dos(HT,energy=0.0,mode="central",operator=None,**kwargs):
    """ Calculates the density of states 
        of a HTstructure by a  
        green function approach, input is a HTstructure class
    """
    from .transporttk import fullgreen
-   g = fullgreen.get_full_green(HT,energy,mode=mode)
+   g = fullgreen.get_full_green(HT,energy,mode=mode,**kwargs)
    if operator is not None:
        g = HT.Hr.get_operator(operator)*g
    d = -np.trace(g.imag)

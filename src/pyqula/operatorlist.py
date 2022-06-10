@@ -6,7 +6,7 @@ def get_operator(self,name,**kwargs):
       from . import operators
       from . import potentials
       if type(name) is operators.Operator: return name # return operator
-      if type(name) is potentials.Potential: 
+      if type(name) is potentials.Potential or callable(name): 
           out = self.copy()*0. # initialize
           out.add_onsite(name) # add onsite
           return out # return operator
