@@ -397,9 +397,9 @@ def interface_multienergy(h1,h2,k=[0.0,0.,0.],energies=[0.0],delta=0.01,
     havg = (algebra.dagger(hop1) + hop2)/2. # average hopping
     if dh1 is not None: ons1 = ons1 + dh1
     if dh2 is not None: ons2 = ons2 + dh2
-    ons = bmat([[csc(ons1),csc(havg)],[csc(havg.H),csc(ons2)]]) # onsite
-    self2 = bmat([[csc(ons1)*0.0,None],[None,csc(hop2@sf2@hop2.H)]])
-    self1 = bmat([[csc(hop1@sf1@hop1.H),None],[None,csc(ons2)*0.0]])
+    ons = bmat([[csc(ons1),csc(havg)],[csc(dagger(havg)),csc(ons2)]]) # onsite
+    self2 = bmat([[csc(ons1)*0.0,None],[None,csc(hop2@sf2@dagger(hop2))]])
+    self1 = bmat([[csc(hop1@sf1@dagger(hop1)),None],[None,csc(ons2)*0.0]])
     # Dyson equation
     ez = (energy+1j*delta)*np.identity(ons1.shape[0]+ons2.shape[0]) # energy
     ginter = algebra.inv(ez - ons - self1 - self2) # Green function

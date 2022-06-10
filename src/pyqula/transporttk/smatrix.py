@@ -46,8 +46,12 @@ def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
 
 
 def get_central_gmatrix(ht,selfl=None,selfr=None,energy=0.0):
-    """Return the central Green's function"""
+    """Return the inverse of the central Green's function"""
     delta = ht.delta
+    if selfl is None: selfl = ht.get_selfenergy(energy,
+        delta=delta,lead=0,pristine=True)
+    if selfr is None: selfr = ht.get_selfenergy(energy,
+        delta=delta,lead=1,pristine=True)
     if ht.block_diagonal:
         ht2 = enlarge_hlist(ht) # get the enlaged hlist with the leads
         gmatrix = effective_tridiagonal_hamiltonian(ht2.central_intra,
