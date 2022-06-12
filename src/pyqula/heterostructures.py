@@ -144,6 +144,9 @@ class Heterostructure():
   def didv(self,**kwargs):
       from .transporttk.didv import generic_didv
       return generic_didv(self,**kwargs)
+  def kdidv(self,**kwargs):
+      from .transporttk.didv import didv_kmap
+      return didv_kmap(self,**kwargs)
   def block2full(self,sparse=False):
       """Put in full form"""
       return block2full(self,sparse=sparse)

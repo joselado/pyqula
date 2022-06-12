@@ -313,8 +313,8 @@ def block_inverse(m,i=0,j=0):
     # select which elements you need
     ilist = [m[ii][ii].shape[0] for ii in range(i)] 
     jlist = [m[jj][jj].shape[1] for jj in range(j)] 
-    imin = np.sum(ilist)
-    jmin = np.sum(jlist)
+    imin = int(np.sum(ilist))
+    jmin = int(np.sum(jlist))
     mt = algebra.inv(mt) # calculate inverse
     imax = imin + m[i][i].shape[0]
     jmax = jmin + m[j][j].shape[1]
