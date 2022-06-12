@@ -12,147 +12,147 @@ dag = dagger
 
 
 class Heterostructure():
-  """Class for a HTstructure"""
-  def copy(self):
-    """Copy the HTstructure"""
-    from copy import deepcopy
-    return deepcopy(self)
-  def __init__(self,h=None):  # initialization using a hamiltonian
-    self.file_right_green = "green_right.dat"  # in/out file for right green
-    self.file_left_green = "green_left.dat"   # in/out file for left green
-    self.file_heff = "heff.dat"   # out for the effective hamiltonian
-    self.scale_rc = 1.0 # scale coupling to the right lead
-    self.scale_lc = 1.0 # scale coupling to the left lead
-    self.is_sparse = False
-    self.dimensionality = 1 # default is one dimensional
-    self.transparency = 1.0 # reference transparency (for kappa)
-    self.delta = 1e-4
-    self.extra_delta_central = 0. # additional delta in the central region
-    self.extra_delta_right = 0. # additional delta in the right region
-    self.extra_delta_left = 0. # additional delta in the left region
-    self.interpolated_selfenergy = False
-    self.block_diagonal = False
-    if h is not None:
-      self.heff = None  # effective hamiltonian
-      self.right_intra = h.intra  # intraterm in the right lead
-      self.right_inter = h.inter  # interterm in the right lead (to the right)
-      self.right_green = None  # right green function
-      self.left_intra = h.intra  # intraterm in the left lead
-      self.left_inter = dagger(h.inter)  # interterm in the left lead (to the left)
-      self.left_green = None  # left green function
-      self.central_intra = h.intra  # intraterm in the center
-      self.right_coupling = h.inter # coupling from the center to the right lead
-      self.left_coupling = dagger(h.inter) # coupling from the center to the left lead
-      # geometry of the central part
-      gc = dc(h.geometry)
-      self.central_geometry = gc # geometry of the central part
-      # additional degrees of freedom
-      self.has_spin = h.has_spin   # spin degree of freedom
-      self.has_eh = h.has_eh   # electron hole pairs
-  def surface_dos(self,**kwargs):
-      from .transporttk import sdos
-      return sdos.surface_dos(self,**kwargs)
-  def get_kdos(self,**kwargs):
-      from .transporttk import kdos
-      return kdos.kdos(self,**kwargs)
-  def get_ldos(self,**kwargs):
-      from .transporttk import ldos
-      return ldos.ldos(self,**kwargs)
-  def get_dos(self,**kwargs):
-      from .transporttk import dos
-      return dos.get_dos(self,**kwargs)
-  def get_coupled_central_dos(self,**kwargs):
-      return device_dos(self,mode="central",**kwargs)
-  def get_coupled_left_dos(self,**kwargs):
-      return device_dos(self,mode="left",**kwargs)
-  def get_coupled_right_dos(self,**kwargs):
-      return device_dos(self,mode="right",**kwargs)
-  def landauer(self,energy=[0.],delta=0.0001,do_leads=True,left_channel=None,
-                right_channel=None):
-    """ Return the Landauer transmission"""
-    if self.has_eh: raise # invalid if there is electorn-hole
-    return landauer(self,energy=energy,delta=delta,do_leads=do_leads,
-                    left_channel=left_channel,right_channel=right_channel)
-  def write_green(self):
-    """Writes the green functions in a file"""
-    from .green import write_matrix
-    write_matrix(self.file_right_green,self.right_green)
-    write_matrix(self.file_left_green,self.left_green)
-  def read_green(self):
-    """Reads the green functions from a file"""
-    from .green import read_matrix
-    self.right_green = read_matrix(self.file_right_green)
-    self.left_green = read_matrix(self.file_left_green)
-  def write_heff(self):
-    """ Writes effective hamiltonian in a file"""
-    from .green import write_sparse
-    write_sparse(self.file_heff,self.heff)
-  def eigenvalues(self,numeig = 10,effective=False,full=False):
-    """ Calculates eigenvalues of the central part """
-    return eigenvalues(self,numeig=numeig,effective=effective,
-                        full=full)
-  def replace_center(self,ht_replacement):
-      """ Replaces the central part by the second argument"""
-      self.central_intra = ht_replacement.central_intra  # make the change
-  def calculate_surface_green(self,energy=0.0,delta=0.0001,error=0.0000001):
-      """Calculate the surface Green function"""
-      delta = self.delta
-      # Right
-      intra = self.right_intra
-      inter = self.right_inter
-      gbulk,g = green.green_renormalization(intra,inter,error=error,
-                                             energy=energy,delta=delta)
-      self.right_green = g # save green function
-      # Left
-      intra = self.left_intra
-      inter = self.left_inter
-      gbulk,g = green.green_renormalization(intra,inter,error=error,
-                                             energy=energy,delta=delta)
-      self.left_green = g # save green function
-      self.energy_green = energy # energy of the Green function
-  def copy_surface_green(self,ht):
-      """Copy the surface Green fucntions"""
-      self.energy_green = ht.energy_green
-      self.left_green = ht.left_green
-      self.right_green = ht.right_green
-  def get_selfenergy(self,energy,**kwargs):
-     """Return selfenergy of iesim lead"""
-     from .transporttk.selfenergy import get_selfenergy
-     return get_selfenergy(self,energy,**kwargs)
-  def get_reflection_normal_lead(self,s):
-     from .transporttk.builder import get_reflection_normal_lead
-     return get_reflection_normal_lead(self,s)
-  def get_central_gmatrix(self,**kwargs):
-     """Return the inverse central Green's function"""
-     from .transporttk.smatrix import get_central_gmatrix
-     return get_central_gmatrix(self,**kwargs) 
-  def set_coupling(self,c): 
-     """Coupling for kappa functionality"""
-     self.scale_lc = np.sqrt(c)
-     self.scale_rc = np.sqrt(c)
-  def setup_selfenergy_interpolation(self,es=np.linspace(-4.0,4.0,100),
-           delta=0.0001,pristine=False):
-      """Create the functions that interpolate the selfenergy"""
-      from .interpolation import intermatrix
-      self.interpolated_selfenergy = False # set as False
-      fsl = lambda e: self.get_selfenergy(e,delta=delta,lead=0,pristine=pristine)
-      fsr = lambda e: self.get_selfenergy(e,delta=delta,lead=1,pristine=pristine)
-      fun_sr = intermatrix(fsr,xs=es) # get the function
-      fun_sl = intermatrix(fsl,xs=es) # get the function
-      self.selfgen = [fun_sl,fun_sr] # store functions
-      self.interpolated_selfenergy = True # set as true
-  def didv(self,**kwargs):
-      from .transporttk.didv import generic_didv
-      return generic_didv(self,**kwargs)
-  def kdidv(self,**kwargs):
-      from .transporttk.didv import didv_kmap
-      return didv_kmap(self,**kwargs)
-  def block2full(self,sparse=False):
-      """Put in full form"""
-      return block2full(self,sparse=sparse)
-  def get_kappa(self,**kwargs):
-      from .transporttk.kappa import get_kappa_ratio
-      return get_kappa_ratio(self,**kwargs)
+    """Class for a HTstructure"""
+    def copy(self):
+      """Copy the HTstructure"""
+      from copy import deepcopy
+      return deepcopy(self)
+    def __init__(self,h=None):  # initialization using a hamiltonian
+      self.file_right_green = "green_right.dat"  # in/out file for right green
+      self.file_left_green = "green_left.dat"   # in/out file for left green
+      self.file_heff = "heff.dat"   # out for the effective hamiltonian
+      self.scale_rc = 1.0 # scale coupling to the right lead
+      self.scale_lc = 1.0 # scale coupling to the left lead
+      self.is_sparse = False
+      self.dimensionality = 1 # default is one dimensional
+      self.transparency = 1.0 # reference transparency (for kappa)
+      self.delta = 1e-4
+      self.extra_delta_central = 0. # additional delta in the central region
+      self.extra_delta_right = 0. # additional delta in the right region
+      self.extra_delta_left = 0. # additional delta in the left region
+      self.interpolated_selfenergy = False
+      self.block_diagonal = False
+      if h is not None:
+        self.heff = None  # effective hamiltonian
+        self.right_intra = h.intra  # intraterm in the right lead
+        self.right_inter = h.inter  # interterm in the right lead (to the right)
+        self.right_green = None  # right green function
+        self.left_intra = h.intra  # intraterm in the left lead
+        self.left_inter = dagger(h.inter)  # interterm in the left lead (to the left)
+        self.left_green = None  # left green function
+        self.central_intra = h.intra  # intraterm in the center
+        self.right_coupling = h.inter # coupling from the center to the right lead
+        self.left_coupling = dagger(h.inter) # coupling from the center to the left lead
+        # geometry of the central part
+        gc = dc(h.geometry)
+        self.central_geometry = gc # geometry of the central part
+        # additional degrees of freedom
+        self.has_spin = h.has_spin   # spin degree of freedom
+        self.has_eh = h.has_eh   # electron hole pairs
+    def surface_dos(self,**kwargs):
+        from .transporttk import sdos
+        return sdos.surface_dos(self,**kwargs)
+    def get_kdos(self,**kwargs):
+        from .transporttk import kdos
+        return kdos.kdos(self,**kwargs)
+    def get_ldos(self,**kwargs):
+        from .transporttk import ldos
+        return ldos.ldos(self,**kwargs)
+    def get_dos(self,**kwargs):
+        from .transporttk import dos
+        return dos.get_dos(self,**kwargs)
+    def get_coupled_central_dos(self,**kwargs):
+        return device_dos(self,mode="central",**kwargs)
+    def get_coupled_left_dos(self,**kwargs):
+        return device_dos(self,mode="left",**kwargs)
+    def get_coupled_right_dos(self,**kwargs):
+        return device_dos(self,mode="right",**kwargs)
+    def landauer(self,energy=[0.],delta=0.0001,do_leads=True,left_channel=None,
+                  right_channel=None):
+      """ Return the Landauer transmission"""
+      if self.has_eh: raise # invalid if there is electorn-hole
+      return landauer(self,energy=energy,delta=delta,do_leads=do_leads,
+                      left_channel=left_channel,right_channel=right_channel)
+    def write_green(self):
+        """Writes the green functions in a file"""
+        from .green import write_matrix
+        write_matrix(self.file_right_green,self.right_green)
+        write_matrix(self.file_left_green,self.left_green)
+    def read_green(self):
+      """Reads the green functions from a file"""
+      from .green import read_matrix
+      self.right_green = read_matrix(self.file_right_green)
+      self.left_green = read_matrix(self.file_left_green)
+    def write_heff(self):
+      """ Writes effective hamiltonian in a file"""
+      from .green import write_sparse
+      write_sparse(self.file_heff,self.heff)
+    def eigenvalues(self,numeig = 10,effective=False,full=False):
+      """ Calculates eigenvalues of the central part """
+      return eigenvalues(self,numeig=numeig,effective=effective,
+                          full=full)
+    def replace_center(self,ht_replacement):
+        """ Replaces the central part by the second argument"""
+        self.central_intra = ht_replacement.central_intra  # make the change
+    def calculate_surface_green(self,energy=0.0,delta=0.0001,error=0.0000001):
+        """Calculate the surface Green function"""
+        delta = self.delta
+        # Right
+        intra = self.right_intra
+        inter = self.right_inter
+        gbulk,g = green.green_renormalization(intra,inter,error=error,
+                                               energy=energy,delta=delta)
+        self.right_green = g # save green function
+        # Left
+        intra = self.left_intra
+        inter = self.left_inter
+        gbulk,g = green.green_renormalization(intra,inter,error=error,
+                                               energy=energy,delta=delta)
+        self.left_green = g # save green function
+        self.energy_green = energy # energy of the Green function
+    def copy_surface_green(self,ht):
+        """Copy the surface Green fucntions"""
+        self.energy_green = ht.energy_green
+        self.left_green = ht.left_green
+        self.right_green = ht.right_green
+    def get_selfenergy(self,energy,**kwargs):
+       """Return selfenergy of iesim lead"""
+       from .transporttk.selfenergy import get_selfenergy
+       return get_selfenergy(self,energy,**kwargs)
+    def get_reflection_normal_lead(self,s):
+       from .transporttk.builder import get_reflection_normal_lead
+       return get_reflection_normal_lead(self,s)
+    def get_central_gmatrix(self,**kwargs):
+       """Return the inverse central Green's function"""
+       from .transporttk.smatrix import get_central_gmatrix
+       return get_central_gmatrix(self,**kwargs) 
+    def set_coupling(self,c): 
+       """Coupling for kappa functionality"""
+       self.scale_lc = np.sqrt(c)
+       self.scale_rc = np.sqrt(c)
+    def setup_selfenergy_interpolation(self,es=np.linspace(-4.0,4.0,100),
+             delta=0.0001,pristine=False):
+        """Create the functions that interpolate the selfenergy"""
+        from .interpolation import intermatrix
+        self.interpolated_selfenergy = False # set as False
+        fsl = lambda e: self.get_selfenergy(e,delta=delta,lead=0,pristine=pristine)
+        fsr = lambda e: self.get_selfenergy(e,delta=delta,lead=1,pristine=pristine)
+        fun_sr = intermatrix(fsr,xs=es) # get the function
+        fun_sl = intermatrix(fsl,xs=es) # get the function
+        self.selfgen = [fun_sl,fun_sr] # store functions
+        self.interpolated_selfenergy = True # set as true
+    def didv(self,**kwargs):
+        from .transporttk.didv import generic_didv
+        return generic_didv(self,**kwargs)
+    def kdidv(self,**kwargs):
+        from .transporttk.didv import didv_kmap
+        return didv_kmap(self,**kwargs)
+    def block2full(self,sparse=False):
+        """Put in full form"""
+        return block2full(self,sparse=sparse)
+    def get_kappa(self,**kwargs):
+        from .transporttk.kappa import get_kappa_ratio
+        return get_kappa_ratio(self,**kwargs)
   
 
 

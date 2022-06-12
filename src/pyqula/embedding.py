@@ -48,7 +48,7 @@ class Embedding():
         return get_dm(self,**kwargs)
     def get_ldos(self,**kwargs):
         return get_ldos(self,**kwargs)
-    def ldos(self,**kwargs):  self.get_ldos(**kwargs)
+    def ldos(self,**kwargs): return self.get_ldos(**kwargs)
     def dos(self,**kwargs):
         (x,y,d) = self.ldos(**kwargs)
         return np.sum(d) # sum the DOS
@@ -95,13 +95,14 @@ class Embedding():
     def get_mean_field_hamiltonian(self,**kwargs):
         from .selfconsistency.embedding import hubbard_mf
         return hubbard_mf(self,**kwargs) # return Hubbard mean-field
-    def didv(self,T=1e-2,i=0,**kwargs):
-        from .transporttk.localprobe import LocalProbe
-        lp = LocalProbe(self,T=T,i=i,**kwargs)
-        return lp.didv(**kwargs)
-
-
-
+    def get_didv(self,**kwargs):
+        from .embeddingtk import didv
+        return didv.get_didv(self,**kwargs)
+    # for compatibility with kappa functionality
+    def didv(self,**kwargs): self.get_didv(**kwargs) 
+    def get_kappa(self,**kwargs):
+        from .embeddingtk import kappa
+        return kappa.get_kappa(self,**kwargs)
 
 
 
@@ -267,18 +268,21 @@ from .embeddingtk.selfenergies import get_selfenergy_from_potential
 
 
 def get_ldos(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,
+                    write = True,
                     operator=None,**kwargs):
     """Compute the local density of states"""
     h = self.H
     # get the Green's function
     gv = self.get_gf(energy=energy,delta=delta,nsuper=nsuper,nk=nk)
     if operator is not None:
+        operator = h.get_operator(operator) # overwrite
         gv = operator*gv # multiply
     ds = [-gv[i,i].imag/np.pi for i in range(gv.shape[0])] # LDOS
     ds = full2profile(h,ds,check=False) # resum if necessary
     ds = np.array(ds) # convert to array
     gs = h.geometry.supercell(nsuper)
     x,y = gs.x,gs.y
+    if write: np.savetxt("LDOS.OUT",np.array([x,y,ds]).T)
     return x,y,ds
 
 

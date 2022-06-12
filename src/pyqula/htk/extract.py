@@ -9,7 +9,9 @@ def local_hamiltonian(h,m,i=0):
     extract the local Hamiltonian"""
     m = todense(m) # dense array
     if not h.has_spin and not h.has_eh: # spinless and no e-h
-        if i>=m.shape[0]: raise
+        if i>=m.shape[0]: 
+            print(i,m.shape[0])
+            raise
         return np.array([[m[i,i]]]) # return a single number
     elif h.has_spin and not h.has_eh: # spinful and no e-h
         if i>=m.shape[0]//2: raise
