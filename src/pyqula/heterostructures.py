@@ -26,7 +26,7 @@ class Heterostructure():
     self.is_sparse = False
     self.dimensionality = 1 # default is one dimensional
     self.transparency = 1.0 # reference transparency (for kappa)
-    self.delta = 0.0001
+    self.delta = 1e-4
     self.extra_delta_central = 0. # additional delta in the central region
     self.extra_delta_right = 0. # additional delta in the right region
     self.extra_delta_left = 0. # additional delta in the left region
@@ -55,6 +55,12 @@ class Heterostructure():
   def get_kdos(self,**kwargs):
       from .transporttk import kdos
       return kdos.kdos(self,**kwargs)
+  def get_ldos(self,**kwargs):
+      from .transporttk import ldos
+      return ldos.ldos(self,**kwargs)
+  def get_dos(self,**kwargs):
+      from .transporttk import dos
+      return dos.get_dos(self,**kwargs)
   def get_coupled_central_dos(self,**kwargs):
       return device_dos(self,mode="central",**kwargs)
   def get_coupled_left_dos(self,**kwargs):
@@ -267,19 +273,8 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
 
 HTstructure = Heterostructure
 
-def device_dos(HT,energy=0.0,mode="central",operator=None,**kwargs):
-   """ Calculates the density of states 
-       of a HTstructure by a  
-       green function approach, input is a HTstructure class
-   """
-   from .transporttk import fullgreen
-   g = fullgreen.get_full_green(HT,energy,mode=mode,**kwargs)
-   if operator is not None:
-       g = HT.Hr.get_operator(operator)*g
-   d = -np.trace(g.imag)
-   return d
-
-
+from .transporttk import dos
+device_dos = dos.device_dos
 
 
 def plot_central_dos(ht,energies=[0.0],num_rep=100,

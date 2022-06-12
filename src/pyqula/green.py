@@ -269,29 +269,30 @@ def read_sparse(f,sparse=True):
 
 
 def gauss_inverse(m,i=0,j=0,test=False):
-  try: from .gauss_invf90 import gauss_inv as ginv
-  except: 
-    test = True # Ups, this might blow up
-  """ Calculates the inverso of a block diagonal
-      matrix """
-  if test: # check whether the inversion worked 
+    """ Calculates the inverso of a block diagonal
+        matrix """
     return block_inverse(m,i=i,j=j)
-  nb = len(m) # number of blocks
-  ca = [None for ii in range(nb)]
-  ua = [None for ii in range(nb-1)]
-  da = [None for ii in range(nb-1)]
-  for ii in range(nb): # diagonal part
-    ca[ii] = m[ii][ii]
-  for ii in range(nb-1):
-    ua[ii] = m[ii][ii+1]
-    da[ii] = m[ii+1][ii]
-  # in case you use the -1 notation of python
-  if i<0: i += nb 
-  if j<0: j += nb 
-  # now call the actual fortran routine
-  mout = ginv(ca,da,ua,i+1,j+1)
-  mout = np.matrix(mout)
-  return mout
+#  try: from .gauss_invf90 import gauss_inv as ginv
+#  except: 
+#  test = True # Ups, this might blow up
+#  if test: # check whether the inversion worked 
+#    return block_inverse(m,i=i,j=j)
+#  nb = len(m) # number of blocks
+#  ca = [None for ii in range(nb)]
+#  ua = [None for ii in range(nb-1)]
+#  da = [None for ii in range(nb-1)]
+#  for ii in range(nb): # diagonal part
+#    ca[ii] = m[ii][ii]
+#  for ii in range(nb-1):
+#    ua[ii] = m[ii][ii+1]
+#    da[ii] = m[ii+1][ii]
+#  # in case you use the -1 notation of python
+#  if i<0: i += nb 
+#  if j<0: j += nb 
+#  # now call the actual fortran routine
+#  mout = ginv(ca,da,ua,i+1,j+1)
+#  mout = np.matrix(mout)
+#  return mout
 
 
 
@@ -312,9 +313,9 @@ def block_inverse(m,i=0,j=0):
     # select which elements you need
     ilist = [m[ii][ii].shape[0] for ii in range(i)] 
     jlist = [m[jj][jj].shape[1] for jj in range(j)] 
-    imin = sum(ilist)
-    jmin = sum(jlist)
-    mt = mt.I # calculate inverse
+    imin = np.sum(ilist)
+    jmin = np.sum(jlist)
+    mt = algebra.inv(mt) # calculate inverse
     imax = imin + m[i][i].shape[0]
     jmax = jmin + m[j][j].shape[1]
     mo = [ [mt[ii,jj] for jj in range(jmin,jmax)] for ii in range(imin,imax) ] 
@@ -323,8 +324,20 @@ def block_inverse(m,i=0,j=0):
 
 
 
-
-
+def full_inverse(m):
+    """ Calculate a certain element of the inverse of a block matrix"""
+    from scipy.sparse import csc_matrix,bmat
+    nb = len(m) # number of blocks
+    if i<0: i += nb
+    if j<0: j += nb
+    mt = [[None for ii in range(nb)] for jj in range(nb)]
+    for ii in range(nb): # diagonal part
+      mt[ii][ii] = csc_matrix(m[ii][ii])
+    for ii in range(nb-1):
+      mt[ii][ii+1] = csc_matrix(m[ii][ii+1])
+      mt[ii+1][ii] = csc_matrix(m[ii+1][ii])
+    mt = bmat(mt).todense() # create dense matrix
+    return algebra.inv(mt) # calculate inverse
 
 
 
