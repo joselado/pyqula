@@ -77,6 +77,8 @@ class Hamiltonian():
     def add_strain(self,fs,**kwargs):
         from .strain import add_strain
         add_strain(self,fs,**kwargs) 
+    def remove_pairing(self):
+        superconductivity.remove_pairing(self)
     def remove_sites(self,store):
         from . import sculpt
         self.geometry = sculpt.remove_sites(self.geometry,store)

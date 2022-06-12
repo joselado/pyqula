@@ -44,6 +44,7 @@ def generate_HT(ht,SC=True,**kwargs):
     # this is a workaround
     from ..heterostructures import Heterostructure
     from .localprobe import LocalProbe
+    from ..embeddingtk.kappa import DualLocalProbe
     def f(h):
         h = h.copy()
         if not SC: # remove the SC order
@@ -62,6 +63,9 @@ def generate_HT(ht,SC=True,**kwargs):
         out.H = f(out.H)
         out.lead = f(out.lead)
         return out
+    elif type(ht)==DualLocalProbe: # Dual Localprobe object
+        if SC: return ht.SC_LP
+        else: return ht.normal_LP
     else: raise
 
 

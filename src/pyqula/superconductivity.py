@@ -537,6 +537,9 @@ def turn_nambu(self):
 from .sctk.extract import get_anomalous_hamiltonian
 from .sctk.dvector import average_hamiltonian_dvector
 
-
+def remove_pairing(H):
+    has_eh = H.has_eh # check if there is eh
+    H.remove_nambu()
+    if has_eh: H.setup_nambu_spinor()  # put eh again
 
 

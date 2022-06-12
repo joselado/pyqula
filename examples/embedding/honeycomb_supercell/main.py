@@ -12,9 +12,10 @@ h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian,spinless
 hv = h.copy() # copy Hamiltonian to create a defective one
 hv.add_onsite(lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100) # add a defect
 eb = embedding.Embedding(h,m=hv) # create an embedding object
-(x,y,d) = eb.ldos(nsuper=19,e=0.,delta=1e-2) # compute LDOS
+(x,y,d) = eb.get_ldos(nsuper=10,e=0.,delta=1e-2) # compute LDOS
+(x,y,d) = eb.get_didv(nsuper=10,T=0.1,energy=0.,delta=1e-2) # compute LDOS
 
-np.savetxt("LDOS.OUT",np.array([x,y,d]).T)
+#np.savetxt("LDOS.OUT",np.array([x,y,d]).T)
 
 
 
