@@ -9,6 +9,9 @@ from numba import jit
 from . import parallel
 
 
+arpack_tol = 1e-5
+arpack_maxiter = 10000
+
 
 
 import numbers
