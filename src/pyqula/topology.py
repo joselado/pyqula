@@ -12,9 +12,8 @@ from . import timing
 from . import algebra
 from . import parallel
 
-
-arpack_tol = 1e-5
-arpack_maxiter = 10000
+arpack_tol = algebra.arpack_tol
+arpack_maxiter = algebra.arpack_maxiter
 
 
 def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=600,

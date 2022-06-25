@@ -3,10 +3,19 @@ from .. import algebra
 import scipy.sparse as slg
 
 
-def states_generator(h,filt=None):
+arpack_tol = algebra.arpack_tol
+arpack_maxiter = algebra.arpack_maxiter
+
+
+def states_generator(h,filt=None,max_waves=None):
     hkgen = h.get_hk_gen() # get hamiltonian generator
     def agen(k):   
         hk = hkgen(k) # get hamiltonian
+        if max_waves is None: 
+            es,wfs = algebra.eigh(hk) # diagonalize all waves
+        else:  
+            es,wfs = slg.eigsh(csc_matrix(hk),k=max_waves,which="SA",
+                        sigma=0.0,tol=arpack_tol,maxiter=arpack_maxiter)
         es,wfs = algebra.eigh(hk) # diagonalize all waves
         wfs = np.conjugate(wfs).T
 #        return [wfs[0]]
@@ -77,7 +86,6 @@ def filter_state(opk,accept=lambda r: True):
        out = []
        for (l,w) in zip(ls,wfs):
            if accept(l): 
-               print(l)
                out.append(w)
        return out # return wavefunctions
    return Filter(filt) # return filter
