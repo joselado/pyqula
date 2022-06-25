@@ -1,6 +1,7 @@
 import numpy as np
 from .. import algebra
-import scipy.sparse as slg
+import scipy.sparse.linalg as slg
+from scipy.sparse import csc_matrix
 
 
 arpack_tol = algebra.arpack_tol
@@ -16,12 +17,28 @@ def states_generator(h,filt=None,max_waves=None):
         else:  
             es,wfs = slg.eigsh(csc_matrix(hk),k=max_waves,which="SA",
                         sigma=0.0,tol=arpack_tol,maxiter=arpack_maxiter)
-        es,wfs = algebra.eigh(hk) # diagonalize all waves
+#        es,wfs = algebra.eigh(hk) # diagonalize all waves
         wfs = np.conjugate(wfs).T
-#        return [wfs[0]]
+        # now filter positive and negative energies
         if filt is not None: wfs = filt(wfs,k=k) # filter wavefunctions
         return wfs
     return agen
+
+
+def positive_wf(es,wfs):
+    """Return eigenfunctions with positive eigenvalues"""
+    es0 = []
+    wfs0 = []
+    for (e,wf) in zip(es,wfs):
+        if e>0.0: # store
+            es0.append(e)
+            wfs0.append(wf)
+    wfs1 = [wf for (e,wf) in sorted(es0,wfs0)] # sorted wavefunctions
+    es1 = sorted(es) # sorted energies
+    return np.array(wfs1)
+
+
+
 
 
 
@@ -69,12 +86,12 @@ class Filter():
         return self.f(*args,**kwargs)
     def __mul__(self,a):
         a = Filter(a) # convert
-        f2 = lambda *args,**kwargs: a(self.f(*args,**kwargs),**kwargs)
+        f2 = lambda *args,**kwargs: self(a.f(*args,**kwargs),**kwargs)
         return Filter(f2) # return new function
 
 
 
-def filter_state(opk,accept=lambda r: True):
+def filter_state(opk,accept=lambda r: True, nmax = None):
    """Flter certain states according to their eigenvalues"""
    def filt(wfs,k=None):
        n = wfs[0].shape[0]
@@ -91,5 +108,38 @@ def filter_state(opk,accept=lambda r: True):
    return Filter(filt) # return filter
 
 
+
+def max_valence_states(h,n=2):
+    """Function to filter a maximum number of valence states"""
+    opk = h.get_operator("energy") # energy operator
+    def filt(wfs,k=None):
+       ni = wfs[0].shape[0]
+       iden = np.identity(ni,dtype=np.complex)
+       op = opk(iden,k=k) # evaluate at a kpoint if needed
+       wfs = algebra.disentangle_manifold(wfs,op) # disentangle
+       ls = algebra.get_representation(wfs,op) # get their eigenvalue
+       ls = [ls[i,i].real for i in range(len(ls))]
+       out = negative_wf(ls,wfs) # stored wavefunctions
+       if len(out)>=n: out = out[0:n,:]
+       else:
+           print("Not enough wavefunctions",len(out),n)
+       return out # return wavefunctions
+    return Filter(filt)
+
+
+def negative_wf(es,wfs):
+    """Return eigenfunctions with positive eigenvalues"""
+    es = np.array(es)
+    es0 = []
+    wfs0 = []
+    for (e,wf) in zip(es,wfs):
+        if e<0.0: # store
+            es0.append(e)
+            wfs0.append(wf)
+    es0 = np.array(es0)
+    # sorted wavefunctions
+    wfs1 = [wf for (e,wf) in sorted(zip(-es0,wfs0),key=lambda x: x[0])] 
+    es1 = -np.sort(-es) # sorted energies
+    return np.array(wfs1)
 
 

@@ -14,10 +14,12 @@ h = g.get_hamiltonian()
 h.add_antiferromagnetism(0.6)
 
 from pyqula.topologytk.occstates import states_generator,filter_state
+from pyqula.topologytk.occstates import max_valence_states
 
 focc = filter_state(h.get_operator("energy"),accept= lambda e: e<0.)
-fsz = filter_state(h.get_operator("sz"),accept= lambda e: e>0.)
-h.os_gen = states_generator(h,filt=focc*fsz)
+focc = max_valence_states(h,n=2)
+fsz = filter_state(h.get_operator("sz"),accept= lambda e: e<0.)
+h.os_gen = states_generator(h,filt=fsz*focc)
 
 (x,y) = topology.write_berry(h)
 import matplotlib.pyplot as plt
