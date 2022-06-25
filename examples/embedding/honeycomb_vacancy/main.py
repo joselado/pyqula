@@ -18,8 +18,8 @@ h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian,spinless
 # create a new intraterm, vacancy is modeled as a large onsite potential
 vintra = h.intra.copy() ; vintra[0,0] = 1000.0
 parallel.cores = 4
-energies = np.linspace(-1.5,1.5,40)
-delta = 0.05 # smearing
+energies = np.linspace(-1.5,1.5,200)
+delta = 1e-2 # smearing
 embedding.dos_impurity(h,vc=vintra,silent=False,energies=energies,
                       delta=delta,use_generator=False)
 # results are written in DOS_DEFECTIVE.OUT and DOS_PRISTINE.OUT

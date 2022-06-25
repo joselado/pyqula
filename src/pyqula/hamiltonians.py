@@ -143,6 +143,7 @@ class Hamiltonian():
       self.hopping_dict = {} # hopping dictonary
       self.has_hopping_dict = False # has hopping dictonary
       self.non_hermitian = False # non hermitian Hamiltonian
+      self.os_gen = None # occupied states generator, for topology
       if not geometry is None:
   # dimensionality of the system
         self.dimensionality = geometry.dimensionality 
