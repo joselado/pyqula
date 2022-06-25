@@ -116,36 +116,9 @@ def berry_curvature(h,k,dk=0.01,window=None,max_waves=None):
   return phi
 
 
-def occ_states_generator(h,k,window=None,max_waves=None):
-  """Return a function that generates the occupied wavefunctions"""
-  hk_gen = h.get_hk_gen() # get hamiltonian generator
-# no need of h anymore
-  return lambda k: occupied_states(hk_gen,k,window=window,max_waves=max_waves) 
-
-
-
-def occ_states2d(h,k):
-  """Input is a Hamiltonian"""
-  hk_gen = h.get_hk_gen() # get hamiltonian generator
-  return occupied_states(hk_gen,k)
-
-
-def occupied_states(hkgen,k,window=None,max_waves=None):
-  """ Returns the WF of the occupied states in a 2d hamiltonian"""
-  hk = hkgen(k) # get hamiltonian
-  if max_waves is None: es,wfs = algebra.eigh(hk) # diagonalize all waves
-  else:  es,wfs = slg.eigsh(csc_matrix(hk),k=max_waves,which="SA",
-                      sigma=0.0,tol=arpack_tol,maxiter=arpack_maxiter)
-  wfs = np.conjugate(wfs.transpose()) # wavefunctions
-  occwf = []
-  for (ie,iw) in zip(es,wfs):  # loop over states
-    if window is None: # no energy window
-      if ie < 0:  # if below fermi
-        occwf.append(iw)  # add to the list
-    else: # energy window provided
-      if -abs(window)< ie < 0:  # between energy window and fermi
-        occwf.append(iw)  # add to the list
-  return np.array(occwf)
+from .topologytk.occstates import occ_states_generator
+from .topologytk.occstates import occupied_states
+from .topologytk.occstates import occ_states2d
 
 
 

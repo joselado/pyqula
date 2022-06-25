@@ -36,7 +36,8 @@ class Operator():
         elif callable(m): 
             self.m = m # as function
         elif type(m)==Hamiltonian: # Hamiltonian type 
-            self.m = lambda v,k=None: m.get_hk_gen()(k)@v
+            hkgen = m.get_hk_gen()
+            self.m = lambda v,k=None: hkgen(k)@v
             self.linear = True
         else: 
             print("Unrecognised type",type(m))
