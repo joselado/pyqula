@@ -95,7 +95,7 @@ def disentangle_manifold(wfs,A):
     ma = get_representation(wfs,A) # get the matrix form of the operator
     wfsout = [] # empty list
     evals,evecs = dlg.eigh(ma) # diagonalize
-    evecs = evecs.T # transpose eigenvectors
+    evecs = np.conjugate(evecs.T) # transpose eigenvectors
 #    print("Representation")
 #    print(np.round(ma,2))
 #    print("Eigenvectors")
@@ -122,8 +122,10 @@ def get_representation(wfs,A):
         vj = np.conjugate(wfs[j]) # first wavefunction
         data = vi@A@vj
         ma[i,j] = data
-  #  print("Representation")
-  #  print(np.round(ma,2))
+#    if len(ma)==2:
+#      print("Representation")
+#      print(np.round(ma,2))
+#      print(dlg.eigvalsh(ma))
     return ma
 
 
@@ -218,7 +220,7 @@ def matrix2vector(v):
 
 
 
-def smalleig(m,numw=10,evecs=False,tol=1e-7):
+def smalleig(m,numw=10,evecs=False,tol=arpack_tol):
     """
     Return the smallest eigenvalues using arpack
     """

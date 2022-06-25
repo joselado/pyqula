@@ -21,7 +21,7 @@ def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=600,
       silent = True):
   """Calculate and write in file the Berry curvature"""
   operator = get_operator(h,operator)
-  if kpath is None: kpath = klist.default(h.geometry,nk=nk) # take default kpath
+  kpath = klist.get_kpath(h.geometry,kpath=kpath,nk=nk) # take default kpath
   tr = timing.Testimator("BERRY CURVATURE",silent=silent)
   ik = 0
   if operator is not None: mode="Green" # Green function mode
