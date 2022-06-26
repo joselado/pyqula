@@ -18,8 +18,10 @@ def get_fractional_function(g,center=False):
     g.has_fractional = True # has fractional coordinates
     L = lg.inv(R) # inverse matrix
     def f(r):
-        if center: return (L@np.array(r))%1.0  # transform
-        else: return L@np.array(r)  # transform
+        if center: 
+            a = np.array(L)@np.array(r).real
+            return (a - np.round(a)).real
+        else: return (L@np.array(r)).real  # transform
     return f
 
 
