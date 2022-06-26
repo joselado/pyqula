@@ -294,51 +294,53 @@ def get_ldos(h,projection="TB",**kwargs):
 def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
              random=True,silent=True,interpolate=False,
              write=True,**kwargs):
-  """ Calculate LDOS in a tight binding basis"""
-  if ks is not None and mode=="green": raise
-  if mode=="green":
-    from . import green
-    if h.dimensionality!=2: raise # only for 2d
-    h = h.copy()
-    h.turn_dense()
-    if nk is not None:
-      print("LDOS using normal integration with nkpoints",nk)
-      gb,gs = green.bloch_selfenergy(h,energy=e,delta=delta,mode="full",nk=nk)
-      d = [ -(gb[i,i]).imag for i in range(len(gb))] # get imaginary part
-    else:
-      print("LDOS using renormalization adaptative Green function")
-      gb,gs = green.bloch_selfenergy(h,energy=e,delta=delta,mode="adaptive")
-      d = [ -(gb[i,i]).imag/np.pi for i in range(len(gb))] # get imaginary part
-  elif mode=="arpack" or mode=="diagonalization": # arpack diagonalization
-    from . import klist
-    if nk is None: nk = 10
-    hkgen = h.get_hk_gen() # get generator
-    ds = [] # empty list
-    if ks is None:
-      ks = klist.kmesh(h.dimensionality,nk=nk)
-      if random: ks = [np.random.random(3) for k in ks] # random mesh
-    ts = timing.Testimator(title="LDOS",maxite=len(ks),silent=silent)
-    for k in ks: # loop over kpoints
-      ts.iterate()
-      hk = hkgen(k) # get Hamiltonian
-      ds += [ldos_diagonalization(hk,e=e,delta=delta,**kwargs)]
-    d = np.mean(ds,axis=0) # average
-  else: raise # not recognized
-  # write result
-  d = spatial_dos(h,d) # convert to spatial resolved DOS
-  g = h.geometry  # store geometry
-  x,y = g.x,g.y # get the coordinates
-  if write: 
-      from .interpolation import atomic_interpolation
-      go = h.geometry.copy() # copy geometry
-      go = go.supercell(nrep) # create supercell
-      do = d.tolist()*(nrep**g.dimensionality) # replicate
-      xo = go.x
-      yo = go.y
-      if interpolate:
+    """ Calculate LDOS in a tight binding basis"""
+    if ks is not None and mode=="green": raise
+    if mode=="green":
+      from . import green
+      if h.dimensionality!=2: raise # only for 2d
+      h = h.copy()
+      h.turn_dense()
+      if nk is not None:
+        print("LDOS using normal integration with nkpoints",nk)
+        gb,gs = green.bloch_selfenergy(h,energy=e,delta=delta,mode="full",nk=nk)
+        d = [ -(gb[i,i]).imag for i in range(len(gb))] # get imaginary part
+      else:
+        print("LDOS using renormalization adaptative Green function")
+        gb,gs = green.bloch_selfenergy(h,energy=e,delta=delta,mode="adaptive")
+        d = [ -(gb[i,i]).imag/np.pi for i in range(len(gb))] # get imaginary part
+    elif mode=="arpack" or mode=="diagonalization": # arpack diagonalization
+      from . import klist
+      if nk is None: nk = 10
+      hkgen = h.get_hk_gen() # get generator
+      ds = [] # empty list
+      if ks is None:
+        ks = klist.kmesh(h.dimensionality,nk=nk)
+        if random: ks = [np.random.random(3) for k in ks] # random mesh
+      ts = timing.Testimator(title="LDOS",maxite=len(ks),silent=silent)
+      for k in ks: # loop over kpoints
+        ts.iterate()
+        hk = hkgen(k) # get Hamiltonian
+        ds += [ldos_diagonalization(hk,e=e,delta=delta,**kwargs)]
+      d = np.mean(ds,axis=0) # average
+    else: raise # not recognized
+    # write result
+    d = spatial_dos(h,d) # convert to spatial resolved DOS
+    g = h.geometry  # store geometry
+    x,y = g.x,g.y # get the coordinates
+    if nrep>1:
+        go = h.geometry.copy() # copy geometry
+        go = go.supercell(nrep) # create supercell
+        do = d.tolist()*(nrep**g.dimensionality) # replicate
+        xo = go.x
+        yo = go.y
+    else: xo,yo,do = y,y,d
+    if interpolate:
+        from .interpolation import atomic_interpolation
         xo,yo,do = atomic_interpolation(xo,yo,do,**kwargs)
-      write_ldos(xo,yo,do) # write in file
-  return (x,y,d) # return LDOS
+    if write: 
+        write_ldos(xo,yo,do) # write in file
+    return (xo,yo,do) # return LDOS
 
 
 ldos = get_ldos # for backcompatibility

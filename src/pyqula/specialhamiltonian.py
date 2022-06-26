@@ -96,18 +96,15 @@ def TMDC_MX2(soc=0.0,cdw=0.0,g=None,tij=[1.0],
     if g is None: 
         g = geometry.triangular_lattice()  # triangular lattice
         if cdw!=0.0: g = g.get_supercell(3,store_primal=True)
-#    ts = [1.0,0.3,0.6]
     tij = np.array(tij)
-#    t = ts[0]/np.max(ts) # 1NN 
-    if normalize: ts = ts/np.max(ts) # normalize
-#    fm = specialhopping.neighbor_hopping_matrix(g,ts) # function for hoppings
+    if normalize: tij = tij/np.max(np.abs(tij)) # normalize
     h = g.get_hamiltonian(is_multicell=True,has_spin=False,tij=tij)
     ## Now add the SOC if necessary
     if soc!=0.0: # add the SOC
         h.turn_spinful() # turn spinful
         d = g.neighbor_distances()[1]
         d = 1.0
-        hsoc = ts[0]*soc*SOC_TMDC(g=h.geometry,d=d) # hamiltonian with SOC
+        hsoc = tij[0]*soc*SOC_TMDC(g=h.geometry,d=d) # hamiltonian with SOC
         h = h + hsoc # add the two Hamiltonians
     if cdw!=0.0: # add the CDW
         g0 = geometry.triangular_lattice()  # triangular lattice
