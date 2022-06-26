@@ -8,27 +8,28 @@ from . import algebra
 minimum_hopping = 1e-3
 
 
-try: 
-  from . import first_neighborsf90
-  def find_first_neighbor(r1,r2):
-      """Calls the fortran routine"""
-      from . import first_neighborsf90 as fn
-      r1t = np.matrix(r1).T
-      r2t = np.matrix(r2).T
-      nn = fn.number_neighborsf90(r1t,r2t)
-      if nn==0: return []  # if no neighbors found
-      pairs = np.array(fn.first_neighborsf90(r1t,r2t,nn))
-      return pairs.T # return the pairs
+#try: 
+#  raise
+#  from . import first_neighborsf90
+#  def find_first_neighbor(r1,r2):
+#      """Calls the fortran routine"""
+#      from . import first_neighborsf90 as fn
+#      r1t = np.matrix(r1).T
+#      r2t = np.matrix(r2).T
+#      nn = fn.number_neighborsf90(r1t,r2t)
+#      if nn==0: return []  # if no neighbors found
+#      pairs = np.array(fn.first_neighborsf90(r1t,r2t,nn))
+#      return pairs.T # return the pairs
 
 
-except:
-  def find_first_neighbor(r1,r2):
+#except:
+def find_first_neighbor(r1,r2):
      """Calls the fortran routine"""
      r1 = np.array(r1)
      r2 = np.array(r2)
-     nn = number_neighbors_jit(r1,r2) # number of first neighbors
+     nn = number_neighbors_jit(r1.real,r2.real) # number of first neighbors
      out = np.zeros((nn,2),dtype=np.int) # generate indexes
-     out = find_first_neighbor_jit(r1,r2,out) # generate all the pairs
+     out = find_first_neighbor_jit(r1.real,r2.real,out) # generate all the pairs
      return out
 
 @jit(nopython=True)

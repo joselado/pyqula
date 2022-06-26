@@ -215,7 +215,7 @@ def supercell2d(g,n1=1,n2=1):
   if True: # brute force
       n = len(g.r)*n1*n2 # total number of positions
       rs = np.zeros((n,3)) # storage
-      rs = supercell2d_jit(g.r,n1,n2,g.a1,g.a2,rs) # get the replicas
+      rs = supercell2d_jit(g.r.real,n1,n2,g.a1.real,g.a2.real,rs.real) # get the replicas
   else: # jit (not as fast for some reason)
       rs = replicate3d(g.r,g.a1,g.a2,np.array([0.,0.,1.]),n1,n2,1)
   go.r = np.array(rs) # store
@@ -254,14 +254,15 @@ def supercell3d(g,n1=1,n2=1,n3=1):
   n = nc*n1*n2*n3 # total number of positions
   ro = np.array([[0.,0.,0.] for i in range(n)])
   ik = 0 # index of the atom
-  a1 = g.a1 # first vector
-  a2 = g.a2 # second vector
-  a3 = g.a3 # third vector
+  a1 = g.a1.real # first vector
+  a2 = g.a2.real # second vector
+  a3 = g.a3.real # third vector
+  r = np.array(g.r).real
   for i in range(n1):
     for j in range(n2):
       for l in range(n3):
         for k in range(nc):
-          ro[ik] = a1*i + a2*j + a3*l + g.r[k] # store position
+          ro[ik] = a1*i + a2*j + a3*l + r[k] # store position
           ik += 1 # increase counter
   go = g.copy() # copy geometry
   go.r = ro # store positions

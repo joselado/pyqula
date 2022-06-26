@@ -53,6 +53,7 @@ def get_klist(g,ns,nk=100):
 
 def py_ang(v1, v2):
   """ Returns the angle in radians between vectors 'v1' and 'v2'    """
+  v1,v2 = v1.real,v2.real
   cosang = np.dot(v1, v2)
   sinang = lg.norm(np.cross(v1, v2))
   return np.arctan2(sinang, cosang)
@@ -73,11 +74,6 @@ def default_kpath(g,nk=400):
     b2 = np.array([0.,1.,0.])
     (G1,G2) = geometry.get_reciprocal2d(g.a1,g.a2)
     bm = b1 + b2 # wave-vector along M
-    def py_ang(v1, v2):
-      """ Returns the angle in radians between vectors 'v1' and 'v2'    """
-      cosang = np.dot(v1, v2)
-      sinang = lg.norm(np.cross(v1, v2))
-      return np.arctan2(sinang, cosang)
     angle = py_ang(g.a1,g.a2) # angle between vectors
     if np.abs(angle - np.pi*2./3.)<0.001:  
       bm = np.array([1.,1.,0.]) # temporal fix
