@@ -1,5 +1,4 @@
 # library to calculate topological properties
-from __future__ import print_function
 import numpy as np
 from scipy.sparse import bmat, csc_matrix
 import scipy.linalg as lg
@@ -212,7 +211,7 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",operator=None):
 
 def get_berry_curvature(h,dk=-1,nk=100,reciprocal=True,nsuper=1,window=None,
                max_waves=None,mode="Wilson",delta=0.001,operator=None,
-               write=True):
+               write=True,verbose=0):
   """ Calculates the chern number of a 2d system """
   if operator is not None: mode="Green" # Green function mode
   c = 0.0
@@ -228,9 +227,10 @@ def get_berry_curvature(h,dk=-1,nk=100,reciprocal=True,nsuper=1,window=None,
     for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
         ks.append([x,y,0.])
   ks = np.array(ks) # convert to array
-  tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
+  if verbose>0: tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
   def fp(ki): # function to compute the Berry curvature
-      if parallel.cores == 1: tr.iterate()
+      if parallel.cores == 1: 
+          if verbose>0: tr.iterate()
       else: print("Doing",ki)
       k = R@ki # change of basis
       if mode=="Wilson":
