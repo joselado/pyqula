@@ -75,3 +75,12 @@ def periodic_grid2mesh(ds,qs):
 from .interpolatetk.atomicinterpolation import atomic_interpolation
 
 
+
+def points2grid(x,y,z,n=100,interpolation="cubic"):
+    from scipy.interpolate import griddata
+    grid_x, grid_y = np.mgrid[np.min(x):np.max(x):n*1j, np.min(y):np.max(y):n*1j]
+    grid_z = griddata(np.array([x,y]).T, z, (grid_x, grid_y), method=interpolation)
+    return grid_x,grid_y,grid_z
+
+
+
