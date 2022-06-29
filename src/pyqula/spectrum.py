@@ -373,7 +373,7 @@ def eigenvalues(h0,nk=10,notime=True):
 
 
 def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,filename="MAP.OUT",
-        write=True,verbosity=0):
+        write=True,verbosity=0,grid=False):
     """ Calculates the reciprocal map of something"""
     if reciprocal: fR = h.geometry.get_k2K_generator()
     else: fR = lambda x: x
@@ -400,6 +400,10 @@ def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,filename="MAP.OUT",
             fo.write("     "+str(b.imag)+"\n")
             fo.flush()
         fo.close() # close file
+    if grid: # if it is a grid
+        from .interpolation import points2grid
+        kx,ky,bs = points2grid(ks[:,0],ks[:,1],bs,n=int(np.sqrt(len(bs))))
+        ks = np.array([kx,ky])
     return ks,bs
 
 
