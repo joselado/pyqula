@@ -151,7 +151,7 @@ def remove_unibonded(g,d=1.0,tol=0.01,use_fortran=use_fortran,iterative=False):
     gout = remove(g,sb) # remove those atoms
   if iterative: # ensure that it hs the same number of atoms by calling again
     if len(g.x) != len(gout.x): # call again
-      print("Iterative cleaning")
+#      print("Iterative cleaning")
       return remove_unibonded(gout,d=d,tol=tol,
          use_fortran=use_fortran,iterative=iterative)
   return gout # return the geometry

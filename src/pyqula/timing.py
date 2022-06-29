@@ -2,9 +2,11 @@ from __future__ import print_function,division
 import time
 
 printall = False
+silent = False
+
 
 class Testimator:
-  def __init__(self,title="",maxite=None,silent=False):
+  def __init__(self,title="",maxite=None,silent=silent):
     self.t0 = time.perf_counter() # starting time
     self.title = title
     self.maxite = maxite
