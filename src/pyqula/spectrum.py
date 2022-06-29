@@ -372,30 +372,35 @@ def eigenvalues(h0,nk=10,notime=True):
 
 
 
-def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,filename="MAP.OUT"):
-  """ Calculates the reciprocal map of something"""
-  if reciprocal: fR = h.geometry.get_k2K_generator()
-  else: fR = lambda x: x
-  fo = open(filename,"w") # open file
-  nt = nk*nk # total number of points
-  ik = 0
-  ks = [] # list with kpoints
-  from . import parallel
-  for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-    for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-        ks.append([x,y,0.])
-  tr = timing.Testimator(filename.replace(".OUT",""),maxite=len(ks))
-  def fp(ki): # function to compute the quantity
-      if parallel.cores == 1: tr.iterate()
-      else: print("Doing",ki)
-      k = fR(ki)
-      return f(k) # call function
-  bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
-  for (b,k) in zip(bs,ks): # write everything
-      fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b.real))
-      fo.write("     "+str(b.imag)+"\n")
-      fo.flush()
-  fo.close() # close file
+def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,filename="MAP.OUT",
+        write=True,verbosity=0):
+    """ Calculates the reciprocal map of something"""
+    if reciprocal: fR = h.geometry.get_k2K_generator()
+    else: fR = lambda x: x
+    if write: fo = open(filename,"w") # open file
+    nt = nk*nk # total number of points
+    ik = 0
+    ks = [] # list with kpoints
+    from . import parallel
+    for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+      for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+          ks.append([x,y,0.])
+    ks = np.array(ks)
+    tr = timing.Testimator(filename.replace(".OUT",""),
+                maxite=len(ks),silent=verbosity==0)
+    def fp(ki): # function to compute the quantity
+        if parallel.cores == 1: tr.iterate()
+        else: print("Doing",ki)
+        k = fR(ki)
+        return f(k) # call function
+    bs = np.array(parallel.pcall(fp,ks)) # compute all values
+    if write:
+        for (b,k) in zip(bs,ks): # write everything
+            fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b.real))
+            fo.write("     "+str(b.imag)+"\n")
+            fo.flush()
+        fo.close() # close file
+    return ks,bs
 
 
 

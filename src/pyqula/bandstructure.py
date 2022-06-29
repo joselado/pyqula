@@ -216,3 +216,13 @@ def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
 
 
 
+
+def get_bands_map(h,n=0,**kwargs):
+    """Get a 2d map of the band structure"""
+    hk = h.get_hk_gen() # Hamiltonian generator
+    def f(k):
+        e = algebra.eigvalsh(hk(k))[n]
+        return e
+    from .spectrum import reciprocal_map
+    return reciprocal_map(h,f,filename="BANDS_2D.OUT",**kwargs) 
+

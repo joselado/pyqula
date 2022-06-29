@@ -22,6 +22,7 @@ from . import groundstate
 from . import rotate_spin
 from . import topology
 from . import ldos
+from . import bandstructure
 from . import increase_hilbert
 from .meanfield import Vinteraction
 from .sctk import dvector
@@ -219,7 +220,10 @@ class Hamiltonian():
         return atomicmultildos.get_density(self,**kwargs)
     def get_bands(self,**kwargs):
       """ Returns a figure with the bandstructure"""
-      return get_bands_nd(self,**kwargs)
+      return bandstructure.get_bands_nd(self,**kwargs)
+    def get_bands_map(self,**kwargs):
+      """ Returns a figure with the bandstructure"""
+      return bandstructure.get_bands_map(self,**kwargs)
     def get_kdos_bands(self,**kwargs):
         from .kdos import kdos_bands
         return kdos_bands(self,**kwargs)
