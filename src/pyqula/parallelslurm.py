@@ -30,6 +30,7 @@ def pcall(fin,xs,batch_size=1,**kwargs):
 
 
 def pcall_single(fin,xs,time=10,memory=5000,error=None,
+    constraint = None,
     return_mode="list"):
     """Run a parallel calculation with slurm"""
     n = len(xs) # number of calculations
@@ -64,6 +65,8 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None,
     runsh = "#!/bin/bash\n#SBATCH -n 1\n#SBATCH -t "+str(int(time))+":"+str(mins)+":00\n"
     runsh += "#SBATCH --mem-per-cpu="+str(memory)+"\n"
     runsh += "#SBATCH --array=0-"+str(n-1)+"\n"
+    if constraint is not None:
+        runsh += "#SBATCH --constraint="+str(constraint)+"\n"
     runsh += "srun python run.py\n"
     open(pfolder+"/run.sh","w").write(runsh) # parallel file
     pwd = os.getcwd() # current directory 

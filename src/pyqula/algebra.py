@@ -122,10 +122,6 @@ def get_representation(wfs,A):
         vj = np.conjugate(wfs[j]) # first wavefunction
         data = vi@A@vj
         ma[i,j] = data
-#    if len(ma)==2:
-#      print("Representation")
-#      print(np.round(ma,2))
-#      print(dlg.eigvalsh(ma))
     return ma
 
 

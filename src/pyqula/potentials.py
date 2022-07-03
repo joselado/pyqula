@@ -27,6 +27,7 @@ class Potential():
     def __sub__(self,a): return self + (-1)*a
     def __rsub__(self,a): return -self + a
     def __radd__(self,a): return self + a
+    def __truediv__(self,a): return self*(1./a)
     def __call__(self,r):
         return self.f(r)
     def normalize(self):

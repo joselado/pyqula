@@ -10,6 +10,7 @@ def kdos(self,kpath=None,energies=None,
         else: raise # not implemented
     if kpath is None: kpath = np.linspace(0.,1.,40)
     if energies is None: energies = np.linspace(-1.0,1.,40)
+    energies = np.array(energies)
     from ..parallel import pcall
     kout,eout,dout = [],[],[]
     ds = pcall(lambda k: [fun(k,e) for e in energies],kpath) # call in parallel

@@ -145,8 +145,8 @@ def add_modified_haldane(h,t):
 
 def add_anti_kane_mele(h,t):
   """Add Haldane to a Hamiltonian"""
-  if not h.has_spin: raise
   if not h.geometry.has_sublattice: return # if it does not have sublattice
+  if not h.has_spin: h.turn_spinful()
   add_haldane_like(h,t,haldane,sublattice=h.geometry.sublattice,
           time_reversal = True) 
 
