@@ -10,16 +10,11 @@ h = g.get_hamiltonian(has_spin=False)
 from pyqula import potentials
 
 f = potentials.commensurate_potential(g,minmax=[-1,1.])
-
-g.write_profile(f) ; exit()
-f = f*0.3
-
-h.add_sublattice_imbalance(f)
-h.turn_sparse()
-h.get_ldos(e=0.0,num_bands=20) ;exit()
-
-
-h.get_bands()
+f = f*0.3 # redefine the amplitude of the modulation
+g.write_profile(f) # write the profile in a file 
+h.add_sublattice_imbalance(f) # add a sublattice imbalance with this profile
+h.get_ldos(e=0.0,num_bands=20) # compute LDOS
+h.get_bands() # compute band structure
 
 
 
