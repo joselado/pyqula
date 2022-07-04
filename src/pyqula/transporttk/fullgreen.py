@@ -2,7 +2,7 @@ import numpy as np
 from ..green import gauss_inverse # calculate the desired green functions
 from ..algebra import dagger,sqrtm
 from .smatrix import enlarge_hlist,effective_tridiagonal_hamiltonian
-
+from .smatrix import build_effective_hlist
 
 def get_full_green(ht,energy,mode="right",delta=None,ic=0):
     """Build effective Hamiltonian at a certain energy"""
