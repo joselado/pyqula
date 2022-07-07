@@ -33,7 +33,6 @@ def pcall(fin,xs,batch_size=1,**kwargs):
 def pcall_killproof(fin,xs,return_mode="list",info=True,**kwargs):
     """Call method that is relaunched for killed jobs"""
     outl = pcall_single(fin,xs) # the return is a list
-    print(outl) ; exit()
     out = dict()
     for i in range(len(ys)):
         out[ys[i]] = outl[i] # store
