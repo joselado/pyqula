@@ -30,7 +30,7 @@ def pcall(fin,xs,batch_size=1,**kwargs):
         return out
 
 
-def pcall_killproof(fin,xs,return_mode="list",info=True,**kwargs):
+def pcall_killproof_dict(fin,xs,info=True,**kwargs):
     """Call method that is relaunched for killed jobs"""
     outl = pcall_single(fin,xs) # the return is a list
     out = dict()
@@ -47,6 +47,10 @@ def pcall_killproof(fin,xs,return_mode="list",info=True,**kwargs):
         out2 = pcall_killproof(fin,xsnew,info=info,**kwargs) # new outputs
         for o in out2:
             out[o] = out2[o] # overwrite
+        return out
+
+def pcall_killproof(fin,xs,return_mode="list",**kwargs):
+    out = pcall_killproof_dict(fin,xs,**kwargs)
     if return_mode=="list": 
         return [out[y] for y in ys]
     elif return_mode=="dict": 
