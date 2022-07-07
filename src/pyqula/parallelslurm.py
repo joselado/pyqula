@@ -39,7 +39,8 @@ def pcall_killproof(fin,xs,return_mode="list",info=True,**kwargs):
     xsnew = [] # empty list
     for (x,o) in zip(xs,out): # loop over keys
         if oout[o] is None: # this one has been killed/failed
-            if info: print("Relaunching",o):
+            if info: 
+                print("Relaunching",o)
                 xsnew.append(o) # store
     if len(xsnew)=0: pass # all good
     else:
