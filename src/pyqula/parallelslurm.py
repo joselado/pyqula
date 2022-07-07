@@ -35,8 +35,8 @@ def pcall_killproof_dict(fin,xs,info=True,**kwargs):
     print("Hello")
     outl = pcall_single(fin,xs,**kwargs) # the return is a list
     out = dict()
-    for i in range(len(ys)):
-        out[ys[i]] = outl[i] # store
+    for i in range(len(xs)):
+        out[xs[i]] = outl[i] # store
     xsnew = [] # empty list
     for (x,o) in zip(xs,out): # loop over keys
         if out[o] is None: # this one has been killed/failed
