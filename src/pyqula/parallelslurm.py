@@ -32,7 +32,6 @@ def pcall(fin,xs,batch_size=1,**kwargs):
 
 def pcall_killproof_dict(fin,xs,info=True,**kwargs):
     """Call method that is relaunched for killed jobs"""
-    print("Hello")
     outl = pcall_single(fin,xs,**kwargs) # the return is a list
     out = dict()
     for i in range(len(xs)):
