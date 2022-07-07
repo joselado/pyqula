@@ -54,7 +54,7 @@ def pcall_killproof_dict(fin,xs,info=True,**kwargs):
 def pcall_killproof(fin,xs,return_mode="list",**kwargs):
     out = pcall_killproof_dict(fin,xs,**kwargs)
     if return_mode=="list": 
-        return [out[y] for y in ys]
+        return [out[x] for x in xs]
     elif return_mode=="dict": 
         return out
 
