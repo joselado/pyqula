@@ -178,9 +178,13 @@ def excitonic_bilayer(gap=0.0,g=None,**kwargs):
 
 
 
-def FeSe():
+def FeSe(**kwargs):
     """Return the Hamiltonian of FeSe, a bandstructure
     displaying two pockets"""
+    g = geometry.square_lattice() # cubic lattice
+    h = g.get_hamiltonian(tij=[1.,3.],**kwargs) 
+    h.add_onsite(-5.)
+    return h
     g = geometry.cubic_lattice() # cubic lattice
     g = g.supercell([1,1,2]) # create a bilayer
     g.dimensionality = 2 # set as 2d
