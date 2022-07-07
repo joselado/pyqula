@@ -185,21 +185,21 @@ def FeSe(**kwargs):
     h = g.get_hamiltonian(tij=[1.,3.],**kwargs) 
     h.add_onsite(-5.)
     return h
-    g = geometry.cubic_lattice() # cubic lattice
-    g = g.supercell([1,1,2]) # create a bilayer
-    g.dimensionality = 2 # set as 2d
-    g.center()
-    def fh(r1,r2): # function for the hoppings
-        dr = r1-r2
-        dr2 = dr.dot(dr)
-        if 0.9<dr2<1.1:
-            if abs(dr[2])>0.1: return 0. # no hopping
-            if np.sign(r1[2]+r2[2])>0: return 1.0 # return hopping
-            else: return -1.0 
-        return 0.
-    h = g.get_hamiltonian(tij=fh)
-    h.add_onsite(lambda r: 3.+1*r[2])
-    return h
+#    g = geometry.cubic_lattice() # cubic lattice
+#    g = g.supercell([1,1,2]) # create a bilayer
+#    g.dimensionality = 2 # set as 2d
+#    g.center()
+#    def fh(r1,r2): # function for the hoppings
+#        dr = r1-r2
+#        dr2 = dr.dot(dr)
+#        if 0.9<dr2<1.1:
+#            if abs(dr[2])>0.1: return 0. # no hopping
+#            if np.sign(r1[2]+r2[2])>0: return 1.0 # return hopping
+#            else: return -1.0 
+#        return 0.
+#    h = g.get_hamiltonian(tij=fh)
+#    h.add_onsite(lambda r: 3.+1*r[2])
+#    return h
 
 
 

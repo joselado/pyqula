@@ -14,6 +14,7 @@ gfmode = "adaptive"
 class LocalProbe():
     def __init__(self,h,lead=None,delta=1e-5,i=0,T=1.0,**kwargs):
         self.H = h.copy() # store Hamiltonian
+        self.H.turn_dense() # dense Hamiltonian
         self.has_eh = self.H.has_eh # electron-hole
         self.delta = delta
         self.mode = "bulk"
