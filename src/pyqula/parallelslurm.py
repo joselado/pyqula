@@ -109,7 +109,8 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None,
         finished = True
         for i in range(n):
             pfolderi = pfolder+"/folder_"+str(i)
-            if started_and_killed(pfolderi,str(job)+"_"+str(i)):
+            if False:
+#            if started_and_killed(pfolderi,str(job)+"_"+str(i)):
                 pass # ignore as if it finished
             else:
                 if not path.exists(pfolderi+"/DONE"):
