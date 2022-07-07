@@ -184,6 +184,7 @@ def FeSe(**kwargs):
     g = geometry.square_lattice() # cubic lattice
     h = g.get_hamiltonian(tij=[1.,3.],**kwargs) 
     h.add_onsite(-5.)
+    h.turn_dense()
     return h
 #    g = geometry.cubic_lattice() # cubic lattice
 #    g = g.supercell([1,1,2]) # create a bilayer
