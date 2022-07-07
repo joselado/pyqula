@@ -12,7 +12,7 @@ srcpath = os.path.dirname(os.path.realpath(__file__))+"/.."
 
 def pcall(fin,xs,batch_size=1,**kwargs):
     """Wrapper to allow for a batch size"""
-    if batch_size==1: return pcall_single(fin,xs,**kwargs)
+    if batch_size==1: return pcall_killproof(fin,xs,**kwargs)
     else: 
         nx = len(xs) # number of xs
         xsn = [] # empty list
@@ -33,7 +33,7 @@ def pcall(fin,xs,batch_size=1,**kwargs):
 def pcall_killproof_dict(fin,xs,info=True,**kwargs):
     """Call method that is relaunched for killed jobs"""
     print("Hello")
-    outl = pcall_single(fin,xs) # the return is a list
+    outl = pcall_single(fin,xs,**kwargs) # the return is a list
     out = dict()
     for i in range(len(ys)):
         out[ys[i]] = outl[i] # store
