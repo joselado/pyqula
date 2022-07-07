@@ -16,7 +16,7 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     if callable(mode):
         weightf = mode # mode is a function returning a 2x2 pairing matrix
     elif mode=="swave":
-        weightf = lambda r1,r2: same_site(r1,r2)*np.identity(2)
+        weightf = lambda r1,r2: swave(r1,r2,H=self,**kwargs) #same_site(r1,r2)*np.identity(2)
     elif mode=="triplet": 
         weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
     elif mode=="pwave": 
@@ -93,7 +93,10 @@ def dxy(r1,r2,**kwargs):
     return 0.0*iden
 
 
-
+def swave(r1,r2,nn=0,**kwargs):
+    """Function with first neighbor dxy profile"""
+    if nn==0: return same_site(r1,r2)*np.identity(2)
+    else: return get_singlet(r1,r2,L=0,nn=nn,**kwargs)
 
 
 def C3nn(r1,r2):
