@@ -42,7 +42,7 @@ def pcall_killproof(fin,xs,return_mode="list",info=True,**kwargs):
             if info: 
                 print("Relaunching",o)
                 xsnew.append(o) # store
-    if len(xsnew)=0: pass # all good
+    if len(xsnew)==0: pass # all good
     else:
         out2 = pcall_killproof(fin,xsnew,info=info,**kwargs) # new outputs
         for o in out2:
