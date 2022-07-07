@@ -153,6 +153,7 @@ def jobkill(n):
 
 def started_and_killed(inipath,number):
     """Check if a certain job that was started has been killed"""
+    from os import path
     if path.exists(inipath+"/START"): # the job started
         out,err = subprocess.Popen(["squeue","-r"],
                       stdout=subprocess.PIPE).communicate()
