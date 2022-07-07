@@ -19,6 +19,8 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
     gf,sf = green_renormalization(ons,hop,energy=energy,nite=None,
                             error=error,info=False,delta=delta)
     return gf,sf
+  h = h.copy() # make a copy
+  h.turn_dense() # dense Hamiltonian
   hk_gen = h.get_hk_gen()  # generator of k dependent hamiltonian
   if h.is_multicell:
       try: h = h.get_no_multicell()
@@ -30,7 +32,7 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
   #######################################
   d = h.dimensionality # dimensionality of the system
   g = h.intra *0.0j # initialize green function
-  e = np.matrix(np.identity(len(g)))*(energy + delta*1j) # complex energy
+  e = np.matrix(np.identity(g.shape[0])*(energy + delta*1j) # complex energy
   if mode=="full":  # full integration in the BZ
     if d==1: # one dimensional
       ks = [[k,0.,0.] for k in np.linspace(0.,1.,nk,endpoint=False)]
