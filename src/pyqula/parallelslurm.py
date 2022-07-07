@@ -38,7 +38,7 @@ def pcall_killproof(fin,xs,return_mode="list",info=True,**kwargs):
         out[ys[i]] = outl[i] # store
     xsnew = [] # empty list
     for (x,o) in zip(xs,out): # loop over keys
-        if oout[o] is None: # this one has been killed/failed
+        if out[o] is None: # this one has been killed/failed
             if info: 
                 print("Relaunching",o)
                 xsnew.append(o) # store
