@@ -44,7 +44,7 @@ def pcall_killproof_dict(fin,xs,info=True,**kwargs):
                 xsnew.append(o) # store
     if len(xsnew)==0: pass # all good
     else:
-        out2 = pcall_killproof(fin,xsnew,info=info,**kwargs) # new outputs
+        out2 = pcall_killproof_dict(fin,xsnew,info=info,**kwargs) # new outputs
         for o in out2:
             out[o] = out2[o] # overwrite
         return out
