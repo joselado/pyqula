@@ -50,6 +50,8 @@ class Geometry:
         self.ncells = 2 # number of neighboring cells returned
     def neighbor_distances(self,**kwargs):
         return neighbor_distances(self,**kwargs)
+    def get_neighbor_distances(self,**kwargs):
+        return neighbor_distances(self,**kwargs)
     def normalize_nn_distance(self):
         """Set the NN istance equal to 1"""
         if self.dimensionality>0: raise
