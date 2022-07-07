@@ -42,7 +42,7 @@ def pcall_killproof_dict(fin,xs,info=True,**kwargs):
         if out[o] is None: # this one has been killed/failed
             if info: 
                 print("Relaunching",o)
-            xsnew.append(o) # store
+            xsnew.append(o[0]) # store
     if len(xsnew)==0: 
         return out # all good
     else:
