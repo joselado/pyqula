@@ -73,10 +73,8 @@ def SOC_TMDC(g=None,soc=0.0,**kwargs):
 
 
 def NbSe2(**kwargs):
-#    return TMDC_MX2(**kwargs,ts=[0.0263,0.0991,-0.0014,-0.0112,-0.0146,0.0025])
     return TMDC_MX2(**kwargs,
             tij=[0.02126916,  0.08462639,  0.00504899, -0.00906057, -0.00572983])
-#    return TMDC_MX2(**kwargs,ts=[0.3,2.,0.6,0.2,0.])
 
 def TaS2(**kwargs):
     return TMDC_MX2(**kwargs,
@@ -182,8 +180,10 @@ def FeSe(**kwargs):
     """Return the Hamiltonian of FeSe, a bandstructure
     displaying two pockets"""
     g = geometry.square_lattice() # cubic lattice
-    h = g.get_hamiltonian(tij=[1.,3.],**kwargs) 
-    h.add_onsite(-5.)
+#    h = g.get_hamiltonian(tij=[1.,3.],**kwargs) 
+    h = g.get_hamiltonian(tij=[1.,-0.4,0.4],**kwargs) 
+#    h.add_onsite(-5.)
+    h.add_onsite(-2.5)
     h.turn_dense()
     return h
 #    g = geometry.cubic_lattice() # cubic lattice
