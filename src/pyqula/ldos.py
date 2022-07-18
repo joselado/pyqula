@@ -292,7 +292,7 @@ def get_ldos(h,projection="TB",**kwargs):
 
 
 def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
-             random=True,silent=True,interpolate=False,
+             random=False,silent=True,interpolate=False,
              write=True,**kwargs):
     """ Calculate LDOS in a tight binding basis"""
     if ks is not None and mode=="green": raise
