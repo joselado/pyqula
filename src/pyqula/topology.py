@@ -18,34 +18,34 @@ arpack_maxiter = algebra.arpack_maxiter
 def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=600,
       mode="Wilson",delta=0.001,reciprocal=False,operator=None,
       silent = True):
-  """Calculate and write in file the Berry curvature"""
-  operator = get_operator(h,operator)
-  kpath = klist.get_kpath(h.geometry,kpath=kpath,nk=nk) # take default kpath
-  tr = timing.Testimator("BERRY CURVATURE",silent=silent)
-  ik = 0
-  if operator is not None: mode="Green" # Green function mode
-  def getb(k):
-    if reciprocal:  k = h.geometry.get_k2K_generator()(k) # convert
-    if mode=="Wilson":
-      b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
-    elif mode=="Green":
-      f = h.get_gk_gen(delta=delta) # get generator
-      b = berry_green(f,k=k,operator=operator) 
-    else: raise
-    return str(k[0])+"   "+str(k[1])+"   "+str(b)+"\n"
-  fo = open("BERRY_CURVATURE.OUT","w") # open file
-  if parallel.cores==1: # serial execution
-    for k in kpath:
-      tr.remaining(ik,len(kpath))
-      ik += 1
-      fo.write(getb(k)) # write result
-      fo.flush()
-  else: # parallel execution
-      out = parallel.pcall(getb,kpath)
-      for o in out: fo.write(o) # write
-  fo.close() # close file
-  m = np.genfromtxt("BERRY_CURVATURE.OUT").transpose()
-  return np.array(range(len(m[0]))),m[2]
+    """Calculate and write in file the Berry curvature"""
+    operator = get_operator(h,operator)
+    kpath = klist.get_kpath(h.geometry,kpath=kpath,nk=nk) # take default kpath
+    tr = timing.Testimator("BERRY CURVATURE",silent=silent)
+    ik = 0
+    if operator is not None: mode="Green" # Green function mode
+    def getb(k):
+      if reciprocal:  k = h.geometry.get_k2K_generator()(k) # convert
+      if mode=="Wilson":
+        b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
+      elif mode=="Green":
+        f = h.get_gk_gen(delta=delta) # get generator
+        b = berry_green(f,k=k,operator=operator) 
+      else: raise
+      return str(k[0])+"   "+str(k[1])+"   "+str(b)+"\n"
+    fo = open("BERRY_CURVATURE.OUT","w") # open file
+    if parallel.cores==1: # serial execution
+      for k in kpath:
+        tr.remaining(ik,len(kpath))
+        ik += 1
+        fo.write(getb(k)) # write result
+        fo.flush()
+    else: # parallel execution
+        out = parallel.pcall(getb,kpath)
+        for o in out: fo.write(o) # write
+    fo.close() # close file
+    m = np.genfromtxt("BERRY_CURVATURE.OUT").transpose()
+    return np.array(range(len(m[0]))),m[2]
 
 
 
@@ -56,31 +56,31 @@ def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=600,
 
 
 
-def berry_phase(h,nk=20,kpath=None):
-  """ Calculates the Berry phase of a Hamiltonian"""
-  if h.dimensionality==0: raise
-  elif h.dimensionality == 1:
-    ks = np.linspace(0.,1.,nk,endpoint=False) # list of kpoints
-  elif h.dimensionality > 1: # you must provide a kpath
-      if kpath is None: 
-          print("You must provide a k-path")
-          raise # error
-      ks = kpath # continue
-      nk = len(kpath) # redefine
-  else: raise # otherwise
-  hkgen = h.get_hk_gen() # get Hamiltonian generator
-  wf0 = occupied_states(hkgen,ks[0]) # get occupied states, first k-point
-  wfold = wf0.copy() # copy
-  m = np.matrix(np.identity(len(wf0))) # initialize as the identity matrix
-  for ik in range(1,len(ks)): # loop over k-points, except first one
-    wf = occupied_states(hkgen,ks[ik])  # get waves
-    m = m@uij(wfold,wf)   # get the uij   and multiply
-    wfold = wf.copy() # this is the new old
-  m = m@uij(wfold,wf0)   # last one
-  d = lg.det(m) # calculate determinant
-  phi = np.arctan2(d.imag,d.real)
-  open("BERRY_PHASE.OUT","w").write(str(phi/np.pi)+"\n")
-  return phi # return Berry phase
+def berry_phase(h,nk=20,kpath=None,write=True):
+    """ Calculates the Berry phase of a Hamiltonian"""
+    if h.dimensionality==0: raise
+    elif h.dimensionality == 1:
+      ks = np.linspace(0.,1.,nk,endpoint=False) # list of kpoints
+    elif h.dimensionality > 1: # you must provide a kpath
+        if kpath is None: 
+            print("You must provide a k-path")
+            raise # error
+        ks = kpath # continue
+        nk = len(kpath) # redefine
+    else: raise # otherwise
+    hkgen = h.get_hk_gen() # get Hamiltonian generator
+    wf0 = occupied_states(hkgen,ks[0]) # get occupied states, first k-point
+    wfold = wf0.copy() # copy
+    m = np.matrix(np.identity(len(wf0))) # initialize as the identity matrix
+    for ik in range(1,len(ks)): # loop over k-points, except first one
+      wf = occupied_states(hkgen,ks[ik])  # get waves
+      m = m@uij(wfold,wf)   # get the uij   and multiply
+      wfold = wf.copy() # this is the new old
+    m = m@uij(wfold,wf0)   # last one
+    d = lg.det(m) # calculate determinant
+    phi = np.arctan2(d.imag,d.real)
+    if write: open("BERRY_PHASE.OUT","w").write(str(phi/np.pi)+"\n")
+    return phi # return Berry phase
 
 
 
@@ -212,42 +212,42 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",operator=None):
 def get_berry_curvature(h,dk=-1,nk=100,reciprocal=True,nsuper=1,window=None,
                max_waves=None,mode="Wilson",delta=0.001,operator=None,
                write=True,verbose=0):
-  """ Calculates the chern number of a 2d system """
-  if operator is not None: mode="Green" # Green function mode
-  c = 0.0
-  ks = [] # array for kpoints
-  if dk<0: dk = 1./float(2*nk) # automatic dk
-  if reciprocal: R = np.array(h.geometry.get_k2K())
-  else: R = np.array(np.identity(3))
-  nt = nk*nk # total number of points
-  ik = 0
-  ks = [] # list with kpoints
-  from . import parallel
-  for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-    for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-        ks.append([x,y,0.])
-  ks = np.array(ks) # convert to array
-  if verbose>0: tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
-  def fp(ki): # function to compute the Berry curvature
-      if parallel.cores == 1: 
-          if verbose>0: tr.iterate()
-      else: print("Doing",ki)
-      k = R@ki # change of basis
-      if mode=="Wilson":
-         b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
-      elif mode=="Green":
-         f = h.get_gk_gen(delta=delta) # get generator
-         b = berry_green(f,k=k,operator=operator) 
-      else: raise
-      return b
-  bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
-  if write: # write result in a file
-      fo = open("BERRY_MAP.OUT","w") # open file
-      for (b,k) in zip(bs,ks): # write everything
-          fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b)+"\n")
-          fo.flush()
-      fo.close() # close file
-  return [ks[:,0],ks[:,1],bs] # return result
+    """ Return the Berry curvature in 2D reciprocal space """
+    if operator is not None: mode="Green" # Green function mode
+    c = 0.0
+    ks = [] # array for kpoints
+    if dk<0: dk = 1./float(2*nk) # automatic dk
+    if reciprocal: R = np.array(h.geometry.get_k2K())
+    else: R = np.array(np.identity(3))
+    nt = nk*nk # total number of points
+    ik = 0
+    ks = [] # list with kpoints
+    from . import parallel
+    for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+      for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+          ks.append([x,y,0.])
+    ks = np.array(ks) # convert to array
+    if verbose>0: tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
+    def fp(ki): # function to compute the Berry curvature
+        if parallel.cores == 1: 
+            if verbose>0: tr.iterate()
+        else: print("Doing",ki)
+        k = R@ki # change of basis
+        if mode=="Wilson":
+           b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
+        elif mode=="Green":
+           f = h.get_gk_gen(delta=delta) # get generator
+           b = berry_green(f,k=k,operator=operator) 
+        else: raise
+        return b
+    bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
+    if write: # write result in a file
+        fo = open("BERRY_MAP.OUT","w") # open file
+        for (b,k) in zip(bs,ks): # write everything
+            fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b)+"\n")
+            fo.flush()
+        fo.close() # close file
+    return [ks[:,0],ks[:,1],bs] # return result
 
 
 berry_map = get_berry_curvature # alias

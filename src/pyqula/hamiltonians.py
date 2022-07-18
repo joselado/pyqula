@@ -398,8 +398,11 @@ class Hamiltonian():
         return MultiHopping(self.get_dict())
 
     @get_docstring(Vinteraction)
-    def get_mean_field_hamiltonian(self,**kwargs):
-        return Vinteraction(self,**kwargs).hamiltonian
+    def get_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
+        scf = Vinteraction(self,**kwargs)
+        if return_total_energy:
+            return (scf.hamiltonian,scf.total_energy)
+        else: return scf.hamiltonian
     def copy(self):
         """
         Return a copy of the hamiltonian

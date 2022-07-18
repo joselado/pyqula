@@ -304,9 +304,11 @@ def get_kpath_labels(g,ks,write=True,**kwargs):
 
 def get_kpath(g,kpath=None,**kwargs):
     """Return a kpath"""
-    if kpath is None: return default(g,**kwargs)
-    elif type(kpath[0])==str: return get_kpath_labels(g,kpath,**kwargs)
-    else: return kpath # assume is a valid list of vectors
+    if kpath is None: 
+        return np.array(default(g,**kwargs))
+    elif type(kpath[0])==str: 
+        return np.array(get_kpath_labels(g,kpath,**kwargs))
+    else: return np.array(kpath) # assume is a valid list of vectors
 
 
 

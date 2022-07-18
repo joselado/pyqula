@@ -45,7 +45,7 @@ def mz(m):
 
 
 def mx(m):
-  """Extract the z component of the magnetism, assume spin degree of freedom"""
+  """Extract the x component of the magnetism, assume spin degree of freedom"""
   n = m.shape[0]//2 # number of sites
   ds = np.zeros(n).real # pairing
   for i in range(n):
@@ -55,7 +55,7 @@ def mx(m):
 
 
 def my(m):
-  """Extract the z component of the magnetism, assume spin degree of freedom"""
+  """Extract the y component of the magnetism, assume spin degree of freedom"""
   n = m.shape[0]//2 # number of sites
   ds = np.zeros(n).real # pairing
   for i in range(n):
