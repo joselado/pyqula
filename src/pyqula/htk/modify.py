@@ -17,12 +17,3 @@ def modify_hamiltonian_matrices(self,f0,use_geometry=False):
         self.hopping[i].m = f(self.hopping[i].m,self.hopping[i].dir) 
     else: # conventional way, now disabled
       raise
-#      if self.dimensionality==1: # one dimensional systems
-#        self.inter = f(self.inter,[1,0,0])
-#      elif self.dimensionality==2: # two dimensional systems
-#        self.tx = f(self.tx,[1,0,0])
-#        self.ty = f(self.ty,[0,1,0])
-#        self.txy = f(self.txy,[1,1,0])
-#        self.txmy = f(self.txmy,[1,-1,0])
-#      else: raise
-
