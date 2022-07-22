@@ -333,7 +333,7 @@ def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
                            delta=delta,hs=hs)
       for (energy,out) in zip(energies,outs):
         # write everything
-        kout.append(ik) # add to the output
+        kout.append(k[0]) # add to the output
         eout.append(energy) # add to the output
         if write:
           if h1.dimensionality==1: fo.write(str(energy)+"   ")
