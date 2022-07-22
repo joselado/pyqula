@@ -9,7 +9,9 @@ def add_strain(h,sr,**kwargs):
       if not h.has_spin: indg = lambda i: i
       elif h.has_spin: indg = lambda i: i//2
       else: raise
-    else: raise
+    else: 
+      if h.has_spin: indg = lambda i: i//4
+      else: raise
     f = strain_mode(sr,**kwargs) # get the function depending on the mode
     def fm(m,r1,r2): # function to modify hopping
         return strain_matrix(m,r1,r2,indg,f)
