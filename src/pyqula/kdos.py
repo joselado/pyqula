@@ -302,42 +302,56 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
 
 
 def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
-                    delta=0.01,kpath=None,hs=None,nsuper=None):
-  """Get the surface DOS of an interface"""
-  h1 = h1.get_supercell(nsuper)
-  from scipy.sparse import csc_matrix,bmat
-#  kpath = h1.geometry.get_kpath(kpath,nk=len(energies)) # get kpath
-  if kpath is None: 
-    if h1.dimensionality==3:
-      g2d = h1.geometry.copy() # copy Hamiltonian
-      g2d = sculpt.set_xy_plane(g2d)
-      kpath = klist.default(g2d,nk=len(energies))
-    elif h1.dimensionality==2:
-#      kpath = klist.default(g2d,nk=len(energies))
-      kpath = [[k,0.,0.] for k in np.linspace(0.,1.,len(energies))]
-    elif h1.dimensionality==1: kpath = [[0.,0.,0.0]] # one dummy point
-    else: raise
-  fo = open("KDOS.OUT","w")
-  fo.write("# k, E, Surface, Bulk\n")
-  tr = timing.Testimator("KDOS") # generate object
-  ik = 0
-  h1 = h1.get_multicell() # multicell Hamiltonian
-  for k in kpath:
-    tr.remaining(ik,len(kpath)) # generate object
-    ik += 1
-    outs = green.surface_multienergy(h1,k=k,energies=energies,delta=delta,hs=hs)
-    for (energy,out) in zip(energies,outs):
-      # write everything
-      if h1.dimensionality==1: fo.write(str(energy)+"   ")
-      else: fo.write(str(ik)+"   "+str(energy)+"   ")
-      for g in out: # loop
-        if operator is None: d = -algebra.trace(g).imag # only the trace 
-        elif callable(operator): d = operator(g,k=k) # call the operator
-        else:  d = -algebra.trace(g@operator).imag # assume it is a matrix
-        fo.write(str(d)+"   ") # write in a file
-      fo.write("\n") # next line
-      fo.flush() # flush
-  fo.close()
+                    delta=0.01,kpath=None,hs=None,nsuper=None,
+                    write=True,nk=None):
+    """Get the surface DOS of an interface"""
+    if nk is None: nk = len(energies)
+    h1 = h1.get_supercell(nsuper)
+    from scipy.sparse import csc_matrix,bmat
+    if kpath is None: 
+        if h1.dimensionality==3:
+          g2d = h1.geometry.copy() # copy Hamiltonian
+          g2d = sculpt.set_xy_plane(g2d)
+          kpath = klist.default(g2d,nk=nk)
+        elif h1.dimensionality==2:
+          kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
+        elif h1.dimensionality==1: kpath = [[0.,0.,0.0]] # one dummy point
+        else: raise
+    if write: fo = open("KDOS.OUT","w")
+    if write: fo.write("# k, E, Surface, Bulk\n")
+    tr = timing.Testimator("KDOS") # generate object
+    ik = 0
+    h1 = h1.get_multicell() # multicell Hamiltonian
+    kout = [] # storage
+    eout = [] # storage
+    dsout = [] # storage
+    dbout = [] # storage
+    for k in kpath:
+      tr.remaining(ik,len(kpath)) # generate object
+      ik += 1
+      outs = green.surface_multienergy(h1,k=k,energies=energies,
+                           delta=delta,hs=hs)
+      for (energy,out) in zip(energies,outs):
+        # write everything
+        kout.append(ik) # add to the output
+        eout.append(energy) # add to the output
+        if write:
+          if h1.dimensionality==1: fo.write(str(energy)+"   ")
+          else: fo.write(str(ik)+"   "+str(energy)+"   ")
+        do = []
+        for g in out: # loop
+          if operator is None: d = -algebra.trace(g).imag # only the trace 
+          elif callable(operator): d = operator(g,k=k) # call the operator
+          else:  d = -algebra.trace(g@operator).imag # assume it is a matrix
+          if write: fo.write(str(d)+"   ") # write in a file
+          do.append(d) # store
+        dsout.append(do[0]) # add to the output
+        dbout.append(do[1]) # add to the output
+        if write:
+          fo.write("\n") # next line
+          fo.flush() # flush
+    if write: fo.close()
+    return np.array(kout),np.array(eout),np.array(dsout),np.array(dbout)
 
 
 
