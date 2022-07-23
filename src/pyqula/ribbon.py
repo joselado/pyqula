@@ -1,9 +1,20 @@
-from __future__ import print_function,division
 import numpy as np
 from . import supercell
 from . import sculpt
 
-def bulk2ribbon(g,n=10,boundary=[1,0],clean=True):
+
+def bulk2ribbon(obj,**kwargs):
+    from .geometry import Geometry
+    from .hamiltonians import Hamiltonian
+    if type(obj)==Geometry:
+        return geometry_bulk2ribbon(obj,**kwargs)
+    elif type(obj)==Hamiltonian:
+        return hamiltonian_ribbon(obj,**kwargs)
+    else: raise
+
+
+
+def geometry_bulk2ribbon(g,n=10,boundary=[1,0],clean=True):
   """Return the geometry of a ribbon"""
   go = g.copy() # copy
   m = [[boundary[0],boundary[1],0],[0,1,0],[0,0,1]] # supercell

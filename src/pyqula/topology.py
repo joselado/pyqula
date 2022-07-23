@@ -209,14 +209,14 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",operator=None):
 
 
 
-def get_berry_curvature(h,dk=-1,nk=100,reciprocal=True,nsuper=1,window=None,
+def get_berry_curvature(h,dk=None,nk=100,reciprocal=True,nsuper=1,window=None,
                max_waves=None,mode="Wilson",delta=0.001,operator=None,
                write=True,verbose=0):
     """ Return the Berry curvature in 2D reciprocal space """
     if operator is not None: mode="Green" # Green function mode
     c = 0.0
     ks = [] # array for kpoints
-    if dk<0: dk = 1./float(2*nk) # automatic dk
+    if dk is None: dk = 1./float(2*nk) # automatic dk
     if reciprocal: R = np.array(h.geometry.get_k2K())
     else: R = np.array(np.identity(3))
     nt = nk*nk # total number of points
