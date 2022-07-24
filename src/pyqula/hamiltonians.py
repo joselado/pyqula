@@ -563,9 +563,9 @@ class Hamiltonian():
         from . import operatorlist
         return operators.object2operator(operatorlist.get_operator(self,name,
             **kwargs))
-    def extract(self,name): 
+    def extract(self,name,**kwargs): 
         """Extract something from the Hamiltonian"""
-        return extract.extract_from_hamiltonian(self,name)
+        return extract.extract_from_hamiltonian(self,name,**kwargs)
     @get_docstring(dvector.dvector_non_unitarity_map)
     def write_non_unitarity(self,**kwargs):
         dvector.dvector_non_unitarity_map(self,**kwargs)

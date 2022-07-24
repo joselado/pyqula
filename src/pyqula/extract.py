@@ -23,24 +23,25 @@ def spin_channel(m,spin_column=None,spin_row=None,has_spin=True):
 
 
 def swave(m):
-  """Extract the swave pairing from a matrix, assuming
-  the Nambu spinor basis"""
-  n = m.shape[0]//4 # number of sites
-  ds = np.zeros(n,dtype=np.complex) # pairing
-  for i in range(n):
-    ds[i] = m[4*i,4*i+2] # get the pairing
-  return ds
+    """Extract the swave pairing from a matrix, assuming
+    the Nambu spinor basis"""
+    n = m.shape[0]//4 # number of sites
+    ds = np.zeros(n,dtype=np.complex) # pairing
+    for i in range(n):
+      ds[i] = m[4*i,4*i+2] # get the pairing
+    return ds
 
 
 
 
 def mz(m):
-  """Extract the z component of the magnetism, assume spin degree of freedom"""
-  n = m.shape[0]//2 # number of sites
-  ds = np.zeros(n).real # pairing
-  for i in range(n):
-    ds[i] = -(m[2*i+1,2*i+1] - m[2*i,2*i]).real/2. # get the pairing
-  return ds
+    """Extract the z component of the magnetism,
+    assume spin degree of freedom"""
+    n = m.shape[0]//2 # number of sites
+    ds = np.zeros(n).real # pairing
+    for i in range(n):
+      ds[i] = -(m[2*i+1,2*i+1] - m[2*i,2*i]).real/2. # get the pairing
+    return ds
 
 
 
@@ -65,19 +66,19 @@ def my(m):
 
 
 def onsite(m,has_spin=True):
-  """Extract the onsite energy"""
-  if has_spin: # has spin degree of freedom
-    n = m.shape[0]//2 # number of sites
-    ds = np.zeros(n).real # pairing
-    for i in range(n):
-      ds[i] = (m[2*i,2*i].real + m[2*i+1,2*i+1].real)/2.
-    return ds
-  else:
-    n = m.shape[0] # number of sites
-    ds = np.zeros(n).real # pairing
-    for i in range(n):
-      ds[i] = m[i,i].real
-    return ds
+    """Extract the onsite energy"""
+    if has_spin: # has spin degree of freedom
+        n = m.shape[0]//2 # number of sites
+        ds = np.zeros(n).real # pairing
+        for i in range(n):
+          ds[i] = (m[2*i,2*i].real + m[2*i+1,2*i+1].real)/2.
+        return ds
+    else:
+        n = m.shape[0] # number of sites
+        ds = np.zeros(n).real # pairing
+        for i in range(n):
+          ds[i] = m[i,i].real
+        return ds
 
 
 
@@ -134,7 +135,7 @@ def hopping_spinless(m,cutoff=0.001):
 
 
   
-def extract_from_hamiltonian(self,name):
+def extract_from_hamiltonian(self,name,**kwargs):
     """Extract a quantity from a Hamiltonian"""
     h0 = self.copy()
     if self.is_sparse: h0.turn_dense() # turn into dense form
@@ -174,6 +175,9 @@ def extract_from_hamiltonian(self,name):
             from .superconductivity import dict2absdeltas
             (uu,dd,ud) = dict2absdeltas(self.get_multihopping().get_dict())
             return uu+dd+ud
+    elif name=="deltak": # reciprocal space superconductivity
+        from .sctk.extract import extract_pairing_kmap
+        return extract_pairing_kmap(self,**kwargs)
     else: raise
 
 
@@ -246,6 +250,9 @@ def extract_hopping_spin_mixing(h):
         m = np.mean(m,axis=0) # sum over the first axis
         out = out + m # add to the output
     return out # return the mixing
+
+
+
 
 
 

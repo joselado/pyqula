@@ -123,3 +123,25 @@ def extract_singlet_pairing(m):
 
 
 
+def extract_pairing_kmap(h,write=False,i=0,j=None,mode="singlet",**kwargs):
+    """Extract the pairing in reciprocal space"""
+    if not h.has_eh: raise # not implemented
+    if j is None: j = i # same site is the default
+    fk = h.get_hk_gen() # Bloch Hamiltonian generator
+    def f0(k):
+        m = fk(k) # full k-dependent Hamiltonian
+        m = extract_singlet_pairing(m) # matrix with pairings 
+        return m[i,j] # return pairing
+    dref = f0(np.random.random(3)) ; dref = dref/np.abs(dref) # reference
+    fr = lambda k: (f0(k)/dref).real # reference
+    fi = lambda k: (f0(k)/dref).imag # reference
+    from .. import spectrum
+    (ks,dsr) = spectrum.reciprocal_map(h,fr,write=write,**kwargs)
+    (ks,dsi) = spectrum.reciprocal_map(h,fi,write=write,**kwargs)
+    return ks[:,0],ks[:,1],dsr+1j*dsi
+
+
+
+
+
+
