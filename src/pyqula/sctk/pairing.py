@@ -17,6 +17,9 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
         weightf = mode # mode is a function returning a 2x2 pairing matrix
     elif mode=="swave":
         weightf = lambda r1,r2: swave(r1,r2,H=self,**kwargs) #same_site(r1,r2)*np.identity(2)
+    elif mode=="extended_swave":
+        weightf = lambda r1,r2: swave(r1,r2,H=self,nn=1,
+                     **kwargs) #same_site(r1,r2)*np.identity(2)
     elif mode=="triplet": 
         weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
     elif mode=="pwave": 
@@ -42,7 +45,7 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     elif mode=="swavesublattice":
         def weightf(r1,r2):
           return swaveB(self.geometry,r1,r2) - swaveA(self.geometry,r1,r2)
-    elif mode=="dx2y2":
+    elif mode in ["dx2y2","nodal_dwave"]:
         weightf = lambda r1,r2: dx2y2(r1,r2,H=self,**kwargs)
     elif mode=="dxy":
         weightf = lambda r1,r2: dxy(r1,r2,H=self,**kwargs)

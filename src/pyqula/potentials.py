@@ -101,7 +101,13 @@ def commensurate_potential(g,k=1,amplitude=1.0,n=None,
     return f
 
 
-
+def impurity(r0,v=0.):
+    """Create the potential for an impurity"""
+    def f(r):
+        dr = r-r0
+        if dr.dot(dr)<1e-3: return v
+        else: return 0.
+    return Potential(f) # return the potential
 
 
 

@@ -19,7 +19,7 @@ arpack_maxiter = 10000
 def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                     e=0.0,nk=50,nsuper=1,reciprocal=True,
                     delta=None,refine_delta=1.0,operator=None,
-                    mode='eigen',num_waves=2,info=True):
+                    mode='eigen',num_waves=2,info=False):
     """Calculates the Fermi surface of a 2d system"""
     if operator is not None: # operator given
         operator = h.get_operator(operator) # get the operator
@@ -93,7 +93,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
       for (x,y,d) in zip(kxout,kyout,kdos):
         f.write(str(x)+ "   "+str(y)+"   "+str(d)+"\n")
       f.close() # close the file
-    return (kxout,kyout,d) # return result
+    return (kxout,kyout,np.array(kdos)) # return result
 
 
 
@@ -372,7 +372,8 @@ def eigenvalues(h0,nk=10,notime=True):
 
 
 
-def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,filename="MAP.OUT",
+def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,
+        filename="MAP.OUT",
         write=True,verbosity=0,grid=False):
     """ Calculates the reciprocal map of something"""
     if reciprocal: fR = h.geometry.get_k2K_generator()

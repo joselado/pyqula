@@ -8,16 +8,16 @@ from . import algebra
 
 
 def get_eh_sector_odd_even(m,i=0,j=0):
-  """ Return the electron hole sector of a matrix,
-  assumming that the matrix is in full nambu form""" 
-  if i>1 or j>1: return NotImplemented # meaningless
-  m = nambu2block(m) # reorder the matrix
-  n = m.shape[0]//2 # number of orbitals
-  if i==0 and j==0: return m[0:n,0:n] 
-  elif i==1 and j==0: return m[n:2*n,0:n] 
-  elif i==0 and j==1: return m[0:n,n:2*n] 
-  elif i==1 and j==1: return m[n:2*n,n:2*n] 
-  else: raise
+    """ Return the electron hole sector of a matrix,
+    assumming that the matrix is in full nambu form""" 
+    if i>1 or j>1: return NotImplemented # meaningless
+    m = nambu2block(m) # reorder the matrix
+    n = m.shape[0]//2 # number of orbitals
+    if i==0 and j==0: return m[0:n,0:n] 
+    elif i==1 and j==0: return m[n:2*n,0:n] 
+    elif i==0 and j==1: return m[0:n,n:2*n] 
+    elif i==1 and j==1: return m[n:2*n,n:2*n] 
+    else: raise
 
 
 get_eh_sector = get_eh_sector_odd_even
