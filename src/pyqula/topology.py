@@ -231,7 +231,8 @@ def get_berry_curvature(h,dk=None,nk=100,reciprocal=True,nsuper=1,window=None,
     def fp(ki): # function to compute the Berry curvature
         if parallel.cores == 1: 
             if verbose>0: tr.iterate()
-        else: print("Doing",ki)
+        else: 
+            if verbose>0:  print("Doing",ki)
         k = R@ki # change of basis
         if mode=="Wilson":
            b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
