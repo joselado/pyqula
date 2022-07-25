@@ -52,7 +52,9 @@ class Embedding():
     def dos(self,**kwargs):
         (x,y,d) = self.ldos(**kwargs)
         return np.sum(d) # sum the DOS
-    def multidos(self,es=np.linspace(-1.0,1.0,30),**kwargs):
+    def multidos(self,es=np.linspace(-1.0,1.0,30),
+                   energies=None,**kwargs):
+        if energies is not None: es = energies # overwrite
         ds = parallel.pcall(lambda e: self.dos(energy=e,**kwargs),es)
         return (es,np.array(ds))
     def multildos(self,es=np.linspace(-2.,2.,20),**kwargs):
