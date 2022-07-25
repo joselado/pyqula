@@ -7,11 +7,11 @@ from . import algebra
 is_child = False # check if you are running a child
 
 try:
-  from multiprocess import Pool
-  import multiprocess
-  maxcpu = multiprocess.cpu_count()
+    from multiprocess import Pool
+    import multiprocess
+    maxcpu = multiprocess.cpu_count()
 except:
-    print("Multiprocess not working")
+#    print("Multiprocess not working")
     def Pool(n=1): # workaround
             class mpool():
                 def map(self,f,xs):
@@ -26,7 +26,8 @@ cores = 1 # call in a single by default
 
 def set_cores(n=1):
     global cores
-    cores = n
+    if n=="max": cores = maxcpu # set to the maximum
+    else: cores = int(n) # number of cores
 
 
 #mainpool = None
