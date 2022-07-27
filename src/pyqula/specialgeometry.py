@@ -214,6 +214,11 @@ def multilayer_graphene(**kwargs):
 
 def multilayer(g,l=[0],dr=[1.,0.,0.],dz=[0.,0.,1.]):
     """Return a multilayer geometry"""
+    if type(l)==str: # if it is a string, make the replacement
+        l = l.replace("A","0")
+        l = l.replace("B","1")
+        l = l.replace("C","2")
+        l = [int(il) for il in l] # transform to numbers
     dr = np.array(dr) # to array
     dz = np.array(dz) # to array
     ss = [] # list for the sublattice
