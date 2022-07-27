@@ -486,7 +486,7 @@ def get_dos(h,energies=np.linspace(-4.0,4.0,400),
   else: # conventional methods
       if mode=="ED": # exact diagonalization
           return dos_kmesh(h,energies=energies,**kwargs)
-      elif mode=="Green": # Green function formalism
+      elif mode in ["Green","RG"]: # Green function formalism
           def fun(e):
               return green.green_operator(h,e=e,**kwargs) 
           ds = parallel.pcall(fun,energies) # compute DOS with an operator
