@@ -26,6 +26,14 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
         weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
     elif mode=="nodal_fwave":
         weightf = lambda r1,r2: nodal_fwave(r1,r2,df,**kwargs)
+#    elif mode=="chiral_fwave": 
+#        weightf = lambda r1,r2: get_triplet(r1,r2,df,L=3)
+    elif mode=="chiral_pwave": 
+        weightf = lambda r1,r2: get_triplet(r1,r2,df,L=1)
+    elif mode=="chiral_dwave": 
+        weightf = lambda r1,r2: get_singlet(r1,r2,L=2,**kwargs)
+    elif mode=="chiral_gwave": 
+        weightf = lambda r1,r2: get_singlet(r1,r2,L=4,**kwargs)
     elif mode=="antihaldane":
         f = get_haldane_function(self.geometry,stagger=True)
         weightf = lambda r1,r2: f(r1,r2)*np.identity(2)
@@ -182,7 +190,7 @@ def get_triplet(r1,r2,df,L=1):
         d = df((r1+r2)/2.) # evaluate dvector
         delta = dvector2delta(d) # compute the local deltas
         ms = np.array([[delta[2],delta[0]],[delta[1],-delta[2]]])
-        return np.exp(1j*phi*L)*ms
+        return np.exp(1j*phi*L)*np.array(ms,dtype=np.complex)
     else: return 0.0*tauz
 
 
