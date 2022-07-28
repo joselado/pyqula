@@ -54,6 +54,8 @@ def zero_T_didv_1D(self,energy=0.0,delta=None,**kwargs):
         print("Something wrong in didv, returning 0")
         return 1e-10
 
+quadepsrel = 1e-1
+quadlimit = 30
 
 def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
                    imode="quad",**kwargs):
@@ -69,7 +71,7 @@ def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
     elif imode=="simpson":
         return simpson(f,eps=1e-4,xlim=[0.,1.])
     elif imode=="quad":
-        return quad(f,0.,1.,epsrel=1e-1,limit=20)[0]
+        return quad(f,0.,1.,epsrel=quadepsrel,limit=quadlimit)[0]
     else: 
         print("Unrecognized imode")
         raise

@@ -122,16 +122,35 @@ def extract_singlet_pairing(m):
 
 
 
+def extract_custom_pairing(m,mode="all"):
+    """Given a matrix, extract the pairing matrix according to some rule"""
+    if mode=="singlet": # singlet, with sign
+        m = extract_singlet_pairing(m) # matrix with pairings 
+        return m
+    elif mode=="triplet": # triplet, summed over
+        ms = extract_triplet_pairing(m) # matrix with pairings 
+        m = np.sum(np.abs(np.array(ms))**2,axis=0)
+        return m
+    elif mode=="all": # compute all in absolute value
+        ms = extract_triplet_pairing(m) # matrix with pairings (3 of them)
+        mt = np.sum(np.abs(np.array(ms))**2,axis=0)
+        m = extract_singlet_pairing(m) # matrix with pairings 
+        m = mt + np.abs(np.array(m))**2 # singlet plus triplet
+        return m
+    else: raise
 
-def extract_pairing_kmap(h,write=False,i=0,j=None,mode="singlet",**kwargs):
+
+
+def extract_pairing_kmap(h,write=False,i=None,j=None,mode="all",**kwargs):
     """Extract the pairing in reciprocal space"""
     if not h.has_eh: raise # not implemented
     if j is None: j = i # same site is the default
     fk = h.get_hk_gen() # Bloch Hamiltonian generator
     def f0(k):
         m = fk(k) # full k-dependent Hamiltonian
-        m = extract_singlet_pairing(m) # matrix with pairings 
-        return m[i,j] # return pairing
+        m = extract_custom_pairing(m,mode=mode)
+        if i is None: return np.sqrt(np.trace(m@np.conjugate(m.T)))
+        else: return m[i,j] # return pairing
     dref = f0(np.random.random(3)) ; dref = dref/np.abs(dref) # reference
     fr = lambda k: (f0(k)/dref).real # reference
     fi = lambda k: (f0(k)/dref).imag # reference
