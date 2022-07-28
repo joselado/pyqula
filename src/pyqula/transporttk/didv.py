@@ -54,7 +54,7 @@ def zero_T_didv_1D(self,energy=0.0,delta=None,**kwargs):
         print("Something wrong in didv, returning 0")
         return 1e-10
 
-quadepsrel = 1e-1
+quadepsrel = 1e-2
 quadlimit = 30
 
 def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
