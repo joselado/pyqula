@@ -4,7 +4,7 @@ import numpy as np
 from . import geometry
 
 
-def twisted_bilayer(n=7,ti=0.12,lambi=3.0,lamb=3.0,is_sparse=True,
+def twisted_multilayer_graphene(n=7,ti=0.12,lambi=3.0,lamb=3.0,is_sparse=True,
         g=None,g0=None,has_spin=False,dl=3.0,**kwargs):
     """
     Return the Hamiltonian of twisted bilayer graphene
@@ -16,8 +16,15 @@ def twisted_bilayer(n=7,ti=0.12,lambi=3.0,lamb=3.0,is_sparse=True,
             is_multicell=True,mgenerator=mgenerator)
     return h
 
+# some aliases
+twisted_bilayer = twisted_multilayer_graphene
 tbg = twisted_bilayer
 twisted_bilayer_graphene = tbg
+
+def tdbg(n=4,**kwargs): 
+    """Twisted double bilayer Hamiltonian"""
+    g = specialgeometry.tdbg(n) # TBDG geometry
+    return twisted_multilayer_graphene(g=g,**kwargs) # return Hamiltonian
 
 
 def multilayer_graphene(l=[0],real=False,**kwargs):

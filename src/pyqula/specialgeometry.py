@@ -12,6 +12,16 @@ def twisted_bilayer(m0,**kwargs):
 
 tbg = twisted_bilayer
 
+def tdbg(m0,**kwargs):
+    """Geomtry of a twisted double bilayer
+    - m0 determines the supercell and twist
+    """
+    g = multilayer_graphene(l=[0,1]) # AB bilayer 
+    return twisted_multilayer(m0=m0,g=g,rot=[1,0],**kwargs)
+
+
+
+
 #def twisted_bilayer(m0=3,rotate=True,shift=[0.,0.],center="AB/BA",
 #  sublattice=True,r=1,g=None,dz=1.5):
 #  """Return the geometry for twisted bilayer graphene"""
@@ -102,9 +112,11 @@ def twisted_supercell(g,m0=3,r=1):
 
 
 def twisted_multilayer(m0=3,rotate=True,shift=None,
-  sublattice=True,r=1,rot=[1,1,0,0],g=None,dz=3.0):
+  sublattice=True,r=1,rot=[1,1,0,0],g=None,dz=None):
   """Return the geometry for twisted multilayer graphene"""
   if g is None: g = geometry.honeycomb_lattice() # default is honeycomb
+  if dz is None: # width + an (arbitrary) distance of 3
+      dz = np.max(g.r[:,2]) - np.min(g.r[:,2]) + 3. # distance
   else: g = geometry.get_geometry(g) # get the geometry
 #  g.has_sublattice = False # no sublattice
   from . import supercell as supercelltk
