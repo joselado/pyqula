@@ -278,3 +278,18 @@ def sqrtm_rotated(M,positive=True):
     return (m2,evecs) # return matrix
 
 
+
+
+def spectrum_bottom(m,tol=arpack_tol):
+    """
+    Return the most negative energy state
+    """
+    if m.shape[0]>1000: # use arpack 
+        m = csc_matrix(m) # sparse matrix
+        eig,eigvec = slg.eigsh(m,k=3,which="LA",tol=tol)
+        return eig[0]
+    else:
+        return np.min(eigvalsh(todense(m)))
+
+
+
