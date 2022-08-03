@@ -287,7 +287,7 @@ def spectrum_bottom(m,tol=arpack_tol):
     if m.shape[0]>1000: # use arpack 
         m = csc_matrix(m) # sparse matrix
         eig,eigvec = slg.eigsh(m,k=3,which="SA",tol=tol)
-        return eig[0]
+        return np.min(eig)
     else:
         return np.min(eigvalsh(todense(m)))
 
