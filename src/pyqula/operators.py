@@ -233,7 +233,7 @@ def get_bulk(h,fac=0.8):
         dr = r[:,0]**2 + r[:,1]**2 # radii
         dr = dr - np.min(dr)
         dr = dr/np.max(dr) # to interval 0,1
-        out[fac>dr] = 0.0 # set to zero
+        out[fac<dr] = 0.0 # set to zero
     elif h.dimensionality==1:
         dr = r[:,1] # y positions
         dr = dr - np.min(dr)
