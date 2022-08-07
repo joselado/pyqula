@@ -37,7 +37,6 @@ def H2HFH(h,JK=0.0,J=0.):
     return h
 
 
-
 def get_operator(self,name,**kwargs):
     """Return operators for systems with Kondo sites"""
     if name=="kondo_sites":
