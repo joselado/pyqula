@@ -248,7 +248,7 @@ def get_berry_curvature(h,dk=None,nk=100,reciprocal=True,nsuper=1,window=None,
             fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b)+"\n")
             fo.flush()
         fo.close() # close file
-    return [ks[:,0],ks[:,1],bs] # return result
+    return [ks[:,0],ks[:,1],np.array(bs)] # return result
 
 
 berry_map = get_berry_curvature # alias
