@@ -132,6 +132,7 @@ class Hamiltonian():
     def __init__(self,geometry=None):
       self.data = dict() # empty dictionary with various data
       self.has_spin = True # has spin degree of freedom
+      self.has_kondo = False # has Kondo sites
       self.prefix = "" # a string used a prefix for different files
       self.path = "" # a path used for different files
       self.has_eh = False # has electron hole pairs
@@ -775,23 +776,27 @@ des_spin = increase_hilbert.des_spin
 
 
 def shift_fermi(h,fermi):
-  """ Moves the fermi energy of the system, the new value is at zero"""
-  r = h.geometry.r # positions
-  n = len(r) # number of sites
-  if checkclass.is_iterable(fermi): # iterable
-    if len(fermi)==n: # same number of sites
-      h.intra = h.intra + h.spinless2full(sparse_diag([fermi],[0]))
-    else: raise
-  else:
-    rc = [i for i in range(n)]  # index
-    datatmp = [] # data
-    for i in range(n): # loop over positions 
-      if callable(fermi): fshift = fermi(r[i]) # fermi shift
-      else: fshift = fermi # assume it is a number
-      datatmp.append(fshift) # append value
-    m = csc_matrix((datatmp,(rc,rc)),shape=(n,n)) # matrix with the shift
-    h.intra = h.intra + h.spinless2full(m) # Add matrix 
-    return
+    """ Moves the fermi energy of the system, the new value is at zero"""
+#    if h.has_kondo: raise # not implemented
+#        from .specialhamiltoniantk import heavyfermion
+#        heavyfermion.add_onsite(h,fermi)
+#        return
+    r = h.geometry.r # positions
+    n = len(r) # number of sites
+    if checkclass.is_iterable(fermi): # iterable
+      if len(fermi)==n: # same number of sites
+        h.intra = h.intra + h.spinless2full(sparse_diag([fermi],[0]))
+      else: raise
+    else:
+      rc = [i for i in range(n)]  # index
+      datatmp = [] # data
+      for i in range(n): # loop over positions 
+        if callable(fermi): fshift = fermi(r[i]) # fermi shift
+        else: fshift = fermi # assume it is a number
+        datatmp.append(fshift) # append value
+      m = csc_matrix((datatmp,(rc,rc)),shape=(n,n)) # matrix with the shift
+      h.intra = h.intra + h.spinless2full(m) # Add matrix 
+      return
 
 
 from .algebra import isnumber as is_number
@@ -901,19 +906,7 @@ from .superconductivity import project_holes
 from .superconductivity import get_eh_sector_odd_even
 
 
-
-
-def kchain(h,k):
-  """ Return the kchain Hamiltonian """
-  if h.dimensionality != 2: raise
-  if h.is_multicell: h = h.get_no_multicell() # redefine
-  tky = h.ty*np.exp(1j*np.pi*2.*k)
-  tkxy = h.txy*np.exp(1j*np.pi*2.*k)
-  tkxmy = h.txmy*np.exp(-1j*np.pi*2.*k)  # notice the minus sign !!!!
-  # chain in the x direction
-  ons = h.intra + tky + np.conjugate(tky).T  # intra of k dependent chain
-  hop = h.tx + tkxy + tkxmy  # hopping of k-dependent chain
-  return (ons,hop)
+from .htk.kchain import kchain
 
 
 
