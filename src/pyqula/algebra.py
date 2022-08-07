@@ -70,6 +70,7 @@ def braket_wAw(w,A,wi=None):
 
 def todense(m):
     """Turn a matrix dense"""
+    if m is None: return None
     if issparse(m):
         if m.shape[0]<maxsize: return np.array(m.todense())
         else: raise

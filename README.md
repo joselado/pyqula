@@ -6,7 +6,7 @@ tight-binding models in different dimensionalities.
 # INSTALLATION #
 ## With pip (release version) ##
 ```bash
-pip install pyqula
+pip install --upgrade pyqula
 ```
 
 ## Manual installation (most recent version) ##

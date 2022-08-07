@@ -9,7 +9,7 @@ def get_operator(self,name,**kwargs):
       if type(name) is potentials.Potential or callable(name): 
           out = self.copy()*0. # initialize
           out.add_onsite(name) # add onsite
-          return out # return operator
+          return operators.Operator(out.intra) # return operator
       if name is None: return None # return operator
       if name=="None": return None
       elif name in ["berry","Berry"]: 
@@ -79,6 +79,9 @@ def get_operator(self,name,**kwargs):
       elif name=="unfold":  
           from .unfolding import bloch_projector
           return bloch_projector(self,**kwargs)
+      elif self.has_kondo:
+          from .specialhamiltoniantk import heavyfermion
+          return heavyfermion.get_operator(self,name,**kwargs)
       else: raise
 
 

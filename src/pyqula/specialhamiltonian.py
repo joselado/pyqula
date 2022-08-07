@@ -77,6 +77,10 @@ def SOC_TMDC(g=None,soc=0.0,**kwargs):
     return h # return the Hamiltonian
 
 
+from .specialhamiltoniantk.tmdc import doped_MoS2
+from .specialhamiltoniantk.heavyfermion import H2HFH
+
+
 
 
 def NbSe2(**kwargs):
