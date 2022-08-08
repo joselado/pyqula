@@ -755,6 +755,7 @@ def kagome_lattice(n=1):
   g.sublattice = [0,1,2] # the three sublattices
   if n>1: return supercelltk.target_angle(g,angle=1./3.,volume=int(n),
           same_length=True) 
+  g.update_reciprocal()
   return g
 
 
