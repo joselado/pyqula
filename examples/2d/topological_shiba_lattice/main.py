@@ -19,7 +19,6 @@ h = g.get_hamiltonian() # generate the Hamiltonian
 nk = 60 # number of kpoints (you may want to make it bigger to check convergence)
 
 h.add_rashba(0.12) # add Rashba SOC
-from pyqula import parallel ; parallel.cores = 7
 from pyqula import potentials
 h.add_exchange(potentials.impurity(g.r[0],v=[0.,0., 2.1])) # add impurity
 # set a specific filling
