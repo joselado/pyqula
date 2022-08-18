@@ -23,7 +23,13 @@ import sys
 sys.path.append(PATH_TO_PYQULA+"/src")
 ```
 
-
+# Tutorials #
+Jupyter notebooks with tutorials can be found in the links below (part of the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_summer_school_2022) )
+- [Electronic structure](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session1.ipynb)
+- [Superconductivity](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session2.ipynb)
+- [Magnetism](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session3.ipynb)
+- [Moire physics](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session4.ipynb)
+- [Topological matter](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session5.ipynb)
 
 
 # FUNCTIONALITIES #
