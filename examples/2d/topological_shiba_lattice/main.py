@@ -32,13 +32,3 @@ print("The gap is",h.get_gap())
 c = h.get_chern(nk=nk)
 print("The Chern number is",c) # show the Chern number
 
-exit()
-
-# compute the surface spectral fucntion
-from pyqula import kdos
-ks = [[ik,0.,0.] for ik in np.linspace(0.,1.,400)]
-(k,e,ds,db) = kdos.surface_kdos(h,energies=np.linspace(-.02,.02,100),
-                             delta=1e-3,kpath=ks,write=False)
-np.savetxt("KDOS.OUT",np.array([k,e,ds,db]).T)
-
-
