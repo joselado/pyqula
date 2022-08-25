@@ -293,4 +293,10 @@ def spectrum_bottom(m,tol=arpack_tol):
         return np.min(eigvalsh(todense(m)))
 
 
-
+def angle(v1,v2):
+    """Given two vectors, return the angle between them"""
+    v1 = v1/np.sqrt(v1.dot(v1)) # normalize
+    v2 = v2/np.sqrt(v2.dot(v2)) # normalize
+    c = v1.dot(v2) # cosine
+    v3 = np.cross(v1,v2) # cross product
+    raise # not finished yet

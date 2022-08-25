@@ -10,7 +10,7 @@ def H2HFH(h,JK=0.0,J=0.):
     if h.has_kondo:
         print("This Hamiltonian already has Kondo sites")
         raise
-    width = np.max(h.geometry.r[:,2]) - np.max(h.geometry.r[:,2])
+    width = np.max(h.geometry.r[:,2]) - np.min(h.geometry.r[:,2])
     if width>1e-4: 
         print("Not implemented for non-2D Hamiltonians")
         raise # not implemented for not 2D 
@@ -48,7 +48,7 @@ def get_operator(self,name,**kwargs):
 
 
 def add_onsite(self,ons):
-    if not self.has_kondo: raise
+    if not self.has_kondo: raise # only for Kondo Hamiltonians
     m = self.copy() # copy Hamiltonian
     dis = m.get_operator("dispersive_electrons") # operator for dispersive
     intra = m.add_onsite(ons).intra@dis # add onsite only to disp electrons
