@@ -12,8 +12,13 @@ def kekule_positions(r):
     """
     cs = hexagon_centers(r,r) # return the centers
     cs = remove_duplicated(cs) # remove duplicated
-    cs = retain(cs,d=3.0) # retain only centers that are at distance 2
-    return np.array(cs) # return array
+    zs = np.unique(np.round(cs[:,2],5)) # unique z positions
+    cso = [] # output list
+    for z in zs:
+        csi = cs[(np.abs(cs[:,2]-z)<1e-4),:] # this layer
+        csi = retain(csi,d=3.0) # retain only centers that are at distance 3
+        cso = cso + np.array(csi).tolist() # store
+    return np.array(cso) # return array
 
 
 
@@ -45,12 +50,14 @@ def kekule_function(r,t=1.):
     """
     cs = kekule_positions(r) # get the centers with all the positions
     ## Define a function to only have hoppings in the hexagon
-    if callable(t): fun = t # t is a function
-    else: # assume t is a number
-        def fun(r1,r2):
-            dr = r1-r2 ; dr = dr.dot(dr) # distance 1
-            if 0.99<dr<1.01: return t # first neighbor
-            else: return 0.0 # nothing
+#    if callable(t): fun = t # t is a function
+#    else: # assume t is a number
+    if callable(t): tfun = t # t is a function
+    else: tfun = lambda r: t # t is a number
+    def fun(r1,r2):
+        dr = r1-r2 ; dr = dr.dot(dr) # distance 1
+        if 0.99<dr<1.01: return tfun((r1+r2)/2.) # first neighbor
+        else: return 0.0 # nothing
     def f(r1,r2):
         for c in cs: # loop over centers
             dr = r1-r2 ; dr=dr.dot(dr) 
@@ -116,7 +123,7 @@ def retain(r,d=3.0):
       out0 = [r for r in out] # initialize
       for rj in out: # loop over stored
         for ri in r: # loop
-            dr = ri-rj ; dr = dr.dot(dr) # distance
+            dr = (ri-rj) ; dr = dr.dot(dr) # distance
             if d*d-0.1<dr<d*d+0.1: # if desired distance
                 # now check that this one has not been stored already
                 if not r_in_rs(ri,out0): # not stored yet

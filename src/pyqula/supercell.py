@@ -1,6 +1,7 @@
 from __future__ import print_function,division
 import numpy as np
 import scipy.linalg as lg
+from . import algebra
 from . import sculpt
 from numba import jit
 
@@ -36,9 +37,9 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
   # unit cell
   if mode=="fill": # look for atoms until everything is filled
     rs = []
-    k2K = go.get_k2K().I # matrix transformation
+    k2K = algebra.inv(go.get_k2K()) # matrix transformation
     R = np.matrix([go.a1,go.a2,go.a3]).T # transformation matrix
-    L = R.I # inverse matrix
+    L = algebra.inv(R) # inverse matrix
     d0 = -np.random.random()*0.1 # accuracy
     d0 = -0.122132112 # some random number
     d1 = 1.0 + d0 # accuracy
@@ -54,7 +55,7 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
             ri = g.r[ir] # get the position
             store = False
             rj = ri + i*g.a1 + j*g.a2 + k*g.a3 # new position
-            rn = L*np.matrix(rj).T  # transform
+            rn = L@np.matrix(rj).T  # transform
             rn = np.array([rn.T[0,ii] for ii in range(3)]) # convert to array
             n1,n2,n3 = rn[0],rn[1],rn[2]
             if g.dimensionality==3 and d0<n1<d1 and d0<n2<d1 and d0<n3<d1:
@@ -81,10 +82,11 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
   elif mode=="brute":
     if g.dimensionality==1:
       rs3 = replicate3d(g.r,g.a1,g.a2,g.a3,c,1,1) # new positions
-    if g.dimensionality==2:
+    elif g.dimensionality==2:
       rs3 = replicate3d(g.r,g.a1,g.a2,g.a3,c,c,1) # new positions
-    if g.dimensionality==3:
+    elif g.dimensionality==3:
       rs3 = replicate3d(g.r,g.a1,g.a2,g.a3,c,c,c) # new positions
+    else: raise # not implemented
     while True: # infinite loop, stop when scf reached
       rs1 = np.array(rs3) # store the first iteration
 #      print(rs1)
@@ -107,9 +109,9 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
 
 
 def replicate3d(rs,a1,a2,a3,n1,n2,n3):
-  nc = len(rs)
-  ro = np.zeros((n1*n2*n3*nc,3)) # allocate output array
-  return replicate3d_jit(rs,a1,a2,a3,n1,n2,n3,ro) # compute
+    nc = len(rs)
+    ro = np.zeros((n1*n2*n3*nc,3)) # allocate output array
+    return replicate3d_jit(rs,a1,a2,a3,n1,n2,n3,ro) # compute
 
 @jit(nopython=True)
 def replicate3d_jit(rs,a1,a2,a3,n1,n2,n3,ro):
@@ -170,15 +172,15 @@ def target_angle_volume(g,angle=None,n=5,volume=None,same_length=False):
                     if abs(diff)>1e-6: continue # next try 
                 if volume is not None: # target such volume
                     if abs(v-volume)>1e-6: continue
-                    else: return [[i,j,0],[k,l,0],[0,0,1]]
+               #     else: return [[i,j,0],[k,l,0],[0,0,1]]
                 out.append([[i,j,0],[k,l,0],[0,0,1]]) # orthogonal, return
                 vs.append(v) # volume
       if len(out)==0: return None # nothng found
       vs = np.array(vs) # as array
       return [o for (v,o) in sorted(zip(vs,out))][0]
     out = getm() # get rotation matrix
-    if out is None: raise
-    g = g.supercell(out)
+    if out is None: raise # no supercell found
+    g = g.get_supercell(out) # generate the right supercell
     g = sculpt.rotate_a2b(g,g.a1,np.array([1.,0.,0.])) # set in the x direction
     return g
 
