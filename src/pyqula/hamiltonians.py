@@ -401,6 +401,7 @@ class Hamiltonian():
     @get_docstring(Vinteraction)
     def get_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
         scf = Vinteraction(self,**kwargs)
+        if not scf.converged: scf.hamiltonian = None # no convergence
         if return_total_energy:
             return (scf.hamiltonian,scf.total_energy)
         else: return scf.hamiltonian
