@@ -258,6 +258,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
         maxerror=1e-5,callback_mf=None,callback_dm=None,
         load_mf=True,compute_cross=True,compute_dd=True,verbose=1,
         compute_anomalous=True,compute_normal=True,info=False,
+        maxite=None,
         callback_h=None,**kwargs):
     """Perform the SCF mean field"""
     if verbose>1: info=True
@@ -320,6 +321,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
       do_scf = True
 #      from .mixing import Mixing
 #      Mxg = Mixing() # initialize
+      ite = 0 # start counter
       while do_scf:
         scf = f(mf) # new vector
         mfnew = scf.mf # new vector
@@ -332,13 +334,21 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
             mf = callback_mf(mf) # callback for the mean field
         t1 = time.perf_counter() # time
         if verbose>1: print("Time in mixing",t1-t0)
-        if verbose>0: print("ERROR in the SCF cycle",diff)
+        if verbose>0: 
+            print("ERROR in the SCF cycle",ite,diff)
         #print("Mixing",dmix)
         if diff<maxerror: 
             scf = f(mfnew) # last iteration, with the unmixed mean field
+            scf.converged = True # no convergence
             inout.save(scf.mf,mf_file) # save the mean field
          #   scf.hamiltonian.check(tol=100*maxerror) # perform some sanity checks
             return scf
+        if maxite is not None: # maximum number of iterations reached
+            if ite>=maxite:
+                scf.converged = False # no convergence
+                print("No convergence has been reached in",maxite,"iterations, stopping")
+                return scf # return
+        ite += 1 # increase number of iterations
     else: # use different solvers
         scf = f(mf) # perform one iteration
         fmf2a = get_mf2array(scf) # convert MF to array
