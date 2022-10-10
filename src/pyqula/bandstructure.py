@@ -71,6 +71,7 @@ def ket_Aw(A,w):
 
 def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                     callback=None,central_energy=0.0,nk=400,
+                    ewindow=None,
                     output_file="BANDS.OUT",write=True,
                     silent=True):
   """
@@ -121,6 +122,8 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
           else: waw = braket_wAw(w,A).real # calculate expectation value
           return waw # return the result
       for (e,w) in zip(es,ws):  # loop over waves
+        if callable(ewindow):
+            if not ewindow(e): continue # skip iteration
         if isinstance(operator, (list,)): # input is a list
             waws = [evaluate(w,k,A) for A in operator]
         else: waws = [evaluate(w,k,operator)]

@@ -53,7 +53,7 @@ def remove_sites(g,store):
   gout.r = g.r[store==1]
   gout.r2xyz() # update r
   if gout.has_sublattice: # if has sublattice, keep the indexes
-    gout.sublattice = g.sublattice[store==1]
+    gout.sublattice = np.array(g.sublattice)[store==1]
   return gout
 
 
