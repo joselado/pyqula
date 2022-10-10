@@ -203,6 +203,7 @@ class Geometry:
         """
         Remove one site
         """
+        if callable(i): return sculpt.intersec(self,lambda r: not i(r))
         if type(i)==list: pass
         else: i = [i]
         return sculpt.remove(self,i)

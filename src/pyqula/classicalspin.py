@@ -5,12 +5,12 @@ from scipy.sparse import csr_matrix,csc_matrix,coo_matrix
 
 import jax
 jax.config.update('jax_platform_name', 'cpu')
+use_jax = True
 
 zero = np.matrix(np.zeros((3,3)))  # real matrix
 iden = np.matrix(np.identity(3))  # real matrix
 zzm = zero.copy() ; zzm[2,2] = 1.0 # matrix for ZZ interaction
 
-use_jax = True
 
 class SpinModel(): # class for a spin Hamiltonian
   def __init__(self,g): # geometry
@@ -291,23 +291,23 @@ def rotatez(angle):
 
 
 def add_tensor_2d(sm,fun,ncells=4,vspiral=[0.,0.]):
-  """Add a tensor interaction, assuming 2d system"""
-  pairs = []
-  js = []
-  for ia in range(-ncells,ncells+1): # loop over cells
-    for ja in range(-ncells,ncells+1): # loop over cells
-      for i1 in range(sm.nspin): # loop over positions
-        r1 = sm.geometry.r[i1]
-        for i2 in range(sm.nspin): # loop over positions
-          r2 = sm.geometry.r[i2] + ia*sm.geometry.a1 + ja*sm.geometry.a2
-          m = fun(r1,r2) # call the function 
-          if np.max(np.abs(m))>0.00001: # if non zero
-            angle = vspiral[0]*ia + vspiral[1]*ja
-            R = rotatez(angle)
-            pairs.append((i1,i2)) # store 
-            js.append(m*R) # store matrix
-  return np.array(pairs),np.array(js)
-
+    """Add a tensor interaction, assuming 2d system"""
+    pairs = []
+    js = []
+    for ia in range(-ncells,ncells+1): # loop over cells
+      for ja in range(-ncells,ncells+1): # loop over cells
+        for i1 in range(sm.nspin): # loop over positions
+          r1 = sm.geometry.r[i1]
+          for i2 in range(sm.nspin): # loop over positions
+            r2 = sm.geometry.r[i2] + ia*sm.geometry.a1 + ja*sm.geometry.a2
+            m = fun(r1,r2) # call the function 
+            if np.max(np.abs(m))>0.00001: # if non zero
+              angle = vspiral[0]*ia + vspiral[1]*ja
+              R = rotatez(angle)
+              pairs.append((i1,i2)) # store 
+              js.append(m*R) # store matrix
+    return np.array(pairs),np.array(js)
+  
 
 
 
@@ -387,49 +387,49 @@ def generating_functions(name="Heisenberg",J=1.0,v=np.array([0.,0.,1.]),
 
 
 def generating_profiles(r,name="skyrmion",n=1.,cut=1.0):
-  """Return thetas and phis"""
-  rho = np.sqrt(r[:,0]**2 + r[:,1]**2) # in-plnae r
-  if name=="skyrmion":
-    theta = cut*rho/np.max(rho)*np.pi
-    phi = n*np.arctan2(r[:,1],r[:,0])
-    return theta,phi
-  elif name=="spiral":
-    phi = (r[:,0]/np.max(r[:,0])+1)*n*np.pi*2
-    return phi*0.+np.pi/2,phi
-  else: raise
+    """Return thetas and phis"""
+    rho = np.sqrt(r[:,0]**2 + r[:,1]**2) # in-plnae r
+    if name=="skyrmion":
+      theta = cut*rho/np.max(rho)*np.pi
+      phi = n*np.arctan2(r[:,1],r[:,0])
+      return theta,phi
+    elif name=="spiral":
+      phi = (r[:,0]/np.max(r[:,0])+1)*n*np.pi*2
+      return phi*0.+np.pi/2,phi
+    else: raise
 
 
 def get_lc():
-  """Return a Levi Civita"""
-  e = np.zeros((3,3,3)) # start as zero
-  e[0,1,2] = 1.0 
-  e[0,2,1] = -1.0 
-  e[1,0,2] = -1.0 
-  e[1,2,0] = 1.0 
-  e[2,0,1] = 1.0 
-  e[2,1,0] = -1.0 
-  return e
+    """Return a Levi Civita"""
+    e = np.zeros((3,3,3)) # start as zero
+    e[0,1,2] = 1.0 
+    e[0,2,1] = -1.0 
+    e[1,0,2] = -1.0 
+    e[1,2,0] = 1.0 
+    e[2,0,1] = 1.0 
+    e[2,1,0] = -1.0 
+    return e
 
 
 
 
 
 def regroup(ps,js):
-  """Regroups the terms in the Hamiltonian"""
-  outp = [] # output pairs
-  outj = [] # output js
-  dictj = dict() # create dictionary
-  for (p,j) in zip(ps,js): # loop over inputs
-    ip = (p[0],p[1])
-    jp = (p[1],p[0])
-    if ip in outp: # if the pair is present
-      dictj[ip] += j # add contribution
-    elif jp in outp: # if the alternative pair is present
-      dictj[jp] += j.transpose() # add contribution
-    else: # not present
-      outp.append(ip) # store
-      dictj[ip] = j # store this j
-  outj = [dictj[p] for p in outp] # get all
-  return np.array(outp),np.array(outj)
+    """Regroups the terms in the Hamiltonian"""
+    outp = [] # output pairs
+    outj = [] # output js
+    dictj = dict() # create dictionary
+    for (p,j) in zip(ps,js): # loop over inputs
+      ip = (p[0],p[1])
+      jp = (p[1],p[0])
+      if ip in outp: # if the pair is present
+        dictj[ip] += j # add contribution
+      elif jp in outp: # if the alternative pair is present
+        dictj[jp] += j.transpose() # add contribution
+      else: # not present
+        outp.append(ip) # store
+        dictj[ip] = j # store this j
+    outj = [dictj[p] for p in outp] # get all
+    return np.array(outp),np.array(outj)
 
 
