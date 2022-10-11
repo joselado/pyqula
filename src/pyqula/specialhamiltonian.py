@@ -4,7 +4,7 @@ import numpy as np
 from . import geometry
 
 
-def twisted_multilayer_graphene(n=7,ti=0.12,lambi=3.0,lamb=3.0,is_sparse=True,
+def twisted_multilayer_graphene(n=7,ti=0.12,lambi=8.0,lamb=12.0,is_sparse=True,
         g=None,g0=None,has_spin=False,dl=3.0,**kwargs):
     """
     Return the Hamiltonian of twisted bilayer graphene
