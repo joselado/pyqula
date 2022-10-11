@@ -68,14 +68,14 @@ def kdos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,kshift=0.,
 
 
 def write_surface(h,energies=np.linspace(-.5,.5,300),
-        klist=None,delta=None,operator=None,hs=None):
+        klist=None,delta=None,operator=None,hs=None,**kwargs):
   if delta is None: delta = (np.max(energies)-np.min(energies))/len(energies)
   if h.dimensionality==1:
     write_surface_1d(h,energies=energies,delta=delta,
                          operator=operator)
   elif h.dimensionality==2:
     write_surface_2d(h,energies=energies,klist=klist,delta=delta,
-                         operator=operator,hs=hs)
+                         operator=operator,hs=hs,**kwargs)
   elif h.dimensionality==3:
     write_surface_3d(h,energies=energies,klist=klist,delta=delta)
   else: raise
@@ -106,11 +106,11 @@ def write_surface_1d(h,energies=None,delta=None,
 
 
 def write_surface_2d(h,energies=None,klist=None,delta=0.01,
-                         operator=None,hs=None):
+                         operator=None,hs=None,nk=50):
   bout = [] # empty list, bulk
   sout = [] # empty list, surface
   if klist is None: 
-      klist = [[i,0.,0.] for i in np.linspace(-.5,.5,50)]
+      klist = [[i,0.,0.] for i in np.linspace(-.5,.5,nk)]
   if energies is None: energies = np.linspace(-.5,.5,50)
   fo  = open("KDOS.OUT","w") # open file
   for k in klist:
