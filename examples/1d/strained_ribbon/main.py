@@ -24,7 +24,7 @@ def interpolate_hopping(r):
     dtmax = 0.5 # maximum correction allowed
     if abs(dt)<dtmax: return 1.+dt # return the hopping
     elif dt>=dtmax: return 1.+dtmax # if too large, return the upper plateau
-    elif dt<=dtmax: return 1.-dtmax # if too small, return the lower plateau
+    elif dt<=-dtmax: return 1.-dtmax # if too small, return the lower plateau
 
 def tij(r1,r2): # function for strined hoppings
     dr = r1-r2 ; dr2 = dr.dot(dr)
