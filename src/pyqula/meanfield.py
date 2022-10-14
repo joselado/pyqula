@@ -261,7 +261,6 @@ def guess(h,mode="ferro",fun=1e-1):
           dd[key] = np.random.random((n,n))-.5 + 1j*(np.random.random((n,n))-.5)
       dd = MultiHopping(dd)
       dd = dd + dd.get_dagger()
-#      print(dd.get_dict()[(0,0,0)]); exit()
       return dd.get_dict()
   elif mode=="dimerization":
       return guess(h,mode="random",fun=fun)

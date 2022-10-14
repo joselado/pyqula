@@ -3,9 +3,9 @@ from .. import geometry
 from .. import algebra
 import numpy as np
 
-def generate_dummy_hamiltonian(d):
+def generate_dummy_hamiltonian(d,g=None):
     """Create a dummy Hamiltonian from a dictionary"""
-    g = geometry.chain() # create a chain
+    if g is None: g = geometry.chain() # create a chain
     h = g.get_hamiltonian() # create a dummy Hamiltonian
     h = h.get_multicell() # set as multicell Hamiltonian
     from ..multihopping import MultiHopping
