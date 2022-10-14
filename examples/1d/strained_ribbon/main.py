@@ -8,8 +8,6 @@ from pyqula import geometry
 import numpy as np
 g = geometry.honeycomb_zigzag_ribbon(20) # create geometry of a zigzag ribbon
 
-d = np.max(g.r[:,1]) - np.min(g.r[:,1]) # width of the ribbon
-
 def interpolate_hopping(r):
     """Modulated hopping in the ribbon as a ramp"""
     y = r[1] # take the y coordinate (in the width)
@@ -31,12 +29,11 @@ def interpolate_hopping(r):
 def tij(r1,r2): # function for strined hoppings
     dr = r1-r2 ; dr2 = dr.dot(dr)
     if abs(dr2-1.)<1e-3: # first neighbor
-        t = 1.0 # take hopping as 1
         r0 = (r1+r2)/2. # average position
         return interpolate_hopping(r0) # return the hopping you want
     return 0. # otherwise
 
-g.write_profile(interpolate_hopping,nrep=40) # write the interpoalted hopping
+g.write_profile(interpolate_hopping,nrep=40) # write the interpolated hopping
 h = g.get_hamiltonian(tij=tij) # create hamiltonian of the system
 h.get_bands()
 
