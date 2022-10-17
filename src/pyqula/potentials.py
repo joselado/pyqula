@@ -149,7 +149,7 @@ def tbgAA(g):
     h.set_filling(0.5,nk=1)
     ks = [[.5,0.,0.],[0.,.5,0.],[.5,.5,0.]]
     (x,y,d) = h.get_ldos(e=0.0,delta=0.01,ks=ks,mode="arpack",
-            write=False,silent=True)
+            write=False,silent=True,nrep=1)
     d = d - np.mean(d) # average in zero
     d = d - np.min(d)
     d = d/np.max(d) # set maximum in 1
