@@ -334,7 +334,7 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
         do = d.tolist()*(nrep**g.dimensionality) # replicate
         xo = go.x
         yo = go.y
-    else: xo,yo,do = y,y,d
+    else: xo,yo,do = x,y,d
     if interpolate:
         from .interpolation import atomic_interpolation
         xo,yo,do = atomic_interpolation(xo,yo,do,**kwargs)
