@@ -196,8 +196,8 @@ def infer_supercell(g,g0):
         nx = int(norm(g.a1)/norm(g0.a1)) # out
         ny = 1
     elif g.dimensionality==2: # assume is orthogonal
-        nx = int(norm(g.a1)/norm(g0.a1)) # out
-        ny = int(norm(g.a2)/norm(g0.a2)) # out
+        nx = int(np.round(norm(g.a1)/norm(g0.a1),1)) # out
+        ny = int(np.round(norm(g.a2)/norm(g0.a2),1)) # out
     else: raise
     # probably a check should be added here
     return (nx,ny,1)

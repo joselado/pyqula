@@ -21,8 +21,8 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                     delta=None,refine_delta=1.0,operator=None,
                     mode='eigen',num_waves=2,info=False):
     """Calculates the Fermi surface of a 2d system"""
+    operator = h.get_operator(operator) # get the operator
     if operator is not None: # operator given
-        operator = h.get_operator(operator) # get the operator
         if not operator.linear:
             if mode=="full": mode = "eigen"
     else: # no operator given
