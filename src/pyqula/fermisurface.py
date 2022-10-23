@@ -37,6 +37,7 @@ def fermi_surface_generator(h,
   else:  fR = lambda x: x # get identity
   # setup a reasonable value for delta
   #### function to calculate the weight ###
+  operator = h.get_operator(operator) # overwrite operator
   def get_weight(hk,k=None):
       if operator is None:
           if mode=='full': es = algebra.eigvalsh(hk) # get eigenvalues
