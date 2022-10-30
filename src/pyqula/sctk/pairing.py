@@ -194,7 +194,7 @@ def get_triplet(r1,r2,df,L=1):
     else: return 0.0*tauz
 
 
-def get_singlet(r1,r2,L=2,H=None,nn=1):
+def get_singlet(r1,r2,L=2,phi0=0.,H=None,nn=1):
     """Function for p-wave order"""
     if L%2!=0: raise
     dr = r1-r2 ; dr2 = dr.dot(dr)
@@ -205,7 +205,7 @@ def get_singlet(r1,r2,L=2,H=None,nn=1):
 #      print(dist2) ; exit()
     if np.abs(dr2-dist2)<1e-4:
         phi = np.arctan2(dr[1],dr[0])
-        out = np.exp(1j*phi*L)
+        out = np.exp(1j*(phi+phi0*np.pi*2.)*L)
 #        print(out)
         return out*iden
     else: return 0.0*tauz
