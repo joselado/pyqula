@@ -44,4 +44,5 @@ def ldos(ht,operator=None,write=True,nsuper=None,kpath=None,**kwargs):
     else: raise
     if write:
         np.savetxt("LDOS.OUT",np.array([r[:,0],r[:,1],ls]).T)
+    return r[:,0],r[:,1],ls
 
