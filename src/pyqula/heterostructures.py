@@ -31,6 +31,8 @@ class Heterostructure():
       self.extra_delta_right = 0. # additional delta in the right region
       self.extra_delta_left = 0. # additional delta in the left region
       self.interpolated_selfenergy = False
+      self.use_minimal_selfenergy = False # use a model selfenergy
+      self.minimal_selfenergy_gamma = 1.0 # the Gamma of the leads
       self.block_diagonal = False
       if h is not None:
         self.heff = None  # effective hamiltonian
