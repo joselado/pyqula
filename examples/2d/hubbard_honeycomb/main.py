@@ -18,10 +18,12 @@ f = open("EVOLUTION.OUT","w") # file with the results
 for U in Us: # loop over Us
   
   h = g.get_hamiltonian() # create hamiltonian of the system
+  h.add_swave(0.)
   mf = meanfield.guess(h,mode="antiferro") # antiferro initialization
   # perform SCF with specialized routine for Hubbard
-  scf = meanfield.hubbardscf(h,nk=20,filling=0.5,U=U,verbose=1,
+  h = h.get_mean_field_hamiltonian(nk=13,filling=0.5,U=U,V=0.1,verbose=1,
                 mix=0.9,mf=mf)
+  exit()
   # alternatively use
 #  scf = scftypes.selfconsistency(h,nkp=20,filling=0.5,g=U,
 #                mix=0.9,mf=mf)
