@@ -262,6 +262,43 @@ def default_v2(g,nk=400):
 
 
 
+def partial_kmesh(d,nk=10,k0=[0.,0.,0.],f=1.0):
+    """Return a partial kmesh, centerer around a certain point"""
+    ks = kmesh(d,nk=nk) # initial kmesh
+    ks = np.array(ks) # convert to array
+    kc = [np.mean(ks[:,i]) for i in range(3)] # center
+    k0 = np.array(k0) # convert to array
+    ks = [k - kc for k in ks] # center in 0,0,0
+    ks = np.array(ks)*f # scale
+    ks = [k + k0 for k in ks] # redefine
+    return np.array(ks) # return kmesh
+
+
+
+def infer_kmesh_dk(ks,d=2):
+    den = infer_kmesh_density(ks,d=d)
+    return np.sqrt(den)/2.
+
+
+
+
+def infer_kmesh_density(kmesh,d=2):
+    """Given a certain kmesh, infer what is the density"""
+    ks = np.array(kmesh) # convert to array
+    dk = [np.max(ks[:,i]) - np.min(ks[:,i]) for i in range(3)]
+    if d==2: # this is a temporal workround
+        nk = np.round(np.sqrt(len(ks))) # infer number of points
+        dk = np.array(dk)*nk/(nk-1)
+        den = dk[0]*dk[1]/(nk*nk)
+    return den
+
+
+
+
+
+
+
+
 
 def kmesh(dimensionality,nk=10,nsuper=1):
   """Return a mesh of k-points for a certain dimensionality"""

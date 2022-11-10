@@ -166,12 +166,15 @@ def hall_conductivity(h,dk=-1,n=1000):
 
 
 
-def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",operator=None):
+def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
+        operator=None,kmesh=None):
   """ Calculates the chern number of a 2d system """
   c = 0.0
   ks = [] # array for kpoints
   bs = [] # array for berrys
   if dk<0: dk = 1./float(2*nk) # automatic dk
+  if kmesh is not None: # infer the dk of the mesh
+      dk = klist.infer_kmesh_dk(kmesh,d=2)
   if operator is not None and mode=="Wilson":
     print("Switching to Green mode in topology")
     mode="Green"
@@ -183,17 +186,11 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",operator=None):
        f2 = h.get_gk_gen(delta=delta) # get generator
        return berry_green(f2,k=[k[0],k[1],0.],operator=operator) 
   ##################
-  for x in np.linspace(0.,1.,nk,endpoint=False):
-    for y in np.linspace(0.,1.,nk,endpoint=False):
-      ks.append([x,y]) # create kpoints
-#  tr = timing.Testimator("CHERN NUMBER")
+  if kmesh is None: # no kmesh provided
+      ks = klist.kmesh(h.dimensionality,nk=nk) # get the mesh
+  else: ks = kmesh # use the provided kmesh
   ik = 0
   bs = parallel.pcall(fberry,ks) # compute all the Berry curvatures
-#  for k in ks: # loop
-#    tr.remaining(ik,len(ks))
-#    ik += 1 # increase
-#    b = fberry(k) # get berry curvature
-#    bs.append(b)
   # write in file
   fo = open("BERRY_CURVATURE.OUT","w") # open file
   for (k,b) in zip(ks,bs):
@@ -203,7 +200,11 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",operator=None):
   fo.close() # close file
   ################
   c = np.sum(bs) # sum berry curvatures
-  c = c/(2.*np.pi*nk*nk)
+  if kmesh is None: # no kmesh provided
+      c = c/(2.*np.pi*nk*nk) # normalize
+  else: # kmesh is given
+      den = klist.infer_kmesh_density(kmesh,d=2) # infer the volume
+      c = den*c/(2.*np.pi) # normalize
   open("CHERN.OUT","w").write(str(c)+"\n")
   return c
 
