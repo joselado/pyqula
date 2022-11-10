@@ -21,7 +21,7 @@ nk = 20 # number of kpoints
 c = h.get_chern(nk=nk)
 print("Chern number in full BZ is ",c)
 
-# now use a reduced mesh (30% of axis around the Gamma point)
+# now use a reduced mesh (50% of axis around the Gamma point)
 from pyqula import klist
 fraction = 0.5 # this is the fraction of each axis taken
 kmesh = klist.partial_kmesh(g.dimensionality,nk=nk,f=fraction)
