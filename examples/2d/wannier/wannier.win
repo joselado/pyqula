@@ -1,0 +1,189 @@
+! Wannier input created with qe2wann
+
+
+
+! restart = default
+
+conv_noise_amp = 0.1
+
+conv_noise_num = 6
+
+trial_step = 0.5  ! make smaller if convergence problem
+
+conv_window = 20
+
+! conv_tol = 0.0000001
+
+! dist_cutoff_mode = 'two_dim'
+
+! bands_plot_dim = 2
+
+! one_dim_axis = z
+
+ exclude_bands = 1-12
+
+! bands_plot_mode = cut
+
+! hr_cutoff = 0.015
+
+dis_froz_min = -5.5672
+dis_froz_max = 4.4328
+
+dis_win_min = -10.5672
+dis_win_max = 9.4328
+
+begin unit_cell_cart
+bohr
+    6.46502850  0.00000000   0.00000000
+    3.23251425  5.59887892   0.00000000
+    0.00000000  0.00000000   36.25090947
+end unit_cell_cart
+
+
+
+begin atoms_frac
+Se  0.40501338  0.40501834  0.11164570
+Se  0.40501100  0.40501602  0.28835422
+Nb  0.07167819  0.07166823  0.20000001
+end atoms_frac
+
+
+hr_plot = .true.  ! calculate hamiltonian
+
+bands_plot = .true.  ! plot bands
+
+guiding_centres = .true.  ! use guiding centres
+
+write_r2mn = .true.  ! use guiding centres
+
+write_xyz = .true.  ! write positions
+
+translate_home_cell = .true.  ! write positions
+
+
+! wannier_plot = .true.  ! plot wannier
+
+wannier_plot_supercell = 2  ! how many cells write
+
+begin kpoint_path
+K  0.0  0.0  0.0  K  1.0  -1.0  0.0
+end kpoint_path
+
+
+bands_num_points = 100  ! number of kpoints
+
+num_wann    =    1
+num_iter    =    1000
+
+
+num_bands = 1  ! bands from qe_nsxf_wann.in
+
+begin projections
+Nb:dz2
+end projections
+
+mp_grid : 10  10  1
+
+begin kpoints
+  0.0   0.0   0.0
+  0.0   0.1   0.0
+  0.0   0.2   0.0
+  0.0   0.3   0.0
+  0.0   0.4   0.0
+  0.0   0.5   0.0
+  0.0   0.6   0.0
+  0.0   0.7   0.0
+  0.0   0.8   0.0
+  0.0   0.9   0.0
+  0.1   0.0   0.0
+  0.1   0.1   0.0
+  0.1   0.2   0.0
+  0.1   0.3   0.0
+  0.1   0.4   0.0
+  0.1   0.5   0.0
+  0.1   0.6   0.0
+  0.1   0.7   0.0
+  0.1   0.8   0.0
+  0.1   0.9   0.0
+  0.2   0.0   0.0
+  0.2   0.1   0.0
+  0.2   0.2   0.0
+  0.2   0.3   0.0
+  0.2   0.4   0.0
+  0.2   0.5   0.0
+  0.2   0.6   0.0
+  0.2   0.7   0.0
+  0.2   0.8   0.0
+  0.2   0.9   0.0
+  0.3   0.0   0.0
+  0.3   0.1   0.0
+  0.3   0.2   0.0
+  0.3   0.3   0.0
+  0.3   0.4   0.0
+  0.3   0.5   0.0
+  0.3   0.6   0.0
+  0.3   0.7   0.0
+  0.3   0.8   0.0
+  0.3   0.9   0.0
+  0.4   0.0   0.0
+  0.4   0.1   0.0
+  0.4   0.2   0.0
+  0.4   0.3   0.0
+  0.4   0.4   0.0
+  0.4   0.5   0.0
+  0.4   0.6   0.0
+  0.4   0.7   0.0
+  0.4   0.8   0.0
+  0.4   0.9   0.0
+  0.5   0.0   0.0
+  0.5   0.1   0.0
+  0.5   0.2   0.0
+  0.5   0.3   0.0
+  0.5   0.4   0.0
+  0.5   0.5   0.0
+  0.5   0.6   0.0
+  0.5   0.7   0.0
+  0.5   0.8   0.0
+  0.5   0.9   0.0
+  0.6   0.0   0.0
+  0.6   0.1   0.0
+  0.6   0.2   0.0
+  0.6   0.3   0.0
+  0.6   0.4   0.0
+  0.6   0.5   0.0
+  0.6   0.6   0.0
+  0.6   0.7   0.0
+  0.6   0.8   0.0
+  0.6   0.9   0.0
+  0.7   0.0   0.0
+  0.7   0.1   0.0
+  0.7   0.2   0.0
+  0.7   0.3   0.0
+  0.7   0.4   0.0
+  0.7   0.5   0.0
+  0.7   0.6   0.0
+  0.7   0.7   0.0
+  0.7   0.8   0.0
+  0.7   0.9   0.0
+  0.8   0.0   0.0
+  0.8   0.1   0.0
+  0.8   0.2   0.0
+  0.8   0.3   0.0
+  0.8   0.4   0.0
+  0.8   0.5   0.0
+  0.8   0.6   0.0
+  0.8   0.7   0.0
+  0.8   0.8   0.0
+  0.8   0.9   0.0
+  0.9   0.0   0.0
+  0.9   0.1   0.0
+  0.9   0.2   0.0
+  0.9   0.3   0.0
+  0.9   0.4   0.0
+  0.9   0.5   0.0
+  0.9   0.6   0.0
+  0.9   0.7   0.0
+  0.9   0.8   0.0
+  0.9   0.9   0.0
+end kpoints
+
