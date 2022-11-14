@@ -4,7 +4,7 @@ from pyqula import wannier
 
 
 # now read the Hamiltonian
-# you need two files, hr_truncated.dat and wannier.win
-h = wannier.read_multicell_hamiltonian(input_file="hr_truncated.dat")
+# you need two files, hamiltonian.wannier and wannier.win
+h = wannier.read_multicell_hamiltonian(input_file="hamiltonian.wannier")
 h.get_bands() # compue band structure
 
