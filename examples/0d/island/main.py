@@ -8,8 +8,14 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 from pyqula import islands
 import numpy as np
-g = islands.get_geometry(name="triangular",shape="flower",
-                           r=14.2,dr=2.0,nedges=6) # get a flower-shaped island
+g = islands.get_geometry(name="triangular",
+                           n=1.4,nedges=6) # get a flower-shaped island
+from pyqula import geometry
+#g = geometry.triangular_lattice() ; g = g.get_supercell(4) ; g.dimensionality = 0
+g.write()
+n = len(g.r)
+print(n)
+exit()
 h = g.get_hamiltonian() # get the Hamiltonian
 h.add_onsite(3.0) # shift chemical potential
 h.add_rashba(1.0) # Rashba spin-orbit coupling
