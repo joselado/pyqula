@@ -6,5 +6,9 @@ from pyqula import wannier
 # now read the Hamiltonian
 # you need two files, hamiltonian.wannier and wannier.win
 h = wannier.read_multicell_hamiltonian(input_file="hamiltonian.wannier")
-h.get_bands() # compue band structure
+h.get_bands() # compute band structure
+
+
+
+
 
