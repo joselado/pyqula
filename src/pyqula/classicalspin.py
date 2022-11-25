@@ -1,5 +1,4 @@
 import numpy as np
-from . import classicalspinf90
 from . import neighbor
 from scipy.sparse import csr_matrix,csc_matrix,coo_matrix
 
@@ -38,6 +37,8 @@ class SpinModel(): # class for a spin Hamiltonian
    #            self.pairs)
 
     return eout
+  def get_magnetization(self):
+      return get_magnetization()
   def minimize_energy(self,theta0=None,phi0=None,tries=10,calle=None):
     """Minimize the energy of the spin model"""
     thetas = [None for i in range(tries)]
@@ -241,21 +242,25 @@ def minimize_energy(sm,theta0=None,phi0=None,tol=1e-5,calle=None):
   phi = result.x[sm.nspin:sm.nspin*2]
   return theta,phi
 
-def write_magnetization(self):
+def get_magnetization(self):
   theta = self.theta
   phi = self.phi
   mx = np.sin(theta)*np.cos(phi)
   my = np.sin(theta)*np.sin(phi)
   mz = np.cos(theta)
-  fo = open("MAGNETISM.OUT","w")
-  for i in range(len(mx)):
-    fo.write(str(self.geometry.x[i])+"   ")
-    fo.write(str(self.geometry.y[i])+"   ")
-    fo.write(str(self.geometry.z[i])+"   ")
-    fo.write(str(mx[i])+"   ")
-    fo.write(str(my[i])+"   ")
-    fo.write(str(mz[i])+"\n")
-  fo.close()
+  return mx,my,mz
+
+def write_magnetization(self):
+    mx,my,mz = self.get_magnetization()
+    fo = open("MAGNETISM.OUT","w")
+    for i in range(len(mx)):
+      fo.write(str(self.geometry.x[i])+"   ")
+      fo.write(str(self.geometry.y[i])+"   ")
+      fo.write(str(self.geometry.z[i])+"   ")
+      fo.write(str(mx[i])+"   ")
+      fo.write(str(my[i])+"   ")
+      fo.write(str(mz[i])+"\n")
+    fo.close()
 
 
 
