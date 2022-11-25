@@ -13,6 +13,9 @@ def sum_geometries(g1,g2):
             g.sublattice = np.concatenate([g1.sublattice,g2.sublattice])
         if g.atoms_have_names:
             g.atoms_names = np.concatenate([g1.atoms_names,g2.atoms_names])
+        if g1.primal_geometry is not None and g2.primal_geometry is not None:
+            print("Primal geometry not implemented in __add__")
+            raise
         return g
     elif type(g2)==np.ndarray: # array input
         g = g1.copy() # copy geometry
