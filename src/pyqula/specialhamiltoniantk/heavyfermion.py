@@ -3,7 +3,7 @@ from ..htk import fusion
 
 
 def H2HFH(h,JK=0.0,J=0.):
-    """Given a certain geometry, generate a new geometry with heavy femrion sites"""
+    """Given a certain geometry, generate a new geometry with heavy fermion sites"""
     if h.has_eh:
         print("Not implemented with superconductivity")
         raise
@@ -25,16 +25,31 @@ def H2HFH(h,JK=0.0,J=0.):
     hd = h.copy() 
     # now the interlayer coupling
     gt = gd + gl
-    def ft(r1,r2):
-        if r1[2]*r2[2]<0.:
-            dr = r1-r2
-            dr2 = dr.dot(dr)
-            if 0.9<dr2<1.1: return JK
-        return 0.
-    ht = gt.get_hamiltonian(has_spin=True,tij=ft)
-    h = fusion.hamiltonian_fusion(hd,hl) + ht
+    h = fusion.hamiltonian_fusion(hd,hl)
     h.has_kondo = True # now with Kondo sites
+    import types
+    h.add_kondo = types.MethodType(add_kondo,h) # add the new method
+    if JK!=0.: add_kondo(h,JK) # add Kondo coupling
     return h
+
+
+def add_kondo(self,JK):
+    """Add the Kondo coupling"""
+    from ..specialhopping import obj2callable
+    JKf = obj2callable(JK) # so that it is callable
+    def ft(r1,r2):
+        if r1[2]*r2[2]<0.: # different layers
+            dr = r1-r2
+            rm = (r1+r2)/2. # average position
+            dr2 = dr.dot(dr)
+            if 0.9<dr2<1.1: return JKf(rm)
+        return 0.
+    gt = self.geometry
+    ht = gt.get_hamiltonian(has_spin=True,tij=ft)
+    self.add_hamiltonian(ht) # include this contribution
+
+
+
 
 
 def get_operator(self,name,**kwargs):
