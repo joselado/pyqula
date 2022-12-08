@@ -234,6 +234,9 @@ class Geometry:
       fractional2real(self)
     def real2fractional(self):
       self.get_fractional() # same function
+    def add_strain(self,*args,**kwargs):
+        from .geometrytk import strain
+        return strain.add_strain(self,*args,**kwargs)
     def get_connections(self):
       """
       Return the connections of each site
