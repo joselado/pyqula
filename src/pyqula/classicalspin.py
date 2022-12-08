@@ -38,7 +38,7 @@ class SpinModel(): # class for a spin Hamiltonian
 
     return eout
   def get_magnetization(self):
-      return get_magnetization()
+      return get_magnetization(self)
   def minimize_energy(self,theta0=None,phi0=None,tries=10,calle=None):
     """Minimize the energy of the spin model"""
     thetas = [None for i in range(tries)]
