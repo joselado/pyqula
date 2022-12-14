@@ -191,10 +191,10 @@ def FeSe(nem=0.,**kwargs):
     """Return the Hamiltonian of FeSe, a bandstructure
     displaying two pockets"""
     g = geometry.square_lattice() # cubic lattice
-    h = g.get_hamiltonian(tij=[1.,3.],**kwargs) 
-#    h = g.get_hamiltonian(tij=[1.,-0.4,0.4],**kwargs) 
-    h.add_onsite(-5.)
-#    h.add_onsite(-2.5)
+#    h = g.get_hamiltonian(tij=[1.,3.],**kwargs) 
+    h = g.get_hamiltonian(tij=[1.,-0.4,0.4],**kwargs) 
+#    h.add_onsite(-5.)
+    h.add_onsite(-2.5)
     v = np.array([1.,0.,0.]) # nematic vector
     v = v/np.sqrt(v.dot(v))
 #    h.remove_spin()
