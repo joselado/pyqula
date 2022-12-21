@@ -26,7 +26,7 @@ parallel.cores = 5
 #ts = parallel.pcall(lambda e: lp.get_kappa(energy=e),es)
 #ts = [lp.didv(energy=e) for e in es]
 ts = [lp.get_kappa(energy=e) for e in es]
-exit()
+#exit()
 import matplotlib.pyplot as plt
 plt.plot(es,ts)
 plt.ylim([0.,max(ts)])

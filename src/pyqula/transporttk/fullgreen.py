@@ -26,7 +26,14 @@ def get_full_green(ht,energy,mode="right",delta=None,ic=0):
     if mode=="left": g = gauss_inverse(gmatrix,0,0,test=test_gauss)
     elif mode=="right": g = gauss_inverse(gmatrix,-1,-1,test=test_gauss)
     elif mode=="central": 
-        ii = 1+ic
-        g = gauss_inverse(gmatrix,i=ii,j=ii,test=test_gauss)
+        if ic is not None: # well implemented way
+          ii = 1+ic
+          g = gauss_inverse(gmatrix,i=ii,j=ii,test=test_gauss)
+        elif ic is None: # provide a list of all the Green's functions
+            out = [] # empty list
+            for ii in range(len(gmatrix)):
+              g = gauss_inverse(gmatrix,i=ii,j=ii,test=test_gauss)
+              out.append(g)
+            return out
     else: raise
     return g

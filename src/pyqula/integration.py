@@ -11,6 +11,14 @@ def integrate_matrix(f,xlim=[0.,1.],eps=0.1,only_imag=False):
 
 
 
+def integrate_matrix_2D(f,xlim=[0.,1.],ylim=[0.,1.],**kwargs):
+    """Perform a 2D integral of a matrix"""
+    def intx(x): # inegrate in the y axis
+        return integrate_matrix(lambda y: f([x,y]),xlim=ylim,**kwargs)
+    return integrate_matrix(intx,xlim=xlim,**kwargs) # now integrate in x axis
+    
+
+
 
 def simpsons_rule(f,a,b):
     c = (a+b) / 2.0

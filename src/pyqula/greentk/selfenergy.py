@@ -25,8 +25,8 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
   if h.is_multicell:
       try: h = h.get_no_multicell()
       except:
-          mode = "full" # multicell hamiltonians only have full mode
-          print("Changed to full mode in selfenergy")
+          mode = "full_adaptive" # multicell hamiltonians only have full mode
+          print("Changed to full adaptive mode in selfenergy")
   # sanity check for surface mode
   if gtype=="surface": mode = "adaptive" # only the adaptive mode
   #######################################
@@ -49,7 +49,7 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
     g = g/len(ks)  # normalize
   #####################################################
   #####################################################
-  if mode=="renormalization":
+  elif mode=="renormalization":
     if d==1: # full renormalization
       g,s = gr(h.intra,h.inter)  # perform renormalization
     elif d==2: # two dimensional, loop over k's
@@ -64,7 +64,7 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
     else: raise
   #####################################################
   #####################################################
-  if mode=="adaptive":
+  elif mode=="adaptive":
     if d==1: # full renormalization
       g,s = gr(h.intra,h.inter)  # perform renormalization
       if gtype=="surface": g = s.copy() # take the surface one
@@ -83,6 +83,14 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
       g = integration.integrate_matrix(fint,xlim=[0.,1.],eps=error)
         # chain in the y direction
     else: raise
+  elif mode=="full_adaptive":
+    fint = lambda k: algebra.inv(e - hk_gen(k))  # green's function
+    if d==1: # adaptive 1D
+        g = integration.integrate_matrix(fint,xlim=[0.,1.],eps=error)
+    elif d==2: # adaptive 2D
+        g = integration.integrate_matrix_2D(fint,xlim=[0.,1.],ylim=[0.,1.],
+              eps=.1)
+    else: raise # not implemented
   # now calculate selfenergy
   selfenergy = e - h.intra - algebra.inv(g)
   return g,selfenergy
