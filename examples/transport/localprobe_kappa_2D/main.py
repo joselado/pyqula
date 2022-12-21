@@ -21,8 +21,8 @@ es = np.linspace(-0.5,0.5,41)
 lp.T = 0.1
 from pyqula import parallel
 parallel.cores = 5
-ts = parallel.pcall(lambda e: lp.didv(energy=e),es)
-#ts = parallel.pcall(lambda e: lp.get_kappa(energy=e),es)
+#ts = parallel.pcall(lambda e: lp.didv(energy=e),es)
+ts = parallel.pcall(lambda e: lp.get_kappa(energy=e),es)
 #ts = [lp.didv(energy=e) for e in es]
 
 import matplotlib.pyplot as plt

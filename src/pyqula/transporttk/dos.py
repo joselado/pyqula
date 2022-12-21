@@ -14,14 +14,24 @@ def get_dos(self,energies=None,write=True,**kwargs):
 
 
 
-def device_dos(HT,energy=0.0,mode="central",operator=None,**kwargs):
+def device_dos(HT,energy=0.0,mode="central",
+        operator=None,ic=0,**kwargs):
    """ Calculates the density of states 
        of a HTstructure by a  
        green function approach, input is a HTstructure class
    """
-   g = fullgreen.get_full_green(HT,energy,mode=mode,**kwargs)
-   if operator is not None:
+   g = fullgreen.get_full_green(HT,energy,mode=mode,ic=ic,**kwargs)
+   if ic is not None: # specific cell
+     if operator is not None:
        g = HT.Hr.get_operator(operator)*g
+   elif ic is None: # all the cells
+       g0 = 0. # initialize
+       for i in range(len(g)): # loop
+         gi = g[i]
+         if operator is not None:
+           gi = HT.Hr.get_operator(operator)*gi
+         g0 = g0 + gi
+       g = g0 # overwrite
    d = -np.trace(g.imag)
    return d
 
