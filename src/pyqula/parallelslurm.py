@@ -113,6 +113,7 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None,
     time.sleep(0.5) # wait half a second
     while True:
         finished = True
+        time.sleep(0.5) # wait half a second
         for i in range(n):
             pfolderi = pfolder+"/folder_"+str(i)
             if started_and_killed(pfolderi,str(job)+"_"+str(i)):
