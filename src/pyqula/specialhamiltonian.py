@@ -207,24 +207,28 @@ def FeSe(nem=0.,**kwargs):
       h.add_strain(fnem, mode="directional")
     h.turn_dense()
     return h
-#    g = geometry.cubic_lattice() # cubic lattice
-#    g = g.supercell([1,1,2]) # create a bilayer
-#    g.dimensionality = 2 # set as 2d
-#    g.center()
-#    def fh(r1,r2): # function for the hoppings
-#        dr = r1-r2
-#        dr2 = dr.dot(dr)
-#        if 0.9<dr2<1.1:
-#            if abs(dr[2])>0.1: return 0. # no hopping
-#            if np.sign(r1[2]+r2[2])>0: return 1.0 # return hopping
-#            else: return -1.0 
-#        return 0.
-#    h = g.get_hamiltonian(tij=fh)
-#    h.add_onsite(lambda r: 3.+1*r[2])
-#    return h
 
 
 
 
 
+def FeSe_GM(nem=0.,**kwargs):
+    """Return the Hamiltonian of FeSe, a bandstructure
+    displaying two pockets, one at G and one at M"""
+    g = geometry.square_lattice() # cubic lattice
+    h = g.get_hamiltonian(tij=[1.,3.],**kwargs) 
+    h.add_onsite(-2.5)
+    if nem==0.: return h
+    v = np.array([1.,0.,0.]) # nematic vector
+    v = v/np.sqrt(v.dot(v))
+#    h.remove_spin()
+    def fnem(dr):
+        if dr.dot(dr)>1e-2: dr = dr/np.sqrt(dr.dot(dr)) # unitary vector
+        else: return 1.0 # same site
+        o = 1. - nem*(dr.dot(v)**2-0.5) # return 
+        return o
+    if np.abs(nem)>0.:
+      h.add_strain(fnem, mode="directional")
+    h.turn_dense()
+    return h
 

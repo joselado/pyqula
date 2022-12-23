@@ -79,6 +79,9 @@ def get_operator(self,name,**kwargs):
       elif name=="unfold":  
           from .unfolding import bloch_projector
           return bloch_projector(self,**kwargs)
+      elif name=="singlet":  
+          from .sctk.operator import real_singlet
+          return real_singlet(self)
       elif self.has_kondo:
           from .specialhamiltoniantk import heavyfermion
           return heavyfermion.get_operator(self,name,**kwargs)

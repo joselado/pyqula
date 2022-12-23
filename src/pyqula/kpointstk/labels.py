@@ -17,7 +17,8 @@ def label2k(g,kl):
     elif kl=="M1": return [.5,.0,.0]
     elif kl=="M2": return [.0,.5,.0]
     elif kl=="M3": return [.5,.5,.0]
-    elif kl=="X": return [.5,.5,.0]
+    elif kl=="X": return [.5,.0,.0]
+    elif kl=="Y": return [.0,.5,.0]
     else: raise
 
 
