@@ -12,23 +12,7 @@ def generic_didv(self,temp=0.,**kwargs):
     else: # finite temperature
         return finite_T_didv(self,temp=temp,**kwargs)
 
-
-def finite_T_didv(self,temp,energy=0.0,**kwargs):
-    """Finite temperature dIdV"""
-#    return zero_T_didv(self,energy=energy,**kwargs)
-    from .fermidirac import fermidirac as FD
-    dt = 20 # max T range
-    de = temp # energy difference to compute the derivative
-    ### Use simpson integration
-    def f(e):
-        out = zero_T_didv(self,energy=energy+e,**kwargs) 
-        out *= FD(e-de,temp=temp) - FD(e+de,temp=temp) 
-        return out/de
-    from ..integration import peak_integrate
-#    return peak_integrate(f,-dt*temp,dt*temp,xp=0.0,dp=temp,
-#                           epsrel=1e-2,limit=10)[0]/2.
-    return quad(f,-dt*temp,dt*temp,epsrel=1e-4,limit=60)[0]/2.
-
+from .thermaldidv import finite_T_didv
 
 def zero_T_didv(self,delta=None,**kwargs):
     """Zero temperature dIdV"""

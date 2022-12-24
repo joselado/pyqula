@@ -187,7 +187,7 @@ def excitonic_bilayer(gap=0.0,g=None,**kwargs):
 
 
 
-def FeSe(nem=0.,**kwargs):
+def FeSe_GXY(nem=0.,**kwargs):
     """Return the Hamiltonian of FeSe, a bandstructure
     displaying two pockets"""
     g = geometry.square_lattice() # cubic lattice
@@ -209,7 +209,7 @@ def FeSe(nem=0.,**kwargs):
     return h
 
 
-
+FeSe = FeSe_GXY
 
 
 def FeSe_GM(nem=0.,**kwargs):
