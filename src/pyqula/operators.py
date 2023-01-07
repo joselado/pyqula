@@ -57,10 +57,15 @@ class Operator():
                 return self.matrix@a # multiply matrices
             else:
                 return self*Operator(a) # convert to operator
+        elif algebra.isvector(a): # array type
+            return self(a)
         else:
             return self*Operator(a) # convert to operator
     def __rmul__(self,a):
         return Operator(a)*self
+    def __truediv__(self,a):
+        if isnumber(a): return self*(1./a)
+        else: raise
     def __add__(self,a):
         """Define the add method"""
         if type(a)==Operator:
@@ -83,9 +88,18 @@ class Operator():
     def __call__(self,v,k=None):
         """Define the call method"""
         return self.m(v,k=k) 
+    def __matmul__(self,a): return self*a
     def get_matrix(self,k=None):
         """Return matrix if possible"""
         if self.matrix is not None: return self.matrix
+    def inv(self):
+        """Return the inverse operator"""
+        if self.matrix is not None and self.linear: # input is a matrix
+            m = self.matrix
+            def f(v,**kwargs):
+                return algebra.applyinverse(m,v)
+            return Operator(f,linear=True)
+        else: raise # not implemented
     def braket(self,w,**kwargs):
         """Compute an expectation value"""
         wi = self(w,**kwargs) # apply the operator

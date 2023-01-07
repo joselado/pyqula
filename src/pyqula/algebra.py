@@ -23,8 +23,11 @@ def isnumber(s):
 maxsize = 10000
 
 def ismatrix(m):
-    return type(m)==np.ndarray or issparse(m) or type(m)==np.matrix
+    return (type(m)==np.ndarray and len(m.shape)==2) or issparse(m) or type(m)==np.matrix
 
+
+def isvector(m):
+    return type(m)==np.ndarray and len(m.shape)==1
 
 
 def hermitian(m):
@@ -300,3 +303,16 @@ def angle(v1,v2):
     c = v1.dot(v2) # cosine
     v3 = np.cross(v1,v2) # cross product
     raise # not finished yet
+
+
+
+
+
+
+def applyinverse(A,b):
+    """Apply A^-1 to b"""
+    if A.shape[0]<30: return inv(A)@b
+    else: return slg.spsolve(A,b)
+
+
+

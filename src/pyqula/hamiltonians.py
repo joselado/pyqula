@@ -178,7 +178,7 @@ class Hamiltonian():
     def get_gk_gen(self,delta=1e-3,operator=None,canonical_phase=False):
       """Return the Green function generator"""
       hkgen = self.get_hk_gen() # Hamiltonian generator
-      def f(k=[0.,0.,0.],e=0.0):
+      def f(k=[0.,0.,0.],e=0.0,inv=False):
           hk = hkgen(k) # get matrix
           if canonical_phase: # use a Bloch phase in all the sites
             frac_r = self.geometry.frac_r # fractional coordinates
@@ -191,7 +191,16 @@ class Hamiltonian():
             hk = Ud@hk@U
           if operator is not None: 
               hk = algebra.dagger(operator)@hk@operator # project
-          out = algebra.inv(np.identity(hk.shape[0])*(e+1j*delta) - hk)
+          if not self.is_sparse: # dense Hamiltonians
+              out = np.identity(hk.shape[0])*(e+1j*delta) - hk
+              if not inv: out = algebra.inv(out) # Green's function
+              else: out = out # just the Hamiltonian
+          else: # for sparse, use the Operator object
+              from scipy.sparse import identity
+              g = identity(hk.shape[0])*(e+1j*delta) - hk
+              out = operators.Operator(g) # get the inverse operator
+              if not inv: out = out.inv() # Green's function
+              else: out = out # just the Hamiltonian
           return out
       return f
     def to_canonical_gauge(self,m,k):

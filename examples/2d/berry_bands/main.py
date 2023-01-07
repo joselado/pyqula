@@ -2,10 +2,6 @@
 import os ; import sys 
 sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
-
-
-
-
 from pyqula import geometry
 from pyqula import topology
 from pyqula import dos
