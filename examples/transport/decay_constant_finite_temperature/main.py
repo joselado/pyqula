@@ -24,13 +24,13 @@ ht.delta = 1e-6 # analytic continuation of the Green's functions
 es = np.linspace(-.2,.2,41) # grid of energies
 T = 1e-1 # reference transparency 
 ht.scale_lc = T # set the transparency for dIdV
-temp = 0.02
+temp = 0.0
 from pyqula import parallel
 parallel.cores = 6
 ts = parallel.pcall(lambda e: ht.didv(energy=e,temp=temp),es)
 ks = parallel.pcall(lambda e: ht.get_kappa(energy=e,T=T,temp=temp),es)
 from pyqula.temperaturetk.convolution import temperature_convolution
-#es,ks = temperature_convolution(es,ks,temp=.1*9e-1)
+es,ks = temperature_convolution(es,ks,temp=0.02)
 
 plt.subplot(121)
 plt.plot(es,ts,marker="o")

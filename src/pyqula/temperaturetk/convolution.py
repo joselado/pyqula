@@ -5,6 +5,7 @@ from ..transporttk.fermidirac import fermidirac as FD
 
 
 def temperature_convolution(x,y,temp=1e-1):
+    if temp==0.: return x,y
     dt = 20 # hwo many times the temperature
     x = np.array(x)
     y = np.array(y)

@@ -27,6 +27,9 @@ def calculate_dos(es,xs,d,use_fortran=use_fortran,w=None):
     from . import dosf90 
     return dosf90.calculate_dos(es,xs,d,w) # use the Fortran routine
   else:
+      es = np.array(es)
+      xs = np.array(xs)
+      d = np.array(d)
       ys = np.zeros(np.array(xs.shape[0])) # initialize
       ys = calculate_dos_jit(es,xs,d,w,ys) # compute
       return ys
