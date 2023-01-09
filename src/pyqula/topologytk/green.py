@@ -1,6 +1,5 @@
 import numpy as np
 from .. import algebra
-from ..operators import Operator
 
 
 def berry_green_generator(f,k=[0.,0.,0.],dk=0.05,operator=None,
