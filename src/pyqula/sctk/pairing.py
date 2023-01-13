@@ -16,7 +16,10 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     if callable(mode):
         weightf = mode # mode is a function returning a 2x2 pairing matrix
     elif mode=="swave":
-        weightf = lambda r1,r2: swave(r1,r2,H=self,**kwargs) #same_site(r1,r2)*np.identity(2)
+        weightf = lambda r1,r2: swave(r1,r2,H=self,**kwargs) 
+    elif mode=="deltaud":
+        # this is a workaround for delta_ud alone!
+        weightf = lambda r1,r2: deltaud(r1,r2,deltaf) 
     elif mode=="extended_swave":
         weightf = lambda r1,r2: swave(r1,r2,H=self,nn=1,
                      **kwargs) #same_site(r1,r2)*np.identity(2)
@@ -25,7 +28,8 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     elif mode=="pwave": 
         weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
     elif mode=="nodal_fwave":
-        weightf = lambda r1,r2: nodal_fwave(r1,r2,df,**kwargs)
+        #weightf = lambda r1,r2: nodal_fwave(r1,r2,df,H=self,**kwargs)
+        weightf = nodal_fwave_generator(df,H=self,**kwargs)
 #    elif mode=="chiral_fwave": 
 #        weightf = lambda r1,r2: get_triplet(r1,r2,df,L=3)
     elif mode=="chiral_pwave": 
@@ -181,11 +185,21 @@ def px(r1,r2):
     return 0.0*tauz
 
 
-def get_triplet(r1,r2,df,L=1):
-    """Function for p-wave order"""
+
+def get_triplet_generator(df,nn=1,H=None,**kwargs):
+    if nn>1: # more than first neighbor
+      dist = H.geometry.get_neighbor_distances(n=nn)[nn-1] # get this distance
+      dist2 = dist**2
+    else: dist2 = 1.0 # first neighbor
+    return lambda r1,r2: get_triplet(r1,r2,df,dist2=dist2,**kwargs)
+
+
+
+def get_triplet(r1,r2,df,L=1,dist2=1.0):
+    """Function for triplet order"""
     dr = r1-r2 ; dr2 = dr.dot(dr)
     if abs(L)%2!=1: raise
-    if 0.99<dr2<1.001: 
+    if np.abs(dr2-dist2)<1e-4:
         phi = np.arctan2(dr[1],dr[0])
         d = df((r1+r2)/2.) # evaluate dvector
         delta = dvector2delta(d) # compute the local deltas
@@ -211,6 +225,12 @@ def get_singlet(r1,r2,L=2,phi0=0.,H=None,nn=1):
     else: return 0.0*tauz
 
 
+def get_deltaud(r1,r2,f):
+    """Return a Delta ud, given a certain function f of the two positions"""
+    return iden*f(r1,r2)
+
+
+
 def pwave(*args,**kwargs): 
     return get_triplet(*args,L=1,**kwargs)
 
@@ -218,6 +238,13 @@ def pwave(*args,**kwargs):
 def dpid(*args,**kwargs):
     return get_singlet(*args,L=2,**kwargs)
 
+def nodal_fwave_generator(*args,dphi=0.,**kwargs): 
+    """Generator for real f-wave order"""
+    z = np.exp(1j*np.pi*2*dphi) # complex rotation
+    f1 = get_triplet_generator(*args,L=3,**kwargs)
+    f2 = get_triplet_generator(*args,L=-3,**kwargs)
+    return lambda r1,r2: f1(r1,r2) + z*f2(r1,r2)
 
-def nodal_fwave(*args,**kwargs): 
-    return get_triplet(*args,L=3,**kwargs) + get_triplet(*args,L=-3,**kwargs)
+def nodal_fwave(*args,dphi=0.,**kwargs): 
+    z = np.exp(1j*np.pi*2*dphi) # complex rotation
+    return get_triplet(*args,L=3,**kwargs) + z*get_triplet(*args,L=-3,**kwargs)
