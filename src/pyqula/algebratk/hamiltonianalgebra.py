@@ -3,8 +3,8 @@
 def add(h1,h2):
     mo1 = h1.get_multihopping()
     mo2 = h2.get_multihopping()
-    h3 = h1.copy() # copy
-    h3.set_multihopping(mo1+mo2)
+    h3 = h1.copy()*0. # copy
+    h3.set_multihopping((mo1+mo2).copy())
     return h3
 
 def rmul(h,a):

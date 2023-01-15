@@ -1,5 +1,6 @@
 import dill as pickle
 import os
+os.system('touch START')
 import sys ; sys.path.append('/home/joselado/Documents/programs/pyqula/src/pyqula/..')
 try: ii = int(os.environ['SLURM_ARRAY_TASK_ID'])
 except: ii = 0

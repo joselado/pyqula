@@ -315,7 +315,8 @@ def add_pairing(deltas=[[0.,0],[0.,0.]],is_sparse=True,r1=[],r2=[]):
   for i in range(n): # loop over sites
     for j in range(n): # loop over sites
       pout[i][j] = get_pmatrix(r1[i],r2[j]) # get this pairing
-  diag = csc_matrix(np.zeros((2*len(r1),2*len(r1)),dtype=np.complex)) # diag
+  diag = sp.identity(2*len(r1))*0. # zero matrix
+#  diag = csc_matrix(np.zeros((2*len(r1),2*len(r1)),dtype=np.complex)) # diag
   pout = bmat(pout) # convert to block matrix
 #  mout = [[diag,pout],[np.conjugate(pout),diag]] # output matrix
   mout = [[diag,pout],[None,diag]] # output matrix
@@ -327,44 +328,21 @@ def add_pairing(deltas=[[0.,0],[0.,0.]],is_sparse=True,r1=[],r2=[]):
 
 
 
-
-
-def block2nambu_matrix(m):
-  '''Reorder a matrix that has electrons and holes, so that
-  the order resembles the Nambu spinor in each site.
-  The initial matrix is
-  H D
-  D H
-  The output is a set of block matrices for each site in the 
-  Nambu form'''
-  R = np.matrix(np.zeros(m.shape)) # zero matrix
-  nr = m.shape[0]//4 # number of positions
-  for i in range(nr): # electrons
-    R[2*i,4*i] = 1.0 # up electron
-    R[2*i+1,4*i+1] = 1.0 # down electron
-    R[2*i+2*nr,4*i+2] = 1.0 # down holes
-    R[2*i+1+2*nr,4*i+3] = 1.0 # up holes
-  R = csc_matrix(R) # to sparse
-  return R
-
-
-def block2nambu(m):
-    R = block2nambu_matrix(m)
-    Rh = np.conjugate(R.T)
-    return Rh@m@R
+from .sctk.reorder import block2nambu
+from .sctk.reorder import block2nambu_matrix
+from .sctk.reorder import nambu2block
 
 reorder = block2nambu
-
-def nambu2block(m):
-    R = block2nambu_matrix(m)
-    Rh = np.conjugate(R.T)
-    return R@m@Rh
 
 
 from .sctk.extract import extract_pairing
 from .sctk.extract import extract_singlet_pairing
 from .sctk.extract import extract_triplet_pairing
 from .sctk.pairing import pairing_generator
+from .sctk.fastdeltaud import hopping2deltaud
+
+
+
 
 def add_pairing_to_hamiltonian(self,**kwargs):
     """ Add a general pairing matrix to a Hamiltonian"""

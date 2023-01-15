@@ -33,7 +33,9 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
 #    elif mode=="chiral_fwave": 
 #        weightf = lambda r1,r2: get_triplet(r1,r2,df,L=3)
     elif mode=="chiral_pwave": 
-        weightf = lambda r1,r2: get_triplet(r1,r2,df,L=1)
+        weightf = lambda r1,r2: get_triplet(r1,r2,df,L=1,**kwargs)
+    elif mode=="chiral_fwave": 
+        weightf = get_triplet_generator(df,L=3,H=self,**kwargs)
     elif mode=="chiral_dwave": 
         weightf = lambda r1,r2: get_singlet(r1,r2,L=2,**kwargs)
     elif mode=="chiral_gwave": 
