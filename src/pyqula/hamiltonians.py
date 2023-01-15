@@ -395,8 +395,8 @@ class Hamiltonian():
             self = self.get_multicell()
         hop = dict()
         hop[(0,0,0)] = self.intra
-        for t in self.hopping: hop[tuple(np.array(t.dir))] = t.m
-        for t in self.hopping: hop[tuple(-np.array(t.dir))] = np.conjugate(t.m).T
+        for t in self.hopping: 
+            hop[tuple(np.array(t.dir))] = t.m
         return hop # return dictionary
 
     @get_docstring(ldos.multi_ldos)
@@ -420,6 +420,7 @@ class Hamiltonian():
         """
         from copy import deepcopy
         return deepcopy(self)
+    def is_zero(self): return self.get_multihopping().is_zero()
     def check(self,**kwargs):
         """
         Check if the Hamiltonian is OK

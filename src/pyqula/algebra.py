@@ -316,3 +316,9 @@ def applyinverse(A,b):
 
 
 
+def is_zero(m):
+    """Check if a matrix is zero"""
+    m = todense(m)
+    return np.max(np.abs(m))<1e-6
+
+

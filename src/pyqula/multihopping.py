@@ -58,22 +58,38 @@ class MultiHopping():
             out[key] = np.conjugate(self.dict[key2].T)
         out = MultiHopping(out) # create a new object
         return out
+    def copy(self):
+        from copy import deepcopy
+        return deepcopy(self)
+    def is_zero(self):
+        for key in self.dict:
+            m = self.dict[key]
+            if not algebra.is_zero(m): return False
+        return True
 
 
 
 
 
-def add_hopping_dict(hop1,hop2):
+
+def add_hopping_dict(hop1i,hop2i):
     """Multiply two hopping dictionaries"""
+    # convert all the keys to tuples
+    hop1,hop2 = dict(),dict()
+    for key in hop1i: hop1[tuple(key)] = hop1i[key]
+    for key in hop2i: hop2[tuple(key)] = hop2i[key]
+    # now collect all the matrices
     out = dict() # create dictionary
     keys = [key1 for key1 in hop1]
     for key2 in hop2:
         if key2 not in keys: keys.append(key2) # store
     for key in keys:
         m = 0 # initialize
-        if key in hop1: m = m + hop1[key]
-        if key in hop2: m = m + hop2[key]
-        out[key] = m # store
+        if key in hop1: 
+            m = (m + hop1[key]).copy()
+        if key in hop2: 
+            m = (m + hop2[key]).copy()
+        out[key] = m.copy() # store
     return out
 
 

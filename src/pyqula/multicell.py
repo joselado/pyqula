@@ -65,22 +65,20 @@ def set_multihopping(ho,dd):
 
 def set_dictionary(ho,dd):
     """Set a dictionary as the Hamiltonian"""
-    ho.intra = dd[(0,0,0)] # intracell
+    ho.intra = dd[(0,0,0)].copy() # intracell
     hoppings = [] # list of hoppings
     for d in dd: # loop over hoppings
         t = dd[d] # matrix
         if d==(0,0,0): continue
         hopping = Hopping() # create object
-        hopping.m = t
+        hopping.m = t.copy()
         hopping.dir = np.array(d)
         hoppings.append(hopping) # store
-#        hopping = Hopping() # create object
-#        hopping.m = np.conjugate(t).T
-#        hopping.dir = -np.array(d)
-#        hoppings.append(hopping) # store
     ho.hopping = hoppings # store all the hoppings
     ho.is_multicell = True # multicell hamiltonian
     return ho
+
+
 
 
 def generate_get_tij(h):
@@ -527,10 +525,10 @@ def get_hopping_dict(h):
     """Return the hopping dictionary"""
     h = h.get_multicell()
     out = dict()
-    out[(0,0,0)] = h.intra
+    out[(0,0,0)] = h.intra.copy()
     for t in h.hopping: 
         if np.max(np.abs(t.m))>1e-7:
-          out[tuple(t.dir)] = t.m # store
+          out[tuple(t.dir)] = t.m.copy() # store
     return out # return
 
 
