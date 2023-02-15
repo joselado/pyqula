@@ -65,8 +65,8 @@ def get_env():
     envout = {} # output dictionary
     for key in env:
         if "SLURM_" not in key or "SBATCH_" not in key:
-           invout[key] = env[key] # store
-    return invout # return this dictionary
+           envout[key] = env[key] # store
+    return envout # return this dictionary
 
 
 def pcall_single(fin,xs,time=10,memory=5000,error=None,
