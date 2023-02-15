@@ -59,6 +59,15 @@ def pcall_killproof(fin,xs,return_mode="list",**kwargs):
         return out
 
 
+def get_env():
+    """Get a cleaned up environment"""
+    env = os.environ # dictionary
+    envout = {} # output dictionary
+    for key in env:
+        if "SLURM_" not in key or if "SBATCH_" not in key:
+           invout[key] = env[key] # store
+    return invout # return this dictionary
+
 
 def pcall_single(fin,xs,time=10,memory=5000,error=None,
     constraint = None,
@@ -104,7 +113,8 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None,
     pwd = os.getcwd() # current directory 
     os.chdir(pfolder) # go to the folder
 #    os.system("sbatch run.sh >> run.out") # run calculation
-    out,err = subprocess.Popen(["sbatch","run.sh"],stdout=subprocess.PIPE).communicate()
+    env = get_env() # get the cleaned environment
+    out,err = subprocess.Popen(["sbatch","run.sh"],stdout=subprocess.PIPE,env=env).communicate()
     job = job_number(out) # job number
     jobkill(job) # kill the job if exiting
     os.chdir(pwd) # back to main

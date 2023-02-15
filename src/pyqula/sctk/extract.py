@@ -30,13 +30,16 @@ def extract_normal_dict(dd):
 
 
 def get_anomalous_hamiltonian(self):
-    """Turn a Hamiltonian into a Nambu Hamiltonian"""
-    self = self.copy() # copy Hamiltonian
-    self.turn_nambu() # setup electron-hole if not present
-    dd = self.get_multihopping().get_dict() # return the dictionary
-    dd = extract_anomalous_dict(dd)
-    self.set_multihopping(MultiHopping(dd))
-    return self
+    """Return anomalous part of a Hamiltonian"""
+    h0 = self.copy() ; h0.remove_nambu() ; h0.setup_nambu_spinor()
+    h = self - h0
+    return h
+#    self = self.copy() # copy Hamiltonian
+#    self.turn_nambu() # setup electron-hole if not present
+#    dd = self.get_multihopping().get_dict() # return the dictionary
+#    dd = extract_anomalous_dict(dd)
+#    self.set_multihopping(MultiHopping(dd))
+#    return self
 
 
 def get_singlet_hamiltonian(self):
@@ -137,6 +140,11 @@ def extract_custom_pairing(m,mode="all"):
         m = extract_singlet_pairing(m) # matrix with pairings 
         m = mt + np.abs(np.array(m))**2 # singlet plus triplet
         return m
+    elif mode=="both": # singlet and triplet with interference effects
+        if m.shape[0]==4: # this is a quick fix for singlet site models
+            m = m@np.conjugate(m.T)
+            return np.array([[np.trace(m)]])
+        else: raise
     else: raise
 
 
@@ -144,6 +152,7 @@ def extract_custom_pairing(m,mode="all"):
 def extract_pairing_kmap(h,write=False,i=None,j=None,mode="all",**kwargs):
     """Extract the pairing in reciprocal space"""
     if not h.has_eh: raise # not implemented
+    h = get_anomalous_hamiltonian(h)
     if j is None: j = i # same site is the default
     fk = h.get_hk_gen() # Bloch Hamiltonian generator
     def f0(k):
