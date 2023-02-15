@@ -64,7 +64,7 @@ def get_env():
     env = os.environ # dictionary
     envout = {} # output dictionary
     for key in env:
-        if "SLURM_" not in key or if "SBATCH_" not in key:
+        if "SLURM_" not in key or "SBATCH_" not in key:
            invout[key] = env[key] # store
     return invout # return this dictionary
 
