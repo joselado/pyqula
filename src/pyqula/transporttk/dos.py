@@ -1,5 +1,6 @@
 import numpy as np
 from . import fullgreen
+from ..checkclass import is_iterable
 
 def get_dos(self,energies=None,write=True,**kwargs):
     """Compute density of states"""
@@ -21,10 +22,7 @@ def device_dos(HT,energy=0.0,mode="central",
        green function approach, input is a HTstructure class
    """
    g = fullgreen.get_full_green(HT,energy,mode=mode,ic=ic,**kwargs)
-   if ic is not None: # specific cell
-     if operator is not None:
-       g = HT.Hr.get_operator(operator)*g
-   elif ic is None: # all the cells
+   if ic is None or is_iterable(ic): # all the cells
        g0 = 0. # initialize
        for i in range(len(g)): # loop
          gi = g[i]
@@ -32,6 +30,9 @@ def device_dos(HT,energy=0.0,mode="central",
            gi = HT.Hr.get_operator(operator)*gi
          g0 = g0 + gi
        g = g0 # overwrite
+   else: # specific cell, assume a single matrix has been returned
+     if operator is not None:
+       g = HT.Hr.get_operator(operator)*g
    d = -np.trace(g.imag)
    return d
 
