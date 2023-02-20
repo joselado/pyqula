@@ -9,8 +9,6 @@ from .algebra import dagger
 
 dag = dagger
 
-
-
 class Heterostructure():
     """Class for a HTstructure"""
     def copy(self):
