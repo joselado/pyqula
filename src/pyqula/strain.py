@@ -1,3 +1,4 @@
+import numpy as np
 
 # routines to apply strain to Hamiltonian
 
@@ -27,6 +28,20 @@ def strain_mode(sr,sd=None,mode="scalar"):
     elif mode=="non_uniform": # spatial and direction-dependent change
         return lambda r,dr: sr(r,dr)
     else: raise
+
+
+
+def uniaxial_strain(H,d=np.array([1.,0.,0.]),s=0.,**kwargs):
+    """Add uniaxial strain"""
+    d = np.array(d) ; d = d/np.sqrt(d.dot(d)) # normalize
+    def fun(dr): # function to get the strain
+        dr2 = dr.dot(dr) # moduli
+        if dr2<1e-4: return 1.0 # do nothing
+        dr = dr/np.sqrt(dr2) # normalize
+        dr0 = dr.dot(d) # projection on the direction
+        fac = np.abs(dr0) # modulation of the strain
+        return 1. + 2*(fac - 0.5)*s # change the hopping
+    add_strain(H,fun,mode="directional") # add strain
 
 
 
