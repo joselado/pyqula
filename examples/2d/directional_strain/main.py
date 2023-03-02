@@ -16,7 +16,7 @@ for phi in phis: # loop over strain directions
     strain.uniaxial_strain(h,d=d,s=0.9) # add strain
     #h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),delta=2e-1)
     nk=100 # number of kpoints
-    (kx,ky,fs) = h.get_fermi_surface(nk=nk,e=4.0,delta=6e-1)
+    (kx,ky,fs) = h.get_fermi_surface(nk=nk,e=2.0,delta=6e-1)
     fs2d = fs.reshape((nk,nk))
     plt.subplot(1,len(phis),iphi+1) ; iphi += 1 # subplot
     plt.imshow(fs2d,interpolation="bicubic")

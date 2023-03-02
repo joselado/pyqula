@@ -77,7 +77,7 @@ def write_positions(g,output_file = "POSITIONS.OUT",nrep=None):
 
 
 
-def write_vasp(g0,s=1.42):
+def write_vasp(g0,s=1.42,namefile="vasp.vasp"):
     """Turn a geometry into vasp geometry"""
     g = g0.copy() # copy geometry
     if g.dimensionality==3: pass
@@ -89,7 +89,7 @@ def write_vasp(g0,s=1.42):
         g.dimensionality = 3
         g.get_fractional() # get fractional coordinates
     else: raise # not implemented
-    f = open("vasp.vasp","w") # input file
+    f = open(namefile,"w") # input file
     f.write("Structure\n 1.0\n")
     for i in range(3): f.write(str(s*g.a1[i])+"  ")
     f.write("\n")
@@ -97,7 +97,10 @@ def write_vasp(g0,s=1.42):
     f.write("\n")
     for i in range(3): f.write(str(s*g.a3[i])+"  ")
     # write the atoms
-    if not g.atoms_have_names: # no name provided
+    if len(g.r)==len(g.atoms_names):
+        atoms_have_names = True
+    else: atoms_have_names = False
+    if not atoms_have_names: # no name provided
       f.write("\n C\n "+str(len(g.r))+"\n Direct\n")
       # write all the atoms in fractional coordinates
       for ir in g.frac_r:
