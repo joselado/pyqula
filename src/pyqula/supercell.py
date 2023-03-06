@@ -283,7 +283,9 @@ def supercell3d(g,n1=1,n2=1,n3=1):
 
 
 
-
+def turn_orthorombic(g):
+    """Transform a geometry into an orthorombic one"""
+    return target_angle(g,angle=0.5)
 
 
 
