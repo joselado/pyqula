@@ -17,7 +17,7 @@ def get_dos(self,energies=None,write=True,nk=20,**kwargs):
         ks = np.linspace(0.,1.,nk) # kpoints
         ds = [] # empty list
         for e in energies:
-            ds.append(np.mean([get(k,e) for k in ks]))
+            ds.append(np.mean([fun(k,e) for k in ks]))
         return (energies,ds)
     else: raise
 
