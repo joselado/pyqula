@@ -2,13 +2,23 @@ import numpy as np
 from . import fullgreen
 from ..checkclass import is_iterable
 
-def get_dos(self,energies=None,write=True,**kwargs):
+def get_dos(self,energies=None,write=True,nk=20,**kwargs):
     """Compute density of states"""
     if self.dimensionality==1:
         if energies is None: energies = np.linspace(-1.0,1.0,100)
         ds = [self.get_coupled_central_dos(energy=e,**kwargs) for e in energies]
         if write: np.savetxt("DOS.OUT",np.array([energies,ds]).T)
         return energies,np.array(ds)
+    if self.dimensionality==2:
+        def fun(k,e):
+            if self.dimensionality==2: # 2D heterostructure
+                HT1 = self.generate(k) # generate heterostructure
+                return HT1.get_coupled_central_dos(energy=e,**kwargs)
+        ks = np.linspace(0.,1.,nk) # kpoints
+        ds = [] # empty list
+        for e in energies:
+            ds.append(np.mean([get(k,e) for k in ks]))
+        return (energies,ds)
     else: raise
 
 
