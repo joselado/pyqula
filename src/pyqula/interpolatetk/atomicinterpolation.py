@@ -58,6 +58,9 @@ def compute_interpolation(centers=[[0.,0.,0.]], heights=[10.0],name="",
           xout.append(ix)
           zout.append(iz)
           yout.append(iy)
+    xout = np.array(xout) # to array
+    yout = np.array(yout) # to array
+    zout = np.array(zout) # to array
     return xout,yout,zout
 
 

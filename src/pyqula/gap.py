@@ -178,7 +178,10 @@ def optimize_energy(h,robust=True,mode="full",**kwargs):
       """Optimize the eigenvalues"""
       from scipy.optimize import differential_evolution
       from scipy.optimize import minimize
-      bounds = [(0.,1.) for i in range(h.dimensionality)]
+      if h.dimensionality==0:
+          return f([0.,0.,0.]) # return
+      else:
+          bounds = [(0.,1.) for i in range(h.dimensionality)]
       if robust: # use a robust optimization
           res = differential_evolution(f,bounds=bounds,**kwargs)
       else: # conventional optimization

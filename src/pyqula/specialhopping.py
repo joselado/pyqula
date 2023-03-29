@@ -2,12 +2,6 @@ import numpy as np
 from scipy.sparse import csc_matrix
 from numba import jit
 
-#try:
-#    from . import specialhoppingf90
-##    raise
-#    use_fortran=True
-#except:
-#    use_fortran=False
 use_fortran=False
 
 
@@ -46,6 +40,11 @@ def twisted(cutoff=5.0,ti=0.3,lambi=8.0,t=1.0,
         #####
         return out
     return fun
+
+
+def real_graphene():
+    return twisted(ti=0.15,lamb=0.5)
+
 
 
 def twisted_matrix(cutoff=5.0,ti=0.3,lambi=8.0,mint=1e-5,
