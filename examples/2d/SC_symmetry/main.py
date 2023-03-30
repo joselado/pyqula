@@ -11,23 +11,13 @@ h = g.get_hamiltonian()
 h.add_pairing(mode="nodal_fwave",delta=0.1j,d=[0,0,1])
 #h.add_pairing(mode="extended_swave",delta=0.4)
 h.add_pairing(mode="swave",delta=0.5)
-h.get_bands() ; exit()
-h0 = h.copy() ; h0.remove_nambu() ; h0.setup_nambu_spinor()
 
-h = h - h0
-
-hk = h.get_hk_gen() # function generating Bloch Hamiltonian
-
-k = np.random.random(3)
-print("At k")
-print(np.round(hk(k),2))
-print("At -k")
-print(np.round(hk(-k),2))
-
-
-
-
+# to get singlet/triplet order parameters
+print("d-vector",h.get_average_dvector())
+print("absolute triplet",h.extract("absolute_delta",mode="triplet"))
+print("absolute singlet",h.extract("absolute_delta",mode="singlet"))
 exit()
+
 np.savetxt("DELTA.OUT",np.array(h.extract("deltak",mode="both")).real.T)
 np.savetxt("DELTA_SINGLET.OUT",np.array(h.extract("deltak",mode="singlet")).real.T)
 np.savetxt("DELTA_TRIPLET.OUT",np.array(h.extract("deltak",mode="triplet")).real.T)
