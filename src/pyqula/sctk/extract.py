@@ -141,7 +141,7 @@ def extract_custom_pairing(m,mode="all"):
         m = mt + np.abs(np.array(m))**2 # singlet plus triplet
         return m
     elif mode=="both": # singlet and triplet with interference effects
-        if m.shape[0]==4: # this is a quick fix for singlet site models
+        if m.shape[0]==4: # this is a quick fix for single site models
             m = m@np.conjugate(m.T)
             return np.array([[np.trace(m)]])
         else: raise
@@ -169,6 +169,17 @@ def extract_pairing_kmap(h,write=False,i=None,j=None,mode="all",**kwargs):
     return ks[:,0],ks[:,1],dsr+1j*dsi
 
 
+def extract_absolute_pairing(h,mode="singlet",**kwargs):
+    """Extract the absolute value of the SC order in the BZ"""
+    from ..klist import kmesh
+    ks = kmesh(h.dimensionality,**kwargs) # kpoints
+    if mode=="singlet":
+        def f(m): return extract_singlet_pairing(m)
+    elif mode=="triplet":
+        def f(m): return extract_triplet_pairing(m)
+    hk = h.get_hk_gen() # generator
+    def g(k): return f(hk(k))
+    return np.mean([np.sum(np.abs(g(k))) for k in ks]) # return mean value
 
 
 
