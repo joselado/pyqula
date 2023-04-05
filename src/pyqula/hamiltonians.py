@@ -398,7 +398,6 @@ class Hamiltonian():
         for t in self.hopping: 
             hop[tuple(np.array(t.dir))] = t.m
         return hop # return dictionary
-
     @get_docstring(ldos.multi_ldos)
     def get_multildos(self,**kwargs):
         return ldos.multi_ldos(self,**kwargs)
@@ -406,7 +405,6 @@ class Hamiltonian():
         """Return a multihopping object"""
         from .multihopping import MultiHopping
         return MultiHopping(self.get_dict())
-
     @get_docstring(Vinteraction)
     def get_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
         scf = Vinteraction(self,**kwargs)
