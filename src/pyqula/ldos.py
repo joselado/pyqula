@@ -293,9 +293,11 @@ def get_ldos(h,projection="TB",**kwargs):
 
 def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
              random=False,silent=True,interpolate=False,
+             operator=None,return_rd = False,
              write=True,**kwargs):
     """ Calculate LDOS in a tight binding basis"""
     if ks is not None and mode=="green": raise
+    if operator is not None: operator = h.get_operator(operator)
     if mode=="green":
       from . import green
       if h.dimensionality!=2: raise # only for 2d
@@ -327,20 +329,32 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
     # write result
     d = spatial_dos(h,d) # convert to spatial resolved DOS
     g = h.geometry  # store geometry
-    x,y = g.x,g.y # get the coordinates
+    x,y,z,r = g.x,g.y,g.z,g.r # get the coordinates
     if nrep>1:
         go = h.geometry.copy() # copy geometry
         go = go.supercell(nrep) # create supercell
         do = d.tolist()*(nrep**g.dimensionality) # replicate
         xo = go.x
         yo = go.y
-    else: xo,yo,do = x,y,d
+        zo = go.z
+        ro = go.r
+    else: xo,yo,zo,ro,do = x,y,z,r,d
     if interpolate:
         from .interpolation import atomic_interpolation
         xo,yo,do = atomic_interpolation(xo,yo,do,**kwargs)
+        if return_rd: raise # not implemented
     if write: 
+#        if return_rd: raise # not implemented
         write_ldos(xo,yo,do) # write in file
-    return (xo,yo,do) # return LDOS
+    xo = np.array(xo)
+    yo = np.array(yo)
+    zo = np.array(zo)
+    ro = np.array(ro)
+    do = np.array(do)
+    if return_rd: # return positions and DOS
+        return (ro,do) # return LDOS
+    else: # return x,y and DOS
+        return (xo,yo,do) # return LDOS
 
 
 ldos = get_ldos # for backcompatibility

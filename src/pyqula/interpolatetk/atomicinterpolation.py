@@ -20,6 +20,7 @@ def wave_jit(x,y,centers,heights,facx,facy,z):
 
 def compute_interpolation(centers=[[0.,0.,0.]], heights=[10.0],name="",
         nx=600,ny=600,smooth=.3,smooth_nxny=False,xcut=None,ycut=None,
+        x = None,y=None,
         dx=None,dy=None,**kwargs):
     """ Creates a set of gaussians at that position and with a height"""
     if len(heights)<len(centers): raise
@@ -47,8 +48,8 @@ def compute_interpolation(centers=[[0.,0.,0.]], heights=[10.0],name="",
     else: dx = float(dx)
     if dy is None: dy = (np.max(ys) - np.min(ys))/10
     else: dy = float(dy)
-    x = np.linspace(min(xs)-dx,max(xs)+dx,nx)
-    y = np.linspace(min(ys)-dy,max(ys)+dy,ny)
+    if x is None: x = np.linspace(min(xs)-dx,max(xs)+dx,nx)
+    if y is None: y = np.linspace(min(ys)-dy,max(ys)+dy,ny)
     xout = []
     yout = []
     zout = []
@@ -65,9 +66,9 @@ def compute_interpolation(centers=[[0.,0.,0.]], heights=[10.0],name="",
 
 
 
-def atomic_interpolation(x,y,z,xcut=None,ycut=None,**kwargs):
+def atomic_interpolation(x0,y0,z0,xcut=None,ycut=None,**kwargs):
     col = 2
-    m = np.array([x,y,z])
+    m = np.array([x0,y0,z0])
     if xcut is not None: # given value
         xc = float(xcut)
         m = m[:,np.abs(m[0,:])<xc]

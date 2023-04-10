@@ -3,7 +3,8 @@ from ..htk import fusion
 
 
 def H2HFH(h,JK=0.0,J=0.):
-    """Given a certain geometry, generate a new geometry with heavy fermion sites"""
+    """Given a certain geometry, generate a new geometry with 
+    heavy fermion sites"""
     if h.has_eh:
         print("Not implemented with superconductivity")
         raise
