@@ -270,7 +270,7 @@ from .embeddingtk.selfenergies import get_selfenergy_from_potential
 
 
 def get_ldos(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,
-                    write = True,
+                    write = True,return_rd = False,
                     operator=None,**kwargs):
     """Compute the local density of states"""
     h = self.H
@@ -283,9 +283,12 @@ def get_ldos(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,
     ds = full2profile(h,ds,check=False) # resum if necessary
     ds = np.array(ds) # convert to array
     gs = h.geometry.supercell(nsuper)
-    x,y = gs.x,gs.y
+    x,y,z,r = gs.x,gs.y,gs.z,gs.r
     if write: np.savetxt("LDOS.OUT",np.array([x,y,ds]).T)
-    return x,y,ds
+    if return_rd:
+        return r,ds
+    else:
+        return x,y,ds
 
 
 

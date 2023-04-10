@@ -11,7 +11,7 @@ h = g.get_hamiltonian()
 h.add_onsite(1.0)
 h = H2HFH(h,JK=0.2)
 (k,e,c) = h.get_bands(operator="dispersive_electrons")
-
+h.get_ldos(operator="electron")
 
 
 

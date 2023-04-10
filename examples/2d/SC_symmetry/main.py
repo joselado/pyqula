@@ -7,7 +7,7 @@ import numpy as np
 
 from pyqula import geometry
 g = geometry.triangular_lattice()
-#g = g.get_supercell(3)
+g = g.get_supercell(3)
 h = g.get_hamiltonian()
 h.add_pairing(mode="nodal_fwave",delta=1.,d=[1,0,0])
 h.add_pairing(mode="swave",delta=0.5)
