@@ -15,13 +15,15 @@ from .hamiltonians import Hamiltonian
 
 class Embedding():
     """Define an embedding object"""
-    def __init__(self,h,m=None,nsuper=None):
+    def __init__(self,h,m=None,nsuper=None,selfenergy=None):
         self.H = h.copy() # Pristine Hamiltonian
         self.geometry = self.H.geometry
         self.dimensionality = self.H.dimensionality
+        self.selfenergy = selfenergy 
         self.has_gf_generator = False
         self.has_spin = self.H.has_spin
         self.has_eh = self.H.has_eh
+        self.boundary_embedding_generator = None
         self.mode = "bulk" # mode
         self.nsuper = None # supercell between original Hamiltonian
         if m is not None: 
@@ -52,6 +54,7 @@ class Embedding():
     def dos(self,**kwargs):
         (x,y,d) = self.ldos(**kwargs)
         return np.sum(d) # sum the DOS
+    def get_dos(self,**kwargs): return self.dos(**kwargs)
     def multidos(self,es=np.linspace(-1.0,1.0,30),
                    energies=None,**kwargs):
         if energies is not None: es = energies # overwrite
@@ -230,11 +233,17 @@ def onsite_supercell(h,nsuper,mc=None):
     return intrasuper
 
 
+def get_gf(self,**kwargs):
+    """Return the Green's function"""
+    if self.selfenergy is None: # no selfenergy given, compute it
+        return get_gf_exact(self,**kwargs)
+    else: # a selfenergy is given
+        from .embeddingtk.boundaryembedding import boundary_embedding_gf
+        return boundary_embedding_gf(self,selfenergy=self.selfenergy,**kwargs)
 
 
-
-
-def get_gf(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,operator=None,**kwargs):
+def get_gf_exact(self,energy=0.0,delta=1e-2,
+        nsuper=1,nk=100,operator=None,**kwargs):
     """Return the Green's function"""
     h = self.H
     e = energy

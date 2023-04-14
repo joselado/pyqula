@@ -30,6 +30,7 @@ class Embedded_Hamiltonian():
         r = [A[i,i].real for i in range(A.shape[0])]
         r = self.H.full2profile(r) # resum components
         self.H.geometry.write_profile(r,name="LDOS.OUT")
+        return H.geometry.r,r # return LDOS
     def get_kdos(self,**kwargs): return get_kdos(self,**kwargs)
 
 
@@ -92,6 +93,10 @@ def get_kdos(self,energies=None,kpath=None,**kwargs):
             fo.write(str(ie)+" ")
             fo.write(str(d)+"\n")
     fo.close()
+
+
+
+
 
 
 
