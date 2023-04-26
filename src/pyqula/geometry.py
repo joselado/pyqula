@@ -1120,7 +1120,7 @@ def write_profile(g,d,name="PROFILE.OUT",nrep=3,normal_order=False):
   """Write a certain profile in a file"""
   if g.dimensionality == 0: nrep = 1
   if callable(d): d = np.array([d(ri) for ri in g.r]) # call
-  else: d = np.array(d)
+  else: d = np.array(d) # assume it is an array
   go = g.copy() # copy geometry
   go = go.supercell(nrep) # create supercell
   d = replicate_array(g,d,nrep=nrep) # replicate
@@ -1130,7 +1130,7 @@ def write_profile(g,d,name="PROFILE.OUT",nrep=3,normal_order=False):
   else:
       m = np.array([go.x,go.y,d,go.z]).T
       header = "x        y     profile      z"
-  np.savetxt(name,m,fmt='%.5f',delimiter="    ",header=header) # save in file
+  np.savetxt(name,m,fmt='%.8f',delimiter="    ",header=header) # save in file
 
 
 

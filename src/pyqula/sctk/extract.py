@@ -209,3 +209,25 @@ def extract_absolute_pairing(h,mode="singlet",**kwargs):
 
 
 
+def extract_absolute_spatial_pairing(h,mode="singlet",**kwargs):
+    """Extract the absolute value of the SC order in the BZ"""
+    h = get_anomalous_hamiltonian(h) # overwrite Hamiltonian
+    if mode=="all" or mode=="both": pass # do nothing
+    elif mode=="singlet": h = extract_singlet_hamiltonian(h) # singlet
+    elif mode=="triplet": h = extract_triplet_hamiltonian(h) # triplet
+    else: raise # do nothing
+    fk = h.get_hk_gen() # Bloch Hamiltonian generator
+    from ..klist import kmesh
+    ks = kmesh(h.dimensionality,**kwargs) # kpoints
+    def f(k):
+        m = fk(k) # return Bloch Hamiltonian
+        m2 = m@m # compute H**2
+        out = np.diag(m2) # return the diagonal
+        return out
+    out = np.mean([f(k) for k in ks],axis=0) # return mean value
+    from ..increase_hilbert import full2profile
+    out = full2profile(h,out) # resum
+    return np.sqrt(out.real/2.) # return the spatial profile
+
+
+
