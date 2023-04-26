@@ -181,6 +181,9 @@ def extract_from_hamiltonian(self,name,**kwargs):
     elif name=="absolute_delta": # reciprocal space superconductivity
         from .sctk.extract import extract_absolute_pairing
         return extract_absolute_pairing(self,**kwargs)
+    elif name=="absolute_spatial_delta": 
+        from .sctk.extract import extract_absolute_spatial_pairing
+        return extract_absolute_spatial_pairing(self,**kwargs)
     else: raise
 
 
