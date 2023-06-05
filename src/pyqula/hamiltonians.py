@@ -523,15 +523,19 @@ class Hamiltonian():
         my = self.extract(name="my")
         mz = self.extract(name="mz")
         return np.array([mx,my,mz]).T # return array
-    def get_vev(self,operator="sz",name=None,**kwargs):
+    def get_vev(self,operator=None,**kwargs):
         """
         Compute a VEV of a spatially resolved operator
         """
-        if name is not None: operator=name # overwrite
         n = len(self.geometry.r) # number of sites
         ops = [operators.index(self,n=[i]) for i in range(n)]
         op = self.get_operator(operator) # get an operator
-        ops = [(o*op).get_matrix() for o in ops] # define operators
+        if op is not None:
+          print(ops[0].matrix)
+          print(op.matrix)
+          ops = [(o*op).get_matrix() for o in ops] # define operators
+        else:
+          ops = [o.get_matrix() for o in ops] # define operators
         return spectrum.ev(self,operator=ops,**kwargs).real
     # for backwards compatibility
     def compute_vev(self,**kwargs): return self.get_vev(**kwargs)
