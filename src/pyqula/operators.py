@@ -120,7 +120,7 @@ def index(h,n=[0]):
   val = [1. for i in n]
   m = csc((val,(n,n)),shape=(num,num),dtype=np.complex)
   m = h.spinless2full(m) # return matrix with e-h
-  return m@m
+  return Operator(m@m)
 
 
 
