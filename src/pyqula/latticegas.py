@@ -5,6 +5,7 @@ from scipy.sparse import coo_matrix
 
 class LatticeGas():
     def __init__(self,g,filling=0.5): # geometry
+        g.nrep = 1
         self.geometry = g # store geometry
         self.nsites = len(g.r) # number of sites
         self.mu = np.zeros(len(g.r)) # chemical potential
@@ -28,9 +29,13 @@ class LatticeGas():
         """Optimize the energy"""
 #        print(self.den) ; exit()
         fun = lambda x: energy_jax(self.mu,self.pairs,self.j,x)
-        x = optimize_discrete(fun,self.den,**kwargs) # optimize
+        x,es = optimize_discrete(fun,self.den,**kwargs) # optimize
         self.den = x # overwrite
-        return self.get_energy()
+        return es
+    def get_correlator(self,**kwargs):
+        """Return the nearest neighbor correlators"""
+        from .statphystk.correlator import get_nnc
+        return get_nnc(self.geometry,self.den,**kwargs)
 
 from numba import jit
 
@@ -49,12 +54,23 @@ def energy_jax(mu,pairs,js,den):
 
 
 
-def optimize_discrete(fun,x0,temp=0.1,ntries=1e5):
+def optimize_discrete(fun,x0,temp=0.1,ntries=1e5,info=False):
     """Discrete optimization, using a swap method"""
+    inds = np.array(range(len(x0))) # indexes
+    vals = np.unique(x0) # different values
+    if len(vals)!=2: 
+        print(vals)
+        raise # not implemented
     def swap(x):
         x = x.copy()
-        i1 = np.random.randint(0,n) # one random site
-        i2 = np.random.randint(0,n) # one random site
+        ainds = inds[x==vals[0]] # indexes for first value
+        binds = inds[x==vals[1]] # indexes for second value
+#        i1 = np.random.randint(0,n) # one random site
+#        i2 = np.random.randint(0,n) # one random site
+        j1 = np.random.randint(0,len(ainds)) # one random site
+        j2 = np.random.randint(0,len(binds)) # one random site
+        i1 = ainds[j1]
+        i2 = binds[j2]
         x1 = x[i1]
         x2 = x[i2]
         x[i2] = x1 # swap
@@ -67,17 +83,19 @@ def optimize_discrete(fun,x0,temp=0.1,ntries=1e5):
     n = len(x0) # number of sites
     nrep = ntries # this many iterations
     xold = x0.copy()
+    es = np.zeros(int(nrep)) # storage for energies
     for ii in range(int(nrep)): # this many iterations
         x = nswap(xold,np.random.randint(1,4)) # make 1,2,3 swaps
         eo = fun(xold) # old
         en = fun(x) # new
-#        print(eo/len(x))
+        if info: print(en)
+        es[ii] = en # store new energy
         if en<eo: xold = x # overwrite
         else: 
             fac = np.exp((eo-en)/temp) # acceptance probability
             if np.random.random()<fac: xold = x # overwrite
             else: pass # do nothing
-    return xold # return old one
+    return xold,es # return old one
 
 
 

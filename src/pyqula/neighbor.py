@@ -190,7 +190,7 @@ def neighbor_distances(g,n=4):
     out = neighbor_distances_jit(r,out) # distances
     out = np.round(out,6) # unique distances
     out = np.unique(out) # unique distances
-    return np.array([out[i+1] for i in range(len(out)-1)]) # return
+    return np.array([out[i+1] for i in range(len(out)-1)])[0:n] # return
 
 
 @jit(nopython=True)
