@@ -47,15 +47,16 @@ def get_nnc(g,den,n=20,**kwargs):
 def get_nnci_jit(r,den,di,delta):
     """Compute a single correlator"""
     out = 0. # output value
-    no = 0 # counter
+    no = 0. # counter
+    den = den - np.mean(den) # redefine so that it has zero average
     for i1 in range(len(r)):
-        for i2 in range(len(r)):
+        for i2 in range(i1,len(r)):
             r1 = r[i1]
             r2 = r[i2]
             dr = r1-r2
             dr2 = np.sum(dr*dr)
             if np.abs(dr2 - di**2)<delta:
                 out += den[i1]*den[i2]
-                no += 1
+                no += 1.
     if no==0: return 0.
-    return out/no - np.mean(den)**2 # return correlator
+    return out/no # - np.mean(den)*np.mean(den) # return correlator
