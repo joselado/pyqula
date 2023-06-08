@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.sparse import coo_matrix
+from copy import deepcopy
 
 
 
@@ -36,6 +37,8 @@ class LatticeGas():
         """Return the nearest neighbor correlators"""
         from .statphystk.correlator import get_nnc
         return get_nnc(self.geometry,self.den,**kwargs)
+    def copy(self):
+        return deepcopy(self)
 
 from numba import jit
 
