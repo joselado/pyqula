@@ -10,7 +10,7 @@ import numpy as np
 g = geometry.triangular_lattice() # generate the geometry
 g = supercell.turn_orthorhombic(g) # make a orthorombic cell
 g = g.get_supercell(10)
-g.dimensionality
+g.dimensionality = 0
 csa = []
 nit = 20
 lg = latticegas.LatticeGas(g,filling=1./3.)
