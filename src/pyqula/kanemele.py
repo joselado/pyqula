@@ -5,13 +5,6 @@ import numpy as np
 from numba import jit
 from . import parallel
 
-try:
-  from . import kanemelef90
-  use_fortran = True
-except:
-#  print("Not possible to use FORTRAN rutines, kanemele.py")
-  use_fortran = False
-
 from .algebra import isnumber 
 
 def generalized_kane_mele(r1,r2,rm,fun=0.0,tol=1e-5):
@@ -37,34 +30,20 @@ def generalized_kane_mele(r1,r2,rm,fun=0.0,tol=1e-5):
   return bmat(mout) # return matrix
 
 
-def km_vector(ri,rj,rm,use_fortran=use_fortran,
-        tol=1e-5):
+def km_vector(ri,rj,rm,tol=1e-5):
   """Return the Kane Mele vector"""
-  if tol>1e-5: 
-      use_fortran = False
-  if use_fortran: return kanemelef90.kmvector(ri,rj,rm)
-  else:  
-      v = np.array([0.,0.,0.])
-      return km_vector_jit(ri,rj,v,np.array(rm),tol=tol)
-#      rmin = 1. -tol
-#      rmax = 1. +tol
-#      for k in range(len(rm)): # look for an intermediate site
-#        dr1 = rm[k]-ri # difference
-#        dr2 = rj-rm[k] # difference
-#        if rmin<dr1.dot(dr1)<rmax and rmin<dr2.dot(dr2)<rmax: # if connected
-#           ur = np.cross(dr1,dr2) # Kane Mele vector
-#           return ur
-#      return np.array([0.,0.,0.])
+  v = np.array([0.,0.,0.])
+  return km_vector_jit(np.array(ri).real,np.array(rj).real,v,np.array(rm).real,tol=tol)
 
 
 @jit(nopython=True)
 def km_vector_jit(ri,rj,v,rm,tol=1e-5):
-    rmin = 1. -tol
-    rmax = 1. +tol
-    for k in range(len(rm)): # look for an intermediate site
+    for k in range(rm.shape[0]): # look for an intermediate site
       dr1 = rm[k]-ri # difference
       dr2 = rj-rm[k] # difference
-      if rmin<dr1.dot(dr1)<rmax and rmin<dr2.dot(dr2)<rmax: # if connected
+      dr1m = np.sum(dr1*dr1)
+      dr2m = np.sum(dr2*dr2)
+      if abs(dr1m-1.)<tol and abs(dr2m-1.)<tol: # if connected
          v = np.cross(dr1,dr2) # Kane Mele vector
          return v
     v = np.array([0.,0.,0.])
