@@ -11,6 +11,9 @@ from pyqula import geometry
 from pyqula import dos
 g = geometry.diamond_lattice()
 h = g.get_hamiltonian()
+h.add_soc(0.1)
+h.get_bands()
+exit()
 h.turn_dense()
 dos.autodos(h,nk=100,auto=True,delta=0.1,energies=np.linspace(-6.0,6.0,1000))
 h.get_bands()
