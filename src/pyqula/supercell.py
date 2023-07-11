@@ -127,8 +127,6 @@ def replicate3d_jit(rs,a1,a2,a3,n1,n2,n3,ro):
   return ro # return positions
 
 
-#@jit(nopython=True)
-#@jit
 def return_unique(rs1,rs2):
   """Return only those positions in rs1 that do not appear in rs2"""
   rout = []
@@ -138,10 +136,6 @@ def return_unique(rs1,rs2):
   return np.array(rout)
 
 
-
-
-#def request(g,nat,ntries=20):
-#  """Request a unit cell with as many atoms"""
 
 
 def target_angle_volume(g,angle=None,n=5,volume=None,same_length=False):

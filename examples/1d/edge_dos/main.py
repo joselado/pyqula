@@ -14,8 +14,5 @@ h.add_zeeman([0.,0.,20]) # put a single band at the chemical potential
 # (only the moduli is important)
 h.add_pairing(mode="pwave",delta=0.3,d=[1.0,0.,0.]) 
 h.get_bands() # get the band structure
-from pyqula.topology import berry_phase
-phi = berry_phase(h) # compute Berry phase
-print("Berry phase",phi)
-
-
+from pyqula.kdos import surface
+surface(h)

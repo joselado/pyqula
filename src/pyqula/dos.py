@@ -34,7 +34,7 @@ def calculate_dos(es,xs,d,use_fortran=use_fortran,w=None):
       ys = calculate_dos_jit(es,xs,d,w,ys) # compute
       return ys
 
-@jit
+@jit(nopython=True)
 def calculate_dos_jit(es,xs,d,w,ys):
       for i in range(len(es)): # loop over energies
           e = es[i]
