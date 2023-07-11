@@ -42,7 +42,7 @@ def get_index(g,r,replicas=False):
     return None # not found
 
 
-@jit
+@jit(nopython=True)
 def get_index_jit(r0,rs):
     for i in range(len(rs)): # loop
         dr = r0 - rs[i] # different
