@@ -23,11 +23,6 @@ for U in Us: # loop over Us
   # perform SCF with specialized routine for Hubbard
   h = h.get_mean_field_hamiltonian(nk=13,filling=0.5,U=U,V=0.1,verbose=1,
                 mix=0.9,mf=mf)
-  exit()
-  # alternatively use
-#  scf = scftypes.selfconsistency(h,nkp=20,filling=0.5,g=U,
-#                mix=0.9,mf=mf)
-  h = scf.hamiltonian # get the Hamiltonian
   gap = h.get_gap() # compute the gap
   f.write(str(U)+"   "+str(gap)+"\n") # save in a file
   
