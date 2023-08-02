@@ -70,7 +70,7 @@ def kekule_function(r,t=1.):
         return 0.0 # no hopping
     # now define the function
     def fm(rs1,rs2):
-      m = np.zeros((len(rs1),len(rs2)),dtype=np.complex) # initialize matrix
+      m = np.zeros((len(rs1),len(rs2)),dtype=np.complex_) # initialize matrix
       for i in range(len(rs1)): # loop
         for j in range(len(rs2)): # loop
             m[i,j] = f(rs1[i],rs2[j]) # get kekule coupling

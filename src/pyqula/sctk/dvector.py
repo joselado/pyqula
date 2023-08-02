@@ -46,7 +46,7 @@ def matrix2dvector(m):
 
 def dvector2nonunitarity(m):
     """Given a matrix of dvectors, compute the non-unitarity"""
-    out = np.zeros(m.shape,dtype=np.complex)
+    out = np.zeros(m.shape,dtype=np.complex_)
     n = m.shape[1]
     for i in range(n): # loop over sites
         for j in range(n): # loop over sites
@@ -81,7 +81,7 @@ def dvector_times_rij_map(h,nrep=4):
     hi = h.get_hopping_dict()[(0,0,0)]
     dms = matrix2dvector(hi) # get the dvectors
     rs = h.geometry.r[:,0:3] # get coordinates
-    ds = np.zeros(rs.shape,dtype=np.complex) # array with the result
+    ds = np.zeros(rs.shape,dtype=np.complex_) # array with the result
     for i in range(len(rs)):
         for j in range(len(rs)):
             d = np.cross(dms[:,i,j],rs[i]-rs[j])
@@ -96,7 +96,7 @@ def dvector_times_mij_map(h,nrep=4):
     hi = h.get_hopping_dict()[(0,0,0)]
     dms = matrix2dvector(hi) # get the dvectors
     rs = h.geometry.r[:,0:3] # get coordinates
-    ds = np.zeros(rs.shape,dtype=np.complex) # array with the result
+    ds = np.zeros(rs.shape,dtype=np.complex_) # array with the result
     for i in range(len(rs)):
         for j in range(len(rs)):
             d = np.cross(dms[:,i,j],rs[i]-rs[j])

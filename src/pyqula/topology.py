@@ -128,7 +128,7 @@ def uij(wf1,wf2):
 
 
 def uij_slow(wf1,wf2):
-  m = np.matrix(np.zeros((len(wf1),len(wf2)),dtype=np.complex))
+  m = np.matrix(np.zeros((len(wf1),len(wf2)),dtype=np.complex_))
   for i in range(len(wf1)):
     for j in range(len(wf2)):
       m[i,j] = np.conjugate(wf1[i]).dot(wf2[j])
@@ -398,7 +398,7 @@ def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
   ws = np.conjugate(np.transpose(ws)) # transpose the waves
   n = len(es) # number of energies
   from .berry_curvaturef90 import berry_curvature as bc90
-  if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex)
+  if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex_)
   b = bc90(dhdx,dhdy,ws,es,operator,delta) # berry curvature
   return b*np.pi*np.pi*8 # normalize so the sum is 2pi Chern
 
@@ -414,7 +414,7 @@ def operator_berry_bands(hin,k=[0.,0.],operator=None,delta=0.00001):
   (es,ws) = algebra.eigh(hkgen(k)) # initial waves
   ws = np.conjugate(np.transpose(ws)) # transpose the waves
   from .berry_curvaturef90 import berry_curvature_bands as bcb90
-  if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex)
+  if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex_)
   bs = bcb90(dhdx,dhdy,ws,es,operator,delta) # berry curvatures
   return (es,bs*np.pi*np.pi*8) # normalize so the sum is 2pi Chern
 

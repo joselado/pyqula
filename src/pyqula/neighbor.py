@@ -28,7 +28,7 @@ def find_first_neighbor(r1,r2):
      r1 = np.array(r1)
      r2 = np.array(r2)
      nn = number_neighbors_jit(r1.real,r2.real) # number of first neighbors
-     out = np.zeros((nn,2),dtype=np.int) # generate indexes
+     out = np.zeros((nn,2),dtype=np.int_) # generate indexes
      out = find_first_neighbor_jit(r1.real,r2.real,out) # generate all the pairs
      return out
 
@@ -97,7 +97,7 @@ def parametric_hopping(r1,r2,fc,is_sparse=False):
     return m
   else:
     n = len(r2)
-    m = np.matrix(np.zeros((n,n),dtype=np.complex)) # complex matrix
+    m = np.matrix(np.zeros((n,n),dtype=np.complex_)) # complex matrix
     for i in range(len(r1)):
       for j in range(len(r2)):
         m[i,j] = fc(r1[i],r2[j])

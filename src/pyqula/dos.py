@@ -71,7 +71,7 @@ def dos0d(h,energies=np.linspace(-4,4,500),delta=0.01):
             delta=delta,energies=energies) # conventiona algorithm
 #  ds = [] # empty list
 #  if h.dimensionality==0:  # only for 0d
-#    iden = np.identity(h.intra.shape[0],dtype=np.complex) # create identity
+#    iden = np.identity(h.intra.shape[0],dtype=np.complex_) # create identity
 #    for e in es: # loop over energies
 #      g = ( (e+1j*delta)*iden -h.intra ).I # calculate green function
 #      if i is None: d = -g.trace()[0,0].imag

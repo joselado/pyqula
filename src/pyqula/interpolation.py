@@ -15,7 +15,7 @@ def intermatrix(fin,xs=np.linspace(-5.0,5.0,20)):
     m = fin(xs[i]) # call the function
     ar[i,:,:] = m.real # real part
     ai[i,:,:] = m.imag # imaginary part
-  zero = np.matrix(np.zeros(m.shape,dtype=np.complex)) # zero matrix
+  zero = np.matrix(np.zeros(m.shape,dtype=np.complex_)) # zero matrix
   fr = interp1d(xs, ar, axis=0,kind=3,fill_value=zero)
   fi = interp1d(xs, ai, axis=0,kind=3,fill_value=zero)
   def fout(e): # output function

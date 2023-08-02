@@ -43,13 +43,13 @@ def full_dm(h,use_fortran=use_fortran,nk=10,fermi=0.0,delta=1e-6,ds=None):
 
 def full_dm_python(n,es,vs,delta=1e-6):
   """Calculate the density matrix"""
-  dm = np.zeros((n,n),dtype=np.complex)
+  dm = np.zeros((n,n),dtype=np.complex_)
   return full_dm_python_jit(n,es,vs,dm,delta)
 
 
 def full_dm_python_d(n,es,vs,ks,d):
   """Calculate the density matrix"""
-  dm = np.zeros((n,n),dtype=np.complex)
+  dm = np.zeros((n,n),dtype=np.complex_)
   return full_dm_python_d_jit(n,es,vs,ks,np.array(d),dm)
 
 
@@ -103,7 +103,7 @@ def restricted_dm(h,use_fortran=True,mode="KPM",pairs=[],
     if ne is None: ne = npol*4
     from . import kpm
     xin = np.linspace(-.99*scale,0.0,ne) # input x array
-    out = np.zeros(len(pairs),dtype=np.complex)
+    out = np.zeros(len(pairs),dtype=np.complex_)
     ii = 0
     for (i,j) in pairs: # loop over inputs
       (x,y) = kpm.dm_ij_energy(h.intra,i=i,j=j,scale=scale,npol=npol,

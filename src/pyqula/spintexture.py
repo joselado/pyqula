@@ -39,7 +39,7 @@ def conduction_texture(h,n=2,**kwargs):
         ws = ws.T # transpose
         ws = ws[es>0.] # positive energies
         es = es[es>0.] # positive energies
-        m = np.zeros((n,n),dtype=np.complex) # create matrix
+        m = np.zeros((n,n),dtype=np.complex_) # create matrix
         for i in range(n):
             wi = np.conjugate(O@ws[i])
             for j in range(n):

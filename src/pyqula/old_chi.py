@@ -19,7 +19,7 @@ def chi0d(m,energies = [0.],t=0.0001):
 def chi1d(h,energies = [0.],t=0.0001,delta=0.01,q=0.001,nk=1000,U=None,adaptive=True,ks=None):
   hkgen = h.get_hk_gen() # get the generating hamiltonian
   n = len(h.geometry.x) # initialice response
-  m = np.zeros((len(energies),n*n),dtype=np.complex) # initialice
+  m = np.zeros((len(energies),n*n),dtype=np.complex_) # initialice
   if not adaptive: # full algorithm  
     if ks==None: ks = np.linspace(0.,1.,nk)  # create klist
     for k in ks:
@@ -58,7 +58,7 @@ def chi1d(h,energies = [0.],t=0.0001,delta=0.01,q=0.001,nk=1000,U=None,adaptive=
 def chi2d(h,energies = [0.],t=0.0001,delta=0.01,q=np.array([0.001,0.0]),nk=20,U=None,ks=None,collinear=False,adaptive=False):
   hkgen = h.get_hk_gen() # get the generating hamiltonian
   n = len(h.geometry.x) # initialice response
-  m = np.zeros((len(energies),n*n),dtype=np.complex) # initialice
+  m = np.zeros((len(energies),n*n),dtype=np.complex_) # initialice
   ##############################
   def get_chik(k):
     """Function to integrate"""
@@ -109,7 +109,7 @@ def sumchi(ms):
 
 def rpachi(ms,U=0.0):
   """ Calculate the RPA spin response"""
-  iden = np.matrix(np.identity(len(ms[0]),dtype=np.complex)) # identity
+  iden = np.matrix(np.identity(len(ms[0]),dtype=np.complex_)) # identity
   msrpa = [] # list with matrices
   for m in ms:
     m = np.matrix(m) # convert to matrix
@@ -124,7 +124,7 @@ def collinear_chi1d(h,energies = [0.],t=0.0001,delta=0.01,q=0.001,nk=1000,U=None
   collinear = True
   hkgen = h.get_hk_gen() # get the generating hamiltonian
   n = len(h.geometry.x) # initialice response
-  m = np.zeros((len(energies),n*n),dtype=np.complex) # initialice
+  m = np.zeros((len(energies),n*n),dtype=np.complex_) # initialice
   if not adaptive: # full algorithm  
     if ks==None: ks = np.linspace(0.,1.,nk)  # create klist
     for k in ks:

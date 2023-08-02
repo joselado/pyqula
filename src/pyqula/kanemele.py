@@ -64,7 +64,7 @@ def haldane(r1,r2,rm,fun=0.0,sublattice=None):
         from .potentials import array2potential
         kmfun = array2potential(r1[:,0],r1[:,1],fun)
     nsites = len(r1) # number of sites
-    mout = np.zeros((nsites,nsites),dtype=np.complex) # initialize
+    mout = np.zeros((nsites,nsites),dtype=np.complex_) # initialize
     from . import neighbor
     neighs = neighbor.connections(r1,rm) # list with neighbors of each site
     for i in range(nsites): # loop over initial site

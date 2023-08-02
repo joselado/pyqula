@@ -265,7 +265,7 @@ def supercell_hamiltonian(hin,nsuper=[1,1,1],sparse=True,ncut=3,
     for j in range(nsuper[1]):
       for k in range(nsuper[2]):
         pos.append(np.array([i,j,k])) # store position inside the supercell
-  zero = csc_matrix(np.zeros(h.intra.shape,dtype=np.complex)) # zero matrix
+  zero = csc_matrix(np.zeros(h.intra.shape,dtype=np.complex_)) # zero matrix
   get_tij = generate_get_tij(h) # return a function to abtain the hoppings
   def superhopping(dr=[0,0,0]): 
     """ Return a matrix with the hopping of the supercell"""
@@ -393,7 +393,7 @@ def read_from_file(input_file="hamiltonian.wan"):
   tlist = []
   norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
   norb = int(norb)
-  zeros = np.matrix(np.zeros((norb,norb),dtype=np.complex)) # zero matrix
+  zeros = np.matrix(np.zeros((norb,norb),dtype=np.complex_)) # zero matrix
   def get_t(i,j,k):
     mo = zeros.copy() # copy matrix
     found = False

@@ -75,10 +75,10 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     return matrixf # return function
 
 # matrices for the e-h subsector
-iden = np.array([[1.,0.],[0.,1.]],dtype=np.complex)
-tauz = np.array([[1.,0.],[0.,-1.]],dtype=np.complex)
-taux = np.array([[0.,1.],[1.,0.]],dtype=np.complex)
-tauy = np.array([[0.,1j],[-1j,0.]],dtype=np.complex)
+iden = np.array([[1.,0.],[0.,1.]],dtype=np.complex_)
+tauz = np.array([[1.,0.],[0.,-1.]],dtype=np.complex_)
+taux = np.array([[0.,1.],[1.,0.]],dtype=np.complex_)
+tauy = np.array([[0.,1j],[-1j,0.]],dtype=np.complex_)
 UU = taux + 1j*tauy # projector in the UU sector
 DD = taux - 1j*tauy # projector in DD sector
 
@@ -207,7 +207,7 @@ def get_triplet(r1,r2,df,L=1,dist2=1.0):
         d = df((r1+r2)/2.) # evaluate dvector
         delta = dvector2delta(d) # compute the local deltas
         ms = np.array([[delta[2],delta[0]],[delta[1],-delta[2]]])
-        return np.exp(1j*phi*L)*np.array(ms,dtype=np.complex)
+        return np.exp(1j*phi*L)*np.array(ms,dtype=np.complex_)
     else: return 0.0*tauz
 
 

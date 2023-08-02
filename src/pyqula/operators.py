@@ -118,7 +118,7 @@ def index(h,n=[0]):
   """Return a projector onto a site"""
   num = len(h.geometry.r)
   val = [1. for i in n]
-  m = csc((val,(n,n)),shape=(num,num),dtype=np.complex)
+  m = csc((val,(n,n)),shape=(num,num),dtype=np.complex_)
   m = h.spinless2full(m) # return matrix with e-h
   return Operator(m@m)
 
@@ -129,7 +129,7 @@ def rfunction2operator(h,f):
     n = len(h.geometry.r)
     val = [f(ri) for ri in h.geometry.r]
     inds = range(n)
-    m = csc((val,(inds,inds)),shape=(n,n),dtype=np.complex)
+    m = csc((val,(inds,inds)),shape=(n,n),dtype=np.complex_)
     return h.spinless2full(m) # return matrix
 
 
@@ -138,7 +138,7 @@ def density2operator(h,d):
     n = len(h.geometry.r)
     if len(d)!=n: raise
     inds = range(n)
-    m = csc((d,(inds,inds)),shape=(n,n),dtype=np.complex)
+    m = csc((d,(inds,inds)),shape=(n,n),dtype=np.complex_)
     return h.spinless2full(m) # return matrix
 
 
@@ -165,7 +165,7 @@ def interface1d(h,cut = 3.):
     if np.abs(y)<cut: data.append(1.) # if it belongs to the interface
     else:  data.append(0.)  # otherwise
   row, col = range(n),range(n)
-  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex)
+  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex_)
   return m # return the operator
 
 
@@ -175,7 +175,7 @@ def get_interface(h,fun=None):
   dind = 1 # index to which divide the positions
   if h.has_spin:  dind *= 2 # duplicate for spin
   if h.has_eh:  dind *= 2  # duplicate for eh
-  iden = csc(np.matrix(np.identity(dind,dtype=np.complex))) # identity matrix
+  iden = csc(np.matrix(np.identity(dind,dtype=np.complex_))) # identity matrix
   r = h.geometry.r # positions
   out = [[None for ri in r] for rj in r] # initialize
   if fun is None: # no input function
@@ -263,7 +263,7 @@ def get_bulk(h,fac=0.8):
     else: return NotImplemented
     from scipy.sparse import diags
     n = len(r) # number of sites
-    out = diags([out],offsets=[0],shape=(n,n),dtype=np.complex) # create matrix
+    out = diags([out],offsets=[0],shape=(n,n),dtype=np.complex_) # create matrix
     m = h.spinless2full(out) # return this matrix
     return m@m # return the square
 
@@ -298,7 +298,7 @@ def get_position(h,mode="z"):
     z = pos[i//dind]
     data.append(z)
   row, col = range(n),range(n)
-  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex)
+  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex_)
   return m # return the operator
 
 
@@ -318,7 +318,7 @@ from .operatortk.spin import get_sz
 def get_z(h):
   """Operator for the calculation of z expectation value"""
   if h.intra.shape[0]==len(h.geometry.z): # if as many positions as entries
-    op = np.zeros(h.intra.shape,dtype=np.complex) # initialize matrix
+    op = np.zeros(h.intra.shape,dtype=np.complex_) # initialize matrix
     for i in range(len(h.geometry.z)):
       op[i,i] = h.geometry.z[i]
     return op
@@ -326,7 +326,7 @@ def get_z(h):
   if h.has_eh: raise
   if not h.has_spin: raise
   if h.has_spin:
-    op = np.zeros(h.intra.shape,dtype=np.complex) # initialize matrix
+    op = np.zeros(h.intra.shape,dtype=np.complex_) # initialize matrix
     for i in range(len(op)//2):   
       op[2*i,2*i+1] = -1j
       op[2*i+1,2*i] = 1j
@@ -345,7 +345,7 @@ def get_rop(h,fun):
   n = h.intra.shape[0]
   row = range(n)
   col = range(n)
-  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex)
+  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex_)
   return m
 
 
@@ -367,7 +367,7 @@ def get_sublattice(h,mode="both"):
   n = h.intra.shape[0]
   row = range(n)
   col = range(n)
-  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex)
+  m = csc((data,(row,col)),shape=(n,n),dtype=np.complex_)
   return m
 
 
@@ -459,7 +459,7 @@ def get_envelop(h,sites=[],d=0.3):
       c = c*d # renormalize all the hoppings
       c[s] = 1.0 # set same atom to 1
       c = c/np.sum(c) # normalize the whole vector
-      c = diags([c],[0],dtype=np.complex) # create matrix
+      c = diags([c],[0],dtype=np.complex_) # create matrix
       out.append(c) # store matrix
     return out # return matrices
 
@@ -591,7 +591,7 @@ def get_layer(self,n=0):
    fac = bool_layer_array(self.geometry,n=n)
    inds = range(len(fac)) # sites
    d = len(fac)
-   m = csc_matrix((fac,(inds,inds)),shape=(d,d),dtype=np.complex) # matrix
+   m = csc_matrix((fac,(inds,inds)),shape=(d,d),dtype=np.complex_) # matrix
    return self.spinless2full(m)
 
 

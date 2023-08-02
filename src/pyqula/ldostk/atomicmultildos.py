@@ -136,7 +136,7 @@ def get_real_space_density_generator(lodict,g,has_spin=False):
         """Function that return the real space density"""
         nc = len(w) # number of components of the Bloch wavefunction
         phis = np.array([g.bloch_phase(d,k) for d in ds]) # phases
-        out = np.zeros(orbs[0].shape[0],dtype=np.complex)
+        out = np.zeros(orbs[0].shape[0],dtype=np.complex_)
         if not has_spin: # spinless
           return get_real_space_density_jit(w,phis,inds,orbs,out).real
         else: # spinful
