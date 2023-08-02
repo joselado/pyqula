@@ -30,7 +30,7 @@ def fermi_surface_generator(h,
   else:
       kxs = np.linspace(-nsuper,nsuper,nk,endpoint=True)  # generate kx
       kys = np.linspace(-nsuper,nsuper,nk,endpoint=True)  # generate ky
-  iden = np.identity(h.intra.shape[0],dtype=np.complex)
+  iden = np.identity(h.intra.shape[0],dtype=np.complex_)
   kxout = []
   kyout = []
   if reciprocal: fR = h.geometry.get_k2K_generator() # get matrix

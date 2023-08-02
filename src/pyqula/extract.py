@@ -11,7 +11,7 @@ def spin_channel(m,spin_column=None,spin_row=None,has_spin=True):
   if (spin_row is None) or (spin_column is None): return m # return initial
   n = m.shape[0] # shape of the matrix
   n2 = n//2 # number of orbitals
-  out = np.zeros((n,n),dtype=np.complex)
+  out = np.zeros((n,n),dtype=np.complex_)
   if spin_column=="up": ii = 0
   else: ii = 1
   if spin_row=="up": jj = 0
@@ -26,7 +26,7 @@ def swave(m):
     """Extract the swave pairing from a matrix, assuming
     the Nambu spinor basis"""
     n = m.shape[0]//4 # number of sites
-    ds = np.zeros(n,dtype=np.complex) # pairing
+    ds = np.zeros(n,dtype=np.complex_) # pairing
     for i in range(n):
       ds[i] = m[4*i,4*i+2] # get the pairing
     return ds
@@ -197,7 +197,7 @@ def extract_onsite_matrix_function(h,**kwargs):
       if 2*n!=m.shape[0]: raise
       def f(r):
         ind = h.geometry.get_index(r,**kwargs) # get the index
-        if ind is None: return np.zeros((2,2),dtype=np.complex)
+        if ind is None: return np.zeros((2,2),dtype=np.complex_)
         else: return m[2*ind:2*ind+2,2*ind:2*ind+2]
     return f # return function
 

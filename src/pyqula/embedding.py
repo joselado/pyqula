@@ -119,7 +119,7 @@ def dos_impurity(h,vc=None,energies=np.linspace(-.5,.5,20),
                    use_generator=False):
   """ Calculates the green function using the embedding technique"""
   if vc is None: vc = h.intra  # assume perfect
-  iden = np.identity(h.intra.shape[0],dtype=np.complex)
+  iden = np.identity(h.intra.shape[0],dtype=np.complex_)
   if use_generator:
     getgreen = green.green_generator(h,nk=nk) # get the function
     def get_green(energy): return getgreen(energy,delta=delta)
@@ -259,7 +259,7 @@ def get_gf_exact(self,energy=0.0,delta=1e-2,
     n = self.m.shape[0]
     ms = onsite_defective_central(h,self.m,nsuper)
     ns = ms.shape[0] # dimension of the supercell
-    iden = np.identity(ns,dtype=np.complex) # identity
+    iden = np.identity(ns,dtype=np.complex_) # identity
     emat = iden*(e + delta*1j) # energy matrix
     gv = algebra.inv(emat - ms -selfe)   # Defective Green function
     return gv

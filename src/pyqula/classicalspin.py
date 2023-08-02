@@ -286,7 +286,7 @@ def add_tensor(sm,fun):
 
 def rotatez(angle):
   """In-plane rotation"""
-  m = np.matrix(np.zeros((3,3),dtype=np.complex)) # zero matrix
+  m = np.matrix(np.zeros((3,3),dtype=np.complex_)) # zero matrix
   cp = np.cos(angle*np.pi)
   sp = np.sin(angle*np.pi)
   m[0,0] = cp

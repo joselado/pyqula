@@ -118,13 +118,13 @@ def get_momentsA_jit(v,m,n,A,mus):
 def get_moments_ij(m0,n=100,i=0,j=0,use_fortran=use_fortran):
   """ Get the first n moments of a the |i><j| operator
   using the Chebychev recursion relations"""
-  m = coo_matrix(m0,dtype=np.complex)
+  m = coo_matrix(m0,dtype=np.complex_)
   if use_fortran:
     mus = kpmf90.get_moments_ij(m.row+1,m.col+1,m.data,n,m.shape[0],i+1,j+1)
     return mus
   else:
-    mus = np.zeros(n,dtype=np.complex) # empty arrray for the moments
-    v = np.zeros(m.shape[0],dtype=np.complex) ; v[i] = 1.0 # initial vector
+    mus = np.zeros(n,dtype=np.complex_) # empty arrray for the moments
+    v = np.zeros(m.shape[0],dtype=np.complex_) ; v[i] = 1.0 # initial vector
     v = np.matrix([v]).T # zero vector
     am = v.copy()
     a = m*v  # vector number 1
@@ -148,8 +148,8 @@ def get_moments_vivj(m0,vi,vj,n=100,use_fortran=False):
 def get_moments_vivj_python(m0,vi,vj,n=100):
   """ Get the first n moments of a the |i><j| operator
   using the Chebychev recursion relations"""
-  m = csc_matrix(m0,dtype=np.complex)
-  mus = np.zeros(n,dtype=np.complex) # empty arrray for the moments
+  m = csc_matrix(m0,dtype=np.complex_)
+  mus = np.zeros(n,dtype=np.complex_) # empty arrray for the moments
   v = vi.copy()
   am = v.copy()
   a = m@v  # vector number 1
@@ -295,7 +295,7 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
     return mus
   from . import parallel
   out = parallel.pcall(pfun,range(ntries))
-  mus = np.zeros(out[0].shape,dtype=np.complex)
+  mus = np.zeros(out[0].shape,dtype=np.complex_)
   for o in out: mus = mus + o # add contribution
   return mus/ntries
 
@@ -397,7 +397,7 @@ def generate_profile(mus,xs,kernel="jackson",use_fortran=use_fortran):
   if use_fortran: # call the fortran routine
     ys = kpmf90.generate_profile(mus,xs) 
   else: # do a python loop
-    ys = np.zeros(xs.shape,dtype=np.complex) + mus[0] # first term
+    ys = np.zeros(xs.shape,dtype=np.complex_) + mus[0] # first term
     # loop over all contributions
     for i in range(1,len(mus)):
       mu = mus[i]
@@ -418,7 +418,7 @@ def generate_green_profile(mus,xs,kernel="jackson",use_fortran=use_fortran):
 #  xs = np.array([0.])
   tm = np.zeros(xs.shape) +1.
   t = xs.copy()
-  ys = np.zeros(xs.shape,dtype=np.complex) + mus[0]/2 # first term
+  ys = np.zeros(xs.shape,dtype=np.complex_) + mus[0]/2 # first term
   if kernel=="jackson": mus = jackson_kernel(mus)
   elif kernel=="lorentz": mus = lorentz_kernel(mus)
   else: raise

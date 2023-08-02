@@ -6,8 +6,8 @@ import numpy as np
 
 def correlator0d(m,energies=np.linspace(-10.,10.,400),i=0,j=0,delta=0.07):
   """Calculate a certain correlator"""
-  iden = np.identity(m.shape[0],dtype=np.complex)
-  zs = np.zeros(energies.shape[0],dtype=np.complex)
+  iden = np.identity(m.shape[0],dtype=np.complex_)
+  zs = np.zeros(energies.shape[0],dtype=np.complex_)
   for (ie,e) in zip(range(len(energies)),energies):
     m0 = ((e+1j*delta)*iden - m).I # inverse 
     zs[ie] = m0[i,j]
@@ -31,9 +31,9 @@ def gs_correlator(m,i=0,j=0):
 def dm_ij_energy(m,ne=500,scale=10.,i=0,j=0,delta=0.07):
   """Calculate a certain correlator"""
   energies = np.linspace(-scale,scale,ne)
-  iden = np.identity(m.shape[0],dtype=np.complex)
-  zs0 = np.zeros(energies.shape[0],dtype=np.complex)
-  zs1 = np.zeros(energies.shape[0],dtype=np.complex)
+  iden = np.identity(m.shape[0],dtype=np.complex_)
+  zs0 = np.zeros(energies.shape[0],dtype=np.complex_)
+  zs1 = np.zeros(energies.shape[0],dtype=np.complex_)
   for (ie,e) in zip(range(len(energies)),energies):
     m0 = ((e+1j*delta)*iden - m).I # inverse 
     m1 = ((e-1j*delta)*iden - m).I # inverse 

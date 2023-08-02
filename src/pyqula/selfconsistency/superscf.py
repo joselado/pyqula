@@ -22,7 +22,7 @@ def anomalous_term_ij(v,dm):
     assuming a nmabu basis"""
     # we will assume that v contains up,down in alternating order
     n = dm.shape[0] # number of spinless sites
-    out = np.zeros((n,n),dtype=np.complex)
+    out = np.zeros((n,n),dtype=np.complex_)
     return anomalous_term_ij_jit(v,dm,out)
 
 

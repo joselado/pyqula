@@ -75,7 +75,7 @@ def effective_mass_velocity(h,k,dk=1e-3,w0=None):
         m = np.array([braket_wAw(w,mass(k)) for w in w0]) # velocity before
         return m
     d = h.dimensionality
-    m = np.zeros((len(w0),d,d),dtype=np.complex)
+    m = np.zeros((len(w0),d,d),dtype=np.complex_)
     for i in range(d):
       for j in range(d):
         m[:,i,j] = d2edk2(i,j) # get all the masses

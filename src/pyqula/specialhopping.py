@@ -63,7 +63,7 @@ def twisted_matrix(cutoff=5.0,ti=0.3,lambi=8.0,mint=1e-5,
 #      ts = ts[0:nout]
 #      ii = ii[0:nout]
 #      jj = jj[0:nout]
-#      out = csc_matrix((ts,(ii-1,jj-1)),shape=(nr,nr),dtype=np.complex) # matrix
+#      out = csc_matrix((ts,(ii-1,jj-1)),shape=(nr,nr),dtype=np.complex_) # matrix
 #      return out
 #    return funhop # return function
   if True:
@@ -143,7 +143,7 @@ def distance_hopping_matrix(vs,ds):
         r1 = np.array(r1)
         r2 = np.array(r2)
         n = len(r1)
-        out = np.zeros((n,n),dtype=np.complex) # output
+        out = np.zeros((n,n),dtype=np.complex_) # output
         return distance_hopping_matrix_jit(r1,r2,vs,ds*ds,out) 
     return mgenerator
 
@@ -227,7 +227,7 @@ def twisted_matrix_python(cutoff=10,**kwargs):
   def tij(rs1,rs2): # function to return
       nr = len(rs1) # length
       nmax = nr*int(10*cutoff**2) # maximum number of hoppings
-      data = np.zeros(nmax,dtype=np.complex) # data
+      data = np.zeros(nmax,dtype=np.complex_) # data
       ii = np.zeros(nmax,dtype=int) # index
       jj = np.zeros(nmax,dtype=int) # index
       ii,jj,data,nk = twisted_matrix_jit(np.array(rs1),np.array(rs2),
@@ -236,7 +236,7 @@ def twisted_matrix_python(cutoff=10,**kwargs):
       ii = ii[0:nk] # only nonzero
       jj = jj[0:nk] # only nonzero
       data = data[0:nk] # only nonzero
-      out = csc_matrix((data,(ii,jj)),shape=(nr,nr),dtype=np.complex) # matrix
+      out = csc_matrix((data,(ii,jj)),shape=(nr,nr),dtype=np.complex_) # matrix
       out.eliminate_zeros()
       return out
   return tij

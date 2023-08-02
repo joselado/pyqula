@@ -31,7 +31,7 @@ def dyson2d(intra,tx,ty,txy,txmy,nx,ny,nk,ez):
         return dyson2df90.dyson2d(intra,tx,ty,txy,txmy,nx,ny,nk,ez)
     else:
         ns = intra.shape[0]*nx*ny
-        g = np.zeros((ns,ns),dtype=np.complex)
+        g = np.zeros((ns,ns),dtype=np.complex_)
         nkx,nky = nk,nk
         return dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g)
 
@@ -39,7 +39,7 @@ def dyson1d(intra,inter,nx,nkx,ez):
     """Workaround for 1D"""
     zero = intra*0.0 # zero matrix
     ns = intra.shape[0]*nx
-    g = np.zeros((ns,ns),dtype=np.complex)
+    g = np.zeros((ns,ns),dtype=np.complex_)
     return dyson2d_jit(intra,inter,zero,zero,zero,nx,1,nkx,1,ez,g)
 
 

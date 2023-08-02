@@ -13,7 +13,7 @@ def spin_mixing_part(m):
             d1.append(d0[i])
             r1.append(r0[i]//2)
             c1.append(c0[i]//2)
-    mo = csc_matrix((d1,(r1,c1)),shape=(n,n),dtype=np.complex)
+    mo = csc_matrix((d1,(r1,c1)),shape=(n,n),dtype=np.complex_)
     if issparse(m): return np.array(mo.todense())
     else: return mo
 
