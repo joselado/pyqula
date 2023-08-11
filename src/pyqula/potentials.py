@@ -38,7 +38,7 @@ class Potential():
 
 
 
-def cnpot(n=4,k=None,v=1.0,angle=0.):
+def cnpot(n=4,k=None,v=1.0,angle=0.,r0=np.array([0.,0.,0.])):
   """Returns a function that generates a potential
   with C_n symmetry"""
   if k is None: raise
@@ -47,6 +47,7 @@ def cnpot(n=4,k=None,v=1.0,angle=0.):
   if n%2==1: f = np.sin # even 
   def fun(r):
     """Function with the potential"""
+    r = r - r0 # shift
     x0,y0 = r[0],r[1]
     def Rk(k0,angle):
       x0,y0 = k0[0],k0[1] # components
@@ -263,6 +264,75 @@ def stacking_potential(g,**kwargs):
     return Potential(fv) # return the potential
 
 
+
+
+
+def commensurate_vortex_harmonic(g):
+    """Return a skyrmion potential
+    commensurate with the lattice.
+    It may work only for triangular and square lattice
+    """
+    from . import geometry
+    if g.dimensionality==2:
+      a12 = g.a2.dot(g.a1)/(np.sqrt(g.a1.dot(g.a1))*np.sqrt(g.a1.dot(g.a1)))
+      if 0.49<abs(a12)<0.51: 
+          g0 = geometry.triangular_lattice() # triangular
+          # this is a quick fix
+      elif abs(a12)<0.01: 
+          g0 = geometry.square_lattice() # square
+      else: raise # not implemented
+    else: raise
+    h0 = g0.get_hamiltonian()
+    h0.add_rashba(1.0) # add Rashba SOC
+    r2f = g.get_k2K_generator() # get function
+    hk = h0.get_hk_gen() # generator
+    da = np.sqrt(g.a1.dot(g.a1))/2 # length of the vector
+    def fun(r):
+        rf = r/da
+        rf = r2f(rf) # convert to fractional
+#        rf = Ri@rf
+        m = hk(rf) # evaluate Hamiltonian
+        mx,my = m[0,1].real,-m[0,1].imag
+        return np.array([mx,my,0.])
+    return Potential(fun)
+
+
+def commensurate_skyrmion_harmonic(g):
+    """Create a skyrmion commensurate with the lattice"""
+    # this function as nood as good as it could
+    # probably the vectors should have the same length
+    fv = commensurate_vortex(g) # get the vortex part
+    vs = [fv(ri) for ri in g.r] # magnetizations
+    vmax = np.max([vi.dot(vi) for vi in vs]) # absolute value
+    fz = commensurate_potential(g,minmax=[-1.,1.],n=6,k=1) # z component
+    def fun(r):
+        m = fv(r) # xy component
+        dz = vmax - m.dot(m) # value of z component
+        return m + np.array([0.,0.,fz(r)])*dz
+    return Potential(fun)
+
+
+
+def commensurate_skyrmion(g,r0=None):
+    """Return a conmmensurate skyrmion"""
+    if r0 is not None: rc = r0
+    else: rc = np.mean(g.r,axis=0) # average position
+    da = np.sqrt(g.a1.dot(g.a1)) # average radius
+    R = da/4. # radius of the skyrmion
+    def fun(r):
+        r = r - rc # radious with respect to the center
+        r = r/R # normalize to the radious of the skyrmion
+        dr = np.sqrt(r.dot(r)) # distance to center
+        if dr<1.: 
+            mz = np.sqrt(1. - dr**2) # z component
+            return r + np.array([0.,0.,mz])
+        if 1.<dr<1.5: 
+            mxy = r/dr*(1.5-dr)
+            mz = np.sqrt(1. - mxy.dot(mxy)) # z component
+            return mxy + np.array([0.,0.,-mz])
+        else:
+            return np.array([0.,0.,-1.])
+    return Potential(fun)
 
 
 

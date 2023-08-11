@@ -37,7 +37,7 @@ def onsite_delta_vev(h,T=0.0,nk=10,**kwargs):
 
 
 
-@jit
+@jit(nopython=True)
 def compute_pairing(ws,p):
     """Compute the pairing"""
     n = len(ws) # number of wavefunctions
@@ -49,7 +49,7 @@ def compute_pairing(ws,p):
     return p # return expectation value
 
 
-@jit
+@jit(nopython=True)
 def compute_density(ws,p):
     """Compute the electronic density"""
     n = len(ws) # number of wavefunctions
