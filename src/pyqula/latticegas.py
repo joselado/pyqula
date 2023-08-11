@@ -28,6 +28,8 @@ class LatticeGas():
         return energy_jax(self.mu,self.pairs,self.j,self.den)
     def get_local_energy(self,**kwargs):
         return get_local_energy(self,**kwargs)
+    def get_local_mu(self,**kwargs):
+        return get_local_mu(self,**kwargs)
     def optimize_energy(self,**kwargs):
         """Optimize the energy"""
 #        print(self.den) ; exit()
@@ -126,6 +128,26 @@ def get_local_energy(LG,normalize=False):
 
 
 
+def get_local_mu(LG,normalize=False):
+    """Return the local chemical potential"""
+    def get(ii): # get for site ii
+        LG0 = LG.copy() # make a dummy copy
+        pairs0 = [] # empty list
+        j0 = [] # empty list
+        for (p,j) in zip(LG.pairs,LG.j): # take only those for this site
+            if ii==p[0] or ii==p[1]: # site ii is here
+                pairs0.append(p)
+                j0.append(j)
+        mu0 = LG.mu*0. # zeros
+        mu0[ii] = LG.mu[ii]
+        LG0.pairs = np.array(pairs0)
+        LG0.j = np.array(j0)/2.
+        LG0.den[ii] = 1.0 # overwrite to return chemical potential
+        LG0.mu = mu0
+        enii = LG0.get_energy()
+        if normalize: return enii/np.sum(LG0.j)
+        else: return enii
+    return np.array([get(ii) for ii in range(len(LG.geometry.r))]) # loop over positions
 
 
 

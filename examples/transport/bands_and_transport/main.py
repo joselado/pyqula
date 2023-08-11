@@ -20,10 +20,10 @@ hl = h.copy()
 hcs = [h for i in range(20)]
 ht = heterostructures.build(hr,hl,central=hcs)
 es = np.linspace(-3.,3.,400)
-ht.delta = 1e-1
+ht.delta = 1e-3
 #ts = np.array([ht.didv(energy=e) for e in es])
-ht.use_minimal_selfenergy = True
-ht.minimal_selfenergy_gamma = 1.
+#ht.use_minimal_selfenergy = True
+#ht.minimal_selfenergy_gamma = 1.
 ts = np.array([ht.didv(energy=e) for e in es])
 m = np.genfromtxt("BANDS.OUT").transpose()
 plt.subplot(2,1,1)
