@@ -9,7 +9,7 @@ def get_operator(self,name,**kwargs):
       if type(name) is potentials.Potential or callable(name): 
           out = self.copy()*0. # initialize
           out.add_onsite(name) # add onsite
-          return operators.Operator(out.intra) # return operator
+          return operators.Operator(out.intra,linear=True) # return operator
       if name is None: return None # return operator
       if name=="None": return None
       elif name in ["berry","Berry"]: 

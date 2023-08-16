@@ -4,30 +4,27 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
 from pyqula import geometry
-from pyqula import heterostructures
+from pyqula.heterostructures import LocalProbe
 import numpy as np
 import matplotlib.pyplot as plt
-g = geometry.square_ribbon(1)
-#g = g.supercell(3)
+g = geometry.chain()
 h = g.get_hamiltonian()
 h.shift_fermi(1.) # shift the chemical potential
-h1 = h.copy() # copy
-h2 = h.copy() # copy
-h1.add_swave(.0) # add electron hole symmetry
-h2.add_swave(.1) # pairing gap of 0.01
-#h2.add_pairing(mode="triplet",delta=0.05) # pairing gap of 0.01
-ht = heterostructures.build(h1,h2) # create the junction
-ht.delta = 1e-8 # analytic continuation of the Green's functions
-es = np.linspace(-.2,.2,101) # grid of energies
-T = 2e-2 # reference transparency 
-ht.set_coupling(T) # set the transparency for dIdV
-ts = [ht.didv(energy=e) for e in es] # calculate transmission
-ks = [ht.get_kappa(energy=e) for e in es] # calculate decay rate
+D = 0.1 # superconducting gap
+h.add_swave(D) # pairing gap of 0.1
+lp = LocalProbe(h,delta=1e-8) # create a local probe object
+lp.T = 2e-2 # reference transparency 
+es = np.linspace(-2*D,2*D,101) # grid of energies
+ts = [lp.didv(energy=e) for e in es] # calculate transmission
+ks = [lp.get_kappa(energy=e) for e in es] # calculate decay rate
 plt.subplot(121)
-plt.plot(es,ts,marker="o")
+plt.plot(es/D,ts,marker="o")
+plt.xlabel("Energy/$\Delta$") ; plt.ylabel("dIdV") ; plt.ylim([0.,0.006])
 plt.subplot(122)
-plt.plot(es,ks,marker="o")
+plt.plot(es/D,ks,marker="o")
+plt.xlabel("Energy/$\Delta$") ; plt.ylabel("$\\kappa/\\kappa_N$")
 plt.ylim([0,4.1])
+plt.tight_layout()
 plt.show()
 
 
