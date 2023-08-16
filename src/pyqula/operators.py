@@ -28,9 +28,11 @@ class Operator():
         if algebra.ismatrix(m):
             self.m = lambda v,k=None: m@v # create dummy function
             self.matrix = m
+            self.linear = True
         elif type(m)==Operator: 
             self.m = m.m
             self.linear = m.linear
+            self.matrix = m.matrix
         elif isinstance(m, numbers.Number): 
             self.m = lambda v,k=None: m*v
         elif callable(m): 
