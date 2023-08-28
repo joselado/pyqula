@@ -14,6 +14,10 @@ def get_operator(self,name,**kwargs):
       if name=="None": return None
       elif name in ["berry","Berry"]: 
           return operators.get_berry(self,**kwargs)
+      elif name=="site": 
+          return operators.get_site(self,**kwargs)
+      elif name=="correlator": 
+          return operators.get_correlator_ij(self,**kwargs)
       elif name=="valleyberry": 
           return operators.get_operator_berry(self,"valley",**kwargs)
       elif name=="szvalleyberry": 
