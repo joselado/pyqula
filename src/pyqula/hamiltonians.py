@@ -531,8 +531,6 @@ class Hamiltonian():
         ops = [operators.index(self,n=[i]) for i in range(n)]
         op = self.get_operator(operator) # get an operator
         if op is not None:
-          print(ops[0].matrix)
-          print(op.matrix)
           ops = [(o*op).get_matrix() for o in ops] # define operators
         else:
           ops = [o.get_matrix() for o in ops] # define operators
@@ -617,6 +615,15 @@ class Hamiltonian():
     def didv(self,**kwargs):
         from .transporttk.localprobe import Hamiltonian_didv
         return Hamiltonian_didv(self,**kwargs)
+    def get_dm_vev(self,A,**kwargs):
+        from . import get_dm_vev
+        return get_dm_vev(self,A,**kwargs)
+    def get_single_vev(self,A,**kwargs):
+        A = self.get_operator(A) # get an operator
+        return spectrum.ev(self,operator=A.get_matrix(),**kwargs).real
+    def get_several_vev(self,As,**kwargs):
+        As = [self.get_operator(A).get_matrix() for A in As] # get an operator
+        return spectrum.ev(self,operator=As,**kwargs).real
 
 
 hamiltonian = Hamiltonian

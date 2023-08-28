@@ -35,9 +35,9 @@ def elementchi(ws1,es1,ws2,es2,omegas,ii,jj,T,delta,out):
     """Compute the response function"""
     out  = out*0.0 # initialize
     n = len(ws1) # number of wavefunctions
-    for i in range(n):
+    for i in range(n): # first loop over states
       oi = es1[i]<0.0 # first occupation
-      for j in range(n):
+      for j in range(n): # second loop over states
           oj = es2[j]<0.0 # second occupation
           fac = ws1[i][ii]*ws2[j][ii] # add the factor
           fac *= np.conjugate(ws1[i][jj]*ws2[j][jj]) # add the factor
@@ -194,6 +194,8 @@ def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta,out):
     return out
 
 
+
+from .chitk.static import chargechi as static_charge_correlator
 
 
 

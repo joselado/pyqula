@@ -139,7 +139,7 @@ def extract_from_hamiltonian(self,name,**kwargs):
     """Extract a quantity from a Hamiltonian"""
     h0 = self.copy()
     if self.is_sparse: h0.turn_dense() # turn into dense form
-    if name=="density":
+    if name in ["density","onsite"]:
       if self.has_eh: 
           h0.remove_nambu()
           m = h0.intra

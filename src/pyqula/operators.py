@@ -627,6 +627,20 @@ def get_location(self,r=[0.,0.,0.]):
     return index(self,n=[ir])
 
 
+def get_site(H,index=0):
+    from . import potentials
+    f = potentials.impurity(H.geometry.r[index],v=1.0)
+    return Operator(f)
+
+
+def get_correlator_ij(H,i=0,j=0):
+    """Return a projector for the correlator ij"""
+    d = len(H.geometry.r)
+    m = np.zeros((d,d),dtype=np.complex_)
+    m[i,j] = 1.0 # set this to nonzero
+    # WARNING, this uses dense matrices
+    m = H.spinless2full(m) # as full matrix
+    return Operator(m) # return operator
 
 
 
