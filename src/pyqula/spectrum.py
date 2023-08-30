@@ -476,19 +476,22 @@ def set_filling(h,filling=0.5,nk=10,extrae=0.,
     h.shift_fermi(-efermi) # shift the fermi energy
 
 
-def get_fermi_energy(es,filling,fermi_shift=0.0):
+def get_fermi_energy(es,filling,fermi_shift=0.0,
+        e_reg = 1e-5 # energy regularization for fully filled/empty
+        ):
   """Return the Fermi energy"""
   ne = len(es) ; ifermi = int(round(ne*filling)) # index for fermi
-  if ifermi>=ne: ifermi = ne-1
   sorte = np.sort(es) # sorted eigenvalues
-  if ifermi==0: return sorte[0] + fermi_shift
-  fermi = (sorte[ifermi-1] + sorte[ifermi])/2.+fermi_shift # fermi energy
-  return fermi
+  if ifermi>=ne: return sorte[-1] + fermi_shift + e_reg
+  elif ifermi==0: return sorte[0] + fermi_shift - e_reg
+  else:
+      fermi = (sorte[ifermi-1] + sorte[ifermi])/2.+fermi_shift # fermi energy
+      return fermi
 
 
 def get_fermi4filling(h,filling,nk=8):
     """Return the fermi energy for a certain filling"""
-    if h.has_eh: 
+    if h.has_eh: # this is an approximation, accurate version to be written 
         h0 = h.copy()
         h0.remove_nambu()
         return get_fermi4filling(h0,filling,nk=nk) # workaround
