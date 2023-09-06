@@ -17,3 +17,4 @@ dist/
 MULTI*
 *.TXT
 .ipynb_checkpoints
+.mpsfolder
