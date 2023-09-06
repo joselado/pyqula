@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.linalg as lg
-
+from . import algebra
 
 
 from scipy.sparse import csc_matrix,bmat
@@ -60,21 +60,22 @@ def global_spin_rotation(m,vector = np.array([0.,0.,1.]),angle = 0.0,
     raise
   R = [[None for i in range(n)] for j in range(n)] # rotation matrix
   for i in range(n): # loop over sites
-    u = np.array(vector) # rotation direction
-    u = u/np.sqrt(u.dot(u)) # normalize rotation direction
-    rot = (u[0]*sx + u[1]*sy + u[2]*sz)/2. # rotation
-    # a factor 2 is taken out due to 1/2 of S
-    # a factor 2 is added to have BZ in the interval 0,1
-    rot = lg.expm(2.*np.pi*1j*rot*angle/2.0)
-#    if i in atoms:
-    R[i][i] = rot  # save term
+      u = np.array(vector) # rotation direction
+      u = u/np.sqrt(u.dot(u)) # normalize rotation direction
+      rot = (u[0]*sx + u[1]*sy + u[2]*sz)/2. # rotation
+      # a factor 2 is taken out due to 1/2 of S
+      # a factor 2 is added to have BZ in the interval 0,1
+      rot = algebra.todense(rot)
+      rot = lg.expm(2.*np.pi*1j*rot*angle/2.0)
+  #    if i in atoms:
+      R[i][i] = rot  # save term
 #    else:
 #      R[i][i] = iden  # save term
   R = bmat(R)  # convert to full sparse matrix
   if spiral:  # for spin spiral
     mout = R @ m  # rotate matrix
   else:  # normal global rotation
-    mout = R @ m @ R.H  # rotate matrix
+    mout = R @ m @ algebra.dagger(R)  # rotate matrix
   return mout # return dense matrix
 
 

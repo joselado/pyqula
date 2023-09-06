@@ -196,6 +196,9 @@ def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta,out):
 
 
 from .chitk.static import chargechi as static_charge_correlator
+from .chitk.static import szchi as static_sz_correlator
+from .chitk.static import sxchi as static_sx_correlator
+from .chitk.static import sychi as static_sy_correlator
 
 
 
