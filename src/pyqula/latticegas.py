@@ -46,8 +46,15 @@ class LatticeGas():
 
 from numba import jit
 
-@jit(nopython=True)
 def energy_jax(mu,pairs,js,den):
+    if len(pairs)==0:
+        pairs = np.array([[0,0]])
+        js = np.array([0.])
+    return energy_jax_jit(mu,pairs,js,den)
+
+
+@jit(nopython=True)
+def energy_jax_jit(mu,pairs,js,den):
     """Compute the energy of the lattice gas model"""
     nump = len(pairs) # number of pairs
     n = len(mu) # number of sites
