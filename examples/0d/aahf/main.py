@@ -52,6 +52,7 @@ plt.xlabel("AAH Onsite")
 plt.ylabel("1/(Localization length)")
 plt.subplot(1,2,2)
 plt.scatter(varray,earray,marker="o",c=varray,cmap="cool")
+plt.ylabel("Energy")
 plt.xlabel("AAH Onsite")
 plt.colorbar(label="1/$\\lambda$")
 
