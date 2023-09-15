@@ -17,7 +17,8 @@ class LatticeGas():
     def set_filling(self,filling):
         """Set filling of the system"""
         self.den[:] = 0. # initialize all to zero
-        self.den[0:int(np.round(self.nsites*filling))] = 1.0 # put some to 1
+        N = int(np.round(self.nsites*filling)) # filled sites
+        self.den = random_density(len(self.den),N) # random density
     def add_interaction(self,Jij=None,**kwargs):
         h = self.geometry.get_hamiltonian(has_spin=False,tij=Jij)
         m = coo_matrix(h.get_hk_gen()([0.,0.,0.])) # get onsite matrix
@@ -156,6 +157,19 @@ def get_local_mu(LG,normalize=False):
         else: return enii
     return np.array([get(ii) for ii in range(len(LG.geometry.r))]) # loop over positions
 
+
+
+def random_density(Ntot,N):
+    """Generate an array with N 1's and Ntot-N 0's,
+    with the 1's randomly distributed"""
+    out = np.zeros(Ntot) # initialize
+    inds = [i for i in range(Ntot)] # indexes with 1's
+    for ii in range(N): # loop
+        jj = np.random.randint(0,len(inds)) # random number from 0 to randint
+        ind = inds[jj] # index with 1
+        out[ind] = 1.0
+        del inds[jj] # remove this one
+    return np.array(out)
 
 
 
