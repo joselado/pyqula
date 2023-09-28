@@ -5,19 +5,19 @@ from numba import jit
 
 def matrix_tails(m,discard=None):
     """Return the tails of a 1d Hamiltonian"""
-    es,ws = lg.eigh(m)
+    es,ws = lg.eigh(m) # diagonalize matrix
     ws = np.abs(np.transpose(ws)) # wavefunctions
-    if callable(discard): # check if the wave is accepted
+    if discard is not None: # if there is a discard function
       wout = []
       eout = []
-      for (e,w) in zip(es,ws):
-        if discard(w): 
+      for (e,w) in zip(es,ws): # loop over waves
+        if not discard(w): # check if this wave is discarded 
           wout.append(w) # store wave
           eout.append(e) # store wave
       ws = np.array(wout) # store
       es = np.array(eout) # store
     ls = np.array([loclength([w]) for w in ws]) # localization length
-    np.savetxt("TAILS.OUT",np.matrix([es,ls]).T)
+#    np.savetxt("TAILS.OUT",np.matrix([es,ls]).T)
     return (es,ls) # return data
     
 
@@ -29,22 +29,31 @@ def tails(vs):
 
 
 
-def logavgtails(vs):
-    """Return the log of the average value of the tails"""
-    out = tails(vs) # return all the tails
-    ds = np.mean(out,axis=0) # average over waves
-    ds = ds[ds>1e-10] # only sizaable elements
-    return np.log(ds)
-
-
-
 def loclength(vs):
-    """Calculate the inverse localization length by fitting the
-    decay of the wavefunctions"""
-    out = logavgtails(vs) # get the logrho
-    ns = np.array(range(len(out))) # length
-    ps = np.polyfit(ns,out,1) # make a fit
-    return -ps[0] # return the slope
+    """Return the log of the average value of the tails"""
+    dsv = tails(vs) # return all the tails
+    def get(cutoff):
+        """Compute the tails for a single cutoff"""
+        ds = np.mean(dsv,axis=0) # average over waves
+        # this is a wway of discardinig too smmall elements
+        # there could be better ways of doing it
+        ds = ds[ds>cutoff] # only sizable elements
+        # now do the fit
+        out = np.log(ds) # log of the density
+        ns = 1.+np.array(range(len(out))) # length
+        ps = np.polyfit(ns,out,1) # make a fit
+        return -ps[0] # return the slope
+    cutoffs = [1e-6,1e-7,1e-8,1e-9,1e-10] # several cutoff
+    cutoffs = [1e-10] # one cutoff
+    ps = np.array([get(c) for c in cutoffs])
+#    print(np.sqrt(np.mean((np.mean(ps)-ps)**2)))
+    return np.mean(ps) # return the average
+
+
+
+
+
+
 
 
 def tails_python(vs):

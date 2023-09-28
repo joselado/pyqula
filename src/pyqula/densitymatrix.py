@@ -21,11 +21,11 @@ def full_dm(h,use_fortran=use_fortran,nk=10,fermi=0.0,delta=1e-6,ds=None):
   if ds is None: # no directions required
     es,vs = h.get_eigenvectors(nk=nk) # get eigenvectors
     es = es - fermi # shift by the Fermi energy
-    if use_fortran:
-      dm = density_matrixf90.density_matrix(np.array(es),np.array(vs),delta)
-      return dm*fac
-    else:
-      return np.matrix(full_dm_python(h.intra.shape[0],es,np.array(vs),
+#    if use_fortran:
+#      dm = density_matrixf90.density_matrix(np.array(es),np.array(vs),delta)
+#      return dm*fac
+#    else:
+    return np.matrix(full_dm_python(h.intra.shape[0],es,np.array(vs),
                            delta=delta))*fac # call the function
   else: # directions required
     es,vs,ks = h.get_eigenvectors(nk=nk,kpoints=True) # get eigenvectors
@@ -91,7 +91,7 @@ def full_dm_python_d_jit(n,es,vs,ks,d,dm):
 
 
 
-def restricted_dm(h,use_fortran=True,mode="KPM",pairs=[],
+def restricted_dm(h,use_fortran=False,mode="KPM",pairs=[],
                    scale=10.0,npol=400,ne=None):
   """Calculate certain elements of the density matrix"""
   if h.dimensionality != 0 : raise
