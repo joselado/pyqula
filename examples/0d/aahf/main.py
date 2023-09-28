@@ -21,8 +21,8 @@ def discard(w):
   """Discard edge wavefunctions"""
   w2 = np.abs(w)*np.abs(w) # absolute value
   n = len(w)
-  if np.sum(w2[0:n//10])>0.5 or np.sum(w2[9*n//10:n])>0.5: return False
-  else: return True
+  if np.sum(w2[0:n//10])>0.5 or np.sum(w2[9*n//10:n])>0.5: return True
+  else: return False
 
 
 fo = open("LAMBDA_VS_V.OUT","w")
@@ -47,7 +47,13 @@ fo.close()
 
 import matplotlib.pyplot as plt
 plt.subplot(1,2,1)
-plt.plot(vs,lm,marker="o")
+plt.plot(vs,lm,marker="o",label="numerical")
+lmt = []
+for v in vs:
+    if v<=2.0: lmt.append(0.)
+    else: lmt.append(np.log(v/2.)*2.)
+plt.plot(vs,lmt,marker="o",label="analytic")
+plt.legend()
 plt.xlabel("AAH Onsite")
 plt.ylabel("1/(Localization length)")
 plt.subplot(1,2,2)

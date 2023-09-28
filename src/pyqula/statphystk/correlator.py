@@ -1,7 +1,7 @@
 import numpy as np
 from numba import jit
 
-def get_nnc(g,den,n=20,**kwargs): 
+def get_nnc(g,den,n=20,normalized=False,**kwargs): 
     """Compute the first N correlators"""
     g0 = g.copy() ; g0.dimensionality = 0 # zero dimensional
     ds = g0.neighbor_distances() # neighbor distances
@@ -18,7 +18,12 @@ def get_nnc(g,den,n=20,**kwargs):
         rj = ri
         denj = deni
     cs = [get_nnci_jit(ri,rj,deni,denj,di,1e-3) for di in ds[0:n]]
-    x,y = ds[0:len(cs)],np.array(cs) # distance and correlators
+    cs = np.array(cs) # convert to array
+    if normalized: # normalize using Cauchy-Swartz inequality
+        var = np.mean((den - np.mean(den))**2)
+        # ignore replica effect due to periodic BC
+        cs = cs/var # normalize by variance
+    x,y = ds[0:len(cs)],cs # distance and correlators
     return x,y
 
 
