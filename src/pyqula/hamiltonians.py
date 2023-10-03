@@ -287,9 +287,9 @@ class Hamiltonian():
       return multicell.supercell_hamiltonian(self,nsuper=ns,**kwargs)
     def supercell(self,*args,**kwargs):
       return self.get_supercell(*args,**kwargs)
-    def set_finite_system(self,periodic=True):
+    def set_finite_system(self,**kwargs):
       """ Transforms the system into a finite system"""
-      return set_finite_system(self,periodic=periodic) 
+      return set_finite_system(self,**kwargs) 
     def get_gap(self,**kwargs):
       """Returns the gap of the Hamiltonian"""
       from . import gap
@@ -774,12 +774,15 @@ def build_eh_nonh(hin,c1=None,c2=None):
 
 
 
-def set_finite_system(hin,periodic=True):
+def set_finite_system(hin,n=1,periodic=False):
   """ Transforms the hamiltonian into a finite system,
   removing the hoppings """
   from copy import deepcopy
   h = hin.copy() # copy Hamiltonian
+  h = h.get_supercell(n) # make the supercell
+  h = h.get_no_multicell()
   h.dimensionality = 0 # put dimensionality = 0
+  h.geometry.dimensionality = 0 # put dimensionality = 0
   if periodic: # periodic boundary conditions
     if h.dimensionality == 1:
       h.intra = h.intra + h.inter + h.inter.H 
