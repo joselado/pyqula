@@ -232,3 +232,7 @@ def FeSe_GM(nem=0.,**kwargs):
     h.turn_dense()
     return h
 
+
+from .specialhamiltoniantk.highorderTI import square_2OTI
+
+
