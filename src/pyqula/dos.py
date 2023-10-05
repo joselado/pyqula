@@ -240,8 +240,8 @@ def dos_kmesh(h,nk=100,delta=None,random=False,ks=None,
     if random: ks = [np.random.random(3) for k in ks]
     # compute band structure
     out = h.get_bands(kpath=ks,write=False,**kwargs) 
-    if len(out)==2: w = None
-    else: w = out[2]
+    if len(out)==2: w = None # use no weight
+    else: w = out[2] # use weight of the bands
     ys = calculate_dos(out[1],energies,delta,w=w)/len(ks)
     ys *= 1./np.pi # normalization of the Lorentzian
     if write: write_dos(energies,ys) # write in file

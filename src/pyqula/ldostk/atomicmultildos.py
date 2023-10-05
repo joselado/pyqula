@@ -18,7 +18,8 @@ def ldos_generator(h,**kwargs):
 
 
 def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
-        ratomic=1.5,dr=0.2,num_bands=None,**kwargs):
+        ratomic=1.5,dr=0.2,num_bands=None,
+        deltax=None, deltay=None,**kwargs):
     """Compute the LDOS at different eenrgies, and add an envelop atomic
     orbital"""
     h = h.copy() # copy the Hamiltonian
@@ -34,8 +35,10 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
     ##########################################################
     lodict = dict() # dictionary for the local orbitals
     # get the grids
+    if deltax is None: deltax=ratomic
+    if deltay is None: deltay=ratomic
     x,y = get_grids(h.geometry,nrep=nrep,dr=dr,
-            deltax=ratomic,deltay=ratomic)
+            deltax=deltax,deltay=deltay)
     r = np.zeros((len(x),3)) ; r[:,0] = x ; r[:,1] = y
     # now chack which centers to accept
     xmin,xmax = np.min(x),np.max(x)
