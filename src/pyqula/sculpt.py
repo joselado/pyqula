@@ -178,40 +178,41 @@ def get_closest(g,n=1,r0=[0.,0.,0.]):
 
 
 def get_central(g,n=1):
-  """Get the index of the central atom"""
-  return get_closest(g,n=n,r0=[0.,0.,0.])
+    """Get the index of the central atom"""
+    g = g.copy() ; g.center()
+    return get_closest(g,n=n,r0=[0.,0.,0.])
 
 def shift(g,r=np.array([0.,0.,0.])):
-  """Shift the geometry by a certain vector"""
-  g.r = np.array([ri-r for ri in g.r])
-  g.r2xyz() # update
+    """Shift the geometry by a certain vector"""
+    g.r = np.array([ri-r for ri in g.r])
+    g.r2xyz() # update
 
 
 def get_angle(v1,v2):
-  """Get the angle between two vectors"""
-  v3 = v1/np.sqrt(v1.dot(v1)) # normalize
-  v4 = v2/np.sqrt(v2.dot(v2)) # normalize
-  alpha = np.arccos(v3.dot(v4))
-  return alpha
+    """Get the angle between two vectors"""
+    v3 = v1/np.sqrt(v1.dot(v1)) # normalize
+    v4 = v2/np.sqrt(v2.dot(v2)) # normalize
+    alpha = np.arccos(v3.dot(v4))
+    return alpha
 
 
 
 
 
 def get_furthest(g,n=1,angle=0.,tol=5.):
-  """Gets n atoms in a certain direction"""
-  rs = [] # norm of the distances
-  inds = [] # norm of the distances
-  for ir in range(len(g.r)): # store only vectors with a certain angle
-    r = g.r[ir]
-    a = np.arctan2(r[1],r[0])/np.pi*180.
-    if (np.abs(angle-a)%360)<tol: # if direction is right
-      rs.append(r) # store vector
-      inds.append(ir) # indexes
-  rr = [-r.dot(r) for r in rs] # norm of the distances
-  sort_inds = [x for (y,x) in sorted(zip(rr,inds))] # indexes sorted by distance
-  rind = [sort_inds[i] for i in range(n)]
-  return rind # return the indexes
+    """Gets n atoms in a certain direction"""
+    rs = [] # norm of the distances
+    inds = [] # norm of the distances
+    for ir in range(len(g.r)): # store only vectors with a certain angle
+      r = g.r[ir]
+      a = np.arctan2(r[1],r[0])/np.pi*180.
+      if (np.abs(angle-a)%360)<tol: # if direction is right
+        rs.append(r) # store vector
+        inds.append(ir) # indexes
+    rr = [-r.dot(r) for r in rs] # norm of the distances
+    sort_inds = [x for (y,x) in sorted(zip(rr,inds))] # indexes sorted by distance
+    rind = [sort_inds[i] for i in range(n)]
+    return rind # return the indexes
 
 
 
