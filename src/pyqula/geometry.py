@@ -836,7 +836,9 @@ def read(input_file="POSITIONS.OUT"):
     if len(g.sublattice) != len(g.r): raise
     print("Read sublattice from SUBLATTICE.OUT")
   except: g.has_sublattice = False
-  dim = int(open("DIMENSIONALITY.OUT").read())
+  try:
+    dim = int(open("DIMENSIONALITY.OUT").read())
+  except: dim = 0
   g.dimensionality = dim # store
   if dim>0: # if it has lattice
     lat = np.genfromtxt("LATTICE.OUT")   # read lattice

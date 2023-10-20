@@ -273,8 +273,8 @@ def sqrtm_rotated(M,positive=True):
     (evals,evecs) = dlg.eigh(M) # eigenvals and eigenvecs
     if positive:
         if np.min(evals)<0.:
-            print("Matrix is not positive defined")
-            evals[evals<0.] = 1e-7
+#            print("Matrix is not positive defined",print(evals[evals<0.]))
+            evals[evals<0.] = 0.
     evecs = dagger(np.matrix(evecs)) # change of basis
     m2 = np.matrix([[0.0j for i in evals] for j in evals]) # create matrix
     for i in range(len(evals)):
