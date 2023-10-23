@@ -235,15 +235,15 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
   mus = random_trace(m_in/scale,ntries=ntries,n=npol,fun=frand,
           operator=operator) 
   if ewindow is None or abs(ewindow)>scale: # no window provided
-    xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
+    xs = np.linspace(-1.0,1.0,ne,endpoint=True)*1.01 # energies
   else:
     xx = abs(ewindow/scale) # scale
-    xs = np.linspace(-xx,xx,ne,endpoint=True)*0.99 # energies
+    xs = np.linspace(-xx,xx,ne,endpoint=True)*1.01 # energies
   ys = generate_profile(mus,xs,kernel=kernel).real
   (xs,ys) = (scale*xs,ys/scale)
   if x is not None:
     from scipy.interpolate import interp1d
-    f = interp1d(xs,ys,bounds_error=False,fill_value=0.0)
+    f = interp1d(xs,ys,bounds_error=False,fill_value=[ys[0],ys[-1]])
     return x,f(x)
   else: return xs,ys
 
