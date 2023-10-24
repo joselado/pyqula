@@ -336,4 +336,14 @@ def commensurate_skyrmion(g,r0=None):
 
 
 
+def circle(r0,v=0.,R=1.1):
+    """Create the potential for a circle"""
+    def f(r):
+        dr = r-r0
+        if dr.dot(dr)<R: return v
+        else: return 0.
+    return Potential(f) # return the potential
+
+
+
 
