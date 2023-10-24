@@ -457,9 +457,9 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   from . import parallel
   numk = len(ks)
   if parallel.cores==1:
-    tr = timing.Testimator("DOS",maxite=numk) # generate object
+    if info: tr = timing.Testimator("DOS",maxite=numk) # generate object
     for ik in range(len(ks)): # loop over kpoints
-      tr.iterate()
+      if info: tr.iterate()
       k = ks[ik]
       (x,y) = f(k) # compute
       ytot += y # add contribution
