@@ -29,12 +29,13 @@ def fm(r):
     if 0.9<dr<1.1: return [.0,.0,.2] # exchange
     return [0.,0.,0.]
 
-h.add_swave(0.2)
-hv = h.copy()
-hv.add_zeeman(fm)
-hv.add_onsite(f)
-hv.add_onsite(lambda r: -fm(r)[2])
-vintra = hv.intra
+h.add_swave(0.2) # add swave superconductivity
+hv = h.copy() # copy the Hamiltonian
+hv.add_zeeman(fm) # add an exchange field
+hv.add_onsite(f) # shift the chemical potential
+hv.add_onsite(lambda r: -fm(r)[2]) # add a single defect
+
+# grid with the energies
 es = np.linspace(-0.3,0.3,200)
 
 from pyqula import parallel
@@ -42,7 +43,7 @@ parallel.cores = 6
 
 op = h.get_operator("electron")*h.get_operator("dn")
 
-eb = embedding.Embedding(h,m=vintra)
+eb = embedding.Embedding(h,m=hv)
 (es,ds) = eb.multidos(es=es,nsuper=1,delta=1e-2,operator=op)
 import matplotlib.pyplot as plt
 plt.plot(es,ds)

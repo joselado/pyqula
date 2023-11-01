@@ -30,6 +30,11 @@ def strain_mode(sr,sd=None,mode="scalar"):
     else: raise
 
 
+# NOTE: strain_mode scalar fails with periodic boundary conditions
+# the distance function should be fixed, otherwise the Hamiltonain is
+# non Hermitian
+
+
 
 def uniaxial_strain(H,d=np.array([1.,0.,0.]),s=0.,**kwargs):
     """Add uniaxial strain"""
@@ -46,6 +51,7 @@ def uniaxial_strain(H,d=np.array([1.,0.,0.]),s=0.,**kwargs):
 
 
 def strain_matrix(m,rs1,rs2,indg,fs): # function to apply strain to a matrix
+    """Apply strain to a matrix, this only works well in 1d"""
     mo = m.copy() # copy matrix
     from scipy.sparse import coo_matrix,csc_matrix
     mo = coo_matrix(mo) # turn sparse

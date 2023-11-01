@@ -8,7 +8,6 @@ from pyqula import heterostructures
 import numpy as np
 import matplotlib.pyplot as plt
 g = geometry.square_ribbon(1)
-#g = g.supercell(3)
 h = g.get_hamiltonian()
 h.shift_fermi(1.0) # shift the chemical potential
 h1 = h.copy() # copy
