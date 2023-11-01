@@ -21,11 +21,14 @@ ms = most_perp_basis(ms) # rotate to the the most xy basis
 mx = ms[:,0] 
 my = ms[:,1]
 mz = ms[:,2]
-print(mz)
+#print(mz)
 x = g.x
 y = g.y
 import matplotlib.pyplot as plt
 plt.quiver(x,y,mx,my,cmap="bwr")
+er = sm.get_local_energy()
+#print(er) ; exit()
+plt.scatter(x,y,c=er-np.mean(er),s=200,cmap="bwr")
 #plt.scatter(x,y,c=mz,s=200,cmap="bwr")
 plt.show()
 

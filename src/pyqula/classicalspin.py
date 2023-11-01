@@ -35,6 +35,8 @@ class SpinModel(): # class for a spin Hamiltonian
   def add_field(self,v):
     """Add magnetic field"""
     self.b += np.array([v for i in range(self.nspin)])
+  def get_energy(self,**kwargs): 
+      return self.energy(**kwargs)
   def energy(self,**kwargs):
     """ Calculate the energy"""
     eout = energy(self.theta,self.phi,self.b,self.j,self.pairs)
@@ -42,6 +44,12 @@ class SpinModel(): # class for a spin Hamiltonian
    #            self.pairs)
 
     return eout
+  def get_local_energy(self):
+      from .classicalspintk.localenergy import get_local_energy
+      return get_local_energy(self)
+  def copy(self):
+      from copy import deepcopy
+      return deepcopy(self)
   def get_magnetization(self):
       return get_magnetization(self)
   def minimize_energy(self,theta0=None,phi0=None,tries=10,calle=None):
@@ -50,13 +58,13 @@ class SpinModel(): # class for a spin Hamiltonian
     phis = [None for i in range(tries)]
     es = [None for i in range(tries)]
     for i in range(tries): # loop over tries
-      theta,phi = minimize_energy(self,theta0=theta0,phi0=phi0,calle=calle)
-      self.theta = theta.copy()
-      self.phi = phi.copy()
-      e = self.energy() # calculate energy
-      thetas[i] = theta.copy()
-      phis[i] = phi.copy()
-      es[i] = e
+        theta,phi = minimize_energy(self,theta0=theta0,phi0=phi0,calle=calle)
+        self.theta = theta.copy()
+        self.phi = phi.copy()
+        e = self.energy() # calculate energy
+        thetas[i] = theta.copy()
+        phis[i] = phi.copy()
+        es[i] = e
     imin = es.index(min(es)) # minimum
     print("Minimum energy",es[imin])
     print("Minimum energy per spin",es[imin]/len(self.phi))
