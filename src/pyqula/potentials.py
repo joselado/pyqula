@@ -336,13 +336,29 @@ def commensurate_skyrmion(g,r0=None):
 
 
 
-def circle(r0,v=0.,R=1.1):
+def circle(r0,v=0.,R=1.1,g=None,**kwargs):
     """Create the potential for a circle"""
     def f(r):
         dr = r-r0
         if dr.dot(dr)<R: return v
         else: return 0.
-    return Potential(f) # return the potential
+    out = Potential(f) # return the potential
+    if g is None: return out
+    else: return periodic_replicate(out,g,**kwargs)
+
+
+
+def periodic_replicate(P,g,n=3):
+    """Enforce a potential to have the periodicity
+    in space of the lattice"""
+    dl = g.neighbor_directions(n) # list with neighboring cells to take
+    def fout(r):
+        o = 0.
+        for d in dl:
+            ri = r + g.a1*d[0] + g.a2*d[1] + g.a3*d[2]
+            o = o + P(ri) # add contribution
+        return o
+    return Potential(fout)
 
 
 

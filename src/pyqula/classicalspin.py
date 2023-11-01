@@ -23,7 +23,7 @@ class SpinModel(): # class for a spin Hamiltonian
   def add_heisenberg(self,Jij=None,Jm=[1.,1.,1.],**kwargs):
     h = self.geometry.get_hamiltonian(has_spin=False,tij=Jij)
     m = coo_matrix(h.get_hk_gen()([0.,0.,0.])) # get onsite matrix
-    (pairs,js) = add_heisenberg(self.geometry.r)
+#    (pairs,js) = add_heisenberg(self.geometry.r)
     pairs = np.array([m.row,m.col]).transpose() # convert to array
     self.pairs = np.concatenate([self.pairs,pairs])
     jmat = np.zeros((3,3))
@@ -89,9 +89,9 @@ class SpinModel(): # class for a spin Hamiltonian
     self.phi = np.arctan2(m[2],m[1]) # theta angle
   def regroup(self):
     """Regroups the terms in the Hamiltonian"""
-    print(len(self.pairs))
+#    print(len(self.pairs))
     self.pairs,self.j = regroup(self.pairs,self.j) 
-    print(len(self.pairs))
+#    print(len(self.pairs))
   def update_magnetization(self):
     """Update the magnetization"""
     mx = np.sin(self.theta)*np.cos(self.phi)
