@@ -351,7 +351,7 @@ def add_pairing_to_hamiltonian(self,**kwargs):
     self.turn_nambu() # add electron hole terms
     r = self.geometry.r # positions 
     m = add_pairing(df,r1=r,r2=r) # intra cell
-    self.intra = self.intra + m + m.H
+    self.intra = self.intra + m + algebra.dagger(m)
     if self.dimensionality>0:
       if not self.is_multicell: # for multicell hamiltonians
         self.turn_multicell()
