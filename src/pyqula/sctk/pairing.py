@@ -17,7 +17,7 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     if callable(mode):
         weightf = mode # mode is a function returning a 2x2 pairing matrix
     elif mode=="swave":
-        weightf = lambda r1,r2: swave(r1,r2,H=self,**kwargs) 
+        weightf = lambda r1,r2: swave(r1,r2,H=self,nn=nn,**kwargs) 
     elif mode=="deltaud":
         # this is a workaround for delta_ud alone!
         weightf = lambda r1,r2: deltaud(r1,r2,deltaf) 

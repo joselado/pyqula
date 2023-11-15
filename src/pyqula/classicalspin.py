@@ -112,11 +112,11 @@ class SpinModel(): # class for a spin Hamiltonian
 
 
 
-def add_heisenberg(r):
-  """Return pairs and js for a Heisenberg interaction"""
-  pairs = neighbor.find_first_neighbor(r,r)
-  js = np.array([iden for p in pairs]) # array
-  return (pairs,js) # return pairs 
+#def add_heisenberg(r):
+#  """Return pairs and js for a Heisenberg interaction"""
+#  pairs = neighbor.find_first_neighbor(r,r)
+#  js = np.array([iden for p in pairs]) # array
+#  return (pairs,js) # return pairs 
 
 
 def energy(thetas,phis,bs,js,indsjs):
