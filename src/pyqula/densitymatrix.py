@@ -3,16 +3,14 @@ import numpy as np
 from numba import jit
 from . import parallel
 
-#try:
-#  from . import density_matrixf90
-#  use_fortran = True
-#except:
-#  use_fortran = False
-##  print("Fortran routines not working in densitymatrix.py")
- 
+delta_dm = 1e-6 # default energy smearing
+
+
 use_fortran = False
 
-def full_dm(h,use_fortran=use_fortran,nk=10,fermi=0.0,delta=1e-6,ds=None):
+def full_dm(h,use_fortran=use_fortran,nk=10,fermi=0.0,
+        delta=delta_dm,
+        ds=None):
   if h.dimensionality == 0: fac = 1.
   elif h.dimensionality == 1: fac = 1./nk
   elif h.dimensionality == 2: fac = 1./nk**2

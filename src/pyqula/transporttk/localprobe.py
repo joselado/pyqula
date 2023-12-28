@@ -3,6 +3,7 @@ from .. import algebra
 from ..green import green_renormalization
 from .. import green
 from copy import deepcopy
+from ..htk.mode import make_compatible
 
 delta_smatrix = 1e-12
 dagger = algebra.dagger
@@ -26,8 +27,7 @@ class LocalProbe():
         if lead is None:
             from ..geometry import chain 
             lead = chain().get_hamiltonian(has_spin=False) # create a chain
-            if self.H.has_spin: lead.turn_spinful()
-            if self.H.has_eh: lead.turn_nambu()
+        lead = make_compatible(lead,self.H) # make them compatible
         lead = lead.get_no_multicell() # no multicell
         self.lead = lead.copy() # store
         self.get_eh_sector = self.lead.get_eh_sector # if it has electron-hole
