@@ -16,9 +16,7 @@ g.dimensionality = 0
 Jij = NNG(g,[-1.0]) # first neighbor
 Jij_tb = Jij.apply(lambda r: abs(r[1])>0.2) # top and bottom
 Jij_I = Jij.apply(lambda r: 0.1*(abs(r[1])<0.2)*np.sign(r[0])) # inter
-Jij_T = Jij_tb + Jij_I
-#h = g.get_hamiltonian(tij=Jij_T)
-#h.write_hopping() ; exit()
+Jij_T = Jij_tb + Jij_I # sum both contributions
 sm = classicalspin.SpinModel(g) # generate a spin model
 sm.add_heisenberg(Jij=Jij_T) # add heisenberg exchange
 classicalspin.use_jax = True
