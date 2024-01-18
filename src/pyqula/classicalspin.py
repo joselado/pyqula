@@ -1,3 +1,8 @@
+
+
+# TODO
+# - twisted boundary conditions (only Gamma now)
+
 import numpy as np
 from . import neighbor
 from scipy.sparse import csr_matrix,csc_matrix,coo_matrix

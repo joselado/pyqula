@@ -14,7 +14,7 @@ def timeit(method):
 
 
 # routines to calculate DC supercurrent using keldysh formalism
-
+# there may be a bug somewhere, not reliable yet
 
 def floquet_selfenergy(selfgen,e,omega,n=20,less=False,delta=0.01):
   """Generate a floquet selfenergy starting from

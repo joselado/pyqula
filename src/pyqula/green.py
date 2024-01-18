@@ -1,3 +1,7 @@
+
+# TODO
+# - renormalization algorithm for long range intercell (2nd at least)
+
 from __future__ import print_function
 import numpy as np
 import scipy.linalg as lg

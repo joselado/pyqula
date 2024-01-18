@@ -12,17 +12,11 @@ from . import parallel
 from numba import jit
 from .klist import kmesh
 
-try:
-#  raise
-  from . import dosf90 
-  use_fortran = True
-except:
-#  print("Something wrong with FORTRAN in DOS")
-  use_fortran = False
-
+use_fortran = False
 
 def calculate_dos(es,xs,d,use_fortran=use_fortran,w=None):
   if w is None: w = np.zeros(len(es)) + 1.0 # initialize
+  else: w = w.real # make it real just in case
   if use_fortran: # use fortran routine
     from . import dosf90 
     return dosf90.calculate_dos(es,xs,d,w) # use the Fortran routine
@@ -39,7 +33,7 @@ def calculate_dos_jit(es,xs,d,w,ys):
       for i in range(len(es)): # loop over energies
           e = es[i]
           iw = w[i]
-          de = xs - e # E - Ei
+          de = np.abs(xs - e) # E - Ei
           de = d/(d*d + de*de) # 1/(delta^2 + (E-Ei)^2)
           ys += de*iw # times the weight
       return ys
@@ -480,7 +474,17 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
 
 
 
-def get_dos(h,energies=np.linspace(-4.0,4.0,400),
+def get_dos(self,**kwargs):
+    """General method to compute the density of states"""
+    if self.non_hermitian: # non-Hermitian hamiltonian
+        from .nonhermitian.nhmethods import get_dos as get_dos_NH
+        return get_dos_NH(self,**kwargs)
+    else: # Hermitian Hamiltonian
+        return get_dos_general(self,**kwargs)
+
+
+
+def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
             use_kpm=False,mode="ED",**kwargs):
   """Calculate the density of states"""
   if use_kpm: # KPM

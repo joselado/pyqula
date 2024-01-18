@@ -4,6 +4,7 @@ from .. import specialhopping
 
 def get_hamiltonian(self,tij=None,has_spin=True,
                         is_sparse=False,spinful_generator=False,nc=2,
+                        non_hermitian = False,
                         is_multicell=False,mgenerator=None,**kwargs):
     """ Create the hamiltonian for this geometry. By default, it assumes
     first neighbor hopping
@@ -28,6 +29,7 @@ def get_hamiltonian(self,tij=None,has_spin=True,
     from ..hamiltonians import Hamiltonian
     h = Hamiltonian(self)  # create the object
     h.is_sparse = is_sparse
+    h.non_hermitian = non_hermitian # non Hermitian flag
     h.has_spin = has_spin
     h.is_multicell = is_multicell
     if is_multicell:  # workaround for multicell hamiltonians
