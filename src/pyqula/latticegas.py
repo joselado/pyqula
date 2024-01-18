@@ -2,6 +2,10 @@ import numpy as np
 from scipy.sparse import coo_matrix
 from copy import deepcopy
 
+# TODO
+# - more efficient discrete optimizr (computing just the energy correction)
+# - autoannealing, stopping the iterations once a reasonable GS is reached
+
 
 
 class LatticeGas():
@@ -104,12 +108,17 @@ def optimize_discrete(fun,x0,temp=0.1,ntries=1e5,info=False):
         eo = fun(xold) # old
         en = fun(x) # new
         if info: print(en)
-        es[ii] = en # store new energy
-        if en<eo: xold = x # overwrite
+        if en<=eo: # smaller or same
+            es[ii] = en # store new energy
+            xold = x # overwrite
         else: 
             fac = np.exp((eo-en)/temp) # acceptance probability
-            if np.random.random()<fac: xold = x # overwrite
-            else: pass # do nothing
+            if np.random.random()<fac: 
+                es[ii] = en # store new energy
+                xold = x # overwrite
+            else: 
+                es[ii] = eo # keep old energy
+                pass # do nothing
     return xold,es # return old one
 
 

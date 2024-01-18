@@ -76,7 +76,7 @@ def aahf1d(n0=0,beta=0.0000001,k=None,b=None,v=1.0,normalize=False):
     ys = np.tanh(beta*(np.cos(2.*np.pi*b*ns+k)-np.cos(np.pi*b)))
     ys /= np.tanh(beta)
     return v*ys
-  return fun # return function
+  return Potential(fun) # return function
 
 
 

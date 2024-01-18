@@ -222,11 +222,11 @@ class Hamiltonian():
         from .ldostk import atomicmultildos
         return atomicmultildos.get_density(self,**kwargs)
     def get_bands(self,**kwargs):
-      """ Returns a figure with the bandstructure"""
-      return bandstructure.get_bands_nd(self,**kwargs)
+        """ Returns a figure with the bandstructure"""
+        return bandstructure.get_bands(self,**kwargs)
     def get_bands_map(self,**kwargs):
-      """ Returns a figure with the bandstructure"""
-      return bandstructure.get_bands_map(self,**kwargs)
+        """ Returns a figure with the bandstructure"""
+        return bandstructure.get_bands_map(self,**kwargs)
     def get_kdos_bands(self,**kwargs):
         from .kdos import kdos_bands
         return kdos_bands(self,**kwargs)

@@ -12,15 +12,26 @@ def equal(m1,m2,tol=1e-4):
     return False
   else: return True
 
-def check_hamiltonian(h,tol=1e-5):
-  """Do various checks in Hamiltonian, to ensure that nothing weird happens"""
+
+
+
+
+def check_hermitian(h,tol=1e-5):
   hk = h.get_hk_gen() # get generator
   m = hk(np.random.random(3)) # random k-point
   if not equal(m,np.conjugate(m).T):
     print("CHECK FAILED, Hamiltonian is not Hermitian")
     print(np.round(m,2))
-    exit()
-#    raise # not hermitian
+    raise
+
+
+
+
+
+def check_hamiltonian(h,tol=1e-5):
+  """Do various checks in Hamiltonian, to ensure that nothing weird happens"""
+  hk = h.get_hk_gen() # get generator
+  if not h.non_hermitian: check_hermitian(h,tol=tol)
   if h.has_eh: # if it has electron hole degree of freedom
     v = np.random.random(3) # random kpoint
     m1 = hk(v) # Hamiltonian

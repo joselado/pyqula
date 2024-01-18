@@ -150,7 +150,8 @@ def todouble_jit(vs,ind,vout,nv,dim):
         vout[2*i+ind,:] = vs[i,:]
     return vout
 
-
+eig = dlg.eig # non Hermitian diagonalization
+eigvals = dlg.eigvals # non Hermitian diagonalization
 
 accelerate = False 
 

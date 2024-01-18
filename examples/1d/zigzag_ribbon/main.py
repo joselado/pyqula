@@ -11,11 +11,14 @@ from pyqula import geometry
 g = geometry.honeycomb_zigzag_ribbon(20) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian(has_spin=False) # create hamiltonian of the system
 #exit()
-h.get_bands()
+(ks,es) = h.get_bands()
+(esd,ds) = h.get_dos()
 
-
-
-
-
+import matplotlib.pyplot as plt
+plt.subplot(1,2,1)
+plt.scatter(ks,es)
+plt.subplot(1,2,2)
+plt.plot(esd,ds)
+plt.show()
 
 
