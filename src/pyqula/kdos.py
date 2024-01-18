@@ -158,7 +158,7 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
       from . import dos
       def pfun(k):
         (es,ds) = h.get_dos(ks=[k],operator=operator,energies=energies,
-                delta=delta)
+                delta=delta,**kwargs)
         return energies,ds
   elif mode=="green":
     f = h.get_gk_gen(delta=delta) # Green generator

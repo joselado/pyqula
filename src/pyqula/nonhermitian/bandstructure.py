@@ -6,7 +6,7 @@ from .. import algebra,operators
 
 def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                     callback=None,central_energy=0.0,nk=400,
-                    ewindow=None,
+                    ewindow=None,eigmode="complex",
                     output_file="BANDS.OUT",write=True,
                     silent=True):
     """
@@ -79,7 +79,13 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
 #        tr.remaining(k,len(kpath)) # estimate of the time
         ek = getek(k)
         esk += ek # add lists
-    return np.array(esk).T
+    esk = np.array(esk).T
+    if eigmode=="complex": pass
+    elif eigmode=="real": esk[1] = esk[1].real
+    elif eigmode=="imag": esk[1] = esk[1].imag
+    else: raise
+    return esk
+
 #        if write: 
 #            f.write(ek.real) # write this kpoint
 #            f.write(ek.imag) # write this kpoint
