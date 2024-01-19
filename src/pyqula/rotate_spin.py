@@ -102,13 +102,13 @@ def spiralhopping(m,ri,rj,svector = np.array([0.,0.,1.]),
          angle = np.array(qvector).dot(np.array(r[i])) # angle of rotation
          # a factor 2 is taken out due to 1/2 of S
          # a factor 2 is added to have BZ in the interval 0,1
-         R[i][i] = lg.expm(2.*np.pi*1j*rot*angle/2.0)
-      return bmat(R)  # convert to full sparse matrix
+         R[i][i] = algebra.expm(2.*np.pi*1j*rot*angle/2.0)
+      return algebra.bmat(R)  # convert to full sparse matrix
   Roti = getR(ri) # get the first rotation matrix
   Rotj = getR(rj) # get the second rotation matrix
 #  print(Roti@Rotj.H)
 #  print(ri,rj)
-  return Rotj @ m @ Roti.H # return the rotated matrix
+  return Rotj @ m @ algebra.dagger(Roti) # return the rotated matrix
 
 
 def hamiltonian_spin_rotation(self,vector=np.array([0.,0.,1.]),angle=0.):

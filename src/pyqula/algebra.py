@@ -323,3 +323,12 @@ def is_zero(m):
     return np.max(np.abs(m))<1e-6
 
 
+def bmat(M):
+    from scipy.sparse import bmat
+    if len(M)==1: 
+        return todense(M[0][0])
+    else: return todense(bmat(M))
+
+def expm(M):
+    M = todense(M)
+    return dlg.expm(M)
