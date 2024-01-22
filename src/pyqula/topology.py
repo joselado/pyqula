@@ -10,6 +10,7 @@ from . import inout
 from . import timing
 from . import algebra
 from . import parallel
+from numba import jit
 
 arpack_tol = algebra.arpack_tol
 arpack_maxiter = algebra.arpack_maxiter
@@ -119,20 +120,7 @@ from .topologytk.occstates import occupied_states
 from .topologytk.occstates import occ_states2d
 
 
-
-
-def uij(wf1,wf2):
-  """ Calcultes the matrix product of two sets of input wavefunctions"""
-  out =  np.matrix(np.conjugate(wf1))@(np.matrix(wf2).T)  # faster way
-  return out
-
-
-def uij_slow(wf1,wf2):
-  m = np.matrix(np.zeros((len(wf1),len(wf2)),dtype=np.complex_))
-  for i in range(len(wf1)):
-    for j in range(len(wf2)):
-      m[i,j] = np.conjugate(wf1[i]).dot(wf2[j])
-  return m
+from .topologytk.overlap import uij
 
 
 def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None):
@@ -209,25 +197,43 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
   return c
 
 
+def get_berry_curvature(self,**kwargs):
+    """Compute Berry curvature"""
+    if self.non_hermitian: # non Hermitian case
+        from .nonhermitiantk.nhmethods import get_berry_curvature as BNH
+        return BNH(self,**kwargs)
+    else: # Hermitian case
+        return get_berry_curvature_master(self,**kwargs)
 
-def get_berry_curvature(h,dk=None,nk=100,reciprocal=True,nsuper=1,window=None,
+
+
+
+
+def get_berry_curvature_master(h,dk=None,nk=100,
+        reciprocal=True,nsuper=1,window=None,
+        kpath=None,
                max_waves=None,mode="Wilson",delta=0.001,operator=None,
                write=True,verbose=0):
     """ Return the Berry curvature in 2D reciprocal space """
+    # get the right kpoints
+    if kpath is None: # no kpath, just to a grid
+        ks = [] # list with kpoints
+        for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+          for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+              ks.append([x,y,0.])
+    else: # kpath provided
+        ks = h.geometry.get_kpath(kpath,nk=nk)
+        reciprocal = False # if given, assume they are in standard way
+    ks = np.array(ks) # convert to array
+    ##############
     if operator is not None: mode="Green" # Green function mode
     c = 0.0
-    ks = [] # array for kpoints
     if dk is None: dk = 1./float(2*nk) # automatic dk
     if reciprocal: R = np.array(h.geometry.get_k2K())
     else: R = np.array(np.identity(3))
     nt = nk*nk # total number of points
     ik = 0
-    ks = [] # list with kpoints
     from . import parallel
-    for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-      for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-          ks.append([x,y,0.])
-    ks = np.array(ks) # convert to array
     if verbose>0: tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
     def fp(ki): # function to compute the Berry curvature
         if parallel.cores == 1: 
@@ -254,56 +260,44 @@ def get_berry_curvature(h,dk=None,nk=100,reciprocal=True,nsuper=1,window=None,
 
 berry_map = get_berry_curvature # alias
 
-
-def smooth_gauge(w1,w2):
-  """Perform a gauge rotation so that the second set of waves are smooth
-  with respect to the first one"""
-  m = uij(w1,w2) # matrix of wavefunctions
-  U, s, V = np.linalg.svd(m, full_matrices=True) # sing val decomp
-  R = (U@V).H # rotation matrix
-  wnew = w2.copy()*0j # initialize
-  wold = w2.copy() # old waves
-  for ii in range(R.shape[0]):
-    for jj in range(R.shape[0]):
-      wnew[ii] += R[jj,ii]*wold[jj]
-  return wnew
+from .topologytk.wannier import smooth_gauge
 
 
 
 
 def z2_vanderbilt(h,nk=30,nt=100,nocc=None,full=False):
-  """ Calculate Z2 invariant according to Vanderbilt algorithm"""
-  out = [] # output list
-  path = np.linspace(0.,1.,nk) # set of kpoints
-  fo = open("WANNIER_CENTERS.OUT","w")
-  if full:  ts = np.linspace(0.,1.0,nt,endpoint=False)
-  else:  ts = np.linspace(0.,0.5,nt,endpoint=False)
-  wfall = [[occ_states2d(h,np.array([k,t,0.,])) for k in path] for t in ts] 
-  # select a continuos gauge for the first wave
-  for it in range(len(ts)-1): # loop over ts
-    wfall[it+1][0] = smooth_gauge(wfall[it][0],wfall[it+1][0]) 
-  for it in range(len(ts)): # loop over t points
-    row = [] # empty list for this row
-    t = ts[it] # select the t point
-    wfs = wfall[it] # get set of waves 
-    for i in range(len(wfs)-1):
-      wfs[i+1] = smooth_gauge(wfs[i],wfs[i+1]) # transform into a smooth gauge
-#      m = uij(wfs[i],wfs[i+1]) # matrix of wavefunctions
-    m = uij(wfs[0],wfs[len(wfs)-1]) # matrix of wavefunctions
-    evals = lg.eigvals(m) # eigenvalues of the rotation 
-    x = np.angle(evals) # phase of the eigenvalues
-    fo.write(str(t)+"    ") # write pumping variable
-    row.append(t) # store
-    for ix in x: # loop over phases
-      fo.write(str(ix)+"  ")
-      row.append(ix) # store
-    fo.write("\n")
-    out.append(row) # store
-  fo.close()
-  return np.array(out).transpose() # transpose the map
+    """ Calculate Z2 invariant according to Vanderbilt algorithm"""
+    out = [] # output list
+    path = np.linspace(0.,1.,nk) # set of kpoints
+    fo = open("WANNIER_CENTERS.OUT","w")
+    if full:  ts = np.linspace(0.,1.0,nt,endpoint=False)
+    else:  ts = np.linspace(0.,0.5,nt,endpoint=False)
+    wfall = [[occ_states2d(h,np.array([k,t,0.,])) for k in path] for t in ts] 
+    # select a continuos gauge for the first wave
+    for it in range(len(ts)-1): # loop over ts
+      wfall[it+1][0] = smooth_gauge(wfall[it][0],wfall[it+1][0]) 
+    for it in range(len(ts)): # loop over t points
+      row = [] # empty list for this row
+      t = ts[it] # select the t point
+      wfs = wfall[it] # get set of waves 
+      for i in range(len(wfs)-1):
+        wfs[i+1] = smooth_gauge(wfs[i],wfs[i+1]) # transform into a smooth gauge
+  #      m = uij(wfs[i],wfs[i+1]) # matrix of wavefunctions
+      m = uij(wfs[0],wfs[len(wfs)-1]) # matrix of wavefunctions
+      evals = lg.eigvals(m) # eigenvalues of the rotation 
+      x = np.angle(evals) # phase of the eigenvalues
+      fo.write(str(t)+"    ") # write pumping variable
+      row.append(t) # store
+      for ix in x: # loop over phases
+        fo.write(str(ix)+"  ")
+        row.append(ix) # store
+      fo.write("\n")
+      out.append(row) # store
+    fo.close()
+    return np.array(out).transpose() # transpose the map
 
 
-def z2_invariant(h,nk=20,nt=20,nocc=None):
+def z2_invariant(h,nk=60,nt=60,nocc=None):
   """Compute Z2 invariant with pumping of Wannier centers"""
   return wannier_winding(h,nk=nk,nt=nt,nocc=nocc,full=False) 
 
@@ -321,33 +315,11 @@ def chern(h,**kwargs):
 
 
 
-def wannier_winding(h,nk=40,nt=40,nocc=None,full=True):
+def wannier_winding(h,nk=100,nt=100,nocc=None,full=True):
   m = z2_vanderbilt(h,nk=nk,nt=nt,nocc=nocc,full=full)
   x = m[0]
-  # find the position of the maximum gap at every t
-  fermis = x*0. # maximum gap
-  for it in range(len(x)): # loop over times
-    imax,jmax = None,None
-    dmax = -1 # initialize
-    gapangle = None # initialize
-    maxgap = -1.0 # maximum gap
-    gapangle = ((m[1][it]+0.5)%1)*np.pi # initialize
-    for i in range(1,len(m)):
-      for j in range(i+1,len(m)):
-        for ipi in [0.,1.]:
-          ip = np.exp(1j*m[i][it]) # center of wave i
-          jp = np.exp(1j*m[j][it]) # center of wave j
-          angle = np.angle(ip+jp)+np.pi*ipi # get the angle
-          dp = np.exp(1j*angle) # now obtain this middle point gap
-          mindis = 4.0 # calculate minimum distance
-          for k in range(1,len(m)): # loop over centers
-            kp = np.exp(1j*m[k][it]) # center of wave k
-            dis = np.abs(dp-kp) # distance between the two points 
-            if dis<mindis: mindis = dis+0. # update minimum distance
-          if mindis>maxgap: # if found a bigger gap
-            maxgap = mindis+0. # maximum distance
-            gapangle = np.angle(dp) # update of found bigger gap
-    fermis[it] = gapangle
+  from .topologytk.wannier import maximum_wannier_gap
+  fermis = maximum_wannier_gap(m)
   # now check the number of cuts of each wannier center
   def angleg(a,b,c):
     """Function to say if a jump has been made or not"""

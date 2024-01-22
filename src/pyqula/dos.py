@@ -477,7 +477,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
 def get_dos(self,**kwargs):
     """General method to compute the density of states"""
     if self.non_hermitian: # non-Hermitian hamiltonian
-        from .nonhermitian.nhmethods import get_dos as get_dos_NH
+        from .nonhermitiantk.nhmethods import get_dos as get_dos_NH
         return get_dos_NH(self,**kwargs)
     else: # Hermitian Hamiltonian
         return get_dos_general(self,**kwargs)
