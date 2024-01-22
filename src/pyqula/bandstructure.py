@@ -71,7 +71,7 @@ def ket_Aw(A,w):
 def get_bands(self,**kwargs):
     """Compute n-dimensional bandstructures"""
     if self.non_hermitian: # non Hermitian Hamiltonians
-        from .nonhermitian.nhmethods import get_bands as get_bands_NH
+        from .nonhermitiantk.nhmethods import get_bands as get_bands_NH
         return get_bands_NH(self,**kwargs)
     else: # for hermitian Hamiltonians
         return get_bands_nd(self,**kwargs)
