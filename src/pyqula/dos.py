@@ -12,21 +12,15 @@ from . import parallel
 from numba import jit
 from .klist import kmesh
 
-use_fortran = False
-
-def calculate_dos(es,xs,d,use_fortran=use_fortran,w=None):
-  if w is None: w = np.zeros(len(es)) + 1.0 # initialize
-  else: w = w.real # make it real just in case
-  if use_fortran: # use fortran routine
-    from . import dosf90 
-    return dosf90.calculate_dos(es,xs,d,w) # use the Fortran routine
-  else:
-      es = np.array(es)
-      xs = np.array(xs)
-      d = np.array(d)
-      ys = np.zeros(np.array(xs.shape[0])) # initialize
-      ys = calculate_dos_jit(es,xs,d,w,ys) # compute
-      return ys
+def calculate_dos(es,xs,d,w=None):
+    if w is None: w = np.zeros(len(es)) + 1.0 # initialize
+    else: w = w.real # make it real just in case
+    es = np.array(es)
+    xs = np.array(xs)
+    d = np.array(d)
+    ys = np.zeros(np.array(xs.shape[0])) # initialize
+    ys = calculate_dos_jit(es,xs,d,w,ys) # compute
+    return ys
 
 @jit(nopython=True)
 def calculate_dos_jit(es,xs,d,w,ys):
@@ -63,21 +57,6 @@ def dos0d(h,energies=np.linspace(-4,4,500),delta=0.01):
   hkgen = h.get_hk_gen() # get generator
   calculate_dos_hkgen(hkgen,[0],
             delta=delta,energies=energies) # conventiona algorithm
-#  ds = [] # empty list
-#  if h.dimensionality==0:  # only for 0d
-#    iden = np.identity(h.intra.shape[0],dtype=np.complex_) # create identity
-#    for e in es: # loop over energies
-#      g = ( (e+1j*delta)*iden -h.intra ).I # calculate green function
-#      if i is None: d = -g.trace()[0,0].imag
-#      elif checkclass.is_iterable(i): # iterable list 
-#          d = sum([-g[ii,ii].imag for ii in i])
-#      else: d = -g[i,i].imag # assume an integer
-#      ds.append(d)  # add this dos
-#  else: raise # not implemented...
-#  write_dos(es,ds)
-#  return ds
-
-
 
 
 

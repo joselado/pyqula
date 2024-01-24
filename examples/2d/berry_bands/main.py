@@ -6,13 +6,13 @@ from pyqula import geometry
 from pyqula import topology
 from pyqula import dos
 g = geometry.honeycomb_lattice()
-h = g.get_hamiltonian(has_spin=True)
+h = g.get_hamiltonian(has_spin=False)
 h.add_sublattice_imbalance(0.5)
 op = h.get_operator("berry")
 h.get_bands(operator=op)
 
 
-
+# this seems broken
 
 
 

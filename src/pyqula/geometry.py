@@ -13,13 +13,6 @@ from numba import jit
 from .htk.g2h import get_hamiltonian
 from .helptk import get_docstring
 
-
-try:
-  from . import supercellf90
-  use_fortran = True
-except: 
-  use_fortran = False
-#  print("FORTRAN routines not present in geometry.py")
 use_fortran = False
 
 class Geometry:
@@ -197,6 +190,7 @@ class Geometry:
         from .geometrytk.replicas import multireplicas
         return multireplicas(self,n)
     def bloch_phase(self,d,k):
+        """Return the Bloch's phase for a specific k-vector"""
         from .geometrytk.bloch import bloch_phase
         return bloch_phase(self,d,k)
     def remove(self,i=0):
