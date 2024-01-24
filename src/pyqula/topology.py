@@ -124,77 +124,77 @@ from .topologytk.overlap import uij
 
 
 def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None):
-  """ Calculates the chern number of a 2d system """
-  from scipy import integrate
-  err = {"epsabs" : 1.0, "epsrel": 1.0,"limit" : 10}
-#  err = [err,err]
-  def f(x,y): # function to integrate
-    if mode=="Wilson":
-      return berry_curvature(h,np.array([x,y]),dk=dk)
-    if mode=="Green":
-       f2 = h.get_gk_gen(delta=delta) # get generator
-       return berry_green(f2,k=[x,y,0.],operator=operator) 
-  c = integrate.dblquad(f,0.,1.,lambda x : 0., lambda x: 1.,epsabs=0.01,
-                          epsrel=0.01)
-  chern = c[0]/(2.*np.pi)
-  open("CHERN.OUT","w").write(str(chern)+"\n")
-  return chern
+    """ Calculates the chern number of a 2d system """
+    from scipy import integrate
+    err = {"epsabs" : 1.0, "epsrel": 1.0,"limit" : 10}
+    def f(x,y): # function to integrate
+      if mode=="Wilson":
+        return berry_curvature(h,np.array([x,y]),dk=dk)
+      elif mode=="Green":
+         f2 = h.get_gk_gen(delta=delta) # get generator
+         return berry_green(f2,k=[x,y,0.],operator=operator) 
+      else: raise
+    c = integrate.dblquad(f,0.,1.,lambda x : 0., lambda x: 1.,epsabs=0.01,
+                            epsrel=0.01)
+    chern = c[0]/(2.*np.pi)
+    open("CHERN.OUT","w").write(str(chern)+"\n")
+    return chern
 
 
 def hall_conductivity(h,dk=-1,n=1000):
-  c = 0.0 
-  nk = int(np.sqrt(n)) # estimate
-  if dk<0: dk = 1./float(2*nk) # automatic dk
-  for i in range(n):
-    k = np.random.random(2) # random kpoint
-    c += berry_curvature(h,k,dk=dk)
-  c = c/(2*np.pi*n) # normalize
-  return c
+    c = 0.0 
+    nk = int(np.sqrt(n)) # estimate
+    if dk<0: dk = 1./float(2*nk) # automatic dk
+    for i in range(n):
+      k = np.random.random(2) # random kpoint
+      c += berry_curvature(h,k,dk=dk)
+    c = c/(2*np.pi*n) # normalize
+    return c
 
 
 
 
 def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
         operator=None,kmesh=None):
-  """ Calculates the chern number of a 2d system """
-  c = 0.0
-  ks = [] # array for kpoints
-  bs = [] # array for berrys
-  if dk<0: dk = 1./float(2*nk) # automatic dk
-  if kmesh is not None: # infer the dk of the mesh
-      dk = klist.infer_kmesh_dk(kmesh,d=2)
-  if operator is not None and mode=="Wilson":
-    print("Switching to Green mode in topology")
-    mode="Green"
-  # create the function
-  def fberry(k): # function to integrate
-    if mode=="Wilson":
-      return berry_curvature(h,k,dk=dk)
-    if mode=="Green":
-       f2 = h.get_gk_gen(delta=delta) # get generator
-       return berry_green(f2,k=[k[0],k[1],0.],operator=operator) 
-  ##################
-  if kmesh is None: # no kmesh provided
-      ks = klist.kmesh(h.dimensionality,nk=nk) # get the mesh
-  else: ks = kmesh # use the provided kmesh
-  ik = 0
-  bs = parallel.pcall(fberry,ks) # compute all the Berry curvatures
-  # write in file
-  fo = open("BERRY_CURVATURE.OUT","w") # open file
-  for (k,b) in zip(ks,bs):
-    fo.write(str(k[0])+"   ")
-    fo.write(str(k[1])+"   ")
-    fo.write(str(b)+"\n")
-  fo.close() # close file
-  ################
-  c = np.sum(bs) # sum berry curvatures
-  if kmesh is None: # no kmesh provided
-      c = c/(2.*np.pi*nk*nk) # normalize
-  else: # kmesh is given
-      den = klist.infer_kmesh_density(kmesh,d=2) # infer the volume
-      c = den*c/(2.*np.pi) # normalize
-  open("CHERN.OUT","w").write(str(c)+"\n")
-  return c
+    """ Calculates the chern number of a 2d system """
+    c = 0.0
+    ks = [] # array for kpoints
+    bs = [] # array for berrys
+    if dk<0: dk = 1./float(2*nk) # automatic dk
+    if kmesh is not None: # infer the dk of the mesh
+        dk = klist.infer_kmesh_dk(kmesh,d=2)
+    if operator is not None and mode=="Wilson":
+      print("Switching to Green mode in topology")
+      mode="Green"
+    # create the function
+    def fberry(k): # function to integrate
+      if mode=="Wilson":
+        return berry_curvature(h,k,dk=dk)
+      if mode=="Green":
+         f2 = h.get_gk_gen(delta=delta) # get generator
+         return berry_green(f2,k=[k[0],k[1],0.],operator=operator) 
+    ##################
+    if kmesh is None: # no kmesh provided
+        ks = klist.kmesh(h.dimensionality,nk=nk) # get the mesh
+    else: ks = kmesh # use the provided kmesh
+    ik = 0
+    bs = parallel.pcall(fberry,ks) # compute all the Berry curvatures
+    # write in file
+    fo = open("BERRY_CURVATURE.OUT","w") # open file
+    for (k,b) in zip(ks,bs):
+      fo.write(str(k[0])+"   ")
+      fo.write(str(k[1])+"   ")
+      fo.write(str(b)+"\n")
+    fo.close() # close file
+    ################
+    c = np.sum(bs) # sum berry curvatures
+    if kmesh is None: # no kmesh provided
+        c = c/(2.*np.pi*nk*nk) # normalize
+    else: # kmesh is given
+        den = klist.infer_kmesh_density(kmesh,d=2) # infer the volume
+        c = den*c/(2.*np.pi) # normalize
+    open("CHERN.OUT","w").write(str(c)+"\n")
+    return c
 
 
 def get_berry_curvature(self,**kwargs):
@@ -305,50 +305,51 @@ def z2_invariant(h,nk=60,nt=60,nocc=None):
 
 
 def chern(h,**kwargs):
-  """Compute Chern invariant"""
-  return mesh_chern(h,**kwargs) # workaround
-  # the wannier winding does not work
-  c = wannier_winding(h,full=True,**kwargs) 
-  open("CHERN.OUT","w").write(str(c))
-  return c
+    """Compute Chern invariant"""
+    return mesh_chern(h,**kwargs) # workaround
+    # the wannier winding does not work
+    c = wannier_winding(h,full=True,**kwargs) 
+    open("CHERN.OUT","w").write(str(c))
+    return c
 
 
 
 
 def wannier_winding(h,nk=100,nt=100,nocc=None,full=True):
-  m = z2_vanderbilt(h,nk=nk,nt=nt,nocc=nocc,full=full)
-  x = m[0]
-  from .topologytk.wannier import maximum_wannier_gap
-  fermis = maximum_wannier_gap(m)
-  # now check the number of cuts of each wannier center
-  def angleg(a,b,c):
-    """Function to say if a jump has been made or not"""
-    d = np.sin(a-b) + np.sin(b-c) + np.sin(c-a)
-    return -d
-
-  if full: # for the Chern number
-    raise
-    # this part is wrong
-    #####################
-    cuts = 0 # start with 0
-#    print(fermis)
-    for i in range(1,len(m)): # loop over waves 
-      cwf = m[i] # center of the wave
-      for it in range(len(x)-1): # loop over times
-        s1 = np.sign(fermis[it]-cwf[it])
-        s2 = np.sign(fermis[it+1]-cwf[it])
-#        print(s1,s2)
-        cuts += (s1-s2)/2. 
-    return cuts
-
-  else: # for the Z2 invariant
-    parity = 1 # start with
-    for i in range(1,len(m)): # loop over waves 
-      cwf = m[i] # center of the wave
-      for it in range(len(x)-1): # loop over times
-        s = np.sign(angleg(fermis[it],fermis[it+1],cwf[it])) 
-        if s<0.:  parity *= -1 # add a minus sign
-    return parity
+    """Compute the winding of the Wannier functions"""
+    m = z2_vanderbilt(h,nk=nk,nt=nt,nocc=nocc,full=full)
+    x = m[0]
+    from .topologytk.wannier import maximum_wannier_gap
+    fermis = maximum_wannier_gap(m)
+    # now check the number of cuts of each wannier center
+    def angleg(a,b,c):
+      """Function to say if a jump has been made or not"""
+      d = np.sin(a-b) + np.sin(b-c) + np.sin(c-a)
+      return -d
+  
+    if full: # for the Chern number
+      raise
+      # this part is wrong
+      #####################
+      cuts = 0 # start with 0
+  #    print(fermis)
+      for i in range(1,len(m)): # loop over waves 
+        cwf = m[i] # center of the wave
+        for it in range(len(x)-1): # loop over times
+          s1 = np.sign(fermis[it]-cwf[it])
+          s2 = np.sign(fermis[it+1]-cwf[it])
+  #        print(s1,s2)
+          cuts += (s1-s2)/2. 
+      return cuts
+  
+    else: # for the Z2 invariant
+      parity = 1 # start with
+      for i in range(1,len(m)): # loop over waves 
+        cwf = m[i] # center of the wave
+        for it in range(len(x)-1): # loop over times
+          s = np.sign(angleg(fermis[it],fermis[it+1],cwf[it])) 
+          if s<0.:  parity *= -1 # add a minus sign
+      return parity
 
 
 
@@ -360,35 +361,35 @@ def wannier_winding(h,nk=100,nt=100,nocc=None,full=True):
 
 
 def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
-  """Calculates the Berry curvature using an arbitrary operator"""
-  h = multicell.turn_multicell(hin) # turn to multicell form
-  dhdx = multicell.derivative(h,k,order=[1,0]) # derivative
-  dhdy = multicell.derivative(h,k,order=[0,1]) # derivative
-  hkgen = h.get_hk_gen() # get generator
-  hk = hkgen(k) # get hamiltonian
-  (es,ws) = algebra.eigh(hkgen(k)) # initial waves
-  ws = np.conjugate(np.transpose(ws)) # transpose the waves
-  n = len(es) # number of energies
-  from .berry_curvaturef90 import berry_curvature as bc90
-  if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex_)
-  b = bc90(dhdx,dhdy,ws,es,operator,delta) # berry curvature
-  return b*np.pi*np.pi*8 # normalize so the sum is 2pi Chern
+    """Calculates the Berry curvature using an arbitrary operator"""
+    h = multicell.turn_multicell(hin) # turn to multicell form
+    dhdx = multicell.derivative(h,k,order=[1,0]) # derivative
+    dhdy = multicell.derivative(h,k,order=[0,1]) # derivative
+    hkgen = h.get_hk_gen() # get generator
+    hk = hkgen(k) # get hamiltonian
+    (es,ws) = algebra.eigh(hkgen(k)) # initial waves
+    ws = np.conjugate(np.transpose(ws)) # transpose the waves
+    n = len(es) # number of energies
+    from .berry_curvaturef90 import berry_curvature as bc90
+    if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex_)
+    b = bc90(dhdx,dhdy,ws,es,operator,delta) # berry curvature
+    return b*np.pi*np.pi*8 # normalize so the sum is 2pi Chern
 
 
 
 def operator_berry_bands(hin,k=[0.,0.],operator=None,delta=0.00001):
-  """Calculates the Berry curvature using an arbitrary operator"""
-  h = multicell.turn_multicell(hin) # turn to multicell form
-  dhdx = multicell.derivative(h,k,order=[1,0]) # derivative
-  dhdy = multicell.derivative(h,k,order=[0,1]) # derivative
-  hkgen = h.get_hk_gen() # get generator
-  hk = hkgen(k) # get hamiltonian
-  (es,ws) = algebra.eigh(hkgen(k)) # initial waves
-  ws = np.conjugate(np.transpose(ws)) # transpose the waves
-  from .berry_curvaturef90 import berry_curvature_bands as bcb90
-  if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex_)
-  bs = bcb90(dhdx,dhdy,ws,es,operator,delta) # berry curvatures
-  return (es,bs*np.pi*np.pi*8) # normalize so the sum is 2pi Chern
+    """Calculates the Berry curvature using an arbitrary operator"""
+    h = multicell.turn_multicell(hin) # turn to multicell form
+    dhdx = multicell.derivative(h,k,order=[1,0]) # derivative
+    dhdy = multicell.derivative(h,k,order=[0,1]) # derivative
+    hkgen = h.get_hk_gen() # get generator
+    hk = hkgen(k) # get hamiltonian
+    (es,ws) = algebra.eigh(hkgen(k)) # initial waves
+    ws = np.conjugate(np.transpose(ws)) # transpose the waves
+    from .berry_curvaturef90 import berry_curvature_bands as bcb90
+    if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex_)
+    bs = bcb90(dhdx,dhdy,ws,es,operator,delta) # berry curvatures
+    return (es,bs*np.pi*np.pi*8) # normalize so the sum is 2pi Chern
 
 
 

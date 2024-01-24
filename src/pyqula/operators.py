@@ -36,8 +36,8 @@ class Operator():
         elif isinstance(m, numbers.Number): 
             self.m = lambda v,k=None: m*v
         elif callable(m): 
-            self.m = lambda v,k=None: m(v)
-        #    self.m = m # as function
+        #    self.m = lambda v,k=None: m(v)
+            self.m = m # as function
         elif type(m)==Hamiltonian: # Hamiltonian type 
             hkgen = m.get_hk_gen()
             self.m = lambda v,k=None: hkgen(k)@v
@@ -624,16 +624,18 @@ def get_potential(self,**kwargs):
 
 
 def get_location(self,r=[0.,0.,0.]):
+    "Return the closest index to a specific location"
     ir = self.geometry.closest_index(r)
     return index(self,n=[ir])
 
 
 def get_site(H,index=0):
+    """Return a projector operator in site number index"""
     from . import potentials
-    Hp = H*0.
-    f = potentials.impurity(H.geometry.r[index],v=1.0)
-    Hp.add_onsite(f)
-    return Operator(Hp.intra)
+    Hp = H*0. # make a dummy copy of the Hamiltonian
+    f = potentials.impurity(H.geometry.r[index],v=1.0) # create a local pot
+    Hp.add_onsite(f) # add onsite energy
+    return Operator(Hp.intra) # return an operator object
 
 
 def get_correlator_ij(H,i=0,j=0):

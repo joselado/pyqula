@@ -68,30 +68,15 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         # callback function in each iteration
         if callback is not None: callback(k,es,ws) # call the function
       return out # return string
-    ### Now evaluate the function
-#    from . import parallel
-#    if write: f = open(output_file,"w") # open bands file
-#    if parallel.cores==1: ### single thread ###
     if True:
-#      tr = timing.Testimator("BANDSTRUCTURE",silent=silent) # generate object
       esk = [] # empty list
       for k in range(len(kpath)): # loop over kpoints
-#        tr.remaining(k,len(kpath)) # estimate of the time
         ek = getek(k)
         esk += ek # add lists
     esk = np.array(esk).T
-    if eigmode=="complex": pass
-    elif eigmode=="real": esk[1] = esk[1].real
-    elif eigmode=="imag": esk[1] = esk[1].imag
+    if eigmode=="complex": pass # full eigenvalue
+    elif eigmode=="real": esk[1] = esk[1].real # real part of eigenvalue
+    elif eigmode=="imag": esk[1] = esk[1].imag # imag part of eigenvalue
     else: raise
     return esk
 
-#        if write: 
-#            f.write(ek.real) # write this kpoint
-#            f.write(ek.imag) # write this kpoint
-#    if write: f.close()
-  #  print("\nBANDS finished")
-#    esk = esk.split("\n") # split
-#    del esk[-1] # remove last one
-#    esk = np.array([[float(i) for i in ek.split()] for ek in esk]).T
-#    return esk # return data
