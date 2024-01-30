@@ -208,27 +208,33 @@ def onsite_supercell(h,nsuper,mc=None):
     if mc is None: mc = intra
     else: mc = csc(mc)
     for i in range(n):
-      intrasuper[i][i] = intra # intracell
-      (x1,y1) = inds[i]
-      for j in range(n):
-        (x2,y2) = inds[j]
-        dx = x2-x1
-        dy = y2-y1
-        if dx==1 and  dy==0: intrasuper[i][j] = tx
-        if dx==-1 and dy==0: intrasuper[i][j] = tx.H
-        if dx==0 and  dy==1: intrasuper[i][j] = ty
-        if dx==0 and  dy==-1: intrasuper[i][j] = ty.H
-        if dx==1 and  dy==1: intrasuper[i][j] = txy
-        if dx==-1 and dy==-1: intrasuper[i][j] = txy.H
-        if dx==1 and  dy==-1: intrasuper[i][j] = txmy
-        if dx==-1 and dy==1: intrasuper[i][j] = txmy.H
-    if nsuper[0]%2==1: # central cell
-        ii=int(n/2)
+        intrasuper[i][i] = intra # intracell
+        (x1,y1) = inds[i]
+        for j in range(n):
+            (x2,y2) = inds[j]
+            dx = x2-x1
+            dy = y2-y1
+            if dx==1 and  dy==0: intrasuper[i][j] = tx
+            if dx==-1 and dy==0: intrasuper[i][j] = tx.H
+            if dx==0 and  dy==1: intrasuper[i][j] = ty
+            if dx==0 and  dy==-1: intrasuper[i][j] = ty.H
+            if dx==1 and  dy==1: intrasuper[i][j] = txy
+            if dx==-1 and dy==-1: intrasuper[i][j] = txy.H
+            if dx==1 and  dy==-1: intrasuper[i][j] = txmy
+            if dx==-1 and dy==1: intrasuper[i][j] = txmy.H
+    ### setup the central (defective) cell
+    if h.dimensionality==1:
+        ii=int(n//2) # central site
         intrasuper[ii][ii] = mc # central onsite
-    else:
-        ii=int(n/2)
-        ii = ii - int(nsuper[0]/2)
-        intrasuper[ii][ii] = mc # central onsite
+    elif h.dimensionality==2:
+        if nsuper[0]%2==1: # odd supercell
+            ii=int(n//2)
+            intrasuper[ii][ii] = mc # central onsite
+        else: # even supercell
+            ii=int(n//2) # central
+            ii = ii - int(nsuper[0]//2)
+            intrasuper[ii][ii] = mc # central onsite
+    else: raise
     intrasuper = bmat(intrasuper).todense() # supercell
     return intrasuper
 
@@ -256,7 +262,7 @@ def get_gf_exact(self,energy=0.0,delta=1e-2,
                 nsuper=nsuper*self.nsuper) # compute Green's function
         h = h.supercell(self.nsuper) # and redefine with a supercell
     ms = onsite_supercell(h,nsuper)
-    n = self.m.shape[0]
+    n = self.m.shape[0] # dimension of the matrix
     ms = onsite_defective_central(h,self.m,nsuper)
     ns = ms.shape[0] # dimension of the supercell
     iden = np.identity(ns,dtype=np.complex_) # identity
