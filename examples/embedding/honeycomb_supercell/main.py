@@ -13,6 +13,12 @@ hv = h.copy() # copy Hamiltonian to create a defective one
 hv.add_onsite(lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100) # add a defect
 eb = embedding.Embedding(h,m=hv) # create an embedding object
 (x,y,d) = eb.get_ldos(nsuper=20,energy=0.,delta=1e-2) # compute LDOS
+
+import matplotlib.pyplot as plt
+
+
+plt.scatter(x,y,c=d,s=200*d/np.max(d))
+plt.show()
 #(x,y,d) = eb.get_didv(nsuper=10,T=0.1,energy=0.,delta=1e-2) # compute LDOS
 
 #np.savetxt("LDOS.OUT",np.array([x,y,d]).T)

@@ -36,8 +36,7 @@ class Operator():
         elif isinstance(m, numbers.Number): 
             self.m = lambda v,k=None: m*v
         elif callable(m): 
-        #    self.m = lambda v,k=None: m(v)
-            self.m = m # as function
+            self.m = m # as function (assume k is a keyword)
         elif type(m)==Hamiltonian: # Hamiltonian type 
             hkgen = m.get_hk_gen()
             self.m = lambda v,k=None: hkgen(k)@v
