@@ -146,10 +146,10 @@ def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
     if len(ht.central_intra)==0: # no central part provided
         ht.central_intra = (ht.left_intra + ht.right_intra)/2.
         print("Generating a dummy central cell, you may want to use a different geometry")
-    ce = energy +1j*delta
-    idenc = np.matrix(np.identity(len(ht.central_intra),dtype=complex))*ce
-    idenl = np.matrix(np.identity(len(ht.left_intra),dtype=complex))*ce
-    idenr = np.matrix(np.identity(len(ht.right_intra),dtype=complex))*ce
+    ce = energy +1j*delta # complex energy
+    idenc = np.matrix(np.identity(ht.central_intra.shape[0],dtype=complex))*ce
+    idenl = np.matrix(np.identity(ht.left_intra.shape[0],dtype=complex))*ce
+    idenr = np.matrix(np.identity(ht.right_intra.shape[0],dtype=complex))*ce
     hlist = [[None for i in range(3)] for j in range(3)] # list of matrices
     # set up the different elements
     # first the intra terms
