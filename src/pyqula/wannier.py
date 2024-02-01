@@ -226,10 +226,13 @@ def read_hamiltonian(input_file="hr_truncated.dat",is_real=False):
   h.txmy = get_t(1,-1,0)
   h.has_spin = False  # if not spin polarized
   h.geometry = read_geometry() # read the geometry of the system
-  if len(h.geometry.r)!=len(h.intra): 
-    print("Dimensions do not match",len(g.r),len(h.intra))
-    print(h.geometry.r)
-    raise # error if dimensions dont match
+  if len(h.geometry.r)!=len(h.intra): # fix
+      print("Fixing the geometry")
+      g0 = geometry.square_lattice() # dummy geometry
+      g0 = g0.get_supercell((h.intra.shape[0],1))
+      h.geometry = g0
+#      print(h.geometry.r)
+#      raise # error if dimensions dont match
   return h
 
 
