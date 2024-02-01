@@ -804,10 +804,6 @@ des_spin = increase_hilbert.des_spin
 
 def shift_fermi(h,fermi):
     """ Moves the fermi energy of the system, the new value is at zero"""
-#    if h.has_kondo: raise # not implemented
-#        from .specialhamiltoniantk import heavyfermion
-#        heavyfermion.add_onsite(h,fermi)
-#        return
     r = h.geometry.r # positions
     n = len(r) # number of sites
     if checkclass.is_iterable(fermi): # iterable
