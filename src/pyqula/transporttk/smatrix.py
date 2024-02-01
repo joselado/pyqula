@@ -10,6 +10,7 @@ def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
     """Calculate the S-matrix of an heterostructure"""
     # now do the Fisher Lee trick
     delta = ht.delta
+    if delta>delta_smatrix: delta = delta_smatrix # small delta is critical!
     smatrix = [[None,None],[None,None]] # smatrix in list form
     # get the selfenergies, using the same coupling as the lead
     selfl = ht.get_selfenergy(energy,delta=delta,lead=0,pristine=True)
@@ -74,7 +75,6 @@ def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
     n = len(intra) # number of blocks
     iout = [[None for i in range(n)] for j in range(n)] # empty list
     iden = np.matrix(np.identity(intra[0][0].shape[0],dtype=np.complex_))
-    if delta>delta_smatrix: delta = delta_smatrix # small delta is critical!
     ez = iden*(energy +1j*delta) # complex energy
     for i in range(n):
       iout[i][i] = ez - intra[i][i] # simply E -H

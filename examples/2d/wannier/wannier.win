@@ -32,6 +32,12 @@ dis_froz_max = 4.4328
 dis_win_min = -10.5672
 dis_win_max = 9.4328
 
+begin unit_cell_cart
+bohr
+    6.46502850  0.00000000   0.00000000
+    3.23251425  5.59887892   0.00000000
+    0.00000000  0.00000000   36.25090947
+end unit_cell_cart
 
 
 

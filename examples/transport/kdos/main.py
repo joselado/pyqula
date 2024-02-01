@@ -17,6 +17,7 @@ h2 = h.copy() # second lead
 h1.add_sublattice_imbalance(0.3)
 h2.add_sublattice_imbalance(-0.3)
 central = [h1 for i in range(10)]
-central = []
-HT = heterostructures.build(h1,h2,central=central) # create the junction
-HT.get_kdos(delta=1e-1,ic=9)
+#central = []
+HT = heterostructures.build(h1,h2) # create the junction
+HT.delta = 1e-1
+HT.get_kdos(delta=1e-1)
