@@ -59,6 +59,15 @@ def read_geometry(input_file="wannier.win"):
   return g
 
 
+def dummy_geometry(H):
+    """Return a dummy geometry for this Hamiltonian"""
+    from . import geometry
+    g0 = geometry.square_lattice() # dummy geometry
+    g0 = g0.get_supercell((h.intra.shape[0],1))
+    return g0
+
+
+
 def get_positions(atom,input_file):
   """Get positions of certain orbitals"""
   ll = read_between("begin atoms_frac","end atoms_frac",input_file)
@@ -192,54 +201,51 @@ def read_between(a,b,input_file):
 
 
 def read_hamiltonian(input_file="hr_truncated.dat",is_real=False):
-  """Reads an output hamiltonian from wannier"""
-  mt = np.genfromtxt(input_file) # get file
-  m = mt.transpose() # transpose matrix
-  # read the hamiltonian matrices
-  class Hopping: pass # create empty class
-  tlist = []
-  def get_t(i,j,k):
-    norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
-    norb = int(norb)
-    mo = np.matrix(np.zeros((norb,norb),dtype=np.complex_))  
-    for l in mt: # look into the file
-      if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
-        if is_real:
-          mo[int(l[3])-1,int(l[4])-1] = l[5] # store element
-        else:
-          mo[int(l[3])-1,int(l[4])-1] = l[5] + 1j*l[6] # store element
-    return mo # return the matrix
-#  for i in range(-nmax,nmax):
-#    for j in range(-nmax,nmax):
-#      for k in range(-nmax,nmax):
-#        t = Hopping() # create hopping
-#        t.dir = [i,j,k] # direction
-#        t.m = get_t(i,j,k) # read the matrix
-#        tlist.append(t) # store hopping
-  # the previous is not used yet...
-  g = geometry.kagome_lattice() # create geometry
-  h = g.get_hamiltonian() # build hamiltonian
-  h.intra = get_t(0,0,0)
-  h.tx = get_t(1,0,0)
-  h.ty = get_t(0,1,0)
-  h.txy = get_t(1,1,0)
-  h.txmy = get_t(1,-1,0)
-  h.has_spin = False  # if not spin polarized
-  h.geometry = read_geometry() # read the geometry of the system
-  if len(h.geometry.r)!=len(h.intra): # fix
-      print("Fixing the geometry")
-      g0 = geometry.square_lattice() # dummy geometry
-      g0 = g0.get_supercell((h.intra.shape[0],1))
-      h.geometry = g0
-#      print(h.geometry.r)
-#      raise # error if dimensions dont match
-  return h
+    """Reads an output hamiltonian from wannier"""
+    mt = np.genfromtxt(input_file) # get file
+    m = mt.transpose() # transpose matrix
+    # read the hamiltonian matrices
+    class Hopping: pass # create empty class
+    tlist = []
+    def get_t(i,j,k):
+      norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
+      norb = int(norb)
+      mo = np.matrix(np.zeros((norb,norb),dtype=np.complex_))  
+      for l in mt: # look into the file
+        if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
+          if is_real:
+            mo[int(l[3])-1,int(l[4])-1] = l[5] # store element
+          else:
+            mo[int(l[3])-1,int(l[4])-1] = l[5] + 1j*l[6] # store element
+      return mo # return the matrix
+  #  for i in range(-nmax,nmax):
+  #    for j in range(-nmax,nmax):
+  #      for k in range(-nmax,nmax):
+  #        t = Hopping() # create hopping
+  #        t.dir = [i,j,k] # direction
+  #        t.m = get_t(i,j,k) # read the matrix
+  #        tlist.append(t) # store hopping
+    # the previous is not used yet...
+    g = geometry.kagome_lattice() # create geometry
+    h = g.get_hamiltonian() # build hamiltonian
+    h.intra = get_t(0,0,0)
+    h.tx = get_t(1,0,0)
+    h.ty = get_t(0,1,0)
+    h.txy = get_t(1,1,0)
+    h.txmy = get_t(1,-1,0)
+    h.has_spin = False  # if not spin polarized
+    try:
+        h.geometry = read_geometry() # read the geometry of the system
+        if len(h.geometry.r)!=len(h.intra): raise # not ok
+        print("Fixing the geometry")
+    except: h.geometry = dummy_geometry(h) # dummy geometry
+    return h
 
 
 
 def read_multicell_hamiltonian(input_file="hr_truncated.dat",
                                 ncells=None,win_file="wannier.win",
-                                dim=2,skip_win=False,path=None):
+                                dim=2,skip_win=True,path=None):
   """Reads an output hamiltonian from wannier"""
   if path is not None: 
       inipath = os.getcwd() # current path
@@ -651,9 +657,13 @@ def read_supercell_hamiltonian(input_file="hr_truncated.dat",is_real=False,nsupe
   h.ty = bmat(ty).todense()
   h.txy = bmat(txy).todense()
   h.txmy = bmat(txmy).todense()
-  h.geometry = read_geometry() # read the geometry of the system
+  try:
+        h.geometry = read_geometry() # read the geometry of the system
+        if len(h.geometry.r)!=len(h.intra): raise # not ok
+        print("Fixing the geometry")
+  except: h.geometry = dummy_geometry(h) # dummy geometry
   if nsuper>1:
-    h.geometry = h.geometry.supercell(nsuper) # create supercell
+    h.geometry = h.geometry.get_supercell(nsuper) # create supercell
   if len(h.geometry.r)!=len(h.intra): 
     print("Dimensions do not match",len(g.r),len(h.intra))
     print(h.geometry.r)
