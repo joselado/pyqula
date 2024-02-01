@@ -22,20 +22,22 @@ def build(left=None,right=None,central=None,**kwargs):
         if h1.dimensionality==1: # one dimensional
           return create_leads_and_central_list(h2,h1,central,**kwargs) # standard way
         elif h1.dimensionality==2:  # two dimensional
-          def fun(k,lc=1.0,rc=1.0):
-            # evaluate at a particular k point
-            h1p = h1.get_1dh(k)
-            h2p = h2.get_1dh(k)
-            centralp = [hc.get_1dh(k) for hc in central]
-            out = create_leads_and_central_list(h2p,h1p,centralp,**kwargs) # standard way
-            out.scale_lc = lc
-            out.scale_rc = rc
-            return out # return 1d heterostructure
+          def fun(k,lc=1.0,rc=1.0,delta=1e-3):
+              # evaluate at a particular k point
+              h1p = h1.get_1dh(k)
+              h2p = h2.get_1dh(k)
+              centralp = [hc.get_1dh(k) for hc in central]
+              out = create_leads_and_central_list(h2p,h1p,centralp,**kwargs) # standard way
+              out.scale_lc = lc
+              out.scale_rc = rc
+              out.delta = delta
+              return out # return 1d heterostructure
           hout = Heterostructure() # create
           hout.Hr = h2.copy() # store Hamiltonian
           hout.Hl = h1.copy() # store Hamiltonian
           hout.dimensionality = 2 # two dimensional
-          hout.generate = fun # function that generates the heterostructure
+          hout.generate = create_generator(hout,fun) # create the generator
+          # function that generates the heterostructure
           return hout # function that return a heterostructure
         else: raise # not implemented
     else:
@@ -63,6 +65,25 @@ def build(left=None,right=None,central=None,**kwargs):
             HT.right_coupling = dagger(HT.left_coupling)
             return HT
         raise # not finished
+
+
+
+
+def create_generator(HT,fun):
+    """Create a function that creates a generator for 2d structures"""
+    def outf(k):
+        HT1 = fun(k) # evaluate
+        # overwrite some parameters
+        HT1.delta = HT.delta
+        HT1.scale_rc = HT.scale_rc
+        HT1.scale_lc = HT.scale_lc
+        return HT1
+    return outf # return function
+
+
+
+
+
 
 
 

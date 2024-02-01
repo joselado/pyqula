@@ -306,8 +306,10 @@ def block_inverse(m,i=0,j=0):
     """ Calculate a certain element of the inverse of a block matrix"""
     from scipy.sparse import csc_matrix,bmat
     nb = len(m) # number of blocks
-    if i<0: i += nb 
-    if j<0: j += nb 
+#    if i<0: i += nb 
+#    if j<0: j += nb 
+    i = i%nb # periodic boundaries
+    j = j%nb # periodic boundaries
     mt = [[None for ii in range(nb)] for jj in range(nb)]
     for ii in range(nb): # diagonal part
       mt[ii][ii] = csc_matrix(m[ii][ii])

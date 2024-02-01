@@ -5,7 +5,7 @@ def kdos(self,kpath=None,energies=None,
     """Compute momentum-resolved spectral function"""
     def fun(k,e):
         if self.dimensionality==2: # 2D heterostructure
-            HT1 = self.generate(k) # generate heterostructure
+            HT1 = self.generate(k)
             return HT1.get_coupled_central_dos(energy=e,**kwargs)
         else: raise # not implemented
     if kpath is None: kpath = np.linspace(0.,1.,40)
