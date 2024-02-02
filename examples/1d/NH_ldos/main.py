@@ -11,12 +11,14 @@ n  = 30
 g = g0.get_supercell(n,store_primal=True)
 h = g.get_hamiltonian(has_spin=False,non_hermitian=True,tij=[-1])
 omega = 1./n
-ons = lambda r: 0.4j*(np.cos(np.pi*2*omega*r[0])+1.)
+ons = lambda r: 0.6j*(np.cos(np.pi*2*omega*r[0])+1.)
 h.add_onsite(ons)
 h.add_onsite(2.)
 
 ks,es = h.get_bands(kpath=[[0.]])
+es = es.real
 numbands = 10 # number of bands to plot
+es = np.unique(np.round(es,2)) # unique energies
 es = es[0:10].real # get the first numbands bands
 ie = 0
 fig = plt.figure(figsize=[12,numbands*2])
@@ -28,7 +30,7 @@ v = v - np.min(v)
 v = v/np.max(v)
 for e in es:
     plt.subplot(len(es),1,ie+1) ; ie += 1
-    (xi,yi,di) = h.get_ldos(e=e,delta=0.01,nrep=nrep)
+    (xi,yi,di) = h.get_ldos(e=e,delta=0.01,nrep=nrep,eigmode="imag")
     di = di/np.max(di) # normalize
     # make a smooth interpolation
     from scipy.interpolate import interp1d

@@ -22,9 +22,14 @@ def get_waves_hermitian(intra,num_bands=None,**kwargs):
 
 
 
-def get_waves_non_hermitian(intra,num_bands=None,**kwargs):
+def get_waves_non_hermitian(intra,num_bands=None,eigmode="complex",
+        **kwargs):
     """Return eigenvalues and eigenvectors"""
     eig,eigvec = algebra.eig(intra)
     eigvec = eigvec.T # transpose
+    if eigmode=="complex": pass
+    elif eigmode=="real": eig = eig.real
+    elif eigmode=="imag": eig = eig.imag
+    else: raise
     return eig,eigvec
 
