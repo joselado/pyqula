@@ -142,25 +142,34 @@ def ldos_waves(intra,es = [0.0],delta=0.01,operator=None,
         num_bands=None,k=None,delta_discard=None,**kwargs):
   """Calculate the DOS in a set of energies by full diagonalization"""
   es = np.array(es) # array with energies
-  if num_bands is None:
-      eig,eigvec = algebra.eigh(intra) 
-  else:
-      eig,eigvec = algebra.smalleig(intra,numw=num_bands,evecs=True)
-      eigvec = eigvec.T
+  eig,eigvec = get_waves(intra,**kwargs) # eigenvalues and eigenvectors
   ds = [] # empty list
-  if operator is None: weights = eig*0. + 1.0
-  else: weights = [operator.braket(v,k=k) for v in eigvec.transpose()] # weights
+  if operator is None: weights = eig*0. + 1.0 # initialize as 1
+  else: weights = [operator.braket(v,k=k) for v in eigvec] # weights
   if delta_discard is not None: # discard too far values
-      ewin = [min(es)-delta_discard*delta,min(es)+delta_discard*delta]
+      ewin = [np.min(es)-delta_discard*delta,np.min(es)+delta_discard*delta]
       for i in range(len(weights)):
           e = eig[i]
           if not ewin[0]<e<ewin[1]: weights[i] = 0.0
-  v2s = [(np.conjugate(v)*v).real for v in eigvec.transpose()]
+  v2s = [(np.conjugate(v)*v).real for v in eigvec] # square of the wavefunction
   ds = [[0.0 for i in range(intra.shape[0])] for e in es] # initialize
   ds = ldos_waves_jit(np.array(es),
           np.array(eigvec).T,np.array(eig),np.array(weights),
           np.array(v2s),np.array(ds),delta)
   return ds
+
+
+
+
+def get_waves(intra,num_bands=None,**kwargs):
+    """Return eigenvalues and eigenvectors"""
+    if num_bands is None:
+        eig,eigvec = algebra.eigh(intra)
+        eigvec = eigvec.T # transpose
+    else:
+        eig,eigvec = algebra.smalleig(intra,numw=num_bands,evecs=True)
+    return eig,eigvec
+
 
 
 
