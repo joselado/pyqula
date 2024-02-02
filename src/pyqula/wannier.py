@@ -63,7 +63,7 @@ def dummy_geometry(H):
     """Return a dummy geometry for this Hamiltonian"""
     from . import geometry
     g0 = geometry.square_lattice() # dummy geometry
-    g0 = g0.get_supercell((h.intra.shape[0],1))
+    g0 = g0.get_supercell((H.intra.shape[0],1))
     return g0
 
 
@@ -245,70 +245,74 @@ def read_hamiltonian(input_file="hr_truncated.dat",is_real=False):
 
 def read_multicell_hamiltonian(input_file="hr_truncated.dat",
                                 ncells=None,win_file="wannier.win",
-                                dim=2,skip_win=True,path=None):
-  """Reads an output hamiltonian from wannier"""
-  if path is not None: 
-      inipath = os.getcwd() # current path
-      os.chdir(path) # go there
-  mt = np.genfromtxt(input_file) # get file
-  m = mt.transpose() # transpose matrix
-  if ncells is None: # use all the hoppings
-    nmax = int(np.max([np.max(m[i])for i in range(3)]))
-    ncells = [nmax,nmax,nmax]
-  # read the hamiltonian matrices
-  class Hopping: pass # create empty class
-  tlist = []
-  def get_t(i,j,k):
-    norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
-    norb = int(norb)
-    mo = np.matrix(np.zeros((norb,norb),dtype=np.complex_))  
-    found = False
-    for l in mt: # look into the file
-      if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
-        mo[int(l[3])-1,int(l[4])-1] = l[5] + 1j*l[6] # store element
-        found  = True # matrix has been found
-    if found:  return mo # return the matrix
-    else: return None # return nothing if not found
-  for i in range(-ncells[0],ncells[0]+1):
-    for j in range(-ncells[1],ncells[1]+1):
-      for k in range(-ncells[2],ncells[2]+1):
-        if (i,j,k)==(0,0,0): continue # skip intracell
-        matrix = get_t(i,j,k) # read the matrix
-        if matrix is None: continue
-        else: # store hopping
-          t = Hopping() # create hopping
-          t.dir = [i,j,k] # direction
-          t.m = get_t(i,j,k) # read the matrix
-          tlist.append(t) # store hopping
-  # the previous is not used yet...
-  g = geometry.kagome_lattice() # create geometry
-  h = g.get_hamiltonian() # build hamiltonian
-  h.is_multicell = True
-  if not skip_win: # do not skip wannier.win
-    h.orbitals = get_all_orbitals(input_file=win_file)
-  h.hopping = tlist # list of hoppings
-  h.has_spin = False  # if not spin polarized
-  if not skip_win: # do not skip readin wannier.win
-    h.geometry = read_geometry(input_file=win_file) # read the geometry of the system
-    h.geometry.center() # center the geometry
-  h.intra = get_t(0,0,0)
-  if not skip_win: # do not skip reading wannier.win
-    if len(h.geometry.r)!=len(h.intra): 
-      print("Dimensions do not match",len(g.r),len(h.intra))
-      print(h.geometry.r)
-  #  raise # error if dimensions dont match
-  h.dimensionality = dim 
-  if path is not None: 
-      os.chdir(inipath) # go back
-      h.wannierpath = path # store
-  else: h.wannierpath = None
-  # now lets add the SOC method
-  def get_soc(self,name,soc):
-      if not self.has_spin: raise # only for spinful
-      self.intra = self.intra + generate_soc(name,soc,path=self.wannierpath) 
-  import types
-  h.get_soc = types.MethodType(get_soc,h) # add the method
-  return h
+                                dim=2,skip_win=True,path=None,
+                                nmax=None):
+    """Reads an output hamiltonian from wannier"""
+    if path is not None: 
+        inipath = os.getcwd() # current path
+        os.chdir(path) # go there
+    mt = np.genfromtxt(input_file) # get file
+    m = mt.transpose() # transpose matrix
+    if ncells is None: # use all the hoppings
+        if nmax is None: 
+            nmax = int(np.max([np.max(m[i]) for i in range(3)]))
+        ncells = [nmax,nmax,nmax]
+    # read the hamiltonian matrices
+    class Hopping: pass # create empty class
+    tlist = []
+    def get_t(i,j,k):
+      norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
+      norb = int(norb)
+      mo = np.matrix(np.zeros((norb,norb),dtype=np.complex_))  
+      found = False
+      for l in mt: # look into the file
+        if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
+          mo[int(l[3])-1,int(l[4])-1] = l[5] + 1j*l[6] # store element
+          found  = True # matrix has been found
+      if found:  return mo # return the matrix
+      else: return None # return nothing if not found
+    for i in range(-ncells[0],ncells[0]+1):
+      for j in range(-ncells[1],ncells[1]+1):
+        for k in range(-ncells[2],ncells[2]+1):
+          if (i,j,k)==(0,0,0): continue # skip intracell
+          matrix = get_t(i,j,k) # read the matrix
+          if matrix is None: continue
+          else: # store hopping
+            t = Hopping() # create hopping
+            t.dir = [i,j,k] # direction
+            t.m = get_t(i,j,k) # read the matrix
+            tlist.append(t) # store hopping
+    # the previous is not used yet...
+    g = geometry.kagome_lattice() # create geometry
+    h = g.get_hamiltonian() # build hamiltonian
+    h.is_multicell = True
+    if not skip_win: # do not skip wannier.win
+      h.orbitals = get_all_orbitals(input_file=win_file)
+    h.hopping = tlist # list of hoppings
+    h.has_spin = False  # if not spin polarized
+    h.intra = get_t(0,0,0)
+    if not skip_win: # do not skip readin wannier.win
+        h.geometry = read_geometry(input_file=win_file) # read from wannier
+        h.geometry.center() # center the geometry
+    else: 
+        h.geometry = dummy_geometry(h) # dummy geometry
+    if not skip_win: # do not skip reading wannier.win
+      if len(h.geometry.r)!=len(h.intra): 
+        print("Dimensions do not match",len(g.r),len(h.intra))
+        print(h.geometry.r)
+      raise # error if dimensions dont match
+    h.dimensionality = dim 
+    if path is not None: 
+        os.chdir(inipath) # go back
+        h.wannierpath = path # store
+    else: h.wannierpath = None
+    # now lets add the SOC method
+    def get_soc(self,name,soc):
+        if not self.has_spin: raise # only for spinful
+        self.intra = self.intra + generate_soc(name,soc,path=self.wannierpath) 
+    import types
+    h.get_soc = types.MethodType(get_soc,h) # add the method
+    return h
 
 
 
@@ -661,7 +665,8 @@ def read_supercell_hamiltonian(input_file="hr_truncated.dat",is_real=False,nsupe
         h.geometry = read_geometry() # read the geometry of the system
         if len(h.geometry.r)!=len(h.intra): raise # not ok
         print("Fixing the geometry")
-  except: h.geometry = dummy_geometry(h) # dummy geometry
+  except: 
+      h.geometry = dummy_geometry(h) # dummy geometry
   if nsuper>1:
     h.geometry = h.geometry.get_supercell(nsuper) # create supercell
   if len(h.geometry.r)!=len(h.intra): 
