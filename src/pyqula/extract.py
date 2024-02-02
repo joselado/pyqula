@@ -144,7 +144,11 @@ def extract_from_hamiltonian(self,name,**kwargs):
           h0.remove_nambu()
           m = h0.intra
       else: m = self.intra
-      return onsite(m,has_spin=self.has_spin)
+      if not self.non_hermitian: # Hermitian case
+          return onsite(m,has_spin=self.has_spin)
+      else: # non Hermitian case
+          from .nonhermitiantk.extract import onsite as onsite_NH
+          return onsite_NH(m,has_spin=self.has_spin)
     elif name=="mx" and self.has_spin:
       if self.has_eh: h0.remove_nambu() # not implemented
       return mx(h0.intra)
