@@ -14,5 +14,6 @@ from ..hamiltonians import Hamiltonian
 # import the local bandstructure method for non Hermitian
 from .bandstructure import get_bands_nd as get_bands
 from .dos import get_dos
+from .ldos import get_ldos
 from .topology import get_berry_curvature
 

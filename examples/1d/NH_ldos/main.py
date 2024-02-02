@@ -11,7 +11,7 @@ n  = 30
 g = g0.get_supercell(n,store_primal=True)
 h = g.get_hamiltonian(has_spin=False,non_hermitian=True,tij=[-1])
 omega = 1./n
-ons = lambda r: 0.3*(np.cos(np.pi*2*omega*r[0])+1.)
+ons = lambda r: 0.4j*(np.cos(np.pi*2*omega*r[0])+1.)
 h.add_onsite(ons)
 h.add_onsite(2.)
 
@@ -22,7 +22,7 @@ ie = 0
 fig = plt.figure(figsize=[12,numbands*2])
 nrep = 4 # number of copies
 
-v = h.extract("onsite",nrep=nrep) # extract the potential
+v = h.extract("onsite",nrep=nrep).imag # extract the potential
 v = geometry.replicate_array(h.geometry,v,nrep=nrep) # replicat the potential
 v = v - np.min(v)
 v = v/np.max(v)
