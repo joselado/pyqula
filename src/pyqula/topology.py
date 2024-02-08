@@ -263,9 +263,15 @@ berry_map = get_berry_curvature # alias
 from .topologytk.wannier import smooth_gauge
 
 
+def z2_wannier_centers(h,full=False,**kwargs):
+    """Return the Wannier centers for the Z2 invariant"""
+    return wannier_centers(h,full=False,**kwargs)
 
 
-def z2_vanderbilt(h,nk=30,nt=100,nocc=None,full=False):
+z2_vanderbilt = z2_wannier_centers # for compatibility
+
+
+def wannier_centers(h,nk=30,nt=100,nocc=None,full=False):
     """ Calculate Z2 invariant according to Vanderbilt algorithm"""
     out = [] # output list
     path = np.linspace(0.,1.,nk) # set of kpoints
@@ -315,9 +321,9 @@ def chern(h,**kwargs):
 
 
 
-def wannier_winding(h,nk=100,nt=100,nocc=None,full=True):
+def z2_wannier_winding(h,nk=100,nt=100,nocc=None,full=True):
     """Compute the winding of the Wannier functions"""
-    m = z2_vanderbilt(h,nk=nk,nt=nt,nocc=nocc,full=full)
+    m = z2_wannier_centers(h,nk=nk,nt=nt,nocc=nocc,full=full)
     x = m[0]
     from .topologytk.wannier import maximum_wannier_gap
     fermis = maximum_wannier_gap(m)
@@ -353,7 +359,7 @@ def wannier_winding(h,nk=100,nt=100,nocc=None,full=True):
 
 
 
-
+wannier_winding = z2_wannier_winding # for compatibility
 
 
 
