@@ -7,6 +7,7 @@ import numpy as np
 from pyqula import specialhamiltonian
 # Hamiltonian
 h = specialhamiltonian.multilayer_graphene(l=[0 for i in range(2)],ti=0.)
-from pyqula.symmetrytk.localsymmetry import permutations
+from pyqula.symmetrytk.localsymmetry import all_permutations
 
-permutations(h)
+Us = all_permutations(h)
+for U in Us: print(U)

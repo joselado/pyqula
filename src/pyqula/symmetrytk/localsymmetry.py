@@ -8,7 +8,7 @@ from jax import jit
 from jax import grad
 
 
-def permutations(H,nk=20):
+def generate_permutation(H,nk=20):
     """Return all the symmetries of a Hamiltonian that arise from permuting
     sites"""
     ks = np.random.random((nk,3)) # generate random kpoints
@@ -30,8 +30,19 @@ def permutations(H,nk=20):
     result = minimize(fun,Ua,tol=tol,jac=jac_fun)
     Ua = result.x
     U = Ua.reshape((n,n))
-    print(np.round(U,2),fun(Ua))
+    U = np.round(U,2)
+#    print(np.round(U,2),fun(Ua))
     return U # return the matrix
+
+
+
+def all_permutations(H,n=10,**kwargs):
+    """Return all permutations that commute with a Hamiltonian"""
+    Us = [generate_permutation(H) for i in range(n)] # generate several cases
+    Us = retain_independent(Us) # linearly indepedent permutations
+    return Us
+
+
 
 
 
@@ -65,7 +76,7 @@ def retain_independent(Ms,tol=1e-4):
     gives the threshold for linear independence"""
     from numpy.linalg import matrix_rank
     n = Ms[0].shape[0] # input are matrices, get their dimension
-    M = [m.reshape((n*n)] for m in Ms] # reshape as vectors
+    M = [m.reshape(n*n) for m in Ms] # reshape as vectors
     dim = len(M) # number of matrices
     LI=[] # output matrices
     for i in range(dim):
@@ -76,7 +87,7 @@ def retain_independent(Ms,tol=1e-4):
         if matrix_rank(tmp,tol=tol)>len(LI):
             LI.append(M[i])
     LIo = [m.reshape((n,n)) for m in LI] # reshape as matrices
-    return LI
+    return LIo
 
 
 
