@@ -24,6 +24,8 @@ energies = np.linspace(-8.0,8.0,40)
 import matplotlib.pyplot as plt
 
 plt.subplot(1,3,1)
+plt.title("Bulk bands")
+plt.ylabel("Energy") ; plt.xticks([]) ; plt.xlabel("k-vector")
 
 for ky in np.linspace(0.,1.0,100):
   kpath = [[kx,ky,0.] for kx in np.linspace(0.,1.0,100)]
@@ -33,12 +35,16 @@ for ky in np.linspace(0.,1.0,100):
 plt.ylim([np.min(energies),np.max(energies)])
 
 plt.subplot(1,3,2)
+plt.title("Edge kdos")
 plt.scatter(k,e,c=ds/np.max(ds),vmax=0.1,cmap="inferno")
 plt.ylim([np.min(energies),np.max(energies)])
+plt.ylabel("Energy") ; plt.xticks([]) ; plt.xlabel("k-vector")
 
 plt.subplot(1,3,3)
+plt.title("Bulk kdos")
 plt.scatter(k,e,c=db/np.max(db),vmax=0.1,cmap="inferno")
 plt.ylim([np.min(energies),np.max(energies)])
+plt.ylabel("Energy") ; plt.xticks([]) ; plt.xlabel("k-vector")
 
 plt.tight_layout()
 
