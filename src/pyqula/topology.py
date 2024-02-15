@@ -364,8 +364,6 @@ wannier_winding = z2_wannier_winding # for compatibility
 
 
 
-
-
 def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
     """Calculates the Berry curvature using an arbitrary operator"""
     h = multicell.turn_multicell(hin) # turn to multicell form
