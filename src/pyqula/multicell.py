@@ -463,7 +463,7 @@ def close_enough(rs1,rs2,rcut=2.0):
 
 
 
-def turn_no_multicell(h,tol=1e-7):
+def turn_no_multicell(h,tol=1e-5):
   """Converts a Hamiltonian into the non multicell form"""
   if not h.is_multicell: return h # Hamiltonian is already fine
   ho = h.copy() # copy Hamiltonian
@@ -500,23 +500,29 @@ def turn_no_multicell(h,tol=1e-7):
 
 
 def kchain(h,k=[0.,0.,0.]):
-  """Return the onsite and hopping for a particular k"""
-  if not h.is_multicell: h = h.get_multicell()
-  dim = h.dimensionality # dimensionality
-  if dim==1: # 1D
-      for t in h.hopping:
-          if t.dir[0]==1: return h.intra,t.m
-      raise
-  elif dim>1: # 2D or 3D
-    intra = np.zeros(h.intra.shape) # zero amtrix
-    inter = np.zeros(h.intra.shape) # zero amtrix
-    intra = h.intra # initialize
-    for t in h.hopping: # loop over hoppings
-      tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
-      if t.dir[dim-1]==0: intra = intra + tk # add contribution 
-      if t.dir[dim-1]==1: inter = inter + tk # add contribution 
-    return intra,inter 
-  else: raise
+    """Return the onsite and hopping for a particular k"""
+    if not h.is_multicell: h = h.get_multicell()
+    # make a check that only NN matters
+    try:
+        hnn = h.get_no_multicell() # no multicell Hamiltonian
+    except:
+        print("Hopping beyong NN unit cells in kchain, stopping")
+        exit()
+    dim = h.dimensionality # dimensionality
+    if dim==1: # 1D
+        for t in h.hopping:
+            if t.dir[0]==1: return h.intra,t.m
+        raise
+    elif dim>1: # 2D or 3D
+      intra = np.zeros(h.intra.shape) # zero amtrix
+      inter = np.zeros(h.intra.shape) # zero amtrix
+      intra = h.intra # initialize
+      for t in h.hopping: # loop over hoppings
+        tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
+        if t.dir[dim-1]==0: intra = intra + tk # add contribution 
+        if t.dir[dim-1]==1: inter = inter + tk # add contribution 
+      return intra,inter 
+    else: raise
 
 
 
