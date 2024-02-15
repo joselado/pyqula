@@ -33,21 +33,23 @@ def kchain_NNN(h,k=[0.,0.,0.]):
     if not h.is_multicell: h = h.get_multicell()
     dim = h.dimensionality # dimensionality
     if dim==1: # 1D
+        t1 = h.intra*0.
+        t2 = h.intra*0.
         for t in h.hopping:
             if t.dir[0]==1: t1 = t.m 
             if t.dir[0]==2: t2 = t.m 
         return h.intra,t1,t2
     elif dim>1: # 2D or 3D
-      intra = np.zeros(h.intra.shape) # zero amtrix
-      inter1 = np.zeros(h.intra.shape) # zero amtrix
-      inter2 = np.zeros(h.intra.shape) # zero amtrix
-      intra = h.intra # initialize
-      for t in h.hopping: # loop over hoppings
-        tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
-        if t.dir[dim-1]==0: intra = intra + tk # add contribution 
-        if t.dir[dim-1]==1: inter1 = inter1 + tk # add contribution 
-        if t.dir[dim-1]==2: inter2 = inter2 + tk # add contribution 
-      return intra,inter1,inter2
+        intra = np.zeros(h.intra.shape,dtype=np.complex_) # zero amtrix
+        inter1 = np.zeros(h.intra.shape,dtype=np.complex_) # zero amtrix
+        inter2 = np.zeros(h.intra.shape,dtype=np.complex_) # zero amtrix
+        intra = h.intra # initialize
+        for t in h.hopping: # loop over hoppings
+            tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
+            if t.dir[dim-1]==0: intra = intra + tk # add contribution 
+            if t.dir[dim-1]==1: inter1 = inter1 + tk # add contribution 
+            if t.dir[dim-1]==2: inter2 = inter2 + tk # add contribution 
+        return intra,inter1,inter2
     else: raise
 
 
