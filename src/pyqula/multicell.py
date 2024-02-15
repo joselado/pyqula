@@ -463,7 +463,7 @@ def close_enough(rs1,rs2,rcut=2.0):
 
 
 
-def turn_no_multicell(h):
+def turn_no_multicell(h,tol=1e-7):
   """Converts a Hamiltonian into the non multicell form"""
   if not h.is_multicell: return h # Hamiltonian is already fine
   ho = h.copy() # copy Hamiltonian
@@ -482,7 +482,7 @@ def turn_no_multicell(h):
     elif h.dimensionality==1: # one dimensional
       if t.dir[0]==1 and t.dir[1]==0 and t.dir[2]==0: # 
         ho.inter = t.m # store
-      elif np.sum(np.abs(t.m))>0.0001 and np.max(np.abs(t.dir))>1: raise # Uppps, not possible
+      elif np.sum(np.abs(t.m))>tol and np.max(np.abs(t.dir))>1: raise # Uppps, not possible
     elif h.dimensionality==2: # two dimensional
       if t.dir[0]==1 and t.dir[1]==0 and t.dir[2]==0: # 
         ho.tx = t.m # store
@@ -492,7 +492,7 @@ def turn_no_multicell(h):
         ho.txy = t.m # store
       elif t.dir[0]==1 and t.dir[1]==-1 and t.dir[2]==0: # 
         ho.txmy = t.m # store
-      elif np.sum(np.abs(t.m))>0.0001 and np.max(np.abs(t.dir))>1: raise # Uppps, not possible
+      elif np.sum(np.abs(t.m))>tol and np.max(np.abs(t.dir))>1: raise # Uppps, not possible
     else: raise
   ho.hopping = [] # empty list
   return ho

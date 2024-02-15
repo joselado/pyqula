@@ -11,7 +11,7 @@ h = wannier.read_multicell_hamiltonian(input_file="hamiltonian.wannier")
 #h = g.get_hamiltonian()
 hf = multicell.bulk2ribbon(h,n=10)
 
-(k,e,op) = hf.get_bands(operator="xposition")
+(k,e,op) = hf.get_bands(operator="yposition")
 
 
 
