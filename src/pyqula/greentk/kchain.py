@@ -22,6 +22,7 @@ def green_kchain_NN(h,k=0.,energy=0.,delta=0.01,only_bulk=True,
 
 def green_kchain(h,**kwargs):
     from ..htk.kchain import detect_longest_hopping
+    return green_kchain_NNN(h,**kwargs)  # return green function
     if detect_longest_hopping(h)==1: # only NN
         return green_kchain_NN(h,**kwargs)  # return green function
     elif detect_longest_hopping(h)==2: # up to NNN
@@ -38,7 +39,7 @@ def green_kchain_NNN(H,k=[0.,0.,0.],**kwargs):
     if detect_longest_hopping(H)>2: raise # up to NNN
     from ..htk.kchain import kchain_NNN # extract up to NNN
     (ons,t1,t2) = kchain_NNN(H,k=k) # return the three matrices
-    from..greentk.dyson import dysonNNN
+    from ..greentk.dyson import dysonNNN
     return dysonNNN(ons,t1,t2,**kwargs)
 
 

@@ -9,17 +9,38 @@ from pyqula import geometry
 g = geometry.honeycomb_lattice()
 g = geometry.square_lattice()
 #h = g.get_hamiltonian()
-h = g.get_hamiltonian(tij=[1.,0.3,0.1])
-h.add_onsite(3.3)
+#h = g.get_hamiltonian(tij=[1.,0.2,0.,0.],has_spin=False)
+h = g.get_hamiltonian(tij=[0.5,0.,0.,1.,0.5],has_spin=False)
+for t in h.hopping:
+    print(t.dir)
+    print(t.m)
+    print()
+#h.add_onsite(3.3)
 #h.add_haldane(0.05)
-(k,e,ds,db) = h.get_kdos(energies=np.linspace(-1.0,1.0,40),delta=3e-2)
+energies = np.linspace(-8.0,8.0,40)
+(k,e,ds,db) = h.get_kdos(energies=energies,delta=1e-2,
+        nit=30)
 
 import matplotlib.pyplot as plt
 
-plt.subplot(1,2,1)
-plt.scatter(k,e,c=ds/np.max(ds),vmax=0.4,cmap="inferno")
-plt.subplot(1,2,2)
-plt.scatter(k,e,c=db/np.max(db),vmax=0.4,cmap="inferno")
+plt.subplot(1,3,1)
+
+for ky in np.linspace(0.,1.0,100):
+  kpath = [[kx,ky,0.] for kx in np.linspace(0.,1.0,100)]
+  (kb,eb) = h.get_bands(kpath=kpath)
+  plt.scatter(kb,eb,c="black")
+
+plt.ylim([np.min(energies),np.max(energies)])
+
+plt.subplot(1,3,2)
+plt.scatter(k,e,c=ds/np.max(ds),vmax=0.1,cmap="inferno")
+plt.ylim([np.min(energies),np.max(energies)])
+
+plt.subplot(1,3,3)
+plt.scatter(k,e,c=db/np.max(db),vmax=0.1,cmap="inferno")
+plt.ylim([np.min(energies),np.max(energies)])
+
+plt.tight_layout()
 
 plt.show()
 

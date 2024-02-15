@@ -303,7 +303,7 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
 
 def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
                     delta=0.01,kpath=None,hs=None,nsuper=None,
-                    write=True,nk=None):
+                    write=True,nk=None,**kwargs):
     """Get the surface DOS of an interface"""
     if nk is None: nk = len(energies)
     h1 = h1.get_supercell(nsuper)
@@ -330,7 +330,7 @@ def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
       tr.remaining(ik,len(kpath)) # generate object
       ik += 1
       outs = green.surface_multienergy(h1,k=k,energies=energies,
-                           delta=delta,hs=hs)
+                           delta=delta,hs=hs,**kwargs)
       for (energy,out) in zip(energies,outs):
         # write everything
         kout.append(k[0]) # add to the output
