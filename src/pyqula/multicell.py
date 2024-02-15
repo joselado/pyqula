@@ -499,32 +499,35 @@ def turn_no_multicell(h,tol=1e-5):
 
 
 
-def kchain(h,k=[0.,0.,0.]):
-    """Return the onsite and hopping for a particular k"""
-    if not h.is_multicell: h = h.get_multicell()
-    # make a check that only NN matters
-    try:
-        hnn = h.get_no_multicell() # no multicell Hamiltonian
-    except:
-        print("Hopping beyong NN unit cells in kchain, stopping")
-        exit()
-    dim = h.dimensionality # dimensionality
-    if dim==1: # 1D
-        for t in h.hopping:
-            if t.dir[0]==1: return h.intra,t.m
-        raise
-    elif dim>1: # 2D or 3D
-      intra = np.zeros(h.intra.shape) # zero amtrix
-      inter = np.zeros(h.intra.shape) # zero amtrix
-      intra = h.intra # initialize
-      for t in h.hopping: # loop over hoppings
-        tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
-        if t.dir[dim-1]==0: intra = intra + tk # add contribution 
-        if t.dir[dim-1]==1: inter = inter + tk # add contribution 
-      return intra,inter 
-    else: raise
+from .htk.kchain import kchain
 
-
+#
+#def kchain(h,k=[0.,0.,0.]):
+#    """Return the onsite and hopping for a particular k"""
+#    if not h.is_multicell: h = h.get_multicell()
+#    # make a check that only NN matters
+#    try:
+#        hnn = h.get_no_multicell() # no multicell Hamiltonian
+#    except:
+#        print("Hopping beyong NN unit cells in kchain, stopping")
+#        exit()
+#    dim = h.dimensionality # dimensionality
+#    if dim==1: # 1D
+#        for t in h.hopping:
+#            if t.dir[0]==1: return h.intra,t.m
+#        raise
+#    elif dim>1: # 2D or 3D
+#      intra = np.zeros(h.intra.shape) # zero amtrix
+#      inter = np.zeros(h.intra.shape) # zero amtrix
+#      intra = h.intra # initialize
+#      for t in h.hopping: # loop over hoppings
+#        tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
+#        if t.dir[dim-1]==0: intra = intra + tk # add contribution 
+#        if t.dir[dim-1]==1: inter = inter + tk # add contribution 
+#      return intra,inter 
+#    else: raise
+#
+#
 
 
 def get_hopping_dict(h):

@@ -85,6 +85,9 @@ class Hamiltonian():
     def get_filling(self,**kwargs):
         """Get the filling of a Hamiltonian at this energy"""
         return spectrum.get_filling(self,**kwargs) # eigenvalues
+    def get_kdos(self,**kwargs):
+        from . import kdos
+        return kdos.surface_kdos(self,**kwargs)
     def project_interactions(self,**kwargs):
         """Project interactions"""
         from .interactions.vijkl import Vijkl
