@@ -10,16 +10,17 @@ g = geometry.honeycomb_lattice()
 g = geometry.square_lattice()
 #h = g.get_hamiltonian()
 #h = g.get_hamiltonian(tij=[1.,0.2,0.,0.],has_spin=False)
-h = g.get_hamiltonian(tij=[0.5,0.,0.,1.,0.5],has_spin=False)
+h = g.get_hamiltonian(tij=[0.5,0.,0.,1.,0.5],has_spin=True)
+h.add_rashba(1.)
 for t in h.hopping:
     print(t.dir)
     print(t.m)
     print()
 #h.add_onsite(3.3)
 #h.add_haldane(0.05)
-energies = np.linspace(-8.0,8.0,40)
+energies = np.linspace(-8.0,8.0,100)
 (k,e,ds,db) = h.get_kdos(energies=energies,delta=1e-2,
-        nit=30)
+        nit=100)
 
 import matplotlib.pyplot as plt
 
