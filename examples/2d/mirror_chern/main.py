@@ -26,12 +26,13 @@ be2 = get_berry_curvature_operator_sector(h,operator=op,sector=-1.0,kpath=kpath)
 
 
 from pyqula.topology import get_chern_operator_sector
-c1 = get_chern_operator_sector(h,operator=op,sector=1.0)
-c2 = get_chern_operator_sector(h,operator=op,sector=-1.0)
+c1 = get_chern_operator_sector(h,operator=op,sector=1.0,nocc=2)
+c2 = get_chern_operator_sector(h,operator=op,sector=-1.0,nocc=2)
 
 print("Chern sector +1",c1)
 print("Chern sector -1",c2)
 
+exit()
 # compute the conventional Berry curvature
 be0 = h.get_berry_curvature(kpath=kpath)[2]
 

@@ -149,10 +149,14 @@ def negative_wf(es,wfs):
 
 
 def occ_states_sector_generator(H,operator=None,sector=1.0,
+        nocc=None,
         tol=1e-3,**kwargs):
     """Return the occupied states generator in a specific sector
     of the Hilbert space given by the operator with value sector"""
-    focc = filter_state(H.get_operator("energy"),accept= lambda e: e<0.)
+    if nocc is None: # no number provided
+      focc = filter_state(H.get_operator("energy"),accept= lambda e: e<0.)
+    else:
+        focc = Filter(lambda wfs,**kwargs: wfs[0:nocc,:]) # lowest nocc
     fop = filter_state(operator,accept= lambda e: np.abs(sector-e)<tol)
     return states_generator(H,filt=fop*focc)
 
