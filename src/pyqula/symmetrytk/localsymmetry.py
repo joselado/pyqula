@@ -30,8 +30,8 @@ def generate_permutation(H,nk=20,error=1e-5,only_permutation=True):
     def jac_fun(Ua):
         return jac_error_jax(Ua,ms) # return jacobian
     from scipy.optimize import minimize
-    tol = 1e-12
-    result = minimize(fun,Ua,tol=tol,jac=jac_fun)
+    tol = error/100
+    result = minimize(fun,Ua,tol=tol,jac=jac_fun,method="CG")
     Ua = result.x
     U = Ua.reshape((n,n))
     if only_permutation:  U = np.round(U,2) # round
@@ -46,7 +46,9 @@ def generate_permutation(H,nk=20,error=1e-5,only_permutation=True):
 def all_permutations(H,n=10,**kwargs):
     """Return all permutations that commute with a Hamiltonian"""
     Us = [generate_permutation(H,**kwargs) for i in range(n)] # generate several cases
-    Us = retain_independent(Us) # linearly indepedent permutations
+    Us = [np.identity(Us[0].shape[0])] + Us # add identity
+    Us = retain_independent(Us) # linearly independent permutations
+    Us = [Us[i] for i in range(1,len(Us))] # all except identity
     return Us
 
 
