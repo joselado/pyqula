@@ -19,26 +19,46 @@ op = np.array([[1,0,0,0],[0,1,0,0],[0,0,-1,0],[0,0,0,-1]])
 from pyqula.operators import Operator
 op = Operator(op)
 
-# compute the operator Berry curvature
-be = h.get_berry_curvature(kpath=kpath,operator=op)[2]
+# compute the operator Berry curvature in the two sectors
+from pyqula.topology import get_berry_curvature_operator_sector
+be1 = get_berry_curvature_operator_sector(h,operator=op,sector=1.0,kpath=kpath)[2]
+be2 = get_berry_curvature_operator_sector(h,operator=op,sector=-1.0,kpath=kpath)[2]
+
+
+from pyqula.topology import get_chern_operator_sector
+c1 = get_chern_operator_sector(h,operator=op,sector=1.0)
+c2 = get_chern_operator_sector(h,operator=op,sector=-1.0)
+
+print("Chern sector +1",c1)
+print("Chern sector -1",c2)
 
 # compute the conventional Berry curvature
 be0 = h.get_berry_curvature(kpath=kpath)[2]
 
+
+
 import matplotlib.pyplot as plt
 
-fig = plt.figure(figsize=[8,8])
+fig = plt.figure(figsize=[12,8])
 
-plt.subplot(3,1,1)
+plt.subplot(4,1,1)
 plt.title("Band structure")
 plt.scatter(ks,es) ; plt.xticks([]) ;  plt.ylabel("Energy") ; plt.xlabel("kpath")
 
-plt.subplot(3,1,2)
-plt.title("Operator Berry curvature")
-plt.scatter(range(len(kpath)),be)
+plt.subplot(4,1,2)
+plt.title("Operator Berry curvature, sector +1")
+plt.scatter(range(len(kpath)),be1)
 plt.xticks([]) ;  plt.ylabel("Operator Berry") ; plt.xlabel("kpath")
 
-plt.subplot(3,1,3)
+
+
+plt.subplot(4,1,3)
+plt.title("Operator Berry curvature, sector -1")
+plt.scatter(range(len(kpath)),be2)
+plt.xticks([]) ;  plt.ylabel("Operator Berry") ; plt.xlabel("kpath")
+
+
+plt.subplot(4,1,4)
 plt.title("Berry curvature")
 plt.scatter(range(len(kpath)),be0) ; plt.ylim([-1,1])
 plt.xticks([]) ;  plt.ylabel("Berry") ; plt.xlabel("kpath")

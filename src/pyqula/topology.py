@@ -611,3 +611,6 @@ from .topologytk import realspace
 
 real_space_chern = realspace.real_space_chern
 
+
+from .topologytk.topologicalsector import get_berry_curvature_operator_sector
+from .topologytk.topologicalsector import get_chern_operator_sector
