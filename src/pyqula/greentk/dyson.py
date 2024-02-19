@@ -67,6 +67,8 @@ def dysonNNN(ons,t1,t2,only_bulk=False,**kwargs):
     t1 = csc_matrix(t1)
     t2 = csc_matrix(t2)
     ons_S = [[ons,t1],[dagger(t1),ons]] # supercell onsite
+    # should this be the other way around (?)
+    #hop_S = [[t2,t1],[t1*0.,t2]] # supercell hopping
     hop_S = [[t2,t1*0.],[t1,t2]] # supercell hopping
     from .. import algebra
     ons_S = algebra.bmat(ons_S) # as matrices

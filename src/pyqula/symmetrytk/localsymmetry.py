@@ -8,7 +8,7 @@ from jax import jit
 from jax import grad
 
 
-def generate_permutation(H,nk=20):
+def generate_permutation(H,nk=20,error=1e-5,only_permutation=True):
     """Return all the symmetries of a Hamiltonian that arise from permuting
     sites"""
     ks = np.random.random((nk,3)) # generate random kpoints
@@ -18,6 +18,10 @@ def generate_permutation(H,nk=20):
     U = np.random.random((n,n)) - 0.5 # random matrix
     Ua = U.reshape(n*n) # make square
     # now define function and gradient
+    if only_permutation:
+        error_master = error_commute_and_permutation
+    else:
+        error_master = error_commute
     error_jax = jit(error_master) # jit jax function for error
     jac_error_jax = jit(grad(error_master,argnums=0)) # jit jax gradient
     #####
@@ -30,7 +34,10 @@ def generate_permutation(H,nk=20):
     result = minimize(fun,Ua,tol=tol,jac=jac_fun)
     Ua = result.x
     U = Ua.reshape((n,n))
-    U = np.round(U,2)
+    if only_permutation:  U = np.round(U,2) # round
+    if fun(Ua)>error:
+        U = np.identity(U.shape[0]) # overwrite
+        print("Error",fun(Ua),", returning identity")
 #    print(np.round(U,2),fun(Ua))
     return U # return the matrix
 
@@ -38,7 +45,7 @@ def generate_permutation(H,nk=20):
 
 def all_permutations(H,n=10,**kwargs):
     """Return all permutations that commute with a Hamiltonian"""
-    Us = [generate_permutation(H) for i in range(n)] # generate several cases
+    Us = [generate_permutation(H,**kwargs) for i in range(n)] # generate several cases
     Us = retain_independent(Us) # linearly indepedent permutations
     return Us
 
@@ -46,9 +53,10 @@ def all_permutations(H,n=10,**kwargs):
 
 
 
-def error_master(Ua,ms):
+def error_commute_and_permutation(Ua,ms):
     """Compute the error of how much a potential unitary U
-    commutes with the matrices ms, and how unitary is"""
+    commutes with the matrices ms, how unitary it is,
+    and how far from a permutation it is"""
     n = ms[0].shape[0] # dimension
     U = Ua.reshape((n,n)) # make square
     iden = jnp.identity(n) # identity
@@ -60,12 +68,35 @@ def error_master(Ua,ms):
     # now error in the unitarity
     dU = iden - U@jnp.conjugate(U.T) 
     err = err + jnp.trace(dU@dU) # trace of the matrix
-    # now error from being a permutation
+    # now error from not being a permutation
     for iu in U:
         iu2 = iu*iu
         erri = jnp.sum(iu2*jnp.log(iu2))
         err = err + erri*erri
     return err.real
+
+
+
+
+def error_commute(Ua,ms):
+    """Compute the error of how much a potential unitary U
+    commutes with the matrices ms, and how unitary it is"""
+    n = ms[0].shape[0] # dimension
+    U = Ua.reshape((n,n)) # make square
+    iden = jnp.identity(n) # identity
+    err = 0. # initialize
+    for m in ms: # loop over matrices
+        dm = m@U - U@m # difference in the commutation
+        dmd = jnp.conjugate(dm.T) # dagger
+        err = err + jnp.trace(dm@dmd) # trace of the matrix
+    # now error in the unitarity
+    dU = iden - U@jnp.conjugate(U.T)
+    err = err + jnp.trace(dU@dU) # trace of the matrix
+    return err.real
+
+
+
+
 
 
 
