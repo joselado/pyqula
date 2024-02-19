@@ -143,3 +143,23 @@ def negative_wf(es,wfs):
     return np.array(wfs1)
 
 
+
+
+
+
+
+def occ_states_sector_generator(H,operator=None,sector=1.0,
+        tol=1e-3,**kwargs):
+    """Return the occupied states generator in a specific sector
+    of the Hilbert space given by the operator with value sector"""
+    focc = filter_state(H.get_operator("energy"),accept= lambda e: e<0.)
+    fop = filter_state(operator,accept= lambda e: np.abs(sector-e)<tol)
+    return states_generator(H,filt=fop*focc)
+
+
+
+
+
+
+
+
