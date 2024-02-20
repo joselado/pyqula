@@ -22,14 +22,13 @@ def green_kchain_NN(h,k=0.,energy=0.,delta=0.01,only_bulk=True,
 
 def green_kchain(h,**kwargs):
     from ..htk.kchain import detect_longest_hopping
-    return green_kchain_NNN(h,**kwargs)  # return green function
+#    return green_kchain_LR(h,**kwargs)  # return green function
     if detect_longest_hopping(h)==1: # only NN
         return green_kchain_NN(h,**kwargs)  # return green function
     elif detect_longest_hopping(h)==2: # up to NNN
-        print("Using Dyson algorithm in k-dependent Green function")
-        print("This is still experimental")
         return green_kchain_NNN(h,**kwargs)  # return green function
-    else: raise # not implemented
+    else: # generic case
+        return green_kchain_LR(h,**kwargs)  # return green function
 
 
 
@@ -41,6 +40,17 @@ def green_kchain_NNN(H,k=[0.,0.,0.],**kwargs):
     (ons,t1,t2) = kchain_NNN(H,k=k) # return the three matrices
     from ..greentk.dyson import dysonNNN
     return dysonNNN(ons,t1,t2,**kwargs)
+
+
+def green_kchain_LR(H,k=[0.,0.,0.],**kwargs):
+    """Return Green function when there is long range hopping"""
+    from ..htk.kchain import kchain_LR # extract up to NNN
+    hops = kchain_LR(H,k=k) # return the three matrices
+    from ..greentk.dyson import dysonLR
+    return dysonLR(hops,**kwargs)
+
+
+
 
 
 

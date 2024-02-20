@@ -1,6 +1,6 @@
 import numpy as np
 
-# Return topological object in a sector of an operator #
+# Return topological objects in a sector of an operator #
 
 def get_berry_curvature_operator_sector(H,operator=None,sector=1.0,
         nocc=None,

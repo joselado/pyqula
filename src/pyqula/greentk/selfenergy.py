@@ -31,9 +31,17 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
           gf,sf = dysonNNN(ons,t1,t2,energy=energy,delta=delta,
                   error=error)
           return gf,sf
-  else: # too long range hoppings for RG, use full integration
-      mode = "full_adaptive" 
-      print("Changed to full adaptive mode in selfenergy")
+  else:
+      from ..htk.kchain import kchain_LR # extract all
+      def gr(h):
+          hops = kchain_LR(h) # return all matrices
+          from ..greentk.dyson import dysonLR
+          gf,sf = dysonLR(hops,energy=energy,delta=delta,
+                  error=error)
+          return gf,sf
+#  else: # too long range hoppings for RG, use full integration
+#      mode = "full_adaptive" 
+#      print("Changed to full adaptive mode in selfenergy")
   h = h.copy() # make a copy
   h.turn_dense() # dense Hamiltonian
   hk_gen = h.get_hk_gen()  # generator of k dependent hamiltonian

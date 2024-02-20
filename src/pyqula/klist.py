@@ -300,24 +300,25 @@ def infer_kmesh_density(kmesh,d=2):
 
 
 
-def kmesh(dimensionality,nk=10,nsuper=1):
+def kmesh(dimensionality,nk=10,nsuper=1,
+        endpoint=False):
   """Return a mesh of k-points for a certain dimensionality"""
   from .checkclass import number2array
   kp = []
   if nk==1 or dimensionality==0: return [[0.,0.,0.]]
   if dimensionality==1:
-    for k1 in np.linspace(0.,nsuper,nk,endpoint=False):
+    for k1 in np.linspace(0.,nsuper,nk,endpoint=endpoint):
       kp.append([k1,0.,0.]) # store
   elif dimensionality==2:
     nk = number2array(nk) # return an array
-    for k1 in np.linspace(0.,nsuper,nk[0],endpoint=False):
-      for k2 in np.linspace(0.,nsuper,nk[1],endpoint=False):
+    for k1 in np.linspace(0.,nsuper,nk[0],endpoint=endpoint):
+      for k2 in np.linspace(0.,nsuper,nk[1],endpoint=endpoint):
         kp.append([k1,k2,0.]) # store
   elif dimensionality==3:
     nk = number2array(nk) # return an array
-    for k1 in np.linspace(0.,nsuper,nk[0],endpoint=False):
-      for k2 in np.linspace(0.,nsuper,nk[1],endpoint=False):
-        for k3 in np.linspace(0.,nsuper,nk[2],endpoint=False):
+    for k1 in np.linspace(0.,nsuper,nk[0],endpoint=endpoint):
+      for k2 in np.linspace(0.,nsuper,nk[1],endpoint=endpoint):
+        for k3 in np.linspace(0.,nsuper,nk[2],endpoint=endpoint):
           kp.append([k1,k2,k3]) # store
   else: raise
   kp = [np.array(k) for k in kp] # to array
