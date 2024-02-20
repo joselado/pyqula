@@ -85,3 +85,33 @@ def detect_longest_hopping(h,tol=1e-7):
 
 
 
+
+def kchain_LR(h,k=[0.,0.,0.]):
+    """Return the onsite, t1 and t2"""
+    if not h.is_multicell: h = h.get_multicell()
+    dim = h.dimensionality # dimensionality
+    zero = h.intra*0j # initialize
+    numt = detect_longest_hopping(h)
+    hops = [zero for i in range(numt+1)] # empty list with hoppings
+    hops[0] = h.intra # store this one
+    if dim==1: # 1D
+        for t in h.hopping:
+            if t.dir[0]>0: # positive ones
+                hops[t.dir[0]] = t.m # store this hopping
+        return hops
+    elif dim>1: # 2D or 3D
+        for t in h.hopping: # loop over hoppings
+            tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
+#            if t.dir[dim-1]==0: intra = intra + tk # add contribution 
+            if t.dir[dim-1]>=0: # positive ones and intra
+                hops[t.dir[dim-1]] += tk # add this hopping
+        return hops
+    else: raise
+
+
+
+
+
+
+
+

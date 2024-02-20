@@ -84,3 +84,34 @@ def dysonNNN(ons,t1,t2,only_bulk=False,**kwargs):
 
 
 
+
+
+def dysonLR(hops,only_bulk=False,**kwargs):
+    """Worksround to do RG with NNN"""
+    hd = dict()
+    hd[(0,0,0)] = hops[0]
+    for i in range(1,len(hops)): hd[(i,0,0)] = hops[i] # hopping
+    for i in range(1,len(hops)): hd[(-i,0,0)] = algebra.dagger(hops[i]) # dagger
+    from ..hamiltonians import generate_hamiltonian_from_dict
+    h = generate_hamiltonian_from_dict(hd) # get the Hamiltonian
+    nt = len(hops) # number of hoppings
+    h = h.get_supercell(len(hops)-1) # make a supercell
+    h = h.get_no_multicell() # no multicell Hamiltonian
+    ons_S = h.intra
+    hop_S = h.inter
+    # perform the RG algorithm
+    from .rg import green_renormalization
+    gb_S,gs_S = green_renormalization(ons_S,hop_S,**kwargs)
+    n = hops[0].shape[0] # size of the system
+    gb = gb_S[0:n,0:n] # bulk Green function
+    gs = gs_S[0:n,0:n] # bulk Green function
+    if only_bulk: return gb
+    else: return gb,gs
+
+
+
+
+
+
+
+

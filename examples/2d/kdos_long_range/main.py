@@ -9,8 +9,8 @@ from pyqula import geometry
 g = geometry.honeycomb_lattice()
 g = geometry.square_lattice()
 #h = g.get_hamiltonian()
-#h = g.get_hamiltonian(tij=[1.,0.2,0.,0.],has_spin=False)
-h = g.get_hamiltonian(tij=[0.5,0.,0.,1.,0.5],has_spin=True)
+h = g.get_hamiltonian(tij=[1.,0.2,1],has_spin=False)
+#h = g.get_hamiltonian(tij=[0.5,0.,0.,1.,0.5],has_spin=True)
 h.add_rashba(1.)
 for t in h.hopping:
     print(t.dir)

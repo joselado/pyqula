@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 from pyqula import geometry
 import numpy as np
 g = geometry.chain()
-h = g.get_hamiltonian(tij=[0.5,0.5],has_spin=True)
+h = g.get_hamiltonian(tij=[0.5,0.,0.,0.5],has_spin=True)
 h.add_rashba(0.7)
 energies = np.linspace(-4.,4.0,60)
 
