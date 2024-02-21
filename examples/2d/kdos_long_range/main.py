@@ -8,17 +8,18 @@ import numpy as np
 from pyqula import geometry
 g = geometry.honeycomb_lattice()
 g = geometry.square_lattice()
-#h = g.get_hamiltonian()
-h = g.get_hamiltonian(tij=[1.,0.2,1],has_spin=False)
-#h = g.get_hamiltonian(tij=[0.5,0.,0.,1.,0.5],has_spin=True)
-h.add_rashba(1.)
+h = g.get_hamiltonian()
+#h = g.get_hamiltonian(tij=[1.,0.2,0.4],has_spin=False)
+h = g.get_hamiltonian(tij=[0.5,0.,0.,0.,0.6,0.3])
+h.add_rashba(0.5)
+#h.get_bands() ; exit()
 for t in h.hopping:
     print(t.dir)
     print(t.m)
     print()
 #h.add_onsite(3.3)
 #h.add_haldane(0.05)
-energies = np.linspace(-8.0,8.0,100)
+energies = np.linspace(-6.0,6.0,100)
 (k,e,ds,db) = h.get_kdos(energies=energies,delta=1e-2,
         nit=100)
 
@@ -31,9 +32,9 @@ plt.ylabel("Energy") ; plt.xticks([]) ; plt.xlabel("k-vector")
 for ky in np.linspace(0.,1.0,100):
   kpath = [[kx,ky,0.] for kx in np.linspace(0.,1.0,100)]
   (kb,eb) = h.get_bands(kpath=kpath)
-  plt.scatter(kb,eb,c="black")
-
+  plt.scatter(kb,eb,c="black",s=10)
 plt.ylim([np.min(energies),np.max(energies)])
+#plt.show() ; exit()
 
 plt.subplot(1,3,2)
 plt.title("Edge kdos")

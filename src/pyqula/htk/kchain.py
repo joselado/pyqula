@@ -92,12 +92,12 @@ def kchain_LR(h,k=[0.,0.,0.]):
     dim = h.dimensionality # dimensionality
     zero = h.intra*0j # initialize
     numt = detect_longest_hopping(h)
-    hops = [zero for i in range(numt+1)] # empty list with hoppings
-    hops[0] = h.intra # store this one
+    hops = [zero.copy() for i in range(numt+1)] # empty list with hoppings
+    hops[0] = h.intra.copy() # store this one
     if dim==1: # 1D
         for t in h.hopping:
             if t.dir[0]>0: # positive ones
-                hops[t.dir[0]] = t.m # store this hopping
+                hops[t.dir[0]] = t.m.copy() # store this hopping
         return hops
     elif dim>1: # 2D or 3D
         for t in h.hopping: # loop over hoppings
