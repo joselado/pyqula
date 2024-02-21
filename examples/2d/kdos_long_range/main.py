@@ -14,6 +14,7 @@ h = g.get_hamiltonian(tij=[0.5,0.,0.,0.,0.6,0.3])
 h.add_rashba(0.5)
 #h.get_bands() ; exit()
 for t in h.hopping:
+    print("Hopping")
     print(t.dir)
     print(t.m)
     print()
