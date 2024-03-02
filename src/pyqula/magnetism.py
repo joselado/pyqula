@@ -104,9 +104,9 @@ def add_magnetism(h,m):
       raise 
     for i in range(natoms): # loop over atoms
       mi = mass[i] # select the element
-      print("First",mi)
+#      print("First",mi)
       mi = float2array(mi) # convert to array
-      print("Second",mi)
+#      print("Second",mi)
       # add contribution to the Hamiltonian
       out[i][i] = sx*mi[0] + sy*mi[1] + sz*mi[2]
     out = bmat(out) # turn into a matrix
