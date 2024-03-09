@@ -121,9 +121,9 @@ class Geometry:
         self.xyz2r() # update r
     def center(self):
         """ Centers the geometry in (0,0,0)"""
-        self.x = self.x - sum(self.x)/len(self.x)
-        self.y = self.y - sum(self.y)/len(self.y)
-        self.z = self.z - sum(self.z)/len(self.z)
+        self.x = self.x - np.sum(self.x)/len(self.x)
+        self.y = self.y - np.sum(self.y)/len(self.y)
+        self.z = self.z - np.sum(self.z)/len(self.z)
         self.xyz2r() # update r
     def get_lattice_name(self):
         if self.dimensionality==2:
