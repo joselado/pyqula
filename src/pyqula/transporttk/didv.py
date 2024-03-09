@@ -71,18 +71,7 @@ dagger = algebra.dagger
 def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,**kwargs):
     """Calculate differential conductance"""
     if ht.has_eh: # for systems with electons and holes
-        s = get_smatrix(ht,energy=energy,check=True) # get the smatrix
-        r1,r2 = s[0][0],s[1][1] # get the reflection matrices
-        get_eh = ht.get_eh_sector # function to read either electron or hole
-        # select the normal lead
-        # r1 is normal
-        r = ht.get_reflection_normal_lead(s) # return the reflection
-        ree = get_eh(r,i=0,j=0) # reflection e-e
-        reh = get_eh(r,i=0,j=1) # reflection e-h
-        Ree = np.trace(dagger(ree)@ree) # total e-e reflection 
-        Reh = np.trace(dagger(reh)@reh) # total e-h reflection 
-        G = (ree.shape[0] - Ree + Reh).real # conductance
-        return G
+        return didv_BdG(ht,energy=energy,delta=delta,**kwargs)
     else:
         if kwant:
           if opl is not None or opr is not None: raise # not implemented
@@ -134,6 +123,27 @@ def didv_kmap(self,kpath=None,energies=None,
 
 
 
+
+
+def didv_BdG(ht,energy=0.0,delta=1e-6,component=None,**kwargs):
+    """Calculate differential conductance in the presence of e-h"""
+    s = get_smatrix(ht,energy=energy,check=True) # get the smatrix
+    r1,r2 = s[0][0],s[1][1] # get the reflection matrices
+    get_eh = ht.get_eh_sector # function to read either electron or hole
+    # select the normal lead
+    # r1 is normal
+    r = ht.get_reflection_normal_lead(s) # return the reflection
+    ree = get_eh(r,i=0,j=0) # reflection e-e
+    reh = get_eh(r,i=0,j=1) # reflection e-h
+    Ree = np.trace(dagger(ree)@ree) # total e-e reflection 
+    Reh = np.trace(dagger(reh)@reh) # total e-h reflection 
+    if component is None: # return all the current
+        G = (ree.shape[0] - Ree + Reh).real # conductance
+    elif component=="electron":
+        G = (ree.shape[0] - Ree - Reh).real # electron conductance
+    elif component in ["hole","Andreev"]:
+        G = 2*Reh.real # hole conductance
+    return G
 
 
 
