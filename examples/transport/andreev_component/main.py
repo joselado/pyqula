@@ -21,7 +21,6 @@ es = np.linspace(-.03,.03,100) # grid of energies
 HT = heterostructures.build(h1,h2) # create the junction
 T = 0.3
 HT.set_coupling(T) # set the coupling between the leads 
-HT.delta = 1e-8
 # get the total conductance, the electron one, and Andreev reflection
 G = [HT.didv(energy=e) for e in es] # calculate transmission
 Ge = [HT.didv(energy=e,component="electron") for e in es] 
