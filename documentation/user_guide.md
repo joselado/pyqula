@@ -1,5 +1,5 @@
 
-# One dimensional tight-binding chain
+# Setting up a Hamiltonian
 In this basic tutorial we will address how to compute the band structure of a one dimensional tight binding model.
 
 The Hamiltonian of a one dimensional tight binding chain takes the form
@@ -50,6 +50,27 @@ h = g.get_hamiltonian() # generate the Hamiltonian
 (k,e) = h.get_bands(tij=[1.0,0.2,0.3]) # compute band structure
 ```
 
+## Including an onsite energy
+
+The Hamiltonian can have an onsite energy term, that is equivalent to a chemical potential
+that takes the form
+
+$$
+H =
+\mu \sum_n c^\dagger_n c_{n}
+$$
+
+This can be added to the Hamiltonian as
+
+```python
+from pyqula import geometry
+g = geometry.chain() # geometry of the 1D chain
+h = g.get_hamiltonian() # generate the Hamiltonian
+mu = 0.3 # value of the onsite
+h.add_onsite(mu) # add onsite energy
+```
+
+
 
 ## Including an external Zeeman field
 
@@ -91,7 +112,7 @@ $$
 t_{\alpha \beta} \rightarrow t_{\alpha \beta} e ^{i\int_{r_\alpha}^{r_\beta} \vec A \cdot d \vec l}
 $$
 
-where $\vec A$ is the magnetic potential. It can be used as shown in the example below
+where $\vec A$ is the magnetic potential so that $\vec B = \nabla \times \vec A$. It can be used as shown in the example below
 
 ```python
 from pyqula import geometry
@@ -102,13 +123,13 @@ h.add_orbital_magnetic_field(B) # add an out-of plane magnetic field
 ```
 
 
-# Two dimensional band structures
-In the following we move on to consider a two dimensional mutliorbital model, in particular a honeycomb lattice. The Hamiltonian takes the form
 
+# Observables
 
-$$H = \sum_{\langle ij\rangle} c^\dagger_i c_{j} + h.c.$$
+## Electronic band structures
 
-where $\langle ij\rangle$ denotes first neighbors of the honeycomb lattice. This model can be diagonalized analytically, giving rise to a diagonal Hamiltonian of the form
+For any system that is periodic in space, 
+can compute the electronic band structure as given by
 
 $$
 H = \sum_{k,\alpha} \epsilon_{k,\alpha} \Psi^\dagger_{k,\alpha} \Psi_{k,\alpha}
@@ -126,46 +147,6 @@ h = g.get_hamiltonian() # generate the Hamiltonian
 ```
 
 
-# Observables
-
-## Electronic band structures
-
-For any system, we can compute the electronic band structure as given by
-
-$$
-H = \sum_k \epsilon_k \Psi^\dagger_k \Psi_k
-$$
-
-where $k$ labels the momentum and $\Psi_k$ are the eigenstates. In band structure calculations, we can also compute the expectation value of arbitrary operators by using the keywork "operator". The path in the Brilloun zone can be specified with the keyword "kpath", and the number fo kpoints with the keywork "nk"
-
-```python
-from pyqula import geometry
-g = geometry.triangular_lattice() # geometry of the 2D model
-h.add_zeeman([0.,0.,0.3]) # add a spin-splitting
-h = g.get_hamiltonian() # generate the Hamiltonian
-(k,e,c) = h.get_bands(operator="sz") # compute band structure
-```
-
-
-## Momentum resolved spectral functions
-
-Apart from the band structure, in certain cases it is interesting to compute the momentum resolved spectral function, that takes the form
-
-$$
-A(k,\omega) = \delta(\omega-\epsilon_k) | \langle \Psi_k | A | \Psi_k \rangle|^2
-$$
-
-where $A$ is a certain operator. The previous quantity allows define a heatmap of the momentum-resolved spectral function. For the example, in a superconducting state, if operator is chosen to be projection onto the electron-sector, the previous quantity shows the electronic spectral fucntion
-
-```python
-from pyqula import geometry
-g = geometry.triangular_lattice() # get the geometry
-h = g.get_hamiltonian()  # get the Hamiltonian
-h.add_swave(0.3) # add superconductivity
-# electron spectral-function
-h.get_kdos_bands(operator="electron",nk=400,
-                    energies=np.linspace(-1.0,1.0,100))
-```
 
 
 ## Density of states
@@ -182,8 +163,45 @@ where $\epsilon_k$ are the eigenenergies of the Hamiltonian. It can be used as s
 from pyqula import geometry
 g = geometry.triangular_lattice() # get the geometry
 h = g.get_hamiltonian()  # get the Hamiltonian
-h.add_swave(0.3) # add superconductivity
 (es,ds) = h.get_dos()
+```
+
+## Local density of states
+
+The density of states counts how many states are in a certian energy window. It is defined as
+
+$$
+D(\omega,n) = \int \delta(\omega-\epsilon_k) | \langle \Psi_k | n \rangle |^2 dk
+$$
+
+where $\epsilon_k$ are the eigenenergies of the Hamiltonian. It can be used as shown below
+
+```python
+from pyqula import geometry
+g = geometry.hoenycomb_zigzag_ribbon() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+(x,y,d) = h.get_ldos()
+```
+
+
+
+
+
+## Momentum resolved spectral functions
+
+Apart from the band structure, in certain cases it is interesting to compute the momentum resolved spectral function, that takes the form
+
+$$
+A(k,\omega) = \delta(\omega-\epsilon_k) | \langle \Psi_k | A | \Psi_k \rangle|^2
+$$
+
+where $A$ is a certain operator. The previous quantity allows define a heatmap of the momentum-resolved spectral function. For the example, in a superconducting state, if operator is chosen to be projection onto the electron-sector, the previous quantity shows the electronic spectral fucntion
+
+```python
+from pyqula import geometry
+g = geometry.triangular_lattice() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+h.get_kdos_bands()
 ```
 
 
@@ -212,22 +230,78 @@ sy = h.get_operator("sy") # Spin y component
 sz = h.get_operator("sz") # Spin z component
 ```
 
+## Location operator
+
+To understand the spatial location of the states we can use the spatial operators, that
+denote where wavefucntions are located in real space
+$$
+R_\alpha = \sum_{r,s} r_\alpha c^\dagger_{r,s} c_{r,s}
+$$
+
+with $r_\alpha$ is the component of the position of site r
+
+```python
+from pyqula import geometry
+g = geometry.triangular_lattice() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+x = h.get_operator("xposition") # x component
+y = h.get_operator("yposition") # y component
+z = h.get_operator("zposition") # z component
+```
+
+
+## Bulk-edge operator
+
+In order to know if a state is located at the edge or in the bulk of the system
+you can use the bulk-edge location operators. The edge operator takes value 1 for
+sites on the edge, and 0 for sites in the bulk. 
+
+
+$$
+hat E  = \sum_{r\in \text{Edge},s} c^\dagger_{r,s} c_{r,s}
+$$
+
+The bulk
+operator takes value 1 for sites on the bulk, and 0 for sites on the edge.
+
+$$
+hat B  = \sum_{r\in \text{Bulk},s} c^\dagger_{r,s} c_{r,s}
+$$
+
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_zigzag_ribbon() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+b = h.get_operator("bulk") # bulk operator
+e = h.get_operator("edge") # edge operator
+```
+
 
 ## Nambu operators
 
-## Topological operators
+In the presence of superconductivity, you can project onto the electron or
+hole component of the Nambu spinor using the electron-hole operators
+
+```python
+from pyqula import geometry
+g = geometry.triangular_lattice() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+e = h.get_operator("electron") # electron component
+h = h.get_operator("hole") # hole component
+```
+
+## Berry curvature operator
 
 The Berry curvature operator is a first example of an operator that is intrinsically momentum dependent. The Berry curvature operator is defined as
 
 $$
- O |\Psi\rangle = \Omega(k,\omega) |\Psi \rangle
+ O |\Psi_k\rangle = \Omega(k,\epsilon_k) |\Psi_k \rangle
 $$
 
 where $\Omega(k,\omega)$ is the Berry curvature evaluated at the momentum $k$ and energy $\omega$ of the eigenstate $|\Psi\rangle$. In particular, this operator allows to directly see the contribution to the Berry curvature of different states in the band structure.
 
-## Structural operators
-
-## Non-linear operators
+## Inverse participation ratio operator
 
 So far we have considered operators that are linear, namely that fufill the condition
 
@@ -242,8 +316,15 @@ $$
  O |\Psi\rangle = \sum_i | \langle i | \Psi \rangle |^4 |\Psi \rangle
 $$
 
-In particular, the previous operator allows to identify states that are highly localized in a few lattice sites, becoming useful to highlight impurity states and lozalized modes.
+In particular, the previous operator allows to identify states that are highly localized in a few lattice sites, becoming useful to highlight impurity states and localized modes.
 
+```python
+from pyqula import geometry
+g = geometry.honeycomb_zigzag_ribbon() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+h.add_onsite(0.3) # add a sublattice imbalance
+ipr = h.get_operator("IPR") # IPR operator
+```
 
 
 
@@ -672,11 +753,11 @@ Generate a supercell
 
 Arguments
 
-- N: size of the supercell to create
-
-## Hamiltonian functions and methods
+- N: size of the supercell to create, number or tuple
 
 Returns a new geometry
+
+## Hamiltonian functions and methods
 
 ### h.get_bands()
 Compute band structure
@@ -699,3 +780,54 @@ Optional arguments:
 - delta=0.01: broadening of the DOS
 
 Return energies and DOS
+
+### h.add_soc()
+Add Kane-Mele intrinsic spin-orbit coupling
+
+Arguments:
+
+- value: value of the SOC
+
+
+### h.add_zeeman()
+Add a Zeeman field to the Hamiltonian
+
+Arguments:
+
+- value: value of the Zeeman, as a number (assumes [0,0,Bz]), array or callable function
+
+
+### h.add_rashba()
+Add Rashba spin-orbit coupling
+
+Arguments:
+
+- value: value of the Rashba SOC
+
+
+### h.add_onsite()
+
+Add a local onsite energy
+
+Arguments:
+
+- value: value of the oniste energy
+
+### h.get_ldos()
+Compute the local density of states.
+
+Optional arguments:
+
+- e: energy of the LDOS
+
+- delta=0.01: broadening of the LDOS
+
+Return x, position, y position and LDOS
+
+
+### h.get_chern()
+Return Chern number of the Hamiltonian.
+
+Optional arguments:
+- nk=20: number of kpoints
+
