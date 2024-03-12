@@ -83,6 +83,23 @@ h = g.add_zeeman([0.1,0.2,0.3]) # add the Zeeman field
 (k,e) = h.get_bands() # compute band structure
 ```
 
+## Including an external orbital field
+
+An external magnetic field can be included using the Peierls substitution
+
+$$
+t_{\alpha \beta} \rightarrow t_{\alpha \beta} e ^{i\int_{r_\alpha}^{r_\beta} \vec A \cdot d \vec l}
+$$
+
+where $\vec A$ is the magnetic potential. It can be used as shown in the example below
+
+```python
+from pyqula import geometry
+N = 20 # number of unit cells as the width
+g = geometry.square_ribbon(N) # ribbon
+h.add_orbital_magnetic_field(B) # add an out-of plane magnetic field
+```
+
 
 # Two dimensional band structures
 In the following we move on to consider a two dimensional mutliorbital model, in particular a honeycomb lattice. The Hamiltonian takes the form
@@ -431,8 +448,8 @@ In the cases above we focused on local repulsive interactions that promote colli
 $$
 H_U^{aMF} = 
 U\sum_{i} 
-\langle c_{i,\uparrow} c_{i,\uparrow} \rangle
-c^\dagger_{i,\downarrow} c^\dagger_{i,\downarrow} 
+\langle c_{i,\uparrow} c_{i,\downarrow} \rangle
+c^\dagger_{i,\downarrow} c^\dagger_{i,\uparrow} 
 + h.c.
 $$
 
@@ -468,7 +485,7 @@ c^\dagger_{i,s} c_{i,s}
 c^\dagger_{j,s'} c_{j,s'}
 $$
 
-where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all teh anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first neighbor interaction $V_1$.
+where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all the anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first neighbor interaction $V_1$.
 
 The first term is the charge order term, that takes the form
 
