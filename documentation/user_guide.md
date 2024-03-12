@@ -97,6 +97,7 @@ where $\vec A$ is the magnetic potential. It can be used as shown in the example
 from pyqula import geometry
 N = 20 # number of unit cells as the width
 g = geometry.square_ribbon(N) # ribbon
+B = 0.02 # magnetic field in quantum flux unit
 h.add_orbital_magnetic_field(B) # add an out-of plane magnetic field
 ```
 
