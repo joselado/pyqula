@@ -152,7 +152,22 @@ h.get_kdos_bands(operator="electron",nk=400,
 
 ## Density of states
 
-## Spatially resolved expectation values
+The density of states counts how many states are in a certian energy window. It is defined as
+
+$$
+D(\omega) = \int \delta(\omega-\epsilon_k) dk
+$$
+
+where $\epsilon_k$ are the eigenenergies of the Hamiltonian. It can be used as shown below
+
+```python
+from pyqula import geometry
+g = geometry.triangular_lattice() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+h.add_swave(0.3) # add superconductivity
+(es,ds) = h.get_dos()
+```
+
 
 
 # Operators
@@ -162,6 +177,23 @@ Both when computing band structures, density of states and expectation values we
 Operators in pyqula have some important properties. First, for periodic Hamiltonian they can have an intrinsic momentum dependence. Second, pyqula allows for native algebra between them, namely they can be summed or multiplied, automatically accounting for intrinsic momentum depences. Third, they can be non-linear, providing a generalization of matrix operators.
 
 ## Spin operators
+
+The simplest operators are the spin operators
+$$
+S_\alpha = \sum_n \sigma_\alpha^{\mu\nu} c^\dagger_{n,\mu} c_{n,\nu}
+$$
+
+with $\sigma_\alpha$ the Pauli matrices, that can be obtained as
+
+```python
+from pyqula import geometry
+g = geometry.triangular_lattice() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+sx = h.get_operator("sx") # Spin x component
+sy = h.get_operator("sy") # Spin y component
+sz = h.get_operator("sz") # Spin z component
+```
+
 
 ## Nambu operators
 
@@ -527,6 +559,34 @@ In this section we address how we can compute surface spectral function of semi-
 
 ## Topological invariants
 
+### Chern number
+
+The Chern number characterizes two-dimensional topological insulators with broken time reversal symmetry. It can be computed with the following code
+
+```python
+from pyqula import geometry
+from pyqula import kdos
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_haldane(0.05) # Add Haldane coupling
+C = h.get_chern() # Chern number
+```
+
+
+### Z2 invariant
+
+The Chern number characterizes two-dimensional topological insulators with time reversal symmetry. It can be computed with the following code
+
+```python
+from pyqula import geometry
+from pyqula import kdos
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_soc(0.05) # Add spin-orbit coupling
+from pyqula import topology
+z2 = topology.z2_invariant(h) # Z2 invariant
+```
+
 ## Berry curvature density in frequency space
 
 ## Berry curvature density in real-space
@@ -573,3 +633,51 @@ for T in np.linspace(1e-3,1.0,6): # loop over transparencies
 
 
 # Single defects in infinite systems
+
+
+
+# Main functions and methods
+
+## Geometry functions and methods
+
+### g.get_hamiltonian()
+Generate the Hamiltonian from a geometry.
+
+Optional arguments
+
+- tij = [1.0,.0,0.]: List with 1st, 2nd, 3rd nearest neighbor hopping
+
+Returns the Hamiltonian
+
+### g.get_supercell()
+Generate a supercell
+
+Arguments
+
+- N: size of the supercell to create
+
+## Hamiltonian functions and methods
+
+Returns a new geometry
+
+### h.get_bands()
+Compute band structure
+
+Optional arguments:
+
+- nk = 20: number of k-points
+
+Returns kpoint index and energies
+
+
+
+### h.get_dos()
+Compute the density of states.
+
+Optional arguments:
+
+- energies: array with frequencies of the DOS
+
+- delta=0.01: broadening of the DOS
+
+Return energies and DOS
