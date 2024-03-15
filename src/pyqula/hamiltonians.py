@@ -273,7 +273,7 @@ class Hamiltonian():
       if nsuper==1: return self
       if self.dimensionality==0: return self
       try: 
-          nsuper[2] 
+          nsuper[0] # check if it is a tuple 
           ns = nsuper # array as input
       except:
           if self.dimensionality==1: ns = [nsuper,1,1]
