@@ -157,63 +157,8 @@ def turn_spinful(h,enforce_tr=False):
     h.hopping[i].m = fun(h.hopping[i].m) # spinful hopping
 
 
-
-
-def bulk2ribbon(hin,n=10,sparse=True,nxt=6,ncut=6):
-  """ Create a ribbon hamiltonian object"""
-  hin = turn_multicell(hin)
-  hr = hin.get_supercell(nsuper=[1,n,1]) # Hamiltonian of the ribbon
-  hr.geometry.dimensionality = 1 # one dimensional
-  hr.dimensionality = 1 # one dimensional
-  out = [] # empty list
-  for i in range(len(hr.hopping)): # loop over hoppings
-      d = hr.hopping[i].dir # direction
-      d = np.array(d) # as array
-      if np.max(np.abs(d[1:]))==0: # hopping in x direction
-          out.append(hr.hopping[i].copy())
-  hr.hopping = out
-  return hr
-#  if not hin.is_multicell: h = turn_multicell(hin)
-#  else: h = hin # nothing othrwise
-#  hr = h.copy() # copy hamiltonian
-#  if sparse: hr.is_sparse = True # sparse output
-#  hr.dimensionality = 1 # reduce dimensionality
-#  # stuff about geometry
-#  hr.geometry = h.geometry.supercell((1,n)) # create supercell
-#  hr.geometry.dimensionality = 1
-#  hr.geometry.a1 = h.geometry.a1 # add the unit cell vector
-#  from . import sculpt # rotate the geometry
-#  hr.geometry = sculpt.rotate_a2b(hr.geometry,hr.geometry.a1,np.array([1.,0.,0.]))
-#  hr.geometry.celldis = hr.geometry.a1[0]
-#  get_tij = generate_get_tij(h) # return a function to abtain the hoppings
-#  def superhopping(dr=[0,0,0]): 
-#    """ Return a matrix with the hopping of the supercell"""
-#    intra = [[None for i in range(n)] for j in range(n)] # intracell term
-#    for ii in range(n): # loop over ii
-#      for jj in range(n): # loop over jj
-#        d = np.array([dr[0],ii-jj+dr[1],dr[2]])
-#        if d.dot(d)>ncut*ncut: continue # skip iteration
-#        m = get_tij(rij=d) # get the matrix
-#        if m is not None: intra[ii][jj] = csc_matrix(m) # store
-#        else: 
-#          if ii==jj: intra[ii][jj] = csc_matrix(h.intra*0.)
-#    intra = bmat(intra) # convert to matrix
-#    if not sparse: intra = intra.todense() # dense matrix
-#    return intra
-#  # get the intra matrix
-#  hr.intra = superhopping()
-#  # now do the same for the interterm
-#  hoppings = [] # list of hopings
-#  for i in range(-nxt,nxt+1): # loop over hoppings
-#    if i==0: continue # skip the 0
-#    d = np.array([i,0.,0.])
-#    hopp = Hopping() # create object
-#    hopp.m = superhopping(dr=d) # get hopping of the supercell
-#    hopp.dir = d
-#    hoppings.append(hopp)
-#  hr.hopping = hoppings # store the list
-#  hr.dimensionality = 1
-#  return hr 
+from .htk.supercell import bulk2ribbon
+from .htk.supercell import bulk2film
 
 
 
