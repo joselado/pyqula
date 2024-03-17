@@ -102,9 +102,13 @@ class Embedding():
         return hubbard_mf(self,**kwargs) # return Hubbard mean-field
     def get_didv(self,**kwargs):
         from .embeddingtk import didv
+        return didv.get_didv_single(self,**kwargs)
+    def get_didv_all(self,**kwargs):
+        from .embeddingtk import didv
         return didv.get_didv(self,**kwargs)
     # for compatibility with kappa functionality
-    def didv(self,**kwargs): self.get_didv(**kwargs) 
+    def didv(self,**kwargs): 
+        return self.get_didv(**kwargs) 
     def get_kappa(self,**kwargs):
         from .embeddingtk import kappa
         return kappa.get_kappa(self,**kwargs)

@@ -318,7 +318,7 @@ def block_inverse(m,i=0,j=0):
     for ii in range(nb-1): # first off diagonal
       mt[ii][ii+1] = csc_matrix(m[ii][ii+1])
       mt[ii+1][ii] = csc_matrix(m[ii+1][ii])
-    mt = bmat(mt).todense() # create dense matrix
+    mt = algebra.bmat(mt) # convert to dense matrix
     # select which elements you need
     ilist = [m[ii][ii].shape[0] for ii in range(i)] 
     jlist = [m[jj][jj].shape[1] for jj in range(j)] 
