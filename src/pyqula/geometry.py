@@ -302,7 +302,7 @@ def ladder(): return square_ribbon(2)
 
 def bisquare_ribbon(ncells):
   g = square_lattice_bipartite()
-  g = g.supercell((1,ncells))
+  g = g.get_supercell((1,ncells))
   g.dimensionality = 1
   return g
 
