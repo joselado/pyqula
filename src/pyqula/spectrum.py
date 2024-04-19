@@ -18,6 +18,7 @@ arpack_maxiter = 10000
 
 def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                     e=0.0,nk=50,nsuper=1,reciprocal=True,
+                    k0 = np.array([0.,0.]),
                     delta=None,refine_delta=1.0,operator=None,
                     mode='eigen',num_waves=2,info=False):
     """Calculates the Fermi surface of a 2d system"""
@@ -39,6 +40,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     else:  R = lambda x: x
     # setup a reasonable value for delta
     if delta is None:  delta = 3./refine_delta*2./nk
+    print(delta)
     #### function to calculate the weight ###
     if mode=='full': # use full inversion
       def get_weight(hk,k=None):
@@ -72,8 +74,9 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     for x in kxs:
       for y in kxs:
         rs.append([x,y,0.]) # store
+    k0 = np.array([k0[0],k0[1],0.])
     def getf(r): # function to compute FS
-        k = R(r)
+        k = R(r) + k0
         hk = hk_gen(k) # get hamiltonian
         return get_weight(hk,k=k)
     rs = np.array(rs) # transform into array
