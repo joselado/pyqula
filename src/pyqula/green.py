@@ -271,7 +271,7 @@ def read_sparse(f,sparse=True):
 
 
 mode_block_inverse = "gauss" # or "full"
-mode_block_inverse = "full" 
+#mode_block_inverse = "full" 
 
 
 def gauss_inverse(m,i=0,j=0,test=False):
