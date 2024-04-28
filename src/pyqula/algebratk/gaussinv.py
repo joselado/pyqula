@@ -6,29 +6,31 @@ def gauss_inverse(m,i=0,j=0,test=False):
     """ Calculates the inverse of a block diagonal
         matrix. This uses brute force inversion,
         so very demanding for large matrices."""
+#    i,j =0,0
     nb = len(m) # number of blocks
     ca = [None for ii in range(nb)]
     ua = [None for ii in range(nb-1)]
     da = [None for ii in range(nb-1)]
     for ii in range(nb): # diagonal part
-      ca[ii] = m[ii][ii]
-    for ii in range(nb-1):
+      ca[ii] = m[ii][ii] 
+    for ii in range(nb-1): 
       ua[ii] = m[ii][ii+1]
-      da[ii] = m[ii+1][ii]
+      da[ii] = m[ii+1][ii] 
     # in case you use the -1 notation of python
     if i<0: i += nb
     if j<0: j += nb
     # now call the actual fortran routine
     nm = nb # number of blocks
     n = ua[0].shape[0] # dimension of the matrix
-    try:
-        from ..fortran.gauss_inv import gauss_inv
-        mout = gauss_inv.gauss_inv(ca,da,ua,i+1,j+1)
-    except:
-        from ..green import block_inverse
-        print("Fortran routine was not compiled, using full version")
-        mout = block_inverse(m,i=i,j=j)
-#        mout = inv_block(ca,da,ua,i,j)
+#    try:
+#        raise
+#        from ..fortran.gauss_inv import gauss_inv
+#        mout = gauss_inv.gauss_inv(ca,da,ua,i+1,j+1)
+#    except:
+    from ..green import block_inverse
+#        print("Fortran routine was not compiled, using full version")
+#        mout = block_inverse(m,i=i,j=j)
+    mout = inv_block(ca,da,ua,i,j)
     mout = np.array(mout)
     test = False # test if the inversion worked
     if test: # check whether the inversion worked
@@ -57,7 +59,7 @@ def inv_block(ca, da, ua, i, j):
         cr[i1, i1] = 1.0
 
     # Calculate dl[i]
-    for i1 in range(i):
+    for i1 in range(i+1):
         if i1 != 0:
             a = da[i1-1].copy()
             hm1 = multiply(a, dl)
