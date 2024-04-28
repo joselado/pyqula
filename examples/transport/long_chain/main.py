@@ -16,13 +16,19 @@ hc = [h.copy() for i in range(nc)]
 ht = heterostructures.build(h,h,central=hc)
 h.get_bands() # get bandstructure
 es = np.linspace(-3.,3.,50)
-ts = [ht.landauer(e) for e in es]
+
+from pyqula import green
+green.mode_block_inverse = "gauss"
+ts0 = [ht.landauer(e) for e in es]
+green.mode_block_inverse = "full"
+ts1 = [ht.landauer(e) for e in es]
 
 import matplotlib.pyplot as plt
-plt.plot(es,ts)
+plt.scatter(es,ts0,label="Gauss inversion (efficient)",c="red")
+plt.plot(es,ts1,label="Full inversion (brute force)",c="blue")
+plt.legend()
 plt.show()
 
-np.savetxt("TRANSPORT.OUT",np.matrix([es,ts]).T)
 
 
 
