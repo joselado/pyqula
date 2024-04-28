@@ -38,10 +38,10 @@ do i1=1,i
   if (.not.(i1.eq.1)) then
   !  call selm(nm-1,n,da,a,i1-1)
     a(:,:) = da(i1-1,:,:)
-    call multiply(a,dl,hm1,n,n,n)
+    call multiply(a,dl,hm1,n)
   !  call selm(nm-1,n,ua,a,i1-1)
     a(:,:) = ua(i1-1,:,:)
-    call multiply(hm1,a,dl,n,n,n)
+    call multiply(hm1,a,dl,n)
   endif
   !call selm(nm,n,ca,a,i1)
   a(:,:) = ca(i1,:,:)
@@ -50,8 +50,8 @@ do i1=1,i
   if((i.gt.j).and.(i1.le.i-1).and.(i1.ge.j)) then
   !  call selm(nm-1,n,da,a,i1)
     a(:,:) = da(i1,:,:)
-    call multiply(a,dl,hm1,n,n,n)
-    call multiply(hm1,cl,hm2,n,n,n)
+    call multiply(a,dl,hm1,n)
+    call multiply(hm1,cl,hm2,n)
     cl=-hm2
   endif
 enddo
@@ -63,10 +63,10 @@ do i4=i,nm
   if (.not.(i1.eq.nm)) then
   !  call selm(nm-1,n,ua,a,i1)
     a(:,:) = ua(i1,:,:)
-    call multiply(a,dr,hm1,n,n,n)
+    call multiply(a,dr,hm1,n)
   !  call selm(nm-1,n,da,a,i1)
     a(:,:) = da(i1,:,:)
-    call multiply(hm1,a,dr,n,n,n)
+    call multiply(hm1,a,dr,n)
   endif
   !call selm(nm,n,ca,a,i1)
   a(:,:) = ca(i1,:,:)
@@ -75,8 +75,8 @@ do i4=i,nm
     if((i.lt.j).and.(i1.ge.i+1).and.(i1.le.j)) then
   !  call selm(nm-1,n,ua,a,i1-1)
     a(:,:) = ua(i1-1,:,:)
-    call multiply(a,dr,hm1,n,n,n)
-    call multiply(hm1,cr,hm2,n,n,n)
+    call multiply(a,dr,hm1,n)
+    call multiply(hm1,cr,hm2,n)
     cr=-hm2
     endif
 enddo
@@ -94,10 +94,10 @@ hm1=-a+dl+dr
 call inverse(hm1,n)
 g=hm1
 if (i.lt.j) then
-call multiply(hm1,cr,g,n,n,n)
+call multiply(hm1,cr,g,n)
 endif
 if (j.lt.i) then
-call multiply(hm1,cl,g,n,n,n)
+call multiply(hm1,cl,g,n)
 endif
 
 

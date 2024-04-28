@@ -270,14 +270,19 @@ def read_sparse(f,sparse=True):
   return g # return green function
 
 
-
+mode_block_inverse = "gauss" # or "full"
+mode_block_inverse = "full" 
 
 
 def gauss_inverse(m,i=0,j=0,test=False):
     """ Calculates the inverse of a block diagonal
         matrix. This uses brute force inversion,
         so very demanding for large matrices."""
-    return block_inverse(m,i=i,j=j)
+    if mode_block_inverse=="gauss":
+        from .algebratk.gaussinv import gauss_inverse as ginv
+        return ginv(m,i=i,j=j)
+    elif mode_block_inverse=="full":
+        return block_inverse(m,i=i,j=j)
 #  try: from .gauss_invf90 import gauss_inv as ginv
 #  except: 
 #  test = True # Ups, this might blow up
