@@ -44,9 +44,9 @@ def gauss_inverse(m,i=0,j=0,test=False):
 
 
 
-# there is some bug somewhere in this function
 
 def inv_block(ca, da, ua, i, j):
+    """Gauss inversion, adapted from the fortran function"""
     nm = len(ca)
     n = ca[0].shape[0]
     cl = np.zeros((n, n), dtype=np.complex_)
@@ -106,13 +106,8 @@ def inv_block(ca, da, ua, i, j):
 
 
 def multiply(a, b):
-#    return np.dot(a,b)
     return a@b
 
 def inverse(a):
     from scipy.linalg import inv
     return inv(a)
-    lu, piv = lu_factor(a)
-    identity = np.eye(a.shape[0], dtype=a.dtype)
-    inv_a = lu_solve((lu, piv), identity)
-    return inv_a
