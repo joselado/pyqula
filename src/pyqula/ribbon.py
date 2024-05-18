@@ -59,3 +59,30 @@ def hamiltonian_ribbon(hin,n=10):
   return h
 
 
+
+def island2ribbon(g):
+    """Transform the geometry of an island into a ribbon,
+    by doing the minimal possible coupling"""
+    if g.dimensionality != 0: raise # only for 1D
+    r = g.r.copy() # array with positions
+    # as first attempt, do a full shift
+    xmin = np.min(g.r[:,0])
+    xmax = np.max(g.r[:,0])
+    dx = xmax - xmin + 1.0 # maximum shift
+    a1 = [dx,0.,0.] # distance
+    r2 = [ri + a1 for ri in r]
+    from .neighbor import find_first_neighbor
+    out = find_first_neighbor(r,r2)
+    if len(out)==0: 
+        print("island2ribbon implementation not working")
+        raise
+    # a more general implementation should be included
+    go = g.copy()
+    go.dimensionality = 1
+    go.a1 = np.array([dx,0.,0.])
+    return go
+
+
+
+
+
