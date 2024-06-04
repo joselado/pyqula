@@ -10,6 +10,7 @@ from . import kpm
 from . import sculpt
 from . import parallel
 from . import algebra
+from . import operators
 
 def write_kdos(k=0.,es=[],ds=[],new=True):
   """ Write KDOS in a file"""
@@ -341,6 +342,8 @@ def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
         do = []
         for g in out: # loop
           if operator is None: d = -algebra.trace(g).imag # only the trace 
+          elif type(operator)==operators.Operator:
+              d = -(operators.Operator(g)*operator).trace().imag
           elif callable(operator): d = operator(g,k=k) # call the operator
           else:  d = -algebra.trace(g@operator).imag # assume it is a matrix
           if write: fo.write(str(d)+"   ") # write in a file

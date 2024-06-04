@@ -49,20 +49,24 @@ class Operator():
         if type(a)==Operator:
             out = Operator(self)
             if self.matrix is not None and a.matrix is not None:
-                out.matrix = self.matrix@a.matrix
+                out.matrix = self.get_matrix()@a.get_matrix()
                 out.m = lambda v,k=None: out.matrix@v # create dummy function
             else: out.m = lambda v,k=None: self.m(a.m(v,k=k),k=k)
             out.linear = self.linear and a.linear
             return out
         elif algebra.ismatrix(a): # matrix type
             if self.matrix is not None: # return a matrix
-                return self.matrix@a # multiply matrices
+                return self.get_matrix()@a # multiply matrices
             else:
                 return self*Operator(a) # convert to operator
         elif algebra.isvector(a): # array type
             return self(a)
         else:
             return self*Operator(a) # convert to operator
+    def trace(self):
+        if self.matrix is not None: 
+            return algebra.trace(self.matrix)
+        else: raise
     def __rmul__(self,a):
         return Operator(a)*self
     def __truediv__(self,a):
@@ -93,7 +97,12 @@ class Operator():
     def __matmul__(self,a): return self*a
     def get_matrix(self,k=None):
         """Return matrix if possible"""
-        if self.matrix is not None: return self.matrix
+        if self.matrix is not None: 
+            if algebra.ismatrix(self.matrix): 
+                return self.matrix
+            else: 
+                print("Operator.matrix has a wrong type",type(self.matrix))
+                raise
     def inv(self):
         """Return the inverse operator"""
         if self.matrix is not None and self.linear: # input is a matrix
