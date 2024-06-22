@@ -59,14 +59,14 @@ def pcall_killproof(fin,xs,return_mode="list",**kwargs):
         return out
 
 
-def get_env():
-    """Get a cleaned up environment"""
-    env = os.environ # dictionary
-    envout = {} # output dictionary
-    for key in env:
-        if "SLURM_" not in key and "SBATCH_" not in key:
-           envout[key] = env[key] # store
-    return envout # return this dictionary
+#def get_env():
+#    """Get a cleaned up environment"""
+#    env = os.environ # dictionary
+#    envout = {} # output dictionary
+#    for key in env:
+#        if "SLURM_" not in key and "SBATCH_" not in key:
+#           envout[key] = env[key] # store
+#    return envout # return this dictionary
 
 
 def pcall_single(fin,xs,time=10,memory=5000,error=None,
@@ -113,7 +113,7 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None,
     pwd = os.getcwd() # current directory 
     os.chdir(pfolder) # go to the folder
 #    os.system("sbatch run.sh >> run.out") # run calculation
-    env = get_env() # get the cleaned environment
+#    env = get_env() # get the cleaned environment
     out,err = subprocess.Popen(["sbatch","run.sh"],stdout=subprocess.PIPE,env=env).communicate()
     job = job_number(out) # job number
     jobkill(job) # kill the job if exiting
@@ -148,13 +148,13 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None,
       return outys # return the dictionary
 
 
-
 def job_number(out):
     """Get the job number"""
     out = str(out)
-    out = out.split("job")[1]
+    out = out.split("Submitted batch job")[1]
     out = out.split("\\n")[0]
     return int(out) # return the job
+
 
 
 def jobkill(n):
