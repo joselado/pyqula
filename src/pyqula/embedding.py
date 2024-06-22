@@ -23,6 +23,7 @@ class Embedding():
         self.has_gf_generator = False
         self.has_spin = self.H.has_spin
         self.has_eh = self.H.has_eh
+        self.gf_mode = "renormalization" # mode for Green's functions
         self.boundary_embedding_generator = None
         self.mode = "bulk" # mode
         self.nsuper = None # supercell between original Hamiltonian
@@ -179,7 +180,13 @@ def onsite_defective_central(h,m,nsuper):
 
 
 def onsite_supercell(h,nsuper,mc=None):
-    if h.is_multicell: h = h.get_no_multicell() # redefine
+    if nsuper==1: return h.intra
+    if h.is_multicell: # try to make it multicell 
+        from .htk.kchain import detect_longest_hopping
+        if detect_longest_hopping(h)>1:
+            print("This requires short-range hopping, stopping")
+            raise # up to NN
+        h = h.get_no_multicell() # redefine
     from .checkclass import is_iterable
     if not is_iterable(nsuper): # just a number 
         if h.dimensionality==1: nsuper = [nsuper,1]
@@ -211,6 +218,7 @@ def onsite_supercell(h,nsuper,mc=None):
     intra = csc(h.intra)
     if mc is None: mc = intra
     else: mc = csc(mc)
+    dag = algebra.dagger
     for i in range(n):
         intrasuper[i][i] = intra # intracell
         (x1,y1) = inds[i]
@@ -219,13 +227,13 @@ def onsite_supercell(h,nsuper,mc=None):
             dx = x2-x1
             dy = y2-y1
             if dx==1 and  dy==0: intrasuper[i][j] = tx
-            if dx==-1 and dy==0: intrasuper[i][j] = tx.H
+            if dx==-1 and dy==0: intrasuper[i][j] = dag(tx)
             if dx==0 and  dy==1: intrasuper[i][j] = ty
-            if dx==0 and  dy==-1: intrasuper[i][j] = ty.H
+            if dx==0 and  dy==-1: intrasuper[i][j] = dag(ty)
             if dx==1 and  dy==1: intrasuper[i][j] = txy
-            if dx==-1 and dy==-1: intrasuper[i][j] = txy.H
+            if dx==-1 and dy==-1: intrasuper[i][j] = dag(txy)
             if dx==1 and  dy==-1: intrasuper[i][j] = txmy
-            if dx==-1 and dy==1: intrasuper[i][j] = txmy.H
+            if dx==-1 and dy==1: intrasuper[i][j] = dag(txmy)
     ### setup the central (defective) cell
     if h.dimensionality==1:
         ii=int(n//2) # central site
@@ -259,7 +267,7 @@ def get_gf_exact(self,energy=0.0,delta=1e-2,
     e = energy
     if self.nsuper is None: # old way
         g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,
-                nsuper=nsuper,gtype=self.mode)
+                nsuper=nsuper,gtype=self.mode,gf_mode=self.gf_mode)
     else: # workaround for supercells
         raise # this does not work yet
         g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,

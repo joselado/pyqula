@@ -471,12 +471,13 @@ def surface_multienergy(h1,k=[0.0,0.,0.],energies=[0.0],reverse=True,**kwargs):
 
 
 def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1],
-                             gtype="bulk"):
+                             gtype="bulk",
+                             gf_mode="renormalization"):
   """Calculates the selfenergy of a certain supercell """
   h.turn_dense() # dense mode
   if nsuper==1: # a single unit cell 
       return bloch_selfenergy(h,energy=e,delta=delta,nk=nk,
-              mode="renormalization",gtype=gtype)
+              mode=gf_mode,gtype=gtype)
   if gtype!="bulk": return NotImplemented # not implemented
   if h.dimensionality>2: return NotImplemented
   try:   # if two number given
