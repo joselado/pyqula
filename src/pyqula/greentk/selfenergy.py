@@ -76,7 +76,8 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
 #      h90 = rotate90(h) # rotated Hamiltonian
       for k in ks:  # loop over k in y direction
  # add contribution to green function
-        g += green_kchain(h,k=k,energy=energy,delta=delta,error=error)
+        g += green_kchain(h,k=k,energy=energy,delta=delta,
+                error=error,only_bulk=True)
 #        g += green_kchain(h90,k=k,energy=energy,delta=delta,error=error)
       g = g/len(ks)
     else: raise

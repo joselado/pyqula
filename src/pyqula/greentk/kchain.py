@@ -42,14 +42,12 @@ def green_kchain_NNN(H,k=[0.,0.,0.],**kwargs):
     return dysonNNN(ons,t1,t2,**kwargs)
 
 
-def green_kchain_LR(H,k=[0.,0.,0.],only_bulk=True,**kwargs):
+def green_kchain_LR(H,k=[0.,0.,0.],**kwargs):
     """Return Green function when there is long range hopping"""
     from ..htk.kchain import kchain_LR # extract up to NNN
     hops = kchain_LR(H,k=k) # return the three matrices
     from ..greentk.dyson import dysonLR
-    gf,sf = dysonLR(hops,**kwargs)
-    if only_bulk: return gf
-    else: return gf,sf
+    return dysonLR(hops,**kwargs)
 
 
 
