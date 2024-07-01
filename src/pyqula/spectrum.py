@@ -40,7 +40,6 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     else:  R = lambda x: x
     # setup a reasonable value for delta
     if delta is None:  delta = 3./refine_delta*2./nk
-    print(delta)
     #### function to calculate the weight ###
     if mode=='full': # use full inversion
       def get_weight(hk,k=None):
