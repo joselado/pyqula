@@ -17,9 +17,7 @@ except:
   use_fortran = False # use python routines
 
 
-
-
-def get_moments(v,m,n=100,use_fortran=use_fortran,test=False):
+def get_moments_old(v,m,n=100,use_fortran=use_fortran,test=False):
     """ Get the first n moments of a certain vector
     using the Chebychev recursion relations"""
     if use_fortran:
@@ -32,6 +30,13 @@ def get_moments(v,m,n=100,use_fortran=use_fortran,test=False):
     else:
         if test: return python_kpm_moments_clear(v,m,n=n)
         else: return python_kpm_moments(v,m,n=n)
+
+
+# numba version
+from .kpmtk.kpmnumba import kpm_moments as get_moments
+
+
+
 
 
 def python_kpm_moments(v,m,n=100):
@@ -201,12 +206,12 @@ def full_trace(m_in,n=200,use_fortran=use_fortran):
 
 def local_dos(m_in,i=0,n=200,use_fortran=use_fortran):
   """ Calculates local DOS using the KPM"""
-  m = csc(m_in) # saprse matrix
+  m = csc(m_in) # sparse matrix
   nd = m.shape[0] # length of the matrix
   mus = np.array([0.0j for j in range(2*n)])
-  v = rand.random(nd)*0.
+  v = np.zeros(nd,dtype=np.complex_) # initialize
   v[i] = 1.0 # vector only in site i 
-  v = csc(v).transpose()
+#  v = csc(v).transpose()
 # get the chebychev moments
   mus += get_moments(v,m,n=n,use_fortran=use_fortran) 
   return mus
