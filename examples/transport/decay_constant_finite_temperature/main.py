@@ -25,6 +25,7 @@ es = np.linspace(-.2,.2,41) # grid of energies
 T = 1e-1 # reference transparency 
 ht.scale_lc = T # set the transparency for dIdV
 temp = 0.0
+ht.didv(energy=0.,temp=1e-4) ; exit()
 from pyqula import parallel
 parallel.cores = 6
 ts = parallel.pcall(lambda e: ht.didv(energy=e,temp=temp),es)
