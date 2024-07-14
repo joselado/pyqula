@@ -204,7 +204,7 @@ def full_trace(m_in,n=200,use_fortran=use_fortran):
 
 
 
-def local_dos(m_in,i=0,n=200,use_fortran=use_fortran):
+def local_dos(m_in,i=0,n=200,**kwargs):
   """ Calculates local DOS using the KPM"""
   m = csc(m_in) # sparse matrix
   nd = m.shape[0] # length of the matrix
@@ -213,18 +213,23 @@ def local_dos(m_in,i=0,n=200,use_fortran=use_fortran):
   v[i] = 1.0 # vector only in site i 
 #  v = csc(v).transpose()
 # get the chebychev moments
-  mus += get_moments(v,m,n=n,use_fortran=use_fortran) 
+  mus += get_moments(v,m,n=n,**kwargs) 
   return mus
 
 
 
-def ldos(m_in,i=0,scale=10.,npol=None,ne=500,kernel="jackson"):
+def ldos(m_in,i=0,scale=10.,x=None,npol=None,ne=500,kernel="jackson",**kwargs):
   """Return two arrays with energies and local DOS"""
   if npol is None: npol = ne
-  mus = local_dos(csc_matrix(m_in)/scale,i=i,n=npol) # get coefficients
+  mus = local_dos(csc_matrix(m_in)/scale,i=i,n=npol,**kwargs) # get coefficients
   xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
   ys = generate_profile(mus,xs,kernel=kernel)
-  return (scale*xs,ys/scale)
+  xs,ys = scale*xs,ys/scale # rescale data
+  if x is not None:
+    from scipy.interpolate import interp1d
+    f = interp1d(xs,ys,bounds_error=False,fill_value=(ys[0],ys[-1]))
+    return x,f(x)
+  else: return xs,ys
 
 
 
@@ -399,9 +404,11 @@ def generate_profile(mus,xs,kernel="jackson",use_fortran=use_fortran):
   if kernel=="jackson": mus = jackson_kernel(mus)
   elif kernel=="lorentz": mus = lorentz_kernel(mus)
   else: raise
-  if use_fortran: # call the fortran routine
-    ys = kpmf90.generate_profile(mus,xs) 
-  else: # do a python loop
+#  use_fortran = False
+#  if use_fortran: # call the fortran routine
+#    ys = kpmf90.generate_profile(mus,xs) 
+#  else: # do a python loop
+  if True:
     ys = np.zeros(xs.shape,dtype=np.complex_) + mus[0] # first term
     # loop over all contributions
     for i in range(1,len(mus)):
