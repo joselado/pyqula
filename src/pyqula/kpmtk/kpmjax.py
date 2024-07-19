@@ -9,10 +9,10 @@ def is_gpu_available():
 
 
 if is_gpu_available(): # GPU available
-    print("GPU available for KPM")
+#    print("GPU available for KPM")
     pass
 else: # use the CPU
-    print("GPU is NOT available for KPM")
+    print("GPU is NOT available for KPM, using the CPU")
     import os
     os.environ['JAX_PLATFORMS'] = 'cpu'
 
