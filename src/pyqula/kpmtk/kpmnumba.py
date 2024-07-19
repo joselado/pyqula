@@ -3,7 +3,8 @@ import numba
 from numba import jit
 
 
-def kpm_moments(v,m,n=100,kpm_prec="double",**kwargs):
+def kpm_moments(v,m,n=100,kpm_prec="double",
+        kpm_cpugpu="CPU",**kwargs):
     """Return the local moments"""
     from scipy.sparse import coo_matrix
     mo = coo_matrix(m)
@@ -13,7 +14,11 @@ def kpm_moments(v,m,n=100,kpm_prec="double",**kwargs):
         elif kpm_prec == "double": dtype = np.float_
         v = np.array(v.real,dtype=dtype) # convert to float
         data = np.array(data.real,dtype=dtype) # convert to float
-        mus = python_kpm_moments_complex(v,data,mo.row,mo.col,n=n)
+        if kpm_cpugpu=="CPU": # use the CPU
+            mus = python_kpm_moments_real(v,data,mo.row,mo.col,n=n)
+        elif kpm_cpugpu=="GPU": # use the GPU
+            from .kpmjax import kpm_moments_real_gpu
+            mus = kpm_moments_real_gpu(v,data,mo.row,mo.col,n=n)
     else:
         mus = python_kpm_moments_complex(v,data,mo.row,mo.col,n=n)
     return np.array(mus,dtype=np.complex_)
