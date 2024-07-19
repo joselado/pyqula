@@ -2,9 +2,10 @@
 
 def is_gpu_available():
     import jax
-    gpu_devices = [device for device in jax.devices() if device.device_kind == 'gpu']
-    return len(gpu_devices) > 0
-
+    try:
+        devices = jax.devices()
+        return True
+    except: return False
 
 
 if is_gpu_available(): # GPU available
