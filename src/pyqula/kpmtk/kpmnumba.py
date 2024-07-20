@@ -3,7 +3,7 @@ import numba
 from numba import jit
 
 
-def kpm_moments(v,m,n=100,kpm_prec="double",
+def kpm_moments_v(v,m,n=100,kpm_prec="double",
         kpm_cpugpu="CPU",**kwargs):
     """Return the local moments"""
     from scipy.sparse import coo_matrix
@@ -94,6 +94,55 @@ def python_kpm_moments_real(v,data,row,col,n=100):
       mus[2*i] +=  - mu0
       mus[2*i+1] += -mu1
     return mus
+
+
+
+
+
+def kpm_moments_vivj(m,vi,vj,n=100,**kwargs):
+    """Return the local moments"""
+    from scipy.sparse import coo_matrix
+    mo = coo_matrix(m)
+    data = np.array(mo.data,dtype=np.complex_)
+    vi = np.array(vi,dtype=np.complex_)
+    vj = np.array(vj,dtype=np.complex_)
+    mus = numba_kpm_moments_ij(vi,vj,data,mo.row,mo.col,n=2*n)
+    return mus
+
+
+
+
+def kpm_moments_ij(m0,i=0,j=0,**kwargs):
+    """Return the KPM moments between sites i and j"""
+    n = m0.shape[0] # size of the matrix
+    from .ldos import index2vector
+    vi = index2vector(i,n) # generate vector
+    vj = index2vector(j,n) # generate vector
+    return kpm_moments_vivj(m0,vi,vj,**kwargs) # return moments
+
+
+
+
+
+@jit(nopython=True)
+def numba_kpm_moments_ij(vi,vj,data,row,col,n=100):
+  """ Get the first n moments of a the |vi><vj| operator
+  using the Chebychev recursion relations"""
+  mus = np.zeros(n,dtype=np.complex_) # empty array for the moments
+  v = vi.copy()
+  am = v.copy()
+  a = Mtimesv(data,row,col,v)
+  bk = np.sum(np.conjugate(vj)*v) # scalar
+  bk1 = np.sum(np.conjugate(vj)*a)
+#  bk1 = (vj.H*a).todense().trace()[0,0] # calculate bk
+  mus[0] = bk  # mu0
+  mus[1] = bk1 # mu1
+  for ii in range(2,n):
+    ap = 2.*Mtimesv(data,row,col,a) - am # recursion relation
+    bk = np.sum(np.conjugate(vj)*ap)
+    mus[ii] = bk
+    am,a = a,ap # new variables
+  return mus
 
 
 

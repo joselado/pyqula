@@ -33,7 +33,7 @@ def get_moments_old(v,m,n=100,use_fortran=use_fortran,test=False):
 
 
 # numba version
-from .kpmtk.kpmnumba import kpm_moments as get_moments
+from .kpmtk.kpmnumba import kpm_moments_v as get_moments_v
 
 
 
@@ -118,82 +118,81 @@ def get_momentsA_jit(v,m,n,A,mus):
     return mus
 
 
+from .kpmtk.kpmnumba import kpm_moments_ij as get_moments_ij
 
-
-def get_moments_ij(m0,n=100,i=0,j=0,use_fortran=use_fortran):
-  """ Get the first n moments of a the |i><j| operator
-  using the Chebychev recursion relations"""
-  m = coo_matrix(m0,dtype=np.complex_)
-  if use_fortran:
-    mus = kpmf90.get_moments_ij(m.row+1,m.col+1,m.data,n,m.shape[0],i+1,j+1)
-    return mus
-  else:
-    mus = np.zeros(n,dtype=np.complex_) # empty arrray for the moments
-    v = np.zeros(m.shape[0],dtype=np.complex_) ; v[i] = 1.0 # initial vector
-    v = np.matrix([v]).T # zero vector
-    am = v.copy()
-    a = m*v  # vector number 1
-    bk = v[j] # scalar product
-    bk1 = a[j,0] # scalar product
-    mus[0] = bk  # mu0
-    mus[1] = bk1 # mu1
-    for ii in range(2,n): 
-      ap = 2.*m*a - am # recursion relation
-      bk = ap[j,0] # scalar product
-      mus[ii] = bk
-      am = a.copy() # new variables
-      a = ap.copy() # new variables
-    return mus
-
-def get_moments_vivj(m0,vi,vj,n=100,use_fortran=False):
-  if not use_fortran: return get_moments_vivj_python(m0,vi,vj,n=n)
-  else: return get_moments_vivj_fortran(m0,vi,vj,n=n)
-
-
-def get_moments_vivj_python(m0,vi,vj,n=100):
-  """ Get the first n moments of a the |i><j| operator
-  using the Chebychev recursion relations"""
-  m = csc_matrix(m0,dtype=np.complex_)
-  mus = np.zeros(n,dtype=np.complex_) # empty arrray for the moments
-  v = vi.copy()
-  am = v.copy()
-  a = m@v  # vector number 1
-  bk = algebra.braket_ww(vj,v)
-#  bk = (vj.H*v).todense().trace()[0,0] # calculate bk
-  bk1 = algebra.braket_ww(vj,a)
-#  bk1 = (vj.H*a).todense().trace()[0,0] # calculate bk
-  mus[0] = bk  # mu0
-  mus[1] = bk1 # mu1
-  for ii in range(2,n): 
-    ap = 2.*m@a - am # recursion relation
-    bk = algebra.braket_ww(vj,ap)
-#    bk = (vj.H*ap).todense().trace()[0,0]
-    mus[ii] = bk
-    am = a.copy() # new variables
-    a = ap.copy() # new variables
-  return mus
+#def get_moments_ij(m0,n=100,i=0,j=0,**kwargs):
+#  """ Get the first n moments of a the |i><j| operator
+#  using the Chebychev recursion relations"""
+#  m = coo_matrix(m0,dtype=np.complex_)
+#  mus = np.zeros(n,dtype=np.complex_) # empty arrray for the moments
+#  v = np.zeros(m.shape[0],dtype=np.complex_) ; v[i] = 1.0 # initial vector
+#  v = np.matrix([v]).T # zero vector
+#  am = v.copy()
+#  a = m*v  # vector number 1
+#  bk = v[j] # scalar product
+#  bk1 = a[j,0] # scalar product
+#  mus[0] = bk  # mu0
+#  mus[1] = bk1 # mu1
+#  for ii in range(2,n): 
+#    ap = 2.*m*a - am # recursion relation
+#    bk = ap[j,0] # scalar product
+#    mus[ii] = bk
+#    am = a.copy() # new variables
+#    a = ap.copy() # new variables
+#  return mus
 
 
 
-def get_moments_vivj_fortran(m0,vi,vj,n=100):
-    raise # I haven't check this function
-    mo = coo_matrix(m0) # convert to coo matrix
-    vi1 = vi.todense() # convert to conventional vector
-    vj1 = vj.todense() # convert to conventional vector
-# call the fortran routine
-    mus = get_moments_vivj(mo.row+1,mo.col+1,mo.data,vi,vj,n) 
-    return mus # return fortran result
+from .kpmtk.kpmnumba import kpm_moments_vivj as get_moments_vivj
+
+#def get_moments_vivj(m0,vi,vj,n=100,**kwargs):
+#  if not use_fortran: return get_moments_vivj_python(m0,vi,vj,n=n)
+#  else: return get_moments_vivj_fortran(m0,vi,vj,n=n)
+#
+#
+#def get_moments_vivj_python(m0,vi,vj,n=100):
+#  """ Get the first n moments of a the |i><j| operator
+#  using the Chebychev recursion relations"""
+#  m = csc_matrix(m0,dtype=np.complex_)
+#  mus = np.zeros(n,dtype=np.complex_) # empty arrray for the moments
+#  v = vi.copy()
+#  am = v.copy()
+#  a = m@v  # vector number 1
+#  bk = algebra.braket_ww(vj,v)
+##  bk = (vj.H*v).todense().trace()[0,0] # calculate bk
+#  bk1 = algebra.braket_ww(vj,a)
+##  bk1 = (vj.H*a).todense().trace()[0,0] # calculate bk
+#  mus[0] = bk  # mu0
+#  mus[1] = bk1 # mu1
+#  for ii in range(2,n): 
+#    ap = 2.*m@a - am # recursion relation
+#    bk = algebra.braket_ww(vj,ap)
+#    mus[ii] = bk
+#    am = a.copy() # new variables
+#    a = ap.copy() # new variables
+#  return mus
+#
+#
+#
+#def get_moments_vivj_fortran(m0,vi,vj,n=100):
+#    raise # I haven't check this function
+#    mo = coo_matrix(m0) # convert to coo matrix
+#    vi1 = vi.todense() # convert to conventional vector
+#    vj1 = vj.todense() # convert to conventional vector
+## call the fortran routine
+#    mus = get_moments_vivj(mo.row+1,mo.col+1,mo.data,vi,vj,n) 
+#    return mus # return fortran result
 
 
 
-def full_trace(m_in,n=200,use_fortran=use_fortran):
+def full_trace(m_in,n=200,**kwargs):
   """ Get full trace of the matrix"""
   m = csc(m_in) # saprse matrix
   nd = m.shape[0] # length of the matrix
   mus = np.array([0.0j for i in range(2*n)])
 #  for i in range(ntries):
   for i in range(nd):
-    mus += local_dos(m_in,i=i,n=n,use_fortran=use_fortran)
+    mus += moments_local_dos(m_in,i=i,n=n,**kwargs)
   return mus/nd
 
 
@@ -204,33 +203,10 @@ def full_trace(m_in,n=200,use_fortran=use_fortran):
 
 
 
-def local_dos(m_in,i=0,n=200,**kwargs):
-  """ Calculates local DOS using the KPM"""
-  m = csc(m_in) # sparse matrix
-  nd = m.shape[0] # length of the matrix
-  mus = np.array([0.0j for j in range(2*n)])
-  v = np.zeros(nd,dtype=np.complex_) # initialize
-  v[i] = 1.0 # vector only in site i 
-#  v = csc(v).transpose()
-# get the chebychev moments
-  mus += get_moments(v,m,n=n,**kwargs) 
-  return mus
+from .kpmtk.ldos import moments_local_dos
 
 
-
-def ldos(m_in,i=0,scale=10.,x=None,npol=None,ne=500,kernel="jackson",**kwargs):
-  """Return two arrays with energies and local DOS"""
-  if npol is None: npol = ne
-  mus = local_dos(csc_matrix(m_in)/scale,i=i,n=npol,**kwargs) # get coefficients
-  xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
-  ys = generate_profile(mus,xs,kernel=kernel)
-  xs,ys = scale*xs,ys/scale # rescale data
-  if x is not None:
-    from scipy.interpolate import interp1d
-    f = interp1d(xs,ys,bounds_error=False,fill_value=(ys[0],ys[-1]))
-    return x,f(x)
-  else: return xs,ys
-
+from .kpmtk.ldos import get_ldos as ldos
 
 
 ldos0d = ldos
@@ -298,7 +274,7 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
     v = v/np.sqrt(v.dot(np.conjugate(v))) # normalize the vector
 #    v = csc(v).transpose()
     if operator is None:
-        mus = get_moments(v,m,n=n) # get the chebychev moments
+        mus = get_moments_v(v,m,n=n) # get the chebychev moments
     else:
 #        mus = get_moments_vivj(m,v,operator@v,n=2*n,use_fortran=False)
         mus = get_momentsA(v,m,n=2*n,A=operator) # get the chebychev moments
@@ -391,58 +367,8 @@ def dm_vivj_energy(m_in,vi,vj,scale=10.,npol=None,ne=500,x=None):
 
 
 
-
-
-
-
-def generate_profile(mus,xs,kernel="jackson",use_fortran=use_fortran):
-  """ Uses the Chebychev expansion to create a certain profile"""
-  # initialize polynomials
-#  xs = np.array([0.])
-  tm = np.zeros(xs.shape) +1.
-  t = xs.copy()
-  if kernel=="jackson": mus = jackson_kernel(mus)
-  elif kernel=="lorentz": mus = lorentz_kernel(mus)
-  else: raise
-#  use_fortran = False
-#  if use_fortran: # call the fortran routine
-#    ys = kpmf90.generate_profile(mus,xs) 
-#  else: # do a python loop
-  if True:
-    ys = np.zeros(xs.shape,dtype=np.complex_) + mus[0] # first term
-    # loop over all contributions
-    for i in range(1,len(mus)):
-      mu = mus[i]
-      ys += 2.*mu*t # add contribution
-      tp = 2.*xs*t - tm # chebychev recursion relation
-      tm = t + 0.
-      t = 0. + tp # next iteration
-    ys = ys/np.sqrt(1.-xs*xs) # prefactor
-  ys = ys/np.pi
-  return ys
-
-
-
-
-def generate_green_profile(mus,xs,kernel="jackson",use_fortran=use_fortran):
-  """ Uses the Chebychev expansion to create a certain profile"""
-  # initialize polynomials
-#  xs = np.array([0.])
-  tm = np.zeros(xs.shape) +1.
-  t = xs.copy()
-  ys = np.zeros(xs.shape,dtype=np.complex_) + mus[0]/2 # first term
-  if kernel=="jackson": mus = jackson_kernel(mus)
-  elif kernel=="lorentz": mus = lorentz_kernel(mus)
-  else: raise
-  if True:
-    for i in range(1,len(mus)): # loop over mus
-      ys += np.exp(1j*i*np.arccos(xs))*mus[i] # add contribution
-    ys = ys/np.sqrt(1.-xs*xs)
-    return 1j*2*ys/np.pi
-#    if use_fortran: # call the fortran routine
-#      ys = kpmf90.generate_profile(mus,xs) 
-#    return ys
-
+from .kpmtk.momenttoprofile import generate_green_profile
+from .kpmtk.momenttoprofile import generate_profile
 
 
 
