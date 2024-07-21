@@ -17,8 +17,10 @@ def kpm_moments_v(v,m,n=100,kpm_prec="double",
         if kpm_cpugpu=="CPU": # use the CPU
             mus = python_kpm_moments_real(v,data,mo.row,mo.col,n=n)
         elif kpm_cpugpu=="GPU": # use the GPU
-            from .kpmjax import kpm_moments_real_gpu
-            mus = kpm_moments_real_gpu(v,data,mo.row,mo.col,n=n)
+#            from .kpmjax import kpm_moments_real_gpu
+#            mus = kpm_moments_real_gpu(v,data,mo.row,mo.col,n=n)
+            from .kpmjax import kpm_moments_real_gpu_sparse
+            mus = kpm_moments_real_gpu_sparse(v,m,n=n)
     else:
         mus = python_kpm_moments_complex(v,data,mo.row,mo.col,n=n)
     return np.array(mus,dtype=np.complex_)
