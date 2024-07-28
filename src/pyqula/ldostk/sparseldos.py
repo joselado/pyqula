@@ -6,7 +6,7 @@ import scipy.sparse as sp
 
 from ..kpmtk.ldos import index2vector
 
-def get_ldos(A,i=0,e=0.,delta=1e-3):
+def get_ldos(A,i=0,e=0.,delta=1e-3,**kwargs):
     """Return the LDOS in site i using sparse inversion"""
     # this is so far just implemented for real matrices
     ##################################
