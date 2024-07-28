@@ -38,19 +38,20 @@ class Potential():
 
 
 
-def cnpot(n=4,k=None,v=1.0,angle=0.,r0=np.array([0.,0.,0.])):
+def cnpot(n=4,k=None,v=1.0,phi=0.,r0=np.array([0.,0.,0.])):
   """Returns a function that generates a potential
   with C_n symmetry"""
   if k is None: raise
   if n==0: return lambda r: v
   if n%2==0: f = np.cos # even 
-  if n%2==1: f = np.sin # even 
+  if n%2==1: f = np.sin # odd 
   def fun(r):
     """Function with the potential"""
     r = r - r0 # shift
     x0,y0 = r[0],r[1]
     def Rk(k0,angle):
       x0,y0 = k0[0],k0[1] # components
+      angle = angle + phi
       x = np.cos(angle)*x0 + np.sin(angle)*y0
       y = np.cos(angle)*y0 - np.sin(angle)*x0
       return np.array([x,y,k0[2]]) # return rotated vector
