@@ -3,7 +3,7 @@ import numba
 from numba import jit
 
 
-def kpm_moments_v(v,m,n=100,kpm_prec="double",
+def kpm_moments_v(v,m,n=100,kpm_prec="single",
         kpm_cpugpu="CPU",**kwargs):
     """Return the local moments"""
     from scipy.sparse import coo_matrix
