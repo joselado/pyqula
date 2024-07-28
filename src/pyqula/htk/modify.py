@@ -1,10 +1,12 @@
+import numpy as np
+
 def modify_hamiltonian_matrices(self,f0,use_geometry=False):
     """Apply a certain function to all the matrices"""
     # wrapper function
     if use_geometry: # use geometry
         g = self.geometry # get the geometry
         def f(m,dr): 
-            return f0(m,g.r,g.replicas(d=dr)) # use r1 and r2
+            return f0(m,g.r,g.replicas(d=-np.array(dr))) # use r1 and r2
     else:
         def f(m,dr): return f0(m) # do not use geometry
     # apply the function

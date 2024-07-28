@@ -51,7 +51,7 @@ def uniaxial_strain(H,d=np.array([1.,0.,0.]),s=0.,**kwargs):
 
 
 def strain_matrix(m,rs1,rs2,indg,fs): # function to apply strain to a matrix
-    """Apply strain to a matrix, this only works well in 1d"""
+    """Apply strain to a matrix"""
     mo = m.copy() # copy matrix
     from scipy.sparse import coo_matrix,csc_matrix
     mo = coo_matrix(mo) # turn sparse
@@ -76,5 +76,38 @@ def simple_strain_matrix(m,rs1,rs2,indg,fs): # function to apply strain to a mat
                 for jj in indg(j): # generate indexes for site j
                     mo[ii,jj] = fac*m[ii,jj] # strain the matrix
     return mo
+
+
+
+
+def graphene_buckling(omega=0.1,dt=0.2):
+    """Return the strain function for graphene buckling"""
+    def pot(r,dr):
+        r = r[0:2]
+        dr = dr[0:2]
+        if callable(omega): omega0 = omega(r) # callable
+        else: omega0 = omega
+        if callable(dt): dt0 = dt(r) # callable
+        else: dt0 = dt
+        g1 = np.array([1.,0.])
+        g2 = np.array([np.cos(np.pi*2/3.),np.sin(np.pi*2/3.)])
+        g3 = np.array([np.cos(np.pi*4/3.),np.sin(np.pi*4/3.)])
+        if np.abs(np.abs(dr.dot(g1))-1.0)<1e-3:
+            G = g1*omega0 # modulate accordingly
+        elif np.abs(np.abs(dr.dot(g2))-1.0)<1e-3:
+            G = g2*omega0 # modulate accordingly
+        elif np.abs(np.abs(dr.dot(g3))-1.0)<1e-3:
+            G = g3*omega0 # modulate accordingly
+        else:
+            print("Unrecognized direction",dr,"returning 1")
+            return 1.
+        return 1. + dt0*np.sin(G.dot(r))
+    return pot # return potential
+
+
+
+
+
+
 
 
