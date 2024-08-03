@@ -6,7 +6,7 @@ from .momenttoprofile import generate_profile
 # functions for calculation of local DOS
 
 def get_ldos(m_in,i=0,scale=10.,x=None,
-        npol=None,ne=500,kernel="jackson",**kwargs):
+        npol=None,ne=5000,kernel="jackson",**kwargs):
   """Return two arrays with energies and local DOS"""
   if npol is None: npol = ne
   mus = moments_local_dos(m_in/scale,
