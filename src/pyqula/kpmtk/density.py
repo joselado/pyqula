@@ -15,7 +15,6 @@ def get_density(m_in,scale=None,fermi=0.,
   """Return the electronic density"""
   if scale is None: scale = estimate_bandwidth(m_in)
   if npol is None: npol = int(scale/delta)
-  print(npol)
   mus = moments_local_dos(m_in/scale,**kwargs) # get coefficients
   return get_density_from_mus(mus,fermi) # obtain the density directly
 
