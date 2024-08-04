@@ -7,10 +7,15 @@ import numpy as np
 from .momenttoprofile import generate_profile
 from .ldos import moments_local_dos
 
-def get_density(m_in,scale=10.,x=None,fermi=0.,
+from .bandwidth import estimate_bandwidth
+
+def get_density(m_in,scale=None,fermi=0.,
+        delta = 1e-2, npol=None,
         kernel="jackson",**kwargs):
   """Return the electronic density"""
-  if npol is None: npol = ne
+  if scale is None: scale = estimate_bandwidth(m_in)
+  if npol is None: npol = int(scale/delta)
+  print(npol)
   mus = moments_local_dos(m_in/scale,**kwargs) # get coefficients
   return get_density_from_mus(mus,fermi) # obtain the density directly
 
@@ -25,7 +30,7 @@ def get_density_from_mus(mus,fermi):
         else:
             return np.sin(n * np.arccos(fermi)) / n
     # Compute electronic density
-    rho = (mu[0] * G_n(0) + 2 * np.sum(mus[n]*G_n(n) for n in range(1, N))) / np.pi
+    rho = (mus[0] * G_n(0) + 2 * np.sum(mus[n]*G_n(n) for n in range(1, N))) / np.pi
     
-    return rho
+    return (1.- rho).real
 
