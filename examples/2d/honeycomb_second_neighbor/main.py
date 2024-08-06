@@ -11,8 +11,7 @@ import numpy as np
 from pyqula import geometry
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(tij=[1.0,0.2]) # create hamiltonian of the system
-h = h.get_supercell(2)
-h = h.get_supercell(11)
+h.get_bands()
 
 
 
