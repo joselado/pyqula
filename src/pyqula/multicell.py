@@ -226,13 +226,13 @@ def supercell_hamiltonian(hin,nsuper=[1,1,1],sparse=True,ncut=3,
       for k in range(nsuper[2]):
         pos.append(np.array([i,j,k])) # store position inside the supercell
   zero = csc_matrix(np.zeros(h.intra.shape,dtype=np.complex_)) # zero matrix
-  get_tij = generate_get_tij(h) # return a function to abtain the hoppings
+  get_tij = generate_get_tij(h) # return a function to obtain the hoppings
   def superhopping(dr=[0,0,0]): 
     """ Return a matrix with the hopping of the supercell"""
     rs = [dr[0]*nsuper[0],dr[1]*nsuper[1],dr[2]*nsuper[2]] # supercell vector
     intra = [[None for i in range(n)] for j in range(n)] # intracell term
-    for ii in range(n): intra[ii][ii] = zero.copy() # zero
-
+    for ii in range(n): 
+        intra[ii][ii] = zero.copy() # zero
     for ii in range(n): # loop over cells
       for jj in range(n): # loop over cells
         d = pos[jj] + np.array(rs) -pos[ii] # distance
@@ -247,15 +247,19 @@ def supercell_hamiltonian(hin,nsuper=[1,1,1],sparse=True,ncut=3,
   hr.intra = superhopping()
   # now do the same for the interterm
   hoppings = [] # list of hopings
-  for i in range(-ncut,ncut+1): # loop over hoppings
-    for j in range(-ncut,ncut+1): # loop over hoppings
-      for k in range(-ncut,ncut+1): # loop over hoppings
+  nxs,nys,nzs = [0],[0],[0] # initialize
+  if hin.dimensionality>0:  nxs = range(-ncut,ncut+1)
+  if hin.dimensionality>1:  nys = range(-ncut,ncut+1)
+  if hin.dimensionality>2:  nzs = range(-ncut,ncut+1)
+  for i in nxs: # loop over hoppings
+    for j in nys: # loop over hoppings
+      for k in nzs: # loop over hoppings
         if i==j==k==0: continue # skip the intraterm
         dr = np.array([i,j,k]) # set as array
         hopp = Hopping() # create object
         hopp.m = superhopping(dr=dr) # get hopping of the supercell
         hopp.dir = dr
-        if np.sum(np.abs(hopp.m))>0.00000001: # skip this matrix
+        if np.sum(np.abs(hopp.m))>1e-6: # skip this matrix
           hoppings.append(hopp)
         else: pass
       hr.hopping = hoppings # store the list
