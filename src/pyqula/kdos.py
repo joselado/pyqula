@@ -11,6 +11,7 @@ from . import sculpt
 from . import parallel
 from . import algebra
 from . import operators
+from .algebra import dagger
 
 def write_kdos(k=0.,es=[],ds=[],new=True):
   """ Write KDOS in a file"""
@@ -228,7 +229,7 @@ def write_surface_kpm(h,ne=400,klist=None,scale=4.,npol=200,w=20,ntries=20):
       def gedge(): return (np.random.random(len(inde))-0.5)*inde
       def gbulk(): return (np.random.random(len(indb))-0.5)*(indb)
       # hamiltonian
-      h0 = intra + inter*np.exp(1j*np.pi*2.*k) + (inter*np.exp(1j*np.pi*2.*k)).H
+      h0 = intra + inter*np.exp(1j*np.pi*2.*k) + dagger(inter*np.exp(1j*np.pi*2.*k))
       xs = np.linspace(-0.9,0.9,4*npol) # x points
       es = xs*scale
       # calculate the bulk

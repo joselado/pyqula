@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.sparse import csc_matrix,bmat,coo_matrix
 from . import parallel
+from .algebra import dagger
 
 
 def collect_hopping(h):
@@ -384,7 +385,7 @@ def read_from_file(input_file="hamiltonian.wan"):
   for i in range(-ncells[0],ncells[0]+1):
     for j in range(-ncells[1],ncells[1]+1):
       for k in range(-ncells[2],ncells[2]+1):
-        dm = get_hopping(i,j,k) - get_hopping(-i,-j,-k).H
+        dm = get_hopping(i,j,k) - dagger(get_hopping(-i,-j,-k))
         if np.sum(np.abs(dm))>0.0001: raise
   print("Hopping generator is Hermitian")
   return get_hopping # return the function

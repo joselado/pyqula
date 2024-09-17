@@ -31,7 +31,8 @@ def isvector(m):
 
 
 def hermitian(m):
-    return np.transpose(np.conjugate(m))
+    return m.conjugate().transpose() 
+#    return np.transpose(np.conjugate(m))
 
 H = hermitian # alias
 get_dagger = hermitian

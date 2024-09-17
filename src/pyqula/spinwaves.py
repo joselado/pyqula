@@ -6,6 +6,8 @@ from . import neighbor
 import numpy as np
 from scipy.sparse import csc_matrix,coo_matrix
 from scipy.sparse import identity as sparseiden
+from .algebra import dagger
+
 
 class SpinModel():
   def __init__(self,g):
@@ -87,7 +89,7 @@ def hp_heisenberg(sm,fun=None,d=None,k=None):
   elif sm.dimensionality == 2: # one dimensional
     for name in ["tx","ty","txy","txmy"]: # loop over attributes
       (mons,mhop) = c2h(getattr(sm.hamiltonian,name))
-      (mons2,mhop2) = c2h(getattr(sm.hamiltonian,name).H)
+      (mons2,mhop2) = c2h(dagger(getattr(sm.hamiltonian,name)))
       setattr(sm.hamiltonian,name,mhop) # set hopping
       sm.hamiltonian.intra += mons + mons2 # add to onsite
   else: raise
@@ -147,7 +149,7 @@ def szsz(sm,fun=None):
   elif sm.dimensionality == 2: # one dimensional
     for name in ["tx","ty","txy","txmy"]: # loop over attributes
       (mons,mhop) = c2h(getattr(sm.hamiltonian,name))
-      (mons2,mhop2) = c2h(getattr(sm.hamiltonian,name).H)
+      (mons2,mhop2) = c2h(dagger(getattr(sm.hamiltonian,name)))
       mout += mons + mons2
   else: raise
   return mout  # return onsite matrix

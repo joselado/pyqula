@@ -1,10 +1,8 @@
 import numpy as np
 import scipy.sparse.linalg as lg
 import scipy.linalg as lg
+from .algebra import braket_wAw
 
-def braket_wAw(w,A):
-  w = np.matrix(w) # convert to matrix
-  return ((w.T).H*A*w.T)[0,0] # expectation value
 
 def current_operator(h):
   """Get the current operator"""
