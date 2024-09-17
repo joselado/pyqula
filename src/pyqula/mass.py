@@ -1,4 +1,5 @@
 import numpy as np
+from .algebra import dagger
 
 # functions to compute the effective mass
 
@@ -15,9 +16,7 @@ def mass_operator(h,**kwargs):
         m = effective_mass_velocity(h,k,w0=w0,**kwargs) # array with masses
         T = np.matrix(w0) # convert
         m0 = np.diag(m) # build new hamiltonian
-        #O = np.array(np.conjugate(T)@m0@T.T) # operator
-        #O = np.conjugate(np.array(T@m0@T.H)) # operator
-        O = np.array(T@m0@T.H) # operator
+        O = np.array(T@m0@dagger(T)) # operator
         out =  O@v # return the result
         return out
     from .operators import Operator

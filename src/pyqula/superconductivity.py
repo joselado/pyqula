@@ -4,6 +4,7 @@ from scipy.sparse import coo_matrix, bmat, csc_matrix
 import scipy.sparse as sp
 from scipy.sparse import issparse
 from . import algebra
+from .algebra import dagger
 
 
 
@@ -170,14 +171,14 @@ projh = csc_matrix([[0.,0.,0.,0.],[0.,0.,0.,0.],[0.,0.,1.,0.],[0.,0.,0.,1.]])
 deltauu = csc_matrix([[0.,0.,0.,0.],[0.,0.,0.,0.],[0.,0.,0.,0.],[-1.,0.,0.,0.]])
 # and the rest are simple
 deltadd = csc_matrix([[0.,0.,0.,0.],[0.,0.,0.,0.],[0.,1.,0.,0.],[0.,0.,0.,0.]])
-deltauu = deltauu.H
-deltadd = deltadd.H
+deltauu = dagger(deltauu)
+deltadd = dagger(deltadd)
 deltax = (deltadd - deltauu)/2.
 deltay = (deltadd + deltauu)/2j
 # this one is tricky, we only want the antisymmetric part
 deltaz = csc_matrix([[0.,0.,0.,0.],[0.,0.,0.,0.],[1.,0.,0.,0.],[0.,-1.,0.,0.]])/2.
 
-deltaz = deltaz.H
+deltaz = dagger(deltaz)
 
 
 
@@ -368,7 +369,7 @@ def add_pairing_to_hamiltonian(self,**kwargs):
         if np.max(np.abs(m))>0.0001: # non zero
             self.hopping.append(Hopping(d=d,m=m)) # add pairing
         if np.max(np.abs(m2))>0.0001: # non zero
-            self.hopping.append(Hopping(d=-np.array(d),m=m2.H)) # add pairing
+            self.hopping.append(Hopping(d=-np.array(d),m=dagger(m2))) # add pairing
       from .multicell import collect_hopping
       self.hopping = collect_hopping(self)
 

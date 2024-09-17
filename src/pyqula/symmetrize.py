@@ -113,7 +113,7 @@ def rotation_operator(orbs,v=np.array([1.,0.,0.])):
     angle = 0.0 # zero angle, to return identity
 #  raise
   R = np.matrix(lg.expm(-1j*lz*angle)) # get the rotation matrix
-  if np.sum(np.abs(lz-lz.H))>0.0001: raise # check that lz is Hermitian
+  if np.sum(np.abs(lz-dagger(lz)))>0.0001: raise # check that lz is Hermitian
   return R # return rotation operator
   
   
@@ -151,7 +151,7 @@ def local_symmetrizer(anames,ons,odict,sym_file="symmetry.wan"):
     # generate rotation matrices
     Rs = [rotation_operator(odict[a],v=v) for v in vs]
     # perform all the rotations in the onsite matrix
-    hrs = [R.H*m*R for R in Rs]
+    hrs = [dagger(R)*m*R for R in Rs]
     hr,error = average_matrices(hrs) # perform the average
     print("Broken symmetry in",a,"is",error)
     sdict[a] = hr # store rotation matrix
@@ -204,7 +204,7 @@ def symmetrize_hamiltonian(orb_file="orbitals.wan",ham_file="hamiltonian.wan",
               tij = sdict[ia] # get the symmetrized onsite matrix
             Ri = rotation_operator(odict[ia],dr) # rotate basis i
             Rj = rotation_operator(odict[ja],dr) # rotate basis j
-            Rtij = Ri.H*tij*Rj # hopping matrix in the new frame
+            Rtij = dagger(Ri)*tij*Rj # hopping matrix in the new frame
             # now store the different things needed
             stored_rs.append(drr) # store the distance
             stored_vectors.append(dr) # store the vector
@@ -236,11 +236,11 @@ def symmetrize_hamiltonian(orb_file="orbitals.wan",ham_file="hamiltonian.wan",
             Ri = rotation_operator(odict[ia],dr) # rotate basis i
             Rj = rotation_operator(odict[ja],dr) # rotate basis j
             if m is not None:
-              m = Ri*m*Rj.H # hopping matrix in the new frame, opposite rot
+              m = Ri@m@dagger(Rj) # hopping matrix in the new frame, opposite rot
               if drr>rmax: m *= 0. # reached maximum distance
               hop[i][j] = csc_matrix(m) # store the matrix 
         hop = bmat(hop).todense() # create dense matrix
-        hop = T.H *hop *T # convert to the original order
+        hop = dagger(T) @hop @T # convert to the original order
         hops_list.append(hop) # store hopping
         ns_list.append([n1,n2,n3]) # store indexes
   multicell.save_multicell(ns_list,hops_list)

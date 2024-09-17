@@ -195,14 +195,14 @@ def basis_change(h,R):
   R = np.matrix(R) # convert to matrix
   for i in range(len(h.hopping)):
     m = h.hopping[i].m # rotation of the direction
-    ho.hopping[i].m = R.H*m*R # Hamiltonian in new basis
+    ho.hopping[i].m = dagger(R)@m@R # Hamiltonian in new basis
   return ho
 
 
 
 
 
-def clean(h,cutoff=0.0001):
+def clean(h,cutoff=1e-4):
   """Remove hoppings smaller than a certain quantity"""
   ho = h.copy() # copy hamiltonian
   raise 
