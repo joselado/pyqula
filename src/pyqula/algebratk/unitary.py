@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.linalg as lg
+from ..algebra import dagger
 
 def make_unitary(M):
     """Given a non-unitary matrix, make it unitary"""

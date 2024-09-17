@@ -4,6 +4,7 @@ from scipy.sparse import bmat
 from scipy.sparse import csc_matrix as csc
 import numpy as np
 from . import sculpt
+from .algebra import dagger
 
 def honeycomb2square(h):
   """Transforms a honeycomb lattice into a square lattice"""
@@ -26,11 +27,11 @@ def honeycomb2square(h):
   txy = csc(h.txy)
   txmy = csc(h.txmy)
   # define new hoppings
-  ho.intra = bmat([[intra,tx.H],[tx,intra]]).todense()
-  ho.tx = bmat([[txy.H,zero],[ty.H,txy.H]]).todense()
-  ho.ty = bmat([[txmy,ty.H],[txmy,zero]]).todense()
+  ho.intra = bmat([[intra,dagger(tx)],[tx,intra]]).todense()
+  ho.tx = bmat([[dagger(txy),zero],[dagger(ty),dagger(txy)]]).todense()
+  ho.ty = bmat([[txmy,dagger(ty)],[txmy,zero]]).todense()
   ho.txy = bmat([[zero,None],[None,zero]]).todense()
-  ho.txmy = bmat([[zero,zero],[tx.H,zero]]).todense()
+  ho.txmy = bmat([[zero,zero],[dagger(tx),zero]]).todense()
   ho.geometry = go
   return ho
 
@@ -40,7 +41,7 @@ def invert_axis2(h):
   """Changes one axis in the hamiltonian"""
   ho = h.copy()
   ho.geometry.a2 = -h.geometry.a2
-  ho.ty = h.ty.H
+  ho.ty = h.dagger(ty)
   ho.txy = h.txmy
   ho.txmy = h.txy
   return ho
@@ -83,9 +84,9 @@ def honeycomb2squareMoS2(h,check=True):
   txy = csc(h.txy)
   txmy = csc(h.txmy)
   # define new hoppings
-  ho.intra = bmat([[intra,tx],[tx.H,intra]]).todense()
+  ho.intra = bmat([[intra,tx],[dagger(tx),intra]]).todense()
   ho.tx = bmat([[txy,zero],[ty,txy]]).todense()
-  ho.ty = bmat([[txmy,zero],[ty.H,txmy]]).todense()
+  ho.ty = bmat([[txmy,zero],[dagger(ty),txmy]]).todense()
   ho.txy = bmat([[zero,zero],[tx,zero]]).todense()
   ho.txmy = bmat([[zero,zero],[zero,zero]]).todense()
   ho.geometry = go
@@ -140,7 +141,7 @@ def bulk2ribbon_zz(h,n=10):
     inter[i][i] = csc(h.tx) 
   for i in range(n-1): # one more or less
     intra[i][i+1] = csc(h.ty)  
-    intra[i+1][i] = csc(h.ty.H)  
+    intra[i+1][i] = csc(h.dagger(ty))  
     inter[i+1][i] = csc(h.txmy) 
     inter[i][i+1] = csc(h.txy) 
   ho.intra = bmat(intra).todense()

@@ -14,6 +14,7 @@ from .greentk.selfenergy import bloch_selfenergy
 from .greentk.kchain import green_kchain
 from .greentk.kchain import get1dhamiltonian
 from .greentk.kchain import green_kchain_evaluator
+from .algebra import dagger
 
 
 use_fortran = False
@@ -85,7 +86,7 @@ def dyson(intra,inter,energy=0.0,gf=None,is_sparse=False,initial = None):
     iden = np.matrix(np.identity(len(intra),dtype=complex)) # create identity
     e = iden*(energy+1j*eps) # complex energy
     while True: # loop over iterations
-      self = inter@g_old@inter.H # selfenergy
+      self = inter@g_old@dagger(inter) # selfenergy
       g = (e - intra - self).I # dyson equation
       if np.max(np.abs(g-g_old))<gf.max_error: break
       g_old = mixing*g + (1.-mixing)*g_old # new green function
@@ -115,11 +116,12 @@ def dos_infinite(intra,inter,energies=[0.0],num_rep=100,
      gr = dyson(intra,inter,energy=energy,num_rep=num_rep,mixing=mixing,
           eps=eps,green_guess=green_guess,max_error=max_error)
      # left green function
-     gl = dyson(intra,inter.H,energy=energy,num_rep=num_rep,mixing=mixing,
+     gl = dyson(intra,dagger(inter),
+             energy=energy,num_rep=num_rep,mixing=mixing,
           eps=eps,green_guess=green_guess,max_error=max_error)
      # central green function
-     selfl = inter.H@gl@inter # left selfenergy
-     selfr = inter@gr@inter.H # right selfenergy
+     selfl = dagger(inter)@gl@inter # left selfenergy
+     selfr = inter@gr@dagger(inter) # right selfenergy
      gc = energy*iden -intra -selfl -selfr # dyson equation for the center
      gc = gc.I # calculate inverse
      dos.append(-algebra.trace(gc).imag)  # calculate the trace of the Green function
@@ -166,8 +168,8 @@ def dos_heterostructure(hetero,energies=[0.0],num_rep=100,
      gl = dyson(intra,inter,energy=energy,num_rep=num_rep,mixing=mixing,
           eps=eps,green_guess=green_guess,max_error=max_error)
      # central green function
-     selfl = inter.H@gl@inter # left selfenergy
-     selfr = inter@gr@inter.H # right selfenergy
+     selfl = dagger(inter)@gl@inter # left selfenergy
+     selfr = inter@gr@dagger(inter) # right selfenergy
      gc = energy*iden -intra -selfl -selfr # dyson equation for the center
      gc = gc.I # calculate inverse
      dos.append(-algebra.trace(gc).imag)  # calculate the trace of the Green function
@@ -392,9 +394,9 @@ def interface(h1,h2,k=[0.0,0.,0.],energy=0.0,delta=0.01):
   (ons1,hop1) = get1dhamiltonian(h1,k,reverse=True) # get 1D Hamiltonian
   (ons2,hop2) = get1dhamiltonian(h2,k,reverse=False) # get 1D Hamiltonian
   havg = (algebra.dagger(hop1) + hop2)/2. # average hopping
-  ons = bmat([[csc(ons1),csc(havg)],[csc(havg.H),csc(ons2)]]) # onsite
-  self2 = bmat([[csc(ons1)*0.0,None],[None,csc(hop2@sf2@hop2.H)]])
-  self1 = bmat([[csc(hop1@sf1@hop1.H),None],[None,csc(ons2)*0.0]])
+  ons = bmat([[csc(ons1),csc(havg)],[csc(dagger(havg)),csc(ons2)]]) # onsite
+  self2 = bmat([[csc(ons1)*0.0,None],[None,csc(hop2@sf2@dagger(hop2))]])
+  self1 = bmat([[csc(hop1@sf1@dagger(hop1)),None],[None,csc(ons2)*0.0]])
   # Dyson equation
   ez = (energy+1j*delta)*np.identity(ons1.shape[0]+ons2.shape[0]) # energy
   ginter = (ez - ons - self1 - self2).I # Green function

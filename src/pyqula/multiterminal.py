@@ -2,6 +2,7 @@
 
 import numpy as np
 from . import neighbor
+from .algebra import dagger
 
 class Device():
   """ Device with leads and scattering part"""
@@ -71,7 +72,7 @@ class Lead():
     """ Get selfenergy"""
     gr = self.get_green(energy,error=error,delta=delta) # get greenfunction
     t = self.coupling # coupling
-    selfenergy = t.H * gr * t 
+    selfenergy = dagger(t) @ gr @ t 
     return selfenergy
 
 
@@ -96,10 +97,10 @@ def landauer_matrix(d,energy,ij=[(0,1)],error=0.000001,delta=0.00001):
   ts = [] # empty list
   for (i,j) in ij: # loop over pairs
     # calculate spectral functions of the leads
-    gammai = 1j*(ss[i]-ss[i].H) # gamma function
-    gammaj = 1j*(ss[j]-ss[j].H) # gamma function
+    gammai = 1j*(ss[i]-dagger(ss[i])) # gamma function
+    gammaj = 1j*(ss[j]-dagger(ss[j])) # gamma function
     # calculate transmission
-    t = (gammai*gc*gammaj.H*gc.H).real 
+    t = (gammai*gc*dagger(gammaj)*dagger(gc)).real 
     ts.append(t) # add to the list
   return ts # return list
 
