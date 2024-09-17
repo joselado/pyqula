@@ -2,6 +2,7 @@
 
 import numpy as np
 from scipy.linalg import eigh
+from .algebra import dagger
 
 def unfolded_bands(hfol,hprim,kpath,inds_super=[]):
   """ Save in file unfolded band structure"""
@@ -51,7 +52,7 @@ def perturb_bands(hprim,hper,kpath,inds_super=[]):
     for iw in wfs: 
       for jw in wfs: 
         iw = np.matrix(iw)
-        jw = np.matrix(jw).H
+        jw = dagger(np.matrix(jw))
         vaw = (iw*hper*jw)[0,0] # matrix element
   
     raise

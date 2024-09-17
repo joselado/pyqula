@@ -314,8 +314,6 @@ def expectation_value(wfs,A,phis):
   out = 0.0j
   for (p,w) in zip(phis,wfs):
     out += braket_wAw(w,A)*p
-#    w = np.matrix(w) # convert to matrix
-#    out += ((w.T).H*A*w.T)[0,0]*p # expectation value
   return np.conjugate(out) # return value
 
 
