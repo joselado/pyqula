@@ -14,7 +14,7 @@ def get_density(m_in,scale=None,fermi=0.,
         kernel="jackson",**kwargs):
   """Return the electronic density"""
   if scale is None: scale = estimate_bandwidth(m_in)
-  if npol is None: npol = int(scale/delta)
+  if npol is None: npol = max([int(scale/delta),3])
   mus = moments_local_dos(m_in/scale,**kwargs) # get coefficients
   return get_density_from_mus(mus,fermi) # obtain the density directly
 
