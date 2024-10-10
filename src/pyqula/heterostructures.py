@@ -272,6 +272,8 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
   ht.central_intra = hc
   # and modify the geometry
   ht.central_geometry.supercell(num_central) 
+  ht.Hr = h_right.copy()
+  ht.Hl = h_left.copy()
   return ht
 
 HTstructure = Heterostructure
