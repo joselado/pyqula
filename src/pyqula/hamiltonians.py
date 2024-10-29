@@ -858,7 +858,7 @@ def first_neighborsnd(h):
     else: rows,cols = np.array(pairs).T # transpose
     data = np.array([1. for c in cols])
     n = len(r1)
-    m = csc_matrix((data,(rows,cols)),shape=(n,n),dtype=np.complex_)
+    m = csc_matrix((data,(rows,cols)),shape=(n,n),dtype=np.complex128)
     m = h.spinless2full(m) # add spin degree of freedom if necessary
     if h.is_sparse: return m
     else: return m.todense()

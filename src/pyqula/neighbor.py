@@ -97,7 +97,7 @@ def parametric_hopping(r1,r2,fc,is_sparse=False):
     return m
   else:
     n = len(r2)
-    m = np.matrix(np.zeros((n,n),dtype=np.complex_)) # complex matrix
+    m = np.matrix(np.zeros((n,n),dtype=np.complex128)) # complex matrix
     for i in range(len(r1)):
       for j in range(len(r2)):
         m[i,j] = fc(r1[i],r2[j])

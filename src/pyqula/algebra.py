@@ -78,7 +78,7 @@ def todense(m):
     if issparse(m):
         if m.shape[0]<maxsize: return np.array(m.todense())
         else: raise
-    else: return np.array(m,dtype=np.complex_)
+    else: return np.array(m,dtype=np.complex128)
 
 
 def braket_ww(w,wi):
@@ -119,7 +119,7 @@ def get_representation(wfs,A):
     Gets the matrix representation of a certain operator
     """
     n = len(wfs) # number of eigenfunctions
-    ma = np.zeros((n,n),dtype=np.complex_) # representation of A
+    ma = np.zeros((n,n),dtype=np.complex128) # representation of A
     A = np.array(A)
     for i in range(n):
       vi = wfs[i] # first wavefunction
@@ -141,7 +141,7 @@ def todouble(vs,ind):
     """Double the eigenvectors"""
     nv = vs.shape[0]
     dim = vs.shape[1]
-    vout = np.zeros((dim*2,nv),dtype=np.complex_) # output vector
+    vout = np.zeros((dim*2,nv),dtype=np.complex128) # output vector
     return todouble_jit(vs,ind,vout,nv,dim)
 
 @jit(nopython=True)

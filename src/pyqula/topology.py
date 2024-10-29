@@ -375,7 +375,7 @@ def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
     ws = np.conjugate(np.transpose(ws)) # transpose the waves
     n = len(es) # number of energies
     from .berry_curvaturef90 import berry_curvature as bc90
-    if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex_)
+    if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex128)
     b = bc90(dhdx,dhdy,ws,es,operator,delta) # berry curvature
     return b*np.pi*np.pi*8 # normalize so the sum is 2pi Chern
 
@@ -391,7 +391,7 @@ def operator_berry_bands(hin,k=[0.,0.],operator=None,delta=0.00001):
     (es,ws) = algebra.eigh(hkgen(k)) # initial waves
     ws = np.conjugate(np.transpose(ws)) # transpose the waves
     from .berry_curvaturef90 import berry_curvature_bands as bcb90
-    if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex_)
+    if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex128)
     bs = bcb90(dhdx,dhdy,ws,es,operator,delta) # berry curvatures
     return (es,bs*np.pi*np.pi*8) # normalize so the sum is 2pi Chern
 

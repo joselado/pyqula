@@ -7,7 +7,7 @@ def crop_matrix(m,store):
     if len(store)!=m.shape[0]: raise
     store = np.array(store,dtype=int) # transform to an integer
     n = np.sum(store) # number of entries of the matrix
-    mout = np.zeros((n,n),dtype=np.complex_)
+    mout = np.zeros((n,n),dtype=np.complex128)
     out = crop_matrix_jit(m,store,mout)
 #    print(np.sum(np.abs(out))) 
     return out

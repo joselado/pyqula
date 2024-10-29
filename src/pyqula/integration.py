@@ -104,7 +104,7 @@ def peak_integrate(f,x0,x1,xp=0.0,dp=1e-6,**kwargs):
 
 
 
-def complex_contour(f,xmin=-5,xmax=0,eps=1e-2,mode="upper",
+def complex128contour(f,xmin=-5,xmax=0,eps=1e-2,mode="upper",
                               **kwargs):
     """Perform an integral using a complex contour"""
 #    return integrate_matrix(f,xlim=[xmin,xmax],**kwargs) # integrate matrix

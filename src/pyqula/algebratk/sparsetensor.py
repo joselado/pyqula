@@ -16,7 +16,7 @@ class Tensor3():
         """Multiply by a vector, assuming that it will use
         the third component, and return an array"""
         if a.shape[0]!= self.shape[2]: raise # inconsistent dimensions
-        out = np.zeros((self.shape[0],self.shape[1]),dtype=np.complex_)
+        out = np.zeros((self.shape[0],self.shape[1]),dtype=np.complex128)
         for ii in range(len(self.row)):
             i = self.row[ii]
             j = self.col[ii]

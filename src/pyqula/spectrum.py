@@ -33,7 +33,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     hk_gen = h.get_hk_gen() # gets the function to generate h(k)
     kxs = np.linspace(-nsuper,nsuper,nk)  # generate kx
     kys = np.linspace(-nsuper,nsuper,nk)  # generate ky
-    iden = np.identity(h.intra.shape[0],dtype=np.complex_)
+    iden = np.identity(h.intra.shape[0],dtype=np.complex128)
     kxout = []
     kyout = []
     if reciprocal: R = h.geometry.get_k2K_generator() # get function

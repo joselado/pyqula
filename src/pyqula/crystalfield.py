@@ -11,7 +11,7 @@ def hartree(h,v=0.0,**kwargs):
     m = m - np.mean(m) # remove average
     nat = len(h.geometry.r) # number of atoms
     ind = range(nat) # indexes
-    mat = np.abs(v)*csc_matrix((m,(ind,ind)),shape=(nat,nat),dtype=np.complex_)
+    mat = np.abs(v)*csc_matrix((m,(ind,ind)),shape=(nat,nat),dtype=np.complex128)
     h.intra = h.intra + h.spinless2full(mat) # add contribution
 
 

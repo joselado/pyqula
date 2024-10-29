@@ -74,7 +74,7 @@ def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
     if not type(intra) is list: raise # assume is list
     n = len(intra) # number of blocks
     iout = [[None for i in range(n)] for j in range(n)] # empty list
-    iden = np.matrix(np.identity(intra[0][0].shape[0],dtype=np.complex_))
+    iden = np.matrix(np.identity(intra[0][0].shape[0],dtype=np.complex128))
     ez = iden*(energy +1j*delta) # complex energy
     for i in range(n):
       iout[i][i] = ez - intra[i][i] # simply E -H

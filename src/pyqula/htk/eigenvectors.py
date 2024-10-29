@@ -32,7 +32,7 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
         vvs = parallel.pcall(lambda k: algebra.eigh(f(k)),kp)
       else: vvs = [algebra.eigh(f(k)) for k in kp] # 
     nume = sum([len(v[0]) for v in vvs]) # number of eigenvalues calculated
-    eigvecs = np.zeros((nume,h.intra.shape[0]),dtype=np.complex_) # eigenvectors
+    eigvecs = np.zeros((nume,h.intra.shape[0]),dtype=np.complex128) # eigenvectors
     eigvals = np.zeros(nume) # eigenvalues
 
     #### New way ####

@@ -39,7 +39,7 @@ def moments_local_dos(m,i=0,n=200,**kwargs):
 
 def index2vector(i,size):
     """Transform an index into a vector"""
-    v = np.zeros(size,dtype=np.complex_) # initialize
+    v = np.zeros(size,dtype=np.complex128) # initialize
     if is_iterable(i): # assume it is a collection of indexes 
         for ii in i: v[ii] = np.random.random()-0.5 # assign
         v = v/np.sqrt(np.sum(np.abs(v)**2)) # normalize

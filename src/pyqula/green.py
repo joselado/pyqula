@@ -363,7 +363,7 @@ def green_surface_cells(gs,hop,ons,delta=1e-2,e=0.0,n=0):
     """Compute the surface Green's function for several unit cells"""
     hopH = algebra.H(hop) # Hermitian
     ez = (e+1j*delta)*np.identity(ons.shape[0]) # energy
-    gt = np.zeros(ons.shape[0],dtype=np.complex_) # energy
+    gt = np.zeros(ons.shape[0],dtype=np.complex128) # energy
     sigmar = hop@gs@algebra.H(hop) # of the infinite right part
     out = []
     for i in range(n):
@@ -496,7 +496,7 @@ def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1],
   # create hamiltonian of the supercell
   from .embedding import onsite_supercell
   intrasuper = onsite_supercell(h,nsuper)
-  eop = np.matrix(np.identity(g.shape[0],dtype=np.complex_))*(ez)
+  eop = np.matrix(np.identity(g.shape[0],dtype=np.complex128))*(ez)
   selfe = eop - intrasuper - algebra.inv(g)
   return g,selfe
 
@@ -512,7 +512,7 @@ def green_generator(h,nk=20):
   if h.dimensionality != 2: raise # only for 2d
   shape = h.intra.shape # shape
   hkgen = h.get_hk_gen() # get the Hamiltonian generator
-  wfs = np.zeros((nk*nk,shape[0],shape[0]),dtype=np.complex_) # allocate vector
+  wfs = np.zeros((nk*nk,shape[0],shape[0]),dtype=np.complex128) # allocate vector
   es = np.zeros((nk*nk,shape[0])) # allocate vector, energies
   ks = np.zeros((nk*nk,2)) # allocate vector, energies
   ii = 0 # counter
@@ -529,7 +529,7 @@ def green_generator(h,nk=20):
   from scipy.integrate import simps
   def getgreen(energy,delta=0.001):
     """Return the Green function"""
-    zero = np.array(np.zeros(shape,dtype=np.complex_)) # zero matrix
+    zero = np.array(np.zeros(shape,dtype=np.complex128)) # zero matrix
     zero = getgreen_jit(wfs,es,energy,delta,zero)
     ediag = np.array(np.identity(shape[0]))*(energy + delta*1j)
     selfenergy = ediag - h.intra - algebra.inv(zero)
@@ -558,7 +558,7 @@ def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=10,
     h = h0.copy()
     h.turn_dense()
     hkgen = h.get_hk_gen() # get generator
-    iden = np.identity(h.intra.shape[0],dtype=np.complex_)
+    iden = np.identity(h.intra.shape[0],dtype=np.complex128)
     from . import klist
     ks = klist.kmesh(h.dimensionality,nk=nk) # klist
     out = 0.0 # output

@@ -104,9 +104,9 @@ def sites2coupling(genij,spins):
   # There are two matrices, one that renormalizes onsite energies
   # and another one that creates hoppings
   n = len(spins)
-  ons = np.zeros((n,n),dtype=np.complex_) # initial
-  hop = np.zeros((n,n),dtype=np.complex_) # initial
-  iden = np.identity(n,dtype=np.complex_) # identity
+  ons = np.zeros((n,n),dtype=np.complex128) # initial
+  hop = np.zeros((n,n),dtype=np.complex128) # initial
+  iden = np.identity(n,dtype=np.complex128) # identity
   for i in range(n): # loop over spins
     for j in range(n): # loop over spins
       cij = genij(i,j) # matrix with the couplings SiSj
@@ -165,9 +165,9 @@ def sites2coupling_sparse(mij,spins):
   # There are two matrices, one that renormalizes onsite energies
   # and another one that creates hoppings
   n = len(spins)
-  ons = coo_matrix(([],([],[])),shape=(n,n),dtype=np.complex_)
-  hop = coo_matrix(([],([],[])),shape=(n,n),dtype=np.complex_)
-  iden = sparseiden(n,dtype=np.complex_) # identity matrix
+  ons = coo_matrix(([],([],[])),shape=(n,n),dtype=np.complex128)
+  hop = coo_matrix(([],([],[])),shape=(n,n),dtype=np.complex128)
+  iden = sparseiden(n,dtype=np.complex128) # identity matrix
   raise # not finished
   
   for i in range(n): # loop over spins

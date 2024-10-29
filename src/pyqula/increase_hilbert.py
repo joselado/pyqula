@@ -37,7 +37,7 @@ def m2spin_sparse(matin,matin2=None):
   cols = np.concatenate([2*m1.col,2*m2.col+1])
   data = np.concatenate([m1.data,m2.data])
   dim = m1.shape[0]*2
-  return csc_matrix((data,(rows,cols)),shape=(dim,dim), dtype=np.complex_)
+  return csc_matrix((data,(rows,cols)),shape=(dim,dim), dtype=np.complex128)
   
 
 
@@ -100,7 +100,7 @@ def des_spin(m,component=0):
             d1.append(d0[i])
             r1.append(r0[i]//2)
             c1.append(c0[i]//2)
-    mo = csc_matrix((d1,(r1,c1)),shape=(n,n),dtype=np.complex_)
+    mo = csc_matrix((d1,(r1,c1)),shape=(n,n),dtype=np.complex128)
     if not sparse: return mo.todense()
     else: return mo
 

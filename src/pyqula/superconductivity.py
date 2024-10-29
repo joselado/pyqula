@@ -43,7 +43,7 @@ def get_nambu_tauz(m,has_eh=False):
   raise # this function is not consistent with the Nambu notation (see below)
   n = m.shape[0] # number of sites 
   if has_eh: n = n//2 # half
-  mout = np.matrix(np.zeros((n*2,n*2)),dtype=np.complex_) # define matrix
+  mout = np.matrix(np.zeros((n*2,n*2)),dtype=np.complex128) # define matrix
   for ii in range(n): # loop over index
     mout[2*ii,2*ii] = 1. # assign
     mout[2*ii+1,2*ii+1] = -1. # assign
@@ -237,7 +237,7 @@ def add_swave(delta=0.0,is_sparse=False,rs=None):
       data.append(dr)  # up e dn h
       data.append(dr)  # dne up h
     iis = range(n*2) # indexes
-    coupling = csc_matrix((data,(iis,iis)),dtype=np.complex_)  # generate matrix
+    coupling = csc_matrix((data,(iis,iis)),dtype=np.complex128)  # generate matrix
   else:
     coupling = sp.identity(n*2)*delta # delta matrix
   zero = coupling*0.
@@ -312,12 +312,12 @@ def add_pairing(deltas=[[0.,0],[0.,0.]],is_sparse=True,r1=[],r2=[]):
   n = len(r1)  # number of sites
   pout = [[None for i in range(n)] for j in range(n)] # initialize None matrix
   # zeros in the diagonal
-#  for i in range(n): bout[i][i] = csc_matrix(np.zeros((4,4),dtype=np.complex_))
+#  for i in range(n): bout[i][i] = csc_matrix(np.zeros((4,4),dtype=np.complex128))
   for i in range(n): # loop over sites
     for j in range(n): # loop over sites
       pout[i][j] = get_pmatrix(r1[i],r2[j]) # get this pairing
   diag = sp.identity(2*len(r1))*0. # zero matrix
-#  diag = csc_matrix(np.zeros((2*len(r1),2*len(r1)),dtype=np.complex_)) # diag
+#  diag = csc_matrix(np.zeros((2*len(r1),2*len(r1)),dtype=np.complex128)) # diag
   pout = bmat(pout) # convert to block matrix
 #  mout = [[diag,pout],[np.conjugate(pout),diag]] # output matrix
   mout = [[diag,pout],[None,diag]] # output matrix
@@ -374,9 +374,9 @@ def add_pairing_to_hamiltonian(self,**kwargs):
       self.hopping = collect_hopping(self)
 
 
-iden = np.matrix([[1.,0.],[0.,1.]],dtype=np.complex_)
-taux = np.matrix([[0.,1.],[1.,0.]],dtype=np.complex_)
-tauz = np.matrix([[1.,0.],[0.,-1.]],dtype=np.complex_)
+iden = np.matrix([[1.,0.],[0.,1.]],dtype=np.complex128)
+taux = np.matrix([[0.,1.],[1.,0.]],dtype=np.complex128)
+tauz = np.matrix([[1.,0.],[0.,-1.]],dtype=np.complex128)
 
 
 
@@ -384,7 +384,7 @@ tauz = np.matrix([[1.,0.],[0.,-1.]],dtype=np.complex_)
 def extract_euphdn(m):
     """Extract electron up hole down sector"""
     n = m.shape[0]//2 # half the dimension
-    out = np.matrix(np.zeros((n,n),dtype=np.complex_))
+    out = np.matrix(np.zeros((n,n),dtype=np.complex128))
     for i in range(n):
       for j in range(n):
         out[i,j] = m[2*i,2*j]
@@ -419,7 +419,7 @@ def get_nambu2signless(m):
         dd.append(1.)
         dd.append(-1.)
     from scipy.sparse import diags
-    return diags([dd],[0],shape=(4*n,4*n),dtype=np.complex_) # create matrix
+    return diags([dd],[0],shape=(4*n,4*n),dtype=np.complex128) # create matrix
 
 
 

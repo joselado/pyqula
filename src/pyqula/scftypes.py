@@ -235,7 +235,7 @@ class scfclass():
         dv.append(-np.array(v.dir)) # store direction, be aware of the sign!!!
       k += 1 # increase counter
     ijk = np.array(ijk,dtype=np.int_)
-    lamb = np.array(lamb,dtype=np.complex_) # data array
+    lamb = np.array(lamb,dtype=np.complex128) # data array
     self.ijk = ijk # first array
     self.lamb = lamb # data array
     self.dir = np.array(dv,dtype=np.int_) # data array
@@ -280,7 +280,7 @@ class scfclass():
       k += 1
   def v2cij(self):
     """Update the value of cij with the values of v"""
-    cs = np.zeros(len(self.interactions)*2,dtype=np.complex_) # get the array
+    cs = np.zeros(len(self.interactions)*2,dtype=np.complex128) # get the array
     k = 0
     for v in self.interactions:
       cs[k] = v.vav
@@ -427,13 +427,13 @@ def get_super_correlator(voccs,weight=None,totkp=1):
   ops = [] # list with the operators
   for i in nat: # loop over atoms
     corrs.append([4*i,4*i]) # up density
-    ops.append(csc_matrix(([1.],[1,1]),dtype=np.complex_)) # down operator
+    ops.append(csc_matrix(([1.],[1,1]),dtype=np.complex128)) # down operator
     corrs.append([4*i+1,4*i+1]) # up density
-    ops.append(csc_matrix(([1.],[0,0]),dtype=np.complex_)) # down operator
+    ops.append(csc_matrix(([1.],[0,0]),dtype=np.complex128)) # down operator
     corrs.append([4*i,4*i+1]) # up density
-    ops.append(csc_matrix(([-1.],[1,0]),dtype=np.complex_)) # down operator
+    ops.append(csc_matrix(([-1.],[1,0]),dtype=np.complex128)) # down operator
     corrs.append([4*i+1,4*i]) # up density
-    ops.append(csc_matrix(([-1.],[0,1]),dtype=np.complex_)) # down operator
+    ops.append(csc_matrix(([-1.],[0,1]),dtype=np.complex128)) # down operator
   pdup = np.array([[4*i,4*i] for i in range(nat)]) # up density
   pddn = pdup + 1 # down density
   pxc = np.array([[4*i,4*i+1] for i in range(nat)]) # exchange

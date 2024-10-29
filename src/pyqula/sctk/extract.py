@@ -55,9 +55,9 @@ def get_triplet_hamiltonian(self):
 def extract_pairing(m):
   """Extract the pairing from a matrix, assuming it has the Nambu form"""
   nr = m.shape[0]//4 # number of positions
-  uu = np.array(np.zeros((nr,nr),dtype=np.complex_)) # zero matrix
-  dd = np.array(np.zeros((nr,nr),dtype=np.complex_)) # zero matrix
-  ud = np.array(np.zeros((nr,nr),dtype=np.complex_)) # zero matrix
+  uu = np.array(np.zeros((nr,nr),dtype=np.complex128)) # zero matrix
+  dd = np.array(np.zeros((nr,nr),dtype=np.complex128)) # zero matrix
+  ud = np.array(np.zeros((nr,nr),dtype=np.complex128)) # zero matrix
   for i in range(nr): # loop over positions
     for j in range(nr): # loop over positions
         ud[i,j] = m[4*i,4*j+2]
@@ -71,9 +71,9 @@ def extract_triplet_pairing(m):
   """Extract the pairing from a matrix, assuming it has the Nambu form"""
   m = algebra.todense(m) # dense matrix
   nr = m.shape[0]//4 # number of positions
-  uu = np.array(np.zeros((nr,nr),dtype=np.complex_)) # zero matrix
-  dd = np.array(np.zeros((nr,nr),dtype=np.complex_)) # zero matrix
-  ud = np.array(np.zeros((nr,nr),dtype=np.complex_)) # zero matrix
+  uu = np.array(np.zeros((nr,nr),dtype=np.complex128)) # zero matrix
+  dd = np.array(np.zeros((nr,nr),dtype=np.complex128)) # zero matrix
+  ud = np.array(np.zeros((nr,nr),dtype=np.complex128)) # zero matrix
   for i in range(nr): # loop over positions
     for j in range(nr): # loop over positions
         ud[i,j] = (m[4*i,4*j+2] - np.conjugate(m[4*j+3,4*i+1]))/2.
@@ -88,7 +88,7 @@ def extract_singlet_dict(dd):
     for key in dd:
         d = dd[key] # get this matrix
         nr = d.shape[0]//4 # number of positions
-        m = np.zeros(d.shape,dtype=np.complex_) # initialize
+        m = np.zeros(d.shape,dtype=np.complex128) # initialize
         m0 = dd[key]
         key2 = (-key[0],-key[1],-key[2]) 
         m1 = dd[key2]
@@ -113,7 +113,7 @@ def extract_triplet_dict(dd):
 def extract_singlet_pairing(m):
   """Extract the pairing from a matrix, assuming it has the Nambu form"""
   nr = m.shape[0]//4 # number of positions
-  ud = np.array(np.zeros((nr,nr),dtype=np.complex_)) # zero matrix
+  ud = np.array(np.zeros((nr,nr),dtype=np.complex128)) # zero matrix
   for i in range(nr): # loop over positions
     for j in range(nr): # loop over positions
         ud[i,j] = (m[4*i,4*j+2] + np.conjugate(m[4*j+3,4*i+1]))/2.

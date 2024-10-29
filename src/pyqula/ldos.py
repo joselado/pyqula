@@ -20,7 +20,7 @@ def ldos0d(h,e=0.0,delta=0.01,write=True):
   """Calculates the local density of states of a Hamiltonian and
      writes it in file"""
   if h.dimensionality==0:  # only for 0d
-    iden = np.identity(h.intra.shape[0],dtype=np.complex_) # create identity
+    iden = np.identity(h.intra.shape[0],dtype=np.complex128) # create identity
     g = ( (e+1j*delta)*iden -h.intra ).I # calculate green function
   else: raise # not implemented...
   d = [ -(g[i,i]).imag/np.pi for i in range(len(g))] # get imaginary part
@@ -220,7 +220,7 @@ def ldos_projector(h,e=0.0,**kwargs):
     inds = np.array(range(len(d))) # indexes
     n = len(d)
     d = d/np.sum(d) # normalize
-    m = csc_matrix((d,(inds,inds)),shape=(n,n),dtype=np.complex_) # matrix
+    m = csc_matrix((d,(inds,inds)),shape=(n,n),dtype=np.complex128) # matrix
     m = h.spinless2full(m) # to full matrix
     return operators.Operator(m) # convert to operator
 

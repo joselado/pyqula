@@ -5,19 +5,19 @@ from .multihopping import MultiHopping
 from. import superconductivity
 #from .scftypes import selfconsistency
 
-dup = csc_matrix(([1.0],[[0],[0]]),shape=(2,2),dtype=np.complex_)
-ddn = csc_matrix(([1.0],[[1],[1]]),shape=(2,2),dtype=np.complex_)
-sp = csc_matrix(([1.0],[[1],[0]]),shape=(2,2),dtype=np.complex_)
-sm = csc_matrix(([1.0],[[0],[1]]),shape=(2,2),dtype=np.complex_)
-def zero(d): return csc_matrix(([],[[],[]]),shape=(d,d),dtype=np.complex_)
+dup = csc_matrix(([1.0],[[0],[0]]),shape=(2,2),dtype=np.complex128)
+ddn = csc_matrix(([1.0],[[1],[1]]),shape=(2,2),dtype=np.complex128)
+sp = csc_matrix(([1.0],[[1],[0]]),shape=(2,2),dtype=np.complex128)
+sm = csc_matrix(([1.0],[[0],[1]]),shape=(2,2),dtype=np.complex128)
+def zero(d): return csc_matrix(([],[[],[]]),shape=(d,d),dtype=np.complex128)
 
 
 def element(i,n,p,d=2,j=None):
   if j is None: j=i
   o = csc_matrix(([1.0],[[d*i+p[0]],[d*j+p[1]]]),
-                   shape=(n*d,n*d),dtype=np.complex_)  
+                   shape=(n*d,n*d),dtype=np.complex128)  
   return o
-  o = csc_matrix(([1.0],[[p[0]],[p[1]]]),shape=(d,d),dtype=np.complex_)
+  o = csc_matrix(([1.0],[[p[0]],[p[1]]]),shape=(d,d),dtype=np.complex128)
   m = [[None for i1 in range(n)] for i2 in range(n)]
   for i1 in range(n): m[i1][i1] = zero(d)
   m[i][j] = o.copy()
@@ -167,8 +167,8 @@ def v_ij(i,j,n,g=1.0,d=[0,0,0],spini=0,spinj=0):
 def v_ij_spinless(i,j,n,g=1.0,d=[0,0,0]):
   """Return pair of operators for a V mean field"""
   v = interaction()
-  v.a = csc_matrix(([1.0],[[i],[j]]),shape=(n,n),dtype=np.complex_) # cc
-  v.b = csc_matrix(([1.0],[[j],[i]]),shape=(n,n),dtype=np.complex_) # cdc
+  v.a = csc_matrix(([1.0],[[i],[j]]),shape=(n,n),dtype=np.complex128) # cc
+  v.b = csc_matrix(([1.0],[[j],[i]]),shape=(n,n),dtype=np.complex128) # cdc
   v.dir = d # direction of the interaction 
   v.dhop = d # direction of the interaction 
   v.g = -g # this minus comes from commutation relations
@@ -181,8 +181,8 @@ def v_ij_spinless(i,j,n,g=1.0,d=[0,0,0]):
 def v_ij_density_spinless(i,j,n,g=1.0,d=[0,0,0],contribution="AB"):
   """Return pair of operators for a V mean field"""
   v = interaction()
-  v.a = csc_matrix(([1.0],[[i],[i]]),shape=(n,n),dtype=np.complex_) # cc
-  v.b = csc_matrix(([1.0],[[j],[j]]),shape=(n,n),dtype=np.complex_) # cdc
+  v.a = csc_matrix(([1.0],[[i],[i]]),shape=(n,n),dtype=np.complex128) # cc
+  v.b = csc_matrix(([1.0],[[j],[j]]),shape=(n,n),dtype=np.complex128) # cdc
   v.dir = d # direction of the neighbor
   v.dhop = [0,0,0] # hopping that is affected
   v.g = g 
@@ -195,10 +195,10 @@ def v_ij_density_spinless(i,j,n,g=1.0,d=[0,0,0],contribution="AB"):
 def v_ij_fast_coulomb(i,jvs,n,vcut=1e-3):
   """Return the interaction part for the fast Coulomb trick"""
   v = interaction()
-  v.a = csc_matrix(([1.0],[[i],[i]]),shape=(n,n),dtype=np.complex_) # cc
+  v.a = csc_matrix(([1.0],[[i],[i]]),shape=(n,n),dtype=np.complex128) # cc
   jj = range(n) # indexes
   if len(jvs)!=n: raise # something wrong
-  v.b = csc_matrix((jvs,[jj,jj]),shape=(n,n),dtype=np.complex_) # cdc
+  v.b = csc_matrix((jvs,[jj,jj]),shape=(n,n),dtype=np.complex128) # cdc
   v.b.eliminate_zeros()
   v.dir = [0,0,0] # direction of the neighbor
   v.dhop = [0,0,0] # hopping that is affected
