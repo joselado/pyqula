@@ -8,9 +8,9 @@ def v2U(v,exp=True):
     Transform a vector into a unitary matrix
     """
     n = int(np.sqrt(v.shape[0]+1)) # dimension of the matrix
-    M = np.zeros((n,n),dtype=np.complex_) # define the matrix
+    M = np.zeros((n,n),dtype=np.complex128) # define the matrix
     ii = 0 # counter
-    d = np.zeros(n,dtype=np.complex_) # diagonal
+    d = np.zeros(n,dtype=np.complex128) # diagonal
     for i in range(n-1):
         d[i] = v[ii]
         ii += 1 # increase counter

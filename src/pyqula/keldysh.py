@@ -35,7 +35,7 @@ def floquet_selfenergy(selfgen,e,omega,n=20,less=False,delta=0.01):
 def floquet_hamiltonian(ham,trl,omega,n=20):
   """Calculate the floquet Hamiltonian"""
   out = [[None for i in range(2*n+1)] for i in range(2*n+1)] # output
-  iden = np.identity(ham.shape[0],dtype=np.complex_) # identity matrix
+  iden = np.identity(ham.shape[0],dtype=np.complex128) # identity matrix
   for i in range(-n,n+1): # loop
     out[i+n][i+n] = ham - iden*i*omega # diagonal
   for i in range(-n,n): # loop
@@ -77,7 +77,7 @@ def current(data,voltage,n=3):
     ftauz = floquet_tauz(tauz,n=n)
     fh = floquet_hamiltonian(ham,tfreq,omega,n=n) # floquet hamiltonian
 # identity matrix
-    iden = np.matrix(np.identity(fh.shape[0],dtype=np.complex_)) 
+    iden = np.matrix(np.identity(fh.shape[0],dtype=np.complex128)) 
     sr = floquet_selfenergy(self_r,e,omega,n=n,less=False) 
     sl = floquet_selfenergy(self_l,e,omega,n=n,less=False) 
     sR_less = floquet_selfenergy(self_r,e,omega,n=n,less=True) 

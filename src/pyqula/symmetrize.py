@@ -83,7 +83,7 @@ def extract_matrix(a1,a2,odict,idict,matrix):
   orbs2 = odict[a2] # orbitals of the second atom
   n1 = len(orbs1) # size of the basis in the first atom
   n2 = len(orbs2) # size of the basis in the second atom
-  zeros = np.matrix(np.zeros((n1,n2),dtype=np.complex_)) # zero matrix  
+  zeros = np.matrix(np.zeros((n1,n2),dtype=np.complex128)) # zero matrix  
 #  print(a1,a2,orbs1)
   for ii in range(len(orbs1)): # loop over orbitals in the first atom
     for jj in range(len(orbs2)): # loop over orbitals in the second atom
@@ -102,7 +102,7 @@ def rotation_operator(orbs,v=np.array([1.,0.,0.])):
   """Generate a rotation matrix along the z axis, depending on the
   orbitals used. Rotates vector v to vector 1,0,0"""
   n = len(orbs) # number of orbitals
-  zeros = np.matrix(np.zeros((n,n),dtype=np.complex_)) # zero matrix  
+  zeros = np.matrix(np.zeros((n,n),dtype=np.complex128)) # zero matrix  
   (lx,ly,lz) = angular.angular_momentum(orbs) # angular momentum matrices
   v = np.array(v)
   vv = v.dot(v) # modulus
@@ -122,7 +122,7 @@ def rotation_operator(orbs,v=np.array([1.,0.,0.])):
 def reorder_basis(anames,odict,idict):
   """Matrix that transforms the new reordered basis into the original one"""
   n = sum([len(odict[a]) for a in anames]) # length of the basis
-  zeros = np.matrix(np.zeros((n,n),dtype=np.complex_)) # zero matrix  
+  zeros = np.matrix(np.zeros((n,n),dtype=np.complex128)) # zero matrix  
   i = 0 # initialize counter
   for a in anames: # loop over atoms
     for o in odict[a]: # loop over orbitals

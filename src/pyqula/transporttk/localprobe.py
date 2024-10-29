@@ -99,7 +99,7 @@ def local_selfenergy(h,g,energy=0.0,i=0,delta=1e-5,**kwargs):
     M = get_intra(h) # get intracell matrix
     gi = local_hamiltonian(h,g,i=i) # local Green's function
     oi = local_hamiltonian(h,M,i=i) # local Hamiltonian
-    iden = np.identity(gi.shape[0],dtype=np.complex_)
+    iden = np.identity(gi.shape[0],dtype=np.complex128)
     out = algebra.inv(gi) - (energy+1j*delta)*iden + oi # local selfenergy
     return -out
 

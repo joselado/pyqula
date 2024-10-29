@@ -12,8 +12,8 @@ def onsite_delta_density_vev(h,nk=10,**kwargs):
         if es[i]<0.0: wout.append(ws[i]) # store
     wout = np.array(wout) # transform to array
     ni = h.intra.shape[0]//2 # number of sites
-    p = np.zeros(ni,dtype=np.complex_) # initialize
-    d = np.zeros(ni,dtype=np.complex_) # initialize
+    p = np.zeros(ni,dtype=np.complex128) # initialize
+    d = np.zeros(ni,dtype=np.complex128) # initialize
     p = compute_pairing(wout,p)*fac # compute the pairing
     d = compute_density(wout,d)*fac # compute the density
     return p,d # return the pairing and density
@@ -31,7 +31,7 @@ def onsite_delta_vev(h,T=0.0,nk=10,**kwargs):
             wout.append(ws[i]*fd)
     wout = np.array(wout) # transform to array
     ni = h.intra.shape[0]//2 # number of sites
-    p = np.zeros(ni,dtype=np.complex_) # initialize
+    p = np.zeros(ni,dtype=np.complex128) # initialize
     p = compute_pairing(wout,p)*fac # compute the pairing
     return p # return the pairing and density
 
@@ -108,7 +108,7 @@ def reorder(m):
 def extract_swave(m):
     """Extract the swave vector form a matrix"""
     n = m.shape[0]//2 # number of orbitals
-    out = np.zeros(n,dtype=np.complex_) # initialize
+    out = np.zeros(n,dtype=np.complex128) # initialize
     for i in range(n):
         out[i] = m[2*i,2*i+1]
     return out
@@ -116,7 +116,7 @@ def extract_swave(m):
 
 def proje(n):
     """Return the projection operator in the electron sector"""
-    m = np.zeros((n,n),dtype=np.complex_)
+    m = np.zeros((n,n),dtype=np.complex128)
     for i in range(n//2):
         m[2*i,2*i] = 1.0
     return m
@@ -131,6 +131,6 @@ def get_filling(h,nk=10,**kwargs):
         if es[i]<0.0: wout.append(ws[i]) # store
     wout = np.array(wout) # transform to array
     ni = h.intra.shape[0]//2 # number of sites
-    d = np.zeros(ni,dtype=np.complex_) # initialize
+    d = np.zeros(ni,dtype=np.complex128) # initialize
     d = compute_density(wout,d)*fac # compute the density
     return np.mean(d).real # return the pairing and density

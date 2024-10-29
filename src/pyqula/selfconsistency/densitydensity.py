@@ -457,10 +457,10 @@ def hubbard(h,U=1.0,constrains=[],**kwargs):
     U = obj2geometryarray(U,h.geometry) # redefine as array 
     n = len(h.geometry.r) # number of spinless sites
     if h.has_spin:
-      zero = np.zeros((2*n,2*n),dtype=np.complex_)
+      zero = np.zeros((2*n,2*n),dtype=np.complex128)
       for i in range(n): zero[2*i,2*i+1] = U[i] # Hubbard interaction
     else: 
-      zero = np.zeros((n,n),dtype=np.complex_)
+      zero = np.zeros((n,n),dtype=np.complex128)
       n = len(h.geometry.r) # number of spinless sites
       for i in range(n): zero[i,i] = U[i] # Hubbard interaction
     v = dict() # dictionary
@@ -501,7 +501,7 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     if h.has_spin: #raise # not implemented
         for d in v: # loop
             m = v[d] ; n = m.shape[0]
-            m1 = np.zeros((2*n,2*n),dtype=np.complex_)
+            m1 = np.zeros((2*n,2*n),dtype=np.complex128)
             for i in range(n):
               for j in range(n): 
                   m1[2*i,2*j] = m[i,j]

@@ -123,9 +123,9 @@ from .kpmtk.kpmnumba import kpm_moments_ij as get_moments_ij
 #def get_moments_ij(m0,n=100,i=0,j=0,**kwargs):
 #  """ Get the first n moments of a the |i><j| operator
 #  using the Chebychev recursion relations"""
-#  m = coo_matrix(m0,dtype=np.complex_)
-#  mus = np.zeros(n,dtype=np.complex_) # empty arrray for the moments
-#  v = np.zeros(m.shape[0],dtype=np.complex_) ; v[i] = 1.0 # initial vector
+#  m = coo_matrix(m0,dtype=np.complex128)
+#  mus = np.zeros(n,dtype=np.complex128) # empty arrray for the moments
+#  v = np.zeros(m.shape[0],dtype=np.complex128) ; v[i] = 1.0 # initial vector
 #  v = np.matrix([v]).T # zero vector
 #  am = v.copy()
 #  a = m*v  # vector number 1
@@ -153,8 +153,8 @@ from .kpmtk.kpmnumba import kpm_moments_vivj as get_moments_vivj
 #def get_moments_vivj_python(m0,vi,vj,n=100):
 #  """ Get the first n moments of a the |i><j| operator
 #  using the Chebychev recursion relations"""
-#  m = csc_matrix(m0,dtype=np.complex_)
-#  mus = np.zeros(n,dtype=np.complex_) # empty arrray for the moments
+#  m = csc_matrix(m0,dtype=np.complex128)
+#  mus = np.zeros(n,dtype=np.complex128) # empty arrray for the moments
 #  v = vi.copy()
 #  am = v.copy()
 #  a = m@v  # vector number 1
@@ -281,7 +281,7 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
     return mus
   from . import parallel
   out = parallel.pcall(pfun,range(ntries))
-  mus = np.zeros(out[0].shape,dtype=np.complex_)
+  mus = np.zeros(out[0].shape,dtype=np.complex128)
   for o in out: mus = mus + o # add contribution
   return mus/ntries
 

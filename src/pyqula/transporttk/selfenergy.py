@@ -49,7 +49,7 @@ def minimal_selfenergy(self,lead=0,**kwargs):
     elif lead==1: 
         scale = self.scale_rc**2
         n = self.right_inter.shape[0]
-    out = np.identity(n,dtype=np.complex_) # output matrix
+    out = np.identity(n,dtype=np.complex128) # output matrix
     out = -scale*gamma*out*1j # multiply
     return out
 

@@ -31,7 +31,7 @@ def dyson2d(intra,tx,ty,txy,txmy,nx,ny,nk,ez):
         return dyson2df90.dyson2d(intra,tx,ty,txy,txmy,nx,ny,nk,ez)
     else:
         ns = intra.shape[0]*nx*ny
-        g = np.zeros((ns,ns),dtype=np.complex_)
+        g = np.zeros((ns,ns),dtype=np.complex128)
         nkx,nky = nk,nk
         return dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g)
 
@@ -39,7 +39,7 @@ def dyson1d(intra,inter,nx,nkx,ez):
     """Workaround for 1D"""
     zero = intra*0.0 # zero matrix
     ns = intra.shape[0]*nx
-    g = np.zeros((ns,ns),dtype=np.complex_)
+    g = np.zeros((ns,ns),dtype=np.complex128)
     return dyson2d_jit(intra,inter,zero,zero,zero,nx,1,nkx,1,ez,g)
 
 
@@ -49,8 +49,8 @@ def dyson1d(intra,inter,nx,nkx,ez):
 def dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g):
     """jit version of the function"""
     n = intra.shape[0] # size of the matrix
-    gs = np.zeros((nkx*nky,n,n),dtype=np.complex_) # GF in k-points
-    gm = np.zeros((nx*2-1,ny*2-1,n,n),dtype=np.complex_) # GF in minicells
+    gs = np.zeros((nkx*nky,n,n),dtype=np.complex128) # GF in k-points
+    gm = np.zeros((nx*2-1,ny*2-1,n,n),dtype=np.complex128) # GF in minicells
     ks = np.zeros((nkx*nky,2)) # kpoints
     em = np.identity(n) # identity times energy
     em = em*ez # identity times energy
@@ -71,7 +71,7 @@ def dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g):
     # GF in the different "minicells" of the supercell
     for i in range(-nx+1,nx):
         for j in range(-ny+1,ny):
-            m = np.zeros((n,n),dtype=np.complex_) # initialize
+            m = np.zeros((n,n),dtype=np.complex128) # initialize
             for ik in range(nk2): # loop over kpoints
                 m = m + gs[ik,:,:]*np.exp(1j*(ks[ik,0]*i+ks[ik,1]*j))
             gm[nx+i-1,ny+j-1,:,:] = m[:,:]/nk2 # store

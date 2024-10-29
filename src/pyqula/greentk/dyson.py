@@ -9,7 +9,7 @@ inv = algebra.inv # inverse
 #    """Dyson equation solver including onsite, t1 and t2"""
 #    print(ons,t1,t2) 
 #    n = ons.shape[0] # size of the system
-#    iden = np.identity(ons.shape[0],dtype=np.complex_) # identity
+#    iden = np.identity(ons.shape[0],dtype=np.complex128) # identity
 #    em = iden*(energy+1j*delta) # imaginary energy matrix
 #    self1 = em*0. # initialize
 #    self2 = em*0. # initialize
@@ -36,7 +36,7 @@ inv = algebra.inv # inverse
 #            energy=energy,delta=delta,**kwargs)
 #    # left and right selfenergies
 #    n = ons.shape[0] # size of the system
-#    iden = np.identity(ons.shape[0],dtype=np.complex_) # identity
+#    iden = np.identity(ons.shape[0],dtype=np.complex128) # identity
 #    em = iden*(energy+1j*delta) # imaginary energy matrix
 #    self1r = dagger(t1)@g1r@t1 # compute self1r
 #    self2r = dagger(t2)@g2r@t2 # compute self2r

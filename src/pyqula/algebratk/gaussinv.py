@@ -49,10 +49,10 @@ def inv_block(ca, da, ua, i, j):
     """Gauss inversion, adapted from the fortran function"""
     nm = len(ca)
     n = ca[0].shape[0]
-    cl = np.zeros((n, n), dtype=np.complex_)
-    cr = np.zeros((n, n), dtype=np.complex_)
-    dl = np.zeros((n, n), dtype=np.complex_)
-    dr = np.zeros((n, n), dtype=np.complex_)
+    cl = np.zeros((n, n), dtype=np.complex128)
+    cr = np.zeros((n, n), dtype=np.complex128)
+    dl = np.zeros((n, n), dtype=np.complex128)
+    dr = np.zeros((n, n), dtype=np.complex128)
 
     for i1 in range(n):
         cl[i1, i1] = 1.0

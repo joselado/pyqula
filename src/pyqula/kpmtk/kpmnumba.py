@@ -8,7 +8,7 @@ def kpm_moments_v(v,m,n=100,kpm_prec="single",
     """Return the local moments"""
     from scipy.sparse import coo_matrix
     mo = coo_matrix(m)
-    data = np.array(mo.data,dtype=np.complex_)
+    data = np.array(mo.data,dtype=np.complex128)
     if np.max(np.abs(data.imag))<1e-6 and np.max(np.abs(v.imag))<1e-6: # real
         if kpm_prec == "single": dtype = np.float32
         elif kpm_prec == "double": dtype = np.float_
@@ -23,13 +23,13 @@ def kpm_moments_v(v,m,n=100,kpm_prec="single",
             mus = kpm_moments_real_gpu_sparse(v,m,n=n)
     else:
         mus = python_kpm_moments_complex(v,data,mo.row,mo.col,n=n)
-    return np.array(mus,dtype=np.complex_)
+    return np.array(mus,dtype=np.complex128)
 
 
 @jit(nopython=True)
 def python_kpm_moments_complex(v,data,row,col,n=100):
     """Python routine to calculate moments"""
-    mus = np.zeros(2*n,dtype=np.complex_) # empty array for the moments
+    mus = np.zeros(2*n,dtype=np.complex128) # empty array for the moments
     am = v.copy() # zero vector
     a = Mtimesv(data,row,col,v) #m@v  # vector number 1
     bk = np.sum(np.conjugate(v)*v)
@@ -105,9 +105,9 @@ def kpm_moments_vivj(m,vi,vj,n=100,**kwargs):
     """Return the local moments"""
     from scipy.sparse import coo_matrix
     mo = coo_matrix(m)
-    data = np.array(mo.data,dtype=np.complex_)
-    vi = np.array(vi,dtype=np.complex_)
-    vj = np.array(vj,dtype=np.complex_)
+    data = np.array(mo.data,dtype=np.complex128)
+    vi = np.array(vi,dtype=np.complex128)
+    vj = np.array(vj,dtype=np.complex128)
     mus = numba_kpm_moments_ij(vi,vj,data,mo.row,mo.col,n=2*n)
     return mus
 
@@ -130,7 +130,7 @@ def kpm_moments_ij(m0,i=0,j=0,**kwargs):
 def numba_kpm_moments_ij(vi,vj,data,row,col,n=100):
   """ Get the first n moments of a the |vi><vj| operator
   using the Chebychev recursion relations"""
-  mus = np.zeros(n,dtype=np.complex_) # empty array for the moments
+  mus = np.zeros(n,dtype=np.complex128) # empty array for the moments
   v = vi.copy()
   am = v.copy()
   a = Mtimesv(data,row,col,v)

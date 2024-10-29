@@ -24,7 +24,7 @@ def generate_profile(mus,xs,kernel="jackson",**kwargs):
 @jit(nopython=True)
 def generate_profile_jit(mus,xs):
     """Numba function to generate the moments"""
-    ys = np.zeros(xs.shape,dtype=np.complex_) + mus[0] # first term
+    ys = np.zeros(xs.shape,dtype=np.complex128) + mus[0] # first term
     t = xs.copy()
     tm = np.zeros(xs.shape) + 1.
     t = xs.copy()
@@ -46,7 +46,7 @@ def generate_green_profile(mus,xs,kernel="jackson",**kwargs):
   # initialize polynomials
   tm = np.zeros(xs.shape) +1.
   t = xs.copy()
-  ys = np.zeros(xs.shape,dtype=np.complex_) + mus[0]/2 # first term
+  ys = np.zeros(xs.shape,dtype=np.complex128) + mus[0]/2 # first term
   if kernel=="jackson": mus = jackson_kernel(mus)
   elif kernel=="lorentz": mus = lorentz_kernel(mus)
   elif kernel=="fejer": mus = fejer_kernel(mus)

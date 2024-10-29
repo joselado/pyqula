@@ -48,7 +48,7 @@ def perturb_bands(hprim,hper,kpath,inds_super=[]):
             wlist.append(wj) # append to the list
       wfs.append(np.concatenate(wlist)) # add this wave to the list
    # now apply perturbation theory
-    vm = np.zeros((len(wfs),len(wfs)),dtype=np.complex_) # perturbation
+    vm = np.zeros((len(wfs),len(wfs)),dtype=np.complex128) # perturbation
     for iw in wfs: 
       for jw in wfs: 
         iw = np.matrix(iw)
@@ -91,7 +91,7 @@ def bloch_phase_matrix_simple(self,nsuper=[1,1,1]):
     from scipy.sparse import bmat,csc_matrix
     if self.dimensionality>2: raise
     n = self.intra.shape[0] # dimensionality
-    iden = csc_matrix(np.identity(n,dtype=np.complex_)) # identity
+    iden = csc_matrix(np.identity(n,dtype=np.complex128)) # identity
     ns = nsuper[0]*nsuper[1] # number of supercells
     nx = nsuper[0] # supercells in x
     ny = nsuper[1] # supercells in y
@@ -125,7 +125,7 @@ def bloch_phase_matrix(self,nsuper=[1,1,1]):
     from scipy.sparse import bmat,csc_matrix
     if self.dimensionality>2: raise
     n = self.intra.shape[0] # dimensionality
-    iden = csc_matrix(np.identity(n,dtype=np.complex_)) # identity
+    iden = csc_matrix(np.identity(n,dtype=np.complex128)) # identity
     ns = nsuper[0]*nsuper[1] # number of supercells
     nx = nsuper[0] # supercells in x
     ny = nsuper[1] # supercells in y

@@ -26,7 +26,7 @@ def geometry2hamiltonian(g,mw=0.6,is_sparse=False):
 
   ## Only valid for square lattice ###
   tol = 0.001 # tolerancy
-  ons = csc_matrix(mw*np.matrix(np.identity(2,dtype=np.complex_))) # onsite
+  ons = csc_matrix(mw*np.matrix(np.identity(2,dtype=np.complex128))) # onsite
   ons = csc_matrix(2.*sz*mw) # onsite
   tx = csc_matrix(1j*sy-mw/2.*sz) # hopping in x direction
   ty = csc_matrix(-1j*sx-mw/2.*sz) # hopping in y direction

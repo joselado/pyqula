@@ -133,7 +133,7 @@ def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
        - mode: response to compute"""
     hk = h.get_hk_gen() # get generator
     if A is None or B is None:
-        A = np.identity(h.intra.shape[0],dtype=np.complex_)
+        A = np.identity(h.intra.shape[0],dtype=np.complex128)
         B = A # initial operator
     # generate the projectors
     if projs is None:
@@ -142,10 +142,10 @@ def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     def getk(k):
         m1 = hk(k) # get Hamiltonian
         es1,ws1 = algebra.eigh(m1)
-        ws1 = np.array(ws1.T,dtype=np.complex_)
+        ws1 = np.array(ws1.T,dtype=np.complex128)
         m2 = hk(k+q) # get Hamiltonian
         es2,ws2 = algebra.eigh(m2)
-        ws2 = np.array(ws2.T,dtype=np.complex_)
+        ws2 = np.array(ws2.T,dtype=np.complex128)
         def getAB(Ai,Bj): # compute for a single operator
             out = 0*energies + 0j # initialize
             return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta,out)

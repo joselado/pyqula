@@ -210,7 +210,7 @@ def read_hamiltonian(input_file="hr_truncated.dat",is_real=False):
     def get_t(i,j,k):
       norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
       norb = int(norb)
-      mo = np.matrix(np.zeros((norb,norb),dtype=np.complex_))  
+      mo = np.matrix(np.zeros((norb,norb),dtype=np.complex128))  
       for l in mt: # look into the file
         if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
           if is_real:
@@ -263,7 +263,7 @@ def read_multicell_hamiltonian(input_file="hr_truncated.dat",
     def get_t(i,j,k):
       norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
       norb = int(norb)
-      mo = np.matrix(np.zeros((norb,norb),dtype=np.complex_))  
+      mo = np.matrix(np.zeros((norb,norb),dtype=np.complex128))  
       found = False
       for l in mt: # look into the file
         if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
@@ -609,7 +609,7 @@ def read_supercell_hamiltonian(input_file="hr_truncated.dat",is_real=False,nsupe
   tlist = []
   def get_t(i,j,k):
     norb = int(np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))]))
-    mo = np.matrix(np.zeros((norb,norb),dtype=np.complex_))  
+    mo = np.matrix(np.zeros((norb,norb),dtype=np.complex128))  
     for l in mt: # look into the file
       if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
         if is_real:
