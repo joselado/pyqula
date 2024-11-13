@@ -174,6 +174,7 @@ def spinless_mean_field(wf,U,collinear=False,totkp=1):
 
 def get_udxc(voccs,weight=None,totkp=1):
   """Get up/down densities and corresponding mean field matrices"""
+  raise # nor working anymore
   ndim = voccs.shape[1] # dimension of the matrix
   if weight is not None:
     if len(weight)!=voccs.shape[0]: raise # inconsistent dimensions

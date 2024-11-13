@@ -56,7 +56,7 @@ class Hamiltonian():
         """Transform a spinless matrix in its full form"""
         return get_spinful2full(self)(m) # return
     def kchain(self,k=0.):
-        return kchain(self,k)
+        return kchain(self,k=k)
     def get_fermi_surface(self,**kwargs):
         return spectrum.fermi_surface(self,**kwargs)
     def get_multi_fermi_surface(self,**kwargs):
@@ -538,12 +538,12 @@ class Hamiltonian():
     # for backwards compatibility
     def compute_vev(self,**kwargs): 
         return self.get_vev(**kwargs)
-    def get_1dh(self,k=0.0):
+    def get_1dh(self,k=[0.0]):
         """Return a 1d Hamiltonian"""
         if self.is_multicell: # not implemented
             self = self.get_no_multicell() # return the no multicell Hamiltonian
         if not self.dimensionality==2: raise # not implemented
-        intra,inter = kchain(self,k) # generate intra and inter
+        intra,inter = kchain(self,k=k) # generate intra and inter
         hout = self.copy() # copy the Hamiltonian
         hout.intra = intra # store
         hout.inter = inter # store

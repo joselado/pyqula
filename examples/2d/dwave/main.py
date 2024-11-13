@@ -11,18 +11,10 @@ from pyqula import geometry
 from pyqula import films
 from pyqula import meanfield
 
-#g = geometry.square_ribbon(3)
-g = geometry.single_square_lattice()
-g = geometry.triangular_lattice()
+g = geometry.square_lattice()
 h = g.get_hamiltonian()
 h.add_onsite(-2.)
-#h.add_pairing(mode="dx2y2",delta=0.5)
-h.add_pairing(mode="dpid",delta=0.5)
-print(h.get_chern()) ; exit()
-#exit()
-#h.get_dos(nk=300) ; exit()
-#h.get_bands(operator="electron") ; exit()
-#h = h.get_anomalous_hamiltonian()
-h.get_multi_fermi_surface(energies=np.linspace(-2.0,2.0,100),delta=2e-2,
-                                 nk=100,operator="electron",
+h.add_pairing(mode="dx2y2",delta=0.2)
+h.get_multi_fermi_surface(energies=np.linspace(-2.0,2.0,100),delta=4e-2,
+                                 nk=200,
                                  nsuper=1)
