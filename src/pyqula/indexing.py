@@ -32,7 +32,7 @@ def get_index(g,r,replicas=False):
     """Given a certain position, return the index of it in the geometry"""
     if replicas: # check the replicas
       ds = g.neighbor_directions()
-      rset = [g.replicas(d) for d in ds]  # all sets of replicas
+      rset = [g.replicas(d=d) for d in ds]  # all sets of replicas
     else:
       rset = [g.r] # list of positions
     for rs in rset: # loop over set of sites

@@ -61,7 +61,7 @@ def error_commute_and_permutation(Ua,ms):
     and how far from a permutation it is"""
     n = ms[0].shape[0] # dimension
     U = Ua.reshape((n,n)) # make square
-    iden = jnp.identity(n) # identity
+    iden = jnp.identity(n,dtype=jnp.complex64) # identity
     err = 0. # initialize
     for m in ms: # loop over matrices
         dm = m@U - U@m # difference in the commutation
@@ -69,7 +69,7 @@ def error_commute_and_permutation(Ua,ms):
         err = err + jnp.trace(dm@dmd) # trace of the matrix
     # now error in the unitarity
     dU = iden - U@jnp.conjugate(U.T) 
-    err = err + jnp.trace(dU@dU) # trace of the matrix
+    err = err + jnp.trace(dU@dU).real # trace of the matrix
     # now error from not being a permutation
     for iu in U:
         iu2 = iu*iu

@@ -25,7 +25,7 @@ def ldos(ht,operator=None,write=True,nsuper=None,kpath=None,**kwargs):
     elif ht.dimensionality==2: 
         if kpath is None: kpath = np.linspace(0.,1.,200)
         from ..parallel import pcall
-        out = pcall(lambda k: get(ht.generate(k)),kpath) # parallelize over k
+        out = pcall(lambda k: get(ht.generate([k,1.])),kpath) # parallelize over k
         nc = out[0][0] # positions
         ls = 0.
         for i in range(len(out)): ls = ls + out[i][1]
