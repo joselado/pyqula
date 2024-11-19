@@ -2,7 +2,7 @@ import numpy as np
 from .. import algebra
 
 
-def berry_green_generator(f,k=[0.,0.,0.],dk=0.05,operator=None,
+def berry_green_generator(f,k=[0.,0.,0.],dk=1e-4,operator=None,
               full=False):
   """Function that returns the energy resolved Berry curvature"""
   k = np.array(k) # set as array
@@ -49,7 +49,7 @@ def berry_green(f,emin=-10.0,k=[0.,0.,0.],ne=100,dk=1e-4,operator=None):
 
 
 
-def berry_operator(h,delta=1e-1,mode="Wilson",**kwargs):
+def berry_operator(h,delta=1e-1,**kwargs):
     """Return ap operator that computes the Berry curvature for a certain
     wavefunction"""
     if h.dimensionality!=2: raise
@@ -59,20 +59,15 @@ def berry_operator(h,delta=1e-1,mode="Wilson",**kwargs):
     # The Green mode has some numerical instability,
     # this should be further checked later
     if not h.is_sparse: # dense Hamiltonians
-        if mode=="Green":
-            def bk(k): return berry_green_generator(gk,k=k,full=False,**kwargs)
-        elif mode=="Wilson":
-            from ..topology import berry_curvature
-            def bk(k): 
-                def f(e):
-                    return berry_curvature(h,k,dk=delta/100,
-                            window=[e-delta,e+delta])
-                return f
+        def bk(k): 
+            return berry_green_generator(gk,k=k,dk=delta/100,
+                    full=True,**kwargs)
         def outf(w,k=[0.,0.,0.]):
             m = hk(k) # bloch Hamiltonian
             e = algebra.braket_wAw(w,m) # energy
-            Be = bk(k)(e).real
-            o = Be*(delta*w) # Berry curvature
+            Be = bk(k)(e)
+            Be = (Be + algebra.dagger(Be))/2. # Hermitian
+            o = Be@(delta*w) # Berry curvature
             return o # return a vector
         return outf
     else:
@@ -93,7 +88,7 @@ def berry_operator(h,delta=1e-1,mode="Wilson",**kwargs):
 
 
 def berry_green_generator_sparse(f,k=[0.,0.,0.],
-        dk=0.05,gI=None):
+        dk=1e-4,gI=None):
   """Function that returns the energy resolved Berry curvature"""
   k = np.array(k) # set as array
   dx = np.array([dk,0.,0.])
