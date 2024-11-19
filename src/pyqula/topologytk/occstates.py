@@ -68,7 +68,6 @@ def occupied_states(hkgen,k,window=None,max_waves=None):
 #        if -np.abs(window)< ie < 0:  # between energy window and fermi
         if window[0] < ie < window[1]:  # between the energy window
             occwf.append(iw)  # add to the list
-    print(len(occwf))
     return np.array(occwf)
 
 

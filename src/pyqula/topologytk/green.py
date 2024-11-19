@@ -56,6 +56,8 @@ def berry_operator(h,delta=1e-1,mode="Wilson",**kwargs):
     h = h.copy()
     hk = h.get_hk_gen() # get generator
     gk = h.get_gk_gen(delta=delta) # get generator
+    # The Green mode has some numerical instability,
+    # this should be further checked later
     if not h.is_sparse: # dense Hamiltonians
         if mode=="Green":
             def bk(k): return berry_green_generator(gk,k=k,full=False,**kwargs)
@@ -70,7 +72,6 @@ def berry_operator(h,delta=1e-1,mode="Wilson",**kwargs):
             m = hk(k) # bloch Hamiltonian
             e = algebra.braket_wAw(w,m) # energy
             Be = bk(k)(e).real
-            print(Be,e)
             o = Be*(delta*w) # Berry curvature
             return o # return a vector
         return outf
