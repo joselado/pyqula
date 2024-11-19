@@ -29,7 +29,7 @@ def berry_green_generator(f,k=[0.,0.,0.],dk=0.05,operator=None,
 
 
 
-def berry_green(f,emin=-10.0,k=[0.,0.,0.],ne=100,dk=0.0001,operator=None):
+def berry_green(f,emin=-10.0,k=[0.,0.,0.],ne=100,dk=1e-4,operator=None):
   """Return the Berry curvature using Green functions"""
   import scipy.integrate as integrate
   fint = berry_green_generator(f,k=k,dk=dk,operator=operator)
@@ -49,7 +49,7 @@ def berry_green(f,emin=-10.0,k=[0.,0.,0.],ne=100,dk=0.0001,operator=None):
 
 
 
-def berry_operator(h,delta=1e-1,**kwargs):
+def berry_operator(h,delta=1e-1,mode="Wilson",**kwargs):
     """Return ap operator that computes the Berry curvature for a certain
     wavefunction"""
     if h.dimensionality!=2: raise
@@ -57,11 +57,21 @@ def berry_operator(h,delta=1e-1,**kwargs):
     hk = h.get_hk_gen() # get generator
     gk = h.get_gk_gen(delta=delta) # get generator
     if not h.is_sparse: # dense Hamiltonians
-        def bk(k): return berry_green_generator(gk,k=k,full=True,**kwargs)
+        if mode=="Green":
+            def bk(k): return berry_green_generator(gk,k=k,full=False,**kwargs)
+        elif mode=="Wilson":
+            from ..topology import berry_curvature
+            def bk(k): 
+                def f(e):
+                    return berry_curvature(h,k,dk=delta/100,
+                            window=[e-delta,e+delta])
+                return f
         def outf(w,k=[0.,0.,0.]):
             m = hk(k) # bloch Hamiltonian
             e = algebra.braket_wAw(w,m) # energy
-            o = bk(k)(e)@(delta*w) # Berry curvature
+            Be = bk(k)(e).real
+            print(Be,e)
+            o = Be*(delta*w) # Berry curvature
             return o # return a vector
         return outf
     else:
