@@ -51,7 +51,8 @@ def turn_multicell(h):
       del ho.ty
       del ho.txy
       del ho.txmy
-    else: raise
+    else: 
+        return h # 3d is always multicell
     dd = dict() # dictionary
     dd[(0,0,0)] = h.intra
     for (d,t) in zip(dirs,ts): 
@@ -430,7 +431,10 @@ def close_enough(rs1,rs2,rcut=2.0):
 
 def turn_no_multicell(h,tol=1e-5):
   """Converts a Hamiltonian into the non multicell form"""
+  from .htk.kchain import detect_longest_hopping
   if not h.is_multicell: return h # Hamiltonian is already fine
+  if detect_longest_hopping(h)>1: raise # error
+  if h.dimensionality>2: return h # too high dimensionality
   ho = h.copy() # copy Hamiltonian
   ho.is_multicell = False
   if ho.dimensionality==0: pass
@@ -441,7 +445,8 @@ def turn_no_multicell(h,tol=1e-5):
     ho.txy = ho.intra*0.
     ho.txmy = ho.intra*0.
     ho.ty = ho.intra*0.
-  else: raise
+  else: 
+      raise # just in case
   for t in h.hopping: # loop over hoppings
     if h.dimensionality==0: pass # one dimensional
     elif h.dimensionality==1: # one dimensional
@@ -458,7 +463,8 @@ def turn_no_multicell(h,tol=1e-5):
       elif t.dir[0]==1 and t.dir[1]==-1 and t.dir[2]==0: # 
         ho.txmy = t.m # store
       elif np.sum(np.abs(t.m))>tol and np.max(np.abs(t.dir))>1: raise # Uppps, not possible
-    else: raise
+    else: 
+        raise # just in case
   ho.hopping = [] # empty list
   return ho
 

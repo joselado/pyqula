@@ -235,5 +235,6 @@ def FeSe_GM(nem=0.,**kwargs):
 
 from .specialhamiltoniantk.highorderTI import square_2OTI
 from .specialhamiltoniantk.highorderTI import chain_1OTI
+from .specialhamiltoniantk.topologicalheavyfermion import topological_heavy_fermion_1d
 
 
