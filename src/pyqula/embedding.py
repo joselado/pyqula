@@ -180,7 +180,9 @@ def onsite_defective_central(h,m,nsuper):
 
 
 def onsite_supercell(h,nsuper,mc=None):
-    if nsuper==1: return h.intra
+    if nsuper==1: 
+        if mc is None: return h.intra # pristine
+        else: return mc # defective
     if h.is_multicell: # try to make it multicell 
         from .htk.kchain import detect_longest_hopping
         if detect_longest_hopping(h)>1:
