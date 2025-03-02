@@ -36,7 +36,7 @@ ei = eb.get_energy_ingap_state() # get energy of the impurity state
 #ei = 0.
 print("Ingap state",ei)
 #(x,y,d) = eb.get_ldos(nsuper=3,energy=ei,delta=1e-2) # get data
-(x,y,d) = eb.get_didv(nsuper=7,T=0.3,energy=ei,delta=1e-2) # get data
+(x,y,d) = eb.get_didv_all(nsuper=7,T=0.3,energy=ei,delta=1e-2) # get data
 #(x,y,d) = eb.get_kappa(nsuper=3,T=0.3,energy=ei,delta=1e-2) # get data
 
 
