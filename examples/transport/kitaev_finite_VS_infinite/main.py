@@ -22,14 +22,21 @@ h2.add_zeeman(0.5)
 h2.add_onsite(2.0)
 h2.get_bands()
 h2.add_swave(.1) # pairing gap of 0.1
-
-ht = heterostructures.build(h1,h2) # create the junction
+hc = [h2,h2] # dimer 
+hc = [h2 for i in range(10)] # dimer 
+ht = heterostructures.build(h1,h1,central=hc) # create the junction
+ht0 = heterostructures.build(h1,h2) # create the junction
 ht.scale_lc = 0.3 # scale the left coupling
+ht.scale_rc = 0.3 # scale the left coupling
 ht.delta = 1e-6 # imaginary part of the energy
-es = np.linspace(-.5,.5,100) # grid of energies
+ht0.scale_lc = 0.3 # scale the left coupling
+ht0.delta = 1e-6 # imaginary part of the energy
+es = np.linspace(-.5,.5,200) # grid of energies
 ts = [ht.didv(energy=e) for e in es] # calculate transmission
-plt.plot(es,ts,marker="o")
-plt.ylim([0,4.1])
+ts0 = [ht0.didv(energy=e) for e in es] # calculate transmission
+plt.plot(es,ts,marker="o",label="finite")
+plt.plot(es,ts0,marker="o",label="infinite")
+plt.legend()
 plt.show()
 
 
