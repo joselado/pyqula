@@ -67,11 +67,11 @@ class Heterostructure():
         return device_dos(self,mode="left",**kwargs)
     def get_coupled_right_dos(self,**kwargs):
         return device_dos(self,mode="right",**kwargs)
-    def landauer(self,energy=[0.],delta=0.0001,do_leads=True,left_channel=None,
-                  right_channel=None):
+    def landauer(self,energy=0.,do_leads=True,left_channel=None,
+                  right_channel=None,**kwargs):
       """ Return the Landauer transmission"""
       if self.has_eh: raise # invalid if there is electorn-hole
-      return landauer(self,energy=energy,delta=delta,do_leads=do_leads,
+      return landauer(self,energy=energy,delta=self.delta,do_leads=do_leads,
                       left_channel=left_channel,right_channel=right_channel)
     def write_green(self):
         """Writes the green functions in a file"""
