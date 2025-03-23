@@ -7,7 +7,6 @@ from .dvector import dvector2delta
 
 
 def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
-        nn = 1,
     **kwargs):
     """Create a generator, taking as input two positions, and returning
     the 2x2 pairing matrix"""
@@ -17,7 +16,7 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     if callable(mode):
         weightf = mode # mode is a function returning a 2x2 pairing matrix
     elif mode=="swave":
-        weightf = lambda r1,r2: swave(r1,r2,H=self,nn=nn,**kwargs) 
+        weightf = lambda r1,r2: swave(r1,r2,H=self,**kwargs) 
     elif mode=="deltaud":
         # this is a workaround for delta_ud alone!
         weightf = lambda r1,r2: deltaud(r1,r2,deltaf) 
@@ -36,7 +35,7 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     elif mode=="chiral_pwave": 
         weightf = lambda r1,r2: get_triplet(r1,r2,df,L=1,**kwargs)
     elif mode=="chiral_fwave": 
-        weightf = get_triplet_generator(df,L=3,H=self,nn=nn,**kwargs)
+        weightf = get_triplet_generator(df,L=3,H=self,**kwargs)
     elif mode=="chiral_dwave": 
         weightf = lambda r1,r2: get_singlet(r1,r2,L=2,**kwargs)
     elif mode=="chiral_gwave": 
