@@ -555,25 +555,31 @@ def getgreen_jit(wfs,es,energy,delta,zero):
 def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=10,
         gmode="adaptive"):
     """Return the integration of an operator times the Green function"""
+    if operator is not None: # get the operator
+        operator = h0.get_operator(operator)
     h = h0.copy()
     h.turn_dense()
-    hkgen = h.get_hk_gen() # get generator
-    iden = np.identity(h.intra.shape[0],dtype=np.complex128)
-    from . import klist
-    ks = klist.kmesh(h.dimensionality,nk=nk) # klist
-    out = 0.0 # output
-    if callable(operator): # callable operator
-      for k in ks: # loop over kpoints
-        hk = hkgen(k) # Hamiltonian
-        o0 = algebra.inv(iden*(e+1j*delta) - hk) # Green's function
-        if callable(operator): o1 = operator(k)
-        else: o1 = operator
-        out += -np.trace(o0@o1).imag # Add contribution
-      out /= len(ks) # normalize
-    else:
-      g = bloch_selfenergy(h,energy=e,delta=delta,mode=gmode)[0] 
-      if operator is None: out = -np.trace(np.array(g)).imag
-      else: out = -np.trace(np.array(g)@operator).imag
+    if operator is None: # no operator
+        g = bloch_selfenergy(h,energy=e,delta=delta,mode=gmode)[0] 
+        out = -np.trace(np.array(g)).imag
+    else: # finite operator
+        if operator.matrix is None: # no matrix, assume a momentum dependent
+            raise # not implemented yet
+#            hkgen = h.get_hk_gen() # get generator
+#            iden = np.identity(h.intra.shape[0],dtype=np.complex128)
+#            from . import klist
+#            ks = klist.kmesh(h.dimensionality,nk=nk) # klist
+#            out = 0.0 # output
+#            for k in ks: # loop over kpoints
+#              hk = hkgen(k) # Hamiltonian
+#              o0 = algebra.inv(iden*(e+1j*delta) - hk) # Green's function
+#              o1 = operator.get_matrix(k=k)
+#              out += -np.trace(o0@o1).imag # Add contribution
+#            out /= len(ks) # normalize
+        else: # operator is a matrix
+            op = operator.get_matrix()
+            g = bloch_selfenergy(h,energy=e,delta=delta,mode=gmode)[0] 
+            out = -np.trace(np.array(g)@op).imag
     return out
 
 
