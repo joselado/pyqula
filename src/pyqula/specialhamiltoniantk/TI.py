@@ -4,10 +4,11 @@ from .. import films
 import numpy as np
 
 
-def QSH3D_film(W=20,dt=0.6,soc = 0.1):
+def QSH3D_film(W=20,dt=0.6,soc = 0.1,g=None):
     """Return the Hamiltonian of a 3D quantum spin Hall insulator"""
-    g0 = geometry.diamond_lattice_minimal()
-    g = films.geometry_film(g0,nz=W)
+    if g is None: # no geometry provided
+        g0 = geometry.diamond_lattice_minimal()
+        g = films.geometry_film(g0,nz=W)
     def tij(ri,rj):
         dr = ri-rj
         dr2 = dr.dot(dr)
