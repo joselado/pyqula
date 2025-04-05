@@ -229,7 +229,8 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
   (xs,ys) = (scale*xs,ys/scale)
   if x is not None:
     from scipy.interpolate import interp1d
-    f = interp1d(xs,ys,bounds_error=False,fill_value=[ys[0],ys[-1]])
+    f = interp1d(xs,ys,bounds_error=False,fill_value=0.)
+#    f = interp1d(xs,ys,bounds_error=False,fill_value=[ys[0],ys[-1]])
     return x,f(x)
   else: return xs,ys
 
@@ -242,7 +243,15 @@ def pdos(m,P=None,**kwargs):
     if P is not None: # operator provided
         from .operators import Operator
         op = Operator(P).get_matrix() # redefine
-        fun = lambda : op@fun0() # define new generator
+        from scipy.sparse import csc_matrix
+        op = csc_matrix(op)
+        def fun():
+            r = fun0()
+            r = op@r
+            r = r/np.sqrt(np.abs(np.sum(np.conjugate(r)*r)))
+            return r
+#        print("aaa",fun0().shape,(op@fun0()).shape)
+#        fun = lambda : op@fun0() # define new generator
     else: fun = fun0 # original generator
     return tdos(m,frand=fun,**kwargs) # call TDOS with the generator
 

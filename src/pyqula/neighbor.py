@@ -81,23 +81,23 @@ def connections(r1,r2,dr=1.0):
 def parametric_hopping(r1,r2,fc,is_sparse=False):
   """ Generates a parametric hopping based on a function"""
   if is_sparse: # sparse matrix
-    print("Sparse parametric hopping")
-    m = np.matrix([[0.0j for i in range(len(r2))] for j in range(len(r1))])
+    # This should be made more efficient
+#    print("Sparse parametric hopping")
     rows,cols,data = [],[],[]
     for i in range(len(r1)):
       for j in range(len(r2)):
         val = fc(r1[i],r2[j]) # add hopping based on function
         if abs(val) > minimum_hopping: # retain this hopping
-         data.append(val)
-         rows.append(i)
-         cols.append(j)
+            data.append(val)
+            rows.append(i)
+            cols.append(j)
     n = len(r2)
-    m = csc_matrix((data,(rows,cols)),shape=(n,n))
+    m = csc_matrix((data,(rows,cols)),shape=(n,n),dtype=np.complex128)
   #  if not is_sparse: m = m.todense() # dense matrix
     return m
   else:
     n = len(r2)
-    m = np.matrix(np.zeros((n,n),dtype=np.complex128)) # complex matrix
+    m = np.array(np.zeros((n,n),dtype=np.complex128)) # complex matrix
     for i in range(len(r1)):
       for j in range(len(r2)):
         m[i,j] = fc(r1[i],r2[j])
