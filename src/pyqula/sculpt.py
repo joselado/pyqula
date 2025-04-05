@@ -167,10 +167,15 @@ def remove_central(g,n):
   return remove(g,rind)  # return geometry with removed 
 
 
-def get_closest(g,n=1,r0=[0.,0.,0.]):
+def get_closest(g,**kwargs):
   """Gets n atoms from the center of the crystal"""
+  return get_closest_rs(rs=g.r,**kwargs)
+
+
+def get_closest_rs(n=1,r0=[0.,0.,0.],rs=[]):
+  """Gets n sites around r0"""
   r0 = np.array(r0)
-  rr = [(r-r0).dot(r-r0) for r in g.r] # norm of the distances
+  rr = [(r-r0).dot(r-r0) for r in np.array(rs)] # norm of the distances
   inds = range(len(rr)) # indexes
   sort_inds = [x for (y,x) in sorted(zip(rr,inds))] # indexes sorted by distance
   rind = [sort_inds[i] for i in range(n)]

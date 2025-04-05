@@ -17,6 +17,9 @@ def QSH3D_film(W=20,dt=0.6,soc = 0.1,g=None):
                 return 1.0 + dt
             else: return 1.0
         else: return 0.
-    h = g.get_hamiltonian(tij=tij,is_sparse=True)
+#    h = g.get_hamiltonian(tij=tij,is_sparse=True)
+    from ..specialhopping import entry2matrix
+    mgen = entry2matrix(tij) # create an mgenerator
+    h = g.get_hamiltonian(mgenerator=mgen)
     h.add_kane_mele(soc)
     return h

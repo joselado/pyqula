@@ -90,8 +90,25 @@ def multilayer(ti=0.3,dz=3.0):
     return fhop
 
 def entry2matrix(f):
-    def fout(rs1,rs2):
-        return np.array([[f(r1,r2) for r1 in rs1] for r2 in rs2]).T
+    """Transform a function that returns a hopping into a function
+    that returns the hopping matrix"""
+    try:
+        fnum = jit(f,nopython=True) # jit function
+        def fout(rs1,rs2):
+            n1 = len(rs1)
+            n2 = len(rs2)
+            out = np.zeros((n1,n2),dtype=np.complex128)
+            for i in range(n1):
+                r1 = rs1[i]
+                for j in range(n2):
+                    r2 = rs2[j]
+                    out[i,j] = fnum(r1,r2)
+            return out
+        return jit(fout,nopython=True)
+    except:
+        print("Warning, hopping cannot be jitd")
+        def fout(rs1,rs2):
+            return np.array([[f(r1,r2) for r1 in rs1] for r2 in rs2]).T
     return fout
 
 

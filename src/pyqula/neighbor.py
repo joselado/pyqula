@@ -59,7 +59,7 @@ def find_first_neighbor_jit(r1,r2,pairs):
              pairs[out,0] = i
              pairs[out,1] = j
              out += 1 # increase
-    return pairs # number of neighbors
+    return pairs # indexes of the neighbors
 
 
 
