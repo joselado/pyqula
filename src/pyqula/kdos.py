@@ -151,53 +151,57 @@ def write_surface_3d(h,energies=None,klist=None,delta=0.01):
 
 def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
                  P = None,
-                 ewindow=4.0,ne=1000,delta=0.01,ntries=10,nk=100,
+                 ewindow=4.0,delta=0.01,ntries=10,nk=100,
                  operator=None,energies=np.linspace(-3.0,3.0,200),
                  mode="ED",**kwargs):
-  """Calculate the KDOS bands using the KPM"""
-  if use_kpm: mode ="KPM" # conventional method
-  if mode=="ED":
-      from . import dos
-      def pfun(k):
-        (es,ds) = h.get_dos(ks=[k],operator=operator,energies=energies,
-                delta=delta,**kwargs)
-        return energies,ds
-  elif mode=="green":
-    f = h.get_gk_gen(delta=delta) # Green generator
-    def pfun(k): # do it for this k-point
-        def gfun(e):
-            m = f(k=k,e=e) # Green's function
-            m = green.GtimesO(m,operator,k=k)
-            return -algebra.trace(m).imag # return DOS
-        return energies,np.array([gfun(e) for e in energies])
-  elif mode=="KPM": # KPM method
-    if operator is not None: 
-        from .operators import Operator
-        operator = Operator(operator).get_matrix() # convert to matrix
-    hkgen = h.get_hk_gen() # get generator
-    def pfun(k): # do it for this k-point
-      print("Doing",k)
-      hk = hkgen(k) # get Hamiltonian
-      npol = int(scale/delta) # number of polynomials
-      (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=ne,P=P,
-                   operator=operator,
-                   ewindow=ewindow,ntries=ntries,x=energies) # compute
-      return (x,y)
-  if kpath is None:
-      kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
-  ### Now compute and write in a file
-  ik = 0
-  out = parallel.pcall(pfun,kpath) # compute all
-  fo = open("KDOS_BANDS.OUT","w") # open file
-  for k in kpath: # loop over kpoints
-    (x,y) = out[ik] # get this one
-    for (ix,iy) in zip(x,y): # loop
-      fo.write(str(ik/len(kpath))+"   ")
-      fo.write(str(ix)+"   ")
-      fo.write(str(iy)+"\n")
-    fo.flush()
-    ik += 1
-  fo.close()
+    """Calculate the KDOS bands using the KPM"""
+    if use_kpm: mode ="KPM" # conventional method
+    if mode=="ED":
+        from . import dos
+        def pfun(k):
+          (es,ds) = h.get_dos(ks=[k],operator=operator,energies=energies,
+                  delta=delta,**kwargs)
+          return energies,ds
+    elif mode=="green":
+      f = h.get_gk_gen(delta=delta) # Green generator
+      def pfun(k): # do it for this k-point
+          def gfun(e):
+              m = f(k=k,e=e) # Green's function
+              m = green.GtimesO(m,operator,k=k)
+              return -algebra.trace(m).imag # return DOS
+          return energies,np.array([gfun(e) for e in energies])
+    elif mode=="KPM": # KPM method
+      if operator is not None: 
+          from .operators import Operator
+          operator = Operator(operator).get_matrix() # convert to matrix
+      h = h.copy()
+      h.turn_sparse()
+      hkgen = h.get_hk_gen() # get generator
+      def pfun(k): # do it for this k-point
+#        print("Doing",k)
+        hk = hkgen(k) # get Hamiltonian
+        npol = 3*int(scale/delta) # number of polynomials
+        (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=npol*4,P=P,
+                     operator=operator,
+                     ewindow=ewindow,ntries=ntries,x=energies,
+                     **kwargs) # compute
+        return (x,y)
+    if kpath is None:
+        kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
+    ### Now compute and write in a file
+    ik = 0
+    out = parallel.pcall(pfun,kpath) # compute all
+    fo = open("KDOS_BANDS.OUT","w") # open file
+    for k in kpath: # loop over kpoints
+      (x,y) = out[ik] # get this one
+      for (ix,iy) in zip(x,y): # loop
+        fo.write(str(ik/len(kpath))+"   ")
+        fo.write(str(ix)+"   ")
+        fo.write(str(iy)+"\n")
+      fo.flush()
+      ik += 1
+    fo.close()
+    return np.genfromtxt("KDOS_BANDS.OUT").T
 
 
 
