@@ -17,12 +17,15 @@ def generalized_kane_mele(r1,r2,rm,fun=0.0,tol=1e-5):
   mout = [[None for i in range(nsites)] for j in range(nsites)]
   for i in range(nsites):
     mout[i][i] = csc_matrix(np.zeros((2,2))) 
+  from .neighbor import find_first_neighbor
   for i in range(nsites): # loop over initial site
+    indsi = find_first_neighbor([r1[i]],rm) # find closest sites to i
+    rmi = [rm[ij[1]] for ij in indsi] # retain only those sites for the loop
     for j in range(nsites): # loop over final site
       dr = r1[i]-r2[j] # difference
       if dr.dot(dr)>4.1:
-        continue # if too far away, next iteration
-      ur = km_vector(r1[i],r2[j],rm,tol=tol) # kane mele vector
+         continue # if too far away, next iteration
+      ur = km_vector(r1[i],r2[j],rmi,tol=tol) # kane mele vector
       r3 = (r1[i] + r2[j])/2.0
       sm = (sx*ur[0] + sy*ur[1] + sz*ur[2])*kmfun(r3) # contribution
       if mout[i][j] is None: mout[i][j] = csc_matrix(1j*sm) # add contribution
