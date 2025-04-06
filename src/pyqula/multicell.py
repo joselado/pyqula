@@ -2,6 +2,7 @@ import numpy as np
 from scipy.sparse import csc_matrix,bmat,coo_matrix
 from . import parallel
 from .algebra import dagger
+from numba import jit
 
 
 def collect_hopping(h):
@@ -416,16 +417,17 @@ def pairs2hopping(ps):
 
 
 
+@jit(nopython=True)
 def close_enough(rs1,rs2,rcut=2.0):
-  """CHeck if two sets of positions are at a distance
-  at least rcut"""
-  rcut2 = rcut*rcut # square of the distance
-  for ri in rs1:
-    for rj in rs2:
-      dr = ri - rj # vector
-      dr = dr.dot(dr) # distance
-      if dr<rcut2: return True
-  return False
+    """Check if two sets of positions are at a distance
+    at least rcut"""
+    rcut2 = rcut*rcut # square of the distance
+    for ri in rs1:
+      for rj in rs2:
+        dr = ri - rj # vector
+        dr = dr.dot(dr) # distance
+        if dr<rcut2: return True
+    return False
 
 
 

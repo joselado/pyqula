@@ -23,6 +23,23 @@ minimum_hopping = 1e-3
 
 
 #except:
+
+@jit(nopython=True)
+def find_close_neighbors(r0,rs,d=2.0):
+    """Return the indexes of the neighbors that are closer than a
+    certain distance"""
+    nout = 0
+    out = np.zeros(len(rs),dtype=np.int_)
+    d2 = d*d
+    dx = rs[:,0] - r0[0]
+    dy = rs[:,1] - r0[1]
+    dz = rs[:,2] - r0[2]
+    dr2 = dx*dx + dy*dy + dz*dz
+    inds = np.arange(0,len(rs))
+    return inds[dr2<d2]
+
+
+
 def find_first_neighbor(r1,r2):
      """Calls the fortran routine"""
      r1 = np.array(r1)
@@ -122,8 +139,17 @@ def parametric_hopping_spinful(r1,r2,fc,is_sparse=False):
   return m
 
 
-
-
+# this is a potential speed-up
+#
+#def generate_parametric_hopping(h,f=None,mgenerator=None,
+#             spinful_generator=False):
+#    """Generate a parametric hopping"""
+#    if f is not None and not spinful_generator:
+#        from .specialhopping import entry2matrix
+#        mgen = entry2matrix(f) # create an mgenerator
+#    return generate_parametric_hopping_old(h,f=None,mgenerator=mgen,
+#             spinful_generator=spinful_generator)
+#
 
 
 
