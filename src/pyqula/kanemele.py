@@ -26,7 +26,7 @@ def generalized_kane_mele(r1,r2,rm,fun=0.0,tol=1e-5):
         rmi = [rm[im] for im in indsim] # retain only those sites for the loop
         indsj = find_close_neighbors(r1[i],r2,d=4.1) # get close enough
         # this can (and should) be done more efficiently
-        for j in range(nsites): # loop over final site
+        for j in indsj: # loop over final site
             dr = r1[i]-r2[j] # difference
             if dr.dot(dr)<4.1: # if close enough
                 ur = km_vector(r1[i],r2[j],rmi,tol=tol) # kane mele vector
