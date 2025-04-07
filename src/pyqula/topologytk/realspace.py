@@ -31,6 +31,7 @@ def real_space_chern(h,operator=None):
 #    print(P - P@P)
     C = h.full2profile(C) # resum if necessary
     h.geometry.write_profile(C,name="REAL_SPACE_CHERN.OUT")
+    return h.geometry.r,C # return result
 
 
 

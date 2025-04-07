@@ -79,16 +79,14 @@ def haldane(r1,r2,rm,fun=0.0,sublattice=None):
     for i in range(nsites): # loop over initial site
       rijs = [rm[kk] for kk in neighs[i]] # loop over first neighbors
       if len(rijs)==0: continue
-      for j in range(nsites): # loop over final site
+      indsj = neighbor.find_close_neighbors(r1[i],r2,d=1.9) # get close enough
+      for j in indsj: # loop over final site
         dr = r1[i]-r2[j] # difference
-        if dr.dot(dr)>4.1:
-          continue # if too far away, next iteration
-  #      ur = km_vector(r1[i],r2[j],rm) # kane mele vector
-  #      print(rijs)
-        ur = km_vector(r1[i],r2[j],rijs) # kane mele vector
-        r3 = (r1[i] + r2[j])/2.0
-        sm = ur[2]*kmfun(r3) # clockwise or anticlockwise
-        mout[i,j] = 1j*sm*(sublattice[i]+sublattice[j])/2. # store
+        if dr.dot(dr)<4.1:
+            ur = km_vector(r1[i],r2[j],rijs) # kane mele vector
+            r3 = (r1[i] + r2[j])/2.0
+            sm = ur[2]*kmfun(r3) # clockwise or anticlockwise
+            mout[i,j] = 1j*sm*(sublattice[i]+sublattice[j])/2. # store
     return csc_matrix(mout) # return matrix
 
 
