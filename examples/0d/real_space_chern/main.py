@@ -13,9 +13,14 @@ h = g.get_hamiltonian(has_spin=False)
 h.add_haldane(.1)
 from pyqula import topology
 #op = h.get_operator("valley",delta=1e-2)
-topology.real_space_chern(h)
+(r,c) = topology.real_space_chern(h)
 
+import matplotlib.pyplot as plt
 
+plt.scatter(r[:,0],r[:,1],c=c,cmap="bwr",vmin=-1.0,vmax=1.0)
+plt.colorbar()
+plt.axis("equal")
+plt.show()
 
 
 
