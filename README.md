@@ -24,7 +24,18 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 ```
 
 # Tutorials #
-Jupyter notebooks with tutorials can be found in the links below (part of the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_summer_school_2022) )
+Jupyter notebooks with tutorials can be found in the links below
+
+From the ["Solid State Physics course at Aalto University 2024"](https://github.com/joselado/SolidStatePhysics2024)
+- [Electronic structure theory](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session3.ipynb)
+- [Topological band structure theory](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session4.ipynb)
+- [The Quantum Hall state](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session5.ipynb)
+- [Superconductivity, Nambu representation and Majorana physics](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session6.ipynb)
+- [Magnetism, magnons, quantum magnetism and spinons](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session7.ipynb)
+- [Excitations and defects in quantum materials](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session8.ipynb)
+
+
+From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_summer_school_2022) )
 - [Electronic structure](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session1.ipynb)
 - [Superconductivity](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session2.ipynb)
 - [Magnetism](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session3.ipynb)
