@@ -35,7 +35,7 @@ From the ["Solid State Physics course at Aalto University 2024"](https://github.
 - [Excitations and defects in quantum materials](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session8.ipynb)
 
 
-From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_summer_school_2022) )
+From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_summer_school_2022) 
 - [Electronic structure](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session1.ipynb)
 - [Superconductivity](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session2.ipynb)
 - [Magnetism](https://github.com/joselado/jyvaskyla_summer_school_2022/blob/main/sessions/session3.ipynb)
