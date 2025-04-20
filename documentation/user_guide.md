@@ -70,6 +70,13 @@ mu = 0.3 # value of the onsite
 h.add_onsite(mu) # add onsite energy
 ```
 
+Possible inputs
+
+- Float: the same onsite energy is added to all the sites
+
+- Iterable (list or array): adds a different onsite energy to each site in teh geometry
+
+- Callable (function): adds a different onsite energy to each site according to its location $\mathbf r$
 
 
 ## Including an external Zeeman field
@@ -122,6 +129,26 @@ B = 0.02 # magnetic field in quantum flux unit
 h.add_orbital_magnetic_field(B) # add an out-of plane magnetic field
 ```
 
+## Setting a fiilling
+
+If you want to enforce a certaing filling $\nu$ in a Hamiltonian, so that
+$$
+\langle c^\dagger_n c_n \rangle = \nu
+$$
+
+use 
+```python
+from pyqula import geometry
+g = geometry.chain() # chain
+h = g.get_hamiltonian()
+h.set_filling(0.7) # enforce a filling
+```
+
+Possible inputs
+
+- float: enforce the filling on average
+
+- array: enforce that each site has a specific filling
 
 
 # Observables
@@ -166,6 +193,11 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 (es,ds) = h.get_dos()
 ```
 
+Optional arguments
+- energies: array with the energies for which the DOS is computed
+- delta: smearing of the DOS
+- operator: operator to which the DOS is projected
+
 ## Local density of states
 
 The density of states counts how many states are in a certian energy window. It is defined as
@@ -184,6 +216,10 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 ```
 
 
+Optional arguments
+- energies: array with the energies for which the DOS is computed
+- delta: smearing of the DOS
+- operator: operator to which the DOS is projected
 
 
 
@@ -204,6 +240,10 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 h.get_kdos_bands()
 ```
 
+Optional arguments
+- energies: array with the energies for which the DOS is computed
+- delta: smearing of the DOS
+- operator: operator to which the DOS is projected
 
 
 # Operators
@@ -656,6 +696,8 @@ In this section we address how we can compute surface spectral function of semi-
 
 # Topological insulators
 
+Here we provide a discussion of observables related with topological insulators
+
 ## Topological invariants
 
 ### Chern number
@@ -688,7 +730,41 @@ z2 = topology.z2_invariant(h) # Z2 invariant
 
 ## Berry curvature density in frequency space
 
+The berry curvature in frequency space is defined as 
+
+$$
+\Omega (\mathbf k) = \int_{-\infty}^{\epsilon_F} \Xi (\mathbf k,\omega) d\omega
+$$
+
+where $\Omega$ is the Berry curvature of the occupiad bands and $\Xi (\mathbf k,\omega)$
+is the energy-resolved Berry curvature
+
 ## Berry curvature density in real-space
+
+The berry curvature in real-space is defined as 
+
+$$
+\Omega (\mathbf k) = \int \Gamma (\mathbf k,\mathbf r) d^2 \mathbf r
+$$
+
+where $\Omega$ is the Berry curvature of the occupiad bands and $\Gamma (\mathbf k,\mathbf r)$
+is the spatially-resolved Berry curvature. Note that this object is meaningful for periodic
+systems with very large unit cells.
+
+
+
+## Chern number in real-space
+
+The berry curvature in real-space is defined as 
+
+$$
+C = \int F (\mathbf r) d^2 \mathbf r
+$$
+
+where $C$ is the total Chern number of the occupiad bands and $F (\mathbf r)$
+is the spatially-resolved Chern number. Note that this object is meaningful for periodic
+systems with very large unit cells.
+
 
 ## Topological surface states
 
@@ -701,6 +777,30 @@ h.add_haldane(0.05) # Add Haldane coupling
 kdos.surface(h) # surface spectral function
 ```
 
+
+# Response functions
+
+Here we discuss how response functions can be computed
+
+## Charge-charge response function
+
+The charge-charge response function for a spinless system is computed as 
+$$
+\chi(\omega,i,j) = 
+\sum_{n,m}
+f(\epsilon_n) (1-f(\epsilon_m))
+\frac{
+\Psi_n(i)\Psi_m(j)
+\Psi^*_m(i)\Psi^*_m(j)
+}
+{
+\epsilon_n - \epsilon_m - \omega + i\delta
+}
+$$
+
+where $f(\epsilon)$ is the Fermi-Dirac distribution
+
+## RKKY response function
 
 # Quantum transport
 

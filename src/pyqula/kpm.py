@@ -327,19 +327,17 @@ def full_trace_A(m_in,ntries=20,n=200,A=None):
 
 
 def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=True,
-  x=None):
-  """Return two arrays with energies and local DOS"""
-  if npol is None: npol = ne
-  mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j,use_fortran=True)
-  if np.sum(np.abs(mus.imag))>0.001:
-#    print("WARNING, off diagonal has nonzero imaginary elements",np.sum(np.abs(mus.imag)))
-     pass
-  if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
-  else: xs = x/scale # use from input
-  ys = generate_green_profile(mus,xs,kernel="jackson",use_fortran=False)/scale*np.pi # so it is the Green function
-#  imys = hilbert(ys).imag
-  if write: np.savetxt("CORRELATOR_KPM.OUT",np.matrix([scale*xs,-ys.imag,ys.real]).T)
-  return (scale*xs,ys.real,ys.imag)
+    x=None):
+    """Return two arrays with energies and local DOS"""
+    if npol is None: npol = ne
+    mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j,use_fortran=True)
+    if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
+    else: xs = x/scale # use from input
+    ys = generate_green_profile(mus,xs,kernel="jackson")/scale*np.pi # so it is the Green function
+  #  imys = hilbert(ys).imag
+    if write: 
+        np.savetxt("CORRELATOR_KPM.OUT",np.array([scale*xs,-ys.imag,ys.real]).T)
+    return (scale*xs,ys.real,ys.imag)
 
 
 
@@ -348,13 +346,10 @@ def dm_ij_energy(m_in,i=0,j=0,scale=10.,npol=None,ne=500,x=None):
   """Return the correlation function"""
   if npol is None: npol = ne
   mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j,use_fortran=use_fortran)
-  if np.sum(np.abs(mus.imag))>0.001:
-#    print("WARNING, off diagonal has nonzero imaginary elements",np.sum(np.abs(mus.imag)))
-    pass
   if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
   else: xs = x/scale # use from input
-  ysr = generate_profile(mus.real,xs,kernel="jackson",use_fortran=use_fortran)/scale*np.pi # so it is the Green function
-  ysi = generate_profile(mus.imag,xs,kernel="jackson",use_fortran=use_fortran)/scale*np.pi # so it is the Green function
+  ysr = generate_profile(mus.real,xs,kernel="jackson")/scale*np.pi # so it is the Green function
+  ysi = generate_profile(mus.imag,xs,kernel="jackson")/scale*np.pi # so it is the Green function
   ys = ysr - 1j*ysi
   return (scale*xs,ys)
 
