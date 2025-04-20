@@ -5,13 +5,6 @@ from numba import jit
 from . import algebra
 
 
-try:
-    from . import chif90
-    use_fortran = True
-except:
-    use_fortran = False
-#    print("Error, chif90 not found")
-
 use_fortran = False
 
 
@@ -24,9 +17,6 @@ def chargechi(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
     ws = np.transpose(ws)
     if i<0: raise
     if j<0: raise
-#    if use_fortran:
-#      return es,chif90.elementchi(ws,esh,ws,esh,es,i+1,j+1,temp,delta)
-#    else:
     out = 0*es + 0j # initialize
     return es,elementchi(ws,esh,ws,esh,es,i,j,temp,delta,out)
 
@@ -44,18 +34,6 @@ def elementchi(ws1,es1,ws2,es2,omegas,ii,jj,T,delta,out):
           fac *= oi - oj # occupation factor
           out = out + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
     return out
-
-def chargechi_nowf(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
-    """Compute charge response function"""
-    if h.dimensionality!=0: raise
-    hk = h.get_hk_gen() # get generator
-    m = hk(0) # get Hamiltonian
-    esh,ws = algebra.eigh(m)
-    ws = np.transpose(ws)*0. + 1.
-    if i<0: raise
-    if j<0: raise
-    return es,chif90.elementchi(ws,esh,ws,esh,es,i+1,j+1,temp,delta)
-
 
 
 
@@ -77,16 +55,6 @@ def chargechi_row(h,i=0,es=np.linspace(-3.0,3.0,100),delta=1e-6,temp=1e-7):
 
 
 
-def chargechi_nowf(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
-    """Compute charge response function"""
-    if h.dimensionality!=0: raise
-    hk = h.get_hk_gen() # get generator
-    m = hk(0) # get Hamiltonian
-    esh,ws = algebra.eigh(m)
-    ws = np.transpose(ws)*0. + 1.
-    if i<0: raise
-    if j<0: raise
-    return es,chif90.elementchi(ws,esh,ws,esh,es,i+1,j+1,temp,delta)
 
 
 
@@ -119,7 +87,18 @@ def chargechi_reciprocal(h,i=None,
 
 
 
-def chiAB(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
+def chiAB(h,q=None,nk=60,**kwargs):
+    """Return the generalized response"""
+    if q is not None: # q point is provided
+        return chiAB_q(h,q=q,nk=nk,**kwargs)
+    else:
+        raise # not finished
+        qs = h.geometry.get_kmesh(nk=nk) # get the kmesh
+        out = np.mean([getk(k) for k in ks],axis=0) # sum over kpoints
+
+
+
+def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                delta=0.1,temp=1e-7,A=None,B=None,projs=None,
                mode="matrix"):
     """Compute AB response function
@@ -200,5 +179,5 @@ from .chitk.static import szchi as static_sz_correlator
 from .chitk.static import sxchi as static_sx_correlator
 from .chitk.static import sychi as static_sy_correlator
 
-
+from .chitk.pmchi import pmchi
 

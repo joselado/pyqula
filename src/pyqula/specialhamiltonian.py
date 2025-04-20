@@ -239,3 +239,4 @@ from .specialhamiltoniantk.topologicalheavyfermion import topological_heavy_ferm
 from .specialhamiltoniantk.TI import QSH3D_film
 
 
+from .specialhamiltoniantk.decorated import decorated_triangular
