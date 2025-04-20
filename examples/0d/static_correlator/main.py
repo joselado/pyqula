@@ -28,12 +28,13 @@ vevs = h.get_several_vev(Pijs) # compute several expectation values
 
 # these lines would be to compute charge-charge correlator
 #from pyqula.chi import static_charge_correlator
-#vevs = [static_charge_correlator(h,i=0,j=j) for j in inds]
+#vevs2 = [static_charge_correlator(h,i=0,j=j).real for j in inds]
 
 
 import matplotlib.pyplot as plt
 
-plt.plot(inds,vevs,marker="o")
+plt.scatter(inds,vevs,c="red",label="VEV")
+#plt.plot(inds,vevs2,c="blue",label="charge-charge")
 plt.xlabel("Site j")
 plt.ylabel("$\\langle C^\\dagger_i C_j \\rangle$")
 plt.show()

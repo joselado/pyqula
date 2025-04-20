@@ -92,9 +92,9 @@ def chiAB(h,q=None,nk=60,**kwargs):
     if q is not None: # q point is provided
         return chiAB_q(h,q=q,nk=nk,**kwargs)
     else:
-        raise # not finished
         qs = h.geometry.get_kmesh(nk=nk) # get the kmesh
-        out = np.mean([getk(k) for k in ks],axis=0) # sum over kpoints
+        out = [chiAB_q(h,q=q,**kwargs) for q in qs] # get all the k kpoints
+        return np.mean(out,axis=0)
 
 
 
