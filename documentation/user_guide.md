@@ -317,6 +317,26 @@ b = h.get_operator("bulk") # bulk operator
 e = h.get_operator("edge") # edge operator
 ```
 
+## Valley operator
+
+For hoenycomb like systems, including aligned and twisted multilayers,
+an operator that allows to extract the valley degree of freedom can be extracted.
+This operator takes the form
+
+$$
+V = i \sum_{\langle \langle ij \rangle\rangle,s} \nu_{ij} \sigma_{ij}  c^\dagger_{r_i,s} c_{r_j,s}
+$$
+
+where $\nu = \pm 1$ and $\sigma = \pm 1$ for clockwise/anticlockwise, sublattice A/B. This
+the so-called anti-Haldane hopping, and takes opposite values in opposite valleys.
+It can can be obtained for honeycomb systems as
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_zigzag_ribbon() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+vall = h.get_operator("valley") # valley operator
+```
 
 ## Nambu operators
 
@@ -702,7 +722,13 @@ Here we provide a discussion of observables related with topological insulators
 
 ### Chern number
 
-The Chern number characterizes two-dimensional topological insulators with broken time reversal symmetry. It can be computed with the following code
+The Chern number characterizes two-dimensional topological insulators with broken time reversal symmetry. It is defined as
+
+$$
+C = \frac{1}{2\pi} \int \Omega (\mathbf k) d^2 \mathbf k
+$$
+
+where $\Omega$ is the Berry curvature. The Chern number can be computed with the following code
 
 ```python
 from pyqula import geometry
@@ -799,6 +825,13 @@ f(\epsilon_n) (1-f(\epsilon_m))
 $$
 
 where $f(\epsilon)$ is the Fermi-Dirac distribution
+
+```python
+from pyqula import geometry
+g = geometry.chain() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+(es,chis) = h.get_chi(q=[0.,0.,0.]) # get response function
+```
 
 ## RKKY response function
 

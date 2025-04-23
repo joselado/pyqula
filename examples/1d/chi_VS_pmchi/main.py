@@ -26,4 +26,5 @@ plt.plot(energies,cfull.real,label="real")
 plt.plot(energies,cfull.imag,label="imag")
 plt.legend()
 
+plt.tight_layout()
 plt.show()

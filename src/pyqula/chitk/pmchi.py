@@ -5,14 +5,13 @@ from scipy.signal import hilbert
 # compute a response function using ultrafast routines, by
 # ignoring matrix elements
 
-def pmchi(h,**kwargs):
-    return pmimchi(h,**kwargs)
-    return omega,1j*np.conjugate(hilbert(out))
 
-def pmimchi(h,energies=np.linspace(-3,3,300),delta=1e-2,**kwargs):
+def pmchi(h,energies=np.linspace(-3,3,300),delta=1e-2,**kwargs):
     """Compute the chi charge-charge response function
     by doing a selfconvolution of the density of states"""
-    (es,dos) = h.get_dos(delta=delta/2.,energies=energies,
+    emax = np.max(np.abs(energies)) # max energy
+    esdos = np.linspace(-emax,emax,10*int(emax/delta)) # energies for DOS
+    (es,dos) = h.get_dos(delta=delta/2.,energies=esdos,
             **kwargs) # compute energies and DOS
     omega,out = chi_from_dos_jit(es,dos,delta=delta,omega=energies)
     return omega,out
