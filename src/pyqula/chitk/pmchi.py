@@ -10,8 +10,9 @@ def pmchi(h,energies=np.linspace(-3,3,300),delta=1e-2,**kwargs):
     """Compute the chi charge-charge response function
     by doing a selfconvolution of the density of states"""
     emax = np.max(np.abs(energies)) # max energy
-    esdos = np.linspace(-emax,emax,10*int(emax/delta)) # energies for DOS
-    (es,dos) = h.get_dos(delta=delta/2.,energies=esdos,
+    de = energies[1] - energies[0]
+    esdos = np.linspace(-emax,emax,10*int(emax/(de))) # energies for DOS
+    (es,dos) = h.get_dos(delta=delta/10.,energies=esdos,
             **kwargs) # compute energies and DOS
     omega,out = chi_from_dos_jit(es,dos,delta=delta,omega=energies)
     return omega,out
