@@ -11,9 +11,12 @@ h = g.get_hamiltonian() # get the Hamiltonian
 fons = lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100 # onsite in the impurity
 h.add_onsite(fons) # add onsite energy
 kpath = np.array(g.get_kpath(nk=200))*n # enlarged k-path
-h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded bands
+(x,y,z) = h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded bands
 
+import matplotlib.pyplot as plt
 
+plt.scatter(x,y,c=z,cmap="inferno")
+plt.show()
 
 #h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),
 #        delta=0.1,nsuper=n,operator="unfold")
