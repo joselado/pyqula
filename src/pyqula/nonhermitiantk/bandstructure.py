@@ -57,14 +57,14 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
             else: waw = braket_wAw(w,A).real # calculate expectation value
             return waw # return the result
         for (e,w) in zip(es,ws):  # loop over waves
-          if callable(ewindow):
-              if not ewindow(e): continue # skip iteration
-          if isinstance(operator, (list,)): # input is a list
-              waws = [evaluate(w,k,A) for A in operator]
-          else: waws = [evaluate(w,k,operator)]
-          oi = [k,e] # create list
-          for waw in waws:  oi.append(waw) # add this one
-          out.append(oi) # store
+            if callable(ewindow):
+                if not ewindow(e): continue # skip iteration
+            if isinstance(operator, (list,)): # input is a list
+                waws = [evaluate(w,k,A) for A in operator]
+            else: waws = [evaluate(w,k,operator)]
+            oi = [k,e] # create list
+            for waw in waws:  oi.append(waw) # add this one
+            out.append(oi) # store
         # callback function in each iteration
         if callback is not None: callback(k,es,ws) # call the function
       return out # return string
