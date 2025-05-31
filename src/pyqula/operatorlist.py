@@ -5,7 +5,10 @@ def get_operator(self,name,**kwargs):
       """Return the conventional operator"""
       from . import operators
       from . import potentials
+      from .hamiltonians import Hamiltonian
       if type(name) is operators.Operator: return name # return operator
+      if type(name) is Hamiltonian: # if input is an operator 
+          return operators.Operator(name) # return operator
       if type(name) is potentials.Potential or callable(name): 
           out = self.copy()*0. # initialize
           out.add_onsite(name) # add onsite
