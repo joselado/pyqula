@@ -19,6 +19,8 @@ def get_operator(self,name,**kwargs):
           return operators.get_berry(self,**kwargs)
       elif name=="site": 
           return operators.get_site(self,**kwargs)
+      elif name=="angularmomenta": 
+          return operators.get_angular_momenta(self,**kwargs)
       elif name=="correlator": 
           return operators.get_correlator_ij(self,**kwargs)
       elif name=="valleyberry": 
