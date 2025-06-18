@@ -3,6 +3,7 @@ import scipy.linalg as lg
 from . import parallel
 from numba import jit
 from . import algebra
+from .operators import Operator
 
 
 use_fortran = False
@@ -94,7 +95,7 @@ def chiAB(h,q=None,nk=60,**kwargs):
     else:
         qs = h.geometry.get_kmesh(nk=nk) # get the kmesh
         out = [chiAB_q(h,q=q,**kwargs) for q in qs] # get all the k kpoints
-        return np.mean(out,axis=0)
+        return out[0][0],np.mean([o[1] for o in out],axis=0)
 
 
 
@@ -114,6 +115,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     if A is None or B is None:
         A = np.identity(h.intra.shape[0],dtype=np.complex128)
         B = A # initial operator
+    if type(A)==Operator: A = algebra.todense(A.get_matrix())
+    if type(B)==Operator: B = algebra.todense(B.get_matrix())
     # generate the projectors
     if projs is None:
         from . import operators
@@ -137,7 +140,7 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         else: raise # not implemented
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     out = np.mean([getk(k) for k in ks],axis=0) # sum over kpoints
-    return out
+    return energies,out
 
 
 def chiAB_trace(h,**kwargs):
