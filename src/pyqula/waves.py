@@ -11,13 +11,13 @@ def get_waves(m,non_hermitian=False,**kwargs):
 
 
 
-def get_waves_hermitian(intra,num_bands=None,**kwargs):
+def get_waves_hermitian(intra,num_bands=None,e0=0.,**kwargs):
     """Return eigenvalues and eigenvectors"""
     if num_bands is None:
         eig,eigvec = algebra.eigh(intra)
         eigvec = eigvec.T # transpose
     else:
-        eig,eigvec = algebra.smalleig(intra,numw=num_bands,evecs=True)
+        eig,eigvec = algebra.smalleig(intra,numw=num_bands,e0=e0,evecs=True)
     return eig,eigvec
 
 
