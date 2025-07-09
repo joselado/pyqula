@@ -222,13 +222,13 @@ def matrix2vector(v):
 
 
 
-def smalleig(m,numw=10,evecs=False,tol=arpack_tol):
+def smalleig(m,numw=10,evecs=False,e0=0.,tol=arpack_tol):
     """
     Return the smallest eigenvalues using arpack
     """
     m = csc_matrix(m) # sparse matrix
     try:
-        eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=0.0,
+        eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=e0,
                                         tol=tol)
         if evecs:  return eig,eigvec.transpose()  # return eigenvectors
         else:  return eig  # return eigenvalues

@@ -12,10 +12,11 @@ def ldos_diagonalization(m,e=0.0,**kwargs):
 
 
 def ldos_waves(intra,es = [0.0],delta=0.01,operator=None,
-        num_bands=None,k=None,delta_discard=None,**kwargs):
+        k=None,delta_discard=None,**kwargs):
   """Calculate the DOS in a set of energies by full diagonalization"""
   es = np.array(es) # array with energies
-  eig,eigvec = get_waves(intra,**kwargs) # eigenvalues and eigenvectors
+  emean = np.mean(es) # average energy
+  eig,eigvec = get_waves(intra,e0=emean,**kwargs) # eigenvalues and eigenvectors
   ds = [] # empty list
   if operator is None: weights = eig.real*0. + 1.0 # initialize as 1
   else: weights = [operator.braket(v,k=k) for v in eigvec] # weights
