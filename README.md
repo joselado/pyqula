@@ -26,13 +26,13 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 # Tutorials #
 Jupyter notebooks with tutorials can be found in the links below
 
-From the ["Solid State Physics course at Aalto University 2024"](https://github.com/joselado/SolidStatePhysics2024)
-- [Electronic structure theory](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session3.ipynb)
-- [Topological band structure theory](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session4.ipynb)
-- [The Quantum Hall state](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session5.ipynb)
-- [Superconductivity, Nambu representation and Majorana physics](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session6.ipynb)
-- [Magnetism, magnons, quantum magnetism and spinons](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session7.ipynb)
-- [Excitations and defects in quantum materials](https://github.com/joselado/SolidStatePhysics2024/blob/main/notebooks/session8.ipynb)
+From the ["Advanced Quantum Materials course at Aalto University 2025"](https://github.com/joselado/Advanced_Quantum_Materials_2025)
+- [Electronic structure theory](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session3.ipynb)
+- [Topological band structure theory](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session4.ipynb)
+- [The Quantum Hall state](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session5.ipynb)
+- [Superconductivity and Majorana physics](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session6.ipynb)
+- [Interactions and magnetism](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session7.ipynb)
+- [Excitations and defects in quantum materials](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session8.ipynb)
 
 
 From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_summer_school_2022) 
