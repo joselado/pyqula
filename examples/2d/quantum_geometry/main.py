@@ -5,11 +5,10 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 from pyqula import geometry
 from pyqula import topology
 from pyqula import dos
-g = geometry.kagome_lattice()
+g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian()
-h.add_exchange([0.,0.,0.6])
-h.add_rashba(0.6)
-h.set_filling(1./3.,nk=10) # Fermi energy in the flat band
+h.add_haldane(0.1)
+h.shift_fermi(0.9)
 
 # compute Berry curvature and quantum geometry
 from pyqula.topologytk import quantumgeometry
