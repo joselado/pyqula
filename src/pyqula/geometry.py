@@ -754,6 +754,7 @@ def kagome_lattice(n=1):
   if n>1: return supercelltk.target_angle(g,angle=1./3.,volume=int(n),
           same_length=True) 
   g.update_reciprocal()
+  g.get_fractional()
   return g
 
 

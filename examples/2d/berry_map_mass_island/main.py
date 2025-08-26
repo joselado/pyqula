@@ -24,7 +24,9 @@ def fm(r):
 h.add_sublattice_imbalance(fm)
 #h.add_haldane(lambda r1,r2: fm((r1+r2)/2))
 from pyqula import parallel
-topology.berry_green_map(h,k=[0.,0.,0.0],nrep=3,
+
+# spatially resolved Berry curvature
+topology.Omega_rmap(h,k=[0.,0.,0.0],nrep=3,
         integral=True,eps=1e-4,delta=1e-2,operator="valley")
 
 
