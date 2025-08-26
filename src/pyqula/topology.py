@@ -16,10 +16,15 @@ arpack_tol = algebra.arpack_tol
 arpack_maxiter = algebra.arpack_maxiter
 
 
-def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=600,
+
+
+
+def get_berry_curvature_path(h,kpath=None,dk=0.01,
+      window=None,max_waves=None,nk=600,
       mode="Wilson",delta=0.001,reciprocal=False,operator=None,
       silent = True):
-    """Calculate and write in file the Berry curvature"""
+    """Calculate and write in file the Berry curvature
+    in a certain kpath"""
     operator = get_operator(h,operator)
     kpath = klist.get_kpath(h.geometry,kpath=kpath,nk=nk) # take default kpath
     tr = timing.Testimator("BERRY CURVATURE",silent=silent)
@@ -49,8 +54,8 @@ def write_berry(h,kpath=None,dk=0.01,window=None,max_waves=None,nk=600,
     return np.array(range(len(m[0]))),m[2]
 
 
-
-
+# alias for compatibility
+write_berry = get_berry_curvature_path
 
 
 
@@ -456,11 +461,12 @@ from .topologytk.green import berry_operator
 
 
 
-def berry_green_map_kpoint(h,emin=None,k=[0.,0.,0.],
+def berry_green_rmap_kpoint(h,emin=None,k=[0.,0.,0.],
         ne=100,dk=0.0001,operator=None,integral_mode="complex",
                   delta=0.002,integral=True,eps=1e-1,
                   energy=0.0,emax=0.0):
-  """Return the Berry curvature map at a certain kpoint"""
+  """Return the Berry curvature map at a certain kpoint. This function
+  allows to compute both dOmega/dE, and Omega"""
   f = h.get_gk_gen(delta=delta,canonical_phase=True) # green function generator
   fgreen = berry_green_generator(f,k=k,dk=dk,operator=operator,full=True) 
   # No minimum energy provided
@@ -496,16 +502,17 @@ def spatial_berry_density(h,**kwargs):
 
 
 
-def berry_green_map(h,nrep=5,k=[0.,0.,0.],operator=None,nk=None,**kwargs):
+def Omega_rmap(h,nrep=5,k=[0.,0.,0.],operator=None,nk=None,**kwargs):
   """
-  Write the Berry curvature of a kpoint in a file
+  Write the spatial resolved Berry curvature of a kpoint in a file.
+  If nk is provided, it does a sum over reciprocal space
   """
   if operator is not None: # this is a dirty workaround
     if type(operator) is str:
       operator = h.get_operator(operator) 
     else: pass
   if nk is None: # kpoint given
-    out = berry_green_map_kpoint(h,k=k,operator=operator,**kwargs) 
+    out = berry_green_rmap_kpoint(h,k=k,operator=operator,**kwargs) 
   else: # kpoint not given
     if operator is not None: 
         from . import gauge
@@ -514,32 +521,29 @@ def berry_green_map(h,nrep=5,k=[0.,0.,0.],operator=None,nk=None,**kwargs):
     ks = klist.kmesh(h.dimensionality,nk=nk) # kpoints
     def f(ki):
         print("kpoint",ki)
-        return berry_green_map_kpoint(h,k=ki,operator=operator,**kwargs)
+        return berry_green_rmap_kpoint(h,k=ki,operator=operator,**kwargs)
     out = parallel.pcall(f,ks) # compute all
     out = np.mean(out,axis=0) # resum
   from . import geometry
   from .ldos import spatial_dos
   # write in a file
   geometry.write_profile(h.geometry,
-          spatial_dos(h,out),name="BERRY_MAP.OUT",nrep=nrep)
+          spatial_dos(h,out),name="BERRY_RMAP.OUT",nrep=nrep)
   return out
 
 
 
-def berry_density(h,k=[0.,0.,0.],operator=None,delta=0.02,dk=0.02):
-  """Compute the Berry density"""
-  f = h.get_gk_gen(delta=delta,canonical_phase=True) # green function generator
-  fgreen = berry_green_generator(f,k=k,dk=dk,operator=operator,full=False) 
-  return fgreen(0.0).real
+# alias for compatibility
+from .topologytk.green import dOmega_dE
 
 
-def berry_density_map(h,nk=40,reciprocal=True,nsuper=1,
+def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
                delta=None,operator=None,dk=0.01):
-  """Compute a Berry density map"""
+  """Compute a Berry density map Omega/dE (k) at a fixed energy"""
   if delta is None: delta = 5./nk
   if reciprocal: R = h.geometry.get_k2K()
   else: R = np.matrix(np.identity(3))
-  fo = open("BERRY_DENSITY_MAP.OUT","w") # open file
+  fo = open("BERRY_DENSITY_KMAP.OUT","w") # open file
   nt = nk*nk # total number of points
   ik = 0
   ks = [] # list with kpoints
@@ -552,7 +556,7 @@ def berry_density_map(h,nk=40,reciprocal=True,nsuper=1,
       else: print("Doing",ki)
       r = np.matrix(ki).T # real space vectors
       k = np.array((R*r).T)[0] # change of basis
-      b = berry_density(h,k=k,operator=operator,dk=dk) # get the density
+      b = dOmega_dE(h,k=k,operator=operator,dk=dk) # get the density
       return b
   bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
   for (b,k) in zip(bs,ks): # write everything
@@ -563,6 +567,7 @@ def berry_density_map(h,nk=40,reciprocal=True,nsuper=1,
 
 
 def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
+        write=False,
         es=np.linspace(-1.0,1.0,40)):
   """Compute the Chern density as a function of the energy"""
   ks = klist.kmesh(h.dimensionality,nk=nk)
@@ -575,14 +580,16 @@ def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
     else: print(k)
 #    k = np.random.random(3)
     fgreen = berry_green_generator(f,k=k,dk=dk,operator=operator,full=False) 
-    return np.array([fgreen(e).real for e in es])
+    return np.array([fgreen(e).real for e in es]) # dOmega/dE at all energies
   out = parallel.pcall(fp,ks) # compute everything
   for o in out: cs += o # add contributions
   cs = cs/(len(ks)*np.pi*2) # normalize
   from scipy.integrate import cumtrapz
   csi = cumtrapz(cs,x=es,initial=0) # integrate
-  np.savetxt("CHERN_DENSITY.OUT",np.matrix([es,cs]).T)
-  np.savetxt("CHERN_DENSITY_INTEGRATED.OUT",np.matrix([es,csi]).T)
+  if write:
+      np.savetxt("CHERN_DENSITY.OUT",np.matrix([es,cs]).T)
+      np.savetxt("CHERN_DENSITY_INTEGRATED.OUT",np.matrix([es,csi]).T)
+  return (es,cs,csi)
 
 
 

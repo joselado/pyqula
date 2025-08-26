@@ -30,7 +30,8 @@ def berry_green_generator(f,k=[0.,0.,0.],dk=1e-4,operator=None,
 
 
 def berry_green(f,emin=-10.0,k=[0.,0.,0.],ne=100,dk=1e-4,operator=None):
-  """Return the Berry curvature using Green functions"""
+  """Return the Berry curvature using Green functions. This function
+  integrated the Green's function expression using complex integration"""
   import scipy.integrate as integrate
   fint = berry_green_generator(f,k=k,dk=dk,operator=operator)
   es = np.linspace(emin,0.,ne) # energies used for the integration
@@ -104,4 +105,25 @@ def berry_green_generator_sparse(f,k=[0.,0.,0.],
     omega = -(gxp-gxm)@gI0@(gyp-gym) + (gyp-gym)@gI0@(gxp-gxm)
     return omega/(4.*dk*dk*2.*np.pi) # return the full matrix
   return fint # return the function
+
+
+
+
+def dOmega_dE_generator(h,operator=None,delta=0.02,dk=0.02):
+  """Return a function that generates
+  dOmega/dE (k,E), the derivative of the Berry curvature
+  with respect to the chamical potential"""
+  gf = h.get_gk_gen(delta=delta,canonical_phase=True) # green function generator
+  # Return dOmega/dE
+  def f(k=[0.,0.,0.],e=0.):
+      fgreen = berry_green_generator(gf,k=k,dk=dk,operator=operator,full=False)
+      return fgreen(e).real # return the generator
+  return f
+
+
+def dOmega_dE(h,k=[0.,0.,0.],e=0.,**kwargs):
+  """Compute dOmega/dE (k,E), the derivative of the Berry curvature
+  with respect to the chamical potential"""
+  return dOmega_dE_generator(h,**kwargs)(k=k,e=e)
+
 

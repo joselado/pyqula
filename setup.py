@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="pyqula",
-    version="0.0.84",
+    version="0.0.85",
     author="Jose Lado",
     author_email="joselado@aalto.fi",
     description="Python library for quantum lattice tight binding models",
@@ -17,7 +17,6 @@ setuptools.setup(
     },
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
     package_dir={"": "src"},
