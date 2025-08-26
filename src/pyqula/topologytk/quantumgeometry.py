@@ -19,9 +19,10 @@ def get_QG(h,delta=1e-1,**kwargs):
     accupied states"""
     es,qge,bes = get_QG_dE(h,delta=delta,**kwargs) # return dQG/dE and dOmega/dE
     dE = es[1]-es[0] # dE
-    weight = (1.-np.tanh(es/delta))/2. # weight function
-    qgew = qge*weight # below fermi with a smearing
-    besw = bes*weight # below fermi with a smearing
+    weight1 = (1.-np.tanh(es/delta))/2. # weight function (soft step)
+    weight2 = delta/(es**2 + delta**2)*1./np.pi # weight function (soft delta)
+    qgew = qge*weight2 # at fermi with a smearing
+    besw = bes*weight1 # below fermi with a smearing
     return np.trapz(qgew,dx=dE), np.trapz(besw,dx=dE) # return the integral
 
 
