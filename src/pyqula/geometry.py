@@ -574,9 +574,23 @@ def triangular_lattice_tripartite():
   """
   Creates a triangular lattice with three sites per unit cell
   """
-  g = triangular_lattice()
-  return supercelltk.target_angle_volume(g,angle=1./3.,volume=3,
-          same_length=True)
+  rs = [] # empty list
+  rs.append([0.,0.,0.]) # first position
+  rs.append([1.,0.,0.]) # second position
+  rs.append([1./2.,np.sqrt(3.)/2.,0.]) # third position
+  rs = np.array(rs)
+  g = Geometry() # create geometry
+  g.r = np.array(rs) # store array
+  g.r2xyz() # tranform
+  g.has_sublattice = False # has sublattice index
+  g.a1 = np.array(rs[1]+rs[2])
+  g.a2 = np.array(-rs[1]+2*rs[2])
+  g.dimensionality = 2 # two dimensional system
+  g.get_fractional() # update reciprocal lattice vectors
+  return g
+#  g = triangular_lattice()
+#  return supercelltk.target_angle_volume(g,angle=1./3.,volume=3,
+#          same_length=True)
 
 
 
