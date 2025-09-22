@@ -3,7 +3,7 @@
 import numpy as np
 import scipy.linalg as lg
 from . import geometry
-
+from numba import jit
 
 def get_klist(g,ns,nk=100):
     """Return a klist from a list of names"""
@@ -348,6 +348,22 @@ def get_kpath(g,kpath=None,**kwargs):
         return np.array(get_kpath_labels(g,kpath,**kwargs))
     else: return np.array(kpath) # assume is a valid list of vectors
 
+
+@jit(nopython=True)
+def kgrid2d(kxs,kys):
+    """Return a list of kvector that create a grid over the inputs"""
+    nx = len(kxs)
+    ny = len(kys)
+    out = np.zeros((nx*ny,3),dtype=float) # create array
+    iz = 0 # initialize
+    for ix in range(nx):
+        x = kxs[ix] # x coordinate
+        for iy in range(ny):
+            y = kys[iy] # x coordinate
+            out[iz,0] = x # store
+            out[iz,1] = y # store
+            iz += 1 # increase counter
+    return out
 
 
 
