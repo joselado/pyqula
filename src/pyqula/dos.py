@@ -13,6 +13,7 @@ from numba import jit
 from .klist import kmesh
 
 def calculate_dos(es,xs,d,w=None):
+    """COmpute DOS, es are the eigenenergies, xs, the frequency grid"""
     if w is None: w = np.zeros(len(es)) + 1.0 # initialize
     else: w = w.real # make it real just in case
     es = np.array(es)
