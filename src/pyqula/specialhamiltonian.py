@@ -129,6 +129,7 @@ def TMDC_MX2(soc=0.0,cdw=0.0,g=None,tij=[1.0],
         h.geometry.write_profile(f)
         h.add_onsite(f)
     h.set_filling(.5)
+    h.turn_dense() # dense Hamiltonian
 #    h = h.supercell(4)
 #    m = np.array(h.intra.todense()).reshape(h.intra.shape[0]**2)
     return h

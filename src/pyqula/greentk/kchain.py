@@ -2,7 +2,7 @@ from .rg import green_renormalization
 from .. import algebra
 
 def green_kchain_NN(h,k=0.,energy=0.,delta=0.01,only_bulk=True,
-                    error=0.0001,hs=None,**kwargs):
+                    error=1e-4,hs=None,**kwargs):
     """ Calculates the green function of a kdependent chain for a 2d system """
     def gr(ons,hop):
       """ Calculates GF by renormalization"""

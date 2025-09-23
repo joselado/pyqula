@@ -100,45 +100,52 @@ def generate_get_tij(h):
     return fun
 
 def hk_gen(h):
-  """Generate a k dependent hamiltonian"""
-  if not h.is_multicell:
-      h = h.get_multicell()
-  # get the non zero hoppings
-  hopping = [] # empty list
-  for t in h.hopping: # loop
-    if h.is_sparse:
-      if np.sum(np.abs(coo_matrix(t.m).data))>1e-7: hopping.append(t) # store this hopping
-    else:
-      if np.sum(np.abs(t.m))>1e-7: hopping.append(t) # store this hopping
-  if h.dimensionality == 0: return lambda k: h.intra
-  elif h.dimensionality == 1: # one dimensional
-    def hk(k):
-      """k dependent hamiltonian, k goes from 0 to 1"""
-      mout = h.intra.copy() # intracell term
-      for t in hopping: # loop over matrices
-        tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
-        mout = mout + tk 
-      return mout
-    return hk  # return the function
-  elif h.dimensionality == 2: # two dimensional
-    def hk(k):
-      """k dependent hamiltonian, k goes from 0 to 1"""
-      mout = h.intra.copy() # intracell term
-      for t in hopping: # loop over matrices
-        tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
-        mout = mout + tk 
-      return mout
-    return hk  # return the function
-  elif h.dimensionality == 3: # three dimensional
-    def hk(k):
-      """k dependent hamiltonian, k goes from 0 to 1"""
-      mout = h.intra.copy() # intracell term
-      for t in h.hopping: # loop over matrices
-        tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
-        mout = mout + tk 
-      return mout
-    return hk  # return the function
-  else: raise
+    """Generate a k dependent hamiltonian"""
+    if not h.is_multicell:
+        h = h.get_multicell()
+    # get the non zero hoppings
+    hopping = [] # empty list
+    for t in h.hopping: # loop
+      if h.is_sparse:
+        if np.sum(np.abs(coo_matrix(t.m).data))>1e-7: hopping.append(t) # store this hopping
+      else:
+        if np.sum(np.abs(t.m))>1e-7: hopping.append(t) # store this hopping
+    ## dense Hamiltonians, accelerated function ##
+    if not h.is_sparse: # for dense Hamiltonians
+        from .htk.bloch import bloch_hamiltonian_generator_dense
+        return bloch_hamiltonian_generator_dense(h,hopping)
+    ## sparse Hamiltonians, explicit function ##
+    else: # sparse Hamiltonians
+        if h.dimensionality == 0: 
+            return lambda k: h.intra
+        elif h.dimensionality == 1: # one dimensional
+          def hk(k):
+            """k dependent hamiltonian, k goes from 0 to 1"""
+            mout = h.intra.copy() # intracell term
+            for t in hopping: # loop over matrices
+              tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
+              mout = mout + tk 
+            return mout
+          return hk  # return the function
+        elif h.dimensionality == 2: # two dimensional
+          def hk(k):
+            """k dependent hamiltonian, k goes from 0 to 1"""
+            mout = h.intra.copy() # intracell term
+            for t in hopping: # loop over matrices
+              tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
+              mout = mout + tk 
+            return mout
+          return hk  # return the function
+        elif h.dimensionality == 3: # three dimensional
+          def hk(k):
+            """k dependent hamiltonian, k goes from 0 to 1"""
+            mout = h.intra.copy() # intracell term
+            for t in h.hopping: # loop over matrices
+              tk = t.m * h.geometry.bloch_phase(t.dir,k) # k hopping
+              mout = mout + tk 
+            return mout
+          return hk  # return the function
+        else: raise
 
 
 

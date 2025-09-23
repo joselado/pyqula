@@ -83,7 +83,7 @@ def fermi_surface_generator(h,
     kdos = np.zeros((len(rs),len(energies))) # initialize
     if parallel.cores==1: # serial execution
         for ir in range(len(rs)): # loop
-          if info: print("Doing",r)
+          if info: print("Doing",rs[ir])
           kdos[ir,:] = getf(rs[ir]) # store in the list
     else: # parallel execution
         kdos = parallel.pcall(getf,rs) # compute all
