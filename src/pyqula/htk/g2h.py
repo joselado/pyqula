@@ -33,24 +33,30 @@ def get_hamiltonian(self,tij=None,has_spin=True,
     h.has_spin = has_spin
     h.is_multicell = is_multicell
     if is_multicell:  # workaround for multicell hamiltonians
-      from ..multicell import parametric_hopping_hamiltonian
-      if mgenerator is not None: # if mgenerator is given
-          from ..multicell import parametric_matrix # not implemented
-          h = parametric_matrix(h,fm=mgenerator,cutoff=nc,**kwargs)
-      else: h = parametric_hopping_hamiltonian(h,fc=tij,**kwargs) # add hopping
-      return h
-    if tij is None and mgenerator is None: # no function given
-      h.first_neighbors()  # create first neighbor hopping
-    else: # function or mgenerator given
-      if h.dimensionality<3:
-        from ..hamiltonians import generate_parametric_hopping
-        h = generate_parametric_hopping(h,f=tij,
-                  spinful_generator=spinful_generator,
-                  mgenerator=mgenerator) # add hopping
-      elif h.dimensionality==3:
-        if mgenerator is not None: raise # not implemented
         from ..multicell import parametric_hopping_hamiltonian
-        h = parametric_hopping_hamiltonian(h,fc=tij,**kwargs) # add hopping
-    if not is_sparse: h.turn_dense() # dense Hamiltonian
+        if mgenerator is not None: # if mgenerator is given
+            from ..multicell import parametric_matrix # not implemented
+            h = parametric_matrix(h,fm=mgenerator,cutoff=nc,**kwargs)
+        else: 
+            h = parametric_hopping_hamiltonian(h,fc=tij,**kwargs) # add hopping
+#        return h
+    else: # non multicell
+        if tij is None and mgenerator is None: # no function given
+          h.first_neighbors()  # create first neighbor hopping
+        else: # function or mgenerator given
+          if h.dimensionality<3:
+            from ..hamiltonians import generate_parametric_hopping
+            h = generate_parametric_hopping(h,f=tij,
+                      spinful_generator=spinful_generator,
+                      mgenerator=mgenerator) # add hopping
+          elif h.dimensionality==3:
+            if mgenerator is not None: raise # not implemented
+            from ..multicell import parametric_hopping_hamiltonian
+            h = parametric_hopping_hamiltonian(h,fc=tij,**kwargs) # add hopping
+    # ensure right sparsity structure
+    if not is_sparse: 
+        h.turn_dense() # dense Hamiltonian
+    else:
+        h.turn_sparse() # sparse Hamiltonian
     return h # return the object
 

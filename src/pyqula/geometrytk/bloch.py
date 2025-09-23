@@ -25,3 +25,7 @@ def bloch_phase(self,d,k):
 
 
 
+
+
+
+
