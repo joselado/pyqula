@@ -51,11 +51,13 @@ class Embedding():
         return get_dm(self,**kwargs)
     def get_ldos(self,**kwargs):
         return get_ldos(self,**kwargs)
-    def ldos(self,**kwargs): return self.get_ldos(**kwargs)
-    def dos(self,**kwargs):
-        (x,y,d) = self.ldos(**kwargs)
+    def ldos(self,**kwargs): 
+        return self.get_ldos(**kwargs)
+    def get_dos(self,**kwargs):
+        (x,y,d) = self.get_ldos(**kwargs)
         return np.sum(d) # sum the DOS
-    def get_dos(self,**kwargs): return self.dos(**kwargs)
+    def dos(self,**kwargs): 
+        return self.get_dos(**kwargs)
     def multidos(self,es=np.linspace(-1.0,1.0,30),
                    energies=None,**kwargs):
         if energies is not None: es = energies # overwrite
