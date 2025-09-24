@@ -19,3 +19,16 @@ def modify_hamiltonian_matrices(self,f0,use_geometry=False):
         self.hopping[i].m = f(self.hopping[i].m,self.hopping[i].dir) 
     else: # conventional way, now disabled
       raise
+
+
+from .. import algebra
+
+def get_dense(self):
+    """ Transforms the hamiltonian into a sparse hamiltonian"""
+    def f(m):
+        return algebra.todense(m)
+    h = self.copy() # make a copy
+    h.modify_hamiltonian_matrices(f) # modify the matrices
+    h.is_sparse = False # sparse flag to true
+    if not self.is_multicell:  h = h.get_no_multicell() # no mult mode
+    return h

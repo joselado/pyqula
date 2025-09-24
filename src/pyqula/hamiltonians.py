@@ -446,6 +446,9 @@ class Hamiltonian():
             return algebra.todense(m)
         self.modify_hamiltonian_matrices(f) # modify the matrices
         self.is_sparse = False # sparse flag to true
+    def get_dense(self):
+        from .htk.modify import get_dense
+        return get_dense(self)
     def add_rashba(self,c):
         """Adds Rashba coupling"""
         from . import rashba
