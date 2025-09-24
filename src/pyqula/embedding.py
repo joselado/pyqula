@@ -168,14 +168,57 @@ def onsite_defective_central(h,m,nsuper):
     return onsite_supercell(h,nsuper,mc=m)
 
 
-def onsite_supercell(h,nsuper,mc=None):
+
+def onsite_supercell_multicell(h,nsuper,mc=None):
+    """Compute the onsite matrix of a supercell, with a defect mc"""
+    hs = h.get_supercell(nsuper) # get a supercell of the Hamiltonian
+    # new lets replace the onsite matrix of the defective cell
+    ni = h.intra.shape[0] # dimension of minimal cell
+    nis = hs.intra.shape[0] # dimension of supercell
+    if mc is None: return hs.intra
+    ### setup the central (defective) cell
+    if h.dimensionality==1: n = nsuper # number of unit cells
+    elif h.dimensionality==2: n = nsuper**2 # number of unit cells
+    else: raise
+    if h.dimensionality==1:
+        ic=int(n//2) # central site
+    elif h.dimensionality==2:
+        if nsuper%2==1: # odd supercell
+            ic=int(n//2)
+        else: # even supercell
+            ic=int(n//2) # central
+            ic = ic - int(nsuper//2)
+    ii = ic*ni # first index
+    jj = (ic+1)*ni # last index
+    hs.intra[ii:jj,ii:jj] = mc[:,:] # replace
+    return hs.intra # return intracell
+
+# redefine
+def onsite_supercell(h0,nsuper,**kwargs):
+    """Generic function for supercell"""
+    try: # try to use the non multicell method
+        h = h0.get_no_multicell()
+        multicell_mode = False
+    except: # if not possible, try the multicell one (not well tested yet)
+        h = h0.copy()
+        multicell_mode = True
+    if multicell_mode:
+        print("WARNING, Multicell function in onsite_supercell")
+        return onsite_supercell_multicell(h,nsuper,**kwargs)
+    else:
+        return onsite_supercell_no_multicell(h,nsuper,**kwargs)
+
+
+
+def onsite_supercell_no_multicell(h,nsuper,mc=None):
+    """Compute the onsite matrix of a supercell, with a defect mc"""
     if nsuper==1: 
         if mc is None: return h.intra # pristine
         else: return mc # defective
     if h.is_multicell: # try to make it multicell 
         from .htk.kchain import detect_longest_hopping
         if detect_longest_hopping(h)>1:
-            print("This requires short-range hopping, stopping")
+            print("This function requires short-range hopping, stopping")
             raise # up to NN
         h = h.get_no_multicell() # redefine
     from .checkclass import is_iterable

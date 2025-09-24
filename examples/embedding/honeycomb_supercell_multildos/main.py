@@ -14,7 +14,7 @@ h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian,spinless
 #h.shift_fermi(2.0)
 vintra = h.intra.copy() ; vintra[0,0] = 1000.0
 from pyqula import parallel
-parallel.cores = 7
+#parallel.cores = 7
 eb = embedding.Embedding(h,m=vintra)
 eb.multildos(nsuper=7,es=np.linspace(-2.,2.,100),delta=1e-1)
 
