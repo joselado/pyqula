@@ -4,7 +4,7 @@ import numpy as np
 def eigenvalues(h,nk):
     """Return all the eigenvalues of a Hamiltonian"""
     import klist
-    h.turn_dense()
+    h = h.get_dense()
     ks = klist.kmesh(h.dimensionality,nk=nk) # get grid
     hkgen = h.get_hk_gen() # get generator
     e0 = 0.0

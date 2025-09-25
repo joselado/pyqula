@@ -24,7 +24,7 @@ def eigenvalues(h0,nk=10,notime=True):
     """Return all the eigenvalues of a Hamiltonian"""
     from . import klist
     h = h0.copy() # copy hamiltonian
-    h.turn_dense()
+    h = h.get_dense()
     ks = klist.kmesh(h.dimensionality,nk=nk) # get grid
     hkgen = h.get_hk_gen() # get generator
     if parallel.cores==1:

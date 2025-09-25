@@ -83,7 +83,8 @@ class Embedding():
     # dummy methods for compatibility
     def turn_multicell(self): pass
     def get_multicell(self): return self
-    def turn_dense(self): pass
+#    def turn_dense(self): pass
+    def get_dense(self): return self
     def get_dict(self): return self.H.get_dict()
     def shift_fermi(self,mu): self.H.shift_fermi(mu)
     def get_total_energy(self,**kwargs): return 0.0

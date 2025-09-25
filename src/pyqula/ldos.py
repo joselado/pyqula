@@ -266,7 +266,7 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
       from . import green
       if h.dimensionality!=2: raise # only for 2d
       h = h.copy()
-      h.turn_dense()
+      h = h.get_dense()
       if nk is not None:
         print("LDOS using normal integration with nkpoints",nk)
         gb,gs = green.bloch_selfenergy(h,energy=e,delta=delta,mode="full",nk=nk)

@@ -138,7 +138,7 @@ def hopping_spinless(m,cutoff=0.001):
 def extract_from_hamiltonian(self,name,**kwargs):
     """Extract a quantity from a Hamiltonian"""
     h0 = self.copy()
-    if self.is_sparse: h0.turn_dense() # turn into dense form
+    if self.is_sparse: h0 = h0.get_dense() # turn into dense form
     if name in ["density","onsite"]:
       if self.has_eh: 
           h0.remove_nambu()

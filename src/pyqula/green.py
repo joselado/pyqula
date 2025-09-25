@@ -476,7 +476,7 @@ def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1],
                              gtype="bulk",
                              gf_mode="renormalization"):
   """Calculates the selfenergy of a certain supercell """
-  h.turn_dense() # dense mode
+  h = h.get_dense() # dense mode
   if nsuper==1: # a single unit cell 
       return bloch_selfenergy(h,energy=e,delta=delta,nk=nk,
               mode=gf_mode,gtype=gtype)
@@ -558,7 +558,7 @@ def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=10,
     if operator is not None: # get the operator
         operator = h0.get_operator(operator)
     h = h0.copy()
-    h.turn_dense()
+    h = h.get_dense()
     if operator is None: # no operator
         g = bloch_selfenergy(h,energy=e,delta=delta,mode=gmode)[0] 
         out = -np.trace(np.array(g)).imag

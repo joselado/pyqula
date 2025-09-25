@@ -264,7 +264,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
     if verbose>1: info=True
 #    if not h0.check_mode("spinless"): raise # sanity check
     h1 = h0.copy() # initial Hamiltonian
-    h1.turn_dense()
+    h1 = h1.get_dense()
     h1.nk = nk # store the number of kpoints
     if mf is None: # no mean field given
       try: 
@@ -419,7 +419,7 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,**kwargs):
     if h.has_eh: 
         if not h.has_spin: return NotImplemented # only for spinful
     h = h.get_multicell()
-    h.turn_dense()
+    h = h.get_dense()
     def callback_h(h):
         """Set the filling"""
         if mu is None:
@@ -485,7 +485,7 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     - V2, second neighbor interaction
     """
     h = h.get_multicell() # multicell Hamiltonian
-    h.turn_dense()
+    h = h.get_dense()
     # define the function
     nd = h.geometry.neighbor_distances() # distance to first neighbors
     from .. import specialhopping
