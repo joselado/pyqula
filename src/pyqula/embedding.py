@@ -172,7 +172,8 @@ def onsite_defective_central(h,m,nsuper):
 
 def onsite_supercell_multicell(h,nsuper,mc=None):
     """Compute the onsite matrix of a supercell, with a defect mc"""
-    hs = h.get_supercell(nsuper) # get a supercell of the Hamiltonian
+    if nsuper==1: hs = h.copy() # just make a copy
+    else: hs = h.get_supercell(nsuper) # get a supercell of the Hamiltonian
     # new lets replace the onsite matrix of the defective cell
     ni = h.intra.shape[0] # dimension of minimal cell
     nis = hs.intra.shape[0] # dimension of supercell
