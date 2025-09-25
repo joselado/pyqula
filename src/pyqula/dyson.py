@@ -52,7 +52,9 @@ def dyson2d_hkgen(hkgen,nx,ny,nk,ez):
     ns = hkgen(np.array([0.,0.])).shape[0]*nx*ny
     g = np.zeros((ns,ns),dtype=np.complex128)
     nkx,nky = nk,nk
-    return dyson2d_hkgen_jit(hkgen,nx,ny,nkx,nky,ez,g)
+#    return dyson2d_hkgen_jit(hkgen,nx,ny,nkx,nky,ez,g)
+    gsk = generate_gfk(hkgen,nx,ny,nkx,nky,ez) # generate Green's functions
+    return dyson2d_gsk_jit(gsk,nx,ny,nkx,nky,ez,g) # generate the full Gf from the individual ones
 
 
 
@@ -135,6 +137,38 @@ def dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g):
 
 
 
+def generate_gfk(hkgen,nx,ny,nkx,nky,ez):
+    """Generate all the required Green's functions"""
+    n = hkgen([0.,0.]).shape[0] # size of the matrix
+    gs = np.zeros((nkx*nky,n,n),dtype=np.complex128) # GF in k-points
+    gm = np.zeros((nx*2-1,ny*2-1,n,n),dtype=np.complex128) # GF in minicells
+    ks = np.zeros((nkx*nky,2)) # kpoints
+    em = np.identity(n) # identity times energy
+    em = em*ez # identity times energy
+    ik = 0
+    nk2 = nkx*nky # total number of kpoints
+    # Compute all the GF
+    for i in range(nkx):
+        kx = 1./nkx*np.pi*2*i # kpoint
+        for j in range(nky):
+            ky = 1./nky*np.pi*2*j # kpoint
+            k = np.array([kx,ky])/(2*np.pi) # k vector in natural
+            m = hkgen(k) # compute Bloch Hamiltonian
+            gs[ik,:,:] = np.linalg.inv(em - m) # store GF
+            ks[ik,0] = kx
+            ks[ik,1] = ky
+            ik += 1 # increase counter
+    return gs # return Green's functions
+
+
+
+
+
+
+
+
+
+# this function is no longer used, but kept for testing purposes
 #@jit(nopython=True)
 def dyson2d_hkgen_jit(hkgen,nx,ny,nkx,nky,ez,g):
     """jit version of the function"""
@@ -188,6 +222,66 @@ def dyson2d_hkgen_jit(hkgen,nx,ny,nkx,nky,ez,g):
             jj1 = n*(j+1)
             g[ii0:ii1,jj0:jj1] = m[:,:] # store all this data
     return g
+
+
+
+
+@jit(nopython=True)
+def dyson2d_gsk_jit(gs,nx,ny,nkx,nky,ez,g):
+    """Compute full Gf from individual ones"""
+    n = gs[0].shape[0] # size of the matrix
+#    gs = np.zeros((nkx*nky,n,n),dtype=np.complex128) # GF in k-points
+    gm = np.zeros((nx*2-1,ny*2-1,n,n),dtype=np.complex128) # GF in minicells
+    ks = np.zeros((nkx*nky,2)) # kpoints
+    em = np.identity(n) # identity times energy
+    em = em*ez # identity times energy
+    ik = 0
+    nk2 = nkx*nky # total number of kpoints
+    # Compute all the GF
+    for i in range(nkx):
+        kx = 1./nkx*np.pi*2*i # kpoint
+        for j in range(nky):
+            ky = 1./nky*np.pi*2*j # kpoint
+            ks[ik,0] = kx
+            ks[ik,1] = ky
+            ik += 1 # increase counter
+    # GF in the different "minicells" of the supercell
+    for i in range(-nx+1,nx):
+        for j in range(-ny+1,ny):
+            m = np.zeros((n,n),dtype=np.complex128) # initialize
+            for ik in range(nk2): # loop over kpoints
+                m = m + gs[ik,:,:]*np.exp(1j*(ks[ik,0]*i+ks[ik,1]*j))
+            gm[nx+i-1,ny+j-1,:,:] = m[:,:]/nk2 # store
+    # now create indexes for the minicell
+    inds = np.zeros((nx*ny,2),dtype=np.int_)
+    ic = 0
+    for i in range(nx):
+        for j in range(ny):
+            inds[ic,0] = i
+            inds[ic,1] = j
+            ic += 1
+    # now compute the supercell GF
+    for i in range(nx*ny): # loop over rows
+        i1 = inds[i,0] # minicell index
+        j1 = inds[i,1] # minicell index
+        for j in range(nx*ny):
+            i2 = inds[j,0] # minicell index
+            j2 = inds[j,1] # minicell index
+            ii = i1-i2 + nx -1 
+            jj = j1-j2 + ny -1
+            m[:,:] = gm[ii,jj,:,:] # get this matrix
+            ii0 = n*i
+            ii1 = n*(i+1)
+            jj0 = n*j
+            jj1 = n*(j+1)
+            g[ii0:ii1,jj0:jj1] = m[:,:] # store all this data
+    return g
+
+
+
+
+
+
 
 
 
