@@ -43,7 +43,7 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
 #      mode = "full_adaptive" 
 #      print("Changed to full adaptive mode in selfenergy")
   h = h.copy() # make a copy
-  h.turn_dense() # dense Hamiltonian
+  h = h.get_dense() # dense Hamiltonian
   hk_gen = h.get_hk_gen()  # generator of k dependent hamiltonian
   # sanity check for surface mode
   if gtype=="surface": mode = "adaptive" # only the adaptive mode

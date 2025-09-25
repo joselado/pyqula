@@ -7,7 +7,7 @@ def dominant_correlation(h0,filling=0.5,dm=1e-1,
         write=False,**kwargs):
     """Compute the dominant magnetic correlator"""
     h = h0.copy() # copy hamiltonian
-    h.turn_dense()
+    h = h.get_dense()
     h.set_filling(filling) # set the desired filling
     if not h.has_spin: raise # only for spinful
     n = len(h.geometry.r) # number of sites

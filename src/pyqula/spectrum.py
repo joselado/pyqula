@@ -304,7 +304,7 @@ def real_space_vev(h,operator=None,nk=1,nrep=3,name="REAL_SPACE_VEV.OUT",
 def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
         kp=None,mode="mesh",tol=1e-1,fermi=0.0):
   """Return the total energy"""
-  if nbands is None: h.turn_dense()
+  if nbands is None: h = h.get_dense()
   if h.is_sparse and not use_kpm: 
       if nbands is None:
         print("Sparse Hamiltonian but no bands given, taking 20")
@@ -484,7 +484,7 @@ def lowest_energies(h,n=4,k=None,**kwargs):
 def get_bandwidth(self,**kwargs):
     """Return the bandwidth of the Hamiltonian"""
     from .gap import optimize_energy 
-    self.turn_dense() # dense matrix
+    self = self.get_dense() # dense matrix
     emin = optimize_energy(self,mode="bottom",**kwargs)
     emax = optimize_energy(self,mode="top",**kwargs)
     return (emin,emax)

@@ -129,7 +129,7 @@ def TMDC_MX2(soc=0.0,cdw=0.0,g=None,tij=[1.0],
         h.geometry.write_profile(f)
         h.add_onsite(f)
     h.set_filling(.5)
-    h.turn_dense() # dense Hamiltonian
+    h = h.get_dense() # dense Hamiltonian
 #    h = h.supercell(4)
 #    m = np.array(h.intra.todense()).reshape(h.intra.shape[0]**2)
     return h
@@ -206,7 +206,7 @@ def FeSe_GXY(nem=0.,**kwargs):
         return o
     if np.abs(nem)>0.:
       h.add_strain(fnem, mode="directional")
-    h.turn_dense()
+    h = h.get_dense()
     return h
 
 
@@ -230,7 +230,7 @@ def FeSe_GM(nem=0.,**kwargs):
         return o
     if np.abs(nem)>0.:
       h.add_strain(fnem, mode="directional")
-    h.turn_dense()
+    h = h.get_dense()
     return h
 
 

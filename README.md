@@ -23,6 +23,13 @@ import sys
 sys.path.append(PATH_TO_PYQULA+"/src")
 ```
 
+## Recommended library versions
+These are the recommended versions of several required libraries
+- numpy 1.26.4
+- numba 0.60.0
+- scipy 1.13.1
+
+
 # Tutorials #
 Jupyter notebooks with tutorials can be found in the links below
 

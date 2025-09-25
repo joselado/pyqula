@@ -24,8 +24,14 @@ minimum_hopping = 1e-3
 
 #except:
 
-@jit(nopython=True)
 def find_close_neighbors(r0,rs,d=2.0):
+    """Return the indexes of the neighbors that are closer than a
+    certain distance"""
+    return find_close_neighbors_jit(np.array(r0),np.array(rs),d=d)
+
+
+@jit(nopython=True)
+def find_close_neighbors_jit(r0,rs,d=2.0):
     """Return the indexes of the neighbors that are closer than a
     certain distance"""
     nout = 0
@@ -196,7 +202,7 @@ def generate_parametric_hopping(h,f=None,mgenerator=None,
     h.turn_sparse() # turn the matrix sparse
   if not is_sparse and type(h.intra)!=type(np.matrix([[]])):
     h.is_sparse = True
-    h.turn_dense() # turn the matrix sparse
+    h = h.get_dense() # turn the matrix sparse
   if has_spin: # Hamiltonian should be spinful
     h.has_spin = False
     h.turn_spinful()

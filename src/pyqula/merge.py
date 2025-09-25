@@ -10,9 +10,9 @@ def merge_channels(h1,h2):
     if len(h1.hopping)!=len(h2.hopping): raise
     h = h1.copy() # copy Hamiltonian
     h.turn_spinful() # make spinful
-    h.turn_dense()
-    h1.turn_dense()
-    h2.turn_dense()
+    h = h.get_dense()
+    h1 = h1.get_dense()
+    h2 = h2.get_dense()
     h.clean()
     if h.has_eh: raise # not implemented
     n = len(h.geometry.r) # number of sites

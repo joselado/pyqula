@@ -15,7 +15,7 @@ def H2HFH(h,JK=0.0,J=0.):
     if width>1e-4: 
         print("Not implemented for non-2D Hamiltonians")
         raise # not implemented for not 2D 
-    h.turn_spinful() ; h.turn_dense()
+    h.turn_spinful() ; h = h.get_dense()
     g = h.geometry # get the geometry
     gl = g.copy() ; gl.r[:,2] += 0.5 ; gl.r2xyz()
     hl = gl.get_hamiltonian(has_spin=True,tij = [J])

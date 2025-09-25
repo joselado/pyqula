@@ -55,7 +55,7 @@ def get_hamiltonian(self,tij=None,has_spin=True,
             h = parametric_hopping_hamiltonian(h,fc=tij,**kwargs) # add hopping
     # ensure right sparsity structure
     if not is_sparse: 
-        h.turn_dense() # dense Hamiltonian
+        h = h.get_dense() # dense Hamiltonian
     else:
         h.turn_sparse() # sparse Hamiltonian
     return h # return the object

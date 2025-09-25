@@ -23,7 +23,7 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
     """Compute the LDOS at different eenrgies, and add an envelop atomic
     orbital"""
     h = h.copy() # copy the Hamiltonian
-    h.turn_dense() # dense hamiltonian
+    h = h.get_dense() # dense hamiltonian
     evals,vs,ks = h.get_eigenvectors(nk=nk,kpoints=True,
             numw=num_bands) # compute wavefunctions
     if dl is None: 
