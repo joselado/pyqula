@@ -3,14 +3,6 @@ from numba import jit
 
 import scipy.linalg as lg
 
-#use_fortran = False
-try:
-    from . import dyson2df90
-    use_fortran = True
-except:
-    use_fortran = False
-
-use_fortran = False # do not use the Fortran routines
 
 def dyson(h0,nsuper,nk,ez):
     try: # try to use the non multicell method
@@ -38,14 +30,10 @@ def dyson(h0,nsuper,nk,ez):
 
 
 def dyson2d(intra,tx,ty,txy,txmy,nx,ny,nk,ez):
-    if use_fortran:
-        from . import dyson2df90
-        return dyson2df90.dyson2d(intra,tx,ty,txy,txmy,nx,ny,nk,ez)
-    else:
-        ns = intra.shape[0]*nx*ny
-        g = np.zeros((ns,ns),dtype=np.complex128)
-        nkx,nky = nk,nk
-        return dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g)
+    ns = intra.shape[0]*nx*ny
+    g = np.zeros((ns,ns),dtype=np.complex128)
+    nkx,nky = nk,nk
+    return dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g)
 
 
 def dyson2d_hkgen(hkgen,nx,ny,nk,ez):
