@@ -54,7 +54,7 @@ def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,**kwargs):
     nite = int(10/delta)
     error = delta*1e-3
     energyz = energy + 1j*delta
-    e = np.array(np.identity(intra.shape[0]),dtype=np.complex_) * energyz
+    e = np.array(np.identity(intra.shape[0]),dtype=np.complex128) * energyz
     return green_renormalization_jit_core(g0,g1,intra,inter,e,nite,
                                                 error)
 
