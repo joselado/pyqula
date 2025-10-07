@@ -2,7 +2,7 @@
 # Saved at 2018-10-25T14:46:28.566114
 
 AddImportPath(u'/home/jose/Documents/programs/pygra/examples/2d/berry_map_tbg')
-ImportFile(u'BERRY_MAP.OUT', u'x y b z ', ignoretext=True, linked=True)
+ImportFile(u'BERRY_RMAP.OUT', u'x y b z ', ignoretext=True, linked=True)
 AddCustom('colormap', u'map', ((255, 0, 0), (0, 255, 0), (0, 0, 255)))
 Set('colorTheme', 'default-latest')
 Set('StyleSheet/axis-function/autoRange', 'next-tick')
