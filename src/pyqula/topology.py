@@ -498,7 +498,8 @@ def berry_green_rmap_kpoint(h,emin=None,k=[0.,0.,0.],
 
 
 def spatial_berry_density(h,**kwargs):
-    return berry_green_map(h,integral=False,**kwargs)
+    """Berry density at the Fermi energy and spatially resolved"""
+    return Omega_rmap(h,integral=False,**kwargs)
 
 
 
