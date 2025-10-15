@@ -803,6 +803,8 @@ h.add_haldane(0.05) # Add Haldane coupling
 kdos.surface(h) # surface spectral function
 ```
 
+## Topological markers
+
 
 # Response functions
 
@@ -834,6 +836,8 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 ```
 
 ## RKKY response function
+
+## Generic operator-operator response function
 
 # Quantum transport
 
@@ -944,7 +948,7 @@ Add a local onsite energy
 
 Arguments:
 
-- value: value of the oniste energy
+- value: value of the onsite energy
 
 ### h.get_ldos()
 Compute the local density of states.
