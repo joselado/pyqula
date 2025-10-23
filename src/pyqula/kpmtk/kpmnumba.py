@@ -11,7 +11,7 @@ def kpm_moments_v(v,m,n=100,kpm_prec="single",
     data = np.array(mo.data,dtype=np.complex128)
     if np.max(np.abs(data.imag))<1e-6 and np.max(np.abs(v.imag))<1e-6: # real
         if kpm_prec == "single": dtype = np.float32
-        elif kpm_prec == "double": dtype = np.float_
+        elif kpm_prec == "double": dtype = np.float64
         v = np.array(v.real,dtype=dtype) # convert to float
         data = np.array(data.real,dtype=dtype) # convert to float
         if kpm_cpugpu=="CPU": # use the CPU
