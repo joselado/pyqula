@@ -382,7 +382,7 @@ g = geometry.honeycomb_lattice() # create a honeycomb lattice
 h = g.get_hamiltonian() # generate Hamiltonian
 h.add_soc(0.15) # add intrinsic spin-orbit coupling
 h.add_rashba(0.1) # add Rashba spin-orbit coupling
-h.get_surface_kdos(delta=1e-2) # compute surface spectral function
+(es,ks,ds,db) = h.get_surface_kdos(delta=1e-2) # compute surface spectral function
 ```
 
 ![Alt text](images/2DTI.png?raw=true "Surface spectral function of a 2D quantum spin-Hall insulator")
@@ -469,7 +469,7 @@ h.add_rashba(1.0) # Rashba spin-orbit coupling
 h.add_zeeman([0.,0.,0.6]) # Zeeman field
 h.add_swave(.3) # add superconductivity
 (kx,ky,omega) = h.get_berry_curvature() # compute Berry curvature
-h.get_surface_kdos(energies=np.linspace(-.4,.4,300)) # surface spectral function
+(es,ks,ds,db) = h.get_surface_kdos(energies=np.linspace(-.4,.4,300)) # surface spectral function
 ```
 
 ![Alt text](images/2DTSC.png?raw=true "Surface states and Berry curvature of a artificial 2D topological superconductor")
