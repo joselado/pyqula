@@ -13,14 +13,17 @@ h.add_swave(0.1)
 import numpy as np
 ng = 100
 
-es0 = np.linspace(-0.3,0.3,ng)
+es0 = np.linspace(-0.2,0.2,ng)
 klist = [(k,0,0) for k in np.linspace(-0.5,0.5,ng)]
 op = h.get_operator("electron")
-(ks,es,db,ds) = h.get_kdos(energies=es0,kpath=klist,operator=op)
+(ks,es,db,ds) = h.get_kdos(energies=es0,kpath=klist,operator=op,delta=1./ng)
+# normalize 
+db = db/np.max(db)
+ds = ds/np.max(ds)
 
 import matplotlib.pyplot as plt
 plt.subplot(2,2,1)
-plt.scatter(ks,es,c=db)
+plt.scatter(ks,es,c=db,vmax=0.3,cmap="inferno")
 plt.xlabel("k") ; plt.ylabel("E")
 plt.colorbar(ticks=[],label="DOS")
 
@@ -31,7 +34,7 @@ plt.xlim([0,np.max(adb)])
 plt.xlabel("DOS") ; plt.ylabel("E")
 
 plt.subplot(2,2,3)
-plt.scatter(ks,es,c=ds)
+plt.scatter(ks,es,c=ds,vmax=0.3,cmap="inferno")
 plt.xlabel("k") ; plt.ylabel("E")
 plt.colorbar(ticks=[],label="DOS")
 
