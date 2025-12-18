@@ -6,7 +6,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 import numpy as np
 from pyqula import specialhamiltonian
 # Hamiltonian
-h = specialhamiltonian.multilayer_graphene(l=[0,1],ti=0.0)
+h = specialhamiltonian.multilayer_graphene(l=["AB"],ti=0.0)
 # add opposite Haldane couplings to each layer
 #h.add_haldane(0.1)
 h.add_haldane(lambda r: 0.1*np.sign(r[2]))
