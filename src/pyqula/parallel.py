@@ -11,7 +11,7 @@ try:
     import multiprocess
     maxcpu = multiprocess.cpu_count()
 except:
-#    print("Multiprocess not working")
+    print("Multiprocess not working, install as 'pip install multiprocess'")
     def Pool(n=1): # workaround
             class mpool():
                 def map(self,f,xs):

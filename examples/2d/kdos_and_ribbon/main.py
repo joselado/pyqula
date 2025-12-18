@@ -20,9 +20,8 @@ klist = [(k,0,0) for k in np.linspace(-0.5,0.5,ng)]
 ####
 
 
-from pyqula import ribbon
-
 # compute the ribbon
+from pyqula import ribbon
 hr = ribbon.bulk2ribbon(h,n=100)
 (ksr,esr,csr) = hr.get_bands(operator="yposition",num_bands=40,kpath=klist)
 
