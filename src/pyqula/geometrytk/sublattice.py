@@ -2,7 +2,7 @@ import numpy as np
 
 info = False
 
-def get_sublattice(rs):
+def get_sublattice(rs,tol=1e-1):
   """Return indexes of the sublattice, assuming that there is sublattice"""
   n = len(rs) # loop over positions
   sublattice = [0 for i in range(n)] # list for the sublattice
@@ -15,7 +15,7 @@ def get_sublattice(rs):
       for j in range(n): # loop over the rest of the atoms
         if sublattice[j]==0: continue # next one
         dr = rs[i] - rs[j] # distance to site i
-        if 0.9<dr.dot(dr)<1.01: # if NN and sublattice 
+        if (1.-tol)<dr.dot(dr)<(1.+tol): # if NN and sublattice 
           sublattice[i] = -sublattice[j] + 0 # opposite
           continue # next one
     if np.min(np.abs(sublattice))!=0: break

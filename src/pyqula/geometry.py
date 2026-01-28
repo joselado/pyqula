@@ -153,11 +153,12 @@ class Geometry:
       return get_diameter(self)  
     def periodic_vector(self):
       return periodic_vector(self)
-    def get_sublattice(self):
+    def get_sublattice(self,**kwargs):
       """Initialize the sublattice"""
-      if self.has_sublattice: self.sublattice = get_sublattice(self.r)
+      if self.has_sublattice: 
+          self.sublattice = get_sublattice(self.r,**kwargs)
       else: 
-          self.sublattice = get_sublattice(self.r)
+          self.sublattice = get_sublattice(self.r,**kwargs)
           self.has_sublattice = True
     def shift(self,r0):
       """Shift all the positions by r0"""
