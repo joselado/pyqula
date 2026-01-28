@@ -8,7 +8,8 @@ def generate_keep_species(species):
     def fkeep(s): return s in species
     return fkeep
 
-def read_xyz(input_file="positions.xyz",species=None):
+def read_xyz(input_file="positions.xyz",species=None,
+             normalize=True):
     """Read an xyz geometry"""
     fkeep = generate_keep_species(species) # function to decide species
     ls = open(input_file).readlines() # read the geometry
@@ -28,7 +29,7 @@ def read_xyz(input_file="positions.xyz",species=None):
     g.dimensionality = 0
     g.r = rs # positions
     g.r2xyz()
-    g.normalize_nn_distance() # set the minimum distance to 1
+    if normalize: g.normalize_nn_distance() # set the minimum distance to 1
     return g
 
 

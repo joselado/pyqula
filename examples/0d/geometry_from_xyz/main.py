@@ -9,10 +9,6 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 from pyqula import geometry
 import numpy as np
 
-
-from pyqula import geometry
-import numpy as np
-
 # read geometry from a file
 g = geometry.read_xyz(input_file="structure.xyz",species="C")
 
