@@ -20,7 +20,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                     e=0.0,nk=50,nsuper=1,reciprocal=True,
                     k0 = np.array([0.,0.]),
                     delta=None,refine_delta=1.0,operator=None,
-                    mode='eigen',num_waves=2,info=False):
+                    mode='eigen',num_waves=10,info=False):
     """Calculates the Fermi surface of a 2d system"""
     operator = h.get_operator(operator) # get the operator
     if operator is not None: # operator given
@@ -59,10 +59,18 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                         energies=[e],delta=delta)
             return ds[0] # return weight
     elif mode=='lowest': # use sparse diagonalization
-      def get_weight(hk,**kwargs):
-        es,waves = slg.eigsh(hk,k=num_waves,sigma=e,tol=arpack_tol,which="LM",
+      def get_weight(hk,k=None,**kwargs):
+        if operator is None:
+            es,waves = slg.eigsh(hk,k=num_waves,sigma=e,
+                    tol=arpack_tol,which="LM",
                               maxiter = arpack_maxiter)
-        return np.sum(delta/((e-es)**2+delta**2)) # return weight
+            return np.sum(delta/((e-es)**2+delta**2)) # return weight
+        else:
+            raise # this should be tested
+            tmp,ds = h.get_dos(ks=[k],operator=operator,
+                        energies=[e],delta=delta,
+                        num_bands=num_waves)
+            return ds[0] # return weight
     else: raise
   
   ##############################################
