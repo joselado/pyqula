@@ -13,7 +13,7 @@ g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=True)
 h.add_onsite(0.6)
 h.get_bands()
-spectrum.fermi_surface(h,nk=100,operator="valley")
+h.get_fermi_surface(nk=100,operator="valley",num_waves=10,mode="lowest")
 
 
 
