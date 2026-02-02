@@ -56,19 +56,22 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
             return np.sum(delta/((e-es)**2+delta**2)) # return weight
         else: # using an operator
             tmp,ds = h.get_dos(ks=[k],operator=operator,
+                        write=False,
                         energies=[e],delta=delta)
             return ds[0] # return weight
     elif mode=='lowest': # use sparse diagonalization
       def get_weight(hk,k=None,**kwargs):
-        if operator is None:
+        if operator is None: # without operator
             es,waves = slg.eigsh(hk,k=num_waves,sigma=e,
                     tol=arpack_tol,which="LM",
                               maxiter = arpack_maxiter)
             return np.sum(delta/((e-es)**2+delta**2)) # return weight
-        else:
-            raise # this should be tested
-            tmp,ds = h.get_dos(ks=[k],operator=operator,
-                        energies=[e],delta=delta,
+        else: # using an operator
+            htmp = h.copy() # make a dummy copy
+            htmp.shift_fermi(-e) # shift the Fermi energy
+            tmp,ds = htmp.get_dos(ks=[k],operator=operator,
+                        write=False,
+                        energies=[0.],delta=delta,
                         num_bands=num_waves)
             return ds[0] # return weight
     else: raise
