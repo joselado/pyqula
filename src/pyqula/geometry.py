@@ -645,7 +645,7 @@ def square_lattice_bipartite():
   g.dimensionality = 2 # two dimensional system
   g.xyz2r() # create r coordinates
   g.has_sublattice = True # has sublattice index
-  g.sublattice = [(-1.)**i for i in range(len(g.x))] # subattice number
+  g.sublattice = [-1,1,1,-1] # sublattice number
   g.update_reciprocal() # update reciprocal lattice vectors
   return g
 
@@ -727,6 +727,18 @@ def cubic_lieb_lattice():
   g = cubic_lattice_bipartite()
   g = g.remove(0) # remove this atom
   return g
+
+
+def lieb_ribbon(n):
+    """Return a ribbon of the Lieb lattice"""
+    from . import ribbon
+    g = lieb_lattice() # 2d lattice
+    g = bulk2ribbon(g,n=n+1) # make a ribbon
+    from .sculpt import remove_unibonded
+    g = remove_unibonded(g) # remove single bonded sites
+    return g
+
+
 
 
 def lieb_lattice():

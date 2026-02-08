@@ -109,6 +109,10 @@ class Hamiltonian():
     def get_chi(self,**kwargs):
         from . import chi
         return chi.chiAB_trace(self,**kwargs)
+    def get_spinchi_ladder(self,**kwargs):
+        """Spin-spin response function with ladder operators"""
+        from . import chi
+        return chi.spinchi_ladder(self,**kwargs)
 
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
@@ -128,6 +132,7 @@ class Hamiltonian():
     def __init__(self,geometry=None):
         self.data = dict() # empty dictionary with various data
         self.has_spin = True # has spin degree of freedom
+        self.V = None # density-density interaction
         self.has_kondo = False # has Kondo sites
         self.prefix = "" # a string used a prefix for different files
         self.path = "" # a path used for different files

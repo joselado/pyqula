@@ -100,7 +100,7 @@ def chiAB(h,q=None,nk=60,**kwargs):
 
 
 def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
-               delta=0.1,temp=1e-7,A=None,B=None,projs=None,
+               delta=0.1,temp=None,A=None,B=None,projs=None,
                mode="matrix"):
     """Compute AB response function
        - energies: energies of the dynamical response
@@ -111,12 +111,16 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
        - B: second operator
        - projs: projection operators
        - mode: response to compute"""
+    if temp is None: temp = delta # as delta
     hk = h.get_hk_gen() # get generator
     if A is None or B is None:
         A = np.identity(h.intra.shape[0],dtype=np.complex128)
         B = A # initial operator
-    if type(A)==Operator: A = algebra.todense(A.get_matrix())
-    if type(B)==Operator: B = algebra.todense(B.get_matrix())
+    else: # generate the operators to be evaluated in the lattice points
+        A = h.get_operator(A)
+        B = h.get_operator(B)
+        A = algebra.todense(A.get_matrix())
+        B = algebra.todense(B.get_matrix())
     # generate the projectors
     if projs is None:
         from . import operators
@@ -161,18 +165,21 @@ def chiABmap(h,energies=np.linspace(-3.0,3.0,100),nq=30,
 @jit(nopython=True)
 def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta,out):
     """Compute the response function"""
+    beta = 1./T # thermal broadening
     out  = out*0.0 # initialize
     n = len(ws1) # number of wavefunctions
-    for i in range(n):
-      if es1[i]<0.0: oi = 1.0 # first occupation
-      else: oi = 0.0
-      for j in range(n):
-          if es2[j]<0.0: oj = 1.0 # second occupation
-          else: oj = 0.0
-          fac = np.conjugate(ws1[i]).dot(A@ws2[j]) # add the factor
-          fac *= np.conjugate(ws2[j]).dot(B@ws1[i]) # add the factor
-          fac *= oi - oj # occupation factor
-          out = out + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
+    Aws2 = (A@ws2.T).T #[A@w for w in ws2] # compute all matrix elements
+    Bws1 = (B@ws1.T).T #[B@w for w in ws1] # compute all matrix elements
+    occs1 = (-np.tanh(beta*es1) + 1.)/2. # oocupations
+    occs2 = (-np.tanh(beta*es2) + 1.)/2. # oocupations
+    for i in range(n): # loop over wavefunctions
+        oi = occs1[i] # first occupation
+        for j in range(n): # loop over wavefunctions
+            oj = occs2[j] # second occupation
+            fac = np.sum(np.conjugate(ws1[i])*Aws2[j]) # add the factor
+            fac *= np.sum(np.conjugate(ws2[j])*Bws1[i]) # add the factor
+            fac *= oi - oj # occupation factor
+            out = out + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
     return out
 
 
@@ -182,5 +189,9 @@ from .chitk.static import szchi as static_sz_correlator
 from .chitk.static import sxchi as static_sx_correlator
 from .chitk.static import sychi as static_sy_correlator
 
+# poor-man's implementation
 from .chitk.pmchi import pmchi
+
+# spin-response functions
+from .chitk.spinchi import spinchi_ladder
 

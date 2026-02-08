@@ -59,16 +59,27 @@ class Operator():
                 return self.get_matrix()@a # multiply matrices
             else:
                 return self*Operator(a) # convert to operator
-        elif algebra.isvector(a): # array type
+        elif algebra.isnumber(a): # single number, just multiply
+            out = Operator(self) # make a copy
+            if self.matrix is not None:
+                out.matrix = self.get_matrix()*a # multiply
+                out.m = lambda v,k=None: out.matrix@v # create dummy function
+            else: 
+                out.m = lambda v,k=None: a*self.m(v,k=k)
+            return out
+        elif algebra.isvector(a): # array type, apply the operator to it
             return self(a)
-        else:
+        else: # anything else, try to convert it to operator
             return self*Operator(a) # convert to operator
     def trace(self):
         if self.matrix is not None: 
             return algebra.trace(self.matrix)
         else: raise
     def __rmul__(self,a):
-        return Operator(a)*self
+        if algebra.isnumber(a): # single number, just multiply
+            return self*a # just multiply
+        else: # not a number
+            return Operator(a)*self
     def __truediv__(self,a):
         if isnumber(a): return self*(1./a)
         else: raise
@@ -88,9 +99,7 @@ class Operator():
         return self + (-a)
     def __neg__(self):
         """Negative operator"""
-        out = Operator(self)
-        out.m = lambda v,k=None: -self.m(v,k=k)
-        return out
+        return (-1)*self # return
     def __call__(self,v,k=None):
         """Define the call method"""
         return self.m(v,k=k) 
@@ -476,9 +485,6 @@ def get_envelop(h,sites=[],d=0.3):
 
 
 def get_sigma_minus(h):
-    """
-    Return the sublattice Pauli matrix \sigma_-
-    """
     def fun(r1,r2):
         i1 = h.geometry.get_index(r1,replicas=True)
         if not h.geometry.sublattice[i1]==1: return 0.0

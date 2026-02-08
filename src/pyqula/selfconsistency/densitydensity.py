@@ -309,6 +309,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
       if verbose>1: print("Time in the normal term = ",t2-t1) # Difference
       scf = SCF() # create object
       scf.hamiltonian = h # store
+      scf.hamiltonian.V = v # store the interaction object
 #      h.check() # check the Hamiltonian
       scf.hamiltonian0 = h0 # store
       scf.mf = mf # store mean field
