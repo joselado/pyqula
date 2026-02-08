@@ -209,8 +209,9 @@ m = h.get_magnetization() # get the magnetization
 ![Alt text](images/scf_square_vacancy.png?raw=true "Interaction-induced non-collinear magnetism in a defective square lattice with spin-orbit coupling")
 
 
-## RPA many-body response functions
+## RPA many-body response function in an antiferromagnet
 ```python
+from pyqula import geometry ; import numpy as np
 g = geometry.bisquare_ribbon(2) # square bipartite ribbon
 h = g.get_hamiltonian() # generate Hamiltonian
 h = h.get_mean_field_hamiltonian(U=3.,mf="antiferro",filling=0.5) # perform SCF
@@ -225,6 +226,27 @@ for q in qs: # loop over qvectors
 ```
 
 ![Alt text](images/spin_chi_rpa.png?raw=true "RPA many-body spin response function, showing the appearence of linearly-dispersing magnons")
+
+
+
+
+## RPA many-body response function in a ferromagnet
+```python
+from pyqula import geometry ; import numpy as np
+g = geometry.lieb_ribbon(2) # Lieb lattice ribbon
+h = g.get_hamiltonian() # generate Hamiltonian
+h = h.get_mean_field_hamiltonian(U=3.,mf="ferro",filling=0.5) # perform SCF
+qs = np.linspace(0.,.5,50) # qvectors
+energies=np.linspace(.0,1.,400) # energies
+
+chimap = [] # storage for the results
+for q in qs: # loop over qvectors
+    es,chis = h.get_spinchi_ladder(q=q,energies=energies) # compute RPA tensor
+    cs = [np.trace(c).imag for c in chis] # imaginary part of the trace
+    chimap.append(cs) # store 
+```
+
+![Alt text](images/spin_chi_rpa_ferro.png?raw=true "RPA many-body spin response function of ferromagnetic lattice, showing the appearence of quadratically-dispersing magnons")
 
 
 
