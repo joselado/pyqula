@@ -8,7 +8,7 @@ g = geometry.honeycomb_zigzag_ribbon(2)
 g = geometry.lieb_ribbon(2)
 #g = geometry.bichain()
 #g = geometry.chain()
-g = geometry.bisquare_ribbon(2)
+#g = geometry.bisquare_ribbon(2)
 h = g.get_hamiltonian()
 #h.add_sublattice_imbalance(3.)
 from pyqula import chi
@@ -22,7 +22,7 @@ hmf = h.copy() ; hmf.add_antiferromagnetism(0.5)
 h = h.get_mean_field_hamiltonian(U=U,nk=nk,mf=hmf,filling=0.5)
 #exit()
 qs = np.linspace(0.,.5,50) # qvectors
-energies=np.linspace(.0,1.6,400) # energies
+energies=np.linspace(.0,1.,400) # energies
 h.get_bands(operator="sz")
 print("Mz",h.get_vev("sz"))
 #exit()
