@@ -136,7 +136,9 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
             out = 0*energies + 0j # initialize
             return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta,out)
         if mode=="matrix": # return a matrix
-            out = np.array([[getAB(pi@A,pj@B) for pi in projs] for pj in projs])
+            out = parallel.pcall(lambda pj: [getAB(pi@A,pj@B) for pi in projs],
+                    projs)
+#            out = np.array([[getAB(pi@A,pj@B) for pi in projs] for pj in projs])
             return np.transpose(out,(2,0,1)) # return array of matrices
         elif mode=="trace": # return the trace
             out = np.array([getAB(pi@A,pi@B) for pi in projs])
