@@ -103,6 +103,7 @@ def chiAB(h,q=None,nk=60,**kwargs):
 
 def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                delta=0.1,temp=None,A=None,B=None,projs=None,
+               imode="mesh",
                mode="matrix"):
     """Compute AB response function
        - energies: energies of the dynamical response
@@ -151,8 +152,19 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         else: raise # not implemented
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     # call in parallel
-    out = [getk(k) for k in ks] # call 
-    out = np.mean(out,axis=0) # sum over kpoints
+    if imode=="mesh": # do a mesh
+        out = [getk(k) for k in ks] # call 
+        out = np.mean(out,axis=0) # sum over kpoints
+    elif imode=="adaptive": # do a mesh
+        from . import integration
+        if h.dimensionality==0: out = getk([0.]) # single point
+        elif h.dimensionality==1: 
+            out = integration.integrate_matrix(lambda k: getk([k]),xlim=[0.,1.])
+        elif h.dimensionality==2: # not implemented
+            out = integration.integrate_matrix_2D(getk,
+                    xlim=[0.,1.],ylim=[0.,1.])
+        else: raise
+    else: raise
 #    out = np.mean([getk(k) for k in ks],axis=0) # sum over kpoints
     return energies,out
 

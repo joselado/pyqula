@@ -92,6 +92,16 @@ def parallel_diagonalization(hks):
 
 
 
+peigh = parallel_diagonalization # alias
 
-
+@jit(nopython=True,parallel=True)
+def peigvalsh(hks):
+    """Diagonalize many matrices at once in parallel"""
+    n = hks.shape[1] # size of the Hamiltonian
+    nh = hks.shape[0] # number of Hamiltonians
+    es = np.zeros((nh,n),dtype=np.float64) # storage for eigenenergies
+    for i in prange(nh): # loop over Hamiltonians
+        e,w = nlg.eigh(hks[i,:,:]) # diagonalize this Hamiltonian
+        es[i,:] = e[:] # store
+    return es # return eigenergies
 
