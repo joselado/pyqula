@@ -8,27 +8,24 @@ from pyqula import parallel
 parallel.numba_cores = 4
 
 
-g = geometry.honeycomb_zigzag_ribbon(200)
-#g = geometry.lieb_ribbon(3)
-#g = geometry.bichain()
+g = geometry.honeycomb_zigzag_ribbon(2)
+#g = geometry.lieb_ribbon(2)
+g = geometry.bichain()
 #g = geometry.chain()
+#g = geometry.honeycomb_lattice()
+#g = geometry.lieb_lattice()
 h = g.get_hamiltonian()
-import os
-#os.environ["MKL_NUM_THREADS"] = "1"
-h.get_eigenvectors()
-exit()
 #h.add_sublattice_imbalance(3.)
 from pyqula import chi
 
-U = 4.
-nk = 50
+U = 3.  
+nk = 20
 hmf = h.copy() ; hmf.add_antiferromagnetism(0.5)
 #hmf = h.copy() ; hmf.add_exchange([0.,0.,1.])
 #h.add_exchange([0.,0.,0.3])
 h = h.get_mean_field_hamiltonian(U=U,nk=nk,mf=hmf,filling=0.5)
-#exit()
 qs = np.linspace(0.,.5,50) # qvectors
-energies=np.linspace(.0,3.,400) # energies
+energies=np.linspace(.0,5.,200) # energies
 h.get_bands(operator="sz")
 print("Mz",h.get_vev("sz"))
 #exit()
@@ -38,7 +35,8 @@ import time
 t0 = time.time()
 
 def f(q):
-    return h.get_spinchi_ladder(q=q,nk=nk,energies=energies,delta=2e-2)
+    return h.get_spinchi_ladder(q=[q,q,0.],nk=nk,energies=energies,delta=2e-2,
+            imode="mesh")
 
 #from pyqula import parallel
 #out = parallel.pcall_deep(f,qs,cores=1) # compute all
@@ -46,6 +44,7 @@ out = [f(q) for q in qs] # compute all
 for o in out: # loop over qvectors
     es,chis = o[0],o[1]
     cs = [np.trace(c).imag for c in chis]
+#    print(cs)
     cs = np.array(cs)/np.max(cs)
     chimap.append(cs) # store 
 
@@ -57,6 +56,7 @@ fig = plt.figure(figsize=(6,4))
 chimap = np.array(chimap) ; chimap = np.abs(chimap) 
 chimap = chimap/np.max(chimap)
 #cut = .8 ; chimap[chimap>cut] = cut
+vmax = np.percentile(chimap,98)
 plt.contourf(qs,energies,chimap.T,levels=100,cmap="Blues_r")
 plt.colorbar(label="Im($\\chi_{+-}^{RPA}$)",ticks=[])
 plt.xlabel("q-vector [$\\pi$]") ; plt.ylabel("$\\omega$")
