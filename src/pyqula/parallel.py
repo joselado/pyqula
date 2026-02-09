@@ -2,6 +2,14 @@
 from __future__ import print_function
 import scipy.linalg as lg
 from . import algebra
+import numba
+
+numba_cores = None # use all cores
+
+def set_num_threads():
+    global numba_cores # global object
+    if numba_cores is not None:
+        numba.set_num_threads(numba_cores) # set these cores
 
 
 is_child = False # check if you are running a child

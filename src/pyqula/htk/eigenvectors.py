@@ -67,3 +67,31 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
     raise
 
 
+
+
+
+
+
+# function to diagonalize many in parallel
+from numba import jit,prange
+import numpy.linalg as nlg
+
+@jit(nopython=True,parallel=True)
+def parallel_diagonalization(hks):
+    """Diagonalize many matrices at once"""
+    n = hks.shape[1] # size of the Hamiltonian
+    nh = hks.shape[0] # number of Hamiltonians
+    es = np.zeros((nh,n),dtype=np.float64) # storage for eigenenergies
+    ws = np.zeros((nh,n,n),dtype=np.complex128) # storage for eigenenergies
+    for i in prange(nh): # loop over Hamiltonians
+        e,w = nlg.eigh(hks[i,:,:]) # diagonalize this Hamiltonian
+        es[i,:] = e[:] # store
+        ws[i,:,:] = w[:,:] # store
+    return es,ws
+
+
+
+
+
+
+

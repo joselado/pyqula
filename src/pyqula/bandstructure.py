@@ -96,7 +96,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
             return algebra.eigh(m) # all eigenvals and eigenfuncs
       else: 
         def diagf(m): # diagonalization routine
-            return algebra.eigvalsh(m) # all eigenvals and eigenfuncs
+            return algebra.eigvalsh(m) # all eigenvals
     else: # using arpack
       h = h.copy()
       h.turn_sparse() # sparse Hamiltonian

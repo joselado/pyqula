@@ -119,7 +119,7 @@ def phase_C3_matrix(*args,**kwargs):
 
 def phase_C3(g,phi=0.5,t=1.0,d=1.0):
     """Create a function that computes hoppings that alternate
-    between +\phi and -\phi every 60 degrees"""
+    between +phi and -phi every 60 degrees"""
     if len(g.r)==1:
       g = g.get_supercell(2) # create a supercell
     ds = g.get_connections()

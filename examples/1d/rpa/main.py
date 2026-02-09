@@ -4,25 +4,27 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 from pyqula import geometry
 import numpy as np
-g = geometry.honeycomb_zigzag_ribbon(2)
-g = geometry.lieb_ribbon(2)
-#g = geometry.bichain()
+from pyqula import parallel
+#parallel.numba_cores = 4
+
+
+#g = geometry.honeycomb_zigzag_ribbon(4)
+#g = geometry.lieb_ribbon(3)
+g = geometry.bichain()
 #g = geometry.chain()
-#g = geometry.bisquare_ribbon(2)
 h = g.get_hamiltonian()
 #h.add_sublattice_imbalance(3.)
 from pyqula import chi
-#from pyqula import parallel
-#parallel.cores = 4
-U = 3.
-nk = 20
+
+U = 4.
+nk = 50
 hmf = h.copy() ; hmf.add_antiferromagnetism(0.5)
 #hmf = h.copy() ; hmf.add_exchange([0.,0.,1.])
 #h.add_exchange([0.,0.,0.3])
 h = h.get_mean_field_hamiltonian(U=U,nk=nk,mf=hmf,filling=0.5)
 #exit()
 qs = np.linspace(0.,.5,50) # qvectors
-energies=np.linspace(.0,1.,400) # energies
+energies=np.linspace(.0,3.,400) # energies
 h.get_bands(operator="sz")
 print("Mz",h.get_vev("sz"))
 #exit()
@@ -31,9 +33,14 @@ chimap = []
 import time
 t0 = time.time()
 
+def f(q):
+    return h.get_spinchi_ladder(q=q,nk=nk,energies=energies,delta=2e-2)
 
-for q in qs: # loop over qvectors
-    es,chis = h.get_spinchi_ladder(q=q,nk=nk,energies=energies,delta=2e-2)
+#from pyqula import parallel
+#out = parallel.pcall_deep(f,qs,cores=1) # compute all
+out = [f(q) for q in qs] # compute all
+for o in out: # loop over qvectors
+    es,chis = o[0],o[1]
     cs = [np.trace(c).imag for c in chis]
     cs = np.array(cs)/np.max(cs)
     chimap.append(cs) # store 

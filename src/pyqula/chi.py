@@ -2,6 +2,8 @@ import numpy as np
 import scipy.linalg as lg
 from . import parallel
 from numba import jit
+from numba import prange
+import numba
 from . import algebra
 from .operators import Operator
 
@@ -125,8 +127,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     if projs is None:
         from . import operators
         projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
-    pAs = [pi@A for pi in projs] # compute these projectors
-    pBs = [pi@B for pi in projs] # compute these projectors
+    pAs = np.array([pi@A for pi in projs]) # compute these projectors
+    pBs = np.array([pi@B for pi in projs]) # compute these projectors
     def getk(k):
         m1 = hk(k) # get Hamiltonian
         es1,ws1 = algebra.eigh(m1)
@@ -135,10 +137,13 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         es2,ws2 = algebra.eigh(m2)
         ws2 = np.array(ws2.T,dtype=np.complex128)
         def getAB(Ai,Bj): # compute for a single operator
-            out = 0*energies + 0j # initialize
-            return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta,out)
+            return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta)
         if mode=="matrix": # return a matrix
-            out = np.array([[getAB(pA,pB) for pA in pAs] for pB in pBs])
+            # simple implementation
+#            out = np.array([[getAB(pA,pB) for pA in pAs] for pB in pBs])
+            parallel.set_num_threads() # set the number of threads
+            out = chiAB_matrix_jit(ws1,es1,ws2,es2,energies,
+                    pAs,pBs,temp,delta)
             return np.transpose(out,(2,0,1)) # return array of matrices
         elif mode=="trace": # return the trace
             out = np.array([getAB(pi@A,pi@B) for pi in projs])
@@ -146,7 +151,7 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         else: raise # not implemented
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     # call in parallel
-    out = parallel.pcall_deep(getk,ks) # call in parallel at deepest level
+    out = [getk(k) for k in ks] # call 
     out = np.mean(out,axis=0) # sum over kpoints
 #    out = np.mean([getk(k) for k in ks],axis=0) # sum over kpoints
     return energies,out
@@ -166,26 +171,9 @@ def chiABmap(h,energies=np.linspace(-3.0,3.0,100),nq=30,
     return None
 
 
-
-@jit(nopython=True)
-def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta,out):
-    """Compute the response function"""
-    beta = 1./T # thermal broadening
-    out[:]  = 0j # initialize
-    n = len(ws1) # number of wavefunctions
-    Aws2 = (A@ws2.T).T #[A@w for w in ws2] # compute all matrix elements
-    Bws1 = (B@ws1.T).T #[B@w for w in ws1] # compute all matrix elements
-    occs1 = (-np.tanh(beta*es1) + 1.)/2. # occupations
-    occs2 = (-np.tanh(beta*es2) + 1.)/2. # occupations
-    for i in range(n): # loop over wavefunctions
-        oi = occs1[i] # first occupation
-        for j in range(n): # loop over wavefunctions
-            oj = occs2[j] # second occupation
-            fac = np.sum(np.conjugate(ws1[i])*Aws2[j]) # add the factor
-            fac *= np.sum(np.conjugate(ws2[j])*Bws1[i]) # add the factor
-            fac *= oi - oj # occupation factor
-            out = out + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
-    return out
+# accelerated function to compute AB response
+from .chitk.chiAB import chiAB_matrix_jit
+from .chitk.chiAB import chiAB_jit
 
 
 
