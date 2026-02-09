@@ -5,14 +5,18 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 from pyqula import geometry
 import numpy as np
 from pyqula import parallel
-#parallel.numba_cores = 4
+parallel.numba_cores = 4
 
 
-#g = geometry.honeycomb_zigzag_ribbon(4)
+g = geometry.honeycomb_zigzag_ribbon(200)
 #g = geometry.lieb_ribbon(3)
-g = geometry.bichain()
+#g = geometry.bichain()
 #g = geometry.chain()
 h = g.get_hamiltonian()
+import os
+#os.environ["MKL_NUM_THREADS"] = "1"
+h.get_eigenvectors()
+exit()
 #h.add_sublattice_imbalance(3.)
 from pyqula import chi
 
