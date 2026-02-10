@@ -103,8 +103,10 @@ def chiAB(h,q=None,nk=60,**kwargs):
 
 def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                delta=0.1,temp=None,A=None,B=None,projs=None,
-               imode="mesh",
-               mode="matrix"):
+               imode="mesh", # integration mode in momentum space
+               ij_mode = "explicit", # loop over elements mode
+               mode="matrix" # return object
+               ):
     """Compute AB response function
        - energies: energies of the dynamical response
        - q: q-vector of the response
@@ -112,8 +114,10 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
        - delta: imaginary part
        - A: first operator
        - B: second operator
-       - projs: projection operators
-       - mode: response to compute"""
+       - projs: local projection operators
+       - imode: integration mode
+       - ij_mode: loop ove elements mode
+       - mode: output to return"""
     if temp is None: temp = delta # as delta
     hk = h.get_hk_gen() # get generator
     if A is None or B is None:
@@ -128,6 +132,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     if projs is None:
         from . import operators
         projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
+    else: 
+        ij_mode = "explicit" # do the loop explicitly
     pAs = np.array([pi@A for pi in projs]) # compute these projectors
     pBs = np.array([pi@B for pi in projs]) # compute these projectors
     def getk(k):
@@ -140,21 +146,29 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         def getAB(Ai,Bj): # compute for a single operator
             return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta)
         if mode=="matrix": # return a matrix
-            # simple implementation
+            # simplest implementation, not optimal
 #            out = np.array([[getAB(pA,pB) for pA in pAs] for pB in pBs])
+            # parallelized (over matrix elements) implementation
             parallel.set_num_threads() # set the number of threads
-            out = chiAB_matrix_jit(ws1,es1,ws2,es2,energies,
-                    pAs,pBs,temp,delta)
-            return np.transpose(out,(2,0,1)) # return array of matrices
+            out = chiAB_matrix_jit(ws1,es1,ws2,es2,energies,pAs,pBs,temp,delta)
+            return out # return array of matrices
         elif mode=="trace": # return the trace
             out = np.array([getAB(pi@A,pi@B) for pi in projs])
             return np.mean(out,axis=0) # sum over the first axis
+        elif mode=="diagonal": # return the diagonal elements
+            out = np.array([getAB(pi@A,pi@B) for pi in projs])
+            return np.transpose(out,(1,0)) # return, first energy, then i
         else: raise # not implemented
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     # call in parallel
     if imode=="mesh": # do a mesh
-        out = [getk(k) for k in ks] # call 
-        out = np.mean(out,axis=0) # sum over kpoints
+        if ij_mode=="accelerated": # (maybe?) accelerated function
+            parallel.set_num_threads() # set the number of threads
+            out = chiAB_matrix_ksum(h,ks,q,energies,A,B,temp,delta)
+        elif ij_mode=="explicit": # explicit function, this is preferred
+            out = [getk(k) for k in ks] # call 
+            out = np.mean(out,axis=0) # sum over kpoints
+        else: raise # not implemented
     elif imode=="adaptive": # do a mesh
         from . import integration
         if h.dimensionality==0: out = getk([0.]) # single point
@@ -185,7 +199,9 @@ def chiABmap(h,energies=np.linspace(-3.0,3.0,100),nq=30,
 
 # accelerated function to compute AB response
 from .chitk.chiAB import chiAB_matrix_jit
+from .chitk.chiAB import chiAB_full_matrix_jit
 from .chitk.chiAB import chiAB_jit
+from .chitk.chiAB import chiAB_matrix_ksum
 
 
 

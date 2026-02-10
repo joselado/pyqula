@@ -8,7 +8,7 @@ from pyqula import parallel
 parallel.numba_cores = 4
 
 
-g = geometry.honeycomb_zigzag_ribbon(2)
+g = geometry.honeycomb_zigzag_ribbon(3)
 #g = geometry.lieb_ribbon(2)
 g = geometry.bichain()
 #g = geometry.chain()
@@ -16,10 +16,11 @@ g = geometry.bichain()
 #g = geometry.lieb_lattice()
 h = g.get_hamiltonian()
 #h.add_sublattice_imbalance(3.)
-from pyqula import chi
+from pyqula import parallel
+#parallel.numba_cores = 2
 
 U = 3.  
-nk = 20
+nk = 100
 hmf = h.copy() ; hmf.add_antiferromagnetism(0.5)
 #hmf = h.copy() ; hmf.add_exchange([0.,0.,1.])
 #h.add_exchange([0.,0.,0.3])
@@ -35,7 +36,7 @@ import time
 t0 = time.time()
 
 def f(q):
-    return h.get_spinchi_ladder(q=[q,q,0.],nk=nk,energies=energies,delta=2e-2,
+    return h.get_spinchi_ladder(q=[q,0.,0.],nk=nk,energies=energies,delta=2e-2,
             imode="mesh")
 
 #from pyqula import parallel

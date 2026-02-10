@@ -24,6 +24,7 @@ def spinchi_pm_RPA(h,U=0.,v=[0.,0.,1.],**kwargs):
     """Compute the spin RPA response for a hamiltonian.
      - v is the chosen quantization axis of the ladder operators
      - U is the Hubbard interaction"""
+     # v needs to be implemented
     sx = h.get_operator("sx") # spin operator, eigen +-1
     sy = h.get_operator("sy") # spin operator, eigen +-1
     sz = h.get_operator("sz") # spin operator, eigen +-1
