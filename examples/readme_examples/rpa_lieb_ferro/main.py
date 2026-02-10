@@ -11,7 +11,8 @@ energies=np.linspace(.0,1.,400) # energies
 
 chimap = [] # storage for the results
 for q in qs: # loop over qvectors
-    es,chis = h.get_spinchi_ladder(q=q,energies=energies) # compute RPA tensor
+    es,chis = h.get_spinchi_ladder(q=q,energies=energies,delta=2e-2) 
+    # compute RPA tensor
     cs = [np.trace(c).imag for c in chis] # imaginary part of the trace
     chimap.append(cs) # store 
 

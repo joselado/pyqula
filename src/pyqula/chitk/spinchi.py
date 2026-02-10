@@ -16,13 +16,15 @@ def spinchi_ladder(H,v=[0.,0.,1.],RPA=True,**kwargs):
     # this is not finished yet
     sp = (sx + 1j*sy)/2. # ladder operator
     sm = (sx - 1j*sy)/2. # ladder operator
-    U = H.V # get the interaction
-    if U is not None: # finite interaction
-        U = U[(0,0,0)] # onsite interaction matrix
-        U = sp@U # project on the operator
-        U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
-        U = -2*U # beware of this minus sign for spin response (!!!)
-    if not RPA: U = None # no RPA
+    if RPA: # RPA mode
+        U = H.V # get the interaction
+        if U is not None: # finite interaction
+            if len(U)>1: raise # not implemented for momentum dependent
+            U = U[(0,0,0)] # onsite interaction matrix
+            U = sp@U # project on the operator
+            U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
+            U = -2*U # beware of this minus sign for spin response (!!!)
+    else: U = None # no RPA
     return chi_AB_RPA(H,A=sp,B=sm,V=U,**kwargs) # non-interacting response
 
 
