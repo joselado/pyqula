@@ -13,7 +13,7 @@ from pyqula import potentials
 v = potentials.commensurate_potential(g,k=23)
 def ons(r):
   dr = r - g.r[0]
-  if dr.dot(dr)<1e-1: return 1.0
+  if dr.dot(dr)<1e-1: return 2.0
   else: return 0.0
 
 #h.geometry.write_profile(v,nrep=1)
