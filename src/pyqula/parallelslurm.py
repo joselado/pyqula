@@ -105,7 +105,11 @@ def pcall_single(fin,xs,time=10,memory=5000,error=None,
     mins = str(max([mins,1])) # at least 1 minute
     runsh = "#!/bin/bash\n#SBATCH -n 1\n#SBATCH -t "+str(int(time))+":"+str(mins)+":00\n"
     runsh += "#SBATCH --mem-per-cpu="+str(memory)+"\n"
-    runsh += "#SBATCH --exclude=milan[0-12]\n"
+    runsh += "#SBATCH --exclude=milan[8,10,23]\n"
+    from .parallel import numba_cores
+    if numba_cores is None: cores = 1
+    else: cores = numba_cores
+    runsh += "#SBATCH --cpus-per-task="+str(cores)+"\n"
     runsh += "#SBATCH --array=0-"+str(n-1)+"\n"
     if constraint is not None:
         runsh += "#SBATCH --constraint="+str(constraint)+"\n"
