@@ -513,12 +513,17 @@ class Hamiltonian():
         """Add in-plane magnetic field"""
         from .peierls import add_inplane_bfield
         add_inplane_bfield(self,**kwargs)
-    def align_magnetism(self,vectors):
+    def align_magnetism(self,vectors=None):
         """ Rotate the Hamiltonian to have magnetism in the z direction"""
         if self.has_eh: raise
         from .rotate_spin import align_magnetism as align
-        self.intra = align(self.intra,vectors)
-        self.inter = align(self.inter,vectors)
+        f = lambda m: align(m,vectors) # align the matrix
+        if vectors is None: # get the magnetization
+            mx = self.get_vev("mx")
+            my = self.get_vev("my")
+            mz = self.get_vev("mz")
+            vectors = np.array([mx,my,mz]).T
+        self.modify_hamiltonian_matrices(f) # modify the matrices
     def global_spin_rotation(self,**kwargs):
         """ Perform a global spin rotation """
         return rotate_spin.hamiltonian_spin_rotation(self,**kwargs)
