@@ -21,17 +21,15 @@ def rotation_matrix(m,vectors):
         vv = np.sqrt(v.dot(v)) # norm of v
         if vv>1e-8: # if nonzero scale
             u = v/vv
-        else: # if zero put to zero
-            raise
-  #      rot = u[0]*sx + u[1]*sy + u[2]*sz 
-        uxy = np.sqrt(u[0]**2 + u[1]**2) # component in xy plane
-        phi = np.arctan2(u[1],u[0]) # phi axis
-        theta = np.arctan2(uxy,u[2]) # angle with respect to z axis
-        r1 =  phi*sz/2.0 # rotate along z
-        r2 =  theta*sy/2.0 # rotate along y
-        # a factor 2 is taken out due to 1/2 of S
-#        rot = algebra.expm(-1j*r2) @ algebra.expm(1j*r1)   
-        rot = algebra.expm(1j*r1) @ algebra.expm(-1j*r2)   
+            uxy = np.sqrt(u[0]**2 + u[1]**2) # component in xy plane
+            phi = np.arctan2(u[1],u[0]) # phi axis
+            theta = np.arctan2(uxy,u[2]) # angle with respect to z axis
+            r1 =  phi*sz/2.0 # rotate along z
+            r2 =  theta*sy/2.0 # rotate along y
+            # a factor 2 is taken out due to 1/2 of S
+            rot = algebra.expm(1j*r1) @ algebra.expm(-1j*r2)   
+        else: # if zero vector, no rotation
+            rot = sz*0. # just no rotation
         R[i][i] = rot  # save term
     R = algebra.bmat(R)  # convert to full sparse matrix
     return algebra.todense(R)
