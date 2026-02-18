@@ -133,16 +133,16 @@ def parametric_hopping(r1,r2,fc,is_sparse=False):
 
 
 def parametric_hopping_spinful(r1,r2,fc,is_sparse=False):
-  """ Generates a parametric hopping based on a function, that returns
-  a 2x2 matrix"""
-  m = [[None for i in range(len(r2))] for j in range(len(r1))]
-  for i in range(len(r1)):
-    for j in range(len(r2)):
-      val = fc(r1[i],r2[j]) # add hopping based on function
-      m[i][j] = val # store this result
-  m = bmat(m) # convert to matrix
-  if not is_sparse: m = m.todense() # dense matrix
-  return m
+    """ Generates a parametric hopping based on a function, that returns
+    a 2x2 matrix"""
+    m = [[None for i in range(len(r2))] for j in range(len(r1))]
+    for i in range(len(r1)):
+      for j in range(len(r2)):
+        val = fc(r1[i],r2[j]) # add hopping based on function
+        m[i][j] = val # store this result
+    m = algebra.bmat(m) # convert to matrix
+    if not is_sparse: m = algebra.todense(m) # dense matrix
+    return m
 
 
 # this is a potential speed-up
@@ -161,52 +161,54 @@ def parametric_hopping_spinful(r1,r2,fc,is_sparse=False):
 
 def generate_parametric_hopping(h,f=None,mgenerator=None,
              spinful_generator=False):
-  """ Adds a parametric hopping to the hamiltonian based on an input function"""
-  rs = h.geometry.r # positions
-  g = h.geometry # geometry
-  has_spin = h.has_spin # check if it has spin
-  is_sparse = h.is_sparse
-  if mgenerator is None: # no matrix generator given on input
-    if f is None: raise # no function given on input
-    if spinful_generator:
-      raise
-      print("WARNING, I am not sure why I programmed this")
-      h.has_spin = True
-      generator = parametric_hopping_spinful
+    """ Adds a parametric hopping to the hamiltonian
+    based on an input function"""
+    rs = h.geometry.r # positions
+    g = h.geometry # geometry
+    has_spin = h.has_spin # check if it has spin
+    is_sparse = h.is_sparse
+    if mgenerator is None: # no matrix generator given on input
+      if f is None: raise # no function given on input
+      if spinful_generator:
+        h.has_spin = True
+        generator = parametric_hopping_spinful
+      else:
+        h.has_spin = False
+        generator = parametric_hopping
+      def mgenerator(r1,r2):
+        return generator(r1,r2,f,is_sparse=is_sparse)
     else:
-      h.has_spin = False
-      generator = parametric_hopping
-    def mgenerator(r1,r2):
-      return generator(r1,r2,f,is_sparse=is_sparse)
-  else:
-    if h.dimensionality==3: raise
-  h.intra = mgenerator(rs,rs)
-  if h.dimensionality == 0: pass
-  elif h.dimensionality == 1:
-    dr = g.a1
-    h.inter = mgenerator(rs,rs+dr)
-  elif h.dimensionality == 2:
-    h.tx = mgenerator(rs,rs+g.a1)
-    h.ty = mgenerator(rs,rs+g.a2)
-    h.txy = mgenerator(rs,rs+g.a1+g.a2)
-    h.txmy = mgenerator(rs,rs+g.a1-g.a2)
-  elif h.dimensionality == 3:
-    if spinful_generator: raise # not implemented
-    h.is_multicell = True # multicell Hamiltonian
-    from . import multicell
-    multicell.parametric_hopping_hamiltonian(h,fc=f)
-  else: raise
-  # check that the sparse mde is set ok
-  if is_sparse and type(h.intra)==type(np.matrix([[]])):
-    h.is_sparse = False
-    h.turn_sparse() # turn the matrix sparse
-  if not is_sparse and type(h.intra)!=type(np.matrix([[]])):
-    h.is_sparse = True
-    h = h.get_dense() # turn the matrix sparse
-  if has_spin: # Hamiltonian should be spinful
-    h.has_spin = False
-    h.turn_spinful()
-  return h
+      if h.dimensionality==3: raise
+    h.intra = mgenerator(rs,rs)
+    if h.dimensionality == 0: pass
+    elif h.dimensionality == 1:
+      dr = g.a1
+      h.inter = mgenerator(rs,rs+dr)
+    elif h.dimensionality == 2:
+      h.tx = mgenerator(rs,rs+g.a1)
+      h.ty = mgenerator(rs,rs+g.a2)
+      h.txy = mgenerator(rs,rs+g.a1+g.a2)
+      h.txmy = mgenerator(rs,rs+g.a1-g.a2)
+    elif h.dimensionality == 3:
+      if spinful_generator: raise # not implemented
+      h.is_multicell = True # multicell Hamiltonian
+      from . import multicell
+      multicell.parametric_hopping_hamiltonian(h,fc=f)
+    else: raise
+    # check that the sparse mde is set ok
+    if is_sparse and type(h.intra)==type(np.matrix([[]])):
+      h.is_sparse = False
+      h.turn_sparse() # turn the matrix sparse
+    if not is_sparse and type(h.intra)!=type(np.matrix([[]])):
+      h.is_sparse = True
+      h = h.get_dense() # turn the matrix sparse
+    if spinful_generator: # spin generator, assume it has spin
+        h.has_spin = True
+    else: # spinless generator, add the spin degree by hand
+        if has_spin: # Hamiltonian should be spinful
+            h.has_spin = False
+            h.turn_spinful()
+    return h
 
 
 
