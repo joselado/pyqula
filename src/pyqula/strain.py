@@ -80,8 +80,19 @@ def simple_strain_matrix(m,rs1,rs2,indg,fs): # function to apply strain to a mat
 
 
 
-def graphene_buckling(omega=0.1,dt=0.2):
+def graphene_buckling(omega=0.1,dt=0.2,geometry=None):
     """Return the strain function for graphene buckling"""
+    if geometry is not None: # get the bond vector from geometry
+        r1 = geometry.r[0] # first site
+        i2 = geometry.get_connections()[0][0] # one neighbor
+        r2 = geometry.r[i2]
+        g1 = (r2-r1)[0:2] # vector connecting them
+    # now get the three bond vectors
+    else:  g1 = np.array([1.,0.]) # make a guess
+    #rotation matrix by 120 degrees
+    R = np.array([[np.cos(np.pi*2/3.),-np.sin(np.pi*2/3.)],[np.sin(np.pi*2/3.),np.cos(np.pi*2/3.)]])
+    g2 = R@g1 # rotate
+    g3 = R@g2 # rotate
     def pot(r,dr):
         r = r[0:2]
         dr = dr[0:2]
@@ -89,9 +100,7 @@ def graphene_buckling(omega=0.1,dt=0.2):
         else: omega0 = omega
         if callable(dt): dt0 = dt(r) # callable
         else: dt0 = dt
-        g1 = np.array([1.,0.])
-        g2 = np.array([np.cos(np.pi*2/3.),np.sin(np.pi*2/3.)])
-        g3 = np.array([np.cos(np.pi*4/3.),np.sin(np.pi*4/3.)])
+        omega0 = omega0*np.sqrt(3./2.)# redefine so that it is periodic in 2D
         if np.abs(np.abs(dr.dot(g1))-1.0)<1e-3:
             G = g1*omega0 # modulate accordingly
         elif np.abs(np.abs(dr.dot(g2))-1.0)<1e-3:
