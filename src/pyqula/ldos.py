@@ -296,8 +296,10 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
     x,y,z,r = g.x,g.y,g.z,g.r # get the coordinates
     if nrep>1:
         go = h.geometry.copy() # copy geometry
-        go = go.supercell(nrep) # create supercell
-        do = d.tolist()*(nrep**g.dimensionality) # replicate
+        go = go.get_supercell(nrep) # create supercell
+        from .geometry import replicate_array
+        do = replicate_array(g,d,nrep=nrep) # replicate
+#        do = d.tolist()*(nrep**g.dimensionality) # replicate
         xo = go.x
         yo = go.y
         zo = go.z

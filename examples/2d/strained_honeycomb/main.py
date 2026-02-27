@@ -20,9 +20,9 @@ omega = np.pi*2./np.sqrt(g.a1.dot(g.a1)) # modulation frequency
 
 from pyqula.strain import graphene_buckling
 
-pot = graphene_buckling(omega=omega,dt=0.2) # special function for buckled lattices
-
+pot = graphene_buckling(omega=omega,dt=0.2,geometry=g) # special function for buckled lattices
 h.add_strain(pot,mode="non_uniform")
+h.write_hopping()
 h.get_bands(num_bands=20)
 h.get_ldos(e=0.)
 
