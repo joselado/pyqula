@@ -241,3 +241,7 @@ from .specialhamiltoniantk.TI import QSH3D_film
 
 
 from .specialhamiltoniantk.decorated import decorated_triangular
+
+
+# altermagnetism
+from .specialhamiltoniantk.altermagnets import square_altermagnet
