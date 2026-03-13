@@ -1,6 +1,7 @@
 from scipy.sparse import issparse,bmat
 from scipy.sparse import csc_matrix as csc
 from scipy.sparse import csc_matrix
+from scipy.sparse import identity as sparse_identity
 import scipy.linalg as dlg
 import scipy.sparse.linalg as slg
 import numpy as np
@@ -333,3 +334,19 @@ def bmat(M):
 def expm(M):
     M = todense(M)
     return dlg.expm(M)
+
+
+def det(M):
+    """Determinant of a matrix"""
+    if issparse(M): 
+        raise # not implemented
+    else: return dlg.det(M)
+
+
+def identity(M):
+    """Return identity matrix"""
+    if issparse(M): 
+        return sparse_identity(M.shape[0],dtype=np.complex128)
+    else:
+        return np.identity(M.shape[0],dtype=np.complex128)
+
