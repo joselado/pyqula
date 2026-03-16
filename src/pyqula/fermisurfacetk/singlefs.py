@@ -1,6 +1,7 @@
 import numpy as np
 from .. import algebra
 from .. import parallel
+import scipy.sparse.linalg as slg
 
 arpack_tol = 1e-5
 arpack_maxiter = 10000
