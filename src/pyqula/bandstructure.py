@@ -168,12 +168,12 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
 
 
 
-def smalleig(m,numw=10,evecs=False):
+def smalleig(m,numw=10,evecs=False,e0=0.):
   """
   Return the smallest eigenvalues using arpack
   """
   tol = arpack_tol
-  eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=0.0,
+  eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=e0,
                                   tol=tol,maxiter=arpack_maxiter)
   if evecs:  return eig,eigvec.transpose()  # return eigenvectors
   else:  return eig  # return eigenvalues
