@@ -460,41 +460,11 @@ from .topologytk.green import berry_green
 from .topologytk.green import berry_operator
 
 
+from .topologytk.quantumgeometry import QG_green_rmap_kpoint
 
-def berry_green_rmap_kpoint(h,emin=None,k=[0.,0.,0.],
-        ne=100,dk=0.0001,operator=None,integral_mode="complex",
-                  delta=0.002,integral=True,eps=1e-1,
-                  energy=0.0,emax=0.0):
-  """Return the Berry curvature map at a certain kpoint. This function
-  allows to compute both dOmega/dE, and Omega"""
-  f = h.get_gk_gen(delta=delta,canonical_phase=True) # green function generator
-  fgreen = berry_green_generator(f,k=k,dk=dk,operator=operator,full=True) 
-  # No minimum energy provided
-  if emin is None and integral:
-      emin = algebra.eigvalsh(h.get_hk_gen()(k))[0] - 1.0
-      print("Minimum energy",emin)
-  def fint(x):  
-#    return fgreen(x).trace()[0,0] # return diagonal
-    return np.diag(fgreen(x)) # return diagonal
-  ### The original function is defined in the complex plane,
-  # we will do a change of variables of the form z = re^(iphi) - r0
-  # so that dz = re^(iphi) i dphi
-  if integral: # integrate up to the fermi energy
-    es = np.linspace(emin,0.,ne) # energies used for the integration
-    def fint2(x):
-      """Function to integrate using a complex contour, from 0 to 1"""
-      de = emax-emin # energy window of the integration
-      ce = de/2. # center of the circle
-      z0 = -ce*np.exp(-1j*x*np.pi) # parametrize the circle
-      z = z0 + (emin+emax)/2. # shift the circle
-      print("Evaluating",x)
-      return -(fint(z)*z0).imag*np.pi # integral after the change of variables
-    from .integration import integrate_matrix
-    out = integrate_matrix(fint2,xlim=[0.,1.],eps=eps)
-    out = out.real # turn real
-  else: # evaluate at the fermi energy
-    out = fint(energy).real
-  return out # return result
+def berry_green_rmap_kpoint(H,**kwargs):
+    return QG_green_rmap_kpoint(H,**kwargs).imag # return Berry part
+
 
 
 def spatial_berry_density(h,**kwargs):
@@ -540,7 +510,7 @@ from .topologytk.green import dOmega_dE
 
 def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
                delta=None,operator=None,dk=0.01):
-  """Compute a Berry density map Omega/dE (k) at a fixed energy"""
+  """Compute a Berry density map dOmega/dE (k) at a fixed energy"""
   if delta is None: delta = 5./nk
   if reciprocal: R = h.geometry.get_k2K()
   else: R = np.matrix(np.identity(3))

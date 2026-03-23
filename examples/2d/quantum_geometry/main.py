@@ -12,7 +12,7 @@ h.shift_fermi(0.9)
 
 # compute Berry curvature and quantum geometry
 from pyqula.topologytk import quantumgeometry
-(es,qg,be) = quantumgeometry.get_QG_kpath(h,delta=0.1)
+(ks,qg,be) = quantumgeometry.get_QG_kpath(h,delta=0.1)
 
 
 import numpy as np
@@ -24,10 +24,10 @@ print("Berry",np.mean(np.abs(be)))
 import matplotlib.pyplot as plt
 
 plt.subplot(1,2,1)
-plt.plot(es,be)
+plt.plot(ks,be)
 plt.xlabel("kpath") ; plt.xticks([]) ; plt.ylabel("Berry curvature")
 plt.subplot(1,2,2)
-plt.plot(es,qg)
+plt.plot(ks,qg)
 plt.xlabel("kpath") ; plt.xticks([]) ; plt.ylabel("Quantum Geometry")
 
 plt.tight_layout()

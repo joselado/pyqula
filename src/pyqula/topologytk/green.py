@@ -78,7 +78,7 @@ def berry_operator(h,delta=1e-1,**kwargs):
         def outf(w,k=[0.,0.,0.]):
             m = hk(k) # bloch Hamiltonian
             e = algebra.dot(w,m*w) # energy
-            w2 = bk(k)(e)*(delta*w) # Operator times WF
+            w2 = bk(k)(e)@(delta*w) # Operator times WF
             # to think, perhaps this should be <v|B|v>|v>
             # currently it is B|v>
             # (this does not change the expectation value though)
