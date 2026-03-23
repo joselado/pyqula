@@ -26,10 +26,21 @@ h.add_sublattice_imbalance(fm)
 from pyqula import parallel
 
 # spatially resolved Berry curvature
-topology.Omega_rmap(h,k=[0.,0.,0.0],nrep=3,
+b = topology.Omega_rmap(h,k=[0.,0.,0.0],nrep=3,
         integral=True,eps=1e-4,delta=1e-2,operator="valley")
 
+import matplotlib.pyplot as plt
 
+plt.subplot(1,2,1) ; plt.title("Sublattice imbalance")
+plt.scatter(g.r[:,0],g.r[:,1],c=[fm(ri) for ri in g.r],
+            cmap="bwr") ; plt.axis("equal")
+plt.colorbar(label="Sublattice imbalance")
+
+plt.subplot(1,2,2) ; plt.title("Valley Berry curvature")
+plt.scatter(g.r[:,0],g.r[:,1],c=b,cmap="bwr") ; plt.axis("equal")
+
+plt.colorbar(label="Valley Berry curvature")
+plt.show()
 
 
 
