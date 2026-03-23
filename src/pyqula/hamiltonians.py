@@ -808,6 +808,7 @@ def set_finite_system(hin,n=1,periodic=False):
   """ Transforms the hamiltonian into a finite system,
   removing the hoppings """
   from copy import deepcopy
+  from .algebra import dagger
   h = hin.copy() # copy Hamiltonian
   h = h.get_supercell(n) # make the supercell
   h = h.get_no_multicell()
@@ -815,12 +816,12 @@ def set_finite_system(hin,n=1,periodic=False):
   h.geometry.dimensionality = 0 # put dimensionality = 0
   if periodic: # periodic boundary conditions
     if h.dimensionality == 1:
-      h.intra = h.intra + h.inter + h.inter.H 
+      h.intra = h.intra + h.inter + dagger(h.inter)
     if h.dimensionality == 2:
-      h.intra = h.intra +  h.tx + h.tx.H 
-      h.intra = h.intra +  h.ty + h.ty.H 
-      h.intra = h.intra +  h.txy + h.txy.H 
-      h.intra = h.intra +  h.txmy + h.txmy.H 
+      h.intra = h.intra +  h.tx + dagger(h.tx) 
+      h.intra = h.intra +  h.ty + dagger(h.ty)
+      h.intra = h.intra +  h.txy + dagger(h.txy)
+      h.intra = h.intra +  h.txmy + dagger(h.txmy)
   else: pass
   return h
   
