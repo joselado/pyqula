@@ -188,19 +188,20 @@ class Hamiltonian():
       def f(k=[0.,0.,0.],e=0.0,inv=False):
           hk = hkgen(k) # get matrix
           if canonical_phase: # use a Bloch phase in all the sites
-            frac_r = self.geometry.frac_r # fractional coordinates
-            # start in zero
-            U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])
-            U = np.matrix(U) # this is without .H
-            # increase the space if necessary
-            U = self.spinless2full(U,is_hamiltonian=False) 
-            Ud = algebra.dagger(U) # dagger
-            hk = Ud@hk@U
+              frac_r = self.geometry.frac_r # fractional coordinates
+              # start in zero
+              U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])
+              U = np.matrix(U) # this is without .H
+              # increase the space if necessary
+              U = self.spinless2full(U,is_hamiltonian=False) 
+              Ud = algebra.dagger(U) # dagger
+              hk = Ud@hk@U
           if operator is not None: 
               hk = algebra.dagger(operator)@hk@operator # project
           if not self.is_sparse: # dense Hamiltonians
               out = np.identity(hk.shape[0])*(e+1j*delta) - hk
-              if not inv: out = algebra.inv(out) # Green's function
+              if not inv: 
+                  out = algebra.inv(algebra.todense(out)) # Green's function
               else: out = out # just the Hamiltonian
           else: # for sparse, use the Operator object
               from scipy.sparse import identity
