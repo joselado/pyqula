@@ -1,0 +1,30 @@
+# Add the root path of the pyqula library
+import os ; import sys 
+sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
+
+
+
+
+
+from pyqula import geometry
+from pyqula import topology
+from pyqula import spectrum
+g = geometry.honeycomb_lattice()
+g = g.get_supercell(5)
+h = g.get_hamiltonian(has_spin=False)
+h.turn_dense()
+h.add_onsite(0.9)
+
+from pyqula.fermisurfacetk.swarmfs import fermi_surface
+ks = fermi_surface(h,nk=500,nrep=3)
+print(ks)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(ks[:,0],ks[:,1]) ; plt.axis("equal")
+plt.show()
+
+
+
+
+
