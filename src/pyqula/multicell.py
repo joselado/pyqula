@@ -99,7 +99,7 @@ def generate_get_tij(h):
             else: return None
     return fun
 
-def hk_gen(h):
+def hk_gen(h,**kwargs):
     """Generate a k dependent hamiltonian"""
     if not h.is_multicell:
         h = h.get_multicell()
@@ -113,7 +113,7 @@ def hk_gen(h):
     ## dense Hamiltonians, accelerated function ##
     if not h.is_sparse: # for dense Hamiltonians
         from .htk.bloch import bloch_hamiltonian_generator_dense
-        return bloch_hamiltonian_generator_dense(h,hopping)
+        return bloch_hamiltonian_generator_dense(h,hopping,**kwargs)
     ## sparse Hamiltonians, explicit function ##
     else: # sparse Hamiltonians
         if h.dimensionality == 0: 

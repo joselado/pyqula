@@ -158,10 +158,10 @@ class Hamiltonian():
           self.dimensionality = geometry.dimensionality 
           self.geometry = geometry # add geometry object
           self.num_orbitals = len(geometry.x)
-    def get_hk_gen(self):
+    def get_hk_gen(self,**kwargs):
         """ Generate kdependent hamiltonian"""
         #if self.is_multicell:
-        out = multicell.hk_gen(self) # for multicell
+        out = multicell.hk_gen(self,**kwargs) # for multicell
        # else: out = hk_gen(self) # for normal cells
         from .htk.canonicalphase import canonical_unitary
 #        return canonical_unitary(self,out)
