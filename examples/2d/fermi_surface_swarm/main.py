@@ -17,11 +17,11 @@ h.add_onsite(0.9)
 
 from pyqula.fermisurfacetk.swarmfs import fermi_surface
 ks = fermi_surface(h,nk=100,nrep=3)
-print(ks)
 
 import matplotlib.pyplot as plt
 
-plt.scatter(ks[:,0],ks[:,1]) ; plt.axis("equal")
+plt.scatter(ks[:,0],ks[:,1],c=range(len(ks)),cmap="rainbow") 
+plt.axis("equal") ; plt.colorbar()
 plt.show()
 
 
