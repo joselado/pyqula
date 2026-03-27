@@ -95,16 +95,16 @@ def default_kpath(g,nk=400):
     # write bandlines
     fbl = open("BANDLINES.OUT","w")
     if np.abs(g.a1.dot(g.a2))<0.001: # square lattice
-      fbl.write("0   \Gamma\n")
+      fbl.write("0   \\Gamma\n")
       fbl.write(str(nk/2)+"   M\n")
-      fbl.write(str(nk)+"   \Gamma\n")
+      fbl.write(str(nk)+"   \\Gamma\n")
 
     else: # triangular lattice
-      fbl.write("0   \Gamma\n")
+      fbl.write("0   \\Gamma\n")
       fbl.write(str(nk/3)+"   K\n")
       fbl.write(str(nk/2)+"   M\n")
       fbl.write(str(2*nk/3)+"   K'\n")
-      fbl.write(str(nk)+"   \Gamma\n")
+      fbl.write(str(nk)+"   \\Gamma\n")
     fbl.close()
     return kout
 
@@ -180,7 +180,7 @@ def kx(g,nk=400):
     # write bandlines
     fbl = open("BANDLINES.OUT","w")
     fbl.write("0   X_1\n")
-    fbl.write(str(nk/2)+"   \Gamma\n")
+    fbl.write(str(nk/2)+"   \\Gamma\n")
     fbl.write(str(nk)+"   X_1\n")
     fbl.close()
   return kout # return klist
@@ -251,11 +251,11 @@ def default_v2(g,nk=400):
     fk.close()
     # write bandlines
     fbl = open("BANDLINES.OUT","w")
-    fbl.write("0   \Gamma\n")
+    fbl.write("0   \\Gamma\n")
     fbl.write(str(nk/3)+"   K\n")
     fbl.write(str(nk/2)+"   M\n")
     fbl.write(str(2*nk/3)+"   K'\n")
-    fbl.write(str(nk)+"   \Gamma\n")
+    fbl.write(str(nk)+"   \\Gamma\n")
     fbl.close()
   else: raise # not implemented
 
@@ -299,33 +299,8 @@ def infer_kmesh_density(kmesh,d=2):
 
 
 
-
-def kmesh(dimensionality,nk=10,nsuper=1,
-        endpoint=False):
-  """Return a mesh of k-points for a certain dimensionality"""
-  from .checkclass import number2array
-  kp = []
-  if nk==1 or dimensionality==0: return [[0.,0.,0.]]
-  if dimensionality==1:
-    for k1 in np.linspace(0.,nsuper,nk,endpoint=endpoint):
-      kp.append([k1,0.,0.]) # store
-  elif dimensionality==2:
-    nk = number2array(nk) # return an array
-    for k1 in np.linspace(0.,nsuper,nk[0],endpoint=endpoint):
-      for k2 in np.linspace(0.,nsuper,nk[1],endpoint=endpoint):
-        kp.append([k1,k2,0.]) # store
-  elif dimensionality==3:
-    nk = number2array(nk) # return an array
-    for k1 in np.linspace(0.,nsuper,nk[0],endpoint=endpoint):
-      for k2 in np.linspace(0.,nsuper,nk[1],endpoint=endpoint):
-        for k3 in np.linspace(0.,nsuper,nk[2],endpoint=endpoint):
-          kp.append([k1,k2,k3]) # store
-  else: raise
-  kp = [np.array(k) for k in kp] # to array
-  return kp
-
-
 from .kpointstk.labels import label2k
+from .kpointstk.kmesh import kmesh
 
 
 

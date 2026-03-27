@@ -10,13 +10,13 @@ from pyqula import geometry
 from pyqula import topology
 from pyqula import spectrum
 g = geometry.honeycomb_lattice()
-g = g.get_supercell(5)
+g = g.get_supercell(3)
 h = g.get_hamiltonian(has_spin=False)
 h.turn_dense()
 h.add_onsite(0.9)
 
 from pyqula.fermisurfacetk.swarmfs import fermi_surface
-ks = fermi_surface(h,nk=500,nrep=3)
+ks = fermi_surface(h,nk=100,nrep=3)
 print(ks)
 
 import matplotlib.pyplot as plt
