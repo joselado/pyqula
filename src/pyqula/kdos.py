@@ -251,55 +251,58 @@ def write_surface_kpm(h,ne=400,klist=None,scale=4.,npol=200,w=20,ntries=20):
 
 
 def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
+                    write=True,
                     delta=None,kpath=None,dh1=None,dh2=None,nk=50):
-  """Get the surface DOS of an interface"""
-  from scipy.sparse import csc_matrix,bmat
-  if delta is None:
-      delta = 1*(max(energies) - min(energies))/len(energies)
-  if kpath is None: 
-    if h1.dimensionality==1:
-      kpath = [[0.,0.,0.]]
-    elif h1.dimensionality==3:
-      g2d = h1.geometry.copy() # copy Hamiltonian
-      g2d = sculpt.set_xy_plane(g2d)
-      kpath = klist.default(g2d,nk=nk)
-    elif h1.dimensionality==2:
-      kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
-    else: raise
-#  tr = timing.Testimator("KDOS") # generate object
-#  tr.remaining(ik,len(kpath)) # generate object
-  ik = 0
-  h1 = h1.get_multicell() # multicell Hamiltonian
-  h2 = h2.get_multicell() # multicell Hamiltonian
-  def computek(ik):
-    k = kpath[ik] # get this one
-#    for energy in energies:
-#  (b1,s1,b2,s2,b12) = green.interface(h1,h2,k=k,energy=energy,delta=delta)
-#      out = green.interface(h1,h2,k=k,energy=energy,delta=delta)
-    outs = green.interface_multienergy(h1,h2,k=k,energies=energies,
-            delta=delta,dh1=dh1,dh2=dh2)
-    outstr = ""
-    for (energy,out) in zip(energies,outs):
-      if operator is None: 
-        op = np.identity(h1.intra.shape[0]*2) # normal cell
-        ops = np.identity(h1.intra.shape[0]) # supercell 
-#      elif callable(operator): op = callable(op)
-      else:
-        op = operator # normal cell 
-        ops = bmat([[csc_matrix(operator),None],[None,csc_matrix(operator)]])
-      # write everything
-      outstr += str(ik)+"   "+str(energy)+"   "
-      for g in out: # loop
-        if g.shape[0]==op.shape[0]: d = -algebra.trace(g@op).imag # bulk
-        else: d = -algebra.trace(g@ops).imag # interface
-        outstr += str(d)+"   "
-      outstr += "\n"
-    return outstr
-  out = parallel.pcall(computek,range(len(kpath))) # compute all
-  fo = open("KDOS_INTERFACE.OUT","w")
-  fo.write("# k, E, Bulk1, Surf1, Bulk2, Surf2, interface\n")
-  for o in out: fo.write(o)
-  fo.close()
+    """Get the surface DOS of an interface"""
+    from scipy.sparse import csc_matrix,bmat
+    if delta is None:
+        delta = 1*(max(energies) - min(energies))/len(energies)
+    if kpath is None: 
+      if h1.dimensionality==1:
+        kpath = [[0.,0.,0.]]
+      elif h1.dimensionality==3:
+        g2d = h1.geometry.copy() # copy Hamiltonian
+        g2d = sculpt.set_xy_plane(g2d)
+        kpath = klist.default(g2d,nk=nk)
+      elif h1.dimensionality==2:
+        kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
+      else: raise
+  #  tr = timing.Testimator("KDOS") # generate object
+  #  tr.remaining(ik,len(kpath)) # generate object
+    ik = 0
+    h1 = h1.get_multicell() # multicell Hamiltonian
+    h2 = h2.get_multicell() # multicell Hamiltonian
+    def computek(ik):
+      k = kpath[ik] # get this one
+  #    for energy in energies:
+  #  (b1,s1,b2,s2,b12) = green.interface(h1,h2,k=k,energy=energy,delta=delta)
+  #      out = green.interface(h1,h2,k=k,energy=energy,delta=delta)
+      outs = green.interface_multienergy(h1,h2,k=k,energies=energies,
+              delta=delta,dh1=dh1,dh2=dh2)
+      outstr = ""
+      for (energy,out) in zip(energies,outs):
+        if operator is None: 
+          op = np.identity(h1.intra.shape[0]*2) # normal cell
+          ops = np.identity(h1.intra.shape[0]) # supercell 
+  #      elif callable(operator): op = callable(op)
+        else:
+          op = operator # normal cell 
+          ops = bmat([[csc_matrix(operator),None],[None,csc_matrix(operator)]])
+        # write everything
+        outstr += str(ik)+"   "+str(energy)+"   "
+        for g in out: # loop
+          if g.shape[0]==op.shape[0]: d = -algebra.trace(g@op).imag # bulk
+          else: d = -algebra.trace(g@ops).imag # interface
+          outstr += str(d)+"   "
+        outstr += "\n"
+      return outstr
+    out = parallel.pcall(computek,range(len(kpath))) # compute all
+    if write:
+        fo = open("KDOS_INTERFACE.OUT","w")
+        fo.write("# k, E, Bulk1, Surf1, Bulk2, Surf2, interface\n")
+        for o in out: fo.write(o)
+        fo.close()
+    return np.genfromtxt("KDOS_INTERFACE.OUT") # return data
 
 
 
