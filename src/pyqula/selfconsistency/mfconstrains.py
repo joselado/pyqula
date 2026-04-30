@@ -17,6 +17,15 @@ def remove_onsite_spinful(m):
     return m
 
 
+def remove_onsite_spinless(m):
+    n = m.shape[0] # number of orbitals
+    for i in range(n):
+        m[i,i] = 0. # set
+    return m
+
+
+
+
 
 def remove_magnetism_spinful(m):
     n = m.shape[0]//2 # number of orbitals
@@ -47,6 +56,21 @@ def remove_inplane_magnetism_spinful(m):
     return m
 
 
+def remove_spinless_sector(h,removef):
+    """Remove total charge renormalization"""
+    has_eh = h.has_eh
+    has_spin = h.has_spin
+    if has_eh: raise # not implemented
+    if has_spin: raise # not the right function
+    def f(dd): # create function
+        out = deepcopy(dd) # copy the dictionary
+        m = out[(0,0,0)] # onsite matrix
+        m = removef(m) # remove the sector
+        out[(0,0,0)] = m # set the new matrix
+        return out # return dictionary
+    return f # return function
+
+
 
 
 def remove_spinful_sector(h,removef):
@@ -72,7 +96,10 @@ def remove_spinful_sector(h,removef):
 
 
 def remove_charge(h):
-    return remove_spinful_sector(h,remove_onsite_spinful)
+    if h.has_spin:
+        return remove_spinful_sector(h,remove_onsite_spinful)
+    else:
+        return remove_spinless_sector(h,remove_onsite_spinless)
 
 def remove_magnetism(h):
     return remove_spinful_sector(h,remove_magnetism_spinful)
