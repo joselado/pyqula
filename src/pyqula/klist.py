@@ -341,4 +341,10 @@ def kgrid2d(kxs,kys):
     return out
 
 
-
+def int2dims(nsuper):
+    """Given a integer or array, return array for all the dimensions"""
+    from .algebra import isnumber
+    from .checkclass import is_iterable
+    if is_iterable(nsuper): return nsuper 
+    elif isnumber(nsuper): return [nsuper,nsuper,nsuper]
+    else: raise
