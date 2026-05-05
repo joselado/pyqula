@@ -21,8 +21,11 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
             operator = np.matrix(np.identity(h.intra.shape[0]))
     if h.dimensionality!=2: raise  # continue if two dimensional
     hk_gen = h.get_hk_gen() # gets the function to generate h(k)
-    kxs = np.linspace(-nsuper,nsuper,nk)  # generate kx
-    kys = np.linspace(-nsuper,nsuper,nk)  # generate ky
+    from ..klist import int2dims
+    nsupers = int2dims(nsuper) # get the array
+    nks = int2dims(nk) # get the array
+    kxs = np.linspace(-nsupers[0],nsupers[0],nks[0])  # generate kx
+    kys = np.linspace(-nsupers[1],nsupers[1],nks[1])  # generate ky
     iden = np.identity(h.intra.shape[0],dtype=np.complex128)
     kxout = []
     kyout = []
@@ -80,7 +83,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     # setup the operator
     rs = [] # empty list
     for x in kxs:
-      for y in kxs:
+      for y in kys:
         rs.append([x,y,0.]) # store
     k0 = np.array([k0[0],k0[1],0.])
     def getf(r): # function to compute FS
