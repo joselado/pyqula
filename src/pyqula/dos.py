@@ -424,6 +424,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
     if operator is None: op = None # no operator
     else:
         op = operator.get_matrix() # get the matrix of the operator
+        ## the case of projector operators should be implemented explicitly
         if op is None: raise # not implemented
     (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=ne,operator=op,
                    ewindow=ewindow,**kwargs) # compute
