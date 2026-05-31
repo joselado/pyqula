@@ -426,7 +426,13 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
         op = operator.get_matrix() # get the matrix of the operator
         ## the case of projector operators should be implemented explicitly
         if op is None: raise # not implemented
-    (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=ne,operator=op,
+        # this currently only works for projector operators
+        if np.max(np.abs(op - op@op))>1e-4:
+            print("only projector operators implemented in KPM")
+            raise
+        P = op # projector
+    (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=ne,operator=None,
+                   P = op,
                    ewindow=ewindow,**kwargs) # compute
     return (x,y)
   from . import parallel
