@@ -29,7 +29,7 @@ def rotation_matrix(m,vectors):
             # a factor 2 is taken out due to 1/2 of S
             rot = algebra.expm(1j*r1) @ algebra.expm(-1j*r2)   
         else: # if zero vector, no rotation
-            rot = sz*0. # just no rotation
+            rot = np.identity(2) # just no rotation
         R[i][i] = rot  # save term
     R = algebra.bmat(R)  # convert to full sparse matrix
     return algebra.todense(R)

@@ -1,5 +1,6 @@
 import numpy as np
 from .rpa import chi_AB_RPA
+from .rpa import chi_ops_RPA
 
 # spin-response functions
 
@@ -21,9 +22,11 @@ def spinchi_ladder(H,v=[0.,0.,1.],RPA=True,**kwargs):
         if U is not None: # finite interaction
             if len(U)>1: raise # not implemented for momentum dependent
             U = U[(0,0,0)] # onsite interaction matrix
-            U = sp@U # project on the operator
+            # up to here U is an off-diagonal matrix, with
+            # finite elements between up and down
+            # now let us pick up the up-down elements and sum them
             U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
-            U = -2*U # beware of this minus sign for spin response (!!!)
+            U = -U # beware of this minus sign for spin response (!!!)
     else: U = None # no RPA
     return chi_AB_RPA(H,A=sp,B=sm,V=U,**kwargs) # non-interacting response
 
@@ -34,9 +37,46 @@ def V2U_matrix(V):
     # V is a 2N matrix with individual U values in the diagonal
     N = V.shape[0]//2 # dimension
     U = np.zeros((N,N),dtype=np.complex128) # initialize
-    for i in range(N):
-        U[i,i] = V[2*i,2*i] # add contribution
-        U[i,i] += V[2*i+1,2*i+1] # add contribution
+    for i in range(N): # loop over orbitals
+        U[i,i] = V[2*i,2*i+1] # add contribution
+        U[i,i] += V[2*i+1,2*i] # add contribution
     return U # return the matrix
+
+def replicateU(U,n=3):
+    """Take an interaction matrix U and replicate 3 times for different
+    channels"""
+    out = [[U*0. for i in range(n)] for j in range(n)]
+    for i in range(n): out[i][i] = U
+    from .. import algebra
+    return np.bmat(out) # return the full matrix
+
+
+
+def spinchi_full(H,RPA=True,**kwargs):
+    """Return the spin response function"""
+    if H.has_eh:
+        print("Not implemented with Nambu basis")
+        raise
+    sx = H.get_operator("sx") # spin operator, eigen +-1
+    sy = H.get_operator("sy") # spin operator, eigen +-1
+    sz = H.get_operator("sz") # spin operator, eigen +-1
+    Ss = [sx/2.,sy/2.,sz/2.] # pauli matrices, with eigen +-1/2
+    if RPA: # RPA mode
+        U = H.V # get the interaction
+        if U is not None: # finite interaction
+            if len(U)>1: raise # not implemented for momentum dependent
+            U = U[(0,0,0)] # onsite interaction matrix
+            U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
+            U = replicateU(U,n=3) # replicate for all the channels
+            U = -2*U # beware of this minus sign for spin response (!!!)
+    else: U = None # no RPA
+    return chi_ops_RPA(H,ops=Ss,V=U,**kwargs) # non-interacting response
+
+
+
+
+
+
+
 
 
