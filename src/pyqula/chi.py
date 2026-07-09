@@ -215,4 +215,5 @@ from .chitk.pmchi import pmchi
 
 # spin-response functions
 from .chitk.spinchi import spinchi_ladder
+from .chitk.spinchi import spinchi_full
 

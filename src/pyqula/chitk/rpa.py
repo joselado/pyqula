@@ -13,6 +13,38 @@ def chi_AB_RPA(h,V=None,**kwargs):
     return es,np.array(chis_rpa)
 
 
+def chi_ops_RPA(h,ops=None,V=None,**kwargs):
+    """Compute the RPA chi for a hamiltonian,
+    return a tensor given a list of operators. This is 
+    for example useful to compute the full spin response
+    function"""
+    from ..chi import chiAB # get response function
+    nop = len(ops) # number of operators
+    # storage for the full response
+    chis = [[None for i in range(nop)] for j in range(nop)]
+    for i in range(nop): # loop over first operator
+        for j in range(nop): # loop over second operator
+            A = ops[i] # first operator
+            B = ops[j] # second operator
+            es,chisi = chiAB(h,mode="matrix",A=A,B=B,
+                            **kwargs) # non-interacting response
+            chis[i][j] = chisi # store in the list
+    # now make it a block matrix, and reshpae accordingly
+    chis_tmp = np.array(chis) # convert to array
+    chis = [] # empty list
+    for i in range(len(es)): # loop over energies
+        chi = chis_tmp[:,:,i,:,:] # get this one
+        chi = [[chi[i,j,:,:] for i in range(nop)] for j in range(nop)]
+        chis.append(np.bmat(chi)) # store
+    iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
+    if V is not None: # finite interaction, RPA summation
+        chis_rpa = [chi@algebra.inv(iden - V@chi) for chi in chis]
+    else: chis_rpa = chis
+    return es,np.array(chis_rpa)
+
+
+
+
 def chi_AB_RPA_scf(scf):
     """Return the RPA response function for an SCF object"""
     if len(scf.v)==1: # just the onsite term
@@ -31,7 +63,7 @@ def spinchi_pm_RPA(h,U=0.,v=[0.,0.,1.],**kwargs):
     v = np.array(v) # convert to array
     sp = (sx + 1j*sy)/2. # ladder operator
     sm = (sx - 1j*sy)/2. # ladder operator
-    from .chi import chiAB # get response function
+    from ..chi import chiAB # get response function
     es,chis = chiAB(h,A=sp,B=sm,mode="matrix",**kwargs) # non-interacting response functions
     iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
     # this factor 1/2 should be here

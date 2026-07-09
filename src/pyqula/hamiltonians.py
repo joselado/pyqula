@@ -119,6 +119,10 @@ class Hamiltonian():
         """Spin-spin response function with ladder operators"""
         from . import chi
         return chi.spinchi_ladder(self,**kwargs)
+    def get_spinchi_full(self,**kwargs):
+        """Full spin-spin response function"""
+        from . import chi
+        return chi.spinchi_full(self,**kwargs)
 
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""

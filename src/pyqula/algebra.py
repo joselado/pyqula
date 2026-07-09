@@ -1,4 +1,4 @@
-from scipy.sparse import issparse,bmat
+from scipy.sparse import issparse,bmat,block_array
 from scipy.sparse import csc_matrix as csc
 from scipy.sparse import csc_matrix
 from scipy.sparse import identity as sparse_identity
@@ -50,7 +50,9 @@ def trace(m):
 def densebmat(m):
     """Turn a block matrix dense"""
     ms = [[todense(mi) for mi in mij] for mij in m]
-    return todense(bmat(ms)) # return block matrix
+    for mij in m:
+        for mi in mij: print(mi.shape)
+    return todense(block_array(ms)) # return block matrix
 
 def direct_sum(ms):
     mout = [[None for i in range(len(ms))] for j in range(len(ms))]

@@ -1,0 +1,66 @@
+# Add the root path of the pyqula library
+import os ; import sys 
+sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
+
+from pyqula import geometry
+import numpy as np
+from pyqula import parallel
+parallel.numba_cores = 4
+
+
+g = geometry.bichain()
+h = g.get_hamiltonian()
+from pyqula import parallel
+#parallel.numba_cores = 2
+
+U = 3.  
+nk = 20
+hmf = h.copy() ; hmf.add_exchange(lambda r: np.random.random(3)-.5) #; hmf.add_antiferromagnetism(0.5)
+#hmf = h.copy() ; hmf.add_exchange([0.,0.,1.])
+#h.add_exchange([0.,0.,0.3])
+h = h.get_mean_field_hamiltonian(U=U,nk=nk,mf=hmf,filling=0.5)
+qs = np.linspace(0.,.5,20) # qvectors
+energies=np.linspace(.0,5.,100) # energies
+h.get_bands(operator="sz")
+print("Mx",h.get_vev("sx"))
+print("My",h.get_vev("sy"))
+print("Mz",h.get_vev("sz"))
+#exit()
+chimap = []
+
+import time
+t0 = time.time()
+
+def f(q):
+    return h.get_spinchi_full(q=[q,0.,0.],nk=nk,energies=energies,
+                                delta=6e-2,
+            imode="mesh")
+
+#from pyqula import parallel
+#out = parallel.pcall_deep(f,qs,cores=1) # compute all
+out = [f(q) for q in qs] # compute all
+for o in out: # loop over qvectors
+    es,chis = o[0],o[1]
+    cs = [np.trace(c).imag for c in chis]
+#    print(cs)
+    cs = np.array(cs)/np.max(cs)
+    chimap.append(cs) # store 
+
+t1 = time.time()
+print("Time",t1-t0)
+#exit()
+import matplotlib.pyplot as plt
+fig = plt.figure(figsize=(6,4))
+chimap = np.array(chimap) ; chimap = np.abs(chimap) 
+chimap = chimap/np.max(chimap)
+#cut = .8 ; chimap[chimap>cut] = cut
+vmax = np.percentile(chimap,99)
+plt.contourf(qs,energies,np.sqrt(chimap.T),levels=100,cmap="Blues_r")
+plt.colorbar(label="Im($\\chi_{+-}^{RPA}$)",ticks=[])
+plt.xlabel("q-vector [$\\pi$]") ; plt.ylabel("$\\omega$")
+plt.tight_layout()
+plt.savefig("spin_chi_rpa.png")
+
+
+plt.show()
+
