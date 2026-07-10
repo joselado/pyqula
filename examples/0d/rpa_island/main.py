@@ -3,13 +3,6 @@ import os ; import sys
 sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 
-from pyqula import geometry
-g = geometry.chain().get_supercell(50)
-print(len(g.r))
-h = g.get_hamiltonian()
-es,chis = h.get_spinchi_full(nk=1) # compute RPA tensor
-exit()
-
 from pyqula import islands
 g = islands.get_geometry(name="honeycomb",n=2,nedges=3) # get an island
 h = g.get_hamiltonian() # get the Hamiltonian
