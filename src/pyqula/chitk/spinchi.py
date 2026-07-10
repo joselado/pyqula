@@ -74,7 +74,28 @@ def spinchi_full(H,RPA=True,**kwargs):
 
 
 
-
+def get_iets_ldos(H,nk=1,delta=1e-2,e=0.,**kwargs):
+    """Return the IETS local density of state by computing the full
+    spin response function"""
+    from ..checkclass import is_iterable
+    if is_iterable(e): energies = np.array(e) # assume it is an array 
+    else: energies = np.array([e]) # list with energies
+    es,chis = H.get_spinchi_full(nk=nk,
+                                 energies=energies,delta=delta,
+                                 imode="mesh",**kwargs)
+    # chi is a 3Nx3N tensor, resum the relevant elements
+    r = H.geometry.r # positions
+    n = len(r) # number of sites
+    dout = [] # list
+    for chi in chis:
+        chi = chi.imag # take the imaginary part of the chi
+        d = [np.sum([chi[n*j+i,n*j+i] for j in range(3)]) for i in range(n)]
+        dout.append(d) # store
+    dout = np.array(dout) # as array
+    if len(energies)==1: # just one requested
+        return r,dout[0] # return positions and IETS ldos
+    else:
+        return r,dout # return positions and IETS ldos
 
 
 

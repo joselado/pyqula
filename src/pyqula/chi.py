@@ -96,7 +96,8 @@ def chiAB(h,q=None,nk=60,**kwargs):
         return chiAB_q(h,q=q,nk=nk,**kwargs)
     else:
         qs = h.geometry.get_kmesh(nk=nk) # get the kmesh
-        out = [chiAB_q(h,q=q,**kwargs) for q in qs] # get all the k kpoints
+        out = [chiAB_q(h,q=q,nk=nk,
+                       **kwargs) for q in qs] # get all the k kpoints
         return out[0][0],np.mean([o[1] for o in out],axis=0)
 
 
@@ -216,4 +217,5 @@ from .chitk.pmchi import pmchi
 # spin-response functions
 from .chitk.spinchi import spinchi_ladder
 from .chitk.spinchi import spinchi_full
+from .chitk.spinchi import get_iets_ldos
 
