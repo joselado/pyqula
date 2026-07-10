@@ -123,7 +123,10 @@ class Hamiltonian():
         """Full spin-spin response function"""
         from . import chi
         return chi.spinchi_full(self,**kwargs)
-
+    def get_iets_ldos(self,**kwargs):
+        """Spatially resolved IETS at a certain energy"""
+        from . import chi
+        return chi.get_iets_ldos(self,**kwargs)
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)
