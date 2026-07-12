@@ -7,7 +7,7 @@ adaptive_error = 1e-2 # error in adaptive algorithm
 
 
 from scipy.integrate import quad_vec
-
+# this uses adaptive integration, it may be useful for some case
 def integrate_matrix_quad(f,xlim=[0.,1.],eps=0.1,only_imag=False):
     """Quad integration of a matrix, perhaps useful at some point"""
     return quad_vec(f,xlim[0],xlim[1],epsrel=eps,epsabs=eps)[0]

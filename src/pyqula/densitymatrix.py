@@ -6,55 +6,93 @@ from . import parallel
 delta_dm = 1e-6 # default energy smearing
 
 
-use_fortran = False
+def full_dm(h,dm_mode="accumulate",**kwargs):
+    """Compute the full density matrix"""
+    if dm_mode=="accumulate":
+        return full_dm_accumulate(h,**kwargs)
+    elif dm_mode=="simultaneous":
+        return full_dm_simultaneous(h,**kwargs)
+    else: raise # not implemented
 
-def full_dm(h,use_fortran=use_fortran,nk=10,fermi=0.0,
+
+def full_dm_accumulate(h,nk=10,fermi=0.0,
         delta=delta_dm,
         ds=None):
-  if h.dimensionality == 0: fac = 1.
-  elif h.dimensionality == 1: fac = 1./nk
-  elif h.dimensionality == 2: fac = 1./nk**2
-  elif h.dimensionality == 3: fac = 1./nk**3
-  else: raise
-  if ds is None: # no directions required
-    es,vs = h.get_eigenvectors(nk=nk) # get eigenvectors
-    es = es - fermi # shift by the Fermi energy
-#    if use_fortran:
-#      dm = density_matrixf90.density_matrix(np.array(es),np.array(vs),delta)
-#      return dm*fac
-#    else:
-    return np.matrix(full_dm_python(h.intra.shape[0],es,np.array(vs),
-                           delta=delta))*fac # call the function
-  else: # directions required
-    es,vs,ks = h.get_eigenvectors(nk=nk,kpoints=True) # get eigenvectors
-    es = es - fermi # shift by the Fermi energy
-    ks = np.array(ks) # to array
-    n = h.intra.shape[0] # dimensionality
-    out = parallel.pcall(lambda x: full_dm_python_d(n,es,vs,ks,x)*fac,ds)
-#    out = [full_dm_python_d(n,es,vs,ks,d)*fac for d in ds] # compute all the DM
-    outd = dict() # dictionary
-    for i in range(len(ds)): outd[tuple(ds[i])] = out[i] # as dictionary
-    return outd
-#    return out # return all the density matrices
+    """Compute the full density matrix by adding the
+    contributions to the matrix kpoint by kpoint"""
+    hk = h.get_hk_gen() # get the Hamiltonian generator
+    from .klist import kmesh
+    ks = h.geometry.get_kmesh(nk=nk) # get the mesh
+    fac = 1./len(ks) # normalization
+    # create the storages
+    norb = h.intra.shape[0] # size of the matrix
+    if ds is None: dm = np.zeros((norb,norb),dtype=np.complex128)
+    else: dm = np.zeros((len(ds),norb,norb),dtype=np.complex128)
+    for k in ks: # loop over kpoints
+        (es,vs) = algebra.eigh(hk(k)) ; vs = vs.T # diagonalize
+        es = es-fermi # substract fermi energy
+        if ds is None: dm += full_dm_python(es,vs,delta=delta)
+        else: 
+            kes = np.zeros((len(es),3))
+            kes[:,0] = k[0] ; kes[:,1] = k[1] ; kes[:,2] = k[2] # kpoints
+            for i in range(len(ds)):
+                dm[i,:,:] += full_dm_python_d(es,vs,kes,ds[i]) # add 
+    dm = dm*fac # renormalize
+    if ds is None: return dm # return the single array
+    else: # if ds were given
+        outd = dict() # dictionary
+        for i in range(len(ds)): outd[tuple(ds[i])] = dm[i,:,:] # as dictionary
+        return outd
+    
+
+
+def full_dm_simultaneous(h,nk=10,fermi=0.0,
+        delta=delta_dm,
+        ds=None):
+    """Compute the full density matrix by first computing all the
+    eigenvectors, and after adding all the contributions together.
+    This can become memore expesive for large kmesh and moderate
+    matrices"""
+    if h.dimensionality == 0: fac = 1.
+    elif h.dimensionality == 1: fac = 1./nk
+    elif h.dimensionality == 2: fac = 1./nk**2
+    elif h.dimensionality == 3: fac = 1./nk**3
+    else: raise
+    if ds is None: # no directions required
+      es,vs = h.get_eigenvectors(nk=nk) # get eigenvectors
+      es = es - fermi # shift by the Fermi energy
+      return np.matrix(full_dm_python(es,np.array(vs),
+                             delta=delta))*fac # call the function
+    else: # directions required
+      es,vs,ks = h.get_eigenvectors(nk=nk,kpoints=True) # get eigenvectors
+      es = es - fermi # shift by the Fermi energy
+      ks = np.array(ks) # to array
+      n = h.intra.shape[0] # dimensionality
+      out = parallel.pcall(lambda x: full_dm_python_d(es,vs,ks,x)*fac,ds)
+      outd = dict() # dictionary
+      for i in range(len(ds)): outd[tuple(ds[i])] = out[i] # as dictionary
+      return outd
 
 
 
-def full_dm_python(n,es,vs,delta=1e-6):
+def full_dm_python(es,vs,delta=1e-6):
   """Calculate the density matrix"""
-  dm = np.zeros((n,n),dtype=np.complex128)
-  return full_dm_python_jit(n,es,vs,dm,delta)
+  n = len(vs[0]) # size of the matrix from the first vector
+  return full_dm_python_jit(n,np.array(es),np.array(vs),delta)
 
 
-def full_dm_python_d(n,es,vs,ks,d):
+def full_dm_python_d(es,vs,ks,d):
   """Calculate the density matrix"""
+  n = len(vs[0]) # size of the matrix from the first vector
   dm = np.zeros((n,n),dtype=np.complex128)
   return full_dm_python_d_jit(n,es,vs,ks,np.array(d),dm)
 
 
 
 @jit(nopython=True)
-def full_dm_python_jit(n,es,vs,dm,delta):
+def full_dm_python_jit(n,es,vs,delta):
   """Auxiliary function to compute the density matrix"""
+  dm = np.zeros((n,n),dtype=np.complex128)
   for ie in range(len(es)): # loop
       occ = (1.0 - np.tanh(es[ie]/delta))/2. # occupation
       for i in range(n):
@@ -81,20 +119,12 @@ def full_dm_python_d_jit(n,es,vs,ks,d,dm):
 
 
 
-
-
-
-
-
-
-
-
-def restricted_dm(h,use_fortran=False,mode="KPM",pairs=[],
+def restricted_dm(h,mode="KPM",pairs=[],
                    scale=10.0,npol=400,ne=None):
   """Calculate certain elements of the density matrix"""
   if h.dimensionality != 0 : raise
   if mode=="full": # full inversion and then select
-    dm = full_dm(h,use_fortran=use_fortran) # Full DM
+    dm = full_dm(h) # Full DM
     outm = np.array([dm[j,i] for (i,j) in pairs]) # get the desired ones
     return outm # return elements
   elif mode=="KPM": # use Kernel polynomial method
@@ -117,10 +147,5 @@ def occupied_projector(m,delta=0.0):
     """Return a projector onto the occupied states"""
     (es,vs) = algebra.eigh(m) # diagonalize
     vs = vs.T # transpose
-#    vs = vs[es<0.0] # occupied states
-    if use_fortran:
-      dm = density_matrixf90.density_matrix(np.array(es),np.array(vs),delta)
-      return np.array(dm)
-    else:
-      return np.array(full_dm_python(m.shape[0],es,np.array(vs)))
+    return np.array(full_dm_python(m.shape[0],es,np.array(vs)))
 
