@@ -18,3 +18,4 @@ MULTI*
 *.TXT
 .ipynb_checkpoints
 .mpsfolder
+examples/**/*.png
