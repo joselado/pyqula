@@ -101,6 +101,7 @@ def chiAB(h,q=None,nk=60,**kwargs):
         return out[0][0],np.mean([o[1] for o in out],axis=0)
 
 
+# this function should probably be moved to vhitk/chAB.py
 
 def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                delta=0.1,temp=None,A=None,B=None,projs=None,
@@ -218,4 +219,5 @@ from .chitk.pmchi import pmchi
 from .chitk.spinchi import spinchi_ladder
 from .chitk.spinchi import spinchi_full
 from .chitk.spinchi import get_iets_ldos
+from .chitk.spinchi import get_qdos_iets
 

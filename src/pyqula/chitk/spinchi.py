@@ -28,7 +28,7 @@ def spinchi_ladder(H,v=[0.,0.,1.],RPA=True,**kwargs):
             U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
             U = -U # beware of this minus sign for spin response (!!!)
     else: U = None # no RPA
-    return chi_AB_RPA(H,A=sp,B=sm,V=U,**kwargs) # non-interacting response
+    return chi_AB_RPA(H,A=sp,B=sm,V=U,**kwargs) # RPA interacting response
 
 
 
@@ -97,6 +97,28 @@ def get_iets_ldos(H,nk=1,delta=1e-2,e=0.,**kwargs):
     else:
         return r,dout # return positions and IETS ldos
 
+
+
+
+def get_qdos_iets(H,energies=np.linspace(0.,1.,100),
+                  qpath=None,nq=20,
+                  nk=10,delta=1e-2,**kwargs):
+    """Return the momentum-resolved spin respose function"""
+    def f(q):
+        return H.get_spinchi_full(q=q,nk=nk,energies=energies,
+                                delta=delta,**kwargs)
+    #out = parallel.pcall_deep(f,qs,cores=1) # compute all
+    qpath = H.geometry.get_kpath(qpath,nk=nq) # generate kpath
+    out = [f(q) for q in qpath] # compute all
+    qout = [] # empty list
+    chimap = [] # storage
+    for o in out: # loop over qvectors
+        es,chis = o[0],o[1]
+        cs = [np.trace(c).imag for c in chis]
+        chimap.append(cs) # store
+    for q in qpath: # loop over qvectors
+        qout.append([q for c in chis])
+    return np.array(qout),energies,np.array(chimap) # return everythin
 
 
 

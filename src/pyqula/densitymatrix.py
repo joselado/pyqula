@@ -155,5 +155,5 @@ def occupied_projector(m,delta=0.0):
     """Return a projector onto the occupied states"""
     (es,vs) = algebra.eigh(m) # diagonalize
     vs = vs.T # transpose
-    return np.array(full_dm_python(m.shape[0],es,np.array(vs)))
+    return np.array(full_dm_python(es,np.array(vs)))
 
