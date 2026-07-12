@@ -3,10 +3,15 @@ import numpy as np
 from numba import jit
 from . import parallel
 
-delta_dm = 1e-6 # default energy smearing
+delta_dm = 1e-6 # default energy smearing for density matrix
+# ds not None does not use it yet
 
+dm_mode = "accumulate" # default mode to compute density matrix
 
-def full_dm(h,dm_mode="accumulate",**kwargs):
+# accumulate is the new mode, it may be worth checking
+# if it yields the same results as simultaneous
+
+def full_dm(h,dm_mode=dm_mode,**kwargs):
     """Compute the full density matrix"""
     if dm_mode=="accumulate":
         return full_dm_accumulate(h,**kwargs)
@@ -14,12 +19,15 @@ def full_dm(h,dm_mode="accumulate",**kwargs):
         return full_dm_simultaneous(h,**kwargs)
     else: raise # not implemented
 
+# it may be worth to implement some adaptive integration with quad_vec
 
+# this mode does not run in parallel
 def full_dm_accumulate(h,nk=10,fermi=0.0,
         delta=delta_dm,
         ds=None):
     """Compute the full density matrix by adding the
-    contributions to the matrix kpoint by kpoint"""
+    contributions to the matrix kpoint by kpoint.
+    Good in terms of memory footprint"""
     hk = h.get_hk_gen() # get the Hamiltonian generator
     from .klist import kmesh
     ks = h.geometry.get_kmesh(nk=nk) # get the mesh
@@ -35,7 +43,7 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
         else: 
             kes = np.zeros((len(es),3))
             kes[:,0] = k[0] ; kes[:,1] = k[1] ; kes[:,2] = k[2] # kpoints
-            for i in range(len(ds)):
+            for i in range(len(ds)): # this could be parallelized if needed
                 dm[i,:,:] += full_dm_python_d(es,vs,kes,ds[i]) # add 
     dm = dm*fac # renormalize
     if ds is None: return dm # return the single array

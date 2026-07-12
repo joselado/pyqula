@@ -12,27 +12,7 @@ from . import parallel
 from numba import jit
 from .klist import kmesh
 
-def calculate_dos(es,xs,d,w=None):
-    """COmpute DOS, es are the eigenenergies, xs, the frequency grid"""
-    if w is None: w = np.zeros(len(es)) + 1.0 # initialize
-    else: w = w.real # make it real just in case
-    es = np.array(es)
-    xs = np.array(xs)
-    d = np.array(d)
-    ys = np.zeros(np.array(xs.shape[0])) # initialize
-    ys = calculate_dos_jit(es,xs,d,w,ys) # compute
-    return ys
-
-@jit(nopython=True)
-def calculate_dos_jit(es,xs,d,w,ys):
-      for i in range(len(es)): # loop over energies
-          e = es[i]
-          iw = w[i]
-          de = np.abs(xs - e) # E - Ei
-          de = d/(d*d + de*de) # 1/(delta^2 + (E-Ei)^2)
-          ys += de*iw # times the weight
-      return ys
-
+from .dostk.eigtodos import calculate_dos
 
 
 
@@ -488,6 +468,9 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
           return (energies,ds)
       elif mode=="KPM": 
           return dos_kpm(h,energies=energies,**kwargs)
+      elif mode=="adaptive":
+          from .dostk.adaptivedos import adaptive_dos
+          return adaptive_dos(h,energies=energies,**kwargs)
       else: 
           print("Unrecognized option in DOS")
           raise

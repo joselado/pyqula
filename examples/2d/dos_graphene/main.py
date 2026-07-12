@@ -10,7 +10,14 @@ import matplotlib.pyplot as plt
 
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=False)
-(es,ds) = h.get_dos(mode="ED",delta=0.01,nk=100)
+import time
+t0 = time.time()
+import numpy as np
+energies = np.linspace(-.5,.5,200)
+(es,ds) = h.get_dos(energies=energies,delta=1e-2,nk=500
+                    ,mode="adaptive"
+                    )
+print("Time in DOS",time.time()-t0)
 plt.plot(es,ds)
 plt.show()
 #dos.dos(h,nk=100,use_kpm=True)
