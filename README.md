@@ -211,18 +211,16 @@ m = h.get_magnetization() # get the magnetization
 
 ## RPA many-body response function in an antiferromagnet
 ```python
-from pyqula import geometry ; import numpy as np
+from pyqula import geometry
+import numpy as np
 g = geometry.bisquare_ribbon(2) # square bipartite ribbon
 h = g.get_hamiltonian() # generate Hamiltonian
-h = h.get_mean_field_hamiltonian(U=3.,mf="antiferro",filling=0.5) # perform SCF
-qs = np.linspace(0.,.5,50) # qvectors
+h = h.get_mean_field_hamiltonian(U=3.,nk=10,mf="antiferro",filling=0.5) # SCF
 energies=np.linspace(.0,1.6,400) # energies
+# RPA many-body spin spectral function
+(qs,es,chis) = h.get_qdos_iets(energies = energies,nq=100,nk=10,
+                               delta=1e-2,qpath=["G","X"])
 
-chimap = [] # storage for the results
-for q in qs: # loop over qvectors
-    es,chis = h.get_spinchi_ladder(q=q,energies=energies) # compute RPA tensor
-    cs = [np.trace(c).imag for c in chis] # imaginary part of the trace
-    chimap.append(cs) # store 
 ```
 
 ![Alt text](images/spin_chi_rpa.png?raw=true "RPA many-body spin response function, showing the appearence of linearly-dispersing magnons")
@@ -235,15 +233,12 @@ for q in qs: # loop over qvectors
 from pyqula import geometry ; import numpy as np
 g = geometry.lieb_ribbon(2) # Lieb lattice ribbon
 h = g.get_hamiltonian() # generate Hamiltonian
-h = h.get_mean_field_hamiltonian(U=3.,mf="ferro",filling=0.5) # perform SCF
-qs = np.linspace(0.,.5,50) # qvectors
+h = h.get_mean_field_hamiltonian(U=3.,mf="antiferro",filling=0.5) # perform SCF
 energies=np.linspace(.0,1.,400) # energies
+# RPA many-body spin spectral function
+(qs,es,chis) = h.get_qdos_iets(energies = energies,nq=100,nk=10,
+                               delta=1e-2,qpath=["G","X"])
 
-chimap = [] # storage for the results
-for q in qs: # loop over qvectors
-    es,chis = h.get_spinchi_ladder(q=q,energies=energies) # compute RPA tensor
-    cs = [np.trace(c).imag for c in chis] # imaginary part of the trace
-    chimap.append(cs) # store 
 ```
 
 ![Alt text](images/spin_chi_rpa_ferro.png?raw=true "RPA many-body spin response function of ferromagnetic lattice, showing the appearence of quadratically-dispersing magnons")
