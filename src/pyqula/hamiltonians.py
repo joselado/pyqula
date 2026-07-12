@@ -127,6 +127,10 @@ class Hamiltonian():
         """Spatially resolved IETS at a certain energy"""
         from . import chi
         return chi.get_iets_ldos(self,**kwargs)
+    def get_qdos_iets(self,**kwargs):
+        """Spatially resolved IETS at a certain energy"""
+        from . import chi
+        return chi.get_qdos_iets(self,**kwargs)
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)

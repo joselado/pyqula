@@ -7,18 +7,14 @@ import numpy as np
 from pyqula import parallel
 parallel.numba_cores = 4
 
-
-g = geometry.bichain()
+g = geometry.triangular_lattice_tripartite()
 h = g.get_hamiltonian()
 from pyqula import parallel
-#parallel.numba_cores = 2
 
-U = 3.  
-nk = 20
-hmf = h.copy() ; hmf.add_exchange(lambda r: np.random.random(3)-.5) #; hmf.add_antiferromagnetism(0.5)
-#hmf = h.copy() ; hmf.add_exchange([0.,0.,1.])
-#h.add_exchange([0.,0.,0.3])
-h = h.get_mean_field_hamiltonian(U=U,nk=nk,mf=hmf,filling=0.5)
+U = 12.  
+nk = 10
+hmf = h.copy() ; hmf.add_exchange(lambda r: np.random.random(3)-.5) 
+h = h.get_mean_field_hamiltonian(U=U,nk=nk,mf=hmf,filling=0.5,mix=0.5)
 qs = np.linspace(0.,.5,20) # qvectors
 energies=np.linspace(.0,5.,100) # energies
 h.get_bands(operator="sz")
@@ -28,8 +24,9 @@ print("Mz",h.get_vev("sz"))
 
 import time
 t0 = time.time()
-(qs,es,chis) = h.get_qdos_iets(energies = np.linspace(0.,5.0,40),
-                               nq=20,nk=nk,delta=6e-2)
+(qs,es,chis) = h.get_qdos_iets(energies = np.linspace(0.,2.0,100),
+                               qpath=["G","K","M"],
+                               nq=80,nk=nk,delta=6e-2)
 qs = np.unique(qs,axis=0)
 es = np.unique(es)
 chimap = chis.reshape((len(qs),len(es))).T
