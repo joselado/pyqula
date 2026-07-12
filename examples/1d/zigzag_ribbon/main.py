@@ -12,7 +12,7 @@ g = geometry.honeycomb_zigzag_ribbon(20) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian(has_spin=False) # create hamiltonian of the system
 #exit()
 (ks,es) = h.get_bands()
-(esd,ds) = h.get_dos()
+(esd,ds) = h.get_dos(mode="adaptive")
 
 import matplotlib.pyplot as plt
 plt.subplot(1,2,1)
