@@ -3,7 +3,6 @@ import numba
 from numba import jit,prange
 
 
-
 @jit(nopython=True)
 def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     """Compute the response function.
