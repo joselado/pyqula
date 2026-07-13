@@ -90,103 +90,10 @@ def chargechi_reciprocal(h,i=None,
 
 
 
-def chiAB(h,q=None,nk=60,**kwargs):
-    """Return the generalized response"""
-    if q is not None: # q point is provided
-        return chiAB_q(h,q=q,nk=nk,**kwargs)
-    else:
-        qs = h.geometry.get_kmesh(nk=nk) # get the kmesh
-        out = [chiAB_q(h,q=q,nk=nk,
-                       **kwargs) for q in qs] # get all the k kpoints
-        return out[0][0],np.mean([o[1] for o in out],axis=0)
-
-
-# this function should probably be moved to vhitk/chAB.py
-
-def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
-               delta=0.1,temp=None,A=None,B=None,projs=None,
-               imode="mesh", # integration mode in momentum space
-               ij_mode = "explicit", # loop over elements mode
-               mode="matrix" # return object
-               ):
-    """Compute AB response function
-       - energies: energies of the dynamical response
-       - q: q-vector of the response
-       - nk: number of k-points for the integration
-       - delta: imaginary part
-       - A: first operator
-       - B: second operator
-       - projs: local projection operators
-       - imode: integration mode
-       - ij_mode: loop ove elements mode
-       - mode: output to return"""
-    if temp is None: temp = delta # as delta
-    hk = h.get_hk_gen() # get generator
-    if A is None or B is None:
-        A = np.identity(h.intra.shape[0],dtype=np.complex128)
-        B = A # initial operator
-    else: # generate the operators to be evaluated in the lattice points
-        A = h.get_operator(A)
-        B = h.get_operator(B)
-        A = algebra.todense(A.get_matrix())
-        B = algebra.todense(B.get_matrix())
-    # generate the projectors
-    if projs is None:
-        from . import operators
-        projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
-    else: 
-        ij_mode = "explicit" # do the loop explicitly
-    pAs = np.array([pi@A for pi in projs]) # compute these projectors
-    pBs = np.array([pi@B for pi in projs]) # compute these projectors
-    def getk(k):
-        m1 = hk(k) # get Hamiltonian
-        es1,ws1 = algebra.eigh(m1)
-        ws1 = np.array(ws1.T,dtype=np.complex128)
-        m2 = hk(k+q) # get Hamiltonian
-        es2,ws2 = algebra.eigh(m2)
-        ws2 = np.array(ws2.T,dtype=np.complex128)
-        def getAB(Ai,Bj): # compute for a single operator
-            return chiAB_jit(ws1,es1,ws2,es2,energies,Ai,Bj,temp,delta)
-        if mode=="matrix": # return a matrix
-            # simplest implementation, not optimal
-#            out = np.array([[getAB(pA,pB) for pA in pAs] for pB in pBs])
-            # parallelized (over matrix elements) implementation
-            parallel.set_num_threads() # set the number of threads
-            out = chiAB_matrix_jit(ws1,es1,ws2,es2,energies,pAs,pBs,temp,delta)
-            return out # return array of matrices
-        elif mode=="trace": # return the trace
-            out = np.array([getAB(pi@A,pi@B) for pi in projs])
-            return np.mean(out,axis=0) # sum over the first axis
-        elif mode=="diagonal": # return the diagonal elements
-            out = np.array([getAB(pi@A,pi@B) for pi in projs])
-            return np.transpose(out,(1,0)) # return, first energy, then i
-        else: raise # not implemented
-    ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
-    # call in parallel
-    if imode=="mesh": # do a mesh
-        if ij_mode=="accelerated": # (maybe?) accelerated function
-            parallel.set_num_threads() # set the number of threads
-            out = chiAB_matrix_ksum(h,ks,q,energies,A,B,temp,delta)
-        elif ij_mode=="explicit": # explicit function, this is preferred
-            out = [getk(k) for k in ks] # call 
-            out = np.mean(out,axis=0) # sum over kpoints
-        else: raise # not implemented
-    elif imode=="adaptive": # do a mesh
-        from . import integration
-        if h.dimensionality==0: out = getk([0.]) # single point
-        elif h.dimensionality==1: 
-            out = integration.integrate_matrix(lambda k: getk([k]),xlim=[0.,1.])
-        elif h.dimensionality==2: # not implemented
-            out = integration.integrate_matrix_2D(getk,
-                    xlim=[0.,1.],ylim=[0.,1.])
-        else: raise
-    else: raise
-#    out = np.mean([getk(k) for k in ks],axis=0) # sum over kpoints
-    return energies,out
 
 
 def chiAB_trace(h,**kwargs):
-    """Compute the trace of chiAB"""
+    """Compute the trace of chiAB, only for non-interacting"""
     return chiAB(h,mode="trace",**kwargs)
 
 
@@ -200,10 +107,8 @@ def chiABmap(h,energies=np.linspace(-3.0,3.0,100),nq=30,
 
 
 # accelerated function to compute AB response
-from .chitk.chiAB import chiAB_matrix_jit
-from .chitk.chiAB import chiAB_full_matrix_jit
-from .chitk.chiAB import chiAB_jit
-from .chitk.chiAB import chiAB_matrix_ksum
+from .chitk.chiAB import chiAB_q
+from .chitk.chiAB import chiAB
 
 
 

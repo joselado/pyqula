@@ -54,12 +54,17 @@ def replicateU(U,n=3):
 
 def spinchi_full(H,RPA=True,**kwargs):
     """Return the spin response function"""
-    if H.has_eh:
-        print("Not implemented with Nambu basis")
-        raise
     sx = H.get_operator("sx") # spin operator, eigen +-1
     sy = H.get_operator("sy") # spin operator, eigen +-1
     sz = H.get_operator("sz") # spin operator, eigen +-1
+    # this is technically not correct, as it will ignore e-h components
+    # of the response. Nevertheless, it can be good enough as starting
+    # point
+    if H.has_eh: # for Nambu basis, quick workaround
+        el = h.get_operator("electron")
+        sx = sx@el
+        sy = sy@el
+        sz = sz@el
     Ss = [sx/2.,sy/2.,sz/2.] # pauli matrices, with eigen +-1/2
     if RPA: # RPA mode
         U = H.V # get the interaction
@@ -109,7 +114,9 @@ def get_qdos_iets(H,energies=np.linspace(0.,1.,100),
                                 delta=delta,**kwargs)
     #out = parallel.pcall_deep(f,qs,cores=1) # compute all
     qpath = H.geometry.get_kpath(qpath,nk=nq) # generate kpath
-    out = [f(q) for q in qpath] # compute all
+#    out = [f(q) for q in qpath] # compute all
+    from .. import parallel
+    out = parallel.pcall(f,qpath) # compute all
     qout = [] # empty list
     chimap = [] # storage
     for o in out: # loop over qvectors
