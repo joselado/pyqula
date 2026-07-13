@@ -8,10 +8,16 @@ g = islands.get_geometry(name="honeycomb",n=2,nedges=3) # get an island
 h = g.get_hamiltonian() # get the Hamiltonian
 h.add_exchange([0.,0.,1e-2]) # this helps getting the peak at zero
 h = h.get_mean_field_hamiltonian(U=1.5,filling=0.5,mf="random") # perform SCF
+print("Number of sites",len(h.geometry.r))
 
 import numpy as np
 energies=np.linspace(0.,.4,200)
+
+import time
+t0 = time.time()
 es,chis = h.get_spinchi_full(energies=energies,delta=1e-2) # compute RPA tensor
+t1 = time.time()
+print("Time in IETS",t1-t0)
 
 mz = h.get_vev("sz")
 

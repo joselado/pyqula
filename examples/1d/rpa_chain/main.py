@@ -28,8 +28,8 @@ print("Mz",h.get_vev("sz"))
 
 import time
 t0 = time.time()
-(qs,es,chis) = h.get_qdos_iets(energies = np.linspace(0.,5.0,40),
-                               nq=20,nk=nk,delta=6e-2)
+(qs,es,chis) = h.get_qdos_iets(energies = np.linspace(0.,5.0,400),
+                               nq=20,nk=nk,delta=1e-2)
 qs = np.unique(qs,axis=0)
 es = np.unique(es)
 chimap = chis.reshape((len(qs),len(es))).T
