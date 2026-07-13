@@ -137,12 +137,12 @@ def set_hoppings(h,hop):
     """Add the hoppings to the Hamiltonian"""
     h.set_multihopping(MultiHopping(hop))
 
-def get_dm(h,v,nk=1):
+def get_dm(h,v,nk=1,**kwargs):
     """Get the density matrix"""
     ds = [(0,0,0)] # directions
 #    if h.dimensionality>0:
     for key in v: ds.append(key) # store the vector
-    dms = h.get_density_matrix(ds=ds,nk=nk) # get all the density matrices
+    dms = h.get_density_matrix(ds=ds,nk=nk,**kwargs) # get all the density matrices
     return dms # return dictionary
 
 
@@ -259,6 +259,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
         load_mf=True,compute_cross=True,compute_dd=True,verbose=1,
         compute_anomalous=True,compute_normal=True,info=False,
         maxite=None,
+        T=1e-7, # temperature
         callback_h=None,**kwargs):
     """Perform the SCF mean field"""
     if verbose>1: info=True
@@ -294,7 +295,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
       if callback_h is not None:
           h = callback_h(h) # callback for the Hamiltonian
       t0 = time.perf_counter() # time
-      dm = get_dm(h,v,nk=nk) # get the density matrix
+      dm = get_dm(h,v,nk=nk,T=T) # get the density matrix
       if callback_dm is not None:
           dm = callback_dm(dm) # callback for the density matrix
       t1 = time.perf_counter() # time

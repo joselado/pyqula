@@ -11,12 +11,13 @@ dm_mode = "accumulate" # default mode to compute density matrix
 # accumulate is the new mode, it may be worth checking
 # if it yields the same results as simultaneous
 
-def full_dm(h,dm_mode=dm_mode,**kwargs):
+def full_dm(h,T=delta_dm,dm_mode=dm_mode,**kwargs):
     """Compute the full density matrix"""
+    if T==0.: T = 1e-15 # just very small 
     if dm_mode=="accumulate":
-        return full_dm_accumulate(h,**kwargs)
+        return full_dm_accumulate(h,delta=T,**kwargs)
     elif dm_mode=="simultaneous":
-        return full_dm_simultaneous(h,**kwargs)
+        return full_dm_simultaneous(h,delta=T,**kwargs)
     else: raise # not implemented
 
 # it may be worth to implement some adaptive integration with quad_vec
@@ -44,7 +45,7 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
             kes = np.zeros((len(es),3))
             kes[:,0] = k[0] ; kes[:,1] = k[1] ; kes[:,2] = k[2] # kpoints
             for i in range(len(ds)): # this could be parallelized if needed
-                dm[i,:,:] += full_dm_python_d(es,vs,kes,ds[i]) # add 
+                dm[i,:,:] += full_dm_python_d(es,vs,kes,ds[i],delta=delta) # add 
     dm = dm*fac # renormalize
     if ds is None: return dm # return the single array
     else: # if ds were given
@@ -86,23 +87,23 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
 def full_dm_python(es,vs,delta=1e-6):
   """Calculate the density matrix"""
   n = len(vs[0]) # size of the matrix from the first vector
-  return full_dm_python_jit(n,np.array(es),np.array(vs),delta)
+  return full_dm_python_jit(n,np.array(es),np.array(vs),delta=delta)
 
 
-def full_dm_python_d(es,vs,ks,d):
+def full_dm_python_d(es,vs,ks,d,delta=delta_dm):
   """Calculate the density matrix"""
   n = len(vs[0]) # size of the matrix from the first vector
-  dm = np.zeros((n,n),dtype=np.complex128)
-  return full_dm_python_d_jit(n,es,vs,ks,np.array(d),dm)
+  return full_dm_python_d_jit(n,es,vs,ks,np.array(d),delta=delta)
 
 
 
 @jit(nopython=True)
-def full_dm_python_jit(n,es,vs,delta):
+def full_dm_python_jit(n,es,vs,delta=1e-7):
   """Auxiliary function to compute the density matrix"""
   dm = np.zeros((n,n),dtype=np.complex128)
   for ie in range(len(es)): # loop
-      occ = (1.0 - np.tanh(es[ie]/delta))/2. # occupation
+      occ = 1./(1. + np.exp(es[ie]/delta)) # occupation, fermi-dirac
+#      occ = (1.0 - np.tanh(es[ie]/delta))/2. # occupation
       for i in range(n):
         for j in range(n): 
           dm[i,j] = dm[i,j] + occ*vs[ie][i].conjugate()*vs[ie][j] # add contribution
@@ -110,17 +111,18 @@ def full_dm_python_jit(n,es,vs,delta):
 
 
 @jit(nopython=True)
-def full_dm_python_d_jit(n,es,vs,ks,d,dm):
+def full_dm_python_d_jit(n,es,vs,ks,d,delta=1e-7):
   """Auxiliary function to compute the density matrix"""
+  dm = np.zeros((n,n),dtype=np.complex128)
   for ie in range(len(es)): # loop
     k = ks[ie] # get kpoint
     kd = k[0]*d[0] + k[1]*d[1] + k[2]*d[2] # compute scalar product
     phi = np.exp(1j*np.pi*kd*2) # compute phase
-#    phi = 0.0
-    if es[ie]<0.: # if below Fermi energy
-      for i in range(n):
-        for j in range(n):
-          dm[i,j] = dm[i,j] + phi*vs[ie][i].conjugate()*vs[ie][j] # add contribution
+    occ = 1./(1. + np.exp(es[ie]/delta)) # occupation, fermi-dirac
+    phi = phi*occ # phase times occupation
+    for i in range(n):
+      for j in range(n):
+        dm[i,j] = dm[i,j] + phi*vs[ie][i].conjugate()*vs[ie][j] # add contribution
   return dm
 
 

@@ -11,12 +11,11 @@ g = geometry.triangular_lattice_tripartite()
 h = g.get_hamiltonian()
 from pyqula import parallel
 
-U = 12.  
+U = 20.  
 nk = 10
 hmf = h.copy() ; hmf.add_exchange(lambda r: np.random.random(3)-.5) 
 h = h.get_mean_field_hamiltonian(U=U,nk=nk,mf=hmf,filling=0.5,mix=0.5)
 qs = np.linspace(0.,.5,20) # qvectors
-energies=np.linspace(.0,5.,100) # energies
 h.get_bands(operator="sz")
 print("Mx",h.get_vev("sx"))
 print("My",h.get_vev("sy"))
@@ -24,9 +23,9 @@ print("Mz",h.get_vev("sz"))
 
 import time
 t0 = time.time()
-(qs,es,chis) = h.get_qdos_iets(energies = np.linspace(0.,2.0,100),
+(qs,es,chis) = h.get_qdos_iets(energies = np.linspace(0.,1.25,200),
                                qpath=["G","K","M"],
-                               nq=80,nk=nk,delta=6e-2)
+                               nq=80,nk=nk,delta=1e-2)
 qs = np.unique(qs,axis=0)
 es = np.unique(es)
 chimap = chis.reshape((len(qs),len(es))).T
