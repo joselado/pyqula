@@ -13,7 +13,7 @@ from pyqula import parallel
 g = geometry.honeycomb_lattice()
 Us = np.linspace(0.,4.,10) # different Us
 h = g.get_hamiltonian() # create hamiltonian of the system
-parallel.cores = 7
+parallel.set_cores(7)
 h.get_dos(nk=300)
 #hmf = h.get_mean_field_hamiltonian(nk=100,U=3.) # mean field Hamiltonian
 

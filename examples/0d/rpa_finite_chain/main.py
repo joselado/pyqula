@@ -9,7 +9,7 @@ g = g.get_supercell(8) # make a supercell
 g.dimensionality = 0
 h = g.get_hamiltonian() # get the Hamiltonian
 h.add_exchange([0.,1e-2,0.]) # this helps getting the peak at zero
-#h = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="random") # perform SCF
+h = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="random") # perform SCF
 import matplotlib.pyplot as plt
 import numpy as np
 

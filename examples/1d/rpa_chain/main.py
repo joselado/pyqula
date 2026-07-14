@@ -5,13 +5,11 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 from pyqula import geometry
 import numpy as np
 from pyqula import parallel
-parallel.numba_cores = 4
+#parallel.numba_cores = 4
 
 
 g = geometry.bichain()
 h = g.get_hamiltonian()
-from pyqula import parallel
-#parallel.numba_cores = 2
 
 U = 3.  
 nk = 20

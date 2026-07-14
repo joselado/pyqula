@@ -27,17 +27,10 @@ def eigenvalues(h0,nk=10,notime=True):
     h = h.get_dense()
     ks = klist.kmesh(h.dimensionality,nk=nk) # get grid
     hkgen = h.get_hk_gen() # get generator
-    if parallel.cores==1:
-      es = [] # empty list
-      if not notime: est = timing.Testimator(maxite=len(ks))
-      for k in ks: # loop
-          if not notime: est.iterate()
-          es += algebra.eigvalsh(hkgen(k)).tolist() # add
-    else:
-        f = lambda k: algebra.eigvalsh(hkgen(k)) # add
-        es = parallel.pcall(f,ks) # call in parallel
-        es = np.array(es)
-        es = es.reshape(es.shape[0]*es.shape[1])
+    f = lambda k: algebra.eigvalsh(hkgen(k)) # add
+    es = parallel.pcall(f,ks) # call in parallel
+    es = np.array(es)
+    es = es.reshape(es.shape[0]*es.shape[1])
     return es # return all the eigenvalues
 
 
