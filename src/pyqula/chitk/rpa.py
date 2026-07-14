@@ -13,6 +13,8 @@ def chi_AB_RPA(h,V=None,**kwargs):
     return es,np.array(chis_rpa)
 
 
+mode_rpa = "vectorized"
+
 def chi_ops_RPA(h,ops=None,V=None,**kwargs):
     """Compute the RPA chi for a hamiltonian,
     return a tensor given a list of operators. This is 
@@ -21,21 +23,39 @@ def chi_ops_RPA(h,ops=None,V=None,**kwargs):
     from ..chi import chiAB # get response function
     nop = len(ops) # number of operators
     # storage for the full response
-    chis = [[None for i in range(nop)] for j in range(nop)]
-    for i in range(nop): # loop over first operator
-        for j in range(nop): # loop over second operator
+    if mode_rpa=="sequential": # one by one
+        chis = [[None for i in range(nop)] for j in range(nop)]
+        for i in range(nop): # loop over first operator
+            for j in range(nop): # loop over second operator
+                A = ops[i] # first operator
+                B = ops[j] # second operator
+                es,chisi = chiAB(h,mode="matrix",A=A,B=B,
+                                **kwargs) # non-interacting response
+                chis[i][j] = chisi # store in the list
+        # now make it a block matrix, and reshpae accordingly
+        chis_tmp = np.array(chis) # convert to array
+        chis = [] # empty list
+        for i in range(len(es)): # loop over energies
+            chi = chis_tmp[:,:,i,:,:] # get this one
+            chi = [[chi[i,j,:,:] for i in range(nop)] for j in range(nop)]
+            chis.append(np.bmat(chi)) # store
+    elif mode_rpa=="vectorized": # all at once
+        # operators as matrices
+        from .. import operators
+        pAs = [] # empty list
+        pBs = [] # empty list
+        projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
+        for i in range(nop): # loop over first operator
             A = ops[i] # first operator
-            B = ops[j] # second operator
-            es,chisi = chiAB(h,mode="matrix",A=A,B=B,
-                            **kwargs) # non-interacting response
-            chis[i][j] = chisi # store in the list
-    # now make it a block matrix, and reshpae accordingly
-    chis_tmp = np.array(chis) # convert to array
-    chis = [] # empty list
-    for i in range(len(es)): # loop over energies
-        chi = chis_tmp[:,:,i,:,:] # get this one
-        chi = [[chi[i,j,:,:] for i in range(nop)] for j in range(nop)]
-        chis.append(np.bmat(chi)) # store
+            B = ops[i] # second operator
+            A = algebra.todense(h.get_operator(A).get_matrix())
+            B = algebra.todense(h.get_operator(B).get_matrix())
+            for pi in projs: # products
+                pAs.append(pi@A)
+                pBs.append(pi@B)
+        es,chis = chiAB(h,mode="matrix",pAs=pAs,pBs=pBs,
+                                **kwargs) # non-interacting response
+    else: raise
     iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
     if V is not None: # finite interaction, RPA summation
         chis_rpa = [chi@algebra.inv(iden - V@chi) for chi in chis]
