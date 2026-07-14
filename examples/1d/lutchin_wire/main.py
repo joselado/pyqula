@@ -15,8 +15,13 @@ h.add_rashba(0.5) # add Rashba SOC
 h.add_zeeman(0.3) # add Zeeman field
 h.shift_fermi(2.) # add Zeeman field
 h.add_swave(0.2) # add swave pairing
-h.get_bands(operator=operators.get_sy(h))
+(k,e,c) = h.get_bands(operator="sy")
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="rainbow")
+
+plt.show()
 
 
 

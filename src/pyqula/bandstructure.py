@@ -146,19 +146,19 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
     ### Now evaluate the function
     from . import parallel
     if write: f = open(output_file,"w") # open bands file
-    if parallel.cores==1: ### single thread ###
-      tr = timing.Testimator("BANDSTRUCTURE",silent=silent) # generate object
-      esk = "" # empty list
-      for k in range(len(kpath)): # loop over kpoints
-        tr.remaining(k,len(kpath)) # estimate of the time
-        ek = getek(k)
-        esk += ek # store
-        if write: f.write(ek) # write this kpoint
-        if write: f.flush() # flush in file
-    else: # parallel run
-        esk = parallel.pcall(getek,range(len(kpath))) # compute all
-        esk = "".join(esk) # concatenate all
-        if write: f.write(esk)
+#    if parallel.cores==1: ### single thread ###
+#      tr = timing.Testimator("BANDSTRUCTURE",silent=silent) # generate object
+#      esk = "" # empty list
+#      for k in range(len(kpath)): # loop over kpoints
+#        tr.remaining(k,len(kpath)) # estimate of the time
+#        ek = getek(k)
+#        esk += ek # store
+#        if write: f.write(ek) # write this kpoint
+#        if write: f.flush() # flush in file
+#    else: # parallel run
+    esk = parallel.pcall(getek,range(len(kpath))) # compute all
+    esk = "".join(esk) # concatenate all
+    if write: f.write(esk)
     if write: f.close()
   #  print("\nBANDS finished")
     esk = esk.split("\n") # split

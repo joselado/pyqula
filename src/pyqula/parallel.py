@@ -1,5 +1,4 @@
 # routines to call a function in parallel
-from __future__ import print_function
 import scipy.linalg as lg
 from . import algebra
 import numba
@@ -7,97 +6,13 @@ import numba
 numba_cores = None # use all cores
 
 def set_num_threads():
-    global numba_cores # global object
-    if numba_cores is not None:
-        numba.set_num_threads(numba_cores) # set these cores
+    from .paralleltk.multiprocess import _is_worker
+    if not _is_worker: # main thread
+        if numba_cores is not None:
+            numba.set_num_threads(numba_cores) # set these cores
+    else:
+        numba.set_num_threads(1) # single thread
 
-
-is_child = False # check if you are running a child
-
-try:
-    from multiprocess import Pool
-    import multiprocess
-    maxcpu = multiprocess.cpu_count()
-except:
-    print("Multiprocess not working, install as 'pip install multiprocess'")
-    def Pool(n=1): # workaround
-            class mpool():
-                def map(self,f,xs):
-                  return [f(x) for x in xs]
-                def terminate(self): return None # dummy function
-            return mpool()
-    maxcpu = 1
-
-
-cores = 1 # call in a single by default
-
-
-def set_cores(n=1):
-    global cores
-    if n=="max": cores = maxcpu # set to the maximum
-    else: cores = int(n) # number of cores
-
-
-#mainpool = None
-
-#def initialize(): 
-#  global mainpool
-#  if cores>1:
-#    mainpool = Pool(cores) # create pool
-#  return mainpool
-
-#def finish(): mainpool=None # delete pool
-
-
-def multieigh(ms):
-  """Diagonalize a bunch of Hamiltonians at once"""
-#  mainpool = initialize()
-  if mainpool is not None: mainpool.map(lg.eigh,ms)
-  else: return [algebra.eigh(m) for m in ms]
-
-
-
-
-
-def pcall_serial(fun,args):
-  """Function to call in serial"""
-  return [fun(a) for a in args]
-
-
-#def pcall_mp(fun,args,cores=1): return pcall_serial(fun,args)
-
-#try: # try to use the multiprocessing library
-def pcall_mp(fun,args,cores=cores):
-    """Calls a function for every input in args"""
-    from pathos.multiprocessing import ProcessPool
-    mainpool = ProcessPool(nodes=cores)
-    return mainpool.map(fun,args)
-
-
-def pcall(fun,args): # define the function
-    global cores,is_child
-#    if cores!=1: 
-#        print("Parallelization needs to be fixed") 
-    return pcall_serial(fun,args) # one core, simply iterate
-
-    from multiprocessing import current_process
-    if not is_child: # if main process
-  #  if current_process().name == 'MainProcess': # main process
-      is_child = True # child from now on
-      if cores==1: out = pcall_serial(fun,args) # one core, simply iterate
-      else: 
-          try: out = pcall_mp(fun,args,cores=cores) # call in parallel
-          except:
-              print("Something wrong happened in the parallel execution")
-              out = pcall_serial(fun,args) # serial execution
-      is_child = False # main from now on
-      return out
-    # child process
-    else: return pcall_serial(fun,args) # one core, simply iterate
-
-
-# parallelize with MPI
-from .paralleltk.mpipcall import pcall as pcall_mpi
-
-# parallelize at the deepest level
-from .paralleltk.deepcall import pcall as pcall_deep
+from .paralleltk.multiprocess import set_cores
+from .paralleltk.multiprocess import pcall
+from .paralleltk.multiprocess import _num_cores as cores
