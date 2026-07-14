@@ -18,6 +18,7 @@ def chiAB(h,q=None,nk=60,**kwargs):
 
 
 def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
+               pAs = None, pBs=None, # projectors for chi
                delta=0.1,T=None,A=None,B=None,projs=None,
                imode="mesh", # integration mode in momentum space
                ij_mode = "explicit", # loop over elements mode
@@ -37,22 +38,27 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     temp = T # redefine
     if temp is None: temp = delta # as delta
     hk = h.get_hk_gen() # get generator
-    if A is None or B is None:
-        A = np.identity(h.intra.shape[0],dtype=np.complex128)
-        B = A # initial operator
-    else: # generate the operators to be evaluated in the lattice points
-        A = h.get_operator(A)
-        B = h.get_operator(B)
-        A = algebra.todense(A.get_matrix())
-        B = algebra.todense(B.get_matrix())
-    # generate the projectors
-    if projs is None:
-        from .. import operators
-        projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
-    else:
+    if pAs is None and pBs is None: # assume in put is A,B,projs
+        if A is None or B is None:
+            A = np.identity(h.intra.shape[0],dtype=np.complex128)
+            B = A # initial operator
+        else: # generate the operators to be evaluated in the lattice points
+            A = h.get_operator(A)
+            B = h.get_operator(B)
+            A = algebra.todense(A.get_matrix())
+            B = algebra.todense(B.get_matrix())
+        # generate the projectors
+        if projs is None:
+            from .. import operators
+            projs = [operators.index(h,n=[i]) for i in range(len(h.geometry.r))]
+        else:
+            ij_mode = "explicit" # do the loop explicitly
+        pAs = np.array([pi@A for pi in projs]) # compute these projectors
+        pBs = np.array([pi@B for pi in projs]) # compute these projectors
+    else: # pAs and pBs provided on input
         ij_mode = "explicit" # do the loop explicitly
-    pAs = np.array([pi@A for pi in projs]) # compute these projectors
-    pBs = np.array([pi@B for pi in projs]) # compute these projectors
+        pass
+    ### now define the function to integrate
     def getk(k):
         m1 = hk(k) # get Hamiltonian
         es1,ws1 = algebra.eigh(m1)

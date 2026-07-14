@@ -30,12 +30,12 @@ import time
 t0 = time.time()
 (qs,es,chis) = h.get_qdos_iets(energies = np.linspace(0.,5.0,400),
                                nq=20,nk=nk,delta=1e-2)
+t1 = time.time()
 qs = np.unique(qs,axis=0)
 es = np.unique(es)
 chimap = chis.reshape((len(qs),len(es))).T
 
 
-t1 = time.time()
 print("Time",t1-t0)
 #exit()
 import matplotlib.pyplot as plt
