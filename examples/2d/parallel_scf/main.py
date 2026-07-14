@@ -11,11 +11,17 @@ import numpy as np
 from pyqula import geometry
 from pyqula import parallel
 g = geometry.honeycomb_lattice()
-Us = np.linspace(0.,4.,10) # different Us
-h = g.get_hamiltonian() # create hamiltonian of the system
-parallel.set_cores(7)
-h.get_dos(nk=300)
-#hmf = h.get_mean_field_hamiltonian(nk=100,U=3.) # mean field Hamiltonian
+g = g.get_supercell(2)
+cores = [1,1,7]
+import time
+for core in cores:
+    parallel.set_cores(core)
+    h = g.get_hamiltonian() # create hamiltonian of the system
+    t0 = time.time()
+    hmf = h.get_mean_field_hamiltonian(nk=10,U=3.,mf="antiferro") 
+    # mean field Hamiltonian
+    t1 = time.time()
+    print("Time with",core,"is",t1-t0)
 
 
 

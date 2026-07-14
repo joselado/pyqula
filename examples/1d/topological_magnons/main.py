@@ -5,9 +5,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 from pyqula import geometry
 import numpy as np
 from pyqula import parallel
-parallel.numba_cores = 4
-
-g = geometry.honeycomb_lattice()
+g = geometry.honeycomb_zigzag_ribbon(3)
 h = g.get_hamiltonian()
 from pyqula import parallel
 
@@ -27,7 +25,6 @@ print("Mz",h.get_vev("sz"))
 import time
 t0 = time.time()
 (qs,es,chis) = h.get_qdos_iets(energies = np.linspace(0.,6.0,200),
-                               qpath=["G","K","M"],
                                nq=80,nk=nk,delta=1e-2)
 qs = np.unique(qs,axis=0)
 es = np.unique(es)
