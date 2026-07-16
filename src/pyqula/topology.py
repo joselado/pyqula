@@ -67,6 +67,7 @@ def berry_phase(h,nk=20,kpath=None,write=True):
     if h.dimensionality==0: raise
     elif h.dimensionality == 1:
       ks = np.linspace(0.,1.,nk,endpoint=False) # list of kpoints
+      ks = np.array([[k,0.,0.] for k in ks]) # redefine
     elif h.dimensionality > 1: # you must provide a kpath
         if kpath is None: 
             print("You must provide a k-path")
@@ -77,7 +78,7 @@ def berry_phase(h,nk=20,kpath=None,write=True):
     hkgen = h.get_hk_gen() # get Hamiltonian generator
     wf0 = occupied_states(hkgen,ks[0]) # get occupied states, first k-point
     wfold = wf0.copy() # copy
-    m = np.matrix(np.identity(len(wf0))) # initialize as the identity matrix
+    m = np.array(np.identity(len(wf0))) # initialize as the identity matrix
     for ik in range(1,len(ks)): # loop over k-points, except first one
       wf = occupied_states(hkgen,ks[ik])  # get waves
       m = m@uij(wfold,wf)   # get the uij   and multiply

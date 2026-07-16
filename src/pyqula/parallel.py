@@ -1,31 +1,25 @@
-# routines to call a function in parallel
-import scipy.linalg as lg
-from . import algebra
+# routines to call a function in parallel, across processes
 import numba
 
-numba_cores = None # use all cores
+from .paralleltk import multiprocess as _backend
+
+numba_cores = None # numba threads per process ("None" = numba's own default)
 
 def set_num_threads():
-    from .paralleltk.multiprocess import _is_worker
-    if not _is_worker: # main thread
-        if numba_cores is not None:
-            numba.set_num_threads(numba_cores) # set these cores
-    else:
-        numba.set_num_threads(1) # single thread
+    """Set the number of numba threads for the current process."""
+    if _backend._is_worker: # inside a worker: never oversubscribe
+        numba.set_num_threads(1)
+    elif numba_cores is not None: # main process
+        numba.set_num_threads(numba_cores)
 
-#from .paralleltk.multiprocess import set_cores
-#from .paralleltk.multiprocess import pcall
-#from .paralleltk.multiprocess import _num_cores as cores
-#from .paralleltk.jlib import pcall
-#from .paralleltk.jlib import set_cores
-#from .paralleltk.jlib import _cores as cores
+cores = 1 # number of processes currently in use
 
-# parallelization not working yet, workaround
-cores = 1
-def pcall(f,xs,**kwargs):  return [f(x) for x in xs]
-def set_cores(n):  
+def set_cores(n):
+    """Set the number of processes used by pcall."""
     global cores
-    cores=1
+    _backend.set_cores(n)
+    cores = _backend._num_cores # may fall back to 1 if the pool failed
 
-
-
+def pcall(f,xs,**kwargs):
+    """Call f on every element of xs, in parallel if cores>1."""
+    return _backend.pcall(f,list(xs))

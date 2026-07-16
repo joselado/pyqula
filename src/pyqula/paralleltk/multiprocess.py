@@ -9,58 +9,45 @@ _num_cores = 1        # number of cores currently configured
 
 # ---------- worker initializer ----------
 def _init_worker():
-    """Called when each worker process starts; sets the _is_worker flag."""
+    """Called once when each worker process starts."""
     global _is_worker
     _is_worker = True
+    from .. import parallel
+    parallel.set_num_threads() # never let numba oversubscribe inside a worker
 
 # ---------- public API ----------
 def set_cores(n=1):
-    """Set the number of cores to use.  n='max' uses all available CPUs."""
+    """Set the number of processes to use.  n='max' uses all available CPUs."""
     global _pool, _num_cores
 
-    # close existing pool if any
-    if _pool is not None:
+    if _pool is not None: # close the existing pool, if any
         _pool.close()
         _pool.join()
         _pool = None
 
-    if n == "max":
-        n = mp.cpu_count()
-    else:
-        n = int(n)
-
+    n = mp.cpu_count() if n == "max" else int(n)
     _num_cores = n
 
     if n > 1:
         try:
             _pool = mp.Pool(processes=n, initializer=_init_worker)
         except Exception as e:
-            print(f"Failed to create pool with {n} processes: {e}", file=sys.stderr)
+            print(f"Failed to create process pool with {n} processes, "
+                  f"falling back to serial execution: {e}", file=sys.stderr)
             _pool = None
             _num_cores = 1
 
 def pcall(fun, args):
     """
-    Call `fun` on each element of `args` in parallel if a pool exists and
-    we are not already inside a worker process.
+    Call `fun` on each element of `args`, in parallel over the pool
+    configured by `set_cores` if there is one.
     """
-    global _pool, _is_worker
-
-    # If we are already in a worker, run serially to avoid recursive pooling.
-    if _is_worker:
+    if _is_worker: # already inside a worker, do not spawn a nested pool
         return [fun(a) for a in args]
-
-    # If we have a working pool, use it.
     if _pool is not None:
-        try:
-            return _pool.map(fun, args)
-        except Exception as e:
-            print(f"Parallel execution failed: {e}", file=sys.stderr)
-            # fall through to serial
-
-    # Fallback: serial execution
+        return _pool.map(fun, args)
     return [fun(a) for a in args]
 
-# optional: clean up pool when the interpreter exits
+# clean up the pool when the interpreter exits
 import atexit
 atexit.register(lambda: _pool.close() if _pool else None)

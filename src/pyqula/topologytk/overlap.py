@@ -3,7 +3,7 @@ import numpy as np
 
 def uij(wf1,wf2):
   """ Calcultes the matrix product of two sets of input wavefunctions"""
-  out =  np.matrix(np.conjugate(wf1))@(np.matrix(wf2).T)  # faster way
+  out =  np.array(np.conjugate(wf1))@(np.array(wf2).T)  # faster way
   return out
 
 
