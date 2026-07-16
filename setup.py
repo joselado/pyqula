@@ -21,6 +21,7 @@ setuptools.setup(
     ],
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
-    install_requires=["numba>=0.60.0","scipy","matplotlib","numpy"],
+    install_requires=["numba>=0.60.0","scipy","matplotlib","numpy",
+                       "multiprocess","dill"],
     python_requires=">=3.6",
 )
