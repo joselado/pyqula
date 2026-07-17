@@ -22,7 +22,7 @@
 #    away from exact degeneracies; T=0/None silently falls back to the
 #    default rather than erroring
 #
-# solver="newton" does NOT scale to large systems: the mean field is
+# solver="newton"/"fsolve" do NOT scale to large systems: the mean field is
 # parameterized as a dense vector of every entry of every mf[direction]
 # matrix (no attempt to exploit physical sparsity), so for norb orbitals
 # the Jacobian is O(norb^2) x O(norb^2), and jax.jacfwd builds it with
@@ -33,10 +33,29 @@
 # jitted forward pass per iteration, same asymptotic cost per iteration as
 # the numpy engine) - e.g. it converged a 100-orbital, mu-fixed chain in
 # 140 iterations / 3.7s, about 2x faster than the numpy engine's 7.2s for
-# the same problem. Use solver="newton" only for small systems (roughly
-# dimer-to-tens-of-orbitals); for anything larger, use solver="fixed_point"
-# regardless of whether the differentiability of Newton would otherwise be
-# preferred.
+# the same problem. Use solver="newton"/"fsolve" only for small systems
+# (roughly dimer-to-tens-of-orbitals); for anything larger, use
+# solver="fixed_point" regardless of whether the differentiability of
+# Newton/fsolve would otherwise be preferred.
+#
+# solver="fsolve" wraps scipy.optimize.fsolve (MINPACK hybrj) with the same
+# jax.jacfwd Jacobian as fprime, as an alternative globalization strategy to
+# the hand-rolled backtracking Newton above - see fsolve_solve's docstring
+# for how to check (via infodict['njev'] vs ['nfev']) whether it reuses
+# Broyden updates of the Jacobian instead of rebuilding it every iteration.
+#
+# It does: on a 4-orbital problem njev=1 for nfev=16 (a single Jacobian,
+# Broyden-updated for the rest) - but this does NOT fix the scaling problem,
+# because the cost of building the Jacobian even once is already what's
+# expensive (see above), and Broyden reuse only reduces the *count* of
+# rebuilds, not their individual cost. Measured on the same 1D chain: 20
+# orbitals converged in 53s with njev=4 (~13s/build); 32 orbitals did not
+# finish even a couple of builds in 200s. So solver="fsolve" has roughly the
+# same practical ceiling as solver="newton" (tens of orbitals, not ~100) -
+# reaching ~100 orbitals with any Jacobian-based solver here would need a
+# matrix-free approach (e.g. jax.jvp Jacobian-vector products feeding
+# scipy.optimize.newton_krylov, never forming the dense O(norb^2)x O(norb^2)
+# Jacobian at all), which is not implemented.
 from __future__ import annotations
 import numpy as np
 import jax
@@ -216,6 +235,34 @@ def newton_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0, verbose=0,
     return x, maxite, err < tol
 
 
+def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
+    """Solve x = step_vec(x) with scipy.optimize.fsolve (MINPACK hybrj),
+    using the exact JAX Jacobian (jax.jacfwd) as fprime. Unlike
+    newton_solve's hand-rolled backtracking, MINPACK's Powell hybrid dogleg
+    method is a mature trust-region implementation, and may reuse Broyden
+    rank-1 updates of the Jacobian between full recomputations instead of
+    rebuilding the O(norb^2) x O(norb^2) Jacobian every iteration - compare
+    infodict['njev'] to infodict['nfev'] to see whether that is actually
+    happening for a given problem size (njev << nfev means yes)."""
+    from scipy.optimize import fsolve
+    jac_fn = jax.jacfwd(step_vec)
+    n = x0.shape[0]
+    eye = jnp.eye(n, dtype=x0.dtype)
+
+    def func(x_np):
+        return np.asarray(step_vec(jnp.asarray(x_np)) - jnp.asarray(x_np))
+
+    def jac(x_np):
+        return np.asarray(jac_fn(jnp.asarray(x_np)) - eye)
+
+    x_sol, infodict, ier, mesg = fsolve(func, np.asarray(x0), fprime=jac,
+            full_output=True, maxfev=maxite, xtol=tol)
+    if verbose > 0:
+        print("fsolve: nfev", infodict["nfev"], "njev",
+                infodict.get("njev"), "ier", ier, mesg)
+    return jnp.asarray(x_sol), infodict["nfev"], ier == 1
+
+
 def fixed_point_solve(step_fn, x0, mu, dirs, n, mix=0.1, maxite=2000, tol=1e-5,
         verbose=0, callback_mf=None):
     """Linear-mixing fixed point, mirrors densitydensity.generic_densitydensity
@@ -299,6 +346,16 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
                     "solver=\"fixed_point\" instead")
         step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
         x, ite, converged = newton_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose)
+        final_mu = float(step_jit(x, mu)[4])
+    elif solver == "fsolve":
+        if callback_mf is not None:
+            raise NotImplementedError("solver=\"fsolve\" cannot apply "
+                    "callback_mf/constrains (they need concrete numpy "
+                    "arrays, incompatible with jax.jacfwd tracing); use "
+                    "solver=\"fixed_point\" instead")
+        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
+        x, ite, converged = fsolve_solve(step_vec, x0, maxite=maxite,
                 tol=maxerror, verbose=verbose)
         final_mu = float(step_jit(x, mu)[4])
     elif solver == "fixed_point":
