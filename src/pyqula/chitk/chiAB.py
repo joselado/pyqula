@@ -109,8 +109,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
 
 
 @jit(nopython=True)
-def chiAB_jit_explicit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
-    """Compute the response function.
+def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
+    """Compute the response function for a single (A,B) operator pair.
     A and B are expected to be local operators, like Sz in site 0"""
     cutoff = delta/100 # cutoff for occupation difference
     beta = 1./T # thermal broadening
@@ -132,56 +132,43 @@ def chiAB_jit_explicit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     return out
 
 
-import numpy as np
-from numba import jit
-
-@jit(nopython=True)
-def chiAB_jit_vectorized(ws1, es1, ws2, es2, omegas, A, B, T, delta):
-    cutoff = delta / 100
-    beta = 1.0 / T
-    n = len(es1)
-    m = len(omegas)
-    # occupations
-    occ1 = 1.0 / (1.0 + np.exp(beta * es1))
-    occ2 = 1.0 / (1.0 + np.exp(beta * es2))
-    # Precompute all <i|A|j> and <j|B|i> as full matrices
-    M_A = np.conjugate(ws1) @ A @ ws2.T          # (n,n)
-    M_B = np.conjugate(ws2) @ B @ ws1.T          # (n,n)  
-    out = np.zeros(m, dtype=np.complex128)
-    # Loop over i,j
-    for i in range(n):
-        oi = occ1[i]
-        es1_i = es1[i]
-        for j in range(n):
-            fac = oi - occ2[j]
-            if np.abs(fac) < cutoff:
-                continue
-            coeff = fac * M_A[i, j] * M_B[j, i]
-            if coeff == 0.0 + 0.0j:   # optional, skip if exactly zero
-                continue
-            denom = es1_i - es2[j] - omegas + 1j * delta   # vector of length m
-            out += coeff / denom
-    return out
-
-
-import numpy as np
-
-# there are two versions, the explicit seems to be fast enough
-
-chiAB_jit = chiAB_jit_explicit
-#chiAB_jit = chiAB_jit_vectorized
-
-
 @jit(nopython=True,parallel=True)
 def chiAB_matrix(ws1,es1,ws2,es2,energies,Ais,Bjs,temp,delta):
-    """Compute the full ChiAB matrix, element by element"""
-    ni = len(Ais) # number of operators
-    nj = len(Bjs) # number of operators
+    """Compute the full ChiAB matrix.
+    A naive implementation calls chiAB_jit once per (i,j) pair of
+    operators, which recomputes the O(n^3) Ai@ws2.T/Bj@ws1.T transforms
+    from scratch for every pair even though the former only depends on i
+    and the latter only on j. Precomputing those transforms once per row
+    and once per column operator (instead of once per pair) turns this
+    from an O(ni*nj*n^3) computation into O((ni+nj)*n^3 + ni*nj*n^2)."""
+    ni = len(Ais) # number of row operators
+    nj = len(Bjs) # number of column operators
+    n = len(ws1) # number of wavefunctions
+    cutoff = delta/100 # cutoff for occupation difference
+    beta = 1./temp # thermal broadening
+    occs1 = 1./(1. + np.exp(beta*es1)) # occupations
+    occs2 = 1./(1. + np.exp(beta*es2)) # occupations
+    cws1 = np.conjugate(ws1)
+    cws2 = np.conjugate(ws2)
+    ws1T = ws1.T
+    ws2T = ws2.T
+    MA = np.zeros((ni,n,n),dtype=np.complex128) # <a|Ai|b>, per row operator
+    for i in prange(ni):
+        MA[i] = cws1@(Ais[i]@ws2T)
+    MB = np.zeros((nj,n,n),dtype=np.complex128) # <b|Bj|a>, per column operator
+    for j in prange(nj):
+        MB[j] = cws2@(Bjs[j]@ws1T)
     out = np.zeros((ni,nj,len(energies)),dtype=np.complex128) # initialize
     for i in prange(ni): # loop over rows of the matrix
-        for j in range(nj): # loop over columns of the matrix
-            out[i,j,:] = chiAB_jit(ws1,es1,ws2,es2,energies,Ais[i],
-                    Bjs[j],temp,delta) # compute the response
+        for a in range(n): # loop over wavefunctions of ws1
+            oa = occs1[a] # first occupation
+            for b in range(n): # loop over wavefunctions of ws2
+                fac0 = oa - occs2[b] # occupation factor
+                if np.abs(fac0)<cutoff: continue # skip contribution if too small
+                denom = fac0*(1./(es1[a]-es2[b] - energies + 1j*delta))
+                MAiab = MA[i,a,b]
+                for j in range(nj): # loop over columns of the matrix
+                    out[i,j,:] += MAiab*MB[j,b,a]*denom
     return np.transpose(out,(2,0,1)) # return transposed, first energy, then ij
 
 
