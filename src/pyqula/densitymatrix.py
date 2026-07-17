@@ -24,27 +24,41 @@ def full_dm(h,T=delta_dm,dm_mode=dm_mode,**kwargs):
 
 def full_dm_accumulate(h,nk=10,fermi=0.0,
         delta=delta_dm,
-        ds=None):
+        ds=None,batch_size=16):
     """Compute the full density matrix by adding the
-    contributions to the matrix kpoint by kpoint.
-    Good in terms of memory footprint"""
+    contributions to the matrix kpoint by kpoint. K-points are processed
+    in batches: each batch is diagonalized in parallel across numba
+    threads (see htk.eigenvectors.parallel_diagonalization), then every
+    kpoint's density-matrix contribution is computed in parallel too
+    (see dmtk.fulldm.full_dm_batch_vectorized) and pooled with a single
+    sum at the end of the batch -- no interprocess communication anywhere
+    in this function, unlike parallel.pcall, so it scales with the number
+    of threads instead of being dominated by IPC overhead. batch_size
+    bounds how many k-points' eigenvectors are held in memory at once,
+    keeping the memory footprint low regardless of how dense the k-mesh
+    is."""
+    from .htk.eigenvectors import parallel_diagonalization
     hk = h.get_hk_gen() # get the Hamiltonian generator
-    ks = h.geometry.get_kmesh(nk=nk) # get the mesh
+    ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
     fac = 1./len(ks) # normalization
-
-    def make_f(hkgen): # built once per worker, from the shared hkgen
-        def f(k): # single k-point contribution to the density matrix
-            (es,vs) = algebra.eigh(hkgen(k)) ; vs = vs.T # diagonalize
-            es = es-fermi # substract fermi energy
-            if ds is None: return full_dm_python(es,vs,delta=delta)
-            kes = np.zeros((len(es),3))
-            kes[:,0] = k[0] ; kes[:,1] = k[1] ; kes[:,2] = k[2] # kpoints
-            return np.array([full_dm_python_d(es,vs,kes,d,delta=delta) for d in ds])
-        return f
-
-    from .paralleltk.shared import pcall_shared
-    contribs = pcall_shared(make_f,hk,ks) # one contribution per k-point
-    dm = np.sum(np.array(contribs),axis=0)*fac # add and renormalize
+    dm = None # accumulator, one slot per batch
+    for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
+        kbatch = ks[i0:i0+batch_size]
+        mats = np.array([hk(k) for k in kbatch]) # k-Hamiltonians in this batch
+        es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
+        es_batch = es_batch-fermi # substract fermi energy
+        if ds is None:
+            contribs = full_dm_batch_vectorized(es_batch,vs_batch,delta=delta) # one per kpoint, in parallel
+            batch_total = np.sum(contribs,axis=0) # pool the batch's contributions
+        else:
+            n = vs_batch.shape[1]
+            batch_total = np.zeros((len(ds),n,n),dtype=np.complex128)
+            for idir,d in enumerate(ds): # each direction, batched over kpoints
+                contribs = full_dm_batch_d_vectorized(es_batch,vs_batch,kbatch,
+                        np.array(d,dtype=np.float64),delta=delta) # one per kpoint, in parallel
+                batch_total[idir] = np.sum(contribs,axis=0) # pool the batch's contributions
+        dm = batch_total if dm is None else dm+batch_total # pool across batches
+    dm = dm*fac # renormalize
     if ds is None: return dm # return the single array
     else: # if ds were given
         outd = dict() # dictionary
@@ -83,6 +97,8 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
 
 from .dmtk.fulldm import full_dm_python
 from .dmtk.fulldm import full_dm_python_d
+from .dmtk.fulldm import full_dm_batch_vectorized
+from .dmtk.fulldm import full_dm_batch_d_vectorized
 
 
 

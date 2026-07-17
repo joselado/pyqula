@@ -1,6 +1,15 @@
 # routines to call a function in parallel, across processes
 import numba
 
+# numba's default threading layer (tbb, where available) does not survive
+# fork(): a @jit(parallel=True) call in the main process initializes tbb's
+# thread pool, and forking a new process afterward (paralleltk/multiprocess.py
+# uses multiprocess.Pool, which forks on Linux) deadlocks -- the child
+# inherits tbb's internal state but not its threads. 'workqueue' is numba's
+# own fork-safe threading layer; set it before any parallel=True function
+# anywhere in the package can run (this module is imported ahead of them).
+numba.config.THREADING_LAYER = 'workqueue'
+
 from .paralleltk import multiprocess as _backend
 
 numba_cores = None # numba threads per process ("None" = numba's own default)
