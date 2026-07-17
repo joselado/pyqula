@@ -93,7 +93,20 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     rs = np.array(rs) # transform into array
     kxout = rs[:,0] # x coordinate
     kyout = rs[:,1] # y coordinate
-    if parallel.cores==1: # serial execution
+    if mode=='eigen' and operator is None:
+        # batched, numba-parallel path -- no interprocess dispatch
+        from ..htk.eigenvectors import peigvalsh
+        ks = np.array([R(r)+k0 for r in rs]) # kpoints, change of basis applied
+        kdos = np.zeros(len(rs),dtype=np.float64)
+        batch_size = 64
+        for i0 in range(0,len(rs),batch_size): # loop over batches of kpoints
+            kbatch = ks[i0:i0+batch_size]
+            mats = np.array([hk_gen(k) for k in kbatch],dtype=np.complex128)
+            es_batch = peigvalsh(mats) # diagonalize the whole batch in parallel
+            for ii in range(len(kbatch)):
+                es = es_batch[ii]
+                kdos[i0+ii] = np.sum(delta/((e-es)**2+delta**2))
+    elif parallel.cores==1: # serial execution
         kdos = np.zeros(len(rs),dtype=np.float64) # empty array
         for ir in range(len(rs)): # loop
             kdos[ir] = getf(rs[ir]) # store

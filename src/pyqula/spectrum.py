@@ -370,21 +370,22 @@ def get_filling(h,**kwargs):
 
 
 
-def eigenvalues_kmesh(h,nk=20):
+def eigenvalues_kmesh(h,nk=20,batch_size=64):
     """Get the eigenvalues in a kmesh"""
     if h.dimensionality!=2: raise # only for 2d
     ne = h.intra.shape[0] # number of energies per k-point
-    es = np.zeros((nk,nk,ne)) # array for the energies 
+    es = np.zeros((nk,nk,ne)) # array for the energies
     hkgen = h.get_hk_gen() # get the generator
     kx = np.linspace(0.,1.,nk,endpoint=False)
     ky = np.linspace(0.,1.,nk,endpoint=False)
-    for i in range(nk):
-      ik = kx[i] # kx point   
-      for j in range(nk):
-        jk = ky[j] # ky point
-        hk = hkgen([ik,jk]) # get the matrix
-        ei = algebra.eigvalsh(hk) # get the energies
-        es[i,j,:] = ei # store energies
+    from .htk.eigenvectors import peigvalsh
+    ijs = [(i,j) for i in range(nk) for j in range(nk)] # flat list of grid indices
+    for i0 in range(0,len(ijs),batch_size): # loop over batches of kpoints
+        ijbatch = ijs[i0:i0+batch_size]
+        mats = np.array([hkgen([kx[i],ky[j]]) for (i,j) in ijbatch],dtype=np.complex128)
+        es_batch = peigvalsh(mats) # diagonalize the whole batch in parallel
+        for ii,(i,j) in enumerate(ijbatch):
+            es[i,j,:] = es_batch[ii] # store energies
     return es # return all the energies
 
 
