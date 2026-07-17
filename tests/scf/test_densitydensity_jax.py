@@ -108,6 +108,24 @@ def test_densitydensity_jax_newton_handles_filling():
     assert abs(scf_old.total_energy - scf_newton.total_energy) < 1e-4
 
 
+def test_densitydensity_jax_fsolve_matches_newton():
+    """solver="fsolve" (scipy.optimize.fsolve/MINPACK hybrj, using the same
+    jax.jacfwd Jacobian as fprime) is an alternative globalization strategy
+    to the hand-rolled backtracking Newton solver - it must converge to the
+    same physics."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf = _biased_hamiltonian_and_guess(h0, seed=0, bias=.8)
+
+    scf_newton = Vinteraction(h1.copy(), nk=20, mu=0.0, U=2., mf=mf.copy(),
+            maxerror=1e-8, verbose=0, use_jax=True, solver="newton")
+    scf_fsolve = Vinteraction(h1.copy(), nk=20, mu=0.0, U=2., mf=mf.copy(),
+            maxerror=1e-8, verbose=0, use_jax=True, solver="fsolve")
+
+    assert scf_newton.converged and scf_fsolve.converged
+    assert abs(scf_newton.total_energy - scf_fsolve.total_energy) < 1e-6
+
+
 def test_densitydensity_jax_documents_unsupported_configurations():
     """Configurations intentionally not carried over to the jax engine must
     fail loudly (NotImplementedError), never silently ignore the request."""
