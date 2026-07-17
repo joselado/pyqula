@@ -14,9 +14,18 @@ def ldos_diagonalization(m,e=0.0,**kwargs):
 def ldos_waves(intra,es = [0.0],delta=0.01,operator=None,
         k=None,delta_discard=None,**kwargs):
   """Calculate the DOS in a set of energies by full diagonalization"""
-  es = np.array(es) # array with energies
   emean = np.mean(es) # average energy
   eig,eigvec = get_waves(intra,e0=emean,**kwargs) # eigenvalues and eigenvectors
+  return ldos_waves_from_eigsystem(eig,eigvec,es,delta,operator=operator,
+          k=k,delta_discard=delta_discard)
+
+
+def ldos_waves_from_eigsystem(eig,eigvec,es,delta,operator=None,
+        k=None,delta_discard=None):
+  """Same as ldos_waves, but starting from an already-diagonalized
+  (eig, eigvec) pair instead of diagonalizing internally -- lets callers
+  batch the diagonalization step themselves (see fermisurface.ldosmap)."""
+  es = np.array(es) # array with energies
   ds = [] # empty list
   if operator is None: weights = eig.real*0. + 1.0 # initialize as 1
   else: weights = [operator.braket(v,k=k) for v in eigvec] # weights
@@ -26,7 +35,7 @@ def ldos_waves(intra,es = [0.0],delta=0.01,operator=None,
           e = eig[i]
           if not ewin[0]<e<ewin[1]: weights[i] = 0.0
   v2s = [(np.conjugate(v)*v).real for v in eigvec] # square of the wavefunction
-  ds = [[0.0 for i in range(intra.shape[0])] for e in es] # initialize
+  ds = [[0.0 for i in range(eigvec.shape[1])] for e in es] # initialize
   ds = ldos_waves_jit(np.array(es),
           np.array(eigvec).T,np.array(eig),np.array(weights),
           np.array(v2s),np.array(ds),delta)
