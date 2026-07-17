@@ -55,7 +55,16 @@
 # reaching ~100 orbitals with any Jacobian-based solver here would need a
 # matrix-free approach (e.g. jax.jvp Jacobian-vector products feeding
 # scipy.optimize.newton_krylov, never forming the dense O(norb^2)x O(norb^2)
-# Jacobian at all), which is not implemented.
+# Jacobian at all).
+#
+# solver="newton_krylov" is exactly that matrix-free approach: the same
+# damped-Newton outer loop as solver="newton", but each linear solve uses
+# GMRES (scipy.sparse.linalg.gmres) with only Jacobian-VECTOR products
+# from jax.jvp, never materializing the dense Jacobian. A jvp costs about
+# one extra step_vec evaluation (O(norb^3), one more batched eigh), not
+# O(norb^2) of those - this is the fix for the scaling problem above, as
+# long as GMRES converges in a modest number of Krylov iterations. See
+# newton_krylov_solve's docstring.
 from __future__ import annotations
 import numpy as np
 import jax
@@ -235,6 +244,73 @@ def newton_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0, verbose=0,
     return x, maxite, err < tol
 
 
+def newton_krylov_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0,
+        verbose=0, max_backtrack=30, gmres_tol=1e-6, gmres_restart=20,
+        gmres_maxiter=None):
+    """Matrix-free (Jacobian-free) Newton-Krylov: same damped-Newton outer
+    loop and backtracking as newton_solve, but the linear system
+    (J_step(x) - I) dx = -r(x) at each step is solved with GMRES using only
+    Jacobian-VECTOR products from jax.jvp, never forming the dense
+    O(norb^2) x O(norb^2) Jacobian that makes newton_solve/fsolve_solve
+    expensive at scale. A jvp costs about the same as one extra evaluation
+    of step_vec (one more batched eigh), i.e. O(norb^3), not O(norb^2) of
+    those - the whole point of this solver. This is the classic JFNK
+    (Jacobian-free Newton-Krylov) method, except the Jacobian-vector
+    products are exact (via jax.jvp / forward-mode autodiff) rather than
+    the usual finite-difference approximation."""
+    from scipy.sparse.linalg import gmres, LinearOperator
+    n = x0.shape[0]
+    # jitted once; reused for every GMRES matvec call across all outer
+    # Newton iterations (x becomes a traced argument, not baked in)
+    jvp_fn = jax.jit(lambda x, v: jax.jvp(step_vec, (x,), (v,))[1] - v)
+
+    def merit(r):
+        return float(jnp.sum(jnp.abs(r) ** 2))
+
+    def gmres_solve(x_cur, rhs_np):
+        def matvec(v_np):
+            # np.array(..., copy=True) rather than np.asarray: a numpy view
+            # of a jax array's buffer can come back read-only, and scipy's
+            # gmres does in-place updates on the vectors matvec returns
+            return np.array(jvp_fn(x_cur, jnp.asarray(v_np)), copy=True)
+        Jop = LinearOperator((n, n), matvec=matvec, dtype=np.float64)
+        rhs_np = np.array(rhs_np, copy=True)
+        try:
+            dx_np, info = gmres(Jop, rhs_np, rtol=gmres_tol,
+                    restart=gmres_restart, maxiter=gmres_maxiter)
+        except TypeError:  # older scipy: "tol" instead of "rtol"
+            dx_np, info = gmres(Jop, rhs_np, tol=gmres_tol,
+                    restart=gmres_restart, maxiter=gmres_maxiter)
+        return jnp.asarray(dx_np)
+
+    x = x0
+    fx = step_vec(x)
+    r = fx - x
+    err = float(jnp.max(jnp.abs(r)))
+    m = merit(r)
+    for ite in range(maxite):
+        if verbose > 0:
+            print("Newton-Krylov iteration", ite, "error", err)
+        if err < tol:
+            return x, ite, True
+        dx = gmres_solve(x, -np.asarray(r))
+        step = damping
+        x_try, err_try, m_try = x, err, m
+        for _ in range(max_backtrack):
+            x_try = x + step * dx
+            fx_try = step_vec(x_try)
+            r_try = fx_try - x_try
+            m_try = merit(r_try)
+            if m_try < m:
+                err_try = float(jnp.max(jnp.abs(r_try)))
+                break
+            step *= 0.5
+        else:
+            return x, ite, err < tol
+        x, fx, r, err, m = x_try, fx_try, r_try, err_try, m_try
+    return x, maxite, err < tol
+
+
 def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
     """Solve x = step_vec(x) with scipy.optimize.fsolve (MINPACK hybrj),
     using the exact JAX Jacobian (jax.jacfwd) as fprime. Unlike
@@ -294,7 +370,8 @@ def fixed_point_solve(step_fn, x0, mu, dirs, n, mix=0.1, maxite=2000, tol=1e-5,
 def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
         filling=None, T=None, mix=0.1, maxerror=1e-5, maxite=2000,
         solver="newton", compute_dd=True, compute_cross=True,
-        add_dagger=True, verbose=0, callback_mf=None, **kwargs):
+        add_dagger=True, verbose=0, callback_mf=None,
+        gmres_tol=1e-6, gmres_restart=20, **kwargs):
     """JAX-differentiable analogue of densitydensity.generic_densitydensity.
     maxite defaults to 2000 (vs. the numpy engine's unbounded default) since
     plain linear mixing from a cold/random start can need many hundreds of
@@ -328,8 +405,14 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
         from ..meanfield import guess
         mf = guess(h0, mode=mf)
     mf = obj2mf(mf)
+    # mf need not cover every direction in dirs (e.g. a nearest-neighbor-only
+    # guess like mode="kekule" combined with a longer-range V1+V2
+    # interaction): missing directions start at zero, matching the old
+    # engine's implicit behavior (MultiHopping addition treats an absent
+    # key as a zero contribution)
+    zero_n = jnp.zeros((n, n), dtype=jnp.complex128)
     x0 = flatten_mf({d: jnp.asarray(mf[d], dtype=jnp.complex128)
-        for d in dirs}, dirs)
+        if d in mf else zero_n for d in dirs}, dirs)
     n_occ_total = None
     if filling is not None:
         n_tot = n * ks.shape[0]
@@ -357,6 +440,17 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
         step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
         x, ite, converged = fsolve_solve(step_vec, x0, maxite=maxite,
                 tol=maxerror, verbose=verbose)
+        final_mu = float(step_jit(x, mu)[4])
+    elif solver == "newton_krylov":
+        if callback_mf is not None:
+            raise NotImplementedError("solver=\"newton_krylov\" cannot apply "
+                    "callback_mf/constrains (they need concrete numpy "
+                    "arrays, incompatible with jax.jvp tracing); use "
+                    "solver=\"fixed_point\" instead")
+        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
+        x, ite, converged = newton_krylov_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose, gmres_tol=gmres_tol,
+                gmres_restart=gmres_restart)
         final_mu = float(step_jit(x, mu)[4])
     elif solver == "fixed_point":
         x, final_mu, ite, converged = fixed_point_solve(step_jit, x0, mu,
