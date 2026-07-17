@@ -47,11 +47,3 @@ def set_cores(n):
 def pcall(f,xs,**kwargs):
     """Call f on every element of xs, in parallel if cores>1."""
     return _backend.pcall(f,list(xs))
-
-def pcall_shared(make_f,payload,xs):
-    """Like pcall(make_f(payload), xs), but ships payload to the worker
-    pool once instead of once per dispatch. Use this instead of pcall when
-    the function being parallelized closes over a large object (e.g. a
-    Hamiltonian's k-Hamiltonian generator) -- see paralleltk/shared.py."""
-    from .paralleltk.shared import pcall_shared as _pcall_shared
-    return _pcall_shared(make_f,payload,list(xs))
