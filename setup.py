@@ -22,6 +22,6 @@ setuptools.setup(
     package_dir={"": "src"},
     packages=setuptools.find_packages(where="src"),
     install_requires=["numba>=0.60.0","scipy","matplotlib","numpy",
-                       "multiprocess","dill"],
+                       "multiprocess","dill","threadpoolctl"],
     python_requires=">=3.6",
 )

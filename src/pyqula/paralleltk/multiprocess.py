@@ -13,7 +13,7 @@ def _init_worker():
     global _is_worker
     _is_worker = True
     from .. import parallel
-    parallel.set_num_threads() # never let numba oversubscribe inside a worker
+    parallel.set_num_threads() # never let numba/BLAS oversubscribe inside a worker
 
 # ---------- public API ----------
 def set_cores(n=1):
