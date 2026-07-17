@@ -1,5 +1,5 @@
 import numpy as np
-from numba import jit,njit
+from numba import jit,njit,prange
 
 
 # vectorized mode seems to be faster, explicit kept as a reference
@@ -55,6 +55,25 @@ def full_dm_vectorized(es, vs, delta=1e-7):
     return dm
 
 
+@jit(nopython=True,parallel=True)
+def full_dm_batch_vectorized(es_batch,vs_batch,delta=1e-7):
+    """Density-matrix contribution for a batch of kpoints, one kpoint per
+    numba thread. vs_batch has shape (nb,n,n) with columns as
+    eigenvectors (the htk.eigenvectors.parallel_diagonalization
+    convention). Returns one (n,n) contribution per kpoint -- the caller
+    pools (sums) them at the end, so each thread only ever writes its own
+    output slot."""
+    nb = es_batch.shape[0] # number of kpoints in this batch
+    n = vs_batch.shape[1] # matrix dimension
+    out = np.zeros((nb,n,n),dtype=np.complex128)
+    for ik in prange(nb): # loop over kpoints in the batch, in parallel
+        es = es_batch[ik]
+        w = vs_batch[ik] # columns are eigenvectors
+        occ = 1.0/(1.0+np.exp(es/delta))
+        out[ik] = (np.conj(w)*occ) @ w.T
+    return out
+
+
 
 
 
@@ -107,3 +126,23 @@ def full_dm_d_vectorized(es, vs, ks, d, delta=1e-7):
         occ = 1.0 / (1.0 + np.exp(es[i] / delta)) # occupation
         weight[i] = np.exp(1j * 2.0 * np.pi * kd) * occ
     return (np.conj(vs.T) * weight) @ vs   # (n, n)
+
+
+@jit(nopython=True,parallel=True)
+def full_dm_batch_d_vectorized(es_batch,vs_batch,ks_batch,d,delta=1e-7):
+    """Same as full_dm_batch_vectorized, but weighting each kpoint's
+    contribution by the Bloch phase exp(2*pi*i*k.d) for a single hopping
+    direction d. ks_batch has shape (nb,3), one kpoint per row."""
+    nb = es_batch.shape[0]
+    n = vs_batch.shape[1]
+    out = np.zeros((nb,n,n),dtype=np.complex128)
+    for ik in prange(nb): # loop over kpoints in the batch, in parallel
+        es = es_batch[ik]
+        w = vs_batch[ik]
+        k = ks_batch[ik]
+        kd = k[0]*d[0]+k[1]*d[1]+k[2]*d[2]
+        phase = np.exp(1j*2.0*np.pi*kd)
+        occ = 1.0/(1.0+np.exp(es/delta))
+        weight = occ*phase
+        out[ik] = (np.conj(w)*weight) @ w.T
+    return out
