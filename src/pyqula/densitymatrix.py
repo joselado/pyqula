@@ -22,7 +22,6 @@ def full_dm(h,T=delta_dm,dm_mode=dm_mode,**kwargs):
 
 # it may be worth to implement some adaptive integration with quad_vec
 
-# this mode does not run in parallel
 def full_dm_accumulate(h,nk=10,fermi=0.0,
         delta=delta_dm,
         ds=None):
@@ -30,23 +29,22 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     contributions to the matrix kpoint by kpoint.
     Good in terms of memory footprint"""
     hk = h.get_hk_gen() # get the Hamiltonian generator
-    from .klist import kmesh
     ks = h.geometry.get_kmesh(nk=nk) # get the mesh
     fac = 1./len(ks) # normalization
-    # create the storages
-    norb = h.intra.shape[0] # size of the matrix
-    if ds is None: dm = np.zeros((norb,norb),dtype=np.complex128)
-    else: dm = np.zeros((len(ds),norb,norb),dtype=np.complex128)
-    for k in ks: # loop over kpoints
-        (es,vs) = algebra.eigh(hk(k)) ; vs = vs.T # diagonalize
-        es = es-fermi # substract fermi energy
-        if ds is None: dm += full_dm_python(es,vs,delta=delta)
-        else: 
+
+    def make_f(hkgen): # built once per worker, from the shared hkgen
+        def f(k): # single k-point contribution to the density matrix
+            (es,vs) = algebra.eigh(hkgen(k)) ; vs = vs.T # diagonalize
+            es = es-fermi # substract fermi energy
+            if ds is None: return full_dm_python(es,vs,delta=delta)
             kes = np.zeros((len(es),3))
             kes[:,0] = k[0] ; kes[:,1] = k[1] ; kes[:,2] = k[2] # kpoints
-            for i in range(len(ds)): # this could be parallelized if needed
-                dm[i,:,:] += full_dm_python_d(es,vs,kes,ds[i],delta=delta) # add 
-    dm = dm*fac # renormalize
+            return np.array([full_dm_python_d(es,vs,kes,d,delta=delta) for d in ds])
+        return f
+
+    from .paralleltk.shared import pcall_shared
+    contribs = pcall_shared(make_f,hk,ks) # one contribution per k-point
+    dm = np.sum(np.array(contribs),axis=0)*fac # add and renormalize
     if ds is None: return dm # return the single array
     else: # if ds were given
         outd = dict() # dictionary
