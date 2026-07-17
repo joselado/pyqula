@@ -65,6 +65,22 @@
 # O(norb^2) of those - this is the fix for the scaling problem above, as
 # long as GMRES converges in a modest number of Krylov iterations. See
 # newton_krylov_solve's docstring.
+#
+# WARNING: for solver in {"newton","fsolve","newton_krylov"}, an unbiased
+# spinful Hamiltonian with an unbroken continuous spin-rotation symmetry
+# leaves the Jacobian singular along that marginal direction, and the
+# outer Newton loop can give up after zero completed iterations (the
+# backtracking line search finds no improving step even on the very first
+# try - see newton_solve's/newton_krylov_solve's "no backtracked step
+# improved the residual" branch). scf.converged is False in that case, but
+# scf.total_energy is still populated with whatever the unconverged state
+# evaluates to (essentially the untouched initial guess) - this is easy to
+# miss since no exception is raised. See the WARNING in
+# densitydensity.Vinteraction's docstring; the fix used throughout this
+# module's own tests is to bias the Hamiltonian itself (not just the mean
+# field guess) along an arbitrary direction, e.g. h.add_exchange(0.8*v),
+# or use a Hamiltonian that already breaks the symmetry physically (SOC,
+# an external field, a spinless interaction).
 from __future__ import annotations
 import numpy as np
 import jax

@@ -491,6 +491,22 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     - U, local Hubbard interaction
     - V1, first neighbor interaction
     - V2, second neighbor interaction
+
+    WARNING: if the SCF loop does not converge (e.g. maxite reached before
+    maxerror is met), the returned Hamiltonian is None, but the returned
+    total_energy is still whatever value was reached at that point, NOT
+    necessarily a meaningful self-consistent energy - this applies to
+    get_mean_field_hamiltonian(return_total_energy=True) too. Always check
+    the SCF object's .converged attribute (or that the returned Hamiltonian
+    is not None) before trusting total_energy; do not assume a returned
+    number is correct just because no exception was raised. This is easy to
+    miss with solver="newton"/"fsolve"/"newton_krylov" (use_jax=True):
+    those can stop after zero completed iterations if the very first
+    Newton/GMRES step fails to find an improving direction (e.g. an
+    unbiased spinful Hamiltonian with an unbroken continuous spin-rotation
+    symmetry, which leaves the Jacobian singular along that direction), in
+    which case the reported total_energy is essentially just the unmodified
+    initial guess evaluated once, not a converged answer.
     """
     h = h.get_multicell() # multicell Hamiltonian
     h = h.get_dense()
