@@ -126,6 +126,40 @@ def test_densitydensity_jax_fsolve_matches_newton():
     assert abs(scf_newton.total_energy - scf_fsolve.total_energy) < 1e-6
 
 
+def test_densitydensity_jax_newton_krylov_matches_newton():
+    """solver="newton_krylov" solves the same Newton step (J_step - I) dx =
+    -r with matrix-free GMRES (jax.jvp Jacobian-vector products) instead of
+    forming the dense jax.jacfwd Jacobian - the whole point is that it
+    scales to much larger systems, but it must still converge to the same
+    physics as solver="newton" on a case both can handle."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf = _biased_hamiltonian_and_guess(h0, seed=0, bias=.8)
+
+    scf_newton = Vinteraction(h1.copy(), nk=20, mu=0.0, U=2., mf=mf.copy(),
+            maxerror=1e-8, verbose=0, use_jax=True, solver="newton")
+    scf_nk = Vinteraction(h1.copy(), nk=20, mu=0.0, U=2., mf=mf.copy(),
+            maxerror=1e-8, verbose=0, use_jax=True, solver="newton_krylov")
+
+    assert scf_newton.converged and scf_nk.converged
+    assert abs(scf_newton.total_energy - scf_nk.total_energy) < 1e-6
+
+
+def test_densitydensity_jax_handles_mismatched_guess_directions():
+    """A regression test: an initial mean-field guess that only covers a
+    subset of the interaction's directions (e.g. a nearest-neighbor-only
+    guess like mode="kekule" combined with a longer-range V1+V2
+    interaction, as in examples/2d/kekule_honeycomb_scf) must not crash -
+    missing directions should default to zero, matching what the numpy
+    engine does implicitly via MultiHopping addition."""
+    g = geometry.honeycomb_lattice().get_supercell(3)
+    h = g.get_hamiltonian(has_spin=False)
+    scf = Vinteraction(h, V1=6.0, mf="kekule", V2=4.0, nk=4, filling=0.5,
+            mix=0.3, maxerror=1e-4, maxite=50, verbose=0,
+            use_jax=True, solver="fixed_point")
+    assert np.isfinite(scf.total_energy)
+
+
 def test_densitydensity_jax_documents_unsupported_configurations():
     """Configurations intentionally not carried over to the jax engine must
     fail loudly (NotImplementedError), never silently ignore the request."""
