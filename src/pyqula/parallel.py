@@ -4,13 +4,28 @@ import numba
 from .paralleltk import multiprocess as _backend
 
 numba_cores = None # numba threads per process ("None" = numba's own default)
+blas_cores = None  # BLAS/LAPACK threads in the *main* process ("None" = leave
+                    # as-is); workers are always clamped to 1 regardless, so
+                    # a raised main-process value here is only safe to set
+                    # when cores==1 (no worker pool competing for the same
+                    # physical cores)
+
+def _clamp_blas_threads(n):
+    """Best-effort: cap the BLAS/LAPACK thread count via threadpoolctl."""
+    try:
+        import threadpoolctl
+        threadpoolctl.threadpool_limits(n)
+    except ImportError:
+        pass
 
 def set_num_threads():
-    """Set the number of numba threads for the current process."""
+    """Set the number of numba/BLAS threads for the current process."""
     if _backend._is_worker: # inside a worker: never oversubscribe
         numba.set_num_threads(1)
-    elif numba_cores is not None: # main process
-        numba.set_num_threads(numba_cores)
+        _clamp_blas_threads(1)
+    else: # main process
+        if numba_cores is not None: numba.set_num_threads(numba_cores)
+        if blas_cores is not None: _clamp_blas_threads(blas_cores)
 
 cores = 1 # number of processes currently in use
 
@@ -23,3 +38,11 @@ def set_cores(n):
 def pcall(f,xs,**kwargs):
     """Call f on every element of xs, in parallel if cores>1."""
     return _backend.pcall(f,list(xs))
+
+def pcall_shared(make_f,payload,xs):
+    """Like pcall(make_f(payload), xs), but ships payload to the worker
+    pool once instead of once per dispatch. Use this instead of pcall when
+    the function being parallelized closes over a large object (e.g. a
+    Hamiltonian's k-Hamiltonian generator) -- see paralleltk/shared.py."""
+    from .paralleltk.shared import pcall_shared as _pcall_shared
+    return _pcall_shared(make_f,payload,list(xs))
