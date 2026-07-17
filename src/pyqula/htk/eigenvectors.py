@@ -26,11 +26,15 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
     if sparse: # sparse Hamiltonians
         fk = lambda k: slg.eigsh(csc(f(k)),k=numw,which="LM",sigma=energy,tol=1e-5)
         vvs = parallel.pcall(fk,kp)
-    else: # dense Hamiltonians
-      if parallel.cores>1: # in parallel
-#        vvs = parallel.multieigh([f(k) for k in kp]) # multidiagonalization
-        vvs = parallel.pcall(lambda k: algebra.eigh(f(k)),kp)
-      else: vvs = [algebra.eigh(f(k)) for k in kp] # 
+    else: # dense Hamiltonians: batched, numba-parallel diagonalization,
+          # no interprocess communication
+      batch_size = 64
+      vvs = []
+      for i0 in range(0,len(kp),batch_size): # loop over batches of kpoints
+        kbatch = kp[i0:i0+batch_size]
+        mats = np.array([f(kk) for kk in kbatch],dtype=np.complex128)
+        es_batch,ws_batch = parallel_diagonalization(mats) # diagonalize the batch in parallel
+        for ii in range(len(kbatch)): vvs.append((es_batch[ii],ws_batch[ii]))
     nume = sum([len(v[0]) for v in vvs]) # number of eigenvalues calculated
     eigvecs = np.zeros((nume,h.intra.shape[0]),dtype=np.complex128) # eigenvectors
     eigvals = np.zeros(nume) # eigenvalues

@@ -81,7 +81,18 @@ def fermi_surface_generator(h,
     kxout = rs[:,0] # x coordinate
     kyout = rs[:,1] # y coordinate
     kdos = np.zeros((len(rs),len(energies))) # initialize
-    if parallel.cores==1: # serial execution
+    if mode=='full' and operator is None:
+        # batched, numba-parallel path -- no interprocess dispatch
+        from .htk.eigenvectors import peigvalsh
+        ks = np.array([fR(r) for r in rs]) # kpoints, change of basis applied
+        batch_size = 64
+        for i0 in range(0,len(rs),batch_size): # loop over batches of kpoints
+            kbatch = ks[i0:i0+batch_size]
+            mats = np.array([hk_gen(k) for k in kbatch],dtype=np.complex128)
+            es_batch = peigvalsh(mats) # diagonalize the whole batch in parallel
+            for ii in range(len(kbatch)):
+                kdos[i0+ii,:] = fermi_weight(es_batch[ii],energies,delta=delta)
+    elif parallel.cores==1: # serial execution
         for ir in range(len(rs)): # loop
           if info: print("Doing",rs[ir])
           kdos[ir,:] = getf(rs[ir]) # store in the list
