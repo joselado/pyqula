@@ -83,7 +83,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                     callback=None,central_energy=0.0,nk=400,
                     ewindow=None,
                     output_file="BANDS.OUT",write=True,
-                    silent=True):
+                    silent=True,batch_size=64):
     """
     Get an n-dimensional bandstructure
     """
@@ -92,50 +92,28 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
     if operator is not None: operator = h.get_operator(operator)
     if isinstance(operator,(list,)): num_waw = len(operator)
     else: num_waw = 1 # number of operator expectation values per band
-    if num_bands is None: # all the bands
-      if operator is not None:
-        def diagf(m): # diagonalization routine
-            return algebra.eigh(m) # all eigenvals and eigenfuncs
-      else:
-        def diagf(m): # diagonalization routine
-            return algebra.eigvalsh(m) # all eigenvals
-    else: # using arpack
-      h = h.copy()
-      h.turn_sparse() # sparse Hamiltonian
-      def diagf(m):
-        eig,eigvec = slg.eigsh(m,k=num_bands,which="LM",sigma=central_energy,
-                                    tol=arpack_tol,maxiter=arpack_maxiter)
-        if operator is None: return eig
-        else: return (eig,eigvec)
     # open file and get generator
     hkgen = h.get_hk_gen() # generator hamiltonian
     kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
     ncols = 2+num_waw if operator is not None else 2 # k, e, (operators)
-    def getek(k):
-      """Compute this k-point, returning a numpy array with one row per
-      band: [k_index, energy, (operator expectation values...)]"""
-      hk = hkgen(kpath[k]) # get hamiltonian
-      if operator is None:
-        es = diagf(hk)
+    def evaluate(w,k,A): # evaluate the operator
+        if type(A)==operators.Operator:
+            waw = A.braket(w,k=kpath[k]).real
+        elif callable(A):
+          try: waw = A(w,k=kpath[k]) # call the operator
+          except:
+            print("Check out the k optional argument in operator")
+            waw = A(w) # call the operator
+        else: waw = braket_wAw(w,A).real # calculate expectation value
+        return waw # return the result
+    def rows_no_operator(k,es):
         es = np.sort(es) # sort energies
         if callback is not None: callback(k,es) # call the function
         out = np.empty((len(es),ncols))
         out[:,0] = k
         out[:,1] = es
         return out
-      else:
-        es,ws = diagf(hk)
-        ws = ws.transpose() # transpose eigenvectors
-        def evaluate(w,k,A): # evaluate the operator
-            if type(A)==operators.Operator:
-                waw = A.braket(w,k=kpath[k]).real
-            elif callable(A):
-              try: waw = A(w,k=kpath[k]) # call the operator
-              except:
-                print("Check out the k optional argument in operator")
-                waw = A(w) # call the operator
-            else: waw = braket_wAw(w,A).real # calculate expectation value
-            return waw # return the result
+    def rows_with_operator(k,es,ws):
         rows = [] # rows for this k-point
         for (e,w) in zip(es,ws):  # loop over waves
           if callable(ewindow):
@@ -148,10 +126,46 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         if callback is not None: callback(k,es,ws) # call the function
         if len(rows)==0: return np.empty((0,ncols))
         return np.array(rows)
-    ### Now evaluate the function
-    from . import parallel
-    esk = parallel.pcall(getek,range(len(kpath))) # compute all
-    esk = np.concatenate(esk,axis=0) if len(esk)>0 else np.empty((0,ncols))
+    if num_bands is None: # all the bands: batched, numba-parallel diagonalization
+        from .htk.eigenvectors import parallel_diagonalization, peigvalsh
+        nkp = len(kpath)
+        rows_all = []
+        for i0 in range(0,nkp,batch_size): # loop over batches of kpoints
+            kbatch = range(i0,min(i0+batch_size,nkp))
+            mats = np.array([hkgen(kpath[k]) for k in kbatch],dtype=np.complex128)
+            if operator is None:
+                es_batch = peigvalsh(mats) # eigenvalues only, diagonalized in parallel
+                for ii,k in enumerate(kbatch):
+                    rows_all.append(rows_no_operator(k,es_batch[ii]))
+            else:
+                es_batch,vs_batch = parallel_diagonalization(mats) # diagonalized in parallel
+                for ii,k in enumerate(kbatch):
+                    ws = vs_batch[ii].T # rows are eigenvectors, matching algebra.eigh().transpose()
+                    rows_all.append(rows_with_operator(k,es_batch[ii],ws))
+        esk = np.concatenate(rows_all,axis=0) if len(rows_all)>0 else np.empty((0,ncols))
+    else: # using arpack -- iterative, doesn't batch the same way, dispatch through pcall
+      h = h.copy()
+      h.turn_sparse() # sparse Hamiltonian
+      hkgen = h.get_hk_gen() # generator hamiltonian, now for the sparse copy
+      def diagf(m):
+        eig,eigvec = slg.eigsh(m,k=num_bands,which="LM",sigma=central_energy,
+                                    tol=arpack_tol,maxiter=arpack_maxiter)
+        if operator is None: return eig
+        else: return (eig,eigvec)
+      def getek(k):
+        """Compute this k-point, returning a numpy array with one row per
+        band: [k_index, energy, (operator expectation values...)]"""
+        hk = hkgen(kpath[k]) # get hamiltonian
+        if operator is None:
+          es = diagf(hk)
+          return rows_no_operator(k,es)
+        else:
+          es,ws = diagf(hk)
+          ws = ws.transpose() # transpose eigenvectors
+          return rows_with_operator(k,es,ws)
+      from . import parallel
+      esk = parallel.pcall(getek,range(len(kpath))) # compute all
+      esk = np.concatenate(esk,axis=0) if len(esk)>0 else np.empty((0,ncols))
     if write:
       with open(output_file,"w") as f: np.savetxt(f,esk) # write in file
   #  print("\nBANDS finished")

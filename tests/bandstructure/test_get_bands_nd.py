@@ -133,3 +133,74 @@ def test_get_bands_nd_matches_legacy_with_operator_and_ewindow(tmp_path):
     assert new.shape == old.shape
     assert np.allclose(new, old), \
         "New and legacy bandstructures (with operator) disagree"
+
+
+def test_get_bands_nd_operator_list_fails_the_same_way_as_legacy(tmp_path):
+    """operator=[op1, op2] (the shape examples/1d/several_operators/main.py
+    uses) currently raises in *both* the legacy and the new implementation:
+    get_bands_nd unconditionally calls h.get_operator(operator) on the raw
+    argument before ever checking isinstance(operator, list), and
+    operatorlist.get_operator has no list case, so it falls through to a
+    bare `raise`. That's a pre-existing bug, not something introduced by
+    the numba-batching refactor -- this test only pins down that the two
+    implementations still fail identically, so the refactor doesn't change
+    the failure mode."""
+    os.chdir(tmp_path)
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    h.add_zeeman([0., 0., 0.3])
+    ops = [h.get_operator("sz"), h.get_operator("sx")]
+    new_exc = old_exc = None
+    try:
+        bandstructure.get_bands_nd(h, nk=8, operator=ops, write=False)
+    except Exception as e:
+        new_exc = type(e)
+    try:
+        _legacy_get_bands_nd(h, nk=8, operator=ops, write=False)
+    except Exception as e:
+        old_exc = type(e)
+    assert new_exc is not None and new_exc == old_exc
+
+
+def test_get_bands_nd_num_bands_eigenvalues_are_a_subset_of_the_spectrum(tmp_path):
+    """num_bands routes through the arpack/sparse path, which this
+    refactor left untouched except for moving hkgen's regeneration.
+    arpack's Lanczos iteration uses a random start vector, so two
+    independent calls (legacy vs. new) aren't guaranteed to return
+    bit-identical results even with unchanged code -- checked directly:
+    calling the *same* implementation twice already disagrees. Check
+    something robust to that instead: every returned eigenvalue must be
+    part of the true (fully diagonalized) spectrum."""
+    os.chdir(tmp_path)
+    g = geometry.honeycomb_lattice()
+    g = g.get_supercell(3)
+    h = g.get_hamiltonian()
+    hkgen = h.get_hk_gen()
+    kpath = h.geometry.get_kpath(None, nk=6)
+    full_spectra = [np.linalg.eigvalsh(hkgen(k)) for k in kpath] # one per kpoint
+    new = bandstructure.get_bands_nd(h, nk=6, num_bands=4, write=False)
+    for ik, e in zip(new[0], new[1]):
+        spectrum = full_spectra[int(round(ik))]
+        assert np.min(np.abs(spectrum - e)) < 1e-6, \
+            f"eigenvalue {e} at kpoint {ik} is not part of that kpoint's true spectrum"
+
+
+def test_get_bands_nd_independent_of_batch_size(tmp_path):
+    os.chdir(tmp_path)
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    h.add_zeeman([0., 0., 0.3])
+    outs = [bandstructure.get_bands_nd(h, nk=10, operator="sz", write=False,
+                                        batch_size=bs)
+            for bs in (1, 3, 10, 100)]
+    for o in outs[1:]:
+        assert np.allclose(o, outs[0]), "Result depends on batch_size"
+
+
+def test_get_bands_nd_callback_receives_every_kpoint_in_order():
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    seen = []
+    bandstructure.get_bands_nd(h, nk=9, write=False,
+                                callback=lambda k, es: seen.append(k))
+    assert seen == list(range(9))
