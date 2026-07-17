@@ -416,9 +416,13 @@ def get_array2mf(scf):
     return fa2mf # return function
 
 
-def densitydensity(h,filling=0.5,mu=None,verbose=0,**kwargs):
+def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     """Function for density-density interactions"""
-    if h.has_eh: 
+    if use_jax:
+        from .densitydensity_jax import densitydensity_jax
+        return densitydensity_jax(h,filling=filling,mu=mu,verbose=verbose,
+                **kwargs)
+    if h.has_eh:
         if not h.has_spin: return NotImplemented # only for spinful
     h = h.get_multicell()
     h = h.get_dense()
@@ -467,11 +471,13 @@ def hubbard(h,U=1.0,constrains=[],**kwargs):
       for i in range(n): zero[i,i] = U[i] # Hubbard interaction
     v = dict() # dictionary
     v[(0,0,0)] = zero 
-    from . import mfconstrains
-    def callback_mf(mf):
-        """Put the constrains in the mean field if necessary"""
-        mf = mfconstrains.enforce_constrains(mf,h,constrains)
-        return mf
+    callback_mf = None
+    if constrains:
+        from . import mfconstrains
+        def callback_mf(mf):
+            """Put the constrains in the mean field if necessary"""
+            mf = mfconstrains.enforce_constrains(mf,h,constrains)
+            return mf
     if h.has_spin:
       return densitydensity(h,v=v,callback_mf=callback_mf,**kwargs)
     else:
@@ -515,11 +521,13 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
             v[(0,0,0)][2*i,2*i+1] += U[i]/2. # add
             v[(0,0,0)][2*i+1,2*i] += U[i]/2. # add
     # Now put the constrains if necessary
-    from . import mfconstrains
-    def callback_mf(mf):
-        """Put the constrains in the mean field if necessary"""
-        mf = mfconstrains.enforce_constrains(mf,h,constrains)
-        return mf
+    callback_mf = None
+    if constrains:
+        from . import mfconstrains
+        def callback_mf(mf):
+            """Put the constrains in the mean field if necessary"""
+            mf = mfconstrains.enforce_constrains(mf,h,constrains)
+            return mf
     return densitydensity(h,v=v,callback_mf=callback_mf,**kwargs)
 
 
