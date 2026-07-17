@@ -76,6 +76,38 @@ def test_densitydensity_jax_newton_is_rotationally_invariant():
         f"jax Newton SCF total energy is not rotationally invariant: {diff}"
 
 
+def test_densitydensity_jax_newton_handles_filling():
+    """solver="newton" also supports a target filling: mu is resolved
+    *inside* the jax trace each step as the midpoint between the N-th and
+    (N+1)-th eigenvalue of the sorted spectrum (via jnp.sort), rather than
+    with a numpy root-find outside the trace - so it must converge to the
+    same physics as the numpy engine for the same filling target. Compared
+    against the numpy engine (not solver="fixed_point"): from a raw random,
+    unbiased seed this dimer has the same SU(2)-marginal-direction slow tail
+    as test_densitydensity_jax_newton_is_rotationally_invariant works around
+    with a bias, and plain mixing (both engines) needs very many iterations
+    to fully resolve it - not something either implementation's Newton
+    solver needs to (and shouldn't be graded on)."""
+    g = geometry.dimer()
+    h = g.get_hamiltonian()
+    U = 2.0
+    rng = np.random.default_rng(3)
+    n = h.intra.shape[0]
+    m = rng.random((n, n)) - 0.5 + 1j * (rng.random((n, n)) - 0.5)
+    m = m + m.T.conjugate()
+    mf0 = {(0, 0, 0): m}
+
+    scf_old = Vinteraction(h.copy(), filling=0.5, U=U,
+            mf={k: v.copy() for k, v in mf0.items()},
+            maxerror=1e-6, verbose=0)
+    scf_newton = Vinteraction(h.copy(), filling=0.5, U=U,
+            mf={k: v.copy() for k, v in mf0.items()},
+            maxerror=1e-7, verbose=0, use_jax=True, solver="newton")
+
+    assert scf_old.converged and scf_newton.converged
+    assert abs(scf_old.total_energy - scf_newton.total_energy) < 1e-4
+
+
 def test_densitydensity_jax_documents_unsupported_configurations():
     """Configurations intentionally not carried over to the jax engine must
     fail loudly (NotImplementedError), never silently ignore the request."""
@@ -83,7 +115,8 @@ def test_densitydensity_jax_documents_unsupported_configurations():
     h = g.get_hamiltonian()
     with pytest.raises(NotImplementedError):
         Vinteraction(h.copy(), filling=0.5, U=2.0, mf="random",
-                use_jax=True, solver="newton")  # newton needs a fixed mu
+                use_jax=True, solver="newton",
+                constrains=["no_charge"])  # newton can't run callback_mf
     h_nambu = h.copy()
     h_nambu.turn_nambu()
     with pytest.raises(NotImplementedError):
