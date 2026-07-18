@@ -23,7 +23,7 @@ def get_fermi_energy(es,filling,fermi_shift=0.0,
 def eigenvalues(h0,nk=10,notime=True,batch_size=64):
     """Return all the eigenvalues of a Hamiltonian"""
     from . import klist
-    from .htk.eigenvectors import peigvalsh
+    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
     h = h0.copy() # copy hamiltonian
     h = h.get_dense()
     ks = klist.kmesh(h.dimensionality,nk=nk) # get grid
@@ -31,7 +31,7 @@ def eigenvalues(h0,nk=10,notime=True,batch_size=64):
     es_all = [] # list of batches
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
-        mats = np.array([hkgen(k) for k in kbatch],dtype=np.complex128)
+        mats = hk_matrix_batch(hkgen,kbatch)
         es_all.append(peigvalsh(mats)) # diagonalize the whole batch in parallel
     es = np.concatenate(es_all,axis=0)
     es = es.reshape(es.shape[0]*es.shape[1])

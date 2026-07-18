@@ -37,14 +37,14 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     bounds how many k-points' eigenvectors are held in memory at once,
     keeping the memory footprint low regardless of how dense the k-mesh
     is."""
-    from .htk.eigenvectors import parallel_diagonalization
+    from .htk.eigenvectors import parallel_diagonalization, hk_matrix_batch
     hk = h.get_hk_gen() # get the Hamiltonian generator
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
     fac = 1./len(ks) # normalization
     dm = None # accumulator, one slot per batch
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
-        mats = np.array([hk(k) for k in kbatch]) # k-Hamiltonians in this batch
+        mats = hk_matrix_batch(hk,kbatch) # k-Hamiltonians in this batch
         es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
         es_batch = es_batch-fermi # substract fermi energy
         if ds is None:

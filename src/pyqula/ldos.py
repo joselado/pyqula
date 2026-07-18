@@ -163,14 +163,14 @@ def ldosmap(h,energies=np.linspace(-1.0,1.0,40),delta=None,
   ks = [np.random.random(3) for ik in range(nk)] # kpoints
   if kwargs.get("num_bands") is None and not kwargs.get("non_hermitian",False):
       # batched, numba-parallel path -- no interprocess dispatch
-      from .htk.eigenvectors import parallel_diagonalization
+      from .htk.eigenvectors import parallel_diagonalization, hk_matrix_batch
       from .ldostk.ldoswaves import ldos_waves_from_eigsystem
       delta_discard = kwargs.get("delta_discard")
       ds = []
       batch_size = 64
       for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
           kbatch = ks[i0:i0+batch_size]
-          mats = np.array([hkgen(k) for k in kbatch],dtype=np.complex128)
+          mats = hk_matrix_batch(hkgen,kbatch)
           es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize the batch in parallel
           for ii,k in enumerate(kbatch):
               eigvec = vs_batch[ii].T # rows are eigenvectors
