@@ -4,6 +4,17 @@ from ..klist import kmesh
 import numpy as np
 import scipy.sparse.linalg as slg
 
+
+def hk_matrix_batch(f,ks):
+  """Evaluate a Hamiltonian generator f at every k in ks and stack the
+  results into one dense complex128 array, densifying any sparse output
+  along the way (see algebra.todense). Every call site that batches
+  k-point Hamiltonians for parallel_diagonalization/peigvalsh should go
+  through this, so a sparse Hamiltonian never reaches numba's dense eigh
+  as a scipy sparse matrix (which numba cannot handle)."""
+  return np.array([algebra.todense(f(k)) for k in ks],dtype=np.complex128)
+
+
 def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
         numw=None,energy=0.0):
   from scipy.sparse import csc_matrix as csc
@@ -32,7 +43,7 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
       vvs = []
       for i0 in range(0,len(kp),batch_size): # loop over batches of kpoints
         kbatch = kp[i0:i0+batch_size]
-        mats = np.array([f(kk) for kk in kbatch],dtype=np.complex128)
+        mats = hk_matrix_batch(f,kbatch)
         es_batch,ws_batch = parallel_diagonalization(mats) # diagonalize the batch in parallel
         for ii in range(len(kbatch)): vvs.append((es_batch[ii],ws_batch[ii]))
     nume = sum([len(v[0]) for v in vvs]) # number of eigenvalues calculated
