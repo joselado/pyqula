@@ -142,6 +142,13 @@ class Hamiltonian():
     def set_multihopping(self,mh):
         """Set a multihopping as the Hamiltonian"""
         multicell.set_multihopping(self,mh)
+
+    def get_wannier_hamiltonian(self,**kwargs):
+        """Wannierize a subset of this Hamiltonian's bands (via wannierpy's
+        pure-Python Wannier90 port) and return a new Hamiltonian in the
+        resulting maximally-localized Wannier basis"""
+        from .wanniertk.wannierize import get_wannier_hamiltonian
+        return get_wannier_hamiltonian(self,**kwargs)
     @get_docstring(spectrum.set_filling)
     def set_filling(self,filling,**kwargs):
         spectrum.set_filling(self,filling=filling,**kwargs)
