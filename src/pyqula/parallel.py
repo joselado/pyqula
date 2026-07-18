@@ -1,6 +1,15 @@
 # routines to call a function in parallel, across processes
 import numba
 
+# numba's default threading layer (tbb, where available) does not survive
+# fork(): a @jit(parallel=True) call in the main process initializes tbb's
+# thread pool, and forking a new process afterward (paralleltk/multiprocess.py
+# uses multiprocess.Pool, which forks on Linux) deadlocks -- the child
+# inherits tbb's internal state but not its threads. 'workqueue' is numba's
+# own fork-safe threading layer; set it before any parallel=True function
+# anywhere in the package can run (this module is imported ahead of them).
+numba.config.THREADING_LAYER = 'workqueue'
+
 from .paralleltk import multiprocess as _backend
 
 numba_cores = None # numba threads per process ("None" = numba's own default)
@@ -38,11 +47,3 @@ def set_cores(n):
 def pcall(f,xs,**kwargs):
     """Call f on every element of xs, in parallel if cores>1."""
     return _backend.pcall(f,list(xs))
-
-def pcall_shared(make_f,payload,xs):
-    """Like pcall(make_f(payload), xs), but ships payload to the worker
-    pool once instead of once per dispatch. Use this instead of pcall when
-    the function being parallelized closes over a large object (e.g. a
-    Hamiltonian's k-Hamiltonian generator) -- see paralleltk/shared.py."""
-    from .paralleltk.shared import pcall_shared as _pcall_shared
-    return _pcall_shared(make_f,payload,list(xs))
