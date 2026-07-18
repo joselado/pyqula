@@ -244,7 +244,23 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
           vv = vv[0:nbands] # get the negative eigenvlaues closest to EF
       return np.sum(vv[vv<fermi]) # sum energies below fermi energy
   # compute energy using different modes
-  if mode=="mesh":
+  if mode in ("mesh","random") and (not use_kpm) and nbands is None:
+    # batched, numba-parallel path -- no interprocess dispatch
+    from .htk.eigenvectors import peigvalsh
+    if mode=="mesh":
+        from .klist import kmesh
+        kp = kmesh(h.dimensionality,nk=nk)
+    else: # random
+        kp = [np.random.random(3) for i in range(nk)]
+    sums = [] # per-kpoint sum of energies below the fermi energy
+    batch_size = 64
+    for i0 in range(0,len(kp),batch_size): # loop over batches of kpoints
+        kbatch = kp[i0:i0+batch_size]
+        mats = np.array([f(k) for k in kbatch],dtype=np.complex128)
+        es_batch = peigvalsh(mats) # diagonalize the whole batch in parallel
+        for es in es_batch: sums.append(np.sum(es[es<fermi]))
+    etot = np.mean(sums) # compute total energy
+  elif mode=="mesh":
     from .klist import kmesh
     kp = kmesh(h.dimensionality,nk=nk)
     etot = np.mean(parallel.pcall(enek,kp)) # compute total energy

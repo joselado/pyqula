@@ -158,10 +158,26 @@ def ldosmap(h,energies=np.linspace(-1.0,1.0,40),delta=None,
   def getd(k): # get LDOS
     hk = hkgen(k) # get Hamiltonian
     # LDOS for this kpoint
-    ds = ldos_waves(hk,k=k,es=energies,delta=delta,operator=operator,**kwargs) 
+    ds = ldos_waves(hk,k=k,es=energies,delta=delta,operator=operator,**kwargs)
     return ds
   ks = [np.random.random(3) for ik in range(nk)] # kpoints
-  ds = parallel.pcall(getd,ks) # get densities
+  if kwargs.get("num_bands") is None and not kwargs.get("non_hermitian",False):
+      # batched, numba-parallel path -- no interprocess dispatch
+      from .htk.eigenvectors import parallel_diagonalization
+      from .ldostk.ldoswaves import ldos_waves_from_eigsystem
+      delta_discard = kwargs.get("delta_discard")
+      ds = []
+      batch_size = 64
+      for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
+          kbatch = ks[i0:i0+batch_size]
+          mats = np.array([hkgen(k) for k in kbatch],dtype=np.complex128)
+          es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize the batch in parallel
+          for ii,k in enumerate(kbatch):
+              eigvec = vs_batch[ii].T # rows are eigenvectors
+              ds.append(ldos_waves_from_eigsystem(es_batch[ii],eigvec,energies,
+                      delta,operator=operator,k=k,delta_discard=delta_discard))
+  else:
+      ds = parallel.pcall(getd,ks) # get densities
   dstot = np.mean(ds,axis=0) # average over first axis
   print("LDOS finished")
   dstot = [spatial_dos(h,d) for d in dstot] # convert to spatial resolved DOS
