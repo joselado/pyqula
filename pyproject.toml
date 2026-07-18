@@ -9,3 +9,6 @@ build-backend = "setuptools.build_meta"
 pythonpath = ["src", "tests"]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
+markers = [
+    "slow: exercises a larger/slower configuration than the default suite targets",
+]
