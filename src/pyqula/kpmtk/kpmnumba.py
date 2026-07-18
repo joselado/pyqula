@@ -2,34 +2,47 @@ import numpy as np
 import numba
 from numba import jit
 
+# precision names -> numpy dtypes, for the real and complex code paths
+_REAL_DTYPES = {"single": np.float32, "double": np.float64}
+_COMPLEX_DTYPES = {"single": np.complex64, "double": np.complex128}
 
-def kpm_moments_v(v,m,n=100,kpm_prec="single",
+
+def kpm_moments_v(v,m,n=100,kpm_prec="double",
         kpm_cpugpu="CPU",**kwargs):
-    """Return the local moments"""
+    """Return the local moments.
+
+    kpm_prec selects the floating point precision ("single" or "double"),
+    and kpm_cpugpu selects the backend: "CPU" (numba) or "GPU" (JAX, which
+    falls back to running on the CPU if no GPU is available). Real input
+    (real matrix and real starting vector) is detected automatically and
+    computed with real arithmetic; otherwise complex arithmetic is used.
+    Both code paths support single and double precision."""
     from scipy.sparse import coo_matrix
     mo = coo_matrix(m)
-    data = np.array(mo.data,dtype=np.complex128)
-    if np.max(np.abs(data.imag))<1e-6 and np.max(np.abs(v.imag))<1e-6: # real
-        if kpm_prec == "single": dtype = np.float32
-        elif kpm_prec == "double": dtype = np.float64
+    v = np.asarray(v)
+    is_real = np.max(np.abs(mo.data.imag))<1e-6 and np.max(np.abs(v.imag))<1e-6
+    if is_real:
+        dtype = _REAL_DTYPES[kpm_prec]
         v = np.array(v.real,dtype=dtype) # convert to float
-        data = np.array(data.real,dtype=dtype) # convert to float
-        if kpm_cpugpu=="CPU": # use the CPU
-            mus = python_kpm_moments_real(v,data,mo.row,mo.col,n=n)
-        elif kpm_cpugpu=="GPU": # use the GPU
-#            from .kpmjax import kpm_moments_real_gpu
-#            mus = kpm_moments_real_gpu(v,data,mo.row,mo.col,n=n)
-            from .kpmjax import kpm_moments_real_gpu_sparse
-            mus = kpm_moments_real_gpu_sparse(v,m,n=n)
+        data = np.array(mo.data.real,dtype=dtype) # convert to float
     else:
-        mus = python_kpm_moments_complex(v,data,mo.row,mo.col,n=n)
+        dtype = _COMPLEX_DTYPES[kpm_prec]
+        v = np.array(v,dtype=dtype)
+        data = np.array(mo.data,dtype=dtype)
+    if kpm_cpugpu=="CPU": # use the CPU
+        if is_real: mus = python_kpm_moments_real(v,data,mo.row,mo.col,n=n)
+        else: mus = python_kpm_moments_complex(v,data,mo.row,mo.col,n=n)
+    elif kpm_cpugpu=="GPU": # use the GPU (or CPU, if no GPU is available)
+        from .kpmjax import kpm_moments_gpu
+        mus = kpm_moments_gpu(v,data,mo.row,mo.col,n=n)
+    else: raise ValueError("kpm_cpugpu must be 'CPU' or 'GPU', got "+str(kpm_cpugpu))
     return np.array(mus,dtype=np.complex128)
 
 
 @jit(nopython=True)
 def python_kpm_moments_complex(v,data,row,col,n=100):
     """Python routine to calculate moments"""
-    mus = np.zeros(2*n,dtype=np.complex128) # empty array for the moments
+    mus = np.zeros(2*n,dtype=v.dtype) # empty array for the moments
     am = v.copy() # zero vector
     a = Mtimesv(data,row,col,v) #m@v  # vector number 1
     bk = np.sum(np.conjugate(v)*v)
