@@ -172,19 +172,19 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
     if operator is not None and mode=="Wilson":
       print("Switching to Green mode in topology")
       mode="Green"
-    # create the function
-    def fberry(k): # function to integrate
-      if mode=="Wilson":
-        return berry_curvature(h,k,dk=dk)
-      if mode=="Green":
-         f2 = h.get_gk_gen(delta=delta) # get generator
-         return berry_green(f2,k=[k[0],k[1],0.],operator=operator) 
     ##################
     if kmesh is None: # no kmesh provided
         ks = klist.kmesh(h.dimensionality,nk=nk) # get the mesh
     else: ks = kmesh # use the provided kmesh
-    ik = 0
-    bs = parallel.pcall(fberry,ks) # compute all the Berry curvatures
+    if mode=="Wilson": # batched, numba-parallel path -- no interprocess dispatch
+        from .topologytk.berry import berry_curvature_mesh
+        bs = berry_curvature_mesh(h,ks,dk=dk)
+    elif mode=="Green": # Green function mode, per-kpoint pcall dispatch
+        def fberry(k):
+            f2 = h.get_gk_gen(delta=delta) # get generator
+            return berry_green(f2,k=[k[0],k[1],0.],operator=operator)
+        bs = parallel.pcall(fberry,ks) # compute all the Berry curvatures
+    else: raise
     # write in file
     fo = open("BERRY_CURVATURE.OUT","w") # open file
     for (k,b) in zip(ks,bs):
@@ -238,23 +238,29 @@ def get_berry_curvature_master(h,dk=None,nk=100,
     if reciprocal: R = np.array(h.geometry.get_k2K())
     else: R = np.array(np.identity(3))
     nt = nk*nk # total number of points
-    ik = 0
     from . import parallel
-    if verbose>0: tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
-    def fp(ki): # function to compute the Berry curvature
-        if parallel.cores == 1: 
-            if verbose>0: tr.iterate()
-        else: 
-            if verbose>0:  print("Doing",ki)
-        k = R@ki # change of basis
-        if mode=="Wilson":
-           b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
-        elif mode=="Green":
-           f = h.get_gk_gen(delta=delta) # get generator
-           b = berry_green(f,k=k,operator=operator) 
-        else: raise
-        return b
-    bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
+    if mode=="Wilson" and window is None and max_waves is None:
+        # batched, numba-parallel path -- no interprocess dispatch
+        from .topologytk.berry import berry_curvature_mesh
+        kks = np.array([R@ki for ki in ks]) # change of basis
+        bs = berry_curvature_mesh(h,kks,dk=dk)
+    else:
+        ik = 0
+        if verbose>0: tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
+        def fp(ki): # function to compute the Berry curvature
+            if parallel.cores == 1:
+                if verbose>0: tr.iterate()
+            else:
+                if verbose>0:  print("Doing",ki)
+            k = R@ki # change of basis
+            if mode=="Wilson":
+               b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
+            elif mode=="Green":
+               f = h.get_gk_gen(delta=delta) # get generator
+               b = berry_green(f,k=k,operator=operator)
+            else: raise
+            return b
+        bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
     if write: # write result in a file
         fo = open("BERRY_MAP.OUT","w") # open file
         for (b,k) in zip(bs,ks): # write everything
