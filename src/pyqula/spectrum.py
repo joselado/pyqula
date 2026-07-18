@@ -246,7 +246,7 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
   # compute energy using different modes
   if mode in ("mesh","random") and (not use_kpm) and nbands is None:
     # batched, numba-parallel path -- no interprocess dispatch
-    from .htk.eigenvectors import peigvalsh
+    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
     if mode=="mesh":
         from .klist import kmesh
         kp = kmesh(h.dimensionality,nk=nk)
@@ -256,7 +256,7 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
     batch_size = 64
     for i0 in range(0,len(kp),batch_size): # loop over batches of kpoints
         kbatch = kp[i0:i0+batch_size]
-        mats = np.array([f(k) for k in kbatch],dtype=np.complex128)
+        mats = hk_matrix_batch(f,kbatch)
         es_batch = peigvalsh(mats) # diagonalize the whole batch in parallel
         for es in es_batch: sums.append(np.sum(es[es<fermi]))
     etot = np.mean(sums) # compute total energy
@@ -394,11 +394,11 @@ def eigenvalues_kmesh(h,nk=20,batch_size=64):
     hkgen = h.get_hk_gen() # get the generator
     kx = np.linspace(0.,1.,nk,endpoint=False)
     ky = np.linspace(0.,1.,nk,endpoint=False)
-    from .htk.eigenvectors import peigvalsh
+    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
     ijs = [(i,j) for i in range(nk) for j in range(nk)] # flat list of grid indices
     for i0 in range(0,len(ijs),batch_size): # loop over batches of kpoints
         ijbatch = ijs[i0:i0+batch_size]
-        mats = np.array([hkgen([kx[i],ky[j]]) for (i,j) in ijbatch],dtype=np.complex128)
+        mats = hk_matrix_batch(lambda ij: hkgen([kx[ij[0]],ky[ij[1]]]),ijbatch)
         es_batch = peigvalsh(mats) # diagonalize the whole batch in parallel
         for ii,(i,j) in enumerate(ijbatch):
             es[i,j,:] = es_batch[ii] # store energies

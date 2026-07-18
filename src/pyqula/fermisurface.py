@@ -83,12 +83,12 @@ def fermi_surface_generator(h,
     kdos = np.zeros((len(rs),len(energies))) # initialize
     if mode=='full' and operator is None:
         # batched, numba-parallel path -- no interprocess dispatch
-        from .htk.eigenvectors import peigvalsh
+        from .htk.eigenvectors import peigvalsh, hk_matrix_batch
         ks = np.array([fR(r) for r in rs]) # kpoints, change of basis applied
         batch_size = 64
         for i0 in range(0,len(rs),batch_size): # loop over batches of kpoints
             kbatch = ks[i0:i0+batch_size]
-            mats = np.array([hk_gen(k) for k in kbatch],dtype=np.complex128)
+            mats = hk_matrix_batch(hk_gen,kbatch)
             es_batch = peigvalsh(mats) # diagonalize the whole batch in parallel
             for ii in range(len(kbatch)):
                 kdos[i0+ii,:] = fermi_weight(es_batch[ii],energies,delta=delta)

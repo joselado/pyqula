@@ -127,12 +127,12 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         if len(rows)==0: return np.empty((0,ncols))
         return np.array(rows)
     if num_bands is None: # all the bands: batched, numba-parallel diagonalization
-        from .htk.eigenvectors import parallel_diagonalization, peigvalsh
+        from .htk.eigenvectors import parallel_diagonalization, peigvalsh, hk_matrix_batch
         nkp = len(kpath)
         rows_all = []
         for i0 in range(0,nkp,batch_size): # loop over batches of kpoints
             kbatch = range(i0,min(i0+batch_size,nkp))
-            mats = np.array([hkgen(kpath[k]) for k in kbatch],dtype=np.complex128)
+            mats = hk_matrix_batch(hkgen,[kpath[k] for k in kbatch])
             if operator is None:
                 es_batch = peigvalsh(mats) # eigenvalues only, diagonalized in parallel
                 for ii,k in enumerate(kbatch):
