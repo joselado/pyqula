@@ -24,6 +24,7 @@ from . import ldos
 from . import bandstructure
 from . import increase_hilbert
 from .meanfield import Vinteraction
+from .meanfield import Vinteraction_kpm
 from .sctk import dvector
 from .algebratk import hamiltonianalgebra
 from .bandstructure import get_bands_nd
@@ -437,6 +438,19 @@ class Hamiltonian():
     @get_docstring(Vinteraction)
     def get_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
         scf = Vinteraction(self,**kwargs)
+        if not scf.converged: scf.hamiltonian = None # no convergence
+        if return_total_energy:
+            return (scf.hamiltonian,scf.total_energy)
+        else: return scf.hamiltonian
+    @get_docstring(Vinteraction_kpm)
+    def get_mean_field_hamiltonian_kpm(self,return_total_energy=False,**kwargs):
+        """KPM-based (sparse, Chebyshev) alternative to
+        get_mean_field_hamiltonian: instead of diagonalizing the Bloch
+        Hamiltonian H(k) at each k-point, evaluates only the density-matrix
+        elements required by the provided interaction (U, V1, V2, V3, Vr)
+        through Chebyshev recursion on H(k). Meant for large/sparse
+        Hamiltonians; see selfconsistency.densitydensity_kpm."""
+        scf = Vinteraction_kpm(self,**kwargs)
         if not scf.converged: scf.hamiltonian = None # no convergence
         if return_total_energy:
             return (scf.hamiltonian,scf.total_energy)

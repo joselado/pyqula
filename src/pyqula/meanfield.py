@@ -492,4 +492,9 @@ from .selfconsistency import densitydensity
 hubbardscf = densitydensity.hubbard
 Vinteraction = densitydensity.Vinteraction
 
+from .selfconsistency import densitydensity_kpm
+
+hubbardscf_kpm = densitydensity_kpm.hubbard_kpm
+Vinteraction_kpm = densitydensity_kpm.Vinteraction_kpm
+
 from .selfconsistency.potentials import keldysh

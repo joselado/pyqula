@@ -20,7 +20,14 @@ def kpm_moments_v(v,m,n=100,kpm_prec="double",
     from scipy.sparse import coo_matrix
     mo = coo_matrix(m)
     v = np.asarray(v)
-    is_real = np.max(np.abs(mo.data.imag))<1e-6 and np.max(np.abs(v.imag))<1e-6
+    # a literally all-zero matrix (e.g. a decoupled orbital subspace, or an
+    # electron-only sector left with no hopping after some projection) has
+    # an empty mo.data -- there is no matrix-side imaginary part to check,
+    # so realness then depends only on the starting vector v
+    if mo.data.size == 0:
+        is_real = np.max(np.abs(v.imag))<1e-6
+    else:
+        is_real = np.max(np.abs(mo.data.imag))<1e-6 and np.max(np.abs(v.imag))<1e-6
     if is_real:
         dtype = _REAL_DTYPES[kpm_prec]
         v = np.array(v.real,dtype=dtype) # convert to float
