@@ -222,10 +222,9 @@ def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
     with nk, not linearly: GKorder=4*bits+1 with bits=ceil(log2(nk)). If dk
     is not given explicitly it also sets the Wilson-loop plaquette size
     dk=1/(2*nk)."""
-    from .qutecipytk import integrate
+    from .qtcitk.gkintegrate import gkorder_from_nk, integrate_robust
     if dk<0: dk = 1./float(2*nk) # automatic dk, tied to the quadrature resolution
-    bits = max(1,int(np.ceil(np.log2(max(nk,2))))) # quantics-like bit count
-    GKorder = 4*bits+1 # Gauss-Kronrod order, grows logarithmically with nk
+    GKorder = gkorder_from_nk(nk)
     if operator is not None and mode=="Wilson":
         mode = "Green" # operator-resolved curvature needs Green's function mode
     if mode=="Green": fgk = h.get_gk_gen(delta=delta) # Green's function generator
@@ -233,8 +232,7 @@ def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
         if mode=="Wilson": return berry_curvature(h,k,dk=dk)
         elif mode=="Green": return berry_green(fgk,k=[k[0],k[1],0.],operator=operator)
         else: raise
-    c = integrate(np.float64,f,[0.,0.],[1.,1.],GKorder=GKorder,
-            tolerance=tolerance,**kwargs)
+    c = integrate_robust(np.float64,f,GKorder,tolerance,**kwargs)
     c = c/(2.*np.pi) # normalize so that the integral gives an integer
     open("CHERN.OUT","w").write(str(c)+"\n")
     return c

@@ -436,8 +436,9 @@ class Hamiltonian():
         from .multihopping import MultiHopping
         return MultiHopping(self.get_dict())
     @get_docstring(Vinteraction)
-    def get_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
-        scf = Vinteraction(self,**kwargs)
+    def get_mean_field_hamiltonian(self,return_total_energy=False,
+            integration="ed",**kwargs):
+        scf = Vinteraction(self,integration=integration,**kwargs)
         if not scf.converged: scf.hamiltonian = None # no convergence
         if return_total_energy:
             return (scf.hamiltonian,scf.total_energy)
