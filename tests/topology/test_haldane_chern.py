@@ -20,3 +20,23 @@ def test_haldane_chern_number_is_quantized(tmp_path, monkeypatch):
     c_topological = topology.chern(h_topological, nk=8)
     assert abs(round(c_topological) - c_topological) < 1e-6
     assert round(c_topological) != 0
+
+
+def test_haldane_chern_number_qtci_matches_grid(tmp_path, monkeypatch):
+    """chern(..., integration="qtci") integrates the Berry curvature with
+    qutecipy instead of summing it over a k-point mesh, but must agree with
+    the grid-based result (up to the requested quadrature resolution)."""
+    monkeypatch.chdir(tmp_path)
+    g = geometry.honeycomb_lattice()
+    g = g.get_supercell(2)
+
+    h_trivial = g.get_hamiltonian()
+    c_trivial = topology.chern(h_trivial, integration="qtci", nk=10)
+    assert abs(round(c_trivial) - c_trivial) < 1e-2
+    assert round(c_trivial) == 0
+
+    h_topological = g.get_hamiltonian()
+    h_topological.add_haldane(0.2)
+    c_topological = topology.chern(h_topological, integration="qtci", nk=10)
+    assert abs(round(c_topological) - c_topological) < 1e-2
+    assert round(c_topological) != 0

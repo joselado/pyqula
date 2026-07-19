@@ -203,6 +203,43 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
     return c
 
 
+def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
+        nk=20,tolerance=1e-6,**kwargs):
+    """Compute the Chern number of a 2D system by integrating the Berry
+    curvature over the BZ with qutecipy, instead of summing it over a
+    k-point mesh (see mesh_chern). qutecipy approximates the integrand as
+    a low-rank tensor train (tensor cross interpolation) and folds a
+    Gauss-Kronrod quadrature rule into it, so the sampling adaptively
+    concentrates where the Berry curvature is largest (e.g. near a small
+    gap) rather than needing a uniformly dense mesh.
+
+    nk sets the resolution of that underlying quadrature mesh (mirroring
+    the nk k-point-mesh density used elsewhere in this module). Because the
+    Gauss-Kronrod/TCI quadrature converges spectrally (each extra order
+    roughly doubles the number of accurate digits, much like each extra
+    quantics bit doubles a grid's resolution), matching the accuracy of an
+    nk-point mesh only takes a Gauss-Kronrod order growing logarithmically
+    with nk, not linearly: GKorder=4*bits+1 with bits=ceil(log2(nk)). If dk
+    is not given explicitly it also sets the Wilson-loop plaquette size
+    dk=1/(2*nk)."""
+    from .qutecipytk import integrate
+    if dk<0: dk = 1./float(2*nk) # automatic dk, tied to the quadrature resolution
+    bits = max(1,int(np.ceil(np.log2(max(nk,2))))) # quantics-like bit count
+    GKorder = 4*bits+1 # Gauss-Kronrod order, grows logarithmically with nk
+    if operator is not None and mode=="Wilson":
+        mode = "Green" # operator-resolved curvature needs Green's function mode
+    if mode=="Green": fgk = h.get_gk_gen(delta=delta) # Green's function generator
+    def f(k):
+        if mode=="Wilson": return berry_curvature(h,k,dk=dk)
+        elif mode=="Green": return berry_green(fgk,k=[k[0],k[1],0.],operator=operator)
+        else: raise
+    c = integrate(np.float64,f,[0.,0.],[1.,1.],GKorder=GKorder,
+            tolerance=tolerance,**kwargs)
+    c = c/(2.*np.pi) # normalize so that the integral gives an integer
+    open("CHERN.OUT","w").write(str(c)+"\n")
+    return c
+
+
 def get_berry_curvature(self,**kwargs):
     """Compute Berry curvature"""
     if self.non_hermitian: # non Hermitian case
@@ -316,11 +353,19 @@ def z2_invariant(h,nk=60,nt=60,nocc=None):
 
 
 
-def chern(h,**kwargs):
-    """Compute Chern invariant"""
+def chern(h,integration="grid",**kwargs):
+    """Compute Chern invariant.
+
+    integration: "grid" (default) sums the Berry curvature over a fixed
+    k-point mesh, see mesh_chern. "qtci" instead integrates the Berry
+    curvature over the BZ using qutecipy (tensor cross interpolation +
+    Gauss-Kronrod quadrature), see chern_qtci, adaptively refining the
+    sampling instead of relying on a fixed mesh density.
+    """
+    if integration=="qtci": return chern_qtci(h,**kwargs)
     return mesh_chern(h,**kwargs) # workaround
     # the wannier winding does not work
-    c = wannier_winding(h,full=True,**kwargs) 
+    c = wannier_winding(h,full=True,**kwargs)
     open("CHERN.OUT","w").write(str(c))
     return c
 
