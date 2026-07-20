@@ -169,6 +169,34 @@ def kekule_registries(g):
     b2 = shift*(1.-dz*dz)
     Binv = np.linalg.inv(np.array([[b1.real,b2.real],[b1.imag,b2.imag]]))
 
+    if g.dimensionality>0:
+        # a periodic geometry only has a single, well-defined Kekule
+        # registry (rather than one that depends on which unit cell you
+        # happened to start counting from) if translating by its own
+        # lattice vectors maps a registry back onto itself -- i.e. each
+        # lattice vector must be an integer combination of b1,b2 (the
+        # registry-preserving sublattice generators), not of the finer
+        # (registry-changing) hexagon-center lattice. This is exactly
+        # the "Kekule-commensurate (multiple-of-3) supercell"
+        # requirement documented in operatortk/inplane_valley.py --
+        # checked here, rather than left to silently paint a
+        # meaningless registry pattern, since get_operator("valley_x"/
+        # "valley_y") on a non-commensurate cell previously returned a
+        # small, physically-meaningless nonzero matrix instead of
+        # failing loudly.
+        lattice_vectors = [g.a1,g.a2,g.a3][:g.dimensionality]
+        for i,a in enumerate(lattice_vectors):
+            mn = a[:2]@Binv.T
+            if np.max(np.abs(mn-np.round(mn)))>0.05:
+                raise ValueError(
+                    "kekule_registries requires a Kekule-commensurate "
+                    "geometry (a multiple-of-3 supercell of the "
+                    "primitive honeycomb cell) for periodic "
+                    "(dimensionality>0) Hamiltonians; lattice vector "
+                    "a%d=%s is not commensurate with the Kekule "
+                    "registry. Use e.g. geometry.supercell(3) (or any "
+                    "other multiple of 3) first." % (i+1,a))
+
     r2 = g.multireplicas(2)
     cs_all = _fast_remove_duplicated(hexagon_centers(r2,r2))
     zs = np.unique(np.round(cs_all[:,2],5)) # unique z layers
