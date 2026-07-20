@@ -16,10 +16,11 @@ g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=False)
 h.add_onsite([0.8,-0.8])
 
-# Wannierize just the lowest (valence) band -- num_bands=1 selects the
-# lowest band at every k-point of the wannierization mesh (nk points per
-# periodic direction); no disentanglement, since the band is pre-selected
-hwan = h.get_wannier_hamiltonian(num_bands=1,nk=12)
+# Wannierize just the lowest (valence) band -- bands=[0,0] selects the
+# lowest band (band index 0) at every k-point of the wannierization mesh
+# (nk points per periodic direction); no disentanglement, since the band
+# is pre-selected
+hwan = h.get_wannier_hamiltonian(bands=[0,0],nk=12)
 
 print("Number of Wannier functions:",hwan.intra.shape[0])
 print("Wannier centres (Cartesian):\n",hwan.wannier_centres)

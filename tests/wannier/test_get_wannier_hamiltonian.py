@@ -20,7 +20,7 @@ def _max_band_diff(h_ref, h_wann, band_indices, ks, dim):
     return maxdiff
 
 
-def test_requires_num_bands_or_band_indices():
+def test_requires_bands():
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=False)
     with pytest.raises(ValueError):
@@ -33,7 +33,7 @@ def test_requires_periodic_hamiltonian():
     h = g.get_hamiltonian(has_spin=False)
     h.dimensionality = 0
     with pytest.raises(NotImplementedError):
-        h.get_wannier_hamiltonian(num_bands=1)
+        h.get_wannier_hamiltonian(bands=[0, 0])
 
 
 def test_ladder_lowest_band_reproduces_spectrum_exactly():
@@ -46,7 +46,7 @@ def test_ladder_lowest_band_reproduces_spectrum_exactly():
     lowest band to numerical precision at every mesh k-point."""
     g = geometry.ladder()
     h = g.get_hamiltonian(has_spin=False)
-    h1 = h.get_wannier_hamiltonian(num_bands=1, nk=16, cutoff=0.0)
+    h1 = h.get_wannier_hamiltonian(bands=[0, 0], nk=16, cutoff=0.0)
 
     assert h1.intra.shape == (1, 1)
     assert h1.wannier_spread_total < 1e-6
@@ -65,7 +65,7 @@ def test_ladder_full_manifold_reproduces_spectrum_exactly():
     spectrum exactly."""
     g = geometry.ladder()
     h = g.get_hamiltonian(has_spin=False)
-    h2 = h.get_wannier_hamiltonian(num_bands=2, nk=16, cutoff=0.0)
+    h2 = h.get_wannier_hamiltonian(bands=[0, 1], nk=16, cutoff=0.0)
 
     assert h2.intra.shape == (2, 2)
     assert h2.wannier_spread_total < 1e-6
@@ -85,7 +85,7 @@ def test_gapped_honeycomb_valence_band_reproduces_spectrum():
     h = g.get_hamiltonian(has_spin=False)
     h.add_onsite([0.8, -0.8])
 
-    h1 = h.get_wannier_hamiltonian(num_bands=1, nk=12, cutoff=0.0)
+    h1 = h.get_wannier_hamiltonian(bands=[0, 0], nk=12, cutoff=0.0)
     assert h1.intra.shape == (1, 1)
 
     ks = kmesh(2, nk=12)
@@ -101,18 +101,18 @@ def test_default_cutoff_still_reproduces_spectrum_reasonably():
     h = g.get_hamiltonian(has_spin=False)
     h.add_onsite([0.8, -0.8])
 
-    h1 = h.get_wannier_hamiltonian(num_bands=1, nk=12)  # default cutoff
+    h1 = h.get_wannier_hamiltonian(bands=[0, 0], nk=12)  # default cutoff
     ks = kmesh(2, nk=12)
     maxdiff = _max_band_diff(h, h1, [0], ks, dim=2)
     assert maxdiff < 1e-3
 
 
-def test_explicit_band_indices_selects_requested_band():
-    """band_indices=[1] (the upper/antibonding band of the ladder, not the
+def test_explicit_band_range_selects_requested_band():
+    """bands=[1,1] (the upper/antibonding band of the ladder, not the
     default lowest-band choice) must wannierize *that* band, not band 0."""
     g = geometry.ladder()
     h = g.get_hamiltonian(has_spin=False)
-    h1 = h.get_wannier_hamiltonian(band_indices=[1], nk=16, cutoff=0.0)
+    h1 = h.get_wannier_hamiltonian(bands=[1, 1], nk=16, cutoff=0.0)
 
     assert h1.wannier_band_indices == [1]
     ks = kmesh(1, nk=16)
@@ -120,17 +120,17 @@ def test_explicit_band_indices_selects_requested_band():
     assert maxdiff < 1e-8
 
 
-def test_num_bands_larger_than_available_raises():
+def test_bands_larger_than_available_raises():
     g = geometry.ladder()
     h = g.get_hamiltonian(has_spin=False)
     with pytest.raises(ValueError):
-        h.get_wannier_hamiltonian(num_bands=3, nk=8)
+        h.get_wannier_hamiltonian(bands=[0, 2], nk=8)
 
 
 def test_result_is_multicell_hamiltonian_with_diagnostics():
     g = geometry.ladder()
     h = g.get_hamiltonian(has_spin=False)
-    h1 = h.get_wannier_hamiltonian(num_bands=1, nk=12)
+    h1 = h.get_wannier_hamiltonian(bands=[0, 0], nk=12)
 
     assert h1.is_multicell
     assert h1.has_spin is False

@@ -4,9 +4,10 @@ bundled in this repo at ``pyqula.wanniertk.wannierpy``.
 
 Only the "fixed band subset, no disentanglement" case is implemented
 (``num_wann == len(band_indices)``, matching wannierpy's own
-``examples/pyqula_ladder.py`` demo): pick ``num_bands`` bands (by default
-the lowest ``num_bands``, or an explicit ``band_indices``) at every
-k-point on a Monkhorst-Pack mesh, Wannierize exactly that subspace, and
+``examples/pyqula_ladder.py`` demo): pick the contiguous band range
+``bands=[a,b]`` (0-indexed into ``eigh``'s ascending output, both ends
+inclusive) at every k-point on a Monkhorst-Pack mesh, Wannierize that
+whole subspace jointly, and
 Fourier-transform the resulting smooth-gauge Bloch Hamiltonian back into
 real-space hoppings for a new pyqula Hamiltonian. Disentanglement (a
 frozen/outer energy window instead of a fixed band count) is not
@@ -150,38 +151,22 @@ def _particle_hole_operator(h, num_orbitals):
     return block2nambu(c_unreordered)
 
 
-def _default_or_validated_eh_band_indices(num_bands, band_indices, num_orbitals):
+def _validate_eh_band_indices(band_indices, num_orbitals):
     """For Nambu/BdG Hamiltonians, a band selection can only be made
     electron-hole symmetric if it is closed under the index pairing
     ``n -> num_orbitals-1-n`` implied by :func:`_particle_hole_operator`
     (ascending-``eigh``-sorted bands at any k: band n's exact
     particle-hole partner is band ``num_orbitals-1-n``, since the full
     spectrum at every k is its own negation under that reindexing --
-    picking one forces picking the other). Without an explicit
-    ``band_indices``, default to the ``num_bands`` indices centred on the
-    gap (the low-energy quasiparticle/quasihole bands nearest the Fermi
-    level) -- a symmetric window around ``(num_orbitals-1)/2`` is
-    automatically closed under that map."""
-    if band_indices is None:
-        if num_bands is None:
-            raise ValueError(
-                "get_wannier_hamiltonian: pass num_bands or an explicit "
-                "band_indices list")
-        if num_bands % 2 != 0:
-            raise ValueError(
-                "get_wannier_hamiltonian: a Nambu/BdG Hamiltonian (has_eh=True) "
-                f"needs an even num_bands to form electron-hole pairs, got {num_bands}")
-        lo = (num_orbitals - num_bands) // 2
-        band_indices = list(range(lo, lo + num_bands))
-    else:
-        band_indices = list(band_indices)
+    picking one forces picking the other). Since ``band_indices`` is a
+    contiguous range, this holds exactly when the range is centred on
+    ``(num_orbitals-1)/2``."""
     pairs_to = lambda n: num_orbitals - 1 - n
     if sorted(pairs_to(n) for n in band_indices) != sorted(band_indices):
         raise ValueError(
-            "get_wannier_hamiltonian: band_indices must be closed under the "
+            "get_wannier_hamiltonian: bands must be closed under the "
             f"electron-hole pairing n -> {num_orbitals - 1}-n to enforce particle-hole "
             f"symmetry (pick a band, pick its exact partner too); got {band_indices}")
-    return band_indices
 
 
 def _wannier_particle_hole_permutation(band_indices, num_orbitals):
@@ -517,7 +502,7 @@ def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
     return setup_result, run_result, H_k_mesh
 
 
-def get_wannier_hamiltonian(h, num_bands=None, band_indices=None, nk=12,
+def get_wannier_hamiltonian(h, bands=None, nk=12,
         trial_vectors=None, num_iter=200, conv_tol=1e-10, conv_window=3,
         cutoff=1e-6, seedname="pyqula_wannier", win_keywords=None,
         auto_split_clusters=False, cluster_rel_tol=0.1):
@@ -530,21 +515,14 @@ def get_wannier_hamiltonian(h, num_bands=None, band_indices=None, nk=12,
     ----------
     h : Hamiltonian
         Must be periodic (``h.dimensionality>=1``).
-    num_bands : int, optional
-        Wannierize the lowest ``num_bands`` bands (0-indexed into
-        ``eigh``'s ascending output) at every k-point. Required unless
-        ``band_indices`` is given. For a Nambu/BdG Hamiltonian
-        (``h.has_eh=True``) this instead selects the ``num_bands`` bands
-        centred on the gap (the low-energy quasiparticle/quasihole
-        bands nearest the Fermi level) -- see ``band_indices`` below for
-        why, and note ``num_bands`` must then be even.
-    band_indices : sequence of int, optional
-        Explicit 0-indexed band selection, overriding ``num_bands``
-        (``num_wann = len(band_indices)``). For a Nambu/BdG Hamiltonian
-        this must be closed under the electron-hole pairing
-        ``n -> num_orbitals-1-n`` (picking a band forces picking its
-        exact particle-hole partner, see
-        ``_default_or_validated_eh_band_indices``) -- otherwise a
+    bands : sequence of two int
+        ``[a,b]``, the first and last band to Wannierize (0-indexed into
+        ``eigh``'s ascending output, both ends inclusive) -- every band
+        in between is Wannierized jointly as a single group
+        (``band_indices = list(range(a,b+1))``, ``num_wann = b-a+1``).
+        For a Nambu/BdG Hamiltonian (``h.has_eh=True``) this range must be
+        closed under the electron-hole pairing ``n -> num_orbitals-1-n``,
+        i.e. centred on the gap (``a+b == num_orbitals-1``) -- otherwise a
         ``ValueError`` is raised.
     nk : int or sequence of int, optional
         k-points per periodic direction for the Monkhorst-Pack
@@ -628,20 +606,20 @@ def get_wannier_hamiltonian(h, num_bands=None, band_indices=None, nk=12,
             "get_wannier_hamiltonian needs a periodic Hamiltonian (h.dimensionality>=1)")
 
     num_orbitals = h.intra.shape[0]
-    if h.has_eh: # Nambu/BdG: band selection must be electron-hole-pair-closed
-        band_indices = _default_or_validated_eh_band_indices(num_bands, band_indices, num_orbitals)
-    elif band_indices is None:
-        if num_bands is None:
-            raise ValueError(
-                "get_wannier_hamiltonian: pass num_bands (wannierize the lowest num_bands "
-                "bands) or an explicit band_indices list")
-        band_indices = list(range(num_bands))
-    else:
-        band_indices = list(band_indices)
+    if bands is None:
+        raise ValueError(
+            "get_wannier_hamiltonian: pass bands=[a,b], the first and last band "
+            "(0-indexed, inclusive) to Wannierize")
+    a, b = bands
+    if a > b:
+        raise ValueError(f"get_wannier_hamiltonian: bands=[{a},{b}] needs a<=b")
+    band_indices = list(range(a, b + 1))
     num_wann = len(band_indices)
     if num_wann < 1 or num_wann > num_orbitals:
         raise ValueError(
-            f"num_bands/band_indices selects {num_wann} bands, only {num_orbitals} available")
+            f"bands=[{a},{b}] selects {num_wann} bands, only {num_orbitals} available")
+    if h.has_eh: # Nambu/BdG: band selection must be electron-hole-pair-closed
+        _validate_eh_band_indices(band_indices, num_orbitals)
 
     particle_hole_operator = None
     particle_hole_perm = None

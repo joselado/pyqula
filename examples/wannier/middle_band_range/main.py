@@ -5,11 +5,11 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 import numpy as np
 from pyqula import geometry
 
-# get_wannier_hamiltonian's band_indices argument selects an *explicit*
-# list of bands (0-indexed into eigh's ascending output at every k-point),
-# not necessarily the lowest ones -- e.g. band_indices=[3,4] out of a
+# get_wannier_hamiltonian's bands=[a,b] argument selects a contiguous
+# range of bands (0-indexed into eigh's ascending output at every
+# k-point), not necessarily the lowest ones -- e.g. bands=[3,4] out of a
 # 6-band model Wannierizes bands 3 and 4 together, skipping bands 0-2
-# and 5. All requested bands are always Wannierized jointly, as one
+# and 5. All bands in the range are always Wannierized jointly, as one
 # group -- get_wannier_hamiltonian never silently splits the selection
 # into independent pieces (an optional auto_split_clusters=True exists
 # for band groups you know decompose into topologically trivial pieces,
@@ -29,7 +29,7 @@ h.add_exchange([0.1,0.15,0.2]) # exchange field
 
 # Wannierize bands 3,4 jointly -- a middle pair of the spectrum, not the
 # lowest 2
-hwan = h.get_wannier_hamiltonian(band_indices=[3,4],nk=24,num_iter=3000)
+hwan = h.get_wannier_hamiltonian(bands=[3,4],nk=24,num_iter=3000)
 
 print("Selected bands:",hwan.wannier_band_indices)
 print("Number of Wannier functions:",hwan.intra.shape[0])

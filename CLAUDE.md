@@ -107,9 +107,9 @@ in infinite systems use `embedding.Embedding(h, m=h_with_defect)`.
 
 ### Wannierization (`wanniertk/`)
 
-`h.get_wannier_hamiltonian(num_bands=N, nk=...)` (`src/pyqula/wanniertk/wannierize.py`) Wannierizes a fixed
-subset of `h`'s bands (the lowest `num_bands`, or an explicit `band_indices` list; no disentanglement yet —
-that's a planned follow-up) and returns a new, smaller multicell `Hamiltonian` whose real-space hoppings
+`h.get_wannier_hamiltonian(bands=[a,b], nk=...)` (`src/pyqula/wanniertk/wannierize.py`) Wannierizes a fixed,
+contiguous range of `h`'s bands (0-indexed, both ends inclusive, Wannierized jointly as one group; no
+disentanglement yet — that's a planned follow-up) and returns a new, smaller multicell `Hamiltonian` whose real-space hoppings
 exactly reproduce that band subspace on the wannierization k-mesh. It's built on
 [wannierpy](https://github.com/joselado/wannierpy)'s pure-Python Wannier90 port, bundled directly in this
 repo at `src/pyqula/wanniertk/wannierpy/` (no Fortran source, no compiled extension — the pure-Python

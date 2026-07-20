@@ -23,7 +23,7 @@ h.add_exchange([0.,0.,0.3]) # exchange (Zeeman-like) field
 # 2 sites x 2 spin = 4 bands per k-point; Wannierize the lowest 2
 # (num_iter raised above the default 200 -- the spin-orbit-coupled spread
 # minimization needs more CG steps to converge than a spinless case)
-hwan = h.get_wannier_hamiltonian(num_bands=2,nk=24,num_iter=1000)
+hwan = h.get_wannier_hamiltonian(bands=[0,1],nk=24,num_iter=1000)
 
 print("Number of Wannier functions:",hwan.intra.shape[0])
 print("Wannier centres (Cartesian):\n",hwan.wannier_centres)
