@@ -323,8 +323,8 @@ def _smooth_degenerate_gauge(C_full, eig_full, nnlist, tol=1e-5):
     return C_aligned
 
 
-def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist,
-                     orbital_positions_frac, band_indices, trial_vectors):
+def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist, nncell,
+                     num_periodic, orbital_positions_frac, band_indices, trial_vectors):
     """Diagonalize ``hamiltonian_k`` on the wannierization mesh and build
     the M/A/eigenvalue arrays ``wannierpy.run`` needs, restricted to a
     fixed band subset with a fixed trial projection matrix -- the "no
@@ -371,13 +371,37 @@ def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist,
     C = C_full[:, list(band_indices), :]
     eigenvalues = eig_full[list(band_indices), :]
 
+    # Wrap-around phase correction. A mesh neighbor k+b that leaves the
+    # first BZ is written as k2+G on the mesh (k2 = nnlist-1, G = nncell,
+    # an integer reciprocal-lattice shift). In the position-regauged
+    # ("convention I") gauge used for the M matrices, eigenvectors obey
+    # C(k2+G)_alpha = exp(i 2*pi G.tau_alpha) C(k2)_alpha (tau = orbital
+    # fractional position; see module docstring), so the true overlap is
+    # M(k,b) = C(k)^dagger @ diag(exp(i 2*pi G.tau)) @ C(k2). The bare
+    # C(k2) (missing that phase) is what the old code used, which silently
+    # dropped the G-dependent phase whenever a neighbor wrapped -- the
+    # bug behind huge, mesh-dependent spreads on ribbon geometries.
+    #
+    # Only G components along genuinely periodic directions are physical:
+    # pyqula pads non-periodic directions with dummy lattice vectors
+    # (e.g. a2=[0,100,0]) whose tiny reciprocal vectors make kmesh_get
+    # emit spurious b-vectors with nncell!=0 there, while tau along those
+    # directions is a raw cartesian coordinate (get_fractional leaves
+    # non-periodic axes untransformed), not a meaningful fractional
+    # position -- so their tau.G product is meaningless. Masking G to the
+    # periodic directions keeps those self-neighbors at M = C^dagger C
+    # (as before) while applying the correct phase where it belongs.
+    G_mask = np.zeros(3, dtype=np.float64)
+    G_mask[:num_periodic] = 1.0
     M_matrix = np.empty((num_selected, num_selected, nntot, num_kpts), dtype=complex)
     A_matrix = np.empty((num_selected, num_wann, num_kpts), dtype=complex)
     for k in range(num_kpts):
         A_matrix[:, :, k] = C[:, :, k].conj().T @ trial_vectors
         for nn in range(nntot):
             k2 = int(nnlist[k, nn]) - 1
-            M_matrix[:, :, nn, k] = C[:, :, k].conj().T @ C[:, :, k2]
+            G = nncell[:, k, nn].astype(np.float64) * G_mask
+            wrap_phase = np.exp(1j * 2 * np.pi * (tau @ G))  # (num_orbitals,)
+            M_matrix[:, :, nn, k] = C[:, :, k].conj().T @ (wrap_phase[:, None] * C[:, :, k2])
 
     return M_matrix, A_matrix, eigenvalues, C_bare
 
@@ -510,7 +534,7 @@ def _split_gapped_clusters(hamiltonian_k, kpt_latt, band_indices, rel_tol=0.1):
 
 
 def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
-        atom_symbols, atoms_cart, num_orbitals, hamiltonian_k,
+        atom_symbols, atoms_cart, num_orbitals, num_periodic, hamiltonian_k,
         orbital_positions_frac, band_indices, trial_vectors, keywords):
     """Run one full setup/overlaps/CG-run/reconstruction cycle for a
     single band group -- the inner loop body shared by the single-group
@@ -521,6 +545,7 @@ def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
     )
     M_matrix, A_matrix, eigenvalues, C_bare = _build_overlaps(
         hamiltonian_k, num_orbitals, kpt_latt, setup_result.nnlist,
+        setup_result.nncell, num_periodic,
         orbital_positions_frac, band_indices, trial_vectors,
     )
     run_result = wannierpy.run(
@@ -719,7 +744,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
 
     setup_result, run_result, H_k_mesh, W_k_mesh = _wannierize_one_group(
         seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
-        atoms_cart, num_orbitals, hamiltonian_k, orbital_positions_frac,
+        atoms_cart, num_orbitals, dim, hamiltonian_k, orbital_positions_frac,
         band_indices, trial_vectors, keywords,
     )
     clusters_used = [band_indices]
@@ -752,7 +777,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
                 kwc = dict(keywords); kwc["num_wann"] = nwc
                 sres, rres, Hk_c, Wk_c = _wannierize_one_group(
                     seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
-                    atoms_cart, num_orbitals, hamiltonian_k, orbital_positions_frac,
+                    atoms_cart, num_orbitals, dim, hamiltonian_k, orbital_positions_frac,
                     cluster, tvc, kwc,
                 )
                 H_k_mesh_split[offset:offset + nwc, offset:offset + nwc, :] = Hk_c
