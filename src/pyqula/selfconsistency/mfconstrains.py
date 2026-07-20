@@ -145,6 +145,6 @@ def obj2mf(mf):
     from ..algebra import ismatrix
     from ..hamiltonians import Hamiltonian
     if ismatrix(mf): return {(0,0,0):mf}
-    elif type(mf)==Hamiltonian: return mf.get_dict()
+    elif isinstance(mf, Hamiltonian): return mf.get_dict()
     else: return mf # assume it is a valid dictionary
 
