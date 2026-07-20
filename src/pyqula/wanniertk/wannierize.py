@@ -331,7 +331,14 @@ def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist,
     disentanglement, pre-selected bands" path. A pyqula-local port of the
     relevant part of wannierpy's examples/_tb_utils.py::build_overlaps
     (that module is example code, not part of wannierpy's installable
-    package, so it isn't imported directly)."""
+    package, so it isn't imported directly).
+
+    Also returns ``C_bare``, the same selected-band eigenvectors *before*
+    the position regauging below, in pyqula's own orbital-basis
+    convention -- needed by :func:`_wannierize_one_group` to reconstruct
+    actual real-space Wannier functions (as opposed to just the
+    Wannier-gauge Hamiltonian, which -- per the module docstring --
+    doesn't care which convention U(k) is applied to)."""
     num_kpts = kpt_latt.shape[1]
     nntot = nnlist.shape[1]
     num_selected = len(band_indices)
@@ -349,6 +356,14 @@ def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist,
 
     C_full = _smooth_degenerate_gauge(C_full, eig_full, nnlist)
 
+    # bare (un-regauged) selected-band eigenvectors -- pyqula's own
+    # orbital-basis convention, kept aside so the actual real-space
+    # Wannier functions can later be built in that same convention (see
+    # _wannierize_one_group); the M/A matrices below need the
+    # position-regauged C instead (see module docstring), so both are
+    # computed off the same eigh call but diverge from here on.
+    C_bare = C_full[:, list(band_indices), :].copy()
+
     tau = np.asarray(orbital_positions_frac, dtype=np.float64)  # (num_orbitals,3)
     phase = np.exp(1j * 2 * np.pi * (tau @ kpt_latt))  # (num_orbitals,num_kpts)
     C_full = C_full * phase[:, None, :]  # regauge each orbital row, see module docstring
@@ -364,7 +379,7 @@ def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist,
             k2 = int(nnlist[k, nn]) - 1
             M_matrix[:, :, nn, k] = C[:, :, k].conj().T @ C[:, :, k2]
 
-    return M_matrix, A_matrix, eigenvalues
+    return M_matrix, A_matrix, eigenvalues, C_bare
 
 
 def _bloch_hamiltonian_from_gauge(U_matrix, eigenvalues):
@@ -378,26 +393,40 @@ def _bloch_hamiltonian_from_gauge(U_matrix, eigenvalues):
     return np.einsum("mik,mk,mjk->ijk", U_matrix.conj(), eigenvalues, U_matrix)
 
 
-def _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=1e-6):
-    """Inverse-Fourier-transform a (num_wann,num_wann,num_kpts) Bloch
-    Hamiltonian sampled on a Monkhorst-Pack mesh into real-space hopping
-    matrices, using pyqula's own Bloch convention (H(k) = sum_R m_R
-    exp(i 2*pi R.k), see htk/bloch.py's evaluate_bloch_matrix_jit) -- so
-    plugging the result into set_multihopping()/get_hk_gen() exactly
-    reproduces H_k_mesh at every mesh k-point (trigonometric
-    interpolation elsewhere)."""
-    num_kpts = H_k_mesh.shape[2]
+def _mesh_to_real_space(M_k_mesh, kpt_latt, mp_grid):
+    """Inverse-Fourier-transform a (dim1,dim2,num_kpts) array sampled on
+    a Monkhorst-Pack mesh into a ``{R: (dim1,dim2) ndarray}`` dict, using
+    pyqula's own Bloch convention (H(k) = sum_R m_R exp(i 2*pi R.k), see
+    htk/bloch.py's evaluate_bloch_matrix_jit) -- shared by
+    :func:`_hopping_from_bloch` (Hamiltonian reconstruction) and
+    :func:`get_wannier_hamiltonian`'s own real-space Wannier function
+    reconstruction, which Fourier-transform different quantities with
+    the same convention so both stay expressed relative to the same
+    cell labels."""
+    num_kpts = M_k_mesh.shape[2]
     axis_ranges = [np.fft.fftfreq(int(n)).astype(np.float64) * int(n) for n in mp_grid]
     Rs = np.array(list(itertools.product(*axis_ranges)), dtype=np.float64)
     phase = np.exp(-1j * 2 * np.pi * (Rs @ kpt_latt))  # (num_R,num_kpts)
-    HR_all = np.einsum("rk,ijk->rij", phase, H_k_mesh) / num_kpts
-    hopping = {}
-    for idx in range(len(Rs)):
-        Rt = tuple(int(round(x)) for x in Rs[idx])
-        HR = HR_all[idx]
-        if Rt == (0, 0, 0) or np.max(np.abs(HR)) > cutoff:
-            hopping[Rt] = HR
-    return hopping
+    M_R_all = np.einsum("rk,ijk->rij", phase, M_k_mesh) / num_kpts
+    return {tuple(int(round(x)) for x in Rs[idx]): M_R_all[idx] for idx in range(len(Rs))}
+
+
+def _drop_negligible_cells(R_to_matrix, cutoff):
+    """Keep only cells whose matrix has an element above ``cutoff``
+    (always keeping the home cell (0,0,0)) -- used to truncate both the
+    real-space hoppings and the real-space Wannier function coefficients
+    to their numerically significant range."""
+    return {R: M for R, M in R_to_matrix.items()
+            if R == (0, 0, 0) or np.max(np.abs(M)) > cutoff}
+
+
+def _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=1e-6):
+    """Inverse-Fourier-transform a (num_wann,num_wann,num_kpts) Bloch
+    Hamiltonian sampled on a Monkhorst-Pack mesh into real-space hopping
+    matrices -- so plugging the result into
+    set_multihopping()/get_hk_gen() exactly reproduces H_k_mesh at every
+    mesh k-point (trigonometric interpolation elsewhere)."""
+    return _drop_negligible_cells(_mesh_to_real_space(H_k_mesh, kpt_latt, mp_grid), cutoff)
 
 
 def _offmesh_validation_kfracs(mp_grid):
@@ -490,7 +519,7 @@ def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
         seedname, mp_grid, kpt_latt, real_lattice, num_orbitals,
         atom_symbols, atoms_cart, win_keywords=keywords, backend="python",
     )
-    M_matrix, A_matrix, eigenvalues = _build_overlaps(
+    M_matrix, A_matrix, eigenvalues, C_bare = _build_overlaps(
         hamiltonian_k, num_orbitals, kpt_latt, setup_result.nnlist,
         orbital_positions_frac, band_indices, trial_vectors,
     )
@@ -499,7 +528,26 @@ def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
         atom_symbols, atoms_cart, M_matrix, A_matrix, eigenvalues, backend="python",
     )
     H_k_mesh = _bloch_hamiltonian_from_gauge(run_result.U_matrix, eigenvalues)
-    return setup_result, run_result, H_k_mesh
+
+    # W(k) = C_bare(k) @ U_matrix(k): rotate the *bare* (un-regauged, see
+    # _build_overlaps) selected-band eigenvectors into the smooth Wannier
+    # gauge -- the real-space Fourier transform of this (done by the
+    # caller, alongside H_k_mesh's) gives the actual Wannier function
+    # coefficients in pyqula's own orbital basis. Using C_bare rather
+    # than the position-regauged C used for the M/A matrices above makes
+    # this exact and self-consistent with the returned Hamiltonian: since
+    # C_bare are eigenvectors of the *actual* hamiltonian_k matrix used
+    # throughout this module, C_bare(k)^dagger @ hamiltonian_k(k) @
+    # C_bare(k) == diag(eigenvalues(k)) restricted to the selected bands,
+    # so W(k)^dagger @ hamiltonian_k(k) @ W(k) == H_k_mesh(k) exactly at
+    # every mesh k-point -- i.e. Fourier-transforming both sides gives
+    # <w_n,0| h |w_n',R> == hopping[R][n,n'] for the Hamiltonian
+    # get_wannier_hamiltonian returns (approximately, not exactly, for a
+    # has_eh Hamiltonian: _enforce_particle_hole_symmetry perturbs
+    # H_k_mesh after this identity would otherwise hold, without
+    # correspondingly perturbing U_matrix).
+    W_k_mesh = np.einsum("omk,mnk->onk", C_bare, run_result.U_matrix)
+    return setup_result, run_result, H_k_mesh, W_k_mesh
 
 
 def get_wannier_hamiltonian(h, bands=None, nk=12,
@@ -582,10 +630,17 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
 
     Returns
     -------
-    Hamiltonian
-        A new, multicell pyqula Hamiltonian with ``num_wann`` orbitals
-        per cell, positioned at the computed Wannier centres. Also
-        carries ``wannier_band_indices``, ``wannier_clusters`` (the
+    WannierHamiltonian
+        A new, multicell ``Hamiltonian`` subclass (see
+        ``wanniertk.wannierhamiltonian.WannierHamiltonian`` -- every
+        ordinary Hamiltonian method works unchanged) with ``num_wann``
+        orbitals per cell, positioned at the computed Wannier centres.
+        Also carries ``wannier_functions`` -- ``{R: (num_orbitals,
+        num_wann) ndarray}``, the real-space Wannier function
+        coefficients in ``h``'s own orbital basis (column n, row o: the
+        amplitude of Wannier function n, translated to cell R relative
+        to the home cell, on orbital o of ``h``) -- along with
+        ``wannier_band_indices``, ``wannier_clusters`` (the
         ``auto_split_clusters`` decomposition actually used -- a single
         one-element list when splitting didn't trigger), ``wannier_centres``,
         ``wannier_spreads``, ``wannier_spread_total``,
@@ -597,9 +652,11 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         hopping ``h_R`` of the result) when ``h.has_eh``. Enforcing this
         exact electron-hole symmetry means the returned Hamiltonian's
         spectrum only *approximately* (not exactly) reproduces ``h``'s
-        selected bands on the wannierization mesh -- see
-        ``_enforce_particle_hole_symmetry``'s docstring for the tradeoff;
-        the approximation improves with better CG convergence/denser nk.
+        selected bands on the wannierization mesh, and ``wannier_functions``
+        is correspondingly only an approximate (not exact) diagonalizer of
+        it in that case -- see ``_enforce_particle_hole_symmetry``'s
+        docstring for the tradeoff; the approximation improves with better
+        CG convergence/denser nk.
     """
     if h.dimensionality < 1:
         raise NotImplementedError(
@@ -660,7 +717,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     if win_keywords:
         keywords.update(win_keywords)
 
-    setup_result, run_result, H_k_mesh = _wannierize_one_group(
+    setup_result, run_result, H_k_mesh, W_k_mesh = _wannierize_one_group(
         seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
         atoms_cart, num_orbitals, hamiltonian_k, orbital_positions_frac,
         band_indices, trial_vectors, keywords,
@@ -685,6 +742,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
             # stand-in, see _offmesh_validation_kfracs)
             num_kpts = kpt_latt.shape[1]
             H_k_mesh_split = np.zeros((num_wann, num_wann, num_kpts), dtype=complex)
+            W_k_mesh_split = np.zeros((num_orbitals, num_wann, num_kpts), dtype=complex)
             centres_parts, spreads_parts = [], []
             setup_results_split, run_results_split = [], []
             offset = 0
@@ -692,12 +750,13 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
                 nwc = len(cluster)
                 tvc = np.eye(num_orbitals, dtype=complex)[:, :nwc]
                 kwc = dict(keywords); kwc["num_wann"] = nwc
-                sres, rres, Hk_c = _wannierize_one_group(
+                sres, rres, Hk_c, Wk_c = _wannierize_one_group(
                     seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
                     atoms_cart, num_orbitals, hamiltonian_k, orbital_positions_frac,
                     cluster, tvc, kwc,
                 )
                 H_k_mesh_split[offset:offset + nwc, offset:offset + nwc, :] = Hk_c
+                W_k_mesh_split[:, offset:offset + nwc, :] = Wk_c
                 centres_parts.append(rres.wann_centres.T)
                 spreads_parts.append(rres.wann_spreads)
                 setup_results_split.append(sres)
@@ -713,15 +772,21 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
                 wann_centres = np.concatenate(centres_parts, axis=0)
                 wann_spreads = np.concatenate(spreads_parts)
                 H_k_mesh = H_k_mesh_split
+                W_k_mesh = W_k_mesh_split
                 setup_results, run_results = setup_results_split, run_results_split
 
     if h.has_eh:
         H_k_mesh = _enforce_particle_hole_symmetry(H_k_mesh, kpt_latt, particle_hole_perm)
 
     hopping = _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=cutoff)
+    # W_k_mesh is already C_bare(k) @ U_matrix(k) (see _wannierize_one_group),
+    # so only the same Fourier-transform-and-truncate step _hopping_from_bloch
+    # uses is left to turn it into real-space Wannier function coefficients.
+    wannier_functions = _drop_negligible_cells(
+        _mesh_to_real_space(W_k_mesh, kpt_latt, mp_grid), cutoff)
 
     from .. import geometry as geometry_module
-    from ..hamiltonians import Hamiltonian
+    from .wannierhamiltonian import WannierHamiltonian
     from ..multihopping import MultiHopping
 
     g2 = geometry_module.Geometry()
@@ -733,7 +798,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     g2.r2xyz()
     g2.get_fractional()
 
-    h2 = Hamiltonian(g2)
+    h2 = WannierHamiltonian(g2)
     h2.has_spin = False
     h2.is_sparse = False
     h2.is_multicell = True
@@ -746,6 +811,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     h2.wannier_spread_total = float(np.sum(wann_spreads))
     h2.wannier_setup_result = setup_results
     h2.wannier_run_result = run_results
+    h2.wannier_functions = wannier_functions
     if particle_hole_perm is not None:
         h2.wannier_particle_hole_operator = particle_hole_perm
     return h2

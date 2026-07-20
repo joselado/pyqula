@@ -8,7 +8,7 @@ def bulk2ribbon(obj,**kwargs):
     from .hamiltonians import Hamiltonian
     if type(obj)==Geometry:
         return geometry_bulk2ribbon(obj,**kwargs)
-    elif type(obj)==Hamiltonian:
+    elif isinstance(obj, Hamiltonian):
         return hamiltonian_ribbon(obj,**kwargs)
     else: raise
 

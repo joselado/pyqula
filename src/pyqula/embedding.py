@@ -28,7 +28,7 @@ class Embedding():
         self.mode = "bulk" # mode
         self.nsuper = None # supercell between original Hamiltonian
         if m is not None: 
-            if type(m)==Hamiltonian: 
+            if isinstance(m, Hamiltonian):
 #                print("Picking intracell in embedding")
                 m = m.intra # get the intracell
             self.m = m # provided matrix

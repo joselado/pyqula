@@ -156,7 +156,7 @@ def get_intra(H):
     depending on its type"""
     from ..hamiltonians import Hamiltonian
     from ..embedding import Embedding
-    if type(H)==Hamiltonian: return H.intra
+    if isinstance(H, Hamiltonian): return H.intra
     elif type(H)==Embedding: return H.m
     else: raise
 

@@ -2,7 +2,9 @@ import numpy as np
 import pytest
 
 from pyqula import geometry
+from pyqula.hamiltonians import Hamiltonian
 from pyqula.klist import kmesh
+from pyqula.wanniertk.wannierhamiltonian import WannierHamiltonian
 
 
 def _max_band_diff(h_ref, h_wann, band_indices, ks, dim):
@@ -138,3 +140,58 @@ def test_result_is_multicell_hamiltonian_with_diagnostics():
     assert h1.wannier_spreads.shape == (1,)
     assert h1.wannier_setup_result is not None
     assert h1.wannier_run_result is not None
+
+
+def test_result_is_wannier_hamiltonian_instance():
+    """get_wannier_hamiltonian must return a WannierHamiltonian -- a
+    Hamiltonian subclass, so every ordinary Hamiltonian method (get_bands,
+    get_dos, ...) keeps working unchanged -- not a plain Hamiltonian."""
+    g = geometry.ladder()
+    h = g.get_hamiltonian(has_spin=False)
+    h1 = h.get_wannier_hamiltonian(bands=[0, 0], nk=12)
+
+    assert isinstance(h1, WannierHamiltonian)
+    assert isinstance(h1, Hamiltonian)
+    (ks, es) = h1.get_bands()  # inherited method must work unmodified
+    assert len(es) > 0
+
+
+def test_wannier_functions_reproduce_hamiltonian_at_every_mesh_kpoint():
+    """wannier_functions[R][o,n] is the amplitude of Wannier function n
+    (translated to cell R) on orbital o of the *original* Hamiltonian h,
+    in h's own orbital basis. Physically this means W(k) := sum_R
+    wannier_functions[R] * exp(i*2*pi*R.k) must be an isometry from h's
+    orbital space into the Wannierized Hamiltonian's, related to it by
+    W(k)^dagger @ h(k) @ W(k) == h1(k) exactly at every mesh k-point --
+    the k-space statement of <w_n,0|h|w_n',R> == h1's own hopping[R]."""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_onsite([0.8, -0.8])
+    h1 = h.get_wannier_hamiltonian(bands=[0, 0], nk=12, cutoff=0.0)
+
+    hk_gen = h.get_hk_gen()
+    hk_gen1 = h1.get_hk_gen()
+    ks = kmesh(2, nk=12)
+    maxerr = 0.0
+    for kfrac in ks:
+        k3 = np.zeros(3); k3[:2] = kfrac[:2]
+        Wk = sum(m * np.exp(1j * 2 * np.pi * np.dot(R, kfrac))
+                 for R, m in h1.wannier_functions.items())
+        lhs = Wk.conj().T @ hk_gen(k3) @ Wk
+        rhs = hk_gen1(k3)
+        maxerr = max(maxerr, float(np.max(np.abs(lhs - rhs))))
+    assert maxerr < 1e-8
+
+
+def test_wannier_functions_are_normalized():
+    """Each Wannier function's total weight (summed over every cell R and
+    orbital o) must be 1: W(k) has orthonormal columns by construction
+    (a unitary rotation of orthonormal selected-band eigenvectors), so
+    Parseval's theorem over the mesh forces this exactly."""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_onsite([0.8, -0.8])
+    h1 = h.get_wannier_hamiltonian(bands=[0, 0], nk=12, cutoff=0.0)
+
+    total_weight = sum(np.sum(np.abs(m) ** 2) for m in h1.wannier_functions.values())
+    assert abs(total_weight - 1.0) < 1e-8

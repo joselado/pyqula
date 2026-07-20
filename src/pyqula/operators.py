@@ -37,7 +37,7 @@ class Operator():
             self.m = lambda v,k=None: m*v
         elif callable(m): 
             self.m = m # as function (assume k is a keyword)
-        elif type(m)==Hamiltonian: # Hamiltonian type 
+        elif isinstance(m, Hamiltonian): # Hamiltonian type
             hkgen = m.get_hk_gen()
             self.m = lambda v,k=None: hkgen(k)@v
             self.linear = True
