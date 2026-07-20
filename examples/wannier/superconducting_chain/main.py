@@ -10,10 +10,10 @@ from pyqula import geometry
 # symmetry on the result: the returned Hamiltonian's real-space hoppings
 # satisfy C @ conj(h_R) @ C^-1 == -h_R exactly, for the unitary operator
 # C stored as hwan.wannier_particle_hole_operator. Because a Nambu
-# spectrum is symmetric under E -> -E, band_indices must be closed under
+# spectrum is symmetric under E -> -E, bands=[a,b] must be closed under
 # the pairing n -> num_orbitals-1-n (picking a band forces picking its
-# exact particle-hole partner) -- num_bands, if given instead, defaults
-# to the bands centred on the gap (nearest the Fermi level).
+# exact particle-hole partner), i.e. centred on the gap
+# (a+b == num_orbitals-1).
 
 g = geometry.chain()
 h = g.get_hamiltonian(has_spin=True) # spinful, needed for Rashba/exchange
@@ -23,9 +23,10 @@ h.shift_fermi(1.0) # move away from particle-hole symmetric filling
 h.add_swave(0.2) # s-wave superconducting pairing -- turns h.has_eh on
 
 # 1 site x 2 spin x 2 (electron/hole) = 4 bands per k-point; Wannierize
-# the 2 bands nearest the gap (the low-energy Bogoliubov quasiparticle
-# branch), the only choice available for num_bands=2 out of 4
-hwan = h.get_wannier_hamiltonian(num_bands=2,nk=24,num_iter=1000)
+# bands 1,2, the 2 bands nearest the gap (the low-energy Bogoliubov
+# quasiparticle branch) -- the only electron-hole-symmetric pair
+# available besides the full 4-band manifold
+hwan = h.get_wannier_hamiltonian(bands=[1,2],nk=24,num_iter=1000)
 
 print("Wannierized bands:",hwan.wannier_band_indices)
 print("Number of Wannier functions:",hwan.intra.shape[0])

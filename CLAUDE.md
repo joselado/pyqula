@@ -105,18 +105,18 @@ h2 = h.get_mean_field_hamiltonian(U=2.0, filling=0.15, mf="swave")  # 4. optiona
 Junctions/transport compose two `Hamiltonian` leads via `heterostructures.build(h1, h2)`; impurities/defects
 in infinite systems use `embedding.Embedding(h, m=h_with_defect)`.
 
-### Wannierization (`wanniertk/`, optional dependency)
+### Wannierization (`wanniertk/`)
 
-`h.get_wannier_hamiltonian(num_bands=N, nk=...)` (`src/pyqula/wanniertk/wannierize.py`) Wannierizes a fixed
-subset of `h`'s bands (the lowest `num_bands`, or an explicit `band_indices` list; no disentanglement yet —
-that's a planned follow-up) and returns a new, smaller multicell `Hamiltonian` whose real-space hoppings
+`h.get_wannier_hamiltonian(bands=[a,b], nk=...)` (`src/pyqula/wanniertk/wannierize.py`) Wannierizes a fixed,
+contiguous range of `h`'s bands (0-indexed, both ends inclusive, Wannierized jointly as one group; no
+disentanglement yet — that's a planned follow-up) and returns a new, smaller multicell `Hamiltonian` whose real-space hoppings
 exactly reproduce that band subspace on the wannierization k-mesh. It's built on
-[wannierpy](https://github.com/joselado/wannierpy)'s pure-Python Wannier90 port (the `wannier90` package,
-`backend="python"`) — not a pyqula dependency, imported lazily like the numba/jax optional backends
-elsewhere in this repo. A copy of wannierpy's Python code (no Fortran source, no compiled extension — the
-pure-Python backend needs neither) is vendored at `vendor/wannierpy/`; enable the feature with
-`pip install -e vendor/wannierpy`. See `examples/wannier/get_wannier_hamiltonian/main.py` for a runnable
-demo and `tests/wannier/` for correctness tests (exact-reproduction checks against the original spectrum).
+[wannierpy](https://github.com/joselado/wannierpy)'s pure-Python Wannier90 port, bundled directly in this
+repo at `src/pyqula/wanniertk/wannierpy/` (no Fortran source, no compiled extension — the pure-Python
+backend needs neither; its only dependency is numpy, already required by pyqula) and imported normally by
+`wannierize.py`, not as an optional backend. See `examples/wannier/get_wannier_hamiltonian/main.py` for a
+runnable demo and `tests/wannier/` for correctness tests (exact-reproduction checks against the original
+spectrum).
 
 ## Notes
 

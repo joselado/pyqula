@@ -6,10 +6,10 @@ import numpy as np
 from pyqula import geometry
 
 # get_wannier_hamiltonian computes maximally-localized Wannier functions for
-# a subset of a Hamiltonian's bands (via the wannierpy package -- see
-# vendor/wannierpy in this repo, "pip install -e vendor/wannierpy" to enable
-# this feature) and returns a new, smaller Hamiltonian defined purely by the
-# resulting real-space hoppings. This example wannierizes a spinful model,
+# a subset of a Hamiltonian's bands (via the wannierpy pure-Python Wannier90
+# port bundled at src/pyqula/wanniertk/wannierpy/) and returns a new,
+# smaller Hamiltonian defined purely by the resulting real-space hoppings.
+# This example wannierizes a spinful model,
 # where each site contributes two spin-orbitals to the Hamiltonian basis.
 
 # dimerized chain: two sites per unit cell (sublattices A/B), so a
@@ -23,7 +23,7 @@ h.add_exchange([0.,0.,0.3]) # exchange (Zeeman-like) field
 # 2 sites x 2 spin = 4 bands per k-point; Wannierize the lowest 2
 # (num_iter raised above the default 200 -- the spin-orbit-coupled spread
 # minimization needs more CG steps to converge than a spinless case)
-hwan = h.get_wannier_hamiltonian(num_bands=2,nk=24,num_iter=1000)
+hwan = h.get_wannier_hamiltonian(bands=[0,1],nk=24,num_iter=1000)
 
 print("Number of Wannier functions:",hwan.intra.shape[0])
 print("Wannier centres (Cartesian):\n",hwan.wannier_centres)
