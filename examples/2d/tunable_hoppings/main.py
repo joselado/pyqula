@@ -16,7 +16,14 @@ til = ILG(g,0.2) # get generator of interlayer hoppings
 #tij_both = tij_top + tij_bottom + til # add all the hoppings
 tij_both = tij_top + tij_bottom + til # add all the hoppings
 h = g.get_hamiltonian(tij=tij_both) # create hamiltonian of the system
-h.get_bands(operator="zposition")
+(k,e,c) = h.get_bands(operator="zposition")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="inferno")
+plt.colorbar(label="z position")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

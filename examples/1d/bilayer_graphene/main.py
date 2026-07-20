@@ -19,7 +19,13 @@ fun = multilayers.multilayer_hopping(ti=0.3) # function for the hopping
 h = g.get_hamiltonian(has_spin=False,fun=fun) # create Hamiltonian
 def ff(r): return r[2]*0.2 # interlayer bias
 h.shift_fermi(ff) # add electric field
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

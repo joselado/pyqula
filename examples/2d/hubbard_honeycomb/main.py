@@ -14,6 +14,7 @@ from pyqula import meanfield
 g = geometry.honeycomb_lattice()
 g.write()
 Us = np.linspace(0.,4.,10) # different Us
+gaps = [] # store the gap for each U
 f = open("EVOLUTION.OUT","w") # file with the results
 for U in Us: # loop over Us
   h = g.get_hamiltonian() # create hamiltonian of the system
@@ -21,9 +22,17 @@ for U in Us: # loop over Us
   h = h.get_mean_field_hamiltonian(nk=13,filling=0.5,U=U,V=0.1,verbose=1,
                 mix=0.9,mf="antiferro")
   gap = h.get_gap() # compute the gap
+  gaps.append(gap)
   f.write(str(U)+"   "+str(gap)+"\n") # save in a file
-  
+
 f.close()
+
+import matplotlib.pyplot as plt
+
+plt.plot(Us,gaps,marker="o")
+plt.xlabel("U")
+plt.ylabel("Gap")
+plt.show()
 
 
 

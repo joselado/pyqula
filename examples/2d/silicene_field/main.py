@@ -16,7 +16,14 @@ h = g.get_hamiltonian(has_spin=True) # create first neighbor Hamiltonian
 h.add_onsite(lambda r: 0.2*np.sign(r[2])) # add a perpendicular electric field
 h.add_kane_mele(0.1) # add Kane Mele SOC
 
-h.get_bands(operator="sz") # compute band structure
+(k,e,c) = h.get_bands(operator="sz") # compute band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

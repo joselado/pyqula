@@ -7,4 +7,11 @@ from pyqula import kdos
 g = geometry.honeycomb_lattice() # create honeycomb lattice
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(0.05) # Add Haldane coupling
-kdos.surface(h) # surface spectral function
+(k,e,ds,db) = kdos.surface(h) # surface spectral function
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=ds,cmap="inferno")
+plt.colorbar(label="Surface DOS")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()

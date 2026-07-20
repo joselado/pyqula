@@ -13,4 +13,19 @@ h.add_swave(.3) # add superconductivity
 (kx,ky,omega) = h.get_berry_curvature() # compute Berry curvature
 (es,ks,ds,db) = h.get_surface_kdos(energies=np.linspace(-.4,.4,300)) # surface spectral function
 
+import matplotlib.pyplot as plt
+
+plt.subplot(1,2,1)
+plt.scatter(kx,ky,c=omega,cmap="bwr")
+plt.colorbar(label="Berry curvature")
+plt.xlabel("kx") ; plt.ylabel("ky")
+
+plt.subplot(1,2,2)
+plt.scatter(es,ks,c=ds,cmap="inferno")
+plt.colorbar(label="Surface DOS")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+
+plt.tight_layout()
+plt.show()
+
 

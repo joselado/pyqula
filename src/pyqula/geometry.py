@@ -677,10 +677,10 @@ def cubic_lattice():
   Creates a cubic lattice
   """
   g = Geometry() # create geometry
-  g.r = [np.array([0.,0.,0.])]
-  g.x = [0.0]
-  g.y = [0.0]
-  g.z = [0.0]
+  g.r = np.array([[0.,0.,0.]])
+  g.x = np.array([0.0])
+  g.y = np.array([0.0])
+  g.z = np.array([0.0])
   g.a1 = np.array([1.,0.,0.]) # first lattice vector
   g.a2 = np.array([0.,1.,0.]) # second lattice vector
   g.a3 = np.array([0.,0.,1.]) # second lattice vector

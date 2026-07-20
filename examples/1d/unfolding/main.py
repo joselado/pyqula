@@ -24,7 +24,14 @@ h.add_onsite(ons)
 from pyqula import kdos
 kpath = np.array(g.get_kpath(nk=200))*n
 op = h.get_operator("unfold")#*h.get_operator("electron")
-kdos.kdos_bands(h,operator=op,kpath=kpath,delta=1e-1)
+(k,e,d) = kdos.kdos_bands(h,operator=op,kpath=kpath,delta=1e-1)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=d,cmap="inferno")
+plt.colorbar(label="Unfolded weight")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

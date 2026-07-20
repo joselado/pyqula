@@ -14,6 +14,7 @@ g = geometry.chain(n) # chain
 g.dimensionality = 0
 Bs = np.linspace(0.0,3.0,300)
 fo = open("SWEEP.OUT","w")
+chimap = []
 for B in Bs:
   def ft(r1,r2):
       dr = r1-r2
@@ -35,7 +36,16 @@ for B in Bs:
       fo.write(str(ie)+"   ")
       fo.write(str(abs(ic.imag))+"\n")
   fo.flush()
+  chimap.append(np.abs(cs.imag))
 fo.close()
+chimap = np.array(chimap)
+
+import matplotlib.pyplot as plt
+plt.contourf(Bs,es,chimap.T,levels=100)
+plt.colorbar(label="Im($\\chi$)")
+plt.xlabel("B")
+plt.ylabel("Energy")
+plt.show()
 
 
 

@@ -23,26 +23,6 @@ def intermatrix(fin,xs=np.linspace(-5.0,5.0,20)):
   return fout # return function
 
 
-def interpolator2d(x,y,z):
-  """Return a 2D interpolator"""
-  x = np.array(x)
-  y = np.array(y)
-  from scipy.interpolate import interp2d
-  ny = (y.max()-y.min())/abs(y[1]-y[0])
-  ny = int(round(ny)) + 1
-  nx = len(z)/ny
-  nx = int(nx)
-  ny = int(ny)
-  x0 = np.linspace(min(x),max(x),nx)
-  y0 = np.linspace(min(y),max(y),ny)
-  xx, yy = np.meshgrid(x0, y0)
-  Z = np.array(z).reshape(nx,ny) # makes a (Zy,Zx) matrix out of z
-  T = Z.T
-  f = interp2d(x0, y0, T, kind='linear')
-  return f
-
-
-
 def interpolator2d(x,y,z,mode=None):
     from scipy.interpolate import griddata
     from scipy.interpolate import NearestNDInterpolator

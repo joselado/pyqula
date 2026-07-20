@@ -8,8 +8,14 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 from pyqula import geometry,specialhamiltonian
 h = specialhamiltonian.triangular_pi_flux(has_spin=False) # get the pi-flux hamiltonian
-h.get_bands()
+(k,e) = h.get_bands()
 h.write_hopping()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

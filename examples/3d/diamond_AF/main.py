@@ -14,8 +14,20 @@ h = g.get_hamiltonian()
 h.turn_dense()
 h.add_antiferromagnetism(1.)
 #dos.dos(h,nk=1000,delta=0.01,random=True,energies=np.linspace(-6.0,6.0,100))
-dos.autodos(h,nk=100,auto=True,delta=0.1,energies=np.linspace(-6.0,6.0,1000))
-h.get_bands()
+(xdos,ydos) = dos.autodos(h,nk=100,auto=True,delta=0.1,energies=np.linspace(-6.0,6.0,1000))
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.subplot(1,2,1)
+plt.plot(xdos,ydos)
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.subplot(1,2,2)
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

@@ -8,7 +8,13 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 from pyqula import geometry
 g = geometry.chain() # create geometry 
 h = g.get_hamiltonian(tij=[1.0,.2]) # create hamiltonian of the system
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

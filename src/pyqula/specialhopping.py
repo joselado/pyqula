@@ -104,8 +104,11 @@ def entry2matrix(f):
                     r2 = rs2[j]
                     out[i,j] = fnum(r1,r2)
             return out
-        return jit(fout,nopython=True)
-    except:
+        foutjit = jit(fout,nopython=True)
+        r0 = np.zeros((1,3)) # dummy input to force compilation now,
+        foutjit(r0,r0) # since jit is lazy and only compiles on first call
+        return foutjit
+    except Exception:
         print("Warning, hopping cannot be jitd")
         def fout(rs1,rs2):
             return np.array([[f(r1,r2) for r1 in rs1] for r2 in rs2]).T

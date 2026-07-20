@@ -15,3 +15,12 @@ h = h.get_mean_field_hamiltonian(U=3.0,mf="antiferro",
 
 # if the SCF does not converge, a None object is returned
 print("Output Hamiltonian",h)
+
+if h is not None: # only plot if the SCF returned a Hamiltonian
+    (k,e) = h.get_bands()
+
+    import matplotlib.pyplot as plt
+
+    plt.scatter(k,e)
+    plt.xlabel("k-path") ; plt.ylabel("Energy")
+    plt.show()

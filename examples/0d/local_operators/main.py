@@ -33,6 +33,13 @@ ys = spectrum.ev(h,operator=ops).real
 
 np.savetxt("EV.OUT",np.array([g.x,g.y,ys]).T)
 
+import matplotlib.pyplot as plt
+plt.scatter(g.x,g.y,c=ys)
+plt.colorbar(label="Local expectation value")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
+
 
 
 

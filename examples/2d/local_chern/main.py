@@ -18,15 +18,21 @@ h.add_swave(0.1)
 
 nk = 20 # number of kpoints
 # first compute the Chern number with a full mesh
-c = h.get_chern(nk=nk)
-print("Chern number in full BZ is ",c)
+c_full = h.get_chern(nk=nk)
+print("Chern number in full BZ is ",c_full)
 
 # now use a reduced mesh (50% of axis around the Gamma point)
 from pyqula import klist
 fraction = 0.5 # this is the fraction of each axis taken
 kmesh = klist.partial_kmesh(g.dimensionality,nk=nk,f=fraction)
-c = h.get_chern(kmesh=kmesh) # compute Chern number in a custom kmesh
-print("Chern number in part of BZ is ",c)
+c_partial = h.get_chern(kmesh=kmesh) # compute Chern number in a custom kmesh
+print("Chern number in part of BZ is ",c_partial)
+
+import matplotlib.pyplot as plt
+
+plt.bar(["Full BZ","Partial BZ"],[c_full,c_partial])
+plt.ylabel("Chern number")
+plt.show()
 
 
 

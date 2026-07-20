@@ -42,6 +42,12 @@ def get(U):
 ms = [get(U) for U in Us]
 np.savetxt("M_VS_U.OUT",np.array([Us,np.abs(ms)]).T)
 
+import matplotlib.pyplot as plt
+
+plt.plot(Us,np.abs(ms),marker="o")
+plt.xlabel("U") ; plt.ylabel("Magnetization")
+plt.show()
+
 
 
 

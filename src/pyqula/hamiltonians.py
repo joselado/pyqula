@@ -592,8 +592,8 @@ class Hamiltonian():
           ops = [o.get_matrix() for o in ops] # define operators
         return spectrum.ev(self,operator=ops,**kwargs).real
     # for backwards compatibility
-    def compute_vev(self,**kwargs): 
-        return self.get_vev(**kwargs)
+    def compute_vev(self,operator=None,**kwargs):
+        return self.get_vev(operator=operator,**kwargs)
     def get_1dh(self,k=[0.0]):
         """Return a 1d Hamiltonian"""
         if self.is_multicell: # not implemented

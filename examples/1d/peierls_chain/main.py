@@ -17,7 +17,13 @@ phi = topology.berry_phase(h) # get the berry phase
 print(phi)
 hf = h.supercell(100) # do a supercell
 hf = hf.set_finite_system(periodic=False) # do an open finite system
-hf.get_bands()
+(k,e) = hf.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

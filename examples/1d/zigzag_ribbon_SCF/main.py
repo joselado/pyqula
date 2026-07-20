@@ -13,6 +13,14 @@ g = geometry.honeycomb_zigzag_ribbon(10) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian() # create hamiltonian of the system
 h = h.get_mean_field_hamiltonian(U=1.0,nk=100) # get the Hamiltonian
 #h.get_bands(operator="sz") # calculate band structure
+(k,e,c) = h.get_bands(operator="sz")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="rainbow")
+plt.colorbar(label="sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

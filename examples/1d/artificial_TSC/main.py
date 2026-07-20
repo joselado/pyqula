@@ -24,13 +24,23 @@ h.add_swave(0.2) # add swave SC order
 # compute LDOS in an energy window
 energies = np.linspace(-0.4,0.4,100)
 f = open("DOS_MAP.OUT","w") # file to write the results
+dmap = [] # LDOS profile for each energy
 for e in energies: # loop over energies
     x,y,d = h.get_ldos(delta=1e-2,e=e) # compute LDOS
+    dmap.append(d)
     for i in range(len(d)): # loop over locations
         f.write(str(e)+"  ") # write energy
         f.write(str(x[i])+"  ") # write x position
         f.write(str(d[i])+"\n") # write DOS
 f.close()
+dmap = np.array(dmap)
+
+import matplotlib.pyplot as plt
+
+plt.contourf(x,energies,dmap,levels=100,cmap="inferno")
+plt.colorbar(label="LDOS")
+plt.xlabel("x") ; plt.ylabel("Energy")
+plt.show()
 
 
 

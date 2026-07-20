@@ -19,6 +19,15 @@ vintra = h.intra.copy() ; vintra[ii,ii] = 1000.0
 eb = embedding.Embedding(h,m=vintra)
 eb.multildos(nsuper=5,es=np.linspace(-.5,.5,100))
 
+(es,ds) = np.loadtxt("MULTILDOS/DOS.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.plot(es,ds)
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.show()
+
 
 
 

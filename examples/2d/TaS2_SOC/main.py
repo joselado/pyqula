@@ -12,7 +12,13 @@ import numpy as np
 h = specialhamiltonian.TaS2_SOC()
 #h = geometry.chain().get_hamiltonian(tij=[1.])
 #h.get_bands(operator="sz") 
-h.get_dos(nk=300)
+(e,d) = h.get_dos(nk=300)
+
+import matplotlib.pyplot as plt
+
+plt.plot(e,d)
+plt.xlabel("Energy") ; plt.ylabel("DOS")
+plt.show()
 
 
 

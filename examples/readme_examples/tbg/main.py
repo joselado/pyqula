@@ -11,3 +11,9 @@ from pyqula import parallel
 parallel.cores = 6
 (k,e) = h.get_bands(num_bands=20,nk=100) # compute band structure
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
+

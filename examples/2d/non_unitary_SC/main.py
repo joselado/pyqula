@@ -28,7 +28,15 @@ scf = meanfield.Vinteraction(h,nk=10,mix=0.5,U=-U,mf=mf,filling=0.45,
 #        constrains=["no_SC"] # this forces the system to ignore SC
         )
 hscf = scf.hamiltonian
-hscf.get_bands(operator="electron",nk=4000)
+(k,e,c) = hscf.get_bands(operator="electron",nk=4000)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="electron")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 print("CDW order",np.abs(hscf.extract("CDW")))
 print("SC order",np.abs(hscf.extract("swave")))
 print("Gap",np.abs(hscf.get_gap()))

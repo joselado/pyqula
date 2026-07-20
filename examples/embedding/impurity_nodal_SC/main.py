@@ -29,7 +29,16 @@ hv.add_onsite(V) # add impurity
 parallel.cores = 6
 energies = np.linspace(-0.7,0.7,100)
 delta = 0.003 # smearing
-embedding.dos_impurity(h,vc=hv.intra,silent=False,energies=energies,
+(ds,dsv) = embedding.dos_impurity(h,vc=hv.intra,silent=False,energies=energies,
                       delta=delta)
 # results are written in DOS_DEFECTIVE.OUT and DOS_PRISTINE.OUT
+
+import matplotlib.pyplot as plt
+
+plt.plot(energies,ds,label="Pristine")
+plt.plot(energies,dsv,label="Defective")
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.legend()
+plt.show()
 

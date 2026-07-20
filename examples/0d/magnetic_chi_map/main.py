@@ -19,7 +19,14 @@ h = g.get_hamiltonian(has_spin=True)
 from pyqula import susceptibility
 from pyqula import parallel
 parallel.cores = 5
-susceptibility.dominant_correlation(h,write=True)
+chi = susceptibility.dominant_correlation(h,write=True)
+
+import matplotlib.pyplot as plt
+plt.scatter(g.x,g.y,c=chi)
+plt.colorbar(label="Dominant magnetic correlator")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
 
 
 

@@ -11,7 +11,21 @@ h = g.get_hamiltonian()
 h.add_onsite(1.0)
 h = H2HFH(h,JK=0.2)
 (k,e,c) = h.get_bands(operator="dispersive_electrons")
-h.get_ldos(operator="electron")
+(x,y,d) = h.get_ldos(operator="electron")
+
+import matplotlib.pyplot as plt
+
+plt.subplot(1,2,1)
+plt.scatter(k,e,c=c,cmap="inferno")
+plt.colorbar(label="Dispersive electron character")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+
+plt.subplot(1,2,2)
+plt.scatter(x,y,c=d,cmap="inferno")
+plt.colorbar(label="LDOS")
+plt.xlabel("x") ; plt.ylabel("y") ; plt.axis("equal")
+
+plt.show()
 
 
 

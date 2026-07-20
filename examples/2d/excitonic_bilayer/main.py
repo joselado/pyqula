@@ -8,6 +8,12 @@ h = specialhamiltonian.excitonic_bilayer(gap=-1.,g="triangular") # Hamiltonian
 h.geometry.write()
 (k,e) = h.get_bands() # compute band structure
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
+
 
 
 

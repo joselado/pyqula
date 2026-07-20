@@ -16,13 +16,24 @@ h.add_rashba(.2)
 h.add_zeeman([0.,0.,0.3])
 g.write()
 t1 = time.time()
-dm = densitymatrix.full_dm(h,use_fortran=False)
+dm = densitymatrix.full_dm(h,dm_mode="accumulate")
 t2 = time.time()
-dmf = densitymatrix.full_dm(h,use_fortran=True)
+dmf = densitymatrix.full_dm(h,dm_mode="simultaneous")
 t3 = time.time()
 print("Error = ",np.sum(np.abs(dm-dmf)))
-print("Time Fortran = ",t3-t2)
-print("Time Python = ",t2-t1)
+print("Time simultaneous = ",t3-t2)
+print("Time accumulate = ",t2-t1)
+
+import matplotlib.pyplot as plt
+plt.subplot(1,2,1)
+plt.imshow(np.abs(dm))
+plt.colorbar(label="|Density matrix|")
+plt.title("accumulate")
+plt.subplot(1,2,2)
+plt.imshow(np.abs(dm-dmf))
+plt.colorbar(label="|Difference|")
+plt.title("simultaneous - accumulate")
+plt.show()
 
 
 

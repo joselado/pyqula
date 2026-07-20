@@ -34,7 +34,15 @@ h.add_onsite(lambda r: np.sign(r[2])*bias) # add interlayer bias
 
 
 ### compute band structure ####
-h.get_bands(num_bands=20,operator="zposition")
+(k,e,c) = h.get_bands(num_bands=20,operator="zposition")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="z position")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

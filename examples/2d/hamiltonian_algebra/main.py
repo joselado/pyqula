@@ -9,7 +9,14 @@ from pyqula import geometry
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=True) # create hamiltonian of the system
 h = h + h
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

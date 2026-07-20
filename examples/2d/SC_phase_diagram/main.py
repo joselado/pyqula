@@ -27,11 +27,21 @@ for mu in mus:
     hscf = scf.hamiltonian
   #  rho = hscf.get_filling()
     d = -np.mean(hscf.extract("swave").real)
+    ds.append(d)
     f.write(str(mu)+"  ")
     f.write(str(t)+"  ")
     f.write(str(d)+"\n")
     f.flush()
 f.close()
+
+import matplotlib.pyplot as plt
+
+dgrid = np.array(ds).reshape((len(mus),len(ts)))
+plt.contourf(ts,mus,dgrid,levels=100,cmap="inferno")
+plt.colorbar(label="SC order parameter")
+plt.xlabel("T")
+plt.ylabel("mu")
+plt.show()
 
 
 

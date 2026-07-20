@@ -16,6 +16,14 @@ h = g.get_hamiltonian()
 from pyqula import ldos
 ldos.multi_ldos(h,projection="atomic")
 
+import numpy as np
+import matplotlib.pyplot as plt
+
+d = np.genfromtxt("MULTILDOS/DOS.OUT")
+plt.plot(d[:,0],d[:,1])
+plt.xlabel("Energy") ; plt.ylabel("DOS")
+plt.show()
+
 
 
 

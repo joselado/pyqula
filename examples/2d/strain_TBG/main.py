@@ -12,6 +12,13 @@ from pyqula import specialhamiltonian # special Hamiltonians library
 h = specialhamiltonian.twisted_bilayer_graphene(g=g,ti=0.4) # TBG Hamiltonian
 (k,e) = h.get_bands(num_bands=20) # compute band structure
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
+
 
 
 

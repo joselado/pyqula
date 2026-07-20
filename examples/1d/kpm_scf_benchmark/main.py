@@ -88,3 +88,23 @@ h0 = ribbon_v1_guess()
 hed_v, hkpm_v = run_case("V1", ribbon, V1=1.0, mf=h0, filling=0.25)
 print("[1d:V1] ED  charge disproportion  =", np.std(hed_v.get_vev()))
 print("[1d:V1] KPM charge disproportion =", np.std(hkpm_v.get_vev()))
+
+import matplotlib.pyplot as plt
+
+plt.subplot(1,2,1)
+(ku,eu) = hed_u.get_bands()
+(kku,eku) = hkpm_u.get_bands()
+plt.scatter(ku,eu,label="ED")
+plt.scatter(kku,eku,label="KPM")
+plt.xlabel("k-path") ; plt.ylabel("Energy") ; plt.title("Hubbard U")
+plt.legend()
+
+plt.subplot(1,2,2)
+(kv,ev) = hed_v.get_bands()
+(kkv,ekv) = hkpm_v.get_bands()
+plt.scatter(kv,ev,label="ED")
+plt.scatter(kkv,ekv,label="KPM")
+plt.xlabel("k-path") ; plt.ylabel("Energy") ; plt.title("V1")
+plt.legend()
+
+plt.show()

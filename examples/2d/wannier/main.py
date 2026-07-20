@@ -13,6 +13,14 @@ hf = multicell.bulk2ribbon(h,n=10)
 
 (k,e,op) = hf.get_bands(operator="yposition")
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=op,cmap="viridis")
+plt.colorbar(label="y position")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
+
 
 
 

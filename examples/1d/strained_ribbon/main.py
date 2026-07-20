@@ -35,7 +35,13 @@ def tij(r1,r2): # function for strined hoppings
 
 g.write_profile(interpolate_hopping,nrep=40) # write the interpolated hopping
 h = g.get_hamiltonian(tij=tij) # create hamiltonian of the system
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

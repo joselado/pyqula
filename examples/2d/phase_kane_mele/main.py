@@ -22,6 +22,16 @@ def getz2(x1,x2):
   return z2
 # now write the Phase diagram in a file
 phasediagram.diagram2d(getz2,x=np.linspace(-.05,0.05,10,endpoint=True),y=np.linspace(-.1,.1,10,endpoint=True),nite=3)
+# diagram2d does not return arrays, it writes PHASE_DIAGRAM.OUT
+(x,y,z) = np.genfromtxt("PHASE_DIAGRAM.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=z,cmap="viridis")
+plt.colorbar(label="Z2 invariant")
+plt.xlabel("Kane-Mele SOC")
+plt.ylabel("Sublattice imbalance")
+plt.show()
 
 
 

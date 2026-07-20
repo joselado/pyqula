@@ -7,5 +7,12 @@ from pyqula import specialhamiltonian # special Hamiltonians library
 h = specialhamiltonian.NbSe2(soc=0.5) # NbSe2 Hamiltonian
 (k,e,c) = h.get_bands(operator="sz",kpath=["G","K","M","G"]) # compute bands
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
+
 
 

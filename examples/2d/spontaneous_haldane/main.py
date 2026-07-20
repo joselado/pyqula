@@ -20,7 +20,13 @@ scf = meanfield.Vinteraction(h,mf=mf,V2=2.0,nk=nk,filling=filling,mix=0.1)
 print(scf.identify_symmetry_breaking())
 h = h - scf.hamiltonian # get the Hamiltonian
 #print("Topological invariant",h.get_topological_invariant())
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 #from pyqula import topology
 #groundstate.hopping(h)
 #topology.write_berry(h)

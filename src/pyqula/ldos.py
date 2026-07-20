@@ -355,7 +355,7 @@ def multi_ldos_tb(h,es=np.linspace(-1.0,1.0,100),delta=0.01,
       e,w = smalleig(hk(k),numw=num_bands,evecs=True,e0=np.mean(es))
       evals += [ie for ie in e]
       ws += [iw for iw in w]
-      ps += [op(iw,k=k) for iw in w] # weights
+      ps += [op(iw,k=k).real for iw in w] # weights (real part of the expectation value)
   else:
     print("Diagonalizing in LDOS, DENSE mode")
     for k in ks: # loop
@@ -366,7 +366,7 @@ def multi_ldos_tb(h,es=np.linspace(-1.0,1.0,100),delta=0.01,
       w = w.transpose()
       evals += [ie for ie in e]
       ws += [iw for iw in w]
-      ps += [op(iw,k=k[0]) for iw in w] # weights
+      ps += [op(iw,k=k).real for iw in w] # weights (real part of the expectation value)
 #      evals = np.concatenate([evals,e]) # store
 #      ws = np.concatenate([ws,w]) # store
   ds = [(np.conjugate(v)*v).real for v in ws] # calculate densities

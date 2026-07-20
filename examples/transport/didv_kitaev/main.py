@@ -28,3 +28,12 @@ for i in range(len(g.r)): # loop over positions
         f.write(str(z)+"\n")
 
 f.close()
+
+data = np.genfromtxt("SWEEP.OUT") # columns: site, energy, dIdV
+import matplotlib.pyplot as plt
+
+plt.scatter(data[:,0],data[:,1],c=data[:,2],cmap="inferno")
+plt.colorbar(label="dI/dV")
+plt.xlabel("Site")
+plt.ylabel("Energy")
+plt.show()

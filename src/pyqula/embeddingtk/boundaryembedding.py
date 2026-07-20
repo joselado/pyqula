@@ -9,7 +9,7 @@ def boundary_embedding_gf(EB,selfenergy=1.,energy=0.,delta=1e-4,**kwargs):
     else: selfe = selfenergy
     SE = selfe*EB.boundary_embedding_generator # selfenergy
     from .. import algebra
-    iden = np.identity(SE.shape[0],dtype=np.complex) # identity
+    iden = np.identity(SE.shape[0],dtype=np.complex128) # identity
     emat = iden*(energy + delta*1j) # energy matrix
     gv = algebra.inv(emat - EB.H.intra - SE)   # Defective Green function
     return gv

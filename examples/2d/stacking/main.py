@@ -12,6 +12,13 @@ from pyqula import stacking
 v = stacking.stacking(g)
 g.write_profile(v)
 
+import matplotlib.pyplot as plt
+
+plt.scatter(g.x,g.y,c=v)
+plt.colorbar(label="Stacking")
+plt.xlabel("x") ; plt.ylabel("y")
+plt.show()
+
 
 
 

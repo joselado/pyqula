@@ -20,7 +20,15 @@ print("########################")
 print("Chern number = ",round(c,2))
 print("########################")
 print()
-h.get_bands(operator="sx") # compute band structure
+(k,e,c) = h.get_bands(operator="sx") # compute band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="$S_x$")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

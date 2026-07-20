@@ -17,7 +17,15 @@ h0.add_zeeman(2.0) # add magnetic order
 h = h.get_mean_field_hamiltonian(U=6.0,V1=1.5,verbose=1,
               mf=h0,mix=0.9,filling = 0.25)
 # compute bands
-h.get_bands(operator="sz")
+(k,e,c) = h.get_bands(operator="sz")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

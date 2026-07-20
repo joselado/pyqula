@@ -12,7 +12,14 @@ g = geometry.chain() # create geometry of a zigzag ribbon
 h = g.get_hamiltonian() # create hamiltonian of the system
 h = h.get_mean_field_hamiltonian(U=10.0,filling=0.2,mf="ferro")
 #exit()
-h.get_bands(operator="sz")
+(k,e,c) = h.get_bands(operator="sz")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="rainbow")
+plt.colorbar(label="sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

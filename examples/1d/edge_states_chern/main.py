@@ -22,8 +22,22 @@ hr = multicell.bulk2ribbon(h, # initial Hamiltonian
                            n=60 # width
                            )
 
-hr.get_bands(operator="yposition")
-hr.get_ldos(e=0.0,delta=1e-3,nk=100,nrep=30)
+(k,e,c) = hr.get_bands(operator="yposition")
+(x,y,d) = hr.get_ldos(e=0.0,delta=1e-3,nk=100,nrep=30)
 #hr.geometry.write(nrep=20) # see the geometry
+
+import matplotlib.pyplot as plt
+
+plt.figure()
+plt.scatter(k,e,c=c,cmap="rainbow")
+plt.colorbar(label="y-position")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+
+plt.figure()
+plt.scatter(x,y,c=d)
+plt.colorbar(label="LDOS")
+plt.xlabel("x") ; plt.ylabel("y")
+
+plt.show()
 
 

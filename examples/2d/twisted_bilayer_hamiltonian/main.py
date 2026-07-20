@@ -34,8 +34,14 @@ hk = h.get_hk_gen() # get Bloch Hamiltonian generator
 # The k points are in the interval [0.,1.]
 # This method automatically computes the local density of states
 from pyqula import ldos
-ldos.ldos(h)
+(x,y,d) = ldos.ldos(h)
 #h.get_ldos(e=0.0) # e is the energy
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=d)
+plt.colorbar(label="LDOS")
+plt.show()
 # This method automatically computes the bands
 #h.get_bands(num_bands=20)
 

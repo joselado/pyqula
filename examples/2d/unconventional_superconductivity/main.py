@@ -44,7 +44,15 @@ print("##########################################")
 
 # now extract the Hamiltonian and compute the bands
 h = scf.hamiltonian # get the Hamiltonian
-h.get_bands(operator="electron") # calculate band structure
+(k,e,c) = h.get_bands(operator="electron") # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Electron character")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

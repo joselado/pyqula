@@ -9,6 +9,13 @@ g = geometry.kagome_lattice()
 h = g.get_hamiltonian()
 (k,e) = h.get_bands(kpath=["G","K"])
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
+
 
 
 

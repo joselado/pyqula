@@ -22,3 +22,16 @@ print("qtci backend: ",len(fs2),"k-points in the reconstructed mesh")
 
 import numpy as np
 print("Max difference between the two maps: ",np.max(np.abs(fs1-fs2)))
+
+import matplotlib.pyplot as plt
+
+plt.subplot(1,2,1)
+plt.title("grid backend")
+plt.scatter(kx1,ky1,c=fs1,cmap="inferno")
+plt.xlabel("kx") ; plt.ylabel("ky")
+plt.subplot(1,2,2)
+plt.title("qtci backend")
+plt.scatter(kx2,ky2,c=fs2,cmap="inferno")
+plt.xlabel("kx") ; plt.ylabel("ky")
+plt.tight_layout()
+plt.show()

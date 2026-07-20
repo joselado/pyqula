@@ -18,7 +18,13 @@ def fm(r):
     if r[2]<0.0: return 3.5
     return 0.0
 h.add_sublattice_imbalance(fm)
-h.get_bands(nk=1000)
+(k,e) = h.get_bands(nk=1000)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

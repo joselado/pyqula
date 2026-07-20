@@ -34,7 +34,15 @@ def fs(r):
 h.add_magnetism(ms)
 h.add_swave(fs)
 h.shift_fermi(fs)
-h.get_bands(operator="interface")
+(k,e,c) = h.get_bands(operator="interface")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="rainbow")
+plt.colorbar(label="Interface weight")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
+
 exit()
 maf = []
 #for s in g.sublattice:

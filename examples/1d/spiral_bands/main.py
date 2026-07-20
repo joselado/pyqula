@@ -21,8 +21,15 @@ q = np.array([0.2,0.0,0.0])
 h.generate_spin_spiral(vector=vector,qspiral=q)
 h.add_zeeman([0.,.0,0.4])
 #h.generate_spin_spiral(vector=vector,qspiral=-q,fractional=True)
-h.get_bands(operator="sx")
+(k,e,c) = h.get_bands(operator="sx")
 h.write_magnetization(nrep=1)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="rainbow")
+plt.colorbar(label="$S_x$")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

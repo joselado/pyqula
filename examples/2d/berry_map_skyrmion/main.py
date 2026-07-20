@@ -28,9 +28,19 @@ h.write_magnetization()
 h.shift_fermi(4.0)
 #exit()
 from pyqula import topology
-topology.berry_green_map(h,k=[0.0,0.0,0.0],nrep=1,integral=True)
-#topology.berry_green_map(h,k=[0.5,0.0,0.0],nrep=3,integral=False)
-#topology.berry_green_map(h,k=[0.0,-0.0,0.0],nrep=3,integral=False)
+topology.Omega_rmap(h,k=[0.0,0.0,0.0],nrep=1,integral=True)
+#topology.Omega_rmap(h,k=[0.5,0.0,0.0],nrep=3,integral=False)
+#topology.Omega_rmap(h,k=[0.0,-0.0,0.0],nrep=3,integral=False)
+
+(x,y,d,z) = np.genfromtxt("BERRY_RMAP.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=d,cmap="bwr")
+plt.colorbar(label="Berry density")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
 
 
 

@@ -20,6 +20,13 @@ h = hamiltonians.generate_hamiltonian_from_dict(d)
 
 
 # this Hamiltonian will work as a typical one
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 

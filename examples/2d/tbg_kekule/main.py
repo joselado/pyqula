@@ -22,8 +22,15 @@ mf = meanfield.guess(h,"dimerization")
 scf = meanfield.Vinteraction(h,nk=1,filling=0.5,V1=2.0,V2=1.0, mix=0.3,mf=mf)
 h = scf.hamiltonian # get the Hamiltonian
 groundstate.hopping(h,nrep=1,skip = lambda r1,r2: r1[2]*r2[2]<0) # write three replicas
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
 h.write_onsite()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

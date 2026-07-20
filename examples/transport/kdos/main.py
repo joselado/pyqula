@@ -20,4 +20,10 @@ central = [h1 for i in range(10)]
 #central = []
 HT = heterostructures.build(h1,h2) # create the junction
 HT.delta = 1e-1
-HT.get_kdos(delta=1e-1)
+(k,e,d) = HT.get_kdos(delta=1e-1)
+
+plt.scatter(k,e,c=d,cmap="inferno")
+plt.colorbar(label="DOS")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()

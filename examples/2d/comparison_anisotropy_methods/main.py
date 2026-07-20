@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 # zigzag ribbon
 import numpy as np
 from pyqula import geometry
-from pyqula import scftypes
+from pyqula import meanfield
 from pyqula import operators
 from scipy.sparse import csc_matrix
 
@@ -35,26 +35,26 @@ for p in ps: # loop over angles
   hin.global_spin_rotation(angle=0.5,vector=[1.,0.,0.])
   U = 3.0 # large U to get antiferromagnetism
   # offplane antiferro initialization
-  mfoff = scftypes.guess(h,mode="antiferro",fun = lambda x: [0.,0.,1.0]) 
+  mfoff = meanfield.guess(h,mode="antiferro",fun = lambda x: [0.,0.,1.0])
   # inplane antiferro initialization
-  mfin = scftypes.guess(h,mode="antiferro",fun = lambda x: [1.0,0.,0.]) 
+  mfin = meanfield.guess(h,mode="antiferro",fun = lambda x: [1.0,0.,0.])
   # compute the energies using collinear formalism with different
   # quantization axis. In this case, the collinear formalism
   # will enforce the magnetization in the z direction
-  scfoff = scftypes.hubbardscf(hoff,nkp=5,filling=0.5,g=U,
-                mix=0.5,mf=mfoff,collinear=True)
-  scfin = scftypes.hubbardscf(hin,nkp=5,filling=0.5,g=U,
-                mix=0.5,mf=mfoff,collinear=True)
+  scfoff = meanfield.hubbardscf(hoff,nk=5,filling=0.5,U=U,
+                mix=0.5,mf=mfoff,constrains=["no_inplane_magnetism"])
+  scfin = meanfield.hubbardscf(hin,nk=5,filling=0.5,U=U,
+                mix=0.5,mf=mfoff,constrains=["no_inplane_magnetism"])
 #  print(scfoff.total_energy)
 #  print(scfin.total_energy)
 #  exit()
   # alternatively, we can use a non-collinear formalism and go to the
   # ground state with using two different initializations
   # compute energies using non-collinear formalism but different initialization
-  scfoff2 = scftypes.hubbardscf(h,nkp=5,filling=0.5,g=U,
-                mix=0.5,mf=mfoff,collinear=False)
-  scfin2 = scftypes.hubbardscf(h,nkp=5,filling=0.5,g=U,
-                mix=0.5,mf=mfin,collinear=False)
+  scfoff2 = meanfield.hubbardscf(h,nk=5,filling=0.5,U=U,
+                mix=0.5,mf=mfoff)
+  scfin2 = meanfield.hubbardscf(h,nk=5,filling=0.5,U=U,
+                mix=0.5,mf=mfin)
   # Now compute energy differences
   e0 = scfoff.total_energy - scfin.total_energy
   e1 = scfoff2.total_energy - scfin2.total_energy

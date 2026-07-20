@@ -30,7 +30,12 @@ h.add_antiferromagnetism(faf)
 h.add_swave(fs)
 from pyqula import ldos
 #ldos.multi_ldos(h,np.linspace(-3.0,3.0,40),delta=0.1)
-h.get_bands()
+(k,e) = h.get_bands()
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

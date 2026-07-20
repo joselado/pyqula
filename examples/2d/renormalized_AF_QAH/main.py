@@ -49,7 +49,14 @@ print("Mz",h.extract("mz"))
 #h.write_onsite()
 op = h.get_operator("sz")#*h.get_operator("sublattice")
 #op = h.get_operator("valley")#*h.get_operator("sublattice")
-h.get_bands(operator=op)
+(k,e,c) = h.get_bands(operator=op)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 #h.write_hopping()
 #h.write_swave()
 #h.write_magnetization()

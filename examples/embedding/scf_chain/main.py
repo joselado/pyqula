@@ -21,8 +21,15 @@ if True: # make it True as a sanity check
                    nk=40,
                    verbose=1) # perform SCF
     print("Finished mean-field of the isolated system")
-    hscf.get_bands()
+    (k,e) = hscf.get_bands()
     print("Gap = ",hscf.get_gap())
+
+    import matplotlib.pyplot as plt
+
+    plt.scatter(k,e)
+    plt.xlabel("k-path")
+    plt.ylabel("Energy")
+    plt.show()
     exit()
 
 

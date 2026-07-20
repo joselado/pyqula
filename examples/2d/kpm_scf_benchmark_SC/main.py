@@ -63,7 +63,7 @@ def triangular_triplet():
 
 # Case 1: onsite attractive Hubbard U, conventional (swave) singlet
 # pairing, dilute filling -- as in examples/readme_examples/scf_SC
-run_case("U-swave", triangular_swave, U=-1.0, filling=0.05, mf="swave",
+hed_u, hkpm_u = run_case("U-swave", triangular_swave, U=-1.0, filling=0.05, mf="swave",
         npol=600)
 
 # Case 2: attractive first-neighbor V1 with a ferromagnetic exchange field,
@@ -79,3 +79,22 @@ d_ed = hed_t.get_dvector_non_unitarity()
 d_kpm = hkpm_t.get_dvector_non_unitarity()
 print(f"[2d-SC:V1-triplet] ED  <|d-vector non-unitarity|>={np.mean(np.abs(d_ed)):.4e}")
 print(f"[2d-SC:V1-triplet] KPM <|d-vector non-unitarity|>={np.mean(np.abs(d_kpm)):.4e}")
+
+import matplotlib.pyplot as plt
+
+(k1,e1) = hed_u.get_bands() ; (k2,e2) = hkpm_u.get_bands()
+plt.subplot(1,2,1)
+plt.scatter(k1,e1,label="ED")
+plt.scatter(k2,e2,label="KPM")
+plt.legend()
+plt.title("U-swave")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+
+(k3,e3) = hed_t.get_bands() ; (k4,e4) = hkpm_t.get_bands()
+plt.subplot(1,2,2)
+plt.scatter(k3,e3,label="ED")
+plt.scatter(k4,e4,label="KPM")
+plt.legend()
+plt.title("V1-triplet")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()

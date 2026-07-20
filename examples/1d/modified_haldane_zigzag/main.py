@@ -11,7 +11,13 @@ from pyqula import geometry
 g = geometry.honeycomb_zigzag_ribbon(30) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian(has_spin=False) # create hamiltonian of the system
 h.add_modified_haldane(.1) # add modified Haldane coupling
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

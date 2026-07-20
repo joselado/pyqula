@@ -12,7 +12,13 @@ fs = potentials.radial_decay(v0=2.0,voo=1.0,rl=3.0,mode="linear")
 h.add_strain(fs)
 h.geometry.write_profile(fs)
 h.write_hopping()
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

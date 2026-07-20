@@ -19,9 +19,17 @@ h = h.get_multicell()
 h.add_kekule(0.4)
 #h.add_haldane(0.3)
 #h1 = h.copy() ; h1.clean() ; h1.add_haldane(0.3) ; h.add_hamiltonian(h1)
-h.get_bands(operator="valley_x")
+(k,e,c) = h.get_bands(operator="valley_x")
 from pyqula import groundstate
 groundstate.hopping(h,nrep=2) # write three replicas
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="valley_x")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

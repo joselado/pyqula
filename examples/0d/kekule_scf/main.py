@@ -19,10 +19,16 @@ from pyqula.selfconsistency import densitydensity
 #scf = scftypes.selfconsistency(h,nk=nk,filling=filling,g=g,mode="V")
 scf = densitydensity.Vinteraction(h,V1=2.0,V2=1.0,filling=filling)
 h = scf.hamiltonian # get the Hamiltonian
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
 from pyqula import topology
 groundstate.hopping(h)
 topology.write_berry(h)
+
+import matplotlib.pyplot as plt
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

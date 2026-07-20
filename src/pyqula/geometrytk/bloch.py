@@ -15,11 +15,15 @@ def bloch_phase(self,d,k):
       return np.exp(1j*dt*kt*np.pi*2.)
     elif self.dimensionality == 2:
       dt = np.array(d)[0:2]
-      kt = np.array(k)[0:2]
+      ka = np.array(k)
+      # ups, assume that only the first component was given
+      kt = np.array([ka,0.]) if ka.ndim==0 else ka[0:2]
       return np.exp(1j*dt.dot(kt)*np.pi*2.)
     elif self.dimensionality == 3:
       dt = np.array(d)[0:3]
-      kt = np.array(k)[0:3]
+      ka = np.array(k)
+      # ups, assume that only the first component was given
+      kt = np.array([ka,0.,0.]) if ka.ndim==0 else ka[0:3]
       return np.exp(1j*dt.dot(kt)*np.pi*2.)
     else: raise
 

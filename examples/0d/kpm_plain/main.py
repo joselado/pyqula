@@ -17,15 +17,11 @@ from pyqula.kpmtk import kpmnumba
 from pyqula import kpm
 import time
 
-from pyqula.kpm import local_dos
-#local_dos(m) ; exit()
-
-
-v = np.zeros(m.shape[0],dtype=np.complex_) ; v[0] = 1.0
+v = np.zeros(m.shape[0],dtype=np.complex128) ; v[0] = 1.0
 n = 1000
-mus0 = kpmnumba.kpm_moments(v,m,n=n)
+mus0 = kpmnumba.kpm_moments_v(v,m,n=n)
 t0 = time.time()
-mus0 = kpmnumba.kpm_moments(v,m,n=n)
+mus0 = kpmnumba.kpm_moments_v(v,m,n=n)
 t1 = time.time()
 mus1 = kpm.python_kpm_moments(v,m,n=n)
 t2 = time.time()
@@ -34,4 +30,12 @@ print(mus0-mus1)
 
 print("Python",t2-t1)
 print("Numba",t1-t0)
+
+import matplotlib.pyplot as plt
+plt.plot(mus0.real,label="Numba")
+plt.plot(mus1.real,label="Python")
+plt.xlabel("Moment index")
+plt.ylabel("KPM moment")
+plt.legend()
+plt.show()
 

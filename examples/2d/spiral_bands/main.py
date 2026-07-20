@@ -22,7 +22,14 @@ h.generate_spin_spiral(vector=[0.,0.,1.],qspiral=q,
         fractional=True)
 h.add_zeeman([.0,0.2,0.0])
 #h.add_zeeman([[.0,0.1,0.0],[0.,-0.1,0.]])
-h.get_bands(operator="sz")
+(k,e,c) = h.get_bands(operator="sz")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

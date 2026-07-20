@@ -19,10 +19,16 @@ filling = 0.5
 mf = meanfield.guess(h,"dimerization")
 scf = meanfield.Vinteraction(h,V1=2.0,nk=nk,filling=filling,mf=mf)
 h = scf.hamiltonian # get the Hamiltonian
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
 from pyqula import topology
 groundstate.hopping(h)
 print(np.round(h.intra,3).real)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

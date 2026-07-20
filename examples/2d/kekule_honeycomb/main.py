@@ -10,7 +10,14 @@ h = g.get_hamiltonian(has_spin=False) # create hamiltonian of the system
 h.add_kekule(0.3) # add a Kekule distortion
 #h.add_sublattice_imbalance(0.2) # add sublattice imbalance
 h.write_hopping() # you can plot this with ql-network
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

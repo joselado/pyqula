@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 # zigzag ribbon
 import numpy as np
 from pyqula import geometry
-from pyqula import scftypes
+from pyqula import meanfield
 from pyqula import operators
 from scipy.sparse import csc_matrix
 
@@ -34,10 +34,10 @@ for p in ps: # loop over angles
   h.global_spin_rotation(angle=p,vector=[1.,0.,0.])
   U = 3.0 # large U to get antiferromagnetism
   # antiferro initialization
-  mf = scftypes.guess(h,mode="antiferro",fun = lambda x: 1.0) 
+  mf = meanfield.guess(h,mode="antiferro",fun = lambda x: 1.0)
   # perform SCF with specialized routine for collinear Hubbard
-  scf = scftypes.hubbardscf(h,nkp=5,filling=0.5,g=U,
-                mix=0.5,mf=mf,collinear=True)
+  scf = meanfield.hubbardscf(h,nk=5,filling=0.5,U=U,
+                mix=0.5,mf=mf,constrains=["no_inplane_magnetism"])
   e = scf.total_energy # get the energy of the system
   es.append(e) # store energy
   f.write(str(p)+"   "+str(e)+"\n") # write in the file

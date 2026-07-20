@@ -21,7 +21,13 @@ g.write_profile(Delta,nrep=2,name="DELTA.OUT") # write the SC in file
 h = g.get_hamiltonian(has_spin=True) # get the Hamiltonian
 h.add_zeeman(J) # add exchange coupling
 h.add_swave(Delta) # add the SC order
-h.get_bands() # compute the bands
+(k,e) = h.get_bands() # compute the bands
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

@@ -12,5 +12,23 @@ h = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="random") # perform SCF
 (k,e,c) = h.get_bands(operator="sz") # calculate band structure
 m = h.get_magnetization() # get the magnetization
 
+import matplotlib.pyplot as plt
+
+plt.subplot(1,2,1)
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+
+plt.subplot(1,2,2)
+x,y = h.geometry.r[:,0],h.geometry.r[:,1]
+plt.quiver(x,y,m[:,0],m[:,1])
+plt.scatter(x,y,c=m[:,2],cmap="bwr")
+plt.colorbar(label="Mz")
+plt.axis("equal")
+plt.xlabel("x") ; plt.ylabel("y")
+
+plt.tight_layout()
+plt.show()
+
 
 

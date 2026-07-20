@@ -17,6 +17,13 @@ imfile = "island.png"
 g = sculpt.image2island(imfile,g,size=20,color="black")
 g.write()
 
+import matplotlib.pyplot as plt
+plt.scatter(g.x,g.y)
+plt.xlabel("x")
+plt.ylabel("y")
+plt.gca().set_aspect("equal")
+plt.show()
+
 
 
 

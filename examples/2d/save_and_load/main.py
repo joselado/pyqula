@@ -16,7 +16,14 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 h.save() # save the Hamiltonian
 del h # delete the Hamiltonian
 h1 = hamiltonians.load() # load the Hamiltonian
-h1.get_bands() # get the bandstructure
+(k,e) = h1.get_bands() # get the bandstructure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

@@ -10,7 +10,13 @@ import numpy as np
 g = geometry.honeycomb_lattice() # create the geometry
 h = g.get_hamiltonian()
 hr = ribbon.bulk2ribbon(h,n=20) # create a ribbon from this 2D Hamiltonian
-hr.get_bands() # compute band structure
+(k,e) = hr.get_bands() # compute band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

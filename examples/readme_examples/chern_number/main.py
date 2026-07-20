@@ -11,3 +11,11 @@ from pyqula import topology
 (kx,ky,omega) = h.get_berry_curvature() # compute Berry curvature
 c = h.get_chern() # compute the Chern number
 
+import matplotlib.pyplot as plt
+
+plt.scatter(kx,ky,c=omega,cmap="bwr")
+plt.colorbar(label="Berry curvature")
+plt.xlabel("kx") ; plt.ylabel("ky")
+plt.title("Chern number = "+str(c))
+plt.show()
+

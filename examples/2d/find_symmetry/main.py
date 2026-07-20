@@ -13,3 +13,11 @@ from pyqula.symmetrytk.localsymmetry import all_permutations
 Us = all_permutations(h,only_permutation=True)
 print(Us)
 for U in Us: print(np.round(U,3))
+
+import matplotlib.pyplot as plt
+
+for i,U in enumerate(Us):
+    plt.subplot(1,len(Us),i+1)
+    plt.imshow(np.abs(U))
+    plt.title("Symmetry "+str(i))
+plt.show()

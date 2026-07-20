@@ -27,7 +27,13 @@ fv = operators.get_valley(h,projector=True) # valley function
 #fv = None
 #fv = h.get_operator("sublattice")
 #fv = np.abs(fv)
-h.get_dos(operator=fv,delta=0.02,use_kpm=False)
+(es,ds) = h.get_dos(operator=fv,delta=0.02,use_kpm=False)
+
+import matplotlib.pyplot as plt
+plt.plot(es,ds)
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.show()
 
 
 

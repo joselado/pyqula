@@ -11,7 +11,14 @@ import numpy as np
 from pyqula import geometry
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(tij=[1.0,0.2]) # create hamiltonian of the system
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

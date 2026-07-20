@@ -60,7 +60,13 @@ def impurity(r):
 # add the impurity in the onsite energies
 h.add_onsite(impurity) # add the impurity potential
 
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

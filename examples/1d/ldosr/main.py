@@ -17,13 +17,24 @@ from pyqula import ldos
 f = ldos.ldosr_generator(h,nk=20,es=np.linspace(-.5,.5,200)) # function to compute the DOS at position r
 g.write()
 fo = open("MAP.OUT","w")
-for y in np.linspace(-30,30,80):
+ys = np.linspace(-30,30,80)
+dmap = [] # store the DOS profile for each y
+for y in ys:
     (es,ds) = f([0.,y,0.])
+    dmap.append(ds)
     for (ei,di) in zip(es,ds):
         fo.write(str(y)+"  ")
         fo.write(str(ei)+"  ")
         fo.write(str(di)+"\n")
 fo.close()
+dmap = np.array(dmap)
+
+import matplotlib.pyplot as plt
+
+plt.contourf(ys,es,dmap.T,levels=100,cmap="inferno")
+plt.colorbar(label="LDOS")
+plt.xlabel("y") ; plt.ylabel("Energy")
+plt.show()
 
 
 

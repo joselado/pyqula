@@ -29,7 +29,14 @@ scf = meanfield.Vinteraction(h,V1=3.0,U=0.0,mf=mf,V2=3.0,V3=0.0,
         compute_anomalous=False)
 h = scf.hamiltonian
 print(scf.identify_symmetry_breaking())
-h.get_bands(operator="sz")
+(k,e,s) = h.get_bands(operator="sz")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=s,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

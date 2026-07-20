@@ -13,6 +13,13 @@ cs = g.get_connections()
 pot = [int(len(c)<3)-0.5 for c in cs] # atoms in the edge
 np.savetxt("POTENTIAL.OUT",np.matrix([g.x,g.y,pot]).T)
 
+import matplotlib.pyplot as plt
+plt.scatter(g.x,g.y,c=pot)
+plt.colorbar(label="Edge indicator")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
+
 
 
 

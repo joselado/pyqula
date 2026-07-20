@@ -25,7 +25,13 @@ h = g.get_hamiltonian(is_sparse=True,has_spin=False,is_multicell=False,
 
 
 
-h.get_bands(num_bands=40)
+(k,e) = h.get_bands(num_bands=40)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

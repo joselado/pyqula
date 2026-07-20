@@ -23,6 +23,16 @@ h.set_filling(0.5,nk=3) # set to half filling
 topology.spatial_berry_density(h,k=[-0.333333,0.33333,0.0],nrep=3,
                                operator="valley")
 
+# spatial_berry_density writes the real-space map to BERRY_RMAP.OUT
+(x,y,d) = np.genfromtxt("BERRY_RMAP.OUT").T[0:3]
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=d)
+plt.colorbar(label="Berry density")
+plt.xlabel("x") ; plt.ylabel("y")
+plt.show()
+
 
 
 

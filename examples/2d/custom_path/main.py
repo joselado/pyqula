@@ -14,7 +14,14 @@ k = klist.label2k(g,"K")
 kpath = [ik*k for ik in np.linspace(0.,1.0,100)]
 kpath = klist.get_kpath(g,["G","K","M","G"])
 h = g.get_hamiltonian()
-h.get_bands(kpath=kpath)
+(k,e) = h.get_bands(kpath=kpath)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

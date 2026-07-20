@@ -10,6 +10,14 @@ h = g.get_hamiltonian()
 h.add_anti_kane_mele(0.05)
 (k,e,c) = h.get_bands(operator="sz")
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="$S_z$")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
+
 
 
 

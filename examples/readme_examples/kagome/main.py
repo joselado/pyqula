@@ -7,3 +7,9 @@ from pyqula import geometry
 g = geometry.kagome_lattice() # get the geometry object
 h = g.get_hamiltonian() # get the Hamiltonian object
 (k,e) = h.get_bands() # compute the band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()

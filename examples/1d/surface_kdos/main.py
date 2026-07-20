@@ -16,7 +16,14 @@ from pyqula import kdos
 
 edge = np.zeros(h.intra.shape[0]) ; edge += 1.0 ; edge[10:edge.shape[0]] = 0.0
 frand = lambda : (-0.5+np.random.random(edge.shape[0]))*edge
-kdos.kdos_bands(h,frand=frand)
+(k,e,d) = kdos.kdos_bands(h,frand=frand)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=d,cmap="inferno")
+plt.colorbar(label="KDOS")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

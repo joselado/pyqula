@@ -14,7 +14,14 @@ tij = specialhopping.phase_C3(g,phi=0.3)
 h = g.get_hamiltonian(has_spin=False,tij=tij)
 h.turn_spinful(enforce_tr=True)
 h.turn_dense()
-h.get_bands(operator="sz")
+(k,e,s) = h.get_bands(operator="sz")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=s,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

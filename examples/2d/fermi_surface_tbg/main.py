@@ -18,8 +18,18 @@ h = specialhamiltonian.tbg(n=7,ti=0.4,is_sparse=True,has_spin=False)
 h.set_filling(0.5,nk=2)
 #h.get_bands(num_bands=20)
 #exit()
-spectrum.multi_fermi_surface(h,nk=60,energies=np.linspace(-0.05,0.05,100),
+out = spectrum.multi_fermi_surface(h,nk=60,energies=np.linspace(-0.05,0.05,100),
         delta=0.0005,nsuper=1)
+
+import matplotlib.pyplot as plt
+
+ie = out.shape[0]//2 # pick a Fermi energy in the middle of the sweep
+kx,ky,w = out[ie,0,:],out[ie,1,:],out[ie,2,:]
+
+plt.scatter(kx,ky,c=w,cmap="inferno")
+plt.colorbar(label="Fermi surface weight")
+plt.xlabel("kx") ; plt.ylabel("ky")
+plt.show()
 
 
 

@@ -24,7 +24,14 @@ scf = meanfield.Vinteraction(h,
         )
 h = scf.hamiltonian # get the selfconsistent Hamiltonian
 print(scf.identify_symmetry_breaking())
-h.get_bands(operator="electron") # calculate band structure
+(k,e,c) = h.get_bands(operator="electron") # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="inferno")
+plt.colorbar(label="Electron character")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

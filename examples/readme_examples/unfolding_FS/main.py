@@ -11,6 +11,15 @@ h = g.get_hamiltonian() # get the Hamiltonian
 fons = lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100 # onsite in the impurity
 h.add_onsite(fons) # add onsite energy
 kpath = np.array(g.get_kpath(nk=200))*n # enlarged k-path
-h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),
+out = h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),
         delta=0.1,nsuper=n,operator="unfold")
+
+import matplotlib.pyplot as plt
+
+ie = len(out)//2 # pick a representative energy
+kx,ky,d = out[ie]
+plt.scatter(kx,ky,c=d,cmap="inferno")
+plt.colorbar(label="Fermi surface weight")
+plt.xlabel("kx") ; plt.ylabel("ky")
+plt.show()
 

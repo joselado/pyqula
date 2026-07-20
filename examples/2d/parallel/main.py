@@ -15,15 +15,25 @@ g = geometry.chain()
 g = g.get_supercell(30)
 cores = [1,7]
 import time
+doss = []
 for core in cores:
     parallel.set_cores(core)
     h = g.get_hamiltonian() # create hamiltonian of the system
     t0 = time.time()
-#    hmf = h.get_mean_field_hamiltonian(nk=5,U=3.,mf="antiferro") 
-    h.get_dos(mode="Green")
+#    hmf = h.get_mean_field_hamiltonian(nk=5,U=3.,mf="antiferro")
+    (energies,dos) = h.get_dos(mode="Green")
+    doss.append(dos)
     # mean field Hamiltonian
     t1 = time.time()
     print("Time with",core,"is",t1-t0)
+
+import matplotlib.pyplot as plt
+
+for core,dos in zip(cores,doss):
+    plt.plot(energies,dos,label=str(core)+" cores")
+plt.legend()
+plt.xlabel("Energy") ; plt.ylabel("DOS")
+plt.show()
 
 
 

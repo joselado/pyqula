@@ -21,7 +21,14 @@ h.add_rashba(1.0) # add Rashba spin-orbit coupling
 mf = meanfield.guess(h,mode="ferro") # antiferro initialization
 scf = meanfield.hubbardscf(h,filling=0.5,U=1.0,mf=mf,nk=5,verbose=1) # perform SCF
 scf.hamiltonian.write_magnetization(nrep=4) # write selfconsistent magnetization
-scf.hamiltonian.get_bands(operator="sz")
+(k,e,s) = scf.hamiltonian.get_bands(operator="sz")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=s,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

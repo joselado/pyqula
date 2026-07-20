@@ -27,7 +27,14 @@ scf = hubbard(h,nk=5,U=U,filling=filling,mf=mf,solver="plain",maxerror=1e-5,
 h = scf.hamiltonian # get the Hamiltonian
 #h.write_magnetization()
 print(scf.identify_symmetry_breaking())
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

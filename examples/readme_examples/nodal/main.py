@@ -9,3 +9,9 @@ g = geometry.diamond_lattice()
 g = films.geometry_film(g,nz=20)
 h = g.get_hamiltonian()
 (k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()

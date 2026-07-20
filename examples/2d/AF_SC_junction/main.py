@@ -28,7 +28,14 @@ def get_hamiltonian():
   h.add_kane_mele(0.1)
   return h
 h = get_hamiltonian()
-h.get_bands(operator="sz",nk=100)
+(k,e,s) = h.get_bands(operator="sz",nk=100)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=s,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

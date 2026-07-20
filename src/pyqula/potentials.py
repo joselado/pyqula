@@ -165,13 +165,14 @@ def tbgAA(g):
 
 def interpolate2d(r,v):
     """Return a function that does 2d interpolation"""
-    from scipy.interpolate import interp2d
+    from scipy.interpolate import RegularGridInterpolator
     x,y = r[:,0],r[:,1] # data
     grid_x, grid_y = np.mgrid[np.min(x):np.max(x):100j,np.min(y):np.max(y):100j]
     from scipy.interpolate import griddata
     grid_z = griddata(r,v, (grid_x, grid_y), method='nearest')
-    f = interp2d(grid_x, grid_y, grid_z, kind='linear')
-    return lambda ri: f(ri[0],ri[1])
+    f = RegularGridInterpolator((grid_x[:,0],grid_y[0,:]),grid_z,
+            method="linear",bounds_error=False,fill_value=None)
+    return lambda ri: f([ri[0],ri[1]])
 
 
 

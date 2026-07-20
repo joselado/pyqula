@@ -19,7 +19,13 @@ def fsc(r):
 h.add_antiferromagnetism(faf)
 h.add_swave(fsc)
 #h.get_bands(operator="valley") # calculate band structure
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

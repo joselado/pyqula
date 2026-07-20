@@ -21,11 +21,21 @@ h1.add_haldane(0.1)
 h2.add_haldane(-0.1)
 
 # compute spectral function at the interface
-kdos.interface(h1,h2,
+data = kdos.interface(h1,h2,
                energies=np.linspace(-1.0,1.0,100), # energies
                nk=50, # number of kpoints
                delta=3e-2 # smearing
                )
+# columns are: k-index, energy, Bulk1, Surf1, Bulk2, Surf2, interface
+(ik,e,dinterface) = data[:,0],data[:,1],data[:,6]
+
+import matplotlib.pyplot as plt
+
+plt.scatter(ik,e,c=dinterface,cmap="inferno")
+plt.colorbar(label="Interface spectral weight")
+plt.xlabel("k-index")
+plt.ylabel("Energy")
+plt.show()
 
 
 

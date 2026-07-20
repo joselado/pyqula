@@ -11,5 +11,12 @@ h.add_onsite(lambda r: (r[1]>0)*0.3) # add chemical potential
 h.add_swave(lambda r: (r[1]<0)*0.3) # add superconductivity
 (k,e,sz) = h.get_bands(operator="sz") # calculate band structure
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=sz,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
+
 
 

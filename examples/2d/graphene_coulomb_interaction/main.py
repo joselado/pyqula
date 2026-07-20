@@ -29,8 +29,16 @@ def vfun(r):
 scf = scftypes.selfconsistency(h,nkp=10,filling=0.5,g=3.0,
                 mix=0.9,mf=mf,mode="fastCoulomb",vfun=vfun)
 h = scf.hamiltonian
-h.get_bands(operator="sz")
+(k,e,c) = h.get_bands(operator="sz")
 #print(h.extract("density"))
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="$S_z$")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

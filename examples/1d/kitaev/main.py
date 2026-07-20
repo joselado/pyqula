@@ -12,10 +12,16 @@ h.add_onsite(20) # make a large shift of the chemical potential
 h.add_zeeman([0.,0.,20]) # put a single band at the chemical potential
 # add spin triplet superconductivity with an in-plane dvector
 # (only the moduli is important)
-h.add_pairing(mode="pwave",delta=0.3,d=[1.0,0.,0.]) 
-h.get_bands() # get the band structure
+h.add_pairing(mode="pwave",delta=0.3,d=[1.0,0.,0.])
+(k,e) = h.get_bands() # get the band structure
 from pyqula.topology import berry_phase
 phi = berry_phase(h) # compute Berry phase
 print("Berry phase",phi)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 

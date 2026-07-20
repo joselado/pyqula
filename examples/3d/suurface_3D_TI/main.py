@@ -14,7 +14,15 @@ g = geometry.diamond_lattice_minimal()
 h = g.get_hamiltonian(has_spin=True)
 h.intra *= 1.3
 h.add_kane_mele(0.05)
-kdos.surface(h,operator=None)
+(k,e,dsurf,dbulk) = kdos.surface(h,operator=None)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=dsurf,cmap="inferno")
+plt.colorbar(label="Surface DOS")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

@@ -22,6 +22,16 @@ ops = [h.get_operator("sx"),h.get_operator("sy")]
 n = [1] # index of the band above the fermi energy you want
 spectrum.selected_bands2d(h,nindex=n,operator=ops,nsuper=1,nk=20)
 
+# selected_bands2d does not return arrays, it writes one file per band
+# with columns kx,ky,energy,<sx>,<sy>
+(kx,ky,e,sx,sy) = np.genfromtxt("BANDS2D__1.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.quiver(kx,ky,sx,sy)
+plt.xlabel("kx") ; plt.ylabel("ky")
+plt.show()
+
 
 
 

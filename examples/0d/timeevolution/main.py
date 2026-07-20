@@ -27,8 +27,22 @@ from pyqula import parallel
 parallel.cores = 5
 from pyqula import chi
 #chi.chargechi_reciprocal(h) ;  exit()
-timeevolution.evolve_local_state(h,i=0,ts=np.linspace(0.,100,100),
+ts = np.linspace(0.,100,100)
+timeevolution.evolve_local_state(h,i=0,ts=ts,
         mode="green")
+
+import matplotlib.pyplot as plt
+dmap = []
+for t in ts:
+    data = np.genfromtxt("MULTITIMEEVOLUTION/TIMEEVOLUTION_T_"+str(t)+"_.OUT")
+    dmap.append(data[:,2])
+dmap = np.array(dmap)
+x = data[:,0]
+plt.contourf(x,ts,dmap,levels=100)
+plt.colorbar(label="LDOS")
+plt.xlabel("x")
+plt.ylabel("time")
+plt.show()
 
 
 

@@ -14,12 +14,18 @@ g = specialgeometry.twisted_bilayer(20)
 #g = geometry.honeycomb_lattice()
 g.write()
 #g = geometry.read()
-from specialhopping import twisted,twisted_matrix
+from pyqula.specialhopping import twisted,twisted_matrix
 h = g.get_hamiltonian(is_sparse=True,has_spin=False,is_multicell=False,
      mgenerator=twisted_matrix(ti=0.4,lambi=7.0))
 from pyqula import kdos
-kdos.kdos_bands(h,ntries=1)
+(x,y,z) = kdos.kdos_bands(h,ntries=1)
 #h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=z,cmap="inferno")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

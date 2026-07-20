@@ -21,3 +21,15 @@ print("Energy of the impurity state",ei) # energy of the impurity state
 (x,y,d) = eb.ldos(nsuper=5,e=ei) # get data
 np.savetxt("LDOS.OUT",np.array([x,y,d]).T) # save data
 
+import matplotlib.pyplot as plt
+
+plt.subplot(1,2,1)
+plt.plot(es,ds)
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.subplot(1,2,2)
+plt.scatter(x,y,c=d,cmap="inferno")
+plt.colorbar(label="LDOS")
+plt.axis("equal")
+plt.show()
+

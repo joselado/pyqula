@@ -20,9 +20,18 @@ vintra = h.intra.copy() ; vintra[0,0] = 1000.0
 parallel.cores = 4
 energies = np.linspace(-1.5,1.5,50)
 delta = 1e-2 # smearing
-embedding.dos_impurity(h,vc=vintra,silent=False,energies=energies,
+(ds,dsv) = embedding.dos_impurity(h,vc=vintra,silent=False,energies=energies,
                       delta=delta,use_generator=False)
 # results are written in DOS_DEFECTIVE.OUT and DOS_PRISTINE.OUT
+
+import matplotlib.pyplot as plt
+
+plt.plot(energies,ds,label="Pristine")
+plt.plot(energies,dsv,label="Defective")
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.legend()
+plt.show()
 
 
 

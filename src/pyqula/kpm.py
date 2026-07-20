@@ -238,8 +238,9 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
 def pdos(m,P=None,**kwargs):
     """Compute the projected density of states, assuming the operator
     fufills P^2 = P"""
+    frand = kwargs.pop("frand",None) # caller-provided random vector generator
     from .randomtk import randomwf
-    fun0 = randomwf(m.shape[0]) # generator
+    fun0 = frand if frand is not None else randomwf(m.shape[0]) # generator
     if P is not None: # operator provided
         from .operators import Operator
         op = Operator(P).get_matrix() # redefine

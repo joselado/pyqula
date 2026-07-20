@@ -38,6 +38,14 @@ for U in Us:
     f.flush()
 f.close()
 
+(Usout,dsout) = np.genfromtxt("DELTA_VS_T_VS_MU.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.plot(Usout,dsout,marker="o")
+plt.xlabel("U") ; plt.ylabel("Delta")
+plt.show()
+
 
 
 

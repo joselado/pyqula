@@ -31,5 +31,14 @@ eb = embedding.embed_hamiltonian(h,selfenergy=selfe) # create embedding object
 # eb.H is the selfconsistent Hamiltonian object
 eb.get_kdos(delta=1e-2)
 
+data = np.genfromtxt("KDOS.OUT") # columns: ik, energy, DOS
+import matplotlib.pyplot as plt
+
+plt.scatter(data[:,0],data[:,1],c=data[:,2],cmap="inferno")
+plt.colorbar(label="DOS")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
+
 
 

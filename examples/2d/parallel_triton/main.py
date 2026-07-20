@@ -25,6 +25,13 @@ Us = np.linspace(0.,3.0,10) # 10 different calculations
 gs = parallelslurm.pcall(func_to_parallelize,Us,time=0.1) # compute for all the inputs
 np.savetxt("SWEEP.OUT",np.array([Us,gs]).T) # write in a file
 
+import matplotlib.pyplot as plt
+
+plt.plot(Us,gs,marker="o")
+plt.xlabel("U")
+plt.ylabel("Gap")
+plt.show()
+
 
 
 

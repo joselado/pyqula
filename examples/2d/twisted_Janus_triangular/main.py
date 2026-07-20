@@ -15,6 +15,13 @@ h.add_rashba(lambda r: 0.2*np.sign(r[2])) # stagger Rashba SOC
 Op = h.get_operator("zposition")*h.get_operator("sx") # layer times Sx
 (k,e,c) = h.get_bands(operator=Op) # compute band structure
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="layer x Sx")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
+
 
 
 

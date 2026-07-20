@@ -9,10 +9,12 @@ def get_operator(self,name,**kwargs):
       if type(name) is operators.Operator: return name # return operator
       if type(name) is Hamiltonian: # if input is an operator 
           return operators.Operator(name) # return operator
-      if type(name) is potentials.Potential or callable(name): 
+      if type(name) is potentials.Potential or callable(name):
           out = self.copy()*0. # initialize
           out.add_onsite(name) # add onsite
           return operators.Operator(out.intra,linear=True) # return operator
+      from . import algebra
+      if algebra.ismatrix(name): return operators.Operator(name) # raw matrix
       if name is None: return None # return operator
       if name=="None": return None
       elif name in ["berry","Berry"]: 

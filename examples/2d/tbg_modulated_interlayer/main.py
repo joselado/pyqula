@@ -11,6 +11,13 @@ h = specialhamiltonian.twisted_bilayer_graphene(n=4,ti=lambda r: 0.4) # TBG Hami
 h.set_filling(0.5,nk=1)
 (k,e) = h.get_bands(num_bands=10) # compute band structure
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
+
 
 
 

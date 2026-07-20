@@ -11,7 +11,15 @@ g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=True)
 h.add_zeeman([0.,0.,0.3])
 h.add_rashba(0.3)
-h.get_bands(operator='sz')
+(k,e,c) = h.get_bands(operator='sz')
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

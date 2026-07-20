@@ -12,7 +12,13 @@ from pyqula import dos
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=True)
 h.add_haldane(0.1)
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

@@ -21,3 +21,14 @@ h2 = g.get_hamiltonian()
 hscf2,e2 = h2.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro",
         nk=8,maxerror=1e-4,return_total_energy=True,integration="qtci")
 print("integration='qtci' total energy = ",e2)
+
+(k1,e1b) = hscf1.get_bands()
+(k2,e2b) = hscf2.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k1,e1b,label="ed")
+plt.scatter(k2,e2b,label="qtci")
+plt.legend()
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()

@@ -11,6 +11,13 @@ h.add_sublattice_imbalance(1.0) # add a sublattice imbalance
 h.add_soc(0.05) # add SOC
 (k,e,s) = h.get_bands(operator="sz") # band structure
 
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=s,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
+
 
 
 

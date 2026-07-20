@@ -8,13 +8,15 @@ import numpy as np
 from pyqula import geometry
 g = geometry.honeycomb_ribbon(50) # create a honeycomb ribbon
 
-for B in np.linspace(0.,0.02,100): # loop over magnetic field
+Bs = np.linspace(0.,0.02,100) # magnetic fields
+dmap = [] # storage for the plot
+for B in Bs: # loop over magnetic field
     h = g.get_hamiltonian() # create a new hamiltonian
     h.remove_spin()
     h.add_orbital_magnetic_field(B) # add an orbital magnetic field
     # calculate DOS projected on the bulk
     (e,d) = h.get_dos(operator="bulk",energies=np.linspace(-1.0,1.0,200),
-                       delta=1e-2,nk=3) 
+                       delta=1e-2,nk=3)
 
 
     print(B)
@@ -22,5 +24,14 @@ for B in np.linspace(0.,0.02,100): # loop over magnetic field
         fo.write(str(B)+" ")
         fo.write(str(ei)+" ")
         fo.write(str(di)+"\n")
+    dmap.append(d) # store the DOS
 
 fo.close()
+
+import matplotlib.pyplot as plt
+
+dmap = np.array(dmap)
+plt.contourf(Bs,e,dmap.T,levels=100,cmap="inferno")
+plt.colorbar(label="DOS")
+plt.xlabel("Magnetic field") ; plt.ylabel("Energy")
+plt.show()

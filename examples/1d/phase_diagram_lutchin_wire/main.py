@@ -24,6 +24,16 @@ def getz2(x1,x2):
 # now write the Phase diagram in a file
 phasediagram.diagram2d(getz2,x=np.linspace(-.0,0.3,30,endpoint=True),y=np.linspace(0.,4.,30,endpoint=True),nite=1)
 
+import matplotlib.pyplot as plt
+
+d = np.genfromtxt("PHASE_DIAGRAM.OUT")
+nx = len(np.unique(d[:,0])) ; ny = len(np.unique(d[:,1]))
+X = d[:,0].reshape(nx,ny) ; Y = d[:,1].reshape(nx,ny) ; Z = d[:,2].reshape(nx,ny)
+plt.contourf(X,Y,Z,levels=100,cmap="inferno")
+plt.colorbar(label="Z2")
+plt.xlabel("Pairing") ; plt.ylabel("Chemical potential")
+plt.show()
+
 
 
 

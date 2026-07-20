@@ -10,6 +10,7 @@ from pyqula import geometry
 from pyqula import topology
 import numpy as np
 mus = np.linspace(-0.7,0.7,40)
+sigmaxys = [] # store the Hall conductivity for each mu
 fo = open("HALL.OUT","w")
 for mu in mus:
   g = geometry.honeycomb_lattice()
@@ -19,8 +20,16 @@ for mu in mus:
   h.shift_fermi(mu)
   sigmaxy = topology.hall_conductivity(h,nk=20) # get
   print(mu,sigmaxy)
+  sigmaxys.append(sigmaxy)
   fo.write(str(mu)+"  "+str(sigmaxy)+"\n")
 fo.close()
+
+import matplotlib.pyplot as plt
+
+plt.plot(mus,sigmaxys,marker="o")
+plt.xlabel("Fermi energy")
+plt.ylabel("Hall conductivity")
+plt.show()
 
 
 

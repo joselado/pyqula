@@ -12,8 +12,22 @@ from pyqula import spectrum
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=True)
 h.add_onsite(0.6)
-h.get_bands()
-h.get_fermi_surface(nk=100,operator="valley",num_waves=10,mode="lowest")
+(k,e) = h.get_bands()
+nk = 100
+(kx,ky,fs) = h.get_fermi_surface(nk=nk,operator="valley",num_waves=10,mode="lowest")
+
+import matplotlib.pyplot as plt
+
+plt.figure()
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+
+plt.figure()
+plt.imshow(fs.reshape((nk,nk)),cmap="bwr")
+plt.xticks([]) ; plt.yticks([])
+plt.colorbar(label="Valley")
+plt.show()
 
 
 

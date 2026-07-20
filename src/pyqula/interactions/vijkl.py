@@ -15,7 +15,7 @@ def Vijkl(h,n=4,fv=None):
             if r2<0.1: return 0.0 # zero
             else: return 1./np.sqrt(r2) # coulomb
     vs = [[fv(r1-r2) for r1 in g.r] for r2 in g.r] # interaction
-    out = np.zeros((numw,numw,numw,numw),dtype=np.complex) # storage
+    out = np.zeros((numw,numw,numw,numw),dtype=np.complex128) # storage
     return get_vijkl_jit(ws,np.array(vs),out)
 
 

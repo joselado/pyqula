@@ -34,8 +34,17 @@ def get():
     return h.get_gap()
 
 
+gaps = []
 for i in range(3):
-    print(get())
+    g_ = get()
+    print(g_)
+    gaps.append(g_)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(range(len(gaps)),gaps)
+plt.xlabel("Trial") ; plt.ylabel("Gap")
+plt.show()
 
 
 

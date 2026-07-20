@@ -9,9 +9,13 @@ g = g.get_supercell([7,7]) # create a supercell
 h = g.get_hamiltonian() # get the Hamiltonian
 fmoire = potentials.commensurate_potential(g,n=3,minmax=[0,1]) # morie potential
 h.add_onsite(fmoire) # add onsite energy following the moire
-h.get_bands(operator=fmoire) # project on the moire
-
-
-
+(k,e,c) = h.get_bands(operator=fmoire) # project on the moire
 
 g.write_profile(fmoire)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="inferno")
+plt.colorbar(label="Moire potential")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()

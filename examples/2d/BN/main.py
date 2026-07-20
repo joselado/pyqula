@@ -10,7 +10,13 @@ from pyqula import geometry
 g = geometry.honeycomb_lattice() # create a honeycomb lattice
 h = g.get_hamiltonian() # get the Hamiltonian
 h.add_sublattice_imbalance(1.0) # add sublattice imbalance
-h.get_bands() # compute bands
+(k,e) = h.get_bands() # compute bands
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

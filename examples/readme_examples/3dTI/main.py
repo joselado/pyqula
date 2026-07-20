@@ -12,3 +12,10 @@ h = g.get_hamiltonian() # generate Hamiltonian
 h.add_strain(lambda r: 1.+abs(r[2])*0.8,mode="directional") # add axial strain
 h.add_kane_mele(0.1) # add intrinsic spin-orbit coupling
 (k,e,c) = h.get_bands(operator="surface") # compute band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="inferno")
+plt.colorbar(label="Surface weight")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()

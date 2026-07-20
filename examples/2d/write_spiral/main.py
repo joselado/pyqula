@@ -23,6 +23,17 @@ h.generate_spin_spiral(vector=vector,qspiral=q,fractional=True)
 #h = h.supercell(4)
 h.write_magnetization(nrep=1)
 
+import matplotlib.pyplot as plt
+
+m = np.genfromtxt("MAGNETISM.OUT").T
+x,y,mx,my,mz = m[0],m[1],m[3],m[4],m[5]
+
+plt.quiver(x,y,mx,my)
+plt.scatter(x,y,c=mz,cmap="bwr")
+plt.colorbar(label="Mz")
+plt.xlabel("x") ; plt.ylabel("y") ; plt.axis("equal")
+plt.show()
+
 
 
 

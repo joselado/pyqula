@@ -27,7 +27,13 @@ h.generate_spin_spiral(qspiral=[1./3.,1./3.,0.])
 #d = density.density(h,window=0.1,e=0.025)
 #h.shift_fermi(d)
 h.turn_sparse()
-h.get_bands(num_bands=20)
+(k,e) = h.get_bands(num_bands=20)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

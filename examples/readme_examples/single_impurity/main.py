@@ -16,6 +16,14 @@ eb = embedding.Embedding(h,m=hv) # create an embedding object
 
 np.savetxt("LDOS.OUT",np.array([x,y,d]).T)
 
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=d,cmap="inferno")
+plt.colorbar(label="LDOS")
+plt.axis("equal")
+plt.xlabel("x") ; plt.ylabel("y")
+plt.show()
+
 
 
 

@@ -23,10 +23,18 @@ mf = meanfield.guess(h,"kekule")
 scf = meanfield.Vinteraction(h,V1=6.0,mf=mf,
         V2=4.0,nk=nk,filling=filling,mix=0.3)
 h = scf.hamiltonian # get the Hamiltonian
-h.get_bands(operator="valley") # calculate band structure
+(k,e,c) = h.get_bands(operator="valley") # calculate band structure
 from pyqula import groundstate
 groundstate.hopping(h,nrep=3) # write three replicas
 h.write_onsite(nrep=3) # write three replicas
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="valley")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 #spectrum.fermi_surface(h)
 
 

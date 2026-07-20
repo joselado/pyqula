@@ -38,6 +38,15 @@ eb = eb.get_mean_field_hamiltonian(U=1.0,verbose=1,
 # eb.H is the selfconsistent Hamiltonian object
 eb.H.write_magnetization() # get the magnetization in each site
 
+m = np.genfromtxt("MAGNETISM.OUT").T
+x,y,mx,my,mz = m[0],m[1],m[3],m[4],m[5]
+import matplotlib.pyplot as plt
+
+plt.quiver(x,y,mx,my)
+plt.scatter(x,y,c=mz,cmap="bwr")
+plt.axis("equal")
+plt.show()
+
 
 
 

@@ -25,6 +25,14 @@ h.add_peierls(0.02)
 indexes = sculpt.common(g,gc)
 pseudocontact.write_correlator(h,index=indexes,e=0.4)
 
+import matplotlib.pyplot as plt
+data = np.genfromtxt("CORRELATOR.OUT")
+plt.scatter(data[:,0],data[:,1],c=data[:,2])
+plt.colorbar(label="Correlator")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
+
 
 
 

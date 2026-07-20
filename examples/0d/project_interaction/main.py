@@ -17,8 +17,18 @@ def get(n):
   m = h.project_interactions(n=4)
   return np.mean(np.abs(m))
 
-for n in range(2,8):
-    print(get(n))
+ns = list(range(2,8))
+ys = []
+for n in ns:
+    y = get(n)
+    print(y)
+    ys.append(y)
+
+import matplotlib.pyplot as plt
+plt.plot(ns,ys,marker="o")
+plt.xlabel("n")
+plt.ylabel("Mean |projected interaction|")
+plt.show()
 
 
 

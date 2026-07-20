@@ -11,5 +11,12 @@ h = g.get_hamiltonian() # get the Hamiltonian
 fons = lambda r: (np.sum((r - g.r[0])**2)<1e-2)*100 # onsite in the impurity
 h.add_onsite(fons) # add onsite energy
 kpath = np.array(g.get_kpath(nk=200))*n # enlarged k-path
-h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded bands
+(x,y,z) = h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded bands
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=z,cmap="inferno")
+plt.colorbar(label="Spectral function")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 

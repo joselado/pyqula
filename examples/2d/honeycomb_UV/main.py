@@ -20,7 +20,13 @@ mf = meanfield.guess(h,"random")
 scf = meanfield.Vinteraction(h,U=0.0,V1=4.0,nk=nk,filling=filling,mf=mf)
 from pyqula import scftypes
 print("Symmetry breaking",scf.identify_symmetry_breaking()) 
-scf.hamiltonian.get_bands() # get the Hamiltonian
+(k,e) = scf.hamiltonian.get_bands() # get the Hamiltonian
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

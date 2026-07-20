@@ -88,3 +88,22 @@ h0 = honeycomb_v1_guess()
 hed_v, hkpm_v = run_case("V1", honeycomb, V1=1.0, mf=h0, filling=0.25)
 print("[2d:V1] ED  charge disproportion  =", np.std(hed_v.get_vev()))
 print("[2d:V1] KPM charge disproportion =", np.std(hkpm_v.get_vev()))
+
+import matplotlib.pyplot as plt
+
+(k1,e1) = hed_u.get_bands() ; (k2,e2) = hkpm_u.get_bands()
+plt.subplot(1,2,1)
+plt.scatter(k1,e1,label="ED")
+plt.scatter(k2,e2,label="KPM")
+plt.legend()
+plt.title("U")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+
+(k3,e3) = hed_v.get_bands() ; (k4,e4) = hkpm_v.get_bands()
+plt.subplot(1,2,2)
+plt.scatter(k3,e3,label="ED")
+plt.scatter(k4,e4,label="KPM")
+plt.legend()
+plt.title("V1")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()

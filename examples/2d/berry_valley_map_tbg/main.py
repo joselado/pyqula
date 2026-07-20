@@ -20,8 +20,18 @@ op = h.get_operator("valley",projector=True) # valley operator
 #h.get_bands(num_bands=30,operator="valley")
 #exit()
 #exit()
-topology.berry_green_map(h,k=[0.0,0.0,0.0],nrep=5,
+topology.Omega_rmap(h,k=[0.0,0.0,0.0],nrep=5,
         integral=False,operator=op,emin=-0.1)
+
+(x,y,d,z) = np.genfromtxt("BERRY_RMAP.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=d,cmap="bwr")
+plt.colorbar(label="Valley Berry density")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
 
 
 

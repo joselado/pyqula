@@ -12,7 +12,19 @@ h.add_onsite(20) # make a large shift of the chemical potential
 h.add_zeeman([0.,0.,20]) # put a single band at the chemical potential
 # add spin triplet superconductivity with an in-plane dvector
 # (only the moduli is important)
-h.add_pairing(mode="pwave",delta=0.3,d=[1.0,0.,0.]) 
-h.get_bands() # get the band structure
+h.add_pairing(mode="pwave",delta=0.3,d=[1.0,0.,0.])
+(k,e) = h.get_bands() # get the band structure
 from pyqula.kdos import surface
-surface(h)
+(ks,es,ds,db) = surface(h)
+
+import matplotlib.pyplot as plt
+
+plt.subplot(121)
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.subplot(122)
+plt.plot(es,ds,label="Surface")
+plt.plot(es,db,label="Bulk")
+plt.xlabel("Energy") ; plt.ylabel("DOS")
+plt.legend()
+plt.show()

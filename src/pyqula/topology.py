@@ -599,8 +599,8 @@ def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
   out = parallel.pcall(fp,ks) # compute everything
   for o in out: cs += o # add contributions
   cs = cs/(len(ks)*np.pi*2) # normalize
-  from scipy.integrate import cumtrapz
-  csi = cumtrapz(cs,x=es,initial=0) # integrate
+  from scipy.integrate import cumulative_trapezoid
+  csi = cumulative_trapezoid(cs,x=es,initial=0) # integrate
   if write:
       np.savetxt("CHERN_DENSITY.OUT",np.matrix([es,cs]).T)
       np.savetxt("CHERN_DENSITY_INTEGRATED.OUT",np.matrix([es,csi]).T)

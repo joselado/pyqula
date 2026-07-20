@@ -43,12 +43,14 @@ def boundary2d(getquantity,xlim=[0.,1.],
 def selected_interpolation(fin,mx,my,mz,nite=3):
   """Call in a function in a mesh which is two nite times finer, but only
   in those points that are expected to change, in the others interpolate"""
-  if nite<1.01: return mx,my,mz 
-  f = interpolate.interp2d(mx[:,0], my[0,:], mz, kind='linear') # interpolation
+  if nite<1.01: return mx,my,mz
+  f = interpolate.RegularGridInterpolator((mx[:,0], my[0,:]), mz,
+          method="linear",bounds_error=False,fill_value=None) # interpolation
   x = np.linspace(np.min(mx),np.max(mx),len(mx)*2) # twice as big
   y = np.linspace(np.min(my),np.max(my),len(my)*2) # twice as big
   mx2, my2 = np.meshgrid(x, y) # new grid
-  mz2 = f(x,y) # interpolate
+  pts = np.array([mx2.ravel(),my2.ravel()]).T
+  mz2 = f(pts).reshape(mx2.shape) # interpolate
   mz2 = mz2.transpose()
   dmz = np.gradient(mz2) # gradient
   dmz = dmz[0]*dmz[0] + dmz[1]*dmz[1] # norm of the derivative

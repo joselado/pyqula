@@ -14,7 +14,14 @@ h.turn_dense()
 g.center() # center the geometry
 g.write()
 ms = [-ri for ri in g.r] # magnetizations
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

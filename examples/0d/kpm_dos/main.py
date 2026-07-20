@@ -15,3 +15,9 @@ h = g.get_hamiltonian(is_sparse=True,has_spin=False) # in sparse mode
             ntries=10 # number of vectors for stochastic trace
             )
 
+import matplotlib.pyplot as plt
+plt.plot(x,y)
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.show()
+

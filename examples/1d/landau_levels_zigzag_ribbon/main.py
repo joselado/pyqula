@@ -12,7 +12,13 @@ g = geometry.honeycomb_zigzag_ribbon(20) # create geometry of a zigzag ribbon
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.remove_spin() # remove spin degree of freedom
 h.add_peierls(.03) # add the magnetic field
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

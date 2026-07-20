@@ -17,9 +17,11 @@ h2.add_exchange([0.,0.,.3]) # add exchange in the second lead
 h2.add_rashba(.3) # add Rashba SOC in the second lead
 h2.add_swave(.05) # add s-wave SC in the second lead
 es = np.linspace(-.1,.1,100) # grid of energies
-for T in np.linspace(1e-3,0.5,10): # loop over transparencies
+Ts = np.linspace(1e-3,0.5,10) # transparencies
+Gmap = [] # storage for the plot
+for T in Ts: # loop over transparencies
     HT = heterostructures.build(h1,h2) # create the junction
-    HT.set_coupling(T) # set the coupling between the leads 
+    HT.set_coupling(T) # set the coupling between the leads
     Gs = [HT.didv(energy=e) for e in es] # calculate transmission
 
 
@@ -28,5 +30,14 @@ for T in np.linspace(1e-3,0.5,10): # loop over transparencies
         fo.write(str(T)+" ")
         fo.write(str(ei)+" ")
         fo.write(str(gi/Gs[0])+"\n")
+    Gmap.append([gi/Gs[0] for gi in Gs]) # store the normalized conductance
 
 fo.close()
+
+import matplotlib.pyplot as plt
+
+Gmap = np.array(Gmap)
+plt.contourf(Ts,es,Gmap.T,levels=100,cmap="inferno")
+plt.colorbar(label="dI/dV")
+plt.xlabel("Transparency") ; plt.ylabel("Energy")
+plt.show()

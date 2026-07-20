@@ -33,6 +33,15 @@ h.get_qpi(delta=1e-2,mode="pm",operator=op,info=True,nsuper=2,nk=140,
 #h.get_multi_fermi_surface(delta=1e-1,operator=op,nsuper=2,nk=30,
 #energies = np.linspace(-2.0,2.0,300))
 
+# get_qpi does not return arrays, it writes DOS.OUT (among other files)
+(es,dosa) = np.genfromtxt("DOS.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.plot(es,dosa)
+plt.xlabel("Energy") ; plt.ylabel("DOS")
+plt.show()
+
 
 
 

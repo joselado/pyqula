@@ -24,11 +24,21 @@ def get_energies(omega):
     return h.get_bands()[1]
 
 fo = open("HOFSTADTER.OUT","w")
+omegas_plot,es_plot = [],[]
 for omega in np.linspace(0.,1.,100):
     es = get_energies(omega)
-    for e in es: fo.write(str(omega)+"  "+str(e)+"\n")
+    for e in es:
+        fo.write(str(omega)+"  "+str(e)+"\n")
+        omegas_plot.append(omega)
+        es_plot.append(e)
 
 fo.close()
+
+import matplotlib.pyplot as plt
+plt.scatter(omegas_plot,es_plot,s=1)
+plt.xlabel("omega")
+plt.ylabel("Energy")
+plt.show()
 
 
 

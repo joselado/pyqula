@@ -12,7 +12,13 @@ fs = radial_vector_decay(v0=5.0,voo=1.0,rl=9.0,mode="exp")
 h.add_strain(fs,mode="non_uniform")
 #h.geometry.write_profile(f)
 h.write_hopping()
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

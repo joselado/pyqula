@@ -12,7 +12,13 @@ from pyqula import specialhamiltonian
 g = geometry.honeycomb_lattice()
 h = specialhamiltonian.flux2d(g,n=80)
 h.geometry.write()
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

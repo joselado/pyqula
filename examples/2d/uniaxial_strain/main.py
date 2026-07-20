@@ -17,7 +17,15 @@ def strain_direction(dr):
     else: return 1.0 # if it is onsite
 h.add_strain(strain_direction,mode="directional")
 h.write_hopping()
-h.get_fermi_surface(e=0.5)
+nk = 50
+(kx,ky,fs) = h.get_fermi_surface(e=0.5,nk=nk)
+
+import matplotlib.pyplot as plt
+
+plt.imshow(fs.reshape((nk,nk)))
+plt.xticks([]) ; plt.yticks([])
+plt.colorbar(label="Fermi surface weight")
+plt.show()
 
 
 

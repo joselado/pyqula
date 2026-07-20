@@ -18,6 +18,15 @@ from pyqula import parallel
 eb = embedding.Embedding(h,m=vintra)
 eb.multildos(nsuper=7,es=np.linspace(-2.,2.,100),delta=1e-1)
 
+(es,ds) = np.loadtxt("MULTILDOS/DOS.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.plot(es,ds)
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.show()
+
 
 
 

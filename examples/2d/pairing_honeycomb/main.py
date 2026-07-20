@@ -19,8 +19,14 @@ h = scf.hamiltonian
 print("Delta",h.extract("swave"))
 print("Onsite",h.extract("density"))
 h.write_swave()
-h.get_bands()
+(k,e) = h.get_bands()
 #scf.hamiltonian.get_bands(operator="electron")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

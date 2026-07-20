@@ -28,6 +28,17 @@ h = scf.hamiltonian
 h.write_swave()
 #h.write_swave()
 #scf.hamiltonian.get_bands(operator="electron")
+# write_swave does not return arrays, it writes AMPLITUDE_SWAVE.OUT (x,y,z,amplitude)
+m = np.genfromtxt("AMPLITUDE_SWAVE.OUT").T
+x,y,amplitude = m[0],m[1],m[3]
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=amplitude,cmap="inferno")
+plt.colorbar(label="|swave order parameter|")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
 
 
 

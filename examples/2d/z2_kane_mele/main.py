@@ -13,7 +13,13 @@ h = g.get_hamiltonian()
 h.add_kane_mele(0.05)
 parity = topology.z2_invariant(h)
 print("Z2 is ",parity)
-h.get_bands()
+(k,e) = h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

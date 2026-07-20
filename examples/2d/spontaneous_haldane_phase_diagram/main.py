@@ -36,6 +36,18 @@ for V1 in V1s:
        f.flush()
 f.close()
 
+import matplotlib.pyplot as plt
+
+data = np.genfromtxt("MAP.OUT").T
+V1g = data[0].reshape(len(V1s),len(V2s))
+V2g = data[1].reshape(len(V1s),len(V2s))
+gapg = data[2].reshape(len(V1s),len(V2s))
+
+plt.contourf(V1g,V2g,gapg,levels=50,cmap="inferno")
+plt.colorbar(label="Gap")
+plt.xlabel("V1") ; plt.ylabel("V2")
+plt.show()
+
 
 
 

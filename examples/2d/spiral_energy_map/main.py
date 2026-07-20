@@ -20,7 +20,7 @@ mf = scftypes.guess(h0,"ferro",fun=[1.,0.,0.]) # in-plane guess
 scf = scftypes.selfconsistency(h0,filling=0.5,nkp=20,g=10.0,
            mf=mf,mix=0.8,maxerror=1e-6)
 hscf = scf.hamiltonian # save the selfconsistent Hamiltonian
-hscf.get_bands(operator="sz") # compute the SCF bandstructure
+(kscf,escf,sscf) = hscf.get_bands(operator="sz") # compute the SCF bandstructure
 #########################
 
 # Now compute energies for different rotations
@@ -47,6 +47,25 @@ for qx in qs: # loop over qx
     print("Doing",qx,qy,e1)
     fo.flush() # save result
 fo.close()
+
+import matplotlib.pyplot as plt
+
+plt.subplot(1,2,1)
+plt.scatter(kscf,escf,c=sscf,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+
+data = np.genfromtxt("STIFFNESS.OUT").T
+qxg = data[0].reshape(len(qs),len(qs))
+qyg = data[1].reshape(len(qs),len(qs))
+eg = data[2].reshape(len(qs),len(qs))
+
+plt.subplot(1,2,2)
+plt.contourf(qxg,qyg,eg,levels=50,cmap="inferno")
+plt.colorbar(label="Energy")
+plt.xlabel("qx") ; plt.ylabel("qy")
+
+plt.show()
 
 
 

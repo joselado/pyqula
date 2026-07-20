@@ -35,13 +35,20 @@ def get():
     du = du/np.sqrt(du.dot(du)) # normalize
     print("Output non-unitarity",np.round(du,3))
 #    print(np.round(h.get_hk_gen()([.25,0.,0.]),2))
-    h.get_bands()
-    
+    (k,e) = h.get_bands()
+    return k,e
+
 
 for i in range(1):
     print()
     print("Trial")
-    get()
+    (k,e) = get()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

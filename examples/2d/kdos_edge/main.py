@@ -10,7 +10,15 @@ from pyqula import kdos
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian()
 h.add_haldane(0.05)
-kdos.surface(h)
+(k,e,ds,db) = kdos.surface(h)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=ds,cmap="inferno")
+plt.colorbar(label="Surface DOS")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

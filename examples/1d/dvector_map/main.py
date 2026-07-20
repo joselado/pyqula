@@ -20,10 +20,27 @@ print("Triplet",scf.order_parameter("odd_SC"))
 print("Singlet",scf.order_parameter("even_SC"))
 print("Average non-unitarity of the d-vector",sum(scf.hamiltonian.get_average_dvector(non_unitarity=True)))
 from pyqula import scftypes
-print("Symmetry breaking",scf.identify_symmetry_breaking()) 
-scf.hamiltonian.get_bands(operator="electron") # get the Hamiltonian
+print("Symmetry breaking",scf.identify_symmetry_breaking())
+(k,e,c) = scf.hamiltonian.get_bands(operator="electron") # get the Hamiltonian
 from pyqula.sctk.dvector import dvector_non_unitarity_map
 dvector_non_unitarity_map(scf.hamiltonian)
+
+import matplotlib.pyplot as plt
+
+plt.subplot(121)
+plt.scatter(k,e,c=c,cmap="rainbow")
+plt.colorbar(label="electron")
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+
+plt.subplot(122)
+dm = np.genfromtxt("NON_UNITARITY_MAP.OUT").T
+x,dx,dy,dz = dm[0],dm[3],dm[4],dm[5]
+plt.plot(x,dx,label="dx")
+plt.plot(x,dy,label="dy")
+plt.plot(x,dz,label="dz")
+plt.xlabel("x") ; plt.ylabel("Non-unitarity")
+plt.legend()
+plt.show()
 
 
 

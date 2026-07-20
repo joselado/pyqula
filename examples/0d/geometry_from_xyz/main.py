@@ -22,8 +22,23 @@ def fun(r1,r2):
 h = g.get_hamiltonian(tij=fun,has_spin=False)
 h.set_filling(0.5) # set half filling in zero
 g.write() # write the geometry just to check
-h.get_bands() # compute electronic structure
+(k,e) = h.get_bands() # compute electronic structure
+es = np.linspace(-0.5,0.5,100)
 h.get_multildos(projection="atomic",delta=1e-2,
-                   es=np.linspace(-0.5,0.5,100)) # compute the LDOS using atomic orbitals
+                   es=es) # compute the LDOS using atomic orbitals
+
+import matplotlib.pyplot as plt
+plt.subplot(1,2,1)
+plt.scatter(k,e)
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.subplot(1,2,2)
+e0 = es[len(es)//2]
+data = np.genfromtxt("MULTILDOS/LDOS_"+str(e0)+"_.OUT")
+plt.scatter(data[:,0],data[:,1],c=data[:,2])
+plt.colorbar(label="LDOS")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
 
 

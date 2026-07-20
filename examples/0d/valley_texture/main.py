@@ -29,6 +29,13 @@ ys = spectrum.real_space_vev(h,operator=fv)
 
 np.savetxt("EV.OUT",np.array([g.x,g.y,ys]).T)
 
+import matplotlib.pyplot as plt
+plt.scatter(g.x,g.y,c=ys)
+plt.colorbar(label="Valley expectation value")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
+
 
 
 

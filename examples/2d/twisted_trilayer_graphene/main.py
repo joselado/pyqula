@@ -16,7 +16,13 @@ from pyqula.specialhopping import twisted_matrix
 h = g.get_hamiltonian(is_sparse=True,has_spin=False,is_multicell=False,
      mgenerator=twisted_matrix(ti=0.4,lambi=7.0))
 #def ff(r): return 0.05*r[2]
-h.get_bands(num_bands=40)
+(k,e) = h.get_bands(num_bands=40)
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

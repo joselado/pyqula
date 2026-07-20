@@ -16,6 +16,7 @@ h0 = g.get_hamiltonian() # create hamiltonian of the system
 
 
 fo = open("STIFFNESS.OUT","w") # open file
+angles,energies = [],[] # store the swept results
 for a in np.linspace(0.,1.0,100): # loop over angles, in units of 2pi
   h = h0.copy()
   h.generate_spin_spiral(vector=[0.,0.,1.],qspiral=[a,0.,0.])
@@ -23,7 +24,15 @@ for a in np.linspace(0.,1.0,100): # loop over angles, in units of 2pi
   e = h.get_total_energy(nk=10)
   fo.write(str(a)+"    "+str(e)+"\n") # write
   print(a,e)
+  angles.append(a)
+  energies.append(e)
 fo.close()
+
+import matplotlib.pyplot as plt
+
+plt.plot(angles,energies,marker="o")
+plt.xlabel("Spiral angle [2$\\pi$]") ; plt.ylabel("Total energy")
+plt.show()
 
 
 

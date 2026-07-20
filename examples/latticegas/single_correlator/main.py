@@ -19,6 +19,15 @@ lg = latticegas.LatticeGas(g,filling=1./3.)
 (rs,cs) = lg.get_correlator()
 print(cs)
 lg.den = 1. - lg.den
-(rs,cs) = lg.get_correlator()
-print(cs)
+(rs2,cs2) = lg.get_correlator()
+print(cs2)
+
+import matplotlib.pyplot as plt
+
+plt.plot(rs,cs,marker="o",label="den")
+plt.plot(rs2,cs2,marker="o",label="1-den")
+plt.xlabel("Distance")
+plt.ylabel("Correlator")
+plt.legend()
+plt.show()
 

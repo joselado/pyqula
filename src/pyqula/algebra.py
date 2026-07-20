@@ -50,8 +50,6 @@ def trace(m):
 def densebmat(m):
     """Turn a block matrix dense"""
     ms = [[todense(mi) for mi in mij] for mij in m]
-    for mij in m:
-        for mi in mij: print(mi.shape)
     return todense(block_array(ms)) # return block matrix
 
 def direct_sum(ms):

@@ -381,9 +381,12 @@ def set_xy_plane(g):
   Rt = np.matrix([[ct,0,st],[0.,1.,0],[-st,0,ct]]) # rotate along y
   Rp = np.matrix([[cp,-sp,0.],[sp,cp,0],[0.,0.,1.]]) # rotate along z
   R = Rp@Rt # transforms (0,0,1) to nv
-  U = algebra.inv(R) # inverse transformation
+  # algebra.inv always returns a complex128 array; this is a rotation of
+  # real vectors, so cast back to real to avoid leaking complex dtype
+  # into the geometry (breaks numba-jitted real-valued code downstream)
+  U = np.array(algebra.inv(R)).real # inverse transformation
   # now transform everything
-  def transform(r): return U@r
+  def transform(r): return np.array(U@r).flatten()
   go.a1 = transform(g.a1)
   go.a2 = transform(g.a2)
   go.a3 = transform(g.a3)

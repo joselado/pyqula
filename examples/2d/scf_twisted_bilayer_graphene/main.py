@@ -12,7 +12,6 @@ from pyqula import hamiltonians
 from pyqula import klist
 from pyqula import sculpt
 from pyqula import specialgeometry
-from pyqula import scftypes
 g = specialgeometry.twisted_bilayer(8)
 #g = geometry.honeycomb_lattice()
 g.write()
@@ -32,14 +31,20 @@ h.add_kane_mele(0.03)
 #exit()
 from pyqula import meanfield
 mf = meanfield.guess(h,"antiferro",0.1)
-g = 2.0
+U = 2.0
 filling = 0.5 + 1./h.intra.shape[0] # plus two electrons
 nk = 1
-scf = scftypes.hubbardscf(h,nkp=nk,filling=filling,g=g,
+scf = meanfield.hubbardscf(h,nk=nk,filling=filling,U=U,
                 mix=0.9,mf=mf,maxite=1)
-#scf1 = scftypes.selfconsistency(h,nkp=nk,filling=0.5,g=g,
-#                mix=0.9,mf=mf)
-scf.hamiltonian.get_bands(num_bands=40,operator="sz")
+(k,e,c) = scf.hamiltonian.get_bands(num_bands=40,operator="sz")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 #print(scf.total_energy-scf1.total_energy)
 
 

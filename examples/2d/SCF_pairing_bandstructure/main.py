@@ -29,7 +29,13 @@ h0.add_swave(0.0) # restore Nambu basis
 print("SCF symmetry breaking",scf.identify_symmetry_breaking())
 
 ha = hscf-h0 # this yields a Hamiltonian only with anomalous term
-ha.get_bands() # band structure of only the anomalous term
+(k,e) = ha.get_bands() # band structure of only the anomalous term
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

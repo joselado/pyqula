@@ -25,4 +25,9 @@ HT = heterostructures.build(h1,h2,central=central) # create the junction
 from pyqula import parallel
 #parallel.cores = 4
 #HT.get_kdos(delta=3e-1,ic=10)
-HT.get_ldos(energy=0.,delta=3e-1)
+(x,y,ldos) = HT.get_ldos(energy=0.,delta=3e-1)
+
+plt.scatter(x,y,c=ldos,cmap="inferno")
+plt.colorbar(label="LDOS")
+plt.axis("equal")
+plt.show()

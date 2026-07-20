@@ -17,7 +17,7 @@ def fm(r):
 h.add_haldane(fm)
 h.add_swave(0.02)
 from pyqula import parallel
-topology.berry_green_map(h,
+topology.Omega_rmap(h,
         energy = 0.5,
         k=[0.,0.,0.0],# do it just at the Gamma point
         nrep=3, # how many supercells to print
@@ -26,7 +26,16 @@ topology.berry_green_map(h,
         delta=1e-2 # analytic continuation
         )
 
-# the result is print to BERRY_MAP.OUT
+# the result is print to BERRY_RMAP.OUT
+(x,y,d,z) = np.genfromtxt("BERRY_RMAP.OUT").T
+
+import matplotlib.pyplot as plt
+
+plt.scatter(x,y,c=d,cmap="bwr")
+plt.colorbar(label="Berry density")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
 
 
 

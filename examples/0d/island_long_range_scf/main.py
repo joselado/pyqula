@@ -20,6 +20,15 @@ scf.hamiltonian.write_hopping(spin_imbalance=True)
 scf.hamiltonian.write_magnetization()
 #scf.hamiltonian.get_bands()
 
+mag = scf.hamiltonian.get_magnetization()
+
+import matplotlib.pyplot as plt
+plt.scatter(g.x,g.y,c=mag[:,2])
+plt.colorbar(label="$m_z$")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.show()
+
 
 
 

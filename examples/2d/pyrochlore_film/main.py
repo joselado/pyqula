@@ -16,7 +16,15 @@ g = films.geometry_film(g,nz=10)
 h = g.get_hamiltonian()
 h.add_kane_mele(0.1)
 h.turn_dense()
-h.get_bands(operator="zposition")
+(k,e,c) = h.get_bands(operator="zposition")
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="viridis")
+plt.colorbar(label="z position")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

@@ -23,10 +23,18 @@ mf = None
 scf = meanfield.Vinteraction(h,V1=1.0,V2=1.0,nk=nk,filling=filling,
         mf=mf,mix=0.2)
 h = scf.hamiltonian # get the Hamiltonian
-h.get_bands(operator="sz") # calculate band structure
+(k,e,c) = h.get_bands(operator="sz") # calculate band structure
 groundstate.hopping(h)
 topology.write_berry(h)
 h.write_onsite()
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Sz")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 

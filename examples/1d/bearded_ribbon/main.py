@@ -11,7 +11,13 @@ ze = np.max(g.r[:,1]) ; g = g.remove(lambda r: abs(r[1]-ze)<1e-3)
 ze = np.min(g.r[:,1]) ; g = g.remove(lambda r: abs(r[1]-ze)<1e-3)
 g.write(nrep=10) # write geometry
 h = g.get_hamiltonian() # create hamiltonian of the system
-h.get_bands() # get bands
+(k,e) = h.get_bands() # get bands
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

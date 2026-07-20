@@ -56,6 +56,13 @@ if __name__=="__main__":
     ds = [f(e) for e in es]
     np.savetxt("DOS.OUT",np.array([es,ds]).T)
 
+    import matplotlib.pyplot as plt
+
+    plt.plot(es,ds)
+    plt.xlabel("Energy")
+    plt.ylabel("DOS")
+    plt.show()
+
 
 
 

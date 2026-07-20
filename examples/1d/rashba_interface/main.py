@@ -14,7 +14,13 @@ def fr(r):
     if r[1]<0.0:  return 0.3
     else: return -0.3
 h.add_rashba(fr)
-h.get_bands() # calculate band structure
+(k,e) = h.get_bands() # calculate band structure
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e)
+plt.xlabel("k-path") ; plt.ylabel("Energy")
+plt.show()
 
 
 

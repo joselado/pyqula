@@ -11,8 +11,17 @@ from pyqula import dos
 g = geometry.diamond_lattice_minimal()
 h = g.get_hamiltonian()
 #h.add_antiferromagnetism(1.)
-dos.bulkandsurface(h,nk=300,delta=0.01)
+(energies,dosbulk,dossurf) = dos.bulkandsurface(h,nk=300,delta=0.01)
 #h.get_bands()
+
+import matplotlib.pyplot as plt
+
+plt.plot(energies,dosbulk,label="Bulk")
+plt.plot(energies,dossurf,label="Surface")
+plt.xlabel("Energy")
+plt.ylabel("DOS")
+plt.legend()
+plt.show()
 
 
 

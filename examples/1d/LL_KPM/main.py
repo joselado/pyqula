@@ -42,8 +42,10 @@ bs = np.linspace(0.0,0.1,30) # magnetic fields
 
 fo = open("DOS_VS_FIELD.OUT","w") # output file
 
+dmap = [] # DOS profile for each field
 for b in bs: # loop over magnetic fields
   (xs,ys) = getdos(b=b)
+  dmap.append(ys)
   for (x,y) in zip(xs,ys):
     fo.write(str(b)+"  ")
     fo.write(str(x)+"  ")
@@ -51,6 +53,14 @@ for b in bs: # loop over magnetic fields
   fo.flush()
 
 fo.close()
+dmap = np.array(dmap)
+
+import matplotlib.pyplot as plt
+
+plt.contourf(bs,xs,dmap.T,levels=100,cmap="inferno")
+plt.colorbar(label="DOS")
+plt.xlabel("Magnetic field") ; plt.ylabel("Energy")
+plt.show()
 
 
 

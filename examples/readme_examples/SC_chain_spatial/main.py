@@ -16,6 +16,7 @@ h.add_exchange([0.,0.,0.15]) # add exchange coupling
 h.add_swave(.1) # add s-wave superconductivity
 energies = np.linspace(-.15,.15,200) # set of energies
 
+xs,dmap = [],[] # storage for the plot
 for ri in g.r: # loop over exchange couplings
     edge = h.get_operator("location",r=ri) # projector on that site
     (e0,d0) = h.get_dos(operator=edge,energies=energies,delta=2e-3) # local DOS
@@ -25,6 +26,16 @@ for ri in g.r: # loop over exchange couplings
         fo0.write(str(ri[0])+" ")
         fo0.write(str(ei/0.1)+" ")
         fo0.write(str(di)+"\n")
+    xs.append(ri[0]) # store the position
+    dmap.append(d0) # store the local DOS
+
+import matplotlib.pyplot as plt
+
+dmap = np.array(dmap)
+plt.contourf(xs,energies/0.1,dmap.T,levels=100,cmap="inferno")
+plt.colorbar(label="LDOS")
+plt.xlabel("Position") ; plt.ylabel("Energy")
+plt.show()
 
 
 

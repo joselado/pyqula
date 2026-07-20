@@ -20,8 +20,16 @@ mf = meanfield.guess(h,"random")
 scf = meanfield.Vinteraction(h,U=-3.0,V1=0.0,nk=nk,filling=filling,mf=mf,
         verbose=1) # perform the SCF calculation
 from pyqula import scftypes
-print("Symmetry breaking",scf.identify_symmetry_breaking()) 
-scf.hamiltonian.get_bands(operator="electron",nk=2000) # get the Hamiltonian
+print("Symmetry breaking",scf.identify_symmetry_breaking())
+(k,e,c) = scf.hamiltonian.get_bands(operator="electron",nk=2000) # get the Hamiltonian
+
+import matplotlib.pyplot as plt
+
+plt.scatter(k,e,c=c,cmap="bwr")
+plt.colorbar(label="Electron character")
+plt.xlabel("k-path")
+plt.ylabel("Energy")
+plt.show()
 
 
 
