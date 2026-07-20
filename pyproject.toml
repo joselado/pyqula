@@ -1,9 +1,69 @@
 [build-system]
 requires = [
-    "setuptools>=42",
+    "setuptools>=68",
     "wheel"
 ]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyqula"
+dynamic = ["version"]
+description = "Python library to compute quantum tight-binding models on lattices"
+readme = "README.md"
+license = {file = "LICENSE.md"}
+authors = [
+    {name = "Jose Lado", email = "joselado@aalto.fi"},
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "numba>=0.60.0",
+    "multiprocess",
+    "dill",
+    "threadpoolctl",
+]
+
+[project.urls]
+Homepage = "https://github.com/joselado/pyqula"
+Repository = "https://github.com/joselado/pyqula"
+"Bug Tracker" = "https://github.com/joselado/pyqula/issues"
+
+# Optional, heavier backends that are only imported lazily by specific
+# submodules (classicalspin.py, kwantlink.py, ...) - not needed for the
+# core library.
+[project.optional-dependencies]
+jax = ["jax"]
+kwant = ["kwant"]
+mpi = ["mpi4py"]
+dataframe = ["pandas"]
+images = ["pillow"]
+all = ["pyqula[jax,kwant,mpi,dataframe,images]"]
+dev = ["pytest", "build", "twine"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pyqula.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pyqula = [
+    "fortran/**/*.f90",
+    "fortran/**/*.pyf",
+    "fortran/**/*.sh",
+    "datasets/*.txt",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests"]

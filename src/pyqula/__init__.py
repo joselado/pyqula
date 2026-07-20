@@ -1,3 +1,5 @@
+__version__ = "0.0.93"
+
 # from . import geometry
 # from . import hamiltonians
 # from . import ldos
