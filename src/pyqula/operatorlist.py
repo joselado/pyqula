@@ -74,15 +74,10 @@ def get_operator(self,name,**kwargs):
         return self.get_operator("sz")@self.get_operator("electron")
       elif name=="layer": return operators.get_layer(self,**kwargs)
       elif name=="valley":  return operators.get_valley(self,**kwargs)
-      elif name=="valley_x":  return operators.get_valley_taux(self)
-      elif name=="inplane_valley": return operators.get_inplane_valley(self)
+      elif name=="valley_x":  return operators.get_valley_taux(self,**kwargs)
+      elif name=="valley_y":  return operators.get_valley_tauy(self,**kwargs)
       elif name=="valley_upper" or name=="valley_top":
         return operators.get_valley_layer(self,n=-1)
-#      elif name=="inplane_valley_upper":
-#        print("This operator only makes sense for TBG")
-#        ht = self.copy()
-#        ht.geometry.sublattice = self.geometry.sublattice * (np.sign(self.geometry.z)+1.0)/2.0
-#        return operators.get_inplane_valley(ht)
       elif name=="valley_lower" or name=="valley_bottom":
         return operators.get_valley_layer(self,n=0)
       elif name in ["ipr","IPR"]: return operators.ipr

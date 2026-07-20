@@ -537,9 +537,14 @@ class Hamiltonian():
         Adds an anti Kane-Mele term
         """  
         kanemele.add_anti_kane_mele(self,t) # return anti kane mele SOC
-    def add_antihaldane(self,t): 
+    def add_antihaldane(self,t):
         """Add an anti-Haldane term"""
         self.add_modified_haldane(t) # second name
+    def add_valley_exchange(self,v):
+        """Add a valley-space exchange term v=(vx,vy,vz).(tau_x,tau_y,tau_z),
+        the valley-pseudospin analogue of add_exchange for real spin"""
+        from .operatortk.inplane_valley import add_valley_exchange
+        add_valley_exchange(self,v)
     def add_crystal_field(self,v,**kwargs):
         """Add a crystal field term to the Hamiltonian"""
         from . import crystalfield

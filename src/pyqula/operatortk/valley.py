@@ -1,5 +1,6 @@
 import numpy as np
 from .. import algebra
+from .sharpen import get_sharpen
 
 
 def get_valley(h,delta=None,**kwargs):
@@ -11,16 +12,7 @@ def get_valley(h,delta=None,**kwargs):
   ho.clean() # set to zero
   ho.add_modified_haldane(1.0/4.5) # add modified Haldane coupling
   hkgen = ho.get_hk_gen() # get generator for the hk Hamiltonian
-  def sharpen(m):
-    """Sharpen the eigenvalues of a matrix"""
-#    return m
-    if delta is None: return m # do nothing
-    if algebra.issparse(m): return m # temporal workaround
-    (es,vs) = algebra.eigh(m) # diagonalize
-    es = es/(np.abs(es)+delta) # renormalize the valley eigenvalues
-    vs = np.matrix(vs) # convert
-    m0 = np.matrix(np.diag(es)) # build new hamiltonian
-    return vs@m0@vs.H # return renormalized operator
+  sharpen = get_sharpen(delta=delta) # renormalize eigenvalues to +-1
   def fun(m=None,k=None):
       if h.dimensionality>0 and k is None: raise # requires a kpoint
       hk = hkgen(k) # evaluate Hamiltonian

@@ -424,26 +424,8 @@ def get_spin_current(h):
 
 
 from .operatortk.valley import get_valley
-
-
-
-def get_inplane_valley(h):
-  """Returns an operator that computes the absolute value
-  of the intervalley mixing"""
-  ho = h.copy() # copy Hamiltonian
-  ho.clean() # set to zero
-  ho.add_modified_haldane(1.0/4.5) # add modified Haldane coupling
-  hkgen = ho.get_hk_gen() # get generator for the hk Hamiltonian
-  hkgen0 = h.get_hk_gen() # get generator for the hk Hamiltonian
-  def fun(w,k=None):
-#    return abs(np.sum(w*w))
-    if h.dimensionality>0 and k is None: raise # requires a kpoint
-    hk = hkgen(k) # evaluate Hamiltonian
-    hk0 = hkgen0(k) # evaluate Hamiltonian
-    A = hk@hk0 - hk0@hk # commutator
-    A = -A@A
-    return abs(braket_wAw(w,A)) # return the braket
-  return fun # return function
+from .operatortk.inplane_valley import get_valley_taux, get_valley_tauy, \
+        get_inplane_valley
 
 
 
@@ -496,40 +478,6 @@ def get_sigma_minus(h):
     hk = h0.get_hk_gen() # get generator
     return hk # return function
 
-
-
-
-
-def get_valley_taux(h):
-    """
-    Return the tau x valley operator
-    """
-    g = h.geometry
-    h0 = g.get_hamiltonian(has_spin=False) # FN coupling
-    h0.turn_multicell() # multicell Hamiltonian
-    h1 = h0.copy() # new Hmailtonian
-    h1.clean()
-    hs = h1.copy() # for sublattice
-    hs.add_onsite(0.5) ; hs.add_sublattice_imbalance(0.5) 
-    h1.add_kekule(1.0) # add kekule term 
-    hops = hs.get_multihopping() # Multihopping for sublattice
-    hop0 = h0.get_multihopping() # MultiHopping object
-    hop1 = h1.get_multihopping() # MultiHopping object
-    # kill hoppings that start in the A sublattice
-    hop0 = hop0*hops
-   # hop1 = hop0*hops
-    # now define the valley mixing
-    hop2 = 1j*hop0*hop1 
-    hop2 = hop1
-    hop2 = hop2 + hop2.get_dagger() # make it Hermitian
-    hop2 = hop2.get_dict() # get the dictionary
-    h2 = h0.copy() # dummy Hamiltonian
-    h2.clean()
-    h2.intra = hop2[(0,0,0)] # onsite matrix
-    del hop2[(0,0,0)] # onsite matrix
-    h2.hoppings = hop2 # store the rest of the hoppings
-    hk = h2.get_hk_gen() # get the generating function
-    return Operator(lambda m=None,k=None: m@hk(k)) # return operator
 
 
 

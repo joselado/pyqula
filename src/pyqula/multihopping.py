@@ -55,7 +55,9 @@ class MultiHopping():
         out = dict()
         for key in self.dict:
             key2 = tuple(-np.array(key,dtype=int))
-            out[key] = np.conjugate(self.dict[key2].T)
+            # a missing key2 means that block is zero, so its dagger is too
+            if key2 in self.dict:
+                out[key] = np.conjugate(self.dict[key2].T)
         out = MultiHopping(out) # create a new object
         return out
     def copy(self):

@@ -1,3 +1,4 @@
+import inspect
 import numpy as np
 from . import geometry
 
@@ -50,13 +51,16 @@ def kekule_function(r,t=1.):
     """
     cs = kekule_positions(r) # get the centers with all the positions
     ## Define a function to only have hoppings in the hexagon
-#    if callable(t): fun = t # t is a function
-#    else: # assume t is a number
-    if callable(t): tfun = t # t is a function
-    else: tfun = lambda r: t # t is a number
+    ## t can be a number, a function of the bond midpoint t(rmid), or a
+    ## bond-direction-aware function t(r1,r2) (e.g. chiral_kekule's output)
+    if callable(t):
+        nargs = len(inspect.signature(t).parameters)
+        if nargs>=2: tfun = t # bond-direction-aware function
+        else: tfun = lambda r1,r2: t((r1+r2)/2.) # function of the midpoint
+    else: tfun = lambda r1,r2: t # t is a number
     def fun(r1,r2):
         dr = r1-r2 ; dr = dr.dot(dr) # distance 1
-        if 0.99<dr<1.01: return tfun((r1+r2)/2.) # first neighbor
+        if 0.99<dr<1.01: return tfun(r1,r2) # first neighbor
         else: return 0.0 # nothing
     def f(r1,r2):
         for c in cs: # loop over centers
@@ -146,7 +150,11 @@ def retain(r,d=3.0):
 
 def chiral_kekule(g,t1=0.0,t2=0.0,hermitian=True):
     """Add a chiral kekule hopping, input is a geometry"""
-    fkc = kekule_center(g.r) # function for kekule center
+    # use the same (replicated) position set that add_kekule/kekule_function
+    # will later use to pick the retained hexagons, so both agree on the
+    # same Kekule tiling (a center lookup built only from g.r can disagree
+    # with kekule_function's near cell boundaries and return None)
+    fkc = kekule_center(g.multireplicas(2)) # function for kekule center
     dr0 = g.r[0] - g.r[1] # one NN vector
     dz = np.exp(1j*2.*np.pi/3.) # second vector
     z0 = dr0[0] + 1j*dr0[1] # complex NN vector
