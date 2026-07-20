@@ -362,6 +362,15 @@ def wann_main(
     converged = False
 
     for iteration in range(1, num_iter + 1):
+        if spread.om_tot <= conv_tol:
+            # Already at the global minimum -- e.g. a fixed trial spanning
+            # the full, untruncated band manifold makes Omega exactly (or
+            # near-exactly) zero from the start, see overlap_project's
+            # docstring. Nothing left to search for, and the line search
+            # below divides by spread.om_tot, which is a literal
+            # ZeroDivisionError whenever it lands on exact 0.0.
+            converged = True
+            break
         if guiding_centres and iteration > num_no_guide_iter and iteration % num_guide_cycles == 0:
             csheet, sheet, rguide = wann_phases(M, bk, bka, neigh, rguide, irguide)
             irguide = 1

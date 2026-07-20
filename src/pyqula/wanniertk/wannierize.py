@@ -603,8 +603,9 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         ``h.dimensionality`` entries.
     trial_vectors : (num_orbitals, num_wann) complex ndarray, optional
         Fixed (k-independent) trial projection matrix seeding the CG
-        minimization -- default: project onto the first ``num_wann``
-        orbitals (``numpy.eye(num_orbitals)[:, :num_wann]``).
+        minimization -- default: a random real matrix (fresh, unseeded draw
+        each call), used to check that the converged spread/geometry don't
+        depend on the particular trial seed (see ``tests/wannier``).
     num_iter, conv_tol, conv_window : optional
         Wannier90 CG minimization parameters, passed through
         ``win_keywords``.
@@ -715,7 +716,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
             trial_vectors = _default_eh_trial_vectors(
                 num_orbitals, particle_hole_perm, particle_hole_operator)
         else:
-            trial_vectors = np.eye(num_orbitals, dtype=complex)[:, :num_wann]
+            trial_vectors = np.random.default_rng().standard_normal((num_orbitals, num_wann))
     trial_vectors = np.asarray(trial_vectors, dtype=complex)
     if trial_vectors.shape != (num_orbitals, num_wann):
         raise ValueError(f"trial_vectors must have shape ({num_orbitals},{num_wann}), "
