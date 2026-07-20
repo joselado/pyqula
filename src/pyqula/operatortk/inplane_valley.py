@@ -46,6 +46,34 @@ from .sharpen import get_sharpen
 # independently-calibrated operator.
 
 _calibration_cache = {}
+_registry_hamiltonian_cache = {}
+
+
+def _registry_hamiltonians(h,t1,t2):
+    """Return (ho0,hoA,hoB): the 3 registry-specific chiral-Kekule
+    Hamiltonians (see module docstring) for h's geometry, painted with
+    the given (t1,t2) amplitudes. This is the common first step of the
+    3-registry construction, shared by _calibrate_tau, _build_tau_T_gen
+    and add_valley_exchange (previously reimplemented independently in
+    each, which meant a fix to the construction had to be applied by
+    hand in three places). Cached by (geometry, t1, t2, Hamiltonian
+    shape): t1,t2 only ever take the one calibrated value in practice,
+    so get_valley_taux and get_valley_tauy on the same h -- which
+    happens whenever both are requested (e.g. real_space_vev for the
+    full in-plane texture) -- hit the cache on the second call instead
+    of repainting the whole Hamiltonian again."""
+    key = (kekule._geometry_key(h.geometry),complex(t1),complex(t2),
+            h.has_spin,h.dimensionality,np.shape(h.intra))
+    if key in _registry_hamiltonian_cache: return _registry_hamiltonian_cache[key]
+    (cs0,csA,csB) = kekule.kekule_registries(h.geometry)
+    def build(cs):
+        ho = h.copy() ; ho.turn_multicell() ; ho.clean()
+        fun = kekule.chiral_kekule(ho.geometry,t1=t1,t2=t2,registry=cs)
+        ho.add_hopping_matrix(kekule.bond_function_to_matrix(fun))
+        return ho
+    out = (build(cs0),build(csA),build(csB))
+    _registry_hamiltonian_cache[key] = out
+    return out
 
 
 def _calibrate_tau():
@@ -73,15 +101,11 @@ def _calibrate_tau():
         return Wsub@us_s
     Wfull = np.concatenate([sublattice_sort(W[:,:2]),sublattice_sort(W[:,2:])],
             axis=1) # basis ordered as (valley,sublattice)
-    (cs0,csA,csB) = kekule.kekule_registries(g3)
     w = np.exp(1j*2.*np.pi/3.)
     def taux_bloch(t1,t2):
-        def hk_of(cs):
-            hk = h0.copy() ; hk.clean()
-            fun = kekule.chiral_kekule(hk.geometry,t1=t1,t2=t2,registry=cs)
-            hk.add_hopping_matrix(kekule.bond_function_to_matrix(fun))
-            return hk.get_hk_gen()([0.,0.,0.])
-        T = hk_of(cs0) + w*hk_of(csA) + w**2*hk_of(csB)
+        (ho0,hoA,hoB) = _registry_hamiltonians(h0,t1,t2)
+        k0 = [0.,0.,0.]
+        T = ho0.get_hk_gen()(k0) + w*hoA.get_hk_gen()(k0) + w**2*hoB.get_hk_gen()(k0)
         return (T+T.conj().T)/2.
     sx = np.array([[0,1],[1,0]],dtype=np.complex128)
     sy = np.array([[0,-1j],[1j,0]],dtype=np.complex128)
@@ -108,14 +132,9 @@ def _build_tau_T_gen(h,t1,t2):
     get_bands sweeping a k-path) and rebuilding the whole multicell
     Hamiltonian (re-painting every bond) per k-point would defeat the
     point of caching the registries."""
-    (cs0,csA,csB) = kekule.kekule_registries(h.geometry)
+    (ho0,hoA,hoB) = _registry_hamiltonians(h,t1,t2)
     w = np.exp(1j*2.*np.pi/3.)
-    def make_hkgen(cs):
-        ho = h.copy() ; ho.turn_multicell() ; ho.clean()
-        fun = kekule.chiral_kekule(ho.geometry,t1=t1,t2=t2,registry=cs)
-        ho.add_hopping_matrix(kekule.bond_function_to_matrix(fun))
-        return ho.get_hk_gen()
-    (hk0,hkA,hkB) = (make_hkgen(cs0),make_hkgen(csA),make_hkgen(csB))
+    (hk0,hkA,hkB) = (ho0.get_hk_gen(),hoA.get_hk_gen(),hoB.get_hk_gen())
     def hkgen_T(k):
         return hk0(k) + w*hkA(k) + w**2*hkB(k)
     return hkgen_T
@@ -145,19 +164,29 @@ def add_valley_exchange(h,v):
     if vz!=0.: h.add_modified_haldane(vz/4.5)
     if vx!=0. or vy!=0.:
         (t1,t2) = _calibrate_tau()
-        (cs0,csA,csB) = kekule.kekule_registries(h.geometry)
+        (ho0,hoA,hoB) = _registry_hamiltonians(h,t1,t2)
         w = np.exp(1j*2.*np.pi/3.)
-        def registry_multihopping(cs):
-            ho = h.copy() ; ho.turn_multicell() ; ho.clean()
-            fun = kekule.chiral_kekule(ho.geometry,t1=t1,t2=t2,registry=cs)
-            ho.add_hopping_matrix(kekule.bond_function_to_matrix(fun))
-            return ho.get_multihopping()
-        mhT = registry_multihopping(cs0) + w*registry_multihopping(csA) \
-                + w**2*registry_multihopping(csB)
+        mhT = ho0.get_multihopping() + w*hoA.get_multihopping() \
+                + w**2*hoB.get_multihopping()
         mhTd = mhT.get_dagger()
         mh_taux = (mhT+mhTd)*0.5
         mh_tauy = (mhT-mhTd)*(-0.5j)
         mh = vx*mh_taux + vy*mh_tauy
+        # MultiHopping.get_dagger() treats a hopping-cell-direction
+        # missing its -direction counterpart as zero rather than
+        # reconstructing it (see multihopping.py), which could in
+        # principle leave mh non-Hermitian if some registry's
+        # contribution to a direction is pruned to exactly zero by the
+        # multicell hopping-dict machinery. This is not expected to
+        # trigger for h.geometry going through turn_multicell() above
+        # (which pre-establishes a symmetric +/-direction skeleton
+        # before any Kekule contribution is painted on), but check
+        # rather than silently add a non-Hermitian term to h.
+        if not mh.is_hermitian(): raise RuntimeError(
+                "add_valley_exchange: the constructed valley-exchange "
+                "term is not Hermitian; this can happen for a "
+                "Hamiltonian whose multicell hopping directions were "
+                "not established via turn_multicell() before this call")
         h.set_multihopping(h.get_multihopping()+mh)
 
 

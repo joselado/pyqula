@@ -525,7 +525,20 @@ class Hamiltonian():
         Add a chiral kekule hopping
         """
         fun = kekule.chiral_kekule(self.geometry,**kwargs)
-        self.add_kekule(fun)
+        # fun already does its own complete bond classification (and,
+        # if a non-default registry= was passed, its own registry
+        # membership check), so go through bond_function_to_matrix
+        # directly rather than add_kekule/kekule_function, which would
+        # independently re-derive and re-apply *their own* (always
+        # default-registry) mask on top -- silently zeroing out every
+        # bond outside the default registry regardless of what fun
+        # itself was built against.
+        fm = kekule.bond_function_to_matrix(fun)
+        if self.dimensionality==0: # zero dimensional
+            m = fm(self.geometry.r,self.geometry.r)
+            self.intra = self.intra + self.spinless2full(m)
+        else: # workaround for higher dimensionality
+            self.add_hopping_matrix(fm) # add the Kekule hopping
   
     def add_modified_haldane(self,t):
         """
