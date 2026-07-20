@@ -1,11 +1,6 @@
 """Wannierize a subset of the bands of a pyqula Hamiltonian using
-wannierpy (github.com/joselado/wannierpy)'s pure-Python Wannier90 port
-(the ``wannier90`` package, ``backend="python"``).
-
-wannierpy is not a pyqula dependency -- ``import wannier90`` is done
-lazily inside :func:`get_wannier_hamiltonian`, matching the numba/jax
-optional-backend pattern used elsewhere in this codebase. Install the
-copy vendored in this repo with ``pip install -e vendor/wannierpy``.
+wannierpy (github.com/joselado/wannierpy)'s pure-Python Wannier90 port,
+bundled in this repo at ``pyqula.wanniertk.wannierpy``.
 
 Only the "fixed band subset, no disentanglement" case is implemented
 (``num_wann == len(band_indices)``, matching wannierpy's own
@@ -56,18 +51,7 @@ import itertools
 
 import numpy as np
 
-
-def _import_wannier90():
-    try:
-        import wannier90
-    except ImportError as e:
-        raise ImportError(
-            "get_wannier_hamiltonian requires the 'wannier90' package (wannierpy's "
-            "pure-Python backend) -- not a pyqula dependency. Install the copy vendored "
-            "in this repo: pip install -e vendor/wannierpy (from the pyqula repo root), "
-            "or pip install wannierpy if a released version is available."
-        ) from e
-    return wannier90
+from . import wannierpy
 
 
 def _mp_grid(h, nk):
@@ -357,7 +341,7 @@ def _smooth_degenerate_gauge(C_full, eig_full, nnlist, tol=1e-5):
 def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist,
                      orbital_positions_frac, band_indices, trial_vectors):
     """Diagonalize ``hamiltonian_k`` on the wannierization mesh and build
-    the M/A/eigenvalue arrays ``wannier90.run`` needs, restricted to a
+    the M/A/eigenvalue arrays ``wannierpy.run`` needs, restricted to a
     fixed band subset with a fixed trial projection matrix -- the "no
     disentanglement, pre-selected bands" path. A pyqula-local port of the
     relevant part of wannierpy's examples/_tb_utils.py::build_overlaps
@@ -511,13 +495,13 @@ def _split_gapped_clusters(hamiltonian_k, kpt_latt, band_indices, rel_tol=0.1):
     return clusters
 
 
-def _wannierize_one_group(wannier90, seedname, mp_grid, kpt_latt, real_lattice,
+def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
         atom_symbols, atoms_cart, num_orbitals, hamiltonian_k,
         orbital_positions_frac, band_indices, trial_vectors, keywords):
     """Run one full setup/overlaps/CG-run/reconstruction cycle for a
     single band group -- the inner loop body shared by the single-group
     and auto-split-into-clusters paths of :func:`get_wannier_hamiltonian`."""
-    setup_result = wannier90.setup(
+    setup_result = wannierpy.setup(
         seedname, mp_grid, kpt_latt, real_lattice, num_orbitals,
         atom_symbols, atoms_cart, win_keywords=keywords, backend="python",
     )
@@ -525,7 +509,7 @@ def _wannierize_one_group(wannier90, seedname, mp_grid, kpt_latt, real_lattice,
         hamiltonian_k, num_orbitals, kpt_latt, setup_result.nnlist,
         orbital_positions_frac, band_indices, trial_vectors,
     )
-    run_result = wannier90.run(
+    run_result = wannierpy.run(
         seedname, setup_result, mp_grid, kpt_latt, real_lattice,
         atom_symbols, atoms_cart, M_matrix, A_matrix, eigenvalues, backend="python",
     )
@@ -577,7 +561,7 @@ def get_wannier_hamiltonian(h, num_bands=None, band_indices=None, nk=12,
         Real-space hopping matrices with max element below this are
         dropped (except the intracell (0,0,0) term, always kept).
     seedname : str, optional
-        Passed to ``wannier90.setup``/``run`` (only used for logging by
+        Passed to ``wannierpy.setup``/``run`` (only used for logging by
         the pure-Python backend).
     win_keywords : dict, optional
         Extra/overriding Wannier90 ``.win`` keywords.
@@ -642,7 +626,6 @@ def get_wannier_hamiltonian(h, num_bands=None, band_indices=None, nk=12,
     if h.dimensionality < 1:
         raise NotImplementedError(
             "get_wannier_hamiltonian needs a periodic Hamiltonian (h.dimensionality>=1)")
-    wannier90 = _import_wannier90()
 
     num_orbitals = h.intra.shape[0]
     if h.has_eh: # Nambu/BdG: band selection must be electron-hole-pair-closed
@@ -700,7 +683,7 @@ def get_wannier_hamiltonian(h, num_bands=None, band_indices=None, nk=12,
         keywords.update(win_keywords)
 
     setup_result, run_result, H_k_mesh = _wannierize_one_group(
-        wannier90, seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
+        seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
         atoms_cart, num_orbitals, hamiltonian_k, orbital_positions_frac,
         band_indices, trial_vectors, keywords,
     )
@@ -732,7 +715,7 @@ def get_wannier_hamiltonian(h, num_bands=None, band_indices=None, nk=12,
                 tvc = np.eye(num_orbitals, dtype=complex)[:, :nwc]
                 kwc = dict(keywords); kwc["num_wann"] = nwc
                 sres, rres, Hk_c = _wannierize_one_group(
-                    wannier90, seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
+                    seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
                     atoms_cart, num_orbitals, hamiltonian_k, orbital_positions_frac,
                     cluster, tvc, kwc,
                 )

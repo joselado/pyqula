@@ -6,10 +6,9 @@ import numpy as np
 from pyqula import geometry
 
 # get_wannier_hamiltonian computes maximally-localized Wannier functions for
-# a subset of a Hamiltonian's bands (via the wannierpy package -- see
-# vendor/wannierpy in this repo, "pip install -e vendor/wannierpy" to enable
-# this feature) and returns a new, smaller Hamiltonian defined purely by the
-# resulting real-space hoppings.
+# a subset of a Hamiltonian's bands (via the wannierpy pure-Python Wannier90
+# port bundled at src/pyqula/wanniertk/wannierpy/) and returns a new,
+# smaller Hamiltonian defined purely by the resulting real-space hoppings.
 
 # staggered honeycomb lattice: a sublattice potential opens a gap, giving a
 # genuinely dispersive (non-trivial) valence band to Wannierize
