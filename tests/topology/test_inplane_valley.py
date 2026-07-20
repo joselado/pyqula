@@ -1,7 +1,6 @@
 import numpy as np
 
 from pyqula import geometry
-from pyqula.operatortk.inplane_valley import _calibrate_taus
 
 
 def _folded_dirac_subspace(h0):
@@ -45,14 +44,15 @@ def test_inplane_valley_pseudospin_algebra():
 
 def test_kekule_gapped_states_are_valley_x_eigenstates():
     """Gapping the Dirac points (exactly at the folded K,K' point, k=Gamma
-    of the tripled cell) with a chiral Kekule mass matching the tau_x
-    calibration must produce the gap-edge eigenstates as exact +-1
-    eigenvectors of the tau_x ("valley_x") operator."""
-    (t1x,t2x,t1y,t2y) = _calibrate_taus()
+    of the tripled cell) with a chiral Kekule mass added through
+    add_valley_exchange (the 3-registry-symmetrized construction, the
+    only one guaranteed to be exactly C3-covariant in real space -- see
+    operatortk/inplane_valley.py) must produce the gap-edge eigenstates
+    as exact +-1 eigenvectors of the tau_x ("valley_x") operator."""
     g3 = geometry.honeycomb_lattice().supercell(3)
     h = g3.get_hamiltonian(has_spin=False)
-    h = h.get_multicell()
-    h.add_chiral_kekule(t1=0.4*t1x,t2=0.4*t2x)
+    h.add_valley_exchange([0.4,0.,0.])
+    h.turn_multicell()
     hk = h.get_hk_gen()([0.,0.,0.])
     (es,vs) = np.linalg.eigh(hk)
     near_gap = np.abs(np.abs(es)-0.4)<1e-6 # the induced gap is exactly 0.4
