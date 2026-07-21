@@ -585,28 +585,24 @@ def _enforce_point_group_symmetry(H_k_mesh, W_k_mesh, kpt_latt, group):
     constraint on the gauge, analogous to electron-hole's "constancy"
     requirement), which only CG-internal symmetry constraints (the
     vendored but unused ``wannierpy/_engine/sitesym.py`` engine, see the
-    module docstring) can reliably achieve -- not implemented here."""
+    module docstring) can reliably achieve -- not implemented here.
+
+    Accumulates by looping over each group element's *source* k (scatter-
+    adding each term straight into its destination ``tgt[k_src]``) rather
+    than looping over destination k and inverting ``tgt`` first -- same
+    sum (``tgt`` is a bijection on the mesh, checked by
+    :func:`_symmetry_target_index`), one array instead of two."""
     if not group:
         return H_k_mesh
     num_kpts = kpt_latt.shape[1]
-    num_wann = H_k_mesh.shape[0]
-    inv_idxs, D_alls = [], []
+    H_sym = np.zeros_like(H_k_mesh)
     for compiled in group:
         tgt = _symmetry_target_index(compiled, kpt_latt)
-        inv = np.empty(num_kpts, dtype=int)
-        inv[tgt] = np.arange(num_kpts)
-        inv_idxs.append(inv)
-        D_alls.append(_point_group_wannier_operators(compiled, W_k_mesh, kpt_latt, tgt))
-    H_sym = np.empty_like(H_k_mesh)
-    order = len(group)
-    for k_dst in range(num_kpts):
-        acc = np.zeros((num_wann, num_wann), dtype=complex)
-        for g_i in range(order):
-            k_src = inv_idxs[g_i][k_dst]
-            D = D_alls[g_i][:, :, k_src]
-            acc += D @ H_k_mesh[:, :, k_src] @ D.conj().T
-        H_sym[:, :, k_dst] = acc / order
-    return H_sym
+        D_all = _point_group_wannier_operators(compiled, W_k_mesh, kpt_latt, tgt)
+        for k_src in range(num_kpts):
+            D = D_all[:, :, k_src]
+            H_sym[:, :, tgt[k_src]] += D @ H_k_mesh[:, :, k_src] @ D.conj().T
+    return H_sym / len(group)
 
 
 def _smooth_degenerate_gauge(C_full, eig_full, nnlist, tol=1e-5):

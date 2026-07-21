@@ -163,21 +163,49 @@ def _mirror_matrix(normal):
     return np.eye(3) - 2 * np.outer(n, n)
 
 
+def _matrix_key(M):
+    """Hashable key for a 3x3 matrix, rounded to avoid missing
+    floating-point-noise duplicates. ``tuple(...tolist())``, not
+    ``.tobytes()``: Python floats compare/hash ``-0.0 == 0.0``, so this
+    (unlike raw byte comparison) isn't fooled by sign-of-zero differences
+    between mathematically identical matrices."""
+    return tuple(np.round(M, 6).flatten().tolist())
+
+
 def _candidate_operations(axes, orders):
-    ops = [("inversion", -np.eye(3))]
+    """Candidate ``(name, matrix)`` pairs, deduplicated by matrix: e.g.
+    ``S2`` about any axis is always exactly ``inversion``, and e.g.
+    ``C4^2`` always exactly equals ``C2`` about the same axis (already
+    generated separately whenever ``2`` is also in ``orders``, the
+    default) -- generating and keeping such algebraic duplicates would
+    only cost every downstream candidate consumer (``_match_geometry``,
+    then ``compile_symmetry``'s Hamiltonian verification) repeated work
+    for zero additional candidates. Deduplication never drops a
+    *distinct* operation, regardless of which ``orders``/``axes`` are
+    requested -- only bit-identical matrices are merged."""
+    seen = set()
+    ops = []
+
+    def add(name, R):
+        key = _matrix_key(R)
+        if key in seen: return
+        seen.add(key)
+        ops.append((name, R))
+
+    add("inversion", -np.eye(3))
     for axis in axes:
         axis_label = np.round(axis, 3).tolist()
         sigma_h = _mirror_matrix(axis)
-        ops.append((f"sigma(axis={axis_label})", sigma_h))
+        add(f"sigma(axis={axis_label})", sigma_h)
         for n in orders:
             for k in range(1, n):
                 angle = 2 * np.pi * k / n
                 R = Rotation.from_rotvec(axis * angle).as_matrix()
                 label = f"C{n}" if k == 1 else f"C{n}^{k}"
-                ops.append((f"{label}(axis={axis_label})", R))
+                add(f"{label}(axis={axis_label})", R)
                 S = sigma_h @ R
                 slabel = f"S{n}" if k == 1 else f"S{n}^{k}"
-                ops.append((f"{slabel}(axis={axis_label})", S))
+                add(f"{slabel}(axis={axis_label})", S)
     return ops
 
 
@@ -239,7 +267,8 @@ def _match_geometry(g, op, vecs, tol_frac=1e-4, tol_pos=1e-4):
     return perm, shift, M
 
 
-def compile_symmetry(h, op, tol_frac=1e-4, tol_pos=1e-4, nk_check=6, op_tol=1e-6, rng=None):
+def compile_symmetry(h, op, tol_frac=1e-4, tol_pos=1e-4, nk_check=6, op_tol=1e-6, rng=None,
+                      hk_gen=None):
     """Resolve a :class:`SymmetryOperation` against ``h``'s geometry
     (site permutation/lattice shifts) and verify it against ``h`` itself
     by sampling random k-points and checking ``H(k') == P(k) H(k)
@@ -247,7 +276,14 @@ def compile_symmetry(h, op, tol_frac=1e-4, tol_pos=1e-4, nk_check=6, op_tol=1e-6
     :class:`CompiledSymmetry`, or ``None`` if ``op`` is not a genuine
     symmetry of ``g``/``h`` -- callers should treat ``None`` as "this
     operation does not apply here", not an error, since geometry
-    symmetries are only ever a superset of the Hamiltonian's own."""
+    symmetries are only ever a superset of the Hamiltonian's own.
+
+    ``hk_gen``, optional: a pre-built ``h.get_hk_gen()`` closure, reused
+    as-is instead of rebuilding one from scratch -- ``get_hk_gen()`` redoes
+    real work (multicell conversion, hopping filtering, dense-array setup),
+    so callers that verify many candidate operations against the same ``h``
+    in a loop (:func:`find_point_group`, :func:`close_group`) build it once
+    and pass it through here instead of paying that cost per candidate."""
     if h.has_eh:
         raise NotImplementedError(
             "compile_symmetry: point-group symmetry enforcement is not implemented "
@@ -272,7 +308,8 @@ def compile_symmetry(h, op, tol_frac=1e-4, tol_pos=1e-4, nk_check=6, op_tol=1e-6
     if perm is None:
         return None
     compiled = CompiledSymmetry(op, perm, shift, M, h.has_spin)
-    hk_gen = h.get_hk_gen()
+    if hk_gen is None:
+        hk_gen = h.get_hk_gen()
     dim = h.dimensionality
     rng = rng or np.random.default_rng(0)
     for _ in range(nk_check):
@@ -310,25 +347,25 @@ def find_point_group(g, h=None, orders=(2, 3, 4, 6), axes=None, centers=None,
     if axes is None: axes = _candidate_axes(g)
     if centers is None: centers = [np.zeros(3)]
     vecs = _periodic_lattice_vectors(g)
+    # built once and reused for every candidate below, not per-candidate --
+    # see compile_symmetry's hk_gen docstring
+    hk_gen = h.get_hk_gen() if h is not None else None
+    candidates = _candidate_operations(axes, orders)  # already deduped, see its docstring
     found = []
     seen = set()
     for center in centers:
-        for name, R in _candidate_operations(axes, orders):
+        for name, R in candidates:
             op = SymmetryOperation(R, center=center, name=name)
             perm, shift, M = _match_geometry(g, op, vecs, tol_frac=tol_frac, tol_pos=tol_pos)
             if perm is None: continue
-            # tuple(...tolist()), not .tobytes(): Python floats compare/hash
-            # -0.0 == 0.0, so this is immune to the sign-of-zero mismatches
-            # that raw byte comparison would spuriously treat as distinct
-            key = (tuple(np.round(R, 6).flatten().tolist()),
-                   tuple(np.round(center, 6).tolist()), perm.tobytes())
+            key = (_matrix_key(R), tuple(np.round(center, 6).tolist()), perm.tobytes())
             if key in seen: continue
             seen.add(key)
             if h is None:
                 found.append(op)
             else:
                 compiled = compile_symmetry(h, op, tol_frac=tol_frac, tol_pos=tol_pos,
-                                             nk_check=nk_check, op_tol=op_tol)
+                                             nk_check=nk_check, op_tol=op_tol, hk_gen=hk_gen)
                 if compiled is not None: found.append(compiled)
     return found
 
@@ -353,12 +390,23 @@ def close_group(h, ops, max_order=48, tol_frac=1e-4, tol_pos=1e-4, nk_check=6, o
     Restricted to operations sharing one rotation center: composing
     rotations about different centers generally requires a translation
     part (a screw/glide), which is outside this module's point-group-only
-    scope (see module docstring)."""
+    scope (see module docstring).
+
+    Any input already given as a :class:`CompiledSymmetry` (e.g. from
+    :func:`find_point_group`) is trusted rather than re-verified from
+    scratch -- it was already checked against this same ``h``, so
+    re-running :func:`compile_symmetry` on it would only repeat work for
+    the same answer. Newly-composed elements still always go through the
+    full verification (composing two genuine symmetries of ``h`` is
+    always itself one, but the composed *matrix* may not be one of the
+    ones already checked)."""
+    hk_gen = h.get_hk_gen()  # built once, reused by every compile_symmetry call below
     base_ops = [c.op if isinstance(c, CompiledSymmetry) else c for c in ops]
+    precompiled = {_matrix_key(c.op.matrix): c for c in ops if isinstance(c, CompiledSymmetry)}
     if not base_ops:
         identity = SymmetryOperation(np.eye(3), name="E")
         return [compile_symmetry(h, identity, tol_frac=tol_frac, tol_pos=tol_pos,
-                                  nk_check=nk_check, op_tol=op_tol)]
+                                  nk_check=nk_check, op_tol=op_tol, hk_gen=hk_gen)]
     center = base_ops[0].center
     for o in base_ops[1:]:
         if not np.allclose(o.center, center, atol=1e-6):
@@ -368,33 +416,39 @@ def close_group(h, ops, max_order=48, tol_frac=1e-4, tol_pos=1e-4, nk_check=6, o
                 "about different centers needs a translation part, outside this module's "
                 "point-group-only scope")
 
-    def key(M): return tuple(np.round(M, 6).flatten().tolist())
-
     identity = SymmetryOperation(np.eye(3), center=center, name="E")
-    group = {key(identity.matrix): identity}
+    group = {_matrix_key(identity.matrix): identity}
     for o in base_ops:
-        group.setdefault(key(o.matrix), o)
-    changed = True
-    while changed:
-        changed = False
+        group.setdefault(_matrix_key(o.matrix), o)
+    # worklist/BFS closure: only test products involving an element added
+    # since the last round, instead of rescanning every already-checked
+    # pair of the whole group on every pass (both a@b and b@a, since the
+    # group need not be abelian)
+    worklist = list(group.values())
+    while worklist:
         current = list(group.values())
-        for a in current:
+        next_worklist = []
+        for a in worklist:
             for b in current:
-                m = a.matrix @ b.matrix
-                k = key(m)
-                if k in group: continue
-                if len(group) >= max_order:
-                    raise ValueError(
-                        f"close_group: the requested symmetries generate more than "
-                        f"{max_order} elements -- this is almost certainly an unintended "
-                        "continuous symmetry rather than a genuine finite point group; pass "
-                        "a smaller/more specific set of symmetries")
-                group[k] = SymmetryOperation(m, center=center, name=f"({a.name})*({b.name})")
-                changed = True
+                for m in (a.matrix @ b.matrix, b.matrix @ a.matrix):
+                    k = _matrix_key(m)
+                    if k in group: continue
+                    if len(group) >= max_order:
+                        raise ValueError(
+                            f"close_group: the requested symmetries generate more than "
+                            f"{max_order} elements -- this is almost certainly an unintended "
+                            "continuous symmetry rather than a genuine finite point group; "
+                            "pass a smaller/more specific set of symmetries")
+                    new_op = SymmetryOperation(m, center=center, name=f"({a.name})*({b.name})")
+                    group[k] = new_op
+                    next_worklist.append(new_op)
+        worklist = next_worklist
     compiled = []
-    for o in group.values():
-        c = compile_symmetry(h, o, tol_frac=tol_frac, tol_pos=tol_pos,
-                              nk_check=nk_check, op_tol=op_tol)
+    for k, o in group.items():
+        c = precompiled.get(k)
+        if c is None:
+            c = compile_symmetry(h, o, tol_frac=tol_frac, tol_pos=tol_pos,
+                                  nk_check=nk_check, op_tol=op_tol, hk_gen=hk_gen)
         if c is None:
             raise ValueError(
                 f"close_group: {o.name}, generated by composing the requested symmetries, "
