@@ -161,10 +161,16 @@ def test_wannier_functions_reproduce_hamiltonian_at_every_mesh_kpoint():
     """wannier_functions[R][o,n] is the amplitude of Wannier function n
     (translated to cell R) on orbital o of the *original* Hamiltonian h,
     in h's own orbital basis. Physically this means W(k) := sum_R
-    wannier_functions[R] * exp(i*2*pi*R.k) must be an isometry from h's
+    wannier_functions[R] * exp(-i*2*pi*R.k) must be an isometry from h's
     orbital space into the Wannierized Hamiltonian's, related to it by
     W(k)^dagger @ h(k) @ W(k) == h1(k) exactly at every mesh k-point --
-    the k-space statement of <w_n,0|h|w_n',R> == h1's own hopping[R]."""
+    the k-space statement of <w_n,0|h|w_n',R> == h1's own hopping[R].
+    (The exp(-i*2*pi*R.k) sign -- rather than the H(k)=sum_R h_R
+    exp(+i*2*pi*R.k) convention used for ordinary hopping matrices --
+    is the fix for issue #30: wannier_functions[R] is a direct
+    substitution of pyqula's own Bloch convention |k,o> = (1/sqrt(N))
+    sum_R exp(+i*2*pi*k.R)|R,o> into the Wannier-function definition, not
+    a Fourier-series coefficient, so it inverts with the opposite sign.)"""
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=False)
     h.add_onsite([0.8, -0.8])
@@ -176,7 +182,7 @@ def test_wannier_functions_reproduce_hamiltonian_at_every_mesh_kpoint():
     maxerr = 0.0
     for kfrac in ks:
         k3 = np.zeros(3); k3[:2] = kfrac[:2]
-        Wk = sum(m * np.exp(1j * 2 * np.pi * np.dot(R, kfrac))
+        Wk = sum(m * np.exp(-1j * 2 * np.pi * np.dot(R, kfrac))
                  for R, m in h1.wannier_functions.items())
         lhs = Wk.conj().T @ hk_gen(k3) @ Wk
         rhs = hk_gen1(k3)

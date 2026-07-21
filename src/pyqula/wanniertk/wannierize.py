@@ -1251,10 +1251,21 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
 
     hopping = _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=cutoff)
     # W_k_mesh is already C_bare(k) @ U_matrix(k) (see _wannierize_one_group),
-    # so only the same Fourier-transform-and-truncate step _hopping_from_bloch
-    # uses is left to turn it into real-space Wannier function coefficients.
+    # so the same Fourier-transform-and-truncate step _hopping_from_bloch uses
+    # turns it into real-space Wannier function coefficients -- except
+    # _mesh_to_real_space extracts a Fourier SERIES coefficient (h_R = (1/N)
+    # sum_k H(k) exp(-i*2*pi*R.k), correct for a hopping matrix), while
+    # W_k_mesh is a Bloch expansion coefficient substituted directly into
+    # pyqula's convention |k,o> = (1/sqrt(N)) sum_R exp(+i*2*pi*k.R) |R,o>,
+    # which needs the opposite sign: c_R[o,n] = (1/N) sum_k W_k_mesh[o,n,k]
+    # exp(+i*2*pi*k.R). Reusing _mesh_to_real_space unmodified therefore
+    # returns the dict keyed by -R instead of R; negate the keys to match
+    # the documented convention (see the "Returns" docstring above and
+    # every examples/wannier/*/main.py plotting script, all of which assume
+    # wannier_functions[R][o,n] sits at h.geometry.r[o] + R*a1).
     wannier_functions = _drop_negligible_cells(
-        _mesh_to_real_space(W_k_mesh, kpt_latt, mp_grid), cutoff)
+        {tuple(-x for x in R): M for R, M in
+         _mesh_to_real_space(W_k_mesh, kpt_latt, mp_grid).items()}, cutoff)
 
     from .. import geometry as geometry_module
     from .wannierhamiltonian import WannierHamiltonian
