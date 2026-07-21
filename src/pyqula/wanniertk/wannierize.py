@@ -71,8 +71,11 @@ Bloch phases enter only via integer lattice-vector directions
 positions. Wannier90's centre/spread formulas assume the opposite
 convention (phases include the orbital's intra-cell position), so the
 eigenvectors used to build the overlap matrices below are regauged by
-``exp(i 2*pi k.tau_orbital)`` before handing them to wannier90 -- exactly
-what wannierpy's own ``pyqula_ladder.py`` example does (see its
+``exp(-i 2*pi k.tau_orbital)`` before handing them to wannier90 (the minus
+sign: this multiplies eigenvector *coefficients*, which pick up the
+opposite phase from the basis vectors they're coefficients of -- see
+``_build_overlaps``'s inline derivation) -- exactly the same regauging
+wannierpy's own ``pyqula_ladder.py`` example does (see its
 ``orbital_positions_frac`` argument) -- so the reported Wannier centres
 are physically meaningful (relative to the real orbital positions) rather
 than always landing on the cell origin. This regauging only affects which
@@ -715,8 +718,20 @@ def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist, nncell,
     # computed off the same eigh call but diverge from here on.
     C_bare = C_full[:, list(band_indices), :].copy()
 
+    # Regauging from pyqula's periodic-gauge basis states (|k,b>_perio =
+    # (1/sqrt N) sum_R exp(i2*pi*k.R)|R,b>) to Wannier90's convention I
+    # (|k,b>_conv1 = (1/sqrt N) sum_R exp(i2*pi*k.(R+tau_b))|R,b> =
+    # exp(i2*pi*k.tau_b) |k,b>_perio) needs the *coefficient* transform, not
+    # the basis-vector one: writing the same physical state as sum_b c_b
+    # |k,b>_perio = sum_b c'_b |k,b>_conv1 and substituting
+    # |k,b>_perio = exp(-i2*pi*k.tau_b) |k,b>_conv1 gives
+    # c'_b = c_b * exp(-i2*pi*k.tau_b) -- the OPPOSITE sign from the basis
+    # vectors' own phase (the usual covariant/contravariant flip for
+    # coordinates vs. basis vectors under a phase rescaling). C_full's
+    # columns store eigenvector *coefficients* (eigh's output), so this
+    # regauging phase must carry the minus sign.
     tau = np.asarray(orbital_positions_frac, dtype=np.float64)  # (num_orbitals,3)
-    phase = np.exp(1j * 2 * np.pi * (tau @ kpt_latt))  # (num_orbitals,num_kpts)
+    phase = np.exp(-1j * 2 * np.pi * (tau @ kpt_latt))  # (num_orbitals,num_kpts)
     C_full = C_full * phase[:, None, :]  # regauge each orbital row, see module docstring
 
     C = C_full[:, list(band_indices), :]
@@ -725,10 +740,12 @@ def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist, nncell,
     # Wrap-around phase correction. A mesh neighbor k+b that leaves the
     # first BZ is written as k2+G on the mesh (k2 = nnlist-1, G = nncell,
     # an integer reciprocal-lattice shift). In the position-regauged
-    # ("convention I") gauge used for the M matrices, eigenvectors obey
-    # C(k2+G)_alpha = exp(i 2*pi G.tau_alpha) C(k2)_alpha (tau = orbital
-    # fractional position; see module docstring), so the true overlap is
-    # M(k,b) = C(k)^dagger @ diag(exp(i 2*pi G.tau)) @ C(k2). The bare
+    # ("convention I") gauge used for the M matrices, eigenvector
+    # *coefficients* obey C(k2+G)_alpha = exp(-i 2*pi G.tau_alpha)
+    # C(k2)_alpha (same sign as the regauging phase above, by the same
+    # coefficient-vs-basis-vector argument -- see it for the derivation),
+    # so the true overlap is
+    # M(k,b) = C(k)^dagger @ diag(exp(-i 2*pi G.tau)) @ C(k2). The bare
     # C(k2) (missing that phase) is what the old code used, which silently
     # dropped the G-dependent phase whenever a neighbor wrapped -- the
     # bug behind huge, mesh-dependent spreads on ribbon geometries.
@@ -751,7 +768,7 @@ def _build_overlaps(hamiltonian_k, num_orbitals, kpt_latt, nnlist, nncell,
         for nn in range(nntot):
             k2 = int(nnlist[k, nn]) - 1
             G = nncell[:, k, nn].astype(np.float64) * G_mask
-            wrap_phase = np.exp(1j * 2 * np.pi * (tau @ G))  # (num_orbitals,)
+            wrap_phase = np.exp(-1j * 2 * np.pi * (tau @ G))  # (num_orbitals,)
             M_matrix[:, :, nn, k] = C[:, :, k].conj().T @ (wrap_phase[:, None] * C[:, :, k2])
 
     return M_matrix, A_matrix, eigenvalues, C_bare

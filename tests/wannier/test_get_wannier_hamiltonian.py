@@ -358,3 +358,53 @@ def test_bdg_island_via_gamma_point_trick_reproduces_spectrum_exactly():
     e_ref = np.sort(np.linalg.eigvalsh(h0.intra))[[mid - 1, mid]]
     e_wan = np.sort(np.linalg.eigvalsh(hwan.intra))
     assert np.max(np.abs(e_ref - e_wan)) < 1e-8
+
+
+def test_backfolded_supercell_bands_respect_marzari_vanderbilt_lower_bound():
+    """Regression test for a real bug (GitHub issue #29): the position
+    regauging (``phase``/``wrap_phase`` in ``_build_overlaps``) that
+    converts pyqula's periodic-gauge eigenvector *coefficients* into
+    Wannier90's "convention I" had the wrong sign. Converting the *basis
+    vectors* from periodic gauge to convention I multiplies them by
+    ``exp(+i2*pi*k.tau)`` -- but a coefficient picks up the *opposite*
+    phase from the basis vector it multiplies (writing the same state as
+    ``sum_b c_b|b>_perio = sum_b c'_b|b>_conv1`` and substituting
+    ``|b>_perio = exp(-i2*pi*k.tau_b)|b>_conv1`` gives
+    ``c'_b = c_b * exp(-i2*pi*k.tau_b)``), and ``C_full`` stores
+    coefficients, not basis vectors. The wrong sign left the CG
+    minimizing against corrupted overlap data -- innocuous-looking for
+    many simple/symmetric geometries (where it happens to have no
+    effect), but for a general geometry it silently inflated the
+    converged spread, sometimes enormously (4x+ the true value in the
+    case that exposed it: a band group with an internal exact
+    degeneracy/touching point, e.g. a backfolded band in a supercell).
+
+    Test: Wannierize a single isolated (gapped) band in a small "primitive"
+    cell (spread S0, no ambiguity -- single band, nothing to get wrong
+    about internal degeneracies), then a 3x supercell of the same
+    geometry's bottom 3 (backfolded copies of that same band, touching at
+    two points in the BZ). Marzari-Vanderbilt theory guarantees the
+    gauge-invariant spread is a lower bound for *any* valid gauge of that
+    3-band manifold -- and 3 copies of the single-band Wannier function,
+    each merely translated (translation doesn't change a function's own
+    spread), is one such valid gauge, with total spread exactly 3*S0. So
+    the supercell's converged total spread must not exceed 3*S0 (up to
+    normal CG/mesh convergence slack) -- and, since translation symmetry
+    relates the 3 backfolded copies, their *individual* spreads should
+    come out close to equal too, not wildly lopsided."""
+    g = geometry.square_ribbon(3)
+    g0 = g.get_supercell(3)
+    g1 = g0.remove(g0.closest_index([0., 0., 0.]))  # isolated "defect" band
+    g2 = g1.get_supercell(3)  # defect repeated 3x -> bands [0,1,2] touch
+
+    h1 = g1.get_hamiltonian(has_spin=False)
+    h2 = g2.get_hamiltonian(has_spin=False)
+
+    hwan1 = h1.get_wannier_hamiltonian(bands=[0, 0], nk=16, num_iter=200)
+    S0 = hwan1.wannier_spreads[0]
+
+    hwan2 = h2.get_wannier_hamiltonian(bands=[0, 2], nk=12, num_iter=300)
+    bound = 3 * S0
+    assert hwan2.wannier_spread_total < 1.5 * bound  # generous CG/mesh slack
+    spreads = hwan2.wannier_spreads
+    assert np.max(spreads) / np.min(spreads) < 1.5  # roughly equal, not lopsided
