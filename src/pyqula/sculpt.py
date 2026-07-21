@@ -29,6 +29,7 @@ def remove(g,l):
   go.y = np.array(yo)
   go.z = np.array(zo)
   go.xyz2r() # update the revectors
+  go.has_fractional = False # site count changed, stale cached frac_r no longer valid
   ##### if has sublattice ####
   if g.has_sublattice: # if has sublattice, keep the indexes
     ab = [] # initialize
@@ -52,6 +53,7 @@ def remove_sites(g,store):
   store = np.array(store,dtype=int) # store
   gout.r = g.r[store==1]
   gout.r2xyz() # update r
+  gout.has_fractional = False # site count changed, stale cached frac_r no longer valid
   if gout.has_sublattice: # if has sublattice, keep the indexes
     gout.sublattice = np.array(g.sublattice)[store==1]
   return gout
