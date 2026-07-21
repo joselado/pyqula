@@ -86,7 +86,16 @@ def spinchi_pm_RPA(h,U=0.,v=[0.,0.,1.],**kwargs):
     from ..chi import chiAB # get response function
     es,chis = chiAB(h,A=sp,B=sm,mode="matrix",**kwargs) # non-interacting response functions
     iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
-    # this factor 1/2 should be here
+    # NOTE (2026-07-21): this U/2 prefactor looks wrong, not "should be here".
+    # spinchi_ladder (chitk/spinchi.py), which computes the same S+/S- RPA
+    # channel and is the one actually reachable from Hamiltonian.get_spinchi_ladder,
+    # uses a bare U (no 1/2) here. Cross-checked spinchi_ladder's bare-U prefactor
+    # against an exact 2-site Hubbard dimer diagonalization (staggered spin
+    # susceptibility grows correctly with U, matching the exact result at U=0
+    # and its trend for small U) and it is correct; this function would predict
+    # the RPA/Stoner-like pole at 2x the correct U. Left unfixed because this
+    # function is never called anywhere in the codebase (dead code) -- fix here
+    # too if it is ever wired up.
     chisrpa = [chi@algebra.inv(iden + U/2.*chi) for chi in chis] # RPA summation
     return es,np.array(chisrpa) # return energies and RPA response function
 

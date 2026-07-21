@@ -50,9 +50,9 @@ def chargechi_row(h,i=0,es=np.linspace(-3.0,3.0,100),delta=1e-6,temp=1e-7):
     m = hk(0) # get Hamiltonian
     esh,ws = algebra.eigh(m)
     ws = np.transpose(ws)
-    out = [] # store
     if i<0: raise
-    f = lambda j: elementchi(ws,esh,ws,esh,es,i+1,j+1,temp,delta)
+    zero = 0*es + 0j # initialize
+    f = lambda j: elementchi(ws,esh,ws,esh,es,i,j,temp,delta,zero)
     out = parallel.pcall(f,range(m.shape[0])) # parallel call
     return np.array(out)
 

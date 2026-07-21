@@ -81,7 +81,7 @@ def elementchi(ws1,es1,ws2,es2,ii,jj,T):
     for i in range(n): # first loop over states
       oi = (-np.tanh(es1[i]/T) + 1.0)/2. # first occupation
       for j in range(n): # second loop over states
-          oj = (-np.tanh(es1[j]/T) + 1.0)/2. # first occupation
+          oj = (-np.tanh(es2[j]/T) + 1.0)/2. # second occupation
           fac = np.conjugate(ws1[i][ii])*ws2[j][ii] # add the factor
           fac *= ws1[i][jj]*np.conjugate(ws2[j][jj]) # add the factor
           # probably this should be written better

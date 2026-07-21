@@ -61,7 +61,7 @@ def spinchi_full(H,RPA=True,**kwargs):
     # of the response. Nevertheless, it can be good enough as starting
     # point
     if H.has_eh: # for Nambu basis, quick workaround
-        el = h.get_operator("electron")
+        el = H.get_operator("electron")
         sx = sx@el
         sy = sy@el
         sz = sz@el
