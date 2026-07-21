@@ -390,6 +390,7 @@ def square_zigzag_ribbon(npairs):
   g = Geometry() # create geometry class
   g.x = x  # add to the x atribute
   g.y = y  # add to the y atribute
+  g.z = y*0.0  # add to the z atribute
   g.celldis = s2 # add distance to the nearest cell
   g.xyz2r() # create r coordinates
   g.dimensionality = 1

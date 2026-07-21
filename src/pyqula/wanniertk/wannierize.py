@@ -30,6 +30,26 @@ through that engine would need extending it with real antiunitary support
 substantial change to third-party code, left for a future iteration; the
 post-hoc approach here is exact and self-contained in the meantime.
 
+That post-hoc approach only works when the CG's converged gauge happens
+to be electron-hole *covariant* -- i.e. the operator it actually induces,
+``C_wan(k) = W(k)^dagger @ particle_hole_operator @ conj(W(-k))``, is the
+*same* matrix at every mesh k (not merely unitary at each k individually;
+see :func:`_wannier_particle_hole_operator_from_gauge`'s docstring for the
+distinction and why both are checked). Nothing about the unconstrained
+CG minimization pushes it toward such a gauge, so this holds reliably
+only for the full band manifold seeded with identity trial vectors (the
+default here -- confirmed empirically: the full manifold's true optimum
+is a near-atomic, close-to-identity gauge that inherits covariance from
+the original, manifestly covariant orbital basis). Partial (non-full)
+band selections generally do *not* converge to a covariant gauge even
+with electron-hole-paired trial vectors and full CG convergence
+(confirmed on multiple models) -- ``get_wannier_hamiltonian`` detects
+this and raises rather than silently returning a Hamiltonian with a
+badly wrong spectrum (which is what happened before this check existed).
+Making partial BdG selections reliably work would need the same
+antiunitary-aware CG extension mentioned above, not just a better trial
+vector.
+
 Gauge note: pyqula's own ``get_hk_gen()`` uses the "periodic gauge" --
 Bloch phases enter only via integer lattice-vector directions
 (``exp(i 2*pi R.k)``, see ``htk/bloch.py``), never via intra-cell atomic
@@ -83,8 +103,49 @@ def _monkhorst_pack(mp_grid):
 def _real_lattice(h):
     """(3,3) array, rows = direct lattice vectors -- matches both
     pyqula's own convention (geometrytk/fractional.py) and wannierpy's
-    (see io_helpers.reciprocal_lattice's docstring)."""
-    return np.array([h.geometry.a1, h.geometry.a2, h.geometry.a3], dtype=np.float64)
+    (see io_helpers.reciprocal_lattice's docstring).
+
+    Non-periodic rows (index >= h.dimensionality) are replaced with clean,
+    mutually orthogonal, artificially large dummy vectors instead of
+    trusting whatever ``h.geometry.a2``/``a3`` happen to hold. Some 1D/2D
+    geometry constructors already pad these consistently (e.g.
+    ``honeycomb_zigzag_ribbon``'s ``a2=[0,100,0]``, per this module's own
+    docstring), but others (``triangular_ribbon``, and anything built via
+    ``ribbon.py``'s ``geometry_bulk2ribbon``, e.g. ``lieb_ribbon``,
+    ``kagome_ribbon``) leave a genuine, lattice-scale, non-orthogonal
+    in-plane vector there instead -- harmless for pyqula's own physics
+    (``geometrytk/fractional.py``'s ``get_fractional`` never even reads
+    ``a2``/``a3`` for ``dim==1``, nor ``a3`` for ``dim==2``: it hardcodes
+    the non-periodic axes as untransformed cartesian coordinates), but
+    fatal for wannierpy's b-vector shell search (``kmesh_get``), which
+    needs a well-conditioned 3x3 cell and raises ``unable to satisfy the
+    B1 completeness relation`` on a near-degenerate one. Substituting
+    clean padding here fixes every such geometry uniformly, without
+    depending on each constructor happening to follow the padding
+    convention. Scale matches ``Geometry``'s own default padding
+    (``geometry.py``'s ``self.a2 = [0,100,0]``/``self.a3 = [0,0,100]``)
+    exactly, rather than scaling with ``a1``: ``kmesh_get``'s shell/
+    neighbour-degeneracy tolerance is an absolute distance, so padding
+    much larger than this (tried 1000x the norm of ``a1`` first) can
+    itself break the neighbour-shell search on some meshes."""
+    a1 = np.array(h.geometry.a1, dtype=np.float64)
+    a2 = np.array(h.geometry.a2, dtype=np.float64)
+    a3 = np.array(h.geometry.a3, dtype=np.float64)
+    dim = h.dimensionality
+    if dim >= 3:
+        return np.array([a1, a2, a3])
+    scale = 100.0
+    if dim == 2:
+        normal = np.cross(a1, a2)
+        a3 = normal / np.linalg.norm(normal) * scale
+        return np.array([a1, a2, a3])
+    # dim == 1: both a2 and a3 are non-periodic padding
+    e1 = a1 / np.linalg.norm(a1)
+    seed = np.array([1.0, 0.0, 0.0]) if abs(e1[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    e2 = seed - np.dot(seed, e1) * e1
+    e2 = e2 / np.linalg.norm(e2)
+    e3 = np.cross(e1, e2)
+    return np.array([a1, e2 * scale, e3 * scale])
 
 
 def _orbital_positions_frac(h, num_orbitals):
@@ -174,7 +235,14 @@ def _wannier_particle_hole_permutation(band_indices, num_orbitals):
     band's local (Wannier-basis) index to its electron-hole partner's --
     the induced action of :func:`_particle_hole_operator` restricted to
     a ``band_indices`` selection already validated as pairing-closed by
-    :func:`_default_or_validated_eh_band_indices`."""
+    :func:`_default_or_validated_eh_band_indices`.
+
+    Only used to seed :func:`_default_eh_trial_vectors` for partial (non-
+    full-manifold) selections -- it is *not* generally the operator
+    actually induced on the CG-converged Wannier gauge (that assumption
+    is what :func:`_wannier_particle_hole_operator_from_gauge` replaced,
+    see its docstring), only a reasonable index-based guess to start the
+    CG from."""
     index_of = {n: i for i, n in enumerate(band_indices)}
     num_wann = len(band_indices)
     perm = np.zeros((num_wann, num_wann), dtype=complex)
@@ -228,6 +296,80 @@ def _negative_k_index(kpt_latt, atol=1e-8):
                               "needed to enforce electron-hole symmetry")
         idx[k] = j
     return idx
+
+
+def _wannier_particle_hole_operator_from_gauge(W_k_mesh, kpt_latt, particle_hole_operator,
+                                                unitarity_atol=1e-4, constancy_atol=1e-3):
+    """The *actual* particle-hole operator induced on the converged Wannier
+    gauge, ``C_wan(k) = W(k)^dagger @ particle_hole_operator @
+    conj(W(-k))``.
+
+    This -- not :func:`_wannier_particle_hole_permutation` -- is what
+    :func:`_enforce_particle_hole_symmetry` needs. That helper assumes each
+    selected band's partner is at the fixed index ``num_orbitals-1-n``, i.e.
+    that the CG-converged Wannier gauge keeps every band's original,
+    ascending-eigenvalue-sorted index -- true only when ``num_wann==1`` or
+    the CG never mixes bands. In every other case the CG's converged smooth
+    gauge mixes band indices freely, and the *true* induced operator
+    (computed here) is a completely different matrix from the naive
+    index-flip guess.
+
+    ``C_wan(k)`` is unitary at *every* mesh k individually whenever the
+    selected subspace is a genuine union of degenerate multiplets of the
+    original Hamiltonian (proof: unitarity of ``particle_hole_operator``,
+    ``W(k)`` and ``W(-k)`` alone gives this, with no further assumption on
+    the gauge) -- so a unitarity failure at any k means the band selection
+    slices *through* a degenerate multiplet (picking some, not all, of it),
+    which has no well-defined, gauge-covariant induced operator since
+    eigh's choice of basis within that multiplet is arbitrary.
+
+    Unitarity alone is *not* enough, though: nothing forces ``C_wan(k)`` to
+    be the *same* matrix at every k -- that requires the CG's converged
+    gauge to itself be "particle-hole covariant" (``W(-k) = const @
+    conj(W(k))`` up to the fixed operator), which the CG has no way to
+    know to aim for (confirmed numerically: identity/simple trial-vector
+    seeds happen to converge to such a covariant gauge on some models, but
+    the production electron-hole-paired trial-vector seed does not on a
+    Rashba+Zeeman+s-wave honeycomb BdG model -- ``C_wan(k)`` there varies
+    by O(1) across the mesh). Using a single k's value regardless (e.g.
+    always the Gamma point) in :func:`_enforce_particle_hole_symmetry`
+    would then silently reintroduce large spectral errors on exactly the
+    cases this whole mechanism exists to avoid -- checked here instead,
+    consistently with the unitarity check above, rather than assumed."""
+    neg_idx = _negative_k_index(kpt_latt)
+    num_kpts = kpt_latt.shape[1]
+    num_wann = W_k_mesh.shape[1]
+    C_wan_all = np.empty((num_wann, num_wann, num_kpts), dtype=complex)
+    for k in range(num_kpts):
+        Wk = W_k_mesh[:, :, k]
+        Wmk = W_k_mesh[:, :, neg_idx[k]]
+        C_wan_all[:, :, k] = Wk.conj().T @ particle_hole_operator @ np.conj(Wmk)
+        err = np.max(np.abs(C_wan_all[:, :, k].conj().T @ C_wan_all[:, :, k] - np.eye(num_wann)))
+        if err > unitarity_atol:
+            raise ValueError(
+                "get_wannier_hamiltonian: the selected band group's induced "
+                f"electron-hole operator is not unitary at k={kpt_latt[:, k]} (deviation "
+                f"{err:.3g}), so exact particle-hole symmetry cannot be enforced -- this band "
+                "selection likely slices through a degenerate multiplet (picks some, not all, "
+                "of a degenerate cluster), which has no well-defined electron-hole-covariant "
+                "subspace; pick a band range that is a union of whole degenerate "
+                "multiplets, or increase num_iter/nk if this is a convergence issue")
+    C_wan = C_wan_all[:, :, 0]
+    variation = np.max(np.abs(C_wan_all - C_wan[:, :, None]))
+    if variation > constancy_atol:
+        raise ValueError(
+            "get_wannier_hamiltonian: the electron-hole operator induced by the converged "
+            f"Wannier gauge is not the same matrix at every mesh k-point (max variation "
+            f"{variation:.3g}) -- the CG minimization has no constraint keeping the gauge "
+            "particle-hole covariant, so exact symmetry enforcement is not possible for this "
+            "band selection as-is. This is a gauge-choice issue, not a convergence tail -- "
+            "confirmed to persist unchanged across a >10x increase in num_iter on affected "
+            "models -- so denser nk/more num_iter will not fix it. Reliably supported today: "
+            "the full band manifold (bands=[0, num_orbitals-1]), which defaults to an "
+            "identity trial-vector seed chosen to converge to a covariant gauge; a partial "
+            "selection may happen to work with hand-picked trial_vectors, but there is no "
+            "general recipe for finding a covariant one")
+    return C_wan
 
 
 def _enforce_particle_hole_symmetry(H_k_mesh, kpt_latt, C_wan):
@@ -675,14 +817,18 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         cluster when ``auto_split_clusters`` engaged), plus
         ``wannier_particle_hole_operator`` (the unitary ``C_wan``
         with ``C_wan @ conj(h_R) @ C_wan^-1 == -h_R`` for every real-space
-        hopping ``h_R`` of the result) when ``h.has_eh``. Enforcing this
-        exact electron-hole symmetry means the returned Hamiltonian's
-        spectrum only *approximately* (not exactly) reproduces ``h``'s
-        selected bands on the wannierization mesh, and ``wannier_functions``
-        is correspondingly only an approximate (not exact) diagonalizer of
-        it in that case -- see ``_enforce_particle_hole_symmetry``'s
-        docstring for the tradeoff; the approximation improves with better
-        CG convergence/denser nk.
+        hopping ``h_R`` of the result) when ``h.has_eh``.
+
+        Raises ``ValueError`` instead of returning a Hamiltonian with a
+        badly wrong spectrum when ``h.has_eh`` and the CG-converged
+        Wannier gauge does not admit a well-defined, mesh-wide-constant
+        electron-hole operator (see the module docstring's "post-hoc
+        approach only works when..." paragraph) -- reliable for the full
+        band manifold (the default trial-vector seed for it is chosen
+        specifically to make this hold), not generally for a partial
+        selection. This is a property of *which smooth gauge the CG
+        happens to land on*, not of convergence quality -- more
+        ``num_iter``/denser ``nk`` does not fix it once it occurs.
     """
     if h.dimensionality < 1:
         raise NotImplementedError(
@@ -705,16 +851,42 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         _validate_eh_band_indices(band_indices, num_orbitals)
 
     particle_hole_operator = None
-    particle_hole_perm = None
+    seed_particle_hole_perm = None
     if h.has_eh:
         particle_hole_operator = _particle_hole_operator(h, num_orbitals)
-        particle_hole_perm = _wannier_particle_hole_permutation(band_indices, num_orbitals)
+        # index-flip guess, good enough to seed the CG (see
+        # _default_eh_trial_vectors) but NOT what actually gets used to
+        # enforce symmetry below -- see _wannier_particle_hole_operator_from_gauge
+        seed_particle_hole_perm = _wannier_particle_hole_permutation(band_indices, num_orbitals)
 
     trial_vectors_given = trial_vectors is not None
     if trial_vectors is None:
-        if h.has_eh: # seed with electron-hole-paired trial orbitals, see docstring
+        if h.has_eh and num_wann == num_orbitals:
+            # Full manifold: identity trial vectors seed the CG at the
+            # (manifestly electron-hole-covariant, since W(k)=I trivially
+            # gives a k-independent induced operator equal to
+            # particle_hole_operator itself) original orbital basis, and
+            # the CG's own spread minimization has no reason to move far
+            # from it -- a full manifold's true optimum is a zero-spread,
+            # near-atomic-orbital gauge (see test_ladder_full_manifold_
+            # reproduces_spectrum_exactly), so this reliably converges to
+            # an (almost) exactly covariant gauge. Confirmed empirically
+            # to matter: _default_eh_trial_vectors' electron-hole-paired
+            # orbital seed, despite being designed with this symmetry in
+            # mind, converges to a gauge whose induced operator varies by
+            # O(1) across the mesh on some models (Rashba+s-wave chains,
+            # Rashba+Zeeman+s-wave honeycomb) even fully converged --
+            # silently corrupting _enforce_particle_hole_symmetry's single
+            # fixed-operator averaging. This does not extend to partial
+            # (non-full) band selections: identity columns there converge
+            # to comparably bad, non-covariant gauges (checked
+            # numerically), so those still use the paired heuristic below
+            # and rely on _wannier_particle_hole_operator_from_gauge's
+            # checks to catch the cases it still fails on.
+            trial_vectors = np.eye(num_orbitals, dtype=complex)
+        elif h.has_eh: # seed with electron-hole-paired trial orbitals, see docstring
             trial_vectors = _default_eh_trial_vectors(
-                num_orbitals, particle_hole_perm, particle_hole_operator)
+                num_orbitals, seed_particle_hole_perm, particle_hole_operator)
         else:
             trial_vectors = np.random.default_rng().standard_normal((num_orbitals, num_wann))
     trial_vectors = np.asarray(trial_vectors, dtype=complex)
@@ -801,7 +973,14 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
                 W_k_mesh = W_k_mesh_split
                 setup_results, run_results = setup_results_split, run_results_split
 
+    particle_hole_perm = None
     if h.has_eh:
+        # the operator actually induced by the CG-converged Wannier gauge,
+        # not the index-flip seed guess -- see
+        # _wannier_particle_hole_operator_from_gauge's docstring for why
+        # they generally differ
+        particle_hole_perm = _wannier_particle_hole_operator_from_gauge(
+            W_k_mesh, kpt_latt, particle_hole_operator)
         H_k_mesh = _enforce_particle_hole_symmetry(H_k_mesh, kpt_latt, particle_hole_perm)
 
     hopping = _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=cutoff)

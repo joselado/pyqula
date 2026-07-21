@@ -195,3 +195,100 @@ def test_wannier_functions_are_normalized():
 
     total_weight = sum(np.sum(np.abs(m) ** 2) for m in h1.wannier_functions.values())
     assert abs(total_weight - 1.0) < 1e-8
+
+
+def _bdg_chain():
+    g = geometry.chain(2)
+    h = g.get_hamiltonian(has_spin=True)
+    h.add_rashba(0.2)
+    h.add_swave(0.3)
+    return h
+
+
+def test_bdg_full_manifold_is_particle_hole_symmetric_and_exact():
+    """Regression test for a real bug: the electron-hole operator induced
+    on the CG-converged Wannier gauge is generally *not* the naive
+    band-index flip n -> num_orbitals-1-n that _enforce_particle_hole_symmetry
+    used to assume (confirmed by direct construction: the two differ by
+    O(1), not a small correction) -- the code now recovers the actual
+    induced operator from the converged gauge instead. Full manifold
+    (num_wann==num_orbitals) is the cleanest check: the raw, unsymmetrized
+    reconstruction is always exact regardless of gauge, so any deviation
+    here after particle-hole enforcement traces directly to the operator
+    used, not to CG non-convergence or a legitimate band-selection issue.
+    Also exercises the default full-manifold trial-vector seed (identity):
+    confirmed to reliably converge to an (almost) exactly electron-hole
+    *covariant* gauge -- constant across the whole mesh, not just unitary
+    pointwise -- unlike the paired-orbital heuristic used for partial
+    selections (see the two tests below)."""
+    h = _bdg_chain()
+    n = h.intra.shape[0]
+    h1 = h.get_wannier_hamiltonian(bands=[0, n - 1], nk=12, num_iter=3000, conv_tol=1e-12)
+
+    C_wan = h1.wannier_particle_hole_operator
+    assert np.max(np.abs(C_wan.conj().T @ C_wan - np.eye(n))) < 1e-8
+
+    for m in h1.get_multihopping().get_dict().values():
+        assert np.max(np.abs(C_wan @ np.conj(m) @ np.linalg.inv(C_wan) + m)) < 1e-8
+
+    # With a genuinely covariant gauge, _enforce_particle_hole_symmetry's
+    # averaging is a no-op (see its counterpart's docstring), so the
+    # reconstruction stays essentially exact -- not just "small enough to
+    # pass a loose bound" as it was before the identity-seed default fix.
+    ks = kmesh(1, nk=12)
+    assert _max_band_diff(h, h1, list(range(n)), ks, dim=1) < 1e-4
+
+
+def test_bdg_band_selection_across_a_degenerate_multiplet_raises():
+    """bands=[3,4] straddles two spin-degenerate multiplets of this model
+    (bands {2,3} and {4,5} are each degenerate, so slicing out just {3,4}
+    picks an arbitrary, non-covariant 1D cut through each) -- there is no
+    well-defined electron-hole operator on that selection, and the code
+    must say so rather than silently returning a wrong Hamiltonian (which
+    is what it used to do before this check was added). This is the
+    *pointwise* failure mode: the induced operator isn't even unitary at a
+    single k, caught before the mesh-wide constancy check below runs."""
+    h = _bdg_chain()
+    with pytest.raises(ValueError, match="not unitary"):
+        h.get_wannier_hamiltonian(bands=[3, 4], nk=12, num_iter=2000, conv_tol=1e-12)
+
+
+def test_bdg_partial_selection_with_non_covariant_gauge_raises():
+    """Regression test for a second, subtler real bug found on top of the
+    first: even for a partial selection that *is* a well-defined, gapped,
+    non-degenerate 2D subspace (so the induced operator is unitary at
+    every individual k -- unlike the test above), nothing guarantees the
+    CG's converged gauge is the *same* covariant operator at every k. On
+    this model (chain(1), Rashba+Zeeman+s-wave, the centred pair [1,2])
+    it demonstrably is not (confirmed by direct construction: varies by
+    the maximum possible amount, 2.0, for a 2x2 unitary difference) even
+    fully converged -- previously this silently reached
+    _enforce_particle_hole_symmetry's single-fixed-operator averaging and
+    returned a Hamiltonian with an O(0.1-1) wrong spectrum. The mesh-wide
+    constancy check now catches this instead of the unitarity check
+    above, and the two are distinguished so callers get an accurate
+    diagnosis of which failure mode they hit."""
+    g = geometry.chain(1)
+    h = g.get_hamiltonian(has_spin=True)
+    h.add_rashba(0.25)
+    h.add_zeeman([0.15, 0.05, 0.2])
+    h.add_swave(0.3)
+    with pytest.raises(ValueError, match="not the same matrix"):
+        h.get_wannier_hamiltonian(bands=[1, 2], nk=12, num_iter=3000, conv_tol=1e-12)
+
+
+@pytest.mark.parametrize("geom_name", ["triangular_ribbon", "lieb_ribbon"])
+def test_ribbon_geometries_with_non_padded_lattice_vectors_do_not_crash(geom_name):
+    """Regression test for a real bug: triangular_ribbon/lieb_ribbon (unlike
+    e.g. honeycomb_zigzag_ribbon) leave a genuine, lattice-scale, non-padded
+    vector in geometry.a2 for a 1D ribbon, which used to crash wannierpy's
+    b-vector shell search (kmesh_get) with "unable to satisfy the B1
+    completeness relation" -- get_wannier_hamiltonian now builds its own
+    clean padding instead of trusting geometry.a2/a3 for non-periodic axes."""
+    g = getattr(geometry, geom_name)(3)
+    h = g.get_hamiltonian(has_spin=False)
+    n = h.intra.shape[0]
+    h1 = h.get_wannier_hamiltonian(bands=[0, n - 1], nk=8, num_iter=1500, cutoff=0.0)
+
+    ks = kmesh(1, nk=8)
+    assert _max_band_diff(h, h1, list(range(n)), ks, dim=1) < 1e-6
