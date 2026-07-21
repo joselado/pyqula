@@ -480,6 +480,43 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 vall = h.get_operator("valley") # valley operator
 ```
 
+## In-plane valley operators
+
+The operator above is the out-of-plane valley pseudospin $\tau_z$. The two remaining components of the valley pseudospin, $\tau_x$ and $\tau_y$, can also be obtained, giving access to the full valley vector $(\tau_x,\tau_y,\tau_z)$ -- the valley-space analogue of $(S_x,S_y,S_z)$ for real spin. They are built from a chiral Kekule coupling (symmetrized over the 3 inequivalent Kekule registries so the result is exactly $C_3$-covariant about every atom, not only about special high-symmetry points) rather than from the second-neighbor coupling behind $\tau_z$
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice().supercell(3) # Kekule-commensurate cell
+h = g.get_hamiltonian(has_spin=False)  # get the Hamiltonian
+taux = h.get_operator("valley_x") # tau_x
+tauy = h.get_operator("valley_y") # tau_y
+```
+
+Both require a honeycomb-like geometry with a sublattice index; for a periodic (non-0d) Hamiltonian they additionally require a Kekule-commensurate cell (already a 3x3, or other multiple-of-3, supercell of the primitive honeycomb cell) to be well-defined -- a finite (0d) flake needs no such commensurability.
+
+A single vacancy in an otherwise pristine honeycomb flake is an atomically-sharp, intervalley-scattering defect, and induces a vortex in the in-plane valley pseudospin around it -- a nice way to see $\tau_x,\tau_y$ in action
+
+```python
+from pyqula import islands
+from pyqula import spectrum
+g = islands.get_geometry(name="honeycomb",n=8,nedges=6)
+gv = g.remove(g.get_central()[0]) # flake with a single vacancy
+hv = gv.get_hamiltonian(has_spin=False)
+dvx = spectrum.real_space_vev(hv,operator=hv.get_operator("valley_x"))
+dvy = spectrum.real_space_vev(hv,operator=hv.get_operator("valley_y"))
+```
+
+`h.add_valley_exchange(v)`, with `v=(vx,vy,vz)`, adds a valley-space exchange term $\vec{v}\cdot(\tau_x,\tau_y,\tau_z)$ to the Hamiltonian -- the valley-pseudospin analogue of `add_exchange` for real spin
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice().supercell(3) # Kekule-commensurate cell
+h = g.get_hamiltonian(has_spin=False)
+h.add_valley_exchange([0.1,0.05,0.2]) # (vx,vy,vz)
+```
+
+See `examples/0d/valley_vortex_vacancy/main.py` and `examples/2d/valley_vortex/main.py` for runnable versions of the vacancy-vortex example.
+
 ## Nambu operators
 
 In the presence of superconductivity, you can project onto the electron or
