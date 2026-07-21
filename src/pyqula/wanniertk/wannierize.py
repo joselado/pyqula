@@ -30,6 +30,21 @@ through that engine would need extending it with real antiunitary support
 substantial change to third-party code, left for a future iteration; the
 post-hoc approach here is exact and self-contained in the meantime.
 
+Point-group symmetries (``symmetries=`` argument, see
+``symmetrytk/pointgroup.py`` and ``_resolve_symmetries``/
+``_enforce_point_group_symmetry`` below) are handled the same post-hoc
+way, but the underlying algebra works out very differently since a
+point-group operation is unitary, not antiunitary like electron-hole
+conjugation: once the selected bands are validated as a genuine union of
+symmetry-related multiplets, the reconstructed Hamiltonian's spectral
+symmetry turns out to already be automatic for *any* CG gauge -- see
+``_enforce_point_group_symmetry``'s docstring for the derivation. So
+``symmetries=`` is mainly a validation gate plus numerical cleanup, not a
+correction like the electron-hole case below; it also does not make the
+Wannier functions/centres themselves symmetric (that needs CG-internal
+constraints, i.e. routing through ``sitesym.py`` for real, not attempted
+here).
+
 That post-hoc approach only works when the CG's converged gauge happens
 to be electron-hole *covariant* -- i.e. the operator it actually induces,
 ``C_wan(k) = W(k)^dagger @ particle_hole_operator @ conj(W(-k))``, is the
@@ -73,6 +88,7 @@ import itertools
 import numpy as np
 
 from . import wannierpy
+from ..symmetrytk import pointgroup
 
 
 def _mp_grid(h, nk):
@@ -294,22 +310,48 @@ def _default_eh_trial_vectors(num_orbitals, particle_hole_perm, particle_hole_op
     return trial_vectors
 
 
+def _mesh_index_of(kpt_latt, targets, atol, on_miss):
+    """For each column of ``targets`` (fractional k-points, any real
+    values -- not necessarily pre-reduced to ``[0,1)``), the column index
+    of the matching point (mod 1) on mesh ``kpt_latt``, matched by
+    minimum-image (periodic, wrap-around) distance -- i.e. a component
+    difference of ``0.999999...`` (as roundoff can produce for a
+    mathematically exact ``0``/``1`` boundary case, e.g. from
+    ``np.linalg.inv`` in :meth:`pointgroup.CompiledSymmetry.k_image`) is
+    treated as the ``~0`` it actually is on the torus, not as ``~1``.
+    Plain ``np.mod(np.abs(diff), 1.0)`` alone does *not* do this: once
+    both operands are already reduced to ``[0,1)`` that outer ``mod`` is
+    a no-op, so it silently reports such a roundoff-wrapped near-integer
+    as maximally far instead of maximally close -- confirmed to cause
+    spurious "mesh is not closed" failures on genuinely closed meshes for
+    3D lattices whose symmetry-induced integer matrices are not sparse
+    (e.g. ``geometry.pyrochlore_lattice()``).
+
+    ``on_miss(k)`` builds the ``ValueError`` message for column ``k`` if
+    no match is found within ``atol``."""
+    num_kpts = kpt_latt.shape[1]
+    targets = np.mod(targets, 1.0)
+    idx = np.empty(num_kpts, dtype=int)
+    for k in range(num_kpts):
+        diff = np.mod(np.abs(kpt_latt - targets[:, k:k + 1]), 1.0)
+        diff = np.minimum(diff, 1.0 - diff)  # minimum-image distance on the torus
+        d2 = np.sum(diff ** 2, axis=0)
+        j = int(np.argmin(d2))
+        if d2[j] > atol:
+            raise ValueError(on_miss(k))
+        idx[k] = j
+    return idx
+
+
 def _negative_k_index(kpt_latt, atol=1e-8):
     """For each column of ``kpt_latt`` (fractional mesh k-points), the
     column index of ``-k`` (mod 1) on the same mesh -- a Gamma-centred
     Monkhorst-Pack mesh is always closed under negation, which the
     electron-hole symmetrization below relies on."""
-    num_kpts = kpt_latt.shape[1]
-    neg = np.mod(-kpt_latt, 1.0)
-    idx = np.empty(num_kpts, dtype=int)
-    for k in range(num_kpts):
-        d2 = np.sum(np.mod(np.abs(kpt_latt - neg[:, k:k + 1]), 1.0) ** 2, axis=0)
-        j = int(np.argmin(d2))
-        if d2[j] > atol:
-            raise ValueError("get_wannier_hamiltonian: k-mesh is not closed under k -> -k, "
-                              "needed to enforce electron-hole symmetry")
-        idx[k] = j
-    return idx
+    return _mesh_index_of(
+        kpt_latt, -kpt_latt, atol,
+        lambda k: "get_wannier_hamiltonian: k-mesh is not closed under k -> -k, "
+                  "needed to enforce electron-hole symmetry")
 
 
 def _wannier_particle_hole_operator_from_gauge(W_k_mesh, kpt_latt, particle_hole_operator,
@@ -407,6 +449,163 @@ def _enforce_particle_hole_symmetry(H_k_mesh, kpt_latt, C_wan):
     for k in range(num_kpts):
         mirrored = -C_wan @ H_k_mesh[:, :, neg_idx[k]].conj() @ C_inv
         H_sym[:, :, k] = 0.5 * (H_k_mesh[:, :, k] + mirrored)
+    return H_sym
+
+
+def _resolve_symmetries(h, symmetries):
+    """Turn ``get_wannier_hamiltonian``'s ``symmetries`` argument
+    (``None``, ``"auto"``, or a list of ``pointgroup.SymmetryOperation``)
+    into a group-closed list of ``pointgroup.CompiledSymmetry``, ready for
+    :func:`_enforce_point_group_symmetry`.
+
+    ``"auto"`` only ever *narrows* ``h.geometry``'s detected point group
+    down to the operations verified against ``h`` itself (see
+    ``pointgroup.find_point_group`` -- a Hamiltonian's symmetries are
+    always a subset of its geometry's, never a superset); an explicit
+    list is verified the same way, but raises instead of silently
+    dropping an operation the caller explicitly asked for, since that
+    almost always means a mistake in the requested operation rather than
+    something to quietly ignore."""
+    if symmetries is None:
+        return []
+    if h.has_eh:
+        raise NotImplementedError(
+            "get_wannier_hamiltonian: symmetries= is not implemented for Nambu/BdG "
+            "Hamiltonians (h.has_eh=True) -- see wanniertk/../symmetrytk/pointgroup.py's "
+            "module docstring")
+    if symmetries == "auto":
+        found = pointgroup.find_point_group(h.geometry, h=h)
+        return pointgroup.close_group(h, found)
+    ops = list(symmetries)
+    if not ops:
+        return []
+    for op in ops:
+        if pointgroup.compile_symmetry(h, op) is None:
+            raise ValueError(
+                f"get_wannier_hamiltonian: symmetries= includes {op!r}, which is not a "
+                "verified symmetry of this Hamiltonian's geometry and H(k) (a Hamiltonian's "
+                "symmetries are always a subset of its geometry's) -- check the operation, "
+                'or use symmetries="auto" to only ever use genuinely-present ones')
+    return pointgroup.close_group(h, ops)
+
+
+def _symmetry_target_index(compiled, kpt_latt, atol=1e-6):
+    """For each mesh index ``k``, the mesh index of
+    ``compiled.k_image(kpt_latt[:,k])`` (mod 1) -- generalizes
+    :func:`_negative_k_index` (the ``k -> -k`` case used for
+    electron-hole symmetry) to an arbitrary point-group operation's
+    ``k -> k'`` action. Requires the k-mesh to be closed under this
+    action, true for a Gamma-centred Monkhorst-Pack mesh as long as the
+    operation doesn't need to relate periodic directions sampled with
+    different densities."""
+    dim = kpt_latt.shape[0]
+    num_kpts = kpt_latt.shape[1]
+    images = np.array([compiled.k_image(kpt_latt[:, k])[:dim] for k in range(num_kpts)]).T
+    return _mesh_index_of(
+        kpt_latt, images, atol,
+        lambda k: "get_wannier_hamiltonian: k-mesh is not closed under symmetry "
+                  f"{compiled.op.name}'s k -> k' action (needed to enforce it) -- likely an "
+                  "anisotropic nk mismatched with a symmetry that mixes periodic directions "
+                  "sampled at different densities; use a uniform nk instead")
+
+
+def _point_group_wannier_operators(compiled, W_k_mesh, kpt_latt, target_idx,
+                                    unitarity_atol=1e-4):
+    """``(num_wann,num_wann,num_kpts)`` array of the Wannier-gauge
+    intertwiners ``D(R,k) = W(Rk)^dagger @ P(R,k) @ W(k)`` induced by one
+    compiled symmetry -- the point-group analogue of
+    :func:`_wannier_particle_hole_operator_from_gauge`, without the
+    complex conjugation that function needs for its antiunitary operator
+    (a point-group operation is unitary, so none appears here).
+
+    ``D(R,k)`` is unitary at every mesh k whenever the selected band
+    subspace is a genuine union of ``R``-related multiplets (proof:
+    unitarity of ``P(R,k)``, ``W(Rk)`` and ``W(k)`` alone gives this) --
+    so a unitarity failure means the band selection slices through a
+    symmetry-related degenerate multiplet, checked here and raised on,
+    exactly mirroring the electron-hole case. Unlike that case, no
+    separate "same matrix at every k" check is needed: ``D(R,k)``
+    genuinely depends on k by construction, and the family
+    ``{D(R,k)}_{R,k}`` automatically satisfies the group cocycle
+    condition ``D(R2,R1 k) D(R1,k) = D(R2 R1,k)`` given only the
+    per-(R,k) unitarity checked here (each ``P(R,k)`` maps the selected
+    subspace at k isomorphically onto the one at ``Rk``, so composing two
+    such maps composes their group elements) -- which is exactly what
+    makes the group-averaging in :func:`_enforce_point_group_symmetry`
+    exactly covariant rather than merely unitary."""
+    num_kpts = kpt_latt.shape[1]
+    num_wann = W_k_mesh.shape[1]
+    D_all = np.empty((num_wann, num_wann, num_kpts), dtype=complex)
+    for k in range(num_kpts):
+        P, _ = compiled.orbital_operator(kpt_latt[:, k])
+        kdst = target_idx[k]
+        D = W_k_mesh[:, :, kdst].conj().T @ P @ W_k_mesh[:, :, k]
+        err = np.max(np.abs(D.conj().T @ D - np.eye(num_wann)))
+        if err > unitarity_atol:
+            raise ValueError(
+                "get_wannier_hamiltonian: the selected band group's induced operator for "
+                f"symmetry {compiled.op.name} is not unitary at k={kpt_latt[:, k]} (deviation "
+                f"{err:.3g}) -- this band selection likely slices through a symmetry-related "
+                "degenerate multiplet (picks some, not all, of it), which has no well-defined "
+                "symmetry-covariant subspace for this operation; pick a band range that is a "
+                "union of whole such multiplets, drop this symmetry from `symmetries`, or "
+                "increase num_iter/nk if this is a convergence issue")
+        D_all[:, :, k] = D
+    return D_all
+
+
+def _enforce_point_group_symmetry(H_k_mesh, W_k_mesh, kpt_latt, group):
+    """Symmetrize a Wannier-gauge Bloch Hamiltonian mesh over a
+    group-closed list of ``pointgroup.CompiledSymmetry`` (see
+    :func:`_resolve_symmetries`) via the Reynolds/group-averaging
+    operator ``H_sym(k) = (1/|G|) sum_R D(R,k_src) H(k_src) D(R,k_src)^dagger``,
+    ``k_src`` the mesh point ``R`` maps to ``k`` -- the point-group
+    analogue of :func:`_enforce_particle_hole_symmetry`. A no-op (returns
+    ``H_k_mesh`` unchanged) when ``group`` is empty.
+
+    Unlike the electron-hole case, this is *not* generally correcting a
+    real violation: for a genuine unitary symmetry (no conjugation, unlike
+    electron-hole's antiunitary ``C``), one can show algebraically that
+    ``D(R,k) H(k) D(R,k)^dagger == H(k_dst)`` *already* holds exactly for
+    *any* per-k gauge ``W(k)`` built from true eigenvectors of the
+    selected subspace -- the projector ``W(k) W(k)^dagger`` onto that
+    subspace is gauge-independent, and the whole identity reduces to the
+    original Hamiltonian's own symmetry once the per-(R,k) unitarity in
+    :func:`_point_group_wannier_operators` holds (confirmed empirically:
+    a deliberately non-covariant, per-k-random gauge on a genuine
+    invariant subspace already satisfies this to machine precision,
+    before this function is even called). So this averaging step is
+    mainly a numerical-residual cleanup + a strong validation gate (via
+    the unitarity check) rather than a correction, in contrast to
+    electron-hole enforcement which fixes a genuine, generically large
+    gauge mismatch. What this does *not* guarantee: that the *Wannier
+    functions themselves* (``W_k_mesh``, hence ``wannier_functions`` and
+    ``wannier_centres``) sit at symmetry-related positions -- that needs
+    ``D(R,k)`` to be *k-independent* (a real, generally unsatisfied
+    constraint on the gauge, analogous to electron-hole's "constancy"
+    requirement), which only CG-internal symmetry constraints (the
+    vendored but unused ``wannierpy/_engine/sitesym.py`` engine, see the
+    module docstring) can reliably achieve -- not implemented here."""
+    if not group:
+        return H_k_mesh
+    num_kpts = kpt_latt.shape[1]
+    num_wann = H_k_mesh.shape[0]
+    inv_idxs, D_alls = [], []
+    for compiled in group:
+        tgt = _symmetry_target_index(compiled, kpt_latt)
+        inv = np.empty(num_kpts, dtype=int)
+        inv[tgt] = np.arange(num_kpts)
+        inv_idxs.append(inv)
+        D_alls.append(_point_group_wannier_operators(compiled, W_k_mesh, kpt_latt, tgt))
+    H_sym = np.empty_like(H_k_mesh)
+    order = len(group)
+    for k_dst in range(num_kpts):
+        acc = np.zeros((num_wann, num_wann), dtype=complex)
+        for g_i in range(order):
+            k_src = inv_idxs[g_i][k_dst]
+            D = D_alls[g_i][:, :, k_src]
+            acc += D @ H_k_mesh[:, :, k_src] @ D.conj().T
+        H_sym[:, :, k_dst] = acc / order
     return H_sym
 
 
@@ -734,7 +933,7 @@ def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
 def get_wannier_hamiltonian(h, bands=None, nk=12,
         trial_vectors=None, num_iter=200, conv_tol=1e-10, conv_window=3,
         cutoff=1e-6, seedname="pyqula_wannier", win_keywords=None,
-        auto_split_clusters=False, cluster_rel_tol=0.1):
+        auto_split_clusters=False, cluster_rel_tol=0.1, symmetries=None):
     """Wannierize a fixed subset of ``h``'s bands and return a new pyqula
     Hamiltonian whose real-space hoppings exactly reproduce that band
     subspace on the wannierization mesh (and interpolate smoothly
@@ -809,6 +1008,38 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         between adjacent selected bands must exceed this fraction of the
         selected bands' total energy span, at every mesh k-point, to
         count as a cluster boundary.
+    symmetries : None, "auto", or list of ``symmetrytk.pointgroup.SymmetryOperation``, optional
+        Default None (no symmetry enforcement, current behaviour
+        unchanged). ``"auto"`` detects ``h.geometry``'s point group
+        (``symmetrytk.pointgroup.find_point_group``, a best-effort,
+        dependency-free heuristic -- see its docstring for what it can
+        and can't find) and keeps only the operations verified as actual
+        symmetries of ``h`` (a Hamiltonian's symmetries are always a
+        subset of its geometry's). A list enforces exactly those
+        operations instead, after the same per-operation verification
+        (raises ``ValueError`` if one doesn't verify -- construct it with
+        ``symmetrytk.pointgroup.SymmetryOperation`` and pass a ``center``
+        if the relevant rotation axis doesn't pass through the origin).
+        Either way the requested/detected operations are closed into a
+        full group (``pointgroup.close_group``), and the selected bands
+        are validated as a genuine union of symmetry-related multiplets
+        under every element (raises ``ValueError`` otherwise, the same
+        failure mode ``h.has_eh``'s enforcement has for electron-hole
+        pairs -- see ``_point_group_wannier_operators``). Not implemented
+        for ``h.has_eh`` Hamiltonians (raises ``NotImplementedError``).
+
+        Note what this does and does not guarantee: for a genuine
+        (unitary) point-group symmetry, unlike electron-hole's antiunitary
+        one, the reconstructed Hamiltonian's spectral symmetry is already
+        automatic once the validation above passes -- *any* CG gauge on a
+        valid selection reproduces it exactly (see
+        ``_enforce_point_group_symmetry``'s docstring for the algebra), so
+        this option mainly acts as that validation gate plus numerical
+        cleanup, not a correction. It does *not* make the *Wannier
+        functions/centres themselves* (``wannier_functions``,
+        ``wannier_centres``) sit at symmetric positions -- that would need
+        symmetry constraints inside the CG minimization itself (not
+        implemented; see the module docstring).
 
     Returns
     -------
@@ -831,7 +1062,10 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         cluster when ``auto_split_clusters`` engaged), plus
         ``wannier_particle_hole_operator`` (the unitary ``C_wan``
         with ``C_wan @ conj(h_R) @ C_wan^-1 == -h_R`` for every real-space
-        hopping ``h_R`` of the result) when ``h.has_eh``.
+        hopping ``h_R`` of the result) when ``h.has_eh``, and
+        ``wannier_symmetries`` (the group-closed list of
+        ``pointgroup.CompiledSymmetry`` actually enforced) when
+        ``symmetries`` was given.
 
         Raises ``ValueError`` instead of returning a Hamiltonian with a
         badly wrong spectrum when ``h.has_eh`` and the CG-converged
@@ -863,6 +1097,10 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
             f"bands=[{a},{b}] selects {num_wann} bands, only {num_orbitals} available")
     if h.has_eh: # Nambu/BdG: band selection must be electron-hole-pair-closed
         _validate_eh_band_indices(band_indices, num_orbitals)
+
+    # resolved/verified/group-closed up front (before the expensive CG
+    # run) so a bad symmetries= argument fails fast -- see _resolve_symmetries
+    symmetry_group = _resolve_symmetries(h, symmetries)
 
     particle_hole_operator = None
     seed_particle_hole_perm = None
@@ -995,6 +1233,9 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
             W_k_mesh, kpt_latt, particle_hole_operator)
         H_k_mesh = _enforce_particle_hole_symmetry(H_k_mesh, kpt_latt, particle_hole_perm)
 
+    if symmetry_group:
+        H_k_mesh = _enforce_point_group_symmetry(H_k_mesh, W_k_mesh, kpt_latt, symmetry_group)
+
     hopping = _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=cutoff)
     # W_k_mesh is already C_bare(k) @ U_matrix(k) (see _wannierize_one_group),
     # so only the same Fourier-transform-and-truncate step _hopping_from_bloch
@@ -1031,4 +1272,6 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     h2.wannier_functions = wannier_functions
     if particle_hole_perm is not None:
         h2.wannier_particle_hole_operator = particle_hole_perm
+    if symmetry_group:
+        h2.wannier_symmetries = symmetry_group
     return h2
