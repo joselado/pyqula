@@ -11,7 +11,7 @@ from pyqula import geometry
 from pyqula import ldos
 g = geometry.honeycomb_zigzag_ribbon()
 h = g.get_hamiltonian(has_spin=True)
-ldos.multi_ldos(h,nk=4,es=np.linspace(-1,1,100),delta=0.1,nrep=3)
+ldos.multi_ldos(h,nk=4,energies=np.linspace(-1,1,100),delta=0.1,nrep=3)
 
 # multi_ldos does not return arrays, it writes a site/energy/LDOS map
 (isite,energy,d) = np.genfromtxt("DOSMAP.OUT").T

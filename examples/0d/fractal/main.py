@@ -13,7 +13,7 @@ g = geometry.sierpinski(n=7,mode="triangular")
 g.write()
 #exit()
 h = g.get_hamiltonian(has_spin=False)
-h.get_multildos(es=np.linspace(-3.0,3.0,100),delta=1e-2)
+h.get_multildos(energies=np.linspace(-3.0,3.0,100),delta=1e-2)
 
 import matplotlib.pyplot as plt
 data = np.genfromtxt("MULTILDOS/DOS.OUT")

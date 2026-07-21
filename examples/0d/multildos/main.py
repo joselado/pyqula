@@ -11,7 +11,7 @@ from pyqula import islands
 g = islands.get_geometry(name="honeycomb",n=3,nedges=3) # get an island
 h = g.get_hamiltonian() # get the Hamiltonian
 es = np.linspace(-2.0,2.0,100)
-h.get_multildos(projection="atomic",es=es) # get the LDOS
+h.get_multildos(projection="atomic",energies=es) # get the LDOS
 
 import matplotlib.pyplot as plt
 e0 = es[len(es)//2]

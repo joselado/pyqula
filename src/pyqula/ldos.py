@@ -333,7 +333,7 @@ def multi_ldos(h,projection="TB",**kwargs):
         return atomicmultildos.multi_ldos(h,**kwargs)
 
 
-def multi_ldos_tb(h,es=np.linspace(-1.0,1.0,100),delta=0.01,
+def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
         nrep=3,nk=100,num_bands=20,
         random=False,op=None,**kwargs):
   """Calculate many LDOS, by diagonalizing the Hamiltonian"""
@@ -352,7 +352,7 @@ def multi_ldos_tb(h,es=np.linspace(-1.0,1.0,100),delta=0.01,
       if random:
         k = np.random.random(3) # random vector
         print("RANDOM vector in LDOS")
-      e,w = smalleig(hk(k),numw=num_bands,evecs=True,e0=np.mean(es))
+      e,w = smalleig(hk(k),numw=num_bands,evecs=True,e0=np.mean(energies))
       evals += [ie for ie in e]
       ws += [iw for iw in w]
       ps += [op(iw,k=k).real for iw in w] # weights (real part of the expectation value)
@@ -384,9 +384,9 @@ def multi_ldos_tb(h,es=np.linspace(-1.0,1.0,100),delta=0.01,
       out += fac*d*p # add contribution
     out /= np.pi # normalize
     return spatial_dos(h,out) # resum if necessary
-  outs = parallel.pcall(getldosi,es) # get energies
+  outs = parallel.pcall(getldosi,energies) # get energies
   ie = 0
-  for e in es: # loop over energies
+  for e in energies: # loop over energies
     print("MULTILDOS for energy",e)
     out = outs[ie] ; ie += 1 # get and increase
     name0 = "LDOS_"+str(e)+"_.OUT" # name of the output
@@ -399,14 +399,14 @@ def multi_ldos_tb(h,es=np.linspace(-1.0,1.0,100),delta=0.01,
   fo.close() # close file
   fmap = open("DOSMAP.OUT","w")
   for ii in range(len(h.geometry.x)):
-      for ie in range(len(es)):
+      for ie in range(len(energies)):
           fmap.write(str(ii)+"  ")
-          fmap.write(str(es[ie])+"  ")
+          fmap.write(str(energies[ie])+"  ")
           fmap.write(str(outs[ie][ii])+"\n")
   fmap.close()
   # Now calculate the DOS
   from .dos import calculate_dos
-  es2 = np.linspace(min(es),max(es),len(es)*10)
+  es2 = np.linspace(min(energies),max(energies),len(energies)*10)
   ys = calculate_dos(evals,es2,delta,w=None) # compute DOS
   from .dos import write_dos
   write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")  

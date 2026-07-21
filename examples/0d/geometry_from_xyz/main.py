@@ -25,7 +25,7 @@ g.write() # write the geometry just to check
 (k,e) = h.get_bands() # compute electronic structure
 es = np.linspace(-0.5,0.5,100)
 h.get_multildos(projection="atomic",delta=1e-2,
-                   es=es) # compute the LDOS using atomic orbitals
+                   energies=es) # compute the LDOS using atomic orbitals
 
 import matplotlib.pyplot as plt
 plt.subplot(1,2,1)

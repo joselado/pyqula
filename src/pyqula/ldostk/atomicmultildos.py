@@ -107,7 +107,7 @@ def get_density(h,e=0.0,delta=1e-3,**kwargs):
 
 
 
-def multi_ldos(h,es=np.linspace(-2.0,2.0,100),delta=0.05,**kwargs):
+def multi_ldos(h,energies=np.linspace(-2.0,2.0,100),delta=0.05,**kwargs):
     """Compute the LDOS at different eenrgies, and add an envelop atomic
     orbital"""
     ldos_gen,evals,x,y = ldos_generator(h,delta=delta,**kwargs) # get the generator
@@ -115,7 +115,7 @@ def multi_ldos(h,es=np.linspace(-2.0,2.0,100),delta=0.05,**kwargs):
     fs.rmdir("MULTILDOS")
     fs.mkdir("MULTILDOS")
     fo = open("MULTILDOS/MULTILDOS.TXT","w") # files with the names
-    for e in es: # loop over energies
+    for e in energies: # loop over energies
         name0 = "LDOS_"+str(e)+"_.OUT" # name of the output
         name = "MULTILDOS/" + name0
         out = ldos_gen(e) # compute the LDOS
@@ -123,7 +123,7 @@ def multi_ldos(h,es=np.linspace(-2.0,2.0,100),delta=0.05,**kwargs):
         fo.write(name0+"\n") # name of the file
     fo.close()
     from ..dos import calculate_dos,write_dos
-    es2 = np.linspace(min(es),max(es),len(es)*10)
+    es2 = np.linspace(min(energies),max(energies),len(energies)*10)
     ys = calculate_dos(evals,es2,delta,w=None) # compute DOS
     write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")
 

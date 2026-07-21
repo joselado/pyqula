@@ -17,7 +17,7 @@ def test_multi_ldos_tb_dense_branch_accepts_kdependent_operator(tmp_path, monkey
     h = g.get_hamiltonian()
     h.add_peierls(0.05)
     op = h.get_operator("valley")
-    out = ldos.multi_ldos(h, op=op, es=np.linspace(-1.0, 1.0, 10), nk=4)
+    out = ldos.multi_ldos(h, op=op, energies=np.linspace(-1.0, 1.0, 10), nk=4)
     d = np.genfromtxt("DOSMAP.OUT")
     assert d.shape[0] > 0
     assert np.all(np.isfinite(d[:, 2]))  # the LDOS column stayed real and finite

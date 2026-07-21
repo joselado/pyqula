@@ -12,6 +12,6 @@ def test_fractal_sierpinski_multildos_matches_reference(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     g = geometry.sierpinski(n=3, mode="triangular")
     h = g.get_hamiltonian(has_spin=False)
-    h.get_multildos(es=np.linspace(-3.0, 3.0, 30), delta=1e-2)
+    h.get_multildos(energies=np.linspace(-3.0, 3.0, 30), delta=1e-2)
     dos = np.genfromtxt("MULTILDOS/DOS.OUT")
     assert np.isclose(np.sum(dos), 4188.630243168944, atol=1e-2)
