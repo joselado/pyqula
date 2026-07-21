@@ -3,6 +3,7 @@ import numpy as np
 def canonical_unitary(self,fin):
     """Return a function that wraps any matrix inot ints canonical unitary"""
     def fun(k):
+        if not getattr(self.geometry, "has_fractional", False): self.geometry.get_fractional()
         frac_r = self.geometry.frac_r # fractional coordinates
         frac_r = frac_r - frac_r[0]
         fphase = lambda ri: np.exp(1j*np.pi*2.*ri.dot(k)) # phase

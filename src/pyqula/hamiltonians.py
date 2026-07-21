@@ -207,6 +207,7 @@ class Hamiltonian():
       def f(k=[0.,0.,0.],e=0.0,inv=False):
           hk = hkgen(k) # get matrix
           if canonical_phase: # use a Bloch phase in all the sites
+              if not getattr(self.geometry, "has_fractional", False): self.geometry.get_fractional()
               frac_r = self.geometry.frac_r # fractional coordinates
               # start in zero
               U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])

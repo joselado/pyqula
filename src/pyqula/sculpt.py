@@ -30,6 +30,10 @@ def remove(g,l):
   go.z = np.array(zo)
   go.xyz2r() # update the revectors
   go.has_fractional = False # site count changed, stale cached frac_r no longer valid
+  if hasattr(go, "frac_r"): del go.frac_r # don't leave a wrong-length array for
+  # code that reads frac_r directly without checking has_fractional first
+  # (see wanniertk/wannierize.py's _particle_hole_operator for a real bug
+  # this caused)
   ##### if has sublattice ####
   if g.has_sublattice: # if has sublattice, keep the indexes
     ab = [] # initialize
@@ -54,6 +58,7 @@ def remove_sites(g,store):
   gout.r = g.r[store==1]
   gout.r2xyz() # update r
   gout.has_fractional = False # site count changed, stale cached frac_r no longer valid
+  if hasattr(gout, "frac_r"): del gout.frac_r # see remove()'s matching comment above
   if gout.has_sublattice: # if has sublattice, keep the indexes
     gout.sublattice = np.array(g.sublattice)[store==1]
   return gout
@@ -363,6 +368,8 @@ def add(g1,g2):
   g.y = np.concatenate([g1.y,g2.y])
   g.z = np.concatenate([g1.z,g2.z])
   g.xyz2r()
+  g.has_fractional = False # site count changed, stale cached frac_r no longer valid
+  if hasattr(g, "frac_r"): del g.frac_r # see remove()'s matching comment above
   g.has_sublattice = False
   return g
 

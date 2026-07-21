@@ -1,9 +1,10 @@
 import numpy as np
 import pytest
 
-from pyqula import geometry
+from pyqula import geometry, islands
 from pyqula.hamiltonians import Hamiltonian
 from pyqula.klist import kmesh
+from pyqula.multihopping import MultiHopping
 from pyqula.wanniertk.wannierhamiltonian import WannierHamiltonian
 
 
@@ -292,3 +293,68 @@ def test_ribbon_geometries_with_non_padded_lattice_vectors_do_not_crash(geom_nam
 
     ks = kmesh(1, nk=8)
     assert _max_band_diff(h, h1, list(range(n)), ks, dim=1) < 1e-6
+
+
+def _wrap_finite_as_fake_1d(h0, boxsize=1000.0):
+    """The standard "Gamma-point-only Wannier functions of a finite
+    system" trick: wrap a dimensionality=0 (molecular/island) Hamiltonian
+    as dimensionality=1 with a huge lattice vector (periodic images never
+    couple) and a single intracell hopping equal to the original intra
+    matrix, then Wannierize with nk=1."""
+    g2 = h0.geometry.copy()
+    g2.dimensionality = 1
+    g2.a1 = np.array([boxsize, 0.0, 0.0])
+    h = Hamiltonian(g2)
+    h.has_spin = h0.has_spin
+    h.has_eh = getattr(h0, "has_eh", False)
+    h.is_sparse = False
+    h.is_multicell = True
+    h.set_multihopping(MultiHopping({(0, 0, 0): np.array(h0.intra)}))
+    return h
+
+
+def test_requires_periodic_hamiltonian_rejects_genuine_0d():
+    """Direct Wannierization of a dimensionality=0 Hamiltonian is not
+    supported (no Bloch phases to build a k-mesh from) and must say so
+    rather than doing something undefined."""
+    g = islands.get_geometry(name="triangular", n=1.4, nedges=3)
+    h = g.get_hamiltonian(has_spin=False)
+    with pytest.raises(NotImplementedError):
+        h.get_wannier_hamiltonian(bands=[0, 0], nk=1)
+
+
+def test_bdg_island_via_gamma_point_trick_reproduces_spectrum_exactly():
+    """Regression test for a real bug: islands.get_geometry's construction
+    pipeline (supercell -> polygon cut -> remove_unibonded) leaves a stale
+    geometry.frac_r array cached from an intermediate, larger supercell
+    even after sculpt.remove/remove_sites correctly reset has_fractional
+    to False (that flag reset doesn't erase the old array, and
+    _particle_hole_operator read frac_r directly without checking the
+    flag first, unlike every other frac_r access in this module) --
+    causing a spurious "got num_orbitals=112 for 81 sites" NotImplementedError
+    on a 28-site island's Nambu Hamiltonian (112 == 4*28, but frac_r's
+    stale length was 81, an intermediate pre-cut supercell size). Fixed by
+    using geometry.r (always current) for the site count instead, and by
+    having sculpt.remove/remove_sites delete the stale frac_r array
+    outright rather than just flagging it stale.
+
+    This also exercises the electron-hole-covariance requirement discussed
+    in test_bdg_partial_selection_with_non_covariant_gauge_raises for a
+    *partial* band selection: with nk=1 there is only ever one mesh
+    k-point (self-paired, k=-k=0), so the "same operator at every k" check
+    is trivially satisfied and partial BdG selections work here, unlike on
+    a genuinely dispersive (nk>1) lattice."""
+    g = islands.get_geometry(name="triangular", n=1.4, nedges=3)
+    h0 = g.get_hamiltonian(has_spin=True)
+    h0.add_rashba(0.2)
+    h0.add_zeeman([0.15, 0.05, 0.2])
+    h0.add_swave(0.3)
+    n = h0.intra.shape[0]
+    h = _wrap_finite_as_fake_1d(h0)
+
+    mid = n // 2
+    hwan = h.get_wannier_hamiltonian(bands=[mid - 1, mid], nk=1, num_iter=1000)
+
+    e_ref = np.sort(np.linalg.eigvalsh(h0.intra))[[mid - 1, mid]]
+    e_wan = np.sort(np.linalg.eigvalsh(hwan.intra))
+    assert np.max(np.abs(e_ref - e_wan)) < 1e-8

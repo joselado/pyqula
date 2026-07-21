@@ -80,7 +80,7 @@ def write_positions(g,output_file = "POSITIONS.OUT",nrep=None):
 def write_vasp(g0,s=1.42,namefile="vasp.vasp"):
     """Turn a geometry into vasp geometry"""
     g = g0.copy() # copy geometry
-    if g.dimensionality==3: pass
+    if g.dimensionality==3: g.get_fractional() # get fractional coordinates
     elif g.dimensionality==2:
         g.r[:,2] -= np.min(g.r[:,2])
         z = np.max(g.r[:,2]) - np.min(g.r[:,2])

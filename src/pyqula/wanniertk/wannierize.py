@@ -158,7 +158,14 @@ def _orbital_positions_frac(h, num_orbitals):
     (``sctk/reorder.py::block2nambu``) regroups each site into one
     contiguous block of 4 (electron up/down, hole down/up) at indices
     4*i..4*i+3. Either way, all of a site's basis rows share that site's
-    position, so site positions are simply repeated in place."""
+    position, so site positions are simply repeated in place.
+
+    Ensures fractional coordinates are fresh itself (not just relying on
+    the caller having done so) -- the same "read frac_r before checking
+    has_fractional" mistake this module's _particle_hole_operator used to
+    make is easy to reintroduce here too if a future caller or reordering
+    stops guaranteeing get_fractional() ran immediately beforehand."""
+    if not getattr(h.geometry, "has_fractional", False): h.geometry.get_fractional()
     frac_r = np.array(h.geometry.frac_r, dtype=np.float64)
     n_sites = frac_r.shape[0]
     if num_orbitals == n_sites:
@@ -199,7 +206,14 @@ def _particle_hole_operator(h, num_orbitals):
     from ..hamiltonians import sy
     from ..sctk.reorder import block2nambu
     import scipy.sparse as sp
-    n_sites = len(h.geometry.frac_r)
+    # Only the site *count* is needed here (not positions), so use
+    # geometry.r rather than frac_r: this function runs before
+    # get_wannier_hamiltonian's own get_fractional() call further down,
+    # so frac_r may not exist yet, or -- the actual bug this replaced --
+    # may hold a stale cached array from an earlier, different-sized
+    # geometry (e.g. an intermediate supercell during island construction)
+    # if has_fractional was reset to False without clearing frac_r itself.
+    n_sites = len(h.geometry.r)
     if num_orbitals != 4 * n_sites or not (h.has_eh and h.has_spin):
         raise NotImplementedError(
             "_particle_hole_operator only supports spinful Nambu/BdG "
@@ -897,9 +911,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     mp_grid = _mp_grid(h, nk)
     kpt_latt = _monkhorst_pack(mp_grid)
     real_lattice = _real_lattice(h)
-    if not getattr(h.geometry, "has_fractional", False):
-        h.geometry.get_fractional()
-    orbital_positions_frac = _orbital_positions_frac(h, num_orbitals)
+    orbital_positions_frac = _orbital_positions_frac(h, num_orbitals) # ensures fractional coords itself
     atoms_cart = orbital_positions_frac @ real_lattice
     atom_symbols = ["X"] * num_orbitals
 

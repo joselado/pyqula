@@ -3,6 +3,7 @@ from . import operators
 
 def to_canonical_gauge(self,m,k):
     """Return a matrix in the canonical gauge form"""
+    if not getattr(self.geometry, "has_fractional", False): self.geometry.get_fractional()
     frac_r = self.geometry.frac_r # fractional coordinates
     # start in zero
     U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])
@@ -15,6 +16,7 @@ def to_canonical_gauge(self,m,k):
 
 def canonical_gauge_transformation(self,k):
     """Return a matrix in the canonical gauge form"""
+    if not getattr(self.geometry, "has_fractional", False): self.geometry.get_fractional()
     frac_r = self.geometry.frac_r # fractional coordinates
     # start in zero
     U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])
