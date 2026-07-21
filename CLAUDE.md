@@ -124,3 +124,8 @@ spectrum).
   submodules explicitly (`from pyqula import geometry`), not `import pyqula` and expect attributes to exist.
 - `update.py` and `pipupdate.sh` are the maintainer's personal git-push / PyPI-publish shortcuts — not part
   of the library and not something to invoke on the user's behalf.
+- When a change adds or materially changes a user-facing feature, update `documentation/user_guide.md`
+  (and `README.md`'s FUNCTIONALITIES list where relevant) to describe it, following the existing style: a
+  short prose section with the physics/motivation, a runnable code snippet, and — for anything with a
+  method on `Hamiltonian`/`Geometry` — an entry in the "Main functions and methods" reference at the end of
+  the user guide.

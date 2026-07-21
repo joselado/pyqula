@@ -94,12 +94,23 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Operator resolved spectral functions
 - Reaching system sizes up to 10000000 atoms on a single-core laptop
 
+## Wannierization ##
+- Maximally-localized Wannier functions for a selected range of bands
+- Exact reproduction of the selected band subspace on the wannierization mesh
+- Point-group symmetry-enforced Wannierization, with rejection of band selections that slice through a symmetry-related degeneracy
+- Works for 0d, 1d, 2d and 3d periodic Hamiltonians, including Nambu/BdG
+
 ## Quantum transport ##
 - Metal-metal transport
 - Metal-superconductor transport
 - Fully non-collinear Nambu basis
 - Non-equilibrium Green's function formalism
 - Operator-resolved transport
+
+## Classical spin models and lattice-gas Monte Carlo ##
+- Classical Heisenberg spin models with arbitrary exchange couplings
+- Local energy minimization and spatially resolved magnetization textures
+- Lattice-gas Monte Carlo with configurable site-site interactions and simulated annealing
 - Differential decay rate
 - Tunneling and contact scanning probe spectroscopy
 

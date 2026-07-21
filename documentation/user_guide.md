@@ -173,6 +173,26 @@ h = g.get_hamiltonian() # generate the Hamiltonian
 (k,e) = h.get_bands() # compute band structure
 ```
 
+Optional arguments
+- `kpath`: k-path to use, either a list of high-symmetry labels (e.g. `["G","K","M"]`) or explicit k-vectors; defaults to the geometry's standard path
+- `nk`: number of k-points along the path
+- `operator`: color/weight each band by the expectation value of an operator (or a list of operators), returning `(k,e,c)` instead of `(k,e)`
+- `num_bands`: for large sparse Hamiltonians, only compute this many bands around `central_energy` with ARPACK, instead of the full spectrum
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian(has_spin=True)
+(k,e,c) = h.get_bands(operator="velocity") # bands colored by group velocity
+```
+
+For a very large system (e.g. a moire supercell), diagonalizing the full Hamiltonian at every k-point is wasteful if only a handful of bands around the Fermi level are of interest. Passing `num_bands` switches to a sparse ARPACK solver that targets only those bands
+
+```python
+(k,e) = h.get_bands(num_bands=20) # only the 20 bands closest to central_energy
+```
+
+See `examples/2d/velocity_bands/main.py` and `examples/2d/strain_TBG/main.py` for runnable versions.
 
 
 
@@ -197,6 +217,31 @@ Optional arguments
 - energies: array with the energies for which the DOS is computed
 - delta: smearing of the DOS
 - operator: operator to which the DOS is projected
+- mode: how the DOS is computed -- `"ED"` (default, broadens a k-mesh band structure), `"Green"` (sums a Green's function per energy, useful when only a handful of energies are needed), `"KPM"` (Chebyshev kernel-polynomial expansion, for large sparse systems -- see the "Chebyshev kernel polynomial (KPM) methods" section), or `"adaptive"`
+- nk: number of k-points in the mesh (`"ED"`/`"KPM"` modes)
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.chain()
+h = g.get_hamiltonian(tij=[0.5,0.,0.,0.5],has_spin=True)
+h.add_rashba(0.7)
+energies = np.linspace(-4.,4.0,60)
+(e1,d1) = h.get_dos(energies=energies,delta=1e-2,mode="ED",nk=1000)
+(e2,d2) = h.get_dos(energies=energies,delta=1e-2,mode="Green")
+```
+
+An operator can be passed to project the DOS onto a subspace, e.g. the sublattice-resolved DOS of a gapped honeycomb lattice
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian(has_spin=True)
+h.add_sublattice_imbalance(.4)
+(es,ds) = h.get_dos(operator="sublattice",nk=40,delta=5e-2)
+```
+
+See `examples/1d/dos_GF/main.py` and `examples/2d/operator_dos/main.py` for runnable versions.
 
 ## Local density of states
 
@@ -217,11 +262,27 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 
 
 Optional arguments
-- energies: array with the energies for which the DOS is computed
-- delta: smearing of the DOS
-- operator: operator to which the DOS is projected
+- e: energy at which the LDOS is evaluated
+- delta: smearing of the LDOS
+- operator: operator to which the LDOS is projected
+- projection: `"TB"` (default, one value per lattice site), `"TBRS"` (same, but interpolated onto a continuous real-space map for smoother plotting), or `"atomic"` (projected onto atomic orbitals rather than tight-binding sites)
+- num_bands: for large sparse Hamiltonians, use ARPACK to only compute this many states around the target energy
 
+```python
+from pyqula import geometry
+g = geometry.honeycomb_zigzag_ribbon() # get the geometry
+h = g.get_hamiltonian()  # get the Hamiltonian
+(x,y,d) = h.get_ldos(e=0.0,projection="TBRS") # interpolated real-space map
+```
 
+`h.get_multildos()` computes the LDOS at many energies at once, writing one file per energy to a `MULTILDOS/` folder (useful for building an LDOS(x,y,E) movie/stack)
+
+```python
+import numpy as np
+h.get_multildos(energies=np.linspace(-2.0,2.0,100),projection="atomic")
+```
+
+See `examples/0d/island/main.py` (single-energy, `projection="TBRS"`, superconducting island) and `examples/readme_examples/ldos_island/main.py` (`get_multildos`, `projection="atomic"`) for runnable versions.
 
 ## Momentum resolved spectral functions
 
@@ -244,6 +305,87 @@ Optional arguments
 - energies: array with the energies for which the DOS is computed
 - delta: smearing of the DOS
 - operator: operator to which the DOS is projected
+
+
+## Fermi surfaces
+
+For a 2D periodic Hamiltonian, `h.get_fermi_surface()` computes the spectral weight on a $(k_x,k_y)$ mesh at a single energy (by default the Fermi level, `e=0.0`), i.e. a single constant-energy cut
+
+```python
+from pyqula import geometry
+g = geometry.triangular_lattice() # get the geometry
+h = g.get_hamiltonian() # get the Hamiltonian
+(kx,ky,fs) = h.get_fermi_surface(e=0.0,nk=50,delta=1e-1)
+```
+
+Optional arguments
+- e: energy of the cut
+- nk: number of k-points per direction
+- delta: broadening
+- operator: project/weight the Fermi surface by an operator, giving e.g. a spin- or valley-textured Fermi surface
+
+```python
+from pyqula.specialhamiltonian import NbSe2
+h = NbSe2(soc=0.9) # multi-orbital spin-orbit-coupled Hamiltonian
+(kx,ky,fs) = h.get_fermi_surface(e=0.,nk=100,delta=3e-1,operator="sz")
+```
+
+`h.get_multi_fermi_surface()` computes the same kind of map at many energies at once, writing one file per energy to a `MULTIFERMISURFACE/` folder -- convenient for scanning how the Fermi surface evolves away from the Fermi level
+
+```python
+import numpy as np
+h.get_multi_fermi_surface(energies=np.linspace(-4,4,100),delta=1e-1)
+```
+
+Passing `operator="unfold"` together with `nsuper` unfolds the Fermi surface of a defective/disordered supercell back onto the primitive Brillouin zone (see the "Electronic structure folding and unfolding" section); as with QPI unfolding, the supercell must be built with `store_primal=True`
+
+```python
+from pyqula import geometry
+g0 = geometry.triangular_lattice()
+n = 3 # size of the supercell
+g = g0.get_supercell(n,store_primal=True)
+h = g.get_hamiltonian()
+h.add_onsite(lambda r: 100.0 if np.linalg.norm(r-g.r[0])<1e-1 else 0.0) # a point defect
+
+out = h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),delta=0.1,
+        nsuper=n,operator="unfold")
+```
+
+See `examples/readme_examples/fermi_surface/main.py`, `examples/2d/operator_fermi_surface/main.py` and `examples/readme_examples/unfolding_FS/main.py` for runnable versions.
+
+## Quasiparticle interference
+
+Quasiparticle interference (QPI) maps the momentum-space scattering pattern that a defect or impurity produces, and is what an STM quasiparticle-interference measurement probes. `h.get_qpi()` is only available for 2D Hamiltonians; unlike the other observables here it does not return arrays -- it writes its output to disk, one file per energy in an output folder (default `MULTIQPI/`) plus a combined `DOS.OUT`
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.triangular_lattice()
+h = g.get_hamiltonian(has_spin=False)
+h.get_qpi(mode="pm",nk=50,delta=1e-1,energies=np.linspace(-6.,6.,100))
+```
+
+Optional arguments
+- energies: array of energies to compute
+- nk: number of k-points per direction
+- delta: broadening
+- mode: `"pm"` ("poor man's") autoconvolves the actual k-resolved spectral weight of the (possibly defective) system in q-space -- the physically meaningful QPI signal for a real scatterer; `"response"` (default) instead computes a cheaper Lindhard-like joint-DOS convolution from the clean band structure only, ignoring wavefunction form factors
+- nunfold: for a defect embedded in an `nunfold`x`nunfold` supercell, unfold the QPI signal back onto the primitive Brillouin zone
+
+A single point defect embedded in a supercell, with the resulting QPI unfolded back onto the primitive cell, is a realistic use case. The supercell must be built with `store_primal=True` so pyqula remembers the primitive-cell reference needed to unfold; `operator="unfold"` then resolves to the corresponding unfolding operator
+
+```python
+from pyqula import geometry
+g0 = geometry.honeycomb_lattice()
+ns = 2
+g = g0.get_supercell(ns,store_primal=True)
+h = g.get_hamiltonian(has_spin=False)
+h.add_onsite(lambda r: 100.0 if np.linalg.norm(r-g.r[0])<1e-1 else 0.0) # a strong point defect
+
+h.get_qpi(mode="pm",delta=1e-2,operator="unfold",nsuper=2,nk=140,nunfold=ns)
+```
+
+See `examples/2d/multiqpi/main.py` (clean system, `mode="pm"`) and `examples/2d/multiqpi_unfold/main.py` (defect in a supercell, unfolded) for runnable versions.
 
 
 # Operators
@@ -835,9 +977,105 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 (es,chis) = h.get_chi(q=[0.,0.,0.]) # get response function
 ```
 
-## RKKY response function
+Optional arguments
+- q: momentum transfer of the response function
+- energies: array of frequencies
+- delta: broadening
+- nk: number of k-points used in the Brillouin-zone integration
+
+The charge-charge response can also be scanned over momentum transfer to build a $\chi(q,\omega)$ map
+
+```python
+import numpy as np
+g = geometry.chain()
+h = g.get_hamiltonian()
+qs = np.linspace(-1.,1.,40)
+chis = [h.get_chi(q=[q,0.,0.],energies=np.linspace(-3,3,100),nk=40,delta=0.1)[1] for q in qs]
+```
+
+See `examples/1d/charge_response/main.py` for a runnable version.
 
 ## Generic operator-operator response function
+
+`h.get_chi` computes the charge-charge response by default, but any pair of operators can be used instead, giving the generalized response
+
+$$
+\chi_{AB}(\omega,q) = \sum_{k,n,m}
+f(\epsilon_{k,n}) (1-f(\epsilon_{k+q,m}))
+\frac{
+\langle \Psi_{k,n}|A|\Psi_{k+q,m}\rangle
+\langle \Psi_{k+q,m}|B|\Psi_{k,n}\rangle
+}
+{
+\epsilon_{k,n} - \epsilon_{k+q,m} - \omega + i\delta
+}
+$$
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.chain()
+h = g.get_hamiltonian(has_spin=True)
+sz = h.get_operator("sz") # any of the operators from the "Operators" section
+(es,chi) = h.get_chi(A=sz,B=sz,energies=np.linspace(-2.,2.,100),nk=40,delta=0.1)
+```
+
+By default `A=B=`identity, which recovers the charge-charge response above. Any operator from the "Operators" section (spin, valley, sublattice, location, Nambu...) can be plugged in to build the corresponding susceptibility.
+
+## RKKY response function
+
+The RKKY (Ruderman-Kittel-Kasuya-Yosida) interaction between two magnetic impurities is the effective exchange coupling mediated by the itinerant electrons, and can be obtained from the same non-interacting response-function machinery. `rkky.rkky_map` computes it between a reference site and every other site in the system, as a function of distance
+
+```python
+from pyqula import geometry
+from pyqula import rkky
+g = geometry.chain()
+h = g.get_hamiltonian()
+h.add_onsite(1.)
+m = rkky.rkky_map(h,n=10,mode="LR",nk=200) # linear-response RKKY vs distance
+```
+
+Optional arguments
+- mode: `"LR"` (linear-response theory, using the same machinery as `get_chi`) or `"pm"` ("poor man's", computed by explicitly adding a small magnetic perturbation at each site and evaluating the total energy change)
+- n: how many neighboring cells/distances to compute
+- nk: number of k-points used in the Brillouin-zone integration
+
+`m` is an array whose columns are `(distance, ..., ..., RKKY energy)`; the RKKY energy is in the last column
+
+```python
+x,e = m[:,0],m[:,3]
+```
+
+See `examples/1d/RKKY/main.py` and `examples/1d/rkky_minimal/main.py` (which compares `"pm"` and `"LR"` on the same system) for runnable versions.
+
+## Spin susceptibility and RPA
+
+The methods above compute the bare (non-interacting) response. For an interacting system, `h.get_spinchi_ladder` and `h.get_spinchi_full` dress the same response with the random phase approximation (RPA), using the Hubbard `U` stored on a mean-field Hamiltonian (`h.V`, see "Interactions at the mean-field level"), giving the physically relevant spin-excitation spectrum of e.g. a magnetically ordered state
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.chain()
+h = g.get_hamiltonian(has_spin=True)
+hmf = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro") # converge a magnetic state
+(es,chis) = hmf.get_spinchi_ladder(energies=np.linspace(0.,2.,100),q=[0.1,0.,0.],nk=40,delta=2e-2)
+```
+
+- `get_spinchi_ladder` computes the transverse ($S^+/S^-$) response, i.e. spin-wave-like excitations
+- `get_spinchi_full` computes the full $(S_x,S_y,S_z)$ tensor response
+- `RPA=True` (default) dresses the response with the interaction; `RPA=False` returns the bare response
+- `h.get_qdos_iets` scans `get_spinchi_full` over a q-path instead of a single q, directly giving a spin-excitation dispersion map along high-symmetry directions (needs a 2D lattice for the `"G","K","M"`-style path labels)
+
+```python
+g2 = geometry.honeycomb_lattice()
+h2 = g2.get_hamiltonian(has_spin=True)
+hmf2 = h2.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro")
+qdisp = hmf2.get_qdos_iets(energies=np.linspace(0.,2.,100),qpath=["G","K","M"],nq=80,nk=40,delta=1e-2)
+```
+
+- `h.get_iets_ldos` instead computes the spatially resolved response at a single energy, i.e. a real-space map of the spin-flip ("inelastic tunneling spectroscopy", IETS) signal, which combined with `h.get_ldos` gives elastic + inelastic STM-like maps
+
+See `examples/1d/rpa/main.py` (RPA spin response vs q for an antiferromagnetic chain), `examples/2d/rpa_triangular/main.py`/`examples/2d/rpa_honeycomb/main.py` (`get_qdos_iets` dispersion along a q-path) and `examples/0d/rpa_island/main.py`/`examples/0d/rpa_finite_chain/main.py` (`get_iets_ldos` real-space IETS maps) for runnable versions.
 
 # Quantum transport
 
@@ -870,6 +1108,118 @@ for T in np.linspace(1e-3,1.0,6): # loop over transparencies
 
 # Single defects in infinite systems
 
+
+# Wannierization
+
+`h.get_wannier_hamiltonian()` Wannierizes a fixed, contiguous range of a
+periodic Hamiltonian's bands and returns a new, smaller multicell
+Hamiltonian whose real-space hoppings exactly reproduce that band subspace
+on the wannierization k-mesh (there is no band disentanglement yet -- the
+selected range is Wannierized jointly as one group).
+
+As an example, consider a staggered honeycomb lattice, where a sublattice
+potential opens a gap and gives a genuinely dispersive valence band to
+Wannierize
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian(has_spin=False)
+h.add_onsite([0.8,-0.8]) # sublattice potential opens a gap
+
+# Wannierize just the lowest (valence) band: bands=[0,0] selects band
+# index 0 at every k-point of a 12x12 Monkhorst-Pack wannierization mesh
+hwan = h.get_wannier_hamiltonian(bands=[0,0],nk=12)
+
+print("Number of Wannier functions:",hwan.intra.shape[0])
+print("Wannier centres (Cartesian):\n",hwan.wannier_centres)
+print("Wannier spreads:",hwan.wannier_spreads)
+print("Total spread Omega:",hwan.wannier_spread_total)
+```
+
+The Wannierized Hamiltonian `hwan` behaves like any other pyqula
+Hamiltonian, so its bands can be compared directly against the original
+model's
+
+```python
+(k,e) = h.get_bands(write=False)
+(kw,ew) = hwan.get_bands(write=False)
+```
+
+## Symmetry-enforced Wannierization
+
+Passing `symmetries="auto"` makes `get_wannier_hamiltonian` check, before
+Wannierizing, that the selected band range is a genuine union of
+point-group-related multiplets everywhere on the mesh (point-group
+operations are auto-detected from the geometry+Hamiltonian via
+`symmetrytk.pointgroup.find_point_group`). A band selection that instead
+slices through a symmetry-related degeneracy is rejected with a
+`ValueError` rather than silently returning a mis-symmetrized model. A
+list of explicit `symmetrytk.pointgroup.SymmetryOperation` can be passed
+instead of `"auto"` to enforce a specific subgroup.
+
+A good illustration is kagome's flat band: it is exactly degenerate with
+the dispersive middle band at the K point, so no selection containing only
+the flat band is a union of whole multiplets -- this is the well-known
+topological obstruction behind kagome's flat band having no symmetric
+exponentially-localized Wannier function, and the check catches it instead
+of returning a broken model
+
+```python
+from pyqula import geometry
+from pyqula.symmetrytk import pointgroup
+
+g = geometry.kagome_lattice()
+h = g.get_hamiltonian(has_spin=False)
+
+try:
+    h.get_wannier_hamiltonian(bands=[2,2],nk=12,symmetries="auto")
+except ValueError as e:
+    print("Flat band alone correctly rejected:",str(e).splitlines()[0])
+
+# the full 3-band manifold has no such obstruction
+hwan_sym = h.get_wannier_hamiltonian(bands=[0,2],nk=12,symmetries="auto")
+print("Symmetries enforced:",[c.op.name for c in hwan_sym.wannier_symmetries])
+```
+
+See `examples/wannier/get_wannier_hamiltonian/main.py` and
+`examples/wannier/symmetric_wannierization/main.py` for runnable versions
+of these two examples.
+
+
+# Chebyshev kernel polynomial (KPM) methods
+
+For very large systems, exact diagonalization becomes impractical. Passing
+`mode="KPM"` to observable methods switches to a stochastic Chebyshev
+kernel polynomial expansion, which never builds the full spectrum and
+scales to systems with millions of sites on a single core. It requires a
+sparse Hamiltonian (`is_sparse=True`)
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.chain()
+g = g.get_supercell(3000) # a big supercell
+g.dimensionality = 0
+h = g.get_hamiltonian(is_sparse=True,has_spin=False)
+(x,y) = h.get_dos(mode="KPM",
+            energies=np.linspace(-3.0,3.0,200), # energies
+            delta=1e-4, # effective smearing (~1/npol)
+            ntries=10 # number of random vectors for the stochastic trace
+            )
+```
+
+The same expansion also gives non-local correlators and Green's functions
+without inverting a matrix, through the lower-level `kpm` module
+
+```python
+from pyqula import kpm
+(x,y) = kpm.dm_ij_energy(h.intra,npol=200,i=0,j=9,ne=1000)
+```
+
+See `examples/0d/kpm_dos/main.py` and `examples/0d/kpm_correlator/main.py`
+for runnable versions, including a comparison of the KPM correlator against
+the exact Green's function calculation.
 
 
 # Main functions and methods
@@ -959,12 +1309,94 @@ Optional arguments:
 
 - delta=0.01: broadening of the LDOS
 
+- projection="TB": `"TB"`, `"TBRS"` (real-space interpolated) or `"atomic"`
+
 Return x, position, y position and LDOS
 
+### h.get_multildos()
+Compute the LDOS at many energies, writing one file per energy to a `MULTILDOS/` folder.
+
+Optional arguments:
+
+- energies=linspace(-1,1,100): energies to compute
+
+- projection="TB": `"TB"` or `"atomic"`
+
+### h.get_chi()
+Compute a non-interacting operator-operator response function (charge-charge by default).
+
+Optional arguments:
+
+- q=[0,0,0]: momentum transfer
+
+- A=None, B=None: operators defining the response (default: identity, i.e. charge-charge)
+
+- energies, delta, nk: frequency range, broadening, k-mesh density
+
+Returns energies and the response function
+
+### h.get_spinchi_ladder()
+Compute the transverse ($S^+/S^-$) spin susceptibility, RPA-dressed by default using the Hubbard `U` of a mean-field Hamiltonian.
+
+Optional arguments:
+
+- q=[0,0,0], energies, delta, nk: as above
+
+- RPA=True: dress with the random-phase approximation; `False` for the bare response
+
+### h.get_fermi_surface()
+Compute the spectral weight on a 2D k-mesh at a single energy.
+
+Optional arguments:
+
+- e=0.0: energy of the cut
+
+- nk=50: k-points per direction
+
+- delta: broadening
+
+- operator=None: project/weight by an operator (e.g. `"sz"`, `"valley"`, `"unfold"`)
+
+Returns kx, ky and the Fermi-surface weight
+
+### h.get_multi_fermi_surface()
+Compute the Fermi surface at many energies, writing one file per energy to a `MULTIFERMISURFACE/` folder.
+
+Optional arguments:
+
+- energies=[0.0]: energies to compute
+
+- nk, delta, operator: as in `get_fermi_surface`
+
+### h.get_qpi()
+Compute the quasiparticle-interference map (2D systems only). Writes output to disk (default `MULTIQPI/` folder plus `DOS.OUT`) rather than returning arrays.
+
+Optional arguments:
+
+- energies, nk, delta: as above
+
+- mode="response": `"pm"` ("poor man's", autoconvolves the actual k-resolved spectral weight -- the physical QPI of a real scatterer) or `"response"` (cheaper Lindhard-like joint-DOS convolution of the clean bands)
+
+- nunfold=1: unfold the QPI of a defect embedded in an `nunfold`x`nunfold` supercell back onto the primitive Brillouin zone
 
 ### h.get_chern()
 Return Chern number of the Hamiltonian.
 
 Optional arguments:
 - nk=20: number of kpoints
+
+### h.get_wannier_hamiltonian()
+Wannierize a fixed range of bands and return the resulting real-space
+Hamiltonian.
+
+Arguments:
+
+- bands = [a,b]: first and last band to Wannierize (0-indexed, both ends inclusive)
+
+Optional arguments:
+
+- nk=12: k-points per periodic direction for the wannierization mesh
+- symmetries=None: `"auto"` to auto-detect and enforce the point group, or an explicit list of `symmetrytk.pointgroup.SymmetryOperation`
+
+Returns a new, smaller Hamiltonian; `.wannier_centres`, `.wannier_spreads` and `.wannier_spread_total` hold the Wannier-function geometry
 
