@@ -1215,6 +1215,26 @@ for T in np.linspace(1e-3,1.0,6): # loop over transparencies
     Gs = [HT.didv(energy=e) for e in es] # calculate conductance
 ```
 
+## Multiple Andreev reflection and AC-Josephson current
+
+`didv`/`landauer` above are equilibrium, zero-bias linear-response quantities. For a voltage-biased junction between two superconductors (an SNS junction), a finite bias makes each lead's pairing phase wind in time, giving rise to multiple Andreev reflections (MAR) and an AC Josephson effect; the physically meaningful, measurable quantity is the time-averaged (DC) current $I_{dc}(V)$. `Heterostructure.get_dc_current(voltage)` computes this with the Floquet-Keldysh formalism of San-Jose, Cayao, Prada and Aguado, *New J. Phys.* **15**, 075019 (2013) ([arXiv:1301.4408](https://arxiv.org/abs/1301.4408)): the bias is gauged away from the (static) leads into a single, periodically time-dependent "weak link" hopping, and the resulting Floquet-space Dyson/Keldysh equations are solved to get $I_{dc}(V)$. It works for any combination of normal and superconducting leads -- including the case (not reachable by `didv`) of **two** superconducting leads
+
+```python
+from pyqula import geometry
+from pyqula import heterostructures
+import numpy as np
+g = geometry.chain() # create the geometry
+h = g.get_hamiltonian() # create the Hamiltonian
+h1 = h.copy() ; h1.add_swave(0.1) # left superconducting lead
+h2 = h.copy() ; h2.add_swave(0.1) # right superconducting lead
+HT = heterostructures.build(h1,h2) # create the SNS junction
+HT.set_coupling(0.5) # set the normal transparency of the weak link
+vs = np.linspace(0.02,1.5,40)*0.1 # bias voltages
+Is = HT.get_iv_curve(vs) # MAR/AC-Josephson dc current
+```
+
+The number of Floquet sidebands is increased adaptively (as in the paper) until $I_{dc}$ converges; see `examples/transport/floquet_keldysh_mar/main.py` for a runnable script and `tests/keldysh/` for correctness tests (a normal-normal junction must reduce exactly to a directly biased, non-Floquet Landauer calculation, and a normal-superconductor junction's zero-bias slope must match the existing equilibrium Andreev conductance from `didv`). Only 1D leads directly coupled through a single "weak link" bond (no explicit multi-site central region) are currently supported.
+
 
 # Single defects in infinite systems
 
@@ -1551,4 +1571,35 @@ Optional arguments:
 - symmetries=None: `"auto"` to auto-detect and enforce the point group, or an explicit list of `symmetrytk.pointgroup.SymmetryOperation`
 
 Returns a new, smaller Hamiltonian; `.wannier_centres`, `.wannier_spreads` and `.wannier_spread_total` hold the Wannier-function geometry
+
+## Heterostructure functions and methods
+
+### HT.get_dc_current()
+Compute the time-averaged (DC) current through a two-terminal junction at a
+given bias, using the Floquet-Keldysh formalism (see "Multiple Andreev
+reflection and AC-Josephson current"). Works for any combination of
+normal/superconducting leads built with `heterostructures.build`.
+
+Arguments:
+
+- voltage: bias voltage
+
+Optional arguments:
+
+- nmax=6, nmax_max=40: initial/maximum number of Floquet sidebands (increased adaptively until convergence)
+- tol=1e-3: relative convergence tolerance used to decide when to stop increasing the sideband count
+- temperature=0.: lead temperature
+- delta=None: broadening (defaults to `HT.delta`); should be much smaller than the smallest relevant gap for small-gap superconductors
+- link=None: which bond carries the bias-induced AC phase (defaults to the single weak-link bond between the two leads; only bonds adjacent to a lead are currently supported)
+
+Returns the DC current
+
+### HT.get_iv_curve()
+Convenience wrapper: `get_dc_current` evaluated over an array of voltages.
+
+Arguments:
+
+- voltages: array of bias voltages
+
+Returns an array of DC currents
 

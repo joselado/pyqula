@@ -247,14 +247,19 @@ def get_electron(h):
 
 
 def get_hole(h):
-  """Operator to project on the electron sector"""
+  """Operator to project on the hole sector"""
   if not h.has_eh: raise # only for e-h systems
-  op = superconductivity.projh
-  r = h.geometry.r
-  out = [[None for ri in r] for rj in r]
-  for i in range(len(r)): # loop over positions
-    out[i][i] = op
-  return bmat(out)
+  elif h.check_mode("spinful_nambu"): # only for e-h systems
+      op = superconductivity.projh
+      r = h.geometry.r
+      out = [[None for ri in r] for rj in r]
+      for i in range(len(r)): # loop over positions
+        out[i][i] = op
+      return bmat(out)
+  elif h.check_mode("spinless_nambu"):
+      from .sctk import spinless
+      return spinless.projh(h.intra.shape[0])
+  else: raise
 
 
 def get_bulk(h,fac=0.8):
