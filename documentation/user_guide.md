@@ -884,13 +884,34 @@ h.get_multildos(projection="atomic") # get the LDOS
 
 # Electronic structure folding and unfolding
 
-In this section we will discuss how we can compute folded band structures in supercells, and most importantly how band structures in a supercell can be unfolded.
+Building a supercell folds the bands of the primitive cell into the smaller supercell Brillouin zone. The inverse operation, unfolding, recovers the primitive-cell-like spectral weight of a supercell calculation (e.g. a defect, a moire pattern, or a non-primitive choice of cell), and is essential to compare supercell calculations directly against ARPES-like band structures. Unfolding is implemented as a special operator, `"unfold"`, that projects onto the Bloch states of the primitive cell; it can be passed to any of the k-resolved observables (`h.get_bands()`, `h.get_kdos_bands()`, `h.get_multi_fermi_surface()`...). It requires the supercell to have been built keeping track of the primitive geometry
 
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.honeycomb_lattice() # primitive geometry
+n = 3
+gs = g.get_supercell(n,store_primal=True) # supercell, keeping the primitive cell info
+h = gs.get_hamiltonian() # Hamiltonian of the supercell
+(k,e,d) = h.get_kdos_bands(operator="unfold",delta=1e-1) # unfolded spectral function
+```
 
+`d` holds the unfolded spectral weight at each `(k,e)`; plotting a scatter of `k,e` colored/sized by `d` recovers the primitive-cell band structure out of the supercell calculation. The same `operator="unfold"` can be passed to `h.get_multi_fermi_surface()` to unfold constant-energy cuts. See `examples/2d/unfolding/main.py`, `examples/1d/unfolding/main.py` and `examples/readme_examples/unfolding_FS/main.py` for runnable versions.
 
 # Surface spectral functions
 
-In this section we address how we can compute surface spectral function of semi-infinite systems.
+In this section we address how we can compute the surface spectral function of a semi-infinite system, i.e. a system that is bulk-like far from a boundary but is cleaved along one direction. This is obtained from the surface Green's function, computed with a renormalization (decimation) technique for the semi-infinite bulk
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_soc(0.05) # Kane-Mele spin-orbit coupling opens a topological gap
+h.add_rashba(0.1) # break z-mirror symmetry to expose the edge states
+(k,e,ds,db) = h.get_surface_kdos(delta=1e-2) # surface and bulk spectral functions
+```
+
+`ds` and `db` are, respectively, the surface and bulk spectral weight at each `(k,e)`; plotting `k,e` colored by `ds` shows the topologically-protected edge states living at the boundary, absent from the bulk spectrum `db`. See `examples/readme_examples/surface_2dTI/main.py` for a runnable version.
 
 
 # Topological insulators
@@ -942,7 +963,19 @@ $$
 $$
 
 where $\Omega$ is the Berry curvature of the occupiad bands and $\Xi (\mathbf k,\omega)$
-is the energy-resolved Berry curvature
+is the energy-resolved Berry curvature. `topology.chern_density` integrates $\Xi(\mathbf k,\omega)$ over the whole Brillouin zone at a set of energies, giving the frequency-resolved Berry-curvature density and its cumulative (energy-integrated) sum
+
+```python
+from pyqula import geometry
+from pyqula import topology
+import numpy as np
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_haldane(0.05) # Add Haldane coupling
+(es,cs,csi) = topology.chern_density(h,nk=10,es=np.linspace(-1.0,1.0,40))
+```
+
+`es` are the energies, `cs` the Berry-curvature density at each energy, and `csi` its cumulative integral. In the gap, `csi` should plateau at a value related to the total Chern number of the occupied bands, but this Green's-function-based estimator is numerically delicate (it involves a finite-difference k-derivative, so it needs a fine enough `nk`/`dk` and a large enough `delta` to avoid spurious peaks near quasi-degenerate k-points) and its overall sign/normalization is not guaranteed to match `h.get_chern()` -- treat it as a qualitative frequency-resolved profile and cross-check any quantitative reading against `h.get_chern()`. The k-resolved counterpart at a single energy, $\Xi(\mathbf k,\omega)$ over a full k-mesh, can be obtained with `topology.dOmega_dE_kmap(h,nk=40)`, which writes the map to `BERRY_DENSITY_KMAP.OUT`. See `examples/2d/berry_density_kmap/main.py` for a runnable version.
 
 ## Berry curvature density in real-space
 
@@ -954,9 +987,18 @@ $$
 
 where $\Omega$ is the Berry curvature of the occupiad bands and $\Gamma (\mathbf k,\mathbf r)$
 is the spatially-resolved Berry curvature. Note that this object is meaningful for periodic
-systems with very large unit cells.
+systems with very large unit cells. In pyqula, the real-space Berry curvature is obtained from a Bianco-Resta-type commutator of position and projector operators, evaluated on a large real-space (0-dimensional) supercell or island with `topology.real_space_chern`
 
+```python
+from pyqula import islands
+from pyqula import topology
+g = islands.get_geometry(name="honeycomb",n=8,nedges=3) # a honeycomb island
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_haldane(0.05) # Add Haldane coupling
+(r,c) = topology.real_space_chern(h) # spatially-resolved Berry curvature
+```
 
+`r` are the site positions and `c` the local Berry-curvature marker at each site (the call also writes `REAL_SPACE_CHERN.OUT`). See `examples/0d/real_space_chern/main.py` for a runnable version.
 
 ## Chern number in real-space
 
@@ -968,8 +1010,20 @@ $$
 
 where $C$ is the total Chern number of the occupiad bands and $F (\mathbf r)$
 is the spatially-resolved Chern number. Note that this object is meaningful for periodic
-systems with very large unit cells.
+systems with very large unit cells. $F(\mathbf r)$ is the local marker computed by `topology.real_space_chern`; because it is built from a commutator $C = P X P Y P - P Y P X P$, its trace over the *entire* finite sample is exactly zero by construction, so summing it over every site is not how the invariant is recovered. Instead, deep in the interior of a large enough island -- away from the boundary, where the local environment looks like the infinite periodic bulk -- the marker plateaus at (approximately) the quantized bulk Chern number, while the edge sites carry compensating opposite-sign weight that cancels the bulk contribution exactly. This exact real-space cancellation is itself a manifestation of the bulk-boundary correspondence
 
+```python
+from pyqula import islands
+from pyqula import topology
+import numpy as np
+g = islands.get_geometry(name="honeycomb",n=8,nedges=3) # a honeycomb island
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_haldane(0.05) # Add Haldane coupling
+(r,c) = topology.real_space_chern(h) # local marker, per site
+r = np.array(r)
+bulk = np.argsort(np.linalg.norm(r-r.mean(axis=0),axis=1))[:len(r)//4] # innermost sites
+C = np.mean(c[bulk]) # bulk plateau value approximates the total Chern number
+```
 
 ## Topological surface states
 
@@ -983,6 +1037,8 @@ kdos.surface(h) # surface spectral function
 ```
 
 ## Topological markers
+
+The real-space Berry curvature/Chern marker of the two sections above is an example of a topological marker: a local, position-resolved quantity, computable from ground-state projectors alone, that reveals a bulk topological invariant without relying on translational symmetry or a clean Brillouin zone. This makes topological markers well suited to disordered systems, finite flakes and islands, or systems with spatially varying parameters (e.g. a Haldane mass that changes sign across a boundary, or a topological insulator with dilute vacancies), where the marker density directly visualizes where the invariant is carried. See `topology.real_space_chern` above for the code that computes it.
 
 
 # Response functions
@@ -1120,7 +1176,24 @@ In this section we discuss how we can perform quantum transport calculations wit
 
 ## Magnetoresistence in metal-metal transport
 
-As specific example, here we will address how we can compute magnetoresistence in transport between two magnetic metals
+As specific example, here we will address how we can compute magnetoresistence in transport between two magnetic metals. We build two copies of the same lead, give each one an exchange field pointing in a different direction, and compare the conductance of the parallel and antiparallel configurations
+
+```python
+from pyqula import geometry
+from pyqula import heterostructures
+import numpy as np
+g = geometry.chain() # create the geometry
+h = g.get_hamiltonian() # create the Hamiltonian
+es = np.linspace(-.5,.5,50) # set of energies for dIdV
+Gs = dict()
+for name,m2 in [("parallel",[0.,0.,0.5]),("antiparallel",[0.,0.,-0.5])]:
+    h1 = h.copy() ; h1.add_exchange([0.,0.,0.5]) # first lead, fixed magnetization
+    h2 = h.copy() ; h2.add_exchange(m2) # second lead, parallel or antiparallel
+    HT = heterostructures.create_leads_and_central(h1,h2,h1) # create the junction
+    Gs[name] = [HT.didv(energy=e) for e in es] # calculate conductance
+```
+
+The magnetoresistance follows from the two conductance curves, e.g. $\mathrm{MR} = (G_P - G_{AP})/G_{AP}$ evaluated at the Fermi energy.
 
 ## Superconductor-metal transport
 
@@ -1145,6 +1218,20 @@ for T in np.linspace(1e-3,1.0,6): # loop over transparencies
 
 # Single defects in infinite systems
 
+A single point defect or impurity embedded in an otherwise infinite, periodic system cannot be handled by a plain supercell calculation without artificially periodizing the defect. `embedding.Embedding` solves this properly with a Green's function embedding technique: it takes the pristine, periodic Hamiltonian `h` and a modified intracell matrix `m` describing the defect (or another `Hamiltonian` from which the modified matrix is taken), and gives access to the observables of the infinite system as perturbed by that single, non-periodic defect
+
+```python
+from pyqula import geometry
+from pyqula import embedding
+g = geometry.chain() # create the geometry
+h = g.get_hamiltonian() # pristine, infinite Hamiltonian
+hv = h.copy()
+hv.add_onsite(lambda r: 1.0 if r[0]<0.01 else 0.0) # a single-site onsite defect
+eb = embedding.Embedding(h,m=hv) # embed the defect in the infinite system
+(x,y,d) = eb.get_ldos(energy=0.0,delta=1e-2,nsuper=200,nk=400) # LDOS around the defect
+```
+
+`get_ldos` returns the real-space positions and the LDOS profile in a window of `nsuper` unit cells around the defect, showing e.g. Friedel oscillations or bound/in-gap states induced by the impurity (it also writes `LDOS.OUT`; pass `write=False` to suppress that). `eb.get_dos()` gives the total DOS, `eb.multildos()` scans the LDOS over many energies (written to a `MULTILDOS/` folder), and `eb.get_didv()` computes transport through the embedded defect. See `examples/embedding/single_impurity_1D/main.py` and `examples/embedding/honeycomb_vacancy/main.py` for runnable versions, and the other scripts under `examples/embedding/` for further defect scenarios (vacancies, boundaries, Yu-Shiba-Rusinov states, self-consistent defects...).
 
 # Wannierization
 
@@ -1279,6 +1366,10 @@ Arguments
 
 - N: size of the supercell to create, number or tuple
 
+Optional arguments
+
+- store_primal=False: keep a reference to the primitive-cell geometry on the supercell, needed by `operator="unfold"` (see "Electronic structure folding and unfolding")
+
 Returns a new geometry
 
 ## Hamiltonian functions and methods
@@ -1291,6 +1382,19 @@ Optional arguments:
 - nk = 20: number of k-points
 
 Returns kpoint index and energies
+
+### h.get_kdos_bands()
+Compute a k-resolved spectral function (band structure dressed with a projection operator, or an unfolded spectral function) along a k-path.
+
+Optional arguments:
+
+- kpath: k-point path (auto-generated if not given)
+
+- operator=None: operator used to weight the spectral function, e.g. `"unfold"` (see "Electronic structure folding and unfolding")
+
+- energies, delta, nk: frequency range, broadening, k-point density
+
+Returns k-path fraction, energy and spectral weight
 
 
 
@@ -1404,6 +1508,17 @@ Optional arguments:
 - energies=[0.0]: energies to compute
 
 - nk, delta, operator: as in `get_fermi_surface`
+
+### h.get_surface_kdos()
+Compute the surface and bulk spectral function of a semi-infinite system, from the surface Green's function (renormalization/decimation technique).
+
+Optional arguments:
+
+- kpath: k-point path (auto-generated if not given)
+
+- energies, delta: frequency range, broadening
+
+Returns k, energy, surface spectral weight and bulk spectral weight; also writes `KDOS.OUT`
 
 ### h.get_qpi()
 Compute the quasiparticle-interference map (2D systems only). Writes output to disk (default `MULTIQPI/` folder plus `DOS.OUT`) rather than returning arrays.
