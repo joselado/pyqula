@@ -18,10 +18,10 @@ def lesser_from_retarded(sigma_r, energy, temperature=0.):
     return -f*(sigma_r - dagger(sigma_r))
 
 
-def _prepare_system(ht, link=None):
-    """Build the block-tridiagonal chain (leads' own unit cell + any
-    explicit central sites) and identify the electron/hole projectors for
-    the bond that carries the bias-induced AC phase."""
+def _check_supported(ht):
+    if getattr(ht, "dimensionality", 1) != 1:
+        raise NotImplementedError(
+            "keldysh.dc_current only supports 1D leads")
     if not ht.has_eh:
         raise NotImplementedError(
             "keldysh.dc_current needs a Nambu (BdG) heterostructure; "
@@ -32,6 +32,13 @@ def _prepare_system(ht, link=None):
             "block-diagonal form (heterostructures.build with zero or two-or"
             "-more explicit central sites); a single dense central site is "
             "not yet supported")
+
+
+def _prepare_system(ht, link=None):
+    """Build the block-tridiagonal chain (leads' own unit cell + any
+    explicit central sites) and identify the electron/hole projectors for
+    the bond that carries the bias-induced AC phase."""
+    _check_supported(ht)
     ht2 = enlarge_hlist(ht)
     hlist = ht2.central_intra
     nb = len(hlist)
@@ -136,6 +143,7 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     `nmax_max` to guarantee termination."""
     if voltage == 0.:
         return 0.0
+    _check_supported(ht)
     if delta is None:
         delta = ht.delta
     tauz = _get_tauz(ht)
@@ -157,7 +165,7 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
             break
         nmax = nmax_new
         prev = cur
-    return prev*np.sign(voltage)
+    return prev
 
 
 def iv_curve(ht, voltages, **kwargs):

@@ -33,7 +33,7 @@ def _static_bias_current(h1, h2, transparency, voltage, delta):
 
 
 @pytest.mark.parametrize("transparency", [0.3, 0.6, 1.0])
-@pytest.mark.parametrize("voltage", [0.3, 0.6, 1.0])
+@pytest.mark.parametrize("voltage", [0.3, 0.6, 1.0, -0.3, -0.6])
 def test_normal_junction_matches_static_bias_reference(transparency, voltage):
     """A two-terminal junction between two plain (non-superconducting)
     leads, promoted to trivial (zero-pairing) Nambu form so the
@@ -45,7 +45,9 @@ def test_normal_junction_matches_static_bias_reference(transparency, voltage):
     resulting (static) transmission over the bias window. These are two
     physically equivalent but numerically unrelated ways of describing the
     same bias, related only by an exact gauge transform -- any bug in the
-    Floquet-sideband bookkeeping would break this equivalence."""
+    Floquet-sideband bookkeeping would break this equivalence. Negative
+    voltages are included so that a current-reversal (I(-V) = -I(V)) sign
+    bug cannot slip through undetected."""
     h0 = geometry.chain().get_hamiltonian()
     h1 = h0.copy()
     h1.turn_nambu()

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from pyqula.keldyshtk.floquet import floquet_hamiltonian
 
@@ -37,3 +38,16 @@ def test_floquet_hamiltonian_is_hermitian_and_has_expected_shape():
     # projecting v01 onto electron+hole and comparing against the sum of
     # the two off-diagonal channels used inside floquet_hamiltonian
     assert np.max(np.abs(proje@v01 + projh@v01 - v01)) < 1e-12
+
+
+def test_dc_current_on_non_nambu_heterostructure_raises_clean_error():
+    """Heterostructure.get_dc_current on a plain (non-Nambu) heterostructure
+    must fail with the documented NotImplementedError, not an unrelated
+    error from deeper inside the tau_z-construction machinery."""
+    from pyqula import geometry
+    from pyqula import heterostructures
+
+    h = geometry.chain().get_hamiltonian()
+    HT = heterostructures.build(h.copy(), h.copy())
+    with pytest.raises(NotImplementedError):
+        HT.get_dc_current(0.1)
