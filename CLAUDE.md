@@ -78,7 +78,7 @@ is what `Hamiltonian` methods call into. When asked to "add a feature to X", che
 Hot inner loops have three possible backends, chosen automatically at import time — don't assume only numpy:
 
 - **Fortran via f2py**: modules under `src/pyqula/fortran/<name>/` compile to `.so` files (see
-  `compilefortran.py` for the full folder→module list, e.g. `kpm`, `dos`, `berry`, `green`, `chi`,
+  `compilefortran.py` for the full folder→module list, e.g. `kpm`, `dos`, `berry`, `chi`,
   `density_matrix`, `algebra`). Call sites use a `try: from . import <x>f90; use_fortran = True except:
   use_fortran = False` pattern (see top of `kpm.py`) and branch on `use_fortran`. If the `.so` files aren't
   built, the pure-Python/numba path is used instead — both paths must stay correct.
