@@ -21,18 +21,27 @@ def green_renormalization_python(intra,inter,energy=0.0,nite=None,
     intra = algebra.todense(intra)
     inter = algebra.todense(inter)
     error = np.abs(delta)*1e-6 # overwrite error
-    e = np.matrix(np.identity(intra.shape[0])) * (energy + 1j*delta)
+    n = intra.shape[0]
+    e = np.identity(n,dtype=np.complex128) * (energy + 1j*delta)
     ite = 0
     alpha = inter.copy()
     beta = algebra.dagger(inter).copy()
     epsilon = intra.copy()
     epsilon_s = intra.copy()
+    # Both updates below only ever need alpha@einv and beta@einv acting on
+    # {alpha,beta}, so solve the two right-hand-sides at once with a single
+    # LU factorization instead of forming the explicit inverse each iteration.
+    rhs = np.empty((n,2*n),dtype=np.complex128)
     while True: # implementation of Eq 11
-      einv = algebra.inv(e - epsilon) # inverse
-      epsilon_s = epsilon_s + alpha @ einv @ beta
-      epsilon = epsilon + alpha @ einv @ beta + beta @ einv @ alpha
-      alpha = alpha @ einv @ alpha  # new alpha
-      beta = beta @ einv @ beta  # new beta
+      rhs[:,:n] = beta
+      rhs[:,n:] = alpha
+      sol = np.linalg.solve(e - epsilon, rhs) # [einv@beta | einv@alpha]
+      alpha_sol = alpha @ sol # [alpha@einv@beta | alpha@einv@alpha]
+      beta_sol = beta @ sol   # [beta@einv@beta  | beta@einv@alpha]
+      epsilon_s = epsilon_s + alpha_sol[:,:n]
+      epsilon = epsilon + alpha_sol[:,:n] + beta_sol[:,n:]
+      alpha = alpha_sol[:,n:]  # new alpha
+      beta = beta_sol[:,:n]  # new beta
       ite += 1
       # stop conditions
       if not nite is None:
@@ -41,8 +50,9 @@ def green_renormalization_python(intra,inter,energy=0.0,nite=None,
         if np.max(np.abs(alpha))<error and np.max(np.abs(beta))<error: break
     if info:
       print("Converged in ",ite,"iterations")
-    g_surf = algebra.inv(e - epsilon_s) # surface green function
-    g_bulk = algebra.inv(e - epsilon)  # bulk green function
+    identity = np.identity(n,dtype=np.complex128)
+    g_surf = np.linalg.solve(e - epsilon_s, identity) # surface green function
+    g_bulk = np.linalg.solve(e - epsilon, identity)  # bulk green function
     return g_bulk,g_surf
 
 def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,**kwargs):
@@ -56,32 +66,6 @@ def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,**kwargs):
                                                 error)
 
 
-#@jit()
-@jit(nopython=True)
-def green_renormalization_jit_core_old(intra,inter,e,nite,error):
-    ite = 0
-    alpha = inter*1.0
-    beta = np.conjugate(inter).T*1.0
-    epsilon = intra*1.0
-    epsilon_s = intra*1.0
-    while True: # implementation of Eq 11
-      einv = np.linalg.inv(e - epsilon) # inverse
-      epsilon_s = epsilon_s + alpha @ einv @ beta
-      epsilon = epsilon + alpha @ einv @ beta + beta @ einv @ alpha
-      alpha = alpha @ einv @ alpha  # new alpha
-      beta = beta @ einv @ beta  # new beta
-      ite += 1
-      # stop conditions
-      if np.max(np.abs(alpha))<error and np.max(np.abs(beta))<error: break
-    g_surf = np.linalg.inv(e - epsilon_s) # surface green function
-    g_bulk = np.linalg.inv(e - epsilon)  # bulk green function 
-    return g0,g1
-                     
-
-
-
-import numpy as np
-from numba import jit
 
 ## this is an optimized version
 @jit(nopython=True)
