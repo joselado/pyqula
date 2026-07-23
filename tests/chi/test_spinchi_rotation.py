@@ -17,9 +17,23 @@ def _converged_island():
     system's self-consistent solution is the trivial (unmagnetized)
     paramagnetic one regardless of the initial guess, so the seed is what
     actually selects a magnetically ordered solution, along a definite
-    (here: random, not fixed) direction. Returns the converged Hamiltonian
-    together with v, so callers can check the converged magnetization
-    direction matches the seed/initial-guess direction."""
+    (here: random, not fixed) direction.
+
+    filling=0.3 (not the more obvious 0.5, half-filling) is deliberate:
+    at exactly half-filling this system's density-density SCF never
+    generates any interaction-driven magnetic correction at all (verified
+    directly -- the converged Hamiltonian differs from the seeded input by
+    less than 1e-13 regardless of U or seed strength), so the converged
+    magnetization there is just the input seed field passed through
+    unchanged, and a same-direction check wouldn't actually exercise the
+    SCF. At filling=0.3 the SCF does contribute substantially (the
+    converged Hamiltonian differs from the seeded input by order 1), so
+    checking its direction against v is a genuine test of self-consistent
+    convergence, not just of the seed surviving unchanged.
+
+    Returns the converged Hamiltonian together with v, so callers can
+    check the converged magnetization direction matches the seed/initial-
+    guess direction."""
     g = islands.get_geometry(name="honeycomb", n=1.2, nedges=3)  # 6 sites
     h = g.get_hamiltonian()
     v = np.random.random(3) - .5  # random exchange direction
@@ -27,7 +41,7 @@ def _converged_island():
     h.add_exchange(1e-2*v)
     mf = h.copy()
     mf.add_exchange(0.5*v)  # initial guess
-    hmf = h.get_mean_field_hamiltonian(U=3.0, filling=0.5, mf=mf,
+    hmf = h.get_mean_field_hamiltonian(U=3.0, filling=0.3, mf=mf,
                                         maxerror=SCF_MAXERROR)
     return hmf, v
 
@@ -47,9 +61,13 @@ def test_spinchi_full_is_rotationally_symmetric(RPA):
     h, v = _converged_island()
 
     # the SCF must actually converge to a solution magnetized along the
-    # seed/initial-guess direction v, not some unrelated (or zero) direction
+    # seed/initial-guess direction v, not some unrelated (or zero) direction.
+    # The threshold (1.0) is well above the ~0.06 that the persistent seed
+    # field alone would give with no interaction-driven contribution at all
+    # (and well below the ~3.0 actually converged to here), so this also
+    # catches a regression where the SCF stops contributing anything.
     mtot = h.get_magnetization().sum(axis=0)
-    assert np.linalg.norm(mtot) > 1e-3, "converged to a non-magnetic solution"
+    assert np.linalg.norm(mtot) > 1.0, "converged to a non-magnetic solution"
     assert abs(np.dot(mtot/np.linalg.norm(mtot), v) - 1.) < 1e-3
 
     # a single-axis rotation (z -> x) and a generic compound rotation
