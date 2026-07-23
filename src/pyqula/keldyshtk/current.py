@@ -12,6 +12,14 @@ from .floquet import floquet_hamiltonian
 # Floquet-Keldysh DC current between two (possibly superconducting) leads,
 # following San-Jose, Cayao, Prada, Aguado, New J. Phys. 15, 075019 (2013)
 # (arXiv:1301.4408), Appendix A. See also src/pyqula/keldysh.py.
+#
+# Only heterostructures with NO explicit central region (heterostructures.
+# build(h1,h2), the two leads directly weak-linked via set_coupling) are
+# supported. Testing found a confirmed, unresolved systematic error (a few
+# percent, growing at low transparency) for junctions with an explicit
+# central Hamiltonian (a single dense central site or several block-diagonal
+# central sites) whenever that region is not structurally identical to a
+# lead; _check_supported rejects that case until it's root-caused.
 
 
 def lesser_from_retarded(sigma_r, energy, temperature=0.):
@@ -29,51 +37,29 @@ def _check_supported(ht):
         raise NotImplementedError(
             "keldysh.dc_current needs a Nambu (BdG) heterostructure; "
             "call h.turn_nambu() on both leads first (even with zero pairing)")
-
-
-def _dense_hlist(ht):
-    """Block-tridiagonal chain (left lead, single dense central site, right
-    lead) for a heterostructure built with a single explicit central
-    Hamiltonian (heterostructures.build(h1,h2,central=[h_junction])), which
-    pyqula represents with a dense `central_intra` rather than a block list
-    (create_leads_and_central always sets block_diagonal=False for exactly
-    one central site)."""
-    return [
-        [ht.left_intra, dagger(ht.left_coupling)*ht.scale_lc, None],
-        [ht.left_coupling*ht.scale_lc, ht.central_intra,
-         dagger(ht.right_coupling)*ht.scale_rc],
-        [None, ht.right_coupling*ht.scale_rc, ht.right_intra],
-    ]
-
-
-def _prepare_system(ht, link=None):
-    """Build the block-tridiagonal chain (leads' own unit cell + any
-    explicit central sites) and identify the electron/hole projectors for
-    the bond that carries the bias-induced AC phase."""
-    _check_supported(ht)
-    if ht.block_diagonal:
-        hlist = enlarge_hlist(ht).central_intra
-    else:
-        hlist = _dense_hlist(ht)
-    nb = len(hlist)
-    if nb < 2:
-        raise ValueError("need at least two blocks to define a weak link")
-    if link is None:
-        link = (nb-2, nb-1)
-    i0, i1 = link
-    if i1 != i0+1:
-        raise ValueError("link must connect adjacent blocks")
-    if i1 != nb-1:
+    if not (ht.block_diagonal and len(ht.central_intra) == 0):
         raise NotImplementedError(
-            "the AC-carrying bond must currently be adjacent to the right "
-            "lead (link=(nb-2,nb-1), the default)")
+            "keldysh.dc_current only supports heterostructures with no "
+            "explicit central region (heterostructures.build(h1,h2), i.e. "
+            "the two leads directly weak-linked via set_coupling); a "
+            "confirmed, unresolved systematic error was found during "
+            "testing for junctions with an explicit central Hamiltonian, so "
+            "that case is rejected until it is root-caused")
+
+
+def _prepare_system(ht):
+    """Build the 2-block chain (one extra unit cell of each lead, directly
+    weak-linked) and the electron/hole projectors for the right lead, whose
+    unit cell is the target of the AC-carrying bond."""
+    _check_supported(ht)
+    hlist = enlarge_hlist(ht).central_intra
     proje = algebra.todense(ht.Hr.get_operator("electron").get_matrix())
     projh = algebra.todense(ht.Hr.get_operator("hole").get_matrix())
     dim = algebra.todense(hlist[0][0]).shape[0]
     if proje.shape[0] != dim:
         raise ValueError("dimension mismatch between the lead Hamiltonian "
                           "and the heterostructure's unit cell")
-    return hlist, link, proje, projh, dim, nb
+    return hlist, proje, projh, dim
 
 
 def _cached_selfenergy(ht, e, lead, delta, cache):
@@ -90,15 +76,15 @@ def _cached_selfenergy(ht, e, lead, delta, cache):
     return out
 
 
-def _floquet_green_functions(ht, voltage, quasienergy, nmax, link, delta,
+def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
                               temperature, cache):
     """Build the retarded and lesser Floquet Green's functions of the
-    S region (leads' extra unit cell + any explicit central sites),
-    together with the left lead's lesser/advanced self-energies at every
-    sideband (needed by the current trace)."""
-    hlist, link, proje, projh, dim, nb = _prepare_system(ht, link=link)
+    2-block S region, together with the left lead's lesser/advanced
+    self-energies at every sideband (needed by the current trace)."""
+    hlist, proje, projh, dim = _prepare_system(ht)
+    nb = len(hlist)
     ns = 2*nmax+1
-    Hbig = floquet_hamiltonian(hlist, link, voltage, nmax, proje, projh)
+    Hbig = floquet_hamiltonian(hlist, (0, 1), voltage, nmax, proje, projh)
     ntot = Hbig.shape[0]
 
     sigL = np.zeros((ntot, ntot), dtype=np.complex128)
@@ -126,18 +112,18 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, link, delta,
     Gr = np.linalg.inv(iden - Hbig - sigL - sigR)
     Ga = dagger(Gr)
     Gless = Gr@sigLess@Ga
-    return Gr, Gless, sigL_less, sigL_a, dim, ns, nb
+    return Gr, Gless, sigL_less, sigL_a, dim, ns
 
 
-def current_integrand(ht, voltage, quasienergy, nmax, tauz, link=None,
+def current_integrand(ht, voltage, quasienergy, nmax, tauz,
                        delta=1e-6, temperature=0., cache=None):
     """Integrand Re Tr{[G^r Sigma_L^< + G^< Sigma_L^a] tauz} of the paper's
     Eq. for I_dc, at a fixed quasienergy. `tauz` is the electron/hole
     grading operator matching the left lead's unit-cell dimension."""
     if cache is None:
         cache = {}
-    Gr, Gless, sigL_less, sigL_a, dim, ns, nb = _floquet_green_functions(
-        ht, voltage, quasienergy, nmax, link, delta, temperature, cache)
+    Gr, Gless, sigL_less, sigL_a, dim, ns = _floquet_green_functions(
+        ht, voltage, quasienergy, nmax, delta, temperature, cache)
     total = 0.0+0.0j
     for isb in range(ns):
         n = isb-nmax
@@ -150,13 +136,11 @@ def current_integrand(ht, voltage, quasienergy, nmax, tauz, link=None,
 
 
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
-               delta=None, link=None):
-    """Time-averaged (DC) current through a two-terminal junction under a
-    bias `voltage`, computed with the Floquet-Keldysh formalism of
-    San-Jose, Cayao, Prada, Aguado, NJP 15, 075019 (2013). Works for any
-    combination of normal/superconducting leads built with
-    heterostructures.build (with an implicit or explicit weak-link bond,
-    see keldyshtk.current._prepare_system).
+               delta=None):
+    """Time-averaged (DC) current through a two-terminal junction (two
+    leads, no explicit central region) under a bias `voltage`, computed
+    with the Floquet-Keldysh formalism of San-Jose, Cayao, Prada, Aguado,
+    NJP 15, 075019 (2013).
 
     The number of Floquet sidebands is increased adaptively (as in the
     paper) until the result changes by less than `tol`, capped at
@@ -172,8 +156,8 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
 
     def integral(nmax):
         f = lambda e: current_integrand(ht, voltage, e, nmax, tauz,
-                                         link=link, delta=delta,
-                                         temperature=temperature, cache=cache)
+                                         delta=delta, temperature=temperature,
+                                         cache=cache)
         val, _ = quad(f, 0., abs(voltage), limit=50, epsrel=1e-3)
         return val
 

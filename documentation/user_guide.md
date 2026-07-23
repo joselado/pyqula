@@ -1233,7 +1233,7 @@ vs = np.linspace(0.02,1.5,40)*0.1 # bias voltages
 Is = HT.get_iv_curve(vs) # MAR/AC-Josephson dc current
 ```
 
-The number of Floquet sidebands is increased adaptively (as in the paper) until $I_{dc}$ converges; see `examples/transport/floquet_keldysh_mar/main.py` for a runnable script and `tests/keldysh/` for correctness tests (a normal-normal junction must reduce exactly to a directly biased, non-Floquet Landauer calculation, and a normal-superconductor junction's zero-bias slope must match the existing equilibrium Andreev conductance from `didv`). Only 1D leads directly coupled through a single "weak link" bond (no explicit multi-site central region) are currently supported.
+The number of Floquet sidebands is increased adaptively (as in the paper) until $I_{dc}$ converges; see `examples/transport/floquet_keldysh_mar/main.py` for a runnable script and `tests/keldysh/` for correctness tests (a normal-normal junction must reduce exactly to a directly biased, non-Floquet Landauer calculation, and a normal-superconductor junction's zero-bias slope must match the existing equilibrium Andreev conductance from `didv`). Only 1D leads directly coupled through a single "weak link" bond (`heterostructures.build(h1,h2)` with no explicit `central=` Hamiltonian) are supported; `get_dc_current` raises `NotImplementedError` for a heterostructure with an explicit central region, since testing found a confirmed, unresolved systematic error there whenever that region is not structurally identical to a lead.
 
 
 # Single defects in infinite systems
@@ -1578,7 +1578,8 @@ Returns a new, smaller Hamiltonian; `.wannier_centres`, `.wannier_spreads` and `
 Compute the time-averaged (DC) current through a two-terminal junction at a
 given bias, using the Floquet-Keldysh formalism (see "Multiple Andreev
 reflection and AC-Josephson current"). Works for any combination of
-normal/superconducting leads built with `heterostructures.build`.
+normal/superconducting leads built with `heterostructures.build(h1,h2)`
+(no explicit `central=` Hamiltonian; raises `NotImplementedError` otherwise).
 
 Arguments:
 
@@ -1586,11 +1587,10 @@ Arguments:
 
 Optional arguments:
 
-- nmax=6, nmax_max=40: initial/maximum number of Floquet sidebands (increased adaptively until convergence)
+- nmax=6, nmax_max=40: initial/maximum number of Floquet sidebands (increased adaptively until convergence; a warning is issued if `nmax_max` is reached before `tol` is satisfied)
 - tol=1e-3: relative convergence tolerance used to decide when to stop increasing the sideband count
 - temperature=0.: lead temperature
 - delta=None: broadening (defaults to `HT.delta`); should be much smaller than the smallest relevant gap for small-gap superconductors
-- link=None: which bond carries the bias-induced AC phase (defaults to the single weak-link bond between the two leads; only bonds adjacent to a lead are currently supported)
 
 Returns the DC current
 

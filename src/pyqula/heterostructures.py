@@ -156,7 +156,9 @@ class Heterostructure():
     def get_dc_current(self,voltage,**kwargs):
         """Floquet-Keldysh DC current (MAR/AC-Josephson) at a given bias
         voltage, following San-Jose, Cayao, Prada, Aguado, NJP 15, 075019
-        (2013) (arXiv:1301.4408)"""
+        (2013) (arXiv:1301.4408). Only supports a heterostructure with no
+        explicit central region (heterostructures.build(h1,h2), the two
+        leads directly weak-linked via set_coupling)"""
         from .keldysh import dc_current
         return dc_current(self,voltage,**kwargs)
     def get_iv_curve(self,voltages,**kwargs):
