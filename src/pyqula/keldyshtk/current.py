@@ -1,13 +1,13 @@
 import warnings
 
 import numpy as np
+from numba import jit
 from scipy.integrate import quad
 
 from .. import algebra
 from ..algebra import dagger
 from ..transporttk.smatrix import enlarge_hlist
 from ..transporttk.fermidirac import fermidirac
-from .floquet import floquet_hamiltonian
 
 # Floquet-Keldysh DC current between two (possibly superconducting) leads,
 # following San-Jose, Cayao, Prada, Aguado, New J. Phys. 15, 075019 (2013)
@@ -20,6 +20,23 @@ from .floquet import floquet_hamiltonian
 # central Hamiltonian (a single dense central site or several block-diagonal
 # central sites) whenever that region is not structurally identical to a
 # lead; _check_supported rejects that case until it's root-caused.
+#
+# Rather than assembling the dense (block x sideband)-space Floquet
+# Hamiltonian (see floquet.py:floquet_hamiltonian, still used by
+# tests/keldysh/test_floquet_hamiltonian_assembly.py and kept as the
+# reference construction) and inverting it whole (O((2*ns)^3)), this module
+# exploits its structure directly: with no explicit central region there is
+# exactly one spatial bond (the AC-carrying weak link), so block 0's
+# sideband n only couples to block 1's sidebands n+1 and n-1 (never to
+# another block-0 site or a same-sideband block-1 site). Following that
+# coupling path visits every sideband exactly once, alternating which
+# block owns it -- so the whole (block, sideband) lattice splits into
+# exactly two independent 1D chains of `ns` sites each (verified: zero
+# cross-coupling between the two chains). Each chain is then solved with a
+# standard O(ns) recursive Green's function sweep (_rgf_chain) instead of
+# an O(ns^3) dense inversion. Both the chain decomposition and the RGF
+# sweep were validated against the dense construction to machine precision
+# before being wired in here (see the PR/commit description).
 
 
 def lesser_from_retarded(sigma_r, energy, temperature=0.):
@@ -102,46 +119,143 @@ def _prefetch_selfenergies_batch(ht, es, lead, delta, cache):
         cache[keys[i]] = algebra.todense(out)
 
 
+def _chain_sites(nmax):
+    """The two independent 1D chains the (block, sideband) Floquet lattice
+    decomposes into (see module docstring): each is a list of `ns =
+    2*nmax+1` (block, n) pairs, one entry per sideband n, in physical
+    chain order (consecutive entries are the actual nearest-neighbor
+    bonds). The two chains partition the block-0 sites between them --
+    together they cover every sideband n exactly once at block 0."""
+    ns = 2*nmax+1
+    chainA = [(0 if k % 2 == 0 else 1, -nmax+k) for k in range(ns)]
+    chainB = [(1 if k % 2 == 0 else 0, -nmax+k) for k in range(ns)]
+    return chainA, chainB
+
+
+def _rgf_chain(Es, taus, SigLess):
+    """Diagonal blocks of the retarded and lesser Green's functions of a
+    1D block-tridiagonal chain, exact, via the standard O(N) two-sweep
+    recursive Green's function algorithm (N = len(Es)) instead of one
+    O(N^3) dense inversion (see e.g. Datta, "Electronic Transport in
+    Mesoscopic Systems"; Lake & Datta, PRB 45, 6670 (1992) for the Keldysh
+    extension). `taus[i]` is the hopping from site i to site i+1 (matrix
+    convention H_{i+1,i} = -taus[i]), `Es[i]` is (energy+i*delta)*I - h_i -
+    Sigma^r_i (the site's own onsite term already dressed by its local
+    retarded selfenergy), `SigLess[i]` is Sigma^<_i.
+
+    A forward sweep builds "left-connected" retarded/lesser Green's
+    functions (site i dressed only by the embedding from sites 0..i-1), a
+    backward sweep builds the mirror "right-connected" ones, and the two
+    are combined at each site to get the true, fully-embedded diagonal
+    block. Validated against dense np.linalg.inv to machine precision, on
+    both generic random (non-Hermitian) test chains and the actual Floquet
+    chains built by _floquet_green_functions below. The recursion itself
+    (_rgf_chain_jit) is numba-compiled: like the selfenergy computation,
+    this call site makes many np.linalg.inv calls on small (dim x dim)
+    matrices, where per-call Python/LAPACK-dispatch overhead dominates the
+    actual flop count -- compiling removes that overhead, not the math."""
+    N = len(Es)
+    dim = Es[0].shape[0]
+    Es_arr = np.asarray(Es, dtype=np.complex128)
+    SigLess_arr = np.asarray(SigLess, dtype=np.complex128)
+    if N > 1:
+        taus_arr = np.asarray(taus, dtype=np.complex128)
+    else:
+        taus_arr = np.empty((0, dim, dim), dtype=np.complex128)
+    G, Gless = _rgf_chain_jit(Es_arr, taus_arr, SigLess_arr)
+    return list(G), list(Gless)
+
+
+@jit(nopython=True, cache=True)
+def _rgf_chain_jit(Es, taus, SigLess):
+    N = Es.shape[0]
+    dim = Es.shape[1]
+    gL = np.empty((N, dim, dim), dtype=np.complex128)
+    gLessL = np.empty((N, dim, dim), dtype=np.complex128)
+    gL[0] = np.linalg.inv(Es[0])
+    gLessL[0] = gL[0]@SigLess[0]@np.conjugate(gL[0]).T
+    for i in range(1, N):
+        t = taus[i-1]
+        td = np.conjugate(t).T
+        sigl_r = t@gL[i-1]@td
+        sigl_less = t@gLessL[i-1]@td
+        gL[i] = np.linalg.inv(Es[i]-sigl_r)
+        gLd = np.conjugate(gL[i]).T
+        gLessL[i] = gL[i]@(SigLess[i]+sigl_less)@gLd
+    gR = np.empty((N, dim, dim), dtype=np.complex128)
+    gRless = np.empty((N, dim, dim), dtype=np.complex128)
+    gR[N-1] = np.linalg.inv(Es[N-1])
+    gRless[N-1] = gR[N-1]@SigLess[N-1]@np.conjugate(gR[N-1]).T
+    for i in range(N-2, -1, -1):
+        t = taus[i]
+        td = np.conjugate(t).T
+        sigr_r = td@gR[i+1]@t
+        sigr_less = td@gRless[i+1]@t
+        gR[i] = np.linalg.inv(Es[i]-sigr_r)
+        gRd = np.conjugate(gR[i]).T
+        gRless[i] = gR[i]@(SigLess[i]+sigr_less)@gRd
+    G = np.empty((N, dim, dim), dtype=np.complex128)
+    Gless = np.empty((N, dim, dim), dtype=np.complex128)
+    for i in range(N):
+        Eeff = Es[i].copy()
+        SLtot = SigLess[i].copy()
+        if i > 0:
+            t = taus[i-1]
+            td = np.conjugate(t).T
+            Eeff = Eeff - t@gL[i-1]@td
+            SLtot = SLtot + t@gLessL[i-1]@td
+        if i < N-1:
+            t = taus[i]
+            td = np.conjugate(t).T
+            Eeff = Eeff - td@gR[i+1]@t
+            SLtot = SLtot + td@gRless[i+1]@t
+        G[i] = np.linalg.inv(Eeff)
+        Gd = np.conjugate(G[i]).T
+        Gless[i] = G[i]@SLtot@Gd
+    return G, Gless
+
+
 def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
                               temperature, cache):
-    """Build the retarded and lesser Floquet Green's functions of the
-    2-block S region, together with the left lead's lesser/advanced
-    self-energies at every sideband (needed by the current trace)."""
+    """Retarded and lesser Green's function diagonal blocks at every
+    block-0 (left-lead-type) sideband, together with the left lead's
+    lesser/advanced self-energies (needed by the current trace). Builds
+    the two decoupled Floquet chains (_chain_sites) directly instead of
+    assembling the dense (2*ns*dim)^2 Hamiltonian, and solves each with
+    the O(ns) recursive sweep (_rgf_chain) -- exact, not an approximation
+    (see module docstring)."""
     hlist, proje, projh, dim = _prepare_system(ht)
-    nb = len(hlist)
+    v0 = algebra.todense(hlist[1][0])  # hopping <lead1 unit cell|H|lead0 unit cell>
+    ve = proje@v0  # electron-projected AC bond, couples sideband n -> n+1
+    vh = projh@v0  # hole-projected AC bond, couples sideband n -> n-1
+    hii = [algebra.todense(hlist[0][0]), algebra.todense(hlist[1][1])]
+    iden = np.eye(dim, dtype=np.complex128)
     ns = 2*nmax+1
-    Hbig = floquet_hamiltonian(hlist, (0, 1), voltage, nmax, proje, projh)
-    ntot = Hbig.shape[0]
 
-    sigL = np.zeros((ntot, ntot), dtype=np.complex128)
-    sigR = np.zeros((ntot, ntot), dtype=np.complex128)
-    sigLess = np.zeros((ntot, ntot), dtype=np.complex128)
-    sigL_less = {}
-    sigL_a = {}
     es = [quasienergy+(isb-nmax)*voltage for isb in range(ns)]
     _prefetch_selfenergies_batch(ht, es, 0, delta, cache)
     _prefetch_selfenergies_batch(ht, es, 1, delta, cache)
-    for isb in range(ns):
-        n = isb-nmax
-        e = quasienergy+n*voltage
-        sl = _cached_selfenergy(ht, e, 0, delta, cache)
-        sr = _cached_selfenergy(ht, e, 1, delta, cache)
-        off0 = (0*ns+isb)*dim
-        offR = ((nb-1)*ns+isb)*dim
-        sigL[off0:off0+dim, off0:off0+dim] += sl
-        sigR[offR:offR+dim, offR:offR+dim] += sr
-        sl_less = lesser_from_retarded(sl, e, temperature=temperature)
-        sr_less = lesser_from_retarded(sr, e, temperature=temperature)
-        sigLess[off0:off0+dim, off0:off0+dim] += sl_less
-        sigLess[offR:offR+dim, offR:offR+dim] += sr_less
-        sigL_less[n] = sl_less
-        sigL_a[n] = dagger(sl)
 
-    iden = np.eye(ntot, dtype=np.complex128)*(quasienergy+1j*delta)
-    Gr = np.linalg.inv(iden - Hbig - sigL - sigR)
-    Ga = dagger(Gr)
-    Gless = Gr@sigLess@Ga
-    return Gr, Gless, sigL_less, sigL_a, dim, ns
+    Gr00, Gless00, sigL_less, sigL_a = {}, {}, {}, {}
+    for chain in _chain_sites(nmax):
+        Es, SigLess, taus = [], [], []
+        for k, (b, n) in enumerate(chain):
+            e = quasienergy+n*voltage
+            sig_r = _cached_selfenergy(ht, e, b, delta, cache)
+            Es.append((quasienergy+n*voltage+1j*delta)*iden - hii[b] - sig_r)
+            sl = lesser_from_retarded(sig_r, e, temperature=temperature)
+            SigLess.append(sl)
+            if b == 0:
+                sigL_less[n] = sl
+                sigL_a[n] = dagger(sig_r)
+            if k < len(chain)-1:
+                taus.append(ve if b == 0 else dagger(vh))
+        G, Gless = _rgf_chain(Es, taus, SigLess)
+        for k, (b, n) in enumerate(chain):
+            if b == 0:
+                Gr00[n] = G[k]
+                Gless00[n] = Gless[k]
+    return Gr00, Gless00, sigL_less, sigL_a, dim, ns
 
 
 def current_integrand(ht, voltage, quasienergy, nmax, tauz,
@@ -151,15 +265,12 @@ def current_integrand(ht, voltage, quasienergy, nmax, tauz,
     grading operator matching the left lead's unit-cell dimension."""
     if cache is None:
         cache = {}
-    Gr, Gless, sigL_less, sigL_a, dim, ns = _floquet_green_functions(
+    Gr00, Gless00, sigL_less, sigL_a, dim, ns = _floquet_green_functions(
         ht, voltage, quasienergy, nmax, delta, temperature, cache)
     total = 0.0+0.0j
     for isb in range(ns):
         n = isb-nmax
-        off0 = (0*ns+isb)*dim
-        Gr00 = Gr[off0:off0+dim, off0:off0+dim]
-        Gless00 = Gless[off0:off0+dim, off0:off0+dim]
-        M = Gr00@sigL_less[n] + Gless00@sigL_a[n]
+        M = Gr00[n]@sigL_less[n] + Gless00[n]@sigL_a[n]
         total += np.trace(M@tauz)
     return total.real
 
