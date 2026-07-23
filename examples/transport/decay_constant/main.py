@@ -14,8 +14,8 @@ D = 0.1 # superconducting gap
 h.add_swave(D) # pairing gap of 0.1
 lp = LocalProbe(h,delta=1e-8) # create a local probe object
 lp.T = 2e-2 # reference transparency 
-es = np.linspace(D*0.3,2*D,5) # grid of energies
-ts = [lp.didv(energy=e,method="keldysh") for e in es] # calculate transmission
+es = np.linspace(-2*D,2*D,101) # grid of energies
+ts = [lp.didv(energy=e) for e in es] # calculate transmission
 ks = [lp.get_kappa(energy=e) for e in es] # calculate decay rate
 plt.subplot(121)
 plt.plot(es/D,ts,marker="o")
