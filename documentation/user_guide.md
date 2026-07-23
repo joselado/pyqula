@@ -1237,6 +1237,23 @@ Is = HT.get_iv_curve(vs) # MAR/AC-Josephson dc current
 
 The number of Floquet sidebands is increased adaptively (as in the paper) until $I_{dc}$ converges; see `examples/transport/floquet_keldysh_mar/main.py` for a runnable script and `tests/keldysh/` for correctness tests (a normal-normal junction must reduce exactly to a directly biased, non-Floquet Landauer calculation, and a normal-superconductor junction's zero-bias slope must match the existing equilibrium Andreev conductance from `didv`). Only 1D leads directly coupled through a single "weak link" bond (`heterostructures.build(h1,h2)` with no explicit `central=` Hamiltonian) are supported; `get_dc_current` raises `NotImplementedError` for a heterostructure with an explicit central region, since testing found a confirmed, unresolved systematic error there whenever that region is not structurally identical to a lead.
 
+`transporttk.localprobe.LocalProbe` models a single STM-like tip weakly coupled to one site of an infinite/bulk sample (used e.g. for `get_kappa`, a decay-constant/transparency-scaling diagnostic -- see `examples/transport/decay_constant/main.py`). The same routing applies there: `LocalProbe.didv`/`get_kappa` use the ordinary scattering-matrix formula by default, but switch to the Floquet-Keldysh MAR current when the probe lead (`lp.lead`) is itself superconducting *and* the sample is superconducting too, since a normal-metal probe no longer applies and the same "no normal lead to reflect against" problem as above appears. The probe's unit cell and the sample's local (single-site) Hamiltonian play the role of the two leads.
+
+```python
+from pyqula import geometry
+from pyqula.transporttk.localprobe import LocalProbe
+
+g = geometry.chain()
+h = g.get_hamiltonian() ; h.shift_fermi(1.) ; h.add_swave(0.1) # SC sample
+lead = geometry.chain().get_hamiltonian() ; lead.shift_fermi(1.) ; lead.add_swave(0.1) # SC probe
+lp = LocalProbe(h,lead=lead,delta=1e-3)
+lp.T = 0.3 # reference transparency
+G = lp.didv(energy=0.25,nmax=4,nmax_max=12,tol=5e-2) # routed through Keldysh automatically
+k = lp.get_kappa(energy=0.25,nmax=4,nmax_max=12,tol=5e-2)
+```
+
+This is considerably more expensive than the normal-probe case (each `didv`/`get_kappa` call runs several Floquet-Keldysh sideband sweeps), especially deep below the combined gap at low transparency, where the sideband sum converges slowly; see `examples/transport/decay_constant_keldysh/main.py` for a runnable script using a coarse energy grid and a modest sideband cutoff to keep the runtime reasonable.
+
 
 # Single defects in infinite systems
 

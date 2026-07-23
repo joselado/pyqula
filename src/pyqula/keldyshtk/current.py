@@ -46,6 +46,11 @@ def lesser_from_retarded(sigma_r, energy, temperature=0.):
     return -f*(sigma_r - dagger(sigma_r))
 
 
+def _is_localprobe(ht):
+    from ..transporttk.localprobe import LocalProbe
+    return isinstance(ht, LocalProbe)
+
+
 def _check_supported(ht):
     if getattr(ht, "dimensionality", 1) != 1:
         raise NotImplementedError(
@@ -54,6 +59,8 @@ def _check_supported(ht):
         raise NotImplementedError(
             "keldysh.dc_current needs a Nambu (BdG) heterostructure; "
             "call h.turn_nambu() on both leads first (even with zero pairing)")
+    if _is_localprobe(ht):
+        return  # a LocalProbe has no explicit central region by construction
     if not (ht.block_diagonal and len(ht.central_intra) == 0):
         raise NotImplementedError(
             "keldysh.dc_current only supports heterostructures with no "
@@ -64,11 +71,38 @@ def _check_supported(ht):
             "that case is rejected until it is root-caused")
 
 
+def _prepare_system_localprobe(lp):
+    """Build the 2-block (probe, sample-site) chain and the electron/hole
+    projectors for a LocalProbe, mirroring `_prepare_system` below: block 0
+    is the probe's unit cell (`lp.lead`), block 1 is the single bulk site
+    being probed (`lp.i` of `lp.H`), and the AC-carrying bond is the
+    probe-sample tunneling link scaled by the transparency `lp.T` -- the
+    same raw Hamiltonian block structure `localprobe.get_central_gmatrix`
+    dresses with self-energies and (energy+i*delta) for the smatrix method."""
+    from ..htk.extract import local_hamiltonian
+    from ..transporttk.localprobe import get_intra
+    oi = algebra.todense(local_hamiltonian(lp.H, get_intra(lp.H), i=lp.i))
+    h01 = algebra.todense(lp.lead.inter)*lp.T  # probe -> sample-site bond
+    hlist = [[algebra.todense(lp.lead.intra), h01],
+             [dagger(h01), oi]]
+    proje = algebra.todense(local_hamiltonian(
+        lp.H, lp.H.get_operator("electron").get_matrix(), i=lp.i))
+    projh = algebra.todense(local_hamiltonian(
+        lp.H, lp.H.get_operator("hole").get_matrix(), i=lp.i))
+    dim = hlist[0][0].shape[0]
+    if proje.shape[0] != dim:
+        raise ValueError("dimension mismatch between the probe lead and "
+                          "the local sample site")
+    return hlist, proje, projh, dim
+
+
 def _prepare_system(ht):
     """Build the 2-block chain (one extra unit cell of each lead, directly
     weak-linked) and the electron/hole projectors for the right lead, whose
     unit cell is the target of the AC-carrying bond."""
     _check_supported(ht)
+    if _is_localprobe(ht):
+        return _prepare_system_localprobe(ht)
     hlist = enlarge_hlist(ht).central_intra
     proje = algebra.todense(ht.Hr.get_operator("electron").get_matrix())
     projh = algebra.todense(ht.Hr.get_operator("hole").get_matrix())
@@ -110,6 +144,8 @@ def _prefetch_selfenergies_batch(ht, es, lead, delta, cache):
     loop across threads. `_cached_selfenergy` below then just hits the
     cache this fills in; the tolerance matches the non-batched path
     exactly, so this only changes speed, never the result."""
+    if not hasattr(ht, "get_selfenergy_batch"):
+        return  # e.g. LocalProbe: fall back to per-energy _cached_selfenergy
     keys = [(lead, round(e, 10)) for e in es]
     miss = [i for i, k in enumerate(keys) if k not in cache]
     if not miss: return
@@ -275,12 +311,30 @@ def current_integrand(ht, voltage, quasienergy, nmax, tauz,
     return total.real
 
 
+def _prepare_bias_target(ht):
+    """LocalProbe's `frozen_lead` (True by default) locks the probe's
+    self-energy at zero energy for every bias -- a fine approximation for
+    a normal, wide-band probe (the smatrix method's default), but wrong
+    for a superconducting probe, whose self-energy has genuine gap
+    structure that must be evaluated at each Floquet sideband energy.
+    Return a copy with `frozen_lead=False` so the Keldysh sideband sweep
+    below sees the probe's real energy dependence; leave non-LocalProbe
+    heterostructures untouched."""
+    if _is_localprobe(ht) and ht.frozen_lead:
+        ht = ht.copy()
+        ht.frozen_lead = False
+    return ht
+
+
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
                delta=None):
-    """Time-averaged (DC) current through a two-terminal junction (two
-    leads, no explicit central region) under a bias `voltage`, computed
-    with the Floquet-Keldysh formalism of San-Jose, Cayao, Prada, Aguado,
-    NJP 15, 075019 (2013).
+    """Time-averaged (DC) current through a two-terminal junction under a
+    bias `voltage`, computed with the Floquet-Keldysh formalism of
+    San-Jose, Cayao, Prada, Aguado, NJP 15, 075019 (2013). The junction is
+    either a two-lead heterostructure with no explicit central region
+    (heterostructures.build(h1,h2)) or a LocalProbe (probe tip weakly
+    coupled to a single site of a bulk sample) whose probe and sample are
+    both superconducting.
 
     The number of Floquet sidebands is increased adaptively (as in the
     paper) until the result changes by less than `tol`, capped at
@@ -288,10 +342,12 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     hit before convergence)."""
     if voltage == 0.:
         return 0.0
+    ht = _prepare_bias_target(ht)
     _check_supported(ht)
     if delta is None:
         delta = ht.delta
-    tauz = algebra.todense(ht.Hl.get_operator("tauz").get_matrix())
+    lead0 = ht.lead if _is_localprobe(ht) else ht.Hl
+    tauz = algebra.todense(lead0.get_operator("tauz").get_matrix())
     cache = {}
 
     def integral(nmax):
