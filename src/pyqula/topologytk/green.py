@@ -3,8 +3,16 @@ from .. import algebra
 
 
 def berry_green_generator(f,k=[0.,0.,0.],dk=1e-4,operator=None,
-              full=False):
-  """Function that returns the energy resolved Berry curvature"""
+              full=False,gI=None):
+  """Function that returns the energy resolved Berry curvature.
+
+  gI, if given, is a callable gI(e=e,k=k) returning the *exact* inverse
+  Green's function at the central k-point (e.g. (e+i*delta)*I - H(k),
+  already available for free from get_gk_gen's inv=True branch). When
+  omitted, gI is approximated by averaging the four finite-difference
+  Green's functions and inverting that average -- one extra O(N^3)
+  inversion per energy point, and only an approximation of the exact
+  central value."""
   k = np.array(k) # set as array
   dx = np.array([dk,0.,0.])
   dy = np.array([0.,dk,0.])
@@ -14,11 +22,12 @@ def berry_green_generator(f,k=[0.,0.,0.],dk=1e-4,operator=None,
     gxm = f(e=e,k=k-dx) # compute at this k and this energy
     gyp = f(e=e,k=k+dy) # compute at this k and this energy
     gym = f(e=e,k=k-dy) # compute at this k and this energy
-    g = (gxp + gyp + gxm + gym)/4. # average Green function
-    # Now apply the formula
-    gI = algebra.inv(g) # inverse
+    if gI is not None: gI0 = gI(e=e,k=k) # exact inverse, no extra inversion
+    else:
+        g = (gxp + gyp + gxm + gym)/4. # average Green function
+        gI0 = algebra.inv(g) # inverse
     # the derivative of g^-1 is -g^-1*g'*g^-1
-    omega = -(gxp-gxm)@gI@(gyp-gym) + (gyp-gym)@gI@(gxp-gxm)
+    omega = -(gxp-gxm)@gI0@(gyp-gym) + (gyp-gym)@gI0@(gxp-gxm)
 #    omega = ((gxp-gxm)@(gyp-gym) - (gyp-gym)@(gxp-gxm))@gI
 #    omega = g*((gxp.I-gxm.I)*(gyp-gym) -(gyp.I-gym.I)*(gxp-gxm))
 #    omega += -g*(gyp.I-gym.I)*(gxp-gxm)
@@ -29,11 +38,11 @@ def berry_green_generator(f,k=[0.,0.,0.],dk=1e-4,operator=None,
 
 
 
-def berry_green(f,emin=-10.0,k=[0.,0.,0.],ne=100,dk=1e-4,operator=None):
+def berry_green(f,emin=-10.0,k=[0.,0.,0.],ne=100,dk=1e-4,operator=None,gI=None):
   """Return the Berry curvature using Green functions. This function
   integrated the Green's function expression using complex integration"""
   import scipy.integrate as integrate
-  fint = berry_green_generator(f,k=k,dk=dk,operator=operator)
+  fint = berry_green_generator(f,k=k,dk=dk,operator=operator,gI=gI)
   es = np.linspace(emin,0.,ne) # energies used for the integration
   ### The original function is defined in the coplex plane,
   # we will do a change of variables of the form z = re^(iphi) - r0
@@ -60,9 +69,11 @@ def berry_operator(h,delta=1e-1,**kwargs):
     # The Green mode has some numerical instability,
     # this should be further checked later
     if not h.is_sparse: # dense Hamiltonians
-        def bk(k): 
+        def gI(e=0.,k=[0.,0.,0.]): # exact inverse Green's function, no extra inversion
+            return gk(e=e,k=k,inv=True)
+        def bk(k):
             return berry_green_generator(gk,k=k,dk=delta/100,
-                    full=True,**kwargs)
+                    full=True,gI=gI,**kwargs)
         def outf(w,k=[0.,0.,0.]):
             m = hk(k) # bloch Hamiltonian
             e = algebra.braket_wAw(w,m) # energy
@@ -114,9 +125,11 @@ def dOmega_dE_generator(h,operator=None,delta=0.02,dk=0.02):
   dOmega/dE (k,E), the derivative of the Berry curvature
   with respect to the chamical potential"""
   gf = h.get_gk_gen(delta=delta,canonical_phase=True) # green function generator
+  def gI(e=0.,k=[0.,0.,0.]): # exact inverse Green's function, no extra inversion
+      return gf(e=e,k=k,inv=True)
   # Return dOmega/dE
   def f(k=[0.,0.,0.],e=0.):
-      fgreen = berry_green_generator(gf,k=k,dk=dk,operator=operator,full=False)
+      fgreen = berry_green_generator(gf,k=k,dk=dk,operator=operator,full=False,gI=gI)
       return fgreen(e).real # return the generator
   return f
 

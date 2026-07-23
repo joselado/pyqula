@@ -40,7 +40,13 @@ get_dagger = hermitian
 dagger = hermitian
 
 def inv(m):
-    return dlg.inv(todense(m))
+    # numpy.linalg.inv avoids scipy.linalg.inv's input-validation overhead
+    # (_asarray_validated/asarray_chkfinite); both are LAPACK LU-based exact
+    # inverses, agreeing to float noise -- this matters here because many
+    # call sites (e.g. topologytk/green.py's Green's-function Berry
+    # curvature) invert large numbers of small matrices, where Python/call
+    # overhead dominates over the O(N^3) FLOPs.
+    return np.linalg.inv(todense(m))
 
 
 def trace(m):

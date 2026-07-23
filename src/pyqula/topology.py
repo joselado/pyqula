@@ -30,13 +30,15 @@ def get_berry_curvature_path(h,kpath=None,dk=0.01,
     tr = timing.Testimator("BERRY CURVATURE",silent=silent)
     ik = 0
     if operator is not None: mode="Green" # Green function mode
+    if mode=="Green": # build the generator once, not per k-point
+        f = h.get_gk_gen(delta=delta) # get generator
+        def gI(e=0.,k=[0.,0.,0.]): return f(e=e,k=k,inv=True) # exact inverse
     def getb(k):
       if reciprocal:  k = h.geometry.get_k2K_generator()(k) # convert
       if mode=="Wilson":
         b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
       elif mode=="Green":
-        f = h.get_gk_gen(delta=delta) # get generator
-        b = berry_green(f,k=k,operator=operator) 
+        b = berry_green(f,k=k,operator=operator,gI=gI)
       else: raise
       return str(k[0])+"   "+str(k[1])+"   "+str(b)+"\n"
     fo = open("BERRY_CURVATURE.OUT","w") # open file
@@ -133,12 +135,14 @@ def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None):
     """ Calculates the chern number of a 2d system """
     from scipy import integrate
     err = {"epsabs" : 1.0, "epsrel": 1.0,"limit" : 10}
+    if mode=="Green": # build the generator once, not per (x,y) evaluation
+        f2 = h.get_gk_gen(delta=delta) # get generator
+        def gI2(e=0.,k=[0.,0.,0.]): return f2(e=e,k=k,inv=True) # exact inverse
     def f(x,y): # function to integrate
       if mode=="Wilson":
         return berry_curvature(h,np.array([x,y]),dk=dk)
       elif mode=="Green":
-         f2 = h.get_gk_gen(delta=delta) # get generator
-         return berry_green(f2,k=[x,y,0.],operator=operator) 
+         return berry_green(f2,k=[x,y,0.],operator=operator,gI=gI2)
       else: raise
     c = integrate.dblquad(f,0.,1.,lambda x : 0., lambda x: 1.,epsabs=0.01,
                             epsrel=0.01)
@@ -173,12 +177,14 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
       print("Switching to Green mode in topology")
       mode="Green"
     # create the function
+    if mode=="Green": # build the generator once, not per k-point
+        f2 = h.get_gk_gen(delta=delta) # get generator
+        def gI2(e=0.,k=[0.,0.,0.]): return f2(e=e,k=k,inv=True) # exact inverse
     def fberry(k): # function to integrate
       if mode=="Wilson":
         return berry_curvature(h,k,dk=dk)
       if mode=="Green":
-         f2 = h.get_gk_gen(delta=delta) # get generator
-         return berry_green(f2,k=[k[0],k[1],0.],operator=operator) 
+         return berry_green(f2,k=[k[0],k[1],0.],operator=operator,gI=gI2)
     ##################
     if kmesh is None: # no kmesh provided
         ks = klist.kmesh(h.dimensionality,nk=nk) # get the mesh
@@ -227,10 +233,12 @@ def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
     GKorder = gkorder_from_nk(nk)
     if operator is not None and mode=="Wilson":
         mode = "Green" # operator-resolved curvature needs Green's function mode
-    if mode=="Green": fgk = h.get_gk_gen(delta=delta) # Green's function generator
+    if mode=="Green": # Green's function generator, built once
+        fgk = h.get_gk_gen(delta=delta)
+        def gI(e=0.,k=[0.,0.,0.]): return fgk(e=e,k=k,inv=True) # exact inverse
     def f(k):
         if mode=="Wilson": return berry_curvature(h,k,dk=dk)
-        elif mode=="Green": return berry_green(fgk,k=[k[0],k[1],0.],operator=operator)
+        elif mode=="Green": return berry_green(fgk,k=[k[0],k[1],0.],operator=operator,gI=gI)
         else: raise
     c = integrate_robust(np.float64,f,GKorder,tolerance,**kwargs)
     c = c/(2.*np.pi) # normalize so that the integral gives an integer
@@ -276,17 +284,19 @@ def get_berry_curvature_master(h,dk=None,nk=100,
     ik = 0
     from . import parallel
     if verbose>0: tr = timing.Testimator("BERRY CURVATURE",maxite=len(ks))
+    if mode=="Green": # build the generator once, not per k-point
+        f = h.get_gk_gen(delta=delta) # get generator
+        def gI(e=0.,k=[0.,0.,0.]): return f(e=e,k=k,inv=True) # exact inverse
     def fp(ki): # function to compute the Berry curvature
-        if parallel.cores == 1: 
+        if parallel.cores == 1:
             if verbose>0: tr.iterate()
-        else: 
+        else:
             if verbose>0:  print("Doing",ki)
         k = R@ki # change of basis
         if mode=="Wilson":
            b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
         elif mode=="Green":
-           f = h.get_gk_gen(delta=delta) # get generator
-           b = berry_green(f,k=k,operator=operator) 
+           b = berry_green(f,k=k,operator=operator,gI=gI)
         else: raise
         return b
     bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
