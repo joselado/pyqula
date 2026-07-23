@@ -49,6 +49,18 @@ class LocalProbe():
     def didv(self,T=None,**kwargs):
         from .didv import didv
         return didv(self,**kwargs)
+    def get_dc_current(self,voltage,**kwargs):
+        """Floquet-Keldysh DC current at bias `voltage` between the probe
+        and the sample site it couples to, see
+        Heterostructure.get_dc_current and keldyshtk/current.py. Only
+        meaningful (and only exact) when the probe lead is itself
+        superconducting -- see didv(method="keldysh")."""
+        from ..keldyshtk.current import dc_current
+        return dc_current(self,voltage,**kwargs)
+    def get_iv_curve(self,voltages,**kwargs):
+        """Floquet-Keldysh I(V) curve, see get_dc_current"""
+        from ..keldyshtk.current import iv_curve
+        return iv_curve(self,voltages,**kwargs)
     def copy(self): return deepcopy(self)
     def set_coupling(self,c):
         self.T = c # set the coupling

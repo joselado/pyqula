@@ -76,10 +76,19 @@ def _lead_is_superconducting(h):
     return not h.get_anomalous_hamiltonian().is_zero()
 
 
+def _is_localprobe(ht):
+    from .localprobe import LocalProbe
+    return isinstance(ht,LocalProbe)
+
+
 def _both_leads_superconducting(ht):
     """Whether `ht` is a two-lead heterostructure (Heterostructure.Hl/Hr
-    set by heterostructures.build) with both leads superconducting -- the
-    case where the Floquet-Keldysh formalism applies."""
+    set by heterostructures.build) with both leads superconducting, or a
+    LocalProbe whose probe (`ht.lead`) and sample (`ht.H`) are both
+    superconducting -- the case where the Floquet-Keldysh formalism
+    applies."""
+    if _is_localprobe(ht):
+        return _lead_is_superconducting(ht.lead) and _lead_is_superconducting(ht.H)
     if not (hasattr(ht,"Hl") and hasattr(ht,"Hr")): return False
     return _lead_is_superconducting(ht.Hl) and _lead_is_superconducting(ht.Hr)
 
@@ -89,8 +98,11 @@ def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,**kwargs):
     obtained as a central finite-difference derivative of the
     Floquet-Keldysh DC current (Heterostructure.get_dc_current), see
     keldyshtk/current.py and San-Jose, Cayao, Prada, Aguado, NJP 15, 075019
-    (2013). Only supported for two-lead heterostructures with no explicit
-    central region (heterostructures.build(h1,h2))."""
+    (2013). Supported for two-lead heterostructures with no explicit
+    central region (heterostructures.build(h1,h2)), and for a LocalProbe
+    (transporttk.localprobe.LocalProbe) whose probe lead is itself
+    superconducting -- the probe and the sample site it couples to play
+    the role of the two leads."""
     from ..keldyshtk.current import dc_current
     if dv is None: dv = max(abs(voltage)*1e-2,1e-3)
     Ip = dc_current(ht,voltage+dv,delta=delta,**kwargs)
@@ -108,7 +120,8 @@ def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,
         `ht.has_eh` is True).
       - "keldysh": Floquet-Keldysh dI/dV, see `keldysh_didv`. Only valid
         for a two-lead heterostructure with no explicit central region and
-        both leads superconducting.
+        both leads superconducting, or a LocalProbe with a superconducting
+        probe and sample.
       - "auto" (default): "keldysh" if both leads of `ht` are
         superconducting, otherwise "smatrix" -- this matches the physical
         case each method is built for (Keldysh MAR/Josephson physics needs
