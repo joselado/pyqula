@@ -83,6 +83,25 @@ def _cached_selfenergy(ht, e, lead, delta, cache):
     return out
 
 
+def _prefetch_selfenergies_batch(ht, es, lead, delta, cache):
+    """Batch-compute every not-yet-cached selfenergy of one lead across a
+    whole set of sideband energies at once (see transporttk/selfenergy.py:
+    get_selfenergy_batch and greentk/rg.py:green_renormalization_jit_batch)
+    instead of one sideband at a time: for a fixed quasienergy, the
+    `2*nmax+1` sidebands only differ in energy for the same fixed lead, so
+    they are embarrassingly parallel and are run over a numba `prange`
+    loop across threads. `_cached_selfenergy` below then just hits the
+    cache this fills in; the tolerance matches the non-batched path
+    exactly, so this only changes speed, never the result."""
+    keys = [(lead, round(e, 10)) for e in es]
+    miss = [i for i, k in enumerate(keys) if k not in cache]
+    if not miss: return
+    me = np.array([es[i] for i in miss])
+    outs = ht.get_selfenergy_batch(me, lead=lead, delta=delta, pristine=True)
+    for i, out in zip(miss, outs):
+        cache[keys[i]] = algebra.todense(out)
+
+
 def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
                               temperature, cache):
     """Build the retarded and lesser Floquet Green's functions of the
@@ -99,6 +118,9 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
     sigLess = np.zeros((ntot, ntot), dtype=np.complex128)
     sigL_less = {}
     sigL_a = {}
+    es = [quasienergy+(isb-nmax)*voltage for isb in range(ns)]
+    _prefetch_selfenergies_batch(ht, es, 0, delta, cache)
+    _prefetch_selfenergies_batch(ht, es, 1, delta, cache)
     for isb in range(ns):
         n = isb-nmax
         e = quasienergy+n*voltage

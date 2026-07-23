@@ -119,6 +119,12 @@ class Heterostructure():
        """Return selfenergy of iesim lead"""
        from .transporttk.selfenergy import get_selfenergy
        return get_selfenergy(self,energy,**kwargs)
+    def get_selfenergy_batch(self,energies,**kwargs):
+       """Return selfenergy of iesim lead at many energies at once, using
+       a numba prange-parallel Sancho-Rubio iteration (see
+       transporttk/selfenergy.py:get_selfenergy_batch)"""
+       from .transporttk.selfenergy import get_selfenergy_batch
+       return get_selfenergy_batch(self,energies,**kwargs)
     def get_reflection_normal_lead(self,s):
        from .transporttk.builder import get_reflection_normal_lead
        return get_reflection_normal_lead(self,s)
