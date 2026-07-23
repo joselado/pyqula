@@ -214,17 +214,17 @@ def onsite_supercell(h0,nsuper,**kwargs):
 
 def onsite_supercell_no_multicell(h,nsuper,mc=None):
     """Compute the onsite matrix of a supercell, with a defect mc"""
-    if nsuper==1: 
+    if nsuper==1:
         if mc is None: return h.intra # pristine
         else: return mc # defective
-    if h.is_multicell: # try to make it multicell 
+    if h.is_multicell: # try to make it multicell
         from .htk.kchain import detect_longest_hopping
         if detect_longest_hopping(h)>1:
             print("This function requires short-range hopping, stopping")
             raise # up to NN
         h = h.get_no_multicell() # redefine
     from .checkclass import is_iterable
-    if not is_iterable(nsuper): # just a number 
+    if not is_iterable(nsuper): # just a number
         if h.dimensionality==1: nsuper = [nsuper,1]
         elif h.dimensionality==2: nsuper = [nsuper,nsuper]
         else: raise
@@ -237,54 +237,56 @@ def onsite_supercell_no_multicell(h,nsuper,mc=None):
         h.txy = h.intra*0.0
         h.txmy = h.intra*0.0
     #### end of the dirty trick ###
-    inds = []
-    k = 0
-    n = nsuper[0]*nsuper[1] # number of cells
-    intrasuper = [[None for j in range(n)] for i in range(n)]
-    for i in range(nsuper[0]):
-      for j in range(nsuper[1]):
-        inds += [(i,j)]
-        k += 1
-    from scipy.sparse import bmat
-    from scipy.sparse import csc_matrix as csc
-    tx = csc(h.tx)
-    ty = csc(h.ty)
-    txy = csc(h.txy)
-    txmy = csc(h.txmy)
-    intra = csc(h.intra)
-    if mc is None: mc = intra
-    else: mc = csc(mc)
+    nx,ny = nsuper[0],nsuper[1]
+    n = nx*ny # number of cells
+    dim = h.intra.shape[0] # orbitals per cell
     dag = algebra.dagger
-    for i in range(n):
-        intrasuper[i][i] = intra # intracell
-        (x1,y1) = inds[i]
-        for j in range(n):
-            (x2,y2) = inds[j]
-            dx = x2-x1
-            dy = y2-y1
-            if dx==1 and  dy==0: intrasuper[i][j] = tx
-            if dx==-1 and dy==0: intrasuper[i][j] = dag(tx)
-            if dx==0 and  dy==1: intrasuper[i][j] = ty
-            if dx==0 and  dy==-1: intrasuper[i][j] = dag(ty)
-            if dx==1 and  dy==1: intrasuper[i][j] = txy
-            if dx==-1 and dy==-1: intrasuper[i][j] = dag(txy)
-            if dx==1 and  dy==-1: intrasuper[i][j] = txmy
-            if dx==-1 and dy==1: intrasuper[i][j] = dag(txmy)
+    intra = algebra.todense(h.intra)
+    tx = algebra.todense(h.tx)
+    ty = algebra.todense(h.ty)
+    txy = algebra.todense(h.txy)
+    txmy = algebra.todense(h.txmy)
+    mc = intra if mc is None else algebra.todense(mc)
+    # place only the O(n) nonzero neighbor blocks directly in the dense
+    # output, instead of building an n x n (mostly-None) block list and
+    # routing it through scipy.sparse.bmat -- for the fixed, regular
+    # nearest-neighbor block structure used here, the sparse machinery
+    # (COO/CSC construction, index-dtype inference) costs far more than
+    # the O(n) numpy slice-assignments it replaces.
+    def kidx(x,y): return x*ny+y # matches the (i,j) row-major order below
+    out = np.zeros((n*dim,n*dim),dtype=np.complex128)
+    for x in range(nx):
+        for y in range(ny):
+            k = kidx(x,y)
+            out[k*dim:(k+1)*dim,k*dim:(k+1)*dim] = intra # intracell
+            if x+1<nx: # (dx,dy) = (1,0) and its dagger
+                k2 = kidx(x+1,y)
+                out[k*dim:(k+1)*dim,k2*dim:(k2+1)*dim] = tx
+                out[k2*dim:(k2+1)*dim,k*dim:(k+1)*dim] = dag(tx)
+            if y+1<ny: # (dx,dy) = (0,1) and its dagger
+                k2 = kidx(x,y+1)
+                out[k*dim:(k+1)*dim,k2*dim:(k2+1)*dim] = ty
+                out[k2*dim:(k2+1)*dim,k*dim:(k+1)*dim] = dag(ty)
+            if x+1<nx and y+1<ny: # (dx,dy) = (1,1) and its dagger
+                k2 = kidx(x+1,y+1)
+                out[k*dim:(k+1)*dim,k2*dim:(k2+1)*dim] = txy
+                out[k2*dim:(k2+1)*dim,k*dim:(k+1)*dim] = dag(txy)
+            if x+1<nx and y-1>=0: # (dx,dy) = (1,-1) and its dagger
+                k2 = kidx(x+1,y-1)
+                out[k*dim:(k+1)*dim,k2*dim:(k2+1)*dim] = txmy
+                out[k2*dim:(k2+1)*dim,k*dim:(k+1)*dim] = dag(txmy)
     ### setup the central (defective) cell
     if h.dimensionality==1:
         ii=int(n//2) # central site
-        intrasuper[ii][ii] = mc # central onsite
     elif h.dimensionality==2:
         if nsuper[0]%2==1: # odd supercell
             ii=int(n//2)
-            intrasuper[ii][ii] = mc # central onsite
         else: # even supercell
             ii=int(n//2) # central
             ii = ii - int(nsuper[0]//2)
-            intrasuper[ii][ii] = mc # central onsite
     else: raise
-    intrasuper = bmat(intrasuper).todense() # supercell
-    return intrasuper
+    out[ii*dim:(ii+1)*dim,ii*dim:(ii+1)*dim] = mc # central onsite
+    return out
 
 
 def get_gf(self,**kwargs):
@@ -309,8 +311,6 @@ def get_gf_exact(self,energy=0.0,delta=1e-2,
         g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,
                 nsuper=nsuper*self.nsuper) # compute Green's function
         h = h.supercell(self.nsuper) # and redefine with a supercell
-    ms = onsite_supercell(h,nsuper)
-    n = self.m.shape[0] # dimension of the matrix
     ms = onsite_defective_central(h,self.m,nsuper)
     ns = ms.shape[0] # dimension of the supercell
     iden = np.identity(ns,dtype=np.complex128) # identity
