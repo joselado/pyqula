@@ -68,8 +68,60 @@ dagger = algebra.dagger
 
 
 
-def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,**kwargs):
-    """Calculate differential conductance"""
+def _lead_is_superconducting(h):
+    """Whether a lead Hamiltonian carries an actual (nonzero) pairing
+    amplitude -- as opposed to merely being written in the Nambu basis
+    with zero pairing, e.g. via turn_nambu())."""
+    if h is None or not getattr(h,"has_eh",False): return False
+    return not h.get_anomalous_hamiltonian().is_zero()
+
+
+def _both_leads_superconducting(ht):
+    """Whether `ht` is a two-lead heterostructure (Heterostructure.Hl/Hr
+    set by heterostructures.build) with both leads superconducting -- the
+    case where the Floquet-Keldysh formalism applies."""
+    if not (hasattr(ht,"Hl") and hasattr(ht,"Hr")): return False
+    return _lead_is_superconducting(ht.Hl) and _lead_is_superconducting(ht.Hr)
+
+
+def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,**kwargs):
+    """Zero/finite-bias differential conductance dI/dV at bias `voltage`,
+    obtained as a central finite-difference derivative of the
+    Floquet-Keldysh DC current (Heterostructure.get_dc_current), see
+    keldyshtk/current.py and San-Jose, Cayao, Prada, Aguado, NJP 15, 075019
+    (2013). Only supported for two-lead heterostructures with no explicit
+    central region (heterostructures.build(h1,h2))."""
+    from ..keldyshtk.current import dc_current
+    if dv is None: dv = max(abs(voltage)*1e-2,1e-3)
+    Ip = dc_current(ht,voltage+dv,delta=delta,**kwargs)
+    Im = dc_current(ht,voltage-dv,delta=delta,**kwargs)
+    return (Ip-Im)/(2*dv)
+
+
+def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,
+         method="auto",**kwargs):
+    """Calculate differential conductance.
+
+    `method` selects the transport formalism used:
+      - "smatrix": zero-temperature scattering-matrix (Landauer/BTK)
+        conductance (the BdG smatrix formula is used automatically when
+        `ht.has_eh` is True).
+      - "keldysh": Floquet-Keldysh dI/dV, see `keldysh_didv`. Only valid
+        for a two-lead heterostructure with no explicit central region and
+        both leads superconducting.
+      - "auto" (default): "keldysh" if both leads of `ht` are
+        superconducting, otherwise "smatrix" -- this matches the physical
+        case each method is built for (Keldysh MAR/Josephson physics needs
+        two superconducting leads; a single/no superconducting lead is
+        already handled exactly by the smatrix formula).
+    """
+    if method=="auto":
+        method = "keldysh" if _both_leads_superconducting(ht) else "smatrix"
+    if method=="keldysh":
+        return keldysh_didv(ht,voltage=energy,delta=delta,**kwargs)
+    elif method!="smatrix":
+        raise ValueError("Unknown didv method '"+str(method)+"', expected"
+                          " 'auto', 'smatrix' or 'keldysh'")
     if ht.has_eh: # for systems with electons and holes
         return didv_BdG(ht,energy=energy,delta=delta,**kwargs)
     else:
