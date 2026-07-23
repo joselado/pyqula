@@ -157,11 +157,11 @@ class Heterostructure():
         """Floquet-Keldysh DC current (MAR/AC-Josephson) at a given bias
         voltage, following San-Jose, Cayao, Prada, Aguado, NJP 15, 075019
         (2013) (arXiv:1301.4408)"""
-        from .keldyshtk.current import dc_current
+        from .keldysh import dc_current
         return dc_current(self,voltage,**kwargs)
     def get_iv_curve(self,voltages,**kwargs):
         """Floquet-Keldysh I(V) curve, see get_dc_current"""
-        from .keldyshtk.current import iv_curve
+        from .keldysh import iv_curve
         return iv_curve(self,voltages,**kwargs)
   
 

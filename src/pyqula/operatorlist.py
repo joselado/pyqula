@@ -53,6 +53,7 @@ def get_operator(self,name,**kwargs):
       elif name=="deltaz": return operators.get_pairing(self,ptype="deltaz")
       elif name=="electron": return operators.get_electron(self)
       elif name=="hole": return operators.get_hole(self)
+      elif name=="tauz": return operators.get_tauz(self)
       elif name=="mass": 
           from .mass import mass_operator
           return mass_operator(self,**kwargs)

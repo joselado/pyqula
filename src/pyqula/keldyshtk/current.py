@@ -1,10 +1,13 @@
+import warnings
+
 import numpy as np
 from scipy.integrate import quad
 
+from .. import algebra
 from ..algebra import dagger
 from ..transporttk.smatrix import enlarge_hlist
 from ..transporttk.fermidirac import fermidirac
-from .floquet import floquet_hamiltonian, todense
+from .floquet import floquet_hamiltonian
 
 # Floquet-Keldysh DC current between two (possibly superconducting) leads,
 # following San-Jose, Cayao, Prada, Aguado, New J. Phys. 15, 075019 (2013)
@@ -26,12 +29,21 @@ def _check_supported(ht):
         raise NotImplementedError(
             "keldysh.dc_current needs a Nambu (BdG) heterostructure; "
             "call h.turn_nambu() on both leads first (even with zero pairing)")
-    if not ht.block_diagonal:
-        raise NotImplementedError(
-            "keldysh.dc_current only supports heterostructures built in "
-            "block-diagonal form (heterostructures.build with zero or two-or"
-            "-more explicit central sites); a single dense central site is "
-            "not yet supported")
+
+
+def _dense_hlist(ht):
+    """Block-tridiagonal chain (left lead, single dense central site, right
+    lead) for a heterostructure built with a single explicit central
+    Hamiltonian (heterostructures.build(h1,h2,central=[h_junction])), which
+    pyqula represents with a dense `central_intra` rather than a block list
+    (create_leads_and_central always sets block_diagonal=False for exactly
+    one central site)."""
+    return [
+        [ht.left_intra, dagger(ht.left_coupling)*ht.scale_lc, None],
+        [ht.left_coupling*ht.scale_lc, ht.central_intra,
+         dagger(ht.right_coupling)*ht.scale_rc],
+        [None, ht.right_coupling*ht.scale_rc, ht.right_intra],
+    ]
 
 
 def _prepare_system(ht, link=None):
@@ -39,35 +51,47 @@ def _prepare_system(ht, link=None):
     explicit central sites) and identify the electron/hole projectors for
     the bond that carries the bias-induced AC phase."""
     _check_supported(ht)
-    ht2 = enlarge_hlist(ht)
-    hlist = ht2.central_intra
+    if ht.block_diagonal:
+        hlist = enlarge_hlist(ht).central_intra
+    else:
+        hlist = _dense_hlist(ht)
     nb = len(hlist)
     if nb < 2:
         raise ValueError("need at least two blocks to define a weak link")
     if link is None:
-        link = (0, 1)
+        link = (nb-2, nb-1)
     i0, i1 = link
     if i1 != i0+1:
         raise ValueError("link must connect adjacent blocks")
-    if i1 == nb-1:
-        h_target = ht.Hr
-    elif i0 == 0:
-        h_target = ht.Hl
-    else:
+    if i1 != nb-1:
         raise NotImplementedError(
-            "the AC-carrying bond must currently be adjacent to one of the "
-            "two leads (link=(0,1) or link=(nb-2,nb-1))")
-    proje = todense(h_target.get_operator("electron"))
-    projh = todense(h_target.get_operator("hole"))
-    dim = todense(hlist[0][0]).shape[0]
+            "the AC-carrying bond must currently be adjacent to the right "
+            "lead (link=(nb-2,nb-1), the default)")
+    proje = algebra.todense(ht.Hr.get_operator("electron").get_matrix())
+    projh = algebra.todense(ht.Hr.get_operator("hole").get_matrix())
+    dim = algebra.todense(hlist[0][0]).shape[0]
     if proje.shape[0] != dim:
         raise ValueError("dimension mismatch between the lead Hamiltonian "
                           "and the heterostructure's unit cell")
     return hlist, link, proje, projh, dim, nb
 
 
+def _cached_selfenergy(ht, e, lead, delta, cache):
+    """Static lead self-energies only depend on (lead, energy); memoize them
+    since the same energies recur across sideband/quadrature/adaptive-nmax
+    evaluations within a single dc_current call, and green_renormalization
+    (the underlying Sancho-Rubio iteration) is not cheap."""
+    key = (lead, round(e, 10))
+    out = cache.get(key)
+    if out is None:
+        out = algebra.todense(ht.get_selfenergy(e, lead=lead, delta=delta,
+                                                 pristine=True))
+        cache[key] = out
+    return out
+
+
 def _floquet_green_functions(ht, voltage, quasienergy, nmax, link, delta,
-                              temperature):
+                              temperature, cache):
     """Build the retarded and lesser Floquet Green's functions of the
     S region (leads' extra unit cell + any explicit central sites),
     together with the left lead's lesser/advanced self-energies at every
@@ -85,8 +109,8 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, link, delta,
     for isb in range(ns):
         n = isb-nmax
         e = quasienergy+n*voltage
-        sl = todense(ht.get_selfenergy(e, lead=0, delta=delta, pristine=True))
-        sr = todense(ht.get_selfenergy(e, lead=1, delta=delta, pristine=True))
+        sl = _cached_selfenergy(ht, e, 0, delta, cache)
+        sr = _cached_selfenergy(ht, e, 1, delta, cache)
         off0 = (0*ns+isb)*dim
         offR = ((nb-1)*ns+isb)*dim
         sigL[off0:off0+dim, off0:off0+dim] += sl
@@ -106,12 +130,14 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, link, delta,
 
 
 def current_integrand(ht, voltage, quasienergy, nmax, tauz, link=None,
-                       delta=1e-6, temperature=0.):
+                       delta=1e-6, temperature=0., cache=None):
     """Integrand Re Tr{[G^r Sigma_L^< + G^< Sigma_L^a] tauz} of the paper's
     Eq. for I_dc, at a fixed quasienergy. `tauz` is the electron/hole
     grading operator matching the left lead's unit-cell dimension."""
+    if cache is None:
+        cache = {}
     Gr, Gless, sigL_less, sigL_a, dim, ns, nb = _floquet_green_functions(
-        ht, voltage, quasienergy, nmax, link, delta, temperature)
+        ht, voltage, quasienergy, nmax, link, delta, temperature, cache)
     total = 0.0+0.0j
     for isb in range(ns):
         n = isb-nmax
@@ -121,12 +147,6 @@ def current_integrand(ht, voltage, quasienergy, nmax, tauz, link=None,
         M = Gr00@sigL_less[n] + Gless00@sigL_a[n]
         total += np.trace(M@tauz)
     return total.real
-
-
-def _get_tauz(ht):
-    proje = todense(ht.Hl.get_operator("electron"))
-    projh = todense(ht.Hl.get_operator("hole"))
-    return proje-projh
 
 
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
@@ -140,34 +160,43 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
 
     The number of Floquet sidebands is increased adaptively (as in the
     paper) until the result changes by less than `tol`, capped at
-    `nmax_max` to guarantee termination."""
+    `nmax_max` to guarantee termination (a warning is issued if the cap is
+    hit before convergence)."""
     if voltage == 0.:
         return 0.0
     _check_supported(ht)
     if delta is None:
         delta = ht.delta
-    tauz = _get_tauz(ht)
+    tauz = algebra.todense(ht.Hl.get_operator("tauz").get_matrix())
+    cache = {}
 
     def integral(nmax):
         f = lambda e: current_integrand(ht, voltage, e, nmax, tauz,
                                          link=link, delta=delta,
-                                         temperature=temperature)
+                                         temperature=temperature, cache=cache)
         val, _ = quad(f, 0., abs(voltage), limit=50, epsrel=1e-3)
         return val
 
     prev = integral(nmax)
+    converged = False
     while nmax < nmax_max:
-        nmax_new = nmax+2
-        cur = integral(nmax_new)
+        nmax += 2
+        cur = integral(nmax)
         denom = max(abs(cur), abs(prev), 1e-12)
-        if abs(cur-prev)/denom < tol:
-            prev = cur
-            break
-        nmax = nmax_new
+        converged = abs(cur-prev)/denom < tol
         prev = cur
+        if converged:
+            break
+    if not converged:
+        warnings.warn(
+            f"keldysh.dc_current: sidebands did not converge to tol={tol} "
+            f"by nmax_max={nmax_max} at voltage={voltage}; result may be "
+            "inaccurate, try a larger nmax_max")
     return prev
 
 
 def iv_curve(ht, voltages, **kwargs):
-    """Convenience wrapper: dc_current evaluated over a list of voltages."""
-    return np.array([dc_current(ht, v, **kwargs) for v in voltages])
+    """Convenience wrapper: dc_current evaluated over an array of voltages,
+    in parallel (see parallel.pcall)."""
+    from ..parallel import pcall
+    return np.array(pcall(lambda v: dc_current(ht, v, **kwargs), voltages))

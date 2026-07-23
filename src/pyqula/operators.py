@@ -262,6 +262,11 @@ def get_hole(h):
   else: raise
 
 
+def get_tauz(h):
+  """Nambu particle-hole grading operator (+1 electron, -1 hole)"""
+  return get_electron(h)-get_hole(h)
+
+
 def get_bulk(h,fac=0.8):
     """Return the bulk operator"""
     r = h.geometry.r # positions

@@ -1,15 +1,5 @@
 import numpy as np
-from scipy.sparse import issparse
-
-
-def todense(m):
-    """Return a dense numpy array, whether `m` is dense, sparse, or an
-    Operator-like object exposing get_matrix()."""
-    if hasattr(m, "get_matrix"):
-        m = m.get_matrix()
-    if issparse(m):
-        return np.asarray(m.todense())
-    return np.asarray(m)
+from ..algebra import todense
 
 
 # Floquet-space assembly for the Floquet-Keldysh Josephson/MAR current

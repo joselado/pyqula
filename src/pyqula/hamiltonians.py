@@ -1002,7 +1002,6 @@ from .neighbor import generate_parametric_hopping
 
 
 
-from .superconductivity import get_nambu_tauz
 from .superconductivity import project_electrons
 from .superconductivity import project_holes
 from .superconductivity import get_eh_sector_odd_even

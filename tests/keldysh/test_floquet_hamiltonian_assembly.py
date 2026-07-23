@@ -51,3 +51,22 @@ def test_dc_current_on_non_nambu_heterostructure_raises_clean_error():
     HT = heterostructures.build(h.copy(), h.copy())
     with pytest.raises(NotImplementedError):
         HT.get_dc_current(0.1)
+
+
+def test_dc_current_warns_when_sidebands_fail_to_converge():
+    """If the adaptive sideband loop is capped before it can satisfy `tol`,
+    dc_current must warn rather than silently return an under-converged
+    number."""
+    from pyqula import geometry
+    from pyqula import heterostructures
+
+    h0 = geometry.chain().get_hamiltonian()
+    h1 = h0.copy()
+    h1.turn_nambu()
+    h2 = h1.copy()
+    HT = heterostructures.build(h1, h2)
+    HT.set_coupling(0.6)
+    HT.delta = 1e-4
+
+    with pytest.warns(UserWarning, match="did not converge"):
+        HT.get_dc_current(0.3, nmax=2, nmax_max=2, tol=1e-12)
