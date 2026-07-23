@@ -121,6 +121,14 @@ def proje(n):
         m[2*i,2*i] = 1.0
     return m
 
+
+def projh(n):
+    """Return the projection operator in the hole sector"""
+    m = np.zeros((n,n),dtype=np.complex128)
+    for i in range(n//2):
+        m[2*i+1,2*i+1] = 1.0
+    return m
+
 def get_filling(h,nk=10,**kwargs):
     """Compute the expectation value of delta"""
     if not h.check_mode("spinless_nambu"): raise

@@ -38,18 +38,6 @@ def get_second_anomalous_sector(m):
     return get_eh_sector_odd_even(m,i=1,j=0)
 
 
-def get_nambu_tauz(m,has_eh=False):
-  """Return the nambu matrix tauz for electron-hole"""
-  raise # this function is not consistent with the Nambu notation (see below)
-  n = m.shape[0] # number of sites 
-  if has_eh: n = n//2 # half
-  mout = np.matrix(np.zeros((n*2,n*2)),dtype=np.complex128) # define matrix
-  for ii in range(n): # loop over index
-    mout[2*ii,2*ii] = 1. # assign
-    mout[2*ii+1,2*ii+1] = -1. # assign
-  return mout # return tauz
-
-
 
 def project_electrons(m):
   """Return the nambu matrix tauz for electron-hole"""

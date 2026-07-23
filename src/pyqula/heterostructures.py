@@ -153,6 +153,18 @@ class Heterostructure():
     def get_kappa(self,**kwargs):
         from .transporttk.kappa import get_kappa_ratio
         return get_kappa_ratio(self,**kwargs)
+    def get_dc_current(self,voltage,**kwargs):
+        """Floquet-Keldysh DC current (MAR/AC-Josephson) at a given bias
+        voltage, following San-Jose, Cayao, Prada, Aguado, NJP 15, 075019
+        (2013) (arXiv:1301.4408). Only supports a heterostructure with no
+        explicit central region (heterostructures.build(h1,h2), the two
+        leads directly weak-linked via set_coupling)"""
+        from .keldysh import dc_current
+        return dc_current(self,voltage,**kwargs)
+    def get_iv_curve(self,voltages,**kwargs):
+        """Floquet-Keldysh I(V) curve, see get_dc_current"""
+        from .keldysh import iv_curve
+        return iv_curve(self,voltages,**kwargs)
   
 
 
