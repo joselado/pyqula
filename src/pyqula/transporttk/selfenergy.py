@@ -1,9 +1,10 @@
 import numpy as np
 from ..green import green_renormalization
+from ..greentk.rg import green_renormalization_jit_batch
 from ..algebra import dagger
 
 
-def get_selfenergy(self,energy,lead=0,delta=None,pristine=False):
+def get_selfenergy(self,energy,lead=0,delta=None,pristine=False,numba=None):
    """Return self energy of iesim lead"""
    # in case you use a dummy selfenergy
    if self.use_minimal_selfenergy:
@@ -29,12 +30,40 @@ def get_selfenergy(self,energy,lead=0,delta=None,pristine=False):
            else: cou = self.right_coupling*self.scale_rc
            deltal = delta + self.extra_delta_right # new delta right
        else: raise # not implemented
-       ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal)
+       ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal,
+                                       numba=numba)
        selfr = cou@gr@dagger(cou) # selfenergy
        return selfr # return selfenergy
 
 
 
+
+
+def get_selfenergy_batch(self,energies,lead=0,delta=None,pristine=False):
+   """Batched version of get_selfenergy: same lead, many energies at once,
+   using the numba prange-parallel Sancho-Rubio iteration
+   (greentk.rg.green_renormalization_jit_batch). Does not support
+   use_minimal_selfenergy/interpolated_selfenergy -- those are cheap
+   already and callers needing this batching (keldyshtk/current.py) never
+   set them."""
+   if self.use_minimal_selfenergy or self.interpolated_selfenergy: raise
+   if delta is None: delta = self.delta
+   if lead==0:
+       intra = self.left_intra
+       inter = self.left_inter
+       if pristine: cou = self.left_inter
+       else: cou = self.left_coupling*self.scale_lc
+       deltal = delta + self.extra_delta_left # new delta left
+   elif lead==1:
+       intra = self.right_intra
+       inter = self.right_inter
+       if pristine: cou = self.right_inter
+       else: cou = self.right_coupling*self.scale_rc
+       deltal = delta + self.extra_delta_right # new delta right
+   else: raise # not implemented
+   ggg,gr = green_renormalization_jit_batch(intra,inter,energies,delta=deltal)
+   cou = np.array(cou) # dense, for the batched matmul below
+   return cou@gr@dagger(cou) # selfenergy at every energy, batched matmul
 
 
 def minimal_selfenergy(self,lead=0,**kwargs):

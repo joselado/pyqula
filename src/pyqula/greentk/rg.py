@@ -1,13 +1,24 @@
 import numpy as np
 from .. import algebra
-from numba import jit
+from numba import jit, prange
+# sets numba.config.THREADING_LAYER = 'workqueue' (fork-safe) before any
+# parallel=True numba function in the package gets compiled/run -- must be
+# imported ahead of green_renormalization_jit_batch_core below
+from .. import parallel
 
-use_numba = False
+use_numba = False # default backend for green_renormalization
 
-def green_renormalization(intra,inter,**kwargs):
-    if use_numba:
+def green_renormalization(intra,inter,numba=None,**kwargs):
+    """Dispatch to the numba-jitted or pure-Python Sancho-Rubio iteration.
+    `numba` overrides the module-level default (`greentk.rg.use_numba`) for
+    this call only -- callers that need the numba path for a hot loop (e.g.
+    keldyshtk/current.py, which recomputes lead selfenergies many thousands
+    of times) can opt in without changing the default used by every other
+    DOS/LDOS/transport call in the library."""
+    if numba is None: numba = use_numba
+    if numba:
       return green_renormalization_jit(intra,inter,**kwargs)
-    else: 
+    else:
       return green_renormalization_python(intra,inter,**kwargs)
 
 
@@ -58,8 +69,10 @@ def green_renormalization_python(intra,inter,energy=0.0,nite=None,
 def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,**kwargs):
     intra = algebra.todense(intra)*(1.0+0j)
     inter = algebra.todense(inter)*(1.0+0j)
-    nite = int(100/delta) # maximum number of iterations
-    error = delta*1e-3
+    # same convergence criterion as green_renormalization_python, so this
+    # path only changes speed (compiled loop), never the numerical result
+    nite = max(int(100/np.abs(delta)),100000) # maximum number of iterations
+    error = np.abs(delta)*1e-6
     energyz = energy + 1j*delta
     e = np.array(np.identity(intra.shape[0]),dtype=np.complex128) * energyz
     return green_renormalization_jit_core(intra,inter,e,nite,
@@ -117,5 +130,68 @@ def green_renormalization_jit_core(intra, inter, e, nite, error):
     return g_bulk, g_surf
 
 
+def green_renormalization_jit_batch(intra,inter,energies,delta=1e-4,**kwargs):
+    """Batched version of green_renormalization_jit: same lead (intra,
+    inter fixed), many energies at once. The Sancho-Rubio iteration is
+    completely independent across energies (only the starting `intra`,
+    `inter` are shared), so this is an embarrassingly parallel batch,
+    computed with a numba `prange` loop (see
+    green_renormalization_jit_batch_core) instead of one Python-level call
+    per energy. Useful when the same lead's selfenergy is needed at many
+    energies at once, e.g. every Floquet sideband of a fixed quasienergy
+    in keldyshtk/current.py -- it amortizes the numba/LAPACK call overhead
+    across the whole batch and runs the sidebands over multiple threads."""
+    intra = algebra.todense(intra)*(1.0+0j)
+    inter = algebra.todense(inter)*(1.0+0j)
+    energies = np.asarray(energies,dtype=np.float64)
+    # same convergence criterion as green_renormalization_python/_jit, so
+    # this path only changes speed, never the numerical result
+    nite = max(int(100/np.abs(delta)),100000) # maximum number of iterations
+    error = np.abs(delta)*1e-6
+    return green_renormalization_jit_batch_core(intra,inter,energies,delta,
+                                                 nite,error)
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def green_renormalization_jit_batch_core(intra,inter,energies,delta,nite,error):
+    nE = energies.shape[0]
+    n = intra.shape[0]
+    g_bulk = np.empty((nE,n,n),dtype=np.complex128)
+    g_surf = np.empty((nE,n,n),dtype=np.complex128)
+    for k in prange(nE): # sidebands/energies are independent -> parallel
+        e = np.eye(n,dtype=np.complex128)*(energies[k]+1j*delta)
+        ite = 0
+        alpha = np.ascontiguousarray(inter * 1.0)
+        beta = np.ascontiguousarray(np.conjugate(inter).T * 1.0)
+        epsilon = np.ascontiguousarray(intra * 1.0)
+        epsilon_s = np.ascontiguousarray(intra * 1.0)
+        RHS = np.empty((n, 2 * n), dtype=alpha.dtype)
+        ZY = np.empty((n, 2 * n), dtype=alpha.dtype)
+        while True:
+            A = e - epsilon
+            RHS[:, :n] = beta
+            RHS[:, n:] = alpha
+            sol = np.linalg.solve(A, RHS)
+            ZY[:, :n] = sol[:, :n]
+            ZY[:, n:] = sol[:, n:]
+            alphaZY = alpha @ ZY
+            betaZY = beta @ ZY
+            alphaZ = alphaZY[:, :n]
+            alphaY = alphaZY[:, n:]
+            betaZ = betaZY[:, :n]
+            betaY = betaZY[:, n:]
+            epsilon_s = epsilon_s + alphaZ
+            epsilon = epsilon + alphaZ + betaY
+            alpha = alphaY.copy()
+            beta = betaZ.copy()
+            ite += 1
+            if np.max(np.abs(alpha)) < error and np.max(np.abs(beta)) < error:
+                break
+            if ite >= nite:
+                break
+        I = np.eye(n, dtype=epsilon.dtype)
+        g_surf[k] = np.linalg.solve(e - epsilon_s, I)
+        g_bulk[k] = np.linalg.solve(e - epsilon, I)
+    return g_bulk, g_surf
 
 
