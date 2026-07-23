@@ -66,12 +66,19 @@ def _cached_selfenergy(ht, e, lead, delta, cache):
     """Static lead self-energies only depend on (lead, energy); memoize them
     since the same energies recur across sideband/quadrature/adaptive-nmax
     evaluations within a single dc_current call, and green_renormalization
-    (the underlying Sancho-Rubio iteration) is not cheap."""
+    (the underlying Sancho-Rubio iteration) is not cheap. `numba=True`
+    routes it through the compiled Sancho-Rubio kernel (greentk.rg.
+    green_renormalization_jit) instead of the plain-Python default used
+    elsewhere in the library -- this call site alone recomputes lead
+    selfenergies tens of thousands of times per dc_current call, where the
+    per-call Python overhead dominates; the tolerance is the same as the
+    Python path (see green_renormalization_jit), so this only changes
+    speed, never the result."""
     key = (lead, round(e, 10))
     out = cache.get(key)
     if out is None:
         out = algebra.todense(ht.get_selfenergy(e, lead=lead, delta=delta,
-                                                 pristine=True))
+                                                 pristine=True, numba=True))
         cache[key] = out
     return out
 

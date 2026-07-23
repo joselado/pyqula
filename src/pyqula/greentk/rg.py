@@ -2,12 +2,19 @@ import numpy as np
 from .. import algebra
 from numba import jit
 
-use_numba = False
+use_numba = False # default backend for green_renormalization
 
-def green_renormalization(intra,inter,**kwargs):
-    if use_numba:
+def green_renormalization(intra,inter,numba=None,**kwargs):
+    """Dispatch to the numba-jitted or pure-Python Sancho-Rubio iteration.
+    `numba` overrides the module-level default (`greentk.rg.use_numba`) for
+    this call only -- callers that need the numba path for a hot loop (e.g.
+    keldyshtk/current.py, which recomputes lead selfenergies many thousands
+    of times) can opt in without changing the default used by every other
+    DOS/LDOS/transport call in the library."""
+    if numba is None: numba = use_numba
+    if numba:
       return green_renormalization_jit(intra,inter,**kwargs)
-    else: 
+    else:
       return green_renormalization_python(intra,inter,**kwargs)
 
 
@@ -58,8 +65,10 @@ def green_renormalization_python(intra,inter,energy=0.0,nite=None,
 def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,**kwargs):
     intra = algebra.todense(intra)*(1.0+0j)
     inter = algebra.todense(inter)*(1.0+0j)
-    nite = int(100/delta) # maximum number of iterations
-    error = delta*1e-3
+    # same convergence criterion as green_renormalization_python, so this
+    # path only changes speed (compiled loop), never the numerical result
+    nite = max(int(100/np.abs(delta)),100000) # maximum number of iterations
+    error = np.abs(delta)*1e-6
     energyz = energy + 1j*delta
     e = np.array(np.identity(intra.shape[0]),dtype=np.complex128) * energyz
     return green_renormalization_jit_core(intra,inter,e,nite,

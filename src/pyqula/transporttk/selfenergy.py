@@ -3,7 +3,7 @@ from ..green import green_renormalization
 from ..algebra import dagger
 
 
-def get_selfenergy(self,energy,lead=0,delta=None,pristine=False):
+def get_selfenergy(self,energy,lead=0,delta=None,pristine=False,numba=None):
    """Return self energy of iesim lead"""
    # in case you use a dummy selfenergy
    if self.use_minimal_selfenergy:
@@ -29,7 +29,8 @@ def get_selfenergy(self,energy,lead=0,delta=None,pristine=False):
            else: cou = self.right_coupling*self.scale_rc
            deltal = delta + self.extra_delta_right # new delta right
        else: raise # not implemented
-       ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal)
+       ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal,
+                                       numba=numba)
        selfr = cou@gr@dagger(cou) # selfenergy
        return selfr # return selfenergy
 
