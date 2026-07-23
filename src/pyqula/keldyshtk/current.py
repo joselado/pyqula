@@ -252,15 +252,22 @@ def _rgf_chain_jit(Es, taus, SigLess):
 
 
 def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
-                              temperature, cache):
+                              temperature, cache, system):
     """Retarded and lesser Green's function diagonal blocks at every
     block-0 (left-lead-type) sideband, together with the left lead's
     lesser/advanced self-energies (needed by the current trace). Builds
     the two decoupled Floquet chains (_chain_sites) directly instead of
     assembling the dense (2*ns*dim)^2 Hamiltonian, and solves each with
     the O(ns) recursive sweep (_rgf_chain) -- exact, not an approximation
-    (see module docstring)."""
-    hlist, proje, projh, dim = _prepare_system(ht)
+    (see module docstring). `system` is the (hlist, proje, projh, dim)
+    tuple from `_prepare_system(ht)`, precomputed once per `dc_current`
+    call by the caller: it only depends on `ht` (never on quasienergy,
+    voltage, nmax or delta), but this function is called once per
+    quadrature point of the current integral, so recomputing it here --
+    which involves building electron/hole projector operators over `ht`
+    and extracting local Hamiltonian blocks -- would redo the same work
+    tens to hundreds of times per `dc_current` call for no benefit."""
+    hlist, proje, projh, dim = system
     v0 = algebra.todense(hlist[1][0])  # hopping <lead1 unit cell|H|lead0 unit cell>
     ve = proje@v0  # electron-projected AC bond, couples sideband n -> n+1
     vh = projh@v0  # hole-projected AC bond, couples sideband n -> n-1
@@ -295,14 +302,20 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
 
 
 def current_integrand(ht, voltage, quasienergy, nmax, tauz,
-                       delta=1e-6, temperature=0., cache=None):
+                       delta=1e-6, temperature=0., cache=None, system=None):
     """Integrand Re Tr{[G^r Sigma_L^< + G^< Sigma_L^a] tauz} of the paper's
     Eq. for I_dc, at a fixed quasienergy. `tauz` is the electron/hole
-    grading operator matching the left lead's unit-cell dimension."""
+    grading operator matching the left lead's unit-cell dimension.
+    `system` is the precomputed `_prepare_system(ht)` tuple, see
+    `_floquet_green_functions`; computed on demand if not given (e.g. for
+    standalone callers/tests) so this stays a valid entry point on its
+    own."""
     if cache is None:
         cache = {}
+    if system is None:
+        system = _prepare_system(ht)
     Gr00, Gless00, sigL_less, sigL_a, dim, ns = _floquet_green_functions(
-        ht, voltage, quasienergy, nmax, delta, temperature, cache)
+        ht, voltage, quasienergy, nmax, delta, temperature, cache, system)
     total = 0.0+0.0j
     for isb in range(ns):
         n = isb-nmax
@@ -349,11 +362,18 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     lead0 = ht.lead if _is_localprobe(ht) else ht.Hl
     tauz = algebra.todense(lead0.get_operator("tauz").get_matrix())
     cache = {}
+    # _prepare_system(ht) only depends on ht (never on quasienergy, nmax or
+    # voltage) but current_integrand is called once per quadrature point
+    # below (tens to hundreds of times per dc_current call, across the
+    # adaptive nmax loop too) -- compute it once here instead of redoing
+    # the electron/hole-projector and local-Hamiltonian extraction work on
+    # every single evaluation.
+    system = _prepare_system(ht)
 
     def integral(nmax):
         f = lambda e: current_integrand(ht, voltage, e, nmax, tauz,
                                          delta=delta, temperature=temperature,
-                                         cache=cache)
+                                         cache=cache, system=system)
         val, _ = quad(f, 0., abs(voltage), limit=50, epsrel=1e-3)
         return val
 

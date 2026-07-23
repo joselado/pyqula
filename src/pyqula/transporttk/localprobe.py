@@ -77,29 +77,43 @@ class LocalProbe():
 
 
 
-def generate_gf(self,energy=0.0,**kwargs):
+def generate_gf(self,energy=0.0,numba=None,**kwargs):
     """Generate the specific Green's function"""
-    mode = self.mode 
+    mode = self.mode
     # just a trick to reuse the GF if needed
-    if self.reuse_gf and self.gf is not None: return self.gf 
+    if self.reuse_gf and self.gf is not None: return self.gf
     else:
+        # forward `numba` down to bloch_selfenergy's Sancho-Rubio call (see
+        # lead_selfenergy above for why: keldyshtk/current.py's
+        # _cached_selfenergy passes numba=True to route the many thousands
+        # of per-sideband calls in a Keldysh dc_current through the
+        # compiled kernel instead of the slow pure-Python default)
         gf = self.H.get_gf(energy=energy,delta=self.bulk_delta,
                              mode=gfmode,
-                             gtype=mode)
+                             gtype=mode,
+                             numba=numba)
         if self.reuse_gf: self.gf = gf # overwrite
         return gf
 
 
-def lead_selfenergy(self,energy=0.0,**kwargs):
+def lead_selfenergy(self,energy=0.0,numba=None,**kwargs):
      """Return the selfenergy of the lead"""
      if self.frozen_lead: energy = 0.0 # set as zero energy
      delta = self.delta
      intra = self.lead.intra
      inter = dagger(self.lead.inter)
      cou = inter
+     # forward `numba` to the Sancho-Rubio iteration: callers like
+     # keldyshtk/current.py's _cached_selfenergy pass numba=True to route
+     # through the compiled kernel (greentk.rg.green_renormalization_jit)
+     # for a hot loop that recomputes this selfenergy many thousands of
+     # times per dc_current call -- dropping it here (it used to land in
+     # the swallowed **kwargs) silently forced the slow pure-Python path
+     # every time regardless of what the caller asked for.
      ggg,g = green_renormalization(intra,inter,
                                      energy=energy,
-                                     delta=delta)
+                                     delta=delta,
+                                     numba=numba)
      sigma = cou@g@dagger(cou) # selfenergy
      return sigma
 

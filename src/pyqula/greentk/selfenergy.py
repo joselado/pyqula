@@ -10,7 +10,7 @@ from .kchain import green_kchain
 def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
                          mode="full", # algorithm for integration
                          gtype="bulk", # bulk or surface
-                         error=1e-3):
+                         error=1e-3,numba=None):
   """ Calculates the selfenergy of a cell defect,
       input is a hamiltonian class"""
   if mode=="adaptative": mode = "adaptive"
@@ -21,7 +21,8 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
         h = h.get_no_multicell()
         ons,hop = h.intra,h.inter
         gf,sf = green_renormalization(ons,hop,energy=energy,nite=None,
-                                error=error,info=False,delta=delta)
+                                error=error,info=False,delta=delta,
+                                numba=numba)
         return gf,sf
   elif detect_longest_hopping(h)==2:
       from ..htk.kchain import kchain_NNN # extract up to NNN
@@ -42,7 +43,12 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
 #  else: # too long range hoppings for RG, use full integration
 #      mode = "full_adaptive" 
 #      print("Changed to full adaptive mode in selfenergy")
-  h = h.copy() # make a copy
+  # get_dense() already returns an independent copy (it deepcopies
+  # internally before modifying), so an extra h.copy() here would just
+  # deepcopy the whole Hamiltonian a second time for nothing -- this
+  # function is called once per energy in hot loops like the LocalProbe
+  # Keldysh sideband sweep (keldyshtk/current.py), where that redundant
+  # deepcopy dominated the profile.
   h = h.get_dense() # dense Hamiltonian
   hk_gen = h.get_hk_gen()  # generator of k dependent hamiltonian
   # sanity check for surface mode
