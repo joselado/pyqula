@@ -93,7 +93,7 @@ def _both_leads_superconducting(ht):
     return _lead_is_superconducting(ht.Hl) and _lead_is_superconducting(ht.Hr)
 
 
-def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,**kwargs):
+def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,**kwargs):
     """Zero/finite-bias differential conductance dI/dV at bias `voltage`,
     obtained as a central finite-difference derivative of the
     Floquet-Keldysh DC current (Heterostructure.get_dc_current), see
@@ -102,9 +102,23 @@ def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,**kwargs):
     central region (heterostructures.build(h1,h2)), and for a LocalProbe
     (transporttk.localprobe.LocalProbe) whose probe lead is itself
     superconducting -- the probe and the sample site it couples to play
-    the role of the two leads."""
-    from ..keldyshtk.current import dc_current
+    the role of the two leads.
+
+    `use_qtci=True` builds one qtcitk.selfenergy_qtci.SelfenergyQTCI
+    interpolant per lead (see keldyshtk.current.build_selfenergy_qtci)
+    once here and shares it between the Ip and Im dc_current calls below,
+    instead of each independently re-solving every self-energy from
+    scratch (measured to have essentially zero natural overlap between
+    the two, despite voltage+dv and voltage-dv differing only by 2*dv).
+    Measured NOT to help for a LocalProbe's Sancho-Rubio self-energy
+    specifically -- default is False; see qtcitk.selfenergy_qtci's module
+    docstring for the benchmark before enabling this."""
+    from ..keldyshtk.current import dc_current, build_selfenergy_qtci
     if dv is None: dv = max(abs(voltage)*1e-2,1e-3)
+    if use_qtci:
+        nmax_max = kwargs.get("nmax_max", 40)
+        kwargs["selfenergy_qtci"] = build_selfenergy_qtci(
+                ht, abs(voltage)+dv, nmax_max, delta=delta)
     Ip = dc_current(ht,voltage+dv,delta=delta,**kwargs)
     Im = dc_current(ht,voltage-dv,delta=delta,**kwargs)
     return (Ip-Im)/(2*dv)

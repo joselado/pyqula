@@ -113,7 +113,7 @@ def _prepare_system(ht):
     return hlist, proje, projh, dim
 
 
-def _cached_selfenergy(ht, e, lead, delta, cache):
+def _cached_selfenergy(ht, e, lead, delta, cache, selfenergy_qtci=None):
     """Static lead self-energies only depend on (lead, energy); memoize them
     since the same energies recur across sideband/quadrature/adaptive-nmax
     evaluations within a single dc_current call, and green_renormalization
@@ -124,12 +124,23 @@ def _cached_selfenergy(ht, e, lead, delta, cache):
     selfenergies tens of thousands of times per dc_current call, where the
     per-call Python overhead dominates; the tolerance is the same as the
     Python path (see green_renormalization_jit), so this only changes
-    speed, never the result."""
+    speed, never the result.
+
+    `selfenergy_qtci`, if given, is a {lead: SelfenergyQTCI} dict (see
+    qtcitk.selfenergy_qtci and keldyshtk.current.build_selfenergy_qtci):
+    an interpolant built once (from far fewer true solves) and evaluated
+    here instead of a fresh solve -- this dict-based memoization cache is
+    local to one dc_current call, but the interpolant itself can be built
+    once and shared across many dc_current calls (e.g. both sides of
+    keldysh_didv's finite-difference derivative), unlike this cache."""
     key = (lead, round(e, 10))
     out = cache.get(key)
     if out is None:
-        out = algebra.todense(ht.get_selfenergy(e, lead=lead, delta=delta,
-                                                 pristine=True, numba=True))
+        if selfenergy_qtci is not None and lead in selfenergy_qtci:
+            out = selfenergy_qtci[lead](e)
+        else:
+            out = algebra.todense(ht.get_selfenergy(e, lead=lead, delta=delta,
+                                                     pristine=True, numba=True))
         cache[key] = out
     return out
 
@@ -252,7 +263,8 @@ def _rgf_chain_jit(Es, taus, SigLess):
 
 
 def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
-                              temperature, cache, system):
+                              temperature, cache, system,
+                              selfenergy_qtci=None):
     """Retarded and lesser Green's function diagonal blocks at every
     block-0 (left-lead-type) sideband, together with the left lead's
     lesser/advanced self-energies (needed by the current trace). Builds
@@ -276,15 +288,21 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
     ns = 2*nmax+1
 
     es = [quasienergy+(isb-nmax)*voltage for isb in range(ns)]
-    _prefetch_selfenergies_batch(ht, es, 0, delta, cache)
-    _prefetch_selfenergies_batch(ht, es, 1, delta, cache)
+    if selfenergy_qtci is None:
+        # batch-prefetching amortizes the per-call solve cost across the
+        # sideband set (see _prefetch_selfenergies_batch); with a qtci
+        # interpolant there's no solve left to amortize, only a cheap
+        # tensor-train evaluation, so it's skipped when qtci is in use.
+        _prefetch_selfenergies_batch(ht, es, 0, delta, cache)
+        _prefetch_selfenergies_batch(ht, es, 1, delta, cache)
 
     Gr00, Gless00, sigL_less, sigL_a = {}, {}, {}, {}
     for chain in _chain_sites(nmax):
         Es, SigLess, taus = [], [], []
         for k, (b, n) in enumerate(chain):
             e = quasienergy+n*voltage
-            sig_r = _cached_selfenergy(ht, e, b, delta, cache)
+            sig_r = _cached_selfenergy(ht, e, b, delta, cache,
+                                        selfenergy_qtci=selfenergy_qtci)
             Es.append((quasienergy+n*voltage+1j*delta)*iden - hii[b] - sig_r)
             sl = lesser_from_retarded(sig_r, e, temperature=temperature)
             SigLess.append(sl)
@@ -302,20 +320,22 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
 
 
 def current_integrand(ht, voltage, quasienergy, nmax, tauz,
-                       delta=1e-6, temperature=0., cache=None, system=None):
+                       delta=1e-6, temperature=0., cache=None, system=None,
+                       selfenergy_qtci=None):
     """Integrand Re Tr{[G^r Sigma_L^< + G^< Sigma_L^a] tauz} of the paper's
     Eq. for I_dc, at a fixed quasienergy. `tauz` is the electron/hole
     grading operator matching the left lead's unit-cell dimension.
     `system` is the precomputed `_prepare_system(ht)` tuple, see
     `_floquet_green_functions`; computed on demand if not given (e.g. for
     standalone callers/tests) so this stays a valid entry point on its
-    own."""
+    own. `selfenergy_qtci`: see _cached_selfenergy/build_selfenergy_qtci."""
     if cache is None:
         cache = {}
     if system is None:
         system = _prepare_system(ht)
     Gr00, Gless00, sigL_less, sigL_a, dim, ns = _floquet_green_functions(
-        ht, voltage, quasienergy, nmax, delta, temperature, cache, system)
+        ht, voltage, quasienergy, nmax, delta, temperature, cache, system,
+        selfenergy_qtci=selfenergy_qtci)
     total = 0.0+0.0j
     for isb in range(ns):
         n = isb-nmax
@@ -361,8 +381,50 @@ def _prepare_bias_target(ht):
     return ht
 
 
+def build_selfenergy_qtci(ht, voltage, nmax_max, delta=None, margin=4,
+                           tolerance=1e-6, **kwargs):
+    """Build one qtcitk.selfenergy_qtci.SelfenergyQTCI interpolant per lead
+    (0 and 1), covering every Floquet sideband energy dc_current's
+    adaptive nmax loop could ever reach for this `voltage`, capped at
+    `nmax_max`: the quasienergy integral ranges over [0,|voltage|] and
+    sidebands add up to nmax_max more steps of |voltage| in either
+    direction, so |energy| <= (nmax_max+1)*|voltage| covers it with room
+    to spare. Pass the result as dc_current's `selfenergy_qtci` argument;
+    building it once and sharing it across multiple dc_current calls
+    (e.g. both sides of keldysh_didv's finite-difference derivative, or a
+    whole iv_curve sweep) is the point -- a single dc_current call alone
+    was measured to solve ~28500 distinct (lead,energy) self-energies
+    from scratch with essentially no reuse, self-energy computation
+    alone accounting for ~78% of total wall time.
+
+    Measured NOT to help for a LocalProbe's Sancho-Rubio lead
+    self-energy specifically (see qtcitk.selfenergy_qtci's module
+    docstring for the full benchmark): building the interpolants can end
+    up needing *more* true solves than the direct per-energy approach,
+    because that self-energy isn't compressible enough over the energy
+    range multiple Andreev reflection needs. Kept as tested, documented,
+    opt-in infrastructure (not used unless a caller explicitly builds and
+    passes selfenergy_qtci) for a self-energy that compresses better."""
+    ht = _prepare_bias_target(ht)
+    _check_supported(ht)
+    if delta is None: delta = ht.delta
+    system = _prepare_system(ht)
+    hlist, proje, projh, dim = system
+    erange = (nmax_max+1)*abs(voltage)
+    from ..qtcitk.selfenergy_qtci import SelfenergyQTCI
+    out = {}
+    for lead in (0, 1):
+        def get_se(e, lead=lead): # default arg freezes the loop variable
+            return ht.get_selfenergy(e, lead=lead, delta=delta,
+                                     pristine=True, numba=True)
+        out[lead] = SelfenergyQTCI(get_se, dim, -erange, erange, delta,
+                                    margin=margin, tolerance=tolerance,
+                                    **kwargs)
+    return out
+
+
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
-               delta=None, min_consecutive=2):
+               delta=None, min_consecutive=2, selfenergy_qtci=None):
     """Time-averaged (DC) current through a two-terminal junction under a
     bias `voltage`, computed with the Floquet-Keldysh formalism of
     San-Jose, Cayao, Prada, Aguado, NJP 15, 075019 (2013). The junction is
@@ -383,7 +445,14 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     values look converged while the sequence is still far from its true
     limit (observed: nmax=60->62 already satisfies tol=1e-3 on its own,
     while the true limit only stabilizes to machine precision by
-    nmax~64)."""
+    nmax~64).
+
+    `selfenergy_qtci`, if given (see build_selfenergy_qtci), replaces the
+    per-energy Sancho-Rubio/bloch_selfenergy solves with evaluations of a
+    precomputed tensor-cross-interpolation cache -- pass a dict built to
+    cover at least this call's voltage/nmax_max, or build it here (once)
+    with build_selfenergy_qtci(ht,voltage,nmax_max,delta) if not sharing
+    it across several calls."""
     if voltage == 0.:
         return 0.0
     ht = _prepare_bias_target(ht)
@@ -404,7 +473,8 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     def integral(nmax):
         f = lambda e: current_integrand(ht, voltage, e, nmax, tauz,
                                          delta=delta, temperature=temperature,
-                                         cache=cache, system=system)
+                                         cache=cache, system=system,
+                                         selfenergy_qtci=selfenergy_qtci)
         val, _ = quad(f, 0., abs(voltage), limit=50, epsrel=1e-3)
         return val
 
