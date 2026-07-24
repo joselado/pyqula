@@ -325,26 +325,39 @@ def current_integrand(ht, voltage, quasienergy, nmax, tauz,
 
 
 def _prepare_bias_target(ht):
-    """LocalProbe's `frozen_lead` (True by default) locks the probe's
-    self-energy at zero energy for every bias -- a fine approximation for
-    a normal, wide-band probe (the smatrix method's default), but wrong
-    for a superconducting probe, whose self-energy has genuine gap
-    structure that must be evaluated at each Floquet sideband energy.
-    Return a copy with `frozen_lead=False` so the Keldysh sideband sweep
-    below sees the probe's real energy dependence; leave non-LocalProbe
-    heterostructures untouched.
+    """For a LocalProbe whose probe lead is normal (no/negligible pairing),
+    ground it: force `frozen_lead=True` so its self-energy is evaluated at
+    absolute energy 0 for every bias, with the entire bias dropped across
+    the sample instead -- the same convention `didv(method="smatrix")`
+    uses for the probe, so that `dc_current`/`method="keldysh"` on such a
+    LocalProbe is directly consistent with its own `method="smatrix"`
+    result (see transporttk.didv.didv's docstring for measurements of the
+    O(1) disagreement this closes).
 
-    This unfreezing is unconditional (applied even when the probe carries
-    no/negligible pairing), by design and necessity -- see
-    transporttk.didv.didv's docstring for why that makes `dc_current` a
-    genuinely different bias convention from the "smatrix" method's
-    frozen-probe one, not an approximation to it, and why
-    method="keldysh" should not be forced expecting it to reproduce
-    method="smatrix" outside the domain method="auto" already routes to
-    Keldysh (both leads superconducting)."""
-    if _is_localprobe(ht) and ht.frozen_lead:
-        ht = ht.copy()
-        ht.frozen_lead = False
+    For a LocalProbe whose probe lead genuinely is superconducting, do the
+    opposite: force `frozen_lead=False` (unfreeze), so the probe's own
+    Floquet sideband physics is evaluated at its actual, varying energy.
+    Grounding it instead would pin every evaluation at the probe's own gap
+    center -- confirmed to suppress the AC-Josephson/MAR current there by
+    over an order of magnitude (0.025 vs the correct 0.38 for
+    examples/transport/decay_constant_keldysh's parameters), since a
+    grounded probe can never sample its own gap edge, where the
+    quasiparticle transport that current depends on actually lives. This
+    is the library's originally-validated LocalProbe Keldysh use case
+    (both probe and sample superconducting, no normal lead for "smatrix"
+    to reflect against) and must keep working exactly as before.
+
+    Two-lead Heterostructures have no `frozen_lead` concept and are
+    always returned untouched -- their `dc_current`/`method="keldysh"`
+    behavior (validated against a normal-normal rigid two-terminal bias
+    reference and an equilibrium Andreev linear-response check, see
+    tests/keldysh) is unaffected by this function and must stay that
+    way."""
+    if not _is_localprobe(ht):
+        return ht
+    from ..transporttk.didv import _lead_is_superconducting
+    ht = ht.copy()
+    ht.frozen_lead = not _lead_is_superconducting(ht.lead)
     return ht
 
 

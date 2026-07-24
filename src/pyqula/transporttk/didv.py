@@ -130,26 +130,40 @@ def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,
         two superconducting leads; a single/no superconducting lead is
         already handled exactly by the smatrix formula).
 
-    Do not force method="keldysh" on a case "auto" would route to
-    "smatrix" (e.g. a LocalProbe whose probe lead is normal or has only an
-    infinitesimal pairing amplitude) expecting it to reproduce/converge to
-    the "smatrix" answer: `dc_current` (unlike "smatrix") evaluates the
-    *probe's* self-energy at each Floquet sideband's actual energy, not
-    frozen at 0 -- a different physical bias convention (shared across the
-    junction via the sideband ladder, needed for and validated against a
-    normal-normal rigid-bias reference in tests/keldysh), not merely a
-    less-accurate version of "smatrix". Confirmed by direct comparison
-    (properly converged, i.e. independent of nmax_max/tol) that the two
-    methods disagree by an O(1) factor persisting as the probe's pairing
-    amplitude is taken to zero -- e.g. ratio 1.18-1.24 well above the gap,
-    both leads' self-energies far from the Fermi level. Exactly at
-    sub-gap bias, the mismatch is compounded further by a genuine
-    physical (not numerical) discontinuity: any nonzero pairing, however
-    small, opens a hard gap exactly at the Fermi level (E=0), which
-    `dc_current`'s quasienergy integral always samples (it starts at
-    `quasienergy=0`), so the zero-pairing limit of the superconducting
-    self-energy at E=0 does not equal the self-energy of the exactly
-    normal lead there."""
+    For a LocalProbe, forcing method="keldysh" where "auto" would pick
+    "smatrix" (i.e. a normal, or negligibly-paired, probe lead) *is*
+    consistent with the "smatrix" result: keldyshtk.current.
+    _prepare_bias_target grounds a normal probe (freezes its self-energy
+    at absolute energy 0, matching "smatrix"'s own convention for it)
+    specifically so the two methods agree there. This is a wide-band-lead
+    approximation, exact only in that limit -- for a probe with genuine
+    band structure over the relevant bias window (e.g. a plain 1D chain,
+    not literally wide-band) expect a residual of a few percent, not
+    perfect agreement (see the tolerance discussion in
+    tests/keldysh/test_localprobe_keldysh.py's
+    test_localprobe_normal_junction_matches_static_bias_reference).
+
+    Do NOT extend that expectation to a two-lead Heterostructure or to a
+    LocalProbe whose probe genuinely is superconducting: `dc_current`
+    there evaluates the probe's self-energy at each Floquet sideband's
+    actual (non-frozen) energy -- letting it float with the bias like a
+    second, comparable electrode is required for correct AC-Josephson/MAR
+    physics through the probe's own gap (grounding it instead pins every
+    evaluation at that gap's center, confirmed to suppress the current by
+    over an order of magnitude for examples/transport/
+    decay_constant_keldysh's parameters) and for a Heterostructure's
+    validated normal-normal rigid-bias reduction (tests/keldysh/
+    test_normal_junction_gauge_invariance.py). Forcing method="keldysh"
+    there where "auto" would pick "smatrix" computes a genuinely
+    different bias convention (confirmed to disagree by a non-vanishing
+    O(1) factor, e.g. ratio 1.18-1.24 well above the gap, as the extra
+    lead's pairing amplitude is taken to zero), not an approximation of
+    it -- and forced sub-gap comparisons are further complicated by a
+    real physical (not numerical) effect: any nonzero pairing, however
+    small, opens a hard gap exactly at the Fermi level, which
+    `dc_current`'s quasienergy integral always samples (it starts at 0),
+    so its zero-pairing limit there does not equal the exactly-normal
+    self-energy either."""
     if method=="auto":
         method = "keldysh" if _both_leads_superconducting(ht) else "smatrix"
     if method=="keldysh":
