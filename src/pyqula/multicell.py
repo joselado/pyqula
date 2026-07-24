@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.sparse import csc_matrix,bmat,coo_matrix
+from scipy.sparse import csc_matrix,coo_matrix
 from . import parallel
 from .algebra import dagger
 from numba import jit
@@ -86,18 +86,6 @@ def set_dictionary(ho,dd):
 
 
 
-
-def generate_get_tij(h):
-    """Get the hopping between cells with certain indexes"""
-    hdict = h.get_multihopping().get_dict() # generate the multihopping object
-    mzero = hdict[(0,0,0)]*0.
-    def fun(rij=np.array([0.,0.,0.]),zero=False):
-        drij = tuple([int(round(ir)) for ir in rij]) # put as integer
-        if drij in hdict: return hdict[tuple(drij)]
-        else:
-            if zero: return mzero
-            else: return None
-    return fun
 
 def hk_gen(h,**kwargs):
     """Generate a k dependent hamiltonian"""
@@ -221,59 +209,70 @@ def clean(h,cutoff=1e-4):
 def supercell_hamiltonian(hin,nsuper=[1,1,1],sparse=True,ncut=3,
                              **kwargs):
   """ Create a ribbon hamiltonian object"""
-#  raise # there is something wrong with this function
-#  print("This function might have something wrong")
   if not hin.is_multicell: h = turn_multicell(hin)
   else: h = hin # nothing otherwise
   hr = h.copy() # copy hamiltonian
   if sparse: hr.is_sparse = True # sparse output
   # stuff about geometry
   hr.geometry = h.geometry.get_supercell(nsuper,**kwargs) # create supercell
-  n = nsuper[0]*nsuper[1]*nsuper[2] # number of cells in the supercell
+  n1,n2,n3 = nsuper[0],nsuper[1],nsuper[2]
+  nsuper_arr = np.array([n1,n2,n3])
+  n = n1*n2*n3 # number of cells in the supercell
   pos = [] # positions inside the supercell
-  for i in range(nsuper[0]):
-    for j in range(nsuper[1]):
-      for k in range(nsuper[2]):
-        pos.append(np.array([i,j,k])) # store position inside the supercell
-  zero = csc_matrix(np.zeros(h.intra.shape,dtype=np.complex128)) # zero matrix
-  get_tij = generate_get_tij(h) # return a function to obtain the hoppings
-  def superhopping(dr=[0,0,0]): 
-    """ Return a matrix with the hopping of the supercell"""
-    rs = [dr[0]*nsuper[0],dr[1]*nsuper[1],dr[2]*nsuper[2]] # supercell vector
-    intra = [[None for i in range(n)] for j in range(n)] # intracell term
-    for ii in range(n): 
-        intra[ii][ii] = zero.copy() # zero
-    for ii in range(n): # loop over cells
-      for jj in range(n): # loop over cells
-        d = pos[jj] + np.array(rs) -pos[ii] # distance
-      #  if d.dot(d)>ncut*ncut: continue # skip iteration
-        m = get_tij(rij=d) # get the matrix
-        if m is not None: 
-          intra[ii][jj] = csc_matrix(m) # store
-    intra = csc_matrix(bmat(intra)) # convert to matrix
-    if not sparse: intra = intra.todense() # dense matrix
-    return intra
+  for i in range(n1):
+    for j in range(n2):
+      for k in range(n3):
+        pos.append((i,j,k)) # store position inside the supercell
+  pos_index = {p:ii for ii,p in enumerate(pos)} # position -> index in the supercell
+  hdict = h.get_multihopping().get_dict() # hoppings of the primitive cell
+  d = h.intra.shape[0] # dimension of a single cell block
+  # Scatter every primitive-cell hopping directly onto the supercell block it
+  # belongs to, instead of scanning all n*n cell pairs for every candidate
+  # supercell direction (which is what this function used to do, and which
+  # scales as n^2 times the number of candidate directions).
+  contributions = dict() # supercell lattice vector -> list of (ii,jj,matrix)
+  for ii,p in enumerate(pos):
+    p = np.array(p)
+    for key,m in hdict.items():
+      target = p + np.array(key) # neighboring primitive cell, supercell units
+      pos_jj = tuple(int(round(x)) for x in np.mod(target,nsuper_arr))
+      dr_cell = tuple(int(round(x)) for x in (target-np.array(pos_jj))/nsuper_arr)
+      if max(abs(c) for c in dr_cell)>ncut: continue # outside the requested range
+      jj = pos_index[pos_jj]
+      contributions.setdefault(dr_cell,[]).append((ii,jj,m))
+  def build_matrix(dr_cell):
+    """Assemble the supercell block matrix for one supercell lattice vector"""
+    rows,cols,data = [],[],[]
+    for (ii,jj,m) in contributions.get(dr_cell,[]):
+      mc = coo_matrix(m)
+      rows.append(mc.row+ii*d)
+      cols.append(mc.col+jj*d)
+      data.append(mc.data)
+    if rows:
+      rows = np.concatenate(rows)
+      cols = np.concatenate(cols)
+      data = np.concatenate(data)
+    else:
+      rows = np.array([],dtype=int)
+      cols = np.array([],dtype=int)
+      data = np.array([],dtype=np.complex128)
+    mat = csc_matrix(coo_matrix((data,(rows,cols)),shape=(n*d,n*d)))
+    if not sparse: mat = mat.todense() # dense matrix
+    return mat
   # get the intra matrix
-  hr.intra = superhopping()
-  # now do the same for the interterm
-  hoppings = [] # list of hopings
-  nxs,nys,nzs = [0],[0],[0] # initialize
-  if hin.dimensionality>0:  nxs = range(-ncut,ncut+1)
-  if hin.dimensionality>1:  nys = range(-ncut,ncut+1)
-  if hin.dimensionality>2:  nzs = range(-ncut,ncut+1)
-  for i in nxs: # loop over hoppings
-    for j in nys: # loop over hoppings
-      for k in nzs: # loop over hoppings
-        if i==j==k==0: continue # skip the intraterm
-        dr = np.array([i,j,k]) # set as array
-        hopp = Hopping() # create object
-        hopp.m = superhopping(dr=dr) # get hopping of the supercell
-        hopp.dir = dr
-        if np.sum(np.abs(hopp.m))>1e-6: # skip this matrix
-          hoppings.append(hopp)
-        else: pass
-      hr.hopping = hoppings # store the list
-  return hr 
+  hr.intra = build_matrix((0,0,0))
+  # now do the same for the interterms
+  hoppings = [] # list of hoppings
+  for dr_cell in contributions:
+    if dr_cell==(0,0,0): continue # already stored as the intraterm
+    mat = build_matrix(dr_cell)
+    if np.sum(np.abs(mat))>1e-6: # skip this matrix if zero
+      hopp = Hopping() # create object
+      hopp.m = mat
+      hopp.dir = np.array(dr_cell)
+      hoppings.append(hopp)
+  hr.hopping = hoppings # store the list
+  return hr
 
 
 
