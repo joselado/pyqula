@@ -36,44 +36,35 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
   # now create replicas until there as c times as many atoms in the
   # unit cell
   if mode=="fill": # look for atoms until everything is filled
-    rs = []
-    k2K = algebra.inv(go.get_k2K()) # matrix transformation
-    R = np.matrix([go.a1,go.a2,go.a3]).T # transformation matrix
+    R = np.array([go.a1,go.a2,go.a3]).T # transformation matrix
     L = algebra.inv(R) # inverse matrix
-    d0 = -np.random.random()*0.1 # accuracy
     d0 = -0.122132112 # some random number
     d1 = 1.0 + d0 # accuracy
     from .geometry import neighbor_cells
 # get as many cells as necessary
     cneigh = reducef(c) # cells to generate given the volume increase c
     cneigh = int(round(cneigh)) # integer
-    inds = neighbor_cells(cneigh,dim=g.dimensionality) 
-    sl = [] # list for the sublattice
-    for (i,j,k) in inds: # loop
-          ii = 0 # start count
-          for ir in range(len(g.r)): # loop over positions
-            ri = g.r[ir] # get the position
-            store = False
-            rj = ri + i*g.a1 + j*g.a2 + k*g.a3 # new position
-            rn = L@np.matrix(rj).T  # transform
-            rn = np.array([rn.T[0,ii] for ii in range(3)]) # convert to array
-            n1,n2,n3 = rn[0],rn[1],rn[2]
-            if g.dimensionality==3 and d0<n1<d1 and d0<n2<d1 and d0<n3<d1:
-                store = True
-            if g.dimensionality==2 and d0<n1<d1 and d0<n2<d1: 
-                store = True
-            if g.dimensionality==1 and d0<n1<d1: 
-                store = True
-            if store:
-                rs.append(rj)
-                if g.has_sublattice: sl.append(g.sublattice[ir])
-#          if len(rs)==len(g.r)*c:
-#            print("All the atoms found")
-#            break
-#    print(rs)
+    inds = np.array(neighbor_cells(cneigh,dim=g.dimensionality))
+    # candidate position of every atom in every candidate cell at once,
+    # vectorized instead of a per-(cell,atom) python loop that built a
+    # np.matrix per atom (this used to dominate the cost of every
+    # twisted-multilayer builder in specialgeometry.py)
+    cell_shifts = inds@np.array([g.a1,g.a2,g.a3]) # shape (ncells,3)
+    rj = g.r[None,:,:] + cell_shifts[:,None,:] # shape (ncells,natoms,3)
+    rn = rj@L.T # fractional coordinates, same shape
+    if g.dimensionality==3:
+      store = (d0<rn[...,0])&(rn[...,0]<d1)&(d0<rn[...,1])&(rn[...,1]<d1)&(d0<rn[...,2])&(rn[...,2]<d1)
+    elif g.dimensionality==2:
+      store = (d0<rn[...,0])&(rn[...,0]<d1)&(d0<rn[...,1])&(rn[...,1]<d1)
+    elif g.dimensionality==1:
+      store = (d0<rn[...,0])&(rn[...,0]<d1)
+    else: store = np.zeros(rn.shape[:-1],dtype=bool)
+    rj = rj.reshape(-1,3) # flatten (cell,atom) -> a single list, cell-major
+    store = store.reshape(-1) # matching flattening
+    rs = rj[store]
     go.r = np.array(rs) # store
-    if go.has_sublattice: go.sublattice = sl # store sublattice
-    if len(rs)!=len(g.r)*c: 
+    if go.has_sublattice: go.sublattice = np.tile(g.sublattice,len(inds))[store] # store sublattice
+    if len(rs)!=len(g.r)*c:
       print("Not all the atoms have been found")
       print("New atoms",len(rs))
       print("Expected atoms",len(g.r)*c)
@@ -144,33 +135,33 @@ def target_angle_volume(g,angle=None,n=5,volume=None,same_length=False):
     a1 = g.a1
     a2 = g.a2
     def getm(): # get the matrix
-      out = [] # empty list
-      vs = [] # volumes
-      for i in range(-n,n+1):
-        for j in range(-n,n+1):
-          for k in range(-n,n+1):
-            for l in range(-n,n+1):
-                store = False
-                a1n = i*a1 + j*a2
-                a2n = k*a1 + l*a2
-                v = lg.norm(np.cross(a1n,a2n)) # new volume
-                v /= lg.norm(np.cross(a1,a2)) # new volume
-                if abs(v)<1e-6: continue # zero volume
-                u1 = a1n/np.sqrt(a1n.dot(a1n)) # normalize
-                u2 = a2n/np.sqrt(a2n.dot(a2n)) # normalize
-                if angle is not None: # check if it has the desired angle
-                    diff = u1.dot(u2)-np.cos(angle*np.pi) # difference
-                    if abs(diff)>1e-6: continue # next try 
-                if same_length: # check if they must have the same length
-                    diff = a1n.dot(a1n) - a2n.dot(a2n)
-                    if abs(diff)>1e-6: continue # next try 
-                if volume is not None: # target such volume
-                    if abs(v-volume)>1e-6: continue
-               #     else: return [[i,j,0],[k,l,0],[0,0,1]]
-                out.append([[i,j,0],[k,l,0],[0,0,1]]) # orthogonal, return
-                vs.append(v) # volume
-      if len(out)==0: return None # nothng found
-      vs = np.array(vs) # as array
+      # evaluate every (i,j,k,l) candidate at once with numpy instead of
+      # calling np.cross/np.linalg.norm once per candidate inside a
+      # python quadruple loop (this used to dominate the cost of every
+      # angle/volume-targeted supercell search)
+      rng = np.arange(-n,n+1)
+      I,J,K,L = np.meshgrid(rng,rng,rng,rng,indexing="ij")
+      I = I.ravel() ; J = J.ravel() ; K = K.ravel() ; L = L.ravel()
+      a1n = I[:,None]*a1[None,:] + J[:,None]*a2[None,:] # shape (ncand,3)
+      a2n = K[:,None]*a1[None,:] + L[:,None]*a2[None,:] # shape (ncand,3)
+      v0 = lg.norm(np.cross(a1,a2))
+      with np.errstate(invalid="ignore",divide="ignore"): # a1n or a2n can be zero
+        v = lg.norm(np.cross(a1n,a2n),axis=1)/v0 # new volume
+        u1 = a1n/np.sqrt(np.sum(a1n*a1n,axis=1))[:,None] # normalize
+        u2 = a2n/np.sqrt(np.sum(a2n*a2n,axis=1))[:,None] # normalize
+      mask = np.abs(v)>=1e-6 # zero volume
+      if angle is not None: # check if it has the desired angle
+        diff = np.sum(u1*u2,axis=1)-np.cos(angle*np.pi) # difference
+        mask &= np.abs(diff)<=1e-6
+      if same_length: # check if they must have the same length
+        diff = np.sum(a1n*a1n,axis=1) - np.sum(a2n*a2n,axis=1)
+        mask &= np.abs(diff)<=1e-6
+      if volume is not None: # target such volume
+        mask &= np.abs(v-volume)<=1e-6
+      idx = np.where(mask)[0]
+      if len(idx)==0: return None # nothng found
+      out = [[[I[i],J[i],0],[K[i],L[i],0],[0,0,1]] for i in idx] # candidates
+      vs = [v[i] for i in idx] # their volumes
       return [o for (v,o) in sorted(zip(vs,out))][0]
     out = getm() # get rotation matrix
     if out is None: raise # no supercell found

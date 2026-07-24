@@ -411,23 +411,17 @@ def sites_in_unit_cell(r,a1,a2,a3,dim=3):
   """Retain position located in the unit cell defined by a1,a2,a3"""
   R = np.array([a1,a2,a3]).T # transformation matrix
   L = algebra.inv(R) # inverse matrix
-#  d0 = -np.random.random()*0.001 - .5 # accuracy
   d0 = 0.00234231421 - 0.5 # random number
   d1 = 1.0 + d0 # accuracy
-  retain = [] # empty list
-  for ri in r: # loop over positions
-    rn = L@ri  # transform
-    n1,n2,n3 = rn[0],rn[1],rn[2]
-    if dim==3:
-        if d0<n1<d1 and d0<n2<d1 and d0<n3<d1:
-            retain.append(1)
-        else: retain.append(0)
-    if dim==2:
-        if d0<n1<d1 and d0<n2<d1:
-            retain.append(1)
-        else: retain.append(0)
-  retain = np.array(retain)
-  return retain
+  # transform every position at once instead of looping over positions in
+  # python with a per-atom matrix-vector product
+  rn = np.array(r)@L.T # fractional coordinates of every position
+  if dim==3:
+    retain = (d0<rn[:,0])&(rn[:,0]<d1)&(d0<rn[:,1])&(rn[:,1]<d1)&(d0<rn[:,2])&(rn[:,2]<d1)
+  elif dim==2:
+    retain = (d0<rn[:,0])&(rn[:,0]<d1)&(d0<rn[:,1])&(rn[:,1]<d1)
+  else: return np.array([]) # unreached in practice, matches the old behavior
+  return retain.astype(int)
 
 def retain_unit_cell(r,a1,a2,a3,dim=3):
     """Retain position located in the unit cell defined by a1,a2,a3"""
