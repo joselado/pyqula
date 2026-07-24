@@ -129,15 +129,20 @@ def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,
     from ..keldyshtk.current import (dc_current, build_selfenergy_qtci,
                                       build_selfenergy_aaa)
     if dv is None: dv = max(abs(voltage)*1e-2,1e-3)
-    if use_qtci:
-        nmax_max = kwargs.get("nmax_max", 40)
-        kwargs["selfenergy_qtci"] = build_selfenergy_qtci(
-                ht, abs(voltage)+dv, nmax_max, delta=delta)
-    elif use_aaa:
-        nmax_max = kwargs.get("nmax_max", 40)
-        shared = build_selfenergy_aaa(ht, abs(voltage)+dv, nmax_max, delta=delta)
-        if all(s.converged for s in shared.values()):
-            kwargs["selfenergy_qtci"] = shared
+    # Only auto-build a shared interpolant if the caller hasn't already
+    # passed their own selfenergy_qtci -- otherwise this would silently
+    # discard it in favor of a freshly built one every time, defeating the
+    # explicit-override escape hatch documented above and in dc_current.
+    if "selfenergy_qtci" not in kwargs:
+        if use_qtci:
+            nmax_max = kwargs.get("nmax_max", 40)
+            kwargs["selfenergy_qtci"] = build_selfenergy_qtci(
+                    ht, abs(voltage)+dv, nmax_max, delta=delta)
+        elif use_aaa:
+            nmax_max = kwargs.get("nmax_max", 40)
+            shared = build_selfenergy_aaa(ht, abs(voltage)+dv, nmax_max, delta=delta)
+            if all(s.converged for s in shared.values()):
+                kwargs["selfenergy_qtci"] = shared
     Ip = dc_current(ht,voltage+dv,delta=delta,**kwargs)
     Im = dc_current(ht,voltage-dv,delta=delta,**kwargs)
     return (Ip-Im)/(2*dv)
