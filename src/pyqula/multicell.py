@@ -226,25 +226,30 @@ def supercell_hamiltonian(hin,nsuper=[1,1,1],sparse=True,ncut=3,
   pos_index = {p:ii for ii,p in enumerate(pos)} # position -> index in the supercell
   hdict = h.get_multihopping().get_dict() # hoppings of the primitive cell
   d = h.intra.shape[0] # dimension of a single cell block
+  # Cache each distinct primitive hopping's direction (as an array) and COO
+  # form once: the same handful of hopping matrices get reused for every one
+  # of the n cells in the supercell below, so converting/allocating per cell
+  # instead of per hopping would multiply that cost by n for no reason.
+  hopping_entries = [(np.array(key),coo_matrix(m)) for key,m in hdict.items()]
   # Scatter every primitive-cell hopping directly onto the supercell block it
   # belongs to, instead of scanning all n*n cell pairs for every candidate
   # supercell direction (which is what this function used to do, and which
   # scales as n^2 times the number of candidate directions).
-  contributions = dict() # supercell lattice vector -> list of (ii,jj,matrix)
+  contributions = dict() # supercell lattice vector -> list of (ii,jj,coo matrix)
   for ii,p in enumerate(pos):
     p = np.array(p)
-    for key,m in hdict.items():
-      target = p + np.array(key) # neighboring primitive cell, supercell units
-      pos_jj = tuple(int(round(x)) for x in np.mod(target,nsuper_arr))
-      dr_cell = tuple(int(round(x)) for x in (target-np.array(pos_jj))/nsuper_arr)
-      if max(abs(c) for c in dr_cell)>ncut: continue # outside the requested range
+    for key_arr,mc in hopping_entries:
+      target = np.array([int(round(x)) for x in p+key_arr]) # neighboring cell
+      dr_cell_arr = target//nsuper_arr # supercell lattice vector (floor div)
+      if np.max(np.abs(dr_cell_arr))>ncut: continue # outside the requested range
+      pos_jj = tuple(target-dr_cell_arr*nsuper_arr) # position inside the supercell
       jj = pos_index[pos_jj]
-      contributions.setdefault(dr_cell,[]).append((ii,jj,m))
+      dr_cell = tuple(dr_cell_arr)
+      contributions.setdefault(dr_cell,[]).append((ii,jj,mc))
   def build_matrix(dr_cell):
     """Assemble the supercell block matrix for one supercell lattice vector"""
     rows,cols,data = [],[],[]
-    for (ii,jj,m) in contributions.get(dr_cell,[]):
-      mc = coo_matrix(m)
+    for (ii,jj,mc) in contributions.get(dr_cell,[]):
       rows.append(mc.row+ii*d)
       cols.append(mc.col+jj*d)
       data.append(mc.data)
