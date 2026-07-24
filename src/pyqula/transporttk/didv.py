@@ -93,7 +93,8 @@ def _both_leads_superconducting(ht):
     return _lead_is_superconducting(ht.Hl) and _lead_is_superconducting(ht.Hr)
 
 
-def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,**kwargs):
+def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,
+                  use_aaa=True,**kwargs):
     """Zero/finite-bias differential conductance dI/dV at bias `voltage`,
     obtained as a central finite-difference derivative of the
     Floquet-Keldysh DC current (Heterostructure.get_dc_current), see
@@ -104,21 +105,39 @@ def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,**kwargs):
     superconducting -- the probe and the sample site it couples to play
     the role of the two leads.
 
-    `use_qtci=True` builds one qtcitk.selfenergy_qtci.SelfenergyQTCI
-    interpolant per lead (see keldyshtk.current.build_selfenergy_qtci)
-    once here and shares it between the Ip and Im dc_current calls below,
-    instead of each independently re-solving every self-energy from
-    scratch (measured to have essentially zero natural overlap between
-    the two, despite voltage+dv and voltage-dv differing only by 2*dv).
-    Measured NOT to help for a LocalProbe's Sancho-Rubio self-energy
-    specifically -- default is False; see qtcitk.selfenergy_qtci's module
-    docstring for the benchmark before enabling this."""
-    from ..keldyshtk.current import dc_current, build_selfenergy_qtci
+    `use_aaa=True` (default) builds one aaatk.selfenergy_aaa.SelfenergyAAA
+    interpolant per lead (see keldyshtk.current.build_selfenergy_aaa) once
+    here, covering both voltage+dv and voltage-dv's sideband window, and
+    shares it between the Ip and Im dc_current calls below instead of
+    each independently building (and discarding) its own -- unlike the
+    quantics/qtci approach below, this one measurably pays off (see
+    aaatk/selfenergy_aaa.py's module docstring for the measured net
+    effect -- modest for a cheap-per-solve target, substantially larger
+    for an expensive-per-solve one), which is why it is the default. If
+    the interpolant doesn't converge within its (deliberately
+    modest, single-sweep-sized) budget -- possible for a wide sideband
+    window packing many Andreev/MAR resonances into the interpolated
+    range -- this falls back to letting each dc_current call build (or
+    skip) its own default instead of forcing a possibly-losing shared fit
+    (see dc_current's own selfenergy_method="aaa" docstring).
+
+    `use_qtci=True` instead builds a qtcitk.selfenergy_qtci.SelfenergyQTCI
+    interpolant the same way (overrides `use_aaa`). Kept for comparison/
+    debugging only -- measured NOT to help for a LocalProbe's Sancho-Rubio
+    self-energy (see qtcitk.selfenergy_qtci's module docstring for the
+    benchmark)."""
+    from ..keldyshtk.current import (dc_current, build_selfenergy_qtci,
+                                      build_selfenergy_aaa)
     if dv is None: dv = max(abs(voltage)*1e-2,1e-3)
     if use_qtci:
         nmax_max = kwargs.get("nmax_max", 40)
         kwargs["selfenergy_qtci"] = build_selfenergy_qtci(
                 ht, abs(voltage)+dv, nmax_max, delta=delta)
+    elif use_aaa:
+        nmax_max = kwargs.get("nmax_max", 40)
+        shared = build_selfenergy_aaa(ht, abs(voltage)+dv, nmax_max, delta=delta)
+        if all(s.converged for s in shared.values()):
+            kwargs["selfenergy_qtci"] = shared
     Ip = dc_current(ht,voltage+dv,delta=delta,**kwargs)
     Im = dc_current(ht,voltage-dv,delta=delta,**kwargs)
     return (Ip-Im)/(2*dv)

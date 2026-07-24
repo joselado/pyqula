@@ -1258,6 +1258,8 @@ k = lp.get_kappa(energy=0.25,nmax=4,nmax_max=12,tol=5e-2)
 
 This is considerably more expensive than the normal-probe case (each `didv`/`get_kappa` call runs several Floquet-Keldysh sideband sweeps), especially deep below the combined gap at low transparency, where the sideband sum converges slowly; see `examples/transport/decay_constant_keldysh/main.py` for a runnable script using a coarse energy grid and a modest sideband cutoff to keep the runtime reasonable.
 
+By default, `get_dc_current`/`keldysh_didv` replace most of the many thousands of individual Sancho-Rubio/`bloch_selfenergy` lead solves the sideband sweep would otherwise need with evaluations of a compact rational (AAA) interpolant of each lead's self-energy, built from far fewer true solves (`keldyshtk.current.build_selfenergy_aaa`); the physical result is unchanged (same tolerance-controlled accuracy), only the internal cost is affected, and it falls back to the original direct per-energy solves automatically if the interpolant can't be built accurately within a bounded effort (e.g. for an unusually wide sideband window). Pass `selfenergy_method="direct"` to `get_dc_current`, or `use_aaa=False` to `didv`/`keldysh_didv`, to force the old direct behavior (e.g. for comparison/debugging).
+
 
 # Single defects in infinite systems
 
