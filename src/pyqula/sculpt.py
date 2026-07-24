@@ -2,9 +2,7 @@ from __future__ import print_function
 from . import geometry
 from copy import deepcopy
 from . import algebra
-from numba import jit
 import numpy as np
-from . import algebra
 
 
 try: 
@@ -15,13 +13,13 @@ except: use_fortran = False
 
 def remove(g,l):
   """ Remove certain atoms from the geometry"""
-  nr = len(l) # number of removed atoms
+  lset = set(l) # membership test below is O(1) against a set, O(len(l)) against a list
   go = g.copy() # copy the geometry
   xo = [] # copy the list
   yo = [] # copy the list
   zo = [] # copy the list
   for i in range(len(g.x)):
-    if not i in l:
+    if not i in lset:
       xo.append(g.x[i])
       yo.append(g.y[i])
       zo.append(g.z[i])
@@ -38,7 +36,7 @@ def remove(g,l):
   if g.has_sublattice: # if has sublattice, keep the indexes
     ab = [] # initialize
     for i in range(len(g.x)):
-      if not i in l:
+      if not i in lset:
         ab.append(g.sublattice[i]) # keep the index
     go.sublattice = ab # store the keeped atoms
   return go
@@ -145,14 +143,17 @@ def remove_unibonded(g,d=1.0,tol=0.01,use_fortran=use_fortran,iterative=False):
       if not retain[i]: sb.append(i) # remove
     gout = remove(g,sb) # remove those atoms
   else: # use python routine
-    for i in range(len(g.r)): 
+    # precompute every direction's replicas once (this used to be redone
+    # from scratch inside the loop over i, turning what should be a single
+    # O(natoms) pass into an O(natoms^2) one) and count neighbors with
+    # numpy broadcasting instead of a per-atom python loop
+    replicas = [g.replicas(d=direc) for direc in g.neighbor_directions()]
+    for i in range(len(g.r)):
       r1 = g.r[i] # first position
       nb = 0 # initialize
-      for direc in g.neighbor_directions(): # loop over directions
-        for r2 in g.replicas(d=direc): # loop over replicas
-          dr = r1-r2
-          if d-tol < dr.dot(dr) < d+tol: # if first neighbor
-            nb += 1 # increase counter
+      for r2 in replicas: # loop over directions
+        dr2 = np.sum((r1-r2)**2,axis=1) # squared distances to this direction's replicas
+        nb += np.count_nonzero((d-tol < dr2) & (dr2 < d+tol)) # first neighbors
       if nb<2:
         sb.append(i+0) # add to the list
     gout = remove(g,sb) # remove those atoms
