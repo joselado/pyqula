@@ -47,6 +47,73 @@
 # interpolants across the quadrature. Left as documented, tested,
 # off-by-default infrastructure -- e.g. for a self-energy from a
 # different, smoother lead where compression may fare better.
+#
+# FOLLOW-UP: interpolating something other than the raw self-energy was
+# also tried, hoping a different target would compress better. Two more
+# targets were benchmarked (same decay_constant_keldysh parameters, SC
+# probe + SC sample, T=0.3, delta=1e-3, tolerance=1e-6), reusing this same
+# class as a generic dim x dim matrix-of-energy interpolator (it doesn't
+# actually care that its target is literally a self-energy):
+#
+#  - M(E) = G^-1(E), the coupled probe+sample block matrix assembled from
+#    both leads' self-energies with no further inversion (M[0,0] =
+#    (E+i*delta)I - h_probe - Sigma_probe(E), M[1,1] likewise for the
+#    sample site, M[0,1]/M[1,0] the constant T-scaled coupling) -- needed
+#    15857 solves over the same erange=1.0 window Sigma_probe alone needed
+#    10095 for (48.4% vs 30.8% of the 32768-point grid).
+#  - G(E) = inv(M(E)), the actual coupled Green's function, which has real
+#    Andreev-bound-state resonances from the probe-sample coupling --
+#    needed 22490 solves, 68.6% of the same grid.
+#
+# So G(E) is indeed harder to compress than its own inverse M(E) (43% more
+# solves) -- inverting away the resonance peaks helps exactly as the
+# "interpolate 1/G, not G" intuition predicts. But M(E) itself already
+# needs *more* solves than a single lead's Sigma(E) alone (15857 vs
+# 10095): bundling two leads' self-energies into one coupled object packs
+# two independent gap/band-edge spectra into the same energy window,
+# which is a step in the wrong direction regardless of which side of the
+# inversion gets interpolated. Tested in isolation (single lead, no
+# bundling), Sigma(E) and g(E)=inv((E+i*delta)I-h-Sigma(E)) came out
+# statistically identical (10095 vs 10027 solves) -- consistent with them
+# differing only by an additive, low-rank-in-quantics linear shift, so
+# inversion alone (without the multi-lead bundling) changes nothing.
+#
+# A third target was tried at a level further removed from the
+# self-energy: qtci-interpolating the converged DC current
+# keldyshtk.current.dc_current(voltage) directly (nmax=4, nmax_max=8,
+# tol=1e-1, i.e. the cheap examples/transport/decay_constant_keldysh
+# parameters), hoping to skip self-energy solves entirely rather than
+# just caching them better. At a 6-bit grid (64 points) it needed all 64
+# -- zero compression. That alone doesn't indict the current as
+# incompressible, though: a control experiment ran the identical qtci
+# machinery on a hand-picked, textbook-smooth sigmoid (no self-energy
+# involved at all) over the same window, and it needed 100%/80%/58%/43%
+# of the grid at 6/8/9/10 bits respectively. Quantics compression only
+# pays off once there are enough bits for the grid to contain long
+# stretches of genuinely "boring" (low-variation) structure the tensor
+# train can skip over cheaply -- that only kicks in at ~15+ bits (grids
+# of 1e4-1e6+ points), which is where this module's own Sigma(E)
+# benchmark above lives. Reaching that many bits for dc_current(voltage)
+# would need a window/resolution ratio this problem doesn't have without
+# an enormous number of true (multi-second) dc_current evaluations to
+# build it, so this wasn't pursued further.
+#
+# UNIFYING DIAGNOSIS: quantics/qtci compression wins when there's a large
+# scale separation between the finest feature width that needs resolving
+# and the size of the domain it's resolved over (the NEGF-on-quantics-
+# tensor-trains framework of Sroda, Inayoshi, Shinaoka & Werner, arXiv:
+# 2412.14032, gets its wins from exactly this: two-time grids with
+# dt ~ 1e-6 over t_max ~ 250, a ratio of ~1e8). Every target tried here --
+# Sigma(E), the coupled M(E)/G(E) pair, and dc_current(voltage) itself --
+# has feature widths (gap edges, Andreev/MAR resonances, self-energy
+# broadening) only modestly separated from the window actually needed
+# (1e1-1e2, not 1e4+), so none of them can show a strong win regardless of
+# which quantity is chosen as the interpolation target or which side of
+# an inversion it sits on. Further qtci attempts on this LocalProbe
+# Keldysh dI/dV pathway should budget for that ratio explicitly before
+# building anything: if the relevant feature/window ratio for a candidate
+# target isn't at least ~1e3-1e4, compression is unlikely to pay for the
+# interpolant-construction cost no matter how the target is transformed.
 import numpy as np
 
 from .. import algebra
