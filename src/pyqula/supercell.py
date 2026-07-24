@@ -45,25 +45,37 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
     cneigh = reducef(c) # cells to generate given the volume increase c
     cneigh = int(round(cneigh)) # integer
     inds = np.array(neighbor_cells(cneigh,dim=g.dimensionality))
-    # candidate position of every atom in every candidate cell at once,
-    # vectorized instead of a per-(cell,atom) python loop that built a
-    # np.matrix per atom (this used to dominate the cost of every
-    # twisted-multilayer builder in specialgeometry.py)
-    cell_shifts = inds@np.array([g.a1,g.a2,g.a3]) # shape (ncells,3)
-    rj = g.r[None,:,:] + cell_shifts[:,None,:] # shape (ncells,natoms,3)
-    rn = rj@L.T # fractional coordinates, same shape
-    if g.dimensionality==3:
-      store = (d0<rn[...,0])&(rn[...,0]<d1)&(d0<rn[...,1])&(rn[...,1]<d1)&(d0<rn[...,2])&(rn[...,2]<d1)
-    elif g.dimensionality==2:
-      store = (d0<rn[...,0])&(rn[...,0]<d1)&(d0<rn[...,1])&(rn[...,1]<d1)
-    elif g.dimensionality==1:
-      store = (d0<rn[...,0])&(rn[...,0]<d1)
-    else: store = np.zeros(rn.shape[:-1],dtype=bool)
-    rj = rj.reshape(-1,3) # flatten (cell,atom) -> a single list, cell-major
-    store = store.reshape(-1) # matching flattening
-    rs = rj[store]
-    go.r = np.array(rs) # store
-    if go.has_sublattice: go.sublattice = np.tile(g.sublattice,len(inds))[store] # store sublattice
+    natoms = len(g.r)
+    cell_basis = np.array([g.a1,g.a2,g.a3])
+    # candidate position of every atom in every candidate cell, vectorized
+    # instead of a per-(cell,atom) python loop that built a np.matrix per
+    # atom (this used to dominate the cost of every twisted-multilayer
+    # builder in specialgeometry.py). Candidate cells are processed in
+    # chunks so peak memory stays bounded by chunk size regardless of how
+    # many cells neighbor_cells() produces, instead of materializing every
+    # (cell,atom) candidate position at once.
+    chunk_cells = max(1,200000//max(natoms,1))
+    rs_parts = [] # matched positions, one array per chunk
+    sl_parts = [] # matched sublattice indices, one array per chunk
+    for start in range(0,len(inds),chunk_cells):
+      inds_chunk = inds[start:start+chunk_cells]
+      cell_shifts = inds_chunk@cell_basis # shape (nchunk,3)
+      rj = g.r[None,:,:] + cell_shifts[:,None,:] # shape (nchunk,natoms,3)
+      rn = rj@L.T # fractional coordinates, same shape
+      if g.dimensionality==3:
+        store = (d0<rn[...,0])&(rn[...,0]<d1)&(d0<rn[...,1])&(rn[...,1]<d1)&(d0<rn[...,2])&(rn[...,2]<d1)
+      elif g.dimensionality==2:
+        store = (d0<rn[...,0])&(rn[...,0]<d1)&(d0<rn[...,1])&(rn[...,1]<d1)
+      elif g.dimensionality==1:
+        store = (d0<rn[...,0])&(rn[...,0]<d1)
+      else: store = np.zeros(rn.shape[:-1],dtype=bool)
+      rj = rj.reshape(-1,3) # flatten (cell,atom) -> a single list, cell-major
+      store = store.reshape(-1) # matching flattening
+      rs_parts.append(rj[store])
+      if go.has_sublattice: sl_parts.append(np.tile(g.sublattice,len(inds_chunk))[store])
+    rs = np.concatenate(rs_parts) if rs_parts else np.zeros((0,3))
+    go.r = rs # store
+    if go.has_sublattice: go.sublattice = np.concatenate(sl_parts) if sl_parts else np.array([]) # store sublattice
     if len(rs)!=len(g.r)*c:
       print("Not all the atoms have been found")
       print("New atoms",len(rs))
