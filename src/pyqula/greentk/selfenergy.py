@@ -18,7 +18,17 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
   if detect_longest_hopping(h)==1:
       def gr(h):
         """ Calculates G by renormalization"""
-        h = h.get_no_multicell()
+        # get_no_multicell() always redoes a full conversion + a
+        # multicell<->non-multicell round-trip consistency check (two
+        # deepcopies) even when h is already non-multicell -- only
+        # turn_no_multicell's *first* step short-circuits for that case,
+        # not the method's own consistency check. Skipping the call
+        # entirely when nothing needs converting is exact (h already is
+        # its own non-multicell form) and removes a call measured to cost
+        # as much as the entire self-energy solve it was embedded in, in
+        # hot loops like the LocalProbe Keldysh sideband sweep that call
+        # this once per energy with the same, unchanging h.
+        if h.is_multicell: h = h.get_no_multicell()
         ons,hop = h.intra,h.inter
         gf,sf = green_renormalization(ons,hop,energy=energy,nite=None,
                                 error=error,info=False,delta=delta,

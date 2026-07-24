@@ -16,6 +16,20 @@ class LocalProbe():
     def __init__(self,h,lead=None,delta=1e-5,i=0,T=1.0,**kwargs):
         h = h.get_dense() # dense Hamiltonian
         self.H = h.copy() # store Hamiltonian
+        # Precompute the non-multicell form once, when valid (nearest-
+        # neighbor or shorter hopping only -- the same precondition
+        # bloch_selfenergy itself uses before ever calling
+        # get_no_multicell()), instead of leaving every later self-energy
+        # call (bloch_selfenergy's per-energy sideband sweep in
+        # keldyshtk/current.py's Floquet-Keldysh dc_current) to redo that
+        # (expensive, deepcopy-based) conversion from scratch against an
+        # unchanging Hamiltonian. Mirrors the identical precomputation
+        # already done for the probe lead below. For longer-range hopping,
+        # bloch_selfenergy takes a different code path that never calls
+        # get_no_multicell(), so there's nothing to precompute there.
+        from ..htk.kchain import detect_longest_hopping
+        if self.H.is_multicell and detect_longest_hopping(self.H)<=1:
+            self.H = self.H.get_no_multicell()
         self.has_eh = self.H.has_eh # electron-hole
         self.delta = delta
         self.mode = "bulk"

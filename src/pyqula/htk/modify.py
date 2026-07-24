@@ -25,8 +25,8 @@ from .. import algebra
 
 def get_dense(self):
     """ Transforms the hamiltonian into a sparse hamiltonian"""
-    if not self.is_sparse and self.is_multicell:
-        # Already dense and already multicell: self.copy() below is a
+    if not self.is_sparse:
+        # Already dense: self.copy() below (in the general path) is a
         # full recursive deepcopy (geometry included), whose cost comes
         # from the sheer number of nested Python objects it traverses,
         # not from array size -- and it exists purely so that a caller
@@ -34,23 +34,46 @@ def get_dense(self):
         # merge.merge_channels does `h.intra[i,j] = ...` after
         # get_dense()) doesn't corrupt self. A shallow copy plus fresh
         # copies of just the matrix attributes gives that same safety
-        # far more cheaply. Restricted to the already-multicell case,
-        # where multicell.turn_multicell(self) (which
-        # modify_hamiltonian_matrices would otherwise call) is a no-op
-        # returning self unchanged -- i.e. the slow path's hopping list
-        # would itself only be independent because self.copy() already
-        # made it so, so building a fresh one here directly is
-        # equivalent, not an approximation. This path is hit once per
-        # energy in hot loops like the LocalProbe Keldysh sideband
-        # sweep, where the full deepcopy dominated the profile for
-        # nothing (dense in, dense out).
+        # far more cheaply -- and, for a non-multicell Hamiltonian, also
+        # avoids the general path's unnecessary round trip through a
+        # multicell representation and back (self.turn_multicell() then
+        # h.get_no_multicell()). This is hit once per energy in hot
+        # loops like the LocalProbe Keldysh sideband sweep, where that
+        # combination dominated the profile for nothing (dense in,
+        # dense out).
         from copy import copy as _shallow_copy
-        from ..multicell import Hopping
-        h = _shallow_copy(self)
-        h.intra = algebra.todense(self.intra)
-        h.hopping = [Hopping(d=t.dir, m=algebra.todense(t.m))
-                     for t in self.hopping]
-        return h
+        if self.is_multicell:
+            # multicell.turn_multicell(self) (which
+            # modify_hamiltonian_matrices would otherwise call) is a
+            # no-op returning self unchanged when already multicell --
+            # i.e. the slow path's hopping list would itself only be
+            # independent because self.copy() already made it so, so
+            # building a fresh one here directly is equivalent, not an
+            # approximation.
+            from ..multicell import Hopping
+            h = _shallow_copy(self)
+            h.intra = algebra.todense(self.intra)
+            h.hopping = [Hopping(d=t.dir, m=algebra.todense(t.m))
+                         for t in self.hopping]
+            return h
+        elif self.dimensionality==0:
+            h = _shallow_copy(self)
+            h.intra = algebra.todense(self.intra)
+            return h
+        elif self.dimensionality==1:
+            h = _shallow_copy(self)
+            h.intra = algebra.todense(self.intra)
+            h.inter = algebra.todense(self.inter)
+            return h
+        elif self.dimensionality==2:
+            h = _shallow_copy(self)
+            h.intra = algebra.todense(self.intra)
+            for attr in ("tx","ty","txy","txmy"):
+                setattr(h, attr, algebra.todense(getattr(self,attr)))
+            return h
+        # dimensionality==3, non-multicell: falls through to the general,
+        # always-correct path below -- not exercised by the hot paths
+        # this targets, not worth risking a hand-rolled shortcut for.
     def f(m):
         return algebra.todense(m)
     h = self.copy() # make a copy
