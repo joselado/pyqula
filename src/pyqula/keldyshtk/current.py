@@ -332,7 +332,16 @@ def _prepare_bias_target(ht):
     structure that must be evaluated at each Floquet sideband energy.
     Return a copy with `frozen_lead=False` so the Keldysh sideband sweep
     below sees the probe's real energy dependence; leave non-LocalProbe
-    heterostructures untouched."""
+    heterostructures untouched.
+
+    This unfreezing is unconditional (applied even when the probe carries
+    no/negligible pairing), by design and necessity -- see
+    transporttk.didv.didv's docstring for why that makes `dc_current` a
+    genuinely different bias convention from the "smatrix" method's
+    frozen-probe one, not an approximation to it, and why
+    method="keldysh" should not be forced expecting it to reproduce
+    method="smatrix" outside the domain method="auto" already routes to
+    Keldysh (both leads superconducting)."""
     if _is_localprobe(ht) and ht.frozen_lead:
         ht = ht.copy()
         ht.frozen_lead = False

@@ -117,7 +117,9 @@ def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,
     `method` selects the transport formalism used:
       - "smatrix": zero-temperature scattering-matrix (Landauer/BTK)
         conductance (the BdG smatrix formula is used automatically when
-        `ht.has_eh` is True).
+        `ht.has_eh` is True). For a LocalProbe this evaluates the probe's
+        self-energy frozen at absolute energy 0 (a grounded, wide-band
+        tip) and drops the entire bias across the sample only.
       - "keldysh": Floquet-Keldysh dI/dV, see `keldysh_didv`. Only valid
         for a two-lead heterostructure with no explicit central region and
         both leads superconducting, or a LocalProbe with a superconducting
@@ -127,7 +129,27 @@ def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,
         case each method is built for (Keldysh MAR/Josephson physics needs
         two superconducting leads; a single/no superconducting lead is
         already handled exactly by the smatrix formula).
-    """
+
+    Do not force method="keldysh" on a case "auto" would route to
+    "smatrix" (e.g. a LocalProbe whose probe lead is normal or has only an
+    infinitesimal pairing amplitude) expecting it to reproduce/converge to
+    the "smatrix" answer: `dc_current` (unlike "smatrix") evaluates the
+    *probe's* self-energy at each Floquet sideband's actual energy, not
+    frozen at 0 -- a different physical bias convention (shared across the
+    junction via the sideband ladder, needed for and validated against a
+    normal-normal rigid-bias reference in tests/keldysh), not merely a
+    less-accurate version of "smatrix". Confirmed by direct comparison
+    (properly converged, i.e. independent of nmax_max/tol) that the two
+    methods disagree by an O(1) factor persisting as the probe's pairing
+    amplitude is taken to zero -- e.g. ratio 1.18-1.24 well above the gap,
+    both leads' self-energies far from the Fermi level. Exactly at
+    sub-gap bias, the mismatch is compounded further by a genuine
+    physical (not numerical) discontinuity: any nonzero pairing, however
+    small, opens a hard gap exactly at the Fermi level (E=0), which
+    `dc_current`'s quasienergy integral always samples (it starts at
+    `quasienergy=0`), so the zero-pairing limit of the superconducting
+    self-energy at E=0 does not equal the self-energy of the exactly
+    normal lead there."""
     if method=="auto":
         method = "keldysh" if _both_leads_superconducting(ht) else "smatrix"
     if method=="keldysh":
