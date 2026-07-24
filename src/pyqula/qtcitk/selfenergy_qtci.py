@@ -114,6 +114,19 @@
 # building anything: if the relevant feature/window ratio for a candidate
 # target isn't at least ~1e3-1e4, compression is unlikely to pay for the
 # interpolant-construction cost no matter how the target is transformed.
+#
+# FOLLOW-UP THAT WORKED: aaatk/selfenergy_aaa.py fits the same Sigma(E)
+# with a rational (AAA/barycentric) interpolant instead of a quantics
+# grid. That sidesteps the diagnosis above entirely -- a resonance is
+# represented directly as a pole rather than needing to be *resolved* by
+# bisection, so the required sample count grows with the number of
+# features, not with the feature/window ratio: hundreds of true solves
+# versus this module's tens of thousands for the same target and
+# tolerance. That solve-count win doesn't translate one-for-one into wall
+# clock, though (evaluating the interpolant many times isn't free either)
+# -- see aaatk/selfenergy_aaa.py's own module docstring for the measured
+# net effect and the two real performance bugs found while measuring it.
+# It is now dc_current's default (selfenergy_method="aaa").
 import numpy as np
 
 from .. import algebra
