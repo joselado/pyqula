@@ -340,7 +340,7 @@ def _prepare_bias_target(ht):
 
 
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
-               delta=None):
+               delta=None, min_consecutive=2):
     """Time-averaged (DC) current through a two-terminal junction under a
     bias `voltage`, computed with the Floquet-Keldysh formalism of
     San-Jose, Cayao, Prada, Aguado, NJP 15, 075019 (2013). The junction is
@@ -350,9 +350,18 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     both superconducting.
 
     The number of Floquet sidebands is increased adaptively (as in the
-    paper) until the result changes by less than `tol`, capped at
-    `nmax_max` to guarantee termination (a warning is issued if the cap is
-    hit before convergence)."""
+    paper) until the result changes by less than `tol` for
+    `min_consecutive` sideband increments in a row, capped at `nmax_max`
+    to guarantee termination (a warning is issued if the cap is hit
+    before convergence). Requiring more than one consecutive agreeing
+    step (rather than just the last pair) guards against sub-gap
+    energies where the integral is not monotonic in nmax -- confirmed to
+    dip through a near-zero crossing and even change sign before
+    settling, which can otherwise make a single lucky pair of nearby
+    values look converged while the sequence is still far from its true
+    limit (observed: nmax=60->62 already satisfies tol=1e-3 on its own,
+    while the true limit only stabilizes to machine precision by
+    nmax~64)."""
     if voltage == 0.:
         return 0.0
     ht = _prepare_bias_target(ht)
@@ -378,14 +387,16 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
         return val
 
     prev = integral(nmax)
+    streak = 0
     converged = False
     while nmax < nmax_max:
         nmax += 2
         cur = integral(nmax)
         denom = max(abs(cur), abs(prev), 1e-12)
-        converged = abs(cur-prev)/denom < tol
+        streak = streak+1 if abs(cur-prev)/denom < tol else 0
         prev = cur
-        if converged:
+        if streak >= min_consecutive:
+            converged = True
             break
     if not converged:
         warnings.warn(
