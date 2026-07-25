@@ -512,6 +512,60 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
     return out
 
 
+def build_shared_selfenergy(ht, vmax, nmax_max=40, delta=None, dv=None, **kwargs):
+    """Build one aaatk.selfenergy_aaa.SelfenergyAAA interpolant per lead
+    (see build_selfenergy_aaa), sized to cover every voltage magnitude up
+    to `vmax` that an upcoming SWEEP of dc_current/didv calls could reach,
+    for sharing across that whole sweep instead of each call independently
+    building (and discarding) its own default fit.
+
+    Returns None (never raises) if `ht` is not a Floquet-Keldysh-eligible
+    junction (both leads, or a LocalProbe's probe+sample, superconducting
+    -- see transporttk.didv._both_leads_superconducting) or if the AAA fit
+    doesn't converge within its default build budget; callers should fall
+    back to their ordinary per-call default in either case, exactly like
+    dc_current's own selfenergy_method="aaa" fallback contract. Otherwise
+    returns the raw {0: interpolant, 1: interpolant} dict build_selfenergy_
+    aaa itself returns -- pass it as the `selfenergy_qtci` kwarg to every
+    dc_current/didv call in the sweep.
+
+    `dv`, if the caller knows it will pass an explicit dv through to
+    keldysh_didv (rather than keldysh_didv's own default dv formula), must
+    be given here too: the window must cover every call's voltage+-dv, not
+    just its voltage, or SelfenergyAAA -- which performs no domain check --
+    would silently extrapolate for any call whose dv pushes it past vmax.
+    With dv=None (the common case) this assumes keldysh_didv's own default,
+    max(voltage*1e-2,1e-3), evaluated at the worst case (vmax itself),
+    which safely covers every smaller voltage in the sweep too.
+
+    This factors out the pattern kappa.py's _shared_selfenergy_for_branch
+    originally grew for its own finite-temperature coupling/energy sweep
+    (see that function, now a thin wrapper around this one); iv_curve and
+    thermaldidv.finite_T_didv use it directly. It is worth doing even for
+    a SINGLE finite_T_didv call: that call's own internal thermal
+    quadrature alone was measured to make 147 independent didv evaluations
+    (temp=0.02), each previously building and discarding its own fit --
+    almost entirely redundant since all 147 share the same two leads and
+    only need self-energies over one common, boundable energy window. A
+    smaller-scale check sharing one build across just 8 independent
+    energies (examples/transport-scale settings, nmax_max=6) still showed
+    a ~1.65x wall-clock win even at that modest a multiplier; the payoff
+    grows with sweep size since the fixed build cost amortizes further.
+    The built interpolant is a small, plain-numpy-backed object (dict of
+    SelfenergyAAA instances) that pickles cleanly through both stdlib
+    pickle and the `multiprocess`/dill pickler pcall's worker pool uses,
+    so it can be shared into parallel sweeps too, not just serial ones."""
+    from ..transporttk.didv import _both_leads_superconducting
+    if not _both_leads_superconducting(ht):
+        return None
+    if delta is None: delta = ht.delta
+    margin = dv if dv is not None else max(vmax*1e-2, 1e-3)
+    shared = build_selfenergy_aaa(ht, vmax+margin, nmax_max, delta=delta, **kwargs)
+    if not all(s.converged for s in shared.values()):
+        return None
+    return shared
+
+
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
                delta=None, min_consecutive=2, selfenergy_qtci=None,
                selfenergy_method="aaa"):
@@ -640,6 +694,26 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
 
 def iv_curve(ht, voltages, **kwargs):
     """Convenience wrapper: dc_current evaluated over an array of voltages,
-    in parallel (see parallel.pcall)."""
+    in parallel (see parallel.pcall).
+
+    Builds one shared AAA self-energy interpolant up front (build_shared_
+    selfenergy), sized to cover every voltage in `voltages`, and reuses it
+    for every dc_current call in the sweep instead of each call
+    independently building (and discarding) its own default fit -- the
+    same sharing keldysh_didv already does within one Ip/Im pair, extended
+    across the whole voltage array. Skipped, falling back to dc_current's
+    own per-call default, if the caller already passed selfenergy_qtci
+    explicitly or selfenergy_method="direct" (both are explicit opt-outs
+    of the default AAA path, so building a shared fit here would be
+    pointless or would silently override the caller's own choice)."""
     from ..parallel import pcall
+    if ("selfenergy_qtci" not in kwargs
+            and kwargs.get("selfenergy_method", "aaa") == "aaa"
+            and len(voltages)):
+        nmax_max = kwargs.get("nmax_max", 40)
+        vmax = max(abs(v) for v in voltages)
+        shared = build_shared_selfenergy(ht, vmax, nmax_max=nmax_max,
+                                          delta=kwargs.get("delta"))
+        if shared is not None:
+            kwargs["selfenergy_qtci"] = shared
     return np.array(pcall(lambda v: dc_current(ht, v, **kwargs), voltages))

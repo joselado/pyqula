@@ -1268,6 +1268,8 @@ k = lp.get_kappa(energies=[0.1,0.25,0.4],temp=0.02,nmax=4,nmax_max=12,tol=5e-2)
 
 By default, `get_dc_current`/`keldysh_didv` replace most of the many thousands of individual Sancho-Rubio/`bloch_selfenergy` lead solves the sideband sweep would otherwise need with evaluations of a compact rational (AAA) interpolant of each lead's self-energy, built from far fewer true solves (`keldyshtk.current.build_selfenergy_aaa`); the physical result is unchanged (same tolerance-controlled accuracy), only the internal cost is affected, and it falls back to the original direct per-energy solves automatically if the interpolant can't be built accurately within a bounded effort (e.g. for an unusually wide sideband window). Pass `selfenergy_method="direct"` to `get_dc_current`, or `use_aaa=False` to `didv`/`keldysh_didv`, to force the old direct behavior (e.g. for comparison/debugging).
 
+This interpolant sharing is not limited to one `dc_current` call's own internal sideband sweep: `get_iv_curve` builds a single interpolant sized to the whole voltage array up front instead of one per voltage, and a single finite-temperature `didv(temp=...)`/`get_kappa(temp=...)` call shares one interpolant across its own internal thermal quadrature -- which alone can visit well over a hundred nearby energies for just one nominal `(energy, temp)` point. Both previously left every one of those internal evaluations to independently build and discard its own default fit.
+
 
 # Single defects in infinite systems
 
