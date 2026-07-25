@@ -927,16 +927,21 @@ def remove_duplicated(g):
 
 
 def remove_duplicated_positions(r):
-  rs = []
+  r = np.array(r) # as array
+  if len(r)==0: return np.zeros((0,3))
+  rs = np.empty(r.shape) # upper bound on the number of kept atoms
+  nkept = 0 # number of atoms kept so far
   for ir in r: # loop over atoms
-     store = True # store this atom
-     for jr in rs: # loop over stored
-       dr = ir-jr
-       dr = dr.dot(dr) # distance
-       if dr<0.01: store = False
+     if nkept==0: store = True # nothing stored yet
+     else: # compare against every already-kept atom at once instead of
+       # a per-pair python loop (this used to be O(natoms^2) with a
+       # python-level distance computation on every pair)
+       dr = rs[:nkept]-ir
+       store = not np.any(np.sum(dr*dr,axis=1)<0.01)
      if store: # store this atom
-       rs.append(ir.copy())
-  return np.array(rs) # return unrepeated atoms
+       rs[nkept] = ir
+       nkept += 1
+  return rs[:nkept].copy() # return unrepeated atoms
 
 
 
