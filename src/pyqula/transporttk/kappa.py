@@ -171,8 +171,14 @@ def get_kappa_finite_temperature_energies(HT,energies=[0.0],temp=1e-2,**kwargs):
         # at all, which is what the non-superconducting branch (and a
         # superconducting branch whose build didn't converge) should get.
         extra = {"selfenergy_qtci": shared} if shared is not None else {}
+        # dict.update, not **extra,**kwargs: if the caller already passed
+        # their own selfenergy_qtci in kwargs, unpacking both would raise
+        # "got multiple values for keyword argument" instead of letting
+        # the freshly-built, branch-specific shared interpolant win
+        call_kwargs = dict(kwargs)
+        call_kwargs.update(extra)
         ts,Gs = get_conductances_finite_temp(
-            HT=ht,energies=energies,temp=temp,**extra,**kwargs)
+            HT=ht,energies=energies,temp=temp,**call_kwargs)
         return np.array([get_power(ts,g) for g in Gs.T])
     ks1 = branch_kappas(True)
     ks2 = branch_kappas(False)

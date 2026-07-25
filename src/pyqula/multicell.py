@@ -428,10 +428,29 @@ def pairs2hopping(ps):
 
 
 
-@jit(nopython=True)
 def close_enough(rs1,rs2,rcut=2.0):
-    """Check if two sets of positions are at a distance
-    at least rcut"""
+    """Check if any pair of points from rs1 and rs2 are within rcut of
+    each other.
+
+    Uses a KD-tree instead of the all-pairs O(len(rs1)*len(rs2)) scan in
+    close_enough_bruteforce below: that scan has an early exit for the
+    common "yes, they're close" case, but confirming "no, nothing is
+    close" -- which happens routinely here, e.g. for a candidate
+    lattice-cell shift too far to matter -- still needs the full scan,
+    measured at ~10s for two ~1e4-site position sets."""
+    from scipy.spatial import cKDTree
+    rs1 = np.asarray(rs1,dtype=np.float64)
+    rs2 = np.asarray(rs2,dtype=np.float64)
+    if len(rs1)==0 or len(rs2)==0: return False
+    dists,_ = cKDTree(rs1).query(rs2,k=1)
+    return bool(np.any(dists<rcut))
+
+
+@jit(nopython=True)
+def close_enough_bruteforce(rs1,rs2,rcut=2.0):
+    """O(len(rs1)*len(rs2)) reference implementation of close_enough,
+    kept for testing against (see tests/geometry/test_neighbor_kdtree.py
+    -- or wherever the corresponding regression test lives)."""
     rcut2 = rcut*rcut # square of the distance
     for ri in rs1:
       for rj in rs2:

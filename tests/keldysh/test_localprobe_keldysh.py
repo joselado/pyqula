@@ -116,3 +116,39 @@ def test_explicit_central_region_style_checks_still_apply():
     lp = LocalProbe(h, delta=1e-4)
     with pytest.raises(NotImplementedError):
         lp.get_dc_current(0.1)
+
+
+def test_didv_delta_default_matches_pre_refactor_number_when_unset():
+    """LocalProbe.didv's zero-temperature path used to call the bare
+    didv() function directly (its own hardcoded delta=1e-6 default,
+    ignoring self.delta entirely); routing through generic_didv (to fix
+    temp being silently swallowed, see test_kappa_finite_temperature.py)
+    made it default to self.delta instead -- a real, previously
+    unintended numerical change for anyone relying on the implicit
+    default. __init__'s own delta default is now also 1e-6, specifically
+    so a caller who never touches delta anywhere still gets exactly the
+    old number; a caller who *does* pass delta explicitly at construction
+    now sees it actually honored by didv() instead of silently ignored."""
+    from pyqula.transporttk.didv import didv as bare_didv
+    g = geometry.chain()
+    h = g.get_hamiltonian(); h.shift_fermi(1.); h.add_swave(0.1)
+    lead = geometry.chain().get_hamiltonian(); lead.shift_fermi(1.); lead.add_swave(0.1)
+    kwargs = dict(nmax=4, nmax_max=10, tol=1e-2)
+
+    # no delta anywhere -> identical to the old bare-didv(delta=1e-6) call
+    lp_default = LocalProbe(h, lead=lead)
+    lp_default.T = 0.3
+    v_new = lp_default.didv(energy=0.25, **kwargs)
+    v_bare = bare_didv(lp_default, energy=0.25, **kwargs)
+    assert abs(v_new - v_bare) < 1e-10
+
+    # explicit delta at construction must now actually reach didv()
+    lp_explicit = LocalProbe(h, lead=lead, delta=1e-3)
+    lp_explicit.T = 0.3
+    v_explicit = lp_explicit.didv(energy=0.25, **kwargs)
+    v_explicit_old_wrong = bare_didv(lp_explicit, energy=0.25, **kwargs)
+    assert abs(v_explicit - v_explicit_old_wrong) > 1e-6
+
+    # an explicit delta= passed straight to didv() still overrides everything
+    v_override = lp_explicit.didv(energy=0.25, delta=1e-6, **kwargs)
+    assert abs(v_override - v_explicit_old_wrong) < 1e-10
