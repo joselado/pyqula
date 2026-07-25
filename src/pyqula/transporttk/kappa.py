@@ -89,7 +89,7 @@ def get_conductances_finite_temp(T=1e-2,temp=1e-2,**kwargs):
     return ts,Gs
 
 
-def _shared_selfenergy_for_branch(ht,energies,temp,nmax_max=40,delta=None,**kwargs):
+def _shared_selfenergy_for_branch(ht,energies,temp,nmax_max=40,delta=None,dv=None,**kwargs):
     """Build one aaatk.selfenergy_aaa.SelfenergyAAA lead self-energy
     interpolant per lead (see keldyshtk.current.build_selfenergy_aaa),
     covering every quasienergy the finite-temperature thermal quadrature
@@ -119,7 +119,16 @@ def _shared_selfenergy_for_branch(ht,energies,temp,nmax_max=40,delta=None,**kwar
     docstring) or if the AAA fit doesn't converge within its default
     build budget -- callers get back the ordinary per-call default
     self-energies in that case (build_selfenergy_aaa/dc_current's own
-    fallback contract), never a wrong answer."""
+    fallback contract), never a wrong answer.
+
+    `dv`, if the caller explicitly passed one through to didv/keldysh_didv
+    (a real, documented kwarg -- see tests/keldysh/test_localprobe_
+    keldysh.py and the user guide's Floquet-Keldysh section), is honored
+    here too: the interpolant must be sized to cover voltage+-dv for the
+    largest voltage the sweep reaches, not keldysh_didv's own *default*
+    dv formula, or an explicit large dv could have dc_current evaluate
+    the self-energy outside the fitted domain (SelfenergyAAA performs no
+    domain check and would silently extrapolate)."""
     from .didv import _both_leads_superconducting
     if not _both_leads_superconducting(ht):
         return None
@@ -127,8 +136,9 @@ def _shared_selfenergy_for_branch(ht,energies,temp,nmax_max=40,delta=None,**kwar
     from .thermaldidv import THERMAL_WINDOW
     if delta is None: delta = ht.delta
     emax = max(abs(e) for e in energies) if len(energies) else 0.
-    vmax = emax + THERMAL_WINDOW*temp
-    vmax += max(vmax*1e-2,1e-3) # keldysh_didv's own default finite-difference dv
+    base = emax + THERMAL_WINDOW*temp
+    margin = dv if dv is not None else max(base*1e-2,1e-3) # keldysh_didv's own default dv formula
+    vmax = base + margin
     shared = build_selfenergy_aaa(ht,vmax,nmax_max,delta=delta)
     if not all(s.converged for s in shared.values()):
         return None
@@ -150,8 +160,19 @@ def get_kappa_finite_temperature_energies(HT,energies=[0.0],temp=1e-2,**kwargs):
     def branch_kappas(sc):
         ht = generate_HT(HT,SC=sc,**kwargs)
         shared = _shared_selfenergy_for_branch(ht,energies,temp,**kwargs) if sc else None
+        # Only pass selfenergy_qtci when there is a real, converged
+        # interpolant to share. Passing selfenergy_qtci=None explicitly
+        # (rather than omitting the key) would make keldysh_didv skip its
+        # own "if 'selfenergy_qtci' not in kwargs" auto-build entirely
+        # (the key is present, just with value None), disabling even its
+        # pre-existing per-call sharing between one didv() call's own
+        # Ip/Im finite-difference pair and forcing two independent builds
+        # instead of one -- strictly worse than not touching this kwarg
+        # at all, which is what the non-superconducting branch (and a
+        # superconducting branch whose build didn't converge) should get.
+        extra = {"selfenergy_qtci": shared} if shared is not None else {}
         ts,Gs = get_conductances_finite_temp(
-            HT=ht,energies=energies,temp=temp,selfenergy_qtci=shared,**kwargs)
+            HT=ht,energies=energies,temp=temp,**extra,**kwargs)
         return np.array([get_power(ts,g) for g in Gs.T])
     ks1 = branch_kappas(True)
     ks2 = branch_kappas(False)

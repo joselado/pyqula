@@ -102,8 +102,9 @@ class LocalProbe():
             return get_kappa_ratio(self,T=T,**kwargs)
         from .kappa import get_kappa_finite_temperature_energies
         single = "energies" not in kwargs
-        if single:
-            kwargs["energies"] = [kwargs.pop("energy",0.0)]
+        energy = kwargs.pop("energy",0.0) # always pop: an explicit energy
+        if single:                        # alongside energies must not be
+            kwargs["energies"] = [energy] # forwarded twice further down
         out = get_kappa_finite_temperature_energies(self,T=T,temp=temp,**kwargs)
         return out[0] if single else out
     def get_dos(self,**kwargs):
