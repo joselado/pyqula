@@ -47,13 +47,34 @@ def find_close_neighbors_jit(r0,rs,d=2.0):
 
 
 def find_first_neighbor(r1,r2):
-     """Calls the fortran routine"""
-     r1 = np.array(r1)
-     r2 = np.array(r2)
-     nn = number_neighbors_jit(r1.real,r2.real) # number of first neighbors
-     out = np.zeros((nn,2),dtype=np.int_) # generate indexes
-     out = find_first_neighbor_jit(r1.real,r2.real,out) # generate all the pairs
-     return out
+     """Return the (i,j) index pairs of first neighbors between the point
+     sets r1 and r2, i.e. 0.99<|r1[i]-r2[j]|^2<1.01.
+
+     Uses a KD-tree to only compare points that are actually close to each
+     other, instead of number_neighbors_jit/find_first_neighbor_jit's
+     all-pairs O(N^2) scan below (kept for testing): for N~1e5 sites the
+     O(N^2) scan is 1e10 distance checks, infeasible in time even jitted,
+     while the KD-tree query is O(N log N)."""
+     from scipy.spatial import cKDTree
+     r1 = np.array(r1,dtype=np.float64).real
+     r2 = np.array(r2,dtype=np.float64).real
+     if len(r1)==0 or len(r2)==0: return np.zeros((0,2),dtype=np.int_)
+     tree = cKDTree(r2)
+     # candidates within a slightly generous radius; the exact
+     # 0.99<dr^2<1.01 criterion is applied below since query_ball_point's
+     # own radius test (dr^2<=r^2) is a different (inclusive) boundary
+     candidates = tree.query_ball_point(r1,r=np.sqrt(1.01),workers=-1)
+     rows,cols = [],[]
+     for i,js in enumerate(candidates):
+         if len(js)==0: continue
+         js = np.array(sorted(js),dtype=np.int_)
+         dr = r2[js]-r1[i]
+         dr2 = np.sum(dr*dr,axis=1)
+         sel = js[(dr2>0.99) & (dr2<1.01)]
+         rows.extend([i]*len(sel))
+         cols.extend(sel.tolist())
+     if len(rows)==0: return np.zeros((0,2),dtype=np.int_)
+     return np.array([rows,cols],dtype=np.int_).T
 
 @jit(nopython=True)
 def number_neighbors_jit(r1,r2):
@@ -83,6 +104,17 @@ def find_first_neighbor_jit(r1,r2,pairs):
              pairs[out,1] = j
              out += 1 # increase
     return pairs # indexes of the neighbors
+
+
+def find_first_neighbor_bruteforce(r1,r2):
+    """O(N^2) reference implementation of find_first_neighbor, kept for
+    testing the KD-tree version above against (see
+    tests/geometry/test_neighbor_kdtree.py)."""
+    r1 = np.array(r1,dtype=np.float64).real
+    r2 = np.array(r2,dtype=np.float64).real
+    nn = number_neighbors_jit(r1,r2)
+    out = np.zeros((nn,2),dtype=np.int_)
+    return find_first_neighbor_jit(r1,r2,out)
 
 
 
