@@ -18,9 +18,9 @@ def zero_T_didv(self,delta=None,**kwargs):
     """Zero temperature dIdV"""
     if delta is None: delta = self.delta # set the own delta
     if self.dimensionality==1: # one dimensional
-        return zero_T_didv_1D(self,**kwargs)
+        return zero_T_didv_1D(self,delta=delta,**kwargs)
     elif self.dimensionality==2: # two dimensional
-        return zero_T_didv_2D(self,**kwargs)
+        return zero_T_didv_2D(self,delta=delta,**kwargs)
     else: raise
 
 
