@@ -1,42 +1,74 @@
 from __future__ import print_function
-from scipy.sparse import csc_matrix,bmat
+from scipy.sparse import coo_matrix
 from .rotate_spin import sx,sy,sz
 import numpy as np
 from numba import jit
 from . import parallel
 
-from .algebra import isnumber 
+from .algebra import isnumber
+
+# dense 2x2 Pauli matrices, converted once at import time: building each
+# bond's 2x2 spin block via scipy-sparse sx/sy/sz arithmetic (as this used
+# to be written) pays scipy's per-call sparse bookkeeping (format checks,
+# index-dtype inference, prune...) on every single bond -- see rashba.py
+# for the same fix and the profiling that motivated it.
+_sx = np.asarray(sx.todense())
+_sy = np.asarray(sy.todense())
+_sz = np.asarray(sz.todense())
+
 
 def generalized_kane_mele(r1,r2,rm,fun=0.0,tol=1e-5):
-    """Return the Kane-Mele generalized Hamiltonian"""
+    """Return the Kane-Mele generalized Hamiltonian.
+
+    Only second-neighbor bonds mediated by a real first-neighbor path
+    contribute, so this builds the (2*nsites,2*nsites) sparse matrix
+    directly from that (typically O(nsites)) bond list, found via a
+    KD-tree batch query (find_close_neighbors_batch, O(N log N) total)
+    instead of one O(len(rm))/O(len(r2)) scan per site (O(N^2) total) --
+    and never allocates an nsites x nsites Python list of blocks for
+    scipy.sparse.bmat regardless of sparsity, which used to be infeasible
+    in time and memory for nsites beyond a few thousand.
+    """
     if fun==0.0: return 0
     if isnumber(fun): kmfun = lambda r: fun # function that always returns fun
     elif callable(fun): kmfun = fun # callable function
     else: raise # no idea
     nsites = len(r1) # number of sites
-    mout = [[None for i in range(nsites)] for j in range(nsites)]
-    for i in range(nsites):
-        mout[i][i] = csc_matrix(np.zeros((2,2))) 
-    from .neighbor import find_first_neighbor,find_close_neighbors
     rm = np.array(rm)
     r1 = np.array(r1)
     r2 = np.array(r2)
+    from .neighbor import find_close_neighbors_batch
+    indsim_all = find_close_neighbors_batch(r1,rm,d=1.1) # candidate intermediate sites, per i
+    indsj_all = find_close_neighbors_batch(r1,r2,d=4.1) # candidate final sites, per i
+    ii,jj,urx,ury,urz,cvals = [],[],[],[],[],[]
     for i in range(nsites): # loop over initial site
-        indsim = find_close_neighbors(r1[i],rm,d=1.1) # get close enough
-        rmi = [rm[im] for im in indsim] # retain only those sites for the loop
-        indsj = find_close_neighbors(r1[i],r2,d=4.1) # get close enough
-        # this can (and should) be done more efficiently
-        for j in indsj: # loop over final site
+        indsim = indsim_all[i]
+        if len(indsim)==0: continue
+        rmi = rm[indsim] # retain only those sites for the loop
+        for j in indsj_all[i]: # loop over final site
             dr = r1[i]-r2[j] # difference
-            if dr.dot(dr)<4.1: # if close enough
-                ur = km_vector(r1[i],r2[j],rmi,tol=tol) # kane mele vector
-                r3 = (r1[i] + r2[j])/2.0
-                sm = (sx*ur[0] + sy*ur[1] + sz*ur[2])*kmfun(r3) # contribution
-                if mout[i][j] is None: 
-                    mout[i][j] = csc_matrix(1j*sm) # add contribution
-                else: 
-                    mout[i][j] += csc_matrix(1j*sm) # add contribution
-    return bmat(mout) # return matrix
+            if dr.dot(dr)>=4.1: continue # not close enough
+            ur = km_vector(r1[i],r2[j],rmi,tol=tol) # kane mele vector
+            if ur[0]==0.0 and ur[1]==0.0 and ur[2]==0.0: continue # no bond path found
+            r3 = (r1[i] + r2[j])/2.0
+            ii.append(i); jj.append(j)
+            urx.append(ur[0]); ury.append(ur[1]); urz.append(ur[2])
+            cvals.append(kmfun(r3))
+    if len(ii)==0: return coo_matrix((2*nsites,2*nsites),dtype=np.complex128)
+    ii = np.array(ii); jj = np.array(jj)
+    urx = np.array(urx); ury = np.array(ury); urz = np.array(urz)
+    cvals = np.array(cvals,dtype=np.complex128)
+    # cross-product-with-sigma * coupling strength, for every bond at once
+    sm = 1j*(urx[:,None,None]*_sx + ury[:,None,None]*_sy
+            + urz[:,None,None]*_sz)*cvals[:,None,None] # (nbonds,2,2)
+    a_idx = np.array([0,0,1,1])
+    b_idx = np.array([0,1,0,1])
+    rows = (2*ii[:,None] + a_idx[None,:]).reshape(-1)
+    cols = (2*jj[:,None] + b_idx[None,:]).reshape(-1)
+    data = sm[:,a_idx,b_idx].reshape(-1)
+    keep = data!=0.0
+    return coo_matrix((data[keep],(rows[keep],cols[keep])),
+            shape=(2*nsites,2*nsites),dtype=np.complex128)
 
 
 def km_vector(ri,rj,rm,tol=1e-5):
@@ -63,9 +95,17 @@ def km_vector_jit(ri,rj,v,rm,tol=1e-5):
 
 
 def haldane(r1,r2,rm,fun=0.0,sublattice=None):
-    """Return the Haldane coupling"""
+    """Return the Haldane coupling.
+
+    Builds the (nsites,nsites) sparse matrix from the (typically
+    O(nsites)) bond list directly, instead of allocating a fully dense
+    nsites x nsites complex array (160GB+ for nsites~1e5) -- and finds
+    the candidate final sites for every site with one shared KD-tree
+    query (find_close_neighbors_batch) instead of one O(len(r2)) scan per
+    site."""
+    r1 = np.array(r1)
     if sublattice is None: sublattice = np.zeros(len(r1)) + 1.0
-    if isnumber(fun): 
+    if isnumber(fun):
         if fun==0.0: return 0 # skip
         kmfun = lambda r: fun # function that always returns fun
     elif callable(fun): kmfun = fun # callable function
@@ -73,21 +113,27 @@ def haldane(r1,r2,rm,fun=0.0,sublattice=None):
         from .potentials import array2potential
         kmfun = array2potential(r1[:,0],r1[:,1],fun)
     nsites = len(r1) # number of sites
-    mout = np.zeros((nsites,nsites),dtype=np.complex128) # initialize
+    r2 = np.array(r2)
+    rm = np.array(rm)
     from . import neighbor
     neighs = neighbor.connections(r1,rm) # list with neighbors of each site
+    indsj_all = neighbor.find_close_neighbors_batch(r1,r2,d=1.9) # candidate final sites, per i
+    rows,cols,data = [],[],[]
     for i in range(nsites): # loop over initial site
-      rijs = [rm[kk] for kk in neighs[i]] # loop over first neighbors
-      if len(rijs)==0: continue
-      indsj = neighbor.find_close_neighbors(r1[i],r2,d=1.9) # get close enough
-      for j in indsj: # loop over final site
+      rijs_idx = neighs[i] # first neighbors of site i
+      if len(rijs_idx)==0: continue
+      rijs = rm[rijs_idx]
+      for j in indsj_all[i]: # loop over final site
         dr = r1[i]-r2[j] # difference
-        if dr.dot(dr)<4.1:
-            ur = km_vector(r1[i],r2[j],rijs) # kane mele vector
-            r3 = (r1[i] + r2[j])/2.0
-            sm = ur[2]*kmfun(r3) # clockwise or anticlockwise
-            mout[i,j] = 1j*sm*(sublattice[i]+sublattice[j])/2. # store
-    return csc_matrix(mout) # return matrix
+        if dr.dot(dr)>=4.1: continue
+        ur = km_vector(r1[i],r2[j],rijs) # kane mele vector
+        if ur[2]==0.0: continue
+        r3 = (r1[i] + r2[j])/2.0
+        v = 1j*ur[2]*kmfun(r3)*(sublattice[i]+sublattice[j])/2. # clockwise or anticlockwise
+        if v!=0.0:
+            rows.append(i); cols.append(j); data.append(v)
+    return coo_matrix((data,(rows,cols)),shape=(nsites,nsites),
+            dtype=np.complex128) # return matrix
 
 
 

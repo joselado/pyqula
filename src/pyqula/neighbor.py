@@ -30,6 +30,24 @@ def find_close_neighbors(r0,rs,d=2.0):
     return find_close_neighbors_jit(np.array(r0),np.array(rs),d=d)
 
 
+def find_close_neighbors_batch(r1,rs,d=2.0):
+    """Return, for every point in r1, the indexes of the points in rs
+    closer than distance d -- i.e. the same criterion as
+    find_close_neighbors, but for many query points at once against one
+    shared KD-tree over rs (built once), instead of one O(len(rs)) scan
+    per query point (kanemele.py calls find_close_neighbors once per site
+    in a Python loop, which is O(N^2) total for N sites; this is
+    O(N log N))."""
+    from scipy.spatial import cKDTree
+    r1 = np.array(r1,dtype=np.float64).real
+    rs = np.array(rs,dtype=np.float64).real
+    if len(rs)==0 or len(r1)==0:
+        return [np.zeros(0,dtype=np.int_) for _ in range(len(r1))]
+    tree = cKDTree(rs)
+    neighbors = tree.query_ball_point(r1,r=d)
+    return [np.array(js,dtype=np.int_) for js in neighbors]
+
+
 @jit(nopython=True)
 def find_close_neighbors_jit(r0,rs,d=2.0):
     """Return the indexes of the neighbors that are closer than a
