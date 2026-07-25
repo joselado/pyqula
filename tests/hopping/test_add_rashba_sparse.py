@@ -67,6 +67,20 @@ def test_rashba_matrix_matches_dense_reference():
         assert np.max(np.abs(got - ref)) < 1e-10, (name, "custom_d")
 
 
+def test_rashba_matrix_edge_localized_profile_matches_dense_reference():
+    """A common physical use case: Rashba coupling confined to an edge or
+    interface, i.e. c(r) is exactly zero over most of the flake. This
+    specifically exercises the `data!=0.0` zero-filtering in the
+    vectorized bond construction, not just a smooth nonzero profile."""
+    g = geometry.honeycomb_lattice().get_supercell(6)
+    r1 = g.r
+    profile = lambda p: 0.4 if p[0] > 3.0 else 0.0
+    got = _dense(rashba_matrix(r1, r2=r1, c=profile, is_sparse=True))
+    ref = _dense_reference_rashba(r1, r1, profile)
+    assert np.max(np.abs(got - ref)) < 1e-10
+    assert 0 < np.count_nonzero(got) < got.size  # neither all-zero nor all-nonzero
+
+
 def test_add_rashba_produces_finite_sparse_hamiltonian():
     """End-to-end add_rashba, including on top of SOC and exchange terms,
     must stay finite and sparse."""
