@@ -98,6 +98,28 @@ def test_haldane_matches_dense_reference():
         assert np.max(np.abs(got - ref)) < 1e-8, (name, "callable")
 
 
+def test_haldane_captures_bonds_in_the_1_9_to_sqrt4_1_gap():
+    """haldane's candidate-site pre-filter radius must be >= sqrt(4.1) to
+    match its own dr.dot(dr)<4.1 acceptance test a few lines later. A
+    tighter radius (this used to be a literal d=1.9) silently drops any
+    genuine bond whose distance falls in (1.9, sqrt(4.1)) before the
+    acceptance test ever sees it -- not triggered by honeycomb/kagome/
+    triangular (their second-neighbor distances don't fall in that gap),
+    so engineer a 3-point geometry that does."""
+    pi = np.array([0., 0., 0.])
+    pm = np.array([1., 0., 0.])  # first neighbor of pi, distance 1
+    target_d = 1.95  # strictly inside (1.9, sqrt(4.1)=2.0248)
+    a = np.arccos((target_d ** 2 - 2) / 2.0)
+    pj = pm + np.array([np.cos(a), np.sin(a), 0.])
+    assert 1.9 < np.linalg.norm(pi - pj) < np.sqrt(4.1)
+
+    r1 = np.array([pi])
+    r2 = np.array([pj])
+    rm = np.array([pi, pm, pj])
+    m = haldane(r1, r2, rm, fun=0.3)
+    assert abs(np.asarray(m.todense())[0, 0]) > 1e-10
+
+
 def test_add_soc_and_add_haldane_produce_finite_sparse_hamiltonians():
     """End-to-end add_soc/add_haldane on 0D, 2D, and multicell 2D
     Hamiltonians must stay finite and sparse."""

@@ -117,7 +117,10 @@ def haldane(r1,r2,rm,fun=0.0,sublattice=None):
     rm = np.array(rm)
     from . import neighbor
     neighs = neighbor.connections(r1,rm) # list with neighbors of each site
-    indsj_all = neighbor.find_close_neighbors_batch(r1,r2,d=1.9) # candidate final sites, per i
+    # radius must be >= sqrt(4.1) to match the dr.dot(dr)<4.1 acceptance
+    # test below -- this pre-filter used to be a tighter d=1.9, which
+    # silently dropped genuine bonds with distance in (1.9, sqrt(4.1))
+    indsj_all = neighbor.find_close_neighbors_batch(r1,r2,d=np.sqrt(4.1)) # candidate final sites, per i
     rows,cols,data = [],[],[]
     for i in range(nsites): # loop over initial site
       rijs_idx = neighs[i] # first neighbors of site i
