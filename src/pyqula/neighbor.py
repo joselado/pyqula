@@ -62,8 +62,11 @@ def find_first_neighbor(r1,r2):
      tree = cKDTree(r2)
      # candidates within a slightly generous radius; the exact
      # 0.99<dr^2<1.01 criterion is applied below since query_ball_point's
-     # own radius test (dr^2<=r^2) is a different (inclusive) boundary
-     candidates = tree.query_ball_point(r1,r=np.sqrt(1.01),workers=-1)
+     # own radius test (dr^2<=r^2) is a different (inclusive) boundary.
+     # No workers= kwarg here: pyproject.toml doesn't pin a scipy floor,
+     # and workers= only exists from scipy>=1.6 -- single-threaded is a
+     # small fraction of a second even at 1e5 sites, not worth requiring it
+     candidates = tree.query_ball_point(r1,r=np.sqrt(1.01))
      rows,cols = [],[]
      for i,js in enumerate(candidates):
          if len(js)==0: continue
