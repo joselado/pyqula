@@ -31,6 +31,7 @@ class LocalProbe():
         if self.H.is_multicell and detect_longest_hopping(self.H)<=1:
             self.H = self.H.get_no_multicell()
         self.has_eh = self.H.has_eh # electron-hole
+        self.dimensionality = 1 # probe-to-single-site coupling, always 1D
         self.delta = delta
         self.mode = "bulk"
         self.reuse_gf = False # reuse the Green's function
@@ -61,8 +62,16 @@ class LocalProbe():
     def get_reflection_normal_lead(self,s):
         return get_reflection_normal_lead(self,s)
     def didv(self,T=None,**kwargs):
-        from .didv import didv
-        return didv(self,**kwargs)
+        """Differential conductance. Routed through generic_didv (as
+        Heterostructure.didv already is) rather than calling the bare
+        method-selecting didv() directly, so that a `temp` kwarg here
+        actually reaches transporttk.thermaldidv.finite_T_didv instead of
+        being silently forwarded into a method (smatrix/keldysh) that
+        never looks at it -- at temp=0 (the default) this reduces to
+        exactly the previous zero_T_didv_1D(self,...)->didv(self,...) call
+        chain, so existing zero-temperature behavior is unchanged."""
+        from .didv import generic_didv
+        return generic_didv(self,**kwargs)
     def get_dc_current(self,voltage,**kwargs):
         """Floquet-Keldysh DC current at bias `voltage` between the probe
         and the sample site it couples to, see
@@ -81,10 +90,22 @@ class LocalProbe():
     def remove_pairing(self):
         self.H.remove_pairing()
         self.lead.remove_pairing()
-    def get_kappa(self,T=None,**kwargs):
-        from .kappa import get_kappa_ratio
-        if T is None: T = self.T 
-        return get_kappa_ratio(self,T=T,**kwargs)
+    def get_kappa(self,T=None,temp=0.,**kwargs):
+        """Kappa (SC/normal conductance power-law ratio). temp=0 (default)
+        keeps the original zero-temperature get_kappa_ratio behavior
+        unchanged; temp!=0 routes through the thermally-averaged
+        get_kappa_finite_temperature_energies instead (see
+        Heterostructure.get_kappa's docstring for the same dispatch)."""
+        if T is None: T = self.T
+        if not temp:
+            from .kappa import get_kappa_ratio
+            return get_kappa_ratio(self,T=T,**kwargs)
+        from .kappa import get_kappa_finite_temperature_energies
+        single = "energies" not in kwargs
+        if single:
+            kwargs["energies"] = [kwargs.pop("energy",0.0)]
+        out = get_kappa_finite_temperature_energies(self,T=T,temp=temp,**kwargs)
+        return out[0] if single else out
     def get_dos(self,**kwargs):
         return get_dos_bulk(self,**kwargs)
 

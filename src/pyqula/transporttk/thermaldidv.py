@@ -3,12 +3,20 @@ from scipy.integrate import quad
 
 thermalmode = "adaptive" # thermal mode
 
+THERMAL_WINDOW = 20 # max |energy-energy0|/temp the thermal quad below integrates
+                     # over; exposed as a module constant (rather than a
+                     # value local to finite_T_didv) so other callers that
+                     # need to know this function's effective energy range
+                     # ahead of time (e.g. kappa.py's finite-temperature
+                     # path, which builds a self-energy interpolant sized
+                     # to cover it) don't have to duplicate the magic number.
+
 def finite_T_didv(self,temp,energy=0.0,**kwargs):
     """Finite temperature dIdV"""
     from .didv import zero_T_didv
     if thermalmode=="adaptive":
         from .fermidirac import fermidirac as FD
-        dt = 20 # max T range
+        dt = THERMAL_WINDOW # max T range
         de = temp # energy difference to compute the derivative
         ### Use simpson integration
         def f(e):
