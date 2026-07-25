@@ -45,6 +45,25 @@ def test_get_kappa_finite_temperature_energies_does_not_recurse_or_reference_und
     assert len(calls) > 0 # the stub was actually reached, not just imported
 
 
+def test_get_kappa_finite_temperature_energies_accepts_caller_selfenergy_qtci(monkeypatch):
+    """branch_kappas builds its own extra={"selfenergy_qtci": shared} for
+    the superconducting branch and used to merge it into the call with
+    get_conductances_finite_temp(...,**extra,**kwargs) -- if the caller's
+    own kwargs already contained selfenergy_qtci (a real, documented
+    didv/dc_current kwarg), that raised "got multiple values for keyword
+    argument" instead of letting the freshly-built, branch-specific
+    interpolant take precedence."""
+    def fake_didv(self, energy=0.0, **kwargs):
+        return 1.0 + 0.01*abs(energy)
+    monkeypatch.setattr(heterostructures.Heterostructure, "didv", fake_didv)
+
+    HT = _sc_junction()
+    out = kappa_mod.get_kappa_finite_temperature_energies(
+        HT, energies=[0.05, 0.1], temp=0.02,
+        selfenergy_qtci={"caller": "value"})
+    assert np.all(np.isfinite(out))
+
+
 def test_shared_selfenergy_for_branch_only_builds_for_both_sc_leads():
     """_shared_selfenergy_for_branch is the piece that lets keldysh_didv's
     self-energy interpolant be reused across a whole finite-temperature

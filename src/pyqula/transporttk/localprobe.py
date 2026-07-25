@@ -13,7 +13,7 @@ gfmode = "adaptive"
 
 
 class LocalProbe():
-    def __init__(self,h,lead=None,delta=1e-5,i=0,T=1.0,**kwargs):
+    def __init__(self,h,lead=None,delta=1e-6,i=0,T=1.0,**kwargs):
         h = h.get_dense() # dense Hamiltonian
         self.H = h.copy() # store Hamiltonian
         # Precompute the non-multicell form once, when valid (nearest-
@@ -67,9 +67,19 @@ class LocalProbe():
         method-selecting didv() directly, so that a `temp` kwarg here
         actually reaches transporttk.thermaldidv.finite_T_didv instead of
         being silently forwarded into a method (smatrix/keldysh) that
-        never looks at it -- at temp=0 (the default) this reduces to
-        exactly the previous zero_T_didv_1D(self,...)->didv(self,...) call
-        chain, so existing zero-temperature behavior is unchanged."""
+        never looks at it.
+
+        At temp=0 (the default) this now goes through zero_T_didv, which
+        defaults an unspecified delta to self.delta -- matching
+        Heterostructure.didv's own convention -- rather than the bare
+        didv()'s hardcoded delta=1e-6 that LocalProbe.didv used to fall
+        through to before this routing existed. __init__'s own delta
+        default is 1e-6 precisely so a caller who never touches delta
+        anywhere still gets that same number; only a caller who
+        constructs LocalProbe with an explicit delta=... now sees it
+        consistently applied to didv() as well, rather than silently
+        ignored in favor of 1e-6. Pass delta=... to didv() itself to
+        override either default directly."""
         from .didv import generic_didv
         return generic_didv(self,**kwargs)
     def get_dc_current(self,voltage,**kwargs):
