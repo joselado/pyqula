@@ -36,6 +36,14 @@ class LocalProbe():
         self.mode = "bulk"
         self.reuse_gf = False # reuse the Green's function
         self.gf = None
+        # Neither selfenergy (probe lead=0, sample lead=1) depends on the
+        # probe-sample coupling self.T -- see get_central_gmatrix, where T
+        # only scales the off-diagonal coupling block -- so callers that
+        # sweep T at fixed energy (transporttk.kappa's get_conductances)
+        # can safely cache them across that sweep. Off by default so every
+        # other call site keeps computing them fresh, as before.
+        self.reuse_selfenergy = False
+        self._selfenergy_cache = {}
         self.bulk_delta = delta
         self.frozen_lead = True
         self.i = i # this site
@@ -49,14 +57,19 @@ class LocalProbe():
         self.T = T # transparency
     def get_selfenergy(self,energy,lead=0,**kwargs):
         """Return the selfenergies"""
+        if self.reuse_selfenergy:
+            key = (energy,lead)
+            if key in self._selfenergy_cache: return self._selfenergy_cache[key]
         if lead==0: # use the probe
-            return lead_selfenergy(self,energy=energy,**kwargs)
+            out = lead_selfenergy(self,energy=energy,**kwargs)
         elif lead==1: # use the system
             g = generate_gf(self,energy=energy,
                                **kwargs) # generate the Green's function
-            return local_selfenergy(self.H,g,i=self.i,
+            out = local_selfenergy(self.H,g,i=self.i,
                                 energy=energy,**kwargs)
         else: raise
+        if self.reuse_selfenergy: self._selfenergy_cache[key] = out
+        return out
     def get_central_gmatrix(self,**kwargs):
         return get_central_gmatrix(self,**kwargs)
     def get_reflection_normal_lead(self,s):

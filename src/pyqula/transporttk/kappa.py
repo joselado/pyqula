@@ -1,4 +1,5 @@
 # compute the kappa parameter of a heterostructure
+from contextlib import contextmanager
 import numpy as np
 from ..parallel import pcall
 
@@ -8,12 +9,38 @@ def get_single(HT=None,c=1.0,energies=[0.0],**kwargs):
     return np.array([HT.didv(energy=e,**kwargs) for e in energies]) # loop over Ts
 
 
+@contextmanager
+def _selfenergy_cache_scope(ht):
+    """Enable LocalProbe self-energy caching (LocalProbe.reuse_selfenergy)
+    for the duration of the block, restoring whatever state was there
+    before on exit. Exact, not an approximation: neither selfenergy
+    LocalProbe.get_selfenergy returns depends on the probe-sample coupling
+    ht.T (get_central_gmatrix only ever scales the off-diagonal coupling
+    block by T), so sharing them across get_conductances' two-coupling
+    sweep at fixed energy changes nothing about the result -- only how
+    many times the expensive Sancho-Rubio/sample-GF selfenergy solve gets
+    redone (2x -> 1x per coupling sweep). `ht` types without this cache
+    (e.g. Heterostructure) silently get a no-op here."""
+    if not hasattr(ht,"reuse_selfenergy"):
+        yield
+        return
+    prev_flag,prev_cache = ht.reuse_selfenergy,ht._selfenergy_cache
+    ht.reuse_selfenergy = True
+    ht._selfenergy_cache = {}
+    try:
+        yield
+    finally:
+        ht.reuse_selfenergy = prev_flag
+        ht._selfenergy_cache = prev_cache
+
+
 def get_conductances(T=1e-2,**kwargs):
     """Compute Kappa by doing a log-log plot"""
     cref = T
     ts = np.exp(np.linspace(np.log(cref*0.9),np.log(cref*1.1),2)) # hoppings
 #    ts = [cref*0.9,cref*1.1]
-    Gs = np.array([get_single(c=t,**kwargs) for t in ts]) # compute conductance
+    with _selfenergy_cache_scope(kwargs.get("HT")):
+        Gs = np.array([get_single(c=t,**kwargs) for t in ts]) # compute conductance
     return ts,Gs
 
 def get_power(ts,gs,delta=1e-8):
@@ -65,8 +92,25 @@ def get_kappa_ratio(HT,**kwargs):
     # unchanged -- injecting the SC branch's interpolant there would hand
     # it the wrong leads' self-energy.
     ht_sc = generate_HT(HT,SC=True,**kwargs)
+    ht_normal = generate_HT(HT,SC=False,**kwargs)
+    # Zero-temperature, 1D LocalProbe fast path: kappa here is
+    # d(log G)/d(log t), which get_kappa/get_power below estimate with a
+    # 2-point secant (2 extra didv/selfenergy solves per branch). When
+    # both branches are LocalProbe objects with a non-superconducting
+    # probe (transporttk.kappa_jax.applicable), that derivative can be
+    # computed exactly with jax.grad instead, from a single selfenergy
+    # solve per branch -- see kappa_jax's module docstring for the
+    # measured ~3.7x speedup and accuracy comparison. get_kappa_ratio_jax
+    # returns None (jax unavailable, wrong case, or a solve failure) for
+    # anything outside that scope, in which case the code below runs
+    # exactly as before.
+    from .kappa_jax import get_kappa_ratio_jax
+    energy = kwargs.get("energy",0.0)
+    T = kwargs.get("T",1e-2)
+    fast = get_kappa_ratio_jax(ht_sc,ht_normal,energy=energy,T=T)
+    if fast is not None: return fast
     ks1 = get_kappa(HT=ht_sc,**_with_shared_selfenergy(ht_sc,kwargs))
-    ks2 = get_kappa(HT=generate_HT(HT,SC=False,**kwargs),**kwargs)
+    ks2 = get_kappa(HT=ht_normal,**kwargs)
     return ks1/ks2
 
 
