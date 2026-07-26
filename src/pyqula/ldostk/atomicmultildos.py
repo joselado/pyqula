@@ -71,15 +71,8 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
                   lodict[(tuple(d),i)] = get_orbital(r0,r) # store 
     ##########################################################
     # now compute the real-space wavefunctions including the Bloch phase
-    ds = np.zeros((len(vs),len(x))) # zero array
-    # get the generator
-    density_generator = get_real_space_density_generator(lodict,h.geometry,
-                              has_spin=h.has_spin)
-    for i in range(len(vs)): # loop over wavefunctions
-        w = vs[i] # get the current Bloch wavefunction
-        k = ks[i] # get the current bloch wavevector
-        d = density_generator(w,k)
-        ds[i] = d # store in the list
+    ds = get_real_space_density_batch(lodict,h.geometry,vs,ks,
+                              has_spin=h.has_spin) # (nwf,ngrid) array
     if mode=="LDOS": # LDOS mode
       def f(e): return ldos_at_energy(evals,ds,e,delta) # compute the LDOS
     elif mode=="density": # LDOS mode
@@ -129,34 +122,39 @@ def multi_ldos(h,energies=np.linspace(-2.0,2.0,100),delta=0.05,**kwargs):
 
 
 
-def get_real_space_density_generator(lodict,g,has_spin=False):
-    """Compute the orbital in real space"""
-    out = 0. # wavefunction in real space
-    orbs = np.array([lodict[key] for key in lodict]) # orbitals
-    inds = np.array([key[1] for key in lodict],dtype=int) # indexes
-    ds = [key[0] for key in lodict]
-    def fout(w,k):
-        """Function that return the real space density"""
-        nc = len(w) # number of components of the Bloch wavefunction
-        phis = np.array([g.bloch_phase(d,k) for d in ds]) # phases
-        out = np.zeros(orbs[0].shape[0],dtype=np.complex128)
-        if not has_spin: # spinless
-          return get_real_space_density_jit(w,phis,inds,orbs,out).real
-        else: # spinful
-          wup = ud_component(w,mode="up") 
-          wdn = ud_component(w,mode="dn") 
-          outup = get_real_space_density_jit(wup,phis,inds,orbs,out).real
-          outdn = get_real_space_density_jit(wdn,phis,inds,orbs,out).real
-          return outup + outdn
-    return fout # return function
+def get_real_space_density_batch(lodict,g,vs,ks,has_spin=False):
+    """Compute the real-space density for all the wavefunctions at once.
 
-@jit(nopython=True)
-def get_real_space_density_jit(w,phis,inds,orbs,out):
-    """Return the real space wavefunction"""
-    for ii in range(len(inds)):
-        iorb = int(inds[ii]) # integer
-        out = out + w[iorb]*phis[ii]*orbs[ii] # add contribution
-    return out*np.conjugate(out)
+    Every eigenvector is expanded in the same fixed set of atomic orbitals
+    (one row of ``orbs`` per (direction,orbital) key), so the whole batch of
+    wavefunctions can be projected with a single dense matrix product
+    (BLAS ``zgemm``) instead of one Python/numba call per wavefunction. The
+    Bloch phase for a given k-point is also cached, since many wavefunctions
+    (all the bands at the same k) share it."""
+    orbs = np.array([lodict[key] for key in lodict]) # (nentries,ngrid)
+    inds = np.array([key[1] for key in lodict],dtype=int) # (nentries,)
+    dirs = [key[0] for key in lodict]
+    vs = np.array(vs,dtype=np.complex128) # (nwf,norb)
+    phis_cache = dict() # cache the Bloch phases, shared across bands at a k
+    phis = np.empty((len(ks),len(dirs)),dtype=np.complex128)
+    for i,k in enumerate(ks):
+        key = tuple(k)
+        cached = phis_cache.get(key)
+        if cached is None:
+            cached = np.array([g.bloch_phase(d,k) for d in dirs])
+            phis_cache[key] = cached
+        phis[i] = cached
+    def project(w):
+        """Coefficients of each wavefunction in the fixed orbital basis"""
+        c = w[:,inds]*phis # (nwf,nentries)
+        psi = c@orbs # (nwf,ngrid) single dense matrix product
+        return (psi*np.conjugate(psi)).real
+    if not has_spin: # spinless
+        return project(vs)
+    else: # spinful: sum the up and down spin-channel densities
+        wup = vs.copy() ; wup[:,0::2] = 0.0j
+        wdn = vs.copy() ; wdn[:,1::2] = 0.0j
+        return project(wup) + project(wdn)
 
 
 
@@ -202,15 +200,4 @@ def density_at_energy(evals,ds,e,delta):
     out = np.sum(ds.T*w,axis=1) # output
     return out # return that density
 
-
-
-def ud_component(w,mode="up"):
-    """Given a wavefunction, return the up components"""
-    n = len(w)//2
-    wo = w.copy()+0j # copy
-    if mode=="up": p = 0
-    elif mode=="dn": p = 1
-    else: raise
-    for i in range(n): wo[2*i+p] = 0.0j # set to zero
-    return wo
 
