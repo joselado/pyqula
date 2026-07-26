@@ -44,6 +44,19 @@ from .htk import symmetry
 from .limits import densedimension as maxmatrix
 optimal = False
 
+def _mean_field_scf_result(scf,return_total_energy):
+    """Shared tail for the get_*_mean_field_hamiltonian wrappers below:
+    SzSz/SxSx/SySy return the NotImplemented sentinel (not an SCF object)
+    for spinless/BdG Hamiltonians, which must be checked before touching
+    scf.converged."""
+    if scf is NotImplemented:
+        if return_total_energy: return (None,None)
+        else: return None
+    if not scf.converged: scf.hamiltonian = None # no convergence
+    if return_total_energy:
+        return (scf.hamiltonian,scf.total_energy)
+    else: return scf.hamiltonian
+
 class Hamiltonian():
     """ Class for a hamiltonian """
     def __add__(self,h):  return hamiltonianalgebra.add(self,h)
@@ -472,32 +485,16 @@ class Hamiltonian():
         else: return scf.hamiltonian
     @get_docstring(SzSz)
     def get_szsz_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
-        scf = SzSz(self,**kwargs)
-        if not scf.converged: scf.hamiltonian = None # no convergence
-        if return_total_energy:
-            return (scf.hamiltonian,scf.total_energy)
-        else: return scf.hamiltonian
+        return _mean_field_scf_result(SzSz(self,**kwargs),return_total_energy)
     @get_docstring(SxSx)
     def get_sxsx_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
-        scf = SxSx(self,**kwargs)
-        if not scf.converged: scf.hamiltonian = None # no convergence
-        if return_total_energy:
-            return (scf.hamiltonian,scf.total_energy)
-        else: return scf.hamiltonian
+        return _mean_field_scf_result(SxSx(self,**kwargs),return_total_energy)
     @get_docstring(SySy)
     def get_sysy_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
-        scf = SySy(self,**kwargs)
-        if not scf.converged: scf.hamiltonian = None # no convergence
-        if return_total_energy:
-            return (scf.hamiltonian,scf.total_energy)
-        else: return scf.hamiltonian
+        return _mean_field_scf_result(SySy(self,**kwargs),return_total_energy)
     @get_docstring(Jinteraction)
     def get_exchange_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
-        scf = Jinteraction(self,**kwargs)
-        if not scf.converged: scf.hamiltonian = None # no convergence
-        if return_total_energy:
-            return (scf.hamiltonian,scf.total_energy)
-        else: return scf.hamiltonian
+        return _mean_field_scf_result(Jinteraction(self,**kwargs),return_total_energy)
     def get_tails(self,discard=None):
         """Write the tails of the wavefunctions"""
         if self.dimensionality!=0: raise

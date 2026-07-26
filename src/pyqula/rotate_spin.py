@@ -47,11 +47,13 @@ def align_magnetism(m,vectors):
 
 
 
-def global_spin_rotation(m,vector = np.array([0.,0.,1.]),angle = 0.0,
-                             spiral = False,atoms = None):
-  """ Rotates a matrix along a certain qvector """
-  n = m.shape[0]//2 # number of sites
-  if atoms is not None: raise # per-atom rotation not implemented
+def build_rotation_matrix(n,vector = np.array([0.,0.,1.]),angle = 0.0):
+  """ Build the full n-site block-diagonal spin rotation matrix for a
+  global spin rotation by `angle` about `vector` (same convention as
+  global_spin_rotation, which uses this internally). Split out so that a
+  caller applying the *same* fixed rotation to many matrices (e.g. every
+  iteration of an SCF loop) can build R once and reuse it, instead of
+  recomputing the matrix exponential on every call. """
   u = np.array(vector) # rotation direction
   u = u/np.sqrt(u.dot(u)) # normalize rotation direction
   rot = (u[0]*sx + u[1]*sy + u[2]*sz)/2. # rotation
@@ -62,7 +64,15 @@ def global_spin_rotation(m,vector = np.array([0.,0.,1.]),angle = 0.0,
   # same rotation at every site, so this is just a repeated block-diagonal;
   # np.kron avoids scipy.sparse.bmat, which mishandles the n=1 (single
   # site per cell) case (raises "blocks must be 2-D")
-  R = np.kron(np.eye(n),rot) # full rotation matrix
+  return np.kron(np.eye(n),rot) # full rotation matrix
+
+
+def global_spin_rotation(m,vector = np.array([0.,0.,1.]),angle = 0.0,
+                             spiral = False,atoms = None):
+  """ Rotates a matrix along a certain qvector """
+  n = m.shape[0]//2 # number of sites
+  if atoms is not None: raise # per-atom rotation not implemented
+  R = build_rotation_matrix(n,vector=vector,angle=angle)
   if spiral:  # for spin spiral
     mout = R @ m  # rotate matrix
   else:  # normal global rotation

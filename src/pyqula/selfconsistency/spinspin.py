@@ -80,7 +80,21 @@ def _callback_mf_constrains(h, constrains):
     return callback_mf
 
 
-def SzSz(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], **kwargs):
+def _compose_callbacks(a, b):
+    """Return a function applying `a` then `b`, skipping whichever of the
+    two is None. Used to let an externally-supplied callback_mf (e.g. the
+    lab-frame constrains wrapper built by _rotated_axis_exchange) compose
+    with the one SzSz derives from its own `constrains` argument, instead
+    of one silently overriding the other."""
+    if a is None: return b
+    if b is None: return a
+    def combined(mf):
+        return b(a(mf))
+    return combined
+
+
+def SzSz(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], callback_mf=None,
+        **kwargs):
     """Self-consistent Hartree-Fock mean field for a
     H = sum J1/J2/J3 (+ Jr(r)) Sz_i Sz_j
     spin-spin interaction (first/second/third neighbor shells, plus an
@@ -92,7 +106,8 @@ def SzSz(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], **kwargs):
     if h.has_eh: return NotImplemented # not implemented for BdG Hamiltonians
     h = h.get_multicell().get_dense()
     v = _build_v(h, J1, J2, J3, Jr)
-    callback_mf = _callback_mf_constrains(h, constrains)
+    constrain_cb = _callback_mf_constrains(h, constrains)
+    callback_mf = _compose_callbacks(constrain_cb, callback_mf)
     return densitydensity(h, v=v, callback_mf=callback_mf, **kwargs)
 
 
@@ -121,6 +136,24 @@ def _rotate_mf_guess(h0, axis, mf, **fwd):
     return {d: _gsr(m, **fwd) for (d, m) in mf.items()}
 
 
+def _rotated_constrains_callback(h0, constrains, fwd, bwd):
+    """Build a callback_mf that enforces `constrains` in the LAB frame (as
+    the user expects -- e.g. "no_offplane_magnetism" meaning the real z
+    axis) even though the mean field iterate SzSz(hr,...) actually mixes
+    lives in the internally-rotated frame where `axis` is the computational
+    z axis. Passing `constrains` straight through to the inner SzSz call
+    would enforce it against the ROTATED frame's z axis instead -- e.g.
+    "no_offplane_magnetism" under SxSx would silently constrain the
+    physical x component (computational z in that frame), not z."""
+    if not constrains: return None
+    from . import mfconstrains
+    def callback_mf(mf_rot):
+        mf_lab = _rotate_dict(mf_rot, **bwd) # mf lives in Hamiltonian convention
+        mf_lab = mfconstrains.enforce_constrains(mf_lab, h0, constrains)
+        return _rotate_dict(mf_lab, **fwd) # back into the rotated SCF's frame
+    return callback_mf
+
+
 def _rotated_axis_exchange(h, axis, J1, J2, J3, Jr, constrains, **kwargs):
     fwd = _AXIS_ROTATION[axis]
     bwd = dict(fwd); bwd["angle"] = -fwd["angle"]
@@ -129,7 +162,8 @@ def _rotated_axis_exchange(h, axis, J1, J2, J3, Jr, constrains, **kwargs):
     hr.global_spin_rotation(**fwd) # rotate so that `axis` becomes computational z
     mf0 = kwargs.pop("mf", None)
     mf_rot = _rotate_mf_guess(h0, axis, mf0, **fwd)
-    scf = SzSz(hr, J1, J2, J3, Jr, constrains=constrains, mf=mf_rot, **kwargs)
+    callback_mf = _rotated_constrains_callback(h0, constrains, fwd, bwd)
+    scf = SzSz(hr, J1, J2, J3, Jr, mf=mf_rot, callback_mf=callback_mf, **kwargs)
     if scf.hamiltonian is not None:
         scf.hamiltonian.global_spin_rotation(**bwd) # rotate the result back
     # scf.mf/scf.dm/scf.v are left expressed in the internally-rotated frame;
@@ -170,34 +204,10 @@ def _rotate_dict(dd, vector, angle):
     return {k: _gsr(m, vector=vector, angle=angle) for (k, m) in dd.items()}
 
 
-def _rotate_dm(dd, vector, angle):
-    """Rotate a dict of *density matrices* by a global spin rotation.
-
-    get_density_matrix's off-diagonal (spin-flip) entries are stored in a
-    transposed convention relative to a Hamiltonian matrix -- normal_term_ij
-    (selfconsistency/densitydensity.py) deliberately reads dm[j,i] rather
-    than dm[i,j] to reconstruct a physically-meaningful mean field from it.
-    For a Hermitian matrix, transposing is the same as complex-conjugating,
-    so a density matrix in this convention is the complex conjugate of the
-    "Hamiltonian-convention" matrix at the same site/bond. Naively rotating
-    it with the same R @ m @ R^dagger used for Hamiltonians (_rotate_dict)
-    therefore silently flips the sign of the imaginary (y) Pauli component
-    while leaving the real (x, z) ones untouched -- caught by checking that
-    a random-direction initial guess converges to a moment collinear with
-    it (only Jinteraction is affected: SzSz/SxSx/SySy rotate the whole
-    Hamiltonian and run a native SCF in the rotated frame, never touching a
-    raw density matrix directly, so they never hit this). Conjugating
-    before and after the standard rotation corrects for it: if
-    dm_stored = conj(dm_physical), then
-    dm_stored' = conj(dm_physical') = conj(R @ conj(dm_stored) @ R^dagger)."""
-    return {k: np.conj(_gsr(np.conj(m), vector=vector, angle=angle))
-            for (k, m) in dd.items()}
-
-
 def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
         Jz1=0.0, Jz2=0.0, Jz3=0.0, Jxr=None, Jyr=None, Jzr=None,
         mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
-        T=1e-7, verbose=0, constrains=[], **kwargs):
+        T=1e-7, verbose=0, constrains=[]):
     """Self-consistent anisotropic exchange mean field,
     H = sum Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j,
     combining all three channels in a single SCF loop: at every iteration
@@ -234,8 +244,50 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     # differently depending on which of its J's are zero, so the lab-frame
     # density matrix must be requested at the union, not just vz's keys
     v_dirs = {d: None for d in (set(vz) | set(vx) | set(vy))}
-    rx, rxb = _AXIS_ROTATION["x"], dict(_AXIS_ROTATION["x"], angle=-_AXIS_ROTATION["x"]["angle"])
-    ry, ryb = _AXIS_ROTATION["y"], dict(_AXIS_ROTATION["y"], angle=-_AXIS_ROTATION["y"]["angle"])
+    # the x/y rotations are fixed for the whole SCF loop, so build the
+    # (small, 2x2-block) rotation matrices once via build_rotation_matrix
+    # instead of paying a fresh matrix exponential on every one of the many
+    # _rotate_dict/_rotate_dm calls compute_mf makes each iteration; the
+    # backward rotation is just the forward matrix's dagger (R(-angle) =
+    # R(angle)^dagger), so only Rx/Ry need to be built
+    from ..rotate_spin import build_rotation_matrix
+    n_orb = h1.intra.shape[0]//2
+    Rx = build_rotation_matrix(n_orb, **_AXIS_ROTATION["x"])
+    Ry = build_rotation_matrix(n_orb, **_AXIS_ROTATION["y"])
+
+    def _rot_dict(dd, R):
+        """Rotate a dict of Hamiltonian-like (hopping/mean-field) matrices:
+        these live in the same convention as Hamiltonian.intra, for which
+        R @ m @ R^dagger is the correct transformation (as used by
+        Hamiltonian.global_spin_rotation, validated by SxSx/SySy)."""
+        Rd = R.conj().T
+        return {k: R @ m @ Rd for (k, m) in dd.items()}
+
+    def _rot_dm(dd, R):
+        """Rotate a dict of *density matrices*, which need a different
+        (conjugate-sandwiched) transformation than _rot_dict.
+
+        get_density_matrix's off-diagonal (spin-flip) entries are stored in
+        a transposed convention relative to a Hamiltonian matrix --
+        normal_term_ij (selfconsistency/densitydensity.py) deliberately
+        reads dm[j,i] rather than dm[i,j] to reconstruct a
+        physically-meaningful mean field from it. For a Hermitian matrix,
+        transposing is the same as complex-conjugating, so a density matrix
+        in this convention is the complex conjugate of the
+        "Hamiltonian-convention" matrix at the same site/bond. Naively
+        rotating it with R @ m @ R^dagger (_rot_dict) therefore silently
+        flips the sign of the imaginary (y) Pauli component while leaving
+        the real (x, z) ones untouched -- caught by checking that a
+        random-direction initial guess converges to a moment collinear with
+        it (only Jinteraction is affected: SzSz/SxSx/SySy rotate the whole
+        Hamiltonian and run a native SCF in the rotated frame, never
+        touching a raw density matrix directly, so they never hit this).
+        Conjugating before and after the standard rotation corrects for it:
+        if dm_stored = conj(dm_physical), then
+        dm_stored' = conj(dm_physical') = conj(R @ conj(dm_stored) @ R^dagger)."""
+        Rd = R.conj().T
+        return {k: np.conj(R @ np.conj(m) @ Rd) for (k, m) in dd.items()}
+
     callback_mf = _callback_mf_constrains(h1, constrains)
 
     def callback_h(hh):
@@ -252,11 +304,11 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
 
     def compute_mf(dm_lab):
         mf = get_mf_normal(vz, dm_lab)
-        dm_x = _rotate_dm(dm_lab, **rx) # dm needs the conjugated rotation
-        mf_x = _rotate_dict(get_mf_normal(vx, dm_x), **rxb) # mf does not
+        dm_x = _rot_dm(dm_lab, Rx) # dm needs the conjugated rotation
+        mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rx.conj().T) # mf does not
         mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
-        dm_y = _rotate_dm(dm_lab, **ry)
-        mf_y = _rotate_dict(get_mf_normal(vy, dm_y), **ryb)
+        dm_y = _rot_dm(dm_lab, Ry)
+        mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ry.conj().T)
         mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
         return mf
 
@@ -279,7 +331,13 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
 
     if mf is None:
         mf = dict()
-        for d in vz: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))*1e-1
+        # seed over v_dirs (the vz/vx/vy key union), not just vz's own keys:
+        # a channel with only its own neighbor shells (e.g. Jx1 nonzero,
+        # Jz1=Jz2=Jz3=0) can have bond-direction keys absent from vz, and
+        # diff_mf below only iterates the keys already present in this
+        # initial guess, so seeding too few of them would make those
+        # channels invisible to the very first convergence check
+        for d in v_dirs: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))*1e-1
         mf[(0, 0, 0)] = mf[(0, 0, 0)] + mf[(0, 0, 0)].T.conjugate()
     else:
         if isinstance(mf, str):
@@ -312,9 +370,9 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     if mu is None:
         etot += h.fermi*h.intra.shape[0]*filling
     etot += get_dc_energy(vz, scf.dm)
-    dm_x = _rotate_dm(scf.dm, **rx) # dm needs the conjugated rotation, see compute_mf
+    dm_x = _rot_dm(scf.dm, Rx) # dm needs the conjugated rotation, see compute_mf
     etot += get_dc_energy(vx, dm_x)
-    dm_y = _rotate_dm(scf.dm, **ry)
+    dm_y = _rot_dm(scf.dm, Ry)
     etot += get_dc_energy(vy, dm_y)
     scf.total_energy = etot.real
     return scf
