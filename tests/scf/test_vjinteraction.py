@@ -8,16 +8,16 @@ MAXERROR = 1e-6
 
 def test_vjinteraction_reduces_to_jinteraction_with_only_J():
     """VJinteraction combines density-density (V/U) and spin-spin exchange
-    (isotropic J1/J2/J3 plus an optional Jx/Jy/Jz anisotropic correction on
-    the first-neighbor shell) mean field into one SCF loop. With
-    V1=V2=V3=U=0 and only Jz set (pure Sz-Sz, since J1 defaults to 0), it
+    (isotropic J1/J2/J3 plus an optional J1x/J1y/J1z anisotropic correction
+    on the first-neighbor shell) mean field into one SCF loop. With
+    V1=V2=V3=U=0 and only J1z set (pure Sz-Sz, since J1 defaults to 0), it
     must reduce exactly to Jinteraction's Jz1-only case."""
     g = geometry.chain()
     h1 = g.get_hamiltonian(has_spin=True)
     scf_j = meanfield.Jinteraction(h1, Jz1=-2.0, mf="ferroZ", nk=10,
             maxerror=MAXERROR, mix=0.3, maxite=300, filling=0.2)
     h2 = g.get_hamiltonian(has_spin=True)
-    scf_vj = meanfield.VJinteraction(h2, Jz=-2.0, mf="ferroZ", nk=10,
+    scf_vj = meanfield.VJinteraction(h2, J1z=-2.0, mf="ferroZ", nk=10,
             maxerror=MAXERROR, mix=0.3, maxite=300, filling=0.2)
     assert scf_j.converged and scf_vj.converged
     assert np.isclose(scf_j.total_energy, scf_vj.total_energy, atol=1e-4), \
@@ -28,7 +28,7 @@ def test_vjinteraction_reduces_to_jinteraction_with_only_J():
 
 
 def test_vjinteraction_reduces_to_vinteraction_with_only_V():
-    """With Jx=Jy=Jz=0, VJinteraction must reduce exactly to Vinteraction
+    """With J1x=J1y=J1z=0, VJinteraction must reduce exactly to Vinteraction
     (here exercised through its U onsite Hubbard term)."""
     g = geometry.chain()
     h1 = g.get_hamiltonian(has_spin=True)
@@ -58,9 +58,9 @@ def test_vjinteraction_combined_U_and_J_reinforce_each_other():
     h_u = g.get_hamiltonian(has_spin=True)
     scf_u = meanfield.VJinteraction(h_u, U=5.0, **params)
     h_j = g.get_hamiltonian(has_spin=True)
-    scf_j = meanfield.VJinteraction(h_j, Jz=-1.0, **params)
+    scf_j = meanfield.VJinteraction(h_j, J1z=-1.0, **params)
     h_uj = g.get_hamiltonian(has_spin=True)
-    scf_uj = meanfield.VJinteraction(h_uj, U=5.0, Jz=-1.0, **params)
+    scf_uj = meanfield.VJinteraction(h_uj, U=5.0, J1z=-1.0, **params)
     assert scf_u.converged and scf_j.converged and scf_uj.converged
 
     mz_u = np.mean(np.abs(scf_u.hamiltonian.get_magnetization()[:, 2]))
@@ -71,10 +71,10 @@ def test_vjinteraction_combined_U_and_J_reinforce_each_other():
         f"(U-only {mz_u}, Jz-only {mz_j})"
 
 
-def test_vjinteraction_J1_matches_setting_Jx_Jy_Jz_equal():
+def test_vjinteraction_J1_matches_setting_J1x_J1y_J1z_equal():
     """J1 (isotropic first-neighbor exchange) must be exactly equivalent to
-    setting Jx=Jy=Jz to the same value with J1=0, since J1 is defined as an
-    isotropic Heisenberg coupling added identically to all three axes on
+    setting J1x=J1y=J1z to the same value with J1=0, since J1 is defined as
+    an isotropic Heisenberg coupling added identically to all three axes on
     the first-neighbor shell."""
     g = geometry.chain()
     params = dict(mf="ferroZ", nk=10, maxerror=MAXERROR, mix=0.3,
@@ -82,7 +82,7 @@ def test_vjinteraction_J1_matches_setting_Jx_Jy_Jz_equal():
     h1 = g.get_hamiltonian(has_spin=True)
     scf_j1 = meanfield.VJinteraction(h1, J1=-2.0, **params)
     h2 = g.get_hamiltonian(has_spin=True)
-    scf_xyz = meanfield.VJinteraction(h2, Jx=-2.0, Jy=-2.0, Jz=-2.0, **params)
+    scf_xyz = meanfield.VJinteraction(h2, J1x=-2.0, J1y=-2.0, J1z=-2.0, **params)
     assert scf_j1.converged and scf_xyz.converged
     assert np.isclose(scf_j1.total_energy, scf_xyz.total_energy, atol=1e-4), \
         (scf_j1.total_energy, scf_xyz.total_energy)
@@ -93,7 +93,7 @@ def test_vjinteraction_J1_matches_setting_Jx_Jy_Jz_equal():
 
 def test_vjinteraction_isotropic_combination_preserves_su2_symmetry():
     """U (already SU(2)-symmetric) combined with an isotropic J1 exchange
-    (Jx=Jy=Jz=0, the pure Heisenberg case) must still have full SU(2)
+    (J1x=J1y=J1z=0, the pure Heisenberg case) must still have full SU(2)
     symmetry: a random-direction initial guess must converge to a moment
     collinear with it, with no hidden preferred axis introduced by how the
     two channels are summed into one z-channel matrix (see

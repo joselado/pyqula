@@ -278,7 +278,7 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None):
 
 
 def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
-        J1=0.0, J2=0.0, J3=0.0, Jr=None, Jx=0.0, Jy=0.0, Jz=0.0,
+        J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
         mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
         T=1e-7, verbose=0, constrains=[]):
     """Self-consistent mean field combining density-density interactions
@@ -288,10 +288,10 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     J1/J2/J3 (+ Jr, a general distance-dependent function) are isotropic
     Heisenberg-like exchange, J*(Sx_i Sx_j + Sy_i Sy_j + Sz_i Sz_j), for the
     first/second/third neighbor shells -- the same first/second/third
-    neighbor-shell convention as V1/V2/V3. Jx/Jy/Jz are an additional,
+    neighbor-shell convention as V1/V2/V3. J1x/J1y/J1z are an additional,
     optional anisotropic correction, added on top of J1 for the
     first-neighbor shell only (e.g. the effective first-neighbor Jz
-    coupling is J1+Jz); second/third neighbors stay purely isotropic. All
+    coupling is J1+J1z); second/third neighbors stay purely isotropic. All
     default to 0, i.e. plain density-density with no spin-spin exchange.
 
     This works by combining the two existing SCF modes rather than
@@ -312,11 +312,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     if not h0.has_spin: raise ValueError("VJinteraction needs a spinful Hamiltonian")
     if h0.has_eh: raise ValueError("VJinteraction is not implemented for BdG Hamiltonians")
     h1 = h0.get_multicell().get_dense()
-    vz = _build_v(h1, J1+Jz, J2, J3, Jr)
+    vz = _build_v(h1, J1+J1z, J2, J3, Jr)
     vd = _build_density_v(h1, V1, V2, V3, U, Vr)
     vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
-    vx = _build_v(h1, J1+Jx, J2, J3, Jr)
-    vy = _build_v(h1, J1+Jy, J2, J3, Jr)
+    vx = _build_v(h1, J1+J1x, J2, J3, Jr)
+    vy = _build_v(h1, J1+J1y, J2, J3, Jr)
     return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             maxerror, maxite, T, verbose, constrains)
 
