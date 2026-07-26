@@ -64,7 +64,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 ## Interacting mean-field Hamiltonians ##
 - Selfconsistent mean-field calculations with local/non-local interactions
 - Both collinear and non-collinear formalism
-- Direct spin-spin (Heisenberg-like) exchange mean field, SzSz/SxSx/SySy and combined anisotropic exchange
+- Direct spin-spin (Heisenberg-like) exchange mean field, SzSz/SxSx/SySy and combined anisotropic exchange, simultaneously with density-density interactions
 - Anomalous mean-field for non-collinear superconductors
 - Full selfconsistency with all Wick terms for non-collinear superconductors
 - Constrained and unconstrained mean-field calculations

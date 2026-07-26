@@ -505,3 +505,4 @@ SzSz = spinspin.SzSz
 SxSx = spinspin.SxSx
 SySy = spinspin.SySy
 Jinteraction = spinspin.Jinteraction
+VJinteraction = spinspin.VJinteraction

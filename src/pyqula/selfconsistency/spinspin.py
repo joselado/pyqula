@@ -228,17 +228,107 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     Only integration="ed" and the plain-mixing solver are supported (unlike
     Vinteraction/SzSz/SxSx/SySy, which forward to the full
     generic_densitydensity solver zoo)."""
+    if not h0.has_spin: raise ValueError("Jinteraction needs a spinful Hamiltonian")
+    if h0.has_eh: raise ValueError("Jinteraction is not implemented for BdG Hamiltonians")
+    h1 = h0.get_multicell().get_dense()
+    vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr)
+    vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr)
+    vy = _build_v(h1, Jy1, Jy2, Jy3, Jyr)
+    return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
+            maxerror, maxite, T, verbose, constrains)
+
+
+def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None):
+    """Build the spin-orbital density-density interaction matrix -- uniform
+    across all four spin blocks (V1/V2/V3 neighbor shells, optional general
+    Vr(r) function), plus an onsite U between up/down -- exactly mirroring
+    Vinteraction's own construction (selfconsistency/densitydensity.py).
+    Kept as a small separate copy here (rather than refactoring Vinteraction
+    to share it) to avoid touching that already-tested, widely-used code
+    path; see _build_v's docstring for why the neighbor-shell key set this
+    produces is independent of which of V1/V2/V3 happen to be zero."""
+    from .. import specialhopping
+    from .densitydensity import obj2geometryarray
+    nd = h.geometry.neighbor_distances()
+    mgenerator = specialhopping.distance_hopping_matrix(
+            [V1/2., V2/2., V3/2.], nd[0:3])
+    hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
+            mgenerator=mgenerator)
+    if Vr is not None:
+        hv1 = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
+                tij=Vr)
+        hv = hv + hv1
+    v = hv.get_hopping_dict()
+    U = obj2geometryarray(U, h.geometry)
+    for d in v:
+        m = v[d]
+        n = m.shape[0]
+        m1 = np.zeros((2*n, 2*n), dtype=np.complex128)
+        for i in range(n):
+            for j in range(n):
+                m1[2*i, 2*j] = m[i, j]
+                m1[2*i+1, 2*j] = m[i, j]
+                m1[2*i, 2*j+1] = m[i, j]
+                m1[2*i+1, 2*j+1] = m[i, j]
+        v[d] = m1
+    for i in range(n):
+        v[(0, 0, 0)][2*i, 2*i+1] += U[i]/2.
+        v[(0, 0, 0)][2*i+1, 2*i] += U[i]/2.
+    return v
+
+
+def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
+        Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
+        Jz1=0.0, Jz2=0.0, Jz3=0.0, Jxr=None, Jyr=None, Jzr=None,
+        mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
+        T=1e-7, verbose=0, constrains=[]):
+    """Self-consistent mean field combining density-density interactions
+    (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
+    Vinteraction) with anisotropic spin-spin exchange (Jx/Jy/Jz Sa_i Sa_j
+    -- same convention as Jinteraction) in a single SCF loop.
+
+    This works by combining the two existing SCF modes rather than
+    inventing new decoupling math: density-density interactions and
+    Sz_i Sz_j are both already density-density interactions in the
+    spin-orbital basis (Vinteraction's uniform sign pattern across the
+    four spin blocks vs. SzSz's +/-1/4 one -- see the module docstring and
+    _build_v), and Hartree-Fock decoupling (get_mf_normal) is linear in the
+    interaction matrix, so the density-density contribution can simply be
+    added into Jinteraction's z-channel matrix before entering its shared
+    SCF loop -- no separate channel, and no rotation, needed for it (unlike
+    Jx/Jy, which do need the rotate-decouple-rotate-back trick). The x/y
+    channels are handled exactly as in Jinteraction.
+
+    See Vinteraction and Jinteraction for the individual parameter
+    conventions; only integration="ed" and the plain-mixing solver are
+    supported (unlike Vinteraction/SzSz/SxSx/SySy)."""
+    if not h0.has_spin: raise ValueError("VJinteraction needs a spinful Hamiltonian")
+    if h0.has_eh: raise ValueError("VJinteraction is not implemented for BdG Hamiltonians")
+    h1 = h0.get_multicell().get_dense()
+    vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr)
+    vd = _build_density_v(h1, V1, V2, V3, U, Vr)
+    vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
+    vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr)
+    vy = _build_v(h1, Jy1, Jy2, Jy3, Jyr)
+    return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
+            maxerror, maxite, T, verbose, constrains)
+
+
+def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
+        maxerror, maxite, T, verbose, constrains):
+    """Shared SCF core for Jinteraction/VJinteraction: decouples the
+    z-channel matrix `vz` directly (Hartree-Fock density-density in the
+    lab/computational spin basis) and the x/y-channel matrices `vx`/`vy`
+    by rotating the density matrix into the frame where that axis is the
+    computational z axis, applying the same decoupling there, and rotating
+    the resulting mean field back before summing all three contributions
+    -- see Jinteraction's docstring for the physics. `h1` must already be
+    h0.get_multicell().get_dense()."""
     from .densitydensity import (get_dm, get_mf_normal, mix_mf, diff_mf,
             update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF)
     from .mfconstrains import obj2mf
-    if not h0.has_spin: raise ValueError("Jinteraction needs a spinful Hamiltonian")
-    if h0.has_eh: raise ValueError("Jinteraction is not implemented for BdG Hamiltonians")
-    h1 = h0.get_multicell().get_dense()
     h1.nk = nk
-    vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr)
-    vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr)
-    vy = _build_v(h1, Jy1, Jy2, Jy3, Jyr)
     # union of the three channels' bond directions: in general the
     # neighbor-shell hopping-dict builder could prune a channel's key set
     # differently depending on which of its J's are zero, so the lab-frame

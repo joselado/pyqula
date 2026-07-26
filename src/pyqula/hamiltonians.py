@@ -25,7 +25,7 @@ from . import bandstructure
 from . import increase_hilbert
 from .meanfield import Vinteraction
 from .meanfield import Vinteraction_kpm
-from .meanfield import SzSz,SxSx,SySy,Jinteraction
+from .meanfield import SzSz,SxSx,SySy,Jinteraction,VJinteraction
 from .sctk import dvector
 from .algebratk import hamiltonianalgebra
 from .bandstructure import get_bands_nd
@@ -495,6 +495,9 @@ class Hamiltonian():
     @get_docstring(Jinteraction)
     def get_exchange_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
         return _mean_field_scf_result(Jinteraction(self,**kwargs),return_total_energy)
+    @get_docstring(VJinteraction)
+    def get_combined_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
+        return _mean_field_scf_result(VJinteraction(self,**kwargs),return_total_energy)
     def get_tails(self,discard=None):
         """Write the tails of the wavefunctions"""
         if self.dimensionality!=0: raise

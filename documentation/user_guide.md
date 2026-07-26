@@ -909,6 +909,14 @@ h = h.get_exchange_mean_field_hamiltonian(Jz1=-1.0,Jx1=-0.5,
                                             filling=0.2,mf="ferroZ")
 ```
 
+Density-density interactions ($U$/$V_1$/$V_2$/$V_3$/$V_r$, as in `get_mean_field_hamiltonian`) and spin-spin exchange ($J_x$/$J_y$/$J_z$, as above) can also be solved together, self-consistently, in a single combined SCF loop with `h.get_combined_mean_field_hamiltonian(U=...,V1=...,Jz1=...,...)`. This is not new physics: $S^z_iS^z_j$ and a density-density interaction are both density-density interactions in the spin-orbital basis (just with a different sign pattern across the four spin blocks), and the Hartree-Fock decoupling is linear in the interaction, so the density-density contribution is simply added into the same $z$-channel matrix the $J_z$ term already uses, with the $J_x$/$J_y$ channels handled exactly as above
+
+```python
+h = g.get_hamiltonian(has_spin=True)
+h = h.get_combined_mean_field_hamiltonian(U=5.0,Jz1=-1.0,
+                                            filling=0.2,mf="ferroZ")
+```
+
 
 # Spatially resolved density of states
 
@@ -1724,6 +1732,19 @@ Optional arguments:
 
 - Jx1, Jx2, Jx3, Jy1, Jy2, Jy3, Jz1, Jz2, Jz3 = 0.: first/second/third-neighbor couplings for each axis
 - Jxr, Jyr, Jzr=None: general distance-dependent couplings, one per axis
+- mf, filling, nk, maxerror, mix, constrains: as above (only `integration="ed"` and the plain-mixing solver are supported)
+
+Returns the converged Hamiltonian (or `None` if the SCF did not converge)
+
+### h.get_combined_mean_field_hamiltonian()
+Self-consistent mean field combining density-density interactions
+(onsite $U$, $V_1$/$V_2$/$V_3$/$V_r$ neighbor-shell) with anisotropic
+spin-spin exchange ($J_x$/$J_y$/$J_z$) in a single SCF loop.
+
+Optional arguments:
+
+- U, V1, V2, V3, Vr: as in `get_mean_field_hamiltonian`
+- Jx1, Jx2, Jx3, Jy1, Jy2, Jy3, Jz1, Jz2, Jz3, Jxr, Jyr, Jzr: as in `get_exchange_mean_field_hamiltonian`
 - mf, filling, nk, maxerror, mix, constrains: as above (only `integration="ed"` and the plain-mixing solver are supported)
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
