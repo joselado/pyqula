@@ -103,21 +103,25 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
 
     Returns (qs,ws,gammas): qs is the integer index of the q-point along
     the path (the same convention used by get_bands for the k-axis),
-    ws the pole frequency and gammas its residual imaginary part
-    (a measure of the mode's broadening/well-definedness). Different
+    ws the pole frequency and gammas its residual imaginary part -- signed,
+    so judge how sharp/well-defined a mode is by abs(gammas), not gammas
+    directly (see rpa.py's _poles_from_chi_matrix docstring). Different
     q-points can have different numbers of poles, so all three are
     returned as flat 1D arrays -- ready for a scatter-style dispersion
     plot -- rather than a ragged per-q array."""
-    from .rpa import rpa_kernel_poles_ops
+    from .rpa import rpa_kernel_poles_ops, build_ops_projectors
     from .. import parallel
     Ss = _full_spin_operators(H)
     U = _full_spin_U(H)
     if U is None: raise ValueError("Hamiltonian has no mean-field "
             "interaction (H.V); set one first, e.g. via "
             "get_mean_field_hamiltonian")
+    # the operator/projector tensor is q-independent: build it once and
+    # reuse it at every q-point instead of rebuilding it from Ss each time
+    pAs,pBs = build_ops_projectors(H,Ss)
     qpath = H.geometry.get_kpath(qpath,nk=nq) # generate the q-path
     def f(q):
-        return rpa_kernel_poles_ops(H,ops=Ss,V=U,q=q,**kwargs)
+        return rpa_kernel_poles_ops(H,V=U,pAs=pAs,pBs=pBs,q=q,**kwargs)
     outs = parallel.pcall(f,qpath) # compute the poles at every q
     qs,ws,gammas = [],[],[] # flat storage
     for iq,poles in enumerate(outs): # loop over q-points

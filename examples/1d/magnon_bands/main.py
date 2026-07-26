@@ -22,10 +22,10 @@ energies = np.linspace(0.01,4.,200) # frequency window (omega=0 excluded,
                                      # it is a trivial root of every kernel)
 qs,ws,gammas = h.get_magnon_bands(nq=nq,energies=energies,delta=2e-2,nk=100)
 
-# each returned pole has a residual imaginary part (gammas): the smaller
-# it is, the sharper/better-defined the collective mode. Keep only the
-# well-defined ones for a clean dispersion plot.
-sharp = gammas < 0.05
+# each returned pole has a signed residual imaginary part (gammas): the
+# smaller its magnitude, the sharper/better-defined the collective mode.
+# Keep only the well-defined ones for a clean dispersion plot.
+sharp = np.abs(gammas) < 0.05
 qs,ws,gammas = qs[sharp],ws[sharp],gammas[sharp]
 
 import matplotlib.pyplot as plt

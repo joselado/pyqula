@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 
 from pyqula import islands
-from pyqula.chitk.chiAB import chiAB
 from pyqula.chitk.spinchi import _full_spin_U
 from pyqula.chitk.rpa import rpa_kernel_poles_ops
 from testutils import SCF_MAXERROR

@@ -1184,7 +1184,7 @@ U = hmf.V[(0,0,0)] # interaction matrix stored on the mean-field Hamiltonian
 poles = hmf.get_rpa_kernel_poles(V=U,q=[0.1,0.,0.],energies=np.linspace(0.,3.,300),delta=2e-2,nk=40)
 ```
 
-`poles` is an `(npoles,2)` array, one row per collective mode found: the pole frequency and its residual imaginary part (a measure of the mode's broadening -- small values mean a sharp, well-defined mode, large values mean it is heavily damped or the crossing is numerical noise).
+`poles` is an `(npoles,2)` array, one row per collective mode found: the pole frequency and its residual imaginary part. The latter is signed (it is the kernel eigenvalue's actual imaginary part at the crossing, which can lie on either side of the real axis) -- judge how sharp/well-defined a mode is by its *magnitude*: small `abs(gamma)` means a sharp mode, large `abs(gamma)` means it is heavily damped or the crossing is numerical noise.
 
 `h.get_magnon_bands` specializes this to the full spin channel used by `get_spinchi_full`/`get_iets_ldos` (the $S_x,S_y,S_z$ tensor, with `U` taken automatically from the mean-field `h.V`, same convention as `get_spinchi_full`) and scans it along a q-path, directly giving the magnon dispersion of a magnetically ordered mean-field state:
 
@@ -1192,7 +1192,7 @@ poles = hmf.get_rpa_kernel_poles(V=U,q=[0.1,0.,0.],energies=np.linspace(0.,3.,30
 qs,ws,gammas = hmf.get_magnon_bands(nq=40,energies=np.linspace(0.01,3.,200),delta=2e-2,nk=40)
 ```
 
-Since different q-points can have a different number of poles, `qs`,`ws`,`gammas` are flat 1D arrays of equal length ready for a scatter-style dispersion plot -- `qs` holds the integer index of the q-point along the path (the same convention `get_bands` uses for its k-axis), `ws` the pole frequency and `gammas` its residual imaginary part, so filtering `gammas < threshold` keeps only the sharp, well-defined branches. See `examples/1d/magnon_bands/main.py` for a runnable version (an antiferromagnetic Hubbard chain, showing both its acoustic and optical magnon branches).
+Since different q-points can have a different number of poles, `qs`,`ws`,`gammas` are flat 1D arrays of equal length ready for a scatter-style dispersion plot -- `qs` holds the integer index of the q-point along the path (the same convention `get_bands` uses for its k-axis), `ws` the pole frequency and `gammas` its (signed) residual imaginary part, so filtering `np.abs(gammas) < threshold` keeps only the sharp, well-defined branches. See `examples/1d/magnon_bands/main.py` for a runnable version (an antiferromagnetic Hubbard chain, showing both its acoustic and optical magnon branches).
 
 # Quantum transport
 
@@ -1577,7 +1577,7 @@ Optional arguments:
 
 - A=None, B=None, q=[0,0,0], energies, delta, nk: as in `get_chi`
 
-Returns an `(npoles,2)` array: pole frequency and residual imaginary part (mode broadening), one row per collective mode found, sorted by frequency.
+Returns an `(npoles,2)` array: pole frequency and its (signed) residual imaginary part -- filter on its magnitude, not its raw value, to keep only sharp/well-defined modes -- one row per collective mode found, sorted by frequency.
 
 ### h.get_magnon_bands()
 Compute the magnon bands: the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`, with `U` taken automatically from the mean-field `h.V`), scanned along a q-path.
