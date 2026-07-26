@@ -33,24 +33,37 @@ def simpsons_rule(f,a,b):
     h3 = abs(b-a) / 6.0
     return h3*(f(a) + 4.0*f(c) + f(b))
  
-def recursive_asr(f,a,b,eps,whole):
-    "Recursive implementation of adaptive Simpson's rule."
+def recursive_asr(f,a,b,eps,whole,fa=None,fm=None,fb=None,test=None):
+    """Recursive implementation of adaptive Simpson's rule.
+
+    fa, fm, fb are f's already-known values at a, the midpoint and b (the
+    caller has always just computed them to build `whole`); each split
+    below then only evaluates the two genuinely new sub-midpoints instead
+    of re-deriving all three inherited points, which the naive version of
+    this recursion did on every call. For an expensive f (e.g. a
+    Sancho-Rubio renormalization solve, as used by the 2D adaptive
+    Green's function mode), that redundant re-evaluation measured ~3x
+    more solves than distinct points needed, growing with recursion depth.
+    """
+    if test is None: test = lambda d: np.max(np.abs(d))
     c = (a+b) / 2.0
-    left = simpsons_rule(f,a,c)
-    right = simpsons_rule(f,c,b)
-    if np.max(np.abs(left + right - whole)) <= 15*eps:
+    if fa is None: fa = f(a)
+    if fm is None: fm = f(c)
+    if fb is None: fb = f(b)
+    fd = f((a+c)/2.0) # new left-half midpoint
+    fe = f((c+b)/2.0) # new right-half midpoint
+    left  = (c-a)/6.0 * (fa + 4.0*fd + fm)
+    right = (b-c)/6.0 * (fm + 4.0*fe + fb)
+    if test(left + right - whole) <= 15*eps:
         return left + right + (left + right - whole)/15.0
-    return recursive_asr(f,a,c,eps/2.0,left) + recursive_asr(f,c,b,eps/2.0,right)
+    return (recursive_asr(f,a,c,eps/2.0,left, fa=fa,fm=fd,fb=fm,test=test) +
+            recursive_asr(f,c,b,eps/2.0,right,fa=fm,fm=fe,fb=fb,test=test))
 
 
-def recursive_asr_imag(f,a,b,eps,whole):
-    "Recursive implementation of adaptive Simpson's rule."
-    c = (a+b) / 2.0
-    left = simpsons_rule(f,a,c)
-    right = simpsons_rule(f,c,b)
-    if np.max(np.abs(np.imag(left + right - whole))) <= 15*eps:
-        return left + right + (left + right - whole)/15.0
-    return recursive_asr(f,a,c,eps/2.0,left) + recursive_asr(f,c,b,eps/2.0,right)
+def recursive_asr_imag(f,a,b,eps,whole,**kwargs):
+    "Adaptive Simpson's rule (see recursive_asr) converging on the imaginary part only."
+    return recursive_asr(f,a,b,eps,whole,
+                          test=lambda d: np.max(np.abs(np.imag(d))),**kwargs)
 
 
 
@@ -76,10 +89,13 @@ def scalar_asr(f,a,b,eps,whole):
  
 def adaptive_simpsons_rule(f,a,b,eps,only_imag=False):
     "Calculate integral of f from a to b with max error of eps."
+    c = (a+b) / 2.0
+    fa,fm,fb = f(a),f(c),f(b)
+    whole = (b-a)/6.0 * (fa + 4.0*fm + fb)
     if only_imag:
-      return recursive_asr_imag(f,a,b,eps,simpsons_rule(f,a,b))
+      return recursive_asr_imag(f,a,b,eps,whole,fa=fa,fm=fm,fb=fb)
     else:
-      return recursive_asr(f,a,b,eps,simpsons_rule(f,a,b))
+      return recursive_asr(f,a,b,eps,whole,fa=fa,fm=fm,fb=fb)
 
 
 
