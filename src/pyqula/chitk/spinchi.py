@@ -52,8 +52,24 @@ def replicateU(U,n=3):
 
 
 
-def spinchi_full(H,RPA=True,**kwargs):
-    """Return the spin response function"""
+def _full_spin_U(H):
+    """Return the interaction matrix for the full (Sx,Sy,Sz) spin channel,
+    in the convention used by spinchi_full/chi_ops_RPA (onsite Hubbard U
+    only, replicated across the 3 spin channels with the -2 prefactor).
+    Returns None if the Hamiltonian carries no mean-field interaction."""
+    U = H.V # get the interaction
+    if U is None: return None # no interaction, no RPA dressing
+    if len(U)>1: raise # not implemented for momentum dependent U
+    U = U[(0,0,0)] # onsite interaction matrix
+    U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
+    U = replicateU(U,n=3) # replicate for all the channels
+    U = -2*U # beware of this minus sign for spin response (!!!)
+    return U
+
+
+def _full_spin_operators(H):
+    """Return the (Sx,Sy,Sz)/2 operators used by spinchi_full/magnon_bands,
+    projected onto the electron subspace for Nambu Hamiltonians."""
     sx = H.get_operator("sx") # spin operator, eigen +-1
     sy = H.get_operator("sy") # spin operator, eigen +-1
     sz = H.get_operator("sz") # spin operator, eigen +-1
@@ -65,17 +81,55 @@ def spinchi_full(H,RPA=True,**kwargs):
         sx = sx@el
         sy = sy@el
         sz = sz@el
-    Ss = [sx/2.,sy/2.,sz/2.] # pauli matrices, with eigen +-1/2
-    if RPA: # RPA mode
-        U = H.V # get the interaction
-        if U is not None: # finite interaction
-            if len(U)>1: raise # not implemented for momentum dependent
-            U = U[(0,0,0)] # onsite interaction matrix
-            U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
-            U = replicateU(U,n=3) # replicate for all the channels
-            U = -2*U # beware of this minus sign for spin response (!!!)
-    else: U = None # no RPA
+    return [sx/2.,sy/2.,sz/2.] # pauli matrices, with eigen +-1/2
+
+
+def spinchi_full(H,RPA=True,**kwargs):
+    """Return the spin response function"""
+    Ss = _full_spin_operators(H)
+    U = _full_spin_U(H) if RPA else None
     return chi_ops_RPA(H,ops=Ss,V=U,**kwargs) # non-interacting response
+
+
+def magnon_bands(H,qpath=None,nq=20,**kwargs):
+    """Return the magnon bands: the poles of the full spin RPA kernel
+    (the same Sx,Sy,Sz channel used by spinchi_full/get_iets_ldos), scanned
+    along a q-path. This is the collective-mode dispersion of the spin
+    response -- where chi_spin_RPA diverges -- rather than the response
+    itself.
+
+    Requires a Hamiltonian with a mean-field interaction set (H.V), e.g.
+    the output of get_mean_field_hamiltonian.
+
+    Returns (qs,ws,gammas): qs is the integer index of the q-point along
+    the path (the same convention used by get_bands for the k-axis),
+    ws the pole frequency and gammas its residual imaginary part -- signed,
+    so judge how sharp/well-defined a mode is by abs(gammas), not gammas
+    directly (see rpa.py's _poles_from_chi_matrix docstring). Different
+    q-points can have different numbers of poles, so all three are
+    returned as flat 1D arrays -- ready for a scatter-style dispersion
+    plot -- rather than a ragged per-q array."""
+    from .rpa import rpa_kernel_poles_ops, build_ops_projectors
+    from .. import parallel
+    Ss = _full_spin_operators(H)
+    U = _full_spin_U(H)
+    if U is None: raise ValueError("Hamiltonian has no mean-field "
+            "interaction (H.V); set one first, e.g. via "
+            "get_mean_field_hamiltonian")
+    # the operator/projector tensor is q-independent: build it once and
+    # reuse it at every q-point instead of rebuilding it from Ss each time
+    pAs,pBs = build_ops_projectors(H,Ss)
+    qpath = H.geometry.get_kpath(qpath,nk=nq) # generate the q-path
+    def f(q):
+        return rpa_kernel_poles_ops(H,V=U,pAs=pAs,pBs=pBs,q=q,**kwargs)
+    outs = parallel.pcall(f,qpath) # compute the poles at every q
+    qs,ws,gammas = [],[],[] # flat storage
+    for iq,poles in enumerate(outs): # loop over q-points
+        for (w,g) in poles: # loop over poles found at this q
+            qs.append(iq)
+            ws.append(w)
+            gammas.append(g)
+    return np.array(qs),np.array(ws),np.array(gammas)
 
 
 

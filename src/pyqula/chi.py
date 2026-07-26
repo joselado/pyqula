@@ -125,4 +125,8 @@ from .chitk.spinchi import spinchi_ladder
 from .chitk.spinchi import spinchi_full
 from .chitk.spinchi import get_iets_ldos
 from .chitk.spinchi import get_qdos_iets
+from .chitk.spinchi import magnon_bands
+
+# RPA kernel poles (collective modes / instabilities)
+from .chitk.rpa import rpa_kernel_poles
 

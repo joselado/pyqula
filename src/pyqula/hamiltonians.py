@@ -132,6 +132,18 @@ class Hamiltonian():
         """Spatially resolved IETS at a certain energy"""
         from . import chi
         return chi.get_qdos_iets(self,**kwargs)
+    def get_rpa_kernel_poles(self,**kwargs):
+        """Return the poles of the RPA kernel 1 - U*chi(q,omega), i.e. the
+        frequencies of the collective modes/instabilities of the
+        interacting response function"""
+        from . import chi
+        return chi.rpa_kernel_poles(self,**kwargs)
+    def get_magnon_bands(self,**kwargs):
+        """Return the magnon bands: the poles of the full spin RPA kernel
+        (the Sx,Sy,Sz channel used by get_spinchi_full/get_iets_ldos),
+        scanned along a q-path"""
+        from . import chi
+        return chi.magnon_bands(self,**kwargs)
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)
