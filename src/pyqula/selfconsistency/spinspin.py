@@ -100,10 +100,18 @@ def SzSz(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], callback_mf=None,
     spin-spin interaction (first/second/third neighbor shells, plus an
     optional general distance function Jr). J>0 is antiferromagnetic
     (Heisenberg-like sign convention), J<0 favors a ferromagnetic
-    instability along z."""
+    instability along z.
+
+    Works for BdG (Nambu, h.has_eh=True) Hamiltonians too: densitydensity()
+    already dispatches has_eh-aware Hartree-Fock+anomalous decoupling
+    (selfconsistency.densitydensity.get_mf) generically for any v matrix,
+    including SzSz's +/-1/4 one, with no changes needed here -- verified
+    that a bare SzSz run (no pre-existing pairing) on a Nambu Hamiltonian
+    converges to a purely magnetic state (zero anomalous/pairing mean
+    field) that exactly matches the non-Nambu SzSz result in the electron
+    sector."""
     from .densitydensity import densitydensity
     if not h.has_spin: return NotImplemented # only for spinful systems
-    if h.has_eh: return NotImplemented # not implemented for BdG Hamiltonians
     h = h.get_multicell().get_dense()
     v = _build_v(h, J1, J2, J3, Jr)
     constrain_cb = _callback_mf_constrains(h, constrains)
@@ -178,9 +186,10 @@ def SxSx(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], **kwargs):
     H = sum J1/J2/J3 (+ Jr(r)) Sx_i Sx_j
     spin-spin interaction. Implemented by rotating the problem so that x
     becomes the computational z axis, running SzSz there, and rotating the
-    converged Hamiltonian back -- see the module docstring."""
+    converged Hamiltonian back -- see the module docstring. Works for BdG
+    (Nambu, h.has_eh=True) Hamiltonians too: global_spin_rotation already
+    handles the Nambu case correctly (see its docstring)."""
     if not h.has_spin: return NotImplemented
-    if h.has_eh: return NotImplemented
     return _rotated_axis_exchange(h, "x", J1, J2, J3, Jr, constrains, **kwargs)
 
 
@@ -189,9 +198,10 @@ def SySy(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], **kwargs):
     H = sum J1/J2/J3 (+ Jr(r)) Sy_i Sy_j
     spin-spin interaction. Implemented by rotating the problem so that y
     becomes the computational z axis, running SzSz there, and rotating the
-    converged Hamiltonian back -- see the module docstring."""
+    converged Hamiltonian back -- see the module docstring. Works for BdG
+    (Nambu, h.has_eh=True) Hamiltonians too: global_spin_rotation already
+    handles the Nambu case correctly (see its docstring)."""
     if not h.has_spin: return NotImplemented
-    if h.has_eh: return NotImplemented
     return _rotated_axis_exchange(h, "y", J1, J2, J3, Jr, constrains, **kwargs)
 
 
@@ -227,9 +237,14 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
 
     Only integration="ed" and the plain-mixing solver are supported (unlike
     Vinteraction/SzSz/SxSx/SySy, which forward to the full
-    generic_densitydensity solver zoo)."""
+    generic_densitydensity solver zoo).
+
+    Works for BdG (Nambu, h0.has_eh=True) Hamiltonians too, but decouples
+    the exchange interaction in the normal (electron) sector only -- see
+    _run_anisotropic_scf's docstring for why (in short: extending the x/y
+    rotate-decouple-rotate-back trick to also generate anomalous/pairing
+    mean field from Jx/Jy is a separate, unverified extension)."""
     if not h0.has_spin: raise ValueError("Jinteraction needs a spinful Hamiltonian")
-    if h0.has_eh: raise ValueError("Jinteraction is not implemented for BdG Hamiltonians")
     h1 = h0.get_multicell().get_dense()
     vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr)
     vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr)
@@ -300,29 +315,38 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     spin-orbital basis (Vinteraction's uniform sign pattern across the
     four spin blocks vs. SzSz's +/-1/4 one -- see the module docstring and
     _build_v), and Hartree-Fock decoupling (get_mf_normal) is linear in the
-    interaction matrix, so the density-density contribution can simply be
-    added into Jinteraction's z-channel matrix before entering its shared
-    SCF loop -- no separate channel, and no rotation, needed for it (unlike
-    the x/y channels, which do need the rotate-decouple-rotate-back trick).
+    interaction matrix, so for a normal-state (non-BdG) Hamiltonian the
+    density-density contribution is simply added into the z-channel matrix
+    before entering the shared SCF loop -- no separate channel, and no
+    rotation, needed for it (unlike the x/y channels, which do need the
+    rotate-decouple-rotate-back trick).
+
+    For a BdG (Nambu, h0.has_eh=True) Hamiltonian, density-density and
+    exchange are instead kept as two separate contributions summed each
+    SCF iteration (see _run_anisotropic_scf's docstring): density-density
+    keeps its existing full normal+anomalous treatment (identical to
+    Vinteraction), while the exchange channels are decoupled in the normal
+    (electron) sector only, i.e. J does not itself induce pairing here.
 
     See Vinteraction and Jinteraction for further background on the
     density-density and exchange conventions respectively; only
     integration="ed" and the plain-mixing solver are supported (unlike
     Vinteraction/SzSz/SxSx/SySy)."""
     if not h0.has_spin: raise ValueError("VJinteraction needs a spinful Hamiltonian")
-    if h0.has_eh: raise ValueError("VJinteraction is not implemented for BdG Hamiltonians")
     h1 = h0.get_multicell().get_dense()
     vz = _build_v(h1, J1+J1z, J2, J3, Jr)
     vd = _build_density_v(h1, V1, V2, V3, U, Vr)
-    vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
     vx = _build_v(h1, J1+J1x, J2, J3, Jr)
     vy = _build_v(h1, J1+J1y, J2, J3, Jr)
+    if not h1.has_eh: # normal-state: fold density-density directly into vz
+        vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
+        vd = None
     return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
-            maxerror, maxite, T, verbose, constrains)
+            maxerror, maxite, T, verbose, constrains, vd=vd)
 
 
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
-        maxerror, maxite, T, verbose, constrains):
+        maxerror, maxite, T, verbose, constrains, vd=None):
     """Shared SCF core for Jinteraction/VJinteraction: decouples the
     z-channel matrix `vz` directly (Hartree-Fock density-density in the
     lab/computational spin basis) and the x/y-channel matrices `vx`/`vy`
@@ -330,25 +354,57 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     computational z axis, applying the same decoupling there, and rotating
     the resulting mean field back before summing all three contributions
     -- see Jinteraction's docstring for the physics. `h1` must already be
-    h0.get_multicell().get_dense()."""
-    from .densitydensity import (get_dm, get_mf_normal, mix_mf, diff_mf,
-            update_hamiltonian, set_hoppings, hamiltonian2dict,
+    h0.get_multicell().get_dense().
+
+    `vd`, if given, is an additional density-density interaction matrix
+    (Vinteraction's convention) added to the mean field each iteration.
+    For a normal-state h1, the caller should have already folded this into
+    `vz` directly instead (Hartree-Fock decoupling is linear in the
+    interaction, so this is equivalent and does not need a separate
+    channel) and passed vd=None. `vd` as a genuinely separate argument only
+    matters for a BdG (Nambu, h1.has_eh=True) h1: there, vx/vy/vz (the
+    exchange channels) are decoupled in the normal (electron) sector only
+    -- extracting it from the full Nambu density matrix, decoupling with
+    get_mf_normal exactly as for a normal-state Hamiltonian (verified: the
+    x/y-rotation trick's _rot_dm/_rot_dict logic, and
+    rotate_spin.global_spin_rotation more generally, both already handle
+    Nambu-doubled matrices correctly with no changes, since pyqula's Nambu
+    convention (sctk/reorder.py) groups each site's electron pair and hole
+    pair as separate, identically-transforming (up,down)-like 2-blocks),
+    then embedded back into a full Nambu matrix with zero anomalous part --
+    while `vd` gets the full has_eh-aware treatment (get_mf, both normal
+    and anomalous/pairing), identical to how Vinteraction already handles
+    it. In short: J does not itself induce superconducting pairing here,
+    only V/U can (matching the existing Zeeman+attractive-V1 triplet-SC
+    machinery) -- extending the x/y rotation trick to also rotate the
+    anomalous sector is a separate, unverified piece of physics left for a
+    future extension."""
+    from .densitydensity import (get_dm, get_mf_normal, get_mf, mix_mf,
+            diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF)
     from .mfconstrains import obj2mf
+    has_eh = h1.has_eh
+    if has_eh: from .. import superconductivity
     h1.nk = nk
-    # union of the three channels' bond directions: in general the
-    # neighbor-shell hopping-dict builder could prune a channel's key set
-    # differently depending on which of its J's are zero, so the lab-frame
-    # density matrix must be requested at the union, not just vz's keys
-    v_dirs = {d: None for d in (set(vz) | set(vx) | set(vy))}
+    # union of the three exchange channels' bond directions (+ vd's, if
+    # given): in general the neighbor-shell hopping-dict builder could
+    # prune a channel's key set differently depending on which of its J's
+    # (or V's) are zero, so the lab-frame density matrix must be requested
+    # at the union, not just vz's keys
+    v_dirs = {d: None for d in (set(vz) | set(vx) | set(vy) |
+            (set(vd) if vd is not None else set()))}
     # the x/y rotations are fixed for the whole SCF loop, so build the
     # (small, 2x2-block) rotation matrices once via build_rotation_matrix
     # instead of paying a fresh matrix exponential on every one of the many
     # _rotate_dict/_rotate_dm calls compute_mf makes each iteration; the
     # backward rotation is just the forward matrix's dagger (R(-angle) =
-    # R(angle)^dagger), so only Rx/Ry need to be built
+    # R(angle)^dagger), so only Rx/Ry need to be built. Sized from vz's own
+    # shape (always the plain spin-orbital size, never Nambu-doubled, even
+    # when h1 itself is BdG) rather than h1.intra.shape, since the exchange
+    # channels are always decoupled in the (electron-sector-sized) normal
+    # channel -- see this function's docstring.
     from ..rotate_spin import build_rotation_matrix
-    n_orb = h1.intra.shape[0]//2
+    n_orb = vz[(0, 0, 0)].shape[0]//2
     Rx = build_rotation_matrix(n_orb, **_AXIS_ROTATION["x"])
     Ry = build_rotation_matrix(n_orb, **_AXIS_ROTATION["y"])
 
@@ -399,14 +455,35 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     hop0 = hamiltonian2dict(h1)
     h0_dense = h1.copy() # reference Hamiltonian before the mean field is added
 
+    def electron_sector(dd):
+        """Extract the normal (electron-electron) sector from a dict of
+        (possibly Nambu-sized) density matrices; a no-op for normal-state
+        h1."""
+        if not has_eh: return dd
+        return {k: superconductivity.get_eh_sector(m, i=0, j=0)
+                for (k, m) in dd.items()}
+
+    def embed_normal(mfe):
+        """Embed an electron-sector-only mean field dict back into full
+        Nambu form, with zero anomalous (pairing) part; a no-op for
+        normal-state h1."""
+        if not has_eh: return mfe
+        return {k: superconductivity.build_nambu_matrix(m)
+                for (k, m) in mfe.items()}
+
     def compute_mf(dm_lab):
-        mf = get_mf_normal(vz, dm_lab)
-        dm_x = _rot_dm(dm_lab, Rx) # dm needs the conjugated rotation
+        dme_lab = electron_sector(dm_lab) # exchange channels: normal sector only
+        mf = get_mf_normal(vz, dme_lab)
+        dm_x = _rot_dm(dme_lab, Rx) # dm needs the conjugated rotation
         mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rx.conj().T) # mf does not
         mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
-        dm_y = _rot_dm(dm_lab, Ry)
+        dm_y = _rot_dm(dme_lab, Ry)
         mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ry.conj().T)
         mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
+        mf = embed_normal(mf)
+        if vd is not None: # density-density: full normal+anomalous treatment
+            mf_d = get_mf(vd, dm_lab, has_eh=has_eh)
+            mf = (MultiHopping(mf) + MultiHopping(mf_d)).get_dict()
         return mf
 
     def f(mf):
@@ -461,15 +538,22 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         ite += 1
 
     # total energy: sum of occupied energies plus the double-counting
-    # correction for each of the three (independently-rotated) channels
+    # correction for each of the three (independently-rotated) exchange
+    # channels (electron sector only, matching compute_mf) plus vd's (if
+    # any), which -- like its mean field -- uses the full, un-extracted
+    # density matrix, matching how Vinteraction/densitydensity.py already
+    # computes it
     h = scf.hamiltonian
     etot = h.get_total_energy(nk=h.nk)
     if mu is None:
         etot += h.fermi*h.intra.shape[0]*filling
-    etot += get_dc_energy(vz, scf.dm)
-    dm_x = _rot_dm(scf.dm, Rx) # dm needs the conjugated rotation, see compute_mf
+    dme = electron_sector(scf.dm)
+    etot += get_dc_energy(vz, dme)
+    dm_x = _rot_dm(dme, Rx) # dm needs the conjugated rotation, see compute_mf
     etot += get_dc_energy(vx, dm_x)
-    dm_y = _rot_dm(scf.dm, Ry)
+    dm_y = _rot_dm(dme, Ry)
     etot += get_dc_energy(vy, dm_y)
+    if vd is not None:
+        etot += get_dc_energy(vd, scf.dm)
     scf.total_energy = etot.real
     return scf

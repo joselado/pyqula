@@ -113,10 +113,19 @@ def spiralhopping(m,ri,rj,svector = np.array([0.,0.,1.]),
 
 
 def hamiltonian_spin_rotation(self,vector=np.array([0.,0.,1.]),angle=0.):
-    """ Perform a global spin rotation """
+    """ Perform a global spin rotation.
+
+    Also correct for BdG (Nambu, has_eh=True) Hamiltonians: pyqula's Nambu
+    convention (sctk/reorder.py's block2nambu) groups each site's electron
+    pair and hole pair as consecutive (up,down)-like 2-blocks, so
+    global_spin_rotation's n=m.shape[0]//2, kron(eye(n),rot) construction
+    already applies the same rotation to every one of those blocks
+    (electron pair and hole pair alike) with no changes needed -- verified
+    numerically (eigenvalue-preserving, and matches rotating the physical
+    exchange/pairing directly) against Hamiltonians with both an exchange
+    field and s-wave pairing present. """
     if not self.has_spin: raise # no spin in the Hamiltonian
     gsr = global_spin_rotation # rename method
-    if self.has_eh: raise
     self.intra = gsr(self.intra,vector=vector,angle=angle)
     if self.is_multicell: # multicell hamiltonian
       for i in range(len(self.hopping)): # loop 
