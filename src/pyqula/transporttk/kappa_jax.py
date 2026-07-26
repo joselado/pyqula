@@ -17,28 +17,44 @@ plus a Fisher-Lee trace -- is re-expressed in jax.numpy so jax.grad can
 differentiate it exactly, instead of sampling G at two nearby couplings
 (the default 0.9T/1.1T window) and fitting a secant slope through them.
 
+Because that tail is a hand-reimplementation of transporttk.smatrix's
+formula (minus unitarize.check_and_fix's unitarity correction, and minus
+LocalProbe's own has_spin=False/spinless-Nambu handling -- see
+applicable()'s docstring), kappa_branch cross-checks its own G(T) against
+one reference get_smatrix(...,check=True) call (reusing the already-solved
+selfenergies) each time and raises if they disagree beyond
+`_reference_rtol`; get_kappa_ratio_jax turns that into a clean fallback
+rather than ever returning a silently-wrong value.
+
 Benchmarked on examples/transport/localprobe_kappa_1D (101-point energy
-sweep, T=0.2, delta=1e-3): ~3.7x faster than transporttk.kappa's existing
-get_kappa_ratio on this LocalProbe, and matches it to within ~3e-3 out of
-O(1) values -- that residual is the secant's own finite-difference
-curvature bias (confirmed by tightening the secant window), not error
-introduced here. See tests/transport/test_kappa_jax.py.
+sweep, T=0.2, delta=1e-3): ~1.25x faster than transporttk.kappa's existing
+get_kappa_ratio on this LocalProbe (after paying for the reference
+cross-check above), and matches it to within ~3e-3 out of O(1) values --
+that residual is the secant's own finite-difference curvature bias
+(confirmed by tightening the secant window), not error introduced here.
+See tests/transport/test_kappa_jax.py.
 
 Not covered here (get_kappa_ratio_jax returns None so callers fall back to
 transporttk.kappa's numeric path): finite temperature
 (get_kappa_finite_temperature_energies), a superconducting probe lead
 (Floquet-Keldysh dc_current, e.g. examples/transport/decay_constant_keldysh),
-and Heterostructure (as opposed to LocalProbe) objects.
+a spinless-Nambu system, and Heterostructure (as opposed to LocalProbe)
+objects.
 """
 import numpy as np
 
 from .. import algebra
-from .localprobe import LocalProbe
+from .localprobe import LocalProbe, delta_smatrix as _delta_smatrix
 from .didv import _both_leads_superconducting
 
 dagger = algebra.dagger
 
-_delta_smatrix = 1e-12
+# Relative tolerance for cross-checking G(T) (from the jax tail's raw
+# Fisher-Lee formula) against the reference transporttk.smatrix.get_smatrix
+# result (which applies unitarize.check_and_fix when the S-matrix's own
+# unitarity error exceeds its threshold, ~100*delta_smatrix -- see
+# kappa_branch's docstring for why this check exists).
+_reference_rtol = 1e-6
 
 try:
     import jax
@@ -53,10 +69,20 @@ def applicable(ht):
     """Whether get_kappa_jax's exact-gradient shortcut is valid for this
     branch object (as produced by transporttk.kappa.generate_HT) --
     structural checks only, not the reference coupling T (callers check
-    T!=0 themselves once T is known)."""
+    T!=0 themselves once T is known).
+
+    Requires has_spin=True on both the sample and the probe: the Nambu
+    reordering _branch_arrays uses (sctk.reorder.block2nambu_matrix, the
+    same convention ht.get_eh_sector/didv_BdG rely on) hardcodes 4
+    degrees of freedom per site (2 spin x 2 nambu). A spinless-Nambu
+    system (has_eh=True, has_spin=False, directly buildable via
+    add_swave on a has_spin=False geometry) doesn't match that layout;
+    reject it here rather than silently reordering into nonsense."""
     if not jax_available: return False
     if not isinstance(ht, LocalProbe): return False
     if not ht.has_eh: return False
+    if not (getattr(ht.H, "has_spin", False) and getattr(ht.lead, "has_spin", False)):
+        return False
     if _both_leads_superconducting(ht): return False
     return True
 
@@ -84,7 +110,7 @@ def _branch_arrays(ht, energy):
     n = A.shape[0]
     from ..sctk.reorder import block2nambu_matrix
     R = np.array(block2nambu_matrix(np.zeros((n, n))).todense())
-    return A, D, C, gl, gr, R
+    return A, D, C, gl, gr, R, delta, selfl, selfr
 
 
 if jax_available:
@@ -112,23 +138,69 @@ if jax_available:
         return jnp.log(G)
 
     _grad_logG = jax.jit(jax.grad(_logG, argnums=0))
+    _logG_jit = jax.jit(_logG)
 else:
     _grad_logG = None
+    _logG_jit = None
+
+
+def _reference_G(ht, energy, T, delta, selfl, selfr):
+    """G(T) from the library's own get_smatrix+didv_BdG formula, which
+    (unlike _logG's raw Fisher-Lee tail) applies unitarize.check_and_fix
+    whenever the S-matrix's own unitarity error exceeds threshold. Reuses
+    the already-solved selfl/selfr via LocalProbe's selfenergy cache
+    (keyed exactly as get_smatrix's own ht.get_selfenergy(energy,
+    delta=delta,lead=...,pristine=True) calls would key it -- see
+    LocalProbe.get_selfenergy) so this doesn't re-run the expensive
+    Sancho-Rubio/sample-GF solve."""
+    from .smatrix import get_smatrix
+    prev_flag, prev_cache = ht.reuse_selfenergy, ht._selfenergy_cache
+    ht.reuse_selfenergy = True
+    ht._selfenergy_cache = {
+        (energy, 0, delta, None): selfl,
+        (energy, 1, delta, None): selfr,
+    }
+    try:
+        s = get_smatrix(ht, energy=energy, check=True)
+    finally:
+        ht.reuse_selfenergy = prev_flag
+        ht._selfenergy_cache = prev_cache
+    r = ht.get_reflection_normal_lead(s)
+    ree = ht.get_eh_sector(r, i=0, j=0)
+    reh = ht.get_eh_sector(r, i=0, j=1)
+    Ree = np.trace(dagger(ree)@ree)
+    Reh = np.trace(dagger(reh)@reh)
+    return (ree.shape[0] - Ree + Reh).real
 
 
 def kappa_branch(ht, energy=0.0, T=None):
     """d(log G)/d(log t) at t=T (default ht.T), computed exactly via
     jax.grad instead of transporttk.kappa.get_power's secant fit. Raises
-    if jax is unavailable or `applicable(ht)` is False -- callers should
-    use get_kappa_ratio_jax, which checks that first and never raises."""
+    if jax is unavailable, `applicable(ht)` is False, or the jax tail's
+    raw (uncorrected) G(T) disagrees with the reference get_smatrix+
+    check_and_fix result by more than `_reference_rtol` -- signalling
+    that check_and_fix actually intervened, so the jax tail would be
+    differentiating a formula the reference path doesn't return unmodified.
+    Callers should use get_kappa_ratio_jax, which checks applicability
+    first and never raises."""
     if not jax_available:
         raise RuntimeError("jax is not available")
     if T is None: T = ht.T
     if T == 0: raise ValueError("T must be nonzero")
     ht.T = T  # so the coupling block get_central_gmatrix builds matches T
-    A, D, C, gl, gr, R = _branch_arrays(ht, energy)
+    A, D, C, gl, gr, R, delta, selfl, selfr = _branch_arrays(ht, energy)
     args = [jnp.array(x, dtype=jnp.complex128) for x in (A, D, C, gl, gr, R)]
     logt = jnp.log(jnp.array(T, dtype=jnp.float64))
+
+    G_jax = float(jnp.exp(_logG_jit(logt, *args)))
+    G_ref = _reference_G(ht, energy, T, delta, selfl, selfr)
+    if not np.isclose(G_jax, G_ref, rtol=_reference_rtol, atol=1e-10):
+        raise RuntimeError(
+            f"kappa_jax G(T)={G_jax} disagrees with reference get_smatrix "
+            f"G(T)={G_ref} beyond rtol={_reference_rtol} -- likely "
+            "unitarize.check_and_fix intervening on the reference path; "
+            "falling back to the numeric secant.")
+
     return float(_grad_logG(logt, *args))
 
 
@@ -144,7 +216,8 @@ def get_kappa_ratio_jax(ht_sc, ht_normal, energy=0.0, T=1e-2, **kwargs):
     try:
         k1 = kappa_branch(ht_sc, energy=energy, T=T)
         k2 = kappa_branch(ht_normal, energy=energy, T=T)
+        ratio = k1/k2
     except Exception:
         return None
-    if not (np.isfinite(k1) and np.isfinite(k2)): return None
-    return k1/k2
+    if not np.isfinite(ratio): return None
+    return ratio

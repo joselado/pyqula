@@ -157,10 +157,19 @@ def get_conductances_finite_temp(T=1e-2,temp=1e-2,**kwargs):
     """Finite-temperature analog of get_conductances: same two-coupling
     log-log sampling used to extract the kappa power-law exponent, but
     each conductance is HT.didv(temp=temp,...) (thermally averaged)
-    rather than the T=0 conductance get_conductances uses."""
+    rather than the T=0 conductance get_conductances uses. Wrapped in the
+    same _selfenergy_cache_scope as get_conductances: the probe/sample
+    selfenergies LocalProbe.get_selfenergy returns still don't depend on
+    the coupling T at finite temperature either (temp only changes how
+    finite_T_didv's thermal quadrature *consumes* them, over a set of
+    quasienergies that is itself identical for both coupling points), so
+    caching them across the two-coupling sweep is exact here too -- and
+    typically a bigger win, since the thermal quadrature revisits the
+    same quasienergy grid ~147 times per coupling."""
     cref = T
     ts = np.exp(np.linspace(np.log(cref*0.9),np.log(cref*1.1),2)) # hoppings
-    Gs = np.array([get_single(c=t,temp=temp,**kwargs) for t in ts]) # compute conductance
+    with _selfenergy_cache_scope(kwargs.get("HT")):
+        Gs = np.array([get_single(c=t,temp=temp,**kwargs) for t in ts]) # compute conductance
     return ts,Gs
 
 

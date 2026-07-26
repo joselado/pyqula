@@ -111,6 +111,37 @@ def test_get_kappa_ratio_jax_returns_none_for_zero_coupling():
     assert kappa_jax.get_kappa_ratio_jax(ht_sc, ht_normal, energy=0.05, T=0.0) is None
 
 
+def test_applicable_rejects_spinless_nambu():
+    """block2nambu_matrix (used to reorder into electron/hole blocks)
+    hardcodes 4 degrees of freedom per site (2 spin x 2 nambu) -- a
+    spinless-Nambu LocalProbe (has_eh=True, has_spin=False) doesn't match
+    that layout and must be rejected, not silently misreordered."""
+    g = geometry.chain()
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_swave(0.1)
+    lp = LocalProbe(h, delta=1e-3)
+    lp.T = 0.2
+    assert lp.H.has_eh and not lp.H.has_spin
+    assert kappa_jax.applicable(lp) is False
+
+
+def test_get_kappa_ratio_jax_never_raises_on_degenerate_branch_ratio():
+    """get_kappa_ratio_jax's docstring promises it never raises, even if
+    a branch's own exponent comes out exactly 0 (which would make the
+    k1/k2 ratio a ZeroDivisionError if not guarded)."""
+    lp = _normal_probe_localprobe()
+    ht_sc = kappa_mod.generate_HT(lp, SC=True)
+    ht_normal = kappa_mod.generate_HT(lp, SC=False)
+
+    orig = kappa_jax.kappa_branch
+    kappa_jax.kappa_branch = lambda ht, energy=0.0, T=None: 0.0
+    try:
+        result = kappa_jax.get_kappa_ratio_jax(ht_sc, ht_normal, energy=0.05, T=lp.T)
+    finally:
+        kappa_jax.kappa_branch = orig
+    assert result is None
+
+
 def test_decay_constant_keldysh_case_still_works_end_to_end():
     """Regression guard: the superconducting-probe LocalProbe.get_kappa
     path (examples/transport/decay_constant_keldysh) must still complete

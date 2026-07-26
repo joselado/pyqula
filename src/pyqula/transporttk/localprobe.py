@@ -58,7 +58,11 @@ class LocalProbe():
     def get_selfenergy(self,energy,lead=0,**kwargs):
         """Return the selfenergies"""
         if self.reuse_selfenergy:
-            key = (energy,lead)
+            # keyed on every kwarg that can change the result (delta,
+            # numba) besides energy/lead -- not just (energy,lead) -- so a
+            # cache scope spanning calls with different delta/numba can't
+            # silently return a stale selfenergy solved with the wrong one
+            key = (energy,lead,kwargs.get("delta"),kwargs.get("numba"))
             if key in self._selfenergy_cache: return self._selfenergy_cache[key]
         if lead==0: # use the probe
             out = lead_selfenergy(self,energy=energy,**kwargs)
