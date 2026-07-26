@@ -1270,6 +1270,10 @@ By default, `get_dc_current`/`keldysh_didv` replace most of the many thousands o
 
 This interpolant sharing is not limited to one `dc_current` call's own internal sideband sweep: `get_iv_curve` builds a single interpolant sized to the whole voltage array up front instead of one per voltage, and a single finite-temperature `didv(temp=...)`/`get_kappa(temp=...)` call shares one interpolant across its own internal thermal quadrature -- which alone can visit well over a hundred nearby energies for just one nominal `(energy, temp)` point. Both previously left every one of those internal evaluations to independently build and discard its own default fit.
 
+### Experimental: a JAX-differentiable Floquet-Keldysh current
+
+`keldyshtk.current_jax.JaxKeldyshCurrent` (needs the optional `jax` extra: `pip install pyqula[jax]`) is an independent reformulation of `dc_current` for zero-temperature, fixed-sideband-count (`nmax`, not adaptively grown) work: instead of a central finite difference of two separate `dc_current` calls, it batches the whole quasienergy quadrature into one compiled, `vmap`ped computation and differentiates it directly with `jax.grad`. Reused across many voltages (build once per `(junction, nmax, vmax)` combination, call `.current(v)`/`.didv(v)` many times), this is a genuine reformulation, not a drop-in speedup: measured on the same superconducting-probe `LocalProbe` workload the rest of this section targets, both `.current()` and `.didv()` came out roughly break-even to about 2x slower than the direct path once implemented and benchmarked rigorously (see the module's own docstring for the full story, including two real self-energy numerical-edge-case bugs and one silently-dropped derivative term found and fixed along the way). Kept as tested, documented, opt-in infrastructure -- a reformulation that did not pay off for the specific workload it was built for, potentially useful for a different one (a system that converges at a smaller `nmax`, or a workload needing only `current()` and not `didv()`) -- not something `didv`/`get_dc_current` route to automatically.
+
 
 # Single defects in infinite systems
 
