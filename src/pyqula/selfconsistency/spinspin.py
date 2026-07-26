@@ -278,38 +278,45 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None):
 
 
 def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
-        Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
-        Jz1=0.0, Jz2=0.0, Jz3=0.0, Jxr=None, Jyr=None, Jzr=None,
+        J1=0.0, J2=0.0, J3=0.0, Jr=None, Jx=0.0, Jy=0.0, Jz=0.0,
         mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
         T=1e-7, verbose=0, constrains=[]):
     """Self-consistent mean field combining density-density interactions
     (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
-    Vinteraction) with anisotropic spin-spin exchange (Jx/Jy/Jz Sa_i Sa_j
-    -- same convention as Jinteraction) in a single SCF loop.
+    Vinteraction) with spin-spin exchange in a single SCF loop.
+
+    J1/J2/J3 (+ Jr, a general distance-dependent function) are isotropic
+    Heisenberg-like exchange, J*(Sx_i Sx_j + Sy_i Sy_j + Sz_i Sz_j), for the
+    first/second/third neighbor shells -- the same first/second/third
+    neighbor-shell convention as V1/V2/V3. Jx/Jy/Jz are an additional,
+    optional anisotropic correction, added on top of J1 for the
+    first-neighbor shell only (e.g. the effective first-neighbor Jz
+    coupling is J1+Jz); second/third neighbors stay purely isotropic. All
+    default to 0, i.e. plain density-density with no spin-spin exchange.
 
     This works by combining the two existing SCF modes rather than
     inventing new decoupling math: density-density interactions and
-    Sz_i Sz_j are both already density-density interactions in the
+    Sa_i Sa_j are both already density-density interactions in the
     spin-orbital basis (Vinteraction's uniform sign pattern across the
     four spin blocks vs. SzSz's +/-1/4 one -- see the module docstring and
     _build_v), and Hartree-Fock decoupling (get_mf_normal) is linear in the
     interaction matrix, so the density-density contribution can simply be
     added into Jinteraction's z-channel matrix before entering its shared
     SCF loop -- no separate channel, and no rotation, needed for it (unlike
-    Jx/Jy, which do need the rotate-decouple-rotate-back trick). The x/y
-    channels are handled exactly as in Jinteraction.
+    the x/y channels, which do need the rotate-decouple-rotate-back trick).
 
-    See Vinteraction and Jinteraction for the individual parameter
-    conventions; only integration="ed" and the plain-mixing solver are
-    supported (unlike Vinteraction/SzSz/SxSx/SySy)."""
+    See Vinteraction and Jinteraction for further background on the
+    density-density and exchange conventions respectively; only
+    integration="ed" and the plain-mixing solver are supported (unlike
+    Vinteraction/SzSz/SxSx/SySy)."""
     if not h0.has_spin: raise ValueError("VJinteraction needs a spinful Hamiltonian")
     if h0.has_eh: raise ValueError("VJinteraction is not implemented for BdG Hamiltonians")
     h1 = h0.get_multicell().get_dense()
-    vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr)
+    vz = _build_v(h1, J1+Jz, J2, J3, Jr)
     vd = _build_density_v(h1, V1, V2, V3, U, Vr)
     vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
-    vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr)
-    vy = _build_v(h1, Jy1, Jy2, Jy3, Jyr)
+    vx = _build_v(h1, J1+Jx, J2, J3, Jr)
+    vy = _build_v(h1, J1+Jy, J2, J3, Jr)
     return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             maxerror, maxite, T, verbose, constrains)
 

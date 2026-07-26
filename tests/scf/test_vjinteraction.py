@@ -8,14 +8,16 @@ MAXERROR = 1e-6
 
 def test_vjinteraction_reduces_to_jinteraction_with_only_J():
     """VJinteraction combines density-density (V/U) and spin-spin exchange
-    (Jx/Jy/Jz) mean field into one SCF loop. With V1=V2=V3=U=0, it must
-    reduce exactly to Jinteraction."""
+    (isotropic J1/J2/J3 plus an optional Jx/Jy/Jz anisotropic correction on
+    the first-neighbor shell) mean field into one SCF loop. With
+    V1=V2=V3=U=0 and only Jz set (pure Sz-Sz, since J1 defaults to 0), it
+    must reduce exactly to Jinteraction's Jz1-only case."""
     g = geometry.chain()
     h1 = g.get_hamiltonian(has_spin=True)
     scf_j = meanfield.Jinteraction(h1, Jz1=-2.0, mf="ferroZ", nk=10,
             maxerror=MAXERROR, mix=0.3, maxite=300, filling=0.2)
     h2 = g.get_hamiltonian(has_spin=True)
-    scf_vj = meanfield.VJinteraction(h2, Jz1=-2.0, mf="ferroZ", nk=10,
+    scf_vj = meanfield.VJinteraction(h2, Jz=-2.0, mf="ferroZ", nk=10,
             maxerror=MAXERROR, mix=0.3, maxite=300, filling=0.2)
     assert scf_j.converged and scf_vj.converged
     assert np.isclose(scf_j.total_energy, scf_vj.total_energy, atol=1e-4), \
@@ -56,9 +58,9 @@ def test_vjinteraction_combined_U_and_J_reinforce_each_other():
     h_u = g.get_hamiltonian(has_spin=True)
     scf_u = meanfield.VJinteraction(h_u, U=5.0, **params)
     h_j = g.get_hamiltonian(has_spin=True)
-    scf_j = meanfield.VJinteraction(h_j, Jz1=-1.0, **params)
+    scf_j = meanfield.VJinteraction(h_j, Jz=-1.0, **params)
     h_uj = g.get_hamiltonian(has_spin=True)
-    scf_uj = meanfield.VJinteraction(h_uj, U=5.0, Jz1=-1.0, **params)
+    scf_uj = meanfield.VJinteraction(h_uj, U=5.0, Jz=-1.0, **params)
     assert scf_u.converged and scf_j.converged and scf_uj.converged
 
     mz_u = np.mean(np.abs(scf_u.hamiltonian.get_magnetization()[:, 2]))
@@ -69,12 +71,33 @@ def test_vjinteraction_combined_U_and_J_reinforce_each_other():
         f"(U-only {mz_u}, Jz-only {mz_j})"
 
 
+def test_vjinteraction_J1_matches_setting_Jx_Jy_Jz_equal():
+    """J1 (isotropic first-neighbor exchange) must be exactly equivalent to
+    setting Jx=Jy=Jz to the same value with J1=0, since J1 is defined as an
+    isotropic Heisenberg coupling added identically to all three axes on
+    the first-neighbor shell."""
+    g = geometry.chain()
+    params = dict(mf="ferroZ", nk=10, maxerror=MAXERROR, mix=0.3,
+            maxite=300, filling=0.2)
+    h1 = g.get_hamiltonian(has_spin=True)
+    scf_j1 = meanfield.VJinteraction(h1, J1=-2.0, **params)
+    h2 = g.get_hamiltonian(has_spin=True)
+    scf_xyz = meanfield.VJinteraction(h2, Jx=-2.0, Jy=-2.0, Jz=-2.0, **params)
+    assert scf_j1.converged and scf_xyz.converged
+    assert np.isclose(scf_j1.total_energy, scf_xyz.total_energy, atol=1e-4), \
+        (scf_j1.total_energy, scf_xyz.total_energy)
+    m1 = scf_j1.hamiltonian.get_magnetization()
+    m2 = scf_xyz.hamiltonian.get_magnetization()
+    assert np.mean(np.abs(m1 - m2)) < 1e-3
+
+
 def test_vjinteraction_isotropic_combination_preserves_su2_symmetry():
-    """U (already SU(2)-symmetric) combined with an isotropic (Jx=Jy=Jz)
-    exchange must still have full SU(2) symmetry: a random-direction
-    initial guess must converge to a moment collinear with it, with no
-    hidden preferred axis introduced by how the two channels are summed
-    into one z-channel matrix (see VJinteraction/_build_density_v)."""
+    """U (already SU(2)-symmetric) combined with an isotropic J1 exchange
+    (Jx=Jy=Jz=0, the pure Heisenberg case) must still have full SU(2)
+    symmetry: a random-direction initial guess must converge to a moment
+    collinear with it, with no hidden preferred axis introduced by how the
+    two channels are summed into one z-channel matrix (see
+    VJinteraction/_build_density_v)."""
     g = geometry.chain()
     rng = np.random.default_rng(3)
     for _ in range(4):
@@ -83,7 +106,7 @@ def test_vjinteraction_isotropic_combination_preserves_su2_symmetry():
         h = g.get_hamiltonian(has_spin=True)
         guess = h.copy()
         guess.add_exchange(0.1*v)
-        scf = meanfield.VJinteraction(h, U=1.0, Jx1=-2.0, Jy1=-2.0, Jz1=-2.0,
+        scf = meanfield.VJinteraction(h, U=1.0, J1=-2.0,
                 mf=guess, nk=10, maxerror=MAXERROR, mix=0.2, maxite=300,
                 filling=0.2)
         assert scf.converged

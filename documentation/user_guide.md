@@ -909,11 +909,11 @@ h = h.get_exchange_mean_field_hamiltonian(Jz1=-1.0,Jx1=-0.5,
                                             filling=0.2,mf="ferroZ")
 ```
 
-Density-density interactions ($U$/$V_1$/$V_2$/$V_3$/$V_r$, as in `get_mean_field_hamiltonian`) and spin-spin exchange ($J_x$/$J_y$/$J_z$, as above) can also be solved together, self-consistently, in a single combined SCF loop with `h.get_combined_mean_field_hamiltonian(U=...,V1=...,Jz1=...,...)`. This is not new physics: $S^z_iS^z_j$ and a density-density interaction are both density-density interactions in the spin-orbital basis (just with a different sign pattern across the four spin blocks), and the Hartree-Fock decoupling is linear in the interaction, so the density-density contribution is simply added into the same $z$-channel matrix the $J_z$ term already uses, with the $J_x$/$J_y$ channels handled exactly as above
+Density-density interactions ($U$/$V_1$/$V_2$/$V_3$/$V_r$, as in `get_mean_field_hamiltonian`) and spin-spin exchange can also be solved together, self-consistently, in a single combined SCF loop with `h.get_combined_mean_field_hamiltonian(U=...,V1=...,J1=...,...)`. This is not new physics: a density-density interaction and $S^z_iS^z_j$ are both density-density interactions in the spin-orbital basis (just with a different sign pattern across the four spin blocks), and the Hartree-Fock decoupling is linear in the interaction, so the density-density contribution is simply added into the same $z$-channel matrix the exchange term already uses. Exchange here follows a $V_1$/$V_2$/$V_3$-like convention: $J_1$/$J_2$/$J_3$ ($+J_r$) are isotropic Heisenberg couplings, $J(S^x_iS^x_j+S^y_iS^y_j+S^z_iS^z_j)$, for the first/second/third neighbor shells, and $J_x$/$J_y$/$J_z$ are an optional anisotropic correction added on top of $J_1$ for the first-neighbor shell only (e.g. the effective first-neighbor $J_z$ coupling is $J_1+J_z$); all default to 0
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
-h = h.get_combined_mean_field_hamiltonian(U=5.0,Jz1=-1.0,
+h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,
                                             filling=0.2,mf="ferroZ")
 ```
 
@@ -1738,13 +1738,15 @@ Returns the converged Hamiltonian (or `None` if the SCF did not converge)
 
 ### h.get_combined_mean_field_hamiltonian()
 Self-consistent mean field combining density-density interactions
-(onsite $U$, $V_1$/$V_2$/$V_3$/$V_r$ neighbor-shell) with anisotropic
-spin-spin exchange ($J_x$/$J_y$/$J_z$) in a single SCF loop.
+(onsite $U$, $V_1$/$V_2$/$V_3$/$V_r$ neighbor-shell) with spin-spin
+exchange in a single SCF loop.
 
 Optional arguments:
 
 - U, V1, V2, V3, Vr: as in `get_mean_field_hamiltonian`
-- Jx1, Jx2, Jx3, Jy1, Jy2, Jy3, Jz1, Jz2, Jz3, Jxr, Jyr, Jzr: as in `get_exchange_mean_field_hamiltonian`
+- J1, J2, J3 = 0.: isotropic Heisenberg exchange for the first/second/third-neighbor shells (same shell convention as V1/V2/V3)
+- Jr=None: general distance-dependent isotropic exchange function, as `Vr`
+- Jx, Jy, Jz = 0.: optional anisotropic correction added to J1 on the first-neighbor shell only (e.g. the effective first-neighbor Jz coupling is J1+Jz); second/third neighbors stay purely isotropic
 - mf, filling, nk, maxerror, mix, constrains: as above (only `integration="ed"` and the plain-mixing solver are supported)
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
