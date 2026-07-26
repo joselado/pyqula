@@ -1,0 +1,291 @@
+# Mean-field (Hartree-Fock) treatment of spin-spin (S_i.S_j) interactions
+# in spinful Hamiltonians.
+#
+# Sz_i Sz_j = 1/4 (n_iu - n_id)(n_ju - n_jd)
+#           = 1/4 (n_iu n_ju - n_iu n_jd - n_id n_ju + n_id n_jd)
+#
+# is already a density-density interaction (sum of V_ab n_a n_b over
+# spin-orbitals a,b) of exactly the form that selfconsistency.densitydensity's
+# generic Hartree-Fock engine decouples -- it does not know or care what the
+# spin-orbital index physically represents. So SzSz needs no new decoupling
+# math, only a v matrix with the right +/-1/4 sign pattern in the 2x2 spin
+# blocks (see _build_v below), fed into the existing densitydensity() engine.
+#
+# SxSx and SySy are obtained by a global spin rotation that maps the physical
+# x (or y) axis onto the computational z axis, running the SzSz machinery
+# there, and rotating the converged Hamiltonian back. Concretely, writing
+# c' = U c for a site-independent spin rotation U, a Hamiltonian h written in
+# terms of c becomes h_tilde = U h U^dagger written in terms of c'; the
+# density matrix transforms the same way. Requiring U^dagger sz U = sx (so
+# that "Sz" measured with the primed operators is "Sx" of the original ones)
+# is satisfied by the existing rotate_spin.global_spin_rotation machinery
+# (exposed as Hamiltonian.global_spin_rotation) for:
+#   x-axis: vector=[0,1,0], angle=+0.5   (undo with angle=-0.5)
+#   y-axis: vector=[1,0,0], angle=-0.5   (undo with angle=+0.5)
+# verified numerically against the Pauli matrices.
+
+import numpy as np
+
+from .. import specialhopping
+from ..multihopping import MultiHopping
+from ..rotate_spin import global_spin_rotation as _gsr
+
+# NOTE: densitydensity is imported lazily (inside each function, not here at
+# module level). densitydensity.py itself does `from ..meanfield import
+# identify_symmetry_breaking` at its very bottom, and meanfield.py imports
+# this module (spinspin) to re-export SzSz/SxSx/SySy/Jinteraction -- an
+# eager top-level import here would close that cycle and fail (with an
+# AttributeError on a partially-initialized module) depending on which
+# module a caller happens to import first.
+
+
+def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None):
+    """Build the spin-orbital interaction matrix for a J1/J2/J3 (plus
+    optional general Jr(r) function) neighbor-shell SzSz coupling,
+    following exactly the same neighbor-shell/hopping-dict construction as
+    Vinteraction, but with the +/-1/4 sign pattern of
+    Sz_i Sz_j = 1/4 (n_iu-n_id)(n_ju-n_jd) in the four spin blocks instead
+    of Vinteraction's uniform value. Same key set (bond directions) as
+    Vinteraction's v for the same geometry, since that is fixed purely by
+    the geometry's neighbor shells, independent of which J's are zero."""
+    nd = h.geometry.neighbor_distances() # distances to the neighbor shells
+    mgenerator = specialhopping.distance_hopping_matrix(
+            [J1/2., J2/2., J3/2.], nd[0:3])
+    hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
+            mgenerator=mgenerator)
+    if Jr is not None:
+        hv1 = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
+                tij=Jr)
+        hv = hv + hv1
+    v = hv.get_hopping_dict()
+    for d in v:
+        m = v[d]
+        n = m.shape[0]
+        m1 = np.zeros((2*n, 2*n), dtype=np.complex128)
+        for i in range(n):
+            for j in range(n):
+                m1[2*i, 2*j] = m[i, j]/4.       # up-up
+                m1[2*i, 2*j+1] = -m[i, j]/4.    # up-down
+                m1[2*i+1, 2*j] = -m[i, j]/4.    # down-up
+                m1[2*i+1, 2*j+1] = m[i, j]/4.   # down-down
+        v[d] = m1
+    return v
+
+
+def _callback_mf_constrains(h, constrains):
+    if not constrains: return None
+    from . import mfconstrains
+    def callback_mf(mf):
+        return mfconstrains.enforce_constrains(mf, h, constrains)
+    return callback_mf
+
+
+def SzSz(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], **kwargs):
+    """Self-consistent Hartree-Fock mean field for a
+    H = sum J1/J2/J3 (+ Jr(r)) Sz_i Sz_j
+    spin-spin interaction (first/second/third neighbor shells, plus an
+    optional general distance function Jr). J>0 is antiferromagnetic
+    (Heisenberg-like sign convention), J<0 favors a ferromagnetic
+    instability along z."""
+    from .densitydensity import densitydensity
+    if not h.has_spin: return NotImplemented # only for spinful systems
+    if h.has_eh: return NotImplemented # not implemented for BdG Hamiltonians
+    h = h.get_multicell().get_dense()
+    v = _build_v(h, J1, J2, J3, Jr)
+    callback_mf = _callback_mf_constrains(h, constrains)
+    return densitydensity(h, v=v, callback_mf=callback_mf, **kwargs)
+
+
+_AXIS_ROTATION = {
+        "x": dict(vector=[0., 1., 0.], angle=0.5),
+        "y": dict(vector=[1., 0., 0.], angle=-0.5),
+        }
+
+
+def _rotate_mf_guess(h0, axis, mf, **fwd):
+    """Turn a user-supplied `mf=` guess -- given in the lab frame, as a
+    string mode name (e.g. "ferroX"), a matrix, a dict, or a Hamiltonian --
+    into a plain hopping dict expressed in the internally-rotated frame
+    that SzSz(hr,...) actually gets called with. Without this, an
+    axis-appropriate guess like mf="ferroX" passed to SxSx would be handed
+    unrotated to the internal (rotated) SzSz call, seeding a guess that has
+    no overlap with the computational-z order parameter the rotated SCF
+    loop actually looks for -- silently killing the intended instability."""
+    if mf is None: return None
+    from .mfconstrains import obj2mf
+    if isinstance(mf, str):
+        from ..meanfield import guess
+        mf = guess(h0, mode=mf) # resolve the guess in the lab frame first
+        if mf is None: return None # e.g. guess() modes that return nothing
+    mf = obj2mf(mf) # normalize matrix/Hamiltonian/dict to a hopping dict
+    return {d: _gsr(m, **fwd) for (d, m) in mf.items()}
+
+
+def _rotated_axis_exchange(h, axis, J1, J2, J3, Jr, constrains, **kwargs):
+    fwd = _AXIS_ROTATION[axis]
+    bwd = dict(fwd); bwd["angle"] = -fwd["angle"]
+    h0 = h.get_multicell().get_dense() # keep the original, unrotated reference
+    hr = h0.copy()
+    hr.global_spin_rotation(**fwd) # rotate so that `axis` becomes computational z
+    mf0 = kwargs.pop("mf", None)
+    mf_rot = _rotate_mf_guess(h0, axis, mf0, **fwd)
+    scf = SzSz(hr, J1, J2, J3, Jr, constrains=constrains, mf=mf_rot, **kwargs)
+    if scf.hamiltonian is not None:
+        scf.hamiltonian.global_spin_rotation(**bwd) # rotate the result back
+    # scf.mf/scf.dm/scf.v are left expressed in the internally-rotated frame;
+    # scf.hamiltonian (the user-facing result) and scf.hamiltonian0 are in
+    # the original frame
+    scf.hamiltonian0 = h0
+    return scf
+
+
+def SxSx(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], **kwargs):
+    """Self-consistent Hartree-Fock mean field for a
+    H = sum J1/J2/J3 (+ Jr(r)) Sx_i Sx_j
+    spin-spin interaction. Implemented by rotating the problem so that x
+    becomes the computational z axis, running SzSz there, and rotating the
+    converged Hamiltonian back -- see the module docstring."""
+    if not h.has_spin: return NotImplemented
+    if h.has_eh: return NotImplemented
+    return _rotated_axis_exchange(h, "x", J1, J2, J3, Jr, constrains, **kwargs)
+
+
+def SySy(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], **kwargs):
+    """Self-consistent Hartree-Fock mean field for a
+    H = sum J1/J2/J3 (+ Jr(r)) Sy_i Sy_j
+    spin-spin interaction. Implemented by rotating the problem so that y
+    becomes the computational z axis, running SzSz there, and rotating the
+    converged Hamiltonian back -- see the module docstring."""
+    if not h.has_spin: return NotImplemented
+    if h.has_eh: return NotImplemented
+    return _rotated_axis_exchange(h, "y", J1, J2, J3, Jr, constrains, **kwargs)
+
+
+def _rotate_dict(dd, vector, angle):
+    return {k: _gsr(m, vector=vector, angle=angle) for (k, m) in dd.items()}
+
+
+def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
+        Jz1=0.0, Jz2=0.0, Jz3=0.0, Jxr=None, Jyr=None, Jzr=None,
+        mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
+        T=1e-7, verbose=0, constrains=[], **kwargs):
+    """Self-consistent anisotropic exchange mean field,
+    H = sum Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j,
+    combining all three channels in a single SCF loop: at every iteration
+    the z channel is decoupled directly (Hartree-Fock density-density in
+    the lab/computational spin basis) and the x/y channels are decoupled
+    by rotating the density matrix into the frame where that axis is the
+    computational z axis, applying the same decoupling there, and rotating
+    the resulting mean field back before summing the three contributions
+    -- see SxSx/SySy for the single-axis version of the same trick.
+
+    Unlike SxSx/SySy, `mf` (a string mode name, matrix, dict or Hamiltonian
+    guess) is used directly in the lab frame with no rotation: the mf
+    iterate driving this SCF loop always lives in the lab frame -- only the
+    per-iteration x/y mean-field *contributions* are computed by a
+    temporary excursion into a rotated frame, rotated back before being
+    summed in.
+
+    Only integration="ed" and the plain-mixing solver are supported (unlike
+    Vinteraction/SzSz/SxSx/SySy, which forward to the full
+    generic_densitydensity solver zoo)."""
+    from .densitydensity import (get_dm, get_mf_normal, mix_mf, diff_mf,
+            update_hamiltonian, set_hoppings, hamiltonian2dict,
+            get_dc_energy, SCF)
+    from .mfconstrains import obj2mf
+    if not h0.has_spin: raise ValueError("Jinteraction needs a spinful Hamiltonian")
+    if h0.has_eh: raise ValueError("Jinteraction is not implemented for BdG Hamiltonians")
+    h1 = h0.get_multicell().get_dense()
+    h1.nk = nk
+    vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr)
+    vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr)
+    vy = _build_v(h1, Jy1, Jy2, Jy3, Jyr)
+    # union of the three channels' bond directions: in general the
+    # neighbor-shell hopping-dict builder could prune a channel's key set
+    # differently depending on which of its J's are zero, so the lab-frame
+    # density matrix must be requested at the union, not just vz's keys
+    v_dirs = {d: None for d in (set(vz) | set(vx) | set(vy))}
+    rx, rxb = _AXIS_ROTATION["x"], dict(_AXIS_ROTATION["x"], angle=-_AXIS_ROTATION["x"]["angle"])
+    ry, ryb = _AXIS_ROTATION["y"], dict(_AXIS_ROTATION["y"], angle=-_AXIS_ROTATION["y"]["angle"])
+    callback_mf = _callback_mf_constrains(h1, constrains)
+
+    def callback_h(hh):
+        if mu is None:
+            fermi = hh.get_fermi4filling(filling, nk=hh.nk)
+            hh.fermi = fermi
+            hh.shift_fermi(-fermi)
+        else:
+            hh.shift_fermi(-mu)
+        return hh
+
+    hop0 = hamiltonian2dict(h1)
+    h0_dense = h1.copy() # reference Hamiltonian before the mean field is added
+
+    def compute_mf(dm_lab):
+        mf = get_mf_normal(vz, dm_lab)
+        dm_x = _rotate_dict(dm_lab, **rx)
+        mf_x = _rotate_dict(get_mf_normal(vx, dm_x), **rxb)
+        mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
+        dm_y = _rotate_dict(dm_lab, **ry)
+        mf_y = _rotate_dict(get_mf_normal(vy, dm_y), **ryb)
+        mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
+        return mf
+
+    def f(mf):
+        h = h1.copy()
+        hop = update_hamiltonian(hop0, mf)
+        set_hoppings(h, hop)
+        h = callback_h(h)
+        dm_lab = get_dm(h, v_dirs, nk=nk, T=T, integration="ed")
+        mfnew = compute_mf(dm_lab)
+        if callback_mf is not None: mfnew = callback_mf(mfnew)
+        scf = SCF()
+        scf.hamiltonian = h
+        scf.hamiltonian0 = h0_dense
+        scf.mf = mfnew
+        scf.dm = dm_lab
+        scf.v = vz # for identify_symmetry_breaking's tolerance bookkeeping
+        scf.tol = maxerror
+        return scf
+
+    if mf is None:
+        mf = dict()
+        for d in vz: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))*1e-1
+        mf[(0, 0, 0)] = mf[(0, 0, 0)] + mf[(0, 0, 0)].T.conjugate()
+    else:
+        if isinstance(mf, str):
+            from ..meanfield import guess
+            mf = guess(h0_dense, mode=mf)
+        mf = obj2mf(mf)
+
+    ite = 0
+    while True:
+        scf = f(mf)
+        mfnew = scf.mf
+        diff = diff_mf(mfnew, mf)
+        mf = mix_mf(mfnew, mf, mix=mix)
+        if callback_mf is not None: mf = callback_mf(mf)
+        if verbose > 0: print("ERROR in the SCF cycle", ite, diff)
+        if diff < maxerror:
+            scf = f(mfnew) # last iteration, with the unmixed mean field
+            scf.converged = True
+            break
+        if maxite is not None and ite >= maxite:
+            scf.converged = False
+            print("No convergence has been reached in", maxite, "iterations, stopping")
+            break
+        ite += 1
+
+    # total energy: sum of occupied energies plus the double-counting
+    # correction for each of the three (independently-rotated) channels
+    h = scf.hamiltonian
+    etot = h.get_total_energy(nk=h.nk)
+    if mu is None:
+        etot += h.fermi*h.intra.shape[0]*filling
+    etot += get_dc_energy(vz, scf.dm)
+    dm_x = _rotate_dict(scf.dm, **rx)
+    etot += get_dc_energy(vx, dm_x)
+    dm_y = _rotate_dict(scf.dm, **ry)
+    etot += get_dc_energy(vy, dm_y)
+    scf.total_energy = etot.real
+    return scf

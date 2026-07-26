@@ -50,28 +50,19 @@ def align_magnetism(m,vectors):
 def global_spin_rotation(m,vector = np.array([0.,0.,1.]),angle = 0.0,
                              spiral = False,atoms = None):
   """ Rotates a matrix along a certain qvector """
-  # pauli matrices
-  from scipy.sparse import csc_matrix,bmat
-  iden = csc_matrix([[1.,0.],[0.,1.]])
   n = m.shape[0]//2 # number of sites
-  if atoms==None: 
-    atoms = range(n) # all the atoms
-  else: 
-    raise
-  R = [[None for i in range(n)] for j in range(n)] # rotation matrix
-  for i in range(n): # loop over sites
-      u = np.array(vector) # rotation direction
-      u = u/np.sqrt(u.dot(u)) # normalize rotation direction
-      rot = (u[0]*sx + u[1]*sy + u[2]*sz)/2. # rotation
-      # a factor 2 is taken out due to 1/2 of S
-      # a factor 2 is added to have BZ in the interval 0,1
-      rot = algebra.todense(rot)
-      rot = lg.expm(2.*np.pi*1j*rot*angle/2.0)
-  #    if i in atoms:
-      R[i][i] = rot  # save term
-#    else:
-#      R[i][i] = iden  # save term
-  R = bmat(R)  # convert to full sparse matrix
+  if atoms is not None: raise # per-atom rotation not implemented
+  u = np.array(vector) # rotation direction
+  u = u/np.sqrt(u.dot(u)) # normalize rotation direction
+  rot = (u[0]*sx + u[1]*sy + u[2]*sz)/2. # rotation
+  # a factor 2 is taken out due to 1/2 of S
+  # a factor 2 is added to have BZ in the interval 0,1
+  rot = algebra.todense(rot)
+  rot = lg.expm(2.*np.pi*1j*rot*angle/2.0)
+  # same rotation at every site, so this is just a repeated block-diagonal;
+  # np.kron avoids scipy.sparse.bmat, which mishandles the n=1 (single
+  # site per cell) case (raises "blocks must be 2-D")
+  R = np.kron(np.eye(n),rot) # full rotation matrix
   if spiral:  # for spin spiral
     mout = R @ m  # rotate matrix
   else:  # normal global rotation

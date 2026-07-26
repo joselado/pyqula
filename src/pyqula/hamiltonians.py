@@ -25,6 +25,7 @@ from . import bandstructure
 from . import increase_hilbert
 from .meanfield import Vinteraction
 from .meanfield import Vinteraction_kpm
+from .meanfield import SzSz,SxSx,SySy,Jinteraction
 from .sctk import dvector
 from .algebratk import hamiltonianalgebra
 from .bandstructure import get_bands_nd
@@ -465,6 +466,34 @@ class Hamiltonian():
         through Chebyshev recursion on H(k). Meant for large/sparse
         Hamiltonians; see selfconsistency.densitydensity_kpm."""
         scf = Vinteraction_kpm(self,**kwargs)
+        if not scf.converged: scf.hamiltonian = None # no convergence
+        if return_total_energy:
+            return (scf.hamiltonian,scf.total_energy)
+        else: return scf.hamiltonian
+    @get_docstring(SzSz)
+    def get_szsz_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
+        scf = SzSz(self,**kwargs)
+        if not scf.converged: scf.hamiltonian = None # no convergence
+        if return_total_energy:
+            return (scf.hamiltonian,scf.total_energy)
+        else: return scf.hamiltonian
+    @get_docstring(SxSx)
+    def get_sxsx_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
+        scf = SxSx(self,**kwargs)
+        if not scf.converged: scf.hamiltonian = None # no convergence
+        if return_total_energy:
+            return (scf.hamiltonian,scf.total_energy)
+        else: return scf.hamiltonian
+    @get_docstring(SySy)
+    def get_sysy_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
+        scf = SySy(self,**kwargs)
+        if not scf.converged: scf.hamiltonian = None # no convergence
+        if return_total_energy:
+            return (scf.hamiltonian,scf.total_energy)
+        else: return scf.hamiltonian
+    @get_docstring(Jinteraction)
+    def get_exchange_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
+        scf = Jinteraction(self,**kwargs)
         if not scf.converged: scf.hamiltonian = None # no convergence
         if return_total_energy:
             return (scf.hamiltonian,scf.total_energy)
