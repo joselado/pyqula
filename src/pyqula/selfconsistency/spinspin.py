@@ -162,7 +162,36 @@ def SySy(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], **kwargs):
 
 
 def _rotate_dict(dd, vector, angle):
+    """Rotate a dict of Hamiltonian-like (hopping/mean-field) matrices by a
+    global spin rotation -- these live in the same convention as
+    Hamiltonian.intra, for which R @ m @ R^dagger is the correct
+    transformation (as used by Hamiltonian.global_spin_rotation, validated
+    by SxSx/SySy)."""
     return {k: _gsr(m, vector=vector, angle=angle) for (k, m) in dd.items()}
+
+
+def _rotate_dm(dd, vector, angle):
+    """Rotate a dict of *density matrices* by a global spin rotation.
+
+    get_density_matrix's off-diagonal (spin-flip) entries are stored in a
+    transposed convention relative to a Hamiltonian matrix -- normal_term_ij
+    (selfconsistency/densitydensity.py) deliberately reads dm[j,i] rather
+    than dm[i,j] to reconstruct a physically-meaningful mean field from it.
+    For a Hermitian matrix, transposing is the same as complex-conjugating,
+    so a density matrix in this convention is the complex conjugate of the
+    "Hamiltonian-convention" matrix at the same site/bond. Naively rotating
+    it with the same R @ m @ R^dagger used for Hamiltonians (_rotate_dict)
+    therefore silently flips the sign of the imaginary (y) Pauli component
+    while leaving the real (x, z) ones untouched -- caught by checking that
+    a random-direction initial guess converges to a moment collinear with
+    it (only Jinteraction is affected: SzSz/SxSx/SySy rotate the whole
+    Hamiltonian and run a native SCF in the rotated frame, never touching a
+    raw density matrix directly, so they never hit this). Conjugating
+    before and after the standard rotation corrects for it: if
+    dm_stored = conj(dm_physical), then
+    dm_stored' = conj(dm_physical') = conj(R @ conj(dm_stored) @ R^dagger)."""
+    return {k: np.conj(_gsr(np.conj(m), vector=vector, angle=angle))
+            for (k, m) in dd.items()}
 
 
 def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
@@ -223,10 +252,10 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
 
     def compute_mf(dm_lab):
         mf = get_mf_normal(vz, dm_lab)
-        dm_x = _rotate_dict(dm_lab, **rx)
-        mf_x = _rotate_dict(get_mf_normal(vx, dm_x), **rxb)
+        dm_x = _rotate_dm(dm_lab, **rx) # dm needs the conjugated rotation
+        mf_x = _rotate_dict(get_mf_normal(vx, dm_x), **rxb) # mf does not
         mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
-        dm_y = _rotate_dict(dm_lab, **ry)
+        dm_y = _rotate_dm(dm_lab, **ry)
         mf_y = _rotate_dict(get_mf_normal(vy, dm_y), **ryb)
         mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
         return mf
@@ -283,9 +312,9 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     if mu is None:
         etot += h.fermi*h.intra.shape[0]*filling
     etot += get_dc_energy(vz, scf.dm)
-    dm_x = _rotate_dict(scf.dm, **rx)
+    dm_x = _rotate_dm(scf.dm, **rx) # dm needs the conjugated rotation, see compute_mf
     etot += get_dc_energy(vx, dm_x)
-    dm_y = _rotate_dict(scf.dm, **ry)
+    dm_y = _rotate_dm(scf.dm, **ry)
     etot += get_dc_energy(vy, dm_y)
     scf.total_energy = etot.real
     return scf

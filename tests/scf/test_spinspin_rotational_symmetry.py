@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from pyqula import geometry
 from pyqula import meanfield
@@ -68,3 +69,34 @@ def test_jinteraction_single_axis_matches_dedicated_function():
     m_ref = scf_ref.hamiltonian.get_magnetization()
     m_combined = scf_combined.hamiltonian.get_magnetization()
     assert np.mean(np.abs(m_ref - m_combined)) < 1e-3
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_jinteraction_random_direction_guess_gives_collinear_moment(seed):
+    """For an isotropic (Jx=Jy=Jz) exchange, the bare interaction has no
+    preferred axis, so the direction the system orders along must be set
+    entirely by the initial guess: a random-direction guess must converge
+    to a moment collinear with it. This is the key regression test for a
+    bug where Jinteraction's per-iteration density-matrix rotation
+    (selfconsistency/spinspin.py's _rotate_dm, used to fold the x/y
+    channels into the lab-frame SCF loop) used the wrong convention and
+    silently flipped the sign of the y Pauli component -- invisible to
+    energy/magnitude-only checks (a pure-y guess still self-consistently
+    finds a same-magnitude, same-energy y-ordered solution even with the
+    sign flipped), but not to a random, generically-3-component direction:
+    before the fix, every direction collapsed onto the x axis instead."""
+    rng = np.random.default_rng(seed)
+    v = rng.random(3) - 0.5
+    v = v/np.linalg.norm(v)
+    g = geometry.chain()
+    h = g.get_hamiltonian(has_spin=True)
+    guess = h.copy()
+    guess.add_exchange(0.1*v)
+    scf = meanfield.Jinteraction(h, Jx1=-2.0, Jy1=-2.0, Jz1=-2.0, mf=guess,
+            nk=10, maxerror=MAXERROR, mix=0.2, maxite=300, filling=0.2)
+    assert scf.converged
+    m = np.mean(scf.hamiltonian.get_magnetization(), axis=0)
+    assert np.linalg.norm(m) > 0.05, "no sizable ordered moment developed"
+    cos_angle = np.dot(m/np.linalg.norm(m), v)
+    assert cos_angle > 1 - 1e-3, \
+        f"moment {m} is not collinear with guess direction {v} (cos={cos_angle})"
