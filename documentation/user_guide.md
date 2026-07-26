@@ -1170,6 +1170,30 @@ qdisp = hmf2.get_qdos_iets(energies=np.linspace(0.,2.,100),qpath=["G","K","M"],n
 
 See `examples/1d/rpa/main.py` (RPA spin response vs q for an antiferromagnetic chain), `examples/2d/rpa_triangular/main.py`/`examples/2d/rpa_honeycomb/main.py` (`get_qdos_iets` dispersion along a q-path) and `examples/0d/rpa_island/main.py`/`examples/0d/rpa_finite_chain/main.py` (`get_iets_ldos` real-space IETS maps) for runnable versions.
 
+### RPA kernel poles and magnon bands
+
+The RPA-dressed response $\chi_{RPA} = \chi(1-U\chi)^{-1}$ diverges wherever the kernel $1-U\chi(q,\omega)$ becomes singular: these poles are the system's collective modes (spin waves/magnons, plasmons) or, if a kernel eigenvalue crosses zero at $\omega=0$, a sign of a Stoner/RPA instability. `h.get_rpa_kernel_poles` scans a frequency window at a fixed `q` and returns every such pole, generalizing `chi_AB_RPA` (any operators `A`,`B` and interaction matrix `V`, defaulting to the charge channel and $q=0$ like the other generic response functions above):
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.chain()
+h = g.get_hamiltonian(has_spin=True)
+hmf = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro")
+U = hmf.V[(0,0,0)] # interaction matrix stored on the mean-field Hamiltonian
+poles = hmf.get_rpa_kernel_poles(V=U,q=[0.1,0.,0.],energies=np.linspace(0.,3.,300),delta=2e-2,nk=40)
+```
+
+`poles` is an `(npoles,2)` array, one row per collective mode found: the pole frequency and its residual imaginary part (a measure of the mode's broadening -- small values mean a sharp, well-defined mode, large values mean it is heavily damped or the crossing is numerical noise).
+
+`h.get_magnon_bands` specializes this to the full spin channel used by `get_spinchi_full`/`get_iets_ldos` (the $S_x,S_y,S_z$ tensor, with `U` taken automatically from the mean-field `h.V`, same convention as `get_spinchi_full`) and scans it along a q-path, directly giving the magnon dispersion of a magnetically ordered mean-field state:
+
+```python
+qs,ws,gammas = hmf.get_magnon_bands(nq=40,energies=np.linspace(0.01,3.,200),delta=2e-2,nk=40)
+```
+
+Since different q-points can have a different number of poles, `qs`,`ws`,`gammas` are flat 1D arrays of equal length ready for a scatter-style dispersion plot -- `qs` holds the integer index of the q-point along the path (the same convention `get_bands` uses for its k-axis), `ws` the pole frequency and `gammas` its residual imaginary part, so filtering `gammas < threshold` keeps only the sharp, well-defined branches. See `examples/1d/magnon_bands/main.py` for a runnable version (an antiferromagnetic Hubbard chain, showing both its acoustic and optical magnon branches).
+
 # Quantum transport
 
 In this section we discuss how we can perform quantum transport calculations with pyqula.
@@ -1543,6 +1567,28 @@ Optional arguments:
 - q=[0,0,0], energies, delta, nk: as above
 
 - RPA=True: dress with the random-phase approximation; `False` for the bare response
+
+### h.get_rpa_kernel_poles()
+Compute the poles of the generic RPA kernel $1-V\chi(q,\omega)$: the frequencies of the collective modes/instabilities of the interacting response.
+
+Optional arguments:
+
+- V=None (required): the interaction matrix; a `ValueError` is raised if not given
+
+- A=None, B=None, q=[0,0,0], energies, delta, nk: as in `get_chi`
+
+Returns an `(npoles,2)` array: pole frequency and residual imaginary part (mode broadening), one row per collective mode found, sorted by frequency.
+
+### h.get_magnon_bands()
+Compute the magnon bands: the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`, with `U` taken automatically from the mean-field `h.V`), scanned along a q-path.
+
+Optional arguments:
+
+- qpath=None, nq=20: the q-path (default path of the geometry) and number of q-points
+
+- energies, delta, nk: as above
+
+Returns `(qs,ws,gammas)`, three flat 1D arrays of equal length: `qs` the integer q-point index along the path, `ws` the pole frequency, `gammas` its residual imaginary part.
 
 ### h.get_fermi_surface()
 Compute the spectral weight on a 2D k-mesh at a single energy.
