@@ -88,9 +88,6 @@ class Embedding():
     def get_dict(self): return self.H.get_dict()
     def shift_fermi(self,mu): self.H.shift_fermi(mu)
     def get_total_energy(self,**kwargs): return 0.0
-    def get_mean_field_hamiltonian(self,**kwargs):
-        from .selfconsistency.embedding import hubbard_mf
-        return hubbard_mf(self,**kwargs) # return Hubbard mean-field
     def get_didv(self,**kwargs):
         from .embeddingtk import didv
         return didv.get_didv_single(self,**kwargs)

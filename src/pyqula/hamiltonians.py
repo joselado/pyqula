@@ -462,10 +462,18 @@ class Hamiltonian():
         """Return a multihopping object"""
         from .multihopping import MultiHopping
         return MultiHopping(self.get_dict())
-    @get_docstring(Vinteraction)
+    @get_docstring(VJinteraction)
     def get_mean_field_hamiltonian(self,return_total_energy=False,
             integration="ed",**kwargs):
-        scf = Vinteraction(self,integration=integration,**kwargs)
+        if self.has_spin and integration=="ed":
+            scf = VJinteraction(self,**kwargs)
+        else:
+            # VJinteraction requires has_spin (spin-spin exchange has no
+            # meaning for a spinless Hamiltonian -- see its own has_spin
+            # check) and only supports integration="ed" (no qtci/solver
+            # zoo); fall back to Vinteraction, which still supports both,
+            # for those two cases
+            scf = Vinteraction(self,integration=integration,**kwargs)
         if not scf.converged: scf.hamiltonian = None # no convergence
         if return_total_energy:
             return (scf.hamiltonian,scf.total_energy)

@@ -17,11 +17,8 @@ class Embedded_Hamiltonian():
         selfe = self.selfenergy(**kwargs) # store selfenergy
         gf = algebra.inv(algebra.inv(gf0) - selfe) # full Green's function
         return gf # return full Green's function
-    def set_multihopping(self,*args): 
+    def set_multihopping(self,*args):
         self.H.set_multihopping(*args)
-    def get_mean_field_hamiltonian(self,**kwargs):
-        from ..selfconsistency.embedding import hubbard_mf
-        return hubbard_mf(self,**kwargs) # return Hubbard mean-field
     def copy(self):
         from copy import deepcopy
         return deepcopy(self)
