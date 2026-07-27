@@ -137,6 +137,52 @@ def set_hoppings(h,hop):
     """Add the hoppings to the Hamiltonian"""
     h.set_multihopping(MultiHopping(hop))
 
+
+def random_hermitian_guess(v,shape):
+    """Random initial mean-field guess dict over v's direction keys.
+
+    Each direction's matrix is drawn independently EXCEPT when its
+    opposite direction was already drawn, in which case it is set to that
+    matrix's conjugate transpose -- required for the overall guess to be
+    Hermitian (mf[d] == mf[-d].conj().T for every direction pair, not just
+    the onsite (0,0,0) term, which used to be the only one symmetrized
+    here). Exact diagonalization tolerates skipping this (diagonalizing a
+    mildly non-Hermitian H(k) still gives a finite, if slightly-off,
+    answer that the SCF loop's own mixing washes out within a few
+    iterations), but integration="kpm" (densitydensity_kpm.py) does not:
+    its Chebyshev recursion assumes real eigenvalues bounded by `scale`,
+    and a non-Hermitian H(k) can have eigenvalues well outside that bound,
+    which blows up exponentially over npol recursion steps (observed:
+    >1e40 mean-field magnitude after a single SCF iteration with the old,
+    onsite-only-symmetrized guess) instead of just being somewhat wrong."""
+    mf = dict()
+    for d in v:
+        d2 = tuple(-x for x in d)
+        if d2 in mf: mf[d] = mf[d2].conj().T # mirror the opposite direction
+        else: mf[d] = np.exp(1j*np.random.random(shape))
+    mf[(0,0,0)] = mf[(0,0,0)] + mf[(0,0,0)].T.conjugate()
+    return mf
+
+
+def mf_matches_hamiltonian(h0,mf):
+    """True if every matrix in a candidate mean-field dict has the shape
+    h0's own hopping matrices do. Used to validate a mean field loaded
+    from MF.pkl before reusing it as an SCF starting guess: checking
+    compatibility by attempting `MultiHopping(h0.get_dict()) +
+    MultiHopping(mf)` and seeing if it raises is NOT reliable -- numpy
+    silently broadcasts two differently-shaped arrays together (instead of
+    raising) whenever one of the mismatched dimensions happens to be 1
+    (e.g. a spinless 1-orbital h0 reusing an MF.pkl cached from an
+    unrelated 2-orbital spinful run), corrupting h0's own matrix shapes
+    downstream with an opaque failure (an "inhomogeneous shape" error deep
+    inside Bloch-matrix construction) far from the actual cause. Checking
+    shapes directly instead is exact, not just "usually works"."""
+    n = h0.intra.shape[0]
+    for m in mf.values():
+        if np.shape(m) != (n,n): return False
+    return True
+
+
 def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     """Get the density matrix.
 
@@ -304,15 +350,14 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
     h1 = h1.get_dense()
     h1.nk = nk # store the number of kpoints
     if mf is None: # no mean field given
-      try: 
-          if load_mf: 
+      try:
+          if load_mf:
               mf = inout.load(mf_file) # load the file
-              MultiHopping(h0.get_dict()) + MultiHopping(mf) # see if compatible
+              if not mf_matches_hamiltonian(h0,mf): # see if compatible
+                  raise ValueError("cached MF.pkl shape does not match this Hamiltonian")
           else: raise
-      except: 
-          mf = dict()
-          for d in v: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))
-          mf[(0,0,0)] = mf[(0,0,0)] + mf[(0,0,0)].T.conjugate()
+      except:
+          mf = random_hermitian_guess(v,h1.intra.shape)
     elif type(mf)==str:
         from ..meanfield import guess
         mf = guess(h0,mode=mf) # overwrite

@@ -17,7 +17,6 @@ import time
 from copy import deepcopy
 
 from .. import inout
-from ..multihopping import MultiHopping
 from .. import algebra
 from ..kpmtk.densitymatrix_kpm import get_dm_kpm, DEFAULT_NK, DEFAULT_NPOL
 
@@ -51,7 +50,8 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
     root-finding solvers there are not KPM-specific and are not needed for
     this backend)."""
     from .densitydensity import (get_mf, mix_mf, diff_mf, update_hamiltonian,
-            hamiltonian2dict, set_hoppings, SCF)
+            hamiltonian2dict, set_hoppings, SCF, random_hermitian_guess,
+            mf_matches_hamiltonian)
     from .mfconstrains import obj2mf
     h1 = h0.copy()
     h1.nk = nk
@@ -59,12 +59,11 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         try:
             if load_mf:
                 mf = inout.load(mf_file)
-                MultiHopping(h0.get_dict()) + MultiHopping(mf)
+                if not mf_matches_hamiltonian(h0,mf):
+                    raise ValueError("cached MF.pkl shape does not match this Hamiltonian")
             else: raise
         except:
-            mf = dict()
-            for d in v: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))
-            mf[(0,0,0)] = mf[(0,0,0)] + mf[(0,0,0)].T.conjugate()
+            mf = random_hermitian_guess(v,h1.intra.shape)
     elif type(mf) == str:
         from ..meanfield import guess
         mf = guess(h0, mode=mf)
@@ -191,7 +190,16 @@ def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
     """KPM analogue of selfconsistency.densitydensity.Vinteraction: mean
     field with density-density interactions (U onsite, V1/V2/V3 first/
     second/third neighbor), computed via sparse KPM instead of exact
-    diagonalization -- see kpmtk.densitymatrix_kpm.get_dm_kpm."""
+    diagonalization -- see kpmtk.densitymatrix_kpm.get_dm_kpm.
+
+    PERFORMANCE CAVEAT: measured far SLOWER than plain Vinteraction
+    (integration="ed") at small/moderate system sizes (order 100-500
+    sites) despite the batching work already done in
+    kpmtk.densitymatrix_kpm._dm_kpm_from_needed -- see that function's and
+    VJinteraction's docstrings for the measured numbers and remaining
+    bottlenecks (per-pair Chebyshev recursion, get_fermi4filling_kpm's
+    O(n_orb) Fermi search). Reach for this engine only if you have
+    confirmed it is actually faster for your system."""
     from .densitydensity import obj2geometryarray
     h = h.get_multicell()
     h = h.get_dense()

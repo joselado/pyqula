@@ -72,6 +72,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Hermitian and non-Hermitian mean-field calculations
 - Random phase approximation many-body response functions
 - RPA collective modes (magnon bands) and Stoner/RPA instability detection
+- KPM (Chebyshev)-based mean-field SCF for large/sparse systems, avoiding diagonalization of the Bloch Hamiltonian
 
 ## Topological characterization ##
 - Berry phases, Berry curvatures, Chern numbers and Z2 invariants

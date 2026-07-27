@@ -4,9 +4,11 @@ import pytest
 from pyqula import geometry
 from pyqula import islands
 from pyqula import specialhopping
+from pyqula import inout
 from pyqula import meanfield
 from pyqula.kpmtk.densitymatrix_kpm import get_dm_kpm
-from pyqula.selfconsistency.densitydensity import get_mf, get_dc_energy
+from pyqula.selfconsistency.densitydensity import (get_mf, get_dc_energy,
+        random_hermitian_guess, mf_matches_hamiltonian, mf_file)
 
 
 def _v1_interaction_dict(h, V1=1.0):
@@ -144,3 +146,77 @@ def test_get_dm_kpm_temperature_smearing_moves_toward_ed():
     dm_warm = get_dm_kpm(h, v, nk=1, npol=300, scale=None, T=2.0)
     diff = np.max(np.abs(dm_cold[(0, 0, 0)] - dm_warm[(0, 0, 0)]))
     assert diff > 1e-3, "changing T had no effect on get_dm_kpm's output"
+
+
+# Regression coverage for two bugs found while adding VJinteraction's own
+# integration="kpm" mode: generic_densitydensity/generic_densitydensity_kpm's
+# shared mf=None default-guess and MF.pkl-caching logic (densitydensity.py)
+# had the same non-Hermitian-guess and shape-mismatch issues that
+# spinspin.py's copy of the same pattern was fixed for.
+
+
+def test_random_hermitian_guess_is_hermitian():
+    """random_hermitian_guess must produce mf[d] == mf[-d].conj().T for
+    every direction pair (not just symmetrize the onsite (0,0,0) term, as
+    the old inline construction did) -- required for integration="kpm"'s
+    Chebyshev recursion, which assumes real eigenvalues bounded by an
+    energy scale estimated from H(k); a non-Hermitian H(k) can violate
+    that badly enough to diverge exponentially (see
+    test_vinteraction_kpm_default_guess_does_not_blow_up)."""
+    v = {(0, 0, 0): np.eye(2, dtype=np.complex128),
+         (1, 0, 0): np.eye(2, dtype=np.complex128),
+         (-1, 0, 0): np.eye(2, dtype=np.complex128)}
+    mf = random_hermitian_guess(v, (2, 2))
+    for d, m in mf.items():
+        d2 = tuple(-x for x in d)
+        diff = np.max(np.abs(m - mf[d2].conj().T))
+        assert diff < 1e-14, (d, diff)
+
+
+def test_vinteraction_kpm_default_guess_does_not_blow_up():
+    """Regression test: before random_hermitian_guess, Vinteraction_kpm's
+    mf=None default guess was non-Hermitian (independent random matrices
+    per direction, only the onsite term symmetrized), which made the
+    Chebyshev recursion diverge -- observed mean-field magnitude >1e40
+    after a handful of SCF iterations for exactly this system (a plain
+    spinless V1 interaction on honeycomb, nothing exotic). With the fix,
+    this must converge normally instead."""
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    scf = meanfield.Vinteraction_kpm(h, V1=1.0, filling=0.3, nk=6, mix=0.3,
+            maxerror=1e-2, maxite=60, npol=200, load_mf=False, verbose=0)
+    assert scf.converged
+    for d, m in scf.mf.items():
+        assert np.all(np.isfinite(m)), d
+        assert np.max(np.abs(m)) < 10.0, (d, np.max(np.abs(m)))
+
+
+def test_mf_matches_hamiltonian_rejects_shape_mismatch():
+    h = geometry.chain().get_hamiltonian(has_spin=False)  # (1,1) matrices
+    ok_mf = {(0, 0, 0): np.zeros((1, 1), dtype=np.complex128)}
+    bad_mf = {(0, 0, 0): np.zeros((2, 2), dtype=np.complex128)}
+    assert mf_matches_hamiltonian(h, ok_mf)
+    assert not mf_matches_hamiltonian(h, bad_mf)
+
+
+def test_stale_mf_pkl_shape_mismatch_is_discarded(tmp_path, monkeypatch):
+    """Regression test: a cached MF.pkl left over from an unrelated,
+    differently-shaped Hamiltonian (e.g. a spinful run's (2,2) blocks,
+    reused by a spinless (1,1) one) used to be silently accepted --
+    MultiHopping(h0.get_dict())+MultiHopping(mf) does not reliably raise
+    on a shape mismatch, since numpy broadcasts a (1,1) array against a
+    (2,2) one instead of erroring, corrupting h0's own matrix shapes
+    downstream (an opaque "inhomogeneous shape" crash far from the actual
+    cause). mf_matches_hamiltonian's explicit shape check must catch this
+    and fall back to a fresh guess instead."""
+    monkeypatch.chdir(tmp_path)  # MF.pkl is always read/written in the cwd
+    stale_mf = {(0, 0, 0): np.eye(2, dtype=np.complex128)*0.3,
+                (1, 0, 0): np.zeros((2, 2), dtype=np.complex128),
+                (-1, 0, 0): np.zeros((2, 2), dtype=np.complex128)}
+    inout.save(stale_mf, mf_file)
+
+    h = geometry.chain().get_hamiltonian(has_spin=False)  # (1,1) matrices
+    scf = meanfield.Vinteraction_kpm(h, V1=1.0, filling=0.3, nk=6, mix=0.3,
+            maxerror=1e-2, maxite=60, npol=200, load_mf=True, verbose=0)
+    assert scf.converged
+    for d, m in scf.mf.items():
+        assert m.shape == (1, 1), (d, m.shape)

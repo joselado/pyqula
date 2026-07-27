@@ -1775,7 +1775,34 @@ normal+anomalous (pairing) treatment (identical to
 decoupled in the normal sector only -- so a state with both magnetic and
 superconducting order requires an attractive $V$, not $J$, to seed the
 pairing (see the example above).
-- mf, filling, nk, maxerror, mix, constrains: as above (only `integration="ed"` and the plain-mixing solver are supported)
+- mf, filling, nk, maxerror, mix, constrains: as above (only the plain-mixing solver is supported)
+- integration="ed": computes the density matrix each SCF iteration by exact
+  diagonalization. `"kpm"` instead gets it through a per-k Chebyshev-moment
+  (Kernel Polynomial Method) expansion, never diagonalizing the Bloch
+  Hamiltonian $H(k)$ -- for large/sparse systems (e.g. a big 0D flake,
+  where the unit cell itself is too large to diagonalize or even hold as a
+  dense matrix) where per-iteration exact diagonalization is the
+  bottleneck; only supported for a normal-state (non-BdG) Hamiltonian.
+  With `"kpm"`: `scale=None` sets the KPM energy rescaling (estimated
+  automatically if not given), `npol` the number of Chebyshev moments,
+  `ne` the number of energies sampled in the occupied window, `cores` the
+  number of parallel workers across k-points; all four are unused for
+  `"ed"`. Also reachable through
+  `h.get_mean_field_hamiltonian(integration="kpm",...)`, which dispatches
+  to this function automatically for a spinful `h`.
+
+  **Performance caveat** (measured, not just theoretical): at
+  small/moderate system sizes (order 100-500 sites) `"kpm"` is currently
+  much *slower* per SCF iteration than `"ed"` -- roughly 50-60x slower,
+  measured on a 98-site honeycomb Hubbard system -- because dense exact
+  diagonalization via LAPACK is extremely fast at that scale regardless of
+  algorithmic complexity, while this KPM implementation still pays real
+  per-orbital and per-matrix-element overhead (see
+  `kpmtk.densitymatrix_kpm._dm_kpm_from_needed`'s and
+  `get_fermi4filling_kpm`'s docstrings for exactly where). It should in
+  principle win for a large/sparse enough system, but that crossover was
+  not reached in the sizes tested. Only use `"kpm"` after confirming it is
+  actually faster for your system.
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
 

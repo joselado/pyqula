@@ -465,15 +465,22 @@ class Hamiltonian():
     @get_docstring(VJinteraction)
     def get_mean_field_hamiltonian(self,return_total_energy=False,
             integration="ed",**kwargs):
-        if self.has_spin and integration=="ed":
-            scf = VJinteraction(self,**kwargs)
+        if self.has_spin and integration in ("ed","kpm"):
+            scf = VJinteraction(self,integration=integration,**kwargs)
         else:
             # VJinteraction requires has_spin (spin-spin exchange has no
             # meaning for a spinless Hamiltonian -- see its own has_spin
-            # check) and only supports integration="ed" (no qtci/solver
-            # zoo); fall back to Vinteraction, which still supports both,
-            # for those two cases
-            scf = Vinteraction(self,integration=integration,**kwargs)
+            # check) and only supports integration="ed"/"kpm" (no
+            # qtci/solver zoo); fall back for the remaining combinations to
+            # whichever of Vinteraction/Vinteraction_kpm supports this
+            # integration mode -- Vinteraction itself never learned "kpm"
+            # (that is Vinteraction_kpm's own separate entry point), so
+            # route there explicitly instead of forwarding integration="kpm"
+            # into Vinteraction's get_dm, which only accepts "ed"/"qtci"
+            if integration=="kpm":
+                scf = Vinteraction_kpm(self,**kwargs)
+            else:
+                scf = Vinteraction(self,integration=integration,**kwargs)
         if not scf.converged: scf.hamiltonian = None # no convergence
         if return_total_energy:
             return (scf.hamiltonian,scf.total_energy)

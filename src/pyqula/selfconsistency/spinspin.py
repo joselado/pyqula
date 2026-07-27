@@ -316,7 +316,8 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None, nd=None):
 def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
         mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
-        T=1e-7, verbose=0, constrains=[]):
+        T=1e-7, verbose=0, constrains=[],
+        integration="ed", scale=None, npol=None, ne=None, cores=None):
     """Self-consistent mean field combining density-density interactions
     (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
     Vinteraction) with spin-spin exchange in a single SCF loop.
@@ -350,11 +351,88 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     (electron) sector only, i.e. J does not itself induce pairing here.
 
     See Vinteraction and Jinteraction for further background on the
-    density-density and exchange conventions respectively; only
-    integration="ed" and the plain-mixing solver are supported (unlike
-    Vinteraction/SzSz/SxSx/SySy)."""
+    density-density and exchange conventions respectively; only the
+    plain-mixing solver is supported (unlike Vinteraction/SzSz/SxSx/SySy),
+    and integration is restricted to "ed" (default) or "kpm" (no "qtci").
+
+    integration="ed" computes the per-iteration density matrix by exact
+    diagonalization -- dense, or restricted to the sparse (direction,row,
+    col) entries the mean field actually reads (see _build_sparse_pairs)
+    for a normal-state (h0.has_eh=False) Hamiltonian. integration="kpm"
+    instead gets those same sparse entries through
+    kpmtk.densitymatrix_kpm's per-k Chebyshev-moment (Kernel Polynomial
+    Method) engine -- the same one Vinteraction_kpm/densitydensity_kpm.py
+    use -- never diagonalizing H(k), and finds the Fermi energy (when
+    mu=None) the same diagonalization-free way via
+    kpmtk.densitymatrix_kpm.get_fermi4filling_kpm.
+
+    PERFORMANCE CAVEAT (measured 2026-07-27, not just a theoretical
+    concern): despite kpmtk.densitymatrix_kpm._dm_kpm_from_needed batching
+    its Chebyshev-moment-to-density-matrix reconstruction across every
+    needed (row,col) pair at a given k (a ~3x speedup over the original
+    per-pair implementation, verified against "ed" to ~1e-7), this backend
+    is currently far SLOWER than integration="ed" at small/moderate system
+    sizes, not faster -- measured ~50-60x slower per SCF iteration on a
+    98-site (196-orbital) honeycomb Hubbard system (nk=4, npol=200): ED
+    ~0.05-0.16s/iteration vs KPM ~7-9s/iteration. The reason is that ED's
+    per-k diagonalization goes through highly-tuned dense LAPACK routines,
+    which are extremely fast for a small-to-moderate matrix regardless of
+    algorithmic complexity, while this KPM implementation still pays real
+    per-element and per-orbital overhead that ED simply doesn't have: a
+    separate Chebyshev VECTOR recursion per needed (row,col,k) triple
+    (kpm_moments_vivj -- not yet batched across pairs sharing a starting
+    vector/column, unlike the profile-reconstruction step, which is), and
+    get_fermi4filling_kpm's own O(n_orb) separate per-orbital moment
+    calculation (a deterministic trace, not a stochastic few-random-vector
+    estimate) when mu=None, which was not touched by this round of fixes
+    and is now a comparable-or-larger fraction of the per-iteration cost
+    than the density-matrix step. Neither of those remaining costs scales
+    down with system size the way ED's O(n^3) diagonalization eventually
+    becomes the bottleneck at -- so while this backend should in principle
+    win for a large enough (or sparse enough) system, that crossover was
+    not reached in the sizes tested here (up to ~200 sites), and further
+    batching work (grouping needed pairs by shared starting column,
+    stochastic-trace Fermi search) would very likely be needed first to
+    reach it in practice. Use integration="ed" unless you have confirmed
+    "kpm" is actually faster for your specific system size/sparsity.
+    Only supported for a normal-state Hamiltonian, for the
+    same reason the sparse ED path is restricted that way (see
+    _run_anisotropic_scf's docstring): a BdG/Nambu VJinteraction call
+    keeps `vd` in a differently-indexed (Nambu-reordered) basis that the
+    sparse-position machinery this KPM path reuses does not (yet) know how
+    to translate -- passing integration="kpm" for a Nambu h0 raises
+    NotImplementedError rather than silently computing the wrong thing.
+    scale/npol/ne/cores are the same KPM tuning knobs as
+    kpmtk.densitymatrix_kpm.get_dm_kpm (scale: KPM energy rescaling,
+    estimated automatically when None; npol: number of Chebyshev moments,
+    defaulting to kpmtk.densitymatrix_kpm.DEFAULT_NPOL when None; ne:
+    number of energies sampled in the occupied window; cores: number of
+    parallel workers across k-points); all four are unused when
+    integration="ed".
+
+    NOTE: unlike the "ed" path, scf.dm after convergence under
+    integration="kpm" only holds the sparse subset of entries the SCF loop
+    itself needed (see _build_sparse_pairs), not a complete dense density
+    matrix -- recomputing a fully dense one via exact diagonalization after
+    convergence would defeat the point of avoiding diagonalization in the
+    first place, so (mirroring Vinteraction_kpm/densitydensity_kpm.py,
+    whose own scf.dm has the same property) this path skips that step.
+
+    integration="kpm" also never forces h0 into a dense representation: the
+    other integration modes (and Jinteraction) unconditionally call
+    .get_dense() here, which is fine for them (they end up diagonalizing
+    dense matrices anyway), but would defeat the point of KPM for a large,
+    genuinely sparse h0 (h0.is_sparse=True, e.g. a big 0D flake/island
+    where the *unit cell itself* -- h.intra -- is too large to hold as a
+    dense array). If h0.is_sparse, h1 (hence every per-iteration
+    Hamiltonian derived from it inside _run_anisotropic_scf) stays sparse
+    for the whole SCF loop -- see that function's docstring for how the
+    mean-field update step, which would otherwise silently densify it
+    (scipy sparse + dense ndarray returns a dense matrix), is kept from
+    doing so."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
-    h1 = h0.get_multicell().get_dense()
+    h1 = h0.get_multicell()
+    if integration != "kpm": h1 = h1.get_dense() # see docstring above
     nd = h1.geometry.neighbor_distances() # shared by all four _build_*_v calls below
     vz = _build_v(h1, J1+J1z, J2, J3, Jr, nd=nd)
     vd = _build_density_v(h1, V1, V2, V3, U, Vr, nd=nd)
@@ -364,7 +442,9 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
         vd = None
     return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
-            maxerror, maxite, T, verbose, constrains, vd=vd)
+            maxerror, maxite, T, verbose, constrains, vd=vd,
+            integration=integration, scale=scale, npol=npol, ne=ne,
+            cores=cores)
 
 
 def _channel_is_zero(v):
@@ -448,8 +528,25 @@ def _build_sparse_pairs(vlist, keys, n):
     return pairs
 
 
+def _sparse_pairs_to_needed(pairs):
+    """Convert _build_sparse_pairs' {direction: (rows, cols)} format into
+    the (direction, row, col) triple set
+    kpmtk.densitymatrix_kpm._dm_kpm_from_needed expects -- the exact same
+    needed positions the ED sparse path (densitymatrix.full_dm_accumulate_
+    sparse) already reads, just handed to the KPM engine instead of the
+    diagonalization-based one (see _run_anisotropic_scf's integration="kpm"
+    branch)."""
+    needed = set()
+    for d, (rows, cols) in pairs.items():
+        d = tuple(d)
+        for i, j in zip(rows.tolist(), cols.tolist()):
+            needed.add((d, i, j))
+    return needed
+
+
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
-        maxerror, maxite, T, verbose, constrains, vd=None):
+        maxerror, maxite, T, verbose, constrains, vd=None,
+        integration="ed", scale=None, npol=None, ne=None, cores=None):
     """Shared SCF core for Jinteraction/VJinteraction: decouples the
     z-channel matrix `vz` directly (Hartree-Fock density-density in the
     lab/computational spin basis) and the x/y-channel matrices `vx`/`vy`
@@ -491,13 +588,32 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     VJinteraction call with only Jx/Jy set (J1=J2=J3=J1z=0), and vd for one
     with only J's and no V/U. A zero interaction contributes exactly zero
     mean field either way, so this changes no result, only the cost of
-    computing it -- see _channel_is_zero."""
+    computing it -- see _channel_is_zero.
+
+    integration="kpm" (see VJinteraction's docstring) reuses exactly the
+    same `sparse_pairs` positions the "ed" sparse path computes below
+    (_build_sparse_pairs), just evaluating them via
+    kpmtk.densitymatrix_kpm._dm_kpm_from_needed's per-k Chebyshev-moment
+    engine instead of full_dm_accumulate_sparse's diagonalization, and
+    finding the Fermi energy (mu=None) via
+    kpmtk.densitymatrix_kpm.get_fermi4filling_kpm instead of
+    Hamiltonian.get_fermi4filling -- so it is only available when
+    use_sparse_dm is (i.e. has_eh=False); requesting it for a Nambu h1
+    raises NotImplementedError rather than silently falling back to ED or
+    misreading vd's differently-indexed Nambu basis."""
     from .densitydensity import (get_dm, get_mf_normal, get_mf, mix_mf,
             diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF)
     from .mfconstrains import obj2mf
     has_eh = h1.has_eh
     if has_eh: from .. import superconductivity
+    if integration not in ("ed", "kpm"):
+        raise ValueError("integration must be 'ed' or 'kpm', got %r" % (integration,))
+    if integration == "kpm" and has_eh:
+        raise NotImplementedError("VJinteraction's integration=\"kpm\" path "
+                "only supports a normal-state (has_eh=False) Hamiltonian -- "
+                "see _run_anisotropic_scf's docstring for why the Nambu "
+                "case (vd in its own reordered basis) is out of scope here")
     h1.nk = nk
     # union of the three exchange channels' bond directions (+ vd's, if
     # given): in general the neighbor-shell hopping-dict builder could
@@ -555,6 +671,31 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             delta = T if T != 0. else 1e-15 # see densitymatrix.full_dm's own T==0 guard
             return full_dm_accumulate_sparse(h, sparse_pairs, nk=nk, delta=delta)
         return get_dm(h, v_dirs, nk=nk, T=T, integration="ed")
+
+    # KPM density-matrix path (integration="kpm", only reached when
+    # use_sparse_dm is True -- see the NotImplementedError check above):
+    # same `sparse_pairs` positions as the ED sparse path, evaluated
+    # through kpmtk.densitymatrix_kpm's per-k Chebyshev-moment engine
+    # instead of diagonalizing H(k) -- see VJinteraction's docstring.
+    use_kpm = integration == "kpm"
+    # h1 keeps whatever is_sparse it was built with when integration="kpm"
+    # (see VJinteraction's docstring) -- keep_sparse gates the per-iteration
+    # re-sparsification below that stops the mean-field update from
+    # silently densifying it again.
+    keep_sparse = use_kpm and h1.is_sparse
+    if use_kpm:
+        from ..kpmtk.densitymatrix_kpm import (DEFAULT_NPOL,
+                get_fermi4filling_kpm, _dm_kpm_from_needed)
+        if npol is None: npol = DEFAULT_NPOL # same default as get_dm_kpm
+        kpm_needed = _sparse_pairs_to_needed(sparse_pairs)
+
+        def _get_dm_kpm(h):
+            dm = _dm_kpm_from_needed(h, kpm_needed, nk=nk, scale=scale,
+                    npol=npol, ne=ne, cores=cores, T=T)
+            for d in v_dirs: # every requested direction must have a key,
+                if d not in dm: # even one contributing no needed entries
+                    dm[d] = np.zeros((n_dm, n_dm), dtype=np.complex128)
+            return dm
 
     def _block_rotate(m, rot):
         """rot @ m @ rot^dagger, applied to every site's own 2x2 spin
@@ -616,6 +757,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
 
     hop0 = hamiltonian2dict(h1)
     h0_dense = h1.copy() # reference Hamiltonian before the mean field is added
+                          # (despite the name, sparse when keep_sparse is)
 
     def electron_sector(dd):
         """Extract the normal (electron-electron) sector from a dict of
@@ -658,8 +800,32 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     def f(mf):
         h = h1.copy()
         hop = update_hamiltonian(hop0, mf)
+        if keep_sparse:
+            # update_hamiltonian adds the (always dense, see get_mf_normal)
+            # mean field mf on top of h1's own (sparse) hoppings; scipy's
+            # sparse+dense addition returns a dense numpy.matrix, which
+            # set_hoppings would otherwise install straight into h.intra/
+            # h.hopping[i].m -- silently densifying h despite h.is_sparse
+            # staying (now incorrectly) True, since set_dictionary never
+            # touches that flag. Re-sparsifying here keeps h genuinely
+            # sparse-backed for every downstream KPM call on it.
+            from scipy.sparse import csr_matrix
+            hop = {d: csr_matrix(m) for d, m in hop.items()}
         set_hoppings(h, hop)
-        if use_sparse_dm and mu is None:
+        if use_kpm:
+            # never diagonalize H(k): the Fermi energy (mu=None) comes from
+            # get_fermi4filling_kpm's Chebyshev-moment DOS integral, and the
+            # density matrix from _get_dm_kpm's per-k Chebyshev recursion --
+            # see VJinteraction's docstring
+            if mu is None:
+                fermi = get_fermi4filling_kpm(h, filling, nk=nk, scale=scale,
+                        npol=npol, ne=ne, cores=cores)
+                h.fermi = fermi
+                h.shift_fermi(-fermi)
+            else:
+                h.shift_fermi(-mu)
+            dm_lab = _get_dm_kpm(h)
+        elif use_sparse_dm and mu is None:
             # combined: diagonalize the unshifted h once, deriving both the
             # Fermi energy and the density matrix from the same
             # eigenvectors, instead of callback_h's get_fermi4filling
@@ -702,8 +868,25 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # Jz1=Jz2=Jz3=0) can have bond-direction keys absent from vz, and
         # diff_mf below only iterates the keys already present in this
         # initial guess, so seeding too few of them would make those
-        # channels invisible to the very first convergence check
-        for d in v_dirs: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))*1e-1
+        # channels invisible to the very first convergence check.
+        #
+        # Each direction's matrix is drawn independently EXCEPT when its
+        # opposite direction was already drawn, in which case it is set to
+        # that matrix's conjugate transpose -- required for the overall
+        # guess to be Hermitian (a physical mean field always is). ED
+        # tolerates skipping this (diagonalizing a mildly non-Hermitian
+        # H(k) still gives a finite, if slightly-off, answer that the SCF
+        # loop's own mixing washes out within a few iterations), but
+        # integration="kpm" does not: the Chebyshev recursion assumes real
+        # eigenvalues bounded by `scale`, and a non-Hermitian H(k) can have
+        # eigenvalues well outside that bound, which blows up
+        # exponentially over npol recursion steps (observed: >1e50 mean-
+        # field entries on the very first iteration) instead of just being
+        # somewhat wrong.
+        for d in v_dirs:
+            d2 = (-d[0], -d[1], -d[2])
+            if d2 in mf: mf[d] = mf[d2].conj().T # mirror the opposite direction
+            else: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))*1e-1
         mf[(0, 0, 0)] = mf[(0, 0, 0)] + mf[(0, 0, 0)].T.conjugate()
     else:
         if isinstance(mf, str):
@@ -729,7 +912,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             break
         ite += 1
 
-    if use_sparse_dm:
+    if use_sparse_dm and not use_kpm:
         # scf.dm is a public field (Vinteraction/SzSz/SxSx/SySy's SCF
         # objects always expose a fully dense one, via densitydensity.py's
         # own get_dm), but the sparse path above only ever populated the
@@ -743,6 +926,13 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # same dense get_dm the has_eh=True path below already relies on,
         # so this is one extra diagonalization for the whole call, not a
         # per-iteration cost.
+        #
+        # Skipped for integration="kpm": diagonalizing here would defeat
+        # the point of avoiding diagonalization in the first place (the
+        # whole reason to pick KPM), so scf.dm stays only the sparse subset
+        # the SCF loop needed -- see VJinteraction's docstring, and
+        # Vinteraction_kpm/densitydensity_kpm.py's scf.dm, which has the
+        # same limitation for the same reason.
         scf.dm = get_dm(scf.hamiltonian, v_dirs, nk=nk, T=T, integration="ed")
 
     # total energy: sum of occupied energies plus the double-counting
