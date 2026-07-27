@@ -371,6 +371,74 @@ def _channel_is_zero(v):
     return all(not np.any(m) for m in v.values())
 
 
+def _build_sparse_pairs(vlist, keys, n):
+    """For each direction, the union of (row,col) index pairs actually read
+    downstream from the lab-frame density matrix, across the given
+    interaction matrices (whichever of vz/vx/vy/vd are not None):
+
+    - get_mf_normal's density-density (compute_dd) term only ever reads
+      dm[(0,0,0)]'s DIAGONAL, for whichever sites participate in any bond
+      of any channel -- in practice that is normally every site, so this
+      always includes the full diagonal at (0,0,0) unconditionally, rather
+      than trying to track which subset that is. Crucially this means the
+      full 2x2 SPIN BLOCK at each site, not just its two purely-diagonal
+      (up-up, down-down) entries: whenever vx/vy is active, _rot_dm rotates
+      dme_lab[(0,0,0)] before compute_dd reads its (rotated) diagonal, and
+      a spin rotation mixes a 2x2 block's diagonal and off-diagonal entries
+      together (rot @ [[a,b],[c,d]] @ rot^dagger's [0,0]/[1,1] entries
+      depend on b,c too) -- so leaving a site's up-down/down-up entries at
+      zero when no channel happens to touch them silently corrupts the
+      rotated diagonal too, not just the (unused) unrotated off-diagonal.
+      Caught by test_jinteraction_random_direction_guess_gives_collinear_moment
+      (isotropic exchange collapsing onto the z axis instead of the guess
+      direction -- the x/y mean-field contribution was being silently
+      zeroed by this).
+    - get_mf_normal's cross term (compute_cross) reads dm[d2][j,i] (note
+      the swapped indices) for every (i,j) where v[d][i,j] is nonzero, i.e.
+      it needs the TRANSPOSE of v[d]'s nonzero pattern at the OPPOSITE
+      direction d2=-d, not v[d2]'s own pattern -- so each v[d] contributes
+      to two masks: its own pattern at d (used directly by get_dc_energy
+      and as the rotation input for vx/vy), and its transpose at d2.
+    - _rot_dm/_rot_dict (used for vx/vy) rotate whichever 2x2 spin
+      sub-blocks are present as a unit (R is block-diagonal in the 2x2
+      spin index, see build_rotation_matrix), so correctness requires
+      each touched site-pair's full 2x2 block, not individual entries.
+      _build_v/_build_density_v's own construction always populates a
+      site-pair's 4 spin sub-entries together (or, for the onsite-U cross
+      term specifically, only the 2 off-diagonal ones -- but those live at
+      a diagonal site-pair (i,i), whose other 2 entries are already forced
+      in by the always-include-the-diagonal rule above), so a plain
+      per-entry union already comes out block-complete with no special
+      handling needed here.
+
+    A short-range neighbor-shell v is overwhelmingly zero -- measured on a
+    98-site/196-orbital system, 0.02%-0.34% nonzero per off-diagonal
+    direction key -- so the result is normally a tiny fraction of the full
+    n^2 grid; see dmtk.fulldm.full_dm_batch_d_sparse and
+    densitymatrix.full_dm_accumulate_sparse for what computing only these
+    entries buys over the dense (n,n)@(n,n) per-direction matmul."""
+    all_dirs = set(keys)
+    for v in vlist:
+        if v is None: continue
+        for d in v:
+            all_dirs.add(d)
+            all_dirs.add((-d[0], -d[1], -d[2]))
+    masks = {d: np.zeros((n, n), dtype=bool) for d in all_dirs}
+    for v in vlist:
+        if v is None: continue
+        for d, m in v.items():
+            nz = (m != 0)
+            masks[d] |= nz               # own-direction uses (get_dc_energy, rotation input)
+            d2 = (-d[0], -d[1], -d[2])
+            masks[d2] |= nz.T            # cross-term uses dm[d2][j,i] for v[d][i,j] != 0
+    masks[(0, 0, 0)] |= np.kron(np.eye(n // 2, dtype=bool), np.ones((2, 2), dtype=bool))
+    pairs = dict()
+    for d, mask in masks.items():
+        rows, cols = np.nonzero(mask)
+        pairs[d] = (rows.astype(np.int64), cols.astype(np.int64))
+    return pairs
+
+
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         maxerror, maxite, T, verbose, constrains, vd=None):
     """Shared SCF core for Jinteraction/VJinteraction: decouples the
@@ -456,6 +524,27 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             Rx = build_rotation_matrix(n_orb, **_AXIS_ROTATION["x"]); Rxd = Rx.conj().T
         if vy_active:
             Ry = build_rotation_matrix(n_orb, **_AXIS_ROTATION["y"]); Ryd = Ry.conj().T
+
+    # sparse density-matrix path: only compute the (row,col) entries that
+    # normal_term_ii/jj/ij/ji actually read, instead of the full (n,n)
+    # matrix per direction (see _build_sparse_pairs/full_dm_accumulate_sparse).
+    # has_eh=False only: vd's Nambu-basis interaction matrix lives in the
+    # reordered Nambu convention (sctk/reorder.py), not the plain
+    # spin-orbital one _build_sparse_pairs assumes, so the Nambu case keeps
+    # the existing dense get_dm call below rather than risk misreading that
+    # reordering here -- a possible follow-up, not attempted in this pass.
+    use_sparse_dm = not has_eh
+    if use_sparse_dm:
+        n_dm = vz[(0, 0, 0)].shape[0]
+        sparse_pairs = _build_sparse_pairs(
+                [vz, vx, vy] + ([vd] if vd is not None else []), v_dirs, n_dm)
+
+    def _get_dm(h):
+        if use_sparse_dm:
+            from ..densitymatrix import full_dm_accumulate_sparse
+            delta = T if T != 0. else 1e-15 # see densitymatrix.full_dm's own T==0 guard
+            return full_dm_accumulate_sparse(h, sparse_pairs, nk=nk, delta=delta)
+        return get_dm(h, v_dirs, nk=nk, T=T, integration="ed")
 
     def _rot_dict(dd, R, Rd):
         """Rotate a dict of Hamiltonian-like (hopping/mean-field) matrices:
@@ -545,7 +634,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         hop = update_hamiltonian(hop0, mf)
         set_hoppings(h, hop)
         h = callback_h(h)
-        dm_lab = get_dm(h, v_dirs, nk=nk, T=T, integration="ed")
+        dm_lab = _get_dm(h)
         mfnew = compute_mf(dm_lab)
         if callback_mf is not None: mfnew = callback_mf(mfnew)
         scf = SCF()

@@ -67,6 +67,66 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     
 
 
+def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
+        delta=delta_dm,batch_size=16,dense_fraction=0.01):
+    """Sparse-position counterpart of full_dm_accumulate: for each
+    direction, only computes the (row,col) entries listed in pairs[d]
+    instead of the full (n,n) matrix (see dmtk.fulldm.full_dm_batch_d_sparse
+    and selfconsistency.spinspin._build_sparse_pairs for why this is safe
+    -- a short-range interaction matrix v[d] is mostly zero, so most of a
+    full (n,n) density matrix at that direction is never read downstream).
+    Still returns a dense {direction: (n,n)} dict, zero everywhere except
+    at the requested pairs (or fully populated, for a direction that fell
+    back to the dense kernel -- see dense_fraction), so it is a drop-in
+    replacement for full_dm_accumulate(...,ds=list(pairs)) wherever only
+    those entries are consumed -- used only by
+    selfconsistency.spinspin._run_anisotropic_scf (Jinteraction/
+    VJinteraction's shared SCF core), not by the generic (Vinteraction/
+    SzSz/SxSx/SySy) path, which still gets the full matrix via
+    full_dm_accumulate.
+
+    dense_fraction: per-direction fallback threshold. full_dm_batch_d_sparse
+    does asymptotically less work than the dense (n,n)@(n,n) matmul
+    (full_dm_batch_d_vectorized) for a truly sparse direction, but it is a
+    gather + elementwise-multiply-and-reduce, not a BLAS call, so its
+    per-entry constant is much worse than a matmul's -- measured on a
+    196-orbital system, the sparse kernel is ~7x *slower* than the dense
+    one at 8.8% of n^2 requested entries (a common density for a bond
+    direction that happens to fold entirely within one cell, e.g.
+    second-neighbor bonds in a compact supercell) despite doing an order of
+    magnitude fewer FLOPs, and the crossover is around 1-2% of n^2. Below
+    dense_fraction*n^2 requested entries for a direction, use the sparse
+    kernel and scatter its output into the (initially zero) container;
+    above it, just run the dense kernel for that direction and keep its
+    full result -- strictly more information than requested, but correct
+    and, past the crossover, cheaper too."""
+    from .htk.eigenvectors import parallel_diagonalization
+    hk = h.get_hk_gen() # get the Hamiltonian generator
+    ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
+    fac = 1./len(ks) # normalization
+    n = h.intra.shape[0]
+    threshold = dense_fraction*n*n
+    outd = {d: np.zeros((n,n),dtype=np.complex128) for d in pairs}
+    for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
+        kbatch = ks[i0:i0+batch_size]
+        mats = np.array([hk(k) for k in kbatch]) # k-Hamiltonians in this batch
+        es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
+        es_batch = es_batch-fermi # substract fermi energy
+        for d,(rows,cols) in pairs.items():
+            npairs = len(rows)
+            if npairs==0: continue # nothing requested in this direction
+            if npairs>threshold: # dense direction: the plain matmul wins
+                contribs = full_dm_batch_d_vectorized(es_batch,vs_batch,kbatch,
+                        np.array(d,dtype=np.float64),delta=delta)
+                outd[d] += np.sum(contribs,axis=0) # pool the batch
+            else:
+                contribs = full_dm_batch_d_sparse(es_batch,vs_batch,kbatch,
+                        np.array(d,dtype=np.float64),rows,cols,delta=delta)
+                outd[d][rows,cols] += np.sum(contribs,axis=0) # pool the batch
+    for d in outd: outd[d] *= fac # renormalize
+    return outd
+
+
 def full_dm_simultaneous(h,nk=10,fermi=0.0,
         delta=delta_dm,
         ds=None):
@@ -98,6 +158,7 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
 from .dmtk.fulldm import full_dm_python
 from .dmtk.fulldm import full_dm_python_d
 from .dmtk.fulldm import full_dm_batch_vectorized
+from .dmtk.fulldm import full_dm_batch_d_sparse
 from .dmtk.fulldm import full_dm_batch_d_vectorized
 
 

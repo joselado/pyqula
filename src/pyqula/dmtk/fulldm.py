@@ -146,3 +146,34 @@ def full_dm_batch_d_vectorized(es_batch,vs_batch,ks_batch,d,delta=1e-7):
         weight = occ*phase
         out[ik] = (np.conj(w)*weight) @ w.T
     return out
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def full_dm_batch_d_sparse(es_batch,vs_batch,ks_batch,d,rows,cols,delta=1e-7):
+    """Same as full_dm_batch_d_vectorized, but only computes the
+    (rows[p],cols[p]) entries of the (n,n) density matrix instead of all
+    n^2 of them -- for a short-range interaction matrix v[d], the vast
+    majority of those n^2 entries are never read by normal_term_ii/jj/ij/ji
+    (selfconsistency/densitydensity.py) because v[d][i,j] is zero there, so
+    computing them via the full (n,n)@(n,n) matmul in
+    full_dm_batch_d_vectorized is mostly wasted work -- see
+    selfconsistency.spinspin._build_sparse_pairs, which derives rows/cols
+    from v's own nonzero pattern (union across the active exchange/density
+    channels, since they share this same k-mesh diagonalization). Returns
+    (nb,npairs) instead of (nb,n,n); the caller scatters these back into a
+    dense (n,n) container at (rows[p],cols[p])."""
+    nb = es_batch.shape[0]
+    npairs = rows.shape[0]
+    out = np.zeros((nb,npairs),dtype=np.complex128)
+    for ik in prange(nb): # loop over kpoints in the batch, in parallel
+        es = es_batch[ik]
+        w = vs_batch[ik]
+        k = ks_batch[ik]
+        kd = k[0]*d[0]+k[1]*d[1]+k[2]*d[2]
+        phase = np.exp(1j*2.0*np.pi*kd)
+        occ = 1.0/(1.0+np.exp(es/delta))
+        weight = occ*phase
+        wa = w[rows,:] # (npairs, nstates)
+        wb = w[cols,:] # (npairs, nstates)
+        out[ik,:] = np.sum(np.conj(wa)*weight*wb,axis=1)
+    return out
