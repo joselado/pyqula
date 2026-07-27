@@ -39,7 +39,7 @@ from ..rotate_spin import global_spin_rotation as _gsr
 # module a caller happens to import first.
 
 
-def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None):
+def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, nd=None):
     """Build the spin-orbital interaction matrix for a J1/J2/J3 (plus
     optional general Jr(r) function) neighbor-shell SzSz coupling,
     following exactly the same neighbor-shell/hopping-dict construction as
@@ -47,8 +47,15 @@ def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None):
     Sz_i Sz_j = 1/4 (n_iu-n_id)(n_ju-n_jd) in the four spin blocks instead
     of Vinteraction's uniform value. Same key set (bond directions) as
     Vinteraction's v for the same geometry, since that is fixed purely by
-    the geometry's neighbor shells, independent of which J's are zero."""
-    nd = h.geometry.neighbor_distances() # distances to the neighbor shells
+    the geometry's neighbor shells, independent of which J's are zero.
+
+    nd: precomputed h.geometry.neighbor_distances(), if the caller already
+    has one (e.g. Jinteraction/VJinteraction, which call this -- and
+    _build_density_v -- several times for the same h and would otherwise
+    recompute this O(n^2) geometry search from scratch on every call).
+    Computed here if not given, so single-channel callers (SzSz) are
+    unaffected."""
+    if nd is None: nd = h.geometry.neighbor_distances() # distances to the neighbor shells
     mgenerator = specialhopping.distance_hopping_matrix(
             [J1/2., J2/2., J3/2.], nd[0:3])
     hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
@@ -246,14 +253,15 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     mean field from Jx/Jy is a separate, unverified extension)."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
     h1 = h0.get_multicell().get_dense()
-    vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr)
-    vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr)
-    vy = _build_v(h1, Jy1, Jy2, Jy3, Jyr)
+    nd = h1.geometry.neighbor_distances() # shared by all three _build_v calls below
+    vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr, nd=nd)
+    vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr, nd=nd)
+    vy = _build_v(h1, Jy1, Jy2, Jy3, Jyr, nd=nd)
     return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             maxerror, maxite, T, verbose, constrains)
 
 
-def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None):
+def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None, nd=None):
     """Build the spin-orbital density-density interaction matrix -- uniform
     across all four spin blocks (V1/V2/V3 neighbor shells, optional general
     Vr(r) function), plus an onsite U between up/down -- exactly mirroring
@@ -261,10 +269,14 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None):
     Kept as a small separate copy here (rather than refactoring Vinteraction
     to share it) to avoid touching that already-tested, widely-used code
     path; see _build_v's docstring for why the neighbor-shell key set this
-    produces is independent of which of V1/V2/V3 happen to be zero."""
+    produces is independent of which of V1/V2/V3 happen to be zero.
+
+    nd: see _build_v's docstring -- same precomputed-neighbor_distances
+    reuse, since VJinteraction calls this alongside three _build_v calls
+    for the same h."""
     from .. import specialhopping
     from .densitydensity import obj2geometryarray
-    nd = h.geometry.neighbor_distances()
+    if nd is None: nd = h.geometry.neighbor_distances()
     mgenerator = specialhopping.distance_hopping_matrix(
             [V1/2., V2/2., V3/2.], nd[0:3])
     hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
@@ -334,15 +346,29 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     Vinteraction/SzSz/SxSx/SySy)."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
     h1 = h0.get_multicell().get_dense()
-    vz = _build_v(h1, J1+J1z, J2, J3, Jr)
-    vd = _build_density_v(h1, V1, V2, V3, U, Vr)
-    vx = _build_v(h1, J1+J1x, J2, J3, Jr)
-    vy = _build_v(h1, J1+J1y, J2, J3, Jr)
+    nd = h1.geometry.neighbor_distances() # shared by all four _build_*_v calls below
+    vz = _build_v(h1, J1+J1z, J2, J3, Jr, nd=nd)
+    vd = _build_density_v(h1, V1, V2, V3, U, Vr, nd=nd)
+    vx = _build_v(h1, J1+J1x, J2, J3, Jr, nd=nd)
+    vy = _build_v(h1, J1+J1y, J2, J3, Jr, nd=nd)
     if not h1.has_eh: # normal-state: fold density-density directly into vz
         vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
         vd = None
     return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             maxerror, maxite, T, verbose, constrains, vd=vd)
+
+
+def _channel_is_zero(v):
+    """True if every matrix in this interaction channel's hopping dict is
+    identically zero -- i.e. the J (or J1x/J1y) that built it via _build_v
+    was 0. Used to skip an exchange channel's rotation and
+    get_mf_normal/get_dc_energy calls entirely in _run_anisotropic_scf,
+    since a zero interaction contributes exactly zero mean field regardless
+    of the density matrix -- this is the difference between VJinteraction's
+    pure density-density case (J1=J2=J3=J1x=J1y=0) and Vinteraction: without
+    this check, VJinteraction always pays for three full exchange-channel
+    passes (z, x, y) even when x and y are pure zero matrices."""
+    return all(not np.any(m) for m in v.values())
 
 
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
@@ -378,7 +404,14 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     only V/U can (matching the existing Zeeman+attractive-V1 triplet-SC
     machinery) -- extending the x/y rotation trick to also rotate the
     anomalous sector is a separate, unverified piece of physics left for a
-    future extension."""
+    future extension.
+
+    vx/vy are skipped entirely (no rotation, no get_mf_normal/get_dc_energy
+    call) when they are identically zero -- e.g. VJinteraction's pure
+    density-density case (J1=J2=J3=J1x=J1y=0), where _build_v returns an
+    all-zero matrix for every key regardless of geometry. A zero
+    interaction contributes exactly zero mean field either way, so this
+    changes no result, only the cost of computing it -- see _channel_is_zero."""
     from .densitydensity import (get_dm, get_mf_normal, get_mf, mix_mf,
             diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF)
@@ -403,20 +436,30 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # when h1 itself is BdG) rather than h1.intra.shape, since the exchange
     # channels are always decoupled in the (electron-sector-sized) normal
     # channel -- see this function's docstring.
-    from ..rotate_spin import build_rotation_matrix
-    n_orb = vz[(0, 0, 0)].shape[0]//2
-    Rx = build_rotation_matrix(n_orb, **_AXIS_ROTATION["x"])
-    Ry = build_rotation_matrix(n_orb, **_AXIS_ROTATION["y"])
+    vx_active = not _channel_is_zero(vx)
+    vy_active = not _channel_is_zero(vy)
+    Rx = Ry = Rxd = Ryd = None
+    if vx_active or vy_active:
+        from ..rotate_spin import build_rotation_matrix
+        n_orb = vz[(0, 0, 0)].shape[0]//2
+        # daggers precomputed once here (rather than inside _rot_dict/_rot_dm,
+        # which previously recomputed R.conj().T -- once for the forward
+        # rotation, again explicitly at each of that channel's two call
+        # sites in compute_mf/the total-energy tail -- on every one of the
+        # maxite SCF iterations for a rotation that never changes)
+        if vx_active:
+            Rx = build_rotation_matrix(n_orb, **_AXIS_ROTATION["x"]); Rxd = Rx.conj().T
+        if vy_active:
+            Ry = build_rotation_matrix(n_orb, **_AXIS_ROTATION["y"]); Ryd = Ry.conj().T
 
-    def _rot_dict(dd, R):
+    def _rot_dict(dd, R, Rd):
         """Rotate a dict of Hamiltonian-like (hopping/mean-field) matrices:
         these live in the same convention as Hamiltonian.intra, for which
         R @ m @ R^dagger is the correct transformation (as used by
         Hamiltonian.global_spin_rotation, validated by SxSx/SySy)."""
-        Rd = R.conj().T
         return {k: R @ m @ Rd for (k, m) in dd.items()}
 
-    def _rot_dm(dd, R):
+    def _rot_dm(dd, R, Rd):
         """Rotate a dict of *density matrices*, which need a different
         (conjugate-sandwiched) transformation than _rot_dict.
 
@@ -438,7 +481,6 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         Conjugating before and after the standard rotation corrects for it:
         if dm_stored = conj(dm_physical), then
         dm_stored' = conj(dm_physical') = conj(R @ conj(dm_stored) @ R^dagger)."""
-        Rd = R.conj().T
         return {k: np.conj(R @ np.conj(m) @ Rd) for (k, m) in dd.items()}
 
     callback_mf = _callback_mf_constrains(h1, constrains)
@@ -474,12 +516,14 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     def compute_mf(dm_lab):
         dme_lab = electron_sector(dm_lab) # exchange channels: normal sector only
         mf = get_mf_normal(vz, dme_lab)
-        dm_x = _rot_dm(dme_lab, Rx) # dm needs the conjugated rotation
-        mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rx.conj().T) # mf does not
-        mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
-        dm_y = _rot_dm(dme_lab, Ry)
-        mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ry.conj().T)
-        mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
+        if vx_active:
+            dm_x = _rot_dm(dme_lab, Rx, Rxd) # dm needs the conjugated rotation
+            mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rxd, Rx) # mf does not
+            mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
+        if vy_active:
+            dm_y = _rot_dm(dme_lab, Ry, Ryd)
+            mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ryd, Ry)
+            mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
         mf = embed_normal(mf)
         if vd is not None: # density-density: full normal+anomalous treatment
             mf_d = get_mf(vd, dm_lab, has_eh=has_eh)
@@ -564,10 +608,12 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         etot += h.fermi*h.intra.shape[0]*filling
     dme = electron_sector(scf.dm)
     etot += get_dc_energy(vz, dme)
-    dm_x = _rot_dm(dme, Rx) # dm needs the conjugated rotation, see compute_mf
-    etot += get_dc_energy(vx, dm_x)
-    dm_y = _rot_dm(dme, Ry)
-    etot += get_dc_energy(vy, dm_y)
+    if vx_active:
+        dm_x = _rot_dm(dme, Rx, Rxd) # dm needs the conjugated rotation, see compute_mf
+        etot += get_dc_energy(vx, dm_x)
+    if vy_active:
+        dm_y = _rot_dm(dme, Ry, Ryd)
+        etot += get_dc_energy(vy, dm_y)
     if vd is not None:
         etot += get_dc_energy(vd, dme)
     scf.total_energy = etot.real
