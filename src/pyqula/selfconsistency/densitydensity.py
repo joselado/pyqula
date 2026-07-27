@@ -542,28 +542,42 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     - V1, first neighbor interaction
     - V2, second neighbor interaction
 
+    NOT the default engine behind Hamiltonian.get_mean_field_hamiltonian
+    any more -- that now calls VJinteraction (selfconsistency/spinspin.py),
+    a superset that also supports J1/J2/J3/J1x/J1y/J1z exchange in the same
+    SCF loop and is the one to build performance/feature work on going
+    forward. Vinteraction is kept as-is: it is still exercised directly by
+    a handful of tests (the qtci/solver/compute_cross/etc. kwargs below
+    that VJinteraction does not accept, and the
+    test_vjinteraction_reduces_to_vinteraction_with_only_V-style
+    equivalence checks), so don't remove or extend it speculatively -- only
+    touch it if a bug is found here specifically.
+
     integration: "ed" (default) computes the density matrix at each SCF
     step by exact diagonalization on a k-mesh. "qtci" instead integrates
     each required density-matrix entry over the BZ with qutecipy (tensor
     cross interpolation) -- see selfconsistency.densitydensity.get_dm and
     qtcitk.densitymatrix_qtci.get_dm_qtci; only 2D Hamiltonians are
-    supported for "qtci".
+    supported for "qtci". VJinteraction does not support this (or
+    solver=/compute_cross=/etc. below) at all -- call Vinteraction
+    directly if you need them.
 
     WARNING: if the SCF loop does not converge (e.g. maxite reached before
     maxerror is met), the returned Hamiltonian is None, but the returned
     total_energy is still whatever value was reached at that point, NOT
     necessarily a meaningful self-consistent energy - this applies to
-    get_mean_field_hamiltonian(return_total_energy=True) too. Always check
-    the SCF object's .converged attribute (or that the returned Hamiltonian
-    is not None) before trusting total_energy; do not assume a returned
-    number is correct just because no exception was raised. This is easy to
-    miss with solver="newton"/"fsolve"/"newton_krylov" (use_jax=True):
-    those can stop after zero completed iterations if the very first
-    Newton/GMRES step fails to find an improving direction (e.g. an
-    unbiased spinful Hamiltonian with an unbroken continuous spin-rotation
-    symmetry, which leaves the Jacobian singular along that direction), in
-    which case the reported total_energy is essentially just the unmodified
-    initial guess evaluated once, not a converged answer.
+    VJinteraction/get_mean_field_hamiltonian(return_total_energy=True) too.
+    Always check the SCF object's .converged attribute (or that the
+    returned Hamiltonian is not None) before trusting total_energy; do not
+    assume a returned number is correct just because no exception was
+    raised. This is easy to miss with
+    solver="newton"/"fsolve"/"newton_krylov" (use_jax=True): those can stop
+    after zero completed iterations if the very first Newton/GMRES step
+    fails to find an improving direction (e.g. an unbiased spinful
+    Hamiltonian with an unbroken continuous spin-rotation symmetry, which
+    leaves the Jacobian singular along that direction), in which case the
+    reported total_energy is essentially just the unmodified initial guess
+    evaluated once, not a converged answer.
     """
     h = h.get_multicell() # multicell Hamiltonian
     h = h.get_dense()

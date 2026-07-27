@@ -4,7 +4,23 @@ import types
 
 def hubbard_mf(EB,**kwargs):
     """Wrapper to perform a mean-field Hubbard calculation with an Embedding
-    object."""
+    object.
+
+    CAVEAT (not currently exercised by any test or example -- EB.
+    get_mean_field_hamiltonian, the only caller of this function, is not
+    itself called anywhere in this repo): this relies on
+    get_mean_field_hamiltonian's SCF loop reading the density matrix via
+    h.get_density_matrix(...), which the get_density_matrix override below
+    redirects to the Embedding object's own density matrix. For a spinful
+    h (has_spin=True) that goes through VJinteraction (this is
+    get_mean_field_hamiltonian's default engine), that assumption breaks:
+    VJinteraction's SCF core (selfconsistency.spinspin._run_anisotropic_scf)
+    computes its density matrix by diagonalizing h.get_hk_gen() directly
+    (densitymatrix.full_dm_accumulate_sparse/_with_fermi) rather than
+    calling h.get_density_matrix, silently ignoring this override and the
+    fermi/shift_fermi ones below with it. A has_spin=False h still goes
+    through Vinteraction (get_mean_field_hamiltonian falls back to it for
+    spinless Hamiltonians), where this override is honored as before."""
     ## This is just a workaround
     h = EB.H.copy() # copy Hamiltonian
     h.EB = EB.copy() # copy the object

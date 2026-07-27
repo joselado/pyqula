@@ -235,6 +235,15 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     the resulting mean field back before summing the three contributions
     -- see SxSx/SySy for the single-axis version of the same trick.
 
+    Superseded by VJinteraction (this module) for new code -- VJinteraction
+    is a superset (also handles V/U density-density in the same SCF loop,
+    isotropic J1/J2/J3 exchange, and is where the Tier 1-3 SCF performance
+    work landed) and is the one Hamiltonian.get_mean_field_hamiltonian
+    calls by default. Jinteraction is kept as-is mainly for the
+    VJinteraction-reduces-to-Jinteraction-with-only-J equivalence tests
+    (tests/scf/test_vjinteraction.py) -- don't extend or optimize it
+    further, only touch it if a bug is found here specifically.
+
     Unlike SxSx/SySy, `mf` (a string mode name, matrix, dict or Hamiltonian
     guess) is used directly in the lab frame with no rotation: the mf
     iterate driving this SCF loop always lives in the lab frame -- only the
