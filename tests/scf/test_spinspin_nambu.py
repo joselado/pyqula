@@ -137,8 +137,9 @@ def test_vjinteraction_v_only_on_nambu_matches_vinteraction():
 
 def test_vjinteraction_isotropic_J_and_V_on_nambu_preserves_su2_symmetry():
     """Combining an SU(2)-symmetric V1 pairing channel with an isotropic J1
-    exchange on a BdG Hamiltonian must keep the total energy independent of
-    the (arbitrary) exchange-field direction used to seed the SCF loop."""
+    (ferromagnetic-sign, uniform order) exchange on a BdG Hamiltonian must
+    keep the total energy independent of the (arbitrary) exchange-field
+    direction used to seed the SCF loop."""
     g = geometry.bichain()
     h0 = g.get_hamiltonian()
     rng = np.random.default_rng(5)
@@ -155,3 +156,52 @@ def test_vjinteraction_isotropic_J_and_V_on_nambu_preserves_su2_symmetry():
         etots.append(scf.total_energy)
     etots = np.array(etots)
     assert np.max(np.abs(etots - np.mean(etots))) < 1e-3, etots
+
+
+def test_vjinteraction_afm_and_fm_J_with_attractive_V_preserve_su2_symmetry():
+    """Combining an attractive V1 (inducing superconductivity) with an
+    isotropic J1 exchange must keep the total energy independent of the
+    (arbitrary) direction of the fixed exchange field used to seed the
+    symmetry breaking, for BOTH signs of J1: J1<0 (ferromagnetic, uniform
+    order -- a uniform field) and J1>0 (antiferromagnetic, staggered/Neel
+    order -- a staggered [+v,-v] field, since Neel order needs at least a
+    2-site cell to represent). The SCF's own mean-field guess is an
+    unrelated random one in both cases (mf="random"), matching the
+    established convention for this kind of check (see
+    test_rotational_symmetry_sc.py's _gap_for_random_direction).
+
+    The antiferromagnetic+SC combination converges much more slowly than
+    the ferromagnetic one (monotonic but shallow, not oscillating -- a
+    genuine competition between the two orders, not a bug), hence the
+    larger mix/maxite for that branch."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    rng = np.random.default_rng(6)
+
+    etots_fm = []
+    for _ in range(2):
+        v = rng.random(3) - 0.5
+        v = v/np.linalg.norm(v)
+        h = h0.copy()
+        h.add_exchange(0.3*v) # fixed uniform field -> ferromagnetic order
+        h.turn_nambu()
+        scf = meanfield.VJinteraction(h, V1=-2.0, J1=-1.0, filling=0.3,
+                mf="random", nk=20, maxerror=MAXERROR, mix=0.15, maxite=2000)
+        assert scf.converged
+        etots_fm.append(scf.total_energy)
+    etots_fm = np.array(etots_fm)
+    assert np.max(np.abs(etots_fm - np.mean(etots_fm))) < 1e-4, etots_fm
+
+    etots_afm = []
+    for _ in range(2):
+        v = rng.random(3) - 0.5
+        v = v/np.linalg.norm(v)
+        h = h0.copy()
+        h.add_exchange([v*0.3, -v*0.3]) # fixed staggered field -> Neel order
+        h.turn_nambu()
+        scf = meanfield.VJinteraction(h, V1=-2.0, J1=1.0, filling=0.3,
+                mf="random", nk=20, maxerror=MAXERROR, mix=0.3, maxite=3000)
+        assert scf.converged
+        etots_afm.append(scf.total_energy)
+    etots_afm = np.array(etots_afm)
+    assert np.max(np.abs(etots_afm - np.mean(etots_afm))) < 1e-4, etots_afm
