@@ -112,7 +112,18 @@ def test_jinteraction_isotropic_on_nambu_preserves_su2_symmetry():
 def test_vjinteraction_v_only_on_nambu_matches_vinteraction():
     """VJinteraction with only V1 (no exchange) on a BdG Hamiltonian must
     reduce exactly to Vinteraction's existing, already-validated Nambu
-    (spin-triplet superconductivity) treatment."""
+    (spin-triplet superconductivity) treatment, including total_energy.
+
+    This also regression-tests a real bug in densitydensity.py's total
+    energy computation (shared by Vinteraction and, through vd,
+    VJinteraction), found and fixed while checking that VJinteraction
+    gives the same result in a supercell as in a minimal cell:
+    get_dc_energy(v, dm) assumes dm's shape matches v's (2n, never
+    Nambu-doubled), but the total-energy code used to pass it the full,
+    un-extracted Nambu-sized density matrix for a BdG Hamiltonian, silently
+    reading the wrong entries -- giving a total energy that was not even
+    consistent between a primitive cell and a supercell of the same
+    system (see test_vjinteraction_nambu_supercell_consistency)."""
     g = geometry.bichain()
     h0 = g.get_hamiltonian()
 
@@ -129,10 +140,10 @@ def test_vjinteraction_v_only_on_nambu_matches_vinteraction():
             nk=20, maxerror=MAXERROR)
 
     assert scf_v.converged and scf_vj.converged
-    assert np.isclose(scf_v.total_energy, scf_vj.total_energy, atol=1e-3), \
-        (scf_v.total_energy, scf_vj.total_energy)
     assert np.isclose(scf_v.hamiltonian.get_gap(), scf_vj.hamiltonian.get_gap(),
             atol=1e-3)
+    assert np.isclose(scf_v.total_energy, scf_vj.total_energy, atol=1e-3), \
+        (scf_v.total_energy, scf_vj.total_energy)
 
 
 def test_vjinteraction_isotropic_J_and_V_on_nambu_preserves_su2_symmetry():

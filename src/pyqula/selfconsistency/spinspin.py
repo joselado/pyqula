@@ -548,10 +548,16 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
 
     # total energy: sum of occupied energies plus the double-counting
     # correction for each of the three (independently-rotated) exchange
-    # channels (electron sector only, matching compute_mf) plus vd's (if
-    # any), which -- like its mean field -- uses the full, un-extracted
-    # density matrix, matching how Vinteraction/densitydensity.py already
-    # computes it
+    # channels, plus vd's (if any) -- all electron-sector only. get_dc_energy
+    # assumes dm's shape matches v's (2n, never Nambu-doubled), so it must
+    # always be fed the extracted electron sector for a BdG h1, never the
+    # full Nambu-sized scf.dm directly (verified: passing the full dm here,
+    # matching how Vinteraction/densitydensity.py's own total-energy
+    # computation does it for its single v, makes the reported total_energy
+    # inconsistent between a primitive cell and a supercell of the same
+    # system for a Nambu Hamiltonian -- a real, pre-existing bug in that
+    # shared code, out of scope to fix here, but not one to reproduce for
+    # vd just because it happens to match precedent)
     h = scf.hamiltonian
     etot = h.get_total_energy(nk=h.nk)
     if mu is None:
@@ -563,6 +569,6 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     dm_y = _rot_dm(dme, Ry)
     etot += get_dc_energy(vy, dm_y)
     if vd is not None:
-        etot += get_dc_energy(vd, scf.dm)
+        etot += get_dc_energy(vd, dme)
     scf.total_energy = etot.real
     return scf

@@ -467,10 +467,22 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     # Now compute the total energy
     h = scf.hamiltonian
     etot = h.get_total_energy(nk=h.nk)
-    if mu is None: 
+    if mu is None:
         etot += h.fermi*h.intra.shape[0]*filling # add the Fermi energy
     #print("Occupied energies",etot)
-    etot += get_dc_energy(scf.v,scf.dm) # add the double counting energy
+    # get_dc_energy assumes dm's shape matches v's, which is never
+    # Nambu-doubled even when h (hence scf.dm) is BdG -- so the electron
+    # sector must be extracted from scf.dm first for a BdG h, or this
+    # silently reads the wrong entries (mixing electron and hole rows/cols
+    # of the reordered Nambu matrix), giving a total energy that is not
+    # even consistent between a primitive cell and a supercell of the same
+    # system (caught via that exact check)
+    dm_dc = scf.dm
+    if h.has_eh:
+        from .. import superconductivity
+        dm_dc = {key: superconductivity.get_eh_sector(m,i=0,j=0)
+                for (key,m) in scf.dm.items()}
+    etot += get_dc_energy(scf.v,dm_dc) # add the double counting energy
     etot = etot.real
     scf.total_energy = etot
     if verbose>1:

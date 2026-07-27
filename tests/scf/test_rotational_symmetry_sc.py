@@ -34,6 +34,43 @@ def test_superconducting_gap_is_rotationally_invariant():
         f"SCF gap is not rotationally invariant: {diff}"
 
 
+def test_superconducting_energy_per_atom_matches_in_a_supercell():
+    """The self-consistent total energy per atom, and the gap, must be the
+    same whether computed in the minimal (primitive) cell or a supercell
+    of it -- same physical lattice, just a bigger repeated unit. The two
+    k-meshes are scaled consistently (nk_supercell = nk_primitive/N) so
+    both sample the same physical k-points folded into the smaller BZ.
+
+    Regression test for a real bug in the total-energy computation shared
+    by every density-density mean field (get_mean_field_hamiltonian /
+    Vinteraction, and, through its own density-density channel,
+    VJinteraction): get_dc_energy(v, dm) assumes dm's shape matches v's
+    (2n, never Nambu-doubled), but the total energy used to be computed
+    with the full, un-extracted Nambu-sized density matrix for a BdG
+    Hamiltonian -- giving a total energy per atom that changed with the
+    supercell size (caught via this exact check)."""
+    g = geometry.bichain()
+    nk0 = 40
+
+    def run(gg, nk):
+        h = gg.get_hamiltonian()
+        h.add_exchange([0.3, 0., 0.])
+        h.turn_nambu()
+        return h.get_mean_field_hamiltonian(V1=-2., filling=.3, mf="random",
+                nk=nk, maxerror=SCF_MAXERROR, return_total_energy=True)
+
+    h1, etot1 = run(g, nk0)
+    natoms1 = len(g.r)
+    g2 = g.get_supercell(2)
+    h2, etot2 = run(g2, nk0//2)
+    natoms2 = len(g2.r)
+    assert natoms2 == 2*natoms1
+
+    assert np.isclose(h1.get_gap(), h2.get_gap(), atol=1e-3)
+    assert np.isclose(etot1/natoms1, etot2/natoms2, atol=1e-3), \
+        (etot1/natoms1, etot2/natoms2)
+
+
 def test_triplet_dvector_is_perpendicular_to_zeeman_direction():
     """A Zeeman field along an arbitrary direction v induces equal-spin
     triplet pairing quantized along v (Delta_ud, the Sz=0 pairing channel
