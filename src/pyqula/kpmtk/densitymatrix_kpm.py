@@ -173,6 +173,20 @@ def _chebyshev_basis(xs,n_moments):
     return T
 
 
+def _estimate_kpm_scale(hk_gen,ks):
+    """Shared KPM energy-rescaling estimate -- 1.1x the largest per-k
+    Gershgorin bandwidth bound (kpmtk.bandwidth.estimate_bandwidth) over
+    the sampled k-mesh -- used by both _dm_kpm_from_needed and
+    get_fermi4filling_kpm whenever scale=None. Factored out so a caller
+    that needs both on the SAME Hamiltonian (e.g. selfconsistency.spinspin
+    ._run_anisotropic_scf's integration="kpm" branch, which calls
+    get_fermi4filling_kpm then _dm_kpm_from_needed every SCF iteration) can
+    estimate it once and pass the same value to both, instead of each
+    independently re-sweeping the whole k-mesh through estimate_bandwidth
+    for an identical result."""
+    return 1.1*max(estimate_bandwidth(hk_gen(k)) for k in ks)
+
+
 def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
                          npol=DEFAULT_NPOL, ne=None, cores=None, T=0.0):
     """Shared per-k Bloch-KPM engine: given the (direction, row, col)
@@ -244,7 +258,7 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     if scale is None:
         # one global scale for every k, so the occupied-energy window
         # used below means the same thing at every k-point
-        scale = 1.1*max(estimate_bandwidth(hk_gen(k)) for k in ks)
+        scale = _estimate_kpm_scale(hk_gen, ks)
     if scale <= 0:
         raise ValueError("H(k) has zero bandwidth on the sampled k-mesh "
                 "(it vanishes at every k) -- cannot set a KPM energy "
@@ -353,41 +367,21 @@ def _cumulative_trapz(y, x):
     return np.concatenate([[0.], np.cumsum(avg*dx)])
 
 
-def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
-        npol=DEFAULT_NPOL, ne=None, cores=None):
-    """KPM analogue of spectrum.get_fermi4filling: find the Fermi energy
-    for a given filling without ever diagonalizing anything, so the KPM
-    SCF (selfconsistency/densitydensity_kpm.py) stays fully
-    diagonalization-free end to end -- otherwise it would still need
-    spectrum.get_fermi4filling's own per-k diagonalization just to locate
-    the Fermi level, even though the density matrix itself is computed via
-    KPM.
-
-    Samples the same k-mesh as the rest of the KPM path
-    (h.geometry.get_kmesh(nk=nk)), and at each k gets the Chebyshev moments
-    of the local density of states averaged over every orbital in the cell
-    via kpm.full_trace -- a deterministic sum over all sites/orbitals
-    (looping i=0..norb-1), not a stochastic random-vector estimate -- then
-    k-averages those moments into a single total-DOS-per-orbital profile
-    (valid because moments are linear in the density of states, so the
-    k-average of the moments equals the moments of the k-averaged DOS).
-    Its cumulative integral gives the fraction of orbitals occupied as a
-    function of energy (0 at the sampled window's bottom, 1 at its top);
-    inverting it at the target filling gives the Fermi energy directly,
-    with no diagonalization anywhere. The cumulative integral is forced
-    monotonic (np.maximum.accumulate) before inversion: a finite-npol
-    Jackson-kernel KPM reconstruction is not guaranteed nonnegative
-    everywhere (Gibbs-type ringing near band edges/gaps/van Hove
-    singularities), which without this would make the inversion via
-    np.interp silently ill-defined.
-
-    For BdG/Nambu Hamiltonians (h.has_eh), mirrors spectrum.
-    get_fermi4filling's own workaround (an approximation, per that
-    function's comment): the Fermi energy is estimated from the
-    electron-only spectrum, obtained here by projecting out the Nambu
-    doubling via h.remove_nambu() before proceeding -- not by locating a
-    zero-energy quasiparticle level, since there generally isn't a well
-    defined "filling" of a superconductor's own BdG spectrum.
+def _kpm_dos_moments(h, nk, scale, npol, ne, cores):
+    """Shared per-k Bloch-KPM engine for get_fermi4filling_kpm and
+    get_total_energy_kpm: samples the k-mesh, gets the Chebyshev moments of
+    the local density of states averaged over every orbital in the cell at
+    each k via kpm.full_trace -- a deterministic sum over all sites/
+    orbitals (looping i=0..norb-1), not a stochastic random-vector estimate
+    -- then k-averages those moments into a single total-DOS-per-orbital
+    profile (valid because moments are linear in the density of states, so
+    the k-average of the moments equals the moments of the k-averaged
+    DOS), and reconstructs it on the standard reduced-energy grid via the
+    Jackson kernel. Returns (scale, xs, ys): xs the reduced-energy grid
+    ([-0.99,0.99]), ys the (real-valued) reconstructed DOS profile on it --
+    ready for either a cumulative-integral inversion (Fermi search) or an
+    energy integral (total energy) downstream, so the two functions that
+    use this can never silently disagree about what "the DOS" means.
 
     PERFORMANCE NOTE (not addressed as of 2026-07-27, unlike
     _dm_kpm_from_needed's per-pair profile reconstruction, which was): the
@@ -402,16 +396,11 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
     trace estimator (a handful of random vectors instead of one deterministic
     vector per orbital) would be the standard KPM fix, at the cost of
     trading exactness for statistical noise -- not attempted here."""
-    if h.has_eh:
-        h0 = h.copy()
-        h0.remove_nambu()
-        return get_fermi4filling_kpm(h0, filling, nk=nk, scale=scale,
-                npol=npol, ne=ne, cores=cores)
     if ne is None: ne = npol*4
     ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
     hk_gen = h.get_hk_gen()
     if scale is None:
-        scale = 1.1*max(estimate_bandwidth(hk_gen(k)) for k in ks)
+        scale = _estimate_kpm_scale(hk_gen, ks)
     if scale <= 0:
         raise ValueError("H(k) has zero bandwidth on the sampled k-mesh "
                 "(it vanishes at every k) -- cannot set a KPM energy "
@@ -428,8 +417,111 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
 
     xs = np.linspace(-1.0, 1.0, ne, endpoint=True)*0.99  # reduced energies
     ys = generate_profile(mus, xs, kernel="jackson").real
+    return scale, xs, ys
+
+
+def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
+        npol=DEFAULT_NPOL, ne=None, cores=None):
+    """KPM analogue of spectrum.get_fermi4filling: find the Fermi energy
+    for a given filling without ever diagonalizing anything, so the KPM
+    SCF (selfconsistency/densitydensity_kpm.py) stays fully
+    diagonalization-free end to end -- otherwise it would still need
+    spectrum.get_fermi4filling's own per-k diagonalization just to locate
+    the Fermi level, even though the density matrix itself is computed via
+    KPM.
+
+    Gets the k-averaged, Jackson-kernel-reconstructed density-of-states
+    profile from _kpm_dos_moments (see its docstring). Its cumulative
+    integral gives the fraction of orbitals occupied as a function of
+    energy (0 at the sampled window's bottom, 1 at its top); inverting it
+    at the target filling gives the Fermi energy directly, with no
+    diagonalization anywhere. The cumulative integral is forced monotonic
+    (np.maximum.accumulate) before inversion: a finite-npol Jackson-kernel
+    KPM reconstruction is not guaranteed nonnegative everywhere (Gibbs-type
+    ringing near band edges/gaps/van Hove singularities), which without
+    this would make the inversion via np.interp silently ill-defined.
+
+    For BdG/Nambu Hamiltonians (h.has_eh), mirrors spectrum.
+    get_fermi4filling's own workaround (an approximation, per that
+    function's comment): the Fermi energy is estimated from the
+    electron-only spectrum, obtained here by projecting out the Nambu
+    doubling via h.remove_nambu() before proceeding -- not by locating a
+    zero-energy quasiparticle level, since there generally isn't a well
+    defined "filling" of a superconductor's own BdG spectrum."""
+    if h.has_eh:
+        h0 = h.copy()
+        h0.remove_nambu()
+        return get_fermi4filling_kpm(h0, filling, nk=nk, scale=scale,
+                npol=npol, ne=ne, cores=cores)
+    scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores)
     cdf = _cumulative_trapz(ys, xs)
     cdf = np.maximum.accumulate(cdf)  # enforce monotonicity, see docstring
     cdf = cdf/cdf[-1]  # normalize exactly to 1 across the sampled window
     ef_reduced = np.interp(filling, cdf, xs)
     return scale*ef_reduced
+
+
+def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
+        npol=DEFAULT_NPOL, ne=None, cores=None):
+    """KPM analogue of spectrum.total_energy's exact-diagonalization path
+    (its nbands=None default, which VJinteraction's integration="kpm"
+    branch used to call unconditionally for its post-convergence total
+    energy -- selfconsistency/spinspin.py -- forcing a dense
+    diagonalization there despite everything else in that branch staying
+    diagonalization-free): the k-averaged sum of occupied eigenvalues of h
+    (those below `fermi`), obtained by integrating E*rho(E) up to `fermi`
+    instead of diagonalizing anything.
+
+    Reuses get_fermi4filling_kpm's exact machinery (_kpm_dos_moments: the
+    same k-averaged, Jackson-kernel-reconstructed per-orbital density of
+    states) so the two functions can never silently disagree about what
+    "the DOS" means, and renormalizes it the same way
+    get_fermi4filling_kpm does -- dividing by its own cumulative integral's
+    endpoint, since a finite-npol/ne reconstruction is not exactly
+    normalized to one state per orbital -- before integrating, so the
+    energy is internally self-consistent with whatever Fermi energy was
+    located via that function on the same h.
+
+    E*rho(E) is integrated over the reduced-energy grid up to fermi/scale
+    (a plain grid-resolution truncation, not an interpolated boundary --
+    consistent with how the rest of this module treats a finite ne grid,
+    e.g. get_fermi4filling_kpm's own np.interp-based inversion), then
+    rescaled: rho_E(E) = rho_x(x)/scale (x=E/scale, so dE=scale*dx), and
+    the result is multiplied by norb since _kpm_dos_moments' profile is
+    normalized per orbital (one state per orbital across the whole
+    window) while this returns the EXTENSIVE total (summed over all norb
+    orbitals), matching spectrum.total_energy's own per-k
+    sum-of-eigenvalues convention (not an average over orbitals).
+
+    For BdG/Nambu Hamiltonians, raises NotImplementedError rather than
+    silently reusing get_fermi4filling_kpm's electron-only-spectrum
+    workaround: that approximation is defensible for LOCATING a Fermi
+    level (an already fuzzy concept for a superconductor's own BdG
+    spectrum), but silently reusing it here would return the energy of the
+    wrong (unpaired, non-superconducting) electron-only sector instead of
+    the actual BdG spectrum's -- worth raising loudly rather than silently
+    approximating twice over. VJinteraction's integration="kpm" path
+    already excludes Nambu Hamiltonians entirely (see
+    _run_anisotropic_scf's docstring), so this restriction is not new
+    relative to what's already reachable.
+
+    Verified against spectrum.total_energy on a frozen (non-SCF) 18-site
+    honeycomb Hamiltonian with a random exchange field and sublattice
+    imbalance (nk=6, npol=500): agreed to ~0.1% relative -- see
+    tests/scf/test_densitydensity_kpm.py."""
+    if h.has_eh:
+        raise NotImplementedError("get_total_energy_kpm does not support "
+                "BdG/Nambu Hamiltonians -- see its own docstring for why "
+                "reusing get_fermi4filling_kpm's electron-only-spectrum "
+                "workaround here specifically would silently return the "
+                "wrong sector's energy rather than just being approximate")
+    norb = h.intra.shape[0]
+    scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores)
+    cdf = _cumulative_trapz(ys, xs)
+    cdf = np.maximum.accumulate(cdf)  # enforce monotonicity, see get_fermi4filling_kpm
+    norm = cdf[-1]  # same renormalization get_fermi4filling_kpm applies
+    x_fermi = fermi/scale
+    mask = xs <= x_fermi
+    if not np.any(mask): return 0.0  # nothing occupied in the sampled window
+    integral = np.trapz((xs*ys)[mask], x=xs[mask])
+    return norb*scale/norm*integral

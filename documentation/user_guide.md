@@ -917,6 +917,22 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,
                                             filling=0.2,mf="ferroZ")
 ```
 
+The same combined SCF loop can instead get its density matrix through a
+per-k Chebyshev-moment (Kernel Polynomial Method) expansion, never
+diagonalizing the Bloch Hamiltonian, with `integration="kpm"`:
+
+```python
+h = g.get_hamiltonian(has_spin=True)
+h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
+                                            mf="ferroZ",integration="kpm")
+```
+
+This is meant for large/sparse systems where per-iteration exact
+diagonalization is the bottleneck -- **but currently measures far slower
+than `integration="ed"` at the small/moderate sizes actually tested (order
+100-500 sites, see the reference entry below for numbers)**, so benchmark
+before relying on it for a given system.
+
 All of the spin-spin exchange functions above also work on BdG (Nambu) Hamiltonians (`h.turn_nambu()`/`h.setup_nambu_spinor()`). `get_szsz_mean_field_hamiltonian`/`get_sxsx_mean_field_hamiltonian`/`get_sysy_mean_field_hamiltonian` need no special handling: `get_mean_field_hamiltonian`'s existing Hartree-Fock-plus-anomalous decoupling already dispatches generically for any density-density-shaped interaction, including $S^z_iS^z_j$'s. `get_combined_mean_field_hamiltonian`/`get_exchange_mean_field_hamiltonian` decouple the exchange ($J$) channels in the normal (electron) sector only for a Nambu Hamiltonian -- exchange does not itself induce superconducting pairing here, only $U$/$V_1$/$V_2$/$V_3$ can (the same mechanism as the spin-triplet example above); a state with both magnetic and superconducting order can still emerge from combining an exchange field with an attractive $V_1$:
 
 ```python

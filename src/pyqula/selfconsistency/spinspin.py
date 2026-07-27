@@ -429,7 +429,25 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     for the whole SCF loop -- see that function's docstring for how the
     mean-field update step, which would otherwise silently densify it
     (scipy sparse + dense ndarray returns a dense matrix), is kept from
-    doing so."""
+    doing so.
+
+    The total-energy computation after the SCF loop converges also never
+    diagonalizes: it used to call h.get_total_energy(nk=h.nk)
+    unconditionally (spectrum.total_energy's own `if nbands is None: h =
+    h.get_dense()` densifies and diagonalizes regardless of h.is_sparse
+    unless `nbands` is explicitly given, which that call never did --
+    forcing a dense diagonalization right after an otherwise
+    sparsity-preserving SCF loop, for a huge sparse h0 exactly the
+    scenario this mode exists for). integration="kpm" instead calls
+    kpmtk.densitymatrix_kpm.get_total_energy_kpm, which integrates the
+    same KPM-reconstructed density of states get_fermi4filling_kpm already
+    uses up to the Fermi energy instead of diagonalizing -- see that
+    function's docstring (verified against exact diagonalization to
+    ~0.1% relative on a frozen test Hamiltonian). Vinteraction_kpm/
+    densitydensity_kpm.py's own total-energy tail still has the
+    unconditional-densification version of this (out of scope for this
+    pass, since it is a separate implementation this work did not
+    touch)."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
     h1 = h0.get_multicell()
     if integration != "kpm": h1 = h1.get_dense() # see docstring above
@@ -603,7 +621,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     misreading vd's differently-indexed Nambu basis."""
     from .densitydensity import (get_dm, get_mf_normal, get_mf, mix_mf,
             diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
-            get_dc_energy, SCF)
+            get_dc_energy, SCF, random_hermitian_guess)
     from .mfconstrains import obj2mf
     has_eh = h1.has_eh
     if has_eh: from .. import superconductivity
@@ -685,11 +703,28 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     keep_sparse = use_kpm and h1.is_sparse
     if use_kpm:
         from ..kpmtk.densitymatrix_kpm import (DEFAULT_NPOL,
-                get_fermi4filling_kpm, _dm_kpm_from_needed)
+                get_fermi4filling_kpm, _dm_kpm_from_needed, get_total_energy_kpm)
         if npol is None: npol = DEFAULT_NPOL # same default as get_dm_kpm
         kpm_needed = _sparse_pairs_to_needed(sparse_pairs)
 
         def _get_dm_kpm(h):
+            # scale=scale (the outer, possibly-None user override) is
+            # deliberately re-estimated independently here rather than
+            # shared with get_fermi4filling_kpm's own estimate below, even
+            # though both call the identical _estimate_kpm_scale formula:
+            # when mu=None, get_fermi4filling_kpm's estimate is necessarily
+            # taken on h BEFORE the Fermi shift (the shift amount isn't
+            # known until it returns), while this h is the POST-shift one
+            # -- and shifting can move the bandwidth estimate by a
+            # near-2x factor in practice (measured: 2.31 -> 4.09 on a
+            # simple 1-site/spin chain), enough to push the pre-shift
+            # scale below the post-shift spectrum's actual extent. Reusing
+            # the pre-shift estimate here was tried and caused the
+            # Chebyshev recursion to diverge to NaN within one SCF
+            # iteration (rescaled H(k) then has eigenvalues outside
+            # [-1,1]) -- a real, confirmed regression, not a theoretical
+            # one, so this is intentionally NOT deduplicated with
+            # get_fermi4filling_kpm's call despite the shared formula.
             dm = _dm_kpm_from_needed(h, kpm_needed, nk=nk, scale=scale,
                     npol=npol, ne=ne, cores=cores, T=T)
             for d in v_dirs: # every requested direction must have a key,
@@ -756,8 +791,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         return hh
 
     hop0 = hamiltonian2dict(h1)
-    h0_dense = h1.copy() # reference Hamiltonian before the mean field is added
-                          # (despite the name, sparse when keep_sparse is)
+    h0_ref = h1.copy() # reference Hamiltonian before the mean field is added
+                        # (sparse-backed when keep_sparse is, like h1 itself)
 
     def electron_sector(dd):
         """Extract the normal (electron-electron) sector from a dict of
@@ -816,7 +851,11 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # never diagonalize H(k): the Fermi energy (mu=None) comes from
             # get_fermi4filling_kpm's Chebyshev-moment DOS integral, and the
             # density matrix from _get_dm_kpm's per-k Chebyshev recursion --
-            # see VJinteraction's docstring
+            # see VJinteraction's docstring. The two calls do NOT share a
+            # scale estimate even though scale=None makes both compute one
+            # via the identical _estimate_kpm_scale formula -- see
+            # _get_dm_kpm's docstring for why that's intentional (tried,
+            # caused a confirmed NaN divergence).
             if mu is None:
                 fermi = get_fermi4filling_kpm(h, filling, nk=nk, scale=scale,
                         npol=npol, ne=ne, cores=cores)
@@ -854,7 +893,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # (which expect a single, onsite-only interaction matrix) should
         # not assume this represents the whole exchange+density-density mix
         scf.hamiltonian.V = vz
-        scf.hamiltonian0 = h0_dense
+        scf.hamiltonian0 = h0_ref
         scf.mf = mfnew
         scf.dm = dm_lab
         scf.v = vz # see scf.hamiltonian.V above for what this does/doesn't capture
@@ -862,7 +901,6 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         return scf
 
     if mf is None:
-        mf = dict()
         # seed over v_dirs (the vz/vx/vy key union), not just vz's own keys:
         # a channel with only its own neighbor shells (e.g. Jx1 nonzero,
         # Jz1=Jz2=Jz3=0) can have bond-direction keys absent from vz, and
@@ -870,28 +908,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # initial guess, so seeding too few of them would make those
         # channels invisible to the very first convergence check.
         #
-        # Each direction's matrix is drawn independently EXCEPT when its
-        # opposite direction was already drawn, in which case it is set to
-        # that matrix's conjugate transpose -- required for the overall
-        # guess to be Hermitian (a physical mean field always is). ED
-        # tolerates skipping this (diagonalizing a mildly non-Hermitian
-        # H(k) still gives a finite, if slightly-off, answer that the SCF
-        # loop's own mixing washes out within a few iterations), but
-        # integration="kpm" does not: the Chebyshev recursion assumes real
-        # eigenvalues bounded by `scale`, and a non-Hermitian H(k) can have
-        # eigenvalues well outside that bound, which blows up
-        # exponentially over npol recursion steps (observed: >1e50 mean-
-        # field entries on the very first iteration) instead of just being
-        # somewhat wrong.
-        for d in v_dirs:
-            d2 = (-d[0], -d[1], -d[2])
-            if d2 in mf: mf[d] = mf[d2].conj().T # mirror the opposite direction
-            else: mf[d] = np.exp(1j*np.random.random(h1.intra.shape))*1e-1
-        mf[(0, 0, 0)] = mf[(0, 0, 0)] + mf[(0, 0, 0)].T.conjugate()
+        # random_hermitian_guess (densitydensity.py) is reused here rather
+        # than a separate inline copy so a future fix to this
+        # safety-critical invariant (see its own docstring for why: a
+        # non-Hermitian guess is harmless for "ed" but blows up
+        # integration="kpm"'s Chebyshev recursion) automatically applies
+        # to both -- this call site's own scale=1e-1 predates that helper
+        # existing at all, kept as-is rather than switched to the helper's
+        # own 1.0 default.
+        mf = random_hermitian_guess(v_dirs, h1.intra.shape, scale=1e-1)
     else:
         if isinstance(mf, str):
             from ..meanfield import guess
-            mf = guess(h0_dense, mode=mf)
+            mf = guess(h0_ref, mode=mf)
         mf = obj2mf(mf)
 
     ite = 0
@@ -948,7 +977,17 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # shared code, out of scope to fix here, but not one to reproduce for
     # vd just because it happens to match precedent)
     h = scf.hamiltonian
-    etot = h.get_total_energy(nk=h.nk)
+    if use_kpm:
+        # never diagonalize H(k), even for this final, once-per-call step:
+        # h is already shifted to its own fermi=0 (see f()'s use_kpm
+        # branch), so this integrates the KPM-reconstructed DOS up to 0
+        # instead of calling spectrum.total_energy, whose own nbands=None
+        # default forces a dense diagonalization regardless of use_kpm --
+        # see get_total_energy_kpm's docstring
+        etot = get_total_energy_kpm(h, fermi=0.0, nk=nk, scale=scale,
+                npol=npol, ne=ne, cores=cores)
+    else:
+        etot = h.get_total_energy(nk=h.nk)
     if mu is None:
         etot += h.fermi*h.intra.shape[0]*filling
     dme = electron_sector(scf.dm)

@@ -481,10 +481,7 @@ class Hamiltonian():
                 scf = Vinteraction_kpm(self,**kwargs)
             else:
                 scf = Vinteraction(self,integration=integration,**kwargs)
-        if not scf.converged: scf.hamiltonian = None # no convergence
-        if return_total_energy:
-            return (scf.hamiltonian,scf.total_energy)
-        else: return scf.hamiltonian
+        return _mean_field_scf_result(scf,return_total_energy)
     @get_docstring(Vinteraction_kpm)
     def get_mean_field_hamiltonian_kpm(self,return_total_energy=False,**kwargs):
         """KPM-based (sparse, Chebyshev) alternative to
@@ -493,11 +490,7 @@ class Hamiltonian():
         elements required by the provided interaction (U, V1, V2, V3, Vr)
         through Chebyshev recursion on H(k). Meant for large/sparse
         Hamiltonians; see selfconsistency.densitydensity_kpm."""
-        scf = Vinteraction_kpm(self,**kwargs)
-        if not scf.converged: scf.hamiltonian = None # no convergence
-        if return_total_energy:
-            return (scf.hamiltonian,scf.total_energy)
-        else: return scf.hamiltonian
+        return _mean_field_scf_result(Vinteraction_kpm(self,**kwargs),return_total_energy)
     @get_docstring(SzSz)
     def get_szsz_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):
         return _mean_field_scf_result(SzSz(self,**kwargs),return_total_energy)

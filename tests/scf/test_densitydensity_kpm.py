@@ -1,14 +1,24 @@
 import numpy as np
 import pytest
+from scipy.special import expit
 
 from pyqula import geometry
 from pyqula import islands
 from pyqula import specialhopping
 from pyqula import inout
 from pyqula import meanfield
-from pyqula.kpmtk.densitymatrix_kpm import get_dm_kpm
+from pyqula import kpm
+from pyqula.kpmtk.densitymatrix_kpm import (get_dm_kpm, _dm_kpm_from_needed,
+        get_total_energy_kpm, get_fermi4filling_kpm)
+from pyqula.kpmtk.bandwidth import estimate_bandwidth
 from pyqula.selfconsistency.densitydensity import (get_mf, get_dc_energy,
-        random_hermitian_guess, mf_matches_hamiltonian, mf_file)
+        random_hermitian_guess, mf_matches_hamiltonian)
+# mf_file: densitydensity_kpm.py's own copy, not densitydensity.py's --
+# Vinteraction_kpm (exercised below) reads/writes THAT one. Both currently
+# hardcode the identical "MF.pkl" literal, but importing from
+# densitydensity.py here would silently stop testing the real path if that
+# ever changes.
+from pyqula.selfconsistency.densitydensity_kpm import mf_file
 
 
 def _v1_interaction_dict(h, V1=1.0):
@@ -220,3 +230,83 @@ def test_stale_mf_pkl_shape_mismatch_is_discarded(tmp_path, monkeypatch):
     assert scf.converged
     for d, m in scf.mf.items():
         assert m.shape == (1, 1), (d, m.shape)
+
+
+def test_dm_kpm_batched_reconstruction_matches_per_pair_reference():
+    """_dm_kpm_from_needed's batched profile reconstruction (a precomputed
+    Chebyshev basis + matrix multiplies, replacing a per-pair
+    kpm.dm_ij_energy+trapz loop -- see that function's docstring) must
+    reproduce the original per-pair formula to numerical precision. This
+    is a much tighter check than the ~1e-2 KPM-vs-ED tolerance used
+    elsewhere in this file: that tolerance is dominated by KPM's own
+    Chebyshev-truncation approximation error relative to exact
+    diagonalization, a different question from whether this algebraic
+    reformulation of the SAME truncated expansion is correct. Isolates
+    the latter by reimplementing the old per-pair formula directly
+    (kpm.dm_ij_energy is still present/importable -- only
+    _dm_kpm_from_needed stopped calling it) and comparing at nk=1 (single
+    k-point, so there is no Bloch-phase summation to also reproduce) on a
+    small frozen Hamiltonian."""
+    h = islands.get_geometry(name="honeycomb", n=2, nedges=3).get_hamiltonian()
+    h.add_sublattice_imbalance(0.3)  # nontrivial charge pattern
+    n = h.intra.shape[0]
+    needed = {((0, 0, 0), i, j) for i in range(n) for j in range(n)
+            if (i + j) % 3 == 0}  # an arbitrary, non-trivial subset
+    npol, ne, T = 80, 320, 1e-6
+
+    dm = _dm_kpm_from_needed(h, needed, nk=1, npol=npol, ne=ne, scale=None, T=T)
+
+    # Reconstruct exactly what _dm_kpm_from_needed itself would have used
+    # for scale/xin/weights, to feed the reference per-pair computation
+    # the identical inputs.
+    hk_gen = h.get_hk_gen()
+    k = list(h.geometry.get_kmesh(nk=1)[0])
+    Hk = hk_gen(k)
+    used_scale = 1.1*estimate_bandwidth(Hk)
+    Tsafe = abs(T) if T != 0. else 1e-15
+    upper = min(0.99*used_scale, 30.*Tsafe)
+    xin = np.linspace(-0.99*used_scale, upper, ne)
+    weights = expit(-xin/Tsafe)
+
+    worst = 0.0
+    for (d, i, j) in needed:
+        (x, y) = kpm.dm_ij_energy(Hk, i=j, j=i, scale=used_scale, npol=npol,
+                ne=ne, x=xin)
+        ref = np.trapz(y*weights, x=x)/np.pi
+        diff = abs(dm[d][i, j] - ref)
+        worst = max(worst, diff)
+    assert worst < 1e-6, worst
+
+
+def test_get_total_energy_kpm_matches_exact_diagonalization():
+    """get_total_energy_kpm (the sum of occupied eigenvalues, obtained by
+    integrating the KPM-reconstructed density of states up to the Fermi
+    energy instead of diagonalizing -- see its own docstring) must
+    reproduce spectrum.total_energy's exact-diagonalization result on a
+    frozen Hamiltonian, isolating this from any SCF convergence-path
+    sensitivity. Uses a non-trivial (asymmetric, non-particle-hole-
+    symmetric) Hamiltonian -- a random exchange field plus sublattice
+    imbalance -- so this cannot pass by accident via some cancellation
+    specific to a clean/symmetric spectrum."""
+    from pyqula import spectrum
+    g = geometry.honeycomb_lattice().get_supercell(3)
+    h = g.get_hamiltonian(has_spin=True)
+    h.add_sublattice_imbalance(0.3)
+    h.add_exchange([0.1, 0.05, 0.2])
+
+    nk = 6
+    fermi = h.get_fermi4filling(0.3, nk=nk)
+    h.shift_fermi(-fermi)  # get_total_energy_kpm/spectrum.total_energy both
+                           # assume the Fermi energy is already at 0
+
+    etot_ed = spectrum.total_energy(h, nk=nk)
+    etot_kpm = get_total_energy_kpm(h, fermi=0.0, nk=nk, npol=500)
+    reldiff = abs(etot_ed - etot_kpm)/abs(etot_ed)
+    assert reldiff < 1e-2, (etot_ed, etot_kpm, reldiff)
+
+
+def test_get_total_energy_kpm_rejects_nambu():
+    h = geometry.chain().get_hamiltonian()
+    h.turn_nambu()
+    with pytest.raises(NotImplementedError):
+        get_total_energy_kpm(h, fermi=0.0, nk=4, npol=100)

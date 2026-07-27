@@ -138,7 +138,7 @@ def set_hoppings(h,hop):
     h.set_multihopping(MultiHopping(hop))
 
 
-def random_hermitian_guess(v,shape):
+def random_hermitian_guess(v,shape,scale=1.0):
     """Random initial mean-field guess dict over v's direction keys.
 
     Each direction's matrix is drawn independently EXCEPT when its
@@ -154,12 +154,20 @@ def random_hermitian_guess(v,shape):
     and a non-Hermitian H(k) can have eigenvalues well outside that bound,
     which blows up exponentially over npol recursion steps (observed:
     >1e40 mean-field magnitude after a single SCF iteration with the old,
-    onsite-only-symmetrized guess) instead of just being somewhat wrong."""
+    onsite-only-symmetrized guess) instead of just being somewhat wrong.
+
+    scale multiplies every freshly-drawn direction's matrix by a real
+    constant before its opposite direction (if any) mirrors it -- this
+    preserves the Hermitian-dict property (scaling a Hermitian pair by a
+    real number keeps it Hermitian) while letting callers pick their own
+    guess magnitude (e.g. selfconsistency.spinspin._run_anisotropic_scf's
+    own copy of this construction used a smaller 1e-1 scale than this
+    module's own default of 1.0 unscaled)."""
     mf = dict()
     for d in v:
         d2 = tuple(-x for x in d)
         if d2 in mf: mf[d] = mf[d2].conj().T # mirror the opposite direction
-        else: mf[d] = np.exp(1j*np.random.random(shape))
+        else: mf[d] = np.exp(1j*np.random.random(shape))*scale
     mf[(0,0,0)] = mf[(0,0,0)] + mf[(0,0,0)].T.conjugate()
     return mf
 
