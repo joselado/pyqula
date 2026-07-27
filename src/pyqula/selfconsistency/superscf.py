@@ -29,7 +29,7 @@ def anomalous_term_ij(v,dm):
 
 # this anomalous term enforces even superconductivity
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def anomalous_term_ij_jit(v,dm,out):
     ns = len(dm)//2 # number of spinless sites
     for i in range(ns): # loop over spinless sites
@@ -61,7 +61,7 @@ def enforce_eh_from_sector(d):
     return out # return
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def enforce_eh_from_sector_jit(d,o):
     """Given the ee sector, return the hh sector"""
     return np.conjugate(d.T) # hermitian conjugate
@@ -87,7 +87,7 @@ def enforce_eh_symmetry_anomalous_sector(d01):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def enforce_eh_symmetry_anomalous_jit(d01,d10,o01):
     """Enforce electron-hole symmetry"""
     ns = len(d01)//2 # number of spinless sites

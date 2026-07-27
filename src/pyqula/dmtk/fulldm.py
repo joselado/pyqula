@@ -35,7 +35,7 @@ def full_dm_python_d(es,vs,ks,d,delta=1e-7):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def full_dm_explicit(n,es,vs,delta=1e-7):
   """Auxiliary function to compute the density matrix"""
   dm = np.zeros((n,n),dtype=np.complex128)
@@ -48,14 +48,14 @@ def full_dm_explicit(n,es,vs,delta=1e-7):
 
 
 # vectorized version, lets see if it is faster
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def full_dm_vectorized(es, vs, delta=1e-7):
     occ = 1.0 / (1.0 + np.exp(es / delta))          # shape (len_es,)
     dm = np.conj(vs).T @ (occ[:, None] * vs)        # (n, n) complex
     return dm
 
 
-@jit(nopython=True,parallel=True)
+@jit(nopython=True,parallel=True,cache=True)
 def full_dm_batch_vectorized(es_batch,vs_batch,delta=1e-7):
     """Density-matrix contribution for a batch of kpoints, one kpoint per
     numba thread. vs_batch has shape (nb,n,n) with columns as
@@ -79,7 +79,7 @@ def full_dm_batch_vectorized(es_batch,vs_batch,delta=1e-7):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def full_dm_python_d_jit(n,es,vs,ks,d,delta=1e-7):
   """Auxiliary function to compute the density matrix"""
   dm = np.zeros((n,n),dtype=np.complex128)
@@ -116,7 +116,7 @@ def full_dm_d_python_vectorized(es, vs, ks, d, delta=1e-7):
 
 
 # vectorized version, this should be faster
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def full_dm_d_vectorized(es, vs, ks, d, delta=1e-7):
     # vs must be shape (n, M)
     M = es.shape[0]
@@ -128,7 +128,7 @@ def full_dm_d_vectorized(es, vs, ks, d, delta=1e-7):
     return (np.conj(vs.T) * weight) @ vs   # (n, n)
 
 
-@jit(nopython=True,parallel=True)
+@jit(nopython=True,parallel=True,cache=True)
 def full_dm_batch_d_vectorized(es_batch,vs_batch,ks_batch,d,delta=1e-7):
     """Same as full_dm_batch_vectorized, but weighting each kpoint's
     contribution by the Bloch phase exp(2*pi*i*k.d) for a single hopping
@@ -145,4 +145,35 @@ def full_dm_batch_d_vectorized(es_batch,vs_batch,ks_batch,d,delta=1e-7):
         occ = 1.0/(1.0+np.exp(es/delta))
         weight = occ*phase
         out[ik] = (np.conj(w)*weight) @ w.T
+    return out
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def full_dm_batch_d_sparse(es_batch,vs_batch,ks_batch,d,rows,cols,delta=1e-7):
+    """Same as full_dm_batch_d_vectorized, but only computes the
+    (rows[p],cols[p]) entries of the (n,n) density matrix instead of all
+    n^2 of them -- for a short-range interaction matrix v[d], the vast
+    majority of those n^2 entries are never read by normal_term_ii/jj/ij/ji
+    (selfconsistency/densitydensity.py) because v[d][i,j] is zero there, so
+    computing them via the full (n,n)@(n,n) matmul in
+    full_dm_batch_d_vectorized is mostly wasted work -- see
+    selfconsistency.spinspin._build_sparse_pairs, which derives rows/cols
+    from v's own nonzero pattern (union across the active exchange/density
+    channels, since they share this same k-mesh diagonalization). Returns
+    (nb,npairs) instead of (nb,n,n); the caller scatters these back into a
+    dense (n,n) container at (rows[p],cols[p])."""
+    nb = es_batch.shape[0]
+    npairs = rows.shape[0]
+    out = np.zeros((nb,npairs),dtype=np.complex128)
+    for ik in prange(nb): # loop over kpoints in the batch, in parallel
+        es = es_batch[ik]
+        w = vs_batch[ik]
+        k = ks_batch[ik]
+        kd = k[0]*d[0]+k[1]*d[1]+k[2]*d[2]
+        phase = np.exp(1j*2.0*np.pi*kd)
+        occ = 1.0/(1.0+np.exp(es/delta))
+        weight = occ*phase
+        wa = w[rows,:] # (npairs, nstates)
+        wb = w[cols,:] # (npairs, nstates)
+        out[ik,:] = np.sum(np.conj(wa)*weight*wb,axis=1)
     return out

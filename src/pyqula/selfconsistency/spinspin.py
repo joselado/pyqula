@@ -371,6 +371,74 @@ def _channel_is_zero(v):
     return all(not np.any(m) for m in v.values())
 
 
+def _build_sparse_pairs(vlist, keys, n):
+    """For each direction, the union of (row,col) index pairs actually read
+    downstream from the lab-frame density matrix, across the given
+    interaction matrices (whichever of vz/vx/vy/vd are not None):
+
+    - get_mf_normal's density-density (compute_dd) term only ever reads
+      dm[(0,0,0)]'s DIAGONAL, for whichever sites participate in any bond
+      of any channel -- in practice that is normally every site, so this
+      always includes the full diagonal at (0,0,0) unconditionally, rather
+      than trying to track which subset that is. Crucially this means the
+      full 2x2 SPIN BLOCK at each site, not just its two purely-diagonal
+      (up-up, down-down) entries: whenever vx/vy is active, _rot_dm rotates
+      dme_lab[(0,0,0)] before compute_dd reads its (rotated) diagonal, and
+      a spin rotation mixes a 2x2 block's diagonal and off-diagonal entries
+      together (rot @ [[a,b],[c,d]] @ rot^dagger's [0,0]/[1,1] entries
+      depend on b,c too) -- so leaving a site's up-down/down-up entries at
+      zero when no channel happens to touch them silently corrupts the
+      rotated diagonal too, not just the (unused) unrotated off-diagonal.
+      Caught by test_jinteraction_random_direction_guess_gives_collinear_moment
+      (isotropic exchange collapsing onto the z axis instead of the guess
+      direction -- the x/y mean-field contribution was being silently
+      zeroed by this).
+    - get_mf_normal's cross term (compute_cross) reads dm[d2][j,i] (note
+      the swapped indices) for every (i,j) where v[d][i,j] is nonzero, i.e.
+      it needs the TRANSPOSE of v[d]'s nonzero pattern at the OPPOSITE
+      direction d2=-d, not v[d2]'s own pattern -- so each v[d] contributes
+      to two masks: its own pattern at d (used directly by get_dc_energy
+      and as the rotation input for vx/vy), and its transpose at d2.
+    - _rot_dm/_rot_dict (used for vx/vy) rotate whichever 2x2 spin
+      sub-blocks are present as a unit (R is block-diagonal in the 2x2
+      spin index, see build_rotation_matrix), so correctness requires
+      each touched site-pair's full 2x2 block, not individual entries.
+      _build_v/_build_density_v's own construction always populates a
+      site-pair's 4 spin sub-entries together (or, for the onsite-U cross
+      term specifically, only the 2 off-diagonal ones -- but those live at
+      a diagonal site-pair (i,i), whose other 2 entries are already forced
+      in by the always-include-the-diagonal rule above), so a plain
+      per-entry union already comes out block-complete with no special
+      handling needed here.
+
+    A short-range neighbor-shell v is overwhelmingly zero -- measured on a
+    98-site/196-orbital system, 0.02%-0.34% nonzero per off-diagonal
+    direction key -- so the result is normally a tiny fraction of the full
+    n^2 grid; see dmtk.fulldm.full_dm_batch_d_sparse and
+    densitymatrix.full_dm_accumulate_sparse for what computing only these
+    entries buys over the dense (n,n)@(n,n) per-direction matmul."""
+    all_dirs = set(keys)
+    for v in vlist:
+        if v is None: continue
+        for d in v:
+            all_dirs.add(d)
+            all_dirs.add((-d[0], -d[1], -d[2]))
+    masks = {d: np.zeros((n, n), dtype=bool) for d in all_dirs}
+    for v in vlist:
+        if v is None: continue
+        for d, m in v.items():
+            nz = (m != 0)
+            masks[d] |= nz               # own-direction uses (get_dc_energy, rotation input)
+            d2 = (-d[0], -d[1], -d[2])
+            masks[d2] |= nz.T            # cross-term uses dm[d2][j,i] for v[d][i,j] != 0
+    masks[(0, 0, 0)] |= np.kron(np.eye(n // 2, dtype=bool), np.ones((2, 2), dtype=bool))
+    pairs = dict()
+    for d, mask in masks.items():
+        rows, cols = np.nonzero(mask)
+        pairs[d] = (rows.astype(np.int64), cols.astype(np.int64))
+    return pairs
+
+
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         maxerror, maxite, T, verbose, constrains, vd=None):
     """Shared SCF core for Jinteraction/VJinteraction: decouples the
@@ -409,9 +477,12 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     vx/vy are skipped entirely (no rotation, no get_mf_normal/get_dc_energy
     call) when they are identically zero -- e.g. VJinteraction's pure
     density-density case (J1=J2=J3=J1x=J1y=0), where _build_v returns an
-    all-zero matrix for every key regardless of geometry. A zero
-    interaction contributes exactly zero mean field either way, so this
-    changes no result, only the cost of computing it -- see _channel_is_zero."""
+    all-zero matrix for every key regardless of geometry. vz and vd (when
+    given) get the same treatment: vz can be identically zero for a Nambu
+    VJinteraction call with only Jx/Jy set (J1=J2=J3=J1z=0), and vd for one
+    with only J's and no V/U. A zero interaction contributes exactly zero
+    mean field either way, so this changes no result, only the cost of
+    computing it -- see _channel_is_zero."""
     from .densitydensity import (get_dm, get_mf_normal, get_mf, mix_mf,
             diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF)
@@ -426,40 +497,80 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # at the union, not just vz's keys
     v_dirs = {d: None for d in (set(vz) | set(vx) | set(vy) |
             (set(vd) if vd is not None else set()))}
-    # the x/y rotations are fixed for the whole SCF loop, so build the
-    # (small, 2x2-block) rotation matrices once via build_rotation_matrix
-    # instead of paying a fresh matrix exponential on every one of the many
+    # the x/y rotations are fixed for the whole SCF loop, so build the small
+    # 2x2 spin rotation matrices once via build_rotation_matrix instead of
+    # paying a fresh matrix exponential on every one of the many
     # _rotate_dict/_rotate_dm calls compute_mf makes each iteration; the
     # backward rotation is just the forward matrix's dagger (R(-angle) =
-    # R(angle)^dagger), so only Rx/Ry need to be built. Sized from vz's own
-    # shape (always the plain spin-orbital size, never Nambu-doubled, even
-    # when h1 itself is BdG) rather than h1.intra.shape, since the exchange
-    # channels are always decoupled in the (electron-sector-sized) normal
-    # channel -- see this function's docstring.
+    # R(angle)^dagger), so only Rx/Ry need to be built.
+    # build_rotation_matrix(1,...) returns exactly the small 2x2 spin
+    # rotation with no reshaping needed (kron with a 1x1 identity is a
+    # no-op) -- the full (2n_orb)x(2n_orb) kron'd matrix this used to build
+    # is never actually needed: see _block_rotate for why applying it is an
+    # O(n_orb^2) per-site contraction with this small matrix, not an
+    # O(n_orb^3) dense matmul against the big one.
     vx_active = not _channel_is_zero(vx)
     vy_active = not _channel_is_zero(vy)
+    vz_active = not _channel_is_zero(vz)
+    vd_active = vd is not None and not _channel_is_zero(vd)
     Rx = Ry = Rxd = Ryd = None
     if vx_active or vy_active:
         from ..rotate_spin import build_rotation_matrix
-        n_orb = vz[(0, 0, 0)].shape[0]//2
         # daggers precomputed once here (rather than inside _rot_dict/_rot_dm,
         # which previously recomputed R.conj().T -- once for the forward
         # rotation, again explicitly at each of that channel's two call
         # sites in compute_mf/the total-energy tail -- on every one of the
         # maxite SCF iterations for a rotation that never changes)
         if vx_active:
-            Rx = build_rotation_matrix(n_orb, **_AXIS_ROTATION["x"]); Rxd = Rx.conj().T
+            Rx = build_rotation_matrix(1, **_AXIS_ROTATION["x"]); Rxd = Rx.conj().T
         if vy_active:
-            Ry = build_rotation_matrix(n_orb, **_AXIS_ROTATION["y"]); Ryd = Ry.conj().T
+            Ry = build_rotation_matrix(1, **_AXIS_ROTATION["y"]); Ryd = Ry.conj().T
 
-    def _rot_dict(dd, R, Rd):
+    # sparse density-matrix path: only compute the (row,col) entries that
+    # normal_term_ii/jj/ij/ji actually read, instead of the full (n,n)
+    # matrix per direction (see _build_sparse_pairs/full_dm_accumulate_sparse).
+    # has_eh=False only: vd's Nambu-basis interaction matrix lives in the
+    # reordered Nambu convention (sctk/reorder.py), not the plain
+    # spin-orbital one _build_sparse_pairs assumes, so the Nambu case keeps
+    # the existing dense get_dm call below rather than risk misreading that
+    # reordering here -- a possible follow-up, not attempted in this pass.
+    use_sparse_dm = not has_eh
+    if use_sparse_dm:
+        n_dm = vz[(0, 0, 0)].shape[0]
+        sparse_pairs = _build_sparse_pairs(
+                [vz, vx, vy] + ([vd] if vd is not None else []), v_dirs, n_dm)
+
+    def _get_dm(h):
+        if use_sparse_dm:
+            from ..densitymatrix import full_dm_accumulate_sparse
+            delta = T if T != 0. else 1e-15 # see densitymatrix.full_dm's own T==0 guard
+            return full_dm_accumulate_sparse(h, sparse_pairs, nk=nk, delta=delta)
+        return get_dm(h, v_dirs, nk=nk, T=T, integration="ed")
+
+    def _block_rotate(m, rot):
+        """rot @ m @ rot^dagger, applied to every site's own 2x2 spin
+        sub-block of an (n,n) matrix independently, instead of a dense
+        (n,n)@(n,n) matmul against the full R=kron(I_{n/2},rot) a global
+        spin rotation used to be built as: R is block-diagonal with n/2
+        IDENTICAL 2x2 blocks (rotate_spin.build_rotation_matrix), so it
+        never mixes different sites -- only the 2 spin components within
+        each one. Two small (n/2 * 4)-cost einsum contractions reproduce
+        the same result as R @ m @ R^dagger at O(n^2) instead of O(n^3)."""
+        n = m.shape[0]
+        n_orb = n//2
+        m4 = m.reshape(n_orb, 2, n_orb, 2)
+        out = np.einsum('ab,xbyc->xayc', rot, m4, optimize=True)
+        out = np.einsum('xayc,dc->xayd', out, rot.conj(), optimize=True)
+        return out.reshape(n, n)
+
+    def _rot_dict(dd, R):
         """Rotate a dict of Hamiltonian-like (hopping/mean-field) matrices:
         these live in the same convention as Hamiltonian.intra, for which
         R @ m @ R^dagger is the correct transformation (as used by
         Hamiltonian.global_spin_rotation, validated by SxSx/SySy)."""
-        return {k: R @ m @ Rd for (k, m) in dd.items()}
+        return {k: _block_rotate(m, R) for (k, m) in dd.items()}
 
-    def _rot_dm(dd, R, Rd):
+    def _rot_dm(dd, R):
         """Rotate a dict of *density matrices*, which need a different
         (conjugate-sandwiched) transformation than _rot_dict.
 
@@ -481,7 +592,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         Conjugating before and after the standard rotation corrects for it:
         if dm_stored = conj(dm_physical), then
         dm_stored' = conj(dm_physical') = conj(R @ conj(dm_stored) @ R^dagger)."""
-        return {k: np.conj(R @ np.conj(m) @ Rd) for (k, m) in dd.items()}
+        return {k: np.conj(_block_rotate(np.conj(m), R)) for (k, m) in dd.items()}
 
     callback_mf = _callback_mf_constrains(h1, constrains)
 
@@ -515,17 +626,22 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
 
     def compute_mf(dm_lab):
         dme_lab = electron_sector(dm_lab) # exchange channels: normal sector only
-        mf = get_mf_normal(vz, dme_lab)
+        if vz_active:
+            mf = get_mf_normal(vz, dme_lab)
+        else: # vz identically zero -- skip the O(n^2) pass, same reasoning
+              # as vx_active/vy_active (see _channel_is_zero)
+            zero = dme_lab[(0, 0, 0)]*0.0
+            mf = {d: zero.copy() for d in vz}
         if vx_active:
-            dm_x = _rot_dm(dme_lab, Rx, Rxd) # dm needs the conjugated rotation
-            mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rxd, Rx) # mf does not
+            dm_x = _rot_dm(dme_lab, Rx) # dm needs the conjugated rotation
+            mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rxd) # mf does not
             mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
         if vy_active:
-            dm_y = _rot_dm(dme_lab, Ry, Ryd)
-            mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ryd, Ry)
+            dm_y = _rot_dm(dme_lab, Ry)
+            mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ryd)
             mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
         mf = embed_normal(mf)
-        if vd is not None: # density-density: full normal+anomalous treatment
+        if vd_active: # density-density: full normal+anomalous treatment
             mf_d = get_mf(vd, dm_lab, has_eh=has_eh)
             mf = (MultiHopping(mf) + MultiHopping(mf_d)).get_dict()
         return mf
@@ -534,8 +650,22 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         h = h1.copy()
         hop = update_hamiltonian(hop0, mf)
         set_hoppings(h, hop)
-        h = callback_h(h)
-        dm_lab = get_dm(h, v_dirs, nk=nk, T=T, integration="ed")
+        if use_sparse_dm and mu is None:
+            # combined: diagonalize the unshifted h once, deriving both the
+            # Fermi energy and the density matrix from the same
+            # eigenvectors, instead of callback_h's get_fermi4filling
+            # paying for an independent diagonalization sweep first -- see
+            # densitymatrix.full_dm_accumulate_sparse_with_fermi's docstring
+            from ..densitymatrix import full_dm_accumulate_sparse_with_fermi
+            delta = T if T != 0. else 1e-15 # see densitymatrix.full_dm's own T==0 guard
+            dm_lab, fermi = full_dm_accumulate_sparse_with_fermi(
+                    h, sparse_pairs, filling, nk=nk, delta=delta)
+            h.fermi = fermi
+            h.shift_fermi(-fermi) # cheap (adds a constant to the diagonal);
+                                   # the eigenvectors above are unaffected by it
+        else:
+            h = callback_h(h)
+            dm_lab = _get_dm(h)
         mfnew = compute_mf(dm_lab)
         if callback_mf is not None: mfnew = callback_mf(mfnew)
         scf = SCF()
@@ -590,6 +720,22 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             break
         ite += 1
 
+    if use_sparse_dm:
+        # scf.dm is a public field (Vinteraction/SzSz/SxSx/SySy's SCF
+        # objects always expose a fully dense one, via densitydensity.py's
+        # own get_dm), but the sparse path above only ever populated the
+        # (row,col) entries the SCF loop itself needed (see
+        # _build_sparse_pairs/full_dm_accumulate_sparse) -- leaving the
+        # rest silently at zero would corrupt any external use of scf.dm
+        # beyond the mean field itself (custom correlators, occupation
+        # diagnostics, symmetry checks). Recompute it fully dense exactly
+        # once here, for the converged (or not-converged-but-returned)
+        # Hamiltonian only -- not once per SCF iteration -- reusing the
+        # same dense get_dm the has_eh=True path below already relies on,
+        # so this is one extra diagonalization for the whole call, not a
+        # per-iteration cost.
+        scf.dm = get_dm(scf.hamiltonian, v_dirs, nk=nk, T=T, integration="ed")
+
     # total energy: sum of occupied energies plus the double-counting
     # correction for each of the three (independently-rotated) exchange
     # channels, plus vd's (if any) -- all electron-sector only. get_dc_energy
@@ -607,14 +753,15 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     if mu is None:
         etot += h.fermi*h.intra.shape[0]*filling
     dme = electron_sector(scf.dm)
-    etot += get_dc_energy(vz, dme)
+    if vz_active:
+        etot += get_dc_energy(vz, dme)
     if vx_active:
-        dm_x = _rot_dm(dme, Rx, Rxd) # dm needs the conjugated rotation, see compute_mf
+        dm_x = _rot_dm(dme, Rx) # dm needs the conjugated rotation, see compute_mf
         etot += get_dc_energy(vx, dm_x)
     if vy_active:
-        dm_y = _rot_dm(dme, Ry, Ryd)
+        dm_y = _rot_dm(dme, Ry)
         etot += get_dc_energy(vy, dm_y)
-    if vd is not None:
+    if vd_active:
         etot += get_dc_energy(vd, dme)
     scf.total_energy = etot.real
     return scf
