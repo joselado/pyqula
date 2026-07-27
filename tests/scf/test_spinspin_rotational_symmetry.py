@@ -173,3 +173,29 @@ def test_szsz_sxsx_sysy_return_none_instead_of_crashing_when_unsupported():
     hamiltonian, etot = h.get_szsz_mean_field_hamiltonian(J1=1.0,
             return_total_energy=True)
     assert hamiltonian is None and etot is None
+
+
+def test_jinteraction_and_vjinteraction_also_return_none_when_unsupported():
+    """Jinteraction/VJinteraction must behave the same as their SzSz/SxSx/
+    SySy siblings for a spinless Hamiltonian (return the NotImplemented
+    sentinel / None through the wrapper), not raise -- regression test for
+    an inconsistency where they used to raise ValueError instead."""
+    g = geometry.chain()
+    h = g.get_hamiltonian(has_spin=False)
+    assert meanfield.Jinteraction(h, Jz1=1.0) is NotImplemented
+    assert meanfield.VJinteraction(h, U=1.0) is NotImplemented
+    assert h.get_exchange_mean_field_hamiltonian(Jz1=1.0) is None
+    assert h.get_combined_mean_field_hamiltonian(U=1.0) is None
+
+
+def test_jinteraction_result_has_V_set():
+    """The Hamiltonian returned by get_exchange_mean_field_hamiltonian must
+    have .V set, like Vinteraction/SzSz/SxSx/SySy's results already do --
+    regression test for a gap where Jinteraction/VJinteraction's SCF loop
+    never set it, leaving h.V as None inconsistently with the rest of the
+    mean-field family."""
+    g = geometry.chain()
+    h = g.get_hamiltonian(has_spin=True)
+    h2 = h.get_exchange_mean_field_hamiltonian(Jz1=-2.0, mf="ferroZ", nk=10,
+            maxerror=MAXERROR, mix=0.3, filling=0.2)
+    assert h2.V is not None

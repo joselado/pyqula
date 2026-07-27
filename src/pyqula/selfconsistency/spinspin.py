@@ -244,7 +244,7 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     _run_anisotropic_scf's docstring for why (in short: extending the x/y
     rotate-decouple-rotate-back trick to also generate anomalous/pairing
     mean field from Jx/Jy is a separate, unverified extension)."""
-    if not h0.has_spin: raise ValueError("Jinteraction needs a spinful Hamiltonian")
+    if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
     h1 = h0.get_multicell().get_dense()
     vz = _build_v(h1, Jz1, Jz2, Jz3, Jzr)
     vx = _build_v(h1, Jx1, Jx2, Jx3, Jxr)
@@ -332,7 +332,7 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     density-density and exchange conventions respectively; only
     integration="ed" and the plain-mixing solver are supported (unlike
     Vinteraction/SzSz/SxSx/SySy)."""
-    if not h0.has_spin: raise ValueError("VJinteraction needs a spinful Hamiltonian")
+    if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
     h1 = h0.get_multicell().get_dense()
     vz = _build_v(h1, J1+J1z, J2, J3, Jr)
     vd = _build_density_v(h1, V1, V2, V3, U, Vr)
@@ -496,10 +496,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         if callback_mf is not None: mfnew = callback_mf(mfnew)
         scf = SCF()
         scf.hamiltonian = h
+        # z-channel matrix only (for a normal-state VJinteraction this
+        # already includes the folded-in density-density vd, but never the
+        # x/y channels, and never vd separately for a Nambu VJinteraction --
+        # unlike Vinteraction/SzSz/SxSx/SySy, there is no single matrix
+        # that fully captures this multi-channel interaction, so callers
+        # relying on h.V for e.g. get_magnon_bands/get_rpa_kernel_poles
+        # (which expect a single, onsite-only interaction matrix) should
+        # not assume this represents the whole exchange+density-density mix
+        scf.hamiltonian.V = vz
         scf.hamiltonian0 = h0_dense
         scf.mf = mfnew
         scf.dm = dm_lab
-        scf.v = vz # for identify_symmetry_breaking's tolerance bookkeeping
+        scf.v = vz # see scf.hamiltonian.V above for what this does/doesn't capture
         scf.tol = maxerror
         return scf
 
