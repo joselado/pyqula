@@ -1,15 +1,51 @@
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 from .. import algebra
+from ..multihopping import MultiHopping
+
+
+def interaction_at_q(V,h,q):
+    """Return the interaction matrix V(q) that RPA dressing needs at a
+    given q-vector, given a real-space interaction V. V can be:
+     - None -> returned as None
+     - a plain matrix/array -> returned unchanged, i.e. treated as a
+       q-independent (onsite-only) interaction. This is the only form V
+       used to take before extended interactions were supported, so this
+       keeps every existing caller (which always passes a plain matrix)
+       working identically.
+     - a dict (or MultiHopping) {(n1,n2,n3): matrix} -- a real-space
+       interaction with support beyond the onsite (0,0,0) term, keyed by
+       lattice-vector offset in exactly the same convention as
+       Hamiltonian.hopping[i].dir. Returned as the Bloch/Fourier sum
+       sum_d V[d]*exp(2 pi i q.d), i.e. the same bloch_phase convention
+       multicell.hk_gen already uses to build H(k) from a hopping dict --
+       an extended interaction is Fourier transformed exactly like an
+       extended hopping.
+    q=None (no q-point specified by the caller) is treated as the Gamma
+    point (q=0), under which every dict reduces to the plain sum of its
+    matrices -- consistent with a caller that never mentions q at all
+    only ever having meant the onsite/zero-momentum interaction."""
+    if V is None: return None
+    if isinstance(V,MultiHopping): V = V.get_dict()
+    if isinstance(V,dict):
+        if q is None: q = [0.,0.,0.]
+        out = None
+        for d,m in V.items():
+            phase = h.geometry.bloch_phase(d,q)
+            out = m*phase if out is None else out + m*phase
+        return out
+    return V # plain matrix, q-independent
+
 
 # compute general RPA response function
-def chi_AB_RPA(h,V=None,**kwargs):
+def chi_AB_RPA(h,V=None,q=None,**kwargs):
     """Compute the RPA chi for a hamiltonian"""
     from ..chi import chiAB # get response function
-    es,chis = chiAB(h,mode="matrix",**kwargs) # non-interacting response
+    es,chis = chiAB(h,mode="matrix",q=q,**kwargs) # non-interacting response
     iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
     if V is not None: # finite interaction, RPA summation
-        chis_rpa = [chi@algebra.inv(iden - V@chi) for chi in chis]
+        Vq = interaction_at_q(V,h,q) # Fourier transform if V has non-onsite support
+        chis_rpa = [chi@algebra.inv(iden - Vq@chi) for chi in chis]
     else: chis_rpa = chis
     return es,np.array(chis_rpa)
 
@@ -40,7 +76,7 @@ def build_ops_projectors(h,ops):
     return pAs,pBs
 
 
-def _chi_ops_matrix_vectorized(h,ops=None,pAs=None,pBs=None,**kwargs):
+def _chi_ops_matrix_vectorized(h,ops=None,pAs=None,pBs=None,q=None,**kwargs):
     """Compute the non-interacting response tensor for a list of local
     operators (e.g. Sx,Sy,Sz), evaluated on every lattice site. Shared by
     chi_ops_RPA and rpa_kernel_poles_ops, so both consume the exact same
@@ -51,9 +87,9 @@ def _chi_ops_matrix_vectorized(h,ops=None,pAs=None,pBs=None,**kwargs):
     from ..chi import chiAB # get response function
     if pAs is None or pBs is None:
         pAs,pBs = build_ops_projectors(h,ops)
-    return chiAB(h,mode="matrix",pAs=pAs,pBs=pBs,**kwargs) # non-interacting response
+    return chiAB(h,mode="matrix",pAs=pAs,pBs=pBs,q=q,**kwargs) # non-interacting response
 
-def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,**kwargs):
+def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,q=None,**kwargs):
     """Compute the RPA chi for a hamiltonian,
     return a tensor given a list of operators. This is
     for example useful to compute the full spin response
@@ -67,7 +103,7 @@ def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,**kwargs):
             for j in range(nop): # loop over second operator
                 A = ops[i] # first operator
                 B = ops[j] # second operator
-                es,chisi = chiAB(h,mode="matrix",A=A,B=B,
+                es,chisi = chiAB(h,mode="matrix",A=A,B=B,q=q,
                                 **kwargs) # non-interacting response
                 chis[i][j] = chisi # store in the list
         # now make it a block matrix, and reshpae accordingly
@@ -78,11 +114,12 @@ def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,**kwargs):
             chi = [[chi[i,j,:,:] for i in range(nop)] for j in range(nop)]
             chis.append(np.bmat(chi)) # store
     elif mode_rpa=="vectorized": # all at once
-        es,chis = _chi_ops_matrix_vectorized(h,ops=ops,pAs=pAs,pBs=pBs,**kwargs)
+        es,chis = _chi_ops_matrix_vectorized(h,ops=ops,pAs=pAs,pBs=pBs,q=q,**kwargs)
     else: raise
     iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
     if V is not None: # finite interaction, RPA summation
-        chis_rpa = [chi@algebra.inv(iden - V@chi) for chi in chis]
+        Vq = interaction_at_q(V,h,q) # Fourier transform if V has non-onsite support
+        chis_rpa = [chi@algebra.inv(iden - Vq@chi) for chi in chis]
     else: chis_rpa = chis
     return es,np.array(chis_rpa)
 
@@ -91,9 +128,8 @@ def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,**kwargs):
 
 def chi_AB_RPA_scf(scf):
     """Return the RPA response function for an SCF object"""
-    if len(scf.v)==1: # just the onsite term
-        return chi_AB_RPA(scf.hamiltonian,scf.v[(0,0,0)])
-    else: raise # not implemented
+    return chi_AB_RPA(scf.hamiltonian,scf.v) # scf.v is a hopping dict,
+                                              # Fourier transformed by chi_AB_RPA
 
 
 def _track_eigenvalue_branches(eigs):
@@ -151,28 +187,33 @@ def _poles_from_chi_matrix(es,chis,V):
     return np.array(poles)
 
 
-def rpa_kernel_poles(h,V=None,**kwargs):
-    """Return the poles of the generic RPA kernel 1 - V*chi(q,omega), i.e.
+def rpa_kernel_poles(h,V=None,q=None,**kwargs):
+    """Return the poles of the generic RPA kernel 1 - V(q)*chi(q,omega), i.e.
     the frequencies at which chi_RPA = chi@(1-V*chi)^-1 diverges (collective
-    modes/instabilities). A, B and q are forwarded through kwargs exactly
+    modes/instabilities). A and B are forwarded through kwargs exactly
     as in chi_AB_RPA (defaulting to the charge channel and q=0 if not
-    given). Returns an (npoles,2) array: [frequency, residual imaginary
+    given). V can be a plain matrix (q-independent, onsite-only) or a
+    real-space hopping dict/MultiHopping with support beyond (0,0,0) --
+    see interaction_at_q for how the latter is turned into V(q) at this
+    same q. Returns an (npoles,2) array: [frequency, residual imaginary
     part], one row per collective mode found, sorted by frequency -- see
     _poles_from_chi_matrix's docstring for how to interpret the residual
     imaginary part's sign."""
     from ..chi import chiAB # get response function
-    es,chis = chiAB(h,mode="matrix",**kwargs) # non-interacting response
-    return _poles_from_chi_matrix(es,chis,V)
+    es,chis = chiAB(h,mode="matrix",q=q,**kwargs) # non-interacting response
+    Vq = interaction_at_q(V,h,q) if V is not None else None
+    return _poles_from_chi_matrix(es,chis,Vq)
 
 
-def rpa_kernel_poles_ops(h,ops=None,V=None,pAs=None,pBs=None,**kwargs):
+def rpa_kernel_poles_ops(h,ops=None,V=None,pAs=None,pBs=None,q=None,**kwargs):
     """Same as rpa_kernel_poles, but for the tensor response of a list of
     local operators (e.g. Sx,Sy,Sz), as used by chi_ops_RPA. pAs/pBs can be
     passed in (see build_ops_projectors) to reuse a q-independent operator
     tensor across many calls at different q, instead of rebuilding it from
     ops every time."""
-    es,chis = _chi_ops_matrix_vectorized(h,ops=ops,pAs=pAs,pBs=pBs,**kwargs)
-    return _poles_from_chi_matrix(es,chis,V)
+    es,chis = _chi_ops_matrix_vectorized(h,ops=ops,pAs=pAs,pBs=pBs,q=q,**kwargs)
+    Vq = interaction_at_q(V,h,q) if V is not None else None
+    return _poles_from_chi_matrix(es,chis,Vq)
 
 
 def spinchi_pm_RPA(h,U=0.,v=[0.,0.,1.],**kwargs):

@@ -20,26 +20,38 @@ def spinchi_ladder(H,v=[0.,0.,1.],RPA=True,**kwargs):
     if RPA: # RPA mode
         U = H.V # get the interaction
         if U is not None: # finite interaction
-            if len(U)>1: raise # not implemented for momentum dependent
-            U = U[(0,0,0)] # onsite interaction matrix
-            # up to here U is an off-diagonal matrix, with
-            # finite elements between up and down
-            # now let us pick up the up-down elements and sum them
-            U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
-            U = -U # beware of this minus sign for spin response (!!!)
+            # up to here U is a real-space hopping dict (one matrix per
+            # lattice-vector offset, e.g. onsite (0,0,0) plus any
+            # neighbor-shell terms); each matrix is off-diagonal in
+            # up/down, with finite elements between up and down.
+            # V2U_matrix/the minus sign are linear per-direction, so
+            # transforming every key independently here and only
+            # Fourier-summing afterwards (done downstream by chi_AB_RPA's
+            # interaction_at_q, at whatever q the caller asks for) is
+            # exactly equivalent to transforming a single q-summed matrix
+            # -- beware of the minus sign for spin response (!!!)
+            U = {d: -V2U_matrix(m) for d,m in U.items()}
     else: U = None # no RPA
     return chi_AB_RPA(H,A=sp,B=sm,V=U,**kwargs) # RPA interacting response
 
 
 
 def V2U_matrix(V):
-    """Transform the V interaction into the U matrix needed for RPA"""
-    # V is a 2N matrix with individual U values in the diagonal
+    """Transform the V interaction into the U matrix needed for RPA.
+    V is a 2N matrix (spin-orbital basis, up/down doubled per orbital);
+    returns the N-dimensional matrix of up-down + down-up cross terms
+    between every pair of orbitals (i,j), not just i==j -- needed once V
+    can carry off-diagonal structure, e.g. a bond/neighbor-shell
+    interaction connecting different sites of a multi-orbital unit cell.
+    Reduces to the previous diagonal-only result whenever V only
+    populates i==j entries (e.g. a plain onsite Hubbard U), so this is a
+    strict generalization, not a behavior change, for every case that
+    worked before."""
     N = V.shape[0]//2 # dimension
     U = np.zeros((N,N),dtype=np.complex128) # initialize
     for i in range(N): # loop over orbitals
-        U[i,i] = V[2*i,2*i+1] # add contribution
-        U[i,i] += V[2*i+1,2*i] # add contribution
+        for j in range(N): # loop over orbitals
+            U[i,j] = V[2*i,2*j+1] + V[2*i+1,2*j] # up-down + down-up cross term
     return U # return the matrix
 
 def replicateU(U,n=3):
@@ -53,18 +65,26 @@ def replicateU(U,n=3):
 
 
 def _full_spin_U(H):
-    """Return the interaction matrix for the full (Sx,Sy,Sz) spin channel,
-    in the convention used by spinchi_full/chi_ops_RPA (onsite Hubbard U
-    only, replicated across the 3 spin channels with the -2 prefactor).
+    """Return the interaction for the full (Sx,Sy,Sz) spin channel, in the
+    convention used by spinchi_full/chi_ops_RPA (replicated across the 3
+    spin channels with the -2 prefactor -- see V2U_matrix/replicateU).
+
+    Returned as a real-space hopping dict, one entry per lattice-vector
+    offset present in H.V (not just the onsite (0,0,0) one): H.V can now
+    carry neighbor-shell terms too (e.g. a VJinteraction run with V1/J1
+    density-density or exchange couplings), and V2U_matrix/replicateU are
+    both linear maps on matrix entries, so transforming each direction's
+    matrix independently here and only Fourier-summing afterwards (done
+    downstream by chi_ops_RPA/rpa_kernel_poles_ops's calls to
+    interaction_at_q, at whatever q the caller asks for) is exactly
+    equivalent to transforming a single q-summed matrix -- no
+    approximation, and identical to the old onsite-only result whenever
+    H.V has just the (0,0,0) key.
+
     Returns None if the Hamiltonian carries no mean-field interaction."""
     U = H.V # get the interaction
     if U is None: return None # no interaction, no RPA dressing
-    if len(U)>1: raise # not implemented for momentum dependent U
-    U = U[(0,0,0)] # onsite interaction matrix
-    U = V2U_matrix(U) # transform the U matrix (2N) into the (N)
-    U = replicateU(U,n=3) # replicate for all the channels
-    U = -2*U # beware of this minus sign for spin response (!!!)
-    return U
+    return {d: -2*replicateU(V2U_matrix(m),n=3) for d,m in U.items()}
 
 
 def _full_spin_operators(H):

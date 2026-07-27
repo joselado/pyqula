@@ -158,6 +158,17 @@ class Hamiltonian():
         scanned along a q-path"""
         from . import chi
         return chi.magnon_bands(self,**kwargs)
+    def get_densitychi_RPA(self,**kwargs):
+        """Density (charge) RPA response function for a V1/V2/V3/U/Vr
+        neighbor-shell density-density interaction"""
+        from . import chi
+        return chi.densitychi_RPA(self,**kwargs)
+    def get_plasmon_bands(self,**kwargs):
+        """Return the plasmon/charge-order bands: the poles of the density
+        RPA kernel for a V1/V2/V3/U/Vr neighbor-shell density-density
+        interaction, scanned along a q-path"""
+        from . import chi
+        return chi.plasmon_bands(self,**kwargs)
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)

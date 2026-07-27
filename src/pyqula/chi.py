@@ -127,6 +127,10 @@ from .chitk.spinchi import get_iets_ldos
 from .chitk.spinchi import get_qdos_iets
 from .chitk.spinchi import magnon_bands
 
+# density (charge) response functions
+from .chitk.densitychi import densitychi_RPA
+from .chitk.densitychi import plasmon_bands
+
 # RPA kernel poles (collective modes / instabilities)
 from .chitk.rpa import rpa_kernel_poles
 

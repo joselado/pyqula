@@ -70,8 +70,8 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Constrained and unconstrained mean-field calculations
 - Automatic identification of order parameters for symmetry broken states
 - Hermitian and non-Hermitian mean-field calculations
-- Random phase approximation many-body response functions
-- RPA collective modes (magnon bands) and Stoner/RPA instability detection
+- Random phase approximation many-body response functions, for interactions beyond onsite (spin and density/charge channels)
+- RPA collective modes (magnon bands, plasmon/charge-order bands) and Stoner/RPA instability detection
 - KPM (Chebyshev)-based mean-field SCF for large/sparse systems, avoiding diagonalization of the Bloch Hamiltonian
 
 ## Topological characterization ##
