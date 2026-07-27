@@ -108,14 +108,14 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Fully non-collinear Nambu basis
 - Non-equilibrium Green's function formalism
 - Operator-resolved transport
+- Differential decay rate
+- Tunneling and contact scanning probe spectroscopy
 - Multiple Andreev reflection and AC-Josephson current between two superconductors (Floquet-Keldysh formalism), including a superconducting local (STM-like) probe
 
 ## Classical spin models and lattice-gas Monte Carlo ##
 - Classical Heisenberg spin models with arbitrary exchange couplings
 - Local energy minimization and spatially resolved magnetization textures
 - Lattice-gas Monte Carlo with configurable site-site interactions and simulated annealing
-- Differential decay rate
-- Tunneling and contact scanning probe spectroscopy
 
 # EXAMPLES #
 A variety of examples can be found in pyqula/examples. Short examples are shown below
