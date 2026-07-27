@@ -498,3 +498,11 @@ hubbardscf_kpm = densitydensity_kpm.hubbard_kpm
 Vinteraction_kpm = densitydensity_kpm.Vinteraction_kpm
 
 from .selfconsistency.potentials import keldysh
+
+from .selfconsistency import spinspin
+
+SzSz = spinspin.SzSz
+SxSx = spinspin.SxSx
+SySy = spinspin.SySy
+Jinteraction = spinspin.Jinteraction
+VJinteraction = spinspin.VJinteraction

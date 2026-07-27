@@ -871,6 +871,63 @@ h.get_kdos_bands(operator="electron",nk=400,
 ```
 
 
+## Spin-spin exchange interactions
+
+The interactions considered above are all of density-density type, $c^\dagger_{i,s}c_{i,s}c^\dagger_{j,s'}c_{j,s'}$. A different kind of interaction, relevant for localized-moment magnetism, is a direct spin-spin coupling $\vec{S}_i\cdot\vec{S}_j$ between the (Pauli) spin operators at two sites,
+
+$$
+H = J_z\sum_{\langle ij\rangle} S^z_i S^z_j
++ J_x\sum_{\langle ij\rangle} S^x_i S^x_j
++ J_y\sum_{\langle ij\rangle} S^y_i S^y_j
+$$
+
+with $J>0$ the antiferromagnetic (Heisenberg) sign convention and $J<0$ favoring a ferromagnetic instability. Writing $S^z_i=(n_{i,\uparrow}-n_{i,\downarrow})/2$,
+
+$$
+S^z_i S^z_j = \tfrac14\left(
+n_{i,\uparrow}n_{j,\uparrow} - n_{i,\uparrow}n_{j,\downarrow}
+- n_{i,\downarrow}n_{j,\uparrow} + n_{i,\downarrow}n_{j,\downarrow}
+\right)
+$$
+
+is already a density-density interaction between spin-orbitals, so $S^z_iS^z_j$ is solved with exactly the same Hartree-Fock machinery as the $U$/$V_1$/$V_2$/$V_3$ interactions above -- `h.get_szsz_mean_field_hamiltonian(J1=...)` (first-neighbor $J_z$; `J2`/`J3` add second/third neighbors, `Jr` a general distance-dependent coupling, following the same convention as `V1`/`V2`/`V3`/`Vr` in `get_mean_field_hamiltonian`). $S^x_iS^x_j$ and $S^y_iS^y_j$ are obtained by a global spin rotation that maps the $x$ (or $y$) axis onto the computational $z$ axis, solving the $S^zS^z$ problem there, and rotating the converged Hamiltonian back -- `h.get_sxsx_mean_field_hamiltonian(...)` and `h.get_sysy_mean_field_hamiltonian(...)`. Because the bare interaction is SU(2)-symmetric, the converged total energy of `SzSz`, `SxSx` and `SySy` at the same coupling only differs by which axis the moment orders along.
+
+```python
+from pyqula import geometry
+g = geometry.chain() # a chain, prone to ferromagnetic order away from half filling
+h = g.get_hamiltonian(has_spin=True)
+h = h.get_szsz_mean_field_hamiltonian(J1=-2.0,filling=0.2,
+                                       mf="ferroZ") # ferromagnetic Sz-Sz coupling
+m = h.get_magnetization() # uniform moment along z
+```
+
+The three channels can also be combined into a single anisotropic-exchange SCF loop, `h.get_exchange_mean_field_hamiltonian(Jx1=...,Jy1=...,Jz1=...)`, which decouples the $z$ channel directly and the $x$/$y$ channels through the same rotate-solve-rotate-back trick, each SCF iteration:
+
+```python
+h = g.get_hamiltonian(has_spin=True)
+h = h.get_exchange_mean_field_hamiltonian(Jz1=-1.0,Jx1=-0.5,
+                                            filling=0.2,mf="ferroZ")
+```
+
+Density-density interactions ($U$/$V_1$/$V_2$/$V_3$/$V_r$, as in `get_mean_field_hamiltonian`) and spin-spin exchange can also be solved together, self-consistently, in a single combined SCF loop with `h.get_combined_mean_field_hamiltonian(U=...,V1=...,J1=...,...)`. This is not new physics: a density-density interaction and $S^z_iS^z_j$ are both density-density interactions in the spin-orbital basis (just with a different sign pattern across the four spin blocks), and the Hartree-Fock decoupling is linear in the interaction, so the density-density contribution is simply added into the same $z$-channel matrix the exchange term already uses. Exchange here follows a $V_1$/$V_2$/$V_3$-like convention: $J_1$/$J_2$/$J_3$ ($+J_r$) are isotropic Heisenberg couplings, $J(S^x_iS^x_j+S^y_iS^y_j+S^z_iS^z_j)$, for the first/second/third neighbor shells, and $J_{1x}$/$J_{1y}$/$J_{1z}$ are an optional anisotropic correction added on top of $J_1$ for the first-neighbor shell only (e.g. the effective first-neighbor $J_z$ coupling is $J_1+J_{1z}$); all default to 0
+
+```python
+h = g.get_hamiltonian(has_spin=True)
+h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,
+                                            filling=0.2,mf="ferroZ")
+```
+
+All of the spin-spin exchange functions above also work on BdG (Nambu) Hamiltonians (`h.turn_nambu()`/`h.setup_nambu_spinor()`). `get_szsz_mean_field_hamiltonian`/`get_sxsx_mean_field_hamiltonian`/`get_sysy_mean_field_hamiltonian` need no special handling: `get_mean_field_hamiltonian`'s existing Hartree-Fock-plus-anomalous decoupling already dispatches generically for any density-density-shaped interaction, including $S^z_iS^z_j$'s. `get_combined_mean_field_hamiltonian`/`get_exchange_mean_field_hamiltonian` decouple the exchange ($J$) channels in the normal (electron) sector only for a Nambu Hamiltonian -- exchange does not itself induce superconducting pairing here, only $U$/$V_1$/$V_2$/$V_3$ can (the same mechanism as the spin-triplet example above); a state with both magnetic and superconducting order can still emerge from combining an exchange field with an attractive $V_1$:
+
+```python
+h = g.get_hamiltonian(has_spin=True)
+h.add_exchange([0.,0.,0.3])
+h.turn_nambu()
+h = h.get_combined_mean_field_hamiltonian(V1=-1.0,J1z=-0.3,
+                                            filling=0.3,mf="random")
+```
+
+
 # Spatially resolved density of states
 
 ```python
@@ -1656,6 +1713,71 @@ Optional arguments:
 - symmetries=None: `"auto"` to auto-detect and enforce the point group, or an explicit list of `symmetrytk.pointgroup.SymmetryOperation`
 
 Returns a new, smaller Hamiltonian; `.wannier_centres`, `.wannier_spreads` and `.wannier_spread_total` hold the Wannier-function geometry
+
+### h.get_szsz_mean_field_hamiltonian()
+Self-consistent Hartree-Fock mean field for a $J_z\sum S^z_iS^z_j$
+spin-spin exchange interaction (see "Spin-spin exchange interactions").
+$J>0$ is antiferromagnetic, $J<0$ ferromagnetic.
+
+Optional arguments:
+
+- J1, J2, J3 = 0.: first/second/third-neighbor $J_z$ couplings
+- Jr=None: general distance-dependent coupling function, as `Vr` for `get_mean_field_hamiltonian`
+- filling, mf, nk, maxerror, mix, constrains: as in `get_mean_field_hamiltonian`
+- return_total_energy=False: also return the total energy
+
+Also works on BdG (Nambu) Hamiltonians, decoupling both the normal and
+anomalous (pairing) channels (same generic dispatch `get_mean_field_hamiltonian`
+already uses).
+
+Returns the converged Hamiltonian (or `None` if the SCF did not converge)
+
+### h.get_sxsx_mean_field_hamiltonian() / h.get_sysy_mean_field_hamiltonian()
+Same as `get_szsz_mean_field_hamiltonian()`, for a $S^x_iS^x_j$ /
+$S^y_iS^y_j$ interaction instead, implemented by rotating the problem so
+that x (or y) becomes the computational z axis, solving there, and
+rotating the converged Hamiltonian back. Also works on BdG Hamiltonians:
+`rotate_spin.global_spin_rotation` already rotates the Nambu-doubled
+Hamiltonian correctly with no changes needed.
+
+### h.get_exchange_mean_field_hamiltonian()
+Self-consistent anisotropic exchange mean field, combining
+$J_x S^x_iS^x_j + J_yS^y_iS^y_j + J_zS^z_iS^z_j$ in a single SCF loop.
+
+Optional arguments:
+
+- Jx1, Jx2, Jx3, Jy1, Jy2, Jy3, Jz1, Jz2, Jz3 = 0.: first/second/third-neighbor couplings for each axis
+- Jxr, Jyr, Jzr=None: general distance-dependent couplings, one per axis
+- mf, filling, nk, maxerror, mix, constrains: as above (only `integration="ed"` and the plain-mixing solver are supported)
+
+Also works on BdG Hamiltonians, but decouples the exchange interaction in
+the normal (electron) sector only -- it does not itself induce
+superconducting pairing (see `get_combined_mean_field_hamiltonian`, where
+$V_1$ can).
+
+Returns the converged Hamiltonian (or `None` if the SCF did not converge)
+
+### h.get_combined_mean_field_hamiltonian()
+Self-consistent mean field combining density-density interactions
+(onsite $U$, $V_1$/$V_2$/$V_3$/$V_r$ neighbor-shell) with spin-spin
+exchange in a single SCF loop.
+
+Optional arguments:
+
+- U, V1, V2, V3, Vr: as in `get_mean_field_hamiltonian`
+- J1, J2, J3 = 0.: isotropic Heisenberg exchange for the first/second/third-neighbor shells (same shell convention as V1/V2/V3)
+- Jr=None: general distance-dependent isotropic exchange function, as `Vr`
+- J1x, J1y, J1z = 0.: optional anisotropic correction added to J1 on the first-neighbor shell only (e.g. the effective first-neighbor Jz coupling is J1+J1z); second/third neighbors stay purely isotropic
+
+On a BdG Hamiltonian, $U$/$V_1$/$V_2$/$V_3$/$V_r$ keep the full
+normal+anomalous (pairing) treatment (identical to
+`get_mean_field_hamiltonian`), while the exchange ($J$) channels are
+decoupled in the normal sector only -- so a state with both magnetic and
+superconducting order requires an attractive $V$, not $J$, to seed the
+pairing (see the example above).
+- mf, filling, nk, maxerror, mix, constrains: as above (only `integration="ed"` and the plain-mixing solver are supported)
+
+Returns the converged Hamiltonian (or `None` if the SCF did not converge)
 
 ## Heterostructure functions and methods
 

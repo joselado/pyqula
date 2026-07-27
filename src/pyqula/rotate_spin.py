@@ -47,31 +47,32 @@ def align_magnetism(m,vectors):
 
 
 
+def build_rotation_matrix(n,vector = np.array([0.,0.,1.]),angle = 0.0):
+  """ Build the full n-site block-diagonal spin rotation matrix for a
+  global spin rotation by `angle` about `vector` (same convention as
+  global_spin_rotation, which uses this internally). Split out so that a
+  caller applying the *same* fixed rotation to many matrices (e.g. every
+  iteration of an SCF loop) can build R once and reuse it, instead of
+  recomputing the matrix exponential on every call. """
+  u = np.array(vector) # rotation direction
+  u = u/np.sqrt(u.dot(u)) # normalize rotation direction
+  rot = (u[0]*sx + u[1]*sy + u[2]*sz)/2. # rotation
+  # a factor 2 is taken out due to 1/2 of S
+  # a factor 2 is added to have BZ in the interval 0,1
+  rot = algebra.todense(rot)
+  rot = lg.expm(2.*np.pi*1j*rot*angle/2.0)
+  # same rotation at every site, so this is just a repeated block-diagonal;
+  # np.kron avoids scipy.sparse.bmat, which mishandles the n=1 (single
+  # site per cell) case (raises "blocks must be 2-D")
+  return np.kron(np.eye(n),rot) # full rotation matrix
+
+
 def global_spin_rotation(m,vector = np.array([0.,0.,1.]),angle = 0.0,
                              spiral = False,atoms = None):
   """ Rotates a matrix along a certain qvector """
-  # pauli matrices
-  from scipy.sparse import csc_matrix,bmat
-  iden = csc_matrix([[1.,0.],[0.,1.]])
   n = m.shape[0]//2 # number of sites
-  if atoms==None: 
-    atoms = range(n) # all the atoms
-  else: 
-    raise
-  R = [[None for i in range(n)] for j in range(n)] # rotation matrix
-  for i in range(n): # loop over sites
-      u = np.array(vector) # rotation direction
-      u = u/np.sqrt(u.dot(u)) # normalize rotation direction
-      rot = (u[0]*sx + u[1]*sy + u[2]*sz)/2. # rotation
-      # a factor 2 is taken out due to 1/2 of S
-      # a factor 2 is added to have BZ in the interval 0,1
-      rot = algebra.todense(rot)
-      rot = lg.expm(2.*np.pi*1j*rot*angle/2.0)
-  #    if i in atoms:
-      R[i][i] = rot  # save term
-#    else:
-#      R[i][i] = iden  # save term
-  R = bmat(R)  # convert to full sparse matrix
+  if atoms is not None: raise # per-atom rotation not implemented
+  R = build_rotation_matrix(n,vector=vector,angle=angle)
   if spiral:  # for spin spiral
     mout = R @ m  # rotate matrix
   else:  # normal global rotation
@@ -112,10 +113,19 @@ def spiralhopping(m,ri,rj,svector = np.array([0.,0.,1.]),
 
 
 def hamiltonian_spin_rotation(self,vector=np.array([0.,0.,1.]),angle=0.):
-    """ Perform a global spin rotation """
+    """ Perform a global spin rotation.
+
+    Also correct for BdG (Nambu, has_eh=True) Hamiltonians: pyqula's Nambu
+    convention (sctk/reorder.py's block2nambu) groups each site's electron
+    pair and hole pair as consecutive (up,down)-like 2-blocks, so
+    global_spin_rotation's n=m.shape[0]//2, kron(eye(n),rot) construction
+    already applies the same rotation to every one of those blocks
+    (electron pair and hole pair alike) with no changes needed -- verified
+    numerically (eigenvalue-preserving, and matches rotating the physical
+    exchange/pairing directly) against Hamiltonians with both an exchange
+    field and s-wave pairing present. """
     if not self.has_spin: raise # no spin in the Hamiltonian
     gsr = global_spin_rotation # rename method
-    if self.has_eh: raise
     self.intra = gsr(self.intra,vector=vector,angle=angle)
     if self.is_multicell: # multicell hamiltonian
       for i in range(len(self.hopping)): # loop 
