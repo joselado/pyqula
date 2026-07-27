@@ -35,7 +35,7 @@ def full_dm_python_d(es,vs,ks,d,delta=1e-7):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def full_dm_explicit(n,es,vs,delta=1e-7):
   """Auxiliary function to compute the density matrix"""
   dm = np.zeros((n,n),dtype=np.complex128)
@@ -48,14 +48,14 @@ def full_dm_explicit(n,es,vs,delta=1e-7):
 
 
 # vectorized version, lets see if it is faster
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def full_dm_vectorized(es, vs, delta=1e-7):
     occ = 1.0 / (1.0 + np.exp(es / delta))          # shape (len_es,)
     dm = np.conj(vs).T @ (occ[:, None] * vs)        # (n, n) complex
     return dm
 
 
-@jit(nopython=True,parallel=True)
+@jit(nopython=True,parallel=True,cache=True)
 def full_dm_batch_vectorized(es_batch,vs_batch,delta=1e-7):
     """Density-matrix contribution for a batch of kpoints, one kpoint per
     numba thread. vs_batch has shape (nb,n,n) with columns as
@@ -79,7 +79,7 @@ def full_dm_batch_vectorized(es_batch,vs_batch,delta=1e-7):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def full_dm_python_d_jit(n,es,vs,ks,d,delta=1e-7):
   """Auxiliary function to compute the density matrix"""
   dm = np.zeros((n,n),dtype=np.complex128)
@@ -116,7 +116,7 @@ def full_dm_d_python_vectorized(es, vs, ks, d, delta=1e-7):
 
 
 # vectorized version, this should be faster
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def full_dm_d_vectorized(es, vs, ks, d, delta=1e-7):
     # vs must be shape (n, M)
     M = es.shape[0]
@@ -128,7 +128,7 @@ def full_dm_d_vectorized(es, vs, ks, d, delta=1e-7):
     return (np.conj(vs.T) * weight) @ vs   # (n, n)
 
 
-@jit(nopython=True,parallel=True)
+@jit(nopython=True,parallel=True,cache=True)
 def full_dm_batch_d_vectorized(es_batch,vs_batch,ks_batch,d,delta=1e-7):
     """Same as full_dm_batch_vectorized, but weighting each kpoint's
     contribution by the Bloch phase exp(2*pi*i*k.d) for a single hopping

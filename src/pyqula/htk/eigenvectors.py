@@ -76,7 +76,7 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
 from numba import jit,prange
 import numpy.linalg as nlg
 
-@jit(nopython=True,parallel=True)
+@jit(nopython=True,parallel=True,cache=True)
 def parallel_diagonalization(hks):
     """Diagonalize many matrices at once"""
     n = hks.shape[1] # size of the Hamiltonian
@@ -94,7 +94,7 @@ def parallel_diagonalization(hks):
 
 peigh = parallel_diagonalization # alias
 
-@jit(nopython=True,parallel=True)
+@jit(nopython=True,parallel=True,cache=True)
 def peigvalsh(hks):
     """Diagonalize many matrices at once in parallel"""
     n = hks.shape[1] # size of the Hamiltonian

@@ -409,9 +409,12 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     vx/vy are skipped entirely (no rotation, no get_mf_normal/get_dc_energy
     call) when they are identically zero -- e.g. VJinteraction's pure
     density-density case (J1=J2=J3=J1x=J1y=0), where _build_v returns an
-    all-zero matrix for every key regardless of geometry. A zero
-    interaction contributes exactly zero mean field either way, so this
-    changes no result, only the cost of computing it -- see _channel_is_zero."""
+    all-zero matrix for every key regardless of geometry. vz and vd (when
+    given) get the same treatment: vz can be identically zero for a Nambu
+    VJinteraction call with only Jx/Jy set (J1=J2=J3=J1z=0), and vd for one
+    with only J's and no V/U. A zero interaction contributes exactly zero
+    mean field either way, so this changes no result, only the cost of
+    computing it -- see _channel_is_zero."""
     from .densitydensity import (get_dm, get_mf_normal, get_mf, mix_mf,
             diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF)
@@ -438,6 +441,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # channel -- see this function's docstring.
     vx_active = not _channel_is_zero(vx)
     vy_active = not _channel_is_zero(vy)
+    vz_active = not _channel_is_zero(vz)
+    vd_active = vd is not None and not _channel_is_zero(vd)
     Rx = Ry = Rxd = Ryd = None
     if vx_active or vy_active:
         from ..rotate_spin import build_rotation_matrix
@@ -515,7 +520,12 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
 
     def compute_mf(dm_lab):
         dme_lab = electron_sector(dm_lab) # exchange channels: normal sector only
-        mf = get_mf_normal(vz, dme_lab)
+        if vz_active:
+            mf = get_mf_normal(vz, dme_lab)
+        else: # vz identically zero -- skip the O(n^2) pass, same reasoning
+              # as vx_active/vy_active (see _channel_is_zero)
+            zero = dme_lab[(0, 0, 0)]*0.0
+            mf = {d: zero.copy() for d in vz}
         if vx_active:
             dm_x = _rot_dm(dme_lab, Rx, Rxd) # dm needs the conjugated rotation
             mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rxd, Rx) # mf does not
@@ -525,7 +535,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ryd, Ry)
             mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
         mf = embed_normal(mf)
-        if vd is not None: # density-density: full normal+anomalous treatment
+        if vd_active: # density-density: full normal+anomalous treatment
             mf_d = get_mf(vd, dm_lab, has_eh=has_eh)
             mf = (MultiHopping(mf) + MultiHopping(mf_d)).get_dict()
         return mf
@@ -607,14 +617,15 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     if mu is None:
         etot += h.fermi*h.intra.shape[0]*filling
     dme = electron_sector(scf.dm)
-    etot += get_dc_energy(vz, dme)
+    if vz_active:
+        etot += get_dc_energy(vz, dme)
     if vx_active:
         dm_x = _rot_dm(dme, Rx, Rxd) # dm needs the conjugated rotation, see compute_mf
         etot += get_dc_energy(vx, dm_x)
     if vy_active:
         dm_y = _rot_dm(dme, Ry, Ryd)
         etot += get_dc_energy(vy, dm_y)
-    if vd is not None:
+    if vd_active:
         etot += get_dc_energy(vd, dme)
     scf.total_energy = etot.real
     return scf

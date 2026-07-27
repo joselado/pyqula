@@ -55,7 +55,7 @@ def normal_term_ji(v,dm):
     out = dm*0.0 # initialize
     return normal_term_ji_jit(v,dm,out) # return the normal term
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def normal_term_jit(v,dm,out):
     """Return the normal terms, jit function"""
     n = len(v[0])
@@ -68,7 +68,7 @@ def normal_term_jit(v,dm,out):
     return out
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def normal_term_ii_jit(v,dm,out):
     """Return the normal terms, jit function"""
     n = len(v[0])
@@ -77,7 +77,7 @@ def normal_term_ii_jit(v,dm,out):
         out[i,i] = out[i,i] + v[i,j]*dm[j,j]
     return out
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def normal_term_jj_jit(v,dm,out):
     """Return the normal terms, jit function"""
     n = len(v[0])
@@ -87,7 +87,7 @@ def normal_term_jj_jit(v,dm,out):
     return out
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def normal_term_ij_jit(v,dm,out):
     """Return the normal terms, jit function"""
     n = len(v[0])
@@ -97,7 +97,7 @@ def normal_term_ij_jit(v,dm,out):
     return out
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def normal_term_ji_jit(v,dm,out):
     """Return the normal terms, jit function"""
     n = len(v[0])
@@ -256,7 +256,7 @@ from .superscf import enforce_eh_symmetry_anomalous
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def get_dc_energy_jit(v,dm00,dmd):
     """Double-counting energy contribution of a single interaction key,
     jit function -- the O(n^2) inner loop of get_dc_energy, split out so it

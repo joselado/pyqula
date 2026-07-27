@@ -35,7 +35,7 @@ def bloch_matrix_generator(ms,ds,dim=1,use_jax=False):
         return f
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def evaluate_bloch_matrix_jit(ms,ds,k):
     """Evaluate the Bloch Hamiltonian"""
     out = ms[0]*0. # initialize
