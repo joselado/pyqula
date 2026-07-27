@@ -720,6 +720,22 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             break
         ite += 1
 
+    if use_sparse_dm:
+        # scf.dm is a public field (Vinteraction/SzSz/SxSx/SySy's SCF
+        # objects always expose a fully dense one, via densitydensity.py's
+        # own get_dm), but the sparse path above only ever populated the
+        # (row,col) entries the SCF loop itself needed (see
+        # _build_sparse_pairs/full_dm_accumulate_sparse) -- leaving the
+        # rest silently at zero would corrupt any external use of scf.dm
+        # beyond the mean field itself (custom correlators, occupation
+        # diagnostics, symmetry checks). Recompute it fully dense exactly
+        # once here, for the converged (or not-converged-but-returned)
+        # Hamiltonian only -- not once per SCF iteration -- reusing the
+        # same dense get_dm the has_eh=True path below already relies on,
+        # so this is one extra diagonalization for the whole call, not a
+        # per-iteration cost.
+        scf.dm = get_dm(scf.hamiltonian, v_dirs, nk=nk, T=T, integration="ed")
+
     # total energy: sum of occupied energies plus the double-counting
     # correction for each of the three (independently-rotated) exchange
     # channels, plus vd's (if any) -- all electron-sector only. get_dc_energy

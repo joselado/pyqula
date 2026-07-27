@@ -135,7 +135,7 @@ def _accumulate_dm_batch(outd,pairs,threshold,es_batch,vs_batch,kbatch,delta):
 
 
 def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
-        delta=delta_dm,batch_size=16,dense_fraction=0.01):
+        delta=delta_dm,batch_size=16,dense_fraction=0.01,max_memory_gb=2.0):
     """Like full_dm_accumulate_sparse, but also determines and returns the
     Fermi energy for `filling` from the SAME diagonalization used to build
     the density matrix, instead of paying for a second, independent
@@ -155,19 +155,38 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     one batch of eigenvectors in memory at a time, since fermi is already
     known there), this holds every batch's (es,vs,kbatch) for the whole
     k-mesh at once, since the Fermi energy needs every eigenvalue in the
-    mesh before any density-matrix contribution can be computed. Used only
-    by selfconsistency.spinspin._run_anisotropic_scf for the normal-state
-    (has_eh=False) case with mu=None (a Fermi-level search is actually
-    needed) -- see that function's docstring for why the Nambu case is out
-    of scope: BdG's own get_fermi4filling diagonalizes an entirely
-    different (de-paired) Hamiltonian, not just a shifted copy of the one
-    the density matrix comes from, so this trick does not apply there."""
+    mesh before any density-matrix contribution can be computed -- unlike
+    full_dm_accumulate's own batch_size, which bounds memory "regardless of
+    how dense the k-mesh is" (that function's own docstring), this one does
+    not, and the eigenvector memory for the whole mesh can get large for an
+    unusually fine k-mesh (e.g. ~6GB for a 196-orbital system on a 100x100
+    2D mesh). max_memory_gb guards against that: above it, this falls back
+    to the same batch_size-bounded, memory-safe (but two-diagonalization)
+    sequence full_dm_accumulate_sparse's own caller used before this
+    function existed -- get_fermi4filling on `h` directly, then
+    full_dm_accumulate_sparse on a shifted copy -- trading back the
+    dedup for a bounded memory footprint only in that regime.
+
+    Used only by selfconsistency.spinspin._run_anisotropic_scf for the
+    normal-state (has_eh=False) case with mu=None (a Fermi-level search is
+    actually needed) -- see that function's docstring for why the Nambu
+    case is out of scope: BdG's own get_fermi4filling diagonalizes an
+    entirely different (de-paired) Hamiltonian, not just a shifted copy of
+    the one the density matrix comes from, so this trick does not apply
+    there."""
     from .htk.eigenvectors import parallel_diagonalization
     from .filling import get_fermi_energy
-    hk = h.get_hk_gen() # get the Hamiltonian generator
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
-    fac = 1./len(ks) # normalization
     n = h.intra.shape[0]
+    if len(ks)*n*n*16 > max_memory_gb*1e9: # see max_memory_gb's docstring
+        fermi = h.get_fermi4filling(filling,nk=nk)
+        h_shifted = h.copy()
+        h_shifted.shift_fermi(-fermi)
+        dm = full_dm_accumulate_sparse(h_shifted,pairs,nk=nk,delta=delta,
+                batch_size=batch_size,dense_fraction=dense_fraction)
+        return dm,fermi
+    hk = h.get_hk_gen() # get the Hamiltonian generator
+    fac = 1./len(ks) # normalization
     threshold = dense_fraction*n*n
     batches = [] # (es_batch, vs_batch, kbatch) for the whole mesh
     all_es = []
