@@ -497,16 +497,18 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # at the union, not just vz's keys
     v_dirs = {d: None for d in (set(vz) | set(vx) | set(vy) |
             (set(vd) if vd is not None else set()))}
-    # the x/y rotations are fixed for the whole SCF loop, so build the
-    # (small, 2x2-block) rotation matrices once via build_rotation_matrix
-    # instead of paying a fresh matrix exponential on every one of the many
+    # the x/y rotations are fixed for the whole SCF loop, so build the small
+    # 2x2 spin rotation matrices once via build_rotation_matrix instead of
+    # paying a fresh matrix exponential on every one of the many
     # _rotate_dict/_rotate_dm calls compute_mf makes each iteration; the
     # backward rotation is just the forward matrix's dagger (R(-angle) =
-    # R(angle)^dagger), so only Rx/Ry need to be built. Sized from vz's own
-    # shape (always the plain spin-orbital size, never Nambu-doubled, even
-    # when h1 itself is BdG) rather than h1.intra.shape, since the exchange
-    # channels are always decoupled in the (electron-sector-sized) normal
-    # channel -- see this function's docstring.
+    # R(angle)^dagger), so only Rx/Ry need to be built.
+    # build_rotation_matrix(1,...) returns exactly the small 2x2 spin
+    # rotation with no reshaping needed (kron with a 1x1 identity is a
+    # no-op) -- the full (2n_orb)x(2n_orb) kron'd matrix this used to build
+    # is never actually needed: see _block_rotate for why applying it is an
+    # O(n_orb^2) per-site contraction with this small matrix, not an
+    # O(n_orb^3) dense matmul against the big one.
     vx_active = not _channel_is_zero(vx)
     vy_active = not _channel_is_zero(vy)
     vz_active = not _channel_is_zero(vz)
@@ -514,16 +516,15 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     Rx = Ry = Rxd = Ryd = None
     if vx_active or vy_active:
         from ..rotate_spin import build_rotation_matrix
-        n_orb = vz[(0, 0, 0)].shape[0]//2
         # daggers precomputed once here (rather than inside _rot_dict/_rot_dm,
         # which previously recomputed R.conj().T -- once for the forward
         # rotation, again explicitly at each of that channel's two call
         # sites in compute_mf/the total-energy tail -- on every one of the
         # maxite SCF iterations for a rotation that never changes)
         if vx_active:
-            Rx = build_rotation_matrix(n_orb, **_AXIS_ROTATION["x"]); Rxd = Rx.conj().T
+            Rx = build_rotation_matrix(1, **_AXIS_ROTATION["x"]); Rxd = Rx.conj().T
         if vy_active:
-            Ry = build_rotation_matrix(n_orb, **_AXIS_ROTATION["y"]); Ryd = Ry.conj().T
+            Ry = build_rotation_matrix(1, **_AXIS_ROTATION["y"]); Ryd = Ry.conj().T
 
     # sparse density-matrix path: only compute the (row,col) entries that
     # normal_term_ii/jj/ij/ji actually read, instead of the full (n,n)
@@ -546,14 +547,30 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             return full_dm_accumulate_sparse(h, sparse_pairs, nk=nk, delta=delta)
         return get_dm(h, v_dirs, nk=nk, T=T, integration="ed")
 
-    def _rot_dict(dd, R, Rd):
+    def _block_rotate(m, rot):
+        """rot @ m @ rot^dagger, applied to every site's own 2x2 spin
+        sub-block of an (n,n) matrix independently, instead of a dense
+        (n,n)@(n,n) matmul against the full R=kron(I_{n/2},rot) a global
+        spin rotation used to be built as: R is block-diagonal with n/2
+        IDENTICAL 2x2 blocks (rotate_spin.build_rotation_matrix), so it
+        never mixes different sites -- only the 2 spin components within
+        each one. Two small (n/2 * 4)-cost einsum contractions reproduce
+        the same result as R @ m @ R^dagger at O(n^2) instead of O(n^3)."""
+        n = m.shape[0]
+        n_orb = n//2
+        m4 = m.reshape(n_orb, 2, n_orb, 2)
+        out = np.einsum('ab,xbyc->xayc', rot, m4, optimize=True)
+        out = np.einsum('xayc,dc->xayd', out, rot.conj(), optimize=True)
+        return out.reshape(n, n)
+
+    def _rot_dict(dd, R):
         """Rotate a dict of Hamiltonian-like (hopping/mean-field) matrices:
         these live in the same convention as Hamiltonian.intra, for which
         R @ m @ R^dagger is the correct transformation (as used by
         Hamiltonian.global_spin_rotation, validated by SxSx/SySy)."""
-        return {k: R @ m @ Rd for (k, m) in dd.items()}
+        return {k: _block_rotate(m, R) for (k, m) in dd.items()}
 
-    def _rot_dm(dd, R, Rd):
+    def _rot_dm(dd, R):
         """Rotate a dict of *density matrices*, which need a different
         (conjugate-sandwiched) transformation than _rot_dict.
 
@@ -575,7 +592,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         Conjugating before and after the standard rotation corrects for it:
         if dm_stored = conj(dm_physical), then
         dm_stored' = conj(dm_physical') = conj(R @ conj(dm_stored) @ R^dagger)."""
-        return {k: np.conj(R @ np.conj(m) @ Rd) for (k, m) in dd.items()}
+        return {k: np.conj(_block_rotate(np.conj(m), R)) for (k, m) in dd.items()}
 
     callback_mf = _callback_mf_constrains(h1, constrains)
 
@@ -616,12 +633,12 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             zero = dme_lab[(0, 0, 0)]*0.0
             mf = {d: zero.copy() for d in vz}
         if vx_active:
-            dm_x = _rot_dm(dme_lab, Rx, Rxd) # dm needs the conjugated rotation
-            mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rxd, Rx) # mf does not
+            dm_x = _rot_dm(dme_lab, Rx) # dm needs the conjugated rotation
+            mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rxd) # mf does not
             mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
         if vy_active:
-            dm_y = _rot_dm(dme_lab, Ry, Ryd)
-            mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ryd, Ry)
+            dm_y = _rot_dm(dme_lab, Ry)
+            mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ryd)
             mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
         mf = embed_normal(mf)
         if vd_active: # density-density: full normal+anomalous treatment
@@ -633,8 +650,22 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         h = h1.copy()
         hop = update_hamiltonian(hop0, mf)
         set_hoppings(h, hop)
-        h = callback_h(h)
-        dm_lab = _get_dm(h)
+        if use_sparse_dm and mu is None:
+            # combined: diagonalize the unshifted h once, deriving both the
+            # Fermi energy and the density matrix from the same
+            # eigenvectors, instead of callback_h's get_fermi4filling
+            # paying for an independent diagonalization sweep first -- see
+            # densitymatrix.full_dm_accumulate_sparse_with_fermi's docstring
+            from ..densitymatrix import full_dm_accumulate_sparse_with_fermi
+            delta = T if T != 0. else 1e-15 # see densitymatrix.full_dm's own T==0 guard
+            dm_lab, fermi = full_dm_accumulate_sparse_with_fermi(
+                    h, sparse_pairs, filling, nk=nk, delta=delta)
+            h.fermi = fermi
+            h.shift_fermi(-fermi) # cheap (adds a constant to the diagonal);
+                                   # the eigenvectors above are unaffected by it
+        else:
+            h = callback_h(h)
+            dm_lab = _get_dm(h)
         mfnew = compute_mf(dm_lab)
         if callback_mf is not None: mfnew = callback_mf(mfnew)
         scf = SCF()
@@ -709,10 +740,10 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     if vz_active:
         etot += get_dc_energy(vz, dme)
     if vx_active:
-        dm_x = _rot_dm(dme, Rx, Rxd) # dm needs the conjugated rotation, see compute_mf
+        dm_x = _rot_dm(dme, Rx) # dm needs the conjugated rotation, see compute_mf
         etot += get_dc_energy(vx, dm_x)
     if vy_active:
-        dm_y = _rot_dm(dme, Ry, Ryd)
+        dm_y = _rot_dm(dme, Ry)
         etot += get_dc_energy(vy, dm_y)
     if vd_active:
         etot += get_dc_energy(vd, dme)

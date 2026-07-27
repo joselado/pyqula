@@ -112,19 +112,77 @@ def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
         mats = np.array([hk(k) for k in kbatch]) # k-Hamiltonians in this batch
         es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
         es_batch = es_batch-fermi # substract fermi energy
-        for d,(rows,cols) in pairs.items():
-            npairs = len(rows)
-            if npairs==0: continue # nothing requested in this direction
-            if npairs>threshold: # dense direction: the plain matmul wins
-                contribs = full_dm_batch_d_vectorized(es_batch,vs_batch,kbatch,
-                        np.array(d,dtype=np.float64),delta=delta)
-                outd[d] += np.sum(contribs,axis=0) # pool the batch
-            else:
-                contribs = full_dm_batch_d_sparse(es_batch,vs_batch,kbatch,
-                        np.array(d,dtype=np.float64),rows,cols,delta=delta)
-                outd[d][rows,cols] += np.sum(contribs,axis=0) # pool the batch
+        _accumulate_dm_batch(outd,pairs,threshold,es_batch,vs_batch,kbatch,delta)
     for d in outd: outd[d] *= fac # renormalize
     return outd
+
+
+def _accumulate_dm_batch(outd,pairs,threshold,es_batch,vs_batch,kbatch,delta):
+    """Add one k-batch's contribution to outd (in place), choosing the
+    sparse or dense kernel per direction -- the shared per-batch step of
+    full_dm_accumulate_sparse and full_dm_accumulate_sparse_with_fermi."""
+    for d,(rows,cols) in pairs.items():
+        npairs = len(rows)
+        if npairs==0: continue # nothing requested in this direction
+        if npairs>threshold: # dense direction: the plain matmul wins
+            contribs = full_dm_batch_d_vectorized(es_batch,vs_batch,kbatch,
+                    np.array(d,dtype=np.float64),delta=delta)
+            outd[d] += np.sum(contribs,axis=0) # pool the batch
+        else:
+            contribs = full_dm_batch_d_sparse(es_batch,vs_batch,kbatch,
+                    np.array(d,dtype=np.float64),rows,cols,delta=delta)
+            outd[d][rows,cols] += np.sum(contribs,axis=0) # pool the batch
+
+
+def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
+        delta=delta_dm,batch_size=16,dense_fraction=0.01):
+    """Like full_dm_accumulate_sparse, but also determines and returns the
+    Fermi energy for `filling` from the SAME diagonalization used to build
+    the density matrix, instead of paying for a second, independent
+    diagonalization sweep first the way
+    selfconsistency.spinspin._run_anisotropic_scf's callback_h
+    (Hamiltonian.get_fermi4filling) otherwise would before calling
+    get_dm/full_dm_accumulate_sparse on the (separately, again-diagonalized)
+    shifted Hamiltonian. Shifting a Hamiltonian by a constant
+    (H' = H - fermi*I) does not change its eigenVECTORS, only shifts the
+    eigenvalues by that same constant -- so diagonalizing the UNSHIFTED h
+    once, determining fermi from the pooled eigenvalues, then subtracting
+    it from the already-computed eigenvalues before building the density
+    matrix, is exactly equivalent to the two-diagonalization version, at
+    (up to) half the diagonalization cost.
+
+    Unlike full_dm_accumulate_sparse's own batching (which only ever needs
+    one batch of eigenvectors in memory at a time, since fermi is already
+    known there), this holds every batch's (es,vs,kbatch) for the whole
+    k-mesh at once, since the Fermi energy needs every eigenvalue in the
+    mesh before any density-matrix contribution can be computed. Used only
+    by selfconsistency.spinspin._run_anisotropic_scf for the normal-state
+    (has_eh=False) case with mu=None (a Fermi-level search is actually
+    needed) -- see that function's docstring for why the Nambu case is out
+    of scope: BdG's own get_fermi4filling diagonalizes an entirely
+    different (de-paired) Hamiltonian, not just a shifted copy of the one
+    the density matrix comes from, so this trick does not apply there."""
+    from .htk.eigenvectors import parallel_diagonalization
+    from .filling import get_fermi_energy
+    hk = h.get_hk_gen() # get the Hamiltonian generator
+    ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
+    fac = 1./len(ks) # normalization
+    n = h.intra.shape[0]
+    threshold = dense_fraction*n*n
+    batches = [] # (es_batch, vs_batch, kbatch) for the whole mesh
+    all_es = []
+    for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
+        kbatch = ks[i0:i0+batch_size]
+        mats = np.array([hk(k) for k in kbatch]) # k-Hamiltonians in this batch
+        es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
+        batches.append((es_batch,vs_batch,kbatch))
+        all_es.append(es_batch.ravel())
+    fermi = get_fermi_energy(np.concatenate(all_es),filling)
+    outd = {d: np.zeros((n,n),dtype=np.complex128) for d in pairs}
+    for es_batch,vs_batch,kbatch in batches:
+        _accumulate_dm_batch(outd,pairs,threshold,es_batch-fermi,vs_batch,kbatch,delta)
+    for d in outd: outd[d] *= fac # renormalize
+    return outd,fermi
 
 
 def full_dm_simultaneous(h,nk=10,fermi=0.0,
