@@ -13,6 +13,7 @@
 # supported.
 import numpy as np
 import os
+from .. import filesystem as fs
 import time
 from copy import deepcopy
 
@@ -69,7 +70,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         mf = guess(h0, mode=mf)
     else: pass
     mf = obj2mf(mf)
-    os.system("rm -f STOP")
+    fs.rmfile("STOP")
     hop0 = hamiltonian2dict(h1)
     def f(mf, h=h1):
         mf0 = deepcopy(mf)

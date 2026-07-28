@@ -19,15 +19,15 @@ def round_folder(input_folder,output_folder,prec=prec):
     value = n[1].split(".dat")[0] # value
     value = round(float(value),prec) # value with new precision
     name = pre + "_"+str(value)+".dat"
-    os.system("cp "+input_folder+"/"+ni+"  "+output_folder+"/"+name) # copy to the new
+    fs.cpfile(input_folder+"/"+ni, output_folder+"/"+name) # copy to the new
 
 
 
 
 def clean():
   """ Clena all the directories"""
-  os.system("rm -rf green_storage*")
-  os.system("rm -rf pdos_storage*")
+  fs.rmglob("green_storage*")
+  fs.rmglob("pdos_storage*")
 
 
 def get_green(fun_gf,name="",energy=0.0,prec=prec):

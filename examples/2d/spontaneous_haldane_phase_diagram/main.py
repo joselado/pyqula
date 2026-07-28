@@ -22,7 +22,7 @@ V2s = np.linspace(0.,3.0,10)
 
 #scf = scftypes.selfconsistency(h,nk=nk,filling=filling,g=g,mode="V")
 def get_gap(V1,V2):
-    os.system("rm -f MF.pkl")
+    if os.path.exists("MF.pkl"): os.remove("MF.pkl")
     scf = densitydensity.Vinteraction(h,V1=V1,V2=V2,nk=nk,filling=filling)
     return scf.hamiltonian.get_gap() # get the Hamiltonian
 

@@ -6,6 +6,7 @@ from ..scftypes import get_occupied_states
 import time
 from .. import limits
 from .. import inout
+from .. import filesystem as fs
 from scipy.sparse import csc_matrix
 
 
@@ -22,7 +23,7 @@ def coulombscf(h,g=1.0,nkp = 100,filling=0.5,mix=0.9,
   mix = 1. - mix
   U = g # redefine
 #  if h.has_spin: raise # not implemented
-  os.system("rm -f STOP") # remove stop file
+  fs.rmfile("STOP") # remove stop file
   from scipy.linalg import eigh
   nat = h.intra.shape[0] # number of atoms
   htmp = h.copy()  # copy hamiltonian

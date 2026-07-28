@@ -6,6 +6,7 @@ from .. import inout
 import numpy as np
 import time
 import os
+from .. import filesystem as fs
 
 mf_file = "MF.pkl" 
 
@@ -19,7 +20,7 @@ def attractive_hubbard(h0,mf=None,mix=0.9,g=0.0,nk=8,solver="plain",
       except: dold = np.random.random(h.intra.shape[0]) # random guess
     else: dold = mf # initial guess
     ii = 0
-    os.system("rm -f STOP") # remove stop file
+    fs.rmfile("STOP") # remove stop file
     def f(dold):
       """Function to minimize"""
 #      print("Iteration #",ii) # Iteration

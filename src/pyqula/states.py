@@ -72,11 +72,12 @@ def multi_states(h,ewindow=[-0.5,0.5],signed=False,
   """Calculate the bands and states in an energy window,
   and write them in a folder"""
   import os
+  from . import filesystem as fs
   if ks is None:
     from . import klist
     ks = klist.default(h.geometry) # generate default klist
-  os.system("rm -rf MULTISTATES_KPATH") # delete folder
-  os.system("mkdir MULTISTATES_KPATH") # create folder
+  fs.rmdir("MULTISTATES_KPATH") # delete folder
+  fs.mkdir("MULTISTATES_KPATH") # create folder
   os.chdir("MULTISTATES_KPATH") # go to the folder
   ik = 0
   for k in ks: # loop over kpoints

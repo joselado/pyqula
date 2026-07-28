@@ -12,6 +12,7 @@ from pyqula import geometry
 from pyqula import scftypes
 from pyqula import meanfield
 import os
+import glob
 g = geometry.honeycomb_lattice()
 h0 = g.get_hamiltonian() # create hamiltonian of the system
 ds = []
@@ -20,7 +21,7 @@ f = open("DELTA_VS_T_VS_MU.OUT","w")
 h0.add_swave(0.0)
 for U in Us:
     h = h0.copy()
-    os.system("rm -rf *.pkl")
+    for name in glob.glob("*.pkl"): os.remove(name)
     #scf = scftypes.attractive_hubbard(h,nk=10,mix=0.9,mf=None,g=-2.0,T=t)
     mf = 10*(meanfield.guess(h,"swave") + meanfield.guess(h,"CDW"))
     mf = meanfield.guess(h,"swave") #+ meanfield.guess(h,"CDW"))

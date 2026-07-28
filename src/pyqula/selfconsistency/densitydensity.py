@@ -5,6 +5,7 @@ from .. import inout
 import numpy as np
 import time
 import os
+from .. import filesystem as fs
 from .. import densitymatrix
 from copy import deepcopy
 from numba import jit
@@ -372,7 +373,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
     else: pass # assume that it is a valid mf
     mf = obj2mf(mf) # convert to MF
     ii = 0
-    os.system("rm -f STOP") # remove stop file
+    fs.rmfile("STOP") # remove stop file
     hop0 = hamiltonian2dict(h1) # create dictionary
     def f(mf,h=h1):
       """Function to minimize"""

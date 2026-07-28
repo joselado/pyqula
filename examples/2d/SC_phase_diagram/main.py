@@ -11,6 +11,7 @@ import numpy as np
 from pyqula import geometry
 from pyqula import scftypes
 import os
+import glob
 g = geometry.honeycomb_lattice()
 h0 = g.get_hamiltonian() # create hamiltonian of the system
 h0.remove_spin()
@@ -22,7 +23,7 @@ for mu in mus:
   for t in ts:
     h = h0.copy()
     h.shift_fermi(mu)
-    os.system("rm -rf *.pkl")
+    for name in glob.glob("*.pkl"): os.remove(name)
     scf = scftypes.attractive_hubbard(h,nk=10,mix=0.9,mf=None,g=-2.0,T=t)
     hscf = scf.hamiltonian
   #  rho = hscf.get_filling()

@@ -14,14 +14,14 @@ def build_job(fin,xs,pfolder):
     (task index ii, read from SLURM_ARRAY_TASK_ID, defaulting to 0)
     executes to produce folder_ii/out.obj"""
     main = "import dill as pickle\nimport os\n"
-    main += "os.system('touch START')\n"
+    main += "open('START','w').close()\n"
     main += "import sys ; sys.path.append('"+srcpath+"')\n"
     main += "try: ii = int(os.environ['SLURM_ARRAY_TASK_ID'])\n"
     main += "except: ii = 0\n"
     main += "f = pickle.load(open('function.obj','rb'))\n"
     main += "v = pickle.load(open('array.obj','rb'))\n"
     main += "folder = 'folder_'+str(ii)\n"
-    main += "os.system('mkdir '+folder)\n"
+    main += "os.makedirs(folder,exist_ok=True)\n"
     main += "os.chdir(folder)\n"
     main += "pwd = os.getcwd()\n"
     main += "try: out = f(v[ii])\n"
@@ -29,7 +29,7 @@ def build_job(fin,xs,pfolder):
     main += "os.chdir(pwd)\n"
     main += "print(out)\n"
     main += "pickle.dump(out,open('out.obj','wb'))\n"
-    main += "os.system('touch DONE')\n"
+    main += "open('DONE','w').close()\n"
     fs.rmdir(pfolder) # create directory
     fs.mkdir(pfolder) # create directory
     pickle.dump(fin,open(pfolder+"/function.obj","wb")) # write function

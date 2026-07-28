@@ -10,6 +10,7 @@ from . import kpm
 from . import timing
 from . import algebra
 from . import densitymatrix
+from . import filesystem as fs
 
 from .fermisurface import multi_fermi_surface
 from .fermisurfacetk.singlefs import fermi_surface
@@ -93,7 +94,7 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
   # setup a reasonable value for delta
   # setup the operator
   operator = operator2list(operator) # convert into a list
-  os.system("rm -f "+output_file+"*") # delete previous files
+  fs.rmglob(output_file+"*") # delete previous files
   fo = [open(output_file+"_"+str(i)+".OUT","w") for i in nindex] # files        
   for x in kxs:
     for y in kxs:

@@ -12,12 +12,13 @@ from pyqula import geometry
 from pyqula import scftypes
 from pyqula import meanfield
 import os
+import glob
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian() # create hamiltonian of the system
 ds = []
 Us = np.linspace(0.0,10.0,10)
 h.add_swave(0.0)
-os.system("rm -rf *.pkl")
+for name in glob.glob("*.pkl"): os.remove(name)
 U = 2.0
 # SC and CDW guess
 mf = 10*(meanfield.guess(h,"swave") + meanfield.guess(h,"CDW")) 

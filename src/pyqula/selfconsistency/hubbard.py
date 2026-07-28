@@ -8,6 +8,7 @@ import time
 from ..scftypes import directional_mean_field
 from .. import limits
 from .. import inout
+from .. import filesystem as fs
 
 
 try:
@@ -30,7 +31,7 @@ def hubbardscf(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
   mix = 1. - mix
   U = g # redefine
   if not h.has_spin: raise
-  os.system("rm -f STOP") # remove stop file
+  fs.rmfile("STOP") # remove stop file
   from scipy.linalg import eigh
   nat = h.intra.shape[0]//2 # number of atoms
   htmp = h.copy()  # copy hamiltonian
@@ -205,7 +206,7 @@ def hubbardscf_spinless(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
   mix = 1. - mix
   U = g # redefine
   if h.has_spin: raise # only for spinless systems
-  os.system("rm -f STOP") # remove stop file
+  fs.rmfile("STOP") # remove stop file
   from scipy.linalg import eigh
   nat = h.intra.shape[0] # number of atoms
   htmp = h.copy()  # copy hamiltonian
