@@ -82,6 +82,7 @@
 # or use a Hamiltonian that already breaks the symmetry physically (SOC,
 # an external field, a spinless interaction).
 from __future__ import annotations
+import warnings
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -381,6 +382,80 @@ def fixed_point_solve(step_fn, x0, mu, dirs, n, mix=0.1, maxite=2000, tol=1e-5,
         if diff < tol:
             return x, cur_mu, ite, True
     return x, cur_mu, maxite, False
+
+
+def lbfgs_solve(loss_fn, x0, maxite=2000, tol=1e-5, verbose=0, gtol=None):
+    """Minimize loss_fn (any JAX-differentiable scalar function of x) with
+    scipy.optimize.minimize's L-BFGS-B, using jax.grad (via
+    jax.value_and_grad) for the exact gradient.
+
+    Used by vjinteraction_jax's solver="lbfgs" with loss_fn(x) =
+    sum((step_vec(x)-x)**2), the squared SCF residual -- NOT a physical
+    free-energy functional. See vjinteraction_jax's module docstring
+    ("solver='lbfgs'" section) for why: minimizing the actual mean-field
+    free energy directly (via jax.grad of a grand-potential functional) was
+    tried first and abandoned after empirically finding the physical SCF
+    solution is generically a *saddle point* of that functional, not a
+    minimum -- L-BFGS-B reliably converged to spurious, non-self-consistent
+    points instead, even from very close to the true solution. Minimizing
+    the squared residual instead has no such issue, since it is a sum of
+    squares whose global minimum (value 0) sits exactly at every SCF fixed
+    point, by construction -- any x this converges to with a near-zero loss
+    IS (to that tolerance) self-consistent, not just a stationary point of
+    an unrelated functional.
+
+    This still gets the intended scaling benefit over newton_solve/
+    fsolve_solve: a jax.grad of a scalar costs about one extra pass through
+    step_vec's own eigh-based computation (structurally like
+    newton_krylov_solve's jax.jvp), not O(norb^2) forward passes to build a
+    dense Jacobian -- so this should scale per-iteration like
+    fixed_point_solve/newton_krylov_solve.
+
+    L-BFGS-B's own gtol/success criteria measure stationarity of loss_fn
+    (gradient norm), which is a necessary but not sufficient proxy for the
+    SCF-residual sense of "converged" every other solver in this file uses
+    (max(|step(x)-x|) < tol) -- e.g. a nonlinear least-squares loss like
+    this can in principle have its own local minima with loss>0. The caller
+    (vjinteraction_jax's solver="lbfgs" branch) must recompute the actual
+    residual from the returned x itself and derive scf.converged from that,
+    exactly as it already computes final_mu that way.
+
+    gtol defaults to tol (the same value the caller passes as its own
+    maxerror), a reasonable default tying the two together without a
+    dedicated tuning knob -- add a separate gtol= passthrough later only if
+    that default proves insufficient in practice."""
+    from scipy.optimize import minimize
+    if gtol is None:
+        gtol = tol
+    val_and_grad = jax.jit(jax.value_and_grad(loss_fn))
+
+    def func(x_np):
+        # reverse-mode jax.grad through loss_fn's complex intermediates
+        # (step_vec's Hamiltonian/eigh/density-matrix arithmetic) onto a
+        # real scalar triggers numpy's ComplexWarning ("Casting complex
+        # values to real discards the imaginary part") deep in jax's own
+        # VJP machinery -- benign (the discarded part is the expected zero
+        # imaginary component of a real-input/real-output map's cotangent;
+        # confirmed by tests/scf/test_vjinteraction_jax.py's solver="lbfgs"
+        # tests matching solver="newton" to <1e-6), not something callers
+        # should see for every SCF iteration
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore",
+                    message=".*Casting complex values to real.*")
+            v, g = val_and_grad(jnp.asarray(x_np))
+        return float(v), np.asarray(g, dtype=np.float64)
+
+    # ftol=0 (scipy's default is a loose ~2.22e-9 relative-function-reduction
+    # criterion) disables L-BFGS-B's OWN early-stopping-on-plateau check, so
+    # it keeps iterating down to gtol -- with the default ftol, a residual
+    # loss already small in absolute terms (e.g. ~1e-10 for a ~1e-5 residual)
+    # can plateau in *relative* terms well before gtol is reached, capping
+    # the achievable residual short of the caller's requested maxerror
+    res = minimize(func, np.asarray(x0), jac=True, method="L-BFGS-B",
+            options=dict(maxiter=maxite, gtol=gtol, ftol=0.0))
+    if verbose > 0:
+        print("L-BFGS-B:", res.message, "nit", res.nit, "nfev", res.nfev)
+    return jnp.asarray(res.x), int(res.nit)
 
 
 def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,

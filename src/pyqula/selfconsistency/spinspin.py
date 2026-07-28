@@ -479,8 +479,14 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     solver="newton" (default, uses jax.jacfwd for the exact Jacobian),
     "newton_krylov" (matrix-free, jax.jvp + GMRES, scales to larger systems
     than "newton"'s dense Jacobian), "fsolve" (scipy.optimize.fsolve/MINPACK
-    with the same jax.jacfwd Jacobian as fprime), or "fixed_point" (plain
-    linear mixing through the same machinery, for comparison/large systems).
+    with the same jax.jacfwd Jacobian as fprime), "fixed_point" (plain
+    linear mixing through the same machinery, for comparison/large systems),
+    or "lbfgs" (minimizes ||step(x)-x||^2 with jax.grad + scipy's L-BFGS-B,
+    instead of root-finding step(x)=x -- see
+    selfconsistency.vjinteraction_jax's module docstring for why this,
+    rather than minimizing the physical free energy directly, is what it
+    does: the physical SCF solution turned out empirically to be a saddle
+    point, not a minimum, of the free-energy functional).
     See selfconsistency.vjinteraction_jax's module docstring for the
     algorithm and selfconsistency.densitydensity_jax's module docstring
     (which implements the same idea for Vinteraction) for the solvers'

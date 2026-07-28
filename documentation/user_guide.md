@@ -1875,7 +1875,16 @@ pairing (see the example above).
   `gmres_restart=20` tune its linear solve); `"fsolve"` wraps
   `scipy.optimize.fsolve`/MINPACK with the same `jax.jacfwd` Jacobian as
   `fprime`; `"fixed_point"` is plain linear mixing routed through the same
-  machinery, for comparison. Restricted to a normal-state (non-BdG)
+  machinery, for comparison; `"lbfgs"` instead minimizes the squared SCF
+  residual $\|f(x)-x\|^2$ with `jax.grad` + `scipy`'s L-BFGS-B (not the
+  physical free energy directly -- see `selfconsistency.vjinteraction_jax`'s
+  module docstring for why that alternative was tried and abandoned: the
+  physical SCF solution turned out to be a saddle point, not a minimum, of
+  the free-energy functional). `"lbfgs"` scales per-iteration like
+  `"newton_krylov"`/`"fixed_point"` (no dense Jacobian), and matches
+  `"newton"` well on small/moderate systems, but as a local optimizer it can
+  stall short of `maxerror` on a harder landscape from a generic starting
+  guess -- always check `.converged`. Restricted to a normal-state (non-BdG)
   Hamiltonian, dense exact diagonalization only (no `integration="kpm"`),
   and no `constrains`; needs the optional `jax` extra
   (`pip install pyqula[jax]`). See `selfconsistency.vjinteraction_jax`'s

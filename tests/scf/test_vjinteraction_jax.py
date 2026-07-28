@@ -221,6 +221,92 @@ def test_vjinteraction_jax_newton_krylov_matches_newton():
     assert abs(scf_newton.total_energy - scf_nk.total_energy) < 1e-6
 
 
+def test_vjinteraction_jax_lbfgs_vu_only_matches_numpy_engine():
+    """solver="lbfgs" minimizes ||step(x)-x||^2 with jax.grad + scipy's
+    L-BFGS-B, instead of root-finding step(x)=x the way every other solver
+    here does (see vjinteraction_jax's module docstring for why -- minimizing
+    the actual free energy directly was tried first and abandoned after
+    finding the SCF solution is generically a saddle point of that
+    functional). With no exchange (pure U), it must still converge to the
+    same physics as the plain-mixing numpy engine."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf0 = _biased_hamiltonian_and_guess(h0, seed=0)
+
+    scf_np = VJinteraction(h1.copy(), nk=20, mu=0.0, U=2.0, mf=mf0.copy(),
+            maxerror=1e-6, verbose=0)
+    scf_lbfgs = VJinteraction(h1.copy(), nk=20, mu=0.0, U=2.0, mf=mf0.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="lbfgs")
+
+    assert scf_np.converged and scf_lbfgs.converged
+    assert abs(scf_np.total_energy - scf_lbfgs.total_energy) < 1e-4
+    diff = np.max(np.abs(scf_np.mf[(0, 0, 0)] - scf_lbfgs.mf[(0, 0, 0)]))
+    assert diff < 1e-3
+
+
+def test_vjinteraction_jax_lbfgs_combined_v_and_anisotropic_j_matches_numpy_engine():
+    """Same combined V+isotropic-J+anisotropic-J1x/J1y/J1z system
+    test_vjinteraction_jax_combined_v_and_anisotropic_j_matches_numpy_engine
+    exercises for solver="newton", now for solver="lbfgs"."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf0 = _biased_hamiltonian_and_guess(h0, seed=2)
+    kwargs = dict(U=1.5, J1=-0.7, J1x=0.2, J1y=-0.1, J1z=0.3)
+
+    scf_np = VJinteraction(h1.copy(), nk=20, mu=0.0, mf=mf0.copy(),
+            maxerror=1e-6, verbose=0, **kwargs)
+    scf_lbfgs = VJinteraction(h1.copy(), nk=20, mu=0.0, mf=mf0.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="lbfgs", **kwargs)
+
+    assert scf_np.converged and scf_lbfgs.converged
+    assert abs(scf_np.total_energy - scf_lbfgs.total_energy) < 1e-4
+    diff = np.max(np.abs(scf_np.mf[(0, 0, 0)] - scf_lbfgs.mf[(0, 0, 0)]))
+    assert diff < 1e-3
+
+
+def test_vjinteraction_jax_lbfgs_matches_newton():
+    """solver="lbfgs" and solver="newton" solve the same fixed point two
+    different ways (least-squares residual minimization vs. Newton root-
+    finding) -- on this biased, non-marginal system they must land on the
+    same isolated solution, not just the same energy."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf0 = _biased_hamiltonian_and_guess(h0, seed=2)
+    kwargs = dict(U=1.5, J1=-0.7, J1x=0.2, J1y=-0.1, J1z=0.3)
+
+    scf_newton = VJinteraction(h1.copy(), nk=20, mu=0.0, mf=mf0.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="newton", **kwargs)
+    scf_lbfgs = VJinteraction(h1.copy(), nk=20, mu=0.0, mf=mf0.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="lbfgs", **kwargs)
+
+    assert scf_newton.converged and scf_lbfgs.converged
+    assert abs(scf_newton.total_energy - scf_lbfgs.total_energy) < 1e-6
+    diff = np.max(np.abs(scf_newton.mf[(0, 0, 0)] - scf_lbfgs.mf[(0, 0, 0)]))
+    assert diff < 1e-5
+
+
+def test_vjinteraction_jax_lbfgs_handles_filling():
+    """A target filling resolves mu *inside* the jax trace (same jnp.sort
+    trick every other solver here uses) -- solver="lbfgs" must handle this
+    the same way solver="newton" already does (regression coverage for the
+    filling-dependent term in the residual: unlike a fixed mu, step(x) here
+    depends on x both directly and through mu_eff(x))."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf0 = _biased_hamiltonian_and_guess(h0, seed=0)
+
+    scf_np = VJinteraction(h1.copy(), nk=20, filling=0.5, U=2.0,
+            mf=mf0.copy(), maxerror=1e-6, verbose=0)
+    scf_lbfgs = VJinteraction(h1.copy(), nk=20, filling=0.5, U=2.0,
+            mf=mf0.copy(), maxerror=1e-6, verbose=0, use_jax=True,
+            solver="lbfgs")
+
+    assert scf_np.converged and scf_lbfgs.converged
+    assert abs(scf_np.total_energy - scf_lbfgs.total_energy) < 1e-4
+    diff_intra = np.max(np.abs(scf_np.hamiltonian.intra - scf_lbfgs.hamiltonian.intra))
+    assert diff_intra < 1e-3
+
+
 def test_vjinteraction_jax_documents_unsupported_configurations():
     """Configurations not carried over to the jax engine must fail loudly."""
     g = geometry.dimer()

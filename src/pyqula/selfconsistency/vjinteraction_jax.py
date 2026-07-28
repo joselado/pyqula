@@ -32,6 +32,95 @@
 #  - occupations always use a finite smearing temperature T (default 1e-4,
 #    see densitydensity_jax.default_T_jax) since jnp.linalg.eigh's eigenvector
 #    gradient is only well defined away from exact degeneracies
+#
+# solver="lbfgs": minimizes ||step(x)-x||^2 with jax.grad + scipy's L-BFGS-B
+# (densitydensity_jax.lbfgs_solve), instead of root-finding step(x)=x the
+# way every other solver here does. Motivation: newton/fsolve's jax.jacfwd
+# Jacobian is O(norb^2) forward passes and doesn't scale (see
+# densitydensity_jax.py's module docstring); a jax.grad of a scalar loss
+# costs about one extra pass through step's own eigh, like newton_krylov's
+# jax.jvp, so this scales per-iteration the same way but needs no GMRES
+# inner loop.
+#
+# What was tried first and abandoned: minimizing the actual physical
+# free-energy/grand-potential functional directly, rather than the SCF
+# residual. This is a real, well-defined functional -- writing
+#   Omega_trial(x) = (1/nk) sum_{k,n} [-T*softplus(-(e_kn(x)-mu)/T)]
+# (the grand potential of the fictitious non-interacting trial Hamiltonian
+# H(x)=H0+x) and correcting it for double-counting the interaction,
+#   Omega_phys(x) = Omega_trial(x) - Re Tr[x.rho(x)] - sum_channel
+#                   get_dc_energy(v_channel, dm_channel(x))
+#   [+ mu_eff(x)*n_occ_total/nk for a filling target, the same Legendre
+#    add-back scf.total_energy itself already applies there],
+# gives dOmega_phys/dx = (Delta[rho(x)]-x).(response operator), which is
+# exactly zero (for any response operator) iff Delta[rho(x)]=x, i.e. iff x
+# is an SCF fixed point -- confirmed numerically to jax.grad(Omega_phys)(x)
+# ~ 1e-16 at Newton-converged solutions, for both fixed-mu and filling-
+# target cases, V/U-only and combined-exchange cases. Both the -Re Tr[x rho]
+# term and the filling-target add-back were confirmed REQUIRED (not
+# redundant with the dc-energy correction): omitting either leaves the
+# functional's *value* unchanged at the SCF solution but its *gradient*
+# nonzero there (measured ~0.7 and ~0.5 respectively, vs ~1e-16 with them).
+#
+# Despite the gradient being exactly correct, minimizing Omega_phys with
+# L-BFGS-B empirically failed: the FULL Hessian of Omega_phys at a Newton-
+# converged SCF solution (a small bichain+U dimer, checked by explicit
+# eigendecomposition) is INDEFINITE -- 6 negative eigenvalues, 13 exactly
+# zero, 13 positive, out of 32 -- i.e. the physical SCF solution is
+# generically a SADDLE POINT of Omega_phys, not a minimum. This is not a
+# sign/factor bug (the gradient check above rules that out) and not
+# evidence that the SCF solution itself is a poor/metastable physical
+# state either -- perturbing x along the most unstable eigenvector and
+# re-running Newton from the perturbed point converges right back to the
+# exact same solution both directions (agreement to ~1e-15), so it is a
+# locally isolated, unique SCF fixed point. The negative curvature instead
+# reflects that Omega_phys, evaluated OFF the self-consistency surface
+# (at x with step(x)!=x), is an essentially arbitrary off-shell extension
+# of the physical energy with no guarantee of convexity -- a known,
+# general phenomenon for Hartree-Fock/mean-field energy functionals (most
+# production electronic-structure codes use Newton/DIIS-style SCF
+# acceleration rather than naive energy minimization for exactly this
+# reason). In practice, L-BFGS-B on Omega_phys reliably ran downhill AWAY
+# from the true solution into unrelated, non-self-consistent points with a
+# deceptively small gradient (residual ~1.8-14 vs the ~1e-6 needed) even
+# starting only 0.05 away from the exact answer. A Lagrange multiplier does
+# not fix this: mu is already exactly that (for the filling constraint),
+# and the saddle behavior appears even with no filling constraint at all;
+# adding a multiplier to enforce Delta[rho(x)]=x exactly and seeking a
+# saddle point of the resulting Lagrangian is mathematically equivalent to
+# solving Delta[rho(x)]=x directly -- i.e. just solver="newton" again with
+# extra steps, not a new capability.
+#
+# ||step(x)-x||^2 sidesteps all of this: it is a plain sum of squares, so
+# its global minimum (value 0) sits exactly at every SCF fixed point by
+# construction, with no separate derivation or saddle-point risk. Measured
+# behavior (see tests/scf/test_vjinteraction_jax.py): matches solver=
+# "newton" closely on V/U-only, combined V+anisotropic-J, and filling-
+# target bichain systems (all to <1e-5 in mf/total_energy). It is still
+# only a LOCAL optimizer, though, so it is not immune to getting stuck in
+# a nonzero-residual local minimum of the least-squares landscape on a
+# harder problem -- observed on a larger (honeycomb, filling-target)
+# system from the same generic starting guess Newton handles fine in a
+# handful of iterations, where lbfgs did not reach maxerror even after
+# thousands of L-BFGS-B iterations, while a warm start close to the true
+# solution converged in ~12. As with the other solvers' documented
+# marginal-direction caveats, always check scf.converged rather than
+# assuming a returned Hamiltonian is self-consistent.
+#
+# Scaling (measured, not assumed -- a biased bichain+U chain, nk=20, fixed
+# mu=0, wall time includes one-time jax/XLA compilation overhead so treat
+# these as rough orders of magnitude, not a precise benchmark):
+#   n=8 orbitals:  lbfgs 1.4s/11 iters, fixed_point 0.16s/136 iters,
+#                  newton_krylov 0.3s/4 iters
+#   n=24 orbitals: lbfgs 0.6s/20 iters, fixed_point 0.2s/126 iters,
+#                  newton_krylov 103s/4 iters (GMRES apparently needing many
+#                  more inner iterations per outer Newton step at this size)
+# i.e. lbfgs's per-iteration cost does stay flat/cheap like fixed_point's as
+# claimed, and at n=24 it is dramatically faster than newton_krylov despite
+# needing more outer iterations -- consistent with the motivating idea
+# (no O(norb^2) Jacobian, no GMRES inner loop) but from only two data
+# points; a proper scaling study across more/larger sizes is a natural
+# follow-up, not done here.
 from __future__ import annotations
 import numpy as np
 import jax
@@ -43,7 +132,7 @@ from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
         get_dc_energy, random_hermitian_guess)
 from .densitydensity_jax import (flatten_mf, unflatten_mf, make_bloch_stack,
         get_mf_normal_jax, default_T_jax, newton_solve, newton_krylov_solve,
-        fsolve_solve, fixed_point_solve)
+        fsolve_solve, fixed_point_solve, lbfgs_solve)
 from .spinspin import _build_v, _build_density_v, _channel_is_zero, _AXIS_ROTATION
 from .mfconstrains import obj2mf
 from ..multihopping import MultiHopping
@@ -252,6 +341,27 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     elif solver == "fixed_point":
         x, final_mu, ite, converged = fixed_point_solve(step_jit, x0, mu,
                 dirs, n, mix=mix, maxite=maxite, tol=maxerror, verbose=verbose)
+    elif solver == "lbfgs":
+        # Minimizes the SCF RESIDUAL norm ||step(x)-x||^2, not the physical
+        # free energy -- see the module docstring's "solver='lbfgs'" section
+        # for why: minimizing the free energy directly was tried first and
+        # found, empirically, to converge to spurious non-self-consistent
+        # points (the physical SCF solution turned out to be a saddle point
+        # of that functional, not a minimum). ||step(x)-x||^2 has no such
+        # issue -- it is a sum of squares with its global minimum (value 0)
+        # exactly at every SCF fixed point, so any point a minimizer
+        # converges to with a near-zero loss IS (to that tolerance) a
+        # self-consistent solution.
+        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
+        residual_loss = jax.jit(lambda x: jnp.sum((step_vec(x) - x) ** 2))
+        x, ite = lbfgs_solve(residual_loss, x0, maxite=maxite, tol=maxerror,
+                verbose=verbose)
+        final_mu = float(step_jit(x, mu)[4])
+        # scf.converged still means the same thing here as for every other
+        # solver -- the actual SCF residual, not L-BFGS-B's own gradient-norm
+        # stopping criterion (see lbfgs_solve's docstring)
+        residual = step_jit(x, final_mu)[0] - x
+        converged = bool(jnp.max(jnp.abs(residual)) < maxerror)
     else:
         raise ValueError("unrecognised solver for VJinteraction "
                 "use_jax=True: %r" % (solver,))
@@ -347,7 +457,11 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     and solves the resulting SCF fixed point with a JAX-derivative-based
     root-finder (solver="newton"/"fsolve"/"newton_krylov", or "fixed_point"
     for plain linear mixing through the same machinery) instead of
-    VJinteraction's own hardcoded plain-mixing loop."""
+    VJinteraction's own hardcoded plain-mixing loop. solver="lbfgs" instead
+    minimizes ||step(x)-x||^2 with jax.grad + scipy's L-BFGS-B -- see the
+    module docstring's "solver='lbfgs'" section for why this (residual-norm
+    minimization), and not minimizing the physical free energy directly, is
+    what it does."""
     if not h0.has_spin:
         return NotImplemented  # only for spinful systems, same as VJinteraction
     if h0.has_eh:
