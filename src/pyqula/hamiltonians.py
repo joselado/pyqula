@@ -839,7 +839,7 @@ def diagonalize(h,nkpoints=100):
     for k in klist: # loop over kpoints
       bf = np.exp(1j*np.pi*2.*k)  # bloch factor for the intercell terms
       inter_k = inter*bf  # bloch hopping
-      hk = intra + inter_k + inter_k.H # k dependent hamiltonian
+      hk = intra + inter_k + inter_k.conj().T # k dependent hamiltonian
       energies += [lg.eigvalsh(hk)] # get eigenvalues of the current hamiltonian
     energies = np.array(energies).transpose() # each kpoint in a line
     return (klist,energies) # return the klist and the energies

@@ -38,7 +38,7 @@ def boolean_fermi_surface(h,write=True,output_file="BOOL_FERMI_MAP.OUT",
     for x in kxs:
       for y in kxs:
         r = np.array([x,y,0.]) # real space vectors
-        k = np.array(R@r) # change of basis
+        k = R@r # change of basis
         hk = hk_gen(k) # get hamiltonian
         evals = lg.eigvalsh(hk) # diagonalize
         de = np.abs(evals - e) # difference with respect to fermi
@@ -164,7 +164,7 @@ def ev2d(h,nk=50,nsuper=1,reciprocal=False,
     for y in kxs:
       print("Doing",x,y)
       r = np.array([x,y,0.]) # real space vectors
-      k = np.array(R@r) # change of basis
+      k = R@r # change of basis
       hk = hk_gen(k) # get hamiltonian
       if not h.is_sparse: evals,waves = lg.eigh(hk) # eigenvalues
       else: evals,waves = slg.eigsh(hk,k=max(nindex)*2,sigma=0.0,

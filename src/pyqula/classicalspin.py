@@ -403,7 +403,7 @@ def generating_functions(name="Heisenberg",J=1.0,v=np.array([0.,0.,1.]),
           for j in range(3): 
             for k in range(3): 
               m[i,j] += eps[i,j,k]*rm[k]
-        return m*J*fr(r1,r2) # return identity
+        return (m*J)@fr(r1,r2) # return identity
       else: return zero
     return fun
 

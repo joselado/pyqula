@@ -249,12 +249,12 @@ def generate_parametric_hopping(h,f=None,mgenerator=None,
       multicell.parametric_hopping_hamiltonian(h,fc=f)
     else: raise
     # check that the sparse mde is set ok
-    if is_sparse and type(h.intra)==np.matrix:
+    if is_sparse and not algebra.issparse(h.intra):
       h.is_sparse = False
       h.turn_sparse() # turn the matrix sparse
-    if not is_sparse and type(h.intra)!=np.matrix:
+    if not is_sparse and algebra.issparse(h.intra):
       h.is_sparse = True
-      h = h.get_dense() # turn the matrix sparse
+      h = h.get_dense() # turn the matrix dense
     if spinful_generator: # spin generator, assume it has spin
         h.has_spin = True
     else: # spinless generator, add the spin degree by hand

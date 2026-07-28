@@ -9,7 +9,7 @@ def correlator0d(m,energies=np.linspace(-10.,10.,400),i=0,j=0,delta=0.07):
   iden = np.identity(m.shape[0],dtype=np.complex128)
   zs = np.zeros(energies.shape[0],dtype=np.complex128)
   for (ie,e) in zip(range(len(energies)),energies):
-    m0 = ((e+1j*delta)*iden - m).I # inverse 
+    m0 = lg.inv((e+1j*delta)*iden - m) # inverse
     zs[ie] = m0[i,j]
   np.savetxt("CORRELATOR.OUT",np.array([energies,zs.real,-zs.imag]).T)
   print("Saved correlator in CORRELATOR.OUT")
@@ -35,8 +35,8 @@ def dm_ij_energy(m,ne=500,scale=10.,i=0,j=0,delta=0.07):
   zs0 = np.zeros(energies.shape[0],dtype=np.complex128)
   zs1 = np.zeros(energies.shape[0],dtype=np.complex128)
   for (ie,e) in zip(range(len(energies)),energies):
-    m0 = ((e+1j*delta)*iden - m).I # inverse 
-    m1 = ((e-1j*delta)*iden - m).I # inverse 
+    m0 = lg.inv((e+1j*delta)*iden - m) # inverse
+    m1 = lg.inv((e-1j*delta)*iden - m) # inverse
     zs0[ie] = m0[i,j]
     zs1[ie] = m1[i,j]
   z = (zs1 - zs0)/2. # both contributions

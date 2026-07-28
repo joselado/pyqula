@@ -21,7 +21,7 @@ def ldos0d(h,e=0.0,delta=0.01,write=True):
      writes it in file"""
   if h.dimensionality==0:  # only for 0d
     iden = np.identity(h.intra.shape[0],dtype=np.complex128) # create identity
-    g = ( (e+1j*delta)*iden -h.intra ).I # calculate green function
+    g = algebra.inv( (e+1j*delta)*iden -h.intra ) # calculate green function
   else: raise # not implemented...
   d = [ -(g[i,i]).imag/np.pi for i in range(len(g))] # get imaginary part
   d = spatial_dos(h,d) # convert to spatial resolved DOS

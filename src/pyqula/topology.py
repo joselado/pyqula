@@ -580,7 +580,7 @@ def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
       if parallel.cores == 1: tr.iterate()
       else: print("Doing",ki)
       r = np.array(ki) # real space vectors
-      k = np.array(R@r) # change of basis
+      k = R@r # change of basis
       b = dOmega_dE(h,k=k,operator=operator,dk=dk) # get the density
       return b
   bs = parallel.pcall(fp,ks) # compute all the Berry curvatures

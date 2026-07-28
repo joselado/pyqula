@@ -96,7 +96,7 @@ def multilayered_hamiltonian(h,dr=np.array([0.,0.,0.])):
 def add_interlayer(t,ri,rj,has_spin=True,is_sparse=True):
   """Calculate interlayer coupling"""
   m = np.array([[0. for i in ri] for j in rj])
-  if has_spin: m = bmat([[csc(m),None],[None,csc(m)]]).todense()
+  if has_spin: m = bmat([[csc(m),None],[None,csc(m)]]).toarray()
   zi = [r[2] for r in ri]
   zj = [r[2] for r in rj]
   for i in range(len(ri)): # add the interlayer
@@ -130,7 +130,7 @@ def build_honeycomb_bilayer(h,t=0.1,mvl = None ):
     if h.is_sparse:
       return bmat([[csc(m),None],[None,csc(m)]])
     else:
-      return bmat([[csc(m),None],[None,csc(m)]]).todense()  
+      return bmat([[csc(m),None],[None,csc(m)]]).toarray()
   # modify the geometry
   x,y,z = np.array(g.x), np.array(g.y) ,np.array(g.z) # store positions
   go.x = np.concatenate([x,x+mvl[0]])  # move 
@@ -171,7 +171,7 @@ def build_honeycomb_trilayer(h,t=0.1,mvl=None):
     mo = [[None for i in range(3)] for j in range(3)]
     for i in range(3): 
       mo[i][i] = csc(m)
-    return bmat(mo).todense()
+    return bmat(mo).toarray()
   # modify the geometry
   x,y,z = np.array(g.x), np.array(g.y) ,np.array(g.z) # store positions
   go.x = np.concatenate([x-mvl[0],x,x+mvl[0]])  # move one unit to the right

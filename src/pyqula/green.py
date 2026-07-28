@@ -78,8 +78,7 @@ def dyson(intra,inter,energy=0.0,gf=None,is_sparse=False,initial = None):
     (g,num_redo) = dyson(intra,inter,energy,num_rep,mixing=mixing,
                eps=eps,green_guess=g_guess,max_error=max_error)
     print("      Converged in ",num_redo,"iterations\n")
-    from numpy import matrix
-    g = matrix(g)
+    g = np.array(g)
   # calculate using python
   if not optimal:
     g_old = g_guess # first iteration

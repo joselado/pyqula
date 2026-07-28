@@ -83,7 +83,7 @@ def hp_heisenberg(sm,fun=None,d=None,k=None):
   if sm.dimensionality == 0: pass # one dimensional
   elif sm.dimensionality == 1: # one dimensional
     (mons,mhop) = c2h(sm.hamiltonian.inter)
-    (mons2,mhop2) = c2h(sm.hamiltonian.inter.H)
+    (mons2,mhop2) = c2h(dagger(sm.hamiltonian.inter))
     sm.hamiltonian.inter = mhop
     sm.hamiltonian.intra += mons + mons2
   elif sm.dimensionality == 2: # one dimensional
@@ -144,7 +144,7 @@ def szsz(sm,fun=None):
   if sm.dimensionality == 0: pass # one dimensional
   elif sm.dimensionality == 1: # one dimensional
     (mons,mhop) = c2h(sm.hamiltonian.inter)
-    (mons2,mhop2) = c2h(sm.hamiltonian.inter.H)
+    (mons2,mhop2) = c2h(dagger(sm.hamiltonian.inter))
     mout += mons + mons2
   elif sm.dimensionality == 2: # one dimensional
     for name in ["tx","ty","txy","txmy"]: # loop over attributes
