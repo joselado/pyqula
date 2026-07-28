@@ -511,6 +511,14 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                     "apply constrains (they need concrete numpy arrays each "
                     "iteration, incompatible with jax tracing); use the "
                     "default (numpy) engine instead")
+        kpm_only = {"scale": scale, "npol": npol, "ne": ne, "cores": cores}
+        kpm_only_set = {k: v for k, v in kpm_only.items() if v is not None}
+        if kpm_only_set:
+            raise NotImplementedError("VJinteraction's use_jax=True only "
+                    "supports integration=\"ed\" (already enforced above), "
+                    "so these integration=\"kpm\"-only tuning kwargs have no "
+                    "effect and must not be silently ignored: %r"
+                    % (kpm_only_set,))
         from .vjinteraction_jax import VJinteraction_jax
         # T left at _T_UNSET (i.e. the caller never passed T at all) picks
         # the jax engine's own default (None -> vjinteraction_jax.
@@ -638,6 +646,66 @@ def _sparse_pairs_to_needed(pairs):
         for i, j in zip(rows.tolist(), cols.tolist()):
             needed.add((d, i, j))
     return needed
+
+
+def _block_rotate(m, rot):
+    """rot @ m @ rot^dagger, applied to every site's own 2x2 spin
+    sub-block of an (n,n) matrix independently, instead of a dense
+    (n,n)@(n,n) matmul against the full R=kron(I_{n/2},rot) a global
+    spin rotation used to be built as: R is block-diagonal with n/2
+    IDENTICAL 2x2 blocks (rotate_spin.build_rotation_matrix), so it
+    never mixes different sites -- only the 2 spin components within
+    each one. Two small (n/2 * 4)-cost einsum contractions reproduce
+    the same result as R @ m @ R^dagger at O(n^2) instead of O(n^3).
+
+    Module-level (not a nested closure inside _run_anisotropic_scf, which
+    is where this and _rot_dict/_rot_dm used to live) so it is directly
+    importable/testable -- in particular, cross-checkable against
+    vjinteraction_jax._block_rotate_jax's JAX port of this exact formula,
+    which cannot itself reuse this numpy implementation (it must run inside
+    a jax.jit/jax.grad trace, and this module must not gain a hard jax
+    dependency -- jax is an optional extra), so the two are independent
+    implementations of the same math kept in sync only by a cross-check
+    test (tests/scf/test_vjinteraction_jax.py) rather than by sharing code."""
+    n = m.shape[0]
+    n_orb = n//2
+    m4 = m.reshape(n_orb, 2, n_orb, 2)
+    out = np.einsum('ab,xbyc->xayc', rot, m4, optimize=True)
+    out = np.einsum('xayc,dc->xayd', out, rot.conj(), optimize=True)
+    return out.reshape(n, n)
+
+
+def _rot_dict(dd, R):
+    """Rotate a dict of Hamiltonian-like (hopping/mean-field) matrices:
+    these live in the same convention as Hamiltonian.intra, for which
+    R @ m @ R^dagger is the correct transformation (as used by
+    Hamiltonian.global_spin_rotation, validated by SxSx/SySy)."""
+    return {k: _block_rotate(m, R) for (k, m) in dd.items()}
+
+
+def _rot_dm(dd, R):
+    """Rotate a dict of *density matrices*, which need a different
+    (conjugate-sandwiched) transformation than _rot_dict.
+
+    get_density_matrix's off-diagonal (spin-flip) entries are stored in
+    a transposed convention relative to a Hamiltonian matrix --
+    normal_term_ij (selfconsistency/densitydensity.py) deliberately
+    reads dm[j,i] rather than dm[i,j] to reconstruct a
+    physically-meaningful mean field from it. For a Hermitian matrix,
+    transposing is the same as complex-conjugating, so a density matrix
+    in this convention is the complex conjugate of the
+    "Hamiltonian-convention" matrix at the same site/bond. Naively
+    rotating it with R @ m @ R^dagger (_rot_dict) therefore silently
+    flips the sign of the imaginary (y) Pauli component while leaving
+    the real (x, z) ones untouched -- caught by checking that a
+    random-direction initial guess converges to a moment collinear with
+    it (only Jinteraction is affected: SzSz/SxSx/SySy rotate the whole
+    Hamiltonian and run a native SCF in the rotated frame, never
+    touching a raw density matrix directly, so they never hit this).
+    Conjugating before and after the standard rotation corrects for it:
+    if dm_stored = conj(dm_physical), then
+    dm_stored' = conj(dm_physical') = conj(R @ conj(dm_stored) @ R^dagger)."""
+    return {k: np.conj(_block_rotate(np.conj(m), R)) for (k, m) in dd.items()}
 
 
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
@@ -810,53 +878,10 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                     dm[d] = np.zeros((n_dm, n_dm), dtype=np.complex128)
             return dm
 
-    def _block_rotate(m, rot):
-        """rot @ m @ rot^dagger, applied to every site's own 2x2 spin
-        sub-block of an (n,n) matrix independently, instead of a dense
-        (n,n)@(n,n) matmul against the full R=kron(I_{n/2},rot) a global
-        spin rotation used to be built as: R is block-diagonal with n/2
-        IDENTICAL 2x2 blocks (rotate_spin.build_rotation_matrix), so it
-        never mixes different sites -- only the 2 spin components within
-        each one. Two small (n/2 * 4)-cost einsum contractions reproduce
-        the same result as R @ m @ R^dagger at O(n^2) instead of O(n^3)."""
-        n = m.shape[0]
-        n_orb = n//2
-        m4 = m.reshape(n_orb, 2, n_orb, 2)
-        out = np.einsum('ab,xbyc->xayc', rot, m4, optimize=True)
-        out = np.einsum('xayc,dc->xayd', out, rot.conj(), optimize=True)
-        return out.reshape(n, n)
-
-    def _rot_dict(dd, R):
-        """Rotate a dict of Hamiltonian-like (hopping/mean-field) matrices:
-        these live in the same convention as Hamiltonian.intra, for which
-        R @ m @ R^dagger is the correct transformation (as used by
-        Hamiltonian.global_spin_rotation, validated by SxSx/SySy)."""
-        return {k: _block_rotate(m, R) for (k, m) in dd.items()}
-
-    def _rot_dm(dd, R):
-        """Rotate a dict of *density matrices*, which need a different
-        (conjugate-sandwiched) transformation than _rot_dict.
-
-        get_density_matrix's off-diagonal (spin-flip) entries are stored in
-        a transposed convention relative to a Hamiltonian matrix --
-        normal_term_ij (selfconsistency/densitydensity.py) deliberately
-        reads dm[j,i] rather than dm[i,j] to reconstruct a
-        physically-meaningful mean field from it. For a Hermitian matrix,
-        transposing is the same as complex-conjugating, so a density matrix
-        in this convention is the complex conjugate of the
-        "Hamiltonian-convention" matrix at the same site/bond. Naively
-        rotating it with R @ m @ R^dagger (_rot_dict) therefore silently
-        flips the sign of the imaginary (y) Pauli component while leaving
-        the real (x, z) ones untouched -- caught by checking that a
-        random-direction initial guess converges to a moment collinear with
-        it (only Jinteraction is affected: SzSz/SxSx/SySy rotate the whole
-        Hamiltonian and run a native SCF in the rotated frame, never
-        touching a raw density matrix directly, so they never hit this).
-        Conjugating before and after the standard rotation corrects for it:
-        if dm_stored = conj(dm_physical), then
-        dm_stored' = conj(dm_physical') = conj(R @ conj(dm_stored) @ R^dagger)."""
-        return {k: np.conj(_block_rotate(np.conj(m), R)) for (k, m) in dd.items()}
-
+    # _block_rotate/_rot_dict/_rot_dm used to be nested closures defined
+    # right here -- now module-level (see their definitions above, right
+    # before _run_anisotropic_scf), unchanged in behavior since none of
+    # them closed over anything from this function's scope.
     callback_mf = _callback_mf_constrains(h1, constrains)
 
     def callback_h(hh):

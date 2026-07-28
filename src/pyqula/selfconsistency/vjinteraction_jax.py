@@ -10,13 +10,13 @@
 # root-finder driven by JAX-computed derivatives of step, instead of only
 # linear mixing -- the same idea selfconsistency/densitydensity_jax.py
 # already implements for Vinteraction (V/U-only, no exchange). This module
-# reuses that machinery almost entirely: the four solver functions
-# (newton_solve/fsolve_solve/newton_krylov_solve/fixed_point_solve) are
-# generic in the step function they are handed and need no changes at all;
-# only the step function itself needs generalizing, from a single
-# density-density channel to VJinteraction's three channels (vz direct, vx/vy
-# via the rotate-decouple-rotate-back trick spinspin._run_anisotropic_scf
-# uses for anisotropic exchange).
+# reuses that machinery almost entirely: densitydensity_jax.solve_scf (the
+# shared dispatch across newton_solve/fsolve_solve/newton_krylov_solve/
+# fixed_point_solve/lbfgs_solve) is generic in the step function it is
+# handed and needs no changes at all; only the step function itself needs
+# generalizing, from a single density-density channel to VJinteraction's
+# three channels (vz direct, vx/vy via the rotate-decouple-rotate-back
+# trick spinspin._run_anisotropic_scf uses for anisotropic exchange).
 #
 # Deliberately narrower in scope than spinspin.VJinteraction, mirroring
 # exactly how densitydensity_jax.py scopes down relative to densitydensity.py:
@@ -122,6 +122,7 @@
 # points; a proper scaling study across more/larger sizes is a natural
 # follow-up, not done here.
 from __future__ import annotations
+import warnings
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -131,8 +132,7 @@ jax.config.update("jax_enable_x64", True)
 from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
         get_dc_energy, random_hermitian_guess)
 from .densitydensity_jax import (flatten_mf, unflatten_mf, make_bloch_stack,
-        get_mf_normal_jax, default_T_jax, newton_solve, newton_krylov_solve,
-        fsolve_solve, fixed_point_solve, lbfgs_solve)
+        get_mf_normal_jax, default_T_jax, solve_scf)
 from .spinspin import _build_v, _build_density_v, _channel_is_zero, _AXIS_ROTATION
 from .mfconstrains import obj2mf
 from ..multihopping import MultiHopping
@@ -263,8 +263,25 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     spinspin._build_v/_build_density_v; vd (density-density) must already be
     folded into vz by the caller, exactly as VJinteraction itself does for
     has_eh=False."""
-    if T is None or T <= 0:
+    if solver != "fixed_point" and mix != 0.1:
+        # mix only controls solver="fixed_point"'s linear-mixing step --
+        # newton/fsolve/newton_krylov use their own backtracking/damping,
+        # and lbfgs uses L-BFGS-B's own line search, so a caller-tuned mix
+        # (e.g. carried over from the numpy engine, where it always
+        # matters) would otherwise be silently ignored with no signal at all
+        warnings.warn("mix=%r has no effect for solver=%r (only "
+                "solver=\"fixed_point\" uses linear mixing)"
+                % (mix, solver), stacklevel=2)
+    if T is None:
         T = default_T_jax
+    elif T <= 0:
+        raise ValueError("T=%r is not usable with use_jax=True: occupations "
+                "are occ=sigmoid(-(e-mu)/T), so T<=0 (including exactly 0) "
+                "divides by a non-positive number and produces NaN/Inf, "
+                "unlike the numpy engine's T=0 hard Fermi step "
+                "(delta = T if T != 0 else 1e-15) -- pass a small positive "
+                "T instead (e.g. the jax engine's own default, "
+                "densitydensity_jax.default_T_jax=%r)" % (T, default_T_jax))
     h1 = h0.copy()
     h1 = h1.get_dense()
     h1.nk = nk
@@ -294,11 +311,18 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     # channel with a smaller key set than another (e.g. Jx1 nonzero, Jz set
     # to a different neighbor range) must still supply a (zero) matrix for
     # every direction get_mf_normal_jax is asked about -- see
-    # build_step_function_vj's docstring
+    # build_step_function_vj's docstring. An inactive channel (vx_active/
+    # vy_active False) is padded to {} instead: step()/free-energy code
+    # never reads vx_j/vy_j when the channel is inactive (guarded by the
+    # same vx_active/vy_active check), so padding+jnp-converting a full set
+    # of all-zero (n,n) complex128 matrices for it would be pure wasted
+    # host-to-device transfer -- e.g. ~12.8MB for n=200, len(dirs)~10.
     zero_np = np.zeros((n, n), dtype=np.complex128)
     def _pad(v):
         return {d: (v[d] if d in v else zero_np) for d in dirs}
-    vz_full, vx_full, vy_full = _pad(vz), _pad(vx), _pad(vy)
+    vz_full = _pad(vz)
+    vx_full = _pad(vx) if vx_active else {}
+    vy_full = _pad(vy) if vy_active else {}
 
     if mf is None:
         mf = random_hermitian_guess({d: None for d in dirs}, h1.intra.shape,
@@ -322,52 +346,18 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
             n_occ_total=n_occ_total)
     step_jit = jax.jit(step)
 
-    if solver == "newton":
-        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
-        x, ite, converged = newton_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose)
-        final_mu = float(step_jit(x, mu)[4])
-    elif solver == "fsolve":
-        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
-        x, ite, converged = fsolve_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose)
-        final_mu = float(step_jit(x, mu)[4])
-    elif solver == "newton_krylov":
-        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
-        x, ite, converged = newton_krylov_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose, gmres_tol=gmres_tol,
-                gmres_restart=gmres_restart)
-        final_mu = float(step_jit(x, mu)[4])
-    elif solver == "fixed_point":
-        x, final_mu, ite, converged = fixed_point_solve(step_jit, x0, mu,
-                dirs, n, mix=mix, maxite=maxite, tol=maxerror, verbose=verbose)
-    elif solver == "lbfgs":
-        # Minimizes the SCF RESIDUAL norm ||step(x)-x||^2, not the physical
-        # free energy -- see the module docstring's "solver='lbfgs'" section
-        # for why: minimizing the free energy directly was tried first and
-        # found, empirically, to converge to spurious non-self-consistent
-        # points (the physical SCF solution turned out to be a saddle point
-        # of that functional, not a minimum). ||step(x)-x||^2 has no such
-        # issue -- it is a sum of squares with its global minimum (value 0)
-        # exactly at every SCF fixed point, so any point a minimizer
-        # converges to with a near-zero loss IS (to that tolerance) a
-        # self-consistent solution.
-        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
-        residual_loss = jax.jit(lambda x: jnp.sum((step_vec(x) - x) ** 2))
-        x, ite = lbfgs_solve(residual_loss, x0, maxite=maxite, tol=maxerror,
-                verbose=verbose)
-        final_mu = float(step_jit(x, mu)[4])
-        # scf.converged still means the same thing here as for every other
-        # solver -- the actual SCF residual, not L-BFGS-B's own gradient-norm
-        # stopping criterion (see lbfgs_solve's docstring)
-        residual = step_jit(x, final_mu)[0] - x
-        converged = bool(jnp.max(jnp.abs(residual)) < maxerror)
-    else:
-        raise ValueError("unrecognised solver for VJinteraction "
-                "use_jax=True: %r" % (solver,))
-
-    xfinal, dm, es, occ, final_mu = step_jit(x, final_mu)
-    final_mu = float(final_mu)
+    # solve_scf (selfconsistency.densitydensity_jax) is the same solver
+    # dispatch densitydensity_jax.generic_densitydensity_jax's own
+    # use_jax=True path uses for Vinteraction -- see its docstring for the
+    # solver="lbfgs" residual-minimization rationale (this module's own
+    # docstring "solver='lbfgs'" section) and why the single trailing
+    # step_jit(x, mu) call it makes is exactly correct here too.
+    # callback_mf is never passed (VJinteraction's use_jax=True path has no
+    # such hook at all), so solve_scf's NotImplementedError branch for it
+    # never triggers here.
+    x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
+            dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
+            gmres_restart)
     mf_final = unflatten_mf(x, dirs, n)
     dm_np = {d: np.asarray(dm[d]) for d in dirs}
     mf_np = {d: np.asarray(mf_final[d]) for d in dirs}
@@ -433,7 +423,15 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     scf.v = vz
     scf.tol = maxerror
     scf.converged = bool(converged)
-    scf.total_energy = etot.real if hasattr(etot, "real") else etot
+    if not scf.converged:
+        # unconditional (not gated on verbose), matching the numpy engine's
+        # own "No convergence has been reached..." print -- maxite here is
+        # 2000 by default under use_jax=True even when the caller left the
+        # numpy engine's maxite=None (unbounded) default, so this is the
+        # only signal such a caller gets that the jax engine gave up early
+        print("No convergence has been reached in", ite,
+                "iterations (solver=%r), stopping" % (solver,))
+    scf.total_energy = etot.real
     scf.mu = final_mu
     scf.iterations = ite
     if verbose > 1:
@@ -468,6 +466,12 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         raise NotImplementedError("VJinteraction's use_jax=True does not "
                 "support the anomalous/BdG mean field yet; use the default "
                 "(numpy) engine")
+    if mu is None and filling is None:
+        raise ValueError("VJinteraction's use_jax=True needs either mu "
+                "(a fixed chemical potential) or filling (a target filling, "
+                "resolved to a mu internally each SCF step) -- got both "
+                "None, which would silently run a mu=0.0 calculation "
+                "instead of raising, if not caught here")
     h1 = h0.get_multicell().get_dense()
     nd = h1.geometry.neighbor_distances()  # shared by all three _build_*_v calls
     vz = _build_v(h1, J1 + J1z, J2, J3, Jr, nd=nd)

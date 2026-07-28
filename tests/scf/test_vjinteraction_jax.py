@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 jax = pytest.importorskip("jax")
+import jax.numpy as jnp
 
 from pyqula import geometry
 from pyqula.selfconsistency.spinspin import VJinteraction
@@ -305,6 +306,52 @@ def test_vjinteraction_jax_lbfgs_handles_filling():
     assert abs(scf_np.total_energy - scf_lbfgs.total_energy) < 1e-4
     diff_intra = np.max(np.abs(scf_np.hamiltonian.intra - scf_lbfgs.hamiltonian.intra))
     assert diff_intra < 1e-3
+
+
+def test_rotation_formulas_agree_between_numpy_and_jax_engines():
+    """spinspin._block_rotate/_rot_dict/_rot_dm (numpy, module-level -- used
+    by the plain SCF loop) and vjinteraction_jax._block_rotate_jax/
+    _rot_dict_jax/_rot_dm_jax (JAX ports of the identical formula, needed
+    since this module must stay importable without jax, so the numpy
+    versions can't just call into jax.numpy) are two independent
+    implementations of the same math, kept in sync only by this test rather
+    than by sharing code -- this repo has already hit a real bug in exactly
+    this rotation-formula code path once (the RPA Goldstone-theorem vertex
+    sign error), so a future fix applied to only one of the two copies
+    should fail this test rather than silently drift."""
+    from pyqula.selfconsistency import spinspin
+    from pyqula.selfconsistency import vjinteraction_jax as vjj
+    from pyqula.rotate_spin import build_rotation_matrix
+
+    rng = np.random.default_rng(0)
+    n_orb = 3  # spinful sites -> matrices are (2*n_orb, 2*n_orb)
+    n = 2 * n_orb
+
+    def random_hermitian():
+        m = rng.random((n, n)) - 0.5 + 1j * (rng.random((n, n)) - 0.5)
+        return m + m.conj().T
+
+    dd = {(0, 0, 0): random_hermitian(), (1, 0, 0): random_hermitian()}
+    R = build_rotation_matrix(1, **spinspin._AXIS_ROTATION["x"])
+    dd_j = {k: jnp.asarray(v) for k, v in dd.items()}
+    R_j = jnp.asarray(R, dtype=jnp.complex128)
+
+    for k in dd:
+        diff = np.max(np.abs(spinspin._block_rotate(dd[k], R)
+                - np.asarray(vjj._block_rotate_jax(dd_j[k], R_j))))
+        assert diff < 1e-12
+
+    rot_dict = spinspin._rot_dict(dd, R)
+    rot_dict_j = vjj._rot_dict_jax(dd_j, R_j)
+    for k in dd:
+        diff = np.max(np.abs(rot_dict[k] - np.asarray(rot_dict_j[k])))
+        assert diff < 1e-12
+
+    rot_dm = spinspin._rot_dm(dd, R)
+    rot_dm_j = vjj._rot_dm_jax(dd_j, R_j)
+    for k in dd:
+        diff = np.max(np.abs(rot_dm[k] - np.asarray(rot_dm_j[k])))
+        assert diff < 1e-12
 
 
 def test_vjinteraction_jax_documents_unsupported_configurations():

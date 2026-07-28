@@ -430,20 +430,13 @@ def lbfgs_solve(loss_fn, x0, maxite=2000, tol=1e-5, verbose=0, gtol=None):
     val_and_grad = jax.jit(jax.value_and_grad(loss_fn))
 
     def func(x_np):
-        # reverse-mode jax.grad through loss_fn's complex intermediates
-        # (step_vec's Hamiltonian/eigh/density-matrix arithmetic) onto a
-        # real scalar triggers numpy's ComplexWarning ("Casting complex
-        # values to real discards the imaginary part") deep in jax's own
-        # VJP machinery -- benign (the discarded part is the expected zero
-        # imaginary component of a real-input/real-output map's cotangent;
-        # confirmed by tests/scf/test_vjinteraction_jax.py's solver="lbfgs"
-        # tests matching solver="newton" to <1e-6), not something callers
-        # should see for every SCF iteration
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore",
-                    message=".*Casting complex values to real.*")
-            v, g = val_and_grad(jnp.asarray(x_np))
-        return float(v), np.asarray(g, dtype=np.float64)
+        v, g = val_and_grad(jnp.asarray(x_np))
+        # np.array(..., copy=True) rather than np.asarray: a numpy view of a
+        # jax array's buffer can come back read-only, and scipy's L-BFGS-B
+        # is not contractually guaranteed never to write into the gradient
+        # array it receives in place (see newton_krylov_solve.gmres_solve's
+        # matvec, which hits this exact issue with scipy's gmres)
+        return float(v), np.array(g, dtype=np.float64, copy=True)
 
     # ftol=0 (scipy's default is a loose ~2.22e-9 relative-function-reduction
     # criterion) disables L-BFGS-B's OWN early-stopping-on-plateau check, so
@@ -451,11 +444,96 @@ def lbfgs_solve(loss_fn, x0, maxite=2000, tol=1e-5, verbose=0, gtol=None):
     # loss already small in absolute terms (e.g. ~1e-10 for a ~1e-5 residual)
     # can plateau in *relative* terms well before gtol is reached, capping
     # the achievable residual short of the caller's requested maxerror
-    res = minimize(func, np.asarray(x0), jac=True, method="L-BFGS-B",
-            options=dict(maxiter=maxite, gtol=gtol, ftol=0.0))
+    #
+    # reverse-mode jax.grad through loss_fn's complex intermediates (the
+    # underlying step_vec's Hamiltonian/eigh/density-matrix arithmetic) onto
+    # a real scalar triggers numpy's ComplexWarning ("Casting complex values
+    # to real discards the imaginary part") deep in jax's own VJP machinery
+    # on every func() call above -- benign (the discarded part is the
+    # expected zero imaginary component of a real-input/real-output map's
+    # cotangent; confirmed by tests/scf/test_vjinteraction_jax.py's
+    # solver="lbfgs" tests matching solver="newton" to <1e-6), so it is
+    # suppressed once here around the whole optimization rather than
+    # per-call, and by exact message text (not a bare category filter) so an
+    # unrelated ComplexWarning from a genuine bug elsewhere would still show
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore",
+                message=".*Casting complex values to real.*")
+        res = minimize(func, np.asarray(x0), jac=True, method="L-BFGS-B",
+                options=dict(maxiter=maxite, gtol=gtol, ftol=0.0))
     if verbose > 0:
         print("L-BFGS-B:", res.message, "nit", res.nit, "nfev", res.nfev)
     return jnp.asarray(res.x), int(res.nit)
+
+
+def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
+        verbose, gmres_tol, gmres_restart, callback_mf=None):
+    """Shared solver dispatch for generic_densitydensity_jax's and
+    vjinteraction_jax.generic_vjinteraction_jax's use_jax=True paths --
+    drives x0 to a fixed point of step_jit via whichever solver= was
+    requested ("newton"/"fsolve"/"newton_krylov"/"fixed_point"/"lbfgs"),
+    then evaluates step_jit exactly ONCE more at the converged x to get
+    everything callers need: final_mu, xfinal/dm/es/occ, and (solver=
+    "lbfgs" only, which has no residual-based convergence notion of its
+    own) the SCF-residual convergence check. Previously each of those was
+    computed via its own separate step_jit call in each of the two
+    call sites (up to 3 redundant full Bloch-build+batched-eigh passes for
+    solver="lbfgs" alone) -- see this function's git history for the
+    per-branch version this replaced.
+
+    Passing the ORIGINAL mu (not each solver's own possibly-different
+    "final" mu) into that single trailing step_jit call is exactly correct:
+    when a filling target is active (step_jit was built with n_occ_total
+    set) step()'s mu_eff ignores its mu argument entirely and resolves it
+    from n_occ_total instead, and for a fixed mu every solver's converged x
+    already has mu_eff == mu by construction (fixed_point_solve's own
+    tracked mu never drifts from the constant mu it started with in that
+    case either).
+
+    Returns (x, final_mu, ite, converged, dm, es, occ). callback_mf (only
+    meaningful for solver="fixed_point"; applied on concrete numpy arrays
+    each iteration) raises NotImplementedError for every other solver, which
+    need x to stay a pure jax-traced value throughout."""
+    if solver in ("newton", "fsolve", "newton_krylov", "lbfgs"):
+        if callback_mf is not None:
+            raise NotImplementedError("solver=%r cannot apply "
+                    "callback_mf/constrains (they need concrete numpy "
+                    "arrays each iteration, incompatible with jax tracing); "
+                    "use solver=\"fixed_point\" instead" % (solver,))
+        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
+    if solver == "newton":
+        x, ite, converged = newton_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose)
+    elif solver == "fsolve":
+        x, ite, converged = fsolve_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose)
+    elif solver == "newton_krylov":
+        x, ite, converged = newton_krylov_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose, gmres_tol=gmres_tol,
+                gmres_restart=gmres_restart)
+    elif solver == "fixed_point":
+        # the mu fixed_point_solve itself tracks/returns is superseded by
+        # the fresh step_jit(x, mu) call below (see this function's
+        # docstring), so it is not needed here
+        x, _, ite, converged = fixed_point_solve(step_jit, x0, mu, dirs, n,
+                mix=mix, maxite=maxite, tol=maxerror, verbose=verbose,
+                callback_mf=callback_mf)
+    elif solver == "lbfgs":
+        residual_loss = jax.jit(lambda x: jnp.sum((step_vec(x) - x) ** 2))
+        x, ite = lbfgs_solve(residual_loss, x0, maxite=maxite, tol=maxerror,
+                verbose=verbose)
+        converged = None  # resolved below, once xfinal is available
+    else:
+        raise ValueError("unrecognised solver for use_jax=True: %r" % (solver,))
+
+    xfinal, dm, es, occ, final_mu = step_jit(x, mu)
+    final_mu = float(final_mu)
+    if solver == "lbfgs":
+        # scf.converged still means the same thing here as for every other
+        # solver -- the actual SCF residual, not L-BFGS-B's own gradient-norm
+        # stopping criterion (see lbfgs_solve's docstring)
+        converged = bool(jnp.max(jnp.abs(xfinal - x)) < maxerror)
+    return x, final_mu, ite, bool(converged), dm, es, occ
 
 
 def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
@@ -469,12 +547,29 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     iterations at tight tolerance - see the "fixed_point" cases in the
     benchmark. solver="newton" converges in a handful of iterations when it
     converges at all, so this default is generous there too, never a
-    bottleneck."""
+    bottleneck. solver="lbfgs" minimizes ||step(x)-x||^2 with jax.grad +
+    scipy's L-BFGS-B instead of root-finding step(x)=x -- see
+    vjinteraction_jax's module docstring for the "solver='lbfgs'" section
+    (written for VJinteraction, but solve_scf/lbfgs_solve are the same
+    generic machinery used here)."""
     if h0.has_eh:
         raise NotImplementedError("use_jax=True does not support the "
                 "anomalous/BdG mean field yet; use the default (numpy) engine")
-    if T is None or T <= 0:
+    if solver != "fixed_point" and mix != 0.1:
+        # mix only controls solver="fixed_point"'s linear-mixing step -- see
+        # vjinteraction_jax.generic_vjinteraction_jax's identical check
+        warnings.warn("mix=%r has no effect for solver=%r (only "
+                "solver=\"fixed_point\" uses linear mixing)"
+                % (mix, solver), stacklevel=2)
+    if T is None:
         T = default_T_jax
+    elif T <= 0:
+        raise ValueError("T=%r is not usable with use_jax=True: occupations "
+                "are occ=sigmoid(-(e-mu)/T), so T<=0 (including exactly 0) "
+                "divides by a non-positive number and produces NaN/Inf, "
+                "unlike the numpy engine's T=0 hard Fermi step -- pass a "
+                "small positive T instead (e.g. this module's own default, "
+                "default_T_jax=%r)" % (T, default_T_jax))
     h1 = h0.copy()
     h1 = h1.get_dense()
     h1.nk = nk
@@ -512,44 +607,9 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     step = build_step_function(hop0, v, ks, dirs, dirs_all, T,
             compute_dd, compute_cross, add_dagger, n_occ_total=n_occ_total)
     step_jit = jax.jit(step)
-    if solver == "newton":
-        if callback_mf is not None:
-            raise NotImplementedError("solver=\"newton\" cannot apply "
-                    "callback_mf/constrains (they need concrete numpy "
-                    "arrays, incompatible with jax.jacfwd tracing); use "
-                    "solver=\"fixed_point\" instead")
-        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
-        x, ite, converged = newton_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose)
-        final_mu = float(step_jit(x, mu)[4])
-    elif solver == "fsolve":
-        if callback_mf is not None:
-            raise NotImplementedError("solver=\"fsolve\" cannot apply "
-                    "callback_mf/constrains (they need concrete numpy "
-                    "arrays, incompatible with jax.jacfwd tracing); use "
-                    "solver=\"fixed_point\" instead")
-        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
-        x, ite, converged = fsolve_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose)
-        final_mu = float(step_jit(x, mu)[4])
-    elif solver == "newton_krylov":
-        if callback_mf is not None:
-            raise NotImplementedError("solver=\"newton_krylov\" cannot apply "
-                    "callback_mf/constrains (they need concrete numpy "
-                    "arrays, incompatible with jax.jvp tracing); use "
-                    "solver=\"fixed_point\" instead")
-        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
-        x, ite, converged = newton_krylov_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose, gmres_tol=gmres_tol,
-                gmres_restart=gmres_restart)
-        final_mu = float(step_jit(x, mu)[4])
-    elif solver == "fixed_point":
-        x, final_mu, ite, converged = fixed_point_solve(step_jit, x0, mu,
-                dirs, n, mix=mix, maxite=maxite, tol=maxerror,
-                verbose=verbose, callback_mf=callback_mf)
-    else:
-        raise ValueError("unrecognised solver for use_jax=True: %s" % solver)
-    xfinal, dm, es, occ, final_mu = step_jit(x, final_mu)
+    x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
+            dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
+            gmres_restart, callback_mf=callback_mf)
     mf_final = unflatten_mf(x, dirs, n)
     dm_np = {d: np.asarray(dm[d]) for d in dirs}
     mf_np = {d: np.asarray(mf_final[d]) for d in dirs}
@@ -573,6 +633,11 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     scf.v = v
     scf.tol = maxerror
     scf.converged = bool(converged)
+    if not scf.converged:
+        # unconditional (not gated on verbose), matching the numpy engine's
+        # own "No convergence has been reached..." print
+        print("No convergence has been reached in", ite,
+                "iterations (solver=%r), stopping" % (solver,))
     scf.total_energy = etot
     scf.mu = final_mu
     scf.iterations = ite

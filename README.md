@@ -73,6 +73,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Random phase approximation many-body response functions, for interactions beyond onsite (spin and density/charge channels)
 - RPA collective modes (magnon bands, plasmon/charge-order bands) and Stoner/RPA instability detection
 - KPM (Chebyshev)-based mean-field SCF for large/sparse systems, avoiding diagonalization of the Bloch Hamiltonian
+- JAX-derivative-based mean-field SCF solvers (Newton, matrix-free Newton-Krylov, L-BFGS-B residual minimization), differentiating through the self-consistency loop instead of plain mixing
 
 ## Topological characterization ##
 - Berry phases, Berry curvatures, Chern numbers and Z2 invariants

@@ -145,6 +145,27 @@ def test_densitydensity_jax_newton_krylov_matches_newton():
     assert abs(scf_newton.total_energy - scf_nk.total_energy) < 1e-6
 
 
+def test_densitydensity_jax_lbfgs_matches_newton():
+    """solver="lbfgs" (minimizes ||step(x)-x||^2 with jax.grad + scipy's
+    L-BFGS-B, via the same densitydensity_jax.solve_scf/lbfgs_solve
+    machinery vjinteraction_jax.py's VJinteraction uses -- see that
+    module's docstring for why residual-norm minimization, not the physical
+    free energy, is what it does) must be reachable for the plain V/U-only
+    engine too, not just VJinteraction, and converge to the same physics as
+    solver="newton"."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf = _biased_hamiltonian_and_guess(h0, seed=0, bias=.8)
+
+    scf_newton = Vinteraction(h1.copy(), nk=20, mu=0.0, U=2., mf=mf.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="newton")
+    scf_lbfgs = Vinteraction(h1.copy(), nk=20, mu=0.0, U=2., mf=mf.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="lbfgs")
+
+    assert scf_newton.converged and scf_lbfgs.converged
+    assert abs(scf_newton.total_energy - scf_lbfgs.total_energy) < 1e-4
+
+
 def test_densitydensity_jax_handles_mismatched_guess_directions():
     """A regression test: an initial mean-field guess that only covers a
     subset of the interaction's directions (e.g. a nearest-neighbor-only
