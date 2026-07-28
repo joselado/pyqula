@@ -23,11 +23,24 @@ import sys
 sys.path.append(PATH_TO_PYQULA+"/src")
 ```
 
+## Optional dependencies ##
+A few features depend on heavier, optional backends that are not installed by
+default. Install them with the relevant extra:
+```bash
+pip install pyqula[jax]        # JAX-derivative-based mean-field SCF solvers
+pip install pyqula[kwant]      # Kwant-based transport backend
+pip install pyqula[mpi]        # MPI-parallel routines (mpi4py)
+pip install pyqula[dataframe]  # pandas-based data export
+pip install pyqula[images]     # Pillow-based image export
+pip install pyqula[all]        # all of the above
+```
+
 ## Recommended library versions
-These are the recommended versions of several required libraries
-- numpy 1.26.4
-- numba 0.60.0
-- scipy 1.13.1
+These are the minimum/recommended versions of several required libraries
+(also enforced in `pyproject.toml`)
+- numpy >= 1.26.4
+- numba >= 0.60.0
+- scipy >= 1.13.1
 
 
 # Tutorials #

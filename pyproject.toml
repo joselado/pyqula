@@ -25,8 +25,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "numpy",
-    "scipy",
+    "numpy>=1.26.4",
+    "scipy>=1.13.1",
     "matplotlib",
     "numba>=0.60.0",
     "multiprocess",
