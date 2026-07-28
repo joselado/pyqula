@@ -261,7 +261,7 @@ class Hamiltonian():
               frac_r = self.geometry.frac_r # fractional coordinates
               # start in zero
               U = np.diag([self.geometry.bloch_phase(k,r) for r in frac_r])
-              U = np.matrix(U) # this is without .H
+              U = np.array(U) # this is without .H
               # increase the space if necessary
               U = self.spinless2full(U,is_hamiltonian=False) 
               Ud = algebra.dagger(U) # dagger
@@ -799,7 +799,7 @@ def get_first_neighbors(r1,r2):
 
 def create_fn_hopping(r1,r2):
   n=len(r1)
-  mat=np.matrix([[0.0j for i in range(n)] for j in range(n)])
+  mat=np.array([[0.0j for i in range(n)] for j in range(n)])
   pairs = get_first_neighbors(r1,r2) # get pairs of first neighbors
   for p in pairs: # loop over pairs
     mat[p[0],p[1]] = 1.0 
@@ -904,7 +904,7 @@ def build_eh_nonh(hin,c1=None,c2=None):
         the non vanishing elments are (0,1),(2,3),(4,5) and so on..."""
   n = len(hin)  # dimension of input
   nn = 2*n  # dimension of output
-  hout = np.matrix(np.zeros((nn,nn),dtype=complex))  # output hamiltonian
+  hout = np.array(np.zeros((nn,nn),dtype=complex))  # output hamiltonian
   for i in range(n):
     for j in range(n):
       hout[2*i,2*j] = hin[i,j]  # electron term

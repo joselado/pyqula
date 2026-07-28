@@ -41,7 +41,7 @@ def get_green(fun_gf,name="",energy=0.0,prec=prec):
   namefile = "green_"+str(er)+".npy" # name of the file
   files = os.listdir(dirname) # files in the directory
   if namefile in files: # check if it has been calculated
-    m = np.matrix(np.load(dirname+"/"+namefile)) # get the matrix
+    m = np.array(np.load(dirname+"/"+namefile)) # get the matrix
     return m # return the matrix
   else: # if it hasn't been calculated
     m = fun_gf(er) # calcualte green function

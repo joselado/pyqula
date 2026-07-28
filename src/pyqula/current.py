@@ -48,7 +48,7 @@ def weighted_current(h,nk=400,fun=None):
 #      jgs += (np.abs(w)**2*weight).real # add contribution
   jgs /= nk # normalize
   print("Total current",np.sum(jgs))
-  np.savetxt("CURRENT1D.OUT",np.matrix([range(len(jgs)),jgs]).T)
+  np.savetxt("CURRENT1D.OUT",np.array([range(len(jgs)),jgs]).T)
 
 
 

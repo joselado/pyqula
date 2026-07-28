@@ -24,6 +24,6 @@ def write_correlator(h,index=None,e=0.0,delta=0.01):
       gz = np.array(g[:,i]).reshape(g.shape[0])
       d += (gz*np.conjugate(gz)).real
   g = h.geometry
-  np.savetxt("CORRELATOR.OUT",np.matrix([g.x,g.y,d]).T)
+  np.savetxt("CORRELATOR.OUT",np.array([g.x,g.y,d]).T)
   print("Writen CORRELATOR.OUT")
 

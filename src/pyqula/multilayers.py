@@ -73,8 +73,8 @@ def bilayer_aa(h,t = 0.1):
         intra[2*p[1]+s][2*p[0]+s] = np.conjugate(t)  
   else: raise # not implemented...
   if h.has_eh: raise # not implemented ....
-  ho.intra = np.matrix(intra)
-  ho.inter = np.matrix(inter)
+  ho.intra = np.array(intra)
+  ho.inter = np.array(inter)
   ho.geometry = go
   return ho   
 
@@ -95,7 +95,7 @@ def multilayered_hamiltonian(h,dr=np.array([0.,0.,0.])):
 
 def add_interlayer(t,ri,rj,has_spin=True,is_sparse=True):
   """Calculate interlayer coupling"""
-  m = np.matrix([[0. for i in ri] for j in rj])
+  m = np.array([[0. for i in ri] for j in rj])
   if has_spin: m = bmat([[csc(m),None],[None,csc(m)]]).todense()
   zi = [r[2] for r in ri]
   zj = [r[2] for r in rj]

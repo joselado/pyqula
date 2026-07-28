@@ -35,7 +35,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
             if mode=="full": mode = "eigen"
     else: # no operator given
         if mode=="full":
-            operator = np.matrix(np.identity(h.intra.shape[0]))
+            operator = np.array(np.identity(h.intra.shape[0]))
     if h.dimensionality!=2: raise  # continue if two dimensional
     hk_gen = h.get_hk_gen() # gets the function to generate h(k)
     from ..klist import int2dims
@@ -57,7 +57,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
         gf = gf - algebra.inv((e-1j*delta)*iden - hk) # get green function
         if callable(operator): # callable operator
            tdos = -(operator(gf,k=k)).imag # get imaginary part
-        else: tdos = -(operator*gf).imag # get imaginary part
+        else: tdos = -(operator@gf).imag # get imaginary part
         return np.trace(tdos).real # return trace
     elif mode=='eigen': # use full diagonalization
       def get_weight(hk,k=None):

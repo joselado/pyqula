@@ -953,8 +953,8 @@ def get_reciprocal(a1,a2,a3):
 #  ux = ux/np.sqrt(ux.dot(ux))
 #  uy = uy/np.sqrt(uy.dot(uy))
 #  uz = uz/np.sqrt(uz.dot(uz))
-  a2kn = np.matrix([ux,uy,uz]) # matrix for the change of basis
-  r2a = np.matrix([ux,uy,uz]).T.I # from real space to lattice vectors
+  a2kn = np.array([ux,uy,uz]) # matrix for the change of basis
+  r2a = np.linalg.inv(np.array([ux,uy,uz]).T) # from real space to lattice vectors
   b1,b2,b3 = r2a[0,:],r2a[1,:],r2a[2,:]
   b1 = np.array(b1).reshape(3)
   b2 = np.array(b2).reshape(3)

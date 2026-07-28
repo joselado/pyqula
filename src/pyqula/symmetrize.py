@@ -83,7 +83,7 @@ def extract_matrix(a1,a2,odict,idict,matrix):
   orbs2 = odict[a2] # orbitals of the second atom
   n1 = len(orbs1) # size of the basis in the first atom
   n2 = len(orbs2) # size of the basis in the second atom
-  zeros = np.matrix(np.zeros((n1,n2),dtype=np.complex128)) # zero matrix  
+  zeros = np.array(np.zeros((n1,n2),dtype=np.complex128)) # zero matrix
 #  print(a1,a2,orbs1)
   for ii in range(len(orbs1)): # loop over orbitals in the first atom
     for jj in range(len(orbs2)): # loop over orbitals in the second atom
@@ -102,7 +102,7 @@ def rotation_operator(orbs,v=np.array([1.,0.,0.])):
   """Generate a rotation matrix along the z axis, depending on the
   orbitals used. Rotates vector v to vector 1,0,0"""
   n = len(orbs) # number of orbitals
-  zeros = np.matrix(np.zeros((n,n),dtype=np.complex128)) # zero matrix  
+  zeros = np.array(np.zeros((n,n),dtype=np.complex128)) # zero matrix
   (lx,ly,lz) = angular.angular_momentum(orbs) # angular momentum matrices
   v = np.array(v)
   vv = v.dot(v) # modulus
@@ -112,7 +112,7 @@ def rotation_operator(orbs,v=np.array([1.,0.,0.])):
   else:
     angle = 0.0 # zero angle, to return identity
 #  raise
-  R = np.matrix(lg.expm(-1j*lz*angle)) # get the rotation matrix
+  R = np.array(lg.expm(-1j*lz*angle)) # get the rotation matrix
   if np.sum(np.abs(lz-dagger(lz)))>0.0001: raise # check that lz is Hermitian
   return R # return rotation operator
   
@@ -122,7 +122,7 @@ def rotation_operator(orbs,v=np.array([1.,0.,0.])):
 def reorder_basis(anames,odict,idict):
   """Matrix that transforms the new reordered basis into the original one"""
   n = sum([len(odict[a]) for a in anames]) # length of the basis
-  zeros = np.matrix(np.zeros((n,n),dtype=np.complex128)) # zero matrix  
+  zeros = np.array(np.zeros((n,n),dtype=np.complex128)) # zero matrix
   i = 0 # initialize counter
   for a in anames: # loop over atoms
     for o in odict[a]: # loop over orbitals
@@ -151,7 +151,7 @@ def local_symmetrizer(anames,ons,odict,sym_file="symmetry.wan"):
     # generate rotation matrices
     Rs = [rotation_operator(odict[a],v=v) for v in vs]
     # perform all the rotations in the onsite matrix
-    hrs = [dagger(R)*m*R for R in Rs]
+    hrs = [dagger(R)@m@R for R in Rs]
     hr,error = average_matrices(hrs) # perform the average
     print("Broken symmetry in",a,"is",error)
     sdict[a] = hr # store rotation matrix
@@ -204,7 +204,7 @@ def symmetrize_hamiltonian(orb_file="orbitals.wan",ham_file="hamiltonian.wan",
               tij = sdict[ia] # get the symmetrized onsite matrix
             Ri = rotation_operator(odict[ia],dr) # rotate basis i
             Rj = rotation_operator(odict[ja],dr) # rotate basis j
-            Rtij = dagger(Ri)*tij*Rj # hopping matrix in the new frame
+            Rtij = dagger(Ri)@tij@Rj # hopping matrix in the new frame
             # now store the different things needed
             stored_rs.append(drr) # store the distance
             stored_vectors.append(dr) # store the vector
@@ -296,8 +296,8 @@ def get_neighbor_order(drs,sym="C3",prec=1):
   elif sym=="C4":  cn = 4 # group symmetry used
   alpha = 2.*np.pi/cn # C3 rotation
   sa,ca = np.sin(alpha), np.cos(alpha) # sin and cosine
-  Rot = np.matrix([[ca,sa,0.],[-sa,ca,0.],[0.,0.,1.]]) # rotation matrix
-  Rs = [Rot**i for i in range(cn)] # rotation matrices
+  Rot = np.array([[ca,sa,0.],[-sa,ca,0.],[0.,0.,1.]]) # rotation matrix
+  Rs = [np.linalg.matrix_power(Rot,i) for i in range(cn)] # rotation matrices
   def same_vectors(dr,rs):
     """Check if two vectors are related by a symmetry operation"""
     norm1 = np.sqrt(dr.dot(dr)) # first norm
@@ -306,7 +306,7 @@ def get_neighbor_order(drs,sym="C3",prec=1):
     if norm1==0. and norm2==0.: return True # special case of 0 vector
     if not np.abs(norm1-norm2)<delta: return False # different distance
     for R in Rs: # loop over operations
-      rs2 = R*(np.matrix([rs]).T) # rotate    
+      rs2 = R@rs # rotate
       rs2 = np.array(rs2).reshape(3) # convert to 1d array
       diff = dr - rs2 # vector difference
       if diff.dot(diff)<delta:

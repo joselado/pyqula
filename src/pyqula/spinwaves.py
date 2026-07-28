@@ -116,7 +116,7 @@ def sites2coupling(genij,spins):
   # S+ S- terms
       sij = np.sqrt(spins[i]*spins[j]) # denominator
       hop[i,j] = -(cij[0,0] + cij[1,1])*sij/2.
-  return (np.matrix(ons),np.matrix(hop)) # return matrices
+  return (np.array(ons),np.array(hop)) # return matrices
 
 
 
@@ -179,7 +179,7 @@ def sites2coupling_sparse(mij,spins):
   # S+ S- terms
       sij = np.sqrt(spins[i]*spins[j]) # denominator
       hop[i,j] = -(cij[0,0] + cij[1,1])*sij/2.
-  return (np.matrix(ons),np.matrix(hop)) # return matrices
+  return (np.array(ons),np.array(hop)) # return matrices
 
 
 

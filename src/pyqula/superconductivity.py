@@ -362,9 +362,9 @@ def add_pairing_to_hamiltonian(self,**kwargs):
       self.hopping = collect_hopping(self)
 
 
-iden = np.matrix([[1.,0.],[0.,1.]],dtype=np.complex128)
-taux = np.matrix([[0.,1.],[1.,0.]],dtype=np.complex128)
-tauz = np.matrix([[1.,0.],[0.,-1.]],dtype=np.complex128)
+iden = np.array([[1.,0.],[0.,1.]],dtype=np.complex128)
+taux = np.array([[0.,1.],[1.,0.]],dtype=np.complex128)
+tauz = np.array([[1.,0.],[0.,-1.]],dtype=np.complex128)
 
 
 
@@ -372,7 +372,7 @@ tauz = np.matrix([[1.,0.],[0.,-1.]],dtype=np.complex128)
 def extract_euphdn(m):
     """Extract electron up hole down sector"""
     n = m.shape[0]//2 # half the dimension
-    out = np.matrix(np.zeros((n,n),dtype=np.complex128))
+    out = np.array(np.zeros((n,n),dtype=np.complex128))
     for i in range(n):
       for j in range(n):
         out[i,j] = m[2*i,2*j]

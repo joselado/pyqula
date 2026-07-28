@@ -175,21 +175,21 @@ def rotate90(h):
 def rotate(h,m):
   """ Rotate the Hamiltonian"""
   ho = h.copy() # duplicate Hamiltonian
-  m = np.matrix(m) # convert to matrix
+  m = np.array(m) # convert to array
   for i in range(len(h.hopping)):
-    tdir = np.array(h.hopping[i].dir)*m.T # rotation of the direction
-    tdir = [tdir[0,0],tdir[0,1],tdir[0,2]]
+    tdir = np.array(h.hopping[i].dir)@m.T # rotation of the direction
+    tdir = [tdir[0],tdir[1],tdir[2]]
 #    print(h.hopping[i].dir,tdir)
     ho.hopping[i].dir = tdir # new direction
   ho.hopping_dict = dict() # new dictionary
-  ho.geometry.a1,ho.geometry.a2 = h.geometry.a2*m.T,ho.geometry.a1*m.T
+  ho.geometry.a1,ho.geometry.a2 = h.geometry.a2@m.T,ho.geometry.a1@m.T
   return ho
 
 
 def basis_change(h,R):
   """Perform a change of basis in the Hamiltonian"""
   ho = h.copy() # duplicate Hamiltonian
-  R = np.matrix(R) # convert to matrix
+  R = np.array(R) # convert to array
   for i in range(len(h.hopping)):
     m = h.hopping[i].m # rotation of the direction
     ho.hopping[i].m = dagger(R)@m@R # Hamiltonian in new basis
@@ -371,7 +371,7 @@ def read_from_file(input_file="hamiltonian.wan"):
   tlist = []
   norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
   norb = int(norb)
-  zeros = np.matrix(np.zeros((norb,norb),dtype=np.complex128)) # zero matrix
+  zeros = np.array(np.zeros((norb,norb),dtype=np.complex128)) # zero matrix
   def get_t(i,j,k):
     mo = zeros.copy() # copy matrix
     found = False

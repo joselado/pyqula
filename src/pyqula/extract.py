@@ -18,7 +18,7 @@ def spin_channel(m,spin_column=None,spin_row=None,has_spin=True):
   else: jj = 1
   for i in range(n2):
     for j in range(n2): out[i,j] = m[2*i+ii,2*j+jj]
-  return np.matrix(out)
+  return np.array(out)
 
 
 

@@ -5,10 +5,10 @@ import numpy as np
 # puts the matrix in spinor form
 def m2spin(matin,matin2=[]):
   n=len(matin)
-  from numpy import matrix
+  from numpy import array
   if len(matin2)==0:
-    matin2=matrix([[0.0j for i in range(n)] for j in range(n)])
-  matout=matrix([[0.0j for i in range(2*n)] for j in range(2*n)])
+    matin2=array([[0.0j for i in range(n)] for j in range(n)])
+  matout=array([[0.0j for i in range(2*n)] for j in range(2*n)])
   for i in range(n):
     for j in range(n):
       matout[2*i,2*j]=matin[i,j].copy()

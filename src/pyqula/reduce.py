@@ -7,7 +7,7 @@ def fullsc2minsc(hin):
   n = len(h.intra)/4 # number of spinless orbitals
   m = h.intra
   def reduce_eh(m):
-    t = np.matrix([[0j for i in range(2*n)] for j in range(2*n)])
+    t = np.array([[0j for i in range(2*n)] for j in range(2*n)])
     for i in range(n): # loop over spinless orbitals
       for j in range(n): # loop over spinless orbitals
         t[i,j] = m[2*i,2*j] # electron up

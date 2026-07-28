@@ -469,12 +469,12 @@ def ldos_defect(h,v,e=0.0,delta=0.001,n=1):
   g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=100,nsuper=rep)
   # now calculate defective green function 
   ez = e + 1j*delta # complex energy
-  emat = np.matrix(np.identity(len(g)))*ez  # E +i\delta 
+  emat = np.array(np.identity(len(g)))*ez  # E +i\delta
   from . import supercell
   pintra = supercell.intra_super2d(h,n=rep) # pristine
   vintra = supercell.intra_super2d(h,n=rep,central=v) # defective
-  selfe = emat - pintra - g.I # dyson euqation, get selfenergy
-  gv = (emat - vintra -selfe).I   # Green function of a vacancy, with selfener
+  selfe = emat - pintra - algebra.inv(g) # dyson euqation, get selfenergy
+  gv = algebra.inv(emat - vintra -selfe)   # Green function of a vacancy, with selfener
   return
 
 

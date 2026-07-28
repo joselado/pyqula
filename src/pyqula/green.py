@@ -83,11 +83,11 @@ def dyson(intra,inter,energy=0.0,gf=None,is_sparse=False,initial = None):
   # calculate using python
   if not optimal:
     g_old = g_guess # first iteration
-    iden = np.matrix(np.identity(len(intra),dtype=complex)) # create identity
+    iden = np.array(np.identity(len(intra),dtype=complex)) # create identity
     e = iden*(energy+1j*eps) # complex energy
     while True: # loop over iterations
       self = inter@g_old@dagger(inter) # selfenergy
-      g = (e - intra - self).I # dyson equation
+      g = algebra.inv(e - intra - self) # dyson equation
       if np.max(np.abs(g-g_old))<gf.max_error: break
       g_old = mixing*g + (1.-mixing)*g_old # new green function
   if is_sparse: 
@@ -110,7 +110,7 @@ def dos_infinite(intra,inter,energies=[0.0],num_rep=100,
    """ Calculates the surface density of states by using a 
     green function approach"""
    dos = [] # list with the density of states
-   iden = np.matrix(np.identity(len(intra),dtype=complex)) # create idntity
+   iden = np.array(np.identity(len(intra),dtype=complex)) # create idntity
    for energy in energies: # loop over energies
      # right green function
      gr = dyson(intra,inter,energy=energy,num_rep=num_rep,mixing=mixing,
@@ -123,7 +123,7 @@ def dos_infinite(intra,inter,energies=[0.0],num_rep=100,
      selfl = dagger(inter)@gl@inter # left selfenergy
      selfr = inter@gr@dagger(inter) # right selfenergy
      gc = energy*iden -intra -selfl -selfr # dyson equation for the center
-     gc = gc.I # calculate inverse
+     gc = algebra.inv(gc) # calculate inverse
      dos.append(-algebra.trace(gc).imag)  # calculate the trace of the Green function
    return dos
 
@@ -155,7 +155,7 @@ def dos_heterostructure(hetero,energies=[0.0],num_rep=100,
        of a heterostructure by a  
     green function approach, input is a heterostructure class"""
    dos = [] # list with the density of states
-   iden = np.matrix(np.identity(len(intra),dtype=complex)) # create idntity
+   iden = np.array(np.identity(len(intra),dtype=complex)) # create idntity
    for energy in energies: # loop over energies
      # right green function
      intra = hetero.right_intra
@@ -171,7 +171,7 @@ def dos_heterostructure(hetero,energies=[0.0],num_rep=100,
      selfl = dagger(inter)@gl@inter # left selfenergy
      selfr = inter@gr@dagger(inter) # right selfenergy
      gc = energy*iden -intra -selfl -selfr # dyson equation for the center
-     gc = gc.I # calculate inverse
+     gc = algebra.inv(gc) # calculate inverse
      dos.append(-algebra.trace(gc).imag)  # calculate the trace of the Green function
    return dos
 
@@ -181,7 +181,7 @@ def read_matrix(f):
   """Read green function from a file"""
   m = np.genfromtxt(f)
   d = int(max(m.transpose()[0]))+1 # dimension of the green functions
-  g = np.matrix([[0.0j for i in range(d)] for j in range(d)]) # create matrix
+  g = np.array([[0.0j for i in range(d)] for j in range(d)]) # create matrix
   for r in m:
     i = int(r[0])
     j = int(r[1])
@@ -246,7 +246,7 @@ def read_sparse(f,sparse=True):
   m = np.genfromtxt(f)
   if not sparse:
 # create matrix  
-    g = np.matrix([[0.0j for i in range(d)] for j in range(d)]) 
+    g = np.array([[0.0j for i in range(d)] for j in range(d)])
     for r in m:
       i = int(r[0])-1
       j = int(r[1])-1
@@ -334,8 +334,8 @@ def block_inverse(m,i=0,j=0):
     mt = algebra.inv(mt) # calculate inverse
     imax = imin + m[i][i].shape[0]
     jmax = jmin + m[j][j].shape[1]
-    mo = [ [mt[ii,jj] for jj in range(jmin,jmax)] for ii in range(imin,imax) ] 
-    mo = np.matrix(mo)
+    mo = [ [mt[ii,jj] for jj in range(jmin,jmax)] for ii in range(imin,imax) ]
+    mo = np.array(mo)
     return mo
 
 
@@ -492,11 +492,11 @@ def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1],
   ez = e + 1j*delta # create complex energy
   from . import dyson
   g = dyson.dyson(h,[nsuper1,nsuper2],nk,ez)
-  g = np.matrix(g) # convert to matrix
+  g = np.array(g) # convert to array
   # create hamiltonian of the supercell
   from .embedding import onsite_supercell
   intrasuper = onsite_supercell(h,nsuper)
-  eop = np.matrix(np.identity(g.shape[0],dtype=np.complex128))*(ez)
+  eop = np.array(np.identity(g.shape[0],dtype=np.complex128))*(ez)
   selfe = eop - intrasuper - algebra.inv(g)
   return g,selfe
 

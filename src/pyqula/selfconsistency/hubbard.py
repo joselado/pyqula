@@ -125,11 +125,11 @@ def selective_U_matrix(Us,m):
   except: return Us*m # return
   if len(Us)!=len(m)//2: raise
   mout = m.copy()
-  fac = np.matrix(np.identity(len(Us)*2),dtype=np.complex128)
+  fac = np.array(np.identity(len(Us)*2),dtype=np.complex128)
   for i in range(len(Us)):
     fac[2*i,2*i] = Us[i]
     fac[2*i+1,2*i+1] = Us[i]
-  return m*fac # return matrix
+  return m@fac # return matrix
 
 
 

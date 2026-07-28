@@ -37,7 +37,7 @@ def block2nambu_matrix_dense(m):
   D H
   The output is a set of block matrices for each site in the 
   Nambu form'''
-  R = np.matrix(np.zeros(m.shape)) # zero matrix
+  R = np.array(np.zeros(m.shape)) # zero matrix
   nr = m.shape[0]//4 # number of positions
   for i in range(nr): # electrons
     R[2*i,4*i] = 1.0 # up electron

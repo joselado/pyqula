@@ -13,8 +13,8 @@ def get_selfenergy(self,energy,lead=0,delta=None,pristine=False,numba=None):
 # if the interpolation function has been created
    if self.interpolated_selfenergy:
        raise # this is not maintained anymore
-       if lead==0: return np.matrix(self.selfgen[0](energy)) # return selfenergy
-       if lead==1: return np.matrix(self.selfgen[1](energy)) # return selfenergy
+       if lead==0: return np.array(self.selfgen[0](energy)) # return selfenergy
+       if lead==1: return np.array(self.selfgen[1](energy)) # return selfenergy
 # run the calculation
    else:
        if lead==0:

@@ -4,7 +4,7 @@ import numpy as np
 
 def ylm2xyz_l1():
   """Return the matrix that converts the cartesian into spherical harmonics"""
-  m = np.matrix([[0.0j for i in range(3)] for j in range(3)])
+  m = np.array([[0.0j for i in range(3)] for j in range(3)])
   s2 = np.sqrt(2.)
   m[1,2] = 1. # pz
   m[0,0] = 1./s2 # dxz
@@ -16,7 +16,7 @@ def ylm2xyz_l1():
 
 def ylm2xyz_l2():
   """Return the matrix that converts the cartesian into spherical harmonics"""
-  m = np.matrix([[0.0j for i in range(5)] for j in range(5)])
+  m = np.array([[0.0j for i in range(5)] for j in range(5)])
   s2 = np.sqrt(2.)
   m[2,0] = 1. # dz2
   m[1,1] = 1./s2 # dxz
@@ -83,7 +83,7 @@ def angular_momentum(orbs):
       orbnames = dorbs
       break
   nm = 2*l + 1 # number of components
-  zero = np.matrix([[0.0j for i in range(nm)] for j in range(nm)])
+  zero = np.array([[0.0j for i in range(nm)] for j in range(nm)])
   # initialize matrices
   lz = zero.copy()
   lx = zero.copy()
@@ -98,34 +98,34 @@ def angular_momentum(orbs):
   for m in range(-l,l+1): # loop over m components
     im = m + l
     lz[im,im] = m # value of lz, up channel
-  lm = lp.H # adjoint
+  lm = lp.conj().T # adjoint
   lx = (lp + lm) /2.
   ly = -1j*(lp - lm) /2.
   # at this point lx,ly,lz are written in the basis of spherical harmonics
   if l==2: R = ylm2xyz_l2() # get change of basis matrix
   if l==1: R = ylm2xyz_l1() # get change of basis matrix
-  lx = R.H * lx * R # change to cartesian orbitals
-  ly = R.H * ly * R # change to cartesian orbitals
-  lz = R.H * lz * R # change to cartesian orbitals
-  
+  lx = R.conj().T @ lx @ R # change to cartesian orbitals
+  ly = R.conj().T @ ly @ R # change to cartesian orbitals
+  lz = R.conj().T @ lz @ R # change to cartesian orbitals
+
   # at this point the angular operators are written in the cartesian basis
   # now you must project onto the input manifold
-  proj = np.matrix([[0.0j for i in range(nm)] for j in range(len(orbs))])
+  proj = np.array([[0.0j for i in range(nm)] for j in range(len(orbs))])
   for i in range(len(orbs)): # loop over input cartesian orbitals
     for j in range(len(orbnames)): # loop over full cartesian orbitals
       if orbs[i] == orbnames[j]: # if same orbital
         proj[i,j] = 1. # identity
-#        print(orbs[i],orbnames[j],i,j) 
+#        print(orbs[i],orbnames[j],i,j)
         break
 #      print(orbs,orbnames,i,j)
 #      raise # raise error if this point is reached
 #  print(proj)
 #  raise
-  proj = proj.H
+  proj = proj.conj().T
   # now project
-  lx = proj.H * lx * proj # change to cartesian orbitals
-  ly = proj.H * ly * proj # change to cartesian orbitals
-  lz = proj.H * lz * proj # change to cartesian orbitals
+  lx = proj.conj().T @ lx @ proj # change to cartesian orbitals
+  ly = proj.conj().T @ ly @ proj # change to cartesian orbitals
+  lz = proj.conj().T @ lz @ proj # change to cartesian orbitals
   return (lx,ly,lz) # return the three matrices
 
 

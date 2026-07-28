@@ -210,7 +210,7 @@ def read_hamiltonian(input_file="hr_truncated.dat",is_real=False):
     def get_t(i,j,k):
       norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
       norb = int(norb)
-      mo = np.matrix(np.zeros((norb,norb),dtype=np.complex128))  
+      mo = np.array(np.zeros((norb,norb),dtype=np.complex128))
       for l in mt: # look into the file
         if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
           if is_real:
@@ -263,7 +263,7 @@ def read_multicell_hamiltonian(input_file="hr_truncated.dat",
     def get_t(i,j,k):
       norb = np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))])
       norb = int(norb)
-      mo = np.matrix(np.zeros((norb,norb),dtype=np.complex128))  
+      mo = np.array(np.zeros((norb,norb),dtype=np.complex128))
       found = False
       for l in mt: # look into the file
         if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
@@ -405,7 +405,7 @@ def generate_soc(specie,value,input_file="wannier.win",nsuper=1,path=None):
   orbnames = names_soc_orbitals(specie) # get which are the orbitals
   ls = soc_l((len(orbnames)-1)/2) # get the SOC matrix
   norb = get_num_wannier(input_file) # number of wannier orbitals
-  m = np.matrix([[0.0j for i in range(norb*2)] for j in range(norb*2)]) # matrix
+  m = np.array([[0.0j for i in range(norb*2)] for j in range(norb*2)]) # matrix
   nat = get_num_atoms(specie,input_file) # number of atoms of this specie
   for iat in range(nat):
    # try:
@@ -433,7 +433,7 @@ def generate_soc(specie,value,input_file="wannier.win",nsuper=1,path=None):
   if path is not None: 
       os.chdir(inipath) # go there
       print(np.max(np.abs(mo)))
-  return np.matrix(mo*value) # return matrix
+  return np.array(mo*value) # return matrix
 #  for name in atoms: # loop over atoms
 
 
@@ -472,7 +472,7 @@ def soc_l(l):
   """Calculate the spin orbit coupling in a basis of spherical harmonics"""
   l = int(l)
   nm = 2*l + 1 # number of components
-  zero = np.matrix([[0.0j for i in range(2*nm)] for j in range(2*nm)]) 
+  zero = np.array([[0.0j for i in range(2*nm)] for j in range(2*nm)])
   # initialize matrices
   lz = zero.copy()
   lx = zero.copy()
@@ -489,7 +489,7 @@ def soc_l(l):
     im = m + l
     lz[2*im,2*im] = m # value of lz, up channel
     lz[2*im+1,2*im+1] = m # value of lz, down channel
-  lm = lp.H # adjoint
+  lm = lp.conj().T # adjoint
   lx = (lp + lm) /2.
   ly = -1j*(lp - lm) /2.
   # create spin matrices
@@ -520,19 +520,19 @@ def soc_l(l):
     comm_angular(lx,ly,lz)
     comm_angular(ly,lz,lx)
     comm_angular(lz,lx,ly)
-  ls = lx*sx + ly*sy + lz*sz  # SOC matrix
+  ls = lx@sx + ly@sy + lz@sz  # SOC matrix
   import scipy.linalg as lg
   from scipy.sparse import csc_matrix as csc
   if l==2: R = ylm2xyz_l2() # get change of basis matrix
   if l==1: R = ylm2xyz_l1() # get change of basis matrix
-  ls = R.H * ls * R # change to cartesian orbitals
+  ls = R.conj().T @ ls @ R # change to cartesian orbitals
   return ls # return the matrix
 
 
 
 def comm_angular(x,y,z):
   from scipy.sparse import csc_matrix as csc
-  xy = x*y - y*x
+  xy = x@y - y@x
   xy = xy - 1j*z
   if np.abs(np.max(xy))>0.001:
     raise
@@ -540,7 +540,7 @@ def comm_angular(x,y,z):
 
 
 def comm_zero(x,y):
-  xy = x*y - y*x
+  xy = x@y - y@x
   if np.abs(np.max(xy))>0.01:
     raise
 
@@ -586,7 +586,7 @@ def get_atomic_projection(specie,input_file="wannier.win",has_spin=False):
   orbs = get_orbitals(specie,input_file=input_file) # read the orbitals
   nat = get_atoms_specie(specie,input_file=input_file) # number of atoms
   norb = get_num_wannier(input_file) # number of wannier orbitals
-  proj = np.matrix([[0.0j for i in range(norb)] for j in range(norb)])
+  proj = np.array([[0.0j for i in range(norb)] for j in range(norb)])
   for iat in range(nat): # loop over atoms of this type
     for iorb in orbs: # loop over orbitals
       i = get_index_orbital(specie,iat+1,iorb) - 1 
@@ -609,7 +609,7 @@ def read_supercell_hamiltonian(input_file="hr_truncated.dat",is_real=False,nsupe
   tlist = []
   def get_t(i,j,k):
     norb = int(np.max([np.max(np.abs(m[3])),np.max(np.abs(m[4]))]))
-    mo = np.matrix(np.zeros((norb,norb),dtype=np.complex128))  
+    mo = np.array(np.zeros((norb,norb),dtype=np.complex128))
     for l in mt: # look into the file
       if i==int(l[0]) and j==int(l[1]) and k==int(l[2]):
         if is_real:

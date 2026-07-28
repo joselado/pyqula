@@ -14,7 +14,7 @@ def mass_operator(h,**kwargs):
         from .algebra import eigh # function to diagonalize
         e0,w0 = eigh(hk0) # central point 
         m = effective_mass_velocity(h,k,w0=w0,**kwargs) # array with masses
-        T = np.matrix(w0) # convert
+        T = np.array(w0) # convert
         m0 = np.diag(m) # build new hamiltonian
         O = np.array(T@m0@dagger(T)) # operator
         out =  O@v # return the result

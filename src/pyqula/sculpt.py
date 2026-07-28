@@ -388,8 +388,8 @@ def set_xy_plane(g):
   # matrix that transforms (0,0,1) to that vector
   ct,st = np.cos(theta),np.sin(theta)
   cp,sp = np.cos(phi),np.sin(phi)
-  Rt = np.matrix([[ct,0,st],[0.,1.,0],[-st,0,ct]]) # rotate along y
-  Rp = np.matrix([[cp,-sp,0.],[sp,cp,0],[0.,0.,1.]]) # rotate along z
+  Rt = np.array([[ct,0,st],[0.,1.,0],[-st,0,ct]]) # rotate along y
+  Rp = np.array([[cp,-sp,0.],[sp,cp,0],[0.,0.,1.]]) # rotate along z
   R = Rp@Rt # transforms (0,0,1) to nv
   # algebra.inv always returns a complex128 array; this is a rotation of
   # real vectors, so cast back to real to avoid leaking complex dtype

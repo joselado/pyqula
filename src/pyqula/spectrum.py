@@ -37,8 +37,8 @@ def boolean_fermi_surface(h,write=True,output_file="BOOL_FERMI_MAP.OUT",
       delta = 8./np.max(np.abs(h.intra))/nk
     for x in kxs:
       for y in kxs:
-        r = np.matrix([x,y,0.]).T # real space vectors
-        k = np.array((R*r).T)[0] # change of basis
+        r = np.array([x,y,0.]) # real space vectors
+        k = np.array(R@r) # change of basis
         hk = hk_gen(k) # get hamiltonian
         evals = lg.eigvalsh(hk) # diagonalize
         de = np.abs(evals - e) # difference with respect to fermi
@@ -156,15 +156,15 @@ def ev2d(h,nk=50,nsuper=1,reciprocal=False,
   kxout = []
   kyout = []
   if reciprocal: R = h.geometry.get_k2K() # get matrix
-  else:  R = np.matrix(np.identity(3)) # get identity
+  else:  R = np.array(np.identity(3)) # get identity
   # setup the operator
   operator = operator2list(operator) # convert into a list
   fo = open("EV2D.OUT","w") # open file
   for x in kxs:
     for y in kxs:
       print("Doing",x,y)
-      r = np.matrix([x,y,0.]).T # real space vectors
-      k = np.array((R*r).T)[0] # change of basis
+      r = np.array([x,y,0.]) # real space vectors
+      k = np.array(R@r) # change of basis
       hk = hk_gen(k) # get hamiltonian
       if not h.is_sparse: evals,waves = lg.eigh(hk) # eigenvalues
       else: evals,waves = slg.eigsh(hk,k=max(nindex)*2,sigma=0.0,

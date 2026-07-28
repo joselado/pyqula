@@ -567,7 +567,7 @@ def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
   """Compute a Berry density map dOmega/dE (k) at a fixed energy"""
   if delta is None: delta = 5./nk
   if reciprocal: R = h.geometry.get_k2K()
-  else: R = np.matrix(np.identity(3))
+  else: R = np.array(np.identity(3))
   fo = open("BERRY_DENSITY_KMAP.OUT","w") # open file
   nt = nk*nk # total number of points
   ik = 0
@@ -579,8 +579,8 @@ def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
   def fp(ki): # function to compute the Berry curvature
       if parallel.cores == 1: tr.iterate()
       else: print("Doing",ki)
-      r = np.matrix(ki).T # real space vectors
-      k = np.array((R*r).T)[0] # change of basis
+      r = np.array(ki) # real space vectors
+      k = np.array(R@r) # change of basis
       b = dOmega_dE(h,k=k,operator=operator,dk=dk) # get the density
       return b
   bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
@@ -612,8 +612,8 @@ def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
   from scipy.integrate import cumulative_trapezoid
   csi = cumulative_trapezoid(cs,x=es,initial=0) # integrate
   if write:
-      np.savetxt("CHERN_DENSITY.OUT",np.matrix([es,cs]).T)
-      np.savetxt("CHERN_DENSITY_INTEGRATED.OUT",np.matrix([es,csi]).T)
+      np.savetxt("CHERN_DENSITY.OUT",np.array([es,cs]).T)
+      np.savetxt("CHERN_DENSITY_INTEGRATED.OUT",np.array([es,csi]).T)
   return (es,cs,csi)
 
 

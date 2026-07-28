@@ -219,7 +219,7 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
     if ds is None: # no directions required
       es,vs = h.get_eigenvectors(nk=nk) # get eigenvectors
       es = es - fermi # shift by the Fermi energy
-      return np.matrix(full_dm_python(es,np.array(vs),
+      return np.array(full_dm_python(es,np.array(vs),
                              delta=delta))*fac # call the function
     else: # directions required
       es,vs,ks = h.get_eigenvectors(nk=nk,kpoints=True) # get eigenvectors

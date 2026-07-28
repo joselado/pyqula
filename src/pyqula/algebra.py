@@ -83,7 +83,7 @@ def todense(m):
     """Turn a matrix dense"""
     if m is None: return None
     if issparse(m):
-        if m.shape[0]<maxsize: return np.array(m.todense())
+        if m.shape[0]<maxsize: return m.toarray()
         else: raise
     else: return np.array(m,dtype=np.complex128)
 
@@ -221,7 +221,7 @@ def eigvalsh(m):
 def matrix2vector(v):
     """Transform a matrix into a vector"""
     if issparse(v): # sparse matrix
-      v = v.todense() # convert to conventional matrix
+      v = v.toarray() # convert to conventional array
     v = np.array(v) # convert to array
     if len(v.shape)==1: return v
     else: return v.reshape(v.shape[0]*v.shape[1])
@@ -284,8 +284,8 @@ def sqrtm_rotated(M,positive=True):
         if np.min(evals)<0.:
 #            print("Matrix is not positive defined",print(evals[evals<0.]))
             evals[evals<0.] = 0.
-    evecs = dagger(np.matrix(evecs)) # change of basis
-    m2 = np.matrix([[0.0j for i in evals] for j in evals]) # create matrix
+    evecs = dagger(np.array(evecs)) # change of basis
+    m2 = np.array([[0.0j for i in evals] for j in evals]) # create matrix
     for i in range(len(evals)):
         m2[i,i] = np.sqrt(np.abs(evals[i])) # square root
     return (m2,evecs) # return matrix

@@ -31,8 +31,8 @@ def get_k2K(g):
   ux = ux/np.sqrt(ux.dot(ux))
   uy = uy/np.sqrt(uy.dot(uy))
   uz = uz/np.sqrt(uz.dot(uz))
-  a2kn = np.matrix([ux,uy,uz]) # matrix for the change of basis
-  r2a = np.matrix([ux,uy,uz]).T.I # from real space to lattice vectors
+  a2kn = np.array([ux,uy,uz]) # matrix for the change of basis
+  r2a = np.linalg.inv(np.array([ux,uy,uz]).T) # from real space to lattice vectors
   R = a2kn@r2a@a2kn.T # rotation matrix
   return R
 

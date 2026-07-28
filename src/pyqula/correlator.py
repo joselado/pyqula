@@ -11,7 +11,7 @@ def correlator0d(m,energies=np.linspace(-10.,10.,400),i=0,j=0,delta=0.07):
   for (ie,e) in zip(range(len(energies)),energies):
     m0 = ((e+1j*delta)*iden - m).I # inverse 
     zs[ie] = m0[i,j]
-  np.savetxt("CORRELATOR.OUT",np.matrix([energies,zs.real,-zs.imag]).T)
+  np.savetxt("CORRELATOR.OUT",np.array([energies,zs.real,-zs.imag]).T)
   print("Saved correlator in CORRELATOR.OUT")
   return (energies,zs.real,-zs.imag)
 

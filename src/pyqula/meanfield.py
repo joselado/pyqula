@@ -321,8 +321,8 @@ def expectation_value(wfs,A,phis):
 
 def enforce_pwave(mf):
   """Enforce pwave symmetry in a mean field Hamiltonian"""
-  for key in mf: mf[key] = np.matrix(mf[key]) # dense matrix
-  for key in mf: 
+  for key in mf: mf[key] = np.array(mf[key]) # dense matrix
+  for key in mf:
 #    print(mf[key],type(mf[key]))
     n = mf[key].shape[0]//4 # number of sites 
     dm = tuple([-di for di in key]) # the opposite matrix
@@ -337,11 +337,11 @@ def enforce_eh(h,mf):
   """Enforce eh symmetry in a mean field Hamiltonian"""
   from .superconductivity import eh_operator
   eh = eh_operator(h.intra) # get the function
-  for key in mf: mf[key] = np.matrix(mf[key]) # dense matrix
+  for key in mf: mf[key] = np.array(mf[key]) # dense matrix
   mfout = dict()
   for key in mf:
-    mkey = (-key[0],-key[1],-key[2]) 
-    mfout[key] = (mf[key] - eh(mf[mkey].H))/2.
+    mkey = (-key[0],-key[1],-key[2])
+    mfout[key] = (mf[key] - eh(mf[mkey].conj().T))/2.
   return mfout
 
 

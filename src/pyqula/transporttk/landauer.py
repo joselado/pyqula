@@ -20,7 +20,7 @@ def landauer(HT,energy=0.0,error=1e-9,**kwargs):
         intra = HT.central_intra[0][0] # when it is diagonal
  # dimension of the central part
         dimhc = len(HT.central_intra)*intra.shape[0]
-    iden = np.matrix(np.identity(len(intra),dtype=complex)) # create identity
+    iden = np.array(np.identity(len(intra),dtype=complex)) # create identity
     selfl = HT.get_selfenergy(energy,lead=0,delta=delta,pristine=False) # left Sigma
     selfr = HT.get_selfenergy(energy,lead=1,delta=delta,pristine=False) # right Sigma
     #################################

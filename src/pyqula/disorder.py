@@ -21,7 +21,7 @@ def phase(h,w=0.0):
   cs = np.array(np.random.random((n,n)) - .5)*2*w # disorder
   cs = (cs - cs.T)/2. # Hermitian
   cs = np.exp(1j*np.pi*cs) # phases
-  ho.intra = np.matrix(np.array(ho.intra)*np.array(cs))
+  ho.intra = np.array(ho.intra)*np.array(cs)
   return ho
 
 

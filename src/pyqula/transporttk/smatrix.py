@@ -29,9 +29,9 @@ def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
     g22 = gauss_inverse(gmatrix,-1,-1,test=test_gauss)
     ######## now build up the s matrix with the fisher trick
     # the identity can have different dimension ignore for now....
-    iden = np.matrix(np.identity(g11.shape[0],dtype=complex)) # create identity
-    iden11 = np.matrix(np.identity(g11.shape[0],dtype=complex)) # create identity
-    iden22 = np.matrix(np.identity(g22.shape[0],dtype=complex)) # create identity
+    iden = np.array(np.identity(g11.shape[0],dtype=complex)) # create identity
+    iden11 = np.array(np.identity(g11.shape[0],dtype=complex)) # create identity
+    iden22 = np.array(np.identity(g22.shape[0],dtype=complex)) # create identity
     smatrix[0][0] = -iden + 1j*sqrtm(gammal)@g11@sqrtm(gammal) # matrix
     smatrix[0][1] = 1j*sqrtm(gammal)@g12@sqrtm(gammar) # transmission matrix
     smatrix[1][0] = 1j*sqrtm(gammar)@g21@sqrtm(gammal) # transmission matrix
@@ -74,7 +74,7 @@ def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
     if not type(intra) is list: raise # assume is list
     n = len(intra) # number of blocks
     iout = [[None for i in range(n)] for j in range(n)] # empty list
-    iden = np.matrix(np.identity(intra[0][0].shape[0],dtype=np.complex128))
+    iden = np.array(np.identity(intra[0][0].shape[0],dtype=np.complex128))
     ez = iden*(energy +1j*delta) # complex energy
     for i in range(n):
       iout[i][i] = ez - intra[i][i] # simply E -H
@@ -147,9 +147,9 @@ def build_effective_hlist(ht,energy=0.0,delta=0.0001,selfl=None,selfr=None):
         ht.central_intra = (ht.left_intra + ht.right_intra)/2.
         print("Generating a dummy central cell, you may want to use a different geometry")
     ce = energy +1j*delta # complex energy
-    idenc = np.matrix(np.identity(ht.central_intra.shape[0],dtype=complex))*ce
-    idenl = np.matrix(np.identity(ht.left_intra.shape[0],dtype=complex))*ce
-    idenr = np.matrix(np.identity(ht.right_intra.shape[0],dtype=complex))*ce
+    idenc = np.array(np.identity(ht.central_intra.shape[0],dtype=complex))*ce
+    idenl = np.array(np.identity(ht.left_intra.shape[0],dtype=complex))*ce
+    idenr = np.array(np.identity(ht.right_intra.shape[0],dtype=complex))*ce
     hlist = [[None for i in range(3)] for j in range(3)] # list of matrices
     # set up the different elements
     # first the intra terms

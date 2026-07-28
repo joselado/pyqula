@@ -20,7 +20,7 @@ def check_and_fix(smatrix,error=1e-7):
 #    else: s3 = smatrix2
         smatrix2 = make_unitary(smatrix2)
 #        print("Unitarized determinant",np.abs(lg.det(smatrix2)))
-    s3 = np.matrix(smatrix2) # unitarized
+    s3 = np.array(smatrix2) # unitarized
     sout = [[s3[0:n,0:n],s3[n:2*n,0:n]],[s3[0:n,n:2*n],s3[n:2*n,n:2*n]]]
     return sout
 

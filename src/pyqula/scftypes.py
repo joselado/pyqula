@@ -390,7 +390,7 @@ def get_occupied_states(es,ws,ks,fermi,smearing=None,mine=None):
       voccs.append(v*weight) # store
       eoccs.append(e*weight) # store
       koccs.append(k) # store
-    voccs = np.matrix(np.array(voccs))  # as array
+    voccs = np.array(voccs)  # as array
     eoccs = np.array(eoccs)  # as array
     koccs = np.array(koccs)  # as array
   return eoccs,voccs,koccs

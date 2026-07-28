@@ -11,8 +11,8 @@ import jax
 jax.config.update('jax_platform_name', 'cpu')
 use_jax = True
 
-zero = np.matrix(np.zeros((3,3)))  # real matrix
-iden = np.matrix(np.identity(3))  # real matrix
+zero = np.array(np.zeros((3,3)))  # real matrix
+iden = np.array(np.identity(3))  # real matrix
 zzm = zero.copy() ; zzm[2,2] = 1.0 # matrix for ZZ interaction
 
 
@@ -299,7 +299,7 @@ def add_tensor(sm,fun):
 
 def rotatez(angle):
   """In-plane rotation"""
-  m = np.matrix(np.zeros((3,3),dtype=np.complex128)) # zero matrix
+  m = np.array(np.zeros((3,3),dtype=np.complex128)) # zero matrix
   cp = np.cos(angle*np.pi)
   sp = np.sin(angle*np.pi)
   m[0,0] = cp
@@ -327,8 +327,8 @@ def add_tensor_2d(sm,fun,ncells=4,vspiral=[0.,0.]):
             if np.max(np.abs(m))>0.00001: # if non zero
               angle = vspiral[0]*ia + vspiral[1]*ja
               R = rotatez(angle)
-              pairs.append((i1,i2)) # store 
-              js.append(m*R) # store matrix
+              pairs.append((i1,i2)) # store
+              js.append(m@R) # store matrix
     return np.array(pairs),np.array(js)
   
 
@@ -352,7 +352,7 @@ def generating_functions(name="Heisenberg",J=1.0,v=np.array([0.,0.,1.]),
     def fun(r1,r2):
       dr = fdiff(r2,r1)
       dr = np.sqrt(dr.dot(dr))
-      return iden*J*fc(dr)*fr(r1,r2) # distance dependent coupling
+      return (iden*J*fc(dr))@fr(r1,r2) # distance dependent coupling
     return fun
   elif name=="Linear":
     def fun(r1,r2):
@@ -360,8 +360,8 @@ def generating_functions(name="Heisenberg",J=1.0,v=np.array([0.,0.,1.]),
       dr = np.sqrt(r12.dot(r12)) # distance
       if dr<0.1: return np.zeros((3,3))
       ur = r12/dr # unit vector
-      m = np.matrix([[ur[i]*ur[j] for i in range(3)] for j in range(3)])
-      return m*J*fr(r1,r2)/dr**3 # distance dependent coupling
+      m = np.array([[ur[i]*ur[j] for i in range(3)] for j in range(3)])
+      return (m*J)@fr(r1,r2)/dr**3 # distance dependent coupling
     return fun
   elif name=="RKKYTI":
     """RKKY interaction in the surface of a TI, as derived in
@@ -371,15 +371,15 @@ def generating_functions(name="Heisenberg",J=1.0,v=np.array([0.,0.,1.]),
       dr = np.sqrt(r12.dot(r12)) # distance
       if dr<0.1: return np.zeros((3,3)) # return 0
       ur = r12/dr # unit vector
-      m = np.matrix([[ur[i]*ur[j] for i in range(3)] for j in range(3)])
-      m = m*3/2 - np.identity(3) 
-      return m*J*fr(r1,r2)/dr**3 # distance dependent coupling
+      m = np.array([[ur[i]*ur[j] for i in range(3)] for j in range(3)])
+      m = m*3/2 - np.identity(3)
+      return (m*J)@fr(r1,r2)/dr**3 # distance dependent coupling
     return fun
   elif name=="ZZ":
     def fun(r1,r2):
       dr = fdiff(r2,r1)
       dr = np.sqrt(dr.dot(dr))
-      return zzm*J*fc(dr)*fr(r1,r2) # return identity
+      return (zzm*J*fc(dr))@fr(r1,r2) # return identity
     return fun
   elif name=="XYZ":
     def fun(r1,r2):
@@ -387,7 +387,7 @@ def generating_functions(name="Heisenberg",J=1.0,v=np.array([0.,0.,1.]),
       dr2 = np.sqrt(dr.dot(dr))
       if np.abs(fc(dr2))<0.00000001: return zero
       if callable(v): return J*fc(dr2)*np.diag(v(dr)) # return matrix
-      else: return J*fc(dr)*np.diag(v)*fr(r1,r2) # return matrix
+      else: return (J*fc(dr)*np.diag(v))@fr(r1,r2) # return matrix
     return fun
   elif name=="DM":
     eps = get_lc()

@@ -30,7 +30,7 @@ def update_mean_field(self,mixing=0.95):
     generate_index2vec(self) # generate the array of not present yet
     accu = 0.0 # accumulator
     if self.correlator_mode == "multicorrelator":
-      np.savetxt("VS_SCF.OUT",np.matrix([range(len(self.cij)),np.abs(self.cij)]).T)
+      np.savetxt("VS_SCF.OUT",np.array([range(len(self.cij)),np.abs(self.cij)]).T)
     zero = self.hamiltonian.intra*0.
     # initialize
     storage = [zero.copy() for i in range(len(self.interactions_vecs))]

@@ -49,11 +49,11 @@ def perturb_bands(hprim,hper,kpath,inds_super=[]):
       wfs.append(np.concatenate(wlist)) # add this wave to the list
    # now apply perturbation theory
     vm = np.zeros((len(wfs),len(wfs)),dtype=np.complex128) # perturbation
-    for iw in wfs: 
-      for jw in wfs: 
-        iw = np.matrix(iw)
-        jw = dagger(np.matrix(jw))
-        vaw = (iw*hper*jw)[0,0] # matrix element
+    for iw in wfs:
+      for jw in wfs:
+        iw = np.array(iw)
+        jw = dagger(np.array(jw))
+        vaw = iw@hper@jw # matrix element
   
     raise
 

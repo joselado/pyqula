@@ -195,7 +195,7 @@ def get_interface(h,fun=None):
   dind = 1 # index to which divide the positions
   if h.has_spin:  dind *= 2 # duplicate for spin
   if h.has_eh:  dind *= 2  # duplicate for eh
-  iden = csc(np.matrix(np.identity(dind,dtype=np.complex128))) # identity matrix
+  iden = csc(np.array(np.identity(dind,dtype=np.complex128))) # identity matrix
   r = h.geometry.r # positions
   out = [[None for ri in r] for rj in r] # initialize
   if fun is None: # no input function

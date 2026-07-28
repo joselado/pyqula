@@ -112,7 +112,7 @@ def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,q=None,**kwargs):
         for i in range(len(es)): # loop over energies
             chi = chis_tmp[:,:,i,:,:] # get this one
             chi = [[chi[i,j,:,:] for i in range(nop)] for j in range(nop)]
-            chis.append(np.bmat(chi)) # store
+            chis.append(np.block(chi)) # store
     elif mode_rpa=="vectorized": # all at once
         es,chis = _chi_ops_matrix_vectorized(h,ops=ops,pAs=pAs,pBs=pBs,q=q,**kwargs)
     else: raise

@@ -89,7 +89,7 @@ def mz(h,name="MZ.OUT"):
   if h.has_eh: raise
   if h.has_spin: ms = extract.mz(h.intra)
   else: raise
-  np.savetxt(name,np.matrix([range(len(ms)),ms]).T)
+  np.savetxt(name,np.array([range(len(ms)),ms]).T)
 
 
 
@@ -101,9 +101,9 @@ def magnetization(h):
     my = extract.my(h.intra)
     mz = extract.mz(h.intra)
   else: raise
-  np.savetxt("MAGNETIZATION_X.OUT",np.matrix([h.geometry.x,h.geometry.y,mx]).T)
-  np.savetxt("MAGNETIZATION_Y.OUT",np.matrix([h.geometry.x,h.geometry.y,my]).T)
-  np.savetxt("MAGNETIZATION_Z.OUT",np.matrix([h.geometry.x,h.geometry.y,mz]).T)
+  np.savetxt("MAGNETIZATION_X.OUT",np.array([h.geometry.x,h.geometry.y,mx]).T)
+  np.savetxt("MAGNETIZATION_Y.OUT",np.array([h.geometry.x,h.geometry.y,my]).T)
+  np.savetxt("MAGNETIZATION_Z.OUT",np.array([h.geometry.x,h.geometry.y,mz]).T)
 
 
 

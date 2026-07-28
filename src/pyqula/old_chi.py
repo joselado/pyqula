@@ -8,7 +8,7 @@ from .collinear_xychi import collinear_xychi
 def chi0d(m,energies = [0.],t=0.0001):
   """ Calculate spin response"""
   e,ev = lg.eigh(m) # get eigenvalues
-  ev = np.matrix(ev.transpose())
+  ev = np.array(ev.transpose())
   n = np.shape(ev)
 #  import check
 #  check.check(ev,e)
@@ -63,10 +63,10 @@ def chi2d(h,energies = [0.],t=0.0001,delta=0.01,q=np.array([0.001,0.0]),nk=20,U=
   def get_chik(k):
     """Function to integrate"""
     hk = hkgen(k) # fist point
-    if collinear: hk = np.matrix([[hk[2*i,2*j] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # up component
+    if collinear: hk = np.array([[hk[2*i,2*j] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # up component
     e1,ev1 = lg.eigh(hk) # get eigenvalues
     hk = hkgen(k+q) # second point
-    if collinear: hk = np.matrix([[hk[2*i+1,2*j+1] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # down component
+    if collinear: hk = np.array([[hk[2*i+1,2*j+1] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # down component
     e2,ev2 = lg.eigh(hk) # get eigenvalues
     if collinear:
       ct = collinear_xychi(ev1.T,e1,ev2.T,e2,energies,t,delta) # contribution
@@ -109,11 +109,11 @@ def sumchi(ms):
 
 def rpachi(ms,U=0.0):
   """ Calculate the RPA spin response"""
-  iden = np.matrix(np.identity(len(ms[0]),dtype=np.complex128)) # identity
+  iden = np.array(np.identity(len(ms[0]),dtype=np.complex128)) # identity
   msrpa = [] # list with matrices
   for m in ms:
-    m = np.matrix(m) # convert to matrix
-    m = (iden - U*m).I*m  # RPA formula
+    m = np.array(m) # convert to array
+    m = lg.inv(iden - U*m)@m  # RPA formula
     msrpa.append(m) # store matrix
   return msrpa # return RPA
 
@@ -131,12 +131,12 @@ def collinear_chi1d(h,energies = [0.],t=0.0001,delta=0.01,q=0.001,nk=1000,U=None
 #      print "Doing k=",k
       hk = hkgen(k) # fist point
 
-      if collinear: hk = np.matrix([[hk[2*i,2*j] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # up component
+      if collinear: hk = np.array([[hk[2*i,2*j] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # up component
 
       e1,ev1 = lg.eigh(hk) # get eigenvalues
       hk = hkgen(k+q) # second point
 
-      if collinear: hk = np.matrix([[hk[2*i+1,2*j+1] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # down component
+      if collinear: hk = np.array([[hk[2*i+1,2*j+1] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # down component
 
       e2,ev2 = lg.eigh(hk) # get eigenvalues
       ct = collinear_xychi(ev1.T,e1,ev2.T,e2,energies,t,delta) # contribution
@@ -148,10 +148,10 @@ def collinear_chi1d(h,energies = [0.],t=0.0001,delta=0.01,q=0.001,nk=1000,U=None
     def get_chik(k): # function which returns a matrix
       """ Get response at a cetain energy"""
       hk = hkgen(k) # first point
-      if collinear: hk = np.matrix([[hk[2*i,2*j] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # up component
+      if collinear: hk = np.array([[hk[2*i,2*j] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # up component
       e1,ev1 = lg.eigh(hk) # get eigenvalues
       hk = hkgen(k+q) # second point
-      if collinear: hk = np.matrix([[hk[2*i+1,2*j+1] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # down component
+      if collinear: hk = np.array([[hk[2*i+1,2*j+1] for i in range(len(hk)/2)] for j in range(len(hk)/2)])  # down component
       e2,ev2 = lg.eigh(hk) # get eigenvalues
       ct = collinear_xychi(ev1.T,e1,ev2.T,e2,energies,t,delta) # contribution
       return ct # return response
