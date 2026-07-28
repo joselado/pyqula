@@ -343,6 +343,19 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     rotation, needed for it (unlike the x/y channels, which do need the
     rotate-decouple-rotate-back trick).
 
+    CAVEAT: this SCF convergence itself is unaffected by any combination
+    of finite V and J (it's a plain linear combination, as above) -- bands,
+    DOS, total energy, get_magnon_bands (onsite-Hubbard-only case: neither
+    V nor J set), etc. all work normally on the result. But the resulting
+    Hamiltonian's h.V only ever stores the combined z-channel matrix, never
+    the separately built x/y-channel ones, so h.V has non-onsite support
+    whenever ANY of V1/V2/V3/Vr/J1/J2/J3/Jr is nonzero -- and
+    get_magnon_bands/get_spinchi_full/get_spinchi_ladder now raise
+    ValueError on a non-onsite h.V (see
+    chitk.spinchi._require_onsite_only_V's docstring for why): that
+    downstream spin-channel RPA path is not yet properly verified for any
+    non-onsite interaction, exchange or density-density or a mix.
+
     For a BdG (Nambu, h0.has_eh=True) Hamiltonian, density-density and
     exchange are instead kept as two separate contributions summed each
     SCF iteration (see _run_anisotropic_scf's docstring): density-density
@@ -892,6 +905,11 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # relying on h.V for e.g. get_magnon_bands/get_rpa_kernel_poles
         # (which expect a single, onsite-only interaction matrix) should
         # not assume this represents the whole exchange+density-density mix
+        # -- this is exactly the non-onsite h.V that
+        # chitk.spinchi._require_onsite_only_V now rejects with
+        # ValueError whenever any of V1/V2/V3/Vr/J1/J2/J3/Jr is nonzero,
+        # since that spin-channel RPA path is not yet properly verified
+        # for a non-onsite interaction (see that function's docstring).
         scf.hamiltonian.V = vz
         scf.hamiltonian0 = h0_ref
         scf.mf = mfnew

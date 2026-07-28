@@ -38,28 +38,30 @@ def test_vjinteraction_v1_only_converges_ferromagnetic_at_low_filling():
     hmf = scf.hamiltonian
     mz = hmf.get_vev("sz")
     assert abs(mz[0]) > 0.05, f"expected a sizable ferromagnetic moment, got {mz}"
-    # H.V must have picked up the neighbor-shell (non-onsite) keys -- this
-    # is exactly what used to make chi.magnon_bands/_full_spin_U raise
+    # H.V picks up the neighbor-shell (non-onsite) keys -- this is exactly
+    # the H.V shape that chitk.spinchi._require_onsite_only_V now rejects
+    # (see test_magnon_bands_raises_on_v1_only_converged_hamiltonian below)
     assert len(hmf.V) > 1
     assert (0, 0, 0) in hmf.V
 
 
 @pytest.mark.slow
-def test_magnon_bands_runs_on_v1_only_converged_hamiltonian():
-    """get_magnon_bands must run without raising (and return finite,
-    self-consistent results) on a Hamiltonian whose H.V comes purely from
-    a folded-in density-density (V1) interaction -- i.e. a genuinely
-    non-onsite H.V reached through the normal SCF path, not just a
-    hand-built dict."""
+def test_magnon_bands_raises_on_v1_only_converged_hamiltonian():
+    """get_magnon_bands must raise ValueError on a Hamiltonian whose H.V
+    comes from a folded-in density-density (V1) interaction -- i.e. a
+    genuinely non-onsite H.V reached through the normal SCF path, not just
+    a hand-built dict. Non-onsite spin-channel RPA (bond exchange alone,
+    density-density alone, or a combination) is not yet properly verified
+    against an independent reference, so chitk.spinchi._require_onsite_only_V
+    rejects it rather than silently returning an unverified number -- see
+    that function's docstring for the reasoning."""
     h, mf = _seeded_chain(filling=0.1)
     scf = VJinteraction(h, V1=1.1, filling=0.1, mf=mf, nk=200, mix=0.2,
                          maxerror=1e-8, maxite=1000)
     hmf = scf.hamiltonian
     energies = np.linspace(0.01, 1.0, 40)
-    qs, ws, gammas = hmf.get_magnon_bands(nq=3, energies=energies, delta=2e-2, nk=100)
-    assert qs.shape == ws.shape == gammas.shape
-    assert np.all(np.isfinite(ws))
-    assert np.all(np.isfinite(gammas))
+    with pytest.raises(ValueError):
+        hmf.get_magnon_bands(nq=3, energies=energies, delta=2e-2, nk=100)
 
 
 @pytest.mark.slow
@@ -117,11 +119,13 @@ def test_vjinteraction_j1_antiferromagnetic_moment_grows_on_bichain():
     # H.V must carry the off-diagonal, cross-sublattice bond structure
     assert len(h_strong.V) > 1
 
-    # get_magnon_bands must run without raising on this genuinely
-    # multi-orbital, non-onsite H.V
+    # get_magnon_bands must raise on this genuinely multi-orbital,
+    # non-onsite H.V -- see test_magnon_bands_raises_on_v1_only_converged_
+    # hamiltonian above and chitk.spinchi._require_onsite_only_V's
+    # docstring; the underlying vertex-extraction math is still exercised
+    # (and regression-tested) directly in
+    # tests/chi/test_magnon_goldstone_bond_exchange.py, which bypasses
+    # this Hamiltonian-level guard on purpose.
     energies = np.linspace(0.01, 3.0, 40)
-    qs, ws, gammas = h_strong.get_magnon_bands(nq=3, energies=energies,
-                                                delta=2e-2, nk=100)
-    assert qs.shape == ws.shape == gammas.shape
-    assert np.all(np.isfinite(ws))
-    assert np.all(np.isfinite(gammas))
+    with pytest.raises(ValueError):
+        h_strong.get_magnon_bands(nq=3, energies=energies, delta=2e-2, nk=100)

@@ -131,11 +131,19 @@ class Hamiltonian():
         from . import chi
         return chi.chiAB_trace(self,**kwargs)
     def get_spinchi_ladder(self,**kwargs):
-        """Spin-spin response function with ladder operators"""
+        """Spin-spin response function with ladder operators.
+
+        RPA=True (the default) requires H.V to be a plain onsite
+        (Hubbard-like) interaction -- raises ValueError otherwise, see
+        chitk.spinchi._require_onsite_only_V's docstring."""
         from . import chi
         return chi.spinchi_ladder(self,**kwargs)
     def get_spinchi_full(self,**kwargs):
-        """Full spin-spin response function"""
+        """Full spin-spin response function.
+
+        RPA=True (the default) requires H.V to be a plain onsite
+        (Hubbard-like) interaction -- raises ValueError otherwise, see
+        chitk.spinchi._require_onsite_only_V's docstring."""
         from . import chi
         return chi.spinchi_full(self,**kwargs)
     def get_iets_ldos(self,**kwargs):
@@ -155,7 +163,12 @@ class Hamiltonian():
     def get_magnon_bands(self,**kwargs):
         """Return the magnon bands: the poles of the full spin RPA kernel
         (the Sx,Sy,Sz channel used by get_spinchi_full/get_iets_ldos),
-        scanned along a q-path"""
+        scanned along a q-path.
+
+        Requires H.V to be a plain onsite (Hubbard-like) interaction --
+        raises ValueError for any non-onsite H.V (bond exchange,
+        density-density, or a combination, e.g. from VJinteraction), see
+        chitk.spinchi._require_onsite_only_V's docstring for why."""
         from . import chi
         return chi.magnon_bands(self,**kwargs)
     def get_densitychi_RPA(self,**kwargs):

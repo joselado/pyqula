@@ -1,8 +1,9 @@
 import numpy as np
+import pytest
 
 from pyqula import geometry
 from pyqula.selfconsistency.spinspin import _build_v
-from pyqula.chitk.spinchi import _full_spin_operators, _full_spin_U
+from pyqula.chitk.spinchi import _full_spin_operators, V2K_matrix, replicateU
 from pyqula.chitk.rpa import rpa_kernel_poles_ops, _chi_ops_matrix_vectorized, \
         interaction_at_q
 
@@ -22,41 +23,55 @@ def _chain_with_nn_exchange(filling, J1, nk_fermi=4000):
     return h
 
 
+def _nononsite_spin_U(h):
+    """Build the same vertex _full_spin_U(h) would (V2K_matrix/replicateU,
+    the +2 prefactor), bypassing chitk.spinchi._require_onsite_only_V's
+    guard -- h.V here is deliberately non-onsite, which that guard now
+    rejects at the public API (get_magnon_bands/get_spinchi_full) because
+    non-onsite spin-channel RPA isn't properly verified in general (see
+    that function's docstring). These tests intentionally exercise the
+    underlying vertex/Fourier-transform math directly, the same way this
+    module's guard-bypassing pattern is documented and recommended for."""
+    return {d: 2*replicateU(V2K_matrix(m), n=3) for d, m in h.V.items()}
+
+
 def test_multishell_interaction_has_more_than_one_key():
     """Sanity check on the test fixture itself: the whole point is that
-    H.V is NOT onsite-only (that used to make _full_spin_U/magnon_bands
-    raise)."""
+    H.V is NOT onsite-only."""
     h = _chain_with_nn_exchange(filling=0.1, J1=-1.0)
     assert len(h.V) > 1
     assert (0, 0, 0) in h.V
 
 
-def test_magnon_bands_matches_direct_kernel_poles_for_nononsite_interaction():
-    """get_magnon_bands must agree exactly with calling the lower-level
-    rpa_kernel_poles_ops directly, using the same Sx,Sy,Sz operators and
-    the same (now non-onsite) interaction dict -- mirrors
-    tests/chi/test_magnon_bands.py's onsite-only version of this check,
-    here specifically for a H.V with neighbor-shell (not just onsite)
-    support, i.e. exercising interaction_at_q's dict-Fourier-transform
-    path end to end."""
+def test_get_magnon_bands_raises_for_nononsite_interaction():
+    """get_magnon_bands must raise ValueError for this hand-built,
+    genuinely non-onsite H.V too (not just an SCF-derived one, see
+    tests/scf/test_rpa_nononsite_ferro_chain.py) -- non-onsite spin-channel
+    RPA is not yet properly verified, see
+    chitk.spinchi._require_onsite_only_V's docstring."""
+    h = _chain_with_nn_exchange(filling=0.1, J1=-1.5)
+    energies = np.linspace(0.0002, 0.08, 60)
+    with pytest.raises(ValueError):
+        h.get_magnon_bands(qpath=[[0.02, 0., 0.]], nq=1, energies=energies,
+                            delta=1e-3, nk=4000)
+
+
+def test_direct_kernel_poles_are_finite_for_nononsite_interaction():
+    """Keeps regression coverage for interaction_at_q's dict-Fourier-
+    transform path (the actual thing this fixture exercises) by calling
+    rpa_kernel_poles_ops directly with a manually-built vertex, bypassing
+    the now-guarded get_magnon_bands/_full_spin_U -- see
+    _nononsite_spin_U's docstring."""
     h = _chain_with_nn_exchange(filling=0.1, J1=-1.5)
     energies = np.linspace(0.0002, 0.08, 60)
     q0 = [0.02, 0., 0.]
 
-    qs, ws, gammas = h.get_magnon_bands(qpath=[q0], nq=1, energies=energies,
-                                         delta=1e-3, nk=4000)
-
     Ss = _full_spin_operators(h)
-    U = _full_spin_U(h)
-    direct_poles = rpa_kernel_poles_ops(h, ops=Ss, V=U, q=q0,
-                                         energies=energies, delta=1e-3, nk=4000)
-
-    assert np.all(qs == 0)
-    assert len(ws) == len(direct_poles)
-    order = np.argsort(ws)
-    direct_order = np.argsort(direct_poles[:, 0])
-    assert np.allclose(ws[order], direct_poles[direct_order, 0])
-    assert np.allclose(gammas[order], direct_poles[direct_order, 1])
+    U = _nononsite_spin_U(h)
+    poles = rpa_kernel_poles_ops(h, ops=Ss, V=U, q=q0,
+                                  energies=energies, delta=1e-3, nk=4000)
+    assert poles.shape[1] == 2
+    assert np.all(np.isfinite(poles))
 
 
 def test_low_filling_enhances_ferromagnetic_instability():
@@ -70,7 +85,11 @@ def test_low_filling_enhances_ferromagnetic_instability():
     filling favours a ferromagnetic instability" -- checked as a
     monotonic trend in the static kernel eigenvalue (not by trying to
     resolve a dynamic pole's exact location, which is far more sensitive
-    to numerical resolution)."""
+    to numerical resolution).
+
+    Builds the vertex directly (bypassing the guard, see
+    _nononsite_spin_U's docstring) since this deliberately exercises a
+    non-onsite interaction."""
     J1 = -1.0
     q = [0.05, 0., 0.]
     energies = np.array([0.01])
@@ -80,7 +99,7 @@ def test_low_filling_enhances_ferromagnetic_instability():
     for filling in fillings:
         h = _chain_with_nn_exchange(filling=filling, J1=J1)
         Ss = _full_spin_operators(h)
-        U = _full_spin_U(h)
+        U = _nononsite_spin_U(h)
         es, chis = _chi_ops_matrix_vectorized(h, ops=Ss, q=q, energies=energies,
                                                delta=1e-2, nk=4000)
         Uq = interaction_at_q(U, h, q)
