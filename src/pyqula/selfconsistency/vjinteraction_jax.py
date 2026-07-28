@@ -1,0 +1,373 @@
+# JAX-derivative-based counterpart of selfconsistency/spinspin.py's
+# VJinteraction.
+#
+# Same physical model (combined V/U density-density + J1/J2/J3/J1x/J1y/J1z
+# spin-spin exchange mean field, normal-state only) as the numpy engine in
+# spinspin.py's _run_anisotropic_scf, but the one-SCF-step map
+#     mf_vector -> mf_vector_new
+# is a pure, differentiable JAX function. That lets solver="newton" (and
+# "newton_krylov"/"fsolve") solve the fixed point x = step(x) with a genuine
+# root-finder driven by JAX-computed derivatives of step, instead of only
+# linear mixing -- the same idea selfconsistency/densitydensity_jax.py
+# already implements for Vinteraction (V/U-only, no exchange). This module
+# reuses that machinery almost entirely: the four solver functions
+# (newton_solve/fsolve_solve/newton_krylov_solve/fixed_point_solve) are
+# generic in the step function they are handed and need no changes at all;
+# only the step function itself needs generalizing, from a single
+# density-density channel to VJinteraction's three channels (vz direct, vx/vy
+# via the rotate-decouple-rotate-back trick spinspin._run_anisotropic_scf
+# uses for anisotropic exchange).
+#
+# Deliberately narrower in scope than spinspin.VJinteraction, mirroring
+# exactly how densitydensity_jax.py scopes down relative to densitydensity.py:
+#  - normal-state (has_eh=False) mean field only, no anomalous/BdG part
+#  - dense exact diagonalization only (jax.numpy.linalg.eigh), no KPM/sparse
+#  - no constrains/callback_mf (needs concrete numpy arrays each iteration,
+#    incompatible with jax tracing -- same restriction densitydensity_jax.py's
+#    solver="newton"/"fsolve"/"newton_krylov" already have for Vinteraction)
+#  - a target filling is supported the same way densitydensity_jax.py does:
+#    mu is resolved *inside* the trace each step as the midpoint between the
+#    n_occ_total-th and (n_occ_total+1)-th eigenvalue of the full (sorted)
+#    spectrum, rather than a numpy root-find outside the trace
+#  - occupations always use a finite smearing temperature T (default 1e-4,
+#    see densitydensity_jax.default_T_jax) since jnp.linalg.eigh's eigenvector
+#    gradient is only well defined away from exact degeneracies
+from __future__ import annotations
+import numpy as np
+import jax
+import jax.numpy as jnp
+
+jax.config.update("jax_enable_x64", True)
+
+from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
+        get_dc_energy, random_hermitian_guess)
+from .densitydensity_jax import (flatten_mf, unflatten_mf, make_bloch_stack,
+        get_mf_normal_jax, default_T_jax, newton_solve, newton_krylov_solve,
+        fsolve_solve, fixed_point_solve)
+from .spinspin import _build_v, _build_density_v, _channel_is_zero, _AXIS_ROTATION
+from .mfconstrains import obj2mf
+from ..multihopping import MultiHopping
+from ..rotate_spin import build_rotation_matrix
+
+
+def _block_rotate_jax(m, rot):
+    """JAX port of spinspin._block_rotate: rot @ m @ rot^dagger, applied to
+    every site's own 2x2 spin sub-block of an (n,n) matrix independently --
+    see spinspin._block_rotate's docstring for why this is equivalent to,
+    but much cheaper than, a dense (n,n)@(n,n) matmul against the full
+    kron(I_{n/2},rot)."""
+    n = m.shape[0]
+    n_orb = n // 2
+    m4 = m.reshape(n_orb, 2, n_orb, 2)
+    out = jnp.einsum('ab,xbyc->xayc', rot, m4)
+    out = jnp.einsum('xayc,dc->xayd', out, jnp.conj(rot))
+    return out.reshape(n, n)
+
+
+def _rot_dict_jax(dd, R):
+    """JAX port of spinspin._rot_dict (Hamiltonian-like matrices: R @ m @ R^dagger)"""
+    return {k: _block_rotate_jax(m, R) for (k, m) in dd.items()}
+
+
+def _rot_dm_jax(dd, R):
+    """JAX port of spinspin._rot_dm (density matrices need the conjugate-
+    sandwiched transformation -- see that function's docstring for why)."""
+    return {k: jnp.conj(_block_rotate_jax(jnp.conj(m), R)) for (k, m) in dd.items()}
+
+
+def _rot_dm_np(dd, R):
+    """Used only for the one-time (post-optimization) total-energy tail
+    below -- reuses _rot_dm_jax/_block_rotate_jax directly (jnp runs fine on
+    plain numpy/complex inputs outside any jit/grad trace) rather than
+    duplicating the rotation formula a third time; spinspin._block_rotate/
+    _rot_dm are nested closures inside _run_anisotropic_scf, not importable
+    at module level, so calling into this module's own jax version -- kept
+    in sync with the step function by construction -- is the reuse path
+    that avoids that."""
+    dd_j = {k: jnp.asarray(m) for k, m in dd.items()}
+    R_j = jnp.asarray(R, dtype=jnp.complex128)
+    return {k: np.asarray(m) for k, m in _rot_dm_jax(dd_j, R_j).items()}
+
+
+def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
+        Rx, Ry, vz_active, vx_active, vy_active, n_occ_total=None):
+    """Return step(x,mu) -> (xnew, dm, es, occ, mu_eff), the pure-JAX one
+    SCF step combining the z/x/y channels -- structurally
+    densitydensity_jax.build_step_function (same Bloch-stack build,
+    vmap(eigh), mu-for-filling jnp.sort trick, per-direction dm
+    reconstruction via einsum) generalized from a single get_mf_normal_jax
+    call to VJinteraction's three-channel combination, mirroring
+    spinspin._run_anisotropic_scf.compute_mf restricted to the normal-state
+    case (no has_eh/vd-separate/embed_normal branches -- vd is folded into
+    vz by the caller before this point, exactly as the numpy VJinteraction
+    already does whenever has_eh=False).
+
+    vz/vx/vy must already be padded to have an entry for every key in dirs
+    (zero matrices where a channel does not itself reach that direction) --
+    get_mf_normal_jax indexes v[d] directly for every d in dirs, unlike the
+    numpy get_mf_normal which only loops over v's own (possibly smaller) key
+    set."""
+    n = hop0[(0, 0, 0)].shape[0]
+    ds_arr = jnp.array([list(d) for d in dirs_all], dtype=jnp.float64)
+    ms0 = make_bloch_stack(hop0, dirs_all, n)
+    vz_j = {d: jnp.asarray(vz[d], dtype=jnp.complex128) for d in vz}
+    vx_j = {d: jnp.asarray(vx[d], dtype=jnp.complex128) for d in vx}
+    vy_j = {d: jnp.asarray(vy[d], dtype=jnp.complex128) for d in vy}
+    Rx_j = jnp.asarray(Rx, dtype=jnp.complex128) if Rx is not None else None
+    Ry_j = jnp.asarray(Ry, dtype=jnp.complex128) if Ry is not None else None
+    nk = ks.shape[0]
+    dir_phase = jnp.array([list(d) for d in dirs], dtype=jnp.float64)  # (nt,3)
+
+    def step(x, mu):
+        mf = unflatten_mf(x, dirs, n)
+        mats = [ms0[i] + mf[d] if d in mf else ms0[i]
+                for i, d in enumerate(dirs_all)]
+        ms = jnp.stack(mats)
+
+        def hk(k):
+            phases = jnp.exp(1j * 2 * jnp.pi * (ds_arr @ k))
+            return jnp.einsum('nij,n->ij', ms, phases)
+
+        hks = jax.vmap(hk)(ks)                      # (nk,n,n)
+        es, vs = jnp.linalg.eigh(hks)                # (nk,n), (nk,n,n)
+        if n_occ_total is not None:
+            es_sorted = jnp.sort(es.reshape(-1))
+            mu_eff = 0.5 * (es_sorted[n_occ_total - 1] + es_sorted[n_occ_total])
+        else:
+            mu_eff = mu
+        occ = jax.nn.sigmoid(-(es - mu_eff) / T)     # (nk,n)
+        kd = ks @ dir_phase.T                        # (nk,nt)
+        phase = jnp.exp(1j * 2 * jnp.pi * kd)         # (nk,nt)
+        dm_all = jnp.einsum('kt,kie,ke,kje->tij', phase,
+                jnp.conj(vs), occ, vs) / nk           # (nt,n,n)
+        dm = {d: dm_all[i] for i, d in enumerate(dirs)}
+
+        zero = dm[(0, 0, 0)] * 0.0
+        if vz_active:
+            mfnew = get_mf_normal_jax(vz_j, dm, dirs)
+        else:
+            mfnew = {d: zero for d in dirs}
+        if vx_active:
+            dm_x = _rot_dm_jax(dm, Rx_j)  # dm needs the conjugated rotation
+            mf_x = _rot_dict_jax(get_mf_normal_jax(vx_j, dm_x, dirs),
+                    jnp.conj(Rx_j).T)     # mf does not
+            mfnew = {d: mfnew[d] + mf_x[d] for d in dirs}
+        if vy_active:
+            dm_y = _rot_dm_jax(dm, Ry_j)
+            mf_y = _rot_dict_jax(get_mf_normal_jax(vy_j, dm_y, dirs),
+                    jnp.conj(Ry_j).T)
+            mfnew = {d: mfnew[d] + mf_y[d] for d in dirs}
+
+        xnew = flatten_mf(mfnew, dirs)
+        return xnew, dm, es, occ, mu_eff
+
+    return step
+
+
+def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
+        filling=None, T=None, mix=0.1, maxerror=1e-5, maxite=2000,
+        solver="newton", verbose=0, gmres_tol=1e-6, gmres_restart=20):
+    """JAX-differentiable analogue of spinspin._run_anisotropic_scf,
+    restricted to the normal-state case -- see the module docstring for the
+    full scope restriction. vz/vx/vy are the (unpadded, possibly
+    smaller-than-`dirs`) numpy interaction matrices built by
+    spinspin._build_v/_build_density_v; vd (density-density) must already be
+    folded into vz by the caller, exactly as VJinteraction itself does for
+    has_eh=False."""
+    if T is None or T <= 0:
+        T = default_T_jax
+    h1 = h0.copy()
+    h1 = h1.get_dense()
+    h1.nk = nk
+    hop0 = hamiltonian2dict(h1)  # numpy dict, bare hoppings
+    n = hop0[(0, 0, 0)].shape[0]
+
+    vz_active = not _channel_is_zero(vz)
+    vx_active = not _channel_is_zero(vx)
+    vy_active = not _channel_is_zero(vy)
+
+    # the x/y rotations are fixed for the whole SCF loop -- build the small
+    # 2x2 spin rotation matrices once, same reasoning as
+    # _run_anisotropic_scf's own Rx/Ry precomputation
+    Rx = Ry = None
+    if vx_active:
+        Rx = build_rotation_matrix(1, **_AXIS_ROTATION["x"])
+    if vy_active:
+        Ry = build_rotation_matrix(1, **_AXIS_ROTATION["y"])
+
+    dirs = sorted(set(vz) | set(vx) | set(vy))
+    if (0, 0, 0) not in dirs:
+        dirs = [(0, 0, 0)] + dirs
+    dirs_all = sorted(set(hop0.keys()) | set(dirs))
+    ks = jnp.asarray(np.array(h1.geometry.get_kmesh(nk=nk)), dtype=jnp.float64)
+
+    # pad each channel's interaction matrix to the full `dirs` union: a
+    # channel with a smaller key set than another (e.g. Jx1 nonzero, Jz set
+    # to a different neighbor range) must still supply a (zero) matrix for
+    # every direction get_mf_normal_jax is asked about -- see
+    # build_step_function_vj's docstring
+    zero_np = np.zeros((n, n), dtype=np.complex128)
+    def _pad(v):
+        return {d: (v[d] if d in v else zero_np) for d in dirs}
+    vz_full, vx_full, vy_full = _pad(vz), _pad(vx), _pad(vy)
+
+    if mf is None:
+        mf = random_hermitian_guess({d: None for d in dirs}, h1.intra.shape,
+                scale=1e-1)  # same scale as VJinteraction's own default guess
+    elif isinstance(mf, str):
+        from ..meanfield import guess
+        mf = guess(h0, mode=mf)
+    mf = obj2mf(mf)
+    zero_n = jnp.zeros((n, n), dtype=jnp.complex128)
+    x0 = flatten_mf({d: jnp.asarray(mf[d], dtype=jnp.complex128)
+        if d in mf else zero_n for d in dirs}, dirs)
+
+    n_occ_total = None
+    if filling is not None:
+        n_tot = n * ks.shape[0]
+        n_occ_total = int(round(filling * n_tot))
+        n_occ_total = min(max(n_occ_total, 1), n_tot - 1)
+
+    step = build_step_function_vj(hop0, vz_full, vx_full, vy_full, ks, dirs,
+            dirs_all, T, Rx, Ry, vz_active, vx_active, vy_active,
+            n_occ_total=n_occ_total)
+    step_jit = jax.jit(step)
+
+    if solver == "newton":
+        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
+        x, ite, converged = newton_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose)
+        final_mu = float(step_jit(x, mu)[4])
+    elif solver == "fsolve":
+        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
+        x, ite, converged = fsolve_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose)
+        final_mu = float(step_jit(x, mu)[4])
+    elif solver == "newton_krylov":
+        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
+        x, ite, converged = newton_krylov_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose, gmres_tol=gmres_tol,
+                gmres_restart=gmres_restart)
+        final_mu = float(step_jit(x, mu)[4])
+    elif solver == "fixed_point":
+        x, final_mu, ite, converged = fixed_point_solve(step_jit, x0, mu,
+                dirs, n, mix=mix, maxite=maxite, tol=maxerror, verbose=verbose)
+    else:
+        raise ValueError("unrecognised solver for VJinteraction "
+                "use_jax=True: %r" % (solver,))
+
+    xfinal, dm, es, occ, final_mu = step_jit(x, final_mu)
+    final_mu = float(final_mu)
+    mf_final = unflatten_mf(x, dirs, n)
+    dm_np = {d: np.asarray(dm[d]) for d in dirs}
+    mf_np = {d: np.asarray(mf_final[d]) for d in dirs}
+
+    hop_final = dict()
+    for d in dirs_all:
+        m = np.asarray(hop0[d]) if d in hop0 else np.zeros((n, n), dtype=complex)
+        if d in mf_np:
+            m = m + mf_np[d]
+        hop_final[d] = m
+    h_final = h1.copy()
+    set_hoppings(h_final, hop_final)
+    # Mirror spinspin._run_anisotropic_scf's callback_h *exactly*, including
+    # which branch sets .fermi: for a filling target (mu is None upstream,
+    # i.e. n_occ_total is not None here) it sets h.fermi=fermi and shifts by
+    # -fermi; for a fixed mu it only shifts by -mu and never assigns .fermi
+    # at all (so scf.hamiltonian.fermi raises AttributeError there, same as
+    # the numpy engine -- code checking hasattr(h,'fermi') to detect a
+    # filling-target run must see the same answer regardless of use_jax).
+    # This step's own dm/es/occ above were computed directly against mu_eff
+    # without needing any shift, but the *returned* h_final must still carry
+    # it, and total_energy must be computed via h_final.get_total_energy
+    # (the exact same call the numpy engine's own total-energy tail makes on
+    # its identically-shifted h) rather than a hand-derived formula from the
+    # raw (unshifted) es/occ above: for a fixed, nonzero mu the numpy engine
+    # sums the SHIFTED eigenvalues with no compensating add-back (only the
+    # filling-target branch adds one, since sum(e_n-fermi,occ)+fermi*N*filling
+    # telescopes back to sum(e_n,occ) when N_occ==N*filling); reusing
+    # sum(occ*es)/nk unconditionally here matched only the filling-target
+    # case and silently gave the wrong energy (off by mu*N_occ) whenever a
+    # caller passed an explicit nonzero mu -- caught by
+    # test_vjinteraction_jax_fixed_nonzero_mu_matches_numpy_engine.
+    if n_occ_total is not None:
+        h_final.fermi = final_mu
+    h_final.shift_fermi(-final_mu)
+
+    # total energy: same h_final.get_total_energy() call (plus the identical
+    # filling-target add-back) the numpy engine's own total-energy tail
+    # makes, so this is defined identically to it by construction -- then
+    # the double-counting correction for each active channel, rotated into
+    # that channel's own frame first for vx/vy, exactly
+    # spinspin._run_anisotropic_scf's total-energy tail (reusing the same
+    # numpy get_dc_energy/_rot_dm_np, not re-derived)
+    etot = h_final.get_total_energy(nk=nk)
+    if n_occ_total is not None:
+        etot += h_final.fermi * n * filling
+    etot = float(etot)
+    if vz_active:
+        etot += get_dc_energy(vz, dm_np)
+    if vx_active:
+        dm_x = _rot_dm_np(dm_np, Rx)
+        etot += get_dc_energy(vx, dm_x)
+    if vy_active:
+        dm_y = _rot_dm_np(dm_np, Ry)
+        etot += get_dc_energy(vy, dm_y)
+
+    scf = SCF()
+    scf.hamiltonian = h_final
+    scf.hamiltonian.V = vz
+    scf.hamiltonian0 = h0
+    scf.mf = mf_np
+    scf.dm = dm_np
+    scf.v = vz
+    scf.tol = maxerror
+    scf.converged = bool(converged)
+    scf.total_energy = etot.real if hasattr(etot, "real") else etot
+    scf.mu = final_mu
+    scf.iterations = ite
+    if verbose > 1:
+        print("##################")
+        print("Total energy", scf.total_energy)
+        print("Converged", scf.converged, "in", ite, "iterations")
+        print("##################")
+    return scf
+
+
+def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
+        J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
+        mf=None, filling=0.5, mu=None, nk=8, maxerror=1e-5, maxite=2000,
+        T=None, mix=0.1, verbose=0, solver="newton",
+        gmres_tol=1e-6, gmres_restart=20):
+    """JAX drop-in for spinspin.VJinteraction (use_jax=True path) -- see the
+    module docstring for the scope restriction relative to the full numpy
+    engine (normal-state only, dense ED, no constrains). Builds the same
+    vz/vx/vy interaction matrices as the numpy VJinteraction
+    (spinspin._build_v/_build_density_v, vd folded into vz for has_eh=False)
+    and solves the resulting SCF fixed point with a JAX-derivative-based
+    root-finder (solver="newton"/"fsolve"/"newton_krylov", or "fixed_point"
+    for plain linear mixing through the same machinery) instead of
+    VJinteraction's own hardcoded plain-mixing loop."""
+    if not h0.has_spin:
+        return NotImplemented  # only for spinful systems, same as VJinteraction
+    if h0.has_eh:
+        raise NotImplementedError("VJinteraction's use_jax=True does not "
+                "support the anomalous/BdG mean field yet; use the default "
+                "(numpy) engine")
+    h1 = h0.get_multicell().get_dense()
+    nd = h1.geometry.neighbor_distances()  # shared by all three _build_*_v calls
+    vz = _build_v(h1, J1 + J1z, J2, J3, Jr, nd=nd)
+    vd = _build_density_v(h1, V1, V2, V3, U, Vr, nd=nd)
+    vx = _build_v(h1, J1 + J1x, J2, J3, Jr, nd=nd)
+    vy = _build_v(h1, J1 + J1y, J2, J3, Jr, nd=nd)
+    vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()  # fold density-density in
+
+    kwargs = dict(mf=mf, nk=nk, T=T, mix=mix, maxerror=maxerror, maxite=maxite,
+            solver=solver, verbose=verbose, gmres_tol=gmres_tol,
+            gmres_restart=gmres_restart)
+    if mu is not None:
+        return generic_vjinteraction_jax(h1, vz, vx, vy, mu=mu, filling=None,
+                **kwargs)
+    else:
+        return generic_vjinteraction_jax(h1, vz, vx, vy, mu=0.0,
+                filling=filling, **kwargs)

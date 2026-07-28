@@ -1864,6 +1864,28 @@ pairing (see the example above).
   principle win for a large/sparse enough system, but that crossover was
   not reached in the sizes tested. Only use `"kpm"` after confirming it is
   actually faster for your system.
+- `use_jax=True, solver="newton"`: solve the same SCF fixed point
+  $x=f(x)$ ($x$ the mean-field parameters, $f$ one SCF iteration) a
+  different way -- instead of the default plain-mixing loop above, build a
+  JAX-differentiable version of $f$ and solve it with a JAX-derivative-based
+  root-finder. `solver="newton"` (the default once `use_jax=True`) uses
+  `jax.jacfwd` for the exact Jacobian; `"newton_krylov"` is the matrix-free
+  variant (`jax.jvp` Jacobian-vector products + GMRES), which scales to
+  larger systems than the dense-Jacobian `"newton"` (`gmres_tol=1e-6`,
+  `gmres_restart=20` tune its linear solve); `"fsolve"` wraps
+  `scipy.optimize.fsolve`/MINPACK with the same `jax.jacfwd` Jacobian as
+  `fprime`; `"fixed_point"` is plain linear mixing routed through the same
+  machinery, for comparison. Restricted to a normal-state (non-BdG)
+  Hamiltonian, dense exact diagonalization only (no `integration="kpm"`),
+  and no `constrains`; needs the optional `jax` extra
+  (`pip install pyqula[jax]`). See `selfconsistency.vjinteraction_jax`'s
+  module docstring for how this reuses (unmodified) the solver
+  infrastructure `selfconsistency.densitydensity_jax` already built for the
+  simpler `Vinteraction` (V/U-only) case:
+```python
+hmf = h.get_combined_mean_field_hamiltonian(U=4.0,J1=-0.5,filling=0.5,
+        use_jax=True,solver="newton") # JAX-derivative-based SCF solver
+```
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
 

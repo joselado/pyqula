@@ -313,11 +313,21 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None, nd=None):
     return v
 
 
+# sentinel distinguishing "T left at its default" from "T explicitly passed
+# as this function's own default value" -- needed because the numpy engine's
+# sensible default (near-zero T, 1e-7) and the jax engine's own (T=1e-4, see
+# vjinteraction_jax.default_T_jax) genuinely differ, so use_jax=True must be
+# able to tell the two cases apart rather than colliding an explicit T=1e-7
+# with "unset" (see the use_jax branch below)
+_T_UNSET = object()
+
+
 def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
         mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
-        T=1e-7, verbose=0, constrains=[],
-        integration="ed", scale=None, npol=None, ne=None, cores=None):
+        T=_T_UNSET, verbose=0, constrains=[],
+        integration="ed", scale=None, npol=None, ne=None, cores=None,
+        use_jax=False, solver="newton", gmres_tol=1e-6, gmres_restart=20):
     """Self-consistent mean field combining density-density interactions
     (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
     Vinteraction) with spin-spin exchange in a single SCF loop.
@@ -460,8 +470,57 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     densitydensity_kpm.py's own total-energy tail still has the
     unconditional-densification version of this (out of scope for this
     pass, since it is a separate implementation this work did not
-    touch)."""
-    if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
+    touch).
+
+    use_jax=True solves the same SCF fixed point a different way: instead of
+    this function's own hardcoded plain-mixing loop, it builds a
+    JAX-differentiable version of the one-iteration mean-field map and
+    solves x=step(x) with a JAX-derivative-based root-finder --
+    solver="newton" (default, uses jax.jacfwd for the exact Jacobian),
+    "newton_krylov" (matrix-free, jax.jvp + GMRES, scales to larger systems
+    than "newton"'s dense Jacobian), "fsolve" (scipy.optimize.fsolve/MINPACK
+    with the same jax.jacfwd Jacobian as fprime), or "fixed_point" (plain
+    linear mixing through the same machinery, for comparison/large systems).
+    See selfconsistency.vjinteraction_jax's module docstring for the
+    algorithm and selfconsistency.densitydensity_jax's module docstring
+    (which implements the same idea for Vinteraction) for the solvers'
+    relative performance/scaling tradeoffs -- both apply here unchanged,
+    since vjinteraction_jax.py reuses those solver functions verbatim.
+    Restricted to a normal-state (has_eh=False) Hamiltonian, dense exact
+    diagonalization only (no integration="kpm"), and no constrains (needs
+    concrete numpy arrays each iteration, incompatible with jax tracing) --
+    combining use_jax=True with any of those raises NotImplementedError/
+    TypeError rather than silently ignoring the request. gmres_tol/
+    gmres_restart tune solver="newton_krylov"'s GMRES linear solve (unused
+    otherwise). Needs the optional jax extra (`pip install pyqula[jax]`)."""
+    if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy/non-jax below -- checked first so the NotImplemented-sentinel contract holds regardless of use_jax
+    if use_jax:
+        if integration != "ed":
+            raise NotImplementedError("VJinteraction's use_jax=True only "
+                    "supports integration=\"ed\" (dense exact "
+                    "diagonalization) -- got integration=%r; \"kpm\" has no "
+                    "jax counterpart" % (integration,))
+        if constrains:
+            raise NotImplementedError("VJinteraction's use_jax=True cannot "
+                    "apply constrains (they need concrete numpy arrays each "
+                    "iteration, incompatible with jax tracing); use the "
+                    "default (numpy) engine instead")
+        from .vjinteraction_jax import VJinteraction_jax
+        # T left at _T_UNSET (i.e. the caller never passed T at all) picks
+        # the jax engine's own default (None -> vjinteraction_jax.
+        # default_T_jax, 1e-4) instead of this function's own near-zero-T
+        # default (1e-7, tuned for the numpy engine's exact-diagonalization
+        # Fermi step -- too sharp for JAX's autodiff-through-eigh, which
+        # needs finite smearing away from degeneracies); an explicitly
+        # passed T (including literally 1e-7) is always forwarded as-is
+        T_jax = None if T is _T_UNSET else T
+        maxite_jax = 2000 if maxite is None else maxite
+        return VJinteraction_jax(h0, V1=V1, V2=V2, V3=V3, U=U, Vr=Vr,
+                J1=J1, J2=J2, J3=J3, Jr=Jr, J1x=J1x, J1y=J1y, J1z=J1z,
+                mf=mf, filling=filling, mu=mu, nk=nk, maxerror=maxerror,
+                maxite=maxite_jax, T=T_jax, mix=mix, verbose=verbose,
+                solver=solver, gmres_tol=gmres_tol, gmres_restart=gmres_restart)
+    T = 1e-7 if T is _T_UNSET else T
     h1 = h0.get_multicell()
     if integration != "kpm": h1 = h1.get_dense() # see docstring above
     nd = h1.geometry.neighbor_distances() # shared by all four _build_*_v calls below
