@@ -35,8 +35,9 @@ independent code paths computing the same quantity agree to numerical tolerance)
 `--import-mode=importlib`, because the repo root directory is itself named `pyqula` and contains a stray
 empty `__init__.py`; with the default import mode pytest's package-root walk from `tests/` would otherwise
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
-repeated SCF/RPA calculations to check invariance and take several seconds each — the full suite runs in well
-under a minute.
+repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
+tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, and the full suite currently takes
+several minutes (measured ~7.5 min for 406 tests) rather than under a minute.
 
 `examples/` (organized by dimensionality: `0d/ 1d/ 2d/ 3d/`, plus `transport/`, `embedding/`, `wannier/`,
 `classicalspin/`, `latticegas/`) contains runnable `main.py` scripts that double as usage documentation —
@@ -86,9 +87,12 @@ branch to preserve.
 - **Dense vs. sparse linear algebra**: `limits.densedimension` (`src/pyqula/limits.py`, currently 10000) is
   the matrix-size cutoff for switching between dense (`scipy.linalg`) and sparse (`scipy.sparse.linalg`)
   diagonalization.
-- Multiprocessing/parallelism (`paralleltk/`) across parameter sweeps (k-points, energies) is currently
-  stubbed to run serially — see the comment "parallelization not working yet, workaround" in `parallel.py`
-  before assuming `cores`/`pcall` actually parallelize.
+- Multiprocessing/parallelism (`paralleltk/`) across parameter sweeps (k-points, energies) runs through
+  `parallel.pcall`/`parallel.set_cores(n)`, backed by a real `multiprocess.Pool` (`paralleltk/multiprocess.py`);
+  default `cores=1` keeps it serial. `parallel.enabled` (default `True`) is a master switch — set it to
+  `False` via `parallel.set_enabled(False)` to force the whole package to run strictly serially (no process
+  pool, numba/BLAS threads clamped to 1), e.g. for debugging, profiling, or reproducibility; `set_enabled(True)`
+  only lifts the restriction, it does not auto-restore a previous `cores` count.
 
 ### Typical call pattern
 
