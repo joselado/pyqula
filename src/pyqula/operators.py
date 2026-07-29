@@ -290,7 +290,7 @@ def get_bulk(h,fac=0.8):
         dr = dr/np.max(dr) # to interval 0,1
         dr2 = dr - np.mean(dr) # minus the average
         out[fac/2.<np.abs(dr2)] = 0.0 # set to zero
-    else: return NotImplemented
+    else: raise # unsupported dimensionality
     from scipy.sparse import diags
     n = len(r) # number of sites
     out = diags([out],offsets=[0],shape=(n,n),dtype=np.complex128) # create matrix
@@ -343,24 +343,6 @@ from .operatortk.spin import get_sz
 
 
 
-
-
-def get_z(h):
-  """Operator for the calculation of z expectation value"""
-  if h.intra.shape[0]==len(h.geometry.z): # if as many positions as entries
-    op = np.zeros(h.intra.shape,dtype=np.complex128) # initialize matrix
-    for i in range(len(h.geometry.z)):
-      op[i,i] = h.geometry.z[i]
-    return op
-  raise
-  if h.has_eh: raise
-  if not h.has_spin: raise
-  if h.has_spin:
-    op = np.zeros(h.intra.shape,dtype=np.complex128) # initialize matrix
-    for i in range(len(op)//2):   
-      op[2*i,2*i+1] = -1j
-      op[2*i+1,2*i] = 1j
-  
 
 
 
@@ -512,7 +494,7 @@ def get_valley_berry(h,**kwargs):
 
 def get_operator_berry(h,name,**kwargs):
     """Return Valley Berry operator"""
-    op = h.get_operator(name,return_matrix=True)
+    op = get_matrix_operator(h,name) # matrix operator (handles composite names)
     return topology.berry_operator(h,operator=op,**kwargs)
 
 
@@ -530,7 +512,7 @@ def get_matrix_operator(h,name,k=None,**kwargs):
         return op
     elif name in ["valley_spin","spin_valley","valley_sz","sz_valley"]:
         op = get_valley(h,projector=True) # valley operator
-        sz = h.get_operator("sz")
+        sz = get_sz(h) # sz matrix (not an Operator wrapper)
         return lambda m,k=None: op(m,k=k)@sz # return operator
     else:
         op = h.get_operator(name) # assume that it is a matrix
