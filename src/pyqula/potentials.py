@@ -42,7 +42,7 @@ def cnpot(n=4,k=None,v=1.0,phi=0.,r0=np.array([0.,0.,0.])):
   """Returns a function that generates a potential
   with C_n symmetry"""
   if k is None: raise
-  if n==0: return lambda r: v
+  if n==0: return Potential(lambda r: v)
   if n%2==0: f = np.cos # even 
   if n%2==1: f = np.sin # odd 
   def fun(r):
@@ -200,7 +200,8 @@ def enforce_amplitude(f,a,g=None):
 
 
 def enforce_minmax(f,a,g=None):
-    """Enforce the minimum, without changing the maximum"""
+    """Rescale f so that its minimum and maximum over the geometry
+    map to a[0] and a[1] respectively"""
     if g is None: raise
     vs = [f(ri) for ri in g.r] 
     minv = np.min(vs)
@@ -216,13 +217,19 @@ def array2potential(x,y,v):
     that interpolates over them"""
     from .interpolation import interpolator2d
     if len(v)!=len(x): raise
-    return Potential(interpolator2d(x,y,v))
+    f = interpolator2d(x,y,v) # batch interpolator, expects an (N,2) array
+    def fout(r):
+        """Adapt the batch interpolator to a single-point Potential call"""
+        return f(np.array([r[0:2]]))[0]
+    return Potential(fout)
 
 
 def object2potential(V,r=None):
     """Transform a generic object into a callable potential"""
-    # this should be finished
-    return V
+    if isinstance(V,Potential): return V
+    if callable(V) or isnumber(V): return Potential(V)
+    if r is not None: return array2potential(r[:,0],r[:,1],V)
+    raise ValueError("Cannot transform into a Potential: "+str(V))
 
 
 from .potentialtk.profiles import radial_decay
@@ -300,17 +307,20 @@ def commensurate_vortex_harmonic(g):
 
 
 def commensurate_skyrmion_harmonic(g):
-    """Create a skyrmion commensurate with the lattice"""
-    # this function as nood as good as it could
-    # probably the vectors should have the same length
-    fv = commensurate_vortex(g) # get the vortex part
+    """Create a skyrmion commensurate with the lattice.
+    The in-plane component is the vortex texture rescaled into the unit
+    disc, and the z component is chosen so the resulting vector has unit
+    length whenever the C6 potential fz(r) reaches +-1 (and shrinks
+    smoothly to the in-plane vector elsewhere)."""
+    fv = commensurate_vortex_harmonic(g) # get the vortex part
     vs = [fv(ri) for ri in g.r] # magnetizations
-    vmax = np.max([vi.dot(vi) for vi in vs]) # absolute value
+    vmax = np.max([vi.dot(vi) for vi in vs]) # maximum in-plane magnitude^2
     fz = commensurate_potential(g,minmax=[-1.,1.],n=6,k=1) # z component
     def fun(r):
-        m = fv(r) # xy component
-        dz = vmax - m.dot(m) # value of z component
-        return m + np.array([0.,0.,fz(r)])*dz
+        m = fv(r)/np.sqrt(vmax) # xy component, rescaled into the unit disc
+        m2 = min(m.dot(m),1.0) # guard against points outside the sampled set
+        mz = fz(r)*np.sqrt(1.-m2) # z component
+        return np.array([m[0],m[1],mz])
     return Potential(fun)
 
 
@@ -342,7 +352,7 @@ def circle(r0,v=0.,R=1.1,g=None,**kwargs):
     """Create the potential for a circle"""
     def f(r):
         dr = r-r0
-        if dr.dot(dr)<R: return v
+        if dr.dot(dr)<R**2: return v
         else: return 0.
     out = Potential(f) # return the potential
     if g is None: return out
