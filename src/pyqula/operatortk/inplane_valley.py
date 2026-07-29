@@ -44,6 +44,34 @@ from .sharpen import get_sharpen
 # calibration constant pair is needed now (not two): tau_y is already
 # the Hermitian partner of tau_x from the same (t1,t2), not an
 # independently-calibrated operator.
+#
+# Why there is no sublattice-diagonal (second-neighbor) variant of this
+# operator, analogous to how tau_z is built from second-neighbor
+# modified-Haldane hopping instead of first-neighbor Kekule: it was
+# tried (project a chiral, registry-gated second-neighbor/NNN texture
+# the same way, i.e. T2 = h(reg0) + w*h(regA) + w^2*h(regB) built from
+# same-sublattice bonds instead of first-neighbor ones) and it comes out
+# EXACTLY zero on the folded K,K' subspace, for every amplitude/chirality
+# ansatz tried -- not a calibration failure, a structural one. The reason:
+# a first-neighbor bond borders 2 hexagons, and chiral_kekule's tau_x
+# depends on that -- a given bond is "active" (nonzero) in 2 of the 3
+# registries, using a DIFFERENT flanking hexagon (hence a different local
+# chirality sign) in each, and that per-bond richness is what survives
+# the w+w^2+1=0 cancellation. A second-neighbor bond's short diagonal
+# belongs to exactly 1 hexagon, so the direct analog is only active in 1
+# of 3 registries with one fixed convention -- and numerically, even a
+# SINGLE registry's contribution alone is already proportional to the
+# identity on the zero-mode subspace (no pseudospin content at all, not
+# just no valley-off-diagonal part), so three identical copies cancel
+# trivially regardless of amplitude/chirality/bond-direction choices.
+# This is not a fundamental no-go: a generic (e.g. random) Hermitian
+# operator restricted to second-neighbor same-sublattice bonds DOES have
+# nonzero K-K' matrix elements when checked the same way. It just has no
+# simple closed-form bond-texture construction the way the first-neighbor
+# and modified-Haldane cases do -- reaching it would need either a longer
+# range (e.g. 4th-neighbor same-sublattice shell) or a texture solved for
+# numerically on a Kekule-commensurate cell rather than a hand-written
+# bond function, neither of which was pursued here.
 
 _calibration_cache = {}
 _registry_hamiltonian_cache = {}
