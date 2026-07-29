@@ -168,7 +168,6 @@ def eigh(m):
     m = todense(m)
     if np.max(np.abs(m.imag))<error: m = m.real # real matrix
     if not accelerate: return dlg.eigh(m)
-#    from . import algebraf90
     # check if doing slices helps
     n = m.shape[0] # size of the matrix
     mo = m[0:n:2,1:n:2] # off diagonal is zero
@@ -182,8 +181,6 @@ def eigh(m):
    #     (es0,vs0) = eigh(m[0:n:2,0:n:2]) # recall
    #     (es1,vs1) = eigh(m[1:n:2,1:n:2]) # recall
         es = np.concatenate([es0,es1]) # concatenate array
-        #vs0 = algebraf90.todouble(vs0.T,0)
-        #vs1 = algebraf90.todouble(vs1.T,1)
         vs0 = todouble(vs0,0) # double the degrees of freedom
         vs1 = todouble(vs1,1) # double the degrees of freedom
         vs = np.concatenate([vs0.T,vs1.T]).T

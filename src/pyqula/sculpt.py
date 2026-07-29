@@ -5,12 +5,6 @@ from . import algebra
 import numpy as np
 
 
-try: 
-  import clean_geometryf90
-  use_fortran = True
-except: use_fortran = False
-
-
 def remove(g,l):
   """ Remove certain atoms from the geometry"""
   lset = set(l) # membership test below is O(1) against a set, O(len(l)) against a list
@@ -131,37 +125,26 @@ def center(g,angle):
  
 
 
-def remove_unibonded(g,d=1.0,tol=0.01,use_fortran=use_fortran,iterative=False):
+def remove_unibonded(g,d=1.0,tol=0.01,iterative=False):
   """Removes from the geometry atoms with only one bond"""
   sb = []
-  if g.dimensionality>0: use_fortran = False # only for 0d
-  if use_fortran: # use fortran routine
-# array with true in right atoms
-    retain = clean_geometryf90.clean_geometry(g.r.transpose(),2) 
-    sb = [] # remove this atoms
-    for i in range(len(retain)):
-      if not retain[i]: sb.append(i) # remove
-    gout = remove(g,sb) # remove those atoms
-  else: # use python routine
-    # precompute every direction's replicas once (this used to be redone
-    # from scratch inside the loop over i, turning what should be a single
-    # O(natoms) pass into an O(natoms^2) one) and count neighbors with
-    # numpy broadcasting instead of a per-atom python loop
-    replicas = [g.replicas(d=direc) for direc in g.neighbor_directions()]
-    for i in range(len(g.r)):
-      r1 = g.r[i] # first position
-      nb = 0 # initialize
-      for r2 in replicas: # loop over directions
-        dr2 = np.sum((r1-r2)**2,axis=1) # squared distances to this direction's replicas
-        nb += np.count_nonzero((d-tol < dr2) & (dr2 < d+tol)) # first neighbors
-      if nb<2:
-        sb.append(i+0) # add to the list
-    gout = remove(g,sb) # remove those atoms
+  # precompute every direction's replicas once (this used to be redone
+  # from scratch inside the loop over i, turning what should be a single
+  # O(natoms) pass into an O(natoms^2) one) and count neighbors with
+  # numpy broadcasting instead of a per-atom python loop
+  replicas = [g.replicas(d=direc) for direc in g.neighbor_directions()]
+  for i in range(len(g.r)):
+    r1 = g.r[i] # first position
+    nb = 0 # initialize
+    for r2 in replicas: # loop over directions
+      dr2 = np.sum((r1-r2)**2,axis=1) # squared distances to this direction's replicas
+      nb += np.count_nonzero((d-tol < dr2) & (dr2 < d+tol)) # first neighbors
+    if nb<2:
+      sb.append(i+0) # add to the list
+  gout = remove(g,sb) # remove those atoms
   if iterative: # ensure that it hs the same number of atoms by calling again
     if len(g.x) != len(gout.x): # call again
-#      print("Iterative cleaning")
-      return remove_unibonded(gout,d=d,tol=tol,
-         use_fortran=use_fortran,iterative=iterative)
+      return remove_unibonded(gout,d=d,tol=tol,iterative=iterative)
   return gout # return the geometry
 
 

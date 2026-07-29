@@ -8,22 +8,6 @@ from . import algebra
 minimum_hopping = 1e-3
 
 
-#try: 
-#  raise
-#  from . import first_neighborsf90
-#  def find_first_neighbor(r1,r2):
-#      """Calls the fortran routine"""
-#      from . import first_neighborsf90 as fn
-#      r1t = np.matrix(r1).T
-#      r2t = np.matrix(r2).T
-#      nn = fn.number_neighborsf90(r1t,r2t)
-#      if nn==0: return []  # if no neighbors found
-#      pairs = np.array(fn.first_neighborsf90(r1t,r2t,nn))
-#      return pairs.T # return the pairs
-
-
-#except:
-
 def find_close_neighbors(r0,rs,d=2.0):
     """Return the indexes of the neighbors that are closer than a
     certain distance"""

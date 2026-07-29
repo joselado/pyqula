@@ -16,7 +16,6 @@ Green's function/spectral-function methods, Chebyshev polynomial (KPM) algorithm
 
 ```bash
 pip install -e .                       # editable install from repo root (package lives in src/)
-python src/pyqula/compilefortran.py    # optional: compile the f2py Fortran acceleration modules (needs f2py)
 ```
 
 There is no separate lint config in this repo — no ruff/flake8/black config and no GitHub Actions workflow.
@@ -73,15 +72,15 @@ superconductivity, `scftk/` for self-consistency, `kpmtk/`, `greentk/`, `transpo
 name (e.g. `topology.py`) is typically the public-facing entry point that composes the `*tk` internals and
 is what `Hamiltonian` methods call into. When asked to "add a feature to X", check both `X.py` and `Xtk/`.
 
-### Performance backends: Fortran, numba, dense/sparse
+### Performance backends: numba, dense/sparse
 
-Hot inner loops have three possible backends, chosen automatically at import time — don't assume only numpy:
+Hot inner loops have two possible backends, chosen automatically at import time — don't assume only numpy.
+There used to be a third, opt-in Fortran/f2py backend (`src/pyqula/fortran/`, `compilefortran.py`); it was
+removed since it required a manual compile step (`f2py`) that most installs never ran, so those code paths
+were effectively dead. Every call site now goes straight through the pure-Python/numba path — if you see a
+lone `*tk` module or comment mentioning a `use_fortran`/`f90` backend, that's leftover phrasing, not a real
+branch to preserve.
 
-- **Fortran via f2py**: modules under `src/pyqula/fortran/<name>/` compile to `.so` files (see
-  `compilefortran.py` for the full folder→module list, e.g. `kpm`, `dos`, `berry`, `chi`,
-  `density_matrix`, `algebra`). Call sites use a `try: from . import <x>f90; use_fortran = True except:
-  use_fortran = False` pattern (see top of `kpm.py`) and branch on `use_fortran`. If the `.so` files aren't
-  built, the pure-Python/numba path is used instead — both paths must stay correct.
 - **numba**: used for jitted numeric routines; `parallel.py` centralizes thread-count configuration
   (`numba.set_num_threads`).
 - **Dense vs. sparse linear algebra**: `limits.densedimension` (`src/pyqula/limits.py`, currently 10000) is

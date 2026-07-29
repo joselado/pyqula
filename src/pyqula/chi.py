@@ -8,9 +8,6 @@ from . import algebra
 from .operators import Operator
 
 
-use_fortran = False
-
-
 def chargechi(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
     """Compute charge response function"""
     if h.dimensionality!=0: raise

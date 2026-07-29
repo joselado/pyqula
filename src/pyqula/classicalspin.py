@@ -45,9 +45,6 @@ class SpinModel(): # class for a spin Hamiltonian
   def energy(self,**kwargs):
     """ Calculate the energy"""
     eout = energy(self.theta,self.phi,self.b,self.j,self.pairs)
-   #   eout = classicalspinf90.energy(self.theta,self.phi,self.b,self.j,
-   #            self.pairs)
-
     return eout
   def get_local_energy(self):
       from .classicalspintk.localenergy import get_local_energy
@@ -126,7 +123,6 @@ class SpinModel(): # class for a spin Hamiltonian
 
 def energy(thetas,phis,bs,js,indsjs):
   """Calculate the energy"""
-#  eout = classicalspinf90.energy(thetas,phis,bs,js,indsjs)
   if use_jax:
       eout = energy_jax(np.concatenate([thetas,phis]),bs,
                         np.array(js),np.array(indsjs))
@@ -227,13 +223,7 @@ def get_jacobian(bs,js,indsjs):
   indsjs = np.array(indsjs)
   js = np.array(js)
   def jacobian(thetaphi):
-    if use_jax:
-        jac = jacobian_jax(thetaphi,bs,js,indsjs)
-    else:
-        thetas = thetaphi[0:len(thetaphi)//2]
-        phis = thetaphi[len(thetaphi)//2:len(thetaphi)]
-        jac = classicalspinf90.jacobian(thetas,phis,bs,js,indsjs)
-    return jac
+    return jacobian_jax(thetaphi,bs,js,indsjs)
   return jacobian
 
 

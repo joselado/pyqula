@@ -9,28 +9,6 @@ from scipy.signal import hilbert
 from . import algebra
 from numba import jit
 
-# check that the fortran library exists
-try: 
-  from . import kpmf90 
-  use_fortran = True
-except:
-  use_fortran = False # use python routines
-
-
-def get_moments_old(v,m,n=100,use_fortran=use_fortran,test=False):
-    """ Get the first n moments of a certain vector
-    using the Chebychev recursion relations"""
-    if use_fortran:
-        from .kpmf90 import get_momentsf90 # fortran routine
-        mo = coo_matrix(m) # convert to coo matrix
-        v = algebra.matrix2vector(v)
-    # call the fortran routine
-        mus = get_momentsf90(mo.row+1,mo.col+1,mo.data,v,n) 
-        return mus # return fortran result
-    else:
-        if test: return python_kpm_moments_clear(v,m,n=n)
-        else: return python_kpm_moments(v,m,n=n)
-
 
 # numba version
 from .kpmtk.kpmnumba import kpm_moments_v as get_moments_v
@@ -120,69 +98,7 @@ def get_momentsA_jit(v,m,n,A,mus):
 
 from .kpmtk.kpmnumba import kpm_moments_ij as get_moments_ij
 
-#def get_moments_ij(m0,n=100,i=0,j=0,**kwargs):
-#  """ Get the first n moments of a the |i><j| operator
-#  using the Chebychev recursion relations"""
-#  m = coo_matrix(m0,dtype=np.complex128)
-#  mus = np.zeros(n,dtype=np.complex128) # empty arrray for the moments
-#  v = np.zeros(m.shape[0],dtype=np.complex128) ; v[i] = 1.0 # initial vector
-#  v = np.matrix([v]).T # zero vector
-#  am = v.copy()
-#  a = m*v  # vector number 1
-#  bk = v[j] # scalar product
-#  bk1 = a[j,0] # scalar product
-#  mus[0] = bk  # mu0
-#  mus[1] = bk1 # mu1
-#  for ii in range(2,n): 
-#    ap = 2.*m*a - am # recursion relation
-#    bk = ap[j,0] # scalar product
-#    mus[ii] = bk
-#    am = a.copy() # new variables
-#    a = ap.copy() # new variables
-#  return mus
-
-
-
 from .kpmtk.kpmnumba import kpm_moments_vivj as get_moments_vivj
-
-#def get_moments_vivj(m0,vi,vj,n=100,**kwargs):
-#  if not use_fortran: return get_moments_vivj_python(m0,vi,vj,n=n)
-#  else: return get_moments_vivj_fortran(m0,vi,vj,n=n)
-#
-#
-#def get_moments_vivj_python(m0,vi,vj,n=100):
-#  """ Get the first n moments of a the |i><j| operator
-#  using the Chebychev recursion relations"""
-#  m = csc_matrix(m0,dtype=np.complex128)
-#  mus = np.zeros(n,dtype=np.complex128) # empty arrray for the moments
-#  v = vi.copy()
-#  am = v.copy()
-#  a = m@v  # vector number 1
-#  bk = algebra.braket_ww(vj,v)
-##  bk = (vj.H*v).todense().trace()[0,0] # calculate bk
-#  bk1 = algebra.braket_ww(vj,a)
-##  bk1 = (vj.H*a).todense().trace()[0,0] # calculate bk
-#  mus[0] = bk  # mu0
-#  mus[1] = bk1 # mu1
-#  for ii in range(2,n): 
-#    ap = 2.*m@a - am # recursion relation
-#    bk = algebra.braket_ww(vj,ap)
-#    mus[ii] = bk
-#    am = a.copy() # new variables
-#    a = ap.copy() # new variables
-#  return mus
-#
-#
-#
-#def get_moments_vivj_fortran(m0,vi,vj,n=100):
-#    raise # I haven't check this function
-#    mo = coo_matrix(m0) # convert to coo matrix
-#    vi1 = vi.todense() # convert to conventional vector
-#    vj1 = vj.todense() # convert to conventional vector
-## call the fortran routine
-#    mus = get_moments_vivj(mo.row+1,mo.col+1,mo.data,vi,vj,n) 
-#    return mus # return fortran result
-
 
 
 def full_trace(m_in,n=200,**kwargs):
@@ -286,7 +202,7 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
     if operator is None:
         mus = get_moments_v(v,m,n=n) # get the chebychev moments
     else:
-#        mus = get_moments_vivj(m,v,operator@v,n=2*n,use_fortran=False)
+#        mus = get_moments_vivj(m,v,operator@v,n=2*n)
         mus = get_momentsA(v,m,n=2*n,A=operator) # get the chebychev moments
     return mus
   from . import parallel
@@ -331,7 +247,7 @@ def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=True,
     x=None):
     """Return two arrays with energies and local DOS"""
     if npol is None: npol = ne
-    mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j,use_fortran=True)
+    mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j)
     if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
     else: xs = x/scale # use from input
     ys = generate_green_profile(mus,xs,kernel="jackson")/scale*np.pi # so it is the Green function
@@ -346,7 +262,7 @@ def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=True,
 def dm_ij_energy(m_in,i=0,j=0,scale=10.,npol=None,ne=500,x=None):
   """Return the correlation function"""
   if npol is None: npol = ne
-  mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j,use_fortran=use_fortran)
+  mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j)
   if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
   else: xs = x/scale # use from input
   ysr = generate_profile(mus.real,xs,kernel="jackson")/scale*np.pi # so it is the Green function
@@ -365,8 +281,8 @@ def dm_vivj_energy(m_in,vi,vj,scale=10.,npol=None,ne=500,x=None):
     pass
   if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
   else: xs = x/scale # use from input
-  ysr = generate_profile(mus.real,xs,kernel="lorentz",use_fortran=use_fortran)/scale*np.pi # so it is the Green function
-  ysi = generate_profile(mus.imag,xs,kernel="jackson",use_fortran=use_fortran)/scale*np.pi # so it is the Green function
+  ysr = generate_profile(mus.real,xs,kernel="lorentz")/scale*np.pi # so it is the Green function
+  ysi = generate_profile(mus.imag,xs,kernel="jackson")/scale*np.pi # so it is the Green function
   ys = ysr - 1j*ysi
   return (scale*xs,ys)
 

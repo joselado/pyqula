@@ -11,12 +11,6 @@ from .. import inout
 from .. import filesystem as fs
 
 
-try:
-  from .. import correlatorsf90
-except: pass
-
-
-
 mf_file = "MF.pkl" # mean field file
 
 def hubbardscf(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
@@ -170,32 +164,6 @@ def magnetic_mean_field(wf,U,collinear=False,totkp=1):
 def spinless_mean_field(wf,U,collinear=False,totkp=1):
   """Return the mean field matrix"""
   raise # not finished
-
-
-
-def get_udxc(voccs,weight=None,totkp=1):
-  """Get up/down densities and corresponding mean field matrices"""
-  raise # nor working anymore
-  ndim = voccs.shape[1] # dimension of the matrix
-  if weight is not None:
-    if len(weight)!=voccs.shape[0]: raise # inconsistent dimensions
-  nat = ndim//2 # one half
-  pdup = np.array([[2*i,2*i] for i in range(nat)]) # up density
-  pddn = pdup + 1 # down density
-  pxc = np.array([[2*i,2*i+1] for i in range(nat)]) # exchange
-  if weight is None: # no weight
-    vdup = correlatorsf90.correlators(voccs,pdup)/totkp
-    vddn = correlatorsf90.correlators(voccs,pddn)/totkp
-    vxc = correlatorsf90.correlators(voccs,pxc)/totkp
-  else: # with weight
-    vdup = correlatorsf90.correlators_weighted(voccs,weight,pdup)/totkp
-    vddn = correlatorsf90.correlators_weighted(voccs,weight,pddn)/totkp
-    vxc = correlatorsf90.correlators_weighted(voccs,pxc)/totkp
-  ndn = csc_matrix((vdup,pddn.transpose()),dtype=np.complex,shape=(ndim,ndim))
-  nup = csc_matrix((vddn,pdup.transpose()),dtype=np.complex,shape=(ndim,ndim))
-  xc = csc_matrix((np.conjugate(vxc),pxc.transpose()),
-                           dtype=np.complex,shape=(ndim,ndim))
-  return (vdup,vddn,vxc,ndn,nup,xc) # return everything
 
 
 

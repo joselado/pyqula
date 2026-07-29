@@ -206,11 +206,6 @@ def infer_supercell(g,g0):
 def supercell2d(g,n1=1,n2=1):
   """ Creates a supercell for a 2d system"""
   go = g.copy() # copy geometry
-#  use_fortran = False
-#  if use_fortran:
-#    from . import supercellf90
-#    go.r = supercellf90.supercell2d(g.r,g.a1,g.a2,n1,n2)
-#    print("Using FORTRAN")
   if True: # brute force
       n = len(g.r)*n1*n2 # total number of positions
       rs = np.zeros((n,3)) # storage

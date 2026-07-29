@@ -1,4 +1,3 @@
 include README.md
 include LICENSE.md
-recursive-include src/pyqula/fortran *.f90 *.pyf *.sh
 recursive-include src/pyqula/datasets *.txt

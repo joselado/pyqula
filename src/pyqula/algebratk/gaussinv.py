@@ -19,17 +19,8 @@ def gauss_inverse(m,i=0,j=0,test=False):
     # in case you use the -1 notation of python
     if i<0: i += nb
     if j<0: j += nb
-    # now call the actual fortran routine
     nm = nb # number of blocks
     n = ua[0].shape[0] # dimension of the matrix
-#    try:
-#        raise
-#        from ..fortran.gauss_inv import gauss_inv
-#        mout = gauss_inv.gauss_inv(ca,da,ua,i+1,j+1)
-#    except:
-    from ..green import block_inverse
-#        print("Fortran routine was not compiled, using full version")
-#        mout = block_inverse(m,i=i,j=j)
     mout = inv_block(ca,da,ua,i,j)
     mout = np.array(mout)
     test = False # test if the inversion worked

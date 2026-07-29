@@ -59,9 +59,6 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 pyqula = [
-    "fortran/**/*.f90",
-    "fortran/**/*.pyf",
-    "fortran/**/*.sh",
     "datasets/*.txt",
 ]
 

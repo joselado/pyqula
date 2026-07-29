@@ -425,6 +425,7 @@ wannier_winding = z2_wannier_winding # for compatibility
 
 def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
     """Calculates the Berry curvature using an arbitrary operator"""
+    k = np.array(list(k) + [0.]*(3-len(k))) # multicell.derivative needs 3 components
     h = multicell.turn_multicell(hin) # turn to multicell form
     dhdx = multicell.derivative(h,k,order=[1,0]) # derivative
     dhdy = multicell.derivative(h,k,order=[0,1]) # derivative
@@ -433,7 +434,7 @@ def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
     (es,ws) = algebra.eigh(hkgen(k)) # initial waves
     ws = np.conjugate(np.transpose(ws)) # transpose the waves
     n = len(es) # number of energies
-    from .berry_curvaturef90 import berry_curvature as bc90
+    from .topologytk.operatorberry import berry_curvature as bc90
     if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex128)
     b = bc90(dhdx,dhdy,ws,es,operator,delta) # berry curvature
     return b*np.pi*np.pi*8 # normalize so the sum is 2pi Chern
@@ -442,6 +443,7 @@ def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
 
 def operator_berry_bands(hin,k=[0.,0.],operator=None,delta=0.00001):
     """Calculates the Berry curvature using an arbitrary operator"""
+    k = np.array(list(k) + [0.]*(3-len(k))) # multicell.derivative needs 3 components
     h = multicell.turn_multicell(hin) # turn to multicell form
     dhdx = multicell.derivative(h,k,order=[1,0]) # derivative
     dhdy = multicell.derivative(h,k,order=[0,1]) # derivative
@@ -449,7 +451,7 @@ def operator_berry_bands(hin,k=[0.,0.],operator=None,delta=0.00001):
     hk = hkgen(k) # get hamiltonian
     (es,ws) = algebra.eigh(hkgen(k)) # initial waves
     ws = np.conjugate(np.transpose(ws)) # transpose the waves
-    from .berry_curvaturef90 import berry_curvature_bands as bcb90
+    from .topologytk.operatorberry import berry_curvature_bands as bcb90
     if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex128)
     bs = bcb90(dhdx,dhdy,ws,es,operator,delta) # berry curvatures
     return (es,bs*np.pi*np.pi*8) # normalize so the sum is 2pi Chern

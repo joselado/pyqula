@@ -14,16 +14,6 @@ from . import groundstate
 from . import parallel
 
 from .meanfield import guess # function to calculate guesses
-try:
-  from . import correlatorsf90
-  multicorrelator = correlatorsf90.multicorrelator
-  multicorrelator_bloch = correlatorsf90.multicorrelator_bloch
-  use_multicorrelator = True
-except:
-#  print("WARNING, FORTRAN not working in scftypes.py")
-  use_multicorrelator = False
-#  raise
-#  def multicorrelator
 
 
 timing = True
@@ -54,11 +44,8 @@ class scfclass():
     self.gap = 0.0 # gap of the system
     self.smearing = None
     self.write_vabv = False # write EV in each iteration
-    if use_multicorrelator: # fortran library is present
-      self.correlator_mode = "multicorrelator" # multicorrelator mode 
-    else:
-      self.correlator_mode = "plain" # multicorrelator mode 
-#    self.correlator_mode = "1by1" # multicorrelator mode 
+    self.correlator_mode = "plain"
+#    self.correlator_mode = "1by1" # multicorrelator mode
     self.bloch_multicorrelator = False # multicorrelator with Bloch phases
     self.enforce_symmetry = "none" # do not enforce any symmetry
     self.hamiltonian0 = h.get_multicell() # store Hamiltonian
@@ -213,61 +200,21 @@ class scfclass():
       else: raise # ups
     self.interactions += interactions # store list
     if timing: print("Time in creating MF operators",time.perf_counter()-t0)
-    self.setup_multicorrelator()
-  def setup_multicorrelator(self):
-    """Create the neccesary arrays to calculate the different
-    correlators efficiently"""
-    lamb = [] # empty list
-    ijk = []
-    dv = [] # direction of the interaction
-    k = 0
-    for v in self.interactions: # loop
-      ac = coo_matrix(v.a)       
-      bc = coo_matrix(v.b)       
-      for (i,j,d) in zip(ac.row,ac.col,ac.data): 
-        ijk.append([i,j,k])
-        lamb.append(d) # store data
-        dv.append(v.dir) # store direction
-      k += 1 # increase counter
-      for (i,j,d) in zip(bc.row,bc.col,bc.data): 
-        ijk.append([i,j,k])
-        lamb.append(d) # store data
-        dv.append(-np.array(v.dir)) # store direction, be aware of the sign!!!
-      k += 1 # increase counter
-    ijk = np.array(ijk,dtype=np.int_)
-    lamb = np.array(lamb,dtype=np.complex128) # data array
-    self.ijk = ijk # first array
-    self.lamb = lamb # data array
-    self.dir = np.array(dv,dtype=np.int_) # data array
-#    self.tensormf = algebra.sparsetensor.Tensor3(ijk[:,0],
-#            ijk[:,1],ijk[:,2],lamb,
-#            shape=(v.a.shape[0],v.a.shape[0],k))
   def update_expectation_values(self):
     """Calculate the expectation values of the different operators"""
     # this conjugate comes from being inconsistent
     # in the routines to calculate exectation values
     voccs = np.array(np.conjugate(self.wavefunctions)) # get wavefunctions
     ks = self.kvectors # kpoints
-#    self.correlator_mode = "plain"
-    mode = self.correlator_mode # 
+    mode = self.correlator_mode #
     if mode=="plain": # conventional mode
         plain_expectation_value(self)
-#      for v in self.interactions:
-#        v.vav = np.trace(voccs@v.a@np.conjugate(voccs).T)/self.kfac # <vAv>
-#        v.vbv = np.trace(voccs@v.b@np.conjugate(voccs).T)/self.kfac # <vBv>
     elif mode=="1by1": # conventional mode
       for v in self.interactions:
         phis = [self.hamiltonian.geometry.bloch_phase(v.dir,k*0.) for k in ks]
         v.vav = meanfield.expectation_value(voccs,v.a,np.conjugate(phis))/self.kfac # <vAv>
         v.vbv = meanfield.expectation_value(voccs,v.b,phis)/self.kfac # <vBv>
       self.v2cij() # update the v vector
-    elif mode=="multicorrelator": # multicorrelator mode
-      numc = len(self.interactions)*2 # number of correlators
-      if self.bloch_multicorrelator:
-        cs = multicorrelator_bloch(voccs,ks,self.lamb,self.ijk,self.dir,numc)
-      else: cs = multicorrelator(voccs,self.lamb,self.ijk,numc)
-      self.cij = cs/self.kfac # store in the object, already normalized
-      self.cij2v() # update the expectation values
     else: raise
   def cij2v(self):
     """Update the values of vav and vbv using the values of cij"""
@@ -415,53 +362,6 @@ from .selfconsistency.densitydensity import densitydensity
 
 repulsive_hubbard = hubbardscf
 from .selfconsistency.attractive_hubbard_spinless import attractive_hubbard
-
-def get_super_correlator(voccs,weight=None,totkp=1):
-  """Get the different correlators for a superconducting system"""
-  from . import correlatorsf90
-  ndim = voccs.shape[1] # dimension of the matrix
-  if weight is not None:
-    if len(weight)!=voccs.shape[0]: raise # inconsistent dimensions
-  nat = ndim//4 # one fourth
-  corrs = [] # empty list with the different correlators
-  ops = [] # list with the operators
-  for i in nat: # loop over atoms
-    corrs.append([4*i,4*i]) # up density
-    ops.append(csc_matrix(([1.],[1,1]),dtype=np.complex128)) # down operator
-    corrs.append([4*i+1,4*i+1]) # up density
-    ops.append(csc_matrix(([1.],[0,0]),dtype=np.complex128)) # down operator
-    corrs.append([4*i,4*i+1]) # up density
-    ops.append(csc_matrix(([-1.],[1,0]),dtype=np.complex128)) # down operator
-    corrs.append([4*i+1,4*i]) # up density
-    ops.append(csc_matrix(([-1.],[0,1]),dtype=np.complex128)) # down operator
-  pdup = np.array([[4*i,4*i] for i in range(nat)]) # up density
-  pddn = pdup + 1 # down density
-  pxc = np.array([[4*i,4*i+1] for i in range(nat)]) # exchange
-  deltadd = np.array([[4*i+1,4*i+2] for i in range(nat)]) # Delta dd
-  deltauu = np.array([[4*i,4*i+3] for i in range(nat)]) # Delta uu
-  deltaud = np.array([[4*i,4*i+2] for i in range(nat)]) # Delta ud
-  deltadu = np.array([[4*i+1,4*i+3] for i in range(nat)]) # Delta du
-  if weight is None: # no weight
-    vdup = correlatorsf90.correlators(voccs,pdup)/totkp
-    vddn = correlatorsf90.correlators(voccs,pddn)/totkp
-    vxc = correlatorsf90.correlators(voccs,pxc)/totkp
-    vdeltadd = correlatorsf90.correlators(voccs,deltadd)/totkp
-    vdeltauu = correlatorsf90.correlators(voccs,deltauu)/totkp
-    vdeltadu = correlatorsf90.correlators(voccs,deltadu)/totkp
-    vdeltaud = correlatorsf90.correlators(voccs,deltaud)/totkp
-  else: # with weight
-    raise
-    vdup = correlatorsf90.correlators_weighted(voccs,weight,pdup)/totkp
-    vddn = correlatorsf90.correlators_weighted(voccs,weight,pddn)/totkp
-    vxc = correlatorsf90.correlators_weighted(voccs,pxc)/totkp
-  ndn = csc_matrix((vdup,pddn.transpose()),dtype=np.complex,shape=(ndim,ndim))
-  nup = csc_matrix((vddn,pdup.transpose()),dtype=np.complex,shape=(ndim,ndim))
-  xc = csc_matrix((np.conjugate(vxc),pxc.transpose()),
-                           dtype=np.complex,shape=(ndim,ndim))
-  return (vdup,vddn,vxc,ndn,nup,xc) # return everything
-
-
-
 
 
 def write_magnetization(mag):

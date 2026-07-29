@@ -17,17 +17,9 @@ from .greentk.kchain import green_kchain_evaluator
 from .algebra import dagger
 
 
-use_fortran = False
-
-try: from .gauss_invf90 import gauss_inv as ginv
-except: 
-  pass
-
-
 class gf_convergence():
    """ Class to manage the convergence  options
    of the green functions """
-   optimal = False
    refinement = False
    guess = True # use old green function
    def __init__(self,mode):
@@ -59,7 +51,6 @@ def dyson(intra,inter,energy=0.0,gf=None,is_sparse=False,initial = None):
   eps = gf.eps
   max_error = gf.max_error
   num_rep = gf.num_rep
-  optimal = gf.optimal
   try:
     intra = intra.todense()
     inter = inter.todense()
@@ -67,29 +58,19 @@ def dyson(intra,inter,energy=0.0,gf=None,is_sparse=False,initial = None):
     a = 1
   if initial is None:  # if green not provided. initialize at zero
     from numpy import zeros
-   
+
     g_guess = intra*0.0j
   else:
     g_guess = initial
-  # calculate using fortran
-  if optimal:
-    print("Fortran dyson calculation")
-    from .green_fortran import dyson  # import fortran subroutine
-    (g,num_redo) = dyson(intra,inter,energy,num_rep,mixing=mixing,
-               eps=eps,green_guess=g_guess,max_error=max_error)
-    print("      Converged in ",num_redo,"iterations\n")
-    g = np.array(g)
-  # calculate using python
-  if not optimal:
-    g_old = g_guess # first iteration
-    iden = np.array(np.identity(len(intra),dtype=complex)) # create identity
-    e = iden*(energy+1j*eps) # complex energy
-    while True: # loop over iterations
-      self = inter@g_old@dagger(inter) # selfenergy
-      g = algebra.inv(e - intra - self) # dyson equation
-      if np.max(np.abs(g-g_old))<gf.max_error: break
-      g_old = mixing*g + (1.-mixing)*g_old # new green function
-  if is_sparse: 
+  g_old = g_guess # first iteration
+  iden = np.array(np.identity(len(intra),dtype=complex)) # create identity
+  e = iden*(energy+1j*eps) # complex energy
+  while True: # loop over iterations
+    self = inter@g_old@dagger(inter) # selfenergy
+    g = algebra.inv(e - intra - self) # dyson equation
+    if np.max(np.abs(g-g_old))<gf.max_error: break
+    g_old = mixing*g + (1.-mixing)*g_old # new green function
+  if is_sparse:
     from scipy.sparse import csc_matrix
     g = csc_matrix(g)
   return g
@@ -284,27 +265,6 @@ def gauss_inverse(m,i=0,j=0,test=False):
         return ginv(m,i=i,j=j)
     elif mode_block_inverse=="full":
         return block_inverse(m,i=i,j=j)
-#  try: from .gauss_invf90 import gauss_inv as ginv
-#  except: 
-#  test = True # Ups, this might blow up
-#  if test: # check whether the inversion worked 
-#    return block_inverse(m,i=i,j=j)
-#  nb = len(m) # number of blocks
-#  ca = [None for ii in range(nb)]
-#  ua = [None for ii in range(nb-1)]
-#  da = [None for ii in range(nb-1)]
-#  for ii in range(nb): # diagonal part
-#    ca[ii] = m[ii][ii]
-#  for ii in range(nb-1):
-#    ua[ii] = m[ii][ii+1]
-#    da[ii] = m[ii+1][ii]
-#  # in case you use the -1 notation of python
-#  if i<0: i += nb 
-#  if j<0: j += nb 
-#  # now call the actual fortran routine
-#  mout = ginv(ca,da,ua,i+1,j+1)
-#  mout = np.matrix(mout)
-#  return mout
 
 
 

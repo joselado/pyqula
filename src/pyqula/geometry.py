@@ -13,8 +13,6 @@ from numba import jit
 from .htk.g2h import get_hamiltonian
 from .helptk import get_docstring
 
-use_fortran = False
-
 class Geometry:
     """ Class for a geometry in a system """
     def __init__(self):

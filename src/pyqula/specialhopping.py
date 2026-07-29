@@ -2,8 +2,6 @@ import numpy as np
 from scipy.sparse import csc_matrix
 from numba import jit
 
-use_fortran=False
-
 
 def obj2callable(a):
     if callable(a): return a # input is a function
@@ -51,21 +49,6 @@ def twisted_matrix(cutoff=5.0,ti=0.3,lambi=8.0,mint=1e-5,
         t=1.0,lamb=12.0,dl=3.0,lambz=10.0,**kwargs):
   """Function capable of returning the hopping matrix
   for twisted bilayer graphene"""
-#  if use_fortran:
-#    from . import specialhoppingf90
-#    def funhop(r1,r2):
-#      """Function that returns a hopping matrix"""
-#      nr = len(r1) # 
-#      nmax = len(r1)*int(10*cutoff**2) # maximum number of hoppings
-#      (ii,jj,ts,nout) = specialhoppingf90.twistedhopping(r1,r2,nmax,
-#                                  cutoff,ti,lamb,lambi,lambz,mint,dl)
-#      if nout>nmax: raise # sanity check
-#      ts = ts[0:nout]
-#      ii = ii[0:nout]
-#      jj = jj[0:nout]
-#      out = csc_matrix((ts,(ii-1,jj-1)),shape=(nr,nr),dtype=np.complex128) # matrix
-#      return out
-#    return funhop # return function
   if True:
       if callable(ti): # workaround for callable interlayer hopping
           tij = twisted(cutoff=cutoff,ti=ti,t=t,
