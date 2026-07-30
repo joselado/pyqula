@@ -33,6 +33,11 @@ def remove(g,l):
       if not i in lset:
         ab.append(g.sublattice[i]) # keep the index
     go.sublattice = ab # store the keeped atoms
+  ##### if built via get_supercell(M), keep the unfolding bookkeeping in sync
+  if getattr(g,"supercell_replica",None) is not None:
+    keep = [i for i in range(len(g.x)) if i not in lset]
+    go.supercell_replica = np.array(g.supercell_replica)[keep]
+    go.supercell_primal_index = np.array(g.supercell_primal_index)[keep]
   return go
 
 def intersec(g,f):
@@ -53,6 +58,9 @@ def remove_sites(g,store):
   if hasattr(gout, "frac_r"): del gout.frac_r # see remove()'s matching comment above
   if gout.has_sublattice: # if has sublattice, keep the indexes
     gout.sublattice = np.array(g.sublattice)[store==1]
+  if getattr(g,"supercell_replica",None) is not None:
+    gout.supercell_replica = np.array(g.supercell_replica)[store==1]
+    gout.supercell_primal_index = np.array(g.supercell_primal_index)[store==1]
   return gout
 
 

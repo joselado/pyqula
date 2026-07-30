@@ -57,6 +57,8 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
     chunk_cells = max(1,200000//max(natoms,1))
     rs_parts = [] # matched positions, one array per chunk
     sl_parts = [] # matched sublattice indices, one array per chunk
+    replica_parts = [] # matched replica vector (n1,n2,n3) in primal-cell units
+    primal_parts = [] # matched primal-atom index (row in g.r), one per chunk
     for start in range(0,len(inds),chunk_cells):
       inds_chunk = inds[start:start+chunk_cells]
       cell_shifts = inds_chunk@cell_basis # shape (nchunk,3)
@@ -73,9 +75,19 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
       store = store.reshape(-1) # matching flattening
       rs_parts.append(rj[store])
       if go.has_sublattice: sl_parts.append(np.tile(g.sublattice,len(inds_chunk))[store])
+      # per-(cell,atom) replica vector / primal-atom index, same cell-major
+      # flattening as rj/store above, so they stay index-aligned with go.r
+      replica_parts.append(np.repeat(inds_chunk,natoms,axis=0)[store])
+      primal_parts.append(np.tile(np.arange(natoms),len(inds_chunk))[store])
     rs = np.concatenate(rs_parts) if rs_parts else np.zeros((0,3))
     go.r = rs # store
     if go.has_sublattice: go.sublattice = np.concatenate(sl_parts) if sl_parts else np.array([]) # store sublattice
+    # bookkeeping consumed by unfolding.bloch_projector to build the Bloch
+    # phase projector for a general (possibly non-diagonal) supercell,
+    # without having to re-derive it via infer_supercell/KDTree matching
+    go.supercell_matrix = np.array(m,dtype=int)
+    go.supercell_replica = np.concatenate(replica_parts) if replica_parts else np.zeros((0,3),dtype=int)
+    go.supercell_primal_index = np.concatenate(primal_parts) if primal_parts else np.array([],dtype=int)
     if len(rs)!=len(g.r)*c:
       print("Not all the atoms have been found")
       print("New atoms",len(rs))

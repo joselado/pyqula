@@ -2,7 +2,7 @@
 
 import numpy as np
 from scipy.linalg import eigh
-from .algebra import dagger
+from .algebra import dagger, inv
 
 def unfolded_bands(hfol,hprim,kpath,inds_super=[]):
   """ Save in file unfolded band structure"""
@@ -70,26 +70,44 @@ def bloch_projector(h,g0=None):
     h0 = g0.get_hamiltonian(has_spin=False)
     if h.has_spin: h0.turn_spinful() # add spin
     if h.has_eh: h0.add_swave(0.0) # add electron hole
-    if h.dimensionality<3:
-        from .supercell import infer_supercell
-        nsuper = infer_supercell(h.geometry,g0) # get the supercell
-    else: raise # not implemented
     n0 = h0.intra.shape[0] # orbitals in the primal cell
-    nfull = n0*nsuper[0]*nsuper[1]*nsuper[2] # orbitals in a complete supercell
-    nactual = h.intra.shape[0] # orbitals in this Hamiltonian
-    if nactual==nfull: # complete supercell (original, unmodified path)
-        fs = bloch_phase_matrix(h0,nsuper=nsuper)
-    elif nactual<nfull: # supercell that has had atoms removed
+    M = getattr(h.geometry,"supercell_matrix",None)
+    if M is not None: # built via g0.get_supercell(M), M a general 3x3 integer
+        # matrix (not necessarily diagonal/orthogonal): use the per-atom
+        # replica bookkeeping recorded at construction time (supercell.py's
+        # non_orthogonal_supercell), which stays valid after removing atoms
+        # since Geometry.remove() keeps it in sync. This covers both the
+        # complete supercell and the atoms-removed case with the same code.
         if h0.dimensionality>2: raise # not implemented
         if n0%len(g0.r)!=0:
             raise ValueError("unfolding: primal orbitals ("+str(n0)+
                 ") is not a multiple of the primal atom count ("+
                 str(len(g0.r))+")")
         norb_factor = n0//len(g0.r) # orbitals per atom (spin/electron-hole)
-        replicas,primal_indices = get_replica_map(h,g0,nsuper)
-        fs = bloch_phase_matrix_general(h0,replicas,primal_indices,
-                norb_factor,nsuper)
-    else: raise # more orbitals than a complete supercell, not expected
+        replicas = h.geometry.supercell_replica
+        primal_indices = h.geometry.supercell_primal_index
+        fs = bloch_phase_matrix_matrix(h0,replicas,primal_indices,
+                norb_factor,M)
+    else: # legacy path: diagonal (nx,ny,nz) supercell, inferred from norms
+        if h.dimensionality<3:
+            from .supercell import infer_supercell
+            nsuper = infer_supercell(h.geometry,g0) # get the supercell
+        else: raise # not implemented
+        nfull = n0*nsuper[0]*nsuper[1]*nsuper[2] # orbitals in a complete supercell
+        nactual = h.intra.shape[0] # orbitals in this Hamiltonian
+        if nactual==nfull: # complete supercell (original, unmodified path)
+            fs = bloch_phase_matrix(h0,nsuper=nsuper)
+        elif nactual<nfull: # supercell that has had atoms removed
+            if h0.dimensionality>2: raise # not implemented
+            if n0%len(g0.r)!=0:
+                raise ValueError("unfolding: primal orbitals ("+str(n0)+
+                    ") is not a multiple of the primal atom count ("+
+                    str(len(g0.r))+")")
+            norb_factor = n0//len(g0.r) # orbitals per atom (spin/electron-hole)
+            replicas,primal_indices = get_replica_map(h,g0,nsuper)
+            fs = bloch_phase_matrix_general(h0,replicas,primal_indices,
+                    norb_factor,nsuper)
+        else: raise # more orbitals than a complete supercell, not expected
     def fun(v,k=0):
         vo = np.conjugate(fs(k))@v # return vector
         out = np.abs(vo.dot(np.conjugate(vo))) # overlap
@@ -157,6 +175,39 @@ def bloch_phase_matrix_general(h0,replicas,primal_indices,norb_factor,nsuper):
     indptr = np.arange(ncols+1) # one nonzero entry per column
     def fun(k): # function generating the matrix
         ki = np.array([k[0]/nx,k[1]/ny,0.]) # scale kvector
+        phi0 = dvecs[:,0]*ki[0] + dvecs[:,1]*ki[1] + dvecs[:,2]*ki[2]
+        phi = np.exp(1j*2.*np.pi*phi0) # phase per column
+        return csc_matrix((phi,rows,indptr),shape=(n0,ncols)) # sparse
+    return fun
+
+
+
+def bloch_phase_matrix_matrix(h0,replicas,primal_indices,norb_factor,M):
+    """General (possibly non-diagonal/non-orthogonal) supercell version
+    of the Bloch phase projector. Unlike bloch_phase_matrix/
+    bloch_phase_matrix_general, which enumerate replicas as a Cartesian
+    product range(nx)*range(ny) and map k by per-axis division
+    [k0/nx,k1/ny,0], this builds the projector directly from each
+    supercell atom's stored replica vector n in Z^3 (arbitrary integer
+    vector, not just (i,j,0)) and maps k with the general transformation
+    k_primal_reduced = Minv@k_super_reduced, where Minv=inv(M) and M is
+    the integer matrix such that the supercell lattice vectors are
+    A_S = M@A_0. This reduces exactly to the legacy per-axis division
+    when M=diag(nx,ny,nz). Works uniformly whether or not atoms have
+    been removed from the supercell, since replicas/primal_indices are
+    already filtered to the atoms actually present."""
+    from scipy.sparse import csc_matrix
+    n0 = h0.intra.shape[0] # orbitals in the primal cell
+    natoms = len(primal_indices)
+    ncols = natoms*norb_factor # orbitals in this supercell
+    # column -> row in the primal-cell operator
+    rows = np.repeat(primal_indices*norb_factor,norb_factor) + \
+           np.tile(np.arange(norb_factor),natoms)
+    dvecs = np.repeat(replicas,norb_factor,axis=0) # replica vector per column
+    Minv = inv(np.array(M,dtype=float))
+    indptr = np.arange(ncols+1) # one nonzero entry per column
+    def fun(k): # function generating the matrix
+        ki = Minv@np.array(k,dtype=float) # primal-cell reduced k-vector
         phi0 = dvecs[:,0]*ki[0] + dvecs[:,1]*ki[1] + dvecs[:,2]*ki[2]
         phi = np.exp(1j*2.*np.pi*phi0) # phase per column
         return csc_matrix((phi,rows,indptr),shape=(n0,ncols)) # sparse

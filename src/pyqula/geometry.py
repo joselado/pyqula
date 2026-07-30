@@ -35,6 +35,9 @@ class Geometry:
         self.shift_kspace = False # shift the klist when plotting
         self.name = "None"
         self.primal_geometry = None # store the primal geometry
+        self.supercell_matrix = None # integer matrix M, if built via get_supercell(M)
+        self.supercell_replica = None # per-atom replica vector n in Z^3, if built via get_supercell(M)
+        self.supercell_primal_index = None # per-atom primal-cell atom index, if built via get_supercell(M)
         self.lattice_name = "" # lattice name
         self.atoms_names = [] # no name for the atoms
         self.atoms_have_names = False # atoms do not have names
