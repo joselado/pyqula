@@ -307,7 +307,8 @@ class Hamiltonian():
         from .ldostk import atomicmultildos
         return atomicmultildos.get_density(self,**kwargs)
     def get_bands(self,**kwargs):
-        """ Returns a figure with the bandstructure"""
+        """ Compute the bandstructure, optionally with operator
+        expectation values (operator can be a single spec or a list)"""
         return bandstructure.get_bands(self,**kwargs)
     def get_bands_map(self,**kwargs):
         """ Returns a figure with the bandstructure"""

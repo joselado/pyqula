@@ -133,3 +133,24 @@ def test_get_bands_nd_matches_legacy_with_operator_and_ewindow(tmp_path):
     assert new.shape == old.shape
     assert np.allclose(new, old), \
         "New and legacy bandstructures (with operator) disagree"
+
+
+def test_get_bands_nd_with_list_of_operators(tmp_path):
+    """A list of operators must yield one extra row per operator, each
+    matching what a separate single-operator call would produce, on top
+    of the same (k, e) rows."""
+    os.chdir(tmp_path)
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    h.add_zeeman([0., 0., 0.3])
+    single_sz = bandstructure.get_bands_nd(h, nk=10, operator="sz",
+                                            write=False)
+    single_site = bandstructure.get_bands_nd(h, nk=10, operator="site",
+                                              write=False)
+    combined = bandstructure.get_bands_nd(h, nk=10, operator=["sz", "site"],
+                                           write=False)
+    assert combined.shape[0] == 4  # k, e, sz, site
+    assert np.allclose(combined[0], single_sz[0])
+    assert np.allclose(combined[1], single_sz[1])
+    assert np.allclose(combined[2], single_sz[2])
+    assert np.allclose(combined[3], single_site[2])

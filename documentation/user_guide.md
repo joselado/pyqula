@@ -186,6 +186,12 @@ h = g.get_hamiltonian(has_spin=True)
 (k,e,c) = h.get_bands(operator="velocity") # bands colored by group velocity
 ```
 
+Passing a list of operators computes the expectation value of each of them for every eigenstate, returning one extra column per operator (`(k,e,c1,c2,...)` instead of `(k,e,c)`)
+
+```python
+(k,e,c_sz,c_site) = h.get_bands(operator=["sz","site"]) # two operators at once
+```
+
 For a very large system (e.g. a moire supercell), diagonalizing the full Hamiltonian at every k-point is wasteful if only a handful of bands around the Fermi level are of interest. Passing `num_bands` switches to a sparse ARPACK solver that targets only those bands
 
 ```python
@@ -1585,8 +1591,9 @@ Compute band structure
 Optional arguments:
 
 - nk = 20: number of k-points
+- operator: a single operator, or a list of operators, to compute expectation values for at each eigenstate
 
-Returns kpoint index and energies
+Returns kpoint index and energies, plus one extra row per operator if `operator` is given
 
 ### h.get_kdos_bands()
 Compute a k-resolved spectral function (band structure dressed with a projection operator, or an unfolded spectral function) along a k-path.

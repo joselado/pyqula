@@ -86,10 +86,19 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                     silent=True):
     """
     Get an n-dimensional bandstructure
+
+    operator: None, a single operator spec, or a list of operator specs
+        (each spec may be a string name, matrix, Operator instance, or
+        callable, exactly as accepted for a single operator). If a list is
+        given, the expectation value of every operator is computed for each
+        eigenstate, and the returned array gains one extra row per operator
+        (k, e, c1, c2, ...) instead of just (k, e, c).
     """
     if num_bands is not None:
       if num_bands>(h.intra.shape[0]-1): num_bands=None
-    if operator is not None: operator = h.get_operator(operator)
+    if isinstance(operator,(list,)):
+        operator = [h.get_operator(o) for o in operator]
+    elif operator is not None: operator = h.get_operator(operator)
     if isinstance(operator,(list,)): num_waw = len(operator)
     else: num_waw = 1 # number of operator expectation values per band
     if num_bands is None: # all the bands
