@@ -48,8 +48,9 @@ def landauer(HT,energy=0.0,error=1e-9,**kwargs):
         heff = deepcopy(intra)
         heff[0][0] = intra[0][0] + selfl
         heff[-1][-1] = intra[-1][-1] + selfr
-        dd = (energy+1j*delta)*iden
         for i in range(len(intra)):  # add the diagonal energy part
+          # each block gets its own identity, blocks can have different sizes
+          dd = (energy+1j*delta)*np.identity(intra[i][i].shape[0],dtype=complex)
           heff[i][i] = heff[i][i] - dd  # this has the wrong sign!!
        # now change the sign
         for i in range(len(intra)):
