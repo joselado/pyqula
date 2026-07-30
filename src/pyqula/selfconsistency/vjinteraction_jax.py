@@ -33,14 +33,15 @@
 #    see densitydensity_jax.default_T_jax) since jnp.linalg.eigh's eigenvector
 #    gradient is only well defined away from exact degeneracies
 #
-# solver="lbfgs": minimizes ||step(x)-x||^2 with jax.grad + scipy's L-BFGS-B
-# (densitydensity_jax.lbfgs_solve), instead of root-finding step(x)=x the
-# way every other solver here does. Motivation: newton/fsolve's jax.jacfwd
-# Jacobian is O(norb^2) forward passes and doesn't scale (see
-# densitydensity_jax.py's module docstring); a jax.grad of a scalar loss
-# costs about one extra pass through step's own eigh, like newton_krylov's
-# jax.jvp, so this scales per-iteration the same way but needs no GMRES
-# inner loop.
+# solver="error_gradient" (dispatched internally as densitydensity_jax's
+# solver="lbfgs"): minimizes ||step(x)-x||^2 with jax.grad + scipy's
+# L-BFGS-B (densitydensity_jax.lbfgs_solve), instead of root-finding
+# step(x)=x the way every other solver here does. Motivation: newton/
+# fsolve's jax.jacfwd Jacobian is O(norb^2) forward passes and doesn't scale
+# (see densitydensity_jax.py's module docstring); a jax.grad of a scalar
+# loss costs about one extra pass through step's own eigh, like
+# newton_krylov's jax.jvp, so this scales per-iteration the same way but
+# needs no GMRES inner loop.
 #
 # What was tried first and abandoned: minimizing the actual physical
 # free-energy/grand-potential functional directly, rather than the SCF
@@ -101,23 +102,23 @@
 # a nonzero-residual local minimum of the least-squares landscape on a
 # harder problem -- observed on a larger (honeycomb, filling-target)
 # system from the same generic starting guess Newton handles fine in a
-# handful of iterations, where lbfgs did not reach maxerror even after
-# thousands of L-BFGS-B iterations, while a warm start close to the true
-# solution converged in ~12. As with the other solvers' documented
+# handful of iterations, where error_gradient did not reach maxerror even
+# after thousands of L-BFGS-B iterations, while a warm start close to the
+# true solution converged in ~12. As with the other solvers' documented
 # marginal-direction caveats, always check scf.converged rather than
 # assuming a returned Hamiltonian is self-consistent.
 #
 # Scaling (measured, not assumed -- a biased bichain+U chain, nk=20, fixed
 # mu=0, wall time includes one-time jax/XLA compilation overhead so treat
 # these as rough orders of magnitude, not a precise benchmark):
-#   n=8 orbitals:  lbfgs 1.4s/11 iters, fixed_point 0.16s/136 iters,
+#   n=8 orbitals:  error_gradient 1.4s/11 iters, linear_mixing 0.16s/136 iters,
 #                  newton_krylov 0.3s/4 iters
-#   n=24 orbitals: lbfgs 0.6s/20 iters, fixed_point 0.2s/126 iters,
+#   n=24 orbitals: error_gradient 0.6s/20 iters, linear_mixing 0.2s/126 iters,
 #                  newton_krylov 103s/4 iters (GMRES apparently needing many
 #                  more inner iterations per outer Newton step at this size)
-# i.e. lbfgs's per-iteration cost does stay flat/cheap like fixed_point's as
-# claimed, and at n=24 it is dramatically faster than newton_krylov despite
-# needing more outer iterations -- consistent with the motivating idea
+# i.e. error_gradient's per-iteration cost does stay flat/cheap like
+# linear_mixing's as claimed, and at n=24 it is dramatically faster than
+# newton_krylov despite needing more outer iterations -- consistent with the motivating idea
 # (no O(norb^2) Jacobian, no GMRES inner loop) but from only two data
 # points; a proper scaling study across more/larger sizes is a natural
 # follow-up, not done here.
@@ -253,6 +254,19 @@ def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
     return step
 
 
+# VJinteraction/VJinteraction_jax's own public solver= names differ from
+# the internal dispatch names solve_scf (shared with Vinteraction/
+# densitydensity_jax.py, not renamed here) expects: "error_gradient"
+# describes what the solver does (jax.grad-driven minimization of the SCF
+# residual) rather than naming the scipy routine behind it (L-BFGS-B), and
+# "linear_mixing" names the algorithm itself rather than its role as a
+# baseline/comparison point ("fixed_point"). Translated once at the entry
+# point below so solve_scf's own dispatch (and its "lbfgs"/"fixed_point"
+# checks, shared verbatim with Vinteraction) never needs to know about the
+# VJinteraction-only names.
+_PUBLIC_SOLVER_NAMES = {"error_gradient": "lbfgs", "linear_mixing": "fixed_point"}
+
+
 def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
         filling=None, T=None, mix=0.1, maxerror=1e-5, maxite=2000,
         solver="newton", verbose=0, gmres_tol=1e-6, gmres_restart=20):
@@ -263,15 +277,17 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     spinspin._build_v/_build_density_v; vd (density-density) must already be
     folded into vz by the caller, exactly as VJinteraction itself does for
     has_eh=False."""
-    if solver != "fixed_point" and mix != 0.1:
-        # mix only controls solver="fixed_point"'s linear-mixing step --
+    if solver != "linear_mixing" and mix != 0.1:
+        # mix only controls solver="linear_mixing"'s linear-mixing step --
         # newton/fsolve/newton_krylov use their own backtracking/damping,
-        # and lbfgs uses L-BFGS-B's own line search, so a caller-tuned mix
-        # (e.g. carried over from the numpy engine, where it always
-        # matters) would otherwise be silently ignored with no signal at all
+        # and error_gradient uses L-BFGS-B's own line search, so a
+        # caller-tuned mix (e.g. carried over from the numpy engine, where
+        # it always matters) would otherwise be silently ignored with no
+        # signal at all
         warnings.warn("mix=%r has no effect for solver=%r (only "
-                "solver=\"fixed_point\" uses linear mixing)"
+                "solver=\"linear_mixing\" uses linear mixing)"
                 % (mix, solver), stacklevel=2)
+    dispatch_solver = _PUBLIC_SOLVER_NAMES.get(solver, solver)
     if T is None:
         T = default_T_jax
     elif T <= 0:
@@ -350,13 +366,15 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     # dispatch densitydensity_jax.generic_densitydensity_jax's own
     # use_jax=True path uses for Vinteraction -- see its docstring for the
     # solver="lbfgs" residual-minimization rationale (this module's own
-    # docstring "solver='lbfgs'" section) and why the single trailing
-    # step_jit(x, mu) call it makes is exactly correct here too.
+    # docstring "solver='error_gradient'" section) and why the single
+    # trailing step_jit(x, mu) call it makes is exactly correct here too.
+    # dispatch_solver (not the public `solver` name) is what solve_scf sees
+    # -- see _PUBLIC_SOLVER_NAMES above.
     # callback_mf is never passed (VJinteraction's use_jax=True path has no
     # such hook at all), so solve_scf's NotImplementedError branch for it
     # never triggers here.
     x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
-            dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
+            dirs, n, dispatch_solver, maxite, maxerror, mix, verbose, gmres_tol,
             gmres_restart)
     mf_final = unflatten_mf(x, dirs, n)
     dm_np = {d: np.asarray(dm[d]) for d in dirs}
@@ -453,13 +471,13 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     vz/vx/vy interaction matrices as the numpy VJinteraction
     (spinspin._build_v/_build_density_v, vd folded into vz for has_eh=False)
     and solves the resulting SCF fixed point with a JAX-derivative-based
-    root-finder (solver="newton"/"fsolve"/"newton_krylov", or "fixed_point"
+    root-finder (solver="newton"/"fsolve"/"newton_krylov", or "linear_mixing"
     for plain linear mixing through the same machinery) instead of
-    VJinteraction's own hardcoded plain-mixing loop. solver="lbfgs" instead
-    minimizes ||step(x)-x||^2 with jax.grad + scipy's L-BFGS-B -- see the
-    module docstring's "solver='lbfgs'" section for why this (residual-norm
-    minimization), and not minimizing the physical free energy directly, is
-    what it does."""
+    VJinteraction's own hardcoded plain-mixing loop. solver="error_gradient"
+    instead minimizes ||step(x)-x||^2 with jax.grad + scipy's L-BFGS-B -- see
+    the module docstring's "solver='error_gradient'" section for why this
+    (residual-norm minimization), and not minimizing the physical free
+    energy directly, is what it does."""
     if not h0.has_spin:
         return NotImplemented  # only for spinful systems, same as VJinteraction
     if h0.has_eh:
