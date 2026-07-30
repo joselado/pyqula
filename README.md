@@ -120,6 +120,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 ## Quantum transport ##
 - Metal-metal transport
 - Metal-superconductor transport
+- Transport through an arbitrary finite (0d) central region contacted by two 1D leads
 - Fully non-collinear Nambu basis
 - Non-equilibrium Green's function formalism
 - Operator-resolved transport

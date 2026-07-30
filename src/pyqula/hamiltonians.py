@@ -771,6 +771,14 @@ class Hamiltonian():
     def didv(self,**kwargs):
         from .transporttk.localprobe import Hamiltonian_didv
         return Hamiltonian_didv(self,**kwargs)
+    def get_central_heterostructure(self,i=0,j=None,left=None,right=None,**kwargs):
+        """Two-terminal transport with `self` as the central scattering
+        region, contacted by two semi-infinite 1D chain leads at sites
+        `i`/`j` (see transporttk.central for details, including how to
+        use a superconducting lead). Returns a Heterostructure."""
+        from .transporttk.central import get_central_heterostructure
+        return get_central_heterostructure(self,i=i,j=j,left=left,
+                                            right=right,**kwargs)
     def get_dm_vev(self,A,**kwargs):
         from . import get_dm_vev
         return get_dm_vev(self,A,**kwargs)

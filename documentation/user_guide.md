@@ -1379,6 +1379,27 @@ for T in np.linspace(1e-3,1.0,6): # loop over transparencies
     Gs = [HT.didv(energy=e) for e in es] # calculate conductance
 ```
 
+## Transport through an arbitrary finite region
+
+The two examples above build the central scattering region out of copies of the leads' own unit cell. `Hamiltonian.get_central_heterostructure(i,j,left=None,right=None)` instead lets *any* finite (0d) Hamiltonian act as the central region, contacted by two semi-infinite 1D chain leads attached at sites `i` and `j`:
+
+```python
+from pyqula import geometry
+
+g = geometry.chain()
+gc = g.get_supercell(5)
+gc.dimensionality = 0 # a finite, 5-site cluster (no periodicity)
+hc = gc.get_hamiltonian() # the central region -- can be any 0d Hamiltonian
+
+h_normal = g.get_hamiltonian() # normal lead
+h_sc = g.get_hamiltonian(); h_sc.add_swave(0.05) # superconducting lead
+
+ht = hc.get_central_heterostructure(0,4,left=h_normal,right=h_sc)
+G = ht.didv(energy=0.02) # Andreev conductance, via the BdG scattering-matrix formula
+```
+
+It returns a plain `Heterostructure`, so every existing method (`landauer`, `didv`, `get_dos`, `get_kappa`...) applies unmodified. `left`/`right` default to a plain spinless chain when omitted, and `j` defaults to the last site. At most one of `{hc, left, right}` may carry an actual pairing amplitude -- e.g. a normal lead + normal lead + superconducting central region (a proximitized molecule) is fine, as is the normal + superconducting lead case above, but two superconducting leads raise a `ValueError` (there would be no normal lead left to define a reflection amplitude against; use `heterostructures.build` + `get_dc_current` for that case instead, see below). Only 0d central regions are supported so far. See `examples/transport/central_region_ij/main.py` for a runnable script.
+
 ## Multiple Andreev reflection and AC-Josephson current
 
 `didv`/`landauer` above are equilibrium, zero-bias linear-response quantities. For a voltage-biased junction between two superconductors (an SNS junction), a finite bias makes each lead's pairing phase wind in time, giving rise to multiple Andreev reflections (MAR) and an AC Josephson effect; the physically meaningful, measurable quantity is the time-averaged (DC) current $I_{dc}(V)$. `Heterostructure.get_dc_current(voltage)` computes this with the Floquet-Keldysh formalism of San-Jose, Cayao, Prada and Aguado, *New J. Phys.* **15**, 075019 (2013) ([arXiv:1301.4408](https://arxiv.org/abs/1301.4408)): the bias is gauged away from the (static) leads into a single, periodically time-dependent "weak link" hopping, and the resulting Floquet-space Dyson/Keldysh equations are solved to get $I_{dc}(V)$. It works for any combination of normal and superconducting leads -- including the case of **two** superconducting leads, which the scattering-matrix formula behind `didv` cannot handle on its own (it has no normal lead to define a reflection amplitude against).
@@ -1940,6 +1961,17 @@ hmf = h.get_combined_mean_field_hamiltonian(U=4.0,J1=-0.5,filling=0.5,
 ```
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
+
+### h.get_central_heterostructure()
+Build a two-terminal `Heterostructure` using `h` (a finite, 0d Hamiltonian) as the central scattering region, contacted by two semi-infinite 1D chain leads attached at sites `i`/`j` (see "Transport through an arbitrary finite region" above).
+
+Optional arguments:
+
+- i=0, j=None: 0-indexed sites `h` is contacted at; `j` defaults to the last site
+
+- left=None, right=None: lead Hamiltonians; default to a plain spinless `geometry.chain()`. Give one of them (or `h` itself) nonzero pairing (`add_swave`) for a normal-superconductor junction -- at most one of `{h, left, right}` may carry pairing
+
+Returns a `Heterostructure`, so `landauer`, `didv`, `get_dos`, `get_kappa`, etc. all apply unmodified. Only 0d central regions are supported so far (`h.dimensionality>0` raises `NotImplementedError`).
 
 ## Heterostructure functions and methods
 

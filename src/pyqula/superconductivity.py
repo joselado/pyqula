@@ -493,6 +493,7 @@ def turn_nambu(self):
   """Turn a Hamiltonian an Nambu Hamiltonian"""
   nambu = build_eh
   if self.check_mode("spinful_nambu"): return # do nothing
+  elif self.check_mode("spinless_nambu"): return # do nothing, already Nambu
   elif self.check_mode("spinless"): self.turn_spinful() # error
   elif self.check_mode("spinful"): pass # error
   else: raise
