@@ -972,24 +972,23 @@ solver list and scope restrictions
 `solver="error_gradient"` minimizes the SCF residual rather than the
 physical free energy directly.
 
-Which solver is most likely to converge at all (as opposed to fastest) on a
-generic, not-necessarily-pre-biased system was measured directly: 72 runs of
-`solver="newton_krylov"`/`"error_gradient"`/`"broyden_mixing"`/`"linear_mixing"`
-on biased AND unbiased spinful Hubbard chains at 4/20/50 sites (3 random `mf`
-seeds each, `maxite=500`): `"error_gradient"` converged 17/18 = 94% of the
-time, `"newton_krylov"`/`"broyden_mixing"` 16/18 = 89%, `"linear_mixing"`
-15/18 = 83%. The gap widens on the hardest case tested (50 sites, no
-symmetry-breaking bias): `"error_gradient"` still converged 3/3, while
-`"broyden_mixing"` dropped to 1/3 and `"linear_mixing"` to 0/3 -- at that
-size range broyden_mixing's own validated regime (5-13 atom systems, see
-above) no longer covers it. `"newton_krylov"` also converged 3/3 there but
-was far slower (55-129s mean at 50 sites vs. `"error_gradient"`'s 15-19s) and
-was the least reliable solver at the *small* end (4 sites), where its
-GMRES-on-a-near-singular-Jacobian failure mode bit hardest. Net recommendation:
-default to `solver="error_gradient"` for a generic system in roughly this
-4-60 site range; reach for `"newton_krylov"`/`"broyden_mixing"` instead only
-once you know your system is comfortably biased/well-conditioned and want
-the extra speed.
+Which solver is most likely to converge at all (as opposed to fastest) matters
+more than raw speed when the system's symmetry properties aren't known in
+advance (e.g. no explicit symmetry-breaking bias applied to the Hamiltonian).
+Measured across a range of system sizes and both biased and fully generic
+(unbiased) Hamiltonians, `solver="error_gradient"` was consistently the most
+robust of the four `use_jax=True` solvers, converging in nearly every case
+tried -- including the hardest one, a larger unbiased system where
+`"linear_mixing"` failed outright and `"broyden_mixing"` converged only a
+minority of the time (outside the small-system regime it was validated on
+above). `"newton_krylov"` was also reliable at larger sizes but considerably
+slower there, and was the least robust solver of the four on small systems,
+where its GMRES step can fail outright against a near-singular Jacobian.
+Net recommendation: default to `solver="error_gradient"` for a generic
+system whose symmetry isn't known to be already broken; reach for
+`"newton_krylov"`/`"broyden_mixing"` instead once the system is known to be
+well-conditioned (or explicitly biased) and the extra speed matters more
+than robustness.
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
