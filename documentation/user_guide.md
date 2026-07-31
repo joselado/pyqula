@@ -945,11 +945,30 @@ builds a JAX-differentiable version of one SCF iteration $x=f(x)$ and drives
 it to its fixed point with a genuine root-finder using JAX-computed
 derivatives of $f$ (`solver="newton"`, the default once `use_jax=True`), a
 matrix-free variant that scales to larger systems (`solver="newton_krylov"`),
-or by minimizing the squared residual $\|f(x)-x\|^2$ with `jax.grad` and
-`scipy`'s L-BFGS-B (`solver="error_gradient"`) -- see the reference entry
-below for the full solver list and scope restrictions (normal-state only, no
-`constrains`), and `selfconsistency.vjinteraction_jax`'s module docstring
-for why `solver="error_gradient"` minimizes the SCF residual rather than the
+by minimizing the squared residual $\|f(x)-x\|^2$ with `jax.grad` and
+`scipy`'s L-BFGS-B (`solver="error_gradient"`), or with a robust black-box
+mixing scheme, `solver="broyden_mixing"` -- a regularized, limited-memory
+multisecant form of Broyden's second method following Marks & Luke,
+*Robust Mixing for Ab-Initio Quantum Mechanical Calculations*
+(arXiv:0801.3098). Unlike the root-finder/gradient-based solvers above, it
+only ever evaluates $f$ itself (no Jacobian, no autodiff), tracking the last
+few SCF steps as simultaneous secant conditions, regularizing the resulting
+least-squares solve (Tikhonov), and adaptively bounding the step length --
+this is the combination the paper credits for converging on cases (e.g.
+"charge sloshing" between two badly-scaled subsets of the mean field) that
+defeat a single fixed linear-mixing factor. It first runs a plain-linear-
+mixing warm-up (reusing `mix`) until the residual drops below a threshold
+(`warmup_tol`, default 1e-2) before switching on the multisecant machinery --
+benchmarked across several small (5-13 atom) systems, starting the
+multisecant phase directly on a cold guess (the paper's own literal
+algorithm) regularly failed to converge, while the warm-up fixed every
+observed case and also converged 2-10x faster than plain linear mixing
+alone; see `selfconsistency.broydenmixing`'s module docstring for the
+algorithm and that benchmark. See the reference entry below for the full
+solver list and scope restrictions
+(normal-state only, no `constrains`), and
+`selfconsistency.vjinteraction_jax`'s module docstring for why
+`solver="error_gradient"` minimizes the SCF residual rather than the
 physical free energy directly:
 
 ```python
@@ -1948,7 +1967,16 @@ pairing (see the example above).
   `"newton_krylov"`/`"linear_mixing"` (no dense Jacobian), and matches
   `"newton"` well on small/moderate systems, but as a local optimizer it can
   stall short of `maxerror` on a harder landscape from a generic starting
-  guess -- always check `.converged`. Restricted to a normal-state (non-BdG)
+  guess -- always check `.converged`. `"broyden_mixing"` is a black-box
+  mixing scheme rather than a root-finder/gradient method (regularized,
+  limited-memory multisecant Broyden mixing, Marks & Luke arXiv:0801.3098 --
+  see `selfconsistency.broydenmixing`'s module docstring); it only ever
+  evaluates $f$ itself, so it plugs into the same solver dispatch with no
+  Jacobian/gradient machinery of its own, and is also reachable from the
+  plain (non-jax) engine as `solver="broyden_mixing"` (alongside the
+  existing `"broyden1"`/`"krylov"`/`"anderson"`/`"linear"` `scipy.optimize`
+  wrappers in `selfconsistency.densitydensity.generic_densitydensity`).
+  Restricted to a normal-state (non-BdG)
   Hamiltonian, dense exact diagonalization only (no `integration="kpm"`),
   and no `constrains`; needs the optional `jax` extra
   (`pip install pyqula[jax]`). See `selfconsistency.vjinteraction_jax`'s

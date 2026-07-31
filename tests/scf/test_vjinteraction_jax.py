@@ -308,6 +308,31 @@ def test_vjinteraction_jax_error_gradient_handles_filling():
     assert diff_intra < 1e-3
 
 
+def test_vjinteraction_solver_broyden_mixing_matches_newton():
+    """solver="broyden_mixing" (regularized, limited-memory multisecant
+    Broyden mixing, arXiv:0801.3098 -- see selfconsistency.broydenmixing's
+    module docstring) is a black-box mixing scheme rather than a root-finder
+    or gradient method like the other jax solvers here -- must still
+    converge to the same physics as solver="newton" on the same combined
+    V+isotropic-J+anisotropic-J1x/J1y/J1z system exercised by the
+    newton/newton_krylov/error_gradient comparison tests above."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf0 = _biased_hamiltonian_and_guess(h0, seed=2)
+    kwargs = dict(U=1.5, J1=-0.7, J1x=0.2, J1y=-0.1, J1z=0.3)
+
+    scf_newton = VJinteraction(h1.copy(), nk=20, mu=0.0, mf=mf0.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="newton", **kwargs)
+    scf_bm = VJinteraction(h1.copy(), nk=20, mu=0.0, mf=mf0.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="broyden_mixing",
+            **kwargs)
+
+    assert scf_newton.converged and scf_bm.converged
+    assert abs(scf_newton.total_energy - scf_bm.total_energy) < 1e-4
+    diff = np.max(np.abs(scf_newton.mf[(0, 0, 0)] - scf_bm.mf[(0, 0, 0)]))
+    assert diff < 1e-3
+
+
 def test_rotation_formulas_agree_between_numpy_and_jax_engines():
     """spinspin._block_rotate/_rot_dict/_rot_dm (numpy, module-level -- used
     by the plain SCF loop) and vjinteraction_jax._block_rotate_jax/

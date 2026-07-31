@@ -469,9 +469,24 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
         elif solver=="linear":
             from scipy.optimize import linearmixing
             x = linearmixing(fsol,x0,f_tol=maxerror*100) # use the solver
+        elif solver=="broyden_mixing":
+            # regularized, limited-memory multisecant Broyden mixing
+            # (arXiv:0801.3098) -- see selfconsistency/broydenmixing.py's
+            # module docstring for the algorithm. fsol(x)=x-F(x), so
+            # F(x)=x-fsol(x) recovers the step_vec(x)->x_new convention
+            # broyden_mixing_solve expects.
+            from .broydenmixing import broyden_mixing_solve
+            step_vec = lambda x: x - fsol(x)
+            bm_kwargs = dict(tol=maxerror, verbose=verbose)
+            if maxite is not None: bm_kwargs["maxite"] = maxite
+            x, ite, converged = broyden_mixing_solve(step_vec, x0, **bm_kwargs)
+            if not converged:
+                print("No convergence has been reached in",ite,
+                        "iterations, stopping")
         else: raise # unrecognised solver
         mf = fa2mf(x) # transform to MF
         scf = f(mf) # compute the SCF with the solution
+        if solver=="broyden_mixing": scf.converged = converged # store convergence flag
         scf.error = maxerror # store the error
         inout.save(scf.mf,mf_file) # save the mean field
         return scf # return the mean field

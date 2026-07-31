@@ -471,7 +471,8 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
     """Shared solver dispatch for generic_densitydensity_jax's and
     vjinteraction_jax.generic_vjinteraction_jax's use_jax=True paths --
     drives x0 to a fixed point of step_jit via whichever solver= was
-    requested ("newton"/"fsolve"/"newton_krylov"/"fixed_point"/"lbfgs"),
+    requested ("newton"/"fsolve"/"newton_krylov"/"fixed_point"/"lbfgs"/
+    "broyden_mixing"),
     then evaluates step_jit exactly ONCE more at the converged x to get
     everything callers need: final_mu, xfinal/dm/es/occ, and (solver=
     "lbfgs" only, which has no residual-based convergence notion of its
@@ -494,7 +495,7 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
     meaningful for solver="fixed_point"; applied on concrete numpy arrays
     each iteration) raises NotImplementedError for every other solver, which
     need x to stay a pure jax-traced value throughout."""
-    if solver in ("newton", "fsolve", "newton_krylov", "lbfgs"):
+    if solver in ("newton", "fsolve", "newton_krylov", "lbfgs", "broyden_mixing"):
         if callback_mf is not None:
             raise NotImplementedError("solver=%r cannot apply "
                     "callback_mf/constrains (they need concrete numpy "
@@ -523,6 +524,18 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
         x, ite = lbfgs_solve(residual_loss, x0, maxite=maxite, tol=maxerror,
                 verbose=verbose)
         converged = None  # resolved below, once xfinal is available
+    elif solver == "broyden_mixing":
+        # unlike newton/fsolve/newton_krylov/lbfgs, this solver never needs
+        # x to stay a traced jax value between iterations (no jacfwd/jvp/grad
+        # of step_vec involved -- it only ever calls step_vec(x) as a black
+        # box), so grouping it with those above (for the callback_mf check)
+        # is a simplicity choice, not a technical requirement the way it is
+        # for them; step_vec still works fine here since a jax.jit function
+        # accepts plain numpy input and converts internally
+        from .broydenmixing import broyden_mixing_solve
+        x, ite, converged = broyden_mixing_solve(step_vec, x0, maxite=maxite,
+                tol=maxerror, verbose=verbose)
+        x = jnp.asarray(x)
     else:
         raise ValueError("unrecognised solver for use_jax=True: %r" % (solver,))
 
@@ -551,7 +564,10 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     scipy's L-BFGS-B instead of root-finding step(x)=x -- see
     vjinteraction_jax's module docstring for the "solver='lbfgs'" section
     (written for VJinteraction, but solve_scf/lbfgs_solve are the same
-    generic machinery used here)."""
+    generic machinery used here). solver="broyden_mixing" is a black-box
+    mixing scheme (regularized, limited-memory multisecant Broyden mixing,
+    arXiv:0801.3098) rather than a root-finder/gradient method -- see
+    broydenmixing.py's module docstring."""
     if h0.has_eh:
         raise NotImplementedError("use_jax=True does not support the "
                 "anomalous/BdG mean field yet; use the default (numpy) engine")

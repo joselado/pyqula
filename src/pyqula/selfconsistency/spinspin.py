@@ -481,12 +481,16 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     than "newton"'s dense Jacobian), "fsolve" (scipy.optimize.fsolve/MINPACK
     with the same jax.jacfwd Jacobian as fprime), "linear_mixing" (plain
     linear mixing through the same machinery, for comparison/large systems),
-    or "error_gradient" (minimizes ||step(x)-x||^2 with jax.grad + scipy's
+    "error_gradient" (minimizes ||step(x)-x||^2 with jax.grad + scipy's
     L-BFGS-B, instead of root-finding step(x)=x -- see
     selfconsistency.vjinteraction_jax's module docstring for why this,
     rather than minimizing the physical free energy directly, is what it
     does: the physical SCF solution turned out empirically to be a saddle
-    point, not a minimum, of the free-energy functional).
+    point, not a minimum, of the free-energy functional), or
+    "broyden_mixing" (regularized, limited-memory multisecant Broyden
+    mixing following Marks & Luke, arXiv:0801.3098 -- a black-box mixing
+    scheme, not a root-finder/gradient-based method like the others; see
+    selfconsistency.broydenmixing's module docstring for the algorithm).
     See selfconsistency.vjinteraction_jax's module docstring for the
     algorithm and selfconsistency.densitydensity_jax's module docstring
     (which implements the same idea for Vinteraction) for the solvers'
