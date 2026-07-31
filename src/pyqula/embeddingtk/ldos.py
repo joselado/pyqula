@@ -36,7 +36,9 @@ def get_ldos(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,
     ds = [-gv[i,i].imag/np.pi for i in range(gv.shape[0])] # LDOS
     ds = full2profile(h,ds,check=False) # resum if necessary
     ds = np.array(ds) # convert to array
-    gs = h.geometry.supercell(nsuper)
+    gs = h.geometry
+    if self.nsuper is not None: gs = gs.supercell(self.nsuper)
+    gs = gs.supercell(nsuper)
     x,y,z,r = gs.x,gs.y,gs.z,gs.r
     if write: np.savetxt("LDOS.OUT",np.array([x,y,ds]).T)
     if return_rd:

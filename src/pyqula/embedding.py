@@ -32,17 +32,17 @@ class Embedding():
 #                print("Picking intracell in embedding")
                 m = m.intra # get the intracell
             self.m = m # provided matrix
-            if m.shape[0]!=h.intra.shape[0]: 
+            if m.shape[0]!=h.intra.shape[0]:
                 if nsuper is None:
-                    print("Dimensions do not match in embedding")
-                    raise
-                else: 
+                    raise ValueError("Dimensions do not match in embedding: "
+                            +str(m.shape[0])+" vs "+str(h.intra.shape[0])
+                            +" (pass nsuper if m is a supercell onsite matrix)")
+                else:
                     self.nsuper = nsuper # store the supercell
                     hs = h.supercell(nsuper)
-                    if m.shape[0]!=hs.intra.shape[0]: 
-                        print("Dimensions do not match after supercell")
-                        print(m.shape[0],hs.intra.shape[0])
-                        raise
+                    if m.shape[0]!=hs.intra.shape[0]:
+                        raise ValueError("Dimensions do not match after supercell: "
+                                +str(m.shape[0])+" vs "+str(hs.intra.shape[0]))
             else: pass
         else: self.m = h.intra.copy() # pristine one
     def get_gf(self,**kwargs):
@@ -300,27 +300,22 @@ def get_gf_exact(self,energy=0.0,delta=1e-2,
     """Return the Green's function"""
     h = self.H
     e = energy
-    if self.nsuper is None: # old way
-        g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,
-                nsuper=nsuper,gtype=self.mode,gf_mode=self.gf_mode)
-    else: # workaround for supercells
-        raise # this does not work yet
-        g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,
-                nsuper=nsuper*self.nsuper) # compute Green's function
-        h = h.supercell(self.nsuper) # and redefine with a supercell
+    if self.nsuper is not None:
+        # self.m is the onsite matrix of a supercell (self.nsuper times
+        # the original cell) with a defect in it -- redefine the cell
+        # used for the periodic embedding *before* computing the bulk
+        # selfenergy, so that the outer nsuper below plays the same role
+        # (extra padding around the given defective supercell) as it does
+        # in the plain, non-supercell case
+        h = h.supercell(self.nsuper)
+    g,selfe = green.supercell_selfenergy(h,e=e,delta=delta,nk=nk,
+            nsuper=nsuper,gtype=self.mode,gf_mode=self.gf_mode)
     ms = onsite_defective_central(h,self.m,nsuper)
     ns = ms.shape[0] # dimension of the supercell
     iden = np.identity(ns,dtype=np.complex128) # identity
     emat = iden*(e + delta*1j) # energy matrix
     gv = algebra.inv(emat - ms -selfe)   # Defective Green function
     return gv
-
-
-def get_onsite(self,nsuper=1,**kwargs):
-    h = self.H
-    ms = onsite_defective_central(h,self.m,nsuper)
-    return ms
-
 
 
 from .embeddingtk.embedded import get_dm
