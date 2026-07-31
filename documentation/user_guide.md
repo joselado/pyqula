@@ -945,8 +945,9 @@ builds a JAX-differentiable version of one SCF iteration $x=f(x)$ and drives
 it to its fixed point with a genuine root-finder using JAX-computed
 derivatives of $f$ (`solver="newton"`, the default once `use_jax=True`), a
 matrix-free variant that scales to larger systems (`solver="newton_krylov"`),
-by minimizing the squared residual $\|f(x)-x\|^2$ with `jax.grad` and
-`scipy`'s L-BFGS-B (`solver="error_gradient"`), or with a robust black-box
+by minimizing the squared residual $\|f(x)-x\|^2$ as a proper nonlinear
+least-squares problem via matrix-free Levenberg-Marquardt (`jax.jvp`/
+`jax.vjp` plus `scipy`'s `lsqr`, `solver="error_gradient"`), or with a robust black-box
 mixing scheme, `solver="broyden_mixing"` -- a regularized, limited-memory
 multisecant form of Broyden's second method following Marks & Luke,
 *Robust Mixing for Ab-Initio Quantum Mechanical Calculations*
@@ -969,7 +970,26 @@ solver list and scope restrictions
 (normal-state only, no `constrains`), and
 `selfconsistency.vjinteraction_jax`'s module docstring for why
 `solver="error_gradient"` minimizes the SCF residual rather than the
-physical free energy directly:
+physical free energy directly.
+
+Which solver is most likely to converge at all (as opposed to fastest) on a
+generic, not-necessarily-pre-biased system was measured directly: 72 runs of
+`solver="newton_krylov"`/`"error_gradient"`/`"broyden_mixing"`/`"linear_mixing"`
+on biased AND unbiased spinful Hubbard chains at 4/20/50 sites (3 random `mf`
+seeds each, `maxite=500`): `"error_gradient"` converged 17/18 = 94% of the
+time, `"newton_krylov"`/`"broyden_mixing"` 16/18 = 89%, `"linear_mixing"`
+15/18 = 83%. The gap widens on the hardest case tested (50 sites, no
+symmetry-breaking bias): `"error_gradient"` still converged 3/3, while
+`"broyden_mixing"` dropped to 1/3 and `"linear_mixing"` to 0/3 -- at that
+size range broyden_mixing's own validated regime (5-13 atom systems, see
+above) no longer covers it. `"newton_krylov"` also converged 3/3 there but
+was far slower (55-129s mean at 50 sites vs. `"error_gradient"`'s 15-19s) and
+was the least reliable solver at the *small* end (4 sites), where its
+GMRES-on-a-near-singular-Jacobian failure mode bit hardest. Net recommendation:
+default to `solver="error_gradient"` for a generic system in roughly this
+4-60 site range; reach for `"newton_krylov"`/`"broyden_mixing"` instead only
+once you know your system is comfortably biased/well-conditioned and want
+the extra speed.
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
@@ -1959,15 +1979,20 @@ pairing (see the example above).
   `scipy.optimize.fsolve`/MINPACK with the same `jax.jacfwd` Jacobian as
   `fprime`; `"linear_mixing"` is plain linear mixing routed through the same
   machinery, for comparison; `"error_gradient"` instead minimizes the squared
-  SCF residual $\|f(x)-x\|^2$ with `jax.grad` + `scipy`'s L-BFGS-B (not the
-  physical free energy directly -- see `selfconsistency.vjinteraction_jax`'s
-  module docstring for why that alternative was tried and abandoned: the
-  physical SCF solution turned out to be a saddle point, not a minimum, of
-  the free-energy functional). `"error_gradient"` scales per-iteration like
-  `"newton_krylov"`/`"linear_mixing"` (no dense Jacobian), and matches
-  `"newton"` well on small/moderate systems, but as a local optimizer it can
-  stall short of `maxerror` on a harder landscape from a generic starting
-  guess -- always check `.converged`. `"broyden_mixing"` is a black-box
+  SCF residual $\|f(x)-x\|^2$ as a proper nonlinear least-squares problem,
+  via matrix-free Levenberg-Marquardt (`jax.jvp`/`jax.vjp` Jacobian-vector
+  and Jacobian-transpose-vector products of the residual + `scipy`'s `lsqr`
+  for each damped LM subproblem) -- not the physical free energy directly
+  (see `selfconsistency.vjinteraction_jax`'s module docstring for why that
+  alternative was tried and abandoned: the physical SCF solution turned out
+  to be a saddle point, not a minimum, of the free-energy functional).
+  `"error_gradient"` scales per-iteration like `"newton_krylov"`/
+  `"linear_mixing"` (no dense Jacobian), and matches `"newton"`/
+  `"newton_krylov"` well from small systems up through at least ~60
+  orbitals (see `selfconsistency.vjinteraction_jax`'s module docstring for
+  measured numbers), but as a local method it can in principle still stall
+  short of `maxerror` on a sufficiently hard landscape -- always check
+  `.converged`. `"broyden_mixing"` is a black-box
   mixing scheme rather than a root-finder/gradient method (regularized,
   limited-memory multisecant Broyden mixing, Marks & Luke arXiv:0801.3098 --
   see `selfconsistency.broydenmixing`'s module docstring); it only ever

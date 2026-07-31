@@ -166,6 +166,29 @@ def test_densitydensity_jax_lbfgs_matches_newton():
     assert abs(scf_newton.total_energy - scf_lbfgs.total_energy) < 1e-4
 
 
+def test_densitydensity_jax_levenberg_marquardt_matches_newton():
+    """solver="levenberg_marquardt" (matrix-free Levenberg-Marquardt on the
+    SCF residual via jax.jvp/jax.vjp + scipy's lsqr -- see
+    densitydensity_jax.levenberg_marquardt_solve's docstring) is what
+    vjinteraction_jax's VJinteraction dispatches solver="error_gradient" to,
+    but exercised there only through _get_step_core_vj (the vz/vx/vy
+    three-channel step). This exercises it directly through the plain
+    V/U-only single-channel step (_get_step_core/build_step_function) that
+    Vinteraction/generic_densitydensity_jax uses, which is a structurally
+    different code path and was previously untested."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf = _biased_hamiltonian_and_guess(h0, seed=0, bias=.8)
+
+    scf_newton = Vinteraction(h1.copy(), nk=20, mu=0.0, U=2., mf=mf.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="newton")
+    scf_lm = Vinteraction(h1.copy(), nk=20, mu=0.0, U=2., mf=mf.copy(),
+            maxerror=1e-6, verbose=0, use_jax=True, solver="levenberg_marquardt")
+
+    assert scf_newton.converged and scf_lm.converged
+    assert abs(scf_newton.total_energy - scf_lm.total_energy) < 1e-4
+
+
 def test_densitydensity_jax_handles_mismatched_guess_directions():
     """A regression test: an initial mean-field guess that only covers a
     subset of the interaction's directions (e.g. a nearest-neighbor-only

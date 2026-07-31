@@ -34,14 +34,21 @@
 #    gradient is only well defined away from exact degeneracies
 #
 # solver="error_gradient" (dispatched internally as densitydensity_jax's
-# solver="lbfgs"): minimizes ||step(x)-x||^2 with jax.grad + scipy's
-# L-BFGS-B (densitydensity_jax.lbfgs_solve), instead of root-finding
-# step(x)=x the way every other solver here does. Motivation: newton/
-# fsolve's jax.jacfwd Jacobian is O(norb^2) forward passes and doesn't scale
-# (see densitydensity_jax.py's module docstring); a jax.grad of a scalar
-# loss costs about one extra pass through step's own eigh, like
-# newton_krylov's jax.jvp, so this scales per-iteration the same way but
-# needs no GMRES inner loop.
+# solver="levenberg_marquardt"): minimizes ||step(x)-x||^2 -- not by
+# root-finding step(x)=x the way newton/fsolve/newton_krylov do, but as a
+# genuine nonlinear-least-squares problem, via matrix-free Levenberg-
+# Marquardt (densitydensity_jax.levenberg_marquardt_solve): jax.jvp/jax.vjp
+# give Jacobian-vector and Jacobian-transpose-vector products of the
+# residual r(x)=step(x)-x, and each LM step solves the damped subproblem
+# with scipy.sparse.linalg.lsqr, entirely matrix-free (no O(norb^2)
+# Jacobian, same motivation as newton_krylov's GMRES). Originally
+# (2026-07-30) this dispatched to densitydensity_jax's scipy-L-BFGS-B-based
+# solver="lbfgs" instead (driven only by jax.grad of the scalar loss) --
+# still available directly via generic_densitydensity_jax's own
+# solver="lbfgs" for Vinteraction, but replaced here after it was found
+# (2026-07-31) to stall on larger systems; see levenberg_marquardt_solve's
+# own docstring and the "Scaling" section below for the measured failure
+# and fix.
 #
 # What was tried first and abandoned: minimizing the actual physical
 # free-energy/grand-potential functional directly, rather than the SCF
@@ -96,33 +103,60 @@
 # its global minimum (value 0) sits exactly at every SCF fixed point by
 # construction, with no separate derivation or saddle-point risk. Measured
 # behavior (see tests/scf/test_vjinteraction_jax.py): matches solver=
-# "newton" closely on V/U-only, combined V+anisotropic-J, and filling-
-# target bichain systems (all to <1e-5 in mf/total_energy). It is still
-# only a LOCAL optimizer, though, so it is not immune to getting stuck in
-# a nonzero-residual local minimum of the least-squares landscape on a
-# harder problem -- observed on a larger (honeycomb, filling-target)
-# system from the same generic starting guess Newton handles fine in a
-# handful of iterations, where error_gradient did not reach maxerror even
-# after thousands of L-BFGS-B iterations, while a warm start close to the
-# true solution converged in ~12. As with the other solvers' documented
-# marginal-direction caveats, always check scf.converged rather than
-# assuming a returned Hamiltonian is self-consistent.
+# "newton"/"newton_krylov" closely on V/U-only, combined V+anisotropic-J,
+# and filling-target bichain systems (all to <1e-5 in mf/total_energy, and
+# to ~1e-8 against newton_krylov on the 30-site chain in the "Scaling"
+# section below). It is still only a LOCAL method, so it is not immune to
+# getting stuck in a nonzero-residual local minimum of the least-squares
+# landscape on a sufficiently hard problem -- always check scf.converged
+# rather than assuming a returned Hamiltonian is self-consistent, the same
+# caveat every other solver here documents for its own marginal cases.
 #
-# Scaling (measured, not assumed -- a biased bichain+U chain, nk=20, fixed
-# mu=0, wall time includes one-time jax/XLA compilation overhead so treat
-# these as rough orders of magnitude, not a precise benchmark):
-#   n=8 orbitals:  error_gradient 1.4s/11 iters, linear_mixing 0.16s/136 iters,
+# History: the original (2026-07-30) scipy-L-BFGS-B-based implementation of
+# this solver had exactly this problem, but severely -- on a 30-site
+# (60-orbital) biased Hubbard chain (nk=20) it did not reach maxerror=1e-6
+# even after 3000 L-BFGS-B iterations (77s), residual stuck around 5e-3 to
+# 1.5e-2, INCLUDING when seeded with 5-40 linear_mixing warm-up iterations
+# first (the fix that worked for solver="broyden_mixing"'s own analogous
+# stall, see broydenmixing.py -- it did not transfer here). The root cause:
+# L-BFGS-B only ever sees the scalar gradient of the squared residual and
+# discards the residual VECTOR's own structure, whereas newton_krylov's
+# jax.jvp-driven GMRES uses that structure directly and converged the same
+# system in 10 iterations/9.0s. levenberg_marquardt_solve (2026-07-31) fixes
+# this by using that same residual structure (jvp AND vjp, i.e. an actual
+# nonlinear-least-squares method, not a generic scalar-loss optimizer)
+# while keeping the "why not just use newton_krylov" advantage this solver
+# was always meant to have: LM's Tikhonov damping keeps its subproblem
+# well-posed even when the Jacobian is singular/near-singular (e.g. the
+# unbroken-continuous-spin-symmetry marginal direction warned about above
+# newton_krylov_solve in densitydensity_jax.py), where GMRES on a literally
+# singular operator can simply fail to find any improving step at all.
+#
+# Scaling (measured, not assumed -- a biased chain+U, nk=20, fixed mu=0,
+# wall time includes one-time jax/XLA compilation overhead so treat these
+# as rough orders of magnitude, not a precise benchmark):
+#   n=8 orbitals:  error_gradient 2.0s/9 iters,  linear_mixing 0.16s/136 iters,
 #                  newton_krylov 0.3s/4 iters
-#   n=24 orbitals: error_gradient 0.6s/20 iters, linear_mixing 0.2s/126 iters,
+#   n=24 orbitals: error_gradient 2.3s/8 iters,  linear_mixing 0.2s/126 iters,
 #                  newton_krylov 103s/4 iters (GMRES apparently needing many
 #                  more inner iterations per outer Newton step at this size)
-# i.e. error_gradient's per-iteration cost does stay flat/cheap like
-# linear_mixing's as claimed, and at n=24 it is dramatically faster than
-# newton_krylov despite needing more outer iterations -- consistent with the motivating idea
-# (no O(norb^2) Jacobian, no GMRES inner loop) but from only two data
-# points; a proper scaling study across more/larger sizes is a natural
-# follow-up, not done here.
+#   n=60 orbitals (30 sites): error_gradient 9.2s/9 iters (matches
+#                  newton_krylov's answer to dE~1.3e-8, d(mf)~1.8e-8),
+#                  newton_krylov 6.1s/8 iters, linear_mixing 2.0s/175 iters
+#                  (converges, but to a total_energy ~1.1e-5 off from the
+#                  other two -- linear_mixing's own maxerror=1e-6 is on the
+#                  mean-field vector, not energy, so this is expected slop,
+#                  not a bug)
+# i.e. error_gradient's outer-iteration count now stays flat/small (~6-9)
+# across this whole size range rather than blowing up, matching the
+# motivating idea (matrix-free, no O(norb^2) Jacobian) -- and at n=60,
+# where the old L-BFGS-B version failed outright, it now succeeds and
+# closely tracks newton_krylov, at comparable (not dramatically better)
+# wall time; a proper scaling study to larger sizes, and a case exercising
+# the singular-Jacobian robustness levenberg_marquardt_solve is specifically
+# meant to have over newton_krylov, are natural follow-ups, not done here.
 from __future__ import annotations
+import functools
 import warnings
 import numpy as np
 import jax
@@ -179,36 +213,26 @@ def _rot_dm_np(dd, R):
     return {k: np.asarray(m) for k, m in _rot_dm_jax(dd_j, R_j).items()}
 
 
-def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
-        Rx, Ry, vz_active, vx_active, vy_active, n_occ_total=None):
-    """Return step(x,mu) -> (xnew, dm, es, occ, mu_eff), the pure-JAX one
-    SCF step combining the z/x/y channels -- structurally
-    densitydensity_jax.build_step_function (same Bloch-stack build,
-    vmap(eigh), mu-for-filling jnp.sort trick, per-direction dm
-    reconstruction via einsum) generalized from a single get_mf_normal_jax
-    call to VJinteraction's three-channel combination, mirroring
-    spinspin._run_anisotropic_scf.compute_mf restricted to the normal-state
-    case (no has_eh/vd-separate/embed_normal branches -- vd is folded into
-    vz by the caller before this point, exactly as the numpy VJinteraction
-    already does whenever has_eh=False).
-
-    vz/vx/vy must already be padded to have an entry for every key in dirs
-    (zero matrices where a channel does not itself reach that direction) --
-    get_mf_normal_jax indexes v[d] directly for every d in dirs, unlike the
-    numpy get_mf_normal which only loops over v's own (possibly smaller) key
-    set."""
-    n = hop0[(0, 0, 0)].shape[0]
+@functools.lru_cache(maxsize=32)
+def _get_step_core_vj(dirs, dirs_all, n, vz_active, vx_active, vy_active,
+        has_filling_target):
+    """VJinteraction's analogue of densitydensity_jax._get_step_core -- see
+    that function's docstring for why this exists: build_step_function_vj
+    used to close over hop0/vz/vx/vy/ks/T as Python constants baked into the
+    traced program, so every top-level call (even with an identical problem
+    shape but different Hamiltonian/interaction values, e.g. a parameter
+    sweep or several random mf seeds on the same system) paid a fresh XLA
+    recompile. Here the actual per-iteration computation is jitted exactly
+    once per distinct STATIC/structural key (which directions exist, system
+    size, which of the z/x/y channels are active, fixed-mu vs
+    filling-target mode) and reused via jax's own per-shape compiled-
+    executable cache for every call that shares it -- build_step_function_vj
+    now just supplies the concrete numeric arrays (ms0, vz/vx/vy, ks, T,
+    Rx/Ry) as jit trace arguments instead of baking them in."""
     ds_arr = jnp.array([list(d) for d in dirs_all], dtype=jnp.float64)
-    ms0 = make_bloch_stack(hop0, dirs_all, n)
-    vz_j = {d: jnp.asarray(vz[d], dtype=jnp.complex128) for d in vz}
-    vx_j = {d: jnp.asarray(vx[d], dtype=jnp.complex128) for d in vx}
-    vy_j = {d: jnp.asarray(vy[d], dtype=jnp.complex128) for d in vy}
-    Rx_j = jnp.asarray(Rx, dtype=jnp.complex128) if Rx is not None else None
-    Ry_j = jnp.asarray(Ry, dtype=jnp.complex128) if Ry is not None else None
-    nk = ks.shape[0]
     dir_phase = jnp.array([list(d) for d in dirs], dtype=jnp.float64)  # (nt,3)
 
-    def step(x, mu):
+    def step_core(x, mu, ms0, vz_j, vx_j, vy_j, ks, T, n_occ_total, Rx_j, Ry_j):
         mf = unflatten_mf(x, dirs, n)
         mats = [ms0[i] + mf[d] if d in mf else ms0[i]
                 for i, d in enumerate(dirs_all)]
@@ -220,7 +244,8 @@ def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
 
         hks = jax.vmap(hk)(ks)                      # (nk,n,n)
         es, vs = jnp.linalg.eigh(hks)                # (nk,n), (nk,n,n)
-        if n_occ_total is not None:
+        nk = ks.shape[0]
+        if has_filling_target:
             es_sorted = jnp.sort(es.reshape(-1))
             mu_eff = 0.5 * (es_sorted[n_occ_total - 1] + es_sorted[n_occ_total])
         else:
@@ -251,20 +276,71 @@ def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
         xnew = flatten_mf(mfnew, dirs)
         return xnew, dm, es, occ, mu_eff
 
+    return jax.jit(step_core)
+
+
+def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
+        Rx, Ry, vz_active, vx_active, vy_active, n_occ_total=None):
+    """Return step(x,mu) -> (xnew, dm, es, occ, mu_eff), the pure-JAX one
+    SCF step combining the z/x/y channels -- structurally
+    densitydensity_jax.build_step_function (same Bloch-stack build,
+    vmap(eigh), mu-for-filling jnp.sort trick, per-direction dm
+    reconstruction via einsum) generalized from a single get_mf_normal_jax
+    call to VJinteraction's three-channel combination, mirroring
+    spinspin._run_anisotropic_scf.compute_mf restricted to the normal-state
+    case (no has_eh/vd-separate/embed_normal branches -- vd is folded into
+    vz by the caller before this point, exactly as the numpy VJinteraction
+    already does whenever has_eh=False).
+
+    vz/vx/vy must already be padded to have an entry for every key in dirs
+    (zero matrices where a channel does not itself reach that direction) --
+    get_mf_normal_jax indexes v[d] directly for every d in dirs, unlike the
+    numpy get_mf_normal which only loops over v's own (possibly smaller) key
+    set.
+
+    The heavy computation lives in a cached, once-jitted core (see
+    _get_step_core_vj) shared across every call with the same structural
+    shape -- the returned step() is a thin, NOT separately jitted, wrapper
+    that just supplies the concrete numeric arrays as arguments to it;
+    callers should not wrap it in another jax.jit (see _get_step_core_vj's
+    docstring for why that would defeat the point)."""
+    n = hop0[(0, 0, 0)].shape[0]
+    ms0 = make_bloch_stack(hop0, dirs_all, n)
+    vz_j = {d: jnp.asarray(vz[d], dtype=jnp.complex128) for d in vz}
+    vx_j = {d: jnp.asarray(vx[d], dtype=jnp.complex128) for d in vx}
+    vy_j = {d: jnp.asarray(vy[d], dtype=jnp.complex128) for d in vy}
+    Rx_j = jnp.asarray(Rx, dtype=jnp.complex128) if Rx is not None else None
+    Ry_j = jnp.asarray(Ry, dtype=jnp.complex128) if Ry is not None else None
+    T_arr = jnp.asarray(T, dtype=jnp.float64)
+    has_filling_target = n_occ_total is not None
+    n_occ_arr = jnp.asarray(n_occ_total if has_filling_target else 0,
+            dtype=jnp.int64)
+    core = _get_step_core_vj(tuple(dirs), tuple(dirs_all), n, vz_active,
+            vx_active, vy_active, has_filling_target)
+
+    def step(x, mu):
+        return core(x, mu, ms0, vz_j, vx_j, vy_j, ks, T_arr, n_occ_arr,
+                Rx_j, Ry_j)
+
     return step
 
 
 # VJinteraction/VJinteraction_jax's own public solver= names differ from
 # the internal dispatch names solve_scf (shared with Vinteraction/
 # densitydensity_jax.py, not renamed here) expects: "error_gradient"
-# describes what the solver does (jax.grad-driven minimization of the SCF
-# residual) rather than naming the scipy routine behind it (L-BFGS-B), and
-# "linear_mixing" names the algorithm itself rather than its role as a
+# describes what the solver does (minimizing the SCF residual, currently via
+# levenberg_marquardt_solve) rather than naming the specific algorithm
+# behind it, so that name can keep meaning the same thing even if the
+# algorithm behind it changes again (as it already has once, from
+# scipy L-BFGS-B to matrix-free Levenberg-Marquardt -- see the module
+# docstring's "solver='error_gradient'" section), and "linear_mixing" names
+# the algorithm itself rather than its role as a
 # baseline/comparison point ("fixed_point"). Translated once at the entry
 # point below so solve_scf's own dispatch (and its "lbfgs"/"fixed_point"
 # checks, shared verbatim with Vinteraction) never needs to know about the
 # VJinteraction-only names.
-_PUBLIC_SOLVER_NAMES = {"error_gradient": "lbfgs", "linear_mixing": "fixed_point"}
+_PUBLIC_SOLVER_NAMES = {"error_gradient": "levenberg_marquardt",
+        "linear_mixing": "fixed_point"}
 
 
 def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
@@ -279,8 +355,9 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     has_eh=False."""
     if solver != "linear_mixing" and mix != 0.1:
         # mix only controls solver="linear_mixing"'s linear-mixing step --
-        # newton/fsolve/newton_krylov use their own backtracking/damping,
-        # and error_gradient uses L-BFGS-B's own line search, so a
+        # newton/fsolve/newton_krylov/error_gradient all use their own
+        # backtracking/damping (Levenberg-Marquardt's own lam for
+        # error_gradient), so a
         # caller-tuned mix (e.g. carried over from the numpy engine, where
         # it always matters) would otherwise be silently ignored with no
         # signal at all
@@ -357,10 +434,13 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
         n_occ_total = int(round(filling * n_tot))
         n_occ_total = min(max(n_occ_total, 1), n_tot - 1)
 
-    step = build_step_function_vj(hop0, vz_full, vx_full, vy_full, ks, dirs,
-            dirs_all, T, Rx, Ry, vz_active, vx_active, vy_active,
+    # not wrapped in an extra jax.jit: build_step_function_vj's returned
+    # closure already dispatches into a cached, once-jitted core shared
+    # across every call with this same structural shape -- see
+    # build_step_function_vj/_get_step_core_vj's docstrings
+    step_jit = build_step_function_vj(hop0, vz_full, vx_full, vy_full, ks,
+            dirs, dirs_all, T, Rx, Ry, vz_active, vx_active, vy_active,
             n_occ_total=n_occ_total)
-    step_jit = jax.jit(step)
 
     # solve_scf (selfconsistency.densitydensity_jax) is the same solver
     # dispatch densitydensity_jax.generic_densitydensity_jax's own
@@ -474,10 +554,11 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     root-finder (solver="newton"/"fsolve"/"newton_krylov", or "linear_mixing"
     for plain linear mixing through the same machinery) instead of
     VJinteraction's own hardcoded plain-mixing loop. solver="error_gradient"
-    instead minimizes ||step(x)-x||^2 with jax.grad + scipy's L-BFGS-B -- see
-    the module docstring's "solver='error_gradient'" section for why this
-    (residual-norm minimization), and not minimizing the physical free
-    energy directly, is what it does."""
+    instead minimizes ||step(x)-x||^2 via matrix-free Levenberg-Marquardt
+    (jax.jvp/jax.vjp + scipy's lsqr) -- see the module docstring's
+    "solver='error_gradient'" section for why this (residual-norm
+    minimization), and not minimizing the physical free energy directly, is
+    what it does."""
     if not h0.has_spin:
         return NotImplemented  # only for spinful systems, same as VJinteraction
     if h0.has_eh:

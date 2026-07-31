@@ -223,13 +223,14 @@ def test_vjinteraction_jax_newton_krylov_matches_newton():
 
 
 def test_vjinteraction_jax_error_gradient_vu_only_matches_numpy_engine():
-    """solver="error_gradient" minimizes ||step(x)-x||^2 with jax.grad + scipy's
-    L-BFGS-B, instead of root-finding step(x)=x the way every other solver
-    here does (see vjinteraction_jax's module docstring for why -- minimizing
-    the actual free energy directly was tried first and abandoned after
-    finding the SCF solution is generically a saddle point of that
-    functional). With no exchange (pure U), it must still converge to the
-    same physics as the plain-mixing numpy engine."""
+    """solver="error_gradient" minimizes ||step(x)-x||^2 as a nonlinear
+    least-squares problem via matrix-free Levenberg-Marquardt (jax.jvp/
+    jax.vjp + scipy's lsqr), instead of root-finding step(x)=x the way every
+    other solver here does (see vjinteraction_jax's module docstring for why
+    -- minimizing the actual free energy directly was tried first and
+    abandoned after finding the SCF solution is generically a saddle point
+    of that functional). With no exchange (pure U), it must still converge
+    to the same physics as the plain-mixing numpy engine."""
     g = geometry.bichain()
     h0 = g.get_hamiltonian()
     h1, mf0 = _biased_hamiltonian_and_guess(h0, seed=0)

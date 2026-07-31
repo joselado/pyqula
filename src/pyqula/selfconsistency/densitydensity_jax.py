@@ -82,6 +82,7 @@
 # or use a Hamiltonian that already breaks the symmetry physically (SOC,
 # an external field, a spinless interaction).
 from __future__ import annotations
+import functools
 import warnings
 import numpy as np
 import jax
@@ -155,25 +156,36 @@ def make_bloch_stack(hop0, dirs_all, n):
         if d in hop0 else zero for d in dirs_all])
 
 
-def build_step_function(hop0, v, ks, dirs, dirs_all, T,
-        compute_dd, compute_cross, add_dagger, n_occ_total=None):
-    """Return step(x,mu) -> (xnew, dm, es, occ, mu_eff), the pure-JAX one
-    SCF step. If n_occ_total is given (a fixed number of occupied states
-    out of the nk*norb total, i.e. a filling target), mu is IGNORED and
-    instead computed inside the trace as the midpoint between the
-    n_occ_total-th and (n_occ_total+1)-th eigenvalue in the whole (sorted)
-    spectrum, via jnp.sort - unlike resolving mu(filling) with a numpy
-    sort/root-find outside the trace, this stays fully differentiable
-    (jnp.sort has a well-defined gradient away from ties) so solver="newton"
-    can handle a fixed filling directly, not just a fixed mu."""
-    n = hop0[(0, 0, 0)].shape[0]
+@functools.lru_cache(maxsize=32)
+def _get_step_core(dirs, dirs_all, n, compute_dd, compute_cross, add_dagger,
+        has_filling_target):
+    """Build (once per distinct STATIC/structural key) and cache the actual
+    jitted SCF-step computation. build_step_function used to close over the
+    concrete Hamiltonian/interaction arrays (hop0, v, ks, T) as Python
+    constants, baking their VALUES into the traced program -- so two calls
+    with identical shapes but different numeric values (e.g. a parameter
+    sweep, or the same system solved from several random mf seeds) produced
+    structurally different jaxpr/HLO and could not share a compiled
+    executable: every top-level SCF call paid a fresh ~0.6-1.2s XLA
+    recompile (measured on an 8-60 orbital chain), dwarfing the actual
+    per-iteration compute cost (sub-ms to ~13ms in the same range).
+
+    Here those arrays are genuine jax.jit trace ARGUMENTS of step_core
+    instead (see build_step_function, which now just supplies them each
+    call), and step_core itself is jitted exactly once per distinct
+    (dirs, dirs_all, n, compute_dd, compute_cross, add_dagger,
+    has_filling_target) key -- the only things that actually change the
+    SHAPE of the computation or its Python-level control flow (e.g. the
+    n_occ_total-is-not-None filling-target branch). Repeat calls sharing a
+    key reuse the same jax.jit-wrapped Python object, so jax's own
+    per-shape compilation cache (keyed on argument abstract shapes/dtypes,
+    not on which Python closure invoked it) takes over from there:
+    identical-shape calls with different concrete hop0/v/ks/T values hit an
+    already-compiled executable instead of recompiling."""
     ds_arr = jnp.array([list(d) for d in dirs_all], dtype=jnp.float64)
-    ms0 = make_bloch_stack(hop0, dirs_all, n)
-    v_jnp = {d: jnp.asarray(v[d], dtype=jnp.complex128) for d in v}
-    nk = ks.shape[0]
     dir_phase = jnp.array([list(d) for d in dirs], dtype=jnp.float64)  # (nt,3)
 
-    def step(x, mu):
+    def step_core(x, mu, ms0, v_jnp, ks, T, n_occ_total):
         mf = unflatten_mf(x, dirs, n)
         mats = [ms0[i] + mf[d] if d in mf else ms0[i]
                 for i, d in enumerate(dirs_all)]
@@ -185,7 +197,8 @@ def build_step_function(hop0, v, ks, dirs, dirs_all, T,
 
         hks = jax.vmap(hk)(ks)                      # (nk,n,n)
         es, vs = jnp.linalg.eigh(hks)                # (nk,n), (nk,n,n)
-        if n_occ_total is not None:
+        nk = ks.shape[0]
+        if has_filling_target:
             es_sorted = jnp.sort(es.reshape(-1))
             mu_eff = 0.5 * (es_sorted[n_occ_total - 1] + es_sorted[n_occ_total])
         else:
@@ -200,6 +213,41 @@ def build_step_function(hop0, v, ks, dirs, dirs_all, T,
                 compute_cross=compute_cross, add_dagger=add_dagger)
         xnew = flatten_mf(mfnew, dirs)
         return xnew, dm, es, occ, mu_eff
+
+    return jax.jit(step_core)
+
+
+def build_step_function(hop0, v, ks, dirs, dirs_all, T,
+        compute_dd, compute_cross, add_dagger, n_occ_total=None):
+    """Return step(x,mu) -> (xnew, dm, es, occ, mu_eff), the pure-JAX one
+    SCF step. If n_occ_total is given (a fixed number of occupied states
+    out of the nk*norb total, i.e. a filling target), mu is IGNORED and
+    instead computed inside the trace as the midpoint between the
+    n_occ_total-th and (n_occ_total+1)-th eigenvalue in the whole (sorted)
+    spectrum, via jnp.sort - unlike resolving mu(filling) with a numpy
+    sort/root-find outside the trace, this stays fully differentiable
+    (jnp.sort has a well-defined gradient away from ties) so solver="newton"
+    can handle a fixed filling directly, not just a fixed mu.
+
+    The heavy computation itself lives in a cached, once-jitted core (see
+    _get_step_core) shared across every call with the same structural shape
+    -- the returned step() is a thin, NOT separately jitted, wrapper that
+    just supplies the concrete numeric arrays as arguments to it; callers
+    should not wrap it in another jax.jit (that would reintroduce a
+    fresh-compile-per-call cost for no benefit, since the actual physics
+    computation is already compiled and cached inside step_core)."""
+    n = hop0[(0, 0, 0)].shape[0]
+    ms0 = make_bloch_stack(hop0, dirs_all, n)
+    v_jnp = {d: jnp.asarray(v[d], dtype=jnp.complex128) for d in v}
+    T_arr = jnp.asarray(T, dtype=jnp.float64)
+    has_filling_target = n_occ_total is not None
+    n_occ_arr = jnp.asarray(n_occ_total if has_filling_target else 0,
+            dtype=jnp.int64)
+    core = _get_step_core(tuple(dirs), tuple(dirs_all), n, compute_dd,
+            compute_cross, add_dagger, has_filling_target)
+
+    def step(x, mu):
+        return core(x, mu, ms0, v_jnp, ks, T_arr, n_occ_arr)
 
     return step
 
@@ -328,6 +376,118 @@ def newton_krylov_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0,
     return x, maxite, err < tol
 
 
+def levenberg_marquardt_solve(step_vec, x0, maxite=200, tol=1e-8, verbose=0,
+        lam0=1e-3, lam_factor=3.0, max_inner_tries=15, lsqr_iter_lim=20):
+    """Matrix-free Levenberg-Marquardt on the residual r(x) = step_vec(x) - x,
+    i.e. a proper nonlinear-least-squares solver for min ||r(x)||^2 - unlike
+    lbfgs_solve (scipy's generic L-BFGS-B on the same objective, driven only
+    by jax.grad of the scalar loss), this uses jax.jvp/jax.vjp to get actual
+    Jacobian-vector and Jacobian-transpose-vector products of r itself, and
+    solves the LM subproblem with scipy.sparse.linalg.lsqr's damped
+    least-squares (min ||J dx + r||^2 + lam*||dx||^2, LinearOperator built
+    from those jvp/vjp matvecs - never the dense O(norb^2) Jacobian). This is
+    the fix for a measured failure mode of lbfgs_solve/solver="error_gradient":
+    on a 30-site (60-orbital) biased Hubbard chain it did not reach
+    maxerror=1e-6 even after 3000 L-BFGS-B iterations (residual stuck around
+    5e-3 to 1.5e-2, including with various amounts of linear-mixing warm start
+    first) while this solver converges in a handful of outer iterations, like
+    solver="newton_krylov" already does on the same case - unsurprising, since
+    L-BFGS-B only ever sees the scalar gradient of the squared residual and
+    discards the residual VECTOR's own structure, whereas both newton_krylov
+    and this solver use that structure directly (jvp of r, not of a scalar).
+
+    Differs from newton_krylov_solve (plain Newton + GMRES on the SQUARE
+    system (J-I)dx=-r) in exactly the way LM differs from Newton generally:
+    the damping term lam*I (equivalently, lsqr's Tikhonov `damp`) keeps the
+    subproblem well-posed even when J is singular/near-singular - e.g. the
+    unbroken-continuous-spin-symmetry marginal direction documented in this
+    module's own WARNING, where newton_krylov_solve's GMRES on a literally
+    singular operator can fail to find any improving step at all. lsqr also
+    works directly on J (not the squared, worse-conditioned J^T J a
+    hand-rolled CG-on-normal-equations version would form), which is the
+    standard numerically-preferred way to solve a damped least-squares
+    subproblem matrix-free.
+
+    Levenberg-Marquardt's classic adaptive-damping accept/reject loop: try a
+    step with the current lam; if it decreases ||r||^2, accept it and relax
+    lam (trust the linear model more); if not, grow lam (fall back toward
+    steepest-descent/more-regularized behavior) and retry the SAME point
+    without advancing the outer iteration count. max_inner_tries caps that
+    retry loop the same way newton_solve/newton_krylov_solve's max_backtrack
+    caps their own step-halving retries.
+
+    lsqr_iter_lim caps each inner lsqr solve's own iteration count, the same
+    role gmres_restart plays for newton_krylov_solve's GMRES - an exact
+    solve of the LM subproblem is not needed, only a good search direction
+    (standard "inexact/truncated Newton" practice), and leaving it unbounded
+    is expensive: measured on a 30-site (60-orbital) biased Hubbard chain,
+    lsqr_iter_lim=None took 29s for 8 outer iterations vs. 8.4s for the same
+    8 iterations at lsqr_iter_lim=20 - same outer-iteration convergence,
+    ~3.5x less wall time, because each lsqr call was doing far more inner
+    work than the resulting step direction actually needed."""
+    from scipy.sparse.linalg import lsqr, LinearOperator
+    n = x0.shape[0]
+    r_fn = jax.jit(lambda x: step_vec(x) - x)
+    jvp_fn = jax.jit(lambda x, v: jax.jvp(r_fn, (x,), (v,))[1])
+
+    def vjp_fn(x, u):
+        _, vjp = jax.vjp(r_fn, x)
+        return vjp(u)[0]
+    vjp_fn = jax.jit(vjp_fn)
+
+    x = x0
+    r = r_fn(x)
+    err = float(jnp.max(jnp.abs(r)))
+    m = float(jnp.sum(jnp.abs(r) ** 2))
+    lam = lam0
+    # jax.vjp's reverse-mode pass through step_vec's complex intermediates
+    # (Hamiltonian/eigh/density-matrix arithmetic) onto a real cotangent
+    # triggers numpy's ComplexWarning deep in jax's own VJP machinery on
+    # every rmatvec call -- benign for the same reason documented in
+    # lbfgs_solve's docstring (the discarded part is the expected zero
+    # imaginary component of a real-input/real-output map's cotangent), so
+    # it is suppressed here the same way, by exact message text rather than
+    # a bare category filter
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore",
+                message=".*Casting complex values to real.*")
+        for ite in range(maxite):
+            if verbose > 0:
+                print("Levenberg-Marquardt iteration", ite, "error", err,
+                        "lambda", lam)
+            if err < tol:
+                return x, ite, True
+
+            def matvec(v_np):
+                return np.array(jvp_fn(x, jnp.asarray(v_np)), copy=True)
+
+            def rmatvec(u_np):
+                return np.array(vjp_fn(x, jnp.asarray(u_np)), copy=True)
+
+            Jop = LinearOperator((n, n), matvec=matvec, rmatvec=rmatvec,
+                    dtype=np.float64)
+            r_np = np.array(r, copy=True)
+            accepted = False
+            for _ in range(max_inner_tries):
+                dx_np = lsqr(Jop, -r_np, damp=np.sqrt(lam),
+                        iter_lim=lsqr_iter_lim)[0]
+                dx = jnp.asarray(dx_np)
+                x_try = x + dx
+                r_try = r_fn(x_try)
+                m_try = float(jnp.sum(jnp.abs(r_try) ** 2))
+                if m_try < m:
+                    x, r, m = x_try, r_try, m_try
+                    err = float(jnp.max(jnp.abs(r)))
+                    lam = max(lam / lam_factor, 1e-12)
+                    accepted = True
+                    break
+                lam *= lam_factor
+            if not accepted:
+                # no damping level tried improved the residual: stuck, stop early
+                return x, ite, err < tol
+        return x, maxite, err < tol
+
+
 def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
     """Solve x = step_vec(x) with scipy.optimize.fsolve (MINPACK hybrj),
     using the exact JAX Jacobian (jax.jacfwd) as fprime. Unlike
@@ -389,10 +549,17 @@ def lbfgs_solve(loss_fn, x0, maxite=2000, tol=1e-5, verbose=0, gtol=None):
     scipy.optimize.minimize's L-BFGS-B, using jax.grad (via
     jax.value_and_grad) for the exact gradient.
 
-    Used by vjinteraction_jax's solver="lbfgs" with loss_fn(x) =
+    Reachable directly via generic_densitydensity_jax's own solver="lbfgs"
+    (Vinteraction's use_jax=True path) with loss_fn(x) =
     sum((step_vec(x)-x)**2), the squared SCF residual -- NOT a physical
-    free-energy functional. See vjinteraction_jax's module docstring
-    ("solver='lbfgs'" section) for why: minimizing the actual mean-field
+    free-energy functional. vjinteraction_jax's solver="error_gradient" used
+    to dispatch here too but now uses levenberg_marquardt_solve instead
+    (see that function's docstring and vjinteraction_jax's module docstring
+    for why: this scalar-loss-only approach was found to stall on larger
+    systems, where levenberg_marquardt_solve's use of the residual's actual
+    Jacobian-vector products, not just the scalar loss gradient, does not).
+    See vjinteraction_jax's module docstring for why minimizing the actual
+    mean-field
     free energy directly (via jax.grad of a grand-potential functional) was
     tried first and abandoned after empirically finding the physical SCF
     solution is generically a *saddle point* of that functional, not a
@@ -416,9 +583,9 @@ def lbfgs_solve(loss_fn, x0, maxite=2000, tol=1e-5, verbose=0, gtol=None):
     SCF-residual sense of "converged" every other solver in this file uses
     (max(|step(x)-x|) < tol) -- e.g. a nonlinear least-squares loss like
     this can in principle have its own local minima with loss>0. The caller
-    (vjinteraction_jax's solver="lbfgs" branch) must recompute the actual
-    residual from the returned x itself and derive scf.converged from that,
-    exactly as it already computes final_mu that way.
+    (solve_scf's solver="lbfgs" branch) must recompute the actual residual
+    from the returned x itself and derive scf.converged from that, exactly
+    as it already computes final_mu that way.
 
     gtol defaults to tol (the same value the caller passes as its own
     maxerror), a reasonable default tying the two together without a
@@ -472,7 +639,7 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
     vjinteraction_jax.generic_vjinteraction_jax's use_jax=True paths --
     drives x0 to a fixed point of step_jit via whichever solver= was
     requested ("newton"/"fsolve"/"newton_krylov"/"fixed_point"/"lbfgs"/
-    "broyden_mixing"),
+    "levenberg_marquardt"/"broyden_mixing"),
     then evaluates step_jit exactly ONCE more at the converged x to get
     everything callers need: final_mu, xfinal/dm/es/occ, and (solver=
     "lbfgs" only, which has no residual-based convergence notion of its
@@ -495,13 +662,22 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
     meaningful for solver="fixed_point"; applied on concrete numpy arrays
     each iteration) raises NotImplementedError for every other solver, which
     need x to stay a pure jax-traced value throughout."""
-    if solver in ("newton", "fsolve", "newton_krylov", "lbfgs", "broyden_mixing"):
+    if solver in ("newton", "fsolve", "newton_krylov", "lbfgs",
+            "levenberg_marquardt", "broyden_mixing"):
         if callback_mf is not None:
             raise NotImplementedError("solver=%r cannot apply "
                     "callback_mf/constrains (they need concrete numpy "
                     "arrays each iteration, incompatible with jax tracing); "
                     "use solver=\"fixed_point\" instead" % (solver,))
-        step_vec = jax.jit(lambda x: step_jit(x, mu)[0])
+        # not wrapped in jax.jit here: step_jit already dispatches into the
+        # cached, once-jitted core built by build_step_function/
+        # _get_step_core (see there) -- an extra jax.jit around this thin
+        # closure would just add its own fresh-per-call compile for no
+        # benefit, since the actual physics computation is already
+        # compiled and shared. jax.jacfwd/jax.jvp/jax.vjp/jax.grad (used
+        # by the solvers below) all work fine tracing through a plain
+        # Python function that calls an already-jitted one.
+        step_vec = lambda x: step_jit(x, mu)[0]
     if solver == "newton":
         x, ite, converged = newton_solve(step_vec, x0, maxite=maxite,
                 tol=maxerror, verbose=verbose)
@@ -524,6 +700,9 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
         x, ite = lbfgs_solve(residual_loss, x0, maxite=maxite, tol=maxerror,
                 verbose=verbose)
         converged = None  # resolved below, once xfinal is available
+    elif solver == "levenberg_marquardt":
+        x, ite, converged = levenberg_marquardt_solve(step_vec, x0,
+                maxite=maxite, tol=maxerror, verbose=verbose)
     elif solver == "broyden_mixing":
         # unlike newton/fsolve/newton_krylov/lbfgs, this solver never needs
         # x to stay a traced jax value between iterations (no jacfwd/jvp/grad
@@ -620,9 +799,12 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
         n_tot = n * ks.shape[0]
         n_occ_total = int(round(filling * n_tot))
         n_occ_total = min(max(n_occ_total, 1), n_tot - 1)
-    step = build_step_function(hop0, v, ks, dirs, dirs_all, T,
+    # not wrapped in an extra jax.jit: build_step_function's returned
+    # closure already dispatches into a cached, once-jitted core shared
+    # across every call with this same structural shape -- see
+    # build_step_function/_get_step_core's docstrings
+    step_jit = build_step_function(hop0, v, ks, dirs, dirs_all, T,
             compute_dd, compute_cross, add_dagger, n_occ_total=n_occ_total)
-    step_jit = jax.jit(step)
     x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
             dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
             gmres_restart, callback_mf=callback_mf)

@@ -481,8 +481,9 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     than "newton"'s dense Jacobian), "fsolve" (scipy.optimize.fsolve/MINPACK
     with the same jax.jacfwd Jacobian as fprime), "linear_mixing" (plain
     linear mixing through the same machinery, for comparison/large systems),
-    "error_gradient" (minimizes ||step(x)-x||^2 with jax.grad + scipy's
-    L-BFGS-B, instead of root-finding step(x)=x -- see
+    "error_gradient" (minimizes ||step(x)-x||^2 as a nonlinear
+    least-squares problem via matrix-free Levenberg-Marquardt (jax.jvp/
+    jax.vjp + scipy's lsqr), instead of root-finding step(x)=x -- see
     selfconsistency.vjinteraction_jax's module docstring for why this,
     rather than minimizing the physical free energy directly, is what it
     does: the physical SCF solution turned out empirically to be a saddle
