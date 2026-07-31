@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.sparse import bmat,csc_matrix
-import scipy.linalg as lg
 from ..algebratk.unitary import make_unitary
 
 
@@ -12,7 +11,10 @@ def check_and_fix(smatrix,error=1e-7):
     smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]
     smatrix2 = bmat(smatrix2).todense()
     sH = np.conjugate(smatrix2).T
-    merror = np.max(np.abs(lg.inv(smatrix2)-sH)) #  check unitarity
+    # S is unitary iff S^-1 == S^H, equivalently S@S^H == I; the latter
+    # avoids an explicit matrix inverse (cheaper, better conditioned)
+    iden = np.identity(smatrix2.shape[0],dtype=smatrix2.dtype)
+    merror = np.max(np.abs(smatrix2@sH-iden)) #  check unitarity
     if merror> error:
 #        print("S-matrix is not unitary",error,"Determinant",np.abs(lg.det(sH)))
 #        if abs(np.abs(lg.det(sH))-1.0)>1e-2: raise

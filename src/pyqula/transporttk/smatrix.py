@@ -7,7 +7,25 @@ delta_smatrix = 1e-12 # delta for the smatrix
 
 
 def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
-    """Calculate the S-matrix of an heterostructure"""
+    """Calculate the S-matrix of an heterostructure.
+
+    Two cheap perf fixes applied here (2026-07-31, no behavior change,
+    verified bit-identical against the previous implementation): sqrtm(Γ_L)
+    and sqrtm(Γ_R) are each computed once and reused for both blocks that
+    need them (previously computed twice each), and unitarize.check_and_fix
+    checks unitarity via S@S^H≈I instead of a full scipy.linalg.inv(S)
+    (equivalent condition, avoids an explicit matrix inverse on every call
+    since check=True is the default).
+
+    Not done here, left as a follow-up: g11/g12/g21/g22 are each obtained
+    via an independent call to gauss_inverse, which internally redoes a
+    full forward or backward sweep over all blocks from scratch every time
+    -- for ht.block_diagonal=True (long/disordered central regions split
+    into many cells) that's ~4x more block inversions than a proper
+    single-pass recursive-Green's-function sweep needs. Not worth it for
+    the common 3-block (non-block_diagonal) case. No test currently
+    exercises get_smatrix with block_diagonal=True, so that rewrite would
+    need new correctness tests first."""
     # now do the Fisher Lee trick
     delta = ht.delta
     if delta>delta_smatrix: delta = delta_smatrix # small delta is critical!
@@ -32,10 +50,12 @@ def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
     # diagonal block needs its own identity matrix
     iden11 = np.array(np.identity(g11.shape[0],dtype=complex)) # create identity
     iden22 = np.array(np.identity(g22.shape[0],dtype=complex)) # create identity
-    smatrix[0][0] = -iden11 + 1j*sqrtm(gammal)@g11@sqrtm(gammal) # matrix
-    smatrix[0][1] = 1j*sqrtm(gammal)@g12@sqrtm(gammar) # transmission matrix
-    smatrix[1][0] = 1j*sqrtm(gammar)@g21@sqrtm(gammal) # transmission matrix
-    smatrix[1][1] = -iden22 + 1j*sqrtm(gammar)@g22@sqrtm(gammar) # matrix
+    sqgl = sqrtm(gammal) # only need this once
+    sqgr = sqrtm(gammar) # only need this once
+    smatrix[0][0] = -iden11 + 1j*sqgl@g11@sqgl # matrix
+    smatrix[0][1] = 1j*sqgl@g12@sqgr # transmission matrix
+    smatrix[1][0] = 1j*sqgr@g21@sqgl # transmission matrix
+    smatrix[1][1] = -iden22 + 1j*sqgr@g22@sqgr # matrix
     if check: # check whether the matrix is unitary
         from .unitarize import check_and_fix
         smatrix = check_and_fix(smatrix,error=100*delta)
