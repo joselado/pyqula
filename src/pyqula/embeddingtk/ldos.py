@@ -33,7 +33,7 @@ def get_ldos(self,energy=0.0,delta=1e-2,nsuper=1,nk=100,
     if operator is not None:
         operator = h.get_operator(operator) # overwrite
         gv = operator*gv # multiply
-    ds = [-gv[i,i].imag/np.pi for i in range(gv.shape[0])] # LDOS
+    ds = -np.diag(gv).imag/np.pi # LDOS
     ds = full2profile(h,ds,check=False) # resum if necessary
     ds = np.array(ds) # convert to array
     gs = h.geometry

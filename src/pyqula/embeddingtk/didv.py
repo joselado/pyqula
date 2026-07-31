@@ -4,12 +4,24 @@ import numpy as np
 
 def get_didv(self,T=1e-2,write=True,nsuper=1,**kwargs):
     from ..transporttk.localprobe import LocalProbe
-    lp = LocalProbe(self,T=T,**kwargs) # local probe object
+    # Build LocalProbe from the pristine Hamiltonian (self.H), not the
+    # Embedding object itself: LocalProbe.__init__ needs real Hamiltonian
+    # attributes (is_multicell, get_no_multicell, intra/tx/ty for
+    # make_compatible) that Embedding doesn't provide, and would crash
+    # with AttributeError otherwise. lp.H gets overwritten below anyway,
+    # so this changes nothing about what LocalProbe ends up using.
+    Hc = self.copy() # copy of the embedding object itself (defect + selfenergy)
+    lp = LocalProbe(self.H,T=T,**kwargs) # local probe object
     lp.reuse_gf = True # reuse the Green's function
+    # the probe-lead selfenergy (lead=0) doesn't depend on the site index
+    # i (see LocalProbe.get_selfenergy), so it only needs to be solved
+    # once here and reused for every site below, instead of redone via a
+    # full Sancho-Rubio renormalization on each one of potentially many
+    # sites in the map.
+    lp.reuse_selfenergy = True
     # now we will overwrite a few objects
     # this is not very elegant, but it works
-    g = lp.H.geometry.get_supercell(nsuper) # supercell geometry
-    Hc = lp.H.copy() # copy the original object
+    g = self.H.geometry.get_supercell(nsuper) # supercell geometry
     # for the selfenernergy, the intracell is picked from lp.H
     lp.H = self.H.get_supercell(nsuper) # overwrite Hamiltonian (for the intra)
     # the Green's function is now directly computed for the supercell
@@ -28,12 +40,14 @@ def get_didv(self,T=1e-2,write=True,nsuper=1,**kwargs):
 
 def get_didv_single(self,T=1e-2,write=True,i=0,nsuper=1,**kwargs):
     from ..transporttk.localprobe import LocalProbe
-    lp = LocalProbe(self,T=T,**kwargs) # local probe object
+    # see get_didv above for why LocalProbe is built from self.H (the
+    # pristine Hamiltonian) rather than the Embedding object itself
+    Hc = self.copy() # copy of the embedding object itself (defect + selfenergy)
+    lp = LocalProbe(self.H,T=T,**kwargs) # local probe object
     lp.reuse_gf = True # reuse the Green's function
     # now we will overwrite a few objects
     # this is not very elegant, but it works
-    g = lp.H.geometry.get_supercell(nsuper) # supercell geometry
-    Hc = lp.H.copy() # copy the original object
+    g = self.H.geometry.get_supercell(nsuper) # supercell geometry
     # for the selfenernergy, the intracell is picked from lp.H
     lp.H = self.H.get_supercell(nsuper) # overwrite Hamiltonian (for the intra)
     # the Green's function is now directly computed for the supercell

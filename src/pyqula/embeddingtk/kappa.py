@@ -19,12 +19,15 @@ class DualLocalProbe():
 
 def get_kappa(self,T=1e-2,write=True,nsuper=1,**kwargs):
     from ..transporttk.localprobe import LocalProbe
-    lp = LocalProbe(self,T=T,**kwargs) # local probe object
+    # see embeddingtk.didv.get_didv for why LocalProbe is built from
+    # self.H (the pristine Hamiltonian) rather than the Embedding object
+    # itself
+    Hc = self.copy() # copy of the embedding object itself (defect + selfenergy)
+    lp = LocalProbe(self.H,T=T,**kwargs) # local probe object
     lp.reuse_gf = True # reuse the Green's function
     # now we will overwrite a few objects
     # this is not very elegant, but it works
-    g = lp.H.geometry.get_supercell(nsuper) # supercell geometry
-    Hc = lp.H.copy() # copy the original object
+    g = self.H.geometry.get_supercell(nsuper) # supercell geometry
     # for the selfenernergy, the intracell is picked from lp.H
     lp.H = self.H.get_supercell(nsuper) # overwrite Hamiltonian (for the intra)
     # the Green's function is now directly computed for the supercell

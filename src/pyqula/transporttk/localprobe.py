@@ -61,8 +61,17 @@ class LocalProbe():
             # keyed on every kwarg that can change the result (delta,
             # numba) besides energy/lead -- not just (energy,lead) -- so a
             # cache scope spanning calls with different delta/numba can't
-            # silently return a stale selfenergy solved with the wrong one
+            # silently return a stale selfenergy solved with the wrong one.
+            # lead=1 (system) additionally depends on self.i (the probe
+            # site, see local_selfenergy below) while lead=0 (probe) does
+            # not -- so only lead=1's key includes it. This lets callers
+            # that sweep self.i at fixed energy (e.g. embeddingtk.didv's
+            # per-site dI/dV map) safely reuse lead=0's selfenergy across
+            # every site instead of recomputing the same Sancho-Rubio
+            # solve each time, without lead=1 entries from different sites
+            # colliding in the cache.
             key = (energy,lead,kwargs.get("delta"),kwargs.get("numba"))
+            if lead==1: key = key+(self.i,)
             if key in self._selfenergy_cache: return self._selfenergy_cache[key]
         if lead==0: # use the probe
             out = lead_selfenergy(self,energy=energy,**kwargs)

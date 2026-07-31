@@ -22,12 +22,12 @@ class Embedded_Hamiltonian():
     def copy(self):
         from copy import deepcopy
         return deepcopy(self)
-    def get_ldos(self,**kwargs): 
+    def get_ldos(self,**kwargs):
         A = get_A(self,**kwargs) # spectral function
-        r = [A[i,i].real for i in range(A.shape[0])]
+        r = np.diag(A).real
         r = self.H.full2profile(r) # resum components
         self.H.geometry.write_profile(r,name="LDOS.OUT")
-        return H.geometry.r,r # return LDOS
+        return self.H.geometry.r,r # return LDOS
     def get_kdos(self,**kwargs): return get_kdos(self,**kwargs)
 
 
