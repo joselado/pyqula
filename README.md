@@ -27,8 +27,6 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 A few features depend on heavier, optional backends that are not installed by
 default. Install them with the relevant extra:
 ```bash
-pip install pyqula[jax]        # JAX-derivative-based mean-field SCF solvers
-pip install pyqula[kwant]      # Kwant-based transport backend
 pip install pyqula[mpi]        # MPI-parallel routines (mpi4py)
 pip install pyqula[dataframe]  # pandas-based data export
 pip install pyqula[images]     # Pillow-based image export

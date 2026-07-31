@@ -148,7 +148,7 @@ def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,
     return (Ip-Im)/(2*dv)
 
 
-def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,
+def didv(ht,energy=0.0,delta=1e-6,opl=None,opr=None,
          method="auto",**kwargs):
     """Calculate differential conductance.
 
@@ -212,10 +212,6 @@ def didv(ht,energy=0.0,delta=1e-6,kwant=False,opl=None,opr=None,
     if ht.has_eh: # for systems with electons and holes
         return didv_BdG(ht,energy=energy,delta=delta,**kwargs)
     else:
-        if kwant:
-          if opl is not None or opr is not None: raise # not implemented
-          from . import kwantlink
-          return kwantlink.transport(ht,energy)
         s = get_smatrix(ht,energy=energy) # get the smatrix
         if opl is not None or opr is not None: # some projector given
           raise # this does not make sense

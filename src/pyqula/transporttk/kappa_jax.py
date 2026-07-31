@@ -56,13 +56,9 @@ dagger = algebra.dagger
 # kappa_branch's docstring for why this check exists).
 _reference_rtol = 1e-6
 
-try:
-    import jax
-    jax.config.update("jax_enable_x64", True)
-    import jax.numpy as jnp
-    jax_available = True
-except ImportError:
-    jax_available = False
+import jax
+jax.config.update("jax_enable_x64", True)
+import jax.numpy as jnp
 
 
 def applicable(ht):
@@ -78,7 +74,6 @@ def applicable(ht):
     system (has_eh=True, has_spin=False, directly buildable via
     add_swave on a has_spin=False geometry) doesn't match that layout;
     reject it here rather than silently reordering into nonsense."""
-    if not jax_available: return False
     if not isinstance(ht, LocalProbe): return False
     if not ht.has_eh: return False
     if not (getattr(ht.H, "has_spin", False) and getattr(ht.lead, "has_spin", False)):
@@ -113,35 +108,31 @@ def _branch_arrays(ht, energy):
     return A, D, C, gl, gr, R, delta, selfl, selfr
 
 
-if jax_available:
-    def _logG(logt, A, D, C, gl, gr, R):
-        """log of didv_BdG's conductance formula (ree.shape[0]-Ree+Reh),
-        restricted to the T-dependent tail -- see this module's docstring
-        for why selfenergies (baked into A, D, gl, gr, all T-independent
-        constants here) don't need to be inside this traced function."""
-        n = A.shape[0]
-        half = n//2
-        iden_n = jnp.eye(n, dtype=jnp.complex128)
-        t = jnp.exp(logt).astype(jnp.complex128)
-        off = -C*t
-        M = jnp.block([[A, off], [jnp.conj(off).T, D]])
-        Minv = jnp.linalg.inv(M)
-        g11 = Minv[:n, :n]
-        s00 = -iden_n + 1j*gl@g11@gl  # reflection block, Fisher-Lee
-        Rh = jnp.conj(R).T
-        rr = R@s00@Rh  # reorder into (electron,hole) block form
-        ree = rr[0:half, 0:half]
-        reh = rr[0:half, half:n]
-        Ree = jnp.trace(jnp.conj(ree).T@ree)
-        Reh = jnp.trace(jnp.conj(reh).T@reh)
-        G = (half - Ree + Reh).real
-        return jnp.log(G)
+def _logG(logt, A, D, C, gl, gr, R):
+    """log of didv_BdG's conductance formula (ree.shape[0]-Ree+Reh),
+    restricted to the T-dependent tail -- see this module's docstring
+    for why selfenergies (baked into A, D, gl, gr, all T-independent
+    constants here) don't need to be inside this traced function."""
+    n = A.shape[0]
+    half = n//2
+    iden_n = jnp.eye(n, dtype=jnp.complex128)
+    t = jnp.exp(logt).astype(jnp.complex128)
+    off = -C*t
+    M = jnp.block([[A, off], [jnp.conj(off).T, D]])
+    Minv = jnp.linalg.inv(M)
+    g11 = Minv[:n, :n]
+    s00 = -iden_n + 1j*gl@g11@gl  # reflection block, Fisher-Lee
+    Rh = jnp.conj(R).T
+    rr = R@s00@Rh  # reorder into (electron,hole) block form
+    ree = rr[0:half, 0:half]
+    reh = rr[0:half, half:n]
+    Ree = jnp.trace(jnp.conj(ree).T@ree)
+    Reh = jnp.trace(jnp.conj(reh).T@reh)
+    G = (half - Ree + Reh).real
+    return jnp.log(G)
 
-    _grad_logG = jax.jit(jax.grad(_logG, argnums=0))
-    _logG_jit = jax.jit(_logG)
-else:
-    _grad_logG = None
-    _logG_jit = None
+_grad_logG = jax.jit(jax.grad(_logG, argnums=0))
+_logG_jit = jax.jit(_logG)
 
 
 def _reference_G(ht, energy, T, delta, selfl, selfr):
@@ -176,15 +167,13 @@ def _reference_G(ht, energy, T, delta, selfl, selfr):
 def kappa_branch(ht, energy=0.0, T=None):
     """d(log G)/d(log t) at t=T (default ht.T), computed exactly via
     jax.grad instead of transporttk.kappa.get_power's secant fit. Raises
-    if jax is unavailable, `applicable(ht)` is False, or the jax tail's
-    raw (uncorrected) G(T) disagrees with the reference get_smatrix+
-    check_and_fix result by more than `_reference_rtol` -- signalling
-    that check_and_fix actually intervened, so the jax tail would be
-    differentiating a formula the reference path doesn't return unmodified.
-    Callers should use get_kappa_ratio_jax, which checks applicability
-    first and never raises."""
-    if not jax_available:
-        raise RuntimeError("jax is not available")
+    if `applicable(ht)` is False, or the jax tail's raw (uncorrected)
+    G(T) disagrees with the reference get_smatrix+check_and_fix result
+    by more than `_reference_rtol` -- signalling that check_and_fix
+    actually intervened, so the jax tail would be differentiating a
+    formula the reference path doesn't return unmodified. Callers should
+    use get_kappa_ratio_jax, which checks applicability first and never
+    raises."""
     if T is None: T = ht.T
     if T == 0: raise ValueError("T must be nonzero")
     ht.T = T  # so the coupling block get_central_gmatrix builds matches T
