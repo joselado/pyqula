@@ -1628,6 +1628,39 @@ for runnable versions, including a comparison of the KPM correlator against
 the exact Green's function calculation.
 
 
+# Lattice gas models
+
+`latticegas.LatticeGas` models classical, occupation-based (0/1) degrees of freedom on a
+lattice -- e.g. adsorbates, vacancies, or any classical binary order parameter -- interacting
+through a real-space coupling $J_{ij} n_i n_j$ and a site-dependent chemical potential
+$\mu_i n_i$. It reuses `Geometry` to define the lattice and its neighbor shells, but is
+otherwise independent of the quantum `Hamiltonian` machinery: the energy is evaluated
+directly from the occupation array, and the ground state is searched with a
+Metropolis-annealed discrete swap optimizer, not diagonalization
+
+```python
+from pyqula import geometry
+from pyqula import supercell
+from pyqula import latticegas
+
+g = geometry.triangular_lattice()
+g = supercell.turn_orthorhombic(g)
+g = g.get_supercell(10)
+g.dimensionality = 0
+
+lg = latticegas.LatticeGas(g,filling=1./3.) # 1/3 of the sites randomly occupied
+lg.add_interaction(Jij=[1.,1.,1.]) # first, second and third neighbor repulsion
+es = lg.optimize_energy(temp=0.5,ntries=1e4) # simulated annealing
+```
+
+`lg.den` holds the current 0/1 occupation array and `es` the energy trajectory of the
+anneal. `get_local_energy()`/`get_local_mu()` give the per-site energy/chemical-potential
+contribution for the current snapshot, and `get_correlator()` gives the neighbor-shell
+density-density correlator -- useful for detecting ordered (e.g. striped, honeycomb-vacancy)
+ground states. See `examples/latticegas/` for runnable demos of annealing, local-energy maps,
+and correlators.
+
+
 # Main functions and methods
 
 ## Geometry functions and methods
@@ -2071,4 +2104,50 @@ Optional arguments:
 Returns kappa (a scalar, or an array matching `energies`)
 
 At `temp=0.` (the default), kappa is `d(log G)/d(log T)`: how steeply the conductance scales with the probe-sample coupling. The `get_kappa_ratio` path above estimates this by sampling the conductance at two nearby couplings (0.9T and 1.1T) and fitting a secant slope through them. For a `LocalProbe` (always 1D) whose probe lead is not itself superconducting -- so `didv` uses the ordinary BdG scattering-matrix formula, not Floquet-Keldysh -- this is now computed exactly instead: neither lead self-energy depends on the coupling `T` (only the coupling block of the small matrix that gets inverted does), so the self-energies are solved once and the coupling-dependent tail is differentiated exactly with `jax.grad` (`transporttk.kappa_jax`), rather than approximated by a secant. This is the default automatically whenever it applies (falling back to the secant otherwise, e.g. when `jax` isn't installed, at finite `temp`, for a superconducting probe, for a spinless-Nambu system, or for a `Heterostructure`); it also cross-checks its own result against the reference `get_smatrix` formula once per call and falls back if they disagree beyond a tight tolerance (guarding against the rare case where `unitarize.check_and_fix`'s unitarity correction on the reference path would have mattered). Benchmarked on `examples/transport/localprobe_kappa_1D`, it matches the secant to within its own finite-difference bias (~1e-3 out of O(1) values) while running faster (~1.2-1.8x depending on system size, after accounting for that cross-check). Both this path and the secant fallback also now solve each lead self-energy once per coupling sweep instead of once per coupling point (self-energies never depend on `T`, only the tiny coupling block that gets inverted does), which is what dominates the speedup for systems where the self-energy solve itself (e.g. a 2D sample's bulk Green's function), not the small coupling-dependent tail, is the expensive part.
+
+## LatticeGas functions and methods
+
+### lg.add_interaction()
+Add a coupling shell to the model, on top of any interactions already added (repeated calls accumulate).
+
+Optional arguments:
+
+- Jij: list of shell couplings, e.g. `[J1,J2,J3]` for first/second/third neighbor $J_{ij} n_i n_j$ repulsion (or attraction, for negative values); passed through to `Geometry.get_hamiltonian(tij=Jij)`, so anything that constructor accepts for `tij` works here too
+
+Mutates `lg` in place, no return value
+
+### lg.set_filling()
+Reset the occupation array `lg.den` to a new random configuration with a given filling fraction, discarding the current snapshot (e.g. to re-seed a fresh anneal, see `examples/latticegas/optimize/main.py`).
+
+Arguments:
+
+- filling: fraction of sites occupied (rounded to the nearest integer site count)
+
+### lg.get_energy()
+Evaluate the total energy $\sum_i \mu_i n_i + \sum_{ij} J_{ij} n_i n_j$ of the current occupation snapshot `lg.den`. Returns a scalar.
+
+### lg.optimize_energy()
+Anneal `lg.den` towards a low-energy configuration with a Metropolis discrete-swap optimizer: at each step, 1-3 random occupied/empty site pairs are swapped (preserving the total filling) and accepted unconditionally if the energy doesn't increase, or with probability $e^{-\Delta E/T}$ otherwise. Energy changes are tracked incrementally per swap rather than by recomputing the full energy from scratch, so cost per step scales with each site's number of interaction neighbors, not with the total number of interaction terms in the system.
+
+Optional arguments:
+
+- temp=0.1: Metropolis temperature (higher accepts more uphill moves; anneal by calling this repeatedly with decreasing `temp`)
+- ntries=1e5: number of swap attempts
+- resync_every=1000: how often (in swap attempts) to recompute the energy from scratch, bounding floating-point drift in the incremental tracking
+
+Overwrites `lg.den` with the final configuration and returns the array of energies recorded at each attempt (whether or not it was accepted)
+
+### lg.get_local_energy() / lg.get_local_mu()
+Per-site breakdown of the current snapshot's energy. `get_local_energy()` returns each site's own contribution $\mu_i n_i + \sum_j J_{ij} n_i n_j$, summed over its interaction neighbors $j$ (`lg.get_energy()` itself counts every bond twice, once from each endpoint, so the values here sum exactly to `lg.get_energy()`, not to half of it); `get_local_mu()` instead evaluates that same expression with site `i` forced occupied, i.e. the energy cost/gain of occupying site `i` given its neighbors' current state.
+
+Optional arguments:
+
+- normalize=False: divide each site's value by the total coupling weight of its own interaction terms
+
+Returns an array over sites
+
+### lg.get_correlator()
+Neighbor-shell density-density correlator of the current snapshot `lg.den`, useful for detecting ordered ground states (e.g. after `optimize_energy`). Thin wrapper around `statphystk.correlator.get_nnc`; see its docstring for `n`/`normalized` options.
+
+Returns `(distances, correlators)`, arrays of matching length
 
