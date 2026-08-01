@@ -224,9 +224,12 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
     else: # directions required
       es,vs,ks = h.get_eigenvectors(nk=nk,kpoints=True) # get eigenvectors
       es = es - fermi # shift by the Fermi energy
-      ks = np.array(ks) # to array
+      es = np.array(es,dtype=np.float64)
+      vs = np.array(vs,dtype=np.complex128)
+      ks = np.array(ks,dtype=np.float64) # to array
+      ds_arr = np.array(ds,dtype=np.float64)
       n = h.intra.shape[0] # dimensionality
-      out = parallel.pcall(lambda x: full_dm_python_d(es,vs,ks,x)*fac,ds)
+      out = full_dm_d_batch_vectorized(es,vs,ks,ds_arr,delta=delta)*fac
       outd = dict() # dictionary
       for i in range(len(ds)): outd[tuple(ds[i])] = out[i] # as dictionary
       return outd
@@ -237,6 +240,7 @@ from .dmtk.fulldm import full_dm_python_d
 from .dmtk.fulldm import full_dm_batch_vectorized
 from .dmtk.fulldm import full_dm_batch_d_sparse
 from .dmtk.fulldm import full_dm_batch_d_vectorized
+from .dmtk.fulldm import full_dm_d_batch_vectorized
 
 
 

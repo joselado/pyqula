@@ -149,6 +149,28 @@ def full_dm_batch_d_vectorized(es_batch,vs_batch,ks_batch,d,delta=1e-7):
 
 
 @jit(nopython=True,parallel=True,cache=True)
+def full_dm_d_batch_vectorized(es,vs,ks,ds,delta=1e-7):
+    """Same as full_dm_d_vectorized, but batched over multiple hopping
+    directions ds (shape (nd,3)) at once -- one direction per numba
+    thread, sharing the same (es,vs,ks) eigenstate data (the counterpart
+    of full_dm_batch_d_vectorized, which instead batches over kpoints for
+    a single fixed direction). Returns (nd,n,n)."""
+    M = es.shape[0]
+    n = vs.shape[1]
+    nd = ds.shape[0]
+    out = np.zeros((nd,n,n),dtype=np.complex128)
+    for id in prange(nd): # loop over directions, in parallel
+        d = ds[id]
+        weight = np.empty(M,dtype=np.complex128)
+        for i in range(M):
+            kd = ks[i,0]*d[0]+ks[i,1]*d[1]+ks[i,2]*d[2]
+            occ = 1.0/(1.0+np.exp(es[i]/delta))
+            weight[i] = np.exp(1j*2.0*np.pi*kd)*occ
+        out[id] = (np.conj(vs.T)*weight) @ vs
+    return out
+
+
+@jit(nopython=True,parallel=True,cache=True)
 def full_dm_batch_d_sparse(es_batch,vs_batch,ks_batch,d,rows,cols,delta=1e-7):
     """Same as full_dm_batch_d_vectorized, but only computes the
     (rows[p],cols[p]) entries of the (n,n) density matrix instead of all

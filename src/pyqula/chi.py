@@ -36,6 +36,29 @@ def elementchi(ws1,es1,ws2,es2,omegas,ii,jj,T,delta,out):
     return out
 
 
+@jit(nopython=True,parallel=True,cache=True)
+def elementchi_row(ws1,es1,ws2,es2,omegas,ii,T,delta):
+    """Batched version of elementchi: computes
+    [elementchi(ws1,es1,ws2,es2,omegas,ii,jj,T,delta,...) for jj in
+    range(n)] all at once, one jj per numba thread, instead of pcall-ing
+    elementchi once per jj. Returns an (n,len(omegas)) array."""
+    n = ws1.shape[0]
+    ne = omegas.shape[0]
+    out = np.zeros((n,ne),dtype=np.complex128)
+    for jj in prange(n): # loop over the second orbital index, in parallel
+        row = np.zeros(ne,dtype=np.complex128)
+        for i in range(n): # first loop over states
+            oi = es1[i]<0.0 # first occupation
+            for j in range(n): # second loop over states
+                oj = es2[j]<0.0 # second occupation
+                fac = ws1[i][ii]*ws2[j][ii] # add the factor
+                fac = fac*np.conjugate(ws1[i][jj]*ws2[j][jj]) # add the factor
+                fac = fac*(oi - oj) # occupation factor
+                row = row + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
+        out[jj] = row
+    return out
+
+
 
 
 
@@ -48,10 +71,8 @@ def chargechi_row(h,i=0,es=np.linspace(-3.0,3.0,100),delta=1e-6,temp=1e-7):
     esh,ws = algebra.eigh(m)
     ws = np.transpose(ws)
     if i<0: raise
-    zero = 0*es + 0j # initialize
-    f = lambda j: elementchi(ws,esh,ws,esh,es,i,j,temp,delta,zero)
-    out = parallel.pcall(f,range(m.shape[0])) # parallel call
-    return np.array(out)
+    out = elementchi_row(ws,esh,ws,esh,es,i,temp,delta)
+    return out
 
 
 
