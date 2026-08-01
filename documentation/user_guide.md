@@ -1628,6 +1628,46 @@ for runnable versions, including a comparison of the KPM correlator against
 the exact Green's function calculation.
 
 
+# Classical spin models
+
+`classicalspin.SpinModel` models classical (non-quantized) spins on a lattice, each
+parametrized by a pair of angles $(\theta_i,\phi_i)$, interacting through a real-space
+tensor exchange $\vec S_i \cdot J_{ij} \cdot \vec S_j$ and an optional Zeeman field. Like
+`LatticeGas`, it reuses `Geometry` for the lattice/neighbor shells but is otherwise
+independent of the quantum `Hamiltonian` machinery: the energy is evaluated directly from
+the angles, and the ground state is found by local (gradient-based, via `jax` autodiff)
+multistart minimization rather than diagonalization -- only the $\Gamma$ point is
+supported, so incommensurate (e.g. spiral) textures need an explicit supercell
+
+```python
+from pyqula import geometry
+from pyqula import classicalspin
+
+g = geometry.triangular_lattice() # geometrically frustrated lattice
+g = g.get_supercell(3)
+
+sm = classicalspin.SpinModel(g) # classical spin model on this geometry
+sm.add_heisenberg(Jij=[1.0]) # first-neighbor antiferromagnetic exchange
+sm.minimize_energy(tries=10) # multistart local minimization
+
+mx,my,mz = sm.get_magnetization() # per-site magnetization components
+```
+
+`add_heisenberg` builds shell-based isotropic (or, via `Jm=[Jx,Jy,Jz]`, diagonally
+anisotropic/XXZ) couplings the same way `Geometry.get_hamiltonian(tij=...)` does.
+`classicalspin.generating_functions(name=...)` returns ready-made two-point coupling
+functions for other common forms -- `"Linear"` (dipolar $1/r^3$), `"RKKYTI"` (RKKY on a
+topological-insulator surface, PRB 81 233405), `"ZZ"`/`"XYZ"` (Ising/anisotropic-diagonal),
+`"DM"` (Dzyaloshinskii-Moriya) -- to pass into `add_tensor(fun)` (couplings within the home
+cell) or `add_tensor_2d(fun,ncells=...,vspiral=...)` (also sums periodic images, and can
+twist the coupling tensor by a per-image angle to embed a spin-spiral wavevector).
+`get_local_energy()` gives the per-site energy for spatially resolved maps
+(e.g. of a skyrmion or domain wall), and `classicalspintk.align.most_perp_basis()` rotates a
+magnetization texture into the frame where it is mostly in-plane, for quiver-style plotting.
+See `examples/classicalspin/` for runnable demos, including a frustrated triangular-lattice
+ground state and a modulated-exchange ladder.
+
+
 # Lattice gas models
 
 `latticegas.LatticeGas` models classical, occupation-based (0/1) degrees of freedom on a
@@ -2104,6 +2144,119 @@ Optional arguments:
 Returns kappa (a scalar, or an array matching `energies`)
 
 At `temp=0.` (the default), kappa is `d(log G)/d(log T)`: how steeply the conductance scales with the probe-sample coupling. The `get_kappa_ratio` path above estimates this by sampling the conductance at two nearby couplings (0.9T and 1.1T) and fitting a secant slope through them. For a `LocalProbe` (always 1D) whose probe lead is not itself superconducting -- so `didv` uses the ordinary BdG scattering-matrix formula, not Floquet-Keldysh -- this is now computed exactly instead: neither lead self-energy depends on the coupling `T` (only the coupling block of the small matrix that gets inverted does), so the self-energies are solved once and the coupling-dependent tail is differentiated exactly with `jax.grad` (`transporttk.kappa_jax`), rather than approximated by a secant. This is the default automatically whenever it applies (falling back to the secant otherwise, e.g. when `jax` isn't installed, at finite `temp`, for a superconducting probe, for a spinless-Nambu system, or for a `Heterostructure`); it also cross-checks its own result against the reference `get_smatrix` formula once per call and falls back if they disagree beyond a tight tolerance (guarding against the rare case where `unitarize.check_and_fix`'s unitarity correction on the reference path would have mattered). Benchmarked on `examples/transport/localprobe_kappa_1D`, it matches the secant to within its own finite-difference bias (~1e-3 out of O(1) values) while running faster (~1.2-1.8x depending on system size, after accounting for that cross-check). Both this path and the secant fallback also now solve each lead self-energy once per coupling sweep instead of once per coupling point (self-energies never depend on `T`, only the tiny coupling block that gets inverted does), which is what dominates the speedup for systems where the self-energy solve itself (e.g. a 2D sample's bulk Green's function), not the small coupling-dependent tail, is the expensive part.
+
+## SpinModel functions and methods
+
+### sm.add_heisenberg()
+Add shell-based exchange couplings to the model, on top of any interactions already added
+(repeated calls accumulate).
+
+Optional arguments:
+
+- Jij=None: list of shell couplings, e.g. `[J1,J2,J3]` for first/second/third neighbor
+  exchange; passed through to `Geometry.get_hamiltonian(tij=Jij)`, so anything that
+  constructor accepts for `tij` works here too (`None` is that constructor's own default,
+  first-neighbor hopping)
+- Jm=[1.,1.,1.]: diagonal $(J_x,J_y,J_z)$ weights, applied on top of `Jij`; use unequal
+  values for XXZ/Ising-like anisotropy
+
+Mutates `sm` in place, no return value
+
+### sm.add_field()
+Add a uniform Zeeman field to every site's `sm.b`. Repeated calls accumulate (not overwrite).
+
+Arguments:
+
+- v: 3-vector field, e.g. `[0.,0.,1.]`
+
+### sm.add_tensor() / sm.add_tensor_2d()
+Add a general pairwise tensor coupling $J_{ij}$ from a function `fun(r1,r2) -> 3x3 matrix`
+(see `generating_functions` below), rather than the fixed-form couplings `add_heisenberg`
+builds. `add_tensor` only considers pairs within the home cell; `add_tensor_2d` additionally
+sums periodic images `ia*a1 + ja*a2` for `ia,ja` in `[-ncells,ncells]`, and can rotate the
+coupling tensor of each image about $z$ by `vspiral[0]*ia + vspiral[1]*ja` (in units of
+$\pi$) -- a way to embed a spin-spiral wavevector directly into the exchange tensor.
+
+Arguments:
+
+- fun: coupling function, e.g. one returned by `generating_functions`
+
+Optional arguments (`add_tensor_2d` only):
+
+- ncells=1: number of periodic images to sum on each side, along each lattice vector
+- vspiral=[0.,0.]: per-image in-plane rotation angle coefficients, see above
+
+Mutates `sm` in place, no return value
+
+### classicalspin.generating_functions()
+Factory returning a `fun(r1,r2) -> 3x3 matrix` two-point coupling function for a standard
+exchange form, for use with `add_tensor`/`add_tensor_2d`.
+
+Optional arguments:
+
+- name="Heisenberg": one of `"Heisenberg"` (isotropic, cutoff `fc(distance)`), `"Linear"`
+  (dipolar $1/r^3$ tensor), `"RKKYTI"` (RKKY on a topological-insulator surface, PRB 81
+  233405), `"ZZ"` (Ising, $S^z_i S^z_j$ only), `"XYZ"` (diagonal, anisotropic weights `v`),
+  `"DM"` (Dzyaloshinskii-Moriya, with `v` the intermediate-ion/mirror direction, or a function
+  of the bond vector)
+- J=1.0: overall coupling strength
+- v=[0.,0.,1.]: form-dependent vector (or vector-valued function of the bond vector), see above
+- fc=None: distance-dependent cutoff/envelope, e.g. restricting `"Heisenberg"`/`"ZZ"` to first
+  neighbors (`0.9 < d < 1.1`, the default)
+- fdiff=lambda x,y: x-y: how the bond vector is computed from `(r1,r2)`; override for e.g. a
+  minimum-image convention
+- fr=None: extra rotation matrix `fr(r1,r2)` applied on top of the base coupling (defaults to
+  the identity)
+
+Returns the coupling function
+
+### sm.minimize_energy()
+Multistart local minimization of the classical energy over every spin's $(\theta,\phi)$
+angles, using `scipy.optimize.minimize` with the gradient from `jax.grad` autodiff of the
+energy (or, if `calle` is given, gradient-free Powell). Only the ground state at $\Gamma$ is
+found -- there are no twisted boundary conditions, so an incommensurate (e.g. spiral) texture
+needs an explicit supercell that fits it.
+
+Optional arguments:
+
+- theta0=None, phi0=None: initial angles; each try re-randomizes them in $[0,\pi]$/$[0,2\pi]$
+  when left as `None` (the default), which is what makes `tries` explore different basins --
+  passing explicit arrays instead starts every try from the same point, since the optimizer
+  itself is deterministic, so `tries>1` is only useful with the default
+- tries=10: number of independent minimizations; the lowest-energy one is kept
+- calle=None: optional extra function `calle(sm) -> float` added to the energy during
+  minimization, e.g. a penalty favoring a particular texture
+
+Updates `sm.theta`, `sm.phi` and `sm.magnetization` in place to the best try found, and
+returns `(theta,phi)`
+
+### sm.get_energy() / sm.energy()
+Evaluate the total energy $\sum_i \vec b_i \cdot \vec S_i + \sum_{ij} \vec S_i \cdot J_{ij}
+\cdot \vec S_j$ of the current `sm.theta`/`sm.phi` snapshot. Returns a scalar.
+
+### sm.get_local_energy()
+Per-site breakdown of the current snapshot's energy: each site's own field term plus half of
+every exchange term it takes part in (as with `LatticeGas.get_local_energy()`, each bond's
+energy is split evenly between its two endpoints), so the values sum exactly to
+`sm.get_energy()`.
+
+Returns an array over sites
+
+### sm.get_magnetization()
+Convert the current `sm.theta`/`sm.phi` angles to Cartesian components.
+
+Returns `(mx,my,mz)`, arrays over sites
+
+### align.most_perpendicular_vector() / align.most_perp_basis()
+(`classicalspintk.align`) Given a set of vectors (typically a `SpinModel`'s magnetization),
+find the direction most nearly perpendicular to all of them, and use it to build a rotated
+basis in which that direction is the new $z$ axis -- i.e. the vectors end up mostly in the new
+$xy$ plane. Useful for plotting a magnetization texture (e.g. a skyrmion or spiral) as an
+in-plane quiver plot when it isn't already aligned with a coordinate axis; see
+`examples/classicalspin/perpendicular/main.py`.
+
+Returns a perpendicular unit vector, or (for `most_perp_basis`) the input vectors expressed in
+the rotated basis
 
 ## LatticeGas functions and methods
 

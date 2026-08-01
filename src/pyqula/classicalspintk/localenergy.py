@@ -12,8 +12,12 @@ def get_local_energy(CS):
                 j0.append(j)
         b0 = CS.b*0. # zeros
         b0[ii] = CS.b[ii]
-        CS0.pairs = np.array(pairs0)
-        CS0.j = np.array(j0)/2.
+        if len(pairs0)==0: # site has no exchange interactions
+            CS0.pairs = np.zeros((0,2),dtype=int)
+            CS0.j = np.zeros((0,3,3))
+        else:
+            CS0.pairs = np.array(pairs0)
+            CS0.j = np.array(j0)/2.
         CS0.b = b0
         enii = CS0.get_energy()
         return enii
