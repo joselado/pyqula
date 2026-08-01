@@ -87,36 +87,6 @@ def write_dos(es,ds,output_file="DOS.OUT"):
 
 
 
-def dos1d(h,use_kpm=False,scale=10.,nk=100,npol=100,ntries=2,
-          ndos=1000,delta=0.01,ewindow=None,frand=None,
-          energies=None):
-  """ Calculate density of states of a 1d system"""
-  if h.dimensionality!=1: raise # only for 1d
-  ks = np.linspace(0.,1.,nk,endpoint=False) # number of kpoints
-  if not use_kpm: # conventional method
-    hkgen = h.get_hk_gen() # get generator
-#    delta = 16./(nk*h.intra.shape[0]) # smoothing
-    calculate_dos_hkgen(hkgen,ks,
-            delta=delta,energies=energies) # conventiona algorithm
-    return np.genfromtxt("DOS.OUT").transpose()
-  else:
-    h.turn_sparse() # turn the hamiltonian sparse
-    hkgen = h.get_hk_gen() # get generator
-    yt = np.zeros(ndos) # number of dos
-    ts = timing.Testimator("DOS") 
-    for i in range(nk): # loop over kpoints
-      k = np.random.random(3) # random k-point
-      hk = hkgen(k) # hamiltonian
-      (xs,yi) = kpm.tdos(hk,scale=scale,npol=npol,frand=frand,ewindow=ewindow,
-                  ntries=ntries,ne=ndos)
-      yt += yi # Add contribution
-      ts.remaining(i,nk)
-    yt /= nk # normalize
-    write_dos(xs,yt) # write in file
-    return xs,yt
-
-
-
 
 def dos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,info=False,ewindow=None):
   """ Calculate density of states of a 1d system for a certain orbitals"""
@@ -149,25 +119,21 @@ def calculate_dos_hkgen(hkgen,ks,ndos=100,delta=None,
   tr = timing.Testimator("DOS",maxite=len(ks))
   if delta is None: delta = 5./len(ks) # automatic delta
   from . import parallel
-  def fun(k): # function to execute
-    if parallel.cores==1: tr.iterate() # print the info
-    hk = hkgen(k) # Hamiltonian
-    t0 = time.perf_counter() # time
-    if is_sparse: # sparse Hamiltonian 
-      es = algebra.smalleig(hk,numw=numw,tol=delta/1e3) # eigenvalues
-      ws = np.zeros(es.shape[0])+1.0 # weight
-    else: # dense Hamiltonian
-      es = algebra.eigvalsh(hk) # get eigenvalues
-      ws = np.zeros(es.shape[0])+1.0 # weight
-    return es # return energies
-#  for ik in range(len(ks)):  
-  out = parallel.pcall(fun,ks) # launch all the processes
-  es = [] # empty list
-  for o in out: 
-      es = np.concatenate([es,o]) # concatenate
-#    tr.remaining(ik,len(ks))
-#  es = es.reshape(len(es)*len(es[0])) # 1d array
-  es = np.array(es) # convert to array
+  if is_sparse: # sparse Hamiltonian, per-k ARPACK call (not numba-batchable)
+    def fun(k): # function to execute
+      if parallel.cores==1: tr.iterate() # print the info
+      hk = hkgen(k) # Hamiltonian
+      return algebra.smalleig(hk,numw=numw,tol=delta/1e3) # eigenvalues
+    out = parallel.pcall(fun,ks) # launch all the processes
+    es = [] # empty list
+    for o in out:
+        es = np.concatenate([es,o]) # concatenate
+    es = np.array(es) # convert to array
+  else: # dense Hamiltonian: batch all k-points into one numba eigh call
+    from .htk.eigenvectors import peigvalsh
+    mats = np.array([hkgen(k) for k in ks],dtype=np.complex128) # H(k) batch
+    es = peigvalsh(mats) # batched numba eigh, shape (len(ks),n)
+    es = es.reshape(es.shape[0]*es.shape[1]) # 1d array
   nk = len(ks) # number of kpoints
   if energies is not None: # energies given on input
     xs = energies
@@ -205,61 +171,6 @@ def dos_kmesh(h,nk=100,delta=None,random=False,ks=None,
 
 
 
-
-
-
-
-def dos2d(h,use_kpm=False,scale=10.,nk=100,ntries=1,delta=None,
-          ndos=2000,random=True,kpm_window=1.0,
-          window=None,energies=None,**kwargs):
-  """ Calculate density of states of a 2d system"""
-  if h.dimensionality!=2: raise # only for 2d
-  ks = []
-  from .klist import kmesh
-  ks = kmesh(h.dimensionality,nk=nk)
-  if random:
-    ks = [np.random.random(2) for ik in ks]
-    print("Random k-mesh")
-  if not use_kpm: # conventional method
-    hkgen = h.get_hk_gen() # get generator
-    if delta is None: delta = 6./nk
-# conventiona algorithm
-    (xs,ys) = calculate_dos_hkgen(hkgen,ks,ndos=ndos,delta=delta,
-                          is_sparse=h.is_sparse,window=window,
-                          energies=energies,**kwargs) 
-    write_dos(xs,ys) # write in file
-    return (xs,ys)
-  else: # use the kpm
-    if delta is not None: npol = int(20*scale/delta)
-    else: npol = ndos//10
-    h.turn_sparse() # turn the hamiltonian sparse
-    hkgen = h.get_hk_gen() # get generator
-    mus = np.array([0.0j for i in range(2*npol)]) # initialize polynomials
-    tr = timing.Testimator("DOS")
-    ik = 0
-    from . import parallel
-    if parallel.cores==1: # serial run
-      for k in ks: # loop over kpoints
-        ik += 1
-        tr.remaining(ik,len(ks))      
-        if random: 
-          kr = np.random.random(2)
-          print("Random sampling in DOS")
-          hk = hkgen(kr) # hamiltonian
-        else: hk = hkgen(k) # hamiltonian
-        mus += kpm.random_trace(hk/scale,ntries=ntries,n=npol)
-    else:
-        ff = lambda k: kpm.random_trace(hkgen(k)/scale,ntries=ntries,n=npol)
-        mus = parallel.pcall(ff,ks) # parallel call
-        mus = np.array(mus).sum(axis=0) # sum all the contributions
-    mus /= len(ks) # normalize by the number of kpoints
-    if energies is None:
-      xs = np.linspace(-0.9,0.9,ndos)*kpm_window # x points
-    else:  xs = energies/scale
-    ys = kpm.generate_profile(mus,xs) # generate the profile
-    ys /= scale # rescale
-    write_dos(xs*scale,ys) # write in file
-    return (xs,ys)
 
 
 

@@ -174,10 +174,10 @@ def eigh(m):
 #    if False: # assume block diagonal
     if np.max(np.abs(mo))<error: # assume block diagonal
         # detected block diagonal
-        ms = [m[0:n:2,0:n:2],m[1:n:2,1:n:2]]
-        out = parallel.pcall(lambda x: dlg.eigh(x),ms)
-        (es0,vs0) = out[0]
-        (es1,vs1) = out[1]
+        # fixed 2-item split: a process pool (pcall) would only add
+        # spawn/IPC overhead here, so just call eigh directly twice
+        (es0,vs0) = dlg.eigh(m[0:n:2,0:n:2])
+        (es1,vs1) = dlg.eigh(m[1:n:2,1:n:2])
    #     (es0,vs0) = eigh(m[0:n:2,0:n:2]) # recall
    #     (es1,vs1) = eigh(m[1:n:2,1:n:2]) # recall
         es = np.concatenate([es0,es1]) # concatenate array

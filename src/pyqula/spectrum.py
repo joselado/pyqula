@@ -245,7 +245,19 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
           vv = vv[0:nbands] # get the negative eigenvlaues closest to EF
       return np.sum(vv[vv<fermi]) # sum energies below fermi energy
   # compute energy using different modes
-  if mode=="mesh":
+  if mode in ("mesh","random") and not use_kpm and nbands is None:
+    # dense, plain-diagonalization case: batch all k-points into one
+    # numba eigh call instead of pcall-ing algebra.eigvalsh per k-point
+    from .htk.eigenvectors import peigvalsh
+    if mode=="mesh":
+      from .klist import kmesh
+      kp = kmesh(h.dimensionality,nk=nk)
+    else: # random
+      kp = [np.random.random(3) for i in range(nk)] # random points
+    mats = np.array([f(k) for k in kp],dtype=np.complex128) # H(k) batch
+    es_batch = peigvalsh(mats) # (nk,n) eigenvalues
+    etot = np.mean([np.sum(es[es<fermi]) for es in es_batch]) # compute total energy
+  elif mode=="mesh":
     from .klist import kmesh
     kp = kmesh(h.dimensionality,nk=nk)
     etot = np.mean(parallel.pcall(enek,kp)) # compute total energy

@@ -159,7 +159,23 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         return np.array(rows)
     ### Now evaluate the function
     from . import parallel
-    esk = parallel.pcall(getek,range(len(kpath))) # compute all
+    if num_bands is None and operator is None and not h.is_sparse:
+      # common case (plain diagonalization, no operator): batch every
+      # k-point's H(k) into one numba eigh call instead of pcall-ing
+      # algebra.eigvalsh per k-point
+      from .htk.eigenvectors import peigvalsh
+      mats = np.array([hkgen(k) for k in kpath],dtype=np.complex128)
+      es_batch = np.sort(peigvalsh(mats),axis=1) # (nk,n) sorted eigenvalues
+      esk = [] # list of per-k arrays, same shape as the old getek(k) output
+      for k in range(len(kpath)):
+        es = es_batch[k]
+        if callback is not None: callback(k,es) # call the function
+        out = np.empty((len(es),ncols))
+        out[:,0] = k
+        out[:,1] = es
+        esk.append(out)
+    else:
+      esk = parallel.pcall(getek,range(len(kpath))) # compute all
     esk = np.concatenate(esk,axis=0) if len(esk)>0 else np.empty((0,ncols))
     if write:
       with open(output_file,"w") as f: np.savetxt(f,esk) # write in file

@@ -27,10 +27,9 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
         fk = lambda k: slg.eigsh(csc(f(k)),k=numw,which="LM",sigma=energy,tol=1e-5)
         vvs = parallel.pcall(fk,kp)
     else: # dense Hamiltonians
-      if parallel.cores>1: # in parallel
-#        vvs = parallel.multieigh([f(k) for k in kp]) # multidiagonalization
-        vvs = parallel.pcall(lambda k: algebra.eigh(f(k)),kp)
-      else: vvs = [algebra.eigh(f(k)) for k in kp] # 
+      mats = np.array([algebra.todense(f(k)) for k in kp],dtype=np.complex128) # H(k) for every k
+      es_batch,ws_batch = parallel_diagonalization(mats) # batched numba eigh
+      vvs = [(es_batch[i],ws_batch[i]) for i in range(nkp)]
     nume = sum([len(v[0]) for v in vvs]) # number of eigenvalues calculated
     eigvecs = np.zeros((nume,h.intra.shape[0]),dtype=np.complex128) # eigenvectors
     eigvals = np.zeros(nume) # eigenvalues
