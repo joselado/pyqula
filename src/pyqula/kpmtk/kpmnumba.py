@@ -1,6 +1,6 @@
 import numpy as np
 import numba
-from numba import jit
+from numba import jit,prange
 
 # precision names -> numpy dtypes, for the real and complex code paths
 _REAL_DTYPES = {"single": np.float32, "double": np.float64}
@@ -46,6 +46,41 @@ def kpm_moments_v(v,m,n=100,kpm_prec="double",
     return np.array(mus,dtype=np.complex128)
 
 
+def kpm_moments_batch(vs,m,n=100,kpm_prec="double",
+        kpm_cpugpu="CPU",**kwargs):
+    """Return the moments for a batch of starting vectors against the same
+    matrix, one vector per numba thread (see python_kpm_moments_batch_complex).
+    vs has shape (nvec,nsites); returns an (nvec,2n) array of moments. This
+    is the batched counterpart of kpm_moments_v, for the common case of
+    many independent vectors (random-trace tries, or one vector per site)
+    sharing the same matrix -- see that function for the precision/realness
+    handling this mirrors."""
+    from scipy.sparse import coo_matrix
+    mo = coo_matrix(m)
+    vs = np.asarray(vs)
+    if mo.data.size == 0:
+        is_real = np.max(np.abs(vs.imag))<1e-6
+    else:
+        is_real = np.max(np.abs(mo.data.imag))<1e-6 and np.max(np.abs(vs.imag))<1e-6
+    if is_real:
+        dtype = _REAL_DTYPES[kpm_prec]
+        vs = np.array(vs.real,dtype=dtype) # convert to float
+        data = np.array(mo.data.real,dtype=dtype) # convert to float
+    else:
+        dtype = _COMPLEX_DTYPES[kpm_prec]
+        vs = np.array(vs,dtype=dtype)
+        data = np.array(mo.data,dtype=dtype)
+    if kpm_cpugpu=="CPU": # use the CPU, one vector per thread
+        if is_real: mus = python_kpm_moments_batch_real(vs,data,mo.row,mo.col,n=n)
+        else: mus = python_kpm_moments_batch_complex(vs,data,mo.row,mo.col,n=n)
+    elif kpm_cpugpu=="GPU": # no batched GPU path, loop over the single-vector one
+        from .kpmjax import kpm_moments_gpu
+        mus = np.array([kpm_moments_gpu(vs[iv],data,mo.row,mo.col,n=n)
+                for iv in range(vs.shape[0])])
+    else: raise ValueError("kpm_cpugpu must be 'CPU' or 'GPU', got "+str(kpm_cpugpu))
+    return np.array(mus,dtype=np.complex128)
+
+
 @jit(nopython=True)
 def python_kpm_moments_complex(v,data,row,col,n=100):
     """Python routine to calculate moments.
@@ -86,6 +121,48 @@ def python_kpm_moments_complex(v,data,row,col,n=100):
     for i in range(1,n):
       mus[2*i] +=  - mu0
       mus[2*i+1] += -mu1
+    return mus
+
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def python_kpm_moments_batch_complex(vs,data,row,col,n=100):
+    """Chebyshev moments for a batch of vectors sharing the same sparse
+    matrix, one vector per numba thread. vs has shape (nvec,nsites); each
+    thread only ever writes its own output row of mus, mirroring the
+    prange-batch pattern used elsewhere in the package (e.g.
+    dmtk/fulldm.py's full_dm_batch_vectorized). The per-vector recursion
+    body is otherwise identical to python_kpm_moments_complex, which stays
+    the (unbatched) entry point used when there is only one vector."""
+    nvec = vs.shape[0]
+    nsites = vs.shape[1]
+    nnz = len(data)
+    mus = np.zeros((nvec,2*n),dtype=vs.dtype)
+    for iv in prange(nvec):
+        v = vs[iv]
+        am = v.copy() # zero vector
+        a = Mtimesv(data,row,col,v) #m@v  # vector number 1
+        bk = np.sum(np.conjugate(v)*v)
+        bk1 = np.sum(np.conjugate(a)*v)
+        mus[iv,0] = bk  # mu0
+        mus[iv,1] = bk1 # mu1
+        ap = np.empty_like(v)
+        for i in range(1,n):
+            for s in range(nsites): ap[s] = -am[s]
+            for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+            bk = a[0]-a[0]   # zero of a's dtype
+            bk1 = a[0]-a[0]
+            for s in range(nsites):
+                bk += np.conjugate(a[s])*a[s]
+                bk1 += np.conjugate(ap[s])*a[s]
+            mus[iv,2*i] = 2.*bk
+            mus[iv,2*i+1] = 2.*bk1
+            am,a,ap = a,ap,am # rotate the three buffers, no allocation
+        mu0 = mus[iv,0] # first
+        mu1 = mus[iv,1] # second
+        for i in range(1,n):
+            mus[iv,2*i] += -mu0
+            mus[iv,2*i+1] += -mu1
     return mus
 
 
@@ -139,6 +216,42 @@ def python_kpm_moments_real(v,data,row,col,n=100):
       mus[2*i+1] += -mu1
     return mus
 
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def python_kpm_moments_batch_real(vs,data,row,col,n=100):
+    """Real-arithmetic counterpart of python_kpm_moments_batch_complex --
+    see that function for the prange-over-vectors batching scheme."""
+    nvec = vs.shape[0]
+    nsites = vs.shape[1]
+    nnz = len(data)
+    mus = np.zeros((nvec,2*n),dtype=vs.dtype)
+    for iv in prange(nvec):
+        v = vs[iv]
+        am = v.copy() # zero vector
+        a = Mtimesv(data,row,col,v) #m@v  # vector number 1
+        bk = np.sum(v*v)
+        bk1 = np.sum(a*v)
+        mus[iv,0] = bk  # mu0
+        mus[iv,1] = bk1 # mu1
+        ap = np.empty_like(v)
+        for i in range(1,n):
+            for s in range(nsites): ap[s] = -am[s]
+            for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+            bk = a[0]-a[0]   # zero of a's dtype
+            bk1 = a[0]-a[0]
+            for s in range(nsites):
+                bk += a[s]*a[s]
+                bk1 += ap[s]*a[s]
+            mus[iv,2*i] = 2.*bk
+            mus[iv,2*i+1] = 2.*bk1
+            am,a,ap = a,ap,am # rotate the three buffers, no allocation
+        mu0 = mus[iv,0] # first
+        mu1 = mus[iv,1] # second
+        for i in range(1,n):
+            mus[iv,2*i] += -mu0
+            mus[iv,2*i+1] += -mu1
+    return mus
 
 
 

@@ -12,6 +12,7 @@ from numba import jit
 
 # numba version
 from .kpmtk.kpmnumba import kpm_moments_v as get_moments_v
+from .kpmtk.kpmnumba import kpm_moments_batch as get_moments_batch
 
 
 
@@ -102,14 +103,14 @@ from .kpmtk.kpmnumba import kpm_moments_vivj as get_moments_vivj
 
 
 def full_trace(m_in,n=200,**kwargs):
-  """ Get full trace of the matrix"""
+  """ Get full trace of the matrix, one site-basis vector per numba
+  thread (see kpm_moments_batch)"""
   m = csc(m_in) # saprse matrix
   nd = m.shape[0] # length of the matrix
-  mus = np.array([0.0j for i in range(2*n)])
-#  for i in range(ntries):
-  for i in range(nd):
-    mus += moments_local_dos(m_in,i=i,n=n,**kwargs)
-  return mus/nd
+  from .kpmtk.ldos import index2vector
+  vs = np.array([index2vector(i,nd) for i in range(nd)])
+  mus = get_moments_batch(vs,m,n=n,**kwargs) # (nd,2n) moments, one row per site
+  return np.sum(mus,axis=0)/nd
 
 
 
@@ -195,21 +196,23 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
 #    def fun(): return rand.random(nd) -.5 + 1j*rand.random(nd) -.5j
       from .randomtk import randomwf
       fun = randomwf(nd) # generator
-  def pfun(x):
-    v = fun()
-    v = v/np.sqrt(v.dot(np.conjugate(v))) # normalize the vector
-#    v = csc(v).transpose()
-    if operator is None:
-        mus = get_moments_v(v,m,n=n) # get the chebychev moments
-    else:
+  if operator is None: # common case: batch the tries, one vector per numba thread
+    vs = np.array([fun() for i in range(ntries)])
+    vs = vs/np.sqrt(np.sum(np.conjugate(vs)*vs,axis=1))[:,None] # normalize each row
+    mus = get_moments_batch(vs,m,n=n) # (ntries,2n) moments
+    return np.mean(mus,axis=0)
+  else: # operator-weighted moments: not batched, dispatch across processes
+    def pfun(x):
+        v = fun()
+        v = v/np.sqrt(v.dot(np.conjugate(v))) # normalize the vector
 #        mus = get_moments_vivj(m,v,operator@v,n=2*n)
         mus = get_momentsA(v,m,n=2*n,A=operator) # get the chebychev moments
-    return mus
-  from . import parallel
-  out = parallel.pcall(pfun,range(ntries))
-  mus = np.zeros(out[0].shape,dtype=np.complex128)
-  for o in out: mus = mus + o # add contribution
-  return mus/ntries
+        return mus
+    from . import parallel
+    out = parallel.pcall(pfun,range(ntries))
+    mus = np.zeros(out[0].shape,dtype=np.complex128)
+    for o in out: mus = mus + o # add contribution
+    return mus/ntries
 
 
 

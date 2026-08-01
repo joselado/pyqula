@@ -93,6 +93,14 @@ branch to preserve.
   `False` via `parallel.set_enabled(False)` to force the whole package to run strictly serially (no process
   pool, numba/BLAS threads clamped to 1), e.g. for debugging, profiling, or reproducibility; `set_enabled(True)`
   only lifts the restriction, it does not auto-restore a previous `cores` count.
+- **For new parallel code, prefer numba `@jit(parallel=True)`/`prange` over `parallel.pcall`'s multiprocess
+  pool.** Reach for `pcall` only when there's no alternative (e.g. the work isn't a numba-jittable loop —
+  calls out to non-jitted Python/SciPy per item). Benchmarked on the KPM moment loop (`kpm.full_trace`,
+  `kpm.random_trace` batched via `kpmtk/kpmnumba.py`'s `kpm_moments_batch`) over a 10,000-site sparse matrix:
+  batching the per-vector loop into one `prange`-parallel numba kernel gave ~4-5x over serial, while
+  `pcall`'s process pool was net *slower* than plain serial for the same workload (`ntries=40`, ~12ms/task —
+  process spawn/IPC overhead exceeded the actual work). Multiprocessing still has a place for coarser-grained
+  or non-jittable work, but it isn't the default first move anymore.
 
 ### Typical call pattern
 
