@@ -130,7 +130,8 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 ## Classical spin models and lattice-gas Monte Carlo ##
 - Classical Heisenberg spin models with arbitrary exchange couplings
 - Local energy minimization and spatially resolved magnetization textures
-- Lattice-gas Monte Carlo with configurable site-site interactions and simulated annealing
+- Lattice-gas Monte Carlo with configurable site-site interactions, simulated annealing, and grand-canonical (fluctuating filling) sampling
+- Density-density correlators and structure factor, and thermodynamic quantities (specific heat, susceptibility) from equilibrium sampling
 
 # EXAMPLES #
 A variety of examples can be found in pyqula/examples. Short examples are shown below

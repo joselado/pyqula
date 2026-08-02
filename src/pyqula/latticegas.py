@@ -3,7 +3,9 @@ from scipy.sparse import coo_matrix
 from copy import deepcopy
 
 # TODO
-# - autoannealing, stopping the iterations once a reasonable GS is reached
+# - multi-species/q-state occupation (den is hard-restricted to exactly
+#   2 distinct values in optimize_discrete); would need a rework of the
+#   swap/flip moves and the energy formula, not just a parameter
 
 
 
@@ -49,10 +51,104 @@ class LatticeGas():
                 adjacency=self._get_adjacency(),**kwargs)
         self.den = x # overwrite
         return es
+    def anneal(self,temps=None,ntries=1e4,**kwargs):
+        """Simulated annealing over a decreasing temperature schedule,
+        calling optimize_energy once per temperature. Keeps the best
+        configuration seen across the whole schedule (a single high-T
+        step's Metropolis walk can wander back up in energy by its
+        end, so the last step's final state is not necessarily the
+        best one found)"""
+        if temps is None: temps = np.geomspace(2.0,0.05,10) # default cooling schedule
+        best_den = self.den.copy()
+        best_e = self.get_energy()
+        es = []
+        for t in temps:
+            esi = self.optimize_energy(temp=t,ntries=ntries,**kwargs)
+            es.append(esi)
+            if esi[-1]<best_e:
+                best_e = esi[-1]
+                best_den = self.den.copy()
+        self.den = best_den # restore the best configuration found
+        return np.concatenate(es)
+    def optimize_energy_multistart(self,nstart=10,**kwargs):
+        """Run nstart independent anneals from independent random
+        seeds (same filling as the current lg.den) and keep the
+        lowest-energy result, mirroring
+        classicalspin.SpinModel.minimize_energy(tries=...). Each
+        anneal is already a full numba-jitted loop (not itself
+        further jittable), so restarts are farmed out with
+        parallel.pcall rather than numba parallel=True; whether that
+        is actually parallel depends on parallel.set_cores(), same as
+        every other pcall call site in this package"""
+        from . import parallel
+        n = self.nsites
+        mu,pairs,j = self.mu,self.pairs,self.j
+        adjacency = self._get_adjacency()
+        N = int(np.round(np.sum(self.den))) # keep the current filling
+        seeds = np.random.randint(0,2**31-1,size=int(nstart))
+        def run(seed):
+            np.random.seed(seed) # decorrelate restarts sharing a worker process
+            x0 = random_density(n,N)
+            x,es = optimize_discrete(mu,pairs,j,x0,adjacency=adjacency,**kwargs)
+            return x,es[-1]
+        results = parallel.pcall(run,seeds)
+        x_best,e_best = min(results,key=lambda t: t[1])
+        self.den = x_best
+        return e_best
+    def optimize_grand_canonical(self,**kwargs):
+        """Grand-canonical Metropolis sampling/annealing: filling
+        fluctuates under self.mu instead of being conserved (see the
+        optimize_grand_canonical function docstring)"""
+        x,es,ns = optimize_grand_canonical(self.mu,self.pairs,self.j,self.den,
+                adjacency=self._get_adjacency(),**kwargs)
+        self.den = x # overwrite
+        return es,ns
+    def add_tensor(self,fun):
+        """Add a custom coupling J_ij = fun(r_i,r_j), for interactions
+        beyond add_interaction()'s fixed neighbor shells (e.g.
+        screened/dipolar long-range repulsion)"""
+        pairs,js = add_tensor(self,fun)
+        if len(pairs)==0: return # nothing matched
+        self.pairs = np.concatenate([self.pairs,pairs])
+        self.j = np.concatenate([self.j,js])
+        self._adjacency = None # pairs/j changed, invalidate cache
+    def regroup(self):
+        """Merge duplicate pair entries accumulated from repeated
+        add_interaction/add_tensor calls (see the regroup() function
+        docstring). Pure performance cleanup: does not change
+        get_energy()"""
+        self.pairs,self.j = regroup(self.pairs,self.j)
+        self._adjacency = None # pairs/j changed, invalidate cache
     def get_correlator(self,**kwargs):
         """Return the nearest neighbor correlators"""
         from .statphystk.correlator import get_nnc
         return get_nnc(self.geometry,self.den,**kwargs)
+    def get_structure_factor(self,**kwargs):
+        """Reciprocal-space structure factor S(q) of the current
+        occupation snapshot -- the companion to get_correlator(): G(r)
+        tells you the ordering length scale, S(q) tells you the
+        ordering wavevector. See statphystk.correlator.get_structure_factor"""
+        from .statphystk.correlator import get_structure_factor
+        return get_structure_factor(self.geometry,self.den,**kwargs)
+    def write(self,name="DENSITY.OUT",**kwargs):
+        """Write the current occupation snapshot to a file, reusing
+        Geometry.write_profile (see also
+        classicalspin.SpinModel.write/load_magnetism, which follow
+        the same checkpoint pattern for magnetization). nrep defaults
+        to 1 (no periodic replication) so read() round-trips cleanly
+        regardless of self.geometry.dimensionality"""
+        kwargs.setdefault("nrep",1)
+        self.geometry.write_profile(self.den,name=name,**kwargs)
+    def read(self,name="DENSITY.OUT"):
+        """Read a snapshot previously saved with write(), overwriting
+        self.den. Rounds to {0,1} to absorb the text round-trip's
+        floating point noise"""
+        m = np.genfromtxt(name).transpose()
+        den = np.round(m[2]) # third column is the profile (see write_profile)
+        if len(den)!=self.nsites:
+            raise ValueError(f"file {name} has {len(den)} sites, "
+                f"expected {self.nsites}")
+        self.den = den
     def copy(self):
         return deepcopy(self)
 
@@ -120,8 +216,27 @@ def swap_delta_energy(mu,ptr,idx,jarr,den,i1,i2):
     return (mu[i1]-mu[i2])*(b-a) + 2.*(b-a)*(sum1-sum2)
 
 
+@jit(nopython=True)
+def flip_delta_energy(mu,ptr,idx,jarr,den,i):
+    """Energy change from flipping den[i] (0<->1) in place, the
+    grand-canonical move complementing swap_delta_energy (filling is
+    not conserved). `energy_numba_jit` double-counts every bond, once
+    from each endpoint's own row (see the module-level docstring note
+    in _build_adjacency and get_local_energy's docstring), so both the
+    mu term and the row-sum term below carry a factor consistent with
+    that convention: row already sums J_{i,k}*den[k] once per
+    neighbor (single direction, via ptr[i]), and by the symmetric
+    pairs guarantee that equals the "other direction" contribution
+    too, hence the factor 2"""
+    delta_n = 1.-2.*den[i] # +1 if turning on, -1 if turning off
+    row = 0.
+    for k in range(ptr[i],ptr[i+1]):
+        row += jarr[k]*den[idx[k]]
+    return mu[i]*delta_n + 2.*row*delta_n
+
+
 def optimize_discrete(mu,pairs,js,x0,temp=0.1,ntries=1e5,info=False,
-        resync_every=1000,adjacency=None):
+        resync_every=1000,adjacency=None,patience=None):
     """Discrete optimization, using a swap method. Energy changes are
     tracked incrementally with swap_delta_energy (O(degree) per swap)
     instead of recomputing the full O(n_pairs) energy on every try;
@@ -130,7 +245,11 @@ def optimize_discrete(mu,pairs,js,x0,temp=0.1,ntries=1e5,info=False,
     `adjacency`, the (ptr,idx,jarr) CSR tuple from _build_adjacency,
     can be passed in precomputed (e.g. cached across repeated calls
     with the same pairs/js, as LatticeGas.optimize_energy does) to
-    skip rebuilding it; it only depends on pairs/js, not on x0"""
+    skip rebuilding it; it only depends on pairs/js, not on x0.
+    `patience`, if set, stops the loop early once `patience` tries
+    have passed without a new best energy being found (`es` is
+    truncated to what actually ran) -- the module's long-standing
+    "autoannealing, stop once a reasonable GS is reached" TODO"""
     n = len(x0) # number of sites
     inds = np.arange(n) # indexes
     vals = np.unique(x0) # different values
@@ -149,6 +268,7 @@ def optimize_discrete(mu,pairs,js,x0,temp=0.1,ntries=1e5,info=False,
     x = x0.copy()
     e = energy_numba(mu,pairs,js,x) # current energy, tracked incrementally
     es = np.zeros(nrep) # storage for energies
+    e_best = e ; i_best = 0 # for patience-based early stop
     for ii in range(nrep): # this many iterations
         if resync_every and ii%resync_every==0: # bound fp drift
             e = energy_numba(mu,pairs,js,x)
@@ -171,7 +291,74 @@ def optimize_discrete(mu,pairs,js,x0,temp=0.1,ntries=1e5,info=False,
             else:
                 es[ii] = e # keep old energy
                 pass # do nothing
+        if e<e_best: e_best = e ; i_best = ii
+        if patience is not None and ii-i_best>patience:
+            es = es[0:ii+1] # only what actually ran
+            break
     return x,es # return final state
+
+
+
+def optimize_grand_canonical(mu,pairs,js,x0,temp=1.0,ntries=1e5,info=False,
+        resync_every=1000,adjacency=None):
+    """Grand-canonical Metropolis: single-site occupation flips
+    (0<->1), accepted/rejected the usual way, so unlike
+    optimize_discrete (fixed-filling swaps) the total filling is not
+    conserved but fluctuates under the applied mu -- the standard
+    lattice-gas MC move set, useful for scanning phase diagrams vs.
+    chemical potential, or for equilibrium sampling at fixed temp (see
+    get_specific_heat/get_susceptibility, which consume the es/ns
+    trajectories returned here). Unlike optimize_discrete this has no
+    2-distinct-values restriction: x0 can start uniform (all empty or
+    all full)"""
+    n = len(x0) # number of sites
+    ptr,idx,jarr = adjacency if adjacency is not None else _build_adjacency(n,pairs,js)
+    nrep = int(ntries) # this many iterations
+    x = x0.copy()
+    e = energy_numba(mu,pairs,js,x) # current energy, tracked incrementally
+    n_occ = np.sum(x) # current filling, tracked incrementally
+    es = np.zeros(nrep) # storage for energies
+    ns = np.zeros(nrep) # storage for filling
+    for ii in range(nrep): # this many iterations
+        if resync_every and ii%resync_every==0: # bound fp drift
+            e = energy_numba(mu,pairs,js,x)
+            n_occ = np.sum(x)
+        i = np.random.randint(0,n) # random site to flip
+        delta = flip_delta_energy(mu,ptr,idx,jarr,x,i)
+        en = e + delta # new
+        if info: print(en)
+        accept = en<=e
+        if not accept:
+            fac = np.exp((e-en)/temp) # acceptance probability
+            accept = np.random.random()<fac
+        if accept:
+            n_occ += 1.-2.*x[i] # +1 if turning on, -1 if turning off
+            x[i] = 1.-x[i] # flip
+            e = en
+        es[ii] = e
+        ns[ii] = n_occ
+    return x,es,ns # return final state
+
+
+
+def get_specific_heat(es,temp,burn=0.2):
+    """Estimate the specific heat C=Var(E)/T^2 from an energy
+    trajectory `es` sampled at fixed temperature `temp` (e.g. from
+    optimize_energy or optimize_grand_canonical run at one fixed
+    temp, not annealed), discarding the first `burn` fraction of
+    steps as equilibration"""
+    n0 = int(len(es)*burn)
+    return np.var(es[n0:])/temp**2
+
+
+def get_susceptibility(ns,temp,burn=0.2):
+    """Estimate the particle-number susceptibility (compressibility)
+    dN/dmu=Var(N)/T from a filling trajectory `ns` sampled at fixed
+    temperature `temp` in the grand-canonical ensemble (the `ns`
+    returned by optimize_grand_canonical), discarding the first `burn`
+    fraction of steps as equilibration"""
+    n0 = int(len(ns)*burn)
+    return np.var(ns[n0:])/temp
 
 
 
@@ -217,6 +404,49 @@ def random_density(Ntot,N):
     inds = np.random.choice(Ntot,N,replace=False) # N random indexes
     out[inds] = 1.0
     return out
+
+
+
+def add_tensor(LG,fun):
+    """Add a custom coupling J_ij=fun(r_i,r_j) between every pair of
+    sites, for interactions beyond add_interaction()'s fixed neighbor
+    shells (e.g. screened/dipolar long-range repulsion). Scalar analog
+    of classicalspin.add_tensor (which returns a 3x3 tensor per pair);
+    self-pairs (i==i) are skipped since fun is typically a
+    distance-based form (e.g. 1/r) that is not defined at r=0, and the
+    model has no onsite n_i^2 term anyway (mu already covers the
+    onsite/chemical-potential piece)"""
+    pairs = []
+    js = []
+    r = LG.geometry.r
+    n = LG.nsites
+    for i1 in range(n):
+        for i2 in range(n):
+            if i1==i2: continue
+            jij = fun(r[i1],r[i2])
+            if abs(jij)>1e-7: # if non zero
+                pairs.append((i1,i2))
+                js.append(jij)
+    return np.array(pairs),np.array(js)
+
+
+
+def regroup(pairs,js):
+    """Merge exactly-duplicate pair entries (e.g. from calling
+    add_interaction/add_tensor more than once with overlapping
+    shells), summing their couplings. Unlike
+    classicalspin.regroup, (i,j) and (j,i) are kept as separate
+    entries rather than folded into one: _build_adjacency's per-site
+    row sums rely on both directions being present, each in its own
+    row (see its docstring), so folding them would silently drop
+    connectivity from one endpoint's row"""
+    dictj = dict() # accumulate contributions, keyed by ordered pair
+    for (p,j) in zip(pairs,js): # loop over inputs
+        key = (p[0],p[1])
+        dictj[key] = dictj.get(key,0.)+j # add contribution
+    outp = list(dictj.keys()) # dicts preserve insertion order
+    outj = [dictj[p] for p in outp] # get all
+    return np.array(outp),np.array(outj)
 
 
 

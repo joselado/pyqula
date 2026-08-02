@@ -1695,10 +1695,18 @@ es = lg.optimize_energy(temp=0.5,ntries=1e4) # simulated annealing
 
 `lg.den` holds the current 0/1 occupation array and `es` the energy trajectory of the
 anneal. `get_local_energy()`/`get_local_mu()` give the per-site energy/chemical-potential
-contribution for the current snapshot, and `get_correlator()` gives the neighbor-shell
-density-density correlator -- useful for detecting ordered (e.g. striped, honeycomb-vacancy)
-ground states. See `examples/latticegas/` for runnable demos of annealing, local-energy maps,
-and correlators.
+contribution for the current snapshot, and `get_correlator()`/`get_structure_factor()` give
+the real-/reciprocal-space density-density correlator -- useful for detecting ordered (e.g.
+striped, honeycomb-vacancy) ground states and their ordering wavevector. `anneal()` wraps
+`optimize_energy()` in a decreasing-temperature schedule, and `optimize_energy_multistart()`
+keeps the best of several independent restarts. `optimize_grand_canonical()` switches from
+fixed-filling swap moves to single-site flips under `lg.mu`, letting the filling itself
+fluctuate -- useful for scanning a phase diagram vs. chemical potential, or for estimating
+thermodynamic quantities like the specific heat (`get_specific_heat()`/`get_susceptibility()`)
+from an equilibrium trajectory at fixed temperature. `add_tensor()` adds couplings beyond
+fixed neighbor shells, and `write()`/`read()` checkpoint a snapshot to/from disk. See
+`examples/latticegas/` for runnable demos of annealing, local-energy maps, correlators, and
+grand-canonical sampling.
 
 
 # Main functions and methods
@@ -2284,11 +2292,60 @@ Anneal `lg.den` towards a low-energy configuration with a Metropolis discrete-sw
 
 Optional arguments:
 
-- temp=0.1: Metropolis temperature (higher accepts more uphill moves; anneal by calling this repeatedly with decreasing `temp`)
+- temp=0.1: Metropolis temperature (higher accepts more uphill moves; anneal by calling this repeatedly with decreasing `temp`, or see `lg.anneal()` below)
 - ntries=1e5: number of swap attempts
 - resync_every=1000: how often (in swap attempts) to recompute the energy from scratch, bounding floating-point drift in the incremental tracking
+- patience=None: if set, stop early once this many attempts have passed without a new best energy being found (the returned array is truncated to what actually ran)
 
 Overwrites `lg.den` with the final configuration and returns the array of energies recorded at each attempt (whether or not it was accepted)
+
+### lg.anneal()
+Simulated annealing over a decreasing temperature schedule: calls `lg.optimize_energy()` once per temperature in `temps`, keeping the best configuration seen across the whole schedule (a single high-temperature step's Metropolis walk can wander back up in energy by its end, so the last step's final state is not necessarily the best one found).
+
+Optional arguments:
+
+- temps=None: sequence of temperatures, high to low; defaults to a 10-step geometric schedule from 2.0 down to 0.05
+- ntries=1e4: number of swap attempts per temperature
+- any other keyword accepted by `lg.optimize_energy()` (e.g. `patience`, `resync_every`), applied at every temperature
+
+Overwrites `lg.den` with the best configuration found and returns the concatenated energy trajectory across all temperatures
+
+### lg.optimize_energy_multistart()
+Run `nstart` independent anneals from independent random seeds at the current filling, and keep the lowest-energy result -- reduces the risk of a single anneal settling into a metastable configuration. Each restart is a full `optimize_discrete` run, farmed out with `parallel.pcall`; whether that runs in parallel depends on `parallel.set_cores()`, same as every other `pcall` call site in this package (serial by default).
+
+Optional arguments:
+
+- nstart=10: number of independent restarts
+- any other keyword accepted by `lg.optimize_energy()` (e.g. `temp`, `ntries`, `patience`), applied identically to every restart
+
+Overwrites `lg.den` with the best configuration found and returns its energy (a scalar)
+
+### lg.optimize_grand_canonical()
+Grand-canonical Metropolis sampling/annealing: instead of swapping pairs at fixed filling, single sites are flipped (occupied $\leftrightarrow$ empty) and accepted/rejected the usual Metropolis way, so the total filling fluctuates under `lg.mu` rather than being conserved. This is the standard lattice-gas MC move set, useful for scanning a phase diagram vs. chemical potential, or for equilibrium sampling at one fixed temperature (see `latticegas.get_specific_heat()`/`get_susceptibility()` below). Unlike `lg.optimize_energy()`, `lg.den` does not need 2 distinct starting values -- it can start uniformly empty or full.
+
+Optional arguments: same as `lg.optimize_energy()` (`temp`, `ntries`, `resync_every`; no `patience`)
+
+Overwrites `lg.den` with the final configuration and returns `(es, ns)`: the energy trajectory and the filling (occupied-site count) trajectory, both arrays of length `ntries`
+
+### latticegas.get_specific_heat() / latticegas.get_susceptibility()
+Module-level (not `lg.`-prefixed) post-processing functions that estimate equilibrium thermodynamic quantities from a trajectory sampled at one *fixed* temperature (e.g. from `lg.optimize_energy()` or `lg.optimize_grand_canonical()` called with a constant `temp`, not annealed) -- `get_specific_heat(es, temp, burn=0.2)` returns $C=\mathrm{Var}(E)/T^2$ from an energy trajectory, and `get_susceptibility(ns, temp, burn=0.2)` returns the particle-number susceptibility $\mathrm{d}N/\mathrm{d}\mu=\mathrm{Var}(N)/T$ from a filling trajectory (only meaningful for the grand-canonical `ns`, since `lg.optimize_energy()`'s filling is constant by construction). `burn` discards that leading fraction of the trajectory as equilibration before computing the variance.
+
+### lg.add_tensor()
+Add a custom coupling $J_{ij}=\mathrm{fun}(r_i,r_j)$ between every pair of sites, for interactions beyond `add_interaction()`'s fixed neighbor shells -- e.g. a screened or dipolar $1/r^n$ form. Scalar analog of `classicalspin.SpinModel.add_tensor` (which returns a 3x3 tensor per pair); self-pairs are skipped, and pairs where `fun` evaluates to (near) zero are dropped.
+
+Mutates `lg` in place, no return value
+
+### lg.regroup()
+Merge duplicate interaction-pair entries accumulated from repeated `add_interaction()`/`add_tensor()` calls (e.g. overlapping neighbor shells added twice), summing their couplings -- pure performance cleanup, doesn't change `lg.get_energy()`.
+
+Mutates `lg` in place, no return value
+
+### lg.write() / lg.read()
+Save/load the current occupation snapshot `lg.den` to/from a text file, reusing `Geometry.write_profile()` -- the same checkpoint pattern as `classicalspin.SpinModel.write()`/`load_magnetism()`. `write()` forces `nrep=1` (no periodic replication) by default so `read()` round-trips exactly regardless of `lg.geometry.dimensionality`; `read()` raises `ValueError` if the file's site count doesn't match `lg.nsites`.
+
+Optional arguments:
+
+- name="DENSITY.OUT": file path
 
 ### lg.get_local_energy() / lg.get_local_mu()
 Per-site breakdown of the current snapshot's energy. `get_local_energy()` returns each site's own contribution $\mu_i n_i + \sum_j J_{ij} n_i n_j$, summed over its interaction neighbors $j$ (`lg.get_energy()` itself counts every bond twice, once from each endpoint, so the values here sum exactly to `lg.get_energy()`, not to half of it); `get_local_mu()` instead evaluates that same expression with site `i` forced occupied, i.e. the energy cost/gain of occupying site `i` given its neighbors' current state.
@@ -2303,4 +2360,15 @@ Returns an array over sites
 Neighbor-shell density-density correlator of the current snapshot `lg.den`, useful for detecting ordered ground states (e.g. after `optimize_energy`). Thin wrapper around `statphystk.correlator.get_nnc`; see its docstring for `n`/`normalized` options.
 
 Returns `(distances, correlators)`, arrays of matching length
+
+### lg.get_structure_factor()
+Reciprocal-space structure factor $S(q)=|\sum_i (n_i-\bar n) e^{-iq\cdot r_i}|^2/N$ of the current snapshot `lg.den`, evaluated directly on the real-space site positions -- the reciprocal-space companion to `lg.get_correlator()`: where the neighbor-shell correlator tells you the ordering length scale, $S(q)$ tells you the ordering wavevector. Subtracting the mean occupation makes $S(q=0)=0$ identically, so a peak elsewhere in $q$ is what signals order. Thin wrapper around `statphystk.correlator.get_structure_factor`.
+
+Optional arguments:
+
+- qpath=None: explicit array of $q$ vectors to evaluate; if omitted, a default square grid of `nq`$\times$`nq` points spanning $\pm$`qmax` is used
+- nq=60: grid resolution when `qpath` is not given
+- qmax=None: half-width of the default grid; defaults to $2\pi/d$ set by the nearest-neighbor spacing $d$
+
+Returns `(qpath, sq)`: the array of $q$ vectors evaluated and the matching array of $S(q)$ values
 
