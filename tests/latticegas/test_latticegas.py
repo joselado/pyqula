@@ -337,3 +337,78 @@ def test_structure_factor_default_grid_shape():
     assert qpath.shape == (64, 3)
     assert sq.shape == (64,)
     assert np.all(np.isfinite(sq))
+
+
+def test_optimize_energy_zero_temperature_never_accepts_uphill_move():
+    """temp=0 must run greedy (zero-temperature) dynamics: the running
+    energy trace can never increase, and no NaN/inf should leak in
+    from the (e-en)/temp division that the finite-temperature branch
+    performs"""
+    lg = _small_lattice_gas(seed=7)
+    np.random.seed(7)
+    es = lg.optimize_energy(temp=0.0, ntries=2000)
+    assert np.all(np.isfinite(es))
+    assert np.all(np.diff(es) <= 1e-10) # never increases
+
+
+def test_anneal_zero_temperature_schedule_works():
+    lg = _small_lattice_gas(seed=7)
+    e0 = lg.get_energy()
+    np.random.seed(7)
+    es = lg.anneal(temps=[0.0, 0.0], ntries=300)
+    assert np.all(np.isfinite(es))
+    assert lg.get_energy() <= e0
+
+
+def test_optimize_energy_checkpoint_at_matches_state_at_that_step():
+    """checkpoint_at must capture the same density that a run stopped
+    after exactly that many tries would end up with (checked by
+    replaying the RNG from the same seed)"""
+    lg = _small_lattice_gas(seed=8)
+    np.random.seed(8)
+    lg.optimize_energy(temp=0.5, ntries=100, checkpoint_at=[30, 70])
+    den_at_30 = lg.checkpoints[30].copy()
+    den_at_70 = lg.checkpoints[70].copy()
+    assert set(lg.checkpoints.keys()) == {30, 70}
+
+    lg2 = _small_lattice_gas(seed=8)
+    np.random.seed(8)
+    lg2.optimize_energy(temp=0.5, ntries=30)
+    assert np.array_equal(lg2.den, den_at_30)
+
+    lg3 = _small_lattice_gas(seed=8)
+    np.random.seed(8)
+    lg3.optimize_energy(temp=0.5, ntries=70)
+    assert np.array_equal(lg3.den, den_at_70)
+
+
+def test_optimize_energy_checkpoint_at_accepts_scalar():
+    lg = _small_lattice_gas(seed=8)
+    np.random.seed(8)
+    lg.optimize_energy(temp=0.5, ntries=50, checkpoint_at=20)
+    assert set(lg.checkpoints.keys()) == {20}
+
+
+def test_optimize_energy_without_checkpoint_at_leaves_checkpoints_empty():
+    lg = _small_lattice_gas(seed=8)
+    np.random.seed(8)
+    lg.optimize_energy(temp=0.5, ntries=50)
+    assert lg.checkpoints == {}
+
+
+def test_anneal_checkpoint_at_uses_global_step_numbering():
+    """checkpoint_at on anneal() counts steps continuously across
+    temperature stages, not restarting at each new temperature"""
+    lg = _small_lattice_gas(seed=8)
+    np.random.seed(8)
+    ntries = 50
+    temps = [1.0, 0.5, 0.1]
+    lg.anneal(temps=temps, ntries=ntries, checkpoint_at=[10, 60, 120])
+    assert set(lg.checkpoints.keys()) == {10, 60, 120}
+
+    # step 60 = 10 steps into the 2nd temperature stage: replay it
+    lg2 = _small_lattice_gas(seed=8)
+    np.random.seed(8)
+    lg2.optimize_energy(temp=temps[0], ntries=ntries)
+    lg2.optimize_energy(temp=temps[1], ntries=10)
+    assert np.array_equal(lg2.den, lg.checkpoints[60])

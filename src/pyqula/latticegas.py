@@ -19,6 +19,8 @@ class LatticeGas():
         self.j = np.array([0]) # interactions
         self.pairs = np.array([[0,0]]) # empty list
         self._adjacency = None # lazily-built cache, see _get_adjacency
+        self.checkpoints = {} # populated by optimize_energy/anneal when
+            # called with checkpoint_at, see their docstrings
         self.set_filling(filling)
     def set_filling(self,filling):
         """Set filling of the system"""
@@ -45,30 +47,55 @@ class LatticeGas():
         return get_local_energy(self,**kwargs)
     def get_local_mu(self,**kwargs):
         return get_local_mu(self,**kwargs)
-    def optimize_energy(self,**kwargs):
-        """Optimize the energy"""
-        x,es = optimize_discrete(self.mu,self.pairs,self.j,self.den,
-                adjacency=self._get_adjacency(),**kwargs)
+    def optimize_energy(self,checkpoint_at=None,**kwargs):
+        """Optimize the energy. `checkpoint_at`, if given (an int or
+        iterable of ints), captures a copy of the configuration after
+        that many trial moves (1-indexed: checkpoint_at=n is the state
+        right after the n-th trial) into self.checkpoints (a dict
+        step->den snapshot), independent of the final/returned state.
+        temp=0 is supported (zero-temperature/greedy dynamics: an
+        uphill move is never accepted)"""
+        x,es,checkpoints = optimize_discrete(self.mu,self.pairs,self.j,self.den,
+                adjacency=self._get_adjacency(),checkpoint_at=checkpoint_at,**kwargs)
         self.den = x # overwrite
+        self.checkpoints = checkpoints
         return es
-    def anneal(self,temps=None,ntries=1e4,**kwargs):
+    def anneal(self,temps=None,ntries=1e4,checkpoint_at=None,**kwargs):
         """Simulated annealing over a decreasing temperature schedule,
         calling optimize_energy once per temperature. Keeps the best
         configuration seen across the whole schedule (a single high-T
         step's Metropolis walk can wander back up in energy by its
         end, so the last step's final state is not necessarily the
-        best one found)"""
+        best one found).
+
+        `checkpoint_at`, if given (an int or iterable of ints),
+        captures a copy of the configuration at those global trial
+        indices (1-indexed, counting continuously across the whole
+        schedule: temperature stage 1 covers steps 1..len(es_1),
+        stage 2 continues from there, etc.) into self.checkpoints (a
+        dict step->den snapshot), letting a caller recover the
+        configuration after any number of annealing steps rather than
+        only the final/best one"""
         if temps is None: temps = np.geomspace(2.0,0.05,10) # default cooling schedule
+        steps = _normalize_checkpoint_steps(checkpoint_at)
         best_den = self.den.copy()
         best_e = self.get_energy()
         es = []
+        checkpoints = {}
+        offset = 0 # global trial count completed before the current stage
         for t in temps:
-            esi = self.optimize_energy(temp=t,ntries=ntries,**kwargs)
+            local_steps = {s-offset for s in steps if offset<s<=offset+ntries}
+            esi = self.optimize_energy(temp=t,ntries=ntries,
+                    checkpoint_at=local_steps or None,**kwargs)
+            for local_s,den_snap in self.checkpoints.items():
+                checkpoints[local_s+offset] = den_snap
             es.append(esi)
             if esi[-1]<best_e:
                 best_e = esi[-1]
                 best_den = self.den.copy()
+            offset += len(esi) # accounts for patience-truncated stages too
         self.den = best_den # restore the best configuration found
+        self.checkpoints = checkpoints
         return np.concatenate(es)
     def optimize_energy_multistart(self,nstart=10,**kwargs):
         """Run nstart independent anneals from independent random
@@ -89,7 +116,7 @@ class LatticeGas():
         def run(seed):
             np.random.seed(seed) # decorrelate restarts sharing a worker process
             x0 = random_density(n,N)
-            x,es = optimize_discrete(mu,pairs,j,x0,adjacency=adjacency,**kwargs)
+            x,es,_ = optimize_discrete(mu,pairs,j,x0,adjacency=adjacency,**kwargs)
             return x,es[-1]
         results = parallel.pcall(run,seeds)
         x_best,e_best = min(results,key=lambda t: t[1])
@@ -235,8 +262,17 @@ def flip_delta_energy(mu,ptr,idx,jarr,den,i):
     return mu[i]*delta_n + 2.*row*delta_n
 
 
+def _normalize_checkpoint_steps(checkpoint_at):
+    """Normalize checkpoint_at (None, a single int, or an iterable of
+    ints) to a set of ints, used by optimize_discrete/anneal to decide
+    at which trial indices to snapshot the configuration"""
+    if checkpoint_at is None: return set()
+    if np.isscalar(checkpoint_at): return {int(checkpoint_at)}
+    return {int(s) for s in checkpoint_at}
+
+
 def optimize_discrete(mu,pairs,js,x0,temp=0.1,ntries=1e5,info=False,
-        resync_every=1000,adjacency=None,patience=None):
+        resync_every=1000,adjacency=None,patience=None,checkpoint_at=None):
     """Discrete optimization, using a swap method. Energy changes are
     tracked incrementally with swap_delta_energy (O(degree) per swap)
     instead of recomputing the full O(n_pairs) energy on every try;
@@ -249,7 +285,12 @@ def optimize_discrete(mu,pairs,js,x0,temp=0.1,ntries=1e5,info=False,
     `patience`, if set, stops the loop early once `patience` tries
     have passed without a new best energy being found (`es` is
     truncated to what actually ran) -- the module's long-standing
-    "autoannealing, stop once a reasonable GS is reached" TODO"""
+    "autoannealing, stop once a reasonable GS is reached" TODO.
+    temp=0 runs zero-temperature (greedy) dynamics: an uphill move
+    (en>e) is never accepted, no Metropolis draw is made.
+    `checkpoint_at`, if given (an int or iterable of ints), returns a
+    copy of the configuration after that many trials (1-indexed) in
+    the third return value, a dict step->den snapshot"""
     n = len(x0) # number of sites
     inds = np.arange(n) # indexes
     vals = np.unique(x0) # different values
@@ -264,6 +305,8 @@ def optimize_discrete(mu,pairs,js,x0,temp=0.1,ntries=1e5,info=False,
         j1 = np.random.randint(0,len(ainds)) # one random site
         j2 = np.random.randint(0,len(binds)) # one random site
         return ainds[j1],binds[j2]
+    checkpoint_steps = _normalize_checkpoint_steps(checkpoint_at)
+    checkpoints = {} # step (1-indexed) -> den snapshot
     nrep = int(ntries) # this many iterations
     x = x0.copy()
     e = energy_numba(mu,pairs,js,x) # current energy, tracked incrementally
@@ -280,22 +323,22 @@ def optimize_discrete(mu,pairs,js,x0,temp=0.1,ntries=1e5,info=False,
             xcand[i1],xcand[i2] = xcand[i2],xcand[i1] # swap
         en = e + delta # new
         if info: print(en)
-        if en<=e: # smaller or same
+        accept = en<=e # smaller or same is always accepted
+        if not accept and temp>0: # uphill move: Metropolis draw (never at temp=0)
+            fac = np.exp((e-en)/temp) # acceptance probability
+            accept = np.random.random()<fac
+        if accept:
             es[ii] = en # store new energy
             x = xcand ; e = en # overwrite
         else:
-            fac = np.exp((e-en)/temp) # acceptance probability
-            if np.random.random()<fac:
-                es[ii] = en # store new energy
-                x = xcand ; e = en # overwrite
-            else:
-                es[ii] = e # keep old energy
-                pass # do nothing
+            es[ii] = e # keep old energy
         if e<e_best: e_best = e ; i_best = ii
+        if checkpoint_steps and (ii+1) in checkpoint_steps:
+            checkpoints[ii+1] = x.copy()
         if patience is not None and ii-i_best>patience:
             es = es[0:ii+1] # only what actually ran
             break
-    return x,es # return final state
+    return x,es,checkpoints # return final state
 
 
 
@@ -310,7 +353,8 @@ def optimize_grand_canonical(mu,pairs,js,x0,temp=1.0,ntries=1e5,info=False,
     get_specific_heat/get_susceptibility, which consume the es/ns
     trajectories returned here). Unlike optimize_discrete this has no
     2-distinct-values restriction: x0 can start uniform (all empty or
-    all full)"""
+    all full). temp=0 runs zero-temperature (greedy) dynamics: a flip
+    that raises the energy is never accepted"""
     n = len(x0) # number of sites
     ptr,idx,jarr = adjacency if adjacency is not None else _build_adjacency(n,pairs,js)
     nrep = int(ntries) # this many iterations
@@ -328,7 +372,7 @@ def optimize_grand_canonical(mu,pairs,js,x0,temp=1.0,ntries=1e5,info=False,
         en = e + delta # new
         if info: print(en)
         accept = en<=e
-        if not accept:
+        if not accept and temp>0: # uphill move: Metropolis draw (never at temp=0)
             fac = np.exp((e-en)/temp) # acceptance probability
             accept = np.random.random()<fac
         if accept:

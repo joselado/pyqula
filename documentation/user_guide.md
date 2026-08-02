@@ -2292,10 +2292,11 @@ Anneal `lg.den` towards a low-energy configuration with a Metropolis discrete-sw
 
 Optional arguments:
 
-- temp=0.1: Metropolis temperature (higher accepts more uphill moves; anneal by calling this repeatedly with decreasing `temp`, or see `lg.anneal()` below)
+- temp=0.1: Metropolis temperature (higher accepts more uphill moves; anneal by calling this repeatedly with decreasing `temp`, or see `lg.anneal()` below). `temp=0` runs zero-temperature (greedy) dynamics: an uphill move is never accepted, equivalent to the $T\to0$ limit without the floating-point division by zero that would otherwise imply
 - ntries=1e5: number of swap attempts
 - resync_every=1000: how often (in swap attempts) to recompute the energy from scratch, bounding floating-point drift in the incremental tracking
 - patience=None: if set, stop early once this many attempts have passed without a new best energy being found (the returned array is truncated to what actually ran)
+- checkpoint_at=None: an int or iterable of ints; captures a copy of `lg.den` after that many attempts (1-indexed) into `lg.checkpoints` (a dict `step -> den` snapshot), independent of the final configuration -- e.g. to inspect or animate how the configuration evolves partway through a run
 
 Overwrites `lg.den` with the final configuration and returns the array of energies recorded at each attempt (whether or not it was accepted)
 
@@ -2304,8 +2305,9 @@ Simulated annealing over a decreasing temperature schedule: calls `lg.optimize_e
 
 Optional arguments:
 
-- temps=None: sequence of temperatures, high to low; defaults to a 10-step geometric schedule from 2.0 down to 0.05
+- temps=None: sequence of temperatures, high to low; defaults to a 10-step geometric schedule from 2.0 down to 0.05 (any entry, including 0, is passed straight through to `lg.optimize_energy()`)
 - ntries=1e4: number of swap attempts per temperature
+- checkpoint_at=None: an int or iterable of ints; like `lg.optimize_energy()`'s `checkpoint_at`, but numbered continuously across the whole schedule (e.g. step 120 is the 20th attempt of the 3rd temperature stage if `ntries=100`), so a snapshot can be recovered after any number of annealing steps, not just the final/best configuration
 - any other keyword accepted by `lg.optimize_energy()` (e.g. `patience`, `resync_every`), applied at every temperature
 
 Overwrites `lg.den` with the best configuration found and returns the concatenated energy trajectory across all temperatures
