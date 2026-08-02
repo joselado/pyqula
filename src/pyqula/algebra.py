@@ -231,9 +231,16 @@ def smalleig(m,numw=10,evecs=False,e0=0.,tol=arpack_tol):
     Return the smallest eigenvalues using arpack
     """
     m = csc_matrix(m) # sparse matrix
+    # fixed (not random) starting vector: eigsh defaults to a random v0,
+    # which reproduces correctly-summed densities only when num_waves
+    # happens to span whole degenerate eigenspaces -- whenever it cuts
+    # one in half (common on symmetric lattices), a random v0 makes the
+    # specific eigenvectors returned, and hence e.g. LDOS built from
+    # them, vary run to run for identical input
+    v0 = np.ones(m.shape[0])
     try:
         eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=e0,
-                                        tol=tol)
+                                        tol=tol,v0=v0)
         if evecs:  return eig,eigvec.transpose()  # return eigenvectors
         else:  return eig  # return eigenvalues
     except:
@@ -241,7 +248,9 @@ def smalleig(m,numw=10,evecs=False,e0=0.,tol=arpack_tol):
         if m.shape[0]>maxsize: raise
         else:
             if not evecs: return eigvalsh(todense(m))
-            else: return eigh(todense(m))
+            else:
+                eig,eigvec = eigh(todense(m))
+                return eig,eigvec.transpose() # match the ARPACK branch's convention
 
 
 

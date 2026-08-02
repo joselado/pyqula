@@ -244,6 +244,12 @@ class Hamiltonian():
     def get_qpi(self,**kwargs):
         from .chitk import qpi
         return qpi.get_qpi(self,**kwargs)
+    def get_qpi_impurity(self,**kwargs):
+        """Real-space-impurity QPI (supercell + real-space impurities +
+        ARPACK LDOS + direct Fourier transform); see
+        qpitk.realspace.get_qpi_impurity for the full docstring"""
+        from .qpitk.realspace import get_qpi_impurity
+        return get_qpi_impurity(self,**kwargs)
     def get_rkky(self,**kwargs):
         #from .chitk import magneticresponse
         from . import rkky
