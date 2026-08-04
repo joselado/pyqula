@@ -300,7 +300,7 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
         ysr = mus_batch.real @ basis  # (len(pairs), ne)
         ysi = mus_batch.imag @ basis
         ys = ysr - 1j*ysi
-        return np.trapz(ys*weights[None, :], x=xin, axis=1)/np.pi
+        return np.trapezoid(ys*weights[None, :], x=xin, axis=1)/np.pi
 
     if cores is not None: parallel.set_cores(cores)
     results = parallel.pcall(compute_for_k, ks)  # one array of pair values per k
@@ -523,5 +523,5 @@ def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
     x_fermi = fermi/scale
     mask = xs <= x_fermi
     if not np.any(mask): return 0.0  # nothing occupied in the sampled window
-    integral = np.trapz((xs*ys)[mask], x=xs[mask])
+    integral = np.trapezoid((xs*ys)[mask], x=xs[mask])
     return norb*scale/norm*integral

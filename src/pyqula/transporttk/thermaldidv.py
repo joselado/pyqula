@@ -55,7 +55,7 @@ def finite_T_didv(self,temp,energy=0.0,**kwargs):
             return zero_T_didv(self,energy=energy+e,**kwargs)
         out = [f(e)*dFDdT(e,temp=temp)*temp for e in Ts]
         norm = np.sum(dFDdT(Ts,temp=temp)*temp)
-        out = np.trapz(out)/norm
+        out = np.trapezoid(out)/norm
         return out
     else: raise
 

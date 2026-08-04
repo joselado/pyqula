@@ -181,7 +181,7 @@ tdos0d = tdos # redefine
 def total_energy(m_in,scale=10.,npol=None,ne=500,ntries=20):
    x,y = tdos0d(m_in,scale=scale,npol=npol,ne=ne,ntries=ntries)
    z = .5*(np.sign(x)+1.)*x*y # function to integrate
-   return np.trapz(z,x)
+   return np.trapezoid(z,x)
 
 
 

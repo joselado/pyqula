@@ -272,7 +272,7 @@ def test_dm_kpm_batched_reconstruction_matches_per_pair_reference():
     for (d, i, j) in needed:
         (x, y) = kpm.dm_ij_energy(Hk, i=j, j=i, scale=used_scale, npol=npol,
                 ne=ne, x=xin)
-        ref = np.trapz(y*weights, x=x)/np.pi
+        ref = np.trapezoid(y*weights, x=x)/np.pi
         diff = abs(dm[d][i, j] - ref)
         worst = max(worst, diff)
     assert worst < 1e-6, worst

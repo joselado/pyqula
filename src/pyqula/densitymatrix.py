@@ -262,7 +262,7 @@ def restricted_dm(h,mode="KPM",pairs=[],
     for (i,j) in pairs: # loop over inputs
       (x,y) = kpm.dm_ij_energy(h.intra,i=i,j=j,scale=scale,npol=npol,
                       ne=ne,x=xin)
-      out[ii] = np.trapz(y,x=x)/np.pi # pi is here so it normalizes to 0.5
+      out[ii] = np.trapezoid(y,x=x)/np.pi # pi is here so it normalizes to 0.5
       ii += 1
     return out
   else: raise

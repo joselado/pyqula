@@ -51,7 +51,7 @@ def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
     f = lambda k: self.generate(k,self.scale_lc,self.scale_rc).didv(energy=energy,delta=delta,**kwargs)
     if imode=="grid":
         out = pcall(f,np.linspace(0.,1.,nk,endpoint=False))
-        return np.trapz(out,dx=1./nk)
+        return np.trapezoid(out,dx=1./nk)
     elif imode=="simpson":
         return simpson(f,eps=1e-4,xlim=[0.,1.])
     elif imode=="quad":
