@@ -36,7 +36,7 @@ pip install pyqula[all]        # all of the above
 ## Recommended library versions
 These are the minimum/recommended versions of several required libraries
 (also enforced in `pyproject.toml`)
-- numpy >= 1.26.4
+- numpy >= 2.1
 - numba >= 0.60.0
 - scipy >= 1.13.1
 
