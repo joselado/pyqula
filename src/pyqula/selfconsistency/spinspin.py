@@ -741,13 +741,18 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     convention (sctk/reorder.py) groups each site's electron pair and hole
     pair as separate, identically-transforming (up,down)-like 2-blocks),
     then embedded back into a full Nambu matrix with zero anomalous part --
-    while `vd` gets the full has_eh-aware treatment (get_mf, both normal
-    and anomalous/pairing), identical to how Vinteraction already handles
-    it. In short: J does not itself induce superconducting pairing here,
-    only V/U can (matching the existing Zeeman+attractive-V1 triplet-SC
-    machinery) -- extending the x/y rotation trick to also rotate the
-    anomalous sector is a separate, unverified piece of physics left for a
-    future extension.
+    while `vd` gets the full has_eh-aware treatment (superscf.get_mf_bdg,
+    both normal and anomalous/pairing -- the same function densitydensity.
+    get_mf's has_eh branch delegates to, so this is identical to how
+    Vinteraction already handles it). In short: J does not itself induce
+    superconducting pairing here, only V/U can (matching the existing
+    Zeeman+attractive-V1 triplet-SC machinery) -- extending the x/y
+    rotation trick to also rotate the anomalous sector is a separate,
+    unverified piece of physics left for a future extension. A variant embedding
+    vz/vx/vy into Nambu form once (zero pairing) and skipping the
+    extract/re-embed step entirely was tried and reverted -- see
+    electron_sector's docstring below for why it's wrong, not just
+    unnecessary, whenever vd is active at the same time as vz/vx/vy.
 
     vx/vy are skipped entirely (no rotation, no get_mf_normal/get_dc_energy
     call) when they are identically zero -- e.g. VJinteraction's pure
@@ -770,12 +775,20 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     use_sparse_dm is (i.e. has_eh=False); requesting it for a Nambu h1
     raises NotImplementedError rather than silently falling back to ED or
     misreading vd's differently-indexed Nambu basis."""
-    from .densitydensity import (get_dm, get_mf_normal, get_mf, mix_mf,
+    from .densitydensity import (get_dm, get_mf_normal, mix_mf,
             diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF, random_hermitian_guess)
     from .mfconstrains import obj2mf
     has_eh = h1.has_eh
-    if has_eh: from .. import superconductivity
+    if has_eh:
+        from .. import superconductivity
+        # vd (the density-density/pairing channel) is only ever passed in
+        # for a BdG h1 -- see VJinteraction, which folds vd into vz instead
+        # for a normal-state h1 -- so the decoupler for it is fixed once
+        # here rather than re-dispatched on a has_eh flag at every call
+        # site, exactly mirroring how vz/vx/vy always call get_mf_normal
+        # directly with no flag.
+        from .superscf import get_mf_bdg
     if integration not in ("ed", "kpm"):
         raise ValueError("integration must be 'ed' or 'kpm', got %r" % (integration,))
     if integration == "kpm" and has_eh:
@@ -905,7 +918,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     def electron_sector(dd):
         """Extract the normal (electron-electron) sector from a dict of
         (possibly Nambu-sized) density matrices; a no-op for normal-state
-        h1."""
+        h1.
+
+        A variant of this refactor was tried where vz/vx/vy are instead
+        embedded ONCE into Nambu-sized, zero-pairing matrices (via
+        build_nambu_matrix) and get_mf_normal is called directly on the full
+        dm every iteration, with no extract/re-embed closures -- this works
+        (bit-for-bit identical to the extract/re-embed approach below) when
+        vd is inactive, but produces spurious triplet pairing (and in one
+        case failed to converge at all) whenever vz/vx/vy AND vd are BOTH
+        active simultaneously (a mixed V+J BdG Hamiltonian), verified on a
+        chain with attractive V1 plus J1z/J1x+J1y. So the electron-sector-only
+        decoupling below is kept as the correct implementation; it is not
+        just implementation debt."""
         if not has_eh: return dd
         return {k: superconductivity.get_eh_sector(m, i=0, j=0)
                 for (k, m) in dd.items()}
@@ -936,7 +961,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
         mf = embed_normal(mf)
         if vd_active: # density-density: full normal+anomalous treatment
-            mf_d = get_mf(vd, dm_lab, has_eh=has_eh)
+            mf_d = get_mf_bdg(vd, dm_lab)
             mf = (MultiHopping(mf) + MultiHopping(mf_d)).get_dict()
         return mf
 

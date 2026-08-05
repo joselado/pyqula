@@ -226,50 +226,17 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
 
 def get_mf(v,dm,has_eh=False,compute_anomalous=True,
         compute_normal=True,**kwargs):
-    """Get the mean field matrix"""
+    """Get the mean field matrix.
+
+    has_eh=True (BdG/Nambu Hamiltonian) delegates to superscf.get_mf_bdg,
+    which combines the normal (Hartree+Fock) and anomalous (pairing)
+    decoupling of the interaction into one self-contained step -- see its
+    docstring for why both are needed. has_eh=False is the plain
+    Hartree-Fock decoupling, get_mf_normal below."""
     if has_eh:
-        # let us assume that it is a full Nambu spinor
-        # (this may not be general, but good enough in the meantime)
-        from .. import superconductivity
-        dme = dict() # dictionary
-        dma01 = dict() # dictionary
-        dma10 = dict() # dictionary
-        ns = v[(0,0,0)].shape[0]//2 # number of spinless sites
-#        op = superconductivity.nambu_anomalous_reordering(ns)
-#        op = op@op # comment this to go back to the previous version
-        for key in dm: # extract the electron part 
-#            m = op.T@dm[key]@op # transform to the new basis
-            m = dm[key] # transform to the new basis
-            dme[key] = superconductivity.get_eh_sector(m,i=0,j=0)
-            # this is a workaround for the reordering of Nambu spinors
-            dma10[key] = superconductivity.get_eh_sector(m,i=0,j=1)
-        mfe = get_mf_normal(v,dme,**kwargs) # electron part of the mean field
-        # anomalous part
-        #dma01,dma10 = enforce_eh_symmetry_anomalous(dma01,dma10)
-        mfa01 = get_mf_anomalous(v,dma10) 
-        mfa01,mfa10 = enforce_eh_symmetry_anomalous(mfa01)
-        ##############################################
-        # now rebuild the Hamiltonian
-        mf = dict()
-        for key in v:
-            if not compute_normal: mfe[key] = mfe[key]*0.0
-            if compute_anomalous:
-                m = superconductivity.build_nambu_matrix(mfe[key],
-                    c12 = mfa10[key],c21=mfa01[key])
-            else:
-                m = superconductivity.build_nambu_matrix(mfe[key])
-            mf[key] = m # store this matrix
-    #        print(key)
-    #        print(np.round(m,2))
-            #print(np.unique(np.round(m,2)))
-        if not MultiHopping(mf).is_hermitian(): # just a sanity check
-            print("Non-Hermitian mean field")
-            print(np.round(mf[(0,0,0)],2))
-            exit()
-   #     exit()
-        # enforce electron-hole symmetry
-   #     mf = superconductivity.enforce_eh_symmetry(mf)
-        return mf # return mean field matrix
+        from .superscf import get_mf_bdg
+        return get_mf_bdg(v,dm,compute_anomalous=compute_anomalous,
+                compute_normal=compute_normal,**kwargs)
     else: return get_mf_normal(v,dm,**kwargs) # no BdG Hamiltonian
 
 
@@ -299,14 +266,6 @@ def get_mf_normal(v,dm,compute_dd=True,add_dagger=True,
             m = normal_term_jj(v[d2],dm[(0,0,0)]) # get matrix
             mf[(0,0,0)] = mf[(0,0,0)] + m # add normal term
     return mf
-
-
-
-# anomalous part of the mean field
-from .superscf import get_mf_anomalous
-from .superscf import enforce_eh_symmetry_anomalous
-
-
 
 
 
