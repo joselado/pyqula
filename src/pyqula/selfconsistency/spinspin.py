@@ -779,16 +779,17 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF, random_hermitian_guess)
     from .mfconstrains import obj2mf
+    # get_mf_bdg is imported unconditionally (not gated on has_eh) even
+    # though it is only ever called from the vd_active branch below, which
+    # in turn is only ever reached when has_eh is True given how the current
+    # callers (VJinteraction/Jinteraction) construct vd -- importing it
+    # unconditionally avoids relying on that cross-function invariant to
+    # avoid a NameError, matching how get_mf_normal above is imported
+    # unconditionally despite also being has_eh-conditional in practice.
+    from .superscf import get_mf_bdg
     has_eh = h1.has_eh
     if has_eh:
         from .. import superconductivity
-        # vd (the density-density/pairing channel) is only ever passed in
-        # for a BdG h1 -- see VJinteraction, which folds vd into vz instead
-        # for a normal-state h1 -- so the decoupler for it is fixed once
-        # here rather than re-dispatched on a has_eh flag at every call
-        # site, exactly mirroring how vz/vx/vy always call get_mf_normal
-        # directly with no flag.
-        from .superscf import get_mf_bdg
     if integration not in ("ed", "kpm"):
         raise ValueError("integration must be 'ed' or 'kpm', got %r" % (integration,))
     if integration == "kpm" and has_eh:
