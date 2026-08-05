@@ -258,7 +258,12 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     Works for BdG (Nambu, h0.has_eh=True) Hamiltonians too, and there J
     induces anomalous/pairing mean field on top of the usual magnetic one
     -- see _run_anisotropic_scf's docstring for how the x/y
-    rotate-decouple-rotate-back trick extends to the anomalous sector."""
+    rotate-decouple-rotate-back trick extends to the anomalous sector.
+    CAVEAT: scf.total_energy's double-counting correction is normal-sector-
+    only (see _run_anisotropic_scf's total-energy tail) -- it is
+    systematically off whenever J converges to a nonzero anomalous mean
+    field. scf.hamiltonian (the actual converged Hamiltonian/mean field)
+    does not have this limitation."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
     h1 = h0.get_multicell().get_dense()
     nd = h1.geometry.neighbor_distances() # shared by all three _build_v calls below
@@ -369,7 +374,12 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     exchange are kept as separate contributions summed each SCF iteration
     (see _run_anisotropic_scf's docstring), but both get the same full
     normal+anomalous (pairing) treatment (identical to Vinteraction) -- J
-    induces anomalous/pairing mean field here too, not just V/U.
+    induces anomalous/pairing mean field here too, not just V/U. CAVEAT:
+    scf.total_energy's double-counting correction is normal-sector-only
+    (see _run_anisotropic_scf's total-energy tail) -- it is systematically
+    off whenever any channel converges to a nonzero anomalous mean field.
+    scf.hamiltonian (the actual converged Hamiltonian/mean field) does not
+    have this limitation.
 
     See Vinteraction and Jinteraction for further background on the
     density-density and exchange conventions respectively; only the
@@ -798,18 +808,10 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     use_sparse_dm is (i.e. has_eh=False); requesting it for a Nambu h1
     raises NotImplementedError rather than silently falling back to ED or
     misreading vd's differently-indexed Nambu basis."""
-    from .densitydensity import (get_dm, get_mf_normal, mix_mf,
+    from .densitydensity import (get_dm, get_mf, get_mf_normal, mix_mf,
             diff_mf, update_hamiltonian, set_hoppings, hamiltonian2dict,
             get_dc_energy, SCF, random_hermitian_guess)
     from .mfconstrains import obj2mf
-    # get_mf_bdg is imported unconditionally (not gated on has_eh) even
-    # though it is only ever called from the vd_active branch below, which
-    # in turn is only ever reached when has_eh is True given how the current
-    # callers (VJinteraction/Jinteraction) construct vd -- importing it
-    # unconditionally avoids relying on that cross-function invariant to
-    # avoid a NameError, matching how get_mf_normal above is imported
-    # unconditionally despite also being has_eh-conditional in practice.
-    from .superscf import get_mf_bdg
     has_eh = h1.has_eh
     if has_eh:
         from .. import superconductivity
@@ -951,13 +953,14 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
 
     def _decouple(v, dm):
         """Wick-decouple one exchange (or density-density) channel's
-        interaction matrix `v` against a density matrix `dm` -- get_mf_bdg
-        (both normal and anomalous/pairing) for a BdG h1, get_mf_normal
-        (normal only, no Nambu structure to speak of) otherwise. See
-        compute_mf's docstring for why vz/vx/vy now go through the same
-        get_mf_bdg call vd always has."""
-        if has_eh: return get_mf_bdg(v, dm)
-        return get_mf_normal(v, dm)
+        interaction matrix `v` against a density matrix `dm` -- delegates to
+        densitydensity.get_mf's own has_eh dispatch (get_mf_bdg for a BdG
+        h1, get_mf_normal otherwise) rather than re-implementing that
+        two-way branch locally, so a future change to that dispatch (e.g. a
+        new has_eh-dependent kwarg) only needs updating in one place. See
+        compute_mf's docstring for why vz/vx/vy (and, below, vd) now all go
+        through this."""
+        return get_mf(v, dm, has_eh=has_eh)
 
     def compute_mf(dm_lab):
         """vz/vx/vy are decoupled exactly like vd (get_mf_bdg, full
@@ -997,7 +1000,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             mf_y = _rot_dict(_decouple(vy, dm_y), Ryd)
             mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
         if vd_active: # density-density: full normal+anomalous treatment
-            mf_d = get_mf_bdg(vd, dm_lab)
+            mf_d = _decouple(vd, dm_lab) # vd is only ever given for has_eh=True h1
             mf = (MultiHopping(mf) + MultiHopping(mf_d)).get_dict()
         return mf
 
@@ -1150,6 +1153,27 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # system for a Nambu Hamiltonian -- a real, pre-existing bug in that
     # shared code, out of scope to fix here, but not one to reproduce for
     # vd just because it happens to match precedent)
+    #
+    # KNOWN LIMITATION (pre-existing for vd/Vinteraction, and now equally
+    # true for vz/vx/vy since they can induce anomalous/pairing mean field
+    # too, see compute_mf): only the NORMAL (Hartree-Fock) double-counting
+    # term is ever subtracted here, via get_dc_energy on the electron-sector
+    # dm -- there is no matching correction for the ANOMALOUS/pairing
+    # double-counting energy get_mf_bdg's decoupling also implies. So
+    # scf.total_energy is systematically off (by an uncharacterized amount)
+    # whenever ANY channel (vd, or now vz/vx/vy) has converged to a nonzero
+    # anomalous mean field -- e.g. the AFM-isotropic-J RVB pairing case in
+    # tests/scf/test_spinspin_nambu.py. Deriving the correct anomalous
+    # double-counting formula (mirroring get_dc_energy_jit's Hartree+Fock
+    # derivation, but for get_mf_anomalous's contraction pattern) was
+    # deliberately left undone here rather than attempted without a
+    # reliable way to validate its sign/prefactor are actually right (both
+    # of this module's own validation tools -- supercell-extensivity checks
+    # and the SU(2)/gauge rotational-invariance checks above -- would stay
+    # green even under a consistent, uniform prefactor error, since neither
+    # varies the interaction strength or geometry against an independently
+    # computed reference). scf.hamiltonian (the actual converged mean
+    # field) is unaffected -- only the scf.total_energy scalar diagnostic.
     h = scf.hamiltonian
     if use_kpm:
         # never diagonalize H(k), even for this final, once-per-call step:
