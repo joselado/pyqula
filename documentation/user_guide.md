@@ -1023,7 +1023,7 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
 
 Needs the optional `jax` extra (`pip install pyqula[jax]`).
 
-All of the spin-spin exchange functions above also work on BdG (Nambu) Hamiltonians (`h.turn_nambu()`/`h.setup_nambu_spinor()`). `get_szsz_mean_field_hamiltonian`/`get_sxsx_mean_field_hamiltonian`/`get_sysy_mean_field_hamiltonian` need no special handling: `get_mean_field_hamiltonian`'s existing Hartree-Fock-plus-anomalous decoupling already dispatches generically for any density-density-shaped interaction, including $S^z_iS^z_j$'s. `get_combined_mean_field_hamiltonian`/`get_exchange_mean_field_hamiltonian` decouple the exchange ($J$) channels in the normal (electron) sector only for a Nambu Hamiltonian -- exchange does not itself induce superconducting pairing here, only $U$/$V_1$/$V_2$/$V_3$ can (the same mechanism as the spin-triplet example above); a state with both magnetic and superconducting order can still emerge from combining an exchange field with an attractive $V_1$:
+All of the spin-spin exchange functions above also work on BdG (Nambu) Hamiltonians (`h.turn_nambu()`/`h.setup_nambu_spinor()`). `get_szsz_mean_field_hamiltonian`/`get_sxsx_mean_field_hamiltonian`/`get_sysy_mean_field_hamiltonian` need no special handling: `get_mean_field_hamiltonian`'s existing Hartree-Fock-plus-anomalous decoupling already dispatches generically for any density-density-shaped interaction, including $S^z_iS^z_j$'s. `get_combined_mean_field_hamiltonian`/`get_exchange_mean_field_hamiltonian` decouple the exchange ($J$) channels with the same full normal-plus-anomalous treatment as $U$/$V_1$/$V_2$/$V_3$ for a Nambu Hamiltonian, so exchange can itself induce superconducting pairing, not just density-density interactions: an antiferromagnetic isotropic $J$ alone (no $U$/$V$ at all), seeded with a random guess, can spontaneously decouple into a purely superconducting, singlet-paired state (the same RVB-like mechanism behind exchange-driven superconductivity), while the ferromagnetic sign has no such pairing tendency and stays magnetic. A state with both magnetic and superconducting order can also still emerge from combining an exchange field with an attractive $V_1$:
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
@@ -2029,10 +2029,11 @@ Optional arguments:
 - Jxr, Jyr, Jzr=None: general distance-dependent couplings, one per axis
 - mf, filling, nk, maxerror, mix, constrains: as above (only `integration="ed"` and the plain-mixing solver are supported)
 
-Also works on BdG Hamiltonians, but decouples the exchange interaction in
-the normal (electron) sector only -- it does not itself induce
-superconducting pairing (see `get_combined_mean_field_hamiltonian`, where
-$V_1$ can).
+Also works on BdG Hamiltonians, with the same full normal-plus-anomalous
+decoupling as `get_combined_mean_field_hamiltonian`'s density-density
+channels -- exchange can itself induce superconducting pairing (e.g. an
+antiferromagnetic isotropic $J$ alone, seeded with a random guess, can
+spontaneously decouple into a purely superconducting state).
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
 

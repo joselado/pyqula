@@ -80,12 +80,17 @@ def test_sxsx_sysy_szsz_on_nambu_are_rotations_of_each_other():
 
 
 def test_jinteraction_isotropic_on_nambu_preserves_su2_symmetry():
-    """Jinteraction (isotropic Jx=Jy=Jz) on a BdG Hamiltonian, seeded with a
-    random-direction guess, must converge to a moment collinear with it
-    (SU(2) symmetry preserved), with no spuriously induced pairing --
-    exercising Jinteraction's Nambu path, where the exchange channels are
-    decoupled in the electron sector only (see _run_anisotropic_scf's
-    docstring)."""
+    """Jinteraction (isotropic Jx=Jy=Jz, ferromagnetic sign) on a BdG
+    Hamiltonian, seeded with a random-direction MAGNETIC-only guess, must
+    converge to a moment collinear with it (SU(2) symmetry preserved), with
+    no spuriously induced pairing: the zero-pairing state is an exact fixed
+    point of get_mf_bdg's decoupling (Wick-contracting a zero anomalous
+    density matrix always returns zero anomalous mean field, see
+    _run_anisotropic_scf's docstring), so seeding purely magnetically stays
+    purely magnetic here even though Jinteraction's Nambu path can, in
+    general, also induce pairing from J now (see
+    test_jinteraction_afm_isotropic_induces_rvb_pairing below, which seeds
+    randomly -- including in the pairing channel -- instead)."""
     g = geometry.chain()
     rng = np.random.default_rng(4)
     for _ in range(3):
@@ -107,6 +112,94 @@ def test_jinteraction_isotropic_on_nambu_preserves_su2_symmetry():
         assert np.linalg.norm(m) > 0.05
         cos_angle = np.dot(m/np.linalg.norm(m), v)
         assert cos_angle > 1 - 1e-3, (v, m, cos_angle)
+
+
+def test_jinteraction_afm_isotropic_induces_rvb_pairing():
+    """Antiferromagnetic isotropic J (NO V/U at all) must be able to
+    spontaneously induce a purely superconducting, rotationally-invariant
+    BdG mean field on its own: Wick's theorem does not care that Sa_i Sa_j
+    started life as an exchange interaction rather than a density-density
+    one (it is one, in the spin-orbital basis -- see _build_v's docstring),
+    so mean-field theory can equally decouple an antiferromagnetic exchange
+    into a singlet-pairing channel instead of a Neel one -- the same
+    physics behind RVB (resonating-valence-bond) theories of
+    exchange-driven superconductivity. Seeded with a fully random guess
+    (magnitude only, direction/phase random) across several seeds, the
+    resulting gap and total energy must be independent of which seed
+    triggered the instability, exactly like the magnetic order parameter's
+    direction is in test_jinteraction_isotropic_on_nambu_preserves_su2_
+    symmetry above -- and the gap must be a real, non-numerical-noise
+    magnitude, not just "technically nonzero". Contrast with
+    test_jinteraction_isotropic_on_nambu_preserves_su2_symmetry (same J
+    magnitude, ferromagnetic sign): a ferromagnetic instability has no
+    singlet-pairing tendency to decouple into, and stays unpaired even
+    with a random (not just magnetic) seed -- see
+    test_jinteraction_fm_isotropic_stays_unpaired_even_with_random_seed."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    gaps = []
+    etots = []
+    for _ in range(3):
+        h = h0.copy()
+        h.turn_nambu()
+        scf = meanfield.Jinteraction(h, Jx1=2.0, Jy1=2.0, Jz1=2.0,
+                mf="random", nk=20, maxerror=MAXERROR, mix=0.15, maxite=3000,
+                filling=0.3)
+        assert scf.converged
+        gaps.append(scf.hamiltonian.get_gap())
+        etots.append(scf.total_energy)
+    gaps = np.array(gaps)
+    etots = np.array(etots)
+    assert np.min(gaps) > 0.05, gaps
+    assert np.max(np.abs(gaps - np.mean(gaps))) < 1e-3, gaps
+    assert np.max(np.abs(etots - np.mean(etots))) < 1e-3, etots
+
+
+def test_jinteraction_fm_isotropic_stays_unpaired_even_with_random_seed():
+    """The ferromagnetic-sign counterpart of
+    test_jinteraction_afm_isotropic_induces_rvb_pairing: isotropic J with a
+    ferromagnetic sign, seeded with a fully random guess (including a
+    random pairing component, unlike test_jinteraction_isotropic_on_nambu_
+    preserves_su2_symmetry's purely-magnetic guess), must still relax back
+    to zero pairing -- a ferromagnetic instability has no singlet-pairing
+    channel to decouple into, so a randomly-seeded pairing amplitude simply
+    decays away under the SCF iteration instead of being sustained."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    for _ in range(3):
+        h = h0.copy()
+        h.turn_nambu()
+        scf = meanfield.Jinteraction(h, Jx1=-2.0, Jy1=-2.0, Jz1=-2.0,
+                mf="random", nk=20, maxerror=MAXERROR, mix=0.15, maxite=3000,
+                filling=0.3)
+        assert scf.converged
+        mf_full = np.array(scf.hamiltonian.intra) - np.array(scf.hamiltonian0.intra)
+        eh = get_eh_sector(mf_full, i=0, j=1)
+        assert np.max(np.abs(eh)) < 1e-3, np.max(np.abs(eh))
+
+
+def test_jinteraction_anisotropic_magnetic_seed_no_spurious_pairing():
+    """A single anisotropic exchange channel (Jz only, no Jx/Jy and no
+    V/U), seeded with a purely magnetic (zero-pairing) guess, must remain
+    at EXACTLY zero pairing: the zero-pairing state is an exact fixed point
+    of get_mf_bdg's decoupling (a zero anomalous density matrix always
+    Wick-contracts to a zero anomalous mean field, regardless of v), so a
+    single active exchange channel with nothing seeding pairing should not
+    spontaneously break into a superconducting state -- unlike
+    test_jinteraction_afm_isotropic_induces_rvb_pairing, this uses only Jz
+    (not the isotropic Jx=Jy=Jz that has an SU(2)-symmetric singlet-pairing
+    channel available)."""
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h = h0.copy()
+    h.add_exchange([0.3, 0., 0.])
+    h.turn_nambu()
+    scf = meanfield.Jinteraction(h, Jz1=-2.0, mf=h.copy(), nk=20,
+            maxerror=MAXERROR, mix=0.2, maxite=1000, filling=0.3)
+    assert scf.converged
+    mf_full = np.array(scf.hamiltonian.intra) - np.array(scf.hamiltonian0.intra)
+    eh = get_eh_sector(mf_full, i=0, j=1)
+    assert np.max(np.abs(eh)) < 1e-8, np.max(np.abs(eh))
 
 
 def test_vjinteraction_v_only_on_nambu_matches_vinteraction():

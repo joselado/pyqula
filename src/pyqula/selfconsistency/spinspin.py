@@ -255,11 +255,10 @@ def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
     Vinteraction/SzSz/SxSx/SySy, which forward to the full
     generic_densitydensity solver zoo).
 
-    Works for BdG (Nambu, h0.has_eh=True) Hamiltonians too, but decouples
-    the exchange interaction in the normal (electron) sector only -- see
-    _run_anisotropic_scf's docstring for why (in short: extending the x/y
-    rotate-decouple-rotate-back trick to also generate anomalous/pairing
-    mean field from Jx/Jy is a separate, unverified extension)."""
+    Works for BdG (Nambu, h0.has_eh=True) Hamiltonians too, and there J
+    induces anomalous/pairing mean field on top of the usual magnetic one
+    -- see _run_anisotropic_scf's docstring for how the x/y
+    rotate-decouple-rotate-back trick extends to the anomalous sector."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy
     h1 = h0.get_multicell().get_dense()
     nd = h1.geometry.neighbor_distances() # shared by all three _build_v calls below
@@ -367,11 +366,10 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     non-onsite interaction, exchange or density-density or a mix.
 
     For a BdG (Nambu, h0.has_eh=True) Hamiltonian, density-density and
-    exchange are instead kept as two separate contributions summed each
-    SCF iteration (see _run_anisotropic_scf's docstring): density-density
-    keeps its existing full normal+anomalous treatment (identical to
-    Vinteraction), while the exchange channels are decoupled in the normal
-    (electron) sector only, i.e. J does not itself induce pairing here.
+    exchange are kept as separate contributions summed each SCF iteration
+    (see _run_anisotropic_scf's docstring), but both get the same full
+    normal+anomalous (pairing) treatment (identical to Vinteraction) -- J
+    induces anomalous/pairing mean field here too, not just V/U.
 
     See Vinteraction and Jinteraction for further background on the
     density-density and exchange conventions respectively; only the
@@ -671,7 +669,19 @@ def _block_rotate(m, rot):
     a jax.jit/jax.grad trace, and this module must not gain a hard jax
     dependency -- jax is an optional extra), so the two are independent
     implementations of the same math kept in sync only by a cross-check
-    test (tests/scf/test_vjinteraction_jax.py) rather than by sharing code."""
+    test (tests/scf/test_vjinteraction_jax.py) rather than by sharing code.
+
+    m is coerced to a plain ndarray first: superscf.get_mf_bdg's output
+    (reached here whenever a rotated exchange channel gets the new
+    get_mf_bdg treatment on a BdG h1, see compute_mf) goes through
+    superconductivity.build_nambu_matrix, which -- for a dense input --
+    returns a numpy.matrix (scipy sparse's own .todense(), not
+    np.asarray); numpy.matrix forbids reshaping to more than 2 dimensions
+    (raises "shape too large to be a matrix" on the 4D reshape below), so
+    without this it would crash the moment a rotated channel's mean field
+    (not just its input density matrix) needs a second rotation-related
+    reshape."""
+    m = np.asarray(m)
     n = m.shape[0]
     n_orb = n//2
     m4 = m.reshape(n_orb, 2, n_orb, 2)
@@ -731,28 +741,41 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     `vz` directly instead (Hartree-Fock decoupling is linear in the
     interaction, so this is equivalent and does not need a separate
     channel) and passed vd=None. `vd` as a genuinely separate argument only
-    matters for a BdG (Nambu, h1.has_eh=True) h1: there, vx/vy/vz (the
-    exchange channels) are decoupled in the normal (electron) sector only
-    -- extracting it from the full Nambu density matrix, decoupling with
-    get_mf_normal exactly as for a normal-state Hamiltonian (verified: the
-    x/y-rotation trick's _rot_dm/_rot_dict logic, and
-    rotate_spin.global_spin_rotation more generally, both already handle
-    Nambu-doubled matrices correctly with no changes, since pyqula's Nambu
-    convention (sctk/reorder.py) groups each site's electron pair and hole
-    pair as separate, identically-transforming (up,down)-like 2-blocks),
-    then embedded back into a full Nambu matrix with zero anomalous part --
-    while `vd` gets the full has_eh-aware treatment (superscf.get_mf_bdg,
-    both normal and anomalous/pairing -- the same function densitydensity.
-    get_mf's has_eh branch delegates to, so this is identical to how
-    Vinteraction already handles it). In short: J does not itself induce
-    superconducting pairing here, only V/U can (matching the existing
-    Zeeman+attractive-V1 triplet-SC machinery) -- extending the x/y
-    rotation trick to also rotate the anomalous sector is a separate,
-    unverified piece of physics left for a future extension. A variant embedding
-    vz/vx/vy into Nambu form once (zero pairing) and skipping the
-    extract/re-embed step entirely was tried and reverted -- see
-    electron_sector's docstring below for why it's wrong, not just
-    unnecessary, whenever vd is active at the same time as vz/vx/vy.
+    matters for a BdG (Nambu, h1.has_eh=True) h1, where it is decoupled with
+    superscf.get_mf_bdg (both normal and anomalous/pairing -- the same
+    function densitydensity.get_mf's has_eh branch delegates to, so this is
+    identical to how Vinteraction already handles it).
+
+    vx/vy/vz (the exchange channels) get exactly the same get_mf_bdg
+    treatment as vd for a BdG h1 -- i.e. J induces anomalous/pairing mean
+    field here too, not just V/U -- via compute_mf's `_decouple` helper
+    below: a Sa_i Sa_j exchange term is, in the spin-orbital basis, just
+    another density-density interaction with a different sign pattern (see
+    _build_v's docstring), and Wick's theorem does not care what an
+    interaction physically represents, only its v matrix and the density
+    matrix it acts on. For the x/y channels this means rotating the FULL
+    Nambu density matrix (not just its electron sector) into the frame
+    where that axis is computational z, calling get_mf_bdg there, and
+    rotating the whole Nambu-sized result back -- verified correct (not
+    just "does not crash") because _rot_dm/_rot_dict's block-diagonal
+    per-2-index-block rotation (_block_rotate) commutes with the
+    electron/anomalous sector EXTRACTION get_mf_bdg does internally: pyqula's
+    Nambu convention (sctk/reorder.py) groups each site's electron pair and
+    hole pair as separate, identically-transforming (up,down)-like
+    2-blocks, so rotate-then-extract-electron-sector gives exactly the same
+    result as the old extract-electron-sector-then-rotate order (this is
+    also how rotate_spin.global_spin_rotation already handles Nambu
+    Hamiltonians directly, used unmodified by SxSx/SySy) -- the anomalous
+    sector comes along for free using the identical rotation.
+
+    This is NOT the same as the Phase-3b variant tried and reverted earlier
+    (embedding vz/vx/vy into Nambu form once with zero pairing and calling
+    plain get_mf_normal directly on the full dm, with no sector extraction
+    at all) -- see compute_mf's and electron_sector's docstrings below for
+    why that one was wrong (spurious triplet pairing, non-convergence)
+    whenever vd was active at the same time as vz/vx/vy, not just
+    unnecessary. get_mf_bdg extracts the electron and anomalous sectors
+    correctly before decoupling either one, so it does not share that bug.
 
     vx/vy are skipped entirely (no rotation, no get_mf_normal/get_dc_energy
     call) when they are identically zero -- e.g. VJinteraction's pure
@@ -919,48 +942,60 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     def electron_sector(dd):
         """Extract the normal (electron-electron) sector from a dict of
         (possibly Nambu-sized) density matrices; a no-op for normal-state
-        h1.
-
-        A variant of this refactor was tried where vz/vx/vy are instead
-        embedded ONCE into Nambu-sized, zero-pairing matrices (via
-        build_nambu_matrix) and get_mf_normal is called directly on the full
-        dm every iteration, with no extract/re-embed closures -- this works
-        (bit-for-bit identical to the extract/re-embed approach below) when
-        vd is inactive, but produces spurious triplet pairing (and in one
-        case failed to converge at all) whenever vz/vx/vy AND vd are BOTH
-        active simultaneously (a mixed V+J BdG Hamiltonian), verified on a
-        chain with attractive V1 plus J1z/J1x+J1y. So the electron-sector-only
-        decoupling below is kept as the correct implementation; it is not
-        just implementation debt."""
+        h1. Only used below for get_dc_energy's electron-sector-only input
+        (see the total-energy tail's docstring) -- compute_mf itself no
+        longer needs this, see its docstring for why."""
         if not has_eh: return dd
         return {k: superconductivity.get_eh_sector(m, i=0, j=0)
                 for (k, m) in dd.items()}
 
-    def embed_normal(mfe):
-        """Embed an electron-sector-only mean field dict back into full
-        Nambu form, with zero anomalous (pairing) part; a no-op for
-        normal-state h1."""
-        if not has_eh: return mfe
-        return {k: superconductivity.build_nambu_matrix(m)
-                for (k, m) in mfe.items()}
+    def _decouple(v, dm):
+        """Wick-decouple one exchange (or density-density) channel's
+        interaction matrix `v` against a density matrix `dm` -- get_mf_bdg
+        (both normal and anomalous/pairing) for a BdG h1, get_mf_normal
+        (normal only, no Nambu structure to speak of) otherwise. See
+        compute_mf's docstring for why vz/vx/vy now go through the same
+        get_mf_bdg call vd always has."""
+        if has_eh: return get_mf_bdg(v, dm)
+        return get_mf_normal(v, dm)
 
     def compute_mf(dm_lab):
-        dme_lab = electron_sector(dm_lab) # exchange channels: normal sector only
+        """vz/vx/vy are decoupled exactly like vd (get_mf_bdg, full
+        normal+anomalous treatment) rather than get_mf_normal on an
+        extracted electron-sector-only density matrix -- so J now induces
+        anomalous/pairing mean field on a BdG Hamiltonian too, not just V/U;
+        see _run_anisotropic_scf's docstring for the physics and why this
+        is NOT the same as the Phase-3b variant tried and reverted earlier
+        (that one called get_mf_normal, which has no notion of Nambu
+        structure, directly on the full dm with no sector extraction at
+        all -- wrong. get_mf_bdg extracts the electron and anomalous
+        sectors internally, decouples each correctly, and reassembles, the
+        same as vd already did -- generalizing that, not bypassing it).
+
+        For the x/y channels, `dm_lab` (or vd's own dm_lab, unrotated) is
+        rotated and the RESULT is rotated back as a whole Nambu-sized
+        matrix, not just its electron sector: _rot_dm/_rot_dict apply the
+        same small 2x2 spin rotation independently to every 2-index block
+        of the matrix (_block_rotate), and pyqula's Nambu convention groups
+        each site's electron pair and hole pair as separate such blocks
+        (see _run_anisotropic_scf's docstring) -- so rotating the full
+        matrix and then extracting a sector (as get_mf_bdg does internally)
+        gives exactly the same electron-sector contribution as the old
+        extract-then-rotate order, plus the new anomalous one for free."""
         if vz_active:
-            mf = get_mf_normal(vz, dme_lab)
+            mf = _decouple(vz, dm_lab)
         else: # vz identically zero -- skip the O(n^2) pass, same reasoning
               # as vx_active/vy_active (see _channel_is_zero)
-            zero = dme_lab[(0, 0, 0)]*0.0
+            zero = dm_lab[(0, 0, 0)]*0.0
             mf = {d: zero.copy() for d in vz}
         if vx_active:
-            dm_x = _rot_dm(dme_lab, Rx) # dm needs the conjugated rotation
-            mf_x = _rot_dict(get_mf_normal(vx, dm_x), Rxd) # mf does not
+            dm_x = _rot_dm(dm_lab, Rx) # dm needs the conjugated rotation
+            mf_x = _rot_dict(_decouple(vx, dm_x), Rxd) # mf does not
             mf = (MultiHopping(mf) + MultiHopping(mf_x)).get_dict()
         if vy_active:
-            dm_y = _rot_dm(dme_lab, Ry)
-            mf_y = _rot_dict(get_mf_normal(vy, dm_y), Ryd)
+            dm_y = _rot_dm(dm_lab, Ry)
+            mf_y = _rot_dict(_decouple(vy, dm_y), Ryd)
             mf = (MultiHopping(mf) + MultiHopping(mf_y)).get_dict()
-        mf = embed_normal(mf)
         if vd_active: # density-density: full normal+anomalous treatment
             mf_d = get_mf_bdg(vd, dm_lab)
             mf = (MultiHopping(mf) + MultiHopping(mf_d)).get_dict()
