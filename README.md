@@ -37,8 +37,13 @@ pip install pyqula[all]        # all of the above
 These are the minimum/recommended versions of several required libraries
 (also enforced in `pyproject.toml`)
 - numpy >= 2.1
-- numba >= 0.60.0
 - scipy >= 1.13.1
+- matplotlib >= 3.10.0
+- numba >= 0.60.0
+- multiprocess >= 0.70.19
+- dill >= 0.4.1
+- threadpoolctl >= 3.5.0
+- jax >= 0.8.1
 
 
 # Tutorials #
