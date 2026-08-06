@@ -270,8 +270,17 @@ needs and the original validation plan didn't cover:
      once in `dc_current`/on demand elsewhere.
    - `_batch_selfenergy` was computing `round(e,10)` cache keys twice per energy per call (once
      in the old `_prefetch_selfenergies_batch` to check for cache misses, again in `_cached_
-     selfenergy` to gather results) — `round()` alone was 214200 calls / ~22% of total wall
-     time in one profiled `dc_current` call. Now computed once and reused for both.
+     selfenergy` to gather results). cProfile attributed ~22% of total wall time to `round()`
+     itself (214200 calls); a follow-up (Claude Fable) review correctly flagged that figure as
+     cProfile's own per-call instrumentation overhead on a cheap C builtin, not real cost --
+     confirmed directly (`timeit`: 214200 bare `round()` calls cost ~30ms, not the ~300-500ms
+     cProfile reported). The fix is still real, though: an isolated, un-profiled A/B of the
+     old (double round+dict-lookup) vs new (deduped) gather logic over 2100 x 129-energy arrays
+     showed a genuine ~0.46s difference -- the cost was never `round()` in isolation, it was
+     doing the tuple-construction+dict-lookup pair *twice* per element, ~540000 times. Also
+     worth noting (missed in the first pass): this path only runs in `selfenergy_method=
+     "direct"`/fallback mode -- the default `"aaa"` path returns via `interp.call_batch(es)`
+     and never touches the round()-keyed cache at all.
 
    Net effect on the same representative case (`nmax_max=64`, `selfenergy_method="direct"`,
    cProfile'd, warmed-up numba): wall time ~2.4s -> ~2.1-2.5s (round() calls halved,
@@ -291,3 +300,44 @@ needs and the original validation plan didn't cover:
    still matters at this reduced per-call cost — not clearly true by default. Recommendation:
    ship the two safe fixes (already done), and only build the full incremental-splice cache if
    a concrete slow workload at this new, lower per-call baseline is identified.
+
+## Update: Claude Fable review found the "no concrete slow workload" framing was wrong, landed a cheap fix instead
+
+A follow-up review (Claude Fable, prompted with this document plus `current.py`/`boundary.py`)
+pushed back on the "shelve, no concrete slow workload" framing above: `current.py`'s own
+`build_shared_selfenergy` docstring already documents one (a single `finite_T_didv` call makes
+147 independent `dc_current`-family evaluations; `iv_curve` sweeps compound further), and the
+Σns≈16x-redundant-work estimate for a `nmax: 6->64` run is derivable directly from the fixed
+`nmax += 2` stepping, not just measured. It also correctly called out that the round()-cost
+figure above was cProfile-instrumentation-inflated (see the correction above) and proposed a
+cheap intermediate step this document hadn't considered: **grow `nmax` geometrically instead of
+by a fixed `+= 2` per adaptive step**, since the per-step cost (a full chain re-solve, no
+incremental reuse -- see the "FAILS" section above for why that's still true) scales with `ns`,
+so fewer, larger steps directly cuts the total redundant work with no new physics and no
+correctness risk beyond the existing `min_consecutive`/`nmax_max` safety net.
+
+**Implemented and validated** (`dc_current`'s new `nmax_growth=1.5` parameter, default on):
+`nmax = max(nmax+2, ceil(nmax*nmax_growth))` per adaptive step instead of `nmax += 2`, capped at
+`nmax_max` as before. `nmax_growth<=1` recovers the old fixed-step behavior exactly, for anyone
+who wants it.
+
+- **Correctness**: full `tests/keldysh` suite (67 tests) and `tests/transport/test_kappa_jax.py`
+  (9 tests) still pass. Directly compared `nmax_growth=1.0` vs `1.5` on two representative cases:
+  the deep-subgap worst case above (hits `nmax_max=64` without converging either way) returned
+  the identical value to 10 significant figures; a case that genuinely converges before the cap
+  (`voltage=0.6*delta`) returned values agreeing to 9 significant figures (`7.1554430529e-02` vs
+  `7.1554430520e-02`), both far inside `tol=1e-3`. The min_consecutive convergence guard is, if
+  anything, a *stronger* test with widely-spaced steps (a coincidental near-agreement between two
+  nearby small-Delta-nmax evaluations -- the failure mode that guard exists for -- is far less
+  likely between two much-more-different windows).
+- **Speed**: the same deep-subgap single-call benchmark: 2.76s (`nmax_growth=1.0`) -> 0.57s
+  (`nmax_growth=1.5`), ~4.8x. At sweep scale (the workload the "no concrete slow workload"
+  framing above missed): an 8-voltage `iv_curve` spanning deep-subgap to above-gap, same
+  junction, `nmax_max=64`: 83.3s -> 34.1s, ~2.4x, with bit-identical output across all 8
+  voltages.
+
+**Net effect**: the full incremental-splice cache (freeze/reuse deep interior chain state
+across nmax growth) remains shelved -- this cheaper fix captures a large fraction of its
+theoretical benefit (Σns redundancy down from ~16x to ~3x for the representative case) for a
+~15-line, zero-new-physics change, at a much smaller correctness-risk profile. Revisit the full
+splice cache only if a workload is still slow after this fix.

@@ -655,7 +655,7 @@ def build_shared_selfenergy(ht, vmax, nmax_max=40, delta=None, dv=None, **kwargs
 
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
                delta=None, min_consecutive=2, selfenergy_qtci=None,
-               selfenergy_method="aaa"):
+               selfenergy_method="aaa", nmax_growth=1.5):
     """Time-averaged (DC) current through a two-terminal junction under a
     bias `voltage`, computed with the Floquet-Keldysh formalism of
     San-Jose, Cayao, Prada, Aguado, NJP 15, 075019 (2013). The junction is
@@ -677,6 +677,26 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     limit (observed: nmax=60->62 already satisfies tol=1e-3 on its own,
     while the true limit only stabilizes to machine precision by
     nmax~64).
+
+    `nmax_growth` (default 1.5) grows each step geometrically
+    (`nmax = max(nmax+2, ceil(nmax*nmax_growth))`) instead of a fixed
+    `nmax += 2`: since `_floquet_green_functions` re-solves the whole
+    `2*nmax+1`-site chain from scratch at every step (no incremental
+    reuse across nmax -- see documentation/
+    keldysh_sideband_decimation_plan.md for why that idea was
+    investigated and shelved), a fixed increment makes the total
+    resolved-chain-size summed over every step scale like nmax_max^2 (a
+    deep-subgap case needing nmax~64 was measured to redo ~16x the work
+    of a single nmax=64 solve). Geometric growth cuts that to a small
+    constant factor (~3x for the same case) by visiting O(log nmax_max)
+    steps instead of O(nmax_max) -- at the cost of coarser sampling of
+    the nmax->current curve, which is not a robustness regression: the
+    min_consecutive agreement check (previous paragraph) is if anything a
+    *stronger* test of true convergence with widely-spaced steps, since a
+    coincidental near-agreement between two nearby, small-Delta-nmax
+    values (the failure mode min_consecutive guards against) is far less
+    likely between two much-more-different windows. Pass nmax_growth<=1
+    to recover the old fixed +=2 stepping exactly.
 
     `selfenergy_method` picks how lead self-energies are obtained:
     "aaa" (default) builds one aaatk.selfenergy_aaa.SelfenergyAAA
@@ -768,7 +788,7 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     streak = 0
     converged = False
     while nmax < nmax_max:
-        nmax += 2
+        nmax = min(nmax_max, max(nmax+2, int(np.ceil(nmax*nmax_growth))))
         cur = integral(nmax)
         denom = max(abs(cur), abs(prev), 1e-12)
         streak = streak+1 if abs(cur-prev)/denom < tol else 0
