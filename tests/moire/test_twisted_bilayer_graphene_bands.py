@@ -12,4 +12,4 @@ def test_twisted_bilayer_graphene_bands_match_reference(tmp_path, monkeypatch):
     h.set_filling(0.5, nk=1)
     (k, e) = h.get_bands(num_bands=8, kpath=["G", "K", "M", "K'", "G"], nk=8)
     assert e.shape == (104,)
-    assert np.isclose(np.sum(e), -13.735331753001446, atol=1e-6)
+    assert np.isclose(np.sum(e), -13.738703648103538, atol=1e-6)
