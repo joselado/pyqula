@@ -44,10 +44,12 @@ def current_bands(h,klist=None):
   fo = open("BANDS.OUT","w") # output file
   from . import current
   fj = current.current_operator(h) # function that generates the operator
-  for k in klist: # loop over kpoints
-    hk = hkgen(k) # get k-hamiltonian
-    jk = fj(k) # get current operator
-    evals,evecs = algebra.eigh(hk) # eigenvectors and eigenvalues
+  from .htk.eigenvectors import peigh
+  hks = np.array([hkgen([k,0.,0.]) for k in klist],dtype=np.complex128) # H(k) batch
+  es_batch,ws_batch = peigh(hks) # batched numba eigh
+  for ik,k in enumerate(klist): # loop over kpoints
+    jk = fj([k,0.,0.]) # get current operator
+    evals,evecs = es_batch[ik],ws_batch[ik] # eigenvectors and eigenvalues
     evecs = np.transpose(evecs) # transpose eigenvectors
     for (e,w) in zip(evals,evecs): # do the loop
         waw = braket_wAw(w,jk).real # product

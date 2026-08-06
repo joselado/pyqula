@@ -209,20 +209,18 @@ def dos2d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
       if info: print("Done",energy)
     write_dos(energies,ys) # write in file
     return
-  else: # do not use green function    
-    import scipy.linalg as lg
+  else: # do not use green function
     kxs = np.linspace(0.,1.,nk)
     kys = np.linspace(0.,1.,nk)
     hkgen= h.get_hk_gen() # get hamiltonian generator
-    ys = energies*0.
     weight = 1./(nk*nk)
-    for ix in kxs:
-      for iy in kys:
-        k = np.array([ix,iy,0.]) # create kpoint
-        hk = hkgen(k) # get hk hamiltonian
-        evals = lg.eigvalsh(hk) # get eigenvalues
-        ys += weight*calculate_dos(evals,energies,delta) # add this contribution
-      if info: print("Done",ix)
+    from .htk.eigenvectors import peigvalsh
+    ks = np.array([[ix,iy,0.] for ix in kxs for iy in kys]) # all kpoints
+    mats = np.array([hkgen(k) for k in ks],dtype=np.complex128) # H(k) batch
+    es_batch = peigvalsh(mats) # batched numba eigh, shape (nk*nk,n)
+    es = es_batch.reshape(es_batch.shape[0]*es_batch.shape[1]) # flatten
+    ys = weight*calculate_dos(es,energies,delta) # add all contributions
+    if info: print("Done")
     write_dos(energies,ys) # write in file
     return
 
@@ -237,17 +235,16 @@ def dos1d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
   ys = [] # density of states
   if delta is None: # pick a good delta value
     delta = 0.1*(max(energies) - min(energies))/len(energies)
-  if True: # do not use green function    
-    import scipy.linalg as lg
+  if True: # do not use green function
     kxs = np.linspace(0.,1.,nk)
     hkgen= h.get_hk_gen() # get hamiltonian generator
-    ys = energies*0.
     weight = 1./(nk)
-    for ix in kxs:
-      hk = hkgen(ix) # get hk hamiltonian
-      evals = lg.eigvalsh(hk) # get eigenvalues
-      ys += weight*calculate_dos(evals,energies,delta) # add this contribution
-    if info: print("Done",ix)
+    from .htk.eigenvectors import peigvalsh
+    mats = np.array([hkgen([ix,0.,0.]) for ix in kxs],dtype=np.complex128) # H(k) batch
+    es_batch = peigvalsh(mats) # batched numba eigh, shape (nk,n)
+    es = es_batch.reshape(es_batch.shape[0]*es_batch.shape[1]) # flatten
+    ys = weight*calculate_dos(es,energies,delta) # add all contributions
+    if info: print("Done")
     write_dos(energies,ys) # write in file
     return
 

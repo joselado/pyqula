@@ -35,18 +35,22 @@ def boolean_fermi_surface(h,write=True,output_file="BOOL_FERMI_MAP.OUT",
     # setup a reasonable value for delta
     if delta is None:
       delta = 8./np.max(np.abs(h.intra))/nk
+    rs = [] # real space vectors
     for x in kxs:
       for y in kxs:
-        r = np.array([x,y,0.]) # real space vectors
-        k = R@r # change of basis
-        hk = hk_gen(k) # get hamiltonian
-        evals = lg.eigvalsh(hk) # diagonalize
-        de = np.abs(evals - e) # difference with respect to fermi
-        de = de[de<delta] # energies close to fermi
-        if len(de)>0: kdos.append(1.0) # add to the list
-        else: kdos.append(0.0) # add to the list
+        rs.append([x,y,0.])
         kxout.append(x)
         kyout.append(y)
+    rs = np.array(rs) # real space vectors
+    ks = np.array([R@r for r in rs]) # change of basis
+    from .htk.eigenvectors import peigvalsh
+    hks = np.array([hk_gen(k) for k in ks],dtype=np.complex128) # H(k) batch
+    es_batch = peigvalsh(hks) # batched numba eigh, shape (nk*nk,n)
+    for evals in es_batch: # loop over kpoints
+      de = np.abs(evals - e) # difference with respect to fermi
+      de = de[de<delta] # energies close to fermi
+      if len(de)>0: kdos.append(1.0) # add to the list
+      else: kdos.append(0.0) # add to the list
     if write:  # optionally, write in file
       f = open(output_file,"w") 
       for (x,y,d) in zip(kxout,kyout,kdos):
@@ -86,25 +90,22 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
   hk_gen = h.get_hk_gen() # gets the function to generate h(k)
   kxs = np.linspace(-nsuper,nsuper,nk)+k0[0]  # generate kx
   kys = np.linspace(-nsuper,nsuper,nk)+k0[1]  # generate ky
-  kdos = [] # empty list
-  kxout = []
-  kyout = []
   if reciprocal: R = h.geometry.get_k2K() # get matrix
   else:  R = np.array(np.identity(3)) # get identity
   # setup a reasonable value for delta
   # setup the operator
   operator = operator2list(operator) # convert into a list
   fs.rmglob(output_file+"*") # delete previous files
-  fo = [open(output_file+"_"+str(i)+".OUT","w") for i in nindex] # files        
-  for x in kxs:
-    for y in kxs:
-#      print("Doing",x,y)
-      r = np.array([x,y,0.]) # real space vectors
-      k = np.array(R)@r # change of basis
-#      print(k)
-      hk = hk_gen(k) # get hamiltonian
-      if not h.is_sparse: evals,waves = lg.eigh(hk) # eigenvalues
-      else: evals,waves = slg.eigsh(hk,k=max(np.abs(nindex))*2,sigma=0.0,
+  fo = [open(output_file+"_"+str(i)+".OUT","w") for i in nindex] # files
+  xys = [(x,y) for x in kxs for y in kxs] # all kpoint pairs
+  ks = np.array([np.array(R)@np.array([x,y,0.]) for (x,y) in xys]) # change of basis
+  if not h.is_sparse: # dense: batch every k-point's H(k) into one numba eigh call
+    from .htk.eigenvectors import peigh
+    hks = np.array([hk_gen(k) for k in ks],dtype=np.complex128) # H(k) batch
+    es_batch,ws_batch = peigh(hks) # batched numba eigh
+  for ik,(x,y) in enumerate(xys):
+      if not h.is_sparse: evals,waves = es_batch[ik],ws_batch[ik] # eigenvalues
+      else: evals,waves = slg.eigsh(hk_gen(ks[ik]),k=max(np.abs(nindex))*2,sigma=0.0,
              tol=arpack_tol,which="LM") # eigenvalues
       waves = waves.transpose() # transpose
       epos,wfpos = [],[] # positive
@@ -116,9 +117,10 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
         else: # negative
           eneg.append(e)
           wfneg.append(w)
-      # now sort the waves
-      wfpos = [yy for (xx,yy) in sorted(zip(epos,wfpos))] 
-      wfneg = [yy for (xx,yy) in sorted(zip(-np.array(eneg),wfneg))] 
+      # now sort the waves (sort key is the energy only, so degenerate
+      # eigenvalues don't fall through to comparing eigenvector arrays)
+      wfpos = [yy for (xx,yy) in sorted(zip(epos,wfpos),key=lambda p: p[0])]
+      wfneg = [yy for (xx,yy) in sorted(zip(-np.array(eneg),wfneg),key=lambda p: p[0])]
       epos = sorted(epos)
       eneg = -np.array(sorted(-np.array(eneg)))
       for (i,j) in zip(nindex,range(len(nindex))): # loop over desired bands
@@ -152,22 +154,21 @@ def ev2d(h,nk=50,nsuper=1,reciprocal=False,
   kxs = np.linspace(-nsuper,nsuper,nk,endpoint=True)+k0[0]  # generate kx
   kys = np.linspace(-nsuper,nsuper,nk,endpoint=True)+k0[1]  # generate ky
   if kreverse: kxs,kys = -kxs,-kys
-  kdos = [] # empty list
-  kxout = []
-  kyout = []
   if reciprocal: R = h.geometry.get_k2K() # get matrix
   else:  R = np.array(np.identity(3)) # get identity
   # setup the operator
   operator = operator2list(operator) # convert into a list
   fo = open("EV2D.OUT","w") # open file
-  for x in kxs:
-    for y in kxs:
+  xys = [(x,y) for x in kxs for y in kxs] # all kpoint pairs
+  ks = np.array([R@np.array([x,y,0.]) for (x,y) in xys]) # change of basis
+  if not h.is_sparse: # dense: batch every k-point's H(k) into one numba eigh call
+    from .htk.eigenvectors import peigh
+    hks = np.array([hk_gen(k) for k in ks],dtype=np.complex128) # H(k) batch
+    es_batch,ws_batch = peigh(hks) # batched numba eigh
+  for ik,(x,y) in enumerate(xys):
       print("Doing",x,y)
-      r = np.array([x,y,0.]) # real space vectors
-      k = R@r # change of basis
-      hk = hk_gen(k) # get hamiltonian
-      if not h.is_sparse: evals,waves = lg.eigh(hk) # eigenvalues
-      else: evals,waves = slg.eigsh(hk,k=max(nindex)*2,sigma=0.0,
+      if not h.is_sparse: evals,waves = es_batch[ik],ws_batch[ik] # eigenvalues
+      else: evals,waves = slg.eigsh(hk_gen(ks[ik]),k=max(nindex)*2,sigma=0.0,
              tol=arpack_tol,which="LM") # eigenvalues
       waves = waves.transpose() # transpose
       eneg,wfneg = [],[] # negative
@@ -180,7 +181,7 @@ def ev2d(h,nk=50,nsuper=1,reciprocal=False,
           c = sum([braket_wAw(w,op) for w in wfneg]).real # expectation value
           fo.write(str(c)+"  ") # write in file
       fo.write("\n") # write in file
-  fo.close() # close file  
+  fo.close() # close file
 
 
 
@@ -387,17 +388,14 @@ def eigenvalues_kmesh(h,nk=20):
     """Get the eigenvalues in a kmesh"""
     if h.dimensionality!=2: raise # only for 2d
     ne = h.intra.shape[0] # number of energies per k-point
-    es = np.zeros((nk,nk,ne)) # array for the energies 
     hkgen = h.get_hk_gen() # get the generator
     kx = np.linspace(0.,1.,nk,endpoint=False)
     ky = np.linspace(0.,1.,nk,endpoint=False)
-    for i in range(nk):
-      ik = kx[i] # kx point   
-      for j in range(nk):
-        jk = ky[j] # ky point
-        hk = hkgen([ik,jk]) # get the matrix
-        ei = algebra.eigvalsh(hk) # get the energies
-        es[i,j,:] = ei # store energies
+    from .htk.eigenvectors import peigvalsh
+    mats = np.array([hkgen([ik,jk]) for ik in kx for jk in ky],
+            dtype=np.complex128) # H(k) batch, ik outer, jk inner
+    es_batch = peigvalsh(mats) # batched numba eigh, shape (nk*nk,ne)
+    es = es_batch.reshape(nk,nk,ne) # reshape to match original layout
     return es # return all the energies
 
 
