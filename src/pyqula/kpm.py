@@ -68,33 +68,17 @@ def python_kpm_moments_clear(v,m,n=100):
 
 
 
-def get_momentsA(v,m,n=100,A=None):
-    """ Get the first n moments of a certain vector
-    using the Chebychev recursion relations"""
-    if A is None: raise # only for a certain A
-    mus = np.array([0.0j for i in range(n)]) # empty arrray for the moments
-    v = algebra.matrix2vector(v) # zero vector
-    A = csc_matrix(A) # turn sparse
-    m = csc_matrix(m) # turn sparse
-    return get_momentsA_jit(v,m,n,A,mus)
+from .kpmtk.kpmnumba import kpm_moments_A_batch as get_moments_A_batch
 
-#@jit(nopython=True)
-def get_momentsA_jit(v,m,n,A,mus):
-    am = v*1.0
-    a = m@v  # vector number 1
-    bk = np.conjugate(v).dot(A@v) 
-    bk1 = np.conjugate(a).dot(A@v)
-    mus[0] = bk  # mu0
-    mus[1] = bk1 # mu1
-    for i in range(2,n): 
-        ap = 2.*m@a - am # recursion relation
-        bk = np.conjugate(ap).dot(A@v) 
-        mus[i] = bk
-        am = a.copy() # new variables
-        a = ap.copy() # new variables
-    mu0 = mus[0] # first
-    mu1 = mus[1] # second
-    return mus
+
+def get_momentsA(v,m,n=100,A=None):
+    """ Get the first n moments of a certain vector, weighted by operator
+    A, using the Chebychev recursion relations (see get_moments_A_batch
+    for the batched numba implementation)"""
+    if A is None: raise # only for a certain A
+    v = algebra.matrix2vector(v) # zero vector
+    mus = get_moments_A_batch(np.array([v]),m,A,n=n)
+    return mus[0]
 
 
 from .kpmtk.kpmnumba import kpm_moments_ij as get_moments_ij
@@ -201,48 +185,35 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
     vs = vs/np.sqrt(np.sum(np.conjugate(vs)*vs,axis=1))[:,None] # normalize each row
     mus = get_moments_batch(vs,m,n=n) # (ntries,2n) moments
     return np.mean(mus,axis=0)
-  else: # operator-weighted moments: not batched, dispatch across processes
-    def pfun(x):
-        v = fun()
-        v = v/np.sqrt(v.dot(np.conjugate(v))) # normalize the vector
-#        mus = get_moments_vivj(m,v,operator@v,n=2*n)
-        mus = get_momentsA(v,m,n=2*n,A=operator) # get the chebychev moments
-        return mus
-    from . import parallel
-    out = parallel.pcall(pfun,range(ntries))
-    mus = np.zeros(out[0].shape,dtype=np.complex128)
-    for o in out: mus = mus + o # add contribution
-    return mus/ntries
+  else: # operator-weighted moments: batch the tries, one vector per numba thread
+    vs = np.array([fun() for i in range(ntries)])
+    vs = vs/np.sqrt(np.sum(np.conjugate(vs)*vs,axis=1))[:,None] # normalize each row
+    mus = get_moments_A_batch(vs,m,operator,n=2*n) # (ntries,2n) moments
+    return np.mean(mus,axis=0)
 
 
 
 def random_trace_A(m_in,ntries=20,n=200,A=None):
-  """ Calculates local DOS using the KPM"""
+  """ Calculates local DOS using the KPM, batching the tries over numba
+  threads (see get_moments_A_batch)"""
   m = csc(m_in) # saprse matrix
   nd = m.shape[0] # length of the matrix
-  mus = np.array([0.0j for j in range(n)])
-  for i in range(ntries): # loop over tries
-    #v = rand.random(nd) - .5
-    v = rand.random(nd) -.5 + 1j*rand.random(nd) -.5j
-    v = v/np.sqrt(v.dot(v)) # normalize the vector
-    v = csc(v).transpose()
-    mus += get_momentsA(v,m,n=n,A=A) # get the chebychev moments
-  return mus/ntries
+  vs = rand.random((ntries,nd)) -.5 + 1j*rand.random((ntries,nd)) -.5j
+  vs = vs/np.sqrt(np.sum(np.conjugate(vs)*vs,axis=1))[:,None] # normalize each row
+  mus = get_moments_A_batch(vs,m,A,n=n) # (ntries,n) moments
+  return np.mean(mus,axis=0)
 
 
 
-def full_trace_A(m_in,ntries=20,n=200,A=None):
-  """ Calculates local DOS using the KPM"""
+def full_trace_A(m_in,n=200,A=None):
+  """ Calculates full trace using the KPM, one site-basis vector per
+  numba thread (see get_moments_A_batch)"""
   m = csc(m_in) # saprse matrix
   nd = m.shape[0] # length of the matrix
-  mus = np.array([0.0j for j in range(2*n)])
-  for i in range(nd): # loop over tries
-    #v = rand.random(nd) - .5
-    v = rand.random(nd)*0.
-    v[i] = 1.0 # vector only in site i 
-    v = csc(v).transpose()
-    mus += get_momentsA(v,m,n=n,A=A) # get the chebychev moments
-  return mus/nd
+  from .kpmtk.ldos import index2vector
+  vs = np.array([index2vector(i,nd) for i in range(nd)])
+  mus = get_moments_A_batch(vs,m,A,n=n) # (nd,n) moments, one row per site
+  return np.sum(mus,axis=0)/nd
 
 
 

@@ -2,12 +2,6 @@
 from .. import meanfield
 from .. import check
 import numpy as np
-from numba import jit
-
-def sum_contributions(a,b,vav,vbv,g,inds):
-    """Compute all the contributions to the mean field"""
-    dirs = [] # empty list
-
 
 def generate_index2vec(self):
     """Generate the index2vec variables"""

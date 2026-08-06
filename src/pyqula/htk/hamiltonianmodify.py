@@ -1,23 +1,17 @@
 # function to modify the Hamiltonian matrices according to criteria
+import numpy as np
 
 
 def remove_hopping(self,f):
     """Remove hoppings to site according to criteria from the geometry"""
     g = self.geometry
+    remove = np.array([f(g.r[i]) for i in range(len(g.r))]) # sites to remove
+    if self.has_spin and not self.has_eh: mask = np.repeat(remove,2) # spin-doubled orbitals
+    elif not self.has_spin and not self.has_eh: mask = remove
+    else: raise
     def fm(m): # function to modify matrices
-        for i in range(len(g.r)): # loop over sites
-            if f(g.r[i]): # if this site is removed
-                if self.has_spin and not self.has_eh:
-                    for j in range(m.shape[0]):
-                        m[2*i,j] = 0.
-                        m[2*i+1,j] = 0.
-                        m[j,2*i+1] = 0.
-                        m[j,2*i] = 0.
-                elif not self.has_spin and not self.has_eh:
-                    for j in range(m.shape[0]):
-                        m[j,i] = 0.
-                        m[i,j] = 0.
-                else: raise
+        m[mask,:] = 0.
+        m[:,mask] = 0.
         return m
     self = self.copy()
     self.modify_hamiltonian_matrices(fm)

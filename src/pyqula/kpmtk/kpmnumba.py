@@ -256,6 +256,100 @@ def python_kpm_moments_batch_real(vs,data,row,col,n=100):
 
 
 
+def kpm_moments_A_batch(vs,m,A,n=100,kpm_prec="double",
+        kpm_cpugpu="CPU",**kwargs):
+    """Return the operator-weighted moments mus[k,i] = <T_i(m) v_k|A|v_k>
+    for a batch of starting vectors sharing the same matrix m and operator
+    A, one vector per numba thread. vs has shape (nvec,nsites); returns an
+    (nvec,n) array of moments. A@v_k depends only on v_k, not on the
+    Chebyshev iterate T_i(m) v_k, so it is computed once per vector via a
+    single sparse-dense matmul up front instead of being recomputed inside
+    the O(n) recursion loop (the prior per-vector implementation in
+    kpm.get_momentsA_jit recomputed A@v on every iteration)."""
+    from scipy.sparse import coo_matrix, csc_matrix
+    mo = coo_matrix(m)
+    vs = np.asarray(vs)
+    Ac = csc_matrix(A)
+    Avs = np.asarray(Ac@vs.T).T # (nvec,nsites), A@v for each starting vector
+    if mo.data.size == 0:
+        is_real = np.max(np.abs(vs.imag))<1e-6 and np.max(np.abs(Avs.imag))<1e-6
+    else:
+        is_real = (np.max(np.abs(mo.data.imag))<1e-6 and np.max(np.abs(vs.imag))<1e-6
+                and np.max(np.abs(Avs.imag))<1e-6)
+    if is_real:
+        dtype = _REAL_DTYPES[kpm_prec]
+        vs = np.array(vs.real,dtype=dtype)
+        Avs = np.array(Avs.real,dtype=dtype)
+        data = np.array(mo.data.real,dtype=dtype)
+    else:
+        dtype = _COMPLEX_DTYPES[kpm_prec]
+        vs = np.array(vs,dtype=dtype)
+        Avs = np.array(Avs,dtype=dtype)
+        data = np.array(mo.data,dtype=dtype)
+    if kpm_cpugpu=="CPU":
+        if is_real: mus = python_kpm_momentsA_batch_real(vs,Avs,data,mo.row,mo.col,n=n)
+        else: mus = python_kpm_momentsA_batch_complex(vs,Avs,data,mo.row,mo.col,n=n)
+    else: raise ValueError("kpm_cpugpu must be 'CPU', got "+str(kpm_cpugpu))
+    return np.array(mus,dtype=np.complex128)
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def python_kpm_momentsA_batch_complex(vs,Avs,data,row,col,n=100):
+    """See kpm_moments_A_batch. Av is precomputed per vector and reused
+    across all n iterations of the Chebyshev recursion."""
+    nvec = vs.shape[0]
+    nsites = vs.shape[1]
+    nnz = len(data)
+    mus = np.zeros((nvec,n),dtype=vs.dtype)
+    for iv in prange(nvec):
+        v = vs[iv]
+        Av = Avs[iv]
+        am = v.copy()
+        a = Mtimesv(data,row,col,v)
+        bk = np.sum(np.conjugate(v)*Av)
+        bk1 = np.sum(np.conjugate(a)*Av)
+        mus[iv,0] = bk
+        mus[iv,1] = bk1
+        ap = np.empty_like(v)
+        for i in range(2,n):
+            for s in range(nsites): ap[s] = -am[s]
+            for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+            bk = a[0]-a[0] # zero of a's dtype
+            for s in range(nsites):
+                bk += np.conjugate(ap[s])*Av[s]
+            mus[iv,i] = bk
+            am,a,ap = a,ap,am # rotate the three buffers, no allocation
+    return mus
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def python_kpm_momentsA_batch_real(vs,Avs,data,row,col,n=100):
+    """Real-arithmetic counterpart of python_kpm_momentsA_batch_complex."""
+    nvec = vs.shape[0]
+    nsites = vs.shape[1]
+    nnz = len(data)
+    mus = np.zeros((nvec,n),dtype=vs.dtype)
+    for iv in prange(nvec):
+        v = vs[iv]
+        Av = Avs[iv]
+        am = v.copy()
+        a = Mtimesv(data,row,col,v)
+        bk = np.sum(v*Av)
+        bk1 = np.sum(a*Av)
+        mus[iv,0] = bk
+        mus[iv,1] = bk1
+        ap = np.empty_like(v)
+        for i in range(2,n):
+            for s in range(nsites): ap[s] = -am[s]
+            for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+            bk = a[0]-a[0]
+            for s in range(nsites):
+                bk += ap[s]*Av[s]
+            mus[iv,i] = bk
+            am,a,ap = a,ap,am
+    return mus
+
+
 def kpm_moments_vivj(m,vi,vj,n=100,**kwargs):
     """Return the local moments"""
     from scipy.sparse import coo_matrix
