@@ -127,51 +127,21 @@ def _prepare_system(ht):
     return hlist, proje, projh, dim
 
 
-def _cached_selfenergy(ht, e, lead, delta, cache, selfenergy_qtci=None):
-    """Static lead self-energies only depend on (lead, energy); memoize them
-    since the same energies recur across sideband/quadrature/adaptive-nmax
-    evaluations within a single dc_current call, and green_renormalization
-    (the underlying Sancho-Rubio iteration) is not cheap. `numba=True`
-    routes it through the compiled Sancho-Rubio kernel (greentk.rg.
-    green_renormalization_jit) instead of the plain-Python default used
-    elsewhere in the library -- this call site alone recomputes lead
-    selfenergies tens of thousands of times per dc_current call, where the
-    per-call Python overhead dominates; the tolerance is the same as the
-    Python path (see green_renormalization_jit), so this only changes
-    speed, never the result.
-
-    `selfenergy_qtci`, if given, is a {lead: SelfenergyQTCI} dict (see
-    qtcitk.selfenergy_qtci and keldyshtk.current.build_selfenergy_qtci):
-    an interpolant built once (from far fewer true solves) and evaluated
-    here instead of a fresh solve -- this dict-based memoization cache is
-    local to one dc_current call, but the interpolant itself can be built
-    once and shared across many dc_current calls (e.g. both sides of
-    keldysh_didv's finite-difference derivative), unlike this cache."""
-    key = (lead, round(e, 10))
-    out = cache.get(key)
-    if out is None:
-        if selfenergy_qtci is not None and lead in selfenergy_qtci:
-            out = selfenergy_qtci[lead](e)
-        else:
-            out = algebra.todense(ht.get_selfenergy(e, lead=lead, delta=delta,
-                                                     pristine=True, numba=True))
-        cache[key] = out
-    return out
-
-
-def _prefetch_selfenergies_batch(ht, es, lead, delta, cache):
+def _prefetch_selfenergies_batch(ht, es, lead, delta, cache, keys):
     """Batch-compute every not-yet-cached selfenergy of one lead across a
     whole set of sideband energies at once (see transporttk/selfenergy.py:
     get_selfenergy_batch and greentk/rg.py:green_renormalization_jit_batch)
     instead of one sideband at a time: for a fixed quasienergy, the
     `2*nmax+1` sidebands only differ in energy for the same fixed lead, so
     they are embarrassingly parallel and are run over a numba `prange`
-    loop across threads. `_cached_selfenergy` below then just hits the
-    cache this fills in; the tolerance matches the non-batched path
-    exactly, so this only changes speed, never the result."""
+    loop across threads. `keys[i]` is the caller's precomputed `(lead,
+    round(es[i],10))` cache key for `es[i]` -- passed in rather than
+    recomputed here since the caller (_batch_selfenergy) needs the same
+    keys again afterward to gather results, and round() was measured to
+    be a meaningful fraction (~20%) of a dc_current call's total time
+    (214200 calls in one profiled case) when computed twice per energy."""
     if not hasattr(ht, "get_selfenergy_batch"):
-        return  # e.g. LocalProbe: fall back to per-energy _cached_selfenergy
-    keys = [(lead, round(e, 10)) for e in es]
+        return  # e.g. LocalProbe: fall back to per-energy solves in the caller
     miss = [i for i, k in enumerate(keys) if k not in cache]
     if not miss: return
     me = np.array([es[i] for i in miss])
@@ -180,17 +150,111 @@ def _prefetch_selfenergies_batch(ht, es, lead, delta, cache):
         cache[keys[i]] = algebra.todense(out)
 
 
-def _chain_sites(nmax):
-    """The two independent 1D chains the (block, sideband) Floquet lattice
-    decomposes into (see module docstring): each is a list of `ns =
-    2*nmax+1` (block, n) pairs, one entry per sideband n, in physical
-    chain order (consecutive entries are the actual nearest-neighbor
-    bonds). The two chains partition the block-0 sites between them --
-    together they cover every sideband n exactly once at block 0."""
-    ns = 2*nmax+1
-    chainA = [(0 if k % 2 == 0 else 1, -nmax+k) for k in range(ns)]
-    chainB = [(1 if k % 2 == 0 else 0, -nmax+k) for k in range(ns)]
-    return chainA, chainB
+def _batch_selfenergy(ht, es, lead, delta, cache, selfenergy_qtci=None):
+    """Self-energy of `lead` at every energy in `es` (1D array), returned
+    as one (len(es),dim,dim) array -- replaces a Python loop of per-energy
+    calls (each a dict lookup + round() cache key + dispatch) with a
+    single batched call wherever the underlying evaluator supports one.
+    This matters once the per-energy evaluation itself is cheap (an AAA
+    interpolant: ~2us) -- profiling a dc_current call showed the
+    surrounding Python-level per-site dispatch, not that evaluation, had
+    become the dominant cost (see _floquet_green_functions's docstring).
+
+    An AAA interpolant (aaatk.selfenergy_aaa.SelfenergyAAA, `selfenergy_
+    qtci`'s default contents -- see dc_current's `selfenergy_method="aaa"`)
+    exposes `call_batch`, evaluating every energy in one compiled call;
+    anything else sharing the `interp(energy)->matrix` contract (e.g. a
+    qtcitk.selfenergy_qtci.SelfenergyQTCI interpolant, which only defines
+    scalar __call__) falls back to a plain Python loop over it -- still
+    correct, just without the batching win.
+
+    With no interpolant at all (`selfenergy_qtci` not covering `lead`),
+    `_prefetch_selfenergies_batch` fills `cache` with one batched Sancho-
+    Rubio solve per lead where available (falls back to solving lazily,
+    one at a time below, for e.g. a LocalProbe -- see that function)."""
+    es = np.asarray(es)
+    if selfenergy_qtci is not None and lead in selfenergy_qtci:
+        interp = selfenergy_qtci[lead]
+        if hasattr(interp, "call_batch"):
+            return interp.call_batch(es)
+        return np.array([interp(e) for e in es], dtype=np.complex128)
+    keys = [(lead, round(e, 10)) for e in es]
+    _prefetch_selfenergies_batch(ht, es, lead, delta, cache, keys)
+    out = []
+    for i, k in enumerate(keys):
+        v = cache.get(k)
+        if v is None:
+            v = algebra.todense(ht.get_selfenergy(es[i], lead=lead, delta=delta,
+                                                    pristine=True, numba=True))
+            cache[k] = v
+        out.append(v)
+    return np.array(out, dtype=np.complex128)
+
+
+@jit(nopython=True, cache=True)
+def _assemble_chain_jit(es, sigR0, sigR1, hii0, hii1, ve, vhd, delta,
+                         temperature, start_block):
+    """Build one Floquet chain's per-site (Es, SigLess, taus) arrays --
+    the inputs _rgf_chain_jit needs -- plus its block-0-owned (sigL_less,
+    sigL_a) entries, directly from precomputed self-energy arrays. This
+    replaces a Python-level loop over (block,sideband) sites that called
+    dagger()/_fermi_scalar()/a dict-cache lookup once per site: profiling
+    a dc_current call on a deep-subgap junction (large nmax) found that
+    loop's own body -- not the RGF sweep, not the self-energy solve --
+    was the dominant cost (~58% of total wall time), because per-call
+    Python/numba dispatch overhead, paid ~150000 times per call, exceeded
+    the actual arithmetic once self-energies were already cheap to obtain
+    (see aaatk/selfenergy_aaa.py's _eval_matrix_batch_jit docstring for
+    the same finding from the self-energy side). Compiling the whole
+    per-site assembly removes that overhead instead of only the self-
+    energy evaluation's own share of it.
+
+    `sigR0`/`sigR1` are (ns,dim,dim) arrays of each lead's self-energy at
+    every quasienergy `es[k]`, shared by BOTH chains: chainA and chainB
+    visit the exact same sideband energies `quasienergy+n*voltage` (see
+    the module docstring's chain decomposition), just with which block
+    owns each site swapped between them, so both chains index into the
+    same two precomputed arrays rather than needing their own. `hii0`/
+    `hii1` are the two blocks' onsite Hamiltonians, `ve`/`vhd` the AC bond
+    hopping from a block-0 site to the next (electron-projected) and from
+    a block-1 site to the next (hole-projected, dagger'd). `start_block`
+    (0 or 1) is which block owns site k=0; block ownership then alternates
+    with k, matching the n=-nmax+k, b=(start_block if k even else
+    1-start_block) convention the removed _chain_sites helper used to
+    build explicitly."""
+    ns = es.shape[0]
+    dim = hii0.shape[0]
+    iden = np.eye(dim, dtype=np.complex128)
+    Es = np.empty((ns, dim, dim), dtype=np.complex128)
+    SigLess = np.empty((ns, dim, dim), dtype=np.complex128)
+    taus = np.empty((ns-1, dim, dim), dtype=np.complex128)
+    sigL_less = np.empty((ns, dim, dim), dtype=np.complex128)
+    sigL_a = np.empty((ns, dim, dim), dtype=np.complex128)
+    for k in range(ns):
+        e = es[k]
+        is_block0 = (k % 2 == 0) if start_block == 0 else (k % 2 == 1)
+        if is_block0:
+            sig_r = sigR0[k]
+            hii = hii0
+        else:
+            sig_r = sigR1[k]
+            hii = hii1
+        sig_r_dag = np.conjugate(sig_r).T
+        Es[k] = (e+1j*delta)*iden - hii - sig_r
+        if temperature == 0.:
+            if e < 0.: f = 1.0
+            elif e > 0.: f = 0.0
+            else: f = 0.5
+        else:
+            f = 1.0/(1.0+np.exp(e/temperature))
+        sl = -f*(sig_r - sig_r_dag)
+        SigLess[k] = sl
+        if is_block0:
+            sigL_less[k] = sl
+            sigL_a[k] = sig_r_dag
+        if k < ns-1:
+            taus[k] = ve if is_block0 else vhd
+    return Es, SigLess, taus, sigL_less, sigL_a
 
 
 @jit(nopython=True, cache=True)
@@ -271,98 +335,121 @@ def _rgf_chain_jit(Es, taus, SigLess):
     return G, Gless
 
 
+def _prepare_chain_consts(system):
+    """The per-`system` (not per-quasienergy/nmax) pieces of a Floquet
+    chain -- the AC-bond hoppings `ve`/`vhd` and the two blocks' onsite
+    Hamiltonians `hii0`/`hii1` -- factored out of `_floquet_green_
+    functions` so they can be computed ONCE per `dc_current` call (like
+    `system` itself) instead of rebuilt (a `todense`/projector matmul
+    each) on every one of its tens-to-hundreds of quasienergy x nmax-step
+    calls: profiling a slow deep-subgap case found this rebuild was a
+    real, avoidable share of `_floquet_green_functions`'s own per-call
+    overhead once the self-energy and chain-assembly costs it originally
+    targeted were already batched away."""
+    hlist, proje, projh, dim = system
+    v0 = algebra.todense(hlist[1][0])  # hopping <lead1 unit cell|H|lead0 unit cell>
+    ve = (proje@v0).astype(np.complex128)  # electron-projected AC bond, sideband n -> n+1
+    vh = projh@v0  # hole-projected AC bond, couples sideband n -> n-1
+    vhd = dagger(vh).astype(np.complex128)
+    hii0 = algebra.todense(hlist[0][0]).astype(np.complex128)
+    hii1 = algebra.todense(hlist[1][1]).astype(np.complex128)
+    return ve, vhd, hii0, hii1, dim
+
+
 def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
                               temperature, cache, system,
-                              selfenergy_qtci=None):
+                              selfenergy_qtci=None, chain_consts=None):
     """Retarded and lesser Green's function diagonal blocks at every
     block-0 (left-lead-type) sideband, together with the left lead's
     lesser/advanced self-energies (needed by the current trace). Builds
-    the two decoupled Floquet chains (_chain_sites) directly instead of
-    assembling the dense (2*ns*dim)^2 Hamiltonian, and solves each with
-    the O(ns) recursive sweep (_rgf_chain_jit) -- exact, not an
-    approximation (see module docstring). `system` is the (hlist, proje,
-    projh, dim) tuple from `_prepare_system(ht)`, precomputed once per
-    `dc_current` call by the caller: it only depends on `ht` (never on
-    quasienergy, voltage, nmax or delta), but this function is called once
-    per quadrature point of the current integral, so recomputing it here
-    -- which involves building electron/hole projector operators over
-    `ht` and extracting local Hamiltonian blocks -- would redo the same
-    work tens to hundreds of times per `dc_current` call for no benefit."""
-    hlist, proje, projh, dim = system
-    v0 = algebra.todense(hlist[1][0])  # hopping <lead1 unit cell|H|lead0 unit cell>
-    ve = proje@v0  # electron-projected AC bond, couples sideband n -> n+1
-    vh = projh@v0  # hole-projected AC bond, couples sideband n -> n-1
-    vhd = dagger(vh)  # precomputed once, not per-site (it's a loop constant)
-    hii = [algebra.todense(hlist[0][0]), algebra.todense(hlist[1][1])]
-    iden = np.eye(dim, dtype=np.complex128)
-    ns = 2*nmax+1
+    the two decoupled Floquet chains directly instead of assembling the
+    dense (2*ns*dim)^2 Hamiltonian, and solves each with the O(ns)
+    recursive sweep (_rgf_chain_jit) -- exact, not an approximation (see
+    module docstring). `system` is the (hlist, proje, projh, dim) tuple
+    from `_prepare_system(ht)`, precomputed once per `dc_current` call by
+    the caller: it only depends on `ht` (never on quasienergy, voltage,
+    nmax or delta), but this function is called once per quadrature point
+    of the current integral, so recomputing it here -- which involves
+    building electron/hole projector operators over `ht` and extracting
+    local Hamiltonian blocks -- would redo the same work tens to hundreds
+    of times per `dc_current` call for no benefit.
 
-    es = [quasienergy+(isb-nmax)*voltage for isb in range(ns)]
-    if selfenergy_qtci is None:
-        # batch-prefetching amortizes the per-call solve cost across the
-        # sideband set (see _prefetch_selfenergies_batch); with a qtci
-        # interpolant there's no solve left to amortize, only a cheap
-        # tensor-train evaluation, so it's skipped when qtci is in use.
-        _prefetch_selfenergies_batch(ht, es, 0, delta, cache)
-        _prefetch_selfenergies_batch(ht, es, 1, delta, cache)
+    Self-energies and the per-site (Es,SigLess,taus) chain arrays are both
+    built as single batched/compiled calls (_batch_selfenergy,
+    _assemble_chain_jit) rather than a Python loop over (block,sideband)
+    sites: profiling a dc_current call on a deep-subgap junction (large
+    nmax) found that loop's own body accounted for ~58% of total wall
+    time, dwarfing both the RGF sweep and the self-energy solve/evaluation
+    it was calling -- ~150000 tiny per-site Python calls (a dict-cache
+    lookup+round() per self-energy, a dagger()/conjugate-transpose, a
+    scalar Fermi evaluation) whose combined dispatch overhead exceeded the
+    actual arithmetic once the self-energy side of this pipeline was
+    already optimized (AAA interpolation, batched Sancho-Rubio) in an
+    earlier round. chainA and chainB (the two decoupled chains the
+    (block,sideband) Floquet lattice splits into -- see module docstring)
+    visit the exact same set of sideband energies `quasienergy+n*voltage`,
+    just with which block owns each site swapped between them, so one
+    pair of (lead,ns)-sized self-energy arrays here is shared by both
+    chains rather than each solving its own.
+
+    `chain_consts`, if given, is `_prepare_chain_consts(system)` --
+    precomputed once by the caller (see that function's docstring) instead
+    of rebuilt on every call here; computed on demand if not given (e.g.
+    a standalone caller, or boundary.py's validate_against_truncation)."""
+    if chain_consts is None:
+        chain_consts = _prepare_chain_consts(system)
+    ve, vhd, hii0, hii1, dim = chain_consts
+    ns = 2*nmax+1
 
     # Indexed by isb=n+nmax (0..ns-1), not a dict keyed by n: the sideband
     # index n ranges over a small contiguous [-nmax,nmax], so a dict here
     # only ever paid Python hashing/lookup overhead for what's really a
-    # plain array index -- and this shape lets current_integrand's trace
-    # sum below run as one jitted call over that per its enumerate below.
+    # plain array index.
+    es = np.array([quasienergy+(isb-nmax)*voltage for isb in range(ns)])
+    sigR0 = _batch_selfenergy(ht, es, 0, delta, cache, selfenergy_qtci=selfenergy_qtci)
+    sigR1 = _batch_selfenergy(ht, es, 1, delta, cache, selfenergy_qtci=selfenergy_qtci)
+
     Gr00 = np.empty((ns, dim, dim), dtype=np.complex128)
     Gless00 = np.empty((ns, dim, dim), dtype=np.complex128)
     sigL_less = np.empty((ns, dim, dim), dtype=np.complex128)
     sigL_a = np.empty((ns, dim, dim), dtype=np.complex128)
-    for chain in _chain_sites(nmax):
-        # Built directly as (N,dim,dim) arrays, not Python lists later
-        # converted with np.asarray -- see _rgf_chain_jit's docstring for
-        # why that conversion mattered once the self-energy path itself
-        # was no longer the bottleneck.
-        N = len(chain)
-        Es = np.empty((N, dim, dim), dtype=np.complex128)
-        SigLess = np.empty((N, dim, dim), dtype=np.complex128)
-        taus = np.empty((max(N-1, 0), dim, dim), dtype=np.complex128)
-        for k, (b, n) in enumerate(chain):
-            e = quasienergy+n*voltage
-            sig_r = _cached_selfenergy(ht, e, b, delta, cache,
-                                        selfenergy_qtci=selfenergy_qtci)
-            sig_r_dag = dagger(sig_r)  # computed once, reused below (was twice)
-            Es[k] = (e+1j*delta)*iden - hii[b] - sig_r
-            f = _fermi_scalar(e, temperature)
-            sl = -f*(sig_r - sig_r_dag)
-            SigLess[k] = sl
-            if b == 0:
-                sigL_less[n+nmax] = sl
-                sigL_a[n+nmax] = sig_r_dag
-            if k < N-1:
-                taus[k] = ve if b == 0 else vhd
+    for start_block in (0, 1):  # chainA (0) and chainB (1), see module docstring
+        Es, SigLess, taus, sl_less, sl_a = _assemble_chain_jit(
+            es, sigR0, sigR1, hii0, hii1, ve, vhd, delta, temperature,
+            start_block)
         G, Gless = _rgf_chain_jit(Es, taus, SigLess)
-        for k, (b, n) in enumerate(chain):
-            if b == 0:
-                Gr00[n+nmax] = G[k]
-                Gless00[n+nmax] = Gless[k]
+        # This chain owns block 0 at every other site, starting at
+        # k=start_block (see _assemble_chain_jit's docstring); those are
+        # exactly the entries Gr00/Gless00/sigL_less/sigL_a need, indexed
+        # by isb=k directly since both chains share the same n=-nmax+k
+        # sideband-energy assignment (only which block owns each k
+        # differs between them).
+        Gr00[start_block::2] = G[start_block::2]
+        Gless00[start_block::2] = Gless[start_block::2]
+        sigL_less[start_block::2] = sl_less[start_block::2]
+        sigL_a[start_block::2] = sl_a[start_block::2]
     return Gr00, Gless00, sigL_less, sigL_a, dim, ns
 
 
 def current_integrand(ht, voltage, quasienergy, nmax, tauz,
                        delta=1e-6, temperature=0., cache=None, system=None,
-                       selfenergy_qtci=None):
+                       selfenergy_qtci=None, chain_consts=None):
     """Integrand Re Tr{[G^r Sigma_L^< + G^< Sigma_L^a] tauz} of the paper's
     Eq. for I_dc, at a fixed quasienergy. `tauz` is the electron/hole
     grading operator matching the left lead's unit-cell dimension.
     `system` is the precomputed `_prepare_system(ht)` tuple, see
     `_floquet_green_functions`; computed on demand if not given (e.g. for
     standalone callers/tests) so this stays a valid entry point on its
-    own. `selfenergy_qtci`: see _cached_selfenergy/build_selfenergy_qtci."""
+    own. `chain_consts`: see _prepare_chain_consts, likewise computed on
+    demand if not given. `selfenergy_qtci`: see _batch_selfenergy/
+    build_selfenergy_qtci."""
     if cache is None:
         cache = {}
     if system is None:
         system = _prepare_system(ht)
     Gr00, Gless00, sigL_less, sigL_a, dim, ns = _floquet_green_functions(
         ht, voltage, quasienergy, nmax, delta, temperature, cache, system,
-        selfenergy_qtci=selfenergy_qtci)
+        selfenergy_qtci=selfenergy_qtci, chain_consts=chain_consts)
     # _integrand_trace_sum_jit (numba) requires matching operand dtypes for
     # @; dc_current's internal call site already passes a complex128 tauz
     # (cast once there, not on every quasienergy evaluation), so this only
@@ -663,12 +750,17 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     # the electron/hole-projector and local-Hamiltonian extraction work on
     # every single evaluation.
     system = _prepare_system(ht)
+    # Same rationale as `system` above, one level down: chain_consts only
+    # depends on `system`, not on quasienergy/nmax, but _floquet_green_
+    # functions is called once per quadrature point x adaptive-nmax step.
+    chain_consts = _prepare_chain_consts(system)
 
     def integral(nmax):
         f = lambda e: current_integrand(ht, voltage, e, nmax, tauz,
                                          delta=delta, temperature=temperature,
                                          cache=cache, system=system,
-                                         selfenergy_qtci=selfenergy_qtci)
+                                         selfenergy_qtci=selfenergy_qtci,
+                                         chain_consts=chain_consts)
         val, _ = quad(f, 0., abs(voltage), limit=50, epsrel=1e-3)
         return val
 

@@ -101,6 +101,45 @@ def _eval_matrix_jit(e, zj_pad, wf_pad, w_pad, ii, jj, dim):
     return out
 
 
+@jit(nopython=True, cache=True)
+def _eval_matrix_batch_jit(es, zj_pad, wf_pad, w_pad, ii, jj, dim):
+    """Batched counterpart of _eval_matrix_jit: evaluate every active
+    matrix entry's barycentric rational fit at every energy in `es` in one
+    compiled call instead of one Python-level (and hence one numba-
+    dispatch) call per energy. Motivated by profiling keldyshtk.current.
+    dc_current on a deep-subgap junction (large nmax): once self-energies
+    are this cheap to evaluate, the surrounding Python-level per-site
+    dispatch of the Floquet sideband sweep (a dict-cache lookup + round()
+    key + one numba call per (lead,sideband) site) -- not the barycentric
+    arithmetic itself -- became the dominant cost (~58% of total wall time
+    in one measured case, versus a few percent for the actual evaluations).
+    keldyshtk.current._batch_selfenergy calls this once per lead per
+    quasienergy point (covering every sideband energy that call needs) in
+    place of that per-site loop."""
+    n = es.shape[0]
+    out = np.zeros((n, dim, dim), dtype=np.complex128)
+    nentries = ii.shape[0]
+    maxlen = zj_pad.shape[1]
+    for m in range(n):
+        e = es[m]
+        for idx in range(nentries):
+            num = 0j
+            den = 0j
+            for k in range(maxlen):
+                wk = w_pad[idx, k]
+                if wk == 0: continue
+                zjk = zj_pad[idx, k]
+                if e == zjk:
+                    num = wf_pad[idx, k]
+                    den = wk
+                    break
+                c = 1.0 / (e - zjk)
+                num += wf_pad[idx, k] * c
+                den += wk * c
+            out[m, ii[idx], jj[idx]] = num / den
+    return out
+
+
 def default_ncand(erange, delta, scale=24, minimum=64):
     """Starting candidate-grid size for a window of width `erange` and
     features of width `delta`: scales with log2(erange/delta) (the number
@@ -258,6 +297,15 @@ class SelfenergyAAA:
         """Return the interpolated self-energy matrix at energy e."""
         return _eval_matrix_jit(complex(e), self._zj_pad, self._wf_pad,
                                  self._w_pad, self._ii, self._jj, self.dim)
+
+    def call_batch(self, es):
+        """Return the interpolated self-energy matrix at every energy in
+        `es` (1D array-like), as one (len(es),dim,dim) array, in a single
+        compiled call -- see _eval_matrix_batch_jit for why this beats
+        calling __call__ once per energy in a Python loop."""
+        es = np.asarray(es, dtype=np.complex128)
+        return _eval_matrix_batch_jit(es, self._zj_pad, self._wf_pad,
+                                       self._w_pad, self._ii, self._jj, self.dim)
 
     def nsolved(self):
         """Number of true (uncompressed) self-energy solves used to build
