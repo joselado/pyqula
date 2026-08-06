@@ -140,3 +140,8 @@ spectrum).
   short prose section with the physics/motivation, a runnable code snippet, and — for anything with a
   method on `Hamiltonian`/`Geometry` — an entry in the "Main functions and methods" reference at the end of
   the user guide.
+- `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap (not started) for moving compute-heavy
+  paths onto GPU via `jax` (already a hard dependency), covering batched dense diagonalization
+  (`htk/eigenvectors.py`), the partially-started KPM GPU path (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), and
+  why sparse/ARPACK-based Green's-function work is a harder/lower-priority case. Check it before starting
+  any GPU-related work in this repo.
