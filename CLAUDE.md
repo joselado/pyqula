@@ -5,6 +5,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project context
 When working with this codebase, prioritize readability over cleverness. Ask clarifying questions before making architectural changes.
 
+When a physics/numerical algorithm issue (e.g. a mean-field, topology, or Green's-function derivation) is
+proving hard to resolve from the code and general knowledge alone, ask the user whether to pull a specific
+paper from arXiv to help sort it out, rather than guessing at the underlying formalism.
+
+When asked to implement a qualitatively new piece of physics (a formalism or algorithm not already present
+in this codebase, as opposed to extending an existing one), check arXiv for a paper covering it before
+writing code, rather than relying on general knowledge alone. If a tested, well-established open-source
+implementation of the same method exists, it's good to use it as a reference too.
+
 ## What this is
 
 pyqula is a Python library for quantum tight-binding calculations on lattices: band structures, mean-field
