@@ -21,3 +21,4 @@ MULTI*
 .mpsfolder
 .claude/
 examples/**/*.png
+benchmarks/results/
