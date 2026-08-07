@@ -1092,6 +1092,84 @@ definite ansatz deliberately rather than comparing energies across
 differently-seeded runs.
 
 
+## Abrikosov-pseudofermion (Read-Newns) mean field for the Kondo lattice
+
+The Kondo lattice / periodic Anderson model -- localized moments
+exchange-coupled to a conduction electron at the same site -- is the
+standard minimal model of heavy fermion compounds. Following P. Coleman,
+*Heavy Fermions: electrons at the edge of magnetism*,
+arXiv:cond-mat/0612006, Sec. III.C, its Coqblin-Schrieffer form is
+$H=\sum_k\epsilon_k c^\dagger_kc_k + \tfrac{J}{N}\sum_j
+S_{ab}(j)c^\dagger_{jb}c_{ja}$ ($N=2$ for a spin-$\tfrac12$ moment --
+**not** the coefficient of a bare $J\vec S_j\cdot\vec s_j$ Heisenberg-form
+Kondo term, see the caveat below). Each moment is
+represented by an Abrikosov pseudofermion
+$\vec S_j=\tfrac12 f^\dagger_j\vec\sigma f_j$ subject to the constraint
+$f^\dagger_jf_j=1$, and the exchange term is Hubbard-Stratonovich
+decoupled into a self-consistent hybridization field
+$V_j=-\tfrac{J}{2}\langle f^\dagger_jc_j\rangle$ (a "composite fermion",
+half electron and half spin-flip) plus a Lagrange multiplier $\lambda_j$
+enforcing the local constraint -- physically the large-N ($N=2$)
+Read-Newns saddle point of the Kondo-lattice path integral.
+`KondoLatticeHamiltonian` (`pyqula.kondolattice`) packages this: given a
+conduction-electron Hamiltonian, it fuses on a second, initially
+decoupled sublattice of localized f-sites (one per conduction site) with
+zero bare hopping, and self-consistently solves for $V_j$ and
+$\lambda_j$:
+
+```python
+from pyqula import geometry
+from pyqula.kondolattice import KondoLatticeHamiltonian
+
+gc = geometry.chain()
+hc = gc.get_hamiltonian(has_spin=True) # conduction electrons
+h = KondoLatticeHamiltonian(hc)
+
+seed = ([0.3+0.0j],[0.0]) # (V,lam) -- see the caveat below for why
+h2 = h.get_mean_field_hamiltonian(J=1.5,filling=0.15,nk=200,mf=seed)
+
+h2.local_occupation   # <n_f> per localized site -- exactly 1.0 at convergence
+h2.hybridization      # converged V per localized site
+h2.constraint_lambda  # converged per-site Lagrange multiplier
+```
+
+`J` is Coleman's Coqblin-Schrieffer coupling (entering the interaction as
+$J/N$ with $N=2$), not the coefficient of a bare $J\vec S_j\cdot\vec s_j$
+Heisenberg-form Kondo term -- the two differ by a numerical factor that
+Coleman's Eq. 73-78 already fixes, so this class follows the paper's
+convention exactly. `filling` sets a lattice-wide chemical potential
+*once*, from the bare ($V=0$) bands, and holds it fixed through the SCF
+loop rather than re-solving it every iteration (Coleman's Eq. 83 is a
+fixed-$\mu$, grand-canonical Hamiltonian; the electron count is meant to
+float, even expand, as $V,\lambda$ converge, Eq. 91-92) -- the local
+$\langle n_f\rangle=1$ constraint is enforced separately by $\lambda_j$,
+not by `filling`. All other `get_mean_field_hamiltonian` kwargs (`mf`,
+`nk`, `mix`, `maxerror`, `maxite`, `T`) are forwarded to the SCF loop
+unchanged.
+
+**$V=0$ is always itself a self-consistent solution**, exactly like the
+trivial root of the BCS gap equation -- an unseeded run (`mf=None`, the
+default) starts there and stays there even for a `J` that also supports a
+genuine hybridized state, so a nonzero seed (as above) is generally
+needed to find it. Where both solutions coexist, the hybridized state is
+the true (lower-energy) ground state. **Avoid a `filling` that lands the
+chemical potential inside the bare f-sector's flat, macroscopically
+degenerate band** (at $V=0$, every f-orbital sits at exactly $\lambda$,
+so a wide range of `filling` values -- roughly 0.25-0.75 for a single
+conduction orbital per site -- all give exactly the same, numerically
+ill-posed starting point); `filling=0.15` above keeps $\mu$ inside the
+dispersing conduction band instead. **The finite Fermi-Dirac smearing
+`T` this SCF loop necessarily runs at** (needed for the $\lambda$
+feedback's numerical stability -- see
+`selfconsistency.kondolattice.kondo_lattice_mean_field`'s docstring)
+turns the textbook, continuous $T_K=D\,e^{-1/(J\rho)}$ onset into a
+genuine finite-temperature Kondo crossover: below a $T$-dependent
+threshold in $J$, thermal smearing washes out the hybridization
+entirely and $V=0$ becomes the *only* self-consistent solution, and
+right at the threshold $V$ jumps directly to an $O(1)$ value rather than
+growing continuously from zero.
+
+
 # Spatially resolved density of states
 
 ```python
@@ -2221,6 +2299,25 @@ through `get_mean_field_hamiltonian`'s usual `J1`/`J2`/`J3`/`Jr`/`J1x`/
     (electron-count convention, 0 to 2 -- target is exactly 1.0)
   - `h2.constraint_lambda`: converged per-site Lagrange multiplier (local
     chemical potential)
+
+### KondoLatticeHamiltonian(hc)
+Abrikosov-pseudofermion (Read-Newns) mean-field Hamiltonian for the Kondo
+lattice / periodic Anderson model built from a conduction-electron
+Hamiltonian `hc` -- see "Abrikosov-pseudofermion (Read-Newns) mean field
+for the Kondo lattice" above. `from pyqula.kondolattice import
+KondoLatticeHamiltonian`; fuses a second, zero-bare-hopping f-sublattice
+onto `hc`'s geometry, with the Kondo coupling supplied through
+`get_mean_field_hamiltonian`'s `J` kwarg.
+
+- `h.get_mean_field_hamiltonian(J=...,filling=...,mf=(V,lam),nk=...,...)`:
+  self-consistently solves for the hybridization and the local
+  constraint's Lagrange multiplier. Returns the converged Hamiltonian (or
+  `None` if the SCF did not converge), with three extra diagnostic
+  attributes:
+  - `h2.local_occupation`: converged $\langle n_f\rangle$ per localized
+    site (target is exactly 1.0)
+  - `h2.hybridization`: converged $V_j$ per localized site
+  - `h2.constraint_lambda`: converged per-site Lagrange multiplier
 
 ### h.get_central_heterostructure()
 Build a two-terminal `Heterostructure` using `h` (a finite, 0d Hamiltonian) as the central scattering region, contacted by two semi-infinite 1D chain leads attached at sites `i`/`j` (see "Transport through an arbitrary finite region" above).
