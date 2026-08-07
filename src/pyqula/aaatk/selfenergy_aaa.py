@@ -148,14 +148,55 @@ def default_ncand(erange, delta, scale=24, minimum=64):
     don't need to *bisect* a resonance's width, just sample across it a
     handful of times, so this is deliberately far more modest than
     qtcitk.selfenergy_qtci.bits_from_delta's exponentiated (2**bits) grid
-    size. This is only the *starting* size; SelfenergyAAA doubles it
-    (reusing every already-solved point) until a held-out validation check
-    passes, so an unusually hard target still converges, just after
-    revisiting this estimate rather than needing it to be exact upfront."""
+    size. This is only the *starting* size; SelfenergyAAA refines it
+    adaptively (reusing every already-solved point, see `_refine_grid`)
+    until a held-out validation check passes, so an unusually hard target
+    still converges, just after revisiting this estimate rather than
+    needing it to be exact upfront."""
     if delta <= 0: raise ValueError("delta must be positive")
     if erange <= 0: raise ValueError("erange must be positive")
     ratio = max(erange/delta, 2.0)
     return max(minimum, int(scale*np.ceil(np.log2(ratio))))
+
+
+def _refine_grid(Z, Fmats, cap, growth=0.5):
+    """Adaptive (curvature-driven) grid refinement: bisect the *roughest*
+    intervals first (largest jump in the already-sampled self-energy
+    matrix between adjacent candidates), up to `growth` fraction of the
+    current grid size or the remaining budget to `cap`, whichever is
+    smaller -- instead of bisecting every interval uniformly regardless of
+    how well- or under-resolved it already is.
+
+    This matters because `cap` (`ncand_max`) is a hard, fixed budget:
+    uniform doubling spends that budget everywhere, including on regions
+    already resolved, so it reaches `cap` after only a couple of rounds
+    (`ncand` roughly doubles each round) with no way to keep refining a
+    single narrow feature further. Measured directly on the case that
+    motivated this (a superconducting lead's gap-edge coherence-peak
+    singularity, physical width set by the broadening `delta`, e.g.
+    `delta=1e-4`, sitting inside a candidate grid with a much coarser
+    starting spacing): uniform doubling hit `ncand_max=2500` within ~3
+    rounds, shrinking the local spacing there by only ~6x -- nowhere near
+    enough to resolve a feature that started ~170x under-resolved -- and
+    then permanently stopped growing, *regardless of how many further
+    rounds were allowed*, because the escalation branch requires
+    `ncand < ncand_max`. Repeatedly picking the roughest intervals instead
+    keeps spending each round's budget where the fit is actually worst
+    (the two new sub-intervals straddling a real singularity are
+    themselves the roughest next round, so the zoom continues on its own),
+    which is the only way to reach the needed local resolution within a
+    bounded total-point budget. See
+    documentation/keldysh_aaa_selfenergy_accuracy_plan.md for the
+    measurement this is based on."""
+    diffs = np.max(np.abs(Fmats[1:] - Fmats[:-1]), axis=(1, 2))
+    n = diffs.shape[0]
+    remaining = max(0, cap - len(Z))
+    if remaining == 0:
+        return Z
+    k = min(max(1, int(np.ceil(growth*n))), n, remaining)
+    worst = np.argsort(diffs)[::-1][:k]
+    new_pts = 0.5*(Z[worst] + Z[worst+1])
+    return np.sort(np.concatenate([Z, new_pts]))
 
 
 class SelfenergyAAA:
@@ -174,24 +215,40 @@ class SelfenergyAAA:
 
     The candidate grid starts at `default_ncand(emax-emin,delta)` points
     and the per-entry support-point budget starts at `mmax0`; each round
-    fits every entry, then checks a held-out validation grid (points
-    offset from the candidates, so genuinely off-sample) against
-    `tolerance` (relative, entrywise). If any entry's fit saturated its
-    support-point budget (used every one of `mmax`, the signature of "not
-    enough poles allowed", not "not enough samples"), `mmax` is escalated
-    first; otherwise `ncand` is doubled. Every previously-solved point
-    stays cached across rounds, so refinement never re-pays for work
-    already done. Gives up (uses the best fit found, without raising)
-    after `maxrounds` rounds or once both budgets hit their caps -- like
-    keldyshtk.current.dc_current's own adaptive sideband loop, this
-    guarantees termination rather than looping indefinitely on a target
-    that resists this ansatz; check `.converged` if that matters to a
-    caller."""
+    fits every entry, then checks a held-out validation grid -- `nvalidate`
+    points drawn uniformly at random across the *whole* `[emin,emax]`
+    window (independent of where the candidates sit, so genuinely
+    off-sample and not confined to the immediate neighborhood of an
+    existing candidate) -- against `tolerance` (relative to the largest
+    sampled |Sigma|). If any entry's fit saturated its support-point
+    budget (used every one of `mmax`, the signature of "not enough poles
+    allowed", not "not enough samples"), `mmax` is escalated first;
+    otherwise the candidate grid is refined via `_refine_grid`, which
+    concentrates new points on the currently-roughest intervals rather
+    than bisecting everywhere uniformly (see that function's docstring for
+    why uniform doubling cannot resolve a narrow feature within a bounded
+    `ncand_max`, regardless of how many rounds are allowed). Every
+    previously-solved point stays cached across rounds, so refinement
+    never re-pays for work already done. Gives up (uses the best fit
+    found, without raising) after `maxrounds` rounds or once both budgets
+    hit their caps -- like keldyshtk.current.dc_current's own adaptive
+    sideband loop, this guarantees termination rather than looping
+    indefinitely on a target that resists this ansatz; check `.converged`
+    if that matters to a caller. A caller relying on speed rather than
+    guaranteed accuracy should treat `converged=False` as "fall back to a
+    direct solve", not "use the best-effort fit anyway". The default
+    `tolerance=1e-3` is tuned to match dc_current's own current-convergence
+    target -- passing a much tighter `tolerance` (e.g. the old 1e-6
+    default) on a genuine near-singularity target can legitimately take
+    several minutes to build (measured: ~4-9 minutes for one lead on a
+    deep-subgap superconducting case, `ncand` climbing toward `ncand_max`)
+    rather than hang -- `maxrounds`/`ncand_max` bound the effort, not the
+    wall-clock time of a single round once `ncand` has grown large."""
 
     def __init__(self, get_selfenergy, dim, emin, emax, delta,
-                 tolerance=1e-6, ncand0=None, ncand_max=2500,
+                 tolerance=1e-3, ncand0=None, ncand_max=20000,
                  nvalidate=32, mmax0=100, mmax_max=400, aaa_tolerance=None,
-                 maxrounds=8, **kwargs):
+                 maxrounds=20, refine_growth=0.5, **kwargs):
         if emax <= emin: raise ValueError("emax must be > emin")
         self.dim = dim
         self.emin, self.emax = emin, emax
@@ -205,14 +262,7 @@ class SelfenergyAAA:
             return solved[key]
         self._solved = solved  # exposed for diagnostics/benchmarking
 
-        rng = np.random.default_rng(0)  # deterministic validation offsets
-        # A dyadically-refinable grid (each round inserts the midpoint of
-        # every adjacent pair) rather than a fresh np.linspace(...,ncand)
-        # each round: previous rounds' points are then an exact subset of
-        # the new grid, so every doubling's true solves are 100% additive
-        # -- nothing already in `solved` is ever re-requested at a
-        # different (unlucky, non-matching) grid coordinate and silently
-        # recomputed.
+        rng = np.random.default_rng(0)  # deterministic validation draws
         Z = np.linspace(emin, emax, ncand0)
         mmax = min(mmax0, mmax_max)
         converged = False
@@ -231,11 +281,28 @@ class SelfenergyAAA:
                     entries[(i, j)] = r
 
             ncand = len(Z)
-            step = (emax-emin)/(ncand-1)
-            nval = min(nvalidate, ncand-1)
-            offsets = rng.uniform(0.1*step, 0.9*step, nval)
-            base = rng.choice(ncand-1, nval, replace=False)
-            Zval = Z[base] + offsets
+            # Validation points come from two sources: (a) a broad,
+            # domain-uniform random sample (independent of the candidate
+            # grid, so not confined to a candidate's immediate
+            # neighborhood), for generic/bulk coverage; (b) points drawn
+            # from *inside* the currently roughest intervals (the same
+            # curvature signal _refine_grid uses), at fractions of the
+            # interval distinct from any future bisection midpoint, so a
+            # narrow feature the fit hasn't resolved yet is actually
+            # tested, not just a large empty region between features. Pure
+            # domain-uniform sampling alone was tried and measured to
+            # under-detect exactly this: a handful of random points over a
+            # wide window has low power to land near a feature much
+            # narrower than the window, or even near a moderately
+            # under-resolved but still fairly localized region -- see
+            # documentation/keldysh_aaa_selfenergy_accuracy_plan.md.
+            diffs = np.max(np.abs(Fmats[1:] - Fmats[:-1]), axis=(1, 2))
+            n_feat = min(16, diffs.shape[0])
+            worst = np.argsort(diffs)[::-1][:n_feat]
+            feat_val = np.concatenate([Z[worst] + f*(Z[worst+1]-Z[worst])
+                                        for f in (0.3, 0.7)])
+            bulk_val = rng.uniform(emin, emax, nvalidate)
+            Zval = np.concatenate([feat_val, bulk_val])
             maxerr, denom = 0., 0.
             for e in Zval:
                 true = full_matrix(e)
@@ -254,7 +321,7 @@ class SelfenergyAAA:
             if saturated and mmax < mmax_max:
                 mmax = min(mmax_max, 2*mmax)
             elif ncand < ncand_max:
-                Z = np.sort(np.concatenate([Z, 0.5*(Z[:-1]+Z[1:])]))
+                Z = _refine_grid(Z, Fmats, ncand_max, growth=refine_growth)
             else:
                 break
 

@@ -815,7 +815,7 @@ def build_selfenergy_qtci(ht, voltage, nmax_max, delta=None, margin=4,
 
 
 def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
-                          tolerance=1e-6, **kwargs):
+                          tolerance=1e-3, **kwargs):
     """Build one aaatk.selfenergy_aaa.SelfenergyAAA interpolant per lead (0
     and 1), covering the same energy window as build_selfenergy_qtci
     (|energy| <= (nmax_max+1)*|voltage|) and returned in the same {lead:
@@ -1082,13 +1082,24 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     finite difference or an iv_curve sweep -- see aaatk/selfenergy_aaa.py's
     module docstring for the performance measurements). NOT the default:
     documentation/keldysh_sideband_decimation_plan.md's "shared-nmax
-    finite difference" update found a real, still-unresolved accuracy gap
-    (up to ~10% relative error in the current, growing with the sideband
-    window size/nmax_max, likely from error compounding through the RGF
-    chain rather than an insufficient AAA fit -- SelfenergyAAA's own
-    validation check reports low error throughout, so it does not protect
-    against this) in some regimes. Use "aaa" only if you have independently
-    checked it agrees with "direct" for your own system/parameter range.
+    finite difference" update found a real accuracy gap (up to ~10%
+    relative error in the current, growing with the sideband window
+    size/nmax_max in the pre-fix implementation), root-caused in
+    documentation/keldysh_aaa_selfenergy_accuracy_plan.md to
+    under-resolved candidate points -- both at a lead's own gap-edge
+    singularities and, more importantly for the current-error trend,
+    across the fit's broader "bulk" domain -- NOT error compounding
+    through the RGF chain (measured directly to attenuate, not amplify,
+    a local self-energy error). SelfenergyAAA's held-out validation was
+    itself confined to points near existing candidates and so did not
+    detect this; both the validation sampling and the grid-refinement
+    strategy were fixed accordingly (see that document's update log and
+    `aaatk/selfenergy_aaa.py`'s `_refine_grid`). Still opt-in: even with
+    the fix, a `converged=True` fit is only as good as `tolerance` for the
+    specific system/parameters it was built for, and a hard enough target
+    can still legitimately report `converged=False` (safe fallback to
+    "direct" happens automatically in that case, see below) rather than
+    ship a wrong answer.
 
     `selfenergy_qtci`, if given explicitly, overrides `selfenergy_method`
     entirely: pass a {lead: interpolant} dict (from build_selfenergy_aaa
