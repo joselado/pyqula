@@ -1651,6 +1651,32 @@ k = lp.get_kappa(energies=[0.1,0.25,0.4],temp=0.02,nmax=4,nmax_max=12,tol=5e-2)
 
 `get_dc_current`/`keldysh_didv`/`get_kappa` solve each lead's Sancho-Rubio/`bloch_selfenergy` self-energy directly at every energy the sideband sweep visits by default (`selfenergy_method="direct"`). An opt-in `selfenergy_method="aaa"` (`use_aaa=True` for `didv`/`keldysh_didv`) instead replaces most of those many-thousands of individual solves with evaluations of a compact rational (AAA) interpolant built from far fewer true solves (`keldyshtk.current.build_selfenergy_aaa`), and can be substantially faster, especially once shared across many calls (an `get_iv_curve` sweep, or one finite-temperature `didv(temp=...)`/`get_kappa(temp=...)` call's internal thermal quadrature, which alone can visit well over a hundred nearby energies for just one nominal `(energy, temp)` point -- both build and share a single interpolant across every internal evaluation when `selfenergy_method="aaa"` is passed, rather than leaving each one to independently build and discard its own). **This is opt-in, not the default, because of a real, currently unresolved accuracy gap**: the interpolant's own convergence check can report success while the resulting current is still off by an amount that grows with the sideband window (`nmax_max`) -- up to ~10% in some regimes measured so far, likely from error compounding through the recursive Green's-function sideband chain rather than an insufficient fit (see `documentation/keldysh_sideband_decimation_plan.md` for the full investigation). Only pass `selfenergy_method="aaa"`/`use_aaa=True` after checking it agrees with the default `"direct"` for your own system and parameter range.
 
+For a Floquet-Keldysh-eligible junction (both leads, or a `LocalProbe`'s probe+sample,
+superconducting), `didv(temp=...)`/`get_kappa(temp=...)` now default to evaluating
+`dc_current`'s own `temperature` parameter directly (2 `dc_current` calls, a central finite
+difference in bias) rather than the internal thermal quadrature described in the previous
+paragraph (`keldysh_thermal_mode="convolution"` on `transporttk.thermaldidv.finite_T_didv`
+recovers the old behavior, still used for non-Keldysh junctions where it is exact). This is not
+merely a faster way to get the same number: the two compute genuinely different quantities away
+from `temp->0` (direct broadens each Floquet sideband's own occupation by `temp`; convolution
+smears the bias voltage, an n-dependent displacement of the whole sideband ladder) -- see
+`documentation/keldysh_sideband_decimation_plan.md`'s "direct finite-T Keldysh evaluation" entry
+for the validation and the measured ~100x-plus speedup.
+
+`dc_current` also takes an opt-in `quadrature` argument for the outer quasienergy integral:
+`"adaptive"` (the default, unchanged) calls `scipy.integrate.quad` as before; `"fixed"` instead
+evaluates a deterministic, fixed-node composite Gauss-Legendre rule whose node/weight set is a
+pure function of `voltage` alone (`quad_panel_width`/`quad_min_panels`/`quad_order` control it),
+known in full before any integrand evaluation and solved with a batched, `numba`-parallel chain
+solver rather than one Python callback per node. Accuracy is not the concern (validated to within
+~6e-4 of a tight reference across a broad SC-SC/normal sweep); speed is case-dependent and often
+*worse* than adaptive quadrature, since a fixed grid has to be dense enough to resolve a gap-edge
+singularity wherever it happens to land, with no way to discover at runtime that a given case
+(e.g. a normal junction with no singularity at all) didn't need that density. `"fixed"` is kept as
+tested, opt-in infrastructure for callers that specifically need a deterministic/cacheable node
+set (see `documentation/keldysh_sideband_decimation_plan.md`'s "item 2b"/"item 2c" entries for the
+full numbers) -- not a general replacement for the default `"adaptive"` path.
+
 ### Experimental: a JAX-differentiable Floquet-Keldysh current
 
 `keldyshtk.current_jax.JaxKeldyshCurrent` (needs the optional `jax` extra: `pip install pyqula[jax]`) is an independent reformulation of `dc_current` for zero-temperature, fixed-sideband-count (`nmax`, not adaptively grown) work: instead of a central finite difference of two separate `dc_current` calls, it batches the whole quasienergy quadrature into one compiled, `vmap`ped computation and differentiates it directly with `jax.grad`. Reused across many voltages (build once per `(junction, nmax, vmax)` combination, call `.current(v)`/`.didv(v)` many times), this is a genuine reformulation, not a drop-in speedup: measured on the same superconducting-probe `LocalProbe` workload the rest of this section targets, both `.current()` and `.didv()` came out roughly break-even to about 2x slower than the direct path once implemented and benchmarked rigorously (see the module's own docstring for the full story, including two real self-energy numerical-edge-case bugs and one silently-dropped derivative term found and fixed along the way). Kept as tested, documented, opt-in infrastructure -- a reformulation that did not pay off for the specific workload it was built for, potentially useful for a different one (a system that converges at a smaller `nmax`, or a workload needing only `current()` and not `didv()`) -- not something `didv`/`get_dc_current` route to automatically.

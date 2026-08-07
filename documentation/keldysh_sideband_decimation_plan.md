@@ -498,3 +498,352 @@ lost, just no longer reached without an explicit `selfenergy_method="aaa"`/`use_
 caller who has verified it's accurate for their own system can still opt back in. `documentation/
 user_guide.md`'s Floquet-Keldysh section was updated to describe "direct" as the default and
 "aaa" as a checked-it-yourself opt-in, with a pointer to this document for the accuracy gap.
+
+## Update: direct finite-T Keldysh evaluation replaces thermal convolution by default
+
+A follow-up consult (Claude Fable, asked for "wild ideas" to speed up Keldysh transport broadly)
+raised `finite_T_didv`'s thermal-convolution approach as a likely large win for `finite_T_didv`/
+`iv_curve`-at-finite-T/`kappa.py`'s finite-temperature path. `transporttk.thermaldidv.
+finite_T_didv` computed finite-temperature dI/dV by evaluating `zero_T_didv` (a T=0
+`dc_current`-pair finite difference) at ~150-400 energies spanning `+-THERMAL_WINDOW*temp` around
+the bias, convolved with a Fermi-derivative kernel -- while `keldyshtk.current.dc_current` already
+has a native `temperature` parameter that broadens each Floquet sideband's own occupation directly
+(`_fermi_scalar`/`_assemble_chain_jit`), reachable in 2 `dc_current` calls instead of ~150-400.
+
+**Corrected framing (important, and initially gotten wrong in this thread's own first draft)**:
+these are NOT two routes to the same number, so "replace the slow approximation with the fast
+exact one" is the wrong mental model. `finite_T_didv`'s convolution smears **bias voltage** --
+for a Floquet ladder, shifting the bias by `dV` moves sideband `n` by `n*dV`, an n-dependent
+displacement of the whole ladder. `dc_current`'s native `temperature` broadens each sideband's own
+occupation by a fixed `temp`, independent of `n`. These are structurally different operations and
+only have to agree as `temp->0` (both reduce to the T=0 curve); do not expect agreement away from
+that limit, and none was found in testing (see below). The convolution approach is exact for
+ordinary elastic/Landauer transport with energy-independent transmission (which is presumably why
+`thermaldidv.py` was written that way generically -- it is also the only mechanism available for
+the non-Keldysh `"smatrix"` path, where the identity genuinely holds and stays the default there).
+
+**Blocking gate, since `dc_current`'s `temperature` parameter had ZERO test coverage anywhere in
+the repo before this**: added `tests/keldysh/test_normal_junction_finite_temperature.py`,
+extending `test_normal_junction_gauge_invariance.py`'s pattern (`turn_nambu`, zero pairing) to
+finite T -- an independent, non-Floquet finite-temperature Landauer reference (`T(E) =
+HTb.didv(energy=E)` at T=0, integrated against the standard thermal window `f_T(E-V/2)-
+f_T(E+V/2)` over a window widened by `+-20*temp`) versus `dc_current(voltage, temperature=temp)`.
+19 parametrized cases (3 transparencies x 3 signed voltages x 2 temperatures, plus a `temp->0`
+sanity check) all pass, relative error <=8e-4 throughout -- comfortably inside the 2e-2 margin the
+zero-temperature sibling test uses. This confirms `dc_current`'s existing `temperature` machinery
+is itself correct.
+
+**Wired in**: `finite_T_didv` gained `keldysh_thermal_mode` ("direct", new default, or
+"convolution", the prior behavior), used only when `_both_leads_superconducting(self)` -- a
+non-Keldysh junction is unaffected either way. "direct" calls `keldysh_didv(self, voltage=energy,
+temperature=temp, **kwargs)` directly. `keldysh_didv`'s `dv` default
+(`max(abs(voltage)*1e-2,1e-3)`) was tuned for the T=0 finite difference, where there is no thermal
+scale to resolve; at finite T it is now clamped to `min(dv, 0.1*temp)` when `temp>0` so the central
+difference doesn't smooth away the thermal structure this mode exists to capture.
+
+**Speed and divergence, measured directly** (transparency=0.1, `HT.delta=1e-2`, `delta_sc=0.3`,
+`fixed_nmax` used on both sides to isolate the thermal-averaging cost from the unrelated adaptive-
+nmax search, which both modes already share via other fixes in this doc): at `temp=0.02`, direct
+took 1.33s (`fixed_nmax=2`) versus convolution's 138.4s for the *same* nominal call (399
+`zero_T_didv` evaluations) -- **~104x**, on a deliberately mild case chosen to even *finish* in a
+reasonable time for this measurement. On the doc's own "worst case" deep-subgap SC-SC parameters
+(`delta_sc=0.3`, transparency=0.6, `HT.delta=1e-4`), convolution did not complete within 500s at
+even `fixed_nmax=4`, while direct mode's own per-call cost there is sub-second (consistent with a
+single `dc_current(fixed_nmax=4)` call measured at 0.02-0.05s warm) -- i.e. the win is qualitatively
+larger, not smaller, exactly where this optimization effort's own worst cases live. As expected from
+the corrected framing above, direct and convolution do **not** numerically agree away from `temp->0`
+(rel. difference ~104% at `temp=0.02` on the mild case) -- this is not a bug, it's the two
+formalisms computing genuinely different quantities.
+
+**Default**: per the maintainer's explicit choice, "direct" is now the default for every
+Keldysh-eligible caller (`finite_T_didv`, `kappa.py`'s `get_conductances_finite_temp`/
+`get_kappa_finite_temperature_energies`, `LocalProbe.didv(temp=...)`) -- this changes the returned
+numbers for all of them (intended: convolution and direct are different quantities, and direct is
+the more physically direct one for this formalism). One existing test
+(`tests/keldysh/test_shared_selfenergy_sweeps.py::test_finite_T_didv_shares_one_interpolant_across_its_thermal_quadrature`)
+specifically exercised the convolution-mode AAA-sharing plumbing and needed
+`keldysh_thermal_mode="convolution"` added explicitly to keep testing what it was built to test,
+matching this doc's own established pattern for prior default flips. Full `tests/keldysh` (87
+tests, including the 19 new ones) and `tests/transport/test_kappa_jax.py` (9 tests) pass.
+
+**`temp->0` convergence, measured** (same mild case, transparency=0.1, `HT.delta=1e-2`,
+`delta_sc=0.3`, voltage=0.3, `fixed_nmax=2` both sides):
+
+| temp  | direct   | convolution | rel. diff | convolution wall time |
+|-------|----------|-------------|-----------|------------------------|
+| 0.05  | 0.035716 | 0.014227    | 1.51      | 301.0s                 |
+| 0.02  | 0.036878 | 0.018033    | 1.05      | 83.4s                  |
+| 0.005 | 0.038962 | 0.031230    | 0.25      | 32.5s                  |
+| 0.001 | 0.039761 | 0.038439    | 0.034     | 37.1s                  |
+
+Relative difference shrinks monotonically toward 0 as `temp->0` (1.51 -> 1.05 -> 0.25 -> 0.034),
+confirming the two formalisms converge to the same T=0 curve as expected, while staying genuinely
+different away from that limit -- exactly the corrected framing above, not a bug. Convolution's own
+wall time does NOT shrink monotonically with `temp` (301.0s at temp=0.05 down to 32.5s at
+temp=0.005, back up to 37.1s at temp=0.001) -- see the mechanism below for why.
+
+**Why convolution is this expensive, root-caused (Claude Fable consult, prompted with this
+section's own numbers plus the actual current `thermaldidv.py`/`didv.py`/`keldyshtk/current.py`
+text)**: it is not merely "~150-400x more `dc_current` calls than direct mode," which was the
+original, incomplete framing above. `fixed_nmax` only freezes the Floquet sideband count per
+quasienergy point -- it does NOT make `dc_current`'s own inner adaptive quasienergy quadrature
+(`quad(f, 0, abs(voltage), epsrel=1e-3)`) fixed. Convolution's outer thermal sweep visits
+`energy+e` across the whole `+-THERMAL_WINDOW*temp` window, so (a) the inner quad's own domain
+width scales with `|energy+e|`, up to ~14x wider than a single-voltage baseline, and (b) that bias
+sweep crosses the MAR resonance ladder (`2*delta_sc/n`), and each crossing makes the inner quad
+subdivide heavily (the same 21->735-node effect `documentation/keldysh_sideband_decimation_plan.md`'s
+item-2a instrumentation already measured) -- so total RGF-chain-solve count is (outer thermal-quad
+nodes) x (inner quasienergy-quad nodes at that specific bias) x 2, not just the outer count. Ruled
+out as contributing causes: per-call setup (`cache={}`/`_prepare_system`/`_prepare_chain_consts`) is
+paid identically in an isolated single call too, so it can't explain a *ratio*;
+`_prepare_bias_target` doesn't copy a two-lead `Heterostructure` at all (only for a `LocalProbe`);
+numba's kernels specialize on dtype/ndim, not array shape, so nothing recompiles mid-sweep. The
+non-monotonic wall-time-vs-temp trend above is explained the same way: `scipy.integrate.quad`
+(QAGS) bisects whichever subinterval has the largest error estimate, so how many of the outer
+sweep's `e` values land near a MAR onset (and hence trigger expensive inner subdivision) depends on
+where the `+-THERMAL_WINDOW*temp` window happens to sit relative to the `2*delta_sc/n` ladder at
+that specific `temp`, not on `temp` monotonically. A further, separate mechanism likely responsible
+for the non-terminating (>500s) deep-subgap/`HT.delta=1e-4` case earlier in this section: the outer
+quad demands `epsrel=1e-4` on an integrand built from `(Ip-Im)/(2*dv)`, but `Ip`/`Im` are each only
+resolved by the inner quad to `epsrel=1e-3` -- amplified by `|Ip|/|Ip-Im|`, that can put the outer
+integrand's noise floor above the tolerance the outer quad is demanding of it, so QAGS keeps
+bisecting toward its `limit=60` ceiling (~2500 outer nodes, ~5000 `dc_current` calls) chasing noise
+it cannot resolve rather than genuinely converging -- consistent with, though not separately
+re-confirmed beyond, the observed non-termination.
+
+This is now understood well enough that no further characterization sweep is planned -- the
+mechanism (nested adaptive quadratures, one of which scales with bias and crosses resonances,
+occasionally compounded by chasing finite-difference noise below its own resolvable floor) fully
+accounts for both the size and the noisiness of convolution mode's cost, and is exactly the kind of
+compounding cost that made this an obvious target for the "direct" replacement in the first place.
+
+## Update: `dc_current`'s `quadrature="fixed"` node solve batched over the quasienergy-node axis
+
+Follow-up to `keldysh_sideband_decimation_plan`'s `quadrature="fixed"` work above (that work's own
+report calls itself "item 2b"; this is its planned "item 2c"): `quadrature="fixed"`'s node set
+(`_fixed_quasienergy_nodes`) is known in full before any integrand evaluation, so the per-node chain
+solve `current_integrand` -> `_floquet_green_functions` -> `_assemble_chain_jit`/`_rgf_chain_jit` --
+previously called once per node via a plain Python list comprehension inside `dc_current`'s
+`integral(nmax)` closure -- was batched over an added leading node axis: `current_integrand_batch`
+-> `_floquet_green_functions_batch` -> `_assemble_chain_batch_jit`/`_rgf_chain_batch_jit`, both
+numba `@jit(parallel=True)` with a `prange` loop over quadrature nodes (mirroring the existing
+sideband-axis batching pattern in `greentk/rg.py:green_renormalization_jit_batch_core`, since each
+node's chain is fully independent of every other node's -- different quasienergy, no coupling).
+Self-energies are still funneled through the existing `_batch_selfenergy`/per-energy `cache` dict,
+just called once over the flattened `(nq*ns,)` energy array per lead per `integral(nmax)` call
+instead of `nq` separate per-node batched calls -- this keeps the cache's cross-`nmax`-step reuse
+(see the "quad-node reuse" update above) working exactly as before, since batching only changes how
+many Python/numba dispatches the *solve* costs, not what gets cached or when. `quadrature="adaptive"`
+is untouched: its node set is discovered one `scipy.integrate.quad` callback at a time and cannot be
+known in advance, so this batching does not apply there.
+
+**Correctness**: per-node integrand values from the batched path are bit-identical (`np.array_equal`,
+not just close) to the pre-batching per-node-loop path, checked on the doc's own deep-subgap case
+(`delta_sc=0.3`, `transparency=0.5`, `voltage=0.031`, `nmax=20`) and two cases from the "fixed"
+validation sweep (`delta_sc=0.1`, `transparency=0.3`, `voltage=0.15` and `voltage=0.55`, `nmax=20`).
+Full `dc_current` output (adaptive-nmax loop included) on the same three cases at their
+`nmax_max` differs from `quadrature="adaptive"` by 1.6e-3/1.1e-3/1.9e-3 relative -- consistent with
+(not a regression from) the accuracy already established for `quadrature="fixed"` itself in the
+update above. `tests/keldysh` (86 tests) and `tests/transport/test_kappa_jax.py` (9 tests) both pass
+unchanged.
+
+**Speed**, same three representative cases as the `quadrature="fixed"` update above
+(`selfenergy_method="direct"`, median of 5 uncontended runs, numba JIT warmed up first, node-chunked
+at the shipped default `_BATCH_CHUNK_NODES=256`):
+
+| case | old per-node loop | new batched+chunked | speedup | adaptive (same run) |
+|---|---|---|---|---|
+| deep-subgap SC-SC (`delta_sc=0.3`, `T=0.5`, `V=0.031`, `nmax_max=64`, 96 nodes) | 0.757s | 0.606s | 1.25x | 0.920s |
+| hardest SC-SC (`delta_sc=0.1`, `T=0.3`, `V=0.55`, `nmax_max=40`, 1472 nodes) | 5.566s | 1.466s | 3.80x | 1.068s |
+| cheap normal-normal (`T=0.6`, `V=0.3`, `nmax_max=20`, 800 nodes) | 1.726s | 1.195s | 1.44x | 0.211s |
+
+Note the old-per-node-loop/adaptive columns above were measured together, in this session, NOT
+copy-pasted from item 2b's own numbers (~1.4x/~1.9x/~45x slower than adaptive on these same three
+shapes of case) -- the two measurement sessions ran under different load and do not reproduce each
+other (this session's own old-fixed-vs-adaptive ratio on the deep-subgap case is already ~on par
+before batching, and its normal-normal ratio is ~8x, not ~45x), so only the ratios *within* this
+table (old -> new -> adaptive, all three columns from the same run) should be read as a consistent
+before/after comparison; item 2b's numbers remain a valid, separately-reported data point from a
+different environment, not a baseline this table extends.
+
+Batching (with the 256-node chunking the memory fix below requires) turns "fixed" from clearly
+slower than adaptive on the two SC-SC cases in this session's own baseline into faster than adaptive
+on the deep-subgap case and much closer (~1.4x slower, down from ~3.8x more work) on the hardest
+SC-SC case, and cuts the cheap normal-normal case's own cost by 1.4x even though it stays ~5.7x
+slower than adaptive there. The normal-normal gap is structural, not a batching
+shortfall: `_fixed_quasienergy_nodes` sizes its panel count off `|voltage|` alone (no gap
+introspection, by design -- see `_FIXED_QUAD_PANEL_WIDTH`'s comment), so a normal junction with no
+gap-edge singularity still pays for the same 800 nodes a singular case would need, while "adaptive"
+discovers the integrand is smooth and stops at ~21 points.
+
+**Net assessment**: batching is a real, validated win for `quadrature="fixed"` itself (up to 3.8x
+here even with the 256-node chunking the memory fix below requires, more for larger `nmax_max`/
+voltage where node count grows), and closes most of the gap to "adaptive" for the singular (SC-SC)
+cases this optimization effort's own worst cases live in. It does NOT make "fixed" a clear
+replacement for "adaptive" as the default: adaptive remains faster on the normal-junction and
+hardest-SC-SC cases (2 of 3 representative cases, including the structurally-unfavorable
+normal-normal case), and
+"fixed"'s main advantage was always determinism/cacheability for a future batched pipeline, not raw
+per-call speed on an isolated call. `dc_current`'s default remains `quadrature="adaptive"`; `"fixed"`
+stays available as an explicit opt-in, now backed by the batched solver from this update rather than
+the plain per-node loop item 2b shipped it with.
+
+**Memory**: solving all `nq` quadrature nodes' chains in one unchunked batched call holds ~13-18 live
+`(nq,ns,dim,dim)` complex128 arrays at once across `_floquet_green_functions_batch`/
+`_assemble_chain_batch_jit`/`_rgf_chain_batch_jit` (`sigR0`/`sigR1`/`Gr00`/`Gless00`/`sigL_less`/
+`sigL_a`/`Es`/`SigLess`/`taus`/`sl_less`/`sl_a`/`G`/`Gless`, briefly more while the second
+`start_block`'s set is built before the first is released). Measured directly (not just estimated) on
+a deliberately large-node-count/long-chain shape (`delta_sc=0.1`, `transparency=0.3`, `voltage=1.0`,
+`nmax_max=64` -> nq=2672, ns=129, dim=4, `resource.getrusage(...).ru_maxrss`, single process): an
+unchunked call peaks at **~2.1GB** RSS; the same call through `dc_current` with the shipped
+node-chunking (below) peaks at **~380MB** -- roughly a 5.6x reduction on this shape, and would scale
+further apart at larger `dim` (more orbitals, or a LocalProbe) since chunking caps memory at a
+constant set by `chunk_size` regardless of `nq`, while the unchunked figure scales linearly with it.
+`iv_curve` fans the unchunked cost out per `parallel.pcall` worker independently, so this matters more
+there, not less. `current_integrand_batch` therefore solves in node chunks of `_BATCH_CHUNK_NODES`
+(256, in `keldyshtk/current.py`) rather than all `nq` nodes at once: only the final `(nq,)` float
+array of per-node integrand values survives across chunks, and the weighted sum in `dc_current`'s
+`integral(nmax)` still runs as a single `np.dot(weights, vals)` over the complete, correctly-ordered
+array, so chunking does not change the summation order or the result (verified bit-identical to an
+unchunked call, independent of `chunk_size`, in
+tests/keldysh/test_batched_fixed_quadrature.py).
+
+**Threading caveat**: the `prange` parallelism in `_assemble_chain_batch_jit`/`_rgf_chain_batch_jit`
+only delivers multi-threaded scaling in a single-process call. Inside a `parallel.pcall` worker (e.g.
+`iv_curve` with `cores>1`), `parallel.set_num_threads()` clamps numba to 1 thread per worker to avoid
+oversubscribing the process pool, so batching's benefit there is limited to fewer Python/numba
+dispatch round trips (still real) rather than the thread-parallel speedup the single-process numbers
+above show.
+
+## Update: items 2b/2c closed out (fixed quadrature shipped as opt-in, now batched); item 3
+## (AAA accuracy-growth diagnosis) investigated and does NOT proceed to a fix
+
+Wrap-up of the three items queued after the previous two updates. All three ran against the repo
+state left by the "direct finite-T Keldysh evaluation" update above (unrelated to this thread --
+that was a separate, already-validated, already-tested default flip in `finite_T_didv`, not touched
+by any of items 2b/2c/3, but still sitting uncommitted in the same working tree at the time of this
+writing -- worth landing as its own changeset rather than folded into this one).
+
+**Item 2b -- deterministic fixed-node quasienergy quadrature.** Added `_fixed_quasienergy_nodes`
+(composite Gauss-Legendre over `[0,|voltage|]`, panel width `_FIXED_QUAD_PANEL_WIDTH=0.006`, floor
+`_FIXED_QUAD_MIN_PANELS=6` panels, order `_FIXED_QUAD_ORDER=16` -- so node count scales with
+`|voltage|` rather than being fixed) and a `quadrature` kwarg on `dc_current` (`"adaptive"`,
+unchanged default, vs. opt-in `"fixed"`). Accuracy is fine: worst relative error 5.8e-4 against a
+tight reference across a 34-case SC-SC/normal sweep (delta_sc in {0.1,0.3}, transparency in
+{0.3,0.6,1.0}, voltage in {0.05,...,1.0}), independently re-checked at verify time with a
+from-scratch reference script on 7 different cases (including near-unity transparency) at 2.1e-6
+(adaptive) / 6.8e-6 (fixed) worst-case -- comfortably under the 1e-3 bar, no sign of the doc's own
+known truncated-sum failure mode. Speed, as shipped, was NOT a win: 1.94x slower than adaptive on
+the hardest SC-SC validation case, 1.39x slower on the doc's own deep-subgap representative case,
+45x slower on a cheap normal-normal case with no gap-edge singularity to resolve -- a fixed
+location-blind grid has to be dense enough to catch a singularity wherever it lands, which costs
+more than adaptive quadrature discovering there's nothing to refine around. Shipped anyway as
+`quadrature="fixed"`, non-default, explicitly built as the known-node-set foundation item 2c needed
+-- `dc_current`'s default behavior (`quadrature="adaptive"`) is unchanged, verified byte-identical
+to the pre-change code path. Two process gaps the verify pass flagged at the time are now partially and fully closed,
+respectively: there was no committed pytest test for `quadrature="fixed"`/
+`_fixed_quasienergy_nodes` at all (only ad-hoc validation scripts) -- item 2c's
+`tests/keldysh/test_batched_fixed_quadrature.py` (below) does call `_fixed_quasienergy_nodes`
+directly and asserts against it (integrand-vs-per-node-loop agreement, chunk-size independence),
+so the function is no longer untested, but no committed test asserts the specific determinism
+property (same `voltage` -> bit-identical node/weight arrays across repeated calls) that was 2b's
+own justification for calling the node set "known in advance" -- that narrow property still has no
+direct regression test. `documentation/user_guide.md` did not mention the new `quadrature` kwarg --
+that gap is now closed, in this update, next to the existing `selfenergy_method` paragraph.
+
+**Item 2c -- batch the per-node chain solve over quadrature nodes.** Built to give item 2b's known,
+fixed node set something to pay for itself with: `_assemble_chain_batch_jit`/`_rgf_chain_batch_jit`,
+numba `@jit(parallel=True)` mirrors of the existing per-node `_assemble_chain_jit`/`_rgf_chain_jit`
+with an added leading quadrature-node axis run over `prange` (same batch-over-an-independent-axis
+pattern as `greentk/rg.py`'s sideband batching -- each node's chain is a different quasienergy with
+no coupling to any other node, so this is a pure vectorization, not a truncation of any sum).
+Self-energies still route through the existing per-energy `cache` dict, just flattened over
+`(node,sideband)` per call, so cross-`nmax`-step cache reuse is unchanged. An advisor review during
+the task caught a real memory issue before it shipped: unchunked batching held ~13-18 live
+`(nq,ns,dim,dim)` complex128 arrays at once, measured at ~2.1GB peak RSS on a large-node-count case
+(`nmax_max=64`, `voltage=1.0` -> nq=2672, ns=129); fixed by chunking the *solve* (not the final
+weighted sum, which stays one `np.dot` over the complete array) into groups of
+`_BATCH_CHUNK_NODES=256`, cutting peak RSS to ~380MB on the same case, verified bit-identical to an
+unchunked call independent of chunk size. Net speed on the same three representative case shapes
+benchmarked in the section immediately above (deep-subgap, hardest-SC-SC, cheap normal-normal):
+batching+chunking closes most of the gap to adaptive quadrature that item 2b alone left open --
+the deep-subgap case goes from 1.39x-slower-than-adaptive to faster than both the unbatched loop
+and adaptive itself, the hardest SC-SC case goes from 1.94x-slower to only ~1.4x slower, and the
+structurally-unfavorable normal-normal case (no gap-edge singularity for a location-blind fixed
+grid to size itself around) improves 1.44x but stays ~5.7x slower than adaptive regardless (full
+numbers in the "Speed" table above). Net: `quadrature="fixed"`+batching is no longer a clear loss
+everywhere (as item 2b alone was), but adaptive still wins 2 of the 3 representative shapes, so
+`dc_current`'s default stays `quadrature="adaptive"` -- "fixed" remains opt-in infrastructure for
+callers that need a deterministic/cacheable node set, not a general speed upgrade. Shipped with `tests/keldysh/test_batched_fixed_quadrature.py` (8 tests: integrand-level
+bit-identical checks against the unbatched loop, chunk-size independence, and `dc_current`-level
+fixed-vs-adaptive agreement including a finite-temperature and a normal-junction case). Full suite
+after landing: `tests/keldysh` 94 passed (86 pre-existing + 8 new), `tests/transport/
+test_kappa_jax.py` 9 passed. Verify pass independently reran the suite (103 passed total), and
+independently re-checked correctness on cases the implementer's own tests didn't reach: a fresh
+finite-temperature case with a deliberately non-divisor chunk size (chunk_size=97 against 992
+nodes) came back bit-identical to both chunk_size=1 and a single unchunked chunk; the hardest SC-SC
+case at `voltage=0.55` (only checked bit-identical at the integrand level by the implementer, not
+end-to-end through `dc_current`'s adaptive-nmax outer loop) came back at 1.88e-3 relative
+difference against adaptive when checked end-to-end -- consistent with, not a regression from, the
+fixed quadrature's own already-established ~1e-3-scale accuracy bound, no blow-up; and a
+`parallel.pcall`-worker invocation (`cores=2` vs `cores=1`) was confirmed to give identical results
+with no hang, closing the one caveat item 2c's own report had left unverified. Verdict: SOUND, no
+correctness concerns raised.
+
+**Item 3 -- diagnose the AAA self-energy accuracy growth (0.5% at `nmax_max=4` up to 9.8% at
+`nmax_max=40`, first found and left unresolved in the update above).** Two candidate mechanisms
+were tested against a strict decision rule (proceed to a fix only if passivity violation tracks the
+error growth AND plain RGF-chain amplification alone does not already explain it); both mechanisms
+failed to survive direct measurement, so **no fix was attempted, and this item does not proceed.**
+The representative case (voltage=0.18, delta_sc=0.3 via `add_swave`, transparency=0.5,
+`HT.delta=1e-4`) reproduced the doc's own numbers almost exactly first (0.515%, 0.555%, 1.367%,
+3.308%, 4.758%, 9.777% at `nmax_max` in {4,8,16,24,32,40}, vs. the doc's 0.5/0.6/1.4/3.3/4.8/9.8%),
+confirming the diagnosis was measuring the same effect.
+
+*Passivity check*: built the exact `SelfenergyAAA` interpolant `dc_current(aaa)` uses at each
+`nmax_max`, sampled `-Im(Hermitian part of Sigma_fit(E))` eigenvalues at fixed density per unit
+energy across the whole sweep. Violations are real in absolute terms (worst negative eigenvalue
+-0.16 to -1.08 against a typical `-Im(Sigma)` eigenvalue scale of ~17-55) but their magnitude does
+**not** track the error growth: worst-violation depth was -0.156, -0.447, -0.228, -0.137, -0.848,
+-1.077 and violating-region measure (as a fraction of the fit window) was 0.0056, 0.0043, 0.0039,
+0.00067, 0.0035, 0.0134, for `nmax_max`=4,8,16,24,32,40 -- both non-monotonic, and decisively so at
+`nmax_max=24`: the smallest violation of the entire sweep occurs exactly where the error (3.3%,
+already 6x its `nmax_max=4` value) is well underway. A mechanism whose own magnitude bottoms out
+partway through the growth it's supposed to explain cannot be that growth's driver. Passivity
+violation is present but is a roughly constant background feature of the AAA fit, unrelated to
+window size.
+
+*Amplification check*: injected a known `PERTURB=1e-7` perturbation (matching `SelfenergyAAA`'s own
+validation-error scale) into one self-energy evaluation (lead 0, sideband n=0, the chain's center
+site) inside the RGF chain, at a fixed quasienergy=0.05 (isolated from the outer quadrature so only
+chain-length dependence is measured), across the same `nmax_max` sweep (chain length ns =
+2*nmax_max+1 = 9,17,33,49,65,81). Result: the resulting current's sensitivity to that perturbation
+(`|current(perturbed)-current(base)|/PERTURB`) was flat at 1.430e-2 to 1.433e-2 across a 9x growth
+in chain length -- not merely insufficient to explain the error, but the opposite of amplification:
+the RGF sweep is ~70x *less* sensitive to a local perturbation than the perturbation itself, and
+that sensitivity does not grow as the chain lengthens (consistent with the doc's own
+interior-freezing/Wannier-Stark finding elsewhere in this document -- the recursive sweep contracts
+local perturbations rather than compounding them). A back-of-envelope bound assuming every one of
+the ~81 sites in the largest window carries an independent, fully-coherently-summed 1e-7 error at
+that flat 1.4e-2 sensitivity gives ~1e-7 absolute against a ~6.4e-2 current -- about 1e-6 relative,
+six orders of magnitude short of the observed 9.8%.
+
+*Decision*: both legs of the decision rule fail -- passivity violation does not track the error
+(condition 1 false), and RGF amplification is not merely insufficient but actively contradicted
+(attenuation, not amplification; condition 2's premise doesn't hold either). Per the task's own
+rule and its explicit allowance that "this doesn't help" is a legitimate outcome, `proceed_with_fix
+= false`; no code was changed for item 3, and there is no fix report or verify report for it
+(both null). `selfenergy_method="aaa"` remains opt-in, non-default, with the same known accuracy
+gap already documented in the "Update: chose the blunt mitigation" section above --
+`selfenergy_method="direct"` is still the shipped default and is unaffected by any of this. The
+real driver of the 0.5%->9.8% growth remains an open question: most likely a systematic bias in the
+AAA fit itself that scales with window size in a way the fit's own 32-point held-out validation
+check doesn't detect (`validation_error` stays flat at ~1e-7-5e-7 across the same sweep where the
+actual current error grows 20x, already noted in the "shared-nmax finite difference" update above)
+-- but confirming that specific mechanism needs its own follow-up measurement (e.g. characterizing
+the fit's error as a function of position within the window and correlating it with which sidebands
+dominate the current) and was outside this task's scope.
+
+**Suite status after all three items**: `tests/keldysh tests/transport/test_kappa_jax.py
+--import-mode=importlib -q` reconfirmed green (all passing, no failures) on the final combined repo
+state.

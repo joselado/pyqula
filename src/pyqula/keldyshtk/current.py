@@ -1,12 +1,18 @@
 import warnings
+from functools import lru_cache
 
 import numpy as np
-from numba import jit
+from numba import jit, prange
 from scipy.integrate import quad
 
 from .. import algebra
 from ..algebra import dagger
 from ..transporttk.smatrix import enlarge_hlist
+# sets numba.config.THREADING_LAYER = 'workqueue' (fork-safe) before any
+# parallel=True numba function in this module gets compiled/run -- must be
+# imported ahead of _assemble_chain_batch_jit/_rgf_chain_batch_jit/
+# _integrand_trace_sum_batch_jit below (see greentk/rg.py, same pattern).
+from .. import parallel
 
 # Floquet-Keldysh DC current between two (possibly superconducting) leads,
 # following San-Jose, Cayao, Prada, Aguado, New J. Phys. 15, 075019 (2013)
@@ -480,6 +486,255 @@ def _integrand_trace_sum_jit(Gr00, sigL_less, Gless00, sigL_a, tauz):
     return total
 
 
+@jit(nopython=True, parallel=True, cache=True)
+def _assemble_chain_batch_jit(es2d, sigR0, sigR1, hii0, hii1, ve, vhd, delta,
+                               temperature, start_block):
+    """Batched version of _assemble_chain_jit: same per-site assembly, but
+    over a whole quadrature's worth of quasienergy NODES at once (a leading
+    `nq` axis added to every array), one independent chain per node, run
+    over a numba `prange` loop across threads -- the same batch-over-an-
+    independent-axis pattern already used for the sideband axis inside
+    _batch_selfenergy's Sancho-Rubio fallback (greentk/rg.py:
+    green_renormalization_jit_batch_core). `es2d[iq,k]` is quadrature
+    node `iq`'s k-th sideband quasienergy (`quasienergies[iq]+(k-nmax)*
+    voltage`); `sigR0`/`sigR1` are (nq,ns,dim,dim), one self-energy per
+    node per sideband -- batched once, up front, for the whole node set by
+    the caller (`_floquet_green_functions_batch`), not recomputed here.
+    Only exists for `quadrature="fixed"` (see dc_current), whose node set
+    is known before any integrand evaluation; `quadrature="adaptive"`'s
+    node set is discovered one callback at a time by scipy.integrate.quad
+    and cannot be batched this way."""
+    nq = es2d.shape[0]
+    ns = es2d.shape[1]
+    dim = hii0.shape[0]
+    iden = np.eye(dim, dtype=np.complex128)
+    Es = np.empty((nq, ns, dim, dim), dtype=np.complex128)
+    SigLess = np.empty((nq, ns, dim, dim), dtype=np.complex128)
+    taus = np.empty((nq, ns-1, dim, dim), dtype=np.complex128)
+    sigL_less = np.empty((nq, ns, dim, dim), dtype=np.complex128)
+    sigL_a = np.empty((nq, ns, dim, dim), dtype=np.complex128)
+    for iq in prange(nq):  # quadrature nodes are independent -> parallel
+        for k in range(ns):
+            e = es2d[iq, k]
+            is_block0 = (k % 2 == 0) if start_block == 0 else (k % 2 == 1)
+            if is_block0:
+                sig_r = sigR0[iq, k]
+                hii = hii0
+            else:
+                sig_r = sigR1[iq, k]
+                hii = hii1
+            sig_r_dag = np.conjugate(sig_r).T
+            Es[iq, k] = (e+1j*delta)*iden - hii - sig_r
+            if temperature == 0.:
+                if e < 0.: f = 1.0
+                elif e > 0.: f = 0.0
+                else: f = 0.5
+            else:
+                f = 1.0/(1.0+np.exp(e/temperature))
+            sl = -f*(sig_r - sig_r_dag)
+            SigLess[iq, k] = sl
+            if is_block0:
+                sigL_less[iq, k] = sl
+                sigL_a[iq, k] = sig_r_dag
+            if k < ns-1:
+                taus[iq, k] = ve if is_block0 else vhd
+    return Es, SigLess, taus, sigL_less, sigL_a
+
+
+@jit(nopython=True, parallel=True, cache=True)
+def _rgf_chain_batch_jit(Es, taus, SigLess):
+    """Batched version of _rgf_chain_jit: identical per-node O(ns) RGF
+    sweep (see that function's docstring for the algorithm itself and its
+    machine-precision validation against dense inversion), just run once
+    per quadrature node over a `prange` loop instead of once per node via
+    a separate Python-level call -- each node's chain is fully independent
+    of every other node's (different quasienergy, no coupling between
+    them), so this changes nothing about the math, only how many separate
+    numba dispatches/Python-callback round trips it costs to get all of
+    them. `Es`/`taus`/`SigLess` carry a leading `nq` axis (node index),
+    all else as in _rgf_chain_jit."""
+    nq = Es.shape[0]
+    N = Es.shape[1]
+    dim = Es.shape[2]
+    G = np.empty((nq, N, dim, dim), dtype=np.complex128)
+    Gless = np.empty((nq, N, dim, dim), dtype=np.complex128)
+    for iq in prange(nq):  # quadrature nodes are independent -> parallel
+        gL = np.empty((N, dim, dim), dtype=np.complex128)
+        gLessL = np.empty((N, dim, dim), dtype=np.complex128)
+        gL[0] = np.linalg.inv(Es[iq, 0])
+        gLessL[0] = gL[0]@SigLess[iq, 0]@np.conjugate(gL[0]).T
+        for i in range(1, N):
+            t = taus[iq, i-1]
+            td = np.conjugate(t).T
+            sigl_r = t@gL[i-1]@td
+            sigl_less = t@gLessL[i-1]@td
+            gL[i] = np.linalg.inv(Es[iq, i]-sigl_r)
+            gLd = np.conjugate(gL[i]).T
+            gLessL[i] = gL[i]@(SigLess[iq, i]+sigl_less)@gLd
+        gR = np.empty((N, dim, dim), dtype=np.complex128)
+        gRless = np.empty((N, dim, dim), dtype=np.complex128)
+        gR[N-1] = np.linalg.inv(Es[iq, N-1])
+        gRless[N-1] = gR[N-1]@SigLess[iq, N-1]@np.conjugate(gR[N-1]).T
+        for i in range(N-2, -1, -1):
+            t = taus[iq, i]
+            td = np.conjugate(t).T
+            sigr_r = td@gR[i+1]@t
+            sigr_less = td@gRless[i+1]@t
+            gR[i] = np.linalg.inv(Es[iq, i]-sigr_r)
+            gRd = np.conjugate(gR[i]).T
+            gRless[i] = gR[i]@(SigLess[iq, i]+sigr_less)@gRd
+        for i in range(N):
+            Eeff = Es[iq, i].copy()
+            SLtot = SigLess[iq, i].copy()
+            if i > 0:
+                t = taus[iq, i-1]
+                td = np.conjugate(t).T
+                Eeff = Eeff - t@gL[i-1]@td
+                SLtot = SLtot + t@gLessL[i-1]@td
+            if i < N-1:
+                t = taus[iq, i]
+                td = np.conjugate(t).T
+                Eeff = Eeff - td@gR[i+1]@t
+                SLtot = SLtot + td@gRless[i+1]@t
+            G[iq, i] = np.linalg.inv(Eeff)
+            Gd = np.conjugate(G[iq, i]).T
+            Gless[iq, i] = G[iq, i]@SLtot@Gd
+    return G, Gless
+
+
+def _floquet_green_functions_batch(ht, voltage, quasienergies, nmax, delta,
+                                    temperature, cache, system,
+                                    selfenergy_qtci=None, chain_consts=None):
+    """Batched version of _floquet_green_functions: solves EVERY quadrature
+    node's pair of Floquet chains in one shot, over the leading node axis,
+    instead of once per node via a Python callback (`current_integrand`
+    called once per `scipy.integrate.quad` evaluation). Only meaningful
+    with a node set known in advance (`quadrature="fixed"`, see dc_current
+    and `_fixed_quasienergy_nodes`).
+
+    Self-energies are still funneled through `_batch_selfenergy` exactly as
+    before -- flattened over (node, sideband) into one (nq*ns,) array per
+    lead per call, so the per-energy `cache` dict (shared across the whole
+    dc_current call, including every nmax growth step) is populated/reused
+    identically to the unbatched path; batching the chain solve does not
+    change what gets cached or when. `quasienergies` is the fixed node
+    array (nq,); returns the same five-tuple as _floquet_green_functions,
+    each array carrying a new leading `nq` axis."""
+    if chain_consts is None:
+        chain_consts = _prepare_chain_consts(system)
+    ve, vhd, hii0, hii1, dim = chain_consts
+    ns = 2*nmax+1
+    quasienergies = np.asarray(quasienergies)
+    nq = quasienergies.shape[0]
+
+    # es2d[iq,isb] = quasienergies[iq]+(isb-nmax)*voltage -- same convention
+    # as _floquet_green_functions' `es`, one row per quadrature node.
+    offsets = (np.arange(ns) - nmax) * voltage
+    es2d = quasienergies[:, None] + offsets[None, :]
+    es_flat = es2d.reshape(-1)
+    sigR0 = _batch_selfenergy(ht, es_flat, 0, delta, cache,
+                               selfenergy_qtci=selfenergy_qtci).reshape(nq, ns, dim, dim)
+    sigR1 = _batch_selfenergy(ht, es_flat, 1, delta, cache,
+                               selfenergy_qtci=selfenergy_qtci).reshape(nq, ns, dim, dim)
+
+    Gr00 = np.empty((nq, ns, dim, dim), dtype=np.complex128)
+    Gless00 = np.empty((nq, ns, dim, dim), dtype=np.complex128)
+    sigL_less = np.empty((nq, ns, dim, dim), dtype=np.complex128)
+    sigL_a = np.empty((nq, ns, dim, dim), dtype=np.complex128)
+    for start_block in (0, 1):  # chainA (0) and chainB (1), see module docstring
+        Es, SigLess, taus, sl_less, sl_a = _assemble_chain_batch_jit(
+            es2d, sigR0, sigR1, hii0, hii1, ve, vhd, delta, temperature,
+            start_block)
+        G, Gless = _rgf_chain_batch_jit(Es, taus, SigLess)
+        Gr00[:, start_block::2] = G[:, start_block::2]
+        Gless00[:, start_block::2] = Gless[:, start_block::2]
+        sigL_less[:, start_block::2] = sl_less[:, start_block::2]
+        sigL_a[:, start_block::2] = sl_a[:, start_block::2]
+    return Gr00, Gless00, sigL_less, sigL_a, dim, ns
+
+
+@jit(nopython=True, parallel=True, cache=True)
+def _integrand_trace_sum_batch_jit(Gr00, sigL_less, Gless00, sigL_a, tauz):
+    """Batched version of _integrand_trace_sum_jit: same per-sideband
+    trace sum, over a leading `nq` (quadrature node) axis, one independent
+    sum per node via `prange`. Returns a (nq,) complex array (one value per
+    quadrature node) instead of a scalar."""
+    nq = Gr00.shape[0]
+    ns = Gr00.shape[1]
+    out = np.empty(nq, dtype=np.complex128)
+    for iq in prange(nq):  # quadrature nodes are independent -> parallel
+        total = 0j
+        for isb in range(ns):
+            M = Gr00[iq, isb]@sigL_less[iq, isb] + Gless00[iq, isb]@sigL_a[iq, isb]
+            MT = M@tauz
+            tr = 0j
+            for d in range(MT.shape[0]):
+                tr += MT[d, d]
+            total += tr
+        out[iq] = total
+    return out
+
+
+# Node-chunk size for current_integrand_batch below. Peak memory of one
+# unchunked call is ~13-18 live (nq,ns,dim,dim) complex128 arrays across
+# _floquet_green_functions_batch/_assemble_chain_batch_jit/_rgf_chain_batch_jit
+# (sigR0/sigR1/Gr00/Gless00/sigL_less/sigL_a/Es/SigLess/taus/sl_less/sl_a/
+# G/Gless, briefly ~18 while the second start_block's set is built before
+# the first is released) -- nq*ns*dim^2*16 bytes each. Left unchunked, a
+# large nmax_max/voltage combination (e.g. nmax_max=64, voltage~1.0 ->
+# nq~2700, ns~129) is order 1GB at dim=4 and scales up further with dim
+# (more orbitals, or a LocalProbe). Chunking the *solve* over node groups
+# of this size (not the final weighted sum, which stays one np.dot call
+# over the whole array so the result is bit-identical to an unchunked
+# call) bounds peak memory to a small, roughly dim-independent-at-typical-
+# sizes constant while leaving _assemble_chain_batch_jit/_rgf_chain_batch_
+# jit's own per-chunk numba dispatch overhead amortized across enough
+# nodes to still batch effectively (prange saturates well below this).
+_BATCH_CHUNK_NODES = 256
+
+
+def current_integrand_batch(ht, voltage, quasienergies, nmax, tauz,
+                             delta=1e-6, temperature=0., cache=None,
+                             system=None, selfenergy_qtci=None,
+                             chain_consts=None, chunk_size=_BATCH_CHUNK_NODES):
+    """Batched version of current_integrand: the same per-quasienergy
+    integrand `Re Tr{[G^r Sigma_L^< + G^< Sigma_L^a] tauz}`, evaluated at
+    every quasienergy in `quasienergies` (nq,) via `_floquet_green_
+    functions_batch`, returned as an (nq,) real array instead of one
+    scalar per call. Used by dc_current's `quadrature="fixed"` path (see
+    `_fixed_quasienergy_nodes`) to replace nq separate Python-callback
+    evaluations (one per scipy.integrate.quad node under
+    `quadrature="adaptive"`) with batched/compiled calls.
+
+    Solved in groups of at most `chunk_size` nodes (see
+    `_BATCH_CHUNK_NODES`'s comment for the memory reasoning), not all `nq`
+    nodes in one shot: each node's chain is fully independent of every
+    other node's, so splitting the node axis into chunks does not change
+    any individual node's result -- only how much peak memory solving them
+    costs. Every element of the returned array is computed by exactly one
+    chunk, in the same order as `quasienergies`, so the result is
+    bit-identical to an unchunked call regardless of `chunk_size` (verified
+    in tests/keldysh/test_batched_fixed_quadrature.py)."""
+    if cache is None:
+        cache = {}
+    if system is None:
+        system = _prepare_system(ht)
+    if tauz.dtype != np.complex128:
+        tauz = tauz.astype(np.complex128)
+    quasienergies = np.asarray(quasienergies)
+    nq = quasienergies.shape[0]
+    out = np.empty(nq, dtype=np.float64)
+    for start in range(0, nq, chunk_size):
+        end = min(start+chunk_size, nq)
+        Gr00, Gless00, sigL_less, sigL_a, dim, ns = _floquet_green_functions_batch(
+            ht, voltage, quasienergies[start:end], nmax, delta, temperature,
+            cache, system, selfenergy_qtci=selfenergy_qtci,
+            chain_consts=chain_consts)
+        out[start:end] = _integrand_trace_sum_batch_jit(
+            Gr00, sigL_less, Gless00, sigL_a, tauz).real
+    return out
+
+
 def _prepare_bias_target(ht):
     """For a LocalProbe whose probe lead is normal (no/negligible pairing),
     ground it: force `frozen_lead=True` so its self-energy is evaluated at
@@ -653,10 +908,122 @@ def build_shared_selfenergy(ht, vmax, nmax_max=40, delta=None, dv=None, **kwargs
     return shared
 
 
+# Default composite-Gauss-Legendre design for `quadrature="fixed"` below:
+# equal-width panels of ABSOLUTE width `_FIXED_QUAD_PANEL_WIDTH` (not a
+# fixed panel COUNT -- see below for why that first design was rejected),
+# each with a 16-point Gauss-Legendre rule, covering [0,|voltage|].
+# `npanels = max(_FIXED_QUAD_MIN_PANELS, ceil(|voltage|/_FIXED_QUAD_PANEL_WIDTH))`
+# so the node count scales with the domain size instead of staying fixed.
+#
+# Chosen empirically (see documentation/keldysh_sideband_decimation_plan.md
+# for the fuller investigation this summarizes -- item 2b, "replace the
+# adaptive quasienergy quadrature with a fixed deterministic node set") in
+# two stages:
+#
+# 1. A first design with a FIXED panel COUNT (60 panels regardless of
+#    voltage, order 16, ~960 nodes always -- panel width ~0.0092, close to
+#    this constant) was validated for ACCURACY against a sweep spanning
+#    delta_sc in {0.1,0.3}, transparency in {0.3,0.6,1.0}, voltage in
+#    {0.05,...,1.0} (both SC-SC and normal-normal junctions, 33/33 cases
+#    within 4e-4 of adaptive quad), plus three robustness sweeps holding
+#    one quantity fixed at a time: panel/singularity phase alignment
+#    (voltage scanned across a full panel width at fixed delta_sc/
+#    transparency/nmax -- worst relative error ~4e-4 over the period, the
+#    binding accuracy constraint, since a fixed uniform grid cannot choose
+#    where its panel boundaries fall relative to the delta_sc-mod-voltage
+#    gap-edge feature); nmax (6 to 64 -- relative error flat to <1e-8
+#    variation, so the node set does not need to depend on nmax); and
+#    ht.delta broadening (1e-3 down to 1e-6 -- relative error saturates
+#    rather than growing, confirming the dominant error is resolving the
+#    singularity's algebraic tail at the panel-width scale, not its narrow
+#    core, so the design does not degrade for a smaller delta). All three
+#    are evidence for why a panel-width-scaled design should generalize,
+#    not a re-run against the exact constant below.
+#
+# 2. That fixed-count design was then rejected on COST, not accuracy:
+#    since node count does not shrink for a small |voltage|, it made the
+#    doc's own deep-subgap representative case (voltage=0.1*delta_sc,
+#    where "adaptive" needs very few quadrature points because the
+#    integration domain itself is tiny) ~20x SLOWER than "adaptive" per
+#    dc_current call, and a cheap normal-normal case ~31x slower --
+#    regressions on exactly the cases this whole optimization effort
+#    targets. Scaling panel count with |voltage| (the design actually
+#    shipped here) fixes the small-voltage blowup: re-validated on the
+#    same 33-case sweep plus one de-commensurated doc-case voltage (34/34
+#    within 6e-4 of adaptive quad, worst case delta_sc=0.1/transparency=
+#    0.3/voltage=0.15, a ~1.7x margin), and a clean (uncontended) wall-
+#    clock benchmark of dc_current itself (selfenergy_method="direct")
+#    gave: ~1.4x slower on the deep-subgap case (down from ~20x), ~1.9x
+#    slower on the hardest SC-SC case in the sweep, and ~45x slower on the
+#    cheap normal-normal case (a normal junction has no gap-edge
+#    singularity at all, so a grid sized to resolve one is pure overkill
+#    there, and telling the two apart at runtime would require inspecting
+#    the pairing -- the gap-introspection this design deliberately avoids;
+#    this regression is a design boundary, not a tuning miss). See the
+#    plan doc for the full per-case node-count and wall-clock comparison
+#    of both designs, and dc_current's own `quadrature` docstring for the
+#    `keldysh_didv` finite-difference amplification check.
+_FIXED_QUAD_PANEL_WIDTH = 0.006
+_FIXED_QUAD_MIN_PANELS = 6
+_FIXED_QUAD_ORDER = 16
+
+
+@lru_cache(maxsize=8)
+def _gauss_legendre_rule(order):
+    """np.polynomial.legendre.leggauss(order), memoized -- called once per
+    (order) the first time `_fixed_quasienergy_nodes` needs it, not
+    recomputed on every dc_current call."""
+    return np.polynomial.legendre.leggauss(order)
+
+
+def _fixed_quasienergy_nodes(voltage, panel_width=_FIXED_QUAD_PANEL_WIDTH,
+                              min_panels=_FIXED_QUAD_MIN_PANELS,
+                              order=_FIXED_QUAD_ORDER):
+    """Deterministic composite Gauss-Legendre quadrature nodes and weights
+    covering [0, |voltage|], the same domain `dc_current`'s adaptive
+    scipy.integrate.quad call integrates current_integrand over:
+    `npanels = max(min_panels, ceil(|voltage|/panel_width))` equal-width
+    panels, each with its own `order`-point Gauss-Legendre rule. A pure
+    function of `(voltage, panel_width, min_panels, order)` only -- NOT of
+    nmax, of the integrand's values, or of anything about `ht` (e.g. no
+    lead-gap lookup) -- so the exact same node set is visited every time
+    `dc_current` is called at the same voltage, satisfying the hard
+    determinism requirement `quadrature="fixed"` exists for (see
+    documentation/keldysh_sideband_decimation_plan.md): no per-call
+    adaptive refinement, and (unlike scipy.integrate.quad's adaptive
+    subdivision, whose node set can differ across nmax steps of the same
+    dc_current call) identical nodes at every nmax the caller's adaptive
+    sideband loop visits. On the selfenergy_method="direct" path (where
+    _batch_selfenergy's dict cache is actually consulted -- "aaa" bypasses
+    it via interp.call_batch), this means every nmax step after the first
+    re-visits nodes already in that cache, where adaptive quad's per-step
+    subdivision can land on different nodes and re-solve them instead;
+    both quadratures' caches are already live across the whole dc_current
+    call regardless, so the difference is hit RATE, not whether caching
+    happens at all. This is a plausible structural difference, not a
+    measured one -- the wall-clock benchmarks in dc_current's own
+    `quadrature` docstring show "fixed" slower overall despite it.
+
+    Returns (nodes, weights) as flat (npanels*order,) arrays; the integral
+    is `float(np.dot(weights, f(nodes)))` for whatever integrand `f`."""
+    x, w = _gauss_legendre_rule(order)
+    V = abs(voltage)
+    npanels = max(min_panels, int(np.ceil(V/panel_width)))
+    edges = np.linspace(0., V, npanels+1)
+    half = 0.5*(edges[1:]-edges[:-1])  # constant, all panels equal width
+    mid = 0.5*(edges[1:]+edges[:-1])
+    nodes = (mid[:, None] + half[:, None]*x[None, :]).ravel()
+    weights = (half[:, None]*w[None, :]).ravel()
+    return nodes, weights
+
+
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
                delta=None, min_consecutive=2, selfenergy_qtci=None,
                selfenergy_method="direct", nmax_growth=1.5,
-               fixed_nmax=None, return_nmax=False):
+               fixed_nmax=None, return_nmax=False, quadrature="adaptive",
+               quad_panel_width=_FIXED_QUAD_PANEL_WIDTH,
+               quad_min_panels=_FIXED_QUAD_MIN_PANELS,
+               quad_order=_FIXED_QUAD_ORDER):
     """Time-averaged (DC) current through a two-terminal junction under a
     bias `voltage`, computed with the Floquet-Keldysh formalism of
     San-Jose, Cayao, Prada, Aguado, NJP 15, 075019 (2013). The junction is
@@ -755,7 +1122,101 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
 
     `return_nmax=True` returns `(current, nmax)` instead of just
     `current` -- `nmax` is the converged (or fixed_nmax's own) value,
-    meant to be fed into a following call's `fixed_nmax`."""
+    meant to be fed into a following call's `fixed_nmax`.
+
+    `quadrature` picks how the outer quasienergy integral over
+    `[0,|voltage|]` (the paper's Floquet-zone integral, evaluated once per
+    adaptive-nmax step by `current_integrand`) is carried out. `"adaptive"`
+    (default, unchanged behavior) uses `scipy.integrate.quad`'s adaptive
+    21-point-Gauss-Kronrod-with-subdivision rule (`limit=50, epsrel=1e-3`);
+    its node set can differ across nmax steps of the same call and is not
+    reproducible without re-running the exact same call.
+
+    `"fixed"` instead uses a deterministic composite Gauss-Legendre rule
+    (`_fixed_quasienergy_nodes`): equal-width panels of absolute width
+    `quad_panel_width` over `[0,|voltage|]` (at least `quad_min_panels` of
+    them), each with its own `quad_order`-point Gauss-Legendre rule --
+    defaulting to panel_width=0.006, min_panels=6, order=16, so e.g.
+    |voltage|=0.55 uses 92 panels (1472 nodes) while |voltage|=0.03 uses
+    the 6-panel floor (96 nodes); see `_FIXED_QUAD_PANEL_WIDTH`'s own
+    comment for how this was chosen (and why panel width, not a fixed
+    panel COUNT, is what scales with voltage). The node set is a pure
+    function of `voltage` (and `quad_panel_width`/`quad_min_panels`/
+    `quad_order`) only: identical across every nmax the adaptive sideband
+    loop visits within one call, and reproducible call-to-call with no
+    dependence on the integrand's runtime values -- what makes item 2c's
+    batched-solver work (`current_integrand_batch`, see below) possible,
+    since it needs the full node set in advance. Validated (documentation/
+    keldysh_sideband_decimation_plan.md) to agree with "adaptive" to
+    within its own epsrel=1e-3 tolerance (typically much better, ~1e-4 to
+    1e-9; worst case over a 34-point sweep of SC-SC and normal-normal
+    junctions, delta_sc in {0.1,0.3}, transparency in {0.3,0.6,1.0},
+    voltage in {0.05,...,1.0}, was 5.8e-4, a ~1.7x margin). Robustness to
+    nmax (6 to 64, flat to <1e-8 variation) and to the self-energy
+    broadening `delta` (1e-3 to 1e-6, saturating rather than growing) was
+    established on an earlier fixed-PANEL-COUNT design that shares this
+    one's panel/order mechanism but not its exact width constant (see
+    `_FIXED_QUAD_PANEL_WIDTH`'s comment for why panel width, not count,
+    was the fix that shipped) -- supporting evidence for why the design
+    should generalize, not a re-run of those two sweeps against this exact
+    constant.
+
+    NOT the default. Every quasienergy node's chain solve is now batched
+    over a leading node axis (`current_integrand_batch` ->
+    `_floquet_green_functions_batch` -> `_assemble_chain_batch_jit`/
+    `_rgf_chain_batch_jit`, one numba `prange` call across nodes instead of
+    one Python callback per node -- item 2c of documentation/
+    keldysh_sideband_decimation_plan.md) rather than the one-callback-per-
+    quad-evaluation loop item 2b originally shipped this mode with, solved
+    in node chunks (`current_integrand_batch`'s `chunk_size`, default
+    `_BATCH_CHUNK_NODES`) to bound peak memory rather than materializing
+    every quadrature node's chain arrays at once. Batched per-node
+    integrand values were checked bit-identical to the pre-batching
+    per-node loop, and independent of `chunk_size`, in
+    tests/keldysh/test_batched_fixed_quadrature.py.
+
+    Speed, measured together (old per-node loop vs new batched-and-chunked
+    vs "adaptive", same run, `selfenergy_method="direct"`, median of 5
+    uncontended runs each -- the three numbers must come from one
+    measurement session to be comparable; item 2b's own "fixed" vs
+    "adaptive" ratios recorded elsewhere in this docstring/the plan doc do
+    NOT reproduce under this session's load, e.g. its ~45x normal-normal
+    slowdown measured ~8x here even before batching, so treat the two
+    sessions' numbers as separate data points, not a single before/after
+    series): on the doc's deep-subgap case, old-fixed 0.757s -> new-fixed
+    0.606s (1.25x) vs adaptive's own 0.920s in the same run -- fixed is now
+    faster than adaptive here. On the hardest SC-SC case in the validation
+    sweep, old-fixed 5.566s -> new-fixed 1.466s (3.80x) vs adaptive's
+    1.068s -- batching closes nearly all of the gap, fixed now ~1.4x
+    slower. On a cheap normal-normal case (no gap-edge singularity, so
+    "adaptive" solves it with as few as 21 points while "fixed" still pays
+    for its full voltage-scaled panel count), old-fixed 1.726s -> new-fixed
+    1.195s (1.44x) vs adaptive's 0.211s -- still ~5.7x slower, a real,
+    structural gap for that case (telling it apart from a singular one at
+    runtime would mean inspecting the pairing -- exactly the gap-
+    introspection this design deliberately avoids), not a batching
+    shortfall. Net: "fixed" is no longer a clear wall-clock loss on every
+    case the way it was pre-batching, but "adaptive" (the default) remains
+    faster on the normal-junction and hardest-SC-SC cases, so there is
+    still no case where switching away from the default is a clear win by
+    itself; "fixed"+batching mainly exists as infrastructure (a
+    deterministic, cacheable node set) for callers that need
+    reproducibility across calls, not as a general speed upgrade. A
+    `keldysh_didv` finite-difference check on the deep-subgap case still
+    found "fixed" and "adaptive" agreeing to 2.0e-4 relative in the
+    resulting dI/dV -- no blow-up.
+
+    The `prange` parallelism inside `_assemble_chain_batch_jit`/
+    `_rgf_chain_batch_jit` only helps when numba can actually use multiple
+    threads: inside a `parallel.pcall` worker (e.g. `iv_curve` with
+    `cores>1`), `parallel.set_num_threads()` clamps numba to 1 thread per
+    worker to avoid oversubscription, so the batching's speedup there comes
+    only from fewer Python/numba dispatch round trips (still real, since
+    that was a meaningful share of the old per-node-loop cost), not from
+    the multi-threaded scaling the single-process benchmarks above show.
+
+    `quad_panel_width`/`quad_min_panels`/`quad_order` are exposed for
+    tuning/testing that node set, not meant to be hand-tuned per call."""
     if voltage == 0.:
         return (0.0, nmax) if return_nmax else 0.0
     if selfenergy_qtci is None and selfenergy_method == "aaa":
@@ -788,7 +1249,19 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     # functions is called once per quadrature point x adaptive-nmax step.
     chain_consts = _prepare_chain_consts(system)
 
+    if quadrature not in ("adaptive", "fixed"):
+        raise ValueError(f"quadrature must be 'adaptive' or 'fixed', got {quadrature!r}")
+
     def integral(nmax):
+        if quadrature == "fixed":
+            nodes, weights = _fixed_quasienergy_nodes(
+                voltage, panel_width=quad_panel_width,
+                min_panels=quad_min_panels, order=quad_order)
+            vals = current_integrand_batch(
+                ht, voltage, nodes, nmax, tauz, delta=delta,
+                temperature=temperature, cache=cache, system=system,
+                selfenergy_qtci=selfenergy_qtci, chain_consts=chain_consts)
+            return float(np.dot(weights, vals))
         f = lambda e: current_integrand(ht, voltage, e, nmax, tauz,
                                          delta=delta, temperature=temperature,
                                          cache=cache, system=system,

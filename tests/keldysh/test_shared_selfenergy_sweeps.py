@@ -120,7 +120,8 @@ def test_finite_T_didv_shares_one_interpolant_across_its_thermal_quadrature(monk
     monkeypatch.setattr(didv_mod, "zero_T_didv", fake_zero_T_didv)
 
     thermaldidv_mod.finite_T_didv(HT, temp=0.02, energy=0.05, nmax_max=6,
-                                   selfenergy_method="aaa")
+                                   selfenergy_method="aaa",
+                                   keldysh_thermal_mode="convolution")
 
     assert len(calls) == 1
     assert len(node_selfenergies) > 1  # the thermal quadrature really did visit many nodes
