@@ -12,8 +12,11 @@ from pyqula.transporttk import didv as didv_mod
 # the decay_constant_keldysh example): these tests are about the SHARING
 # plumbing (how many times build_selfenergy_aaa is called, and whether every
 # sub-call in a sweep sees the same interpolant), not about physical
-# convergence, so a small nmax_max keeps them fast.
-_CHEAP = dict(nmax=2, nmax_max=6, tol=1e-2)
+# convergence, so a small nmax_max keeps them fast. selfenergy_method="aaa"
+# is required explicitly since dc_current's default is now "direct" (see
+# its own docstring for the accuracy gap that made AAA opt-in only) --
+# these tests specifically exercise the AAA-sharing path.
+_CHEAP = dict(nmax=2, nmax_max=6, tol=1e-2, selfenergy_method="aaa")
 
 
 def _sc_junction(delta=0.3, transparency=0.3):
@@ -116,7 +119,8 @@ def test_finite_T_didv_shares_one_interpolant_across_its_thermal_quadrature(monk
         return 1.0  # stand-in, cost-free: this test is about the wiring
     monkeypatch.setattr(didv_mod, "zero_T_didv", fake_zero_T_didv)
 
-    thermaldidv_mod.finite_T_didv(HT, temp=0.02, energy=0.05, nmax_max=6)
+    thermaldidv_mod.finite_T_didv(HT, temp=0.02, energy=0.05, nmax_max=6,
+                                   selfenergy_method="aaa")
 
     assert len(calls) == 1
     assert len(node_selfenergies) > 1  # the thermal quadrature really did visit many nodes

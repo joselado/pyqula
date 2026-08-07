@@ -655,7 +655,8 @@ def build_shared_selfenergy(ht, vmax, nmax_max=40, delta=None, dv=None, **kwargs
 
 def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
                delta=None, min_consecutive=2, selfenergy_qtci=None,
-               selfenergy_method="aaa", nmax_growth=1.5):
+               selfenergy_method="direct", nmax_growth=1.5,
+               fixed_nmax=None, return_nmax=False):
     """Time-averaged (DC) current through a two-terminal junction under a
     bias `voltage`, computed with the Floquet-Keldysh formalism of
     San-Jose, Cayao, Prada, Aguado, NJP 15, 075019 (2013). The junction is
@@ -699,29 +700,28 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     to recover the old fixed +=2 stepping exactly.
 
     `selfenergy_method` picks how lead self-energies are obtained:
-    "aaa" (default) builds one aaatk.selfenergy_aaa.SelfenergyAAA
+    "direct" (default) solves Sancho-Rubio/bloch_selfenergy from scratch
+    at every one of the (tens of thousands of) distinct (lead,energy)
+    pairs the adaptive sideband sweep visits -- unconditionally correct,
+    at the cost of not reusing work across nearby energies.
+
+    "aaa" instead builds one aaatk.selfenergy_aaa.SelfenergyAAA
     interpolant per lead internally (see build_selfenergy_aaa), covering
-    this call's voltage/nmax_max window, and evaluates it instead of
-    solving Sancho-Rubio/bloch_selfenergy from scratch at every one of the
-    (tens of thousands of) distinct (lead,energy) pairs the adaptive
-    sideband sweep visits. Measured through the actual pipeline (see
-    aaatk/selfenergy_aaa.py's module docstring for the performance bugs
-    found and fixed while measuring it, and _rgf_chain_jit/
-    _integrand_trace_sum_jit's docstrings below for a second, separate
-    optimization round of the shared RGF-chain/trace-sum machinery that
-    benefits the direct path too): a consistent win even within a single
-    call for a cheap-per-solve target like a 1D Sancho-Rubio self-energy
-    (roughly break-even to ~40% faster), and should be substantially
-    larger for an expensive-per-solve target (e.g. a 2D sample's
-    green_kchain-based self-energy) where a single direct solve alone
-    costs much more than the interpolant's whole per-energy evaluation.
-    Sharing one interpolant across several calls
-    (e.g. keldysh_didv's finite difference, or an iv_curve sweep) helps
-    further since the one-time build cost is paid only once. If the
-    interpolant doesn't converge within its (deliberately modest, single-
-    call-sized) budget, this falls back to "direct" automatically rather
-    than risking a large, possibly-losing build -- see build_selfenergy_aaa.
-    "direct" restores the old per-energy behavior unconditionally.
+    this call's voltage/nmax_max window, and evaluates that instead of
+    solving from scratch at every energy -- a real speedup for a
+    cheap-per-solve target like a 1D Sancho-Rubio self-energy (roughly
+    break-even to ~40% faster for a single call, more when the
+    interpolant is shared across several calls, e.g. keldysh_didv's
+    finite difference or an iv_curve sweep -- see aaatk/selfenergy_aaa.py's
+    module docstring for the performance measurements). NOT the default:
+    documentation/keldysh_sideband_decimation_plan.md's "shared-nmax
+    finite difference" update found a real, still-unresolved accuracy gap
+    (up to ~10% relative error in the current, growing with the sideband
+    window size/nmax_max, likely from error compounding through the RGF
+    chain rather than an insufficient AAA fit -- SelfenergyAAA's own
+    validation check reports low error throughout, so it does not protect
+    against this) in some regimes. Use "aaa" only if you have independently
+    checked it agrees with "direct" for your own system/parameter range.
 
     `selfenergy_qtci`, if given explicitly, overrides `selfenergy_method`
     entirely: pass a {lead: interpolant} dict (from build_selfenergy_aaa
@@ -742,9 +742,22 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     interpolant across many calls (e.g. an iv_curve sweep) should build
     one explicitly with a larger budget (build_selfenergy_aaa(...,
     ncand_max=...)) and pass it as `selfenergy_qtci` instead of relying on
-    this automatic, single-call-sized default."""
+    this automatic, single-call-sized default.
+
+    `fixed_nmax`, if given, skips the adaptive nmax search entirely and
+    solves the chain once at exactly this nmax (nmax/nmax_max/tol/
+    min_consecutive/nmax_growth are all ignored). For sharing across a
+    finite-difference pair (see transporttk.didv.keldysh_didv): the two
+    biases differ by only `2*dv` (~1-2% of voltage), so their converged
+    nmax is almost always identical, and same-nmax differencing also
+    cancels systematic truncation error that the adaptive loop's own
+    tol/min_consecutive guard does not otherwise control for.
+
+    `return_nmax=True` returns `(current, nmax)` instead of just
+    `current` -- `nmax` is the converged (or fixed_nmax's own) value,
+    meant to be fed into a following call's `fixed_nmax`."""
     if voltage == 0.:
-        return 0.0
+        return (0.0, nmax) if return_nmax else 0.0
     if selfenergy_qtci is None and selfenergy_method == "aaa":
         selfenergy_qtci = build_selfenergy_aaa(ht, voltage, nmax_max, delta=delta)
         if not all(s.converged for s in selfenergy_qtci.values()):
@@ -784,6 +797,10 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
         val, _ = quad(f, 0., abs(voltage), limit=50, epsrel=1e-3)
         return val
 
+    if fixed_nmax is not None:
+        prev = integral(fixed_nmax)
+        return (prev, fixed_nmax) if return_nmax else prev
+
     prev = integral(nmax)
     streak = 0
     converged = False
@@ -801,26 +818,27 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
             f"keldysh.dc_current: sidebands did not converge to tol={tol} "
             f"by nmax_max={nmax_max} at voltage={voltage}; result may be "
             "inaccurate, try a larger nmax_max")
-    return prev
+    return (prev, nmax) if return_nmax else prev
 
 
 def iv_curve(ht, voltages, **kwargs):
     """Convenience wrapper: dc_current evaluated over an array of voltages,
     in parallel (see parallel.pcall).
 
-    Builds one shared AAA self-energy interpolant up front (build_shared_
-    selfenergy), sized to cover every voltage in `voltages`, and reuses it
-    for every dc_current call in the sweep instead of each call
-    independently building (and discarding) its own default fit -- the
-    same sharing keldysh_didv already does within one Ip/Im pair, extended
-    across the whole voltage array. Skipped, falling back to dc_current's
-    own per-call default, if the caller already passed selfenergy_qtci
-    explicitly or selfenergy_method="direct" (both are explicit opt-outs
-    of the default AAA path, so building a shared fit here would be
-    pointless or would silently override the caller's own choice)."""
+    dc_current's default selfenergy_method is "direct" (see its own
+    docstring for the accuracy gap that made "aaa" opt-in only). If the
+    caller explicitly passes selfenergy_method="aaa", this builds one
+    shared AAA self-energy interpolant up front (build_shared_selfenergy),
+    sized to cover every voltage in `voltages`, and reuses it for every
+    dc_current call in the sweep instead of each call independently
+    building (and discarding) its own -- the same sharing keldysh_didv
+    already does within one Ip/Im pair, extended across the whole voltage
+    array. Skipped if the caller already passed selfenergy_qtci
+    explicitly (an explicit opt-out, so building a shared fit here would
+    silently override the caller's own choice)."""
     from ..parallel import pcall
     if ("selfenergy_qtci" not in kwargs
-            and kwargs.get("selfenergy_method", "aaa") == "aaa"
+            and kwargs.get("selfenergy_method", "direct") == "aaa"
             and len(voltages)):
         nmax_max = kwargs.get("nmax_max", 40)
         vmax = max(abs(v) for v in voltages)

@@ -77,11 +77,18 @@ def test_shared_selfenergy_for_branch_only_builds_for_both_sc_leads():
     ht_normal = kappa_mod.generate_HT(HT, SC=False)
 
     shared_normal = kappa_mod._shared_selfenergy_for_branch(
-        ht_normal, [0.05, 0.1], 0.02, nmax_max=4)
+        ht_normal, [0.05, 0.1], 0.02, nmax_max=4, selfenergy_method="aaa")
     assert shared_normal is None
 
-    shared_sc = kappa_mod._shared_selfenergy_for_branch(
+    # dc_current's default is now "direct" (see its own docstring for the
+    # AAA accuracy gap that made sharing opt-in) -- without an explicit
+    # selfenergy_method="aaa", even the SC branch must build nothing.
+    shared_sc_default = kappa_mod._shared_selfenergy_for_branch(
         ht_sc, [0.05, 0.1], 0.02, nmax_max=4)
+    assert shared_sc_default is None
+
+    shared_sc = kappa_mod._shared_selfenergy_for_branch(
+        ht_sc, [0.05, 0.1], 0.02, nmax_max=4, selfenergy_method="aaa")
     assert shared_sc is not None
     assert all(s.converged for s in shared_sc.values())
 

@@ -18,18 +18,21 @@ def finite_T_didv(self,temp,energy=0.0,**kwargs):
     energies within +-THERMAL_WINDOW*temp of `energy` (147 evaluations
     for one "adaptive"-mode call was measured at temp=0.02) -- all of them
     on the SAME junction, so if it is Floquet-Keldysh-eligible (see
-    transporttk.didv._both_leads_superconducting) one shared AAA
-    self-energy interpolant (keldyshtk.current.build_shared_selfenergy),
-    sized to cover the whole window up front, is built once here and
-    reused by every one of those evaluations instead of each
-    independently building (and discarding) its own default fit -- the
-    same sharing kappa.py's _shared_selfenergy_for_branch already does for
-    its own outer coupling/energy sweep, applied here to the window a
-    single finite_T_didv call visits internally, with or without any
-    outer sweep at all. Skipped if the caller already passed
-    selfenergy_qtci explicitly."""
+    transporttk.didv._both_leads_superconducting) AND the caller
+    explicitly opted into selfenergy_method="aaa" (see dc_current's own
+    docstring for why that's not the default -- an unresolved accuracy
+    gap), one shared AAA self-energy interpolant (keldyshtk.current.
+    build_shared_selfenergy), sized to cover the whole window up front, is
+    built once here and reused by every one of those evaluations instead
+    of each independently building (and discarding) its own -- the same
+    sharing kappa.py's _shared_selfenergy_for_branch already does for its
+    own outer coupling/energy sweep, applied here to the window a single
+    finite_T_didv call visits internally, with or without any outer sweep
+    at all. Skipped if the caller already passed selfenergy_qtci
+    explicitly, or didn't ask for selfenergy_method="aaa"."""
     from .didv import zero_T_didv, _both_leads_superconducting
-    if "selfenergy_qtci" not in kwargs and _both_leads_superconducting(self):
+    if ("selfenergy_qtci" not in kwargs and kwargs.get("selfenergy_method") == "aaa"
+            and _both_leads_superconducting(self)):
         from ..keldyshtk.current import build_shared_selfenergy
         nmax_max = kwargs.get("nmax_max", 40)
         shared = build_shared_selfenergy(self, abs(energy)+THERMAL_WINDOW*temp,

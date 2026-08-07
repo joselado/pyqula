@@ -72,8 +72,12 @@ def _with_shared_selfenergy(ht,kwargs):
     finite-temperature kappa path below, applied to the zero-temperature
     one -- a smaller win (only 2 calls share one build here, versus that
     path's whole coupling/energy/thermal-quadrature sweep) but the same
-    already-proven, zero-risk pattern."""
+    already-proven, zero-risk pattern. Only applies if the caller
+    explicitly opted into selfenergy_method="aaa" (see dc_current's own
+    docstring for why that's not the default -- an unresolved accuracy
+    gap)."""
     if "selfenergy_qtci" in kwargs: return kwargs
+    if kwargs.get("selfenergy_method") != "aaa": return kwargs
     from .didv import _both_leads_superconducting
     if not _both_leads_superconducting(ht): return kwargs
     from ..keldyshtk.current import build_shared_selfenergy
@@ -198,7 +202,12 @@ def _shared_selfenergy_for_branch(ht,energies,temp,nmax_max=40,delta=None,dv=Non
     converge within budget) and for why an explicit `dv` must be honored
     here too (SelfenergyAAA performs no domain check and would silently
     extrapolate for a call whose voltage+-dv pushes past the fitted
-    window)."""
+    window). Only builds anything if the caller explicitly opted into
+    selfenergy_method="aaa" via **kwargs (see dc_current's own docstring
+    for why that's not the default -- an unresolved accuracy gap);
+    returns None otherwise, same as the not-both-leads-superconducting
+    case."""
+    if kwargs.get("selfenergy_method") != "aaa": return None
     from .thermaldidv import THERMAL_WINDOW
     from ..keldyshtk.current import build_shared_selfenergy
     emax = max(abs(e) for e in energies) if len(energies) else 0.

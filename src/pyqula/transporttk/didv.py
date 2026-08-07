@@ -94,7 +94,7 @@ def _both_leads_superconducting(ht):
 
 
 def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,
-                  use_aaa=True,**kwargs):
+                  use_aaa=False,**kwargs):
     """Zero/finite-bias differential conductance dI/dV at bias `voltage`,
     obtained as a central finite-difference derivative of the
     Floquet-Keldysh DC current (Heterostructure.get_dc_current), see
@@ -105,27 +105,40 @@ def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,
     superconducting -- the probe and the sample site it couples to play
     the role of the two leads.
 
-    `use_aaa=True` (default) builds one aaatk.selfenergy_aaa.SelfenergyAAA
-    interpolant per lead (see keldyshtk.current.build_selfenergy_aaa) once
-    here, covering both voltage+dv and voltage-dv's sideband window, and
-    shares it between the Ip and Im dc_current calls below instead of
-    each independently building (and discarding) its own -- unlike the
-    quantics/qtci approach below, this one measurably pays off (see
-    aaatk/selfenergy_aaa.py's module docstring for the measured net
-    effect -- modest for a cheap-per-solve target, substantially larger
-    for an expensive-per-solve one), which is why it is the default. If
-    the interpolant doesn't converge within its (deliberately
-    modest, single-sweep-sized) budget -- possible for a wide sideband
-    window packing many Andreev/MAR resonances into the interpolated
-    range -- this falls back to letting each dc_current call build (or
-    skip) its own default instead of forcing a possibly-losing shared fit
-    (see dc_current's own selfenergy_method="aaa" docstring).
+    `use_aaa=True` (NOT the default -- see dc_current's own
+    selfenergy_method docstring for why) builds one aaatk.selfenergy_aaa.
+    SelfenergyAAA interpolant per lead (see keldyshtk.current.
+    build_selfenergy_aaa) once here, covering both voltage+dv and
+    voltage-dv's sideband window, and shares it between the Ip and Im
+    dc_current calls below instead of each independently building (and
+    discarding) its own. This is a real speedup where it's accurate (see
+    aaatk/selfenergy_aaa.py's module docstring), but the finite difference
+    below divides by `Ip-Im`, which can be much smaller than `Ip`/`Im`
+    themselves -- documentation/keldysh_sideband_decimation_plan.md found
+    this amplifies AAA's per-branch error (which itself grows with the
+    sideband window/nmax_max, not fully explained yet) by up to ~10x in
+    the resulting dI/dV. Only turn this on if you have independently
+    checked it against use_aaa=False for your own system/parameter range.
 
     `use_qtci=True` instead builds a qtcitk.selfenergy_qtci.SelfenergyQTCI
     interpolant the same way (overrides `use_aaa`). Kept for comparison/
     debugging only -- measured NOT to help for a LocalProbe's Sancho-Rubio
     self-energy (see qtcitk.selfenergy_qtci's module docstring for the
-    benchmark)."""
+    benchmark).
+
+    Ip and Im also share one converged adaptive-nmax value: Ip runs
+    dc_current's normal adaptive nmax search, then Im is solved once at
+    that same nmax (dc_current's fixed_nmax) instead of re-running its own
+    independent search. `voltage+dv` and `voltage-dv` differ by only `2*dv`
+    (~1-2% of voltage), so they converge at the same nmax in practice --
+    skipping Im's own search avoids redoing ~O(log nmax_max) redundant
+    chain re-solves, and differencing two same-nmax evaluations also
+    cancels systematic truncation error that could otherwise show up as
+    numerical noise in the derivative (see documentation/
+    keldysh_sideband_decimation_plan.md). Only applies when the caller
+    hasn't already fixed nmax explicitly (an explicit `fixed_nmax` in
+    kwargs is left untouched, applying identically to both Ip and Im, same
+    as passing it straight to dc_current would)."""
     from ..keldyshtk.current import (dc_current, build_selfenergy_qtci,
                                       build_selfenergy_aaa)
     if dv is None: dv = max(abs(voltage)*1e-2,1e-3)
@@ -143,8 +156,12 @@ def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,
             shared = build_selfenergy_aaa(ht, abs(voltage)+dv, nmax_max, delta=delta)
             if all(s.converged for s in shared.values()):
                 kwargs["selfenergy_qtci"] = shared
-    Ip = dc_current(ht,voltage+dv,delta=delta,**kwargs)
-    Im = dc_current(ht,voltage-dv,delta=delta,**kwargs)
+    if "fixed_nmax" in kwargs:
+        Ip = dc_current(ht,voltage+dv,delta=delta,**kwargs)
+        Im = dc_current(ht,voltage-dv,delta=delta,**kwargs)
+    else:
+        Ip, nmax_shared = dc_current(ht,voltage+dv,delta=delta,return_nmax=True,**kwargs)
+        Im = dc_current(ht,voltage-dv,delta=delta,fixed_nmax=nmax_shared,**kwargs)
     return (Ip-Im)/(2*dv)
 
 

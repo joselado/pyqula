@@ -341,3 +341,160 @@ across nmax growth) remains shelved -- this cheaper fix captures a large fractio
 theoretical benefit (Σns redundancy down from ~16x to ~3x for the representative case) for a
 ~15-line, zero-new-physics change, at a much smaller correctness-risk profile. Revisit the full
 splice cache only if a workload is still slow after this fix.
+
+## Update: shared-nmax finite difference landed (T=0 path); surfaced a separate, more
+## important accuracy issue in the default AAA self-energy path
+
+Per a follow-up (Claude Fable) review prioritizing what's next after the geometric-nmax-growth
+fix above, the maintainer asked to prioritize the T=0 (zero-temperature) path specifically over
+the finite-temperature thread (`finite_T_didv`'s ~294-`dc_current`-calls-per-point structure,
+which needs an arXiv-consult before any native-temperature-routing change per CLAUDE.md -- not
+started). That review's P2 item: `transporttk.didv.keldysh_didv`'s `Ip`/`Im` finite-difference
+pair each independently re-ran `dc_current`'s adaptive-nmax search, even though the two biases
+differ by only `2*dv` (~1-2% of voltage) and converge to the same nmax in practice.
+
+**Implemented**: `dc_current` gained `fixed_nmax` (skip the adaptive search, solve once at an
+explicit nmax) and `return_nmax=True` (return `(current, nmax)` instead of just `current`).
+`keldysh_didv` now runs `Ip` with `return_nmax=True`, then `Im` with `fixed_nmax=` that same
+value, instead of two independent adaptive searches -- unless the caller already passed their
+own `fixed_nmax` explicitly, in which case both branches just use it directly (unchanged
+behavior).
+
+**Correctness**: verified bit-identical (not just "close") to the pre-change independent-search
+behavior, isolating the self-energy method (`selfenergy_method="direct"`, no AAA involved) so
+only the nmax-sharing itself is being tested: two representative points (deep-subgap
+voltage=0.03 and near-gap voltage=0.18, same delta=0.3/T=0.5 SC-SC chain as this doc's earlier
+benchmarks) both gave exactly 0.0 relative difference between old (`Ip`,`Im` independently
+adaptive) and new (`Im` at `Ip`'s converged nmax) results -- expected, since both branches
+happened to converge to the same nmax (14 and 64 respectively) even independently, and `dc_current`
+with `fixed_nmax=N` calls the exact same internal `integral(N)` closure the adaptive loop's own
+final step would have called. Full `tests/keldysh` (67 tests) still passes unchanged.
+
+**Speed**: same deep-subgap point (voltage=0.03, nmax_max=64, `selfenergy_method="aaa"`
+default): independent Ip+Im search 11.3s -> shared-nmax `keldysh_didv` 3.6s, ~3.1x (on top of
+the geometric-growth win already landed -- this is now cumulative with that fix, since each of
+Ip/Im's own adaptive search is itself geometric).
+
+**Separate finding, NOT caused by this change, found while validating it**: comparing
+`selfenergy_method="aaa"` (default) against `"direct"` on the *same* near-gap case
+(voltage=0.18, delta=0.3, T=0.5, HT.delta=1e-4) turned up per-branch self-energy fit errors of
+~7-8% (`Ip`: direct=6.740e-2 vs aaa=6.246e-2; `Im`: direct=6.173e-2 vs aaa=5.677e-2) -- each
+individually larger than the 5% bound `tests/keldysh/test_selfenergy_aaa.py`'s existing
+AAA-vs-direct tests assert, though those tests exercise a different system (a shallow-gap
+LocalProbe, delta=0.1, `nmax_max<=12`, `tol=5e-2`) that doesn't reach this regime. Because
+`keldysh_didv`'s finite difference divides by `Ip-Im` (here ~0.0057, much smaller than either
+`Ip` or `Im` themselves), that ~7-8% per-branch error is amplified by catastrophic cancellation
+into a 37-60% error in the resulting dI/dV depending on whether the AAA fit is built shared
+(one interpolant for both `Ip`/`Im`, `keldysh_didv`'s current default) or independently (each
+call builds its own) -- confirmed present identically on unmodified master, i.e. **this is a
+pre-existing accuracy gap in the shipped default (`selfenergy_method="aaa"`), not something this
+change introduced**, but it was found as a direct side effect of validating this change (the
+"apples-to-oranges" comparison in an early version of this validation, before pinning
+`selfenergy_method="direct"` on both sides, is what surfaced it).
+
+**Not yet resolved -- flagged to the maintainer, no fix attempted**: whether the right fix is
+tightening `SelfenergyAAA`'s convergence tolerance specifically when it will feed a
+finite-difference derivative (since the failure mode is error amplification, not the raw
+self-energy fit being unreasonable in absolute terms), widening test coverage to catch this
+regime (deep SC gap + tight broadening + near-gap bias, not currently exercised by
+`tests/keldysh/test_selfenergy_aaa.py`), or something else -- this needs a decision, not a
+guess, before any code changes.
+
+## Update: first attempted fix (validation-resolution gate) was miscalibrated and reverted;
+## the real error mechanism is a continuous, window-size-dependent bias, not a threshold effect
+
+Asked to investigate and fix the accuracy gap above. First hypothesis: `SelfenergyAAA`'s
+held-out validation offsets (`rng.uniform(0.1*step, 0.9*step, ...)`) are always drawn within one
+candidate-grid step of an existing sample, so validation can never probe finer resolution than
+the candidate grid already has -- a real feature narrower than the grid step (e.g. a gap-edge
+singularity of width ~delta on a grid with step >> delta) would be invisible to both the fit
+and its own validation check, explaining a false `converged=True`. Implemented a gate
+(`resolution_factor`, requiring `step <= resolution_factor*delta` in addition to the existing
+`maxerr <= tolerance`) plus an early-bailout check (skip straight to `converged=False` when even
+`ncand_max` candidates can't reach that resolution, to avoid burning the full escalation budget
+on a doomed fit -- confirmed necessary: without it, the gated build took ~10s before giving up
+vs ~1s with it).
+
+**This was reverted after broader testing showed it doesn't match the real error behavior.**
+Directly measuring relative current error (`selfenergy_method="aaa"` vs `"direct"`, same system,
+`voltage=0.18`, `delta=1e-4`) across a range of `nmax_max` (hence window width) found the error
+grows *continuously* with window size -- 0.5% at `nmax_max=4`, 0.6% at 8, 1.4% at 16, 3.3% at 24,
+4.8% at 32, 9.8% at 40 -- with no sharp resolution threshold anywhere in that range, and
+`validation_error` staying deceptively flat (~1e-7-5e-7) throughout regardless of the actual
+error's 20x growth. The `resolution_factor` gate, calibrated against only the single worst-case
+point that motivated it, correctly rejected that one point (by coincidence of it having an
+extreme step/delta ratio) but had no principled relationship to this actual, continuous trend --
+and independently, it broke 3 existing tests (`test_shared_selfenergy_for_branch_only_builds_
+for_both_sc_leads`, `test_iv_curve_shares_one_interpolant_across_the_voltage_sweep`,
+`test_finite_T_didv_shares_one_interpolant_across_its_thermal_quadrature`) whose small-`nmax_max`
+fixtures (also `delta=1e-4`, transparency=0.3) turned out to be genuinely accurate (rel. error
+2.9e-7 and 1.2e-3, confirmed by direct measurement) despite similarly "unfavorable" step/delta
+ratios -- proof the gate's threshold logic doesn't track the real failure boundary.
+
+Tightening `tolerance` alone (1e-6 -> 1e-12, at `nmax_max=40`) helps but doesn't cleanly fix it
+either: 9.8% -> 7.4% -> 6.6% -> 0.8% -- a real ~12x improvement, but not converging to
+correctness, and `aaa_tolerance` (0.1*tolerance, the AAA fit's own internal residual target)
+turns out to be doing most of that work rather than added candidate density (`ncand` stayed
+fixed at 432 from tolerance=1e-6 through 1e-10, only escalating to 863 at 1e-12) -- i.e. the same
+432 candidates support a materially better fit once AAA is told to work harder fitting them,
+independent of any resolution/coverage argument.
+
+**Working hypothesis, not yet confirmed**: error compounding through the RGF chain across many
+sidebands (each `_rgf_chain_jit` step recursively combines Green's functions from adjacent
+sites, potentially amplifying even a small ~1e-7-level per-energy self-energy error many times
+over as `nmax_max`/window size grows -- roughly consistent with the observed error trend scaling
+with window size rather than with any single evaluation's local accuracy) rather than a missed
+narrow feature. Not yet verified directly (would need e.g. injecting a known small perturbation
+into a single self-energy evaluation and measuring how much the final current changes as a
+function of chain length/nmax, to see if the amplification factor actually matches).
+
+**Status: unresolved, reverted to the pre-fix `aaatk/selfenergy_aaa.py` (the accuracy gap
+documented in the update above is real and still present) -- needs the maintainer's input on
+how to proceed** (deeper investigation into the compounding-error hypothesis; a blunter interim
+mitigation like always using `selfenergy_method="direct"` above some `nmax_max`/domain-width
+threshold at the cost of losing the AAA speedup exactly where it's needed most; or deprioritizing
+this and shipping only the independently-validated nmax-sharing change from the update above).
+The nmax-sharing (`fixed_nmax`/`return_nmax`, `keldysh_didv`) change itself is unaffected by this
+revert -- it was validated with `selfenergy_method="direct"` specifically to isolate it from this
+issue, and remains correct and landed.
+
+## Update: chose the blunt mitigation -- "direct" is now the default everywhere, "aaa" is opt-in
+
+Maintainer's choice, given the compounding-error mechanism above is still not understood well
+enough to fix confidently: make `selfenergy_method="direct"` the default at every entry point
+that could reach the Floquet-Keldysh path, so nothing silently returns the AAA accuracy gap's
+wrong answer unless a caller explicitly asks for it. Implemented:
+
+- `dc_current`'s own `selfenergy_method` default: `"aaa"` -> `"direct"`.
+- `keldysh_didv`'s `use_aaa` default: `True` -> `False`.
+- `iv_curve`'s auto-share-a-fit check: was `kwargs.get("selfenergy_method", "aaa") == "aaa"`,
+  now defaults to `"direct"` in the same `.get(...)` (so it only shares when the caller passed
+  `selfenergy_method="aaa"` explicitly).
+- `thermaldidv.finite_T_didv`'s auto-share (previously unconditional whenever both leads were
+  superconducting, regardless of any `selfenergy_method` kwarg): now additionally gated on
+  `kwargs.get("selfenergy_method") == "aaa"`.
+- `kappa._with_shared_selfenergy` (get_kappa's zero-temperature path) and `kappa._shared_
+  selfenergy_for_branch` (the finite-temperature path): same new gate, `kwargs.get(
+  "selfenergy_method") == "aaa"` required before building/sharing anything.
+
+Every one of these previously built (and shared) an AAA fit *by default* whenever the junction
+was Floquet-Keldysh-eligible, with no way for a caller to have hit the "direct" path without
+explicitly asking for it at every single call site -- the gates above close that gap in one
+consistent sweep rather than leaving some entry points silently still defaulting to "aaa".
+
+**Test fallout, all expected and fixed**: several `tests/keldysh` tests were specifically
+testing the AAA-sharing plumbing (call counting, interpolant-object identity across a sweep) and
+relied on the old AAA-by-default behavior without passing `selfenergy_method="aaa"` themselves --
+these now explicitly opt in (`tests/keldysh/test_shared_selfenergy_sweeps.py`'s `_CHEAP` dict,
+`test_kappa_finite_temperature.py`'s `test_shared_selfenergy_for_branch_only_builds_for_both_
+sc_leads`, `test_selfenergy_aaa.py`'s `test_build_selfenergy_aaa_matches_direct_dc_current`/
+`test_keldysh_didv_use_aaa_matches_use_qtci_and_direct`) so they keep testing what they were
+built to test rather than silently comparing "direct" against "direct". Full `tests/keldysh`
+(67 tests) passes with these updates.
+
+**Cost of this choice**: every Floquet-Keldysh call is back to the pre-AAA per-energy solve cost
+by default -- the AAA speedup work (aaatk/selfenergy_aaa.py, this doc's earlier updates) is not
+lost, just no longer reached without an explicit `selfenergy_method="aaa"`/`use_aaa=True`, and a
+caller who has verified it's accurate for their own system can still opt back in. `documentation/
+user_guide.md`'s Floquet-Keldysh section was updated to describe "direct" as the default and
+"aaa" as a checked-it-yourself opt-in, with a pointer to this document for the accuracy gap.

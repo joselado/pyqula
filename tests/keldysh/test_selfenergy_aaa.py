@@ -61,13 +61,14 @@ def test_selfenergy_aaa_matches_direct_sancho_rubio():
 
 
 def test_build_selfenergy_aaa_matches_direct_dc_current():
-    """dc_current's default (selfenergy_method="aaa") must agree with the
-    old per-energy direct Sancho-Rubio solves (selfenergy_method="direct")
-    to within the sideband-convergence tolerance already requested -- the
-    interpolant changes performance, not the physics."""
+    """selfenergy_method="aaa" (opt-in -- dc_current's default is "direct",
+    see its own docstring for the accuracy gap that made this opt-in only)
+    must agree with the direct per-energy Sancho-Rubio solves to within
+    the sideband-convergence tolerance already requested, for this small,
+    cheap-nmax_max case."""
     lp = _superconducting_localprobe()
     kwargs = dict(nmax=4, nmax_max=12, tol=5e-2)
-    Iaaa = lp.get_dc_current(0.05, **kwargs)
+    Iaaa = lp.get_dc_current(0.05, selfenergy_method="aaa", **kwargs)
     Idirect = lp.get_dc_current(0.05, selfenergy_method="direct", **kwargs)
     assert abs(Iaaa-Idirect) < 5e-2*max(abs(Idirect), 1e-8)
 
@@ -80,12 +81,13 @@ def test_aaa_falls_back_to_direct_when_selfenergy_method_invalid():
 
 
 def test_keldysh_didv_use_aaa_matches_use_qtci_and_direct():
-    """The three self-energy strategies keldysh_didv can use (default AAA,
-    explicit qtci, explicit direct via use_aaa=False) must agree on the
-    physical dI/dV to within the sideband-convergence tolerance."""
+    """The three self-energy strategies keldysh_didv can use (opt-in AAA,
+    explicit qtci, default direct via use_aaa=False) must agree on the
+    physical dI/dV to within the sideband-convergence tolerance, for this
+    small, cheap-nmax_max case."""
     lp = _superconducting_localprobe()
     kwargs = dict(nmax=4, nmax_max=10, tol=5e-2)
-    Gaaa = lp.didv(energy=0.25, method="keldysh", **kwargs)
+    Gaaa = lp.didv(energy=0.25, method="keldysh", use_aaa=True, **kwargs)
     Gdirect = lp.didv(energy=0.25, method="keldysh", use_aaa=False, **kwargs)
     assert abs(Gaaa-Gdirect) < 5e-2*max(abs(Gdirect), 1e-8)
 
