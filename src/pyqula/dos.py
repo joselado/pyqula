@@ -332,7 +332,9 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
       k = ks[ik]
       (x,y) = f(k) # compute
       ytot += y # add contribution
-    ytot /= nk # normalize
+    ytot /= numk # normalize (numk = len(ks), not nk -- for 2D/3D
+    # lattices numk = nk**(dimensionality), so normalizing by nk alone
+    # under-divides by a factor of nk per extra dimension)
   else: # parallel calculation
     out = parallel.pcall(f,ks) # compute all
     ytot = np.mean([out[i][1] for i in range(numk)],axis=0) # average DOS
@@ -370,8 +372,11 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
           return dos_kmesh(h,energies=energies,**kwargs)
       elif mode in ["Green","RG"]: # Green function formalism
           def fun(e):
-              return green.green_operator(h,e=e,**kwargs) 
+              return green.green_operator(h,e=e,**kwargs)
           ds = parallel.pcall(fun,energies) # compute DOS with an operator
+          # green_operator returns the raw -Im[Tr G], not yet a DOS value;
+          # apply the same 1/pi normalization dos_kmesh (mode="ED") does
+          ds = np.array(ds)/np.pi
           np.savetxt("DOS.OUT",np.array([energies,ds]).T) # write in a file
           return (energies,ds)
       elif mode=="KPM": 
