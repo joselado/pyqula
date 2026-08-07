@@ -9,10 +9,12 @@ When a physics/numerical algorithm issue (e.g. a mean-field, topology, or Green'
 proving hard to resolve from the code and general knowledge alone, ask the user whether to pull a specific
 paper from arXiv to help sort it out, rather than guessing at the underlying formalism.
 
-When asked to implement a qualitatively new piece of physics (a formalism or algorithm not already present
-in this codebase, as opposed to extending an existing one), check arXiv for a paper covering it before
-writing code, rather than relying on general knowledge alone. If a tested, well-established open-source
-implementation of the same method exists, it's good to use it as a reference too.
+Whenever doing a new implementation (a formalism or algorithm not already present in this codebase, as
+opposed to extending an existing one), check arXiv for a paper covering it before writing code, rather than
+relying on general knowledge alone, and use that reference to guide the implementation. If a tested,
+open-source implementation of the same method is available under a permissive/compatible license (e.g.
+MIT, GPL), use it as a benchmark (compare results against it) or mirror its structure/approach where
+fitting, rather than writing the algorithm from scratch against general knowledge alone.
 
 ## What this is
 
