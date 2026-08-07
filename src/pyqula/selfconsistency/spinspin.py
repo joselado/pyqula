@@ -29,6 +29,7 @@ import numpy as np
 from .. import specialhopping
 from ..multihopping import MultiHopping
 from ..rotate_spin import global_spin_rotation as _gsr
+from ..checkclass import is_iterable
 
 # NOTE: densitydensity is imported lazily (inside each function, not here at
 # module level). densitydensity.py itself does `from ..meanfield import
@@ -344,6 +345,31 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     first-neighbor shell only (e.g. the effective first-neighbor Jz
     coupling is J1+J1z); second/third neighbors stay purely isotropic. All
     default to 0, i.e. plain density-density with no spin-spin exchange.
+
+    `filling` accepts either a scalar (a single, lattice-averaged Fermi
+    level, the original/default behavior -- 0.5 means half of each site's
+    2-orbital up+down capacity filled, i.e. 1 electron/site on average) or
+    a per-SITE array (length len(h0.geometry.r), one target per site,
+    same 0-to-1-fraction-of-2-orbital-capacity normalization as the scalar
+    case). The array form enforces the LOCAL occupation <n_i>=filling[i]
+    at every site independently, via a per-site onsite potential/Lagrange
+    multiplier -- the hard local constraint an Abrikosov-pseudofermion
+    mean-field treatment of a spin-1/2 Heisenberg model needs (Savary &
+    Balents, "Quantum Spin Liquids: a review", arXiv:1601.03742, Sec. 4.1)
+    -- rather than only the lattice-averaged filling a scalar Fermi level
+    gives. See densitymatrix.full_dm_accumulate_sparse_local_fermi and
+    _run_anisotropic_scf's array-filling branch for the mechanism
+    (warm-started, co-converged with the mean field one diagonalization per
+    outer SCF iteration, not solved to tight tolerance every iteration) and
+    its performance-vs-exactness tradeoff. Only supported for a
+    normal-state (has_eh=False), integration="ed" Hamiltonian with mu=None
+    (the default) -- combining an array filling with integration="kpm", a
+    BdG (has_eh=True) h0, or an explicit mu all raise NotImplementedError
+    (see _run_anisotropic_scf's own checks for why each is out of scope).
+    scf.local_occupation (the converged <n_i> per site) and scf.lam /
+    scf.hamiltonian.fermi (the converged per-site potentials) are exposed
+    on the returned SCF object as diagnostics only when filling was given
+    as an array.
 
     This works by combining the two existing SCF modes rather than
     inventing new decoupling math: density-density interactions and
@@ -822,6 +848,41 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 "only supports a normal-state (has_eh=False) Hamiltonian -- "
                 "see _run_anisotropic_scf's docstring for why the Nambu "
                 "case (vd in its own reordered basis) is out of scope here")
+    # per-site (array) filling -- see the array-filling branch of f() below
+    # (near densitymatrix.full_dm_accumulate_sparse_local_fermi) for the
+    # implementation and its normalization convention. Two combinations are
+    # explicitly out of scope, rejected here (fail before any SCF work,
+    # rather than partway through the loop):
+    array_filling = is_iterable(filling)
+    if array_filling and integration == "kpm":
+        raise NotImplementedError("VJinteraction's integration=\"kpm\" path "
+                "does not support a per-site (array) filling -- its Fermi/"
+                "occupation machinery (kpmtk.densitymatrix_kpm) only knows "
+                "how to target a single scalar filling via a deterministic "
+                "moment-based DOS integral, with no per-site local-chemical-"
+                "potential analogue implemented; use integration=\"ed\" "
+                "(the default) for a per-site filling target")
+    if array_filling and has_eh:
+        raise NotImplementedError("A per-site (array) filling is not "
+                "supported for a BdG (Nambu, has_eh=True) Hamiltonian -- "
+                "enforcing a LOCAL occupation target in the presence of "
+                "anomalous/pairing correlations needs a Nambu-aware "
+                "extraction of <n_i> that has not been implemented (the "
+                "normal-state sparse-dm machinery this array-filling path "
+                "otherwise reuses, use_sparse_dm, is itself only available "
+                "when has_eh=False); use a scalar filling (or mu=) for a "
+                "BdG Hamiltonian")
+    if array_filling and mu is not None:
+        raise NotImplementedError("A per-site (array) filling cannot be "
+                "combined with an explicit mu= -- the array-filling branch "
+                "of f() below only runs when mu is None (it solves its own "
+                "per-site chemical potential in place of a caller-supplied "
+                "one, see full_dm_accumulate_sparse_local_fermi's "
+                "docstring); with mu explicitly given, f() would instead "
+                "take the plain (non-array-aware) branch, which never sets "
+                "scf.local_occupation, crashing the outer loop's occ_err "
+                "check on the very first iteration. Leave mu=None (the "
+                "default) for a per-site filling target")
     h1.nk = nk
     # union of the three exchange channels' bond directions (+ vd's, if
     # given): in general the neighbor-shell hopping-dict builder could
@@ -872,6 +933,20 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         n_dm = vz[(0, 0, 0)].shape[0]
         sparse_pairs = _build_sparse_pairs(
                 [vz, vx, vy] + ([vd] if vd is not None else []), v_dirs, n_dm)
+
+    # per-site (array) filling state: `lam` (the per-site Lagrange
+    # multiplier/local chemical potential) is warm-started at zero and
+    # co-converged with `mf` across the SAME outer SCF loop below, one
+    # cheap proportional update per outer iteration rather than a fresh
+    # fsolve-to-tolerance every time -- see
+    # densitymatrix.full_dm_accumulate_sparse_local_fermi's docstring for
+    # why (each candidate lam needs a fresh diagonalization, unlike a
+    # scalar Fermi shift). A one-element list, not a plain variable, purely
+    # so f() below can mutate it in place as a closure cell (nonlocal would
+    # also work but this matches this module's existing style of mutable
+    # closure state, e.g. `outd` in densitymatrix._accumulate_dm_batch).
+    filling_arr = np.asarray(filling, dtype=np.float64) if array_filling else None
+    lam_state = [np.zeros(len(h1.geometry.r))] if array_filling else [None]
 
     def _get_dm(h):
         if use_sparse_dm:
@@ -1019,6 +1094,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             from scipy.sparse import csr_matrix
             hop = {d: csr_matrix(m) for d, m in hop.items()}
         set_hoppings(h, hop)
+        local_occ = None # only set (and only exposed on scf) for array_filling
         if use_kpm:
             # never diagonalize H(k): the Fermi energy (mu=None) comes from
             # get_fermi4filling_kpm's Chebyshev-moment DOS integral, and the
@@ -1036,6 +1112,42 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             else:
                 h.shift_fermi(-mu)
             dm_lab = _get_dm_kpm(h)
+        elif use_sparse_dm and mu is None and array_filling:
+            # per-site filling: no scalar Fermi shift trick available (see
+            # densitymatrix.full_dm_accumulate_sparse_local_fermi's
+            # docstring) -- one diagonalization at the WARM-STARTED lam
+            # from the previous outer SCF iteration (lam_state[0], zero on
+            # the very first call), then a cheap proportional update for
+            # the NEXT outer iteration to use. `h`/`dm_lab` below are
+            # shifted/computed with the PRE-update lam (lam_used), so they
+            # stay mutually consistent -- exactly mirroring how the scalar
+            # branch's `h`/`dm_lab` are both derived from the same `fermi`.
+            #
+            # Step size: reuses `mix` (already an SCF-wide knob, no new
+            # kwarg needed) as the proportional gain,
+            # lam_i += mix*(filling_i - occ_i). This is a Jacobian-free,
+            # diagonal (site-decoupled) fixed-point update, not a Newton
+            # step -- deliberately: a finite-difference Newton update would
+            # need ~n_sites+1 diagonalizations per outer iteration just for
+            # lam (see full_dm_accumulate_sparse_local_fermi's docstring),
+            # multiplying the whole SCF loop's cost by that factor. Using
+            # the same `mix` that already stably mixes `mf` each iteration
+            # is a reasonable, documented default (comparable order of
+            # magnitude: both are O(0.1-0.3) proportional gains acting on
+            # an O(0.1-1) residual once per outer iteration) rather than a
+            # tuned optimum -- a genuinely badly-conditioned local
+            # compressibility (e.g. a near-flat band pinned exactly at the
+            # target filling) could still need a smaller `mix`/more outer
+            # iterations to converge, same as it would for `mf` itself.
+            from ..densitymatrix import full_dm_accumulate_sparse_local_fermi
+            delta = T if T != 0. else 1e-15 # see densitymatrix.full_dm's own T==0 guard
+            lam_used = lam_state[0]
+            dm_lab, occ = full_dm_accumulate_sparse_local_fermi(
+                    h, sparse_pairs, filling_arr, lam_used, nk=nk, delta=delta)
+            h.fermi = lam_used.copy() # per-site array -- see Hamiltonian.shift_fermi
+            h.shift_fermi(-lam_used) # matches the lam dm_lab was computed at
+            lam_state[0] = lam_used + mix*(filling_arr - occ) # warm start for next call
+            local_occ = occ
         elif use_sparse_dm and mu is None:
             # combined: diagonalize the unshifted h once, deriving both the
             # Fermi energy and the density matrix from the same
@@ -1075,6 +1187,17 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         scf.dm = dm_lab
         scf.v = vz # see scf.hamiltonian.V above for what this does/doesn't capture
         scf.tol = maxerror
+        if local_occ is not None:
+            # per-site diagnostics for the array-filling path: the per-site
+            # occupation <n_i> (fraction of that site's 2-orbital capacity,
+            # same convention as `filling`) actually reached this call, and
+            # the per-site Lagrange multiplier/local chemical potential
+            # lam_i that produced it (also on scf.hamiltonian.fermi, mirroring
+            # how the scalar path's converged Fermi energy ends up on
+            # h.fermi) -- so a caller (e.g. the future SpinonHamiltonian)
+            # can read back the converged per-site constraint diagnostics.
+            scf.local_occupation = local_occ
+            scf.lam = h.fermi
         return scf
 
     if mf is None:
@@ -1105,13 +1228,57 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         scf = f(mf)
         mfnew = scf.mf
         diff = diff_mf(mfnew, mf)
+        if array_filling:
+            # fold the per-site occupation residual into the same
+            # convergence check as mf's own diff -- a converged-looking mf
+            # with lam still off would silently return a Hamiltonian whose
+            # local occupations do not match `filling`, exactly the failure
+            # mode this array-filling path exists to prevent. Reuses
+            # `maxerror` (no separate tolerance kwarg) for both, same as mf.
+            occ_err = np.max(np.abs(filling_arr - scf.local_occupation))
+            diff = max(diff, occ_err)
         mf = mix_mf(mfnew, mf, mix=mix)
         if callback_mf is not None: mf = callback_mf(mf)
         if verbose > 0: print("ERROR in the SCF cycle", ite, diff)
         if diff < maxerror:
             scf = f(mfnew) # last iteration, with the unmixed mean field
-            scf.converged = True
-            break
+            if array_filling:
+                # BUG (found post-hoc, fixed here): f()'s array-filling
+                # branch mutates lam_state[0] as a side effect on EVERY
+                # call, including this "last iteration" re-call -- so the
+                # scf just built above was computed at a lam that is one
+                # more (small) proportional step past the lam whose
+                # occupation was actually checked against maxerror just
+                # above (occ_err, folded into `diff`). For the mf-only
+                # case re-evaluating at mfnew instead of the mixed mf is
+                # safe by continuity (mfnew varies smoothly with mf near a
+                # fixed point). Per-site occupation vs lam is NOT smooth in
+                # general on a finite k-mesh with the default near-zero
+                # smearing (T~1e-7): a single k-point eigenvalue crossing
+                # zero as lam varies flips that state's occupation
+                # contribution discontinuously, by O(1/(nk*n_orb)) --
+                # confirmed empirically (a lam change of 2e-8 producing a
+                # 0.038 jump in occupation on a small test system sitting
+                # exactly at such a crossing). So, unlike the mf-only case,
+                # this re-evaluated scf's OWN occupation must be checked
+                # before trusting it -- silently trusting continuity here
+                # is exactly what let scf.converged=True ship with
+                # scf.local_occupation up to ~0.04 off target in ~5% of
+                # random-seed runs before this fix.
+                final_err = np.max(np.abs(filling_arr - scf.local_occupation))
+                if final_err < maxerror:
+                    scf.converged = True
+                    break
+                # else: this re-evaluation landed across a level crossing
+                # and is no longer actually converged -- do NOT report
+                # scf.converged=True. Fall through without breaking: mf and
+                # lam_state[0] both already advanced (via the f() calls
+                # above), so this is exactly equivalent to just continuing
+                # the outer fixed-point loop for another iteration from
+                # here, bounded by the same maxite check below as always.
+            else:
+                scf.converged = True
+                break
         if maxite is not None and ite >= maxite:
             scf.converged = False
             print("No convergence has been reached in", maxite, "iterations, stopping")
@@ -1187,7 +1354,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     else:
         etot = h.get_total_energy(nk=h.nk)
     if mu is None:
-        etot += h.fermi*h.intra.shape[0]*filling
+        if array_filling:
+            # per-site generalization of the scalar correction below: h.fermi
+            # is now the converged per-site lam array (see f()'s array-filling
+            # branch), and h.intra.shape[0]*filling (= 2*n_sites*filling for a
+            # uniform scalar) generalizes to 2*sum_i(lam_i*filling_i) -- the
+            # "2" is orbitals/site (up+down), matching filling's own
+            # fraction-of-2-orbital-capacity convention (see
+            # densitymatrix.full_dm_accumulate_sparse_local_fermi's
+            # docstring); reduces exactly to the scalar formula when lam and
+            # filling are both uniform.
+            etot += 2.0*np.sum(np.asarray(h.fermi)*filling_arr)
+        else:
+            etot += h.fermi*h.intra.shape[0]*filling
     dme = electron_sector(scf.dm)
     if vz_active:
         etot += get_dc_energy(vz, dme)

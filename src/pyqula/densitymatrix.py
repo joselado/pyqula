@@ -204,6 +204,101 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     return outd,fermi
 
 
+def full_dm_accumulate_sparse_local_fermi(h,pairs,filling,lam,nk=10,
+        delta=delta_dm,batch_size=16,dense_fraction=0.01):
+    """Sparse density matrix under a per-site local chemical potential
+    (Lagrange multiplier) `lam`, for the Abrikosov-pseudofermion / hard
+    local-occupation-constraint case (Savary & Balents, "Quantum Spin
+    Liquids: a review", arXiv:1601.03742, Sec. 4.1): unlike the scalar
+    Fermi search (Hamiltonian.get_fermi4filling /
+    full_dm_accumulate_sparse_with_fermi), a per-SITE array `filling`
+    cannot be enforced by sorting the pooled eigenvalues and index-picking
+    one cut -- a generic eigenstate is spread over many sites, so there is
+    no single energy cut that fixes every site's occupation independently.
+    It has to be enforced by n_sites independent onsite potentials (one per
+    site, applied identically to both spin channels via
+    Hamiltonian.shift_fermi's existing per-site-array support -- see that
+    function's docstring), tuned so that <n_i> = filling[i] at every site
+    simultaneously.
+
+    PERFORMANCE/CORRECTNESS TRADEOFF (why this function only takes ONE
+    diagonalization, not several): a scalar Fermi shift is a RIGID shift of
+    the whole spectrum -- it commutes with H, so it changes only the
+    eigenVALUES, never the eigenVECTORS, which is exactly what lets
+    full_dm_accumulate_sparse_with_fermi reuse a single diagonalization for
+    both the Fermi search and the density matrix (see its own docstring). A
+    per-site onsite potential does NOT commute with H's off-diagonal
+    (hopping) part, so it generally changes the eigenVECTORS too -- there is
+    no analogous "diagonalize once, read off lam from the same eigenvectors"
+    trick here. Finding the n_sites lam_i's that exactly satisfy
+    <n_i>=filling[i] is therefore a genuine nonlinear root-find that needs a
+    fresh diagonalization per proposed lam -- filling.set_individual_filling
+    already does this for a *static* (non-mean-field) Hamiltonian, via
+    scipy.optimize.fsolve with a numerically-estimated Jacobian, at a cost
+    of ~n_sites+1 diagonalizations for one call. That is fine there (it runs
+    once), but prohibitive here: this function is called once per iteration
+    of selfconsistency.spinspin._run_anisotropic_scf's own outer SCF
+    fixed-point loop (already tens to hundreds of iterations), where
+    n_sites+1 extra diagonalizations per iteration would multiply the
+    total cost by that same factor for no asymptotic benefit -- the fixed
+    point converged to is the same either way.
+
+    So this function does not itself iterate lam to convergence. It takes
+    ONE diagonalization at the caller-supplied `lam` (in practice, the
+    previous outer SCF iteration's value -- warm-started, since lam should
+    barely move once the mean field is close to converged, exactly the
+    same reasoning that lets `mf` itself be only mixed, not re-solved, at
+    every outer iteration) and returns the resulting density matrix plus
+    the per-site occupation fraction, so the caller
+    (_run_anisotropic_scf's array-filling branch) can take a cheap,
+    Jacobian-free proportional update step
+    (lam_i += step*(filling_i - occ_i)) and let lam co-converge with the
+    mean field across the SAME outer loop, at the SAME one-diagonalization-
+    per-iteration cost the scalar path already pays -- see
+    _run_anisotropic_scf's docstring for the exact step used and why a full
+    multi-dimensional Newton solve was rejected here.
+
+    NORMALIZATION: `filling` (and the returned `occ`) use the SAME
+    convention as the scalar `filling` kwarg everywhere else in this
+    module -- a FRACTION of a site's own 2-orbital (spin up + spin down)
+    capacity, so filling[i]=0.5 uniformly is exactly the array equivalent
+    of scalar filling=0.5 (average 1 electron/site: half of the 2-orbital
+    capacity, filled). filling[i]=1.0 (not 0.5) would be needed to request
+    a FULLY occupied site (2 electrons) -- filling[i]=0.5 is "exactly one
+    fermion per site". This is verified empirically against the scalar
+    path (get_fermi4filling(0.5) -> a site's occupation from get_vev is
+    1.0, i.e. 2*0.5) and is NOT the same convention
+    filling.set_individual_filling/Hamiltonian.get_vev use internally (they
+    compare directly against the raw electron COUNT, 0 to 2, not a 0-to-1
+    fraction -- effectively off by a factor of 2 from this module's
+    convention for the same physical target). That pre-existing function is
+    not reused here for that reason (among others -- it is also, as of this
+    writing, uncallable at all with a nonzero smearing due to an unrelated
+    get_vev/densitymatrix.full_dm keyword-argument collision when it
+    forwards delta=; independent of this work, not fixed here, see
+    selfconsistency.spinspin's per-site-filling design notes).
+
+    Returns (dm, occ): `dm` is full_dm_accumulate_sparse's usual
+    {direction: (n,n)} dict, computed at the given (UN-updated) `lam` -- the
+    caller is responsible for shifting whatever Hamiltonian this dm is
+    associated with by this same lam before using it downstream, exactly
+    paralleling how full_dm_accumulate_sparse_with_fermi's caller shifts by
+    the fermi it returns. `occ` is the per-site occupation FRACTION, shape
+    (n_sites,), read off dm[(0,0,0)]'s diagonal as (dm_uu+dm_dd)/2 for each
+    site -- valid only because selfconsistency.spinspin._build_sparse_pairs
+    always includes the full onsite (0,0,0) 2x2 spin block for every site
+    unconditionally (see the last paragraph of its own docstring), so this
+    diagonal is guaranteed populated regardless of which channels (V/J/U)
+    are actually active."""
+    h_shifted = h.copy()
+    h_shifted.shift_fermi(-np.asarray(lam))
+    dm = full_dm_accumulate_sparse(h_shifted,pairs,nk=nk,delta=delta,
+            batch_size=batch_size,dense_fraction=dense_fraction)
+    diag = np.real(np.diag(dm[(0,0,0)]))
+    occ = (diag[0::2] + diag[1::2])/2.0 # (n_up+n_down)/2 per site, a fraction in [0,1]
+    return dm,occ
+
+
 def full_dm_simultaneous(h,nk=10,fermi=0.0,
         delta=delta_dm,
         ds=None):

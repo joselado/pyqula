@@ -91,6 +91,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - KPM (Chebyshev)-based mean-field SCF for large/sparse systems, avoiding diagonalization of the Bloch Hamiltonian
 - JAX-derivative-based mean-field SCF solvers (Newton, matrix-free Newton-Krylov, matrix-free Levenberg-Marquardt residual minimization), differentiating through the self-consistency loop instead of plain mixing
 - Robust multisecant Broyden mixing SCF solver (regularized, limited-memory, Marks & Luke arXiv:0801.3098), available with or without JAX
+- Abrikosov-pseudofermion (RVB spinon) mean-field theory for spin-1/2 Heisenberg models, with the local one-fermion-per-site constraint enforced at every site individually
 
 ## Topological characterization ##
 - Berry phases, Berry curvatures, Chern numbers and Z2 invariants

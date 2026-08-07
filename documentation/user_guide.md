@@ -1033,6 +1033,64 @@ h = h.get_combined_mean_field_hamiltonian(V1=-1.0,J1z=-0.3,
                                             filling=0.3,mf="random")
 ```
 
+## Abrikosov-pseudofermion (spinon) mean field for Heisenberg models
+
+Rather than seeding a spin-spin exchange on top of an existing tight-binding
+Hamiltonian, a pure spin-$\tfrac12$ Heisenberg model
+$H=J\sum_{\langle ij\rangle}\vec S_i\cdot\vec S_j$ can be treated on its own
+terms with the Abrikosov-pseudofermion (parton) representation
+$\vec S_i=\tfrac12 f^\dagger_i\vec\sigma f_i$ (Savary & Balents, *Quantum
+Spin Liquids: a review*, arXiv:1601.03742, Sec. 4): each spin is written in
+terms of an auxiliary ("spinon") fermion subject to the hard local
+constraint $f^\dagger_i f_i=1$, exactly one fermion per site, and the
+exchange term is Wick-decoupled into an RVB bond order parameter
+$\chi_{ij}=\langle f^\dagger_i f_j\rangle$ -- physically the same Fock/
+Hartree-Fock decoupling `get_combined_mean_field_hamiltonian`'s $J$ channel
+already performs, just on a Hamiltonian with zero bare hopping (a pure spin
+model has no bare electron kinetic term) and with the local constraint
+enforced at *every* site individually, not only on lattice average.
+`SpinonHamiltonian` (`pyqula.spinon`) packages exactly this:
+
+```python
+from pyqula import geometry
+from pyqula.spinon import SpinonHamiltonian
+
+g = geometry.triangular_lattice() # a canonical frustrated-Heisenberg lattice
+h = SpinonHamiltonian(g) # zero bare hopping -- couplings come from J1/J2/...
+h2 = h.get_mean_field_hamiltonian(J1=1.0,nk=12,mix=0.1,maxerror=1e-4)
+
+h2.local_occupation   # <n_i> per site -- exactly 1.0 at convergence
+h2.constraint_lambda  # converged per-site Lagrange multiplier (local chemical potential)
+h2.get_bands()        # spinon dispersion
+```
+
+`filling=` cannot be passed to `SpinonHamiltonian.get_mean_field_hamiltonian`
+-- the representation is only valid at exactly one fermion per site, so it
+is always requested internally as the per-site array `get_combined_mean_field_hamiltonian`'s
+own `filling` kwarg now accepts (one target per site, instead of only a single
+lattice-averaged Fermi level), enforced via a per-site Lagrange multiplier
+warm-started and co-converged with the RVB mean field across the same SCF
+loop; `scf.converged` (equivalently, a non-`None` return here) already
+implies the local constraint converged to within `maxerror`, not only the
+mean field itself. Only the U(1) (RVB bond-only) ansatz is implemented --
+a Z2 ansatz (allowing the pairing/anomalous channel $J$ can also induce, as
+above) would need a Nambu-doubled `SpinonHamiltonian`, not yet supported.
+All other `get_mean_field_hamiltonian` kwargs (`mf`, `nk`, `mix`,
+`maxerror`, `maxite`, `constrains`, an additional `V1`/`V2`/`V3`/`U`
+density-density term, ...) are forwarded unchanged.
+
+**On a frustrated lattice (triangular, kagome, ...) the converged state is
+ansatz-dependent**, not unique: several distinct self-consistent RVB flux
+sectors can coexist at the same $J$, and which one an unseeded random `mf`
+guess lands on is itself part of the physics, not SCF noise -- "it is not
+possible to search for all possible self-consistent mean field
+solutions... calculations are usually carried out by assuming a particular
+decoupling scheme" (Savary & Balents, Sec. 4.1). A 1-site-unit-cell chain
+has a unique solution (no frustration), so repeated calls agree to within
+`maxerror`; on a frustrated lattice, pass an explicit `mf=` to select a
+definite ansatz deliberately rather than comparing energies across
+differently-seeded runs.
+
 
 # Spatially resolved density of states
 
@@ -2128,6 +2186,41 @@ hmf = h.get_combined_mean_field_hamiltonian(U=4.0,J1=-0.5,filling=0.5,
 ```
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
+
+`filling` also accepts a per-SITE array (length `len(h.geometry.r)`, same
+0-to-1-fraction-of-2-orbital-capacity convention as the scalar case) instead
+of only a single lattice-averaged value, enforcing $\langle n_i\rangle=$
+`filling[i]` at every site independently via a per-site Lagrange multiplier
+(warm-started and co-converged with the mean field across the same SCF
+loop, one diagonalization per outer iteration -- not solved to tight
+tolerance every iteration, since a per-site potential generally changes the
+eigenvectors too, unlike a scalar Fermi shift). `scf.local_occupation` and
+`scf.lam`/`h.fermi` (now the converged per-site array) expose the
+diagnostics; `scf.converged` implies the per-site constraint converged to
+within `maxerror`, not only the mean field. Only supported for a
+normal-state (non-BdG), `integration="ed"` Hamiltonian with `mu=None`
+(the default). This is the
+mechanism `SpinonHamiltonian` (see "Abrikosov-pseudofermion (spinon) mean
+field for Heisenberg models") builds on to enforce exactly one auxiliary
+fermion per site.
+
+### SpinonHamiltonian(g)
+Abrikosov-pseudofermion (RVB) mean-field Hamiltonian for a spin-$\tfrac12$
+Heisenberg model on geometry `g` -- see "Abrikosov-pseudofermion (spinon)
+mean field for Heisenberg models" above. `from pyqula.spinon import
+SpinonHamiltonian`; built with zero bare hopping, couplings supplied
+through `get_mean_field_hamiltonian`'s usual `J1`/`J2`/`J3`/`Jr`/`J1x`/
+`J1y`/`J1z` kwargs.
+
+- `h.get_mean_field_hamiltonian(J1=...,nk=...,...)`: same SCF kwargs as
+  `get_combined_mean_field_hamiltonian` above, except `filling` cannot be
+  passed (always exactly one fermion/site, enforced site-by-site). Returns
+  the converged Hamiltonian (or `None` if the SCF did not converge), with
+  two extra diagnostic attributes:
+  - `h2.local_occupation`: converged $\langle n_i\rangle$ per site
+    (electron-count convention, 0 to 2 -- target is exactly 1.0)
+  - `h2.constraint_lambda`: converged per-site Lagrange multiplier (local
+    chemical potential)
 
 ### h.get_central_heterostructure()
 Build a two-terminal `Heterostructure` using `h` (a finite, 0d Hamiltonian) as the central scattering region, contacted by two semi-infinite 1D chain leads attached at sites `i`/`j` (see "Transport through an arbitrary finite region" above).
