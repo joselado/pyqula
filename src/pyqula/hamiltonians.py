@@ -777,6 +777,9 @@ class Hamiltonian():
     def didv(self,**kwargs):
         from .transporttk.localprobe import Hamiltonian_didv
         return Hamiltonian_didv(self,**kwargs)
+    def didv_curve(self,energies,**kwargs):
+        from .transporttk.localprobe import Hamiltonian_didv_curve
+        return Hamiltonian_didv_curve(self,energies,**kwargs)
     def get_central_heterostructure(self,i=0,j=None,left=None,right=None,**kwargs):
         """Two-terminal transport with `self` as the central scattering
         region, contacted by two semi-infinite 1D chain leads at sites

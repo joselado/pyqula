@@ -165,3 +165,97 @@ def test_get_kappa_ratio_only_shares_the_sc_branchs_interpolant(monkeypatch):
     assert len(seen) == 2
     assert seen[0] is not None   # SC branch: got the shared interpolant
     assert seen[1] is None       # normal branch: kwargs untouched
+
+
+_CHEAP_DIDV = dict(nmax_max=6, fixed_nmax=6)
+
+
+def test_didv_curve_shares_one_interpolant_across_the_energy_sweep(monkeypatch):
+    """A raw loop of `didv(energy=e, use_aaa=True)` calls independently
+    builds (and discards) its own AAA fit at every energy, since
+    keldysh_didv's own sharing is scoped to just its Ip/Im pair within one
+    call -- didv_curve exists to share one build across the whole energy
+    sweep instead, the same fix iv_curve already got for dc_current
+    sweeps."""
+    HT = _sc_junction()
+    calls = _counting_build(monkeypatch)
+    # Deliberately away from voltage~0 -- dc_current's own adaptive sweep
+    # already warns that this cheap nmax_max=6 doesn't converge tightly
+    # near there (see test_iv_curve_shares_one_interpolant_across_the_
+    # voltage_sweep's identical warning), and keldysh_didv's finite
+    # difference amplifies that residual noise the same way the
+    # catastrophic-cancellation case in
+    # documentation/keldysh_aaa_selfenergy_accuracy_plan.md does -- this
+    # test is about the sharing plumbing, not about nailing convergence at
+    # a setting this cheap.
+    energies = [0.1, 0.15, 0.2, 0.25]
+
+    Gs_shared = didv_mod.didv_curve(HT, energies, use_aaa=True, **_CHEAP_DIDV)
+
+    assert len(calls) == 1
+
+    Gs_percall = [didv_mod.keldysh_didv(HT, voltage=e, **_CHEAP_DIDV)
+                  for e in energies]
+    assert np.max(np.abs(np.array(Gs_shared)-np.array(Gs_percall))) < 2e-2
+
+
+def test_didv_curve_skips_sharing_for_a_normal_junction(monkeypatch):
+    """The ordinary (non-superconducting) case must be completely
+    unaffected: didv's "auto" method picks the already-cheap "smatrix"
+    formula there, so didv_curve must not attempt to build any self-energy
+    interpolant, and must still match the equivalent per-energy loop
+    (this is also the array-input case that used to hard-fail with a numpy
+    broadcasting error before didv_curve existed)."""
+    HT = _normal_junction()
+    calls = _counting_build(monkeypatch)
+    energies = [0.05, 0.1, 0.15]
+
+    Gs_curve = didv_mod.didv_curve(HT, energies, use_aaa=True)
+
+    assert len(calls) == 0
+    Gs_loop = [HT.didv(energy=e) for e in energies]
+    assert np.allclose(Gs_curve, Gs_loop)
+
+
+def test_didv_curve_respects_a_caller_supplied_selfenergy_qtci(monkeypatch):
+    """Same explicit-override escape hatch as iv_curve/dc_current: if the
+    caller already threaded their own selfenergy_qtci through, didv_curve
+    must not silently replace it with a freshly auto-built one."""
+    HT = _sc_junction()
+    calls = _counting_build(monkeypatch)
+    seen = []
+    orig = didv_mod.keldysh_didv
+    def spy_keldysh_didv(ht, voltage=0.0, **kwargs):
+        seen.append(kwargs.get("selfenergy_qtci"))
+        return 0.0  # stand-in, cost-free
+    monkeypatch.setattr(didv_mod, "keldysh_didv", spy_keldysh_didv)
+
+    sentinel = object()
+    didv_mod.didv_curve(HT, [0.05, 0.1], use_aaa=True,
+                         selfenergy_qtci=sentinel, **_CHEAP_DIDV)
+
+    assert len(calls) == 0  # no auto-build attempted at all
+    assert seen == [sentinel, sentinel]
+
+
+def test_didv_energies_keyword_dispatches_to_didv_curve():
+    """`didv(energies=array)` (note the plural, distinct from and mutually
+    exclusive with the scalar `energy=`) must transparently route to
+    didv_curve -- checked on both the smatrix (normal junction) and
+    keldysh (SC-SC, use_aaa=True) paths, matching didv_curve's own output
+    exactly (not just approximately: it's the same code path, not an
+    independent re-implementation). Passing an array as the scalar
+    `energy=` itself is not supported (see `didv`'s own docstring)."""
+    h1 = geometry.chain().get_hamiltonian()
+    h2 = geometry.chain().get_hamiltonian()
+    normal_HT = heterostructures.build(h1, h2)
+    normal_HT.set_coupling(0.5)
+    es = np.array([-0.1, 0.0, 0.1])
+    assert np.array_equal(normal_HT.didv(energies=es),
+                           didv_mod.didv_curve(normal_HT, es))
+
+    HT = _sc_junction()
+    energies = [0.1, 0.15, 0.2]
+    assert np.array_equal(
+        HT.didv(energies=energies, use_aaa=True, **_CHEAP_DIDV),
+        didv_mod.didv_curve(HT, energies, use_aaa=True, **_CHEAP_DIDV))

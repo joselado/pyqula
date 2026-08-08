@@ -1653,6 +1653,15 @@ k = lp.get_kappa(energies=[0.1,0.25,0.4],temp=0.02,nmax=4,nmax_max=12,tol=5e-2)
 
 An earlier version of this had a real accuracy gap, growing with the sideband window (`nmax_max`) -- up to ~10% relative current error in the worst case investigated. `documentation/keldysh_aaa_selfenergy_accuracy_plan.md` root-caused this to the interpolant's candidate grid being under-resolved (both at a lead's own gap-edge singularities and, more consequentially for the current-error trend, across the fit's broader domain) in a way the interpolant's own held-out validation check -- confined too close to existing candidates -- never detected. Both the validation sampling and the grid-refinement strategy (`aaatk.selfenergy_aaa._refine_grid`) were fixed and validated directly against the current (not just the self-energy fit) across the same `nmax_max` sweep that exposed the original gap: relative current error is now consistently under ~1% throughout, with no growth trend (see that document's closing update for the full measurement). `selfenergy_method="aaa"` still checks its own convergence (`.converged`) and safely falls back to `"direct"` if a fit can't reach its target tolerance within a bounded budget, rather than silently returning an under-resolved answer -- but as with any interpolation-based shortcut, checking agreement with `"direct"` for your own system/parameter range before relying on it is still good practice.
 
+`didv`'s `energy` and `energies` arguments are mutually exclusive, the same convention `get_kappa` already uses: pass a single `energy` (returns a scalar) or a whole `energies=[...]` array at once (returns an array, and internally dispatches to `didv_curve(ht, energies, **kwargs)`). Passing an array directly as the scalar `energy=` is not supported (it fails, a numpy broadcasting error on the `smatrix` path, an "ambiguous truth value" error on the `keldysh` path) -- every example that plots dI/dV vs. energy predates `energies=` and loops explicitly instead, `[ht.didv(energy=e) for e in es]`, which still works but is no longer necessary. `energies=` additionally -- like `get_iv_curve` does for `get_dc_current` -- builds and shares ONE AAA interpolant across the whole sweep when `use_aaa=True` is passed, instead of a raw loop's `didv(energy=e, use_aaa=True)` independently building (and discarding) its own interpolant at every single energy:
+
+```python
+es = np.linspace(0.15,0.25,40)*0.1 # bias energies
+Gs = HT.didv(energies=es, use_aaa=True, nmax_max=40) # shared-AAA dI/dV curve
+```
+
+`HT.didv_curve(es, **kwargs)`/`lp.didv_curve(es, **kwargs)` are the same thing called directly, for a caller who wants the array entry point without going through `didv`.
+
 For a Floquet-Keldysh-eligible junction (both leads, or a `LocalProbe`'s probe+sample,
 superconducting), `didv(temp=...)`/`get_kappa(temp=...)` now default to evaluating
 `dc_current`'s own `temperature` parameter directly (2 `dc_current` calls, a central finite
@@ -2388,6 +2397,22 @@ Arguments:
 - voltages: array of bias voltages
 
 Returns an array of DC currents
+
+### HT.didv_curve() / lp.didv_curve()
+Convenience wrapper: `didv` evaluated over an array of energies, in parallel -- the array-native
+equivalent of `[ht.didv(energy=e) for e in es]`. Also reachable as `didv(energies=...)` (mutually
+exclusive with `didv`'s scalar `energy=...`, same convention as `get_kappa`), which dispatches
+straight here. If `use_aaa=True` and the sweep resolves to the Floquet-Keldysh method, builds and
+shares one AAA self-energy interpolant across the whole sweep instead of each energy independently
+building (and discarding) its own -- the `didv` counterpart to `get_iv_curve`'s own sharing for
+`get_dc_current`.
+
+Arguments:
+
+- energies: array of bias energies
+- any keyword argument accepted by `didv` (`method`, `delta`, `use_aaa`, `nmax_max`, `temp`, ...)
+
+Returns an array of dI/dV values
 
 ### HT.get_kappa()
 Compute the superconducting/normal conductance power-law-ratio "kappa"

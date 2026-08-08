@@ -108,6 +108,12 @@ class LocalProbe():
         override either default directly."""
         from .didv import generic_didv
         return generic_didv(self,**kwargs)
+    def didv_curve(self,energies,**kwargs):
+        """Array-of-energies counterpart to `didv` above -- see
+        transporttk.didv.didv_curve for the shared-AAA-interpolant
+        behavior when `use_aaa=True` is passed."""
+        from .didv import didv_curve
+        return didv_curve(self,energies,**kwargs)
     def get_dc_current(self,voltage,**kwargs):
         """Floquet-Keldysh DC current at bias `voltage` between the probe
         and the sample site it couples to, see
@@ -264,6 +270,12 @@ def Hamiltonian_didv(self,**kwargs):
    """Wrapper to compute the didv for a Hamiltonian"""
    lp = LocalProbe(self,**kwargs) # create the object
    return lp.didv(**kwargs)
+
+
+def Hamiltonian_didv_curve(self,energies,**kwargs):
+   """Wrapper to compute didv_curve for a Hamiltonian"""
+   lp = LocalProbe(self,**kwargs) # create the object
+   return lp.didv_curve(energies,**kwargs)
 
 
 

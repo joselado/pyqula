@@ -150,6 +150,9 @@ class Heterostructure():
     def didv(self,**kwargs):
         from .transporttk.didv import generic_didv
         return generic_didv(self,**kwargs)
+    def didv_curve(self,energies,**kwargs):
+        from .transporttk.didv import didv_curve
+        return didv_curve(self,energies,**kwargs)
     def kdidv(self,**kwargs):
         from .transporttk.didv import didv_kmap
         return didv_kmap(self,**kwargs)

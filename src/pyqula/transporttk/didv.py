@@ -165,7 +165,7 @@ def keldysh_didv(ht,voltage=0.0,delta=1e-6,dv=None,use_qtci=False,
     return (Ip-Im)/(2*dv)
 
 
-def didv(ht,energy=0.0,delta=1e-6,opl=None,opr=None,
+def didv(ht,energy=0.0,energies=None,delta=1e-6,opl=None,opr=None,
          method="auto",**kwargs):
     """Calculate differential conductance.
 
@@ -218,7 +218,20 @@ def didv(ht,energy=0.0,delta=1e-6,opl=None,opr=None,
     small, opens a hard gap exactly at the Fermi level, which
     `dc_current`'s quasienergy integral always samples (it starts at 0),
     so its zero-pairing limit there does not equal the exactly-normal
-    self-energy either."""
+    self-energy either.
+
+    `energy` and `energies` are mutually exclusive: `energy` (the default
+    path) is a single scalar bias; `energies`, if given, is an array of
+    them, and dispatches straight to `didv_curve` (see its own docstring
+    for the shared-AAA-interpolant behavior when `use_aaa=True` is also
+    passed) instead of computing a single dI/dV at `energy` -- `energy`
+    itself is then ignored. Passing an array directly as `energy` is not
+    supported (it fails, on the smatrix path with a numpy broadcasting
+    error, on the keldysh path with an "ambiguous truth value" error from
+    keldysh_didv's own scalar arithmetic) -- use `energies=` instead."""
+    if energies is not None:
+        return didv_curve(ht, energies, delta=delta, opl=opl, opr=opr,
+                           method=method, **kwargs)
     if method=="auto":
         method = "keldysh" if _both_leads_superconducting(ht) else "smatrix"
     if method=="keldysh":
@@ -250,6 +263,61 @@ def didv(ht,energy=0.0,delta=1e-6,opl=None,opr=None,
         G2 = np.trace(s[0][1]@dagger(s[0][1])).real # total e-e transmission
         return (G1+G2)/2.
 
+
+def didv_curve(ht, energies, **kwargs):
+    """Convenience wrapper: dI/dV evaluated over an array of energies, in
+    parallel (see parallel.pcall) -- the array-native equivalent of the
+    `[ht.didv(energy=e) for e in es]` loop every example in this repo uses.
+    `didv(energies=...)` (note the plural, distinct from and mutually
+    exclusive with its scalar `energy=...`) dispatches straight here, so
+    calling this directly is only needed for callers who want the array
+    entry point without going through `didv`. Routed through `generic_didv`
+    per energy (like `Heterostructure.didv`/`LocalProbe.didv` themselves)
+    rather than the bare method-selecting `didv()`, so an unspecified
+    `delta` still defaults to `ht.delta` and a `temp` kwarg still reaches
+    `finite_T_didv` correctly, matching those methods' own conventions.
+
+    If the sweep resolves to the Keldysh path (see `method` below) and the
+    caller explicitly passes `use_aaa=True`, this builds ONE shared AAA
+    self-energy interpolant up front (keldyshtk.current.
+    build_shared_selfenergy), sized to cover every energy in `energies`,
+    and reuses it for every keldysh_didv call in the sweep -- mirroring
+    keldyshtk.current.iv_curve's own sharing (a `dc_current` sweep),
+    extended here to a `didv` sweep. Without this, a raw loop of
+    `didv(energy=e, use_aaa=True)` calls builds (and discards) an
+    independent interpolant at every single energy, since keldysh_didv's
+    own sharing is scoped to just its own Ip/Im pair within one call --
+    expensive (each build alone can cost several to tens of seconds, see
+    aaatk/selfenergy_aaa.py), and exactly the trap this function exists to
+    avoid. Skipped if the caller already passed `selfenergy_qtci`
+    explicitly (an explicit opt-out, so building a shared fit here would
+    silently override the caller's own choice) -- matching `iv_curve`'s
+    own behavior. Only applies at `temp=0` (the default): a finite-`temp`
+    sweep goes through `finite_T_didv` at every energy independently, each
+    with its own internal thermal-quadrature sharing already, a separate
+    concern from sharing across THIS function's energy array.
+
+    `method="auto"` (the default, matching `didv`'s own default) is
+    resolved once, up front, from `ht` alone rather than per energy: the
+    same physical system is being swept over energy, so the keldysh-vs-
+    smatrix choice cannot differ from one energy to the next."""
+    method = kwargs.pop("method", "auto")
+    if method == "auto":
+        method = "keldysh" if _both_leads_superconducting(ht) else "smatrix"
+    if (method == "keldysh" and kwargs.get("temp", 0.) == 0.
+            and "selfenergy_qtci" not in kwargs
+            and kwargs.get("use_aaa", False) and len(energies)):
+        from ..keldyshtk.current import build_shared_selfenergy
+        nmax_max = kwargs.get("nmax_max", 40)
+        emax = max(abs(e) for e in energies)
+        shared = build_shared_selfenergy(ht, emax, nmax_max=nmax_max,
+                                          delta=kwargs.get("delta"),
+                                          dv=kwargs.get("dv"))
+        if shared is not None:
+            kwargs["selfenergy_qtci"] = shared
+    return np.array(pcall(lambda e: generic_didv(ht, energy=e, method=method,
+                                                   **kwargs),
+                           energies))
 
 
 def didv_kmap(self,kpath=None,energies=None,
