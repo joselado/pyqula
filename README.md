@@ -68,14 +68,14 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 
 # FUNCTIONALITIES #
 ## Single particle Hamiltonians ##
-- Spinless, spinful and Nambu basis for orbitals
-- Full non-collinear electron and Nambu formalism
-- Include magnetism, spin-orbit coupling and superconductivity
-- Band structures with state-resolved expectation values
-- Momentum-resolved spectral functions
-- Local and full operator-resolved density of states
-- 0d, 1d, 2d and 3d tight binding models 
-- Electronic structure unfolding in supercells
+- Spinless, spinful and Nambu basis for orbitals [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/01_spinless_spinful_nambu_basis.ipynb)
+- Full non-collinear electron and Nambu formalism [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/02_noncollinear_nambu_formalism.ipynb)
+- Include magnetism, spin-orbit coupling and superconductivity [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/03_magnetism_soc_superconductivity.ipynb)
+- Band structures with state-resolved expectation values [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/04_state_resolved_bands.ipynb)
+- Momentum-resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/05_momentum_resolved_spectral_functions.ipynb)
+- Local and full operator-resolved density of states [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/06_operator_resolved_dos.ipynb)
+- 0d, 1d, 2d and 3d tight binding models [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/07_0d_1d_2d_3d_models.ipynb)
+- Electronic structure unfolding in supercells [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
 
 ## Interacting mean-field Hamiltonians ##
 - Selfconsistent mean-field calculations with local/non-local interactions
