@@ -459,6 +459,30 @@ def operator_berry_bands(hin,k=[0.,0.],operator=None,delta=0.00001):
 
 
 
+from .topologytk.qgt import quantum_geometric_tensor_k
+from .topologytk.qgt import quantum_geometric_tensor_path
+from .topologytk.qgt import quantum_geometric_tensor_mesh
+from .topologytk.qgt import quantum_metric_from_qgt
+from .topologytk.qgt import berry_curvature_from_qgt
+from .topologytk.qgt import chern_from_qgt
+
+
+def quantum_geometric_tensor(h,**kwargs):
+    """Multiband (non-Abelian) quantum geometric tensor of a multiorbital
+    Hamiltonian, see topologytk/qgt.py for the formula and references"""
+    return quantum_geometric_tensor_k(h,**kwargs)
+
+
+def quantum_metric(h,**kwargs):
+    """Quantum metric (symmetric part of the quantum geometric tensor)
+    of a multiorbital Hamiltonian, at a single k-point"""
+    non_abelian = kwargs.get("non_abelian",False)
+    Q = quantum_geometric_tensor_k(h,**kwargs)
+    return quantum_metric_from_qgt(Q,non_abelian=non_abelian)
+
+
+
+
 
 
 

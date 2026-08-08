@@ -127,6 +127,16 @@ class Hamiltonian():
     def get_berry_curvature(h,**kwargs):
         return topology.get_berry_curvature(h,**kwargs)
 
+    def get_quantum_geometric_tensor(h,**kwargs):
+        """Multiband (non-Abelian) quantum geometric tensor at a single
+        k-point, see topologytk/qgt.py for the formula and references"""
+        return topology.quantum_geometric_tensor(h,**kwargs)
+
+    def get_quantum_metric(h,**kwargs):
+        """Quantum metric (symmetric part of the quantum geometric
+        tensor) at a single k-point"""
+        return topology.quantum_metric(h,**kwargs)
+
     def get_chi(self,**kwargs):
         from . import chi
         return chi.chiAB_trace(self,**kwargs)

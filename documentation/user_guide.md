@@ -1317,6 +1317,66 @@ from pyqula import topology
 z2 = topology.z2_invariant(h) # Z2 invariant
 ```
 
+## Quantum geometric tensor (multiorbital/multiband)
+
+The quantum geometric tensor (QGT) generalizes the Berry curvature: its
+antisymmetric part is the Berry curvature and its symmetric part is the
+quantum metric, a measure of the distance between neighboring Bloch
+states. For a chosen band subspace $S$ (e.g. the occupied bands) it is
+
+$$
+Q_{ij}^{mn}(\mathbf k) = \sum_{l \notin S}
+\frac{\langle u_m|\partial_{k_i} H|u_l\rangle \langle u_l|\partial_{k_j} H|u_n\rangle}
+{(E_m-E_l)(E_n-E_l)}, \qquad m,n \in S
+$$
+
+with the quantum metric $g_{ij}^{mn} = \mathrm{Re}\,Q_{ij}^{mn}$ (symmetric
+part) and Berry curvature $\Omega_{ij}^{mn} = -2\,\mathrm{Im}\,Q_{ij}^{mn}$
+(antisymmetric part) recovered in the band-trace ("Abelian") case; setting
+`non_abelian=True` instead returns the full band-pair-resolved
+("non-Abelian") tensor. Because only states *outside* $S$ enter the energy
+denominators, this stays well defined even when $S$ contains an exactly or
+nearly degenerate multiplet of bands -- e.g. an exactly spin-degenerate
+pair, or several orbitals meeting at a high-symmetry point -- which an
+ordinary single-band Kubo formula cannot handle; this is what makes it
+suitable for genuinely multiorbital/multiband tight-binding models, not
+just single isolated bands. `dH/dk_i` is evaluated with pyqula's exact
+analytic multicell k-derivative (no finite-difference error), with $k$ in
+the same reduced (dimensionless, period-1) coordinates as the rest of
+pyqula's k-space code (e.g. `topology.berry_curvature`) -- not Cartesian
+k, so the quantum metric's absolute scale is reciprocal-lattice-dependent
+if you convert to Cartesian coordinates yourself. `occ_idxs` defaults to
+the bands with $E<0$, the same convention `h.get_chern()` uses, so it
+tracks `h.shift_fermi(...)`.
+
+```python
+from pyqula import geometry
+from pyqula import topology
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system (spinful by default)
+h.add_haldane(0.2) # Add Haldane coupling
+h.shift_fermi(0.3) # put the Fermi level safely mid-gap (gap is [-0.9,0.9])
+
+Q = h.get_quantum_geometric_tensor(k=[0.1,0.2,0.],occ_idxs=[0,1]) # at a k-point
+g_metric = h.get_quantum_metric(k=[0.1,0.2,0.],occ_idxs=[0,1]) # quantum metric only
+
+# band-pair-resolved (non-Abelian) tensor of the two occupied bands
+Qna = topology.quantum_geometric_tensor(h,k=[0.1,0.2,0.],occ_idxs=[0,1],
+        non_abelian=True)
+
+# along a k-path, and integrated over the BZ (cross-checked against
+# the independent Wilson-loop h.get_chern() in tests/topology/test_quantum_geometric_tensor.py)
+inds,gpath,omegapath = topology.quantum_geometric_tensor_path(h,occ_idxs=[0,1])
+C = topology.chern_from_qgt(h,nk=20,occ_idxs=[0,1])
+```
+
+See `examples/2d/quantum_geometric_tensor/main.py` for a runnable version,
+and `src/pyqula/topologytk/qgt.py` for the implementation and references.
+There is also an older, unrelated Green's-function/Kubo estimator of the
+whole-occupied-manifold quantum geometry trace (not band- or
+band-pair-resolved), `pyqula.topologytk.quantumgeometry.get_QG_kpath`, see
+`examples/2d/quantum_geometry/main.py`.
+
 ## Berry curvature density in frequency space
 
 The berry curvature in frequency space is defined as 
@@ -2198,6 +2258,24 @@ Return Chern number of the Hamiltonian.
 
 Optional arguments:
 - nk=20: number of kpoints
+
+### h.get_quantum_geometric_tensor()
+Return the (multiband/multiorbital) quantum geometric tensor at a single
+k-point, see "Quantum geometric tensor (multiorbital/multiband)".
+
+Optional arguments:
+- k=[0.,0.,0.]: k-point
+- occ_idxs=None: band indices of the chosen subspace (default: the bands
+  with E<0, the same Fermi-level convention `h.get_chern()` uses, so this
+  tracks `h.shift_fermi(...)`)
+- non_abelian=False: if True, return the full band-pair-resolved tensor
+  instead of its trace over the subspace
+- degeneracy_tol=1e-10: energy tolerance used to detect a degeneracy
+  between the chosen subspace and its complement (raises `ValueError`)
+
+### h.get_quantum_metric()
+Same arguments as `h.get_quantum_geometric_tensor()`, but returns only the
+quantum metric (symmetric part of the tensor).
 
 ### h.get_wannier_hamiltonian()
 Wannierize a fixed range of bands and return the resulting real-space

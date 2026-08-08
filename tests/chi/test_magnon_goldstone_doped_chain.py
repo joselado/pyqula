@@ -3,7 +3,7 @@ import pytest
 
 from pyqula import geometry
 from pyqula.chitk.spinchi import _full_spin_U, _full_spin_operators
-from pyqula.chitk.rpa import interaction_at_q, _chi_ops_matrix_vectorized
+from pyqula.chitk.rpa import rpa_kernel_ops
 
 
 def _q0_kernel_residual(hmf, delta, nk):
@@ -13,13 +13,9 @@ def _q0_kernel_residual(hmf, delta, nk):
     Ss = _full_spin_operators(hmf)
     Uv = _full_spin_U(hmf)
     q0 = [0., 0., 0.]
-    Vq = interaction_at_q(Uv, hmf, q0)
-    iden = np.identity(Vq.shape[0], dtype=np.complex128)
-    es, chis = _chi_ops_matrix_vectorized(hmf, ops=Ss, q=q0,
-                                           energies=np.array([0.0]),
-                                           delta=delta, nk=nk)
-    kernel = iden - Vq @ chis[0]
-    return np.min(np.abs(np.linalg.eigvals(kernel)))
+    _, kernels = rpa_kernel_ops(hmf, ops=Ss, V=Uv, q=q0,
+                                 energies=np.array([0.0]), delta=delta, nk=nk)
+    return np.min(np.abs(np.linalg.eigvals(kernels[0])))
 
 
 @pytest.mark.slow

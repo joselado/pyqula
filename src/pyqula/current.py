@@ -85,4 +85,22 @@ def derivative(h,k,order=None):
   else: raise # not implemented
 
 
+def hk_derivative(h,k,order=None):
+  """Physically correct dH/dk_i...dk_j (or a higher mixed derivative, per
+  order). derivative() differentiates each hopping's phase as if it were
+  exp(i*k.R), but the actual Bloch phase convention (exp(i*2*pi*k.R), with
+  k in reduced coordinates) makes its raw output short by a factor of
+  2*pi per derivative order -- see derivative()'s "phi = ...; np.exp(1j*
+  np.pi*2.*phi)" vs its prefactor "(t.dir[i]*1j)**order[i]", which has no
+  matching 2*pi. Existing callers of derivative() (operator_berry,
+  operator_berry_bands, current_operator) already compensate for this
+  locally with their own factor and must keep doing so; this function is
+  the single shared, correctly-normalized wrapper for any *new* code that
+  wants the true derivative directly, instead of re-deriving the
+  compensating factor ad hoc at each new call site."""
+  if order is None: n = 1
+  else: n = sum(order)
+  return derivative(h,k,order=order)*(2.*np.pi)**n
+
+
 

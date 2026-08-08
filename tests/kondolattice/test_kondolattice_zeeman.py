@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from pyqula import geometry
 from pyqula.kondolattice import KondoLatticeHamiltonian

@@ -99,6 +99,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Frequency resolved topological density
 - Spatially resolved topological flux
 - Real-space Chern density for amorphous systems
+- Multiorbital/multiband (non-Abelian) quantum geometric tensor and quantum metric
 - Wilson loop and Green's function formalism
 
 ## Spectral functions ##
