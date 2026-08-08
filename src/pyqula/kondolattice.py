@@ -111,7 +111,33 @@ class KondoLatticeHamiltonian(Hamiltonian):
     the module docstring for why a nonzero seed is generally needed at
     all). `nk=`, `mix=`, `maxerror=`, `maxite=`, `T=` are forwarded to the
     SCF loop (selfconsistency.kondolattice.kondo_lattice_mean_field)
-    unchanged."""
+    unchanged.
+
+    An external Zeeman/magnetic field couples EXACTLY to both fermion
+    species here (the conduction electron and the localized moment
+    S_j=1/2 f_j^dagger sigma f_j, already bilinear in f -- see the module
+    docstring) -- it is a single-particle term, added via the inherited
+    Hamiltonian.add_zeeman/add_exchange called on this instance BEFORE
+    get_mean_field_hamiltonian, exactly like SpinonHamiltonian::
+
+        h = KondoLatticeHamiltonian(hc)
+        h.add_zeeman([0., 0., 0.05])  # or h.add_exchange([0.,0.,0.05])
+        h2 = h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=150, mf=seed)
+
+    add_zeeman applies to EVERY site in this fused Hamiltonian's geometry,
+    i.e. both the conduction and the f sublattice (offset in z, see
+    __init__) -- pass a position-dependent callable instead of a constant
+    vector to target only one of them. As with SpinonHamiltonian, the
+    argument is the coefficient of sigma, not of S=sigma/2. The f-site
+    local constraint (a total-occupation, not a spin, constraint) stays
+    exact under a field. Genuine physics, not a bug: a field competes with
+    the Kondo singlet, so |V| SHRINKS as the field grows at fixed J, and a
+    strong enough field destroys the hybridized state entirely -- the SCF
+    then correctly reports non-convergence (a `None` return), the same
+    "decays toward the always-self-consistent V=0 branch" signal a
+    subcritical J produces (see kondo_lattice_mean_field's `residual`
+    docstring) -- not a smaller-but-nonzero V. See
+    tests/kondolattice/test_kondolattice_zeeman.py."""
 
     def __init__(self, hc=None):
         super().__init__(None)

@@ -62,7 +62,36 @@ class SpinonHamiltonian(Hamiltonian):
     constraint itself converged to within `maxerror`, since
     _run_anisotropic_scf folds the per-site occupation residual into the
     same convergence check as the mean field's own -- no separate
-    tolerance to track."""
+    tolerance to track.
+
+    An external Zeeman/magnetic field couples EXACTLY (not via any
+    mean-field decoupling) to the auxiliary fermion, since
+    S_i = 1/2 f_i^dagger sigma f_i is itself already bilinear in f: physically
+    it is just an extra single-particle term -h.S_i, i.e. -(h/2).sigma_i,
+    added to the auxiliary Hamiltonian before the RVB exchange mean field is
+    layered on top. Use the inherited Hamiltonian.add_zeeman/add_exchange
+    (called on this instance BEFORE get_mean_field_hamiltonian, same as for
+    any other Hamiltonian in this codebase) to add one::
+
+        h = SpinonHamiltonian(g)
+        h.add_zeeman([0., 0., 0.3])  # or h.add_exchange([0.,0.,0.3])
+        h2 = h.get_mean_field_hamiltonian(J1=1.0, nk=12)
+
+    Note add_zeeman/add_exchange's argument b is the coefficient of sigma
+    (Pauli matrices, eigenvalues +-1), not of S=sigma/2 -- so the physical
+    field h in H=-h.S_i is 2*b, matching this argument's convention
+    everywhere else in pyqula (add_exchange/add_magnetism on an ordinary
+    electronic Hamiltonian use the same sigma-not-S convention). The local
+    constraint enforced by the array-filling machinery above (exactly one
+    fermion per site, summed over spin) is unaffected by the field -- it is
+    a total-occupation constraint, not a constraint on the spin
+    polarization, so a finite field is free to induce a net <S_i> (up to
+    full polarization at large field/J) while local_occupation stays
+    exactly 1.0 (verified in tests/spinon/test_spinon_zeeman.py: an
+    isotropic response to same-magnitude fields along different axes,
+    saturation at large field, and constraint preservation throughout --
+    see Savary & Balents, arXiv:1601.03742, Sec. 4.1, on the field response
+    of a U(1) RVB spin liquid)."""
 
     def __init__(self, geometry=None):
         super().__init__(geometry)

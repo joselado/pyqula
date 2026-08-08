@@ -1091,6 +1091,29 @@ has a unique solution (no frustration), so repeated calls agree to within
 definite ansatz deliberately rather than comparing energies across
 differently-seeded runs.
 
+**An external Zeeman/magnetic field** couples to $\vec S_i=\tfrac12
+f_i^\dagger\vec\sigma f_i$ exactly, not via any mean-field decoupling (it is
+already bilinear in $f$), so it is added as an ordinary single-particle term
+with the same `Hamiltonian.add_zeeman`/`add_exchange` used everywhere else in
+pyqula -- call it on the `SpinonHamiltonian` instance *before*
+`get_mean_field_hamiltonian`:
+
+```python
+h = SpinonHamiltonian(g)
+h.add_zeeman([0., 0., 0.3])            # or h.add_exchange([0.,0.,0.3])
+h2 = h.get_mean_field_hamiltonian(J1=1.0, nk=12)
+h2.get_magnetization()                 # induced <S> per site
+```
+
+`add_zeeman`'s argument is the coefficient of $\vec\sigma$ (Pauli matrices),
+not of $\vec S=\vec\sigma/2$, so the physical field $h$ in $H=-h\cdot S_i$ is
+twice the value passed in -- the same convention `add_exchange` uses on an
+ordinary electronic Hamiltonian elsewhere in this guide. The local
+one-fermion-per-site constraint is a total-occupation constraint, not a
+spin constraint, so it stays exactly satisfied under a field while $\langle
+S_i\rangle$ is free to grow with it, saturating once the field dominates
+$J$ (see `tests/spinon/test_spinon_zeeman.py`).
+
 
 ## Abrikosov-pseudofermion (Read-Newns) mean field for the Kondo lattice
 
@@ -1168,6 +1191,33 @@ threshold in $J$, thermal smearing washes out the hybridization
 entirely and $V=0$ becomes the *only* self-consistent solution, and
 right at the threshold $V$ jumps directly to an $O(1)$ value rather than
 growing continuously from zero.
+
+**An external Zeeman/magnetic field** couples exactly to both fermion
+species here (the conduction electron and the localized moment
+$\vec S_j=\tfrac12 f_j^\dagger\vec\sigma f_j$, already bilinear in $f$),
+so -- exactly as for `SpinonHamiltonian` above -- it is added as an
+ordinary single-particle term with `add_zeeman`/`add_exchange`, called on
+the `KondoLatticeHamiltonian` instance *before*
+`get_mean_field_hamiltonian`:
+
+```python
+h = KondoLatticeHamiltonian(hc)
+h.add_zeeman([0., 0., 0.05])
+h2 = h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=150, mf=seed)
+```
+
+`add_zeeman` applies to every site of the fused geometry, i.e. both the
+conduction and the f sublattice (offset in $z$) -- pass a position-
+dependent callable instead of a constant vector to target only one of
+them. The $\langle n_f\rangle=1$ constraint (a total-occupation, not spin,
+constraint) stays exact under a field. A field competes with the Kondo
+singlet: the self-consistent $|V|$ *shrinks* as the field grows at fixed
+$J$, and a strong enough field destroys the hybridized state -- genuine
+physics, not a bug, and the SCF correctly reports non-convergence
+(`None`) there rather than a spuriously small but nonzero $V$, exactly
+the "decays toward the always-self-consistent $V=0$ branch" signal a
+subcritical $J$ already produces above (see
+`tests/kondolattice/test_kondolattice_zeeman.py`).
 
 
 # Spatially resolved density of states
