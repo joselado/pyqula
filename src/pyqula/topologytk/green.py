@@ -130,7 +130,16 @@ def dOmega_dE_generator(h,operator=None,delta=0.02,dk=0.02):
   # Return dOmega/dE
   def f(k=[0.,0.,0.],e=0.):
       fgreen = berry_green_generator(gf,k=k,dk=dk,operator=operator,full=False,gI=gI)
-      return fgreen(e).real # return the generator
+      # -1: berry_green_generator's raw fint(e), evaluated directly on the
+      # real energy axis, comes out with the opposite sign of the
+      # independently Wilson-loop-validated complex-contour integration in
+      # berry_green (which consumes the very same fint via a change of
+      # variables) -- verified at a single k-point, where the real-axis
+      # integral of dOmega/dE from deep in the band to e=0 reproduces
+      # -berry_green(...) to 5 significant figures. Without this sign flip,
+      # chern_density's cumulative energy integral converges to minus the
+      # Chern number instead of matching it.
+      return -fgreen(e).real
   return f
 
 

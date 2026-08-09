@@ -586,6 +586,7 @@ def Omega_rmap(h,nrep=5,k=[0.,0.,0.],operator=None,nk=None,**kwargs):
 
 # alias for compatibility
 from .topologytk.green import dOmega_dE
+from .topologytk.green import dOmega_dE_generator
 
 
 def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
@@ -623,15 +624,18 @@ def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
   """Compute the Chern density as a function of the energy"""
   ks = klist.kmesh(h.dimensionality,nk=nk)
   cs = np.zeros(es.shape[0]) # initialize
-  f = h.get_gk_gen(delta=delta,canonical_phase=True) # green function generator
+  # dOmega_dE_generator wraps the same berry_green_generator call this used
+  # to duplicate inline (with the correct sign convention -- see its
+  # docstring/comments -- and the exact, rather than averaged, Green's
+  # function inverse)
+  fdomega = dOmega_dE_generator(h,operator=operator,delta=delta,dk=dk)
   tr = timing.Testimator("CHERN DENSITY",maxite=len(ks))
   from . import parallel
   def fp(k): # compute berry curvatures
     if parallel.cores==1: tr.iterate()
     else: print(k)
 #    k = np.random.random(3)
-    fgreen = berry_green_generator(f,k=k,dk=dk,operator=operator,full=False) 
-    return np.array([fgreen(e).real for e in es]) # dOmega/dE at all energies
+    return np.array([fdomega(k=k,e=e) for e in es]) # dOmega/dE at all energies
   out = parallel.pcall(fp,ks) # compute everything
   for o in out: cs += o # add contributions
   cs = cs/(len(ks)*np.pi*2) # normalize
