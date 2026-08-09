@@ -356,26 +356,61 @@ def random_spins(Ntot,N_up):
 
 
 
-def _local_terms(LI,ii):
-    """Return the (pairs,J,b) restricted to the interaction terms
-    that touch site ii, without copying the whole LatticeIsing object
-    -- see latticegas._local_terms"""
-    mask = (LI.pairs[:,0]==ii) | (LI.pairs[:,1]==ii) # terms touching ii
-    pairs0 = LI.pairs[mask]
-    j0 = LI.j[mask]/2.
-    b0 = np.zeros_like(LI.b)
-    b0[ii] = LI.b[ii]
-    return pairs0,j0,b0
+@jit(nopython=True)
+def _local_energy_numba(b,ptr,idx,jarr,s):
+    """Local energy at every site, en[i] = -b[i]*s[i] -
+    s[i]*sum_k J_ik*s[k], via the CSR adjacency (O(degree) per site,
+    O(n_pairs) total) instead of masking the full pairs array and
+    re-running the whole-lattice energy sum per site -- see
+    get_local_energy's docstring for why this replaced that approach"""
+    n = len(b)
+    out = np.zeros(n)
+    for i in range(n):
+        row = 0.
+        for k in range(ptr[i],ptr[i+1]):
+            row += jarr[k]*s[idx[k]]
+        out[i] = -b[i]*s[i] - s[i]*row
+    return out
+
+
+@jit(nopython=True)
+def _row_sums_numba(ptr,jarr):
+    """sum_k J_ik over each site's neighbors, the normalize=True
+    divisor for get_local_energy"""
+    n = len(ptr)-1
+    out = np.zeros(n)
+    for i in range(n):
+        row = 0.
+        for k in range(ptr[i],ptr[i+1]):
+            row += jarr[k]
+        out[i] = row
+    return out
 
 
 def get_local_energy(LI,normalize=False):
-    """Return the local energy at each site for the current snapshot"""
-    def get(ii): # get for site ii
-        pairs0,j0,b0 = _local_terms(LI,ii)
-        enii = ising_energy_numba(b0,pairs0,j0,LI.s)
-        if normalize: return enii/np.sum(j0)
-        else: return enii
-    return np.array([get(ii) for ii in range(LI.nsites)]) # loop over positions
+    """Return the local energy at each site for the current snapshot.
+
+    Previously built, per site, a boolean mask over the *entire*
+    pairs array and called the whole-lattice ising_energy_numba (itself
+    an O(n) loop over all sites for the field term) -- O(n*n_pairs)
+    total. Now walks the cached CSR adjacency once, O(n_pairs) total,
+    the same approach get_local_field already used"""
+    ptr,idx,jarr = LI._get_adjacency()
+    out = _local_energy_numba(LI.b,ptr,idx,jarr,LI.s)
+    if normalize: out = out/_row_sums_numba(ptr,jarr)
+    return out
+
+
+@jit(nopython=True)
+def _local_field_numba(b,ptr,idx,jarr,s):
+    n = len(b)
+    out = np.zeros(n)
+    for i in range(n):
+        row = 0.
+        for k in range(ptr[i],ptr[i+1]):
+            row += jarr[k]*s[idx[k]]
+        out[i] = b[i] + 2.*row
+    return out
 
 
 def get_local_field(LI):
@@ -386,10 +421,4 @@ def get_local_field(LI):
     both (i,k) and (k,i) -- same double-counting convention as
     get_energy())"""
     ptr,idx,jarr = LI._get_adjacency()
-    out = np.zeros(LI.nsites)
-    for i in range(LI.nsites):
-        row = 0.
-        for k in range(ptr[i],ptr[i+1]):
-            row += jarr[k]*LI.s[idx[k]]
-        out[i] = LI.b[i] + 2.*row
-    return out
+    return _local_field_numba(LI.b,ptr,idx,jarr,LI.s)

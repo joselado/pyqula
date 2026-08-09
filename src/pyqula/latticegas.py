@@ -406,38 +406,59 @@ def get_susceptibility(ns,temp,burn=0.2):
 
 
 
-def _local_terms(LG,ii):
-    """Return the (pairs,J,mu) restricted to the interaction terms
-    that touch site ii, without copying the whole LatticeGas object"""
-    mask = (LG.pairs[:,0]==ii) | (LG.pairs[:,1]==ii) # terms touching ii
-    pairs0 = LG.pairs[mask]
-    j0 = LG.j[mask]/2.
-    mu0 = np.zeros_like(LG.mu)
-    mu0[ii] = LG.mu[ii]
-    return pairs0,j0,mu0
+@jit(nopython=True)
+def _row_sums_den_numba(ptr,idx,jarr,den):
+    """sum_k J_ik*den[k] over each site's neighbors, via the CSR
+    adjacency -- the row sum shared by get_local_energy/get_local_mu"""
+    n = len(ptr)-1
+    out = np.zeros(n)
+    for i in range(n):
+        row = 0.
+        for k in range(ptr[i],ptr[i+1]):
+            row += jarr[k]*den[idx[k]]
+        out[i] = row
+    return out
+
+
+@jit(nopython=True)
+def _row_sums_numba(ptr,jarr):
+    """sum_k J_ik over each site's neighbors, the normalize=True
+    divisor for get_local_energy/get_local_mu"""
+    n = len(ptr)-1
+    out = np.zeros(n)
+    for i in range(n):
+        row = 0.
+        for k in range(ptr[i],ptr[i+1]):
+            row += jarr[k]
+        out[i] = row
+    return out
 
 
 def get_local_energy(LG,normalize=False):
-    """Return the local energy at each site for the current snapshot"""
-    def get(ii): # get for site ii
-        pairs0,j0,mu0 = _local_terms(LG,ii)
-        enii = energy_numba(mu0,pairs0,j0,LG.den)
-        if normalize: return enii/np.sum(j0)
-        else: return enii
-    return np.array([get(ii) for ii in range(len(LG.geometry.r))]) # loop over positions
+    """Return the local energy at each site for the current snapshot.
 
+    Previously built, per site, a boolean mask over the *entire*
+    pairs array and called the whole-lattice energy_numba (itself an
+    O(n) loop over all sites for the mu term) -- O(n*n_pairs) total.
+    Now walks the cached CSR adjacency once, O(n_pairs) total -- see
+    latticeising.get_local_energy, which mirrors this same fix"""
+    ptr,idx,jarr = LG._get_adjacency()
+    row = _row_sums_den_numba(ptr,idx,jarr,LG.den)
+    out = LG.mu*LG.den + LG.den*row
+    if normalize: out = out/_row_sums_numba(ptr,jarr)
+    return out
 
 
 def get_local_mu(LG,normalize=False):
-    """Return the local chemical potential"""
-    def get(ii): # get for site ii
-        pairs0,j0,mu0 = _local_terms(LG,ii)
-        den0 = LG.den.copy()
-        den0[ii] = 1.0 # overwrite to return chemical potential
-        enii = energy_numba(mu0,pairs0,j0,den0)
-        if normalize: return enii/np.sum(j0)
-        else: return enii
-    return np.array([get(ii) for ii in range(len(LG.geometry.r))]) # loop over positions
+    """Return the local chemical potential: the marginal energy cost
+    of occupying site ii, independent of its current occupation (mu_i
+    + sum_k J_ik*den_k) -- see get_local_energy's docstring for the
+    same O(n*n_pairs) -> O(n_pairs) rewrite"""
+    ptr,idx,jarr = LG._get_adjacency()
+    row = _row_sums_den_numba(ptr,idx,jarr,LG.den)
+    out = LG.mu + row
+    if normalize: out = out/_row_sums_numba(ptr,jarr)
+    return out
 
 
 
