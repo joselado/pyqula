@@ -2014,6 +2014,53 @@ fixed neighbor shells, and `write()`/`read()` checkpoint a snapshot to/from disk
 grand-canonical sampling.
 
 
+# Ising models
+
+`latticeising.LatticeIsing` models classical Ising spins $s_i\in\{-1,+1\}$ on a lattice,
+interacting through a real-space coupling $-J_{ij}s_is_j$ and a site-dependent field
+$-b_is_i$ -- the standard textbook Ising Hamiltonian, with $J>0$ ferromagnetic (favoring
+alignment). It mirrors `LatticeGas` closely (same `Geometry`-driven pair list, CSR adjacency
+cache, and Metropolis machinery, several of whose module-level functions -- the adjacency
+builder, `add_tensor()`, `regroup()`, `get_specific_heat()`/`get_susceptibility()` -- are
+reused directly rather than reimplemented) but uses the **opposite** energy sign convention
+from `LatticeGas` (whose $\sum J_{ij}n_in_j$ has no minus sign, so positive $J$ there is a
+*repulsion*): with Ising spins, positive $J_{ij}$ in `add_interaction()` means ferromagnetic
+alignment, matching the literature convention.
+
+```python
+from pyqula import geometry
+from pyqula import latticeising
+
+g = geometry.square_lattice() # bipartite, so ferromagnetic order is not frustrated
+g = g.get_supercell(12)
+g.dimensionality = 0
+
+li = latticeising.LatticeIsing(g,m=0.0) # random +-1 spins, zero net magnetization
+li.add_interaction(Jij=[1.]) # first-neighbor ferromagnetic coupling
+es,ms = li.anneal(temps=[3.,1.,0.3,0.1,0.03],ntries=1e4) # simulated annealing
+```
+
+`li.s` holds the current $\pm1$ spin array. `li.optimize_energy()` runs single-spin-flip
+Metropolis dynamics -- the standard Ising Monte Carlo move set, in which the total
+magnetization is *not* conserved (it fluctuates under `li.b`), so, mirroring
+`LatticeGas.optimize_grand_canonical()`, it returns `(es, ms)`: the energy and total
+magnetization ($\sum_i s_i$) trajectories, the latter usable directly with
+`latticegas.get_susceptibility()`. `li.optimize_conserved()` instead uses Kawasaki
+spin-exchange (swap) dynamics, which *does* conserve the total magnetization -- the analog of
+`LatticeGas.optimize_energy()`'s fixed-filling swaps. `li.anneal()` wraps `optimize_energy()`
+in a decreasing-temperature schedule, and `optimize_energy_multistart()` keeps the best of
+several independent restarts. `get_local_energy()`/`get_local_field()` give the per-site
+energy/effective-field for the current snapshot, and `get_correlator()`/`get_structure_factor()`
+reuse `LatticeGas`'s real-/reciprocal-space correlator machinery directly (it operates on any
+per-site array, not just 0/1 occupations) to locate ordered (ferromagnetic, checkerboard
+antiferromagnetic, ...) ground states and their ordering wavevector. Because `li.pairs` lists
+both directions of every bond (same convention as `LatticeGas`), `get_energy()` is twice the
+usual sum-over-unordered-bonds convention -- e.g. the 2d square-lattice ferromagnet's critical
+temperature sits near $2\times2.269$ in these units, not $2.269$. See `examples/latticeising/`
+for runnable demos of annealing, a temperature scan (magnetization and specific heat), and
+local-energy/local-field maps.
+
+
 # Main functions and methods
 
 ## Geometry functions and methods
@@ -2778,4 +2825,103 @@ Optional arguments:
 - qmax=None: half-width of the default grid; defaults to $2\pi/d$ set by the nearest-neighbor spacing $d$
 
 Returns `(qpath, sq)`: the array of $q$ vectors evaluated and the matching array of $S(q)$ values
+
+
+## LatticeIsing functions and methods
+
+### li.add_interaction()
+Add a coupling shell to the model, on top of any interactions already added (repeated calls accumulate).
+
+Optional arguments:
+
+- Jij: list of shell couplings, e.g. `[J1,J2,J3]` for first/second/third neighbor $-J_{ij}s_is_j$ exchange; positive is ferromagnetic (opposite sign convention from `LatticeGas.add_interaction()`). Passed through to `Geometry.get_hamiltonian(tij=Jij)`, so anything that constructor accepts for `tij` works here too
+
+Mutates `li` in place, no return value
+
+### li.add_field()
+Add an external (Zeeman-like) field to `li.b`.
+
+Arguments:
+
+- h: a scalar (applied uniformly to every site) or a per-site array
+
+Mutates `li` in place, no return value
+
+### li.set_magnetization()
+Reset the spin array `li.s` to a new random $\pm1$ configuration with a given average magnetization, discarding the current snapshot.
+
+Arguments:
+
+- m=0.0: target average magnetization in $[-1,1]$ (rounded to the nearest integer up-spin count)
+
+### li.get_energy()
+Evaluate the total energy $-\sum_i b_i s_i - \sum_{ij} J_{ij} s_i s_j$ of the current spin snapshot `li.s`. Returns a scalar. Since `li.pairs` lists both directions of every bond, this is twice the usual sum-over-unordered-bonds convention.
+
+### li.get_magnetization()
+Return $\mathrm{mean}(s)$, the average magnetization per site of `li.s` (a scalar in $[-1,1]$).
+
+### li.optimize_energy()
+Single-spin-flip Metropolis dynamics -- the standard Ising Monte Carlo move set: at each step, one random site is flipped and accepted unconditionally if the energy doesn't increase, or with probability $e^{-\Delta E/T}$ otherwise. Magnetization is *not* conserved (it fluctuates under `li.b`), the spin analog of `LatticeGas.optimize_grand_canonical()`.
+
+Optional arguments:
+
+- temp=1.0: Metropolis temperature; `temp=0` runs zero-temperature (greedy) dynamics
+- ntries=1e5: number of flip attempts
+- resync_every=1000: how often (in flip attempts) to recompute the energy from scratch, bounding floating-point drift in the incremental tracking
+- checkpoint_at=None: an int or iterable of ints; captures a copy of `li.s` after that many attempts (1-indexed) into `li.checkpoints` (a dict `step -> s` snapshot)
+
+No `patience` option: unlike `optimize_conserved()`, this trajectory is meant to be fed to `latticegas.get_specific_heat()`/`get_susceptibility()`, and early truncation would silently bias those variance estimates.
+
+Overwrites `li.s` with the final configuration and returns `(es, ms)`: the energy trajectory and the total-magnetization ($\sum_i s_i$) trajectory, both arrays of length `ntries`
+
+### li.optimize_conserved()
+Kawasaki spin-exchange dynamics: at each step, one up spin and one down spin are picked at random and swapped, which conserves the total magnetization -- the spin analog of `LatticeGas.optimize_energy()` (swap-based, fixed filling). Raises `ValueError` if `li.s` doesn't currently have both $+1$ and $-1$ present (e.g. after `set_magnetization(1.0)`).
+
+Optional arguments: same as `li.optimize_energy()`, plus:
+
+- patience=None: if set, stop early once this many attempts have passed without a new best energy being found (the returned array is truncated to what actually ran)
+
+Overwrites `li.s` with the final configuration and returns the array of energies recorded at each attempt
+
+### li.anneal()
+Simulated annealing over a decreasing temperature schedule: calls `li.optimize_energy()` once per temperature in `temps`, keeping the best (lowest-energy) configuration seen across the whole schedule.
+
+Optional arguments:
+
+- temps=None: sequence of temperatures, high to low; defaults to a 10-step geometric schedule from 2.0 down to 0.05
+- ntries=1e4: number of flip attempts per temperature
+- checkpoint_at=None: like `li.optimize_energy()`'s `checkpoint_at`, but numbered continuously across the whole schedule
+- any other keyword accepted by `li.optimize_energy()`, applied at every temperature
+
+Overwrites `li.s` with the best configuration found and returns `(es, ms)`, the concatenated energy and magnetization trajectories across all temperatures
+
+### li.optimize_energy_multistart()
+Run `nstart` independent flip-based anneals from independent random seeds (same initial magnetization as the current `li.s`) and keep the lowest-energy result. Each restart is a full `optimize_ising` run, farmed out with `parallel.pcall`, mirroring `LatticeGas.optimize_energy_multistart()`.
+
+Optional arguments:
+
+- nstart=10: number of independent restarts
+- any other keyword accepted by `li.optimize_energy()` (e.g. `temp`, `ntries`), applied identically to every restart
+
+Overwrites `li.s` with the best configuration found and returns its energy (a scalar)
+
+### li.get_local_energy() / li.get_local_field()
+Per-site breakdown of the current snapshot. `get_local_energy()` returns each site's own contribution to `li.get_energy()` (values sum exactly to `li.get_energy()`, mirroring `LatticeGas.get_local_energy()`'s $j/2$ correction for the double-counted bonds). `get_local_field()` returns the effective field $h^{\mathrm{eff}}_i=b_i+2\sum_kJ_{ik}s_k$ seen by each site, defined so that flipping $s_i$ costs exactly $2s_ih^{\mathrm{eff}}_i$ -- the spin analog of `LatticeGas.get_local_mu()`.
+
+Returns an array over sites
+
+### li.get_correlator() / li.get_structure_factor()
+Spin-spin correlator and reciprocal-space structure factor of the current snapshot `li.s`, reusing `statphystk.correlator.get_nnc`/`get_structure_factor` directly (both operate on any per-site array, not just 0/1 occupations) -- see `LatticeGas.get_correlator()`/`get_structure_factor()` for the argument reference.
+
+### li.add_tensor() / li.regroup()
+Same as `LatticeGas.add_tensor()`/`regroup()`, reusing those functions directly (they only touch `geometry.r`/`nsites`/`pairs`/`j`, none of which differ in meaning between the two models).
+
+Mutates `li` in place, no return value
+
+### li.write() / li.read()
+Save/load the current spin snapshot `li.s` to/from a text file, reusing `Geometry.write_profile()` -- see `LatticeGas.write()`/`read()`. `read()` rounds to $\{-1,+1\}$ (sign, treating exact 0 as $+1$) to absorb the text round-trip's floating point noise, and raises `ValueError` if the file's site count doesn't match `li.nsites`.
+
+Optional arguments:
+
+- name="SPIN.OUT": file path
 
