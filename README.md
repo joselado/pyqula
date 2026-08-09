@@ -118,10 +118,10 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Reaching system sizes up to 10000000 atoms on a single-core laptop [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/05_kpm_large_systems.ipynb)
 
 ## Wannierization ##
-- Maximally-localized Wannier functions for a selected range of bands
-- Exact reproduction of the selected band subspace on the wannierization mesh
-- Point-group symmetry-enforced Wannierization, with rejection of band selections that slice through a symmetry-related degeneracy
-- Works for 0d, 1d, 2d and 3d periodic Hamiltonians, including Nambu/BdG
+- Maximally-localized Wannier functions for a selected range of bands [[notebook]](jupyter-notebooks/functionalities/wannierization/01_maximally_localized_wannier.ipynb)
+- Exact reproduction of the selected band subspace on the wannierization mesh [[notebook]](jupyter-notebooks/functionalities/wannierization/02_exact_reproduction.ipynb)
+- Point-group symmetry-enforced Wannierization, with rejection of band selections that slice through a symmetry-related degeneracy [[notebook]](jupyter-notebooks/functionalities/wannierization/03_symmetry_enforced_wannierization.ipynb)
+- Works for 0d, 1d, 2d and 3d periodic Hamiltonians, including Nambu/BdG [[notebook]](jupyter-notebooks/functionalities/wannierization/04_dimensionality_and_bdg.ipynb)
 
 ## Quantum transport ##
 - Metal-metal transport
