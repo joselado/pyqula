@@ -306,19 +306,32 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   if random: ks = [np.random.random(3) for k in ks]
   ytot = np.zeros(ne) # initialize
   npol = int(scale/delta) # number of polynomials
+  # dos_kpm's stochastic trace estimator (kpm.pdos) draws random vectors
+  # confined to (and renormalized within) the operator's subspace, so it
+  # converges to Tr[P f(H)]/Tr[P], the *per-state* projected DOS averaged
+  # over that subspace -- not over the full N-dimensional Hilbert space.
+  # Recovering the extensive/total projected DOS Tr[P f(H)] therefore
+  # requires rescaling by Tr[P] (the projector's rank), not by the full
+  # matrix dimension N=h.intra.shape[0] (which is only correct when no
+  # operator/projector is supplied, i.e. P=identity, Tr[P]=N). The
+  # projector's matrix (and hence its rank) does not depend on k (see
+  # Operator.get_matrix), so it is resolved once, here.
+  if operator is None: op = None # no operator
+  else:
+      op = operator.get_matrix() # get the matrix of the operator
+      ## the case of projector operators should be implemented explicitly
+      if op is None: raise # not implemented
+      # this currently only works for projector operators
+      if np.max(np.abs(op - op@op))>1e-4:
+          print("only projector operators implemented in KPM")
+          raise
+  # op can be a scipy.sparse matrix (e.g. get_electron/get_hole build it
+  # via sparse.bmat) as well as a dense ndarray -- .diagonal().sum() works
+  # for both, unlike np.trace which chokes on sparse input
+  norm_dim = h.intra.shape[0] if op is None else np.real(op.diagonal().sum())
   def f(k):
     if info: print("Doing",k)
     hk = hkgen(k) # get Hamiltonian
-    if operator is None: op = None # no operator
-    else:
-        op = operator.get_matrix() # get the matrix of the operator
-        ## the case of projector operators should be implemented explicitly
-        if op is None: raise # not implemented
-        # this currently only works for projector operators
-        if np.max(np.abs(op - op@op))>1e-4:
-            print("only projector operators implemented in KPM")
-            raise
-        P = op # projector
     (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=ne,operator=None,
                    P = op,
                    ewindow=ewindow,**kwargs) # compute
@@ -345,7 +358,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
                     fill_value=0.) # interpolation
       x = energies # redefine x
       ytot = finter(energies) # redefine y
-  ytot = ytot*h.intra.shape[0] # by the dimension
+  ytot = ytot*norm_dim # by the (projected) dimension
   np.savetxt("DOS.OUT",np.array([x,ytot]).T) # save in file
   return (x,ytot)
 
