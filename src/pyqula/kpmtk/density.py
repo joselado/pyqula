@@ -29,7 +29,9 @@ def get_density_from_mus(mus,fermi):
         else:
             return np.sin(n * np.arccos(fermi)) / n
     # Compute electronic density
-    rho = (mus[0] * G_n(0) + 2 * np.sum(mus[n]*G_n(n) for n in range(1, N))) / np.pi
+    ns = np.arange(1, N)
+    Gn = np.sin(ns * np.arccos(fermi)) / ns # G_n(E) for n >= 1, vectorized
+    rho = (mus[0] * G_n(0) + 2 * np.sum(mus[ns]*Gn)) / np.pi
     
     return (1.- rho).real
 
