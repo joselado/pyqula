@@ -168,7 +168,7 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
           def gfun(e):
               m = f(k=k,e=e) # Green's function
               m = green.GtimesO(m,operator,k=k)
-              return -algebra.trace(m).imag # return DOS
+              return -algebra.trace(m).imag/np.pi # return DOS, same normalization as mode="ED"
           return energies,np.array([gfun(e) for e in energies])
     elif mode=="KPM": # KPM method
       if operator is not None: 

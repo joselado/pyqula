@@ -63,3 +63,21 @@ def test_kdos_bands_green_and_kpm_modes_still_work(tmp_path, monkeypatch):
     out_kpm = kdos_bands(h, kpath=kpath, energies=energies, delta=0.1,
                           mode="KPM", scale=5.0, ntries=2)
     assert np.all(np.isfinite(out_kpm[2]))
+
+
+def test_kdos_bands_green_matches_ed_normalization():
+    """Regression test: mode="green" computes -Im Tr G(k,e) directly instead
+    of going through h.get_dos, and used to skip the 1/pi Lorentzian
+    normalization that mode="ED" applies (dos.dos_kmesh's `ys *= 1./np.pi`)
+    -- the two modes disagreed by exactly a factor of pi. Both modes must
+    return the same physical A(k,omega), since they're just two numerical
+    routes to the same quantity within one function."""
+    g = geometry.triangular_lattice()
+    h = g.get_hamiltonian()
+    kpath = [[k, 0., 0.] for k in np.linspace(0., 1., 12)]
+    energies = np.linspace(-5, 5, 20)
+    delta = 0.1
+
+    out_ed = kdos_bands(h, kpath=kpath, energies=energies, delta=delta, mode="ED")
+    out_green = kdos_bands(h, kpath=kpath, energies=energies, delta=delta, mode="green")
+    assert np.max(np.abs(out_ed[2] - out_green[2])) < 1e-8
