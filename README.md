@@ -78,44 +78,44 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Electronic structure unfolding in supercells [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
 
 ## Interacting mean-field Hamiltonians ##
-- Selfconsistent mean-field calculations with local/non-local interactions
-- Both collinear and non-collinear formalism
-- Direct spin-spin (Heisenberg-like) exchange mean field, SzSz/SxSx/SySy and combined anisotropic exchange, simultaneously with density-density interactions
-- Anomalous mean-field for non-collinear superconductors
-- Full selfconsistency with all Wick terms for non-collinear superconductors
-- Constrained and unconstrained mean-field calculations
-- Automatic identification of order parameters for symmetry broken states
-- Hermitian and non-Hermitian mean-field calculations
-- Random phase approximation many-body response functions, for interactions beyond onsite (spin and density/charge channels)
-- RPA collective modes (magnon bands, plasmon/charge-order bands) and Stoner/RPA instability detection
-- KPM (Chebyshev)-based mean-field SCF for large/sparse systems, avoiding diagonalization of the Bloch Hamiltonian
-- JAX-derivative-based mean-field SCF solvers (Newton, matrix-free Newton-Krylov, matrix-free Levenberg-Marquardt residual minimization), differentiating through the self-consistency loop instead of plain mixing
-- Abrikosov-pseudofermion (RVB spinon) mean-field theory for spin-1/2 Heisenberg models, with the local one-fermion-per-site constraint enforced at every site individually
-- Abrikosov-pseudofermion (Read-Newns) mean-field theory for the Kondo lattice / periodic Anderson model (heavy fermions), with self-consistent hybridization and a per-site local-moment constraint
+- Selfconsistent mean-field calculations with local/non-local interactions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/01_local_nonlocal_scf.ipynb)
+- Both collinear and non-collinear formalism [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/02_collinear_noncollinear.ipynb)
+- Direct spin-spin (Heisenberg-like) exchange mean field, SzSz/SxSx/SySy and combined anisotropic exchange, simultaneously with density-density interactions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/03_spin_spin_exchange.ipynb)
+- Anomalous mean-field for non-collinear superconductors [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/04_anomalous_mf_sc.ipynb)
+- Full selfconsistency with all Wick terms for non-collinear superconductors [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/05_full_wick_noncollinear_sc.ipynb)
+- Constrained and unconstrained mean-field calculations [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/06_constrained_unconstrained.ipynb)
+- Automatic identification of order parameters for symmetry broken states [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/07_order_parameter_identification.ipynb)
+- Hermitian and non-Hermitian mean-field calculations [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/08_hermitian_nonhermitian.ipynb)
+- Random phase approximation many-body response functions, for interactions beyond onsite (spin and density/charge channels) [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/09_rpa_beyond_onsite.ipynb)
+- RPA collective modes (magnon bands, plasmon/charge-order bands) and Stoner/RPA instability detection [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/10_rpa_collective_modes.ipynb)
+- KPM (Chebyshev)-based mean-field SCF for large/sparse systems, avoiding diagonalization of the Bloch Hamiltonian [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/11_kpm_scf.ipynb)
+- JAX-derivative-based mean-field SCF solvers (Newton, matrix-free Newton-Krylov, matrix-free Levenberg-Marquardt residual minimization), differentiating through the self-consistency loop instead of plain mixing [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/12_jax_scf_solvers.ipynb)
+- Abrikosov-pseudofermion (RVB spinon) mean-field theory for spin-1/2 Heisenberg models, with the local one-fermion-per-site constraint enforced at every site individually [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/13_spinon_rvb.ipynb)
+- Abrikosov-pseudofermion (Read-Newns) mean-field theory for the Kondo lattice / periodic Anderson model (heavy fermions), with self-consistent hybridization and a per-site local-moment constraint [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/14_kondo_lattice.ipynb)
 
 ## Topological characterization ##
-- Berry phases, Berry curvatures, Chern numbers and Z2 invariants
-- Operator-resolved Chern numbers and Berry density
-- Frequency resolved topological density
-- Spatially resolved topological flux
-- Real-space Chern density for amorphous systems
-- Multiorbital/multiband (non-Abelian) quantum geometric tensor and quantum metric
-- Wilson loop and Green's function formalism
+- Berry phases, Berry curvatures, Chern numbers and Z2 invariants [[notebook]](jupyter-notebooks/functionalities/topological_characterization/01_chern_z2.ipynb)
+- Operator-resolved Chern numbers and Berry density [[notebook]](jupyter-notebooks/functionalities/topological_characterization/02_operator_resolved_chern.ipynb)
+- Frequency resolved topological density [[notebook]](jupyter-notebooks/functionalities/topological_characterization/03_frequency_resolved_topological_density.ipynb)
+- Spatially resolved topological flux [[notebook]](jupyter-notebooks/functionalities/topological_characterization/04_spatially_resolved_topological_flux.ipynb)
+- Real-space Chern density for amorphous systems [[notebook]](jupyter-notebooks/functionalities/topological_characterization/05_real_space_chern_amorphous.ipynb)
+- Multiorbital/multiband (non-Abelian) quantum geometric tensor and quantum metric [[notebook]](jupyter-notebooks/functionalities/topological_characterization/06_quantum_geometric_tensor.ipynb)
+- Wilson loop and Green's function formalism [[notebook]](jupyter-notebooks/functionalities/topological_characterization/07_wilson_green_formalism.ipynb)
 
 ## Spectral functions ##
-- Spectral functions in infinite geometries
-- Surface spectral functions for semi-infinite systems
-- Interfacial spectral function in semi-infinite junctions
-- Single impurities in infinite systems
-- Green's function renormalization algorithm
-- Operator and momentum resolved spectral functions
+- Spectral functions in infinite geometries [[notebook]](jupyter-notebooks/functionalities/spectral_functions/01_spectral_infinite.ipynb)
+- Surface spectral functions for semi-infinite systems [[notebook]](jupyter-notebooks/functionalities/spectral_functions/02_surface_spectral_semiinfinite.ipynb)
+- Interfacial spectral function in semi-infinite junctions [[notebook]](jupyter-notebooks/functionalities/spectral_functions/03_interfacial_spectral_junctions.ipynb)
+- Single impurities in infinite systems [[notebook]](jupyter-notebooks/functionalities/spectral_functions/04_single_impurities_infinite.ipynb)
+- Green's function renormalization algorithm [[notebook]](jupyter-notebooks/functionalities/spectral_functions/05_green_renormalization.ipynb)
+- Operator and momentum resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/spectral_functions/06_operator_momentum_resolved.ipynb)
 
 ## Chebyshev kernel polynomial based-algorithms ##
-- Local and full spectral functions
-- Non-local correlators and Green's functions
-- Locally resolved expectation values
-- Operator resolved spectral functions
-- Reaching system sizes up to 10000000 atoms on a single-core laptop
+- Local and full spectral functions [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/01_local_full_spectral_functions.ipynb)
+- Non-local correlators and Green's functions [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/02_nonlocal_correlators_greens_functions.ipynb)
+- Locally resolved expectation values [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/03_locally_resolved_expectation_values.ipynb)
+- Operator resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/04_operator_resolved_spectral_functions.ipynb)
+- Reaching system sizes up to 10000000 atoms on a single-core laptop [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/05_kpm_large_systems.ipynb)
 
 ## Wannierization ##
 - Maximally-localized Wannier functions for a selected range of bands
