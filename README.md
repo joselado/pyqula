@@ -107,6 +107,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Surface spectral functions for semi-infinite systems [[notebook]](jupyter-notebooks/functionalities/spectral_functions/02_surface_spectral_semiinfinite.ipynb)
 - Interfacial spectral function in semi-infinite junctions [[notebook]](jupyter-notebooks/functionalities/spectral_functions/03_interfacial_spectral_junctions.ipynb)
 - Single impurities in infinite systems [[notebook]](jupyter-notebooks/functionalities/spectral_functions/04_single_impurities_infinite.ipynb)
+- Real-space quasiparticle interference (QPI) maps from explicit impurities in a supercell
 - Green's function renormalization algorithm [[notebook]](jupyter-notebooks/functionalities/spectral_functions/05_green_renormalization.ipynb)
 - Operator and momentum resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/spectral_functions/06_operator_momentum_resolved.ipynb)
 
@@ -116,6 +117,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Locally resolved expectation values [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/03_locally_resolved_expectation_values.ipynb)
 - Operator resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/04_operator_resolved_spectral_functions.ipynb)
 - Reaching system sizes up to 10000000 atoms on a single-core laptop [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/05_kpm_large_systems.ipynb)
+- GPU-accelerated (JAX) batched Chebyshev moment evaluation via `kpm_cpugpu="GPU"`
 
 ## Wannierization ##
 - Maximally-localized Wannier functions for a selected range of bands [[notebook]](jupyter-notebooks/functionalities/wannierization/01_maximally_localized_wannier.ipynb)

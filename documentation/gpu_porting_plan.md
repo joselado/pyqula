@@ -41,11 +41,12 @@ else:
 
 Any new GPU work should reuse this pattern rather than inventing a second one.
 
-`parallelmpi.py` has a commented-out `pcallgpu` using MPI + `torch.cuda` — an abandoned,
-never-wired-up prior attempt (zero callers, `torch` isn't even a dependency). Don't
-resurrect it. Introducing torch or cupy as a second GPU backend alongside jax would split
-the codebase's GPU story in two for no benefit; jax already covers dense linear algebra,
-sparse matvecs, and batching (`vmap`) well enough for every candidate identified below.
+A prior, never-wired-up attempt at an MPI + `torch.cuda` `pcallgpu` (zero callers, `torch`
+isn't even a dependency) lived in `parallelmpi.py` and has since been removed as dead code.
+Don't resurrect that approach. Introducing torch or cupy as a second GPU backend alongside
+jax would split the codebase's GPU story in two for no benefit; jax already covers dense
+linear algebra, sparse matvecs, and batching (`vmap`) well enough for every candidate
+identified below.
 
 ## Candidate hot spots, ranked
 

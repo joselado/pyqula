@@ -20,7 +20,6 @@ __version__ = "0.0.93"
 # from . import current
 # from . import dos
 # from . import sculpt
-# from . import kpm
 # from . import supercell
 # from . import skeleton
 # from . import multilayers
