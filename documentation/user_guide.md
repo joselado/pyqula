@@ -1932,6 +1932,42 @@ See `examples/0d/kpm_dos/main.py` and `examples/0d/kpm_correlator/main.py`
 for runnable versions, including a comparison of the KPM correlator against
 the exact Green's function calculation.
 
+The batched Chebyshev-moment kernels underneath KPM (one starting vector
+per random try, or per site for a full trace) run on numba by default, but
+can be dispatched to a GPU through [jax](https://github.com/jax-ml/jax)
+instead by passing `kpm_cpugpu="GPU"` down to any KPM entry point --
+`h.get_dos(mode="KPM", ...)`, `kpm.tdos`/`kpm.pdos`/`kpm.ldos`, or the
+lower-level `kpm` module functions themselves all forward it:
+
+```python
+(x,y) = h.get_dos(mode="KPM",
+            energies=np.linspace(-3.0,3.0,200),
+            delta=1e-4,ntries=10,
+            kpm_cpugpu="GPU") # dispatch the Chebyshev moments to a GPU
+```
+
+`kpm_cpugpu="GPU"` transparently falls back to running on the CPU (through
+jax's own CPU backend) if no GPU is visible, so it is always safe to pass
+even on a machine without one. The batch of starting vectors is sent to
+the device in fixed-size chunks (`gpu_batch_size`, default 256, currently
+a reasoned default rather than a GPU-benchmarked one) rather than all at
+once, so device memory use stays bounded even for a full-space trace over
+a large system; pass a smaller `gpu_batch_size` to trade fewer, larger
+device dispatches for a smaller memory footprint. `kpm_prec="single"`
+(also forwarded the same way) switches the moments to single precision,
+useful for squeezing more parallelism out of a GPU when double-precision
+accuracy is not needed.
+
+There are two distinct KPM code paths for an operator-weighted quantity
+(a projected DOS/spectral function): passing `operator=` reaches the
+operator-weighted moments directly (`kpm.tdos`/`kpm.pdos`'s `operator=`
+argument, or `h.get_kdos_bands(mode="KPM", operator=...)`), while
+`h.get_dos(mode="KPM", operator=...)` instead confines the random
+starting vectors to the operator's subspace and falls back to the plain
+(non-operator-weighted) moments internally. `kpm_cpugpu="GPU"` reaches
+both, but only the first actually exercises the operator-weighted GPU
+kernel (`kpm_momentsA_batch_gpu`).
+
 
 # Classical spin models
 

@@ -73,10 +73,9 @@ def kpm_moments_batch(vs,m,n=100,kpm_prec="double",
     if kpm_cpugpu=="CPU": # use the CPU, one vector per thread
         if is_real: mus = python_kpm_moments_batch_real(vs,data,mo.row,mo.col,n=n)
         else: mus = python_kpm_moments_batch_complex(vs,data,mo.row,mo.col,n=n)
-    elif kpm_cpugpu=="GPU": # no batched GPU path, loop over the single-vector one
-        from .kpmjax import kpm_moments_gpu
-        mus = np.array([kpm_moments_gpu(vs[iv],data,mo.row,mo.col,n=n)
-                for iv in range(vs.shape[0])])
+    elif kpm_cpugpu=="GPU": # batched, dispatched to the device in fixed-size chunks
+        from .kpmjax import kpm_moments_batch_gpu
+        mus = kpm_moments_batch_gpu(vs,data,mo.row,mo.col,n=n,**kwargs)
     else: raise ValueError("kpm_cpugpu must be 'CPU' or 'GPU', got "+str(kpm_cpugpu))
     return np.array(mus,dtype=np.complex128)
 
@@ -289,7 +288,10 @@ def kpm_moments_A_batch(vs,m,A,n=100,kpm_prec="double",
     if kpm_cpugpu=="CPU":
         if is_real: mus = python_kpm_momentsA_batch_real(vs,Avs,data,mo.row,mo.col,n=n)
         else: mus = python_kpm_momentsA_batch_complex(vs,Avs,data,mo.row,mo.col,n=n)
-    else: raise ValueError("kpm_cpugpu must be 'CPU', got "+str(kpm_cpugpu))
+    elif kpm_cpugpu=="GPU": # batched, dispatched to the device in fixed-size chunks
+        from .kpmjax import kpm_momentsA_batch_gpu
+        mus = kpm_momentsA_batch_gpu(vs,Avs,data,mo.row,mo.col,n=n,**kwargs)
+    else: raise ValueError("kpm_cpugpu must be 'CPU' or 'GPU', got "+str(kpm_cpugpu))
     return np.array(mus,dtype=np.complex128)
 
 

@@ -1,10 +1,11 @@
 # GPU porting plan
 
-Status: **not started**. This is a roadmap for future work, written after surveying the
-codebase for GPU-portable hot spots. It complements, and is independent of, the CPU-side
-`perf_optimization_plan` work (numba batching of dense diagonalization and KPM moments,
-already landed; SCF-loop redundancy still pending). Nothing here should be implemented
-without explicit user sign-off per tier, same as that plan.
+Status: **Tier 1 done** (KPM batched GPU path, see below); Tiers 2-4 not started. This is a
+roadmap for future work, written after surveying the codebase for GPU-portable hot spots.
+It complements, and is independent of, the CPU-side `perf_optimization_plan` work (numba
+batching of dense diagonalization and KPM moments, already landed; SCF-loop redundancy
+still pending). Nothing here should be implemented without explicit user sign-off per tier,
+same as that plan.
 
 **No GPU hardware is available in the current dev environment** (`nvidia-smi` is absent,
 `jax.devices()` returns only a `CpuDevice`). Every tier below must therefore be validated
@@ -66,28 +67,37 @@ small matrices/small k-meshes, where the existing numba CPU path may already be 
 the crossover point** before deciding whether to add a GPU path at all, and if so, whether
 it replaces or supplements the numba path.
 
-### 2. KPM moments, batched GPU path — `kpmtk/kpmnumba.py` / `kpmtk/kpmjax.py`
+### 2. KPM moments, batched GPU path — `kpmtk/kpmnumba.py` / `kpmtk/kpmjax.py` — **done**
 
-A GPU switch already exists (`kpm_cpugpu="GPU"` in `kpm_moments_v`/`kpm_moments_batch`),
-but it's unfinished: `kpm_moments_batch`'s GPU branch loops in plain Python over
-`kpm_moments_gpu` once per vector —
+`kpm_moments_batch`'s GPU branch used to loop in plain Python over the single-vector
+`kpm_moments_gpu` kernel, one dispatch per vector. It now calls
+`kpmjax.kpm_moments_batch_gpu`, which builds the sparse `BCOO` matrix once and dispatches
+the batch via `jax.lax.map(..., batch_size=gpu_batch_size)` (default 256, jitted as
+`_kpm_moments_sparse_batch_jit`) instead of one `jax.vmap` over the whole batch — a plain
+vmap would materialize `nvec` copies of the per-vector recursion state on-device at once,
+which for a full-space trace (`kpm.full_trace`/`full_trace_A`, one basis vector per site,
+so `nvec=nsites`) can reach `limits.densedimension` (10,000) and plausibly exceed real GPU
+memory; chunking bounds device memory independent of `nvec`. The same treatment was
+extended to `kpm_moments_A_batch` (the operator-weighted moments used by
+`random_trace_A`/`full_trace_A`), which previously had no GPU path at all
+(`kpm_cpugpu="GPU"` raised `ValueError`) — it now calls `kpmjax.kpm_momentsA_batch_gpu`,
+built the same way around a new `_kpm_momentsA_sparse` recursion.
 
-```python
-elif kpm_cpugpu=="GPU": # no batched GPU path, loop over the single-vector one
-    from .kpmjax import kpm_moments_gpu
-    mus = np.array([kpm_moments_gpu(vs[iv],data,mo.row,mo.col,n=n)
-            for iv in range(vs.shape[0])])
-```
+Separately, `kpm_cpugpu` used to be unreachable from the actual user-facing entry points:
+`random_trace`, `random_trace_A`, `full_trace_A`, and `tdos` (which `pdos`/`ldos` build on)
+took no `**kwargs` and never forwarded a backend choice down to
+`get_moments_batch`/`get_moments_A_batch`, so `kpm.tdos(..., kpm_cpugpu="GPU")` silently
+ran on the CPU regardless. All four now accept and forward `**kwargs` (including
+`kpm_cpugpu`, `kpm_prec`, and the new `gpu_batch_size`).
 
-— unlike the CPU branch, which batches all vectors into one `prange`-parallel numba kernel
-(`python_kpm_moments_batch_complex`/`_real`). This is the most scoped, lowest-risk item
-here: replace the Python loop with a `jax.vmap` over `_kpm_moments_sparse_jit` (or an
-explicit `jax.lax.map`/batched `sparse.BCOO` matmul) so all vectors are dispatched to the
-device together, mirroring the CPU batching work already done for
-`kpm_moments_A_batch`/`kpm_moments_batch` (see `perf_optimization_plan` Tier 2). Ground
-truth for correctness already exists — the CPU batched kernels — so this can be verified
-numerically on this GPU-less machine (via jax's CPU fallback) even before real GPU timing
-is possible.
+Both the chunked dispatch and the reachability fix are verified in
+`tests/kpm/test_kpm_gpu_batch.py`: batched moments and A-batched moments each against the
+CPU reference (real/complex input, single/double precision), an explicit multi-chunk check
+(batch size > the default chunk, plus a small custom `gpu_batch_size` forcing many uneven
+chunks), and an end-to-end check through `kpm.tdos`/`kpm.ldos`/`kpm.full_trace`/
+`kpm.full_trace_A`. All of this is exercised transparently through jax's CPU fallback on
+this GPU-less machine; real GPU timing and real GPU memory behavior are still unmeasured
+(see the status note above) — the chunk size is a reasoned default, not a benchmarked one.
 
 ### 3. Sparse / Green's-function work — lower priority, needs its own research spike
 
@@ -117,8 +127,7 @@ deadlock or serialize badly). Ask before lifting this restriction; it may be int
 Each tier is independent and needs explicit user confirmation before implementation, same
 process as the CPU perf plan.
 
-- **Tier 1 — finish the KPM batched GPU path** (item 2 above). Scoped, mirrors an existing
-  CPU pattern, has a ready-made correctness reference. Best starting point.
+- **Tier 1 — finish the KPM batched GPU path** (item 2 above). **Done.**
 - **Tier 2 — benchmark batched `eigh` on GPU** (item 1 above). Requires the size/batch
   sweep described above before committing to an implementation; likely the highest
   eventual payoff given how many call sites feed off `htk/eigenvectors.py`, but also the

@@ -71,13 +71,13 @@ def python_kpm_moments_clear(v,m,n=100):
 from .kpmtk.kpmnumba import kpm_moments_A_batch as get_moments_A_batch
 
 
-def get_momentsA(v,m,n=100,A=None):
+def get_momentsA(v,m,n=100,A=None,**kwargs):
     """ Get the first n moments of a certain vector, weighted by operator
     A, using the Chebychev recursion relations (see get_moments_A_batch
     for the batched numba implementation)"""
     if A is None: raise # only for a certain A
     v = algebra.matrix2vector(v) # zero vector
-    mus = get_moments_A_batch(np.array([v]),m,A,n=n)
+    mus = get_moments_A_batch(np.array([v]),m,A,n=n,**kwargs)
     return mus[0]
 
 
@@ -116,11 +116,12 @@ ldos0d = ldos
 
 def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
               ntries=20,ewindow=None,frand=None,
-              operator=None,x=None):
-  """Return two arrays with energies and local DOS"""
+              operator=None,x=None,**kwargs):
+  """Return two arrays with energies and local DOS. Extra **kwargs (e.g.
+  kpm_cpugpu, kpm_prec) are forwarded to random_trace/get_moments_batch."""
   if npol is None: npol = ne
   mus = random_trace(m_in/scale,ntries=ntries,n=npol,fun=frand,
-          operator=operator) 
+          operator=operator,**kwargs)
   if ewindow is None or abs(ewindow)>scale: # no window provided
     xs = np.linspace(-1.0,1.0,ne,endpoint=True)*1.01 # energies
   else:
@@ -169,8 +170,9 @@ def total_energy(m_in,scale=10.,npol=None,ne=500,ntries=20):
 
 
 
-def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
-  """ Calculates local DOS using the KPM"""
+def random_trace(m_in,ntries=20,n=200,fun=None,operator=None,**kwargs):
+  """ Calculates local DOS using the KPM. Extra **kwargs (e.g. kpm_cpugpu,
+  kpm_prec) are forwarded to get_moments_batch/get_moments_A_batch."""
   m = csc(m_in) # sparse matrix
   nd = m.shape[0] # length of the matrix
   if fun is not None: # check that dimensions are fine
@@ -183,36 +185,36 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None):
   if operator is None: # common case: batch the tries, one vector per numba thread
     vs = np.array([fun() for i in range(ntries)])
     vs = vs/np.sqrt(np.sum(np.conjugate(vs)*vs,axis=1))[:,None] # normalize each row
-    mus = get_moments_batch(vs,m,n=n) # (ntries,2n) moments
+    mus = get_moments_batch(vs,m,n=n,**kwargs) # (ntries,2n) moments
     return np.mean(mus,axis=0)
   else: # operator-weighted moments: batch the tries, one vector per numba thread
     vs = np.array([fun() for i in range(ntries)])
     vs = vs/np.sqrt(np.sum(np.conjugate(vs)*vs,axis=1))[:,None] # normalize each row
-    mus = get_moments_A_batch(vs,m,operator,n=2*n) # (ntries,2n) moments
+    mus = get_moments_A_batch(vs,m,operator,n=2*n,**kwargs) # (ntries,2n) moments
     return np.mean(mus,axis=0)
 
 
 
-def random_trace_A(m_in,ntries=20,n=200,A=None):
+def random_trace_A(m_in,ntries=20,n=200,A=None,**kwargs):
   """ Calculates local DOS using the KPM, batching the tries over numba
   threads (see get_moments_A_batch)"""
   m = csc(m_in) # saprse matrix
   nd = m.shape[0] # length of the matrix
   vs = rand.random((ntries,nd)) -.5 + 1j*rand.random((ntries,nd)) -.5j
   vs = vs/np.sqrt(np.sum(np.conjugate(vs)*vs,axis=1))[:,None] # normalize each row
-  mus = get_moments_A_batch(vs,m,A,n=n) # (ntries,n) moments
+  mus = get_moments_A_batch(vs,m,A,n=n,**kwargs) # (ntries,n) moments
   return np.mean(mus,axis=0)
 
 
 
-def full_trace_A(m_in,n=200,A=None):
+def full_trace_A(m_in,n=200,A=None,**kwargs):
   """ Calculates full trace using the KPM, one site-basis vector per
   numba thread (see get_moments_A_batch)"""
   m = csc(m_in) # saprse matrix
   nd = m.shape[0] # length of the matrix
   from .kpmtk.ldos import index2vector
   vs = np.array([index2vector(i,nd) for i in range(nd)])
-  mus = get_moments_A_batch(vs,m,A,n=n) # (nd,n) moments, one row per site
+  mus = get_moments_A_batch(vs,m,A,n=n,**kwargs) # (nd,n) moments, one row per site
   return np.sum(mus,axis=0)/nd
 
 
