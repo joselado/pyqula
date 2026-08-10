@@ -1,7 +1,6 @@
 from .. import algebra
 import numpy as np
 from .. import green
-from ..hamiltonians import is_number
 
 dagger = algebra.dagger
 

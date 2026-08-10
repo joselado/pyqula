@@ -504,7 +504,6 @@ def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=False):
    """ Plots the local density of states in the central part"""
    from .green import green_renormalization
    from .green import dyson
-   from .hamiltonians import is_number
    # perform dyson calculation
    intra = HT.right_intra
    inter = HT.right_inter
@@ -555,7 +554,7 @@ def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=False):
 
 def get_tmatrix(ht,energy=0.0,delta=0.0001):
   """Calculate the S-matrix of an HTstructure"""
-  if ht.block_diagonal: raise  # not implemented
+  if ht.block_diagonal: raise NotImplementedError
   smatrix = get_smatrix(ht,energy=energy)
   return smatrix[0][1]
 

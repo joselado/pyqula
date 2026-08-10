@@ -882,10 +882,6 @@ def read(input_file="POSITIONS.OUT"):
 
 
 from .ribbon import bulk2ribbon
-#def bulk2ribbon(h,n=10):
-#  """Converts a hexagonal bulk hamiltonian into a ribbon hamiltonian"""
-#  from .hexagonal import bulk2ribbon as br
-#  return br(h,n=n)
 
 
 def get_reciprocal2d(a1,a2):
@@ -1257,7 +1253,7 @@ def get_supercell(self,nsuper,store_primal=False):
         nsuper2 = nsuper[1]
         nsuper3 = nsuper[2]
         s = supercell3d(self,n1=nsuper1,n2=nsuper2,n3=nsuper3)
-    else: raise # not implemented
+    else: raise NotImplementedError
     s.center()
     s.get_fractional()
     return s

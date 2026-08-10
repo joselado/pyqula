@@ -41,7 +41,6 @@ from .htk import symmetry
 
 #import data
 
-from .limits import densedimension as maxmatrix
 optimal = False
 
 def _mean_field_scf_result(scf,return_total_energy):
@@ -569,7 +568,7 @@ class Hamiltonian():
         self.turn_multicell() # turn to multicell mode
         from superconductivity import eh_operator
         f = eh_operator(self.intra) # electron hole operator
-        raise # not implemented
+        raise NotImplementedError
     def turn_sparse(self):
         """
         Transforms the hamiltonian into a sparse hamiltonian
@@ -707,7 +706,7 @@ class Hamiltonian():
         """Return a 1d Hamiltonian"""
         if self.is_multicell: # not implemented
             self = self.get_no_multicell() # return the no multicell Hamiltonian
-        if not self.dimensionality==2: raise # not implemented
+        if not self.dimensionality==2: raise NotImplementedError
         intra,inter = kchain(self,k=k) # generate intra and inter
         hout = self.copy() # copy the Hamiltonian
         hout.intra = intra # store
@@ -773,7 +772,7 @@ class Hamiltonian():
         from . import ipr
         if self.dimensionality==0:
             return ipr.ipr(self.intra,**kwargs) 
-        else: raise # not implemented
+        else: raise NotImplementedError
     @get_docstring(dvector.dvector_non_unitarity)
     def get_dvector_non_unitarity(self,**kwargs):
         return dvector.dvector_non_unitarity(self,**kwargs)
@@ -815,99 +814,6 @@ hamiltonian = Hamiltonian
 
 
 
-def get_first_neighbors(r1,r2):
-    """Gets the fist neighbors, input are arrays"""
-    from . import neighbor
-    pairs = neighbor.find_first_neighbor(r1,r2)
-    return pairs
-
-
-
-
-
-def create_fn_hopping(r1,r2):
-  n=len(r1)
-  mat=np.array([[0.0j for i in range(n)] for j in range(n)])
-  pairs = get_first_neighbors(r1,r2) # get pairs of first neighbors
-  for p in pairs: # loop over pairs
-    mat[p[0],p[1]] = 1.0 
-  return mat
-
-
-
-# function to calculate the chirality between two vectors (vectorial productc)
-def vec_chi(r1,r2):
-  """Return clockwise or anticlockwise"""
-  z=r1[0]*r2[1]-r1[1]*r2[0]
-  zz = r1-r2
-  zz = sum(zz*zz)
-  if zz>0.01:
-    if z>0.01: # clockwise
-      return 1.0
-    if z<-0.01: # anticlockwise
-      return -1.0
-  return 0.0
-
-
-
-
-#################################3
-
-def diagonalize(h,nkpoints=100):
-  """ Diagonalice a hamiltonian """
-  import scipy.linalg as lg
-  # for one dimensional systems
-  if h.dimensionality==1:  # one simensional system
-    klist = np.arange(0.0,1.0,1.0/nkpoints)  # create array with the klist
-    if h.geometry.shift_kspace:
-      klist = np.arange(-0.5,0.5,1.0/nkpoints)  # create array with the klist
-    intra = h.intra  # assign intraterm
-    inter = h.inter  # assign interterm
-    energies = [] # list with the energies
-    for k in klist: # loop over kpoints
-      bf = np.exp(1j*np.pi*2.*k)  # bloch factor for the intercell terms
-      inter_k = inter*bf  # bloch hopping
-      hk = intra + inter_k + inter_k.conj().T # k dependent hamiltonian
-      energies += [lg.eigvalsh(hk)] # get eigenvalues of the current hamiltonian
-    energies = np.array(energies).transpose() # each kpoint in a line
-    return (klist,energies) # return the klist and the energies
-# for zero dimensional systems system
-  elif h.dimensionality==0:  
-    intra = h.intra  # assign intraterm
-    energies = lg.eigvalsh(intra) # get eigenvalues of the current hamiltonian
-    return (range(len(intra)),energies) # return indexes and energies
-  else: raise
-
-
-
-
-def diagonalize_hk(k):
-  return algebra.eigh(hk(k))
-
-
-
-
-def diagonalize_kpath(h,kpath):
-  """Diagonalice in a certain path"""
-  energies = [] # empty list with energies
-  import scipy.linalg as lg
-  ik = 0.
-  iks = [] # empty list
-  for k in kpath:
-    f = h.get_hk_gen() # get Hk generator
-    hk = f(k)  # k dependent hamiltonian
-    es = (lg.eigvalsh(hk)).tolist() # get eigenvalues for current hamiltonian
-    energies += es # append energies 
-    iks += [ik for i in es]
-    ik += 1.
-  iks = np.array(iks)
-  iks = iks/max(iks) # normalize path
-  return (iks,energies)
-
-
-
-
-
 def print_hamiltonian(h):
   """ Print the hamilotnian on screen """
   from scipy.sparse import coo_matrix as coo # import sparse matrix
@@ -921,34 +827,6 @@ def print_hamiltonian(h):
 
 
 from .htk.cdw import add_sublattice_imbalance
-
-
-def build_eh_nonh(hin,c1=None,c2=None):
-  """Creates a electron hole matrix, from an input matrix, coupling couples
-     electrons and holes
-      - hin is the hamiltonian for electrons, which has the usual common form
-      - coupling is the matrix which tells the coupling between electron
-        on state i woth holes on state j, for exmaple, with swave pairing
-        the non vanishing elments are (0,1),(2,3),(4,5) and so on..."""
-  n = len(hin)  # dimension of input
-  nn = 2*n  # dimension of output
-  hout = np.array(np.zeros((nn,nn),dtype=complex))  # output hamiltonian
-  for i in range(n):
-    for j in range(n):
-      hout[2*i,2*j] = hin[i,j]  # electron term
-      hout[2*i+1,2*j+1] = -np.conjugate(hin[i,j])  # hole term
-  if not c1 is None: # if there is coupling
-    for i in range(n):
-      for j in range(n):
-        # couples electron in i with hole in j
-        hout[2*i,2*j+1] = c1[i,j]  # electron hole term
-  if not c2 is None: # if there is coupling
-    for i in range(n):
-      for j in range(n):
-        # couples hole in i with electron in j
-        hout[2*j+1,2*i] = np.conjugate(c2[i,j])  # hole electron term
-  return hout 
-
 
 
 
@@ -1002,25 +880,6 @@ def shift_fermi(h,fermi):
       return
 
 
-from .algebra import isnumber as is_number
-import numbers
-
-
-def is_hermitic(m):
-  mh = np.conjugate(m).T
-  hh = m - mh
-  for i in range(len(hh)):
-    for j in range(len(hh)):
-      if np.abs(hh[i,j]) > 1e-5:
-        print("No hermitic element", i,j,m[i,j],m[j,i])
-        return False
-  return True
-  
-
-
-
-
-
 def first_neighborsnd(h):
   """ Gets a first neighbor hamiltonian"""
   r = h.geometry.r    # x coordinate 
@@ -1054,45 +913,10 @@ def first_neighborsnd(h):
 
 
 
-from .superconductivity import add_swave
-from .superconductivity import build_eh
-nambu_nonh = build_eh_nonh
-
-
-
 from .bandstructure import lowest_bands
 
 
 
-def hk_gen(h):
-  """ Returns a function that generates a k dependent hamiltonian"""
-  if h.dimensionality == 0: return lambda x: h.intra
-  elif h.dimensionality == 1: 
-    def hk(k):
-      """k dependent hamiltonian, k goes from 0 to 1"""
-      try: kp = k[0]
-      except: kp = k
-      tk = h.inter * h.geometry.bloch_phase([1.],kp) # get the bloch phase
-      ho = h.intra + tk + algebra.dagger(tk) # hamiltonian
-      return ho
-    return hk  # return the function
-  elif h.dimensionality == 2: 
-    def hk(k):
-      """k dependent hamiltonian, k goes from (0,0) to (1,1)"""
-      if len(k)==3:
-        k = np.array([k[0],k[1]]) # redefine for 2d
-      k = np.array(k)
-      ux = np.array([1.,0.])
-      uy = np.array([0.,1.])
-      ptk = [[h.tx,ux],[h.ty,uy],[h.txy,ux+uy],[h.txmy,ux-uy]] 
-      ho = (h.intra).copy() # intraterm
-      for p in ptk: # loop over hoppings
-#        tk = p[0]*np.exp(1j*np.pi*2.*(p[1].dot(k)))  # add bloch hopping
-        tk = p[0]*h.geometry.bloch_phase(p[1],k)  # add bloch hopping
-        ho = ho + tk + algebra.dagger(tk)  # add bloch hopping
-      return ho
-    return hk
-  else: raise
 
 
 

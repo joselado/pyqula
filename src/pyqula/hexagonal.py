@@ -109,14 +109,6 @@ def honeycomb2squareMoS2(h,check=True):
 
 
 
-def bulk2ribbon(h,n=10):
-  """Converts a hexagonal bulk hamiltonian into a ribbon hamiltonian"""
-  from ribbonizate import hamiltonian_bulk2ribbon as b2r
-  return b2r(h,n=n)  # workaround so that old script work
-
-
-
-
 
 
 
