@@ -257,7 +257,7 @@ def default_v2(g,nk=400):
     fbl.write(str(2*nk/3)+"   K'\n")
     fbl.write(str(nk)+"   \\Gamma\n")
     fbl.close()
-  else: raise # not implemented
+  else: raise NotImplementedError
 
 
 

@@ -14,7 +14,7 @@ def H2HFH(h,JK=0.0,J=0.):
     width = np.max(h.geometry.r[:,2]) - np.min(h.geometry.r[:,2])
     if width>1e-4: 
         print("Not implemented for non-2D Hamiltonians")
-        raise # not implemented for not 2D 
+        raise NotImplementedError("Not implemented for non-2D systems")
     h.turn_spinful() ; h = h.get_dense()
     g = h.geometry # get the geometry
     gl = g.copy() ; gl.r[:,2] += 0.5 ; gl.r2xyz()

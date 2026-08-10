@@ -163,7 +163,7 @@ def magnetic_mean_field(wf,U,collinear=False,totkp=1):
 
 def spinless_mean_field(wf,U,collinear=False,totkp=1):
   """Return the mean field matrix"""
-  raise # not finished
+  raise NotImplementedError
 
 
 

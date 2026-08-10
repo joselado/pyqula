@@ -39,11 +39,11 @@ def build(left=None,right=None,central=None,**kwargs):
           hout.generate = create_generator(hout,fun) # create the generator
           # function that generates the heterostructure
           return hout # function that return a heterostructure
-        else: raise # not implemented
+        else: raise NotImplementedError
     else:
   # this is a temporal fix
         if h1.dimensionality==1 and h2.dimensionality==2: # 1D to 2D
-            if len(central)!=0: raise # not implemented
+            if len(central)!=0: raise NotImplementedError
             h2t = h2.get_1dh(0.) # create a 1D Hamiltonian
             HT = build(h1,h2t,central=central,**kwargs) # create a fake HT
             HT0 = HT.copy() # copy the HT
@@ -64,7 +64,7 @@ def build(left=None,right=None,central=None,**kwargs):
             HT.central_intra = h1.intra # intra cell
             HT.right_coupling = dagger(HT.left_coupling)
             return HT
-        raise # not finished
+        raise NotImplementedError
 
 
 
@@ -91,7 +91,7 @@ class Hybrid_Heterostructure(Heterostructure):
     """New class for hybrid heterostructures"""
     def __init__(self,h1,h2):
         if h1.dimensionality==1 and h2.dimensionality==2: # 1D to 2D
-          if len(central)!=0: raise # not implemented
+          if len(central)!=0: raise NotImplementedError
           h2t = h2.get_1dh(0.) # create a 1D Hamiltonian
           HT = build(h1,h2t,central=central,**kwargs) # create a fake HT
           HT0 = HT.copy() # copy the HT
@@ -111,7 +111,7 @@ class Hybrid_Heterostructure(Heterostructure):
           HT.block_diagonal = False # block diagonal
           HT.central_intra = h1.intra # intra cell
           HT.right_coupling = dagger(HT.left_coupling)
-          raise # not finished
+          raise NotImplementedError
 
 
 

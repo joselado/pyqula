@@ -14,7 +14,7 @@ def build_ribbon(hin,g=None,n=20):
     h.geometry.get_lattice_name()
     if h.geometry.lattice_name=="square": # square lattice
       g = geometry.square_ribbon(n) 
-    else: raise # not implemented
+    else: raise NotImplementedError
   # now build the hamiltonian
   h = hin.copy() # generate hamiltonian
   # if the hamiltonian is not multicell, turn it so

@@ -22,7 +22,7 @@ def ldos0d(h,e=0.0,delta=0.01,write=True):
   if h.dimensionality==0:  # only for 0d
     iden = np.identity(h.intra.shape[0],dtype=np.complex128) # create identity
     g = algebra.inv( (e+1j*delta)*iden -h.intra ) # calculate green function
-  else: raise # not implemented...
+  else: raise NotImplementedError
   d = [ -(g[i,i]).imag/np.pi for i in range(len(g))] # get imaginary part
   d = spatial_dos(h,d) # convert to spatial resolved DOS
   g = h.geometry  # store geometry
@@ -99,7 +99,7 @@ def ldos0d_wf(h,e=0.0,delta=0.01,num_wf = 10,robust=False,tol=0):
      writes it in file, using arpack"""
   if h.dimensionality==0:  # only for 0d
     intra = csc_matrix(h.intra) # matrix
-  else: raise # not implemented...
+  else: raise NotImplementedError
   if robust: # go to the imaginary axis for stability
     eig,eigvec = slg.eigs(intra,k=int(num_wf),which="LM",
                         sigma=e+1j*delta,tol=tol) 
@@ -308,7 +308,7 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
     if interpolate:
         from .interpolation import atomic_interpolation
         xo,yo,do = atomic_interpolation(xo,yo,do,**kwargs)
-        if return_rd: raise # not implemented
+        if return_rd: raise NotImplementedError
     if write: 
 #        if return_rd: raise # not implemented
         write_ldos(xo,yo,do) # write in file

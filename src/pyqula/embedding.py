@@ -218,7 +218,7 @@ def onsite_supercell_no_multicell(h,nsuper,mc=None):
         from .htk.kchain import detect_longest_hopping
         if detect_longest_hopping(h)>1:
             print("This function requires short-range hopping, stopping")
-            raise # up to NN
+            raise NotImplementedError("Not implemented beyond nearest-neighbor hopping")
         h = h.get_no_multicell() # redefine
     from .checkclass import is_iterable
     if not is_iterable(nsuper): # just a number

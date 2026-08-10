@@ -289,7 +289,7 @@ def commensurate_vortex_harmonic(g):
           # this is a quick fix
       elif abs(a12)<0.01: 
           g0 = geometry.square_lattice() # square
-      else: raise # not implemented
+      else: raise NotImplementedError
     else: raise
     h0 = g0.get_hamiltonian()
     h0.add_rashba(1.0) # add Rashba SOC

@@ -166,7 +166,7 @@ def extract_custom_pairing(m,mode="all"):
 
 def extract_pairing_kmap(h,write=False,i=None,j=None,mode="all",**kwargs):
     """Extract the pairing in reciprocal space"""
-    if not h.has_eh: raise # not implemented
+    if not h.has_eh: raise NotImplementedError
     h = get_anomalous_hamiltonian(h)
     if j is None: j = i # same site is the default
     if mode=="all": pass # do nothing 
@@ -177,7 +177,7 @@ def extract_pairing_kmap(h,write=False,i=None,j=None,mode="all",**kwargs):
     def f0(k):
         m = fk(k) # full k-dependent Hamiltonian
         if i is None: return np.trace(m@np.conjugate(m.T))/m.shape[0]
-        else: raise # not implemented
+        else: raise NotImplementedError
         # return m[i,j] # return pairing
     from .. import spectrum
     (ks,ds) = spectrum.reciprocal_map(h,f0,write=write,**kwargs)

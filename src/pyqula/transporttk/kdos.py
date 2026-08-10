@@ -7,7 +7,7 @@ def kdos(self,kpath=None,energies=None,
         if self.dimensionality==2: # 2D heterostructure
             HT1 = self.generate(k)
             return HT1.get_coupled_central_dos(energy=e,**kwargs)
-        else: raise # not implemented
+        else: raise NotImplementedError
     if kpath is None: kpath = np.linspace(0.,1.,40)
     if energies is None: energies = np.linspace(-1.0,1.,40)
     energies = np.array(energies)

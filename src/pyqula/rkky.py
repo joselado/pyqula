@@ -39,7 +39,7 @@ def rkky_map(h0,n=2,mode="LR",info=False,fsuper=8,**kwargs):
 #                             mode="LR",**kwargs) # get the RKKY
             if info: print(d,ii,jj,e)
             return e
-    else: raise # not implemented
+    else: raise NotImplementedError
 
     eout = [] # output RKKY
     rout = [] # output locations

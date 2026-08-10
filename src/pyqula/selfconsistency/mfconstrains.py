@@ -60,7 +60,7 @@ def remove_spinless_sector(h,removef):
     """Remove total charge renormalization"""
     has_eh = h.has_eh
     has_spin = h.has_spin
-    if has_eh: raise # not implemented
+    if has_eh: raise NotImplementedError
     if has_spin: raise # not the right function
     def f(dd): # create function
         out = deepcopy(dd) # copy the dictionary
@@ -80,7 +80,7 @@ def remove_spinful_sector(h,removef):
     def f(dd): # create function
         out = deepcopy(dd) # copy the dictionary
         m = out[(0,0,0)] # onsite matrix
-        if has_eh and not has_spin: raise # not implemented
+        if has_eh and not has_spin: raise NotImplementedError
         elif not has_eh and has_spin: # spinful
             m = removef(m)
         elif has_eh and has_spin: # spinful

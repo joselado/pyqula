@@ -13,7 +13,7 @@ def honeycomb_ribbon(n=1,rtype="zigzag",stype="AB",has_spin=True,
   if rtype=="zigzag":  g = geometry.honeycomb_zigzag_ribbon(n)
   elif rtype=="armchair":  g = geometry.honeycomb_zigzag_ribbon(n)
   else: raise
-  if rtype=="amrchair": raise # not implemented yet
+  if rtype=="amrchair": raise NotImplementedError
   h = g.get_hamiltonian(has_spin=has_spin) # hamiltonian
   if stype=="ABC": # trilayer ABC
     h = build_honeycomb_trilayer(h,t,mvl=[0.,1.])
@@ -71,8 +71,8 @@ def bilayer_aa(h,t = 0.1):
       for s in range(2): # loop over spin
         intra[2*p[0]+s][2*p[1]+s] = t  
         intra[2*p[1]+s][2*p[0]+s] = np.conjugate(t)  
-  else: raise # not implemented...
-  if h.has_eh: raise # not implemented ....
+  else: raise NotImplementedError
+  if h.has_eh: raise NotImplementedError
   ho.intra = np.array(intra)
   ho.inter = np.array(inter)
   ho.geometry = go

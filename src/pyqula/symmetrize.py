@@ -144,7 +144,7 @@ def local_symmetrizer(anames,ons,odict,sym_file="symmetry.wan"):
   for (a,m) in zip(anames,ons): # now do a loop over all the different atoms
     sname = stypedict[a] # symmetry for this atom
     if sname == "C3": nr = 3# C3 symmetry
-    else: raise # not implemented
+    else: raise NotImplementedError
     step = 2.*np.pi/nr # 2 times pi over number of rotations
     # generate vectors
     vs = [np.array([np.cos(step*i),np.sin(step*i)]) for i in range(nr)]

@@ -267,7 +267,7 @@ def dos_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
   elif h.dimensionality==1: # one dimensional
     dos1d_ewindow(h,energies=energies,delta=delta,info=info,
                     use_green=use_green,nk=nk)
-  else: raise # not implemented
+  else: raise NotImplementedError
 
 
 
@@ -320,7 +320,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   else:
       op = operator.get_matrix() # get the matrix of the operator
       ## the case of projector operators should be implemented explicitly
-      if op is None: raise # not implemented
+      if op is None: raise NotImplementedError
       # this currently only works for projector operators
       if np.max(np.abs(op - op@op))>1e-4:
           print("only projector operators implemented in KPM")
@@ -488,6 +488,6 @@ def surface_dos(h,energies=None,klist=None,delta=0.01,
                          only_bulk=False) # surface green function
                 out += -np.trace(sf).imag
             return out/len(klist)
-        else: raise # not implemented
+        else: raise NotImplementedError
     return energies,np.array([sdos(e) for e in energies])          
 

@@ -168,7 +168,7 @@ def sites2coupling_sparse(mij,spins):
   ons = coo_matrix(([],([],[])),shape=(n,n),dtype=np.complex128)
   hop = coo_matrix(([],([],[])),shape=(n,n),dtype=np.complex128)
   iden = sparseiden(n,dtype=np.complex128) # identity matrix
-  raise # not finished
+  raise NotImplementedError
   
   for i in range(n): # loop over spins
     for j in range(n): # loop over spins

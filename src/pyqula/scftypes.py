@@ -109,7 +109,7 @@ class scfclass():
     self.kvectors = koccs # store kvectors
   def adaptive_correlator(self):
     """Calculate the correlators using the Simpson's adaptive algorithm"""
-    raise # not finished yet
+    raise NotImplementedError
   def update_hamiltonian(self):
     """Updates the total mean field Hamiltonian"""
     self.hamiltonian = self.hamiltonian0.copy() # copy original

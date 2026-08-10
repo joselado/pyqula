@@ -126,7 +126,7 @@ def add_frustrated_antiferromagnetism(h,m):
   elif h.geometry.sublattice_number==4:
     g = geometry.pyrochlore_lattice()
     g.center()
-  else: raise # not implemented
+  else: raise NotImplementedError
   ms = []
   for i in range(len(h.geometry.r)): # loop
     ii = h.geometry.sublattice[i] # index of the sublattice
@@ -143,7 +143,7 @@ def add_frustrated_antiferromagnetism(h,m):
 def compute_magnetization(h,**kwargs):
   """Return the magnetization of the system"""
   if not h.has_spin: raise # meaningless
-  if h.has_eh: raise # not implemented
+  if h.has_eh: raise NotImplementedError
   from .densitymatrix import full_dm
   dm = full_dm(h,**kwargs) # compute density matrix
   n = dm.shape[0]//2 # number of orbitals

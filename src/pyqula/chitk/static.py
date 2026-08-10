@@ -8,7 +8,7 @@ def chargechi(h,i=0,j=0):
     """Compute the charge correlator for a Hamiltonian"""
     if h.has_eh: 
         print("Hamiltonians with eh not implemented")
-        raise # not implemented
+        raise NotImplementedError
     if not h.has_spin:
         return single_chargechi(h,i=i,j=j)
     else:
@@ -24,7 +24,7 @@ def szchi(h,i=0,j=0):
     """Compute the charge correlator for a Hamiltonian"""
     if h.has_eh:
         print("Hamiltonians with eh not implemented")
-        raise # not implemented
+        raise NotImplementedError
     if not h.has_spin:
         return single_chargechi(h,i=i,j=j)
     else:

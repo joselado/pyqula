@@ -29,7 +29,7 @@ class Tensor3():
         return deepcopy(self)
     def __add__(self,a):
         """Sum two tensors"""
-        if type(a)!=Tensor3: raise # not implemented
+        if type(a)!=Tensor3: raise NotImplementedError
         if a.shape[0]!=self.shape[0]: raise
         if a.shape[1]!=self.shape[1]: raise
         if a.shape[2]!=self.shape[2]: raise

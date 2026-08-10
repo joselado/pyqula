@@ -14,7 +14,7 @@ def merge_channels(h1,h2):
     h1 = h1.get_dense()
     h2 = h2.get_dense()
     h.clean()
-    if h.has_eh: raise # not implemented
+    if h.has_eh: raise NotImplementedError
     n = len(h.geometry.r) # number of sites
     for i in range(n): # loop over positions
       for j in range(n): # loop over positions

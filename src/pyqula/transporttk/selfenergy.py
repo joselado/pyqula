@@ -29,7 +29,7 @@ def get_selfenergy(self,energy,lead=0,delta=None,pristine=False,numba=None):
            if pristine: cou = self.right_inter
            else: cou = self.right_coupling*self.scale_rc
            deltal = delta + self.extra_delta_right # new delta right
-       else: raise # not implemented
+       else: raise NotImplementedError
        ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal,
                                        numba=numba)
        selfr = cou@gr@dagger(cou) # selfenergy
@@ -60,7 +60,7 @@ def get_selfenergy_batch(self,energies,lead=0,delta=None,pristine=False):
        if pristine: cou = self.right_inter
        else: cou = self.right_coupling*self.scale_rc
        deltal = delta + self.extra_delta_right # new delta right
-   else: raise # not implemented
+   else: raise NotImplementedError
    ggg,gr = green_renormalization_jit_batch(intra,inter,energies,delta=deltal)
    cou = np.array(cou) # dense, for the batched matmul below
    return cou@gr@dagger(cou) # selfenergy at every energy, batched matmul

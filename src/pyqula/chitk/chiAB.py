@@ -81,7 +81,7 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         elif mode=="diagonal": # return the diagonal elements
             out = np.array([getAB(pi@A,pi@B) for pi in projs])
             return np.transpose(out,(1,0)) # return, first energy, then i
-        else: raise # not implemented
+        else: raise NotImplementedError
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     # call in parallel
     if imode=="mesh": # do a mesh
@@ -91,7 +91,7 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         elif ij_mode=="explicit": # explicit function, this is preferred
             out = [getk(k) for k in ks] # call
             out = np.mean(out,axis=0) # sum over kpoints
-        else: raise # not implemented
+        else: raise NotImplementedError
     elif imode=="adaptive": # do a mesh
         from . import integration
         if h.dimensionality==0: out = getk([0.]) # single point
@@ -231,8 +231,8 @@ def chiAB_matrix_ksum(h,ks,q,omegas,A,B,T,delta):
     over kpoints"""
     # this function is currently only implemented for spinful
     # a spinless and Nmabu implementation needs to be done
-    if h.has_eh: raise # not implemented for Nambu
-    if not h.has_spin: raise # not implemented for spinless
+    if h.has_eh: raise NotImplementedError("Not implemented for Nambu")
+    if not h.has_spin: raise NotImplementedError("Not implemented for spinless")
     hk = h.get_hk_gen() # get generator
     n = h.intra.shape[0] # shape
     nk = len(ks) # number of kpoints

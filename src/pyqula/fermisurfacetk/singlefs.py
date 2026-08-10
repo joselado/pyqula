@@ -85,7 +85,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                         num_bands=num_waves)
             return ds[0] # return weight
     elif mode=='det': # use determinant method, this is not too stable
-        if operator is not None: raise # not implemented
+        if operator is not None: raise NotImplementedError
         else: # None operator
             iden = algebra.identity(h.intra)
             def get_weight(hk,k=None,**kwargs):

@@ -125,7 +125,7 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
     elif d==2: # adaptive 2D
         g = integration.integrate_matrix_2D(fint,xlim=[0.,1.],ylim=[0.,1.],
               eps=.1)
-    else: raise # not implemented
+    else: raise NotImplementedError
   # now calculate selfenergy
   selfenergy = e - h.intra - algebra.inv(g)
   return g,selfenergy

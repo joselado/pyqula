@@ -35,7 +35,7 @@ def green_kchain(h,**kwargs):
 def green_kchain_NNN(H,k=[0.,0.,0.],**kwargs):
     """Return Green function when there is long range hopping"""
     from ..htk.kchain import detect_longest_hopping
-    if detect_longest_hopping(H)>2: raise # up to NNN
+    if detect_longest_hopping(H)>2: raise NotImplementedError("Not implemented beyond next-nearest-neighbor hopping")
     from ..htk.kchain import kchain_NNN # extract up to NNN
     (ons,t1,t2) = kchain_NNN(H,k=k) # return the three matrices
     from ..greentk.dyson import dysonNNN

@@ -78,7 +78,7 @@ def bloch_projector(h,g0=None):
         # non_orthogonal_supercell), which stays valid after removing atoms
         # since Geometry.remove() keeps it in sync. This covers both the
         # complete supercell and the atoms-removed case with the same code.
-        if h0.dimensionality>2: raise # not implemented
+        if h0.dimensionality>2: raise NotImplementedError
         if n0%len(g0.r)!=0:
             raise ValueError("unfolding: primal orbitals ("+str(n0)+
                 ") is not a multiple of the primal atom count ("+
@@ -92,13 +92,13 @@ def bloch_projector(h,g0=None):
         if h.dimensionality<3:
             from .supercell import infer_supercell
             nsuper = infer_supercell(h.geometry,g0) # get the supercell
-        else: raise # not implemented
+        else: raise NotImplementedError
         nfull = n0*nsuper[0]*nsuper[1]*nsuper[2] # orbitals in a complete supercell
         nactual = h.intra.shape[0] # orbitals in this Hamiltonian
         if nactual==nfull: # complete supercell (original, unmodified path)
             fs = bloch_phase_matrix(h0,nsuper=nsuper)
         elif nactual<nfull: # supercell that has had atoms removed
-            if h0.dimensionality>2: raise # not implemented
+            if h0.dimensionality>2: raise NotImplementedError
             if n0%len(g0.r)!=0:
                 raise ValueError("unfolding: primal orbitals ("+str(n0)+
                     ") is not a multiple of the primal atom count ("+

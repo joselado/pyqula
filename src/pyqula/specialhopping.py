@@ -309,7 +309,7 @@ def ILG(g,ti,**kwargs):
     from . import algebra
     if callable(ti): ti = Potential(ti) # transform to potential
     elif algebra.isnumber(ti): pass
-    else: raise # not implemented
+    else: raise NotImplementedError
     fm = twisted_matrix(t=0.,ti=-1*ti,**kwargs) # interlayer hopping generator
     # return a generator
     return HoppingGenerator(lambda *args: algebra.todense(fm(*args))) 

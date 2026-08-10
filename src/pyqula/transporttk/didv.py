@@ -327,7 +327,7 @@ def didv_kmap(self,kpath=None,energies=None,
         if self.dimensionality==2: # 2D heterostructure
             HT1 = self.generate(k) # generate heterostructure
             return HT1.didv(energy=e,**kwargs)
-        else: raise # not implemented
+        else: raise NotImplementedError
     if kpath is None: kpath = np.linspace(0.,1.,40)
     if energies is None: energies = np.linspace(-1.0,1.,40)
     from ..parallel import pcall

@@ -227,7 +227,7 @@ def generate_parametric_hopping(h,f=None,mgenerator=None,
       h.txy = mgenerator(rs,rs+g.a1+g.a2)
       h.txmy = mgenerator(rs,rs+g.a1-g.a2)
     elif h.dimensionality == 3:
-      if spinful_generator: raise # not implemented
+      if spinful_generator: raise NotImplementedError
       h.is_multicell = True # multicell Hamiltonian
       from . import multicell
       multicell.parametric_hopping_hamiltonian(h,fc=f)
@@ -317,7 +317,7 @@ def neighbor_directions(g,cutoff=3):
         for i2 in range(-cutoff,cutoff+1):
           for i3 in range(-cutoff,cutoff+1):
             dirs.append([i1,i2,i3])
-    else: raise # not implemented
+    else: raise NotImplementedError
     dirs = [np.array(d) for d in dirs]
     return dirs # return directions
 

@@ -18,7 +18,7 @@ def full_dm(h,T=delta_dm,dm_mode=dm_mode,**kwargs):
         return full_dm_accumulate(h,delta=T,**kwargs)
     elif dm_mode=="simultaneous":
         return full_dm_simultaneous(h,delta=T,**kwargs)
-    else: raise # not implemented
+    else: raise NotImplementedError
 
 # it may be worth to implement some adaptive integration with quad_vec
 

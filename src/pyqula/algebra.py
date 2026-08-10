@@ -325,7 +325,7 @@ def angle(v1,v2):
     v2 = v2/np.sqrt(v2.dot(v2)) # normalize
     c = v1.dot(v2) # cosine
     v3 = np.cross(v1,v2) # cross product
-    raise # not finished yet
+    raise NotImplementedError
 
 
 
@@ -359,7 +359,7 @@ def expm(M):
 def det(M):
     """Determinant of a matrix"""
     if issparse(M): 
-        raise # not implemented
+        raise NotImplementedError
     else: return dlg.det(M)
 
 

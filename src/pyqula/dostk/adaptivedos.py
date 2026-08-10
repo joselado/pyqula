@@ -59,7 +59,7 @@ def generate_function(h,operator=None,energies=np.linspace(-1.,1.,200),
             if dim==0: k = [0.,0.,0.]
             elif dim==1: k = np.array([k,0.,0.])
             elif dim==2: k = np.array([k[0],k[1],0.])
-            else: raise # not implemented
+            else: raise NotImplementedError
             out = h.get_bands(kpath=[k],operator=operator,
                               write=False,**kwargs)
             w = out[2] # use weight of the bands
@@ -72,7 +72,7 @@ def generate_function(h,operator=None,energies=np.linspace(-1.,1.,200),
             if dim==0: k = [k,0.,0.]
             elif dim==1: k = np.array([k,0.,0.])
             elif dim==2: k = np.array([k[0],k[1],0.])
-            else: raise # not implemented
+            else: raise NotImplementedError
             m = hk(k) # compute Bloch Hamiltonian
             es = eigvalsh(m) # eigenvalues
             return calculate_dos(es,energies,delta,parallel=False)

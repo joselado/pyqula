@@ -82,7 +82,7 @@ def derivative(h,k,order=None):
         tk = pref*t.m * np.exp(1j*np.pi*2.*phi) # derivative of the first
         mout = mout + tk # add to the hamiltonian
       return mout
-  else: raise # not implemented
+  else: raise NotImplementedError
 
 
 def hk_derivative(h,k,order=None):

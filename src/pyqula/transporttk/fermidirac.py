@@ -8,5 +8,5 @@ def fermidirac(es,temp=0.):
 
 def dFDdT(es,temp=0.):
     """Return a Fermi Dirac distribution at a certain temperature"""
-    if temp==0.: raise # not implemented
+    if temp==0.: raise NotImplementedError
     else: return 1./temp*np.exp(es/temp)/(1. + np.exp(es/temp))**2

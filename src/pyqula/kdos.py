@@ -131,7 +131,7 @@ def write_surface_2d(h,energies=None,klist=None,delta=0.01,
 
 
 def write_surface_3d(h,energies=None,klist=None,delta=0.01):
-  raise # not implemented
+  raise NotImplementedError
   if h.dimensionality != 3: raise # only for 3d
   ho = h.copy() # copy Hamiltonian
   ho = ho.turn_multicell() # multicell Hamiltonian

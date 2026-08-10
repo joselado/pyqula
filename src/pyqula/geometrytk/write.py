@@ -88,7 +88,7 @@ def write_vasp(g0,s=1.42,namefile="vasp.vasp"):
         g.a3 = a3 # set the lattice vector
         g.dimensionality = 3
         g.get_fractional() # get fractional coordinates
-    else: raise # not implemented
+    else: raise NotImplementedError
     f = open(namefile,"w") # input file
     f.write("Structure\n 1.0\n")
     for i in range(3): f.write(str(s*g.a1[i])+"  ")

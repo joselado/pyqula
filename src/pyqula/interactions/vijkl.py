@@ -5,8 +5,8 @@ def Vijkl(h,n=4,fv=None):
     """Return the Coulomb matrix elements between different orbitals"""
     numw = n
     if h.dimensionality!=0: raise # only for 0D
-    if h.has_eh: raise # not implemented
-    if h.has_spin: raise # not implemented
+    if h.has_eh: raise NotImplementedError
+    if h.has_spin: raise NotImplementedError
     es,ws = h.get_eigenvectors(numw=numw) # get eigenstates
     g = h.geometry # geometry
     if fv is None:

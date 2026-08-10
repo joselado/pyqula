@@ -137,7 +137,7 @@ def add_peierls(h,mag_field,**kwargs):
 
 def add_bfield(h,b=0.0,phi=0.0,mode="inplane",gauge="Landau"):
     """Add an in-plane magnetic field"""
-    if h.dimensionality>2: raise # not implemented
+    if h.dimensionality>2: raise NotImplementedError
     if h.has_spin: gi = lambda i: i//2
     else: gi = lambda i: i
     if not h.is_multicell: 

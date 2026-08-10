@@ -101,7 +101,7 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
       rs3 = replicate3d(g.r,g.a1,g.a2,g.a3,c,c,1) # new positions
     elif g.dimensionality==3:
       rs3 = replicate3d(g.r,g.a1,g.a2,g.a3,c,c,c) # new positions
-    else: raise # not implemented
+    else: raise NotImplementedError
     while True: # infinite loop, stop when scf reached
       rs1 = np.array(rs3) # store the first iteration
 #      print(rs1)

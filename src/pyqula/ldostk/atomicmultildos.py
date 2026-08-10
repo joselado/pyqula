@@ -77,7 +77,7 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
       def f(e): return ldos_at_energy(evals,ds,e,delta) # compute the LDOS
     elif mode=="density": # LDOS mode
       def f(e): return density_at_energy(evals,ds,e,delta) # compute the LDOS
-    else: raise # not implemented
+    else: raise NotImplementedError
     return f,evals,x,y # return generator
 
 

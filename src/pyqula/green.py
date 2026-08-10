@@ -523,7 +523,7 @@ def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=10,
         out = -np.trace(np.array(g)).imag
     else: # finite operator
         if operator.matrix is None: # no matrix, assume a momentum dependent
-            raise # not implemented yet
+            raise NotImplementedError
 #            hkgen = h.get_hk_gen() # get generator
 #            iden = np.identity(h.intra.shape[0],dtype=np.complex128)
 #            from . import klist

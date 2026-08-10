@@ -119,7 +119,7 @@ class Operator():
             def f(v,**kwargs):
                 return algebra.applyinverse(m,v)
             return Operator(f,linear=True)
-        else: raise # not implemented
+        else: raise NotImplementedError
     def braket(self,w,**kwargs):
         """Compute an expectation value"""
         wi = self(w,**kwargs) # apply the operator
