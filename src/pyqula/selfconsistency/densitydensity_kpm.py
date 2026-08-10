@@ -149,7 +149,16 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
     h = scf.hamiltonian
     etot = h.get_total_energy(nk=h.nk)
     if mu is None: etot += h.fermi*h.intra.shape[0]*filling
-    etot += get_dc_energy(scf.v, scf.dm)
+    # get_dc_energy assumes dm's shape matches v's, which is never
+    # Nambu-doubled even when h (hence scf.dm) is BdG -- see the identical
+    # fix/comment in densitydensity.densitydensity for why the electron
+    # sector must be extracted first for a BdG h.
+    dm_dc = scf.dm
+    if h.has_eh:
+        from .. import superconductivity
+        dm_dc = {key: superconductivity.get_eh_sector(m,i=0,j=0)
+                for (key,m) in scf.dm.items()}
+    etot += get_dc_energy(scf.v, dm_dc)
     etot = etot.real
     scf.total_energy = etot
     if verbose>1:
