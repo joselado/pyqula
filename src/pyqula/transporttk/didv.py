@@ -32,11 +32,6 @@ def zero_T_didv_1D(self,energy=0.0,delta=None,**kwargs):
     if delta is None: delta = self.delta # set the own delta
     if not self.dimensionality==1: raise # only for one dimensional
     return didv(self,energy=energy,delta=delta,**kwargs)
-    try:
-        return didv(self,energy=energy,delta=delta,**kwargs)
-    except:
-        print("Something wrong in didv, returning 0")
-        return 1e-10
 
 quadepsrel = 1e-2
 quadlimit = 30
@@ -244,16 +239,7 @@ def didv(ht,energy=0.0,energies=None,delta=1e-6,opl=None,opr=None,
     else:
         s = get_smatrix(ht,energy=energy) # get the smatrix
         if opl is not None or opr is not None: # some projector given
-          raise # this does not make sense
-          U = [[np.identity(s[0][0].shape[0]),None],
-                   [None,np.identity(s[1][1].shape[0])]] # projector
-          if opl is not None: U[0][0] = opl # assign this matrix
-          if opr is not None: U[1][1] = opr # assign this matrix
-          #### those formulas are not ok
-          s[0][0] = U[0][0]@s[0][0]@U[0][0] # new smatrix
-          s[0][1] = U[0][0]@s[0][1]@U[1][1] # new smatrix
-          s[1][0] = U[1][1]@s[1][0]@U[0][0] # new smatrix
-          s[1][1] = U[1][1]@s[1][1]@U[1][1] # new smatrix
+          raise NotImplementedError("opl/opr projectors are not implemented for didv")
         r1,r2,t = s[0][0],s[1][1],s[0][1] # get the reflection matrices
         # select a normal lead (both of them are)
         # r1 is normal

@@ -8,7 +8,7 @@ from .kchain import green_kchain
 
 
 def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
-                         mode="full", # algorithm for integration
+                         mode="adaptive", # algorithm for integration
                          gtype="bulk", # bulk or surface
                          error=1e-3,numba=None):
   """ Calculates the selfenergy of a cell defect,

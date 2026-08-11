@@ -18,12 +18,13 @@ def get_full_green(ht,energy,mode="right",delta=None,ic=0):
                                         selfl,selfr,
                                         energy=energy,
                                         delta=delta + ht.extra_delta_central)
-        test_gauss = False # do the tridiagonal inversion
     else: # not block diagonal
         gmatrix = build_effective_hlist(ht,energy=energy,
                                           delta=delta,selfl=selfl,
                                         selfr=selfr)
-    test_gauss = True # do the tridiagonal inversion
+    test_gauss = False # test=True has no effect: green.gauss_inverse never
+    # forwards it to algebratk.gaussinv.gauss_inverse, which itself hardcodes
+    # test=False internally regardless of what's passed in
     if mode=="left": g = gauss_inverse(gmatrix,0,0,test=test_gauss)
     elif mode=="right": g = gauss_inverse(gmatrix,-1,-1,test=test_gauss)
     elif mode=="central": 

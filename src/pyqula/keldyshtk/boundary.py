@@ -321,6 +321,15 @@ def dc_current_boundary(ht, voltage, nmax0=8, delta=None, temperature=0.,
     resonance structure explicitly (validate_against_truncation is the
     tool to check this for a given system) -- convergence in nmax0 itself
     is NOT yet automated here, unlike current.dc_current's nmax."""
+    raise RuntimeError(
+        "dc_current_boundary is known broken: it silently drops most of "
+        "the current's value (measured ~80% at nmax0=8, see this module's "
+        "docstring and documentation/keldysh_sideband_decimation_plan.md). "
+        "Use keldyshtk.current.dc_current instead. The underlying "
+        "floquet_green_functions_boundary/converged_boundary primitives "
+        "are correct and remain usable directly (see "
+        "validate_against_truncation) -- only this fixed-window current "
+        "assembly is disabled.")
     from .current import _prepare_bias_target, _check_supported, _prepare_system
     from scipy.integrate import quad
     from .. import algebra

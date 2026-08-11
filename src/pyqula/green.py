@@ -85,78 +85,6 @@ def dyson(intra,inter,energy=0.0,gf=None,is_sparse=False,initial = None):
 
 
 
-def dos_infinite(intra,inter,energies=[0.0],num_rep=100,
-                      mixing=0.7,eps=0.0001,green_guess=None,max_error=0.0001):
-   """ Calculates the surface density of states by using a 
-    green function approach"""
-   dos = [] # list with the density of states
-   iden = np.array(np.identity(len(intra),dtype=complex)) # create idntity
-   for energy in energies: # loop over energies
-     # right green function
-     gr = dyson(intra,inter,energy=energy,num_rep=num_rep,mixing=mixing,
-          eps=eps,green_guess=green_guess,max_error=max_error)
-     # left green function
-     gl = dyson(intra,dagger(inter),
-             energy=energy,num_rep=num_rep,mixing=mixing,
-          eps=eps,green_guess=green_guess,max_error=max_error)
-     # central green function
-     selfl = dagger(inter)@gl@inter # left selfenergy
-     selfr = inter@gr@dagger(inter) # right selfenergy
-     gc = energy*iden -intra -selfl -selfr # dyson equation for the center
-     gc = algebra.inv(gc) # calculate inverse
-     dos.append(-algebra.trace(gc).imag)  # calculate the trace of the Green function
-   return dos
-
-
-
-
-def dos_semiinfinite(intra,inter,energies=np.linspace(-1.0,1.0,100),num_rep=100,
-                      mixing=0.7,eps=0.0001,green_guess=None,max_error=0.0001):
-   """ Calculates the surface density of states by using a 
-    green function approach"""
-   dos = [] # list with the density of states
-   for energy in energies: # loop over energies
-#     gf = dyson(intra,inter,energy=energy,num_rep=num_rep,mixing=mixing,
-     gb,gf = green_renormalization(intra,inter,energy=energy,delta=delta)
-     dos.append(-algebra.trace(gf).imag)  # calculate the trace of the Green function
-   return energies,dos
-
-
-
-
-
-
-
-
-
-def dos_heterostructure(hetero,energies=[0.0],num_rep=100,
-                      mixing=0.7,eps=0.0001,green_guess=None,max_error=0.0001):
-   """ Calculates the density of states 
-       of a heterostructure by a  
-    green function approach, input is a heterostructure class"""
-   dos = [] # list with the density of states
-   iden = np.array(np.identity(len(intra),dtype=complex)) # create idntity
-   for energy in energies: # loop over energies
-     # right green function
-     intra = hetero.right_intra
-     inter = hetero.right_inter
-     gr = dyson(intra,inter,energy=energy,num_rep=num_rep,mixing=mixing,
-          eps=eps,green_guess=green_guess,max_error=max_error)
-     # left green function
-     intra = hetero.right_intra
-     inter = hetero.right_inter
-     gl = dyson(intra,inter,energy=energy,num_rep=num_rep,mixing=mixing,
-          eps=eps,green_guess=green_guess,max_error=max_error)
-     # central green function
-     selfl = dagger(inter)@gl@inter # left selfenergy
-     selfr = inter@gr@dagger(inter) # right selfenergy
-     gc = energy*iden -intra -selfl -selfr # dyson equation for the center
-     gc = algebra.inv(gc) # calculate inverse
-     dos.append(-algebra.trace(gc).imag)  # calculate the trace of the Green function
-   return dos
-
-
-
 def read_matrix(f):
   """Read green function from a file"""
   m = np.genfromtxt(f)
@@ -439,8 +367,8 @@ def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1],
   if nsuper==1: # a single unit cell 
       return bloch_selfenergy(h,energy=e,delta=delta,nk=nk,
               mode=gf_mode,gtype=gtype)
-  if gtype!="bulk": return NotImplemented # not implemented
-  if h.dimensionality>2: return NotImplemented
+  if gtype!="bulk": raise NotImplementedError("supercell_selfenergy only implemented for gtype='bulk'")
+  if h.dimensionality>2: raise NotImplementedError("supercell_selfenergy only implemented for dimensionality<=2")
   try:   # if two number given
     nsuper1 = nsuper[0]
     nsuper2 = nsuper[1]

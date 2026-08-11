@@ -531,22 +531,28 @@ def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=False):
    if not HT.block_diagonal:
      heff = intra + selfl + selfr
      HT.heff = heff
-     if save_heff:
+     if write: # save hamiltonian if desired
        print("Saving effective hamiltonian in ",HT.file_heff)
-       if write: # save hamiltonian if desired
-         HT.write_heff() 
+       HT.write_heff()
    # reduced matrix
-   if HT.block_diagonal: 
+   if HT.block_diagonal:
      from copy import deepcopy
      heff = deepcopy(intra)
      heff[0][0] = intra[0][0] + selfl
      heff[-1][-1] = intra[-1][-1] + selfr
     # save the green function
-     from scipy.sparse import bmat
-#     HT.heff = bmat(heff)
+     from scipy.sparse import csc_matrix,bmat
+     numb = len(heff) # number of central blocks
+     heffsp = [[None for i in range(numb)] for j in range(numb)]
+     for i in range(numb):
+       heffsp[i][i] = csc_matrix(heff[i][i])
+     for i in range(numb-1):
+       heffsp[i][i+1] = csc_matrix(heff[i][i+1])
+       heffsp[i+1][i] = csc_matrix(heff[i+1][i])
+     HT.heff = bmat(heffsp) # sparse effective Hamiltonian
      if write: # save hamiltonian
        print("Saving effective hamiltonian in ",HT.file_heff)
-       HT.write_heff() 
+       HT.write_heff()
    return heff
 
 
@@ -600,17 +606,6 @@ def get_bulk_green(HT,energy=0.0,delta=0.0001):
 
 
 
-
-
-def get_central_selfenergies(HT,energy=0.0,delta=0.0001):
-   """Calculate left and right selfenergies, coupled to central part"""
-   (gl,gr) = get_surface_green(HT,energy=energy,delta=delta)
-   inter = HT.left_coupling
-   selfl = inter*gl*inter.H # left selfenergy
-   # right selfenergy
-   inter = HT.right_coupling
-   selfr = inter*gr*inter.H # right selfenergy
-   return (selfl,selfr) # return selfenergies
 
 
 def get_surface_selfenergies(HT,energy=0.0,delta=0.0001,pristine=False):
