@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyqula.selfconsistency.broydenmixing import broyden_mixing_solve
+from pyqula.scftk.broydenmixing import broyden_mixing_solve
 
 
 def _sloshing_problem():
@@ -105,7 +105,7 @@ def test_broyden_mixing_converges_from_cold_start_on_small_hubbard_flake():
     the cold guess (the paper's literal algorithm); with the warm-up phase
     it must now converge reliably."""
     from pyqula import islands
-    from pyqula.selfconsistency.densitydensity import Vinteraction
+    from pyqula.scftk.densitydensity import Vinteraction
 
     g = islands.get_geometry(name="lieb", n=1.5)
     h0 = g.get_hamiltonian(has_spin=True)

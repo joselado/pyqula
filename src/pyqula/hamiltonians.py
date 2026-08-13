@@ -529,7 +529,7 @@ class Hamiltonian():
         Hamiltonian H(k) at each k-point, evaluates only the density-matrix
         elements required by the provided interaction (U, V1, V2, V3, Vr)
         through Chebyshev recursion on H(k). Meant for large/sparse
-        Hamiltonians; see selfconsistency.densitydensity_kpm."""
+        Hamiltonians; see scftk.densitydensity_kpm."""
         return _mean_field_scf_result(Vinteraction_kpm(self,**kwargs),return_total_energy)
     @get_docstring(SzSz)
     def get_szsz_mean_field_hamiltonian(self,return_total_energy=False,**kwargs):

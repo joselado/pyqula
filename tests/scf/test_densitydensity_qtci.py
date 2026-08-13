@@ -4,7 +4,7 @@ import pytest
 from pyqula import geometry
 from pyqula import specialhopping
 from pyqula.qtcitk.densitymatrix_qtci import get_dm_qtci
-from pyqula.selfconsistency.densitydensity import get_mf, get_dc_energy
+from pyqula.scftk.densitydensity import get_mf, get_dc_energy
 
 
 def _v1_interaction_dict(h, V1=1.0):

@@ -11,14 +11,14 @@ from pyqula import kpm
 from pyqula.kpmtk.densitymatrix_kpm import (get_dm_kpm, _dm_kpm_from_needed,
         get_total_energy_kpm, get_fermi4filling_kpm)
 from pyqula.kpmtk.bandwidth import estimate_bandwidth
-from pyqula.selfconsistency.densitydensity import (get_mf, get_dc_energy,
+from pyqula.scftk.densitydensity import (get_mf, get_dc_energy,
         random_hermitian_guess, mf_matches_hamiltonian)
 # mf_file: densitydensity_kpm.py's own copy, not densitydensity.py's --
 # Vinteraction_kpm (exercised below) reads/writes THAT one. Both currently
 # hardcode the identical "MF.pkl" literal, but importing from
 # densitydensity.py here would silently stop testing the real path if that
 # ever changes.
-from pyqula.selfconsistency.densitydensity_kpm import mf_file
+from pyqula.scftk.densitydensity_kpm import mf_file
 
 
 def _v1_interaction_dict(h, V1=1.0):

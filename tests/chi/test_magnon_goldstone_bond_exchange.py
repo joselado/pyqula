@@ -23,7 +23,7 @@ def test_v2k_matrix_reduces_to_v2u_matrix_for_onsite_only_interaction():
 
 
 def test_v2k_matrix_captures_same_spin_component_v2u_matrix_drops():
-    """For a matrix built the way selfconsistency.spinspin._build_v encodes
+    """For a matrix built the way scftk.spinspin._build_v encodes
     a direct Sz_i Sz_j bond term (+1/4 same-spin, -1/4 cross-spin), V2K_matrix
     must recover the full bond coefficient, while V2U_matrix (cross-spin
     only) recovers only half of it -- this asymmetry is the root cause fixed

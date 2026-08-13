@@ -72,7 +72,7 @@ def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
     """Sparse-position counterpart of full_dm_accumulate: for each
     direction, only computes the (row,col) entries listed in pairs[d]
     instead of the full (n,n) matrix (see dmtk.fulldm.full_dm_batch_d_sparse
-    and selfconsistency.spinspin._build_sparse_pairs for why this is safe
+    and scftk.spinspin._build_sparse_pairs for why this is safe
     -- a short-range interaction matrix v[d] is mostly zero, so most of a
     full (n,n) density matrix at that direction is never read downstream).
     Still returns a dense {direction: (n,n)} dict, zero everywhere except
@@ -80,7 +80,7 @@ def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
     back to the dense kernel -- see dense_fraction), so it is a drop-in
     replacement for full_dm_accumulate(...,ds=list(pairs)) wherever only
     those entries are consumed -- used only by
-    selfconsistency.spinspin._run_anisotropic_scf (Jinteraction/
+    scftk.spinspin._run_anisotropic_scf (Jinteraction/
     VJinteraction's shared SCF core), not by the generic (Vinteraction/
     SzSz/SxSx/SySy) path, which still gets the full matrix via
     full_dm_accumulate.
@@ -140,7 +140,7 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     Fermi energy for `filling` from the SAME diagonalization used to build
     the density matrix, instead of paying for a second, independent
     diagonalization sweep first the way
-    selfconsistency.spinspin._run_anisotropic_scf's callback_h
+    scftk.spinspin._run_anisotropic_scf's callback_h
     (Hamiltonian.get_fermi4filling) otherwise would before calling
     get_dm/full_dm_accumulate_sparse on the (separately, again-diagonalized)
     shifted Hamiltonian. Shifting a Hamiltonian by a constant
@@ -167,7 +167,7 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     full_dm_accumulate_sparse on a shifted copy -- trading back the
     dedup for a bounded memory footprint only in that regime.
 
-    Used only by selfconsistency.spinspin._run_anisotropic_scf for the
+    Used only by scftk.spinspin._run_anisotropic_scf for the
     normal-state (has_eh=False) case with mu=None (a Fermi-level search is
     actually needed) -- see that function's docstring for why the Nambu
     case is out of scope: BdG's own get_fermi4filling diagonalizes an
@@ -237,7 +237,7 @@ def full_dm_accumulate_sparse_local_fermi(h,pairs,filling,lam,nk=10,
     scipy.optimize.fsolve with a numerically-estimated Jacobian, at a cost
     of ~n_sites+1 diagonalizations for one call. That is fine there (it runs
     once), but prohibitive here: this function is called once per iteration
-    of selfconsistency.spinspin._run_anisotropic_scf's own outer SCF
+    of scftk.spinspin._run_anisotropic_scf's own outer SCF
     fixed-point loop (already tens to hundreds of iterations), where
     n_sites+1 extra diagonalizations per iteration would multiply the
     total cost by that same factor for no asymptotic benefit -- the fixed
@@ -276,7 +276,7 @@ def full_dm_accumulate_sparse_local_fermi(h,pairs,filling,lam,nk=10,
     writing, uncallable at all with a nonzero smearing due to an unrelated
     get_vev/densitymatrix.full_dm keyword-argument collision when it
     forwards delta=; independent of this work, not fixed here, see
-    selfconsistency.spinspin's per-site-filling design notes).
+    scftk.spinspin's per-site-filling design notes).
 
     Returns (dm, occ): `dm` is full_dm_accumulate_sparse's usual
     {direction: (n,n)} dict, computed at the given (UN-updated) `lam` -- the
@@ -285,7 +285,7 @@ def full_dm_accumulate_sparse_local_fermi(h,pairs,filling,lam,nk=10,
     paralleling how full_dm_accumulate_sparse_with_fermi's caller shifts by
     the fermi it returns. `occ` is the per-site occupation FRACTION, shape
     (n_sites,), read off dm[(0,0,0)]'s diagonal as (dm_uu+dm_dd)/2 for each
-    site -- valid only because selfconsistency.spinspin._build_sparse_pairs
+    site -- valid only because scftk.spinspin._build_sparse_pairs
     always includes the full onsite (0,0,0) 2x2 spin block for every site
     unconditionally (see the last paragraph of its own docstring), so this
     diagonal is guaranteed populated regardless of which channels (V/J/U)

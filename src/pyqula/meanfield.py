@@ -487,19 +487,19 @@ def order_parameter(self,name):
 
 
 
-from .selfconsistency import densitydensity
+from .scftk import densitydensity
 
 hubbardscf = densitydensity.hubbard
 Vinteraction = densitydensity.Vinteraction
 
-from .selfconsistency import densitydensity_kpm
+from .scftk import densitydensity_kpm
 
 hubbardscf_kpm = densitydensity_kpm.hubbard_kpm
 Vinteraction_kpm = densitydensity_kpm.Vinteraction_kpm
 
-from .selfconsistency.potentials import keldysh
+from .scftk.potentials import keldysh
 
-from .selfconsistency import spinspin
+from .scftk import spinspin
 
 SzSz = spinspin.SzSz
 SxSx = spinspin.SxSx

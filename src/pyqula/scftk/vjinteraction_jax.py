@@ -1,4 +1,4 @@
-# JAX-derivative-based counterpart of selfconsistency/spinspin.py's
+# JAX-derivative-based counterpart of scftk/spinspin.py's
 # VJinteraction.
 #
 # Same physical model (combined V/U density-density + J1/J2/J3/J1x/J1y/J1z
@@ -8,7 +8,7 @@
 # is a pure, differentiable JAX function. That lets solver="newton" (and
 # "newton_krylov"/"fsolve") solve the fixed point x = step(x) with a genuine
 # root-finder driven by JAX-computed derivatives of step, instead of only
-# linear mixing -- the same idea selfconsistency/densitydensity_jax.py
+# linear mixing -- the same idea scftk/densitydensity_jax.py
 # already implements for Vinteraction (V/U-only, no exchange). This module
 # reuses that machinery almost entirely: densitydensity_jax.solve_scf (the
 # shared dispatch across newton_solve/fsolve_solve/newton_krylov_solve/
@@ -442,7 +442,7 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
             dirs, dirs_all, T, Rx, Ry, vz_active, vx_active, vy_active,
             n_occ_total=n_occ_total)
 
-    # solve_scf (selfconsistency.densitydensity_jax) is the same solver
+    # solve_scf (scftk.densitydensity_jax) is the same solver
     # dispatch densitydensity_jax.generic_densitydensity_jax's own
     # use_jax=True path uses for Vinteraction -- see its docstring for the
     # solver="lbfgs" residual-minimization rationale (this module's own

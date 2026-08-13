@@ -9,11 +9,11 @@ Liquids: a review", arXiv:1601.03742, Sec. 4 ("Partons") and Sec. 4.1 in
 particular, whose Eq. 35/36/37/38 and surrounding text this class follows
 directly. Physically this is exactly meanfield.VJinteraction's J-channel
 (already the correct Fock/Hartree-Fock decoupling of a spin-spin exchange,
-see selfconsistency/spinspin.py's module docstring) run on a Hamiltonian
+see scftk/spinspin.py's module docstring) run on a Hamiltonian
 with zero bare hopping (a pure spin model has no bare electron tunneling --
 every "kinetic" term is the auxiliary mean field itself) and with the local
 constraint enforced exactly, at every site, via the per-site `filling`
-array VJinteraction now supports (selfconsistency.spinspin._run_anisotropic_
+array VJinteraction now supports (scftk.spinspin._run_anisotropic_
 scf's array-filling branch) instead of only a single lattice-averaged Fermi
 level.
 
@@ -23,7 +23,7 @@ Hamiltonian, see meanfield.VJinteraction's docstring) would need a
 Nambu-doubled SpinonHamiltonian and a has_eh=True-aware local constraint,
 neither of which exist yet (VJinteraction's array-filling path explicitly
 raises NotImplementedError for has_eh=True -- see
-selfconsistency.spinspin._run_anisotropic_scf)."""
+scftk.spinspin._run_anisotropic_scf)."""
 import numpy as np
 
 from .hamiltonians import Hamiltonian, _mean_field_scf_result

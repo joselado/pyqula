@@ -3,13 +3,13 @@ import numpy as np
 from pyqula import geometry
 from pyqula import meanfield
 from pyqula.multihopping import MultiHopping
-from pyqula.selfconsistency import spinspin
-from pyqula.selfconsistency.densitydensity import get_dm
+from pyqula.scftk import spinspin
+from pyqula.scftk.densitydensity import get_dm
 from pyqula.densitymatrix import (full_dm_accumulate, full_dm_accumulate_sparse,
         full_dm_accumulate_sparse_with_fermi)
 
 # Regression coverage for the sparse density-matrix machinery
-# (selfconsistency.spinspin._build_sparse_pairs, densitymatrix's
+# (scftk.spinspin._build_sparse_pairs, densitymatrix's
 # full_dm_accumulate_sparse/full_dm_accumulate_sparse_with_fermi,
 # dmtk.fulldm.full_dm_batch_d_sparse) introduced for VJinteraction/
 # Jinteraction. None of the small-geometry tests elsewhere in this file/

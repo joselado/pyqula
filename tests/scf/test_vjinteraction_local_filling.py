@@ -4,7 +4,7 @@ from pyqula import geometry
 from pyqula import meanfield
 
 # Coverage for the per-site (array) `filling` path added to
-# selfconsistency.spinspin._run_anisotropic_scf (VJinteraction/Jinteraction's
+# scftk.spinspin._run_anisotropic_scf (VJinteraction/Jinteraction's
 # shared SCF core) -- see densitymatrix.full_dm_accumulate_sparse_local_fermi
 # for the mechanism (a per-site Lagrange multiplier/local chemical potential,
 # warm-started and co-converged with the mean field across the same outer SCF

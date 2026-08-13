@@ -161,7 +161,7 @@ def random_hermitian_guess(v,shape,scale=1.0):
     constant before its opposite direction (if any) mirrors it -- this
     preserves the Hermitian-dict property (scaling a Hermitian pair by a
     real number keeps it Hermitian) while letting callers pick their own
-    guess magnitude (e.g. selfconsistency.spinspin._run_anisotropic_scf's
+    guess magnitude (e.g. scftk.spinspin._run_anisotropic_scf's
     own copy of this construction used a smaller 1e-1 scale than this
     module's own default of 1.0 unscaled)."""
     mf = dict()
@@ -201,7 +201,7 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     qutecipy (tensor cross interpolation), see
     qtcitk.densitymatrix_qtci.get_dm_qtci -- same {direction: matrix}
     return contract, so it is a drop-in replacement in the SCF loop below
-    (selfconsistency.densitydensity.generic_densitydensity); nk defaults
+    (scftk.densitydensity.generic_densitydensity); nk defaults
     to get_dm_qtci's own DEFAULT_NK if not given (nk=None is forwarded
     through rather than substituting a different, ED-only default here).
     tolerance only applies to (and is only forwarded for) "qtci"; the "ed"
@@ -430,7 +430,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
             x = linearmixing(fsol,x0,f_tol=maxerror*100) # use the solver
         elif solver=="broyden_mixing":
             # regularized, limited-memory multisecant Broyden mixing
-            # (arXiv:0801.3098) -- see selfconsistency/broydenmixing.py's
+            # (arXiv:0801.3098) -- see scftk/broydenmixing.py's
             # module docstring for the algorithm. fsol(x)=x-F(x), so
             # F(x)=x-fsol(x) recovers the step_vec(x)->x_new convention
             # broyden_mixing_solve expects.
@@ -571,7 +571,7 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     - V2, second neighbor interaction
 
     NOT the default engine behind Hamiltonian.get_mean_field_hamiltonian
-    any more -- that now calls VJinteraction (selfconsistency/spinspin.py),
+    any more -- that now calls VJinteraction (scftk/spinspin.py),
     a superset that also supports J1/J2/J3/J1x/J1y/J1z exchange in the same
     SCF loop and is the one to build performance/feature work on going
     forward. Vinteraction is kept as-is: it is still exercised directly by
@@ -584,7 +584,7 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     integration: "ed" (default) computes the density matrix at each SCF
     step by exact diagonalization on a k-mesh. "qtci" instead integrates
     each required density-matrix entry over the BZ with qutecipy (tensor
-    cross interpolation) -- see selfconsistency.densitydensity.get_dm and
+    cross interpolation) -- see scftk.densitydensity.get_dm and
     qtcitk.densitymatrix_qtci.get_dm_qtci; only 2D Hamiltonians are
     supported for "qtci". VJinteraction does not support this (or
     solver=/compute_cross=/etc. below) at all -- call Vinteraction

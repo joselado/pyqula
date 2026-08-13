@@ -988,11 +988,11 @@ benchmarked across several small (5-13 atom) systems, starting the
 multisecant phase directly on a cold guess (the paper's own literal
 algorithm) regularly failed to converge, while the warm-up fixed every
 observed case and also converged 2-10x faster than plain linear mixing
-alone; see `selfconsistency.broydenmixing`'s module docstring for the
+alone; see `scftk.broydenmixing`'s module docstring for the
 algorithm and that benchmark. See the reference entry below for the full
 solver list and scope restrictions
 (normal-state only, no `constrains`), and
-`selfconsistency.vjinteraction_jax`'s module docstring for why
+`scftk.vjinteraction_jax`'s module docstring for why
 `solver="error_gradient"` minimizes the SCF residual rather than the
 physical free energy directly.
 
@@ -1184,7 +1184,7 @@ ill-posed starting point); `filling=0.15` above keeps $\mu$ inside the
 dispersing conduction band instead. **The finite Fermi-Dirac smearing
 `T` this SCF loop necessarily runs at** (needed for the $\lambda$
 feedback's numerical stability -- see
-`selfconsistency.kondolattice.kondo_lattice_mean_field`'s docstring)
+`scftk.kondolattice.kondo_lattice_mean_field`'s docstring)
 turns the textbook, continuous $T_K=D\,e^{-1/(J\rho)}$ onset into a
 genuine finite-temperature Kondo crossover: below a $T$-dependent
 threshold in $J$, thermal smearing washes out the hybridization
@@ -1622,7 +1622,7 @@ Since different q-points can have a different number of poles, `qs`,`ws`,`gammas
 `V` (passed to `get_rpa_kernel_poles`/`get_chi`) and `h.V` (the mean-field interaction `get_magnon_bands` reads automatically) are not restricted to a single onsite matrix: they can also be a real-space hopping-like dictionary `{(n1,n2,n3): matrix}`, keyed by lattice-vector offset in the same convention as `h.get_hopping_dict()`, for an interaction with support beyond the same unit cell (e.g. a neighbor-shell exchange `J1`/`V1` from `VJinteraction`, whose `h.V` after convergence typically has more than just the `(0,0,0)` key). It is Fourier-transformed to $V(q)$ at whatever `q` the response is evaluated at, using the same Bloch-phase convention as the Hamiltonian's own hoppings -- an extended interaction is dressed exactly like an extended hopping:
 
 ```python
-from pyqula.selfconsistency.spinspin import _build_v
+from pyqula.scftk.spinspin import _build_v
 g = geometry.chain()
 h = g.get_hamiltonian(has_spin=True)
 h.V = _build_v(h,J1=-1.0) # nearest-neighbor ferromagnetic exchange, no onsite U at all
@@ -2481,30 +2481,30 @@ pairing (see the example above).
   via matrix-free Levenberg-Marquardt (`jax.jvp`/`jax.vjp` Jacobian-vector
   and Jacobian-transpose-vector products of the residual + `scipy`'s `lsqr`
   for each damped LM subproblem) -- not the physical free energy directly
-  (see `selfconsistency.vjinteraction_jax`'s module docstring for why that
+  (see `scftk.vjinteraction_jax`'s module docstring for why that
   alternative was tried and abandoned: the physical SCF solution turned out
   to be a saddle point, not a minimum, of the free-energy functional).
   `"error_gradient"` scales per-iteration like `"newton_krylov"`/
   `"linear_mixing"` (no dense Jacobian), and matches `"newton"`/
   `"newton_krylov"` well from small systems up through at least ~60
-  orbitals (see `selfconsistency.vjinteraction_jax`'s module docstring for
+  orbitals (see `scftk.vjinteraction_jax`'s module docstring for
   measured numbers), but as a local method it can in principle still stall
   short of `maxerror` on a sufficiently hard landscape -- always check
   `.converged`. `"broyden_mixing"` is a black-box
   mixing scheme rather than a root-finder/gradient method (regularized,
   limited-memory multisecant Broyden mixing, Marks & Luke arXiv:0801.3098 --
-  see `selfconsistency.broydenmixing`'s module docstring); it only ever
+  see `scftk.broydenmixing`'s module docstring); it only ever
   evaluates $f$ itself, so it plugs into the same solver dispatch with no
   Jacobian/gradient machinery of its own, and is also reachable from the
   plain (non-jax) engine as `solver="broyden_mixing"` (alongside the
   existing `"broyden1"`/`"krylov"`/`"anderson"`/`"linear"` `scipy.optimize`
-  wrappers in `selfconsistency.densitydensity.generic_densitydensity`).
+  wrappers in `scftk.densitydensity.generic_densitydensity`).
   Restricted to a normal-state (non-BdG)
   Hamiltonian, dense exact diagonalization only (no `integration="kpm"`),
   and no `constrains`; needs the optional `jax` extra
-  (`pip install pyqula[jax]`). See `selfconsistency.vjinteraction_jax`'s
+  (`pip install pyqula[jax]`). See `scftk.vjinteraction_jax`'s
   module docstring for how this reuses (unmodified) the solver
-  infrastructure `selfconsistency.densitydensity_jax` already built for the
+  infrastructure `scftk.densitydensity_jax` already built for the
   simpler `Vinteraction` (V/U-only) case:
 ```python
 hmf = h.get_combined_mean_field_hamiltonian(U=4.0,J1=-0.5,filling=0.5,

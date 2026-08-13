@@ -27,7 +27,7 @@ def test_szsz_sxsx_sysy_are_rotations_of_each_other():
     energy and the magnitude of the ordered moment must be identical for
     all three axes -- only the direction of the ordering differs. This is
     the key cross-check that the SxSx/SySy rotate-solve-rotate-back
-    implementation (see selfconsistency/spinspin.py) has the right
+    implementation (see scftk/spinspin.py) has the right
     rotation angle and sign."""
     scfs = {axis: _run(axis) for axis in ("x", "y", "z")}
     etots = np.array([scfs[axis].total_energy for axis in ("x", "y", "z")])
@@ -78,7 +78,7 @@ def test_jinteraction_random_direction_guess_gives_collinear_moment(seed):
     entirely by the initial guess: a random-direction guess must converge
     to a moment collinear with it. This is the key regression test for a
     bug where Jinteraction's per-iteration density-matrix rotation
-    (selfconsistency/spinspin.py's _rotate_dm, used to fold the x/y
+    (scftk/spinspin.py's _rotate_dm, used to fold the x/y
     channels into the lab-frame SCF loop) used the wrong convention and
     silently flipped the sign of the y Pauli component -- invisible to
     energy/magnitude-only checks (a pure-y guess still self-consistently

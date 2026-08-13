@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from pyqula import geometry
-from pyqula.selfconsistency.spinspin import _build_v
+from pyqula.scftk.spinspin import _build_v
 from pyqula.chitk.spinchi import _full_spin_operators, V2K_matrix, replicateU
 from pyqula.chitk.rpa import rpa_kernel_poles_ops, _chi_ops_matrix_vectorized, \
         interaction_at_q

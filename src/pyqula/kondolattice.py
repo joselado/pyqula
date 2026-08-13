@@ -12,7 +12,7 @@ arXiv:cond-mat/0612006, Sec. III.C ("The Large N Kondo Lattice", Eq.
 approximation into a self-consistent hybridization field
 V_j = -(J/2) <f_j^dagger c_j> (a composite fermion, "half electron, half
 spin-flip", Eq. 100-102) plus a Lagrange multiplier lam_j enforcing
-<f_j^dagger f_j> = 1 -- see selfconsistency/kondolattice.py for the SCF
+<f_j^dagger f_j> = 1 -- see scftk/kondolattice.py for the SCF
 loop and the exact equations it implements.
 
 IMPORTANT normalization caveat: J here is Coleman's Coqblin-Schrieffer
@@ -32,7 +32,7 @@ band density of states at the Fermi level) -- i.e. a hybridization that, in
 principle, turns on continuously (if exponentially slowly) as soon as J>0.
 This SCF loop, however, necessarily runs at a finite Fermi-Dirac smearing
 T>0 (its `T` kwarg -- needed for numerical stability of the local
-constraint's feedback, see selfconsistency/kondolattice.py's docstring),
+constraint's feedback, see scftk/kondolattice.py's docstring),
 and observably (see tests/kondolattice/) shows a genuine finite-temperature
 Kondo crossover instead of a continuously-vanishing gap: for J*rho too
 small that T_K(J) < T, thermal smearing washes out the hybridization
@@ -71,7 +71,7 @@ import numpy as np
 
 from .hamiltonians import Hamiltonian, _mean_field_scf_result
 from .htk import fusion
-from .selfconsistency.kondolattice import kondo_lattice_mean_field
+from .scftk.kondolattice import kondo_lattice_mean_field
 
 
 class KondoLatticeHamiltonian(Hamiltonian):
@@ -101,7 +101,7 @@ class KondoLatticeHamiltonian(Hamiltonian):
     (V=0, lam=0) conduction+f bands, and holds it fixed through the SCF
     loop (Hamiltonian.get_fermi4filling's usual fraction-of-all-spin-
     orbitals convention, covering both the conduction and f sectors, but
-    see selfconsistency.kondolattice.kondo_lattice_mean_field's docstring
+    see scftk.kondolattice.kondo_lattice_mean_field's docstring
     for why it is not re-solved every iteration, and for its "avoid the
     bare f-sector's massively degenerate flat band" caveat); the local
     constraint on the f-sector is enforced separately and automatically,
@@ -110,7 +110,7 @@ class KondoLatticeHamiltonian(Hamiltonian):
     h2.constraint_lambda)` pair instead of the default all-zero guess (see
     the module docstring for why a nonzero seed is generally needed at
     all). `nk=`, `mix=`, `maxerror=`, `maxite=`, `T=` are forwarded to the
-    SCF loop (selfconsistency.kondolattice.kondo_lattice_mean_field)
+    SCF loop (scftk.kondolattice.kondo_lattice_mean_field)
     unchanged.
 
     An external Zeeman/magnetic field couples EXACTLY to both fermion

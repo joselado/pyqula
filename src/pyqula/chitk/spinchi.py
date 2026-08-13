@@ -17,7 +17,7 @@ def _require_onsite_only_V(H):
     rotational symmetry has been checked numerically for each separately),
     but a VJinteraction Hamiltonian with BOTH set simultaneously only ever
     exposes the combined z-channel SCF matrix as H.V (never the separately
-    built x/y-channel ones -- see selfconsistency.spinspin's
+    built x/y-channel ones -- see scftk.spinspin's
     "scf.hamiltonian.V = vz"), so the spin RPA vertex built from it cannot
     be trusted in general, and no independent (e.g. exact-diagonalization)
     cross-check exists yet for any non-onsite case. Rather than silently
@@ -92,7 +92,7 @@ def V2U_matrix(V):
     NOTE: only reads the up-down/down-up cross terms, which is a complete
     description of V only when V has no same-spin (up-up/down-down)
     component -- true for a plain onsite Hubbard U, but NOT true for a
-    direct S_i.S_j bond term (selfconsistency.spinspin._build_v), whose
+    direct S_i.S_j bond term (scftk.spinspin._build_v), whose
     matrix carries an equally-weighted same-spin component that this
     function silently ignores. Kept around only because
     tests/chi/test_v2u_matrix_offdiagonal.py pins its (intentionally
@@ -119,7 +119,7 @@ def V2K_matrix(V):
     onsite Hubbard U, where n_up n_down = n^2/4 - Sz^2 has no such
     component -- there V2K_matrix reduces to exactly -V2U_matrix, see
     below). A direct S_i.S_j bond term
-    (selfconsistency.spinspin._build_v's +/-1/4 sign pattern) is instead
+    (scftk.spinspin._build_v's +/-1/4 sign pattern) is instead
     PURELY a same-spin-plus-cross-spin combination with no free n_i n_j or
     n_i Sz_j piece, and V2U_matrix's cross-term-only read discards exactly
     half of it -- this was the root cause of a real (not just

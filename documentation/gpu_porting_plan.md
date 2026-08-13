@@ -17,8 +17,8 @@ wasn't measured on a GPU.
 ## Why jax, not torch/cupy
 
 `jax` is already a hard runtime dependency (`pyproject.toml`), not optional, and several
-modules already run through it: `selfconsistency/densitydensity_jax.py`,
-`selfconsistency/vjinteraction_jax.py`, `keldyshtk/current_jax.py`,
+modules already run through it: `scftk/densitydensity_jax.py`,
+`scftk/vjinteraction_jax.py`, `keldyshtk/current_jax.py`,
 `transporttk/kappa_jax.py`, `kpmtk/kpmjax.py`. jax transparently targets GPU when one is
 present and `jaxlib` is built with CUDA/ROCm support, and falls back to CPU otherwise — no
 code changes needed at the call site, only at the environment level. `kpmtk/kpmjax.py`
@@ -56,7 +56,7 @@ The single most reused hot path from the CPU perf work: a numba `prange`-paralle
 `eigh` over many k-point Hamiltonians, called from `dos.py`, `spectrum.py`,
 `bandstructure.py`, and (per the original CPU survey, not yet migrated to the batched
 helper) `topology.py`, `ldos.py`, `gap.py`, `ipr.py`, `dostk/adaptivedos.py`,
-`selfconsistency/hubbard.py`/`coulomb.py`. This is bounded by `limits.densedimension`
+`scftk/hubbard.py`/`coulomb.py`. This is bounded by `limits.densedimension`
 (currently 10000) below which dense diagonalization is used at all; above it the code goes
 sparse (ARPACK via `scipy.sparse.linalg`), which is a different problem (see item 3).
 

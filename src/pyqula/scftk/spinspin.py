@@ -5,7 +5,7 @@
 #           = 1/4 (n_iu n_ju - n_iu n_jd - n_id n_ju + n_id n_jd)
 #
 # is already a density-density interaction (sum of V_ab n_a n_b over
-# spin-orbitals a,b) of exactly the form that selfconsistency.densitydensity's
+# spin-orbitals a,b) of exactly the form that scftk.densitydensity's
 # generic Hartree-Fock engine decouples -- it does not know or care what the
 # spin-orbital index physically represents. So SzSz needs no new decoupling
 # math, only a v matrix with the right +/-1/4 sign pattern in the 2x2 spin
@@ -112,7 +112,7 @@ def SzSz(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], callback_mf=None,
 
     Works for BdG (Nambu, h.has_eh=True) Hamiltonians too: densitydensity()
     already dispatches has_eh-aware Hartree-Fock+anomalous decoupling
-    (selfconsistency.densitydensity.get_mf) generically for any v matrix,
+    (scftk.densitydensity.get_mf) generically for any v matrix,
     including SzSz's +/-1/4 one, with no changes needed here -- verified
     that a bare SzSz run (no pre-existing pairing) on a Nambu Hamiltonian
     converges to a purely magnetic state (zero anomalous/pairing mean
@@ -279,7 +279,7 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None, nd=None):
     """Build the spin-orbital density-density interaction matrix -- uniform
     across all four spin blocks (V1/V2/V3 neighbor shells, optional general
     Vr(r) function), plus an onsite U between up/down -- exactly mirroring
-    Vinteraction's own construction (selfconsistency/densitydensity.py).
+    Vinteraction's own construction (scftk/densitydensity.py).
     Kept as a small separate copy here (rather than refactoring Vinteraction
     to share it) to avoid touching that already-tested, widely-used code
     path; see _build_v's docstring for why the neighbor-shell key set this
@@ -518,16 +518,16 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     "error_gradient" (minimizes ||step(x)-x||^2 as a nonlinear
     least-squares problem via matrix-free Levenberg-Marquardt (jax.jvp/
     jax.vjp + scipy's lsqr), instead of root-finding step(x)=x -- see
-    selfconsistency.vjinteraction_jax's module docstring for why this,
+    scftk.vjinteraction_jax's module docstring for why this,
     rather than minimizing the physical free energy directly, is what it
     does: the physical SCF solution turned out empirically to be a saddle
     point, not a minimum, of the free-energy functional), or
     "broyden_mixing" (regularized, limited-memory multisecant Broyden
     mixing following Marks & Luke, arXiv:0801.3098 -- a black-box mixing
     scheme, not a root-finder/gradient-based method like the others; see
-    selfconsistency.broydenmixing's module docstring for the algorithm).
-    See selfconsistency.vjinteraction_jax's module docstring for the
-    algorithm and selfconsistency.densitydensity_jax's module docstring
+    scftk.broydenmixing's module docstring for the algorithm).
+    See scftk.vjinteraction_jax's module docstring for the
+    algorithm and scftk.densitydensity_jax's module docstring
     (which implements the same idea for Vinteraction) for the solvers'
     relative performance/scaling tradeoffs -- both apply here unchanged,
     since vjinteraction_jax.py reuses those solver functions verbatim.
@@ -740,7 +740,7 @@ def _rot_dm(dd, R):
 
     get_density_matrix's off-diagonal (spin-flip) entries are stored in
     a transposed convention relative to a Hamiltonian matrix --
-    normal_term_ij (selfconsistency/densitydensity.py) deliberately
+    normal_term_ij (scftk/densitydensity.py) deliberately
     reads dm[j,i] rather than dm[i,j] to reconstruct a
     physically-meaningful mean field from it. For a Hermitian matrix,
     transposing is the same as complex-conjugating, so a density matrix

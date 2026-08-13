@@ -18,7 +18,7 @@ from pyqula.kondolattice import KondoLatticeHamiltonian
 # lands the chemical potential inside that degenerate block (roughly
 # 0.25-0.75 for this one-orbital-per-site chain) is a numerically
 # ill-posed starting point for the SCF loop -- see
-# selfconsistency.kondolattice.kondo_lattice_mean_field's docstring.
+# scftk.kondolattice.kondo_lattice_mean_field's docstring.
 
 
 def _chain():

@@ -5,7 +5,7 @@ jax = pytest.importorskip("jax")
 import jax.numpy as jnp
 
 from pyqula import geometry
-from pyqula.selfconsistency.spinspin import VJinteraction
+from pyqula.scftk.spinspin import VJinteraction
 
 
 def _biased_hamiltonian_and_guess(h0, seed, bias=.8):
@@ -311,7 +311,7 @@ def test_vjinteraction_jax_error_gradient_handles_filling():
 
 def test_vjinteraction_solver_broyden_mixing_matches_newton():
     """solver="broyden_mixing" (regularized, limited-memory multisecant
-    Broyden mixing, arXiv:0801.3098 -- see selfconsistency.broydenmixing's
+    Broyden mixing, arXiv:0801.3098 -- see scftk.broydenmixing's
     module docstring) is a black-box mixing scheme rather than a root-finder
     or gradient method like the other jax solvers here -- must still
     converge to the same physics as solver="newton" on the same combined
@@ -345,8 +345,8 @@ def test_rotation_formulas_agree_between_numpy_and_jax_engines():
     this rotation-formula code path once (the RPA Goldstone-theorem vertex
     sign error), so a future fix applied to only one of the two copies
     should fail this test rather than silently drift."""
-    from pyqula.selfconsistency import spinspin
-    from pyqula.selfconsistency import vjinteraction_jax as vjj
+    from pyqula.scftk import spinspin
+    from pyqula.scftk import vjinteraction_jax as vjj
     from pyqula.rotate_spin import build_rotation_matrix
 
     rng = np.random.default_rng(0)

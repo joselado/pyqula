@@ -133,7 +133,7 @@ suite as an "either/or" case.
 
 ### Tier 3 — richer but noisier, needs a second metric
 
-5. **SCF solver comparison — `selfconsistency/densitydensity.py::generic_densitydensity(solver="plain"|"krylov"|"anderson"|"broyden1"|"broyden_mixing")`**
+5. **SCF solver comparison — `scftk/densitydensity.py::generic_densitydensity(solver="plain"|"krylov"|"anderson"|"broyden1"|"broyden_mixing")`**
    plus the jax solvers in `densitydensity_jax.py`
    (`solver="newton"|"fsolve"|"newton_krylov"|"lbfgs"|"fixed_point"|"broyden_mixing"`). The
    richest set of alternatives in the codebase, but wall time alone is misleading here since

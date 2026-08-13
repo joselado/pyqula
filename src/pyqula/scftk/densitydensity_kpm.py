@@ -1,4 +1,4 @@
-# KPM-based (Chebyshev, sparse) alternative to selfconsistency/densitydensity.py
+# KPM-based (Chebyshev, sparse) alternative to scftk/densitydensity.py
 #
 # This is a parallel implementation of the density-density mean-field SCF:
 # same interaction dictionary "v" (U, V1, V2, V3, Vr), same mean-field
@@ -46,7 +46,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         compute_anomalous=True, compute_normal=True, maxite=None,
         T=1e-7, callback_h=None,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, **kwargs):
-    """KPM analogue of selfconsistency.densitydensity.generic_densitydensity.
+    """KPM analogue of scftk.densitydensity.generic_densitydensity.
     Only the "plain" mixing solver is implemented (the alternate
     root-finding solvers there are not KPM-specific and are not needed for
     this backend)."""
@@ -124,7 +124,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
 
 def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, **kwargs):
-    """KPM analogue of selfconsistency.densitydensity.densitydensity"""
+    """KPM analogue of scftk.densitydensity.densitydensity"""
     from .densitydensity import get_dc_energy
     from ..kpmtk.densitymatrix_kpm import get_fermi4filling_kpm
     if h.has_eh:
@@ -169,7 +169,7 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
 
 
 def hubbard_kpm(h, U=1.0, constrains=[], **kwargs):
-    """KPM analogue of selfconsistency.densitydensity.hubbard"""
+    """KPM analogue of scftk.densitydensity.hubbard"""
     from .densitydensity import obj2geometryarray
     h = h.copy()
     h.turn_multicell()
@@ -197,7 +197,7 @@ def hubbard_kpm(h, U=1.0, constrains=[], **kwargs):
 
 def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
         Vr=None, **kwargs):
-    """KPM analogue of selfconsistency.densitydensity.Vinteraction: mean
+    """KPM analogue of scftk.densitydensity.Vinteraction: mean
     field with density-density interactions (U onsite, V1/V2/V3 first/
     second/third neighbor), computed via sparse KPM instead of exact
     diagonalization -- see kpmtk.densitymatrix_kpm.get_dm_kpm.

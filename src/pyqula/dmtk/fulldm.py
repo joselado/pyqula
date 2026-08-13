@@ -176,10 +176,10 @@ def full_dm_batch_d_sparse(es_batch,vs_batch,ks_batch,d,rows,cols,delta=1e-7):
     (rows[p],cols[p]) entries of the (n,n) density matrix instead of all
     n^2 of them -- for a short-range interaction matrix v[d], the vast
     majority of those n^2 entries are never read by normal_term_ii/jj/ij/ji
-    (selfconsistency/densitydensity.py) because v[d][i,j] is zero there, so
+    (scftk/densitydensity.py) because v[d][i,j] is zero there, so
     computing them via the full (n,n)@(n,n) matmul in
     full_dm_batch_d_vectorized is mostly wasted work -- see
-    selfconsistency.spinspin._build_sparse_pairs, which derives rows/cols
+    scftk.spinspin._build_sparse_pairs, which derives rows/cols
     from v's own nonzero pattern (union across the active exchange/density
     channels, since they share this same k-mesh diagonalization). Returns
     (nb,npairs) instead of (nb,n,n); the caller scatters these back into a

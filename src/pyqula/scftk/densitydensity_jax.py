@@ -1,4 +1,4 @@
-# JAX-differentiable counterpart of selfconsistency/densitydensity.py
+# JAX-differentiable counterpart of scftk/densitydensity.py
 #
 # Same physical model (density-density mean field) as the numpy/numba
 # engine in densitydensity.py, but the one-SCF-step map

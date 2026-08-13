@@ -8,7 +8,7 @@ from pyqula.spinon import SpinonHamiltonian
 # a spin-1/2 Heisenberg model (Savary & Balents, arXiv:1601.03742, Sec. 4):
 # the local constraint <n_i>=1 (exactly one auxiliary fermion per site) must
 # hold at EVERY site, enforced via VJinteraction's per-site `filling` array
-# path (selfconsistency.spinspin._run_anisotropic_scf) -- these tests check
+# path (scftk.spinspin._run_anisotropic_scf) -- these tests check
 # that guarantee end to end through the class, not just the lower-level SCF
 # machinery (already covered by tests/scf/test_vjinteraction_local_filling.py).
 
@@ -124,7 +124,7 @@ def test_bare_hopping_is_zero():
     # note: tij=[0.0] (see SpinonHamiltonian.__init__) prunes exactly-zero
     # bonds rather than keeping explicit zero-valued Hopping entries around
     # -- h.hopping is empty at construction, not a list of zero matrices.
-    # That's fine: the exchange decoupling (selfconsistency.spinspin._build_v)
+    # That's fine: the exchange decoupling (scftk.spinspin._build_v)
     # rebuilds its own neighbor-shell bond structure directly from the
     # geometry, never from self.hopping (see test_rvb_bond_order_is_nonzero,
     # which confirms the mean field is nonzero despite this).

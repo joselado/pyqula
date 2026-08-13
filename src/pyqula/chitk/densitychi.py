@@ -6,7 +6,7 @@ import numpy as np
 # total-number operator via chiAB's own site projectors, which sum both
 # spins -- see operators.index) already is the density-density response,
 # an N-dimensional (one entry per site) matrix -- NOT the 2N spin-orbital
-# one selfconsistency.spinspin._build_density_v returns for Hartree-Fock
+# one scftk.spinspin._build_density_v returns for Hartree-Fock
 # decoupling, so that helper cannot be reused as-is here; _density_v below
 # builds the N-dimensional interaction the charge channel actually needs.
 
@@ -19,7 +19,7 @@ def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None):
     and unambiguously: (1/2) V_ij n_i n_j (i!=j, n_i the total occupation
     at site i) is already a two-site term with no spin/charge mixing, so
     its charge-channel coefficient is exactly V_ij -- same neighbor-shell
-    construction as selfconsistency.spinspin._build_v/_build_density_v,
+    construction as scftk.spinspin._build_v/_build_density_v,
     just without their spin-doubling step.
 
     The onsite U term needs care: U n_up n_down = (U/4)n^2 - (U/4)m_z^2
@@ -41,7 +41,7 @@ def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None):
                 tij=Vr)
         hv = hv + hv1
     v = hv.get_hopping_dict()
-    from ..selfconsistency.densitydensity import obj2geometryarray
+    from ..scftk.densitydensity import obj2geometryarray
     Ua = obj2geometryarray(U,h.geometry)
     n = len(h.geometry.r)
     for i in range(n):
@@ -53,7 +53,7 @@ def densitychi_RPA(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,**kwargs):
     """Return the density (charge) RPA response function for a
     V1/V2/V3 neighbor-shell (+ onsite U, + optional general Vr(r))
     density-density interaction -- same V1/V2/V3/U/Vr convention as
-    selfconsistency.densitydensity.Vinteraction/VJinteraction. Unlike the
+    scftk.densitydensity.Vinteraction/VJinteraction. Unlike the
     spin channel (spinchi_full/magnon_bands), this does not need a
     converged mean-field Hamiltonian first: the interaction is fully
     determined by V1/V2/V3/U/Vr, so it can dress the bare susceptibility of

@@ -1,7 +1,7 @@
 # KPM (Chebyshev/sparse) density matrix, restricted to the elements
 # actually required by a density-density interaction.
 #
-# The existing SCF machinery (selfconsistency/densitydensity.py) always
+# The existing SCF machinery (scftk/densitydensity.py) always
 # computes a *dense* n x n density-matrix block for every lattice vector
 # appearing in the interaction dictionary "v" (see get_dm/full_dm there),
 # using exact diagonalization on a k-mesh. Here we instead:
@@ -37,7 +37,7 @@ from .momenttoprofile import generate_profile
 from .kpmnumba import kpm_moments_ij as get_moments_ij
 from .kernels import jackson_kernel
 
-# Shared defaults for the KPM SCF's tuning knobs. selfconsistency/
+# Shared defaults for the KPM SCF's tuning knobs. scftk/
 # densitydensity_kpm.py's generic_densitydensity_kpm/densitydensity_kpm
 # reference these same constants (rather than separately hardcoding their
 # own copies) so the density-matrix computation and the Fermi-energy
@@ -49,7 +49,7 @@ DEFAULT_NPOL = 200
 def required_elements(v, tol=1e-10):
     """Given the interaction dictionary v (lattice vector -> matrix),
     return the set of (direction, i, j) density-matrix entries actually
-    read by selfconsistency/densitydensity.py for every nonzero v[d][i,j]:
+    read by scftk/densitydensity.py for every nonzero v[d][i,j]:
       - normal_term_ij (via get_mf_normal) reads dm[d2][j,i] (d2=-d, and
         indices SWAPPED relative to v's own (i,j)) -- so that transposed
         entry is requested at direction d2, not the raw (d,i,j) location;
@@ -99,7 +99,7 @@ def required_anomalous_elements(v, tol=1e-10):
     """Pairing (anomalous) density-matrix entries the BdG mean field needs,
     in the same "block" index convention v itself uses (electron indices
     0..N-1, hole-sector-local indices 0..N-1) -- see
-    selfconsistency/superscf.py's anomalous_term_ij_jit, which for a given
+    scftk/superscf.py's anomalous_term_ij_jit, which for a given
     (spinless-site i, spinless-site j) pair reads:
         out[2i,2j]     = v[2i,2j+1]  * dm[2j,2i]
         out[2i,2j+1]   = v[2i,2j]    * dm[2j+1,2i]
@@ -128,7 +128,7 @@ def required_elements_eh(v, tol=1e-10):
     (matching h.intra's own layout), instead of the whole dense (2n)x(2n)
     block per direction.
 
-    get_mf's has_eh branch (selfconsistency/densitydensity.py) extracts
+    get_mf's has_eh branch (scftk/densitydensity.py) extracts
     two sub-blocks out of each dm[key] via superconductivity.get_eh_sector
     (which internally reorders dm[key] with sctk/reorder.py's
     nambu2block): the electron-electron block dme[key] = dm[key]'s "ee"
@@ -178,7 +178,7 @@ def _estimate_kpm_scale(hk_gen,ks):
     Gershgorin bandwidth bound (kpmtk.bandwidth.estimate_bandwidth) over
     the sampled k-mesh -- used by both _dm_kpm_from_needed and
     get_fermi4filling_kpm whenever scale=None. Factored out so a caller
-    that needs both on the SAME Hamiltonian (e.g. selfconsistency.spinspin
+    that needs both on the SAME Hamiltonian (e.g. scftk.spinspin
     ._run_anisotropic_scf's integration="kpm" branch, which calls
     get_fermi4filling_kpm then _dm_kpm_from_needed every SCF iteration) can
     estimate it once and pass the same value to both, instead of each
@@ -202,7 +202,7 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     exp(2*pi*i*k.d) and summed over k, exactly mirroring the
     exact-diagonalization path's own phase convention (dmtk/fulldm.py).
 
-    T is the same finite-temperature smearing selfconsistency/
+    T is the same finite-temperature smearing scftk/
     densitydensity.py's ED path applies via Fermi-Dirac occupation
     (densitymatrix.py's full_dm(h,T=...)): rather than a hard cutoff at
     the Fermi energy (E=0), the occupied-window integration is weighted by
@@ -241,7 +241,7 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     than "ed" at the system sizes actually measured (order 100-500 sites:
     ED's dense per-k LAPACK diagonalization is extremely fast regardless
     of algorithmic complexity at that scale) -- see VJinteraction's
-    docstring (selfconsistency/spinspin.py) for the full measured
+    docstring (scftk/spinspin.py) for the full measured
     comparison. get_fermi4filling_kpm's own O(n_orb) per-orbital Fermi
     search (below) is a separate, also-unaddressed cost of comparable or
     greater size."""
@@ -321,7 +321,7 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
 
 def get_dm_kpm(h, v, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL, ne=None,
                cores=None, T=0.0, **kwargs):
-    """KPM-based analogue of selfconsistency.densitydensity.get_dm: return
+    """KPM-based analogue of scftk.densitydensity.get_dm: return
     a dictionary {direction: matrix} with the density matrix, but computing
     only the entries that v actually requires, each one through a sparse
     Chebyshev-moment (KPM) correlator instead of full diagonalization.
@@ -424,7 +424,7 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
         npol=DEFAULT_NPOL, ne=None, cores=None):
     """KPM analogue of spectrum.get_fermi4filling: find the Fermi energy
     for a given filling without ever diagonalizing anything, so the KPM
-    SCF (selfconsistency/densitydensity_kpm.py) stays fully
+    SCF (scftk/densitydensity_kpm.py) stays fully
     diagonalization-free end to end -- otherwise it would still need
     spectrum.get_fermi4filling's own per-k diagonalization just to locate
     the Fermi level, even though the density matrix itself is computed via
@@ -466,7 +466,7 @@ def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
     """KPM analogue of spectrum.total_energy's exact-diagonalization path
     (its nbands=None default, which VJinteraction's integration="kpm"
     branch used to call unconditionally for its post-convergence total
-    energy -- selfconsistency/spinspin.py -- forcing a dense
+    energy -- scftk/spinspin.py -- forcing a dense
     diagonalization there despite everything else in that branch staying
     diagonalization-free): the k-averaged sum of occupied eigenvalues of h
     (those below `fermi`), obtained by integrating E*rho(E) up to `fermi`

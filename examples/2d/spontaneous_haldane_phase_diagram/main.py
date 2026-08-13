@@ -10,7 +10,7 @@ import numpy as np
 from pyqula import geometry
 import os
 from pyqula import groundstate
-from pyqula.selfconsistency import densitydensity
+from pyqula.scftk import densitydensity
 g = geometry.honeycomb_lattice(3)
 h = g.get_hamiltonian(has_spin=False) # create hamiltonian of the system
 nk = 3

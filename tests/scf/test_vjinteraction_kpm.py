@@ -5,13 +5,13 @@ import scipy.sparse as sp
 from pyqula import geometry
 from pyqula import meanfield
 from pyqula.multihopping import MultiHopping
-from pyqula.selfconsistency import spinspin
-from pyqula.selfconsistency.spinspin import _sparse_pairs_to_needed
+from pyqula.scftk import spinspin
+from pyqula.scftk.spinspin import _sparse_pairs_to_needed
 from pyqula.densitymatrix import full_dm_accumulate_sparse
 from pyqula.kpmtk.densitymatrix_kpm import _dm_kpm_from_needed
 
 # Regression coverage for VJinteraction's integration="kpm" density-matrix
-# path (selfconsistency.spinspin._run_anisotropic_scf's use_kpm branch).
+# path (scftk.spinspin._run_anisotropic_scf's use_kpm branch).
 # It reuses _build_sparse_pairs' needed (direction,row,col) positions --
 # the exact same ones the "ed" sparse path (densitymatrix.
 # full_dm_accumulate_sparse) reads -- but evaluates them through

@@ -16,8 +16,8 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 import time
 import numpy as np
 from pyqula import geometry
-from pyqula.selfconsistency.densitydensity_kpm import get_dm_kpm
-from pyqula.selfconsistency.densitydensity import get_dc_energy, get_mf
+from pyqula.scftk.densitydensity_kpm import get_dm_kpm
+from pyqula.scftk.densitydensity import get_dc_energy, get_mf
 
 common = dict(maxerror=1e-4, mix=0.5, maxite=200, verbose=0,
               load_mf=False, return_total_energy=True)

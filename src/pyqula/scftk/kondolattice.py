@@ -25,7 +25,7 @@ scalar, so a non-uniform (e.g. supercell) system self-consistently converges
 to site-dependent values -- for a translationally invariant lattice they
 converge to the same value on every site.
 
-This is deliberately NOT routed through selfconsistency.spinspin's
+This is deliberately NOT routed through scftk.spinspin's
 VJinteraction/_run_anisotropic_scf (the engine SpinonHamiltonian reuses for
 the analogous Heisenberg-model RVB decoupling): that machinery's per-site
 "array filling" branch enforces a local occupation constraint on EVERY site
@@ -95,7 +95,7 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, filling=0.5, mf=None, nk=8,
         for a resonance broadened only by T (V itself can be arbitrarily
         small deep in the weak-coupling Kondo regime this class exists to
         explore, so it cannot be relied on to provide that broadening); a
-        naive lam += mix*(n_f-Q) step (as selfconsistency.spinspin's
+        naive lam += mix*(n_f-Q) step (as scftk.spinspin's
         per-site filling branch uses for the Heisenberg/RVB case, where the
         RVB bond order chi always provides an O(J) broadening) is then a
         proportional controller with gain mix/(4T), unstable for any

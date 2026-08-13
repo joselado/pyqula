@@ -1,5 +1,5 @@
 # qtci (quantics/Gauss-Kronrod tensor cross interpolation) alternative to
-# selfconsistency/densitydensity.py's get_dm.
+# scftk/densitydensity.py's get_dm.
 #
 # get_dm computes a dense density-matrix block per direction by exact
 # diagonalization on a k-mesh (densitymatrix.py's full_dm), averaging the
@@ -86,13 +86,13 @@ def _dm_qtci_from_needed(h, needed, nk=DEFAULT_NK, fermi=0.0, T=1e-7,
 
 def get_dm_qtci(h, v, nk=None, fermi=0.0, T=1e-7, tolerance=1e-6,
         **kwargs):
-    """qtci-based analogue of selfconsistency.densitydensity.get_dm: return
+    """qtci-based analogue of scftk.densitydensity.get_dm: return
     a dictionary {direction: matrix} with the density matrix, computing
     only the entries v actually requires, each one as a BZ integral (via
     qutecipy) of the occupied-state projector instead of a k-mesh average.
     Same {direction: matrix} contract as get_dm, so it is a drop-in
     replacement inside the same (conventional) SCF loop -- see
-    selfconsistency.densitydensity.get_dm's integration="qtci" branch.
+    scftk.densitydensity.get_dm's integration="qtci" branch.
 
     A direction with no required entries at all (e.g. an interaction v[d]
     that is exactly all-zero for that d) is backfilled below with an
