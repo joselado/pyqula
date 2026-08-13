@@ -1,3 +1,5 @@
+# Unreferenced anywhere in src/, tests/, or examples/ as of 2026-08-13 -- candidate for removal in a future cleanup.
+
 import numpy as np
 
 def reciprocal_evaluation(h,f,nk=50,nsuper=1,reciprocal=True):

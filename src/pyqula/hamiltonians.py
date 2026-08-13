@@ -311,7 +311,8 @@ class Hamiltonian():
         return get_bandwidth(self,**kwargs)
     def diagonalize(self,nkpoints=100):
       """Return eigenvalues"""
-      return diagonalize(self,nkpoints=nkpoints)
+      (k,e) = self.get_bands(nk=nkpoints,write=False)
+      return e
     def get_fermi4filling(self,filling,**kwargs):
         """Return the fermi energy for a certain filling"""
         return spectrum.get_fermi4filling(self,filling,**kwargs)
