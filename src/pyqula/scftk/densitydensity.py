@@ -242,30 +242,38 @@ def get_mf(v,dm,has_eh=False,compute_anomalous=True,
 
 
 
-def get_mf_normal(v,dm,compute_dd=True,add_dagger=True,
-        compute_cross=True):
-    """Get the mean field"""
+def get_mf_normal_core(v,dm,keys,term_ii,term_jj,term_ij,dag,
+        compute_dd=True,add_dagger=True,compute_cross=True):
+    """Shared normal (Hartree+Fock) mean-field accumulation loop for the
+    density-density interaction, parameterized by the backend's term/
+    dagger primitives so the numpy/numba engine (get_mf_normal) and the
+    JAX engine (get_mf_normal_jax, in densitydensity_jax.py) share this
+    control flow instead of each re-implementing it."""
     zero = dm[(0,0,0)]*0. # zero
-    mf = dict()
-    for d in v: mf[d] = zero.copy()  # initialize
-    # compute the contribution to the mean field
-    # onsite term
-#    mf[(0,0,0)] = normal_term(v[(0,0,0)],dm[(0,0,0)]) 
-    def dag(m): return m.T.conjugate()
-    for d in v: # loop over directions
+    mf = {d: zero for d in keys} # initialize
+    for d in keys: # loop over directions
         d2 = (-d[0],-d[1],-d[2]) # minus this direction
         # add the normal terms
         if compute_cross: # only density density terms
-            m = normal_term_ij(v[d],dm[d2]) # get matrix
+            m = term_ij(v[d],dm[d2]) # get matrix
             mf[d] = mf[d] + m # add normal term
             if add_dagger:
                 mf[d2] = mf[d2] + dag(m) # add normal term
         if compute_dd: # density density terms
-            m = normal_term_ii(v[d],dm[(0,0,0)]) # get matrix
+            m = term_ii(v[d],dm[(0,0,0)]) # get matrix
             mf[(0,0,0)] = mf[(0,0,0)] + m # add normal term
-            m = normal_term_jj(v[d2],dm[(0,0,0)]) # get matrix
+            m = term_jj(v[d2],dm[(0,0,0)]) # get matrix
             mf[(0,0,0)] = mf[(0,0,0)] + m # add normal term
     return mf
+
+
+def get_mf_normal(v,dm,compute_dd=True,add_dagger=True,
+        compute_cross=True):
+    """Get the mean field"""
+    def dag(m): return m.T.conjugate()
+    return get_mf_normal_core(v,dm,v.keys(),normal_term_ii,normal_term_jj,
+            normal_term_ij,dag,compute_dd=compute_dd,
+            add_dagger=add_dagger,compute_cross=compute_cross)
 
 
 

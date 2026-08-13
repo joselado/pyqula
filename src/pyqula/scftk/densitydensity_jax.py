@@ -91,7 +91,7 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
-        get_dc_energy, obj2geometryarray)
+        get_dc_energy, obj2geometryarray, get_mf_normal_core)
 from .mfconstrains import obj2mf
 from ..multihopping import MultiHopping
 
@@ -112,22 +112,15 @@ def normal_term_ij_jax(v, dm):
 
 def get_mf_normal_jax(v, dm, dirs, compute_dd=True, compute_cross=True,
         add_dagger=True):
-    """JAX version of densitydensity.get_mf_normal (normal part only)"""
-    zero = dm[(0, 0, 0)] * 0.0
-    mf = {d: zero for d in dirs}
-    for d in dirs:
-        d2 = (-d[0], -d[1], -d[2])
-        if compute_cross:
-            m = normal_term_ij_jax(v[d], dm[d2])
-            mf[d] = mf[d] + m
-            if add_dagger:
-                mf[d2] = mf[d2] + jnp.conj(m).T
-        if compute_dd:
-            m = normal_term_ii_jax(v[d], dm[(0, 0, 0)])
-            mf[(0, 0, 0)] = mf[(0, 0, 0)] + m
-            m = normal_term_jj_jax(v[d2], dm[(0, 0, 0)])
-            mf[(0, 0, 0)] = mf[(0, 0, 0)] + m
-    return mf
+    """JAX version of densitydensity.get_mf_normal (normal part only) --
+    shares its control flow with the numpy/numba engine via
+    densitydensity.get_mf_normal_core, supplying jax term/dagger
+    primitives in place of the numba-jitted ones."""
+    def dag(m): return jnp.conj(m).T
+    return get_mf_normal_core(v, dm, dirs, normal_term_ii_jax,
+            normal_term_jj_jax, normal_term_ij_jax, dag,
+            compute_dd=compute_dd, add_dagger=add_dagger,
+            compute_cross=compute_cross)
 
 
 def flatten_mf(mf, dirs):
