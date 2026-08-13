@@ -269,29 +269,23 @@ def didv_curve(ht, energies, **kwargs):
     `energies`, and reuses it for every keldysh_didv call in the sweep --
     mirroring keldyshtk.current.iv_curve's own sharing (a `dc_current`
     sweep), extended here to a `didv` sweep. `use_aaa` defaults to `True`
-    HERE (opposite of a single `didv`/`keldysh_didv` call's own default)
-    once `len(energies) >= keldyshtk.current._AAA_SWEEP_MIN_LEN` (see that
-    constant's own comment for the measured build-vs-eval break-even this
-    is calibrated against) -- below that length it defaults to `False`
-    like a plain `didv`/`keldysh_didv` call, since the build cost would not
-    be amortized (measured: AAA's build got noticeably more expensive as a
-    side effect of the accuracy fix in aaatk/selfenergy_aaa.py, to the
-    point that a short sweep can now be *slower* via "aaa" than "direct").
-    A raw loop of `didv(energy=e, use_aaa=True)` calls, by contrast, builds
-    (and discards) an independent interpolant at every single energy,
-    since keldysh_didv's own sharing is scoped to just its own Ip/Im pair
-    within one call -- expensive, and exactly the trap this function
-    exists to avoid regardless of the length default above. Pass
-    `use_aaa=True`/`False` explicitly to override the length-based default
-    in either direction. Skipped if the caller already passed
-    `selfenergy_qtci` explicitly (an explicit opt-out, so building a
-    shared fit here would silently override the caller's own choice) --
-    matching `iv_curve`'s own behavior, or if the shared fit doesn't
-    converge within budget (falls back to `use_aaa=False` automatically).
-    Only applies at `temp=0` (the default): a finite-`temp` sweep goes
-    through `finite_T_didv` at every energy independently, each with its
-    own internal thermal-quadrature sharing already, a separate concern
-    from sharing across THIS function's energy array.
+    HERE (opposite of a single `didv`/`keldysh_didv` call's own default),
+    since an energy sweep is exactly the workload the AAA build cost is
+    meant to amortize -- a raw loop of `didv(energy=e, use_aaa=True)`
+    calls, by contrast, builds (and discards) an independent interpolant
+    at every single energy, since keldysh_didv's own sharing is scoped to
+    just its own Ip/Im pair within one call -- expensive (each build alone
+    can cost several to tens of seconds, see aaatk/selfenergy_aaa.py), and
+    exactly the trap this function exists to avoid. Pass
+    `use_aaa=False` explicitly to opt back out. Skipped if the caller
+    already passed `selfenergy_qtci` explicitly (an explicit opt-out, so
+    building a shared fit here would silently override the caller's own
+    choice) -- matching `iv_curve`'s own behavior, or if the shared fit
+    doesn't converge within budget (falls back to `use_aaa=False`
+    automatically). Only applies at `temp=0` (the default): a finite-`temp`
+    sweep goes through `finite_T_didv` at every energy independently, each
+    with its own internal thermal-quadrature sharing already, a separate
+    concern from sharing across THIS function's energy array.
 
     `method="auto"` (the default, matching `didv`'s own default) is
     resolved once, up front, from `ht` alone rather than per energy: the
@@ -300,12 +294,10 @@ def didv_curve(ht, energies, **kwargs):
     method = kwargs.pop("method", "auto")
     if method == "auto":
         method = "keldysh" if _both_leads_superconducting(ht) else "smatrix"
-    from ..keldyshtk.current import build_shared_selfenergy, _AAA_SWEEP_MIN_LEN
-    use_aaa = kwargs["use_aaa"] if "use_aaa" in kwargs \
-        else len(energies) >= _AAA_SWEEP_MIN_LEN
     if (method == "keldysh" and kwargs.get("temp", 0.) == 0.
             and "selfenergy_qtci" not in kwargs
-            and use_aaa and len(energies)):
+            and kwargs.get("use_aaa", True) and len(energies)):
+        from ..keldyshtk.current import build_shared_selfenergy
         nmax_max = kwargs.get("nmax_max", 40)
         emax = max(abs(e) for e in energies)
         shared = build_shared_selfenergy(ht, emax, nmax_max=nmax_max,
