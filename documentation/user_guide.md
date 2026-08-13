@@ -1277,6 +1277,49 @@ h.add_rashba(0.1) # break z-mirror symmetry to expose the edge states
 `ds` and `db` are, respectively, the surface and bulk spectral weight at each `(k,e)`; plotting `k,e` colored by `ds` shows the topologically-protected edge states living at the boundary, absent from the bulk spectrum `db`. See `examples/readme_examples/surface_2dTI/main.py` for a runnable version.
 
 
+# Twisted bilayer graphene structural relaxation
+
+Rigidly twisting two graphene layers is only an approximation: below a few
+degrees of twist, the real lattice relaxes so that the energetically costly
+AA-stacked regions shrink and triangular AB/BA (Bernal) domains grow around
+them, separated by solitonic domain walls (Nam & Koshino,
+[arXiv:1706.03908](https://arxiv.org/abs/1706.03908)). `GrapheneGeometry`
+wraps any graphene multilayer `Geometry` (bilayer, twisted bilayer, twisted
+trilayer, ...) and adds a `.relax()` method that reproduces this effect by
+minimizing a phenomenological energy over an in-plane relaxation
+displacement field: the interlayer Generalized Stacking Fault Energy (GSFE,
+a closed-form periodic function of the local interlayer registry, fit to
+graphene's AA/AB/BA stacking energies) plus the intralayer linear-elastic
+energy, both taken from Carr, Massatt, Torrisi, Cazeaux, Luskin, Kaxiras,
+[arXiv:1805.06972](https://arxiv.org/abs/1805.06972), Table 1. The
+minimization runs entirely in-plane (no out-of-plane corrugation yet) using
+jax autodiff gradients passed to a scipy L-BFGS-B solver.
+
+`GrapheneHamiltonian` builds the actual tight-binding Hamiltonian from a
+(relaxed or rigid) `GrapheneGeometry`, defaulting to the same
+distance-decaying hoppings as `specialhamiltonian.twisted_bilayer_graphene`
+-- since those hoppings depend on the true 3D interatomic distance, the
+relaxed positions feed into the electronic structure automatically
+
+```python
+from pyqula import specialgeometry
+from pyqula.graphenetk.geometry import GrapheneGeometry
+from pyqula.graphenetk.hamiltonian import GrapheneHamiltonian
+
+g0 = specialgeometry.twisted_bilayer(m0=15) # ~2 degree twist
+g = GrapheneGeometry(g0).relax() # AA area shrinks, AB/BA domains grow
+h = GrapheneHamiltonian(g)
+(k,e) = h.get_bands(num_bands=20)
+```
+
+See `examples/2d/graphene_relax/main.py` for a runnable version comparing
+the rigid and relaxed lattices, and `tests/moire/test_graphene_relax.py`
+for the physical invariants this is checked against (AA is the GSFE
+maximum and AB/BA the degenerate minima; relaxed bond lengths stay
+physical; the local relaxation amplitude grows monotonically as the twist
+angle shrinks).
+
+
 # Topological insulators
 
 Here we provide a discussion of observables related with topological insulators
@@ -2566,6 +2609,33 @@ onto `hc`'s geometry, with the Kondo coupling supplied through
     site (target is exactly 1.0)
   - `h2.hybridization`: converged $V_j$ per localized site
   - `h2.constraint_lambda`: converged per-site Lagrange multiplier
+
+### GrapheneGeometry(g)
+`Geometry` subclass wrapping a graphene multilayer geometry `g` (bilayer,
+twisted bilayer, twisted trilayer, ...), adding a `.relax()` method -- see
+"Twisted bilayer graphene structural relaxation" above. `from
+pyqula.graphenetk.geometry import GrapheneGeometry`; `g` must have
+`has_sublattice=True` (raises `ValueError` otherwise).
+
+- `g.relax(nrep=1,maxiter=500,verbose=False,layer_pairs=None,gsfe_coeffs=...,elastic_coeffs=...)`:
+  minimizes the GSFE (interlayer) + elastic (intralayer) energy over an
+  in-plane displacement field and returns a new, relaxed
+  `GrapheneGeometry`. `layer_pairs` selects which (lower,upper) pairs of
+  layers (ordered by z) get an interlayer GSFE term, defaulting to all
+  adjacent pairs; `gsfe_coeffs`/`elastic_coeffs` override the graphene
+  Table 1 constants of `pyqula.graphenetk.gsfe.GRAPHENE_GSFE` /
+  `pyqula.graphenetk.elastic.GRAPHENE_ELASTIC`.
+
+### GrapheneHamiltonian(geometry)
+Hamiltonian built from a graphene multilayer `geometry` (typically a
+`GrapheneGeometry`, relaxed or not) -- see "Twisted bilayer graphene
+structural relaxation" above. `from pyqula.graphenetk.hamiltonian import
+GrapheneHamiltonian`; defaults to the distance-decaying hoppings of
+`specialhopping.twisted_matrix` (`ti=0.12,lambi=8.0,lamb=12.0,dl=3.0`,
+matching `specialhamiltonian.twisted_bilayer_graphene`'s defaults) rather
+than the generic first-neighbor default, so relaxed (in-plane displaced)
+positions feed into the electronic structure automatically. Pass
+`mgenerator=...` to use a different hopping generator instead.
 
 ### h.get_central_heterostructure()
 Build a two-terminal `Heterostructure` using `h` (a finite, 0d Hamiltonian) as the central scattering region, contacted by two semi-infinite 1D chain leads attached at sites `i`/`j` (see "Transport through an arbitrary finite region" above).

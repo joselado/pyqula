@@ -76,6 +76,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Local and full operator-resolved density of states [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/06_operator_resolved_dos.ipynb)
 - 0d, 1d, 2d and 3d tight binding models [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/07_0d_1d_2d_3d_models.ipynb)
 - Electronic structure unfolding in supercells [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
+- Twisted bilayer graphene structural relaxation (GSFE + elastic energy minimization, AA-region shrinkage and AB/BA domain formation below a few degrees of twist)
 
 ## Interacting mean-field Hamiltonians ##
 - Selfconsistent mean-field calculations with local/non-local interactions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/01_local_nonlocal_scf.ipynb)
