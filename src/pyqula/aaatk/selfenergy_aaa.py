@@ -250,18 +250,39 @@ class SelfenergyAAA:
     def __init__(self, get_selfenergy, dim, emin, emax, delta,
                  tolerance=1e-3, ncand0=None, ncand_max=20000,
                  nvalidate=32, mmax0=100, mmax_max=400, aaa_tolerance=None,
-                 maxrounds=20, refine_growth=0.5, **kwargs):
+                 maxrounds=20, refine_growth=0.5, get_selfenergy_batch=None,
+                 **kwargs):
         if emax <= emin: raise ValueError("emax must be > emin")
         self.dim = dim
         self.emin, self.emax = emin, emax
         if ncand0 is None: ncand0 = default_ncand(emax-emin, delta)
         if aaa_tolerance is None: aaa_tolerance = 0.1*tolerance
         solved = {}
-        def full_matrix(e):
-            key = round(e, 12)
-            if key not in solved:
-                solved[key] = algebra.todense(get_selfenergy(e))
-            return solved[key]
+        def full_matrix_many(es):
+            """Solve every energy in `es` not already in `solved`, in ONE
+            batched call when `get_selfenergy_batch` is available (the
+            numba prange-parallel Sancho-Rubio iteration, transporttk.
+            selfenergy.get_selfenergy_batch / greentk.rg.
+            green_renormalization_jit_batch -- see keldyshtk/current.py's
+            _batch_selfenergy for the same batching pattern used elsewhere
+            on this codebase's Keldysh path), falling back to a per-energy
+            Python loop over `get_selfenergy` otherwise (e.g. a LocalProbe,
+            which has no batched solve). Every solved energy is cached
+            into `solved` either way, so later rounds/validation calls
+            reuse it exactly as before -- this is a pure batching of the
+            SAME true solves the unbatched path made, not a change to what
+            gets solved or how many rounds/candidates are needed, so it
+            cannot change the resulting fit."""
+            missing = [e for e in es if round(e, 12) not in solved]
+            if missing:
+                if get_selfenergy_batch is not None:
+                    mats = get_selfenergy_batch(np.asarray(missing))
+                    for e, m in zip(missing, mats):
+                        solved[round(e, 12)] = algebra.todense(m)
+                else:
+                    for e in missing:
+                        solved[round(e, 12)] = algebra.todense(get_selfenergy(e))
+            return np.array([solved[round(e, 12)] for e in es])
         self._solved = solved  # exposed for diagnostics/benchmarking
 
         rng = np.random.default_rng(0)  # deterministic validation draws
@@ -269,7 +290,7 @@ class SelfenergyAAA:
         mmax = min(mmax0, mmax_max)
         converged = False
         for _round in range(maxrounds):
-            Fmats = np.array([full_matrix(e) for e in Z])
+            Fmats = full_matrix_many(Z)
             entries = {}
             saturated = False
             for i in range(dim):
@@ -305,13 +326,10 @@ class SelfenergyAAA:
                                         for f in (0.3, 0.7)])
             bulk_val = rng.uniform(emin, emax, nvalidate)
             Zval = np.concatenate([feat_val, bulk_val])
-            maxerr, denom = 0., 0.
-            for e in Zval:
-                true = full_matrix(e)
-                denom = max(denom, np.max(np.abs(true)))
-            denom = max(denom, 1e-12)
-            for e in Zval:
-                true = full_matrix(e)
+            Trues = full_matrix_many(Zval)
+            denom = max(np.max(np.abs(Trues)), 1e-12)
+            maxerr = 0.
+            for e, true in zip(Zval, Trues):
                 approx = np.zeros((dim, dim), dtype=np.complex128)
                 for (i, j), r in entries.items():
                     if r is not None: approx[i, j] = r(np.complex128(e))

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from pyqula import geometry
+from pyqula import heterostructures
 from pyqula.transporttk.localprobe import LocalProbe
 from pyqula.aaatk.aaa import aaa
 from pyqula.aaatk.selfenergy_aaa import SelfenergyAAA
@@ -136,3 +137,48 @@ def test_out_of_window_call_warns_once_and_in_window_is_silent():
         domain_warnings = [w for w in rec if issubclass(w.category, UserWarning)
                             and "fitted window" in str(w.message)]
         assert len(domain_warnings) == 1  # warned once, not once per call
+
+
+def test_batched_selfenergy_solve_gives_the_same_fit_as_the_scalar_loop():
+    """get_selfenergy_batch is a pure speedup of SelfenergyAAA's build (the
+    numba prange-parallel Sancho-Rubio solve, transporttk.selfenergy.
+    get_selfenergy_batch, instead of one Python-level get_selfenergy call
+    per candidate/validation energy) -- it must solve the exact same
+    energies in the exact same rounds and reach the exact same fit, not
+    just a similar one. Compares the batched build (as build_selfenergy_aaa
+    wires it in for any Heterostructure) against the scalar-loop build
+    (get_selfenergy_batch=None) on the same two-lead SC-SC system."""
+    h1 = geometry.chain().get_hamiltonian(); h1.shift_fermi(1.); h1.add_swave(0.1)
+    h2 = geometry.chain().get_hamiltonian(); h2.shift_fermi(1.); h2.add_swave(0.1)
+    HT = heterostructures.build(h1, h2)
+    HT.set_coupling(0.3)
+    HT.delta = 1e-3
+
+    voltage, nmax_max = 0.05, 8
+    erange = (nmax_max+1)*abs(voltage)
+    dim = HT.Hl.intra.shape[0]
+
+    def get_se(e):
+        return HT.get_selfenergy(e, lead=0, delta=HT.delta,
+                                  pristine=True, numba=True)
+    def get_se_batch(es):
+        return HT.get_selfenergy_batch(es, lead=0, delta=HT.delta, pristine=True)
+
+    scalar = SelfenergyAAA(get_se, dim, -erange, erange, HT.delta, tolerance=1e-4)
+    batched = SelfenergyAAA(get_se, dim, -erange, erange, HT.delta, tolerance=1e-4,
+                             get_selfenergy_batch=get_se_batch)
+
+    assert scalar.converged and batched.converged
+    assert batched.ncand == scalar.ncand
+    assert batched.mmax == scalar.mmax
+    assert batched.nsolved() == scalar.nsolved()
+    assert batched.validation_error == scalar.validation_error
+
+    for e in np.linspace(-0.9*erange, 0.9*erange, 9):
+        assert np.array_equal(batched(e), scalar(e))
+
+    # build_selfenergy_aaa must actually wire the batched path in for a
+    # Heterostructure (not silently fall back to the scalar loop).
+    interp = build_selfenergy_aaa(HT, voltage, nmax_max, delta=HT.delta,
+                                   tolerance=1e-4)
+    assert interp[0].nsolved() == scalar.nsolved()

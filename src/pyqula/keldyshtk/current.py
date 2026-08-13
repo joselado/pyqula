@@ -836,7 +836,17 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
     interpolant many times isn't free either; larger for an expensive-
     per-solve target), which is why dc_current uses this by default
     (selfenergy_method="aaa") but with a bounded build budget and a
-    fallback to direct solves if that budget isn't enough to converge."""
+    fallback to direct solves if that budget isn't enough to converge.
+
+    When `ht` exposes `get_selfenergy_batch` (Heterostructure does; a
+    LocalProbe does not), every candidate/validation round's true solves
+    are routed through it -- the numba prange-parallel Sancho-Rubio
+    iteration (transporttk.selfenergy.get_selfenergy_batch, greentk.rg.
+    green_renormalization_jit_batch) instead of one Python-level call per
+    energy -- via SelfenergyAAA's own `get_selfenergy_batch` argument.
+    This is a pure speedup of the *build* (same solves, same rounds, same
+    resulting fit -- see SelfenergyAAA.__init__'s docstring), not a change
+    to the interpolant's accuracy or the number of true solves needed."""
     ht = _prepare_bias_target(ht)
     _check_supported(ht)
     if delta is None: delta = ht.delta
@@ -849,8 +859,14 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
         def get_se(e, lead=lead): # default arg freezes the loop variable
             return ht.get_selfenergy(e, lead=lead, delta=delta,
                                      pristine=True, numba=True)
+        get_se_batch = None
+        if hasattr(ht, "get_selfenergy_batch"):
+            def get_se_batch(es, lead=lead): # default arg freezes the loop variable
+                return ht.get_selfenergy_batch(es, lead=lead, delta=delta,
+                                                pristine=True)
         out[lead] = SelfenergyAAA(get_se, dim, -erange, erange, delta,
-                                   tolerance=tolerance, **kwargs)
+                                   tolerance=tolerance,
+                                   get_selfenergy_batch=get_se_batch, **kwargs)
     return out
 
 
