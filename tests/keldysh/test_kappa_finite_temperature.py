@@ -80,23 +80,29 @@ def test_shared_selfenergy_for_branch_only_builds_for_both_sc_leads():
         ht_normal, [0.05, 0.1], 0.02, nmax_max=4, selfenergy_method="aaa")
     assert shared_normal is None
 
-    # get_kappa_finite_temperature_energies' sweep default is now "aaa"
-    # (unlike a single dc_current call, whose own default stays "direct" --
-    # see its docstring): without an explicit selfenergy_method, the SC
-    # branch must still build a shared interpolant.
+    # get_kappa_finite_temperature_energies' sweep default is "aaa" only
+    # once len(energies) >= keldyshtk.current._AAA_SWEEP_MIN_LEN (a short
+    # sweep defaults to "direct", like a plain dc_current call, since the
+    # AAA build cost wouldn't be amortized -- see that constant's own
+    # comment). [0.05, 0.1] is well below the threshold, so without an
+    # explicit selfenergy_method the SC branch must build nothing here.
     shared_sc_default = kappa_mod._shared_selfenergy_for_branch(
         ht_sc, [0.05, 0.1], 0.02, nmax_max=4)
-    assert shared_sc_default is not None
-    assert all(s.converged for s in shared_sc_default.values())
+    assert shared_sc_default is None
 
-    # Explicit selfenergy_method="direct" opts back out of sharing.
+    # Explicit selfenergy_method="direct" opts out of sharing too (same
+    # outcome as the length-based default above, checked separately so a
+    # future threshold change can't silently make this assert the wrong
+    # thing for the wrong reason).
     shared_sc_direct = kappa_mod._shared_selfenergy_for_branch(
         ht_sc, [0.05, 0.1], 0.02, nmax_max=4, selfenergy_method="direct")
     assert shared_sc_direct is None
 
+    # Explicit selfenergy_method="aaa" always builds, regardless of length.
     shared_sc = kappa_mod._shared_selfenergy_for_branch(
         ht_sc, [0.05, 0.1], 0.02, nmax_max=4, selfenergy_method="aaa")
     assert shared_sc is not None
+    assert all(s.converged for s in shared_sc.values())
     assert all(s.converged for s in shared_sc.values())
 
 

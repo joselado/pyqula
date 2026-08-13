@@ -1306,6 +1306,31 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     return (prev, nmax) if return_nmax else prev
 
 
+# A sweep shorter than this defaults to selfenergy_method="direct" instead
+# of "aaa" (see iv_curve/didv_curve): AAA's build cost only amortizes past a
+# certain sweep length, and the accuracy fix (aaatk/selfenergy_aaa.py,
+# documentation/keldysh_aaa_selfenergy_accuracy_plan.md) made that build
+# noticeably more expensive (ncand growing to the thousands-to-20000 range,
+# vs. hundreds pre-fix) as a direct side effect of closing the accuracy gap.
+# Measured directly on the accuracy work's own worst-case system (SC-SC,
+# delta_sc=0.3, transparency=0.5, HT.delta=1e-4, nmax_max=40, vmax=1.0):
+# build 61.7s (ncand saturated its 20000 cap), eval-only 2.03s/call vs.
+# direct's 5.16s/call -- break-even at N~=20 calls. Below that, defaulting
+# to "aaa" was a measured *slowdown* (a 9-voltage sweep on this same system
+# took 47.3s via "aaa" vs. 21.0s via "direct", ~2.2x slower) -- exactly what
+# this threshold exists to avoid. This is a single global constant, not
+# adaptive per system (an easier system's own break-even could be lower,
+# leaving some win on the table below this threshold) -- deliberately
+# conservative, calibrated against the hardest case this module's own
+# accuracy work already characterizes in depth, not a general benchmark.
+# Only applies when the caller hasn't stated a selfenergy_method
+# explicitly: an explicit selfenergy_method="aaa" is always honored
+# regardless of sweep length, since the caller has then made their own
+# amortization judgment (e.g. planning to reuse the returned interpolant
+# beyond this one call).
+_AAA_SWEEP_MIN_LEN = 20
+
+
 def iv_curve(ht, voltages, **kwargs):
     """Convenience wrapper: dc_current evaluated over an array of voltages,
     in parallel (see parallel.pcall).
@@ -1313,23 +1338,27 @@ def iv_curve(ht, voltages, **kwargs):
     Unlike a single dc_current call (whose own default is
     selfenergy_method="direct" -- see its docstring for the AAA accuracy
     gap this used to raise, since fixed), a voltage sweep is exactly the
-    workload the AAA fit's build cost (7-31s) is meant to amortize: this
-    builds one shared AAA self-energy interpolant up front
-    (build_shared_selfenergy), sized to cover every voltage in
-    `voltages`, and reuses it for every dc_current call in the sweep
-    instead of each call independently building (and discarding) its
-    own -- so "aaa" is the default HERE, opposite of dc_current's own
-    default, unless the caller explicitly passes selfenergy_method=
-    "direct" to opt back out. Skipped if the caller already passed
-    selfenergy_qtci explicitly (an explicit opt-out, so building a shared
-    fit here would silently override the caller's own choice), or if the
-    shared fit doesn't converge within budget (falls back to "direct"
-    automatically, same safe-fallback contract as a plain dc_current
-    call)."""
+    workload the AAA fit's build cost is meant to amortize: this builds one
+    shared AAA self-energy interpolant up front (build_shared_selfenergy),
+    sized to cover every voltage in `voltages`, and reuses it for every
+    dc_current call in the sweep instead of each call independently
+    building (and discarding) its own. "aaa" is the default HERE, opposite
+    of dc_current's own default, but only once `len(voltages) >=
+    _AAA_SWEEP_MIN_LEN` (see that constant's own comment for the measured
+    break-even this is calibrated against) -- a short sweep instead defaults
+    to "direct" like a plain dc_current call, since the build cost would not
+    be amortized. Pass selfenergy_method="aaa"/"direct" explicitly to
+    override this length-based default in either direction. Skipped
+    entirely if the caller already passed selfenergy_qtci explicitly (an
+    explicit opt-out, so building a shared fit here would silently override
+    the caller's own choice), or if the shared fit doesn't converge within
+    budget (falls back to "direct" automatically, same safe-fallback
+    contract as a plain dc_current call)."""
     from ..parallel import pcall
-    if ("selfenergy_qtci" not in kwargs
-            and kwargs.get("selfenergy_method", "aaa") == "aaa"
-            and len(voltages)):
+    method = kwargs.get("selfenergy_method")
+    use_aaa = (method == "aaa") if method is not None \
+        else len(voltages) >= _AAA_SWEEP_MIN_LEN
+    if "selfenergy_qtci" not in kwargs and use_aaa and len(voltages):
         nmax_max = kwargs.get("nmax_max", 40)
         vmax = max(abs(v) for v in voltages)
         shared = build_shared_selfenergy(ht, vmax, nmax_max=nmax_max,

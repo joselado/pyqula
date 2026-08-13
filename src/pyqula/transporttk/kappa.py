@@ -202,17 +202,28 @@ def _shared_selfenergy_for_branch(ht,energies,temp,nmax_max=40,delta=None,dv=Non
     converge within budget) and for why an explicit `dv` must be honored
     here too (SelfenergyAAA enforces no domain, only warns once if a call
     pushes past the fitted window and silently extrapolates there). Like
-    iv_curve, "aaa" is the default HERE (a whole
-    coupling/energy/thermal-quadrature sweep is exactly the workload the
-    AAA build cost amortizes over -- this is the case that made the
-    un-shared, per-call-rebuilding path prohibitively slow in the first
-    place, see the docstring above) -- pass selfenergy_method="direct"
-    explicitly to opt back out; returns None (safe fallback to "direct")
-    if the fit doesn't converge within budget, same as the
+    iv_curve, "aaa" is the default HERE once `len(energies) >=
+    keldyshtk.current._AAA_SWEEP_MIN_LEN` (see that constant's own comment
+    for the measured build-vs-eval break-even this is calibrated against)
+    -- a whole coupling/energy/thermal-quadrature sweep is exactly the
+    workload the AAA build cost amortizes over, PROVIDED there's enough of
+    it: under the now-default `keldysh_thermal_mode="direct"` (see
+    thermaldidv.finite_T_didv), a single energy only costs 4 dc_current
+    calls here (2 couplings x Ip/Im), not the ~150-400 the old
+    "convolution" default made per point -- measured directly, not
+    assumed -- so a short `energies` array is no longer automatically
+    above the break-even the way it used to be. Below the threshold this
+    defaults to "direct" like a plain dc_current call. Pass
+    selfenergy_method="aaa"/"direct" explicitly to override the
+    length-based default in either direction; returns None (safe fallback
+    to "direct") if the fit doesn't converge within budget, same as the
     not-both-leads-superconducting case."""
-    if kwargs.get("selfenergy_method", "aaa") != "aaa": return None
+    from ..keldyshtk.current import build_shared_selfenergy, _AAA_SWEEP_MIN_LEN
+    method = kwargs.get("selfenergy_method")
+    use_aaa = (method == "aaa") if method is not None \
+        else len(energies) >= _AAA_SWEEP_MIN_LEN
+    if not use_aaa: return None
     from .thermaldidv import THERMAL_WINDOW
-    from ..keldyshtk.current import build_shared_selfenergy
     emax = max(abs(e) for e in energies) if len(energies) else 0.
     vmax = emax + THERMAL_WINDOW*temp
     return build_shared_selfenergy(ht,vmax,nmax_max=nmax_max,delta=delta,dv=dv)
