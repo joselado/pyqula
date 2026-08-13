@@ -80,12 +80,19 @@ def test_shared_selfenergy_for_branch_only_builds_for_both_sc_leads():
         ht_normal, [0.05, 0.1], 0.02, nmax_max=4, selfenergy_method="aaa")
     assert shared_normal is None
 
-    # dc_current's default is now "direct" (see its own docstring for the
-    # AAA accuracy gap that made sharing opt-in) -- without an explicit
-    # selfenergy_method="aaa", even the SC branch must build nothing.
+    # get_kappa_finite_temperature_energies' sweep default is now "aaa"
+    # (unlike a single dc_current call, whose own default stays "direct" --
+    # see its docstring): without an explicit selfenergy_method, the SC
+    # branch must still build a shared interpolant.
     shared_sc_default = kappa_mod._shared_selfenergy_for_branch(
         ht_sc, [0.05, 0.1], 0.02, nmax_max=4)
-    assert shared_sc_default is None
+    assert shared_sc_default is not None
+    assert all(s.converged for s in shared_sc_default.values())
+
+    # Explicit selfenergy_method="direct" opts back out of sharing.
+    shared_sc_direct = kappa_mod._shared_selfenergy_for_branch(
+        ht_sc, [0.05, 0.1], 0.02, nmax_max=4, selfenergy_method="direct")
+    assert shared_sc_direct is None
 
     shared_sc = kappa_mod._shared_selfenergy_for_branch(
         ht_sc, [0.05, 0.1], 0.02, nmax_max=4, selfenergy_method="aaa")

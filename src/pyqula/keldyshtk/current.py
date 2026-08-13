@@ -1309,20 +1309,25 @@ def iv_curve(ht, voltages, **kwargs):
     """Convenience wrapper: dc_current evaluated over an array of voltages,
     in parallel (see parallel.pcall).
 
-    dc_current's default selfenergy_method is "direct" (see its own
-    docstring for the accuracy gap that made "aaa" opt-in only). If the
-    caller explicitly passes selfenergy_method="aaa", this builds one
-    shared AAA self-energy interpolant up front (build_shared_selfenergy),
-    sized to cover every voltage in `voltages`, and reuses it for every
-    dc_current call in the sweep instead of each call independently
-    building (and discarding) its own -- the same sharing keldysh_didv
-    already does within one Ip/Im pair, extended across the whole voltage
-    array. Skipped if the caller already passed selfenergy_qtci
-    explicitly (an explicit opt-out, so building a shared fit here would
-    silently override the caller's own choice)."""
+    Unlike a single dc_current call (whose own default is
+    selfenergy_method="direct" -- see its docstring for the AAA accuracy
+    gap this used to raise, since fixed), a voltage sweep is exactly the
+    workload the AAA fit's build cost (7-31s) is meant to amortize: this
+    builds one shared AAA self-energy interpolant up front
+    (build_shared_selfenergy), sized to cover every voltage in
+    `voltages`, and reuses it for every dc_current call in the sweep
+    instead of each call independently building (and discarding) its
+    own -- so "aaa" is the default HERE, opposite of dc_current's own
+    default, unless the caller explicitly passes selfenergy_method=
+    "direct" to opt back out. Skipped if the caller already passed
+    selfenergy_qtci explicitly (an explicit opt-out, so building a shared
+    fit here would silently override the caller's own choice), or if the
+    shared fit doesn't converge within budget (falls back to "direct"
+    automatically, same safe-fallback contract as a plain dc_current
+    call)."""
     from ..parallel import pcall
     if ("selfenergy_qtci" not in kwargs
-            and kwargs.get("selfenergy_method", "direct") == "aaa"
+            and kwargs.get("selfenergy_method", "aaa") == "aaa"
             and len(voltages)):
         nmax_max = kwargs.get("nmax_max", 40)
         vmax = max(abs(v) for v in voltages)

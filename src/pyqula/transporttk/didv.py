@@ -263,22 +263,26 @@ def didv_curve(ht, energies, **kwargs):
     `delta` still defaults to `ht.delta` and a `temp` kwarg still reaches
     `finite_T_didv` correctly, matching those methods' own conventions.
 
-    If the sweep resolves to the Keldysh path (see `method` below) and the
-    caller explicitly passes `use_aaa=True`, this builds ONE shared AAA
-    self-energy interpolant up front (keldyshtk.current.
-    build_shared_selfenergy), sized to cover every energy in `energies`,
-    and reuses it for every keldysh_didv call in the sweep -- mirroring
-    keldyshtk.current.iv_curve's own sharing (a `dc_current` sweep),
-    extended here to a `didv` sweep. Without this, a raw loop of
-    `didv(energy=e, use_aaa=True)` calls builds (and discards) an
-    independent interpolant at every single energy, since keldysh_didv's
-    own sharing is scoped to just its own Ip/Im pair within one call --
-    expensive (each build alone can cost several to tens of seconds, see
-    aaatk/selfenergy_aaa.py), and exactly the trap this function exists to
-    avoid. Skipped if the caller already passed `selfenergy_qtci`
-    explicitly (an explicit opt-out, so building a shared fit here would
-    silently override the caller's own choice) -- matching `iv_curve`'s
-    own behavior. Only applies at `temp=0` (the default): a finite-`temp`
+    If the sweep resolves to the Keldysh path (see `method` below), this
+    builds ONE shared AAA self-energy interpolant up front (keldyshtk.
+    current.build_shared_selfenergy), sized to cover every energy in
+    `energies`, and reuses it for every keldysh_didv call in the sweep --
+    mirroring keldyshtk.current.iv_curve's own sharing (a `dc_current`
+    sweep), extended here to a `didv` sweep. `use_aaa` defaults to `True`
+    HERE (opposite of a single `didv`/`keldysh_didv` call's own default),
+    since an energy sweep is exactly the workload the AAA build cost is
+    meant to amortize -- a raw loop of `didv(energy=e, use_aaa=True)`
+    calls, by contrast, builds (and discards) an independent interpolant
+    at every single energy, since keldysh_didv's own sharing is scoped to
+    just its own Ip/Im pair within one call -- expensive (each build alone
+    can cost several to tens of seconds, see aaatk/selfenergy_aaa.py), and
+    exactly the trap this function exists to avoid. Pass
+    `use_aaa=False` explicitly to opt back out. Skipped if the caller
+    already passed `selfenergy_qtci` explicitly (an explicit opt-out, so
+    building a shared fit here would silently override the caller's own
+    choice) -- matching `iv_curve`'s own behavior, or if the shared fit
+    doesn't converge within budget (falls back to `use_aaa=False`
+    automatically). Only applies at `temp=0` (the default): a finite-`temp`
     sweep goes through `finite_T_didv` at every energy independently, each
     with its own internal thermal-quadrature sharing already, a separate
     concern from sharing across THIS function's energy array.
@@ -292,7 +296,7 @@ def didv_curve(ht, energies, **kwargs):
         method = "keldysh" if _both_leads_superconducting(ht) else "smatrix"
     if (method == "keldysh" and kwargs.get("temp", 0.) == 0.
             and "selfenergy_qtci" not in kwargs
-            and kwargs.get("use_aaa", False) and len(energies)):
+            and kwargs.get("use_aaa", True) and len(energies)):
         from ..keldyshtk.current import build_shared_selfenergy
         nmax_max = kwargs.get("nmax_max", 40)
         emax = max(abs(e) for e in energies)

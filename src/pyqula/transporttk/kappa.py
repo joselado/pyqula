@@ -202,12 +202,15 @@ def _shared_selfenergy_for_branch(ht,energies,temp,nmax_max=40,delta=None,dv=Non
     converge within budget) and for why an explicit `dv` must be honored
     here too (SelfenergyAAA performs no domain check and would silently
     extrapolate for a call whose voltage+-dv pushes past the fitted
-    window). Only builds anything if the caller explicitly opted into
-    selfenergy_method="aaa" via **kwargs (see dc_current's own docstring
-    for why that's not the default -- an unresolved accuracy gap);
-    returns None otherwise, same as the not-both-leads-superconducting
-    case."""
-    if kwargs.get("selfenergy_method") != "aaa": return None
+    window). Like iv_curve, "aaa" is the default HERE (a whole
+    coupling/energy/thermal-quadrature sweep is exactly the workload the
+    AAA build cost amortizes over -- this is the case that made the
+    un-shared, per-call-rebuilding path prohibitively slow in the first
+    place, see the docstring above) -- pass selfenergy_method="direct"
+    explicitly to opt back out; returns None (safe fallback to "direct")
+    if the fit doesn't converge within budget, same as the
+    not-both-leads-superconducting case."""
+    if kwargs.get("selfenergy_method", "aaa") != "aaa": return None
     from .thermaldidv import THERMAL_WINDOW
     from ..keldyshtk.current import build_shared_selfenergy
     emax = max(abs(e) for e in energies) if len(energies) else 0.
