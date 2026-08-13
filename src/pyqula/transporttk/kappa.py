@@ -200,9 +200,9 @@ def _shared_selfenergy_for_branch(ht,energies,temp,nmax_max=40,delta=None,dv=Non
     See build_shared_selfenergy's own docstring for the full None-return
     contract (not both leads superconducting, or the AAA fit didn't
     converge within budget) and for why an explicit `dv` must be honored
-    here too (SelfenergyAAA performs no domain check and would silently
-    extrapolate for a call whose voltage+-dv pushes past the fitted
-    window). Like iv_curve, "aaa" is the default HERE (a whole
+    here too (SelfenergyAAA enforces no domain, only warns once if a call
+    pushes past the fitted window and silently extrapolates there). Like
+    iv_curve, "aaa" is the default HERE (a whole
     coupling/energy/thermal-quadrature sweep is exactly the workload the
     AAA build cost amortizes over -- this is the case that made the
     un-shared, per-call-rebuilding path prohibitively slow in the first

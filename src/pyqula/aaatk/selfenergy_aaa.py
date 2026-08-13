@@ -65,6 +65,8 @@
 # `mmax` first whenever a fit saturates its cap. This was a real, measured
 # multi-minute-plus hang (from bug (1) above compounding with unbounded
 # ncand doubling) before both the SVD fix and this escalation split.
+import warnings
+
 import numpy as np
 from numba import jit
 
@@ -330,7 +332,30 @@ class SelfenergyAAA:
         self.mmax = mmax
         self.validation_error = maxerr
         self.converged = converged
+        self._domain_warned = False  # __call__/call_batch warn at most once
         self._pack_entries()
+
+    def _check_domain(self, emin_e, emax_e):
+        """Warn (once per instance) if [emin_e,emax_e] pokes outside the
+        fitted window [self.emin,self.emax]. This interpolant performs no
+        domain enforcement -- __call__/call_batch will happily return a
+        barycentric-formula value for an out-of-window energy, which is
+        extrapolation, not interpolation, and carries no accuracy guarantee
+        at all (unlike the in-window error `validation_error` actually
+        bounds). A caller hitting this should widen the window the
+        interpolant was built with (e.g. build_selfenergy_aaa's `erange`,
+        build_shared_selfenergy's `vmax`/`dv`), not treat the returned
+        value as trustworthy."""
+        if emin_e >= self.emin and emax_e <= self.emax: return
+        if self._domain_warned: return
+        self._domain_warned = True
+        warnings.warn(
+            "SelfenergyAAA: evaluated outside its fitted window "
+            f"[{self.emin:.6g},{self.emax:.6g}] (energy reached "
+            f"[{emin_e:.6g},{emax_e:.6g}]); the interpolant performs no "
+            "domain check and is silently extrapolating there -- treat the "
+            "result as untrustworthy. This warning is shown once per "
+            "interpolant.", stacklevel=3)
 
     def _pack_entries(self):
         """Precompute a padded (nentries, maxlen) array layout of every
@@ -362,6 +387,8 @@ class SelfenergyAAA:
 
     def __call__(self, e):
         """Return the interpolated self-energy matrix at energy e."""
+        er = e.real if isinstance(e, complex) else e
+        self._check_domain(er, er)
         return _eval_matrix_jit(complex(e), self._zj_pad, self._wf_pad,
                                  self._w_pad, self._ii, self._jj, self.dim)
 
@@ -371,6 +398,9 @@ class SelfenergyAAA:
         compiled call -- see _eval_matrix_batch_jit for why this beats
         calling __call__ once per energy in a Python loop."""
         es = np.asarray(es, dtype=np.complex128)
+        if es.size:
+            er = es.real
+            self._check_domain(er.min(), er.max())
         return _eval_matrix_batch_jit(es, self._zj_pad, self._wf_pad,
                                        self._w_pad, self._ii, self._jj, self.dim)
 

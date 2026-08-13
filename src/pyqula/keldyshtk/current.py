@@ -874,8 +874,9 @@ def build_shared_selfenergy(ht, vmax, nmax_max=40, delta=None, dv=None, **kwargs
     `dv`, if the caller knows it will pass an explicit dv through to
     keldysh_didv (rather than keldysh_didv's own default dv formula), must
     be given here too: the window must cover every call's voltage+-dv, not
-    just its voltage, or SelfenergyAAA -- which performs no domain check --
-    would silently extrapolate for any call whose dv pushes it past vmax.
+    just its voltage, or SelfenergyAAA -- which enforces no domain, only
+    warns once -- would silently extrapolate for any call whose dv pushes
+    it past vmax.
     With dv=None (the common case) this assumes keldysh_didv's own default,
     max(voltage*1e-2,1e-3), evaluated at the worst case (vmax itself),
     which safely covers every smaller voltage in the sweep too.

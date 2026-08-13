@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import pytest
 
@@ -107,3 +109,30 @@ def test_selfenergy_aaa_bounded_effort_on_a_hard_target():
     interp = SelfenergyAAA(get_se, 1, -1., 1., 1e-3, tolerance=1e-10,
                             ncand_max=600, mmax_max=80, maxrounds=5)
     assert interp.ncand <= 600 and interp.mmax <= 80
+
+
+def test_out_of_window_call_warns_once_and_in_window_is_silent():
+    """SelfenergyAAA enforces no domain -- __call__/call_batch will happily
+    extrapolate past [emin,emax] -- but must warn (once per instance, not
+    once per call) when that happens, and stay silent for in-window calls
+    (including a plain in-window sweep via call_batch), so the warning is a
+    real signal rather than noise on every ordinary use."""
+    def get_se(e):
+        return np.array([[1.0/(e-(0.5-1e-3j))]], dtype=np.complex128)
+    interp = SelfenergyAAA(get_se, 1, -1., 1., 1e-3, tolerance=1e-6)
+    assert interp.converged
+
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        interp(0.3)  # in-window scalar call
+        interp.call_batch(np.linspace(-0.9, 0.9, 5))  # in-window batch call
+        assert len(rec) == 0
+
+    with warnings.catch_warnings(record=True) as rec:
+        warnings.simplefilter("always")
+        interp(1.5)  # past emax
+        interp(1.6)  # a second out-of-window call
+        interp.call_batch(np.array([0.0, -1.5]))  # batch straddling emin
+        domain_warnings = [w for w in rec if issubclass(w.category, UserWarning)
+                            and "fitted window" in str(w.message)]
+        assert len(domain_warnings) == 1  # warned once, not once per call
