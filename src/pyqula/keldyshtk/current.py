@@ -814,6 +814,41 @@ def build_selfenergy_qtci(ht, voltage, nmax_max, delta=None, margin=4,
     return out
 
 
+def _leads_share_selfenergy(ht, delta, erange):
+    """Cheap empirical check (a handful of true solves, not a full AAA
+    build) for whether lead 0 and lead 1 have the IDENTICAL self-energy
+    as a function of energy -- so build_selfenergy_aaa can build ONE
+    interpolant and reuse it for both instead of paying for two
+    independent builds (each hundreds to thousands of true solves).
+
+    Comparing the raw intra/inter/extra_delta attributes directly would
+    be unsafe: heterostructures.create_leads_and_central_list stores the
+    left lead's inter as dagger(h_left.inter) while the right lead's is
+    h_right.inter unchanged (see heterostructures.py) -- so even a
+    literally-identical physical lead built on both sides (e.g. two
+    separately-constructed but equal Hamiltonians passed to
+    heterostructures.build) has non-identical raw matrices whenever
+    `inter` isn't Hermitian (multi-orbital, SOC, or any directional
+    hopping). Only a numerical comparison of the actual self-energy
+    catches the symmetric case correctly without either false negatives
+    (physically-identical leads, differently-stored) or false positives.
+
+    Also correctly returns False for a LocalProbe without any special
+    case: LocalProbe.get_selfenergy's lead=0 (probe surface GF) and
+    lead=1 (bulk sample-site GF, a completely different Green's-function
+    calculation, `local_selfenergy`) are different physics by
+    construction and will not match numerically at any sampled energy."""
+    probes = (0.0, 0.37*erange, -0.61*erange)
+    for e in probes:
+        s0 = algebra.todense(ht.get_selfenergy(e, lead=0, delta=delta,
+                                                pristine=True, numba=True))
+        s1 = algebra.todense(ht.get_selfenergy(e, lead=1, delta=delta,
+                                                pristine=True, numba=True))
+        if s0.shape != s1.shape or not np.allclose(s0, s1, rtol=1e-10, atol=1e-12):
+            return False
+    return True
+
+
 def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
                           tolerance=1e-3, **kwargs):
     """Build one aaatk.selfenergy_aaa.SelfenergyAAA interpolant per lead (0
@@ -846,7 +881,17 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
     energy -- via SelfenergyAAA's own `get_selfenergy_batch` argument.
     This is a pure speedup of the *build* (same solves, same rounds, same
     resulting fit -- see SelfenergyAAA.__init__'s docstring), not a change
-    to the interpolant's accuracy or the number of true solves needed."""
+    to the interpolant's accuracy or the number of true solves needed.
+
+    If the two leads turn out to have the identical self-energy as a
+    function of energy (checked empirically, see _leads_share_selfenergy
+    -- a symmetric junction, e.g. the same physical lead on both sides of
+    heterostructures.build), only ONE interpolant is actually built and
+    `out[1] is out[0]` (the same object, not a copy) -- halving the build
+    cost for that common case. Never true for a LocalProbe (lead 0 is the
+    probe's own surface GF, lead 1 is the bulk sample-site GF it couples
+    to -- different physics by construction), so this never risks handing
+    a LocalProbe the wrong lead's self-energy."""
     ht = _prepare_bias_target(ht)
     _check_supported(ht)
     if delta is None: delta = ht.delta
@@ -854,8 +899,9 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
     hlist, proje, projh, dim = system
     erange = (nmax_max+1)*abs(voltage)
     from ..aaatk.selfenergy_aaa import SelfenergyAAA
+    shared = _leads_share_selfenergy(ht, delta, erange)
     out = {}
-    for lead in (0, 1):
+    for lead in ((0,) if shared else (0, 1)):
         def get_se(e, lead=lead): # default arg freezes the loop variable
             return ht.get_selfenergy(e, lead=lead, delta=delta,
                                      pristine=True, numba=True)
@@ -867,6 +913,7 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
         out[lead] = SelfenergyAAA(get_se, dim, -erange, erange, delta,
                                    tolerance=tolerance,
                                    get_selfenergy_batch=get_se_batch, **kwargs)
+    if shared: out[1] = out[0]
     return out
 
 

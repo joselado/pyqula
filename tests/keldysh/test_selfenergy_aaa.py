@@ -182,3 +182,33 @@ def test_batched_selfenergy_solve_gives_the_same_fit_as_the_scalar_loop():
     interp = build_selfenergy_aaa(HT, voltage, nmax_max, delta=HT.delta,
                                    tolerance=1e-4)
     assert interp[0].nsolved() == scalar.nsolved()
+
+
+def test_build_selfenergy_aaa_shares_one_fit_for_a_symmetric_junction():
+    """build_selfenergy_aaa must build only ONE SelfenergyAAA (halving the
+    build cost) and return it for both leads when they have the identical
+    self-energy -- the common case of the same physical lead on both
+    sides of heterostructures.build -- but must NEVER do this for an
+    asymmetric junction (different lead physics on each side) or a
+    LocalProbe (lead 0 is the probe's own surface GF, lead 1 is the bulk
+    sample-site GF it couples to -- always different physics, however
+    similar the raw matrices might look)."""
+    def sc_sc_junction(delta_sc_left, delta_sc_right, transparency=0.5, ht_delta=1e-3):
+        h1 = geometry.chain().get_hamiltonian(); h1.shift_fermi(1.); h1.add_swave(delta_sc_left)
+        h2 = geometry.chain().get_hamiltonian(); h2.shift_fermi(1.); h2.add_swave(delta_sc_right)
+        HT = heterostructures.build(h1, h2)
+        HT.set_coupling(transparency)
+        HT.delta = ht_delta
+        return HT
+
+    symmetric = sc_sc_junction(0.3, 0.3)
+    interp_sym = build_selfenergy_aaa(symmetric, 0.05, 4, tolerance=1e-2)
+    assert interp_sym[0] is interp_sym[1]
+
+    asymmetric = sc_sc_junction(0.3, 0.15)
+    interp_asym = build_selfenergy_aaa(asymmetric, 0.05, 4, tolerance=1e-2)
+    assert interp_asym[0] is not interp_asym[1]
+
+    lp = _superconducting_localprobe()
+    interp_lp = build_selfenergy_aaa(lp, 0.02, 4, tolerance=1e-2)
+    assert interp_lp[0] is not interp_lp[1]
