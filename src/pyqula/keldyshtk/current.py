@@ -891,7 +891,19 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
     cost for that common case. Never true for a LocalProbe (lead 0 is the
     probe's own surface GF, lead 1 is the bulk sample-site GF it couples
     to -- different physics by construction), so this never risks handing
-    a LocalProbe the wrong lead's self-energy."""
+    a LocalProbe the wrong lead's self-energy.
+
+    When both leads DO need independent builds, they run concurrently in
+    two threads rather than one after the other: each build's actual work
+    (the numba prange-parallel batched Sancho-Rubio solve above, and the
+    SVD inside aaa()'s LAPACK call) releases the GIL, so two builds
+    genuinely overlap instead of just interleaving Python bytecode -- the
+    two SelfenergyAAA objects are fully independent (their own local
+    `solved` cache, no shared mutable state), and the only shared object
+    they both read from, `ht`, is not mutated by get_selfenergy/
+    get_selfenergy_batch for a Heterostructure, and touches disjoint cache
+    keys (keyed on `lead`) for a LocalProbe's optional reuse_selfenergy
+    cache -- so this is safe with no locking needed."""
     ht = _prepare_bias_target(ht)
     _check_supported(ht)
     if delta is None: delta = ht.delta
@@ -900,8 +912,9 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
     erange = (nmax_max+1)*abs(voltage)
     from ..aaatk.selfenergy_aaa import SelfenergyAAA
     shared = _leads_share_selfenergy(ht, delta, erange)
-    out = {}
-    for lead in ((0,) if shared else (0, 1)):
+    leads = (0,) if shared else (0, 1)
+
+    def build_one(lead):
         def get_se(e, lead=lead): # default arg freezes the loop variable
             return ht.get_selfenergy(e, lead=lead, delta=delta,
                                      pristine=True, numba=True)
@@ -910,9 +923,16 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
             def get_se_batch(es, lead=lead): # default arg freezes the loop variable
                 return ht.get_selfenergy_batch(es, lead=lead, delta=delta,
                                                 pristine=True)
-        out[lead] = SelfenergyAAA(get_se, dim, -erange, erange, delta,
-                                   tolerance=tolerance,
-                                   get_selfenergy_batch=get_se_batch, **kwargs)
+        return SelfenergyAAA(get_se, dim, -erange, erange, delta,
+                              tolerance=tolerance,
+                              get_selfenergy_batch=get_se_batch, **kwargs)
+
+    if len(leads) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(leads)) as ex:
+            out = dict(zip(leads, ex.map(build_one, leads)))
+    else:
+        out = {leads[0]: build_one(leads[0])}
     if shared: out[1] = out[0]
     return out
 
