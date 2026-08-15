@@ -1,10 +1,30 @@
 import numpy as np
+import threading
 from .. import algebra
 from numba import jit, prange
 # sets numba.config.THREADING_LAYER = 'workqueue' (fork-safe) before any
 # parallel=True numba function in the package gets compiled/run -- must be
 # imported ahead of green_renormalization_jit_batch_core below
 from .. import parallel
+
+# numba's 'workqueue' threading layer -- which parallel.py selects for
+# fork-safety -- is NOT threadsafe: entering a parallel=True kernel from two
+# Python threads at once aborts the interpreter ("Fatal Python error:
+# Aborted" inside numba/np/ufunc/workqueue).
+#
+# That is reachable in practice: keldyshtk/current.py's build_selfenergy_aaa
+# builds the two leads' AAA interpolants in a ThreadPoolExecutor (4a086f5),
+# and both threads land in green_renormalization_jit_batch_core below. It is
+# a race, so it fires intermittently -- observed killing a `pytest
+# tests/keldysh` run partway through, with two [ThreadPoolExecu] threads in
+# the traceback both inside this kernel.
+#
+# Guard the kernel itself rather than that one call site: any future
+# multi-threaded caller is then safe by construction. The lock costs nothing
+# in the (usual) single-threaded case, and concurrent callers still overlap
+# their non-numba work -- the LAPACK/SVD parts of an AAA build release the
+# GIL and are unaffected by this lock.
+_batch_lock = threading.Lock()
 
 use_numba = False # default backend for green_renormalization
 
@@ -148,8 +168,9 @@ def green_renormalization_jit_batch(intra,inter,energies,delta=1e-4,**kwargs):
     # this path only changes speed, never the numerical result
     nite = max(int(100/np.abs(delta)),100000) # maximum number of iterations
     error = np.abs(delta)*1e-6
-    return green_renormalization_jit_batch_core(intra,inter,energies,delta,
-                                                 nite,error)
+    with _batch_lock: # workqueue is not threadsafe -- see _batch_lock above
+        return green_renormalization_jit_batch_core(intra,inter,energies,delta,
+                                                     nite,error)
 
 
 @jit(nopython=True,parallel=True,cache=True)
