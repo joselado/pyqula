@@ -151,14 +151,24 @@ tests are suspects to be rederived, not references to be preserved.**
 
 Smaller surface, but nothing at all checks them:
 
-- **`h.get_densitychi_RPA`** — 0 tests. (`h.get_plasmon_bands`, layered on top of the
-  same module, has one — so the module is partly exercised, but the charge-response
-  entry point itself is unchecked.)
-- **`operatortk/inplane_valley.py` `get_inplane_valley`, `sharpen.get_sharpen`** — 0
-  tests on the entry point; only `add_valley_exchange` is covered. Before touching:
-  read `0649957` (fixed a composite spin+valley Berry operator bug) and `53f58d4`
-  (documents why a sublattice-diagonal in-plane valley operator *cannot* work) — the
-  design constraints here are already understood and written down.
+- **`h.get_densitychi_RPA`** — genuinely 0 tests. **DONE** (`tests/chi/test_densitychi_rpa.py`):
+  confirmed first that `h.get_plasmon_bands` gives it no transitive coverage — instrumented
+  the call, and `plasmon_bands` invokes `densitychi_RPA` **zero** times; they are siblings in
+  one module, not layers. Tests use the analytic RPA structure
+  `chi_RPA = chi_0 (1 - V_q chi_0)^-1` as the oracle, and pin the docstring's derived
+  charge-channel coefficient `a_charge = U/2` via the first-order series
+  `chi_0 + chi_0 V chi_0` — including a guard that the same comparison with `a_charge = U`
+  is rejected, so the test cannot pass for the wrong kernel.
+- ~~**`operatortk/inplane_valley.py` `get_inplane_valley`, `sharpen.get_sharpen`**~~ —
+  **WRONG ENTRY IN THIS PLAN; they are well covered.** `tests/topology/test_inplane_valley.py`
+  has three tests, including a full Pauli-pseudospin-algebra check on the folded K,K' subspace.
+  Verified by instrumentation: `h.get_operator("valley_x"/"valley_y")` calls
+  `get_inplane_valley` with angle 0 and pi/2, and reaches `get_sharpen`.
+
+  This entry was produced by exactly the basename-grep mistake §0 of this document warns
+  about — searching for `get_inplane_valley` rather than resolving the public entry point
+  `h.get_operator("valley_x")`. §0's rule works; it just has to actually be applied. Left
+  struck through rather than deleted, as a standing example.
 
 ### A3. `qtcitk/gkintegrate.integrate_robust` — the shared primitive
 
