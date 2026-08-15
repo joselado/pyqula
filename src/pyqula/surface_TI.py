@@ -1,6 +1,9 @@
 from __future__ import print_function
+# Unreferenced anywhere in src/, tests/, or examples/ as of 2026-08-16 -- candidate
+# for removal in a future cleanup, alongside the modules 015b776 flagged.
 
 import numpy as np
+from . import algebra
 from . import geometry
 from .hamiltonians import sx,sy,sz
 from scipy.sparse import csc_matrix
@@ -37,8 +40,8 @@ def geometry2hamiltonian(g,mw=0.6,is_sparse=False):
     if dr.dot(dr)<tol: return ons # onsite
     elif (dr-dx).dot(dr-dx)<tol: return tx # onsite
     elif (dr-dy).dot(dr-dy)<tol: return ty # onsite
-    elif (dr+dx).dot(dr+dx)<tol: return tx.H # onsite
-    elif (dr+dy).dot(dr+dy)<tol: return ty.H # onsite
+    elif (dr+dx).dot(dr+dx)<tol: return algebra.dagger(tx) # onsite
+    elif (dr+dy).dot(dr+dy)<tol: return algebra.dagger(ty) # onsite
     else: return ons*0.
 
   h = g.get_hamiltonian(fun=f,spinful_generator=True) # generate 

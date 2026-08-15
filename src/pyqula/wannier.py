@@ -2,6 +2,7 @@
 from __future__ import print_function
 import numpy as np
 from . import hamiltonians
+from . import algebra
 from . import geometry
 from scipy.sparse import csc_matrix as csc
 from scipy.sparse import bmat
@@ -689,7 +690,7 @@ def rotate90(h):
   a2 = h.geometry.a2
   h.geometry.a1, h.geometry.a2 = np.array([a2[1],a2[0],0.]),  np.array([a1[1],a1[0],0.])  # geometry
   h.tx , h.ty = h.ty, h.tx
-  h.txy , h.tmy = h.txy, h.txmy.H
+  h.txy , h.tmy = h.txy, algebra.dagger(h.txmy)
   return h
 
 

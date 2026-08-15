@@ -297,7 +297,7 @@ def edge_dos(intra0,inter0,scale=4.,w=20,npol=300,ne=500,bulk=False,
   inter = csc_matrix(inter0)
   for i in range(w): h[i][i] = intra
   for i in range(w-1): 
-    h[i+1][i] = inter.H
+    h[i+1][i] = algebra.dagger(inter)
     h[i][i+1] = inter
   h = bmat(h) # sparse hamiltonian
   ds = np.zeros(ne)

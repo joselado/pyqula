@@ -1,6 +1,9 @@
 # library for creating different kinds of junctions
+# Unreferenced anywhere in src/, tests/, or examples/ as of 2026-08-16 -- candidate
+# for removal in a future cleanup, alongside the modules 015b776 flagged.
 
 import numpy as np
+from . import algebra
 from . import geometry  # library with different geometries 
 from . import hamiltonians  # hamiltonians library
 
@@ -97,23 +100,23 @@ def super_normal_super(g,f_sc,f_n,replicas = [1,1,1],phi=0.0,delta=0.1):
   # intercell contributions
   for i in range(replicas[0]-1): 
     intra[i][i+1] = h_left.inter # intercell of the left lead
-    intra[i+1][i] = h_left.inter.H # intercell of the left lead
+    intra[i+1][i] = algebra.dagger(h_left.inter) # intercell of the left lead
   init = replicas[0] # inital index
   for i in range(replicas[1]-1): 
     intra[init+i][init+i+1] = h_central.inter # intercell of the central lead
-    intra[init+i+1][init+i] = h_central.inter.H # intercell of the central lead
+    intra[init+i+1][init+i] = algebra.dagger(h_central.inter) # intercell of the central lead
   init = replicas[0]+replicas[1] # inital index
   for i in range(replicas[2]-1): 
     intra[init+i][init+i+1] = h_right.inter # intercell of the right lead
-    intra[init+i+1][init+i] = h_right.inter.H # intercell of the right lead
+    intra[init+i+1][init+i] = algebra.dagger(h_right.inter) # intercell of the right lead
 
   # coupling between SC and central part, take couapling of the central
   il = replicas[0]
   intra[il-1][il] = h_central.inter # intracell of the left lead
-  intra[il][il-1] = h_central.inter.H # intracell of the left lead
+  intra[il][il-1] = algebra.dagger(h_central.inter) # intracell of the left lead
   il = replicas[0]+replicas[1]
   intra[il-1][il] = h_central.inter # intracell of the left lead
-  intra[il][il-1] = h_central.inter.H # intracell of the left lead
+  intra[il][il-1] = algebra.dagger(h_central.inter) # intracell of the left lead
   # create matrix
   intra = bmat(intra).todense()
   hj.intra = intra # add to hamiltonian junction

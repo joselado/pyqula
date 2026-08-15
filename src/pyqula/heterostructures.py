@@ -244,7 +244,7 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
       hc[i][i] = ec
     for i in range(num_central-1): # interterm of the central blocks
       hc[i][i+1] = tc
-      hc[i+1][i] = tc.H
+      hc[i+1][i] = dagger(tc)
 
   # central part is a step of the right and left hamiltonians
   elif interpolation=="step": # with step interpolation
@@ -262,13 +262,13 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
     for i in range(num_central-1): # interterm of the central blocks
       if i<num_central/2:
         hc[i][i+1] = tl
-        hc[i+1][i] = tl.H
+        hc[i+1][i] = dagger(tl)
       elif i>num_central/2:
         hc[i][i+1] = tr
-        hc[i+1][i] = tr.H
+        hc[i+1][i] = dagger(tr)
       elif i==num_central/2:
         hc[i][i+1] = tc
-        hc[i+1][i] = tc.H
+        hc[i+1][i] = dagger(tc)
       else:
         raise
 
@@ -303,7 +303,7 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
   if block_diagonal:
     hc = hc   # this is a list !!!!!
     tcr = h_right.inter.copy()    # this is a matrix
-    tcl = h_left.inter.H.copy()   # this is a matrix
+    tcl = dagger(h_left.inter).copy()   # this is a matrix
     ht.block_diagonal = True
   # assign to the HTstructure
   ht.right_coupling = tcr

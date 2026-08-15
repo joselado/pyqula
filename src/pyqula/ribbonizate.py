@@ -1,5 +1,6 @@
 from __future__ import print_function
 import numpy as np
+from . import algebra
 
 #def bulk2ribbon(g, n=5):
 #  """ Transformas a 2D geometry into a ribbon"""
@@ -82,7 +83,7 @@ def hamiltonian_bulk2ribbon(h,n=10,sparse=False,check=True):
     inter[i][i] = csc(h.tx)
   for i in range(n-1): # one more or less
     intra[i][i+1] = csc(h.ty)
-    intra[i+1][i] = csc(h.ty.H)
+    intra[i+1][i] = csc(algebra.dagger(h.ty))
     inter[i+1][i] = csc(h.txmy)
     inter[i][i+1] = csc(h.txy)
   if sparse:

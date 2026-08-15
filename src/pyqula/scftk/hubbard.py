@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from .. import algebra
 from ..scftypes import scfclass
 from ..scftypes import get_fermi_energy
 from ..scftypes import get_occupied_states
@@ -143,7 +144,7 @@ def magnetic_mean_field(wf,U,collinear=False,totkp=1):
   """Return the mean field matrix"""
   (vdup,vddn,vxc,ndn,nup,xc) = get_udxc(wf,totkp=totkp) # density and XC
   if collinear: mf = ndn + nup
-  else: mf = ndn + nup - xc - xc.H
+  else: mf = ndn + nup - xc - algebra.dagger(xc)
   mf = selective_U_matrix(U,mf.todense()) # new intramatrix mean field
   edc = -np.sum(selective_U_vector(U,vdup*vddn)).real
   edc += np.sum(selective_U_vector(U,vxc*np.conjugate(vxc))).real
