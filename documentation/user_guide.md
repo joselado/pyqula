@@ -1345,6 +1345,49 @@ h.add_haldane(0.05) # Add Haldane coupling
 C = h.get_chern() # Chern number
 ```
 
+#### Tensor-cross-interpolation (qtci) integration
+
+By default the Brillouin-zone integral above is a plain sum over a uniform
+`nk` x `nk` mesh, so its cost grows as `nk^2` and the accuracy is set by how
+finely that mesh resolves the Berry curvature. When the curvature is sharply
+peaked -- near a gap closing, or a nearly-flat band -- the mesh has to be very
+fine before the answer settles.
+
+`integration="qtci"` instead evaluates the integral by *quantics tensor cross
+interpolation*: the integrand is treated as a function on a binary-refined
+grid and learned adaptively, sampling only where the function actually varies,
+with Gauss-Kronrod quadrature on the resulting representation. The number of
+evaluations then grows roughly logarithmically rather than quadratically in the
+effective resolution.
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian()
+h.add_haldane(0.05)
+C = h.get_chern(integration="qtci",nk=20) # tensor-cross-interpolated BZ integral
+```
+
+The same backend can compute the density matrix in a mean-field calculation,
+replacing the k-mesh sum there:
+
+```python
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian()
+hscf,e = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro",
+        nk=8,maxerror=1e-4,return_total_energy=True,integration="qtci")
+```
+
+This is backed by `qutecipy`, a pure-Python port of
+`TensorCrossInterpolation.jl` vendored into pyqula at
+`src/pyqula/qutecipytk/` (MIT, no extra install needed). Both entry points are
+checked against their plain counterparts -- the qtci Chern number against the
+analytic value on trivial and topological Haldane models, and the qtci density
+matrix against the full dense one -- in `tests/topology/test_haldane_chern.py`
+and `tests/scf/test_densitydensity_qtci.py`. Runnable versions are in
+`examples/2d/chern_qtci/main.py` and `examples/2d/mean_field_qtci/main.py`.
+Note the density-matrix path currently supports 2D Hamiltonians only.
+
 
 ### Z2 invariant
 
@@ -2402,6 +2445,12 @@ Return Chern number of the Hamiltonian.
 
 Optional arguments:
 - nk=20: number of kpoints
+- integration="grid": how the Brillouin-zone integral is evaluated. "grid"
+  (default) sums the Berry curvature over a uniform nk x nk mesh; "qtci"
+  integrates it by quantics tensor cross interpolation plus Gauss-Kronrod
+  quadrature, sampling adaptively instead of uniformly -- useful when the
+  curvature is sharply peaked. See "Tensor-cross-interpolation (qtci)
+  integration"
 
 ### h.get_quantum_geometric_tensor()
 Return the (multiband/multiorbital) quantum geometric tensor at a single

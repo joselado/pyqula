@@ -348,7 +348,7 @@ def crossinterpolate1(
     normalizeerror: bool = True,
 ) -> tuple[TensorCI1, list[int], list[float]]:
     """Cross interpolate f using the TCI1 algorithm. No caching takes place
-    by default; wrap f in qutecipy.tensortrain.cachedfunction.CachedFunction
+    by default; wrap f in pyqula.qutecipytk.tensortrain.cachedfunction.CachedFunction
     first if it's expensive to evaluate (see crossinterpolate2's docstring)."""
     if firstpivot is None:
         firstpivot = [0] * len(localdims)

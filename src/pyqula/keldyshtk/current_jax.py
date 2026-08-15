@@ -1,3 +1,19 @@
+# STATUS (2026-08-15): NOT REACHABLE FROM ANY PUBLIC ENTRY POINT. Nothing in
+# src/ imports this module -- `keldysh_didv_jax` below has zero callers, and
+# the only importer anywhere is its own tests/keldysh/test_current_jax.py.
+# Unlike the modules 015b776 flagged (alloy.py, effective.py, ...), this is
+# NOT dead-because-broken: it is complete and tested, it simply was never
+# wired up. So the choice is to expose it or to drop it, not to fix it.
+#
+# To expose it, the natural seam is a `use_jax` route in
+# transporttk/didv.py's didv() / keldyshtk.current.keldysh_didv, alongside
+# the existing selfenergy_method/quadrature switches -- it computes the same
+# quantity (zero-temperature dI/dV of an SC-SC junction), so it would be an
+# alternative backend, not a new formalism. Whoever does that should first
+# benchmark it against the (already heavily optimized) default path; the jax
+# route's advantage is exact gradients rather than raw speed, and the default
+# path has had several rounds of batching work since this was written.
+#
 # JAX-differentiable counterpart of keldyshtk/current.py's Floquet-Keldysh
 # DC current, for the workload that motivated it: zero-temperature dI/dV
 # of a junction whose leads (or, for a LocalProbe, probe+sample) are both
