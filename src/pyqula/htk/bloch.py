@@ -25,13 +25,22 @@ def bloch_matrix_generator(ms,ds,dim=1,use_jax=False):
     ds = ds[:,0:dim] # crop to the dimension
     ds = np.ascontiguousarray(ds) # for memory efficiency
     ms = np.ascontiguousarray(ms) # for memory efficiency
+    # k must be coerced to float64 explicitly, exactly as ds is above: the
+    # jitted kernel is compiled for a float64 k, so an all-integer k (e.g.
+    # the natural way to write the Gamma point, h.get_hk_gen()([0,0,0]), or
+    # any np.array of ints) otherwise reaches numba as int64 and fails with
+    # an opaque TypingError instead of just working. A k that is already
+    # float is unaffected -- np.array(..., dtype=float64) on float input is
+    # a plain copy, which this was doing anyway.
     if use_jax:
         def f(k,**kwargs):
-            return evaluate_bloch_matrix(ms,ds,jnp.array(k)[0:dim]) # call 
+            return evaluate_bloch_matrix(ms,ds,
+                    jnp.asarray(k,dtype=jnp.float64)[0:dim]) # call
         return f
     else:
         def f(k,**kwargs):
-            return evaluate_bloch_matrix_jit(ms,ds,np.array(k)[0:dim]) # call 
+            return evaluate_bloch_matrix_jit(ms,ds,
+                    np.array(k,dtype=np.float64)[0:dim]) # call
         return f
 
 
