@@ -254,19 +254,42 @@ def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
     curvature over the BZ with qutecipy, instead of summing it over a
     k-point mesh (see mesh_chern). qutecipy approximates the integrand as
     a low-rank tensor train (tensor cross interpolation) and folds a
-    Gauss-Kronrod quadrature rule into it, so the sampling adaptively
-    concentrates where the Berry curvature is largest (e.g. near a small
-    gap) rather than needing a uniformly dense mesh.
+    Gauss-Kronrod quadrature rule into it.
 
-    nk sets the resolution of that underlying quadrature mesh (mirroring
-    the nk k-point-mesh density used elsewhere in this module). Because the
-    Gauss-Kronrod/TCI quadrature converges spectrally (each extra order
-    roughly doubles the number of accurate digits, much like each extra
-    quantics bit doubles a grid's resolution), matching the accuracy of an
-    nk-point mesh only takes a Gauss-Kronrod order growing logarithmically
-    with nk, not linearly: GKorder=4*bits+1 with bits=ceil(log2(nk)). If dk
-    is not given explicitly it also sets the Wilson-loop plaquette size
-    dk=1/(2*nk)."""
+    ACCURACY -- READ BEFORE CHOOSING THIS OVER mesh_chern. This path is
+    accurate for a SMOOTH Berry curvature and unreliable for a sharply
+    peaked one, which is the opposite of what an "adaptive" method might be
+    expected to give. Measured on a spinful Haldane model (exact C=2),
+    error in the returned Chern number:
+
+        smooth   (t2=0.3):  nk=10 4.8e-5   nk=20 5.1e-5   nk=40 9.1e-6
+        trivial  (C=0):     nk=10 4.8e-7   nk=20 3.1e-8   nk=40 8.4e-9
+        sharp    (t2=0.05): nk=10 6.5e-3   nk=20 1.5e-2   nk=40 6.6e-2
+
+    In the sharp/small-gap case the error GROWS with nk, and raising
+    `tolerance` does not help (flat from 1e-4 to 1e-8); mode="Green",
+    which has no plaquette at all, degrades the same way, so this is a
+    property of the tensor-cross-interpolation quadrature and not of the
+    dk below. The likely mechanism is that refining the Gauss-Kronrod grid
+    shrinks the fraction of nodes near the curvature peak, so the
+    cross-interpolation pivot search can miss it while its rank tolerance
+    is still satisfied on the smooth bulk.
+
+    Prefer mesh_chern (integration="grid", the default) whenever the gap is
+    small: it is not merely more accurate there but EXACTLY quantized, since
+    the Fukui-Hatsugai-Suzuki construction counts vortices in link variables
+    rather than quadraturing a field -- measured error ~1e-15 at every nk.
+    Use this path for smooth curvature, where it reaches 1e-5..1e-9 from far
+    fewer evaluations than a dense mesh.
+
+    nk sets the resolution of the underlying quadrature (mirroring the nk
+    k-point-mesh density used elsewhere in this module), via a
+    Gauss-Kronrod order growing logarithmically with it:
+    GKorder=4*bits+1 with bits=ceil(log2(nk)). If dk is not given
+    explicitly it also sets the Wilson-loop plaquette size dk=1/(2*nk).
+
+    See tests/topology/test_chern_qtci_accuracy.py, which pins the smooth
+    case and records the sharp-case limitation."""
     from .qtcitk.gkintegrate import gkorder_from_nk, integrate_robust
     if dk<0: dk = 1./float(2*nk) # automatic dk, tied to the quadrature resolution
     GKorder = gkorder_from_nk(nk)
