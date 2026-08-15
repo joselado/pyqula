@@ -31,14 +31,26 @@ def _berry_curvature_bands(dhdx, dhdy, waves, es, operator, delta):
     np.fill_diagonal(denom,1.0) # avoid division by zero, masked out below
     contribution = np.imag(prod/denom)
     np.fill_diagonal(contribution,0.0) # ii==jj excluded
-    # Overall MINUS sign: the Kubo Berry curvature is
-    #   Omega_n = -2 Im sum_{m!=n} <n|dHx|m><m|dHy|n> / (En-Em)^2,
-    # and `contribution` above is +Im[<n|dhdx|m><m|dhdy|n>]/(...). The
-    # factor 2, and the 2*pi per derivative that multicell.derivative omits
-    # (see current.py:derivative), are together supplied by the 8*pi^2 the
-    # topology.py callers apply -- only the sign belongs here. Without it
-    # the BZ integral came out as -2*pi*Chern, i.e. every Chern number and
-    # operator-resolved Berry curvature had the wrong sign.
+    # Overall MINUS sign. `contribution` above is
+    # +Im[<n|dhdx|m><m|dhdy|n>]/(En-Em)^2; the factor 2 of the Kubo formula,
+    # and the 2*pi per derivative that multicell.derivative omits (see
+    # current.py:derivative), are together supplied by the 8*pi^2 that the
+    # topology.py callers apply -- only the sign belongs here. Without it the
+    # BZ integral came out with the opposite sign to every other Berry
+    # quantity in the package.
+    #
+    # SIGN CONVENTION -- do not "correct" this to the textbook Kubo form.
+    # What this sign buys is agreement with pyqula's OWN convention, not with
+    # Xiao/Chang/Niu (RMP 82, 1959 (2010)). topology.berry_curvature returns
+    # -Omega in the RMP convention (see its SIGN CONVENTION docstring: the
+    # link-variable product is exp(-i*closed integral of A), so its argument
+    # is minus the Berry phase), and every Chern number in the package
+    # inherits that global sign. With the sign as written here,
+    # operator_berry tracks berry_curvature pointwise (verified: ratio 1.00
+    # across k on a gapped Haldane model) and their BZ integrals agree, which
+    # is what makes topology.spin_chern and bandstructure.berry_bands
+    # consistent with h.get_chern(). Flipping it to match the RMP formula
+    # would put this one function out of step with the rest of pyqula.
     return -np.sum(contribution,axis=1) # sum over jj, one value per band
 
 

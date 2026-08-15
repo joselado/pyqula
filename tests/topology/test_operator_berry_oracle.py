@@ -20,6 +20,17 @@ The oracle here is the analytically known Chern number of the Haldane model,
 cross-checked against topology.chern's independent Fukui-Hatsugai-Suzuki
 Wilson-loop implementation. Assert on BOTH sign and magnitude: bug (2) was
 invisible to any magnitude-only check.
+
+SIGN CONVENTION. The signs asserted below are pyqula's, not Xiao/Chang/Niu's
+(RMP 82, 1959 (2010)). topology.berry_curvature returns -Omega in the RMP
+convention and every Chern number in the package inherits that global sign --
+see its SIGN CONVENTION docstring. So "C = +1 for t2 = +0.1" here means +1 as
+pyqula reports it; the point of these tests is that operator_berry agrees with
+its siblings (h.get_chern, topology.spin_chern, bandstructure.berry_bands),
+which is what was broken. If someone ever flips the package to the RMP
+convention, these expected values flip with it -- they are not independent of
+that choice, and should not be used to argue operator_berry's sign in
+isolation.
 """
 import numpy as np
 import pytest
