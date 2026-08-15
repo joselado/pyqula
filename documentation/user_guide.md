@@ -1773,7 +1773,7 @@ vs = np.linspace(0.02,1.5,40)*0.1 # bias voltages
 Is = HT.get_iv_curve(vs) # MAR/AC-Josephson dc current
 ```
 
-The number of Floquet sidebands is increased adaptively (as in the paper) until $I_{dc}$ converges; see `examples/transport/floquet_keldysh_mar/main.py` for a runnable script and `tests/keldysh/` for correctness tests (a normal-normal junction must reduce exactly to a directly biased, non-Floquet Landauer calculation, and a normal-superconductor junction's zero-bias slope must match the existing equilibrium Andreev conductance from `didv`). Only 1D leads directly coupled through a single "weak link" bond (`heterostructures.build(h1,h2)` with no explicit `central=` Hamiltonian) are supported; `get_dc_current` raises `NotImplementedError` for a heterostructure with an explicit central region, since testing found a confirmed, unresolved systematic error there whenever that region is not structurally identical to a lead.
+The number of Floquet sidebands is increased adaptively (as in the paper) until $I_{dc}$ converges; see `examples/transport/floquet_keldysh_mar/main.py` for a runnable script and `tests/keldysh/` for correctness tests (a normal-normal junction must reduce exactly to a directly biased, non-Floquet Landauer calculation, and a normal-superconductor junction's zero-bias slope must match the existing equilibrium Andreev conductance from `didv`). Only 1D leads are supported. An explicit central region (`heterostructures.build(h1,h2,central=[hc])`, e.g. a quantum dot detuned from the leads) works too, solved through the general dense Floquet inversion rather than the fast two-block chain decomposition -- correspondingly slower, since the whole (block x sideband) matrix is inverted at every quasienergy. Note where the bias is assumed to drop: the AC-carrying bond is the junction's rightmost one, so the central region sits at the **left** lead's electrostatic potential. That is a physical model choice, not a gauge choice -- a comparison against a static-bias reference has to shift the central region along with the left lead, and a central Hamiltonian must be a valid BdG (particle-hole symmetric) one, so detune it with `hc.shift_fermi(eps)` rather than by adding `eps` to the diagonal of `hc.intra`.
 
 `transporttk.localprobe.LocalProbe` models a single STM-like tip weakly coupled to one site of an infinite/bulk sample (used e.g. for `get_kappa`, a decay-constant/transparency-scaling diagnostic -- see `examples/transport/decay_constant/main.py`). The same routing applies there: `LocalProbe.didv`/`get_kappa` use the ordinary scattering-matrix formula by default, but switch to the Floquet-Keldysh MAR current when the probe lead (`lp.lead`) is itself superconducting *and* the sample is superconducting too, since a normal-metal probe no longer applies and the same "no normal lead to reflect against" problem as above appears. The probe's unit cell and the sample's local (single-site) Hamiltonian play the role of the two leads.
 
@@ -1829,8 +1829,24 @@ smears the bias voltage, an n-dependent displacement of the whole sideband ladde
 `documentation/keldysh_sideband_decimation_plan.md`'s "direct finite-T Keldysh evaluation" entry
 for the validation and the measured ~100x-plus speedup.
 
+The outer quasienergy integral itself is evaluated with a batched adaptive quadrature
+(`keldyshtk.quadrature.adaptive_quad_batch`): the same 21-point Gauss-Kronrod rule and embedded
+QUADPACK error estimator `scipy.integrate.quad` uses, at the same tolerance, but with the
+refinement loop restructured so that every panel awaiting evaluation in a round is evaluated in a
+single batched, `numba`-parallel chain solve rather than one scalar Python callback per node. It
+visits essentially the same nodes as `scipy.integrate.quad` did (measured over a whole
+`get_dc_current` call: 630 vs 588, 1197 vs 1197, 3906 vs 3906 on three superconducting cases, and
+84 vs 210 on a normal junction) while collapsing those hundreds-to-thousands of scalar dispatches
+into 4-54 batched ones. Together with a companion fix to the self-energy cache's per-energy Python
+bookkeeping (which profiling exposed as the next bottleneck once the quadrature stopped dominating),
+that is worth 5.0x-11.8x in wall clock across those four cases, with the returned current unchanged
+to 1e-16 relative on three of them and 1.5e-6 on the fourth. This is the
+default; it needs no opt-in, and the previous `scipy.integrate.quad` implementation stays reachable
+as `quadrature="adaptive_scipy"` (the reference the batched rule is validated against, not a mode
+to choose on its own).
+
 `dc_current` also takes an opt-in `quadrature` argument for the outer quasienergy integral:
-`"adaptive"` (the default, unchanged) calls `scipy.integrate.quad` as before; `"fixed"` instead
+`"adaptive"` is the batched adaptive rule just described (the default); `"fixed"` instead
 evaluates a deterministic, fixed-node composite Gauss-Legendre rule whose node/weight set is a
 pure function of `voltage` alone (`quad_panel_width`/`quad_min_panels`/`quad_order` control it),
 known in full before any integrand evaluation and solved with a batched, `numba`-parallel chain
@@ -2656,8 +2672,10 @@ Returns a `Heterostructure`, so `landauer`, `didv`, `get_dos`, `get_kappa`, etc.
 Compute the time-averaged (DC) current through a two-terminal junction at a
 given bias, using the Floquet-Keldysh formalism (see "Multiple Andreev
 reflection and AC-Josephson current"). Works for any combination of
-normal/superconducting leads built with `heterostructures.build(h1,h2)`
-(no explicit `central=` Hamiltonian; raises `NotImplementedError` otherwise).
+normal/superconducting leads built with `heterostructures.build(h1,h2)`,
+with or without an explicit `central=` Hamiltonian (the latter is solved
+by a general dense Floquet inversion, and assumes the bias drops across
+the junction's rightmost bond).
 
 Arguments:
 

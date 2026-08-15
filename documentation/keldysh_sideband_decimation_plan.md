@@ -847,3 +847,164 @@ dominate the current) and was outside this task's scope.
 **Suite status after all three items**: `tests/keldysh tests/transport/test_kappa_jax.py
 --import-mode=importlib -q` reconfirmed green (all passing, no failures) on the final combined repo
 state.
+
+## Update: the default `quadrature="adaptive"` path is now batched (same rule, same nodes, 3.5-6.8x)
+
+Item 2c above batched the chain solve over quasienergy nodes, but only for `quadrature="fixed"`,
+because that was the only mode whose node set is known before any integrand evaluation. The
+default `"adaptive"` path kept calling `scipy.integrate.quad` with a scalar Python callback, so it
+could use neither the batching nor the `prange` parallelism `_assemble_chain_batch_jit`/
+`_rgf_chain_batch_jit` already implement. That framing -- "adaptive nodes are discovered one at a
+time, so they cannot be batched" -- turns out to be a property of `scipy.integrate.quad`'s API, not
+of adaptive quadrature: a globally adaptive composite rule discovers nodes one *round* at a time,
+and every panel pending in a round can be evaluated together.
+
+`keldyshtk/quadrature.py` (new) implements that: `adaptive_quad_batch`, the same 21-point
+Gauss-Kronrod rule with the same embedded DQK21 error estimator QUADPACK uses (the rescaled
+`resasc*min(1,200*|K-G|/resasc)^1.5` form, kept verbatim rather than simplified to `|K-G|`, which
+for a smooth panel is pessimistic enough to force needless subdivision), at the same tolerances
+`dc_current` was already asking `quad` for (`epsrel=1e-3`, `epsabs=1.49e-8`, `limit=50`). Each
+round bisects the shortest prefix of worst-error panels that leaves the untouched remainder under
+half the target, and evaluates all resulting children in one `current_integrand_batch` call. The
+hardcoded GK21 tables are self-checked at import against `numpy.polynomial.legendre.leggauss(10)`
+and against exact integration of every monomial each rule is exact for, so a mistyped constant
+fails loudly instead of silently degrading the quadrature.
+
+`scipy.integrate.quad_vec` was checked first and does not solve this: it is vector-valued in the
+integrand's *output*, still evaluating one x at a time.
+
+**Node economy (the property that decides whether this is a win).** The reason `"fixed"` never
+became the default is that a location-blind grid pays for density an easy integrand does not need.
+A batched adaptive rule only helps if it does not reintroduce that. Measured, summed over a whole
+`dc_current` call's adaptive-nmax loop, batched vs scipy: 630 vs 588 (deep-subgap), 1197 vs 1197
+(hardest SC-SC), 3906 vs 3906 (worst-accuracy point), 84 vs 210 (normal-normal, where the batched
+rule's per-round selection happens to accept a panel scipy subdivided). Two of four are exactly
+equal; none is materially worse. The corresponding batched-call counts are 12, 18, 54 and 4 -- that
+collapse from hundreds-to-thousands of scalar Python->numba dispatches into a handful is the whole
+mechanism.
+
+**Accuracy.** Returned currents vs the scipy path: 2.5e-16, 0.0, 3.5e-16 relative on the three
+SC-SC cases (i.e. the two rules visited the same nodes) and 1.5e-6 on the normal-normal case.
+Checked through `keldysh_didv` too, where a per-branch quadrature error is amplified by
+`|Ip|/(Ip-Im)` (~12x on the deep-subgap case) -- that is asserted in the new tests rather than only
+measured, since `dc_current`-level agreement alone is not sufficient evidence for the
+finite-difference path.
+
+**Speed** (median of 5 uncontended runs each, `selfenergy_method="direct"`, numba warmed, same
+session for both arms):
+
+| case | scipy `quad` | batched adaptive | speedup |
+|---|---|---|---|
+| deep-subgap SC-SC (`delta_sc=0.3`, `T=0.5`, `V=0.031`, `nmax_max=40`) | 4.312s | 1.175s | 3.67x |
+| hardest SC-SC (`delta_sc=0.1`, `T=0.3`, `V=0.55`, `nmax_max=40`) | 8.501s | 1.768s | 4.81x |
+| worst-accuracy point (`delta_sc=0.1`, `T=0.3`, `V=0.15`, `nmax_max=40`) | 21.293s | 6.063s | 3.51x |
+| cheap normal-normal (`T=0.6`, `V=0.3`, `nmax_max=20`) | 0.752s | 0.111s | 6.80x |
+
+**Follow-on: the self-energy cache's per-energy Python bookkeeping.** With the quadrature no longer
+dominating, a fresh `cProfile` of the worst-accuracy case (7.700s total) showed the actual numerical
+work had become a minority of the call: `green_renormalization_jit_batch` (the batched Sancho-Rubio
+solve) was 1.27s, while `builtins.round` alone was **2.31s over 325500 calls** and per-element
+`algebra.todense` on already-dense matrices another ~1.2s (105685 calls, each a scipy `issparse`
+check behind an `abc.__instancecheck__` plus an `np.array`). Both live in `_batch_selfenergy`'s
+cache bookkeeping -- `round(e,10)` per energy to build the dict key, and `todense` per energy to
+store what `get_selfenergy_batch` already returned as one dense `(n,dim,dim)` array. The cache
+itself earns its keep (~68% hit rate across the adaptive-nmax loop), so it was kept and its
+bookkeeping vectorized instead: one `np.round(es,10).tolist()` for the whole array (plain Python
+floats, hashing identically to the `np.float64` keys they replace) and indexing straight into the
+batched result. No change to what is cached, when, or to any returned value.
+
+Combined effect on the same four cases (`scipy quad` -> batched quadrature -> also with this fix):
+
+| case | scipy `quad` | batched | + cache fix | total |
+|---|---|---|---|---|
+| deep-subgap SC-SC | 4.312s | 1.175s | 0.623s | 6.92x |
+| hardest SC-SC | 8.501s | 1.768s | 0.964s | 8.82x |
+| worst-accuracy point | 21.293s | 6.063s | 4.237s | 5.03x |
+| cheap normal-normal | 0.752s | 0.111s | 0.064s | 11.75x |
+
+Returned currents after both changes are unchanged from the pre-batching values to every digit
+printed (4.42594686e-04, 2.50505143e-01, 1.99548644e-02, 4.62108618e-01).
+
+Unlike `"fixed"`, this wins on every case shape benchmarked, including the normal-normal case that
+was `"fixed"`'s structural weakness -- which is why it *replaces* the default rather than shipping
+as another opt-in mode. The previous implementation stays reachable as
+`quadrature="adaptive_scipy"`, as the reference the new rule is validated against (the repo has
+twice had a Keldysh primitive validate in isolation and then be wrong in the pipeline, so keeping
+the old path callable is worth one extra enum value). `"fixed"` is unchanged. The
+`parallel.pcall`-worker caveat from item 2c applies unchanged: inside a worker, numba is clamped to
+one thread, so only the dispatch-count reduction survives there, not the thread scaling.
+
+One behavioural change worth noting: `scipy.integrate.quad` raised an `IntegrationWarning` when it
+hit `limit=50` without converging. `adaptive_quad_batch` returns silently and `dc_current` issues
+its own warning instead, so the signal is preserved rather than dropped.
+
+Tests: `tests/keldysh/test_adaptive_quad_batch.py` (rule self-consistency, agreement and node
+economy against `scipy.integrate.quad` on five analytic integrands spanning the shapes the
+quasienergy integrand has, the batch-contract/round-count property, the panel-limit path, and
+`dc_current`/`keldysh_didv` agreement against `"adaptive_scipy"` on SC-SC, normal and
+finite-temperature cases).
+
+## Update: the central-region restriction is lifted -- the reported "2-8% systematic error" was the test case, not the solver
+
+`_check_supported` had rejected any heterostructure with an explicit central region since commit
+0f0c9bc, which reported a "confirmed, reproducible 2-8% systematic error, growing at low
+transparency" for a central region not structurally identical to a lead, against a static-bias
+Landauer reference, after ruling out `nmax` under-convergence, hlist ordering, a sideband-index
+sign error, Hermiticity/positivity violations, and left/right self-energy inconsistency
+(`I_L = -I_R` held to 4e-5). The root cause was not found and the case was rejected rather than
+returning a wrong number.
+
+Rebuilt the general N-block dense path from the paper's Appendix A (arXiv:1301.4408 -- e-print
+source pulled and read directly; the formalism explicitly covers a central system `S`, split by the
+gauge transformation into `S_L`/`S_R` with the AC phase on the single internal `S_L`-`S_R` bond,
+and the current trace `Re Tr{[G^r Σ_L^< + G^< Σ_L^a] τ_z}` reduces to the left-contact block
+because `Σ_L` vanishes elsewhere, so measuring at a different bond than the AC bond is not an
+issue). Gated on the validated two-block case first: the reconstruction reproduces it to 4.2e-4 /
+8.0e-4 at transparency 0.3 / 1.0, consistent with that case's own established <0.1%.
+
+**The 2-8% does not reproduce.** With a physically valid BdG central site -- detuned by `eps*tauz`,
+or equivalently by pyqula's own `shift_fermi` (checked to give bit-comparable currents) -- the
+Floquet result agrees with the reference to 6.3e-4 - 1.6e-3 across transparency 0.3/0.6/1.0 and
+`eps` 0.0/0.5, with the reference shifted the way the implementation's own gauge grouping requires
+(central region with the left lead, since the AC bond is the rightmost one). The residual is an
+O(`HT.delta`) regularization artifact, not a systematic error: at transparency 0.1 it is 9.38e-2,
+9.46e-3, 9.47e-4 for `HT.delta` = 1e-3, 1e-4, 1e-5 -- linear in the broadening, while the reference
+itself is converged to 8 digits over the same sweep. It is also converged in `nmax` (identical to
+8 digits from nmax=8 to nmax=30) and in both sides' quadrature tolerance (unchanged from
+`epsrel=1e-4` to 1e-8), which is why tightening those knobs -- what the original session tried --
+could never have made it go away.
+
+**What does reproduce the reported signature** is detuning the central site as
+`hc.intra + eps*identity` instead of `eps*tauz`: 3.6% at transparency 1.0, 9.6% at 0.6, 31% at 0.3,
+98% at 0.1 -- "a few percent, growing at low transparency". That Hamiltonian is not particle-hole
+symmetric, so it is not a BdG Hamiltonian at all, and the BTK/scattering-matrix formula behind the
+reference does not apply to it. This is a plausible reconstruction of what was measured, not proof
+of what that session ran (its script was not committed) -- but it is the only construction found
+that reproduces both the magnitude and the transparency trend, while every physically valid one
+agrees.
+
+**Shipped**: `_check_supported` no longer rejects a central region; `_prepare_system` restores
+`_dense_hlist` for the single-dense-central-site representation (with the coupling placement
+matching `enlarge_hlist`'s `nc>0` branch, i.e. the convention the validated scattering-matrix path
+uses); and `_dense_floquet_integrand` solves three-or-more-block
+junctions by assembling `floquet.floquet_hamiltonian` and inverting it whole, reusing
+`_batch_selfenergy` for the self-energies and `_integrand_trace_sum_jit` for the trace. The fast
+two-block RGF chain path is untouched and still handles every junction without an explicit central
+region (and every LocalProbe); the dense path costs O((nb*ns*dim)^3) per quasienergy, which is why
+it is not used for the two-block case. `dc_current` on a central-region junction gives identical
+results through `"adaptive"`, `"adaptive_scipy"` and a standalone dense reference (4.62511392e-01
+on all three). Tests: `tests/keldysh/test_normal_junction_gauge_invariance.py` replaces the
+"must raise NotImplementedError" test with agreement checks for the dense single-site and
+block-diagonal multi-site representations, the broadening-convergence assertion that pins the
+residual as an O(delta) artifact, and a check that the two valid detuning conventions agree.
+
+**A second, real bug found on the way in.** The pre-0f0c9bc `_dense_hlist` stored the RIGHT bond
+daggered the opposite way to `enlarge_hlist` (`hlist[2][1] = right_coupling` instead of
+`dagger(right_coupling)`). Every case in this investigation -- and every existing test -- is blind
+to it, because a single-orbital chain's lead coupling is real and diagonal, so the two conventions
+build the identical matrix. Discriminated with a two-site-unit-cell chain, whose coupling is
+genuinely non-Hermitian (`dim=8`): the shipped (`enlarge_hlist`) convention agrees with the
+static-bias reference to 2.2e-3, the old one is off by **97.7%** (1.32e-2 against a reference of
+5.77e-1). So the restored path fixes a latent wrong-answer bug for multi-orbital/spin-orbit leads
+that the original central-region code would have had. Regression test:
+`test_central_region_with_non_hermitian_lead_coupling`.

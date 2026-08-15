@@ -13,23 +13,40 @@ from ..transporttk.smatrix import enlarge_hlist
 # imported ahead of _assemble_chain_batch_jit/_rgf_chain_batch_jit/
 # _integrand_trace_sum_batch_jit below (see greentk/rg.py, same pattern).
 from .. import parallel
+from .floquet import floquet_hamiltonian
+from .quadrature import adaptive_quad_batch
 
 # Floquet-Keldysh DC current between two (possibly superconducting) leads,
 # following San-Jose, Cayao, Prada, Aguado, New J. Phys. 15, 075019 (2013)
 # (arXiv:1301.4408), Appendix A. See also src/pyqula/keldysh.py.
 #
-# Only heterostructures with NO explicit central region (heterostructures.
-# build(h1,h2), the two leads directly weak-linked via set_coupling) are
-# supported. Testing found a confirmed, unresolved systematic error (a few
-# percent, growing at low transparency) for junctions with an explicit
-# central Hamiltonian (a single dense central site or several block-diagonal
-# central sites) whenever that region is not structurally identical to a
-# lead; _check_supported rejects that case until it's root-caused.
+# Junctions with an explicit central region (a single dense central site or
+# several block-diagonal ones) are supported, via the general dense Floquet
+# inversion in _dense_floquet_integrand. That case was rejected outright for
+# a while, after testing reported a "confirmed, reproducible 2-8% systematic
+# error, growing at low transparency" against a static-bias Landauer
+# reference whenever the central region was not structurally identical to a
+# lead. It does not reproduce: rebuilt from the paper's Appendix A and
+# re-measured against the same reference, a junction with a detuned central
+# site agrees to within an O(ht.delta) artifact that converges away linearly
+# with the broadening (9.4e-2 -> 9.5e-3 -> 9.5e-4 relative as ht.delta goes
+# 1e-3 -> 1e-4 -> 1e-5, at transparency 0.1, converged in nmax and in both
+# sides' quadrature). The reported signature is reproduced -- exactly, and
+# only -- by detuning the central site as `hc.intra + eps*identity` instead
+# of `eps*tauz`: that is not particle-hole symmetric, so it is not a BdG
+# Hamiltonian and the BTK/scattering-matrix reference formula it was being
+# compared against does not apply to it (3.6% at transparency 1.0, 9.6% at
+# 0.6, 31% at 0.3, 98% at 0.1 -- the "few percent growing at low
+# transparency" shape). Detuning it correctly, with tauz or with pyqula's
+# own Hamiltonian.shift_fermi, agrees. See tests/keldysh/
+# test_normal_junction_gauge_invariance.py.
 #
-# Rather than assembling the dense (block x sideband)-space Floquet
-# Hamiltonian (see floquet.py:floquet_hamiltonian, still used by
-# tests/keldysh/test_floquet_hamiltonian_assembly.py and kept as the
-# reference construction) and inverting it whole (O((2*ns)^3)), this module
+# For the common two-block case (no explicit central region), rather than
+# assembling the dense (block x sideband)-space Floquet
+# Hamiltonian (see floquet.py:floquet_hamiltonian, which the central-region
+# path above does use, and which tests/keldysh/
+# test_floquet_hamiltonian_assembly.py checks directly) and inverting it
+# whole (O((2*ns)^3)), this module
 # exploits its structure directly: with no explicit central region there is
 # exactly one spatial bond (the AC-carrying weak link), so block 0's
 # sideband n only couples to block 1's sidebands n+1 and n-1 (never to
@@ -56,7 +73,15 @@ def _fermi_scalar(e, temperature=0.):
         if e < 0.: return 1.0
         if e > 0.: return 0.0
         return 0.5
-    return 1.0/(1.0+np.exp(e/temperature))
+    x = e/temperature
+    # Saturate rather than letting np.exp overflow to inf: the answer is the
+    # same (1/(1+inf) is already 0.0) but a temperature far below every
+    # energy scale in the problem -- a legitimate thing to ask for, e.g. to
+    # check that the finite-temperature path reduces to the T=0 one -- would
+    # otherwise spray RuntimeWarnings.
+    if x > 700.: return 0.0
+    if x < -700.: return 1.0
+    return 1.0/(1.0+np.exp(x))
 
 
 def lesser_from_retarded(sigma_r, energy, temperature=0.):
@@ -79,16 +104,6 @@ def _check_supported(ht):
         raise NotImplementedError(
             "keldysh.dc_current needs a Nambu (BdG) heterostructure; "
             "call h.turn_nambu() on both leads first (even with zero pairing)")
-    if _is_localprobe(ht):
-        return  # a LocalProbe has no explicit central region by construction
-    if not (ht.block_diagonal and len(ht.central_intra) == 0):
-        raise NotImplementedError(
-            "keldysh.dc_current only supports heterostructures with no "
-            "explicit central region (heterostructures.build(h1,h2), i.e. "
-            "the two leads directly weak-linked via set_coupling); a "
-            "confirmed, unresolved systematic error was found during "
-            "testing for junctions with an explicit central Hamiltonian, so "
-            "that case is rejected until it is root-caused")
 
 
 def _prepare_system_localprobe(lp):
@@ -116,14 +131,50 @@ def _prepare_system_localprobe(lp):
     return hlist, proje, projh, dim
 
 
+def _dense_hlist(ht):
+    """`enlarge_hlist`'s block chain for the one case it cannot build: a
+    heterostructure carrying a single explicit central Hamiltonian, which
+    pyqula always represents with a DENSE `central_intra` matrix rather than
+    a block list (`create_leads_and_central` forces `block_diagonal=False`
+    for exactly one central site). Block ordering and the placement of each
+    coupling (which side stores the dagger) mirror `enlarge_hlist`'s own
+    `nc>0` branch exactly -- that is the convention the validated
+    scattering-matrix path uses, and `floquet.floquet_hamiltonian` reads the
+    lower-triangular entry `hlist[i+1][i]` of each bond.
+
+    The version of this function that existed before the central-region
+    restriction landed stored the RIGHT bond the other way round
+    (`hlist[2][1] = right_coupling` rather than its dagger). That is
+    invisible for a single-orbital lead, whose coupling is real and
+    diagonal, hence Hermitian -- which is why no test caught it -- but on a
+    lead with a non-Hermitian coupling (a two-site unit cell, or spin-orbit
+    coupling) it builds a different Hamiltonian: measured at 97.7% wrong
+    against the static-bias reference on a two-orbital chain where this
+    convention agrees to 2.2e-3. See tests/keldysh/
+    test_normal_junction_gauge_invariance.py::
+    test_central_region_with_non_hermitian_lead_coupling."""
+    return [
+        [ht.left_intra, dagger(ht.left_coupling)*ht.scale_lc, None],
+        [ht.left_coupling*ht.scale_lc, ht.central_intra,
+         ht.right_coupling*ht.scale_rc],
+        [None, dagger(ht.right_coupling)*ht.scale_rc, ht.right_intra],
+    ]
+
+
 def _prepare_system(ht):
-    """Build the 2-block chain (one extra unit cell of each lead, directly
-    weak-linked) and the electron/hole projectors for the right lead, whose
-    unit cell is the target of the AC-carrying bond."""
+    """Build the block chain (one extra unit cell of each lead, plus any
+    explicit central sites in between) and the electron/hole projectors for
+    the right lead, whose unit cell is the target of the AC-carrying bond.
+
+    Two blocks (no explicit central region) is the common case and the one
+    the fast RGF chain decomposition below applies to; three or more blocks
+    (an explicit central region) are solved by the general dense Floquet
+    inversion instead, see `_dense_floquet_integrand`."""
     _check_supported(ht)
     if _is_localprobe(ht):
         return _prepare_system_localprobe(ht)
-    hlist = enlarge_hlist(ht).central_intra
+    hlist = (enlarge_hlist(ht).central_intra if ht.block_diagonal
+             else _dense_hlist(ht))
     proje = algebra.todense(ht.Hr.get_operator("electron").get_matrix())
     projh = algebra.todense(ht.Hr.get_operator("hole").get_matrix())
     dim = algebra.todense(hlist[0][0]).shape[0]
@@ -141,19 +192,25 @@ def _prefetch_selfenergies_batch(ht, es, lead, delta, cache, keys):
     `2*nmax+1` sidebands only differ in energy for the same fixed lead, so
     they are embarrassingly parallel and are run over a numba `prange`
     loop across threads. `keys[i]` is the caller's precomputed `(lead,
-    round(es[i],10))` cache key for `es[i]` -- passed in rather than
+    rounded energy)` cache key for `es[i]` -- passed in rather than
     recomputed here since the caller (_batch_selfenergy) needs the same
-    keys again afterward to gather results, and round() was measured to
-    be a meaningful fraction (~20%) of a dc_current call's total time
-    (214200 calls in one profiled case) when computed twice per energy."""
+    keys again afterward to gather results.
+
+    `get_selfenergy_batch` already returns one dense (n,dim,dim) array, so
+    the misses are stored by indexing straight into it rather than passing
+    each (dim,dim) slice through `algebra.todense`: that per-element call
+    (a scipy `issparse` check behind an `abc.__instancecheck__`, then
+    `np.array`) was profiled at ~1.2s of a 7.7s dc_current call over
+    ~105000 already-dense matrices -- pure dispatch, no work."""
     if not hasattr(ht, "get_selfenergy_batch"):
         return  # e.g. LocalProbe: fall back to per-energy solves in the caller
     miss = [i for i, k in enumerate(keys) if k not in cache]
     if not miss: return
-    me = np.array([es[i] for i in miss])
-    outs = ht.get_selfenergy_batch(me, lead=lead, delta=delta, pristine=True)
-    for i, out in zip(miss, outs):
-        cache[keys[i]] = algebra.todense(out)
+    me = es[miss]
+    outs = np.asarray(ht.get_selfenergy_batch(me, lead=lead, delta=delta,
+                                              pristine=True))
+    for j, i in enumerate(miss):
+        cache[keys[i]] = outs[j]
 
 
 def _batch_selfenergy(ht, es, lead, delta, cache, selfenergy_qtci=None):
@@ -184,12 +241,18 @@ def _batch_selfenergy(ht, es, lead, delta, cache, selfenergy_qtci=None):
         if hasattr(interp, "call_batch"):
             return interp.call_batch(es)
         return np.array([interp(e) for e in es], dtype=np.complex128)
-    keys = [(lead, round(e, 10)) for e in es]
+    # np.round over the whole array, not `round(e,10)` per energy: the
+    # scalar builtin has to go through numpy's __round__ on every element
+    # and was profiled at 2.3s of a 7.7s dc_current call (325500 calls) --
+    # a third of the whole call spent computing dict keys, more than twice
+    # what the Sancho-Rubio solves those keys guard actually cost. .tolist()
+    # gives plain Python floats, so the keys hash exactly as before.
+    keys = [(lead, e) for e in np.round(es, 10).tolist()]
     _prefetch_selfenergies_batch(ht, es, lead, delta, cache, keys)
     out = []
     for i, k in enumerate(keys):
         v = cache.get(k)
-        if v is None:
+        if v is None:  # only when the batched prefetch is unavailable
             v = algebra.todense(ht.get_selfenergy(es[i], lead=lead, delta=delta,
                                                     pristine=True, numba=True))
             cache[k] = v
@@ -342,7 +405,11 @@ def _rgf_chain_jit(Es, taus, SigLess):
 
 
 def _prepare_chain_consts(system):
-    """The per-`system` (not per-quasienergy/nmax) pieces of a Floquet
+    """`None` for a junction with an explicit central region (three or more
+    blocks), which the chain decomposition does not describe -- see
+    `_dense_floquet_integrand`, which is used instead there.
+
+    Otherwise, the per-`system` (not per-quasienergy/nmax) pieces of a Floquet
     chain -- the AC-bond hoppings `ve`/`vhd` and the two blocks' onsite
     Hamiltonians `hii0`/`hii1` -- factored out of `_floquet_green_
     functions` so they can be computed ONCE per `dc_current` call (like
@@ -353,6 +420,8 @@ def _prepare_chain_consts(system):
     overhead once the self-energy and chain-assembly costs it originally
     targeted were already batched away."""
     hlist, proje, projh, dim = system
+    if len(hlist) != 2:
+        return None
     v0 = algebra.todense(hlist[1][0])  # hopping <lead1 unit cell|H|lead0 unit cell>
     ve = (proje@v0).astype(np.complex128)  # electron-projected AC bond, sideband n -> n+1
     vh = projh@v0  # hole-projected AC bond, couples sideband n -> n-1
@@ -404,6 +473,11 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
     a standalone caller, or boundary.py's validate_against_truncation)."""
     if chain_consts is None:
         chain_consts = _prepare_chain_consts(system)
+    if chain_consts is None:  # explicit central region: no such chain exists
+        raise NotImplementedError(
+            "the Floquet chain decomposition only describes a two-block "
+            "junction; a junction with an explicit central region is solved "
+            "by _dense_floquet_integrand instead")
     ve, vhd, hii0, hii1, dim = chain_consts
     ns = 2*nmax+1
 
@@ -437,6 +511,82 @@ def _floquet_green_functions(ht, voltage, quasienergy, nmax, delta,
     return Gr00, Gless00, sigL_less, sigL_a, dim, ns
 
 
+def _dense_floquet_integrand(ht, voltage, quasienergies, nmax, tauz, delta,
+                              temperature, cache, system,
+                              selfenergy_qtci=None):
+    """Integrand of the same current trace as `current_integrand`, for a
+    junction WITH an explicit central region (three or more blocks), where
+    the two-chain decomposition the fast path relies on does not apply: with
+    more than one spatial bond, the static bonds keep two blocks at the SAME
+    sideband, so the (block,sideband) lattice no longer splits into 1D
+    chains of one-block sites (see the module docstring). This assembles the
+    full dense Floquet Hamiltonian (`floquet.floquet_hamiltonian`, the
+    repo's reference construction, tested in
+    tests/keldysh/test_floquet_hamiltonian_assembly.py) and inverts it whole
+    -- O((nb*ns*dim)^3) per quasienergy instead of the chain path's O(ns),
+    which is why the chain path is kept for the (much more common) two-block
+    case rather than routing everything through here.
+
+    The AC-carrying bond is `(nb-2,nb-1)`, the one adjacent to the RIGHT
+    lead. That is a physical statement, not a free gauge choice: it puts the
+    whole central region in the LEFT lead's gauge region (paper's `S_L`),
+    i.e. it assumes the bias drops entirely across the junction's rightmost
+    bond and the central region sits at the left lead's electrostatic
+    potential. A different potential profile is a different physical model
+    and would give a different (also correct-for-that-model) current -- so
+    when comparing against a static-bias Landauer reference, that reference
+    has to shift the central region along with the left lead.
+
+    Returns one integrand value per entry of `quasienergies`; self-energies
+    for every (node, sideband) are still obtained through `_batch_selfenergy`
+    in one call per lead, exactly as the chain path does."""
+    hlist, proje, projh, dim = system
+    nb = len(hlist)
+    ns = 2*nmax+1
+    ntot = nb*ns*dim
+    H = floquet_hamiltonian(hlist, (nb-2, nb-1), voltage, nmax, proje, projh)
+    quasienergies = np.asarray(quasienergies)
+    nq = quasienergies.shape[0]
+    offsets = (np.arange(ns)-nmax)*voltage
+    es2d = quasienergies[:, None] + offsets[None, :]
+    es_flat = es2d.reshape(-1)
+    sigR0 = _batch_selfenergy(ht, es_flat, 0, delta, cache,
+                              selfenergy_qtci=selfenergy_qtci).reshape(nq, ns, dim, dim)
+    sigR1 = _batch_selfenergy(ht, es_flat, 1, delta, cache,
+                              selfenergy_qtci=selfenergy_qtci).reshape(nq, ns, dim, dim)
+    iden = np.eye(ntot, dtype=np.complex128)
+    # Block 0 (left lead cell) occupies the first ns*dim rows/columns, one
+    # dim-sized diagonal block per sideband -- the only place Sigma_L is
+    # nonzero, so the current trace only ever needs those sub-blocks.
+    off0 = np.arange(ns)*dim
+    offR = ((nb-1)*ns + np.arange(ns))*dim
+    out = np.empty(nq, dtype=np.float64)
+    for iq in range(nq):
+        A = (quasienergies[iq]+1j*delta)*iden - H
+        SigLess = np.zeros((ntot, ntot), dtype=np.complex128)
+        sigL_less = np.empty((ns, dim, dim), dtype=np.complex128)
+        sigL_a = np.empty((ns, dim, dim), dtype=np.complex128)
+        for isb in range(ns):
+            e = es2d[iq, isb]
+            sl, sr = sigR0[iq, isb], sigR1[iq, isb]
+            a, b = off0[isb], offR[isb]
+            A[a:a+dim, a:a+dim] -= sl
+            A[b:b+dim, b:b+dim] -= sr
+            sl_less = lesser_from_retarded(sl, e, temperature=temperature)
+            sr_less = lesser_from_retarded(sr, e, temperature=temperature)
+            SigLess[a:a+dim, a:a+dim] += sl_less
+            SigLess[b:b+dim, b:b+dim] += sr_less
+            sigL_less[isb] = sl_less
+            sigL_a[isb] = dagger(sl)
+        Gr = np.linalg.inv(A)
+        Gless = Gr@SigLess@dagger(Gr)
+        Gr00 = np.array([Gr[a:a+dim, a:a+dim] for a in off0])
+        Gless00 = np.array([Gless[a:a+dim, a:a+dim] for a in off0])
+        out[iq] = _integrand_trace_sum_jit(Gr00, sigL_less, Gless00,
+                                            sigL_a, tauz).real
+    return out
+
+
 def current_integrand(ht, voltage, quasienergy, nmax, tauz,
                        delta=1e-6, temperature=0., cache=None, system=None,
                        selfenergy_qtci=None, chain_consts=None):
@@ -453,15 +603,19 @@ def current_integrand(ht, voltage, quasienergy, nmax, tauz,
         cache = {}
     if system is None:
         system = _prepare_system(ht)
-    Gr00, Gless00, sigL_less, sigL_a, dim, ns = _floquet_green_functions(
-        ht, voltage, quasienergy, nmax, delta, temperature, cache, system,
-        selfenergy_qtci=selfenergy_qtci, chain_consts=chain_consts)
     # _integrand_trace_sum_jit (numba) requires matching operand dtypes for
     # @; dc_current's internal call site already passes a complex128 tauz
     # (cast once there, not on every quasienergy evaluation), so this only
     # copies for a standalone caller passing a real-valued tauz.
     if tauz.dtype != np.complex128:
         tauz = tauz.astype(np.complex128)
+    if len(system[0]) != 2:  # explicit central region, see that function
+        return float(_dense_floquet_integrand(
+            ht, voltage, np.array([quasienergy]), nmax, tauz, delta,
+            temperature, cache, system, selfenergy_qtci=selfenergy_qtci)[0])
+    Gr00, Gless00, sigL_less, sigL_a, dim, ns = _floquet_green_functions(
+        ht, voltage, quasienergy, nmax, delta, temperature, cache, system,
+        selfenergy_qtci=selfenergy_qtci, chain_consts=chain_consts)
     return _integrand_trace_sum_jit(Gr00, sigL_less, Gless00, sigL_a, tauz).real
 
 
@@ -622,6 +776,11 @@ def _floquet_green_functions_batch(ht, voltage, quasienergies, nmax, delta,
     each array carrying a new leading `nq` axis."""
     if chain_consts is None:
         chain_consts = _prepare_chain_consts(system)
+    if chain_consts is None:  # explicit central region, see the unbatched sibling
+        raise NotImplementedError(
+            "the Floquet chain decomposition only describes a two-block "
+            "junction; a junction with an explicit central region is solved "
+            "by _dense_floquet_integrand instead")
     ve, vhd, hii0, hii1, dim = chain_consts
     ns = 2*nmax+1
     quasienergies = np.asarray(quasienergies)
@@ -722,6 +881,15 @@ def current_integrand_batch(ht, voltage, quasienergies, nmax, tauz,
     if tauz.dtype != np.complex128:
         tauz = tauz.astype(np.complex128)
     quasienergies = np.asarray(quasienergies)
+    if len(system[0]) != 2:
+        # Explicit central region: no chain decomposition, so no node-axis
+        # numba kernel to batch into either -- the dense solve is a plain
+        # loop over nodes (self-energies for all of them are still obtained
+        # in one batched call per lead). Chunking would only bound a memory
+        # peak the dense path never builds, so it is skipped.
+        return _dense_floquet_integrand(
+            ht, voltage, quasienergies, nmax, tauz, delta, temperature,
+            cache, system, selfenergy_qtci=selfenergy_qtci)
     nq = quasienergies.shape[0]
     out = np.empty(nq, dtype=np.float64)
     for start in range(0, nq, chunk_size):
@@ -1221,11 +1389,44 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
 
     `quadrature` picks how the outer quasienergy integral over
     `[0,|voltage|]` (the paper's Floquet-zone integral, evaluated once per
-    adaptive-nmax step by `current_integrand`) is carried out. `"adaptive"`
-    (default, unchanged behavior) uses `scipy.integrate.quad`'s adaptive
-    21-point-Gauss-Kronrod-with-subdivision rule (`limit=50, epsrel=1e-3`);
-    its node set can differ across nmax steps of the same call and is not
-    reproducible without re-running the exact same call.
+    adaptive-nmax step) is carried out. `"adaptive"` (default) uses
+    `keldyshtk.quadrature.adaptive_quad_batch`: the same 21-point
+    Gauss-Kronrod rule with the same embedded QUADPACK error estimator
+    `scipy.integrate.quad` uses, at the same tolerance (`limit=50,
+    epsrel=1e-3, epsabs=1.49e-8`), but with the refinement loop
+    restructured so that every panel awaiting evaluation in a round is
+    evaluated in ONE batched `current_integrand_batch` call instead of one
+    scalar Python callback per node. Its node set can differ across nmax
+    steps of the same call and is not reproducible without re-running the
+    exact same call (use `"fixed"` if you need determinism).
+
+    `"adaptive_scipy"` is the previous implementation -- a literal
+    `scipy.integrate.quad(current_integrand, ...)` with a scalar callback --
+    kept as the reference the batched rule is validated against
+    (tests/keldysh/test_adaptive_quad_batch.py), not as a mode to pick for
+    its own sake.
+
+    Batching the adaptive rule is a pure cost change: it visits essentially
+    the same nodes (measured node counts, batched vs scipy, summed over a
+    whole dc_current call's adaptive-nmax loop: 630 vs 588 on the
+    deep-subgap case, 1197 vs 1197 on the hardest SC-SC case, 3906 vs 3906
+    on the worst-accuracy case, and 84 vs 210 on a normal-normal junction
+    where the batched rule's per-round panel selection happens to accept
+    earlier) while collapsing those hundreds-to-thousands of scalar
+    dispatches into 4-54 batched ones. Returned currents matched the scipy
+    path to 0.0/2.5e-16/3.5e-16 relative on the three SC-SC cases and
+    1.5e-6 on the normal-normal one. Wall clock (median of 5 uncontended
+    runs each, `selfenergy_method="direct"`, numba warmed): 4.312s->1.175s
+    (3.67x) deep-subgap, 8.501s->1.768s (4.81x) hardest SC-SC,
+    21.293s->6.063s (3.51x) worst-accuracy, 0.752s->0.111s (6.80x)
+    normal-normal. Unlike `"fixed"` (below), this wins on every case shape
+    benchmarked, which is why it is the default rather than opt-in.
+
+    As with `"fixed"`, the `prange` parallelism inside the batched chain
+    solver only delivers multi-threaded scaling in a single-process call:
+    inside a `parallel.pcall` worker, `parallel.set_num_threads()` clamps
+    numba to one thread per worker, so the win there comes only from the
+    reduced dispatch count (still real -- that was the larger share).
 
     `"fixed"` instead uses a deterministic composite Gauss-Legendre rule
     (`_fixed_quasienergy_nodes`): equal-width panels of absolute width
@@ -1344,8 +1545,9 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     # functions is called once per quadrature point x adaptive-nmax step.
     chain_consts = _prepare_chain_consts(system)
 
-    if quadrature not in ("adaptive", "fixed"):
-        raise ValueError(f"quadrature must be 'adaptive' or 'fixed', got {quadrature!r}")
+    if quadrature not in ("adaptive", "fixed", "adaptive_scipy"):
+        raise ValueError("quadrature must be 'adaptive', 'fixed' or "
+                          f"'adaptive_scipy', got {quadrature!r}")
 
     def integral(nmax):
         if quadrature == "fixed":
@@ -1357,6 +1559,27 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
                 temperature=temperature, cache=cache, system=system,
                 selfenergy_qtci=selfenergy_qtci, chain_consts=chain_consts)
             return float(np.dot(weights, vals))
+        if quadrature == "adaptive":
+            fb = lambda es: current_integrand_batch(
+                ht, voltage, es, nmax, tauz, delta=delta,
+                temperature=temperature, cache=cache, system=system,
+                selfenergy_qtci=selfenergy_qtci, chain_consts=chain_consts)
+            # epsrel/epsabs/limit deliberately mirror the scipy.integrate.
+            # quad call below (epsabs=1.49e-8 is scipy's own default, kept
+            # so a near-zero current stops refining at the same absolute
+            # floor the previous implementation did).
+            val, _, info = adaptive_quad_batch(
+                fb, 0., abs(voltage), epsrel=1e-3, epsabs=1.49e-8, limit=50,
+                full_output=True)
+            if not info["converged"]:
+                # scipy.integrate.quad raised its own IntegrationWarning
+                # here; keep the signal rather than silently returning an
+                # under-refined integral.
+                warnings.warn(
+                    "keldysh.dc_current: the quasienergy quadrature hit its "
+                    f"{info['npanels']}-panel limit without reaching "
+                    f"epsrel=1e-3 at voltage={voltage}, nmax={nmax}")
+            return val
         f = lambda e: current_integrand(ht, voltage, e, nmax, tauz,
                                          delta=delta, temperature=temperature,
                                          cache=cache, system=system,

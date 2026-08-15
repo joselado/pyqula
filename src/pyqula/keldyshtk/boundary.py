@@ -253,6 +253,12 @@ def floquet_green_functions_boundary(ht, voltage, quasienergy, nmax0, delta, tem
     from .. import algebra
     from ..algebra import dagger
     hlist, proje, projh, dim = system
+    if len(hlist) != 2:
+        # Same two-chain-decomposition assumption as current.py's fast path;
+        # a junction with an explicit central region has no such chain (see
+        # current._dense_floquet_integrand) and is not handled here.
+        raise NotImplementedError(
+            "the absorbing-boundary path only supports a two-block chain")
     v0 = algebra.todense(hlist[1][0])
     ve = (proje@v0).astype(np.complex128)
     vh = projh@v0

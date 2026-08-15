@@ -330,6 +330,17 @@ def _build_static_system(ht, nmax):
     (JaxKeldyshCurrent does this before calling here)."""
     from .current import _prepare_system, _is_localprobe
     hlist, proje, projh, dim = _prepare_system(ht)
+    if len(hlist) != 2:
+        # This reformulation is built on the two-chain decomposition of the
+        # (block,sideband) lattice, which only holds for a junction with a
+        # single spatial bond. keldyshtk.current handles a junction with an
+        # explicit central region by inverting the full Floquet matrix
+        # instead (_dense_floquet_integrand); there is no jax mirror of that
+        # path, so refuse rather than silently solving the wrong chain.
+        raise NotImplementedError(
+            "JaxKeldyshCurrent only supports junctions with no explicit "
+            "central region (a two-block chain); use "
+            "Heterostructure.get_dc_current for this junction")
     v0 = algebra.todense(hlist[1][0])
     ve = proje @ v0
     vhd = algebra.dagger(projh @ v0)
