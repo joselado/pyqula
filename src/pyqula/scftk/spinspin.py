@@ -1080,7 +1080,17 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         return mf
 
     def f(mf):
-        h = h1.copy()
+        # Shallow copy, not h1.copy() (== deepcopy) -- see the same change in
+        # scftk/densitydensity.py's generic_densitydensity for the reasoning:
+        # set_hoppings below goes through multicell.set_dictionary, which
+        # rebinds h.intra/h.hopping to freshly copied matrices, so nothing
+        # deep-copied here survives. `data` gets its own dict; every other
+        # attribute (including is_sparse, which set_dictionary deliberately
+        # does not touch) is inherited exactly as before. Each iteration
+        # still yields a distinct Hamiltonian object.
+        from copy import copy as _shallowcopy
+        h = _shallowcopy(h1)
+        h.data = dict(h1.data)
         hop = update_hamiltonian(hop0, mf)
         if keep_sparse:
             # update_hamiltonian adds the (always dense, see get_mf_normal)

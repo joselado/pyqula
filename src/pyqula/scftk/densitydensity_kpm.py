@@ -15,7 +15,7 @@ import numpy as np
 import os
 from .. import filesystem as fs
 import time
-from copy import deepcopy
+from copy import copy, deepcopy
 
 from .. import inout
 from .. import algebra
@@ -73,8 +73,15 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
     fs.rmfile("STOP")
     hop0 = hamiltonian2dict(h1)
     def f(mf, h=h1):
-        mf0 = deepcopy(mf)
-        h = h1.copy()
+        # Shallow copies, not deepcopy -- see the same two changes in
+        # scftk/densitydensity.py's generic_densitydensity for the full
+        # reasoning: `mf` is never mutated here, and set_hoppings rebinds
+        # h.intra/h.hopping to fresh matrices on the next line, so nothing
+        # deep-copied would have survived. Each iteration still gets a
+        # distinct Hamiltonian object.
+        mf0 = dict(mf) if isinstance(mf,dict) else mf
+        h = copy(h1)
+        h.data = dict(h1.data)
         hop = update_hamiltonian(hop0, mf)
         set_hoppings(h, hop)
         if callback_h is not None: h = callback_h(h)

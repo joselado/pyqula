@@ -287,23 +287,51 @@ Python-level bookkeeping three times running.
 Both are documented, scoped, and deliberately parked waiting on a maintainer decision.
 A plan-writing moment is the right time to surface them rather than leave them parked.
 
-### C1. SCF loop redundancy — `scftk/scftypes.py` (Tier 3 of the perf plan)
+### C1. SCF loop redundancy — **DONE, and the premise was wrong** (`f7b4d82`, `<shallow-copy commit>`)
 
-The last un-started tier of the 4-tier performance plan (Tiers 1, 2, 4 all landed).
-What it would change:
+Two corrections, both worth keeping on record.
 
-- `iterate`/`update_hamiltonian` **deep-copy the whole Hamiltonian + geometry every SCF
-  iteration** and unconditionally rebuild the hopping list via
-  `multicell.collect_hopping`, even though only the mean-field hopping matrix changes.
-- `update_occupied_states` **regenerates the k-mesh twice per iteration**, though
-  `nkgrid` never changes across iterations.
+**1. Tier 3 pointed at dead code.** The perf plan describes `scftypes.py`'s
+`scfclass.iterate`/`update_hamiltonian`/`update_occupied_states`. None of it runs:
+`scfclass.iterate` has no live callers (`scftypes.solve()` opens with a bare `return`;
+`meanfield.broyden_solver` is referenced only from a commented-out line), and
+`update_occupied_states`/`update_expectation_values` have no callers outside that file.
+`scftk/hubbard.py` and `scftk/coulomb.py` instantiate `scfclass` but run their own loops.
+The redundancy Tier 3 describes is real, but it lives in the loops
+`get_mean_field_hamiltonian` actually runs: `scftk/densitydensity.py`,
+`scftk/spinspin.py` (VJinteraction has its own copy of the loop, it does not wrap
+generic_densitydensity), and `scftk/densitydensity_kpm.py`.
 
-This was held back because it touches iteration behavior more directly than the other
-tiers — a subtle change here alters SCF convergence paths, not just speed. It affects
-every mean-field calculation in the library, so it is the largest remaining
-single-target speedup. **Line numbers will have moved** since the survey (the
-`selfconsistency/` → `scftk/` merge in `bf7a721` came after) — re-locate before
-starting. Needs an explicit go/no-go.
+**2. The speedup does not exist.** Both redundancies were removed there — the
+per-iteration `deepcopy(mf)` and the per-iteration `h1.copy()` (`Hamiltonian.copy()` is
+`deepcopy(self)`, geometry included) — and both are **verified bit-identical** (exact
+equality of total energy and `intra` across spinful-Hubbard, V1-spinless and s-wave-BdG
+fixtures). But measured wall time:
+
+| system | before | after |
+|---|---|---|
+| 16×16 | 3.080s | 3.030s |
+| 64×64 | 0.323s | 0.349s |
+| 64×64, mix=0.05 (many iterations) | 2.585s | 2.468s |
+| 144×144, mix=0.05 | 10.744s | 10.688s |
+
+i.e. **~4.5% in the single most favourable regime and nothing otherwise.** The
+"11.7% of a profiled run" figure quoted in `f7b4d82` is a **cProfile artifact**:
+`deepcopy` makes ~7900 recursive calls and cProfile charges per-call overhead, so it
+inflates call-heavy functions badly. Wall time for that change was 0.225s → 0.214s,
+also noise.
+
+The "O(N²) of thrown-away memory traffic" scaling argument was **backwards**: the copy is
+O(N²) while the per-iteration diagonalization is O(N³), so the copy's share *shrinks* as
+systems grow — which the 144×144 row shows.
+
+The changes are kept as hygiene (don't deep-copy what the next line overwrites; the
+shallow copy is documented in place, including the one residual — a `callback_h` that
+mutates `h.geometry` would now leak across iterations), **not as an optimization**.
+
+**Generalizable lesson:** in this repo, do not quote cProfile percentages as speedups.
+Confirm with wall time before claiming a win, especially for call-heavy functions like
+`deepcopy` where profiling overhead dominates.
 
 ### C2. GPU porting — Tiers 2-4 of `documentation/gpu_porting_plan.md`
 
@@ -349,10 +377,13 @@ be closed out rather than pursued.
    `unrecognized arguments` argument error that also "exited 0" while running nothing at
    all. Either drop the pipe, or `set -o pipefail`, or use `--tb=short -q` and let pytest
    own the output. Any "the suite passes" claim made through a pipe is unverified.
-8. **Update CLAUDE.md's test-suite figures** — it documents "~7.5 min for 406 tests";
-   the suite now collects **667 tests** and takes correspondingly longer. Worth
-   refreshing since CLAUDE.md is what sets the next session's expectations about
-   whether a long-running suite is hung or just slow.
+   **DONE** (`b5d91d2`): warning added to CLAUDE.md's Tests section.
+8. **Update CLAUDE.md's test-suite figures** — it documented "~7.5 min for 406 tests".
+   **DONE** (`b5d91d2`): now records 687 collected tests, plus the per-directory times
+   that are actually known (`tests/scf` ~15 min, `tests/keldysh` ~12 min). A whole-suite
+   wall time is deliberately NOT quoted — every measurement available was taken on a
+   loaded machine, and an unreliable number is worse than none. Still to measure on an
+   idle machine.
 
 ---
 

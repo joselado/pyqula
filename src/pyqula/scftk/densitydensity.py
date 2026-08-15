@@ -7,7 +7,7 @@ import time
 import os
 from .. import filesystem as fs
 from .. import densitymatrix
-from copy import deepcopy
+from copy import copy, deepcopy
 from numba import jit
 from .. import utilities
 from ..multihopping import MultiHopping
@@ -352,7 +352,21 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
       # every matrix, and get_mf does not take `mf` at all. Deep-copying every
       # mean-field matrix once per SCF iteration was 11.7% of a profiled run.
       mf0 = dict(mf) if isinstance(mf,dict) else mf # preserve the guess
-      h = h1.copy()
+      # Shallow copy, not h1.copy() (== deepcopy): set_hoppings on the very
+      # next line goes through multicell.set_dictionary, which REBINDS
+      # h.intra and h.hopping to freshly .copy()d matrices -- so nothing
+      # deep-copied here would have survived anyway. Deep-copying the whole
+      # Hamiltonian *and its geometry* every iteration only to overwrite
+      # intra/hopping immediately is O(N^2) of thrown-away memory traffic.
+      # `data` gets its own dict so per-iteration caches are not shared.
+      # Each iteration still returns a DISTINCT Hamiltonian object, so
+      # nothing about aliasing changes (the non-plain solver branch below
+      # keeps two SCF objects alive at once, and reusing one buffer would
+      # have broken that). Residual: a callback_h that mutates h.geometry
+      # in place would now leak across iterations -- this loop only ever
+      # reads the geometry.
+      h = copy(h1)
+      h.data = dict(h1.data)
       hop = update_hamiltonian(hop0,mf) # add the mean field to the Hamiltonian
       set_hoppings(h,hop) # set the new hoppings in the Hamiltonian
       if callback_h is not None:
