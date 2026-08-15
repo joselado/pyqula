@@ -65,7 +65,17 @@ write_berry = get_berry_curvature_path
 
 
 def berry_phase(h,nk=20,kpath=None,write=True):
-    """ Calculates the Berry phase of a Hamiltonian"""
+    """ Calculates the Berry phase of a Hamiltonian
+
+    SIGN CONVENTION. Like berry_curvature below, this returns the argument
+    of the closed link-variable product directly, without the negation of
+    the standard discrete Berry phase gamma = -Im log prod_j <u_j|u_{j+1}>
+    (King-Smith & Vanderbilt, PRB 47, 1651(R) (1993)) -- so it is -gamma in
+    that convention. See berry_curvature's docstring for the derivation and
+    for why this is documented rather than changed. Quantized cases (a
+    Berry phase of 0 or pi, as used by nodes.py) are unaffected, since
+    -pi = pi modulo 2*pi.
+    """
     if h.dimensionality==0: raise
     elif h.dimensionality == 1:
       ks = np.linspace(0.,1.,nk,endpoint=False) # list of kpoints
@@ -99,7 +109,36 @@ def berry_phase(h,nk=20,kpath=None,write=True):
 
 
 def berry_curvature(h,k,dk=0.01,window=None,max_waves=None):
-  """ Calculates the Berry curvature of a 2d hamiltonian"""
+  """ Calculates the Berry curvature of a 2d hamiltonian
+
+  SIGN CONVENTION. This returns the argument of the closed link-variable
+  product divided by the loop area, without the negation carried by the
+  standard discrete Berry phase,
+
+      gamma = -Im log prod_j <u_j|u_{j+1}>
+
+  (King-Smith & Vanderbilt, PRB 47, 1651(R) (1993)). With
+  uij(a,b)[i,j] = <a_i|b_j> and the counter-clockwise corner order used
+  below, that product equals exp(-i * closed integral of A), so its
+  argument is minus the Berry phase. What is returned here is therefore
+  -Omega in the convention A = i<u|grad_k u>, Omega = curl A of Xiao, Chang
+  & Niu, RMP 82, 1959 (2010); every Chern number built on it (precise_chern,
+  mesh_chern, chern_qtci, berry_map, ...) inherits the same overall sign.
+
+  Being a global sign, it cancels from anything depending only on relative
+  signs or magnitudes: K/K' valley antisymmetry, |C|, Z2 parities, and any
+  comparison of two states computed the same way.
+
+  Documented rather than changed, because flipping it would silently invert
+  every Chern number and curvature map previously produced with pyqula. The
+  sibling project elkpy (github.com/joselado/elkpy), which computes the same
+  quantity from all-electron DFT wavefunctions, adopted the RMP convention
+  instead -- so its curvature and Chern signs are opposite to pyqula's. Its
+  docs/design.md section 22 derives the negation and records the three
+  independent checks that pinned it: an analytic massive-Dirac model, a real
+  h-BN calculation, and the Provost-Vallee spin-1/2 example (whose curvature
+  integrates to -2*pi, the spin-1/2 monopole charge).
+  """
   if h.dimensionality != 2: raise # only for 2d
   k = np.array([k[0],k[1]]) 
   dx = np.array([dk,0.])
