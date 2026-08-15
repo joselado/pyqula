@@ -39,6 +39,13 @@ python -m pytest tests            # run the whole suite
 python -m pytest tests/scf -v     # run one topic
 ```
 
+**Do not pipe pytest's output** (`... | tail`, `... | grep`). The shell reports the *pipe's* exit
+status, not pytest's, so a failed or even crashed run looks like success. This is not hypothetical:
+it masked a fatal interpreter abort (numba's non-threadsafe `workqueue` layer entered from two
+threads, fixed in `d759b32`) as exit code 0, and separately made an `unrecognized arguments` error —
+which ran no tests at all — also report exit code 0. If you must post-process the output, use
+`set -o pipefail` first, or redirect to a file and read that.
+
 `tests/<topic>/test_*.py` holds pytest tests that assert a physical/numerical invariant (e.g. that a
 self-consistent mean-field result doesn't depend on the random initial guess used to seed it, or that two
 independent code paths computing the same quantity agree to numerical tolerance). `pyproject.toml`'s
@@ -47,8 +54,11 @@ independent code paths computing the same quantity agree to numerical tolerance)
 empty `__init__.py`; with the default import mode pytest's package-root walk from `tests/` would otherwise
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
-tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, and the full suite currently takes
-several minutes (measured ~7.5 min for 406 tests) rather than under a minute.
+tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
+minutes, not under a minute. It currently collects **687 tests** (`pytest tests --collect-only -q`);
+the old "~7.5 min for 406 tests" figure predates the Keldysh, transport and AAA suites and is stale —
+`tests/scf` alone is ~15 min and `tests/keldysh` ~12 min. A fresh whole-suite wall time still needs
+measuring on an idle machine; treat any timing taken while other jobs are running as meaningless.
 
 `examples/` (organized by dimensionality: `0d/ 1d/ 2d/ 3d/`, plus `transport/`, `embedding/`, `wannier/`,
 `classicalspin/`, `latticegas/`) contains runnable `main.py` scripts that double as usage documentation —
