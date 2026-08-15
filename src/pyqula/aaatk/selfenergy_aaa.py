@@ -273,16 +273,24 @@ class SelfenergyAAA:
             SAME true solves the unbatched path made, not a change to what
             gets solved or how many rounds/candidates are needed, so it
             cannot change the resulting fit."""
-            missing = [e for e in es if round(e, 12) not in solved]
+            # One vectorized np.round over the whole array instead of a Python
+            # `round(e,12)` per energy, three times per call: `es` here is the
+            # candidate grid, which grows to ncand_max (20000) over up to
+            # `maxrounds` rounds, so the per-item version was a measurable
+            # share of build time. Same pattern (and same reason) as
+            # keldyshtk/current.py:_batch_selfenergy. Keys are bit-identical
+            # to the old per-item round(), so cache hits are unchanged.
+            keys = np.round(es, 12).tolist()
+            missing = [(k, e) for k, e in zip(keys, es) if k not in solved]
             if missing:
                 if get_selfenergy_batch is not None:
-                    mats = get_selfenergy_batch(np.asarray(missing))
-                    for e, m in zip(missing, mats):
-                        solved[round(e, 12)] = algebra.todense(m)
+                    mats = get_selfenergy_batch(np.asarray([e for _, e in missing]))
+                    for (k, _), m in zip(missing, mats):
+                        solved[k] = algebra.todense(m)
                 else:
-                    for e in missing:
-                        solved[round(e, 12)] = algebra.todense(get_selfenergy(e))
-            return np.array([solved[round(e, 12)] for e in es])
+                    for k, e in missing:
+                        solved[k] = algebra.todense(get_selfenergy(e))
+            return np.array([solved[k] for k in keys])
         self._solved = solved  # exposed for diagnostics/benchmarking
 
         rng = np.random.default_rng(0)  # deterministic validation draws
