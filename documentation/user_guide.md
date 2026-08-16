@@ -56,6 +56,7 @@ is a reference of the `Geometry`/`Hamiltonian` methods and their arguments.
 - [Surface spectral functions](#surface-spectral-functions)
 - [Twisted bilayer graphene structural relaxation](#twisted-bilayer-graphene-structural-relaxation)
 - [Topological insulators](#topological-insulators)
+- [Entanglement](#entanglement)
 - [Response functions](#response-functions)
 - [Quantum transport](#quantum-transport)
 - [Single defects in infinite systems](#single-defects-in-infinite-systems)
@@ -758,6 +759,70 @@ h.add_swave(0.2) # add s-wave superconductivity
 ```
 Note that due to the BdG nature of the Hamiltonian, the bandstructure shows both the electron and hole states
 
+## Superfluid weight and BKT temperature
+
+A finite pairing amplitude does not by itself make a superconductor: what
+carries the supercurrent is the *superfluid weight* (superfluid stiffness)
+
+$$
+D_s^{ab} = \frac{1}{V}\frac{\partial^2 \Omega}{\partial Q_a \partial Q_b}
+$$
+
+the rigidity of the grand potential against winding the phase of the order
+parameter, at frozen $|\Delta|$, with $\mathbf Q$ a Cartesian twist
+wavevector. pyqula evaluates the general multiband BdG expression of Liang
+*et al.*, PRB **95**, 024515 (2017) -- a Kubo current-current plus
+diamagnetic sum over the Bogoliubov spectrum -- as the primary result, and
+can split it into a *conventional* part built from band velocities and a
+*quantum-geometric* part built from interband current matrix elements. In
+the isolated-flat-band limit the latter reduces to the integral of the
+quantum metric (Peotta & Törmä, Nat. Commun. **6**, 8944 (2015)): a flat
+band has no velocity, so its entire stiffness is geometric, which is why a
+flat band can superconduct at all. The quantum-metric integral is *not*
+used as a definition -- the decomposition is offered on top of the Kubo
+result and is refused with a `ValueError`, rather than silently reported,
+when its assumptions (uniform on-site pairing, time-reversal symmetry, a
+resolvable normal-state gap) do not hold.
+
+```python
+from pyqula import geometry
+g = geometry.square_lattice() # geometry of the 2D model
+h = g.get_hamiltonian() # generate the Hamiltonian
+h.add_onsite(-0.6) # move away from half filling
+h.add_swave(0.3) # BdG Hamiltonian with an s-wave gap
+
+D = h.get_superfluid_weight(nk=20) # Cartesian (dim,dim) tensor
+out = h.get_superfluid_weight(nk=20,decompose=True)
+print(out["total"],out["conventional"],out["geometric"])
+print(h.get_bkt_temperature(nk=20)) # Nelson-Kosterlitz criterion
+```
+
+The twist is the physical Peierls substitution with the *full* bond vector
+$\mathbf R + \mathbf r_j - \mathbf r_i$, not just the lattice vector
+$\mathbf R$. This matters: with the lattice vector alone, $D_s$ comes out
+anisotropic on the honeycomb lattice (0.220 vs 0.173, forbidden by C3) and
+changes when the very same crystal is redescribed with a supercell, while
+the full bond vector gives an isotropic, supercell-invariant answer. The
+two agree only for cells holding a single orbital. `gauge="lattice"`
+selects the other convention, which is the one used in the Peotta/Törmä
+literature and by pyqula's own `h.get_quantum_metric()` -- the fixed-$|\Delta|$
+superfluid weight genuinely depends on the orbital embedding, see Huhtinen,
+Herzog-Arbeitman, Chew, Bernevig & Törmä, PRB **106**, 014518 (2022).
+
+In two dimensions `h.get_bkt_temperature()` solves the Nelson-Kosterlitz
+criterion $T_{\rm BKT} = (\pi/8) D_s(T_{\rm BKT})$ self-consistently by
+bisection, at frozen $|\Delta|$ (there is no $\Delta(T)$ feedback, so it is
+an upper estimate). Setting `mode="finite_difference"` differentiates the
+grand potential numerically instead: much slower, but assumption-free, and
+it is the oracle the analytic route is tested against in
+`tests/superfluid/`. One caveat worth knowing: at $T=0$ with a *gapless
+normal state* and zero or tiny pairing, the paramagnetic/diamagnetic
+cancellation is carried by a $-\partial f/\partial E$ that collapses to a
+delta function, which a finite k-mesh cannot resolve, so $D_s$ comes out at
+the normal state's Drude weight rather than zero; use a temperature the
+mesh resolves when checking that a marginal state has no stiffness. See
+`examples/2d/superfluid_weight/main.py` for a runnable version and
+`src/pyqula/sctk/superfluidweight.py` for the implementation.
 
 
 # Interactions at the mean-field level
@@ -1652,9 +1717,137 @@ kdos.surface(h) # surface spectral function
 The real-space Berry curvature/Chern marker of the two sections above is an example of a topological marker: a local, position-resolved quantity, computable from ground-state projectors alone, that reveals a bulk topological invariant without relying on translational symmetry or a clean Brillouin zone. This makes topological markers well suited to disordered systems, finite flakes and islands, or systems with spatially varying parameters (e.g. a Haldane mass that changes sign across a boundary, or a topological insulator with dilute vacancies), where the marker density directly visualizes where the invariant is carried. See `topology.real_space_chern` above for the code that computes it.
 
 
+# Entanglement
+
+## Entanglement entropy and entanglement spectrum
+
+For a Slater determinant -- any non-interacting or mean-field ground state
+-- the reduced density matrix of a spatial region $A$ is itself the
+exponential of a free-fermion operator, so it is completely fixed by the
+one-particle correlations inside $A$. Diagonalizing the restricted
+correlation matrix $C_{ij} = \langle c_i^\dagger c_j\rangle$ ($i,j \in A$)
+gives occupations $\zeta_n \in [0,1]$, from which
+
+$$
+S = -\sum_n \left[ \zeta_n \ln \zeta_n + (1-\zeta_n)\ln(1-\zeta_n)\right],
+\qquad
+\xi_n = \ln\frac{1-\zeta_n}{\zeta_n}
+$$
+
+are the entanglement entropy and the single-particle entanglement spectrum
+(Peschel, J. Phys. A **36**, L205 (2003); Peschel & Eisler, J. Phys. A
+**42**, 504003 (2009)). Only a matrix the size of the region is ever
+diagonalized, never the exponentially large reduced density matrix.
+
+The region is given as a list of site indices, a boolean mask, a callable
+on positions (the same convention as `sculpt`), or simply a fraction of the
+cells; spin, sublattice and Nambu components are treated as extra orbitals
+of a site, so a region is always specified in terms of *sites*. A periodic
+Hamiltonian is first folded into a ring of `nsuper` unit cells, so region
+$A$ has **two** entanglement boundaries rather than one -- worth keeping in
+mind when comparing against single-cut results in the literature.
+
+The entanglement spectrum is where this becomes a topological probe. For a
+2d Hamiltonian the momentum parallel to the cut remains a good quantum
+number, and $\xi_n(k_\parallel)$ is the Li-Haldane entanglement spectrum
+(Li & Haldane, PRL **101**, 010504 (2008)): for a Chern insulator its
+mid-gap branches flow across $\xi=0$ and count $2|C|$ ($|C|$ chiral modes
+per boundary, two boundaries), mirroring the model's edge spectrum, while a
+trivial insulator's entanglement spectrum stays gapped. This is entirely a
+bulk ground-state calculation -- no ribbon and no open boundary is ever
+constructed.
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # create a honeycomb lattice
+h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian
+h.add_haldane(0.1) # Chern insulator, C = 1
+print(h.get_chern(nk=20)) # 1.0
+
+# Li-Haldane entanglement spectrum xi_n(k_par) across the BZ
+(ks,xis) = h.get_entanglement_spectrum(nsuper=10,nk=101)
+
+# entanglement entropy, per parallel unit cell, averaged over the BZ
+print(h.get_entanglement_entropy(nsuper=10,nk=20))
+```
+
+Nambu/BdG Hamiltonians are handled with the full anomalous correlation
+matrix, whose basis doubling is divided out. Occupation is a hard $T=0$
+cut, and a level sitting exactly at the Fermi energy raises rather than
+silently returning the entropy of an arbitrarily chosen determinant.
+`tests/entanglement/` pins the absolute normalization against the $c=1$ CFT
+law $S = (c/3)\ln[(L/\pi)\sin(\pi l/L)]$ of a critical chain, the area law
+of a gapped 2d insulator, and the Li-Haldane counting against pyqula's own
+`h.get_chern()`. See `examples/1d/entanglement_entropy_chain/main.py` and
+`examples/2d/entanglement_spectrum_haldane/main.py` for runnable versions,
+and `src/pyqula/entanglement.py` for the implementation and references.
+
+
 # Response functions
 
 Here we discuss how response functions can be computed
+
+## Optical conductivity
+
+The frequency-dependent conductivity tensor of a periodic Hamiltonian is
+computed with the Kubo-Greenwood formula, summing velocity matrix elements
+over a k-mesh in the Lehmann representation,
+
+$$
+\sigma_{ab}(\omega) = \frac{i e^2 \hbar}{N_k V_{\rm cell}} \sum_{\mathbf k}
+\sum_{n \neq m} \frac{f_n - f_m}{E_m - E_n}
+\frac{v^a_{nm} v^b_{mn}}{\hbar\omega + i\eta - (E_m-E_n)}
+$$
+
+following the Wannier90/`postw90` convention (Yates, Wang, Vanderbilt &
+Souza, PRB **75**, 195121 (2007)). The full complex tensor is returned, so
+$\mathrm{Re}\,\sigma_{xx}$ is the optical absorption, $\sigma_{xy}$ the
+magneto-optical (Kerr/Faraday) response, and the $\omega \to 0$ limit of
+$\sigma_{xy}$ the anomalous Hall conductivity -- quantized to $-C\,e^2/h$ for
+a Chern insulator. The intraband (Drude) channel comes from the degenerate
+limit $(f_n-f_m)/(E_m-E_n) \to -\partial f/\partial E$ of the same sum,
+which also protects the formula against $0/0$ on spin-degenerate
+multiplets; `intraband`/`interband` switch the two channels independently.
+
+Results are in units of $e^2/\hbar$, so one conductance quantum $e^2/h$ is
+$1/(2\pi)$ of the returned value, times $a^{2-d}$ for a $d$-dimensional
+lattice. `T` sets the temperature and `delta` the Lorentzian broadening
+$\eta$. The absolute normalization is fixed by the f-sum rule,
+$\int \mathrm{Re}\,\sigma_{aa}(\omega)\,d\omega = \pi W_{aa}$, with $W$ the
+diamagnetic weight available as `h.get_sum_rule_weight()`; the Drude weight
+tensor is `h.get_drude_weight()`.
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # create a honeycomb lattice
+h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian
+h.add_haldane(0.2) # Chern insulator
+h.shift_fermi(0.3) # put the Fermi energy in the gap
+
+(ws,s) = h.get_optical_conductivity(energies=np.linspace(0.,4.,100),
+                                    nk=40,T=0.02,delta=0.05)
+absorption = s[:,0,0].real # Re sigma_xx, the optical absorption
+
+# the DC Hall response is quantized to the Chern number
+(w0,s0) = h.get_optical_conductivity(energies=[0.],nk=40,T=0.01,delta=1e-3)
+print("sigma_xy(0) in e^2/h:",2.*np.pi*s0[0,0,1].real) # -1
+```
+
+A note on the velocity operator, which matters for any multi-site unit
+cell: pyqula builds $H(\mathbf k)$ in the *lattice* gauge, whose Bloch
+phase carries only the lattice vector $\mathbf R$, so $dH/dk$ alone
+silently drops every *intracell* bond -- on the honeycomb lattice (one of
+the three nearest-neighbour bonds is intracell) that visibly breaks C3
+symmetry. The velocity used here is therefore the Peierls current operator
+built from the full bond vector $\mathbf d_{ij} = \mathbf R + \mathbf r_j -
+\mathbf r_i$, equivalently $v_a = \partial_a H + i[H,r_a]$, i.e. the
+*atomic* gauge. With it, $\sigma_{xx} = \sigma_{yy}$ to machine precision
+and graphene reproduces its universal $\pi e^2/4h$. Superconducting (Nambu)
+and 3d Hamiltonians raise `NotImplementedError`. See
+`examples/2d/optical_conductivity/main.py` and
+`examples/1d/optical_conductivity_chain/main.py`, and
+`src/pyqula/conductivity.py` for the implementation and references.
 
 ## Charge-charge response function
 
@@ -2710,6 +2903,84 @@ Optional arguments:
 ### h.get_quantum_metric()
 Same arguments as `h.get_quantum_geometric_tensor()`, but returns only the
 quantum metric (symmetric part of the tensor).
+
+### h.get_superfluid_weight()
+Superfluid weight tensor $D_s^{ab}$ of a BdG (Nambu) Hamiltonian of
+dimensionality 1, 2 or 3 (see "Superfluid weight and BKT temperature").
+
+Optional arguments:
+
+- nk=20: k-points per periodic direction
+- T=0.0: temperature (see the caveat above for gapless normal states at T=0)
+- mode="kubo": `"kubo"` for the analytic multiband formula, `"finite_difference"` for the assumption-free numerical derivative of the grand potential
+- gauge="atomic": `"atomic"` twists with the full bond vector (the physical Peierls substitution), `"lattice"` with the lattice vector alone (the literature cell-gauge convention)
+- decompose=False: if True, return a dict with `"total"`, `"conventional"`, `"geometric"`, `"delta"` and `"gauge"` instead of a bare tensor
+
+Returns a Cartesian `(dim,dim)` array, or a dictionary if `decompose=True`.
+`decompose=True` raises `ValueError` when the decomposition's assumptions
+do not hold.
+
+### h.get_bkt_temperature()
+Berezinskii-Kosterlitz-Thouless temperature of a 2d BdG Hamiltonian, from
+the self-consistent Nelson-Kosterlitz criterion
+$T_{\rm BKT} = (\pi/8)D_s(T_{\rm BKT})$ at frozen $|\Delta|$. Arguments
+`nk=20`, `tmax=None`, `tol=1e-6`, `maxite=60`, plus `gauge`. Returns a
+float.
+
+### h.get_optical_conductivity()
+Frequency-dependent conductivity tensor $\sigma_{ab}(\omega)$ in the
+Kubo-Greenwood formalism (see "Optical conductivity").
+
+Optional arguments:
+
+- energies=None: frequencies at which to evaluate $\sigma$
+- nk=20: k-points per periodic direction
+- T=None: temperature (defaults to `delta`)
+- delta=0.1: Lorentzian broadening $\eta$
+- intraband=True, interband=True: switch the two channels independently
+- component=None: e.g. `"xy"` to return that component alone
+- degeneracy_tol=1e-6: relative tolerance for treating a pair as degenerate
+
+Returns `(energies,sigma)` with `sigma` of shape `(nw,3,3)` and complex, or
+`(nw,)` if `component` is given. Units of $e^2/\hbar$ (so $e^2/h$ is
+$1/(2\pi)$ of it). Raises `NotImplementedError` for 3d and Nambu
+Hamiltonians.
+
+### h.get_drude_weight()
+Drude (intraband) weight tensor. Arguments `nk=20`, `T=0.05`,
+`degeneracy_tol=1e-6`. Returns a real `(3,3)` array.
+
+### h.get_sum_rule_weight()
+Diamagnetic weight tensor $W$ entering the optical f-sum rule
+$\int \mathrm{Re}\,\sigma_{aa}(\omega)\,d\omega = \pi W_{aa}$. Arguments
+`nk=20`, `T=0.05`. Returns a real symmetric `(3,3)` array.
+
+### h.get_entanglement_entropy()
+Entanglement entropy of a real-space region, from the eigenvalues of the
+region-restricted one-particle correlation matrix (see "Entanglement
+entropy and entanglement spectrum").
+
+Optional arguments:
+
+- region=None: the region, as a list of site indices, a boolean mask, a callable on positions (the `sculpt` convention) or a float fraction of the cells; `None` takes half the system
+- nsuper=10: unit cells stacked into the ring that is cut (periodic Hamiltonians)
+- direction=None: lattice direction normal to the cut, defaults to the last periodic one
+- kpar=None: momentum parallel to the cut; `None` on a 2d Hamiltonian averages over an `nk` mesh
+- nk=20: k-points used for that average
+- fermi=0.0: occupied states are those with `E<fermi` (must stay 0 for BdG)
+
+Returns a float. A level exactly at the Fermi energy raises rather than
+returning the entropy of an arbitrary determinant.
+
+### h.get_entanglement_spectrum()
+Single-particle entanglement Hamiltonian eigenvalues
+$\xi_n = \ln[(1-\zeta_n)/\zeta_n]$ of a real-space region. Same arguments as
+`h.get_entanglement_entropy()` (with `nk=41` by default).
+
+Returns a sorted array of $\xi_n$ for a 0d/1d Hamiltonian or a single
+`kpar`; for a 2d Hamiltonian with `kpar=None` it returns `(ks,xis)` with
+`xis` of shape `(nk,nA)`, the Li-Haldane entanglement spectrum across the
+BZ.
 
 ### h.get_wannier_hamiltonian()
 Wannierize a fixed range of bands and return the resulting real-space

@@ -115,6 +115,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - JAX-derivative-based mean-field SCF solvers (Newton, matrix-free Newton-Krylov, matrix-free Levenberg-Marquardt residual minimization), differentiating through the self-consistency loop instead of plain mixing [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/12_jax_scf_solvers.ipynb)
 - Abrikosov-pseudofermion (RVB spinon) mean-field theory for spin-1/2 Heisenberg models, with the local one-fermion-per-site constraint enforced at every site individually [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/13_spinon_rvb.ipynb)
 - Abrikosov-pseudofermion (Read-Newns) mean-field theory for the Kondo lattice / periodic Anderson model (heavy fermions), with self-consistent hybridization and a per-site local-moment constraint [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/14_kondo_lattice.ipynb)
+- Superfluid weight of BdG Hamiltonians, split into conventional and quantum-geometric contributions (flat-band superconductivity), with the BKT temperature from the Nelson-Kosterlitz criterion
 
 ## Topological characterization ##
 - Berry phases, Berry curvatures, Chern numbers and Z2 invariants [[notebook]](jupyter-notebooks/functionalities/topological_characterization/01_chern_z2.ipynb)
@@ -124,6 +125,11 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Real-space Chern density for amorphous systems [[notebook]](jupyter-notebooks/functionalities/topological_characterization/05_real_space_chern_amorphous.ipynb)
 - Multiorbital/multiband (non-Abelian) quantum geometric tensor and quantum metric [[notebook]](jupyter-notebooks/functionalities/topological_characterization/06_quantum_geometric_tensor.ipynb)
 - Wilson loop and Green's function formalism [[notebook]](jupyter-notebooks/functionalities/topological_characterization/07_wilson_green_formalism.ipynb)
+- Free-fermion entanglement entropy and Li-Haldane entanglement spectrum from the correlation matrix, with the chiral spectral flow of a Chern insulator obtained from the bulk alone
+
+## Response functions ##
+- Optical (frequency-dependent) conductivity tensor from the Kubo-Greenwood formula, giving optical absorption, the magneto-optical Kerr/Faraday response, and a DC Hall response quantized to the Chern number
+- Drude weight and the optical f-sum rule
 
 ## Spectral functions ##
 - Spectral functions in infinite geometries [[notebook]](jupyter-notebooks/functionalities/spectral_functions/01_spectral_infinite.ipynb)
