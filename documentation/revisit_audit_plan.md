@@ -178,6 +178,38 @@ What is *not* checked is its robustness contract: tolerance handling and
 since it is the single shared primitive behind both a topological invariant and an
 SCF backend. Lower priority than A1 precisely because the end-to-end oracles pass.
 
+**DONE** (2026-08-16, `tests/qtci/test_gkintegrate.py`, 10 tests, 1.2s) — **and the
+robustness contract was genuinely broken, exactly as the "end-to-end oracles pass"
+caveat allowed for.** The zero-integrand pivot search scanned only the *diagonal* of
+the Gauss-Kronrod node grid and, finding it all zero, declared the integral zero. Its
+docstring justified that as "f is almost certainly identically zero over the whole BZ",
+which is false for any integrand a symmetry pins to zero on the line kx=ky: a mirror
+exchanging kx and ky forces `f(kx,ky) = -f(ky,kx)`, and a product of two such factors
+(minimal case `f=(kx-ky)**2`, true integral 1/6) vanishes on that whole line while
+integrating to something finite. Pre-fix that returned exactly `0.0` — a silent wrong
+answer with no warning, on the exact class of integrand (symmetry-constrained) the
+branch was written to serve.
+
+Fixed by extending the scan past the diagonal to the whole node grid (`_pivot_candidates`:
+diagonal first, so every currently-working integrand keeps its old seed pivot bit for
+bit, then the off-diagonal pairs by increasing cyclic shift, each pair exactly once).
+This also upgrades the zero return from a heuristic to an exact statement: if f is zero
+at *every* node, the tensorized Gauss-Kronrod sum is a weighted sum of zeros, so `0` is
+the exact value of the requested quadrature rule, not an extrapolation between nodes.
+
+Cost is unchanged in practice — a nonzero integrand still exits at its first node
+(asserted), and the full n² scan runs only for a genuinely zero-everywhere entry, where
+`get_dm_qtci`'s shared projector cache absorbs it (`test_get_dm_qtci_handles_symmetry_
+protected_zero_entries` still runs in 0.06s). All 10 qtci consumer tests in `tests/scf`
+and `tests/topology` pass unchanged.
+
+Oracles used are analytic integrals of elementary functions, not recorded output. The
+tests also pin `gkorder_from_nk` against its documented `4*ceil(log2(nk))+1` formula
+plus the two properties its consumers depend on (odd — qutecipy's `integrate` rejects
+an even order outright — and non-decreasing in `nk`), and check that tightening
+`tolerance` actually buys accuracy on an integrand the tensor train cannot represent
+exactly.
+
 ### A4. Extend the external-oracle standard
 
 Cross-cutting, and the durable version of this whole plan. Produce a list of features
