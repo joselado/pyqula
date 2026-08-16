@@ -1,3 +1,70 @@
+# pyqula user guide
+
+pyqula computes electronic structure of tight-binding models on lattices:
+band structures, densities of states and spectral functions, self-consistent
+(mean-field) interacting Hamiltonians, superconductivity, topological
+invariants, response functions, quantum transport, and classical spin and
+lattice-gas models.
+
+Almost everything in this guide follows the same four steps -- build a
+geometry, get its Hamiltonian, add terms to it, then ask the Hamiltonian for
+an observable:
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice()   # 1. a lattice
+h = g.get_hamiltonian()            # 2. its tight-binding Hamiltonian
+h.add_zeeman([0.,0.,0.3])          # 3. add terms (in place)
+(k,e) = h.get_bands()              # 4. compute an observable
+```
+
+Install with `pip install pyqula`, or from a clone of the repository with
+`pip install -e .` from its root. Note that `import pyqula` on its own
+exposes nothing -- always import the submodule you need
+(`from pyqula import geometry`).
+
+Each code block below carries its own imports and runs on its own, except
+where a block picks up the variables of the one before it inside the same
+section (a second call on an `h` that was just built, say).
+
+The snippets here stop at the computed arrays and leave the plotting to you.
+Two other places in the repository take it further:
+
+- `examples/` holds several hundred runnable scripts organized by
+  dimensionality (`0d/ 1d/ 2d/ 3d/`, plus `transport/`, `embedding/`,
+  `wannier/`, `classicalspin/`, `latticegas/`), most of them ending in a
+  figure. Most sections below point at the relevant ones
+- `jupyter-notebooks/functionalities/` holds 53 executed notebooks, one per
+  feature, grouped the same way as the README's functionality list
+  (single-particle Hamiltonians, mean field, topology, spectral functions,
+  KPM, Wannierization, transport). Each carries its physics discussion and
+  its output plots inline, so they are the place to look for what a result
+  should actually look like
+
+The last chapter, [Main functions and methods](#main-functions-and-methods),
+is a reference of the `Geometry`/`Hamiltonian` methods and their arguments.
+
+## Contents
+
+- [Setting up a Hamiltonian](#setting-up-a-hamiltonian)
+- [Observables](#observables)
+- [Operators](#operators)
+- [Superconductivity](#superconductivity)
+- [Interactions at the mean-field level](#interactions-at-the-mean-field-level)
+- [Spatially resolved density of states](#spatially-resolved-density-of-states)
+- [Electronic structure folding and unfolding](#electronic-structure-folding-and-unfolding)
+- [Surface spectral functions](#surface-spectral-functions)
+- [Twisted bilayer graphene structural relaxation](#twisted-bilayer-graphene-structural-relaxation)
+- [Topological insulators](#topological-insulators)
+- [Response functions](#response-functions)
+- [Quantum transport](#quantum-transport)
+- [Single defects in infinite systems](#single-defects-in-infinite-systems)
+- [Wannierization](#wannierization)
+- [Chebyshev kernel polynomial (KPM) methods](#chebyshev-kernel-polynomial-kpm-methods)
+- [Classical spin models](#classical-spin-models)
+- [Lattice gas models](#lattice-gas-models)
+- [Ising models](#ising-models)
+- [Main functions and methods](#main-functions-and-methods)
 
 # Setting up a Hamiltonian
 In this basic tutorial we will address how to compute the band structure of a one dimensional tight binding model.
@@ -253,7 +320,7 @@ See `examples/1d/dos_GF/main.py` and `examples/2d/operator_dos/main.py` for runn
 
 ## Local density of states
 
-The density of states counts how many states are in a certain energy window. It is defined as
+The local density of states resolves the density of states by site: it counts how many states are in a certain energy window, weighted by how much of each state sits on site $n$. It is defined as
 
 $$
 D(\omega,n) = \int \delta(\omega-\epsilon_k) | \langle \Psi_k | n \rangle |^2 dk
