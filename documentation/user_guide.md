@@ -461,6 +461,8 @@ h.add_onsite(lambda r: 100.0 if np.linalg.norm(r-g.r[0])<1e-1 else 0.0) # a stro
 h.get_qpi(mode="pm",delta=1e-2,operator="unfold",nsuper=2,nk=140,nunfold=ns)
 ```
 
+This is the most expensive snippet in the guide: `mode="pm"` diagonalizes on an `nk`x`nk` mesh and then autoconvolves the result, so the cost grows quadratically with `nk` and the `nk=140` above takes minutes. Drop to `nk=60` (about 40 seconds) while setting a calculation up, and raise `nk` only for the final figure -- the q-space resolution of the QPI pattern is what it buys.
+
 See `examples/2d/multiqpi/main.py` (clean system, `mode="pm"`) and `examples/2d/multiqpi_unfold/main.py` (defect in a supercell, unfolded) for runnable versions.
 
 ### Real-space-impurity QPI
@@ -1786,12 +1788,26 @@ The RPA-dressed response $\chi_{RPA} = \chi(1-U\chi)^{-1}$ diverges wherever the
 ```python
 from pyqula import geometry
 import numpy as np
-g = geometry.chain()
-h = g.get_hamiltonian(has_spin=True)
-hmf = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro")
-U = hmf.V[(0,0,0)] # interaction matrix stored on the mean-field Hamiltonian
-poles = hmf.get_rpa_kernel_poles(V=U,q=[0.1,0.,0.],energies=np.linspace(0.,3.,300),delta=2e-2,nk=40)
+g = geometry.bichain() # two sites per cell, so Neel order fits in the cell
+h = g.get_hamiltonian()
+seed = h.copy() ; seed.add_antiferromagnetism(0.5) # symmetry-breaking seed
+hmf = h.get_mean_field_hamiltonian(U=3.0,nk=100,mf=seed,filling=0.5)
+N = len(g.r) # the response matrix is one entry per site
+V = 3.0*np.identity(N) # charge-channel interaction, in site space
+poles = hmf.get_rpa_kernel_poles(V=V,q=[0.1,0.,0.],
+        energies=np.linspace(0.,4.,200),delta=2e-2,nk=40)
 ```
+
+Two things there are easy to get wrong. The mean field needs a unit cell that
+can *hold* the order being sought -- a one-site `geometry.chain()` cell cannot
+represent Neel order at all, so seeding antiferromagnetism on it is
+meaningless; `bichain` gives the two sublattices, and the converged state has
+`hmf.get_vev("sz")` equal and opposite on them. And `V` must live in the same
+space as the response matrix: `get_rpa_kernel_poles` defaults to the charge
+channel, one entry per *site*, so `V` is `N`x`N`. It is **not** `hmf.V`, which
+is the mean-field interaction in spin-orbital space (`2N`x`2N`) and raises a
+dimension error here. For the spin channel use `get_magnon_bands` below, which
+builds the $S_x,S_y,S_z$ vertex from `hmf.V` itself.
 
 `poles` is an `(npoles,2)` array, one row per collective mode found: the pole frequency and its residual imaginary part. The latter is signed (it is the kernel eigenvalue's actual imaginary part at the crossing, which can lie on either side of the real axis) -- judge how sharp/well-defined a mode is by its *magnitude*: small `abs(gamma)` means a sharp mode, large `abs(gamma)` means it is heavily damped or the crossing is numerical noise.
 
