@@ -264,7 +264,7 @@ energies=np.linspace(.0,1.6,400) # energies
 
 ```
 
-![Alt text](images/spin_chi_rpa.png?raw=true "RPA many-body spin response function, showing the appearence of linearly-dispersing magnons")
+![Alt text](images/spin_chi_rpa.png?raw=true "RPA many-body spin response function, showing the appearance of linearly-dispersing magnons")
 
 
 
@@ -282,7 +282,7 @@ energies=np.linspace(.0,1.,400) # energies
 
 ```
 
-![Alt text](images/spin_chi_rpa_ferro.png?raw=true "RPA many-body spin response function of ferromagnetic lattice, showing the appearence of quadratically-dispersing magnons")
+![Alt text](images/spin_chi_rpa_ferro.png?raw=true "RPA many-body spin response function of ferromagnetic lattice, showing the appearance of quadratically-dispersing magnons")
 
 
 

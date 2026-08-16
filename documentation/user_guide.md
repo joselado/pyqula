@@ -46,8 +46,8 @@ taking $t_2 =0.2$ and $t_3=0.3$, we write
 ```python
 from pyqula import geometry
 g = geometry.chain() # geometry of the 1D chain
-h = g.get_hamiltonian() # generate the Hamiltonian
-(k,e) = h.get_bands(tij=[1.0,0.2,0.3]) # compute band structure
+h = g.get_hamiltonian(tij=[1.0,0.2,0.3]) # Hamiltonian with t1,t2,t3
+(k,e) = h.get_bands() # compute band structure
 ```
 
 ## Including an onsite energy
@@ -107,7 +107,7 @@ of the form $\vec B = (0.1,0.2,0.3)$ to our chain we write
 from pyqula import geometry
 g = geometry.chain() # geometry of the 1D chain
 h = g.get_hamiltonian() # generate the Hamiltonian
-h = g.add_zeeman([0.1,0.2,0.3]) # add the Zeeman field
+h.add_zeeman([0.1,0.2,0.3]) # add the Zeeman field (modifies h in place)
 (k,e) = h.get_bands() # compute band structure
 ```
 
@@ -125,13 +125,15 @@ where $\vec A$ is the magnetic potential so that $\vec B = \nabla \times \vec A$
 from pyqula import geometry
 N = 20 # number of unit cells as the width
 g = geometry.square_ribbon(N) # ribbon
+h = g.get_hamiltonian() # generate the Hamiltonian
 B = 0.02 # magnetic field in quantum flux unit
 h.add_orbital_magnetic_field(B) # add an out-of plane magnetic field
+(k,e) = h.get_bands() # compute the Landau-level band structure
 ```
 
-## Setting a fiilling
+## Setting a filling
 
-If you want to enforce a certaing filling $\nu$ in a Hamiltonian, so that
+If you want to enforce a certain filling $\nu$ in a Hamiltonian, so that
 $$
 \langle c^\dagger_n c_n \rangle = \nu
 $$
@@ -204,7 +206,7 @@ See `examples/2d/velocity_bands/main.py` and `examples/2d/strain_TBG/main.py` fo
 
 ## Density of states
 
-The density of states counts how many states are in a certian energy window. It is defined as
+The density of states counts how many states are in a certain energy window. It is defined as
 
 $$
 D(\omega) = \int \delta(\omega-\epsilon_k) dk
@@ -251,7 +253,7 @@ See `examples/1d/dos_GF/main.py` and `examples/2d/operator_dos/main.py` for runn
 
 ## Local density of states
 
-The density of states counts how many states are in a certian energy window. It is defined as
+The density of states counts how many states are in a certain energy window. It is defined as
 
 $$
 D(\omega,n) = \int \delta(\omega-\epsilon_k) | \langle \Psi_k | n \rangle |^2 dk
@@ -261,7 +263,7 @@ where $\epsilon_k$ are the eigenenergies of the Hamiltonian. It can be used as s
 
 ```python
 from pyqula import geometry
-g = geometry.hoenycomb_zigzag_ribbon() # get the geometry
+g = geometry.honeycomb_zigzag_ribbon() # get the geometry
 h = g.get_hamiltonian()  # get the Hamiltonian
 (x,y,d) = h.get_ldos()
 ```
@@ -381,6 +383,7 @@ Optional arguments
 A single point defect embedded in a supercell, with the resulting QPI unfolded back onto the primitive cell, is a realistic use case. The supercell must be built with `store_primal=True` so pyqula remembers the primitive-cell reference needed to unfold; `operator="unfold"` then resolves to the corresponding unfolding operator
 
 ```python
+import numpy as np
 from pyqula import geometry
 g0 = geometry.honeycomb_lattice()
 ns = 2
@@ -550,14 +553,19 @@ See `examples/0d/valley_vortex_vacancy/main.py` and `examples/2d/valley_vortex/m
 ## Nambu operators
 
 In the presence of superconductivity, you can project onto the electron or
-hole component of the Nambu spinor using the electron-hole operators
+hole component of the Nambu spinor using the electron-hole operators. The
+Hamiltonian must already be in the Nambu (BdG) basis -- i.e. some pairing
+has been added -- otherwise there is no hole sector to project onto and
+these raise
 
 ```python
 from pyqula import geometry
 g = geometry.triangular_lattice() # get the geometry
 h = g.get_hamiltonian()  # get the Hamiltonian
-e = h.get_operator("electron") # electron component
-h = h.get_operator("hole") # hole component
+h.add_swave(0.2) # add pairing, doubling the basis into Nambu space
+electron = h.get_operator("electron") # electron component
+hole = h.get_operator("hole") # hole component
+(k,e,c) = h.get_bands(operator=electron) # electron weight of each state
 ```
 
 ## Berry curvature operator
@@ -927,16 +935,41 @@ from pyqula import geometry
 g = geometry.chain() # a chain, prone to ferromagnetic order away from half filling
 h = g.get_hamiltonian(has_spin=True)
 h = h.get_szsz_mean_field_hamiltonian(J1=-2.0,filling=0.2,
-                                       mf="ferroZ") # ferromagnetic Sz-Sz coupling
+                                       mf="ferroZ", # ferromagnetic Sz-Sz coupling
+                                       nk=10,mix=0.3,maxite=300)
 m = h.get_magnetization() # uniform moment along z
 ```
+
+**Getting these SCF loops to converge.** All the mean-field entry points
+return `None` instead of a Hamiltonian when the loop does not converge, so
+check the result before using it. Two defaults are worth overriding
+explicitly for a partially filled metal like this chain:
+
+- `maxite=None` (the default) means *no iteration limit*, so a loop that
+  settles into a limit cycle instead of a fixed point never returns.
+  Always pass a finite `maxite` while exploring parameters -- you then get
+  a `None` and a "no convergence" message in a few seconds instead of a
+  hung session
+- `nk=8` (the default k-mesh) is often the actual culprit rather than the
+  mixing. At `filling=0.2` this chain does *not* converge at `nk=8` for any
+  mixing, because the mesh does not resolve the Fermi points and the
+  occupied set flips between iterations; `nk=10` converges in a fraction
+  of a second. If an SCF refuses to converge, change `nk` before reaching
+  for a smaller `mix`
+
+`mix` (0.1 by default, linear mixing of successive mean fields) is the
+knob for a loop that oscillates around a fixed point rather than one that
+never approaches one; `maxerror` (1e-5) sets the convergence threshold.
+`tests/scf/` is a good source of known-converging parameter sets for each
+coupling.
 
 The three channels can also be combined into a single anisotropic-exchange SCF loop, `h.get_exchange_mean_field_hamiltonian(Jx1=...,Jy1=...,Jz1=...)`, which decouples the $z$ channel directly and the $x$/$y$ channels through the same rotate-solve-rotate-back trick, each SCF iteration:
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
 h = h.get_exchange_mean_field_hamiltonian(Jz1=-1.0,Jx1=-0.5,
-                                            filling=0.2,mf="ferroZ")
+                                            filling=0.2,mf="ferroZ",
+                                            nk=10,mix=0.3,maxite=300)
 ```
 
 Density-density interactions ($U$/$V_1$/$V_2$/$V_3$/$V_r$, as in `get_mean_field_hamiltonian`) and spin-spin exchange can also be solved together, self-consistently, in a single combined SCF loop with `h.get_combined_mean_field_hamiltonian(U=...,V1=...,J1=...,...)`. This is not new physics: a density-density interaction and $S^z_iS^z_j$ are both density-density interactions in the spin-orbital basis (just with a different sign pattern across the four spin blocks), and the Hartree-Fock decoupling is linear in the interaction, so the density-density contribution is simply added into the same $z$-channel matrix the exchange term already uses. Exchange here follows a $V_1$/$V_2$/$V_3$-like convention: $J_1$/$J_2$/$J_3$ ($+J_r$) are isotropic Heisenberg couplings, $J(S^x_iS^x_j+S^y_iS^y_j+S^z_iS^z_j)$, for the first/second/third neighbor shells, and $J_{1x}$/$J_{1y}$/$J_{1z}$ are an optional anisotropic correction added on top of $J_1$ for the first-neighbor shell only (e.g. the effective first-neighbor $J_z$ coupling is $J_1+J_{1z}$); all default to 0
@@ -1705,23 +1738,33 @@ Since different q-points can have a different number of poles, `qs`,`ws`,`gammas
 
 ### Interactions beyond onsite
 
-`V` (passed to `get_rpa_kernel_poles`/`get_chi`) and `h.V` (the mean-field interaction `get_magnon_bands` reads automatically) are not restricted to a single onsite matrix: they can also be a real-space hopping-like dictionary `{(n1,n2,n3): matrix}`, keyed by lattice-vector offset in the same convention as `h.get_hopping_dict()`, for an interaction with support beyond the same unit cell (e.g. a neighbor-shell exchange `J1`/`V1` from `VJinteraction`, whose `h.V` after convergence typically has more than just the `(0,0,0)` key). It is Fourier-transformed to $V(q)$ at whatever `q` the response is evaluated at, using the same Bloch-phase convention as the Hamiltonian's own hoppings -- an extended interaction is dressed exactly like an extended hopping:
+The `V` passed to `get_rpa_kernel_poles` is not restricted to a single onsite matrix: it can also be a real-space hopping-like dictionary `{(n1,n2,n3): matrix}`, keyed by lattice-vector offset in the same convention as `h.get_hopping_dict()`, for an interaction with support beyond the same unit cell. It is Fourier-transformed to $V(q)$ at whatever `q` the response is evaluated at, using the same Bloch-phase convention as the Hamiltonian's own hoppings -- an extended interaction is dressed exactly like an extended hopping. For a nearest-neighbor $V_1$ on a chain this gives the expected $V(q)=2V_1\cos{2\pi q}$, so the interaction is repulsive at $q=0$ and attractive at the zone boundary:
 
 ```python
-from pyqula.scftk.spinspin import _build_v
+import numpy as np
+from pyqula import geometry
 g = geometry.chain()
-h = g.get_hamiltonian(has_spin=True)
-h.V = _build_v(h,J1=-1.0) # nearest-neighbor ferromagnetic exchange, no onsite U at all
-poles = h.get_rpa_kernel_poles(V=h.V,q=[0.1,0.,0.],energies=np.linspace(0.,1.,100),delta=2e-2,nk=200)
+h = g.get_hamiltonian(has_spin=False)
+N = h.intra.shape[0] # one site per cell here
+I = np.identity(N)
+V = {(0,0,0): 0.0*I, (1,0,0): 0.6*I, (-1,0,0): 0.6*I} # nearest-neighbor V1
+poles = h.get_rpa_kernel_poles(V=V,q=[0.5,0.,0.],energies=np.linspace(0.,2.,60),
+                                delta=2e-2,nk=200)
 ```
 
-A 1D chain's density of states diverges at the bottom of the band, so at low filling even a weak nearest-neighbor exchange like this pushes the system towards a ferromagnetic (Stoner) instability -- see `tests/chi/test_rpa_nononsite_interaction.py` and `tests/scf/test_rpa_nononsite_ferro_chain.py` for worked examples (both the bare-interaction and the self-consistent, `V1`-only-density-density-interaction routes to the same instability).
+Note the channel: `get_rpa_kernel_poles` dresses the **charge** response by default, so a dictionary `V` here must be a density-density interaction in site space, of the same dimension as the response matrix `chiAB(...,mode="matrix")` returns. It is *not* the place to put a spin vertex.
+
+The **spin** channel deliberately does not accept a non-onsite interaction. `get_magnon_bands`, `get_spinchi_full` and `get_spinchi_ladder` read the mean-field interaction from `h.V`, and raise a `ValueError` if it has any key other than `(0,0,0)` -- which is exactly what `h.V` looks like after a `VJinteraction` run with a neighbor-shell `J1`/`V1`. The gate is deliberate: the non-onsite spin vertex is not validated (see `chitk.spinchi._require_onsite_only_V`'s docstring for the caveats), so the library refuses rather than returning a plausible-looking wrong dispersion. To work with a non-onsite spin interaction anyway, build the vertex explicitly and call `chitk.rpa.rpa_kernel_poles_ops`/`chi_ops_RPA` directly, bypassing `h.V` -- `tests/chi/test_rpa_nononsite_interaction.py` and `tests/scf/test_rpa_nononsite_ferro_chain.py` do exactly that, and are worked examples of the low-filling ferromagnetic (Stoner) instability a nearest-neighbor exchange drives on a chain.
 
 ### Density (charge) response
 
 `h.get_densitychi_RPA` and `h.get_plasmon_bands` are the density-density (charge) channel analogs of `get_spinchi_full`/`get_magnon_bands`, for a `V1`/`V2`/`V3`-neighbor-shell (+ onsite `U`, + a general `Vr(r)`) density-density interaction, same convention as `Vinteraction`/`VJinteraction`. Unlike the spin-channel functions, they take the interaction directly as parameters instead of reading it from `h.V`, so no mean-field convergence is needed first -- they dress the bare susceptibility of whatever Hamiltonian is passed in (which can also be an already-converged one, if the RPA response about that reference state is wanted):
 
 ```python
+import numpy as np
+from pyqula import geometry
+g = geometry.chain()
+h = g.get_hamiltonian(has_spin=True) # 1D chain at half filling
 qs,ws,gammas = h.get_plasmon_bands(V1=0.6,qpath=[[0.3,0.,0.],[0.4,0.,0.],[0.5,0.,0.]],nq=3,
                                     energies=np.linspace(0.,1.,100),delta=2e-2,nk=2000)
 ```
@@ -1732,9 +1775,9 @@ A 1D chain at half filling has perfect Fermi-surface nesting at $q=\pi$, strongl
 
 In this section we discuss how we can perform quantum transport calculations with pyqula.
 
-## Magnetoresistence in metal-metal transport
+## Magnetoresistance in metal-metal transport
 
-As specific example, here we will address how we can compute magnetoresistence in transport between two magnetic metals. We build two copies of the same lead, give each one an exchange field pointing in a different direction, and compare the conductance of the parallel and antiparallel configurations
+As specific example, here we will address how we can compute magnetoresistance in transport between two magnetic metals. We build two copies of the same lead, give each one an exchange field pointing in a different direction, and compare the conductance of the parallel and antiparallel configurations
 
 ```python
 from pyqula import geometry
@@ -2265,6 +2308,84 @@ Optional arguments:
 
 Return energies and DOS
 
+### h.get_gap()
+Return the indirect gap, i.e. the smallest energy difference between an
+empty and an occupied state anywhere in the Brillouin zone (the two need
+not sit at the same k-point). Obtained by numerically minimizing over k
+rather than by scanning a fixed mesh, so a gap that closes at an
+incommensurate k-point is not missed.
+
+Optional arguments:
+
+- ntries=1: repeat the minimization this many times from different random
+  starting points and keep the smallest result -- worth raising for a band
+  structure with several nearly degenerate minima
+
+Returns a single number, the gap. Zero (up to numerical noise) for a metal
+or a Dirac semimetal
+
+### h.get_bandwidth()
+Return the bottom and top of the spectrum, `(emin,emax)` -- note this is
+the pair of band edges, not their difference. Uses the same k-space
+optimization as `h.get_gap()`, so the edges are the true extrema over the
+Brillouin zone rather than the extrema of a k-mesh sample
+
+### h.get_filling()
+Return the fraction of states below zero energy, i.e. the filling measured
+with the Fermi energy at $E=0$. Half filling gives 0.5. Use
+`h.set_filling(nu)` to shift the onsite energy so that a target filling is
+realized, and this method to check the result
+
+Optional arguments:
+
+- nk: k-point density used to sample the spectrum
+
+### h.get_total_energy()
+Return the total energy, i.e. the sum of the occupied single-particle
+eigenvalues. For a mean-field Hamiltonian this is the band energy only --
+`h.get_mean_field_hamiltonian(...,return_total_energy=True)` returns the
+interacting total energy including the double-counting correction instead
+
+Optional arguments:
+
+- nk=10: k-point density of the Brillouin-zone sum
+
+- fermi=0.0: energy below which states are counted as occupied
+
+- mode="mesh": k-space sampling; `use_kpm=True` switches to a Chebyshev
+  estimate for large systems
+
+### h.get_density_matrix()
+Return the full density matrix of the occupied states, as a dense matrix in
+the same basis as `h.intra`. See "Interactions at the mean-field level" for
+the k-resolved, hopping-resolved version the self-consistent loops use
+
+### h.get_ipr()
+Return the inverse participation ratio of every eigenstate, as
+`(energies,ipr)`. A delocalized state in a system of $N$ sites gives
+$\mathrm{IPR}\sim 1/N$ and a state localized on one site gives
+$\mathrm{IPR}\sim 1$, so this is the usual diagnostic for Anderson
+localization or for in-gap bound states. **Finite (0d) systems only** --
+it raises `NotImplementedError` for a periodic Hamiltonian; for those use
+the IPR operator instead (see "Inverse participation ratio operator")
+
+### h.get_vev() / h.get_single_vev() / h.get_several_vev()
+Ground-state expectation values of operators, evaluated by summing over the
+occupied states.
+
+- `h.get_vev(operator=...)` returns one real number **per site**: the
+  site-resolved expectation value of `operator` (any name accepted by
+  `h.get_operator`, e.g. `"sz"`), or the site occupation if `operator` is
+  omitted. This is what produces a magnetization or charge-density map
+- `h.get_single_vev(A)` returns the single number $\langle A \rangle$ for
+  one operator `A`, summed over the whole system
+- `h.get_several_vev([A,B,...])` does the same for a list of operators in
+  one pass, sharing the diagonalization
+
+Optional arguments:
+
+- nk=30: k-point density of the Brillouin-zone sum
+
 ### h.add_soc()
 Add Kane-Mele intrinsic spin-orbit coupling
 
@@ -2451,6 +2572,38 @@ Optional arguments:
   quadrature, sampling adaptively instead of uniformly -- useful when the
   curvature is sharply peaked. See "Tensor-cross-interpolation (qtci)
   integration"
+
+### h.get_berry_curvature()
+Return the Berry curvature of the occupied bands as a map over the
+Brillouin zone, `(kx,ky,berry)` -- three flat arrays, so it goes straight
+into a `plt.scatter(kx,ky,c=berry)` or, after reshaping to `(nk,nk)`, into
+a `contourf`. This is the same curvature that `h.get_chern()` integrates.
+
+Optional arguments:
+
+- nk=100: linear k-point density of the map (the map has `nk*nk` points)
+
+- reciprocal=True: return `kx,ky` in Cartesian reciprocal coordinates,
+  which is what you want to plot a hexagonal Brillouin zone undistorted.
+  Pass `reciprocal=False` for fractional coordinates instead, in which the
+  curvature integrates to the Chern number directly: with `nsuper=1` the
+  map covers `[-1,1)` along both fractional directions, i.e. four
+  Brillouin zones, so `np.sum(berry)*(2/nk)**2/(2*np.pi)` comes out at
+  four times `h.get_chern()`
+
+- mode="Wilson": how the curvature is evaluated. `"Wilson"` uses the
+  Fukui-Hatsugai-Suzuki plaquette construction; `"Green"` uses the
+  Green's-function Kubo formula and is selected automatically when
+  `operator` is given
+
+- operator=None: restrict the curvature to a subspace, e.g. `"valley"` for
+  a valley-resolved curvature (see "Berry curvature operator")
+
+- nsuper=1: extend the map over this many Brillouin zones
+
+- kpath: compute along a k-path instead of over a 2D grid
+
+- delta=0.001: broadening used by the Green's-function mode
 
 ### h.get_quantum_geometric_tensor()
 Return the (multiband/multiorbital) quantum geometric tensor at a single
