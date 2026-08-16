@@ -136,6 +136,51 @@ class Hamiltonian():
         tensor) at a single k-point"""
         return topology.quantum_metric(h,**kwargs)
 
+    def get_optical_conductivity(h,**kwargs):
+        """Frequency-dependent (optical) conductivity tensor
+        sigma_ab(omega) in the Kubo-Greenwood formalism, see
+        conductivity.py for the formula and conventions"""
+        from . import conductivity
+        return conductivity.optical_conductivity(h,**kwargs)
+
+    def get_drude_weight(h,**kwargs):
+        """Drude (intraband) weight tensor, the Fermi-surface average of
+        the squared band velocity, see conductivity.py"""
+        from . import conductivity
+        return conductivity.drude_weight(h,**kwargs)
+
+    def get_sum_rule_weight(h,**kwargs):
+        """Diamagnetic weight tensor W entering the optical f-sum rule
+        int Re sigma_aa(omega) domega = pi*W_aa, see conductivity.py"""
+        from . import conductivity
+        return conductivity.sum_rule_weight(h,**kwargs)
+
+    def get_superfluid_weight(h,**kwargs):
+        """Superfluid weight (superfluid stiffness) tensor of a BdG
+        Hamiltonian, see sctk/superfluidweight.py for the formula"""
+        from . import superfluid
+        return superfluid.superfluid_weight(h,**kwargs)
+
+    def get_bkt_temperature(h,**kwargs):
+        """Berezinskii-Kosterlitz-Thouless temperature of a 2d BdG
+        Hamiltonian, from the superfluid weight"""
+        from . import superfluid
+        return superfluid.bkt_temperature(h,**kwargs)
+
+    def get_entanglement_entropy(h,**kwargs):
+        """Entanglement entropy of a real-space region, from the
+        one-particle correlation matrix (Peschel's method), see
+        entanglement.py"""
+        from . import entanglement
+        return entanglement.entanglement_entropy(h,**kwargs)
+
+    def get_entanglement_spectrum(h,**kwargs):
+        """Entanglement spectrum (single-particle entanglement
+        Hamiltonian eigenvalues) of a real-space region, see
+        entanglement.py"""
+        from . import entanglement
+        return entanglement.entanglement_spectrum(h,**kwargs)
+
     def get_chi(self,**kwargs):
         from . import chi
         return chi.chiAB_trace(self,**kwargs)
