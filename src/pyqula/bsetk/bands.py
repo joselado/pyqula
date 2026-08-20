@@ -24,8 +24,13 @@ def exciton_bands(h,qpath=None,nq=20,n=None,**kwargs):
     qpath/nq select the path (same convention as get_bands/get_magnon_bands,
     so a list of high-symmetry labels or of explicit q-vectors also works),
     n keeps only the n lowest excitons at each q-point, and every other
-    argument (V, nk, nv, nc, kernel, tda, max_memory) is passed on to
-    get_bse unchanged.
+    argument (V, nk, nv, nc, kernel, tda, max_memory, screening, nkW) is
+    passed on to get_bse unchanged.
+
+    One note on screening: the screened interaction does not depend on Q,
+    so passing screening="rpa" here rebuilds the identical W once per
+    q-point of the path. Build it once with h.get_screened_interaction()
+    and pass that object as screening= instead.
 
     Returns (qs,es): qs is the integer index of the q-point along the path
     (the same convention get_bands uses for its k-axis) and es the exciton

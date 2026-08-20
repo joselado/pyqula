@@ -258,6 +258,19 @@ class Hamiltonian():
         lowest independent-particle transition each exciton lies"""
         from . import bse
         return bse.exciton_binding_energies(self,**kwargs)
+    def get_screened_interaction(self,**kwargs):
+        """Return the static RPA screened interaction W = eps^-1 v built
+        from this Hamiltonian's own bands, as a ScreenedInteraction. Pass
+        V= for the bare interaction to screen (it defaults to self.V, the
+        one a mean field was converged with -- but note that a fitted
+        Hubbard U is already screened and should not be screened again)"""
+        from . import screening
+        return screening.get_screened_interaction(self,**kwargs)
+    def get_polarizability(self,**kwargs):
+        """Return (qs,chi0), the static polarizability of this Hamiltonian
+        on its k-mesh, in the orbital basis"""
+        from . import screening
+        return screening.get_polarizability(self,**kwargs)
     def get_exciton_bands(self,**kwargs):
         """Return the exciton bands E_X(Q): the Bethe-Salpeter energies at
         finite center-of-mass momentum, scanned along a q-path. Returns

@@ -1,7 +1,7 @@
 import numpy as np
 from numba import jit,prange
 from .. import parallel
-from .interaction import interaction_at_q
+from .interaction import interaction_at_q,qkey
 
 
 def qdifference_map(kpoints):
@@ -20,8 +20,7 @@ def qdifference_map(kpoints):
     iq = np.zeros((nk,nk),dtype=np.int64)
     for i in range(nk):
         for j in range(nk):
-            q = np.mod(kpoints[i]-kpoints[j],1.0) # fold into [0,1)
-            key = tuple(np.round(q,7)%1.0) # %1 again: 0.9999999 -> 1.0 -> 0.0
+            key = qkey(kpoints[i]-kpoints[j]) # fold into [0,1)
             if key not in keys:
                 keys[key] = len(qs)
                 qs.append(np.array(key))
@@ -43,7 +42,15 @@ def nonzero_pattern(Wqs,tol=1e-10):
     pattern is typically very sparse -- a Hubbard U only couples the two
     spin components of each site, so 2*nsites entries out of (2*nsites)^2.
     Restricting the kernel's inner contraction to those entries turns its
-    cost from O(norb^2) per matrix element into O(nnz)."""
+    cost from O(norb^2) per matrix element into O(nnz).
+
+    An RPA-screened W is the exception: eps^-1 is dense, so screening
+    fills the pattern in completely and the direct term costs the full
+    O(norb^2) per element again. That is unavoidable (it is what screening
+    physically does -- the interaction stops being short ranged), but it
+    is worth knowing that turning screening on can slow the kernel build
+    down by a large factor on a model whose bare interaction was very
+    sparse."""
     mask = np.max(np.abs(Wqs),axis=0)>tol
     rows,cols = np.nonzero(mask)
     return np.array(rows,dtype=np.int64),np.array(cols,dtype=np.int64)
@@ -99,7 +106,7 @@ def exchange_block(F1,F2,WQ,norm,conjugate=True):
     return norm*(F1@WQ@G)
 
 
-def build_blocks(pb,W,kernel="full"):
+def build_blocks(pb,W,Wx=None,kernel="full"):
     """Return (A,Abar,B), the three blocks of the BSE matrix at pb.Q.
 
       A     resonant block,        A[m,m']    = dE_m delta + X - D
@@ -113,16 +120,28 @@ def build_blocks(pb,W,kernel="full"):
     binds and the exchange term (which is the only one surviving if the
     direct term is switched off) reproduces the RPA.
 
+    W is the interaction of the DIRECT (ladder) term and Wx that of the
+    EXCHANGE (Hartree / local-field) one. Wx=None means "the same as W",
+    which is the bare-interaction, time-dependent-Hartree-Fock case and
+    what every caller wanted before screening existed. They differ as soon
+    as the direct term is screened: the standard GW-BSE construction pairs
+    a screened W in the ladder with the BARE interaction in the exchange
+    term, because screening the exchange term as well would resum the same
+    RPA bubbles a second time (and, incidentally, would destroy the
+    kernel="exchange" cross-check against chitk/rpa.py).
+
     kernel selects which terms are included:
       "full"     both, i.e. time-dependent Hartree-Fock on top of the mean
                  field -- the physical choice
       "direct"   ladder only (no exchange): no singlet/triplet splitting
       "exchange" Hartree only: this is exactly the RPA, and is what
                  tests/bse cross-checks against chitk.rpa's independent
-                 frequency-scan implementation
+                 frequency-scan implementation. NOTE this term never uses
+                 the screened interaction, so screening has no effect here
       "none"     no interaction: eigenvalues collapse onto the
                  independent-particle transition energies
     """
+    if Wx is None: Wx = W # exchange defaults to the direct interaction
     g = pb.geometry
     norm = 1.0/len(pb.kpoints) # 1/N, N the number of unit cells
     A = np.diag(pb.dE).astype(np.complex128)
@@ -133,7 +152,7 @@ def build_blocks(pb,W,kernel="full"):
         raise ValueError("kernel must be one of 'full', 'direct', "
                 "'exchange', 'none', got %r"%(kernel,))
     if kernel in ("full","exchange"): # exchange (Hartree) term
-        WQ = interaction_at_q(W,g,pb.Q) # W(+Q)
+        WQ = interaction_at_q(Wx,g,pb.Q) # W(+Q), the BARE interaction
         WmQ = np.conj(WQ) # W(-Q); W(d) is real, so this is the same as
         # interaction_at_q(W,g,-pb.Q), just without a second Fourier sum
         Fr = np.conj(pb.el)*pb.ho # resonant density form factors

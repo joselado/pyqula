@@ -117,6 +117,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Abrikosov-pseudofermion (Read-Newns) mean-field theory for the Kondo lattice / periodic Anderson model (heavy fermions), with self-consistent hybridization and a per-site local-moment constraint [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/14_kondo_lattice.ipynb)
 - Superfluid weight of BdG Hamiltonians, split into conventional and quantum-geometric contributions (flat-band superconductivity), with the BKT temperature from the Nelson-Kosterlitz criterion
 - Excitons from the Bethe-Salpeter equation on top of mean field (full non-Tamm-Dancoff, at any exciton momentum), with binding energies, electron-hole amplitudes and exciton band structures
+- Static RPA screened interaction W = eps^-1 v computed from the mean-field bands, usable as the direct-term kernel of the Bethe-Salpeter equation (GW-BSE style, with cRPA as an option) or on its own
 
 ## Topological characterization ##
 - Berry phases, Berry curvatures, Chern numbers and Z2 invariants [[notebook]](jupyter-notebooks/functionalities/topological_characterization/01_chern_z2.ipynb)

@@ -2114,6 +2114,57 @@ One trap worth knowing about, since it is invisible at $Q=0$: `nv`/`nc` must not
 
 See `examples/2d/exciton_bands/main.py` for a runnable version (the exciton band of a gapped honeycomb, plotted below the electron-hole continuum of the same model) and `tests/bse/test_bse_bands.py` for the checks.
 
+### The screened interaction
+
+Everything above uses the *bare* interaction in both kernel terms, which makes the BSE time-dependent Hartree-Fock. But an electron and a hole added to a solid do not feel the bare interaction: the other electrons rearrange around them, and what survives that rearrangement is the *screened* interaction. Since the mean-field step has already left the bands $\{e_n(k), C^n(k)\}$ on a k-mesh, the static RPA screening can be computed from them directly rather than postulated,
+
+$$\chi^0_{ab}(q) = \frac{1}{N}\sum_k \sum_{n,m} (f_{nk}-f_{m,k+q})\, \frac{\rho^{nm}_a(k,q)\, \rho^{nm*}_b(k,q)}{e_{nk}-e_{m,k+q}}, \qquad \rho^{nm}_a(k,q) = C^{n,k*}_a C^{m,k+q}_a$$
+
+$$\varepsilon(q) = 1 - v(q)\chi^0(q), \qquad W(q) = \varepsilon^{-1}(q)\, v(q)$$
+
+with $a,b$ running over the spin-orbitals of the unit cell, in the same point-like-orbital approximation the rest of the BSE uses. `screening="rpa"` computes this and puts $W$ in the direct (ladder) term:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.bsetk.interaction import density_interaction
+
+h = geometry.honeycomb_lattice().get_hamiltonian()
+h.add_sublattice_imbalance(1.0) # a gapped semiconductor
+
+# a BARE interaction: an onsite term plus a soft-cutoff Coulomb tail
+coulomb = lambda r1,r2: 0.6/np.sqrt((r1-r2).dot(r1-r2)+0.25)
+V = density_interaction(h,U=1.0,Vr=coulomb)
+
+bare = h.get_bse(V=V,nk=8) # time-dependent Hartree-Fock
+screened = h.get_bse(V=V,nk=8,screening="rpa") # GW-BSE style
+```
+
+The **exchange term keeps the bare interaction** whatever `screening` is set to. That is the standard GW-BSE split, not an oversight: screening the exchange term as well would resum the same RPA bubbles a second time. A consequence worth knowing is that `kernel="exchange"` is completely unaffected by `screening` (a warning is raised if both are given).
+
+**A fitted Hubbard $U$ must not be screened.** A $U$ chosen to reproduce a material is already an effective, screened interaction; running it through this a second time is double counting and gives a spuriously weak interaction. Screening is for a genuinely *bare* interaction -- a long-range Coulomb tail from `density_interaction(Vr=...)`, or bare model `V1`/`V2`/`V3` shells. The dangerous case is precisely the default one, `V=h.V` from a Hubbard SCF. Note that this is a different question from RPA-versus-cRPA below: bubbles inside $W$ and ladders in the BSE are different diagram classes, so a full-RPA $W$ with a BSE ladder is the standard construction and is *not* double counting.
+
+`screening="crpa"` is the constrained variant, which leaves the transitions inside the `nv`/`nc` BSE band window out of the polarization ([arXiv:0710.4013](https://arxiv.org/abs/0710.4013)). That is the right choice when the band window is being treated as a downfolded model to be solved exactly afterwards, and it screens strictly less than the full RPA. It needs a genuine subset of the bands: with the default `nv=nc=None` the window is the whole spectrum, nothing is left outside it to do the screening, and the call is refused rather than silently returning the bare interaction.
+
+The screened interaction is also available on its own, as a `ScreenedInteraction`:
+
+```python
+W = h.get_screened_interaction(V=V,nk=8)
+print(W.epsmin) # smallest dielectric eigenvalue over the mesh
+Wq = W.at(W.qs[3]) # the screened interaction at one q-point
+d = W.get_dict() # ... and back in real space, usable at any q
+```
+
+Unlike the real-space dictionaries used elsewhere, this object exists only *on* its mesh: $W(q)$ is the result of a matrix inversion at each $q$, not the Fourier transform of anything short ranged. That is exactly what the direct term needs, because the distinct $k-k'$ differences of a Γ-centered mesh are mesh points themselves, so $W$ is tabulated at precisely the points it is consumed at with no interpolation anywhere. Asking for it at any other $q$ raises rather than snapping to the nearest point. `get_dict()` is the escape hatch: it inverse Fourier transforms back to a real-space interaction, which can be evaluated anywhere, inspected to see how far the screened interaction reaches, or fed to `get_mean_field_hamiltonian(V=...)` for a screened-exchange mean field -- at the price of aliasing the tail beyond the mesh supercell. `nkW` takes a denser screening mesh than the BSE mesh (it must be an integer multiple of `nk`, so that the q-points the direct term needs are still tabulated).
+
+**The RPA here is not spin-rotation invariant**, and on a non-magnetic spinful model that is the limitation to know about. On such a reference $\chi^0$ is proportional to the identity in spin, and the bare interaction's spin structure (every spin combination of a site pair coupled equally, plus an up-down-only Hubbard term) spans a commutative algebra that $\varepsilon^{-1}$ stays inside -- but with the same-spin and opposite-spin entries no longer equal. That difference is an Ising $S^z_i S^z_j$ coupling, which breaks SU(2), and the visible consequence is that a spin multiplet of the exciton spectrum splits: on the gapped honeycomb a lowest transition that is four-fold degenerate to $10^{-14}$ bare comes out split by $4\times10^{-3}$ once screened. This is an artifact of resumming charge bubbles with a density-density kernel in the spin-orbital basis, not of the implementation -- RPA in the density channel generically generates Ising-like effective spin couplings. The standard fix is the GW one, building the dielectric matrix in the charge channel alone as a matrix over *site* indices and left-multiplying the bare interaction by it, so that its spin structure is untouched; that is a different approximation and is not implemented here. Spinless models are unaffected.
+
+Two more things are worth expecting before reading the numbers. First, **screening does not always weaken the interaction here.** A density-density interaction matrix that excludes self-interaction is traceless, hence necessarily indefinite, so $\varepsilon(q)$ sits above unity in some channels and below it in others -- the charge channel is screened and the spin channel is *enhanced*, which is the same Stoner enhancement `chitk/rpa.py` reports as a magnetic instability. Whether the net effect on a given exciton is more or less binding depends on the model, and on a point-orbital Coulomb tail with no onsite term it is usually *more*. Include a realistic onsite $U$ and the expected reduction reappears. Second, if an eigenvalue of $\varepsilon(q)$ actually reaches zero, the RPA has diverged: that is a charge or spin instability of the mean field at that wavevector -- the same $1-V\chi=0$ condition `chitk.rpa.rpa_kernel_poles` reports as a collective mode -- and the call raises rather than returning a huge number.
+
+One cost note: an RPA-screened $W$ is dense in the orbital indices, where a bare Hubbard-like interaction is very sparse. The direct kernel exploits that sparsity, so turning screening on can slow the kernel build noticeably on a model whose bare interaction was nearly diagonal. That is unavoidable -- it is what screening physically does.
+
+See `examples/2d/screened_bse/main.py` for a runnable version and `tests/bse/test_bse_screening.py` for the correctness checks. There is no external benchmark for this: Xatu, whose formalism the rest of this BSE follows, uses a *phenomenological* Rytova-Keldysh screening rather than an RPA $W$, and no comparable open tight-binding implementation was found -- so the tests are internal cross-checks (an exact $q=0$ sum rule, supercell folding, the weak-coupling series $W = v + v\chi^0 v + O(v^3)$, the reciprocity $W(-q)=W(q)^*$ on a magnetic model, and agreement of $\chi^0$ with the independently implemented response function of `chitk/chiAB.py`).
+
 
 # Quantum transport
 
@@ -2869,6 +2920,10 @@ Optional arguments:
 
 - max_memory=2.0: refuse, rather than attempt, a calculation whose dense matrix would need more than this many GB
 
+- screening=None: the interaction of the *direct* (ladder) term. `None` keeps the bare one, i.e. time-dependent Hartree-Fock; `"rpa"` replaces it by the static RPA screened interaction $W=\varepsilon^{-1}v$ built from this Hamiltonian's own bands; `"crpa"` does the same with the transitions inside the `nv`/`nc` window left out of the polarization; a `ScreenedInteraction` reuses a precomputed one. The exchange term always keeps the bare interaction. Do not screen a fitted Hubbard `U` -- see the section above
+
+- nkW=None: k-mesh for the screening, defaulting to `nk`. Must be an integer multiple of it
+
 The returned object exposes `energies`, `amplitudes` (the resonant amplitudes $A_{vc}(k)$), `amplitudesY` (the antiresonant ones, zero under `tda`), `pairs` (the k-mesh, band window and `(ik,iv,ic)` label of every pair index) and the `get_energies`/`get_binding_energies` methods below.
 
 ### h.get_exciton_energies()
@@ -2889,9 +2944,27 @@ Optional arguments:
 
 - n=None: keep only the `n` lowest excitons at each q-point
 
-- V, nk, nv, nc, kernel, tda, max_memory: as in `get_bse`, passed through unchanged
+- V, nk, nv, nc, kernel, tda, max_memory, screening, nkW: as in `get_bse`, passed through unchanged
 
 Returns `(qs,es)`, flat 1D arrays of equal length: `qs` the integer index of the q-point along the path (same convention as `get_bands`) and `es` the exciton energy, complex at any q-point where the mean-field reference is unstable against the excitation. Note that `nv`/`nc` must not split a degenerate multiplet (a spinful Hamiltonian with no spin-orbit coupling or magnetic order needs an even `nv`/`nc`); a warning is raised if they do.
+
+### h.get_screened_interaction()
+Return the static RPA screened interaction $W(q)=\varepsilon^{-1}(q)v(q)$ built from this Hamiltonian's own bands, as a `ScreenedInteraction`.
+
+Optional arguments:
+
+- V=None: the *bare* interaction to screen, same forms as `get_bse`'s `V`. `None` reads `h.V`, but note that a fitted Hubbard `U` is already an effective screened interaction and should not be screened again
+
+- nk=10: k-mesh for both the Brillouin zone sum and the q-grid `W` is tabulated on
+
+- screening="rpa": `"rpa"` (all transitions polarize) or `"crpa"` (those inside `exclude` do not)
+
+- exclude=None: `(vbands,cbands)` to leave out of the polarization, required by `"crpa"`
+
+The returned object exposes `qs`, `Wq`, `chi0`, `bare`, `epsmin` (the smallest dielectric eigenvalue found over the mesh), `.at(q)` for the value at a mesh q-point and `.get_dict()` for the inverse Fourier transform back to a real-space interaction. Raises if an eigenvalue of $\varepsilon(q)$ reaches zero, which is a charge or spin instability of the mean field at that wavevector.
+
+### h.get_polarizability()
+Return `(qs,chi0)`, the static polarizability of this Hamiltonian on its k-mesh, in the spin-orbital basis; `chi0` has shape `(nq,norb,norb)`. Takes `nk`, `exclude` and the precomputed-eigenstate arguments of `get_screened_interaction`.
 
 ### h.get_fermi_surface()
 Compute the spectral weight on a 2D k-mesh at a single energy.

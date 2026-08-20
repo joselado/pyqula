@@ -58,6 +58,7 @@ def bare_interaction(h,V=None):
         the H_int convention above).
       - a plain matrix: treated as an onsite-only W, i.e. {(0,0,0): matrix}.
     """
+    if hasattr(V,"at"): return V # already a tabulated interaction
     if V is None: # read the interaction off the mean-field Hamiltonian
         if getattr(h,"V",None) is None:
             raise ValueError("this Hamiltonian carries no interaction "
@@ -80,6 +81,17 @@ def V2dict(V):
     return {(0,0,0): np.array(V,dtype=np.complex128)} # onsite-only matrix
 
 
+def qkey(q):
+    """Hashable key identifying a q-point modulo a reciprocal lattice
+    vector. Used both to collapse the k-k' differences of a mesh onto the
+    nk distinct ones (kernel.qdifference_map) and to look a q-point up in
+    a tabulated screened interaction (screening.ScreenedInteraction),
+    which only agree if both use the same key. The second %1.0 is not
+    redundant: it catches a value that rounds up to 1.0."""
+    q = np.mod(np.array(q,dtype=np.float64),1.0) # fold into [0,1)
+    return tuple(np.round(q,7)%1.0)
+
+
 def interaction_at_q(W,g,q):
     """Fourier transform a real-space interaction dictionary at a q-point,
     W(q) = sum_d W(d) exp(2 pi i q.d). This is the exact same Bloch-phase
@@ -88,7 +100,13 @@ def interaction_at_q(W,g,q):
     C^{nk} and the interaction W(q) share a gauge in the BSE kernel with no
     extra intracell-position phases: pyqula works in the cell gauge, where
     the Bloch phase depends only on the lattice vector and not on the
-    positions inside the unit cell."""
+    positions inside the unit cell.
+
+    W may also be a tabulated screening.ScreenedInteraction rather than a
+    real-space dictionary, in which case there is nothing to transform and
+    the value stored at that q is returned -- see its .at method for what
+    happens when q is not a mesh point."""
+    if hasattr(W,"at"): return W.at(q) # tabulated on a mesh, not a dict
     out = None
     for d,m in W.items():
         phase = g.bloch_phase(d,q)

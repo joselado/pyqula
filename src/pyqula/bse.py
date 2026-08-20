@@ -22,6 +22,13 @@ Because the interaction is read from the mean field itself (h.V) by
 default, this is time-dependent Hartree-Fock on top of Hartree-Fock: the
 same interaction generates the Fock self-energy already inside h and the
 BSE kernel, so nothing is double counted.
+
+Passing screening="rpa" replaces the interaction of the direct (ladder)
+term by the static RPA screened one W = eps^-1 v, built from the bands of
+the mean field itself (screening.py), which is the GW-BSE-style
+construction -- the exchange term keeps the bare interaction, as it must.
+Read bsetk/screening.py before using it: a fitted Hubbard U is already an
+effective screened interaction and must not be screened a second time.
 """
 
 from .bsetk.solve import BSE

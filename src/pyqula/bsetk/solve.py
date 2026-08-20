@@ -9,6 +9,29 @@ class BSE():
     """Solution of the Bethe-Salpeter equation at a fixed center-of-mass
     momentum Q, on top of a (mean-field) Hamiltonian.
 
+    screening selects the interaction of the DIRECT (ladder) term:
+
+      None (default)  the bare interaction, i.e. time-dependent
+                      Hartree-Fock -- the behavior this class always had
+      "rpa"           the static RPA screened interaction W = eps^-1 v,
+                      built from the bands of the mean field itself
+                      (bsetk/screening.py). This is the GW-BSE-style
+                      construction and is what physically binds excitons
+      "crpa"          the same, with the transitions inside the nv/nc BSE
+                      band window excluded from the polarization
+      a ScreenedInteraction  a precomputed one, e.g. to reuse the same W
+                      across a scan of Q without rebuilding it
+
+    The EXCHANGE term always keeps the bare interaction, whatever this is
+    set to -- see build_blocks for why.
+
+    BEFORE TURNING SCREENING ON, read bsetk/screening.py's module
+    docstring. In short: a Hubbard U fitted to a material is already an
+    effective screened interaction and must not be screened again, and the
+    default V=h.V from a Hubbard SCF is exactly that case. Screening is
+    for a genuinely bare interaction, i.e. a long-range Coulomb tail from
+    interaction.density_interaction(Vr=...).
+
     Attributes after solving:
       energies    exciton energies, the positive eigenvalues, sorted
       amplitudes  (nexciton,npair) resonant amplitudes A_{vc}(k)
@@ -16,16 +39,22 @@ class BSE():
                   zero under the Tamm-Dancoff approximation
       pairs       the PairBasis, holding the k-mesh, the band window and
                   the (ik,iv,ic) label of every pair index
+      W           the interaction of the direct term (screened, if asked)
+      Wx          the bare interaction, used by the exchange term
     """
     def __init__(self,h,V=None,Q=None,nk=10,nv=None,nc=None,
-            kernel="full",tda=False,max_memory=2.0):
+            kernel="full",tda=False,max_memory=2.0,
+            screening=None,nkW=None):
         self.pairs = PairBasis(h,Q=Q,nk=nk,nv=nv,nc=nc)
-        self.W = bare_interaction(h,V=V)
+        self.Wx = bare_interaction(h,V=V) # bare, for the exchange term
+        self.W = get_direct_interaction(h,self.pairs,V=V,nk=nk,
+                screening=screening,nkW=nkW,kernel=kernel)
+        self.screening = screening
         self.kernel = kernel
         self.tda = tda
         check_memory(self.pairs.npair,tda=tda,max_memory=max_memory)
         self.A,self.Abar,self.B = build_blocks(self.pairs,self.W,
-                kernel=kernel)
+                Wx=self.Wx,kernel=kernel)
         self.solve()
     def get_matrix(self):
         """Return the full BSE matrix that is diagonalized,
@@ -99,6 +128,46 @@ class BSE():
         Positive means bound."""
         gap = np.min(self.pairs.dE) # lowest single-particle transition
         return gap - self.get_energies(n=n)
+
+
+def get_direct_interaction(h,pb,V=None,nk=10,screening=None,nkW=None,
+        kernel="full"):
+    """Return the interaction the direct (ladder) term should use.
+
+    screening=None gives the bare interaction back, so nothing about the
+    old behavior changes. Otherwise the static RPA screened interaction is
+    built on the mesh -- reusing the PairBasis's own diagonalizations when
+    the screening mesh is the BSE mesh, which is the common case and makes
+    the screening almost free next to the kernel build."""
+    import warnings
+    if screening is None: return bare_interaction(h,V=V)
+    if hasattr(screening,"at"): return screening # precomputed, reuse it
+    from .screening import screened_interaction
+    if kernel in ("exchange","none"):
+        warnings.warn("screening=%r has no effect with kernel=%r: the "
+            "screened interaction only enters the direct (ladder) term, "
+            "and the exchange term deliberately keeps the bare "
+            "interaction. The result is the unscreened one"
+            %(screening,kernel),stacklevel=3)
+    nkW = nk if nkW is None else nkW
+    reuse = (nkW==nk) # can the pair basis's own eigenstates be reused?
+    if not reuse:
+        # A Gamma-centered mesh of m*nk points contains every point of the
+        # nk one, so the q-points the direct term asks for are still
+        # tabulated; any other ratio leaves holes and is refused rather
+        # than interpolated over.
+        if nkW%nk!=0 or nkW<nk:
+            raise ValueError("nkW = %d must be a positive integer multiple "
+                "of nk = %d. The direct term needs W at the differences of "
+                "the BSE k-mesh, and only a mesh whose density is a "
+                "multiple of it contains those points; anything else would "
+                "have to be interpolated, which is not done here"%(nkW,nk))
+    exclude = (pb.vbands,pb.cbands) if screening=="crpa" else None
+    return screened_interaction(h,V=V,nk=nkW,screening=screening,
+            exclude=exclude,
+            kpoints=pb.kpoints if reuse else None,
+            ek=pb.ek if reuse else None,
+            ck=pb.ck if reuse else None)
 
 
 def solve_pseudo_hermitian(H):
