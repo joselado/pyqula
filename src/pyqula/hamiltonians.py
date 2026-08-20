@@ -258,6 +258,12 @@ class Hamiltonian():
         lowest independent-particle transition each exciton lies"""
         from . import bse
         return bse.exciton_binding_energies(self,**kwargs)
+    def get_exciton_bands(self,**kwargs):
+        """Return the exciton bands E_X(Q): the Bethe-Salpeter energies at
+        finite center-of-mass momentum, scanned along a q-path. Returns
+        flat (qs,es) arrays, same convention as get_bands"""
+        from . import bse
+        return bse.exciton_bands(self,**kwargs)
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)

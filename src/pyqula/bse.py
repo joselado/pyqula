@@ -25,6 +25,7 @@ BSE kernel, so nothing is double counted.
 """
 
 from .bsetk.solve import BSE
+from .bsetk.bands import exciton_bands
 
 
 def get_bse(h,**kwargs):

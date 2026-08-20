@@ -2085,7 +2085,7 @@ print(bse.get_energies()[0], bse.get_binding_energies()[0]) # lowest exciton, an
 
 - `h.get_exciton_energies` returns the exciton energies, `h.get_exciton_binding_energies` how far below the lowest independent-particle transition each one lies (positive means bound), and `h.get_exciton_states` both the energies and the amplitudes $A_{vc}(k)$
 - `h.get_bse` returns the full solved object, whose `pairs` attribute holds the k-mesh, the band window and the `(ik,iv,ic)` label of every pair index, so the amplitudes can be resolved in momentum or by band
-- `Q=[qx,qy,qz]` gives the excitons at finite center-of-mass momentum (an exciton dispersion, if scanned over a q-path); `nv`/`nc` restrict the calculation to the `nv` highest valence and `nc` lowest conduction bands
+- `Q=[qx,qy,qz]` gives the excitons at finite center-of-mass momentum, and `h.get_exciton_bands` scans that over a q-path to give the exciton band structure (below); `nv`/`nc` restrict the calculation to the `nv` highest valence and `nc` lowest conduction bands
 - `kernel="full"` (default) uses both kernel terms; `"direct"` is the ladder alone (no singlet/triplet splitting), `"exchange"` is exactly the RPA, and `"none"` collapses the spectrum onto the bare transition energies
 - `tda=True` applies the Tamm-Dancoff approximation, diagonalizing only the resonant block: four times smaller and Hermitian, and a good approximation at weak coupling
 
@@ -2096,6 +2096,23 @@ One caveat on the default `V=None`: `h.V` does not capture an *anisotropic* exch
 The size of the problem is $N_{pair} = n_v n_c N_k$, and the matrix is dense and $2N_{pair}$ square, so the k-mesh is the expensive knob: `max_memory` (default 2 GB) refuses a calculation that would not fit rather than letting it exhaust memory. A gapped reference state is required -- a metallic filling has no well-defined electron-hole pair basis and is rejected, as are Nambu/BdG Hamiltonians, whose two-particle structure is different.
 
 See `examples/2d/excitons_bse/main.py` for a runnable version (the lowest exciton of a gapped honeycomb detaching from the absorption edge as the Coulomb tail is turned up) and `tests/bse/` for the correctness checks, including a cross-check that the exchange-only BSE reproduces the poles of the independently implemented RPA kernel of `chitk/rpa.py`.
+
+### Exciton band structure
+
+An exciton is a two-particle state, so besides its binding energy it has a dispersion of its own: the bound electron-hole pair propagates with a center-of-mass momentum $Q$, and $E_X(Q)$ is the exciton band structure. It is not the difference of two band energies -- the electron-hole interaction bends it -- so its curvature is the exciton's effective mass, and a flat exciton band means a strongly bound, spatially compact exciton. `h.get_exciton_bands` solves one BSE per q-point along a path and returns the result in the same flat form `get_bands` uses:
+
+```python
+# h2 and W as above; nv=nc=2 keeps both members of each spin-degenerate pair
+opts = dict(V=W,nq=20,nk=8,nv=2,nc=2,n=4)
+qs,es = h2.get_exciton_bands(**opts) # the four lowest excitons along the path
+qs0,es0 = h2.get_exciton_bands(kernel="none",**opts) # the bare continuum
+```
+
+`qs` holds the integer index of the q-point along the path and `es` the exciton energy, both flat 1D arrays ready for a scatter plot; `n` keeps only the `n` lowest excitons at each q-point and every other argument is passed straight to `get_bse`. `qpath` takes the same input as `get_bands` -- a list of high-symmetry labels or of explicit q-vectors -- and $Q$ is not restricted to the k-mesh, since the pair basis diagonalizes at $k$ and $k+Q$ independently. Running it a second time with `kernel="none"` is the same call with the kernel construction skipped, and gives the bottom of the electron-hole continuum to plot the exciton band against, which is what makes the binding visible. If the mean-field reference is unstable against some excitation at some q-point, `es` comes back complex there rather than silently losing the imaginary part. The cost is `nq` full dense diagonalizations, so `nv`/`nc` and `tda=True` are the knobs that make a long path affordable, and `parallel.set_cores` parallelizes over the path.
+
+One trap worth knowing about, since it is invisible at $Q=0$: `nv`/`nc` must not cut a degenerate multiplet in half. Every band of a spinful Hamiltonian with no spin-orbit coupling and no magnetic order is two-fold degenerate, so `nv=1` there keeps an arbitrary state out of a two-dimensional degenerate subspace, and the exciton energies inherit that arbitrariness -- measurably, `E_X(Q)` stops being even in $Q$ on a time-reversal-symmetric model by ~0.1, where the full multiplet gives equality to $10^{-15}$. The library warns when the window splits a multiplet; use an even `nv`/`nc` on a spin-degenerate Hamiltonian.
+
+See `examples/2d/exciton_bands/main.py` for a runnable version (the exciton band of a gapped honeycomb, plotted below the electron-hole continuum of the same model) and `tests/bse/test_bse_bands.py` for the checks.
 
 
 # Quantum transport
@@ -2862,6 +2879,19 @@ Return the exciton binding energies, i.e. how far below the lowest independent-p
 
 ### h.get_exciton_states()
 Return `(energies,amplitudes)` of the excitons, the amplitudes being the electron-hole amplitudes $A_{vc}(k)$ of each one, indexed by the flattened pair index whose `(ik,iv,ic)` meaning is in the `BSE` object's `pairs.labels`. Same arguments as `get_exciton_energies`.
+
+### h.get_exciton_bands()
+Return the exciton band structure $E_X(Q)$: one Bethe-Salpeter solve per q-point along a path.
+
+Optional arguments:
+
+- qpath=None, nq=20: the q-path, same input as `get_bands` (a list of high-symmetry labels, a list of explicit q-vectors, or `None` for the default path with `nq` points)
+
+- n=None: keep only the `n` lowest excitons at each q-point
+
+- V, nk, nv, nc, kernel, tda, max_memory: as in `get_bse`, passed through unchanged
+
+Returns `(qs,es)`, flat 1D arrays of equal length: `qs` the integer index of the q-point along the path (same convention as `get_bands`) and `es` the exciton energy, complex at any q-point where the mean-field reference is unstable against the excitation. Note that `nv`/`nc` must not split a degenerate multiplet (a spinful Hamiltonian with no spin-orbit coupling or magnetic order needs an even `nv`/`nc`); a warning is raised if they do.
 
 ### h.get_fermi_surface()
 Compute the spectral weight on a 2D k-mesh at a single energy.

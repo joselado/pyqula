@@ -122,4 +122,37 @@ def select_bands(ek,nv=None,nc=None):
     if nc is not None: cb = cb[:nc] # nc lowest conduction bands
     if len(vb)==0 or len(cb)==0:
         raise ValueError("empty band window (nv=%s, nc=%s)"%(nv,nc))
+    _warn_degenerate_window(ek,vb,cb)
     return vb,cb
+
+
+def _warn_degenerate_window(ek,vb,cb,tol=1e-6):
+    """Warn if the nv/nc window cuts through a degenerate multiplet.
+
+    Splitting a degenerate subspace keeps an arbitrary linear combination
+    of its states -- whichever one the diagonalization happened to return
+    -- so the pair basis is no longer determined by the physics, and the
+    resulting exciton energies are not either. It is easy to hit without
+    noticing: every band of a spinful Hamiltonian with no spin-orbit
+    coupling and no magnetic order is two-fold degenerate, so nv=1/nc=1
+    always cuts a multiplet there. The symptom is subtle rather than
+    catastrophic -- E(Q) stops being even in Q on a time-reversal
+    symmetric model, by ~0.1 in a measured case that is exact to 1e-15
+    with the full multiplet included -- so it is warned about here rather
+    than left to be discovered downstream."""
+    import warnings
+    cut = [] # window boundaries that fall inside a multiplet
+    if vb[0]>0 and np.min(np.abs(ek[:,vb[0]]-ek[:,vb[0]-1]))<tol:
+        cut.append("valence bands %d,%d"%(vb[0]-1,vb[0]))
+    if cb[-1]<ek.shape[1]-1 and np.min(np.abs(ek[:,cb[-1]]-ek[:,cb[-1]+1]))<tol:
+        cut.append("conduction bands %d,%d"%(cb[-1],cb[-1]+1))
+    if len(cut)==0: return
+    warnings.warn("the nv/nc band window splits a degenerate multiplet (%s "
+        "are degenerate at some k-point, with only part of the multiplet "
+        "inside the window). Which states are kept is then an arbitrary "
+        "choice within the degenerate subspace, and the exciton energies "
+        "inherit that arbitrariness. Widen nv/nc to take the whole "
+        "multiplet -- a spinful Hamiltonian with no spin-orbit coupling "
+        "and no magnetic order is two-fold degenerate throughout, so it "
+        "needs an even nv/nc."%(" and ".join(cut),)
+        ,stacklevel=3)

@@ -45,7 +45,7 @@ exciton whose Bohr radius spans many unit cells has an envelope `A(k)`
 squeezed into a small neighbourhood of the band edge, and needs nk in the
 hundreds -- unreachable densely.
 
-## Phase 2 -- observables (not started)
+## Phase 2 -- observables (partially done)
 
 Straightforward, no new numerics needed.
 
@@ -55,9 +55,24 @@ Straightforward, no new numerics needed.
    `V^a_X = sum_{cvk} A_X(k) v^a_{vc}(k)`, and bright/dark classification
    follows. Gives the excitonic absorption spectrum, which is the point of
    computing excitons at all.
-2. **Exciton bands `E_X(Q)`** scanned along a q-path. Reuse
-   `chitk/densitychi.plasmon_bands`' flat `(qs, ws, ...)` return convention.
-   The finite-Q machinery is already implemented and tested.
+2. **Exciton bands `E_X(Q)`** scanned along a q-path. DONE:
+   `bsetk/bands.py`, `h.get_exciton_bands`, flat `(qs, es)` return in the
+   `get_bands`/`plasmon_bands` convention, `parallel.pcall` over the path,
+   `examples/2d/exciton_bands/`, `tests/bse/test_bse_bands.py`. It is a
+   thin loop over the existing fixed-Q solver, so the cost is nq dense
+   diagonalizations and the table above still sets the reachable mesh.
+
+   Building it turned up one trap that is invisible at Q=0: an `nv`/`nc`
+   window that cuts a **degenerate multiplet** in half keeps an arbitrary
+   state out of the degenerate subspace, and the exciton energies inherit
+   that arbitrariness. Measured on the spinful ionic chain, `nv=nc=1` (so
+   half of each spin-degenerate pair) breaks `E_X(Q) = E_X(-Q)` by 0.15 in
+   the full kernel and 0.17 in the direct one, where `nv=nc=2` gives 3e-15;
+   the `kernel="none"` spectrum is symmetric either way, so only the
+   interacting terms expose it. `bsetk/pairbasis.select_bands` now warns
+   when the window splits a multiplet. Any later work that truncates the
+   pair basis (the iterative solver of Phase 3 especially) has to respect
+   the same rule.
 3. **Envelope visualization**: `|A_vc(k)|²` over the BZ, and its real-space
    transform. `BSE.pairs.labels` already carries the `(ik,iv,ic)` of every
    pair index, so this is presentation work.
