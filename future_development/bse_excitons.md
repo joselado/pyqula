@@ -512,6 +512,15 @@ The `chi0` build itself is `nk^2 * n_occ * n_emp * norb^2`, jitted with a
 
 ### Follow-up tier (noted, not scoped)
 
+Extending the screened interaction to the **magnon** RPA kernel was asked
+about and ruled out; see `magnons_screening.md` for the Goldstone/Ward
+identity measurements that settle it. The short version is that the magnon
+kernel must use the same interaction that produced the mean-field exchange
+splitting, and screening only the kernel opens a gap
+`U|m_z|(1 - U_kern/U_MF)` -- first order in the mismatch, with the Stoner
+splitting as prefactor. The exciton case is different only because no
+Goldstone theorem constrains it.
+
 Two plan items were deliberately not built. A `max_memory` guard on the
 `chi0` tensor is unnecessary -- it is `nq*norb^2`, always dwarfed by the
 BSE matrix `solve.check_memory` already guards. A standalone

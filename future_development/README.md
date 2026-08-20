@@ -13,6 +13,9 @@ already reached once.
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a
   quantics tensor-train route to large k-meshes.
+- [`magnons_screening.md`](magnons_screening.md) -- why the screened
+  interaction must NOT be used in the magnon RPA kernel on its own, with
+  the Goldstone/Ward-identity measurements that settle it.
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

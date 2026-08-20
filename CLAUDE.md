@@ -165,7 +165,9 @@ spectrum).
   scoped-but-not-started, with the measurements and dead ends that led to each conclusion recorded so
   they don't have to be re-derived. Check it before starting work in an area it covers, and add to it
   when a piece of work leaves something deliberately unbuilt. Currently: `bse_excitons.md` (exciton
-  observables, iterative solvers, and a measured feasibility study of a quantics tensor-train route).
+  observables, iterative solvers, and a measured feasibility study of a quantics tensor-train route) and
+  `magnons_screening.md` (why the screened interaction must not be used in the magnon RPA kernel on its
+  own -- it breaks the Goldstone mode at first order in the kernel/mean-field mismatch).
 - `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap (not started) for moving compute-heavy
   paths onto GPU via `jax` (already a hard dependency), covering batched dense diagonalization
   (`htk/eigenvectors.py`), the partially-started KPM GPU path (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), and
