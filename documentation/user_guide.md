@@ -2050,6 +2050,54 @@ qs,ws,gammas = h.get_plasmon_bands(V1=0.6,qpath=[[0.3,0.,0.],[0.4,0.,0.],[0.5,0.
 
 A 1D chain at half filling has perfect Fermi-surface nesting at $q=\pi$, strongly enhancing the static charge susceptibility there -- the charge-channel analog of the low-filling ferromagnetic instability above, driven by a repulsive `V1` instead (see `tests/chi/test_plasmon_bands.py`).
 
+## Excitons and the Bethe-Salpeter equation
+
+The RPA sections above dress a response function at fixed frequency. The Bethe-Salpeter equation (BSE) instead solves the two-particle problem directly, by diagonalizing the electron-hole pair Hamiltonian, which gives the exciton energies *and* the electron-hole amplitudes that say what each exciton is made of. This matters because a mean-field band structure can only ever absorb above its gap: the electron-hole interaction binds the pair, and the exciton appears below the gap by its binding energy.
+
+The exciton at center-of-mass momentum $Q$ is written as a superposition of the mean field's own transitions,
+
+$$|X\rangle_Q = \sum_{v,c,k} A_{vc}(k)\, c^\dagger_{c,k+Q} c_{v,k} |MF\rangle$$
+
+and the BSE is the eigenvalue problem for the amplitudes $A_{vc}(k)$, with a kernel made of a *direct* term (the screened electron-hole attraction, which binds) and an *exchange* term (which splits singlet from triplet and, on its own, reproduces the RPA). The formalism is the localized-orbital ("point-like orbitals") BSE of the Xatu code, [arXiv:2307.01572](https://arxiv.org/abs/2307.01572), solved here in its full non-Tamm-Dancoff form.
+
+By default the interaction is read straight off a converged mean-field Hamiltonian (`h.V`), so the same interaction that generated the Fock self-energy inside `h` also generates the BSE kernel and nothing is double counted -- this is time-dependent Hartree-Fock on top of Hartree-Fock:
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian(has_spin=True)
+h.add_sublattice_imbalance(0.6)
+hmf = h.get_mean_field_hamiltonian(U=1.5,filling=0.5,mf="antiferro",nk=6) # converge a mean field
+es = hmf.get_exciton_energies(nk=6,n=8) # the eight lowest excitons
+```
+
+A purely onsite Hubbard `U` is far too short ranged to bind a Wannier-Mott exciton in two dimensions, so realistic exciton calculations want a long-ranged interaction instead. `bsetk.interaction.density_interaction` builds one from the same `U`/`V1`/`V2`/`V3`/`Vr` parameters `Vinteraction` uses, and it can be handed to any of the exciton methods through `V=`:
+
+```python
+import numpy as np
+from pyqula.bsetk.interaction import density_interaction
+h2 = g.get_hamiltonian()
+h2.add_sublattice_imbalance(1.0) # a gapped semiconductor
+W = density_interaction(h2,Vr=lambda r1,r2: 0.8/np.sqrt((r1-r2).dot(r1-r2)+0.25)) # Coulomb tail
+bse = h2.get_bse(V=W,nk=8)
+print(bse.get_energies()[0], bse.get_binding_energies()[0]) # lowest exciton, and how far below the gap
+```
+
+- `h.get_exciton_energies` returns the exciton energies, `h.get_exciton_binding_energies` how far below the lowest independent-particle transition each one lies (positive means bound), and `h.get_exciton_states` both the energies and the amplitudes $A_{vc}(k)$
+- `h.get_bse` returns the full solved object, whose `pairs` attribute holds the k-mesh, the band window and the `(ik,iv,ic)` label of every pair index, so the amplitudes can be resolved in momentum or by band
+- `Q=[qx,qy,qz]` gives the excitons at finite center-of-mass momentum (an exciton dispersion, if scanned over a q-path); `nv`/`nc` restrict the calculation to the `nv` highest valence and `nc` lowest conduction bands
+- `kernel="full"` (default) uses both kernel terms; `"direct"` is the ladder alone (no singlet/triplet splitting), `"exchange"` is exactly the RPA, and `"none"` collapses the spectrum onto the bare transition energies
+- `tda=True` applies the Tamm-Dancoff approximation, diagonalizing only the resonant block: four times smaller and Hermitian, and a good approximation at weak coupling
+
+Since the Hamiltonian is spinful, spin is simply part of the orbital index, so singlet and triplet excitons come out of a single calculation with no separate spin channel -- the exchange term is what splits them. On a spin-rotation-invariant reference the lowest transition starts out four-fold degenerate and the full kernel resolves it into a three-fold triplet with the singlet pushed up above it, which neither kernel term produces on its own (see `tests/bse/test_bse_physics.py`).
+
+One caveat on the default `V=None`: `h.V` does not capture an *anisotropic* exchange run (`J1x`/`J1y` alongside `J1z` store only the z channel), and after `SxSx`/`SySy` it is left in the internally-rotated spin frame while the returned Hamiltonian is rotated back. In either case build the interaction explicitly and pass it as `V=` instead.
+
+The size of the problem is $N_{pair} = n_v n_c N_k$, and the matrix is dense and $2N_{pair}$ square, so the k-mesh is the expensive knob: `max_memory` (default 2 GB) refuses a calculation that would not fit rather than letting it exhaust memory. A gapped reference state is required -- a metallic filling has no well-defined electron-hole pair basis and is rejected, as are Nambu/BdG Hamiltonians, whose two-particle structure is different.
+
+See `examples/2d/excitons_bse/main.py` for a runnable version (the lowest exciton of a gapped honeycomb detaching from the absorption edge as the Coulomb tail is turned up) and `tests/bse/` for the correctness checks, including a cross-check that the exchange-only BSE reproduces the poles of the independently implemented RPA kernel of `chitk/rpa.py`.
+
+
 # Quantum transport
 
 In this section we discuss how we can perform quantum transport calculations with pyqula.
@@ -2784,6 +2832,36 @@ Optional arguments:
 - qpath=None, nq=20, energies, delta, nk: as in `get_magnon_bands`
 
 Returns `(qs,ws,gammas)`, same convention as `get_magnon_bands`.
+
+### h.get_bse()
+Solve the Bethe-Salpeter equation (excitons) on top of this mean-field Hamiltonian, and return the solved `BSE` object.
+
+Optional arguments:
+
+- V=None: the electron-hole interaction. `None` reads it from `h.V`, the interaction the mean field was converged with (so the BSE kernel and the Fock self-energy inside `h` come from the same interaction). Otherwise a real-space dictionary `{(n1,n2,n3): matrix}`, or a plain matrix for an onsite-only interaction -- `bsetk.interaction.density_interaction` builds one from `U`/`V1`/`V2`/`V3`/`Vr`
+
+- Q=None: center-of-mass momentum of the exciton, defaulting to the zone center
+
+- nk=10: k-points per direction of the mesh the electron-hole pairs are built on
+
+- nv=None, nc=None: restrict to the `nv` highest valence and `nc` lowest conduction bands; `None` takes all of them
+
+- kernel="full": which kernel terms to include -- `"full"`, `"direct"` (ladder only), `"exchange"` (exactly the RPA) or `"none"` (bare transitions)
+
+- tda=False: apply the Tamm-Dancoff approximation, diagonalizing only the resonant block
+
+- max_memory=2.0: refuse, rather than attempt, a calculation whose dense matrix would need more than this many GB
+
+The returned object exposes `energies`, `amplitudes` (the resonant amplitudes $A_{vc}(k)$), `amplitudesY` (the antiresonant ones, zero under `tda`), `pairs` (the k-mesh, band window and `(ik,iv,ic)` label of every pair index) and the `get_energies`/`get_binding_energies` methods below.
+
+### h.get_exciton_energies()
+Return the exciton energies from the Bethe-Salpeter equation, sorted. Takes the same arguments as `get_bse`, plus `n=None` to keep only the `n` lowest.
+
+### h.get_exciton_binding_energies()
+Return the exciton binding energies, i.e. how far below the lowest independent-particle transition each exciton lies; positive means bound. Same arguments as `get_exciton_energies`.
+
+### h.get_exciton_states()
+Return `(energies,amplitudes)` of the excitons, the amplitudes being the electron-hole amplitudes $A_{vc}(k)$ of each one, indexed by the flattened pair index whose `(ik,iv,ic)` meaning is in the `BSE` object's `pairs.labels`. Same arguments as `get_exciton_energies`.
 
 ### h.get_fermi_surface()
 Compute the spectral weight on a 2D k-mesh at a single energy.

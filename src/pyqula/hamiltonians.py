@@ -236,6 +236,28 @@ class Hamiltonian():
         interaction, scanned along a q-path"""
         from . import chi
         return chi.plasmon_bands(self,**kwargs)
+    def get_bse(self,**kwargs):
+        """Return the solved Bethe-Salpeter (exciton) problem on top of
+        this mean-field Hamiltonian, as a bsetk.solve.BSE object"""
+        from . import bse
+        return bse.get_bse(self,**kwargs)
+    def get_exciton_energies(self,**kwargs):
+        """Return the exciton energies from the Bethe-Salpeter equation
+        solved on top of this mean-field Hamiltonian. The interaction
+        defaults to the one the mean field was converged with (self.V);
+        pass V explicitly for a different (e.g. screened) interaction"""
+        from . import bse
+        return bse.exciton_energies(self,**kwargs)
+    def get_exciton_states(self,**kwargs):
+        """Return (energies,amplitudes) of the excitons, the amplitudes
+        being the electron-hole amplitudes A_vc(k) of each exciton"""
+        from . import bse
+        return bse.exciton_states(self,**kwargs)
+    def get_exciton_binding_energies(self,**kwargs):
+        """Return the exciton binding energies, i.e. how far below the
+        lowest independent-particle transition each exciton lies"""
+        from . import bse
+        return bse.exciton_binding_energies(self,**kwargs)
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)
