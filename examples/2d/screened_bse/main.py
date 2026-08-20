@@ -16,6 +16,13 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 # produced. screening="rpa" computes it and puts it in the direct (ladder)
 # term, leaving the exchange term bare -- the standard GW-BSE split.
 #
+# eps is built in the CHARGE channel, on site indices, as in GW: what
+# polarizes the medium is the total density, and the correction that comes
+# back is spin independent. That is what keeps the result spin-rotation
+# invariant -- dressing the full spin-orbital matrix instead
+# (channel="orbital") generates an Ising Sz-Sz coupling and splits the
+# exciton's spin multiplet, which this example also shows.
+#
 # Below: the dielectric matrix across the Brillouin zone, and what
 # screening does to the exciton.
 
@@ -59,12 +66,17 @@ for val,k in strength[0:6]:
     print("   cell %-12s  %.4f"%(str(k),val))
 
 # and what it does to the exciton
-bare = h.get_bse(V=V,nk=nk)
-scr = h.get_bse(V=V,nk=nk,screening="rpa")
-print("\nlowest exciton, bare interaction     = %.6f (binding %.6f)"
-        %(bare.get_energies(1)[0].real,bare.get_binding_energies(1)[0].real))
-print("lowest exciton, screened interaction = %.6f (binding %.6f)"
-        %(scr.get_energies(1)[0].real,scr.get_binding_energies(1)[0].real))
+print("\n%-28s %10s %10s   %s"%("","lowest","binding","lowest 4 (multiplet)"))
+for label,opts in [("bare",dict()),
+                   ("screened, charge channel",dict(screening="rpa")),
+                   ("screened, orbital channel",dict(screening="rpa",
+                                                     channel="orbital"))]:
+    b = h.get_bse(V=V,nk=nk,**opts)
+    es = b.get_energies(4).real
+    print("%-28s %10.6f %10.6f   spread %.1e"%(label,es[0],
+            b.get_binding_energies(1)[0].real,es[3]-es[0]))
+print("\nThe multiplet stays degenerate in the charge channel and splits in")
+print("the orbital one: that split is the SU(2)-breaking artifact.")
 
 plt.plot(np.sort(eigs.ravel()),marker=".",ls="")
 plt.axhline(1.,color="k",ls="--",label="unscreened")

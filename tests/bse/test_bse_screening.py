@@ -286,44 +286,84 @@ def test_a_precomputed_screened_interaction_can_be_reused():
     assert np.max(np.abs(a - b)) < 1e-12
 
 
-# --- a known limitation, pinned so it cannot change silently -----------
+# --- the charge channel, i.e. the standard GW construction ------------
 
-def test_screening_breaks_spin_rotation_invariance():
-    """The RPA in this density-density representation is NOT spin-rotation
-    invariant, and this test records that rather than asserting it away.
+def test_charge_channel_preserves_spin_rotation_invariance():
+    """The reason channel="charge" is the default.
 
-    On a non-magnetic reference the Bloch states are spin-diagonal, so
-    chi0 is proportional to the identity in spin. The bare interaction's
-    spin structure is spanned by {1, sigma_x} (a site pair couples every
-    spin combination equally; a site's own block is the up-down-only
-    Hubbard term), and that algebra is commutative, so eps and W stay
-    inside it -- but with the same-spin and opposite-spin entries now
-    DIFFERENT, where the bare interaction had them equal. Splitting
-    W into those two parts,
+    Dressing the full spin-orbital matrix (channel="orbital") screens the
+    charge and spin channels with a single density-density kernel. On a
+    non-magnetic reference chi0 is spin-diagonal and the bare interaction's
+    spin structure spans the commutative algebra {1, sigma_x}, so eps and W
+    stay inside it -- but with the same-spin and opposite-spin entries no
+    longer EQUAL. Splitting W into those two parts,
 
         A n_iu n_ju + B n_iu n_jd + ... = (A+B)/2 n_i n_j + 2(A-B) Sz_i Sz_j
 
-    so the screened interaction carries an Ising Sz-Sz coupling. That is
-    not SU(2) invariant, and the visible consequence is that the lowest
-    spin multiplet of the exciton spectrum splits.
+    a nonzero A-B is an Ising Sz-Sz coupling, which is not SU(2) invariant,
+    and it splits the exciton's spin multiplet.
 
-    The fix is the standard GW one -- build the dielectric matrix in the
-    charge channel alone, over site indices, and left-multiply the bare
-    interaction by it so that its spin structure is untouched. That is a
-    different approximation, not a bug fix, and is deliberately not
-    implemented here. Until it is, prefer spinless models (or read the
-    spin structure of the result with this in mind)."""
+    The charge channel builds the dielectric matrix on site indices instead
+    and adds a spin-INDEPENDENT correction to the bare interaction, so A-B
+    is left exactly as the bare interaction had it. Both halves are checked
+    here: the matrix elements, and the multiplet the user actually sees."""
     h = gapped_honeycomb(mass=1.0)  # spin-rotation invariant reference
     V = density_interaction(h, U=1.0, Vr=_coulomb(0.6))
-    W = h.get_screened_interaction(V=V, nk=6)
-    vq, Wq = interaction_at_q(W.bare, h.geometry, W.qs[5]), W.at(W.qs[5])
-    # the bare interaction couples both spin combinations of a site pair
-    # equally; the screened one no longer does
-    assert abs(vq[0, 2] - vq[0, 3]) < 1e-12
-    assert abs(Wq[0, 2] - Wq[0, 3]) > 1e-3
-    # and the lowest multiplet, four-fold degenerate with the bare
-    # interaction, splits
-    bare = h.get_bse(V=V, nk=6).get_energies(4).real
-    screened = h.get_bse(V=V, nk=6, screening="rpa").get_energies(4).real
-    assert bare[3] - bare[0] < 1e-10
-    assert screened[3] - screened[0] > 1e-3
+    same_opp = {}
+    for ch in ("orbital", "charge"):
+        W = h.get_screened_interaction(V=V, nk=6, channel=ch)
+        Wq = W.at(W.qs[5])
+        same_opp[ch] = abs(Wq[0, 2] - Wq[0, 3])
+        q = W.qs[5]
+    vq = interaction_at_q(W.bare, h.geometry, q)  # the bare one, same q
+    assert abs(vq[0, 2] - vq[0, 3]) < 1e-12       # bare: equal
+    assert same_opp["orbital"] > 1e-3             # orbital: split
+    assert same_opp["charge"] < 1e-12             # charge: still equal
+
+    # and the multiplet the spectrum shows
+    spread = lambda b: b.get_energies(4).real[3] - b.get_energies(4).real[0]
+    assert spread(h.get_bse(V=V, nk=6)) < 1e-10
+    assert spread(h.get_bse(V=V, nk=6, screening="rpa",
+                            channel="orbital")) > 1e-3
+    assert spread(h.get_bse(V=V, nk=6, screening="rpa",
+                            channel="charge")) < 1e-10
+
+
+def test_the_two_channels_coincide_for_a_spinless_hamiltonian():
+    """With no spin to sum over, v^c = v and chi^c = chi0, so the charge
+    channel reduces exactly to W = eps^-1 v. Anything else would mean the
+    spin collapse is not the identity it should be here."""
+    from pyqula import geometry
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    h.add_sublattice_imbalance(1.0)
+    h = h.get_multicell().get_dense()
+    V = density_interaction(h, Vr=_coulomb(0.6))
+    a = h.get_screened_interaction(V=V, nk=6, channel="orbital")
+    b = h.get_screened_interaction(V=V, nk=6, channel="charge")
+    assert np.max(np.abs(a.Wq - b.Wq)) < 1e-12
+    assert abs(a.epsmin - b.epsmin) < 1e-12
+
+
+def test_the_charge_channel_screens_rather_than_enhances():
+    """A self-interaction-free density-density matrix is traceless, hence
+    indefinite, so the spin-orbital dielectric matrix drops below one in
+    some channel and the interaction can come out ENHANCED. The charge
+    channel's v^c picks up a positive diagonal from the Hubbard term
+    (v^c_ii = U/2), which is what restores ordinary screening -- provided
+    the model has a realistic onsite U at all."""
+    h = gapped_honeycomb(mass=1.0)
+    V = density_interaction(h, U=2.0, Vr=_coulomb(0.6))
+    bare = h.get_bse(V=V, nk=6).get_binding_energies(1)[0].real
+    orbital = h.get_bse(V=V, nk=6, screening="rpa",
+                        channel="orbital").get_binding_energies(1)[0].real
+    charge = h.get_bse(V=V, nk=6, screening="rpa",
+                       channel="charge").get_binding_energies(1)[0].real
+    assert orbital > bare   # the spin channel is Stoner-enhanced
+    assert charge < bare    # ... and the charge channel is not
+
+
+def test_an_unknown_channel_is_refused():
+    h = gapped_ionic_chain()
+    with pytest.raises(ValueError, match="channel must be"):
+        h.get_screened_interaction(V=density_interaction(h, U=1.0),
+                                   nk=NK, channel="spin")

@@ -83,8 +83,9 @@ Straightforward, no new numerics needed.
 
 DONE: `src/pyqula/bsetk/screening.py` (+ public `screening.py`),
 `h.get_screened_interaction()`, `h.get_polarizability()`,
-`h.get_bse(screening="rpa"|"crpa")`, `tests/bse/test_bse_screening.py`
-(23 tests), `examples/2d/screened_bse/`. The plan below is what was built;
+`h.get_bse(screening="rpa"|"crpa", channel="charge"|"orbital")`,
+`tests/bse/test_bse_screening.py` (27 tests),
+`examples/2d/screened_bse/`. The plan below is what was built;
 the "What the implementation measured" section at the end records what
 came out of it that the plan did not anticipate.
 
@@ -168,6 +169,16 @@ cross-check against `chitk/rpa.py` in `tests/bse/test_bse_rpa.py`.
 Concretely `build_blocks(pb, W, kernel=...)` becomes
 `build_blocks(pb, W, Wx=None, kernel=...)` with `Wx=None` meaning "same as
 W". Every existing call keeps its current behavior bit for bit.
+
+### Which channel the dielectric matrix lives in
+
+This is the part the plan did not foresee at all, and it turned out to
+matter more than anything else in the section. It is written up in full as
+point 5 of "What the implementation measured" below: the short version is
+that the dielectric matrix must be built in the CHARGE channel, on site
+indices, or the result is not spin-rotation invariant. `channel="charge"`
+is the default; `channel="orbital"` keeps the plain spin-orbital RPA the
+plan described.
 
 ### RPA vs cRPA -- and where the real double counting is
 
@@ -385,8 +396,8 @@ trip `select_bands`' degenerate-multiplet warning.
 `tests/bse/test_bse_screening.py` builds a spinless chain with four
 *different* onsite energies for this.
 
-**5. The RPA here breaks spin-rotation invariance. This is the sharpest
-limitation and the plan did not anticipate it.** On a non-magnetic spinful
+**5. The plain spin-orbital RPA breaks spin-rotation invariance. The plan
+did not anticipate it; the charge-channel construction below fixes it.** On a non-magnetic spinful
 reference the Bloch states are spin-diagonal, so `chi0` comes out
 proportional to the identity in spin. The bare interaction's spin
 structure is spanned by `{1, sigma_x}` -- a site pair couples every spin
@@ -421,31 +432,70 @@ is what does it. `tests/bse/test_bse_screening.py::
 test_screening_breaks_spin_rotation_invariance` pins both halves (the
 matrix elements and the multiplet split) so it cannot change silently.
 
-**The fix, and why it was not taken here.** The standard GW construction
-builds the dielectric matrix in the **charge channel alone** -- a matrix
-over SITE indices, `eps_ij(q) = delta_ij - sum_k v^c_ik chi^c_kj` -- and
-then left-multiplies the bare interaction by it,
+**The fix, applied.** `channel="charge"` (now the default) builds the
+dielectric matrix in the **charge channel alone** -- a matrix over SITE
+indices -- because that is what screening physically is: what polarizes
+the medium is the total density, and what the induced charge acts back on
+is again the total density.
 
 ```
-W_{(i,s)(j,s')}(q) = sum_k [eps^-1(q)]_ik v_{(k,s)(j,s')}(q)
+chi^c_ij = sum_{s,s'} chi0_{(i,s)(j,s')}      (= chitk/chiAB.py's <n_i;n_j>)
+v^c_ij   = (1/4) sum_{s,s'} v_{(i,s)(j,s')}
+eps_ij   = delta_ij - sum_k v^c_ik chi^c_kj
+W_{(i,s)(j,s')} = v_{(i,s)(j,s')} + [v^c chi v^c]_ij,  chi = chi^c(1-v^c chi^c)^-1
 ```
 
-Because `eps^-1` acts only on the spatial index, the spin structure of
-`v` is untouched and SU(2) survives by construction. It also fixes the
-antiscreening of point 2 for free, since a charge-channel Coulomb *with*
-its onsite term is positive definite where the spin-orbital matrix never
-is. It is maybe thirty lines.
+Two things about this that the earlier sketch in this file got wrong and
+that are worth not re-deriving:
 
-What stopped it is a genuine convention question rather than effort: what
-the charge-channel `v^c` of an up-down-only Hubbard term actually is. The
-Hartree potential an electron at `(i,s)` feels from a spin-symmetric
-density fluctuation on site `j` is `(1/2) sum_{s'} v_{(i,s)(j,s')}`, which
-gives `v^c_ij = V_ij` for `i != j` but `v^c_ii = U/2`, not `U` -- and
-different conventions in the literature put that factor in different
-places. Getting it wrong would be worse than not having it, and it is a
-physics decision rather than an implementation one. **This is the next
-piece of work in this area, and it should probably become the default for
-spinful models once decided.**
+1. **It is `v + v^c chi v^c`, not `eps^-1 v`.** Left-multiplying the
+   spin-orbital `v` by a site-space `eps^-1` is not Hermitian -- the usual
+   argument that `eps^-1 v = v + v chi v` is a symmetric form only works
+   when `eps` and `v` live on the same index space, which is exactly what
+   is not true here. Going back to the diagram settles it: the second
+   order term is `v^c_ik chi^c_kl v^c_lj`, with `v^c` on BOTH sides,
+   because the coupling of a spin-orbital to the medium's total density is
+   `v^c` at either end. Resumming gives `v^c chi v^c`, which is
+   manifestly Hermitian and is what is implemented. (The two forms are
+   related by `(1-AB)^-1 A = A(1-BA)^-1`; the identity
+   `(eps^-1 - 1)v^c = v^c chi v^c` is how the code computes it.)
+2. **`v^c_ii = U/2`, not `U`.** This was the convention question that
+   stopped the first pass, and the derivation is short: the Hartree
+   potential an electron at `(i,s)` feels from a spin-symmetric density
+   fluctuation `dn_j` is `sum_{s'} v_{(i,s)(j,s')} dn_j/2`. Off-site that
+   is `V_ij`; on-site the up-down-only Hubbard block `[[0,U],[U,0]]` gives
+   `U/2`, because only half of the site's own density couples to a given
+   electron. Both cases are the single spin-average formula above.
+
+Why it works, measured:
+
+| | orbital channel | charge channel |
+|---|---|---|
+| same-spin vs opposite-spin, `\|A-B\|` | 7.97e-02 | **0.0 exactly** |
+| exciton multiplet spread (bare: 1.6e-14) | 4.26e-03 | **8.22e-15** |
+| Hermiticity of W | 0.0 | 0.0 |
+| spinless model vs orbital channel | -- | agrees to 2.2e-16 |
+
+The SU(2) argument is structural rather than numerical luck: the
+correction `[v^c chi v^c]_ij` is spin *independent* and is added equally
+to every spin combination, so the same-spin minus opposite-spin part of
+`W` -- the Ising term -- is left exactly as the bare interaction had it.
+
+It also half-fixes point 2. `v^c` picks up a positive diagonal `U/2` where
+the spin-orbital matrix has none, so ordinary screening is restored
+whenever the model has a realistic onsite `U`. With `U = 0` it does not
+help, because then `v^c` is traceless too. Honeycomb, `e2=0.6` tail, nk=6,
+change in binding energy against bare:
+
+| onsite U | orbital | charge |
+|---|---|---|
+| 0.0 | +0.0055 | +0.0055 |
+| 0.6 | +0.0013 | +0.0005 |
+| 1.2 | +0.0012 | **-0.0020** |
+| 2.0 | +0.0078 | **-0.0030** |
+
+`channel="orbital"` is kept, not deleted: it is the honest full-matrix
+RPA and is what quantifies the error above. It is simply not the default.
 
 **4. Cost.** Screening is cheap next to the kernel build when it reuses
 the `PairBasis` diagonalizations (the `nkW == nk` path, which is the
@@ -461,10 +511,6 @@ The `chi0` build itself is `nk^2 * n_occ * n_emp * norb^2`, jitted with a
 `norb^4` at fixed mesh, so a large unit cell will feel it.
 
 ### Follow-up tier (noted, not scoped)
-
-**The charge-channel dielectric matrix of point 5 above is the first thing
-to do in this area**, ahead of what follows: it is what makes screening
-trustworthy on spinful models at all.
 
 Two plan items were deliberately not built. A `max_memory` guard on the
 `chi0` tensor is unnecessary -- it is `nq*norb^2`, always dwarfed by the

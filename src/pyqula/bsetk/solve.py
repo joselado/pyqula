@@ -22,6 +22,12 @@ class BSE():
       a ScreenedInteraction  a precomputed one, e.g. to reuse the same W
                       across a scan of Q without rebuilding it
 
+    channel picks where the dielectric matrix is built: "charge" (the
+    default, the standard GW construction, spin-rotation invariant) or
+    "orbital" (dress the full spin-orbital matrix, which does not
+    preserve SU(2)). See bsetk/screening.charge_channel. The two coincide
+    for a spinless Hamiltonian.
+
     The EXCHANGE term always keeps the bare interaction, whatever this is
     set to -- see build_blocks for why.
 
@@ -44,11 +50,11 @@ class BSE():
     """
     def __init__(self,h,V=None,Q=None,nk=10,nv=None,nc=None,
             kernel="full",tda=False,max_memory=2.0,
-            screening=None,nkW=None):
+            screening=None,nkW=None,channel="charge"):
         self.pairs = PairBasis(h,Q=Q,nk=nk,nv=nv,nc=nc)
         self.Wx = bare_interaction(h,V=V) # bare, for the exchange term
         self.W = get_direct_interaction(h,self.pairs,V=V,nk=nk,
-                screening=screening,nkW=nkW,kernel=kernel)
+                screening=screening,nkW=nkW,kernel=kernel,channel=channel)
         self.screening = screening
         self.kernel = kernel
         self.tda = tda
@@ -131,7 +137,7 @@ class BSE():
 
 
 def get_direct_interaction(h,pb,V=None,nk=10,screening=None,nkW=None,
-        kernel="full"):
+        kernel="full",channel="charge"):
     """Return the interaction the direct (ladder) term should use.
 
     screening=None gives the bare interaction back, so nothing about the
@@ -164,7 +170,7 @@ def get_direct_interaction(h,pb,V=None,nk=10,screening=None,nkW=None,
                 "have to be interpolated, which is not done here"%(nkW,nk))
     exclude = (pb.vbands,pb.cbands) if screening=="crpa" else None
     return screened_interaction(h,V=V,nk=nkW,screening=screening,
-            exclude=exclude,
+            exclude=exclude,channel=channel,
             kpoints=pb.kpoints if reuse else None,
             ek=pb.ek if reuse else None,
             ck=pb.ck if reuse else None)

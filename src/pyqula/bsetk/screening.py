@@ -65,36 +65,45 @@ entered through interaction.density_interaction(Vr=...), or bare model
 V1/V2/V3 shells. The dangerous case is exactly the default one, V=h.V from
 a Hubbard SCF.
 
-**The RPA here is not spin-rotation invariant.** This is the sharpest
-limitation and it bites on the most ordinary case, a non-magnetic spinful
-model. On such a reference the Bloch states are spin-diagonal, so chi0 is
-proportional to the identity in spin; the bare interaction's spin
-structure is spanned by {1, sigma_x} (a site pair couples every spin
-combination equally, a site's own block is the up-down-only Hubbard term),
-and that algebra is commutative, so eps and W stay inside it -- but with
-the same-spin and opposite-spin entries no longer EQUAL. Writing the
-result as
+**Where the dielectric matrix is built matters, and the default is the
+standard GW choice.** Screening is a property of the CHARGE channel: what
+polarizes the medium is the total density, and what the medium's induced
+charge acts back on is again the total density. So `channel="charge"`
+(the default) builds eps on SITE indices and adds the resulting
+correction, which is spin independent, to the bare interaction:
 
-    A n_iu n_ju + B n_iu n_jd + ... = (A+B)/2 n_i n_j + 2(A-B) Sz_i Sz_j
+    W_{(i,s)(j,s')} = v_{(i,s)(j,s')} + [v^c chi v^c]_ij
 
-the screened interaction has picked up an Ising Sz-Sz coupling, which is
-not SU(2) invariant. The visible consequence is that a spin multiplet of
-the exciton spectrum splits: measured on the gapped honeycomb, a lowest
-transition that is four-fold degenerate to 1e-14 with the bare
-interaction comes out split by 4e-3 once screened
-(tests/bse/test_bse_screening.py pins this).
+See charge_channel for the definitions of v^c and chi^c. This preserves
+spin-rotation invariance exactly, because the same-spin minus
+opposite-spin part of W -- the Ising Sz-Sz coupling that would break
+SU(2) -- is left as the bare interaction had it.
 
-This is an artifact of resumming charge bubbles with a density-density
-kernel in the spin-orbital basis, not of the code: RPA in the density
-channel generically generates Ising-like effective spin couplings. The
-standard fix is the GW one -- build the dielectric matrix in the charge
-channel alone, as a matrix over SITE indices, and left-multiply the bare
-interaction by it, so its spin structure is untouched by construction.
-That is a different approximation with its own convention questions (what
-exactly the charge-channel v of an up-down-only Hubbard term is), so it
-is deliberately not decided here. Until it is: spinless models are
-unaffected, and on a spinful one read the spin structure of the result
-with this in mind.
+The alternative, `channel="orbital"`, dresses the full spin-orbital
+matrix as W = eps^-1 v. It is simpler and it is what a first reading of
+the RPA suggests, but it screens the charge and spin channels with a
+single density-density kernel and so DOES break SU(2): on a non-magnetic
+reference chi0 is spin-diagonal and the bare interaction's spin structure
+spans the commutative algebra {1, sigma_x}, so eps and W stay inside it,
+but with the same-spin and opposite-spin entries no longer equal.
+Measured on the gapped honeycomb, an exciton multiplet four-fold
+degenerate to 1e-14 with the bare interaction splits by 4.3e-3 in the
+orbital channel and stays degenerate to 8.2e-15 in the charge one. It is
+kept because it is the honest full-matrix RPA and is useful for
+quantifying that error; it is not the default.
+
+The two coincide exactly for a spinless Hamiltonian, where there is no
+spin to sum over and v^c = v, chi^c = chi0.
+
+The charge channel also cures a second problem for free. A
+self-interaction-free density-density matrix is traceless, hence
+necessarily indefinite, so the spin-orbital eps drops below one in some
+channel and the interaction comes out *enhanced* rather than screened --
+the same Stoner enhancement chitk/rpa.py reports as a magnetic
+instability. v^c picks up a positive diagonal from the Hubbard term
+(v^c_ii = U/2), which restores ordinary screening whenever the model has
+a realistic onsite U. With U = 0 the two channels still coincide in that
+respect, because then v^c is traceless too.
 
 Note also that bubbles inside W and ladders in the BSE are different
 diagram classes, so a full-RPA W with a BSE ladder is the standard
@@ -130,7 +139,7 @@ class ScreenedInteraction():
               mesh -- how close the RPA came to diverging
     """
     def __init__(self,qs,Wq,geometry,nkmesh,chi0=None,bare=None,
-            epsmin=None,screening="rpa"):
+            epsmin=None,screening="rpa",channel="charge"):
         self.qs = np.array(qs,dtype=np.float64)
         self.Wq = np.array(Wq,dtype=np.complex128)
         self.geometry = geometry
@@ -139,6 +148,7 @@ class ScreenedInteraction():
         self.bare = bare
         self.epsmin = epsmin
         self.screening = screening
+        self.channel = channel
         self._index = {qkey(q): i for i,q in enumerate(self.qs)}
     def at(self,q):
         """Return W at a q-point of the mesh.
@@ -194,8 +204,9 @@ class ScreenedInteraction():
             if np.max(np.abs(m))>tol: out[d] = m
         return out
     def __str__(self):
-        return "ScreenedInteraction(%s, %d q-points, min eig eps = %s)"%(
-                self.screening,len(self.qs),self.epsmin)
+        return ("ScreenedInteraction(%s, %s channel, %d q-points, "
+                "min eig eps = %s)"%(self.screening,self.channel,
+                    len(self.qs),self.epsmin))
 
 
 def _mesh_vectors(nkmesh,dim):
@@ -352,8 +363,93 @@ def static_polarizability(h,nk=10,exclude=None,kpoints=None,ek=None,ck=None):
     return qs,chi0
 
 
+def spin_collapse(m,ns):
+    """Sum a spin-orbital matrix over both spin indices of each site,
+    m_ij = sum_{s,s'} m_{(i,s)(j,s')}, giving the site-resolved (charge
+    channel) matrix. pyqula orders a spinful basis site-major with spin
+    innermost, so site i owns rows/columns 2i and 2i+1."""
+    m = np.asarray(m)
+    m = m.reshape(ns,2,ns,2) # (site,spin,site,spin)
+    return m.sum(axis=(1,3))
+
+
+def spin_expand(m):
+    """The inverse layout operation: spread a site-resolved matrix over
+    every spin combination of each site pair, out_{(i,s)(j,s')} = m_ij.
+    Used for a screening correction that is spin independent by
+    construction, which is exactly what keeps it SU(2) safe."""
+    return np.kron(np.asarray(m),np.ones((2,2),dtype=np.complex128))
+
+
+def charge_channel(vq,chi0q,ns,has_spin):
+    """Return (eps, delta), the charge-channel dielectric matrix and the
+    screening correction it generates, both over SITE indices.
+
+    This is the standard GW construction, and the reason to prefer it over
+    dressing the full spin-orbital matrix is spin-rotation invariance --
+    see the module docstring. Screening is a property of the CHARGE
+    channel: what polarizes the medium is the total density, and what the
+    medium's induced charge acts back on is again the total density. So
+    both the response and the coupling to it live on site indices.
+
+      chi^c_ij = sum_{s,s'} chi0_{(i,s)(j,s')}
+                 the total-density response, i.e. exactly the quantity
+                 chitk/chiAB.py computes as <n_i ; n_j>
+
+      v^c_ij   = (1/4) sum_{s,s'} v_{(i,s)(j,s')}
+                 the coupling of one spin-orbital to the total density on
+                 another site. The Hartree potential an electron at (i,s)
+                 feels from a spin-symmetric density fluctuation dn_j is
+                 sum_{s'} v_{(i,s)(j,s')} dn_j/2, which is independent of
+                 s for a non-magnetic interaction and equals the average
+                 above. Off-site this returns V_ij unchanged; ON-site it
+                 returns U/2, NOT U, because a Hubbard term couples only
+                 opposite spins and so only half of the site's own density
+                 acts on a given electron. That factor is the whole
+                 convention question in this construction.
+
+    The screened interaction is then
+
+      W_{(i,s)(j,s')} = v_{(i,s)(j,s')} + [v^c chi v^c]_ij,
+                        chi = chi^c (1 - v^c chi^c)^-1
+
+    i.e. the bare interaction keeps its full spin structure and picks up a
+    spin-INDEPENDENT correction. Two things follow immediately, and both
+    are why this form is the right one rather than the naive eps^-1 v:
+
+      - it is Hermitian, because v^c chi v^c is (the naive left
+        multiplication eps^-1 v is not, once eps and v live on different
+        index spaces)
+      - the same-spin minus opposite-spin part of W, which is the Ising
+        Sz-Sz coupling that breaks SU(2), is completely UNCHANGED from the
+        bare interaction, since the correction is added equally to every
+        spin combination
+
+    For a spinless Hamiltonian there is no spin to sum over, v^c = v and
+    chi^c = chi0, so this reduces exactly to W = eps^-1 v.
+    """
+    if not has_spin: # spinless: the orbital basis is already the site one
+        vc,chic = vq,chi0q
+    else:
+        if vq.shape[0]!=2*ns:
+            raise ValueError("a spinful Hamiltonian should have two "
+                "spin-orbitals per site, but the interaction is %dx%d for "
+                "%d sites. The charge channel has to know which orbitals "
+                "belong to which site; use channel='orbital' if this basis "
+                "is not site-major with spin innermost"
+                %(vq.shape[0],vq.shape[1],ns))
+        chic = spin_collapse(chi0q,ns)
+        vc = spin_collapse(vq,ns)/4.
+    iden = np.identity(ns,dtype=np.complex128)
+    eps = iden - vc@chic # charge-channel dielectric matrix
+    # delta = (eps^-1 - 1) v^c = v^c chi v^c, the screening correction
+    delta = (algebra.inv(eps) - iden)@vc
+    delta = (delta + delta.conj().T)/2. # Hermitian, symmetrize roundoff
+    return eps,delta
+
+
 def screened_interaction(h,V=None,nk=10,screening="rpa",exclude=None,
-        kpoints=None,ek=None,ck=None,tol=1e-6):
+        channel="charge",kpoints=None,ek=None,ck=None,tol=1e-6):
     """Return the static RPA screened interaction of h as a
     ScreenedInteraction.
 
@@ -365,10 +461,23 @@ def screened_interaction(h,V=None,nk=10,screening="rpa",exclude=None,
       screening  "rpa" (all transitions polarize) or "crpa" (transitions
                  inside the band window given by exclude do not)
       exclude    (vbands,cbands) for "crpa"; ignored for "rpa"
+      channel    where the dielectric matrix is built:
+                 "charge" (default) builds it on site indices, the
+                   standard GW construction -- see charge_channel. This
+                   preserves spin-rotation invariance exactly and is what
+                   you want on any spinful model
+                 "orbital" dresses the full spin-orbital matrix,
+                   W = eps^-1 v. Simpler, but it screens the charge and
+                   spin channels with a single density-density kernel and
+                   so generates an Ising Sz-Sz coupling that breaks SU(2)
+                 The two coincide for a spinless Hamiltonian
 
     Raises if the RPA diverges, i.e. if an eigenvalue of eps(q) reaches
     zero at some q -- that is a charge instability of the mean field at
     that wavevector, and the screened interaction there is infinite."""
+    if channel not in ("charge","orbital"):
+        raise ValueError("channel must be 'charge' or 'orbital', got %r"
+                %(channel,))
     if screening not in ("rpa","crpa"):
         raise ValueError("screening must be 'rpa' or 'crpa', got %r"
                 %(screening,))
@@ -383,12 +492,18 @@ def screened_interaction(h,V=None,nk=10,screening="rpa",exclude=None,
     if norb!=h.intra.shape[0]:
         raise ValueError("the interaction and the Hamiltonian disagree on "
             "the number of orbitals (%d vs %d)"%(norb,h.intra.shape[0]))
+    ns = len(h.geometry.r) # number of sites
     iden = np.identity(norb,dtype=np.complex128)
     Wq = np.zeros(chi0.shape,dtype=np.complex128)
     epsmin,absmin,qmin = None,None,None
     for iq,q in enumerate(qs):
         vq = interaction_at_q(v,h.geometry,q) # bare interaction at q
-        eps = iden - vq@chi0[iq] # dielectric matrix
+        if channel=="charge": # dielectric matrix on site indices (GW)
+            eps,delta = charge_channel(vq,chi0[iq],ns,h.has_spin)
+            Wq[iq] = vq + (spin_expand(delta) if h.has_spin else delta)
+        else: # dress the full spin-orbital matrix
+            eps = iden - vq@chi0[iq] # dielectric matrix
+            Wq[iq] = algebra.inv(eps)@vq
         ev = np.linalg.eigvals(eps)
         # Two conditions, because eps is a product of two Hermitian
         # matrices and neither is definite here, so its eigenvalues need
@@ -400,7 +515,6 @@ def screened_interaction(h,V=None,nk=10,screening="rpa",exclude=None,
         emin,amin = np.min(ev.real),np.min(np.abs(ev))
         if epsmin is None or emin<epsmin: epsmin,qmin = emin,q
         if absmin is None or amin<absmin: absmin = amin
-        Wq[iq] = algebra.inv(eps)@vq
     if epsmin<=tol or absmin<=tol:
         raise ValueError("the RPA screening diverges: the dielectric "
             "matrix eps(q) = 1 - v(q) chi0(q) has an eigenvalue reaching "
@@ -418,7 +532,8 @@ def screened_interaction(h,V=None,nk=10,screening="rpa",exclude=None,
     Wq = (Wq + np.conj(np.transpose(Wq,(0,2,1))))/2.
     return ScreenedInteraction(qs,Wq,h.geometry,
             _nkmesh(h.geometry.dimensionality,nk),
-            chi0=chi0,bare=v,epsmin=epsmin,screening=screening)
+            chi0=chi0,bare=v,epsmin=epsmin,screening=screening,
+            channel=channel)
 
 
 def _nkmesh(dim,nk):

@@ -2157,9 +2157,23 @@ d = W.get_dict() # ... and back in real space, usable at any q
 
 Unlike the real-space dictionaries used elsewhere, this object exists only *on* its mesh: $W(q)$ is the result of a matrix inversion at each $q$, not the Fourier transform of anything short ranged. That is exactly what the direct term needs, because the distinct $k-k'$ differences of a Γ-centered mesh are mesh points themselves, so $W$ is tabulated at precisely the points it is consumed at with no interpolation anywhere. Asking for it at any other $q$ raises rather than snapping to the nearest point. `get_dict()` is the escape hatch: it inverse Fourier transforms back to a real-space interaction, which can be evaluated anywhere, inspected to see how far the screened interaction reaches, or fed to `get_mean_field_hamiltonian(V=...)` for a screened-exchange mean field -- at the price of aliasing the tail beyond the mesh supercell. `nkW` takes a denser screening mesh than the BSE mesh (it must be an integer multiple of `nk`, so that the q-points the direct term needs are still tabulated).
 
-**The RPA here is not spin-rotation invariant**, and on a non-magnetic spinful model that is the limitation to know about. On such a reference $\chi^0$ is proportional to the identity in spin, and the bare interaction's spin structure (every spin combination of a site pair coupled equally, plus an up-down-only Hubbard term) spans a commutative algebra that $\varepsilon^{-1}$ stays inside -- but with the same-spin and opposite-spin entries no longer equal. That difference is an Ising $S^z_i S^z_j$ coupling, which breaks SU(2), and the visible consequence is that a spin multiplet of the exciton spectrum splits: on the gapped honeycomb a lowest transition that is four-fold degenerate to $10^{-14}$ bare comes out split by $4\times10^{-3}$ once screened. This is an artifact of resumming charge bubbles with a density-density kernel in the spin-orbital basis, not of the implementation -- RPA in the density channel generically generates Ising-like effective spin couplings. The standard fix is the GW one, building the dielectric matrix in the charge channel alone as a matrix over *site* indices and left-multiplying the bare interaction by it, so that its spin structure is untouched; that is a different approximation and is not implemented here. Spinless models are unaffected.
+**Where the dielectric matrix is built matters.** Screening is a property of the *charge* channel: what polarizes the medium is the total density, and what the medium's induced charge acts back on is again the total density. So `channel="charge"` (the default) builds $\varepsilon$ on **site** indices,
 
-Two more things are worth expecting before reading the numbers. First, **screening does not always weaken the interaction here.** A density-density interaction matrix that excludes self-interaction is traceless, hence necessarily indefinite, so $\varepsilon(q)$ sits above unity in some channels and below it in others -- the charge channel is screened and the spin channel is *enhanced*, which is the same Stoner enhancement `chitk/rpa.py` reports as a magnetic instability. Whether the net effect on a given exciton is more or less binding depends on the model, and on a point-orbital Coulomb tail with no onsite term it is usually *more*. Include a realistic onsite $U$ and the expected reduction reappears. Second, if an eigenvalue of $\varepsilon(q)$ actually reaches zero, the RPA has diverged: that is a charge or spin instability of the mean field at that wavevector -- the same $1-V\chi=0$ condition `chitk.rpa.rpa_kernel_poles` reports as a collective mode -- and the call raises rather than returning a huge number.
+$$\varepsilon_{ij}(q) = \delta_{ij} - \sum_k v^c_{ik}(q)\,\chi^c_{kj}(q), \qquad \chi^c_{ij} = \sum_{\sigma\sigma'}\chi^0_{(i\sigma)(j\sigma')}, \qquad v^c_{ij} = \tfrac{1}{4}\sum_{\sigma\sigma'} v_{(i\sigma)(j\sigma')}$$
+
+and adds the resulting correction, which is spin-independent, to the bare interaction:
+
+$$W_{(i\sigma)(j\sigma')} = v_{(i\sigma)(j\sigma')} + \left[v^c \chi\, v^c\right]_{ij}, \qquad \chi = \chi^c(1-v^c\chi^c)^{-1}$$
+
+This is the standard GW construction. Note the one convention it fixes: $v^c_{ij} = V_{ij}$ off-site, but $v^c_{ii} = U/2$, not $U$, because a Hubbard term couples only opposite spins, so only half of a site's own density acts on a given electron. Note also that the correction is $v^c\chi v^c$ rather than the naive $\varepsilon^{-1}v$ -- with $\varepsilon$ and $v$ living on different index spaces the latter is not even Hermitian.
+
+Two things follow, and they are why this is the default. First, it **preserves spin-rotation invariance exactly**: the same-spin minus opposite-spin part of $W$, which is an Ising $S^z_iS^z_j$ coupling, is left exactly as the bare interaction had it. Second, $v^c$ picks up a positive diagonal from the Hubbard term, which restores ordinary screening.
+
+The alternative, `channel="orbital"`, dresses the full spin-orbital matrix as $W = \varepsilon^{-1}v$. It screens the charge and spin channels with a single density-density kernel and therefore **breaks SU(2)**: on the gapped honeycomb an exciton multiplet four-fold degenerate to $10^{-14}$ bare splits by $4.3\times10^{-3}$ in the orbital channel and stays degenerate to $8\times10^{-15}$ in the charge one. It is kept because it is the honest full-matrix RPA and is useful for quantifying that error, not because it should be used. The two channels coincide exactly for a spinless Hamiltonian.
+
+**Screening still does not always weaken the interaction**, if the model has no onsite term. A density-density matrix that excludes self-interaction is traceless, hence necessarily indefinite; the charge channel escapes that only through $v^c_{ii}=U/2$, so with $U=0$ it is traceless too and the interaction comes out *enhanced* rather than screened -- the same Stoner enhancement `chitk/rpa.py` reports as a magnetic instability. Measured on the gapped honeycomb with an $e2=0.6$ tail, the change in binding energy against the bare result is $+0.0055$ at $U=0$ in both channels, and at $U=2.0$ it is $+0.0078$ in the orbital channel but $-0.0030$ in the charge one. A point-orbital Coulomb tail with no onsite term is simply missing its largest matrix element; include a realistic $U$.
+
+Finally, if an eigenvalue of $\varepsilon(q)$ actually reaches zero, the RPA has diverged: that is a charge or spin instability of the mean field at that wavevector -- the same $1-V\chi=0$ condition `chitk.rpa.rpa_kernel_poles` reports as a collective mode -- and the call raises rather than returning a huge number.
 
 One cost note: an RPA-screened $W$ is dense in the orbital indices, where a bare Hubbard-like interaction is very sparse. The direct kernel exploits that sparsity, so turning screening on can slow the kernel build noticeably on a model whose bare interaction was nearly diagonal. That is unavoidable -- it is what screening physically does.
 
@@ -2924,6 +2938,8 @@ Optional arguments:
 
 - nkW=None: k-mesh for the screening, defaulting to `nk`. Must be an integer multiple of it
 
+- channel="charge": where the dielectric matrix is built. `"charge"` builds it on site indices (the standard GW construction, spin-rotation invariant); `"orbital"` dresses the full spin-orbital matrix as $\varepsilon^{-1}v$, which does not preserve SU(2). The two coincide for a spinless Hamiltonian
+
 The returned object exposes `energies`, `amplitudes` (the resonant amplitudes $A_{vc}(k)$), `amplitudesY` (the antiresonant ones, zero under `tda`), `pairs` (the k-mesh, band window and `(ik,iv,ic)` label of every pair index) and the `get_energies`/`get_binding_energies` methods below.
 
 ### h.get_exciton_energies()
@@ -2960,6 +2976,8 @@ Optional arguments:
 - screening="rpa": `"rpa"` (all transitions polarize) or `"crpa"` (those inside `exclude` do not)
 
 - exclude=None: `(vbands,cbands)` to leave out of the polarization, required by `"crpa"`
+
+- channel="charge": `"charge"` (standard GW, on site indices, spin-rotation invariant) or `"orbital"` (the full spin-orbital matrix, which breaks SU(2))
 
 The returned object exposes `qs`, `Wq`, `chi0`, `bare`, `epsmin` (the smallest dielectric eigenvalue found over the mesh), `.at(q)` for the value at a mesh q-point and `.get_dict()` for the inverse Fourier transform back to a real-space interaction. Raises if an eigenvalue of $\varepsilon(q)$ reaches zero, which is a charge or spin instability of the mean field at that wavevector.
 
