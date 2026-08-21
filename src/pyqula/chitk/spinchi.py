@@ -30,14 +30,16 @@ def _require_onsite_only_V(H):
         fatal on a V1-ordered ferromagnet, whose vertex comes out
         identically zero and whose kernel is then the identity), so it is
         refused rather than decided for the caller. The route that is
-        right by construction there is bsetk/spinflip.py: time-dependent
-        Hartree-Fock in the spin-flip electron-hole pair basis, where that
-        rung fits, with an exact Goldstone mode at Q=0 (measured 2.0e-10
-        with a V1 neighbor shell). Reach it with
-        h.get_magnon_bands(method="tdhf"), h.get_magnon_energies or
-        h.get_goldstone_residual. It needs a gapped mean field and the
-        same k-mesh the SCF used, which is why it does not simply replace
-        this one.
+        right by construction there are two: chitk/pairchi.py, which sums
+        this same ladder in the basis of the interaction's PAIR index
+        where that rung actually lives (h.get_magnon_bands(method="pair"),
+        h.get_transverse_spinchi -- keeps the frequency scan, needs no
+        gap, collinear states only), and bsetk/spinflip.py, which solves
+        the electron-hole pair eigenproblem
+        (h.get_magnon_bands(method="tdhf"), h.get_magnon_energies,
+        h.get_goldstone_residual -- no frequency grid, handles
+        non-collinear states too). Both have an exact Goldstone mode with
+        a V1 neighbor shell; both want the same k-mesh the SCF used.
       - a non-onsite H.V with no H.Vchannels beside it, e.g. one built by
         hand or by an SCF engine that does not record them. Nothing then
         says which interaction it came from: an isotropic J1 and an
@@ -74,9 +76,10 @@ def _require_onsite_only_V(H):
             f"support ({sorted(V.keys())}) and neither applies -- see "
             "chitk.spinchi._require_onsite_only_V's docstring. If the "
             "non-onsite part is a DENSITY-DENSITY interaction, no "
-            "site-separable vertex can carry its Fock rung at all; use the "
-            "time-dependent Hartree-Fock route, which can and has an exact "
-            "Goldstone mode: h.get_magnon_bands(method='tdhf'). If this is "
+            "site-separable vertex can carry its Fock rung at all; use a "
+            "route that keeps the pair index and so can, both with an "
+            "exact Goldstone mode: h.get_magnon_bands(method='pair') or "
+            "method='tdhf'. If this is "
             "a hand-built H.V, build the vertex yourself and call "
             "chitk.rpa.chi_ops_RPA/rpa_kernel_poles_ops directly.")
 
@@ -374,8 +377,8 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
     spin channels the SCF records in H.Vchannels. A neighbor-shell
     DENSITY-DENSITY interaction raises ValueError -- see
     _require_onsite_only_V's docstring for why that one has no vertex here
-    at all, and h.get_magnon_bands(method="tdhf") for the route that does
-    handle it.
+    at all, and h.get_magnon_bands(method="pair") or method="tdhf" for the
+    routes that do handle it.
 
     Returns (qs,ws,gammas): qs is the integer index of the q-point along
     the path (the same convention used by get_bands for the k-axis),

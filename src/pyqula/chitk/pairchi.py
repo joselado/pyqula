@@ -21,20 +21,30 @@ but absent (chitk.spinchi.V2K_matrix maps it to exactly zero).
 This module keeps the pair index. The response is built in the basis of
 pair operators
 
-    A_P = sum_r c^dag_{i up, r} c_{j dn, r+R} ,   P = (i,j,R)
+    A_P = sum_r c^dag_{a,r} c_{b,r+R} ,   P = (a,b,R)
 
-one per non-zero entry of the real-space interaction, and the Dyson
-equation solved there:
+with a,b SPIN-ORBITAL indices, one per non-zero entry of the real-space
+interaction plus the diagonal ones, and the Dyson equation solved there:
 
-    chi = chi0 (1 + V chi0)^-1 ,   V = diag(V_P) .
+    chi = chi0 (1 + K chi0)^-1 .
 
-The physical transverse susceptibility is the diagonal-pair block,
-chi_{+-}(i,k) = chi_{(i,i,0),(k,k,0)}.
+The kernel K has both terms of the time-dependent Hartree-Fock kernel: the
+exchange rung W_ab, diagonal in the pair index, and the Hartree rung
+-W_ac(q) between diagonal pairs (see ladder_kernel). Restricting to a
+single spin-flip sector would let the second be dropped, but only for a
+state with a global spin quantization axis; keeping both, in a basis with
+no spin structure assumed, is what makes this work for a NON-COLLINEAR
+mean field too (measured on a 120-degree triangular spiral: the Goldstone
+mode is at zero to the broadening, delta^2, where a transverse-only ladder
+left it gapped by 0.41).
+
+The physical spin response is contracted out of the diagonal pairs with
+the Pauli matrices, and comes back in the same (Sx,Sy,Sz) x site layout
+chitk.spinchi.spinchi_full uses.
 
 The cost is set by how many pairs the interaction actually has, not by
-N^2: the kernel is diagonal, so only pairs in the support of V enter the
-inversion, and for a short-ranged V that is N*(z+1) -- linear in N, eight
-pairs for a honeycomb cell with a nearest-neighbour V. What it buys over
+N^2: only pairs in its support enter, plus the diagonal ones, so a
+short-ranged V gives O(N*(z+1)) -- linear in N. What it buys over
 bsetk/spinflip.py's pair basis is the frequency-resolved response itself
 (a chi(omega), not an eigenvalue list), which is what get_spinchi_full and
 the IETS maps consume, and no gap requirement anywhere.
@@ -52,75 +62,72 @@ from numba import jit
 from .. import algebra
 
 
-def site_interaction(W, tol=1e-10, channel="+-"):
-    """Return (pairs,values): the list of (i,j,R) the interaction couples
-    and the transverse ladder coupling of each, from a spin-orbital
-    density-density dictionary W.
+def spinorbital_pairs(W, norb, tol=1e-10):
+    """Return (pairs,xvals,diag): the pair basis of the ladder and the
+    exchange coupling of each pair.
 
-    The coupling is the UP-DOWN element W[2i, 2j+1] (down-up for the "-+"
-    channel), and that is not a choice. Writing the interaction as a
-    general two-body term, the transverse rung comes out as the exchange
-    integral
+    A pair is P = (a,b,R) with a,b SPIN-ORBITAL indices, standing for the
+    operator A_P = sum_r c^dag_{a,r} c_{b,r+R}. The basis is every pair
+    the interaction couples, plus every diagonal pair (a,a,0) -- the
+    latter because the Hartree rung acts between those and because the
+    physical spin response is read off them, whether or not the
+    interaction has an entry there.
 
-        K_{(ij),(kl)} = -W_{(i up),(l dn)} delta_ik delta_jl ,
-
-    so only the opposite-spin element enters. It is worth noticing that
-    this covers the two cases that LOOK different in this basis with one
-    formula: an extended spin-independent V_ij has W[2i,2j+1] = V_ij, and
-    an onsite Hubbard U has W[2i,2i+1] = U while its same-spin entries are
-    zero (n^2 = n for one orbital, so there is no self-interaction to
-    write down). Reading the same element in both is what makes the ladder
-    reduce to the familiar chi0/(1-U chi0) for a Hubbard model.
-
-    The interaction still has to be spin-rotation invariant for any of
-    this to describe a Goldstone-carrying magnet, but that check lives in
-    bsetk.spinflip.check_su2_interaction and is not duplicated here."""
+    Using spin-orbital rather than site indices is what makes this work
+    for a state with no global spin quantization axis: the basis is then
+    complete for any spin structure, and no rotation into an ordering
+    axis -- which a non-collinear state does not have -- is needed
+    anywhere."""
     from ..multihopping import MultiHopping
     if isinstance(W, MultiHopping): W = W.get_dict()
     if not isinstance(W, dict): W = {(0, 0, 0): W}
-    si, sj = (0, 1) if channel == "+-" else (1, 0)
-    pairs, values = [], []
+    pairs, xvals = [], []
     for d, m in W.items():
         m = np.array(m)
-        n = m.shape[0]//2
-        for i in range(n):
-            for j in range(n):
-                v = m[2*i + si, 2*j + sj]
-                if abs(v) > tol:
-                    pairs.append((i, j, tuple(int(x) for x in d)))
-                    values.append(v)
-    return pairs, np.array(values, dtype=np.complex128)
-
-
-def diagonal_pairs(pairs, nsite):
-    """Return the index of the pair (i,i,0) for every site i, or -1 where
-    the interaction has no onsite entry for it.
-
-    The physical transverse susceptibility is the block of the pair
-    response on these, so an interaction with no onsite term at all (a
-    bare V1 with no Hubbard U) has no diagonal pairs to read it off. They
-    are added to the pair list by build_pairs for exactly that reason --
-    a pair can be needed as an OUTPUT index without appearing in the
-    kernel."""
-    index = {p: n for n, p in enumerate(pairs)}
-    return np.array([index.get((i, i, (0, 0, 0)), -1) for i in range(nsite)],
-                    dtype=np.int64)
-
-
-def build_pairs(W, nsite, channel="+-"):
-    """Return (pairs,values,diag): the pair basis of the ladder.
-
-    Every pair in the support of the interaction, plus the diagonal pairs
-    (i,i,0) whether or not the interaction has an entry there. The latter
-    carry a zero coupling and so do not change the kernel; they are in the
-    basis because the physical response is read off them."""
-    pairs, values = site_interaction(W, channel=channel)
+        for a in range(norb):
+            for b in range(norb):
+                if abs(m[a, b]) > tol:
+                    pairs.append((a, b, tuple(int(x) for x in d)))
+                    xvals.append(m[a, b])
     have = set(pairs)
-    extra = [(i, i, (0, 0, 0)) for i in range(nsite)
-             if (i, i, (0, 0, 0)) not in have]
+    extra = [(a, a, (0, 0, 0)) for a in range(norb)
+             if (a, a, (0, 0, 0)) not in have]
     pairs = pairs + extra
-    values = np.concatenate([values, np.zeros(len(extra), dtype=np.complex128)])
-    return pairs, values, diagonal_pairs(pairs, nsite)
+    xvals = np.concatenate([np.array(xvals, dtype=np.complex128),
+                            np.zeros(len(extra), dtype=np.complex128)])
+    index = {p: n for n, p in enumerate(pairs)}
+    diag = np.array([index[(a, a, (0, 0, 0))] for a in range(norb)],
+                    dtype=np.int64)
+    return pairs, xvals, diag
+
+
+def ladder_kernel(pairs, xvals, diag, Wq):
+    """Return the time-dependent Hartree-Fock kernel in the pair basis.
+
+    Differentiating the Hartree-Fock Hamiltonian
+    h_ab = t_ab + delta_ab sum_c W_ac rho_cc - W_ab rho_ab with respect to
+    the density matrix gives two terms, and both are needed as soon as the
+    basis is not restricted to a single spin-flip sector:
+
+      exchange   W_ab delta_ac delta_bd  -- DIAGONAL in the pair index,
+                 with the real-space interaction. This is the ladder rung
+                 that binds the magnon, and the whole reason the pair
+                 index has to be kept at all: for an extended V_ij it
+                 lives on the pairs with a != b, which a site-basis vertex
+                 does not have.
+      Hartree    -delta_ab delta_cd W_ac(q) -- between DIAGONAL pairs
+                 only, with the interaction at the transferred momentum q.
+
+    For a transverse sector quantized along a global axis every pair has
+    a != b, so the Hartree term drops out entirely -- which is why a
+    transverse-only ladder can get away without it, and why it cannot once
+    the state has no such axis and the sectors mix."""
+    n = len(pairs)
+    K = np.diag(xvals).astype(np.complex128)
+    for a in range(len(diag)):
+        for c in range(len(diag)):
+            K[diag[a], diag[c]] -= Wq[a, c]
+    return K
 
 
 @jit(nopython=True, cache=True)
@@ -130,12 +137,10 @@ def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, flip):
     chi0[P,P',w] += sum_{nm} (f_n - f_m) M_P conj(M_P') / (e1_n-e2_m-w+i d)
 
     with M_P = conj(u1[n,iP]) u2[m,jP] phase_P, iP/jP the spin-orbital
-    indices the pair operator connects and phase_P its Bloch phase. flip
-    selects the spin channel: the up index of a site is 2*i and the down
-    one 2*i+1, so a (+,-) operator takes jP odd and iP even and a (-,+)
-    one the other way round -- the caller has already resolved that into
-    iP/jP, and flip is carried only so the two channels can share this
-    kernel without rebuilding the index arrays."""
+    indices the pair operator connects and phase_P its Bloch phase. The
+    indices are spin-orbital ones and carry no assumption about a spin
+    quantization axis, which is what lets a non-collinear state through
+    (flip is unused and kept only for signature stability)."""
     npair = iP.shape[0]
     nb = e1.shape[0]
     nw = omegas.shape[0]
@@ -158,16 +163,9 @@ def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, flip):
     return chi0
 
 
-def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20,
-              channel="+-"):
+def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20):
     """Return the non-interacting response in the pair basis, shape
-    (npair,npair,nomega).
-
-    channel picks which transverse operator the pairs stand for: "+-"
-    means A_P = c^dag_{i up} c_{j dn} and "-+" the other way round. The
-    two are the two spin-flip sectors; a collinear state generally has
-    weight in one or both, and they do not mix under a spin-conserving
-    interaction, which is why they are solved separately."""
+    (npair,npair,nomega), chi0_{P,P'} = <<A_P ; A_P'^dag>>."""
     if energies is None: energies = np.linspace(-1., 1., 100)
     energies = np.array(energies, dtype=np.float64)
     if q is None: q = [0., 0., 0.]
@@ -175,14 +173,11 @@ def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20,
     h = h.get_multicell().get_dense()
     hk = h.get_hk_gen()
     g = h.geometry
-    if channel == "+-": si, sj = 0, 1 # up index of i, down index of j
-    elif channel == "-+": si, sj = 1, 0
-    else: raise ValueError("channel must be '+-' or '-+', got %r"%(channel,))
-    iP = np.array([2*p[0] + si for p in pairs], dtype=np.int64)
-    jP = np.array([2*p[1] + sj for p in pairs], dtype=np.int64)
+    iP = np.array([p[0] for p in pairs], dtype=np.int64)
+    jP = np.array([p[1] for p in pairs], dtype=np.int64)
     ds = [p[2] for p in pairs]
-    npair, nw = len(pairs), len(energies)
-    chi0 = np.zeros((npair, npair, nw), dtype=np.complex128)
+    chi0 = np.zeros((len(pairs), len(pairs), len(energies)),
+                    dtype=np.complex128)
     ks = g.get_kmesh(nk=nk)
     for k in ks:
         k = np.array(k, dtype=np.float64)
@@ -194,60 +189,108 @@ def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20,
         # convention the Hamiltonian's own hoppings use
         phase = np.array([g.bloch_phase(d, k + q) for d in ds],
                          dtype=np.complex128)
-        _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, energies, delta,
-                    0 if channel == "+-" else 1)
+        _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, energies, delta, 0)
     return chi0/len(ks)
 
 
+def _setup(h, W=None, q=None):
+    """Shared preamble: the interaction, the pair basis and the kernel's
+    momentum-dependent Hartree block."""
+    from ..bsetk.interaction import bare_interaction, interaction_at_q
+    W = bare_interaction(h, V=W)
+    norb = h.get_multicell().get_dense().intra.shape[0]
+    pairs, xvals, diag = spinorbital_pairs(W, norb)
+    if q is None: q = [0., 0., 0.]
+    Wq = interaction_at_q(W, h.geometry, q)
+    return pairs, xvals, diag, ladder_kernel(pairs, xvals, diag, Wq)
+
+
+def pair_rpa_kernel(h, W=None, q=None, energies=None, delta=1e-2, nk=20):
+    """Return (energies,kernels): the ladder kernel 1 + K chi0 in the pair
+    basis, one matrix per frequency. Its zeros are the collective modes --
+    the magnons -- exactly as chitk.rpa's 1 - V chi is for the site
+    basis."""
+    if energies is None: energies = np.linspace(-1., 1., 100)
+    energies = np.array(energies, dtype=np.float64)
+    pairs, xvals, diag, K = _setup(h, W=W, q=q)
+    chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk)
+    iden = np.identity(len(pairs), dtype=np.complex128)
+    return energies, [iden + K@chi0[:, :, w] for w in range(len(energies))]
+
+
 def pair_chi_rpa(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
-                 channel="+-"):
-    """Return (energies,chi): the RPA-dressed transverse response in the
-    SITE basis, one N x N matrix per frequency.
+                 component=None):
+    """Return (energies,chi): the RPA-dressed SPIN response, one 3N x 3N
+    tensor per frequency in the (Sx,Sy,Sz) x site convention
+    chitk.spinchi.spinchi_full uses, so the two are directly comparable.
 
     The ladder is summed in the pair basis, where the interaction is
-    diagonal, and then read off the diagonal pairs. W defaults to the
-    interaction the mean field was converged with (bsetk.interaction's
-    bare_interaction, factor of two included), so this is
-    time-dependent Hartree-Fock on top of Hartree-Fock, the same
+    simple, and the spin response contracted out of it afterwards:
+
+        <<S_a(i);S_b(j)>> = 1/4 sum (sigma_a)_{ss'} conj((sigma_b)_{t't})
+                                 chi_{(is,is'),(jt',jt)}
+
+    component, if given as a pair of indices (a,b), returns only that spin
+    block instead of the full tensor.
+
+    W defaults to the interaction the mean field was converged with
+    (bsetk.interaction's bare_interaction, factor of two included), so
+    this is time-dependent Hartree-Fock on top of Hartree-Fock -- the same
     self-consistent choice bsetk/spinflip.py makes."""
-    from ..bsetk.interaction import bare_interaction
     if energies is None: energies = np.linspace(-1., 1., 100)
     energies = np.array(energies, dtype=np.float64)
-    W = bare_interaction(h, V=W)
-    nsite = len(h.geometry.r)
-    pairs, values, diag = build_pairs(W, nsite, channel=channel)
-    chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk,
-                     channel=channel)
-    npair = len(pairs)
-    iden = np.identity(npair, dtype=np.complex128)
-    out = np.zeros((len(energies), nsite, nsite), dtype=np.complex128)
-    if np.any(diag < 0):
-        raise ValueError("the interaction has no onsite entry for every "
-            "site, so the physical response cannot be read off the "
-            "diagonal pairs. build_pairs adds them; this should not "
-            "happen and means the pair basis was built by hand")
+    pairs, xvals, diag, K = _setup(h, W=W, q=q)
+    chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk)
+    iden = np.identity(len(pairs), dtype=np.complex128)
+    norb = len(diag)
+    nsite = norb//2
+    index = {p: n for n, p in enumerate(pairs)}
+    sigma = [np.array([[0, 1], [1, 0]], dtype=np.complex128),
+             np.array([[0, -1j], [1j, 0]], dtype=np.complex128),
+             np.array([[1, 0], [0, -1]], dtype=np.complex128)]
+    # every (i s, i s') pair is needed as an index; they are all diagonal
+    # in the site, so they are in the basis already only when s == s'.
+    # The rest are added here rather than in spinorbital_pairs, which
+    # builds the KERNEL's basis -- these carry no coupling
+    need = [(2*i + s, 2*i + sp, (0, 0, 0))
+            for i in range(nsite) for s in range(2) for sp in range(2)]
+    missing = [p for p in need if p not in index]
+    if len(missing) > 0:
+        pairs = pairs + missing
+        xvals = np.concatenate([xvals, np.zeros(len(missing),
+                                                dtype=np.complex128)])
+        K2 = np.zeros((len(pairs), len(pairs)), dtype=np.complex128)
+        K2[0:K.shape[0], 0:K.shape[1]] = K
+        K = K2
+        index = {p: n for n, p in enumerate(pairs)}
+        chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta,
+                         nk=nk)
+        iden = np.identity(len(pairs), dtype=np.complex128)
+    out = np.zeros((len(energies), 3*nsite, 3*nsite), dtype=np.complex128)
     for w in range(len(energies)):
         c0 = chi0[:, :, w]
-        chi = c0@algebra.inv(iden + (values[:, None]*c0))
-        out[w] = chi[np.ix_(diag, diag)]
+        chi = c0@algebra.inv(iden + K@c0)
+        for a in range(3):
+            for b in range(3):
+                for i in range(nsite):
+                    for j in range(nsite):
+                        acc = 0.0+0.0j
+                        for ss in range(2):
+                            for sp in range(2):
+                                if sigma[a][ss, sp] == 0.: continue
+                                for tp in range(2):
+                                    for t in range(2):
+                                        if sigma[b][tp, t] == 0.: continue
+                                        P = index[(2*i+ss, 2*i+sp, (0, 0, 0))]
+                                        Q = index[(2*j+tp, 2*j+t, (0, 0, 0))]
+                                        acc += (sigma[a][ss, sp]
+                                                *np.conj(sigma[b][tp, t])
+                                                *chi[P, Q])
+                        out[w, a*nsite+i, b*nsite+j] = acc/4.
+    if component is not None:
+        a, b = component
+        out = out[:, a*nsite:(a+1)*nsite, b*nsite:(b+1)*nsite]
     return energies, out
-
-
-def pair_rpa_kernel(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
-                    channel="+-"):
-    """Return (energies,kernels): the ladder kernel 1 + V chi0 in the pair
-    basis, one matrix per frequency. Its zeros are the collective modes --
-    the magnons -- exactly as rpa.py's 1 - V chi is for the site basis."""
-    from ..bsetk.interaction import bare_interaction
-    if energies is None: energies = np.linspace(-1., 1., 100)
-    energies = np.array(energies, dtype=np.float64)
-    W = bare_interaction(h, V=W)
-    pairs, values, _ = build_pairs(W, len(h.geometry.r), channel=channel)
-    chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk,
-                     channel=channel)
-    iden = np.identity(len(pairs), dtype=np.complex128)
-    return energies, [iden + values[:, None]*chi0[:, :, w]
-                      for w in range(len(energies))]
 
 
 def pair_rpa_poles(h, **kwargs):
@@ -274,7 +317,7 @@ def pair_rpa_poles(h, **kwargs):
     return np.array(poles)
 
 
-def magnon_bands_pair(h, qpath=None, nq=20, channel="+-", **kwargs):
+def magnon_bands_pair(h, qpath=None, nq=20, **kwargs):
     """Return the magnon bands from the pair-basis ladder, scanned along a
     q-path: the third route to the same physics.
 
@@ -291,7 +334,7 @@ def magnon_bands_pair(h, qpath=None, nq=20, channel="+-", **kwargs):
     abs(gammas), not by its sign."""
     from .. import parallel
     qpath = h.geometry.get_kpath(qpath, nk=nq)
-    def f(q): return pair_rpa_poles(h, q=q, channel=channel, **kwargs)
+    def f(q): return pair_rpa_poles(h, q=q, **kwargs)
     outs = parallel.pcall(f, qpath)
     qs, ws, gammas = [], [], []
     for iq, poles in enumerate(outs):

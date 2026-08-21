@@ -1,12 +1,12 @@
 # Magnons beyond the site-basis RPA -- what landed, and what did not
 
 The spin response of an interacting mean field has two implementations in
-this repo, and they cover different interactions. This file records why,
-what was measured, and the two things still open: relaxing the RPA's
-non-onsite gate (which is broader than the physics requires) and carrying
-the transverse exchange rung in the TDHF kernel.
+this repo has three implementations, and they cover different
+interactions. This file records why, what was measured, and the one thing
+still open: carrying the transverse exchange rung in the pair-basis
+kernels.
 
-## The two routes
+## The three routes
 
 `chitk/spinchi.py` -- **site-basis RPA**. Dresses the N x N site-resolved
 spin response with a site-separable vertex, `chi@(1-V@chi)^-1`. Works for
@@ -14,12 +14,17 @@ metals and insulators alike, needs only a frequency grid, and is exact for
 an onsite Hubbard U, where the transverse ladder rung lives on a single
 site. It is gated to onsite-only `h.V` (`_require_onsite_only_V`).
 
+`chitk/pairchi.py` -- **the same ladder in the interaction's pair basis**.
+Keeps the frequency scan and the metal support of the site basis and gains
+the interaction coverage of the one below, with no collinearity
+requirement. See "The pair-basis ladder" below.
+
 `bsetk/spinflip.py` -- **time-dependent Hartree-Fock** in the spin-flip
 electron-hole pair basis, i.e. the BSE of `bsetk/` restricted to pairs
 whose electron and hole have opposite spin (arXiv:2502.06598 does the same
 thing ab initio for the chromium trihalides). Handles any density-density
-interaction, onsite or not. Needs a gapped mean-field reference and the
-same k-mesh the mean field was converged on.
+interaction, onsite or not, collinear or not, metallic (metal=True) or
+gapped. Needs the same k-mesh the mean field was converged on.
 
 ## What the site-basis RPA does and does not miss
 
@@ -103,7 +108,7 @@ but the convergence of the mean field contributes to it. The corresponding
 eigenvalue sits at 4e-5, the square root, which is why the assertion is on
 the generator and not on the spectrum.
 
-Independently of the symmetry argument, the two routes agree numerically
+Independently of the symmetry argument, the routes agree numerically
 where both are valid. On the honeycomb Neel Hubbard state at nk=6 the
 acoustic magnon comes out at 0.4917 (q=0.1) and 0.9037 (q=0.2) from both
 the site-basis RPA frequency scan and the pair-basis TDHF eigenproblem,
@@ -211,6 +216,27 @@ and it agrees with the independent TDHF pair basis to five decimals
 closed-form saturated-ferromagnet dispersion in a METAL to five decimals
 (0.00173, 0.01291, 0.07756 at q = 0.02, 0.05, 0.1). No gap is required
 anywhere in this route.
+
+No collinearity assumption, and getting there is the instructive part.
+The first version restricted the basis to one spin-flip sector, which lets
+the Hartree rung be dropped (every pair has a != b there) and works
+perfectly for a state with a global spin quantization axis. It leaves a
+non-collinear state's Goldstone mode gapped by 0.41, independent of the
+broadening -- the two sectors mix, and summing them separately breaks the
+SU(2) Ward identity. That is not a contradiction of the Goldstone theorem,
+which constrains the EXACT response: an approximation inherits it only if
+it is conserving, and that truncation is not.
+
+Two fixes were tried. Rotating the state into a global axis works for
+collinear states along any axis and cannot work for a spiral; it is also
+where the angle convention of global_spin_rotation bit (a partially
+rotated state is neither along z nor detectably wrong, and gapped the mode
+by 0.145 for a 54-degree tilt -- rotating the eigenvector SPINOR
+COMPONENTS with a matrix written down from the axis avoids the convention
+entirely). The real fix is the one in place: keep every spin-orbital pair
+and both rungs. The 120-degree triangular spiral then gives 9.4e-8,
+9.4e-10, 9.4e-12 at delta 1e-3, 1e-4, 1e-5 -- proportional to delta^2 and
+limited by nothing else.
 
 What it does NOT do is exchange, for the same reason the TDHF kernel does
 not -- see the next section.

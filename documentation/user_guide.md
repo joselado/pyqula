@@ -2051,18 +2051,21 @@ For that case there are two routes that are right by construction rather than by
 | neighbour-shell density-density $V_1,V_2,\dots$ | **no** | yes | yes |
 | exchange $J_1,J_2,\dots$ (isotropic or anisotropic) | yes | **no** | **no** |
 | metallic reference | yes | yes | with `metal=True` |
+| non-collinear (canted, spiral) state | yes | yes | yes |
 | frequency-resolved $\chi(\omega)$ | yes | yes | no (an eigenproblem) |
 
 The reason the middle row splits is a matter of which index the ladder rung is diagonal in. Writing $H_{int} = \tfrac12\sum V_{ij} n_i n_j$, the transverse rung is $K_{(ij),(kl)} = -V_{ij}\delta_{ik}\delta_{jl}$ -- diagonal in the **pair** index $(i,j)$, not the site index. An onsite $U$ collapses that onto the pairs with $i=j$, which is exactly what the site basis of `method="rpa"` holds, and that collapse is why it is exact there. An extended $V_{ij}$ lives in the pairs with $i\ne j$, which that basis does not have.
 
-`method="pair"` (`chitk/pairchi.py`) keeps the pair index and solves the same ladder there, $\chi = \chi_0(1+V\chi_0)^{-1}$ with $V$ diagonal. The cost is set by how many pairs the interaction has rather than by $N^2$ -- only pairs in its support enter the inversion, so a short-ranged $V$ gives $N(z+1)$, linear in $N$ and eight pairs for a honeycomb cell with a nearest-neighbour $V$. It keeps the frequency scan and needs no gap:
+`method="pair"` (`chitk/pairchi.py`) keeps the pair index and solves the same ladder there, $\chi = \chi_0(1+V\chi_0)^{-1}$ with $V$ diagonal. The cost is set by how many pairs the interaction has rather than by $N^2$ -- only pairs in its support enter the inversion, so a short-ranged $V$ gives $N(z+1)$, linear in $N$ and eight pairs for a honeycomb cell with a nearest-neighbour $V$. It keeps the frequency scan, needs no gap, and assumes nothing about the spin structure of the state:
 
 ```python
 qs,ws,gammas = hmf.get_magnon_bands(method="pair",nq=20,
                     energies=np.linspace(1e-3,3.,400),delta=1e-3,nk=nk)
 es,chi = hmf.get_transverse_spinchi(energies=np.linspace(0.,2.,100),
-                    q=[0.1,0.,0.],delta=1e-2,nk=nk)   # site-resolved chi(w)
+                    q=[0.1,0.,0.],delta=1e-2,nk=nk)   # (Sx,Sy,Sz) x site chi(w)
 ```
+
+Two terms make up the kernel, and which of them can be dropped is a good illustration of what the Goldstone residual actually tests. Differentiating the Hartree-Fock Hamiltonian gives an *exchange* rung $W_{ab}$, diagonal in the pair index, and a *Hartree* rung $-W_{ac}(q)$ between diagonal pairs. Restricted to one spin-flip sector every pair has $a\ne b$, the Hartree rung drops out, and a transverse-only ladder is complete -- but only for a state with a global spin quantization axis. For a non-collinear mean field the two sectors mix, dropping the Hartree rung breaks the SU(2) Ward identity, and the acoustic branch comes out gapped by 0.41 on a 120-degree triangular spiral, independent of the broadening. That is not a contradiction of the Goldstone theorem: the theorem constrains the *exact* response, and an approximation inherits it only if it is conserving. Keeping both rungs, in a basis of spin-orbital pairs that assumes no axis at all, makes the truncation conserving again -- the same spiral then gives 9.4e-12 at `delta=1e-5`, proportional to $\delta^2$ and limited by nothing else.
 
 The last row is why `"tdhf"` still exists: it returns magnon energies as eigenvalues, with no frequency grid and no broadening, which is what the Goldstone residual is measured on. The three agree wherever more than one applies -- the acoustic magnon of a Néel honeycomb at $q=0.1$ is 0.49165 from all of them, and 0.59492 from `"pair"` and `"tdhf"` once a $V_1$ is added. In a metal, `"pair"` reproduces the closed-form saturated-ferromagnet dispersion to five decimals (0.00173, 0.01291, 0.07756 at $q=0.02,0.05,0.1$), as does `"tdhf"`.
 
@@ -3003,7 +3006,7 @@ Optional arguments:
 Returns `(qs,ws,gammas)` for `method="rpa"`: three flat 1D arrays of equal length, `qs` the integer q-point index along the path, `ws` the pole frequency, `gammas` its residual imaginary part. `method="tdhf"` returns `(qs,es)`, with `es` the (complex) magnon energy.
 
 ### h.get_transverse_spinchi()
-Return the transverse ($S^+/S^-$) spin response computed in the basis of the interaction's *pair* index rather than of sites, which is what lets it carry a neighbour-shell density-density interaction -- the one the site-basis RPA maps to exactly zero. Needs no gapped reference, and returns a frequency-resolved, site-resolved $\chi(\omega)$.
+Return the spin response computed in the basis of the interaction's *pair* index rather than of sites, which is what lets it carry a neighbour-shell density-density interaction -- the one the site-basis RPA maps to exactly zero. Needs no gapped reference and no global spin quantization axis, so it covers metals and non-collinear states alike, and returns a frequency-resolved, spin- and site-resolved $\chi(\omega)$.
 
 Optional arguments:
 
@@ -3011,9 +3014,9 @@ Optional arguments:
 
 - q=[0,0,0], energies, delta, nk: as in `get_chi`
 
-- channel="+-": which spin-flip sector; "-+" is the other one. They do not mix under a spin-conserving interaction, and a collinear state may have weight in only one
+- component=None: a pair of spin indices `(a,b)` to return only that spin block instead of the full tensor
 
-Returns `(energies,chi)` with `chi` one $N\times N$ site matrix per frequency.
+Returns `(energies,chi)` with `chi` one $3N\times3N$ tensor per frequency, in the same $(S_x,S_y,S_z)\times$site layout `get_spinchi_full` uses.
 
 ### h.get_magnon_energies()
 Return the magnon energies at a single center-of-mass momentum `Q`, from the spin-flip channel of the Bethe-Salpeter equation. Same arguments as `get_magnon_bands(method="tdhf")` with `Q=[qx,qy,qz]` in place of the q-path. A sizable imaginary part on an energy means the mean-field reference is unstable against that excitation.

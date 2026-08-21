@@ -37,10 +37,9 @@ def _neel(nk=NK, **kw):
                           **kw).hamiltonian
 
 
-def _kernel_min_eigenvalue(h, nk=NK, delta=1e-4, q=(0., 0., 0.),
-                            channel="+-"):
+def _kernel_min_eigenvalue(h, nk=NK, delta=1e-4, q=(0., 0., 0.)):
     _, K = pairchi.pair_rpa_kernel(h, q=list(q), energies=np.array([0.0]),
-                                    delta=delta, nk=nk, channel=channel)
+                                    delta=delta, nk=nk)
     return np.min(np.abs(np.linalg.eigvals(K[0])))
 
 
@@ -50,23 +49,22 @@ def test_the_pair_basis_is_the_support_of_the_interaction():
     response is read off. A honeycomb cell with a nearest-neighbour V has
     eight, not sixteen."""
     h = _neel(U=3.0)
-    pairs, values, diag = pairchi.build_pairs(bare_interaction(h), 2)
-    assert len(pairs) == 2 and np.allclose(values.real, [3., 3.])  # onsite U
-    assert list(diag) == [0, 1]
+    pairs, xvals, diag = pairchi.spinorbital_pairs(bare_interaction(h), 4)
+    assert len(pairs) == 8  # 4 Hubbard entries + 4 diagonal pairs
+    assert len(diag) == 4
     h2 = _neel(U=3.0, V1=0.5)
-    pairs2, values2, _ = pairchi.build_pairs(bare_interaction(h2), 2)
-    assert len(pairs2) == 8  # 2 onsite + 6 bond
+    pairs2, xvals2, _ = pairchi.spinorbital_pairs(bare_interaction(h2), 4)
+    assert len(pairs2) > len(pairs)  # V1 adds the bond pairs
     assert any(p[0] != p[1] for p in pairs2)  # genuinely off-diagonal pairs
 
 
 @pytest.mark.slow
 def test_goldstone_for_an_onsite_hubbard_antiferromagnet():
-    """The case the site basis already did, which must not change. Both
-    spin channels, and the controls: at finite q, and away from a magnetic
-    state, the kernel is nowhere near singular."""
+    """The case the site basis already did, which must not change. The
+    control is what makes it a statement: at finite q the kernel is
+    nowhere near singular."""
     h = _neel(U=3.0)
-    for ch in ("+-", "-+"):
-        assert _kernel_min_eigenvalue(h, channel=ch) < 1e-6
+    assert _kernel_min_eigenvalue(h) < 1e-6
     assert _kernel_min_eigenvalue(h, q=(0.1, 0., 0.)) > 1e-2
 
 
@@ -145,22 +143,83 @@ def test_it_reproduces_the_exact_saturated_ferromagnet_dispersion():
     grid = np.linspace(1e-5, 0.3, 3000)
     for q in (0.02, 0.05, 0.1):
         poles = pairchi.pair_rpa_poles(hm, q=[q, 0., 0.], energies=grid,
-                                        delta=1e-5, nk=nk, channel="+-")
+                                        delta=1e-5, nk=nk)
         sharp = sorted(p[0] for p in poles if abs(p[1]) < 0.02)
         assert abs(sharp[0] - exact(q)) < 1e-4
 
 
 @pytest.mark.slow
 def test_the_response_itself_comes_back_site_resolved():
-    """The point of this route over the eigenproblem one: a chi(omega), in
-    the site basis, which is what get_spinchi_full and the IETS maps
-    consume. Its poles are where the kernel is singular."""
+    """The point of this route over the eigenproblem one: a chi(omega),
+    site- and spin-resolved in the same (Sx,Sy,Sz) x site layout
+    get_spinchi_full uses, which is what the IETS maps consume. Its peak
+    is the magnon the kernel is singular at."""
     h = _neel(U=3.0, V1=0.5)
     es = np.linspace(0.3, 0.9, 61)
     out, chi = h.get_transverse_spinchi(energies=es, q=[0.1, 0., 0.],
                                          delta=1e-2, nk=NK)
     chi = np.array(chi)
-    assert chi.shape == (len(es), 2, 2)
+    assert chi.shape == (len(es), 6, 6)  # 3 spin channels x 2 sites
     weight = np.array([abs(np.trace(c).imag) for c in chi])
     peak = es[np.argmax(weight)]
     assert abs(peak - 0.5949) < 0.05  # the magnon this state has at q=0.1
+
+
+@pytest.mark.slow
+def test_a_collinear_state_along_any_axis_works():
+    """The ordering axis of a state is not an observable, so the answer
+    cannot depend on it. With the complete spin-orbital pair basis this is
+    automatic -- there is no quantization axis anywhere in the
+    construction -- but it is the cheapest check that no axis crept back
+    in, and an earlier transverse-only version failed it (a 54-degree tilt
+    gapped the mode by 0.145)."""
+    h = _neel(U=3.0)
+    ref = _kernel_min_eigenvalue(h)
+    assert ref < 1e-6
+    for vec, ang in (([1., 0., 0.], 0.5), ([1., 0., 0.], 0.3),
+                     ([0., 1., 0.], 0.5), ([1., 1., 0.], 0.37)):
+        t = h.copy()
+        t.global_spin_rotation(vector=vec, angle=ang)
+        assert abs(_kernel_min_eigenvalue(t) - ref) < 1e-8
+
+
+@pytest.mark.slow
+def test_a_non_collinear_state_keeps_its_goldstone_mode():
+    """The 120-degree spiral of the triangular-lattice Hubbard model,
+    which has no global spin quantization axis at all.
+
+    This is what the complete pair basis buys. A ladder restricted to one
+    spin-flip sector left this state's Goldstone mode gapped by 0.41,
+    independent of the broadening: those sectors are separate blocks only
+    while the state is quantized along one axis, and summing them
+    separately breaks the SU(2) Ward identity. That was never a
+    contradiction of the Goldstone theorem -- the theorem constrains the
+    exact response, and an approximation inherits it only if it is
+    conserving -- but it was a real limitation. Keeping every
+    spin-orbital pair, with the Hartree rung the restriction had allowed
+    to be dropped, makes the truncation conserving again and the mode
+    returns to zero: measured 9.4e-8, 9.4e-10, 9.4e-12 at delta 1e-3,
+    1e-4, 1e-5, i.e. proportional to delta^2 and limited by nothing
+    else."""
+    g = geometry.triangular_lattice().get_supercell([3, 3])
+    h = g.get_hamiltonian()
+
+    def spiral(r):
+        ph = 2*np.pi*(r[0] + 2*r[1])/3.
+        return [np.cos(ph), np.sin(ph), 0.]
+
+    mf = h.copy()
+    mf.add_exchange(spiral)
+    nk = 3
+    hm = h.get_mean_field_hamiltonian(U=8.0, filling=0.5, mf=mf, nk=nk,
+                                       maxerror=1e-9, mix=0.2, maxite=3000)
+    m = np.array([hm.get_vev("sx"), hm.get_vev("sy"), hm.get_vev("sz")]).T
+    n = m/np.linalg.norm(m, axis=1)[:, None]
+    assert 1 - np.min(np.abs(n@n[0])) > 0.4  # genuinely non-collinear
+    res = [_kernel_min_eigenvalue(hm, nk=nk, delta=d)
+           for d in (1e-3, 1e-4, 1e-5)]
+    assert res[-1] < 1e-9
+    for a, b in zip(res, res[1:]):
+        assert abs(b/a - 0.01) < 0.005  # proportional to delta^2
+    # ... and the independent route agrees that it is gapless
+    assert hm.get_goldstone_residual(nk=nk) < 1e-6

@@ -55,7 +55,7 @@ empty `__init__.py`; with the default import mode pytest's package-root walk fro
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
 tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
-minutes, not under a minute. It currently collects **1085 tests** (`pytest tests --collect-only -q`);
+minutes, not under a minute. It currently collects **1087 tests** (`pytest tests --collect-only -q`);
 the old "~7.5 min for 406 tests" figure predates the Keldysh, transport and AAA suites and is stale —
 `tests/scf` alone is ~15 min and `tests/keldysh` ~12 min. A fresh whole-suite wall time still needs
 measuring on an idle machine; treat any timing taken while other jobs are running as meaningless.
@@ -168,10 +168,10 @@ spectrum).
   observables, iterative solvers, and a measured feasibility study of a quantics tensor-train route) and
   `magnons_screening.md` (why the screened interaction must not be used in the magnon RPA kernel on its
   own -- it breaks the Goldstone mode at first order in the kernel/mean-field mismatch) and
-  `magnons_tdhf.md` (the two magnon routes -- site-basis RPA vs time-dependent Hartree-Fock in the
-  spin-flip pair basis -- what each covers, the Goldstone measurements validating both, why a neighbor-shell
-  exchange interaction works in the RPA once the SCF records its three spin channels in `h.Vchannels`, and
-  why a neighbor-shell density-density one structurally cannot).
+  `magnons_tdhf.md` (the three magnon routes -- site basis, the interaction's pair basis, and
+  time-dependent Hartree-Fock in the electron-hole pair basis -- what each covers, the Goldstone and
+  exact-reference measurements validating all three, and the one thing still open: the transverse exchange
+  rung in the pair-basis kernels).
 - `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap (not started) for moving compute-heavy
   paths onto GPU via `jax` (already a hard dependency), covering batched dense diagonalization
   (`htk/eigenvectors.py`), the partially-started KPM GPU path (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), and
