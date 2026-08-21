@@ -152,3 +152,17 @@ from .chitk.densitychi import plasmon_bands
 # RPA kernel poles (collective modes / instabilities)
 from .chitk.rpa import rpa_kernel_poles
 
+
+
+def transverse_spinchi(h,**kwargs):
+    """Transverse spin response with the interaction's pair index kept, so
+    a neighbour-shell density-density interaction is carried properly.
+    See chitk.pairchi"""
+    from .chitk.pairchi import pair_chi_rpa
+    return pair_chi_rpa(h,**kwargs)
+
+
+def pair_magnon_bands(h,**kwargs):
+    """Magnon bands from the pair-basis ladder, see chitk.pairchi"""
+    from .chitk.pairchi import magnon_bands_pair
+    return magnon_bands_pair(h,**kwargs)

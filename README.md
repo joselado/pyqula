@@ -118,6 +118,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Superfluid weight of BdG Hamiltonians, split into conventional and quantum-geometric contributions (flat-band superconductivity), with the BKT temperature from the Nelson-Kosterlitz criterion
 - Excitons from the Bethe-Salpeter equation on top of mean field (full non-Tamm-Dancoff, at any exciton momentum), with binding energies, electron-hole amplitudes and exciton band structures
 - Magnons from time-dependent Hartree-Fock, i.e. the spin-flip channel of the same Bethe-Salpeter equation, for neighbor-shell as well as onsite density-density interactions, with an exact Goldstone mode as the built-in check
+- Magnons from a pair-basis ladder, keeping the interaction's pair index so that a neighbor-shell density-density interaction enters the transverse spin response properly, frequency-resolved and without needing a gapped reference
 - Matrix-free and quantics-tensor-train Bethe-Salpeter solvers, which never build the dense BSE matrix: an exactly factorized kernel with an iterative eigensolver, and a quantics MPO solved by DMRG whose cost grows logarithmically with the k-mesh
 - Static RPA screened interaction computed from the mean-field bands, with the dielectric matrix built in the charge channel as in GW (spin-rotation invariant), usable as the direct-term kernel of the Bethe-Salpeter equation (GW-BSE style, with cRPA as an option) or on its own
 

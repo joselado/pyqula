@@ -174,9 +174,46 @@ Still refused, deliberately:
   whether dropping it matters is a property of the converged state rather
   than of the interaction (it cancels on a Neel state, it is fatal on a
   V1-ordered ferromagnet). `_channel_spin_U` returns None in that case and
-  the old gate fires. The TDHF route is the answer there.
+  the old gate fires. `chitk/pairchi.py` (below) and the TDHF route are
+  the answers there.
 - a **hand-built `h.V`** with no `h.Vchannels` alongside it, for the
   original reason: nothing says which interaction it came from.
+
+## The pair-basis ladder (done)
+
+`chitk/pairchi.py` is the third route, and the one that removes the
+density-density limitation from the frequency-resolved response rather
+than routing around it. The rung
+`K_{(ij),(kl)} = -W_{(i up),(j dn)} delta_ik delta_jl` is diagonal in the
+PAIR index, so the ladder is summed in the basis of pair operators
+`A_P = sum_r c^dag_{i up,r} c_{j dn,r+R}`, one per non-zero entry of the
+real-space interaction, and the physical response read off the diagonal
+pairs. The cost is set by the interaction's support, not by N^2: only
+pairs in it enter the inversion, giving N(z+1) -- linear in N, eight pairs
+for a honeycomb cell with a nearest-neighbour V.
+
+One formula covers the two cases that look different in this basis: the
+coupling is always the up-down element `W[2i,2j+1]`, which is `V_ij` for
+an extended spin-independent interaction and `U` for an onsite Hubbard
+one (whose same-spin entries are zero, since n^2 = n for one orbital).
+That is what makes the ladder reduce to the familiar chi0/(1-U chi0).
+
+Measured:
+
+| state | interaction | min eigenvalue of 1 + V chi0 at q=0 |
+|---|---|---|
+| honeycomb Neel | U=3 | 2.2e-9 (both spin channels) |
+| honeycomb Neel | U=3, V1=0.5 (8 pairs) | 3.2e-9 |
+| metallic V1-ordered chain | V1=1.1, no U | proportional to delta exactly (4.614e-3, -4, -5, -6 at delta 1e-3 ... 1e-6) |
+
+and it agrees with the independent TDHF pair basis to five decimals
+(0.49165 at U=3, 0.59492 with V1=0.5, both at q=0.1), and with the
+closed-form saturated-ferromagnet dispersion in a METAL to five decimals
+(0.00173, 0.01291, 0.07756 at q = 0.02, 0.05, 0.1). No gap is required
+anywhere in this route.
+
+What it does NOT do is exchange, for the same reason the TDHF kernel does
+not -- see the next section.
 
 ## The open case: the transverse rung in the TDHF kernel
 

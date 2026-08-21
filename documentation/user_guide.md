@@ -2039,7 +2039,34 @@ A neighbor-shell **exchange** interaction (`J1`/`J2`/`J3`/`Jr`, isotropic or ani
 
 A neighbor-shell **density-density** interaction is still refused, and this one is about representation rather than bookkeeping. The vertex here is site-separable, `chi(1-V chi)^{-1}` with one index per site, while the rung an extended $V_{ij}$ contributes to the spin response is its Fock term acting on the electron-hole *pair* index. There is nowhere to put it: the extraction that builds the vertex maps a spin-independent $V_{ij}$ to exactly zero. Whether that matters depends on the converged state rather than on the interaction, which is precisely why it is refused rather than decided for you -- on a Neel state $V_1$'s Fock term renormalizes the hopping spin-*in*dependently (the two sublattices swap under a spin flip), never enters the exchange splitting, and the Goldstone mode survives (3.0e-9 at `U=3, V1=0.5`); on a ferromagnetic chain ordered by $V_1$ alone the vertex is identically zero, the kernel is the identity, and its smallest eigenvalue is 1.0 where the Goldstone theorem demands 0 -- no magnon of any kind.
 
-For that case, the next section is a route that is right by construction rather than by a cancellation you would have to check state by state. A hand-built `h.V` (one not produced by an SCF, so with no `h.Vchannels` alongside it) is also refused, for the same reason the old gate existed: nothing says which interaction it came from. To use one anyway, build the vertex explicitly and call `chitk.rpa.rpa_kernel_poles_ops`/`chi_ops_RPA` directly, bypassing `h.V` -- `tests/chi/test_rpa_nononsite_interaction.py` and `tests/scf/test_rpa_nononsite_ferro_chain.py` do exactly that, and are worked examples of the low-filling ferromagnetic (Stoner) instability a nearest-neighbor exchange drives on a chain.
+For that case there are two routes that are right by construction rather than by a cancellation you would have to check state by state -- `method="pair"` and `method="tdhf"`, both below. A hand-built `h.V` (one not produced by an SCF, so with no `h.Vchannels` alongside it) is also refused, for the same reason the old gate existed: nothing says which interaction it came from. To use one anyway, build the vertex explicitly and call `chitk.rpa.rpa_kernel_poles_ops`/`chi_ops_RPA` directly, bypassing `h.V` -- `tests/chi/test_rpa_nononsite_interaction.py` and `tests/scf/test_rpa_nononsite_ferro_chain.py` do exactly that, and are worked examples of the low-filling ferromagnetic (Stoner) instability a nearest-neighbor exchange drives on a chain.
+
+### The three magnon routes
+
+`h.get_magnon_bands` takes a `method`, and the three cover different interactions because they keep different amounts of the ladder:
+
+| interaction | `"rpa"` | `"pair"` | `"tdhf"` |
+|---|---|---|---|
+| onsite Hubbard $U$ | yes | yes | yes |
+| neighbour-shell density-density $V_1,V_2,\dots$ | **no** | yes | yes |
+| exchange $J_1,J_2,\dots$ (isotropic or anisotropic) | yes | **no** | **no** |
+| metallic reference | yes | yes | with `metal=True` |
+| frequency-resolved $\chi(\omega)$ | yes | yes | no (an eigenproblem) |
+
+The reason the middle row splits is a matter of which index the ladder rung is diagonal in. Writing $H_{int} = \tfrac12\sum V_{ij} n_i n_j$, the transverse rung is $K_{(ij),(kl)} = -V_{ij}\delta_{ik}\delta_{jl}$ -- diagonal in the **pair** index $(i,j)$, not the site index. An onsite $U$ collapses that onto the pairs with $i=j$, which is exactly what the site basis of `method="rpa"` holds, and that collapse is why it is exact there. An extended $V_{ij}$ lives in the pairs with $i\ne j$, which that basis does not have.
+
+`method="pair"` (`chitk/pairchi.py`) keeps the pair index and solves the same ladder there, $\chi = \chi_0(1+V\chi_0)^{-1}$ with $V$ diagonal. The cost is set by how many pairs the interaction has rather than by $N^2$ -- only pairs in its support enter the inversion, so a short-ranged $V$ gives $N(z+1)$, linear in $N$ and eight pairs for a honeycomb cell with a nearest-neighbour $V$. It keeps the frequency scan and needs no gap:
+
+```python
+qs,ws,gammas = hmf.get_magnon_bands(method="pair",nq=20,
+                    energies=np.linspace(1e-3,3.,400),delta=1e-3,nk=nk)
+es,chi = hmf.get_transverse_spinchi(energies=np.linspace(0.,2.,100),
+                    q=[0.1,0.,0.],delta=1e-2,nk=nk)   # site-resolved chi(w)
+```
+
+The last row is why `"tdhf"` still exists: it returns magnon energies as eigenvalues, with no frequency grid and no broadening, which is what the Goldstone residual is measured on. The three agree wherever more than one applies -- the acoustic magnon of a Néel honeycomb at $q=0.1$ is 0.49165 from all of them, and 0.59492 from `"pair"` and `"tdhf"` once a $V_1$ is added. In a metal, `"pair"` reproduces the closed-form saturated-ferromagnet dispersion to five decimals (0.00173, 0.01291, 0.07756 at $q=0.02,0.05,0.1$), as does `"tdhf"`.
+
+Exchange goes the other way: its transverse rung $J/2(S^+_iS^-_j+\mathrm{h.c.})$ is a spin-flip two-body term with no density-density representation at all, so neither `"pair"` nor `"tdhf"` can carry it, while `"rpa"` handles it through the mean field's own three spin channels. For an isotropic $J$, use `"rpa"`.
 
 ### Magnons from time-dependent Hartree-Fock
 
@@ -2963,6 +2990,8 @@ Compute the magnon bands of a magnetic mean-field state, scanned along a q-path.
 
 Optional arguments:
 
+- method="rpa" / "pair" / "tdhf": which ladder to sum. See "The three magnon routes" above for the coverage table; in short, "rpa" is the site basis (onsite U or neighbour-shell exchange), "pair" keeps the interaction's pair index (any density-density interaction, onsite or not, metals included, frequency-resolved), "tdhf" solves the electron-hole pair eigenproblem (any density-density interaction, no frequency grid).
+
 - method="rpa": the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`, with the interaction taken from the mean field -- an onsite `h.V`, or a neighbor-shell **exchange** interaction through `h.Vchannels`, which the SCF records; a neighbor-shell density-density interaction is refused). Works for metals as well as insulators, and needs a frequency grid. `method="tdhf"` instead solves the time-dependent Hartree-Fock problem in the spin-flip electron-hole pair basis: it handles a neighbor-shell density-density interaction, has an exact Goldstone mode, needs no frequency grid, and requires a gapped reference converged on the same `nk`
 
 - qpath=None, nq=20: the q-path (default path of the geometry) and number of q-points
@@ -2972,6 +3001,19 @@ Optional arguments:
 - nk, n, channel, V: for `method="tdhf"` -- the k-mesh (which must match the SCF's), how many branches to keep per q-point, whether to restrict to the spin-flip block (`"auto"`, `"spinflip"`, `"all"`), and an interaction overriding `h.V`
 
 Returns `(qs,ws,gammas)` for `method="rpa"`: three flat 1D arrays of equal length, `qs` the integer q-point index along the path, `ws` the pole frequency, `gammas` its residual imaginary part. `method="tdhf"` returns `(qs,es)`, with `es` the (complex) magnon energy.
+
+### h.get_transverse_spinchi()
+Return the transverse ($S^+/S^-$) spin response computed in the basis of the interaction's *pair* index rather than of sites, which is what lets it carry a neighbour-shell density-density interaction -- the one the site-basis RPA maps to exactly zero. Needs no gapped reference, and returns a frequency-resolved, site-resolved $\chi(\omega)$.
+
+Optional arguments:
+
+- W=None: the interaction, defaulting to the one the mean field was converged with
+
+- q=[0,0,0], energies, delta, nk: as in `get_chi`
+
+- channel="+-": which spin-flip sector; "-+" is the other one. They do not mix under a spin-conserving interaction, and a collinear state may have weight in only one
+
+Returns `(energies,chi)` with `chi` one $N\times N$ site matrix per frequency.
 
 ### h.get_magnon_energies()
 Return the magnon energies at a single center-of-mass momentum `Q`, from the spin-flip channel of the Bethe-Salpeter equation. Same arguments as `get_magnon_bands(method="tdhf")` with `Q=[qx,qy,qz]` in place of the q-path. A sizable imaginary part on an energy means the mean-field reference is unstable against that excitation.

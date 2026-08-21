@@ -237,6 +237,12 @@ class Hamiltonian():
         site-separable vertex cannot represent at all (see
         chitk.spinchi._require_onsite_only_V).
 
+        method="pair" sums the same ladder as "rpa" but in the basis of
+        the interaction's pair index, where the rung of a neighbour-shell
+        density-density interaction actually lives. It keeps the frequency
+        scan and the metal support of "rpa" and gains the interaction
+        coverage of "tdhf"; see chitk.pairchi.
+
         method="tdhf" solves the time-dependent Hartree-Fock (Bethe-
         Salpeter) problem in the spin-flip electron-hole pair basis
         instead, which is where that rung belongs: it handles any
@@ -249,10 +255,22 @@ class Hamiltonian():
         if method=="tdhf":
             from . import bse
             return bse.magnon_bands_tdhf(self,**kwargs)
+        if method=="pair":
+            from . import chi
+            return chi.pair_magnon_bands(self,**kwargs)
         if method!="rpa":
-            raise ValueError("method must be 'rpa' or 'tdhf', got %r"%(method,))
+            raise ValueError("method must be 'rpa', 'tdhf' or 'pair', got "
+                    "%r"%(method,))
         from . import chi
         return chi.magnon_bands(self,**kwargs)
+    def get_transverse_spinchi(self,**kwargs):
+        """Transverse (S+/S-) spin response computed in the basis of the
+        interaction's PAIR index rather than of sites, which is what lets
+        it carry a neighbour-shell density-density interaction -- the one
+        the site-basis RPA maps to exactly zero. Needs no gap, and returns
+        a frequency-resolved chi. See chitk.pairchi"""
+        from . import chi
+        return chi.transverse_spinchi(self,**kwargs)
     def get_magnon_energies(self,**kwargs):
         """Return the magnon energies at a single momentum Q, from the
         spin-flip channel of the Bethe-Salpeter equation, see
