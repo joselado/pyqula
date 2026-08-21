@@ -187,16 +187,24 @@ class Hamiltonian():
     def get_spinchi_ladder(self,**kwargs):
         """Spin-spin response function with ladder operators.
 
-        RPA=True (the default) requires H.V to be a plain onsite
-        (Hubbard-like) interaction -- raises ValueError otherwise, see
-        chitk.spinchi._require_onsite_only_V's docstring."""
+        RPA=True (the default) needs an interaction the site-basis spin
+        vertex can represent: an onsite (Hubbard-like) H.V, or a
+        neighbor-shell EXCHANGE one, whose three spin channels the SCF
+        records in H.Vchannels. A neighbor-shell density-density
+        interaction raises ValueError, see
+        chitk.spinchi._require_onsite_only_V's docstring. This is the
+        transverse (S+/S-) channel, so an in-plane anisotropy (Kx != Ky)
+        also raises -- use get_spinchi_full there."""
         from . import chi
         return chi.spinchi_ladder(self,**kwargs)
     def get_spinchi_full(self,**kwargs):
         """Full spin-spin response function.
 
-        RPA=True (the default) requires H.V to be a plain onsite
-        (Hubbard-like) interaction -- raises ValueError otherwise, see
+        RPA=True (the default) needs an interaction the site-basis spin
+        vertex can represent: an onsite (Hubbard-like) H.V, or a
+        neighbor-shell EXCHANGE one, whose three spin channels the SCF
+        records in H.Vchannels. A neighbor-shell density-density
+        interaction raises ValueError, see
         chitk.spinchi._require_onsite_only_V's docstring."""
         from . import chi
         return chi.spinchi_full(self,**kwargs)
@@ -214,17 +222,49 @@ class Hamiltonian():
         interacting response function"""
         from . import chi
         return chi.rpa_kernel_poles(self,**kwargs)
-    def get_magnon_bands(self,**kwargs):
-        """Return the magnon bands: the poles of the full spin RPA kernel
-        (the Sx,Sy,Sz channel used by get_spinchi_full/get_iets_ldos),
-        scanned along a q-path.
+    def get_magnon_bands(self,method="rpa",**kwargs):
+        """Return the magnon bands of a magnetic mean-field state, scanned
+        along a q-path.
 
-        Requires H.V to be a plain onsite (Hubbard-like) interaction --
-        raises ValueError for any non-onsite H.V (bond exchange,
-        density-density, or a combination, e.g. from VJinteraction), see
-        chitk.spinchi._require_onsite_only_V's docstring for why."""
+        method="rpa" (the default) takes the poles of the site-basis spin
+        RPA kernel (the Sx,Sy,Sz channel used by
+        get_spinchi_full/get_iets_ldos) on a frequency grid. It works for
+        metals as well as insulators, and takes an onsite (Hubbard-like)
+        H.V or a neighbor-shell EXCHANGE interaction, whose three spin
+        channels the SCF records in H.Vchannels. It raises ValueError for
+        a neighbor-shell DENSITY-DENSITY one, whose contribution to the
+        spin response is a rung on the electron-hole pair index that a
+        site-separable vertex cannot represent at all (see
+        chitk.spinchi._require_onsite_only_V).
+
+        method="tdhf" solves the time-dependent Hartree-Fock (Bethe-
+        Salpeter) problem in the spin-flip electron-hole pair basis
+        instead, which is where that rung belongs: it handles any
+        density-density interaction, onsite or not, and has an exact
+        Goldstone mode at Q=0 (check it with get_goldstone_residual). In
+        exchange it needs a gapped mean-field reference and the same
+        k-mesh the mean field was converged on. See
+        bsetk.spinflip.magnon_bands_tdhf."""
+        if method=="tdhf":
+            from . import bse
+            return bse.magnon_bands_tdhf(self,**kwargs)
+        if method!="rpa":
+            raise ValueError("method must be 'rpa' or 'tdhf', got %r"%(method,))
         from . import chi
         return chi.magnon_bands(self,**kwargs)
+    def get_magnon_energies(self,**kwargs):
+        """Return the magnon energies at a single momentum Q, from the
+        spin-flip channel of the Bethe-Salpeter equation, see
+        bsetk.spinflip.magnon_energies"""
+        from . import bse
+        return bse.magnon_energies(self,**kwargs)
+    def get_goldstone_residual(self,**kwargs):
+        """Return how far this magnetic mean field is from having a
+        zero-energy magnon at Q=0, as the Goldstone theorem requires of
+        any magnetic state without spin-orbit coupling. Zero up to the SCF
+        tolerance; see bsetk.spinflip.goldstone_residual"""
+        from . import bse
+        return bse.goldstone_residual(self,**kwargs)
     def get_densitychi_RPA(self,**kwargs):
         """Density (charge) RPA response function for a V1/V2/V3/U/Vr
         neighbor-shell density-density interaction"""
@@ -303,6 +343,12 @@ class Hamiltonian():
         self.data = dict() # empty dictionary with various data
         self.has_spin = True # has spin degree of freedom
         self.V = None # density-density interaction
+        self.Vchannels = None # the x/y/z exchange channels and the
+        # density-density part of the interaction, kept separately because
+        # self.V is a single matrix and an isotropic J and an anisotropic
+        # Jz leave exactly the same one in it. Set by the exchange SCF
+        # (scftk.spinspin), read by the spin-channel RPA
+        # (chitk.spinchi._full_spin_U)
         self.has_kondo = False # has Kondo sites
         self.prefix = "" # a string used a prefix for different files
         self.path = "" # a path used for different files

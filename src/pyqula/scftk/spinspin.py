@@ -385,16 +385,21 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
 
     CAVEAT: this SCF convergence itself is unaffected by any combination
     of finite V and J (it's a plain linear combination, as above) -- bands,
-    DOS, total energy, get_magnon_bands (onsite-Hubbard-only case: neither
-    V nor J set), etc. all work normally on the result. But the resulting
-    Hamiltonian's h.V only ever stores the combined z-channel matrix, never
-    the separately built x/y-channel ones, so h.V has non-onsite support
-    whenever ANY of V1/V2/V3/Vr/J1/J2/J3/Jr is nonzero -- and
-    get_magnon_bands/get_spinchi_full/get_spinchi_ladder now raise
-    ValueError on a non-onsite h.V (see
-    chitk.spinchi._require_onsite_only_V's docstring for why): that
-    downstream spin-channel RPA path is not yet properly verified for any
-    non-onsite interaction, exchange or density-density or a mix.
+    DOS, total energy, etc. all work normally on the result. But the
+    resulting Hamiltonian's h.V only ever stores the combined z-channel
+    matrix, never the separately built x/y-channel ones, so h.V has
+    non-onsite support whenever ANY of V1/V2/V3/Vr/J1/J2/J3/Jr is nonzero,
+    and it cannot by itself tell an isotropic J1 from an anisotropic J1z
+    (both leave the same matrix there). The three channels are therefore
+    ALSO stored, separately, as h.Vchannels = {"x": vx, "y": vy, "z": vz,
+    "d": vd} -- that is what the spin-channel RPA
+    (chitk.spinchi._channel_spin_U) reads to build a vertex matching this
+    mean field, and it is why get_magnon_bands/get_spinchi_full/
+    get_spinchi_ladder work on an exchange-converged Hamiltonian. They
+    still raise ValueError when the non-onsite part is a DENSITY-DENSITY
+    interaction, whose Fock rung no site-separable vertex can carry at all
+    -- see chitk.spinchi._require_onsite_only_V's docstring, and
+    h.get_magnon_bands(method="tdhf") for the route that does handle it.
 
     For a BdG (Nambu, h0.has_eh=True) Hamiltonian, density-density and
     exchange are kept as separate contributions summed each SCF iteration
@@ -581,11 +586,14 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     vd = _build_density_v(h1, V1, V2, V3, U, Vr, nd=nd)
     vx = _build_v(h1, J1+J1x, J2, J3, Jr, nd=nd)
     vy = _build_v(h1, J1+J1y, J2, J3, Jr, nd=nd)
+    vz_exchange = vz # keep the pure exchange z channel and the density
+    vd_reference = vd # part separately, see _run_anisotropic_scf
     if not h1.has_eh: # normal-state: fold density-density directly into vz
         vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
         vd = None
     return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             maxerror, maxite, T, verbose, constrains, vd=vd,
+            vz_exchange=vz_exchange, vd_reference=vd_reference,
             integration=integration, scale=scale, npol=npol, ne=ne,
             cores=cores)
 
@@ -760,8 +768,8 @@ def _rot_dm(dd, R):
 
 
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
-        maxerror, maxite, T, verbose, constrains, vd=None,
-        integration="ed", scale=None, npol=None, ne=None, cores=None):
+        maxerror, maxite, T, verbose, constrains, vd=None, vz_exchange=None,
+        vd_reference=None, integration="ed", scale=None, npol=None, ne=None, cores=None):
     """Shared SCF core for Jinteraction/VJinteraction: decouples the
     z-channel matrix `vz` directly (Hartree-Fock density-density in the
     lab/computational spin basis) and the x/y-channel matrices `vx`/`vy`
@@ -773,6 +781,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
 
     `vd`, if given, is an additional density-density interaction matrix
     (Vinteraction's convention) added to the mean field each iteration.
+
+    `vd_reference` is the density-density part of the interaction whether
+    or not it was folded into `vz` -- also purely for `h.Vchannels`, and
+    also unused by the SCF. Defaults to `vd`.
+
+    `vz_exchange` is the EXCHANGE part of `vz` alone, before a caller
+    folded a density-density matrix into it (VJinteraction does that for a
+    normal-state Hamiltonian, and then passes vd=None). It is not used by
+    the SCF itself -- it exists so that the converged Hamiltonian can carry
+    the three exchange channels separately in `h.Vchannels`, which is what
+    lets the spin-channel RPA rebuild the vertex that matches this mean
+    field instead of guessing it from the single matrix `h.V`. Defaults to
+    `vz`, i.e. "nothing was folded in".
     For a normal-state h1, the caller should have already folded this into
     `vz` directly instead (Hartree-Fock decoupling is linear in the
     interaction, so this is equivalent and does not need a separate
@@ -1183,15 +1204,18 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # x/y channels, and never vd separately for a Nambu VJinteraction --
         # unlike Vinteraction/SzSz/SxSx/SySy, there is no single matrix
         # that fully captures this multi-channel interaction, so callers
-        # relying on h.V for e.g. get_magnon_bands/get_rpa_kernel_poles
-        # (which expect a single, onsite-only interaction matrix) should
-        # not assume this represents the whole exchange+density-density mix
-        # -- this is exactly the non-onsite h.V that
-        # chitk.spinchi._require_onsite_only_V now rejects with
-        # ValueError whenever any of V1/V2/V3/Vr/J1/J2/J3/Jr is nonzero,
-        # since that spin-channel RPA path is not yet properly verified
-        # for a non-onsite interaction (see that function's docstring).
+        # relying on h.V alone should not assume it represents the whole
+        # exchange+density-density mix). Vchannels below is what does.
         scf.hamiltonian.V = vz
+        # ... and the three exchange channels separately, which h.V alone
+        # cannot express (it is one matrix). The spin-channel RPA needs
+        # them to build a vertex that matches this mean field: an isotropic
+        # J and an anisotropic Jz leave the SAME z-channel matrix in h.V,
+        # so anything reading only that has to either guess isotropy or
+        # refuse. See chitk.spinchi._full_spin_U
+        scf.hamiltonian.Vchannels = {"x": vx, "y": vy,
+                "z": vz if vz_exchange is None else vz_exchange,
+                "d": vd if vd_reference is None else vd_reference}
         scf.hamiltonian0 = h0_ref
         scf.mf = mfnew
         scf.dm = dm_lab

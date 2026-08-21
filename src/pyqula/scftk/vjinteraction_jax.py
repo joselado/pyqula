@@ -344,6 +344,7 @@ _PUBLIC_SOLVER_NAMES = {"error_gradient": "levenberg_marquardt",
 
 
 def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
+        vz_exchange=None, vd_reference=None,
         filling=None, T=None, mix=0.1, maxerror=1e-5, maxite=2000,
         solver="newton", verbose=0, gmres_tol=1e-6, gmres_restart=20):
     """JAX-differentiable analogue of spinspin._run_anisotropic_scf,
@@ -515,6 +516,16 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     scf = SCF()
     scf.hamiltonian = h_final
     scf.hamiltonian.V = vz
+    # ... and the three exchange channels separately, exactly as the numpy
+    # engine does (spinspin._run_anisotropic_scf): h.V is a single matrix
+    # and an isotropic J and an anisotropic Jz leave the same one in it, so
+    # the spin-channel RPA needs these to build a matching vertex. Without
+    # them the same physics would be accepted through the numpy engine and
+    # refused through this one, which is the kind of engine-dependent
+    # behavior that is worth a few lines to avoid
+    scf.hamiltonian.Vchannels = {"x": vx, "y": vy,
+            "z": vz if vz_exchange is None else vz_exchange,
+            "d": vd_reference}
     scf.hamiltonian0 = h0
     scf.mf = mf_np
     scf.dm = dm_np
@@ -577,11 +588,14 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     vd = _build_density_v(h1, V1, V2, V3, U, Vr, nd=nd)
     vx = _build_v(h1, J1 + J1x, J2, J3, Jr, nd=nd)
     vy = _build_v(h1, J1 + J1y, J2, J3, Jr, nd=nd)
+    vz_exchange = vz  # keep the pure exchange z channel and the density
+    vd_reference = vd  # part, for h.Vchannels -- see generic_vjinteraction_jax
     vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()  # fold density-density in
 
     kwargs = dict(mf=mf, nk=nk, T=T, mix=mix, maxerror=maxerror, maxite=maxite,
             solver=solver, verbose=verbose, gmres_tol=gmres_tol,
-            gmres_restart=gmres_restart)
+            gmres_restart=gmres_restart,
+            vz_exchange=vz_exchange, vd_reference=vd_reference)
     if mu is not None:
         return generic_vjinteraction_jax(h1, vz, vx, vy, mu=mu, filling=None,
                 **kwargs)

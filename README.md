@@ -117,6 +117,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Abrikosov-pseudofermion (Read-Newns) mean-field theory for the Kondo lattice / periodic Anderson model (heavy fermions), with self-consistent hybridization and a per-site local-moment constraint [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/14_kondo_lattice.ipynb)
 - Superfluid weight of BdG Hamiltonians, split into conventional and quantum-geometric contributions (flat-band superconductivity), with the BKT temperature from the Nelson-Kosterlitz criterion
 - Excitons from the Bethe-Salpeter equation on top of mean field (full non-Tamm-Dancoff, at any exciton momentum), with binding energies, electron-hole amplitudes and exciton band structures
+- Magnons from time-dependent Hartree-Fock, i.e. the spin-flip channel of the same Bethe-Salpeter equation, for neighbor-shell as well as onsite density-density interactions, with an exact Goldstone mode as the built-in check
 - Matrix-free and quantics-tensor-train Bethe-Salpeter solvers, which never build the dense BSE matrix: an exactly factorized kernel with an iterative eigensolver, and a quantics MPO solved by DMRG whose cost grows logarithmically with the k-mesh
 - Static RPA screened interaction computed from the mean-field bands, with the dielectric matrix built in the charge channel as in GW (spin-rotation invariant), usable as the direct-term kernel of the Bethe-Salpeter equation (GW-BSE style, with cRPA as an option) or on its own
 

@@ -6,24 +6,44 @@ from .rpa import chi_ops_RPA
 
 
 def _require_onsite_only_V(H):
-    """Raise ValueError unless H.V is a plain onsite (Hubbard-like)
-    interaction -- a single (0,0,0) key, or a plain matrix (the only form
-    that predates non-onsite support and is always implicitly onsite).
+    """Raise ValueError unless the spin (Sx,Sy,Sz)/(S+,S-) RPA vertex can
+    actually be built from what this Hamiltonian carries.
 
-    Automatically dressing the spin (Sx,Sy,Sz)/(S+,S-) RPA channel from
-    H.V beyond that is not properly verified yet: bond exchange (J) alone
-    and density-density (V) alone are individually well-behaved
-    mathematically (V2K_matrix is exact for both, see its docstring, and
-    rotational symmetry has been checked numerically for each separately),
-    but a VJinteraction Hamiltonian with BOTH set simultaneously only ever
-    exposes the combined z-channel SCF matrix as H.V (never the separately
-    built x/y-channel ones -- see scftk.spinspin's
-    "scf.hamiltonian.V = vz"), so the spin RPA vertex built from it cannot
-    be trusted in general, and no independent (e.g. exact-diagonalization)
-    cross-check exists yet for any non-onsite case. Rather than silently
-    returning a result that ranges from "probably fine" (isotropic J
-    alone) to "structurally wrong" (anisotropic J + V), every non-onsite
-    H.V is rejected here until that validation exists.
+    Three cases pass. A plain onsite (Hubbard-like) H.V -- a single
+    (0,0,0) key, or a plain matrix, the only form that predates non-onsite
+    support. A Hamiltonian carrying H.Vchannels, the three exchange
+    channel matrices the SCF decoupled, whose density-density part is
+    onsite: the vertex is then built per channel by _channel_spin_U, which
+    is what makes a neighbor-shell EXCHANGE interaction (isotropic or
+    anisotropic) work here. And no interaction at all.
+
+    What is rejected, and why:
+
+      - a non-onsite DENSITY-DENSITY interaction, even alongside an
+        exchange one. Its contribution to the spin response is the Fock
+        rung of V_ij acting on the electron-hole PAIR index, and a
+        site-separable vertex has nowhere to put a two-index object --
+        V2K_matrix maps a spin-independent V_ij to exactly zero. Whether
+        dropping it matters is a property of the converged STATE rather
+        than of the interaction (it cancels on a Neel state, where V1's
+        Fock term renormalizes the hopping spin-independently, and it is
+        fatal on a V1-ordered ferromagnet, whose vertex comes out
+        identically zero and whose kernel is then the identity), so it is
+        refused rather than decided for the caller. The route that is
+        right by construction there is bsetk/spinflip.py: time-dependent
+        Hartree-Fock in the spin-flip electron-hole pair basis, where that
+        rung fits, with an exact Goldstone mode at Q=0 (measured 2.0e-10
+        with a V1 neighbor shell). Reach it with
+        h.get_magnon_bands(method="tdhf"), h.get_magnon_energies or
+        h.get_goldstone_residual. It needs a gapped mean field and the
+        same k-mesh the SCF used, which is why it does not simply replace
+        this one.
+      - a non-onsite H.V with no H.Vchannels beside it, e.g. one built by
+        hand or by an SCF engine that does not record them. Nothing then
+        says which interaction it came from: an isotropic J1 and an
+        anisotropic J1z leave exactly the same z-channel matrix in H.V, so
+        replicating it across the three spin channels would be a guess
+        that is right for one and wrong for the other.
 
     If you understand the caveats and want to proceed anyway (e.g. for
     regression-testing the underlying vertex math), build the interaction
@@ -34,18 +54,31 @@ def _require_onsite_only_V(H):
     from ..multihopping import MultiHopping
     V = H.V
     if V is None: return # no interaction at all, nothing to check
+    if _channel_spin_U(H) is not None:
+        # the SCF recorded the three exchange channels separately, so the
+        # vertex is built per channel rather than guessed from this single
+        # matrix -- a neighbor-shell EXCHANGE interaction is fine here.
+        # _channel_spin_U itself returns None (and so falls through to the
+        # check below) when the density-density part is non-onsite, which
+        # is the case it cannot represent
+        return
     if isinstance(V,MultiHopping): V = V.get_dict()
     if not isinstance(V,dict): return # plain matrix: always onsite
     if set(V.keys()) != {(0,0,0)}:
         raise ValueError(
             "get_magnon_bands/get_rpa_kernel_poles/get_spinchi_full/"
-            "get_spinchi_ladder only support a plain onsite (Hubbard-like) "
-            "H.V (a single (0,0,0) key); this Hamiltonian's H.V has "
-            f"non-onsite support ({sorted(V.keys())}). Non-onsite spin-"
-            "channel RPA is not yet properly verified -- see "
-            "chitk.spinchi._require_onsite_only_V's docstring. Build the "
-            "interaction yourself and call chitk.rpa.chi_ops_RPA/"
-            "rpa_kernel_poles_ops directly if you want to proceed anyway.")
+            "get_spinchi_ladder need an interaction their site-basis spin "
+            "vertex can represent: an onsite (Hubbard-like) H.V, or a "
+            "neighbor-shell EXCHANGE one whose three spin channels the SCF "
+            "recorded in H.Vchannels. This Hamiltonian's H.V has non-onsite "
+            f"support ({sorted(V.keys())}) and neither applies -- see "
+            "chitk.spinchi._require_onsite_only_V's docstring. If the "
+            "non-onsite part is a DENSITY-DENSITY interaction, no "
+            "site-separable vertex can carry its Fock rung at all; use the "
+            "time-dependent Hartree-Fock route, which can and has an exact "
+            "Goldstone mode: h.get_magnon_bands(method='tdhf'). If this is "
+            "a hand-built H.V, build the vertex yourself and call "
+            "chitk.rpa.chi_ops_RPA/rpa_kernel_poles_ops directly.")
 
 
 def spinchi_ladder(H,v=[0.,0.,1.],RPA=True,**kwargs):
@@ -61,6 +94,9 @@ def spinchi_ladder(H,v=[0.,0.,1.],RPA=True,**kwargs):
     sp = (sx + 1j*sy)/2. # ladder operator
     sm = (sx - 1j*sy)/2. # ladder operator
     if RPA: # RPA mode
+        U = _transverse_spin_K(H) # per-channel vertex, if the SCF kept one
+        if U is not None:
+            return chi_AB_RPA(H,A=sp,B=sm,V=U,**kwargs)
         _require_onsite_only_V(H) # raises for non-onsite H.V, see docstring
         U = H.V # get the interaction
         if U is not None: # finite interaction
@@ -149,6 +185,20 @@ def V2K_matrix(V):
     return K # return the matrix
 
 
+def blockU(Us):
+    """Take one interaction matrix per spin channel and build the
+    block-diagonal matrix chi_ops_RPA's (Sx,Sy,Sz) tensor expects.
+
+    replicateU below is the special case Us = [U,U,U]. The general one is
+    needed as soon as the three channels differ, i.e. for an anisotropic
+    exchange interaction, where using a single matrix for all three is not
+    an approximation but the wrong vertex."""
+    n = len(Us)
+    out = [[Us[0]*0. for i in range(n)] for j in range(n)]
+    for i in range(n): out[i][i] = Us[i]
+    return np.block(out)
+
+
 def replicateU(U,n=3):
     """Take an interaction matrix U and replicate 3 times for different
     channels"""
@@ -156,6 +206,107 @@ def replicateU(U,n=3):
     for i in range(n): out[i][i] = U
     return np.block(out) # return the full matrix
 
+
+
+def _density_part_is_onsite(ch,tol=1e-12):
+    """True if the density-density part recorded in H.Vchannels has no
+    support beyond the onsite (0,0,0) term (or is absent/zero)."""
+    vd = ch.get("d",None)
+    if vd is None: return True
+    for d,m in vd.items():
+        if tuple(d)==(0,0,0): continue
+        if np.max(np.abs(np.array(m)))>tol: return False
+    return True
+
+
+def _transverse_spin_K(H,tol=1e-9):
+    """Return the transverse (S+/S-) vertex of H as a real-space dict, or
+    None if this Hamiltonian does not carry separate spin channels.
+
+    The ladder response chi_{+-} lives in the transverse channel, so its
+    vertex is the x (equivalently y) exchange coupling plus the
+    density-density part, not the z one. They coincide for everything that
+    worked before this existed -- an onsite Hubbard U, or an isotropic
+    exchange -- and differ for an anisotropic one, where S+/S- is not an
+    eigen-channel of the interaction at all: Kx != Ky is refused rather
+    than silently averaged."""
+    ch = getattr(H,"Vchannels",None)
+    if ch is None or not _density_part_is_onsite(ch): return None
+    keys = set()
+    for k in ["x","y","z","d"]:
+        if ch.get(k,None) is not None: keys |= set(ch[k].keys())
+    if len(keys)==0: return None
+    shape = None
+    for k in ["x","y","z","d"]:
+        if ch.get(k,None) is not None:
+            shape = list(ch[k].values())[0].shape ; break
+    def at(name,d):
+        m = ch.get(name,None)
+        if m is None or d not in m: return np.zeros(shape,dtype=np.complex128)
+        return np.array(m[d])
+    out = {}
+    for d in keys:
+        Kx,Ky = V2K_matrix(at("x",d)),V2K_matrix(at("y",d))
+        if np.max(np.abs(Kx-Ky))>tol:
+            raise ValueError("this mean field has an anisotropic in-plane "
+                "exchange (Kx != Ky), so S+/S- is not an eigen-channel of "
+                "its interaction and the ladder response has no single "
+                "vertex. Use get_spinchi_full, which treats the three spin "
+                "channels separately")
+        out[d] = Kx + V2K_matrix(at("d",d))
+    return out
+
+
+def _channel_spin_U(H):
+    """Build the (Sx,Sy,Sz) RPA vertex from H.Vchannels, the three exchange
+    channel matrices the SCF decoupled plus its density-density part, or
+    return None if this Hamiltonian does not carry them.
+
+    This is what makes a neighbor-shell EXCHANGE interaction usable in the
+    spin RPA. The mean field for one is already the right thing --
+    scftk.spinspin's SCF decouples the x and y channels too, by rotating
+    the density matrix into the frame where that axis is the computational
+    z (see _run_anisotropic_scf) -- so the only thing missing was a vertex
+    that matches it, and H.V alone cannot provide one: an isotropic J1 and
+    an anisotropic J1z leave exactly the same z-channel matrix there.
+    With the channels kept separately the vertex is simply built per
+    channel, and isotropic and anisotropic exchange are equally correct
+    (and equally distinguishable).
+
+    The density-density part enters every channel identically -- it is
+    spin-rotation invariant -- so it is added to each of the three. For an
+    isotropic interaction this reproduces _full_spin_U's replicated vertex
+    exactly, which is why turning it on changes no existing result."""
+    ch = getattr(H,"Vchannels",None)
+    if ch is None: return None
+    if not _density_part_is_onsite(ch):
+        # a neighbor-shell density-density interaction is a different
+        # problem from a neighbor-shell exchange one: its contribution to
+        # the spin response is a Fock rung on the electron-hole PAIR
+        # index, which no site-separable vertex can carry, and V2K_matrix
+        # maps it to exactly zero. Whether that matters depends on the
+        # converged state rather than on the interaction (it cancels on a
+        # Neel state and is fatal on a V1-ordered ferromagnet), so this
+        # falls back to the gate rather than deciding for the caller
+        return None
+    keys = set()
+    for k in ["x","y","z","d"]:
+        if ch.get(k,None) is not None: keys |= set(ch[k].keys())
+    if len(keys)==0: return None
+    def at(name,d,shape): # the channel's matrix at this lattice vector
+        m = ch.get(name,None)
+        if m is None or d not in m: return np.zeros(shape,dtype=np.complex128)
+        return np.array(m[d])
+    shape = None
+    for k in ["x","y","z","d"]:
+        if ch.get(k,None) is not None:
+            shape = list(ch[k].values())[0].shape ; break
+    out = {}
+    for d in keys:
+        Kd = V2K_matrix(at("d",d,shape)) # isotropic, common to all channels
+        Ks = [V2K_matrix(at(a,d,shape)) + Kd for a in ["x","y","z"]]
+        out[d] = 2*blockU(Ks)
+    return out
 
 
 def _full_spin_U(H):
@@ -172,7 +323,14 @@ def _full_spin_U(H):
     reduces to -V2U_matrix there, so +2*V2K_matrix reduces to exactly the
     previous -2*V2U_matrix).
 
-    Returns None if the Hamiltonian carries no mean-field interaction."""
+    Returns None if the Hamiltonian carries no mean-field interaction.
+
+    A Hamiltonian that carries H.Vchannels (one from the exchange SCF)
+    takes the _channel_spin_U route above instead, which builds the vertex
+    per spin channel rather than replicating one -- see that function for
+    why that is what lets a neighbor-shell exchange interaction through."""
+    out = _channel_spin_U(H) # per-channel vertex, if the SCF recorded one
+    if out is not None: return out
     _require_onsite_only_V(H) # raises for non-onsite H.V, see docstring
     U = H.V # get the interaction
     if U is None: return None # no interaction, no RPA dressing
@@ -211,12 +369,13 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
     itself.
 
     Requires a Hamiltonian with a mean-field interaction set (H.V), e.g.
-    the output of get_mean_field_hamiltonian, and H.V must be a plain
-    onsite (Hubbard-like) interaction -- a single (0,0,0) key. Raises
-    ValueError for any non-onsite H.V (bond exchange, density-density, or
-    a combination of the two, e.g. from VJinteraction) -- see
-    _require_onsite_only_V's docstring for why that support is not yet
-    properly verified.
+    the output of get_mean_field_hamiltonian. An onsite (Hubbard-like) one
+    works, and so does a neighbor-shell EXCHANGE interaction, whose three
+    spin channels the SCF records in H.Vchannels. A neighbor-shell
+    DENSITY-DENSITY interaction raises ValueError -- see
+    _require_onsite_only_V's docstring for why that one has no vertex here
+    at all, and h.get_magnon_bands(method="tdhf") for the route that does
+    handle it.
 
     Returns (qs,ws,gammas): qs is the integer index of the q-point along
     the path (the same convention used by get_bands for the k-axis),

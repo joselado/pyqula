@@ -2033,7 +2033,44 @@ poles = h.get_rpa_kernel_poles(V=V,q=[0.5,0.,0.],energies=np.linspace(0.,2.,60),
 
 Note the channel: `get_rpa_kernel_poles` dresses the **charge** response by default, so a dictionary `V` here must be a density-density interaction in site space, of the same dimension as the response matrix `chiAB(...,mode="matrix")` returns. It is *not* the place to put a spin vertex.
 
-The **spin** channel deliberately does not accept a non-onsite interaction. `get_magnon_bands`, `get_spinchi_full` and `get_spinchi_ladder` read the mean-field interaction from `h.V`, and raise a `ValueError` if it has any key other than `(0,0,0)` -- which is exactly what `h.V` looks like after a `VJinteraction` run with a neighbor-shell `J1`/`V1`. The gate is deliberate: the non-onsite spin vertex is not validated (see `chitk.spinchi._require_onsite_only_V`'s docstring for the caveats), so the library refuses rather than returning a plausible-looking wrong dispersion. To work with a non-onsite spin interaction anyway, build the vertex explicitly and call `chitk.rpa.rpa_kernel_poles_ops`/`chi_ops_RPA` directly, bypassing `h.V` -- `tests/chi/test_rpa_nononsite_interaction.py` and `tests/scf/test_rpa_nononsite_ferro_chain.py` do exactly that, and are worked examples of the low-filling ferromagnetic (Stoner) instability a nearest-neighbor exchange drives on a chain.
+In the **spin** channel the two kinds of non-onsite interaction behave very differently, and only one of them works here.
+
+A neighbor-shell **exchange** interaction (`J1`/`J2`/`J3`/`Jr`, isotropic or anisotropic) **does** work. That is worth spelling out because it used to be refused. The mean field for one is not Ising-like at all: `VJinteraction` builds all three channel matrices and decouples the $x$ and $y$ ones by rotating the density matrix into the frame where that axis is the computational $z$, so the converged state is a genuinely SU(2)-symmetric Hartree-Fock one. What was missing was only a vertex to match it, because `h.V` is a single matrix and an isotropic $J_1$ and an anisotropic $J_{1z}$ leave exactly the same one in it. The SCF now also records the three channels separately in `h.Vchannels`, the vertex is built per channel, and the two cases are both correct and distinguishable. The check is the Goldstone theorem: on a `J1=3` honeycomb Neel state the RPA kernel's smallest eigenvalue at $q=0,\omega=0$ is 4.3e-10, while the same kernel at finite $q$ (0.10) and on a non-magnetic reference (0.50) is order one.
+
+A neighbor-shell **density-density** interaction is still refused, and this one is about representation rather than bookkeeping. The vertex here is site-separable, `chi(1-V chi)^{-1}` with one index per site, while the rung an extended $V_{ij}$ contributes to the spin response is its Fock term acting on the electron-hole *pair* index. There is nowhere to put it: the extraction that builds the vertex maps a spin-independent $V_{ij}$ to exactly zero. Whether that matters depends on the converged state rather than on the interaction, which is precisely why it is refused rather than decided for you -- on a Neel state $V_1$'s Fock term renormalizes the hopping spin-*in*dependently (the two sublattices swap under a spin flip), never enters the exchange splitting, and the Goldstone mode survives (3.0e-9 at `U=3, V1=0.5`); on a ferromagnetic chain ordered by $V_1$ alone the vertex is identically zero, the kernel is the identity, and its smallest eigenvalue is 1.0 where the Goldstone theorem demands 0 -- no magnon of any kind.
+
+For that case, the next section is a route that is right by construction rather than by a cancellation you would have to check state by state. A hand-built `h.V` (one not produced by an SCF, so with no `h.Vchannels` alongside it) is also refused, for the same reason the old gate existed: nothing says which interaction it came from. To use one anyway, build the vertex explicitly and call `chitk.rpa.rpa_kernel_poles_ops`/`chi_ops_RPA` directly, bypassing `h.V` -- `tests/chi/test_rpa_nononsite_interaction.py` and `tests/scf/test_rpa_nononsite_ferro_chain.py` do exactly that, and are worked examples of the low-filling ferromagnetic (Stoner) instability a nearest-neighbor exchange drives on a chain.
+
+### Magnons from time-dependent Hartree-Fock
+
+A magnon is the same kind of object as an exciton -- a bound two-particle excitation of a mean-field state -- built from electron-hole pairs whose electron and hole have *opposite* spin instead of the same spin. So the Bethe-Salpeter machinery of the exciton sections below already contains it, and restricting its pair basis to that spin-flip block is what `method="tdhf"` does. This is the route that handles a neighbor-shell interaction properly, because the pair index is exactly where the missing rung lives:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.meanfield import VJinteraction
+nk = 6                                  # the SCF and the magnon share this mesh
+g = geometry.honeycomb_lattice()
+scf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
+                     mf="antiferro",nk=nk,maxerror=1e-10)
+hmf = scf.hamiltonian
+print(hmf.get_goldstone_residual(nk=nk))          # 2e-10: the mode is exact
+qs,es = hmf.get_magnon_bands(method="tdhf",nk=nk,nq=20,n=2)
+```
+
+`qs`,`es` are flat 1D arrays in the same convention as the RPA `get_magnon_bands` above (`qs` is the integer index along the q-path), and `es` is complex whenever the mean-field state is unstable against some excitation. `h.get_magnon_energies(Q=...)` gives the spectrum at a single momentum.
+
+The test that this is right is the **Goldstone theorem**: a state that orders magnetically without spin-orbit coupling breaks SU(2) spontaneously, so a uniform spin rotation costs nothing and there must be a magnon at exactly zero energy at $Q=0$. `h.get_goldstone_residual()` measures how far the calculation is from that, as $\|Mv\|$ with $v$ the spin generator written in the pair basis. It comes out proportional to the SCF tolerance the mean field was converged to and to nothing else -- 1.8e-6, 1.8e-8, 1.8e-10 at `maxerror` 1e-6, 1e-8, 1e-10 -- which is what makes it worth checking before reading any dispersion. Note it is deliberately not "the eigenvalue nearest zero": that eigenvalue is defective, so it only converges as the *square root* of the same error (4e-5 where the residual is 2e-10), and a small imaginary part of that size on the acoustic branch is the expected signature rather than a problem.
+
+Three constraints come with it, all of them consequences of that same Ward identity:
+
+- **the mean field and the magnon must use the same `nk`.** A mean field converged at `nk=20` and a magnon solved at `nk=4` is not self-consistent on the magnon's mesh, and the acoustic branch acquires a real gap (measured 0.38, against 1e-5 for matched meshes). Nothing can check this for you -- the mesh the SCF ran on is not recorded on the Hamiltonian -- so `get_goldstone_residual` is how to find out.
+- **the reference must be gapped.** The pair basis needs the same number of occupied bands at every k-point, so a metallic magnet (a doped ferromagnetic chain, say) is refused; those still need `method="rpa"`, i.e. an onsite `U`.
+- **the interaction must be a density-density one.** An exchange interaction (`J1`/`J2`/`J3`/`Jr`, or `SzSz`) is refused, because `h.V` holds only its Ising part -- the transverse rung $J/2(S^+_iS^-_j+\mathrm{h.c.})$ that makes it isotropic is a spin-flip two-body term with no density-density representation, so this kernel cannot carry it. Solving the Ising part alone returns an ordinary-looking dispersion gapped by of order $J$ (measured 1.81 at `J1=3`), so it is rejected rather than returned. This is a limitation of the *kernel*, not of the mean field: `VJinteraction` decouples the $x$ and $y$ exchange channels too (by rotating the density matrix into the frame where that axis is the computational $z$), so an isotropic-$J$ mean field is genuinely SU(2) symmetric -- and `method="rpa"`, which rebuilds the $x/y$ vertices by replicating the $z$ one, keeps its Goldstone mode there (measured 4.3e-10). **For isotropic exchange, use `method="rpa"`.** See `future_development/magnons_tdhf.md`.
+
+By default the calculation restricts itself to the spin-flip block of the pair basis, which is exact for a collinear state and about eight times cheaper; a non-collinear or tilted state has no such block and the whole basis is kept instead, transparently (`channel="all"` forces that, `channel="spinflip"` refuses instead of falling back). That path is checked on a genuinely non-collinear state too -- the 120-degree spiral of the triangular-lattice Hubbard model, whose Goldstone residual comes out at 2.9e-9 for an SCF converged to 1e-9. Where both routes are valid -- a plain onsite Hubbard `U`, where the site-separable RPA vertex is exact -- they agree: the acoustic magnon of the Neel honeycomb comes out at 0.4917 and 0.9037 at $q=0.1$ and $0.2$ from both, and the two share no code below the Hamiltonian.
+
+See `examples/2d/magnon_bands_tdhf/main.py` for a runnable version and `tests/magnon/` for the Goldstone checks on a Neel antiferromagnet, a $V_1$-dressed one, a tilted one, a 120-degree non-collinear spiral and a saturated ferromagnet, plus that cross-check.
 
 ### Density (charge) response
 
@@ -2918,15 +2955,31 @@ Optional arguments:
 Returns an `(npoles,2)` array: pole frequency and its (signed) residual imaginary part -- filter on its magnitude, not its raw value, to keep only sharp/well-defined modes -- one row per collective mode found, sorted by frequency.
 
 ### h.get_magnon_bands()
-Compute the magnon bands: the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`, with the interaction taken automatically from the mean-field `h.V` -- which can have neighbor-shell, not just onsite, support), scanned along a q-path.
+Compute the magnon bands of a magnetic mean-field state, scanned along a q-path. Two methods, with different domains of validity:
 
 Optional arguments:
 
+- method="rpa": the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`, with the interaction taken from the mean field -- an onsite `h.V`, or a neighbor-shell **exchange** interaction through `h.Vchannels`, which the SCF records; a neighbor-shell density-density interaction is refused). Works for metals as well as insulators, and needs a frequency grid. `method="tdhf"` instead solves the time-dependent Hartree-Fock problem in the spin-flip electron-hole pair basis: it handles a neighbor-shell density-density interaction, has an exact Goldstone mode, needs no frequency grid, and requires a gapped reference converged on the same `nk`
+
 - qpath=None, nq=20: the q-path (default path of the geometry) and number of q-points
 
-- energies, delta, nk: as above
+- energies, delta, nk: as above (`method="rpa"` only)
 
-Returns `(qs,ws,gammas)`, three flat 1D arrays of equal length: `qs` the integer q-point index along the path, `ws` the pole frequency, `gammas` its residual imaginary part.
+- nk, n, channel, V: for `method="tdhf"` -- the k-mesh (which must match the SCF's), how many branches to keep per q-point, whether to restrict to the spin-flip block (`"auto"`, `"spinflip"`, `"all"`), and an interaction overriding `h.V`
+
+Returns `(qs,ws,gammas)` for `method="rpa"`: three flat 1D arrays of equal length, `qs` the integer q-point index along the path, `ws` the pole frequency, `gammas` its residual imaginary part. `method="tdhf"` returns `(qs,es)`, with `es` the (complex) magnon energy.
+
+### h.get_magnon_energies()
+Return the magnon energies at a single center-of-mass momentum `Q`, from the spin-flip channel of the Bethe-Salpeter equation. Same arguments as `get_magnon_bands(method="tdhf")` with `Q=[qx,qy,qz]` in place of the q-path. A sizable imaginary part on an energy means the mean-field reference is unstable against that excitation.
+
+### h.get_goldstone_residual()
+Return how far a magnetic mean field is from having a zero-energy magnon at $Q=0$, as the Goldstone theorem requires of any magnetic state without spin-orbit coupling: $\|Mv\|/\|v\|$ with $M$ the time-dependent Hartree-Fock matrix and $v$ the uniform spin-rotation generator in the pair basis. It is proportional to the SCF tolerance the mean field was converged to and to nothing else, so it is the check to run before trusting a magnon dispersion -- in particular it is what catches a mean field converged on a different `nk` than the magnon is being solved on.
+
+Optional arguments:
+
+- nk=10, V=None, channel="auto": as in `get_magnon_energies`
+
+- relative=True: divide by the largest transition energy of the pair basis, so the number is comparable across models with different bandwidths
 
 ### h.get_densitychi_RPA()
 Compute the density (charge) RPA response function for a `V1`/`V2`/`V3`-neighbor-shell (+ onsite `U`, + general `Vr(r)`) density-density interaction, same convention as `Vinteraction`/`VJinteraction`. Unlike `get_spinchi_full`, the interaction is taken directly as parameters, not read from `h.V` -- no mean-field convergence is needed first.

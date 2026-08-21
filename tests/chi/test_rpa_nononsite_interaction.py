@@ -44,10 +44,13 @@ def test_multishell_interaction_has_more_than_one_key():
 
 
 def test_get_magnon_bands_raises_for_nononsite_interaction():
-    """get_magnon_bands must raise ValueError for this hand-built,
-    genuinely non-onsite H.V too (not just an SCF-derived one, see
-    tests/scf/test_rpa_nononsite_ferro_chain.py) -- non-onsite spin-channel
-    RPA is not yet properly verified, see
+    """get_magnon_bands must raise ValueError for a hand-built, non-onsite
+    H.V. An SCF-converged exchange Hamiltonian is now let through (the SCF
+    records its three spin channels in h.Vchannels, so a matching vertex
+    can be built -- see tests/chi/test_exchange_channels_rpa.py), but a
+    bare h.V carries no such information: nothing says whether the
+    interaction it came from was isotropic, and replicating its z channel
+    across all three would be a guess. So this stays refused, see
     chitk.spinchi._require_onsite_only_V's docstring."""
     h = _chain_with_nn_exchange(filling=0.1, J1=-1.5)
     energies = np.linspace(0.0002, 0.08, 60)

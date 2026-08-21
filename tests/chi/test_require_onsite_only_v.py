@@ -28,6 +28,15 @@ def test_require_onsite_only_v_allows_plain_onsite():
     _require_onsite_only_V(h)  # must not raise
 
 
+# NOTE every Hamiltonian in this module has its H.V set by hand and no
+# h.Vchannels, which is exactly the case the guard still rejects: without
+# the SCF's record of the three spin channels there is no way to tell an
+# isotropic exchange (which the RPA can now dress, see
+# tests/chi/test_exchange_channels_rpa.py) from an anisotropic one or from
+# a density-density interaction. The guard is about missing information,
+# not about the number of keys as such.
+
+
 def test_require_onsite_only_v_rejects_nononsite_key():
     h = _hubbard_chain()
     h.V[(1, 0, 0)] = h.V[(0, 0, 0)]*0.1  # add a neighbor-shell key

@@ -34,6 +34,14 @@ goes further and compresses the operator into a quantics matrix product
 operator solved by DMRG, whose cost grows with log(nk) rather than nk.
 Both are Tamm-Dancoff only. See bsetk/iterative.py and bsetk/qtt.py.
 
+The same two-particle problem, restricted to electron-hole pairs whose
+electron and hole have opposite spin, describes MAGNONS rather than
+excitons -- bsetk/spinflip.py, exposed here as magnon_bands_tdhf /
+magnon_energies / goldstone_residual. That route is what covers a
+neighbor-shell (non-onsite) interaction in the spin channel, which the
+site-basis RPA of chitk/spinchi.py structurally cannot; its own docstring
+has the argument, and the Goldstone theorem is the test.
+
 Passing screening="rpa" replaces the interaction of the direct (ladder)
 term by the static RPA screened one W = eps^-1 v, built from the bands of
 the mean field itself (screening.py), which is the GW-BSE-style
@@ -44,6 +52,8 @@ effective screened interaction and must not be screened a second time.
 
 from .bsetk.solve import BSE
 from .bsetk.bands import exciton_bands
+from .bsetk.spinflip import (goldstone_residual, magnon_bands_tdhf,
+                             magnon_energies)
 
 
 def get_bse(h,**kwargs):
@@ -71,3 +81,21 @@ def exciton_binding_energies(h,n=None,**kwargs):
     """Return the exciton binding energies, i.e. how far below the lowest
     independent-particle transition each exciton lies. Positive is bound"""
     return get_bse(h,**kwargs).get_binding_energies(n=n)
+
+
+def get_magnon_bands_tdhf(h,**kwargs):
+    """Return the magnon bands of a mean-field Hamiltonian, from the
+    spin-flip channel of the BSE, see bsetk.spinflip.magnon_bands_tdhf"""
+    return magnon_bands_tdhf(h,**kwargs)
+
+
+def get_magnon_energies(h,**kwargs):
+    """Return the magnon energies at one momentum, see
+    bsetk.spinflip.magnon_energies"""
+    return magnon_energies(h,**kwargs)
+
+
+def get_goldstone_residual(h,**kwargs):
+    """Return how far a magnetic mean field is from having a zero-energy
+    magnon at Q=0, see bsetk.spinflip.goldstone_residual"""
+    return goldstone_residual(h,**kwargs)

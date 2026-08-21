@@ -119,13 +119,17 @@ def test_vjinteraction_j1_antiferromagnetic_moment_grows_on_bichain():
     # H.V must carry the off-diagonal, cross-sublattice bond structure
     assert len(h_strong.V) > 1
 
-    # get_magnon_bands must raise on this genuinely multi-orbital,
-    # non-onsite H.V -- see test_magnon_bands_raises_on_v1_only_converged_
-    # hamiltonian above and chitk.spinchi._require_onsite_only_V's
-    # docstring; the underlying vertex-extraction math is still exercised
-    # (and regression-tested) directly in
-    # tests/chi/test_magnon_goldstone_bond_exchange.py, which bypasses
-    # this Hamiltonian-level guard on purpose.
+    # get_magnon_bands RUNS on this genuinely multi-orbital, non-onsite
+    # H.V: an isotropic exchange interaction is one the spin RPA can build
+    # a matching vertex for, now that the SCF records its three channels
+    # separately in h.Vchannels. See
+    # tests/chi/test_exchange_channels_rpa.py for the Goldstone
+    # measurement that justifies letting it through, and
+    # test_magnon_bands_raises_on_v1_only_converged_hamiltonian above for
+    # the case that is still refused (a neighbor-shell density-density
+    # interaction, whose Fock rung no site-separable vertex can carry).
+    assert h_strong.Vchannels is not None
     energies = np.linspace(0.01, 3.0, 40)
-    with pytest.raises(ValueError):
-        h_strong.get_magnon_bands(nq=3, energies=energies, delta=2e-2, nk=100)
+    qs, ws, gammas = h_strong.get_magnon_bands(nq=3, energies=energies,
+                                                delta=2e-2, nk=100)
+    assert len(qs) == len(ws) == len(gammas)

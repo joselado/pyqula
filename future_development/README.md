@@ -16,6 +16,12 @@ already reached once.
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with
   the Goldstone/Ward-identity measurements that settle it.
+- [`magnons_tdhf.md`](magnons_tdhf.md) -- the two magnon routes (site-basis
+  RPA vs time-dependent Hartree-Fock in the spin-flip pair basis), what
+  each covers, the Goldstone measurements that validate both, why a
+  neighbor-shell exchange interaction works in the RPA once the SCF records
+  its three spin channels, and why a neighbor-shell density-density one
+  structurally cannot.
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).
