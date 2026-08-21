@@ -19,6 +19,21 @@ class PairBasis():
     full non-Tamm-Dancoff BSE at finite Q be assembled without any further
     momentum bookkeeping. At Q=0 the two sets coincide.
 
+    metal=True drops the requirement that the reference be gapped. The band
+    window is then every band, and which pairs actually exist is decided
+    per k-point from the occupations (self.occk/self.occkq) rather than
+    once for the whole mesh -- so the number of pairs per k-point varies,
+    which everything downstream already tolerates (the flattened arrays
+    carry a kindex per pair and bsetk/kernel.py indexes the interaction
+    through it). Note this class does NOT apply that filter: it builds
+    every (k,v,c) triple and leaves the masking to the caller, because the
+    resonant and antiresonant halves need DIFFERENT occupancy conditions
+    (a resonant pair needs v occupied at k and c empty at k+Q, its
+    antiresonant partner needs v occupied at k+Q and c empty at k) and only
+    the caller knows which half it is building. bsetk/spinflip.py's
+    occupancy_masks does it. The exciton path leaves metal=False and is
+    unaffected: for a gapped reference the occupancy filter is a no-op.
+
     gauge, if given, smooths the arbitrary phase (or intra-multiplet
     unitary) algebra.eigh leaves on each eigenvector -- see bsetk/gauge.py.
     It changes no observable: the exciton spectrum is invariant, because
@@ -26,7 +41,7 @@ class PairBasis():
     the quantics solver, whose tensor-train ranks are destroyed by the raw
     gauge, and it is applied here (rather than only there) so the dense
     solver can be used to check that invariance directly."""
-    def __init__(self,h,Q=None,nk=10,nv=None,nc=None,gauge=None):
+    def __init__(self,h,Q=None,nk=10,nv=None,nc=None,gauge=None,metal=False):
         if h.has_eh:
             raise ValueError("BSE is not implemented for Nambu/BdG "
                 "Hamiltonians (h.has_eh): a superconducting mean field "
@@ -49,7 +64,24 @@ class PairBasis():
         self.ck = np.array(cks) # (nk,norb,norb), ck[ik][n] = C^{n,k}
         self.ekq = np.array(ekqs) # energies at k+Q
         self.ckq = np.array(ckqs) # coefficients at k+Q
-        self.vbands,self.cbands = select_bands(self.ek,nv=nv,nc=nc)
+        self.metal = metal
+        if metal: # occupancy decided per k-point, see select_bands
+            if nv is not None or nc is not None:
+                raise ValueError("nv/nc select a band window around a gap, "
+                    "which is what metal=True says there is not. Every band "
+                    "is kept and the pairs are filtered by occupation "
+                    "instead; restrict them there if a window is wanted")
+            norb = self.ek.shape[1]
+            self.vbands = self.cbands = list(range(norb))
+        else:
+            self.vbands,self.cbands = select_bands(self.ek,nv=nv,nc=nc)
+        # occupation of every band at k and at k+Q. The Fermi energy is at
+        # zero by pyqula convention (the same one chitk/chiAB.py's
+        # occupations use). For a gapped reference these are constant over
+        # the mesh and say nothing the band window does not already say;
+        # for a metal they are what defines which pairs exist at all
+        self.occk = self.ek<0.
+        self.occkq = self.ekq<0.
         self.gauge = gauge
         if gauge not in (None,"none"): # smooth the eigenvector gauge
             from .gauge import fix_gauge,default_trials,default_refs

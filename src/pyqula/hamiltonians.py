@@ -242,9 +242,10 @@ class Hamiltonian():
         instead, which is where that rung belongs: it handles any
         density-density interaction, onsite or not, and has an exact
         Goldstone mode at Q=0 (check it with get_goldstone_residual). In
-        exchange it needs a gapped mean-field reference and the same
-        k-mesh the mean field was converged on. See
-        bsetk.spinflip.magnon_bands_tdhf."""
+        exchange it needs the same k-mesh the mean field was converged
+        on, and by default a gapped reference -- pass metal=True for an
+        itinerant magnet, which decides the occupied and empty sets per
+        k-point instead. See bsetk.spinflip.magnon_bands_tdhf."""
         if method=="tdhf":
             from . import bse
             return bse.magnon_bands_tdhf(self,**kwargs)

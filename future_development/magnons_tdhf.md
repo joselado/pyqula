@@ -225,14 +225,51 @@ should use `get_magnon_bands(method="rpa")`, whose Goldstone mode is
 intact for exactly this case (4.3e-10 above) and whose gate no longer
 stands in the way.
 
-## Not done: metals
+## Metals (done)
 
-`bsetk/pairbasis.py:select_bands` requires the same number of occupied
-bands at every k-point, so the TDHF route is insulators only. The
-canonical itinerant-magnet magnon cases (a doped ferromagnetic chain, say)
-are metallic and can only be done with the site-basis RPA today, i.e. with
-an onsite U. Lifting it means a pair basis with per-k occupations: the
-flattened arrays already carry a `kindex` per pair and `kernel.py` indexes
-the interaction through it, so a varying number of pairs per k-point needs
-no change there -- the work is in `select_bands` and in whatever the
-exciton path would want to keep refusing.
+`PairBasis(metal=True)` drops the global band window and decides the
+occupied and empty sets per k-point; `spinflip.occupancy_masks` applies
+them, separately for the two halves of the Casida matrix (a resonant pair
+needs v occupied at k and c empty at k+Q, its antiresonant partner needs v
+occupied at k+Q and c empty at k). Nothing downstream needed touching --
+the flattened arrays already carry a `kindex` per pair and `kernel.py`
+indexes the interaction through it, so a varying number of pairs per
+k-point was always fine. The exciton path keeps `metal=False` and is
+unaffected; for a gapped reference the filter is a no-op and the answer is
+bit-identical either way.
+
+This covers the case neither route could do: a ferromagnet ordered by a
+neighbour-shell V1 alone is metallic (so the TDHF route used to refuse it)
+and has no site-basis vertex at all (so the RPA gives it no magnon).
+Measured Goldstone residual on the V1=1.1 chain at filling 0.1: 2.6e-16.
+
+Validated against an exact reference rather than only a symmetry argument.
+For a SATURATED ferromagnet the single-magnon sector is a two-body problem
+with a separable interaction, whose dispersion solves
+`1 = (U/N) sum_k 1/(dE_k - E)` over the occupied k. The TDHF magnon
+reproduces that to five decimals (0.00173, 0.01291, 0.07756 at
+q = 0.02, 0.05, 0.1), and with a symmetric occupied set the site-basis RPA
+agrees with both to the same five decimals.
+
+Two things are genuinely different in a metal:
+
+- **the magnon is inside the Stoner continuum**, so it is not the lowest
+  mode and cannot be read off by energy. `magnon_spectrum` returns the
+  spectral weight |<generator|mode>|^2 per mode, and
+  `magnon_bands_tdhf(by="weight")` selects branches with it. The weight
+  also measures Landau damping directly: 1.00, 0.96, 0.78, 0.44 at
+  Q = 0, 0.02, 0.05, 0.1 on the V1=1.5 chain.
+- **E(q) is even in q only if the occupied set is**, which on a finite
+  mesh is not automatic. With an even number of occupied points around
+  k=0 the +q and -q magnons genuinely differ -- 0.02413 against 0.00559 at
+  q=0.05 on one such mesh -- and the two routes then disagree because they
+  weight the two differently (TDHF resolves +q; the RPA's (Sx,Sy,Sz) block
+  mixes them). This looks exactly like a bug in whichever method is
+  checked second, and is not one;
+  `tests/magnon/test_metal.py` pins both halves of it.
+
+One more trap, unrelated to metals but easiest to hit there: a persistent
+exchange seed field on h (as opposed to on the initial mean-field guess)
+breaks SU(2) explicitly, and the Goldstone residual then comes out at
+exactly the Zeeman gap -- 2e-2 for a 1e-2 seed. That is the right answer,
+not a failure.

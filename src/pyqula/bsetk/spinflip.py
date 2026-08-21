@@ -73,6 +73,21 @@ Two consequences of that Ward identity are worth stating before use:
     the measurements. That is also why the ab initio BSE magnons of
     arXiv:2502.06598 miss the Goldstone mode by 1.25 eV and are shifted by
     hand, while the construction here does not need to be.
+
+Metals work too, with metal=True: the occupied and empty sets are then
+decided per k-point instead of once for the whole mesh, so the number of
+pairs varies across it, which everything here already tolerated. That is
+what covers an itinerant magnet -- and in particular a ferromagnet ordered
+by a neighbour-shell V1 alone, which the site-basis RPA cannot touch (its
+vertex for one is identically zero) and which was gapless so this route
+used to refuse it. The saturated case has a closed-form answer to check
+against, and it is reproduced to five decimals; see tests/magnon/test_metal.py.
+
+One thing to know before reading a metallic dispersion: E(q) is even in q
+only if the OCCUPIED SET is symmetric under k -> -k, which on a finite mesh
+it need not be. With an even number of occupied points around k=0 the +q
+and -q magnons genuinely differ (measured 0.02413 against 0.00559 at
+q=0.05 on one such mesh), and no method can paper over that.
 """
 
 import numpy as np
@@ -157,6 +172,31 @@ def _degenerate_groups(es, tol=1e-8):
     return groups
 
 
+def occupancy_masks(pb):
+    """Return (o1,o2), the masks of the pairs that actually exist as
+    excitations of this mean field.
+
+    A resonant pair (v,k) -> (c,k+Q) needs band v occupied at k and band c
+    empty at k+Q. Its antiresonant partner runs the other way -- hole at
+    (v,k+Q), electron at (c,k) -- so it needs v occupied at k+Q and c empty
+    at k. The two conditions differ, which is why they are returned
+    separately and why PairBasis does not apply them itself.
+
+    For a gapped reference this is a no-op: the band window already put
+    every v below the gap and every c above it, so both masks are all True
+    and nothing changes. It is only for a METAL that they bite -- there a
+    band can be occupied at one k-point and empty at another, and the
+    number of pairs varies across the mesh. That is what lets the magnons
+    of an itinerant magnet be computed here at all; see PairBasis's
+    metal=True."""
+    ik = np.array([l[0] for l in pb.labels])
+    iv = np.array([l[1] for l in pb.labels])
+    ic = np.array([l[2] for l in pb.labels])
+    o1 = pb.occk[ik, iv] & (~pb.occkq[ik, ic]) # v occupied at k, c empty at k+Q
+    o2 = pb.occkq[ik, iv] & (~pb.occk[ik, ic]) # v occupied at k+Q, c empty at k
+    return o1, o2
+
+
 def spinflip_masks(pb, tol=1e-6):
     """Return (m1,m2), the masks of the pairs that make up the magnon
     block of the Casida matrix, or None if the mean field is not collinear
@@ -192,6 +232,7 @@ def spinflip_masks(pb, tol=1e-6):
     belongs to, -1 for S^- and +1 for S^+, so goldstone_vector can build
     the matching one. Both are equally physical -- they are each other's
     image under a spin flip -- and an antiferromagnet has both."""
+    o1, o2 = occupancy_masks(pb) # which pairs exist at all, see above
     szk = band_sz(pb.ck) # <Sz> at k
     szkq = band_sz(pb.ckq) # <Sz> at k+Q
     if not (is_collinear(szk, tol=tol) and is_collinear(szkq, tol=tol)):
@@ -200,10 +241,10 @@ def spinflip_masks(pb, tol=1e-6):
     iv = np.array([l[1] for l in pb.labels])
     ic = np.array([l[2] for l in pb.labels])
     dsz = szkq[ik, ic] - szk[ik, iv] # spin change of the resonant pair
-    lower = np.abs(dsz + 1.) < tol # excitations S^- creates
-    raise_ = np.abs(dsz - 1.) < tol # excitations S^+ creates
-    if np.any(lower): return lower, raise_, -1 # S^- channel
-    if np.any(raise_): return raise_, lower, +1 # S^+ channel
+    lower = (np.abs(dsz + 1.) < tol) # excitations S^- creates
+    raise_ = (np.abs(dsz - 1.) < tol) # excitations S^+ creates
+    if np.any(lower & o1): return lower & o1, raise_ & o2, -1 # S^- channel
+    if np.any(raise_ & o1): return raise_ & o1, lower & o2, +1 # S^+ channel
     return None # no spin-flip pair at all, nothing to restrict to
 
 
@@ -365,7 +406,7 @@ class MagnonProblem():
 
 
 def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
-                  max_memory=2.0, check_su2=True):
+                  max_memory=2.0, check_su2=True, metal=False):
     """Return (pb,M,m1,m2): the pair basis, the time-dependent
     Hartree-Fock matrix whose eigenvalues are the magnon energies at Q,
     and the resonant/antiresonant pair masks it was built from.
@@ -390,6 +431,24 @@ def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
                         every energy returned is a real excitation of the
                         system -- just not necessarily a magnon.
 
+    metal=True lifts the requirement that the mean field be gapped: the
+    band window becomes every band and which pairs exist is decided per
+    k-point from the occupations (see PairBasis and occupancy_masks). That
+    is what lets an itinerant magnet -- a doped ferromagnetic chain, say --
+    be treated here at all. It changes nothing for a gapped reference,
+    where the occupancy filter is a no-op (checked: identical pair counts
+    and identical Goldstone residual either way), so it is safe to turn on
+    when unsure; it is off by default only because the gapped path fails
+    loudly and informatively when the reference is not what the caller
+    thought it was.
+
+    Two things are different about a metal once it runs. The Casida matrix
+    picks up Fermi-surface pairs of nearly zero energy, so the Cholesky in
+    solve_pseudo_hermitian can fail and fall back to the general solver.
+    And the magnon is no longer the lowest mode -- it sits inside the
+    Stoner continuum -- so it has to be found by spectral weight, which is
+    what magnon_spectrum is for.
+
     Interpreting the returned M needs the masks: its first sum(m1) rows
     are the excitation half and the remaining sum(m2) the de-excitation
     one, and those two counts differ (m2 is empty for a saturated
@@ -402,7 +461,7 @@ def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
     if channel not in ("auto", "spinflip", "all"):
         raise ValueError("channel must be 'auto', 'spinflip' or 'all', "
                 "got %r"%(channel,))
-    pb = PairBasis(h, Q=Q, nk=nk, nv=nv, nc=nc)
+    pb = PairBasis(h, Q=Q, nk=nk, nv=nv, nc=nc, metal=metal)
     masks = None
     if channel != "all":
         spin_diagonalize(pb) # make the degenerate multiplets Sz eigenstates
@@ -413,7 +472,7 @@ def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
                 "spin-flip block to restrict to. Use channel='all', which "
                 "keeps every pair and still contains the magnons")
     if masks is None: # whole pair basis, both halves, both spin channels
-        m1 = m2 = np.ones(pb.npair, dtype=bool)
+        m1, m2 = occupancy_masks(pb) # still only the pairs that exist
         op = 0 # generator picked by weight, see goldstone_vector
     else: m1, m2, op = masks
     _check_memory(int(np.sum(m1)+np.sum(m2)), max_memory)
@@ -526,6 +585,46 @@ def goldstone_vector(p):
     return down if np.linalg.norm(down) > np.linalg.norm(up) else up
 
 
+def magnon_spectrum(h, **kwargs):
+    """Return (energies,weights): the magnon energies at one momentum Q and
+    how much of the spin generator each mode carries.
+
+    In an insulator the magnon is the lowest mode and nothing else is
+    nearby, so magnon_energies is enough. In a METAL it is not: the
+    spin-flip particle-hole continuum (the Stoner continuum) reaches down
+    to zero, so the spectrum is dense at low energy and "the lowest
+    eigenvalue" is a continuum state rather than the collective mode. What
+    separates them is spectral weight -- the magnon is the mode the uniform
+    spin rotation actually couples to, and the continuum states carry
+    almost none of it.
+
+    weights[i] is |<generator|mode_i>|^2 in the metric of the
+    linear-response problem, normalized to sum to one over the branch, so
+    it is directly the fraction of the transverse spectral weight in each
+    mode. Sorting by it, rather than by energy, is how to read a magnon
+    dispersion out of a metal."""
+    p = magnon_matrix(h, **kwargs)
+    if p.n2 == 0:
+        es, ws = _solve_resonant(p.M)
+        keep = np.arange(len(es))
+        metric = np.ones(len(es))
+    else:
+        es, ws = solve_pseudo_hermitian(p.M)
+        ws = ws/np.linalg.norm(ws, axis=1)[:, None]
+        metric = (np.sum(np.abs(ws[:, 0:p.n1])**2, axis=1)
+                  - np.sum(np.abs(ws[:, p.n1:])**2, axis=1))
+        keep = np.argsort(-metric)[0:p.n1] # the excitation branch
+        es, ws, metric = es[keep], ws[keep], metric[keep]
+    v = goldstone_vector(p)
+    S = np.ones(p.M.shape[0])
+    if p.n2 > 0: S[p.n1:] = -1. # the Casida metric diag(1,-1)
+    ov = np.abs(ws.conj()@(S*v))**2
+    denom = np.sum(ov)
+    if denom > 0: ov = ov/denom
+    order = np.argsort(es.real)
+    return es[order], ov[order]
+
+
 def goldstone_residual(h, nk=10, relative=True, **kwargs):
     """Return how far the mean field is from satisfying the Goldstone
     theorem: the norm of the time-dependent Hartree-Fock matrix at Q=0
@@ -563,7 +662,7 @@ def goldstone_residual(h, nk=10, relative=True, **kwargs):
     return res
 
 
-def magnon_bands_tdhf(h, qpath=None, nq=20, n=None, **kwargs):
+def magnon_bands_tdhf(h, qpath=None, nq=20, n=None, by="energy", **kwargs):
     """Return the magnon bands E(Q) of a magnetic mean-field state, from
     the spin-flip channel of the Bethe-Salpeter equation.
 
@@ -572,6 +671,15 @@ def magnon_bands_tdhf(h, qpath=None, nq=20, n=None, **kwargs):
     convention as get_bands/chitk.spinchi.magnon_bands (high-symmetry
     labels or explicit q-vectors), and n keeps only the n lowest branches
     at each q.
+
+    by= decides which n branches are kept at each q-point, and for a metal
+    it is the whole difference between a dispersion and noise. "energy"
+    (the default) keeps the n lowest, which is what an insulator wants --
+    there the magnon IS the lowest mode. "weight" keeps the n modes
+    carrying the most of the spin generator, which is what a metal wants:
+    its magnon sits inside the Stoner continuum, so the lowest mode at any
+    q is a continuum state and the acoustic branch read off by energy is
+    not the magnon at all. See magnon_spectrum.
 
     Returns (qs,es): qs is the integer index of the q-point along the path
     and es the magnon energy, both flat 1D arrays ready for a scatter
@@ -588,8 +696,14 @@ def magnon_bands_tdhf(h, qpath=None, nq=20, n=None, **kwargs):
         raise ValueError("magnon bands need a periodic Hamiltonian; a 0d "
                 "system has no momentum to disperse in. Use "
                 "magnon_energies for its discrete spin excitations")
+    if by not in ("energy", "weight"):
+        raise ValueError("by must be 'energy' or 'weight', got %r"%(by,))
     qpath = h.geometry.get_kpath(qpath, nk=nq) # generate the q-path
-    def f(q): return magnon_energies(h, Q=q, n=n, **kwargs)
+    def f(q):
+        if by == "energy": return magnon_energies(h, Q=q, n=n, **kwargs)
+        es, w = magnon_spectrum(h, Q=q, **kwargs)
+        keep = np.argsort(-w)[0:(len(es) if n is None else n)]
+        return np.sort_complex(es[keep])
     outs = parallel.pcall(f, qpath) # one eigenproblem per q-point
     qs = np.concatenate([np.full(len(es), iq) for iq, es in enumerate(outs)])
     es = np.concatenate(outs)
