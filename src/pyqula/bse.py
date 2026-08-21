@@ -23,6 +23,17 @@ default, this is time-dependent Hartree-Fock on top of Hartree-Fock: the
 same interaction generates the Fock self-energy already inside h and the
 BSE kernel, so nothing is double counted.
 
+By default the BSE matrix is built and diagonalized densely, which is the
+only route to the full non-Tamm-Dancoff spectrum but limits the k-mesh to
+a few thousand electron-hole pairs. It does not have to be: the kernel is
+EXACTLY a diagonal plus a fixed number of rank-one terms, one per non-zero
+entry of the real-space interaction and independent of the mesh
+(bsetk/factorize.py), so it can be applied without ever being assembled.
+solver="iterative" does that and runs a block eigensolver; solver="qtt"
+goes further and compresses the operator into a quantics matrix product
+operator solved by DMRG, whose cost grows with log(nk) rather than nk.
+Both are Tamm-Dancoff only. See bsetk/iterative.py and bsetk/qtt.py.
+
 Passing screening="rpa" replaces the interaction of the direct (ladder)
 term by the static RPA screened one W = eps^-1 v, built from the bands of
 the mean field itself (screening.py), which is the GW-BSE-style

@@ -17,8 +17,16 @@ class PairBasis():
     The antiresonant set is the resonant set at -Q, relabelled by k -> k+Q;
     keeping it as a separate (but identically indexed) set is what lets the
     full non-Tamm-Dancoff BSE at finite Q be assembled without any further
-    momentum bookkeeping. At Q=0 the two sets coincide."""
-    def __init__(self,h,Q=None,nk=10,nv=None,nc=None):
+    momentum bookkeeping. At Q=0 the two sets coincide.
+
+    gauge, if given, smooths the arbitrary phase (or intra-multiplet
+    unitary) algebra.eigh leaves on each eigenvector -- see bsetk/gauge.py.
+    It changes no observable: the exciton spectrum is invariant, because
+    the gauge is a block-diagonal unitary on the pair index. It exists for
+    the quantics solver, whose tensor-train ranks are destroyed by the raw
+    gauge, and it is applied here (rather than only there) so the dense
+    solver can be used to check that invariance directly."""
+    def __init__(self,h,Q=None,nk=10,nv=None,nc=None,gauge=None):
         if h.has_eh:
             raise ValueError("BSE is not implemented for Nambu/BdG "
                 "Hamiltonians (h.has_eh): a superconducting mean field "
@@ -42,6 +50,20 @@ class PairBasis():
         self.ekq = np.array(ekqs) # energies at k+Q
         self.ckq = np.array(ckqs) # coefficients at k+Q
         self.vbands,self.cbands = select_bands(self.ek,nv=nv,nc=nc)
+        self.gauge = gauge
+        if gauge not in (None,"none"): # smooth the eigenvector gauge
+            from .gauge import fix_gauge,default_trials,default_refs
+            groups = [self.vbands,self.cbands]
+            trials = default_trials(self.ck,groups)
+            refs = default_refs(self.ck)
+            kw = dict(mode=gauge,trials=trials,refs=refs)
+            self.ck = fix_gauge(self.ck,groups,**kw)
+            # the SAME trial orbitals and reference orbitals at k+Q, so
+            # the two are gauged consistently: a pair basis whose k and
+            # k+Q sides were smoothed towards different references is not
+            # smooth in the pair index, which is the only thing the gauge
+            # is for
+            self.ckq = fix_gauge(self.ckq,groups,**kw)
         self.build()
     def build(self):
         """Build the flattened pair index and its coefficient arrays"""

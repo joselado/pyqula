@@ -2095,6 +2095,39 @@ One caveat on the default `V=None`: `h.V` does not capture an *anisotropic* exch
 
 The size of the problem is $N_{pair} = n_v n_c N_k$, and the matrix is dense and $2N_{pair}$ square, so the k-mesh is the expensive knob: `max_memory` (default 2 GB) refuses a calculation that would not fit rather than letting it exhaust memory. A gapped reference state is required -- a metallic filling has no well-defined electron-hole pair basis and is rejected, as are Nambu/BdG Hamiltonians, whose two-particle structure is different.
 
+### Large k-meshes: solving the BSE without its matrix
+
+The size of the problem is the reason the previous paragraph exists, and the k-mesh is exactly the knob that decides whether an exciton is converged at all. A tightly bound exciton is broad in the Brillouin zone and converges on a coarse mesh; a shallow Wannier-Mott one, whose envelope $A(k)$ is sharply peaked, does not, and that is the case the dense solver cannot reach.
+
+It does not have to be reached with a matrix. Because a real-space interaction Fourier transforms as $W_{ab}(k-k') = \sum_d W_{ab}(d)\,e^{2\pi i k\cdot d}\,e^{-2\pi i k'\cdot d}$, the direct term of the kernel separates exactly into one rank-one term per non-zero entry $(a,b,d)$ of that interaction -- a *fixed* number, set by how far the interaction reaches and not by the mesh. The exchange term is already a product of density form factors. So the whole resonant block is a diagonal plus a fixed-rank correction, and can be applied to a vector without being built. `solver=` chooses what to do with that:
+
+```python
+h.get_bse(V=W,nk=1024,tda=True,solver="iterative",neig=4) # no matrix
+h.get_bse(V=W,nk=65536,tda=True,solver="qtt",neig=1)      # no mesh either
+```
+
+- `solver="dense"` (default) is the behavior described above and is unchanged. It is the only one that solves the *full* non-Tamm-Dancoff problem and the only one that returns every exciton.
+- `solver="iterative"` applies the factorized kernel through a `LinearOperator` and finds the `neig` lowest excitons with a preconditioned block LOBPCG from a deterministic start. It is exact -- the operator applied is the same matrix `build_blocks` assembles -- and it removes the memory wall outright, but it still diagonalizes every k-point, so its cost is linear in the mesh.
+- `solver="qtt"` binary-encodes the pair index, cross-interpolates the kernel into a matrix product operator with the bundled `qutecipy`, and diagonalizes it with DMRG from `dmrgpy`'s `pyitensor`. Its cost grows like $\log N_k$: on a gapped chain the number of k-points it actually diagonalizes went 1011, 2657, 5721, 6592, 8757 as the mesh went 1024, 4096, 16384, 65536, 262144 -- a factor of 8.7 for a factor of 256 in mesh -- with the wall time flat at 14-23 s throughout. The dense solver stops around $N_{pair}\sim2000$. Two dimensions costs considerably more per mesh point, since the MPO bond dimension is roughly eight times larger there.
+
+Both new solvers need `tda=True`. The full BSE matrix is not Hermitian and is diagonalized through a Cholesky factorization of $S H$, which needs the matrix; large-scale BSE codes make the same restriction for the same reason, and `tests/bse/test_bse_physics.py` shows the Tamm-Dancoff and full answers converging at weak coupling, which is where bound excitons live.
+
+The quantics solver has one requirement the others do not: a **smooth gauge**. Diagonalization returns each Bloch eigenvector with an arbitrary phase (and, inside a degenerate multiplet, an arbitrary unitary), which makes the kernel a discontinuous function of $k$ and destroys its tensor-train rank completely -- in the raw gauge the operator is exactly incompressible. `gauge="projection"` (the default for this solver) rotates each band subspace onto fixed trial orbitals, `gauge="phase"` fixes one component of each eigenvector, and the gauge is unobservable, so it can be switched on for the dense solver too and the spectrum must not move. Measured maximum tensor-train rank of the kernel's factors at tolerance `1e-6`, as the mesh is refined 16-fold:
+
+| model | raw gauge | fixed gauge |
+|---|---|---|
+| 1D chain, spinless | 16 → 32 → 64 | 8 → 8 → 8 (phase) |
+| 2D honeycomb, spinless | 96 → 192 → 383 | 57 → 62 → 63 (phase) |
+| 2D honeycomb, spinful | 256 → 512 → 1024 | 182 → 248 → 274 (projection) |
+
+A phase fix cannot help a degenerate multiplet -- what is arbitrary there is a whole unitary -- which is why `"projection"` is the default and why a spinful model with no spin-orbit coupling, whose every band is two-fold degenerate, needs it.
+
+**When `"qtt"` is the right choice, and when it is not.** It wants a narrow band window on a fine k-mesh, and that is a real restriction. In 1D with one band pair it is the clear winner (mesh ×256, work ×8.7, wall time flat). In 2D on a primitive cell it is *slower* than `"iterative"` at every mesh measured -- 103 s against 0.7 s at 32×32 -- not because the quantics side degrades but because the exact solver is so cheap there (4096 pairs cost it 3.1 s in 2D against 24 s in 1D); the ratio does improve with mesh, so a crossover exists beyond what was measured. On a **supercell** it is the wrong tool outright: a 3×3 supercell has 9 valence and 9 conduction bands, and a band label is not a smooth coordinate the way $k$ is, so the MPO rank saturates (bond dimension 729 out of a possible 729, with 450 s spent in cross-interpolation, at nk=4). The same physics from the primitive cell at three times the mesh keeps $n_v n_c = 1$ and compresses. Use the primitive cell and a fine mesh; if a supercell is unavoidable, narrow the window with `nv`/`nc`, or use `solver="iterative"`, which is indifferent to it.
+
+Other things worth knowing before turning `solver="qtt"` on: `nk` must be a power of two (the k index is binary encoded, one tensor-train site per bit); a tabulated screened interaction (`screening="rpa"`) is refused, because inverse transforming it over the mesh gives $N_k$ lattice vectors and the kernel's rank would grow with the mesh -- truncate it in real space with `ScreenedInteraction.get_dict()` and pass the result as `V=`; and it returns the **lowest exciton only**. Excited excitons would need an overlap-penalty DMRG, which does not converge on this problem (measured errors up to 0.4, and sometimes below the true eigenvalue, at any penalty weight tried), so it is refused rather than approximated -- use `solver="iterative"`, which is exact and also needs no matrix.
+
+See `examples/1d/exciton_qtt/main.py` for a runnable comparison of the three solvers across meshes spanning three orders of magnitude, and `examples/2d/exciton_qtt/main.py` for the 2D case, where the bit ordering is measured rather than assumed and the exciton envelope $|A(k)|^2$ is plotted over the Brillouin zone.
+
 See `examples/2d/excitons_bse/main.py` for a runnable version (the lowest exciton of a gapped honeycomb detaching from the absorption edge as the Coulomb tail is turned up) and `tests/bse/` for the correctness checks, including a cross-check that the exchange-only BSE reproduces the poles of the independently implemented RPA kernel of `chitk/rpa.py`.
 
 ### Exciton band structure
@@ -2940,7 +2973,15 @@ Optional arguments:
 
 - channel="charge": where the dielectric matrix is built. `"charge"` builds it on site indices (the standard GW construction, spin-rotation invariant); `"orbital"` dresses the full spin-orbital matrix as $\varepsilon^{-1}v$, which does not preserve SU(2). The two coincide for a spinless Hamiltonian
 
-The returned object exposes `energies`, `amplitudes` (the resonant amplitudes $A_{vc}(k)$), `amplitudesY` (the antiresonant ones, zero under `tda`), `pairs` (the k-mesh, band window and `(ik,iv,ic)` label of every pair index) and the `get_energies`/`get_binding_energies` methods below.
+- solver="dense": how the eigenproblem is solved. `"dense"` builds the matrix and diagonalizes it, and is the only route to the full non-Tamm-Dancoff spectrum. `"iterative"` applies the exactly factorized kernel matrix-free and runs a preconditioned block LOBPCG, removing the memory wall. `"qtt"` compresses the kernel into a quantics matrix product operator and solves it by DMRG, with a cost growing like $\log N_k$. The last two need `tda=True`; see "Large k-meshes" above
+
+- neig=None: how many excitons `solver="iterative"` returns; `"dense"` returns all of them and ignores it, and `"qtt"` accepts only `neig=1`. `None` means 4 for `"iterative"` and 1 for `"qtt"`
+
+- gauge="auto": smooth the arbitrary phase left on each Bloch eigenvector. `"auto"` turns it on (as `"projection"`) only for `solver="qtt"`, which cannot work without it; `"phase"`, `"projection"` or `None` apply to every solver. It changes no energy, being a unitary on the pair index
+
+`solver="qtt"` additionally takes `tolerance` (cross-interpolation tolerance of the kernel MPO, default `1e-6`), `maxbonddim`, `maxdim`/`nsweep`/`cutoff` (the DMRG parameters), `coarse_nk` (the submesh the band window and gauge references are read from) and `unfolding` (`"grouped"`, the measured default, or `"interleaved"`).
+
+The returned object exposes `energies`, `amplitudes` (the resonant amplitudes $A_{vc}(k)$), `amplitudesY` (the antiresonant ones, zero under `tda`), `pairs` (the k-mesh, band window and `(ik,iv,ic)` label of every pair index), and the methods `get_energies(n)`, `get_binding_energies(n)` and `get_lowest_transition()` -- the last being the lowest independent-particle transition the binding energies are measured from, obtained as a mesh minimum for the first two solvers and, for `"qtt"`, by a binary descent on the mesh index seeded from the k-points already visited (a minimum over the whole mesh would be the one step of that solver that is not logarithmic).
 
 ### h.get_exciton_energies()
 Return the exciton energies from the Bethe-Salpeter equation, sorted. Takes the same arguments as `get_bse`, plus `n=None` to keep only the `n` lowest.

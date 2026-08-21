@@ -1,9 +1,17 @@
 # Excitons / Bethe-Salpeter -- future development
 
 Status of the BSE implementation added in `6f81888`, what is deliberately
-not built yet (oscillator strengths, an iterative solver), and a *measured*
-feasibility study of the tensor-network route to large k-meshes. The numbers quoted below were all measured on this
-codebase; they are recorded so nobody has to re-derive them.
+not built yet (oscillator strengths), and what the scaling work of Phase 4
+measured. The numbers quoted below were all measured on this codebase; they
+are recorded so nobody has to re-derive them.
+
+The headline of Phase 4, since it changes how the rest of this file should
+be read: the BSE kernel is **exactly** a diagonal plus a fixed number of
+rank-one terms, with that number set by the interaction and independent of
+the k-mesh. The dense matrix the "wall" sections below are about was never
+necessary. Two solvers now exploit that -- an exact matrix-free one and a
+quantics tensor-train one whose cost grows like log(nk) -- and the mesh
+sizes quoted in the dense tables are no longer limits.
 
 ## What exists today
 
@@ -22,7 +30,11 @@ codebase; they are recorded so nobody has to re-derive them.
   screened interaction.
 - `kernel="full"|"direct"|"exchange"|"none"`, `tda=True/False`,
   `nv`/`nc` band windows, `max_memory` guard.
-- Tests in `tests/bse/`, example in `examples/2d/excitons_bse/`.
+- `solver="dense"|"iterative"|"qtt"` (Phase 4 below): the dense matrix, the
+  exactly factorized matrix-free operator, or a quantics MPO solved by
+  DMRG. The latter two are Tamm-Dancoff only.
+- Tests in `tests/bse/`, examples in `examples/2d/excitons_bse/`,
+  `examples/1d/exciton_qtt/` and `examples/2d/exciton_qtt/`.
 
 ### Measured cost of the dense solver
 
@@ -36,7 +48,8 @@ Honeycomb, spinful, 4 orbitals per cell, all bands:
 | 20 | 1600 | 3200² | 21.6 s | 1.91 GB |
 
 The default `max_memory=2.0` refuses nk=24. This is the wall everything
-below is about.
+below is about -- and which Phase 4 removed; `solver="iterative"` and
+`solver="qtt"` never allocate this matrix at all.
 
 ### Why the wall matters physically
 
@@ -45,7 +58,8 @@ The same system's lowest exciton energy over that mesh sequence:
 because that exciton is fairly tightly bound. A shallow Wannier-Mott
 exciton whose Bohr radius spans many unit cells has an envelope `A(k)`
 squeezed into a small neighbourhood of the band edge, and needs nk in the
-hundreds -- unreachable densely.
+hundreds -- unreachable densely, and routine with the Phase 4 solvers
+(measured up to nk = 262144 in 1D).
 
 ## Phase 2 -- observables (partially done)
 
@@ -73,8 +87,12 @@ Straightforward, no new numerics needed.
    the `kernel="none"` spectrum is symmetric either way, so only the
    interacting terms expose it. `bsetk/pairbasis.select_bands` now warns
    when the window splits a multiplet. Any later work that truncates the
-   pair basis (the iterative solver of Phase 4 especially) has to respect
-   the same rule.
+   pair basis (the Phase 4 solvers especially) has to respect the same
+   rule -- and both of them do, in their own way: `iterative._request`
+   grows the eigenvalue request past a degenerate multiplet of the
+   diagonal, and the quantics solver's `gauge="projection"` exists
+   precisely because a degenerate subspace has no well-defined phase to
+   fix.
 3. **Envelope visualization**: `|A_vc(k)|²` over the BZ, and its real-space
    transform. `BSE.pairs.labels` already carries the `(ik,iv,ic)` of every
    pair index, so this is presentation work.
@@ -536,132 +554,389 @@ GW-BSE inconsistency noted above. Whether to iterate the screening
 alongside it (recomputing `chi0` from the new bands) is the usual
 self-consistent-GW question and should not be entered into lightly.
 
-## Phase 4 -- scaling (not started)
+## Phase 4 -- scaling (DONE)
 
-**Do this before the tensor-network route.** A matrix-free iterative
-eigensolver (Lanczos/LOBPCG) that applies the BSE kernel without ever
-materializing it removes the O(N_pair²) memory wall outright and returns
-the few lowest excitons at large nk. The kernel-apply is cheap to write:
-the exchange term is already a rank-≤n_orb factorization
-(`kernel.exchange_block` is pure matmuls), and the direct term is the
-existing numba contraction restructured to act on a vector.
+Both halves landed together, because the same structural finding powers
+them: `bsetk/factorize.py`, `bsetk/iterative.py`, `bsetk/gauge.py`,
+`bsetk/oracle.py`, `bsetk/qtt.py`, reachable as
+`h.get_bse(solver="iterative"|"qtt")`. Tests in
+`tests/bse/test_bse_factorize.py`, `test_bse_iterative.py`,
+`test_bse_gauge.py`, `test_bse_qtt.py`; examples in
+`examples/1d/exciton_qtt/` and `examples/2d/exciton_qtt/`.
 
-Expect this to be roughly a day's work and to move the reachable mesh by
-an order of magnitude. Everything below is the step *after* it.
+### The finding the plan did not have: the kernel is EXACTLY low rank
 
-## The quantics tensor-train route -- measured feasibility
-
-The idea: encode the electron-hole amplitude `A(k)` in a quantics tensor
-train (binary-encode the k index; a smooth, peaked `A(k)` is low-rank in
-that encoding), represent the BSE kernel as an MPO, and solve variationally
-with DMRG. Cost then scales with the number of quantics bits, i.e.
-*logarithmically* in nk.
-
-### Both halves of the toolchain already exist in this ecosystem
-
-- `src/pyqula/qutecipytk/` (bundled qutecipy): TCI1/TCI2, tensor trains
-  with bond-dimension compression, MPO-MPS contraction
-  (`contract_naive`/`zipup`/`TCI`), quantics grids.
-- `dmrgpy/pyitensor` (pure Python, numpy/scipy only, JAX optional): `MPO`
-  built from an arbitrary list of tensors, `dmrg(psi,H,sweeps)`,
-  `dmrg_excited` (overlap-penalty, several excitons), `dmrg_generalized`,
-  TDVP, KPM energy truncation. Same dependency profile as the bundled
-  `wannierpy`, so it can be vendored or imported lazily the way
-  `pyqula2dmrgpy.py` already imports `dmrgpy`.
-
-They are complementary, not alternatives: **qutecipy builds the MPO,
-pyitensor solves it.**
-
-### Measurement 1 -- the solver works on a real BSE matrix
-
-A real pyqula TDA BSE matrix (ionic chain, nk=8, N_pair=32) was decomposed
-exactly into a 5-qubit MPO and handed to `pyitensor.dmrg`:
+The plan for this phase said "restructure the numba contraction to act on
+a vector". That is not necessary, and the reason is worth more than the
+solver it enabled. A real-space interaction dictionary Fourier transforms
+as
 
 ```
-DMRG lowest exciton = 1.6694777390
-exact (eigh)        = 1.6694777390     difference = 4.00e-15
+W_ab(k-k') = sum_d W_ab(d) phi(d,k) conj(phi(d,k'))
 ```
 
-So the plumbing -- hand-built MPO into DMRG -- is not in question.
+so the direct term's only k-dependence *separates*, and the block becomes
 
-### Measurement 2 -- gauge is the whole obstacle, and it is fixable
+```
+A = diag(dE) + (1/N)[ F W(Q) F^dag - sum_t W_ab(d) |U_t><U_t| ]
+U_t[m] = conj(el[m,a]) ho[m,b] phi(d,k_m),   t = (a,b,d)
+```
 
-Exact quantics TT ranks of the TDA BSE matrix, 1D spinless two-band ionic
-chain with `V1=0.8`, `nv=nc=1` (so N_pair = nk and every qubit is a k-bit):
+one rank-one term per non-zero `(a,b,d)` of the real-space interaction --
+**36 for a 4-orbital cell with U+V1+V2, independent of nk**. The
+antiresonant and coupling blocks separate identically. Verified against
+`kernel.build_blocks` at finite Q: `|A - A_rec| = 4.4e-16`.
 
-| nk | qubits | raw `eigh` gauge | phase-fixed gauge | max possible |
+So the matrix-vector product is `O(nterm*npair)` and needs
+`O(nterm*npair)` memory. The dense wall was never a property of the
+problem, only of how it was being written down.
+
+The one exception, and it matters: a **tabulated** screened interaction
+has no fixed-rank real-space form. Inverse transforming `W(q)` over the
+mesh gives nk lattice vectors, so `R = nk*norb^2` and the rank
+independence is gone. `factorize.KernelFactorization` refuses one and
+points at `ScreenedInteraction.get_dict()` for a real-space truncation.
+
+### The eigensolver: two traps, and why the fast option lost
+
+The obvious matrix-free eigensolver is a Jacobi-preconditioned LOBPCG --
+the BSE block is strongly diagonally dominant, its diagonal being the
+O(gap) transition energy against an O(1/N) kernel. **The preconditioner is
+a trap, and it fails worse the finer the mesh**, i.e. exactly where the
+solver exists. Spinless ionic chain, against the exact 1.5023327683:
+
+| nk | unshifted Jacobi | shifted Jacobi | no preconditioner |
+|---|---|---|---|
+| 1024 | 3.8e-05 | 3.8e-12 | 3.8e-12 |
+| 4096 | **2.9e-01** | 3.8e-12 | 3.8e-12 |
+
+Refining the mesh packs the transition energies near the band-edge minimum
+into an ever denser cluster -- the spread scales like 1/nk^2 -- so
+`1/(dE - min dE)` becomes enormous and nearly constant across hundreds of
+states, preconditioning nothing and wrecking the conditioning. Shifting
+the denominator by a fixed fraction of the diagonal's own spread fixes it
+completely, and costs nothing.
+
+**ARPACK is 100x faster, its eigenvalues are exact, and it still cannot be
+used.** A single-start-vector Lanczos builds a Krylov space containing
+each *distinct* eigenvalue once, so it cannot resolve eigenvalue
+MULTIPLICITY: a degenerate level comes back once and the remaining slots
+are filled from higher up, with rounding noise deciding how much of the
+multiplet survives. On the spinful ionic chain at nk=16, whose lowest
+exciton is four-fold degenerate, repeated runs returned either the correct
+1.65611456 x4 or 1.65611456 x3 followed by 1.88540220 -- a 0.16 error,
+nondeterministically. It first showed up as a test failing on
+`kernel="none"` in one run and on `kernel="full"` in the next.
+
+**This repo already knew this, elsewhere.** `qpitk`'s impurity QPI carries
+the same warning for the same reason -- its `num_waves` is grown until the
+partial diagonalization "never cuts a degenerate manifold in half, since
+summing over a partial degenerate manifold isn't basis-independent", and
+`tests/fermisurface/test_qpi_impurity.py::
+test_ldos_is_independent_of_arpack_starting_vector` pins it. Worth
+remembering the next time a partial diagonalization is added anywhere:
+ARPACK's start vector is a hidden parameter wherever degeneracies are, and
+lattices with symmetry have degeneracies everywhere. Exciton
+spectra are degenerate as a rule (a spinful model with no spin-orbit
+coupling makes every transition a four-fold multiplet, and the
+singlet/triplet structure *is* the physics), so this cannot be documented
+away.
+
+**Seeding LOBPCG from ARPACK looks like the best of both and is not.** It
+was implemented and measured: the seeded block inherits ARPACK's inability
+to span a degenerate eigenspace, and one run in three still came back
+0.23 off while the others were exact to 4e-15. It was also *slower* (88 s
+against 24 s at nk=4096, since the seed has to be a whole block).
+
+What is implemented is shifted-Jacobi LOBPCG from a **deterministic**
+starting block -- unit vectors on the smallest diagonal entries, widened
+until it does not cut a degenerate multiplet of the diagonal
+(`iterative._block_size`, the same rule `select_bands` applies to band
+windows). Measured: 3.8e-12 at nk=256/1024/4096, and bit-for-bit identical
+across repeated runs on the degenerate case (3.33e-15 every time). It
+costs 1.6 / 3.6 / 23.9 s at those meshes where ARPACK alone would take
+~0.2 s. That is the price of a reference implementation being a reference:
+the same answer every time.
+
+## The quantics tensor-train route -- BUILT
+
+The two measurements below supersede Measurement 2 of the earlier plan and
+answer its go/no-go. Everything is at cross-interpolation tolerance 1e-6
+unless said otherwise, and the tolerance matters: at 1e-10 the 2D ranks
+still creep, at 1e-4...1e-8 they saturate. **Quote the tolerance with
+every rank number.**
+
+### Gauge: confirmed, and "phase" is not enough
+
+Max tensor-train rank of the kernel's stacked factor tensor as the mesh is
+refined 16-fold:
+
+| model | npair | raw gauge | fixed |
+|---|---|---|---|
+| 1D chain, spinless | 128 / 512 / 2048 | 16 / 32 / 64 | **8 / 8 / 8** (phase) |
+| 2D honeycomb, spinless | 1024 / 4096 / 16384 | 96 / 192 / 383 | **57 / 62 / 63** (phase) |
+| 2D honeycomb, spinful | 4096 / 16384 / 65536 | 256 / 512 / 1024 | **182 / 248 / 274** (projection) |
+| 1D chain, spinful | 4*128 / 4*512 | 16 / 32 | phase: 16 / 32; **projection: 7 / 7** |
+
+The last row is the one to remember. **A phase fix does exactly nothing on
+degenerate bands** -- it reproduces the raw-gauge rank digit for digit --
+because what is arbitrary inside a degenerate subspace is a full unitary,
+not a phase. Every band of a spinful Hamiltonian with no spin-orbit
+coupling and no magnetic order is two-fold degenerate, so this is the
+common case, not the exotic one. `gauge="projection"` (project the band
+subspace onto trial orbitals, `U = A(A^dag A)^-1/2`, Wannier90's first
+step) is therefore the default.
+
+The plan proposed `wanniertk/` as the gauge supplier. That would not work:
+Wannierization is mesh-global, so it needs every k-point and puts the
+O(nk) scaling straight back. The projection gauge is **k-local** -- each
+k-point is gauged using only its own eigenvectors, against references
+fixed once on a coarse submesh -- which is what lets it run inside the
+cross-interpolation oracle.
+
+### Bit ordering: the plan's assumption was backwards
+
+The plan asserted that the k-bits of different reciprocal directions "have
+to be interleaved by scale, not concatenated, or the rank will not
+saturate". Measured, the opposite is true on every 2D case tried here.
+`dE(k)` on the gapped honeycomb, tolerance 1e-6, grouped (all kx bits then
+all ky bits) against interleaved:
+
+| nk | grouped | interleaved |
+|---|---|---|
+| 32^2 | 15 | 23 |
+| 64^2 | 16 | 25 |
+| 128^2 | 16 | 25 |
+
+Both saturate; grouped saturates lower. `unfolding="grouped"` is the
+default and `"interleaved"` is kept as a knob. Grouped also happens to
+make the quantics grid index *identical* to the existing flat pair index
+`m = (ix*nk + iy)*nband + ib`, so no permutation appears anywhere.
+
+### How the MPO is built -- and the trap in building it
+
+Not by decomposing a dense matrix (the earlier measurement did that, which
+defeats the purpose) and not from the rank-one factors either. Two
+separate cross interpolations, following the same pattern
+`fermisurfacetk/singlefs.py` and `qtcitk/` already use:
+
+1. the **interaction alone**, `X - D`, over the fused (row,column)
+   quantics index, giving the kernel MPO directly at its true rank;
+2. `dE(m)` over the row index alone, which becomes a diagonal MPO.
+
+They are summed exactly at the end, with no truncation. **Interpolating
+`A = dE + X - D` in one go would be a silent disaster**: the diagonal is
+O(gap) while each kernel element is O(1/N), so on a fine mesh a relative
+tolerance discards the entire interaction and hands back the
+independent-particle spectrum, looking perfectly converged. This is the
+single most important implementation decision in the module.
+
+Going through the factors instead was considered and rejected on a
+measurement: summing `R` rank-one MPOs reaches bond dimension
+`sum_t chi_t^2` before any compression -- 18 * 21^2 ~ 8000 on the 2D
+honeycomb -- where cross-interpolating the matrix element function lands
+directly on the true rank.
+
+### Measured: the cost really does grow like log(nk)
+
+Spinless gapped chain, `V1=0.8`, tolerance 1e-8, lowest exciton, as
+`examples/1d/exciton_qtt/` runs it. `ndiag` is how many k-points were
+actually diagonalized:
+
+| nk | E_X | ndiag | npair | time |
 |---|---|---|---|---|
-| 128 | 7 | [4, 16, 64, 64, 16, 4] | [4, 16, **30**, 24, 13, 4] | [4, 16, 64, 64, 16, 4] |
-| 256 | 8 | [4, 16, 64, **256**, 64, 16, 4] | [4, 16, **30**, 24, 17, 13, 4] | (= raw) |
-| 512 | 9 | -- | [4, 16, **30**, 22, 15, 13, 10, 4] | [4, 16, 64, 256, 256, 64, 16, 4] |
-| 1024 | 10 | -- | [4, 16, **29**, 21, 15, 14, 10, 9, 4] | [4, 16, 64, 256, **1024**, 256, 64, 16, 4] |
+| 1024 | 1.5023327696 | 1011 | 1024 | 21.5 s |
+| 4096 | 1.5023327707 | 2657 | 4096 | 14.2 s |
+| 16384 | 1.5023327696 | 5721 | 16384 | 22.3 s |
+| 65536 | 1.5023327789 | 6592 | 65536 | 20.6 s |
+| 262144 | 1.5023327904 | 8757 | 262144 | 23.1 s |
 
-Two conclusions:
+The mesh grows by a factor of 256, the work by a factor of 8.7, the wall
+time not at all. For reference the dense solver stops near
+`npair ~ 2000`. The energy drifts in the ninth digit, which is the cross
+interpolation tolerance, not the mesh; the converged value from the dense
+and matrix-free solvers is 1.50233276830.
 
-1. **In the raw gauge the matrix is exactly incompressible** -- maximal
-   bond dimension at every cut, at every mesh size. The MPO *is* the dense
-   matrix. Bloch coefficients come out of `algebra.eigh` with an arbitrary
-   phase per k-point, so `C^{nk}` is a discontinuous function of k even
-   where the physics is perfectly smooth, and that discontinuity is what
-   destroys the rank.
-2. **A trivial gauge fix already bounds the rank.** Making one fixed
-   reference component of each eigenvector real and positive holds the peak
-   bond dimension at ~30 while the mesh grows 8x and the dense matrix grows
-   64x. Bounded rank under mesh refinement is exactly the quantics
-   signature.
+Below nk ~ 1024 the quantics solver is *slower* than the exact matrix-free
+one -- cross interpolation visits a fixed few thousand points regardless.
+It wins by not growing.
 
-The spectrum is unchanged to 1e-14 across the gauge change (it is a
-diagonal unitary on the pair index, `U_m = exp(i(theta_m - phi_m))`), so
-this is a pure representation choice with no physics content -- but it is
-the difference between "impossible" and "logarithmic".
+**Two dimensions costs much more per mesh point**, and the example says so
+rather than burying it: on the gapped honeycomb the three solvers agree to
+ten digits (1.5300762424 at 8x8, 1.5075436487 at 16x16) but a 16x16
+quantics run takes ~30 s where a 1D run of 16384 points takes ~22 s. The
+MPO bond dimension is what differs -- ~63 against ~8 for the factors --
+and it enters the DMRG cost multiplied by the square of the MPS bond
+dimension.
 
-### What is still missing
+### Two dimensions: measured, and it does NOT pay off
 
-1. **Build the MPO without the dense matrix.** The measurement above built
-   it by SVD-ing the full matrix, which defeats the entire purpose. A real
-   implementation must construct the MPO directly: either analytically from
-   the convolution structure of `W(k-k')` (convolution kernels have compact
-   quantics representations) or via TCI from a matrix-element oracle. This
-   is the bulk of the work, and it is what `qutecipytk` is for.
-2. **Full A/B does not fit ground-state DMRG.** The spectrum of `S@K` is
-   unbounded below, so plain `dmrg` would chase `-E_max`;
-   `dmrg_generalized` needs a positive-definite metric and
-   `S = diag(1,-1)` is indefinite. **TDA fits directly** (the `A` block is
-   Hermitian and bounded below) and is what large-scale BSE codes use for
-   the same reason. `tests/bse/test_bse_physics.py` already shows TDA
-   converging to full at weak coupling, which is the regime bound excitons
-   live in. Keep the dense full-A/B path for smaller meshes and for
-   quantifying the TDA error.
-3. **A smooth gauge in the general case.** The phase fix above works for a
-   non-degenerate band in 1D. Degenerate subspaces need a full unitary, not
-   a phase -- i.e. genuine parallel transport or Wannierization.
-   `h.get_wannier_hamiltonian` (`wanniertk/`) already produces exactly such
-   a gauge and is the natural supplier.
-4. **Bit ordering in 2D/3D.** The k-bits of different reciprocal directions
-   have to be interleaved by scale, not concatenated, or the rank will not
-   saturate.
+The 1D table above is the good case. In 2D the quantics solver is slower
+than the exact matrix-free one at every mesh reachable here, and the
+reason is the denominator. Gapped honeycomb, spinless, `V1=0.6` plus a
+Coulomb tail, lowest exciton:
 
-### Next decision point (go/no-go)
+| mesh | exact (iterative) | qtt tol=1e-4 | qtt tol=1e-6 | qtt tol=1e-8 |
+|---|---|---|---|---|
+| 16x16 | **0.9 s** | 8.6 s (err 9.6e-09) | 9.7 s | 9.7 s |
+| 32x32 | **0.7 s** | 103 s (err 7.7e-06) | 222 s | 264 s |
+| 64x64 | **3.1 s** | 234 s (err 9.6e-06) | -- | -- |
 
-Repeat Measurement 2 on a **2D model with multiple, possibly degenerate
-bands, using a Wannier gauge** from `wanniertk/`. If the peak bond
-dimension still saturates as nk grows, the route is viable and the work
-becomes engineering. If it does not, stop at Phase 4's iterative solver.
+`ndiag` was the whole mesh at every one of these, so none of the
+asymptotic advantage is in play yet. Loosening the cross-interpolation
+tolerance to 1e-4 buys about 2.5x and costs surprisingly little accuracy
+(1e-5 rather than the 1e-4 the name suggests), but 2.5x does not close a
+factor of 76-150. The ratio does improve with mesh (150x at 32^2, 76x at
+64^2), so a crossover presumably exists; it is beyond what was measured.
 
-This is a contained experiment -- it needs no new solver, only the rank
-measurement applied to a differently-gauged matrix.
+The 1D crossover existed because the exact solver got slow there (24 s at
+4096 pairs). In 2D the same 4096 pairs take 3.1 s. **The quantics solver
+did not get worse in 2D; its competitor got better.**
 
-Before implementing, check arXiv for existing quantics/tensor-network
-treatments of BSE-type eigenproblems (per this repo's CLAUDE.md policy on
-new formalisms) rather than deriving the MPO construction from scratch.
+### Supercells are the wrong shape for this method
 
-### Side benefit
+Asked what happens on a 3x3 supercell of the same honeycomb (18 orbitals,
+9 valence, 9 conduction bands), and the answer turned out to be a usage
+rule worth writing down.
 
-A tensor-network solver returns the few lowest excitons, not the whole
-spectrum -- so optical absorption (a sum over *all* excitons) would need a
-Chebyshev/KPM treatment of the BSE operator instead. `pyitensor` ships a
-KPM energy-truncation module and this repo has `kpmtk/`, so the two fit
-together naturally. Worth planning for rather than discovering late.
+First, an encoding bug the question exposed. The band pair was originally
+one tensor-train site of dimension `nv*nc`, which the MPO fuses to
+`(nv*nc)^2`. Fine for a primitive cell (1 or 4, fused 1 or 16);
+catastrophic for the supercell, where it is 81 and **6561** -- cross
+interpolation has to sample that many states at that site per pivot, and
+the full-window case simply never completed. Valence and conduction are
+now separate variables, each prime-factorized across sites
+(`qtt.prime_factors`), so 9 becomes two sites of 3 and the widest MPO
+site is 9. Any `nv` works, the largest site being the largest prime
+factor, with no padding. Verified neutral on small windows: 9.3 -> 9.9 s
+and 341.9 -> 353.7 s with bit-identical energies, which is the right
+signature for a pure change of representation.
+
+That fix was necessary and **not sufficient**. Profiling the full-window
+supercell at nk=4 (npair=1296, sites `[2,2,2,2,3,3,3,3]`):
+
+| stage | time |
+|---|---|
+| diagonal TCI | 0.1 s |
+| kernel TCI | **450.7 s** |
+| MPO build | 1.0 s |
+| DMRG | 69.0 s |
+
+with **MPO bond dimension 729, which is the maximum possible at that cut
+(9^3)**. The operator is exactly incompressible. The reason is structural
+rather than a tuning failure: quantics compression works because k is a
+smooth coordinate whose binary digits are a genuine multi-scale
+decomposition. A band label is not -- "digit 0 of the valence index" has
+no physical meaning -- so splitting it lowers the local dimension without
+buying any rank.
+
+**The rule.** The quantics solver wants a NARROW band window on a FINE
+k-mesh. A supercell is the opposite trade: a 3x3 supercell at nk is the
+same physics as the primitive cell at 3nk by folding, but it buys its
+resolution in the band index (81 incompressible pairs) where the
+primitive cell buys it in k (compressible, nv*nc = 1). Use the primitive
+cell and a fine mesh; if a supercell is unavoidable, use `nv`/`nc` to keep
+the window narrow, or `solver="iterative"`, which does not care -- it did
+the full window in 9.1 s against dense's 96.5 s.
+
+Reference numbers, 3x3 supercell, nk=8x8, tolerance 1e-4:
+
+| window | dense | iterative | qtt |
+|---|---|---|---|
+| nv=nc=2 (npair 256) | 0.9 s | 0.7 s | 9.9 s (err 1.5e-03) |
+| all bands (npair 5184) | 96.5 s | 9.1 s | did not finish in 35 min |
+
+### What was built vs. what the plan expected
+
+- **Full A/B remains out**, as the plan said: `S@K` is unbounded below and
+  `dmrg_generalized` needs a positive-definite metric, which `diag(1,-1)`
+  is not. Both new solvers require `tda=True` and say so rather than
+  silently switching.
+- **The band index is one extra tensor-train site** of dimension `nv*nc`,
+  via `InherentDiscreteGrid`'s per-dimension `base` -- no separate
+  handling needed.
+- **Binding energies do not need a mesh scan** -- but not the way it
+  looked like they would. The lowest independent-particle transition is
+  the ground state of the diagonal MPO alone, which is exactly what
+  `kernel="none"` means, and running DMRG on it would be elegant and
+  logarithmic. **It does not work: a diagonal Hamiltonian is the
+  pathological case for DMRG**, since every basis state is already an
+  eigenstate and the local eigenproblem at each bond leaves the sweep
+  nothing to descend. Measured, it came back 0.042 high on the gapped
+  chain at nk=32. What is there instead is a binary descent on the mesh
+  index (`PairOracle.lowest_transition_energy`), seeded from the k-points
+  the cross interpolation already visited and therefore nearly free: exact
+  to 1e-15 on the same case, `O(dim*log nk)` extra diagonalizations, and
+  honest about being a local refinement rather than a global minimum.
+- **`pyitensor` is imported lazily from `dmrgpy`**, not vendored, so the
+  quantics tests skip where dmrgpy is absent.
+
+### Benchmark obligation -- and why it is unmet
+
+`CLAUDE.md` asks for a comparison against an existing open implementation.
+There is none for this construction, and this was checked rather than
+assumed: Xatu (arXiv:2307.01572), whose formalism `bsetk/` follows, uses a
+dense solver, and **TensorBinding** (arXiv:2607.00991) -- the closest
+match, quantics TCI MPOs for tight-binding Hamiltonians in the same
+ecosystem, and the paper whose abstract does mention excitonic physics --
+has no exciton or BSE module in the copy available. The substitutes are
+internal, in descending order of value: agreement with `solver="iterative"`
+(exact, and independent of every tensor-train choice) past the dense wall;
+agreement with the dense solver below it; gauge invariance of the
+spectrum; supercell folding.
+
+Literature that does cover the construction, and is cited in the module
+docstrings: arXiv:1602.02646 (BSE eigenproblem by low-rank kernel
+factorization plus QTT eigenvectors and ALS -- the same idea, in a quantum
+chemistry basis), arXiv:2410.22975 (QTT-TCI operations for
+Bethe-Salpeter-type equations), arXiv:2607.00991.
+
+### Left undone
+
+- **Excited excitons from the quantics solver do not work, and are
+  refused rather than approximated.** `pyitensor.dmrg_excited`'s
+  overlap-penalty objective does not converge on this problem. Gapped
+  chain at nk=32, dense reference 1.813914 / 1.831623 / 1.917174: a
+  penalty weight well above the bandwidth gave 1.787139 / 1.829526 /
+  2.019560, and the default weight gave 1.659272 / 1.666385 / 1.797612 --
+  *below* the true second eigenvalue, so not even variational.
+  `dmrg_excited`'s own docstring records the same class of stationary
+  point on an unrelated model, so this is a property of the penalized
+  objective rather than of the plumbing; `run_dmrg`'s excited branch is
+  kept so a better driver (block DMRG, or shift-invert on the MPO) can
+  slot in. Until then `solver="qtt"` accepts `neig=1` only and points at
+  `solver="iterative"`, which is exact and equally matrix-free.
+
+  There was a real bug underneath it, worth not rediscovering:
+  `dmrg_excited` does not leave the state normalized, so `<psi|H|psi>`
+  reports an energy scaled by `<psi|psi>` -- which lands BELOW the true
+  excited energy and therefore does not look wrong at all. Use the
+  Rayleigh quotient. Fixing it improved the numbers and did not rescue
+  the method.
+- **A matrix-free full A/B solver** would need a Lanczos run in the `S@H`
+  inner product. Not built.
+- **Amplitude reconstruction is O(npair)**, the one non-logarithmic step,
+  done because every other solver returns amplitudes. It returns an empty
+  array above four million pairs rather than making the allocation the
+  solver existed to avoid.
+- **Optical absorption** still wants all excitons, so it needs a
+  Chebyshev/KPM treatment of the BSE operator rather than a few-lowest
+  solver. The matrix-free apply built here is exactly what such a KPM
+  expansion would need.
+- **A spinful 2D quantics run is not tested end to end.** The rank
+  measurement covers it (bond dimension ~274 against ~63 spinless, for
+  the same physics twice over), and the machinery has no 2D-specific or
+  spin-specific branch that the 2D spinless and 1D spinful tests do not
+  already exercise between them -- but the combination is expensive
+  enough that it is left to the user guide's caveat rather than run in
+  the suite.
+
+### Side benefit realized
+
+`bsetk/gauge.py` is independently useful: it is a k-local smooth-gauge
+utility with a spectrum-invariance test, and nothing about it is specific
+to the BSE.
+
 
 ## Conventions and traps worth not re-discovering
 
@@ -702,6 +977,19 @@ invisible at Q=0.
   [arXiv:2309.06834](https://arxiv.org/abs/2309.06834) -- the same
   localized-basis electron-hole kernel (local fields + screened
   attraction) built from Wannier functions.
+- Benner, Dolgov, Khoromskaia and Khoromskij,
+  [arXiv:1602.02646](https://arxiv.org/abs/1602.02646) -- fast iterative
+  solution of the BSE eigenvalue problem by low-rank factorization of the
+  kernel plus QTT-compressed eigenvectors. The same construction as
+  Phase 4, in a quantum-chemistry basis.
+- [arXiv:2410.22975](https://arxiv.org/abs/2410.22975) -- quantics tensor
+  trains for Bethe-Salpeter-type equations (the Matsubara/parquet family),
+  including how convolutions and Fourier transforms are done in compressed
+  form.
+- TensorBinding, [arXiv:2607.00991](https://arxiv.org/abs/2607.00991) --
+  quantics tensor cross interpolation of tight-binding Hamiltonians into
+  MPOs, the closest match to Phase 4's MPO construction. It has no exciton
+  or BSE module, so it could not serve as a numerical benchmark.
 - Dynamical screening in the BSE,
   [arXiv:2302.07948](https://arxiv.org/abs/2302.07948) -- what the static
   approximation in Phase 3 costs, and when it starts to matter (strongly

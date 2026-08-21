@@ -14,16 +14,29 @@ def qdifference_map(kpoints):
     so on the regular Gamma-centered mesh geometry.get_kmesh returns there
     are only nk distinct differences rather than nk^2. Fourier transforming
     the interaction once per distinct difference instead of once per pair
-    of k-points is what keeps the kernel build from dominating the cost."""
+    of k-points is what keeps the kernel build from dominating the cost.
+
+    The returned q is the EXACT difference kpoints[i]-kpoints[j], not the
+    folded and rounded qkey used to recognize it. qkey rounds to seven
+    decimals so it can be a dictionary key, and a mesh whose points are
+    not exactly representable at that precision -- any nk that is not a
+    power of two, 1/6 = 0.1666667 for instance -- then gets Fourier
+    transformed at a q that is off by ~1e-8, which lands in the kernel and
+    therefore in the exciton energies. Keeping the exact difference costs
+    nothing and makes the kernel independent of the key's precision;
+    tests/bse/test_bse_factorize.py is what exposed this, since the
+    low-rank factorization uses the mesh points themselves and so
+    disagreed with the rounded reference at exactly that size."""
     nk = len(kpoints)
     keys,qs = dict(),[]
     iq = np.zeros((nk,nk),dtype=np.int64)
     for i in range(nk):
         for j in range(nk):
-            key = qkey(kpoints[i]-kpoints[j]) # fold into [0,1)
+            q = kpoints[i]-kpoints[j]
+            key = qkey(q) # fold into [0,1), for recognition only
             if key not in keys:
                 keys[key] = len(qs)
-                qs.append(np.array(key))
+                qs.append(np.array(q))
             iq[i,j] = keys[key]
     return np.array(qs),iq
 

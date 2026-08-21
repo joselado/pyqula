@@ -31,6 +31,35 @@ class BSE():
     The EXCHANGE term always keeps the bare interaction, whatever this is
     set to -- see build_blocks for why.
 
+    solver picks how the eigenproblem is solved:
+
+      "dense" (default)  assemble the matrix and diagonalize it. The only
+                  route that gives the FULL (non-Tamm-Dancoff) spectrum
+                  and every exciton, and the only one whose behavior is
+                  unchanged by this option existing. Its cost is the
+                  (2*npair)^2 matrix that check_memory guards.
+      "iterative" apply the kernel matrix-free through its exact low-rank
+                  factorization (bsetk/factorize.py) and run LOBPCG for
+                  the neig lowest excitons. No dense matrix ever exists,
+                  so the memory wall is gone; Tamm-Dancoff only.
+      "qtt"       quantics tensor train: compress the kernel into an MPO
+                  and solve it with DMRG (bsetk/qtt.py). Cost grows with
+                  log(nk) rather than nk, at the price of a smooth-gauge
+                  requirement, a tensor-train tolerance and a dmrgpy
+                  dependency. Tamm-Dancoff only.
+
+    neig is how many excitons solver="iterative" returns; "dense" returns
+    all of them and ignores it, and "qtt" accepts only neig=1. The default
+    None means 4 for "iterative" and 1 for "qtt".
+
+    gauge smooths the arbitrary phase algebra.eigh leaves on each Bloch
+    eigenvector (bsetk/gauge.py). It changes no energy -- it is a
+    block-diagonal unitary on the pair index -- so the default "auto"
+    turns it on only for solver="qtt", which cannot work without it, and
+    leaves the other two in the raw gauge where it makes no difference.
+    Setting it explicitly ("phase", "projection" or None) applies to every
+    solver, which is how the invariance is checked on the dense one.
+
     BEFORE TURNING SCREENING ON, read bsetk/screening.py's module
     docstring. In short: a Hubbard U fitted to a material is already an
     effective screened interaction and must not be screened again, and the
@@ -44,25 +73,84 @@ class BSE():
       amplitudesY (nexciton,npair) antiresonant amplitudes; identically
                   zero under the Tamm-Dancoff approximation
       pairs       the PairBasis, holding the k-mesh, the band window and
-                  the (ik,iv,ic) label of every pair index
+                  the (ik,iv,ic) label of every pair index -- or, for
+                  solver="qtt", an oracle.PairOracle, which exposes the
+                  same things but computes them per k-point on demand and
+                  reports how many it actually diagonalized (.ndiag())
       W           the interaction of the direct term (screened, if asked)
       Wx          the bare interaction, used by the exchange term
     """
     def __init__(self,h,V=None,Q=None,nk=10,nv=None,nc=None,
             kernel="full",tda=False,max_memory=2.0,
-            screening=None,nkW=None,channel="charge"):
-        self.pairs = PairBasis(h,Q=Q,nk=nk,nv=nv,nc=nc)
+            screening=None,nkW=None,channel="charge",
+            solver="dense",neig=None,gauge="auto",**kwargs):
+        if solver not in ("dense","iterative","qtt"):
+            raise ValueError("solver must be 'dense', 'iterative' or "
+                    "'qtt', got %r"%(solver,))
+        if solver!="dense" and not tda:
+            # not a silent switch: the two answers differ, and which one
+            # was computed has to be unambiguous
+            raise ValueError("solver=%r solves the Tamm-Dancoff problem "
+                "only, so it needs tda=True. The full (non-Tamm-Dancoff) "
+                "BSE matrix is not Hermitian and is diagonalized through a "
+                "Cholesky factorization of S@H (see "
+                "solve_pseudo_hermitian), which needs the dense matrix; "
+                "large-scale BSE codes use the Tamm-Dancoff approximation "
+                "for the same reason. tests/bse/test_bse_physics.py shows "
+                "the two agreeing at weak coupling, which is the regime "
+                "bound excitons live in"%(solver,))
+        if neig is None:
+            # the quantics solver returns the lowest exciton only (see
+            # qtt.solve_qtt for the measurements behind that), so the
+            # default cannot be the same for both
+            neig = 1 if solver=="qtt" else 4
+        if gauge=="auto":
+            # the gauge is unobservable, so only the solver that needs it
+            # pays for it: "qtt" cannot work without a smooth gauge, the
+            # other two are exact in any gauge. An explicit gauge= is
+            # honored everywhere, which is what makes the invariance
+            # testable on the dense solver
+            gauge = "projection" if solver=="qtt" else None
+        self.solver = solver
+        self.neig = neig
+        self.gauge = gauge
+        if solver=="qtt": # never builds the mesh-wide pair basis
+            from .qtt import solve_qtt
+            # note PairBasis is deliberately not constructed above: it
+            # diagonalizes every point of the mesh, which is the one thing
+            # this solver exists not to do
+            self.pairs,self.W,self.Wx,out = solve_qtt(h,V=V,Q=Q,nk=nk,
+                    nv=nv,nc=nc,kernel=kernel,neig=neig,gauge=gauge,
+                    screening=screening,nkW=nkW,channel=channel,**kwargs)
+            self.screening = screening
+            self.kernel = kernel
+            self.tda = tda
+            self.A = self.Abar = self.B = None
+            self.energies,self.amplitudes = out
+            self.amplitudesY = np.zeros(self.amplitudes.shape,
+                    dtype=np.complex128)
+            return
+        self.pairs = PairBasis(h,Q=Q,nk=nk,nv=nv,nc=nc,gauge=gauge)
         self.Wx = bare_interaction(h,V=V) # bare, for the exchange term
         self.W = get_direct_interaction(h,self.pairs,V=V,nk=nk,
                 screening=screening,nkW=nkW,kernel=kernel,channel=channel)
         self.screening = screening
         self.kernel = kernel
         self.tda = tda
+        if solver=="iterative":
+            from .iterative import solve_iterative
+            self.A = self.Abar = self.B = None
+            es,ws = solve_iterative(self.pairs,self.W,Wx=self.Wx,
+                    kernel=kernel,neig=neig,**kwargs)
+            self.energies = es.astype(np.complex128)
+            self.amplitudes = ws
+            self.amplitudesY = np.zeros(ws.shape,dtype=np.complex128)
+            return
         check_memory(self.pairs.npair,tda=tda,max_memory=max_memory)
         self.A,self.Abar,self.B = build_blocks(self.pairs,self.W,
                 Wx=self.Wx,kernel=kernel)
         self.solve()
-    def get_matrix(self):
+    def _get_matrix(self):
         """Return the full BSE matrix that is diagonalized,
 
             [[   A   ,     B      ],
@@ -132,8 +220,23 @@ class BSE():
         """Return the binding energies, i.e. how far below the lowest
         independent-particle transition on this mesh each exciton lies.
         Positive means bound."""
-        gap = np.min(self.pairs.dE) # lowest single-particle transition
-        return gap - self.get_energies(n=n)
+        return self.get_lowest_transition() - self.get_energies(n=n)
+    def get_lowest_transition(self):
+        """The lowest independent-particle transition on this mesh.
+
+        A minimum over the mesh for the solvers that hold it; for the
+        quantics solver, whose pair basis is never materialized, the same
+        number computed as the ground state of the diagonal MPO alone --
+        which is exactly what kernel="none" means, and stays logarithmic
+        in the mesh."""
+        if self.solver=="qtt": return self.pairs.lowest_transition
+        return np.min(self.pairs.dE)
+    def get_matrix(self):
+        if self.A is None:
+            raise ValueError("solver=%r never builds the BSE matrix -- "
+                "that is the point of it. Use solver='dense' if the "
+                "matrix itself is what is wanted"%(self.solver,))
+        return self._get_matrix()
 
 
 def get_direct_interaction(h,pb,V=None,nk=10,screening=None,nkW=None,
