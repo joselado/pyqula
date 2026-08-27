@@ -480,6 +480,52 @@ measured against has since become ~800x faster.
 acceleration and single precision both change the numbers; neither should
 be touched before the device measurement attributes the plain port.
 
+### What runs where: the port is chi0, not the whole RPA
+
+Worth stating plainly, because "the RPA runs on the GPU" is the natural but
+wrong reading of `chi_cpugpu="GPU"`. What the switch moves to the device is
+the **bare** susceptibility and the eigenproblem feeding it; the dressing
+around it is still host numpy.
+
+**On the device** (`chitk/chijax.py`):
+
+- the batched `eigh` of `H(k)` and `H(k+q)` over the entire k-mesh, one
+  dispatch rather than a Python loop (`chi_matrix_kmesh_gpu`);
+- the Lindhard contraction itself -- `TA`/`TB` built from the eigenvectors
+  and the operator tensors, then one GEMM per frequency over the gathered
+  pairs -- accumulated over k **without returning to the host in between**.
+  This is the `36 N^4 nw` per k-point of section 2, i.e. the whole reason
+  this plan exists.
+
+**Still on the host, in numpy/scipy:**
+
+- the RPA dressing `chi @ inv(1 - Vq @ chi)`, a list comprehension over
+  frequencies in `rpa.chi_ops_RPA` / `chi_AB_RPA`;
+- the pole finding behind `get_magnon_bands(method="rpa")` and
+  `get_rpa_kernel_poles`: `np.linalg.eigvals` per frequency in
+  `_poles_from_chi_matrix`, plus `_track_eigenvalue_branches`;
+- `interaction_at_q`'s Fourier transform of V, and `build_ops_projectors`'
+  operator/projector construction (both q-cheap, and the latter is already
+  built once per q-path rather than per q);
+- the pair selection in `pair_plan`, deliberately: it is O(n^2) bookkeeping
+  on eigenvalues, and doing it host-side is what lets one padded length
+  cover a whole mesh.
+
+The reason this split was acceptable is arithmetic, not laziness: the
+host-side work is `O((3N)^3 nw)` against the kernel's `O(N^4 nw)` *per
+k-point*, so at the sizes measured it is a rounding error -- roughly 0.03 s
+against the kernel's 0.189 s at N=64.
+
+The reason it will stop being acceptable is that the same arithmetic does
+not shrink when the kernel gets 800x faster. Extrapolating both: around
+N ~ 100 with a frequency grid of ~100 points, the per-frequency `inv` and
+`eigvals` become **co-dominant** with the device kernel, and past that they
+are the bottleneck. That is what the "deferred" Tier 2 items in the status
+section above are for -- batching the dressing as a `jnp.linalg.solve` over
+the frequency axis, and reusing the q-independent `ws1` across a q-path --
+and why they should be re-profiled on a real `get_magnon_bands` q-path
+rather than re-derived from these estimates.
+
 ### Device measurements (Tesla V100-SXM2-32GB, 2026-08-27)
 
 Triton jobs 19967215 (`--quick`, 1:35 wall, 1.77 GB host RAM) and 19967260
