@@ -22,7 +22,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                delta=0.1,T=None,A=None,B=None,projs=None,
                imode="mesh", # integration mode in momentum space
                ij_mode = "explicit", # loop over elements mode
-               mode="matrix" # return object
+               mode="matrix", # return object
+               chi_cpugpu="CPU" # backend for the Lindhard kernel
                ):
     """Compute AB response function
        - energies: energies of the dynamical response
@@ -34,7 +35,14 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
        - projs: local projection operators
        - imode: integration mode
        - ij_mode: loop ove elements mode
-       - mode: output to return"""
+       - mode: output to return
+       - chi_cpugpu: "CPU" (numba, the default) or "GPU" (jax, falling
+         back to jax's CPU backend if no GPU is present). The GPU path
+         implements the mode="matrix", imode="mesh", ij_mode="explicit"
+         combination only, and raises otherwise rather than silently
+         computing on the CPU"""
+    if chi_cpugpu not in ["CPU","GPU"]:
+        raise ValueError("chi_cpugpu must be 'CPU' or 'GPU', got "+str(chi_cpugpu))
     temp = T # redefine
     if temp is None: temp = delta # as delta
     hk = h.get_hk_gen() # get generator
@@ -85,7 +93,21 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     # call in parallel
     if imode=="mesh": # do a mesh
-        if ij_mode=="accelerated": # (maybe?) accelerated function
+        if chi_cpugpu=="GPU": # device path, whole kmesh at once
+            if mode!="matrix" or ij_mode!="explicit":
+                raise ValueError("chi_cpugpu='GPU' only implements "
+                        "mode='matrix' with ij_mode='explicit', got mode='"
+                        +str(mode)+"', ij_mode='"+str(ij_mode)+"'")
+            # imported here, never at module scope: chijax prints a banner
+            # and flips process-global jax configuration at import time,
+            # and the CPU path runs under parallel.pcall's fork-based pool
+            from .chijax import chi_matrix_kmesh_gpu
+            qv = np.array(q) # the q shift of the second Hamiltonian
+            hks1 = np.array([hk(k) for k in ks]) # H(k) over the mesh
+            hks2 = np.array([hk(np.array(k)+qv) for k in ks]) # H(k+q)
+            out = chi_matrix_kmesh_gpu(hks1,hks2,energies,np.array(pAs),
+                                       np.array(pBs),temp,delta)
+        elif ij_mode=="accelerated": # (maybe?) accelerated function
             parallel.set_num_threads() # set the number of threads
             out = chiAB_matrix_ksum(h,ks,q,energies,A,B,temp,delta)
         elif ij_mode=="explicit": # explicit function, this is preferred
@@ -93,6 +115,9 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
             out = np.mean(out,axis=0) # sum over kpoints
         else: raise NotImplementedError
     elif imode=="adaptive": # do a mesh
+        if chi_cpugpu=="GPU": # the adaptive integrator calls back per point
+            raise ValueError("chi_cpugpu='GPU' is not implemented for "
+                             "imode='adaptive'")
         from . import integration
         if h.dimensionality==0: out = getk([0.]) # single point
         elif h.dimensionality==1:

@@ -22,3 +22,4 @@ MULTI*
 .claude/
 examples/**/*.png
 benchmarks/results/
+CLAUDE.local.md

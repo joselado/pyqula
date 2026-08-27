@@ -1977,6 +1977,27 @@ Both snippets depend on the mean-field state actually being ordered, which is wo
 
 See `examples/1d/rpa/main.py` (RPA spin response vs q for an antiferromagnetic chain), `examples/2d/rpa_triangular/main.py`/`examples/2d/rpa_honeycomb/main.py` (`get_qdos_iets` dispersion along a q-path) and `examples/0d/rpa_island/main.py`/`examples/0d/rpa_finite_chain/main.py` (`get_iets_ldos` real-space IETS maps) for runnable versions.
 
+#### Running the response on a GPU
+
+Every one of these RPA entry points -- `get_spinchi_ladder`, `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles`, `get_magnon_bands(method="rpa")` and the density-channel `get_densitychi_RPA` -- bottoms out in the same Lindhard kernel, a sum over pairs of eigenstates at every k-point of the mesh. Its cost is $36N^4 n_\omega$ complex multiply-adds *per k-point* for the full $(S_x,S_y,S_z)$ response of an $N$-site cell, so it is what decides whether a large unit cell is feasible at all: measured on one workstation core, one k-point takes 0.035 s at $N=10$ and 5.9 s at $N=40$, and the $N^4$ scaling puts $N=100$ at roughly four minutes *per k-point*.
+
+That kernel can be dispatched to a GPU through [jax](https://github.com/jax-ml/jax) instead of numba, with `chi_cpugpu="GPU"`, forwarded down from any of those entry points:
+
+```python
+es,chis = hmf.get_spinchi_full(q=[0.2,0.,0.],nk=8,
+            energies=np.linspace(0.01,1.0,100),delta=1e-2,
+            chi_cpugpu="GPU") # dispatch the Lindhard kernel to a GPU
+qs,ws,gammas = hmf.get_magnon_bands(method="rpa",nq=20,nk=8,
+            energies=np.linspace(0.01,2.0,200),delta=1e-2,
+            chi_cpugpu="GPU")
+```
+
+The device path is exact, not an approximation: it rewrites the four-fold loop as one matrix multiplication per frequency over the electron-hole pairs that survive the occupation cutoff, and agrees with the numba kernel to the last bits of complex128. Like `kpm_cpugpu`, it transparently falls back to jax's own CPU backend when no GPU is visible, so it is always safe to pass -- but on such a machine it is a jax-CPU calculation and not a fast one, and the whole point of the switch is FP64 throughput, so do not read a speedup into it that was not measured on a device.
+
+Two behaviours worth knowing. The switch refuses rather than silently falling back: `mode="trace"`/`"diagonal"` (`h.get_chiAB_trace`) and `imode="adaptive"` use different kernels that are not ported, and asking for them together with `chi_cpugpu="GPU"` raises. And a q-scan (`get_magnon_bands`, `get_qdos_iets`) that normally spreads its q-points over `parallel.pcall`'s worker processes runs the loop in a single process under `chi_cpugpu="GPU"`, since several processes sharing one device is contention rather than parallelism.
+
+Measured on a Tesla V100 (complex128, one BLAS-pinned CPU core as the baseline, `nk=4`, `n_\omega=40`), the crossover sits at about $N=7$: below it the CPU kernel wins, and above it the device pulls away as the CPU side grows like $N^4$ while the device time stays nearly flat -- 13x at $N=12$, 207x at $N=32$, and 833x at $N=64$, with the two backends agreeing to $10^{-16}$ relative throughout. `benchmarks/cases/rpa_spin_response.py` reproduces that sweep on any machine, and `future_development/gpu_rpa_spin_response.md` records the full measurements and what is still open.
+
 ### RPA kernel poles and magnon bands
 
 The RPA-dressed response $\chi_{RPA} = \chi(1-U\chi)^{-1}$ diverges wherever the kernel $1-U\chi(q,\omega)$ becomes singular: these poles are the system's collective modes (spin waves/magnons, plasmons) or, if a kernel eigenvalue crosses zero at $\omega=0$, a sign of a Stoner/RPA instability. `h.get_rpa_kernel_poles` scans a frequency window at a fixed `q` and returns every such pole, generalizing `chi_AB_RPA` (any operators `A`,`B` and interaction matrix `V`, defaulting to the charge channel and $q=0$ like the other generic response functions above):
@@ -2976,6 +2997,8 @@ Optional arguments:
 - q=[0,0,0], energies, delta, nk: as above
 
 - RPA=True: dress with the random-phase approximation; `False` for the bare response
+
+- chi_cpugpu="CPU": backend for the underlying Lindhard kernel; `"GPU"` dispatches it to jax (falling back to jax's CPU backend if no device is visible). Also accepted by `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles` and `get_magnon_bands(method="rpa")`, which all share that kernel. Unsupported combinations (`mode="trace"`/`"diagonal"`, `imode="adaptive"`) raise instead of falling back to the CPU
 
 ### h.get_rpa_kernel_poles()
 Compute the poles of the generic RPA kernel $1-V(q)\chi(q,\omega)$: the frequencies of the collective modes/instabilities of the interacting response.

@@ -1,7 +1,9 @@
 # GPU porting plan
 
-Status: **Tier 1 done** (KPM batched GPU path, see below); Tiers 2-4 not started. This is a
-roadmap for future work, written after surveying the codebase for GPU-portable hot spots.
+Status: **Tier 1 done** (KPM batched GPU path, see below); Tiers 2-4 not started. A
+separate tier for the RPA response kernel (`chi_cpugpu`) is implemented on the CPU fallback
+and awaiting its device measurement -- see `future_development/gpu_rpa_spin_response.md`.
+This is a roadmap for future work, written after surveying the codebase for GPU-portable hot spots.
 It complements, and is independent of, the CPU-side `perf_optimization_plan` work (numba
 batching of dense diagonalization and KPM moments, already landed; SCF-loop redundancy
 still pending). Nothing here should be implemented without explicit user sign-off per tier,
@@ -138,6 +140,12 @@ process as the CPU perf plan.
   deciding whether to add a GPU option there too.
 - **Tier 4 — research spike only, not committed work**: sparse/Green's-function GPU
   feasibility (item 3 above). Write up findings before proposing an implementation tier.
+- **The RPA response kernel** (`chitk/chiAB.py::chiAB_matrix`, the `N^4` Lindhard
+  contraction behind every spin/charge RPA entry point) has its own plan and its own
+  measurements in `future_development/gpu_rpa_spin_response.md`. It follows the conventions
+  of this file (`chi_cpugpu="CPU"|"GPU"`, the `kpmjax` fallback pattern, an import kept
+  inside the GPU branch) and is implemented through its Tier 2; what is missing is the
+  speedup itself, which needs a GPU node.
 
 ## Process notes
 

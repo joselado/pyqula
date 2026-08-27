@@ -84,13 +84,13 @@ def plasmon_bands(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,qpath=None,nq=20,**kwargs):
     (see rpa.py's _poles_from_chi_matrix docstring). Different q-points can
     have different numbers of poles, so all three are flat 1D arrays."""
     from .rpa import rpa_kernel_poles
-    from .. import parallel
+    from .spinchi import _map_over_q
     h1 = h.get_multicell().get_dense()
     v = _density_v(h1,V1,V2,V3,U,Vr)
     qpath = h1.geometry.get_kpath(qpath,nk=nq) # generate the q-path
     def f(q):
         return rpa_kernel_poles(h1,V=v,q=q,**kwargs)
-    outs = parallel.pcall(f,qpath) # compute the poles at every q
+    outs = _map_over_q(f,qpath,**kwargs) # compute the poles at every q
     qs,ws,gammas = [],[],[] # flat storage
     for iq,poles in enumerate(outs): # loop over q-points
         for (w,g) in poles: # loop over poles found at this q

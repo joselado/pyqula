@@ -364,6 +364,21 @@ def spinchi_full(H,RPA=True,**kwargs):
     return chi_ops_RPA(H,ops=Ss,V=U,**kwargs) # non-interacting response
 
 
+def _map_over_q(f,qpath,**kwargs):
+    """Map f over a q-path, serially when the device backend is in use.
+
+    parallel.pcall forks several worker processes; with a single GPU that
+    is contention rather than parallelism (each process would build its own
+    device context and its own copy of the operator tensors), which is the
+    failure mode documentation/gpu_porting_plan.md item 4 suspects behind
+    classicalspin.py's unconditional CPU forcing. So under
+    chi_cpugpu="GPU" the q-loop stays in this process."""
+    from .. import parallel
+    if kwargs.get("chi_cpugpu","CPU")=="GPU": # one device, one process
+        return [f(q) for q in qpath]
+    return parallel.pcall(f,qpath) # CPU path, as before
+
+
 def magnon_bands(H,qpath=None,nq=20,**kwargs):
     """Return the magnon bands: the poles of the full spin RPA kernel
     (the same Sx,Sy,Sz channel used by spinchi_full/get_iets_ldos), scanned
@@ -389,7 +404,6 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
     returned as flat 1D arrays -- ready for a scatter-style dispersion
     plot -- rather than a ragged per-q array."""
     from .rpa import rpa_kernel_poles_ops, build_ops_projectors
-    from .. import parallel
     Ss = _full_spin_operators(H)
     U = _full_spin_U(H)
     if U is None: raise ValueError("Hamiltonian has no mean-field "
@@ -401,7 +415,7 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
     qpath = H.geometry.get_kpath(qpath,nk=nq) # generate the q-path
     def f(q):
         return rpa_kernel_poles_ops(H,V=U,pAs=pAs,pBs=pBs,q=q,**kwargs)
-    outs = parallel.pcall(f,qpath) # compute the poles at every q
+    outs = _map_over_q(f,qpath,**kwargs) # compute the poles at every q
     qs,ws,gammas = [],[],[] # flat storage
     for iq,poles in enumerate(outs): # loop over q-points
         for (w,g) in poles: # loop over poles found at this q
@@ -448,8 +462,7 @@ def get_qdos_iets(H,energies=np.linspace(0.,1.,100),
     #out = parallel.pcall_deep(f,qs,cores=1) # compute all
     qpath = H.geometry.get_kpath(qpath,nk=nq) # generate kpath
 #    out = [f(q) for q in qpath] # compute all
-    from .. import parallel
-    out = parallel.pcall(f,qpath) # compute all
+    out = _map_over_q(f,qpath,**kwargs) # compute all
     qout = [] # empty list
     chimap = [] # storage
     for o in out: # loop over qvectors
