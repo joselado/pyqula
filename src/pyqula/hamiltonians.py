@@ -84,6 +84,9 @@ class Hamiltonian():
     def get_spin_splitting_density(self,**kwargs):
         from .fermisurfacetk.spinsplitting import spin_splitting_density
         return spin_splitting_density(self,**kwargs)
+    def get_spin_splitting_vs_energy(self,**kwargs):
+        from .fermisurfacetk.spinsplitting import spin_splitting_vs_energy
+        return spin_splitting_vs_energy(self,**kwargs)
     def get_gf(self,**kwargs):
         from .htk.green import get_gf
         return get_gf(self,**kwargs)

@@ -490,6 +490,32 @@ The Hamiltonian is kept sparse throughout (the primitive cell is turned sparse b
 
 See `examples/2d/qpi_realspace_impurity/main.py` for a runnable version that plots both the real-space LDOS and QPI(q).
 
+## Spin splitting of an altermagnet
+
+In a collinear magnet whose spin-up and spin-down bands are split without any net magnetization -- an altermagnet -- the natural quantity to characterize the order is how far apart the two spin channels are pushed, resolved by the energy at which that happens. Both quantities below diagonalize the two spin blocks separately and pair the resulting bands by index, so for every k-point and band index `n` there is a splitting `Delta_n(k) = E_up_n(k) - E_dn_n(k)` sitting at the mean energy `Ebar_n(k) = (E_up_n(k) + E_dn_n(k))/2`.
+
+The two differ in how they reduce that set. `get_spin_splitting_density` broadens every pair into a smooth weighted density, giving the *typical* splitting at each energy. `get_spin_splitting_vs_energy` instead keeps the *largest* `|Delta|` found in each energy bin, so its global maximum is a bound on the spin splitting anywhere in the Brillouin zone. The distinction matters when reporting a single number for a material: a maximum taken along one cut through k-space (a circle of fixed radius, say) depends on choosing where to look, while the binned maximum over a full mesh does not.
+
+```python
+import numpy as np
+from pyqula import specialhamiltonian
+
+h = specialhamiltonian.square_altermagnet(am=1.)
+
+# largest spin splitting in each energy bin, over the whole BZ
+(es, ds) = h.get_spin_splitting_vs_energy(nk=100, nbins=400)
+print("largest spin splitting anywhere in the BZ:", ds.max())
+
+# the smooth counterpart, on the same axes
+(xs, ys) = h.get_spin_splitting_density(nk=100, delta=1e-1, energies=es)
+```
+
+Both return `(energies, values)` with the same shape convention, so they can be plotted together. Bins containing no states come back as `0.0` rather than `NaN`, and states falling outside an explicitly requested energy window are dropped rather than piled onto the end bins.
+
+Both assume spin is a good quantum number, since they are built on `remove_spin`, which keeps one spin block and discards the off-diagonal one. `get_spin_splitting_vs_energy` checks this and raises if the spin off-diagonal block of the Bloch Hamiltonian is not negligible -- with Rashba coupling, any other spin-orbit term, or non-collinear magnetic order the splitting defined above is not a meaningful quantity, and a silently wrong number would be worse than an error. Diagonalization is dense throughout, deliberately: a sparse solver returns only the eigenvalues nearest `E=0`, and the splitting commonly peaks far away from there.
+
+See `examples/2d/altermagnetism_density/main.py` for a runnable version.
+
 
 # Operators
 
@@ -3206,6 +3232,27 @@ Optional arguments:
 - energies=0.0, delta, nk: as above
 - num_waves=20: starting number of ARPACK eigenstates computed nearest the requested energies -- grown automatically as needed until the diagonalization both reaches `margin` (default 5.0) times `delta` past every requested energy and never stops in the middle of a degenerate manifold (summing over a partial degenerate manifold isn't basis-independent, which otherwise makes the result depend on ARPACK's starting vector -- common on symmetric lattices like honeycomb, which have large exact degeneracies at high-symmetry k-points). Picking it too small just costs extra ARPACK calls to grow from, not correctness
 - write=True, output_folder="QPI_IMPURITY": also write the MULTIQPI-style disk output
+
+### h.get_spin_splitting_density()
+Compute the energy-resolved spin splitting of a collinear magnet as a smooth weighted density: every band pair contributes its squared splitting, broadened, at the mean energy of the pair. Returns `(energies,values)`.
+
+Optional arguments:
+
+- nk=20: number of k-points per direction
+- energies: energies at which the density is evaluated (default 400 points spanning -3 to 3)
+- delta=1e-2: broadening
+
+### h.get_spin_splitting_vs_energy()
+Compute the energy-resolved **maximum** spin splitting over the Brillouin zone, so that the largest value returned bounds the spin splitting anywhere in the zone. Bands are paired by index within each spin channel and binned at the mean energy of the pair. Returns `(energies,values)`, the same convention as `get_spin_splitting_density`, so the two are directly comparable.
+
+Optional arguments:
+
+- nk=100: linear mesh density (nk^d points in d dimensions)
+- energies=None: explicit bin centers; otherwise `nbins` points spanning `emin` to `emax`
+- nbins=400, emin=None, emax=None: used when `energies` is not given; the default range is that of the mean energies actually found, so no state falls outside the window
+- tol=1e-7: largest spin off-diagonal element of the Bloch Hamiltonian tolerated. Above it this raises rather than answering, since the spin-resolved splitting is not meaningful with spin-orbit coupling or non-collinear order
+
+Empty bins are `0.0` (not `NaN`), and states outside an explicitly requested window are dropped rather than clamped onto the end bins. Diagonalization is dense throughout, since a sparse solver would return only the eigenvalues nearest `E=0` and could miss the peak.
 
 ### h.get_chern()
 Return Chern number of the Hamiltonian.
