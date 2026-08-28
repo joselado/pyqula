@@ -177,3 +177,11 @@ spectrum).
   (`htk/eigenvectors.py`), the partially-started KPM GPU path (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), and
   why sparse/ARPACK-based Green's-function work is a harder/lower-priority case. Check it before starting
   any GPU-related work in this repo.
+- **HPC-cluster material never goes into git.** pyqula is a public repository; the maintainer's cluster
+  details (login hosts, scratch paths, partition names, queue measurements, account-specific job scripts,
+  run logs) are none of the public's business and must not reach GitHub. They live in `docs/` and in
+  `CLAUDE.local.md`, both of which are gitignored for exactly this reason — keep them there, and never
+  `git add -f` them, move their contents into a tracked file, or quote cluster specifics into a commit
+  message, a docstring, `documentation/`, or `future_development/`. Performance *conclusions* are welcome
+  in the tracked roadmaps (e.g. "the batched dense solve is the GPU-favourable shape"); the hostnames,
+  paths and job IDs that produced them are not.
