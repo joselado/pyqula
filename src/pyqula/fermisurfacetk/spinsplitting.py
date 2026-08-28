@@ -133,21 +133,38 @@ def spin_splitting_vs_energy(h,nk=100,energies=None,nbins=400,
     radius, say), nothing here depends on choosing where to look: the
     bound covers the whole zone.
 
-    CAVEAT -- pairing by index is defined relative to the unit cell you
-    give it, and is only the physical splitting while the two spin
-    channels stay in the same band order. Sorting each channel and
-    subtracting index by index pairs the n-th lowest up band with the
-    n-th lowest down band; once a splitting grows comparable to the
-    spacing between neighboring bands, those two are no longer the same
-    band, and the pairing silently compares unrelated states. Band
-    folding makes this concrete: on a supercell of the square altermagnet
-    the folded bands at one k come from several primitive k-points at
-    once, index pairing mixes them, and the reported maximum drops from
-    4*am to 2*am even though the spectrum is identical (this is pinned in
-    tests/fermisurface/test_spin_splitting_vs_energy.py). Use the natural
-    magnetic unit cell, and treat the result as a lower bound on the true
-    maximum whenever the splitting approaches the level spacing --
-    dense multiorbital cells are exactly where that happens.
+    There are two separate things to know about the index pairing, and
+    they have different answers.
+
+    WHEN IS THE PAIRING UNAMBIGUOUS? Whenever the two spin channels are
+    related by a point-group operation acting on k -- which is what a
+    collinear altermagnet is -- the sorted spectra satisfy
+    E^up_n(k) = E^dn_n(Rk) exactly, so
+
+        Delta_n(k) = E^dn_n(Rk) - E^dn_n(k)
+
+    compares the same sorted index within ONE channel at two related
+    momenta. There is no "which band is which" freedom left, and the
+    usual worry (that a splitting exceeding the band spacing makes the
+    n-th up and n-th down band different bands) simply does not arise:
+    the symmetry supplies the correspondence. Only without such a
+    relation does band order become an assumption worth doubting. The
+    operation is worth identifying for a new system -- compare
+    sorted(E_up(k)) with sorted(E_dn(Rk)) over the point group and look
+    for the R that gives ~1e-14 -- since it also tells you the pairing
+    is trustworthy.
+
+    WHICH UNIT CELL? This one is a real dependence, and the symmetry
+    above does NOT remove it: n indexes whatever band set the cell
+    produces, and folding changes that set. On a supercell of the square
+    altermagnet the mirror identity still holds to 4e-16, yet the
+    reported maximum drops from 4*am to 2*am, because the folded bands
+    at one k come from several primitive k-points and index pairing
+    compares across them. So give this the true magnetic unit cell: if
+    the converged order repeats with a smaller period than the cell it
+    was solved in, the result is a lower bound rather than the maximum.
+    Both facts are pinned in
+    tests/fermisurface/test_spin_splitting_vs_energy.py.
 
     Parameters
       nk        linear mesh density (nk**d points in d dimensions)

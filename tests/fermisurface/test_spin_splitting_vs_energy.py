@@ -119,17 +119,50 @@ def test_matches_density_convention():
     assert np.array(xs).shape == np.array(ys).shape
 
 
-def test_index_pairing_is_relative_to_the_unit_cell():
-    """Pinning a limitation, not a feature.
+def _mirror(k):
+    """The k1<->k2 mirror relating the two spin channels of the square
+    altermagnet."""
+    return np.array([k[1], k[0], 0.])
 
-    Bands are paired by sorted index within each spin channel, which is
-    the physical splitting only while the two channels stay in the same
-    band order. On a supercell the folded bands at one k come from
-    several primitive k-points at once, so index pairing compares states
-    that do not correspond, and the reported maximum falls even though
-    the spectrum is unchanged. The same mechanism degrades the result
-    whenever a splitting grows comparable to the band spacing, so this
-    test exists to keep the behaviour visible rather than to bless it.
+
+def test_spin_channels_are_related_by_a_mirror_in_k():
+    """The identity that makes sorted-index pairing exact here.
+
+    For a collinear altermagnet the two spin channels are related by a
+    point-group operation acting on k, not by a state-by-state
+    correspondence at fixed k: sorted(E_up(k)) equals sorted(E_dn(Mk)) to
+    machine precision. Delta_n(k) is then E_dn_n(Mk) - E_dn_n(k), the
+    same sorted index within one channel at two related momenta, so no
+    band-identification ambiguity remains. This probes every band at
+    every k, which makes it a far sharper check than the single 4*am
+    extremum."""
+    h = specialhamiltonian.square_altermagnet(am=1.)
+    hup = h.copy(); hup.remove_spin(channel="up")
+    hdn = h.copy(); hdn.remove_spin(channel="dn")
+    u, d = hup.get_hk_gen(), hdn.get_hk_gen()
+    rng = np.random.default_rng(0)
+    worst_mirror, worst_same = 0., 0.
+    for _ in range(40):
+        k = np.array([rng.random(), rng.random(), 0.])
+        eu = np.sort(algebra.eigvalsh(u(k)))
+        worst_mirror = max(worst_mirror, np.max(np.abs(
+            eu-np.sort(algebra.eigvalsh(d(_mirror(k)))))))
+        worst_same = max(worst_same, np.max(np.abs(
+            eu-np.sort(algebra.eigvalsh(d(k))))))
+    assert worst_mirror < 1e-12   # the mirror relates the two channels
+    assert worst_same > 1e-2      # at the same k they genuinely differ
+
+
+def test_index_pairing_is_relative_to_the_unit_cell():
+    """Pinning a limitation the mirror symmetry does NOT remove.
+
+    Sorted index n labels whatever band set the unit cell produces, and
+    folding changes that set. On a supercell the mirror identity above
+    still holds to machine precision, yet the reported maximum halves,
+    because the folded bands at one k come from several primitive
+    k-points and index pairing compares across them. So the symmetry
+    makes the pairing unambiguous without making it cell-independent --
+    the cell has to be the true magnetic one.
     """
     h = specialhamiltonian.square_altermagnet(am=1.)
     hs = h.supercell(2)
@@ -147,3 +180,11 @@ def test_index_pairing_is_relative_to_the_unit_cell():
     _, Ds = hs.get_spin_splitting_vs_energy(nk=20, nbins=200)
     assert np.isclose(D.max(), 4.0, atol=1e-10)
     assert np.isclose(Ds.max(), 2.0, atol=1e-10)
+    # and the mirror identity holds on the supercell too, so it is not
+    # the thing that distinguishes the two answers
+    hsup = hs.copy(); hsup.remove_spin(channel="up")
+    hsdn = hs.copy(); hsdn.remove_spin(channel="dn")
+    us, ds = hsup.get_hk_gen(), hsdn.get_hk_gen()
+    ks = np.array([0.17, 0.29, 0.])
+    assert np.allclose(np.sort(algebra.eigvalsh(us(ks))),
+                       np.sort(algebra.eigvalsh(ds(_mirror(ks)))), atol=1e-12)
