@@ -117,3 +117,33 @@ def test_matches_density_convention():
     xs, ys = h.get_spin_splitting_density(nk=12, energies=np.linspace(-3., 3., 50))
     assert E.shape == D.shape == (50,)
     assert np.array(xs).shape == np.array(ys).shape
+
+
+def test_index_pairing_is_relative_to_the_unit_cell():
+    """Pinning a limitation, not a feature.
+
+    Bands are paired by sorted index within each spin channel, which is
+    the physical splitting only while the two channels stay in the same
+    band order. On a supercell the folded bands at one k come from
+    several primitive k-points at once, so index pairing compares states
+    that do not correspond, and the reported maximum falls even though
+    the spectrum is unchanged. The same mechanism degrades the result
+    whenever a splitting grows comparable to the band spacing, so this
+    test exists to keep the behaviour visible rather than to bless it.
+    """
+    h = specialhamiltonian.square_altermagnet(am=1.)
+    hs = h.supercell(2)
+    # the supercell spectrum really is the folded primitive one
+    hup = h.copy(); hup.remove_spin(channel="up")
+    hsup = hs.copy(); hsup.remove_spin(channel="up")
+    hk, hks = hup.get_hk_gen(), hsup.get_hk_gen()
+    k = np.array([0.17, 0.29, 0.])
+    folded = np.sort(np.concatenate(
+        [algebra.eigvalsh(hk((k+np.array([i, j, 0.]))/2.))
+         for i in range(2) for j in range(2)]))
+    assert np.allclose(folded, np.sort(algebra.eigvalsh(hks(k))), atol=1e-9)
+    # yet the index-paired maximum differs, purely from the pairing
+    _, D = h.get_spin_splitting_vs_energy(nk=40, nbins=200)
+    _, Ds = hs.get_spin_splitting_vs_energy(nk=20, nbins=200)
+    assert np.isclose(D.max(), 4.0, atol=1e-10)
+    assert np.isclose(Ds.max(), 2.0, atol=1e-10)

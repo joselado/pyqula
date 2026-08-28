@@ -133,6 +133,22 @@ def spin_splitting_vs_energy(h,nk=100,energies=None,nbins=400,
     radius, say), nothing here depends on choosing where to look: the
     bound covers the whole zone.
 
+    CAVEAT -- pairing by index is defined relative to the unit cell you
+    give it, and is only the physical splitting while the two spin
+    channels stay in the same band order. Sorting each channel and
+    subtracting index by index pairs the n-th lowest up band with the
+    n-th lowest down band; once a splitting grows comparable to the
+    spacing between neighboring bands, those two are no longer the same
+    band, and the pairing silently compares unrelated states. Band
+    folding makes this concrete: on a supercell of the square altermagnet
+    the folded bands at one k come from several primitive k-points at
+    once, index pairing mixes them, and the reported maximum drops from
+    4*am to 2*am even though the spectrum is identical (this is pinned in
+    tests/fermisurface/test_spin_splitting_vs_energy.py). Use the natural
+    magnetic unit cell, and treat the result as a lower bound on the true
+    maximum whenever the splitting approaches the level spacing --
+    dense multiorbital cells are exactly where that happens.
+
     Parameters
       nk        linear mesh density (nk**d points in d dimensions)
       energies  explicit bin centers; otherwise nbins points spanning
