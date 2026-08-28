@@ -520,7 +520,7 @@ The second is a genuine dependence that the symmetry does *not* remove: `n` labe
 
 Both assume spin is a good quantum number, since they are built on `remove_spin`, which keeps one spin block and discards the off-diagonal one. `get_spin_splitting_vs_energy` checks this and raises if the spin off-diagonal block of the Bloch Hamiltonian is not negligible -- with Rashba coupling, any other spin-orbit term, or non-collinear magnetic order the splitting defined above is not a meaningful quantity, and a silently wrong number would be worse than an error. Diagonalization is dense throughout, deliberately: a sparse solver returns only the eigenvalues nearest `E=0`, and the splitting commonly peaks far away from there.
 
-See `examples/2d/altermagnetism_density/main.py` for a runnable version.
+See `examples/2d/spin_splitting_vs_energy/main.py` for a runnable version plotting both curves (and showing the redundant-cell trap), and `examples/2d/altermagnetism_density/main.py` for the density alone.
 
 
 # Operators

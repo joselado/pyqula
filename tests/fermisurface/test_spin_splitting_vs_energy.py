@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from pyqula import algebra, specialhamiltonian
+from pyqula import algebra, geometry, specialhamiltonian
 from pyqula.klist import kmesh
 
 
@@ -188,3 +188,40 @@ def test_index_pairing_is_relative_to_the_unit_cell():
     ks = np.array([0.17, 0.29, 0.])
     assert np.allclose(np.sort(algebra.eigvalsh(us(ks))),
                        np.sort(algebra.eigvalsh(ds(_mirror(ks)))), atol=1e-12)
+
+
+def _ferromagnet(mz, nsuper=1):
+    """Onsite-mz order, the complementary mechanism to square_altermagnet.
+
+    pyqula's altermagnet carries its magnetism in a spin-dependent
+    HOPPING, so its onsite mz is identically zero and no other fixture
+    here exercises an onsite exchange field. This one does, and its
+    splitting is exactly 2*mz at every k."""
+    g = geometry.square_lattice()
+    h = g.get_hamiltonian(has_spin=True)
+    h.add_exchange([0., 0., mz])
+    return h.supercell(nsuper) if nsuper > 1 else h
+
+
+@pytest.mark.parametrize("mz", [0.3, 0.7])
+def test_onsite_exchange_field_splitting_is_analytic(mz):
+    """A uniform exchange field splits every band by exactly 2*mz."""
+    E, D = _ferromagnet(mz).get_spin_splitting_vs_energy(nk=30, nbins=200)
+    assert np.isclose(D.max(), 2.*mz, atol=1e-10)
+
+
+def test_folding_is_harmless_when_the_splitting_is_k_independent():
+    """The other half of the folding story, and the reason the supercell
+    result above is not simply a supercell artifact.
+
+    Index pairing only loses information when sorting can mix bands with
+    DIFFERENT splittings. A uniform exchange field splits every band by
+    the same 2*mz, so no mixing can change any difference, and the
+    supercell answer is identical to the primitive one -- unlike the
+    altermagnet, whose k-dependent splitting halves under the same
+    folding."""
+    d1 = _ferromagnet(0.3).get_spin_splitting_vs_energy(nk=30, nbins=200)[1]
+    d2 = _ferromagnet(0.3, nsuper=2).get_spin_splitting_vs_energy(nk=15,
+                                                                  nbins=200)[1]
+    assert np.isclose(d1.max(), 0.6, atol=1e-10)
+    assert np.isclose(d2.max(), 0.6, atol=1e-10)  # folding changes nothing here
