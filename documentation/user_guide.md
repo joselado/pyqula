@@ -529,6 +529,60 @@ Both when computing band structures, density of states and expectation values we
 
 Operators in pyqula have some important properties. First, for periodic Hamiltonian they can have an intrinsic momentum dependence. Second, pyqula allows for native algebra between them, namely they can be summed or multiplied, automatically accounting for intrinsic momentum depences. Third, they can be non-linear, providing a generalization of matrix operators.
 
+
+## Nonlinear spin current as a measurement of altermagnetic order
+
+The spin splitting above tells you *how big* the altermagnetic order is. A harder question is *which kind* it is -- d-wave, g-wave, i-wave -- and that turns out to have a purely electrical answer, one that needs no spin-orbit coupling at all.
+
+The spin-splitting form factor of an X-wave collinear magnet is a k-space harmonic of order `l+1`: `kx*ky` for d-wave, `kx*ky*(kx^2-ky^2)` for g-wave, `kx*ky*(3kx^2-ky^2)*(kx^2-3ky^2)` for i-wave. In the semiclassical Boltzmann treatment the `l`-th order nonlinear Drude conductivity is a Brillouin-zone integral of the `(l+1)`-th derivative of the band energy,
+
+```
+sigma_s^{x^l1 y^l2 ; b} = (-e/hbar)^(l+1)/(i omega + 1/tau)^l
+        * Int d^Dk/(2 pi)^D f_s^(0) d^(l+1) eps_s/(dk_x^l1 dk_y^l2 dk_b)
+```
+
+with `sigma_spin = (sigma_up - sigma_dn)/2` and `sigma_charge = sigma_up + sigma_dn`. A harmonic of order `l+1` has a nonzero constant `(l+1)`-th derivative and nothing below it survives the zone integral, so the spin response switches on at exactly one order and is silent below it:
+
+| wave | p | d | f | g | i |
+|---|---|---|---|---|---|
+| lowest order `l` | 0 | 1 | 2 | 3 | 5 |
+
+Reading off the lowest order at which a nonlinear spin current appears therefore identifies the wave index. This is the content of Ezawa, *Phys. Rev. B* **111**, 125420 (2025) ([arXiv:2411.16036](https://arxiv.org/abs/2411.16036)).
+
+```python
+from pyqula import specialhamiltonian
+
+h = specialhamiltonian.iwave_altermagnet(J=0.3)   # or dwave_/fwave_/gwave_
+
+# largest |sigma_spin| over every component of each order l
+orders = h.get_nonlinear_drude_orders(lmax=6, nk=48, T=0.02, mu=-5.5)
+# -> zero to machine precision for l = 0..4, nonzero at l = 5
+
+# one component, and every component of a given order
+s = h.get_nonlinear_drude_conductivity(field="yyyyy", current="x", mu=-5.5)
+c = h.get_nonlinear_drude_components(5, nk=48, mu=-5.5)   # {"x^l1 y^l2;b": value}
+```
+
+`field` carries one character per power of the electric field, so `field="yyyyy"` is the fifth-order response to `E_y`; `current` is the direction the current is measured in. `channel` selects `"spin"`, `"charge"`, `"up"` or `"dn"`. Units are `e = hbar = 1` and the zone integral carries the `1/(2 pi)^D` of a density, as in the rest of `conductivity.py`; `fermi_volume` uses the same normalization, so ratios to it reproduce the paper's analytic results directly.
+
+The X-wave lattice models themselves are `specialhamiltonian.xwave_magnet(wave=...)`, with `pwave_magnet`, `dwave_altermagnet`, `fwave_magnet`, `gwave_altermagnet` and `iwave_altermagnet` as named aliases. Each is Ezawa's tight-binding model on the host lattice its symmetry requires -- square for p, d and g, triangular for f and i -- built by expanding his sine-product form factors exactly into real-space hoppings.
+
+Three things are worth knowing before quoting a result.
+
+**Orders above the threshold do not vanish.** On a lattice the form factor carries higher harmonics beyond the leading one, so a d-wave altermagnet responds at `l = 1` but also at `l = 3` and `l = 5`. It is the *absence of everything below* the threshold that carries the information, not the presence of a single isolated order.
+
+**An insulator gives zero at every order, which is a trap.** With the chemical potential in a gap, `f` is 1 on every valence band and 0 on every conduction band, so the integrand is a pure k-derivative of `Tr(P H)` with `P` the valence projector; that is smooth and periodic, and the zone integral of a derivative of a smooth periodic function vanishes. The result is an exact zero at every order -- including the fifth. So a gapped system reproduces the "nothing below fifth order" pattern trivially, and the fingerprint only identifies i-wave order if the fifth order is simultaneously shown to be present. That requires a metal.
+
+**A spin-degenerate state is flagged, not silently answered.** The spin channel is only meaningful if the two spin channels have different bands. When they do not -- a compensated Neel state on a bipartite lattice is PT symmetric and exactly spin degenerate, an *antiferromagnet* rather than an altermagnet -- what comes back is rounding, and it does not look small: on a multiorbital cell the two channels are diagonalized independently, so near a degeneracy their eigenvector gauges differ and the high-order derivatives drift apart far more than the band energies do. Measured on a 44-site honeycomb antidot Neel state, bands agreeing to `1.2e-14` produced a fifth-order "spin response" of `1.3e-3`, which looks exactly like a signal. The module therefore checks the band splitting itself and raises a `RuntimeWarning` when it is below `1e-10` of the bandwidth. A genuine altermagnet is nowhere near that floor: the response stays exactly linear in the order parameter down to `J ~ 1e-9`.
+
+**Which X-waves a real Hamiltonian can carry.** Reality of the Hamiltonian is itself a selection rule, and a useful one when building or diagnosing a model. With real hoppings and no spin-orbit coupling, `H_s(k)* = H_s(-k)`, so `eps_s(k) = eps_s(-k)` and the splitting satisfies `Delta(phi+180 deg) = Delta(phi)` -- every *odd* harmonic is forbidden. Add a C3 axis, which kills every `l` not divisible by 3, and only `l = 6, 12, ...` survives: **a real, SOC-free, C3-symmetric cell is necessarily i-wave**, and no choice of vacancy pattern or supercell can make it f-wave. The models here bear this out -- p-wave and f-wave come out with *imaginary* hoppings, while d, g and i wave are real -- so an f- or g-wave fixture cannot be built from a real C3 model and needs complex hoppings or lower symmetry.
+
+**Spin must be a good quantum number.** The derivation treats each spin channel as an independent single-band problem, so a Hamiltonian with spin-orbit coupling is rejected rather than silently mistreated: with Rashba or Kane-Mele terms the nonlinear response also picks up quantum-metric and Berry-curvature-dipole contributions ([arXiv:2409.09241](https://arxiv.org/abs/2409.09241)) that this formula does not contain.
+
+Multiorbital cells are supported and are the interesting case -- superlattices, antidot lattices, multilayers. There the band energies are eigenvalues rather than matrix elements, and their derivatives are obtained by Rayleigh-Schroedinger perturbation theory carried out in a truncated two-variable Taylor ring, which delivers every mixed derivative up to sixth order to machine precision. Finite differences are not an option here and the module does not offer them: the selection rule is a statement that certain derivatives vanish *identically*, and a difference stencil manufactures a spurious nonzero value exactly there -- measured at `1e-4` against a true zero on a case where the surviving response is `0.6`, which would read as the response appearing at the wrong order and so invert the conclusion. The expansion is done in the block (Kato) form, grouping degenerate multiplets and using the trace of the block effective Hamiltonian, because a cell with a C3 or C6 axis has two-dimensional irreducible representations and hence exactly degenerate bands at its high-symmetry points -- unavoidable for the superlattices this is most useful for. A `supercell(2)`, whose folded bands are degenerate along whole curves and so exercises that treatment everywhere, reproduces the primitive-cell answer on the equivalent k-mesh to `1e-16` at first order and `1e-14` at fifth -- with the four orders below the fifth staying at machine zero in both, which is the property that actually matters.
+
+See `examples/2d/xwave_nonlinear_spin_current/main.py` for a runnable version printing the whole selection-rule table.
+
 ## Spin operators
 
 The simplest operators are the spin operators
@@ -3344,6 +3398,36 @@ the self-consistent Nelson-Kosterlitz criterion
 $T_{\rm BKT} = (\pi/8)D_s(T_{\rm BKT})$ at frozen $|\Delta|$. Arguments
 `nk=20`, `tmax=None`, `tol=1e-6`, `maxite=60`, plus `gauge`. Returns a
 float.
+
+### h.get_nonlinear_drude_conductivity()
+Compute the l-th order nonlinear Drude conductivity `sigma^{x^l1 y^l2 ; b}` of a collinear magnet, the quantity whose lowest nonvanishing order measures the X-wave index of an altermagnet (p:0, d:1, f:2, g:3, i:5). Requires spin to be a good quantum number.
+
+Optional arguments
+
+- field = "x": one character per power of the electric field, e.g. "yyyyy" for the fifth-order response to E_y
+- current = "x": Cartesian direction of the measured current
+- channel = "spin": "spin", "charge", "up" or "dn"
+- nk = 100: k-points per periodic direction
+- T = 0.01: temperature of the Fermi occupations
+- mu = 0.0: chemical potential
+- tau = 1.0: relaxation time; the l-th order response scales as tau^l
+- omega = 0.0: frequency, entering as 1/(i omega + 1/tau)^l
+- degeneracy_tol = 1e-8: multiorbital cells only, the relative band spacing below which bands are grouped into a degenerate multiplet
+
+Returns a complex scalar
+
+### h.get_nonlinear_drude_components()
+Every component of the l-th order nonlinear Drude conductivity, as a dict `{"x^l1 y^l2;b": value}`. Shares one k-mesh across the components, so it is much cheaper than the equivalent individual calls.
+
+### h.get_nonlinear_drude_orders()
+X-wave selection-rule sweep: for each order l = 0..lmax, the largest `|sigma^{x^l1 y^l2 ; b}|` over that order's components. The lowest l with a nonzero entry is the wave index readout.
+
+Optional arguments
+
+- lmax = 6: highest order to sweep
+- plus every optional argument of h.get_nonlinear_drude_conductivity()
+
+Returns a list of floats
 
 ### h.get_optical_conductivity()
 Frequency-dependent conductivity tensor $\sigma_{ab}(\omega)$ in the

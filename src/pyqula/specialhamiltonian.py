@@ -245,3 +245,11 @@ from .specialhamiltoniantk.decorated import decorated_triangular
 
 # altermagnetism
 from .specialhamiltoniantk.altermagnets import square_altermagnet
+
+# X-wave (p, d, f, g, i) collinear magnets, Ezawa arXiv:2411.16036
+from .specialhamiltoniantk.xwave import xwave_magnet
+from .specialhamiltoniantk.xwave import pwave_magnet
+from .specialhamiltoniantk.xwave import dwave_altermagnet
+from .specialhamiltoniantk.xwave import fwave_magnet
+from .specialhamiltoniantk.xwave import gwave_altermagnet
+from .specialhamiltoniantk.xwave import iwave_altermagnet

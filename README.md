@@ -100,6 +100,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Electronic structure unfolding in supercells [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
 - Twisted bilayer graphene structural relaxation (GSFE + elastic energy minimization, AA-region shrinkage and AB/BA domain formation below a few degrees of twist)
 - Energy-resolved spin splitting of collinear magnets and altermagnets, either as a broadened density or as the maximum over the whole Brillouin zone
+- Nonlinear Drude spin conductivity at arbitrary order in the electric field, whose lowest nonvanishing order identifies the X-wave index (p, d, f, g, i) of an altermagnet without any spin-orbit coupling, together with the X-wave tight-binding models themselves
 
 ## Interacting mean-field Hamiltonians ##
 - Selfconsistent mean-field calculations with local/non-local interactions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/01_local_nonlocal_scf.ipynb)

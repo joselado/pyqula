@@ -22,5 +22,12 @@ already reached once.
   and exact-reference measurements validating all three, and the one thing
   still open (the transverse exchange rung in the pair-basis kernels).
 
+- [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
+  X-wave nonlinear Drude spin conductivity covers, the measured performance
+  and its nb^3 scaling, why the thermal (spin-Nernst) channel is
+  deliberately unbuilt (the paper's linear i-wave result does not
+  reproduce, with the Brillouin-zone-domain trap that produced a false
+  positive), and why a gapped system returns an exact zero at every order.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

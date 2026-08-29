@@ -202,3 +202,106 @@ def sum_rule_weight(h,nk=20,T=0.05):
     Drude weight plus the interband spectral weight. Returns a real,
     symmetric 3x3 array, in units of e^2/hbar times energy."""
     return kubo.sum_rule_weight(h,nk=nk,T=T)
+
+
+from .conductivitytk import nonlineardrude
+
+
+def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
+        nk=100,T=0.01,mu=0.,tau=1.,omega=0.,degeneracy_tol=1e-8):
+    """l-th order nonlinear Drude conductivity sigma^{x^l1 y^l2 ; b} of a
+    collinear magnet, the quantity whose lowest nonvanishing order measures
+    the X-wave index of an altermagnet.
+
+    The current is expanded in the electric field as
+
+      j_b = sum_{l1,l2} sigma^{x^l1 y^l2 ; b} (E_x)^l1 (E_y)^l2,
+
+    and solving the semiclassical Boltzmann equation recursively gives, for
+    each spin channel s (spin must be a good quantum number),
+
+      sigma_s^{x^l1 y^l2 ; b} = (-e/hbar)^(l+1)/(i omega + 1/tau)^l
+            * Int d^Dk/(2 pi)^D f_s^(0) d^(l+1) eps_s
+                                / (dk_x^l1 dk_y^l2 dk_b),   l = l1+l2
+
+    with sigma_spin = (sigma_up - sigma_dn)/2 and sigma_charge = sigma_up +
+    sigma_dn (Ezawa, Phys. Rev. B 111, 125420 (2025), arXiv:2411.16036).
+
+    The physics: an X-wave form factor is a k-space harmonic of order l+1,
+    so its (l+1)-th derivative is the first that is a nonzero constant while
+    every lower one integrates to zero over the Brillouin zone. The spin
+    response therefore switches on at
+
+      p-wave: l = 0     d-wave: l = 1     f-wave: l = 2
+      g-wave: l = 3     i-wave: l = 5
+
+    and reading off the lowest order at which a nonlinear spin current
+    appears identifies the wave index -- a purely electrical measurement of
+    altermagnetic order that needs no spin-orbit coupling. Orders *above*
+    the threshold are generically nonzero too on a lattice (the lattice form
+    factor contains higher harmonics beyond the leading one), so it is the
+    lowest nonvanishing order, not the only nonvanishing one, that carries
+    the information. Use nonlinear_drude_orders for that sweep.
+
+    Parameters
+    ----------
+    h : Hamiltonian
+      a 1D or 2D spinful Hamiltonian in which spin is a good quantum number
+      (no spin-orbit coupling; this is checked, and a spin-mixing
+      Hamiltonian is rejected rather than silently mistreated)
+    field : str
+      one character per power of the electric field, e.g. "yyyyy" for the
+      fifth-order response to E_y. The empty string is l = 0, the
+      field-free persistent spin current.
+    current : str
+      Cartesian direction b of the measured current
+    channel : "spin", "charge", "up" or "dn"
+    nk : int
+      k-points per periodic direction (a 2D calculation uses nk*nk)
+    T : float
+      temperature of the Fermi occupations
+    mu : float
+      chemical potential (pyqula puts the Fermi level at zero, so this is
+      measured from there)
+    tau : float
+      relaxation time; the l-th order response scales as tau^l
+    omega : float
+      frequency of the applied field, entering as 1/(i omega + 1/tau)^l
+    degeneracy_tol : float
+      multiorbital cells only. The band derivatives are obtained exactly,
+      by Rayleigh-Schroedinger perturbation theory in a truncated Taylor
+      ring, whose reduced resolvent divides by the band spacing; bands
+      closer than this on a mesh point raise rather than return nonsense.
+      A Dirac point is the usual culprit -- see the error message.
+
+    Units are e = hbar = 1 and the Brillouin-zone integral carries the
+    1/(2 pi)^D of a density, as in the rest of this module; see
+    conductivitytk/nonlineardrude.py. Returns a complex scalar.
+    """
+    return nonlineardrude.nonlinear_drude_conductivity(h,field=field,
+            current=current,channel=channel,nk=nk,T=T,mu=mu,tau=tau,
+            omega=omega,degeneracy_tol=degeneracy_tol)
+
+
+def nonlinear_drude_components(h,l,**kwargs):
+    """Every component of the l-th order nonlinear Drude conductivity, as
+    a dict {"x^l1 y^l2;b": value}. Sharing one k-mesh and one set of Bloch
+    phases makes this much cheaper than the equivalent individual calls to
+    nonlinear_drude_conductivity, which it otherwise matches exactly."""
+    return nonlineardrude.nonlinear_drude_components(h,l,**kwargs)
+
+
+def nonlinear_drude_orders(h,lmax=6,**kwargs):
+    """X-wave selection-rule sweep: for each order l = 0..lmax, the largest
+    |sigma^{x^l1 y^l2 ; b}| over that order's components. The lowest l with
+    a nonzero entry is the wave index readout (p:0, d:1, f:2, g:3, i:5).
+    Returns a list of floats."""
+    return nonlineardrude.nonlinear_drude_orders(h,lmax=lmax,**kwargs)
+
+
+def fermi_volume(h,nk=100,T=0.01,mu=0.,channel="charge"):
+    """Fermi volume V^F = Int d^Dk/(2 pi)^D f^(0), in the same
+    normalization as the conductivities above. It is what the analytic
+    results of arXiv:2411.16036 are expressed in terms of, so ratios of a
+    conductivity to it are free of the (2 pi)^D convention."""
+    return nonlineardrude.fermi_volume(h,nk=nk,T=T,mu=mu,channel=channel)

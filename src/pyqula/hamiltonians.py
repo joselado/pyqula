@@ -146,6 +146,24 @@ class Hamiltonian():
         from . import conductivity
         return conductivity.optical_conductivity(h,**kwargs)
 
+    def get_nonlinear_drude_conductivity(h,**kwargs):
+        """l-th order nonlinear Drude conductivity sigma^{x^l1 y^l2 ; b},
+        whose lowest nonvanishing order measures the X-wave index of a
+        collinear magnet, see conductivity.py for the formula"""
+        from . import conductivity
+        return conductivity.nonlinear_drude_conductivity(h,**kwargs)
+
+    def get_nonlinear_drude_components(h,l,**kwargs):
+        """Every component of the l-th order nonlinear Drude conductivity"""
+        from . import conductivity
+        return conductivity.nonlinear_drude_components(h,l,**kwargs)
+
+    def get_nonlinear_drude_orders(h,**kwargs):
+        """X-wave selection-rule sweep of the nonlinear Drude spin
+        conductivity over orders l = 0..lmax"""
+        from . import conductivity
+        return conductivity.nonlinear_drude_orders(h,**kwargs)
+
     def get_drude_weight(h,**kwargs):
         """Drude (intraband) weight tensor, the Fermi-surface average of
         the squared band velocity, see conductivity.py"""
