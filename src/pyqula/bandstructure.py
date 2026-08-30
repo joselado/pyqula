@@ -165,8 +165,8 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
       # common case (plain diagonalization, no operator): batch every
       # k-point's H(k) into one numba eigh call instead of pcall-ing
       # algebra.eigvalsh per k-point
-      from .htk.eigenvectors import peigvalsh
-      mats = np.array([hkgen(k) for k in kpath],dtype=np.complex128)
+      from .htk.eigenvectors import peigvalsh, hk_matrix_batch
+      mats = hk_matrix_batch(hkgen,kpath)
       es_batch = np.sort(peigvalsh(mats),axis=1) # (nk,n) sorted eigenvalues
       esk = [] # list of per-k arrays, same shape as the old getek(k) output
       for k in range(len(kpath)):

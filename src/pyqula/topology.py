@@ -250,7 +250,12 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
         ks = klist.kmesh(h.dimensionality,nk=nk) # get the mesh
     else: ks = kmesh # use the provided kmesh
     ik = 0
-    bs = parallel.pcall(fberry,ks) # compute all the Berry curvatures
+    from .topologytk.berry import use_berry_curvature_mesh
+    if use_berry_curvature_mesh(h,mode=mode): # batched, numba-parallel path
+        from .topologytk.berry import berry_curvature_mesh
+        bs = berry_curvature_mesh(h,ks,dk=dk)
+    else: # per-kpoint dispatch
+        bs = parallel.pcall(fberry,ks) # compute all the Berry curvatures
     # write in file
     fo = open("BERRY_CURVATURE.OUT","w") # open file
     for (k,b) in zip(ks,bs):
@@ -382,7 +387,13 @@ def get_berry_curvature_master(h,dk=None,nk=100,
            b = berry_green(f,k=k,operator=operator,gI=gI)
         else: raise
         return b
-    bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
+    from .topologytk.berry import use_berry_curvature_mesh
+    if use_berry_curvature_mesh(h,mode=mode,window=window,max_waves=max_waves):
+        # batched, numba-parallel path -- no interprocess dispatch
+        from .topologytk.berry import berry_curvature_mesh
+        bs = berry_curvature_mesh(h,np.array([R@ki for ki in ks]),dk=dk)
+    else: # per-kpoint dispatch
+        bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
     if write: # write result in a file
         fo = open("BERRY_MAP.OUT","w") # open file
         for (b,k) in zip(bs,ks): # write everything

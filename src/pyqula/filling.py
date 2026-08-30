@@ -42,12 +42,12 @@ def get_fermi_energy(es,filling,fermi_shift=0.0,
 def eigenvalues(h0,nk=10,notime=True):
     """Return all the eigenvalues of a Hamiltonian"""
     from . import klist
-    from .htk.eigenvectors import peigvalsh
+    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
     h = h0.copy() # copy hamiltonian
     h = h.get_dense()
     ks = klist.kmesh(h.dimensionality,nk=nk) # get grid
     hkgen = h.get_hk_gen() # get generator
-    mats = np.array([hkgen(k) for k in ks],dtype=np.complex128) # H(k) batch
+    mats = hk_matrix_batch(hkgen,ks) # H(k) batch, densified
     es = peigvalsh(mats) # batched numba eigh
     es = es.reshape(es.shape[0]*es.shape[1])
     return es # return all the eigenvalues

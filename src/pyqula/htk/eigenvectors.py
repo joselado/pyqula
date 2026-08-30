@@ -4,6 +4,16 @@ from ..klist import kmesh
 import numpy as np
 import scipy.sparse.linalg as slg
 
+def hk_matrix_batch(f,ks):
+  """Evaluate a Hamiltonian generator f at every k in ks and stack the
+  results into one dense complex128 array, densifying any sparse output
+  along the way (see algebra.todense). Every call site that batches
+  k-point Hamiltonians for parallel_diagonalization/peigvalsh should go
+  through this, so a sparse Hamiltonian never reaches numba's dense eigh
+  as a scipy sparse matrix (which numba cannot handle)."""
+  return np.array([algebra.todense(f(k)) for k in ks],dtype=np.complex128)
+
+
 def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
         numw=None,energy=0.0):
   from scipy.sparse import csc_matrix as csc
@@ -27,7 +37,7 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
         fk = lambda k: slg.eigsh(csc(f(k)),k=numw,which="LM",sigma=energy,tol=1e-5)
         vvs = parallel.pcall(fk,kp)
     else: # dense Hamiltonians
-      mats = np.array([algebra.todense(f(k)) for k in kp],dtype=np.complex128) # H(k) for every k
+      mats = hk_matrix_batch(f,kp) # H(k) for every k, densified
       es_batch,ws_batch = parallel_diagonalization(mats) # batched numba eigh
       vvs = [(es_batch[i],ws_batch[i]) for i in range(nkp)]
     nume = sum([len(v[0]) for v in vvs]) # number of eigenvalues calculated

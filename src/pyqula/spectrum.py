@@ -43,8 +43,8 @@ def boolean_fermi_surface(h,write=True,output_file="BOOL_FERMI_MAP.OUT",
         kyout.append(y)
     rs = np.array(rs) # real space vectors
     ks = np.array([R@r for r in rs]) # change of basis
-    from .htk.eigenvectors import peigvalsh
-    hks = np.array([hk_gen(k) for k in ks],dtype=np.complex128) # H(k) batch
+    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
+    hks = hk_matrix_batch(hk_gen,ks) # H(k) batch, densified
     es_batch = peigvalsh(hks) # batched numba eigh, shape (nk*nk,n)
     for evals in es_batch: # loop over kpoints
       de = np.abs(evals - e) # difference with respect to fermi
@@ -258,13 +258,13 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
   if mode in ("mesh","random") and not use_kpm and nbands is None:
     # dense, plain-diagonalization case: batch all k-points into one
     # numba eigh call instead of pcall-ing algebra.eigvalsh per k-point
-    from .htk.eigenvectors import peigvalsh
+    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
     if mode=="mesh":
       from .klist import kmesh
       kp = kmesh(h.dimensionality,nk=nk)
     else: # random
       kp = [np.random.random(3) for i in range(nk)] # random points
-    mats = np.array([f(k) for k in kp],dtype=np.complex128) # H(k) batch
+    mats = hk_matrix_batch(f,kp) # H(k) batch, densified
     es_batch = peigvalsh(mats) # (nk,n) eigenvalues
     etot = np.mean([np.sum(es[es<fermi]) for es in es_batch]) # compute total energy
   elif mode=="mesh":
@@ -423,9 +423,9 @@ def eigenvalues_kmesh(h,nk=20):
     hkgen = h.get_hk_gen() # get the generator
     kx = np.linspace(0.,1.,nk,endpoint=False)
     ky = np.linspace(0.,1.,nk,endpoint=False)
-    from .htk.eigenvectors import peigvalsh
-    mats = np.array([hkgen([ik,jk]) for ik in kx for jk in ky],
-            dtype=np.complex128) # H(k) batch, ik outer, jk inner
+    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
+    mats = hk_matrix_batch(hkgen,[[ik,jk] for ik in kx for jk in ky])
+    # H(k) batch, ik outer, jk inner
     es_batch = peigvalsh(mats) # batched numba eigh, shape (nk*nk,ne)
     es = es_batch.reshape(nk,nk,ne) # reshape to match original layout
     return es # return all the energies

@@ -156,12 +156,30 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
                  mode="ED",**kwargs):
     """Calculate the KDOS bands using the KPM"""
     if use_kpm: mode ="KPM" # conventional method
+    # normalize the kpath up front: the ED branch below needs the actual
+    # kpoints (it indexes get_bands's output by k-index), and get_kpath
+    # also expands a list of high-symmetry-point labels into vectors
+    kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
     if mode=="ED":
-        from . import dos
-        def pfun(k):
-          (es,ds) = h.get_dos(ks=[k],operator=operator,energies=energies,
-                  delta=delta,**kwargs)
-          return energies,ds
+        # batched path: diagonalize the whole kpath at once via get_bands
+        # (already numba-parallel, see bandstructure.get_bands_nd) instead
+        # of dispatching one h.get_dos call per kpoint through an outer
+        # process pool -- that wrapped many cheap single-kpoint
+        # diagonalizations in pcall, exactly the overhead-dominates-work
+        # failure mode the rest of this codebase's pcall->prange migration
+        # was built to avoid.
+        from .dostk.eigtodos import calculate_dos
+        bout = h.get_bands(kpath=kpath,operator=operator,write=False,**kwargs)
+        kidx = bout[0].astype(int) # k-index per row
+        es_col = bout[1] # energy per row
+        w_col = bout[2] if len(bout)>2 else None # operator weight per row, if any
+        out = [] # (energies,dos) pair per kpoint, matching the old pfun contract
+        for ik in range(len(kpath)):
+            mask = kidx==ik
+            w_k = w_col[mask] if w_col is not None else None
+            ys = calculate_dos(es_col[mask],energies,delta,w=w_k)
+            ys *= 1./np.pi # normalization of the Lorentzian, as in dos.dos_kmesh
+            out.append((energies,ys))
     elif mode=="green":
       f = h.get_gk_gen(delta=delta) # Green generator
       def pfun(k): # do it for this k-point
@@ -170,6 +188,7 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
               m = green.GtimesO(m,operator,k=k)
               return -algebra.trace(m).imag/np.pi # return DOS, same normalization as mode="ED"
           return energies,np.array([gfun(e) for e in energies])
+      out = parallel.pcall(pfun,kpath) # compute all
     elif mode=="KPM": # KPM method
       if operator is not None: 
           from .operators import Operator
@@ -186,11 +205,9 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
                      ewindow=ewindow,ntries=ntries,x=energies,
                      **kwargs) # compute
         return (x,y)
-    if kpath is None:
-        kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
+      out = parallel.pcall(pfun,kpath) # compute all
     ### Now compute and write in a file
     ik = 0
-    out = parallel.pcall(pfun,kpath) # compute all
     fo = open("KDOS_BANDS.OUT","w") # open file
     for k in kpath: # loop over kpoints
       (x,y) = out[ik] # get this one
