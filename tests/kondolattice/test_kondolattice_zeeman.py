@@ -29,7 +29,8 @@ def _chain():
 def test_zero_J_field_reproduces_bare_zeeman_on_both_sublattices():
     """With J=0 there is no Kondo coupling at all: the converged
     Hamiltonian is exactly the bare (field-split) conduction + f bands, so
-    get_magnetization must reproduce the input field exactly on BOTH the
+    get_magnetization(mode="field") must reproduce the input field
+    exactly on BOTH the
     conduction site and the f site -- a convention-free sign/normalization
     check, same idea as the analogous spinon test."""
     h = _chain()
@@ -39,7 +40,11 @@ def test_zero_J_field_reproduces_bare_zeeman_on_both_sublattices():
     assert h2 is not None, "SCF did not converge"
     assert np.allclose(h2.local_occupation, 1.0, atol=1e-3)
     assert np.allclose(h2.hybridization, 0.0, atol=1e-8)
-    assert np.allclose(h2.get_magnetization(), [[0., 0., 0.3], [0., 0., 0.3]],
+    # mode="field": this pins the sign/normalization of the readout of
+    # the magnetic term in the Hamiltonian against a known input field,
+    # not the moment it induces (which is get_magnetization's default)
+    assert np.allclose(h2.get_magnetization(mode="field"),
+            [[0., 0., 0.3], [0., 0., 0.3]],
             atol=1e-6)
 
 
@@ -123,4 +128,5 @@ def test_add_exchange_matches_add_zeeman():
     assert h2_zeeman is not None and h2_exchange is not None
     assert np.allclose(h2_zeeman.local_occupation, h2_exchange.local_occupation)
     assert np.allclose(h2_zeeman.hybridization, h2_exchange.hybridization)
-    assert np.allclose(h2_zeeman.get_magnetization(), h2_exchange.get_magnetization())
+    assert np.allclose(h2_zeeman.get_magnetization(mode="field"),
+                       h2_exchange.get_magnetization(mode="field"))

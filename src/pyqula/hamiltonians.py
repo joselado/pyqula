@@ -868,26 +868,28 @@ class Hamiltonian():
     def generate_spin_spiral(self,**kwargs):
         """ Generate a spin spiral antsaz in the Hamiltonian """
         return rotate_spin.generate_spin_spiral(self,**kwargs)
-    def get_magnetization(self,mode="field",**kwargs):
-        """Return the site-resolved magnetic order, as an (nsites,3) array.
+    def get_magnetization(self,mode="vev",**kwargs):
+        """Return the site-resolved magnetization, as an (nsites,3) array.
 
-        Two different quantities go by this name, and which one you want
-        depends on what you are doing:
+        Two different quantities go by this name:
 
-        - mode="field" (the default, and what this method has always
-          returned) reads the magnetic *term written in the Hamiltonian*,
-          i.e. the coefficients of sigma_x/y/z on each site, via
-          extract("mx"/"my"/"mz"). After a self-consistent calculation
-          that term is the mean-field exchange field, which is the natural
-          order parameter of the loop and is proportional -- not equal --
-          to the moment. For a Hamiltonian where you put the field in by
-          hand (add_zeeman/add_exchange) this returns exactly the field
-          you put in, not the polarization it induces.
+        - mode="vev" (the default) returns the physical magnetization: the
+          per-site expectation value (<S_x>,<S_y>,<S_z>) over the occupied
+          states, i.e. get_vev("sx"/"sy"/"sz"). This is the moment, and it
+          is what to report as one. Being a Brillouin-zone integral it
+          needs a k-mesh: pass nk, or rely on the mesh a self-consistent
+          Hamiltonian remembers from its own loop.
 
-        - mode="vev" returns the actual per-site expectation value
-          (<S_x>,<S_y>,<S_z>) of the occupied states, i.e.
-          get_vev("sx"/"sy"/"sz"). This is the physical magnetization, and
-          it is what you want if you are reporting a moment.
+        - mode="field" reads the magnetic *term written in the
+          Hamiltonian* instead, i.e. the coefficients of sigma_x/y/z on
+          each site, via extract("mx"/"my"/"mz"). After a self-consistent
+          calculation that term is the mean-field exchange field: the
+          natural order parameter of the loop, proportional -- not equal
+          -- to the moment. On a Hamiltonian whose field was put in by
+          hand with add_zeeman/add_exchange it hands that field straight
+          back, rather than the polarization the field induces. That used
+          to be the default, which made it easy to report a field as if it
+          were a moment.
 
         Any extra keyword is forwarded to get_vev (e.g. nk) in "vev" mode.
         """
@@ -896,9 +898,25 @@ class Hamiltonian():
             my = self.extract(name="my")
             mz = self.extract(name="mz")
         elif mode=="vev":
-            mx = self.get_vev("sx",**kwargs)
-            my = self.get_vev("sy",**kwargs)
-            mz = self.get_vev("sz",**kwargs)
+            # the moment is a Brillouin-zone integral, so unlike the field
+            # readout it has a k-mesh and needs a fine enough one: a
+            # weakly polarized metal whose moment is 0.02 comes out as
+            # exactly 0 on get_vev's default 30-point mesh. A Hamiltonian
+            # produced by a self-consistent calculation remembers the mesh
+            # it was converged on, so use that unless told otherwise.
+            if "nk" not in kwargs and getattr(self,"nk",None) is not None:
+                kwargs["nk"] = self.nk
+            # one Brillouin-zone sweep for the three components, rather
+            # than one per component: spectrum.ev takes a list of
+            # operators and shares the diagonalization between them
+            nsites = len(self.geometry.r) # number of sites
+            idx = [operators.index(self,n=[i]) for i in range(nsites)]
+            ops = []
+            for name in ["sx","sy","sz"]:
+                op = self.get_operator(name) # spin operator
+                ops += [(o*op).get_matrix() for o in idx]
+            out = spectrum.ev(self,operator=ops,**kwargs).real
+            mx,my,mz = out[:nsites],out[nsites:2*nsites],out[2*nsites:]
         else:
             raise ValueError("unknown magnetization mode '"+str(mode)
               +"', expected 'field' (the magnetic term in the Hamiltonian) "

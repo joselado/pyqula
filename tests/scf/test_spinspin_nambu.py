@@ -28,7 +28,10 @@ def test_szsz_on_nambu_matches_normal_state_electron_sector():
     scf_normal = meanfield.SzSz(h_normal, J1=-2.0, mf="ferroZ", nk=10,
             maxerror=MAXERROR, mix=0.3, filling=0.2)
     assert scf_normal.converged
-    m_normal = scf_normal.hamiltonian.get_magnetization()
+    # mode="field": the Nambu side below extracts its z-magnetization
+    # from the mean-field matrix itself, so this must be the same
+    # quantity, not the moment the field induces
+    m_normal = scf_normal.hamiltonian.get_magnetization(mode="field")
 
     h_nambu = g.get_hamiltonian(has_spin=True)
     h_nambu.setup_nambu_spinor()

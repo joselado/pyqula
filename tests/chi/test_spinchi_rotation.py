@@ -66,7 +66,11 @@ def test_spinchi_full_is_rotationally_symmetric(RPA):
     # field alone would give with no interaction-driven contribution at all
     # (and well below the ~3.0 actually converged to here), so this also
     # catches a regression where the SCF stops contributing anything.
-    mtot = h.get_magnetization().sum(axis=0)
+    # mode="field": the threshold below is calibrated on the mean-field
+    # exchange term (the order parameter of the SCF loop), which is what
+    # "the SCF stopped contributing" would show up in. The default,
+    # mode="vev", is the induced moment and has a different scale.
+    mtot = h.get_magnetization(mode="field").sum(axis=0)
     assert np.linalg.norm(mtot) > 1.0, "converged to a non-magnetic solution"
     assert abs(np.dot(mtot/np.linalg.norm(mtot), v) - 1.) < 1e-3
 

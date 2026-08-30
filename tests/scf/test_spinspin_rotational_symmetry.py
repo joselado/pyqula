@@ -97,7 +97,11 @@ def test_jinteraction_random_direction_guess_gives_collinear_moment(seed):
     assert scf.converged
     m = np.mean(scf.hamiltonian.get_magnetization(), axis=0)
     assert np.linalg.norm(m) > 0.05, "no sizable ordered moment developed"
-    cos_angle = np.dot(m/np.linalg.norm(m), v)
+    # the moment is ANTIparallel to the exchange field that seeded it (the
+    # term added is +h.sigma, so the occupied states polarize against it),
+    # so this pins the sign as well as the direction: a flipped component
+    # takes |cos| away from 1 for a generic direction
+    cos_angle = -np.dot(m/np.linalg.norm(m), v)
     assert cos_angle > 1 - 1e-3, \
         f"moment {m} is not collinear with guess direction {v} (cos={cos_angle})"
 
@@ -120,7 +124,12 @@ def test_sxsx_constrains_apply_in_the_lab_frame():
             mix=0.3, maxite=300, filling=0.2,
             constrains=["no_offplane_magnetism"])
     assert scf1.converged
-    mx1 = np.mean(np.abs(scf1.hamiltonian.get_magnetization()[:, 0]))
+    # mode="field" in this test: a constrain acts on the mean field, which
+    # is what "removed the order" means here. The moment would also carry a
+    # spurious 2/nk from the last, half-filled degenerate level of the
+    # coarse nk=10 mesh.
+    mx1 = np.mean(np.abs(
+        scf1.hamiltonian.get_magnetization(mode="field")[:, 0]))
     assert mx1 > 0.05, \
         "no_offplane_magnetism should not remove the (lab-frame) x order"
 
@@ -129,7 +138,8 @@ def test_sxsx_constrains_apply_in_the_lab_frame():
             mix=0.3, maxite=300, filling=0.2,
             constrains=["no_inplane_magnetism"])
     assert scf2.converged
-    m2 = np.mean(np.abs(scf2.hamiltonian.get_magnetization()), axis=0)
+    m2 = np.mean(np.abs(
+        scf2.hamiltonian.get_magnetization(mode="field")), axis=0)
     assert np.max(m2) < 1e-3, \
         f"no_inplane_magnetism should remove all order here: {m2}"
 

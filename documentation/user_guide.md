@@ -3024,30 +3024,38 @@ Optional arguments:
 - nk=30: k-point density of the Brillouin-zone sum
 
 ### h.get_magnetization()
-Site-resolved magnetic order, as an `(nsites,3)` array. Two different
+Site-resolved magnetization, as an `(nsites,3)` array. Two different
 quantities go by this name, and the `mode` argument picks between them:
 
-- `mode="field"` (the default) reads the magnetic *term written in the
-  Hamiltonian*, i.e. the coefficients of $\sigma_{x,y,z}$ on each site.
-  After a self-consistent calculation this is the mean-field exchange
-  field, the natural order parameter of the loop, which is proportional --
-  not equal -- to the moment. On a Hamiltonian whose field you put in by
-  hand with `add_zeeman`/`add_exchange`, it returns exactly that field
-  back, not the polarization it induces
-- `mode="vev"` returns the physical per-site expectation value
-  $(\langle S_x\rangle,\langle S_y\rangle,\langle S_z\rangle)$, i.e.
-  `get_vev("sx"/"sy"/"sz")`. This is what to report as a magnetic moment
+- `mode="vev"` (the default) returns the physical moment: the per-site
+  expectation value
+  $(\langle S_x\rangle,\langle S_y\rangle,\langle S_z\rangle)$ over the
+  occupied states, i.e. `get_vev("sx"/"sy"/"sz")`. Being a Brillouin-zone
+  integral it needs a k-mesh -- pass `nk`, or rely on the mesh a
+  self-consistent Hamiltonian remembers from its own loop. On a metal at
+  $T=0$ the moment is quantized in steps of $2/n_k$, so use a fine enough
+  mesh (or `mode="field"`) when comparing weakly polarized states
+- `mode="field"` reads the magnetic *term written in the Hamiltonian*
+  instead, i.e. the coefficients of $\sigma_{x,y,z}$ on each site. After a
+  self-consistent calculation this is the mean-field exchange field: the
+  natural order parameter of the loop, proportional -- not equal -- to the
+  moment, and continuous where the moment is quantized. On a Hamiltonian
+  whose field you put in by hand it hands that field straight back
+
+Note the sign: `add_zeeman`/`add_exchange` add $+\vec h\cdot\vec\sigma$, so
+the occupied states polarize *against* $\vec h$ and the moment comes out
+antiparallel to the field you applied.
 
 ```python
 h = geometry.chain().get_hamiltonian()
 h.add_exchange([0.,0.,0.5])
-h.get_magnetization()                  # [0,0,0.5], the field you put in
-h.get_magnetization(mode="vev",nk=40)  # the moment it actually induces
+h.get_magnetization(nk=40)         # the moment: [0,0,-0.167], against the field
+h.get_magnetization(mode="field")  # [0,0,0.5], the field you put in
 ```
 
 Optional arguments:
 
-- mode="field": `"field"` or `"vev"`, as above
+- mode="vev": `"vev"` or `"field"`, as above
 - any further keyword (e.g. nk) is forwarded to `get_vev` in `"vev"` mode
 
 

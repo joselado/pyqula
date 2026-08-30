@@ -63,9 +63,12 @@ def test_vjinteraction_combined_U_and_J_reinforce_each_other():
     scf_uj = meanfield.VJinteraction(h_uj, U=5.0, J1z=-1.0, **params)
     assert scf_u.converged and scf_j.converged and scf_uj.converged
 
-    mz_u = np.mean(np.abs(scf_u.hamiltonian.get_magnetization()[:, 2]))
-    mz_j = np.mean(np.abs(scf_j.hamiltonian.get_magnetization()[:, 2]))
-    mz_uj = np.mean(np.abs(scf_uj.hamiltonian.get_magnetization()[:, 2]))
+    # mode="field", the continuous order parameter of the loop: the moment
+    # itself is quantized in steps of 2/nk at T=0 on this metal, so all
+    # three runs sit on the same step and cannot be ordered
+    mzf = lambda scf: np.mean(np.abs(
+        scf.hamiltonian.get_magnetization(mode="field")[:, 2]))
+    mz_u, mz_j, mz_uj = mzf(scf_u), mzf(scf_j), mzf(scf_uj)
     assert mz_uj > max(mz_u, mz_j), \
         f"combined moment ({mz_uj}) should exceed either channel alone " \
         f"(U-only {mz_u}, Jz-only {mz_j})"
@@ -112,6 +115,7 @@ def test_vjinteraction_isotropic_combination_preserves_su2_symmetry():
         assert scf.converged
         m = np.mean(scf.hamiltonian.get_magnetization(), axis=0)
         assert np.linalg.norm(m) > 0.05
-        cos_angle = np.dot(m/np.linalg.norm(m), v)
+        # the moment is antiparallel to the exchange field that seeded it
+        cos_angle = -np.dot(m/np.linalg.norm(m), v)
         assert cos_angle > 1 - 1e-3, \
             f"moment {m} not collinear with guess {v} (cos={cos_angle})"

@@ -79,7 +79,14 @@ def test_vjinteraction_j1_ferromagnetic_moment_grows_with_coupling_strength():
         scf = VJinteraction(h, J1=J1, mf="ferroZ", nk=100, maxerror=1e-8,
                              mix=0.3, maxite=500, filling=0.5)
         assert scf.converged
-        return np.mean(np.abs(scf.hamiltonian.get_magnetization()[:, 2]))
+        # mode="field", i.e. the mean-field exchange term, is the
+        # continuous order parameter of the loop. The moment itself (the
+        # default) cannot resolve this comparison on a metal: at T=0 on an
+        # nk-point mesh it is quantized in steps of 2/nk, so both
+        # couplings below sit on the same single-k-point step (0.02 at
+        # nk=100) even though their exchange fields differ by 20x.
+        return np.mean(np.abs(
+            scf.hamiltonian.get_magnetization(mode="field")[:, 2]))
 
     mz_weak = mz(-0.1)
     mz_strong = mz(-2.0)

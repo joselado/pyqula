@@ -10,7 +10,11 @@ def _mz(J1, filling=0.2, nk=10, maxerror=1e-6, maxite=300):
     scf = meanfield.SzSz(h, J1=J1, mf="ferroZ", nk=nk, maxerror=maxerror,
             mix=0.3, maxite=maxite, filling=filling)
     assert scf.converged, "SCF did not converge"
-    m = scf.hamiltonian.get_magnetization()
+    # mode="field", the continuous order parameter of the loop. The moment
+    # cannot resolve this comparison on a metal: at T=0 on an nk-point mesh
+    # it is quantized in steps of 2/nk, so both couplings below land on the
+    # same single-step value.
+    m = scf.hamiltonian.get_magnetization(mode="field")
     return np.mean(np.abs(m[:, 2]))
 
 

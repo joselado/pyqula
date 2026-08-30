@@ -20,16 +20,21 @@ def _magnetization(g, J1, zeeman, seed=0, nk=24):
     h2 = h.get_mean_field_hamiltonian(J1=J1, nk=nk, mix=0.3,
             maxerror=1e-6, maxite=2000)
     assert h2 is not None, "SCF did not converge"
-    return h2.local_occupation, h2.get_magnetization()
+    # mode="field" reads the magnetic term written in the Hamiltonian,
+    # which is what these tests are about: they pin the sign and
+    # normalization of that readout against a known input field. The
+    # default, mode="vev", is the induced moment instead.
+    return h2.local_occupation, h2.get_magnetization(mode="field")
 
 
 def test_zero_exchange_field_reproduces_bare_zeeman_exactly():
     """With J1=0 the RVB mean field is identically zero (no exchange to
     decouple), so the converged Hamiltonian's intra is exactly hop0 (the
     bare Zeeman term) modulo a spin-symmetric constraint shift that cancels
-    in the up/down difference get_magnetization reads -- i.e. this is a
+    in the up/down difference the field readout sees -- i.e. this is a
     convention-free, exactly-solvable check that also pins down
-    get_magnetization's sign/normalization for the field-only case: the
+    get_magnetization(mode="field")'s sign/normalization for the
+    field-only case: the
     readout must equal the input field component for component, with zero
     on the other two axes."""
     g = geometry.chain()
@@ -100,4 +105,5 @@ def test_add_exchange_matches_add_zeeman():
             maxerror=1e-6, maxite=2000)
     assert h2 is not None
     assert np.allclose(h2.local_occupation, occ_zeeman, atol=1e-6)
-    assert np.allclose(h2.get_magnetization(), m_zeeman, atol=1e-6)
+    assert np.allclose(h2.get_magnetization(mode="field"), m_zeeman,
+                       atol=1e-6)
