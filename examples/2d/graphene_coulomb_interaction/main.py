@@ -23,11 +23,13 @@ g = g.supercell(6)
 h = g.get_hamiltonian(has_spin=True) # create hamiltonian of the system
 h = h.get_multicell()
 mf = scftypes.guess(h,mode="ferro",fun=1.0) 
-def vfun(r):
+# Vr is a distance-dependent density-density interaction V(r_i,r_j)
+def Vr(r1,r2):
+    r = np.sqrt((r1-r2).dot(r1-r2))
     if r<1e-2: return 0.0
     else: return 2.0*np.exp(-r)
-scf = scftypes.selfconsistency(h,nkp=10,filling=0.5,g=3.0,
-                mix=0.9,mf=mf,mode="fastCoulomb",vfun=vfun)
+scf = scftypes.selfconsistency(h,nk=10,filling=0.5,
+                mix=0.9,mf=mf,Vr=Vr)
 h = scf.hamiltonian
 (k,e,c) = h.get_bands(operator="sz")
 #print(h.extract("density"))

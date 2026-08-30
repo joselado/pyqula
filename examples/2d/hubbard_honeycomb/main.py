@@ -19,7 +19,7 @@ f = open("EVOLUTION.OUT","w") # file with the results
 for U in Us: # loop over Us
   h = g.get_hamiltonian() # create hamiltonian of the system
   # perform SCF with specialized routine for Hubbard
-  h = h.get_mean_field_hamiltonian(nk=13,filling=0.5,U=U,V=0.1,verbose=1,
+  h = h.get_mean_field_hamiltonian(nk=13,filling=0.5,U=U,V1=0.1,verbose=1,
                 mix=0.9,mf="antiferro")
   gap = h.get_gap() # compute the gap
   gaps.append(gap)

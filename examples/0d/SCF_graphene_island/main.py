@@ -32,8 +32,8 @@ h = g.get_hamiltonian(fun=fhop,has_spin=True) # get the Hamiltonian
 h.add_zeeman([0.,.4,0.])
 g.write()
 mf = scftypes.guess(h,mode="antiferro")
-scf = scftypes.selfconsistency(h,filling=0.5,g=1.0,
-                mix=0.9,mf=mf,mode="U")
+scf = scftypes.selfconsistency(h,filling=0.5,U=1.0,
+                mix=0.9,mf=mf)
 #scf.hamiltonian.get_bands()
 
 mag = scf.hamiltonian.get_magnetization()

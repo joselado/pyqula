@@ -55,7 +55,7 @@ empty `__init__.py`; with the default import mode pytest's package-root walk fro
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
 tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
-minutes, not under a minute. It currently collects **1087 tests** (`pytest tests --collect-only -q`);
+minutes, not under a minute. It currently collects **1225 tests** (`pytest tests --collect-only -q`);
 the old "~7.5 min for 406 tests" figure predates the Keldysh, transport and AAA suites and is stale —
 `tests/scf` alone is ~15 min and `tests/keldysh` ~12 min. A fresh whole-suite wall time still needs
 measuring on an idle machine; treat any timing taken while other jobs are running as meaningless.
@@ -130,7 +130,9 @@ from pyqula import geometry
 g = geometry.honeycomb_lattice()      # 1. build geometry
 h = g.get_hamiltonian()               # 2. build tight-binding Hamiltonian
 h.add_exchange([0.,0.,0.3])           # 3. add terms (onsite, Zeeman, SOC, pairing...) — mutates + returns
-h2 = h.get_mean_field_hamiltonian(U=2.0, filling=0.15, mf="swave")  # 4. optional SCF interacting step
+h2 = h.get_mean_field_hamiltonian(U=2.0, filling=0.15, mf="ferro")  # 4. optional SCF interacting step
+# (a superconducting guess needs the Nambu degree of freedom first:
+#  h.setup_nambu_spinor(); h.get_mean_field_hamiltonian(U=-2.0, ..., mf="swave"))
 (k, e) = h2.get_bands()               # 5. compute an observable (bands, DOS, Chern, transport, KPM DOS...)
 ```
 

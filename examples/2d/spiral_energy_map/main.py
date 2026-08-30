@@ -17,7 +17,7 @@ h0 = g.get_hamiltonian(has_spin=True) # create hamiltonian of the system
 
 # perform the SCF calculation
 mf = scftypes.guess(h0,"ferro",fun=[1.,0.,0.]) # in-plane guess
-scf = scftypes.selfconsistency(h0,filling=0.5,nkp=20,g=10.0,
+scf = scftypes.selfconsistency(h0,filling=0.5,nk=20,U=10.0,
            mf=mf,mix=0.8,maxerror=1e-6)
 hscf = scf.hamiltonian # save the selfconsistent Hamiltonian
 (kscf,escf,sscf) = hscf.get_bands(operator="sz") # compute the SCF bandstructure

@@ -29,5 +29,12 @@ already reached once.
   reproduce, with the Brillouin-zone-domain trap that produced a false
   positive), and why a gapped system returns an exact zero at every order.
 
+- [`orbital_field_in_a_superconductor.md`](orbital_field_in_a_superconductor.md)
+  -- why `add_peierls` refuses a Hamiltonian that already carries pairing
+  (the anomalous term has no single Peierls phase; a real orbital field
+  means self-consistent vortices), what the supported field-then-Nambu
+  workflow is and the test that pins it, and what a vortex implementation
+  would actually need.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

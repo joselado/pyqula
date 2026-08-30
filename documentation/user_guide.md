@@ -2901,6 +2901,14 @@ Optional arguments:
 
 - nk = 20: number of k-points
 - operator: a single operator, or a list of operators, to compute expectation values for at each eigenstate
+- kpath: an explicit k-path, either as reduced coordinates or as a list of
+  high-symmetry labels (`"G"`, `"M"`, `"K"`, `"X"`, `"Y"`, and in three
+  dimensions `"Z"`, `"R"`, `"A"`, `"B"`)
+
+Without `kpath` the path is $\Gamma$-M for a square-like 2D lattice,
+$\Gamma$-K-M-K'-$\Gamma$ for a triangular-like one, and
+$\Gamma$-X-M-$\Gamma$-R for a 3D one -- the 3D path genuinely leaves the
+$k_3=0$ plane, so the band edges of a 3D crystal are reached.
 
 Returns kpoint index and energies, plus one extra row per operator if `operator` is given
 
@@ -2956,7 +2964,14 @@ Brillouin zone rather than the extrema of a k-mesh sample
 Return the fraction of states below zero energy, i.e. the filling measured
 with the Fermi energy at $E=0$. Half filling gives 0.5. Use
 `h.set_filling(nu)` to shift the onsite energy so that a target filling is
-realized, and this method to check the result
+realized, and this method to check the result.
+
+For a Hamiltonian with the electron-hole (Nambu) degree of freedom the
+spectrum is particle-hole symmetric, so exactly half of it lies below zero
+whatever the density is; there the filling is instead the weight that the
+occupied BdG states put on the electron components, normalized by the two
+electron states per site. At zero pairing this reproduces the normal-state
+filling exactly.
 
 Optional arguments:
 
@@ -3008,6 +3023,43 @@ Optional arguments:
 
 - nk=30: k-point density of the Brillouin-zone sum
 
+### h.get_magnetization()
+Site-resolved magnetic order, as an `(nsites,3)` array. Two different
+quantities go by this name, and the `mode` argument picks between them:
+
+- `mode="field"` (the default) reads the magnetic *term written in the
+  Hamiltonian*, i.e. the coefficients of $\sigma_{x,y,z}$ on each site.
+  After a self-consistent calculation this is the mean-field exchange
+  field, the natural order parameter of the loop, which is proportional --
+  not equal -- to the moment. On a Hamiltonian whose field you put in by
+  hand with `add_zeeman`/`add_exchange`, it returns exactly that field
+  back, not the polarization it induces
+- `mode="vev"` returns the physical per-site expectation value
+  $(\langle S_x\rangle,\langle S_y\rangle,\langle S_z\rangle)$, i.e.
+  `get_vev("sx"/"sy"/"sz")`. This is what to report as a magnetic moment
+
+```python
+h = geometry.chain().get_hamiltonian()
+h.add_exchange([0.,0.,0.5])
+h.get_magnetization()                  # [0,0,0.5], the field you put in
+h.get_magnetization(mode="vev",nk=40)  # the moment it actually induces
+```
+
+Optional arguments:
+
+- mode="field": `"field"` or `"vev"`, as above
+- any further keyword (e.g. nk) is forwarded to `get_vev` in `"vev"` mode
+
+
+### h.get_topological_invariant()
+Return a topological invariant of the occupied bands: the Berry (Zak) phase
+in one dimension, the $Z_2$ invariant in two dimensions when the
+Hamiltonian is time-reversal symmetric, and the Chern number otherwise. A
+0d Hamiltonian has no Brillouin zone and 3D is not implemented, so both
+raise; for a 3D system take the Chern number of a 2D slice, or
+`topology.berry_phase(h,kpath=...)` along a chosen path.
+
+
 ### h.add_soc()
 Add Kane-Mele intrinsic spin-orbit coupling
 
@@ -3045,9 +3097,10 @@ Compute the local density of states.
 
 Optional arguments:
 
-- e: energy of the LDOS
+- e: energy of the LDOS (`energy` is accepted as an alias, since that is
+  how the Green's function, embedding and transport routines spell it)
 
-- delta=0.01: broadening of the LDOS
+- delta=0.01: broadening of the LDOS, which must be positive
 
 - projection="TB": `"TB"`, `"TBRS"` (real-space interpolated) or `"atomic"`
 
