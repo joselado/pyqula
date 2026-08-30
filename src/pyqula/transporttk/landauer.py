@@ -6,16 +6,24 @@ dagger = algebra.dagger
 
 # Landauer Buttiker formula
 
-def landauer(HT,energy=0.0,error=1e-9,**kwargs):
+def landauer(HT,energy=0.0,delta=None,error=1e-9,**kwargs):
     """ Calculates transmission using Landauer formula"""
-    delta = HT.delta
+    if len(kwargs)>0:
+        # nothing downstream consumes these; they used to be dropped here
+        raise TypeError("unexpected keyword argument(s) "+str(sorted(kwargs))
+          +" for landauer")
+    if delta is None: delta = HT.delta # the heterostructure's own delta
     if not HT.block_diagonal:
       intra = HT.central_intra # central intraterm   
       dimhc = intra.shape[0] # dimension of the central part
     if HT.block_diagonal:
         if len(HT.central_intra)==0: # no central
-            print("No central region provided")
-            raise
+            raise ValueError("the Landauer formula as implemented here "
+              +"needs an explicit central region, build the "
+              +"heterostructure with heterostructures.build(h1,h2,"
+              +"central=[...]). For a direct lead-to-lead junction use "
+              +"didv, which goes through the scattering matrix and "
+              +"returns the same transmission for normal leads")
         intra = HT.central_intra[0][0] # when it is diagonal
  # dimension of the central part
         dimhc = len(HT.central_intra)*intra.shape[0]

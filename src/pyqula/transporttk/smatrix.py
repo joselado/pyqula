@@ -6,7 +6,7 @@ delta_smatrix = 1e-12 # delta for the smatrix
 
 
 
-def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
+def get_smatrix(ht,energy=0.0,delta=None,as_matrix=False,check=True):
     """Calculate the S-matrix of an heterostructure.
 
     Two cheap perf fixes applied here (2026-07-31, no behavior change,
@@ -27,7 +27,7 @@ def get_smatrix(ht,energy=0.0,as_matrix=False,check=True):
     exercises get_smatrix with block_diagonal=True, so that rewrite would
     need new correctness tests first."""
     # now do the Fisher Lee trick
-    delta = ht.delta
+    if delta is None: delta = ht.delta # the heterostructure's own delta
     if delta>delta_smatrix: delta = delta_smatrix # small delta is critical!
     smatrix = [[None,None],[None,None]] # smatrix in list form
     # get the selfenergies, using the same coupling as the lead

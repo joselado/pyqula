@@ -6,8 +6,22 @@ from .. import parallel
 
 
 
-def generic_didv(self,temp=0.,**kwargs):
-    """Wrapper to compute the dIdV at finite temperature"""
+def generic_didv(self,temp=None,**kwargs):
+    """Wrapper to compute the dIdV at finite temperature.
+
+    The temperature is `temp`; `T` and `temperature` are accepted as
+    aliases, because they are how the rest of the library spells it. They
+    used to be swallowed by **kwargs, silently returning the zero
+    temperature result."""
+    from ..utilities import rename_kwarg
+    for alias in ["T","temperature"]:
+        if alias in kwargs:
+            if temp is not None:
+                raise TypeError("got both 'temp' and its alias '"+alias
+                  +"'; pass only one of them")
+            kwargs = rename_kwarg(kwargs,alias,"temp")
+            temp = kwargs.pop("temp")
+    if temp is None: temp = 0. # default, zero temperature
     if temp==0.: return zero_T_didv(self,**kwargs) # zero temperature
     else: # finite temperature
         return finite_T_didv(self,temp=temp,**kwargs)
@@ -237,7 +251,18 @@ def didv(ht,energy=0.0,energies=None,delta=1e-6,opl=None,opr=None,
     if ht.has_eh: # for systems with electons and holes
         return didv_BdG(ht,energy=energy,delta=delta,**kwargs)
     else:
-        s = get_smatrix(ht,energy=energy) # get the smatrix
+        # options that only steer the Keldysh solver are legitimately
+        # inert here (didv_curve sets them for whichever method "auto"
+        # ends up choosing); anything else is a keyword nobody consumes,
+        # which used to be dropped in silence
+        keldysh_only = ["use_aaa","use_qtci","selfenergy_qtci","dv",
+                        "nmax_max","fixed_nmax"]
+        unknown = [k for k in kwargs if k not in keldysh_only]
+        if len(unknown)>0:
+            raise TypeError("unexpected keyword argument(s) "
+              +str(sorted(unknown))+" for didv with method='smatrix' on a "
+              +"normal (non-superconducting) heterostructure")
+        s = get_smatrix(ht,energy=energy,delta=delta) # get the smatrix
         if opl is not None or opr is not None: # some projector given
           raise NotImplementedError("opl/opr projectors are not implemented for didv")
         r1,r2,t = s[0][0],s[1][1],s[0][1] # get the reflection matrices

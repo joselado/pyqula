@@ -67,12 +67,22 @@ class Heterostructure():
         return device_dos(self,mode="left",**kwargs)
     def get_coupled_right_dos(self,**kwargs):
         return device_dos(self,mode="right",**kwargs)
-    def landauer(self,energy=0.,do_leads=True,left_channel=None,
+    def landauer(self,energy=0.,left_channel=None,
                   right_channel=None,**kwargs):
       """ Return the Landauer transmission"""
-      if self.has_eh: raise # invalid if there is electorn-hole
-      return landauer(self,energy=energy,delta=self.delta,do_leads=do_leads,
-                      left_channel=left_channel,right_channel=right_channel)
+      if self.has_eh:
+          raise NotImplementedError("the Landauer formula is not valid "
+            +"with the electron-hole (Nambu) degree of freedom, since a "
+            +"Cooper pair carries charge 2e; use didv instead, which uses "
+            +"the BTK/BdG scattering formula")
+      if left_channel is not None or right_channel is not None:
+          # these were accepted and then dropped by landauer's own
+          # **kwargs, so channel resolution never happened
+          raise NotImplementedError("channel-resolved transmission "
+            +"(left_channel/right_channel) is not implemented; use "
+            +"get_smatrix and project the transmission block yourself")
+      # kwargs used to be accepted here and then dropped on the floor
+      return landauer(self,energy=energy,**kwargs)
     def write_green(self):
         """Writes the green functions in a file"""
         from .green import write_matrix
