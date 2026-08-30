@@ -194,7 +194,16 @@ def ev(h,operator=None,nk=30,**kwargs):
     operator = [] # empty list
   elif not isinstance(operator,list): # if it is not a list
     operator = [operator] # convert to list
-  out = [np.trace(dm@op) for op in operator] 
+  # densitymatrix.full_dm builds dm[i,j] = sum_occ conj(psi_i) psi_j, the
+  # transpose of the usual rho[i,j] = sum_occ psi_i conj(psi_j), so
+  # Tr(dm@A) evaluates <A^T> = <A*> rather than <A>. The two agree for
+  # every real operator -- the density, sx, sz, a projector -- which is
+  # why this went unnoticed, but for a purely imaginary one (sy, and any
+  # current/velocity operator i[H,r]) it silently flips the sign.
+  # Cross-checked against magnetism.compute_magnetization, an independent
+  # implementation that reads the density matrix elements directly.
+  dmt = np.transpose(dm) # the standard density matrix
+  out = [np.trace(dmt@op) for op in operator]
   out = np.array(out) # return the result
   out = out.reshape(out.shape[0]) # reshape in case there are indexes
   return out # return array

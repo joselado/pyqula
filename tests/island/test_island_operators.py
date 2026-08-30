@@ -13,7 +13,12 @@ def test_local_operators_valley_envelope_matches_reference(tmp_path, monkeypatch
     flux and a sublattice imbalance: the summed expectation values must
     match the value recorded from a known-good run. Marked slow: the
     island size is already small (24 atoms) -- the runtime is dominated by
-    fixed overhead, not island size."""
+    fixed overhead, not island size.
+
+    The reference had the wrong sign until spectrum.ev stopped contracting
+    the density matrix transposed: the valley operator is purely
+    imaginary, exactly the case where <A*> and <A> differ. +0.71821 is
+    what an explicit sum over the occupied eigenstates gives."""
     monkeypatch.chdir(tmp_path)
     g = islands.get_geometry(name="honeycomb", n=2, nedges=6, rot=0.0)
     h = g.get_hamiltonian(has_spin=False)
@@ -25,7 +30,7 @@ def test_local_operators_valley_envelope_matches_reference(tmp_path, monkeypatch
     fv = h.get_operator("valley")
     ops = [fv * o for o in ops]
     ys = spectrum.ev(h, operator=ops).real
-    assert np.isclose(np.sum(ys), -0.7182101377163648, atol=1e-6)
+    assert np.isclose(np.sum(ys), 0.7182101377163648, atol=1e-6)
 
 
 @pytest.mark.slow

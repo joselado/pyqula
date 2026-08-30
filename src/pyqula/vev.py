@@ -10,5 +10,8 @@ def get_dm_vev(H,A,**kwargs):
         raise
     dm = H.get_density_matrix() # return the DM, as a matrix
     A = Operator(A) # convert to operator
-    return np.trace(A@dm) # return the expectation value
+    # transposed for the same reason as in spectrum.ev: full_dm's
+    # convention is the transpose of the usual density matrix, so
+    # contracting it directly gives <A*> instead of <A>
+    return np.trace(A@np.transpose(dm)) # return the expectation value
 
