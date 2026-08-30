@@ -175,19 +175,37 @@ def optimize_energy(h,robust=True,mode="full",**kwargs):
       es = gete(k) # get eigenvalues
       return -np.max(es) # bottom
     def opte(f):
-      """Optimize the eigenvalues"""
+      """Optimize the eigenvalues.
+
+      The optimization starts from the best point of a deterministic
+      coarse k-grid rather than from a random one, and the global search
+      is seeded. Both matter: the minimum this looks for is the band edge,
+      and a search started at an arbitrary point can settle on a nearby
+      local minimum instead. On a gapless system that shows up as a small
+      but nonzero gap -- a metallic ferromagnet whose gap is 0 returned
+      2e-4 or 1e-16 depending on nothing but the state of the global
+      random number generator when it was called. The grid also gives the
+      optimizer a good starting point, so the polish converges in fewer
+      evaluations."""
       from scipy.optimize import differential_evolution
       from scipy.optimize import minimize
       if h.dimensionality==0:
           return f([0.,0.,0.]) # return
-      else:
-          bounds = [(0.,1.) for i in range(h.dimensionality)]
+      bounds = [(0.,1.) for i in range(h.dimensionality)]
+      # deterministic coarse scan of the Brillouin zone
+      ng = {1:20,2:12,3:8}[h.dimensionality] # points per direction
+      grid = np.linspace(0.,1.,ng,endpoint=False)
+      ks = np.array(np.meshgrid(*([grid]*h.dimensionality),indexing="ij"))
+      ks = ks.reshape(h.dimensionality,-1).T # one row per k-point
+      vals = np.array([f(k) for k in ks]) # scan
+      ib = int(np.argmin(vals)) # best point of the grid
+      bx,bf = ks[ib],vals[ib]
       if robust: # use a robust optimization
-          res = differential_evolution(f,bounds=bounds,**kwargs)
-      else: # conventional optimization
-          x0 = np.random.random(h.dimensionality) # inital vector
-          res = minimize(f,x0,method="Powell",bounds=bounds,**kwargs)
-      return f(res.x)
+          res = differential_evolution(f,bounds=bounds,x0=bx,seed=0,**kwargs)
+      else: # conventional optimization, polished from the grid minimum
+          res = minimize(f,bx,method="Powell",bounds=bounds,**kwargs)
+      if res.fun<bf: bx,bf = res.x,res.fun # keep the better of the two
+      return f(bx)
     if mode=="full":
         ev = opte(funv) # optimize valence band
         if h.has_eh: ec = ev # workaround for SC
