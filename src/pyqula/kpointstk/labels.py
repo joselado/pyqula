@@ -3,6 +3,9 @@ import numpy as np
 
 
 
+known_labels = ["G","M","K","K'","M1","M2","M3","X","Y","Z","R","A","B"]
+
+
 def label2k(g,kl):
     """Given a kpoint label, return the kpoint"""
     if kl=="G": return [0.,0.,0.]
@@ -19,9 +22,16 @@ def label2k(g,kl):
     elif kl=="M3": return [.5,.5,.0]
     elif kl=="X": return [.5,.0,.0]
     elif kl=="Y": return [.0,.5,.0]
-    else: 
-        print("Unrecognized kpoint",kl)
-        raise
+    # three dimensional high symmetry points; every label above lies in the
+    # k3=0 plane, so a 3d path used to be impossible to write down
+    elif kl=="Z": return [.0,.0,.5]
+    elif kl=="R": return [.5,.5,.5]
+    elif kl=="A": return [.5,.0,.5]
+    elif kl=="B": return [.0,.5,.5]
+    else:
+        raise ValueError("Unrecognized kpoint label '"+str(kl)+"'. Known "
+          +"labels: "+str(known_labels)+", or give the kpoint directly as "
+          +"a list of three reduced coordinates")
 
 
 

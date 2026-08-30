@@ -8,7 +8,8 @@ def target_moduli(v1,v2,m):
         for j in range(-n,n+1):
             v = i*v1 + j*v2
             if abs(np.sqrt(v.dot(v))-m)<1e-3: return v
-    raise # not found
+    raise ValueError("no integer combination of the two reciprocal "
+      +"vectors has moduli "+str(m))
 
 def closest_kreplica(g,v,v0):
     """Return the closest replica of a kpoint close to another one"""
@@ -40,7 +41,25 @@ def closest_kreplica(g,v,v0):
                     vo = v + np.array([i,j,0.])
                     dmax = dw
         return vo # return vo
-    else: raise
+    elif g.dimensionality==3: # for 3d
+        w = v[0]*g.b1 + v[1]*g.b2 + v[2]*g.b3 # redefine
+        w0 = v0[0]*g.b1 + v0[1]*g.b2 + v0[2]*g.b3 # redefine
+        n = 2
+        dmax = 1e8
+        vo = np.array(v) # in case no replica is closer than the tolerance
+        for i in range(-n,n+1):
+          for j in range(-n,n+1):
+            for l in range(-n,n+1):
+                wt = w + g.b1*i + g.b2*j + g.b3*l # compute replica
+                dw = wt - w0 # distance to reference point
+                dw = np.sqrt(dw.dot(dw)) # distance
+                if 1e-4<dw<dmax:
+                    vo = v + np.array([i,j,l])
+                    dmax = dw
+        return vo # return vo
+    else:
+        raise ValueError("no closest-replica rule for dimensionality "
+          +str(g.dimensionality))
 
 
 
@@ -76,6 +95,7 @@ def k2path(g,kp,nk=100):
     for i in range(len(kp)-1): # loop over pairs
       dk0 = kp[i+1] - kp[i] # difference
       dk = dk0[0]*g.b1 + dk0[1]*g.b2 # real reciprocal vector
+      if g.dimensionality==3: dk = dk + dk0[2]*g.b3 # the third direction
       dk2 = dk.dot(dk) # moduli real vector
       nk2 = int(nk*np.sqrt(dk2/g.b1.dot(g.b1))) # in units of reciprocal vector
       steps = np.linspace(0.,1.,nk2,endpoint=False) # number of points
