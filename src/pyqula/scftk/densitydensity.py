@@ -320,6 +320,13 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
         tolerance=1e-6, # qtci-only: crossinterpolate2 convergence tolerance
         callback_h=None,**kwargs):
     """Perform the SCF mean field"""
+    if len(kwargs)>0:
+        # this is the end of the mean-field call chain: anything left over
+        # here is a keyword nobody consumed, and used to be dropped in
+        # silence (a misspelled filling= would run with the default)
+        raise TypeError("unexpected keyword argument(s) "
+          +str(sorted(kwargs))+" in the mean-field calculation; nothing "
+          +"in the call chain consumes them, so they would be ignored")
     if verbose>1: info=True
 #    if not h0.check_mode("spinless"): raise # sanity check
     h1 = h0.copy() # initial Hamiltonian
@@ -591,6 +598,22 @@ def hubbard(h,U=1.0,constrains=[],**kwargs):
               callback_mf=callback_mf,**kwargs)
 
 
+# The old scftypes.selfconsistency interface, which this function is now
+# aliased to (scftypes.py: `from .meanfield import Vinteraction as
+# selfconsistency`). None of these names exist in the current signature, so
+# they used to travel down the call chain and be dropped in silence -- a
+# call like selfconsistency(h,g=1.0,mode="U") ran with U=0, i.e. no
+# interaction at all, while looking like a Hubbard calculation.
+legacy_selfconsistency_kwargs = {
+  "g": "the interaction strength: pass U= for the local Hubbard term, or "
+       "V1=/V2=/V3=/Vr= for the intersite ones",
+  "mode": "the interaction channel is now chosen by which of U/V1/V2/V3/Vr "
+          "you pass, not by a mode string",
+  "vfun": "a distance dependent interaction is now passed as Vr=f(r1,r2)",
+  "vc": "the interaction strength: see U/V1/V2/V3/Vr",
+  }
+
+
 def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
         constrains=[],Vr=None,**kwargs):
     """Perform a mean-field calculation with density-density interactions
@@ -635,6 +658,16 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     reported total_energy is essentially just the unmodified initial guess
     evaluated once, not a converged answer.
     """
+    from ..utilities import rename_kwarg
+    kwargs = rename_kwarg(kwargs,"nkp","nk") # the old spelling of the k-mesh
+    legacy = [k for k in kwargs if k in legacy_selfconsistency_kwargs]
+    if len(legacy)>0:
+        msg = "".join(["\n  "+k+": "+legacy_selfconsistency_kwargs[k]
+                        for k in sorted(legacy)])
+        raise TypeError("keyword argument(s) "+str(sorted(legacy))+" belong "
+          +"to the old scftypes.selfconsistency interface and have no "
+          +"effect here -- a call that passes them silently runs with no "
+          +"interaction at all. The current spellings are:"+msg)
     h = h.get_multicell() # multicell Hamiltonian
     h = h.get_dense()
     # define the function
@@ -649,6 +682,16 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
       hv = hv + hv1 # add the two Hamiltonians
     v = hv.get_hopping_dict() # hopping dictionary
     U = obj2geometryarray(U,h.geometry) # convert to array
+    if not h.has_spin and np.max(np.abs(U))>0.0:
+        # the on-site Hubbard term is the up-down density-density
+        # interaction, so it has no meaning without spin -- it used to be
+        # built here and then quietly dropped by the has_spin branch below
+        raise ValueError("a local Hubbard U requires the spin degree of "
+          +"freedom (it is the interaction between the up and down "
+          +"densities on the same site), but this Hamiltonian has "
+          +"has_spin=False. Build it with g.get_hamiltonian(has_spin=True), "
+          +"or use the intersite interactions V1/V2/V3/Vr, which are "
+          +"defined for spinless fermions.")
     if h.has_spin: #raise # not implemented
         for d in v: # loop
             m = v[d] ; n = m.shape[0]

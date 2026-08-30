@@ -231,6 +231,35 @@ spinful_guesses = ["Fully random","dimerization"]
 spinful_guesses += symmetry_breaking
 
 
+# every mode understood by guess() below, for error messages
+known_guesses = ["ferro","magnetic","ferroX","ferroY","ferroZ","randomXY","XY",
+        "random","Fully random","dimerization","kekule","Haldane","rashba",
+        "kanemele","antihaldane","valley","CDW","Charge density wave",
+        "potential","antiferro","imbalance","swave",
+        "s-wave superconductivity","pwave"]
+
+
+def require_nambu(h,mode):
+  """Complain if a superconducting guess is asked of a Hamiltonian without
+  the electron-hole (Nambu) degree of freedom"""
+  if not h.has_eh:
+      raise ValueError("mean-field guess mode '"+str(mode)+"' is a "
+        +"superconducting order parameter, but this Hamiltonian has no "
+        +"electron-hole (Nambu) degree of freedom, so the guess would be "
+        +"identically zero and the self-consistency would return the "
+        +"normal state. Call h.setup_nambu_spinor() (or h.add_swave(0.0)) "
+        +"before the mean-field calculation.")
+
+
+def require_spin(h,mode):
+  """Complain if a spinful guess is asked of a spinless Hamiltonian"""
+  if not h.has_spin:
+      raise ValueError("mean-field guess mode '"+str(mode)+"' needs the spin "
+        +"degree of freedom, but this Hamiltonian has has_spin=False. "
+        +"Build it with g.get_hamiltonian(has_spin=True), or use a "
+        +"spinless guess mode.")
+
+
 def guess(h,mode="ferro",fun=1e-1):
   """Return a mean field matrix guess given a certain Hamiltonian"""
   h0 = h.copy() # copy Hamiltonian
@@ -238,23 +267,23 @@ def guess(h,mode="ferro",fun=1e-1):
 #  h0.intra *= 0. # initialize
   h0.clean() # clean the Hamiltonian
   if mode=="ferro":
-      if h.has_spin: h0.add_zeeman(fun)
+      require_spin(h,mode) ; h0.add_zeeman(fun)
   elif mode=="magnetic":
-      if h.has_spin: h0.add_zeeman(lambda x: np.random.random(3)*fun)
+      require_spin(h,mode) ; h0.add_zeeman(lambda x: np.random.random(3)*fun)
   elif mode=="ferroX":
-      if h.has_spin: h0.add_zeeman([fun,0.,0.])
+      require_spin(h,mode) ; h0.add_zeeman([fun,0.,0.])
   elif mode=="ferroY":
-      if h.has_spin: h0.add_zeeman([0.,fun,0.])
+      require_spin(h,mode) ; h0.add_zeeman([0.,fun,0.])
   elif mode=="ferroZ":
-      if h.has_spin: h0.add_zeeman([0.,0.,fun])
+      require_spin(h,mode) ; h0.add_zeeman([0.,0.,fun])
   elif mode=="randomXY" or mode=="XY":
       def f(r):
           m = [np.random.random()-0.5,np.random.random()-0.5,0.]
           m = np.array(m)
           return m/np.sqrt(m.dot(m))
-      if h.has_spin: h0.add_zeeman(f)
+      require_spin(h,mode) ; h0.add_zeeman(f)
       return h0.get_hopping_dict()
-  elif mode=="random":
+  elif mode in ["random","Fully random"]:
       dd = h.get_dict()
       for key in dd:
           n = dd[key].shape[0]
@@ -272,37 +301,41 @@ def guess(h,mode="ferro",fun=1e-1):
       h0.add_haldane(fun) # Haldane coupling
       return h0.get_hopping_dict()
   elif mode=="rashba":
-      if h.has_spin: h0.add_rashba(fun) # Haldane coupling
+      require_spin(h,mode) ; h0.add_rashba(fun) # Haldane coupling
       return h0.get_hopping_dict()
   elif mode=="kanemele":
-      if h.has_spin: h0.add_kane_mele(fun) # Haldane coupling
+      require_spin(h,mode) ; h0.add_kane_mele(fun) # Haldane coupling
       return h0.get_hopping_dict()
   elif mode in ["antihaldane","valley"]:
       h = h.copy() ; h.clean() ; h.add_antihaldane(fun) # Haldane coupling
       return h.get_hopping_dict()
-  elif mode=="Fully random": return None
   elif mode in ["CDW","Charge density wave"]:
-      if h.geometry.has_sublattice:
-        h0.add_onsite(h.geometry.sublattice)
-      else: return 0.0 #guess(h,mode="random",fun=0.0)
+      if not h.geometry.has_sublattice:
+          raise ValueError("mean-field guess mode '"+str(mode)+"' seeds the "
+            +"charge order with the sublattice, but this geometry has none "
+            +"(one site per unit cell). Build a supercell first, e.g. "
+            +"g = g.get_supercell(2), so that a modulated density fits in "
+            +"the unit cell.")
+      h0.add_onsite(h.geometry.sublattice)
   elif mode=="potential":
       h0.add_onsite(fun)
   elif mode=="antiferro":
-      if h.has_spin: h0.add_antiferromagnetism(fun)
+      require_spin(h,mode) ; h0.add_antiferromagnetism(fun)
   elif mode=="imbalance":
       h0.add_sublattice_imbalance(fun)
   elif mode in ["swave","s-wave superconductivity"]:
-      if h.has_eh: h0.add_swave(fun)
+      require_nambu(h,mode) ; h0.add_swave(fun)
   elif mode=="pwave":
+    require_nambu(h,mode)
     for t in h0.hopping: t.m *= 0. # clean
-    h0.add_pwave(fun)
+    h0.add_pairing(delta=fun,mode="pwave") # px+ipy pairing
     hop = dict()
     hop[(0,0,0)] = h0.intra
     for t in h0.hopping: hop[tuple(t.dir)] = t.m
     return hop
   else:
-      print("Unrecognized initialization")
-      raise
+      raise ValueError("Unrecognized mean-field initialization '"+str(mode)
+        +"'. Known modes: "+str(sorted(set(known_guesses))))
   return h0.intra # return matrix
 
 from .algebra import braket_wAw

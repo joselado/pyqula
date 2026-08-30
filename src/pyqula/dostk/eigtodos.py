@@ -4,6 +4,8 @@ from numba import jit,njit,prange
 
 def calculate_dos(es,xs,d,w=None,parallel=True):
     """COmpute DOS, es are the eigenenergies, xs, the frequency grid"""
+    from ..utilities import check_delta
+    check_delta(d)
     if w is None: w = np.zeros(len(es)) + 1.0 # initialize
     else: w = w.real # make it real just in case
     es = np.array(es).real

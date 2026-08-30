@@ -113,6 +113,11 @@ def remove_offplane_magnetism(h):
 
 
 
+known_constrains = ["no_charge","no_magnetism","no_inplane_magnetism",
+        "no_offplane_magnetism","no_normal_term","no_anomalous_term",
+        "no_SC","no_superconductivity"]
+
+
 def enforce_constrains(mf,h,constrains=[]):
     """Given a list of constrains, return a function that enforces
     all of them in the mean field"""
@@ -129,12 +134,18 @@ def enforce_constrains(mf,h,constrains=[]):
             if h.has_eh:
                 from ..sctk.extract import extract_anomalous_dict
                 mf = extract_anomalous_dict(mf)
-            else: raise
+            else:
+                raise ValueError("constrain 'no_normal_term' only makes "
+                  +"sense for a Hamiltonian with the electron-hole (Nambu) "
+                  +"degree of freedom; this one has has_eh=False")
         elif c in ["no_anomalous_term","no_SC","no_superconductivity"]:
             if h.has_eh:
                 from ..sctk.extract import extract_normal_dict
                 mf = extract_normal_dict(mf)
-            else: pass
+            else: pass # no anomalous term to remove in the first place
+        else:
+            raise ValueError("unknown mean-field constrain '"+str(c)
+              +"'. Known constrains: "+str(known_constrains))
 #        print(np.round(mf[(0,0,0)],1))
     return mf
 

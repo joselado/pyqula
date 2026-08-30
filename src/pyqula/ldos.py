@@ -238,6 +238,10 @@ def ldos_potential(h,**kwargs):
 
 def get_ldos(h,**kwargs):
     """Master method for LDOS"""
+    from .utilities import rename_kwarg
+    # `energy` is how the Green's function, embedding and transport
+    # routines spell it, so accept it here as well instead of dropping it
+    kwargs = rename_kwarg(kwargs,"energy","e")
     if not h.non_hermitian: # Hermitian case
         return get_ldos_general(h,**kwargs)
     else:
@@ -260,7 +264,11 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
              operator=None,return_rd = False,
              write=True,**kwargs):
     """ Calculate LDOS in a tight binding basis"""
-    if ks is not None and mode=="green": raise
+    from .utilities import check_delta
+    check_delta(delta)
+    if ks is not None and mode=="green":
+        raise ValueError("an explicit k-point list (ks) is incompatible "
+          +"with mode='green', which integrates over the Brillouin zone")
     if operator is not None: operator = h.get_operator(operator)
     if mode=="green":
       from . import green

@@ -5,10 +5,29 @@ from . import parallel
 
 
 
+def check_filling(filling):
+  """Complain if the filling is not a fraction of the occupied states.
+
+  The convention throughout pyqula is that filling is the fraction of
+  *all* the states of the Hamiltonian that are occupied, so it must lie
+  in [0,1] (half filling is 0.5, both for spinful and spinless
+  Hamiltonians). Values outside that range used to be accepted silently:
+  a negative filling wrapped around through negative indexing and
+  returned the Fermi energy of filling 1+f."""
+  if filling is None: return # nothing to check
+  f = float(np.real(filling))
+  if not np.isfinite(f) or f<0.0 or f>1.0:
+      raise ValueError("filling must be a fraction of the total number of "
+        +"states, i.e. in [0,1] (half filling is 0.5), got "+str(filling)
+        +". If you meant electrons per site, divide by the number of "
+        +"states per site.")
+
+
 def get_fermi_energy(es,filling,fermi_shift=0.0,
         e_reg = 1e-5 # energy regularization for fully filled/empty
         ):
   """Return the Fermi energy"""
+  check_filling(filling) # complain about a meaningless filling
   ne = len(es) ; ifermi = int(round(ne*filling)) # index for fermi
   sorte = np.sort(es) # sorted eigenvalues
   if ifermi>=ne: return sorte[-1] + fermi_shift + e_reg

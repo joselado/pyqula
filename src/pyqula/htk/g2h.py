@@ -10,10 +10,37 @@ def get_hamiltonian(self,tij=None,has_spin=True,
     first neighbor hopping
         - has_spin = True, whether if to include spin degree of freedom
         - is_sparse = False, use sparse representation
-        - ts = None, list of 1st,2nd,3rd neighbor hoppings
-        - tij = None, function that return the spatially dependent hoppings
+        - tij = None, either a function returning the spatially dependent
+          hopping, a specialhopping.HoppingGenerator, or a list of the
+          1st,2nd,3rd... neighbor hoppings
+        - is_multicell = False, store the hoppings as a multicell dictionary
+        - mgenerator = None, generator of the full hopping matrix
+        - nc = 2, neighbor cutoff for the multicell construction
+    Any remaining keyword is forwarded to the multicell hopping builders
+    (cutoff, rcut); an unknown one is an error rather than being ignored.
     """
     ### Perform some initial sanity checks
+    # `fun` is what this argument used to be called before it was renamed
+    # to `tij`. It is still spelled that way in several places (spinwaves,
+    # surface_TI, operators.get_sublattice_hopping_generator, examples),
+    # and until now it was silently dropped -- so those built a plain
+    # first-neighbor Hamiltonian instead of the one their hopping function
+    # describes.
+    if "fun" in kwargs:
+        if tij is not None:
+            raise TypeError("got both 'tij' and its old name 'fun'; pass "
+              +"only one of them")
+        tij = kwargs.pop("fun")
+    # anything not consumed here is only meaningful for the multicell
+    # builders below; unknown keywords used to be dropped in silence, so a
+    # misspelled has_spin/is_sparse quietly gave the default Hamiltonian
+    forwardable = ["cutoff","rcut"] # accepted by the multicell builders
+    unknown = [k for k in kwargs if k not in forwardable]
+    if len(unknown)>0:
+        raise TypeError("get_hamiltonian() got unexpected keyword "
+          +"argument(s) "+str(sorted(unknown))+"; the accepted ones are "
+          +str(["tij","has_spin","is_sparse","spinful_generator","nc",
+                "non_hermitian","is_multicell","mgenerator"]+forwardable))
     ## in case tij is an iterable with hoppings
     from ..checkclass import is_iterable
     if is_iterable(tij): # tij is an iterable

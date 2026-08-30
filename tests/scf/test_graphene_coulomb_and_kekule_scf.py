@@ -11,10 +11,20 @@ from pyqula.specialhopping import twisted_matrix
 def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatch):
     """Regression check for a ferromagnetic-guess Coulomb (fastCoulomb
     mode) SCF calculation on a triangular-lattice supercell, at a small
-    size (supercell(2) instead of (6), nkp=4 instead of 10): the
+    size (supercell(2) instead of (6), nk=4 instead of 10): the
     sz-resolved band energies must match the values recorded from a
     known-good run. Marked slow: SCF convergence and the all-pairs Coulomb
-    sum drive the runtime, not just the k-mesh."""
+    sum drive the runtime, not just the k-mesh.
+
+    The interaction is now given as `Vr`, the current spelling of a
+    distance-dependent density-density interaction. It used to be passed as
+    the old scftypes.selfconsistency arguments `mode="fastCoulomb"`,
+    `vfun=` and `g=3.0`; none of them exist in the signature that name is
+    now aliased to, so all three were dropped and the loop ran with no
+    interaction at all -- hence the re-recorded reference. `g` has no
+    counterpart here (in the dead code path it was overloaded, naming the
+    geometry in one place and a coupling in another), so the interaction is
+    `vfun` alone."""
     monkeypatch.chdir(tmp_path)
     g = geometry.triangular_lattice()
     g = g.supercell(2)
@@ -22,15 +32,16 @@ def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatc
     h = h.get_multicell()
     mf = scftypes.guess(h, mode="ferro", fun=1.0)
 
-    def vfun(r):
+    def Vr(r1, r2):
+        r = np.linalg.norm(np.array(r1) - np.array(r2))
         if r < 1e-2: return 0.0
         else: return 2.0 * np.exp(-r)
 
-    scf = scftypes.selfconsistency(h, nkp=4, filling=0.5, g=3.0,
-                    mix=0.9, mf=mf, mode="fastCoulomb", vfun=vfun)
+    scf = scftypes.selfconsistency(h, nk=4, filling=0.5,
+                    mix=0.9, mf=mf, Vr=Vr)
     (k, e, c) = scf.hamiltonian.get_bands(operator="sz", nk=20)
-    assert np.isclose(np.sum(e), 173.18275204678304, atol=1e-4)
-    assert np.isclose(np.sum(c), 5.662137425588298e-15, atol=1e-6)
+    assert np.isclose(np.sum(e), 141.0056528200021, atol=1e-4)
+    assert np.isclose(np.sum(c), 0.0, atol=1e-6)
 
 
 @pytest.mark.slow
