@@ -37,7 +37,14 @@ def get_index(g,r,replicas=False):
       rset = [g.r] # list of positions
     for rs in rset: # loop over set of sites
       out = get_index_jit(r,np.array(rs)) # index
-      if out>0: 
+      if out>=0:
+          # get_index_jit signals "not here" with -1, so 0 is a perfectly
+          # valid index -- testing out>0 rejected the very first site of
+          # the cell and reported it as not found. That made e.g.
+          # sctk.pairing.swaveA/swaveB silently skip site 0, and left the
+          # callers that index sublattice[i] with the returned value
+          # (kanemele's staggered Haldane, pairing.swavesublattice) with a
+          # None subscript
           return out # valid index
     return None # not found
 
