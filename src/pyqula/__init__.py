@@ -1,4 +1,4 @@
-__version__ = "0.0.93"
+__version__ = "0.0.94"
 
 # from . import geometry
 # from . import hamiltonians
