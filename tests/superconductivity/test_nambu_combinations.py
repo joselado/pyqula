@@ -60,3 +60,20 @@ def test_berry_curvature_with_an_empty_occupied_manifold():
     h.add_onsite(10.0)
     assert np.allclose(h.get_berry_curvature(nk=4)[2], 0.0)
     assert abs(h.get_chern(nk=4)) < 1e-8
+
+
+def test_moment_is_the_same_with_and_without_the_nambu_doubling():
+    """At zero pairing the BdG description of a state is the same physics
+    as the normal-state description of it, so the moment must agree. The
+    Nambu spin operator carries the same sign in the hole block and the
+    sum runs over the whole particle-hole-redundant set of negative-energy
+    states, so it used to come out exactly twice as large."""
+    g = geometry.chain()
+    for v in ([0., 0., 0.5], [0.3, 0.4, 0.5]):
+        hn = g.get_hamiltonian()
+        hn.add_exchange(v)
+        hb = g.get_hamiltonian()
+        hb.add_exchange(v)
+        hb.turn_nambu()
+        assert np.allclose(hn.get_magnetization(nk=60),
+                           hb.get_magnetization(nk=60), atol=1e-10), v

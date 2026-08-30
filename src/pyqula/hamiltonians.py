@@ -878,7 +878,10 @@ class Hamiltonian():
           states, i.e. get_vev("sx"/"sy"/"sz"). This is the moment, and it
           is what to report as one. Being a Brillouin-zone integral it
           needs a k-mesh: pass nk, or rely on the mesh a self-consistent
-          Hamiltonian remembers from its own loop.
+          Hamiltonian remembers from its own loop. With the electron-hole
+          (Nambu) degree of freedom it is read off the electron sector, so
+          that a BdG description of a state gives the same moment as the
+          normal-state description of that same state.
 
         - mode="field" reads the magnetic *term written in the
           Hamiltonian* instead, i.e. the coefficients of sigma_x/y/z on
@@ -911,9 +914,21 @@ class Hamiltonian():
             # operators and shares the diagonalization between them
             nsites = len(self.geometry.r) # number of sites
             idx = [operators.index(self,n=[i]) for i in range(nsites)]
+            pe = None
+            if self.has_eh:
+                # the Nambu spin operator carries the same sign in the
+                # hole block, and the sum runs over the whole
+                # particle-hole-redundant set of negative-energy BdG
+                # states, so it counts every physical spin twice: a BdG
+                # Hamiltonian at zero pairing came out with exactly twice
+                # the moment of the identical normal-state one. Read the
+                # electron sector, the same convention that
+                # spectrum.get_filling_spinful_nambu uses for the filling.
+                pe = operators.Operator(operators.get_electron(self))
             ops = []
             for name in ["sx","sy","sz"]:
                 op = self.get_operator(name) # spin operator
+                if pe is not None: op = pe*op*pe # electron sector
                 ops += [(o*op).get_matrix() for o in idx]
             out = spectrum.ev(self,operator=ops,**kwargs).real
             mx,my,mz = out[:nsites],out[nsites:2*nsites],out[2*nsites:]
