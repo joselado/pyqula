@@ -13,7 +13,28 @@ dm_mode = "accumulate" # default mode to compute density matrix
 # if it yields the same results as simultaneous
 
 def full_dm(h,T=delta_dm,dm_mode=dm_mode,**kwargs):
-    """Compute the full density matrix"""
+    """Compute the full density matrix.
+
+    INDEX CONVENTION, which is not the textbook one: this returns
+
+        dm[i,j] = sum_occ conj(psi_i) psi_j
+
+    i.e. the TRANSPOSE of the usual rho[i,j] = sum_occ psi_i conj(psi_j).
+    Contracting it directly therefore gives Tr(dm@A) = <A^T> = <A*>, which
+    equals <A> for a real operator (the density, sx, sz, a projector) and
+    has the OPPOSITE SIGN for a purely imaginary one -- sy, the valley
+    operator, any current/velocity operator i[H,r]. Transpose first:
+    Tr(dm.T@A). spectrum.ev and vev.get_dm_vev do; getting this wrong is
+    invisible in every single-axis test and shows up only as a reflected
+    vector for a generic direction.
+
+    The convention is not changed here because the mean-field machinery is
+    built around it: scftk/densitydensity.py's normal-term kernels,
+    magnetism.compute_magnetization (which reads the matrix elements
+    directly and is correct as written) and restricted_dm (which swaps its
+    indices to compensate) all depend on it, as does everything the SCF
+    loops do with h.get_density_matrix(ds=...).
+    """
     if T==0.: T = 1e-15 # just very small 
     if dm_mode=="accumulate":
         return full_dm_accumulate(h,delta=T,**kwargs)

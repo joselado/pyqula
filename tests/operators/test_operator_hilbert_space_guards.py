@@ -72,3 +72,31 @@ def test_sparse_hamiltonians_reach_the_density_matrix_routines():
                        atol=1e-10)
     assert np.allclose(np.array(hd.get_density_matrix(nk=6)),
                        np.array(hs.get_density_matrix(nk=6)), atol=1e-10)
+
+
+def test_sublattice_lowering_generator_starts_only_on_one_sublattice():
+    """operators.get_sigma_minus builds a first-neighbor hopping that
+    starts only on sublattice A, so its intra-cell block is sigma_minus.
+    It was unreachable until get_hamiltonian started honouring `fun` (the
+    old name of `tij`): the function was dropped, a plain first-neighbor
+    Hamiltonian was built instead, and the site at index 0 -- which is
+    exactly sublattice A here -- was reported as not found by get_index."""
+    from pyqula import operators
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    operators.get_sigma_minus(h)  # must not raise
+    a = [i for i in range(len(g.r)) if g.sublattice[i] == 1]
+    assert len(a) > 0
+
+    def fun(r1, r2):
+        i1 = g.get_index(r1, replicas=True)
+        if i1 is None or g.sublattice[i1] != 1:
+            return 0.0
+        dr = r1 - r2
+        return 1.0 if 0.9 < dr.dot(dr) < 1.1 else 0.0
+
+    intra = np.array(g.get_hamiltonian(has_spin=False, tij=fun).intra)
+    for i in range(intra.shape[0]):
+        if i not in a:
+            assert np.allclose(intra[i, :], 0.), (i, intra)
+    assert np.max(np.abs(intra)) > 0.5   # and it is not empty

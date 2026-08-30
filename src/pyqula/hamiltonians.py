@@ -914,16 +914,10 @@ class Hamiltonian():
             # operators and shares the diagonalization between them
             nsites = len(self.geometry.r) # number of sites
             idx = [operators.index(self,n=[i]) for i in range(nsites)]
+            # the electron-sector restriction a Nambu Hamiltonian needs
+            # lives in get_vev, whose convention this shares
             pe = None
             if self.has_eh:
-                # the Nambu spin operator carries the same sign in the
-                # hole block, and the sum runs over the whole
-                # particle-hole-redundant set of negative-energy BdG
-                # states, so it counts every physical spin twice: a BdG
-                # Hamiltonian at zero pairing came out with exactly twice
-                # the moment of the identical normal-state one. Read the
-                # electron sector, the same convention that
-                # spectrum.get_filling_spinful_nambu uses for the filling.
                 pe = operators.Operator(operators.get_electron(self))
             ops = []
             for name in ["sx","sy","sz"]:
@@ -939,11 +933,24 @@ class Hamiltonian():
         return np.array([mx,my,mz]).T # return array
     def get_vev(self,operator=None,**kwargs):
         """
-        Compute a VEV of a spatially resolved operator
+        Compute a VEV of a spatially resolved operator.
+
+        With the electron-hole (Nambu) degree of freedom the sum runs over
+        the whole particle-hole-redundant set of negative-energy BdG
+        states, so a physical one-body observable is counted twice: the
+        site occupation of a BdG Hamiltonian came out as 2 where the
+        identical normal-state Hamiltonian gives 1, and its moment twice
+        as large. The operator is therefore restricted to the electron
+        sector there, the same convention spectrum.get_filling_spinful_nambu
+        uses for the filling, so that a BdG description of a state returns
+        the same numbers as the normal-state description of that state.
         """
         n = len(self.geometry.r) # number of sites
         ops = [operators.index(self,n=[i]) for i in range(n)]
         op = self.get_operator(operator) # get an operator
+        if self.has_eh: # restrict to the electron sector, see above
+            pe = operators.Operator(operators.get_electron(self))
+            op = pe if op is None else pe*op*pe
         if op is not None:
           ops = [(o*op).get_matrix() for o in ops] # define operators
         else:
@@ -1027,7 +1034,16 @@ class Hamiltonian():
     def get_dvector_non_unitarity(self,**kwargs):
         return dvector.dvector_non_unitarity(self,**kwargs)
     def get_density_matrix(self,**kwargs):
-        """Return the density matrix"""
+        """Return the density matrix.
+
+        Note the index convention: this is
+        dm[i,j] = sum_occ conj(psi_i) psi_j, the transpose of the usual
+        one, so an expectation value is Tr(dm.T@A) and NOT Tr(dm@A) --
+        the two differ by a sign for any purely imaginary operator (sy,
+        valley, current). See densitymatrix.full_dm for why the convention
+        is what it is. h.get_vev(operator) does this correctly and is the
+        way to get an expectation value.
+        """
         from . import densitymatrix
         return densitymatrix.full_dm(self,**kwargs)
     @get_docstring(superconductivity.average_hamiltonian_dvector)

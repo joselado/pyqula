@@ -62,12 +62,13 @@ def test_berry_curvature_with_an_empty_occupied_manifold():
     assert abs(h.get_chern(nk=4)) < 1e-8
 
 
-def test_moment_is_the_same_with_and_without_the_nambu_doubling():
+def test_expectation_values_are_the_same_with_and_without_nambu_doubling():
     """At zero pairing the BdG description of a state is the same physics
-    as the normal-state description of it, so the moment must agree. The
-    Nambu spin operator carries the same sign in the hole block and the
-    sum runs over the whole particle-hole-redundant set of negative-energy
-    states, so it used to come out exactly twice as large."""
+    as the normal-state description of it, so every one-body expectation
+    value must agree. The sum runs over the whole particle-hole-redundant
+    set of negative-energy BdG states, so each physical quantity used to
+    be counted twice: the site occupation came out as 2 where the normal
+    Hamiltonian gives 1, and the moment twice as large."""
     g = geometry.chain()
     for v in ([0., 0., 0.5], [0.3, 0.4, 0.5]):
         hn = g.get_hamiltonian()
@@ -75,5 +76,9 @@ def test_moment_is_the_same_with_and_without_the_nambu_doubling():
         hb = g.get_hamiltonian()
         hb.add_exchange(v)
         hb.turn_nambu()
+        assert np.allclose(hn.get_vev(nk=60), hb.get_vev(nk=60),
+                           atol=1e-10), ("occupation", v)
+        assert np.allclose(hn.get_vev("sz", nk=60), hb.get_vev("sz", nk=60),
+                           atol=1e-10), ("sz", v)
         assert np.allclose(hn.get_magnetization(nk=60),
                            hb.get_magnetization(nk=60), atol=1e-10), v

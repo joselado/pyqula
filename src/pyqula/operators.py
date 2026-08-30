@@ -485,6 +485,13 @@ def get_envelop(h,sites=[],d=0.3):
 
 
 def get_sigma_minus(h):
+    """Bloch generator of the sublattice lowering operator: a first
+    neighbor hopping that starts only on sublattice A, so the intra-cell
+    block is sigma_minus in the sublattice pseudospin.
+
+    Note that get_hk_gen adds the Hermitian conjugate of the inter-cell
+    hoppings, so the matrix this returns at finite k is not purely
+    sigma_minus -- only its intra-cell block is."""
     def fun(r1,r2):
         i1 = h.geometry.get_index(r1,replicas=True)
         # get_index returns None for a position that is not in the cell or

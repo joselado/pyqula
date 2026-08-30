@@ -2070,6 +2070,12 @@ Every one of these RPA entry points -- `get_spinchi_ladder`, `get_spinchi_full`,
 That kernel can be dispatched to a GPU through [jax](https://github.com/jax-ml/jax) instead of numba, with `chi_cpugpu="GPU"`, forwarded down from any of those entry points:
 
 ```python
+import numpy as np
+from pyqula import geometry
+g = geometry.bichain() # two sites per cell, so Neel order fits in the cell
+h = g.get_hamiltonian(has_spin=True)
+seed = h.copy() ; seed.add_antiferromagnetism(0.5) # symmetry-breaking seed
+hmf = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf=seed,nk=100)
 es,chis = hmf.get_spinchi_full(q=[0.2,0.,0.],nk=8,
             energies=np.linspace(0.01,1.0,100),delta=1e-2,
             chi_cpugpu="GPU") # dispatch the Lindhard kernel to a GPU
@@ -2166,6 +2172,13 @@ The reason the middle row splits is a matter of which index the ladder rung is d
 `method="pair"` (`chitk/pairchi.py`) keeps the pair index and solves the same ladder there, $\chi = \chi_0(1+V\chi_0)^{-1}$ with $V$ diagonal. The cost is set by how many pairs the interaction has rather than by $N^2$ -- only pairs in its support enter the inversion, so a short-ranged $V$ gives $N(z+1)$, linear in $N$ and eight pairs for a honeycomb cell with a nearest-neighbour $V$. It keeps the frequency scan, needs no gap, and assumes nothing about the spin structure of the state:
 
 ```python
+import numpy as np
+from pyqula import geometry
+from pyqula.meanfield import VJinteraction
+nk = 6                                  # the SCF and the magnon share this mesh
+g = geometry.honeycomb_lattice()
+hmf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
+                     mf="antiferro",nk=nk,maxerror=1e-10).hamiltonian
 qs,ws,gammas = hmf.get_magnon_bands(method="pair",nq=20,
                     energies=np.linspace(1e-3,3.,400),delta=1e-3,nk=nk)
 es,chi = hmf.get_transverse_spinchi(energies=np.linspace(0.,2.,100),
@@ -2280,6 +2293,13 @@ The size of the problem is the reason the previous paragraph exists, and the k-m
 It does not have to be reached with a matrix. Because a real-space interaction Fourier transforms as $W_{ab}(k-k') = \sum_d W_{ab}(d)\,e^{2\pi i k\cdot d}\,e^{-2\pi i k'\cdot d}$, the direct term of the kernel separates exactly into one rank-one term per non-zero entry $(a,b,d)$ of that interaction -- a *fixed* number, set by how far the interaction reaches and not by the mesh. The exchange term is already a product of density form factors. So the whole resonant block is a diagonal plus a fixed-rank correction, and can be applied to a vector without being built. `solver=` chooses what to do with that:
 
 ```python
+import numpy as np
+from pyqula import geometry
+from pyqula.bsetk.interaction import density_interaction
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian()
+h.add_sublattice_imbalance(1.0) # a gapped semiconductor
+W = density_interaction(h,Vr=lambda r1,r2: 0.8/np.sqrt((r1-r2).dot(r1-r2)+0.25))
 h.get_bse(V=W,nk=1024,tda=True,solver="iterative",neig=4) # no matrix
 h.get_bse(V=W,nk=65536,tda=True,solver="qtt",neig=1)      # no mesh either
 ```
@@ -2313,7 +2333,15 @@ See `examples/2d/excitons_bse/main.py` for a runnable version (the lowest excito
 An exciton is a two-particle state, so besides its binding energy it has a dispersion of its own: the bound electron-hole pair propagates with a center-of-mass momentum $Q$, and $E_X(Q)$ is the exciton band structure. It is not the difference of two band energies -- the electron-hole interaction bends it -- so its curvature is the exciton's effective mass, and a flat exciton band means a strongly bound, spatially compact exciton. `h.get_exciton_bands` solves one BSE per q-point along a path and returns the result in the same flat form `get_bands` uses:
 
 ```python
-# h2 and W as above; nv=nc=2 keeps both members of each spin-degenerate pair
+# h2 and W as in the section above
+import numpy as np
+from pyqula import geometry
+from pyqula.bsetk.interaction import density_interaction
+g = geometry.honeycomb_lattice()
+h2 = g.get_hamiltonian()
+h2.add_sublattice_imbalance(1.0) # a gapped semiconductor
+W = density_interaction(h2,Vr=lambda r1,r2: 0.8/np.sqrt((r1-r2).dot(r1-r2)+0.25))
+# nv=nc=2 keeps both members of each spin-degenerate pair
 opts = dict(V=W,nq=20,nk=8,nv=2,nc=2,n=4)
 qs,es = h2.get_exciton_bands(**opts) # the four lowest excitons along the path
 qs0,es0 = h2.get_exciton_bands(kernel="none",**opts) # the bare continuum
@@ -2995,7 +3023,17 @@ Optional arguments:
 ### h.get_density_matrix()
 Return the full density matrix of the occupied states, as a dense matrix in
 the same basis as `h.intra`. See "Interactions at the mean-field level" for
-the k-resolved, hopping-resolved version the self-consistent loops use
+the k-resolved, hopping-resolved version the self-consistent loops use.
+
+**Index convention.** This is
+$\mathrm{dm}_{ij}=\sum_\mathrm{occ}\psi_i^*\psi_j$, the *transpose* of the
+usual $\rho_{ij}=\sum_\mathrm{occ}\psi_i\psi_j^*$ -- the mean-field
+machinery is built around it. So an expectation value is
+`np.trace(dm.T@A)`, not `np.trace(dm@A)`: the two agree for any real
+operator (the density, $\sigma_x$, $\sigma_z$, a projector) and differ by a
+sign for a purely imaginary one ($\sigma_y$, the valley operator, any
+current operator $i[H,r]$). Use `h.get_vev(operator)` rather than
+contracting the matrix yourself
 
 ### h.get_ipr()
 Return the inverse participation ratio of every eigenstate, as
