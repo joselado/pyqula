@@ -234,6 +234,13 @@ def add_swave(delta=0.0,is_sparse=False,rs=None):
 
 def add_swave_to_hamiltonian(self,delta,**kwargs):
     """Add the swave coupling to the Hamiltonian"""
+    if len(kwargs)>0:
+        # add_swave takes only the amplitude; anything else (mode=, d=,
+        # r1=...) belongs to add_pairing and used to be dropped here
+        raise TypeError("add_swave() got unexpected keyword argument(s) "
+          +str(sorted(kwargs))+"; it only takes the pairing amplitude. "
+          +"For any other pairing symmetry use add_pairing(delta=...,"
+          +"mode=...)")
     from .operators import isnumber
 #    if isnumber(delta):
 #        if delta==0.0: return 
@@ -245,7 +252,10 @@ def add_swave_to_hamiltonian(self,delta,**kwargs):
     elif self.check_mode("spinful") or self.check_mode("spinful_nambu"): 
       self.turn_nambu() # add electron hole
       self.intra = self.intra + add_swave(delta=delta,rs=self.geometry.r,is_sparse=self.is_sparse)
-    else: raise
+    else:
+        raise ValueError("cannot add s-wave pairing to this Hamiltonian: "
+          +"it is neither spinless nor spinful (has_spin="
+          +str(self.has_spin)+", has_eh="+str(self.has_eh)+")")
 
 
 

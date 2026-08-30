@@ -5,7 +5,7 @@ import numpy as np
 
 def slab(h,nz=1,nx=1,ny=1,sparse=False,ncut=3):
   """Create slab"""
-  hout = multicell.supercell(h,nsuper=[nx,ny,nz],sparse=sparse,ncut=ncut)
+  hout = multicell.supercell_hamiltonian(h,nsuper=[nx,ny,nz],sparse=sparse,ncut=ncut)
   hout.dimensionality = 2
   hout.geometry.dimensionality = 2
   hopping = [] # empty list

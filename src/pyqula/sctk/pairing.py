@@ -69,7 +69,10 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
         weightf = lambda r1,r2: C3nn(r1,r2)
     elif mode=="SnnAB":
         weightf = lambda r1,r2: SnnAB(self.geometry,r1,r2)
-    else: raise
+    else:
+        raise ValueError("unknown pairing mode '"+str(mode)+"'; it must be "
+          +"one of the modes listed in sctk.pairing.pairing_generator, or "
+          +"a callable returning the 2x2 pairing matrix")
     matrixf = lambda r1,r2: deltaf((r1+r2)/2.)*weightf(r1,r2) 
     return matrixf # return function
 

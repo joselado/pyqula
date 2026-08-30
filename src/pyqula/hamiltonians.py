@@ -615,16 +615,30 @@ class Hamiltonian():
       """ Move the Fermi energy of the system"""
       shift_fermi(self,fermi)
     def get_topological_invariant(self,**kwargs):
-        """Return a topological invariant"""
-        if self.dimensionality==0: pass
-        elif self.dimensionality==1: pass
+        """Return a topological invariant of the occupied bands.
+
+        In one dimension this is the Berry (Zak) phase, in two the Z2
+        invariant for a time-reversal-symmetric Hamiltonian and the Chern
+        number otherwise. The 0d and 3d cases used to return None and
+        raise a bare `raise` respectively."""
+        if self.dimensionality==0:
+            raise ValueError("a 0-dimensional (finite) Hamiltonian has no "
+              +"Brillouin zone, so no topological invariant is defined for "
+              +"it; build a periodic system, or look at the spectrum of "
+              +"the finite cluster instead")
+        elif self.dimensionality==1:
+            return topology.berry_phase(self,**kwargs) # Zak phase
         elif self.dimensionality==2: 
             if self.has_time_reversal_symmetry():
                 return topology.z2_invariant(self,**kwargs)
             else:
-                print("Computing Chern")
                 return topology.chern(self,**kwargs)
-        else: raise
+        else:
+            raise NotImplementedError("no topological invariant is "
+              +"implemented for a 3-dimensional Hamiltonian; compute the "
+              +"Chern number of a 2d slice with get_chern on a fixed third "
+              +"momentum, or the Berry phase along a chosen k-path with "
+              +"topology.berry_phase(h,kpath=...)")
     def shift_fermi(self,fermi): self.add_onsite(fermi)  
     def first_neighbors(self):
       """ Create first neighbor hopping"""
@@ -854,11 +868,41 @@ class Hamiltonian():
     def generate_spin_spiral(self,**kwargs):
         """ Generate a spin spiral antsaz in the Hamiltonian """
         return rotate_spin.generate_spin_spiral(self,**kwargs)
-    def get_magnetization(self,**kwargs):
-        """ Return the magnetization """
-        mx = self.extract(name="mx")
-        my = self.extract(name="my")
-        mz = self.extract(name="mz")
+    def get_magnetization(self,mode="field",**kwargs):
+        """Return the site-resolved magnetic order, as an (nsites,3) array.
+
+        Two different quantities go by this name, and which one you want
+        depends on what you are doing:
+
+        - mode="field" (the default, and what this method has always
+          returned) reads the magnetic *term written in the Hamiltonian*,
+          i.e. the coefficients of sigma_x/y/z on each site, via
+          extract("mx"/"my"/"mz"). After a self-consistent calculation
+          that term is the mean-field exchange field, which is the natural
+          order parameter of the loop and is proportional -- not equal --
+          to the moment. For a Hamiltonian where you put the field in by
+          hand (add_zeeman/add_exchange) this returns exactly the field
+          you put in, not the polarization it induces.
+
+        - mode="vev" returns the actual per-site expectation value
+          (<S_x>,<S_y>,<S_z>) of the occupied states, i.e.
+          get_vev("sx"/"sy"/"sz"). This is the physical magnetization, and
+          it is what you want if you are reporting a moment.
+
+        Any extra keyword is forwarded to get_vev (e.g. nk) in "vev" mode.
+        """
+        if mode=="field":
+            mx = self.extract(name="mx")
+            my = self.extract(name="my")
+            mz = self.extract(name="mz")
+        elif mode=="vev":
+            mx = self.get_vev("sx",**kwargs)
+            my = self.get_vev("sy",**kwargs)
+            mz = self.get_vev("sz",**kwargs)
+        else:
+            raise ValueError("unknown magnetization mode '"+str(mode)
+              +"', expected 'field' (the magnetic term in the Hamiltonian) "
+              +"or 'vev' (the expectation value of the spin operator)")
         return np.array([mx,my,mz]).T # return array
     def get_vev(self,operator=None,**kwargs):
         """

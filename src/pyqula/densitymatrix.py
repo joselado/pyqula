@@ -1,5 +1,6 @@
 from __future__ import print_function, division
 import numpy as np
+from .algebra import todense
 from numba import jit
 from . import parallel
 
@@ -44,7 +45,12 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     dm = None # accumulator, one slot per batch
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
-        mats = np.array([hk(k) for k in kbatch]) # k-Hamiltonians in this batch
+        # hk(k) is sparse for an is_sparse Hamiltonian; np.array of those
+        # gives an object array that the numba kernels below reject with an
+        # opaque TypingError, so densify (this path diagonalizes fully
+        # anyway)
+        mats = np.array([todense(hk(k)) for k in kbatch],
+                dtype=np.complex128) # k-Hamiltonians in this batch
         es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
         es_batch = es_batch-fermi # substract fermi energy
         if ds is None:
@@ -109,7 +115,12 @@ def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
     outd = {d: np.zeros((n,n),dtype=np.complex128) for d in pairs}
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
-        mats = np.array([hk(k) for k in kbatch]) # k-Hamiltonians in this batch
+        # hk(k) is sparse for an is_sparse Hamiltonian; np.array of those
+        # gives an object array that the numba kernels below reject with an
+        # opaque TypingError, so densify (this path diagonalizes fully
+        # anyway)
+        mats = np.array([todense(hk(k)) for k in kbatch],
+                dtype=np.complex128) # k-Hamiltonians in this batch
         es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
         es_batch = es_batch-fermi # substract fermi energy
         _accumulate_dm_batch(outd,pairs,threshold,es_batch,vs_batch,kbatch,delta)
@@ -192,7 +203,12 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     all_es = []
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
-        mats = np.array([hk(k) for k in kbatch]) # k-Hamiltonians in this batch
+        # hk(k) is sparse for an is_sparse Hamiltonian; np.array of those
+        # gives an object array that the numba kernels below reject with an
+        # opaque TypingError, so densify (this path diagonalizes fully
+        # anyway)
+        mats = np.array([todense(hk(k)) for k in kbatch],
+                dtype=np.complex128) # k-Hamiltonians in this batch
         es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
         batches.append((es_batch,vs_batch,kbatch))
         all_es.append(es_batch.ravel())

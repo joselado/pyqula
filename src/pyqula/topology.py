@@ -76,23 +76,39 @@ def berry_phase(h,nk=20,kpath=None,write=True):
     Berry phase of 0 or pi, as used by nodes.py) are unaffected, since
     -pi = pi modulo 2*pi.
     """
-    if h.dimensionality==0: raise
+    if h.dimensionality==0:
+        raise ValueError("a 0-dimensional Hamiltonian has no Brillouin "
+          +"zone, so it has no Berry phase")
     elif h.dimensionality == 1:
       ks = np.linspace(0.,1.,nk,endpoint=False) # list of kpoints
       ks = np.array([[k,0.,0.] for k in ks]) # redefine
     elif h.dimensionality > 1: # you must provide a kpath
-        if kpath is None: 
-            print("You must provide a k-path")
-            raise # error
+        if kpath is None:
+            raise ValueError("in more than one dimension the Berry phase "
+              +"depends on the path, so you must provide kpath=")
         ks = kpath # continue
         nk = len(kpath) # redefine
     else: raise # otherwise
     hkgen = h.get_hk_gen() # get Hamiltonian generator
     wf0 = occupied_states(hkgen,ks[0]) # get occupied states, first k-point
+    if len(wf0)==0:
+        raise ValueError("there is no occupied state (no eigenvalue below "
+          +"zero) at the first k-point, so the Berry phase of the occupied "
+          +"manifold is not defined; shift the Fermi energy into the gap "
+          +"with h.shift_fermi / h.set_filling first")
     wfold = wf0.copy() # copy
     m = np.array(np.identity(len(wf0))) # initialize as the identity matrix
     for ik in range(1,len(ks)): # loop over k-points, except first one
       wf = occupied_states(hkgen,ks[ik])  # get waves
+      if len(wf)!=len(wf0):
+        # the manifold must be the same size all along the path, otherwise
+        # the link variables are not square and this used to die with an
+        # opaque matmul shape error
+        raise ValueError("the number of occupied states changes along the "
+          +"k-path ("+str(len(wf0))+" at the first k-point, "+str(len(wf))
+          +" at k="+str(ks[ik])+"), so the occupied manifold is not "
+          +"separated by a gap and its Berry phase is not defined. Shift "
+          +"the Fermi energy into a gap, or pass an energy window")
       m = m@uij(wfold,wf)   # get the uij   and multiply
       wfold = wf.copy() # this is the new old
     m = m@uij(wfold,wf0)   # last one
@@ -155,6 +171,11 @@ def berry_curvature(h,k,dk=0.01,window=None,max_waves=None):
   if max(dims)!=min(dims): # check that the dimensions are fine 
 #    print("WARNING, skipping this k-point",k)
     return 0.0 # if different number of vectors
+  if max(dims)==0:
+    # no occupied state at this k-point (e.g. every band above the Fermi
+    # energy): the Berry curvature is zero, not an error -- this used to
+    # reach uij with empty arrays and die with an opaque TypeError
+    return 0.0
   # get the uij  
   m = uij(wf1,wf2)@uij(wf2,wf3)@uij(wf3,wf4)@uij(wf4,wf1)
   d = lg.det(m) # calculate determinant

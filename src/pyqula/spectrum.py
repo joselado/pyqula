@@ -368,12 +368,35 @@ def get_fermi4filling(h,filling,nk=8):
         es = eigenvalues(h,nk=nk,notime=True)
         return get_fermi_energy(es,filling)
 
+def get_filling_spinful_nambu(h,nk=10,**kwargs):
+    """Filling of a spinful Nambu (BdG) Hamiltonian.
+
+    Counting eigenvalues below zero, as the normal-state branch does, is
+    meaningless in the Nambu basis: the spectrum is particle-hole
+    symmetric, so exactly half of it always sits below zero whatever the
+    density is. What the filling actually is, is the weight the negative
+    energy BdG states put on the *electron* components,
+    n = sum_{E_nk<0} <psi_nk|P_e|psi_nk> / N_k, normalized by the number
+    of electron states per unit cell (2 per site, up and down), so that a
+    half filled system gives 0.5 like everywhere else in the library."""
+    from . import operators
+    pe = np.array(operators.get_electron(h).todense()) # electron projector
+    (es,ws) = h.get_eigenvectors(nk=nk,**kwargs) # eigenvalues and vectors
+    fac = 1./(nk**h.dimensionality) # number of kpoints
+    ne = 0.0 # number of electrons per unit cell
+    for (e,w) in zip(es,ws): # loop over states
+        if e<0.0: ne += np.conjugate(w).dot(pe@w).real # electron weight
+    nstates = h.intra.shape[0]//2 # electron states per unit cell
+    return ne*fac/nstates # return the filling
+
+
 def get_filling(h,**kwargs):
     """Get the filling of a Hamiltonian at this energy"""
     if h.check_mode("spinless_nambu"): # spinless Nambu Hamiltonian
         from .sctk import spinless
         return spinless.get_filling(h,**kwargs)
-    elif h.check_mode("spinful_nambu"): raise # spinful Nambu
+    elif h.check_mode("spinful_nambu"): # spinful Nambu
+        return get_filling_spinful_nambu(h,**kwargs)
     else:
         es = eigenvalues(h,**kwargs) # eigenvalues
         es = np.array(es)

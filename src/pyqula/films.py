@@ -5,7 +5,7 @@ from . import sculpt
 def build(h,nz=1):
   """Create Hamiltonian of a film from a 3d geometry"""
 #  if not h.dimensionality==3: raise
-  ho = multicell.supercell(h,nsuper=[1,1,nz],sparse=False,ncut=3)
+  ho = multicell.supercell_hamiltonian(h,nsuper=[1,1,nz],sparse=False,ncut=3)
   ho.dimensionality = 2 # reduce dimensionality
   ho.geometry.dimensionality = 2 # reduce dimensionality
   ho.geometry = sculpt.set_xy_plane(ho.geometry) # put in the xy plane

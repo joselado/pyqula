@@ -215,12 +215,25 @@ def get_interface(h,fun=None):
 def get_pairing(h,ptype="s"):
   """Return an operator that calculates the expectation value of the
   s-wave pairing"""
-  if not h.has_eh: raise # only for e-h systems
+  if not h.has_eh:
+      raise ValueError("a pairing operator needs the electron-hole "
+        +"(Nambu) degree of freedom; call h.setup_nambu_spinor() first")
+  if not h.check_mode("spinful_nambu"):
+      # these are all 4x4 (spin x electron-hole) blocks: built on a
+      # spinless Nambu Hamiltonian they came out twice the size of its
+      # Hilbert space instead of raising
+      raise NotImplementedError("the pairing operators ('spair', 'deltax',"
+        +" 'deltay', 'deltaz') are singlet/d-vector components in the "
+        +"spin x electron-hole basis, so they are only defined for a "
+        +"spinful Nambu Hamiltonian; this one is spinless Nambu. Use "
+        +"h.extract('swave') or sctk.spinless for the spinless case")
   if ptype=="s": op = superconductivity.spair
   elif ptype=="deltax": op = superconductivity.deltax
   elif ptype=="deltay": op = superconductivity.deltay
   elif ptype=="deltaz": op = superconductivity.deltaz
-  else: raise
+  else:
+      raise ValueError("unknown pairing operator '"+str(ptype)
+        +"', expected 's', 'deltax', 'deltay' or 'deltaz'")
   r = h.geometry.r
   out = [[None for ri in r] for rj in r]
   for i in range(len(r)): # loop over positions
@@ -248,7 +261,9 @@ def get_electron(h):
 
 def get_hole(h):
   """Operator to project on the hole sector"""
-  if not h.has_eh: raise # only for e-h systems
+  if not h.has_eh:
+      raise ValueError("the hole projector needs the electron-hole "
+        +"(Nambu) degree of freedom; call h.setup_nambu_spinor() first")
   elif h.check_mode("spinful_nambu"): # only for e-h systems
       op = superconductivity.projh
       r = h.geometry.r
@@ -391,16 +406,27 @@ def get_velocity(h):
         return vk(k)@w
     return f
   elif h.dimensionality==2:
+    # the Cartesian band speed |<v>|, with v_alpha = i[H,r_alpha] built by
+    # conductivitytk.kubo (the shared, benchmarked velocity: it applies
+    # current.hk_derivative's 2*pi normalization, the reduced->Cartesian
+    # Jacobian, and the intracell-bond term that the lattice gauge drops).
+    # Building it out of raw current.derivative instead, as this used to,
+    # got all three wrong -- the x and y derivative orders were also
+    # swapped -- and the result was not even C3 invariant on a honeycomb
+    # lattice: three symmetry-equivalent k-points of the same band came
+    # out with three different speeds.
+    from .conductivitytk.kubo import _setup,_velocities
+    hm,orders,hkgen,jac,dr,cellvol,scale = _setup(h)
     def f(w,k=[0.,0.,0.]):
-      vx = current.derivative(h,k,order=[0,1])
-      vy = current.derivative(h,k,order=[1,0])
-      R = np.array(h.geometry.get_k2K())
-#      R = algebra.inv(R) # not sure if this is ok
-      v = [braket_wAw(w,vx),braket_wAw(w,vy),0]
-      v = np.array(v).real
-      return (v@R@v)*w # return the scalar product
+      hk = hkgen(k) # Bloch Hamiltonian at this k-point
+      v = _velocities(hm,orders,jac,dr,hk,k) # Cartesian velocity operators
+      vs = np.array([braket_wAw(w,v[a]).real for a in range(3)])
+      return np.sqrt(vs.dot(vs))*w # return the modulus of the velocity
     return Operator(f)
-  else: raise
+  else:
+    raise NotImplementedError("the velocity operator is only implemented "
+      +"for dimensionality 1 and 2 (current.derivative, the shared "
+      +"k-derivative, has no 3D branch)")
 
 
 
@@ -461,8 +487,13 @@ def get_envelop(h,sites=[],d=0.3):
 def get_sigma_minus(h):
     def fun(r1,r2):
         i1 = h.geometry.get_index(r1,replicas=True)
+        # get_index returns None for a position that is not in the cell or
+        # any of its replicas; there is nothing to couple then. This used
+        # to be unreachable, because `fun` was silently dropped by
+        # get_hamiltonian (it is the old name of `tij`) and a plain
+        # first-neighbor Hamiltonian was built instead
+        if i1 is None: return 0.0
         if not h.geometry.sublattice[i1]==1: return 0.0
-        i2 = h.geometry.get_index(r2,replicas=True)
         dr = r1-r2 # distance
         if 0.9<dr.dot(dr)<1.1: return 1.0 # get first neighbor
         return 0.0

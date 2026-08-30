@@ -138,8 +138,33 @@ def add_peierls(h,mag_field,**kwargs):
 def add_bfield(h,b=0.0,phi=0.0,mode="inplane",gauge="Landau"):
     """Add an in-plane magnetic field"""
     if h.dimensionality>2: raise NotImplementedError
-    if h.has_spin: gi = lambda i: i//2
-    else: gi = lambda i: i
+    # number of orbitals per site: this used to assume 2 for a spinful
+    # Hamiltonian, which is wrong for a Nambu one (4 per site, or 2 for a
+    # spinless Nambu) and indexed off the end of the position list
+    nsites = len(h.geometry.r) # number of sites
+    ndim = h.intra.shape[0] # dimension of the Hamiltonian
+    if ndim%nsites!=0:
+        raise ValueError("the Hamiltonian dimension "+str(ndim)+" is not a "
+          +"multiple of the number of sites "+str(nsites))
+    nper = ndim//nsites # orbitals per site
+    gi = lambda i: i//nper # index of the site of this orbital
+    if h.has_eh: # Nambu Hamiltonian
+        # the hole block is -H*(-A), so it must pick up the conjugate
+        # Peierls phase; the anomalous block has no single well defined
+        # one (a Cooper pair carries charge 2e, and a field there means
+        # vortices), so refuse rather than guess
+        if not h.get_anomalous_hamiltonian().is_zero():
+            raise NotImplementedError("an orbital magnetic field cannot be "
+              +"added to a Hamiltonian that already carries a pairing "
+              +"amplitude: the anomalous term has no single Peierls phase "
+              +"(a Cooper pair has charge 2e, and an orbital field in a "
+              +"superconductor means vortices). Add the field to the "
+              +"normal-state Hamiltonian first, then turn_nambu()/"
+              +"add_swave(), so that the hole block is built from the "
+              +"field-carrying electron block")
+        ehsign = lambda i: 1.0 if (i%nper)<nper//2 else -1.0 # electron/hole
+    else:
+        ehsign = lambda i: 1.0 # no electron-hole degree of freedom
     if not h.is_multicell: 
         h.turn_multicell() # turn to multicell form
     cphi = np.cos(phi*np.pi)
@@ -151,8 +176,10 @@ def add_bfield(h,b=0.0,phi=0.0,mode="inplane",gauge="Landau"):
         elif mode=="offplane": 
             if gauge=="Landau": return r[1]*dr[0]/2.
             elif gauge=="symmetric": return r[1]*dr[0]/4.- r[0]*dr[1]/4.
-            else: raise
-        else: raise
+            else: raise ValueError("unknown gauge '"+str(gauge)
+                    +"', expected 'Landau' or 'symmetric'")
+        else: raise ValueError("unknown mode '"+str(mode)
+                +"', expected 'inplane' or 'offplane'")
     def add_phase(m,r1,r2): # add the phase
         mo = coo_matrix(m) # convert to coo matrix
         data = mo.data +0.0j
@@ -161,7 +188,9 @@ def add_bfield(h,b=0.0,phi=0.0,mode="inplane",gauge="Landau"):
             r = (r1[gi(i)] + r2[gi(j)])/2.
             dr = r1[gi(i)] - r2[gi(j)]
             p = get_phase(r,dr)
-            data[k] *= np.exp(1j*b*p*2.*np.pi)
+            # the hole block carries the opposite charge, hence the
+            # conjugate phase; ehsign is 1 everywhere without Nambu
+            data[k] *= np.exp(1j*ehsign(i)*b*p*2.*np.pi)
             k += 1
         out = csc_matrix((data,(mo.row,mo.col)),shape=mo.shape) 
         return out.todense() # return matrix
