@@ -25,7 +25,7 @@ def get():
     di = np.random.random(3) ; di = np.cross(dr,di)
     di = di/np.sqrt(di.dot(di)) # second vector
     d = dr + 1j*di
-    du0 = (1j*np.cross(np.conjugate(d),d)).real # non-unitarity
+    du0 = (1j*np.cross(d,np.conjugate(d))).real # non-unitarity q = i(d x d*)
     du0 = du0/np.sqrt(du0.dot(du0)) # normalize
     print("Input non-unitarity",du0)
     h.add_pairing(d=d,mode="triplet",delta=1.0)

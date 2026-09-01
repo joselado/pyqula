@@ -45,23 +45,34 @@ def matrix2dvector(m):
 
 
 def dvector2nonunitarity(m):
-    """Given a matrix of dvectors, compute the non-unitarity"""
-    out = np.zeros(m.shape,dtype=np.complex128)
-    n = m.shape[1]
-    for i in range(n): # loop over sites
-        for j in range(n): # loop over sites
-            d = m[:,i,j]
-            out[:,i,j] = 1j*np.cross(np.conjugate(d),d)
-    return out.real
+    """Given a matrix of d-vectors, compute the non-unitarity vector
+
+    The convention is q = i*(d x d^*), fixed by
+
+        Delta Delta^dag = |d|^2 * identity + q.sigma
+
+    with Delta = i*(d.sigma)*sigma_y. The state is unitary iff q = 0, and
+    q is the spin moment of the Cooper pairs: a pure up-up pairing
+    (d proportional to (1,i,0)) gives q along +z. Note this is the
+    opposite order of the cross product to i*(d^* x d), which returns -q.
+    """
+    out = 1j*np.cross(m,np.conjugate(m),axis=0) # q = i*(d x d^*)
+    return out.real # it is real by construction
 
 
 def average_hamiltonian_dvector(h,nk=10,
     spatial_sum=True,
     non_unitarity=False
     ):
-    """Compute the average d-vector of a Hamiltonian. Optional arguments
+    """Compute the average d-vector of a Hamiltonian, as the three
+    k-averaged squared components (|dx|^2,|dy|^2,|dz|^2). Optional arguments
        - nk = 10, number of kpoints in each direction
        - spatial_sum = True, return sum over sites
+       - non_unitarity = False, average the squared components of the
+         non-unitarity vector q = i*(d x d^*) instead of those of d. This
+         is a magnitude only, and unlike get_dvector_non_unitarity it
+         carries no sign, so use it to ask whether the state is
+         non-unitary rather than in which direction.
     """
     if not h.has_eh: raise
     f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
@@ -107,7 +118,11 @@ def dvector_times_mij_map(h,nrep=4):
 
 
 def dvector_non_unitarity_map(h,nrep=2,**kwargs):
-    """Compute a map of the d-vector non-unitarity"""
+    """Write a real-space map of the d-vector non-unitarity to
+    NON_UNITARITY_MAP.OUT, with columns (x,y,z,qx,qy,qz). Optional arguments
+       - nrep = 2, number of replicas written for each direction
+       - nk = 10, number of k-points in each direction
+    See get_dvector_non_unitarity for the definition of q."""
     ds = dvector_non_unitarity(h,**kwargs) # dvectors
     rs = h.geometry.supercell(nrep).r # supercell positions
     from ..geometry import replicate_array
@@ -117,7 +132,24 @@ def dvector_non_unitarity_map(h,nrep=2,**kwargs):
 
 
 def dvector_non_unitarity(h,nk=10):
-    """Compute the non-unitarity"""
+    """Compute the non-unitarity vector of the spin-triplet d-vector,
+    resolved per site, as an array of shape (number of sites, 3).
+
+    For a spin-triplet pairing matrix Delta = i*(d.sigma)*sigma_y one has
+
+        Delta Delta^dag = |d|^2 * identity + q.sigma,  q = i*(d x d^*)
+
+    so the state is unitary (Delta Delta^dag proportional to the identity)
+    iff q = 0. When it is non-zero, q is real and is the spin moment of the
+    Cooper pairs: it is parallel to the magnetization in a ferromagnetic
+    spin-triplet superconductor, and it points along +z for a pure up-up
+    pairing. The d-vector is computed at each k-point of a uniform mesh,
+    q is averaged over the mesh, and the pairing partners of each site
+    are summed over.
+
+    Optional arguments
+       - nk = 10, number of k-points in each direction
+    """
     f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
     ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
     out = np.array([f(k) for k in ks]) # compute d-vector matrices

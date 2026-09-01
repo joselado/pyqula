@@ -845,6 +845,94 @@ h.add_swave(0.2) # add s-wave superconductivity
 ```
 Note that due to the BdG nature of the Hamiltonian, the bandstructure shows both the electron and hole states
 
+## Spin-triplet d-vector and non-unitary superconductivity
+
+For a spin-triplet superconductor the pairing is a symmetric $2\times2$
+matrix in spin space, which is conventionally parametrized by a complex
+three-component d-vector $\vec d$ as
+
+$$
+\Delta = i (\vec d \cdot \vec \sigma) \sigma_y =
+\begin{pmatrix}
+-d_x + i d_y & d_z \\
+d_z & d_x + i d_y \\
+\end{pmatrix}
+$$
+
+so that $d_z$ is the equal-spin-antiparallel $\Delta_{\uparrow\downarrow}$
+component and $d_x,d_y$ encode the equal-spin
+$\Delta_{\uparrow\uparrow},\Delta_{\downarrow\downarrow}$ ones. Only
+$\Delta_{\uparrow\downarrow}$ can also host a spin-singlet contribution,
+which is antisymmetric under exchanging the two sites; pyqula projects it
+out before reading off $d_z$, so a state with both singlet and triplet
+order still gives the triplet d-vector alone.
+
+The product
+
+$$
+\Delta \Delta^\dagger = |\vec d|^2 \mathbb{1} + \vec q \cdot \vec \sigma,
+\qquad
+\vec q = i (\vec d \times \vec d^*)
+$$
+
+splits the state into two classes. When $\vec q = 0$ the state is
+**unitary**: $\Delta \Delta^\dagger$ is proportional to the identity, the
+two quasiparticle branches are degenerate, and the Cooper pairs carry no
+net spin. When $\vec q \neq 0$ the state is **non-unitary**: the gap is
+different for the two spin branches and the pairs carry a spin moment
+$\vec q$, which is real by construction (the cross product of a vector
+with its own conjugate is purely imaginary). A $\vec d$ with all
+components sharing a common phase, i.e. a $\vec d$ that is a real vector
+times a global phase, is always unitary; non-unitarity requires a relative
+phase between components, as in $\vec d \propto (1, i, 0)$, which is a pure
+$\Delta_{\uparrow\uparrow}$ pairing with $\vec q$ along $+z$. Non-unitary
+states therefore require broken time-reversal symmetry, and appear
+naturally in ferromagnetic superconductors, where $\vec q$ is parallel to
+the magnetization because the pairs form in the majority band.
+
+`h.get_dvector_non_unitarity()` returns $\vec q$ per site, as an array of
+shape (number of sites, 3), with $\vec d$ evaluated on a uniform k-mesh,
+$\vec q$ averaged over that mesh and the pairing partners of each site
+summed over. As an illustration, an explicit p-wave pairing with
+$\vec d \propto (1,i,0)$ is non-unitary with the pair spin along $+z$
+
+```python
+from pyqula import geometry
+g = geometry.chain() # geometry of the 1D model
+h = g.get_hamiltonian() # generate the Hamiltonian
+h.setup_nambu_spinor() # initialize the Nambu basis
+h.add_pairing(delta=0.3,mode="pwave",d=[1.,1j,0.]) # up-up pairing
+q = h.get_dvector_non_unitarity(nk=20) # -> [[0., 0., 0.36]]
+```
+
+whereas the same p-wave pairing with a real d-vector, `d=[1.,0.,0.]`, is
+unitary and returns zero. Non-unitary states also arise on their own from
+a self-consistent calculation: adding attractive first-neighbor
+interactions on top of a large Zeeman splitting, as in the example of the
+"Long range interactions" section, generates a spin-triplet order whose
+$\vec q$ follows the magnetization
+
+```python
+from pyqula import geometry
+g = geometry.triangular_lattice() # generate the geometry
+h = g.get_hamiltonian() # create Hamiltonian of the system
+h.add_exchange([0.,0.,3.]) # add exchange field
+h.setup_nambu_spinor() # initialize the Nambu basis
+# perform a superconducting non-collinear mean-field calculation
+h = h.get_mean_field_hamiltonian(V1=-1.0,filling=0.3,mf="random",nk=4)
+q = h.get_dvector_non_unitarity() # antiparallel to +z, as is h.get_magnetization()
+```
+
+For an inhomogeneous system, `h.write_non_unitarity()` writes the same
+quantity as a real-space map in `NON_UNITARITY_MAP.OUT`, with columns
+$(x,y,z,q_x,q_y,q_z)$. If all that is needed is whether the state is
+non-unitary at all, and not in which direction,
+`h.get_average_dvector(non_unitarity=True)` returns the k-averaged squared
+components of $\vec q$, a magnitude that carries no sign; the same method
+with its default `non_unitarity=False` returns
+$(|d_x|^2,|d_y|^2,|d_z|^2)$ and is what
+`superconductivity.identify_superconductivity` uses to label a state.
+
 ## Superfluid weight and BKT temperature
 
 A finite pairing amplitude does not by itself make a superconductor: what
@@ -3474,6 +3562,40 @@ Optional arguments:
 ### h.get_quantum_metric()
 Same arguments as `h.get_quantum_geometric_tensor()`, but returns only the
 quantum metric (symmetric part of the tensor).
+
+### h.get_dvector_non_unitarity()
+Non-unitarity vector $\vec q = i(\vec d \times \vec d^*)$ of the spin-triplet
+d-vector of a BdG (Nambu) Hamiltonian, resolved per site (see "Spin-triplet
+d-vector and non-unitary superconductivity"). It is real, vanishes for a
+unitary state, and otherwise is the spin moment of the Cooper pairs --
+parallel to the magnetization in a ferromagnetic spin-triplet
+superconductor, and along $+z$ for a pure $\Delta_{\uparrow\uparrow}$
+pairing.
+
+Optional arguments
+
+- nk = 10: k-points per periodic direction
+
+Returns an array of shape (number of sites, 3).
+
+### h.write_non_unitarity()
+Write $\vec q$ as a real-space map in `NON_UNITARITY_MAP.OUT`, with columns
+$(x,y,z,q_x,q_y,q_z)$.
+
+Optional arguments
+
+- nrep = 2: number of replicas written per direction
+- nk = 10: k-points per periodic direction
+
+### h.get_average_dvector()
+k-averaged squared components $(|d_x|^2,|d_y|^2,|d_z|^2)$ of the
+spin-triplet d-vector of a BdG (Nambu) Hamiltonian.
+
+Optional arguments
+
+- nk = 10: k-points per periodic direction
+- spatial_sum = True: average over sites, returning a single 3-component vector
+- non_unitarity = False: average the squared components of $\vec q$ instead of those of $\vec d$. This is a magnitude only and carries no sign, so use it to ask whether the state is non-unitary rather than in which direction; use `h.get_dvector_non_unitarity()` for the signed vector.
 
 ### h.get_superfluid_weight()
 Superfluid weight tensor $D_s^{ab}$ of a BdG (Nambu) Hamiltonian of
