@@ -17,7 +17,9 @@ re-confirmed by reading the source.
 **Not covered** (the agents were barred from the slow suites): `tests/scf`,
 `tests/keldysh`, `sctk/superfluidweight.py`, `sctk/pairing.py` internals,
 `scftk/spinspin.py`'s sparse density-matrix kernels, and the Nambu handling of
-the mean-field SCF kernels. A second sweep should start there.
+the mean-field SCF kernels. A second sweep should start there. The same two
+suites were also not run to verify the fixes -- everything else that touches
+the changed modules was.
 
 **One candidate chased and cleared**, recorded so it is not re-chased:
 `sctk/spinless.onsite_delta_vev`'s finite-temperature weight `ws[i]*fd` looks
@@ -25,7 +27,24 @@ like it squares the occupation, but `f^2 - (1-f)^2 == f - (1-f)` exactly, so
 the +-E BdG pair cancellation makes it numerically identical to the linear
 form. Not a bug.
 
-Status column: `open` / `fixed <hash>`.
+Each finding carries a **Status** line: `open`, or `fixed` with the commit and
+the test that pins it.
+
+**Where this stands.** Section 1 (silently wrong numbers) and section 3 (hard
+crashes) are fixed, in `5f3da27 7087ee6 a39bf68 4d5843d 66df675 a0e8681`, each with a regression test that asserts an
+invariant rather than a pinned number. Section 2 (silently ignored arguments)
+and section 4 (aliasing and missing guards) are deliberately still open -- they
+are the lower-severity half, and three of them (2.1 `get_ldos(operator=)`, 2.4
+`add_sublattice_imbalance` on 3 sublattices, 2.7 `hs` beyond nearest
+neighbours) are feature work rather than repairs, so they want a decision about
+whether to implement or to refuse in the `3b43557` style. 1.11 (the parallel
+RNG) is open on purpose; see its entry.
+
+Three of the fixes turn a silent wrong answer into a raised exception, which is
+a behaviour change for anyone who was relying on the broken path: an
+unrecognised operator name in `topology` (was: the valley operator), a 3D
+`set_finite_system(periodic=True)` (was: an open cluster), and a `filling`
+outside [0,1] in `set_individual_filling` (was: unchecked).
 
 ---
 
@@ -52,7 +71,7 @@ Line 762 compounds it: `if type(op)==np.array` is never true (`np.array` is a
 function, not a type), so an operator passed as a plain numpy matrix falls off
 the end of the function and is silently replaced by `None`, i.e. unprojected.
 
-**Status:** fixed. The `else` branch now goes through the ordinary
+**Status:** fixed in `5f3da27`. The `else` branch now goes through the ordinary
 `h.get_operator(op)` lookup (only `"valley"` accepts `projector=True`), the
 matrix test is `algebra.ismatrix`, and an unrecognised type raises `TypeError`
 instead of falling through. `tests/topology/test_topology_operator_dispatch.py`.
@@ -83,7 +102,7 @@ re-pinning that test. Every valley-texture consumer is affected:
 read `valley_x`/`valley_y` maps from this function, so the vortex winding sense
 is reversed.
 
-**Status:** fixed. The contraction now transposes the density matrix, the same
+**Status:** fixed in `7087ee6`. The contraction now transposes the density matrix, the same
 way `spectrum.ev` does. `test_island_operators.py`'s pin was replaced by an
 in-test explicit occupied-state sum so it cannot regress in either direction;
 `tests/spectrum/test_real_space_vev.py` covers the rest.
@@ -109,7 +128,7 @@ for precisely this reason -- the fix in `6f0f031`. `real_space_vev` has no
 would *not* be a bug for an LDOS, where summing electron+hole is a legitimate
 quasiparticle convention.
 
-**Status:** fixed, with the `get_vev` electron-sector restriction.
+**Status:** fixed in `7087ee6`, with the `get_vev` electron-sector restriction.
 `tests/spectrum/test_real_space_vev.py`.
 
 ### 1.4 `chitk/chiAB.py:217` -- the accelerated path runs at half the requested temperature
@@ -133,7 +152,16 @@ path at `T`:
 Against a response scale of `max|chi| = 1.184` at T=0.1, that is a 2.6% error,
 growing as T falls.
 
-**Status:** open
+**Status:** fixed in `a0e8681` -- `0.5*(1 - tanh(0.5*beta*E))`, which is Fermi-Dirac at `T`
+and, unlike `1/(1+exp(beta*E))`, does not overflow at low temperature.
+`chitk/chijax._occupations` already wrote it that way and its docstring names
+this function as the one it was mirroring, so it is the in-repo reference.
+`tests/chi/test_chi_backend_agreement.py`.
+
+`chitk/static.py:82`'s `elementchi` carried the same `(-tanh(E/T)+1)/2`, found
+while fixing this one and fixed with it. Its default `temp=1e-7` makes the
+occupation a step function, so in practice nothing moved -- but the convention
+now matches the rest of `chitk/`.
 
 ### 1.5 `chi.py:32` -- `elementchi` conjugates the wrong pair of amplitudes
 
@@ -155,7 +183,9 @@ unchanged: measured `max|chi - chi_gauged| = 0.0144` on values of order 0.2,
 where a direct Lehmann reference is invariant to 1e-16. `elementchi_row`, its
 batched twin, has the same defect.
 
-**Status:** open
+**Status:** fixed in `a0e8681`, in both. `chargechi` now reproduces an explicit Lehmann sum
+to 1e-17 and is gauge invariant to 2e-15.
+`tests/chi/test_chi_backend_agreement.py`.
 
 ### 1.6 `ldostk/ldosr.py:29` -- spinless branch overwrites instead of accumulating
 
@@ -177,7 +207,7 @@ Worse than the magnitude error: the result depends on the order
 the map is not even a smooth function of position. `examples/1d/ldosr/main.py`
 builds its ribbon with `has_spin=False`.
 
-**Status:** fixed -- the branch accumulates like its three siblings.
+**Status:** fixed in `a39bf68` -- the branch accumulates like its three siblings.
 `tests/ldos/test_ldosr_accumulation.py` pins spinful == 2 x spinless, an
 independent reference for the same quantity.
 
@@ -199,7 +229,7 @@ sx-projected surface DOS is identically `[-0,-0,-0,-0,-0]` against a correct
 `trace(sf@sx)` of `[-0.1038,-0.0506,0,+0.0506,+0.1038]`. `sz`, being diagonal,
 happens to come out right.
 
-**Status:** fixed. The operator resolution is now a shared
+**Status:** fixed in `a39bf68`. The operator resolution is now a shared
 `kdos.get_surface_operator`, hoisted out of the energy loop, and the
 contractions are matrix products. `tests/kdos/test_surface_dos_operator.py`.
 
@@ -223,7 +253,7 @@ differs from `get_smatrix(check=False)[0][1]` by 0.255 but matches
 blocks -- so this bites any caller using the transmission block itself.
 `Heterostructure.get_smatrix` is public and its docstring advises `check=True`.
 
-**Status:** fixed -- the split reads the blocks the way `bmat` laid them out,
+**Status:** fixed in `4d5843d` -- the split reads the blocks the way `bmat` laid them out,
 and it no longer assumes the two leads have the same dimension.
 `tests/transport/test_smatrix_block_order.py`.
 
@@ -243,7 +273,7 @@ ring: `H[0,5] = 0` instead of 1, spectrum `[-1.802,-1.247,-0.445,0.445,1.247,1.8
 (open chain) instead of the exact `[-2,-1,-1,1,1,2]`. Bit-identical to
 `periodic=False`.
 
-**Status:** fixed -- the dimensionality is captured before it is zeroed, and a
+**Status:** fixed in `4d5843d` -- the dimensionality is captured before it is zeroed, and a
 3D `periodic=True` now raises rather than silently returning an open cluster.
 `tests/hopping/test_finite_system_periodic.py`.
 
@@ -259,7 +289,7 @@ and identically in the `block_diagonal` branch at line 249
 the one finding whose agent did not manage a numerical repro; the source lines
 read exactly as quoted.
 
-**Status:** fixed -- both read `h_left.inter` now.
+**Status:** fixed in `4d5843d` -- both read `h_left.inter` now.
 
 ### 1.11 `paralleltk/multiprocess.py:11` -- `_init_worker` never reseeds the RNG
 
@@ -281,7 +311,17 @@ So averaging over k-points does not reduce the KPM variance the way it does
 serially: the parallel answer is systematically noisier than the serial one for
 the same nominal `ntries`, and the two backends disagree.
 
-**Status:** open
+**Status:** left open, deliberately, and recorded here instead. Reseeding is
+one line (`np.random.seed()` in `_init_worker`), but it makes every parallel
+stochastic result irreproducible run to run, and `90a5cf5` establishes that
+determinism is wanted here. The fix that keeps both is to draw a base seed from
+the parent's own stream and derive per-worker seeds from it plus the worker
+index, so the whole parallel run is reproducible given the parent's seed. Until
+that is built: **stochastic routines dispatched through `parallel.pcall` do not
+average independently when `cores>1`.** In practice that means KPM
+(`kpm.random_trace`) run through `pcall` -- note the KPM moment loop's own
+batching (`kpmtk/kpmnumba.py`) is a numba kernel, not `pcall`, and is not
+affected.
 
 ---
 
@@ -398,7 +438,7 @@ The signature declares `nrep=3`; the body calls
 default `operator=None` dies in `operators.Operator(None)` on a bare `raise`
 -> `RuntimeError: No active exception to reraise`.
 
-**Status:** fixed alongside 1.2/1.3 -- the same four lines. `nrep` is forwarded
+**Status:** fixed in `7087ee6`, alongside 1.2/1.3 -- the same four lines. `nrep` is forwarded
 and `operator=None` now means the density.
 
 ---
@@ -416,7 +456,8 @@ peigvalsh`. `hk_matrix_batch` is not a module-level name in `dos.py`, so
 1D sibling works. Reachable as `from pyqula import dos; dos.dos_ewindow(...)`
 -- not exposed as a `Hamiltonian` method.
 
-**Status:** open
+**Status:** fixed in `66df675` -- the local import names both, like its two siblings.
+`tests/densitymatrix/test_dead_code_paths.py`.
 
 ### 3.2 `filling.py:106` -- `set_filling(average=False)` is dead
 
@@ -438,7 +479,12 @@ Secondary, *not* verified because the crash comes first: even once callable,
 `fmin` compares `get_vev`'s per-site occupancy (0..2 for a spinful Hamiltonian)
 against a `filling` the rest of the module treats as 0..1.
 
-**Status:** open
+**Status:** both fixed in `66df675`. `full_dm` accepts `delta` as an explicit alias for `T`
+-- they are the same smearing under two names -- and raises if given both.
+`set_individual_filling` now aims at `filling * (2 if has_spin else 1)`, the
+per-site occupancy `get_vev` actually returns, and calls `check_filling`. The
+secondary defect turned out to be real: at `filling=0.5` on a spinful chain the
+solver had been aiming at 0.5 electrons per site where half filling is 1.0.
 
 ### 3.3 `chitk/chiAB.py:106` -- the GPU branch does not densify
 
@@ -455,7 +501,13 @@ difference), so this is purely a backend asymmetry -- `hk_matrix_batch`
 not applied here. Lines 271-275 (`lg.eigh(m1)` on the raw `hk(k)`) have the
 same shape of problem.
 
-**Status:** open
+**Status:** fixed in `a0e8681`, in both places, with `algebra.todense`. A third instance of
+the same class turned up while testing it and is fixed too: the numba kernels
+multiply the operator against complex wavefunctions and numba's `@` refuses a
+mixed-dtype product, so a real-valued named operator (`A="sz"`) made
+`ij_mode="accelerated"` fail to compile. All four backend combinations
+(dense/sparse x explicit/accelerated/GPU) now agree to 1e-15.
+`tests/chi/test_chi_backend_agreement.py`.
 
 ### 3.4 `greentk/kchain.py:12` -- `np.identity` with numpy never imported
 
@@ -464,7 +516,8 @@ imports only `.rg.green_renormalization` and `..algebra`. Asking for a modified
 surface onsite matrix raises `NameError` instead of returning the surface
 Green's function.
 
-**Status:** open
+**Status:** fixed in `66df675` -- the module imports numpy.
+`tests/green/test_kchain_surface_onsite.py`.
 
 ### 3.5 `hamiltonians.py:1067` + `vev.py:4` -- `get_dm_vev` has never worked
 
@@ -486,7 +539,10 @@ transpose fix in two places, and one of them was `vev.get_dm_vev`, i.e. the fix
 is recorded in a module that cannot run. Either repair both layers or delete
 `vev.py` so the fix is not filed in an unreachable place.
 
-**Status:** open
+**Status:** fixed in `66df675`, both layers -- `from .vev import get_dm_vev` and
+`from .operators import Operator`. The transpose fix filed there turns out to
+be correct: `get_dm_vev` now reproduces an explicit occupied-state sum for
+`sx`, `sy` and `sz` alike. `tests/densitymatrix/test_dead_code_paths.py`.
 
 ---
 

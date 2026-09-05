@@ -10,6 +10,11 @@ already measured or ruled out, and what the next decision point is, so that
 picking the work up again does not mean re-deriving conclusions that were
 already reached once.
 
+- [`bug_audit.md`](bug_audit.md) -- the standing list from the four-lens
+  audit sweep: every finding with its reproduction, what has been fixed and
+  in which commit, what is deliberately left open, the areas the sweep did
+  not cover, and one candidate it chased and cleared.
+
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a
   quantics tensor-train route to large k-meshes.

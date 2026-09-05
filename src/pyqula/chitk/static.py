@@ -79,9 +79,13 @@ def elementchi(ws1,es1,ws2,es2,ii,jj,T):
     out = 0j # initialize
     n = len(ws1) # number of wavefunctions
     for i in range(n): # first loop over states
-      oi = (-np.tanh(es1[i]/T) + 1.0)/2. # first occupation
+      # (1 - tanh(E/2T))/2 is Fermi-Dirac at T; without the half in the
+      # argument it is Fermi-Dirac at T/2, the same discrepancy
+      # chiAB_full_matrix_jit carried. chitk/chijax._occupations is the
+      # reference form.
+      oi = (1. - np.tanh(es1[i]/(2.*T)))/2. # first occupation
       for j in range(n): # second loop over states
-          oj = (-np.tanh(es2[j]/T) + 1.0)/2. # second occupation
+          oj = (1. - np.tanh(es2[j]/(2.*T)))/2. # second occupation
           fac = np.conjugate(ws1[i][ii])*ws2[j][ii] # add the factor
           fac *= ws1[i][jj]*np.conjugate(ws2[j][jj]) # add the factor
           # probably this should be written better

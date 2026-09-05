@@ -53,8 +53,12 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         else: # generate the operators to be evaluated in the lattice points
             A = h.get_operator(A)
             B = h.get_operator(B)
-            A = algebra.todense(A.get_matrix())
-            B = algebra.todense(B.get_matrix())
+            # cast to complex: the numba kernels multiply these against
+            # complex wavefunctions, and numba's @ refuses a mixed-dtype
+            # product, so a real operator (sz, a density projector) used
+            # to make ij_mode="accelerated" fail to compile
+            A = np.array(algebra.todense(A.get_matrix()),dtype=np.complex128)
+            B = np.array(algebra.todense(B.get_matrix()),dtype=np.complex128)
         # generate the projectors
         if projs is None:
             from .. import operators
@@ -103,8 +107,14 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
             # and the CPU path runs under parallel.pcall's fork-based pool
             from .chijax import chi_matrix_kmesh_gpu
             qv = np.array(q) # the q shift of the second Hamiltonian
-            hks1 = np.array([hk(k) for k in ks]) # H(k) over the mesh
-            hks2 = np.array([hk(np.array(k)+qv) for k in ks]) # H(k+q)
+            # hk(k) is sparse for an is_sparse Hamiltonian, and np.array
+            # of those gives a dtype=object array that jax rejects, so
+            # densify -- the same thing hk_matrix_batch does for the
+            # numba paths
+            hks1 = np.array([algebra.todense(hk(k)) for k in ks],
+                    dtype=np.complex128) # H(k) over the mesh
+            hks2 = np.array([algebra.todense(hk(np.array(k)+qv)) for k in ks],
+                    dtype=np.complex128) # H(k+q)
             out = chi_matrix_kmesh_gpu(hks1,hks2,energies,np.array(pAs),
                                        np.array(pBs),temp,delta)
         elif ij_mode=="accelerated": # (maybe?) accelerated function
@@ -214,8 +224,14 @@ def chiAB_full_matrix_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     n = len(ws1) # number of wavefunctions
     Aws2 = (A@ws2.T).T # compute all the applied wavefunctions
     Bws1 = (B@ws1.T).T # compute all the applied wavefunctions 
-    occs1 = (-np.tanh(beta*es1) + 1.)/2. # occupations
-    occs2 = (-np.tanh(beta*es2) + 1.)/2. # occupations
+    # (1 - tanh(beta*E/2))/2 is Fermi-Dirac at T; without the half in the
+    # argument it is Fermi-Dirac at T/2, so this path silently answered at
+    # half the temperature the caller asked for. The tanh form (rather
+    # than 1/(1+exp(beta*E)), which chiAB_jit uses) is kept because it does
+    # not overflow at low temperature -- chitk/chijax._occupations writes
+    # the same expression.
+    occs1 = 0.5*(1. - np.tanh(0.5*beta*es1)) # occupations
+    occs2 = 0.5*(1. - np.tanh(0.5*beta*es2)) # occupations
     for i in range(n): # loop over wavefunctions
         oi = occs1[i] # first occupation
         for j in range(n): # loop over wavefunctions
@@ -268,10 +284,12 @@ def chiAB_matrix_ksum(h,ks,q,omegas,A,B,T,delta):
     ws2k = np.zeros((nk,n,n),dtype=np.complex128) # storage
     ik = 0 # counter
     for k in ks: # loop over kpoints
-        m1 = hk(k) # get Hamiltonian
+        # densify: hk(k) is sparse for an is_sparse Hamiltonian, which
+        # scipy.linalg.eigh does not take
+        m1 = algebra.todense(hk(k)) # get Hamiltonian
         es1,ws1 = lg.eigh(m1)
         ws1 = np.array(ws1.T,dtype=np.complex128)
-        m2 = hk(k+q) # get Hamiltonian
+        m2 = algebra.todense(hk(k+q)) # get Hamiltonian
         es2,ws2 = lg.eigh(m2)
         ws2 = np.array(ws2.T,dtype=np.complex128)
         # now store all

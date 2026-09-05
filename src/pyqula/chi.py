@@ -29,8 +29,15 @@ def elementchi(ws1,es1,ws2,es2,omegas,ii,jj,T,delta,out):
       oi = es1[i]<0.0 # first occupation
       for j in range(n): # second loop over states
           oj = es2[j]<0.0 # second occupation
-          fac = ws1[i][ii]*ws2[j][ii] # add the factor
-          fac *= np.conjugate(ws1[i][jj]*ws2[j][jj]) # add the factor
+          # the Lehmann matrix element is
+          # <n|rho_ii|m><m|rho_jj|n>, i.e. conj(psi_n(ii)) psi_m(ii)
+          # times conj(psi_m(jj)) psi_n(jj). This used to conjugate the
+          # wrong member of each pair, which agrees only for real
+          # amplitudes and otherwise breaks the gauge invariance of the
+          # response. chitk/static.py's elementchi and chitk/chiAB.py's
+          # chiAB_jit both already write it this way.
+          fac = np.conjugate(ws1[i][ii])*ws2[j][ii] # add the factor
+          fac *= np.conjugate(ws2[j][jj])*ws1[i][jj] # add the factor
           fac *= oi - oj # occupation factor
           out = out + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
     return out
@@ -51,8 +58,10 @@ def elementchi_row(ws1,es1,ws2,es2,omegas,ii,T,delta):
             oi = es1[i]<0.0 # first occupation
             for j in range(n): # second loop over states
                 oj = es2[j]<0.0 # second occupation
-                fac = ws1[i][ii]*ws2[j][ii] # add the factor
-                fac = fac*np.conjugate(ws1[i][jj]*ws2[j][jj]) # add the factor
+                # see elementchi: the conjugation goes on the first
+                # amplitude of each pair, not on both of one index
+                fac = np.conjugate(ws1[i][ii])*ws2[j][ii] # add the factor
+                fac = fac*np.conjugate(ws2[j][jj])*ws1[i][jj] # add factor
                 fac = fac*(oi - oj) # occupation factor
                 row = row + fac*(1./(es1[i]-es2[j] - omegas + 1j*delta))
         out[jj] = row
