@@ -83,7 +83,10 @@ re-pinning that test. Every valley-texture consumer is affected:
 read `valley_x`/`valley_y` maps from this function, so the vortex winding sense
 is reversed.
 
-**Status:** open
+**Status:** fixed. The contraction now transposes the density matrix, the same
+way `spectrum.ev` does. `test_island_operators.py`'s pin was replaced by an
+in-test explicit occupied-state sum so it cannot regress in either direction;
+`tests/spectrum/test_real_space_vev.py` covers the rest.
 
 ### 1.3 `spectrum.py:220` -- `real_space_vev` double-counts Nambu
 
@@ -106,7 +109,8 @@ for precisely this reason -- the fix in `6f0f031`. `real_space_vev` has no
 would *not* be a bug for an LDOS, where summing electron+hole is a legitimate
 quasiparticle convention.
 
-**Status:** open
+**Status:** fixed, with the `get_vev` electron-sector restriction.
+`tests/spectrum/test_real_space_vev.py`.
 
 ### 1.4 `chitk/chiAB.py:217` -- the accelerated path runs at half the requested temperature
 
@@ -386,7 +390,8 @@ The signature declares `nrep=3`; the body calls
 default `operator=None` dies in `operators.Operator(None)` on a bare `raise`
 -> `RuntimeError: No active exception to reraise`.
 
-**Status:** open
+**Status:** fixed alongside 1.2/1.3 -- the same four lines. `nrep` is forwarded
+and `operator=None` now means the density.
 
 ---
 

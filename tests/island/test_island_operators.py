@@ -37,10 +37,18 @@ def test_local_operators_valley_envelope_matches_reference(tmp_path, monkeypatch
 def test_valley_texture_real_space_vev_matches_reference(tmp_path, monkeypatch):
     """Regression check for the real-space valley expectation value on a
     small honeycomb island (n=3 instead of 8) with Peierls flux and a
-    sublattice imbalance: the summed real-space VEV must match the value
-    recorded from a known-good run. Marked slow: the island size is already
-    small (42 atoms) -- the runtime is dominated by fixed overhead, not
-    island size."""
+    sublattice imbalance: the summed real-space VEV must match an explicit
+    sum of <psi|A|psi> over the occupied eigenstates. Marked slow: the
+    island size is already small (42 atoms) -- the runtime is dominated by
+    fixed overhead, not island size.
+
+    The reference used to be a pinned -0.88529, which had the wrong sign:
+    real_space_vev contracted the density matrix untransposed, so for the
+    purely imaginary valley operator it evaluated <A*> rather than <A>.
+    That is the same defect fbee7c9 fixed in spectrum.ev, and it survived
+    in this sibling. The assertion is against a reference computed here
+    rather than a literal, so it cannot silently regress in either
+    direction."""
     monkeypatch.chdir(tmp_path)
     g = islands.get_geometry(name="honeycomb", n=3, nedges=6, rot=0.0)
     h = g.get_hamiltonian(has_spin=False)
@@ -48,7 +56,12 @@ def test_valley_texture_real_space_vev_matches_reference(tmp_path, monkeypatch):
     h.add_sublattice_imbalance(.2)
     fv = h.get_operator("valley")
     ys = spectrum.real_space_vev(h, operator=fv)
-    assert np.isclose(np.sum(ys), -0.8852949826564925, atol=1e-6)
+    (es, ws) = h.get_eigenvectors()
+    m = fv.get_matrix()
+    ref = sum([np.conjugate(w).dot(m @ w) for (e, w) in zip(es, ws)
+               if e < 0.]).real
+    assert np.isclose(np.sum(ys), ref, atol=1e-6)
+    assert ref > 0.  # the sign the untransposed contraction got wrong
 
 
 def test_dos_in_site_bulk_vs_edge_matches_reference(tmp_path, monkeypatch):

@@ -215,11 +215,27 @@ def real_space_vev(h,operator=None,nk=1,nrep=3,name="REAL_SPACE_VEV.OUT",
     """Compute the expectation value in real space"""
     if nk>1: raise # only Gamma point implemented
     dm = densitymatrix.full_dm(h,nk=nk,**kwargs) # Gamma point DM
-    operator = operators.Operator(operator) # convert to operator
-    rho = operator(dm,k=[0.,0.,0.]) # compute the projected DM
+    if operator is None: operator = np.identity(dm.shape[0],dtype=np.complex128)
+    operator = h.get_operator(operator) # convert to operator
+    if h.has_eh:
+        # with the electron-hole degree of freedom the sum runs over the
+        # whole particle-hole-redundant set of negative-energy BdG states,
+        # and full2profile below then adds the electron and hole entries of
+        # each site: every site came out as exactly 2.0 whatever the
+        # density was, destroying all the spatial information. Restricting
+        # the operator to the electron sector is the convention get_vev
+        # and get_filling_spinful_nambu already use.
+        pe = operators.Operator(operators.get_electron(h))
+        operator = pe*operator*pe
+    # densitymatrix.full_dm builds dm[i,j] = sum_occ conj(psi_i) psi_j, the
+    # transpose of the usual rho, so contracting it untransposed evaluates
+    # <A*> instead of <A> -- invisible for a real operator, a sign flip for
+    # a purely imaginary one such as the valley operator or sy. The same
+    # fix spectrum.ev carries a few lines above.
+    rho = operator(np.transpose(dm),k=[0.,0.,0.]) # compute the projected DM
     rho = np.diag(rho).real # extract the diagonal
     rho = h.full2profile(rho) # resum if necessary
-    h.geometry.write_profile(rho,nrep=5,name=name)
+    h.geometry.write_profile(rho,nrep=nrep,name=name)
     return rho
 
 
