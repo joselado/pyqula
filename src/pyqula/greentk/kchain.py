@@ -1,3 +1,4 @@
+import numpy as np
 from .rg import green_renormalization
 from .. import algebra
 

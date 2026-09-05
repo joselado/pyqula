@@ -12,7 +12,7 @@ dm_mode = "accumulate" # default mode to compute density matrix
 # accumulate is the new mode, it may be worth checking
 # if it yields the same results as simultaneous
 
-def full_dm(h,T=delta_dm,dm_mode=dm_mode,**kwargs):
+def full_dm(h,T=delta_dm,dm_mode=dm_mode,delta=None,**kwargs):
     """Compute the full density matrix.
 
     INDEX CONVENTION, which is not the textbook one: this returns
@@ -35,6 +35,17 @@ def full_dm(h,T=delta_dm,dm_mode=dm_mode,**kwargs):
     indices to compensate) all depend on it, as does everything the SCF
     loops do with h.get_density_matrix(ds=...).
     """
+    # T is forwarded below as full_dm_accumulate's `delta`, the same
+    # smearing under another name, so a caller who spelled it `delta` --
+    # the name the rest of the library uses -- collided with it and got
+    # "got multiple values for keyword argument 'delta'". Accept the
+    # alias, and refuse the ambiguity loudly if both are given.
+    if delta is not None:
+        if T!=delta_dm:
+            raise TypeError("full_dm got both T="+str(T)+" and delta="
+              +str(delta)+", which are the same energy smearing under two "
+              +"names; pass only one")
+        T = delta
     if T==0.: T = 1e-15 # just very small 
     if dm_mode=="accumulate":
         return full_dm_accumulate(h,delta=T,**kwargs)

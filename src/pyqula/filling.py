@@ -98,13 +98,24 @@ def set_average_filling(h,filling=0.5,nk=10,extrae=0.,
 
 
 def set_individual_filling(h,filling=0.5,**kwargs):
-    """Set the fillings of all the sites"""
+    """Set the fillings of all the sites.
+
+    `filling` keeps the convention of check_filling -- the fraction of all
+    the states that are occupied, in [0,1] -- while get_vev returns an
+    occupancy per site, which runs to 2 for a spinful Hamiltonian. The two
+    used to be compared directly, so the solver aimed at half the
+    occupancy it should have on every spinful system."""
+    check_filling(filling) # complain about a meaningless filling
+    # states per site, counting only the electron sector: get_vev already
+    # restricts a Nambu Hamiltonian to it
+    nper = 2 if h.has_spin else 1
+    target = filling*nper # occupancy per site the solver aims at
     def fmin(ons):
         """Function to solve"""
         hi = h.copy()
         hi.add_onsite(ons) # add these onsites
         out = hi.get_vev(delta=1e-2,**kwargs) # output fillings
-        return out - filling
+        return out - target
     x0 = np.zeros(len(h.geometry.r) ) # initial guess
     from scipy.optimize import fsolve
     x = fsolve(fmin,x0,xtol=1e-5,factor=1.)

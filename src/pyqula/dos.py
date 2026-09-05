@@ -214,7 +214,7 @@ def dos2d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
     kys = np.linspace(0.,1.,nk)
     hkgen= h.get_hk_gen() # get hamiltonian generator
     weight = 1./(nk*nk)
-    from .htk.eigenvectors import peigvalsh
+    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
     ks = np.array([[ix,iy,0.] for ix in kxs for iy in kys]) # all kpoints
     mats = hk_matrix_batch(hkgen,ks) # H(k) batch, densified
     es_batch = peigvalsh(mats) # batched numba eigh, shape (nk*nk,n)

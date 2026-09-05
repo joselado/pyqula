@@ -1064,7 +1064,10 @@ class Hamiltonian():
         return get_central_heterostructure(self,i=i,j=j,left=left,
                                             right=right,**kwargs)
     def get_dm_vev(self,A,**kwargs):
-        from . import get_dm_vev
+        # this used to be `from . import get_dm_vev`, a package attribute
+        # that src/pyqula/__init__.py deliberately never populates, so the
+        # method raised ImportError for every argument
+        from .vev import get_dm_vev
         return get_dm_vev(self,A,**kwargs)
     def get_single_vev(self,A,**kwargs):
         A = self.get_operator(A) # get an operator
