@@ -756,10 +756,22 @@ def get_operator(h,op):
     """ Wrapper for operators """
     if op is None: return None
     if type(op)==str: # string
-        if op=="valley": return h.get_operator("valley",projector=True) 
-        else: return h.get_operator("valley",projector=True) 
+        # the valley operator is the only one that takes projector=True;
+        # every other name goes through the ordinary Hamiltonian lookup.
+        # Both branches of this test used to return the valley operator,
+        # so asking for a "sz"-resolved Berry curvature silently computed
+        # the valley-projected one -- and any unrecognised string became
+        # "valley" instead of raising.
+        if op=="valley": return h.get_operator("valley",projector=True)
+        else: return h.get_operator(op)
     if callable(op): return op # function
-    if type(op)==np.array: return op
+    # np.array is a function, not a type, so `type(op)==np.array` was never
+    # true and a raw matrix fell off the end of the function as None, i.e.
+    # unprojected
+    if algebra.ismatrix(op): return h.get_operator(op)
+    raise TypeError("unrecognised operator of type "+str(type(op))
+        +", expected None, a string name, a matrix, an Operator "
+        +"or a callable")
 
 
 
