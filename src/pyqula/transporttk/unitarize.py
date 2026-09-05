@@ -7,7 +7,10 @@ def check_and_fix(smatrix,error=1e-7):
     """Given an smatrix as a list, chwck if it is Hermitian,
     and if not fix it"""
 #    return smatrix
-    n = smatrix[0][0].shape[0] # dimension of the matrix
+    # the two leads can have different dimensions, so each diagonal block
+    # sets its own size
+    n0 = smatrix[0][0].shape[0] # dimension of the first lead
+    n1 = smatrix[1][1].shape[0] # dimension of the second lead
     smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]
     smatrix2 = bmat(smatrix2).todense()
     sH = np.conjugate(smatrix2).T
@@ -23,7 +26,16 @@ def check_and_fix(smatrix,error=1e-7):
         smatrix2 = make_unitary(smatrix2)
 #        print("Unitarized determinant",np.abs(lg.det(smatrix2)))
     s3 = np.array(smatrix2) # unitarized
-    sout = [[s3[0:n,0:n],s3[n:2*n,0:n]],[s3[0:n,n:2*n],s3[n:2*n,n:2*n]]]
+    # bmat lays block [i][j] out at rows i, columns j, so the split back
+    # has to read it the same way round. It used to read the off-diagonal
+    # blocks transposed -- sout[0][1] got s3[n:2n,0:n], which is block
+    # [1][0] -- so get_smatrix (check=True is the default) returned the
+    # two transmission blocks interchanged. didv and didv_BdG happened not
+    # to notice, since two-terminal unitarity makes Tr(t t^dag) equal for
+    # the two and the BdG path only reads the diagonal blocks, but
+    # get_tmatrix and any caller of the transmission block itself did.
+    sout = [[s3[0:n0,0:n0],       s3[0:n0,n0:n0+n1]],
+            [s3[n0:n0+n1,0:n0],   s3[n0:n0+n1,n0:n0+n1]]]
     return sout
 
 

@@ -1109,17 +1109,25 @@ def set_finite_system(hin,n=1,periodic=False):
   h = hin.copy() # copy Hamiltonian
   h = h.get_supercell(n) # make the supercell
   h = h.get_no_multicell()
+  # the wrap-around terms have to be added while the Hamiltonian still
+  # knows its dimensionality: this used to zero it two lines before the
+  # branches below tested it, so both were false by construction and
+  # periodic=True silently built an open cluster
+  dim = h.dimensionality # the dimensionality being collapsed
   h.dimensionality = 0 # put dimensionality = 0
   h.geometry.dimensionality = 0 # put dimensionality = 0
   if periodic: # periodic boundary conditions
-    if h.dimensionality == 1:
+    if dim == 1:
       h.intra = h.intra + h.inter + dagger(h.inter)
-    if h.dimensionality == 2:
+    elif dim == 2:
       h.intra = h.intra +  h.tx + dagger(h.tx) 
       h.intra = h.intra +  h.ty + dagger(h.ty)
       h.intra = h.intra +  h.txy + dagger(h.txy)
       h.intra = h.intra +  h.txmy + dagger(h.txmy)
-  else: pass
+    else:
+      raise NotImplementedError("periodic boundary conditions are only "
+        +"implemented for one- and two-dimensional Hamiltonians, not "
+        +str(dim)+"-dimensional ones")
   return h
   
 # remove spin degree of freedom

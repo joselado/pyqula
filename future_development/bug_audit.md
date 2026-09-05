@@ -223,7 +223,9 @@ differs from `get_smatrix(check=False)[0][1]` by 0.255 but matches
 blocks -- so this bites any caller using the transmission block itself.
 `Heterostructure.get_smatrix` is public and its docstring advises `check=True`.
 
-**Status:** open
+**Status:** fixed -- the split reads the blocks the way `bmat` laid them out,
+and it no longer assumes the two leads have the same dimension.
+`tests/transport/test_smatrix_block_order.py`.
 
 ### 1.9 `hamiltonians.py:1112` -- `set_finite_system(periodic=True)` is unreachable
 
@@ -241,7 +243,9 @@ ring: `H[0,5] = 0` instead of 1, spectrum `[-1.802,-1.247,-0.445,0.445,1.247,1.8
 (open chain) instead of the exact `[-2,-1,-1,1,1,2]`. Bit-identical to
 `periodic=False`.
 
-**Status:** open
+**Status:** fixed -- the dimensionality is captured before it is zeroed, and a
+3D `periodic=True` now raises rather than silently returning an open cluster.
+`tests/hopping/test_finite_system_periodic.py`.
 
 ### 1.10 `heterostructures.py:242,249` -- left lead built from the right lead's hopping
 
@@ -255,7 +259,7 @@ and identically in the `block_diagonal` branch at line 249
 the one finding whose agent did not manage a numerical repro; the source lines
 read exactly as quoted.
 
-**Status:** open
+**Status:** fixed -- both read `h_left.inter` now.
 
 ### 1.11 `paralleltk/multiprocess.py:11` -- `_init_worker` never reseeds the RNG
 

@@ -239,14 +239,14 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
     er = csc_matrix(h_right.intra) 
     el = csc_matrix(h_left.intra) 
     tr = csc_matrix(h_right.inter) 
-    tl = csc_matrix(h_right.inter) 
+    tl = csc_matrix(h_left.inter) # the LEFT lead's hopping, not the right's
     tc = csc_matrix(h_central.inter) 
   if block_diagonal: 
     ec = h_central.intra.copy()  
     er = h_right.intra.copy()  
     el = h_left.intra.copy()  
     tr = h_right.inter.copy()  
-    tl = h_right.inter.copy() 
+    tl = h_left.inter.copy() # the LEFT lead's hopping, not the right's
     tc = h_central.inter.copy() 
   # central part is pure central input hamilotnian
   if interpolation=="None": # without central interpolation
