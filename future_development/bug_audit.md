@@ -600,3 +600,8 @@ candidate conventions rather than asserted as a bug. Decomposing by bug class
 seeded from recent commits, rather than by subsystem, is what made 4 agents
 tractable over 408 files -- worth repeating for the uncovered areas listed at
 the top.
+
+One caveat on any timing that appears in this file or in the sweep's logs: the
+machine was running two other sessions' jobs throughout (one benchmark at ~8
+cores of 12), so every wall-time measured here is inflated and none of it
+should be recorded as a baseline. The correctness results are unaffected.
