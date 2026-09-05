@@ -31,7 +31,7 @@ Each finding carries a **Status** line: `open`, or `fixed` with the commit and
 the test that pins it.
 
 **Where this stands.** Section 1 (silently wrong numbers) and section 3 (hard
-crashes) are fixed, in `5f3da27 7087ee6 a39bf68 4d5843d 66df675 a0e8681`, each with a regression test that asserts an
+crashes) are fixed, in `5f3da27 7087ee6 a39bf68 4d5843d 66df675 2c28e53`, each with a regression test that asserts an
 invariant rather than a pinned number. Section 2 (silently ignored arguments)
 and section 4 (aliasing and missing guards) are deliberately still open -- they
 are the lower-severity half, and three of them (2.1 `get_ldos(operator=)`, 2.4
@@ -152,7 +152,7 @@ path at `T`:
 Against a response scale of `max|chi| = 1.184` at T=0.1, that is a 2.6% error,
 growing as T falls.
 
-**Status:** fixed in `a0e8681` -- `0.5*(1 - tanh(0.5*beta*E))`, which is Fermi-Dirac at `T`
+**Status:** fixed in `2c28e53` -- `0.5*(1 - tanh(0.5*beta*E))`, which is Fermi-Dirac at `T`
 and, unlike `1/(1+exp(beta*E))`, does not overflow at low temperature.
 `chitk/chijax._occupations` already wrote it that way and its docstring names
 this function as the one it was mirroring, so it is the in-repo reference.
@@ -183,7 +183,7 @@ unchanged: measured `max|chi - chi_gauged| = 0.0144` on values of order 0.2,
 where a direct Lehmann reference is invariant to 1e-16. `elementchi_row`, its
 batched twin, has the same defect.
 
-**Status:** fixed in `a0e8681`, in both. `chargechi` now reproduces an explicit Lehmann sum
+**Status:** fixed in `2c28e53`, in both. `chargechi` now reproduces an explicit Lehmann sum
 to 1e-17 and is gauge invariant to 2e-15.
 `tests/chi/test_chi_backend_agreement.py`.
 
@@ -501,7 +501,7 @@ difference), so this is purely a backend asymmetry -- `hk_matrix_batch`
 not applied here. Lines 271-275 (`lg.eigh(m1)` on the raw `hk(k)`) have the
 same shape of problem.
 
-**Status:** fixed in `a0e8681`, in both places, with `algebra.todense`. A third instance of
+**Status:** fixed in `2c28e53`, in both places, with `algebra.todense`. A third instance of
 the same class turned up while testing it and is fixed too: the numba kernels
 multiply the operator against complex wavefunctions and numba's `@` refuses a
 mixed-dtype product, so a real-valued named operator (`A="sz"`) made
