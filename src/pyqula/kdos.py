@@ -84,21 +84,41 @@ def write_surface(h,energies=np.linspace(-.5,.5,300),
 
 
 
+def get_surface_operator(h,operator):
+  """Return the matrix a surface/bulk DOS is projected onto.
+
+  This used to be inlined in write_surface_1d/2d as
+
+      if operator is None: op = np.identity(...)
+      elif callable(operator): op = callable(op)
+      else: op = operator
+
+  whose middle branch referenced an unbound `op` -- and an Operator, which
+  is what h.get_operator("sz") returns, is callable, so every named
+  operator raised UnboundLocalError before any physics happened."""
+  if operator is None: return np.identity(h.intra.shape[0],dtype=np.complex128)
+  op = h.get_operator(operator) # resolve names, matrices and Operators alike
+  m = op.get_matrix() # the matrix it acts with
+  from scipy.sparse import issparse
+  if issparse(m): m = m.todense()
+  return np.array(m)
+
 
 def write_surface_1d(h,energies=None,delta=None,
         operator=None):
   if energies is None: energies = np.linspace(-.5,.5,200)
   if delta is None: delta = (max(energies)-min(energies))/len(energies)
   h = h.get_no_multicell()
+  op = get_surface_operator(h,operator) # projection matrix, once
   fo  = open("SURFACE_DOS.OUT","w") # open file
   for energy in energies:
       gs,sf = green.green_renormalization(h.intra,h.inter,
               energy=energy,delta=delta) # surface green function 
-      if operator is None: op = np.identity(h.intra.shape[0]) # identity matrix
-      elif callable(operator): op = callable(op)
-      else: op = operator # assume a matrix
-      db = -algebra.trace(gs*op).imag # bulk
-      ds = -algebra.trace(sf*op).imag # surface
+      # gs and sf are plain ndarrays, so `*` here was an elementwise
+      # product: the trace picked up only sum_i g[i,i]*op[i,i] and any
+      # off-diagonal operator (sx, sy, a current) came out identically zero
+      db = -algebra.trace(gs@op).imag # bulk
+      ds = -algebra.trace(sf@op).imag # surface
       fo.write(str(energy)+"   "+str(ds)+"   "+str(db)+"\n")
       fo.flush()
   fo.close()
@@ -114,17 +134,16 @@ def write_surface_2d(h,energies=None,klist=None,delta=0.01,
   if klist is None: 
       klist = [[i,0.,0.] for i in np.linspace(-.5,.5,nk)]
   if energies is None: energies = np.linspace(-.5,.5,50)
+  op = get_surface_operator(h,operator) # projection matrix, once
   fo  = open("KDOS.OUT","w") # open file
   for k in klist:
     print("Doing k-point",k)
     for energy in energies:
       gs,sf = green.green_kchain(h,k=k,energy=energy,delta=delta,
                        only_bulk=False,hs=hs) # surface green function 
-      if operator is None: op = np.identity(h.intra.shape[0]) # identity matrix
-      elif callable(operator): op = callable(op)
-      else: op = operator # assume a matrix
-      db = -algebra.trace(gs*op).imag # bulk
-      ds = -algebra.trace(sf*op).imag # surface
+      # see write_surface_1d: `*` was an elementwise product here too
+      db = -algebra.trace(gs@op).imag # bulk
+      ds = -algebra.trace(sf@op).imag # surface
       fo.write(str(k[0])+"   "+str(energy)+"   "+str(ds)+"   "+str(db)+"\n")
       fo.flush()
   fo.close()

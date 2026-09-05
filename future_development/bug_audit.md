@@ -177,7 +177,9 @@ Worse than the magnitude error: the result depends on the order
 the map is not even a smooth function of position. `examples/1d/ldosr/main.py`
 builds its ribbon with `has_spin=False`.
 
-**Status:** open
+**Status:** fixed -- the branch accumulates like its three siblings.
+`tests/ldos/test_ldosr_accumulation.py` pins spinful == 2 x spinless, an
+independent reference for the same quantity.
 
 ### 1.7 `kdos.py:98,100` -- surface-DOS operator algebra broken twice over
 
@@ -197,7 +199,9 @@ sx-projected surface DOS is identically `[-0,-0,-0,-0,-0]` against a correct
 `trace(sf@sx)` of `[-0.1038,-0.0506,0,+0.0506,+0.1038]`. `sz`, being diagonal,
 happens to come out right.
 
-**Status:** open
+**Status:** fixed. The operator resolution is now a shared
+`kdos.get_surface_operator`, hoisted out of the energy loop, and the
+contractions are matrix products. `tests/kdos/test_surface_dos_operator.py`.
 
 ### 1.8 `transporttk/unitarize.py:26` -- S-matrix off-diagonal blocks swapped
 
