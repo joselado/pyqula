@@ -564,7 +564,9 @@ def get_supercell(self,nsuper,store_primal=False):
     from .checkclass import number2array
     if store_primal: # store the primal geometry
         self.primal_geometry = self.copy() 
-    if self.dimensionality==0: return self # zero dimensional
+    # a copy, never an alias of self: the caller is entitled to mutate
+    # the returned geometry without touching the one it asked about
+    if self.dimensionality==0: return self.copy() # zero dimensional
     if np.array(nsuper).shape==(3,3): # if a matrix is given
         return supercelltk.non_orthogonal_supercell(self,nsuper)
     if self.dimensionality==1:

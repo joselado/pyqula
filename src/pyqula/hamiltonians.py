@@ -540,13 +540,15 @@ class Hamiltonian():
         return hamiltonianmode.same_hamiltonian(self,*args,**kwargs)
     def get_supercell(self,nsuper,**kwargs):
       """ Creates a supercell of a one dimensional system"""
-      if nsuper is None: return self # do nothing
-      if nsuper==1: return self
-      if self.dimensionality==0: return self
+      # the contract is a new Hamiltonian, so the no-op cases return a copy
+      # and never an alias of self, which the caller would then mutate
+      if nsuper is None: return self.copy() # do nothing
+      if self.dimensionality==0: return self.copy() # nothing to replicate
       try: 
           nsuper[0] # check if it is a tuple 
           ns = nsuper # array as input
-      except:
+      except: # a single number was given
+          if nsuper==1: return self.copy() # nothing to replicate
           if self.dimensionality==1: ns = [nsuper,1,1]
           elif self.dimensionality==2: ns = [nsuper,nsuper,1]
           elif self.dimensionality==3: ns = [nsuper,nsuper,nsuper]

@@ -20,7 +20,9 @@ def check_mode(h,n):
 
 def reduce_hamiltonian(self):
     """Try to reduce the dimensionality of the Hamiltonian"""
-    if self.check_mode("spinless"): return self # nothing to do
+    # every branch returns a new Hamiltonian, so that the caller can mutate
+    # the reduced one without reaching back into the one it was built from
+    if self.check_mode("spinless"): return self.copy() # nothing to do
     elif self.check_mode("spinful"): # spinful Hamiltonian
         h = self.copy() # copy Hamiltonian
         h.remove_spin() # remove the spin degree of freedom
@@ -29,9 +31,8 @@ def reduce_hamiltonian(self):
         if self.same_hamiltonian(h): 
 #            print("Hamiltonian has become spinless")
             return h0 # return the spinless one
-        else: return self # return the spinful one
-        return self # nothing to do
-    else: return self # nothing to do
+        else: return self.copy() # return the spinful one
+    else: return self.copy() # nothing to do
 
 
 def same_hamiltonian(self,h,ntries=10):
