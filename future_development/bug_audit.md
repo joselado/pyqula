@@ -28,9 +28,7 @@ the +-E BdG pair cancellation makes it numerically identical to the linear
 form. Not a bug.
 
 Each finding carries a **Status** line: `open`, or `fixed` with the commit and
-the test that pins it. The section-2 and section-4 entries fixed in the latest
-round name their test but no commit -- the hash was not yet assigned when they
-were written; fill them in when that change lands.
+the test that pins it.
 
 **Where this stands.** Section 1 (silently wrong numbers) and section 3 (hard
 crashes) are fixed, in `5f3da27 7087ee6 a39bf68 4d5843d 66df675 2c28e53`, each with a regression test that asserts an
@@ -356,7 +354,7 @@ Because it is a named parameter it is not caught by an unknown-kwarg check.
 library, not a missing feature. (The header of this file filed it under feature
 work; the entry is right and the header was wrong.)
 
-**Status:** fixed. Both branches now honour it. `mode="arpack"` forwards it
+**Status:** fixed in `05e0f17`. Both branches now honour it. `mode="arpack"` forwards it
 into `ldos_diagonalization`, whose `ldos_waves_from_eigsystem` already had the
 machinery (`<psi|A|psi>` times the local density `|psi(i)|^2`) and is what
 `ldosmap` uses. `mode="green"` contracts the Green's function with the
@@ -397,7 +395,7 @@ h.get_bands(nk=20, ewindow=lambda e: abs(e)<0.5)
   operator="sz"  -> 16 bands, max|e| = 0.382
 ```
 
-**Status:** fixed. The filtering moved into a shared `kes2rows` helper that
+**Status:** fixed in `05e0f17`. The filtering moved into a shared `kes2rows` helper that
 every path packs its output through, so the three branches cannot drift
 apart again. `callback` still sees the full unfiltered set of energies at
 each k-point, which is what the operator branch always did.
@@ -422,7 +420,7 @@ correctly produces `(+-2,0,0)` with norm 0.7071.
 In fairness: `add_kekule`/`add_chiral_kekule` on a first-neighbour honeycomb
 stay within the existing directions, so the common uses are unaffected.
 
-**Status:** fixed. `add_hamiltonian` now merges the two `MultiHopping`
+**Status:** fixed in `05e0f17`. `add_hamiltonian` now merges the two `MultiHopping`
 dictionaries and calls `set_multihopping`, i.e. it goes through the same
 machinery the `+` operator (`algebratk/hamiltonianalgebra`) already used
 correctly -- which is also what the test compares against. `add_hopping_matrix`
@@ -456,7 +454,7 @@ calls `kmesh2d(nk,nsuper)`, whose signature takes no `endpoint` and whose two
 returns the same mesh as `endpoint=False`; `kmesh(1,...)` correctly differs.
 No in-tree caller passes `endpoint=True` today, so the impact is latent.
 
-**Status:** fixed -- `kmesh2d` takes `endpoint` and `kmesh` forwards it, like
+**Status:** fixed in `05e0f17` -- `kmesh2d` takes `endpoint` and `kmesh` forwards it, like
 the 1D and 3D branches. `tests/geometry/test_kmesh_endpoint.py`.
 
 ### 2.6 `greentk/rg.py:192` -- the numba backend swallows `nite` and `error`
@@ -471,7 +469,7 @@ the numba path returns a fully converged answer where the Python path returns
 the requested 2-step truncation. The `error` divergence is milder (4e-7 at
 `error=0.01`).
 
-**Status:** fixed in both `green_renormalization_jit` and
+**Status:** fixed in `05e0f17`, in both `green_renormalization_jit` and
 `green_renormalization_jit_batch`. Both take `nite`/`error` as named
 parameters and only fall back to the derived values when they are absent, and
 the two numba kernels take a `truncate` flag so a caller-supplied `nite` means
@@ -491,7 +489,7 @@ For Hamiltonians with hoppings beyond NN, `green_kchain` dispatches to
 swallowing `**kwargs` -- so the `hs` surface-onsite matrix is accepted and
 silently dropped.
 
-**Status:** implemented rather than refused. The decimation solves
+**Status:** implemented rather than refused, in `05e0f17`. The decimation solves
 `gs = (ez - ons - hop gs hop^dag)^(-1)`, and `hop gs hop^dag` is the
 selfenergy of everything attached below the surface cell, which does not
 depend on that cell's own onsite matrix -- so replacing the onsite and
@@ -668,7 +666,7 @@ has `if not h.has_eh: raise` but no `spinless_nambu` check, so a spinless Nambu
 Hamiltonian (2x2 per cell, `nr=0`) sails through and returns `[nan nan nan]`
 from a mean over an empty slice.
 
-**Status:** fixed. One `sctk/dvector.check_spinful_nambu` helper raises a
+**Status:** fixed in `05e0f17`. One `sctk/dvector.check_spinful_nambu` helper raises a
 `ValueError` naming what the Hamiltonian actually is, called from all four
 public entry points -- `extract_dvector_from_hamiltonian` (which covers
 `dvector_non_unitarity` and `average_hamiltonian_dvector`, whose weaker
