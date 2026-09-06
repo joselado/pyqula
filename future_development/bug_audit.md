@@ -696,18 +696,32 @@ The test pinned `np.sum(e) == -13.738703648103538` and failed on master at
 `-13.735331753001255`. It is not a regression from any of the audit fixes:
 every commit from the `0.0.94` release (`2832f36`) forward returns the same
 `-13.7353...`, which is also the value the test was *originally* written with.
-`6c8cfbc` replaced it with a number produced by some other environment, and
-the test has been red since.
+`6c8cfbc` replaced it with `-13.738703648103538` and the test has been red
+since.
 
-Dense `eigvalsh` at each k-point of the path, taking the eight eigenvalues
-nearest zero, reproduces the sparse ARPACK output to 5e-15 -- exactly the
-check `6c8cfbc`'s message describes doing by hand. Fixed in `ccdee4a` by
-making the test perform that comparison instead of pinning a number, so it
-cannot go stale against an environment again.
+Where that number came from is unclear, and it is worth being precise about
+what was checked rather than guessing. Running the same script against the
+source of four commits -- `22e35ff` (which wrote the test), `6c8cfbc` (which
+changed the pin), `2832f36` (the 0.0.94 release) and HEAD -- gives
+`-13.7353...` every time, agreeing to 1e-12. So the value `6c8cfbc` recorded
+is not produced by `6c8cfbc`'s own source, let alone by a later regression;
+its commit message reports verifying the new value against dense
+diagonalization, and dense `eigvalsh` at each k-point of the path, taking the
+eight eigenvalues nearest zero, agrees with the *original* value to 5e-15.
+The one thing not reproducible now is that machine's installed numpy/scipy
+of 2026-08-06.
 
-The general lesson for the 72 golden-value tests added in `22e35ff`: a pinned
-sum that has already failed to port once will fail again. Where an
-independent code path computes the same quantity, assert the agreement.
+Fixed in `ccdee4a`/`4e0eff9`: the test now does the dense comparison on the
+spot *and* keeps the original pinned sum. The two check different things --
+the dense agreement pins the eigensolver and would pass for a wrong
+Hamiltonian, the sum pins the Hamiltonian -- and dropping the pin, as the
+first attempt did, would have removed the only check on the physics.
+
+The general point for the 54 golden-value test files added in `22e35ff`
+(12 of them in `tests/scf`): a pinned number carries no way to tell a
+regression from a stale reference, which is how this one was resolved in the
+wrong direction. Where an independent code path computes the same quantity,
+assert the agreement *alongside* the pin.
 
 ---
 

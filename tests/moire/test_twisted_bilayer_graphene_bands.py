@@ -11,11 +11,12 @@ def test_twisted_bilayer_graphene_bands_match_dense_diagonalization(tmp_path,
     G-K-M-K'-G must be the eight eigenvalues closest to zero of the dense
     Bloch matrix at the same k-points.
 
-    This used to pin a hardcoded sum instead. That is not portable -- the
-    recorded value was updated once for an environment that produced it, and
-    then no longer matched anywhere, leaving the test red while the physics
-    was fine. Diagonalizing densely on the spot checks the same thing without
-    depending on which machine recorded the number.
+    The band energies themselves are still pinned, below, since the dense
+    comparison only checks the eigensolver and would pass for a wrong
+    Hamiltonian too. The pinned value is the one this test was written with;
+    `6c8cfbc` replaced it with -13.738703648103538, which no commit of this
+    repository reproduces -- not the 0.0.94 release, not HEAD, and not
+    `6c8cfbc`'s own source -- so the test had been red ever since.
     """
     monkeypatch.chdir(tmp_path)  # get_bands writes BANDS.OUT to cwd
     kpath = ["G", "K", "M", "K'", "G"]
@@ -32,5 +33,5 @@ def test_twisted_bilayer_graphene_bands_match_dense_diagonalization(tmp_path,
         ev = lg.eigvalsh(m)
         ref += sorted(ev[np.argsort(np.abs(ev))[:8]])  # the eight nearest zero
     assert np.allclose(e, ref, atol=1e-10), np.max(np.abs(e - np.array(ref)))
-    # and the flat bands are where a twisted bilayer puts them
-    assert np.max(np.abs(e)) < 1.5
+    # and the Hamiltonian itself is the one this was recorded against
+    assert np.isclose(np.sum(e), -13.735331753001446, atol=1e-6), np.sum(e)
