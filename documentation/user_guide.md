@@ -608,6 +608,23 @@ sy = h.get_operator("sy") # Spin y component
 sz = h.get_operator("sz") # Spin z component
 ```
 
+## Listing the available operators
+
+Every routine that takes an `operator` argument (`h.get_bands`, `h.get_dos`,
+`h.get_ldos`, `h.get_kdos_bands`, `h.get_vev`, the topological invariants...)
+accepts either an object -- an `Operator`, a `Hamiltonian`, a `Potential`, a
+callable of the position, a bare matrix -- or the name of one of the operators
+that pyqula knows how to build. The names are kept in a single registry, and
+can be listed
+
+```python
+from pyqula import operatorlist
+print(operatorlist.get_operator_names()) # every name h.get_operator accepts
+```
+
+Passing a name that is not in that list raises a `ValueError` quoting the
+offending name and the accepted ones, rather than failing further downstream.
+
 ## Location operator
 
 To understand the spatial location of the states we can use the spatial operators, that
