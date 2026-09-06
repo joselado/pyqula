@@ -340,7 +340,18 @@ parent's own stream is left where a single draw would leave it, so a `pcall`
 does not perturb randomness in the calling code beyond that. The two call
 sites that had already worked around the bug by drawing explicit per-task
 seeds (`latticegas`/`latticeising`'s `optimize_energy_multistart`) still
-override it and are unaffected. `tests/parallel/test_pcall_random_seeds.py`,
+override it and are unaffected.
+
+The one-draw cost is not free, and the whole-suite run shows what it looks
+like: `tests/spinon`'s seed-independence test pinned SCF seeds 1 and 2, and
+the shifted stream moved seed 2's random starting guess onto one where the
+`mix=0.3` iteration settles into a limit cycle and never meets `maxerror`
+(8000 iterations do not help; `mix=0.1` converges to the same energy every
+other seed reaches). A design that put the caller's state back instead was
+tried and rejected: two `pcall`s made from the same state would then draw the
+same numbers, which is the original bug again one level up. The test now
+sweeps four seeds at the gentler mixing, which checks the invariant harder
+than the two seeds it had. `tests/parallel/test_pcall_random_seeds.py`,
 and `documentation/user_guide.md`'s new "Parallelism and reproducibility"
 section.
 

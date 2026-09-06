@@ -58,8 +58,13 @@ def _run_chain(seed, J1, maxerror=1e-6):
     g = geometry.chain()
     np.random.seed(seed)
     h = SpinonHamiltonian(g)
-    h2, etot = h.get_mean_field_hamiltonian(J1=J1, nk=24, mix=0.3,
-            maxerror=maxerror, maxite=2000, return_total_energy=True)
+    # mix=0.1, not the 0.3 used by the tests above: at 0.3 the iteration
+    # settles into a limit cycle for some starting guesses (seed 2 among
+    # them) and never meets maxerror, however many iterations it is given.
+    # That is the mixing, not the physics -- the same seed converges to the
+    # same energy as every other one at 0.1.
+    h2, etot = h.get_mean_field_hamiltonian(J1=J1, nk=24, mix=0.1,
+            maxerror=maxerror, maxite=4000, return_total_energy=True)
     assert h2 is not None, "SCF did not converge"
     return h2, etot/len(g.r)
 
@@ -76,9 +81,8 @@ def test_energy_per_site_independent_of_scf_seed():
     Balents, arXiv:1601.03742, Sec. 4.1: "it is not possible to search for
     all possible self-consistent mean field solutions... calculations are
     usually carried out by assuming a particular decoupling scheme")."""
-    _, e1 = _run_chain(1, J1=1.0)
-    _, e2 = _run_chain(2, J1=1.0)
-    assert np.isclose(e1, e2, atol=1e-3), (e1, e2)
+    es = [_run_chain(seed, J1=1.0)[1] for seed in range(4)]
+    assert np.allclose(es, es[0], atol=1e-3), es
 
 
 def test_rvb_bond_order_is_nonzero():

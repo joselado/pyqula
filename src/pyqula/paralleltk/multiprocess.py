@@ -52,7 +52,13 @@ def set_cores(n=1):
 # which worker happens to pick it up.
 
 def _task_seeds(n):
-    """One seed per task, derived from a single draw off the parent's stream."""
+    """One seed per task, derived from a single draw off the caller's stream.
+
+    Drawing (rather than reading the state and putting it back) is what keeps
+    two pcalls apart: repeated stochastic estimates have to see different
+    random numbers or they do not average. The cost is one draw, the same as
+    any other routine that uses randomness -- and because the draw is the only
+    thing pcall takes, seeding numpy makes the whole sweep reproducible."""
     base = int(np.random.randint(0, 2**32 - 1))
     return [int(s.generate_state(1)[0])
             for s in np.random.SeedSequence(base).spawn(n)]
