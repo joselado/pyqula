@@ -33,11 +33,9 @@ the test that pins it.
 **Where this stands.** Section 1 (silently wrong numbers) and section 3 (hard
 crashes) are fixed, in `5f3da27 7087ee6 a39bf68 4d5843d 66df675 2c28e53`, each with a regression test that asserts an
 invariant rather than a pinned number. Section 2 is now fixed too, except 2.4;
-section 4 is fixed except 4.1. What remains open, deliberately:
+section 4 is fixed. Section 4 is now fixed
+entirely (4.1 in `ccdee4a`). What remains open, deliberately:
 
-- **4.1** `get_supercell` returning `self` -- the highest-severity item left,
-  and the only one that silently corrupts a Hamiltonian the caller believes it
-  did not touch.
 - **2.4** `add_sublattice_imbalance` no-oping on triangular and kagome --
   feature work, wants a decision (implement, or refuse in the `3b43557` style)
   rather than a repair.
@@ -651,7 +649,21 @@ corruption is silent. `geometry.py`'s `get_supercell` has the same hole
 (`if self.dimensionality==0: return self`), which additionally makes a 0D
 supercell request a silent no-op rather than an error.
 
-**Status:** open
+**Status:** fixed in `ccdee4a`. Every no-op branch returns `self.copy()`, in
+both `hamiltonians.py` and `geometry.py`. The 0D case keeps its no-op meaning
+rather than raising: `geometry.replicate_array` already collapses `nrep` to 1
+for dimensionality 0, and internal callers pass a default `nrep>1` to
+geometries that may be 0D (`ldos.get_ldos_tb`'s `nrep=5`), so raising would
+break paths that are correct today. Moving the scalar `nsuper==1` test inside
+the "not a tuple" branch additionally lets `nsuper` arrive as a numpy array,
+which used to raise "the truth value of an array with more than one element is
+ambiguous". `htk/mode.py`'s `reduce_hamiltonian` was folded in as the one
+other live instance of the class -- it returned a fresh Hamiltonian when the
+spin could be dropped and `self` when it could not, so whether `h.reduce()`
+aliased its input depended on the answer. `sctk/extract.py:45` and
+`htk/hamiltonianmodify.py:18` were checked and are fine (both `self.copy()`
+first); `embedding.py:85,87` are `Embedding` accessors with no mutating
+callers. `tests/geometry/test_supercell_returns_new_object.py`.
 
 ### 4.2 `sctk/dvector.py:134` -- `dvector_non_unitarity` has no Hilbert-space guard
 
@@ -673,6 +685,29 @@ public entry points -- `extract_dvector_from_hamiltonian` (which covers
 `if not h.has_eh: raise` it replaces) and the two `*_map` routines, which
 bypass it by going through `h.get_hopping_dict()` and `matrix2dvector`.
 `tests/superconductivity/test_dvector_hilbert_space.py`.
+
+---
+
+## 5. Not a library bug: a golden-value test that had gone red
+
+### 5.1 `tests/moire/test_twisted_bilayer_graphene_bands.py` -- the pinned sum
+
+The test pinned `np.sum(e) == -13.738703648103538` and failed on master at
+`-13.735331753001255`. It is not a regression from any of the audit fixes:
+every commit from the `0.0.94` release (`2832f36`) forward returns the same
+`-13.7353...`, which is also the value the test was *originally* written with.
+`6c8cfbc` replaced it with a number produced by some other environment, and
+the test has been red since.
+
+Dense `eigvalsh` at each k-point of the path, taking the eight eigenvalues
+nearest zero, reproduces the sparse ARPACK output to 5e-15 -- exactly the
+check `6c8cfbc`'s message describes doing by hand. Fixed in `ccdee4a` by
+making the test perform that comparison instead of pinning a number, so it
+cannot go stale against an environment again.
+
+The general lesson for the 72 golden-value tests added in `22e35ff`: a pinned
+sum that has already failed to port once will fail again. Where an
+independent code path computes the same quantity, assert the agreement.
 
 ---
 
