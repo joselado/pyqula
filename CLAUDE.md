@@ -55,7 +55,7 @@ empty `__init__.py`; with the default import mode pytest's package-root walk fro
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
 tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
-minutes, not under a minute. It currently collects **1237 tests** (`pytest tests --collect-only -q`);
+minutes, not under a minute. It currently collects **1322 tests** (`pytest tests --collect-only -q`);
 the old "~7.5 min for 406 tests" figure predates the Keldysh, transport and AAA suites and is stale —
 `tests/scf` alone is ~15 min and `tests/keldysh` ~12 min. A fresh whole-suite wall time still needs
 measuring on an idle machine; treat any timing taken while other jobs are running as meaningless.
@@ -168,7 +168,8 @@ spectrum).
   they don't have to be re-derived. Check it before starting work in an area it covers, and add to it
   when a piece of work leaves something deliberately unbuilt. Currently: `bug_audit.md` (the standing
   bug list from the four-lens audit sweep -- every finding with its reproduction, what is fixed and in
-  which commit, what is deliberately left open, and the areas the sweep did not cover) and
+  which commit, why the two items that were decisions rather than repairs were decided
+  the way they were, and the areas the sweep did not cover -- nothing in it is open) and
   `bse_excitons.md` (exciton
   observables, iterative solvers, and a measured feasibility study of a quantics tensor-train route) and
   `magnons_screening.md` (why the screened interaction must not be used in the magnon RPA kernel on its

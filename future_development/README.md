@@ -12,8 +12,9 @@ already reached once.
 
 - [`bug_audit.md`](bug_audit.md) -- the standing list from the four-lens
   audit sweep: every finding with its reproduction, what has been fixed and
-  in which commit, what is deliberately left open, the areas the sweep did
-  not cover, and one candidate it chased and cleared.
+  in which commit, why the two items that were decisions rather than repairs
+  were decided the way they were (nothing in it is open now), the areas the
+  sweep did not cover, and one candidate it chased and cleared.
 
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a
