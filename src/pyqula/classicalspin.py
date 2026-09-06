@@ -90,12 +90,19 @@ class SpinModel(): # class for a spin Hamiltonian
     """Return a function that calculated the Jacobian"""
 #    return None
     return get_jacobian(self.b,self.j,self.pairs)
-  def load_magnetism(self,name="MAGNETIZATION.OUT"):
-    """Read the magnetization from a file"""
+  def load_magnetism(self,name="MAGNETISM.OUT"):
+    """Read the magnetization back from the file write() produced.
+
+    write_magnetization lays the file out as x,y,z,mx,my,mz -- six columns,
+    three of position. This used to default to a filename nothing writes
+    ("MAGNETIZATION.OUT") and then read columns 1,2,3 (y,z,mx) as if they
+    were the moment, so the documented write()/load_magnetism() round trip
+    could not work."""
     m = np.genfromtxt(name).transpose()
-    r = np.sqrt(m[1]**2+m[2]**2) # in-plane radius
-    self.theta = np.arctan2(r,m[3]) # theta angle
-    self.phi = np.arctan2(m[2],m[1]) # theta angle
+    (mx,my,mz) = m[3],m[4],m[5]
+    r = np.sqrt(mx**2+my**2) # in-plane radius
+    self.theta = np.arctan2(r,mz) # theta angle
+    self.phi = np.arctan2(my,mx) # phi angle
   def regroup(self):
     """Regroups the terms in the Hamiltonian"""
 #    print(len(self.pairs))
@@ -313,7 +320,10 @@ def generating_functions(name="Heisenberg",J=1.0,v=np.array([0.,0.,1.]),
       dr2 = np.sqrt(dr.dot(dr))
       if np.abs(fc(dr2))<0.00000001: return zero
       if callable(v): return J*fc(dr2)*np.diag(v(dr)) # return matrix
-      else: return (J*fc(dr)*np.diag(v))@fr(r1,r2) # return matrix
+      # fc takes the distance, dr2 -- the vector dr was passed here, so the
+      # default cutoff compared an array and raised "truth value of an array
+      # is ambiguous" for every non-callable v
+      else: return (J*fc(dr2)*np.diag(v))@fr(r1,r2) # return matrix
     return fun
   elif name=="DM":
     eps = get_lc()

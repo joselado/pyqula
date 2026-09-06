@@ -68,8 +68,8 @@ In this repository:
   self-consistency, Chern insulators, Jackiw-Rebbi solitons and quantum-dot
   modes
 - [`jupyter-notebooks/functionalities/`](jupyter-notebooks/functionalities) --
-  53 executed notebooks, one per feature, matching the FUNCTIONALITIES list
-  below (every bullet there links to its own)
+  53 executed notebooks, matching the FUNCTIONALITIES list below -- 53 of its
+  74 bullets carry a link to theirs; the rest have no notebook yet
 
 From the ["Advanced Quantum Materials course at Aalto University 2025"](https://github.com/joselado/Advanced_Quantum_Materials_2025)
 - [Electronic structure theory](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session3.ipynb)
@@ -139,6 +139,9 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 ## Response functions ##
 - Optical (frequency-dependent) conductivity tensor from the Kubo-Greenwood formula, giving optical absorption, the magneto-optical Kerr/Faraday response, and a DC Hall response quantized to the Chern number
 - Drude weight and the optical f-sum rule
+- Charge-charge (density-density) response function, and its RPA form for an onsite/neighbor-shell interaction
+- Generic operator-operator response function, for an arbitrary pair of operators
+- RKKY interaction between magnetic impurities, resolved in real space
 
 ## Spectral functions ##
 - Spectral functions in infinite geometries [[notebook]](jupyter-notebooks/functionalities/spectral_functions/01_spectral_infinite.ipynb)

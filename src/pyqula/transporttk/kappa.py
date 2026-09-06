@@ -51,13 +51,26 @@ def get_power(ts,gs,delta=1e-8):
     k = p[0]
     return k
 
-def get_kappa(energy=0.0,**kwargs):
-    ts,Gs = get_conductances(energies=[energy],**kwargs)
+def get_kappa(energy=0.0,energies=None,**kwargs):
+    """Kappa at a single energy, or at each of `energies` if given.
+
+    `energies` used to reach here only through the finite-temperature path;
+    at temp=0 it was forwarded from the caller and collided with this
+    function's own `energies=[energy]`, so the documented batched form
+    raised a TypeError instead of returning an array."""
+    if energies is None: single,energies = True,[energy]
+    else:
+        if energy!=0.0:
+            raise ValueError("get_kappa takes either a single `energy` or "
+              +"an array of `energies`, not both")
+        single = False
+    ts,Gs = get_conductances(energies=energies,**kwargs)
     ks = []
     for g in Gs.T: # loop over energies
         k = get_power(ts,g)
         ks.append(k)
-    return np.array(ks)[0] # return kappa
+    ks = np.array(ks)
+    return ks[0] if single else ks # return kappa
 
 
 def _with_shared_selfenergy(ht,kwargs):
@@ -111,8 +124,9 @@ def get_kappa_ratio(HT,**kwargs):
     from .kappa_jax import get_kappa_ratio_jax
     energy = kwargs.get("energy",0.0)
     T = kwargs.get("T",1e-2)
-    fast = get_kappa_ratio_jax(ht_sc,ht_normal,energy=energy,T=T)
-    if fast is not None: return fast
+    if "energies" not in kwargs: # the fast path is one energy at a time
+        fast = get_kappa_ratio_jax(ht_sc,ht_normal,energy=energy,T=T)
+        if fast is not None: return fast
     ks1 = get_kappa(HT=ht_sc,**_with_shared_selfenergy(ht_sc,kwargs))
     ks2 = get_kappa(HT=ht_normal,**kwargs)
     return ks1/ks2

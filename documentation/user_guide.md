@@ -32,8 +32,9 @@ Two other places in the repository take it further:
 
 - `examples/` holds several hundred runnable scripts organized by
   dimensionality (`0d/ 1d/ 2d/ 3d/`, plus `transport/`, `embedding/`,
-  `wannier/`, `classicalspin/`, `latticegas/`), most of them ending in a
-  figure. Most sections below point at the relevant ones
+  `wannier/`, `classicalspin/`, `latticegas/`, `latticeising/`, `spinon/`,
+  `kondolattice/`, `minimal/` and `readme_examples/`), most of them ending
+  in a figure. Most sections below point at the relevant ones
 - `jupyter-notebooks/functionalities/` holds 53 executed notebooks, one per
   feature, grouped the same way as the README's functionality list
   (single-particle Hamiltonians, mean field, topology, spectral functions,
@@ -42,7 +43,10 @@ Two other places in the repository take it further:
   should actually look like
 
 The last chapter, [Main functions and methods](#main-functions-and-methods),
-is a reference of the `Geometry`/`Hamiltonian` methods and their arguments.
+is a reference of the `Geometry`/`Hamiltonian` methods and their arguments,
+followed by the `Heterostructure`, `SpinModel`, `LatticeGas` and
+`LatticeIsing` classes. It is not exhaustive: it covers the methods the
+sections above use, not every public method on those classes.
 
 ## Contents
 
@@ -418,6 +422,7 @@ h.get_multi_fermi_surface(energies=np.linspace(-4,4,100),delta=1e-1)
 Passing `operator="unfold"` together with `nsuper` unfolds the Fermi surface of a defective/disordered supercell back onto the primitive Brillouin zone (see the "Electronic structure folding and unfolding" section); as with QPI unfolding, the supercell must be built with `store_primal=True`
 
 ```python
+import numpy as np
 from pyqula import geometry
 g0 = geometry.triangular_lattice()
 n = 3 # size of the supercell
@@ -1595,6 +1600,7 @@ Unfolding also works when atoms have been removed from the supercell (e.g. `gs =
 Unfolding also works for a general, non-diagonal/non-orthogonal supercell, built by passing a 3x3 integer matrix `M` to `get_supercell` instead of a plain `(n1,n2,...)` size (`gs.a1,gs.a2,gs.a3` become integer combinations of the primitive vectors, `gs = M @ g`). No change is needed at the unfolding call site — `get_supercell(M,...)` records, per surviving atom, which primitive replica it came from, and `operator="unfold"` reads that bookkeeping directly (both for a complete supercell and after removing atoms):
 
 ```python
+from pyqula import geometry
 g = geometry.honeycomb_lattice() # primitive geometry
 M = [[2,1,0],[0,1,0],[0,0,1]] # non-diagonal supercell matrix, det(M)=2
 gs = g.get_supercell(M,store_primal=True) # supercell, keeping the primitive cell info
@@ -1715,6 +1721,7 @@ The same backend can compute the density matrix in a mean-field calculation,
 replacing the k-mesh sum there:
 
 ```python
+from pyqula import geometry
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian()
 hscf,e = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro",
@@ -2573,7 +2580,7 @@ ht = hc.get_central_heterostructure(0,4,left=h_normal,right=h_sc)
 G = ht.didv(energy=0.02) # Andreev conductance, via the BdG scattering-matrix formula
 ```
 
-It returns a plain `Heterostructure`, so every existing method (`landauer`, `didv`, `get_dos`, `get_kappa`...) applies unmodified. `left`/`right` default to a plain spinless chain when omitted, and `j` defaults to the last site. At most one of `{hc, left, right}` may carry an actual pairing amplitude -- e.g. a normal lead + normal lead + superconducting central region (a proximitized molecule) is fine, as is the normal + superconducting lead case above, but two superconducting leads raise a `ValueError` (there would be no normal lead left to define a reflection amplitude against; use `heterostructures.build` + `get_dc_current` for that case instead, see below). Only 0d central regions are supported so far. See `examples/transport/central_region_ij/main.py` for a runnable script.
+It returns a plain `Heterostructure`, so every existing method (`didv`, `get_dos`, `get_kappa`...) applies unmodified -- except `landauer`, which refuses a junction carrying the Nambu degree of freedom, as in the example above: the Landauer formula counts single-particle transmission and a Cooper pair carries charge 2e, so use `didv`, which applies the BTK/BdG scattering formula. `left`/`right` default to a plain spinless chain when omitted, and `j` defaults to the last site. At most one of `{hc, left, right}` may carry an actual pairing amplitude -- e.g. a normal lead + normal lead + superconducting central region (a proximitized molecule) is fine, as is the normal + superconducting lead case above, but two superconducting leads raise a `ValueError` (there would be no normal lead left to define a reflection amplitude against; use `heterostructures.build` + `get_dc_current` for that case instead, see below). Only 0d central regions are supported so far. See `examples/transport/central_region_ij/main.py` for a runnable script.
 
 ## Multiple Andreev reflection and AC-Josephson current
 
@@ -3031,7 +3038,7 @@ Generate a supercell
 
 Arguments
 
-- N: size of the supercell to create, number or tuple, or a 3x3 integer matrix M for a general non-diagonal/non-orthogonal supercell (see "Electronic structure folding and unfolding" for how this interacts with `operator="unfold"`)
+- nsuper: size of the supercell to create, number or tuple, or a 3x3 integer matrix M for a general non-diagonal/non-orthogonal supercell (see "Electronic structure folding and unfolding" for how this interacts with `operator="unfold"`) (positional, or by that name)
 
 Optional arguments
 
@@ -3046,7 +3053,7 @@ Compute band structure
 
 Optional arguments:
 
-- nk = 20: number of k-points
+- nk = 400: number of k-points
 - operator: a single operator, or a list of operators, to compute expectation values for at each eigenstate
 - kpath: an explicit k-path, either as reduced coordinates or as a list of
   high-symmetry labels (`"G"`, `"M"`, `"K"`, `"X"`, `"Y"`, and in three
@@ -3084,7 +3091,9 @@ Optional arguments:
 
 - energies: array with frequencies of the DOS
 
-- delta=0.01: broadening of the DOS
+- delta=None: broadening of the DOS. Left as `None` it is chosen from the
+  k-mesh, `5/nk` (so 0.05 at the default `nk=100`), which keeps the curve
+  smooth as the mesh is refined
 
 Return energies and DOS
 
@@ -3097,9 +3106,11 @@ incommensurate k-point is not missed.
 
 Optional arguments:
 
-- ntries=1: repeat the minimization this many times from different random
-  starting points and keep the smallest result -- worth raising for a band
-  structure with several nearly degenerate minima
+- ntries=1: repeat the minimization this many times and keep the smallest
+  result. Since the search was made deterministic (a fixed coarse grid picks
+  the starting point, and `differential_evolution` runs with a fixed seed)
+  every repetition returns the identical number, so raising this only costs
+  time -- it is kept for backwards compatibility
 
 Returns a single number, the gap. Zero (up to numerical noise) for a metal
 or a Dirac semimetal
@@ -3209,7 +3220,7 @@ antiparallel to the field you applied.
 ```python
 h = geometry.chain().get_hamiltonian()
 h.add_exchange([0.,0.,0.5])
-h.get_magnetization(nk=40)         # the moment: [0,0,-0.167], against the field
+h.get_magnetization(nk=40)         # the moment: [0,0,-0.15], against the field
 h.get_magnetization(mode="field")  # [0,0,0.5], the field you put in
 ```
 
@@ -3233,7 +3244,7 @@ Add Kane-Mele intrinsic spin-orbit coupling
 
 Arguments:
 
-- value: value of the SOC
+- t: value of the SOC (positional, or by that name)
 
 
 ### h.add_zeeman()
@@ -3241,7 +3252,8 @@ Add a Zeeman field to the Hamiltonian
 
 Arguments:
 
-- value: value of the Zeeman, as a number (assumes [0,0,Bz]), array or callable function
+- zeeman: value of the Zeeman, as a number (assumes [0,0,Bz]), array or
+  callable function (positional, or by that name)
 
 
 ### h.add_rashba()
@@ -3249,7 +3261,7 @@ Add Rashba spin-orbit coupling
 
 Arguments:
 
-- value: value of the Rashba SOC
+- c: value of the Rashba SOC (positional, or by that name)
 
 
 ### h.add_onsite()
@@ -3258,7 +3270,8 @@ Add a local onsite energy
 
 Arguments:
 
-- value: value of the onsite energy
+- fermi: value of the onsite energy, as a number, an array with one entry
+  per site, or a callable of the position (positional, or by that name)
 
 
 ### h.add_sublattice_imbalance()
@@ -3299,7 +3312,7 @@ Optional arguments:
 - e: energy of the LDOS (`energy` is accepted as an alias, since that is
   how the Green's function, embedding and transport routines spell it)
 
-- delta=0.01: broadening of the LDOS, which must be positive
+- delta=0.001: broadening of the LDOS, which must be positive
 
 - operator=None: operator the LDOS is projected onto (a name, a matrix or an
   `Operator`); see the LDOS section above for how the two modes weight it
@@ -3325,7 +3338,9 @@ Compute a non-interacting operator-operator response function (charge-charge by 
 
 Optional arguments:
 
-- q=[0,0,0]: momentum transfer
+- q=None: momentum transfer. Left as `None` the response is *averaged over
+  the whole q-mesh* rather than evaluated at q=0 -- pass `q=[0.,0.,0.]`
+  explicitly for the uniform response
 
 - A=None, B=None: operators defining the response (default: identity, i.e. charge-charge)
 
@@ -3338,7 +3353,7 @@ Compute the transverse ($S^+/S^-$) spin susceptibility, RPA-dressed by default u
 
 Optional arguments:
 
-- q=[0,0,0], energies, delta, nk: as above
+- q=None, energies, delta, nk: as above, `None` again meaning the q-average
 
 - RPA=True: dress with the random-phase approximation; `False` for the bare response
 
@@ -3351,7 +3366,7 @@ Optional arguments:
 
 - V=None (required): the interaction; a `ValueError` is raised if not given. Either a plain matrix (q-independent, onsite-only) or a real-space hopping dict/`MultiHopping` `{(n1,n2,n3): matrix}` for an interaction with support beyond the onsite cell, Fourier-transformed to $V(q)$ at this call's `q` (see "Interactions beyond onsite")
 
-- A=None, B=None, q=[0,0,0], energies, delta, nk: as in `get_chi`
+- A=None, B=None, q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
 
 Returns an `(npoles,2)` array: pole frequency and its (signed) residual imaginary part -- filter on its magnitude, not its raw value, to keep only sharp/well-defined modes -- one row per collective mode found, sorted by frequency.
 
@@ -3379,7 +3394,7 @@ Optional arguments:
 
 - W=None: the interaction, defaulting to the one the mean field was converged with
 
-- q=[0,0,0], energies, delta, nk: as in `get_chi`
+- q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
 
 - component=None: a pair of spin indices `(a,b)` to return only that spin block instead of the full tensor
 
@@ -3404,7 +3419,7 @@ Optional arguments:
 
 - V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None: the density-density interaction, built the same way as `Vinteraction`/`VJinteraction`'s
 
-- q=[0,0,0], energies, delta, nk: as in `get_chi`
+- q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
 
 ### h.get_plasmon_bands()
 Compute the plasmon/charge-order bands: the poles of the density RPA kernel for a `V1`/`V2`/`V3`/`U`/`Vr` neighbor-shell density-density interaction, scanned along a q-path -- the charge-channel analog of `get_magnon_bands`.
@@ -3576,7 +3591,8 @@ Empty bins are `0.0` (not `NaN`), and states outside an explicitly requested win
 Return Chern number of the Hamiltonian.
 
 Optional arguments:
-- nk=20: number of kpoints
+- nk: number of kpoints, 10 for the default `integration="grid"` and 20 for
+  `integration="qtci"`
 - integration="grid": how the Brillouin-zone integral is evaluated. "grid"
   (default) sums the Berry curvature over a uniform nk x nk mesh; "qtci"
   integrates it by quantics tensor cross interpolation plus Gauss-Kronrod
@@ -3627,7 +3643,7 @@ Optional arguments:
   tracks `h.shift_fermi(...)`)
 - non_abelian=False: if True, return the full band-pair-resolved tensor
   instead of its trace over the subspace
-- degeneracy_tol=1e-10: energy tolerance used to detect a degeneracy
+- degeneracy_tol=1e-8: energy tolerance used to detect a degeneracy
   between the chosen subspace and its complement (raises `ValueError`)
 
 ### h.get_quantum_metric()
@@ -4019,7 +4035,7 @@ Optional arguments:
 
 - left=None, right=None: lead Hamiltonians; default to a plain spinless `geometry.chain()`. Give one of them (or `h` itself) nonzero pairing (`add_swave`) for a normal-superconductor junction -- at most one of `{h, left, right}` may carry pairing
 
-Returns a `Heterostructure`, so `landauer`, `didv`, `get_dos`, `get_kappa`, etc. all apply unmodified. Only 0d central regions are supported so far (`h.dimensionality>0` raises `NotImplementedError`).
+Returns a `Heterostructure`, so `didv`, `get_dos`, `get_kappa`, etc. all apply unmodified; `landauer` is the exception, raising `NotImplementedError` once any of the three carries pairing (use `didv` there). Only 0d central regions are supported so far (`h.dimensionality>0` raises `NotImplementedError`).
 
 ## Heterostructure functions and methods
 
@@ -4258,7 +4274,7 @@ Overwrites `lg.den` with the best configuration found and returns its energy (a 
 ### lg.optimize_grand_canonical()
 Grand-canonical Metropolis sampling/annealing: instead of swapping pairs at fixed filling, single sites are flipped (occupied $\leftrightarrow$ empty) and accepted/rejected the usual Metropolis way, so the total filling fluctuates under `lg.mu` rather than being conserved. This is the standard lattice-gas MC move set, useful for scanning a phase diagram vs. chemical potential, or for equilibrium sampling at one fixed temperature (see `latticegas.get_specific_heat()`/`get_susceptibility()` below). Unlike `lg.optimize_energy()`, `lg.den` does not need 2 distinct starting values -- it can start uniformly empty or full.
 
-Optional arguments: same as `lg.optimize_energy()` (`temp`, `ntries`, `resync_every`; no `patience`)
+Optional arguments: same as `lg.optimize_energy()` (`temp`, `ntries`, `resync_every`; no `patience`), except that `temp` defaults to `1.0` here rather than `0.1` -- grand-canonical sampling is usually wanted at a temperature, not as an anneal
 
 Overwrites `lg.den` with the final configuration and returns `(es, ns)`: the energy trajectory and the filling (occupied-site count) trajectory, both arrays of length `ntries`
 
@@ -4358,7 +4374,7 @@ Overwrites `li.s` with the final configuration and returns `(es, ms)`: the energ
 ### li.optimize_conserved()
 Kawasaki spin-exchange dynamics: at each step, one up spin and one down spin are picked at random and swapped, which conserves the total magnetization -- the spin analog of `LatticeGas.optimize_energy()` (swap-based, fixed filling). Raises `ValueError` if `li.s` doesn't currently have both $+1$ and $-1$ present (e.g. after `set_magnetization(1.0)`).
 
-Optional arguments: same as `li.optimize_energy()`, plus:
+Optional arguments: same as `li.optimize_energy()`, except that `temp` defaults to `0.1` here rather than `1.0`, plus:
 
 - patience=None: if set, stop early once this many attempts have passed without a new best energy being found (the returned array is truncated to what actually ran)
 
