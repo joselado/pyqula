@@ -711,7 +711,7 @@ eight eigenvalues nearest zero, agrees with the *original* value to 5e-15.
 The one thing not reproducible now is that machine's installed numpy/scipy
 of 2026-08-06.
 
-Fixed in `ccdee4a`/`4e0eff9`: the test now does the dense comparison on the
+Fixed in `ccdee4a` and `efd3cf3`: the test now does the dense comparison on the
 spot *and* keeps the original pinned sum. The two check different things --
 the dense agreement pins the eigensolver and would pass for a wrong
 Hamiltonian, the sum pins the Hamiltonian -- and dropping the pin, as the
