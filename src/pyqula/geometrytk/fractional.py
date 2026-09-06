@@ -8,13 +8,19 @@ def get_fractional_function(g,center=False):
     if dim==0: return lambda x: x
     elif dim==1: # one dimensional
       R = np.array([g.a1,[0.,1.,0.],[0.,0.,1.]]).T # transformation matrix
-      if np.max(np.abs(g.a1[1:2]))>1e-6: raise
+      if np.max(np.abs(g.a1[1:2]))>1e-6:
+          raise ValueError("fractional coordinates in 1d assume the lattice "
+                  "vector points along x, and this one does not")
     elif dim==2: # two dimensional
       R = np.array([g.a1,g.a2,[0.,0.,1.]]).T # transformation matrix
-      if np.abs(g.a1[2])>1e-6 or np.abs(g.a2[2])>1e-6: raise
+      if np.abs(g.a1[2])>1e-6 or np.abs(g.a2[2])>1e-6:
+          raise ValueError("fractional coordinates in 2d assume both lattice "
+                  "vectors lie in the xy plane, and they do not")
     elif dim==3:
       R = np.array([g.a1,g.a2,g.a3]).T # transformation matrix
-    else: raise
+    else:
+        raise ValueError("fractional coordinates need a dimensionality "
+                "between 0 and 3")
     g.has_fractional = True # has fractional coordinates
     L = lg.inv(R) # inverse matrix
     def f(r):
@@ -44,7 +50,9 @@ def get_fractional(g,center=False):
 
 def fractional2real(self):
     """Write real coordinates using the fractional ones"""
-    if self.dimensionality==0: raise
+    if self.dimensionality==0:
+        raise ValueError("a 0d geometry has no lattice vectors, so it has no "
+                "fractional coordinates")
     elif self.dimensionality==1: # 1D
       self.x = self.frac_x*self.a1[0]
     elif self.dimensionality==2: # 2D
@@ -54,7 +62,9 @@ def fractional2real(self):
       self.x = self.frac_x*self.a1[0] +  self.frac_y*self.a2[0] + self.frac_z*self.a3[0]
       self.y = self.frac_x*self.a1[1] +  self.frac_y*self.a2[1] + self.frac_z*self.a3[1]
       self.z = self.frac_x*self.a1[2] +  self.frac_y*self.a2[2] + self.frac_z*self.a3[2]
-    else: raise
+    else:
+        raise ValueError("fractional coordinates need a dimensionality "
+                "between 0 and 3")
     self.xyz2r() # update xyz
     self.center() # center
 

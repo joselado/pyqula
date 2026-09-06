@@ -49,7 +49,10 @@ def add_rashba(self,c):
         self.txy = self.txy + rashba(g.r,r2=r2,c=c,is_sparse=is_sparse)
         r2 = [ir + g.a1-g.a2 for ir in g.r]
         self.txmy = self.txmy + rashba(g.r,r2=r2,c=c,is_sparse=is_sparse)
-      else: raise
+      else:
+        raise NotImplementedError("the Rashba coupling is only implemented up "
+                "to 2d for non-multicell Hamiltonians; call "
+                "h.turn_multicell() first")
 
 
 

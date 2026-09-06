@@ -12,7 +12,9 @@ def rotation_matrix(m,vectors):
     of the magnetism """
     if not len(m)==2*len(vectors): # stop if they don't have
                                     # compatible dimensions
-       raise
+       raise ValueError("the matrix and the list of directions are "
+               "incompatible, the matrix must have two spin components per "
+               "direction")
     # pauli matrices
     n = len(m)//2 # number of sites
     R = [[None for i in range(n)] for j in range(n)] # rotation matrix
@@ -71,7 +73,9 @@ def global_spin_rotation(m,vector = np.array([0.,0.,1.]),angle = 0.0,
                              spiral = False,atoms = None):
   """ Rotates a matrix along a certain qvector """
   n = m.shape[0]//2 # number of sites
-  if atoms is not None: raise # per-atom rotation not implemented
+  if atoms is not None: # per-atom rotation not implemented
+    raise NotImplementedError("a rotation of a selected set of atoms is not "
+            "implemented, the rotation is global")
   R = build_rotation_matrix(n,vector=vector,angle=angle)
   if spiral:  # for spin spiral
     mout = R @ m  # rotate matrix
@@ -124,7 +128,9 @@ def hamiltonian_spin_rotation(self,vector=np.array([0.,0.,1.]),angle=0.):
     numerically (eigenvalue-preserving, and matches rotating the physical
     exchange/pairing directly) against Hamiltonians with both an exchange
     field and s-wave pairing present. """
-    if not self.has_spin: raise # no spin in the Hamiltonian
+    if not self.has_spin: # no spin in the Hamiltonian
+      raise ValueError("a spin rotation needs a spinful Hamiltonian; call "
+              "h.turn_spinful() first")
     gsr = global_spin_rotation # rename method
     self.intra = gsr(self.intra,vector=vector,angle=angle)
     if self.is_multicell: # multicell hamiltonian
@@ -139,7 +145,9 @@ def hamiltonian_spin_rotation(self,vector=np.array([0.,0.,1.]),angle=0.):
         self.ty = gsr(self.ty,vector=vector,angle=angle)
         self.txy = gsr(self.txy,vector=vector,angle=angle)
         self.txmy = gsr(self.txmy,vector=vector,angle=angle)
-      else: raise
+      else:
+        raise NotImplementedError("the spin rotation is only implemented up "
+                "to 2d for non-multicell Hamiltonians")
 
 
 
@@ -149,7 +157,9 @@ def generate_spin_spiral(self,vector=np.array([0.,0.,1.]),
     """
     Generate a spin spiral antsaz in the Hamiltonian
     """
-    if not self.has_spin: raise # no spin
+    if not self.has_spin: # no spin
+      raise ValueError("a spin spiral needs a spinful Hamiltonian; call "
+              "h.turn_spinful() first")
     qspiral = np.array(qspiral) # to array
     if qspiral.dot(qspiral)<1e-7: qspiral = np.array([0.,0.,0.])
     self.geometry.get_fractional()
@@ -184,4 +194,6 @@ def generate_spin_spiral(self,vector=np.array([0.,0.,1.]),
         self.ty = tmprot(self.ty,[0.,1.,0.])
         self.txy = tmprot(self.txy,[1.,1.,0.])
         self.txmy = tmprot(self.txmy,[1.,-1.,0.])
-      else: raise
+      else:
+        raise NotImplementedError("the spin spiral is only implemented up to "
+                "2d for non-multicell Hamiltonians")

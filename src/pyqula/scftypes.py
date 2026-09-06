@@ -86,8 +86,9 @@ class scfclass():
     self.gap = get_gap(es,self.fermi) # store the gap
     if self.energy_cutoff is not None:
       if self.gap>self.energy_cutoff/2: 
-        print("\nEnergy cutoff is to small, halting",self.gap,"\n\n")
-        raise
+        raise ValueError("the energy cutoff "+str(self.energy_cutoff)+" is "
+                "smaller than twice the gap "+str(self.gap)+", so the "
+                "occupied states cannot be selected; increase energy_cutoff")
       print("Warning!!!! Performing calculation with an energy cutoff")
     eoccs,voccs,koccs = get_occupied_states(es,ws,ks,self.fermi,
                             mine=self.energy_cutoff,smearing = self.smearing)
@@ -98,7 +99,9 @@ class scfclass():
   def update_occupied_states_kpoint(self,k=[0.,0.,0.]):
     """Update the object with the eigenvectors of a single kpoint,
     this function is used for the adaptive method of SCF"""
-    if not self.scfmode=="fermi": raise # only for this mode
+    if not self.scfmode=="fermi": # only for this mode
+        raise ValueError("updating the occupied states of a single k-point is "
+                "only possible with scfmode='fermi'")
     es,ws,ks = self.hamiltonian.get_eigenvectors(nk=self.nkgrid,
             kpoints=True,k=k)
     self.kfac = 1
@@ -109,7 +112,7 @@ class scfclass():
     self.kvectors = koccs # store kvectors
   def adaptive_correlator(self):
     """Calculate the correlators using the Simpson's adaptive algorithm"""
-    raise NotImplementedError
+    raise NotImplementedError("the adaptive correlator is not implemented")
   def update_hamiltonian(self):
     """Updates the total mean field Hamiltonian"""
     self.hamiltonian = self.hamiltonian0.copy() # copy original
@@ -197,7 +200,10 @@ class scfclass():
             else: # spinless
               # factor 2 in g due to spin degree of freedom
               interactions.append(meanfield.v_ij_spinless(i,j,nat,g=2*g,d=d)) 
-      else: raise # ups
+      else: # ups
+          raise ValueError("unknown interaction mode; the accepted ones are "
+                  "'Hubbard', 'U', 'Hubbard collinear', 'Coulomb', "
+                  "'fastCoulomb' and 'V'")
     self.interactions += interactions # store list
     if timing: print("Time in creating MF operators",time.perf_counter()-t0)
   def update_expectation_values(self):
@@ -215,7 +221,9 @@ class scfclass():
         v.vav = meanfield.expectation_value(voccs,v.a,np.conjugate(phis))/self.kfac # <vAv>
         v.vbv = meanfield.expectation_value(voccs,v.b,phis)/self.kfac # <vBv>
       self.v2cij() # update the v vector
-    else: raise
+    else:
+      raise ValueError("unknown correlator_mode; the accepted ones are "
+              "'plain' and '1by1'")
   def cij2v(self):
     """Update the values of vav and vbv using the values of cij"""
     cs = self.cij # get the array

@@ -35,7 +35,8 @@ def fermi_surface_generator(h,
     if h.is_sparse: mode = "sparse"
     else: mode = "full"
     energies = np.array(energies) # convert to array
-    if h.dimensionality!=2: raise  # continue if two dimensional
+    if h.dimensionality!=2: # continue if two dimensional
+      raise ValueError("the Fermi surface is only defined for 2d Hamiltonians")
     hk_gen = h.get_hk_gen() # gets the function to generate h(k)
     if full_bz:
         kxs = np.linspace(0.,nsuper,nk,endpoint=True)  # generate kx

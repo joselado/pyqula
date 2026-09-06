@@ -10,13 +10,17 @@ def dyson(h0,nsuper,nk,ez):
     except: # if not possible, try the multicell one (not well tested yet)
         h = h0.copy()
     h = h.get_dense() # dense matrices
-    if h.dimensionality==0: raise
+    if h.dimensionality==0:
+        raise ValueError("the Dyson equation needs a periodic Hamiltonian, "
+                "and this one is 0d")
     if not h.is_multicell: # no multicell
         if h.dimensionality==1: 
             return dyson1d(h.intra,h.inter,nsuper[0],nk,ez)
         elif h.dimensionality==2: 
             return dyson2d(h.intra,h.tx,h.ty,h.txy,h.txmy,nsuper[0],nsuper[1],nk,ez)
-        else: raise
+        else:
+            raise NotImplementedError("the Dyson equation is only implemented "
+                    "for 1d and 2d Hamiltonians")
     else:
         print("WARNING, Multicell function in Dyson")
         hkgen = h.get_hk_gen() # get Hamiltonian generator
@@ -24,7 +28,9 @@ def dyson(h0,nsuper,nk,ez):
             return dyson1d_hkgen(hkgen,nsuper[0],nk,ez)
         elif h.dimensionality==2: 
             return dyson2d_hkgen(hkgen,nsuper[0],nsuper[1],nk,ez)
-        else: raise
+        else:
+            raise NotImplementedError("the multicell Dyson equation is only "
+                    "implemented for 1d and 2d Hamiltonians")
 
 
 

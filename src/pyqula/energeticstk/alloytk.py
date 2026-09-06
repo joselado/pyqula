@@ -44,8 +44,12 @@ class Alloy():
         """Randomize species"""
         ss = [0 for i in range(len(self.r))]
         n = len(self.r) # number of sites
-        if sum(sp)!=n: raise
-        if len(sp)!=2: raise
+        if sum(sp)!=n:
+            raise ValueError("the number of atoms of each species must add up "
+                    "to the number of sites")
+        if len(sp)!=2:
+            raise ValueError("only binary alloys are implemented, so two "
+                    "species counts are expected")
         ones = random.sample(range(0,n),sp[1])
         for o in ones: ss[o] = 1
         self.set_species(ss)
@@ -138,7 +142,9 @@ def minimize_energy(self,n=1000,mode="random",**kwargs):
             enew = itene() # iterate
             if abs(eold-enew)<1e-2: break
             eold = enew
-    else: raise # not recognized
+    else: # not recognized
+        raise ValueError("unknown mode; minimize_energy accepts 'random' and "
+                "'brute'")
 
 def single_update(self,eold,ii,jj,T=1e-7):
         s = self.specie.copy()

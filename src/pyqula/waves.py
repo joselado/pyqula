@@ -30,6 +30,8 @@ def get_waves_non_hermitian(intra,num_bands=None,eigmode="complex",
     if eigmode=="complex": pass
     elif eigmode=="real": eig = eig.real
     elif eigmode=="imag": eig = eig.imag
-    else: raise
+    else:
+        raise ValueError("unknown eigmode; the accepted ones are 'complex', "
+                "'real' and 'imag'")
     return eig,eigvec
 

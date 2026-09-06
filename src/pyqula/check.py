@@ -20,9 +20,9 @@ def check_hermitian(h,tol=1e-5):
   hk = h.get_hk_gen() # get generator
   m = hk(np.random.random(3)) # random k-point
   if not equal(m,np.conjugate(m).T):
-    print("CHECK FAILED, Hamiltonian is not Hermitian")
-    print(np.round(m,2))
-    raise
+    raise ValueError("the Hamiltonian is not Hermitian, the largest "
+            "deviation of h(k) from its adjoint is "
+            +str(np.max(np.abs(m-np.conjugate(m).T))))
 
 
 

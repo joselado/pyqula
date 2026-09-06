@@ -16,5 +16,7 @@ def get_gf(H,energy=0.0,delta=1e-5,
         return gf
     elif H.dimensionality==0: # zero dimensional
         return H.get_gk_gen(delta=delta)(e=energy) 
-    else: raise
+    else:
+        raise NotImplementedError("this Green's function is only implemented "
+                "for 0d and 1d Hamiltonians")
 

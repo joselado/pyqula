@@ -35,7 +35,9 @@ def interpolator2d(x,y,z,mode=None):
             k = k[:,0:2]%1.
             return f(k)
         return f0
-    else: raise
+    else:
+        raise ValueError("unknown mode; interpolator2d accepts None and "
+                "'periodic'")
 
 
 

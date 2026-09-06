@@ -205,7 +205,9 @@ def generate_parametric_hopping(h,f=None,mgenerator=None,
     has_spin = h.has_spin # check if it has spin
     is_sparse = h.is_sparse
     if mgenerator is None: # no matrix generator given on input
-      if f is None: raise # no function given on input
+      if f is None: # no function given on input
+        raise ValueError("a parametric hopping needs either a hopping "
+                "function f or a matrix generator mgenerator")
       if spinful_generator:
         h.has_spin = True
         generator = parametric_hopping_spinful
@@ -215,7 +217,9 @@ def generate_parametric_hopping(h,f=None,mgenerator=None,
       def mgenerator(r1,r2):
         return generator(r1,r2,f,is_sparse=is_sparse)
     else:
-      if h.dimensionality==3: raise
+      if h.dimensionality==3:
+        raise NotImplementedError("a matrix generator is not supported for 3d "
+                "Hamiltonians, pass a hopping function f instead")
     h.intra = mgenerator(rs,rs)
     if h.dimensionality == 0: pass
     elif h.dimensionality == 1:
@@ -227,11 +231,15 @@ def generate_parametric_hopping(h,f=None,mgenerator=None,
       h.txy = mgenerator(rs,rs+g.a1+g.a2)
       h.txmy = mgenerator(rs,rs+g.a1-g.a2)
     elif h.dimensionality == 3:
-      if spinful_generator: raise NotImplementedError
+      if spinful_generator:
+        raise NotImplementedError("a spinful hopping generator is not "
+                "implemented for 3d Hamiltonians")
       h.is_multicell = True # multicell Hamiltonian
       from . import multicell
       multicell.parametric_hopping_hamiltonian(h,fc=f)
-    else: raise
+    else:
+      raise ValueError("the parametric hopping needs a dimensionality between "
+              "0 and 3")
     # check that the sparse mde is set ok
     if is_sparse and not algebra.issparse(h.intra):
       h.is_sparse = False
@@ -317,7 +325,9 @@ def neighbor_directions(g,cutoff=3):
         for i2 in range(-cutoff,cutoff+1):
           for i3 in range(-cutoff,cutoff+1):
             dirs.append([i1,i2,i3])
-    else: raise NotImplementedError
+    else:
+      raise ValueError("the neighbor directions need a geometry of "
+              "dimensionality between 0 and 3")
     dirs = [np.array(d) for d in dirs]
     return dirs # return directions
 

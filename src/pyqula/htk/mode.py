@@ -14,7 +14,9 @@ def check_mode(h,n):
     elif n=="spinless":
         if (not h.has_spin) and (not h.has_eh): return True
         else: return False
-    else: raise
+    else:
+        raise ValueError("unknown mode; check_mode accepts 'spinless', "
+                "'spinful', 'spinless_nambu' and 'spinful_nambu'")
 
 
 

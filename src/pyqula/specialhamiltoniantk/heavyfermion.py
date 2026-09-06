@@ -6,11 +6,10 @@ def H2HFH(h,JK=0.0,J=0.):
     """Given a certain geometry, generate a new geometry with 
     heavy fermion sites"""
     if h.has_eh:
-        print("Not implemented with superconductivity")
-        raise
+        raise NotImplementedError("the heavy-fermion Hamiltonian is not "
+                "implemented with superconductivity")
     if h.has_kondo:
-        print("This Hamiltonian already has Kondo sites")
-        raise
+        raise ValueError("this Hamiltonian already has Kondo sites")
     width = np.max(h.geometry.r[:,2]) - np.min(h.geometry.r[:,2])
     if width>1e-4: 
         print("Not implemented for non-2D Hamiltonians")
@@ -59,12 +58,16 @@ def get_operator(self,name,**kwargs):
         return self.get_operator(lambda r: 1.*(r[2]>0.))
     elif name=="dispersive_electrons":
         return self.get_operator(lambda r: 1.*(r[2]<0.))
-    else: raise
+    else:
+        raise ValueError("unknown operator for a Kondo Hamiltonian; the "
+                "accepted ones are 'kondo_sites' and 'dispersive_electrons'")
 
 
 
 def add_onsite(self,ons):
-    if not self.has_kondo: raise # only for Kondo Hamiltonians
+    if not self.has_kondo: # only for Kondo Hamiltonians
+        raise ValueError("this onsite term is only defined for Hamiltonians "
+                "with Kondo sites")
     m = self.copy() # copy Hamiltonian
     dis = m.get_operator("dispersive_electrons") # operator for dispersive
     intra = m.add_onsite(ons).intra@dis # add onsite only to disp electrons

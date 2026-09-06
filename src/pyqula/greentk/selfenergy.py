@@ -77,7 +77,9 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
         for iky in kk:
           ks.append([ikx,iky,0.])
       ks = np.array(ks)  # all the kpoints
-    else: raise # raise error
+    else: # raise error
+      raise NotImplementedError("the full-integration selfenergy is only "
+              "implemented for 1d and 2d Hamiltonians")
     for k in ks:  # loop in BZ
       g += algebra.inv(e - hk_gen(k))  # add green function  
     g = g/len(ks)  # normalize
@@ -96,7 +98,9 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
                 error=error,only_bulk=True)
 #        g += green_kchain(h90,k=k,energy=energy,delta=delta,error=error)
       g = g/len(ks)
-    else: raise
+    else:
+      raise NotImplementedError("the renormalization selfenergy is only "
+              "implemented for 1d and 2d Hamiltonians")
   #####################################################
   #####################################################
   elif mode=="adaptive":
@@ -104,12 +108,16 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
       g,s = gr(h)  # perform renormalization
       if gtype=="surface": g = s.copy() # take the surface one
       elif gtype=="bulk": pass # do nothing
-      else: raise
+      else:
+        raise ValueError("unknown gtype; the accepted ones are 'surface' and "
+                "'bulk'")
     elif d==2: # two dimensional, loop over k's
       ks = [[k,0.,0.] for k in np.linspace(0.,1.,nk,endpoint=False)]
       if gtype=="surface": ig = 1 # take the surface one
       elif gtype=="bulk": ig = 0 # take the bulk one
-      else: raise
+      else:
+        raise ValueError("unknown gtype; the accepted ones are 'surface' and "
+                "'bulk'")
       def fint(k):
         """ Function to integrate """
         return green_kchain(h,k=[k,0.,0.],energy=energy,
@@ -117,7 +125,9 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
       # eps is error, might work....
       g = integration.integrate_matrix(fint,xlim=[0.,1.],eps=error)
         # chain in the y direction
-    else: raise
+    else:
+      raise NotImplementedError("the adaptive selfenergy is only implemented "
+              "for 1d and 2d Hamiltonians")
   elif mode=="full_adaptive":
     fint = lambda k: algebra.inv(e - hk_gen(k))  # green's function
     if d==1: # adaptive 1D
@@ -125,7 +135,9 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
     elif d==2: # adaptive 2D
         g = integration.integrate_matrix_2D(fint,xlim=[0.,1.],ylim=[0.,1.],
               eps=.1)
-    else: raise NotImplementedError
+    else:
+      raise NotImplementedError("the fully adaptive selfenergy is only "
+              "implemented for 1d and 2d Hamiltonians")
   # now calculate selfenergy
   selfenergy = e - h.intra - algebra.inv(g)
   return g,selfenergy

@@ -35,7 +35,9 @@ def zero_T_didv(self,delta=None,**kwargs):
         return zero_T_didv_1D(self,delta=delta,**kwargs)
     elif self.dimensionality==2: # two dimensional
         return zero_T_didv_2D(self,delta=delta,**kwargs)
-    else: raise
+    else:
+        raise NotImplementedError("the dIdV is only implemented for 1d and 2d "
+                "junctions")
 
 
 
@@ -44,7 +46,8 @@ def zero_T_didv(self,delta=None,**kwargs):
 def zero_T_didv_1D(self,energy=0.0,delta=None,**kwargs):
     """Wrapper for the dIdV in one dimension"""
     if delta is None: delta = self.delta # set the own delta
-    if not self.dimensionality==1: raise # only for one dimensional
+    if not self.dimensionality==1: # only for one dimensional
+        raise ValueError("zero_T_didv_1D is only for 1d junctions")
     return didv(self,energy=energy,delta=delta,**kwargs)
 
 quadepsrel = 1e-2
@@ -54,7 +57,8 @@ def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
                    imode="quad",**kwargs):
     """Wrapper for the dIdV in two-dimensions"""
     if delta is None: delta = self.delta # set the own delta
-    if not self.dimensionality==2: raise # only for two dimensional
+    if not self.dimensionality==2: # only for two dimensional
+        raise ValueError("zero_T_didv_2D is only for 2d junctions")
     # function to integrate
     print("Computing",energy)
     f = lambda k: self.generate(k,self.scale_lc,self.scale_rc).didv(energy=energy,delta=delta,**kwargs)
@@ -66,8 +70,8 @@ def zero_T_didv_2D(self,energy=0.0,delta=None,nk=10,
     elif imode=="quad":
         return quad(f,0.,1.,epsrel=quadepsrel,limit=quadlimit)[0]
     else: 
-        print("Unrecognized imode")
-        raise
+        raise ValueError("unknown imode "+str(imode)+"; the accepted ones "
+                "are 'mesh', 'simpson' and 'quad'")
 
 
 
@@ -342,7 +346,9 @@ def didv_kmap(self,kpath=None,energies=None,
         if self.dimensionality==2: # 2D heterostructure
             HT1 = self.generate(k) # generate heterostructure
             return HT1.didv(energy=e,**kwargs)
-        else: raise NotImplementedError
+        else:
+            raise NotImplementedError("the k-resolved dIdV is only "
+                    "implemented for 2d junctions")
     if kpath is None: kpath = np.linspace(0.,1.,40)
     if energies is None: energies = np.linspace(-1.0,1.,40)
     from ..parallel import pcall

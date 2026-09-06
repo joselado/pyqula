@@ -12,7 +12,9 @@ def rkky(h,mode="pm",**kwargs):
     elif mode=="LR": # linear response theory
         from .chitk import magneticresponse
         return magneticresponse.rkky(h,**kwargs)
-    else: raise
+    else:
+        raise ValueError("unknown RKKY mode; the accepted ones are 'pm' (poor "
+                "man's) and 'LR' (linear response)")
 
 
 
@@ -39,7 +41,9 @@ def rkky_map(h0,n=2,mode="LR",info=False,fsuper=8,**kwargs):
 #                             mode="LR",**kwargs) # get the RKKY
             if info: print(d,ii,jj,e)
             return e
-    else: raise NotImplementedError
+    else:
+        raise ValueError("unknown mode; rkky_map accepts 'LR' (linear "
+                "response)")
 
     eout = [] # output RKKY
     rout = [] # output locations

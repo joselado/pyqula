@@ -6,8 +6,8 @@ from ..algebra import todense
 def bloch_hamiltonian_generator_dense(h,hopping,**kwargs):
     """Return generator of a Bloch Hamiltonian"""
     if h.is_sparse:
-        print("Only sparse Hamiltonians")
-        raise
+        raise ValueError("the dense Bloch generator needs a dense "
+                "Hamiltonian; call h.get_dense() first")
     ms,ds = [h.intra],[[0.,0.,0.]] # initialize
     for t in hopping: # loop over matrices
         ds.append(t.dir)

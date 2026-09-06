@@ -41,7 +41,9 @@ def berry_curvature_mesh(h,ks,dk=0.01,batch_size=64):
     there is no occupied state at all, the curvature is set to 0.0 -- the
     same fallbacks topology.berry_curvature itself uses.
     """
-    if h.dimensionality!=2: raise NotImplementedError # only for 2d
+    if h.dimensionality!=2: # only for 2d
+        raise NotImplementedError("the Berry curvature mesh is only "
+                "implemented for 2d Hamiltonians")
     hkgen = h.get_hk_gen()
     ks = np.array(ks)
     nk = len(ks)

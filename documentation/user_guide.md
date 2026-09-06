@@ -70,6 +70,7 @@ sections above use, not every public method on those classes.
 - [Lattice gas models](#lattice-gas-models)
 - [Ising models](#ising-models)
 - [Parallelism and reproducibility](#parallelism-and-reproducibility)
+- [Errors and unsupported inputs](#errors-and-unsupported-inputs)
 - [Main functions and methods](#main-functions-and-methods)
 
 # Setting up a Hamiltonian
@@ -3036,6 +3037,37 @@ np.random.seed(42)
 
 makes the whole sweep reproducible run to run. A `pcall` costs the parent
 exactly one draw off its own stream, whatever the tasks do with theirs.
+
+# Errors and unsupported inputs
+
+Most routines in pyqula only make sense for a Hamiltonian of a particular
+dimensionality, or in a particular Hilbert space, or for one of a fixed set of
+`mode=`/`solver=`/`channel=` strings. Those requirements are checked up front, and a
+violated one raises an exception whose message says what the routine needed:
+
+- `ValueError` for a value that cannot work -- the Berry curvature of a Hamiltonian
+  that is not two-dimensional, an unknown `mode` string, a spin operator on a spinless
+  Hamiltonian, an array of the wrong length
+- `NotImplementedError` for a combination that is simply not built yet -- a spin
+  rotation of a 3d non-multicell Hamiltonian, say, where the fix is usually to call
+  `h.turn_multicell()` first
+- `TypeError` for an argument of the wrong kind entirely -- a string where an
+  `Operator` was expected
+
+Where the check can name the offending value it does, so a message reads
+
+```
+ValueError: unknown mode ED2; the DOS accepts 'ED', 'KPM' and 'adaptive'
+```
+
+rather than only saying that something went wrong. For string-selected options the
+accepted values are listed in the message, which makes a typo self-diagnosing without
+a trip to the source.
+
+Two of these messages are worth knowing in advance because they point at the fix
+rather than the failure: a superconducting quantity asked of a normal Hamiltonian says
+to call `h.setup_nambu_spinor()` first, and a spin quantity asked of a spinless one
+says to call `h.turn_spinful()`.
 
 # Main functions and methods
 

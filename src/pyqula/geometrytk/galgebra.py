@@ -5,7 +5,9 @@ from ..geometry import Geometry
 def sum_geometries(g1,g2):
     """Sum two geometries"""
     if type(g2)==Geometry:
-        if g1.dimensionality!=g2.dimensionality: raise
+        if g1.dimensionality!=g2.dimensionality:
+            raise ValueError("two geometries can only be added if they have "
+                    "the same dimensionality")
         g = g1.copy()
         g.r = np.concatenate([g1.r,g2.r])
         g.r2xyz()
@@ -14,8 +16,8 @@ def sum_geometries(g1,g2):
         if g.atoms_have_names:
             g.atoms_names = np.concatenate([g1.atoms_names,g2.atoms_names])
         if g1.primal_geometry is not None and g2.primal_geometry is not None:
-            print("Primal geometry not implemented in __add__")
-            raise
+            raise NotImplementedError("adding two geometries that both keep a "
+                    "primal geometry is not implemented")
         return g
     elif type(g2)==np.ndarray: # array input
         g = g1.copy() # copy geometry
@@ -23,6 +25,6 @@ def sum_geometries(g1,g2):
         g.r2xyz()
         return g
     else:
-        print(type(g2))
-        raise
+        raise TypeError("a geometry can only be added to another geometry or "
+                "to a shift vector, and not to a "+str(type(g2)))
 

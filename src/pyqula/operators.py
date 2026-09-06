@@ -42,8 +42,9 @@ class Operator():
             self.m = lambda v,k=None: hkgen(k)@v
             self.linear = True
         else: 
-            print("Unrecognised type",type(m))
-            raise
+            raise TypeError("an Operator must be built from a matrix, another "
+                    "Operator, a number, a callable, or a Hamiltonian, and "
+                    "not from a "+str(type(m)))
     def __mul__(self,a):
         """Define the multiply method"""
         if type(a)==Operator:
@@ -74,7 +75,9 @@ class Operator():
     def trace(self):
         if self.matrix is not None: 
             return algebra.trace(self.matrix)
-        else: raise
+        else:
+            raise ValueError("this operator has no matrix representation, so "
+                    "its trace is not defined")
     def __rmul__(self,a):
         if algebra.isnumber(a): # single number, just multiply
             return self*a # just multiply
@@ -82,7 +85,8 @@ class Operator():
             return Operator(a)*self
     def __truediv__(self,a):
         if isnumber(a): return self*(1./a)
-        else: raise
+        else:
+            raise TypeError("an Operator can only be divided by a number")
     def __add__(self,a):
         """Define the add method"""
         if type(a)==Operator:
@@ -110,8 +114,8 @@ class Operator():
             if algebra.ismatrix(self.matrix): 
                 return self.matrix
             else: 
-                print("Operator.matrix has a wrong type",type(self.matrix))
-                raise
+                raise TypeError("the stored operator is not a matrix but "
+                        "a "+str(type(self.matrix)))
     def inv(self):
         """Return the inverse operator"""
         if self.matrix is not None and self.linear: # input is a matrix
@@ -119,7 +123,9 @@ class Operator():
             def f(v,**kwargs):
                 return algebra.applyinverse(m,v)
             return Operator(f,linear=True)
-        else: raise NotImplementedError
+        else:
+            raise NotImplementedError("only a linear operator with a matrix "
+                    "representation can be inverted")
     def braket(self,w,**kwargs):
         """Compute an expectation value"""
         wi = self(w,**kwargs) # apply the operator
@@ -156,7 +162,8 @@ def rfunction2operator(h,f):
 def density2operator(h,d):
     """Given a function that takes a position, return the operator"""
     n = len(h.geometry.r)
-    if len(d)!=n: raise
+    if len(d)!=n:
+        raise ValueError("the density must have one value per site")
     inds = range(n)
     m = csc((d,(inds,inds)),shape=(n,n),dtype=np.complex128)
     return h.spinless2full(m) # return matrix
@@ -202,7 +209,10 @@ def get_interface(h,fun=None):
     cut = 2.0 # cutoff
     if h.dimensionality==1: index = 1
     elif h.dimensionality==2: index = 2
-    else: raise
+    else:
+        raise NotImplementedError("the default interface operator is only "
+                "defined for 1d and 2d Hamiltonians; pass an explicit fun "
+                "instead")
     def fun(ri): # define the function
       if np.abs(ri[index])<cut: return 1.0
       else: return 0.0
@@ -256,7 +266,9 @@ def get_electron(h):
   elif h.check_mode("spinless_nambu"):
       from .sctk import spinless
       return spinless.proje(h.intra.shape[0])
-  else: raise
+  else:
+      raise ValueError("the electron projector needs a Nambu Hamiltonian; "
+              "call h.setup_nambu_spinor() first")
 
 
 def get_hole(h):
@@ -274,7 +286,9 @@ def get_hole(h):
   elif h.check_mode("spinless_nambu"):
       from .sctk import spinless
       return spinless.projh(h.intra.shape[0])
-  else: raise
+  else:
+      raise ValueError("the hole projector needs a Nambu Hamiltonian; call "
+              "h.setup_nambu_spinor() first")
 
 
 def get_tauz(h):
@@ -305,7 +319,9 @@ def get_bulk(h,fac=0.8):
         dr = dr/np.max(dr) # to interval 0,1
         dr2 = dr - np.mean(dr) # minus the average
         out[fac/2.<np.abs(dr2)] = 0.0 # set to zero
-    else: raise # unsupported dimensionality
+    else: # unsupported dimensionality
+        raise NotImplementedError("the bulk operator is only implemented for "
+                "Hamiltonians up to 2d")
     from scipy.sparse import diags
     n = len(r) # number of sites
     out = diags([out],offsets=[0],shape=(n,n),dtype=np.complex128) # create matrix
@@ -333,12 +349,16 @@ def get_position(h,mode="z"):
   if h.has_spin:  dind *= 2 # duplicate for spin
   if h.has_eh:  dind *= 2  # duplicate for eh
   n = h.intra.shape[0] # number of elments of the hamiltonian
-  if len(h.geometry.z)!=n//dind: raise # dimensions do not match
+  if len(h.geometry.z)!=n//dind: # dimensions do not match
+      raise ValueError("the geometry and the Hamiltonian have a different "
+              "number of sites")
   data = [] # epmty list
   if mode=="x": pos = h.geometry.x
   elif mode=="y": pos = h.geometry.y
   elif mode=="z":  pos = h.geometry.z
-  else: raise
+  else:
+      raise ValueError("unknown mode; the position operator accepts 'x', 'y' "
+              "and 'z'")
   for i in range(n): # loop over elements
     z = pos[i//dind]
     data.append(z)
@@ -380,7 +400,9 @@ def get_rop(h,fun):
 
 def get_sublattice(h,mode="both"):
   """Sublattice operator"""
-  if not h.geometry.has_sublattice: raise
+  if not h.geometry.has_sublattice:
+      raise ValueError("the sublattice operator needs a geometry with a "
+              "sublattice index")
   rep = 1 # repetitions 
   if h.has_spin: rep *= 2
   if h.has_eh: rep *= 2
@@ -390,7 +412,9 @@ def get_sublattice(h,mode="both"):
       if mode=="both": data.append(s) # store
       elif mode=="A": data.append((s+1.)/2.) # store
       elif mode=="B": data.append((-s+1.)/2.) # store
-      else: raise
+      else:
+          raise ValueError("unknown mode; the sublattice operator accepts "
+                  "'both', 'A' and 'B'")
   n = h.intra.shape[0]
   row = range(n)
   col = range(n)

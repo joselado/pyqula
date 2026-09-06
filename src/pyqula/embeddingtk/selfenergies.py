@@ -32,6 +32,8 @@ def semimetal(*args,zero=0.):
 def get_selfenergy_from_potential(*args,mode="metal",**kwargs):
     if mode=="metal": return metal(*args,**kwargs)
     elif mode=="semimetal": return semimetal(*args,**kwargs)
-    else: raise
+    else:
+        raise ValueError("unknown mode; the accepted ones are 'metal' and "
+                "'semimetal'")
 
 

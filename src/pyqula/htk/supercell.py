@@ -3,7 +3,8 @@ import numpy as np
 
 def bulk2ribbon(hin,n=10):
   """ Create a ribbon hamiltonian object"""
-  if hin.dimensionality!=2: raise
+  if hin.dimensionality!=2:
+    raise ValueError("bulk2ribbon needs a 2d Hamiltonian")
   hin = hin.get_multicell() # into multicell form
   hr = hin.get_supercell(nsuper=[1,n,1]) # Hamiltonian of the ribbon
   hr.geometry.dimensionality = 1 # one dimensional
@@ -21,7 +22,8 @@ def bulk2ribbon(hin,n=10):
 
 def bulk2film(hin,n=10):
   """ Create a ribbon hamiltonian object"""
-  if hin.dimensionality!=3: raise
+  if hin.dimensionality!=3:
+    raise ValueError("bulk2film needs a 3d Hamiltonian")
   hin = hin.get_multicell() # into multicell form
   hr = hin.get_supercell(nsuper=[1,1,n]) # Hamiltonian of the ribbon
   hr.geometry.dimensionality = 2 # two dimensional

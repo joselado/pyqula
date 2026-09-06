@@ -7,8 +7,9 @@ import numpy as np
 def chargechi(h,i=0,j=0):
     """Compute the charge correlator for a Hamiltonian"""
     if h.has_eh: 
-        print("Hamiltonians with eh not implemented")
-        raise NotImplementedError
+        raise NotImplementedError("the static charge correlator is not "
+                "implemented for Hamiltonians with the electron-hole (Nambu) "
+                "degree of freedom")
     if not h.has_spin:
         return single_chargechi(h,i=i,j=j)
     else:
@@ -23,8 +24,9 @@ def chargechi(h,i=0,j=0):
 def szchi(h,i=0,j=0):
     """Compute the charge correlator for a Hamiltonian"""
     if h.has_eh:
-        print("Hamiltonians with eh not implemented")
-        raise NotImplementedError
+        raise NotImplementedError("the static Sz correlator is not "
+                "implemented for Hamiltonians with the electron-hole (Nambu) "
+                "degree of freedom")
     if not h.has_spin:
         return single_chargechi(h,i=i,j=j)
     else:
@@ -62,13 +64,17 @@ def sychi(H,**kwargs):
 
 def single_chargechi(h,i=0,j=0,temp=1e-7):
     """Compute charge response function for a single orbital"""
-    if h.dimensionality!=0: raise
+    if h.dimensionality!=0:
+        raise ValueError("the static charge response is only implemented for "
+                "0d Hamiltonians")
     hk = h.get_hk_gen() # get generator
     m = hk(0) # get Hamiltonian
     esh,ws = algebra.eigh(m) # diagonalize
     ws = np.transpose(ws) # transpose wavefunctions
-    if i<0: raise # sanity check
-    if j<0: raise # sanity check
+    if i<0: # sanity check
+        raise ValueError("the site index i must not be negative")
+    if j<0: # sanity check
+        raise ValueError("the site index j must not be negative")
     return elementchi(ws,esh,ws,esh,i,j,temp)
 
 

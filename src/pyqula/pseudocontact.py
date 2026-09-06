@@ -7,8 +7,12 @@ import numpy as np
 
 def write_correlator(h,index=None,e=0.0,delta=0.01):
   """Write the correlator in a file"""
-  if h.dimensionality!=0: raise # only for 0d
-  if h.has_spin: raise NotImplementedError
+  if h.dimensionality!=0: # only for 0d
+    raise ValueError("write_correlator is only implemented for 0d "
+            "Hamiltonians")
+  if h.has_spin:
+    raise NotImplementedError("write_correlator is not implemented for "
+            "spinful Hamiltonians")
   intra = csc_matrix(h.intra) # hamiltonian 
   d = np.zeros(intra.shape[0]) # correlator
   if True:

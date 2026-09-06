@@ -14,7 +14,9 @@ def build_ribbon(hin,g=None,n=20):
     h.geometry.get_lattice_name()
     if h.geometry.lattice_name=="square": # square lattice
       g = geometry.square_ribbon(n) 
-    else: raise NotImplementedError
+    else:
+      raise NotImplementedError("a default skeleton is only implemented for a "
+              "square lattice; pass the skeleton geometry as g")
   # now build the hamiltonian
   h = hin.copy() # generate hamiltonian
   # if the hamiltonian is not multicell, turn it so
@@ -87,7 +89,9 @@ def build_island(h,n=5,angle=30,nedges=6):
   if np.abs(angle-60)<1.: gin.a2 = -gin.a2 # change the unit cell
   g = sculpt.build_island(gin,n=n,angle=angle,nedges=nedges,clear=False) # get the island
   angle2 = sculpt.get_angle(gin.a1,gin.a2)/np.pi*180
-  if np.abs(angle-angle2)>1.: raise # error in the angles
+  if np.abs(angle-angle2)>1.: # error in the angles
+    raise ValueError("the angle between the lattice vectors of the island "
+            "does not match the one of the input Hamiltonian")
   gh = sculpt.rotate_a2b(h.geometry,h.geometry.a1,gin.a1) # use the same axis
   # now define a function to select the correct hopping
   (w1,w2,w3) = sculpt.reciprocal(gin.a1,gin.a2) # get reciprocal vectors
@@ -141,7 +145,14 @@ def image2island(impath,h,s=20):
   g = sculpt.image2island(impath,gin,s=s) # get the island
   angle = 0.0
   angle2 = sculpt.get_angle(gin.a1,gin.a2)/np.pi*180
-  if np.abs(angle-angle2)>1.: raise # error in the angles
+  if np.abs(angle-angle2)>1.: # error in the angles
+    # NOTE: angle is hardwired to 0 just above, so this asks the two lattice
+    # vectors to be parallel and no valid 2d lattice passes it. Left as is
+    # (with a message, rather than a bare raise) because changing the
+    # condition would be a change of behaviour, not a repair of the error.
+    raise ValueError("image2island requires the angle between the lattice "
+            "vectors of the input geometry to be 0 degrees, and it is "
+            +str(angle2))
   gh = sculpt.rotate_a2b(h.geometry,h.geometry.a1,gin.a1) # use the same axis
   # now define a function to select the correct hopping
   (w1,w2,w3) = sculpt.reciprocal(gin.a1,gin.a2) # get reciprocal vectors

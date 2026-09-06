@@ -42,5 +42,13 @@ already reached once.
   workflow is and the test that pins it, and what a vortex implementation
   would actually need.
 
+- [`unreferenced_modules.md`](unreferenced_modules.md) -- the dead-module
+  cleanup: how "unreferenced" was actually established (an AST walk of every
+  import in the repo, since grep both over- and under-reports on module names
+  that are ordinary English words), the 15 modules that were removed and why
+  each was safe, and the seven that are unused but import cleanly and were
+  deliberately kept because deleting them is a public-API decision rather
+  than a repair.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

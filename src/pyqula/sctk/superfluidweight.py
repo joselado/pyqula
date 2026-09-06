@@ -280,7 +280,9 @@ def _cell_volume(g,dim=None):
     if dim==1: return np.sqrt(g.a1.dot(g.a1))
     elif dim==2: return np.abs(np.cross(g.a1,g.a2)[2])
     elif dim==3: return np.abs(np.dot(g.a1,np.cross(g.a2,g.a3)))
-    else: raise NotImplementedError
+    else:
+        raise ValueError("the cell volume needs a geometry of dimensionality "
+                "1, 2 or 3")
 
 
 # ---------------------------------------------------------------------------

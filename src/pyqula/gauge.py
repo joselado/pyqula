@@ -35,7 +35,9 @@ def Operator2canonical_gauge(h,op):
 def hamiltonian_gauge_transformation(h,phis):
     ho = h.copy()
     phis = np.array(phis)
-    if len(phis)!=len(h.geometry.r): raise
+    if len(phis)!=len(h.geometry.r):
+        raise ValueError("the gauge transformation needs one phase per site, "
+                "got a different number of phases than sites in the geometry")
     U = np.diag(np.exp(1j*np.pi*2*phis)) # create the 
     U = ho.spinless2full(U) # increase the space if necessary
     Uh = np.conjugate(U.T) # transpose

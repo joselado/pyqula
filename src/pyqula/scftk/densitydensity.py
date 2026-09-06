@@ -477,7 +477,10 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
             if not converged:
                 print("No convergence has been reached in",ite,
                         "iterations, stopping")
-        else: raise # unrecognised solver
+        else: # unrecognised solver
+            raise ValueError("unknown solver; the accepted ones are 'plain', "
+                    "'krylov', 'anderson', 'broyden1', 'linear' and "
+                    "'broyden_mixing'")
         mf = fa2mf(x) # transform to MF
         scf = f(mf) # compute the SCF with the solution
         if solver=="broyden_mixing": scf.converged = converged # store convergence flag
@@ -738,4 +741,6 @@ def obj2geometryarray(U,g):
         return np.array([U for ir in g.r]) # same for all
     elif callable(U):
         return np.array([U(ir) for ir in g.r]) # call for each
-    else: raise
+    else:
+        raise TypeError("the interaction must be a number or a callable of "
+                "the position")

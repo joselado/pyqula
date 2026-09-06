@@ -18,7 +18,9 @@ def get_eh_sector_odd_even(m,i=0,j=0):
     elif i==1 and j==0: return m[n:2*n,0:n] 
     elif i==0 and j==1: return m[0:n,n:2*n] 
     elif i==1 and j==1: return m[n:2*n,n:2*n] 
-    else: raise
+    else:
+        raise ValueError("the electron-hole sector indexes i and j must each "
+                "be 0 or 1")
 
 
 get_eh_sector = get_eh_sector_odd_even
@@ -82,7 +84,8 @@ def eh_operator(m):
 
 def enforce_multihopping_eh_symmetry(MH):
     """Enforce electron-hole symmetry in a multihopping object"""
-    raise
+    raise NotImplementedError("enforce_multihopping_eh_symmetry is not "
+            "implemented")
     from .multihopping import MultiHopping
     dd = MH.get_dict() # get the dictionary
     out = dict() # dictionary
@@ -215,7 +218,8 @@ def build_nambu_matrix(hin,c12=None,c21=None,is_sparse=True):
 
 def add_swave(delta=0.0,is_sparse=False,rs=None):
   """ Adds swave pairing """
-  if rs is None: raise # raise error to signal that this is temporal
+  if rs is None: # raise error to signal that this is temporal
+      raise ValueError("add_swave needs the site positions, pass them as rs")
   n = len(rs) # number of sites
   if callable(delta): # delta is a function
     datar = [delta(ri) for ri in rs] # generate data for the different positions
@@ -506,7 +510,9 @@ def turn_nambu(self):
   elif self.check_mode("spinless_nambu"): return # do nothing, already Nambu
   elif self.check_mode("spinless"): self.turn_spinful() # error
   elif self.check_mode("spinful"): pass # error
-  else: raise
+  else:
+      raise NotImplementedError("this Hilbert space cannot be turned into a "
+              "Nambu one")
   def f(m): return nambu(m,is_sparse=self.is_sparse)
   self.modify_hamiltonian_matrices(f) # modify all the matrices
   self.has_eh = True

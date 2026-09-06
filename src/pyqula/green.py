@@ -396,7 +396,8 @@ def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1],
 def green_generator(h,nk=20):
   """Returns a function capable of calculating the Green function
   at a certain energy, by explicity summing the k-dependent Green functions"""
-  if h.dimensionality != 2: raise # only for 2d
+  if h.dimensionality != 2: # only for 2d
+    raise ValueError("green_generator is only implemented for 2d Hamiltonians")
   shape = h.intra.shape # shape
   hkgen = h.get_hk_gen() # get the Hamiltonian generator
   wfs = np.zeros((nk*nk,shape[0],shape[0]),dtype=np.complex128) # allocate vector
@@ -451,7 +452,9 @@ def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=10,
         out = -np.trace(np.array(g)).imag
     else: # finite operator
         if operator.matrix is None: # no matrix, assume a momentum dependent
-            raise NotImplementedError
+            raise NotImplementedError("green_operator needs an operator with "
+                    "a matrix representation, a momentum-dependent one is not "
+                    "implemented")
 #            hkgen = h.get_hk_gen() # get generator
 #            iden = np.identity(h.intra.shape[0],dtype=np.complex128)
 #            from . import klist
@@ -479,7 +482,8 @@ def GtimesO(g,o,k=[0.,0.,0.]):
     elif callable(o): return o(g,k=k) # call the operator
     else:
         print(type(g),type(o))
-        raise
+        raise TypeError("cannot multiply the Green function by this operator; "
+                "it must be a matrix of the same type or a callable")
 
 
 

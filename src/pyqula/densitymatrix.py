@@ -51,7 +51,9 @@ def full_dm(h,T=delta_dm,dm_mode=dm_mode,delta=None,**kwargs):
         return full_dm_accumulate(h,delta=T,**kwargs)
     elif dm_mode=="simultaneous":
         return full_dm_simultaneous(h,delta=T,**kwargs)
-    else: raise NotImplementedError
+    else:
+        raise ValueError("unknown dm_mode; the density matrix accepts "
+                "'accumulate' and 'simultaneous'")
 
 # it may be worth to implement some adaptive integration with quad_vec
 
@@ -358,7 +360,8 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
     elif h.dimensionality == 1: fac = 1./nk
     elif h.dimensionality == 2: fac = 1./nk**2
     elif h.dimensionality == 3: fac = 1./nk**3
-    else: raise
+    else:
+        raise ValueError("the Hamiltonian must have dimensionality 0, 1, 2 or 3")
     if ds is None: # no directions required
       es,vs = h.get_eigenvectors(nk=nk) # get eigenvectors
       es = es - fermi # shift by the Fermi energy
@@ -391,7 +394,8 @@ from .dmtk.fulldm import full_dm_d_batch_vectorized
 def restricted_dm(h,mode="KPM",pairs=[],
                    scale=10.0,npol=400,ne=None):
   """Calculate certain elements of the density matrix"""
-  if h.dimensionality != 0 : raise
+  if h.dimensionality != 0:
+      raise ValueError("restricted_dm is only implemented for 0d Hamiltonians")
   if mode=="full": # full inversion and then select
     dm = full_dm(h) # Full DM
     outm = np.array([dm[j,i] for (i,j) in pairs]) # get the desired ones
@@ -408,7 +412,8 @@ def restricted_dm(h,mode="KPM",pairs=[],
       out[ii] = np.trapezoid(y,x=x)/np.pi # pi is here so it normalizes to 0.5
       ii += 1
     return out
-  else: raise
+  else:
+      raise ValueError("unknown mode; restricted_dm accepts 'full' and 'KPM'")
        
 from . import algebra
 

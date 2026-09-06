@@ -48,7 +48,9 @@ class Geometry:
         return neighbor_distances(self,**kwargs)
     def normalize_nn_distance(self):
         """Set the NN istance equal to 1"""
-        if self.dimensionality>0: raise
+        if self.dimensionality>0:
+            raise ValueError("normalize_nn_distance is only implemented for 0d "
+                    "geometries")
         d = self.neighbor_distances(n=1)[0]
         self.r = self.r/d
         self.r2xyz()
@@ -364,7 +366,9 @@ write_geometry = write_positions
 
 def remove_duplicated(g):
   """ Remove duplicated atoms"""
-  if not g.atoms_have_names: raise
+  if not g.atoms_have_names:
+      raise ValueError("remove_duplicated needs a geometry whose atoms have "
+              "names")
   go = g.copy() # copy geometry
   rs = remove_duplicated_positions(g.r)
   go.r = np.array(rs)
@@ -582,12 +586,17 @@ def get_supercell(self,nsuper,store_primal=False):
         else: return supercell2d(self,n1=nsuper1,n2=nsuper2)
     elif self.dimensionality==3:
         nsuper = number2array(nsuper,d=3)
-        if np.max(np.abs(nsuper-np.round(nsuper)))>1e-5: raise # not implementet
+        if np.max(np.abs(nsuper-np.round(nsuper)))>1e-5: # not implementet
+          raise NotImplementedError("in 3d only integer supercells are "
+                  "implemented, nsuper must be a whole number in each "
+                  "direction")
         nsuper1 = nsuper[0]
         nsuper2 = nsuper[1]
         nsuper3 = nsuper[2]
         s = supercell3d(self,n1=nsuper1,n2=nsuper2,n3=nsuper3)
-    else: raise NotImplementedError
+    else:
+        raise NotImplementedError("a supercell is only implemented for "
+                "geometries of dimensionality 1, 2 and 3")
     s.center()
     s.get_fractional()
     return s

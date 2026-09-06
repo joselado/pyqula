@@ -39,7 +39,9 @@ def get_berry_curvature_path(h,kpath=None,dk=0.01,
         b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
       elif mode=="Green":
         b = berry_green(f,k=k,operator=operator,gI=gI)
-      else: raise
+      else:
+        raise ValueError("unknown mode for the Berry curvature; the accepted "
+                "ones are 'Wilson' and 'Green'")
       return str(k[0])+"   "+str(k[1])+"   "+str(b)+"\n"
     fo = open("BERRY_CURVATURE.OUT","w") # open file
     if parallel.cores==1: # serial execution
@@ -88,7 +90,9 @@ def berry_phase(h,nk=20,kpath=None,write=True):
               +"depends on the path, so you must provide kpath=")
         ks = kpath # continue
         nk = len(kpath) # redefine
-    else: raise # otherwise
+    else: # otherwise
+      raise ValueError("the Berry phase needs a Hamiltonian with a "
+              "non-negative dimensionality")
     hkgen = h.get_hk_gen() # get Hamiltonian generator
     wf0 = occupied_states(hkgen,ks[0]) # get occupied states, first k-point
     if len(wf0)==0:
@@ -155,7 +159,8 @@ def berry_curvature(h,k,dk=0.01,window=None,max_waves=None):
   h-BN calculation, and the Provost-Vallee spin-1/2 example (whose curvature
   integrates to -2*pi, the spin-1/2 monopole charge).
   """
-  if h.dimensionality != 2: raise # only for 2d
+  if h.dimensionality != 2: # only for 2d
+    raise ValueError("the Berry curvature is only defined for 2d Hamiltonians")
   k = np.array([k[0],k[1]]) 
   dx = np.array([dk,0.])
   dy = np.array([0.,dk])
@@ -203,7 +208,9 @@ def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None):
         return berry_curvature(h,np.array([x,y]),dk=dk)
       elif mode=="Green":
          return berry_green(f2,k=[x,y,0.],operator=operator,gI=gI2)
-      else: raise
+      else:
+        raise ValueError("unknown mode for the Berry curvature; the accepted "
+                "ones are 'Wilson' and 'Green'")
     c = integrate.dblquad(f,0.,1.,lambda x : 0., lambda x: 1.,epsabs=0.01,
                             epsrel=0.01)
     chern = c[0]/(2.*np.pi)
@@ -327,7 +334,9 @@ def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
     def f(k):
         if mode=="Wilson": return berry_curvature(h,k,dk=dk)
         elif mode=="Green": return berry_green(fgk,k=[k[0],k[1],0.],operator=operator,gI=gI)
-        else: raise
+        else:
+          raise ValueError("unknown mode for the Berry curvature; the "
+                  "accepted ones are 'Wilson' and 'Green'")
     c = integrate_robust(np.float64,f,GKorder,tolerance,**kwargs)
     c = c/(2.*np.pi) # normalize so that the integral gives an integer
     open("CHERN.OUT","w").write(str(c)+"\n")
@@ -385,7 +394,9 @@ def get_berry_curvature_master(h,dk=None,nk=100,
            b = berry_curvature(h,k,dk=dk,window=window,max_waves=max_waves)
         elif mode=="Green":
            b = berry_green(f,k=k,operator=operator,gI=gI)
-        else: raise
+        else:
+          raise ValueError("unknown mode for the Berry curvature; the "
+                  "accepted ones are 'Wilson' and 'Green'")
         return b
     from .topologytk.berry import use_berry_curvature_mesh
     if use_berry_curvature_mesh(h,mode=mode,window=window,max_waves=max_waves):
@@ -487,7 +498,8 @@ def z2_wannier_winding(h,nk=100,nt=100,nocc=None,full=True):
       return -d
   
     if full: # for the Chern number
-      raise
+      raise NotImplementedError("the full (Chern-number) branch of "
+              "z2_wannier_winding is not implemented; call it with full=False")
       # this part is wrong
       #####################
       cuts = 0 # start with 0

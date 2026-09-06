@@ -21,7 +21,8 @@ def kmesh(dimensionality,nk=10,nsuper=1,
           for k2 in np.linspace(0.,nsuper,nk[1],endpoint=endpoint):
             for k3 in np.linspace(0.,nsuper,nk[2],endpoint=endpoint):
               kp.append([k1,k2,k3]) # store
-    else: raise
+    else:
+        raise ValueError("a k-mesh needs a dimensionality between 0 and 3")
     kp = [np.array(k) for k in kp] # to array
     return np.array(kp)
 

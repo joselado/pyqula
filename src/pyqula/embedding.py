@@ -142,7 +142,9 @@ def bulk_and_surface(h1,nk=100,energies=np.linspace(-1.,1.,100),**kwargs):
   from scipy.sparse import csc_matrix,bmat
   if h1.dimensionality==2:
       kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
-  else: raise
+  else:
+      raise NotImplementedError("bulk_and_surface is only implemented for 2d "
+              "Hamiltonians")
   ik = 0
   h1 = h1.get_multicell() # multicell Hamiltonian
   tr = timing.Testimator("DOS") # generate object
@@ -178,7 +180,9 @@ def onsite_supercell_multicell(h,nsuper,mc=None):
     ### setup the central (defective) cell
     if h.dimensionality==1: n = nsuper # number of unit cells
     elif h.dimensionality==2: n = nsuper**2 # number of unit cells
-    else: raise
+    else:
+        raise NotImplementedError("the supercell onsite matrix is only "
+                "implemented for 1d and 2d Hamiltonians")
     if h.dimensionality==1:
         ic=int(n//2) # central site
     elif h.dimensionality==2:
@@ -224,8 +228,13 @@ def onsite_supercell_no_multicell(h,nsuper,mc=None):
     if not is_iterable(nsuper): # just a number
         if h.dimensionality==1: nsuper = [nsuper,1]
         elif h.dimensionality==2: nsuper = [nsuper,nsuper]
-        else: raise
-    if h.dimensionality>2: raise
+        else:
+            raise NotImplementedError("a single number for nsuper is only "
+                    "understood for 1d and 2d Hamiltonians, give one size per "
+                    "direction")
+    if h.dimensionality>2:
+        raise NotImplementedError("the supercell onsite matrix is only "
+                "implemented up to 2d")
     #### this is a dirty workaround ####
     if h.dimensionality==1:
         h = h.copy()
@@ -281,7 +290,9 @@ def onsite_supercell_no_multicell(h,nsuper,mc=None):
         else: # even supercell
             ii=int(n//2) # central
             ii = ii - int(nsuper[0]//2)
-    else: raise
+    else:
+        raise NotImplementedError("the supercell onsite matrix is only "
+                "implemented for 1d and 2d Hamiltonians")
     out[ii*dim:(ii+1)*dim,ii*dim:(ii+1)*dim] = mc # central onsite
     return out
 

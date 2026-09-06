@@ -137,13 +137,17 @@ def twisted_multilayer(m0=3,rotate=True,shift=None,
     gs = [] # empty list with geometries
     ii = 0
     for i in rot: # loop
-        if i!=0 and i!=1: raise # nope
+        if i!=0 and i!=1: # nope
+            raise ValueError("the rotation list can only contain 0 for an "
+                    "unrotated layer and 1 for a rotated one")
         dr = shift[ii][0]*g0.a1 + shift[ii][1]*g0.a2 # shift geometry
         dr = dr + np.array([0.,0.,dz*(ii-len(rot)/2.+.5)]) # shift layer
         gs.append(rotate_layer(g,i*theta,dr=dr))
       #  gs.append(g.copy())
         ii += 1 # increase counter
-  else: raise
+  else:
+      raise NotImplementedError("twisted_multilayer is only implemented with "
+              "rotate=True")
 #  g.r = np.concatenate([g1.r,g.r,g2.r]).copy()
   g.r = np.concatenate([gi.r for gi in gs]).copy() # all the positions
   if g.has_sublattice:
@@ -179,10 +183,14 @@ def generalized_twisted_multilayer(m0=3,rotate=True,shift=[0.,0.],
         g = gf[ii] # get the geometry
         g = twisted_supercell(g,m0=m0,r=r) # get the twisted supercell
         print(i)
-        if i!=0 and i!=1: raise # nope
+        if i!=0 and i!=1: # nope
+            raise ValueError("the rotation list can only contain 0 for an "
+                    "unrotated layer and 1 for a rotated one")
         gs.append(rotate_layer(g,i*theta,dr=[0.,0.,dz*(ii-len(rot)/2.+.5)]))
         ii += 1 # increase counter
-  else: raise
+  else:
+      raise NotImplementedError("generalized_twisted_multilayer is only "
+              "implemented with rotate=True")
 #  g.r = np.concatenate([g1.r,g.r,g2.r]).copy()
   g.r = np.concatenate([gi.r for gi in gs]).copy() # all the positions
 #  g.r = np.concatenate([g2.r,g.r]).copy()
@@ -298,7 +306,9 @@ def twisted_multimultilayer(m0=3,
   # supercell used
   nsuper = [[m0,m0+r,0],[-m0-r,2*m0+r,0],[0,0,1]]
   gs = [] # empty list
-  if len(rot)!=len(g): raise # inconsistency
+  if len(rot)!=len(g): # inconsistency
+      raise ValueError("the rotation list and the list of geometries must "
+              "have the same length, one rotation per layer")
   zshift= 0.0 # initial shift
   for (irot,gi) in zip(rot,g): # loop
     dzi = np.max(gi.z)-np.min(gi.z) # width of this layer
@@ -306,7 +316,9 @@ def twisted_multimultilayer(m0=3,
            reducef=lambda x: 3*np.sqrt(x))
     gi.r[:,2] -= np.min(gi.r[:,2]) # lowest layer in zero
     gi.r2xyz() # update
-    if irot!=0 and irot!=1: raise # nope
+    if irot!=0 and irot!=1: # nope
+        raise ValueError("the rotation list can only contain 0 for an "
+                "unrotated layer and 1 for a rotated one")
     gs.append(rotate_layer(gi,irot*theta,dr=[0.,0.,zshift]))
     zshift = zshift + dzi + dz
   # now create the final geometry object
@@ -337,7 +349,10 @@ def parse_twisted_multimultilayer(name,n=3):
             elif ni=="ABC": gi = multilayer_graphene(l=[0,1,2]) 
             elif ni=="ABAB": gi = multilayer_graphene(l=[0,1,0,1]) 
             elif ni=="ABBA": gi = multilayer_graphene(l=[0,1,1,0]) 
-            else: raise
+            else:
+                raise ValueError("unknown stacking name; the accepted ones "
+                        "are '', 'A', 'AA', 'AB', 'BA', 'ABC', 'ABAB' and "
+                        "'ABBA'")
             gs.append(gi) # store
     rot = name[1] # rotations
     return twisted_multimultilayer(rot=rot,g=gs,m0=n)

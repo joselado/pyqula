@@ -8,8 +8,8 @@ def mass_operator(h,**kwargs):
     """Return the operator to compute the effective mass"""
     def mop(v,k=None):
         if k is None: 
-            print("Kpoint required")
-            raise
+            raise ValueError("the mass operator has to be evaluated at a "
+                    "k-point, and none was given")
         hk0 = h.get_hk_gen()(k) # get the Hamiltonian
         from .algebra import eigh # function to diagonalize
         e0,w0 = eigh(hk0) # central point 
@@ -39,7 +39,9 @@ def effective_mass(h,k,dk=1e-2,**kwargs):
         v = np.sqrt(a1.dot(a1))
         m = v*m/((2.*np.pi)**2) # renormalize by the pi factors
         return m
-    else: raise
+    else:
+        raise NotImplementedError("the effective mass is only implemented for "
+                "1d Hamiltonians")
 
 
 

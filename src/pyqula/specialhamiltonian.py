@@ -153,8 +153,8 @@ def triangular_pi_flux(g=None,**kwargs):
         print(np.round(h.intra,2))
         for t in h.hopping:
           print(np.round(t.m,2))
-        print("Something wrong happened in pi-flux")
-        raise
+        raise ValueError("the pi-flux Hamiltonian came out without "
+                "time-reversal symmetry")
     exit()
     return h
 

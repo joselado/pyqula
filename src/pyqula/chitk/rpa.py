@@ -115,7 +115,9 @@ def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,q=None,**kwargs):
             chis.append(np.block(chi)) # store
     elif mode_rpa=="vectorized": # all at once
         es,chis = _chi_ops_matrix_vectorized(h,ops=ops,pAs=pAs,pBs=pBs,q=q,**kwargs)
-    else: raise
+    else:
+        raise ValueError("unknown mode_rpa; the accepted ones are "
+                "'sequential' and 'vectorized'")
     iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
     if V is not None: # finite interaction, RPA summation
         Vq = interaction_at_q(V,h,q) # Fourier transform if V has non-onsite support

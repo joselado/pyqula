@@ -120,7 +120,9 @@ def rotate(g,angle):
       x,y,z = go.a1
       go.a1 = np.array([c*x + s*y,-s*x + c*y,z])
     elif go.dimensionality==0: pass
-    else: raise # 
+    else: # 
+      raise NotImplementedError("rotate is only implemented for geometries up "
+              "to 2d")
     go.get_fractional() # get fractional coordinates 
     return go
 
@@ -237,7 +239,8 @@ def rotate_a2b(g,a,b):
 def build_island(gin,n=5,angle=20,nedges=6,clear=True):
   """ Build an island starting from a 2d geometry"""
   nf = float(n)   # get the desired size, in float
-  if gin.dimensionality!=2: raise 
+  if gin.dimensionality!=2:
+    raise ValueError("build_island needs a 2d geometry")
   g = gin.copy()
   g = g.supercell(8*n)   # create supercell
   g.set_finite() # set as finite system
@@ -268,7 +271,8 @@ def reciprocal(v1,v2,v3=np.array([0.,0.,1.])):
 
 def build_ribbon(g,n):
   """ Return a geometry of a ribbon based on this cell"""
-  if g.dimensionality!=2: raise # if it is not two dimensional
+  if g.dimensionality!=2: # if it is not two dimensional
+    raise ValueError("build_ribbon needs a 2d geometry")
   angle = sculpt.get_angle(g.a1,g.a2)/np.pi*180 # get the angle
   if np.abs(angle-90)<1.: # if it is square
     gout = g.copy() # copy geometry
@@ -279,7 +283,8 @@ def build_ribbon(g,n):
         rs.append(ir+g.a1*i) # append position
     gout.r = rs
     gout.r2xyz() # update
-    raise
+    raise NotImplementedError("build_ribbon is only implemented for a square "
+            "unit cell")
     return gout
 
 
@@ -299,7 +304,9 @@ def image2island(impath,g,nsuper=4,size=10,color="black",
     retain = (red < 20) & (blue > 200) & (green < 20)
   elif color=="green": #retain the black color
     retain = (red < 20) & (blue < 20) & (green > 200)
-  else: raise # unrecognized
+  else: # unrecognized
+    raise ValueError("unknown color; image2island accepts 'black', 'red', "
+            "'blue' and 'green'")
   data[..., :-1][retain.T] = (0, 0, 0) # set as black
   data[..., :-1][np.logical_not(retain.T)] = (255, 255, 255) # set as white
 #  data[..., :-1][not retain.T] = (255, 255, 255) # set as black

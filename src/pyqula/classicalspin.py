@@ -355,7 +355,9 @@ def generating_profiles(r,name="skyrmion",n=1.,cut=1.0):
     elif name=="spiral":
       phi = (r[:,0]/np.max(r[:,0])+1)*n*np.pi*2
       return phi*0.+np.pi/2,phi
-    else: raise
+    else:
+      raise ValueError("unknown profile name; generating_profiles accepts "
+              "'skyrmion' and 'spiral'")
 
 
 def get_lc():

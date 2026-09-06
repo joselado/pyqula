@@ -83,7 +83,9 @@ def add_swave_to_hamiltonian(h,d):
     if h.check_mode("spinless"):
       h.modify_hamiltonian_matrices(nambu) # modify the matrices
     elif h.check_mode("spinless_nambu"): pass # do nothing
-    else: raise
+    else:
+        raise ValueError("the spinless s-wave pairing needs a spinless "
+                "Hamiltonian, with or without the Nambu degree of freedom")
     n = h.intra.shape[0]//2 # orbitals
     h.intra = h.intra + swave_matrix(np.ones(n)*d) # add matrix
     h.has_eh = True # has electron hole
@@ -131,7 +133,9 @@ def projh(n):
 
 def get_filling(h,nk=10,**kwargs):
     """Compute the expectation value of delta"""
-    if not h.check_mode("spinless_nambu"): raise
+    if not h.check_mode("spinless_nambu"):
+        raise ValueError("this filling is only defined for spinless Nambu "
+                "Hamiltonians")
     (es,ws) = h.get_eigenvectors(nk=nk,**kwargs) # compute the eigenvectors
     fac = 1./(nk**h.dimensionality) # number of kpoints
     wout = [] # empty list

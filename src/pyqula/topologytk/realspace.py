@@ -4,7 +4,9 @@ from .. import densitymatrix
 
 def real_space_chern(h,operator=None):
     """Compute the real space Chern number"""
-    if h.dimensionality!=0: raise
+    if h.dimensionality!=0:
+        raise ValueError("the real-space Chern number is only defined for 0d "
+                "Hamiltonians")
     X = h.get_operator("xposition").get_matrix()
     Y = h.get_operator("yposition").get_matrix()
 #    X = np.diag(h.geometry.x)
@@ -25,7 +27,9 @@ def real_space_chern(h,operator=None):
         C2 = A@B@op - B@op@A # compute the commutator
         C = (C1+C2)/2. # average
     elif operator is None: C = A@B - B@A # compute the commutator
-    else: raise
+    else:
+        raise TypeError("the projector must be an operator with a matrix "
+                "representation, or None")
     C = np.pi*2*np.diagonal(C).imag # diagonal part
     C = C/scale # normalize
 #    print(P - P@P)

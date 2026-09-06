@@ -14,8 +14,12 @@ def anderson(h,w=0.0,p=1.0):
 
 def phase(h,w=0.0):
   """Random phase disorder"""
-  if h.has_eh: raise # not yet
-  if h.has_spin: raise # not yet
+  if h.has_eh: # not yet
+    raise NotImplementedError("random phase disorder is not implemented for "
+            "Hamiltonians with the electron-hole (Nambu) degree of freedom")
+  if h.has_spin: # not yet
+    raise NotImplementedError("random phase disorder is not implemented for "
+            "spinful Hamiltonians")
   ho = h.copy() # copy the Hamiltonian
   n = h.intra.shape[0] # dimension
   cs = np.array(np.random.random((n,n)) - .5)*2*w # disorder

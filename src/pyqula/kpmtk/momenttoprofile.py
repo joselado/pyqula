@@ -16,7 +16,9 @@ def generate_profile(mus,xs,kernel="jackson",**kwargs):
     if kernel=="jackson": mus = jackson_kernel(mus)
     elif kernel=="lorentz": mus = lorentz_kernel(mus)
     elif kernel=="fejer": mus = fejer_kernel(mus)
-    else: raise
+    else:
+        raise ValueError("unknown kernel; the accepted ones are 'jackson', "
+                "'lorentz' and 'fejer'")
     ys = generate_profile_jit(mus,xs)
     return ys
 
@@ -50,7 +52,9 @@ def generate_green_profile(mus,xs,kernel="jackson",**kwargs):
   if kernel=="jackson": mus = jackson_kernel(mus)
   elif kernel=="lorentz": mus = lorentz_kernel(mus)
   elif kernel=="fejer": mus = fejer_kernel(mus)
-  else: raise
+  else:
+      raise ValueError("unknown kernel; the accepted ones are 'jackson', "
+              "'lorentz' and 'fejer'")
   for i in range(1,len(mus)): # loop over mus
     ys += np.exp(1j*i*np.arccos(xs))*mus[i] # add contribution
   ys = ys/np.sqrt(1.-xs*xs)

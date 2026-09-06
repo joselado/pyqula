@@ -55,7 +55,7 @@ empty `__init__.py`; with the default import mode pytest's package-root walk fro
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
 tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
-minutes, not under a minute. It currently collects **1322 tests** (`pytest tests --collect-only -q`);
+minutes, not under a minute. It currently collects **1330 tests** (`pytest tests --collect-only -q`);
 the old "~7.5 min for 406 tests" figure predates the Keldysh, transport and AAA suites and is stale —
 `tests/scf` alone is ~15 min and `tests/keldysh` ~12 min. A fresh whole-suite wall time still needs
 measuring on an idle machine; treat any timing taken while other jobs are running as meaningless.
@@ -152,6 +152,27 @@ backend needs neither; its only dependency is numpy, already required by pyqula)
 runnable demo and `tests/wannier/` for correctness tests (exact-reproduction checks against the original
 spectrum).
 
+## Error conventions
+
+Argument and Hilbert-space guards raise a real exception with a message saying what the
+routine requires: `ValueError` for a bad input value or a Hamiltonian in the wrong
+Hilbert space, `NotImplementedError` for a combination that is simply not built yet,
+`TypeError` for a wrong type. Two message-less forms were swept out of the package and
+should not come back: a bare `raise` (which surfaces as `RuntimeError: No active
+exception to reraise`, naming neither the input nor the requirement) and a bare
+`raise NotImplementedError` (which names the category but not what is unsupported).
+Where a guard's message can name the offending value -- the mode string, the two
+mismatched sizes, the type that was passed -- it does, rather than printing it and
+raising separately. The only bare `raise` left in `src/pyqula` is the jump-to-except
+idiom inside a `try` body (five sites), where it is control flow rather than an error
+report.
+
+Options selected by a string (`mode=`, `solver=`, `channel=`, an operator name) should
+list the accepted values in the error, so a typo is self-diagnosing. `operatorlist.py`
+goes one step further and keeps its ~60 operator names in a registry, so
+`operatorlist.get_operator_names()` can enumerate them and adding an operator is one
+dict entry rather than a new `elif` branch.
+
 ## Notes
 
 - `src/pyqula/__init__.py` deliberately leaves all submodule imports commented out — always import
@@ -177,7 +198,10 @@ spectrum).
   `magnons_tdhf.md` (the three magnon routes -- site basis, the interaction's pair basis, and
   time-dependent Hartree-Fock in the electron-hole pair basis -- what each covers, the Goldstone and
   exact-reference measurements validating all three, and the one thing still open: the transverse exchange
-  rung in the pair-basis kernels).
+  rung in the pair-basis kernels) and `unreferenced_modules.md` (the dead-module cleanup: why an AST walk
+  of every import, not grep, is the way to establish that a module is unused here, which 15 modules were
+  removed, and the seven that are unused but import cleanly and were kept because deleting a module of a
+  public package is an API decision rather than a repair).
 - `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap (not started) for moving compute-heavy
   paths onto GPU via `jax` (already a hard dependency), covering batched dense diagonalization
   (`htk/eigenvectors.py`), the partially-started KPM GPU path (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), and

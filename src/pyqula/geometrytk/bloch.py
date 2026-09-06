@@ -25,7 +25,9 @@ def bloch_phase(self,d,k):
       # ups, assume that only the first component was given
       kt = np.array([ka,0.,0.]) if ka.ndim==0 else ka[0:3]
       return np.exp(1j*dt.dot(kt)*np.pi*2.)
-    else: raise
+    else:
+      raise ValueError("the Bloch phase needs a dimensionality between 0 and "
+              "3")
 
 
 

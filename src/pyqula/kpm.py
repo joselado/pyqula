@@ -75,7 +75,9 @@ def get_momentsA(v,m,n=100,A=None,**kwargs):
     """ Get the first n moments of a certain vector, weighted by operator
     A, using the Chebychev recursion relations (see get_moments_A_batch
     for the batched numba implementation)"""
-    if A is None: raise # only for a certain A
+    if A is None: # only for a certain A
+      raise ValueError("get_momentsA needs the weighting operator, pass it as "
+              "A")
     v = algebra.matrix2vector(v) # zero vector
     mus = get_moments_A_batch(np.array([v]),m,A,n=n,**kwargs)
     return mus[0]
@@ -177,7 +179,9 @@ def random_trace(m_in,ntries=20,n=200,fun=None,operator=None,**kwargs):
   nd = m.shape[0] # length of the matrix
   if fun is not None: # check that dimensions are fine
     v0 = fun()
-    if len(v0) != m_in.shape[0]: raise
+    if len(v0) != m_in.shape[0]:
+      raise ValueError("the vector returned by fun does not have the same "
+              "size as the matrix")
   if fun is None:
 #    def fun(): return rand.random(nd) -.5 + 1j*rand.random(nd) -.5j
       from .randomtk import randomwf

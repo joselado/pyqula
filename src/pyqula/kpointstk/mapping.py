@@ -27,7 +27,9 @@ def get_k2K(g):
     (ux,uy,uz) = (g.a1,g.a2,np.array([0.,0.,1]))
   elif g.dimensionality == 3:
     (ux,uy,uz) = (g.a1,g.a2,g.a3)
-  else: raise
+  else:
+    raise ValueError("the k to K conversion is only defined for 2d and 3d "
+            "geometries")
   ux = ux/np.sqrt(ux.dot(ux))
   uy = uy/np.sqrt(uy.dot(uy))
   uz = uz/np.sqrt(uz.dot(uz))

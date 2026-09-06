@@ -60,8 +60,13 @@ def remove_spinless_sector(h,removef):
     """Remove total charge renormalization"""
     has_eh = h.has_eh
     has_spin = h.has_spin
-    if has_eh: raise NotImplementedError
-    if has_spin: raise # not the right function
+    if has_eh:
+        raise NotImplementedError("remove_spinless_sector is not implemented "
+                "for Hamiltonians with the electron-hole (Nambu) degree of "
+                "freedom")
+    if has_spin: # not the right function
+        raise ValueError("remove_spinless_sector is for spinless "
+                "Hamiltonians, use the spinful version instead")
     def f(dd): # create function
         out = deepcopy(dd) # copy the dictionary
         m = out[(0,0,0)] # onsite matrix
@@ -80,7 +85,9 @@ def remove_spinful_sector(h,removef):
     def f(dd): # create function
         out = deepcopy(dd) # copy the dictionary
         m = out[(0,0,0)] # onsite matrix
-        if has_eh and not has_spin: raise NotImplementedError
+        if has_eh and not has_spin:
+            raise NotImplementedError("the mean-field constrain is not "
+                    "implemented for spinless Nambu Hamiltonians")
         elif not has_eh and has_spin: # spinful
             m = removef(m)
         elif has_eh and has_spin: # spinful
@@ -89,7 +96,9 @@ def remove_spinful_sector(h,removef):
             m00 = get_eh_sector(m,i=0,j=0) # anomalous part
             m00 = removef(m00) # remove onsite 
             m = build_nambu_matrix(m00,c12=m01,c21=m10) # rebuild the matrix
-        else: raise
+        else:
+            raise NotImplementedError("this Hilbert space is not implemented "
+                    "in the mean-field constrain")
         out[(0,0,0)] = m # set the new matrix
         return out # return dictionary
     return f # return function

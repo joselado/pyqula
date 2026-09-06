@@ -23,7 +23,9 @@ def compute_interpolation(centers=[[0.,0.,0.]], heights=[10.0],name="",
         x = None,y=None,
         dx=None,dy=None,**kwargs):
     """ Creates a set of gaussians at that position and with a height"""
-    if len(heights)<len(centers): raise
+    if len(heights)<len(centers):
+        raise ValueError("there are fewer heights than centers, one height "
+                "per center is needed")
     if smooth_nxny:
         if xcut is not None:
             facx = nx/float(xcut)

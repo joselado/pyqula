@@ -24,7 +24,9 @@ def berry_bands(h,klist=None,mode=None,operator=None):
   ks = [] # list of kpoints
   if mode is not None: # get the mode
     if mode=="sz": operator = operators.get_sz(h)
-    else: raise
+    else:
+      raise ValueError("unknown mode; berry_bands accepts 'sz', or an "
+              "explicit operator")
 
   fo = open("BANDS.OUT","w")
   for ik in range(len(klist)): # loop over kpoints
@@ -37,7 +39,9 @@ def berry_bands(h,klist=None,mode=None,operator=None):
 
 def current_bands(h,klist=None):
   """Calcualte the band structure, with the bands"""
-  if h.dimensionality != 1: raise # only 1 dimensional
+  if h.dimensionality != 1: # only 1 dimensional
+    raise ValueError("the current-resolved bands are only implemented for 1d "
+            "Hamiltonians")
   # go for the rest
   hkgen = h.get_hk_gen() # get generator of the hamiltonian
   if klist is None:  klist = np.linspace(0,1.,100) # generate k points
@@ -238,7 +242,9 @@ def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
         for e in eig:
           fo.write(str(ik)+"     "+str(e)+"\n")
         if info:  print("Done",ik,end="\r")
-    else: raise # ups
+    else: # ups
+      raise ValueError("the Hamiltonian must have a non-negative "
+              "dimensionality")
   else:  # if there is an operator
     if h.dimensionality==1:
       hkgen = h.get_hk_gen() # get generator

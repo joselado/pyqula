@@ -41,11 +41,13 @@ def object2selfenergy(self,H,delta=1e-4,**kwargs):
             if delta>0.: return self
             else: return np.conjugate(self)
         return f
-      else: raise # unrecognized
+      else: # unrecognized
+          raise ValueError("the selfenergy matrix does not have the same "
+                  "dimension as the Hamiltonian")
     elif callable(self): return self # assume that it returns a matrix
     else: 
-        print("Selfenergy is not compatible with Hamiltonian")
-        raise
+        raise TypeError("the selfenergy must be a matrix of the same "
+                "dimension as the Hamiltonian, or a callable returning one")
 
 
 def embed_hamiltonian(self,**kwargs):

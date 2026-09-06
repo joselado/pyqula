@@ -9,7 +9,9 @@ from . import parallel
 def evolve_local_state(h,i=0,ts=np.linspace(0.,20.,300),
         mode="chi"):
     """Evolve a state that is originally localized in a point"""
-    if h.dimensionality!=0: raise # only for 0d
+    if h.dimensionality!=0: # only for 0d
+        raise ValueError("the time evolution is only implemented for 0d "
+                "Hamiltonians")
     # create the vector
 #    if h.has_spin: raise
     # get the function that does time evolution
@@ -34,7 +36,9 @@ def evolve_local_state(h,i=0,ts=np.linspace(0.,20.,300),
 
 def evolve_green(h,i=0):
     """Return the Green function evolution"""
-    if h.dimensionality!=0: raise # only for 0d
+    if h.dimensionality!=0: # only for 0d
+        raise ValueError("the Green's function evolution is only implemented "
+                "for 0d Hamiltonians")
     # create the vector
     v0 = np.zeros(h.intra.shape[0]) # zero dimensional
     v0[i] = 1.0

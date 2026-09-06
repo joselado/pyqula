@@ -19,7 +19,8 @@ from .dostk.eigtodos import calculate_dos
 def dos_surface(h,output_file="DOS.OUT",
                  energies=np.linspace(-1.,1.,20),delta=0.001):
   """Calculates the DOS of a surface, and writes in file"""
-  if h.dimensionality!=1: raise # only for 1d
+  if h.dimensionality!=1: # only for 1d
+    raise ValueError("the surface DOS is only implemented for 1d Hamiltonians")
   fo = open(output_file,"w")
   fo.write("# energy, DOS surface, DOS bulk\n")
   for e in energies: # loop over energies
@@ -43,8 +44,11 @@ def dos0d(h,energies=np.linspace(-4,4,500),delta=0.01):
 
 def dos0d_kpm(h,use_kpm=True,scale=10,npol=100,ntries=100,fun=None):
   """ Calculate density of states of a 1d system"""
-  if h.dimensionality!=0: raise # only for 0d
-  if not use_kpm: raise # only using KPM
+  if h.dimensionality!=0: # only for 0d
+    raise ValueError("dos0d_kpm is only for 0d Hamiltonians")
+  if not use_kpm: # only using KPM
+    raise ValueError("dos0d_kpm only implements the KPM, so use_kpm cannot be "
+            "switched off")
   h.turn_sparse() # turn the hamiltonian sparse
   mus = np.array([0.0j for i in range(2*npol)]) # initialize polynomials
   mus = kpm.random_trace(h.intra/scale,ntries=ntries,n=npol,fun=fun)
@@ -55,7 +59,8 @@ def dos0d_kpm(h,use_kpm=True,scale=10,npol=100,ntries=100,fun=None):
 
 def dos0d_sites(h,sites=[0],scale=10.,npol=500,ewindow=None,refine_e=1.0):
   """ Calculate density of states of a 1d system for a certain orbitals"""
-  if h.dimensionality!=0: raise # only for 1d
+  if h.dimensionality!=0: # only for 1d
+    raise ValueError("dos0d_sites is only for 0d Hamiltonians")
   h.turn_sparse() # turn the hamiltonian sparse
   mus = np.array([0.0j for i in range(2*npol)]) # initialize polynomials
   hk = h.intra # hamiltonian
@@ -90,7 +95,8 @@ def write_dos(es,ds,output_file="DOS.OUT"):
 
 def dos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,info=False,ewindow=None):
   """ Calculate density of states of a 1d system for a certain orbitals"""
-  if h.dimensionality!=1: raise # only for 1d
+  if h.dimensionality!=1: # only for 1d
+    raise ValueError("dos1d_sites is only for 1d Hamiltonians")
   ks = np.linspace(0.,1.,nk,endpoint=False) # number of kpoints
   h.turn_sparse() # turn the hamiltonian sparse
   hkgen = h.get_hk_gen() # get generator
@@ -178,7 +184,8 @@ def dos_kmesh(h,nk=100,delta=None,random=False,ks=None,
 def dos3d(h,scale=10.,nk=20,delta=None,ndos=100,
         random=False,energies=None):
     """ Calculate density of states of a 2d system"""
-    if h.dimensionality!=3: raise # only for 2d
+    if h.dimensionality!=3: # only for 2d
+      raise ValueError("dos3d is only for 3d Hamiltonians")
     ks = [np.random.random(3) for i in range(nk)] # number of kpoints
     hkgen = h.get_hk_gen() # get generator
     if delta is None: delta = 10./ndos # smoothing
@@ -267,7 +274,9 @@ def dos_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
   elif h.dimensionality==1: # one dimensional
     dos1d_ewindow(h,energies=energies,delta=delta,info=info,
                     use_green=use_green,nk=nk)
-  else: raise NotImplementedError
+  else:
+    raise NotImplementedError("the energy-window DOS is only implemented for "
+            "1d and 2d Hamiltonians")
 
 
 
@@ -320,11 +329,13 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   else:
       op = operator.get_matrix() # get the matrix of the operator
       ## the case of projector operators should be implemented explicitly
-      if op is None: raise NotImplementedError
+      if op is None:
+        raise NotImplementedError("the KPM DOS needs an operator with a "
+                "matrix representation, and only a projector at that")
       # this currently only works for projector operators
       if np.max(np.abs(op - op@op))>1e-4:
-          print("only projector operators implemented in KPM")
-          raise
+        raise NotImplementedError("the KPM DOS only accepts projector "
+                "operators, and this one is not idempotent")
   # op can be a scipy.sparse matrix (e.g. get_electron/get_hole build it
   # via sparse.bmat) as well as a dense ndarray -- .diagonal().sum() works
   # for both, unlike np.trace which chokes on sparse input
@@ -398,8 +409,8 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
           from .dostk.adaptivedos import adaptive_dos
           return adaptive_dos(h,energies=energies,**kwargs)
       else: 
-          print("Unrecognized option in DOS")
-          raise
+        raise ValueError("unknown mode "+str(mode)+"; the DOS accepts 'ED', "
+                "'KPM' and 'adaptive'")
 
 
 dos = get_dos # redefine
@@ -461,7 +472,9 @@ def surface2bulk(h,n=50,nk=3000,delta=1e-3,e=0.0,**kwargs):
         return np.array([-algebra.trace(o).imag for o in out]) # DOS
       ks = np.linspace(0.,1.,nk) # loop
       out = np.mean([f(k) for k in ks],axis=0)
-    else: raise
+    else:
+      raise NotImplementedError("surface2bulk is only implemented for 2d "
+              "Hamiltonians")
     return np.array([range(n),out]) # return array
 
 
@@ -488,6 +501,8 @@ def surface_dos(h,energies=None,klist=None,delta=0.01,
                          only_bulk=False) # surface green function
                 out += -np.trace(sf).imag
             return out/len(klist)
-        else: raise NotImplementedError
+        else:
+          raise NotImplementedError("the surface DOS is only implemented for "
+                  "1d and 2d Hamiltonians")
     return energies,np.array([sdos(e) for e in energies])          
 

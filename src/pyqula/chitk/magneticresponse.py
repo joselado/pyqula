@@ -48,8 +48,10 @@ def rkky_loop(es,phis,fs,d1s,d2s,delta):
 
 def rkky_pm(h,nk=20,delta=1e-1,**kwargs):
     """Compute the RKKY using a poor man convolution of the k-DOS"""
-    raise
-    if h.dimensionality!=2: raise
+    raise NotImplementedError("rkky_pm is not implemented; use rkky with "
+            "mode='LR' instead")
+    if h.dimensionality!=2:
+        raise ValueError("rkky_pm is only for 2d Hamiltonians")
     qs0 = h.geometry.get_kmesh(nk=nk)
     qs = np.array([fR(q) for q in qs0]) # convert
     from ..fermisurface import fermi_surface_generator

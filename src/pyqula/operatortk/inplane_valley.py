@@ -240,7 +240,10 @@ def get_inplane_valley(h,angle=0.0,delta=None,**kwargs):
     sharpen = get_sharpen(delta=delta) # renormalize eigenvalues to +-1
     phase = np.exp(-1j*angle) # tau(angle) = Re(e^{-i*angle} T), see below
     def fun(m=None,k=None):
-        if h.dimensionality>0 and k is None: raise # requires a kpoint
+        if h.dimensionality>0 and k is None: # requires a kpoint
+            raise ValueError("the in-plane valley operator of a periodic "
+                    "Hamiltonian has to be evaluated at a k-point, and none "
+                    "was given")
         T = phase*hkgen_T(k) # evaluate Hamiltonian
         hk = (T+T.conj().T)/2. # cos(angle)*tau_x + sin(angle)*tau_y
         hk = sharpen(hk) # sharpen the valley

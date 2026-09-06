@@ -3,7 +3,9 @@ from numba import jit
 
 def selfconvolve(ds):
     """Do a selfconvolution"""
-    if len(ds.shape)!=2: raise
+    if len(ds.shape)!=2:
+        raise ValueError("selfconvolve expects a two-dimensional array, with "
+                "the x and y columns")
     return selfconvolve_fft(ds)
 
 

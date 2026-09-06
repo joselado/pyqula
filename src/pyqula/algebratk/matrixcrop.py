@@ -4,7 +4,9 @@ import numpy as np
 
 def crop_matrix(m,store):
     """Retain just some entries of a matrix"""
-    if len(store)!=m.shape[0]: raise
+    if len(store)!=m.shape[0]:
+        raise ValueError("the list of sites to keep must have one entry per "
+                "row of the matrix")
     store = np.array(store,dtype=int) # transform to an integer
     n = np.sum(store) # number of entries of the matrix
     mout = np.zeros((n,n),dtype=np.complex128)

@@ -19,7 +19,9 @@ def get_dos(self,energies=None,write=True,nk=20,**kwargs):
         for e in energies:
             ds.append(np.mean([fun(k,e) for k in ks]))
         return (energies,ds)
-    else: raise
+    else:
+        raise NotImplementedError("the junction DOS is only implemented for "
+                "1d and 2d junctions")
 
 
 

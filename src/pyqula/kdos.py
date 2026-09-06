@@ -31,7 +31,8 @@ def kdos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,kshift=0.,
                   ewindow=None,info=False):
   """ Calculate kresolved density of states of
   a 1d system for a certain orbitals"""
-  if h.dimensionality!=1: raise # only for 1d
+  if h.dimensionality!=1: # only for 1d
+    raise ValueError("kdos1d_sites is only implemented for 1d Hamiltonians")
   ks = np.linspace(0.,1.,nk) # number of kpoints
   h.turn_sparse() # turn the hamiltonian sparse
   hkgen = h.get_hk_gen() # get generator
@@ -80,7 +81,9 @@ def write_surface(h,energies=np.linspace(-.5,.5,300),
                          operator=operator,hs=hs,**kwargs)
   elif h.dimensionality==3:
     write_surface_3d(h,energies=energies,klist=klist,delta=delta)
-  else: raise
+  else:
+    raise ValueError("write_surface needs a Hamiltonian of dimensionality 1, "
+            "2 or 3")
 
 
 
@@ -150,13 +153,16 @@ def write_surface_2d(h,energies=None,klist=None,delta=0.01,
 
 
 def write_surface_3d(h,energies=None,klist=None,delta=0.01):
-  raise NotImplementedError
-  if h.dimensionality != 3: raise # only for 3d
+  raise NotImplementedError("write_surface_3d is not implemented")
+  if h.dimensionality != 3: # only for 3d
+    raise ValueError("write_surface_3d is only for 3d Hamiltonians")
   ho = h.copy() # copy Hamiltonian
   ho = ho.turn_multicell() # multicell Hamiltonian
   bout = [] # empty list, bulk
   sout = [] # empty list, surface
-  if klist is None: raise
+  if klist is None:
+    raise ValueError("write_surface_3d needs an explicit k-path, pass it as "
+            "klist")
   if energies is None: energies = np.linspace(-.5,.5,50)
   fo  = open("KDOS.OUT","w") # open file
   for k in klist:
@@ -278,7 +284,8 @@ def write_surface_kpm(h,ne=400,klist=None,scale=4.,npol=200,w=20,ntries=20):
       # calculate the edge
       mus = kpm.random_trace(h0/scale,ntries=ntries,n=npol,fun=gedge)
       ds = kpm.generate_profile(mus,xs) # generate the profile
-    else: raise
+    else:
+      raise ValueError("write_surface_kpm needs a 1d or 2d Hamiltonian")
     for (e,d1,d2) in zip(es,ds,dsb):
       fo.write(str(k)+"   "+str(e)+"   "+str(d1)+"    "+str(d2)+"\n")
   fo.close()
@@ -302,7 +309,9 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
         kpath = klist.default(g2d,nk=nk)
       elif h1.dimensionality==2:
         kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
-      else: raise
+      else:
+        raise ValueError("the interface k-path is only defined for "
+                "Hamiltonians of dimensionality 2 or 3")
   #  tr = timing.Testimator("KDOS") # generate object
   #  tr.remaining(ik,len(kpath)) # generate object
     ik = 0
@@ -362,7 +371,9 @@ def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
         elif h1.dimensionality==2:
           kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
         elif h1.dimensionality==1: kpath = [[0.,0.,0.0]] # one dummy point
-        else: raise
+        else:
+          raise ValueError("the surface k-path is only defined for "
+                  "Hamiltonians of dimensionality 1, 2 or 3")
     if write: fo = open("KDOS.OUT","w")
     if write: fo.write("# k, E, Surface, Bulk\n")
     if info: tr = timing.Testimator("KDOS") # generate object

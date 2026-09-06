@@ -4,9 +4,16 @@ from numba import jit
 def Vijkl(h,n=4,fv=None):
     """Return the Coulomb matrix elements between different orbitals"""
     numw = n
-    if h.dimensionality!=0: raise # only for 0D
-    if h.has_eh: raise NotImplementedError
-    if h.has_spin: raise NotImplementedError
+    if h.dimensionality!=0: # only for 0D
+        raise ValueError("the Coulomb matrix elements are only implemented "
+                "for 0d Hamiltonians")
+    if h.has_eh:
+        raise NotImplementedError("the Coulomb matrix elements are not "
+                "implemented for Hamiltonians with the electron-hole (Nambu) "
+                "degree of freedom")
+    if h.has_spin:
+        raise NotImplementedError("the Coulomb matrix elements are not "
+                "implemented for spinful Hamiltonians")
     es,ws = h.get_eigenvectors(numw=numw) # get eigenstates
     g = h.geometry # geometry
     if fv is None:

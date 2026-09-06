@@ -91,7 +91,9 @@ def get_central_gmatrix(ht,selfl=None,selfr=None,energy=0.0):
 def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
                                         energy = 0.0, delta=1e-5):
     """ Calculate effective Hamiltonian"""
-    if not type(intra) is list: raise # assume is list
+    if not type(intra) is list: # assume is list
+        raise TypeError("the effective tridiagonal Hamiltonian takes the "
+                "central part as a list of blocks")
     n = len(intra) # number of blocks
     iout = [[None for i in range(n)] for j in range(n)] # empty list
     ce = energy +1j*delta # complex energy
@@ -113,7 +115,9 @@ def effective_tridiagonal_hamiltonian(intra,selfl,selfr,
 def enlarge_hlist(ht):
     """Add a single cell of the leads to the central part"""
     ho = ht.copy() # copy heterostructure
-    if not ht.block_diagonal: raise # check that is in block diagonal form
+    if not ht.block_diagonal: # check that is in block diagonal form
+        raise ValueError("enlarge_hlist needs a junction with a "
+                "block-diagonal central part")
     nc = len(ht.central_intra) # number of cells in the central
     hcentral = [[None for i in range(nc+2)] for j in range(nc+2)]
     for i in range(nc): # intraterm

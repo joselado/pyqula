@@ -49,7 +49,9 @@ def NN_exchange(h,J=0.1,nk=2,num_bands=None,full_energy=False,
         e0 = h0.get_total_energy(nk=nk,nbands=nbands) # GS energy 
         e1 = h1.get_total_energy(nk=nk,nbands=nbands) # GS energy 
         return e1-e0
-    else: raise # unrecognized mode
+    else: # unrecognized mode
+        raise ValueError("unknown mode; NN_exchange accepts 'supercell' and "
+                "'spiral'")
 
 
 

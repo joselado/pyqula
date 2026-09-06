@@ -87,8 +87,8 @@ def _require_onsite_only_V(H):
 def spinchi_ladder(H,v=[0.,0.,1.],RPA=True,**kwargs):
     """Return the spin response function"""
     if H.has_eh:
-        print("Not implemented with Nambu basis")
-        raise
+        raise NotImplementedError("the ladder spin response is not "
+                "implemented in the Nambu basis")
     sx = H.get_operator("sx") # spin operator, eigen +-1
     sy = H.get_operator("sy") # spin operator, eigen +-1
     sz = H.get_operator("sz") # spin operator, eigen +-1

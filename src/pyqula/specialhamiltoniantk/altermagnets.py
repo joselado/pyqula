@@ -7,13 +7,15 @@ def square_altermagnet(am=0.):
 
 
 def honeycomb_altermagnet(am=0.):
-    raise
+    raise NotImplementedError("honeycomb_altermagnet is not implemented; use "
+            "nwave_altermagnet with an explicit n")
     g = geometry.honeycomb_lattice() # get the geometry
     return nwave_altermagnet(g,n=6,am=am)
 
 
 def triangular_altermagnet(am=0.):
-    raise
+    raise NotImplementedError("triangular_altermagnet is not implemented; use "
+            "nwave_altermagnet with an explicit n")
     g = geometry.triangular_lattice() # get the geometry
     return nwave_altermagnet(g,n=6,am=am)
 
@@ -21,7 +23,9 @@ def triangular_altermagnet(am=0.):
 
 def nwave_altermagnet(g,n=None,am=0.):
     """Create a Hamiltonian with n-wave altermagnetism"""
-    if n is None: raise # this must be provided
+    if n is None: # this must be provided
+        raise ValueError("nwave_altermagnet needs the order of the "
+                "altermagnetic harmonic, pass it as n")
     def ft(r1,r2):
         dr = r1-r2 # distance
         if 0.2<dr.dot(dr)<1.1: # nearest neighbor

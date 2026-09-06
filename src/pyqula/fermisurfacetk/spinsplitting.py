@@ -4,7 +4,8 @@ from .. import algebra
 def average_spin_splitting(h,nk=20):
     """Compute the average spin splitting in the BZ"""
     # this assumes that spin up and down are good quantum numbers
-    if not h.has_spin: raise
+    if not h.has_spin:
+        raise ValueError("the spin splitting needs a spinful Hamiltonian")
     hup = h.copy() ; hup.remove_spin(channel="up") 
     hdn = h.copy() ; hdn.remove_spin(channel="dn") 
     hkup = hup.get_hk_gen() # get generator
@@ -28,7 +29,8 @@ def spin_splitting_density(h,nk=20,energies=None,delta=1e-2):
     """Compute the average spin splitting in the BZ"""
     # this assumes that spin up and down are good quantum numbers
     if energies is None: energies = np.linspace(-3.0,3.0,400)
-    if not h.has_spin: raise
+    if not h.has_spin:
+        raise ValueError("the spin splitting needs a spinful Hamiltonian")
     hup = h.copy() ; hup.remove_spin(channel="up")
     hdn = h.copy() ; hdn.remove_spin(channel="dn")
     hkup = hup.get_hk_gen() # get generator

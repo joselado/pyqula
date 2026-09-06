@@ -71,7 +71,8 @@ def gap2d(h,nk=40,k0=None,rmap=1.0,recursive=False,
 
   else: # classical way
     if k0 is None: k0 = np.random.random(2) # random shift
-    if h.dimensionality != 2: raise
+    if h.dimensionality != 2:
+      raise ValueError("gap2d is only implemented for 2d Hamiltonians")
     hk_gen = h.get_hk_gen() # get hamiltonian generator
     emin = 1000. # initial values
     for ix in np.linspace(-.5,.5,nk):  
@@ -145,7 +146,10 @@ def optimize_energy(h,robust=True,mode="full",**kwargs):
     def gete(k): # return the energies
       hk = hk_gen(k) # Hamiltonian 
       if h.is_sparse: 
-          if mode in ["top","bottom"]: raise # this should be finished
+          if mode in ["top","bottom"]: # this should be finished
+            raise NotImplementedError("the 'top' and 'bottom' modes are not "
+                    "implemented for sparse Hamiltonians; call h.get_dense() "
+                    "first")
           else:
               es = algebra.smalleig(hk,numw=3) # sparse mode
       else: es = algebra.eigvalsh(hk) # get eigenvalues
@@ -219,7 +223,9 @@ def optimize_energy(h,robust=True,mode="full",**kwargs):
         return opte(fbottom) # optimize bottom of the bands
     elif mode=="top":
         return -opte(ftop) # optimize top of the bands
-    else: raise
+    else:
+      raise ValueError("unknown mode; optimize_energy accepts 'full', "
+              "'valence', 'conduction', 'bottom' and 'top'")
 
 
 indirect_gap = optimize_energy # wrapper (for compatibility)

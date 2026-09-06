@@ -93,7 +93,9 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         elif mode=="diagonal": # return the diagonal elements
             out = np.array([getAB(pi@A,pi@B) for pi in projs])
             return np.transpose(out,(1,0)) # return, first energy, then i
-        else: raise NotImplementedError
+        else:
+            raise ValueError("unknown mode; the response function accepts "
+                    "'full', 'trace' and 'diagonal'")
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     # call in parallel
     if imode=="mesh": # do a mesh
@@ -123,7 +125,9 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         elif ij_mode=="explicit": # explicit function, this is preferred
             out = [getk(k) for k in ks] # call
             out = np.mean(out,axis=0) # sum over kpoints
-        else: raise NotImplementedError
+        else:
+            raise ValueError("unknown ij_mode; the accepted ones are "
+                    "'accelerated' and 'explicit'")
     elif imode=="adaptive": # do a mesh
         if chi_cpugpu=="GPU": # the adaptive integrator calls back per point
             raise ValueError("chi_cpugpu='GPU' is not implemented for "
@@ -135,8 +139,12 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
         elif h.dimensionality==2: # not implemented
             out = integration.integrate_matrix_2D(getk,
                     xlim=[0.,1.],ylim=[0.,1.])
-        else: raise
-    else: raise
+        else:
+            raise NotImplementedError("the adaptive integration of the "
+                    "response function is only implemented up to 2d")
+    else:
+        raise ValueError("unknown imode; the accepted ones are 'mesh' and "
+                "'adaptive'")
     return energies,out
 
 

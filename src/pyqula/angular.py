@@ -48,7 +48,9 @@ def names_soc_orbitals(specie):
   patoms += ["Tl","Pb","Bi","Po","At"]
   if name in datoms: return dorbs # for dorbitals
   elif name in patoms: return porbs # for dorbitals
-  else: raise
+  else:
+    raise ValueError("no spin-orbit orbital basis is tabulated for this "
+            "element; only p-block and d-block elements are")
 
 
 

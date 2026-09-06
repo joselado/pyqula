@@ -34,7 +34,9 @@ def update_mean_field(self,mixing=0.95):
       elif v.contribution=="A":
         tmp = v.a*v.vbv*v.g
         accu += np.abs(v.vbv)
-      else: raise
+      else:
+        raise ValueError("unknown interaction contribution; the accepted ones "
+                "are 'AB' and 'A'")
       # store in the dictionary
       jj = self.interactions_dindex[ii] # index for this one
       storage[jj] = storage[jj] + tmp # store

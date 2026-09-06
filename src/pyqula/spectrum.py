@@ -24,7 +24,9 @@ def boolean_fermi_surface(h,write=True,output_file="BOOL_FERMI_MAP.OUT",
                     e=0.0,nk=50,nsuper=1,reciprocal=False,
                     delta=None):
     """Calculates the Fermi surface of a 2d system"""
-    if h.dimensionality!=2: raise  # continue if two dimensional
+    if h.dimensionality!=2: # continue if two dimensional
+        raise ValueError("the boolean Fermi surface is only defined for 2d "
+                "Hamiltonians")
     hk_gen = h.get_hk_gen() # gets the function to generate h(k)
     kxs = np.linspace(-nsuper,nsuper,nk)  # generate kx
     kys = np.linspace(-nsuper,nsuper,nk)  # generate ky
@@ -86,7 +88,8 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
                nk=50,nsuper=1,reciprocal=True,
                operator=None,k0=[0.,0.]):
   """ Calculate a selected bands in a 2d Hamiltonian"""
-  if h.dimensionality!=2: raise  # continue if two dimensional
+  if h.dimensionality!=2: # continue if two dimensional
+      raise ValueError("selected_bands2d is only for 2d Hamiltonians")
   hk_gen = h.get_hk_gen() # gets the function to generate h(k)
   kxs = np.linspace(-nsuper,nsuper,nk)+k0[0]  # generate kx
   kys = np.linspace(-nsuper,nsuper,nk)+k0[1]  # generate ky
@@ -149,7 +152,8 @@ get_bands = selected_bands2d
 def ev2d(h,nk=50,nsuper=1,reciprocal=False,
                operator=None,k0=[0.,0.],kreverse=False):
   """ Calculate the expectation value of a certain operator"""
-  if h.dimensionality!=2: raise  # continue if two dimensional
+  if h.dimensionality!=2: # continue if two dimensional
+      raise ValueError("ev2d is only for 2d Hamiltonians")
   hk_gen = h.get_hk_gen() # gets the function to generate h(k)
   kxs = np.linspace(-nsuper,nsuper,nk,endpoint=True)+k0[0]  # generate kx
   kys = np.linspace(-nsuper,nsuper,nk,endpoint=True)+k0[1]  # generate ky
@@ -213,7 +217,9 @@ def ev(h,operator=None,nk=30,**kwargs):
 def real_space_vev(h,operator=None,nk=1,nrep=3,name="REAL_SPACE_VEV.OUT",
         **kwargs):
     """Compute the expectation value in real space"""
-    if nk>1: raise # only Gamma point implemented
+    if nk>1: # only Gamma point implemented
+        raise NotImplementedError("the real-space expectation value is only "
+                "implemented at the Gamma point, so nk must be 1")
     dm = densitymatrix.full_dm(h,nk=nk,**kwargs) # Gamma point DM
     if operator is None: operator = np.identity(dm.shape[0],dtype=np.complex128)
     operator = h.get_operator(operator) # convert to operator
@@ -297,8 +303,12 @@ def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
     elif h.dimensionality==2: # two dimensional
         etot = integrate.dblquad(lambda x,y: enek([x,y]),-1.,1.,-1.,1.,
                 epsabs=tol,epsrel=tol)[0]
-    else: raise
-  else: raise
+    else:
+        raise NotImplementedError("the integrated total energy is only "
+                "implemented for 1d and 2d Hamiltonians")
+  else:
+      raise ValueError("unknown mode; the total energy accepts 'mesh', "
+              "'random' and 'integrate'")
   return etot
 
 
@@ -434,7 +444,8 @@ def get_filling(h,**kwargs):
 
 def eigenvalues_kmesh(h,nk=20):
     """Get the eigenvalues in a kmesh"""
-    if h.dimensionality!=2: raise # only for 2d
+    if h.dimensionality!=2: # only for 2d
+        raise ValueError("eigenvalues_kmesh is only for 2d Hamiltonians")
     ne = h.intra.shape[0] # number of energies per k-point
     hkgen = h.get_hk_gen() # get the generator
     kx = np.linspace(0.,1.,nk,endpoint=False)
@@ -451,7 +462,9 @@ def eigenvalues_kmesh(h,nk=20):
 
 def lowest_energies(h,n=4,k=None,**kwargs):
     """Return the lowest energy states in a k-point"""
-    if k is None: raise
+    if k is None:
+        raise ValueError("lowest_energies needs the k-point to evaluate, pass "
+                "it as k")
     es,ws = h.get_eigenvectors(kpoints=False,k=k,numw=2*n,**kwargs)
     es = [y for (x,y) in sorted(zip(np.abs(es),es))][0:n]
     es = np.sort(es)

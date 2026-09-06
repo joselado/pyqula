@@ -8,8 +8,9 @@ class Potential():
         elif callable(f): self.f = f # store function
         elif isnumber(f): self.f = lambda r: f # store function
         else: 
-            print("Unrecognized potential",f)
-            raise
+            raise TypeError("a Potential must be built from another "
+                    "Potential, a callable of the position, or a number, "
+                    "and not from a "+str(type(f)))
         self.g = g # geometry
     def __add__(self,a):
         a = Potential(a)
@@ -41,7 +42,8 @@ class Potential():
 def cnpot(n=4,k=None,v=1.0,phi=0.,r0=np.array([0.,0.,0.])):
   """Returns a function that generates a potential
   with C_n symmetry"""
-  if k is None: raise
+  if k is None:
+      raise ValueError("cnpot needs a wavevector, pass it as k")
   if n==0: return Potential(lambda r: v)
   if n%2==0: f = np.cos # even 
   if n%2==1: f = np.sin # odd 
@@ -94,7 +96,9 @@ def commensurate_potential(g,k=1,amplitude=1.0,n=None,
       f = cnpot(n=n,k=k*g.b1,**kwargs)
     elif g.dimensionality==1: 
       f = cnpot(n=1,k=k*g.b1,**kwargs)
-    else: raise
+    else:
+        raise NotImplementedError("a commensurate potential is only implemented "
+                "for 1d and 2d geometries")
     f = enforce_amplitude(f,amplitude,g=g) # enforce the amplitude
     f = enforce_average(f,average,g=g) # enforce average
     if minmax is not None: f = enforce_minmax(f,minmax,g=g) # enforce minmax
@@ -179,7 +183,9 @@ def interpolate2d(r,v):
 
 def enforce_average(f,a,g=None):
     """Normalize the average value of a function for the geometry"""
-    if g is None: raise
+    if g is None:
+        raise ValueError("enforce_average needs the geometry the average is "
+                "taken over, pass it as g")
     m = np.mean([f(ri) for ri in g.r]) # average value
     def fout(r):
         return f(r) + a - m # return this value
@@ -188,7 +194,9 @@ def enforce_average(f,a,g=None):
 
 def enforce_amplitude(f,a,g=None):
     """Normalize the average value of a function for the geometry"""
-    if g is None: raise
+    if g is None:
+        raise ValueError("enforce_amplitude needs the geometry the amplitude is "
+                "measured on, pass it as g")
     vs = [f(ri) for ri in g.r] 
     minv = np.min(vs)
     maxv = np.max(vs)
@@ -202,7 +210,9 @@ def enforce_amplitude(f,a,g=None):
 def enforce_minmax(f,a,g=None):
     """Rescale f so that its minimum and maximum over the geometry
     map to a[0] and a[1] respectively"""
-    if g is None: raise
+    if g is None:
+        raise ValueError("enforce_minmax needs the geometry the minimum and "
+                "maximum are taken over, pass it as g")
     vs = [f(ri) for ri in g.r] 
     minv = np.min(vs)
     maxv = np.max(vs)
@@ -216,7 +226,9 @@ def array2potential(x,y,v):
     """Given an initial xyz array, return a function
     that interpolates over them"""
     from .interpolation import interpolator2d
-    if len(v)!=len(x): raise
+    if len(v)!=len(x):
+        raise ValueError("array2potential needs one value per point, and got a "
+                "different number of values than x coordinates")
     f = interpolator2d(x,y,v) # batch interpolator, expects an (N,2) array
     def fout(r):
         """Adapt the batch interpolator to a single-point Potential call"""
@@ -289,8 +301,12 @@ def commensurate_vortex_harmonic(g):
           # this is a quick fix
       elif abs(a12)<0.01: 
           g0 = geometry.square_lattice() # square
-      else: raise NotImplementedError
-    else: raise
+      else:
+          raise NotImplementedError("the commensurate vortex harmonic is only "
+                  "implemented for square and triangular-like 2d lattices")
+    else:
+        raise NotImplementedError("the commensurate vortex harmonic is only "
+                "implemented for 2d geometries")
     h0 = g0.get_hamiltonian()
     h0.add_rashba(1.0) # add Rashba SOC
     r2f = g.get_k2K_generator() # get function

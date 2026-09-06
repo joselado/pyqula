@@ -62,7 +62,9 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
                   lodict[(tuple(d),4*i+1)] = get_orbital(r0,r) # store 
            #       lodict[(tuple(d),4*i+2)] = 0. # store 
            #       lodict[(tuple(d),4*i+3)] = 0. # store 
-                else: raise
+                else:
+                    raise NotImplementedError("the atomic LDOS is not "
+                            "implemented for spinless Nambu Hamiltonians")
               else:
                 if h.has_spin: # spinful
                   lodict[(tuple(d),2*i)] = get_orbital(r0,r) # store 
@@ -77,7 +79,9 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
       def f(e): return ldos_at_energy(evals,ds,e,delta) # compute the LDOS
     elif mode=="density": # LDOS mode
       def f(e): return density_at_energy(evals,ds,e,delta) # compute the LDOS
-    else: raise NotImplementedError
+    else:
+        raise ValueError("unknown mode; the atomic LDOS accepts 'LDOS' and "
+                "'density'")
     return f,evals,x,y # return generator
 
 

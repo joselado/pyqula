@@ -9,10 +9,14 @@ def add_strain(h,sr,**kwargs):
     if not h.has_eh:
       if not h.has_spin: indg = lambda i: i
       elif h.has_spin: indg = lambda i: i//2
-      else: raise
+      else:
+          raise ValueError("cannot map orbital indices onto sites for this "
+                  "Hilbert space")
     else: 
       if h.has_spin: indg = lambda i: i//4
-      else: raise
+      else:
+          raise NotImplementedError("strain is not implemented for spinless "
+                  "Nambu Hamiltonians")
     f = strain_mode(sr,**kwargs) # get the function depending on the mode
     def fm(m,r1,r2): # function to modify hopping
         return strain_matrix(m,r1,r2,indg,f)
@@ -27,7 +31,9 @@ def strain_mode(sr,sd=None,mode="scalar"):
         return lambda r,dr: sr(dr)
     elif mode=="non_uniform": # spatial and direction-dependent change
         return lambda r,dr: sr(r,dr)
-    else: raise
+    else:
+        raise ValueError("unknown strain mode; the accepted ones are "
+                "'scalar', 'directional' and 'non_uniform'")
 
 
 # NOTE: strain_mode scalar fails with periodic boundary conditions

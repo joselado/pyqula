@@ -3,7 +3,9 @@ from scipy.sparse import coo_matrix,csc_matrix,issparse
 
 
 def add_phase(m1,r1,r2,phasefun,has_spin=False):
-  if m1.shape[0] != len(r1): raise
+  if m1.shape[0] != len(r1):
+    raise ValueError("the matrix and the list of positions must have the same "
+            "size, one row per site")
   m = coo_matrix(m1) # convert to sparse matrix
   row,col = m.row,m.col
   data = m.data +0j
@@ -25,21 +27,27 @@ def add_phase(m1,r1,r2,phasefun,has_spin=False):
 
 def add_peierls(h,mag_field=0.0,new=False):
   """ Adds Peierls phase to the Hamiltonian"""
-  if h.has_eh: raise
+  if h.has_eh:
+    raise NotImplementedError("the Peierls phase is not implemented for "
+            "Hamiltonians with the electron-hole (Nambu) degree of freedom")
   x = h.geometry.x    # x coordinate 
   y = h.geometry.y    # x coordinate 
   a1 = h.geometry.a1    # distance to neighboring cell
   celldis = np.sqrt(a1.dot(a1))
   from numpy import array
   norb = h.intra.shape[0]  # number of orbitals
-  if h.is_multicell: raise
+  if h.is_multicell:
+    raise NotImplementedError("the Peierls phase is not implemented for "
+            "multicell Hamiltonians")
   if new:
     print("New method to calculate peierls")
     g = h.geometry # geometry
     has_spin = h.has_spin # has spin degree of freedom
     def phasefun(ri,rj): 
       if callable(mag_field): return mag_field(ri[0],ri[1],rj[0],rj[1])
-      else: raise
+      else:
+        raise TypeError("this Peierls branch needs mag_field to be a callable "
+                "of the two positions")
     h.intra = add_phase(h.intra,g.r,g.r,phasefun,has_spin) 
     if h.dimensionality==2:
       h.tx = add_phase(h.tx,g.r,g.replicas(d=[1.,0.,0.]),phasefun,has_spin) 
@@ -64,7 +72,9 @@ def add_peierls(h,mag_field=0.0,new=False):
         h.intra = csc_matrix((data,(row,col)),shape=(norb,norb)) # convert to csc
       if h.dimensionality==1: # one dimensional
         # check that celldis is right
-        if np.abs(celldis - h.geometry.a1[0])>0.001: raise
+        if np.abs(celldis - h.geometry.a1[0])>0.001:
+          raise ValueError("the Peierls gauge assumes the 1d lattice vector "
+                  "points along x, and this one does not")
         def phaseize(inter,numn=1):
           m = coo_matrix(inter) # convert to sparse matrix
           row,col = m.row,m.col
@@ -100,13 +110,16 @@ def add_peierls(h,mag_field=0.0,new=False):
       gaugeize(h.intra,d=0.0)  # gaugeize intraterm
       if h.dimensionality==0: pass # if zero dimensional
       elif h.dimensionality==1: # if one dimensional
-        if h.is_multicell: raise
+        if h.is_multicell:
+          raise NotImplementedError("the Peierls phase is not implemented for "
+                  "multicell Hamiltonians")
         gaugeize(h.inter,d=celldis) # gaugeize interterm
       elif h.dimensionality==2: # if bigger dimensional
         print("WARNING, is your gauge periodic?")
         gaugeize(h.tx,d=h.geometry.a1[0]) # gaugeize interterm
       else:
-        raise
+        raise NotImplementedError("the Peierls phase is only implemented up "
+                "to 2d")
 
 
 
@@ -116,7 +129,9 @@ def peierls(x1,y1,x2,y2,mag_field):
   if is_number(mag_field): b = mag_field 
   elif callable(mag_field): 
       b = mag_field(np.array([x1,y1,0.0]),np.array([x2,y2,0.0]))
-  else: raise
+  else:
+    raise TypeError("mag_field must be a number or a callable of the two "
+            "positions")
   phase = b*(x1-x2)*(y1+y2)/2.0
   return np.exp(1j*phase*2*np.pi)
 
@@ -137,7 +152,9 @@ def add_peierls(h,mag_field,**kwargs):
 
 def add_bfield(h,b=0.0,phi=0.0,mode="inplane",gauge="Landau"):
     """Add an in-plane magnetic field"""
-    if h.dimensionality>2: raise NotImplementedError
+    if h.dimensionality>2:
+      raise NotImplementedError("an in-plane magnetic field is only "
+              "implemented for Hamiltonians up to 2d")
     # number of orbitals per site: this used to assume 2 for a spinful
     # Hamiltonian, which is wrong for a Nambu one (4 per site, or 2 for a
     # spinless Nambu) and indexed off the end of the position list

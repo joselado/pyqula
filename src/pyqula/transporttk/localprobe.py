@@ -80,7 +80,9 @@ class LocalProbe():
                                **kwargs) # generate the Green's function
             out = local_selfenergy(self.H,g,i=self.i,
                                 energy=energy,**kwargs)
-        else: raise
+        else:
+            raise ValueError("a local probe has two leads, so lead must be 0 "
+                    "or 1")
         if self.reuse_selfenergy: self._selfenergy_cache[key] = out
         return out
     def get_central_gmatrix(self,**kwargs):
@@ -262,7 +264,9 @@ def get_intra(H):
     from ..embedding import Embedding
     if isinstance(H, Hamiltonian): return H.intra
     elif type(H)==Embedding: return H.m
-    else: raise
+    else:
+        raise TypeError("the intracell matrix can only be extracted from a "
+                "Hamiltonian or an Embedding")
 
 
 

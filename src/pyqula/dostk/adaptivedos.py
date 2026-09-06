@@ -9,7 +9,9 @@ def adaptive_dos(h,energies=np.linspace(-1.,1.,200),
                  error=1e-1,nk=100,
                  **kwargs):
     """Compute DOS using adaptive integration"""
-    if h.is_sparse: raise # only for dense Hamiltonians
+    if h.is_sparse: # only for dense Hamiltonians
+        raise ValueError("the adaptive DOS is only implemented for dense "
+                "Hamiltonians; call h.get_dense() first")
     f = generate_function(h,energies=energies,**kwargs) # function to integrate
     dim = h.dimensionality # dimensionality
     limit = max([2,nk//30])
@@ -29,7 +31,9 @@ def adaptive_dos(h,energies=np.linspace(-1.,1.,200),
                              ) # integrate in x
         out = integrate(fy) # integrate in y
         return energies,out
-    else: raise
+    else:
+        raise NotImplementedError("the adaptive DOS is only implemented for "
+                "Hamiltonians up to 2d")
 
 
 
@@ -52,14 +56,18 @@ def generate_function(h,operator=None,energies=np.linspace(-1.,1.,200),
                  error=1e-1,nk=100,
                  delta=1e-2,**kwargs):
     """Generate function to compute DOS using adaptive integration"""
-    if h.is_sparse: raise # only for dense Hamiltonians
+    if h.is_sparse: # only for dense Hamiltonians
+        raise ValueError("the adaptive DOS is only implemented for dense "
+                "Hamiltonians; call h.get_dense() first")
     dim = h.dimensionality # dimensionality
     if operator is not None: # use a workaround (not too efficient)
         def f(k):
             if dim==0: k = [0.,0.,0.]
             elif dim==1: k = np.array([k,0.,0.])
             elif dim==2: k = np.array([k[0],k[1],0.])
-            else: raise NotImplementedError
+            else:
+                raise NotImplementedError("the adaptive DOS is only "
+                        "implemented for Hamiltonians up to 2d")
             out = h.get_bands(kpath=[k],operator=operator,
                               write=False,**kwargs)
             w = out[2] # use weight of the bands
@@ -72,7 +80,9 @@ def generate_function(h,operator=None,energies=np.linspace(-1.,1.,200),
             if dim==0: k = [k,0.,0.]
             elif dim==1: k = np.array([k,0.,0.])
             elif dim==2: k = np.array([k[0],k[1],0.])
-            else: raise NotImplementedError
+            else:
+                raise NotImplementedError("the adaptive DOS is only "
+                        "implemented for Hamiltonians up to 2d")
             m = hk(k) # compute Bloch Hamiltonian
             es = eigvalsh(m) # eigenvalues
             return calculate_dos(es,energies,delta,parallel=False)

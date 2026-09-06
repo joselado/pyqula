@@ -29,7 +29,9 @@ def cf_potential(g,rcut=6.0,vc=0.0,mode="full"):
         def getd(dr,dx,dy,dz):
             dr = dx**2 + dy**2 + 0.1*dz**2
             return dr
-    else: raise NotImplementedError
+    else:
+        raise ValueError("unknown mode; the crystal field accepts 'full' and "
+                "'stacking'")
     g = g.copy() # copy geometry
     interactions = [] # empty list
     nat = len(g.r) # number of atoms

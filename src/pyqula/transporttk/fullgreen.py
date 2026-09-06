@@ -43,5 +43,7 @@ def get_full_green(ht,energy,mode="right",delta=None,ic=0):
         else: # well implemented way, assume it is a number
           ii = 1+ic
           g = gauss_inverse(gmatrix,i=ii,j=ii,test=test_gauss)
-    else: raise
+    else:
+        raise ValueError("unknown mode; the full Green's function accepts "
+                "'left', 'right' and 'central'")
     return g

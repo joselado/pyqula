@@ -92,7 +92,9 @@ def set_average_filling(h,filling=0.5,nk=10,extrae=0.,
     elif mode=="ED": # dense Hamiltonian, use ED
         es = eigenvalues(h,nk=nk,notime=True)
         efermi = get_fermi_energy(es,fill)
-    else: raise
+    else:
+        raise ValueError("unknown mode; set_average_filling accepts 'KPM' and "
+                "'ED'")
     h.shift_fermi(-efermi) # shift the fermi energy
 
 

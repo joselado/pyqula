@@ -20,7 +20,8 @@ def canonical_unitary(self,fin):
 
 def canonical_unitary_generator(self):
     """Return a function that wraps any matrix inot ints canonical unitary"""
-    raise
+    raise NotImplementedError("the canonical unitary generator is not "
+            "implemented")
     def fun(k=None,d=None):
         """Given a certain directional hopping, return the Bloch matrix"""
         frac_r = self.geometry.frac_r # fractional coordinates

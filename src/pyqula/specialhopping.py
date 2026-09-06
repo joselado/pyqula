@@ -24,7 +24,9 @@ def twisted(cutoff=5.0,ti=0.3,lambi=8.0,t=1.0,
         dy = r1[1]-r2[1]
         dz = r1[2]-r2[2]
         r = np.sqrt(rr)
-        if (r-1.0)<-0.1: raise
+        if (r-1.0)<-0.1:
+            raise ValueError("two sites are closer than the first-neighbor "
+                    "distance this hopping is normalized to")
         out = -t*(dx*dx + dy*dy)/rr*np.exp(-lamb*(r-1.0))*np.exp(-lambz*dz*dz)
         # interlayer hopping
         out += -ti(rm)*(dz*dz)/rr*np.exp(-lambi*(r-dl))
@@ -191,7 +193,9 @@ class HoppingGenerator():
     def __init__(self,m):
         if type(m)==HoppingGenerator: self.f = m.f # redefine
         elif callable(m): self.f = m # define callable function
-        else: raise
+        else:
+            raise TypeError("a HoppingGenerator must be built from another "
+                    "HoppingGenerator or a callable")
     def __call__(self,rs1,rs2):
         """Call method"""
         return self.f(rs1,rs2)
@@ -235,7 +239,9 @@ def twisted_matrix_python(cutoff=10,**kwargs):
       jj = np.zeros(nmax,dtype=int) # index
       ii,jj,data,nk = twisted_matrix_jit(np.array(rs1),np.array(rs2),
                          ii,jj,data,cutoff=cutoff,**kwargs) # call function
-      if nk>nmax: raise # sanity check
+      if nk>nmax: # sanity check
+          raise MemoryError("more hoppings were found than the preallocated "
+                  "arrays hold, increase the estimate in tij")
       ii = ii[0:nk] # only nonzero
       jj = jj[0:nk] # only nonzero
       data = data[0:nk] # only nonzero
@@ -268,7 +274,8 @@ def twisted_matrix_jit(rs1,rs2,ii,jj,data,cutoff=5.0,ti=0.3,lambi=8.0,
       r = np.sqrt(rr)
   #    if r2>100.0: return 0.0 # too far
       if (r-1.0)<-0.1:
-        raise
+          raise ValueError("two sites are closer than the first-neighbor "
+                  "distance this hopping is normalized to")
       out = -t*(dx*dx + dy*dy)/rr*np.exp(-lamb*(r-1.0))*np.exp(-lambz*dz*dz)
       out += -ti*(dz*dz)/rr*np.exp(-lambi*(r-dl))
       #### fix for magnetic field
@@ -309,7 +316,9 @@ def ILG(g,ti,**kwargs):
     from . import algebra
     if callable(ti): ti = Potential(ti) # transform to potential
     elif algebra.isnumber(ti): pass
-    else: raise NotImplementedError
+    else:
+        raise TypeError("the interlayer hopping amplitude must be a number or "
+                "a callable of the position")
     fm = twisted_matrix(t=0.,ti=-1*ti,**kwargs) # interlayer hopping generator
     # return a generator
     return HoppingGenerator(lambda *args: algebra.todense(fm(*args))) 

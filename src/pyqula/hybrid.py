@@ -11,14 +11,18 @@ def create_hybrid(h1,h2,coupling=1.0):
   hy = deepcopy(h1) # copy hamiltonian
   # check that thw two hamiltonians are mixable
   if not h1.has_spin == h2.has_spin:  # spinpol
-    raise
+    raise ValueError("create_hybrid needs two Hamiltonians with the same spin "
+            "structure; one has has_spin and the other does not")
   if not h1.has_eh == h2.has_eh:  # electron hole
-    raise
+    raise ValueError("create_hybrid needs two Hamiltonians with the same "
+            "electron-hole structure; one has has_eh and the other does not")
   if not len(h1.intra) == len(h2.intra):  # same dimension
-    print("Wrong dimensions", len(h1.intra),len(h2.intra))
-    raise
+    raise ValueError("create_hybrid needs two Hamiltonians of the same "
+            "dimension, and got intra matrices of size "
+            +str(len(h1.intra))+" and "+str(len(h2.intra)))
   if not h1.dimensionality == h2.dimensionality:  # dimension
-    raise
+    raise ValueError("create_hybrid needs two Hamiltonians of the same "
+            "dimensionality")
   dd = h1.intra.shape[0] # dimension of the hamiltonian
   # we wnt a matrix like
   # ( h1_1   t12  )
@@ -67,7 +71,9 @@ def half_and_half(h1,h2,fun=None,tlen=0.001,direction=1):
       else:
         if h1.dimensionality==1: # one dimensional
           hout.inter[i,j] = fac*(h1.inter[i,j]) + (1.-fac)*h2.inter[i,j]
-        else: raise
+        else:
+          raise NotImplementedError("half_and_half is only implemented for 0d "
+                  "and 1d Hamiltonians, and for multicell ones")
   return hout
 
 

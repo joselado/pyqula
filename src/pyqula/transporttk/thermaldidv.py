@@ -107,6 +107,8 @@ def finite_T_didv(self,temp,energy=0.0,keldysh_thermal_mode="direct",**kwargs):
         norm = np.sum(dFDdT(Ts,temp=temp)*temp)
         out = np.trapezoid(out)/norm
         return out
-    else: raise
+    else:
+        raise ValueError("unknown thermalmode; the accepted ones are "
+                "'adaptive' and 'pm'")
 
 

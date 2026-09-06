@@ -10,13 +10,17 @@ from .operators import Operator
 
 def chargechi(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
     """Compute charge response function"""
-    if h.dimensionality!=0: raise
+    if h.dimensionality!=0:
+        raise ValueError("the charge response function is only implemented "
+                "for 0d Hamiltonians")
     hk = h.get_hk_gen() # get generator
     m = hk(0) # get Hamiltonian
     esh,ws = algebra.eigh(m)
     ws = np.transpose(ws)
-    if i<0: raise
-    if j<0: raise
+    if i<0:
+        raise ValueError("the site index i must not be negative")
+    if j<0:
+        raise ValueError("the site index j must not be negative")
     out = 0*es + 0j # initialize
     return es,elementchi(ws,esh,ws,esh,es,i,j,temp,delta,out)
 
@@ -74,12 +78,15 @@ def elementchi_row(ws1,es1,ws2,es2,omegas,ii,T,delta):
 
 def chargechi_row(h,i=0,es=np.linspace(-3.0,3.0,100),delta=1e-6,temp=1e-7):
     """Compute charge response function"""
-    if h.dimensionality!=0: raise
+    if h.dimensionality!=0:
+        raise ValueError("the charge response function is only implemented "
+                "for 0d Hamiltonians")
     hk = h.get_hk_gen() # get generator
     m = hk(0) # get Hamiltonian
     esh,ws = algebra.eigh(m)
     ws = np.transpose(ws)
-    if i<0: raise
+    if i<0:
+        raise ValueError("the site index i must not be negative")
     out = elementchi_row(ws,esh,ws,esh,es,i,temp,delta)
     return out
 
@@ -91,7 +98,9 @@ def chargechi_row(h,i=0,es=np.linspace(-3.0,3.0,100),delta=1e-6,temp=1e-7):
 def chargechi_reciprocal(h,i=None,
         es=np.linspace(-4.,4.,200),delta=1e-3,**kwargs):
     """Return the charge susceptibility in reciprocal space"""
-    if h.dimensionality!=0: raise
+    if h.dimensionality!=0:
+        raise ValueError("the reciprocal-space charge susceptibility is only "
+                "implemented for 0d Hamiltonians")
     if i is None: i = h.geometry.get_central(1)[0]
     # compute correlators
     cs = chargechi_row(h,es=es,delta=delta,**kwargs) 

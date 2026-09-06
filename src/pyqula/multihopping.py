@@ -15,7 +15,9 @@ class MultiHopping():
         elif type(a)==np.ndarray or issparse(a) or type(a)==np.matrix:
             dd = dict() ; dd[(0,0,0)] = a
             self.dict = dd
-        else: raise
+        else:
+            raise TypeError("a MultiHopping must be built from a dictionary, "
+                    "another MultiHopping, or a single matrix")
     def __add__(self,a):
         if type(a)!=MultiHopping: return NotImplemented
         out = add_hopping_dict(self.dict,a.dict)

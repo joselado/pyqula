@@ -5,7 +5,9 @@ from ..increase_hilbert import full2profile as spatial_dos
 def ldos(ht,operator=None,write=True,nsuper=None,kpath=None,**kwargs):
     """Compute the local density of states"""
     def get(ht):
-        if ht.dimensionality!=1: raise
+        if ht.dimensionality!=1:
+            raise ValueError("the junction LDOS is only implemented for 1d "
+                    "junctions")
         if ht.block_diagonal:
             nc = len(ht.central_intra) # number of cells in the middle
             ls = [] # storage for LDOS
@@ -17,7 +19,9 @@ def ldos(ht,operator=None,write=True,nsuper=None,kpath=None,**kwargs):
                 d = [ -(g[i,i]).imag/np.pi for i in range(len(g))] # LDOS
                 d = spatial_dos(ht.Hr,d) # convert to spatial resolved DOS
                 ls = np.concatenate([ls,d]) # store LDOS
-        else: raise
+        else:
+            raise NotImplementedError("the junction LDOS needs a "
+                    "block-diagonal central part")
         return nc,ls # return positions and LDOS
     if ht.dimensionality==1: 
         nc,ls = get(ht) # 1d
@@ -41,7 +45,9 @@ def ldos(ht,operator=None,write=True,nsuper=None,kpath=None,**kwargs):
         lso = []
         for i in range(nsuper): lso = np.concatenate([lso,ls])
         ls = lso # overwrite
-    else: raise
+    else:
+        raise NotImplementedError("the junction LDOS is only implemented for "
+                "1d and 2d junctions")
     if write:
         np.savetxt("LDOS.OUT",np.array([r[:,0],r[:,1],ls]).T)
     return r[:,0],r[:,1],ls

@@ -267,7 +267,8 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
       elif i==num_central/2:
           hc[i][i] = ec
       else:
-        raise
+        raise ValueError("the central-block index fell outside the junction "
+                "while assigning the onsite matrices")
     # interterm
     for i in range(num_central-1): # interterm of the central blocks
       if i<num_central/2:
@@ -280,7 +281,8 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
         hc[i][i+1] = tc
         hc[i+1][i] = dagger(tc)
       else:
-        raise
+        raise ValueError("the central-block index fell outside the junction "
+                "while assigning the hopping matrices")
 
 
   # central part is a linear interpolation of right and left
@@ -295,7 +297,8 @@ def create_leads_and_central(h_right,h_left,h_central,num_central=1,
 
 
   else:
-    raise
+    raise NotImplementedError("this interpolation mode between the two leads "
+            "is not implemented")
 
   for i in range(num_central):  # intra term of the central blocks
     tcr[i][0] = csc_matrix(z) 
@@ -370,8 +373,8 @@ def block2full(ht,sparse=False):
       lc[0] = csc_matrix(ht.left_coupling)
       rc[nb-1] = csc_matrix(ht.right_coupling)
   else: 
-      print("Not implemented")
-      raise # no central part
+    raise NotImplementedError("block2full is only implemented for junctions "
+            "with a block-diagonal central part")
   # convert the central to sparse form
   central = [[None for i in range(nb)] for j in range(nb)]
   for i in range(nb):
@@ -465,8 +468,8 @@ def create_leads_and_central_list(h_right,h_left,list_h_central,
 def eigenvalues(HT,numeig=10,effective=False,gf=None,full=False):
   """ Gets the lowest eigenvalues of the central part of the hamiltonian"""
   if not HT.block_diagonal:
-    print(""" HTunction in eigenvalues must be block diagonal""")
-    raise
+    raise ValueError("the eigenvalues of the central part need a junction "
+            "with a block-diagonal central Hamiltonian")
   # if effective hamiltonian, just calculate the eigenvalues
   if effective: # effective hamiltonian
     print("Calculating eigenvalues of effective hamiltonian...")
@@ -570,7 +573,9 @@ def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=False):
 
 def get_tmatrix(ht,energy=0.0,delta=0.0001):
   """Calculate the S-matrix of an HTstructure"""
-  if ht.block_diagonal: raise NotImplementedError
+  if ht.block_diagonal:
+    raise NotImplementedError("the transmission matrix needs a junction whose "
+            "central part is not block diagonal")
   smatrix = get_smatrix(ht,energy=energy)
   return smatrix[0][1]
 

@@ -24,7 +24,10 @@ def kchain(h,**kwargs):
     elif detect_longest_hopping(h)==2:
         print("WARNING, NNN in kchain")
         return kchain_NNN(h,**kwargs) # include NNN
-    else: raise
+    else:
+        raise NotImplementedError("kchain only supports hoppings up to "
+                "second-neighbor cells, and this Hamiltonian couples cells "
+                "further apart")
 
 
 
@@ -50,7 +53,9 @@ def kchain_NNN(h,k=[0.,0.,0.]):
             if t.dir[dim-1]==1: inter1 = inter1 + tk # add contribution 
             if t.dir[dim-1]==2: inter2 = inter2 + tk # add contribution 
         return intra,inter1,inter2
-    else: raise
+    else:
+        raise ValueError("kchain_NNN needs a Hamiltonian with a positive "
+                "dimensionality")
 
 
 def kchain_NN(h,k=[0.,0.,0.]):
@@ -61,7 +66,8 @@ def kchain_NN(h,k=[0.,0.,0.]):
     if dim==1: # 1D
         for t in h.hopping:
             if t.dir[0]==1: return h.intra,t.m
-        raise
+        raise ValueError("no hopping to the neighboring cell was found, so "
+                "this 1d chain is decoupled")
     elif dim>1: # 2D or 3D
       intra = np.zeros(h.intra.shape) # zero amtrix
       inter = np.zeros(h.intra.shape) # zero amtrix
@@ -71,7 +77,9 @@ def kchain_NN(h,k=[0.,0.,0.]):
         if t.dir[dim-1]==0: intra = intra + tk # add contribution 
         if t.dir[dim-1]==1: inter = inter + tk # add contribution 
       return intra,inter
-    else: raise
+    else:
+        raise ValueError("kchain_NN needs a Hamiltonian with a positive "
+                "dimensionality")
 
 
 def detect_longest_hopping(h,tol=1e-7):
@@ -106,7 +114,9 @@ def kchain_LR(h,k=[0.,0.,0.]):
             if t.dir[dim-1]>=0: # positive ones and intra
                 hops[t.dir[dim-1]] += tk # add this hopping
         return hops
-    else: raise
+    else:
+        raise ValueError("kchain_LR needs a Hamiltonian with a positive "
+                "dimensionality")
 
 
 

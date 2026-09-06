@@ -9,7 +9,9 @@ def generate_dummy_hamiltonian(d,g=None):
     h = g.get_hamiltonian() # create a dummy Hamiltonian
     h = h.get_multicell() # set as multicell Hamiltonian
     from ..multihopping import MultiHopping
-    if type(d) is not dict: raise
+    if type(d) is not dict:
+        raise TypeError("a dummy Hamiltonian is built from a dictionary of "
+                "hoppings")
     d = clean_dict(d) # overwrite
     h.set_multihopping(MultiHopping(d)) # set the dictionary
     h.geometry.supercell(h.intra.shape[0]) # dimensionality

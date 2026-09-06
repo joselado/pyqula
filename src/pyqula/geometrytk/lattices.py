@@ -697,4 +697,6 @@ def get_geometry(g):
     elif type(g)==str:
         if g in gdict: return gdict[g]() # return the geometry
     elif g is None: return get_geometry("square") # default geometry
-    else: raise
+    else:
+      raise TypeError("get_geometry takes a Geometry, the name of one of the "
+              "tabulated lattices, or None")

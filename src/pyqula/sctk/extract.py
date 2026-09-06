@@ -141,7 +141,8 @@ def extract_triplet_hamiltonian(h):
 
 def extract_custom_pairing(m,mode="all"):
     """Given a matrix, extract the pairing matrix according to some rule"""
-    raise # this may be buggy
+    raise NotImplementedError("extract_custom_pairing is not implemented; use "
+            "extract_absolute_pairing or extract_pairing_kmap instead")
     if mode=="singlet": # singlet, with sign
         m = extract_singlet_pairing(m) # matrix with pairings 
         return m
@@ -159,25 +160,35 @@ def extract_custom_pairing(m,mode="all"):
         if m.shape[0]==4: # this is a quick fix for single site models
             m = m@np.conjugate(m.T)
             return np.array([[np.trace(m)]])
-        else: raise
-    else: raise
+        else:
+            raise NotImplementedError("the 'both' mode is only implemented "
+                    "for single-site models")
+    else:
+        raise ValueError("unknown mode; the accepted ones are 'all', "
+                "'singlet', 'triplet' and 'both'")
 
 
 
 def extract_pairing_kmap(h,write=False,i=None,j=None,mode="all",**kwargs):
     """Extract the pairing in reciprocal space"""
-    if not h.has_eh: raise NotImplementedError
+    if not h.has_eh:
+        raise ValueError("the pairing k-map needs a Nambu Hamiltonian; call "
+                "h.setup_nambu_spinor() first")
     h = get_anomalous_hamiltonian(h)
     if j is None: j = i # same site is the default
     if mode=="all": pass # do nothing 
     elif mode=="singlet": h = extract_singlet_hamiltonian(h) # singlet
     elif mode=="triplet": h = extract_triplet_hamiltonian(h) # triplet
-    else: raise
+    else:
+        raise ValueError("unknown mode; the accepted ones are 'all', "
+                "'singlet' and 'triplet'")
     fk = h.get_hk_gen() # Bloch Hamiltonian generator
     def f0(k):
         m = fk(k) # full k-dependent Hamiltonian
         if i is None: return np.trace(m@np.conjugate(m.T))/m.shape[0]
-        else: raise NotImplementedError
+        else:
+            raise NotImplementedError("a single pairing matrix element is not "
+                    "implemented, only the trace over all of them")
         # return m[i,j] # return pairing
     from .. import spectrum
     (ks,ds) = spectrum.reciprocal_map(h,f0,write=write,**kwargs)
@@ -197,7 +208,9 @@ def extract_absolute_pairing(h,mode="singlet",**kwargs):
     if mode=="all" or mode=="both": pass # do nothing 
     elif mode=="singlet": h = extract_singlet_hamiltonian(h) # singlet
     elif mode=="triplet": h = extract_triplet_hamiltonian(h) # triplet
-    else: raise # do nothing
+    else: # do nothing
+        raise ValueError("unknown mode; the accepted ones are 'all', 'both', "
+                "'singlet' and 'triplet'")
     fk = h.get_hk_gen() # Bloch Hamiltonian generator
     from ..klist import kmesh
     ks = kmesh(h.dimensionality,**kwargs) # kpoints
@@ -215,7 +228,9 @@ def extract_absolute_spatial_pairing(h,mode="singlet",**kwargs):
     if mode=="all" or mode=="both": pass # do nothing
     elif mode=="singlet": h = extract_singlet_hamiltonian(h) # singlet
     elif mode=="triplet": h = extract_triplet_hamiltonian(h) # triplet
-    else: raise # do nothing
+    else: # do nothing
+        raise ValueError("unknown mode; the accepted ones are 'all', 'both', "
+                "'singlet' and 'triplet'")
     fk = h.get_hk_gen() # Bloch Hamiltonian generator
     from ..klist import kmesh
     ks = kmesh(h.dimensionality,**kwargs) # kpoints

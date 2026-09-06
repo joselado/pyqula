@@ -14,5 +14,7 @@ def clean_hamiltonian(h):
       h.ty *= 0.0
       h.txy *= 0.0
       h.txmy *= 0.0
-    elif h.dimensionality==3: raise
+    elif h.dimensionality==3:
+      raise NotImplementedError("cleaning a 3d Hamiltonian is only "
+              "implemented in the multicell form")
 

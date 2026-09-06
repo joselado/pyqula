@@ -12,8 +12,12 @@ def honeycomb_ribbon(n=1,rtype="zigzag",stype="AB",has_spin=True,
   """Return the hamiltonian of a ribbon"""
   if rtype=="zigzag":  g = geometry.honeycomb_zigzag_ribbon(n)
   elif rtype=="armchair":  g = geometry.honeycomb_zigzag_ribbon(n)
-  else: raise
-  if rtype=="amrchair": raise NotImplementedError
+  else:
+    raise ValueError("unknown ribbon type; honeycomb_ribbon accepts 'zigzag' "
+            "and 'armchair'")
+  if rtype=="amrchair":
+    raise NotImplementedError("armchair ribbons are not implemented, only "
+            "zigzag ones")
   h = g.get_hamiltonian(has_spin=has_spin) # hamiltonian
   if stype=="ABC": # trilayer ABC
     h = build_honeycomb_trilayer(h,t,mvl=[0.,1.])
@@ -71,8 +75,12 @@ def bilayer_aa(h,t = 0.1):
       for s in range(2): # loop over spin
         intra[2*p[0]+s][2*p[1]+s] = t  
         intra[2*p[1]+s][2*p[0]+s] = np.conjugate(t)  
-  else: raise NotImplementedError
-  if h.has_eh: raise NotImplementedError
+  else:
+    raise NotImplementedError("bilayer_aa is only implemented for 1d "
+            "Hamiltonians")
+  if h.has_eh:
+    raise NotImplementedError("bilayer_aa is not implemented for Hamiltonians "
+            "with the electron-hole (Nambu) degree of freedom")
   ho.intra = np.array(intra)
   ho.inter = np.array(inter)
   ho.geometry = go
@@ -153,7 +161,8 @@ def build_honeycomb_bilayer(h,t=0.1,mvl = None ):
     dx = g.a1
     ho.inter += add_interlayer(t,go.r,go.r+dx) # add interlayer coupling
   else:
-    raise
+    raise NotImplementedError("build_honeycomb_bilayer is only implemented "
+            "for 1d and 2d Hamiltonians")
   return ho
 
 
@@ -194,7 +203,8 @@ def build_honeycomb_trilayer(h,t=0.1,mvl=None):
     dx = g.a1
     ho.inter += add_interlayer(t,go.r,go.r+dx) # add interlayer coupling
   else:
-    raise
+    raise NotImplementedError("build_honeycomb_trilayer is only implemented "
+            "for 1d and 2d Hamiltonians")
   ## add sublattice index, might break
   return ho
 
@@ -243,7 +253,9 @@ def get_geometry(name,dz=2.0,armchair=True):
     g = bilayer_geometry(g,mvl=[0.,0.],dz=1.0)
   elif name=="AB":
     g = bilayer_geometry(g,mvl=None,dz=1.0)
-  else: raise
+  else:
+    raise ValueError("unknown stacking name; get_geometry accepts 'AA' and "
+            "'AB'")
   g.has_sublattice = False # no sublattice
   if armchair: g = g.supercell([[1,-1,0],[0,1,0],[0,0,1]]) # armchair unit cell
   g.z *= dz ; g.xyz2r() # increase distance

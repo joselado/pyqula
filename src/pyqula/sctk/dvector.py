@@ -20,7 +20,8 @@ dvector2deltas = dvector2delta
 
 def dvector2deltas_old(ds):
     """Transform a certain dvector into deltauu, deltadd and deltaud"""
-    raise # this must be checked
+    raise NotImplementedError("dvector2deltas_old is superseded and probably "
+            "has a wrong sign; use dvector2deltas instead")
     # this function has probably a missing sign somewhere
     deltas = [0.,0.,0.]
     deltas[0] = ds[0]+ds[1]

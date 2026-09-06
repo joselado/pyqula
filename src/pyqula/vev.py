@@ -6,8 +6,8 @@ from .operators import Operator
 def get_dm_vev(H,A,**kwargs):
     """Compute a vacuum expectation value of two operators"""
     if H.dimensionality != 0:
-        print("Only implemented for 0d Hamiltonians")
-        raise
+        raise ValueError("the density-matrix expectation value is only "
+                "implemented for 0d Hamiltonians")
     dm = H.get_density_matrix() # return the DM, as a matrix
     A = Operator(A) # convert to operator
     # transposed for the same reason as in spectrum.ev: full_dm's

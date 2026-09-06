@@ -32,7 +32,9 @@ class SpinModel():
       self.exchange.ty = h.ty
       self.exchange.txy = h.txy
       self.exchange.txmy = h.txmy
-    else: raise
+    else:
+      raise NotImplementedError("the spin model exchange is only implemented "
+              "up to 2d")
 
  
 
@@ -43,7 +45,9 @@ def set_couplings(g,f=None):
   ys = []
   if callable(f): # callable function
     m = neighbor.parametric_hopping(g.r,g.r)
-  else: raise
+  else:
+    raise TypeError("set_couplings needs a callable exchange function, pass "
+            "it as f")
   return m # return pairs
 
 def xyj(m):
@@ -92,7 +96,9 @@ def hp_heisenberg(sm,fun=None,d=None,k=None):
       (mons2,mhop2) = c2h(dagger(getattr(sm.hamiltonian,name)))
       setattr(sm.hamiltonian,name,mhop) # set hopping
       sm.hamiltonian.intra += mons + mons2 # add to onsite
-  else: raise
+  else:
+    raise NotImplementedError("the Holstein-Primakoff transformation is only "
+            "implemented up to 2d")
   return sm
     
 
@@ -151,7 +157,8 @@ def szsz(sm,fun=None):
       (mons,mhop) = c2h(getattr(sm.hamiltonian,name))
       (mons2,mhop2) = c2h(dagger(getattr(sm.hamiltonian,name)))
       mout += mons + mons2
-  else: raise
+  else:
+    raise NotImplementedError("the SzSz term is only implemented up to 2d")
   return mout  # return onsite matrix
     
 
@@ -168,7 +175,8 @@ def sites2coupling_sparse(mij,spins):
   ons = coo_matrix(([],([],[])),shape=(n,n),dtype=np.complex128)
   hop = coo_matrix(([],([],[])),shape=(n,n),dtype=np.complex128)
   iden = sparseiden(n,dtype=np.complex128) # identity matrix
-  raise NotImplementedError
+  raise NotImplementedError("the sparse Holstein-Primakoff couplings are not "
+          "implemented; use the dense sites2coupling instead")
   
   for i in range(n): # loop over spins
     for j in range(n): # loop over spins

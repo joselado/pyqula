@@ -6,7 +6,8 @@ import numpy as np
 class Tensor3():
     """Class for a three dimensional tensor"""
     def __init__(self,row,col,pla,data,shape=None):
-        if shape is None: raise
+        if shape is None:
+            raise ValueError("a Tensor3 needs its shape, pass it as shape")
         self.row = row
         self.col = col
         self.pla = pla
@@ -15,7 +16,9 @@ class Tensor3():
     def __mul__(self,a):
         """Multiply by a vector, assuming that it will use
         the third component, and return an array"""
-        if a.shape[0]!= self.shape[2]: raise # inconsistent dimensions
+        if a.shape[0]!= self.shape[2]: # inconsistent dimensions
+            raise ValueError("the vector does not match the third dimension "
+                    "of the tensor")
         out = np.zeros((self.shape[0],self.shape[1]),dtype=np.complex128)
         for ii in range(len(self.row)):
             i = self.row[ii]
@@ -29,10 +32,15 @@ class Tensor3():
         return deepcopy(self)
     def __add__(self,a):
         """Sum two tensors"""
-        if type(a)!=Tensor3: raise NotImplementedError
-        if a.shape[0]!=self.shape[0]: raise
-        if a.shape[1]!=self.shape[1]: raise
-        if a.shape[2]!=self.shape[2]: raise
+        if type(a)!=Tensor3:
+            raise TypeError("a Tensor3 can only be added to another Tensor3")
+        if a.shape[0]!=self.shape[0]:
+            raise ValueError("the two tensors differ in their first dimension")
+        if a.shape[1]!=self.shape[1]:
+            raise ValueError("the two tensors differ in their second "
+                    "dimension")
+        if a.shape[2]!=self.shape[2]:
+            raise ValueError("the two tensors differ in their third dimension")
         out = self.copy() # copy object
         out.row = np.concatenate([self.row,a.row])
         out.col = np.concatenate([self.col,a.col])

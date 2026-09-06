@@ -8,7 +8,9 @@ def st(h,nk=10,p=1):
     from . import extract
     if p==1: h = extract.get_singlet_hamiltonian(h)
     elif p==-1: h = extract.get_triplet_hamiltonian(h)
-    else: raise
+    else:
+        raise ValueError("the parity p must be 1 for the singlet or -1 for "
+                "the triplet")
     hk = h.get_hk_gen() # get Bloch Hamiltonian generator
     ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
     def f(k):

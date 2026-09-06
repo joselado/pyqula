@@ -36,7 +36,7 @@ def boundary2d(getquantity,xlim=[0.,1.],
   y = np.linspace(ylim[0],ylim[1],4)
   for ix in x: # loop over s parameter
     for iy in y: # loop over s parameter
-      raise
+      raise NotImplementedError("boundary2d is not implemented")
 
 
 

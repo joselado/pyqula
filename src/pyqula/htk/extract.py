@@ -31,8 +31,8 @@ def local_hamiltonian(h,m,i=0):
     m = todense(m) # dense array
     s = site_slice(h,i)
     if s.stop>m.shape[0]:
-        print(i,m.shape[0])
-        raise
+        raise ValueError("site "+str(i)+" lies outside a matrix of "
+                "dimension "+str(m.shape[0]))
     return np.array(m[s,s])
 
 

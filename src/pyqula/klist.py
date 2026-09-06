@@ -166,7 +166,8 @@ def path_GKMKG(g,nk):
   """Generate a path G-K-M-K'-G"""
   a1 = g.a1 # vector
   a2 = g.a2 # vector
-  raise
+  raise NotImplementedError("path_GKMKG is not implemented; use the labelled "
+          "k-path machinery in kpointstk instead")
 
 
 
@@ -294,7 +295,9 @@ def default_v2(g,nk=400):
     fbl.write(str(2*nk/3)+"   K'\n")
     fbl.write(str(nk)+"   \\Gamma\n")
     fbl.close()
-  else: raise NotImplementedError
+  else:
+    raise NotImplementedError("default_v2 only knows the honeycomb-like "
+            "k-path; use the labelled k-path machinery in kpointstk instead")
 
 
 
@@ -384,4 +387,5 @@ def int2dims(nsuper):
     from .checkclass import is_iterable
     if is_iterable(nsuper): return nsuper 
     elif isnumber(nsuper): return [nsuper,nsuper,nsuper]
-    else: raise
+    else:
+      raise TypeError("nsuper must be a number or an iterable of numbers")

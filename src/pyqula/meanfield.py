@@ -110,7 +110,8 @@ def v_pairing_uu(i,j,n,g=1.0,d=[0,0,0],channel="ee"):
   elif channel=="hh":
     v.a = element(i,n,[3,0],d=4,j=j) # cc
     v.b = element(j,n,[0,3],d=4,j=i) # cdcd
-  else: raise
+  else:
+      raise ValueError("unknown channel; the accepted ones are 'ee' and 'hh'")
   v.dir = d # direction of the interaction 
   v.g = g
   v.contribution = "A"
@@ -128,7 +129,8 @@ def v_pairing_dd(i,j,n,g=1.0,d=[0,0,0],channel="ee"):
   elif channel=="hh":
     v.a = element(i,n,[2,1],d=4,j=j) # cc
     v.b = element(j,n,[1,2],d=4,j=i) # cdcd
-  else: raise
+  else:
+      raise ValueError("unknown channel; the accepted ones are 'ee' and 'hh'")
   v.dir = d # direction of the interaction 
   v.g = g
   v.contribution = "A"
@@ -197,7 +199,9 @@ def v_ij_fast_coulomb(i,jvs,n,vcut=1e-3):
   v = interaction()
   v.a = csc_matrix(([1.0],[[i],[i]]),shape=(n,n),dtype=np.complex128) # cc
   jj = range(n) # indexes
-  if len(jvs)!=n: raise # something wrong
+  if len(jvs)!=n: # something wrong
+      raise ValueError("the fast-Coulomb interaction needs one potential "
+              "value per site")
   v.b = csc_matrix((jvs,[jj,jj]),shape=(n,n),dtype=np.complex128) # cdc
   v.b.eliminate_zeros()
   v.dir = [0,0,0] # direction of the neighbor
@@ -217,7 +221,9 @@ def v_ij_fast_coulomb_spinful(i,jvs,n,channel="up"):
   elif channel=="down":
       for jj in range(n): jvs2[2*jj+1] = jvs[jj]
       ii = 2*i
-  else: raise
+  else:
+      raise ValueError("unknown channel; the accepted ones are 'up' and "
+              "'down'")
   return v_ij_fast_coulomb(ii,jvs2,2*n)
 
 
@@ -477,7 +483,10 @@ def fast_coulomb_interaction(g,vc=1.0,vcut=1e-4,vfun=None,has_spin=False,**kwarg
           interactions.append(
                   v_ij_fast_coulomb_spinful(i,vjs,nat,channel="down")
                   )
-        else: raise
+        else:
+            raise NotImplementedError("the fast-Coulomb interaction is only "
+                    "implemented for spinless and spinful Hamiltonians, not "
+                    "for Nambu ones")
     return interactions
 
 
@@ -515,7 +524,9 @@ def order_parameter(self,name):
     elif name=="odd_SC":
         from .sctk.orderparameter import triplet
         return triplet(mf)
-    else: raise
+    else:
+        raise ValueError("unknown order parameter; the accepted ones are "
+                "'even_SC' and 'odd_SC'")
 
 
 

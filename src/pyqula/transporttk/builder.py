@@ -8,8 +8,8 @@ def build(left=None,right=None,central=None,**kwargs):
     """Create a heterostructure, works also for 2d"""
   #  if central is None: central = [h1,h2] # list
     if left is None or right is None:
-        print("No leads provided")
-        raise
+        raise ValueError("a heterostructure needs both leads, pass them as "
+                "left and right")
     h1,h2 = left,right
     if central is None: central = [] # list
     # make the Hamiltonians compatible
@@ -39,11 +39,15 @@ def build(left=None,right=None,central=None,**kwargs):
           hout.generate = create_generator(hout,fun) # create the generator
           # function that generates the heterostructure
           return hout # function that return a heterostructure
-        else: raise NotImplementedError
+        else:
+            raise NotImplementedError("a 2d heterostructure needs both leads "
+                    "to be 2d")
     else:
   # this is a temporal fix
         if h1.dimensionality==1 and h2.dimensionality==2: # 1D to 2D
-            if len(central)!=0: raise NotImplementedError
+            if len(central)!=0:
+                raise NotImplementedError("a central region is not "
+                        "implemented for a 1d lead coupled to a 2d one")
             h2t = h2.get_1dh(0.) # create a 1D Hamiltonian
             HT = build(h1,h2t,central=central,**kwargs) # create a fake HT
             HT0 = HT.copy() # copy the HT
@@ -58,13 +62,17 @@ def build(left=None,right=None,central=None,**kwargs):
                                            delta=delta)[0]
                     gamma = dagger(HT0.left_inter)
                     return gamma@gf@dagger(gamma)
-                else: raise
+                else:
+                    raise ValueError("a heterostructure has two leads, so "
+                            "lead must be 0 or 1")
             HT.get_selfenergy = get_selfenergy # overwrite
             HT.block_diagonal = False # block diagonal
             HT.central_intra = h1.intra # intra cell
             HT.right_coupling = dagger(HT.left_coupling)
             return HT
-        raise NotImplementedError
+        raise NotImplementedError("this combination of lead dimensionalities "
+                "is not implemented; the leads must both be 1d, both be 2d, "
+                "or be a 1d one coupled to a 2d one")
 
 
 
@@ -96,8 +104,8 @@ def get_reflection_normal_lead(ht,s):
     if np.sum(np.abs(get_eh(ht.left_intra,i=0,j=1)))<0.0001: r = r1
     elif np.sum(np.abs(get_eh(ht.right_intra,i=0,j=1)))<0.0001: r = r2
     else:
-        print("There is SC in both leads, aborting")
-        raise
+        raise ValueError("the normal-lead reflection matrix needs one of the "
+                "two leads to be normal, and both of them are superconducting")
     return r
 
 

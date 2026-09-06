@@ -77,7 +77,10 @@ def get_hamiltonian(self,tij=None,has_spin=True,
                       spinful_generator=spinful_generator,
                       mgenerator=mgenerator) # add hopping
           elif h.dimensionality==3:
-            if mgenerator is not None: raise NotImplementedError
+            if mgenerator is not None:
+                raise NotImplementedError("a matrix generator is not "
+                        "supported for 3d Hamiltonians, pass a hopping "
+                        "function as tij instead")
             from ..multicell import parametric_hopping_hamiltonian
             h = parametric_hopping_hamiltonian(h,fc=tij,**kwargs) # add hopping
     # ensure right sparsity structure

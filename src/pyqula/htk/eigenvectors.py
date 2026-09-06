@@ -73,7 +73,7 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
     else:
       return eigvals,eigvecs
   else:
-    raise
+    raise ValueError("the Hamiltonian must have a non-negative dimensionality")
 
 
 

@@ -10,7 +10,9 @@ def get_geometry(shape="polygon",**kwargs):
         return get_polygon_island(**kwargs)
     elif shape=="flower":
         return get_flower_island(**kwargs)
-    else: raise
+    else:
+        raise ValueError("unknown island shape; the accepted ones are "
+                "'polygon' and 'flower'")
 
 
 
@@ -31,7 +33,9 @@ def default_geometry_edges(name="square",nedges=None,geo=None):
     elif lattice_name=="triangular":
       geometry_builder = geometry.triangular_lattice
       if nedges==None: nedges = 3
-    else: raise
+    else:
+        raise ValueError("unknown lattice name; the accepted ones are "
+                "'honeycomb', 'square', 'kagome', 'lieb' and 'triangular'")
     # first create a raw unit cell
     if geo is not None: 
       print("Geometry generator taken from input")

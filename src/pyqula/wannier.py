@@ -149,7 +149,8 @@ def get_index_orbital(specie,atom,orbital,input_file="wannier.win"):
       # if the desired orbital and atom has been reached
       if specie==sname and atom==ifound and orbital==oname:
         return iorb
-  raise # error if this point is reached
+  raise ValueError("orbital not found in the wannier input file for the "
+          "requested specie and atom")
 
 
 
@@ -301,7 +302,8 @@ def read_multicell_hamiltonian(input_file="hr_truncated.dat",
       if len(h.geometry.r)!=len(h.intra): 
         print("Dimensions do not match",len(g.r),len(h.intra))
         print(h.geometry.r)
-      raise # error if dimensions dont match
+      raise ValueError("the geometry read from wannier.win has a different "
+              "number of sites than the Hamiltonian read from the hr file")
     h.dimensionality = dim 
     if path is not None: 
         os.chdir(inipath) # go back
@@ -309,7 +311,9 @@ def read_multicell_hamiltonian(input_file="hr_truncated.dat",
     else: h.wannierpath = None
     # now lets add the SOC method
     def get_soc(self,name,soc):
-        if not self.has_spin: raise # only for spinful
+        if not self.has_spin: # only for spinful
+            raise ValueError("the spin-orbit coupling can only be added to a "
+                    "spinful Hamiltonian")
         self.intra = self.intra + generate_soc(name,soc,path=self.wannierpath) 
     import types
     h.get_soc = types.MethodType(get_soc,h) # add the method
@@ -536,14 +540,16 @@ def comm_angular(x,y,z):
   xy = x@y - y@x
   xy = xy - 1j*z
   if np.abs(np.max(xy))>0.001:
-    raise
+    raise ValueError("the angular momentum matrices do not satisfy the "
+            "expected commutation relation")
 
 
 
 def comm_zero(x,y):
   xy = x@y - y@x
   if np.abs(np.max(xy))>0.01:
-    raise
+    raise ValueError("the two matrices are expected to commute, and they do "
+            "not")
 
 
 
@@ -551,7 +557,9 @@ def symmetrize_atoms(h,specie,input_file="wannier.win"):
   """Symmetrizes a certain atom"""
   orbs = get_orbitals(specie,input_file=input_file) # read the orbitals
   nat = get_atoms_specie(specie,input_file=input_file) # number of atoms
-  if h.has_spin: raise
+  if h.has_spin:
+    raise NotImplementedError("symmetrize_atoms is not implemented for "
+            "spinful Hamiltonians")
   for iorb in orbs: # loop over orbitals
     avg = 0.
     for iat in range(nat): # loop over atoms 

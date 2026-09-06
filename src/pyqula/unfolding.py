@@ -22,7 +22,8 @@ def unfolded_bands(hfol,hprim,kpath,inds_super=[]):
     df = [(w.dot(np.conjugate(w))).real for w in wff.transpose()] # density fol
     df = [sum(w.split(nn)) for w in df] # transform into smaller basis
     # now it is time to compare weights of each eigenvalue
-    raise
+    raise NotImplementedError("unfolded_bands is not implemented; use the "
+            "unfold operator (see bloch_projector) instead")
 
 
 
@@ -55,7 +56,7 @@ def perturb_bands(hprim,hper,kpath,inds_super=[]):
         jw = dagger(np.array(jw))
         vaw = iw@hper@jw # matrix element
   
-    raise
+    raise NotImplementedError("perturb_bands is not implemented")
 
 
 
@@ -64,8 +65,9 @@ def bloch_projector(h,g0=None):
     a projector to the minimal BZ"""
     if g0 is None:
         if h.geometry.primal_geometry is None:
-            print("No primal geometry")
-            raise
+            raise ValueError("the unfolding projector needs the "
+                    "primitive-cell geometry; build the supercell with "
+                    "store_primal=True, or pass the primitive geometry as g0")
         else: g0 = h.geometry.primal_geometry # get the primal geometry
     h0 = g0.get_hamiltonian(has_spin=False)
     if h.has_spin: h0.turn_spinful() # add spin
@@ -78,7 +80,9 @@ def bloch_projector(h,g0=None):
         # non_orthogonal_supercell), which stays valid after removing atoms
         # since Geometry.remove() keeps it in sync. This covers both the
         # complete supercell and the atoms-removed case with the same code.
-        if h0.dimensionality>2: raise NotImplementedError
+        if h0.dimensionality>2:
+            raise NotImplementedError("unfolding a general (matrix) supercell "
+                    "is only implemented up to 2d")
         if n0%len(g0.r)!=0:
             raise ValueError("unfolding: primal orbitals ("+str(n0)+
                 ") is not a multiple of the primal atom count ("+
@@ -92,13 +96,19 @@ def bloch_projector(h,g0=None):
         if h.dimensionality<3:
             from .supercell import infer_supercell
             nsuper = infer_supercell(h.geometry,g0) # get the supercell
-        else: raise NotImplementedError
+        else:
+            raise NotImplementedError("inferring a diagonal supercell from "
+                    "the lattice vectors is only implemented up to 2d; build "
+                    "the supercell with get_supercell(M,store_primal=True) so "
+                    "the replica bookkeeping is recorded")
         nfull = n0*nsuper[0]*nsuper[1]*nsuper[2] # orbitals in a complete supercell
         nactual = h.intra.shape[0] # orbitals in this Hamiltonian
         if nactual==nfull: # complete supercell (original, unmodified path)
             fs = bloch_phase_matrix(h0,nsuper=nsuper)
         elif nactual<nfull: # supercell that has had atoms removed
-            if h0.dimensionality>2: raise NotImplementedError
+            if h0.dimensionality>2:
+                raise NotImplementedError("unfolding a supercell with atoms "
+                        "removed is only implemented up to 2d")
             if n0%len(g0.r)!=0:
                 raise ValueError("unfolding: primal orbitals ("+str(n0)+
                     ") is not a multiple of the primal atom count ("+
@@ -107,7 +117,9 @@ def bloch_projector(h,g0=None):
             replicas,primal_indices = get_replica_map(h,g0,nsuper)
             fs = bloch_phase_matrix_general(h0,replicas,primal_indices,
                     norb_factor,nsuper)
-        else: raise # more orbitals than a complete supercell, not expected
+        else: # more orbitals than a complete supercell, not expected
+          raise ValueError("the Hamiltonian has more orbitals than a complete "
+                  "supercell of the primitive geometry accounts for")
     def fun(v,k=0):
         vo = np.conjugate(fs(k))@v # return vector
         out = np.abs(vo.dot(np.conjugate(vo))) # overlap
@@ -220,7 +232,9 @@ def bloch_phase_matrix_simple(self,nsuper=[1,1,1]):
     for a supercell. This is a simple non-optimal version
     of this function"""
     from scipy.sparse import bmat,csc_matrix
-    if self.dimensionality>2: raise
+    if self.dimensionality>2:
+        raise NotImplementedError("the Bloch phase matrix is only implemented "
+                "up to 2d")
     n = self.intra.shape[0] # dimensionality
     iden = csc_matrix(np.identity(n,dtype=np.complex128)) # identity
     ns = nsuper[0]*nsuper[1] # number of supercells
@@ -254,7 +268,9 @@ def bloch_phase_matrix(self,nsuper=[1,1,1]):
     """Given a Hamiltonian, return the matrix with Bloch phases
     for a supercell"""
     from scipy.sparse import bmat,csc_matrix
-    if self.dimensionality>2: raise
+    if self.dimensionality>2:
+        raise NotImplementedError("the Bloch phase matrix is only implemented "
+                "up to 2d")
     n = self.intra.shape[0] # dimensionality
     iden = csc_matrix(np.identity(n,dtype=np.complex128)) # identity
     ns = nsuper[0]*nsuper[1] # number of supercells

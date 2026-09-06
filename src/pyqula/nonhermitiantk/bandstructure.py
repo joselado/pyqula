@@ -86,6 +86,8 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
     if eigmode=="complex": pass # full eigenvalue
     elif eigmode=="real": esk[1] = esk[1].real # real part of eigenvalue
     elif eigmode=="imag": esk[1] = esk[1].imag # imag part of eigenvalue
-    else: raise
+    else:
+      raise ValueError("unknown eigmode; the accepted ones are 'complex', "
+              "'real' and 'imag'")
     return esk
 

@@ -63,7 +63,9 @@ def get_spinless2full(h,time_reversal=False,is_hamiltonian=True):
   elif h.check_mode("spinless_nambu"): 
       from .sctk import spinless
       return spinless.nambu
-  else: raise
+  else:
+    raise NotImplementedError("this Hilbert space cannot be promoted from the "
+            "spinless form")
   return outf
 
   
@@ -71,7 +73,8 @@ def get_spinless2full(h,time_reversal=False,is_hamiltonian=True):
 
 def get_spinful2full(h):
   """Function to transform a matrix into its full form"""
-  if not h.has_spin: raise
+  if not h.has_spin:
+    raise ValueError("promoting a spinful matrix needs a spinful Hamiltonian")
   else:
     if h.has_eh:
       from .superconductivity import build_eh

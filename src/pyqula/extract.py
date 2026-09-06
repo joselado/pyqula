@@ -158,7 +158,9 @@ def extract_from_hamiltonian(self,name,**kwargs):
         elif self.check_mode("spinless_nambu"): 
             from .sctk import spinless
             return spinless.extract_swave(self.intra)
-        else: raise
+        else:
+          raise ValueError("extracting the s-wave pairing needs a Nambu "
+                  "Hamiltonian; call h.setup_nambu_spinor() first")
     elif name=="CDW":
         if self.geometry.has_sublattice: # if it has sublattice
             v = self.extract("density")
@@ -188,7 +190,12 @@ def extract_from_hamiltonian(self,name,**kwargs):
     elif name=="absolute_spatial_delta": 
         from .sctk.extract import extract_absolute_spatial_pairing
         return extract_absolute_spatial_pairing(self,**kwargs)
-    else: raise
+    else:
+      raise ValueError("unknown quantity to extract; the accepted names are "
+              "'density', 'onsite', 'mx', 'my', 'mz', 'swave', 'SC', 'CDW', "
+              "'spin_mixing', 'hopping_spin_mixing', 'superfluidity', "
+              "'deltak', 'absolute_delta' and 'absolute_spatial_delta' (the "
+              "magnetizations need a spinful Hamiltonian)")
 
 
 
@@ -198,7 +205,9 @@ def extract_onsite_matrix_function(h,**kwargs):
     if h.check_mode("spinful"): # not implemented
       m = h.intra # get the matrix
       n = len(h.geometry.r) # number of sites
-      if 2*n!=m.shape[0]: raise
+      if 2*n!=m.shape[0]:
+        raise ValueError("the intracell matrix does not have two spin "
+                "components per site")
       def f(r):
         ind = h.geometry.get_index(r,**kwargs) # get the index
         if ind is None: return np.zeros((2,2),dtype=np.complex128)
@@ -230,7 +239,9 @@ def extract_spin_mixing(h):
     """Extract the spin mixing part of a Hamiltonian"""
     h = h.copy()
     h.remove_nambu() # remove nambu
-    if not h.has_spin: raise
+    if not h.has_spin:
+      raise ValueError("the spin mixing is only defined for spinful "
+              "Hamiltonians")
     dt = h.get_dict() # get the multihopping object
     out = 0 # output
     for key in dt: # loop
@@ -247,7 +258,9 @@ def extract_hopping_spin_mixing(h):
     """Extract the spin mixing part of a Hamiltonian"""
     h = h.copy()
     h.remove_nambu() # remove nambu
-    if not h.has_spin: raise
+    if not h.has_spin:
+      raise ValueError("the hopping spin mixing is only defined for spinful "
+              "Hamiltonians")
     dt = h.get_dict() # get the multihopping object
     out = 0 # output
     for key in dt: # loop

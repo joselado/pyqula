@@ -15,7 +15,8 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
         nunfold = 1, # flag for unfolding
         delta=1e-1,**kwargs):
     """Compute the QPI using a poor-mans convolution of the k-DOS"""
-    if h.dimensionality!=2: raise
+    if h.dimensionality!=2:
+        raise ValueError("the QPI is only implemented for 2d Hamiltonians")
     if reciprocal: fR = h.geometry.get_k2K_generator() # get matrix
     else:  fR = lambda x: x # get identity
     qs0 = h.geometry.get_kmesh(nk=nk*nsuper,nsuper=nsuper)
@@ -40,7 +41,8 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
         out = epsilonk(h,energies=energies,nk=nk,delta=delta,qs=qs) # output
         es = energies # redefine the energies
         dosa = np.sum([o[1] for o in out],axis=1) # DOS
-    else: raise
+    else:
+        raise ValueError("unknown mode; the QPI accepts 'pm' and 'response'")
 #    print(np.array(out).shape) ; exit()
     # now write everything #
     ########################################

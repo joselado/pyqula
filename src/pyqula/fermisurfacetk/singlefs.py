@@ -36,7 +36,9 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     else: # no operator given
         if mode=="full":
             operator = np.array(np.identity(h.intra.shape[0]))
-    if h.dimensionality!=2: raise  # continue if two dimensional
+    if h.dimensionality!=2: # continue if two dimensional
+        raise ValueError("the Fermi surface is only defined for 2d "
+                "Hamiltonians")
     hk_gen = h.get_hk_gen() # gets the function to generate h(k)
     from ..klist import int2dims
     nsupers = int2dims(nsuper) # get the array
@@ -85,14 +87,18 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                         num_bands=num_waves)
             return ds[0] # return weight
     elif mode=='det': # use determinant method, this is not too stable
-        if operator is not None: raise NotImplementedError
+        if operator is not None:
+            raise NotImplementedError("the determinant mode of the Fermi "
+                    "surface does not support an operator")
         else: # None operator
             iden = algebra.identity(h.intra)
             def get_weight(hk,k=None,**kwargs):
                 hk0 = hk - e*iden # shift by the energy
                 return 1./(np.abs(algebra.det(hk0))+delta)
 
-    else: raise # unrecognized mode
+    else: # unrecognized mode
+        raise ValueError("unknown mode; the Fermi surface accepts 'full', "
+                "'eigen', 'lowest' and 'det'")
   
   ##############################################
   

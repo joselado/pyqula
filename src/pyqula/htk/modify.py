@@ -18,7 +18,8 @@ def modify_hamiltonian_matrices(self,f0,use_geometry=False):
         # modify Hamiltonian matrix
         self.hopping[i].m = f(self.hopping[i].m,self.hopping[i].dir) 
     else: # conventional way, now disabled
-      raise
+      raise NotImplementedError("modifying the matrices of a non-multicell "
+              "Hamiltonian is disabled; call h.turn_multicell() first")
 
 
 from .. import algebra

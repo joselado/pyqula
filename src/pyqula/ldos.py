@@ -22,7 +22,8 @@ def ldos0d(h,e=0.0,delta=0.01,write=True):
   if h.dimensionality==0:  # only for 0d
     iden = np.identity(h.intra.shape[0],dtype=np.complex128) # create identity
     g = algebra.inv( (e+1j*delta)*iden -h.intra ) # calculate green function
-  else: raise NotImplementedError
+  else:
+    raise NotImplementedError("ldos0d is only for 0d Hamiltonians")
   d = [ -(g[i,i]).imag/np.pi for i in range(len(g))] # get imaginary part
   d = spatial_dos(h,d) # convert to spatial resolved DOS
   g = h.geometry  # store geometry
@@ -62,14 +63,18 @@ def dos_site_kpm(h,energies=np.linspace(-1.,1.,1000),
             (es,ds1) = get(4*i)
             (es,ds2) = get(4*i+1)
             ds = ds1+ds2
-        else: raise
+        else:
+          raise ValueError("unknown sector for a Nambu Hamiltonian; the "
+                  "accepted ones are None and 'electron'")
     elif h.has_spin and not h.has_eh: # spinful
         (es,ds1) = get(2*i)
         (es,ds2) = get(2*i+1)
         ds = ds1+ds2
     elif not h.has_spin and not h.has_eh: # spinless
         (es,ds) = get(i)
-    else: raise
+    else:
+      raise NotImplementedError("the KPM site DOS is not implemented for "
+              "spinless Nambu Hamiltonians")
     f = interp1d(es,ds.real,bounds_error=False,fill_value=0.0)
     return energies,f(energies)
 
@@ -80,7 +85,9 @@ def dos_site_kpm(h,energies=np.linspace(-1.,1.,1000),
 def dos_site(h,i=0,mode="ED",energies=np.linspace(-1.,1.,500),**kwargs):
     """DOS in a particular site for different energies"""
     if mode=="ED":
-      if h.dimensionality!=0: raise # only for 0d
+      if h.dimensionality!=0: # only for 0d
+        raise ValueError("the exact-diagonalization site DOS is only "
+                "implemented for 0d Hamiltonians")
       out = []
       for e in energies:
           d = ldos0d(h,e=e,write=False,**kwargs)
@@ -99,7 +106,8 @@ def ldos0d_wf(h,e=0.0,delta=0.01,num_wf = 10,robust=False,tol=0):
      writes it in file, using arpack"""
   if h.dimensionality==0:  # only for 0d
     intra = csc_matrix(h.intra) # matrix
-  else: raise NotImplementedError
+  else:
+    raise NotImplementedError("ldos0d_wf is only for 0d Hamiltonians")
   if robust: # go to the imaginary axis for stability
     eig,eigvec = slg.eigs(intra,k=int(num_wf),which="LM",
                         sigma=e+1j*delta,tol=tol) 
@@ -191,11 +199,13 @@ def spatial_energy_profile(h,**kwargs):
       pos = h.geometry.r[:,0]
   elif h.dimensionality==1: pos = h.geometry.r[:,1]
   elif h.dimensionality==2: pos = h.geometry.r[:,2]
-  else: raise
+  else:
+    raise ValueError("the spatial energy profile is only implemented for "
+            "Hamiltonians up to 2d")
   es,ds = ldosmap(h,**kwargs)
   if len(ds[0])!=len(pos): 
-    print("Wrong dimensions",len(ds[0]),len(pos))
-    raise
+    raise ValueError("the LDOS map has "+str(len(ds[0]))+" entries and the "
+            "list of positions has "+str(len(pos)))
   f = open("DOSMAP.OUT","w")
   f.write("# energy, index, DOS, position\n")
   for ie in range(len(es)):
@@ -218,7 +228,8 @@ slabldos = spatial_energy_profile # redefine
 def ldos1d(h,e=0.0,delta=0.001,nrep=3):
   """ Calculate DOS for a 1d system"""
   from . import green
-  if h.dimensionality!=1: raise # only for 1d
+  if h.dimensionality!=1: # only for 1d
+    raise ValueError("ldos1d is only for 1d Hamiltonians")
   gb,gs = green.green_renormalization(h.intra,h.inter,energy=e,delta=delta)
   d = [ -(gb[i,i]).imag for i in range(len(gb))] # get imaginary part
   d = spatial_dos(h,d) # convert to spatial resolved DOS
@@ -272,7 +283,9 @@ def get_ldos_general(h,projection="TB",**kwargs):
     elif projection=="atomic": 
         from .ldostk import atomicmultildos
         return atomicmultildos.get_ldos(h,**kwargs)
-    else: raise
+    else:
+      raise ValueError("unknown projection; get_ldos accepts 'TB', 'TBRS' and "
+              "'atomic'")
 
 
 def green2ldos(g,op=None):
@@ -321,7 +334,9 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
     if operator is not None: operator = h.get_operator(operator)
     if mode=="green":
       from . import green
-      if h.dimensionality!=2: raise # only for 2d
+      if h.dimensionality!=2: # only for 2d
+        raise ValueError("the Green's function LDOS is only implemented for "
+                "2d Hamiltonians")
       h = h.copy()
       h = h.get_dense()
       op = None # no operator
@@ -354,7 +369,9 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
         ds += [ldos_diagonalization(hk,e=e,delta=delta,operator=operator,
                                     k=k,**kwargs)]
       d = np.mean(ds,axis=0) # average
-    else: raise # not recognized
+    else: # not recognized
+      raise ValueError("unknown mode; the LDOS accepts 'green', 'arpack' and "
+              "'diagonalization'")
     # write result
     d = spatial_dos(h,d) # convert to spatial resolved DOS
     g = h.geometry  # store geometry
@@ -373,7 +390,9 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
     if interpolate:
         from .interpolation import atomic_interpolation
         xo,yo,do = atomic_interpolation(xo,yo,do,**kwargs)
-        if return_rd: raise NotImplementedError
+        if return_rd:
+          raise NotImplementedError("return_rd is not implemented together "
+                  "with the atomic interpolation")
     if write: 
 #        if return_rd: raise # not implemented
         write_ldos(xo,yo,do) # write in file
@@ -497,7 +516,8 @@ def write_ldos(x,y,dos,output_file="LDOS.OUT",z=None):
 
 def ldos_finite(h,e=0.0,n=10,nwf=4,delta=0.0001):
   """Calculate the density of states for a finite system"""
-  if h.dimensionality!=1: raise # if it is not one dimensional
+  if h.dimensionality!=1: # if it is not one dimensional
+    raise ValueError("ldos_finite is only for 1d Hamiltonians")
   intra = csc(h.intra) # convert to sparse
   inter = csc(h.inter) # convert to sparse
   interH = dagger(inter) # hermitian
@@ -526,7 +546,8 @@ def ldos_finite(h,e=0.0,n=10,nwf=4,delta=0.0001):
 def ldos_defect(h,v,e=0.0,delta=0.001,n=1):
   """Calculates the LDOS of a cell with a defect, writting the n
   neighring cells"""
-  raise # still not finished
+  raise NotImplementedError("ldos_defect is not implemented; use the "
+          "Embedding class for a defect in an infinite system")
   from . import green
   # number of repetitions
   rep = 2*n +1

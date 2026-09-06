@@ -102,7 +102,9 @@ class Hamiltonian():
         from . import sculpt
         self.geometry = sculpt.remove_sites(self.geometry,store)
         from .algebratk.matrixcrop import crop_matrix
-        if self.has_spin: raise
+        if self.has_spin:
+            raise NotImplementedError("remove_sites is not implemented for "
+                    "spinful Hamiltonians")
         f = lambda m: crop_matrix(m,store)
         self.modify_hamiltonian_matrices(f) # modify all the matrices
     def get_filling(self,**kwargs):
@@ -608,11 +610,16 @@ class Hamiltonian():
       elif self.check_mode("spinful"):
           if channel=="up": c = 0
           elif channel=="dn": c = 1
-          else: raise
+          else:
+              raise ValueError("unknown spin channel; remove_spin accepts 'up' "
+                      "and 'dn'")
           def f(m): return des_spin(m,component=c)
           self.modify_hamiltonian_matrices(f) # modify the matrices
           self.has_spin = False # set to spinless
-      else: raise
+      else:
+          raise NotImplementedError("remove_spin is not implemented for "
+                  "Hamiltonians with the electron-hole (Nambu) degree of "
+                  "freedom; call h.remove_nambu() first")
     def remove_nambu(self):
       if self.check_mode("spinful_nambu"): 
           def f(m):
@@ -621,7 +628,9 @@ class Hamiltonian():
           self.has_eh = False # set to normal
       elif self.check_mode("spinful"): pass
       elif self.check_mode("spinless"): pass
-      else: raise
+      else:
+          raise NotImplementedError("remove_nambu is not implemented for this "
+                  "Hilbert space")
     def add_onsite(self,fermi):
       """ Move the Fermi energy of the system"""
       shift_fermi(self,fermi)
@@ -658,7 +667,9 @@ class Hamiltonian():
       elif self.dimensionality == 3:
         from .multicell import first_neighbors as fnm
         fnm(self)
-      else: raise
+      else:
+          raise ValueError("the first-neighbor hopping needs a dimensionality "
+                  "between 0 and 3")
     def add_hopping_matrix(self,fm,**kwargs):
         """
         Add a certain hopping matrix to the Hamiltonian. Any extra keyword
@@ -748,7 +759,9 @@ class Hamiltonian():
         return _mean_field_scf_result(VJinteraction(self,**kwargs),return_total_energy)
     def get_tails(self,discard=None):
         """Write the tails of the wavefunctions"""
-        if self.dimensionality!=0: raise
+        if self.dimensionality!=0:
+            raise ValueError("the tails of the wavefunctions are only defined "
+                    "for 0d Hamiltonians")
         else: return tails.matrix_tails(self.intra,discard=discard)
     def copy(self):
         """
@@ -768,7 +781,7 @@ class Hamiltonian():
         self.turn_multicell() # turn to multicell mode
         from superconductivity import eh_operator
         f = eh_operator(self.intra) # electron hole operator
-        raise NotImplementedError
+        raise NotImplementedError("enforce_eh is not implemented")
     def turn_sparse(self):
         """
         Transforms the hamiltonian into a sparse hamiltonian
@@ -866,7 +879,10 @@ class Hamiltonian():
         add_inplane_bfield(self,**kwargs)
     def align_magnetism(self,vectors=None):
         """ Rotate the Hamiltonian to have magnetism in the z direction"""
-        if self.has_eh: raise
+        if self.has_eh:
+            raise NotImplementedError("align_magnetism is not implemented for "
+                    "Hamiltonians with the electron-hole (Nambu) degree of "
+                    "freedom")
         from .rotate_spin import align_magnetism as align
         f = lambda m: align(m,vectors) # align the matrix
         if vectors is None: # get the magnetization
@@ -976,7 +992,9 @@ class Hamiltonian():
         """Return a 1d Hamiltonian"""
         if self.is_multicell: # not implemented
             self = self.get_no_multicell() # return the no multicell Hamiltonian
-        if not self.dimensionality==2: raise NotImplementedError
+        if not self.dimensionality==2:
+            raise NotImplementedError("get_1dh takes a 2d Hamiltonian, and "
+                    "returns the 1d one at a fixed transverse momentum")
         intra,inter = kchain(self,k=k) # generate intra and inter
         hout = self.copy() # copy the Hamiltonian
         hout.intra = intra # store
@@ -1004,8 +1022,9 @@ class Hamiltonian():
             for t in h0.hopping:
                 print(t.m)
                 print(t.dir)
-            print("Hamiltonian cannot be made no multicell")
-            raise
+            raise ValueError("this Hamiltonian cannot be written in the "
+                    "non-multicell form, it couples cells beyond first "
+                    "neighbors")
         else: return h1 # return the Hamiltonian
     def clean(self):
         """Clean a Hamiltonian"""
@@ -1042,7 +1061,9 @@ class Hamiltonian():
         from . import ipr
         if self.dimensionality==0:
             return ipr.ipr(self.intra,**kwargs) 
-        else: raise NotImplementedError
+        else:
+            raise NotImplementedError("the IPR is only implemented for 0d "
+                    "Hamiltonians")
     @get_docstring(dvector.dvector_non_unitarity)
     def get_dvector_non_unitarity(self,**kwargs):
         return dvector.dvector_non_unitarity(self,**kwargs)
@@ -1169,7 +1190,9 @@ def shift_fermi(h,fermi):
     if checkclass.is_iterable(fermi): # iterable
       if len(fermi)==n: # same number of sites
         h.intra = h.intra + h.spinless2full(sparse_diag([fermi],[0]))
-      else: raise
+      else:
+          raise ValueError("a site-dependent Fermi energy needs one value per "
+                  "site")
     else:
       rc = [i for i in range(n)]  # index
       datatmp = [] # data
@@ -1211,7 +1234,9 @@ def first_neighborsnd(h):
     h.ty = gett(r,r+a2)
     h.txy = gett(r,r+a1+a2)
     h.txmy = gett(r,r+a1-a2)
-  else: raise
+  else:
+      raise ValueError("the non-multicell first-neighbor hopping is only "
+              "implemented up to 2d")
 
 
 

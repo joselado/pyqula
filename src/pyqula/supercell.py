@@ -29,8 +29,8 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
   vold = a1.dot(np.cross(a2,a3))  
   vnew = go.a1.dot(np.cross(go.a2,go.a3))  
   if abs(vnew)<0.0001: 
-    print("No volume",vnew,"\n",a1,"\n",a2,"\n",a3)
-    raise
+    raise ValueError("the supercell transformation matrix is singular, the "
+            "resulting cell has volume "+str(vnew))
   c = vnew/vold
   c = int(round(abs(c)))
   # now create replicas until there as c times as many atoms in the
@@ -89,11 +89,9 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
     go.supercell_replica = np.concatenate(replica_parts) if replica_parts else np.zeros((0,3),dtype=int)
     go.supercell_primal_index = np.concatenate(primal_parts) if primal_parts else np.array([],dtype=int)
     if len(rs)!=len(g.r)*c:
-      print("Not all the atoms have been found")
-      print("New atoms",len(rs))
-      print("Expected atoms",len(g.r)*c)
-      print("Volume of the cell increase",c)
-      raise
+      raise ValueError("not all the atoms of the supercell have been found: "
+              +str(len(rs))+" found, "+str(len(g.r)*c)+" expected for a "
+              "cell-volume increase of "+str(c)+"; increase ncheck")
   elif mode=="brute":
     if g.dimensionality==1:
       rs3 = replicate3d(g.r,g.a1,g.a2,g.a3,c,1,1) # new positions
@@ -101,7 +99,9 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
       rs3 = replicate3d(g.r,g.a1,g.a2,g.a3,c,c,1) # new positions
     elif g.dimensionality==3:
       rs3 = replicate3d(g.r,g.a1,g.a2,g.a3,c,c,c) # new positions
-    else: raise NotImplementedError
+    else:
+      raise NotImplementedError("the brute-force supercell is only "
+              "implemented for geometries of dimensionality 1, 2 and 3")
     while True: # infinite loop, stop when scf reached
       rs1 = np.array(rs3) # store the first iteration
 #      print(rs1)
@@ -155,7 +155,9 @@ def return_unique(rs1,rs2):
 
 def target_angle_volume(g,angle=None,n=5,volume=None,same_length=False):
     """Return a supercell, targetting a certain new angle between vectors"""
-    if g.dimensionality!=2: raise # only for 2d
+    if g.dimensionality!=2: # only for 2d
+      raise ValueError("target_angle_volume is only implemented for 2d "
+              "geometries")
     a1 = g.a1
     a2 = g.a2
     def getm(): # get the matrix
@@ -188,7 +190,9 @@ def target_angle_volume(g,angle=None,n=5,volume=None,same_length=False):
       vs = [v[i] for i in idx] # their volumes
       return [o for (v,o) in sorted(zip(vs,out))][0]
     out = getm() # get rotation matrix
-    if out is None: raise # no supercell found
+    if out is None: # no supercell found
+      raise ValueError("no supercell with the requested angle or volume was "
+              "found; increase n")
     g = g.get_supercell(out) # generate the right supercell
     g = sculpt.rotate_a2b(g,g.a1,np.array([1.,0.,0.])) # set in the x direction
     return g
@@ -207,7 +211,9 @@ def infer_supercell(g,g0):
     elif g.dimensionality==2: # assume is orthogonal
         nx = int(np.round(norm(g.a1)/norm(g0.a1),1)) # out
         ny = int(np.round(norm(g.a2)/norm(g0.a2),1)) # out
-    else: raise
+    else:
+      raise NotImplementedError("infer_supercell is only implemented for 1d "
+              "and 2d geometries")
     # probably a check should be added here
     return (nx,ny,1)
       

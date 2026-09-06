@@ -14,7 +14,9 @@ def get_valley(h,delta=None,**kwargs):
   hkgen = ho.get_hk_gen() # get generator for the hk Hamiltonian
   sharpen = get_sharpen(delta=delta) # renormalize eigenvalues to +-1
   def fun(m=None,k=None):
-      if h.dimensionality>0 and k is None: raise # requires a kpoint
+      if h.dimensionality>0 and k is None: # requires a kpoint
+        raise ValueError("the valley operator of a periodic Hamiltonian has "
+                "to be evaluated at a k-point, and none was given")
       hk = hkgen(k) # evaluate Hamiltonian
       hk = sharpen(hk) # sharpen the valley
       if m is None: return hk # just return the valley operator

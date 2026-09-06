@@ -21,7 +21,9 @@ def write_xyz(gin,output_file = "crystal.xyz",units=0.529,nsuper=1):
   else:
     names = ["C" for ix in x ] # create names
   # check that there are as many names as positions
-  if len(names)!=len(x): raise
+  if len(names)!=len(x):
+    raise ValueError("there are as many atom names as positions expected, and "
+            "there are not")
   fg.write(str(len(x))+"\nGenerated with Python\n") # number of atoms
   for (n,ix,iy,iz) in zip(names,x,y,z):
     fg.write(n+"   "+str(ix)+ "     "+str(iy)+"   "+str(iz)+"  \n")
@@ -46,7 +48,9 @@ def write_lattice(g,output_file = "LATTICE.OUT"):
     fg.write(str(g.a1[0])+"   "+str(g.a1[1])+"  "+str(g.a1[2])+"\n")
     fg.write(str(g.a2[0])+"   "+str(g.a2[1])+"  "+str(g.a2[2])+"\n")
     fg.write(str(g.a3[0])+"   "+str(g.a3[1])+"  "+str(g.a3[2])+"\n")
-  else: raise
+  else:
+    raise ValueError("writing the lattice needs a dimensionality between 0 "
+            "and 3")
   fg.close()
 
 
@@ -88,7 +92,9 @@ def write_vasp(g0,s=1.42,namefile="vasp.vasp"):
         g.a3 = a3 # set the lattice vector
         g.dimensionality = 3
         g.get_fractional() # get fractional coordinates
-    else: raise NotImplementedError
+    else:
+      raise NotImplementedError("the VASP writer is only implemented for 2d "
+              "and 3d geometries")
     f = open(namefile,"w") # input file
     f.write("Structure\n 1.0\n")
     for i in range(3): f.write(str(s*g.a1[i])+"  ")

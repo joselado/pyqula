@@ -6,7 +6,8 @@ from .ldos import write_ldos as write_wave
 
 def states0d(h,ewindow=[-.5,.5],signed=False,prefix=""):
   """Write in files the different states"""
-  if not h.dimensionality==0: raise
+  if not h.dimensionality==0:
+    raise ValueError("states0d is only for 0d Hamiltonians")
   (evals,evecs) = lg.eigh(h.intra)
   evecs = evecs.transpose() # transpose list
   for i in range(len(evals)):
@@ -31,7 +32,8 @@ def states0d(h,ewindow=[-.5,.5],signed=False,prefix=""):
 
 def states2d(h,ewindow=[-.5,.5],signed=False,prefix="",k=[0.,0.,0.],nrep=3):
   """Write in files the different states in 2d"""
-  if not h.dimensionality==2: raise
+  if not h.dimensionality==2:
+    raise ValueError("states2d is only for 2d Hamiltonians")
   hk = h.get_hk_gen() # get generator
   m = hk(k) # stre this matrix
   (evals,evecs) = lg.eigh(m)

@@ -203,7 +203,9 @@ def get_triplet_generator(df,nn=1,H=None,**kwargs):
 def get_triplet(r1,r2,df,L=1,dist2=1.0):
     """Function for triplet order"""
     dr = r1-r2 ; dr2 = dr.dot(dr)
-    if abs(L)%2!=1: raise
+    if abs(L)%2!=1:
+        raise ValueError("a triplet order parameter needs an odd angular "
+                "momentum L")
     if np.abs(dr2-dist2)<1e-4:
         phi = np.arctan2(dr[1],dr[0])
         d = df((r1+r2)/2.) # evaluate dvector
@@ -215,7 +217,9 @@ def get_triplet(r1,r2,df,L=1,dist2=1.0):
 
 def get_singlet(r1,r2,L=2,phi0=0.,H=None,nn=1):
     """Function for p-wave order"""
-    if L%2!=0: raise
+    if L%2!=0:
+        raise ValueError("a singlet order parameter needs an even angular "
+                "momentum L")
     dr = r1-r2 ; dr2 = dr.dot(dr)
     if nn>1: # more than first neighbor
       dist = H.geometry.get_neighbor_distances(n=nn)[nn-1] # get this distance

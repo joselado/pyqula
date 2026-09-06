@@ -8,8 +8,12 @@ from .. import algebra
 def explicit_rkky(h,ri=None,rj=None,nk=10,dj=1e-1):
     """Compute the RKKY interaction explicitly by adding
     local exchange fields"""
-    if ri is None: raise
-    if rj is None: raise
+    if ri is None:
+      raise ValueError("explicit_rkky needs the position of the first "
+              "impurity, pass it as ri")
+    if rj is None:
+      raise ValueError("explicit_rkky needs the position of the second "
+              "impurity, pass it as rj")
     h0 = h.copy() # copy Hamiltonian
     h0.turn_spinful() # spinfull Hamiltonian
     filling = h0.get_filling(nk=nk) # get the filling of the Hamiltonian
@@ -39,8 +43,10 @@ def explicit_rkky(h,ri=None,rj=None,nk=10,dj=1e-1):
 # mainly for 0d, yet it can apply to 2d with PBC
 
 def rkky_atom(hin,delta=0.001,i=None,filling=0.5):  
-  if h.dimensionality != 0: raise # only for 0d
-  if i is None: raise # default value
+  if h.dimensionality != 0: # only for 0d
+    raise ValueError("rkky_atom is only for 0d Hamiltonians")
+  if i is None: # default value
+    raise ValueError("rkky_atom needs the index of the site, pass it as i")
   else: r0 = hin.geometry.r[i]
   no = hin.intra.shape[0]
   # unperturbed hamiltonian
@@ -76,9 +82,14 @@ def rkky_atom(hin,delta=0.001,i=None,filling=0.5):
 
 def rkky0d(h,check=False):
   """Calculate RKKY interaction for a 0d system"""
-  if h.dimensionality != 0: raise # only for 0d
-  if h.has_spin: raise # only for spinless
-  if h.has_eh: raise # only for electrons
+  if h.dimensionality != 0: # only for 0d
+    raise ValueError("rkky0d is only for 0d Hamiltonians")
+  if h.has_spin: # only for spinless
+    raise ValueError("rkky0d is only for spinless Hamiltonians, the exchange "
+            "field is added by the routine itself")
+  if h.has_eh: # only for electrons
+    raise NotImplementedError("rkky0d is not implemented for Hamiltonians "
+            "with the electron-hole (Nambu) degree of freedom")
   m = [] #empty matrix
   for i in range(h.intra.shape[0]): # loop over sites
     row = rkky_atom_v1(h,i=i)
@@ -86,7 +97,8 @@ def rkky0d(h,check=False):
   m = np.array(m)
   diff = np.sum(np.abs(m - np.transpose(m)))
   if check: # check that it is symmetric
-    if diff>0.01: raise
+    if diff>0.01:
+      raise ValueError("the RKKY matrix came out non-symmetric")
     print("RKKY matrix is symmetric")
   m = (m + np.transpose(m))/2.0  # symmetrize
   return m # return correlation matrix
@@ -95,8 +107,10 @@ def rkky0d(h,check=False):
 
 
 def rkky_atom_v1(hin,delta=0.001,i=None,filling=0.5):  
-  if hin.dimensionality != 0: raise # only for 0d
-  if i is None: raise # default value
+  if hin.dimensionality != 0: # only for 0d
+    raise ValueError("rkky_atom_v1 is only for 0d Hamiltonians")
+  if i is None: # default value
+    raise ValueError("rkky_atom_v1 needs the index of the site, pass it as i")
   else: r0 = hin.geometry.r[i]
   no = hin.intra.shape[0]
   def denshift(delta2):

@@ -159,7 +159,9 @@ def generate_HT(ht,SC=True,**kwargs):
     elif type(ht)==DualLocalProbe: # Dual Localprobe object
         if SC: return ht.SC_LP
         else: return ht.normal_LP
-    else: raise
+    else:
+        raise TypeError("kappa takes a HTstructure, a LocalProbe or a "
+                "DualLocalProbe")
 
 
 #### Finite-temperature kappa: same SC/normal power-law-ratio idea as

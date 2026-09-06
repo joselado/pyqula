@@ -62,7 +62,9 @@ def berry_green(f,emin=-10.0,k=[0.,0.,0.],ne=100,dk=1e-4,operator=None,gI=None):
 def berry_operator(h,delta=1e-1,**kwargs):
     """Return ap operator that computes the Berry curvature for a certain
     wavefunction"""
-    if h.dimensionality!=2: raise
+    if h.dimensionality!=2:
+        raise ValueError("the Berry operator is only defined for 2d "
+                "Hamiltonians")
     h = h.copy()
     hk = h.get_hk_gen() # get generator
     gk = h.get_gk_gen(delta=delta) # get generator

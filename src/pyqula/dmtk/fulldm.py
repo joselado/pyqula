@@ -13,7 +13,9 @@ def full_dm_python(es,vs,delta=1e-7):
       return full_dm_explicit(n,np.array(es),np.array(vs),delta=delta)
   elif mode=="vectorized":
       return full_dm_vectorized(np.array(es),np.array(vs),delta=delta)
-  else: raise
+  else:
+      raise ValueError("unknown mode; the density matrix accepts 'explicit' "
+              "and 'vectorized'")
 
 
 def full_dm_python_d(es,vs,ks,d,delta=1e-7):
@@ -31,7 +33,9 @@ def full_dm_python_d(es,vs,ks,d,delta=1e-7):
                                   np.array(ks),
                                   np.array(d),
                                   delta=delta)
-  else: raise
+  else:
+      raise ValueError("unknown mode; the density matrix accepts 'explicit' "
+              "and 'vectorized'")
 
 
 

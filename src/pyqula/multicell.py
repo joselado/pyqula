@@ -133,7 +133,9 @@ def hk_gen(h,**kwargs):
               mout = mout + tk 
             return mout
           return hk  # return the function
-        else: raise
+        else:
+          raise ValueError("the Hamiltonian has an unsupported dimensionality "
+                  "for generating h(k)")
 
 
 
@@ -145,7 +147,9 @@ def turn_spinful(h,enforce_tr=False):
   """Turn a hamiltonian spinful"""
   from .increase_hilbert import spinful
   from .superconductivity import time_reversal
-  if h.has_eh: raise
+  if h.has_eh:
+    raise NotImplementedError("turn_spinful is not implemented for "
+            "Hamiltonians with the electron-hole (Nambu) degree of freedom")
   if h.has_spin: return # return if already has spin
   h.has_spin = True # put spin
   def fun(m):
@@ -202,7 +206,8 @@ def basis_change(h,R):
 def clean(h,cutoff=1e-4):
   """Remove hoppings smaller than a certain quantity"""
   ho = h.copy() # copy hamiltonian
-  raise 
+  raise NotImplementedError("multicell.clean is not implemented; use "
+          "Hamiltonian.clean instead")
 
 
 
@@ -328,7 +333,9 @@ def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0):
 def parametric_matrix(h,cutoff=2,fm=None):
   """ Gets a first neighbor hamiltonian"""
   from .neighbor import parametric_hopping
-  if fm is None: raise
+  if fm is None:
+    raise ValueError("parametric_matrix needs a hopping function, pass it as "
+            "fm")
   r = h.geometry.r    # x coordinate 
   g = h.geometry
   h.is_multicell = True
@@ -399,7 +406,9 @@ def read_from_file(input_file="hamiltonian.wan"):
     for j in range(-ncells[1],ncells[1]+1):
       for k in range(-ncells[2],ncells[2]+1):
         dm = get_hopping(i,j,k) - dagger(get_hopping(-i,-j,-k))
-        if np.sum(np.abs(dm))>0.0001: raise
+        if np.sum(np.abs(dm))>0.0001:
+          raise ValueError("the hopping generator read from file is not "
+                  "Hermitian")
   print("Hopping generator is Hermitian")
   return get_hopping # return the function
      
@@ -465,7 +474,10 @@ def turn_no_multicell(h,tol=1e-5):
   """Converts a Hamiltonian into the non multicell form"""
   from .htk.kchain import detect_longest_hopping
   if not h.is_multicell: return h # Hamiltonian is already fine
-  if detect_longest_hopping(h)>1: raise # error
+  if detect_longest_hopping(h)>1: # error
+    raise ValueError("turn_no_multicell only works for Hamiltonians with "
+            "first-neighbor-cell hoppings, this one couples cells further "
+            "apart")
   if h.dimensionality>2: return h # too high dimensionality
   ho = h.copy() # copy Hamiltonian
   ho.is_multicell = False
@@ -478,13 +490,16 @@ def turn_no_multicell(h,tol=1e-5):
     ho.txmy = ho.intra*0.
     ho.ty = ho.intra*0.
   else: 
-      raise # just in case
+    raise ValueError("turn_no_multicell only supports dimensionalities 0, 1 "
+            "and 2")
   for t in h.hopping: # loop over hoppings
     if h.dimensionality==0: pass # one dimensional
     elif h.dimensionality==1: # one dimensional
       if t.dir[0]==1 and t.dir[1]==0 and t.dir[2]==0: # 
         ho.inter = t.m # store
-      elif np.sum(np.abs(t.m))>tol and np.max(np.abs(t.dir))>1: raise # Uppps, not possible
+      elif np.sum(np.abs(t.m))>tol and np.max(np.abs(t.dir))>1: # Uppps, not possible
+        raise ValueError("this 1d Hamiltonian couples cells further apart "
+                "than first neighbors, and has no non-multicell form")
     elif h.dimensionality==2: # two dimensional
       if t.dir[0]==1 and t.dir[1]==0 and t.dir[2]==0: # 
         ho.tx = t.m # store
@@ -494,9 +509,12 @@ def turn_no_multicell(h,tol=1e-5):
         ho.txy = t.m # store
       elif t.dir[0]==1 and t.dir[1]==-1 and t.dir[2]==0: # 
         ho.txmy = t.m # store
-      elif np.sum(np.abs(t.m))>tol and np.max(np.abs(t.dir))>1: raise # Uppps, not possible
+      elif np.sum(np.abs(t.m))>tol and np.max(np.abs(t.dir))>1: # Uppps, not possible
+        raise ValueError("this 2d Hamiltonian couples cells further apart "
+                "than first neighbors, and has no non-multicell form")
     else: 
-        raise # just in case
+      raise ValueError("turn_no_multicell only supports dimensionalities 0, "
+              "1 and 2")
   ho.hopping = [] # empty list
   return ho
 

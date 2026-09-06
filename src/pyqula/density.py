@@ -34,7 +34,9 @@ def restricted_density(intra,n=20,e=0.0,window=0.1,mode="arpack",
       if 0.0<(ie-e)<window: d = d + np.abs(iw)*np.abs(iw) # add
     elif window_mode=="filled":
       if ie<e: d = d + np.abs(iw)*np.abs(iw) # add
-    else: raise
+    else:
+      raise ValueError("unknown window_mode; restricted_density accepts "
+              "'around', 'below', 'above' or 'filled'")
   return d # return contribution
 
 

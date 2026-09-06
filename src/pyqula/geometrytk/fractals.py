@@ -33,7 +33,9 @@ def sierpinski(n=4,mode="triangle"):
         a2 = g0.a2 
         vs = [a1,a2]
         inflate = lambda i: 2**i # inflate function
-    else: raise
+    else:
+        raise ValueError("unknown mode; sierpinski accepts 'triangular', "
+                "'square' and 'honeycomb'")
     for i in range(n): # loop over replicas
         r0 = r.copy() # copy
         for a in vs:

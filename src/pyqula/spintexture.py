@@ -5,8 +5,12 @@ def kfun_map(h,nk=50,
                nsuper=1,reciprocal=True,
                operator=None,k0=[0.,0.]):
     """ Calculate a reciprocal space map"""
-    if operator is None: raise
-    if h.dimensionality!=2: raise  # continue if two dimensional
+    if operator is None:
+        raise ValueError("kfun_map needs the operator whose reciprocal-space "
+                "map is computed")
+    if h.dimensionality!=2: # continue if two dimensional
+        raise ValueError("a reciprocal-space map is only defined for 2d "
+                "Hamiltonians")
     hk_gen = h.get_hk_gen() # gets the function to generate h(k)
     kxs = np.linspace(-nsuper,nsuper,nk)+k0[0]  # generate kx
     kys = np.linspace(-nsuper,nsuper,nk)+k0[1]  # generate ky

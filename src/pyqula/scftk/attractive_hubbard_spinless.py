@@ -13,7 +13,9 @@ mf_file = "MF.pkl"
 def attractive_hubbard(h0,mf=None,mix=0.9,g=0.0,nk=8,solver="plain",
         maxerror=1e-5,**kwargs):
     """Perform the SCF mean field"""
-    if not h0.check_mode("spinless"): raise # sanity check
+    if not h0.check_mode("spinless"): # sanity check
+      raise ValueError("the spinless attractive Hubbard mean field needs a "
+              "spinless Hamiltonian")
     h = h0.copy() # initial Hamiltonian
     if mf is None:
       try: dold = inout.load(mf_file) # load the file
@@ -53,7 +55,9 @@ def attractive_hubbard(h0,mf=None,mix=0.9,g=0.0,nk=8,solver="plain",
         elif solver=="anderson": fsolver = optimize.anderson
         elif solver=="broyden": fsolver = optimize.broyden2
         elif solver=="linear": fsolver = optimize.linearmixing
-        else: raise
+        else:
+          raise ValueError("unknown solver; the accepted ones are 'plain', "
+                  "'newton', 'anderson', 'broyden' and 'linear'")
         def fsol(x): return x - f(x) # function to solve
         dold = fsolver(fsol,dold,f_tol=maxerror)
     h = h0.copy() # copy Hamiltonian

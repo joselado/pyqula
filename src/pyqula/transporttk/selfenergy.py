@@ -12,7 +12,8 @@ def get_selfenergy(self,energy,lead=0,delta=None,pristine=False,numba=None):
    if delta is None:  delta = self.delta
 # if the interpolation function has been created
    if self.interpolated_selfenergy:
-       raise # this is not maintained anymore
+       raise NotImplementedError("the interpolated selfenergy is not "
+               "maintained anymore")
        if lead==0: return np.array(self.selfgen[0](energy)) # return selfenergy
        if lead==1: return np.array(self.selfgen[1](energy)) # return selfenergy
 # run the calculation
@@ -29,7 +30,8 @@ def get_selfenergy(self,energy,lead=0,delta=None,pristine=False,numba=None):
            if pristine: cou = self.right_inter
            else: cou = self.right_coupling*self.scale_rc
            deltal = delta + self.extra_delta_right # new delta right
-       else: raise NotImplementedError
+       else:
+           raise ValueError("a junction has two leads, so lead must be 0 or 1")
        ggg,gr = green_renormalization(intra,inter,energy=energy,delta=deltal,
                                        numba=numba)
        selfr = cou@gr@dagger(cou) # selfenergy
@@ -46,7 +48,9 @@ def get_selfenergy_batch(self,energies,lead=0,delta=None,pristine=False):
    use_minimal_selfenergy/interpolated_selfenergy -- those are cheap
    already and callers needing this batching (keldyshtk/current.py) never
    set them."""
-   if self.use_minimal_selfenergy or self.interpolated_selfenergy: raise
+   if self.use_minimal_selfenergy or self.interpolated_selfenergy:
+       raise NotImplementedError("the batched selfenergy does not support the "
+               "minimal or the interpolated selfenergy")
    if delta is None: delta = self.delta
    if lead==0:
        intra = self.left_intra
@@ -60,7 +64,8 @@ def get_selfenergy_batch(self,energies,lead=0,delta=None,pristine=False):
        if pristine: cou = self.right_inter
        else: cou = self.right_coupling*self.scale_rc
        deltal = delta + self.extra_delta_right # new delta right
-   else: raise NotImplementedError
+   else:
+       raise ValueError("a junction has two leads, so lead must be 0 or 1")
    ggg,gr = green_renormalization_jit_batch(intra,inter,energies,delta=deltal)
    cou = np.array(cou) # dense, for the batched matmul below
    return cou@gr@dagger(cou) # selfenergy at every energy, batched matmul
@@ -69,7 +74,9 @@ def get_selfenergy_batch(self,energies,lead=0,delta=None,pristine=False):
 def minimal_selfenergy(self,lead=0,**kwargs):
     """Function returning a minimal selfenergy"""
     print("Using a dummy metallic selfenergy")
-    if not self.use_minimal_selfenergy: raise # make sure this is ok
+    if not self.use_minimal_selfenergy: # make sure this is ok
+        raise ValueError("the dummy metallic selfenergy needs "
+                "use_minimal_selfenergy to be set")
     gamma = self.minimal_selfenergy_gamma # get the gamma
     # reescale for compatibility with everything else
     if lead==0: 
