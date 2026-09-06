@@ -29,8 +29,23 @@ def dvector2deltas_old(ds):
     return np.array(deltas)
 
 
+def check_spinful_nambu(h):
+    """Raise unless h has both the spin and the electron-hole degree of
+    freedom. Everything below reads the pairing out of a 4x4 spin x
+    electron-hole block per site (extract.extract_triplet_pairing), so on
+    any other Hilbert space it silently returns an array of the wrong
+    length -- zeros for a spinful non-Nambu Hamiltonian, an empty array
+    (and nan means) for a spinless Nambu one."""
+    if not h.check_mode("spinful_nambu"):
+        raise ValueError("the d-vector needs a spinful Nambu Hamiltonian "
+          +"(has_spin and has_eh); this one has has_spin="+str(h.has_spin)
+          +" and has_eh="+str(h.has_eh)+". Call setup_nambu_spinor() on a "
+          +"spinful Hamiltonian first")
+
+
 def extract_dvector_from_hamiltonian(h):
     """Return a function that computes the d-vector matrix at a k-point"""
+    check_spinful_nambu(h) # the extraction assumes this Hilbert space
     hk = h.get_hk_gen() # get Bloch Hamiltonian generator
     def f(k): # define function
         m = hk(k) # compute Bloch Hamiltonian
@@ -74,7 +89,6 @@ def average_hamiltonian_dvector(h,nk=10,
          carries no sign, so use it to ask whether the state is
          non-unitary rather than in which direction.
     """
-    if not h.has_eh: raise
     f = extract_dvector_from_hamiltonian(h) # function to extract the d-vector
     ks = h.geometry.get_kmesh(nk=nk) # get k-mesh
     out = np.array([f(k) for k in ks]) # compute d-vector matrices
@@ -88,6 +102,7 @@ def average_hamiltonian_dvector(h,nk=10,
 
 def dvector_times_rij_map(h,nrep=4):
     """Compute the dvector times rij"""
+    check_spinful_nambu(h) # the extraction assumes this Hilbert space
     h = h.supercell(nrep) # create a supercell (if needed)
     hi = h.get_hopping_dict()[(0,0,0)]
     dms = matrix2dvector(hi) # get the dvectors
@@ -103,6 +118,7 @@ def dvector_times_rij_map(h,nrep=4):
 
 def dvector_times_mij_map(h,nrep=4):
     """Compute the dvector times rij"""
+    check_spinful_nambu(h) # the extraction assumes this Hilbert space
     h = h.supercell(nrep) # create a supercell (if needed)
     hi = h.get_hopping_dict()[(0,0,0)]
     dms = matrix2dvector(hi) # get the dvectors

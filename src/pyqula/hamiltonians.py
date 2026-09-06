@@ -648,16 +648,19 @@ class Hamiltonian():
         from .multicell import first_neighbors as fnm
         fnm(self)
       else: raise
-    def add_hopping_matrix(self,fm):
+    def add_hopping_matrix(self,fm,**kwargs):
         """
-        Add a certain hopping matrix to the Hamiltonian
+        Add a certain hopping matrix to the Hamiltonian. Any extra keyword
+        (in particular nc, the neighbor cutoff) is forwarded to the
+        geometry's Hamiltonian builder -- raise it above its default when
+        fm reaches beyond the cells that default cutoff covers.
         """
         if not self.is_multicell: 
             self.turn_multicell()
             #raise # this may not work for multicell
         h = self.geometry.get_hamiltonian(has_spin=self.has_spin,
                 is_multicell=self.is_multicell,
-                mgenerator=fm) # generate a new Hamiltonian
+                mgenerator=fm,**kwargs) # generate a new Hamiltonian
         self.add_hamiltonian(h) # add this contribution
     def add_hamiltonian(self,h):
         """
@@ -665,12 +668,11 @@ class Hamiltonian():
         """
         if not self.is_multicell: # not implemented
             self.turn_multicell()
-        hd = h.get_dict() # get the dictionary
-        self.intra = self.intra + hd[(0,0,0)] # add the matrix
-        for i in range(len(self.hopping)):
-            d = tuple(self.hopping[i].dir)
-            if d in hd:
-              self.hopping[i].m = self.hopping[i].m + hd[d]
+        # this used to loop over the directions self already had, so any
+        # lattice direction present only in h was dropped in silence
+        from .multihopping import MultiHopping
+        mh = MultiHopping(self.get_dict()) + MultiHopping(h.get_dict())
+        self.set_multihopping(mh) # store the merged hoppings
     def get_dict(self):
         """
         Return the dictionary that yields the hoppings

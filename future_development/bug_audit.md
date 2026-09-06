@@ -28,23 +28,36 @@ the +-E BdG pair cancellation makes it numerically identical to the linear
 form. Not a bug.
 
 Each finding carries a **Status** line: `open`, or `fixed` with the commit and
-the test that pins it.
+the test that pins it. The section-2 and section-4 entries fixed in the latest
+round name their test but no commit -- the hash was not yet assigned when they
+were written; fill them in when that change lands.
 
 **Where this stands.** Section 1 (silently wrong numbers) and section 3 (hard
 crashes) are fixed, in `5f3da27 7087ee6 a39bf68 4d5843d 66df675 2c28e53`, each with a regression test that asserts an
-invariant rather than a pinned number. Section 2 (silently ignored arguments)
-and section 4 (aliasing and missing guards) are deliberately still open -- they
-are the lower-severity half, and three of them (2.1 `get_ldos(operator=)`, 2.4
-`add_sublattice_imbalance` on 3 sublattices, 2.7 `hs` beyond nearest
-neighbours) are feature work rather than repairs, so they want a decision about
-whether to implement or to refuse in the `3b43557` style. 1.11 (the parallel
-RNG) is open on purpose; see its entry.
+invariant rather than a pinned number. Section 2 is now fixed too, except 2.4;
+section 4 is fixed except 4.1. What remains open, deliberately:
 
-Three of the fixes turn a silent wrong answer into a raised exception, which is
+- **4.1** `get_supercell` returning `self` -- the highest-severity item left,
+  and the only one that silently corrupts a Hamiltonian the caller believes it
+  did not touch.
+- **2.4** `add_sublattice_imbalance` no-oping on triangular and kagome --
+  feature work, wants a decision (implement, or refuse in the `3b43557` style)
+  rather than a repair.
+- **1.11** the parallel RNG; see its entry for why.
+
+The two items that were filed as "wants a decision" and have now been
+implemented rather than refused are 2.1 (`get_ldos(operator=)`, which
+`dos.get_dos` already honoured, so the library was inconsistent with itself)
+and 2.7 (`hs` beyond nearest neighbours, generalized from the nearest-neighbour
+path's own convention and pinned against it).
+
+Four of the fixes turn a silent wrong answer into a raised exception, which is
 a behaviour change for anyone who was relying on the broken path: an
 unrecognised operator name in `topology` (was: the valley operator), a 3D
-`set_finite_system(periodic=True)` (was: an open cluster), and a `filling`
-outside [0,1] in `set_individual_filling` (was: unchecked).
+`set_finite_system(periodic=True)` (was: an open cluster), a `filling`
+outside [0,1] in `set_individual_filling` (was: unchecked), and a d-vector
+asked of anything but a spinful Nambu Hamiltonian (was: an array of the wrong
+length, or nan).
 
 ---
 
@@ -340,9 +353,36 @@ named parameter) ever sees it. `h.get_ldos(e=1.0, operator="sz")` on a
 Zeeman-polarized chain returns an array byte-identical to `h.get_ldos(e=1.0)`.
 Because it is a named parameter it is not caught by an unknown-kwarg check.
 `dos.get_dos` honours the same argument, so this is an inconsistency inside the
-library, not a missing feature.
+library, not a missing feature. (The header of this file filed it under feature
+work; the entry is right and the header was wrong.)
 
-**Status:** open
+**Status:** fixed. Both branches now honour it. `mode="arpack"` forwards it
+into `ldos_diagonalization`, whose `ldos_waves_from_eigsystem` already had the
+machinery (`<psi|A|psi>` times the local density `|psi(i)|^2`) and is what
+`ldosmap` uses. `mode="green"` contracts the Green's function with the
+operator through a new `ldos.green2ldos`, as `-Im(diag(G A + A G))/(2 pi)`.
+The Hermitian combination is not cosmetic: `diag(G A)` and `diag(A G)` are
+site-by-site complex conjugates, so each alone carries a piece the other
+cancels -- large enough to give a nonzero `sy` map on a purely real
+Hamiltonian, with a sign set by which matrix goes first. That is 1.2's
+question again, and the sum rule `sum_i LDOS_A(i) = -Im Tr(G A)/pi` (what
+`green.green_operator` returns) holds for either ordering, so it does not
+catch it; the `sy`-is-zero test does.
+
+The two modes weight the operator differently -- global expectation times
+local density, versus the local matrix element -- and coincide only when the
+eigenstates are eigenstates of the operator. Both integrate over sites to the
+same operator-resolved DOS. Switching `ldos_waves` to the local form as well
+would make them agree everywhere, but it changes a working path that
+`ldosmap` and `multi_ldos` use, so it is left alone and documented instead.
+`tests/ldos/test_ldos_operator.py`.
+
+Found while fixing this, and fixed with it: inside the same `mode="green"`
+branch the `nk is not None` sub-branch computed `-Im(gb[i,i])` with no
+`1/pi`, where its adaptive sibling three lines below and the whole
+diagonalization path (`ldos_waves_jit`) divide by pi. The same LDOS came out
+a factor pi apart depending on which sub-branch ran. It now agrees with the
+diagonalization result to 1e-15.
 
 ### 2.2 `bandstructure.py:152` -- `ewindow` applied only when an operator is given
 
@@ -357,7 +397,11 @@ h.get_bands(nk=20, ewindow=lambda e: abs(e)<0.5)
   operator="sz"  -> 16 bands, max|e| = 0.382
 ```
 
-**Status:** open
+**Status:** fixed. The filtering moved into a shared `kes2rows` helper that
+every path packs its output through, so the three branches cannot drift
+apart again. `callback` still sees the full unfiltered set of energies at
+each k-point, which is what the operator branch always did.
+`tests/bandstructure/test_ewindow.py`.
 
 ### 2.3 `hamiltonians.py:668` -- `add_hamiltonian` drops terms in new lattice directions
 
@@ -378,7 +422,14 @@ correctly produces `(+-2,0,0)` with norm 0.7071.
 In fairness: `add_kekule`/`add_chiral_kekule` on a first-neighbour honeycomb
 stay within the existing directions, so the common uses are unaffected.
 
-**Status:** open
+**Status:** fixed. `add_hamiltonian` now merges the two `MultiHopping`
+dictionaries and calls `set_multihopping`, i.e. it goes through the same
+machinery the `+` operator (`algebratk/hamiltonianalgebra`) already used
+correctly -- which is also what the test compares against. `add_hopping_matrix`
+gained a `**kwargs` passthrough so `nc`, the neighbour cutoff of the generated
+Hamiltonian, can be raised above its default for a long-range `fm`; without it
+the generated Hamiltonian has no long-range directions for the merge to find.
+`tests/hopping/test_add_hamiltonian_directions.py`.
 
 ### 2.4 `hamiltonians.py:514` -- `add_sublattice_imbalance` is a silent no-op off the beaten path
 
@@ -405,7 +456,8 @@ calls `kmesh2d(nk,nsuper)`, whose signature takes no `endpoint` and whose two
 returns the same mesh as `endpoint=False`; `kmesh(1,...)` correctly differs.
 No in-tree caller passes `endpoint=True` today, so the impact is latent.
 
-**Status:** open
+**Status:** fixed -- `kmesh2d` takes `endpoint` and `kmesh` forwards it, like
+the 1D and 3D branches. `tests/geometry/test_kmesh_endpoint.py`.
 
 ### 2.6 `greentk/rg.py:192` -- the numba backend swallows `nite` and `error`
 
@@ -419,7 +471,17 @@ the numba path returns a fully converged answer where the Python path returns
 the requested 2-step truncation. The `error` divergence is milder (4e-7 at
 `error=0.01`).
 
-**Status:** open
+**Status:** fixed in both `green_renormalization_jit` and
+`green_renormalization_jit_batch`. Both take `nite`/`error` as named
+parameters and only fall back to the derived values when they are absent, and
+the two numba kernels take a `truncate` flag so a caller-supplied `nite` means
+exactly what it means in the Python path: that many iterations, no convergence
+test, and -- this is the part that would otherwise have undone the fix -- no
+`_fix_green_renormalization` afterwards, since a deliberately truncated result
+fails the Dyson residual by construction and would have been silently
+re-converged. The three backends now agree to 1e-12 or better with `nite` or
+`error` given, and bit-identically without.
+`tests/green/test_rg_truncation_and_error.py`.
 
 ### 2.7 `greentk/kchain.py:29` -- `hs` discarded beyond nearest neighbours
 
@@ -429,7 +491,27 @@ For Hamiltonians with hoppings beyond NN, `green_kchain` dispatches to
 swallowing `**kwargs` -- so the `hs` surface-onsite matrix is accepted and
 silently dropped.
 
-**Status:** open
+**Status:** implemented rather than refused. The decimation solves
+`gs = (ez - ons - hop gs hop^dag)^(-1)`, and `hop gs hop^dag` is the
+selfenergy of everything attached below the surface cell, which does not
+depend on that cell's own onsite matrix -- so replacing the onsite and
+re-solving is exactly what `green_kchain_NN` already does. Beyond nearest
+neighbours the chain is a chain of supercells and only the first of the
+sub-cells is the actual surface, so `hs` replaces that block alone
+(`greentk/dyson.surface_onsite_dyson`). `green_kchain_NNN`/`_LR` resolve a
+callable `hs` at their own k-point, where k is known, so the `dyson*` routines
+only ever see matrices. Two checks pin it, neither of which needs a new
+convention to be trusted: on a nearest-neighbour Hamiltonian the long-range
+solver collapses to a one-cell supercell and reproduces `green_kchain_NN`
+(1e-11), and for any range, passing the surface cell's *actual* onsite matrix
+returns the Green's function the decimation already gives (1e-16), because
+that is the equation `gs` solves. A third check settles the convention
+itself rather than assuming it: a 400-cell chain with a non-trivial onsite
+matrix on its first cell alone, inverted directly, agrees to 1e-12 -- as
+accurately as the no-`hs` path does against the same reference, so the
+one-Dyson-step formula is exact and not an approximation inherited from
+`green_kchain_NN`.
+`tests/green/test_kchain_surface_onsite_longrange.py`.
 
 ### 2.8 `spectrum.py:221` -- `real_space_vev`'s `nrep` is ignored
 
@@ -586,7 +668,13 @@ has `if not h.has_eh: raise` but no `spinless_nambu` check, so a spinless Nambu
 Hamiltonian (2x2 per cell, `nr=0`) sails through and returns `[nan nan nan]`
 from a mean over an empty slice.
 
-**Status:** open
+**Status:** fixed. One `sctk/dvector.check_spinful_nambu` helper raises a
+`ValueError` naming what the Hamiltonian actually is, called from all four
+public entry points -- `extract_dvector_from_hamiltonian` (which covers
+`dvector_non_unitarity` and `average_hamiltonian_dvector`, whose weaker
+`if not h.has_eh: raise` it replaces) and the two `*_map` routines, which
+bypass it by going through `h.get_hopping_dict()` and `matrix2dvector`.
+`tests/superconductivity/test_dvector_hilbert_space.py`.
 
 ---
 

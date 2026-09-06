@@ -275,11 +275,44 @@ def get_ldos_general(h,projection="TB",**kwargs):
     else: raise
 
 
+def green2ldos(g,op=None):
+    """Local density of states read off a Green's function, optionally
+    resolved with an operator A as -Im(diag(G A + A G))/(2 pi).
+
+    Only the trace of diag(G A) does not depend on the ordering: site by
+    site, diag(G A) and diag(A G) are complex conjugates of one another,
+    so each carries a spurious piece that the other cancels -- large
+    enough to give, for instance, a nonzero sy-resolved map on a real
+    Hamiltonian, which has no sy at all. The Hermitian combination keeps
+    only the Lorentzian-weighted Re<psi|A|psi>_i, which is the local
+    spectral weight, and still sums over sites to the operator-resolved
+    DOS that green.green_operator returns. Without an operator this is
+    the ordinary -Im(diag(G))/pi.
+
+    This is the same which-matrix-goes-first question that spectrum.ev
+    and vev.get_dm_vev had to settle (fbee7c9, 7087ee6)."""
+    g = np.array(g)
+    if op is None: return -np.diag(g).imag/np.pi
+    return -np.diag(g@op + op@g).imag/(2.*np.pi)
+
+
 def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
              random=False,silent=True,interpolate=False,
              operator=None,return_rd = False,
              write=True,**kwargs):
-    """ Calculate LDOS in a tight binding basis"""
+    """ Calculate LDOS in a tight binding basis
+
+    operator: None, or an operator spec (a name, a matrix, an Operator).
+        The LDOS is then resolved with that operator instead of being the
+        plain charge one. The two modes weight it differently, and both
+        integrate over sites to the same operator-resolved DOS:
+        mode="arpack" uses <psi|A|psi> times the local density |psi(i)|^2,
+        while mode="green" uses the local matrix element
+        Re<psi|A|psi>_i -- the genuinely local quantity, which is what
+        differs for states that are not eigenstates of A. A k-dependent
+        operator is only available in mode="arpack", since mode="green"
+        has already integrated over the Brillouin zone.
+    """
     from .utilities import check_delta
     check_delta(delta)
     if ks is not None and mode=="green":
@@ -291,14 +324,21 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
       if h.dimensionality!=2: raise # only for 2d
       h = h.copy()
       h = h.get_dense()
+      op = None # no operator
+      if operator is not None:
+          op = operator.get_matrix() # matrix of the operator
+          if op is None: # momentum dependent operator
+              raise NotImplementedError("mode='green' integrates over the "
+                +"Brillouin zone before the operator is applied, so it "
+                +"cannot take a k-dependent operator; use mode='arpack'")
+          op = algebra.todense(op)
       if nk is not None:
         print("LDOS using normal integration with nkpoints",nk)
         gb,gs = green.bloch_selfenergy(h,energy=e,delta=delta,mode="full",nk=nk)
-        d = [ -(gb[i,i]).imag for i in range(len(gb))] # get imaginary part
       else:
         print("LDOS using renormalization adaptative Green function")
         gb,gs = green.bloch_selfenergy(h,energy=e,delta=delta,mode="adaptive")
-        d = [ -(gb[i,i]).imag/np.pi for i in range(len(gb))] # get imaginary part
+      d = green2ldos(gb,op=op) # local density of states
     elif mode=="arpack" or mode=="diagonalization": # arpack diagonalization
       from . import klist
       if nk is None: nk = 10
@@ -311,7 +351,8 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
       for k in ks: # loop over kpoints
         ts.iterate()
         hk = hkgen(k) # get Hamiltonian
-        ds += [ldos_diagonalization(hk,e=e,delta=delta,**kwargs)]
+        ds += [ldos_diagonalization(hk,e=e,delta=delta,operator=operator,
+                                    k=k,**kwargs)]
       d = np.mean(ds,axis=0) # average
     else: raise # not recognized
     # write result

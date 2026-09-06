@@ -189,16 +189,24 @@ def green_renormalization_python(intra,inter,energy=0.0,nite=None,
     # the decimation is not unconditionally accurate, check it
     return _fix_green_renormalization(g_bulk,g_surf,intra,inter,e)
 
-def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,**kwargs):
+def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,
+                              nite=None,error=None,**kwargs):
+    """Numba-compiled twin of green_renormalization_python. `nite` and
+    `error` mean exactly what they mean there -- a truncated decimation and
+    a convergence threshold -- and used to be recomputed here instead of
+    being honoured, so the two backends answered different questions."""
     intra = algebra.todense(intra)*(1.0+0j)
     inter = algebra.todense(inter)*(1.0+0j)
+    truncate = nite is not None # caller asked for a truncated decimation
     # same convergence criterion as green_renormalization_python, so this
     # path only changes speed (compiled loop), never the numerical result
-    nite = max(int(100/np.abs(delta)),100000) # maximum number of iterations
-    error = np.abs(delta)*1e-6
+    if nite is None: nite = max(int(100/np.abs(delta)),100000) # max iterations
+    if error is None: error = np.abs(delta)*1e-6 # default threshold
     energyz = energy + 1j*delta
     e = np.array(np.identity(intra.shape[0]),dtype=np.complex128) * energyz
-    g_bulk,g_surf = green_renormalization_jit_core(intra,inter,e,nite,error)
+    g_bulk,g_surf = green_renormalization_jit_core(intra,inter,e,nite,error,
+                                                   truncate)
+    if truncate: return g_bulk,g_surf # deliberately unconverged, do not fix
     # same validity check as the pure Python path, so the two agree
     return _fix_green_renormalization(g_bulk,g_surf,intra,inter,e)
 
@@ -206,7 +214,7 @@ def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,**kwargs):
 
 ## this is an optimized version
 @jit(nopython=True)
-def green_renormalization_jit_core(intra, inter, e, nite, error):
+def green_renormalization_jit_core(intra, inter, e, nite, error, truncate):
     ite = 0
     # Force C‑contiguity from the start
     alpha = np.ascontiguousarray(inter * 1.0)
@@ -242,10 +250,14 @@ def green_renormalization_jit_core(intra, inter, e, nite, error):
         alpha = alphaY.copy()
         beta = betaZ.copy()
         ite += 1
-        if np.max(np.abs(alpha)) < error and np.max(np.abs(beta)) < error:
-            break
-        if ite >= nite:
-            break
+        if truncate: # fixed iteration count, no convergence test
+            if ite > nite:
+                break
+        else:
+            if np.max(np.abs(alpha)) < error and np.max(np.abs(beta)) < error:
+                break
+            if ite >= nite:
+                break
     # Compute Green's functions using solve (avoids explicit inverse)
     I = np.eye(n, dtype=epsilon.dtype)
     g_surf = np.linalg.solve(e - epsilon_s, I)
@@ -254,7 +266,8 @@ def green_renormalization_jit_core(intra, inter, e, nite, error):
     return g_bulk, g_surf
 
 
-def green_renormalization_jit_batch(intra,inter,energies,delta=1e-4,**kwargs):
+def green_renormalization_jit_batch(intra,inter,energies,delta=1e-4,
+                                    nite=None,error=None,**kwargs):
     """Batched version of green_renormalization_jit: same lead (intra,
     inter fixed), many energies at once. The Sancho-Rubio iteration is
     completely independent across energies (only the starting `intra`,
@@ -268,13 +281,15 @@ def green_renormalization_jit_batch(intra,inter,energies,delta=1e-4,**kwargs):
     intra = algebra.todense(intra)*(1.0+0j)
     inter = algebra.todense(inter)*(1.0+0j)
     energies = np.asarray(energies,dtype=np.float64)
+    truncate = nite is not None # caller asked for a truncated decimation
     # same convergence criterion as green_renormalization_python/_jit, so
     # this path only changes speed, never the numerical result
-    nite = max(int(100/np.abs(delta)),100000) # maximum number of iterations
-    error = np.abs(delta)*1e-6
+    if nite is None: nite = max(int(100/np.abs(delta)),100000) # max iterations
+    if error is None: error = np.abs(delta)*1e-6 # default threshold
     with _batch_lock: # workqueue is not threadsafe -- see _batch_lock above
         g_bulk,g_surf = green_renormalization_jit_batch_core(intra,inter,
-                energies,delta,nite,error)
+                energies,delta,nite,error,truncate)
+    if truncate: return g_bulk,g_surf # deliberately unconverged, do not fix
     # same validity check as the single-energy paths; the residuals for
     # the whole batch come from one set of broadcast matrix products, and
     # only the energies that actually fail go through the (rare, slow)
@@ -288,7 +303,8 @@ def green_renormalization_jit_batch(intra,inter,energies,delta=1e-4,**kwargs):
 
 
 @jit(nopython=True,parallel=True,cache=True)
-def green_renormalization_jit_batch_core(intra,inter,energies,delta,nite,error):
+def green_renormalization_jit_batch_core(intra,inter,energies,delta,nite,
+                                         error,truncate):
     nE = energies.shape[0]
     n = intra.shape[0]
     g_bulk = np.empty((nE,n,n),dtype=np.complex128)
@@ -320,10 +336,14 @@ def green_renormalization_jit_batch_core(intra,inter,energies,delta,nite,error):
             alpha = alphaY.copy()
             beta = betaZ.copy()
             ite += 1
-            if np.max(np.abs(alpha)) < error and np.max(np.abs(beta)) < error:
-                break
-            if ite >= nite:
-                break
+            if truncate: # fixed iteration count, no convergence test
+                if ite > nite:
+                    break
+            else:
+                if np.max(np.abs(alpha))<error and np.max(np.abs(beta))<error:
+                    break
+                if ite >= nite:
+                    break
         I = np.eye(n, dtype=epsilon.dtype)
         g_surf[k] = np.linalg.solve(e - epsilon_s, I)
         g_bulk[k] = np.linalg.solve(e - epsilon, I)

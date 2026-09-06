@@ -33,22 +33,31 @@ def green_kchain(h,**kwargs):
 
 
 
-def green_kchain_NNN(H,k=[0.,0.,0.],**kwargs):
+def resolve_hs(hs,k):
+    """Evaluate the surface onsite matrix at this k-point, if it is given
+    as a function of k (green_kchain_NN accepts both forms)"""
+    if callable(hs): return hs(k) # momentum dependent
+    else: return hs # a matrix, or None
+
+
+def green_kchain_NNN(H,k=[0.,0.,0.],hs=None,**kwargs):
     """Return Green function when there is long range hopping"""
     from ..htk.kchain import detect_longest_hopping
     if detect_longest_hopping(H)>2: raise NotImplementedError("Not implemented beyond next-nearest-neighbor hopping")
     from ..htk.kchain import kchain_NNN # extract up to NNN
     (ons,t1,t2) = kchain_NNN(H,k=k) # return the three matrices
     from ..greentk.dyson import dysonNNN
-    return dysonNNN(ons,t1,t2,**kwargs)
+    # hs is resolved here, where k is known; dysonNNN only sees matrices
+    return dysonNNN(ons,t1,t2,hs=resolve_hs(hs,k),**kwargs)
 
 
-def green_kchain_LR(H,k=[0.,0.,0.],**kwargs):
+def green_kchain_LR(H,k=[0.,0.,0.],hs=None,**kwargs):
     """Return Green function when there is long range hopping"""
     from ..htk.kchain import kchain_LR # extract up to NNN
     hops = kchain_LR(H,k=k) # return the three matrices
     from ..greentk.dyson import dysonLR
-    return dysonLR(hops,**kwargs)
+    # hs is resolved here, where k is known; dysonLR only sees matrices
+    return dysonLR(hops,hs=resolve_hs(hs,k),**kwargs)
 
 
 

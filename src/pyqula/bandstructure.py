@@ -95,6 +95,11 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         given, the expectation value of every operator is computed for each
         eigenstate, and the returned array gains one extra row per operator
         (k, e, c1, c2, ...) instead of just (k, e, c).
+
+    ewindow: None, or a callable taking an energy and returning whether to
+        keep that band. Applied on every code path (with and without an
+        operator, batched or not); the callback, if any, still sees the
+        full unfiltered set of energies at each k-point.
     """
     if num_bands is not None:
       if num_bands>(h.intra.shape[0]-1): num_bands=None
@@ -122,6 +127,14 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
     hkgen = h.get_hk_gen() # generator hamiltonian
     kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
     ncols = 2+num_waw if operator is not None else 2 # k, e, (operators)
+    def kes2rows(k,es):
+      """Pack a k-point's energies into output rows, dropping the bands
+      that the energy window rejects"""
+      if callable(ewindow): es = np.array([e for e in es if ewindow(e)])
+      out = np.empty((len(es),ncols))
+      out[:,0] = k
+      out[:,1] = es
+      return out
     def getek(k):
       """Compute this k-point, returning a numpy array with one row per
       band: [k_index, energy, (operator expectation values...)]"""
@@ -130,10 +143,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         es = diagf(hk)
         es = np.sort(es) # sort energies
         if callback is not None: callback(k,es) # call the function
-        out = np.empty((len(es),ncols))
-        out[:,0] = k
-        out[:,1] = es
-        return out
+        return kes2rows(k,es)
       else:
         es,ws = diagf(hk)
         ws = ws.transpose() # transpose eigenvectors
@@ -172,10 +182,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
       for k in range(len(kpath)):
         es = es_batch[k]
         if callback is not None: callback(k,es) # call the function
-        out = np.empty((len(es),ncols))
-        out[:,0] = k
-        out[:,1] = es
-        esk.append(out)
+        esk.append(kes2rows(k,es))
     else:
       esk = parallel.pcall(getek,range(len(kpath))) # compute all
     esk = np.concatenate(esk,axis=0) if len(esk)>0 else np.empty((0,ncols))

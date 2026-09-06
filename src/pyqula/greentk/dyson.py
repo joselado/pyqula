@@ -6,7 +6,8 @@ inv = algebra.inv # inverse
 # Dyson equation solvers for Green's functions
 
 
-def dysonNNN(ons,t1,t2,only_bulk=False,**kwargs):
+def dysonNNN(ons,t1,t2,only_bulk=False,hs=None,energy=0.,delta=0.01,
+             **kwargs):
     """Worksround to do RG with NNN"""
     from scipy.sparse import csc_matrix
     ons = csc_matrix(ons)
@@ -21,19 +22,45 @@ def dysonNNN(ons,t1,t2,only_bulk=False,**kwargs):
     hop_S = algebra.bmat(hop_S) # as matrices
     # perform the RG algorithm
     from .rg import green_renormalization
-    gb_S,gs_S = green_renormalization(ons_S,hop_S,**kwargs)
+    gb_S,gs_S = green_renormalization(ons_S,hop_S,energy=energy,delta=delta,
+                                      **kwargs)
     n = ons.shape[0] # size of the system
+    if hs is not None: # surface onsite matrix provided
+        gs_S = surface_onsite_dyson(gs_S,ons_S,hop_S,hs,energy,delta,n)
     gb = gb_S[0:n,0:n] # bulk Green function
     gs = gs_S[0:n,0:n] # bulk Green function
     if only_bulk: return gb
     else: return gb,gs
 
 
+def surface_onsite_dyson(gs_S,ons_S,hop_S,hs,energy,delta,n):
+    """Recompute the surface Green's function of a semi-infinite chain
+    after replacing the outermost cell's onsite matrix by hs.
+
+    The decimation solves gs = (ez - ons - hop gs hop^dag)^(-1), so
+    hop gs hop^dag is the selfenergy of everything attached below the
+    surface cell -- unchanged by what that one cell's onsite is. Putting
+    hs in its place therefore just re-solves the same equation, which is
+    exactly what green_kchain_NN does for the nearest-neighbor case. Here
+    the chain is a chain of supercells, and only the first of the n-sized
+    sub-cells is the actual surface, so hs replaces that block alone."""
+    from .. import algebra
+    ons_S = algebra.todense(ons_S) # dense, a block is about to be replaced
+    hop_S = algebra.todense(hop_S)
+    gs_S = algebra.todense(gs_S)
+    N = ons_S.shape[0] # dimension of the supercell
+    ez = (energy+1j*delta)*np.identity(N) # energy
+    sigma = hop_S@gs_S@dagger(hop_S) # selfenergy of the rest of the chain
+    ons2_S = np.array(ons_S,dtype=np.complex128) # copy to modify
+    ons2_S[0:n,0:n] = algebra.todense(hs) # replace the surface onsite
+    return inv(ez - ons2_S - sigma) # Dyson equation
 
 
 
 
-def dysonLR(hops0,only_bulk=False,**kwargs):
+
+
+def dysonLR(hops0,only_bulk=False,hs=None,energy=0.,delta=0.01,**kwargs):
     """Worksround to do RG with NNN"""
     from scipy.sparse import csc_matrix
     hops = [csc_matrix(m) for m in hops0] # to sparse
@@ -60,8 +87,11 @@ def dysonLR(hops0,only_bulk=False,**kwargs):
     ons_S = algebra.bmat(ons_S) # as matrices
     hop_S = algebra.bmat(hop_S) # as matrices
     from .rg import green_renormalization
-    gb_S,gs_S = green_renormalization(ons_S,hop_S,**kwargs)
+    gb_S,gs_S = green_renormalization(ons_S,hop_S,energy=energy,delta=delta,
+                                      **kwargs)
     n = hops[0].shape[0] # size of the system
+    if hs is not None: # surface onsite matrix provided
+        gs_S = surface_onsite_dyson(gs_S,ons_S,hop_S,hs,energy,delta,n)
     gb = gb_S[0:n,0:n] # bulk Green function
     gs = gs_S[0:n,0:n] # bulk Green function
     if only_bulk: return gb

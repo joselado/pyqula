@@ -340,7 +340,8 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 Optional arguments
 - e: energy at which the LDOS is evaluated
 - delta: smearing of the LDOS
-- operator: operator to which the LDOS is projected
+- operator: operator to which the LDOS is projected (a name such as `"sz"`, a matrix, or an `Operator`), giving e.g. a spin-resolved real-space map instead of the charge one. The two evaluation modes weight it differently and both integrate over sites to the same operator-resolved DOS: `mode="arpack"` (the default) uses the expectation value $\langle \Psi | A | \Psi\rangle$ times the local density $|\Psi(i)|^2$, while `mode="green"` uses the local matrix element $\mathrm{Re}\,\Psi^*(i)(A\Psi)(i)$, which is the genuinely local quantity for states that are not eigenstates of the operator. A momentum-dependent operator (`"valley"`) only works in `mode="arpack"`, since `mode="green"` has already integrated over the Brillouin zone
+- mode: `"arpack"` (default, diagonalization on a k-mesh) or `"green"` (Green's function, 2D Hamiltonians only)
 - projection: `"TB"` (default, one value per lattice site), `"TBRS"` (same, but interpolated onto a continuous real-space map for smoother plotting), or `"atomic"` (projected onto atomic orbitals rather than tight-binding sites)
 - num_bands: for large sparse Hamiltonians, use ARPACK to only compute this many states around the target energy
 
@@ -3020,6 +3021,9 @@ Optional arguments:
 - kpath: an explicit k-path, either as reduced coordinates or as a list of
   high-symmetry labels (`"G"`, `"M"`, `"K"`, `"X"`, `"Y"`, and in three
   dimensions `"Z"`, `"R"`, `"A"`, `"B"`)
+- ewindow: a function of the energy returning whether to keep that band, used
+  to restrict the output to an energy window (e.g.
+  `ewindow=lambda e: abs(e)<0.5`)
 
 Without `kpath` the path is $\Gamma$-M for a square-like 2D lattice,
 $\Gamma$-K-M-K'-$\Gamma$ for a triangular-like one, and
@@ -3235,6 +3239,12 @@ Optional arguments:
   how the Green's function, embedding and transport routines spell it)
 
 - delta=0.01: broadening of the LDOS, which must be positive
+
+- operator=None: operator the LDOS is projected onto (a name, a matrix or an
+  `Operator`); see the LDOS section above for how the two modes weight it
+
+- mode="arpack": `"arpack"` (diagonalization on a k-mesh) or `"green"`
+  (Green's function, 2D only)
 
 - projection="TB": `"TB"`, `"TBRS"` (real-space interpolated) or `"atomic"`
 
