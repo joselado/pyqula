@@ -32,14 +32,10 @@ the test that pins it.
 
 **Where this stands.** Section 1 (silently wrong numbers) and section 3 (hard
 crashes) are fixed, in `5f3da27 7087ee6 a39bf68 4d5843d 66df675 2c28e53`, each with a regression test that asserts an
-invariant rather than a pinned number. Section 2 is now fixed too, except 2.4;
-section 4 is fixed. Section 4 is now fixed
-entirely (4.1 in `ccdee4a`). What remains open, deliberately:
-
-- **2.4** `add_sublattice_imbalance` no-oping on triangular and kagome --
-  feature work, wants a decision (implement, or refuse in the `3b43557` style)
-  rather than a repair.
-- **1.11** the parallel RNG; see its entry for why.
+invariant rather than a pinned number. Sections 2 and 4 are fixed as well. Section 4 is now fixed
+entirely (4.1 in `ccdee4a`), and so are the last two open items, 2.4 and 1.11.
+Nothing in this file is open any more; what is left is the areas the sweep did
+not cover, listed above.
 
 The two items that were filed as "wants a decision" and have now been
 implemented rather than refused are 2.1 (`get_ldos(operator=)`, which
@@ -47,13 +43,19 @@ implemented rather than refused are 2.1 (`get_ldos(operator=)`, which
 and 2.7 (`hs` beyond nearest neighbours, generalized from the nearest-neighbour
 path's own convention and pinned against it).
 
-Four of the fixes turn a silent wrong answer into a raised exception, which is
+Six of the fixes turn a silent wrong answer into a raised exception, which is
 a behaviour change for anyone who was relying on the broken path: an
 unrecognised operator name in `topology` (was: the valley operator), a 3D
 `set_finite_system(periodic=True)` (was: an open cluster), a `filling`
-outside [0,1] in `set_individual_filling` (was: unchecked), and a d-vector
+outside [0,1] in `set_individual_filling` (was: unchecked), a d-vector
 asked of anything but a spinful Nambu Hamiltonian (was: an array of the wrong
-length, or nan).
+length, or nan), and `add_sublattice_imbalance`/`add_antiferromagnetism` on a
+geometry with no usable sublattice (was: an unchanged Hamiltonian).
+
+One fix changes numbers without raising anything: `parallel.pcall` now seeds
+the numpy RNG per task, so stochastic results routed through it differ from
+before in the serial path as well as the parallel one. They are reproducible
+and core-count-independent now, which they were not.
 
 ---
 
@@ -320,17 +322,27 @@ So averaging over k-points does not reduce the KPM variance the way it does
 serially: the parallel answer is systematically noisier than the serial one for
 the same nominal `ntries`, and the two backends disagree.
 
-**Status:** left open, deliberately, and recorded here instead. Reseeding is
-one line (`np.random.seed()` in `_init_worker`), but it makes every parallel
+**Status:** fixed in `e23b94c`. The one-line reseed
+(`np.random.seed()` in `_init_worker`) was rejected: it makes every parallel
 stochastic result irreproducible run to run, and `90a5cf5` establishes that
-determinism is wanted here. The fix that keeps both is to draw a base seed from
-the parent's own stream and derive per-worker seeds from it plus the worker
-index, so the whole parallel run is reproducible given the parent's seed. Until
-that is built: **stochastic routines dispatched through `parallel.pcall` do not
-average independently when `cores>1`.** In practice that means KPM
-(`kpm.random_trace`) run through `pcall` -- note the KPM moment loop's own
-batching (`kpmtk/kpmnumba.py`) is a numba kernel, not `pcall`, and is not
-affected.
+determinism is wanted here. Instead `pcall` derives one seed per **task
+index** -- a single draw off the parent's stream, expanded with
+`np.random.SeedSequence(base).spawn(n)` -- and seeds the global numpy RNG
+before each task runs. Seeding per task rather than per worker is what makes
+`cores=1` and `cores>1` bit-identical, since a task's stream no longer depends
+on which worker picks it up; that equality is what the test asserts, alongside
+"eight tasks, eight distinct draws" (it was four distinct out of eight at
+`cores=4`) and the KPM `random_trace` case that motivated the finding.
+
+The serial path reseeds too, so results there change for anything stochastic
+routed through `pcall` -- the price of having the two backends agree. The
+parent's own stream is left where a single draw would leave it, so a `pcall`
+does not perturb randomness in the calling code beyond that. The two call
+sites that had already worked around the bug by drawing explicit per-task
+seeds (`latticegas`/`latticeising`'s `optimize_energy_multistart`) still
+override it and are unaffected. `tests/parallel/test_pcall_random_seeds.py`,
+and `documentation/user_guide.md`'s new "Parallelism and reproducibility"
+section.
 
 ---
 
@@ -442,7 +454,22 @@ no-ops, even though the neighbouring `add_antiferromagnetism` routes
 `sublattice_number>2` to `magnetism.add_frustrated_antiferromagnetism` -- so
 two adjacent methods disagree about what a 3-sublattice geometry supports.
 
-**Status:** open
+**Status:** refused rather than implemented, in `e23b94c`, on the
+maintainer's call. Both methods now raise a `ValueError` when the geometry has
+no sublattice at all, through one shared `hamiltonians.require_sublattice`
+helper; `add_sublattice_imbalance` additionally raises for
+`sublattice_number != 2`, since those geometries index their sublattices
+`0,1,2,...` rather than `+-1` and a single mass has no staggering to apply
+there. `add_antiferromagnetism` keeps its frustrated path for more than two,
+so the two methods no longer disagree silently -- they disagree explicitly,
+which is the true state of what is implemented.
+
+The message each raises points at `g.get_supercell(2)` followed by
+`g.get_sublattice()`, and a test runs that workflow end to end to check the
+advice is real -- a supercell alone does *not* set `has_sublattice`, so the
+same advice already in `meanfield.py`'s `mode="CDW"` refusal (from `3b43557`)
+was incomplete and is corrected here too. `tests/hopping/test_sublattice_terms_refuse.py`,
+and reference entries for both methods in `documentation/user_guide.md`.
 
 ### 2.5 `kpointstk/kmesh.py:39` -- `endpoint` dropped for dimensionality 2
 
