@@ -65,6 +65,7 @@ is a reference of the `Geometry`/`Hamiltonian` methods and their arguments.
 - [Classical spin models](#classical-spin-models)
 - [Lattice gas models](#lattice-gas-models)
 - [Ising models](#ising-models)
+- [Parallelism and reproducibility](#parallelism-and-reproducibility)
 - [Main functions and methods](#main-functions-and-methods)
 
 # Setting up a Hamiltonian
@@ -2983,6 +2984,35 @@ for runnable demos of annealing, a temperature scan (magnetization and specific 
 local-energy/local-field maps.
 
 
+# Parallelism and reproducibility
+
+Parameter sweeps -- over k-points, energies, q-points, restarts -- are farmed
+out with `parallel.pcall`, which is serial by default. `parallel.set_cores(n)`
+gives it a pool of `n` worker processes, and `parallel.set_enabled(False)`
+forces the whole package strictly serial (no pool, numba and BLAS threads
+clamped to one), which is the setting to reach for when debugging or
+profiling.
+
+```python
+from pyqula import parallel
+parallel.set_cores(4)          # spread pcall's work over 4 processes
+```
+
+Results do not depend on the core count, including for the routines that draw
+random numbers -- KPM's stochastic trace, the multi-start anneals of the
+classical models. Each *task* is seeded from the parent process's own random
+stream, so a task's random numbers depend on its index in the sweep and not on
+which worker happened to run it: `cores=1` and `cores=8` give identical
+answers, and seeding the parent
+
+```python
+import numpy as np
+np.random.seed(42)
+```
+
+makes the whole sweep reproducible run to run. A `pcall` costs the parent
+exactly one draw off its own stream, whatever the tasks do with theirs.
+
 # Main functions and methods
 
 ## Geometry functions and methods
@@ -3229,6 +3259,37 @@ Add a local onsite energy
 Arguments:
 
 - value: value of the onsite energy
+
+
+### h.add_sublattice_imbalance()
+Add a staggered onsite energy, $+m$ on one sublattice and $-m$ on the other
+-- the mass term that gaps a honeycomb lattice into a boron-nitride-like
+semiconductor
+
+Arguments:
+
+- mass: the imbalance, as a number or as a callable of the position
+
+The term is written with the geometry's sublattice index, so it needs one.
+A geometry with no sublattice (a chain, a triangular or square lattice) and
+a geometry with more than two (kagome, pyrochlore, whose index runs
+$0,1,2,\ldots$ rather than $\pm 1$) both raise a `ValueError` rather than
+returning an unchanged Hamiltonian. On a bipartite lattice you can label one
+yourself with `g = g.get_supercell(2)` followed by `g.get_sublattice()`;
+otherwise write the profile explicitly with `h.add_onsite(f)`.
+
+
+### h.add_antiferromagnetism()
+Add a staggered exchange field: a Neel pattern on two sublattices, and the
+120-degree frustrated pattern on more than two
+
+Arguments:
+
+- mass: the exchange field, as a number or as a callable of the position
+
+Like `add_sublattice_imbalance` this needs a sublattice and raises a
+`ValueError` when the geometry has none. Unlike it, more than two
+sublattices are supported, through the frustrated pattern
 
 ### h.get_ldos()
 Compute the local density of states.

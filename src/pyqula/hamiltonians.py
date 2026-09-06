@@ -509,18 +509,27 @@ class Hamiltonian():
         return surface_kdos(self,**kwargs)
     def add_sublattice_imbalance(self,mass):
       """ Adds a sublattice imbalance """
-      if self.geometry.has_sublattice and self.geometry.sublattice_number==2:
-        add_sublattice_imbalance(self,mass)
-      else: pass
+      require_sublattice(self,"add_sublattice_imbalance","staggers the "
+        +"onsite energy between the two sublattices")
+      if self.geometry.sublattice_number!=2:
+          raise ValueError("add_sublattice_imbalance is defined for two "
+            +"sublattices, and this geometry has "
+            +str(self.geometry.sublattice_number)+", whose sublattice index "
+            +"runs 0,1,2,... rather than +-1, so a single mass has no "
+            +"staggering to apply. Use add_onsite with a per-site profile "
+            +"instead, e.g. h.add_onsite(lambda r: ...).")
+      add_sublattice_imbalance(self,mass)
     def add_antiferromagnetism(self,mass):
         """ Adds antiferromagnetic imbalanc """
-        if self.geometry.has_sublattice:
-            if self.geometry.sublattice_number==2:
-                magnetism.add_antiferromagnetism(self,mass)
-            elif self.geometry.sublattice_number>2:
-                magnetism.add_frustrated_antiferromagnetism(self,mass)
-            else: raise
-        else: return 
+        require_sublattice(self,"add_antiferromagnetism","staggers the "
+          +"magnetization between sublattices")
+        if self.geometry.sublattice_number==2:
+            magnetism.add_antiferromagnetism(self,mass)
+        elif self.geometry.sublattice_number>2:
+            magnetism.add_frustrated_antiferromagnetism(self,mass)
+        else: raise ValueError("a geometry with "
+            +str(self.geometry.sublattice_number)+" sublattices has no "
+            +"antiferromagnetic pattern to write")
     def turn_nambu(self):
         """Add electron hole degree of freedom"""
         self.get_eh_sector = get_eh_sector_odd_even # assign function
@@ -1102,6 +1111,18 @@ def print_hamiltonian(h):
 from .htk.cdw import add_sublattice_imbalance
 
 
+def require_sublattice(h,name,what):
+    """Refuse a sublattice-staggered term on a geometry with no sublattice.
+
+    These used to be silent no-ops, so a caller building "a gapped
+    semiconductor" on a triangular lattice got a gapless metal and no
+    warning."""
+    if not h.geometry.has_sublattice:
+        raise ValueError(name+" "+what+", and this geometry has no "
+          +"sublattice. On a bipartite lattice, build a cell that fits the "
+          +"pattern and label it -- g = g.get_supercell(2) followed by "
+          +"g.get_sublattice(), which two-colors the lattice. Otherwise "
+          +"write the profile explicitly with add_onsite/add_exchange.")
 
 
 

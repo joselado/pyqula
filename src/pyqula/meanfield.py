@@ -312,10 +312,10 @@ def guess(h,mode="ferro",fun=1e-1):
   elif mode in ["CDW","Charge density wave"]:
       if not h.geometry.has_sublattice:
           raise ValueError("mean-field guess mode '"+str(mode)+"' seeds the "
-            +"charge order with the sublattice, but this geometry has none "
-            +"(one site per unit cell). Build a supercell first, e.g. "
-            +"g = g.get_supercell(2), so that a modulated density fits in "
-            +"the unit cell.")
+            +"charge order with the sublattice, but this geometry has none. "
+            +"Build a cell that fits the modulation and label it -- "
+            +"g = g.get_supercell(2) followed by g.get_sublattice(), which "
+            +"two-colors the lattice -- or pass an explicit guess instead.")
       h0.add_onsite(h.geometry.sublattice)
   elif mode=="potential":
       h0.add_onsite(fun)
