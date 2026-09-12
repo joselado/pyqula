@@ -55,7 +55,7 @@ empty `__init__.py`; with the default import mode pytest's package-root walk fro
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
 tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
-minutes, not under a minute. It currently collects **1716 tests** (`pytest tests --collect-only -q`),
+minutes, not under a minute. It currently collects **1720 tests** (`pytest tests --collect-only -q`),
 and a whole-suite run takes **~34 minutes** — measured twice on an idle machine, 33:40 and 34:18, so
 that figure is real rather than an estimate. `tests/scf` alone is ~15 min and `tests/keldysh` ~12 min.
 Treat any timing taken while other jobs are running as meaningless.
@@ -170,7 +170,9 @@ Where a guard's message can name the offending value -- the mode string, the two
 mismatched sizes, the type that was passed -- it does, rather than printing it and
 raising separately. The only bare `raise` left in `src/pyqula` is the jump-to-except
 idiom inside a `try` body (five sites), where it is control flow rather than an error
-report.
+report -- plus four ordinary re-raises inside `except` handlers, which re-raise a live
+exception and are not the message-less form at all. An AST walk therefore finds nine
+bare `raise` nodes in the package; nine is the expected count, not a regression.
 
 Options selected by a string (`mode=`, `solver=`, `channel=`, an operator name) should
 list the accepted values in the error, so a typo is self-diagnosing. `operatorlist.py`
@@ -192,26 +194,19 @@ dict entry rather than a new `elif` branch.
 - `future_development/` holds maintainer-facing roadmaps for work that is planned, partially done, or
   scoped-but-not-started, with the measurements and dead ends that led to each conclusion recorded so
   they don't have to be re-derived. Check it before starting work in an area it covers, and add to it
-  when a piece of work leaves something deliberately unbuilt. Currently: `bug_audit.md` (the standing
-  bug list from the four-lens audit sweep -- every finding with its reproduction, what is fixed and in
-  which commit, why the two items that were decisions rather than repairs were decided
-  the way they were, and the areas the sweep did not cover -- nothing in it is open) and
-  `bse_excitons.md` (exciton
-  observables, iterative solvers, and a measured feasibility study of a quantics tensor-train route) and
-  `magnons_screening.md` (why the screened interaction must not be used in the magnon RPA kernel on its
-  own -- it breaks the Goldstone mode at first order in the kernel/mean-field mismatch) and
-  `magnons_tdhf.md` (the three magnon routes -- site basis, the interaction's pair basis, and
-  time-dependent Hartree-Fock in the electron-hole pair basis -- what each covers, the Goldstone and
-  exact-reference measurements validating all three, and the one thing still open: the transverse exchange
-  rung in the pair-basis kernels) and `unreferenced_modules.md` (the dead-module cleanup: why an AST walk
-  of every import, not grep, is the way to establish that a module is unused here, which 15 modules were
-  removed, and the seven that are unused but import cleanly and were kept because deleting a module of a
-  public package is an API decision rather than a repair).
-- `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap (not started) for moving compute-heavy
-  paths onto GPU via `jax` (already a hard dependency), covering batched dense diagonalization
-  (`htk/eigenvectors.py`), the partially-started KPM GPU path (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), and
-  why sparse/ARPACK-based Green's-function work is a harder/lower-priority case. Check it before starting
-  any GPU-related work in this repo.
+  when a piece of work leaves something deliberately unbuilt. `future_development/README.md` is the
+  index: it lists every roadmap there with a sentence on what each one settles and what each leaves
+  open. Read that index rather than a copy of it here -- a second list in this file only goes stale.
+  Two of them are the standing bug record: `bug_audit.md` (the four-lens first sweep, nothing in it
+  open) and `bug_audit_2.md` (the eight-lens second sweep, 76 of 80 findings fixed), with the four
+  that were decisions rather than repairs written up in `audit_open_decisions.md`, which is also
+  where a third sweep should start.
+- `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap for moving compute-heavy
+  paths onto GPU via `jax` (already a hard dependency). Tier 1, the batched KPM GPU path
+  (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), is done; Tiers 2-4 are not started, covering batched dense
+  diagonalization (`htk/eigenvectors.py`) and why sparse/ARPACK-based Green's-function work is a
+  harder/lower-priority case. Each tier wants explicit sign-off before it starts. Check the plan
+  before starting any GPU-related work in this repo.
 - **HPC-cluster material never goes into git.** pyqula is a public repository; the maintainer's cluster
   details (login hosts, scratch paths, partition names, queue measurements, account-specific job scripts,
   run logs) are none of the public's business and must not reach GitHub. They live in `docs/` and in
