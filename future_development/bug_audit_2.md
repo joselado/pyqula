@@ -105,7 +105,9 @@ Status line, with the remainder its fixing agent reported and, where the fix
 spanned files one agent did not own, the follow-up that closed it.
 
 The four that are **not fixed are not repairs**, and should not be re-opened as
-though they were:
+though they were. Each is written up in full, with what was measured, in
+[`audit_open_decisions.md`](audit_open_decisions.md), together with the three
+judgement calls that were made one way and could reasonably be made the other:
 
 - **#57** (batching the QGT's per-k eigh) -- the named fix is *not*
   output-equivalent, which the agent measured rather than assumed:
@@ -586,7 +588,7 @@ H0=0       seed=1  crashes at 1 of 61 energies: [(0.0, 'LinAlgError')]
 H0 generic seed=1  crashes at 0 of 61 energies: []
 ```
 
-**Status:** **fixed** in this session. Remainder reported by the fixing agent: PARTIAL -- the remaining half needs src/pyqula/transporttk/smatrix.py, which I do not own. That file sets delta_smatrix = 1e-12 and get_smatrix clamps any larger delta down to it, so every S-matrix evaluation asks for the surface Green's function at a broadening at which, on a multi-orbital lead with a state at the evaluated energy, no double-precision algorithm can produce it (I checked: an Umerski-style transfer-matrix reformulation fails there too, because the decaying-mode eigenvalues are degenerate to 1e-6, and the required cancellation is ~1e-12 out of numbers of size 5e11). With my greentk fix, ht.didv(energy=0.0) on such a lead now raises a ValueError that names the energy, the delta and the residual and says to use a larger delta -- diagnosable instead of `LinAlgError: Singular matrix` or a silently wrong number -- but it still does not return a conductance. Returning one requires smatrix.py to stop forcing an unresolvable broadening (e.g. honour the heterostructure's own delta, which is what landauer(energy=0.0) does and why it works on the same fixture).
+**Status:** **fixed** in this session, in both halves. The greentk half (a diagnostic naming the energy, delta and residual instead of `LinAlgError: Singular matrix`) landed with the fix pass. The remaining half, which needed a file that agent did not own, is now closed too: `transporttk/smatrix.py` no longer clamps the lead broadening to `delta_smatrix=1e-12` unconditionally. It raises it only as far as the Dyson-residual check requires and never past the junction's own `delta` -- the value `landauer()` uses, which is why landauer worked on exactly the fixtures where this failed -- and warns when it does, because the Fisher-Lee S-matrix is only unitary in the small-broadening limit and the unitarity tolerance is tied to whatever broadening was actually used. Pinned by `tests/transport/test_smatrix_delta_escalation.py`, which checks the previously-failing energy against the independent `landauer()` route, checks that a resolvable energy is bit-identical (0.14489064219000647) and silent, and keeps a one-orbital chain as the control that never needs the escalation.
 
 ### 10. bloch_selfenergy(mode="full_adaptive") in 2D hardcodes eps=0.1 and silently ignores the caller's `error`
 

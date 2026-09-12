@@ -26,10 +26,19 @@ already reached once.
   behaviour changes before upgrading -- a great many of these fixes turn a
   silent wrong number into a right one or into a raised exception.
 
-- [`bug_audit_2_reproductions.md`](bug_audit_2_reproductions.md) -- the 149
-  standalone scripts that sweep wrote, preserved verbatim and annotated with the
+- [`bug_audit_2_reproductions.md`](bug_audit_2_reproductions.md) -- the 211
+  scripts written while producing that audit and then fixing it, preserved
+  verbatim (with absolute paths replaced by placeholders) and annotated with the
   finding each one backs. Evidence, not a test suite: they print numbers a human
   reads and none of them asserts.
+
+- [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
+  sweep did NOT fix, and the calls that were made one way and could reasonably
+  be made the other: three findings that are decisions rather than repairs (the
+  QGT batching that is not output-equivalent, what the AAA's `converged` flag
+  should mean, GPU Tier 2), three judgement calls (the one normalization
+  deliberately left, the one aliasing sibling deliberately left, and the one
+  assertion deliberately weakened), and where a third sweep should start.
 
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a

@@ -5,6 +5,54 @@ from ..algebra import dagger,sqrtm
 delta_smatrix = 1e-12 # delta for the smatrix
 
 
+def _lead_selfenergies(ht,energy,delta_lead,delta_max):
+    """The two lead selfenergies, at the smallest broadening that actually
+    resolves them.
+
+    The S-matrix wants the leads evaluated as close to the real axis as
+    possible: a finite broadening adds an anti-Hermitian piece to the lead
+    selfenergy that is not real coupling, so Gamma = i(Sigma - Sigma^dag)
+    stops being the true level width and the Fisher-Lee S-matrix stops
+    being unitary -- which is why `delta_smatrix` is 1e-12 and why the
+    unitarity tolerance below is tied to it.
+
+    But that broadening is not always attainable. On a lead with a state
+    essentially at the evaluated energy the surface Green's function grows
+    like 1/delta, and at delta=1e-12 on a multi-orbital lead the
+    cancellation it needs is ~1e-12 out of numbers of size 1e11, which
+    double precision cannot carry -- greentk.rg refuses it rather than
+    return a wrong Green's function (see its Dyson-residual check). A
+    one-orbital chain never hits this, because the decimation there is
+    exact, which is why the clamp went unchallenged for so long.
+
+    So the broadening is raised only as far as it has to be, and never
+    past the junction's own `delta` -- the value landauer() uses, and the
+    reason landauer works on exactly the fixtures where this used to
+    fail. The caller ties the unitarity tolerance to whatever comes back,
+    so a raised broadening loosens that check honestly instead of
+    silently. If even the junction's own delta will not resolve the lead,
+    greentk's ValueError propagates: there is no answer to give."""
+    import warnings
+    d = delta_lead
+    while True:
+        try:
+            selfl = ht.get_selfenergy(energy,delta=d,lead=0,pristine=True)
+            selfr = ht.get_selfenergy(energy,delta=d,lead=1,pristine=True)
+        except ValueError:
+            if not d<delta_max: raise # nothing left to try, report it
+            d = min(d*100.,delta_max) # escalate, bounded by the junction's
+            continue
+        if d!=delta_lead: # tell the caller the S-matrix is less unitary
+            warnings.warn("the lead selfenergies could not be resolved at "
+                "delta=%g at energy %g, so the S-matrix was evaluated at "
+                "delta=%g instead (the junction's own delta is %g). The "
+                "Fisher-Lee S-matrix is only unitary in the limit of small "
+                "lead broadening, so this result is correspondingly less "
+                "unitary; the unitarity check is loosened to match."
+                %(delta_lead,energy,d,delta_max))
+        return selfl,selfr,d
+
+
 
 def get_smatrix(ht,energy=0.0,delta=None,as_matrix=False,check=True):
     """Calculate the S-matrix of an heterostructure.
@@ -44,8 +92,7 @@ def get_smatrix(ht,energy=0.0,delta=None,as_matrix=False,check=True):
     if delta_lead>delta_smatrix: delta_lead = delta_smatrix # small delta is critical!
     smatrix = [[None,None],[None,None]] # smatrix in list form
     # get the selfenergies, using the same coupling as the lead
-    selfl = ht.get_selfenergy(energy,delta=delta_lead,lead=0,pristine=True)
-    selfr = ht.get_selfenergy(energy,delta=delta_lead,lead=1,pristine=True)
+    (selfl,selfr,delta_lead) = _lead_selfenergies(ht,energy,delta_lead,delta)
     # get the central Green's function
     gmatrix = ht.get_central_gmatrix(selfl=selfl,selfr=selfr,
                                    energy=energy)
