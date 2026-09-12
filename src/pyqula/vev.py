@@ -8,7 +8,9 @@ def get_dm_vev(H,A,**kwargs):
     if H.dimensionality != 0:
         raise ValueError("the density-matrix expectation value is only "
                 "implemented for 0d Hamiltonians")
-    dm = H.get_density_matrix() # return the DM, as a matrix
+    # every keyword (the temperature above all) used to be dropped here,
+    # so the vev was the zero-temperature one whatever was asked for
+    dm = H.get_density_matrix(**kwargs) # return the DM, as a matrix
     A = Operator(A) # convert to operator
     # transposed for the same reason as in spectrum.ev: full_dm's
     # convention is the transpose of the usual density matrix, so

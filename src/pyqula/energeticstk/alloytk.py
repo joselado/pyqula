@@ -91,7 +91,6 @@ def get_energy(self,**kwargs):
 def get_energy_i(self,f,ii,**kwargs):
     eout = 0.0
     r = self.r
-    print(len(r)); exit()
     for jj in range(len(r)):
         eout += get_energy_ij(self,f,ii,jj,**kwargs)
     return eout

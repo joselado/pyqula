@@ -66,15 +66,22 @@ def valence_TMDC(g=None,soc=0.0,**kwargs):
     return h # return the Hamiltonian
 
 
-def SOC_TMDC(g=None,soc=0.0,**kwargs):
-    """Return the Ising SOC for a triangular lattice"""
+def SOC_TMDC(g=None,soc=1.0,**kwargs):
+    """Return the Ising SOC for a triangular lattice, with strength soc.
+
+    Unlike valence_TMDC above, soc is an amplitude here and not a phase:
+    the Ising pattern is the phi=1/2 one, and what the parameter sets is
+    how strong it is. That is also how the internal caller TMDC_MX2 has
+    always used it, multiplying the result by soc externally. It used to
+    be accepted and never read, so SOC_TMDC(soc=0.0) -- which reads as
+    'no SOC' -- returned the full-strength Hamiltonian."""
     if g is None:
         g = geometry.triangular_lattice()
     ft0 = specialhopping.phase_C3(g,phi=.5,**kwargs)
     ft = lambda r1,r2: 1j*(ft0(r1,r2).imag) # only imaginary part
     h = g.get_hamiltonian(tij=ft,is_multicell=True,has_spin=False)
     h.turn_spinful(enforce_tr=True)
-    return h # return the Hamiltonian
+    return soc*h # return the Hamiltonian, with the requested strength
 
 
 from .specialhamiltoniantk.tmdc import doped_MoS2
@@ -148,14 +155,18 @@ def triangular_pi_flux(g=None,**kwargs):
     from . import gauge
 #    h = gauge.hamiltonian_gauge_transformation(h,[0.,0.25])
 #    return h
-    if h.has_time_reversal_symmetry(): pass
-    else: 
-        print(np.round(h.intra,2))
-        for t in h.hopping:
-          print(np.round(t.m,2))
+    if not h.has_time_reversal_symmetry():
+        # has_time_reversal_symmetry asks whether the hoppings are real,
+        # which is a gauge dependent question. For the default triangular
+        # lattice the answer is not a gauge artifact: the spectrum itself
+        # is not symmetric under k -> -k, so the flux this construction
+        # puts through the triangles is not the pi the name promises, and
+        # choosing the right one is a physics decision rather than a repair
         raise ValueError("the pi-flux Hamiltonian came out without "
-                "time-reversal symmetry")
-    exit()
+                "time-reversal symmetry: its hoppings are complex in this "
+                "gauge (for the default triangular lattice the spectrum is "
+                "not symmetric under k -> -k either, so the flux per "
+                "plaquette is neither 0 nor pi)")
     return h
 
 

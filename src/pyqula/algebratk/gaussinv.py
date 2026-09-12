@@ -19,8 +19,6 @@ def gauss_inverse(m,i=0,j=0,test=False):
     # in case you use the -1 notation of python
     if i<0: i += nb
     if j<0: j += nb
-    nm = nb # number of blocks
-    n = ua[0].shape[0] # dimension of the matrix
     mout = inv_block(ca,da,ua,i,j)
     mout = np.array(mout)
     test = False # test if the inversion worked
@@ -39,15 +37,18 @@ def gauss_inverse(m,i=0,j=0,test=False):
 def inv_block(ca, da, ua, i, j):
     """Gauss inversion, adapted from the fortran function"""
     nm = len(ca)
-    n = ca[0].shape[0]
-    cl = np.zeros((n, n), dtype=np.complex128)
-    cr = np.zeros((n, n), dtype=np.complex128)
-    dl = np.zeros((n, n), dtype=np.complex128)
-    dr = np.zeros((n, n), dtype=np.complex128)
-
-    for i1 in range(n):
-        cl[i1, i1] = 1.0
-        cr[i1, i1] = 1.0
+    # The blocks need not all have the same size (landauer.py and
+    # smatrix.py both advertise that, and transporttk/central.py builds
+    # junctions whose central region is bigger than the lead cell), so
+    # each accumulator is sized by the block it starts on rather than by
+    # a single global n. dl sweeps up from block 0 and dr down from the
+    # last block, so they start as the zero selfenergy of those blocks;
+    # cl/cr start as the identity on block j, which is where their
+    # recursions below are first entered.
+    dl = np.zeros((ca[0].shape[0],)*2, dtype=np.complex128)
+    dr = np.zeros((ca[nm-1].shape[0],)*2, dtype=np.complex128)
+    cl = np.identity(ca[j].shape[0], dtype=np.complex128)
+    cr = np.identity(ca[j].shape[0], dtype=np.complex128)
 
     # Calculate dl[i]
     for i1 in range(i+1):

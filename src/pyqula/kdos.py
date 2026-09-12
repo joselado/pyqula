@@ -179,8 +179,19 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
                  ewindow=4.0,delta=0.01,ntries=10,nk=100,
                  operator=None,energies=np.linspace(-3.0,3.0,200),
                  mode="ED",**kwargs):
-    """Calculate the KDOS bands using the KPM"""
+    """Calculate the KDOS bands using the KPM.
+
+    frand is the KPM random-vector generator (the one kpm.pdos and
+    kpm.tdos take): it is what makes the KDOS a projected one, by drawing
+    the random vectors from a subspace instead of the whole Hilbert
+    space. It used to be accepted here and never forwarded, so the output
+    was the unprojected one and was byte-identical with and without it."""
     if use_kpm: mode ="KPM" # conventional method
+    if frand is not None and mode!="KPM": # nothing to do with it here
+        raise ValueError("frand is the KPM random-vector generator, and is "
+                "only used by mode='KPM'; pass use_kpm=True or mode='KPM' "
+                "to have it honoured (this call asked for mode='"+str(mode)
+                +"', which diagonalizes instead of sampling)")
     # normalize the kpath up front: the ED branch below needs the actual
     # kpoints (it indexes get_bands's output by k-index), and get_kpath
     # also expands a list of high-symmetry-point labels into vectors
@@ -226,7 +237,7 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
         hk = hkgen(k) # get Hamiltonian
         npol = 3*int(scale/delta) # number of polynomials
         (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=npol*4,P=P,
-                     operator=operator,
+                     operator=operator,frand=frand,
                      ewindow=ewindow,ntries=ntries,x=energies,
                      **kwargs) # compute
         return (x,y)

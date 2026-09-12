@@ -16,7 +16,10 @@ from pyqula import kdos
 
 edge = np.zeros(h.intra.shape[0]) ; edge += 1.0 ; edge[10:edge.shape[0]] = 0.0
 frand = lambda : (-0.5+np.random.random(edge.shape[0]))*edge
-(k,e,d) = kdos.kdos_bands(h,frand=frand)
+# use_kpm=True is what makes frand do anything: frand draws the KPM random
+# vectors from the edge subspace, which is what projects the KDOS onto the
+# surface. Without it this runs a plain diagonalization and frand is unused.
+(k,e,d) = kdos.kdos_bands(h,frand=frand,use_kpm=True)
 
 import matplotlib.pyplot as plt
 

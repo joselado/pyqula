@@ -440,15 +440,21 @@ def getgreen_jit(wfs,es,energy,delta,zero):
 
 
 
-def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=10,
+def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=100,
         gmode="adaptive"):
-    """Return the integration of an operator times the Green function"""
+    """Return the integration of an operator times the Green function
+
+    nk is the k-mesh of the Brillouin-zone sum, and it used to be declared
+    here and never forwarded to bloch_selfenergy, which then quietly used
+    its own default. Note that with the default gmode="adaptive" the
+    integration is error-controlled rather than performed on a fixed mesh,
+    so nk only bites for gmode="full" and gmode="renormalization"."""
     if operator is not None: # get the operator
         operator = h0.get_operator(operator)
     h = h0.copy()
     h = h.get_dense()
     if operator is None: # no operator
-        g = bloch_selfenergy(h,energy=e,delta=delta,mode=gmode)[0] 
+        g = bloch_selfenergy(h,energy=e,delta=delta,nk=nk,mode=gmode)[0] 
         out = -np.trace(np.array(g)).imag
     else: # finite operator
         if operator.matrix is None: # no matrix, assume a momentum dependent
@@ -468,7 +474,7 @@ def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=10,
 #            out /= len(ks) # normalize
         else: # operator is a matrix
             op = operator.get_matrix()
-            g = bloch_selfenergy(h,energy=e,delta=delta,mode=gmode)[0] 
+            g = bloch_selfenergy(h,energy=e,delta=delta,nk=nk,mode=gmode)[0] 
             out = -np.trace(np.array(g)@op).imag
     return out
 

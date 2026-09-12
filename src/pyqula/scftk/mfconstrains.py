@@ -56,8 +56,17 @@ def remove_inplane_magnetism_spinful(m):
     return m
 
 
-def remove_spinless_sector(h,removef):
-    """Remove total charge renormalization"""
+def remove_spinless_sector(h,removef,alldirs=True):
+    """Remove total charge renormalization.
+
+    alldirs=True applies removef to EVERY direction of the mean-field
+    dictionary, not just the onsite (0,0,0) block: with an intersite
+    interaction the spin-dependent Fock term lives on the bonds, so a
+    constraint that only rewrote (0,0,0) was a silent no-op there. It is
+    False for the charge constraint, whose remover (remove_onsite_*) is
+    about the onsite charge specifically -- applied to a bond it would
+    delete the spin-independent part of the hopping renormalization (a
+    bond/Kekule-type charge order), which is not what "no_charge" says."""
     has_eh = h.has_eh
     has_spin = h.has_spin
     if has_eh:
@@ -69,46 +78,57 @@ def remove_spinless_sector(h,removef):
                 "Hamiltonians, use the spinful version instead")
     def f(dd): # create function
         out = deepcopy(dd) # copy the dictionary
-        m = out[(0,0,0)] # onsite matrix
-        m = removef(m) # remove the sector
-        out[(0,0,0)] = m # set the new matrix
+        for d in (out if alldirs else [(0,0,0)]): # loop over directions
+            out[d] = removef(out[d]) # remove the sector
         return out # return dictionary
     return f # return function
 
 
 
 
-def remove_spinful_sector(h,removef):
-    """Remove total charge renormalization"""
+def remove_spinful_sector(h,removef,alldirs=True):
+    """Remove total charge renormalization.
+
+    alldirs: see remove_spinless_sector's docstring -- every direction of
+    the mean field, or only the onsite (0,0,0) block. The spin structure
+    of a bond matrix is the same 2x2 block per pair of orbitals that the
+    onsite one has, so the removers apply unchanged; and for a Nambu
+    Hamiltonian the hole block is rebuilt from the (constrained) electron
+    block at the SAME direction, which is the relation
+    superconductivity.build_nambu_matrix already keeps at every
+    direction (the hole Hamiltonian is -h*(-k), whose real-space hopping
+    at d is -conj(t_d), not -conj(t_-d))."""
     has_eh = h.has_eh
     has_spin = h.has_spin
     def f(dd): # create function
         out = deepcopy(dd) # copy the dictionary
-        m = out[(0,0,0)] # onsite matrix
-        if has_eh and not has_spin:
-            raise NotImplementedError("the mean-field constrain is not "
-                    "implemented for spinless Nambu Hamiltonians")
-        elif not has_eh and has_spin: # spinful
-            m = removef(m)
-        elif has_eh and has_spin: # spinful
-            m01 = get_eh_sector(m,i=0,j=1) # anomalous part
-            m10 = get_eh_sector(m,i=1,j=0) # anomalous part
-            m00 = get_eh_sector(m,i=0,j=0) # anomalous part
-            m00 = removef(m00) # remove onsite 
-            m = build_nambu_matrix(m00,c12=m01,c21=m10) # rebuild the matrix
-        else:
-            raise NotImplementedError("this Hilbert space is not implemented "
-                    "in the mean-field constrain")
-        out[(0,0,0)] = m # set the new matrix
+        for d in (out if alldirs else [(0,0,0)]): # loop over directions
+            m = out[d] # matrix of this direction
+            if has_eh and not has_spin:
+                raise NotImplementedError("the mean-field constrain is not "
+                        "implemented for spinless Nambu Hamiltonians")
+            elif not has_eh and has_spin: # spinful
+                m = removef(m)
+            elif has_eh and has_spin: # spinful
+                m01 = get_eh_sector(m,i=0,j=1) # anomalous part
+                m10 = get_eh_sector(m,i=1,j=0) # anomalous part
+                m00 = get_eh_sector(m,i=0,j=0) # anomalous part
+                m00 = removef(m00) # remove the sector
+                m = build_nambu_matrix(m00,c12=m01,c21=m10) # rebuild the matrix
+            else:
+                raise NotImplementedError("this Hilbert space is not "
+                        "implemented in the mean-field constrain")
+            out[d] = m # set the new matrix
         return out # return dictionary
     return f # return function
 
 
 def remove_charge(h):
+    # alldirs=False: the onsite charge only, see remove_spinless_sector
     if h.has_spin:
-        return remove_spinful_sector(h,remove_onsite_spinful)
+        return remove_spinful_sector(h,remove_onsite_spinful,alldirs=False)
     else:
-        return remove_spinless_sector(h,remove_onsite_spinless)
+        return remove_spinless_sector(h,remove_onsite_spinless,alldirs=False)
 
 def remove_magnetism(h):
     return remove_spinful_sector(h,remove_magnetism_spinful)

@@ -75,19 +75,21 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
     # now compute the real-space wavefunctions including the Bloch phase
     ds = get_real_space_density_batch(lodict,h.geometry,vs,ks,
                               has_spin=h.has_spin) # (nwf,ngrid) array
+    from ..klist import kmesh
+    nkp = len(kmesh(h.dimensionality,nk=nk)) # kpoints the mesh has
     if mode=="LDOS": # LDOS mode
-      def f(e): return ldos_at_energy(evals,ds,e,delta) # compute the LDOS
+      def f(e): return ldos_at_energy(evals,ds,e,delta,nkp) # compute the LDOS
     elif mode=="density": # LDOS mode
-      def f(e): return density_at_energy(evals,ds,e,delta) # compute the LDOS
+      def f(e): return density_at_energy(evals,ds,e,delta,nkp) # compute the LDOS
     else:
         raise ValueError("unknown mode; the atomic LDOS accepts 'LDOS' and "
                 "'density'")
-    return f,evals,x,y # return generator
+    return f,evals,x,y,nkp # return generator
 
 
 def get_ldos(h,e=0.0,delta=0.05,**kwargs):
     """Compute a single LDOS"""
-    ldos_gen,evals,x,y = ldos_generator(h,e=e,delta=delta,**kwargs) 
+    ldos_gen,evals,x,y,nkp = ldos_generator(h,e=e,delta=delta,**kwargs) 
     out = ldos_gen(e) # compute the LDOS
     np.savetxt("LDOS.OUT",np.array([x,y,out]).T) # save
     return x,y,out
@@ -95,7 +97,7 @@ def get_ldos(h,e=0.0,delta=0.05,**kwargs):
 
 def get_density(h,e=0.0,delta=1e-3,**kwargs):
     """Compute a single LDOS"""
-    ldos_gen,evals,x,y = profile_generator(h,e=e,delta=delta,
+    ldos_gen,evals,x,y,nkp = profile_generator(h,e=e,delta=delta,
                                mode="density",**kwargs)
     out = ldos_gen(e) # compute the LDOS
     np.savetxt("DENSITY.OUT",np.array([x,y,out]).T) # save
@@ -107,7 +109,7 @@ def get_density(h,e=0.0,delta=1e-3,**kwargs):
 def multi_ldos(h,energies=np.linspace(-2.0,2.0,100),delta=0.05,**kwargs):
     """Compute the LDOS at different eenrgies, and add an envelop atomic
     orbital"""
-    ldos_gen,evals,x,y = ldos_generator(h,delta=delta,**kwargs) # get the generator
+    ldos_gen,evals,x,y,nkp = ldos_generator(h,delta=delta,**kwargs) # get the generator
     # now compute all the LDOS
     fs.rmdir("MULTILDOS")
     fs.mkdir("MULTILDOS")
@@ -121,7 +123,9 @@ def multi_ldos(h,energies=np.linspace(-2.0,2.0,100),delta=0.05,**kwargs):
     fo.close()
     from ..dos import calculate_dos,write_dos
     es2 = np.linspace(min(energies),max(energies),len(energies)*10)
-    ys = calculate_dos(evals,es2,delta,w=None) # compute DOS
+    # same normalization as the maps above, and as dos.dos_kmesh: 1/pi
+    # for the Lorentzian and 1/nkp for the average over the Brillouin zone
+    ys = calculate_dos(evals,es2,delta,w=None)/(np.pi*nkp) # compute DOS
     write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")
 
 
@@ -191,17 +195,18 @@ def get_grids_jit(x,y,gridx,gridy):
           k += 1
     return gridx,gridy
 
-def ldos_at_energy(evals,ds,e,delta):
+def ldos_at_energy(evals,ds,e,delta,nkp):
     """Compute the different local density of states at each energy"""
     de2 = (evals-e)**2 # difference in energy
     out = np.sum(ds.T*delta/(de2+delta**2),axis=1)
-    return out # return that density
+    return out/(np.pi*nkp) # normalize the Lorentzian and the kpoints
 
-def density_at_energy(evals,ds,e,delta):
+def density_at_energy(evals,ds,e,delta,nkp):
     """Compute the density at this energy"""
     de = evals-e # difference in energy
     w = (1. - np.tanh(de/delta))/2. # weight
     out = np.sum(ds.T*w,axis=1) # output
-    return out # return that density
+    # an occupation, so only the average over the Brillouin zone here
+    return out/nkp # return that density
 
 

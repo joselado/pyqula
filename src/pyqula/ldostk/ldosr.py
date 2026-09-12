@@ -43,7 +43,12 @@ def ldosr_generator(h,rs=0.2,es=np.linspace(-1.,1.,100),
             else:
               raise NotImplementedError("the real-space LDOS is not "
                       "implemented for spinless Nambu Hamiltonians")
-        return (es,yout)
+        # calculate_dos returns pi times a sum of unit-normalized
+        # Lorentzians (see dostk/eigtodos.py), so the 1/pi that makes this
+        # a density of states is the caller's, exactly as in dos.dos_kmesh
+        # and ldos.multi_ldos_tb. Without it the energy integral of this
+        # LDOS came out pi instead of 1
+        return (es,yout/np.pi)
     return fun
 
 

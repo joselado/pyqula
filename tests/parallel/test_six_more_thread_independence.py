@@ -5,9 +5,21 @@ from pyqula import geometry
 from pyqula.filling import eigenvalues as filling_eigenvalues
 from pyqula.spectrum import total_energy
 from pyqula.fermisurface import fermi_surface_generator
-from pyqula.htk.eigenvectors import get_eigenvectors
+from pyqula.htk.eigenvectors import get_eigenvectors, hk_matrix_batch
 from pyqula.ldos import ldosmap
 from pyqula.kdos import kdos_bands
+
+
+def max_eigenpair_residual(h, es, vs, ks):
+    """max_i || H(k_i) v_i - e_i v_i ||, the oracle for eigenvector
+    content (same one as tests/parallel/test_get_eigenvectors_dense.py,
+    where it is also shown to reject an arbitrary orthonormal set). It
+    is invariant under the phase of each eigenvector, which the
+    completeness contraction it replaced was too -- but so was every
+    orthonormal set, which is why that one could not fail."""
+    hks = hk_matrix_batch(h.get_hk_gen(), ks)  # H(k) for every state's k
+    resid = np.einsum("iab,ib->ia", hks, vs) - es[:, None]*vs
+    return np.max(np.abs(resid))
 
 
 def test_eigenvalue_only_functions_independent_of_thread_count():
@@ -53,19 +65,26 @@ def test_eigenvector_based_functions_independent_of_thread_count(tmp_path, monke
     h.add_zeeman([0., 0., 0.3])
     default_threads = numba.get_num_threads()
     try:
-        # get_eigenvectors: compare via the phase-invariant density-matrix
-        # sum -- individual eigenvector phases aren't guaranteed stable
-        # across independently-threaded diagonalizations of the same
-        # matrix, even though the eigenspace they span is (see
+        # get_eigenvectors: the eigenvalues must agree exactly, and the
+        # eigenvectors are compared through the eigenpair residual
+        # ||H(k)v - e v|| -- individual eigenvector phases aren't
+        # guaranteed stable across independently-threaded
+        # diagonalizations of the same matrix, and the completeness
+        # contraction conj(vs).T@vs that used to be used here is
+        # satisfied by any orthonormal set (see
         # tests/parallel/test_get_eigenvectors_dense.py).
-        dms = []
+        runs = []
         for n in (1, 2, 4):
             numba.set_num_threads(n)
-            es, vs = get_eigenvectors(h, nk=5)
-            dms.append(np.conj(vs).T @ vs)
-        for dm in dms[1:]:
-            assert np.allclose(dm, dms[0], atol=1e-8), \
-                "get_eigenvectors: result depends on numba thread count"
+            runs.append(get_eigenvectors(h, nk=5, kpoints=True))
+        for (es, vs, ks) in runs[1:]:
+            assert np.allclose(es, runs[0][0]), \
+                "get_eigenvectors: eigenvalues depend on numba thread count"
+            assert np.allclose(ks, runs[0][2]), \
+                "get_eigenvectors: kpoints depend on numba thread count"
+        for (es, vs, ks) in runs:
+            assert max_eigenpair_residual(h, es, vs, ks) < 1e-10, \
+                "get_eigenvectors: eigenvectors depend on numba thread count"
 
         # ldosmap draws its own random kpoints internally; pin them so
         # only the thread count varies between runs (see

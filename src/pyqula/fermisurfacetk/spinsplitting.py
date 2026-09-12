@@ -1,11 +1,16 @@
 import numpy as np
 from .. import algebra
 
-def average_spin_splitting(h,nk=20):
-    """Compute the average spin splitting in the BZ"""
-    # this assumes that spin up and down are good quantum numbers
-    if not h.has_spin:
-        raise ValueError("the spin splitting needs a spinful Hamiltonian")
+def average_spin_splitting(h,nk=20,tol=algebra.error):
+    """Compute the average spin splitting in the BZ.
+
+    The average runs over bands as well as over kpoints, so the result is
+    the splitting of a typical band and does not depend on how big a cell
+    the same crystal is described in. Summing over bands instead -- which
+    is what this did -- makes it grow with the number of bands: a uniform
+    Zeeman field splitting every band by 0.6 gave 1.2 on the primitive
+    honeycomb cell and 4.8 / 10.8 on its 2x / 3x supercells."""
+    check_collinear(h,tol=tol) # refuse rather than return a wrong number
     hup = h.copy() ; hup.remove_spin(channel="up") 
     hdn = h.copy() ; hdn.remove_spin(channel="dn") 
     hkup = hup.get_hk_gen() # get generator
@@ -13,11 +18,13 @@ def average_spin_splitting(h,nk=20):
     from ..klist import kmesh
     ks = kmesh(h.geometry.dimensionality,nk=nk)
     def am(k):
-        eup = algebra.eigvalsh(hkup(k)) # eigenvalues for up
-        edn = algebra.eigvalsh(hkdn(k)) # eigenvalues for dn
+        # sorted for the same reason as in spin_splitting_vs_energy:
+        # algebra.eigvalsh concatenates the two halves of a block diagonal
+        # matrix without sorting them, which scrambles the band pairing
+        eup = np.sort(algebra.eigvalsh(hkup(k))) # eigenvalues for up
+        edn = np.sort(algebra.eigvalsh(hkdn(k))) # eigenvalues for dn
         de = (eup-edn)**2 # square difference
-        ea = (eup + edn)/2. # average
-        return np.sum(np.sqrt(de)) # square root
+        return np.mean(np.sqrt(de)) # square root, averaged over bands
     out = np.mean([am(k) for k in ks]) # average altermagnetism
     return out # return result
 
@@ -25,12 +32,10 @@ def average_spin_splitting(h,nk=20):
 
 
 
-def spin_splitting_density(h,nk=20,energies=None,delta=1e-2):
+def spin_splitting_density(h,nk=20,energies=None,delta=1e-2,tol=algebra.error):
     """Compute the average spin splitting in the BZ"""
-    # this assumes that spin up and down are good quantum numbers
     if energies is None: energies = np.linspace(-3.0,3.0,400)
-    if not h.has_spin:
-        raise ValueError("the spin splitting needs a spinful Hamiltonian")
+    check_collinear(h,tol=tol) # refuse rather than return a wrong number
     hup = h.copy() ; hup.remove_spin(channel="up")
     hdn = h.copy() ; hdn.remove_spin(channel="dn")
     hkup = hup.get_hk_gen() # get generator
@@ -39,8 +44,9 @@ def spin_splitting_density(h,nk=20,energies=None,delta=1e-2):
     ks = kmesh(h.geometry.dimensionality,nk=nk)
     from ..dos import calculate_dos
     def am(k):
-        eup = algebra.eigvalsh(hkup(k)) # eigenvalues for up
-        edn = algebra.eigvalsh(hkdn(k)) # eigenvalues for dn
+        # sorted, so that the two channels are paired by band index
+        eup = np.sort(algebra.eigvalsh(hkup(k))) # eigenvalues for up
+        edn = np.sort(algebra.eigvalsh(hkdn(k))) # eigenvalues for dn
         de = (eup-edn)**2 # square difference
         ea = (eup + edn)/2. # average
         return calculate_dos(ea,energies,delta,w=de)

@@ -14,16 +14,13 @@ def kfun_map(h,nk=50,
     hk_gen = h.get_hk_gen() # gets the function to generate h(k)
     kxs = np.linspace(-nsuper,nsuper,nk)+k0[0]  # generate kx
     kys = np.linspace(-nsuper,nsuper,nk)+k0[1]  # generate ky
-    kdos = [] # empty list
-    kxout = []
-    kyout = []
     if reciprocal: R = h.geometry.get_k2K() # get matrix
     else:  R = np.array(np.identity(3)) # get identity
     out = [] # empty list
     kx = []
     ky = []
     for x in kxs:
-        for y in kxs:
+        for y in kys: # the y axis is the ky grid, not a second copy of kxs
             print("Doing",x,y)
             r = np.array([x,y,0.]) # real space vectors
             k = np.array(R)@r # change of basis

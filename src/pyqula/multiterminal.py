@@ -2,7 +2,7 @@
 
 import numpy as np
 from . import neighbor
-from .algebra import dagger
+from .algebra import dagger,inv
 
 class Device():
   """ Device with leads and scattering part"""
@@ -79,7 +79,7 @@ class Lead():
 def landauer(d,energy,ij=[(0,1)],error=0.000001,delta=0.00001):
   """ Calculate landauer tranmission between leads i,j """
   Ms = landauer_matrix(d,energy,ij=ij,error=error,delta=delta) # matrix
-  Ts = [m.trace()[0,0] for m in Ms]
+  Ts = [np.trace(m) for m in Ms]
   return Ts
 
 
@@ -92,15 +92,17 @@ def landauer_matrix(d,energy,ij=[(0,1)],error=0.000001,delta=0.00001):
   # identity matrix
   iden = np.identity(d.intra.shape[0])
   # calculate central green function
-  gc = ((energy + delta*1j)*iden -  d.intra - ssum). I
+  # (this used to use the .I attribute and elementwise products of the
+  # removed numpy.matrix, so it raised on a plain array)
+  gc = inv((energy + delta*1j)*iden -  d.intra - ssum)
   # calculate transmission
   ts = [] # empty list
   for (i,j) in ij: # loop over pairs
     # calculate spectral functions of the leads
     gammai = 1j*(ss[i]-dagger(ss[i])) # gamma function
     gammaj = 1j*(ss[j]-dagger(ss[j])) # gamma function
-    # calculate transmission
-    t = (gammai*gc*dagger(gammaj)*dagger(gc)).real 
+    # calculate transmission, Tr[Gamma_i G Gamma_j G^dag]
+    t = (gammai@gc@dagger(gammaj)@dagger(gc)).real
     ts.append(t) # add to the list
   return ts # return list
 
@@ -116,7 +118,7 @@ def central_density(d,energy,ij=[(0,1)],error=0.000001,delta=0.00001):
   # identity matrix
   iden = np.identity(d.intra.shape[0])
   # calculate central green function
-  gc = ((energy + delta*1j)*iden -  d.intra - ssum). I
+  gc = inv((energy + delta*1j)*iden -  d.intra - ssum)
   # calculate transmission
   den = np.array([gc[i,i].imag for i in range(gc.shape[0])])
   return den # return list

@@ -125,7 +125,7 @@ def test_kondo_branch_has_lower_energy_than_trivial_branch():
     test_v_zero_is_also_a_fixed_point_at_nonzero_J) -- but only one of them
     should be the actual ground state. This is also the first real exercise
     of return_total_energy=True's Eq. 83 constant terms
-    (sum_j |V_j|^2/J - lam_j*Q) and the mu*n_electrons un-shift: get either
+    (sum_j N|V_j|^2/J - lam_j*Q) and the mu*n_electrons un-shift: get either
     sign wrong and this assertion is the one thing here that would catch
     it (every other test only checks hybridization/local_occupation, never
     total_energy)."""

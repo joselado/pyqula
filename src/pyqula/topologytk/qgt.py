@@ -209,7 +209,22 @@ def _qgt_over_kpoints(hm,orders,hkgen,ks,occ_idxs,non_abelian,degeneracy_tol,
     """Shared core of quantum_geometric_tensor_path/_mesh: resolve
     occ_idxs once from the first k-point (see _resolve_occ_idxs) and
     evaluate the QGT at every k in ks, reusing the same hm/orders/hkgen/
-    scale throughout. Returns (occ_idxs,Qs)."""
+    scale throughout. Returns (occ_idxs,Qs).
+
+    This loop is deliberately per-k-point rather than a batched
+    hk_matrix_batch + htk.eigenvectors.parallel_diagonalization, which is
+    the usual way to parallelize a k-mesh in this package. Batching would
+    replace algebra.eigh's eigenvectors with numba's, and the two agree on
+    the eigenvalues but not on the basis they pick inside a degenerate
+    subspace. The Abelian tensor traces over the chosen subspace and is
+    invariant under such a rotation (measured: agreement to 5e-14 on a 2x2
+    spinful Haldane supercell), but the non_abelian=True tensor Q_ij^{mn}
+    is only covariant -- the same measurement moves it by 4.9 out of a
+    |Q|max of 5.0 -- so a batched solver would silently change its value
+    and break, for instance, the spin-block-diagonality test in
+    tests/topology/test_quantum_geometric_tensor.py. Batching the
+    diagonalization here needs a fixed gauge for the occupied block first,
+    which is a design decision and not a speedup."""
     occ_idxs = _resolve_occ_idxs(hkgen,ks[0],occ_idxs)
     Qs = np.array([_quantum_geometric_tensor_at(hm,orders,hkgen,k,occ_idxs,
              non_abelian,degeneracy_tol,scale) for k in ks])

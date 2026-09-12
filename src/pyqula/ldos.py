@@ -243,7 +243,11 @@ def ldos1d(h,e=0.0,delta=0.001,nrep=3):
 
 def ldos_projector(h,e=0.0,**kwargs):
     """Return an operator to project onto that region"""
-    (x,y,d) = ldos(h,e=e,mode="arpack",silent=True,write=False,**kwargs)
+    # nrep=1 is essential: the profile returned by get_ldos_tb is written
+    # on an nrep-replicated supercell grid (nrep defaults to 5), and the
+    # operator has to live in the Hilbert space of the unit cell instead
+    (x,y,d) = ldos(h,e=e,mode="arpack",silent=True,write=False,nrep=1,
+            **kwargs)
     inds = np.array(range(len(d))) # indexes
     n = len(d)
     d = d/np.sum(d) # normalize
@@ -253,14 +257,18 @@ def ldos_projector(h,e=0.0,**kwargs):
 
 def ldos_density(h,**kwargs):
     """Return a normalized profile with the DOS"""
-    (x,y,d) = ldos(h,mode="arpack",silent=True,write=False,**kwargs)
+    # nrep=1 for the same reason as in ldos_projector: this is one value
+    # per site of the unit cell, not of an nrep-replicated supercell
+    (x,y,d) = ldos(h,mode="arpack",silent=True,write=False,nrep=1,**kwargs)
     d = d/np.sum(d) # normalize
     return d
 
 
 def ldos_potential(h,**kwargs):
     """Return a function that evaluates an LDOS profile"""
-    return # not finished yet
+    raise NotImplementedError("ldos_potential is not implemented; use "
+            "ldos_density for a normalized LDOS profile, or "
+            "ldos_projector for an operator projecting onto it")
 
 
 def get_ldos(h,**kwargs):
@@ -411,64 +419,92 @@ ldos = get_ldos # for backcompatibility
 
 def multi_ldos(h,projection="TB",**kwargs):
     """Compute the LDOS at different energies, and save everything in a file"""
+    from .utilities import rename_kwarg
+    # multi_ldos_tb used to spell the operator `op`, which is how the
+    # examples call it; the rest of the library spells it `operator`
+    kwargs = rename_kwarg(kwargs,"op","operator")
     if projection=="TB": return multi_ldos_tb(h,**kwargs)
     elif projection=="atomic": 
+        if kwargs.pop("operator",None) is not None:
+            raise NotImplementedError("the atomic projection of the LDOS "
+                    "does not accept an operator; use projection='TB'")
         from .ldostk import atomicmultildos
         return atomicmultildos.multi_ldos(h,**kwargs)
+    else:
+      raise ValueError("unknown projection; multi_ldos accepts 'TB' and "
+              "'atomic'")
 
 
 def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
         nrep=3,nk=100,num_bands=20,
-        random=False,op=None,**kwargs):
-  """Calculate many LDOS, by diagonalizing the Hamiltonian"""
+        random=False,operator=None):
+  """Calculate many LDOS, by diagonalizing the Hamiltonian
+
+  operator: None, or an operator spec (a name, a matrix, an Operator).
+      Each eigenstate is then weighted with its expectation value
+      <psi|A|psi>, which is the same convention get_ldos uses in
+      mode="arpack" (see ldostk.ldoswaves), so the map written for a
+      given energy is what get_ldos returns at that energy.
+  """
   print("Calculating eigenvectors in LDOS")
   ps = [] # weights
   evals,ws = [],[] # empty list
   ks = klist.kmesh(h.dimensionality,nk=nk) # get grid
+  if random:
+      ks = [np.random.random(3) for k in ks] # random vectors
+      print("RANDOM vectors in LDOS")
   hk = h.get_hk_gen() # get generator
-  op = operators.tofunction(op) # turn into a function
-#  if op is None: op = lambda x,k: 1.0 # dummy function
+  if operator is not None: operator = h.get_operator(operator) # resolve name
+  def get_weight(v,k):
+      """Weight of this eigenstate, its expectation value of the operator"""
+      if operator is None: return 1.0 # no operator, plain charge LDOS
+      return np.real(operator.braket(v,k=k)) # expectation value
   if h.is_sparse: # sparse Hamiltonian
     from .bandstructure import smalleig
     print("SPARSE Matrix")
     for k in ks: # loop
       print("Diagonalizing in LDOS, SPARSE mode")
-      if random:
-        k = np.random.random(3) # random vector
-        print("RANDOM vector in LDOS")
       e,w = smalleig(hk(k),numw=num_bands,evecs=True,e0=np.mean(energies))
       evals += [ie for ie in e]
       ws += [iw for iw in w]
-      ps += [op(iw,k=k).real for iw in w] # weights (real part of the expectation value)
+      ps += [get_weight(iw,k) for iw in w] # weights
   else:
     print("Diagonalizing in LDOS, DENSE mode")
-    for k in ks: # loop
-      if random:
-        k = np.random.random(3) # random vector
-        print("RANDOM vector in LDOS")
-      e,w = algebra.eigh(hk(k))
-      w = w.transpose()
-      evals += [ie for ie in e]
-      ws += [iw for iw in w]
-      ps += [op(iw,k=k).real for iw in w] # weights (real part of the expectation value)
-#      evals = np.concatenate([evals,e]) # store
-#      ws = np.concatenate([ws,w]) # store
-  ds = [(np.conjugate(v)*v).real for v in ws] # calculate densities
+    # the k-points are diagonalized in batches with the same numba-parallel
+    # routine dos.py and ldosmap use, instead of one LAPACK call per k-point
+    from .htk.eigenvectors import parallel_diagonalization,hk_matrix_batch
+    batch_size = 64
+    for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
+      kb = ks[i0:i0+batch_size] # kpoints in this batch
+      es,vs = parallel_diagonalization(hk_matrix_batch(hk,kb)) # diagonalize
+      for (ii,k) in enumerate(kb): # loop over kpoints of the batch
+        w = vs[ii].transpose() # rows are the eigenvectors
+        evals += [ie for ie in es[ii]]
+        ws += [iw for iw in w]
+        ps += [get_weight(iw,k) for iw in w] # weights
+  ds = np.array([(np.conjugate(v)*v).real for v in ws]) # calculate densities
   del ws # remove the wavefunctions
   fs.rmdir("MULTILDOS") # remove folder
   fs.mkdir("MULTILDOS") # create folder
   go = h.geometry.copy() # copy geometry
   go = go.supercell(nrep) # create supercell
   fo = open("MULTILDOS/MULTILDOS.TXT","w") # files with the names
-  def getldosi(e):
-    """Get this iteration"""
-    out = np.array([0.0 for i in range(h.intra.shape[0])]) # initialize
-    for (d,p,ie) in zip(ds,ps,evals): # loop over wavefunctions
-      fac = delta/((e-ie)**2 + delta**2) # factor to create a delta
-      out += fac*d*p # add contribution
-    out /= np.pi # normalize
-    return spatial_dos(h,out) # resum if necessary
-  outs = parallel.pcall(getldosi,energies) # get energies
+  # The accumulation over eigenstates is bilinear, so the whole double loop
+  # over energies and eigenstates is a single matrix product: the weight
+  # matrix W[ie,n] = delta/((e-E_n)^2+delta^2)*p_n times the densities.
+  # It is done in blocks of energies so that W stays small.
+  evals = np.array(evals) # eigenvalues of the whole mesh
+  ps = np.array(ps) # weights of the whole mesh
+  nkp = len(ks) # number of kpoints in the mesh
+  outs = [] # LDOS at each energy
+  eblock = max(1,int(1e6//max(len(evals),1))) # energies per block
+  for i0 in range(0,len(energies),eblock): # loop over blocks of energies
+      eb = np.array(energies[i0:i0+eblock]) # energies of this block
+      w = delta/((eb[:,None]-evals[None,:])**2 + delta**2)*ps[None,:]
+      # 1/pi is the normalization of the Lorentzian and 1/nkp the average
+      # over the Brillouin zone, the same two factors get_ldos applies
+      out = (w@ds)/(np.pi*nkp) # LDOS of this block of energies
+      outs += [spatial_dos(h,o) for o in out] # resum if necessary
   ie = 0
   for e in energies: # loop over energies
     print("MULTILDOS for energy",e)
@@ -491,7 +527,8 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
   # Now calculate the DOS
   from .dos import calculate_dos
   es2 = np.linspace(min(energies),max(energies),len(energies)*10)
-  ys = calculate_dos(evals,es2,delta,w=None) # compute DOS
+  # same normalization as the maps above, and as dos.dos_kmesh
+  ys = calculate_dos(evals,es2,delta,w=None)/(np.pi*nkp) # compute DOS
   from .dos import write_dos
   write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")  
 

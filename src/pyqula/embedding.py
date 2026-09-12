@@ -297,17 +297,27 @@ def onsite_supercell_no_multicell(h,nsuper,mc=None):
     return out
 
 
-def get_gf(self,**kwargs):
-    """Return the Green's function"""
+def get_gf(self,operator=None,**kwargs):
+    """Return the Green's function
+
+    operator: None, or an operator spec (a name, a matrix, an Operator).
+        The Green's function is then weighted with that operator, the
+        same convention Embedding.get_ldos uses for its map. It is
+        applied here rather than in each branch so that both the exact
+        and the boundary-selfenergy Green's functions honour it.
+    """
     if self.selfenergy is None: # no selfenergy given, compute it
-        return get_gf_exact(self,**kwargs)
+        gv = get_gf_exact(self,**kwargs)
     else: # a selfenergy is given
         from .embeddingtk.boundaryembedding import boundary_embedding_gf
-        return boundary_embedding_gf(self,selfenergy=self.selfenergy,**kwargs)
+        gv = boundary_embedding_gf(self,selfenergy=self.selfenergy,**kwargs)
+    if operator is not None: # project with the operator
+        gv = self.H.get_operator(operator)*gv # multiply
+    return gv
 
 
 def get_gf_exact(self,energy=0.0,delta=1e-2,
-        nsuper=1,nk=100,operator=None,**kwargs):
+        nsuper=1,nk=100,**kwargs):
     """Return the Green's function"""
     h = self.H
     e = energy

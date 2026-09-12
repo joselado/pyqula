@@ -1,7 +1,14 @@
 import numpy as np
+import scipy.sparse.linalg as slg
 from .. import algebra,operators
+from ..algebra import braket_wAw
 
 # workaround for non hermitian Hamiltonians
+
+# same values as in the Hermitian bandstructure.py, whose arpack branch
+# this one is a copy of
+arpack_tol = 1e-8
+arpack_maxiter = 10000
 
 
 def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
@@ -18,6 +25,12 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         given, the expectation value of every operator is computed for each
         eigenstate, and the returned array gains one extra row per operator
         (k, e, c1, c2, ...) instead of just (k, e, c).
+
+    write/output_file: as in the Hermitian get_bands_nd. The eigenvalues
+        are complex here, so with eigmode="complex" the file carries the
+        real and the imaginary part in two columns (k, Re e, Im e, ...)
+        rather than dropping half of the eigenvalue; with eigmode="real"
+        or "imag" it carries the single part that was asked for.
     """
     if num_bands is not None:
       if num_bands>(h.intra.shape[0]-1): num_bands=None
@@ -89,5 +102,10 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
     else:
       raise ValueError("unknown eigmode; the accepted ones are 'complex', "
               "'real' and 'imag'")
+    if write: # write the bands, as the Hermitian get_bands_nd does
+      out = esk.real # kpoint index, energy and operator expectation values
+      if eigmode=="complex": # keep the imaginary part, in its own column
+          out = np.concatenate([out[0:2],[esk[1].imag],out[2:]])
+      with open(output_file,"w") as f: np.savetxt(f,out.T) # write in file
     return esk
 

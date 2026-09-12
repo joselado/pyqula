@@ -40,8 +40,27 @@ def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatc
     scf = scftypes.selfconsistency(h, nk=4, filling=0.5,
                     mix=0.9, mf=mf, Vr=Vr)
     (k, e, c) = scf.hamiltonian.get_bands(operator="sz", nk=20)
+    e, c = np.array(e), np.array(c)
     assert np.isclose(np.sum(e), 141.0056528200021, atol=1e-4)
-    assert np.isclose(np.sum(c), 0.0, atol=1e-6)
+
+    # The ferromagnetic guess survives the loop, and the state it converges
+    # to is collinear: sz stays a good quantum number, so every band is a
+    # pure spin state, every site carries the same moment along z, and the
+    # two spin species are pushed apart by an exchange splitting that is
+    # linear in the interaction (0.0078 at this Vr, 7.8e-5 at a hundredth
+    # of it).
+    #
+    # The assertion this replaces was sum(c) == 0, which is nk*Tr(sz) over
+    # a full band structure: zero for every Hamiltonian with a spin index,
+    # interacting or not, magnetic or not.
+    assert np.allclose(np.abs(c), 1., atol=1e-6)
+    mag = np.array(scf.hamiltonian.get_magnetization())
+    assert np.allclose(mag[:, :2], 0., atol=1e-6)  # collinear, along z
+    assert np.all(np.abs(mag[:, 2]) > 0.02)  # and ferromagnetic
+    assert np.allclose(mag[:, 2], mag[0, 2], atol=1e-3)  # the same on every site
+    up, dn = np.sort(e[c > 0.5]), np.sort(e[c < -0.5])
+    assert len(up) == len(dn)
+    assert abs(np.mean(dn - up)) > 0.005
 
 
 @pytest.mark.slow
@@ -65,18 +84,28 @@ def test_tbg_kekule_dimerization_matches_reference(tmp_path, monkeypatch):
 
 
 @pytest.mark.slow
-def test_kekule_honeycomb_scf_matches_reference(tmp_path, monkeypatch):
-    """Regression check for a Kekule-guess V1+V2 SCF calculation on a
-    honeycomb supercell(3) (the periodicity the Kekule distortion
-    requires): the valley-resolved band energies must match the values
-    recorded from a known-good run. Marked slow: SCF convergence drives
-    the runtime, not the k-mesh."""
+def test_kekule_scf_gaps_the_folded_dirac_point(tmp_path, monkeypatch):
+    """A supercell(3) of the honeycomb lattice folds K and K' onto Gamma,
+    where the two Dirac cones meet and the pristine lattice is gapless. A
+    Kekule bond order is exactly the instability that couples them, so the
+    converged V1+V2 mean field must open a gap there -- 0.57 at V1=6, V2=4,
+    and only 0.008 when both couplings are ten times weaker -- while the
+    bands stay valley-polarised.
+
+    The assertions this replaces were abs(sum(e)) < 1e-4 and abs(sum(c)) <
+    1e-6. sum(e) is sum_k Tr H(k), which a Kekule mean field (a modulation
+    of the *bonds*) leaves at zero for any V1 and V2, and sum(c) over a full
+    band structure is nk*Tr(valley) = 0 for any Hamiltonian. Marked slow:
+    SCF convergence drives the runtime, not the k-mesh."""
     monkeypatch.chdir(tmp_path)
     g = geometry.honeycomb_lattice()
     g = g.get_supercell(3)
     h = g.get_hamiltonian(has_spin=False)
+    assert np.min(np.abs(np.array(h.get_bands(nk=20)[1]))) < 1e-8  # gapless
+
     mf = meanfield.guess(h, "kekule")
     scf = meanfield.Vinteraction(h, V1=6.0, mf=mf, V2=4.0, nk=4, filling=0.5, mix=0.3)
     (k, e, c) = scf.hamiltonian.get_bands(operator="valley", nk=20)
-    assert abs(np.sum(e)) < 1e-4
-    assert abs(np.sum(c)) < 1e-6
+    e, c = np.array(e), np.array(c)
+    assert np.min(np.abs(e)) > 0.3
+    assert np.max(np.abs(c)) > 0.5

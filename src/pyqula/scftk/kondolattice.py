@@ -18,7 +18,7 @@ the mean-field Hamiltonian (Eq. 81/83)
 
     H_MFT = sum_k eps_k c^dagger_k c_k
           + sum_j [ V_j^* c^dagger_j f_j + V_j f^dagger_j c_j + lam_j f^dagger_j f_j ]
-          + sum_j [ |V_j|^2/J - lam_j Q ]
+          + sum_j [ N|V_j|^2/J - lam_j Q ]
 
 Both V_j and lam_j are kept per-site (arrays) rather than a single global
 scalar, so a non-uniform (e.g. supercell) system self-consistently converges
@@ -40,6 +40,21 @@ hybridization turns on; lam_j alone enforces the local f-constraint)."""
 import numpy as np
 
 from ..multihopping import MultiHopping
+
+N_SPIN = 2 # N in the large-N Coqblin-Schrieffer coupling J/N: the number of
+           # spin components of a spin-1/2 (Q=1) local moment
+
+
+def hs_constant(V, J):
+    """Hubbard-Stratonovich constant of the Coqblin-Schrieffer decoupling.
+
+    Decoupling -g X^dagger X (g = J/N, X = sum_a c^dagger_a f_a) as
+    Vbar X + X^dagger V + |V|^2/g reproduces the interaction only with the
+    constant |V|^2/g = N|V|^2/J -- the same g = J/N that the SCF update
+    V <- -(J/N)<f^dagger c> below already uses, so the two have to carry
+    the same N."""
+    if J == 0.0: return 0.0 # no interaction, no constant
+    return N_SPIN*np.sum(np.abs(V)**2)/J
 
 
 class KondoLatticeSCF():
@@ -189,8 +204,10 @@ def _pack(h, dm, V, lam, nfocc, J, Q, nk, converged):
     scf.hybridization = V
     scf.local_occupation = nfocc
     scf.constraint_lambda = lam
-    # Eq. 83's constant terms (V-bar*V/J from the Hubbard-Stratonovich
-    # transform, Eq. 78, minus lam*Q from expanding lam*(n_f-Q), Eq. 81),
+    # Eq. 83's constant terms (N*V-bar*V/J from the Hubbard-Stratonovich
+    # transform, Eq. 78 -- see hs_constant for why the N is there, and for
+    # the stationarity it is fixed by -- minus lam*Q from expanding
+    # lam*(n_f-Q), Eq. 81),
     # which the one-body matrix above does not contain (they multiply the
     # identity, not any operator) but which the free energy needs -- see
     # this module's docstring. No further double-counting correction is
@@ -205,7 +222,6 @@ def _pack(h, dm, V, lam, nfocc, J, Q, nk, converged):
     # count read off the converged (intracell) density matrix instead.
     n_electrons = np.trace(dm).real
     etot = h.get_total_energy(nk=nk) + h.fermi*n_electrons
-    hs_term = np.sum(np.abs(V)**2)/J if J != 0.0 else 0.0
-    etot += hs_term - np.sum(lam)*Q
+    etot += hs_constant(V, J) - np.sum(lam)*Q
     scf.total_energy = etot.real if hasattr(etot, "real") else etot
     return scf

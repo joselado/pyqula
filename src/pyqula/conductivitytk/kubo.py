@@ -9,6 +9,13 @@ from .. import algebra
 from .. import current
 from .. import klist
 from .. import parallel
+from ..htk.eigenvectors import hk_matrix_batch, parallel_diagonalization
+
+
+_kbatch = 64 # k-points whose Bloch matrices are held in memory at once by
+             # the batched loops below (same convention as ldos.py and
+             # densitymatrix.py): the k-sums are all linear, so the batch
+             # size bounds the memory footprint without affecting the result
 
 
 def _setup(h):
@@ -78,6 +85,93 @@ def _bond_vectors(h,n):
     return np.array([rr[None,:,a]-rr[:,None,a] for a in range(3)])
 
 
+def _hopping_arrays(hm):
+    """Stack the multicell hoppings of hm into a single (nhop,n,n) tensor
+    and their lattice vectors into a (nhop,3) array. Purely a
+    rearrangement, done once per calculation, so that every k-derivative
+    of H can be built for a whole batch of k-points with one einsum over
+    the Bloch phases (see _derivative_batch) instead of with a Python
+    loop over the hoppings at every single k-point."""
+    n = hm.intra.shape[0]
+    nhop = len(hm.hopping)
+    tms = np.zeros((nhop,n,n),dtype=np.complex128)
+    dirs = np.zeros((nhop,3),dtype=np.float64)
+    for i in range(nhop): # loop over the stored hoppings
+        tms[i] = hm.hopping[i].m
+        dirs[i] = hm.hopping[i].dir
+    return tms,dirs
+
+
+def _bloch_phases(dirs,ks):
+    """exp(2 pi i R.k) for every hopping lattice vector R (the rows of
+    dirs) and every k-point of ks, as a (nk,nhop) array. This is the only
+    k-dependent ingredient of any k-derivative of H (see
+    _derivative_batch)."""
+    return np.exp(2j*np.pi*(np.array(ks,dtype=np.float64)@dirs.T))
+
+
+def _derivative_batch(tms,dirs,ph,order):
+    """Reduced-coordinate derivative dH/dk_i...dk_j (order in
+    multicell.derivative's convention) on a whole stack of k-points at
+    once: the batched equivalent of current.hk_derivative, with exactly
+    its normalization, the factor 2*pi per derivative order included.
+    Returns a (nk,n,n) array.
+
+    Every hopping enters H(k) as t exp(2 pi i R.k), so differentiating it
+    order[i] times with respect to k_i just multiplies it by the
+    k-independent prefactor (2 pi i R_i)^order[i] -- which is therefore
+    folded in once for the whole mesh rather than rebuilt at every
+    k-point. The intracell block carries no Bloch phase and so does not
+    contribute, exactly as in current.derivative."""
+    pref = np.full(len(dirs),(2.*np.pi)**sum(order),dtype=np.complex128)
+    for i in range(len(order)): # one factor per periodic direction
+        if order[i]!=0: pref = pref*(dirs[:,i]*1j)**order[i]
+    return np.einsum("kh,h,hnm->knm",ph,pref,tms,optimize=True)
+
+
+def _velocities_batch(orders,jac,dr,hks,dhs):
+    """Cartesian velocity operators v[k,alpha] on a whole stack of
+    k-points at once, from the stacked Bloch Hamiltonians hks (nk,n,n)
+    and the stacked reduced-coordinate derivatives dhs (one (nk,n,n)
+    array per periodic direction, from _derivative_batch). The physics,
+    the Jacobian and the intracell-bond term are documented in
+    _velocities, the single-k reference implementation."""
+    nk,n = hks.shape[0],hks.shape[1]
+    v = np.zeros((nk,3,n,n),dtype=np.complex128)
+    for alpha in range(3): # loop over Cartesian directions
+        for i in range(len(orders)): # loop over periodic directions
+            v[:,alpha] = v[:,alpha] + jac[i,alpha]*dhs[i]
+        v[:,alpha] = v[:,alpha] + 1j*hks*dr[alpha] # intracell bonds
+    return v
+
+
+def _second_derivatives_batch(orders,jac,dr,hks,tms,dirs,ph):
+    """Cartesian second derivatives d2H/dK_a dK_b on a whole stack of
+    k-points at once, as a 3x3 nested list of (nk,n,n) arrays. The
+    (a,b) and (b,a) entries are literally the same array, since the
+    tensor is symmetric. See _second_derivatives, the single-k reference
+    implementation, for the physics."""
+    dim = len(orders)
+    # reduced-coordinate first and second derivatives, whole batch at once
+    d1 = [_derivative_batch(tms,dirs,ph,o) for o in orders]
+    d2 = [[None for j in range(dim)] for i in range(dim)]
+    for i in range(dim):
+        for j in range(i,dim):
+            order = [orders[i][d]+orders[j][d] for d in range(dim)]
+            d2[i][j] = _derivative_batch(tms,dirs,ph,order)
+            d2[j][i] = d2[i][j] # symmetric in (i,j)
+    # Cartesian lattice-gauge derivatives, one per Cartesian direction
+    dK = [sum(jac[i,a]*d1[i] for i in range(dim)) for a in range(3)]
+    out = [[None for b in range(3)] for a in range(3)]
+    for a in range(3):
+        for b in range(a,3):
+            m = sum(jac[i,a]*jac[j,b]*d2[i][j]
+                    for i in range(dim) for j in range(dim))
+            out[a][b] = m + 1j*dK[a]*dr[b] + 1j*dK[b]*dr[a] - hks*dr[a]*dr[b]
+            out[b][a] = out[a][b] # symmetric in (a,b)
+    return out
+
+
 def _velocities(hm,orders,jac,dr,hk,k):
     """Cartesian velocity operators v_alpha = i[H,r_alpha] (alpha = x,y,z)
     of the Bloch Hamiltonian at the reduced-coordinate k-point k, with
@@ -123,7 +217,12 @@ def _velocities(hm,orders,jac,dr,hk,k):
     The normalization of the whole chain is pinned by analytic benchmarks
     in tests/conductivity: the 1D chain (dE/dK = -2 t sin K, f-sum-rule
     weight 2|t|/pi at half filling) and the universal optical conductivity
-    of graphene, pi e^2/(4 h) per spin."""
+    of graphene, pi e^2/(4 h) per spin.
+
+    This is the single-k reference implementation, kept because
+    operators.get_velocity needs the velocity at one given k-point and
+    because it is the independent code path the tests check the batched
+    twin against; the mesh sweeps here go through _velocities_batch."""
     dhs = [current.hk_derivative(hm,k,order=o) for o in orders]
     n = hk.shape[0]
     v = np.zeros((3,n,n),dtype=np.complex128)
@@ -145,7 +244,8 @@ def _second_derivatives(hm,orders,jac,dr,hk,k):
                       + i (dH/dK_b) o dr_a - H o dr_a o dr_b
 
     with "o" an elementwise (Hadamard) product. Returns a 3x3 nested list
-    of matrices."""
+    of matrices. Single-k reference implementation, as _velocities is;
+    sum_rule_weight itself uses _second_derivatives_batch."""
     dim = len(orders)
     # reduced-coordinate first and second derivatives
     d1 = [current.hk_derivative(hm,k,order=o) for o in orders]
@@ -185,21 +285,41 @@ def _bands_and_velocities(h,ks):
     velocity operators into the instantaneous eigenbasis. Returns the band
     energies es[k,n], the velocity matrix elements vs[k,alpha,n,m] =
     <n|v_alpha|m>, the unit cell volume and the Hamiltonian's energy
-    scale."""
+    scale.
+
+    The whole mesh is processed in batches of _kbatch k-points: the Bloch
+    matrices are stacked with hk_matrix_batch and diagonalized by one
+    thread-parallel numba kernel, the derivatives of H come out of a
+    single einsum over the Bloch phases, and the rotation into the
+    eigenbasis is one batched matmul -- instead of one LAPACK call, one
+    Python loop over every hopping and six (n,n) matmuls per k-point.
+
+    The eigenbasis this returns is *not* the one scipy's algebra.eigh
+    would return: numba's eigh picks different eigenvector phases and a
+    different basis inside a degenerate multiplet, so the individual
+    matrix elements vs differ by O(1) between the two. Every consumer
+    below is built to be invariant under exactly that freedom (see
+    _response_weights and drude_weight), and the invariance is checked
+    directly in tests/conductivity/test_kubo_batched_paths.py -- the
+    physical output is what must agree, never vs itself."""
     hm,orders,hkgen,jac,dr,cellvol,scale = _setup(h)
+    tms,dirs = _hopping_arrays(hm) # hoppings, stacked once for the mesh
     nk = len(ks)
     n = hm.intra.shape[0]
     es = np.zeros((nk,n),dtype=np.float64)
     vs = np.zeros((nk,3,n,n),dtype=np.complex128)
-    for ik in range(nk):
-        k = ks[ik]
-        hk = _hk(hkgen,k)
-        (e,w) = algebra.eigh(hk) # w[:,n] is the eigenvector of e[n]
-        wc = np.conjugate(w)
-        v = _velocities(hm,orders,jac,dr,hk,k)
-        es[ik] = e
-        for alpha in range(3):
-            vs[ik,alpha] = wc.T@v[alpha]@w # <n|v_alpha|m>
+    for i0 in range(0,nk,_kbatch): # loop over batches of k-points
+        kb = ks[i0:i0+_kbatch]
+        i1 = i0 + len(kb)
+        hks = hk_matrix_batch(hkgen,kb) # H(k) for the batch, densified
+        eb,wb = parallel_diagonalization(hks) # batched numba eigh
+        ph = _bloch_phases(dirs,kb) # Bloch phases of the batch
+        dhs = [_derivative_batch(tms,dirs,ph,o) for o in orders]
+        v = _velocities_batch(orders,jac,dr,hks,dhs)
+        wc = np.conjugate(wb).transpose(0,2,1) # the bras <n|, every k-point
+        es[i0:i1] = eb
+        for alpha in range(3): # one Cartesian slice at a time
+            vs[i0:i1,alpha] = wc@v[:,alpha]@wb # <n|v_alpha|m>
     return es,vs,cellvol,scale
 
 
@@ -326,20 +446,25 @@ def sum_rule_weight(h,nk=20,T=None):
     conductivity.sum_rule_weight"""
     if T is None: T = 0.05
     hm,orders,hkgen,jac,dr,cellvol,scale = _setup(h)
+    tms,dirs = _hopping_arrays(hm) # hoppings, stacked once for the mesh
     ks = _kmesh(h,nk)
     W = np.zeros((3,3),dtype=np.float64)
-    for k in ks:
-        hk = _hk(hkgen,k)
-        (e,w) = algebra.eigh(hk)
-        f = _fermi(e,T)
-        wc = np.conjugate(w)
-        d2 = _second_derivatives(hm,orders,jac,dr,hk,k)
+    # same batched sweep as _bands_and_velocities; W is a plain k-sum, so
+    # each batch's contribution is simply accumulated
+    for i0 in range(0,len(ks),_kbatch): # loop over batches of k-points
+        kb = ks[i0:i0+_kbatch]
+        hks = hk_matrix_batch(hkgen,kb) # H(k) for the batch, densified
+        eb,wb = parallel_diagonalization(hks) # batched numba eigh
+        f = _fermi(eb,T)
+        wc = np.conjugate(wb)
+        ph = _bloch_phases(dirs,kb) # Bloch phases of the batch
+        d2 = _second_derivatives_batch(orders,jac,dr,hks,tms,dirs,ph)
         for a in range(3):
             for b in range(a,3):
                 # diagonal expectation values <n|d2H/dK_a dK_b|n>
-                di = np.real(np.einsum("in,ij,jn->n",wc,d2[a][b],w,
+                di = np.real(np.einsum("kin,kij,kjn->kn",wc,d2[a][b],wb,
                         optimize=True))
-                W[a,b] += np.dot(f,di)
+                W[a,b] += np.sum(f*di)
     for a in range(3): # mirror the upper triangle, W is symmetric
         for b in range(a+1,3): W[b,a] = W[a,b]
     return W/(len(ks)*cellvol)

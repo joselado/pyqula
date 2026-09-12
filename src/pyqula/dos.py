@@ -212,7 +212,10 @@ def dos2d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
     for energy in energies:
       (g,selfe) = bloch_selfenergy(h,nk=nk,energy=energy, delta=delta,
                    mode=mode)
-      ys.append(-g.trace()[0,0].imag)
+      # bloch_selfenergy returns a plain array, so np.trace already gives
+      # the scalar trace; the [0,0] that used to follow it indexed that
+      # scalar and raised IndexError before any DOS was written
+      ys.append(-np.trace(g).imag/np.pi) # DOS, same normalization as ED
       if info: print("Done",energy)
     write_dos(energies,ys) # write in file
     return
@@ -227,6 +230,7 @@ def dos2d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
     es_batch = peigvalsh(mats) # batched numba eigh, shape (nk*nk,n)
     es = es_batch.reshape(es_batch.shape[0]*es_batch.shape[1]) # flatten
     ys = weight*calculate_dos(es,energies,delta) # add all contributions
+    ys *= 1./np.pi # normalization of the Lorentzian
     if info: print("Done")
     write_dos(energies,ys) # write in file
     return
@@ -237,12 +241,22 @@ def dos2d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
 
 
 def dos1d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
-                    use_green=True,nk=300):
+                    use_green=True,nk=300,mode="adaptive"):
   """Calculate the density of states in certain energy window"""
   ys = [] # density of states
   if delta is None: # pick a good delta value
     delta = 0.1*(max(energies) - min(energies))/len(energies)
-  if True: # do not use green function
+  if use_green: # this branch used to be shadowed by an `if True:`, so
+    # use_green was declared and dead here while the 2d sibling honoured it
+    from .green import bloch_selfenergy
+    for energy in energies:
+      (g,selfe) = bloch_selfenergy(h,nk=nk,energy=energy, delta=delta,
+                   mode=mode)
+      ys.append(-np.trace(g).imag/np.pi) # DOS, same normalization as ED
+      if info: print("Done",energy)
+    write_dos(energies,ys) # write in file
+    return
+  else: # do not use green function
     kxs = np.linspace(0.,1.,nk)
     hkgen= h.get_hk_gen() # get hamiltonian generator
     weight = 1./(nk)
@@ -251,6 +265,7 @@ def dos1d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
     es_batch = peigvalsh(mats) # batched numba eigh, shape (nk,n)
     es = es_batch.reshape(es_batch.shape[0]*es_batch.shape[1]) # flatten
     ys = weight*calculate_dos(es,energies,delta) # add all contributions
+    ys *= 1./np.pi # normalization of the Lorentzian
     if info: print("Done")
     write_dos(energies,ys) # write in file
     return
@@ -395,13 +410,19 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
       if mode=="ED": # exact diagonalization
           return dos_kmesh(h,energies=energies,**kwargs)
       elif mode in ["Green","RG"]: # Green function formalism
+          # write is this function's own argument, not green_operator's:
+          # it used to go into **kwargs and reach green_operator, which
+          # raised TypeError, while this branch wrote DOS.OUT
+          # unconditionally -- so mode="Green" was the one mode that both
+          # refused write= and ignored it
+          write = kwargs.pop("write",True)
           def fun(e):
               return green.green_operator(h,e=e,**kwargs)
           ds = parallel.pcall(fun,energies) # compute DOS with an operator
           # green_operator returns the raw -Im[Tr G], not yet a DOS value;
           # apply the same 1/pi normalization dos_kmesh (mode="ED") does
           ds = np.array(ds)/np.pi
-          np.savetxt("DOS.OUT",np.array([energies,ds]).T) # write in a file
+          if write: np.savetxt("DOS.OUT",np.array([energies,ds]).T)
           return (energies,ds)
       elif mode=="KPM": 
           return dos_kpm(h,energies=energies,**kwargs)
@@ -410,7 +431,7 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
           return adaptive_dos(h,energies=energies,**kwargs)
       else: 
         raise ValueError("unknown mode "+str(mode)+"; the DOS accepts 'ED', "
-                "'KPM' and 'adaptive'")
+                "'KPM', 'adaptive', 'Green' and 'RG'")
 
 
 dos = get_dos # redefine
@@ -483,23 +504,34 @@ def surface2bulk(h,n=50,nk=3000,delta=1e-3,e=0.0,**kwargs):
 
 def surface_dos(h,energies=None,klist=None,delta=0.01,
                          operator=None):
+    """Compute the surface DOS, optionally projected onto an operator"""
     bout = [] # empty list, bulk
     sout = [] # empty list, surface
     if klist is None:
         klist = [[i,0.,0.] for i in np.linspace(-.5,.5,50)]
     if energies is None: energies = np.linspace(-.5,.5,50)
     h = h.get_no_multicell()
+    # `operator` used to be declared here and never consumed, so
+    # surface_dos(h,operator="sz") gave back the plain charge DOS -- the
+    # same defect kdos's surface routines had, and the projection matrix
+    # is built with the very same helper they use
+    if operator is not None and h.get_operator(operator).matrix is None:
+        raise NotImplementedError("the surface DOS needs an operator with a "
+                "matrix representation; the momentum-dependent operator "
+                +str(operator)+" is not implemented")
+    from .kdos import get_surface_operator
+    op = get_surface_operator(h,operator) # projection matrix, once
     def sdos(energy):
         if h.dimensionality==1:
             gs,sf = green.green_renormalization(h.intra,h.inter,
                 energy=energy,delta=delta) # surface green function
-            return -np.trace(sf).imag # return result
+            return -np.trace(sf@op).imag # return result
         elif h.dimensionality==2:
             out = 0.0
             for k in klist: # loop over kpoints
                 gs,sf = green.green_kchain(h,k=k,energy=energy,delta=delta,
                          only_bulk=False) # surface green function
-                out += -np.trace(sf).imag
+                out += -np.trace(sf@op).imag
             return out/len(klist)
         else:
           raise NotImplementedError("the surface DOS is only implemented for "

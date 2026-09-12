@@ -421,7 +421,7 @@ def _kpm_dos_moments(h, nk, scale, npol, ne, cores):
 
 
 def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
-        npol=DEFAULT_NPOL, ne=None, cores=None):
+        npol=DEFAULT_NPOL, ne=None, cores=None, T=0.):
     """KPM analogue of spectrum.get_fermi4filling: find the Fermi energy
     for a given filling without ever diagonalizing anything, so the KPM
     SCF (scftk/densitydensity_kpm.py) stays fully
@@ -452,13 +452,31 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
         h0 = h.copy()
         h0.remove_nambu()
         return get_fermi4filling_kpm(h0, filling, nk=nk, scale=scale,
-                npol=npol, ne=ne, cores=cores)
+                npol=npol, ne=ne, cores=cores, T=T)
     scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores)
     cdf = _cumulative_trapz(ys, xs)
     cdf = np.maximum.accumulate(cdf)  # enforce monotonicity, see docstring
     cdf = cdf/cdf[-1]  # normalize exactly to 1 across the sampled window
     ef_reduced = np.interp(filling, cdf, xs)
-    return scale*ef_reduced
+    if T is None or T<=0.: return scale*ef_reduced # T=0, the step count
+    # Finite temperature: inverting the cumulative DOS is a STEP count, and
+    # the density matrix this Fermi level is handed to is built with
+    # Fermi-Dirac occupations instead (see _dm_kpm_from_needed). Wherever
+    # the density of states is not symmetric about mu the two hold
+    # different numbers of electrons, so the converged filling drifts away
+    # from the requested one as T grows -- the same defect repaired in
+    # spectrum.get_fermi_energy_T for the exact-diagonalization path, of
+    # which this is the KPM analogue. The electron count is monotonic in
+    # mu, so bracket it on the sampled window and bisect.
+    Tr = T/scale # the grid is in reduced energies, so the temperature is too
+    norm = np.trapezoid(ys,xs) # total weight, i.e. filling==1
+    def nelec(mu): # occupied fraction at this chemical potential
+        return np.trapezoid(ys*expit(-(xs-mu)/Tr),xs)/norm
+    lo,hi = xs[0]-40.*Tr, xs[-1]+40.*Tr # well outside the window at this T
+    if nelec(lo)>filling or nelec(hi)<filling: # not bracketed, keep T=0
+        return scale*ef_reduced
+    from scipy.optimize import brentq
+    return scale*brentq(lambda mu: nelec(mu)-filling,lo,hi,xtol=1e-12)
 
 
 def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,

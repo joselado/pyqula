@@ -142,6 +142,20 @@ class Heterostructure():
        """Return the inverse central Green's function"""
        from .transporttk.smatrix import get_central_gmatrix
        return get_central_gmatrix(self,**kwargs) 
+    def with_delta(self,delta):
+       """Return a copy of this junction whose broadening is `delta`.
+
+       The broadening is an attribute, read independently by the lead
+       selfenergies and by the central Green's function, so this is how a
+       `delta=` keyword given to a single call (didv, get_smatrix,
+       get_tmatrix) is made to mean exactly what the attribute means.
+       The copy is shallow: nothing downstream mutates the leads, and a
+       deepcopy of them would cost more than the calculation it
+       precedes."""
+       from copy import copy
+       out = copy(self) # shallow, the matrices are shared
+       out.delta = delta # the only thing that changes
+       return out
     def set_coupling(self,c): 
        """Coupling for kappa functionality"""
        self.scale_lc = np.sqrt(c)
@@ -571,12 +585,15 @@ def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=False):
 
 
 
-def get_tmatrix(ht,energy=0.0,delta=0.0001):
-  """Calculate the S-matrix of an HTstructure"""
+def get_tmatrix(ht,energy=0.0,delta=None):
+  """Calculate the S-matrix of an HTstructure.
+
+  `delta` defaults to the junction's own attribute, and used to be
+  declared here and never forwarded, so it had no effect."""
   if ht.block_diagonal:
     raise NotImplementedError("the transmission matrix needs a junction whose "
             "central part is not block diagonal")
-  smatrix = get_smatrix(ht,energy=energy)
+  smatrix = get_smatrix(ht,energy=energy,delta=delta)
   return smatrix[0][1]
 
 

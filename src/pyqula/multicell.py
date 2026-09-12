@@ -167,7 +167,7 @@ from .htk.supercell import bulk2film
 
 def rotate90(h):
   """ Rotate 90 degrees the Hamiltonian"""
-  ho = turn_multicell(h) # copy Hamiltonian
+  ho = h.copy() ; ho.turn_multicell() # copy, then to multicell form
   hoppings = []
   for i in range(len(ho.hopping)):
     tdir = ho.hopping[i].dir 
@@ -473,12 +473,14 @@ def close_enough_bruteforce(rs1,rs2,rcut=2.0):
 def turn_no_multicell(h,tol=1e-5):
   """Converts a Hamiltonian into the non multicell form"""
   from .htk.kchain import detect_longest_hopping
-  if not h.is_multicell: return h # Hamiltonian is already fine
+  # the contract is a new Hamiltonian, so the two pass-through cases return
+  # a copy and never an alias of the input, which the caller would mutate
+  if not h.is_multicell: return h.copy() # Hamiltonian is already fine
   if detect_longest_hopping(h)>1: # error
     raise ValueError("turn_no_multicell only works for Hamiltonians with "
             "first-neighbor-cell hoppings, this one couples cells further "
             "apart")
-  if h.dimensionality>2: return h # too high dimensionality
+  if h.dimensionality>2: return h.copy() # too high dimensionality
   ho = h.copy() # copy Hamiltonian
   ho.is_multicell = False
   if ho.dimensionality==0: pass

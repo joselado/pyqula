@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from pyqula import geometry
 from pyqula.dmtk import fulldm
@@ -19,7 +20,16 @@ def _compute(h, mode1, mode2, use_ds):
 def test_density_matrix_modes_are_consistent():
     """explicit/vectorized and accumulate/simultaneous density-matrix
     implementations must all agree on the result, on the same Hamiltonian,
-    for both the per-hopping (ds) and full-matrix output modes."""
+    for both the per-hopping (ds) and full-matrix output modes.
+
+    fulldm.mode selects the kernel only on the `simultaneous` branch --
+    `accumulate` always uses the batched kernels, which have no explicit
+    counterpart -- so two of the four combinations here are deliberately
+    the same code path, and the comparison that discriminates the explicit
+    kernel from the vectorized one is the simultaneous one. It used to be
+    no comparison at all in the ds case, where the switch reached nothing
+    and both values ran full_dm_d_batch_vectorized (see
+    test_the_kernel_switch_is_not_silently_ignored)."""
     h = random_hermitian_hamiltonian(geometry.honeycomb_lattice, supercell=4)
     modes = [(m1, m2)
              for m1 in ("explicit", "vectorized")
@@ -52,3 +62,15 @@ def test_density_matrix_index_convention_is_the_transposed_one():
     # and the standard one is its transpose, which is what an expectation
     # value must be contracted against
     assert not np.allclose(dm, np.transpose(ref/len(ks)), atol=1e-8)
+
+
+def test_the_kernel_switch_is_not_silently_ignored():
+    """An option selected by a string must reject a typo rather than
+    quietly running something else. For the per-hopping (ds) output
+    fulldm.mode used to reach nothing at all, so ANY value -- including a
+    misspelling -- ran the vectorized kernel."""
+    h = random_hermitian_hamiltonian(geometry.honeycomb_lattice, supercell=2)
+    ds = [[i, 0, 0] for i in range(3)]
+    with temporary_attr(fulldm, "mode", "vectorised"):  # British spelling
+        with pytest.raises(ValueError):
+            h.get_density_matrix(nk=NK, ds=ds, dm_mode="simultaneous")

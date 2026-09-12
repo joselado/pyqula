@@ -421,8 +421,15 @@ def internal_find_u(u_matrix_opt: np.ndarray, A_matrix: np.ndarray, windows: Win
     u_matrix = np.zeros((num_wann, num_wann, num_kpts), dtype=complex)
     k_range = sym.ir2ik if sym is not None else range(num_kpts)
     for k in k_range:
-        nd = windows.ndimwin[k]
-        caa = u_matrix_opt[:nd, :, k].conj().T @ A_matrix[:nd, :num_wann, k]
+        n0, nd = windows.nfirstwin[k], windows.ndimwin[k]
+        # A_matrix is the one array never slimmed to the window, so its rows
+        # are absolute band indices while u_matrix_opt's are window-relative
+        # (row i = band nfirstwin+i, the convention dis_project/slim_m/
+        # dis_extract/_rotate_m all share) -- offset by nfirstwin to pair
+        # each optimal-subspace state with the right band's projections.
+        # (How the Fortran source avoids the same mismatch was not checked
+        # here -- this follows the port's own row convention.)
+        caa = u_matrix_opt[:nd, :, k].conj().T @ A_matrix[n0:n0 + nd, :num_wann, k]
         Z, _, Vh = np.linalg.svd(caa, full_matrices=True)
         u_matrix[:, :, k] = Z @ Vh
     if sym is not None:

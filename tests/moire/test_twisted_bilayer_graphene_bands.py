@@ -11,12 +11,21 @@ def test_twisted_bilayer_graphene_bands_match_dense_diagonalization(tmp_path,
     G-K-M-K'-G must be the eight eigenvalues closest to zero of the dense
     Bloch matrix at the same k-points.
 
-    The band energies themselves are still pinned, below, since the dense
-    comparison only checks the eigensolver and would pass for a wrong
-    Hamiltonian too. The pinned value is the one this test was written with;
-    `6c8cfbc` replaced it with -13.738703648103538, which no commit of this
-    repository reproduces -- not the 0.0.94 release, not HEAD, and not
-    `6c8cfbc`'s own source -- so the test had been red ever since.
+    The dense comparison only checks the eigensolver and would pass for a
+    wrong Hamiltonian too, so the interlayer coupling is checked separately
+    below, by the thing that makes this a *bilayer*: at ti=0 the two layers
+    decouple and every level is two-fold degenerate, and a nonzero ti
+    splits that degeneracy.
+
+    On the history of the constant: this docstring used to claim that
+    -13.738703648103538 "no commit of this repository reproduces -- not the
+    0.0.94 release, not HEAD, and not `6c8cfbc`'s own source", and `efd3cf3`
+    reverted the pin to -13.735331753001446 on that basis. That claim was
+    wrong. HEAD reproduces -13.7387036481035 to ~1e-14 (measured directly on
+    a pristine `git archive HEAD` tree), so `6c8cfbc` had recorded the right
+    number and the revert is what left the test red. The pin below is the
+    reproducible value; the degeneracy check is what actually discriminates
+    the Hamiltonian.
     """
     monkeypatch.chdir(tmp_path)  # get_bands writes BANDS.OUT to cwd
     kpath = ["G", "K", "M", "K'", "G"]
@@ -34,4 +43,34 @@ def test_twisted_bilayer_graphene_bands_match_dense_diagonalization(tmp_path,
         ref += sorted(ev[np.argsort(np.abs(ev))[:8]])  # the eight nearest zero
     assert np.allclose(e, ref, atol=1e-10), np.max(np.abs(e - np.array(ref)))
     # and the Hamiltonian itself is the one this was recorded against
-    assert np.isclose(np.sum(e), -13.735331753001446, atol=1e-6), np.sum(e)
+    assert np.isclose(np.sum(e), -13.738703648103538, atol=1e-6), np.sum(e)
+
+
+def _max_layer_pair_splitting(ti, kpath, nk=8):
+    """Largest splitting of consecutive level pairs along the k-path.
+
+    With the two layers decoupled every eigenvalue of the bilayer is a
+    doubled monolayer eigenvalue, so sorting the spectrum and differencing
+    it in pairs gives zero; the interlayer hopping is what lifts it."""
+    h = specialhamiltonian.twisted_bilayer_graphene(n=1, ti=ti, has_spin=False)
+    h.set_filling(0.5, nk=1)
+    hk = h.get_hk_gen()
+    out = 0.
+    for ki in klist.get_kpath(h.geometry, kpath=kpath, nk=nk):
+        ev = np.sort(lg.eigvalsh(np.array(algebra.todense(hk(ki)),
+                                          dtype=np.complex128)))
+        out = max(out, np.max(np.abs(ev[1::2]-ev[0::2])))
+    return out
+
+
+def test_twisted_bilayer_interlayer_hopping_splits_the_layer_degeneracy(
+        tmp_path, monkeypatch):
+    """The pinned band sum above cannot tell a bilayer from two decoupled
+    monolayers, which is the one thing `twisted_bilayer_graphene` exists to
+    build. At ti=0 the layers decouple and the spectrum is exactly the
+    monolayer one doubled, so consecutive levels are degenerate; ti=0.4
+    splits them by an amount of order the hopping itself."""
+    monkeypatch.chdir(tmp_path)
+    kpath = ["G", "K", "M", "K'", "G"]
+    assert _max_layer_pair_splitting(0.0, kpath) < 1e-10
+    assert _max_layer_pair_splitting(0.4, kpath) > 0.5

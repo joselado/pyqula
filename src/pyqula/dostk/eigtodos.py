@@ -3,7 +3,14 @@ from numba import jit,njit,prange
 
 
 def calculate_dos(es,xs,d,w=None,parallel=True):
-    """COmpute DOS, es are the eigenenergies, xs, the frequency grid"""
+    """COmpute DOS, es are the eigenenergies, xs, the frequency grid
+
+    The returned array is sum_i w_i*d/(d^2 + (x-e_i)^2), i.e. pi times a
+    sum of unit-normalized Lorentzians. The 1/pi that turns that into a
+    density of states is the caller's job, and every consumer that
+    reports a DOS has to apply it: dos.dos_kmesh,
+    dos.calculate_dos_hkgen, dos's two energy-window routines,
+    dostk/adaptivedos and kdos all divide by pi after calling this."""
     from ..utilities import check_delta
     check_delta(d)
     if w is None: w = np.zeros(len(es)) + 1.0 # initialize

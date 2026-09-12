@@ -2,7 +2,11 @@ import numpy as np
 from numba import jit,njit,prange
 
 
-# vectorized mode seems to be faster, explicit kept as a reference
+# vectorized mode seems to be faster, explicit kept as a reference.
+# This switch is read by full_dm_python/full_dm_python_d, i.e. by the
+# densitymatrix.full_dm_simultaneous path; the (default) accumulate path
+# always uses the batched kernels below, which have no explicit
+# counterpart.
 mode = "explicit"
 mode = "vectorized"
 

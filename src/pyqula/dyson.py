@@ -63,10 +63,15 @@ def dyson1d(intra,inter,nx,nkx,ez):
 
 def dyson1d_hkgen(hkgen,nx,nkx,ez):
     """Workaround for 1D"""
-    zero = hkgen([0.])*0.0 # zero matrix
-    ns = zero.shape[0]*nx
+    ns = hkgen([0.]).shape[0]*nx
     g = np.zeros((ns,ns),dtype=np.complex128)
-    return dyson2d_jit(hkgen,nx,1,nkx,1,ez,g)
+    # same two-step route as dyson2d_hkgen: evaluate the Green's function
+    # at every k-point in python (the Bloch generator is not jittable),
+    # then assemble the supercell one in the jitted kernel. This used to
+    # call dyson2d_jit, which takes the four hopping matrices rather than
+    # a generator, with the generator in the intracell slot
+    gsk = generate_gfk_1d(hkgen,nkx,ez) # generate Green's functions
+    return dyson2d_gsk_jit(gsk,nx,1,nkx,1,ez,g)
 
 
 
@@ -127,6 +132,24 @@ def dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g):
             jj1 = n*(j+1)
             g[ii0:ii1,jj0:jj1] = m[:,:] # store all this data
     return g
+
+
+
+
+def generate_gfk_1d(hkgen,nkx,ez):
+    """Generate the required Green's functions of a 1D Hamiltonian.
+
+    The k-points and their ordering are the ones dyson2d_gsk_jit assumes
+    for ny=nky=1, and the k-vector handed to the generator is in natural
+    units (fraction of the reciprocal lattice vector), as in
+    generate_gfk."""
+    n = hkgen([0.]).shape[0] # size of the matrix
+    gs = np.zeros((nkx,n,n),dtype=np.complex128) # GF in k-points
+    em = np.identity(n)*ez # identity times energy
+    for i in range(nkx):
+        k = 1./nkx*i # k vector in natural units
+        gs[i,:,:] = np.linalg.inv(em - hkgen([k])) # store GF
+    return gs # return Green's functions
 
 
 

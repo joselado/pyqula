@@ -103,14 +103,27 @@ def surface_green_dyson(intra,inter,e,mix=0.5,nite=20000,tol=1e-14):
     iterations rather than ~20, since it adds one cell at a time instead
     of doubling), but every iteration is well conditioned -- it never
     forms the huge intermediate quantities that break the decimation at a
-    degenerate energy -- so it is used as the fallback there."""
+    degenerate energy -- so it is used as the fallback there.
+
+    `tol` is measured relative to the size of the iterate: where the true
+    surface Green's function is of order 1/delta an absolute 1e-14 is
+    simply unreachable, and the iteration would grind through every one
+    of `nite` steps for nothing. The iteration starts at g=0 and grows,
+    so at such an energy `e - intra - inter g inter^dag` can itself
+    collapse to a numerically singular matrix; that is not an error to
+    report here -- the current iterate is returned and the caller's Dyson
+    check decides whether anything usable came out."""
     n = intra.shape[0]
     g = np.zeros((n,n),dtype=np.complex128)
     iden = np.identity(n,dtype=np.complex128)
     for i in range(nite):
-        gn = np.linalg.solve(e - intra - inter@g@algebra.dagger(inter),iden)
+        try:
+            gn = np.linalg.solve(e - intra - inter@g@algebra.dagger(inter),
+                                 iden)
+        except np.linalg.LinAlgError: return g # no meaningful step left
         gn = mix*gn + (1.-mix)*g # damping
-        if np.max(np.abs(gn-g))<tol: return gn
+        scale = max(np.max(np.abs(gn)),1.) # the iterate can be huge
+        if np.max(np.abs(gn-g))<tol*scale: return gn
         g = gn
     return g
 
@@ -119,15 +132,33 @@ def _fix_green_renormalization(g_bulk,g_surf,intra,inter,e):
     """Accept the decimation's Green's functions, or replace them by the
     fixed-point ones if they fail their own Dyson equation.
 
-    Whichever of the two has the smaller residual is returned, so this can
-    only improve the answer. The bulk Green's function needs the surface
-    Green's function of *both* semi-infinite halves,
-    g_b = (e - intra - inter g_s inter^dag - inter^dag g_s' inter)^(-1)."""
+    The fixed point is used only if it actually satisfies the equation;
+    the bulk Green's function is then rebuilt from it, which needs the
+    surface Green's function of *both* semi-infinite halves,
+    g_b = (e - intra - inter g_s inter^dag - inter^dag g_s' inter)^(-1).
+
+    If neither of the two satisfies the equation there is no answer to
+    hand back, and this raises. That happens when the lead has a state
+    essentially at the evaluated energy: the true surface Green's
+    function then grows like 1/delta and has to come out of inverting a
+    matrix assembled by cancelling numbers of that same size, which
+    double precision cannot carry -- a multi-orbital lead with intra=0 at
+    E=0 and delta=1e-12 is the standard example. Returning the less-bad
+    of two wrong Green's functions is exactly the silent failure this
+    whole residual check exists to stop, so say so instead."""
     res = surface_dyson_residual(g_surf,intra,inter,e)
     if res<dyson_tolerance: return g_bulk,g_surf # the decimation is fine
     gsr = surface_green_dyson(intra,inter,e) # this side
     res2 = surface_dyson_residual(gsr,intra,inter,e)
-    if not res2<res: return g_bulk,g_surf # no improvement, keep what we had
+    if not res2<dyson_tolerance: # neither of the two solves the equation
+        raise ValueError("the surface Green's function of this lead does "
+                "not satisfy its own Dyson equation at energy %g and "
+                "delta %g (best residual %.2e, required below %.1e). The "
+                "lead has a state essentially at that energy, where the "
+                "surface Green's function grows like 1/delta and double "
+                "precision cannot resolve it; use a larger delta, or "
+                "evaluate away from that energy."
+                %(e[0,0].real,e[0,0].imag,min(res,res2),dyson_tolerance))
     dag = algebra.dagger
     gsl = surface_green_dyson(intra,dag(inter),e) # the opposite side
     n = intra.shape[0]

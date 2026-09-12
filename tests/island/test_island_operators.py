@@ -84,12 +84,28 @@ def test_dos_in_site_bulk_vs_edge_matches_reference(tmp_path, monkeypatch):
 
 
 def test_multildos_atomic_projection_matches_reference(tmp_path, monkeypatch):
-    """Regression check for get_multildos(projection="atomic") on a small
-    honeycomb island (n=2 instead of 3): the total DOS written to
-    MULTILDOS/DOS.OUT must match the value recorded from a known-good run."""
+    """get_multildos(projection="atomic") on a small honeycomb island
+    (n=2 instead of 3).
+
+    This used to pin sum(DOS.OUT) == 40231.97213545212, which was the
+    un-normalized value: ldostk/atomicmultildos handed the eigenvalues to
+    calculate_dos raw, without the 1/pi of the Lorentzian that
+    dos.dos_kmesh applies, so the recorded constant locked the error in.
+    The island is 0d, so only that half of the defect bit here -- there is
+    no k-mesh to divide by as well.
+
+    The invariant replacing it is that MULTILDOS/DOS.OUT is a density of
+    states: the one h.get_dos computes from the same eigenvalues on the
+    refined grid multi_ldos_tb builds internally. Its sum is 12806.23,
+    which is the old constant divided by pi."""
     monkeypatch.chdir(tmp_path)
     g = islands.get_geometry(name="honeycomb", n=2, nedges=3)
     h = g.get_hamiltonian()
-    h.get_multildos(projection="atomic")
-    dos = np.genfromtxt("MULTILDOS/DOS.OUT")
-    assert np.isclose(np.sum(dos), 40231.97213545212, atol=1e-2)
+    energies = np.linspace(-2.0, 2.0, 100)
+    delta = 0.05
+    es2 = np.linspace(min(energies), max(energies), len(energies)*10)
+    ref = h.get_dos(energies=es2, delta=delta, write=False)[1]
+    h.get_multildos(projection="atomic", energies=energies, delta=delta)
+    dos = np.genfromtxt("MULTILDOS/DOS.OUT").T
+    assert np.max(np.abs(dos[0]-es2)) < 1e-12  # same energy grid
+    assert np.max(np.abs(dos[1]-ref)) < 1e-10*np.max(np.abs(ref))

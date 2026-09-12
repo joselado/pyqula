@@ -16,6 +16,21 @@ already reached once.
   were decided the way they were (nothing in it is open now), the areas the
   sweep did not cover, and one candidate it chased and cleared.
 
+- [`bug_audit_2.md`](bug_audit_2.md) -- the eight-lens second sweep, aimed at
+  the areas the first one listed as not covered: 80 distinct findings (bugs,
+  optimization candidates, and coverage/documentation holes), each with its
+  reproduction, its oracle, and the structural cause. **76 are fixed**, each
+  with a regression test asserting an invariant; the four that remain are
+  decisions rather than repairs and the file says why each one is. Read its
+  "Status" section before re-opening anything, and its list of user-visible
+  behaviour changes before upgrading -- a great many of these fixes turn a
+  silent wrong number into a right one or into a raised exception.
+
+- [`bug_audit_2_reproductions.md`](bug_audit_2_reproductions.md) -- the 149
+  standalone scripts that sweep wrote, preserved verbatim and annotated with the
+  finding each one backs. Evidence, not a test suite: they print numbers a human
+  reads and none of them asserts.
+
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a
   quantics tensor-train route to large k-meshes.

@@ -69,7 +69,7 @@ In this repository:
   modes
 - [`jupyter-notebooks/functionalities/`](jupyter-notebooks/functionalities) --
   53 executed notebooks, matching the FUNCTIONALITIES list below -- 53 of its
-  74 bullets carry a link to theirs; the rest have no notebook yet
+  79 bullets carry a link to theirs; the rest have no notebook yet
 
 From the ["Advanced Quantum Materials course at Aalto University 2025"](https://github.com/joselado/Advanced_Quantum_Materials_2025)
 - [Electronic structure theory](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session3.ipynb)
@@ -97,6 +97,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Momentum-resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/05_momentum_resolved_spectral_functions.ipynb)
 - Local and full operator-resolved density of states [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/06_operator_resolved_dos.ipynb)
 - 0d, 1d, 2d and 3d tight binding models [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/07_0d_1d_2d_3d_models.ipynb)
+- Non-Hermitian Hamiltonians (gain/loss, non-reciprocal hopping), with complex-spectrum band structures, density of states, LDOS and Berry curvature
 - Electronic structure unfolding in supercells [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
 - Twisted bilayer graphene structural relaxation (GSFE + elastic energy minimization, AA-region shrinkage and AB/BA domain formation below a few degrees of twist)
 - Energy-resolved spin splitting of collinear magnets and altermagnets, either as a broadened density or as the maximum over the whole Brillouin zone
@@ -163,6 +164,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 ## Wannierization ##
 - Maximally-localized Wannier functions for a selected range of bands [[notebook]](jupyter-notebooks/functionalities/wannierization/01_maximally_localized_wannier.ipynb)
 - Exact reproduction of the selected band subspace on the wannierization mesh [[notebook]](jupyter-notebooks/functionalities/wannierization/02_exact_reproduction.ipynb)
+- Souza-Marzari-Vanderbilt band disentanglement, with outer and frozen energy windows
 - Point-group symmetry-enforced Wannierization, with rejection of band selections that slice through a symmetry-related degeneracy [[notebook]](jupyter-notebooks/functionalities/wannierization/03_symmetry_enforced_wannierization.ipynb)
 - Works for 0d, 1d, 2d and 3d periodic Hamiltonians, including Nambu/BdG [[notebook]](jupyter-notebooks/functionalities/wannierization/04_dimensionality_and_bdg.ipynb)
 

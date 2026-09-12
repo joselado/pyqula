@@ -220,11 +220,14 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     the one the density matrix comes from, so this trick does not apply
     there."""
     from .htk.eigenvectors import parallel_diagonalization
-    from .filling import get_fermi_energy
+    # the T-aware Fermi search, because the density matrix below weights
+    # the states with the Fermi-Dirac occupation at this same `delta`: a
+    # T=0 eigenvalue count would hold a different number of electrons
+    from .spectrum import get_fermi_energy_T
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
     n = h.intra.shape[0]
     if len(ks)*n*n*16 > max_memory_gb*1e9: # see max_memory_gb's docstring
-        fermi = h.get_fermi4filling(filling,nk=nk)
+        fermi = h.get_fermi4filling(filling,nk=nk,T=delta)
         h_shifted = h.copy()
         h_shifted.shift_fermi(-fermi)
         dm = full_dm_accumulate_sparse(h_shifted,pairs,nk=nk,delta=delta,
@@ -246,7 +249,7 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
         es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
         batches.append((es_batch,vs_batch,kbatch))
         all_es.append(es_batch.ravel())
-    fermi = get_fermi_energy(np.concatenate(all_es),filling)
+    fermi = get_fermi_energy_T(np.concatenate(all_es),filling,T=delta)
     outd = {d: np.zeros((n,n),dtype=np.complex128) for d in pairs}
     for es_batch,vs_batch,kbatch in batches:
         _accumulate_dm_batch(outd,pairs,threshold,es_batch-fermi,vs_batch,kbatch,delta)
@@ -375,7 +378,14 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
       ks = np.array(ks,dtype=np.float64) # to array
       ds_arr = np.array(ds,dtype=np.float64)
       n = h.intra.shape[0] # dimensionality
-      out = full_dm_d_batch_vectorized(es,vs,ks,ds_arr,delta=delta)*fac
+      from .dmtk import fulldm
+      if fulldm.mode=="vectorized": # every direction in one batched call
+          out = full_dm_d_batch_vectorized(es,vs,ks,ds_arr,delta=delta)*fac
+      else: # the reference implementation, one direction at a time --
+          # full_dm_python_d is what reads dmtk.fulldm.mode here, so an
+          # unrecognized mode is reported there instead of being ignored
+          out = np.array([full_dm_python_d(es,vs,ks,d,delta=delta)
+                  for d in ds_arr])*fac
       outd = dict() # dictionary
       for i in range(len(ds)): outd[tuple(ds[i])] = out[i] # as dictionary
       return outd

@@ -49,7 +49,12 @@ def fermi_surface_generator(h,
     kyout = []
     if reciprocal: fR = h.geometry.get_k2K_generator() # get matrix
     else:  fR = lambda x: x # get identity
-    # setup a reasonable value for delta
+    # setup a reasonable value for delta: refine_delta is the refinement
+    # factor of the broadening, as it is in fermisurfacetk.singlefs (which
+    # applies it only to the delta it picks automatically). It used to be
+    # declared and never read, so asking for a 50 times sharper Fermi
+    # surface returned the unrefined one
+    delta = delta/refine_delta # refine the broadening
     #### function to calculate the weight ###
     operator = h.get_operator(operator) # overwrite operator
     def get_weight(hk,k=None):

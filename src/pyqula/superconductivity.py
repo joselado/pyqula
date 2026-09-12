@@ -442,6 +442,16 @@ def identify_superconductivity(h,tol=1e-5):
     if not h.has_eh: return [] # empty list
     dd = h.get_multihopping()
     if dd.norm()<tol: return [] # nothing
+    # every route below (the d-vector, dict2absdeltas, the singlet/triplet
+    # extraction) reads the pairing out of a 4x4 spin x electron-hole block
+    # per site, so name the requirement here rather than letting the
+    # d-vector complain about a Hilbert space the caller never mentioned
+    if not h.check_mode("spinful_nambu"):
+        raise NotImplementedError("identify_superconductivity classifies the "
+          +"pairing in the spin x electron-hole basis, so it needs a spinful "
+          +"Nambu Hamiltonian; this one is spinless Nambu (has_spin="
+          +str(h.has_spin)+"). Use h.extract('swave') or sctk.spinless for "
+          +"the spinless case")
     out = [] # initialize the list
 #    out.append("Superconductivity") # is superconducting
     dv = h.get_average_dvector() # get the average d-vector

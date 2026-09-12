@@ -80,7 +80,10 @@ def test_sparse_fermi_dedup_matches_two_diagonalization_reference():
     h1, v_dirs, pairs, n = _build_vj_matrices(g)
     filling, nk = 0.3, 4
 
-    fermi_ref = h1.get_fermi4filling(filling, nk=nk)
+    # T=1e-6, the same smearing the density matrix below is built with:
+    # both sequences locate the Fermi level at the temperature its own
+    # Fermi-Dirac occupations use, so the reference has to as well
+    fermi_ref = h1.get_fermi4filling(filling, nk=nk, T=1e-6)
     h_shifted = h1.copy()
     h_shifted.shift_fermi(-fermi_ref)
     dm_ref = full_dm_accumulate_sparse(h_shifted, pairs, nk=nk, delta=1e-6)

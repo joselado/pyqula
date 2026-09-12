@@ -9,6 +9,16 @@ delta_smatrix = 1e-12 # delta for the smatrix
 def get_smatrix(ht,energy=0.0,delta=None,as_matrix=False,check=True):
     """Calculate the S-matrix of an heterostructure.
 
+    `delta` is the broadening, and defaults to the junction's own `delta`
+    attribute. Passing it explicitly is exactly equivalent to building the
+    junction with that attribute: the broadening is read in several places
+    below (the lead selfenergies, the central Green's function, and for a
+    LocalProbe also the bulk_delta of the sample Green's function), so an
+    explicit value is applied by rebinding the attribute on a copy rather
+    than threaded into each of them one by one -- threading it reached
+    only the lead selfenergies, where it is clamped to delta_smatrix
+    anyway, so the keyword had no effect on the answer at all.
+
     Two cheap perf fixes applied here (2026-07-31, no behavior change,
     verified bit-identical against the previous implementation): sqrtm(Γ_L)
     and sqrtm(Γ_R) are each computed once and reused for both blocks that
@@ -27,12 +37,15 @@ def get_smatrix(ht,energy=0.0,delta=None,as_matrix=False,check=True):
     exercises get_smatrix with block_diagonal=True, so that rewrite would
     need new correctness tests first."""
     # now do the Fisher Lee trick
-    if delta is None: delta = ht.delta # the heterostructure's own delta
-    if delta>delta_smatrix: delta = delta_smatrix # small delta is critical!
+    if delta is not None and delta!=ht.delta: # explicit, different delta
+        ht = ht.with_delta(delta) # rebind it, see the docstring above
+    delta = ht.delta # the heterostructure's own delta
+    delta_lead = delta # delta for the leads and the unitarity check
+    if delta_lead>delta_smatrix: delta_lead = delta_smatrix # small delta is critical!
     smatrix = [[None,None],[None,None]] # smatrix in list form
     # get the selfenergies, using the same coupling as the lead
-    selfl = ht.get_selfenergy(energy,delta=delta,lead=0,pristine=True)
-    selfr = ht.get_selfenergy(energy,delta=delta,lead=1,pristine=True)
+    selfl = ht.get_selfenergy(energy,delta=delta_lead,lead=0,pristine=True)
+    selfr = ht.get_selfenergy(energy,delta=delta_lead,lead=1,pristine=True)
     # get the central Green's function
     gmatrix = ht.get_central_gmatrix(selfl=selfl,selfr=selfr,
                                    energy=energy)
@@ -58,7 +71,7 @@ def get_smatrix(ht,energy=0.0,delta=None,as_matrix=False,check=True):
     smatrix[1][1] = -iden22 + 1j*sqgr@g22@sqgr # matrix
     if check: # check whether the matrix is unitary
         from .unitarize import check_and_fix
-        smatrix = check_and_fix(smatrix,error=100*delta)
+        smatrix = check_and_fix(smatrix,error=100*delta_lead)
     if as_matrix:
       from scipy.sparse import bmat,csc_matrix
       smatrix2 = [[csc_matrix(smatrix[i][j]) for j in range(2)] for i in range(2)]

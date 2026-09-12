@@ -19,7 +19,7 @@ def equal(m1,m2,tol=1e-4):
 def check_hermitian(h,tol=1e-5):
   hk = h.get_hk_gen() # get generator
   m = hk(np.random.random(3)) # random k-point
-  if not equal(m,np.conjugate(m).T):
+  if not equal(m,np.conjugate(m).T,tol=tol):
     raise ValueError("the Hamiltonian is not Hermitian, the largest "
             "deviation of h(k) from its adjoint is "
             +str(np.max(np.abs(m-np.conjugate(m).T))))
@@ -39,8 +39,9 @@ def check_hamiltonian(h,tol=1e-5):
     from .superconductivity import eh_operator
     eh = eh_operator(m1) # get the function
     if not equal(m1,-eh(m2),tol=tol): 
-      print("CHECK FAILED, Hamiltonian does not have electron-hole symmetry")
-      exit()
+      raise ValueError("the Hamiltonian does not have electron-hole "
+              "symmetry, the largest deviation of h(k) from -eh(h(-k)) is "
+              +str(np.max(np.abs(m1+eh(m2)))))
     print("CHECKED that the Hamiltonian has electron-hole symmetry")
 
 

@@ -100,6 +100,35 @@ def test_didv_accepts_the_temperature_spellings():
     assert abs(ht.didv(energy=e, temperature=0.2) - warm) < 1e-8
 
 
+def test_localprobe_didv_reads_T_as_the_transparency_and_temp_as_the_temperature():
+    """The same three spellings on a LocalProbe, whose conventions differ
+    from the Heterostructure's above: `temp`/`temperature` are the
+    temperature, but `T` is the probe TRANSPARENCY -- the same knob as
+    LocalProbe(...,T=...), set_coupling and get_kappa(T=...), and the one
+    examples/transport/didv_kitaev/main.py sweeps through Hamiltonian.didv.
+    Both readings used to be impossible: didv declared T and never used it,
+    so the probe's own transparency was silently used instead."""
+    from pyqula.transporttk.localprobe import LocalProbe
+    h = geometry.chain().get_hamiltonian(has_spin=False)
+    e = 1.9  # just inside the band edge, where temperature matters
+    lp = LocalProbe(h, delta=1e-3)
+    lp.T = 0.2
+    cold = lp.didv(energy=e)
+    warm = lp.didv(energy=e, temp=0.2)
+    assert abs(warm - cold) > 1e-2
+    assert abs(lp.didv(energy=e, temperature=0.2) - warm) < 1e-8
+    # T is the transparency, so the keyword must return what the attribute
+    # returns -- and must not be re-read as the temperature
+    lp2 = LocalProbe(h, delta=1e-3)
+    lp2.T = 0.9
+    assert abs(lp.didv(energy=e, T=0.9) - lp2.didv(energy=e)) < 1e-12
+    assert abs(lp.didv(energy=e, T=0.9) - cold) > 1e-2
+    assert abs(lp.didv(energy=e, T=0.2) - cold) < 1e-12
+    # didv_curve is the array-of-energies twin of didv, so T means the
+    # same thing there
+    assert abs(lp.didv_curve([e], T=0.9)[0] - lp2.didv(energy=e)) < 1e-12
+
+
 def test_the_dead_legacy_selfconsistency_interface_is_refused():
     """`scftypes.selfconsistency` is now an alias of
     `densitydensity.Vinteraction`, whose signature shares none of the old

@@ -139,7 +139,14 @@ def connections(r1,r2,dr=1.0):
 
 
 def parametric_hopping(r1,r2,fc,is_sparse=False):
-  """ Generates a parametric hopping based on a function"""
+  """ Generates a parametric hopping based on a function.
+
+  The result is the hopping from the r1 sites to the r2 sites, so it has
+  len(r1) rows and len(r2) columns. Both dimensions used to be taken from
+  r2, which only happens to be right when the two lists have the same
+  length -- the rectangular case (a lead-to-central coupling, see
+  multiterminal.Device.biterminal) came back square, with the rows beyond
+  len(r1) left at zero."""
   if is_sparse: # sparse matrix
     # This should be made more efficient
 #    print("Sparse parametric hopping")
@@ -151,13 +158,12 @@ def parametric_hopping(r1,r2,fc,is_sparse=False):
             data.append(val)
             rows.append(i)
             cols.append(j)
-    n = len(r2)
-    m = csc_matrix((data,(rows,cols)),shape=(n,n),dtype=np.complex128)
+    m = csc_matrix((data,(rows,cols)),shape=(len(r1),len(r2)),
+                    dtype=np.complex128)
   #  if not is_sparse: m = m.todense() # dense matrix
     return m
   else:
-    n = len(r2)
-    m = np.array(np.zeros((n,n),dtype=np.complex128)) # complex matrix
+    m = np.array(np.zeros((len(r1),len(r2)),dtype=np.complex128)) # complex matrix
     for i in range(len(r1)):
       for j in range(len(r2)):
         m[i,j] = fc(r1[i],r2[j])

@@ -14,7 +14,7 @@ def current_operator(h):
 
 
 def gs_current(h,nk=400):
-  weighted_current(h,nk=nk)
+  return weighted_current(h,nk=nk)
 
 
 
@@ -22,7 +22,7 @@ def gs_current(h,nk=400):
 def fermi_current(h,nk=400,delta=0.5):
   def fun(e):
     return delta/(delta**2+e**2)*2/np.pi
-  weighted_current(h,nk=nk,fun=fun)
+  return weighted_current(h,nk=nk,fun=fun)
 
 
 
@@ -34,7 +34,10 @@ def weighted_current(h,nk=400,fun=None):
   jgs = np.zeros(h.intra.shape[0]) # current array
   hkgen = h.get_hk_gen() # generator
   fj = current_operator(h) # current operator
-  ks = np.linspace(0.0,1.0,nk,endpoint=False) # k-points
+  # a bare float k reaches htk.bloch's generator as a 0-d array and is
+  # indexed there, so it has to be a sequence -- the same scalar-vs-array
+  # k defect that dos1d_ewindow and current_bands were repaired for
+  ks = [[k,0.,0.] for k in np.linspace(0.0,1.0,nk,endpoint=False)]
   for k in ks: # loop
     hk = hkgen(k) # Hamiltonian
     (es,ws) = lg.eigh(hk) # diagonalize
@@ -42,13 +45,22 @@ def weighted_current(h,nk=400,fun=None):
     jk = fj(k) # get the generator
     for (e,w) in zip(es,ws): # loop
       weight = fun(e) # weight
-      print(weight)
-      d = np.conjugate(w)*ket_Aw(jk,w) # current density
+      # this used to call ket_Aw, which is defined in bandstructure.py and
+      # was never imported here, so every call raised NameError -- the
+      # whole of gs_current/fermi_current/weighted_current was unreachable.
+      # ket_Aw(A,w) is A@w, inlined rather than imported for one matmul.
+      # np.asarray().ravel() because derivative() returns an np.matrix, so
+      # jk@w is a (1,n) matrix and the elementwise product below would
+      # silently become a matrix product (a shape error on any Hamiltonian
+      # with more than one orbital)
+      d = np.conjugate(w)*np.asarray(jk@w).ravel() # current density
       jgs += d.real*weight # add contribution
 #      jgs += (np.abs(w)**2*weight).real # add contribution
   jgs /= nk # normalize
-  print("Total current",np.sum(jgs))
+  # these three used to compute jgs and drop it on the floor -- the value
+  # only ever reached the caller as a printed line and a file
   np.savetxt("CURRENT1D.OUT",np.array([range(len(jgs)),jgs]).T)
+  return jgs # the current density, site by site
 
 
 

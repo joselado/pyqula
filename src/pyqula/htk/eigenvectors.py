@@ -17,7 +17,6 @@ def hk_matrix_batch(f,ks):
 def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
         numw=None,energy=0.0):
   from scipy.sparse import csc_matrix as csc
-  shape = h.intra.shape
   if numw is not None: sparse = True
   if h.dimensionality==0:
     if not sparse: vv = algebra.eigh(h.intra)
@@ -33,29 +32,27 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
     else:  kp = np.array([k]) # kpoint given on input
 #    vvs = [lg.eigh(f(k)) for k in kp] # diagonalize k hamiltonian
     nkp = len(kp) # total number of k-points
-    if sparse: # sparse Hamiltonians
-        fk = lambda k: slg.eigsh(csc(f(k)),k=numw,which="LM",sigma=energy,tol=1e-5)
-        vvs = parallel.pcall(fk,kp)
-    else: # dense Hamiltonians
+    if not sparse: # dense Hamiltonians
+      # every k-point yields the same number of eigenstates, so the
+      # batched diagonalization is unpacked with pure reshapes instead
+      # of a per-eigenstate Python loop
       mats = hk_matrix_batch(f,kp) # H(k) for every k, densified
       es_batch,ws_batch = parallel_diagonalization(mats) # batched numba eigh
-      vvs = [(es_batch[i],ws_batch[i]) for i in range(nkp)]
+      n = es_batch.shape[1] # number of eigenstates per k-point
+      eigvals = es_batch.reshape(-1) # eigenvalues, k-point by k-point
+      # eigh returns the eigenvectors as columns, they are stored as rows
+      eigvecs = ws_batch.transpose(0,2,1).reshape(nkp*n,n) # eigenvectors
+      if kpoints: # return also the kpoints, one per eigenstate
+        return eigvals,eigvecs,np.repeat(np.array(kp),n,axis=0)
+      else:
+        return eigvals,eigvecs
+    # sparse Hamiltonians, eigsh may return a different number of
+    # eigenstates per k-point, so they are unpacked one by one
+    fk = lambda k: slg.eigsh(csc(f(k)),k=numw,which="LM",sigma=energy,tol=1e-5)
+    vvs = parallel.pcall(fk,kp)
     nume = sum([len(v[0]) for v in vvs]) # number of eigenvalues calculated
     eigvecs = np.zeros((nume,h.intra.shape[0]),dtype=np.complex128) # eigenvectors
     eigvals = np.zeros(nume) # eigenvalues
-
-    #### New way ####
-#    eigvals = np.array([iv[0] for iv in vvs]).reshape(nkp*shape[0],order="F")
-#    eigvecs = np.array([iv[1].transpose() for iv in vvs]).reshape((nkp*shape[0],shape[1]),order="F")
-#    if kpoints: # return also the kpoints
-#      kvectors = [] # empty list
-#      for ik in kp: 
-#        for i in range(h.intra.shape[0]): kvectors.append(ik) # store
-#      return eigvals,eigvecs,kvectors
-#    else:
-#      return eigvals,eigvecs
-
-    #### Old way, slightly slower but clearer ####
     iv = 0
     kvectors = [] # empty list
     for ik in range(len(kp)): # loop over kpoints
@@ -66,10 +63,7 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
         kvectors.append(kp[ik])
         iv += 1
     if kpoints: # return also the kpoints
-#      for iik in range(len(kp)):
-#        ik = kp[iik] # store kpoint 
-#        for e in vvs[iik][0]: kvectors.append(ik) # store
-      return eigvals,eigvecs,kvectors
+      return eigvals,eigvecs,np.array(kvectors)
     else:
       return eigvals,eigvecs
   else:

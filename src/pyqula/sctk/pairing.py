@@ -6,6 +6,15 @@ from ..utilities import get_callable
 from .dvector import dvector2delta
 
 
+# the pairing symmetries the dispatch below accepts, in the same order; they
+# are listed in the error of an unknown mode, so keep the two in sync (the
+# test tests/superconductivity/test_pairing_modes.py builds every one of them)
+pairing_modes = ("swave","extended_swave","triplet","pwave","nodal_fwave",
+        "chiral_pwave","chiral_fwave","chiral_dwave","chiral_gwave",
+        "antihaldane","haldane","swavez","px","dpid","swaveA","swaveB",
+        "swavesublattice","dx2y2","nodal_dwave","dxy","snn","C3nn","SnnAB")
+
+
 def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     **kwargs):
     """Create a generator, taking as input two positions, and returning
@@ -17,9 +26,6 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
         weightf = mode # mode is a function returning a 2x2 pairing matrix
     elif mode=="swave":
         weightf = lambda r1,r2: swave(r1,r2,H=self,**kwargs) 
-    elif mode=="deltaud":
-        # this is a workaround for delta_ud alone!
-        weightf = lambda r1,r2: deltaud(r1,r2,deltaf) 
     elif mode=="extended_swave":
         weightf = lambda r1,r2: swave(r1,r2,H=self,nn=1,
                      **kwargs) #same_site(r1,r2)*np.identity(2)
@@ -71,8 +77,8 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
         weightf = lambda r1,r2: SnnAB(self.geometry,r1,r2)
     else:
         raise ValueError("unknown pairing mode '"+str(mode)+"'; it must be "
-          +"one of the modes listed in sctk.pairing.pairing_generator, or "
-          +"a callable returning the 2x2 pairing matrix")
+          +"one of "+str(list(pairing_modes))+", or a callable returning "
+          +"the 2x2 pairing matrix")
     matrixf = lambda r1,r2: deltaf((r1+r2)/2.)*weightf(r1,r2) 
     return matrixf # return function
 

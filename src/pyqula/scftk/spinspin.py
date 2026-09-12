@@ -1026,7 +1026,10 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
 
     def callback_h(hh):
         if mu is None:
-            fermi = hh.get_fermi4filling(filling, nk=hh.nk)
+            # T, because the density matrix is built with the Fermi-Dirac
+            # weight at this same T -- see the identical comment in
+            # densitydensity.densitydensity's own callback_h
+            fermi = hh.get_fermi4filling(filling, nk=hh.nk, T=T)
             hh.fermi = fermi
             hh.shift_fermi(-fermi)
         else:
@@ -1400,7 +1403,10 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # filling are both uniform.
             etot += 2.0*np.sum(np.asarray(h.fermi)*filling_arr)
         else:
-            etot += h.fermi*h.intra.shape[0]*filling
+            # electron_dimension, not h.intra.shape[0] -- see the identical
+            # comment in densitydensity.densitydensity
+            from .densitydensity import electron_dimension
+            etot += h.fermi*electron_dimension(h)*filling
     dme = electron_sector(scf.dm)
     if vz_active:
         etot += get_dc_energy(vz, dme)

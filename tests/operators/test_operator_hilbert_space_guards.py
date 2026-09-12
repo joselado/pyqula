@@ -15,18 +15,32 @@ def test_spin_operators_refuse_a_spinless_hamiltonian():
             h.get_vev(name)
 
 
-def test_pairing_operators_refuse_a_spinless_nambu_hamiltonian():
+@pytest.mark.parametrize("name", ["spair", "singlet"])
+def test_pairing_operators_refuse_a_spinless_nambu_hamiltonian(name):
     """The pairing operators are singlet/d-vector components in the
     spin x electron-hole basis. Built on a spinless Nambu Hamiltonian they
     came out twice the size of its Hilbert space instead of raising."""
     h = geometry.chain().get_hamiltonian(has_spin=False)
     h.add_swave(0.2)
     with pytest.raises(NotImplementedError):
-        h.get_operator("spair")
+        h.get_operator(name)
     hs = geometry.chain().get_hamiltonian()
     hs.add_swave(0.2)
-    op = hs.get_operator("spair").get_matrix()
+    op = hs.get_operator(name).get_matrix()
     assert op.shape == hs.intra.shape  # spinful Nambu is fine
+
+
+@pytest.mark.parametrize("name", ["spair", "singlet"])
+@pytest.mark.parametrize("has_spin", [True, False])
+def test_pairing_operators_refuse_a_hamiltonian_without_nambu(name, has_spin):
+    """A pairing operator on a Hamiltonian with no electron-hole degree of
+    freedom used to be built anyway: "singlet" calls add_swave on a copy,
+    which promotes that copy into Nambu space, so the operator came back at
+    twice the Hilbert-space dimension and only failed later, inside a raw
+    numpy matmul that named neither pyqula nor the requirement."""
+    h = geometry.chain().get_hamiltonian(has_spin=has_spin)
+    with pytest.raises(ValueError):
+        h.get_operator(name)
 
 
 def test_velocity_operator_is_c3_symmetric_on_a_honeycomb_lattice():

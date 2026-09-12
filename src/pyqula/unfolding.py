@@ -6,25 +6,10 @@ from .algebra import dagger, inv
 
 def unfolded_bands(hfol,hprim,kpath,inds_super=[]):
   """ Save in file unfolded band structure"""
-  hkfol = hfol.get_hk_gen()  # generator
-  hkprim = hprim.get_hk_gen() # generator
-  nump = hprim.intra.shape[0] # number orbitals of primitive
-  numf = hfol.intra.shape[0] # number orbitals of folded
-  nn = numf/numfp # number times the hamiltonian is bigger
-  for k in kpath:
-    kfol = k # kpoint
-    kprim = k/3.
-    hf = hkfol(k) # get matrix
-    hp = hkprim(k) # get matrix
-    (ep,wfp) = eigh(hp) # eigenvalues and eigenvectors 
-    (ef,wff) = eigh(hf) # eigenvalues and eigenvectors 
-    dp = [(w.dot(np.conjugate(w))).real for w in wfp.transpose()] # density prim
-    df = [(w.dot(np.conjugate(w))).real for w in wff.transpose()] # density fol
-    df = [sum(w.split(nn)) for w in df] # transform into smaller basis
-    # now it is time to compare weights of each eigenvalue
-    raise NotImplementedError("unfolded_bands is not implemented; use the "
-            "unfold operator (see bloch_projector) instead")
-
+  # the body of this stub read an unbound name in its first lines, so
+  # every call raised NameError inside the k-loop instead of this
+  raise NotImplementedError("unfolded_bands is not implemented; use the "
+          "unfold operator (see bloch_projector) instead")
 
 
 

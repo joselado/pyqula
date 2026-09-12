@@ -48,8 +48,11 @@ def current_bands(h,klist=None):
   fo = open("BANDS.OUT","w") # output file
   from . import current
   fj = current.current_operator(h) # function that generates the operator
-  from .htk.eigenvectors import peigh
-  hks = np.array([hkgen([k,0.,0.]) for k in klist],dtype=np.complex128) # H(k) batch
+  from .htk.eigenvectors import peigh, hk_matrix_batch
+  # through hk_matrix_batch, which densifies every H(k) first: stacking
+  # them with np.array instead raises "must be real number, not
+  # csc_matrix" on a sparse Hamiltonian
+  hks = hk_matrix_batch(hkgen,[[k,0.,0.] for k in klist]) # H(k) batch
   es_batch,ws_batch = peigh(hks) # batched numba eigh
   for ik,k in enumerate(klist): # loop over kpoints
     jk = fj([k,0.,0.]) # get current operator
@@ -215,7 +218,9 @@ def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
   """
   from scipy.sparse import csc_matrix
   if kpath is None: 
-    k = klist.default(h.geometry) # default path
+    # nkpoints used to be declared and never read, so the path length was
+    # klist.default's own default whatever was asked for
+    k = klist.default(h.geometry,nk=nkpoints) # default path
   else: k = kpath
   import gc # garbage collector
   fo = open("BANDS.OUT","w")

@@ -16,14 +16,28 @@ def rkky_generator(h,delta=None,nk=100):
     h = h.copy()
     h.remove_spin() # remove spin degree of freedom
     es,ws,ks = h.get_eigenvectors(kpoints=True,nk=nk) # get eigenvectors
+    ks = np.array(ks) # one kpoint per eigenstate
     if delta is None: delta = 1./nk
+    fs = (np.tanh(es/delta) + 1.0)/2. # smearing, it depends only on es
+    nw = len(es)/len(h.geometry.r)
+    dim = h.geometry.dimensionality # number of periodic directions
+    cache = [None,None] # last R and its Bloch phases
+    def get_phis(R):
+        """Bloch phases of every eigenstate for this R. They do not
+        depend on the sites, and rkky_map asks for a whole block of
+        site pairs at the same R, so the last one is kept"""
+        if cache[0] is not None and np.array_equal(cache[0],R):
+            return cache[1] # the phases for this R are already there
+        # same convention as geometry.bloch_phase (only the periodic
+        # components enter), evaluated on every kpoint at once
+        phis = np.exp(1j*2.*np.pi*(ks[:,0:dim]@R[0:dim])) # phases
+        cache[0],cache[1] = R,phis # store for the next site pair
+        return phis
     def get(R,ii,jj):
-        d1s = np.array([w[ii] for w in ws]) # densities
-        d2s = np.array([w[jj] for w in ws]) # densities
+        d1s = np.ascontiguousarray(ws[:,ii]) # densities
+        d2s = np.ascontiguousarray(ws[:,jj]) # densities
         R = np.array(R) # convert to array
-        phis = np.array([h.geometry.bloch_phase(R,k) for k in ks]) # phase
-        fs = (np.tanh(es/delta) + 1.0)/2. # smearing
-        nw = len(es)/len(h.geometry.r)
+        phis = get_phis(R) # phase, computed once per R
         return rkky_loop(es,phis,fs,d1s,d2s,delta)/(nw**2) # return RKKY int
     return get
 

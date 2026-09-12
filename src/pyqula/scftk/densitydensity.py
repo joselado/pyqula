@@ -192,6 +192,48 @@ def mf_matches_hamiltonian(h0,mf):
     return True
 
 
+def dm_sparse_pairs(v,ds,n,has_spin=True):
+    """The (row,col) entries of the density matrix that the normal-state
+    mean field actually reads, one set of index arrays per direction.
+
+    get_mf_normal's density-density terms (normal_term_ii/jj) read only
+    the DIAGONAL of dm[(0,0,0)]; its cross term (normal_term_ij) reads
+    dm[-d][j,i] wherever v[d][i,j] is nonzero -- the transpose of v[d]'s
+    pattern at the OPPOSITE direction -- and get_dc_energy reads
+    dm[d][i,j] at v[d]'s own pattern. Every one of them multiplies the
+    entry by v[i,j], so an entry where the interaction vanishes cannot
+    contribute to any of them and never has to be computed. A short-range
+    v is overwhelmingly zero, so this is a small fraction of the n^2 grid
+    per off-diagonal direction.
+
+    Same construction as scftk.spinspin._build_sparse_pairs, which does
+    this for the Jinteraction/VJinteraction engine; there the mask also has
+    to be complete on every 2x2 spin block because that engine rotates the
+    density matrix before reading it, which is not the case here.
+
+    Only valid for a normal-state Hamiltonian: the BdG decoupling
+    (superscf.get_mf_bdg) reads a different set of entries."""
+    masks = {d: np.zeros((n,n),dtype=bool) for d in ds}
+    for d,m in v.items(): # loop over the interaction directions
+        nz = np.array(m)!=0 # nonzero pattern of the interaction
+        masks[d] |= nz # read by get_dc_energy
+        d2 = (-d[0],-d[1],-d[2]) # the opposite direction
+        if d2 in masks: masks[d2] |= nz.T # read by the cross term
+    # the full onsite block of every site, not just its diagonal: the mean
+    # field only needs the diagonal, but this direction is dense anyway
+    # (see densitymatrix.full_dm_accumulate_sparse's dense_fraction) and
+    # scf.dm is user-visible, so an onsite magnetization read off it stays
+    # meaningful
+    norb = 2 if has_spin else 1 # orbitals per site
+    masks[(0,0,0)] |= np.kron(np.eye(n//norb,dtype=bool),
+            np.ones((norb,norb),dtype=bool))
+    pairs = dict()
+    for d,mask in masks.items():
+        rows,cols = np.nonzero(mask)
+        pairs[d] = (rows.astype(np.int64),cols.astype(np.int64))
+    return pairs
+
+
 def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     """Get the density matrix.
 
@@ -215,6 +257,19 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
         ds = [(0,0,0)] # directions
 #    if h.dimensionality>0:
         for key in v: ds.append(key) # store the vector
+        # normal state, and v is the interaction dictionary (not just a
+        # list of directions, which carries no pattern to build a mask
+        # from -- scftk.spinspin's post-convergence recompute passes one,
+        # and wants the full matrices anyway): compute only the entries
+        # the mean field reads, with the same kernel VJinteraction uses,
+        # instead of a full (n,n) matmul per direction and kpoint
+        if not h.has_eh and isinstance(v,dict):
+            from ..densitymatrix import full_dm_accumulate_sparse, delta_dm
+            T = kwargs.pop("T",delta_dm) # the energy smearing
+            if T==0.: T = 1e-15 # as densitymatrix.full_dm does
+            pairs = dm_sparse_pairs(v,ds,h.intra.shape[0],
+                    has_spin=h.has_spin)
+            return full_dm_accumulate_sparse(h,pairs,nk=nk,delta=T,**kwargs)
         dms = h.get_density_matrix(ds=ds,nk=nk,**kwargs) # get all the density matrices
         return dms # return dictionary
     else:
@@ -294,6 +349,17 @@ def get_dc_energy_jit(v,dm00,dmd):
           c = dmd[i,j] # cross term
           out += v[i,j]*c*np.conjugate(c) # add contribution
     return out
+
+
+def electron_dimension(h):
+    """Number of ELECTRON states per unit cell.
+
+    `filling` is always a fraction of the electron states -- for a Nambu
+    (BdG) Hamiltonian spectrum.get_fermi4filling removes the electron-hole
+    doubling before counting -- so the mu*N un-shift of a total energy has
+    to use this, and not the Nambu-doubled h.intra.shape[0]."""
+    n = h.intra.shape[0] # dimension of the Hamiltonian
+    return n//2 if h.has_eh else n # undo the Nambu doubling
 
 
 def get_dc_energy(v,dm):
@@ -526,6 +592,9 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         from .densitydensity_jax import densitydensity_jax
         return densitydensity_jax(h,filling=filling,mu=mu,verbose=verbose,
                 **kwargs)
+    # read, not consumed: generic_densitydensity below still gets its own T
+    T = kwargs.get("T",1e-7) # temperature, same default as that function
+    integration = kwargs.get("integration","ed") # density-matrix backend
     if h.has_eh:
         if not h.has_spin: return NotImplemented # only for spinful
     h = h.get_multicell()
@@ -533,7 +602,11 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     def callback_h(h):
         """Set the filling"""
         if mu is None:
-          fermi = h.get_fermi4filling(filling,nk=h.nk) # get the filling
+          # T, because the density matrix below is built with the
+          # Fermi-Dirac weight at this same T: a Fermi level located by a
+          # T=0 eigenvalue count would hold a different number of
+          # electrons than `filling` asks for
+          fermi = h.get_fermi4filling(filling,nk=h.nk,T=T) # get the filling
           if verbose>1: print("Fermi energy",fermi)
           h.fermi = fermi
           h.shift_fermi(-fermi) # shift by the fermi energy
@@ -544,9 +617,21 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
             **kwargs)
     # Now compute the total energy
     h = scf.hamiltonian
+    # scf.dm is user-visible, while the loop above only ever computed the
+    # entries the mean field reads (see get_dm's sparse branch) -- a small
+    # fraction of each off-diagonal direction's matrix for a large system,
+    # and eventually of the onsite one too. Recompute it in full once here,
+    # exactly as spinspin._run_anisotropic_scf does at the end of its own
+    # loop; only for the path that actually went sparse (a dense recompute
+    # would defeat the point of any other integrator)
+    if integration=="ed" and not h.has_eh:
+        ds = [(0,0,0)] + [d for d in scf.v] # every direction of the mean field
+        scf.dm = h.get_density_matrix(ds=ds,nk=h.nk,T=T)
     etot = h.get_total_energy(nk=h.nk)
     if mu is None:
-        etot += h.fermi*h.intra.shape[0]*filling # add the Fermi energy
+        # electron_dimension, not h.intra.shape[0]: N = filling*(number of
+        # electron states), which is not the Nambu-doubled dimension
+        etot += h.fermi*electron_dimension(h)*filling # add the Fermi energy
     #print("Occupied energies",etot)
     # get_dc_energy assumes dm's shape matches v's, which is never
     # Nambu-doubled even when h (hence scf.dm) is BdG -- so the electron

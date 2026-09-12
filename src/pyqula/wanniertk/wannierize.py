@@ -2,16 +2,32 @@
 wannierpy (github.com/joselado/wannierpy)'s pure-Python Wannier90 port,
 bundled in this repo at ``pyqula.wanniertk.wannierpy``.
 
-Only the "fixed band subset, no disentanglement" case is implemented
+The default is the "fixed band subset, no disentanglement" case
 (``num_wann == len(band_indices)``, matching wannierpy's own
 ``examples/pyqula_ladder.py`` demo): pick the contiguous band range
 ``bands=[a,b]`` (0-indexed into ``eigh``'s ascending output, both ends
 inclusive) at every k-point on a Monkhorst-Pack mesh, Wannierize that
 whole subspace jointly, and
 Fourier-transform the resulting smooth-gauge Bloch Hamiltonian back into
-real-space hoppings for a new pyqula Hamiltonian. Disentanglement (a
-frozen/outer energy window instead of a fixed band count) is not
-implemented yet.
+real-space hoppings for a new pyqula Hamiltonian.
+
+Passing ``num_wann`` smaller than that band range instead switches on
+Souza-Marzari-Vanderbilt disentanglement (PRB 65, 035109 (2001)):
+``bands=[a,b]`` then only says which bands are *offered* to the
+extraction, and the optional energy windows ``dis_win_min``/
+``dis_win_max`` (outer) and ``dis_froz_min``/``dis_froz_max`` (frozen,
+inner) narrow it further per k-point. No algorithm is implemented here
+for that -- wannierpy's own ``_engine/disentangle.py`` is a complete port
+of the SMV engine and ``wannierpy.run`` dispatches to it automatically as
+soon as it is handed more bands than ``num_wann``; all this module adds
+is the band/window bookkeeping on either side of that call (see
+``_disentangled_gauge``). What changes for the caller: the result no
+longer reproduces the selected bands, only the states inside the frozen
+window -- those exactly, at every mesh k-point -- while outside it the
+extracted subspace is a deliberately different, smoother one. That is
+the trade disentanglement makes, not an accuracy loss. Disentanglement is
+not combined with ``h.has_eh``, ``symmetries=`` or
+``auto_split_clusters`` (see :func:`get_wannier_hamiltonian`).
 
 Superconducting (Nambu/BdG, ``h.has_eh=True``) Hamiltonians are also
 supported, with electron-hole (particle-hole) symmetry *enforced* on the
@@ -785,6 +801,36 @@ def _bloch_hamiltonian_from_gauge(U_matrix, eigenvalues):
     return np.einsum("mik,mk,mjk->ijk", U_matrix.conj(), eigenvalues, U_matrix)
 
 
+def _disentangled_gauge(U_matrix, U_matrix_opt, lwindow, eigenvalues, C_bare):
+    """Same two outputs as the fixed-window path's
+    :func:`_bloch_hamiltonian_from_gauge` plus ``C_bare @ U_matrix``, but
+    for a disentangled run, where the gauge comes in two pieces: the
+    optimal-subspace matrix ``U_matrix_opt(k)`` (outer-window states ->
+    ``num_wann`` optimally-connected states) and the Wannierisation
+    rotation ``U_matrix(k)`` (``num_wann`` -> ``num_wann``). Their
+    product ``V(k)`` is the full band-to-Wannier gauge, and the
+    reconstruction is the same unitary similarity transform as there,
+    H_W(k) = V(k)^dagger @ diag(eigenvalues) @ V(k).
+
+    The bookkeeping this exists for: ``U_matrix_opt``'s rows are
+    *window-relative*, i.e. row i of column k is the i-th band that
+    ``lwindow`` marks as inside the outer window at that k-point, not
+    band i. The outer window generally holds a different number of bands
+    (and starts at a different band) at different k, so the rows have to
+    be looked up per k-point -- which is also why this is a Python loop
+    rather than the single einsum the fixed-window path uses."""
+    num_wann, _, num_kpts = U_matrix.shape
+    num_orbitals = C_bare.shape[0]
+    H_k_mesh = np.empty((num_wann, num_wann, num_kpts), dtype=complex)
+    W_k_mesh = np.empty((num_orbitals, num_wann, num_kpts), dtype=complex)
+    for k in range(num_kpts):
+        rows = np.nonzero(lwindow[:, k])[0] # bands inside the outer window at k
+        V = U_matrix_opt[:len(rows), :, k] @ U_matrix[:, :, k]
+        H_k_mesh[:, :, k] = V.conj().T @ (eigenvalues[rows, k][:, None] * V)
+        W_k_mesh[:, :, k] = C_bare[:, rows, k] @ V
+    return H_k_mesh, W_k_mesh
+
+
 def _mesh_to_real_space(M_k_mesh, kpt_latt, mp_grid):
     """Inverse-Fourier-transform a (dim1,dim2,num_kpts) array sampled on
     a Monkhorst-Pack mesh into a ``{R: (dim1,dim2) ndarray}`` dict, using
@@ -920,6 +966,12 @@ def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
         seedname, setup_result, mp_grid, kpt_latt, real_lattice,
         atom_symbols, atoms_cart, M_matrix, A_matrix, eigenvalues, backend="python",
     )
+    if run_result.U_matrix.shape[0] < len(band_indices):
+        # disentangled run -- the gauge is U_matrix_opt @ U_matrix and the
+        # rows it refers to vary with k, see _disentangled_gauge
+        return (setup_result, run_result) + _disentangled_gauge(
+            run_result.U_matrix, run_result.U_matrix_opt, run_result.lwindow,
+            eigenvalues, C_bare)
     H_k_mesh = _bloch_hamiltonian_from_gauge(run_result.U_matrix, eigenvalues)
 
     # W(k) = C_bare(k) @ U_matrix(k): rotate the *bare* (un-regauged, see
@@ -946,11 +998,18 @@ def _wannierize_one_group(seedname, mp_grid, kpt_latt, real_lattice,
 def get_wannier_hamiltonian(h, bands=None, nk=12,
         trial_vectors=None, num_iter=200, conv_tol=1e-10, conv_window=3,
         cutoff=1e-6, seedname="pyqula_wannier", win_keywords=None,
-        auto_split_clusters=False, cluster_rel_tol=0.1, symmetries=None):
-    """Wannierize a fixed subset of ``h``'s bands and return a new pyqula
-    Hamiltonian whose real-space hoppings exactly reproduce that band
-    subspace on the wannierization mesh (and interpolate smoothly
-    elsewhere).
+        auto_split_clusters=False, cluster_rel_tol=0.1, symmetries=None,
+        num_wann=None, dis_win_min=None, dis_win_max=None,
+        dis_froz_min=None, dis_froz_max=None, dis_num_iter=200):
+    """Wannierize a subset of ``h``'s bands and return a new pyqula
+    Hamiltonian whose real-space hoppings reproduce that band subspace on
+    the wannierization mesh (and interpolate smoothly elsewhere).
+
+    By default the subspace is the fixed band range ``bands=[a,b]`` and
+    the reproduction is exact. Passing a smaller ``num_wann`` instead
+    disentangles ``num_wann`` optimally-connected states out of that
+    range, and then only the states inside the frozen energy window are
+    reproduced -- see ``num_wann``/``dis_froz_max`` below.
 
     Parameters
     ----------
@@ -960,7 +1019,8 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         ``[a,b]``, the first and last band to Wannierize (0-indexed into
         ``eigh``'s ascending output, both ends inclusive) -- every band
         in between is Wannierized jointly as a single group
-        (``band_indices = list(range(a,b+1))``, ``num_wann = b-a+1``).
+        (``band_indices = list(range(a,b+1))``, ``num_wann = b-a+1``
+        unless ``num_wann`` is given explicitly, see below).
         For a Nambu/BdG Hamiltonian (``h.has_eh=True``) this range must be
         closed under the electron-hole pairing ``n -> num_orbitals-1-n``,
         i.e. centred on the gap (``a+b == num_orbitals-1``) -- otherwise a
@@ -1053,6 +1113,45 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         ``wannier_centres``) sit at symmetric positions -- that would need
         symmetry constraints inside the CG minimization itself (not
         implemented; see the module docstring).
+    num_wann : int, optional
+        Default None, i.e. ``b-a+1`` -- the whole selected band range is
+        Wannierized as a fixed subspace and reproduced exactly, the
+        behaviour of every other argument above. A *smaller* value turns
+        on Souza-Marzari-Vanderbilt disentanglement: ``bands=[a,b]`` then
+        only says which bands are offered to the extraction, and
+        ``num_wann`` optimally-connected states are extracted out of them
+        (via ``wannierpy``'s own SMV engine, see the module docstring).
+        The selected bands are then *not* reproduced any more -- only the
+        states inside the frozen window are, see ``dis_froz_max``.
+        Disentanglement is not implemented together with ``h.has_eh``,
+        ``symmetries=`` or ``auto_split_clusters`` (each raises
+        ``NotImplementedError``).
+    dis_win_min, dis_win_max : float, optional
+        Outer energy window: only bands falling inside it at a given
+        k-point are offered to the extraction there (so the number of
+        bands available varies across the mesh, which is the point of a
+        window rather than a band range). Default None, i.e. the full
+        energy range spanned by ``bands`` -- every selected band is
+        available at every k-point. Every eigenvalue of the returned
+        Hamiltonian lies inside this window, since the extracted subspace
+        is a compression of the window states only.
+    dis_froz_min, dis_froz_max : float, optional
+        Frozen (inner) energy window: states inside it are kept exactly
+        rather than optimized, so the returned Hamiltonian reproduces
+        them to numerical precision at every wannierization-mesh k-point
+        -- that is the invariant to test a disentangled result against,
+        not reproduction of the original bands, which disentanglement
+        deliberately gives up outside this window. ``dis_froz_max`` alone
+        is enough (``dis_froz_min`` then defaults to ``dis_win_min``);
+        ``dis_froz_min`` alone raises. Default None, no frozen window.
+        The window must hold at most ``num_wann`` states at every
+        k-point, and the outer window at least ``num_wann`` (the engine
+        raises a ``ValueError`` naming the k-point otherwise).
+    dis_num_iter : int, optional
+        Default 200. Maximum iterations of the Omega_I minimization.
+        Not reaching convergence within them is a warning, not an error
+        -- the frozen window is reproduced exactly either way, it is the
+        smoothness of the rest of the subspace that suffers.
 
     Returns
     -------
@@ -1069,7 +1168,9 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         ``wannier_band_indices``, ``wannier_clusters`` (the
         ``auto_split_clusters`` decomposition actually used -- a single
         one-element list when splitting didn't trigger), ``wannier_centres``,
-        ``wannier_spreads``, ``wannier_spread_total``,
+        ``wannier_spreads``, ``wannier_spread_total``, ``wannier_num_wann``,
+        ``wannier_disentanglement_window`` (the four ``dis_*`` window
+        values actually used, or None when not disentangling),
         ``wannier_setup_result``, ``wannier_run_result`` for diagnostics
         (each a single wannierpy result, or a list with one entry per
         cluster when ``auto_split_clusters`` engaged), plus
@@ -1104,16 +1205,63 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     if a > b:
         raise ValueError(f"get_wannier_hamiltonian: bands=[{a},{b}] needs a<=b")
     band_indices = list(range(a, b + 1))
-    num_wann = len(band_indices)
-    if num_wann < 1 or num_wann > num_orbitals:
+    num_selected = len(band_indices)
+    if num_selected < 1 or num_selected > num_orbitals:
         raise ValueError(
-            f"bands=[{a},{b}] selects {num_wann} bands, only {num_orbitals} available")
+            f"bands=[{a},{b}] selects {num_selected} bands, only {num_orbitals} available")
+    if num_wann is None:
+        num_wann = num_selected
+    num_wann = int(num_wann)
+    if num_wann < 1 or num_wann > num_selected:
+        raise ValueError(
+            f"get_wannier_hamiltonian: num_wann={num_wann} must be between 1 and the "
+            f"{num_selected} bands selected by bands=[{a},{b}]")
+    disentangling = num_wann < num_selected
+
+    dis_window = {"dis_win_min": dis_win_min, "dis_win_max": dis_win_max,
+                  "dis_froz_min": dis_froz_min, "dis_froz_max": dis_froz_max}
+    window_given = sorted(k for k, v in dis_window.items() if v is not None)
+    if window_given and not disentangling:
+        # wannierpy only disentangles when it is handed more bands than
+        # num_wann, so without this the windows would be accepted and then
+        # silently ignored, returning the plain fixed-window Hamiltonian
+        raise ValueError(
+            f"get_wannier_hamiltonian: {'/'.join(window_given)} given, but num_wann="
+            f"{num_wann} is the whole band range bands=[{a},{b}] -- an energy window "
+            "only does something when num_wann is smaller than the selected range "
+            "(otherwise there is nothing to disentangle and the window would be "
+            "silently ignored); pass a smaller num_wann")
+    if dis_froz_min is not None and dis_froz_max is None:
+        raise ValueError(
+            "get_wannier_hamiltonian: dis_froz_min given without dis_froz_max -- the "
+            "frozen inner window needs its upper end; dis_froz_max on its own is fine "
+            "(dis_froz_min then defaults to dis_win_min)")
+    if disentangling:
+        if h.has_eh:
+            raise NotImplementedError(
+                f"get_wannier_hamiltonian: disentanglement (num_wann={num_wann} < the "
+                f"{num_selected} bands selected) is not implemented for Nambu/BdG "
+                "Hamiltonians (h.has_eh=True) -- the electron-hole post-processing needs "
+                "a pair-closed band selection, which a disentangled subspace is not")
+        if auto_split_clusters:
+            raise NotImplementedError(
+                "get_wannier_hamiltonian: auto_split_clusters=True is not implemented "
+                f"together with disentanglement (num_wann={num_wann} < the {num_selected} "
+                "bands selected) -- the gapped-cluster split assumes one Wannier function "
+                "per selected band; pass num_wann=None or auto_split_clusters=False")
     if h.has_eh: # Nambu/BdG: band selection must be electron-hole-pair-closed
         _validate_eh_band_indices(band_indices, num_orbitals)
 
     # resolved/verified/group-closed up front (before the expensive CG
     # run) so a bad symmetries= argument fails fast -- see _resolve_symmetries
     symmetry_group = _resolve_symmetries(h, symmetries)
+    if disentangling and symmetry_group:
+        raise NotImplementedError(
+            "get_wannier_hamiltonian: symmetries= is not implemented together with "
+            f"disentanglement (num_wann={num_wann} < the {num_selected} bands selected) "
+            "-- wannierpy's symmetry-adapted path does not cover the frozen-window case "
+            "either (see wannierpy/_engine/sitesym.py), and the post-hoc point-group "
+            "enforcement needs the selected bands to be a union of whole multiplets")
 
     particle_hole_operator = None
     seed_particle_hole_perm = None
@@ -1175,6 +1323,9 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
 
     keywords = {"num_wann": num_wann, "num_iter": num_iter,
                 "conv_tol": conv_tol, "conv_window": conv_window}
+    if disentangling:
+        keywords["dis_num_iter"] = dis_num_iter
+        keywords.update({k: v for k, v in dis_window.items() if v is not None})
     if win_keywords:
         keywords.update(win_keywords)
 
@@ -1287,6 +1438,8 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     h2.set_multihopping(MultiHopping(hopping))
 
     h2.wannier_band_indices = band_indices
+    h2.wannier_num_wann = num_wann
+    h2.wannier_disentanglement_window = dict(dis_window) if disentangling else None
     h2.wannier_clusters = clusters_used
     h2.wannier_centres = wann_centres
     h2.wannier_spreads = wann_spreads

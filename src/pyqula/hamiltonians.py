@@ -100,11 +100,14 @@ class Hamiltonian():
         superconductivity.remove_pairing(self)
     def remove_sites(self,store):
         from . import sculpt
-        self.geometry = sculpt.remove_sites(self.geometry,store)
-        from .algebratk.matrixcrop import crop_matrix
+        # the guard goes first: it used to fire after the geometry had
+        # already been replaced, leaving a shrunken geometry next to the
+        # original, full-size matrices
         if self.has_spin:
             raise NotImplementedError("remove_sites is not implemented for "
                     "spinful Hamiltonians")
+        from .algebratk.matrixcrop import crop_matrix
+        self.geometry = sculpt.remove_sites(self.geometry,store)
         f = lambda m: crop_matrix(m,store)
         self.modify_hamiltonian_matrices(f) # modify all the matrices
     def get_filling(self,**kwargs):
@@ -564,6 +567,10 @@ class Hamiltonian():
           elif self.dimensionality==2: ns = [nsuper,nsuper,1]
           elif self.dimensionality==3: ns = [nsuper,nsuper,nsuper]
           else: raise
+      # a sequence is padded to three components and checked against the
+      # dimensionality here: multicell.supercell_hamiltonian unpacks three
+      # of them, while the geometry only reads the first `dimensionality`
+      ns = normalize_nsuper(self,ns)
       return multicell.supercell_hamiltonian(self,nsuper=ns,**kwargs)
     def supercell(self,*args,**kwargs):
       return self.get_supercell(*args,**kwargs)
@@ -624,6 +631,14 @@ class Hamiltonian():
       if self.check_mode("spinful_nambu"): 
           def f(m):
               return superconductivity.get_eh_sector(m,i=0,j=0)
+          self.modify_hamiltonian_matrices(f) # modify the matrices
+          self.has_eh = False # set to normal
+      elif self.check_mode("spinless_nambu"): 
+          # spinless Nambu matrices interleave electrons and holes, site by
+          # site (sctk.spinless.reorder), so the electron sector is the
+          # even rows and columns
+          def f(m):
+              return m[::2,::2]
           self.modify_hamiltonian_matrices(f) # modify the matrices
           self.has_eh = False # set to normal
       elif self.check_mode("spinful"): pass
@@ -778,9 +793,10 @@ class Hamiltonian():
         check.check_hamiltonian(self,**kwargs) # check the Hamiltonian
     def enforce_eh(self):
         """Enforce electron-hole symmetry in the Hamiltonian"""
-        self.turn_multicell() # turn to multicell mode
-        from superconductivity import eh_operator
-        f = eh_operator(self.intra) # electron hole operator
+        # the routine is not written yet, so say so and change nothing: the
+        # two lines that used to run first were a Python-2 absolute import
+        # (which raised ModuleNotFoundError before this guard could fire)
+        # and a turn_multicell() that mutated the Hamiltonian on the way out
         raise NotImplementedError("enforce_eh is not implemented")
     def turn_sparse(self):
         """
@@ -1117,15 +1133,46 @@ hamiltonian = Hamiltonian
 
 
 
+def normalize_nsuper(h,nsuper):
+  """Turn the number of repetitions of a supercell into a (n1,n2,n3) triple
+
+  Only a single number used to be padded, so a two-component sequence --
+  which Geometry.get_supercell accepts -- raised a bare IndexError inside
+  the supercell builder, and a three-component one on a 2d Hamiltonian
+  built matrices of n1*n2*n3 cells next to a geometry of n1*n2, with
+  nothing downstream noticing."""
+  if np.array(nsuper).shape==(3,3): # a supercell matrix
+      raise NotImplementedError("a non-orthogonal (3x3 matrix) supercell is "
+              "only implemented for the geometry, g.get_supercell(m); for a "
+              "Hamiltonian give the number of repetitions along each lattice "
+              "vector instead")
+  ns = [n for n in nsuper] # as a list
+  if len(ns)>3:
+      raise ValueError("nsuper has "+str(len(ns))+" components, but a "
+              "supercell has at most three (one per lattice vector)")
+  ns = ns + [1 for i in range(3-len(ns))] # pad the missing directions
+  for i in range(h.dimensionality,3): # directions the lattice does not have
+      if ns[i]!=1:
+          raise ValueError("nsuper asks for "+str(ns[i])+" repetitions along "
+                  "direction "+str(i)+", but this Hamiltonian is "
+                  +str(h.dimensionality)+"-dimensional; only its first "
+                  +str(h.dimensionality)+" components may differ from 1")
+  return ns
+
+
 def print_hamiltonian(h):
   """ Print the hamilotnian on screen """
   from scipy.sparse import coo_matrix as coo # import sparse matrix
-  intra = coo(h.intra) # intracell
-  inter = coo(h.inter) # intracell
-  print("Intracell matrix")
-  print(intra)
-  print("Intercell matrix")
-  print(inter)
+  # the real-space hoppings, which every Hamiltonian has: this used to read
+  # h.inter, an attribute only a non-multicell 1d Hamiltonian carries, so it
+  # raised AttributeError on every 2d and 3d lattice
+  dd = h.get_multihopping().get_dict() # dictionary of hoppings
+  # the intracell block first, then the neighboring cells, in a stable order
+  keys = sorted(dd,key=lambda d: (np.max(np.abs(d)),tuple(d)))
+  for key in keys: # loop over directions
+    if np.max(np.abs(key))==0: print("Intracell matrix")
+    else: print("Hopping matrix to the cell",tuple([int(i) for i in key]))
+    print(coo(dd[key]))
   return
 
 

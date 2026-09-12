@@ -132,7 +132,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
 def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, **kwargs):
     """KPM analogue of scftk.densitydensity.densitydensity"""
-    from .densitydensity import get_dc_energy
+    from .densitydensity import get_dc_energy, electron_dimension
     from ..kpmtk.densitymatrix_kpm import get_fermi4filling_kpm
     if h.has_eh:
         if not h.has_spin: return NotImplemented  # only for spinful, as in ED
@@ -143,8 +143,13 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
             # KPM Fermi-energy search (get_fermi4filling_kpm) instead of
             # h.get_fermi4filling, so this never diagonalizes anything --
             # see that function's docstring
+            # T, not the T=0 default: the density matrix this Fermi level
+            # feeds is built with Fermi-Dirac occupations, so locating it
+            # with a step count makes the converged electron count drift
+            # away from `filling` as T grows
             fermi = get_fermi4filling_kpm(h, filling, nk=nk, scale=scale,
-                    npol=npol, ne=ne, cores=cores)
+                    npol=npol, ne=ne, cores=cores,
+                    T=kwargs.get("T",1e-7))
             if verbose>1: print("Fermi energy",fermi)
             h.fermi = fermi
             h.shift_fermi(-fermi)
@@ -155,7 +160,9 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
             cores=cores, **kwargs)
     h = scf.hamiltonian
     etot = h.get_total_energy(nk=h.nk)
-    if mu is None: etot += h.fermi*h.intra.shape[0]*filling
+    # electron_dimension, not h.intra.shape[0] -- see the identical
+    # comment in densitydensity.densitydensity
+    if mu is None: etot += h.fermi*electron_dimension(h)*filling
     # get_dc_energy assumes dm's shape matches v's, which is never
     # Nambu-doubled even when h (hence scf.dm) is BdG -- see the identical
     # fix/comment in densitydensity.densitydensity for why the electron

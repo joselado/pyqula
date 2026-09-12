@@ -131,10 +131,13 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
   elif mode=="full_adaptive":
     fint = lambda k: algebra.inv(e - hk_gen(k))  # green's function
     if d==1: # adaptive 1D
-        g = integration.integrate_matrix(fint,xlim=[0.,1.],eps=error)
+        # the 1D integrator hands the integrand a scalar, the Bloch
+        # generator wants a k-vector
+        g = integration.integrate_matrix(lambda k: fint([k]),xlim=[0.,1.],
+              eps=error)
     elif d==2: # adaptive 2D
         g = integration.integrate_matrix_2D(fint,xlim=[0.,1.],ylim=[0.,1.],
-              eps=.1)
+              eps=error)
     else:
       raise NotImplementedError("the fully adaptive selfenergy is only "
               "implemented for 1d and 2d Hamiltonians")

@@ -69,14 +69,13 @@ write_berry = get_berry_curvature_path
 def berry_phase(h,nk=20,kpath=None,write=True):
     """ Calculates the Berry phase of a Hamiltonian
 
-    SIGN CONVENTION. Like berry_curvature below, this returns the argument
-    of the closed link-variable product directly, without the negation of
-    the standard discrete Berry phase gamma = -Im log prod_j <u_j|u_{j+1}>
-    (King-Smith & Vanderbilt, PRB 47, 1651(R) (1993)) -- so it is -gamma in
-    that convention. See berry_curvature's docstring for the derivation and
-    for why this is documented rather than changed. Quantized cases (a
-    Berry phase of 0 or pi, as used by nodes.py) are unaffected, since
-    -pi = pi modulo 2*pi.
+    SIGN CONVENTION. This returns +gamma in the standard discrete
+    convention gamma = -Im log prod_j <u_j|u_{j+1}> (King-Smith &
+    Vanderbilt, PRB 47, 1651(R) (1993)), i.e. the Berry phase of the
+    connection A = i<u|grad_k u>. The negation that formula carries is
+    supplied by uij, not by the arctan2 below -- see berry_curvature's
+    SIGN CONVENTION docstring for the derivation. Checked against a direct
+    King-Smith-Vanderbilt evaluation on closed k-loops (six digits).
     """
     if h.dimensionality==0:
         raise ValueError("a 0-dimensional Hamiltonian has no Brillouin "
@@ -131,33 +130,38 @@ def berry_phase(h,nk=20,kpath=None,write=True):
 def berry_curvature(h,k,dk=0.01,window=None,max_waves=None):
   """ Calculates the Berry curvature of a 2d hamiltonian
 
-  SIGN CONVENTION. This returns the argument of the closed link-variable
-  product divided by the loop area, without the negation carried by the
-  standard discrete Berry phase,
+  SIGN CONVENTION. This returns +Omega in the convention A = i<u|grad_k u>,
+  Omega = curl A of Xiao, Chang & Niu, RMP 82, 1959 (2010) -- the same sign
+  as the textbook Kubo formula
 
-      gamma = -Im log prod_j <u_j|u_{j+1}>
+      Omega_n = -2 Im sum_m <n|dH/dkx|m><m|dH/dky|n>/(E_n-E_m)^2
 
-  (King-Smith & Vanderbilt, PRB 47, 1651(R) (1993)). With
-  uij(a,b)[i,j] = <a_i|b_j> and the counter-clockwise corner order used
-  below, that product equals exp(-i * closed integral of A), so its
-  argument is minus the Berry phase. What is returned here is therefore
-  -Omega in the convention A = i<u|grad_k u>, Omega = curl A of Xiao, Chang
-  & Niu, RMP 82, 1959 (2010); every Chern number built on it (precise_chern,
-  mesh_chern, chern_qtci, berry_map, ...) inherits the same overall sign.
+  -- and every Chern number built on it (precise_chern, mesh_chern,
+  chern_qtci, berry_map, ...) inherits that sign. Note that this is the
+  argument of the closed link-variable product taken directly, with no
+  explicit minus sign anywhere below, even though the standard discrete
+  Berry phase is gamma = -Im log prod_j <u_j|u_{j+1}> (King-Smith &
+  Vanderbilt, PRB 47, 1651(R) (1993)). The negation is already in uij:
+  occstates.occupied_states hands back ALREADY-CONJUGATED wavefunctions and
+  overlap.uij conjugates its first argument a second time, so
+  uij(a,b)[i,j] = <b_j|a_i> = conj(<a_i|b_j>). The closed product built
+  from it is therefore the complex conjugate of prod_j <u_j|u_{j+1}> =
+  exp(-i*gamma), and its argument is +gamma.
 
-  Being a global sign, it cancels from anything depending only on relative
-  signs or magnitudes: K/K' valley antisymmetry, |C|, Z2 parities, and any
-  comparison of two states computed the same way.
+  Measured, not assumed: the ratio of this function to an independent
+  finite-difference Kubo evaluation of the formula above is 1.000000 at
+  every k tested on a gapped Haldane model, the Kubo reference itself
+  having been calibrated on the Provost-Vallee spin-1/2 example (upper band
+  integrating to -2*pi over the sphere), and berry_phase reproduces the
+  King-Smith-Vanderbilt gamma to six digits on closed k-loops. pyqula's
+  Bloch convention is H(k) = sum_R t(R) exp(2*pi*i*k.R) with k in reduced
+  coordinates, so the returned curvature is per unit area of the reduced
+  k-plane; for a right-handed lattice basis (the usual case) that carries
+  the same sign as the Cartesian one.
 
-  Documented rather than changed, because flipping it would silently invert
-  every Chern number and curvature map previously produced with pyqula. The
-  sibling project elkpy (github.com/joselado/elkpy), which computes the same
-  quantity from all-electron DFT wavefunctions, adopted the RMP convention
-  instead -- so its curvature and Chern signs are opposite to pyqula's. Its
-  docs/design.md section 22 derives the negation and records the three
-  independent checks that pinned it: an analytic massive-Dirac model, a real
-  h-BN calculation, and the Provost-Vallee spin-1/2 example (whose curvature
-  integrates to -2*pi, the spin-1/2 monopole charge).
+  A code that adopts the opposite convention, A = -i<u|grad_k u>, reports
+  the opposite curvature and Chern signs; check the convention before
+  comparing pyqula's output with another package's.
   """
   if h.dimensionality != 2: # only for 2d
     raise ValueError("the Berry curvature is only defined for 2d Hamiltonians")
@@ -196,9 +200,26 @@ from .topologytk.occstates import occ_states2d
 from .topologytk.overlap import uij
 
 
-def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None):
+def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None,
+        nk=None):
     """ Calculates the chern number of a 2d system """
     from scipy import integrate
+    if nk is not None: # every sibling Chern path takes one; this one cannot
+        raise ValueError("precise_chern integrates the Brillouin zone "
+            "adaptively (scipy.integrate.dblquad), so it has no k-mesh and "
+            "nk is meaningless here; got nk="+str(nk)+". Use dk to set the "
+            "finite-difference step, or h.get_chern(nk=...) for the "
+            "fixed-mesh Chern number")
+    operator = get_operator(h,operator) # accept a name, matrix or callable
+    if operator is not None and mode=="Wilson":
+        # the Wilson branch below calls berry_curvature without the
+        # operator, so an operator-projected Chern number asked for in this
+        # mode used to come back as the unprojected one
+        raise ValueError("precise_chern only honours operator= in "
+            "mode='Green'; got mode='Wilson', whose Wilson-loop curvature "
+            "has no projected form here. Pass mode='Green' (slower, it "
+            "integrates a Green's function adaptively) or use "
+            "h.get_chern(operator=...), which switches for you")
     err = {"epsabs" : 1.0, "epsrel": 1.0,"limit" : 10}
     if mode=="Green": # build the generator once, not per (x,y) evaluation
         f2 = h.get_gk_gen(delta=delta) # get generator
@@ -218,25 +239,13 @@ def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None):
     return chern
 
 
-def hall_conductivity(h,dk=-1,n=1000):
-    c = 0.0 
-    nk = int(np.sqrt(n)) # estimate
-    if dk<0: dk = 1./float(2*nk) # automatic dk
-    for i in range(n):
-      k = np.random.random(2) # random kpoint
-      c += berry_curvature(h,k,dk=dk)
-    c = c/(2*np.pi*n) # normalize
-    return c
-
-
-
-
 def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
         operator=None,kmesh=None):
     """ Calculates the chern number of a 2d system """
     c = 0.0
     ks = [] # array for kpoints
     bs = [] # array for berrys
+    operator = get_operator(h,operator) # accept a name, matrix or callable
     if dk<0: dk = 1./float(2*nk) # automatic dk
     if kmesh is not None: # infer the dk of the mesh
         dk = klist.infer_kmesh_dk(kmesh,d=2)
@@ -324,6 +333,7 @@ def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
     See tests/topology/test_chern_qtci_accuracy.py, which pins the smooth
     case and records the sharp-case limitation."""
     from .qtcitk.gkintegrate import gkorder_from_nk, integrate_robust
+    operator = get_operator(h,operator) # accept a name, matrix or callable
     if dk<0: dk = 1./float(2*nk) # automatic dk, tied to the quadrature resolution
     GKorder = gkorder_from_nk(nk)
     if operator is not None and mode=="Wilson":
@@ -361,6 +371,7 @@ def get_berry_curvature_master(h,dk=None,nk=100,
                max_waves=None,mode="Wilson",delta=0.001,operator=None,
                write=True,verbose=0):
     """ Return the Berry curvature in 2D reciprocal space """
+    operator = get_operator(h,operator) # accept a name, matrix or callable
     # get the right kpoints
     if kpath is None: # no kpath, just to a grid
         ks = [] # list with kpoints
@@ -530,7 +541,14 @@ wannier_winding = z2_wannier_winding # for compatibility
 
 
 def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
-    """Calculates the Berry curvature using an arbitrary operator"""
+    """Calculates the Berry curvature using an arbitrary operator
+
+    ewindow: None, or a callable taking a band energy and returning
+      whether to keep that band, exactly as on bandstructure.get_bands. It
+      narrows the occupied (E<=0) manifold the curvature is summed over;
+      it does not replace the occupancy condition, so a window covering
+      the whole spectrum reproduces the unwindowed value.
+    """
     k = np.array(list(k) + [0.]*(3-len(k))) # multicell.derivative needs 3 components
     h = multicell.turn_multicell(hin) # turn to multicell form
     dhdx = multicell.derivative(h,k,order=[1,0]) # derivative
@@ -540,9 +558,19 @@ def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
     (es,ws) = algebra.eigh(hkgen(k)) # initial waves
     ws = np.conjugate(np.transpose(ws)) # transpose the waves
     n = len(es) # number of energies
-    from .topologytk.operatorberry import berry_curvature as bc90
     if operator is None: operator = np.identity(dhdx.shape[0],dtype=np.complex128)
-    b = bc90(dhdx,dhdy,ws,es,operator,delta) # berry curvature
+    if ewindow is None: # every occupied band contributes
+        from .topologytk.operatorberry import berry_curvature as bc90
+        b = bc90(dhdx,dhdy,ws,es,operator,delta) # berry curvature
+    else: # restrict the sum to the occupied bands inside the window
+        if not callable(ewindow):
+            raise TypeError("ewindow must be a callable taking a band energy "
+                    "and returning whether to keep that band, and not a "
+                    +str(type(ewindow)))
+        from .topologytk.operatorberry import berry_curvature_bands as bcb90
+        bs = bcb90(dhdx,dhdy,ws,es,operator,delta) # one value per band
+        keep = np.array([e<=0. and bool(ewindow(e)) for e in es])
+        b = np.sum(bs[keep]) # only the selected bands
     return b*np.pi*np.pi*8 # normalize so the sum is 2pi Chern
 
 
@@ -629,9 +657,15 @@ def write_spin_berry(h,kpath,delta=0.00001,operator=None):
 
 
 
-def precise_spin_chern(h,delta=0.00001,tol=0.1):
+def precise_spin_chern(h,delta=0.00001,tol=0.1,nk=None):
   """ Calculates the chern number of a 2d system """
   from scipy import integrate
+  if nk is not None: # same contract as precise_chern, see the note there
+      raise ValueError("precise_spin_chern integrates the Brillouin zone "
+          "adaptively (scipy.integrate.dblquad), so it has no k-mesh and "
+          "nk is meaningless here; got nk="+str(nk)+". Use tol to set the "
+          "integration tolerance, or h.get_spin_chern(nk=...) for the "
+          "fixed-mesh spin Chern number")
   err = {"epsabs" : 0.01, "epsrel": 0.01,"limit" : 20}
   sz = operators.get_sz(h) # get sz operator
   def f(x,y): # function to integrate
@@ -728,6 +762,7 @@ def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
         write=False,
         es=np.linspace(-1.0,1.0,40)):
   """Compute the Chern density as a function of the energy"""
+  operator = get_operator(h,operator) # accept a name, matrix or callable
   ks = klist.kmesh(h.dimensionality,nk=nk)
   cs = np.zeros(es.shape[0]) # initialize
   # dOmega_dE_generator wraps the same berry_green_generator call this used
@@ -759,6 +794,12 @@ def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
 
 
 
+# The zero-temperature intrinsic Hall conductivity in units of e^2/h is the
+# Chern number, so this is an alias and not a separate routine -- it takes
+# chern's arguments (nk, integration, operator, ...). There used to be a
+# second, Monte-Carlo definition of this name earlier in the module, which
+# this binding shadowed: the dk/n keywords it advertised had no effect on
+# anything, since the name always resolved to chern at import time.
 hall_conductivity = chern
 
 

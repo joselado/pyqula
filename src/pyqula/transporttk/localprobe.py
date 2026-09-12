@@ -87,6 +87,33 @@ class LocalProbe():
         return out
     def get_central_gmatrix(self,**kwargs):
         return get_central_gmatrix(self,**kwargs)
+    def with_delta(self,delta):
+        """Return a copy of this probe whose broadening is `delta`, as if
+        it had been built with LocalProbe(...,delta=delta) -- __init__
+        sets both the probe's own delta and the bulk_delta of the sample
+        Green's function from its single delta argument, and both of them
+        change the answer, so both are set here. This is how a `delta=`
+        keyword given to a single didv/get_smatrix call is made to mean
+        exactly what the constructor argument means."""
+        from copy import copy
+        out = copy(self) # shallow, the Hamiltonians are shared
+        out.delta = delta # probe selfenergy and central Green's function
+        out.bulk_delta = delta # Green's function of the sample
+        # the cache is keyed on the (clamped) delta that get_smatrix hands
+        # down, not on this one, so the copy must not share its entries,
+        # and a reused Green's function was solved at the old bulk_delta
+        out._selfenergy_cache = {}
+        out.gf = None
+        return out
+    def with_coupling(self,T):
+        """Return a copy of this probe whose transparency is `T`, the
+        same knob as LocalProbe(...,T=...) and set_coupling. Neither
+        selfenergy depends on it (see get_selfenergy), so the copy keeps
+        sharing the cache."""
+        from copy import copy
+        out = copy(self) # shallow, the Hamiltonians are shared
+        out.T = T # transparency of the probe-sample coupling
+        return out
     def get_reflection_normal_lead(self,s):
         return get_reflection_normal_lead(self,s)
     def didv(self,T=None,**kwargs):
@@ -96,6 +123,17 @@ class LocalProbe():
         actually reaches transporttk.thermaldidv.finite_T_didv instead of
         being silently forwarded into a method (smatrix/keldysh) that
         never looks at it.
+
+        `T` here is the probe TRANSPARENCY, the same knob as
+        LocalProbe(...,T=...), set_coupling and get_kappa(T=...) -- NOT
+        the temperature, which on Heterostructure.didv is what T spells.
+        This class has both, and the transparency is the older meaning
+        (examples/transport/didv_kitaev sweeps it through
+        Hamiltonian.didv, which hands the same T to the constructor and
+        to this method); the temperature here is `temp`, or its
+        `temperature` alias. T used to be declared and never used, so
+        neither reading happened and the probe's own transparency was
+        silently used instead.
 
         At temp=0 (the default) this now goes through zero_T_didv, which
         defaults an unspecified delta to self.delta -- matching
@@ -109,12 +147,17 @@ class LocalProbe():
         ignored in favor of 1e-6. Pass delta=... to didv() itself to
         override either default directly."""
         from .didv import generic_didv
+        if T is not None and T!=self.T: # explicit, different transparency
+            return generic_didv(self.with_coupling(T),**kwargs)
         return generic_didv(self,**kwargs)
-    def didv_curve(self,energies,**kwargs):
+    def didv_curve(self,energies,T=None,**kwargs):
         """Array-of-energies counterpart to `didv` above -- see
         transporttk.didv.didv_curve for the shared-AAA-interpolant
-        behavior when `use_aaa=True` is passed."""
+        behavior when `use_aaa=True` is passed. `T` is the probe
+        transparency here too, for the same reasons as in didv."""
         from .didv import didv_curve
+        if T is not None and T!=self.T: # explicit, different transparency
+            return didv_curve(self.with_coupling(T),energies,**kwargs)
         return didv_curve(self,energies,**kwargs)
     def get_dc_current(self,voltage,**kwargs):
         """Floquet-Keldysh DC current at bias `voltage` between the probe

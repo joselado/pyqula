@@ -21,16 +21,14 @@ cross-checked against topology.chern's independent Fukui-Hatsugai-Suzuki
 Wilson-loop implementation. Assert on BOTH sign and magnitude: bug (2) was
 invisible to any magnitude-only check.
 
-SIGN CONVENTION. The signs asserted below are pyqula's, not Xiao/Chang/Niu's
-(RMP 82, 1959 (2010)). topology.berry_curvature returns -Omega in the RMP
-convention and every Chern number in the package inherits that global sign --
-see its SIGN CONVENTION docstring. So "C = +1 for t2 = +0.1" here means +1 as
-pyqula reports it; the point of these tests is that operator_berry agrees with
-its siblings (h.get_chern, topology.spin_chern, bandstructure.berry_bands),
-which is what was broken. If someone ever flips the package to the RMP
-convention, these expected values flip with it -- they are not independent of
-that choice, and should not be used to argue operator_berry's sign in
-isolation.
+SIGN CONVENTION. The signs asserted below are the ones of Xiao/Chang/Niu
+(RMP 82, 1959 (2010), A = i<u|grad_k u>), which is what pyqula returns -- see
+topology.berry_curvature's SIGN CONVENTION docstring, whose measurement
+(ratio 1.000000 against an independently coded Kubo formula) pins it. So
+"C = +1 for t2 = +0.1" is both pyqula's answer and the textbook one, and the
+point of these tests is that operator_berry agrees with its siblings
+(h.get_chern, topology.spin_chern, bandstructure.berry_bands), which is what
+was broken.
 """
 import numpy as np
 import pytest
@@ -119,9 +117,10 @@ def test_spin_chern_is_quantized_on_kane_mele(soc, mass, expected):
     one *public invariant* the operator-weighted path feeds. Its value must be
     quantized: the sz-weighted Berry curvature integrates to C_up - C_down.
 
-    This also covers the Operator-object branch -- spin_chern passes
-    operators.get_sz(h), not a raw matrix, so operatorberry must not coerce
-    `operator` itself (only its product with dhdx)."""
+    spin_chern passes operators.get_sz(h), a scipy sparse matrix -- NOT an
+    operators.Operator, as this docstring used to claim. The Operator branch
+    is covered in tests/topology/test_operator_berry_spin_blocks.py, which
+    is also where the sparse-Hamiltonian branch lives."""
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=True)
     h.add_kane_mele(soc)

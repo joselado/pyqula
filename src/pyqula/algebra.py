@@ -269,11 +269,14 @@ def spectral_gap(m,numw=10,**kwargs):
     """
     Compute the spectral gap
     """
-    es = smalleig(m,numw=10,evecs=False,**kwargs)
+    es = smalleig(m,numw=numw,evecs=False,**kwargs)
     ev = es[es<0.]
     ec = es[es>0.]
     if len(ev)==0 or len(ec)==0:
-        if numw<100: return gap(m,numw=2*numw,**kwargs)
+        # the window held states of a single sign, so widen it; this used
+        # to call gap(), a name that does not exist, and to ask smalleig
+        # for a hardcoded 10 eigenvalues, so neither half could work
+        if numw<100: return spectral_gap(m,numw=2*numw,**kwargs)
         else:
             raise ValueError("no spectral gap was found around zero after "
                     "enlarging the number of computed eigenvalues to 100")

@@ -12,7 +12,9 @@ def generic_didv(self,temp=None,**kwargs):
     The temperature is `temp`; `T` and `temperature` are accepted as
     aliases, because they are how the rest of the library spells it. They
     used to be swallowed by **kwargs, silently returning the zero
-    temperature result."""
+    temperature result. The one exception is a LocalProbe, whose `T` is
+    its probe transparency: LocalProbe.didv/didv_curve take that argument
+    themselves, so it never reaches this alias loop."""
     from ..utilities import rename_kwarg
     for alias in ["T","temperature"]:
         if alias in kwargs:
@@ -366,9 +368,49 @@ def didv_kmap(self,kpath=None,energies=None,
 
 
 
-def didv_BdG(ht,energy=0.0,delta=1e-6,component=None,**kwargs):
-    """Calculate differential conductance in the presence of e-h"""
-    s = get_smatrix(ht,energy=energy,check=True) # get the smatrix
+def _check_nambu_layout(ht):
+    """Refuse a spinless-Nambu junction rather than reorder it into zeros.
+
+    ht.get_eh_sector is superconductivity.get_eh_sector_odd_even, whose
+    sctk.reorder.block2nambu_matrix builds its reordering matrix with
+    nr = n//4, i.e. it assumes 4 degrees of freedom per site (2 spin x 2
+    Nambu). On a spinless Nambu Hamiltonian -- has_eh=True with
+    has_spin=False, which add_swave on a spinless geometry builds
+    directly -- there are only 2, so nr comes out 0, the reordering
+    matrix is all zeros, and BOTH the e-e and the e-h reflection blocks
+    come back zero. didv_BdG then returns ree.shape[0] - 0 + 0, i.e.
+    exactly the number of channels, for every coupling and every energy:
+    a spinless junction reported dI/dV = 1.0 at couplings 0.009, 0.010
+    and 0.011 alike, where the spinful one follows the t^2 tunnelling law.
+
+    transporttk.kappa_jax.applicable already rejects this layout for the
+    same reason; this is the same refusal on the dI/dV path."""
+    for h in [getattr(ht,"Hr",None),getattr(ht,"Hl",None),
+              getattr(ht,"lead",None),getattr(ht,"H",None)]:
+        if h is None: continue
+        if getattr(h,"has_eh",False) and not getattr(h,"has_spin",True):
+            raise NotImplementedError("the BdG dI/dV needs a spinful Nambu "
+                "Hamiltonian: the electron-hole reordering it uses assumes "
+                "4 degrees of freedom per site (2 spin x 2 Nambu) and a "
+                "spinless Nambu lead has 2, which silently reorders to "
+                "zero. Rebuild the lead with has_spin=True before "
+                "add_swave/turn_nambu")
+
+
+def didv_BdG(ht,energy=0.0,delta=None,component=None,**kwargs):
+    """Calculate differential conductance in the presence of e-h.
+
+    `component` selects which part of the current is returned: None (the
+    default) gives the full BTK conductance, "electron" the normal
+    transmission and "hole"/"Andreev" the Andreev one.
+
+    `delta` defaults to the junction's own broadening, as get_smatrix
+    does (didv itself always passes one down explicitly)."""
+    # delta used to be declared here and never forwarded, unlike the
+    # normal branch in didv above, so the broadening of a BdG junction
+    # could only be set through its attribute
+    _check_nambu_layout(ht)
+    s = get_smatrix(ht,energy=energy,delta=delta,check=True) # get the smatrix
     r1,r2 = s[0][0],s[1][1] # get the reflection matrices
     get_eh = ht.get_eh_sector # function to read either electron or hole
     # select the normal lead
@@ -384,6 +426,10 @@ def didv_BdG(ht,energy=0.0,delta=1e-6,component=None,**kwargs):
         G = (ree.shape[0] - Ree - Reh).real # electron conductance
     elif component in ["hole","Andreev"]:
         G = 2*Reh.real # hole conductance
+    else:
+        raise ValueError("unknown component '"+str(component)+"' for the "
+                "BdG dIdV; the accepted ones are None (the full current), "
+                "'electron', and 'hole'/'Andreev'")
     return G
 
 
