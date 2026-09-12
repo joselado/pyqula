@@ -4,6 +4,7 @@ from .increase_hilbert import get_spinless2full,get_spinful2full
 import numpy as np
 from . import checkclass
 from . import geometry
+from .check import require_spin
 
 def float2array(z):
     if checkclass.is_iterable(z): return z # iterable, input is an array
@@ -76,9 +77,7 @@ def add_antiferromagnetism(h,m):
       out[i][i] = (sx*mi[0] + sy*mi[1] + sz*mi[2])*sublattice[i]
     out = bmat(out) # turn into a matrix
     h.intra = h.intra + h.spinful2full(out) # Add matrix 
-  else:
-    raise ValueError("antiferromagnetism needs a spinful Hamiltonian; call "
-            "h.turn_spinful() first")
+  else: require_spin(h,"antiferromagnetism")
 
 
 
@@ -114,9 +113,7 @@ def add_magnetism(h,m):
       out[i][i] = sx*mi[0] + sy*mi[1] + sz*mi[2]
     out = bmat(out) # turn into a matrix
     h.intra = h.intra + h.spinful2full(out) # Add matrix 
-  else:
-    raise ValueError("an exchange field needs a spinful Hamiltonian; call "
-            "h.turn_spinful() first")
+  else: require_spin(h,"an exchange field")
 
 
 
@@ -148,9 +145,7 @@ def add_frustrated_antiferromagnetism(h,m):
 
 def compute_magnetization(h,**kwargs):
   """Return the magnetization of the system"""
-  if not h.has_spin: # meaningless
-    raise ValueError("the magnetization is only defined for spinful "
-            "Hamiltonians")
+  require_spin(h,"the magnetization")
   if h.has_eh:
     raise NotImplementedError("the magnetization is not implemented for "
             "Hamiltonians with the electron-hole (Nambu) degree of freedom")

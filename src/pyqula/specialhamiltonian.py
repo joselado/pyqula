@@ -171,7 +171,7 @@ def triangular_pi_flux(g=None,**kwargs):
 
 
 
-def excitonic_bilayer(gap=0.0,g=None,**kwargs):
+def excitonic_bilayer(gap=0.0,g=None):
     """Return the Hamiltonian for a bilayer system for an excitonic system"""
     from .geometry import get_geometry
     g0 = get_geometry(g) # get the geometry

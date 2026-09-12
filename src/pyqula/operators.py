@@ -15,6 +15,7 @@ from . import superconductivity
 from .algebra import braket_wAw
 
 import numbers
+from .check import require_nambu
 
 isnumber = algebra.isnumber
 
@@ -225,9 +226,7 @@ def get_interface(h,fun=None):
 def get_pairing(h,ptype="s"):
   """Return an operator that calculates the expectation value of the
   s-wave pairing"""
-  if not h.has_eh:
-      raise ValueError("a pairing operator needs the electron-hole "
-        +"(Nambu) degree of freedom; call h.setup_nambu_spinor() first")
+  require_nambu(h,"a pairing operator")
   if not h.check_mode("spinful_nambu"):
       # these are all 4x4 (spin x electron-hole) blocks: built on a
       # spinless Nambu Hamiltonian they came out twice the size of its
@@ -274,8 +273,7 @@ def get_electron(h):
 def get_hole(h):
   """Operator to project on the hole sector"""
   if not h.has_eh:
-      raise ValueError("the hole projector needs the electron-hole "
-        +"(Nambu) degree of freedom; call h.setup_nambu_spinor() first")
+      require_nambu(h,"the hole projector")
   elif h.check_mode("spinful_nambu"): # only for e-h systems
       op = superconductivity.projh
       r = h.geometry.r

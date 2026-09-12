@@ -6,6 +6,7 @@ from numba import jit
 from . import parallel
 
 from .algebra import isnumber
+from .check import require_spin
 
 # dense 2x2 Pauli matrices, converted once at import time: building each
 # bond's 2x2 spin block via scipy-sparse sx/sy/sz arithmetic (as this used
@@ -193,8 +194,7 @@ def add_kane_mele(self,t,**kwargs):
   if not self.has_spin: self.turn_spinful() # spilful Hamiltonian
   from .multicell import close_enough # check if two rs are close
   g = self.geometry
-  if not self.has_spin: # only for spinfull
-    raise ValueError("the Kane-Mele coupling needs a spinful Hamiltonian")
+  require_spin(self,"the Kane-Mele coupling")
   if self.is_multicell:   # multicell Hamiltonian
     ncells = 2 # number of neighboring cells to check
     if self.dimensionality==0: rs = g.r # fix for zero dimensional
@@ -400,8 +400,7 @@ def add_kane_mele_old(self,t):
   if not self.has_spin: self.turn_spinful() # spilful Hamiltonian
   from .multicell import close_enough # check if two rs are close
   g = self.geometry
-  if not self.has_spin: # only for spinfull
-    raise ValueError("the Kane-Mele coupling needs a spinful Hamiltonian")
+  require_spin(self,"the Kane-Mele coupling")
   if self.is_multicell:   # multicell Hamiltonians
     ncells = 4 # number of neighboring cells to check
     if self.dimensionality==1:  # three dimensional

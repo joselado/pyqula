@@ -42,7 +42,7 @@ def strain_mode(sr,sd=None,mode="scalar"):
 
 
 
-def uniaxial_strain(H,d=np.array([1.,0.,0.]),s=0.,**kwargs):
+def uniaxial_strain(H,d=np.array([1.,0.,0.]),s=0.):
     """Add uniaxial strain"""
     d = np.array(d) ; d = d/np.sqrt(d.dot(d)) # normalize
     def fun(dr): # function to get the strain

@@ -74,6 +74,7 @@ import numpy as np
 from .. import algebra
 from .. import klist
 from .kubo import _fermi
+from ..check import require_spin
 
 
 def _axis(c):
@@ -106,9 +107,8 @@ def _check_spin_conserving(h,tol=1e-8):
 def _spin_channels(h):
     """Return [(s, hs)] with s = +-1 and hs the spinless Hamiltonian of that
     spin channel"""
-    if not h.has_spin: raise ValueError(
-        "the nonlinear Drude conductivity needs a spinful Hamiltonian, so "
-        "that the two spin channels can be resolved")
+    require_spin(h,"the nonlinear Drude conductivity, whose two spin "
+        "channels have to be resolved,")
     if h.has_eh: raise NotImplementedError(
         "not implemented for Nambu (superconducting) Hamiltonians")
     _check_spin_conserving(h)

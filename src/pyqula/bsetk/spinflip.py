@@ -95,6 +95,7 @@ import numpy as np
 from .interaction import bare_interaction
 from .pairbasis import PairBasis
 from .solve import solve_pseudo_hermitian
+from ..check import require_spin
 
 
 
@@ -453,9 +454,8 @@ def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
     are the excitation half and the remaining sum(m2) the de-excitation
     one, and those two counts differ (m2 is empty for a saturated
     ferromagnet)."""
-    if not h.has_spin:
-        raise ValueError("magnons need a spinful Hamiltonian (h.has_spin), "
-                "there is no spin to flip in a spinless one")
+    require_spin(h,"magnons (there is no spin to flip in a spinless "
+            "Hamiltonian)")
     W = bare_interaction(h, V=V) # bare interaction, i.e. TDHF
     if check_su2: check_su2_interaction(W)
     if channel not in ("auto", "spinflip", "all"):

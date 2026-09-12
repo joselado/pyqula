@@ -10,6 +10,7 @@ from ..scftypes import directional_mean_field
 from .. import limits
 from .. import inout
 from .. import filesystem as fs
+from ..check import require_spin
 
 
 mf_file = "MF.pkl" # mean field file
@@ -25,9 +26,7 @@ def hubbardscf(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
   #############################
   mix = 1. - mix
   U = g # redefine
-  if not h.has_spin:
-    raise ValueError("the Hubbard mean field needs a spinful Hamiltonian; "
-            "call h.turn_spinful() first, or use hubbardscf_spinless")
+  require_spin(h,"the Hubbard mean field (or use hubbardscf_spinless)")
   fs.rmfile("STOP") # remove stop file
   from scipy.linalg import eigh
   nat = h.intra.shape[0]//2 # number of atoms

@@ -2,12 +2,11 @@ from __future__ import print_function
 import numpy as np
 
 from . import extract
+from .check import require_spin, require_nambu
 
 def swave(h,name="SWAVE.OUT",nrep=3):
   """Write the swave pairing of a Hamiltonian"""
-  if not h.has_eh:
-    raise ValueError("writing the s-wave pairing needs a Nambu Hamiltonian; "
-            "call h.setup_nambu_spinor() first")
+  require_nambu(h,"writing the s-wave pairing")
   d = h.extract("swave") # get the pairing
   g = h.geometry # get the geometry
   g.write_profile(np.abs(d),name="AMPLITUDE_"+name,
@@ -24,9 +23,7 @@ def anomalous_hopping(h,name="ANOMALOUS_HOPPING.OUT",nrep=3,
         cutoff=1e-6):
     """Write in a file the s-wave hoppings"""
     from. import superconductivity
-    if not h.has_eh:
-      raise ValueError("writing the anomalous hopping needs a Nambu "
-              "Hamiltonian; call h.setup_nambu_spinor() first")
+    require_nambu(h,"writing the anomalous hopping")
     h = h.supercell(nrep)
     m = superconductivity.get_eh_sector_odd_even(h.intra,i=0,j=1)
     (ii,jj,ts) = extract.hopping_spinful(m)
@@ -97,10 +94,8 @@ def mz(h,name="MZ.OUT"):
   if h.has_eh:
     raise NotImplementedError("writing the magnetization is not implemented "
             "for Nambu Hamiltonians")
-  if h.has_spin: ms = extract.mz(h.intra)
-  else:
-    raise ValueError("the magnetization is only defined for spinful "
-            "Hamiltonians")
+  require_spin(h,"the magnetization")
+  ms = extract.mz(h.intra)
   np.savetxt(name,np.array([range(len(ms)),ms]).T)
 
 
@@ -110,13 +105,10 @@ def magnetization(h):
   if h.has_eh:
     raise NotImplementedError("writing the magnetization is not implemented "
             "for Nambu Hamiltonians")
-  if h.has_spin: 
-    mx = extract.mx(h.intra)
-    my = extract.my(h.intra)
-    mz = extract.mz(h.intra)
-  else:
-    raise ValueError("the magnetization is only defined for spinful "
-            "Hamiltonians")
+  require_spin(h,"the magnetization")
+  mx = extract.mx(h.intra)
+  my = extract.my(h.intra)
+  mz = extract.mz(h.intra)
   np.savetxt("MAGNETIZATION_X.OUT",np.array([h.geometry.x,h.geometry.y,mx]).T)
   np.savetxt("MAGNETIZATION_Y.OUT",np.array([h.geometry.x,h.geometry.y,my]).T)
   np.savetxt("MAGNETIZATION_Z.OUT",np.array([h.geometry.x,h.geometry.y,mz]).T)

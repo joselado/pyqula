@@ -5,6 +5,7 @@ from . import algebra
 
 from scipy.sparse import csc_matrix,bmat
 from .spin import sx,sy,sz
+from .check import require_spin
 
 
 def rotation_matrix(m,vectors):
@@ -128,9 +129,7 @@ def hamiltonian_spin_rotation(self,vector=np.array([0.,0.,1.]),angle=0.):
     numerically (eigenvalue-preserving, and matches rotating the physical
     exchange/pairing directly) against Hamiltonians with both an exchange
     field and s-wave pairing present. """
-    if not self.has_spin: # no spin in the Hamiltonian
-      raise ValueError("a spin rotation needs a spinful Hamiltonian; call "
-              "h.turn_spinful() first")
+    require_spin(self,"a spin rotation")
     gsr = global_spin_rotation # rename method
     self.intra = gsr(self.intra,vector=vector,angle=angle)
     if self.is_multicell: # multicell hamiltonian
@@ -152,14 +151,11 @@ def hamiltonian_spin_rotation(self,vector=np.array([0.,0.,1.]),angle=0.):
 
 
 def generate_spin_spiral(self,vector=np.array([0.,0.,1.]),
-                            qspiral=[1.,0.,0.],fractional=True,
-                            **kwargs):
+                            qspiral=[1.,0.,0.],fractional=True):
     """
     Generate a spin spiral antsaz in the Hamiltonian
     """
-    if not self.has_spin: # no spin
-      raise ValueError("a spin spiral needs a spinful Hamiltonian; call "
-              "h.turn_spinful() first")
+    require_spin(self,"a spin spiral")
     qspiral = np.array(qspiral) # to array
     if qspiral.dot(qspiral)<1e-7: qspiral = np.array([0.,0.,0.])
     self.geometry.get_fractional()

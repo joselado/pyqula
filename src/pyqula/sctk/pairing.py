@@ -6,13 +6,59 @@ from ..utilities import get_callable
 from .dvector import dvector2delta
 
 
-# the pairing symmetries the dispatch below accepts, in the same order; they
-# are listed in the error of an unknown mode, so keep the two in sync (the
-# test tests/superconductivity/test_pairing_modes.py builds every one of them)
-pairing_modes = ("swave","extended_swave","triplet","pwave","nodal_fwave",
-        "chiral_pwave","chiral_fwave","chiral_dwave","chiral_gwave",
-        "antihaldane","haldane","swavez","px","dpid","swaveA","swaveB",
-        "swavesublattice","dx2y2","nodal_dwave","dxy","snn","C3nn","SnnAB")
+# The pairing symmetries live in a registry (mode -> builder) rather than in
+# an if/elif chain, so pairing_modes below is derived from the dispatch
+# instead of being a second tuple kept in sync by hand, and adding a channel
+# is one dict entry. Every builder takes the Hamiltonian, the d-vector
+# callable and the caller's keyword bag, and returns the weight function
+# weightf(r1,r2) -> 2x2 pairing matrix.
+# (tests/superconductivity/test_pairing_modes.py builds every advertised one)
+
+
+def _haldane_weight(H,stagger=False):
+    """Haldane-like (next-nearest-neighbor, complex) weight, spin diagonal"""
+    f = get_haldane_function(H.geometry,stagger=stagger)
+    return lambda r1,r2: f(r1,r2)*np.identity(2)
+
+
+# mode -> builder(H,df,kwargs) -> weightf(r1,r2). The helpers the builders
+# call are defined further down the module; that is fine, every builder is
+# a lambda and resolves them when it is called, not when it is defined.
+_pairing_builders = {
+  "swave": lambda H,df,kw: lambda r1,r2: swave(r1,r2,H=H,**kw),
+  "extended_swave": lambda H,df,kw: lambda r1,r2: swave(r1,r2,H=H,nn=1,**kw),
+  "triplet": lambda H,df,kw: lambda r1,r2: pwave(r1,r2,df,**kw),
+  "pwave": lambda H,df,kw: lambda r1,r2: pwave(r1,r2,df,**kw),
+  "nodal_fwave": lambda H,df,kw: nodal_fwave_generator(df,H=H,**kw),
+  "chiral_pwave": lambda H,df,kw: lambda r1,r2: get_triplet(r1,r2,df,L=1,**kw),
+  "chiral_fwave": lambda H,df,kw: get_triplet_generator(df,L=3,H=H,**kw),
+  "chiral_dwave": lambda H,df,kw: lambda r1,r2: get_singlet(r1,r2,L=2,**kw),
+  "chiral_gwave": lambda H,df,kw: lambda r1,r2: get_singlet(r1,r2,L=4,**kw),
+  "antihaldane": lambda H,df,kw: _haldane_weight(H,stagger=True),
+  "haldane": lambda H,df,kw: _haldane_weight(H,stagger=False),
+  "swavez": lambda H,df,kw: lambda r1,r2: same_site(r1,r2)*tauz,
+  "px": lambda H,df,kw: lambda r1,r2: px(r1,r2),
+  "dpid": lambda H,df,kw: lambda r1,r2: dpid(r1,r2,**kw),
+  "swaveA": lambda H,df,kw: lambda r1,r2: swaveA(H.geometry,r1,r2),
+  "swaveB": lambda H,df,kw: lambda r1,r2: swaveB(H.geometry,r1,r2),
+  "swavesublattice": lambda H,df,kw: lambda r1,r2: (
+          swaveB(H.geometry,r1,r2) - swaveA(H.geometry,r1,r2)),
+  "dx2y2": lambda H,df,kw: lambda r1,r2: dx2y2(r1,r2,H=H,**kw),
+  "nodal_dwave": lambda H,df,kw: lambda r1,r2: dx2y2(r1,r2,H=H,**kw),
+  "dxy": lambda H,df,kw: lambda r1,r2: dxy(r1,r2,H=H,**kw),
+  "snn": lambda H,df,kw: lambda r1,r2: swavenn(r1,r2),
+  "C3nn": lambda H,df,kw: lambda r1,r2: C3nn(r1,r2),
+  "SnnAB": lambda H,df,kw: lambda r1,r2: SnnAB(H.geometry,r1,r2),
+  }
+
+
+# derived from the dispatch, never a second list kept in sync by hand
+pairing_modes = tuple(_pairing_builders)
+
+
+def get_pairing_modes():
+    """Return every pairing symmetry that pairing_generator accepts"""
+    return tuple(_pairing_builders)
 
 
 def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
@@ -24,61 +70,12 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     df = get_callable(d) # callable for the d-vector
     if callable(mode):
         weightf = mode # mode is a function returning a 2x2 pairing matrix
-    elif mode=="swave":
-        weightf = lambda r1,r2: swave(r1,r2,H=self,**kwargs) 
-    elif mode=="extended_swave":
-        weightf = lambda r1,r2: swave(r1,r2,H=self,nn=1,
-                     **kwargs) #same_site(r1,r2)*np.identity(2)
-    elif mode=="triplet": 
-        weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
-    elif mode=="pwave": 
-        weightf = lambda r1,r2: pwave(r1,r2,df,**kwargs)
-    elif mode=="nodal_fwave":
-        #weightf = lambda r1,r2: nodal_fwave(r1,r2,df,H=self,**kwargs)
-        weightf = nodal_fwave_generator(df,H=self,**kwargs)
-#    elif mode=="chiral_fwave": 
-#        weightf = lambda r1,r2: get_triplet(r1,r2,df,L=3)
-    elif mode=="chiral_pwave": 
-        weightf = lambda r1,r2: get_triplet(r1,r2,df,L=1,**kwargs)
-    elif mode=="chiral_fwave": 
-        weightf = get_triplet_generator(df,L=3,H=self,**kwargs)
-    elif mode=="chiral_dwave": 
-        weightf = lambda r1,r2: get_singlet(r1,r2,L=2,**kwargs)
-    elif mode=="chiral_gwave": 
-        weightf = lambda r1,r2: get_singlet(r1,r2,L=4,**kwargs)
-    elif mode=="antihaldane":
-        f = get_haldane_function(self.geometry,stagger=True)
-        weightf = lambda r1,r2: f(r1,r2)*np.identity(2)
-    elif mode=="haldane":
-        f = get_haldane_function(self.geometry,stagger=False)
-        weightf = lambda r1,r2: f(r1,r2)*np.identity(2)
-    elif mode=="swavez":
-        weightf = lambda r1,r2: same_site(r1,r2)*tauz
-    elif mode=="px":
-        weightf = lambda r1,r2: px(r1,r2)
-    elif mode=="dpid":
-        weightf = lambda r1,r2: dpid(r1,r2,**kwargs)
-    elif mode=="swaveA":
-        weightf = lambda r1,r2: swaveA(self.geometry,r1,r2)
-    elif mode=="swaveB":
-        weightf = lambda r1,r2: swaveB(self.geometry,r1,r2)
-    elif mode=="swavesublattice":
-        def weightf(r1,r2):
-          return swaveB(self.geometry,r1,r2) - swaveA(self.geometry,r1,r2)
-    elif mode in ["dx2y2","nodal_dwave"]:
-        weightf = lambda r1,r2: dx2y2(r1,r2,H=self,**kwargs)
-    elif mode=="dxy":
-        weightf = lambda r1,r2: dxy(r1,r2,H=self,**kwargs)
-    elif mode=="snn":
-        weightf = lambda r1,r2: swavenn(r1,r2)
-    elif mode=="C3nn":
-        weightf = lambda r1,r2: C3nn(r1,r2)
-    elif mode=="SnnAB":
-        weightf = lambda r1,r2: SnnAB(self.geometry,r1,r2)
     else:
-        raise ValueError("unknown pairing mode '"+str(mode)+"'; it must be "
-          +"one of "+str(list(pairing_modes))+", or a callable returning "
-          +"the 2x2 pairing matrix")
+        if mode not in _pairing_builders:
+            raise ValueError("unknown pairing mode '"+str(mode)+"'; it must be "
+              +"one of "+str(list(pairing_modes))+", or a callable returning "
+              +"the 2x2 pairing matrix")
+        weightf = _pairing_builders[mode](self,df,kwargs)
     matrixf = lambda r1,r2: deltaf((r1+r2)/2.)*weightf(r1,r2) 
     return matrixf # return function
 

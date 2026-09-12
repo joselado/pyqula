@@ -55,7 +55,7 @@ empty `__init__.py`; with the default import mode pytest's package-root walk fro
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
 tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
-minutes, not under a minute. It currently collects **1720 tests** (`pytest tests --collect-only -q`),
+minutes, not under a minute. It currently collects **1760 tests** (`pytest tests --collect-only -q`),
 and a whole-suite run takes **~34 minutes** — measured twice on an idle machine, 33:40 and 34:18, so
 that figure is real rather than an estimate. `tests/scf` alone is ~15 min and `tests/keldysh` ~12 min.
 Treat any timing taken while other jobs are running as meaningless.
@@ -175,10 +175,32 @@ exception and are not the message-less form at all. An AST walk therefore finds 
 bare `raise` nodes in the package; nine is the expected count, not a regression.
 
 Options selected by a string (`mode=`, `solver=`, `channel=`, an operator name) should
-list the accepted values in the error, so a typo is self-diagnosing. `operatorlist.py`
-goes one step further and keeps its ~60 operator names in a registry, so
-`operatorlist.get_operator_names()` can enumerate them and adding an operator is one
-dict entry rather than a new `elif` branch.
+list the accepted values in the error, so a typo is self-diagnosing. Five dispatches go
+one step further and keep their names in a registry, so the accepted set can be
+enumerated and adding a name is one dict entry rather than a new `elif` branch --
+crucially, the advertised list is *derived from* the registry instead of being a second
+list maintained by hand beside the chain, so the two cannot drift:
+
+| dispatch | registry | names |
+| --- | --- | --- |
+| named operators | `operatorlist.py` | `operatorlist.get_operator_names()` |
+| mean-field guesses (`mf=`) | `meanfield.py` | `meanfield.get_guess_names()` |
+| pairing symmetries (`mode=`) | `sctk/pairing.py` | `pairing.get_pairing_modes()` |
+| high-symmetry kpoint labels | `kpointstk/labels.py` | `labels.get_label_names()` |
+| `h.extract(name)` quantities | `extract.py` | `extract.get_extractable_names()` |
+
+A new string-selected option should follow that shape rather than adding an `elif`.
+
+Hilbert-space requirements go through three shared guards in `check.py` --
+`require_spin(h,what)`, `require_nambu(h,what)` and `require_sublattice(h,what)` --
+where `what` is the noun phrase the message opens with (`"an exchange field"`,
+`"the d-vector"`). They supply the fixed tail naming the remedy (`h.turn_spinful()`,
+`h.setup_nambu_spinor()`), so a new routine does not reinvent either the wording or
+the fix. Use them instead of a hand-written `raise ValueError("... needs a spinful
+Hamiltonian")`. Guards that carry *more* information than the generic one -- the
+`check_mode("spinful_nambu")` family, which names both flags' values, and the local
+Hubbard-U guard, which points at the spinless `V1/V2/V3/Vr` alternative -- are
+deliberately left as they are.
 
 ## Notes
 

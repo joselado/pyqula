@@ -643,6 +643,32 @@ print(operatorlist.get_operator_names()) # every name h.get_operator accepts
 Passing a name that is not in that list raises a `ValueError` quoting the
 offending name and the accepted ones, rather than failing further downstream.
 
+## Listing the other names pyqula accepts
+
+Named operators are not the only thing selected by a string. The mean-field
+initialization (`mf=`), the superconducting pairing symmetry (`mode=`), the
+high-symmetry kpoint labels of a band path, and the quantities `h.extract`
+knows how to pull out of a Hamiltonian are all chosen the same way, and each
+of them keeps its names in a registry that the dispatch itself reads. So the
+accepted values can always be listed, and a name that is not accepted raises
+a `ValueError` quoting both the offending name and the full list rather than
+failing somewhere downstream
+
+```python
+from pyqula import meanfield, extract
+from pyqula.sctk import pairing
+from pyqula.kpointstk import labels
+
+print(meanfield.get_guess_names())    # every mf= mean-field initialization
+print(pairing.get_pairing_modes())    # every h.add_pairing(mode=...) symmetry
+print(labels.get_label_names())       # every high-symmetry kpoint label
+print(extract.get_extractable_names())# every h.extract(...) quantity
+```
+
+Because each list is derived from the dispatch rather than written out
+beside it, the two cannot disagree: a symmetry that is advertised is one
+that is built.
+
 ## Location operator
 
 To understand the spatial location of the states we can use the spatial operators, that
@@ -3311,6 +3337,27 @@ Two of these messages are worth knowing in advance because they point at the fix
 rather than the failure: a superconducting quantity asked of a normal Hamiltonian says
 to call `h.setup_nambu_spinor()` first, and a spin quantity asked of a spinless one
 says to call `h.turn_spinful()`.
+
+Those two requirements are checked by three shared guards, `require_spin`,
+`require_nambu` and `require_sublattice` in `pyqula.check`, so the message reads the
+same wherever it comes from and always names three things: what was being computed,
+what is missing, and how to get it
+
+```python
+from pyqula import geometry
+h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+h.extract("mz")
+# ValueError: the magnetization 'mz' needs a spinful Hamiltonian; call
+# h.turn_spinful() first, or build it with g.get_hamiltonian(has_spin=True)
+```
+
+They can be reused when adding a routine of your own. Note that the requirement is on
+*reading* a degree of freedom: the Hamiltonian methods that *add* a spin term --
+`h.add_exchange`, `h.add_zeeman`, `h.add_kane_mele` -- promote a spinless Hamiltonian
+to a spinful one rather than rejecting it. The third guard covers the sublattice,
+which several sublattice-resolved quantities need and which an unlabeled cell does not
+have: `h.extract("CDW")` on such a cell says so instead of returning `None`, and so
+does `h.extract("superfluidity")` on a Hamiltonian with no electron-hole grading.
 
 A second family of checks exists not because the routine cannot run, but because it
 could run and return a number that means nothing. Those raise rather than answer:

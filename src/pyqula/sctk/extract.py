@@ -1,6 +1,7 @@
 import numpy as np
 from ..multihopping import MultiHopping
 from .. import algebra
+from ..check import require_nambu
 
 # superconductivity.py imports several names from this module, so importing
 # get_eh_sector/build_nambu_matrix at the top level here would make the two
@@ -169,9 +170,7 @@ def extract_custom_pairing(m,mode="all"):
 
 def extract_pairing_kmap(h,write=False,i=None,j=None,mode="all",**kwargs):
     """Extract the pairing in reciprocal space"""
-    if not h.has_eh:
-        raise ValueError("the pairing k-map needs a Nambu Hamiltonian; call "
-                "h.setup_nambu_spinor() first")
+    require_nambu(h,"the pairing k-map")
     h = get_anomalous_hamiltonian(h)
     if j is None: j = i # same site is the default
     if mode=="all": pass # do nothing 

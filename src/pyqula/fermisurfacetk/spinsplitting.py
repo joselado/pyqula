@@ -1,5 +1,6 @@
 import numpy as np
 from .. import algebra
+from ..check import require_spin
 
 def average_spin_splitting(h,nk=20,tol=algebra.error):
     """Compute the average spin splitting in the BZ.
@@ -67,9 +68,7 @@ def check_collinear(h,tol=algebra.error,ks=None):
     coupling, or non-collinear magnetic order the result is a plausible
     but meaningless number rather than an error. So it is checked here
     instead of trusted."""
-    if not h.has_spin:
-        raise ValueError("spin splitting needs a spinful Hamiltonian; "
-                "this one has no spin degree of freedom")
+    require_spin(h,"the spin splitting")
     if h.has_eh:
         raise ValueError("spin splitting is not defined for a Nambu "
                 "(superconducting) Hamiltonian: its spin blocks mix "

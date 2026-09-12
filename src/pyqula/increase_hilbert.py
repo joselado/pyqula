@@ -1,5 +1,6 @@
 from scipy.sparse import coo_matrix,bmat,csc_matrix
 import numpy as np
+from .check import require_spin
 
 
 # puts the matrix in spinor form
@@ -73,15 +74,13 @@ def get_spinless2full(h,time_reversal=False,is_hamiltonian=True):
 
 def get_spinful2full(h):
   """Function to transform a matrix into its full form"""
-  if not h.has_spin:
-    raise ValueError("promoting a spinful matrix needs a spinful Hamiltonian")
+  require_spin(h,"promoting a spinful matrix")
+  if h.has_eh:
+    from .superconductivity import build_eh
+    def outf(m):
+      return build_eh(m) # add e-h
   else:
-    if h.has_eh:
-      from .superconductivity import build_eh
-      def outf(m): 
-        return build_eh(m) # add e-h
-    else:
-      def outf(m): return m # do nothing
+    def outf(m): return m # do nothing
   return outf
 
 

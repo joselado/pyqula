@@ -1,4 +1,5 @@
 
+from ..check import require_nambu
 
 def real_singlet(h):
     """Given a Hamiltonian, return an operator that computes the
@@ -6,9 +7,7 @@ def real_singlet(h):
     # add_swave promotes its argument into Nambu space, so without this
     # check the operator came out bigger than the Hilbert space it is meant
     # to act on, and only failed later inside a raw numpy matmul
-    if not h.has_eh:
-        raise ValueError("a pairing operator needs the electron-hole "
-          +"(Nambu) degree of freedom; call h.setup_nambu_spinor() first")
+    require_nambu(h,"a pairing operator")
     if not h.check_mode("spinful_nambu"):
         raise NotImplementedError("the 'singlet' operator is the spin "
           +"singlet component of the pairing, in the spin x electron-hole "

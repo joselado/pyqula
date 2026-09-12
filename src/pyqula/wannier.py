@@ -13,6 +13,7 @@ import scipy.linalg as lg
 from copy import deepcopy
 import os
 from . import filesystem as fs
+from .check import require_spin
 
 
 def convert(inname="wannier.win",name="wannier"):
@@ -311,9 +312,7 @@ def read_multicell_hamiltonian(input_file="hr_truncated.dat",
     else: h.wannierpath = None
     # now lets add the SOC method
     def get_soc(self,name,soc):
-        if not self.has_spin: # only for spinful
-            raise ValueError("the spin-orbit coupling can only be added to a "
-                    "spinful Hamiltonian")
+        require_spin(self,"the spin-orbit coupling")
         self.intra = self.intra + generate_soc(name,soc,path=self.wannierpath) 
     import types
     h.get_soc = types.MethodType(get_soc,h) # add the method
