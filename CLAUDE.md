@@ -212,7 +212,10 @@ deliberately left as they are.
   (and `README.md`'s FUNCTIONALITIES list where relevant) to describe it, following the existing style: a
   short prose section with the physics/motivation, a runnable code snippet, and — for anything with a
   method on `Hamiltonian`/`Geometry` — an entry in the "Main functions and methods" reference at the end of
-  the user guide.
+  the user guide. Before writing or rewriting any prose in the guide, read `documentation/VOICE.md`: it
+  describes the maintainer's voice per register (chapter prose, section intros, catalogue bullets), the
+  spelling decisions, what not to do, and which chapters are the maintainer's own prose (fix only) versus
+  Claude-written (convert).
 - `future_development/` holds maintainer-facing roadmaps for work that is planned, partially done, or
   scoped-but-not-started, with the measurements and dead ends that led to each conclusion recorded so
   they don't have to be re-derived. Check it before starting work in an area it covers, and add to it
