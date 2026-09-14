@@ -6,7 +6,7 @@ band structures, densities of states and spectral functions, self-consistent
 invariants, response functions, quantum transport, and classical spin and
 lattice-gas models.
 
-Almost everything in this guide follows the same four steps -- build a
+Almost everything in this guide follows the same four steps, build a
 geometry, get its Hamiltonian, add terms to it, then ask the Hamiltonian for
 an observable:
 
@@ -20,7 +20,7 @@ h.add_zeeman([0.,0.,0.3])          # 3. add terms (in place)
 
 Install with `pip install pyqula`, or from a clone of the repository with
 `pip install -e .` from its root. Note that `import pyqula` on its own
-exposes nothing -- always import the submodule you need
+exposes nothing. Always import the submodule you need
 (`from pyqula import geometry`).
 
 Each code block below carries its own imports and runs on its own, except
@@ -254,7 +254,7 @@ Optional arguments
 - `kpath`: k-path to use, either a list of high-symmetry labels (e.g. `["G","K","M"]`) or explicit k-vectors; defaults to the geometry's standard path
 - `nk`: number of k-points along the path
 - `operator`: color/weight each band by the expectation value of an operator (or a list of operators), returning `(k,e,c)` instead of `(k,e)`
-- `num_bands`: for large sparse Hamiltonians, only compute this many bands around `central_energy` with ARPACK, instead of the full spectrum
+- `num_bands`: for large sparse Hamiltonians, only compute this many bands around `central_energy`, instead of the full spectrum
 
 ```python
 from pyqula import geometry
@@ -300,13 +300,13 @@ Optional arguments
 - energies: array with the energies for which the DOS is computed
 - delta: smearing of the DOS
 - operator: operator to which the DOS is projected
-- mode: how the DOS is computed -- `"ED"` (default, broadens a k-mesh band structure), `"Green"`/`"RG"` (sums a Green's function per energy, useful when only a handful of energies are needed), `"KPM"` (Chebyshev kernel-polynomial expansion, for large sparse systems -- see the "Chebyshev kernel polynomial (KPM) methods" section), or `"adaptive"`
-- nk: number of k-points in the mesh, for `"ED"` and `"KPM"`. `"adaptive"` does not sample a mesh at all -- it integrates over the Brillouin zone with error-controlled quadrature, tuned by `error=1e-1`, and reads `nk` only as a subdivision limit. `"Green"`/`"RG"` pass `nk` to the Brillouin-zone sum behind the self-energy, where it matters for `gmode="full"` and (in 2D) `gmode="renormalization"` but not for the default `gmode="adaptive"`
+- mode: how the DOS is computed, `"ED"` (default, broadens a k-mesh band structure), `"Green"`/`"RG"` (sums a Green's function per energy, useful when only a handful of energies are needed), `"KPM"` (Chebyshev kernel-polynomial expansion, for large sparse systems, see the "Chebyshev kernel polynomial (KPM) methods" section), or `"adaptive"`
+- nk: number of k-points in the mesh, for `"ED"` and `"KPM"`. `"adaptive"` does not sample a mesh at all. It integrates over the Brillouin zone with error-controlled quadrature, tuned by `error=1e-1`, and reads `nk` only as a subdivision limit. `"Green"`/`"RG"` pass `nk` to the Brillouin-zone sum behind the self-energy, where it matters for `gmode="full"` and (in 2D) `gmode="renormalization"` but not for the default `gmode="adaptive"`
 
 Whatever the mode, the result is normalized as a density of states: integrating it
 over the energies gives the number of states per unit cell. On a spinful chain, whose
 answer is 2, all four modes reproduce it to better than 1% on the same window, so
-they can be compared with each other directly -- and so can `h.get_dos()`, the DOS
+they can be compared with each other directly, and so can `h.get_dos()`, the DOS
 written next to an LDOS map by `h.get_multildos()`, and the file `dos.dos_ewindow`
 writes
 
@@ -357,7 +357,7 @@ Optional arguments
 - operator: operator to which the LDOS is projected (a name such as `"sz"`, a matrix, or an `Operator`), giving e.g. a spin-resolved real-space map instead of the charge one. The two evaluation modes weight it differently and both integrate over sites to the same operator-resolved DOS: `mode="arpack"` (the default) uses the expectation value $\langle \Psi | A | \Psi\rangle$ times the local density $|\Psi(i)|^2$, while `mode="green"` uses the local matrix element $\mathrm{Re}\,\Psi^*(i)(A\Psi)(i)$, which is the genuinely local quantity for states that are not eigenstates of the operator. A momentum-dependent operator (`"valley"`) only works in `mode="arpack"`, since `mode="green"` has already integrated over the Brillouin zone
 - mode: `"arpack"` (default, diagonalization on a k-mesh) or `"green"` (Green's function, 2D Hamiltonians only)
 - projection: `"TB"` (default, one value per lattice site), `"TBRS"` (same, but interpolated onto a continuous real-space map for smoother plotting), or `"atomic"` (projected onto atomic orbitals rather than tight-binding sites)
-- num_bands: for large sparse Hamiltonians, use ARPACK to only compute this many states around the target energy
+- num_bands: for large sparse Hamiltonians, only compute this many states around the target energy
 
 ```python
 from pyqula import geometry
@@ -378,8 +378,8 @@ The maps and the `DOS.OUT` beside them carry the same normalization as
 single-energy LDOS and the `DOS.OUT` against `h.get_dos()` without rescaling. An
 `operator=` is honoured here as it is by `get_ldos` (the older spelling `op=` still
 works, but passing both is a `TypeError`), and the weight it applies is the
-expectation value $\langle\Psi|A|\Psi\rangle$ of the eigenstate -- a gauge-invariant
-number -- times the local density, the same convention `get_ldos(mode="arpack")`
+expectation value $\langle\Psi|A|\Psi\rangle$ of the eigenstate, a gauge-invariant
+number. Times the local density, the same convention `get_ldos(mode="arpack")`
 uses. `projection="atomic"` does not accept an operator and says so
 
 See `examples/0d/island/main.py` (single-energy, `projection="TBRS"`, superconducting island) and `examples/readme_examples/ldos_island/main.py` (`get_multildos`, `projection="atomic"`) for runnable versions.
@@ -430,7 +430,7 @@ h = NbSe2(soc=0.9) # multi-orbital spin-orbit-coupled Hamiltonian
 (kx,ky,fs) = h.get_fermi_surface(e=0.,nk=100,delta=3e-1,operator="sz")
 ```
 
-`h.get_multi_fermi_surface()` computes the same kind of map at many energies at once, writing one file per energy to a `MULTIFERMISURFACE/` folder -- convenient for scanning how the Fermi surface evolves away from the Fermi level
+`h.get_multi_fermi_surface()` computes the same kind of map at many energies at once, writing one file per energy to a `MULTIFERMISURFACE/` folder, convenient for scanning how the Fermi surface evolves away from the Fermi level
 
 ```python
 import numpy as np
@@ -456,7 +456,7 @@ See `examples/readme_examples/fermi_surface/main.py`, `examples/2d/operator_ferm
 
 ## Quasiparticle interference
 
-Quasiparticle interference (QPI) maps the momentum-space scattering pattern that a defect or impurity produces, and is what an STM quasiparticle-interference measurement probes. `h.get_qpi()` is only available for 2D Hamiltonians; unlike the other observables here it does not return arrays -- it writes its output to disk, one file per energy in an output folder (default `MULTIQPI/`) plus a combined `DOS.OUT`
+Quasiparticle interference (QPI) maps the momentum-space scattering pattern that a defect or impurity produces, and is what an STM quasiparticle-interference measurement probes. `h.get_qpi()` is only available for 2D Hamiltonians; unlike the other observables here it does not return arrays. It writes its output to disk, one file per energy in an output folder (default `MULTIQPI/`) plus a combined `DOS.OUT`
 
 ```python
 import numpy as np
@@ -470,7 +470,7 @@ Optional arguments
 - energies: array of energies to compute
 - nk: number of k-points per direction
 - delta: broadening
-- mode: `"pm"` ("poor man's") autoconvolves the actual k-resolved spectral weight of the (possibly defective) system in q-space -- the physically meaningful QPI signal for a real scatterer; `"response"` (default) instead computes a cheaper Lindhard-like joint-DOS convolution from the clean band structure only, ignoring wavefunction form factors
+- mode: `"pm"` ("poor man's") autoconvolves the actual k-resolved spectral weight of the (possibly defective) system in q-space, the physically meaningful QPI signal for a real scatterer; `"response"` (default) instead computes a cheaper Lindhard-like joint-DOS convolution from the clean band structure only, ignoring wavefunction form factors
 - nunfold: for a defect embedded in an `nunfold`x`nunfold` supercell, unfold the QPI signal back onto the primitive Brillouin zone
 
 A single point defect embedded in a supercell, with the resulting QPI unfolded back onto the primitive cell, is a realistic use case. The supercell must be built with `store_primal=True` so pyqula remembers the primitive-cell reference needed to unfold; `operator="unfold"` then resolves to the corresponding unfolding operator
@@ -487,13 +487,13 @@ h.add_onsite(lambda r: 100.0 if np.linalg.norm(r-g.r[0])<1e-1 else 0.0) # a stro
 h.get_qpi(mode="pm",delta=1e-2,operator="unfold",nsuper=2,nk=140,nunfold=ns)
 ```
 
-This is the most expensive snippet in the guide: `mode="pm"` diagonalizes on an `nk`x`nk` mesh and then autoconvolves the result, so the cost grows quadratically with `nk` and the `nk=140` above takes minutes. Drop to `nk=60` (about 40 seconds) while setting a calculation up, and raise `nk` only for the final figure -- the q-space resolution of the QPI pattern is what it buys.
+This is the most expensive snippet in the guide: `mode="pm"` diagonalizes on an `nk`x`nk` mesh and then autoconvolves the result, so the cost grows quadratically with `nk` and the `nk=140` above takes minutes. Drop to `nk=60` (about 40 seconds) while setting a calculation up, and raise `nk` only for the final figure, the q-space resolution of the QPI pattern is what it buys.
 
 See `examples/2d/multiqpi/main.py` (clean system, `mode="pm"`) and `examples/2d/multiqpi_unfold/main.py` (defect in a supercell, unfolded) for runnable versions.
 
 ### Real-space-impurity QPI
 
-`h.get_qpi()`'s modes are all reciprocal-space methods (they convolve or scatter k-resolved spectral weight, never touch real-space impurities). `h.get_qpi_impurity()` instead takes the direct route: it builds a supercell of `h`, adds one or more actual real-space impurities to it, computes the real-space LDOS map with ARPACK partial diagonalization (only the eigenstates nearest each requested energy, so this stays tractable for large supercells, unlike full diagonalization), and Fourier transforms that map directly (a discrete sum over the atoms' actual positions, not a grid FFT) to get the QPI(q) signal. Unlike `get_qpi()`, it returns arrays rather than only writing to disk
+`h.get_qpi()`'s modes are all reciprocal-space methods: they convolve or scatter k-resolved spectral weight and never touch a real-space impurity. `h.get_qpi_impurity()` instead takes the direct route: it builds a supercell of `h`, adds one or more actual real-space impurities to it, computes the real-space LDOS map around them, and Fourier transforms that map to get the QPI(q) signal. Unlike `get_qpi()`, it returns arrays rather than only writing to disk
 
 ```python
 from pyqula import geometry
@@ -508,16 +508,16 @@ Optional arguments
 - nsuper: supercell size (scalar or `(n1,n2)`)
 - impurities: list of dicts, each an onsite potential (`{"position": [x,y,z], "onsite": v}`, or `{"index": i, "onsite": v}` for a specific supercell site index) or a vacancy (`{"position": [x,y,z], "vacancy": True}`). A vacancy is modeled as a strong onsite potential rather than true site removal, since deleting sites from a large sparse supercell Hamiltonian would require densifying it
 - energies: a single energy or an array
-- num_waves: a starting guess for the number of ARPACK eigenstates nearest the requested energies -- automatically grown (more ARPACK calls, not a correctness risk) until the diagonalization covers `margin*delta` past every requested energy and never cuts a degenerate manifold in half, since summing over a partial manifold isn't basis-independent and would otherwise leak spurious QPI weight, dependent on ARPACK's starting vector, even for a clean (impurity-free) supercell
+- num_waves: a starting guess for how many eigenstates nearest the requested energies to compute. It is grown automatically until the window covers `margin*delta` past every requested energy and never cuts a degenerate manifold in half. Summing over half a degenerate manifold is not basis independent and would leak spurious QPI weight even for a clean supercell
 - nk, delta: as in `get_ldos`
 
-The Hamiltonian is kept sparse throughout (the primitive cell is turned sparse before the supercell is built, and impurities are added as a sparse diagonal), so no dense matrix of the supercell's size is ever built. No unfolding step is needed either: this never diagonalizes supercell bands and projects them onto primitive Bloch states (which is what `get_qpi`'s `nunfold`/`store_primal` are for) -- it only Fourier transforms a real-space scalar density, evaluated directly at q spanning the full primitive Brillouin zone. `q` is fixed at exactly the `nsuper1`x`nsuper2` points commensurate with the supercell (`nsuper` sets the achievable q *resolution*, not the BZ range); evaluating the direct-sum Fourier transform at any other q would show finite-size leakage even for a perfectly clean system, since only the commensurate points are free of it.
+No unfolding step is needed here: this never diagonalizes supercell bands and projects them onto primitive Bloch states (which is what `get_qpi`'s `nunfold`/`store_primal` are for). It only Fourier transforms a real-space scalar density, evaluated directly at q spanning the full primitive Brillouin zone. `q` is fixed at exactly the `nsuper1`x`nsuper2` points commensurate with the supercell (`nsuper` sets the achievable q *resolution*, not the BZ range); evaluating the direct-sum Fourier transform at any other q would show finite-size leakage even for a perfectly clean system, since only the commensurate points are free of it.
 
 See `examples/2d/qpi_realspace_impurity/main.py` for a runnable version that plots both the real-space LDOS and QPI(q).
 
 ## Spin splitting of an altermagnet
 
-In a collinear magnet whose spin-up and spin-down bands are split without any net magnetization -- an altermagnet -- the natural quantity to characterize the order is how far apart the two spin channels are pushed, resolved by the energy at which that happens. Both quantities below diagonalize the two spin blocks separately and pair the resulting bands by index, so for every k-point and band index `n` there is a splitting `Delta_n(k) = E_up_n(k) - E_dn_n(k)` sitting at the mean energy `Ebar_n(k) = (E_up_n(k) + E_dn_n(k))/2`.
+An altermagnet is a collinear magnet whose spin-up and spin-down bands are split even though it carries no net magnetization. The natural measure of that order is how far apart the two spin channels are pushed, and at which energy. Both quantities below diagonalize the two spin blocks separately and pair the bands by index, so every k-point and band index `n` has a splitting `Delta_n(k) = E_up_n(k) - E_dn_n(k)` sitting at the mean energy `Ebar_n(k) = (E_up_n(k) + E_dn_n(k))/2`.
 
 The two differ in how they reduce that set. `get_spin_splitting_density` broadens every pair into a smooth weighted density, giving the *typical* splitting at each energy. `get_spin_splitting_vs_energy` instead keeps the *largest* `|Delta|` found in each energy bin, so its global maximum is a bound on the spin splitting anywhere in the Brillouin zone. The distinction matters when reporting a single number for a material: a maximum taken along one cut through k-space (a circle of fixed radius, say) depends on choosing where to look, while the binned maximum over a full mesh does not.
 
@@ -539,11 +539,11 @@ Both return `(energies, values)` with the same shape convention, so they can be 
 
 Two things about that index pairing are worth knowing, because together they decide whether the number you report is the number you meant.
 
-The first is reassuring. In a collinear altermagnet the two spin channels are related by a point-group operation acting on k rather than by a state-by-state correspondence at fixed k: the sorted spectra satisfy `E_up_n(k) = E_dn_n(Rk)` exactly, so `Delta_n(k) = E_dn_n(Rk) - E_dn_n(k)` compares the same sorted index within one channel at two related momenta. No band-identification ambiguity survives, and the usual worry -- that a splitting exceeding the band spacing makes the n-th up and n-th down band different bands -- does not arise, because the symmetry supplies the correspondence. It is worth identifying `R` for a new system: compare `sorted(E_up(k))` with `sorted(E_dn(Rk))` over the point group and look for the operation giving `~1e-14`. For the square altermagnet it is the `k1<->k2` mirror.
+The first is reassuring. In a collinear altermagnet the two spin channels are related by a point-group operation acting on k rather than by a state-by-state correspondence at fixed k: the sorted spectra satisfy `E_up_n(k) = E_dn_n(Rk)` exactly, so `Delta_n(k) = E_dn_n(Rk) - E_dn_n(k)` compares the same sorted index within one channel at two related momenta. No band-identification ambiguity survives, and the usual worry, that a splitting exceeding the band spacing makes the n-th up and n-th down band different bands, does not arise, because the symmetry supplies the correspondence. It is worth identifying `R` for a new system: compare `sorted(E_up(k))` with `sorted(E_dn(Rk))` over the point group and look for the operation giving `~1e-14`. For the square altermagnet it is the `k1<->k2` mirror.
 
-The second is a genuine dependence that the symmetry does *not* remove: `n` labels whatever band set your unit cell produces, and folding changes that set. On a `supercell(2)` of the square altermagnet the mirror identity still holds to `4e-16`, yet the reported maximum drops from `4*am` to `2*am`, because the folded bands at one k come from four primitive k-points and index pairing compares across them. So give this the true magnetic unit cell. If the converged order repeats with a smaller period than the cell it was solved in, the result is a lower bound rather than the maximum.
+The second is a real dependence that symmetry does not remove. The band index `n` labels whatever set of bands your unit cell produces, and folding changes that set: on a supercell, bands at one k come from several primitive k-points, and pairing them by index compares across those. The reported maximum then comes out too small. Give this the true magnetic unit cell. If the converged order repeats with a shorter period than the cell it was solved in, the result is a lower bound rather than the maximum.
 
-Both assume spin is a good quantum number, since they are built on `remove_spin`, which keeps one spin block and discards the off-diagonal one. `get_spin_splitting_vs_energy` checks this and raises if the spin off-diagonal block of the Bloch Hamiltonian is not negligible -- with Rashba coupling, any other spin-orbit term, or non-collinear magnetic order the splitting defined above is not a meaningful quantity, and a silently wrong number would be worse than an error. Diagonalization is dense throughout, deliberately: a sparse solver returns only the eigenvalues nearest `E=0`, and the splitting commonly peaks far away from there.
+Both require spin to be a good quantum number, since they keep one spin block and discard the off-diagonal one. `get_spin_splitting_vs_energy` checks this and raises if the spin off-diagonal block of the Bloch Hamiltonian is not negligible. With Rashba coupling, any other spin-orbit term, or non-collinear magnetic order the splitting defined above is not a meaningful quantity, and a silently wrong number would be worse than an error. Diagonalization is dense throughout, deliberately: a sparse solver returns only the eigenvalues nearest `E=0`, and the splitting commonly peaks far away from there.
 
 See `examples/2d/spin_splitting_vs_energy/main.py` for a runnable version plotting both curves (and showing the redundant-cell trap), and `examples/2d/altermagnetism_density/main.py` for the density alone.
 
@@ -557,7 +557,7 @@ Operators in pyqula have some important properties. First, for periodic Hamilton
 
 ## Nonlinear spin current as a measurement of altermagnetic order
 
-The spin splitting above tells you *how big* the altermagnetic order is. A harder question is *which kind* it is -- d-wave, g-wave, i-wave -- and that turns out to have a purely electrical answer, one that needs no spin-orbit coupling at all.
+The spin splitting above tells you *how big* the altermagnetic order is. A harder question is *which kind* it is, d-wave, g-wave, i-wave, and that turns out to have a purely electrical answer, one that needs no spin-orbit coupling at all.
 
 The spin-splitting form factor of an X-wave collinear magnet is a k-space harmonic of order `l+1`: `kx*ky` for d-wave, `kx*ky*(kx^2-ky^2)` for g-wave, `kx*ky*(3kx^2-ky^2)*(kx^2-3ky^2)` for i-wave. In the semiclassical Boltzmann treatment the `l`-th order nonlinear Drude conductivity is a Brillouin-zone integral of the `(l+1)`-th derivative of the band energy,
 
@@ -588,23 +588,23 @@ s = h.get_nonlinear_drude_conductivity(field="yyyyy", current="x", mu=-5.5)
 c = h.get_nonlinear_drude_components(5, nk=48, mu=-5.5)   # {"x^l1 y^l2;b": value}
 ```
 
-`field` carries one character per power of the electric field, so `field="yyyyy"` is the fifth-order response to `E_y`; `current` is the direction the current is measured in. `channel` selects `"spin"`, `"charge"`, `"up"` or `"dn"`. Units are `e = hbar = 1` and the zone integral carries the `1/(2 pi)^D` of a density, as in the rest of `conductivity.py`; `fermi_volume` uses the same normalization, so ratios to it reproduce the paper's analytic results directly.
+`field` carries one character per power of the electric field, so `field="yyyyy"` is the fifth-order response to $E_y$; `current` is the direction the current is measured in, and `channel` picks `"spin"`, `"charge"`, `"up"` or `"dn"`. Units are $e=\hbar=1$, with the zone integral normalized as a density, the same convention `fermi_volume` uses.
 
-The X-wave lattice models themselves are `specialhamiltonian.xwave_magnet(wave=...)`, with `pwave_magnet`, `dwave_altermagnet`, `fwave_magnet`, `gwave_altermagnet` and `iwave_altermagnet` as named aliases. Each is Ezawa's tight-binding model on the host lattice its symmetry requires -- square for p, d and g, triangular for f and i -- built by expanding his sine-product form factors exactly into real-space hoppings.
+The X-wave models themselves are `specialhamiltonian.xwave_magnet(wave=...)`, with `pwave_magnet`, `dwave_altermagnet`, `fwave_magnet`, `gwave_altermagnet` and `iwave_altermagnet` as named aliases. These are Ezawa's models, each on the lattice its symmetry requires: square for p, d and g, triangular for f and i.
 
 Three things are worth knowing before quoting a result.
 
 **Orders above the threshold do not vanish.** On a lattice the form factor carries higher harmonics beyond the leading one, so a d-wave altermagnet responds at `l = 1` but also at `l = 3` and `l = 5`. It is the *absence of everything below* the threshold that carries the information, not the presence of a single isolated order.
 
-**An insulator gives zero at every order, which is a trap.** With the chemical potential in a gap, `f` is 1 on every valence band and 0 on every conduction band, so the integrand is a pure k-derivative of `Tr(P H)` with `P` the valence projector; that is smooth and periodic, and the zone integral of a derivative of a smooth periodic function vanishes. The result is an exact zero at every order -- including the fifth. So a gapped system reproduces the "nothing below fifth order" pattern trivially, and the fingerprint only identifies i-wave order if the fifth order is simultaneously shown to be present. That requires a metal.
+**An insulator gives zero at every order, which is a trap.** With the chemical potential in a gap, every valence band is full and every conduction band empty, and the zone integral vanishes identically at every order, including the fifth. A gapped system therefore reproduces the "nothing below fifth order" pattern trivially, so the fingerprint only identifies i-wave order if the fifth order is also shown to be *present*. That needs a metal.
 
-**A spin-degenerate state is flagged, not silently answered.** The spin channel is only meaningful if the two spin channels have different bands. When they do not -- a compensated Neel state on a bipartite lattice is PT symmetric and exactly spin degenerate, an *antiferromagnet* rather than an altermagnet -- what comes back is rounding, and it does not look small: on a multiorbital cell the two channels are diagonalized independently, so near a degeneracy their eigenvector gauges differ and the high-order derivatives drift apart far more than the band energies do. Measured on a 44-site honeycomb antidot Neel state, bands agreeing to `1.2e-14` produced a fifth-order "spin response" of `1.3e-3`, which looks exactly like a signal. The module therefore checks the band splitting itself and raises a `RuntimeWarning` when it is below `1e-10` of the bandwidth. A genuine altermagnet is nowhere near that floor: the response stays exactly linear in the order parameter down to `J ~ 1e-9`.
+**A spin-degenerate state is flagged rather than answered.** The spin channel only means something if the two spin channels have different bands. A compensated Neel state on a bipartite lattice is $PT$ symmetric and exactly spin degenerate. That is an antiferromagnet rather than an altermagnet, and what comes back there is noise that does not look small. A warning is raised whenever the splitting falls below $10^{-10}$ of the bandwidth, so it cannot be mistaken for a signal. A real altermagnet stays far above that floor.
 
-**Which X-waves a real Hamiltonian can carry.** Reality of the Hamiltonian is itself a selection rule, and a useful one when building or diagnosing a model. With real hoppings and no spin-orbit coupling, `H_s(k)* = H_s(-k)`, so `eps_s(k) = eps_s(-k)` and the splitting satisfies `Delta(phi+180 deg) = Delta(phi)` -- every *odd* harmonic is forbidden. Add a C3 axis, which kills every `l` not divisible by 3, and only `l = 6, 12, ...` survives: **a real, SOC-free, C3-symmetric cell is necessarily i-wave**, and no choice of vacancy pattern or supercell can make it f-wave. The models here bear this out -- p-wave and f-wave come out with *imaginary* hoppings, while d, g and i wave are real -- so an f- or g-wave fixture cannot be built from a real C3 model and needs complex hoppings or lower symmetry.
+**Which X-waves a real Hamiltonian can carry.** Reality is itself a selection rule, and a useful one when building a model. With real hoppings and no spin-orbit coupling $\epsilon_s(k)=\epsilon_s(-k)$, so the splitting is even under $\phi\to\phi+180^\circ$ and every odd harmonic is forbidden. A C3 axis then removes everything not divisible by three, leaving only $l=6,12,\dots$: **a real, spin-orbit-free, C3-symmetric cell is necessarily i-wave**, and no vacancy pattern or supercell can make it f-wave. The models here bear this out: p-wave and f-wave need imaginary hoppings, while d, g and i wave are real.
 
-**Spin must be a good quantum number.** The derivation treats each spin channel as an independent single-band problem, so a Hamiltonian with spin-orbit coupling is rejected rather than silently mistreated: with Rashba or Kane-Mele terms the nonlinear response also picks up quantum-metric and Berry-curvature-dipole contributions ([arXiv:2409.09241](https://arxiv.org/abs/2409.09241)) that this formula does not contain.
+**Spin must be a good quantum number.** The formula treats each spin channel on its own, so a Hamiltonian with spin-orbit coupling is rejected rather than mistreated: with Rashba or Kane-Mele terms the nonlinear response picks up quantum-metric and Berry-curvature-dipole contributions ([arXiv:2409.09241](https://arxiv.org/abs/2409.09241)) this formula does not contain.
 
-Multiorbital cells are supported and are the interesting case -- superlattices, antidot lattices, multilayers. There the band energies are eigenvalues rather than matrix elements, and their derivatives are obtained by Rayleigh-Schroedinger perturbation theory carried out in a truncated two-variable Taylor ring, which delivers every mixed derivative up to sixth order to machine precision. Finite differences are not an option here and the module does not offer them: the selection rule is a statement that certain derivatives vanish *identically*, and a difference stencil manufactures a spurious nonzero value exactly there -- measured at `1e-4` against a true zero on a case where the surviving response is `0.6`, which would read as the response appearing at the wrong order and so invert the conclusion. The expansion is done in the block (Kato) form, grouping degenerate multiplets and using the trace of the block effective Hamiltonian, because a cell with a C3 or C6 axis has two-dimensional irreducible representations and hence exactly degenerate bands at its high-symmetry points -- unavoidable for the superlattices this is most useful for. A `supercell(2)`, whose folded bands are degenerate along whole curves and so exercises that treatment everywhere, reproduces the primitive-cell answer on the equivalent k-mesh to `1e-16` at first order and `1e-14` at fifth -- with the four orders below the fifth staying at machine zero in both, which is the property that actually matters.
+Multiorbital cells (superlattices, antidot lattices, multilayers) are supported, and are the interesting case. The band derivatives there are taken analytically, including at the degeneracies a C3 or C6 axis forces at high-symmetry points, so an order the selection rule forbids comes out as an exact zero rather than as small numerical noise.
 
 See `examples/2d/xwave_nonlinear_spin_current/main.py` for a runnable version printing the whole selection-rule table.
 
@@ -626,48 +626,32 @@ sy = h.get_operator("sy") # Spin y component
 sz = h.get_operator("sz") # Spin z component
 ```
 
-## Listing the available operators
+## Listing the accepted names
 
 Every routine that takes an `operator` argument (`h.get_bands`, `h.get_dos`,
 `h.get_ldos`, `h.get_kdos_bands`, `h.get_vev`, the topological invariants...)
-accepts either an object -- an `Operator`, a `Hamiltonian`, a `Potential`, a
-callable of the position, a bare matrix -- or the name of one of the operators
-that pyqula knows how to build. The names are kept in a single registry, and
+accepts either an object, an `Operator`, a `Hamiltonian`, a `Potential`, a
+callable of the position, a bare matrix, or the name of one of the operators
+pyqula knows how to build. Named operators are not the only thing selected by
+a string: so are the mean-field initialization (`mf=`), the superconducting
+pairing symmetry (`mode=`), the high-symmetry kpoint labels of a band path,
+and the quantities `h.extract` pulls out of a Hamiltonian. Each accepted set
 can be listed
 
 ```python
-from pyqula import operatorlist
-print(operatorlist.get_operator_names()) # every name h.get_operator accepts
-```
-
-Passing a name that is not in that list raises a `ValueError` quoting the
-offending name and the accepted ones, rather than failing further downstream.
-
-## Listing the other names pyqula accepts
-
-Named operators are not the only thing selected by a string. The mean-field
-initialization (`mf=`), the superconducting pairing symmetry (`mode=`), the
-high-symmetry kpoint labels of a band path, and the quantities `h.extract`
-knows how to pull out of a Hamiltonian are all chosen the same way, and each
-of them keeps its names in a registry that the dispatch itself reads. So the
-accepted values can always be listed, and a name that is not accepted raises
-a `ValueError` quoting both the offending name and the full list rather than
-failing somewhere downstream
-
-```python
-from pyqula import meanfield, extract
+from pyqula import operatorlist, meanfield, extract
 from pyqula.sctk import pairing
 from pyqula.kpointstk import labels
 
+print(operatorlist.get_operator_names()) # every name h.get_operator accepts
 print(meanfield.get_guess_names())    # every mf= mean-field initialization
 print(pairing.get_pairing_modes())    # every h.add_pairing(mode=...) symmetry
 print(labels.get_label_names())       # every high-symmetry kpoint label
 print(extract.get_extractable_names())# every h.extract(...) quantity
 ```
 
-Because each list is derived from the dispatch rather than written out
-beside it, the two cannot disagree: a symmetry that is advertised is one
-that is built.
+A name outside those lists raises a `ValueError` quoting both the offending
+name and the accepted ones, rather than failing somewhere downstream.
 
 ## Location operator
 
@@ -739,7 +723,7 @@ vall = h.get_operator("valley") # valley operator
 
 ## In-plane valley operators
 
-The operator above is the out-of-plane valley pseudospin $\tau_z$. The two remaining components of the valley pseudospin, $\tau_x$ and $\tau_y$, can also be obtained, giving access to the full valley vector $(\tau_x,\tau_y,\tau_z)$ -- the valley-space analogue of $(S_x,S_y,S_z)$ for real spin. They are built from a chiral Kekule coupling (symmetrized over the 3 inequivalent Kekule registries so the result is exactly $C_3$-covariant about every atom, not only about special high-symmetry points) rather than from the second-neighbor coupling behind $\tau_z$
+The operator above is the out-of-plane valley pseudospin $\tau_z$. The two remaining components of the valley pseudospin, $\tau_x$ and $\tau_y$, can also be obtained, giving access to the full valley vector $(\tau_x,\tau_y,\tau_z)$, the valley-space analogue of $(S_x,S_y,S_z)$ for real spin. They are built from a chiral Kekule coupling (symmetrized over the 3 inequivalent Kekule registries so the result is exactly $C_3$-covariant about every atom, not only about special high-symmetry points) rather than from the second-neighbor coupling behind $\tau_z$
 
 ```python
 from pyqula import geometry
@@ -749,9 +733,9 @@ taux = h.get_operator("valley_x") # tau_x
 tauy = h.get_operator("valley_y") # tau_y
 ```
 
-Both require a honeycomb-like geometry with a sublattice index; for a periodic (non-0d) Hamiltonian they additionally require a Kekule-commensurate cell (already a 3x3, or other multiple-of-3, supercell of the primitive honeycomb cell) to be well-defined -- a finite (0d) flake needs no such commensurability.
+Both require a honeycomb-like geometry with a sublattice index; for a periodic (non-0d) Hamiltonian they additionally require a Kekule-commensurate cell (already a 3x3, or other multiple-of-3, supercell of the primitive honeycomb cell) to be well-defined, a finite (0d) flake needs no such commensurability.
 
-A single vacancy in an otherwise pristine honeycomb flake is an atomically-sharp, intervalley-scattering defect, and induces a vortex in the in-plane valley pseudospin around it -- a nice way to see $\tau_x,\tau_y$ in action
+A single vacancy in an otherwise pristine honeycomb flake is an atomically-sharp, intervalley-scattering defect, and induces a vortex in the in-plane valley pseudospin around it, a nice way to see $\tau_x,\tau_y$ in action
 
 ```python
 from pyqula import islands
@@ -763,7 +747,7 @@ dvx = spectrum.real_space_vev(hv,operator=hv.get_operator("valley_x"))
 dvy = spectrum.real_space_vev(hv,operator=hv.get_operator("valley_y"))
 ```
 
-`h.add_valley_exchange(v)`, with `v=(vx,vy,vz)`, adds a valley-space exchange term $\vec{v}\cdot(\tau_x,\tau_y,\tau_z)$ to the Hamiltonian -- the valley-pseudospin analogue of `add_exchange` for real spin
+`h.add_valley_exchange(v)`, with `v=(vx,vy,vz)`, adds a valley-space exchange term $\vec{v}\cdot(\tau_x,\tau_y,\tau_z)$ to the Hamiltonian, the valley-pseudospin analogue of `add_exchange` for real spin
 
 ```python
 from pyqula import geometry
@@ -778,8 +762,8 @@ See `examples/0d/valley_vortex_vacancy/main.py` and `examples/2d/valley_vortex/m
 
 In the presence of superconductivity, you can project onto the electron or
 hole component of the Nambu spinor using the electron-hole operators. The
-Hamiltonian must already be in the Nambu (BdG) basis -- i.e. some pairing
-has been added -- otherwise there is no hole sector to project onto and
+Hamiltonian must already be in the Nambu (BdG) basis, i.e. some pairing
+has been added. Otherwise there is no hole sector to project onto and
 these raise
 
 ```python
@@ -831,8 +815,8 @@ ipr = h.get_operator("IPR") # IPR operator
 
 # Non-Hermitian Hamiltonians
 
-An open quantum system -- one exchanging particles or energy with an
-environment -- is often described by an effective Hamiltonian that is no
+An open quantum system, one exchanging particles or energy with an
+environment. Is often described by an effective Hamiltonian that is no
 longer Hermitian: gain and loss enter as imaginary onsite energies, and
 non-reciprocal hopping ($t_{ij}\ne t_{ji}^*$) as an asymmetric hopping
 matrix. The eigenvalues are then complex, their imaginary parts being
@@ -842,10 +826,9 @@ lattices with gain and loss, of the non-Hermitian skin effect, and of
 $\mathcal{PT}$-symmetric models.
 
 pyqula builds such a Hamiltonian with the `non_hermitian=True` flag, after
-which the usual observables route to non-Hermitian implementations
-(`pyqula.nonhermitiantk`) instead of the Hermitian ones. Nothing else about
-building the model changes -- `add_onsite` with a complex-valued function is
-what puts the gain and loss in.
+which the usual observables are computed with their non-Hermitian
+counterparts. Nothing else about building the model changes: an `add_onsite`
+with a complex-valued function is what puts the gain and loss in.
 
 ```python
 import numpy as np
@@ -870,16 +853,16 @@ gain/decay axis, or both as a scatter in the complex plane.
 ## Choosing which part is the energy: eigmode
 
 `eigmode` is the argument that exists only on this path. It says which part
-of the complex eigenvalue is to play the role of "the energy" -- the
+of the complex eigenvalue is to play the role of "the energy", the
 quantity a broadening is centred on, or a band structure is written out
 as. It takes `"complex"` (the default, keep the whole eigenvalue),
 `"real"`, or `"imag"`; anything else raises `ValueError` listing the three.
 
 In `h.get_bands()` it selects what the returned energy row and the written
 `BANDS.OUT` carry. With the default `"complex"` the file gains one extra
-column, so its layout is `k`, `Re E`, `Im E`, then one column per operator
--- rather than silently dropping the imaginary part, which is the physics
-the calculation was done for.
+column, so its layout is `k`, `Re E`, `Im E`, then one column per operator.
+The imaginary part is kept rather than silently dropped, since it is the
+physics the calculation was done for.
 
 In `h.get_ldos()` it decides which axis the requested energy `e` lives on.
 With `eigmode="imag"` the states are selected by their amplification rate
@@ -900,7 +883,7 @@ imax = np.argmax(es.imag) # the most amplified state
 print("it lives at x =",x[np.argmax(d)])
 ```
 
-which returns the site where the gain is largest, $x=-0.5$ here -- the
+which returns the site where the gain is largest, $x=-0.5$ here, the
 maximum of the modulation above.
 
 `h.get_dos()` broadens the real part whatever `eigmode` says, so
@@ -909,34 +892,31 @@ maximum of the modulation above.
 
 ## What is and is not available
 
-The non-Hermitian path re-implements the band structure, the density of
-states, the LDOS and the Berry curvature; everything else on a
-`non_hermitian=True` Hamiltonian runs the ordinary Hermitian code, which
-may or may not be meaningful for a complex spectrum, so check before
-relying on it. The self-consistent mean field is one of those: it is not
-re-implemented here, so `h.get_mean_field_hamiltonian()` on a
-non-Hermitian Hamiltonian runs the ordinary SCF loop (see
-`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/08_hermitian_nonhermitian.ipynb`),
-and the density matrix it builds is the Hermitian one.
+The band structure, the density of states, the LDOS and the Berry curvature
+have genuine non-Hermitian versions. Everything else on a
+`non_hermitian=True` Hamiltonian falls back to the Hermitian formula, which
+may or may not be meaningful for a complex spectrum, so check before relying
+on it. The self-consistent mean field is one of those: it runs the ordinary
+SCF loop and the density matrix it builds is the Hermitian one (see
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/08_hermitian_nonhermitian.ipynb`).
 
 One restriction is enforced rather than left to the caller: `h.get_dos()`
 accepts only `mode="ED"`, and refuses `use_kpm=True` and every other mode
 with a `NotImplementedError`, because the Chebyshev and adaptive expansions
-both assume a real spectrum. `h.get_ldos()` has the same limitation --
-only its default `mode="diagonalization"` is implemented here -- but does
+both assume a real spectrum. `h.get_ldos()` has the same limitation,
+only its default `mode="diagonalization"` is implemented here, but does
 not enforce it, so pass no other mode.
 
 Operators work as usual, including `operator="unfold"`, so a supercell
 calculation can be unfolded back onto the primitive Brillouin zone with a
-complex spectrum -- see `examples/1d/unfolding_non_hermitian/main.py`.
+complex spectrum. See `examples/1d/unfolding_non_hermitian/main.py`.
 `num_bands` also works, selecting the few eigenvalues nearest
-`central_energy` with ARPACK rather than diagonalizing fully.
+`central_energy` rather than diagonalizing fully.
 
 See `examples/1d/NH_ldos/main.py` (the model above, resolved mode by
 mode), `examples/0d/non_hermitian_aah/main.py` and
 `examples/0d/non_hermitian_aah_dos/main.py` (a non-Hermitian Aubry-Andre
-chain swept over the modulation phase), and `tests/nonhermitian/` for the
-invariants these paths are held to.
+chain swept over the modulation phase).
 
 # Superconductivity
 Up to now we have focused on Hamiltonians that contain only normal terms,
@@ -1120,20 +1100,19 @@ D_s^{ab} = \frac{1}{V}\frac{\partial^2 \Omega}{\partial Q_a \partial Q_b}
 $$
 
 the rigidity of the grand potential against winding the phase of the order
-parameter, at frozen $|\Delta|$, with $\mathbf Q$ a Cartesian twist
-wavevector. pyqula evaluates the general multiband BdG expression of Liang
-*et al.*, PRB **95**, 024515 (2017) -- a Kubo current-current plus
-diamagnetic sum over the Bogoliubov spectrum -- as the primary result, and
-can split it into a *conventional* part built from band velocities and a
-*quantum-geometric* part built from interband current matrix elements. In
-the isolated-flat-band limit the latter reduces to the integral of the
-quantum metric (Peotta & Törmä, Nat. Commun. **6**, 8944 (2015)): a flat
-band has no velocity, so its entire stiffness is geometric, which is why a
-flat band can superconduct at all. The quantum-metric integral is *not*
-used as a definition -- the decomposition is offered on top of the Kubo
-result and is refused with a `ValueError`, rather than silently reported,
-when its assumptions (uniform on-site pairing, time-reversal symmetry, a
-resolvable normal-state gap) do not hold.
+parameter, at fixed $|\Delta|$, with $\mathbf Q$ the twist wavevector. What
+is computed is the general multiband BdG expression of Liang *et al.*, PRB
+**95**, 024515 (2017).
+
+It can also be split into two parts. The *conventional* part comes from the
+band velocities, and the *quantum-geometric* part from interband matrix
+elements. For an isolated flat band the second reduces to the integral of the
+quantum metric (Peotta & Törmä, Nat. Commun. **6**, 8944 (2015)): a flat band
+has no velocity, so all of its stiffness is geometric, which is why a flat
+band can superconduct at all. The split is offered on top of the full result
+rather than used as the definition, and is refused with a `ValueError` when
+its assumptions (uniform onsite pairing, time-reversal symmetry, a resolvable
+normal-state gap) do not hold.
 
 ```python
 from pyqula import geometry
@@ -1148,32 +1127,29 @@ print(out["total"],out["conventional"],out["geometric"])
 print(h.get_bkt_temperature(nk=20)) # Nelson-Kosterlitz criterion
 ```
 
-The twist is the physical Peierls substitution with the *full* bond vector
-$\mathbf R + \mathbf r_j - \mathbf r_i$, not just the lattice vector
-$\mathbf R$. This matters: with the lattice vector alone, $D_s$ comes out
-anisotropic on the honeycomb lattice (0.220 vs 0.173, forbidden by C3) and
-changes when the very same crystal is redescribed with a supercell, while
-the full bond vector gives an isotropic, supercell-invariant answer. The
-two agree only for cells holding a single orbital. `gauge="lattice"`
-selects the other convention, which is the one used in the Peotta/Törmä
-literature and by pyqula's own `h.get_quantum_metric()` -- the fixed-$|\Delta|$
-superfluid weight genuinely depends on the orbital embedding, see Huhtinen,
-Herzog-Arbeitman, Chew, Bernevig & Törmä, PRB **106**, 014518 (2022).
+The twist uses the full bond vector $\mathbf R + \mathbf r_j - \mathbf r_i$
+rather than the lattice vector $\mathbf R$ alone, and this matters. With the
+lattice vector alone $D_s$ comes out anisotropic on the honeycomb lattice,
+which C3 symmetry forbids, and it changes when the same crystal is described
+with a supercell. The full bond vector gives an isotropic, supercell-invariant
+answer. The two agree only for a cell with one orbital. `gauge="lattice"`
+selects the other convention, the one used in the Peotta and Törmä literature
+and by `h.get_quantum_metric()`: at fixed $|\Delta|$ the superfluid weight
+genuinely depends on where the orbitals sit, see Huhtinen, Herzog-Arbeitman,
+Chew, Bernevig & Törmä, PRB **106**, 014518 (2022).
 
 In two dimensions `h.get_bkt_temperature()` solves the Nelson-Kosterlitz
 criterion $T_{\rm BKT} = (\pi/8) D_s(T_{\rm BKT})$ self-consistently by
 bisection, at frozen $|\Delta|$ (there is no $\Delta(T)$ feedback, so it is
 an upper estimate). Setting `mode="finite_difference"` differentiates the
-grand potential numerically instead: much slower, but assumption-free, and
-it is the oracle the analytic route is tested against in
-`tests/superfluid/`. One caveat worth knowing: at $T=0$ with a *gapless
+grand potential numerically instead: much slower, but assumption-free.
+One caveat worth knowing: at $T=0$ with a *gapless
 normal state* and zero or tiny pairing, the paramagnetic/diamagnetic
 cancellation is carried by a $-\partial f/\partial E$ that collapses to a
 delta function, which a finite k-mesh cannot resolve, so $D_s$ comes out at
 the normal state's Drude weight rather than zero; use a temperature the
 mesh resolves when checking that a marginal state has no stiffness. See
-`examples/2d/superfluid_weight/main.py` for a runnable version and
-`src/pyqula/sctk/superfluidweight.py` for the implementation.
+`examples/2d/superfluid_weight/main.py` for a runnable version.
 
 
 # Interactions at the mean-field level
@@ -1413,7 +1389,7 @@ n_{i,\uparrow}n_{j,\uparrow} - n_{i,\uparrow}n_{j,\downarrow}
 \right)
 $$
 
-is already a density-density interaction between spin-orbitals, so $S^z_iS^z_j$ is solved with exactly the same Hartree-Fock machinery as the $U$/$V_1$/$V_2$/$V_3$ interactions above -- `h.get_szsz_mean_field_hamiltonian(J1=...)` (first-neighbor $J_z$; `J2`/`J3` add second/third neighbors, `Jr` a general distance-dependent coupling, following the same convention as `V1`/`V2`/`V3`/`Vr` in `get_mean_field_hamiltonian`). $S^x_iS^x_j$ and $S^y_iS^y_j$ are obtained by a global spin rotation that maps the $x$ (or $y$) axis onto the computational $z$ axis, solving the $S^zS^z$ problem there, and rotating the converged Hamiltonian back -- `h.get_sxsx_mean_field_hamiltonian(...)` and `h.get_sysy_mean_field_hamiltonian(...)`. Because the bare interaction is SU(2)-symmetric, the converged total energy of `SzSz`, `SxSx` and `SySy` at the same coupling only differs by which axis the moment orders along.
+is already a density-density interaction between spin-orbitals, so $S^z_iS^z_j$ is solved at the same Hartree-Fock level as the $U$/$V_1$/$V_2$/$V_3$ interactions above, with `h.get_szsz_mean_field_hamiltonian(J1=...)`. `J1`/`J2`/`J3` are the first-, second- and third-neighbor couplings and `Jr` a general distance-dependent one, the same convention as `V1`/`V2`/`V3`/`Vr`. The other two axes are `h.get_sxsx_mean_field_hamiltonian(...)` and `h.get_sysy_mean_field_hamiltonian(...)`. The bare interaction is SU(2) symmetric, so at the same coupling the three differ only in the axis the moment orders along.
 
 ```python
 from pyqula import geometry
@@ -1425,30 +1401,25 @@ h = h.get_szsz_mean_field_hamiltonian(J1=-2.0,filling=0.2,
 m = h.get_magnetization() # uniform moment along z
 ```
 
-**Getting these SCF loops to converge.** All the mean-field entry points
-return `None` instead of a Hamiltonian when the loop does not converge, so
-check the result before using it. Two defaults are worth overriding
-explicitly for a partially filled metal like this chain:
+**Getting these calculations to converge.** All the mean-field functions
+return `None` instead of a Hamiltonian when the calculation does not
+converge, so check the result before using it. Four parameters decide
+whether it does:
 
-- `maxite=None` (the default) means *no iteration limit*, so a loop that
-  settles into a limit cycle instead of a fixed point never returns.
-  Always pass a finite `maxite` while exploring parameters -- you then get
-  a `None` and a "no convergence" message in a few seconds instead of a
-  hung session
-- `nk=8` (the default k-mesh) is often the actual culprit rather than the
-  mixing. At `filling=0.2` this chain does *not* converge at `nk=8` for any
-  mixing, because the mesh does not resolve the Fermi points and the
-  occupied set flips between iterations; `nk=10` converges in a fraction
-  of a second. If an SCF refuses to converge, change `nk` before reaching
-  for a smaller `mix`
+- `nk` (8 by default) is the k-mesh, and is usually the real culprit. A mesh
+  that does not resolve the Fermi surface makes the occupied states flip from
+  one iteration to the next, and no amount of mixing helps. The chain above
+  at `filling=0.2` never converges at `nk=8` and converges at once at
+  `nk=10`. Change this first
+- `mix` (0.1) mixes each new mean field into the old one. Lower it when the
+  calculation oscillates around a solution rather than settling on it
+- `maxite` (no limit by default) caps the number of iterations. Always set it
+  while exploring parameters, so a calculation that will never converge comes
+  back in seconds instead of running forever
+- `maxerror` (1e-5) is how close two successive mean fields must be before
+  the result counts as converged
 
-`mix` (0.1 by default, linear mixing of successive mean fields) is the
-knob for a loop that oscillates around a fixed point rather than one that
-never approaches one; `maxerror` (1e-5) sets the convergence threshold.
-`tests/scf/` is a good source of known-converging parameter sets for each
-coupling.
-
-The three channels can also be combined into a single anisotropic-exchange SCF loop, `h.get_exchange_mean_field_hamiltonian(Jx1=...,Jy1=...,Jz1=...)`, which decouples the $z$ channel directly and the $x$/$y$ channels through the same rotate-solve-rotate-back trick, each SCF iteration:
+The three axes can be given different couplings in a single anisotropic-exchange calculation, `h.get_exchange_mean_field_hamiltonian(Jx1=...,Jy1=...,Jz1=...)`:
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
@@ -1457,7 +1428,7 @@ h = h.get_exchange_mean_field_hamiltonian(Jz1=-1.0,Jx1=-0.5,
                                             nk=10,mix=0.3,maxite=300)
 ```
 
-Density-density interactions ($U$/$V_1$/$V_2$/$V_3$/$V_r$, as in `get_mean_field_hamiltonian`) and spin-spin exchange can also be solved together, self-consistently, in a single combined SCF loop with `h.get_combined_mean_field_hamiltonian(U=...,V1=...,J1=...,...)`. This is not new physics: a density-density interaction and $S^z_iS^z_j$ are both density-density interactions in the spin-orbital basis (just with a different sign pattern across the four spin blocks), and the Hartree-Fock decoupling is linear in the interaction, so the density-density contribution is simply added into the same $z$-channel matrix the exchange term already uses. Exchange here follows a $V_1$/$V_2$/$V_3$-like convention: $J_1$/$J_2$/$J_3$ ($+J_r$) are isotropic Heisenberg couplings, $J(S^x_iS^x_j+S^y_iS^y_j+S^z_iS^z_j)$, for the first/second/third neighbor shells, and $J_{1x}$/$J_{1y}$/$J_{1z}$ are an optional anisotropic correction added on top of $J_1$ for the first-neighbor shell only (e.g. the effective first-neighbor $J_z$ coupling is $J_1+J_{1z}$); all default to 0
+Density-density interactions and spin-spin exchange can also be solved together in one self-consistent calculation, `h.get_combined_mean_field_hamiltonian(U=...,V1=...,J1=...,...)`, which is what a model with both charge and magnetic correlations needs. $J_1$/$J_2$/$J_3$ (and $J_r$) are isotropic Heisenberg couplings $J(S^x_iS^x_j+S^y_iS^y_j+S^z_iS^z_j)$ on the first, second and third neighbor shells; $J_{1x}$/$J_{1y}$/$J_{1z}$ add an anisotropy on top of $J_1$ for the first shell only, so the effective first-neighbor $J_z$ is $J_1+J_{1z}$. All default to zero
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
@@ -1475,62 +1446,14 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
                                             mf="ferroZ",integration="kpm")
 ```
 
-This is meant for large/sparse systems where per-iteration exact
-diagonalization is the bottleneck -- **but currently measures far slower
-than `integration="ed"` at the small/moderate sizes actually tested (order
-100-500 sites, see the reference entry below for numbers)**, so benchmark
-before relying on it for a given system.
+This is meant for large, sparse systems.
 
-The same combined SCF loop can instead be solved with a JAX-derivative-based
-solver, `use_jax=True`: rather than the default plain-mixing loop, this
-builds a JAX-differentiable version of one SCF iteration $x=f(x)$ and drives
-it to its fixed point with a genuine root-finder using JAX-computed
-derivatives of $f$ (`solver="newton"`, the default once `use_jax=True`), a
-matrix-free variant that scales to larger systems (`solver="newton_krylov"`),
-by minimizing the squared residual $\|f(x)-x\|^2$ as a proper nonlinear
-least-squares problem via matrix-free Levenberg-Marquardt (`jax.jvp`/
-`jax.vjp` plus `scipy`'s `lsqr`, `solver="error_gradient"`), or with a robust black-box
-mixing scheme, `solver="broyden_mixing"` -- a regularized, limited-memory
-multisecant form of Broyden's second method following Marks & Luke,
-*Robust Mixing for Ab-Initio Quantum Mechanical Calculations*
-(arXiv:0801.3098). Unlike the root-finder/gradient-based solvers above, it
-only ever evaluates $f$ itself (no Jacobian, no autodiff), tracking the last
-few SCF steps as simultaneous secant conditions, regularizing the resulting
-least-squares solve (Tikhonov), and adaptively bounding the step length --
-this is the combination the paper credits for converging on cases (e.g.
-"charge sloshing" between two badly-scaled subsets of the mean field) that
-defeat a single fixed linear-mixing factor. It first runs a plain-linear-
-mixing warm-up (reusing `mix`) until the residual drops below a threshold
-(`warmup_tol`, default 1e-2) before switching on the multisecant machinery --
-benchmarked across several small (5-13 atom) systems, starting the
-multisecant phase directly on a cold guess (the paper's own literal
-algorithm) regularly failed to converge, while the warm-up fixed every
-observed case and also converged 2-10x faster than plain linear mixing
-alone; see `scftk.broydenmixing`'s module docstring for the
-algorithm and that benchmark. See the reference entry below for the full
-solver list and scope restrictions
-(normal-state only, no `constrains`), and
-`scftk.vjinteraction_jax`'s module docstring for why
-`solver="error_gradient"` minimizes the SCF residual rather than the
-physical free energy directly.
-
-Which solver is most likely to converge at all (as opposed to fastest) matters
-more than raw speed when the system's symmetry properties aren't known in
-advance (e.g. no explicit symmetry-breaking bias applied to the Hamiltonian).
-Measured across a range of system sizes and both biased and fully generic
-(unbiased) Hamiltonians, `solver="error_gradient"` was consistently the most
-robust of the four `use_jax=True` solvers, converging in nearly every case
-tried -- including the hardest one, a larger unbiased system where
-`"linear_mixing"` failed outright and `"broyden_mixing"` converged only a
-minority of the time (outside the small-system regime it was validated on
-above). `"newton_krylov"` was also reliable at larger sizes but considerably
-slower there, and was the least robust solver of the four on small systems,
-where its GMRES step can fail outright against a near-singular Jacobian.
-Net recommendation: default to `solver="error_gradient"` for a generic
-system whose symmetry isn't known to be already broken; reach for
-`"newton_krylov"`/`"broyden_mixing"` instead once the system is known to be
-well-conditioned (or explicitly biased) and the extra speed matters more
-than robustness.
+A loop that refuses to converge under plain mixing can be handed to a
+nonlinear solver instead, with `use_jax=True`, which treats one SCF
+iteration $x=f(x)$ as a root-finding problem. `solver="error_gradient"` is
+the most robust of these on a generic Hamiltonian and the one to reach for
+first; `"newton"` is the default. These solvers are for the normal state only
+and do not accept `constrains`.
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
@@ -1541,7 +1464,7 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
 
 Needs the optional `jax` extra (`pip install pyqula[jax]`).
 
-All of the spin-spin exchange functions above also work on BdG (Nambu) Hamiltonians (`h.turn_nambu()`/`h.setup_nambu_spinor()`). `get_szsz_mean_field_hamiltonian`/`get_sxsx_mean_field_hamiltonian`/`get_sysy_mean_field_hamiltonian` need no special handling: `get_mean_field_hamiltonian`'s existing Hartree-Fock-plus-anomalous decoupling already dispatches generically for any density-density-shaped interaction, including $S^z_iS^z_j$'s. `get_combined_mean_field_hamiltonian`/`get_exchange_mean_field_hamiltonian` decouple the exchange ($J$) channels with the same full normal-plus-anomalous treatment as $U$/$V_1$/$V_2$/$V_3$ for a Nambu Hamiltonian, so exchange can itself induce superconducting pairing, not just density-density interactions: an antiferromagnetic isotropic $J$ alone (no $U$/$V$ at all), seeded with a small coherent pairing guess (e.g. `h.add_swave(0.1)` on top of the Hamiltonian used as `mf`; a purely random guess has no reliable overlap with this instability and often relaxes back to zero pairing instead), can spontaneously decouple into a purely superconducting, singlet-paired state (the same RVB-like mechanism behind exchange-driven superconductivity), while the ferromagnetic sign has no such pairing tendency and stays magnetic. A state with both magnetic and superconducting order can also still emerge from combining an exchange field with an attractive $V_1$. CAVEAT: the reported `total_energy` only ever subtracts the normal (Hartree-Fock) double-counting correction, never a matching one for the anomalous/pairing channel, so it is systematically off whenever any channel (exchange or $V$/$U$) converges to a nonzero pairing amplitude; the converged Hamiltonian itself is unaffected by this, only the `total_energy` scalar:
+All of the spin-spin exchange functions above also work on BdG (Nambu) Hamiltonians (`h.turn_nambu()`/`h.setup_nambu_spinor()`), where the exchange ($J$) channels are decoupled in the normal *and* anomalous channels, exactly as $U$/$V_1$/$V_2$/$V_3$ are. Exchange can therefore induce superconducting pairing on its own: an antiferromagnetic isotropic $J$, with no $U$ or $V$ at all, can decouple spontaneously into a purely superconducting singlet-paired state, the RVB-like mechanism behind exchange-driven superconductivity, while the ferromagnetic sign has no such tendency and stays magnetic. That instability has to be seeded coherently (e.g. `h.add_swave(0.1)` on top of the Hamiltonian passed as `mf`); a purely random guess has little overlap with it and usually relaxes back to zero pairing. A state carrying both magnetic and superconducting order can also emerge from an exchange field combined with an attractive $V_1$. CAVEAT: the reported `total_energy` subtracts only the normal (Hartree-Fock) double-counting correction and never a matching one for the anomalous channel, so it is systematically off whenever any channel converges to a nonzero pairing amplitude; the converged Hamiltonian itself is unaffected, only that scalar:
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
@@ -1562,7 +1485,7 @@ Spin Liquids: a review*, arXiv:1601.03742, Sec. 4): each spin is written in
 terms of an auxiliary ("spinon") fermion subject to the hard local
 constraint $f^\dagger_i f_i=1$, exactly one fermion per site, and the
 exchange term is Wick-decoupled into an RVB bond order parameter
-$\chi_{ij}=\langle f^\dagger_i f_j\rangle$ -- physically the same Fock/
+$\chi_{ij}=\langle f^\dagger_i f_j\rangle$, physically the same Fock/
 Hartree-Fock decoupling `get_combined_mean_field_hamiltonian`'s $J$ channel
 already performs, just on a Hamiltonian with zero bare hopping (a pure spin
 model has no bare electron kinetic term) and with the local constraint
@@ -1574,33 +1497,25 @@ from pyqula import geometry
 from pyqula.spinon import SpinonHamiltonian
 
 g = geometry.triangular_lattice() # a canonical frustrated-Heisenberg lattice
-h = SpinonHamiltonian(g) # zero bare hopping -- couplings come from J1/J2/...
+h = SpinonHamiltonian(g) # zero bare hopping, couplings come from J1/J2/...
 h2 = h.get_mean_field_hamiltonian(J1=1.0,nk=12,mix=0.1,maxerror=1e-4)
 
-h2.local_occupation   # <n_i> per site -- exactly 1.0 at convergence
+h2.local_occupation   # <n_i> per site, exactly 1.0 at convergence
 h2.constraint_lambda  # converged per-site Lagrange multiplier (local chemical potential)
 h2.get_bands()        # spinon dispersion
 ```
 
-`filling=` cannot be passed to `SpinonHamiltonian.get_mean_field_hamiltonian`
--- the representation is only valid at exactly one fermion per site, so it
-is always requested internally as the per-site array `get_combined_mean_field_hamiltonian`'s
-own `filling` kwarg now accepts (one target per site, instead of only a single
-lattice-averaged Fermi level), enforced via a per-site Lagrange multiplier
-warm-started and co-converged with the RVB mean field across the same SCF
-loop; `scf.converged` (equivalently, a non-`None` return here) already
-implies the local constraint converged to within `maxerror`, not only the
-mean field itself. Only the U(1) (RVB bond-only) ansatz is implemented --
-a Z2 ansatz (allowing the pairing/anomalous channel $J$ can also induce, as
-above) would need a Nambu-doubled `SpinonHamiltonian`, not yet supported.
-All other `get_mean_field_hamiltonian` kwargs (`mf`, `nk`, `mix`,
-`maxerror`, `maxite`, `constrains`, an additional `V1`/`V2`/`V3`/`U`
-density-density term, ...) are forwarded unchanged.
+`filling=` cannot be passed to `SpinonHamiltonian.get_mean_field_hamiltonian`:
+the representation is only valid at exactly one fermion per site, so that
+occupation is imposed site by site through a per-site Lagrange multiplier
+rather than as a lattice-averaged Fermi level. Only the U(1) (RVB bond-only)
+ansatz is implemented; a Z2 ansatz, which would allow the pairing channel $J$
+can also induce, is not.
 
 **On a frustrated lattice (triangular, kagome, ...) the converged state is
 ansatz-dependent**, not unique: several distinct self-consistent RVB flux
 sectors can coexist at the same $J$, and which one an unseeded random `mf`
-guess lands on is itself part of the physics, not SCF noise -- "it is not
+guess lands on is itself part of the physics, not SCF noise, "it is not
 possible to search for all possible self-consistent mean field
 solutions... calculations are usually carried out by assuming a particular
 decoupling scheme" (Savary & Balents, Sec. 4.1). A 1-site-unit-cell chain
@@ -1613,7 +1528,7 @@ differently-seeded runs.
 f_i^\dagger\vec\sigma f_i$ exactly, not via any mean-field decoupling (it is
 already bilinear in $f$), so it is added as an ordinary single-particle term
 with the same `Hamiltonian.add_zeeman`/`add_exchange` used everywhere else in
-pyqula -- call it on the `SpinonHamiltonian` instance *before*
+pyqula. Call it on the `SpinonHamiltonian` instance *before*
 `get_mean_field_hamiltonian`:
 
 ```python
@@ -1625,23 +1540,23 @@ h2.get_magnetization()                 # induced <S> per site
 
 `add_zeeman`'s argument is the coefficient of $\vec\sigma$ (Pauli matrices),
 not of $\vec S=\vec\sigma/2$, so the physical field $h$ in $H=-h\cdot S_i$ is
-twice the value passed in -- the same convention `add_exchange` uses on an
+twice the value passed in, the same convention `add_exchange` uses on an
 ordinary electronic Hamiltonian elsewhere in this guide. The local
 one-fermion-per-site constraint is a total-occupation constraint, not a
 spin constraint, so it stays exactly satisfied under a field while $\langle
 S_i\rangle$ is free to grow with it, saturating once the field dominates
-$J$ (see `tests/spinon/test_spinon_zeeman.py`).
+$J$.
 
 
 ## Abrikosov-pseudofermion (Read-Newns) mean field for the Kondo lattice
 
-The Kondo lattice / periodic Anderson model -- localized moments
-exchange-coupled to a conduction electron at the same site -- is the
+The Kondo lattice / periodic Anderson model, localized moments
+exchange-coupled to a conduction electron at the same site, is the
 standard minimal model of heavy fermion compounds. Following P. Coleman,
 *Heavy Fermions: electrons at the edge of magnetism*,
 arXiv:cond-mat/0612006, Sec. III.C, its Coqblin-Schrieffer form is
 $H=\sum_k\epsilon_k c^\dagger_kc_k + \tfrac{J}{N}\sum_j
-S_{ab}(j)c^\dagger_{jb}c_{ja}$ ($N=2$ for a spin-$\tfrac12$ moment --
+S_{ab}(j)c^\dagger_{jb}c_{ja}$ ($N=2$ for a spin-$\tfrac12$ moment,
 **not** the coefficient of a bare $J\vec S_j\cdot\vec s_j$ Heisenberg-form
 Kondo term, see the caveat below). Each moment is
 represented by an Abrikosov pseudofermion
@@ -1650,7 +1565,7 @@ $f^\dagger_jf_j=1$, and the exchange term is Hubbard-Stratonovich
 decoupled into a self-consistent hybridization field
 $V_j=-\tfrac{J}{2}\langle f^\dagger_jc_j\rangle$ (a "composite fermion",
 half electron and half spin-flip) plus a Lagrange multiplier $\lambda_j$
-enforcing the local constraint -- physically the large-N ($N=2$)
+enforcing the local constraint, physically the large-N ($N=2$)
 Read-Newns saddle point of the Kondo-lattice path integral.
 `KondoLatticeHamiltonian` (`pyqula.kondolattice`) packages this: given a
 conduction-electron Hamiltonian, it fuses on a second, initially
@@ -1666,44 +1581,38 @@ gc = geometry.chain()
 hc = gc.get_hamiltonian(has_spin=True) # conduction electrons
 h = KondoLatticeHamiltonian(hc)
 
-seed = ([0.3+0.0j],[0.0]) # (V,lam) -- see the caveat below for why
+seed = ([0.3+0.0j],[0.0]) # (V,lam), see the caveat below for why
 h2 = h.get_mean_field_hamiltonian(J=1.5,filling=0.15,nk=200,mf=seed)
 
-h2.local_occupation   # <n_f> per localized site -- exactly 1.0 at convergence
+h2.local_occupation   # <n_f> per localized site, exactly 1.0 at convergence
 h2.hybridization      # converged V per localized site
 h2.constraint_lambda  # converged per-site Lagrange multiplier
 ```
 
 `J` is Coleman's Coqblin-Schrieffer coupling (entering the interaction as
 $J/N$ with $N=2$), not the coefficient of a bare $J\vec S_j\cdot\vec s_j$
-Heisenberg-form Kondo term -- the two differ by a numerical factor that
+Heisenberg-form Kondo term, the two differ by a numerical factor that
 Coleman's Eq. 73-78 already fixes, so this class follows the paper's
-convention exactly. `filling` sets a lattice-wide chemical potential
-*once*, from the bare ($V=0$) bands, and holds it fixed through the SCF
-loop rather than re-solving it every iteration (Coleman's Eq. 83 is a
-fixed-$\mu$, grand-canonical Hamiltonian; the electron count is meant to
-float, even expand, as $V,\lambda$ converge, Eq. 91-92) -- the local
-$\langle n_f\rangle=1$ constraint is enforced separately by $\lambda_j$,
-not by `filling`. All other `get_mean_field_hamiltonian` kwargs (`mf`,
-`nk`, `mix`, `maxerror`, `maxite`, `T`) are forwarded to the SCF loop
-unchanged.
+convention exactly. `filling` sets a lattice-wide chemical potential once,
+from the bare ($V=0$) bands, and holds it fixed: this is a grand-canonical
+Hamiltonian, in which the electron count is meant to float as $V$ and
+$\lambda$ converge. The local $\langle n_f\rangle=1$ constraint is enforced
+separately by $\lambda_j$, not by `filling`.
 
 **$V=0$ is always itself a self-consistent solution**, exactly like the
-trivial root of the BCS gap equation -- an unseeded run (`mf=None`, the
+trivial root of the BCS gap equation, an unseeded run (`mf=None`, the
 default) starts there and stays there even for a `J` that also supports a
 genuine hybridized state, so a nonzero seed (as above) is generally
 needed to find it. Where both solutions coexist, the hybridized state is
 the true (lower-energy) ground state. **Avoid a `filling` that lands the
 chemical potential inside the bare f-sector's flat, macroscopically
-degenerate band** (at $V=0$, every f-orbital sits at exactly $\lambda$,
-so a wide range of `filling` values -- roughly 0.25-0.75 for a single
-conduction orbital per site -- all give exactly the same, numerically
-ill-posed starting point); `filling=0.15` above keeps $\mu$ inside the
+degenerate band**. At $V=0$ every f-orbital sits at exactly $\lambda$, so a
+wide range of fillings, roughly 0.25 to 0.75 for a single conduction orbital
+per site, all give the same numerically ill-posed starting point.
+`filling=0.15` above keeps $\mu$ inside the
 dispersing conduction band instead. **The finite Fermi-Dirac smearing
-`T` this SCF loop necessarily runs at** (needed for the $\lambda$
-feedback's numerical stability -- see
-`scftk.kondolattice.kondo_lattice_mean_field`'s docstring)
-turns the textbook, continuous $T_K=D\,e^{-1/(J\rho)}$ onset into a
+`T` this SCF loop runs at** turns the textbook, continuous
+$T_K=D\,e^{-1/(J\rho)}$ onset into a
 genuine finite-temperature Kondo crossover: below a $T$-dependent
 threshold in $J$, thermal smearing washes out the hybridization
 entirely and $V=0$ becomes the *only* self-consistent solution, and
@@ -1713,7 +1622,7 @@ growing continuously from zero.
 **An external Zeeman/magnetic field** couples exactly to both fermion
 species here (the conduction electron and the localized moment
 $\vec S_j=\tfrac12 f_j^\dagger\vec\sigma f_j$, already bilinear in $f$),
-so -- exactly as for `SpinonHamiltonian` above -- it is added as an
+so, exactly as for `SpinonHamiltonian` above, it is added as an
 ordinary single-particle term with `add_zeeman`/`add_exchange`, called on
 the `KondoLatticeHamiltonian` instance *before*
 `get_mean_field_hamiltonian`:
@@ -1725,17 +1634,16 @@ h2 = h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=150, mf=seed)
 ```
 
 `add_zeeman` applies to every site of the fused geometry, i.e. both the
-conduction and the f sublattice (offset in $z$) -- pass a position-
+conduction and the f sublattice (offset in $z$), pass a position-
 dependent callable instead of a constant vector to target only one of
 them. The $\langle n_f\rangle=1$ constraint (a total-occupation, not spin,
 constraint) stays exact under a field. A field competes with the Kondo
 singlet: the self-consistent $|V|$ *shrinks* as the field grows at fixed
-$J$, and a strong enough field destroys the hybridized state -- genuine
-physics, not a bug, and the SCF correctly reports non-convergence
+$J$, and a strong enough field destroys the hybridized state, genuine
+physics rather than a numerical failure, and the SCF reports non-convergence
 (`None`) there rather than a spuriously small but nonzero $V$, exactly
 the "decays toward the always-self-consistent $V=0$ branch" signal a
-subcritical $J$ already produces above (see
-`tests/kondolattice/test_kondolattice_zeeman.py`).
+subcritical $J$ already produces above.
 
 
 # Spatially resolved density of states
@@ -1765,9 +1673,9 @@ h = gs.get_hamiltonian() # Hamiltonian of the supercell
 
 `d` holds the unfolded spectral weight at each `(k,e)`; plotting a scatter of `k,e` colored/sized by `d` recovers the primitive-cell band structure out of the supercell calculation. The same `operator="unfold"` can be passed to `h.get_multi_fermi_surface()` to unfold constant-energy cuts. See `examples/2d/unfolding/main.py`, `examples/1d/unfolding/main.py` and `examples/readme_examples/unfolding_FS/main.py` for runnable versions.
 
-Unfolding also works when atoms have been removed from the supercell (e.g. `gs = gs.remove([...])` before `gs.get_hamiltonian()`), such as a vacancy or an irregularly-shaped flake cut out of a supercell: pyqula matches each remaining atom back to its primitive-cell replica by position instead of assuming every replica is fully present, so no extra arguments are needed — `operator="unfold"` transparently falls back to this slower, defect-tolerant path whenever the supercell's atom count doesn't match a complete replication of the primitive cell, and uses the original fast path otherwise. This position match requires the remaining atoms to sit exactly where they were in the original, undefective supercell, so don't call anything that moves atoms (e.g. `gs.center()`, a geometry relaxation) between `gs.remove(...)` and `gs.get_hamiltonian()` — doing so raises a `ValueError` rather than silently unfolding onto the wrong replica.
+Unfolding also works when atoms have been removed from the supercell (e.g. `gs = gs.remove([...])` before `gs.get_hamiltonian()`), such as a vacancy or an irregularly-shaped flake cut out of a supercell: each remaining atom is matched back to its primitive-cell replica by position, so no extra arguments are needed. The match requires the remaining atoms to sit exactly where they were in the complete supercell, so do not move them (with `gs.center()`, or a relaxation) between `gs.remove(...)` and `gs.get_hamiltonian()`. Doing so raises a `ValueError` rather than unfolding onto the wrong replica.
 
-Unfolding also works for a general, non-diagonal/non-orthogonal supercell, built by passing a 3x3 integer matrix `M` to `get_supercell` instead of a plain `(n1,n2,...)` size (`gs.a1,gs.a2,gs.a3` become integer combinations of the primitive vectors, `gs = M @ g`). No change is needed at the unfolding call site — `get_supercell(M,...)` records, per surviving atom, which primitive replica it came from, and `operator="unfold"` reads that bookkeeping directly (both for a complete supercell and after removing atoms):
+Unfolding also works for a general, non-diagonal/non-orthogonal supercell, built by passing a 3x3 integer matrix `M` to `get_supercell` instead of a plain `(n1,n2,...)` size (`gs.a1,gs.a2,gs.a3` become integer combinations of the primitive vectors, `gs = M @ g`). No change is needed at the unfolding call site: `get_supercell(M,...)` records, per surviving atom, which primitive replica it came from, and `operator="unfold"` reads that bookkeeping directly (both for a complete supercell and after removing atoms):
 
 ```python
 from pyqula import geometry
@@ -1778,7 +1686,7 @@ h = gs.get_hamiltonian() # Hamiltonian of the supercell
 (k,e,d) = h.get_kdos_bands(operator="unfold",delta=1e-1) # unfolded spectral function
 ```
 
-This bookkeeping-based path only supports 1D/2D lattices (matching the diagonal case); a 3x3 `M` on a 3D bulk geometry is not yet implemented.
+This works for 1D and 2D lattices; a 3x3 `M` on a 3D bulk geometry is not yet implemented.
 
 # Surface spectral functions
 
@@ -1803,9 +1711,9 @@ momentum-dependent operator such as `"valley"` is refused with a
 `NotImplementedError` naming it, since the Green's function it is built on
 has already been integrated over the Brillouin zone.
 
-This whole family -- `dos.surface_dos`, `dos.dos_surface`,
+This whole family, `dos.surface_dos`, `dos.dos_surface`,
 `dos.bulkandsurface`, `dos.surface2bulk` and the surface writers in
-`kdos` -- reports $-\mathrm{Im}\,\mathrm{Tr}\,G$ without the $1/\pi$ that
+`kdos`. Reports $-\mathrm{Im}\,\mathrm{Tr}\,G$ without the $1/\pi$ that
 `h.get_dos()` applies, so their values are $\pi$ times a density of states.
 They agree with each other; compare them among themselves rather than
 against `h.get_dos()`.
@@ -1826,13 +1734,12 @@ a closed-form periodic function of the local interlayer registry, fit to
 graphene's AA/AB/BA stacking energies) plus the intralayer linear-elastic
 energy, both taken from Carr, Massatt, Torrisi, Cazeaux, Luskin, Kaxiras,
 [arXiv:1805.06972](https://arxiv.org/abs/1805.06972), Table 1. The
-minimization runs entirely in-plane (no out-of-plane corrugation yet) using
-jax autodiff gradients passed to a scipy L-BFGS-B solver.
+minimization runs entirely in-plane: out-of-plane corrugation is not included.
 
 `GrapheneHamiltonian` builds the actual tight-binding Hamiltonian from a
 (relaxed or rigid) `GrapheneGeometry`, defaulting to the same
 distance-decaying hoppings as `specialhamiltonian.twisted_bilayer_graphene`
--- since those hoppings depend on the true 3D interatomic distance, the
+since those hoppings depend on the true 3D interatomic distance, the
 relaxed positions feed into the electronic structure automatically
 
 ```python
@@ -1846,12 +1753,11 @@ h = GrapheneHamiltonian(g)
 (k,e) = h.get_bands(num_bands=20)
 ```
 
-See `examples/2d/graphene_relax/main.py` for a runnable version comparing
-the rigid and relaxed lattices, and `tests/moire/test_graphene_relax.py`
-for the physical invariants this is checked against (AA is the GSFE
-maximum and AB/BA the degenerate minima; relaxed bond lengths stay
-physical; the local relaxation amplitude grows monotonically as the twist
-angle shrinks).
+AA is the maximum of the stacking-fault energy and AB/BA its degenerate
+minima, so the AA regions shrink and the AB/BA domains grow, by an amount
+that increases as the twist angle decreases. See
+`examples/2d/graphene_relax/main.py` for a runnable version comparing the
+rigid and relaxed lattices.
 
 
 # Topological insulators
@@ -1884,7 +1790,7 @@ C = h.get_chern() # Chern number
 By default the Brillouin-zone integral above is a plain sum over a uniform
 `nk` x `nk` mesh, so its cost grows as `nk^2` and the accuracy is set by how
 finely that mesh resolves the Berry curvature. When the curvature is sharply
-peaked -- near a gap closing, or a nearly-flat band -- the mesh has to be very
+peaked, near a gap closing, or a nearly-flat band, the mesh has to be very
 fine before the answer settles.
 
 `integration="qtci"` instead evaluates the integral by *quantics tensor cross
@@ -1913,15 +1819,11 @@ hscf,e = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro",
         nk=8,maxerror=1e-4,return_total_energy=True,integration="qtci")
 ```
 
-This is backed by `qutecipy`, a pure-Python port of
-`TensorCrossInterpolation.jl` vendored into pyqula at
-`src/pyqula/qutecipytk/` (MIT, no extra install needed). Both entry points are
-checked against their plain counterparts -- the qtci Chern number against the
-analytic value on trivial and topological Haldane models, and the qtci density
-matrix against the full dense one -- in `tests/topology/test_haldane_chern.py`
-and `tests/scf/test_densitydensity_qtci.py`. Runnable versions are in
-`examples/2d/chern_qtci/main.py` and `examples/2d/mean_field_qtci/main.py`.
-Note the density-matrix path currently supports 2D Hamiltonians only.
+The tensor cross interpolation itself is a pure-Python port of
+`TensorCrossInterpolation.jl`, bundled with pyqula, so nothing extra needs
+installing. Runnable versions are in `examples/2d/chern_qtci/main.py` and
+`examples/2d/mean_field_qtci/main.py`. Note the density-matrix path
+supports 2D Hamiltonians only.
 
 
 ### Z2 invariant
@@ -1957,14 +1859,14 @@ part) and Berry curvature $\Omega_{ij}^{mn} = -2\,\mathrm{Im}\,Q_{ij}^{mn}$
 `non_abelian=True` instead returns the full band-pair-resolved
 ("non-Abelian") tensor. Because only states *outside* $S$ enter the energy
 denominators, this stays well defined even when $S$ contains an exactly or
-nearly degenerate multiplet of bands -- e.g. an exactly spin-degenerate
-pair, or several orbitals meeting at a high-symmetry point -- which an
+nearly degenerate multiplet of bands, e.g. an exactly spin-degenerate
+pair, or several orbitals meeting at a high-symmetry point, which an
 ordinary single-band Kubo formula cannot handle; this is what makes it
 suitable for genuinely multiorbital/multiband tight-binding models, not
 just single isolated bands. `dH/dk_i` is evaluated with pyqula's exact
 analytic multicell k-derivative (no finite-difference error), with $k$ in
 the same reduced (dimensionless, period-1) coordinates as the rest of
-pyqula's k-space code (e.g. `topology.berry_curvature`) -- not Cartesian
+pyqula's k-space code (e.g. `topology.berry_curvature`), not Cartesian
 k, so the quantum metric's absolute scale is reciprocal-lattice-dependent
 if you convert to Cartesian coordinates yourself. `occ_idxs` defaults to
 the bands with $E<0$, the same convention `h.get_chern()` uses, so it
@@ -1985,14 +1887,13 @@ g_metric = h.get_quantum_metric(k=[0.1,0.2,0.],occ_idxs=[0,1]) # quantum metric 
 Qna = topology.quantum_geometric_tensor(h,k=[0.1,0.2,0.],occ_idxs=[0,1],
         non_abelian=True)
 
-# along a k-path, and integrated over the BZ (cross-checked against
-# the independent Wilson-loop h.get_chern() in tests/topology/test_quantum_geometric_tensor.py)
+# along a k-path, and integrated over the BZ: the integral of the Berry
+# curvature part reproduces h.get_chern()
 inds,gpath,omegapath = topology.quantum_geometric_tensor_path(h,occ_idxs=[0,1])
 C = topology.chern_from_qgt(h,nk=20,occ_idxs=[0,1])
 ```
 
-See `examples/2d/quantum_geometric_tensor/main.py` for a runnable version,
-and `src/pyqula/topologytk/qgt.py` for the implementation and references.
+See `examples/2d/quantum_geometric_tensor/main.py` for a runnable version.
 There is also an older, unrelated Green's-function/Kubo estimator of the
 whole-occupied-manifold quantum geometry trace (not band- or
 band-pair-resolved), `pyqula.topologytk.quantumgeometry.get_QG_kpath`, see
@@ -2019,7 +1920,7 @@ h.add_haldane(0.05) # Add Haldane coupling
 (es,cs,csi) = topology.chern_density(h,nk=10,es=np.linspace(-1.0,1.0,40))
 ```
 
-`es` are the energies, `cs` the Berry-curvature density at each energy, and `csi` its cumulative integral. In the gap, `csi` should plateau at a value related to the total Chern number of the occupied bands, but this Green's-function-based estimator is numerically delicate (it involves a finite-difference k-derivative, so it needs a fine enough `nk`/`dk` and a large enough `delta` to avoid spurious peaks near quasi-degenerate k-points) and its overall sign/normalization is not guaranteed to match `h.get_chern()` -- treat it as a qualitative frequency-resolved profile and cross-check any quantitative reading against `h.get_chern()`. The k-resolved counterpart at a single energy, $\Xi(\mathbf k,\omega)$ over a full k-mesh, can be obtained with `topology.dOmega_dE_kmap(h,nk=40)`, which writes the map to `BERRY_DENSITY_KMAP.OUT`. See `examples/2d/berry_density_kmap/main.py` for a runnable version.
+`es` are the energies, `cs` the Berry-curvature density at each energy, and `csi` its cumulative integral. In the gap, `csi` should plateau at a value related to the total Chern number of the occupied bands. This estimator is numerically delicate: it needs a fine enough `nk` and a large enough `delta` to avoid spurious peaks near near-degenerate k-points, and its overall sign and normalization are not guaranteed to match `h.get_chern()`. Read it as a qualitative profile in frequency, and check any number it gives against `h.get_chern()`. The k-resolved counterpart at a single energy, $\Xi(\mathbf k,\omega)$ over a full k-mesh, can be obtained with `topology.dOmega_dE_kmap(h,nk=40)`, which writes the map to `BERRY_DENSITY_KMAP.OUT`. See `examples/2d/berry_density_kmap/main.py` for a runnable version.
 
 ## Berry curvature density in real-space
 
@@ -2054,7 +1955,7 @@ $$
 
 where $C$ is the total Chern number of the occupiad bands and $F (\mathbf r)$
 is the spatially-resolved Chern number. Note that this object is meaningful for periodic
-systems with very large unit cells. $F(\mathbf r)$ is the local marker computed by `topology.real_space_chern`; because it is built from a commutator $C = P X P Y P - P Y P X P$, its trace over the *entire* finite sample is exactly zero by construction, so summing it over every site is not how the invariant is recovered. Instead, deep in the interior of a large enough island -- away from the boundary, where the local environment looks like the infinite periodic bulk -- the marker plateaus at (approximately) the quantized bulk Chern number, while the edge sites carry compensating opposite-sign weight that cancels the bulk contribution exactly. This exact real-space cancellation is itself a manifestation of the bulk-boundary correspondence
+systems with very large unit cells. $F(\mathbf r)$ is the local marker computed by `topology.real_space_chern`. Its sum over the whole finite sample is exactly zero, so summing over every site is not how the invariant is recovered. Instead, deep inside a large enough island, where the local environment already looks like the infinite bulk, the marker plateaus at the quantized bulk Chern number. The edge sites carry the opposite weight that cancels it. This exact real-space cancellation is itself a manifestation of the bulk-boundary correspondence
 
 ```python
 from pyqula import islands
@@ -2089,8 +1990,8 @@ The real-space Berry curvature/Chern marker of the two sections above is an exam
 
 ## Entanglement entropy and entanglement spectrum
 
-For a Slater determinant -- any non-interacting or mean-field ground state
--- the reduced density matrix of a spatial region $A$ is itself the
+For a Slater determinant, which is what any non-interacting or mean-field
+ground state is, the reduced density matrix of a spatial region $A$ is the
 exponential of a free-fermion operator, so it is completely fixed by the
 one-particle correlations inside $A$. Diagonalizing the restricted
 correlation matrix $C_{ij} = \langle c_i^\dagger c_j\rangle$ ($i,j \in A$)
@@ -2112,7 +2013,7 @@ on positions (the same convention as `sculpt`), or simply a fraction of the
 cells; spin, sublattice and Nambu components are treated as extra orbitals
 of a site, so a region is always specified in terms of *sites*. A periodic
 Hamiltonian is first folded into a ring of `nsuper` unit cells, so region
-$A$ has **two** entanglement boundaries rather than one -- worth keeping in
+$A$ has **two** entanglement boundaries rather than one, worth keeping in
 mind when comparing against single-cut results in the literature.
 
 The entanglement spectrum is where this becomes a topological probe. For a
@@ -2122,7 +2023,7 @@ number, and $\xi_n(k_\parallel)$ is the Li-Haldane entanglement spectrum
 mid-gap branches flow across $\xi=0$ and count $2|C|$ ($|C|$ chiral modes
 per boundary, two boundaries), mirroring the model's edge spectrum, while a
 trivial insulator's entanglement spectrum stays gapped. This is entirely a
-bulk ground-state calculation -- no ribbon and no open boundary is ever
+bulk ground-state calculation. No ribbon and no open boundary is ever
 constructed.
 
 ```python
@@ -2143,12 +2044,11 @@ Nambu/BdG Hamiltonians are handled with the full anomalous correlation
 matrix, whose basis doubling is divided out. Occupation is a hard $T=0$
 cut, and a level sitting exactly at the Fermi energy raises rather than
 silently returning the entropy of an arbitrarily chosen determinant.
-`tests/entanglement/` pins the absolute normalization against the $c=1$ CFT
-law $S = (c/3)\ln[(L/\pi)\sin(\pi l/L)]$ of a critical chain, the area law
-of a gapped 2d insulator, and the Li-Haldane counting against pyqula's own
-`h.get_chern()`. See `examples/1d/entanglement_entropy_chain/main.py` and
-`examples/2d/entanglement_spectrum_haldane/main.py` for runnable versions,
-and `src/pyqula/entanglement.py` for the implementation and references.
+The normalization is the standard one, so a critical chain reproduces the
+$c=1$ conformal-field-theory law $S = (c/3)\ln[(L/\pi)\sin(\pi l/L)]$, a
+gapped 2d insulator obeys the area law, and the Li-Haldane counting matches
+the Chern number. See `examples/1d/entanglement_entropy_chain/main.py` and
+`examples/2d/entanglement_spectrum_haldane/main.py` for runnable versions.
 
 
 # Response functions
@@ -2171,7 +2071,7 @@ following the Wannier90/`postw90` convention (Yates, Wang, Vanderbilt &
 Souza, PRB **75**, 195121 (2007)). The full complex tensor is returned, so
 $\mathrm{Re}\,\sigma_{xx}$ is the optical absorption, $\sigma_{xy}$ the
 magneto-optical (Kerr/Faraday) response, and the $\omega \to 0$ limit of
-$\sigma_{xy}$ the anomalous Hall conductivity -- quantized to $-C\,e^2/h$ for
+$\sigma_{xy}$ the anomalous Hall conductivity, quantized to $-C\,e^2/h$ for
 a Chern insulator. The intraband (Drude) channel comes from the degenerate
 limit $(f_n-f_m)/(E_m-E_n) \to -\partial f/\partial E$ of the same sum,
 which also protects the formula against $0/0$ on spin-degenerate
@@ -2205,7 +2105,7 @@ print("sigma_xy(0) in e^2/h:",2.*np.pi*s0[0,0,1].real) # -1
 A note on the velocity operator, which matters for any multi-site unit
 cell: pyqula builds $H(\mathbf k)$ in the *lattice* gauge, whose Bloch
 phase carries only the lattice vector $\mathbf R$, so $dH/dk$ alone
-silently drops every *intracell* bond -- on the honeycomb lattice (one of
+silently drops every *intracell* bond. On the honeycomb lattice (one of
 the three nearest-neighbour bonds is intracell) that visibly breaks C3
 symmetry. The velocity used here is therefore the Peierls current operator
 built from the full bond vector $\mathbf d_{ij} = \mathbf R + \mathbf r_j -
@@ -2214,8 +2114,7 @@ built from the full bond vector $\mathbf d_{ij} = \mathbf R + \mathbf r_j -
 and graphene reproduces its universal $\pi e^2/4h$. Superconducting (Nambu)
 and 3d Hamiltonians raise `NotImplementedError`. See
 `examples/2d/optical_conductivity/main.py` and
-`examples/1d/optical_conductivity_chain/main.py`, and
-`src/pyqula/conductivity.py` for the implementation and references.
+`examples/1d/optical_conductivity_chain/main.py`.
 
 ## Charge-charge response function
 
@@ -2289,7 +2188,7 @@ By default `A=B=`identity, which recovers the charge-charge response above. Any 
 
 ## RKKY response function
 
-The RKKY (Ruderman-Kittel-Kasuya-Yosida) interaction between two magnetic impurities is the effective exchange coupling mediated by the itinerant electrons, and can be obtained from the same non-interacting response-function machinery. `rkky.rkky_map` computes it between a reference site and every other site in the system, as a function of distance
+The RKKY (Ruderman-Kittel-Kasuya-Yosida) interaction between two magnetic impurities is the effective exchange coupling mediated by the itinerant electrons, and follows from the same non-interacting response function. `rkky.rkky_map` computes it between a reference site and every other site in the system, as a function of distance
 
 ```python
 from pyqula import geometry
@@ -2301,7 +2200,7 @@ m = rkky.rkky_map(h,n=10,mode="LR",nk=200) # linear-response RKKY vs distance
 ```
 
 Optional arguments
-- mode: `"LR"` (linear-response theory, using the same machinery as `get_chi`) or `"pm"` ("poor man's", computed by explicitly adding a small magnetic perturbation at each site and evaluating the total energy change)
+- mode: `"LR"` for linear response, the same response function `get_chi` uses, or `"pm"` ("poor man's"), which adds a small magnetic perturbation at each site and measures the change in total energy
 - n: how many neighboring cells/distances to compute
 - nk: number of k-points used in the Brillouin-zone integration
 
@@ -2341,36 +2240,23 @@ qdisp = hmf2.get_qdos_iets(energies=np.linspace(0.,2.,60),qpath=["G","K","M"],nq
 
 - `h.get_iets_ldos` instead computes the spatially resolved response at a single energy, i.e. a real-space map of the spin-flip ("inelastic tunneling spectroscopy", IETS) signal, which combined with `h.get_ldos` gives elastic + inelastic STM-like maps
 
-Both snippets depend on the mean-field state actually being ordered, which is worth checking with `hmf.get_vev("sz")` before reading anything into the excitation spectrum: an RPA calculation on top of an unpolarized reference state runs perfectly happily and tells you nothing about magnons. Two things decide it. The unit cell must be able to hold the order -- a one-site `geometry.chain()` cell cannot represent Neel order at all, and seeding it with `mf="antiferro"` converges to exactly zero moment; `bichain` and `honeycomb_lattice` both have the two sublattices. And `U` must be past the ordering transition: on honeycomb at half filling `U=2` gives a moment of 0.002 (i.e. none) while `U=3` gives 0.44. Note also that `get_qdos_iets`'s cost is the product of its `nq`, `nk` and energy-grid sizes, so it grows quickly -- the grid above takes well under a minute, while a 80x40x100 one is closer to an hour.
+Both snippets depend on the mean-field state actually being ordered, which is worth checking with `hmf.get_vev("sz")` before reading anything into the excitation spectrum: an RPA calculation on top of an unpolarized reference state runs perfectly happily and tells you nothing about magnons. Two things decide it. The unit cell must be able to hold the order, a one-site `geometry.chain()` cell cannot represent Neel order at all, and seeding it with `mf="antiferro"` converges to exactly zero moment; `bichain` and `honeycomb_lattice` both have the two sublattices. And `U` must be past the ordering transition: on honeycomb at half filling `U=2` gives a moment of 0.002 (i.e. none) while `U=3` gives 0.44. Note also that `get_qdos_iets`'s cost is the product of its `nq`, `nk` and energy-grid sizes, so it grows quickly, the grid above takes well under a minute, while a 80x40x100 one is closer to an hour.
 
 See `examples/1d/rpa/main.py` (RPA spin response vs q for an antiferromagnetic chain), `examples/2d/rpa_triangular/main.py`/`examples/2d/rpa_honeycomb/main.py` (`get_qdos_iets` dispersion along a q-path) and `examples/0d/rpa_island/main.py`/`examples/0d/rpa_finite_chain/main.py` (`get_iets_ldos` real-space IETS maps) for runnable versions.
 
 #### Running the response on a GPU
 
-Every one of these RPA entry points -- `get_spinchi_ladder`, `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles`, `get_magnon_bands(method="rpa")` and the density-channel `get_densitychi_RPA` -- bottoms out in the same Lindhard kernel, a sum over pairs of eigenstates at every k-point of the mesh. Its cost is $36N^4 n_\omega$ complex multiply-adds *per k-point* for the full $(S_x,S_y,S_z)$ response of an $N$-site cell, so it is what decides whether a large unit cell is feasible at all: measured on one workstation core, one k-point takes 0.035 s at $N=10$ and 5.9 s at $N=40$, and the $N^4$ scaling puts $N=100$ at roughly four minutes *per k-point*.
+All of these RPA functions, `get_spinchi_ladder`,
+`get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles`,
+`get_magnon_bands(method="rpa")` and the density-channel
+`get_densitychi_RPA`. Bottoms out in the same Lindhard kernel, a sum over
+pairs of eigenstates at every k-point of the mesh. Its cost is
+$36N^4 n_\omega$ complex multiply-adds *per k-point* for the full
+$(S_x,S_y,S_z)$ response of an $N$-site cell, which is what decides whether a
+large unit cell is feasible at all. Passing `chi_cpugpu="GPU"` to any of them
+runs that kernel on a GPU instead, which is worth it once the cell holds more
+than a few sites.
 
-That kernel can be dispatched to a GPU through [jax](https://github.com/jax-ml/jax) instead of numba, with `chi_cpugpu="GPU"`, forwarded down from any of those entry points:
-
-```python
-import numpy as np
-from pyqula import geometry
-g = geometry.bichain() # two sites per cell, so Neel order fits in the cell
-h = g.get_hamiltonian(has_spin=True)
-seed = h.copy() ; seed.add_antiferromagnetism(0.5) # symmetry-breaking seed
-hmf = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf=seed,nk=100)
-es,chis = hmf.get_spinchi_full(q=[0.2,0.,0.],nk=8,
-            energies=np.linspace(0.01,1.0,100),delta=1e-2,
-            chi_cpugpu="GPU") # dispatch the Lindhard kernel to a GPU
-qs,ws,gammas = hmf.get_magnon_bands(method="rpa",nq=20,nk=8,
-            energies=np.linspace(0.01,2.0,200),delta=1e-2,
-            chi_cpugpu="GPU")
-```
-
-The device path is exact, not an approximation: it rewrites the four-fold loop as one matrix multiplication per frequency over the electron-hole pairs that survive the occupation cutoff, and agrees with the numba kernel to the last bits of complex128. Like `kpm_cpugpu`, it transparently falls back to jax's own CPU backend when no GPU is visible, so it is always safe to pass -- but on such a machine it is a jax-CPU calculation and not a fast one, and the whole point of the switch is FP64 throughput, so do not read a speedup into it that was not measured on a device.
-
-Two behaviours worth knowing. The switch refuses rather than silently falling back: `mode="trace"`/`"diagonal"` (`h.get_chiAB_trace`) and `imode="adaptive"` use different kernels that are not ported, and asking for them together with `chi_cpugpu="GPU"` raises. And a q-scan (`get_magnon_bands`, `get_qdos_iets`) that normally spreads its q-points over `parallel.pcall`'s worker processes runs the loop in a single process under `chi_cpugpu="GPU"`, since several processes sharing one device is contention rather than parallelism.
-
-Measured on a Tesla V100 (complex128, one BLAS-pinned CPU core as the baseline, `nk=4`, `n_\omega=40`), the crossover sits at about $N=7$: below it the CPU kernel wins, and above it the device pulls away as the CPU side grows like $N^4$ while the device time stays nearly flat -- 13x at $N=12$, 207x at $N=32$, and 833x at $N=64$, with the two backends agreeing to $10^{-16}$ relative throughout. `benchmarks/cases/rpa_spin_response.py` reproduces that sweep on any machine, and `future_development/gpu_rpa_spin_response.md` records the full measurements and what is still open.
 
 ### RPA kernel poles and magnon bands
 
@@ -2390,7 +2276,7 @@ poles = hmf.get_rpa_kernel_poles(V=V,q=[0.1,0.,0.],
 ```
 
 Two things there are easy to get wrong. The mean field needs a unit cell that
-can *hold* the order being sought -- a one-site `geometry.chain()` cell cannot
+can *hold* the order being sought, a one-site `geometry.chain()` cell cannot
 represent Neel order at all, so seeding antiferromagnetism on it is
 meaningless; `bichain` gives the two sublattices, and the converged state has
 `hmf.get_vev("sz")` equal and opposite on them. And `V` must live in the same
@@ -2400,19 +2286,19 @@ is the mean-field interaction in spin-orbital space (`2N`x`2N`) and raises a
 dimension error here. For the spin channel use `get_magnon_bands` below, which
 builds the $S_x,S_y,S_z$ vertex from `hmf.V` itself.
 
-`poles` is an `(npoles,2)` array, one row per collective mode found: the pole frequency and its residual imaginary part. The latter is signed (it is the kernel eigenvalue's actual imaginary part at the crossing, which can lie on either side of the real axis) -- judge how sharp/well-defined a mode is by its *magnitude*: small `abs(gamma)` means a sharp mode, large `abs(gamma)` means it is heavily damped or the crossing is numerical noise.
+`poles` is an `(npoles,2)` array, one row per collective mode found: the pole frequency and its residual imaginary part. The latter is signed (it is the kernel eigenvalue's actual imaginary part at the crossing, which can lie on either side of the real axis). Judge how sharp/well-defined a mode is by its *magnitude*: small `abs(gamma)` means a sharp mode, large `abs(gamma)` means it is heavily damped or the crossing is numerical noise.
 
-`h.get_magnon_bands` specializes this to the full spin channel used by `get_spinchi_full`/`get_iets_ldos` (the $S_x,S_y,S_z$ tensor, with `U` taken automatically from the mean-field `h.V`, same convention as `get_spinchi_full`) and scans it along a q-path, directly giving the magnon dispersion of a magnetically ordered mean-field state:
+`h.get_magnon_bands` does this in the full $S_x,S_y,S_z$ spin channel, taking the interaction from the converged mean field, and scans along a q-path. The result is the magnon dispersion of a magnetically ordered state:
 
 ```python
 qs,ws,gammas = hmf.get_magnon_bands(nq=40,energies=np.linspace(0.01,3.,200),delta=2e-2,nk=40)
 ```
 
-Since different q-points can have a different number of poles, `qs`,`ws`,`gammas` are flat 1D arrays of equal length ready for a scatter-style dispersion plot -- `qs` holds the integer index of the q-point along the path (the same convention `get_bands` uses for its k-axis), `ws` the pole frequency and `gammas` its (signed) residual imaginary part, so filtering `np.abs(gammas) < threshold` keeps only the sharp, well-defined branches. See `examples/1d/magnon_bands/main.py` for a runnable version (an antiferromagnetic Hubbard chain, showing both its acoustic and optical magnon branches).
+Different q-points can have different numbers of poles, so `qs`, `ws` and `gammas` come back as flat arrays of equal length, ready for a scatter plot. `qs` is the index of the q-point along the path, the same convention `get_bands` uses; `ws` is the pole frequency and `gammas` its residual imaginary part. Filtering on `np.abs(gammas) < threshold` keeps only the sharp branches. See `examples/1d/magnon_bands/main.py` for a runnable version (an antiferromagnetic Hubbard chain, showing both its acoustic and optical magnon branches).
 
 ### Interactions beyond onsite
 
-The `V` passed to `get_rpa_kernel_poles` is not restricted to a single onsite matrix: it can also be a real-space hopping-like dictionary `{(n1,n2,n3): matrix}`, keyed by lattice-vector offset in the same convention as `h.get_hopping_dict()`, for an interaction with support beyond the same unit cell. It is Fourier-transformed to $V(q)$ at whatever `q` the response is evaluated at, using the same Bloch-phase convention as the Hamiltonian's own hoppings -- an extended interaction is dressed exactly like an extended hopping. For a nearest-neighbor $V_1$ on a chain this gives the expected $V(q)=2V_1\cos{2\pi q}$, so the interaction is repulsive at $q=0$ and attractive at the zone boundary:
+The `V` passed to `get_rpa_kernel_poles` is not restricted to a single onsite matrix: it can also be a real-space hopping-like dictionary `{(n1,n2,n3): matrix}`, keyed by lattice-vector offset in the same convention as `h.get_hopping_dict()`, for an interaction with support beyond the same unit cell. It is Fourier-transformed to $V(q)$ at whatever `q` the response is evaluated at, using the same Bloch-phase convention as the Hamiltonian's own hoppings, an extended interaction is dressed exactly like an extended hopping. For a nearest-neighbor $V_1$ on a chain this gives the expected $V(q)=2V_1\cos{2\pi q}$, so the interaction is repulsive at $q=0$ and attractive at the zone boundary:
 
 ```python
 import numpy as np
@@ -2430,11 +2316,11 @@ Note the channel: `get_rpa_kernel_poles` dresses the **charge** response by defa
 
 In the **spin** channel the two kinds of non-onsite interaction behave very differently, and only one of them works here.
 
-A neighbor-shell **exchange** interaction (`J1`/`J2`/`J3`/`Jr`, isotropic or anisotropic) **does** work. That is worth spelling out because it used to be refused. The mean field for one is not Ising-like at all: `VJinteraction` builds all three channel matrices and decouples the $x$ and $y$ ones by rotating the density matrix into the frame where that axis is the computational $z$, so the converged state is a genuinely SU(2)-symmetric Hartree-Fock one. What was missing was only a vertex to match it, because `h.V` is a single matrix and an isotropic $J_1$ and an anisotropic $J_{1z}$ leave exactly the same one in it. The SCF now also records the three channels separately in `h.Vchannels`, the vertex is built per channel, and the two cases are both correct and distinguishable. The check is the Goldstone theorem: on a `J1=3` honeycomb Neel state the RPA kernel's smallest eigenvalue at $q=0,\omega=0$ is 4.3e-10, while the same kernel at finite $q$ (0.10) and on a non-magnetic reference (0.50) is order one.
+A neighbor-shell **exchange** interaction (`J1`/`J2`/`J3`/`Jr`, isotropic or anisotropic) **does** work. Such a mean field is not Ising-like: all three spin channels are decoupled, so the converged state is genuinely SU(2) symmetric, and the RPA vertex is built channel by channel to match. The Goldstone mode survives, as it must for a magnet with no spin-orbit coupling.
 
-A neighbor-shell **density-density** interaction is still refused, and this one is about representation rather than bookkeeping. The vertex here is site-separable, `chi(1-V chi)^{-1}` with one index per site, while the rung an extended $V_{ij}$ contributes to the spin response is its Fock term acting on the electron-hole *pair* index. There is nowhere to put it: the extraction that builds the vertex maps a spin-independent $V_{ij}$ to exactly zero. Whether that matters depends on the converged state rather than on the interaction, which is precisely why it is refused rather than decided for you -- on a Neel state $V_1$'s Fock term renormalizes the hopping spin-*in*dependently (the two sublattices swap under a spin flip), never enters the exchange splitting, and the Goldstone mode survives (3.0e-9 at `U=3, V1=0.5`); on a ferromagnetic chain ordered by $V_1$ alone the vertex is identically zero, the kernel is the identity, and its smallest eigenvalue is 1.0 where the Goldstone theorem demands 0 -- no magnon of any kind.
+A neighbor-shell **density-density** interaction is refused in this channel. An extended $V_{ij}$ enters the spin response through a Fock term that acts on the electron-hole *pair* index, and a vertex with one index per site has nowhere to put it. Whether that omission matters depends on the state: on a Neel state the $V_1$ Fock term is spin independent, never enters the exchange splitting, and the Goldstone mode survives; on a ferromagnetic chain ordered by $V_1$ alone the vertex vanishes entirely and no magnon comes out at all. Since that depends on the converged state rather than on the interaction, the case is refused rather than decided for you.
 
-For that case there are two routes that are right by construction rather than by a cancellation you would have to check state by state -- `method="pair"` and `method="tdhf"`, both below. A hand-built `h.V` (one not produced by an SCF, so with no `h.Vchannels` alongside it) is also refused, for the same reason the old gate existed: nothing says which interaction it came from. To use one anyway, build the vertex explicitly and call `chitk.rpa.rpa_kernel_poles_ops`/`chi_ops_RPA` directly, bypassing `h.V` -- `tests/chi/test_rpa_nononsite_interaction.py` and `tests/scf/test_rpa_nononsite_ferro_chain.py` do exactly that, and are worked examples of the low-filling ferromagnetic (Stoner) instability a nearest-neighbor exchange drives on a chain.
+Use `method="pair"` or `method="tdhf"` instead, both below. A hand-built `h.V`, one not produced by a self-consistent calculation, is also refused, since nothing records which interaction it came from.
 
 ### The three magnon routes
 
@@ -2449,9 +2335,15 @@ For that case there are two routes that are right by construction rather than by
 | non-collinear (canted, spiral) state | yes | yes | yes |
 | frequency-resolved $\chi(\omega)$ | yes | yes | no (an eigenproblem) |
 
-The reason the middle row splits is a matter of which index the ladder rung is diagonal in. Writing $H_{int} = \tfrac12\sum V_{ij} n_i n_j$, the transverse rung is $K_{(ij),(kl)} = -V_{ij}\delta_{ik}\delta_{jl}$ -- diagonal in the **pair** index $(i,j)$, not the site index. An onsite $U$ collapses that onto the pairs with $i=j$, which is exactly what the site basis of `method="rpa"` holds, and that collapse is why it is exact there. An extended $V_{ij}$ lives in the pairs with $i\ne j$, which that basis does not have.
+The middle row splits because of which index the interaction is diagonal in.
+Writing $H_{int} = \tfrac12\sum V_{ij} n_i n_j$, the transverse rung is
+$K_{(ij),(kl)} = -V_{ij}\delta_{ik}\delta_{jl}$, diagonal in the pair index
+$(i,j)$ rather than in the site index. An onsite $U$ collapses this onto the
+pairs with $i=j$, which is exactly what `method="rpa"` works with, and that is
+why it is exact there. An extended $V_{ij}$ lives in the pairs with $i\ne j$,
+which that basis simply does not contain.
 
-`method="pair"` (`chitk/pairchi.py`) keeps the pair index and solves the same ladder there, $\chi = \chi_0(1+V\chi_0)^{-1}$ with $V$ diagonal. The cost is set by how many pairs the interaction has rather than by $N^2$ -- only pairs in its support enter the inversion, so a short-ranged $V$ gives $N(z+1)$, linear in $N$ and eight pairs for a honeycomb cell with a nearest-neighbour $V$. It keeps the frequency scan, needs no gap, and assumes nothing about the spin structure of the state:
+`method="pair"` solves the same ladder in the pair index, where $V$ is diagonal. Only the pairs the interaction actually connects enter, so a short-ranged $V$ costs $N(z+1)$ rather than $N^2$. It keeps the frequency scan, needs no gap, and assumes nothing about the spin structure of the state:
 
 ```python
 import numpy as np
@@ -2467,15 +2359,15 @@ es,chi = hmf.get_transverse_spinchi(energies=np.linspace(0.,2.,100),
                     q=[0.1,0.,0.],delta=1e-2,nk=nk)   # (Sx,Sy,Sz) x site chi(w)
 ```
 
-Two terms make up the kernel, and which of them can be dropped is a good illustration of what the Goldstone residual actually tests. Differentiating the Hartree-Fock Hamiltonian gives an *exchange* rung $W_{ab}$, diagonal in the pair index, and a *Hartree* rung $-W_{ac}(q)$ between diagonal pairs. Restricted to one spin-flip sector every pair has $a\ne b$, the Hartree rung drops out, and a transverse-only ladder is complete -- but only for a state with a global spin quantization axis. For a non-collinear mean field the two sectors mix, dropping the Hartree rung breaks the SU(2) Ward identity, and the acoustic branch comes out gapped by 0.41 on a 120-degree triangular spiral, independent of the broadening. That is not a contradiction of the Goldstone theorem: the theorem constrains the *exact* response, and an approximation inherits it only if it is conserving. Keeping both rungs, in a basis of spin-orbital pairs that assumes no axis at all, makes the truncation conserving again -- the same spiral then gives 9.4e-12 at `delta=1e-5`, proportional to $\delta^2$ and limited by nothing else.
+The kernel has two terms, an exchange one and a Hartree one. For a state with a single spin quantization axis the Hartree term drops out of the transverse response, and keeping only the exchange term is exact. For a non-collinear state the two spin sectors mix, dropping the Hartree term breaks SU(2), and the acoustic branch comes out spuriously gapped. Both terms are therefore kept, which keeps the Goldstone mode in place for a canted or spiral state as well.
 
-The last row is why `"tdhf"` still exists: it returns magnon energies as eigenvalues, with no frequency grid and no broadening, which is what the Goldstone residual is measured on. The three agree wherever more than one applies -- the acoustic magnon of a Néel honeycomb at $q=0.1$ is 0.49165 from all of them, and 0.59492 from `"pair"` and `"tdhf"` once a $V_1$ is added. In a metal, `"pair"` reproduces the closed-form saturated-ferromagnet dispersion to five decimals (0.00173, 0.01291, 0.07756 at $q=0.02,0.05,0.1$), as does `"tdhf"`.
+The last row is what `"tdhf"` is for: it gives the magnon energies as eigenvalues, with no frequency grid and no broadening, which is what the Goldstone residual is measured on. The three methods agree wherever more than one of them applies, and in a metal `"pair"` and `"tdhf"` both reproduce the exact saturated-ferromagnet dispersion.
 
-Exchange goes the other way: its transverse rung $J/2(S^+_iS^-_j+\mathrm{h.c.})$ is a spin-flip two-body term with no density-density representation at all, so neither `"pair"` nor `"tdhf"` can carry it, while `"rpa"` handles it through the mean field's own three spin channels. For an isotropic $J$, use `"rpa"`.
+Exchange goes the other way. Its transverse part $J/2(S^+_iS^-_j+\mathrm{h.c.})$ has no density-density form at all, so neither `"pair"` nor `"tdhf"` can carry it, while `"rpa"` handles it through the mean field's own three spin channels. For an isotropic $J$, use `"rpa"`.
 
 ### Magnons from time-dependent Hartree-Fock
 
-A magnon is the same kind of object as an exciton -- a bound two-particle excitation of a mean-field state -- built from electron-hole pairs whose electron and hole have *opposite* spin instead of the same spin. So the Bethe-Salpeter machinery of the exciton sections below already contains it, and restricting its pair basis to that spin-flip block is what `method="tdhf"` does. This is the route that handles a neighbor-shell interaction properly, because the pair index is exactly where the missing rung lives:
+A magnon is the same kind of object as an exciton: a bound two-particle excitation of a mean-field state, made of electron-hole pairs whose electron and hole have *opposite* spin rather than the same spin. So the Bethe-Salpeter equation of the exciton sections below already describes it, and `method="tdhf"` is that equation restricted to the spin-flip pairs. Because it works in the pair index, it carries a neighbor-shell interaction properly:
 
 ```python
 import numpy as np
@@ -2492,25 +2384,23 @@ qs,es = hmf.get_magnon_bands(method="tdhf",nk=nk,nq=20,n=2)
 
 `qs`,`es` are flat 1D arrays in the same convention as the RPA `get_magnon_bands` above (`qs` is the integer index along the q-path), and `es` is complex whenever the mean-field state is unstable against some excitation. `h.get_magnon_energies(Q=...)` gives the spectrum at a single momentum.
 
-The test that this is right is the **Goldstone theorem**: a state that orders magnetically without spin-orbit coupling breaks SU(2) spontaneously, so a uniform spin rotation costs nothing and there must be a magnon at exactly zero energy at $Q=0$. `h.get_goldstone_residual()` measures how far the calculation is from that, as $\|Mv\|$ with $v$ the spin generator written in the pair basis. It comes out proportional to the SCF tolerance the mean field was converged to and to nothing else -- 1.8e-6, 1.8e-8, 1.8e-10 at `maxerror` 1e-6, 1e-8, 1e-10 -- which is what makes it worth checking before reading any dispersion. Note it is deliberately not "the eigenvalue nearest zero": that eigenvalue is defective, so it only converges as the *square root* of the same error (4e-5 where the residual is 2e-10), and a small imaginary part of that size on the acoustic branch is the expected signature rather than a problem.
+The check that this is right is the **Goldstone theorem**. A state that orders magnetically without spin-orbit coupling breaks SU(2) spontaneously, so a uniform spin rotation costs no energy and there must be a magnon at exactly zero energy at $Q=0$. `h.get_goldstone_residual()` measures how far the calculation is from that. It comes out proportional to the tolerance the mean field was converged to and to nothing else, roughly $10^{-10}$ for a mean field converged to `maxerror=1e-10`, so it is worth checking before reading any dispersion. It is deliberately not "the eigenvalue nearest zero", which converges much more slowly; a small imaginary part of that size on the acoustic branch is expected rather than a problem.
 
-Three constraints come with it, all of them consequences of that same Ward identity:
+Three things are worth knowing before using it:
 
-- **the mean field and the magnon must use the same `nk`.** A mean field converged at `nk=20` and a magnon solved at `nk=4` is not self-consistent on the magnon's mesh, and the acoustic branch acquires a real gap (measured 0.38, against 1e-5 for matched meshes). Nothing can check this for you -- the mesh the SCF ran on is not recorded on the Hamiltonian -- so `get_goldstone_residual` is how to find out.
-- **a metallic reference needs `metal=True`.** By default the pair basis takes the same number of occupied bands at every k-point, which a metal does not have. Passing `metal=True` decides the occupied and empty sets per k-point instead, so the number of pairs varies across the mesh -- everything downstream already tolerated that. This is what covers an itinerant magnet, and in particular a ferromagnet ordered by a neighbour-shell $V_1$ alone, which neither route could do before. It changes nothing for a gapped reference (bit-identical pair counts and Goldstone residual), so it is safe to leave on when unsure.
+- **the mean field and the magnon must use the same `nk`.** A mean field converged at `nk=20` and a magnon solved at `nk=4` is not self-consistent on the magnon's mesh, and the acoustic branch picks up a large spurious gap. The Hamiltonian does not record the mesh it was converged on, so `get_goldstone_residual` is how to catch this.
+- **a metallic reference needs `metal=True`.** By default the same number of bands is taken as occupied at every k-point, which a metal does not have. `metal=True` decides the occupied and empty sets separately at each k-point instead, which is what an itinerant magnet needs, and in particular a ferromagnet ordered by a neighbour-shell $V_1$ alone. It changes nothing for a gapped reference, so it is safe to leave on when unsure.
 
-  Two things are different once it runs. The magnon is no longer the lowest mode -- it sits inside the Stoner continuum -- so `h.get_magnon_bands(method="tdhf", metal=True, by="weight")` selects branches by how much of the spin generator they carry rather than by energy, and `bsetk.spinflip.magnon_spectrum` returns the energies with those weights. And $E(q)$ is even in $q$ only if the *occupied set* is symmetric under $k\to-k$, which on a finite mesh it need not be: with an even number of occupied points around $k=0$ the $+q$ and $-q$ magnons genuinely differ (0.02413 against 0.00559 at $q=0.05$ on one such mesh). That is not something any method can paper over -- pick the mesh so the occupied set is symmetric.
+  Two things change once it runs. The magnon sits inside the Stoner continuum and is no longer the lowest mode, so `h.get_magnon_bands(method="tdhf", metal=True, by="weight")` picks branches by how much spin character they carry rather than by energy. And $E(q)$ is even in $q$ only if the occupied set is symmetric under $k\to-k$, which a finite mesh need not make it: otherwise the $+q$ and $-q$ magnons genuinely differ. Choose the mesh so the occupied set is symmetric.
+- **the interaction must be a density-density one.** An exchange interaction (`J1`/`J2`/`J3`/`Jr`, or `SzSz`) is refused. Only its Ising part has a density-density form; the transverse part $J/2(S^+_iS^-_j+\mathrm{h.c.})$, which is what makes it isotropic, does not, so this kernel cannot carry it. Solving the Ising part alone would give an ordinary-looking dispersion spuriously gapped by of order $J$. This is a limitation of the kernel and not of the mean field, which is genuinely SU(2) symmetric. **For isotropic exchange, use `method="rpa"`.**
 
-  The metallic case has an exact reference and is checked against it rather than only against a symmetry argument: for a *saturated* ferromagnet the single-magnon sector is a two-body problem, solvable in closed form, and the TDHF magnon reproduces it to five decimals at every $q$ (0.00173, 0.01291, 0.07756 at $q=0.02,0.05,0.1$). With a symmetric occupied set the site-basis RPA agrees with both, to the same five decimals.
-- **the interaction must be a density-density one.** An exchange interaction (`J1`/`J2`/`J3`/`Jr`, or `SzSz`) is refused, because `h.V` holds only its Ising part -- the transverse rung $J/2(S^+_iS^-_j+\mathrm{h.c.})$ that makes it isotropic is a spin-flip two-body term with no density-density representation, so this kernel cannot carry it. Solving the Ising part alone returns an ordinary-looking dispersion gapped by of order $J$ (measured 1.81 at `J1=3`), so it is rejected rather than returned. This is a limitation of the *kernel*, not of the mean field: `VJinteraction` decouples the $x$ and $y$ exchange channels too (by rotating the density matrix into the frame where that axis is the computational $z$), so an isotropic-$J$ mean field is genuinely SU(2) symmetric -- and `method="rpa"`, which rebuilds the $x/y$ vertices by replicating the $z$ one, keeps its Goldstone mode there (measured 4.3e-10). **For isotropic exchange, use `method="rpa"`.** See `future_development/magnons_tdhf.md`.
+For a collinear state only the spin-flip pairs are needed, which is exact and much cheaper, and that is the default. A canted or spiral state has no such block, and the whole pair basis is used instead without your having to ask (`channel="all"` forces it). This covers genuinely non-collinear states such as the 120-degree spiral of the triangular-lattice Hubbard model, whose Goldstone mode survives to the tolerance the mean field was converged to. On a plain onsite Hubbard `U`, where both this and `method="rpa"` are exact, the two agree.
 
-By default the calculation restricts itself to the spin-flip block of the pair basis, which is exact for a collinear state and about eight times cheaper; a non-collinear or tilted state has no such block and the whole basis is kept instead, transparently (`channel="all"` forces that, `channel="spinflip"` refuses instead of falling back). That path is checked on a genuinely non-collinear state too -- the 120-degree spiral of the triangular-lattice Hubbard model, whose Goldstone residual comes out at 2.9e-9 for an SCF converged to 1e-9. Where both routes are valid -- a plain onsite Hubbard `U`, where the site-separable RPA vertex is exact -- they agree: the acoustic magnon of the Neel honeycomb comes out at 0.4917 and 0.9037 at $q=0.1$ and $0.2$ from both, and the two share no code below the Hamiltonian.
-
-See `examples/2d/magnon_bands_tdhf/main.py` for a runnable version and `tests/magnon/` for the Goldstone checks on a Neel antiferromagnet, a $V_1$-dressed one, a tilted one, a 120-degree non-collinear spiral and a saturated ferromagnet, plus that cross-check.
+See `examples/2d/magnon_bands_tdhf/main.py` for a runnable version.
 
 ### Density (charge) response
 
-`h.get_densitychi_RPA` and `h.get_plasmon_bands` are the density-density (charge) channel analogs of `get_spinchi_full`/`get_magnon_bands`, for a `V1`/`V2`/`V3`-neighbor-shell (+ onsite `U`, + a general `Vr(r)`) density-density interaction, same convention as `Vinteraction`/`VJinteraction`. Unlike the spin-channel functions, they take the interaction directly as parameters instead of reading it from `h.V`, so no mean-field convergence is needed first -- they dress the bare susceptibility of whatever Hamiltonian is passed in (which can also be an already-converged one, if the RPA response about that reference state is wanted):
+`h.get_densitychi_RPA` and `h.get_plasmon_bands` are the density-density (charge) channel analogs of `get_spinchi_full`/`get_magnon_bands`, for a `V1`/`V2`/`V3`-neighbor-shell (+ onsite `U`, + a general `Vr(r)`) density-density interaction, same convention as `Vinteraction`/`VJinteraction`. Unlike the spin-channel functions, they take the interaction directly as parameters instead of reading it from `h.V`, so no mean-field convergence is needed first. They dress the bare susceptibility of whatever Hamiltonian is passed in (which can also be an already-converged one, if the RPA response about that reference state is wanted):
 
 ```python
 import numpy as np
@@ -2521,7 +2411,7 @@ qs,ws,gammas = h.get_plasmon_bands(V1=0.6,qpath=[[0.3,0.,0.],[0.4,0.,0.],[0.5,0.
                                     energies=np.linspace(0.,1.,100),delta=2e-2,nk=2000)
 ```
 
-A 1D chain at half filling has perfect Fermi-surface nesting at $q=\pi$, strongly enhancing the static charge susceptibility there -- the charge-channel analog of the low-filling ferromagnetic instability above, driven by a repulsive `V1` instead (see `tests/chi/test_plasmon_bands.py`).
+A 1D chain at half filling has perfect Fermi-surface nesting at $q=\pi$, strongly enhancing the static charge susceptibility there, the charge-channel analog of the low-filling ferromagnetic instability above, driven by a repulsive `V1` instead.
 
 ## Excitons and the Bethe-Salpeter equation
 
@@ -2533,7 +2423,7 @@ $$|X\rangle_Q = \sum_{v,c,k} A_{vc}(k)\, c^\dagger_{c,k+Q} c_{v,k} |MF\rangle$$
 
 and the BSE is the eigenvalue problem for the amplitudes $A_{vc}(k)$, with a kernel made of a *direct* term (the screened electron-hole attraction, which binds) and an *exchange* term (which splits singlet from triplet and, on its own, reproduces the RPA). The formalism is the localized-orbital ("point-like orbitals") BSE of the Xatu code, [arXiv:2307.01572](https://arxiv.org/abs/2307.01572), solved here in its full non-Tamm-Dancoff form.
 
-By default the interaction is read straight off a converged mean-field Hamiltonian (`h.V`), so the same interaction that generated the Fock self-energy inside `h` also generates the BSE kernel and nothing is double counted -- this is time-dependent Hartree-Fock on top of Hartree-Fock:
+By default the interaction is read straight off a converged mean-field Hamiltonian (`h.V`), so the same interaction that generated the Fock self-energy inside `h` also generates the BSE kernel and nothing is double counted. This is time-dependent Hartree-Fock on top of Hartree-Fock:
 
 ```python
 from pyqula import geometry
@@ -2562,17 +2452,19 @@ print(bse.get_energies()[0], bse.get_binding_energies()[0]) # lowest exciton, an
 - `kernel="full"` (default) uses both kernel terms; `"direct"` is the ladder alone (no singlet/triplet splitting), `"exchange"` is exactly the RPA, and `"none"` collapses the spectrum onto the bare transition energies
 - `tda=True` applies the Tamm-Dancoff approximation, diagonalizing only the resonant block: four times smaller and Hermitian, and a good approximation at weak coupling
 
-Since the Hamiltonian is spinful, spin is simply part of the orbital index, so singlet and triplet excitons come out of a single calculation with no separate spin channel -- the exchange term is what splits them. On a spin-rotation-invariant reference the lowest transition starts out four-fold degenerate and the full kernel resolves it into a three-fold triplet with the singlet pushed up above it, which neither kernel term produces on its own (see `tests/bse/test_bse_physics.py`).
+Since the Hamiltonian is spinful, spin is simply part of the orbital index, so singlet and triplet excitons come out of a single calculation with no separate spin channel, the exchange term is what splits them. On a spin-rotation-invariant reference the lowest transition starts out four-fold degenerate and the full kernel resolves it into a three-fold triplet with the singlet pushed up above it, which neither kernel term produces on its own.
 
 One caveat on the default `V=None`: `h.V` does not capture an *anisotropic* exchange run (`J1x`/`J1y` alongside `J1z` store only the z channel), and after `SxSx`/`SySy` it is left in the internally-rotated spin frame while the returned Hamiltonian is rotated back. In either case build the interaction explicitly and pass it as `V=` instead.
 
-The size of the problem is $N_{pair} = n_v n_c N_k$, and the matrix is dense and $2N_{pair}$ square, so the k-mesh is the expensive knob: `max_memory` (default 2 GB) refuses a calculation that would not fit rather than letting it exhaust memory. A gapped reference state is required -- a metallic filling has no well-defined electron-hole pair basis and is rejected, as are Nambu/BdG Hamiltonians, whose two-particle structure is different.
+The size of the problem is $N_{pair} = n_v n_c N_k$, and the matrix is dense and $2N_{pair}$ square, so the k-mesh is the expensive knob: `max_memory` (default 2 GB) refuses a calculation that would not fit rather than letting it exhaust memory. A gapped reference state is required. A metallic filling has no well-defined electron-hole pair basis and is rejected, as are Nambu/BdG Hamiltonians, whose two-particle structure is different.
 
-### Large k-meshes: solving the BSE without its matrix
+### Large k-meshes
 
-The size of the problem is the reason the previous paragraph exists, and the k-mesh is exactly the knob that decides whether an exciton is converged at all. A tightly bound exciton is broad in the Brillouin zone and converges on a coarse mesh; a shallow Wannier-Mott one, whose envelope $A(k)$ is sharply peaked, does not, and that is the case the dense solver cannot reach.
-
-It does not have to be reached with a matrix. Because a real-space interaction Fourier transforms as $W_{ab}(k-k') = \sum_d W_{ab}(d)\,e^{2\pi i k\cdot d}\,e^{-2\pi i k'\cdot d}$, the direct term of the kernel separates exactly into one rank-one term per non-zero entry $(a,b,d)$ of that interaction -- a *fixed* number, set by how far the interaction reaches and not by the mesh. The exchange term is already a product of density form factors. So the whole resonant block is a diagonal plus a fixed-rank correction, and can be applied to a vector without being built. `solver=` chooses what to do with that:
+How fine a k-mesh an exciton needs is set by how tightly it is bound. A
+strongly bound exciton is spread out over the Brillouin zone and is already
+converged on a coarse mesh. A weakly bound Wannier-Mott one has an envelope
+$A(k)$ peaked sharply at the band edge, and only a fine mesh resolves that
+peak. `solver=` says how to reach one:
 
 ```python
 import numpy as np
@@ -2582,37 +2474,40 @@ g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian()
 h.add_sublattice_imbalance(1.0) # a gapped semiconductor
 W = density_interaction(h,Vr=lambda r1,r2: 0.8/np.sqrt((r1-r2).dot(r1-r2)+0.25))
-h.get_bse(V=W,nk=1024,tda=True,solver="iterative",neig=4) # no matrix
-h.get_bse(V=W,nk=65536,tda=True,solver="qtt",neig=1)      # no mesh either
+h.get_bse(V=W,nk=1024,tda=True,solver="iterative",neig=4)
+h.get_bse(V=W,nk=65536,tda=True,solver="qtt",neig=1)
 ```
 
-- `solver="dense"` (default) is the behavior described above and is unchanged. It is the only one that solves the *full* non-Tamm-Dancoff problem and the only one that returns every exciton.
-- `solver="iterative"` applies the factorized kernel through a `LinearOperator` and finds the `neig` lowest excitons with a preconditioned block LOBPCG from a deterministic start. It is exact -- the operator applied is the same matrix `build_blocks` assembles -- and it removes the memory wall outright, but it still diagonalizes every k-point, so its cost is linear in the mesh.
-- `solver="qtt"` binary-encodes the pair index, cross-interpolates the kernel into a matrix product operator with the bundled `qutecipy`, and diagonalizes it with DMRG from `dmrgpy`'s `pyitensor`. Its cost grows like $\log N_k$: on a gapped chain the number of k-points it actually diagonalizes went 1011, 2657, 5721, 6592, 8757 as the mesh went 1024, 4096, 16384, 65536, 262144 -- a factor of 8.7 for a factor of 256 in mesh -- with the wall time flat at 14-23 s throughout. The dense solver stops around $N_{pair}\sim2000$. Two dimensions costs considerably more per mesh point, since the MPO bond dimension is roughly eight times larger there.
+- `solver="dense"` (default): gives the whole exciton spectrum, and is the
+  only one that works without the Tamm-Dancoff approximation. Good up to a
+  few thousand electron-hole pairs
+- `solver="iterative"`: same energies, much finer meshes, but only the
+  `neig` lowest excitons
+- `solver="qtt"`: for the very fine meshes a weakly bound exciton needs.
+  Returns the lowest exciton only
 
-Both new solvers need `tda=True`. The full BSE matrix is not Hermitian and is diagonalized through a Cholesky factorization of $S H$, which needs the matrix; large-scale BSE codes make the same restriction for the same reason, and `tests/bse/test_bse_physics.py` shows the Tamm-Dancoff and full answers converging at weak coupling, which is where bound excitons live.
+Both `"iterative"` and `"qtt"` need `tda=True`, the Tamm-Dancoff
+approximation, which is accurate for the weakly coupled systems where bound
+excitons live.
 
-The quantics solver has one requirement the others do not: a **smooth gauge**. Diagonalization returns each Bloch eigenvector with an arbitrary phase (and, inside a degenerate multiplet, an arbitrary unitary), which makes the kernel a discontinuous function of $k$ and destroys its tensor-train rank completely -- in the raw gauge the operator is exactly incompressible. `gauge="projection"` (the default for this solver) rotates each band subspace onto fixed trial orbitals, `gauge="phase"` fixes one component of each eigenvector, and the gauge is unobservable, so it can be switched on for the dense solver too and the spectrum must not move. Measured maximum tensor-train rank of the kernel's factors at tolerance `1e-6`, as the mesh is refined 16-fold:
+`"qtt"` is the specialist: it is at its best on a fine mesh over a narrow
+band window, which is exactly a Wannier-Mott exciton, and it is the clear
+winner in 1D. In 2D, use it on a primitive cell with `nv`/`nc` kept small; on
+a supercell its advantage disappears and `"iterative"` is the better choice.
+It also wants `nk` to be a power of two, and cannot take an RPA-screened
+interaction directly. Pass one with `ScreenedInteraction.get_dict()`.
 
-| model | raw gauge | fixed gauge |
-|---|---|---|
-| 1D chain, spinless | 16 → 32 → 64 | 8 → 8 → 8 (phase) |
-| 2D honeycomb, spinless | 96 → 192 → 383 | 57 → 62 → 63 (phase) |
-| 2D honeycomb, spinful | 256 → 512 → 1024 | 182 → 248 → 274 (projection) |
+See `examples/1d/exciton_qtt/main.py` and `examples/2d/exciton_qtt/main.py`
+for runnable comparisons of the three solvers, the second plotting the
+exciton envelope $|A(k)|^2$ over the Brillouin zone, and
+`examples/2d/excitons_bse/main.py` for the lowest exciton of a gapped
+honeycomb detaching from the absorption edge as the Coulomb tail is turned
+up.
 
-A phase fix cannot help a degenerate multiplet -- what is arbitrary there is a whole unitary -- which is why `"projection"` is the default and why a spinful model with no spin-orbit coupling, whose every band is two-fold degenerate, needs it.
-
-**When `"qtt"` is the right choice, and when it is not.** It wants a narrow band window on a fine k-mesh, and that is a real restriction. In 1D with one band pair it is the clear winner (mesh ×256, work ×8.7, wall time flat). In 2D on a primitive cell it is *slower* than `"iterative"` at every mesh measured -- 103 s against 0.7 s at 32×32 -- not because the quantics side degrades but because the exact solver is so cheap there (4096 pairs cost it 3.1 s in 2D against 24 s in 1D); the ratio does improve with mesh, so a crossover exists beyond what was measured. On a **supercell** it is the wrong tool outright: a 3×3 supercell has 9 valence and 9 conduction bands, and a band label is not a smooth coordinate the way $k$ is, so the MPO rank saturates (bond dimension 729 out of a possible 729, with 450 s spent in cross-interpolation, at nk=4). The same physics from the primitive cell at three times the mesh keeps $n_v n_c = 1$ and compresses. Use the primitive cell and a fine mesh; if a supercell is unavoidable, narrow the window with `nv`/`nc`, or use `solver="iterative"`, which is indifferent to it.
-
-Other things worth knowing before turning `solver="qtt"` on: `nk` must be a power of two (the k index is binary encoded, one tensor-train site per bit); a tabulated screened interaction (`screening="rpa"`) is refused, because inverse transforming it over the mesh gives $N_k$ lattice vectors and the kernel's rank would grow with the mesh -- truncate it in real space with `ScreenedInteraction.get_dict()` and pass the result as `V=`; and it returns the **lowest exciton only**. Excited excitons would need an overlap-penalty DMRG, which does not converge on this problem (measured errors up to 0.4, and sometimes below the true eigenvalue, at any penalty weight tried), so it is refused rather than approximated -- use `solver="iterative"`, which is exact and also needs no matrix.
-
-See `examples/1d/exciton_qtt/main.py` for a runnable comparison of the three solvers across meshes spanning three orders of magnitude, and `examples/2d/exciton_qtt/main.py` for the 2D case, where the bit ordering is measured rather than assumed and the exciton envelope $|A(k)|^2$ is plotted over the Brillouin zone.
-
-See `examples/2d/excitons_bse/main.py` for a runnable version (the lowest exciton of a gapped honeycomb detaching from the absorption edge as the Coulomb tail is turned up) and `tests/bse/` for the correctness checks, including a cross-check that the exchange-only BSE reproduces the poles of the independently implemented RPA kernel of `chitk/rpa.py`.
 
 ### Exciton band structure
 
-An exciton is a two-particle state, so besides its binding energy it has a dispersion of its own: the bound electron-hole pair propagates with a center-of-mass momentum $Q$, and $E_X(Q)$ is the exciton band structure. It is not the difference of two band energies -- the electron-hole interaction bends it -- so its curvature is the exciton's effective mass, and a flat exciton band means a strongly bound, spatially compact exciton. `h.get_exciton_bands` solves one BSE per q-point along a path and returns the result in the same flat form `get_bands` uses:
+An exciton is a two-particle state, so besides its binding energy it has a dispersion of its own: the bound electron-hole pair propagates with a center-of-mass momentum $Q$, and $E_X(Q)$ is the exciton band structure. It is not the difference of two band energies, the electron-hole interaction bends it, so its curvature is the exciton's effective mass, and a flat exciton band means a strongly bound, spatially compact exciton. `h.get_exciton_bands` solves one BSE per q-point along a path and returns the result in the same flat form `get_bands` uses:
 
 ```python
 # h2 and W as in the section above
@@ -2629,11 +2524,11 @@ qs,es = h2.get_exciton_bands(**opts) # the four lowest excitons along the path
 qs0,es0 = h2.get_exciton_bands(kernel="none",**opts) # the bare continuum
 ```
 
-`qs` holds the integer index of the q-point along the path and `es` the exciton energy, both flat 1D arrays ready for a scatter plot; `n` keeps only the `n` lowest excitons at each q-point and every other argument is passed straight to `get_bse`. `qpath` takes the same input as `get_bands` -- a list of high-symmetry labels or of explicit q-vectors -- and $Q$ is not restricted to the k-mesh, since the pair basis diagonalizes at $k$ and $k+Q$ independently. Running it a second time with `kernel="none"` is the same call with the kernel construction skipped, and gives the bottom of the electron-hole continuum to plot the exciton band against, which is what makes the binding visible. If the mean-field reference is unstable against some excitation at some q-point, `es` comes back complex there rather than silently losing the imaginary part. The cost is `nq` full dense diagonalizations, so `nv`/`nc` and `tda=True` are the knobs that make a long path affordable, and `parallel.set_cores` parallelizes over the path.
+`qs` holds the integer index of the q-point along the path and `es` the exciton energy, both flat 1D arrays ready for a scatter plot; `n` keeps only the `n` lowest excitons at each q-point and every other argument is passed straight to `get_bse`. `qpath` takes the same input as `get_bands`, a list of high-symmetry labels or of explicit q-vectors, and $Q$ is not restricted to the k-mesh, since the pair basis diagonalizes at $k$ and $k+Q$ independently. Running it a second time with `kernel="none"` is the same call with the kernel construction skipped, and gives the bottom of the electron-hole continuum to plot the exciton band against, which is what makes the binding visible. If the mean-field reference is unstable against some excitation at some q-point, `es` comes back complex there rather than silently losing the imaginary part. The cost is `nq` full dense diagonalizations, so `nv`/`nc` and `tda=True` are the knobs that make a long path affordable, and `parallel.set_cores` parallelizes over the path.
 
-One trap worth knowing about, since it is invisible at $Q=0$: `nv`/`nc` must not cut a degenerate multiplet in half. Every band of a spinful Hamiltonian with no spin-orbit coupling and no magnetic order is two-fold degenerate, so `nv=1` there keeps an arbitrary state out of a two-dimensional degenerate subspace, and the exciton energies inherit that arbitrariness -- measurably, `E_X(Q)` stops being even in $Q$ on a time-reversal-symmetric model by ~0.1, where the full multiplet gives equality to $10^{-15}$. The library warns when the window splits a multiplet; use an even `nv`/`nc` on a spin-degenerate Hamiltonian.
+One trap worth knowing about, since it is invisible at $Q=0$: `nv`/`nc` must not cut a degenerate multiplet in half. Every band of a spinful Hamiltonian with no spin-orbit coupling and no magnetic order is two-fold degenerate. Setting `nv=1` there keeps an arbitrary state out of that degenerate pair, and the exciton energies inherit the arbitrariness: on a time-reversal-symmetric model, $E_X(Q)$ visibly stops being even in $Q$. The library warns when the window splits a multiplet; use an even `nv`/`nc` on a spin-degenerate Hamiltonian.
 
-See `examples/2d/exciton_bands/main.py` for a runnable version (the exciton band of a gapped honeycomb, plotted below the electron-hole continuum of the same model) and `tests/bse/test_bse_bands.py` for the checks.
+See `examples/2d/exciton_bands/main.py` for a runnable version: the exciton band of a gapped honeycomb, plotted below the electron-hole continuum of the same model.
 
 ### The screened interaction
 
@@ -2661,9 +2556,9 @@ bare = h.get_bse(V=V,nk=8) # time-dependent Hartree-Fock
 screened = h.get_bse(V=V,nk=8,screening="rpa") # GW-BSE style
 ```
 
-The **exchange term keeps the bare interaction** whatever `screening` is set to. That is the standard GW-BSE split, not an oversight: screening the exchange term as well would resum the same RPA bubbles a second time. A consequence worth knowing is that `kernel="exchange"` is completely unaffected by `screening` (a warning is raised if both are given).
+The **exchange term keeps the bare interaction** whatever `screening` is set to. This is the standard GW-BSE split rather than an oversight, since screening the exchange term too would count the same bubbles twice. One consequence is that `kernel="exchange"` is unaffected by `screening`, and a warning is raised if both are given.
 
-**A fitted Hubbard $U$ must not be screened.** A $U$ chosen to reproduce a material is already an effective, screened interaction; running it through this a second time is double counting and gives a spuriously weak interaction. Screening is for a genuinely *bare* interaction -- a long-range Coulomb tail from `density_interaction(Vr=...)`, or bare model `V1`/`V2`/`V3` shells. The dangerous case is precisely the default one, `V=h.V` from a Hubbard SCF. Note that this is a different question from RPA-versus-cRPA below: bubbles inside $W$ and ladders in the BSE are different diagram classes, so a full-RPA $W$ with a BSE ladder is the standard construction and is *not* double counting.
+**A fitted Hubbard $U$ must not be screened.** A $U$ chosen to reproduce a material is already an effective, screened interaction, and screening it again double counts and gives a spuriously weak interaction. Use screening for a genuinely bare interaction: a long-range Coulomb tail from `density_interaction(Vr=...)`, or bare `V1`/`V2`/`V3` shells. The dangerous case is the default `V=h.V` taken from a Hubbard calculation. This is a different question from combining an RPA $W$ with a BSE ladder, which is the standard GW-BSE construction and is not double counting.
 
 `screening="crpa"` is the constrained variant, which leaves the transitions inside the `nv`/`nc` BSE band window out of the polarization ([arXiv:0710.4013](https://arxiv.org/abs/0710.4013)). That is the right choice when the band window is being treated as a downfolded model to be solved exactly afterwards, and it screens strictly less than the full RPA. It needs a genuine subset of the bands: with the default `nv=nc=None` the window is the whole spectrum, nothing is left outside it to do the screening, and the call is refused rather than silently returning the bare interaction.
 
@@ -2676,7 +2571,7 @@ Wq = W.at(W.qs[3]) # the screened interaction at one q-point
 d = W.get_dict() # ... and back in real space, usable at any q
 ```
 
-Unlike the real-space dictionaries used elsewhere, this object exists only *on* its mesh: $W(q)$ is the result of a matrix inversion at each $q$, not the Fourier transform of anything short ranged. That is exactly what the direct term needs, because the distinct $k-k'$ differences of a Γ-centered mesh are mesh points themselves, so $W$ is tabulated at precisely the points it is consumed at with no interpolation anywhere. Asking for it at any other $q$ raises rather than snapping to the nearest point. `get_dict()` is the escape hatch: it inverse Fourier transforms back to a real-space interaction, which can be evaluated anywhere, inspected to see how far the screened interaction reaches, or fed to `get_mean_field_hamiltonian(V=...)` for a screened-exchange mean field -- at the price of aliasing the tail beyond the mesh supercell. `nkW` takes a denser screening mesh than the BSE mesh (it must be an integer multiple of `nk`, so that the q-points the direct term needs are still tabulated).
+$W(q)$ is not short ranged, so unlike the other interactions in this guide it lives only on the mesh it was computed on, which is exactly the set of $q$ the kernel needs. Asking for it at any other $q$ raises rather than silently using the nearest point. `get_dict()` gives the real-space version, which can be evaluated anywhere, inspected to see how far the screened interaction reaches, or passed to `get_mean_field_hamiltonian(V=...)` for a screened-exchange mean field. `nkW` sets a finer mesh for the screening than for the exciton, and must be an integer multiple of `nk`.
 
 **Where the dielectric matrix is built matters.** Screening is a property of the *charge* channel: what polarizes the medium is the total density, and what the medium's induced charge acts back on is again the total density. So `channel="charge"` (the default) builds $\varepsilon$ on **site** indices,
 
@@ -2686,19 +2581,27 @@ and adds the resulting correction, which is spin-independent, to the bare intera
 
 $$W_{(i\sigma)(j\sigma')} = v_{(i\sigma)(j\sigma')} + \left[v^c \chi\, v^c\right]_{ij}, \qquad \chi = \chi^c(1-v^c\chi^c)^{-1}$$
 
-This is the standard GW construction. Note the one convention it fixes: $v^c_{ij} = V_{ij}$ off-site, but $v^c_{ii} = U/2$, not $U$, because a Hubbard term couples only opposite spins, so only half of a site's own density acts on a given electron. Note also that the correction is $v^c\chi v^c$ rather than the naive $\varepsilon^{-1}v$ -- with $\varepsilon$ and $v$ living on different index spaces the latter is not even Hermitian.
+This is the standard GW construction. One convention worth noting: off site $v^c_{ij}=V_{ij}$, but on site $v^c_{ii}=U/2$ rather than $U$, because a Hubbard term couples only opposite spins, so only half of a site's own density acts on a given electron.
 
-Two things follow, and they are why this is the default. First, it **preserves spin-rotation invariance exactly**: the same-spin minus opposite-spin part of $W$, which is an Ising $S^z_iS^z_j$ coupling, is left exactly as the bare interaction had it. Second, $v^c$ picks up a positive diagonal from the Hubbard term, which restores ordinary screening.
+Building the dielectric matrix in the charge channel keeps spin-rotation invariance exact: the Ising $S^z_iS^z_j$ part of $W$ is left exactly as the bare interaction had it. That is why it is the default.
 
-The alternative, `channel="orbital"`, dresses the full spin-orbital matrix as $W = \varepsilon^{-1}v$. It screens the charge and spin channels with a single density-density kernel and therefore **breaks SU(2)**: on the gapped honeycomb an exciton multiplet four-fold degenerate to $10^{-14}$ bare splits by $4.3\times10^{-3}$ in the orbital channel and stays degenerate to $8\times10^{-15}$ in the charge one. It is kept because it is the honest full-matrix RPA and is useful for quantifying that error, not because it should be used. The two channels coincide exactly for a spinless Hamiltonian.
+The alternative, `channel="orbital"`, dresses the full spin-orbital matrix as $W = \varepsilon^{-1}v$. It screens the charge and spin channels with a single density-density kernel and therefore **breaks SU(2)**: an exciton multiplet that should stay degenerate splits visibly in the orbital channel and stays degenerate in the charge one. Use the default. The two channels coincide exactly for a spinless Hamiltonian.
 
-**Screening still does not always weaken the interaction**, if the model has no onsite term. A density-density matrix that excludes self-interaction is traceless, hence necessarily indefinite; the charge channel escapes that only through $v^c_{ii}=U/2$, so with $U=0$ it is traceless too and the interaction comes out *enhanced* rather than screened -- the same Stoner enhancement `chitk/rpa.py` reports as a magnetic instability. Measured on the gapped honeycomb with an $e2=0.6$ tail, the change in binding energy against the bare result is $+0.0055$ at $U=0$ in both channels, and at $U=2.0$ it is $+0.0078$ in the orbital channel but $-0.0030$ in the charge one. A point-orbital Coulomb tail with no onsite term is simply missing its largest matrix element; include a realistic $U$.
+**Screening does not always weaken the interaction.** With no onsite term the interaction matrix has zero trace, and screening then *enhances* it rather than reducing it, in the same way an RPA kernel enhances a magnetic instability. A Coulomb tail with no onsite term is simply missing its largest matrix element, so include a realistic $U$.
 
-Finally, if an eigenvalue of $\varepsilon(q)$ actually reaches zero, the RPA has diverged: that is a charge or spin instability of the mean field at that wavevector -- the same $1-V\chi=0$ condition `chitk.rpa.rpa_kernel_poles` reports as a collective mode -- and the call raises rather than returning a huge number.
+Finally, if an eigenvalue of $\varepsilon(q)$ actually reaches zero, the RPA has diverged: that is a charge or spin instability of the mean field at that wavevector, the same $1-V\chi=0$ condition `h.get_rpa_kernel_poles` reports as a collective mode, and the call raises rather than returning a huge number.
 
-One cost note: an RPA-screened $W$ is dense in the orbital indices, where a bare Hubbard-like interaction is very sparse. The direct kernel exploits that sparsity, so turning screening on can slow the kernel build noticeably on a model whose bare interaction was nearly diagonal. That is unavoidable -- it is what screening physically does.
+The parameters, in short:
 
-See `examples/2d/screened_bse/main.py` for a runnable version and `tests/bse/test_bse_screening.py` for the correctness checks. There is no external benchmark for this: Xatu, whose formalism the rest of this BSE follows, uses a *phenomenological* Rytova-Keldysh screening rather than an RPA $W$, and no comparable open tight-binding implementation was found -- so the tests are internal cross-checks (an exact $q=0$ sum rule, supercell folding, the weak-coupling series $W = v + v\chi^0 v + O(v^3)$, the reciprocity $W(-q)=W(q)^*$ on a magnetic model, and agreement of $\chi^0$ with the independently implemented response function of `chitk/chiAB.py`).
+- `screening` picks the interaction in the direct term: `None` for the bare
+  one, `"rpa"` for the screened $W$, `"crpa"` for the constrained version when
+  the band window will be solved exactly afterwards
+- `channel` picks where the dielectric matrix is built. Leave it at
+  `"charge"`, which keeps spin-rotation invariance exact
+- `nkW` is the mesh the screening is computed on. Raise it above `nk`, by an
+  integer factor, when the screening needs more k-points than the exciton does
+
+See `examples/2d/screened_bse/main.py` for a runnable version.
 
 
 # Quantum transport
@@ -2756,7 +2659,7 @@ from pyqula import geometry
 g = geometry.chain()
 gc = g.get_supercell(5)
 gc.dimensionality = 0 # a finite, 5-site cluster (no periodicity)
-hc = gc.get_hamiltonian() # the central region -- can be any 0d Hamiltonian
+hc = gc.get_hamiltonian() # the central region, can be any 0d Hamiltonian
 
 h_normal = g.get_hamiltonian() # normal lead
 h_sc = g.get_hamiltonian(); h_sc.add_swave(0.05) # superconducting lead
@@ -2765,7 +2668,7 @@ ht = hc.get_central_heterostructure(0,4,left=h_normal,right=h_sc)
 G = ht.didv(energy=0.02) # Andreev conductance, via the BdG scattering-matrix formula
 ```
 
-It returns a plain `Heterostructure`, so every existing method (`didv`, `get_dos`, `get_kappa`...) applies unmodified -- except `landauer`, which refuses a junction carrying the Nambu degree of freedom, as in the example above: the Landauer formula counts single-particle transmission and a Cooper pair carries charge 2e, so use `didv`, which applies the BTK/BdG scattering formula. `left`/`right` default to a plain spinless chain when omitted, and `j` defaults to the last site. At most one of `{hc, left, right}` may carry an actual pairing amplitude -- e.g. a normal lead + normal lead + superconducting central region (a proximitized molecule) is fine, as is the normal + superconducting lead case above, but two superconducting leads raise a `ValueError` (there would be no normal lead left to define a reflection amplitude against; use `heterostructures.build` + `get_dc_current` for that case instead, see below). Only 0d central regions are supported so far. See `examples/transport/central_region_ij/main.py` for a runnable script.
+It returns a plain `Heterostructure`, so `didv`, `get_dos`, `get_kappa` and the rest all work on it. The exception is `landauer`, which refuses a junction with a Nambu degree of freedom: the Landauer formula counts single-particle transmission, while a Cooper pair carries charge $2e$. Use `didv`, which applies the BdG scattering formula, in that case. `left`/`right` default to a plain spinless chain and `j` to the last site. At most one of `hc`, `left` and `right` may carry a pairing amplitude, so a superconducting central region between two normal leads is fine, and so is one superconducting lead, but two superconducting leads raise a `ValueError`: there is then no normal lead left to define a reflection amplitude against, and `get_dc_current` is the right tool instead. Only 0d central regions are supported so far. See `examples/transport/central_region_ij/main.py` for a runnable script.
 
 ## Landauer transmission through a real-space device
 
@@ -2796,8 +2699,7 @@ print("ballistic transmission:",d.transmission(energy=0.0)[0])
 
 A perfectly matched chain has one open channel and nothing to scatter off,
 so the transmission is 1 everywhere inside the band, to the tolerance of
-the lead decimation -- which is the check
-`tests/transport/test_multiterminal_landauer.py` makes. Raising `disorder`
+the lead decimation. Raising `disorder`
 puts random onsite energies in the central region and the transmission
 drops below 1 by an amount that depends on the realization drawn.
 `d.transmission(energy=e)` returns a list with one entry per lead pair,
@@ -2806,11 +2708,11 @@ is the same quantity as a plain function, with the pairs named explicitly.
 
 ## Multiple Andreev reflection and AC-Josephson current
 
-`didv`/`landauer` above are equilibrium, zero-bias linear-response quantities. For a voltage-biased junction between two superconductors (an SNS junction), a finite bias makes each lead's pairing phase wind in time, giving rise to multiple Andreev reflections (MAR) and an AC Josephson effect; the physically meaningful, measurable quantity is the time-averaged (DC) current $I_{dc}(V)$. `Heterostructure.get_dc_current(voltage)` computes this with the Floquet-Keldysh formalism of San-Jose, Cayao, Prada and Aguado, *New J. Phys.* **15**, 075019 (2013) ([arXiv:1301.4408](https://arxiv.org/abs/1301.4408)): the bias is gauged away from the (static) leads into a single, periodically time-dependent "weak link" hopping, and the resulting Floquet-space Dyson/Keldysh equations are solved to get $I_{dc}(V)$. It works for any combination of normal and superconducting leads -- including the case of **two** superconducting leads, which the scattering-matrix formula behind `didv` cannot handle on its own (it has no normal lead to define a reflection amplitude against).
+`didv`/`landauer` above are equilibrium, zero-bias linear-response quantities. For a voltage-biased junction between two superconductors (an SNS junction), a finite bias makes each lead's pairing phase wind in time, giving rise to multiple Andreev reflections (MAR) and an AC Josephson effect; the physically meaningful, measurable quantity is the time-averaged (DC) current $I_{dc}(V)$. `Heterostructure.get_dc_current(voltage)` computes this with the Floquet-Keldysh formalism of San-Jose, Cayao, Prada and Aguado, *New J. Phys.* **15**, 075019 (2013) ([arXiv:1301.4408](https://arxiv.org/abs/1301.4408)): the bias is gauged away from the (static) leads into a single, periodically time-dependent "weak link" hopping, and the resulting Floquet-space Dyson/Keldysh equations are solved to get $I_{dc}(V)$. It works for any combination of normal and superconducting leads, including the case of **two** superconducting leads, which the scattering-matrix formula behind `didv` cannot handle on its own (it has no normal lead to define a reflection amplitude against).
 
-`didv` takes this formalism as an optional `method` argument, so a linear-response conductance can be obtained without calling `get_dc_current`/differentiating by hand: `method="smatrix"` is the original zero-temperature scattering-matrix/BdG conductance; `method="keldysh"` returns $dI/dV$ at bias `energy`, computed as a central finite difference of `get_dc_current` (`HT.didv(energy=v, method="keldysh", dv=..., nmax=..., temperature=...)`, extra keyword arguments are forwarded to `get_dc_current`); the default, `method="auto"`, picks `"keldysh"` when both leads carry an actual (nonzero) pairing amplitude and `"smatrix"` otherwise, since a single/no superconducting lead is already handled exactly by the scattering matrix.
+`didv` reaches the same formalism through a `method` argument, so a conductance can be had without differentiating $I_{dc}$ by hand. `method="smatrix"` is the zero-temperature BdG scattering-matrix conductance, `method="keldysh"` differentiates `get_dc_current` at the bias `energy`, and the default `method="auto"` picks Keldysh when both leads are genuinely superconducting and the scattering matrix otherwise.
 
-"Works for any combination of leads" means `get_dc_current` runs without error for a mixed normal/superconducting **Heterostructure** junction too -- but its result is **not** directly comparable to `didv(method="smatrix")` on the same junction, even in the limit where the superconducting lead's pairing amplitude is taken to zero (this caveat is specific to `Heterostructure`; see below for why `LocalProbe` is different). The two methods use different bias conventions: `smatrix` freezes the normal lead's self-energy at absolute energy 0 (a grounded, wide-band probe with the entire bias dropped on the other lead), while `dc_current` evaluates *both* leads' self-energies at their actual Floquet sideband energies (needed for, and validated against, a normal-normal rigid two-terminal bias reference in `tests/keldysh`). Forcing `method="keldysh"` where `method="auto"` would have picked `"smatrix"` therefore computes a different physical quantity, not a slower/more-general version of the same one -- confirmed by direct comparison to disagree by an O(1), non-vanishing factor as the extra lead's pairing amplitude shrinks to zero. Exactly at sub-gap bias this is compounded further by real (not numerical) physics: an infinitesimal pairing amplitude still opens a hard gap exactly at the Fermi level, which `get_dc_current`'s sideband ladder always samples (its quasienergy integral starts at 0), so its zero-pairing limit at that energy does not equal the exactly-normal-lead value there either.
+The two are different physical quantities rather than two ways of getting the same one, because the bias is applied differently: `"smatrix"` grounds the normal lead and drops the whole bias on the other, while `"keldysh"` biases both leads rigidly. So on a junction with one normal lead they disagree by an O(1) factor, and they keep disagreeing as the other lead's pairing is taken to zero. Let `method="auto"` choose.
 
 ```python
 from pyqula import geometry
@@ -2826,13 +2728,22 @@ vs = np.linspace(0.02,1.5,40)*0.1 # bias voltages
 Is = HT.get_iv_curve(vs) # MAR/AC-Josephson dc current
 ```
 
-Budget for the cost: this is the most expensive family in the guide, at roughly 15 seconds per bias point for a two-lead SNS junction, so the 40-point curve above is several minutes. Note also the bottom of that voltage grid. The number of sidebands needed grows as the bias falls (the MAR order $2\Delta/eV$ does), so a grid reaching very close to zero bias -- `0.02*delta` here -- can genuinely exhaust `nmax_max` and warn that "sidebands did not converge", meaning that point is inaccurate rather than that anything crashed. Raising the grid's lower endpoint (to `0.15*delta`, say) is the cheap fix; raising `nmax_max` is the expensive one.
+This is the most expensive calculation in the guide, at roughly fifteen seconds per bias point for the SNS junction above, so a forty-point curve takes minutes. The reason is physical: the number of Andreev reflections that matter is the MAR order $2\Delta/eV$, which grows as the bias falls, and each one costs a Floquet sideband. The sidebands are added automatically until $I_{dc}$ converges, but a grid reaching very close to zero bias can exhaust `nmax_max` and warn that the sidebands did not converge. That point is inaccurate; nothing has crashed. Starting the grid a little higher is the cheap fix; raising `nmax_max` the expensive one.
 
-The number of Floquet sidebands is increased adaptively (as in the paper) until $I_{dc}$ converges; see `examples/transport/floquet_keldysh_mar/main.py` for a runnable script and `tests/keldysh/` for correctness tests (a normal-normal junction must reduce exactly to a directly biased, non-Floquet Landauer calculation, and a normal-superconductor junction's zero-bias slope must match the existing equilibrium Andreev conductance from `didv`). Only 1D leads are supported. An explicit central region (`heterostructures.build(h1,h2,central=[hc])`, e.g. a quantum dot detuned from the leads) works too, solved through the general dense Floquet inversion rather than the fast two-block chain decomposition -- correspondingly slower, since the whole (block x sideband) matrix is inverted at every quasienergy. Note where the bias is assumed to drop: the AC-carrying bond is the junction's rightmost one, so the central region sits at the **left** lead's electrostatic potential. That is a physical model choice, not a gauge choice -- a comparison against a static-bias reference has to shift the central region along with the left lead, and a central Hamiltonian must be a valid BdG (particle-hole symmetric) one, so detune it with `hc.shift_fermi(eps)` rather than by adding `eps` to the diagonal of `hc.intra`.
+Only 1D leads are supported. A central region between the leads
+(`heterostructures.build(h1,h2,central=[hc])`, e.g. a quantum dot) works too,
+more slowly. The bias drops across the junction's rightmost bond, so the
+central region sits at the **left** lead's potential, detune it with
+`hc.shift_fermi(eps)`, which keeps it a valid BdG Hamiltonian, rather than by
+adding to its diagonal. See `examples/transport/floquet_keldysh_mar/main.py`
+for a runnable script.
 
-`transporttk.localprobe.LocalProbe` models a single STM-like tip weakly coupled to one site of an infinite/bulk sample (used e.g. for `get_kappa`, a decay-constant/transparency-scaling diagnostic -- see `examples/transport/decay_constant/main.py`). The same routing applies there: `LocalProbe.didv`/`get_kappa` use the ordinary scattering-matrix formula by default, but switch to the Floquet-Keldysh MAR current when the probe lead (`lp.lead`) is itself superconducting *and* the sample is superconducting too, since a normal-metal probe no longer applies and the same "no normal lead to reflect against" problem as above appears. The probe's unit cell and the sample's local (single-site) Hamiltonian play the role of the two leads.
-
-Unlike `Heterostructure`, forcing `method="keldysh"` on a `LocalProbe` whose probe is normal (or negligibly paired) *is* consistent with `method="smatrix"`: `LocalProbe`'s Keldysh path grounds a normal probe lead (freezes its self-energy at absolute energy 0, `smatrix`'s own convention for it) precisely so the two agree -- exactly in the wide-band-lead limit, to within a few percent for a probe with genuine band structure over the bias window (e.g. a plain tight-binding chain). This grounding only applies when the probe lead itself has no real pairing; when it does (the case below), the probe's self-energy is evaluated at its actual Floquet sideband energy instead, exactly as for `Heterostructure` -- grounding a genuinely superconducting probe would pin every evaluation at its own gap center and was confirmed to suppress the MAR current by over an order of magnitude, so the two-superconductor case keeps working as originally validated.
+A `LocalProbe` is an STM-like tip weakly coupled to one site of an infinite
+sample, with the tip and the sample site playing the role of the two leads.
+The same choice of method applies: the scattering matrix by default, and the
+Floquet-Keldysh MAR current when tip and sample are both superconducting. On a
+`LocalProbe` the two methods do agree when the tip is normal, since the tip is
+grounded there exactly as the scattering matrix grounds it.
 
 ```python
 from pyqula import geometry
@@ -2849,7 +2760,7 @@ k = lp.get_kappa(energy=0.25,nmax=4,nmax_max=12,tol=5e-2)
 
 This is considerably more expensive than the normal-probe case (each `didv`/`get_kappa` call runs several Floquet-Keldysh sideband sweeps), especially deep below the combined gap at low transparency, where the sideband sum converges slowly; see `examples/transport/decay_constant_keldysh/main.py` for a runnable script using a coarse energy grid and a modest sideband cutoff to keep the runtime reasonable.
 
-`get_kappa` also accepts a `temp` argument for a thermally-averaged kappa (each conductance entering the power-law fit is `didv(temp=...)`'s thermal average rather than the zero-temperature value); `temp=0` (the default) is unchanged. Pass a single `energy` (returns a scalar, as above) or a whole `energies=[...]` array at once (returns an array):
+`get_kappa` also accepts a `temp` argument for a thermally-averaged kappa (each conductance entering the power-law fit is `didv(temp=...)`'s thermal average rather than the zero-temperature value). Pass a single `energy` (returns a scalar, as above) or a whole `energies=[...]` array at once (returns an array):
 
 ```python
 k = lp.get_kappa(energies=[0.1,0.25,0.4],temp=0.02,nmax=4,nmax_max=12,tol=5e-2)
@@ -2857,71 +2768,19 @@ k = lp.get_kappa(energies=[0.1,0.25,0.4],temp=0.02,nmax=4,nmax_max=12,tol=5e-2)
 
 `Heterostructure.get_kappa` takes the same `temp`/`energies` arguments.
 
-A single `get_dc_current`/`keldysh_didv`/`get_kappa` call solves each lead's Sancho-Rubio/`bloch_selfenergy` self-energy directly at every energy the sideband sweep visits by default (`selfenergy_method="direct"`), since building an AAA interpolant (many true solves at increasingly refined candidate energies) usually costs more than that one `"direct"` call by itself -- the win comes from reuse, not the first call. The opt-in `selfenergy_method="aaa"` (`use_aaa=True` for `didv`/`keldysh_didv`) instead replaces most of those many-thousands of individual solves with evaluations of a compact rational (AAA) interpolant built from far fewer true solves (`keldyshtk.current.build_selfenergy_aaa`).
-
-A **sweep** over many calls is exactly the workload that reuse pays for, so the three sweep entry points default the OTHER way, to `"aaa"`/`use_aaa=True`, building and sharing one interpolant across the whole sweep instead of leaving each call to independently build (and discard) its own: `get_iv_curve` (a `get_dc_current` voltage sweep), `didv(energies=...)`/`didv_curve` (a `didv` energy sweep), and `get_kappa(energies=...)`'s finite-temperature path (whose internal thermal quadrature alone can visit well over a hundred nearby energies for just one nominal `(energy, temp)` point). Pass `selfenergy_method="direct"` (or `use_aaa=False`) explicitly to any of these to opt back out. Each falls back to `"direct"` automatically, per-sweep, if the shared fit doesn't converge within its budget.
-
-An earlier version of this had a real accuracy gap, growing with the sideband window (`nmax_max`) -- up to ~10% relative current error in the worst case investigated. `documentation/keldysh_aaa_selfenergy_accuracy_plan.md` root-caused this to the interpolant's candidate grid being under-resolved (both at a lead's own gap-edge singularities and, more consequentially for the current-error trend, across the fit's broader domain) in a way the interpolant's own held-out validation check -- confined too close to existing candidates -- never detected. Both the validation sampling and the grid-refinement strategy (`aaatk.selfenergy_aaa._refine_grid`) were fixed and validated directly against the current (not just the self-energy fit) across the same `nmax_max` sweep that exposed the original gap: relative current error is now consistently under ~1% throughout, with no growth trend (see that document's closing update for the full measurement). `selfenergy_method="aaa"` still checks its own convergence (`.converged`) and safely falls back to `"direct"` if a fit can't reach its target tolerance within a bounded budget, rather than silently returning an under-resolved answer -- but as with any interpolation-based shortcut, checking agreement with `"direct"` for your own system/parameter range before relying on it is still good practice.
-
-`didv`'s `energy` and `energies` arguments are mutually exclusive, the same convention `get_kappa` already uses: pass a single `energy` (returns a scalar) or a whole `energies=[...]` array at once (returns an array, and internally dispatches to `didv_curve(ht, energies, **kwargs)`). Passing an array directly as the scalar `energy=` is not supported (it fails, a numpy broadcasting error on the `smatrix` path, an "ambiguous truth value" error on the `keldysh` path) -- every example that plots dI/dV vs. energy predates `energies=` and loops explicitly instead, `[ht.didv(energy=e) for e in es]`, which still works but is no longer necessary. `energies=` additionally -- like `get_iv_curve` does for `get_dc_current` -- builds and shares ONE AAA interpolant across the whole sweep by default (see above), instead of a raw loop's `didv(energy=e, use_aaa=True)` independently building (and discarding) its own interpolant at every single energy:
+`didv`'s `energy` and `energies` arguments are mutually exclusive, the same
+convention `get_kappa` uses: pass a single `energy` and get a scalar back, or
+a whole `energies=[...]` array at once and get an array.
 
 ```python
 es = np.linspace(0.15,0.25,40)*0.1 # bias energies
-Gs = HT.didv(energies=es, nmax_max=40) # shared-AAA dI/dV curve (use_aaa=True is now the default for a sweep)
+Gs = HT.didv(energies=es, nmax_max=40) # dI/dV curve
 ```
-
-`HT.didv_curve(es, **kwargs)`/`lp.didv_curve(es, **kwargs)` are the same thing called directly, for a caller who wants the array entry point without going through `didv`.
-
-For a Floquet-Keldysh-eligible junction (both leads, or a `LocalProbe`'s probe+sample,
-superconducting), `didv(temp=...)`/`get_kappa(temp=...)` now default to evaluating
-`dc_current`'s own `temperature` parameter directly (2 `dc_current` calls, a central finite
-difference in bias) rather than the internal thermal quadrature described in the previous
-paragraph (`keldysh_thermal_mode="convolution"` on `transporttk.thermaldidv.finite_T_didv`
-recovers the old behavior, still used for non-Keldysh junctions where it is exact). This is not
-merely a faster way to get the same number: the two compute genuinely different quantities away
-from `temp->0` (direct broadens each Floquet sideband's own occupation by `temp`; convolution
-smears the bias voltage, an n-dependent displacement of the whole sideband ladder) -- see
-`documentation/keldysh_sideband_decimation_plan.md`'s "direct finite-T Keldysh evaluation" entry
-for the validation and the measured ~100x-plus speedup.
-
-The outer quasienergy integral itself is evaluated with a batched adaptive quadrature
-(`keldyshtk.quadrature.adaptive_quad_batch`): the same 21-point Gauss-Kronrod rule and embedded
-QUADPACK error estimator `scipy.integrate.quad` uses, at the same tolerance, but with the
-refinement loop restructured so that every panel awaiting evaluation in a round is evaluated in a
-single batched, `numba`-parallel chain solve rather than one scalar Python callback per node. It
-visits essentially the same nodes as `scipy.integrate.quad` did (measured over a whole
-`get_dc_current` call: 630 vs 588, 1197 vs 1197, 3906 vs 3906 on three superconducting cases, and
-84 vs 210 on a normal junction) while collapsing those hundreds-to-thousands of scalar dispatches
-into 4-54 batched ones. Together with a companion fix to the self-energy cache's per-energy Python
-bookkeeping (which profiling exposed as the next bottleneck once the quadrature stopped dominating),
-that is worth 5.0x-11.8x in wall clock across those four cases, with the returned current unchanged
-to 1e-16 relative on three of them and 1.5e-6 on the fourth. This is the
-default; it needs no opt-in, and the previous `scipy.integrate.quad` implementation stays reachable
-as `quadrature="adaptive_scipy"` (the reference the batched rule is validated against, not a mode
-to choose on its own).
-
-`dc_current` also takes an opt-in `quadrature` argument for the outer quasienergy integral:
-`"adaptive"` is the batched adaptive rule just described (the default); `"fixed"` instead
-evaluates a deterministic, fixed-node composite Gauss-Legendre rule whose node/weight set is a
-pure function of `voltage` alone (`quad_panel_width`/`quad_min_panels`/`quad_order` control it),
-known in full before any integrand evaluation and solved with a batched, `numba`-parallel chain
-solver rather than one Python callback per node. Accuracy is not the concern (validated to within
-~6e-4 of a tight reference across a broad SC-SC/normal sweep); speed is case-dependent and often
-*worse* than adaptive quadrature, since a fixed grid has to be dense enough to resolve a gap-edge
-singularity wherever it happens to land, with no way to discover at runtime that a given case
-(e.g. a normal junction with no singularity at all) didn't need that density. `"fixed"` is kept as
-tested, opt-in infrastructure for callers that specifically need a deterministic/cacheable node
-set (see `documentation/keldysh_sideband_decimation_plan.md`'s "item 2b"/"item 2c" entries for the
-full numbers) -- not a general replacement for the default `"adaptive"` path.
-
-### Experimental: a JAX-differentiable Floquet-Keldysh current
-
-`keldyshtk.current_jax.JaxKeldyshCurrent` (needs the optional `jax` extra: `pip install pyqula[jax]`) is an independent reformulation of `dc_current` for zero-temperature, fixed-sideband-count (`nmax`, not adaptively grown) work: instead of a central finite difference of two separate `dc_current` calls, it batches the whole quasienergy quadrature into one compiled, `vmap`ped computation and differentiates it directly with `jax.grad`. Reused across many voltages (build once per `(junction, nmax, vmax)` combination, call `.current(v)`/`.didv(v)` many times), this is a genuine reformulation, not a drop-in speedup: measured on the same superconducting-probe `LocalProbe` workload the rest of this section targets, both `.current()` and `.didv()` came out roughly break-even to about 2x slower than the direct path once implemented and benchmarked rigorously (see the module's own docstring for the full story, including two real self-energy numerical-edge-case bugs and one silently-dropped derivative term found and fixed along the way). Kept as tested, documented, opt-in infrastructure -- a reformulation that did not pay off for the specific workload it was built for, potentially useful for a different one (a system that converges at a smaller `nmax`, or a workload needing only `current()` and not `didv()`) -- not something `didv`/`get_dc_current` route to automatically.
 
 
 # Single defects in infinite systems
 
-A single point defect or impurity embedded in an otherwise infinite, periodic system cannot be handled by a plain supercell calculation without artificially periodizing the defect. `embedding.Embedding` solves this properly with a Green's function embedding technique: it takes the pristine, periodic Hamiltonian `h` and a modified intracell matrix `m` describing the defect (or another `Hamiltonian` from which the modified matrix is taken), and gives access to the observables of the infinite system as perturbed by that single, non-periodic defect
+A single point defect or impurity embedded in an otherwise infinite, periodic system cannot be handled by a plain supercell calculation without artificially periodizing the defect. `embedding.Embedding` solves this with a Green's function embedding technique. It takes the pristine periodic Hamiltonian `h` together with a modified cell `m` describing the defect, and gives the observables of the infinite system as perturbed by that single defect
 
 ```python
 from pyqula import geometry
@@ -2979,9 +2838,8 @@ model's
 
 Passing `symmetries="auto"` makes `get_wannier_hamiltonian` check, before
 Wannierizing, that the selected band range is a genuine union of
-point-group-related multiplets everywhere on the mesh (point-group
-operations are auto-detected from the geometry+Hamiltonian via
-`symmetrytk.pointgroup.find_point_group`). A band selection that instead
+point-group-related multiplets everywhere on the mesh, with the point group
+auto-detected from the geometry and the Hamiltonian. A band selection that instead
 slices through a symmetry-related degeneracy is rejected with a
 `ValueError` rather than silently returning a mis-symmetrized model. A
 list of explicit `symmetrytk.pointgroup.SymmetryOperation` can be passed
@@ -2989,9 +2847,9 @@ instead of `"auto"` to enforce a specific subgroup.
 
 A good illustration is kagome's flat band: it is exactly degenerate with
 the dispersive middle band at the K point, so no selection containing only
-the flat band is a union of whole multiplets -- this is the well-known
+the flat band is a union of whole multiplets. This is the well-known
 topological obstruction behind kagome's flat band having no symmetric
-exponentially-localized Wannier function, and the check catches it instead
+localized Wannier function, and the check catches it instead
 of returning a broken model
 
 ```python
@@ -3051,14 +2909,14 @@ What is reproduced changes with it, and this is the trade rather than a
 loss of accuracy: a disentangled Hamiltonian reproduces the states inside
 the **frozen inner window** (`dis_froz_min`/`dis_froz_max`) exactly at
 every mesh k-point, and deliberately does not reproduce the selected bands
-outside it -- outside the frozen window the extracted subspace is a
+outside it. Outside the frozen window the extracted subspace is a
 different, smoother one. Pass `cutoff=0.0` when testing that exactness, as
 above: the default `cutoff=1e-6` drops small real-space hoppings and with
 them the last few digits. An **outer window** (`dis_win_min`/
 `dis_win_max`) narrows which bands are offered at each k-point, so the
 number available varies across the mesh, which is the point of a window
 rather than a band range; every eigenvalue of the result then lies inside
-it. `dis_num_iter` (default 200) bounds the $\Omega_I$ minimization --
+it. `dis_num_iter` (default 200) bounds the $\Omega_I$ minimization,
 not reaching convergence within it is a warning rather than an error,
 since the frozen window is reproduced either way.
 
@@ -3075,7 +2933,7 @@ Nambu/BdG Hamiltonian, with `symmetries=`, or with
 `auto_split_clusters=True`, each naming the combination. One gap in that
 guard is worth knowing: `win_keywords=` is by design an unchecked
 passthrough merged after the check, so a window smuggled in through it can
-still reach the engine and be ignored -- use the real `dis_froz_max=`
+still reach the engine and be ignored, use the real `dis_froz_max=`
 argument, which is guarded.
 
 
@@ -3113,41 +2971,15 @@ See `examples/0d/kpm_dos/main.py` and `examples/0d/kpm_correlator/main.py`
 for runnable versions, including a comparison of the KPM correlator against
 the exact Green's function calculation.
 
-The batched Chebyshev-moment kernels underneath KPM (one starting vector
-per random try, or per site for a full trace) run on numba by default, but
-can be dispatched to a GPU through [jax](https://github.com/jax-ml/jax)
-instead by passing `kpm_cpugpu="GPU"` down to any KPM entry point --
-`h.get_dos(mode="KPM", ...)`, `kpm.tdos`/`kpm.pdos`/`kpm.ldos`, or the
-lower-level `kpm` module functions themselves all forward it:
+The Chebyshev moments can be computed on a GPU instead, by passing
+`kpm_cpugpu="GPU"` to any of the KPM functions:
 
 ```python
 (x,y) = h.get_dos(mode="KPM",
             energies=np.linspace(-3.0,3.0,200),
             delta=1e-4,ntries=10,
-            kpm_cpugpu="GPU") # dispatch the Chebyshev moments to a GPU
+            kpm_cpugpu="GPU") # Chebyshev moments on a GPU
 ```
-
-`kpm_cpugpu="GPU"` transparently falls back to running on the CPU (through
-jax's own CPU backend) if no GPU is visible, so it is always safe to pass
-even on a machine without one. The batch of starting vectors is sent to
-the device in fixed-size chunks (`gpu_batch_size`, default 256, currently
-a reasoned default rather than a GPU-benchmarked one) rather than all at
-once, so device memory use stays bounded even for a full-space trace over
-a large system; pass a smaller `gpu_batch_size` to trade fewer, larger
-device dispatches for a smaller memory footprint. `kpm_prec="single"`
-(also forwarded the same way) switches the moments to single precision,
-useful for squeezing more parallelism out of a GPU when double-precision
-accuracy is not needed.
-
-There are two distinct KPM code paths for an operator-weighted quantity
-(a projected DOS/spectral function): passing `operator=` reaches the
-operator-weighted moments directly (`kpm.tdos`/`kpm.pdos`'s `operator=`
-argument, or `h.get_kdos_bands(mode="KPM", operator=...)`), while
-`h.get_dos(mode="KPM", operator=...)` instead confines the random
-starting vectors to the operator's subspace and falls back to the plain
-(non-operator-weighted) moments internally. `kpm_cpugpu="GPU"` reaches
-both, but only the first actually exercises the operator-weighted GPU
-kernel (`kpm_momentsA_batch_gpu`).
 
 
 # Classical spin models
@@ -3155,10 +2987,10 @@ kernel (`kpm_momentsA_batch_gpu`).
 `classicalspin.SpinModel` models classical (non-quantized) spins on a lattice, each
 parametrized by a pair of angles $(\theta_i,\phi_i)$, interacting through a real-space
 tensor exchange $\vec S_i \cdot J_{ij} \cdot \vec S_j$ and an optional Zeeman field. Like
-`LatticeGas`, it reuses `Geometry` for the lattice/neighbor shells but is otherwise
-independent of the quantum `Hamiltonian` machinery: the energy is evaluated directly from
-the angles, and the ground state is found by local (gradient-based, via `jax` autodiff)
-multistart minimization rather than diagonalization -- only the $\Gamma$ point is
+`LatticeGas`, it takes its lattice and neighbor shells from a `Geometry` but is otherwise
+independent of the quantum `Hamiltonian`: the energy is evaluated directly from
+the angles, and the ground state is found by local gradient-based
+multistart minimization rather than diagonalization, only the $\Gamma$ point is
 supported, so incommensurate (e.g. spiral) textures need an explicit supercell
 
 ```python
@@ -3178,9 +3010,9 @@ mx,my,mz = sm.get_magnetization() # per-site magnetization components
 `add_heisenberg` builds shell-based isotropic (or, via `Jm=[Jx,Jy,Jz]`, diagonally
 anisotropic/XXZ) couplings the same way `Geometry.get_hamiltonian(tij=...)` does.
 `classicalspin.generating_functions(name=...)` returns ready-made two-point coupling
-functions for other common forms -- `"Linear"` (dipolar $1/r^3$), `"RKKYTI"` (RKKY on a
+functions for other common forms, `"Linear"` (dipolar $1/r^3$), `"RKKYTI"` (RKKY on a
 topological-insulator surface, PRB 81 233405), `"ZZ"`/`"XYZ"` (Ising/anisotropic-diagonal),
-`"DM"` (Dzyaloshinskii-Moriya) -- to pass into `add_tensor(fun)` (couplings within the home
+`"DM"` (Dzyaloshinskii-Moriya). To pass into `add_tensor(fun)` (couplings within the home
 cell) or `add_tensor_2d(fun,ncells=...,vspiral=...)` (also sums periodic images, and can
 twist the coupling tensor by a per-image angle to embed a spin-spiral wavevector).
 `get_local_energy()` gives the per-site energy for spatially resolved maps
@@ -3193,10 +3025,10 @@ ground state and a modulated-exchange ladder.
 # Lattice gas models
 
 `latticegas.LatticeGas` models classical, occupation-based (0/1) degrees of freedom on a
-lattice -- e.g. adsorbates, vacancies, or any classical binary order parameter -- interacting
+lattice, e.g. adsorbates, vacancies, or any classical binary order parameter, interacting
 through a real-space coupling $J_{ij} n_i n_j$ and a site-dependent chemical potential
-$\mu_i n_i$. It reuses `Geometry` to define the lattice and its neighbor shells, but is
-otherwise independent of the quantum `Hamiltonian` machinery: the energy is evaluated
+$\mu_i n_i$. It takes its lattice and neighbor shells from a `Geometry`, but is
+otherwise independent of the quantum `Hamiltonian`: the energy is evaluated
 directly from the occupation array, and the ground state is searched with a
 Metropolis-annealed discrete swap optimizer, not diagonalization
 
@@ -3218,12 +3050,12 @@ es = lg.optimize_energy(temp=0.5,ntries=1e4) # simulated annealing
 `lg.den` holds the current 0/1 occupation array and `es` the energy trajectory of the
 anneal. `get_local_energy()`/`get_local_mu()` give the per-site energy/chemical-potential
 contribution for the current snapshot, and `get_correlator()`/`get_structure_factor()` give
-the real-/reciprocal-space density-density correlator -- useful for detecting ordered (e.g.
+the real-/reciprocal-space density-density correlator. Useful for detecting ordered (e.g.
 striped, honeycomb-vacancy) ground states and their ordering wavevector. `anneal()` wraps
 `optimize_energy()` in a decreasing-temperature schedule, and `optimize_energy_multistart()`
 keeps the best of several independent restarts. `optimize_grand_canonical()` switches from
 fixed-filling swap moves to single-site flips under `lg.mu`, letting the filling itself
-fluctuate -- useful for scanning a phase diagram vs. chemical potential, or for estimating
+fluctuate. Useful for scanning a phase diagram vs. chemical potential, or for estimating
 thermodynamic quantities like the specific heat (`get_specific_heat()`/`get_susceptibility()`)
 from an equilibrium trajectory at fixed temperature. `add_tensor()` adds couplings beyond
 fixed neighbor shells, and `write()`/`read()` checkpoint a snapshot to/from disk. See
@@ -3235,11 +3067,9 @@ grand-canonical sampling.
 
 `latticeising.LatticeIsing` models classical Ising spins $s_i\in\{-1,+1\}$ on a lattice,
 interacting through a real-space coupling $-J_{ij}s_is_j$ and a site-dependent field
-$-b_is_i$ -- the standard textbook Ising Hamiltonian, with $J>0$ ferromagnetic (favoring
-alignment). It mirrors `LatticeGas` closely (same `Geometry`-driven pair list, CSR adjacency
-cache, and Metropolis machinery, several of whose module-level functions -- the adjacency
-builder, `add_tensor()`, `regroup()`, `get_specific_heat()`/`get_susceptibility()` -- are
-reused directly rather than reimplemented) but uses the **opposite** energy sign convention
+$-b_is_i$, the standard textbook Ising Hamiltonian, with $J>0$ ferromagnetic (favoring
+alignment). It mirrors `LatticeGas` closely, and shares its `add_tensor()`, `regroup()` and
+`get_specific_heat()`/`get_susceptibility()` helpers, but uses the **opposite** energy sign convention
 from `LatticeGas` (whose $\sum J_{ij}n_in_j$ has no minus sign, so positive $J$ there is a
 *repulsion*): with Ising spins, positive $J_{ij}$ in `add_interaction()` means ferromagnetic
 alignment, matching the literature convention.
@@ -3258,21 +3088,20 @@ es,ms = li.anneal(temps=[3.,1.,0.3,0.1,0.03],ntries=1e4) # simulated annealing
 ```
 
 `li.s` holds the current $\pm1$ spin array. `li.optimize_energy()` runs single-spin-flip
-Metropolis dynamics -- the standard Ising Monte Carlo move set, in which the total
+Metropolis dynamics, the standard Ising Monte Carlo move set, in which the total
 magnetization is *not* conserved (it fluctuates under `li.b`), so, mirroring
 `LatticeGas.optimize_grand_canonical()`, it returns `(es, ms)`: the energy and total
 magnetization ($\sum_i s_i$) trajectories, the latter usable directly with
 `latticegas.get_susceptibility()`. `li.optimize_conserved()` instead uses Kawasaki
-spin-exchange (swap) dynamics, which *does* conserve the total magnetization -- the analog of
+spin-exchange (swap) dynamics, which *does* conserve the total magnetization, the analog of
 `LatticeGas.optimize_energy()`'s fixed-filling swaps. `li.anneal()` wraps `optimize_energy()`
 in a decreasing-temperature schedule, and `optimize_energy_multistart()` keeps the best of
 several independent restarts. `get_local_energy()`/`get_local_field()` give the per-site
 energy/effective-field for the current snapshot, and `get_correlator()`/`get_structure_factor()`
-reuse `LatticeGas`'s real-/reciprocal-space correlator machinery directly (it operates on any
-per-site array, not just 0/1 occupations) to locate ordered (ferromagnetic, checkerboard
-antiferromagnetic, ...) ground states and their ordering wavevector. Because `li.pairs` lists
+are the same real- and reciprocal-space diagnostics `LatticeGas` has, locating ordered
+(ferromagnetic, checkerboard antiferromagnetic, ...) ground states and their ordering wavevector. Because `li.pairs` lists
 both directions of every bond (same convention as `LatticeGas`), `get_energy()` is twice the
-usual sum-over-unordered-bonds convention -- e.g. the 2d square-lattice ferromagnet's critical
+usual sum-over-unordered-bonds convention, e.g. the 2d square-lattice ferromagnet's critical
 temperature sits near $2\times2.269$ in these units, not $2.269$. See `examples/latticeising/`
 for runnable demos of annealing, a temperature scan (magnetization and specific heat), and
 local-energy/local-field maps.
@@ -3280,68 +3109,49 @@ local-energy/local-field maps.
 
 # Parallelism and reproducibility
 
-Parameter sweeps -- over k-points, energies, q-points, restarts -- are farmed
-out with `parallel.pcall`, which is serial by default. `parallel.set_cores(n)`
-gives it a pool of `n` worker processes, and `parallel.set_enabled(False)`
-forces the whole package strictly serial (no pool, numba and BLAS threads
-clamped to one), which is the setting to reach for when debugging or
-profiling.
+Parameter sweeps, over k-points, energies, q-points, restarts, run
+serially by default. `parallel.set_cores(n)` spreads them over `n` worker
+processes, and `parallel.set_enabled(False)` forces the whole package
+strictly serial, which is the setting to reach for when debugging.
 
 ```python
 from pyqula import parallel
-parallel.set_cores(4)          # spread pcall's work over 4 processes
+parallel.set_cores(4)          # spread the sweeps over 4 processes
 ```
 
 Results do not depend on the core count, including for the routines that draw
-random numbers -- KPM's stochastic trace, the multi-start anneals of the
-classical models. Each *task* is seeded from the parent process's own random
-stream, so a task's random numbers depend on its index in the sweep and not on
-which worker happened to run it: `cores=1` and `cores=8` give identical
-answers, and seeding the parent
+random numbers. KPM's stochastic trace, the multistart anneals of the
+classical models: `cores=1` and `cores=8` give identical answers. Seeding
+numpy in the parent process
 
 ```python
 import numpy as np
 np.random.seed(42)
 ```
 
-makes the whole sweep reproducible run to run. A `pcall` costs the parent
-exactly one draw off its own stream, whatever the tasks do with theirs.
+therefore makes a whole sweep reproducible run to run.
 
 # Errors and unsupported inputs
 
-Most routines in pyqula only make sense for a Hamiltonian of a particular
-dimensionality, or in a particular Hilbert space, or for one of a fixed set of
-`mode=`/`solver=`/`channel=` strings. Those requirements are checked up front, and a
-violated one raises an exception whose message says what the routine needed:
-
-- `ValueError` for a value that cannot work -- the Berry curvature of a Hamiltonian
-  that is not two-dimensional, an unknown `mode` string, a spin operator on a spinless
-  Hamiltonian, an array of the wrong length
-- `NotImplementedError` for a combination that is simply not built yet -- a spin
-  rotation of a 3d non-multicell Hamiltonian, say, where the fix is usually to call
-  `h.turn_multicell()` first
-- `TypeError` for an argument of the wrong kind entirely -- a string where an
-  `Operator` was expected
-
-Where the check can name the offending value it does, so a message reads
+Most routines only make sense for a Hamiltonian of a particular
+dimensionality or in a particular Hilbert space, or for one of a fixed set of
+`mode=`/`solver=`/`channel=` strings. Those requirements are checked up front,
+and the exception says what was needed rather than only that something went
+wrong: `ValueError` for a value that cannot work (the Berry curvature of a
+Hamiltonian that is not two-dimensional, an unknown `mode` string, a spin
+operator on a spinless Hamiltonian), `NotImplementedError` for a combination
+that is not built yet, `TypeError` for an argument of the wrong kind. For a
+string-selected option the accepted values are listed in the message, so a
+typo is self-diagnosing:
 
 ```
 ValueError: unknown mode ED2; the DOS accepts 'ED', 'KPM', 'adaptive', 'Green' and 'RG'
 ```
 
-rather than only saying that something went wrong. For string-selected options the
-accepted values are listed in the message, which makes a typo self-diagnosing without
-a trip to the source.
-
-Two of these messages are worth knowing in advance because they point at the fix
-rather than the failure: a superconducting quantity asked of a normal Hamiltonian says
-to call `h.setup_nambu_spinor()` first, and a spin quantity asked of a spinless one
+Two messages are worth knowing in advance because they name the fix: a
+superconducting quantity asked of a normal Hamiltonian says to call
+`h.setup_nambu_spinor()` first, and a spin quantity asked of a spinless one
 says to call `h.turn_spinful()`.
-
-Those two requirements are checked by three shared guards, `require_spin`,
-`require_nambu` and `require_sublattice` in `pyqula.check`, so the message reads the
-same wherever it comes from and always names three things: what was being computed,
-what is missing, and how to get it
 
 ```python
 from pyqula import geometry
@@ -3351,45 +3161,33 @@ h.extract("mz")
 # h.turn_spinful() first, or build it with g.get_hamiltonian(has_spin=True)
 ```
 
-They can be reused when adding a routine of your own. Note that the requirement is on
-*reading* a degree of freedom: the Hamiltonian methods that *add* a spin term --
-`h.add_exchange`, `h.add_zeeman`, `h.add_kane_mele` -- promote a spinless Hamiltonian
-to a spinful one rather than rejecting it. The third guard covers the sublattice,
-which several sublattice-resolved quantities need and which an unlabeled cell does not
-have: `h.extract("CDW")` on such a cell says so instead of returning `None`, and so
-does `h.extract("superfluidity")` on a Hamiltonian with no electron-hole grading.
+Note the requirement is on *reading* a degree of freedom. The methods that
+*add* a spin term, `h.add_exchange`, `h.add_zeeman`, `h.add_kane_mele`,
+promote a spinless Hamiltonian to a spinful one rather than rejecting it.
+A third requirement of the same kind is the sublattice label, which several
+sublattice-resolved quantities need and an unlabeled cell does not have:
+`h.extract("CDW")` on such a cell says so rather than returning `None`.
 
-A second family of checks exists not because the routine cannot run, but because it
-could run and return a number that means nothing. Those raise rather than answer:
+A second family of checks exists not because the routine cannot run, but
+because it could run and return a number that means nothing. Those raise
+rather than answer:
 
 - `h.get_average_spin_splitting()`, `h.get_spin_splitting_density()` and
-  `h.get_spin_splitting_vs_energy()` refuse a Hamiltonian whose spin off-diagonal
-  block does not vanish (Rashba, any spin-orbit term, non-collinear order), naming
-  the largest off-diagonal element found -- they are built on `remove_spin`, which
-  would drop that block without warning
-- `h.get_dos()` on a non-Hermitian Hamiltonian refuses every mode but `"ED"`, and
-  refuses `use_kpm=True`: the Chebyshev and adaptive expansions assume a real
-  spectrum (see "Non-Hermitian Hamiltonians")
-- `h.get_kdos_bands(frand=...)` refuses unless `mode="KPM"`, since only the KPM
-  path draws the random vectors that argument supplies
+  `h.get_spin_splitting_vs_energy()` refuse a Hamiltonian whose spin
+  off-diagonal block does not vanish (Rashba, any spin-orbit term,
+  non-collinear order), naming the largest off-diagonal element found
+- `h.get_dos()` on a non-Hermitian Hamiltonian refuses every mode but `"ED"`,
+  and refuses `use_kpm=True`: the Chebyshev and adaptive expansions assume a
+  real spectrum (see "Non-Hermitian Hamiltonians")
 - `h.get_total_energy(fermi=...)` refuses a Nambu Hamiltonian, where a nonzero
-  `fermi` is not a rigid shift of the spectrum (the electron and hole blocks move
-  opposite ways) -- use `h.shift_fermi(-mu)` on the Hamiltonian instead
-- `h.get_multildos(projection="atomic",operator=...)` refuses the combination and
-  names `projection="TB"` as the one that projects
+  `fermi` is not a rigid shift of the spectrum (the electron and hole blocks
+  move opposite ways). Use `h.shift_fermi(-mu)` on the Hamiltonian instead
 - the surface density of states refuses a momentum-dependent operator such as
   `"valley"`, which its Green's function has already integrated over
 - the lead decimation behind `HT.didv()`, `h.get_dos(mode="RG")` and
-  `Embedding.get_gf()` refuses an energy sitting exactly on a lead level with a
-  broadening below about `1e-7`, naming the energy, the broadening, the residual it
-  reached and the tolerance it needed, and recommending a larger `delta`
-- `h.check()`, the consistency check on a Hamiltonian, raises naming the deviation
-  when a matrix is not Hermitian to within `tol` (1e-5 by default), or when a Nambu
-  Hamiltonian's electron-hole symmetry is broken
+  `Embedding.get_gf()` refuses an energy sitting exactly on a lead level with
+  a broadening below about `1e-7`, and recommends a larger `delta`
 
-Passing an argument a routine cannot honour is also an error rather than a silent
-drop: an unknown keyword to `h.get_multildos()` is a `TypeError`, and so is passing
-both the old `op=` and the new `operator=` spelling to it.
 
 # Main functions and methods
 
@@ -3423,7 +3221,7 @@ Hamiltonian (see "Valley operator" for an example).
 
 Arguments
 
-- i=0: which sites to drop -- a single index into `g.r`, a list of indices,
+- i=0: which sites to drop, a single index into `g.r`, a list of indices,
   or a callable of the position, in which case every site where it returns
   True is removed
 
@@ -3458,14 +3256,14 @@ Optional arguments:
   to restrict the output to an energy window (e.g.
   `ewindow=lambda e: abs(e)<0.5`)
 
-- eigmode="complex": non-Hermitian Hamiltonians only -- which part of the
+- eigmode="complex": non-Hermitian Hamiltonians only, which part of the
   complex eigenvalue is returned and written, `"complex"`, `"real"` or
   `"imag"` (see "Non-Hermitian Hamiltonians"). With `"complex"` the written
   `BANDS.OUT` carries `k`, `Re E`, `Im E` and then the operator columns
 
 Without `kpath` the path is $\Gamma$-M for a square-like 2D lattice,
 $\Gamma$-K-M-K'-$\Gamma$ for a triangular-like one, and
-$\Gamma$-X-M-$\Gamma$-R for a 3D one -- the 3D path genuinely leaves the
+$\Gamma$-X-M-$\Gamma$-R for a 3D one, the 3D path genuinely leaves the
 $k_3=0$ plane, so the band edges of a 3D crystal are reached.
 
 Returns kpoint index and energies, plus one extra row per operator if `operator` is given
@@ -3517,7 +3315,7 @@ Optional arguments:
 
 For a non-Hermitian Hamiltonian only `mode="ED"` exists, and the extra
 `eigmode` argument chooses which part of the complex eigenvalue the
-broadening is centred on -- see "Non-Hermitian Hamiltonians".
+broadening is centred on. See "Non-Hermitian Hamiltonians".
 
 Return energies and DOS
 
@@ -3531,16 +3329,14 @@ incommensurate k-point is not missed.
 Optional arguments:
 
 - ntries=1: repeat the minimization this many times and keep the smallest
-  result. Since the search was made deterministic (a fixed coarse grid picks
-  the starting point, and `differential_evolution` runs with a fixed seed)
-  every repetition returns the identical number, so raising this only costs
-  time -- it is kept for backwards compatibility
+  result. The search is deterministic, so every repetition returns the same
+  number and raising this only costs time
 
 Returns a single number, the gap. Zero (up to numerical noise) for a metal
 or a Dirac semimetal
 
 ### h.get_bandwidth()
-Return the bottom and top of the spectrum, `(emin,emax)` -- note this is
+Return the bottom and top of the spectrum, `(emin,emax)`, note this is
 the pair of band edges, not their difference. Uses the same k-space
 optimization as `h.get_gap()`, so the edges are the true extrema over the
 Brillouin zone rather than the extrema of a k-mesh sample
@@ -3564,7 +3360,7 @@ Optional arguments:
 
 ### h.get_total_energy()
 Return the total energy, i.e. the sum of the occupied single-particle
-eigenvalues. For a mean-field Hamiltonian this is the band energy only --
+eigenvalues. For a mean-field Hamiltonian this is the band energy only,
 `h.get_mean_field_hamiltonian(...,return_total_energy=True)` returns the
 interacting total energy including the double-counting correction instead
 
@@ -3575,7 +3371,7 @@ Optional arguments:
 - fermi=0.0: energy below which states are counted as occupied. Not accepted
   for a Nambu Hamiltonian (raises `ValueError`): a nonzero `fermi` is not a
   rigid shift of a BdG spectrum, since the electron and hole blocks shift by
-  $-\mu$ and $+\mu$ -- shift the Hamiltonian instead, with
+  $-\mu$ and $+\mu$. Shift the Hamiltonian instead, with
   `h.shift_fermi(-mu)`, and leave `fermi=0`
 
 - mode="mesh": k-space sampling; `use_kpm=True` switches to a Chebyshev
@@ -3597,8 +3393,7 @@ the k-resolved, hopping-resolved version the self-consistent loops use.
 
 **Index convention.** This is
 $\mathrm{dm}_{ij}=\sum_\mathrm{occ}\psi_i^*\psi_j$, the *transpose* of the
-usual $\rho_{ij}=\sum_\mathrm{occ}\psi_i\psi_j^*$ -- the mean-field
-machinery is built around it. So an expectation value is
+usual $\rho_{ij}=\sum_\mathrm{occ}\psi_i\psi_j^*$. So an expectation value is
 `np.trace(dm.T@A)`, not `np.trace(dm@A)`: the two agree for any real
 operator (the density, $\sigma_x$, $\sigma_z$, a projector) and differ by a
 sign for a purely imaginary one ($\sigma_y$, the valley operator, any
@@ -3610,7 +3405,7 @@ Return the inverse participation ratio of every eigenstate, as
 `(energies,ipr)`. A delocalized state in a system of $N$ sites gives
 $\mathrm{IPR}\sim 1/N$ and a state localized on one site gives
 $\mathrm{IPR}\sim 1$, so this is the usual diagnostic for Anderson
-localization or for in-gap bound states. **Finite (0d) systems only** --
+localization or for in-gap bound states. **Finite (0d) systems only**,
 it raises `NotImplementedError` for a periodic Hamiltonian; for those use
 the IPR operator instead (see "Inverse participation ratio operator")
 
@@ -3639,14 +3434,14 @@ quantities go by this name, and the `mode` argument picks between them:
   expectation value
   $(\langle S_x\rangle,\langle S_y\rangle,\langle S_z\rangle)$ over the
   occupied states, i.e. `get_vev("sx"/"sy"/"sz")`. Being a Brillouin-zone
-  integral it needs a k-mesh -- pass `nk`, or rely on the mesh a
+  integral it needs a k-mesh. Pass `nk`, or rely on the mesh a
   self-consistent Hamiltonian remembers from its own loop. On a metal at
   $T=0$ the moment is quantized in steps of $2/n_k$, so use a fine enough
   mesh (or `mode="field"`) when comparing weakly polarized states
 - `mode="field"` reads the magnetic *term written in the Hamiltonian*
   instead, i.e. the coefficients of $\sigma_{x,y,z}$ on each site. After a
   self-consistent calculation this is the mean-field exchange field: the
-  natural order parameter of the loop, proportional -- not equal -- to the
+  natural order parameter of the loop, proportional, not equal, to the
   moment, and continuous where the moment is quantized. On a Hamiltonian
   whose field you put in by hand it hands that field straight back
 
@@ -3714,7 +3509,7 @@ Arguments:
 
 ### h.add_sublattice_imbalance()
 Add a staggered onsite energy, $+m$ on one sublattice and $-m$ on the other
--- the mass term that gaps a honeycomb lattice into a boron-nitride-like
+the mass term that gaps a honeycomb lattice into a boron-nitride-like
 semiconductor
 
 Arguments:
@@ -3756,7 +3551,7 @@ Needs a geometry with a sublattice. Breaks time-reversal symmetry
 ### h.add_modified_haldane() / h.add_antihaldane()
 Same second-neighbor complex hopping, but with the sign also flipped
 between the two sublattices, so the two valleys acquire opposite masses
-and the total Chern number is zero -- a valley-Hall rather than a Chern
+and the total Chern number is zero, a valley-Hall rather than a Chern
 insulator. `add_antihaldane` is a second name for the same method.
 
 Arguments
@@ -3802,8 +3597,8 @@ Arguments
 - v = (vx,vy,vz): the valley field
 
 Built from the same in-plane valley operators, so for a periodic
-Hamiltonian it needs a Kekule-commensurate cell -- a multiple-of-3
-supercell of the primitive honeycomb cell -- and raises `ValueError`
+Hamiltonian it needs a Kekule-commensurate cell, a multiple-of-3
+supercell of the primitive honeycomb cell, and raises `ValueError`
 otherwise. A finite (0d) flake needs no such commensurability
 
 ### h.add_peierls() / h.add_orbital_magnetic_field()
@@ -3813,7 +3608,7 @@ hopping. `add_orbital_magnetic_field` is a second name for the same method.
 Arguments
 
 - mag_field: the field, in units of the flux quantum per unit area of the
-  lattice -- the Peierls phase on a bond is $2\pi B\,y\,dx$ in the Landau
+  lattice, the Peierls phase on a bond is $2\pi B\,y\,dx$ in the Landau
   gauge. A periodic (commensurate) calculation needs the flux through the
   unit cell to be a rational multiple of the flux quantum, so build the
   supercell first and pick `mag_field` to match it
@@ -3830,7 +3625,7 @@ vortices. Add the field to the normal-state Hamiltonian first, then
 
 ### h.add_inplane_bfield()
 Add an in-plane magnetic field, as a Peierls phase built from the
-out-of-plane coordinate -- meaningful for a multilayer or a system with
+out-of-plane coordinate. Meaningful for a multilayer or a system with
 finite thickness, where an in-plane field still threads flux between the
 layers.
 
@@ -3898,7 +3693,7 @@ Optional arguments
 
 - delta=0.0: pairing amplitude, a number or a callable of the position
 - mode="swave": the pairing symmetry. The accepted names are listed in
-  `pyqula.sctk.pairing.pairing_modes` -- `"swave"`, `"extended_swave"`,
+  `pyqula.sctk.pairing.pairing_modes`, `"swave"`, `"extended_swave"`,
   `"triplet"`, `"pwave"`, `"chiral_pwave"`, `"dx2y2"`, `"dxy"`,
   `"nodal_dwave"`, `"chiral_dwave"`, `"nodal_fwave"`, `"chiral_fwave"`,
   `"chiral_gwave"`, `"haldane"`, `"antihaldane"`, and several others. A
@@ -3933,7 +3728,7 @@ Optional arguments
 - channel="up": which block to keep, `"up"` or `"dn"`
 
 This **drops the spin off-diagonal block**, so it is only meaningful when
-spin is a good quantum number -- with spin-orbit coupling or non-collinear
+spin is a good quantum number. With spin-orbit coupling or non-collinear
 order the result is a different model, not a projection of this one. The
 spin-splitting routines built on it check that explicitly (see
 "Errors and unsupported inputs")
@@ -3964,7 +3759,7 @@ Optional arguments
 
 - energy=0.0: energy at which it is evaluated
 - delta=1e-5: imaginary part (analytic continuation)
-- mode="adaptive": how the Brillouin-zone integral is done -- `"adaptive"`
+- mode="adaptive": how the Brillouin-zone integral is done, `"adaptive"`
   (error-controlled), `"full"` (a fixed `nk` mesh) or `"renormalization"`
 - gtype="bulk": `"bulk"` or `"surface"`
 
@@ -4022,7 +3817,7 @@ Optional arguments:
 
 - projection="TB": `"TB"`, `"TBRS"` (real-space interpolated) or `"atomic"`
 
-- eigmode="complex": non-Hermitian Hamiltonians only -- whether `e` is read
+- eigmode="complex": non-Hermitian Hamiltonians only, whether `e` is read
   on the real or the imaginary axis of the complex spectrum (see
   "Non-Hermitian Hamiltonians"). Only `mode="diagonalization"` is
   implemented there
@@ -4043,7 +3838,7 @@ Optional arguments:
 - delta, nk: broadening and k-point density, as in `h.get_ldos()`
 
 - operator=None: operator the LDOS is projected onto, weighting each
-  eigenstate by $\langle\Psi|A|\Psi\rangle$ -- the same convention
+  eigenstate by $\langle\Psi|A|\Psi\rangle$, the same convention
   `h.get_ldos(mode="arpack")` uses. The older spelling `op=` is still
   accepted; passing both raises `TypeError`
 
@@ -4059,7 +3854,7 @@ Compute a non-interacting operator-operator response function (charge-charge by 
 Optional arguments:
 
 - q=None: momentum transfer. Left as `None` the response is *averaged over
-  the whole q-mesh* rather than evaluated at q=0 -- pass `q=[0.,0.,0.]`
+  the whole q-mesh* rather than evaluated at q=0, pass `q=[0.,0.,0.]`
   explicitly for the uniform response
 
 - A=None, B=None: operators defining the response (default: identity, i.e. charge-charge)
@@ -4077,7 +3872,7 @@ Optional arguments:
 
 - RPA=True: dress with the random-phase approximation; `False` for the bare response
 
-- chi_cpugpu="CPU": backend for the underlying Lindhard kernel; `"GPU"` dispatches it to jax (falling back to jax's CPU backend if no device is visible). Also accepted by `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles` and `get_magnon_bands(method="rpa")`, which all share that kernel. Unsupported combinations (`mode="trace"`/`"diagonal"`, `imode="adaptive"`) raise instead of falling back to the CPU
+- chi_cpugpu="CPU": where the Lindhard response is computed; `"GPU"` runs it on a GPU, falling back to the CPU if none is visible. Also accepted by `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles` and `get_magnon_bands(method="rpa")`, which all share that kernel. Unsupported combinations (`mode="trace"`/`"diagonal"`, `imode="adaptive"`) raise instead of falling back to the CPU
 
 ### h.get_rpa_kernel_poles()
 Compute the poles of the generic RPA kernel $1-V(q)\chi(q,\omega)$: the frequencies of the collective modes/instabilities of the interacting response.
@@ -4088,7 +3883,7 @@ Optional arguments:
 
 - A=None, B=None, q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
 
-Returns an `(npoles,2)` array: pole frequency and its (signed) residual imaginary part -- filter on its magnitude, not its raw value, to keep only sharp/well-defined modes -- one row per collective mode found, sorted by frequency.
+Returns an `(npoles,2)` array: pole frequency and its (signed) residual imaginary part, filter on its magnitude, not its raw value, to keep only sharp/well-defined modes, one row per collective mode found, sorted by frequency.
 
 ### h.get_magnon_bands()
 Compute the magnon bands of a magnetic mean-field state, scanned along a q-path. Two methods, with different domains of validity:
@@ -4097,18 +3892,18 @@ Optional arguments:
 
 - method="rpa" / "pair" / "tdhf": which ladder to sum. See "The three magnon routes" above for the coverage table; in short, "rpa" is the site basis (onsite U or neighbour-shell exchange), "pair" keeps the interaction's pair index (any density-density interaction, onsite or not, metals included, frequency-resolved), "tdhf" solves the electron-hole pair eigenproblem (any density-density interaction, no frequency grid).
 
-- method="rpa": the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`, with the interaction taken from the mean field -- an onsite `h.V`, or a neighbor-shell **exchange** interaction through `h.Vchannels`, which the SCF records; a neighbor-shell density-density interaction is refused). Works for metals as well as insulators, and needs a frequency grid. `method="tdhf"` instead solves the time-dependent Hartree-Fock problem in the spin-flip electron-hole pair basis: it handles a neighbor-shell density-density interaction, has an exact Goldstone mode, needs no frequency grid, and requires a gapped reference converged on the same `nk`
+- method="rpa": the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`, with the interaction taken from the mean field, an onsite `h.V`, or a neighbor-shell **exchange** interaction through `h.Vchannels`, which the SCF records; a neighbor-shell density-density interaction is refused). Works for metals as well as insulators, and needs a frequency grid. `method="tdhf"` instead solves the time-dependent Hartree-Fock problem in the spin-flip electron-hole pair basis: it handles a neighbor-shell density-density interaction, has an exact Goldstone mode, needs no frequency grid, and requires a gapped reference converged on the same `nk`
 
 - qpath=None, nq=20: the q-path (default path of the geometry) and number of q-points
 
 - energies, delta, nk: as above (`method="rpa"` only)
 
-- nk, n, channel, V: for `method="tdhf"` -- the k-mesh (which must match the SCF's), how many branches to keep per q-point, whether to restrict to the spin-flip block (`"auto"`, `"spinflip"`, `"all"`), and an interaction overriding `h.V`
+- nk, n, channel, V: for `method="tdhf"`, the k-mesh (which must match the SCF's), how many branches to keep per q-point, whether to restrict to the spin-flip block (`"auto"`, `"spinflip"`, `"all"`), and an interaction overriding `h.V`
 
 Returns `(qs,ws,gammas)` for `method="rpa"`: three flat 1D arrays of equal length, `qs` the integer q-point index along the path, `ws` the pole frequency, `gammas` its residual imaginary part. `method="tdhf"` returns `(qs,es)`, with `es` the (complex) magnon energy.
 
 ### h.get_transverse_spinchi()
-Return the spin response computed in the basis of the interaction's *pair* index rather than of sites, which is what lets it carry a neighbour-shell density-density interaction -- the one the site-basis RPA maps to exactly zero. Needs no gapped reference and no global spin quantization axis, so it covers metals and non-collinear states alike, and returns a frequency-resolved, spin- and site-resolved $\chi(\omega)$.
+Return the spin response computed in the basis of the interaction's *pair* index rather than of sites, which is what lets it carry a neighbour-shell density-density interaction, the one the site-basis RPA maps to exactly zero. Needs no gapped reference and no global spin quantization axis, so it covers metals and non-collinear states alike, and returns a frequency-resolved, spin- and site-resolved $\chi(\omega)$.
 
 Optional arguments:
 
@@ -4124,7 +3919,7 @@ Returns `(energies,chi)` with `chi` one $3N\times3N$ tensor per frequency, in th
 Return the magnon energies at a single center-of-mass momentum `Q`, from the spin-flip channel of the Bethe-Salpeter equation. Same arguments as `get_magnon_bands(method="tdhf")` with `Q=[qx,qy,qz]` in place of the q-path. A sizable imaginary part on an energy means the mean-field reference is unstable against that excitation.
 
 ### h.get_goldstone_residual()
-Return how far a magnetic mean field is from having a zero-energy magnon at $Q=0$, as the Goldstone theorem requires of any magnetic state without spin-orbit coupling: $\|Mv\|/\|v\|$ with $M$ the time-dependent Hartree-Fock matrix and $v$ the uniform spin-rotation generator in the pair basis. It is proportional to the SCF tolerance the mean field was converged to and to nothing else, so it is the check to run before trusting a magnon dispersion -- in particular it is what catches a mean field converged on a different `nk` than the magnon is being solved on.
+Return how far a magnetic mean field is from having a zero-energy magnon at $Q=0$, as the Goldstone theorem requires of any magnetic state without spin-orbit coupling: $\|Mv\|/\|v\|$ with $M$ the time-dependent Hartree-Fock matrix and $v$ the uniform spin-rotation generator in the pair basis. It is proportional to the SCF tolerance the mean field was converged to and to nothing else, so it is the check to run before trusting a magnon dispersion. In particular it is what catches a mean field converged on a different `nk` than the magnon is being solved on.
 
 Optional arguments:
 
@@ -4133,7 +3928,7 @@ Optional arguments:
 - relative=True: divide by the largest transition energy of the pair basis, so the number is comparable across models with different bandwidths
 
 ### h.get_densitychi_RPA()
-Compute the density (charge) RPA response function for a `V1`/`V2`/`V3`-neighbor-shell (+ onsite `U`, + general `Vr(r)`) density-density interaction, same convention as `Vinteraction`/`VJinteraction`. Unlike `get_spinchi_full`, the interaction is taken directly as parameters, not read from `h.V` -- no mean-field convergence is needed first.
+Compute the density (charge) RPA response function for a `V1`/`V2`/`V3`-neighbor-shell (+ onsite `U`, + general `Vr(r)`) density-density interaction, same convention as `Vinteraction`/`VJinteraction`. Unlike `get_spinchi_full`, the interaction is taken directly as parameters, not read from `h.V`. No mean-field convergence is needed first.
 
 Optional arguments:
 
@@ -4142,7 +3937,7 @@ Optional arguments:
 - q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
 
 ### h.get_plasmon_bands()
-Compute the plasmon/charge-order bands: the poles of the density RPA kernel for a `V1`/`V2`/`V3`/`U`/`Vr` neighbor-shell density-density interaction, scanned along a q-path -- the charge-channel analog of `get_magnon_bands`.
+Compute the plasmon/charge-order bands: the poles of the density RPA kernel for a `V1`/`V2`/`V3`/`U`/`Vr` neighbor-shell density-density interaction, scanned along a q-path, the charge-channel analog of `get_magnon_bands`.
 
 Optional arguments:
 
@@ -4157,7 +3952,7 @@ Solve the Bethe-Salpeter equation (excitons) on top of this mean-field Hamiltoni
 
 Optional arguments:
 
-- V=None: the electron-hole interaction. `None` reads it from `h.V`, the interaction the mean field was converged with (so the BSE kernel and the Fock self-energy inside `h` come from the same interaction). Otherwise a real-space dictionary `{(n1,n2,n3): matrix}`, or a plain matrix for an onsite-only interaction -- `bsetk.interaction.density_interaction` builds one from `U`/`V1`/`V2`/`V3`/`Vr`
+- V=None: the electron-hole interaction. `None` reads it from `h.V`, the interaction the mean field was converged with (so the BSE kernel and the Fock self-energy inside `h` come from the same interaction). Otherwise a real-space dictionary `{(n1,n2,n3): matrix}`, or a plain matrix for an onsite-only interaction, `bsetk.interaction.density_interaction` builds one from `U`/`V1`/`V2`/`V3`/`Vr`
 
 - Q=None: center-of-mass momentum of the exciton, defaulting to the zone center
 
@@ -4165,13 +3960,13 @@ Optional arguments:
 
 - nv=None, nc=None: restrict to the `nv` highest valence and `nc` lowest conduction bands; `None` takes all of them
 
-- kernel="full": which kernel terms to include -- `"full"`, `"direct"` (ladder only), `"exchange"` (exactly the RPA) or `"none"` (bare transitions)
+- kernel="full": which kernel terms to include, `"full"`, `"direct"` (ladder only), `"exchange"` (exactly the RPA) or `"none"` (bare transitions)
 
 - tda=False: apply the Tamm-Dancoff approximation, diagonalizing only the resonant block
 
 - max_memory=2.0: refuse, rather than attempt, a calculation whose dense matrix would need more than this many GB
 
-- screening=None: the interaction of the *direct* (ladder) term. `None` keeps the bare one, i.e. time-dependent Hartree-Fock; `"rpa"` replaces it by the static RPA screened interaction $W=\varepsilon^{-1}v$ built from this Hamiltonian's own bands; `"crpa"` does the same with the transitions inside the `nv`/`nc` window left out of the polarization; a `ScreenedInteraction` reuses a precomputed one. The exchange term always keeps the bare interaction. Do not screen a fitted Hubbard `U` -- see the section above
+- screening=None: the interaction of the *direct* (ladder) term. `None` keeps the bare one, i.e. time-dependent Hartree-Fock; `"rpa"` replaces it by the static RPA screened interaction $W=\varepsilon^{-1}v$ built from this Hamiltonian's own bands; `"crpa"` does the same with the transitions inside the `nv`/`nc` window left out of the polarization; a `ScreenedInteraction` reuses a precomputed one. The exchange term always keeps the bare interaction. Do not screen a fitted Hubbard `U`, see the section above
 
 - nkW=None: k-mesh for the screening, defaulting to `nk`. Must be an integer multiple of it
 
@@ -4183,9 +3978,9 @@ Optional arguments:
 
 - gauge="auto": smooth the arbitrary phase left on each Bloch eigenvector. `"auto"` turns it on (as `"projection"`) only for `solver="qtt"`, which cannot work without it; `"phase"`, `"projection"` or `None` apply to every solver. It changes no energy, being a unitary on the pair index
 
-`solver="qtt"` additionally takes `tolerance` (cross-interpolation tolerance of the kernel MPO, default `1e-6`), `maxbonddim`, `maxdim`/`nsweep`/`cutoff` (the DMRG parameters), `coarse_nk` (the submesh the band window and gauge references are read from) and `unfolding` (`"grouped"`, the measured default, or `"interleaved"`).
+`solver="qtt"` additionally takes `tolerance` (default `1e-6`), `maxbonddim` and `maxdim`/`nsweep`/`cutoff`, which trade accuracy against cost, plus `coarse_nk` (the submesh the band window is read from) and `unfolding`.
 
-The returned object exposes `energies`, `amplitudes` (the resonant amplitudes $A_{vc}(k)$), `amplitudesY` (the antiresonant ones, zero under `tda`), `pairs` (the k-mesh, band window and `(ik,iv,ic)` label of every pair index), and the methods `get_energies(n)`, `get_binding_energies(n)` and `get_lowest_transition()` -- the last being the lowest independent-particle transition the binding energies are measured from, obtained as a mesh minimum for the first two solvers and, for `"qtt"`, by a binary descent on the mesh index seeded from the k-points already visited (a minimum over the whole mesh would be the one step of that solver that is not logarithmic).
+The returned object exposes `energies`, `amplitudes` (the resonant amplitudes $A_{vc}(k)$), `amplitudesY` (the antiresonant ones, zero under `tda`), `pairs` (the k-mesh, band window and `(ik,iv,ic)` label of every pair index), and the methods `get_energies(n)`, `get_binding_energies(n)` and `get_lowest_transition()`. The last is the lowest independent-particle transition, the energy the binding energies are measured from.
 
 ### h.get_exciton_energies()
 Return the exciton energies from the Bethe-Salpeter equation, sorted. Takes the same arguments as `get_bse`, plus `n=None` to keep only the `n` lowest.
@@ -4271,19 +4066,19 @@ Optional arguments:
 
 - energies, nk, delta: as above
 
-- mode="response": `"pm"` ("poor man's", autoconvolves the actual k-resolved spectral weight -- the physical QPI of a real scatterer) or `"response"` (cheaper Lindhard-like joint-DOS convolution of the clean bands)
+- mode="response": `"pm"` ("poor man's", autoconvolves the actual k-resolved spectral weight, the physical QPI of a real scatterer) or `"response"` (cheaper Lindhard-like joint-DOS convolution of the clean bands)
 
 - nunfold=1: unfold the QPI of a defect embedded in an `nunfold`x`nunfold` supercell back onto the primitive Brillouin zone
 
 ### h.get_qpi_impurity()
-Compute quasiparticle interference by placing real-space impurities in a supercell, computing the real-space LDOS with ARPACK partial diagonalization, and Fourier transforming it directly (2D systems only). Returns `(r,ldos_r,q,qpi_q)`.
+Compute quasiparticle interference by placing real-space impurities in a supercell, computing the real-space LDOS by partial diagonalization, and Fourier transforming it directly (2D systems only). Returns `(r,ldos_r,q,qpi_q)`.
 
 Optional arguments:
 
 - nsuper=10: supercell size (scalar or `(n1,n2)`)
 - impurities=[]: list of dicts, each `{"position"|"index": ..., "onsite": v}` or `{"position"|"index": ..., "vacancy": True}`
 - energies=0.0, delta, nk: as above
-- num_waves=20: starting number of ARPACK eigenstates computed nearest the requested energies -- grown automatically as needed until the diagonalization both reaches `margin` (default 5.0) times `delta` past every requested energy and never stops in the middle of a degenerate manifold (summing over a partial degenerate manifold isn't basis-independent, which otherwise makes the result depend on ARPACK's starting vector -- common on symmetric lattices like honeycomb, which have large exact degeneracies at high-symmetry k-points). Picking it too small just costs extra ARPACK calls to grow from, not correctness
+- num_waves=20: starting number of eigenstates computed nearest the requested energies. It grows automatically until the window reaches `margin` (default 5.0) times `delta` past every requested energy, and never stops in the middle of a degenerate manifold, since half a manifold would give a basis-dependent answer. Picking it too small costs a little time, not correctness
 - write=True, output_folder="QPI_IMPURITY": also write the MULTIQPI-style disk output
 
 ### h.get_spin_splitting_density()
@@ -4295,7 +4090,7 @@ Optional arguments:
 - energies: energies at which the density is evaluated (default 400 points spanning -3 to 3)
 - delta=1e-2: broadening
 - tol=1e-7: largest spin off-diagonal element of the Bloch Hamiltonian
-  tolerated, the same guard `get_spin_splitting_vs_energy` applies -- above
+  tolerated, the same guard `get_spin_splitting_vs_energy` applies, above
   it this raises rather than answering
 
 ### h.get_average_spin_splitting()
@@ -4333,7 +4128,7 @@ Optional arguments:
 - integration="grid": how the Brillouin-zone integral is evaluated. "grid"
   (default) sums the Berry curvature over a uniform nk x nk mesh; "qtci"
   integrates it by quantics tensor cross interpolation plus Gauss-Kronrod
-  quadrature, sampling adaptively instead of uniformly -- useful when the
+  quadrature, sampling adaptively instead of uniformly, useful when the
   curvature is sharply peaked. See "Tensor-cross-interpolation (qtci)
   integration"
 - operator=None: a name, a matrix or an `Operator`, as for
@@ -4343,7 +4138,7 @@ Optional arguments:
 
 ### h.get_berry_curvature()
 Return the Berry curvature of the occupied bands as a map over the
-Brillouin zone, `(kx,ky,berry)` -- three flat arrays, so it goes straight
+Brillouin zone, `(kx,ky,berry)`. Three flat arrays, so it goes straight
 into a `plt.scatter(kx,ky,c=berry)` or, after reshaping to `(nk,nk)`, into
 a `contourf`. This is the same curvature that `h.get_chern()` integrates.
 
@@ -4398,7 +4193,7 @@ quantum metric (symmetric part of the tensor).
 Non-unitarity vector $\vec q = i(\vec d \times \vec d^*)$ of the spin-triplet
 d-vector of a BdG (Nambu) Hamiltonian, resolved per site (see "Spin-triplet
 d-vector and non-unitary superconductivity"). It is real, vanishes for a
-unitary state, and otherwise is the spin moment of the Cooper pairs --
+unitary state, and otherwise is the spin moment of the Cooper pairs,
 parallel to the magnetization in a ferromagnetic spin-triplet
 superconductor, and along $+z$ for a pure $\Delta_{\uparrow\uparrow}$
 pairing.
@@ -4578,8 +4373,7 @@ Optional arguments:
 - return_total_energy=False: also return the total energy
 
 Also works on BdG (Nambu) Hamiltonians, decoupling both the normal and
-anomalous (pairing) channels (same generic dispatch `get_mean_field_hamiltonian`
-already uses).
+anomalous (pairing) channels.
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
 
@@ -4603,7 +4397,7 @@ Optional arguments:
 
 Also works on BdG Hamiltonians, with the same full normal-plus-anomalous
 decoupling as `get_combined_mean_field_hamiltonian`'s density-density
-channels -- exchange can itself induce superconducting pairing (e.g. an
+channels. Exchange can itself induce superconducting pairing (e.g. an
 antiferromagnetic isotropic $J$ alone, seeded with a random guess, can
 spontaneously decouple into a purely superconducting state).
 
@@ -4631,7 +4425,7 @@ magnetism (see "Spin-spin exchange interactions" above, and the
 - integration="ed": computes the density matrix each SCF iteration by exact
   diagonalization. `"kpm"` instead gets it through a per-k Chebyshev-moment
   (Kernel Polynomial Method) expansion, never diagonalizing the Bloch
-  Hamiltonian $H(k)$ -- for large/sparse systems (e.g. a big 0D flake,
+  Hamiltonian $H(k)$. For large/sparse systems (e.g. a big 0D flake,
   where the unit cell itself is too large to diagonalize or even hold as a
   dense matrix) where per-iteration exact diagonalization is the
   bottleneck; only supported for a normal-state (non-BdG) Hamiltonian.
@@ -4640,62 +4434,15 @@ magnetism (see "Spin-spin exchange interactions" above, and the
   `ne` the number of energies sampled in the occupied window, `cores` the
   number of parallel workers across k-points; all four are unused for
   `"ed"`. Also reachable through
-  `h.get_mean_field_hamiltonian(integration="kpm",...)`, which dispatches
-  to this function automatically for a spinful `h`.
-
-  **Performance caveat** (measured, not just theoretical): at
-  small/moderate system sizes (order 100-500 sites) `"kpm"` is currently
-  much *slower* per SCF iteration than `"ed"` -- roughly 50-60x slower,
-  measured on a 98-site honeycomb Hubbard system -- because dense exact
-  diagonalization via LAPACK is extremely fast at that scale regardless of
-  algorithmic complexity, while this KPM implementation still pays real
-  per-orbital and per-matrix-element overhead (see
-  `kpmtk.densitymatrix_kpm._dm_kpm_from_needed`'s and
-  `get_fermi4filling_kpm`'s docstrings for exactly where). It should in
-  principle win for a large/sparse enough system, but that crossover was
-  not reached in the sizes tested. Only use `"kpm"` after confirming it is
-  actually faster for your system.
-- `use_jax=True, solver="newton"`: solve the same SCF fixed point
-  $x=f(x)$ ($x$ the mean-field parameters, $f$ one SCF iteration) a
-  different way -- instead of the default plain-mixing loop above, build a
-  JAX-differentiable version of $f$ and solve it with a JAX-derivative-based
-  root-finder. `solver="newton"` (the default once `use_jax=True`) uses
-  `jax.jacfwd` for the exact Jacobian; `"newton_krylov"` is the matrix-free
-  variant (`jax.jvp` Jacobian-vector products + GMRES), which scales to
-  larger systems than the dense-Jacobian `"newton"` (`gmres_tol=1e-6`,
-  `gmres_restart=20` tune its linear solve); `"fsolve"` wraps
-  `scipy.optimize.fsolve`/MINPACK with the same `jax.jacfwd` Jacobian as
-  `fprime`; `"linear_mixing"` is plain linear mixing routed through the same
-  machinery, for comparison; `"error_gradient"` instead minimizes the squared
-  SCF residual $\|f(x)-x\|^2$ as a proper nonlinear least-squares problem,
-  via matrix-free Levenberg-Marquardt (`jax.jvp`/`jax.vjp` Jacobian-vector
-  and Jacobian-transpose-vector products of the residual + `scipy`'s `lsqr`
-  for each damped LM subproblem) -- not the physical free energy directly
-  (see `scftk.vjinteraction_jax`'s module docstring for why that
-  alternative was tried and abandoned: the physical SCF solution turned out
-  to be a saddle point, not a minimum, of the free-energy functional).
-  `"error_gradient"` scales per-iteration like `"newton_krylov"`/
-  `"linear_mixing"` (no dense Jacobian), and matches `"newton"`/
-  `"newton_krylov"` well from small systems up through at least ~60
-  orbitals (see `scftk.vjinteraction_jax`'s module docstring for
-  measured numbers), but as a local method it can in principle still stall
-  short of `maxerror` on a sufficiently hard landscape -- always check
-  `.converged`. `"broyden_mixing"` is a black-box
-  mixing scheme rather than a root-finder/gradient method (regularized,
-  limited-memory multisecant Broyden mixing, Marks & Luke arXiv:0801.3098 --
-  see `scftk.broydenmixing`'s module docstring); it only ever
-  evaluates $f$ itself, so it plugs into the same solver dispatch with no
-  Jacobian/gradient machinery of its own, and is also reachable from the
-  plain (non-jax) engine as `solver="broyden_mixing"` (alongside the
-  existing `"broyden1"`/`"krylov"`/`"anderson"`/`"linear"` `scipy.optimize`
-  wrappers in `scftk.densitydensity.generic_densitydensity`).
-  Restricted to a normal-state (non-BdG)
-  Hamiltonian, dense exact diagonalization only (no `integration="kpm"`),
-  and no `constrains`; needs the optional `jax` extra
-  (`pip install pyqula[jax]`). See `scftk.vjinteraction_jax`'s
-  module docstring for how this reuses (unmodified) the solver
-  infrastructure `scftk.densitydensity_jax` already built for the
-  simpler `Vinteraction` (V/U-only) case:
+  `h.get_mean_field_hamiltonian(integration="kpm",...)`.
+- `use_jax=True, solver=...`: solve the same SCF fixed point $x=f(x)$ ($x$
+  the mean-field parameters, $f$ one SCF iteration) with a nonlinear solver
+  instead of plain mixing. `"error_gradient"` is the most robust of these on
+  a generic Hamiltonian, `"newton"` the default; as local methods they can
+  still stall short of `maxerror`, so always check `.converged`. Restricted
+  to a normal-state (non-BdG) Hamiltonian, dense exact diagonalization only
+  (no `integration="kpm"`), and no `constrains`; needs the optional `jax`
+  extra (`pip install pyqula[jax]`):
 ```python
 from pyqula import geometry
 h = geometry.chain().get_hamiltonian()
@@ -4709,12 +4456,9 @@ Returns the converged Hamiltonian (or `None` if the SCF did not converge)
 0-to-1-fraction-of-2-orbital-capacity convention as the scalar case) instead
 of only a single lattice-averaged value, enforcing $\langle n_i\rangle=$
 `filling[i]` at every site independently via a per-site Lagrange multiplier
-(warm-started and co-converged with the mean field across the same SCF
-loop, one diagonalization per outer iteration -- not solved to tight
-tolerance every iteration, since a per-site potential generally changes the
-eigenvectors too, unlike a scalar Fermi shift). `scf.local_occupation` and
-`scf.lam`/`h.fermi` (now the converged per-site array) expose the
-diagnostics; `scf.converged` implies the per-site constraint converged to
+co-converged with the mean field in the same SCF loop.
+`scf.local_occupation` and `scf.lam`/`h.fermi` (the converged per-site
+array) expose the result; `scf.converged` implies the per-site constraint converged to
 within `maxerror`, not only the mean field. Only supported for a
 normal-state (non-BdG), `integration="ed"` Hamiltonian with `mu=None`
 (the default). This is the
@@ -4724,7 +4468,7 @@ fermion per site.
 
 ### SpinonHamiltonian(g)
 Abrikosov-pseudofermion (RVB) mean-field Hamiltonian for a spin-$\tfrac12$
-Heisenberg model on geometry `g` -- see "Abrikosov-pseudofermion (spinon)
+Heisenberg model on geometry `g`. See "Abrikosov-pseudofermion (spinon)
 mean field for Heisenberg models" above. `from pyqula.spinon import
 SpinonHamiltonian`; built with zero bare hopping, couplings supplied
 through `get_mean_field_hamiltonian`'s usual `J1`/`J2`/`J3`/`Jr`/`J1x`/
@@ -4736,14 +4480,14 @@ through `get_mean_field_hamiltonian`'s usual `J1`/`J2`/`J3`/`Jr`/`J1x`/
   the converged Hamiltonian (or `None` if the SCF did not converge), with
   two extra diagnostic attributes:
   - `h2.local_occupation`: converged $\langle n_i\rangle$ per site
-    (electron-count convention, 0 to 2 -- target is exactly 1.0)
+    (electron-count convention, 0 to 2, target is exactly 1.0)
   - `h2.constraint_lambda`: converged per-site Lagrange multiplier (local
     chemical potential)
 
 ### KondoLatticeHamiltonian(hc)
 Abrikosov-pseudofermion (Read-Newns) mean-field Hamiltonian for the Kondo
 lattice / periodic Anderson model built from a conduction-electron
-Hamiltonian `hc` -- see "Abrikosov-pseudofermion (Read-Newns) mean field
+Hamiltonian `hc`. See "Abrikosov-pseudofermion (Read-Newns) mean field
 for the Kondo lattice" above. `from pyqula.kondolattice import
 KondoLatticeHamiltonian`; fuses a second, zero-bare-hopping f-sublattice
 onto `hc`'s geometry, with the Kondo coupling supplied through
@@ -4761,7 +4505,7 @@ onto `hc`'s geometry, with the Kondo coupling supplied through
 
 ### GrapheneGeometry(g)
 `Geometry` subclass wrapping a graphene multilayer geometry `g` (bilayer,
-twisted bilayer, twisted trilayer, ...), adding a `.relax()` method -- see
+twisted bilayer, twisted trilayer, ...), adding a `.relax()` method, see
 "Twisted bilayer graphene structural relaxation" above. `from
 pyqula.graphenetk.geometry import GrapheneGeometry`; `g` must have
 `has_sublattice=True` (raises `ValueError` otherwise).
@@ -4777,7 +4521,7 @@ pyqula.graphenetk.geometry import GrapheneGeometry`; `g` must have
 
 ### GrapheneHamiltonian(geometry)
 Hamiltonian built from a graphene multilayer `geometry` (typically a
-`GrapheneGeometry`, relaxed or not) -- see "Twisted bilayer graphene
+`GrapheneGeometry`, relaxed or not), see "Twisted bilayer graphene
 structural relaxation" above. `from pyqula.graphenetk.hamiltonian import
 GrapheneHamiltonian`; defaults to the distance-decaying hoppings of
 `specialhopping.twisted_matrix` (`ti=0.12,lambi=8.0,lamb=12.0,dl=3.0`,
@@ -4793,7 +4537,7 @@ Optional arguments:
 
 - i=0, j=None: 0-indexed sites `h` is contacted at; `j` defaults to the last site
 
-- left=None, right=None: lead Hamiltonians; default to a plain spinless `geometry.chain()`. Give one of them (or `h` itself) nonzero pairing (`add_swave`) for a normal-superconductor junction -- at most one of `{h, left, right}` may carry pairing
+- left=None, right=None: lead Hamiltonians; default to a plain spinless `geometry.chain()`. Give one of them (or `h` itself) nonzero pairing (`add_swave`) for a normal-superconductor junction. At most one of `{h, left, right}` may carry pairing
 
 Returns a `Heterostructure`, so `didv`, `get_dos`, `get_kappa`, etc. all apply unmodified; `landauer` is the exception, raising `NotImplementedError` once any of the three carries pairing (use `didv` there). Only 0d central regions are supported so far (`h.dimensionality>0` raises `NotImplementedError`).
 
@@ -4831,13 +4575,11 @@ Arguments:
 Returns an array of DC currents
 
 ### HT.didv_curve() / lp.didv_curve()
-Convenience wrapper: `didv` evaluated over an array of energies, in parallel -- the array-native
+Convenience wrapper: `didv` evaluated over an array of energies, in parallel, the array-native
 equivalent of `[ht.didv(energy=e) for e in es]`. Also reachable as `didv(energies=...)` (mutually
-exclusive with `didv`'s scalar `energy=...`, same convention as `get_kappa`), which dispatches
-straight here. If `use_aaa=True` and the sweep resolves to the Floquet-Keldysh method, builds and
-shares one AAA self-energy interpolant across the whole sweep instead of each energy independently
-building (and discarding) its own -- the `didv` counterpart to `get_iv_curve`'s own sharing for
-`get_dc_current`.
+exclusive with `didv`'s scalar `energy=...`, same convention as `get_kappa`). If `use_aaa=True`
+and the sweep resolves to the Floquet-Keldysh method, one AAA self-energy interpolant is built and
+shared across the whole sweep.
 
 Arguments:
 
@@ -4847,9 +4589,9 @@ Arguments:
 Returns an array of dI/dV values
 
 **`T` means different things on the two classes.** On a `Heterostructure`,
-`T` is the temperature. On a `LocalProbe` it is the probe *transparency* --
+`T` is the temperature. On a `LocalProbe` it is the probe *transparency*,
 the same knob as `LocalProbe(...,T=...)`, `set_coupling` and
-`get_kappa(T=...)` -- and the temperature there is `temp` (or its alias
+`get_kappa(T=...)`, and the temperature there is `temp` (or its alias
 `temperature`). Both `lp.didv(T=...)` and `lp.didv_curve(...,T=...)` honour
 it for that call alone, leaving the probe itself untouched.
 
@@ -4870,12 +4612,12 @@ Optional arguments:
 
 - energy=0.0: energy at which to evaluate kappa (returns a scalar)
 - energies: array of energies to evaluate at once instead (returns an array); mutually exclusive with `energy`
-- temp=0.: temperature; `0.` (the default) uses the original zero-temperature `get_kappa_ratio` path, a nonzero value thermally averages each conductance entering the power-law fit (`didv(temp=...)`) and, for whichever branch is actually superconducting, shares one lead self-energy interpolant across the whole coupling/energy/thermal sweep instead of rebuilding it per call
+- temp=0.: temperature. The default is the zero-temperature result; a nonzero value thermally averages each conductance entering the power-law fit
 - T=1e-2: reference coupling the power-law exponent is extracted around
 
 Returns kappa (a scalar, or an array matching `energies`)
 
-At `temp=0.` (the default), kappa is `d(log G)/d(log T)`: how steeply the conductance scales with the probe-sample coupling. The `get_kappa_ratio` path above estimates this by sampling the conductance at two nearby couplings (0.9T and 1.1T) and fitting a secant slope through them. For a `LocalProbe` (always 1D) whose probe lead is not itself superconducting -- so `didv` uses the ordinary BdG scattering-matrix formula, not Floquet-Keldysh -- this is now computed exactly instead: neither lead self-energy depends on the coupling `T` (only the coupling block of the small matrix that gets inverted does), so the self-energies are solved once and the coupling-dependent tail is differentiated exactly with `jax.grad` (`transporttk.kappa_jax`), rather than approximated by a secant. This is the default automatically whenever it applies (falling back to the secant otherwise, e.g. when `jax` isn't installed, at finite `temp`, for a superconducting probe, for a spinless-Nambu system, or for a `Heterostructure`); it also cross-checks its own result against the reference `get_smatrix` formula once per call and falls back if they disagree beyond a tight tolerance (guarding against the rare case where `unitarize.check_and_fix`'s unitarity correction on the reference path would have mattered). Benchmarked on `examples/transport/localprobe_kappa_1D`, it matches the secant to within its own finite-difference bias (~1e-3 out of O(1) values) while running faster (~1.2-1.8x depending on system size, after accounting for that cross-check). Both this path and the secant fallback also now solve each lead self-energy once per coupling sweep instead of once per coupling point (self-energies never depend on `T`, only the tiny coupling block that gets inverted does), which is what dominates the speedup for systems where the self-energy solve itself (e.g. a 2D sample's bulk Green's function), not the small coupling-dependent tail, is the expensive part.
+At `temp=0.` (the default), kappa is `d(log G)/d(log T)`: how steeply the conductance scales with the probe-sample coupling. For a `LocalProbe` whose probe lead is not itself superconducting it is an exact derivative, obtained with `jax.grad`; otherwise it is estimated from the conductance at two nearby couplings (0.9T and 1.1T). Which of the two applies is decided automatically, and the two agree to within the finite-difference bias of the secant. See `examples/transport/localprobe_kappa_1D` for a runnable version.
 
 ## SpinModel functions and methods
 
@@ -4907,7 +4649,7 @@ Add a general pairwise tensor coupling $J_{ij}$ from a function `fun(r1,r2) -> 3
 builds. `add_tensor` only considers pairs within the home cell; `add_tensor_2d` additionally
 sums periodic images `ia*a1 + ja*a2` for `ia,ja` in `[-ncells,ncells]`, and can rotate the
 coupling tensor of each image about $z$ by `vspiral[0]*ia + vspiral[1]*ja` (in units of
-$\pi$) -- a way to embed a spin-spiral wavevector directly into the exchange tensor.
+$\pi$), a way to embed a spin-spiral wavevector directly into the exchange tensor.
 
 Arguments:
 
@@ -4944,15 +4686,15 @@ Returns the coupling function
 
 ### sm.minimize_energy()
 Multistart local minimization of the classical energy over every spin's $(\theta,\phi)$
-angles, using `scipy.optimize.minimize` with the gradient from `jax.grad` autodiff of the
+angles, by local gradient-based minimization of the
 energy (or, if `calle` is given, gradient-free Powell). Only the ground state at $\Gamma$ is
-found -- there are no twisted boundary conditions, so an incommensurate (e.g. spiral) texture
+found. There are no twisted boundary conditions, so an incommensurate (e.g. spiral) texture
 needs an explicit supercell that fits it.
 
 Optional arguments:
 
 - theta0=None, phi0=None: initial angles; each try re-randomizes them in $[0,\pi]$/$[0,2\pi]$
-  when left as `None` (the default), which is what makes `tries` explore different basins --
+  when left as `None` (the default), which is what makes `tries` explore different basins,
   passing explicit arrays instead starts every try from the same point, since the optimizer
   itself is deterministic, so `tries>1` is only useful with the default
 - tries=10: number of independent minimizations; the lowest-energy one is kept
@@ -4982,7 +4724,7 @@ Returns `(mx,my,mz)`, arrays over sites
 ### align.most_perpendicular_vector() / align.most_perp_basis()
 (`classicalspintk.align`) Given a set of vectors (typically a `SpinModel`'s magnetization),
 find the direction most nearly perpendicular to all of them, and use it to build a rotated
-basis in which that direction is the new $z$ axis -- i.e. the vectors end up mostly in the new
+basis in which that direction is the new $z$ axis, i.e. the vectors end up mostly in the new
 $xy$ plane. Useful for plotting a magnetization texture (e.g. a skyrmion or spiral) as an
 in-plane quiver plot when it isn't already aligned with a coordinate axis; see
 `examples/classicalspin/perpendicular/main.py`.
@@ -5012,7 +4754,7 @@ Arguments:
 Evaluate the total energy $\sum_i \mu_i n_i + \sum_{ij} J_{ij} n_i n_j$ of the current occupation snapshot `lg.den`. Returns a scalar.
 
 ### lg.optimize_energy()
-Anneal `lg.den` towards a low-energy configuration with a Metropolis discrete-swap optimizer: at each step, 1-3 random occupied/empty site pairs are swapped (preserving the total filling) and accepted unconditionally if the energy doesn't increase, or with probability $e^{-\Delta E/T}$ otherwise. Energy changes are tracked incrementally per swap rather than by recomputing the full energy from scratch, so cost per step scales with each site's number of interaction neighbors, not with the total number of interaction terms in the system.
+Anneal `lg.den` towards a low-energy configuration with a Metropolis discrete-swap optimizer: at each step, 1-3 random occupied/empty site pairs are swapped (preserving the total filling) and accepted unconditionally if the energy doesn't increase, or with probability $e^{-\Delta E/T}$ otherwise. Only the energy change of each swap is computed, not the full energy, so the cost of a step is set by how many neighbors a site has rather than by the size of the system.
 
 Optional arguments:
 
@@ -5020,12 +4762,12 @@ Optional arguments:
 - ntries=1e5: number of swap attempts
 - resync_every=1000: how often (in swap attempts) to recompute the energy from scratch, bounding floating-point drift in the incremental tracking
 - patience=None: if set, stop early once this many attempts have passed without a new best energy being found (the returned array is truncated to what actually ran)
-- checkpoint_at=None: an int or iterable of ints; captures a copy of `lg.den` after that many attempts (1-indexed) into `lg.checkpoints` (a dict `step -> den` snapshot), independent of the final configuration -- e.g. to inspect or animate how the configuration evolves partway through a run
+- checkpoint_at=None: an int or iterable of ints; captures a copy of `lg.den` after that many attempts (1-indexed) into `lg.checkpoints` (a dict `step -> den` snapshot), independent of the final configuration, e.g. to inspect or animate how the configuration evolves partway through a run
 
 Overwrites `lg.den` with the final configuration and returns the array of energies recorded at each attempt (whether or not it was accepted)
 
 ### lg.anneal()
-Simulated annealing over a decreasing temperature schedule: calls `lg.optimize_energy()` once per temperature in `temps`, keeping the best configuration seen across the whole schedule (a single high-temperature step's Metropolis walk can wander back up in energy by its end, so the last step's final state is not necessarily the best one found).
+Simulated annealing over a decreasing temperature schedule, running `lg.optimize_energy()` once per temperature in `temps`. The best configuration seen anywhere in the schedule is kept, since a high-temperature step can wander back up in energy before it ends.
 
 Optional arguments:
 
@@ -5037,7 +4779,7 @@ Optional arguments:
 Overwrites `lg.den` with the best configuration found and returns the concatenated energy trajectory across all temperatures
 
 ### lg.optimize_energy_multistart()
-Run `nstart` independent anneals from independent random seeds at the current filling, and keep the lowest-energy result -- reduces the risk of a single anneal settling into a metastable configuration. Each restart is a full `optimize_discrete` run, farmed out with `parallel.pcall`; whether that runs in parallel depends on `parallel.set_cores()`, same as every other `pcall` call site in this package (serial by default).
+Run `nstart` independent anneals from independent random seeds at the current filling, and keep the lowest-energy result, which reduces the risk of a single anneal settling into a metastable configuration. Each restart is a full `optimize_discrete` run, farmed out with `parallel.pcall`; whether that runs in parallel depends on `parallel.set_cores()`, same as every other `pcall` call site in this package (serial by default).
 
 Optional arguments:
 
@@ -5047,27 +4789,27 @@ Optional arguments:
 Overwrites `lg.den` with the best configuration found and returns its energy (a scalar)
 
 ### lg.optimize_grand_canonical()
-Grand-canonical Metropolis sampling/annealing: instead of swapping pairs at fixed filling, single sites are flipped (occupied $\leftrightarrow$ empty) and accepted/rejected the usual Metropolis way, so the total filling fluctuates under `lg.mu` rather than being conserved. This is the standard lattice-gas MC move set, useful for scanning a phase diagram vs. chemical potential, or for equilibrium sampling at one fixed temperature (see `latticegas.get_specific_heat()`/`get_susceptibility()` below). Unlike `lg.optimize_energy()`, `lg.den` does not need 2 distinct starting values -- it can start uniformly empty or full.
+Grand-canonical Metropolis sampling/annealing: instead of swapping pairs at fixed filling, single sites are flipped (occupied $\leftrightarrow$ empty) and accepted/rejected the usual Metropolis way, so the total filling fluctuates under `lg.mu` rather than being conserved. This is the standard lattice-gas MC move set, useful for scanning a phase diagram vs. chemical potential, or for equilibrium sampling at one fixed temperature (see `latticegas.get_specific_heat()`/`get_susceptibility()` below). Unlike `lg.optimize_energy()`, `lg.den` does not need 2 distinct starting values. It can start uniformly empty or full.
 
-Optional arguments: same as `lg.optimize_energy()` (`temp`, `ntries`, `resync_every`; no `patience`), except that `temp` defaults to `1.0` here rather than `0.1` -- grand-canonical sampling is usually wanted at a temperature, not as an anneal
+Optional arguments: same as `lg.optimize_energy()` (`temp`, `ntries`, `resync_every`; no `patience`), except that `temp` defaults to `1.0` here rather than `0.1`. Grand-canonical sampling is usually wanted at a temperature, not as an anneal
 
 Overwrites `lg.den` with the final configuration and returns `(es, ns)`: the energy trajectory and the filling (occupied-site count) trajectory, both arrays of length `ntries`
 
 ### latticegas.get_specific_heat() / latticegas.get_susceptibility()
-Module-level (not `lg.`-prefixed) post-processing functions that estimate equilibrium thermodynamic quantities from a trajectory sampled at one *fixed* temperature (e.g. from `lg.optimize_energy()` or `lg.optimize_grand_canonical()` called with a constant `temp`, not annealed) -- `get_specific_heat(es, temp, burn=0.2)` returns $C=\mathrm{Var}(E)/T^2$ from an energy trajectory, and `get_susceptibility(ns, temp, burn=0.2)` returns the particle-number susceptibility $\mathrm{d}N/\mathrm{d}\mu=\mathrm{Var}(N)/T$ from a filling trajectory (only meaningful for the grand-canonical `ns`, since `lg.optimize_energy()`'s filling is constant by construction). `burn` discards that leading fraction of the trajectory as equilibration before computing the variance.
+Thermodynamic quantities from a trajectory sampled at one fixed temperature, as produced by `lg.optimize_energy()` or `lg.optimize_grand_canonical()` run at constant `temp` rather than annealed. `get_specific_heat(es, temp, burn=0.2)` gives $C=\mathrm{Var}(E)/T^2$ from an energy trajectory, and `get_susceptibility(ns, temp, burn=0.2)` gives $\mathrm{d}N/\mathrm{d}\mu=\mathrm{Var}(N)/T$ from a filling trajectory. The second is only meaningful in the grand canonical case, where the filling is free to fluctuate. `burn` is the leading fraction of the trajectory discarded as equilibration.
 
 ### lg.add_tensor()
-Add a custom coupling $J_{ij}=\mathrm{fun}(r_i,r_j)$ between every pair of sites, for interactions beyond `add_interaction()`'s fixed neighbor shells -- e.g. a screened or dipolar $1/r^n$ form. Scalar analog of `classicalspin.SpinModel.add_tensor` (which returns a 3x3 tensor per pair); self-pairs are skipped, and pairs where `fun` evaluates to (near) zero are dropped.
+Add a custom coupling $J_{ij}=\mathrm{fun}(r_i,r_j)$ between every pair of sites, for interactions beyond `add_interaction()`'s fixed neighbor shells, e.g. a screened or dipolar $1/r^n$ form. Scalar analog of `classicalspin.SpinModel.add_tensor` (which returns a 3x3 tensor per pair); self-pairs are skipped, and pairs where `fun` evaluates to (near) zero are dropped.
 
 Mutates `lg` in place, no return value
 
 ### lg.regroup()
-Merge duplicate interaction-pair entries accumulated from repeated `add_interaction()`/`add_tensor()` calls (e.g. overlapping neighbor shells added twice), summing their couplings -- pure performance cleanup, doesn't change `lg.get_energy()`.
+Merge duplicate interaction-pair entries accumulated from repeated `add_interaction()`/`add_tensor()` calls (e.g. overlapping neighbor shells added twice), summing their couplings. Pure performance cleanup, doesn't change `lg.get_energy()`.
 
 Mutates `lg` in place, no return value
 
 ### lg.write() / lg.read()
-Save/load the current occupation snapshot `lg.den` to/from a text file, reusing `Geometry.write_profile()` -- the same checkpoint pattern as `classicalspin.SpinModel.write()`/`load_magnetism()`. `write()` forces `nrep=1` (no periodic replication) by default so `read()` round-trips exactly regardless of `lg.geometry.dimensionality`; `read()` raises `ValueError` if the file's site count doesn't match `lg.nsites`.
+Save/load the current occupation snapshot `lg.den` to/from a text file, the same checkpoint pattern as `classicalspin.SpinModel.write()`/`load_magnetism()`. `write()` forces `nrep=1` (no periodic replication) by default so `read()` round-trips exactly regardless of `lg.geometry.dimensionality`; `read()` raises `ValueError` if the file's site count doesn't match `lg.nsites`.
 
 Optional arguments:
 
@@ -5083,12 +4825,12 @@ Optional arguments:
 Returns an array over sites
 
 ### lg.get_correlator()
-Neighbor-shell density-density correlator of the current snapshot `lg.den`, useful for detecting ordered ground states (e.g. after `optimize_energy`). Thin wrapper around `statphystk.correlator.get_nnc`; see its docstring for `n`/`normalized` options.
+Neighbor-shell density-density correlator of the current snapshot `lg.den`, useful for detecting ordered ground states (e.g. after `optimize_energy`). `n` sets how many neighbor shells to return, `normalized` whether to divide out the mean occupation.
 
 Returns `(distances, correlators)`, arrays of matching length
 
 ### lg.get_structure_factor()
-Reciprocal-space structure factor $S(q)=|\sum_i (n_i-\bar n) e^{-iq\cdot r_i}|^2/N$ of the current snapshot `lg.den`, evaluated directly on the real-space site positions -- the reciprocal-space companion to `lg.get_correlator()`: where the neighbor-shell correlator tells you the ordering length scale, $S(q)$ tells you the ordering wavevector. Subtracting the mean occupation makes $S(q=0)=0$ identically, so a peak elsewhere in $q$ is what signals order. Thin wrapper around `statphystk.correlator.get_structure_factor`.
+Reciprocal-space structure factor $S(q)=|\sum_i (n_i-\bar n) e^{-iq\cdot r_i}|^2/N$ of the current snapshot `lg.den`, evaluated directly on the real-space site positions, the reciprocal-space companion to `lg.get_correlator()`: where the neighbor-shell correlator tells you the ordering length scale, $S(q)$ tells you the ordering wavevector. Subtracting the mean occupation makes $S(q=0)=0$ identically, so a peak elsewhere in $q$ is what signals order.
 
 Optional arguments:
 
@@ -5133,7 +4875,7 @@ Evaluate the total energy $-\sum_i b_i s_i - \sum_{ij} J_{ij} s_i s_j$ of the cu
 Return $\mathrm{mean}(s)$, the average magnetization per site of `li.s` (a scalar in $[-1,1]$).
 
 ### li.optimize_energy()
-Single-spin-flip Metropolis dynamics -- the standard Ising Monte Carlo move set: at each step, one random site is flipped and accepted unconditionally if the energy doesn't increase, or with probability $e^{-\Delta E/T}$ otherwise. Magnetization is *not* conserved (it fluctuates under `li.b`), the spin analog of `LatticeGas.optimize_grand_canonical()`.
+Single-spin-flip Metropolis dynamics, the standard Ising Monte Carlo move set: at each step, one random site is flipped and accepted unconditionally if the energy doesn't increase, or with probability $e^{-\Delta E/T}$ otherwise. Magnetization is *not* conserved (it fluctuates under `li.b`), the spin analog of `LatticeGas.optimize_grand_canonical()`.
 
 Optional arguments:
 
@@ -5147,7 +4889,7 @@ No `patience` option: unlike `optimize_conserved()`, this trajectory is meant to
 Overwrites `li.s` with the final configuration and returns `(es, ms)`: the energy trajectory and the total-magnetization ($\sum_i s_i$) trajectory, both arrays of length `ntries`
 
 ### li.optimize_conserved()
-Kawasaki spin-exchange dynamics: at each step, one up spin and one down spin are picked at random and swapped, which conserves the total magnetization -- the spin analog of `LatticeGas.optimize_energy()` (swap-based, fixed filling). Raises `ValueError` if `li.s` doesn't currently have both $+1$ and $-1$ present (e.g. after `set_magnetization(1.0)`).
+Kawasaki spin-exchange dynamics: at each step, one up spin and one down spin are picked at random and swapped, which conserves the total magnetization, the spin analog of `LatticeGas.optimize_energy()` (swap-based, fixed filling). Raises `ValueError` if `li.s` doesn't currently have both $+1$ and $-1$ present (e.g. after `set_magnetization(1.0)`).
 
 Optional arguments: same as `li.optimize_energy()`, except that `temp` defaults to `0.1` here rather than `1.0`, plus:
 
@@ -5178,12 +4920,12 @@ Optional arguments:
 Overwrites `li.s` with the best configuration found and returns its energy (a scalar)
 
 ### li.get_local_energy() / li.get_local_field()
-Per-site breakdown of the current snapshot. `get_local_energy()` returns each site's own contribution to `li.get_energy()` (values sum exactly to `li.get_energy()`, mirroring `LatticeGas.get_local_energy()`'s $j/2$ correction for the double-counted bonds). `get_local_field()` returns the effective field $h^{\mathrm{eff}}_i=b_i+2\sum_kJ_{ik}s_k$ seen by each site, defined so that flipping $s_i$ costs exactly $2s_ih^{\mathrm{eff}}_i$ -- the spin analog of `LatticeGas.get_local_mu()`.
+Per-site breakdown of the current snapshot. `get_local_energy()` returns each site's own contribution to `li.get_energy()` (values sum exactly to `li.get_energy()`, mirroring `LatticeGas.get_local_energy()`'s $j/2$ correction for the double-counted bonds). `get_local_field()` returns the effective field $h^{\mathrm{eff}}_i=b_i+2\sum_kJ_{ik}s_k$ seen by each site, defined so that flipping $s_i$ costs exactly $2s_ih^{\mathrm{eff}}_i$, the spin analog of `LatticeGas.get_local_mu()`.
 
 Returns an array over sites
 
 ### li.get_correlator() / li.get_structure_factor()
-Spin-spin correlator and reciprocal-space structure factor of the current snapshot `li.s`, reusing `statphystk.correlator.get_nnc`/`get_structure_factor` directly (both operate on any per-site array, not just 0/1 occupations) -- see `LatticeGas.get_correlator()`/`get_structure_factor()` for the argument reference.
+Spin-spin correlator and reciprocal-space structure factor of the current snapshot `li.s`. See `LatticeGas.get_correlator()`/`get_structure_factor()` for the argument reference.
 
 ### li.add_tensor() / li.regroup()
 Same as `LatticeGas.add_tensor()`/`regroup()`, reusing those functions directly (they only touch `geometry.r`/`nsites`/`pairs`/`j`, none of which differ in meaning between the two models).
@@ -5191,7 +4933,7 @@ Same as `LatticeGas.add_tensor()`/`regroup()`, reusing those functions directly 
 Mutates `li` in place, no return value
 
 ### li.write() / li.read()
-Save/load the current spin snapshot `li.s` to/from a text file, reusing `Geometry.write_profile()` -- see `LatticeGas.write()`/`read()`. `read()` rounds to $\{-1,+1\}$ (sign, treating exact 0 as $+1$) to absorb the text round-trip's floating point noise, and raises `ValueError` if the file's site count doesn't match `li.nsites`.
+Save/load the current spin snapshot `li.s` to/from a text file. See `LatticeGas.write()`/`read()`. `read()` rounds to $\{-1,+1\}$ (sign, treating exact 0 as $+1$) to absorb the text round-trip's floating point noise, and raises `ValueError` if the file's site count doesn't match `li.nsites`.
 
 Optional arguments:
 
