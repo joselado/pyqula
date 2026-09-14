@@ -125,12 +125,13 @@ Sentence length, measured on prose sentences only (no code, equations, headings 
 | The maintainer's 2024 guide (`77a6fa8`, chapters before the reference) | 79 | 24 | 21 |
 | The course lecture notes | | 32 | 30 |
 | The pilot chapter "Setting up a Hamiltonian" (14 September 2026) | 35 | 34 | 29 |
+| The whole guide after the voice pass, before the reference (14 September 2026) | 862 | 32 | 29 |
 
 The guide's own sentences are shorter than the lecture notes'. The pilot matched the notes
-rather than the guide and the maintainer approved its density, so a full pass aims at the
-pilot: build-up before each snippet, the result read aloud after it, sentences chained with
-commas rather than packed with clauses, and a sentence of 40 words or more only when the
-chain reads naturally.
+rather than the guide and the maintainer approved its density, so the full pass aimed at the
+pilot and landed on the notes' figures: build-up before each snippet, the result read aloud
+after it, sentences chained with commas rather than packed with clauses, and a sentence of 40
+words or more only when the chain reads naturally.
 
 ---
 
@@ -487,10 +488,11 @@ list:
       mechanics, fix histories).
 - [ ] `python -m pytest tests/documentation` passes, run without a pipe.
 - [ ] Every `](#...)` anchor in the table of contents still resolves to a heading, and the word
-      delta of the pass is reported and defensible: `d30babe` took the guide from 43,512 to
-      36,462 words; a canonical chapter grows by its build-up (the pilot chapter went from 675
-      to 1,578 words), and a Claude-written chapter should net shrink as the narration leaves
-      the bullets, so the guide as a whole does not grow back to where it was.
+      delta of the pass is reported: `d30babe` took the guide from 43,512 to 36,462 words by
+      cutting maintainer material, and the voice pass of 14 September 2026 took it to 47,052 by
+      adding the build-up before each snippet and the reading after it, a density the
+      maintainer approved on the pilot. Growth from those two things is expected; growth from
+      padding, repetition or material that belongs in `CLAUDE.md` is not.
 - [ ] `documentation/convert.sh` was re-run so the PDF matches the Markdown.
 
 ---
