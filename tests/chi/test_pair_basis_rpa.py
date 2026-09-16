@@ -223,3 +223,61 @@ def test_a_non_collinear_state_keeps_its_goldstone_mode():
         assert abs(b/a - 0.01) < 0.005  # proportional to delta^2
     # ... and the independent route agrees that it is gapless
     assert hm.get_goldstone_residual(nk=nk) < 1e-6
+
+
+@pytest.mark.slow
+def test_an_isotropic_exchange_keeps_its_goldstone_mode():
+    """J1 is not a density-density interaction: its transverse part
+    J/2 (S+_i S-_j + h.c.) enters as the Sx_i Sx_j and Sy_i Sy_j channels
+    the SCF records in h.Vchannels, each a ladder kernel in its own rotated
+    pair basis. Without them the smallest eigenvalue of 1 + K chi0 at q=0
+    was 0.288 on this state; with them it is 6.35e-6, 6.33e-8 and 4.1e-10
+    at delta 1e-2, 1e-3 and 1e-4, along z and tilted alike. That is
+    proportional to delta^2 until it reaches the floor the SCF tolerance
+    sets (1e-10 here; at maxerror 1e-12 the ratio stays at 100 down to
+    delta 1e-4), which is how the U-only state behaves too."""
+    h = _neel(J1=3.0)
+    res = [_kernel_min_eigenvalue(h, delta=d) for d in (1e-2, 1e-3, 1e-4)]
+    assert res[2] < 1e-8
+    assert abs(res[1]/res[0] - 0.01) < 0.001  # proportional to delta^2
+    assert _kernel_min_eigenvalue(h, q=(0.1, 0., 0.)) > 1e-2
+    t = h.copy()
+    t.global_spin_rotation(vector=[1., 0.4, 0.2], angle=0.31)
+    assert _kernel_min_eigenvalue(t) < 1e-8
+
+
+@pytest.mark.slow
+def test_the_exchange_magnon_agrees_with_the_tdhf_pair_basis():
+    """The two pair-basis routes carry the transverse rung independently,
+    one as rotated pair operators in a frequency scan, the other as rotated
+    electron-hole coefficients in a Casida matrix, and the TDHF one is
+    checked against a brute-force reference in
+    tests/magnon/test_exchange_rung.py. Measured at q=0.1: 1.368678 from
+    both for J1=3, 0.755143 from both for U=3 with J1=1."""
+    grid = np.linspace(1e-4, 3.0, 3000)
+    q = [0.1, 0., 0.]
+    for kw in ({"J1": 3.0}, {"U": 3.0, "J1": 1.0}):
+        h = _neel(**kw)
+        tdhf = magnon_energies(h, nk=NK, Q=q, n=1)[0].real
+        poles = pairchi.pair_rpa_poles(h, q=q, energies=grid, delta=1e-4,
+                                        nk=NK)
+        sharp = sorted(p[0] for p in poles if abs(p[1]) < 0.05)
+        assert abs(sharp[0] - tdhf) < 1e-4, f"{kw}: {sharp[0]} vs {tdhf}"
+
+
+def test_an_ising_interaction_without_recorded_channels_is_refused():
+    """What SzSz leaves behind, an Ising h.V and no h.Vchannels, is what an
+    isotropic exchange with its transverse part lost would look like too,
+    so the kernel is not built from it silently. Passing the interaction
+    explicitly as W= is how to say it is a genuine Ising one."""
+    from pyqula.meanfield import SzSz
+    g = geometry.chain().get_supercell(2)
+    g.get_sublattice()
+    h = SzSz(g.get_hamiltonian(), J1=3.0, filling=0.5, mf="antiferro",
+             nk=NK, maxerror=1e-10, mix=0.3, maxite=3000).hamiltonian
+    assert abs(h.get_vev("sz")[0]) > 0.1
+    with pytest.raises(ValueError, match="SzSz"):
+        pairchi.pair_rpa_kernel(h, energies=np.array([0.0]), nk=NK)
+    _, K = pairchi.pair_rpa_kernel(h, W=bare_interaction(h),
+                                   energies=np.array([0.0]), nk=NK)
+    assert len(K) == 1

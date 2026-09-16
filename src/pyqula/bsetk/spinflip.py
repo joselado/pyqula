@@ -39,6 +39,22 @@ complete one: the pair basis is where the Fock rung of an extended
 interaction actually lives, so it is right by construction rather than by
 a cancellation that has to be checked state by state.
 
+An exchange interaction needs one more thing. Its Ising part Sz_i Sz_j is
+a density-density matrix and sits in h.V, but its transverse part
+J/2 (S+_i S-_j + h.c.) is a spin-flip two-body term and does not. The
+exchange SCF decouples Sx_i Sx_j and Sy_i Sy_j as the same Ising matrix in
+two rotated spin frames and records the three channels in h.Vchannels, so
+the kernel here is built the same way: one density-density kernel per
+channel, from the states rotated into that channel's frame
+(interaction.interaction_channels, masked_blocks). The kernel is the
+derivative of that mean field, so the two are consistent by construction.
+Without the rotated channels the acoustic magnon of a J1=3 Neel honeycomb
+sits at 1.89; with them the Goldstone residual is 1e-10, and the whole
+spectrum at every momentum matches a brute-force TDHF of the same model
+written from the Pauli matrices (tests/magnon/test_exchange_rung.py). At
+finite Q it differs from the site-basis RPA's, which has no place for the
+Fock rung of the exchange bonds (1.3687 against 1.3296 at q=0.1).
+
 The test that this is right is the Goldstone theorem. A mean-field state
 that orders magnetically without spin-orbit coupling breaks SU(2)
 spontaneously, so the exact response must have a zero-frequency mode at
@@ -92,7 +108,8 @@ q=0.05 on one such mesh), and no method can paper over that.
 
 import numpy as np
 
-from .interaction import bare_interaction
+from .interaction import (interaction_channels,
+                          spin_block_parts)
 from .pairbasis import PairBasis
 from .solve import solve_pseudo_hermitian
 from ..check import require_spin
@@ -260,30 +277,55 @@ def masked_blocks(pb, W, m1, m2):
     which arrays are handed to the same three block builders, so the
     physics stays in kernel.py where it belongs.
 
+    W is either a single laboratory-frame density-density interaction or
+    the list of (W,R) spin-frame channels interaction.interaction_channels
+    returns. The kernel is linear in the interaction, so the channels are
+    simply summed, each built from the state coefficients rotated into
+    its own frame. For an exchange interaction the rotated channels are
+    its transverse rung J/2 (S+_i S-_j + h.c.), and they are what gives it
+    a Goldstone mode.
+
     Note the per-pair interaction index of the coupling block:
     iq[m,n] has to be built from the k-points of m1 on the rows and of m2
     on the columns, since that block connects the two different sets."""
-    from .kernel import (direct_block, exchange_block, interaction_tensor,
-                         nonzero_pattern, qdifference_map)
-    from .interaction import interaction_at_q
-    g = pb.geometry
-    norm = 1.0/len(pb.kpoints) # 1/N, N the number of unit cells
+    if isinstance(W, list): channels = W
+    else: channels = [(W, None)]
     A = np.diag(pb.dE[m1]).astype(np.complex128)
     Abar = np.diag(pb.dEA[m2]).astype(np.complex128)
     B = np.zeros((int(np.sum(m1)), int(np.sum(m2))), dtype=np.complex128)
-    # exchange (Hartree) term. It vanishes identically on the spin-flip
-    # block -- its form factors are pair densities conj(electron)*hole,
-    # and an up electron and a down hole have no orbital in common -- but
-    # it is computed rather than assumed away, so that a mask which turned
-    # out not to be exactly spin-flip would show up as a wrong energy
-    # instead of a silently dropped term
+    for Wc, R in channels:
+        dA, dAbar, dB = _channel_blocks(pb, Wc, R, m1, m2)
+        A, Abar, B = A + dA, Abar + dAbar, B + dB
+    return A, Abar, B
+
+
+def _channel_blocks(pb, W, R, m1, m2):
+    """The interaction part of the three masked Casida blocks for one
+    density-density channel W acting in the spin frame R (None for the
+    laboratory frame), see masked_blocks"""
+    from .kernel import (direct_block, exchange_block, interaction_tensor,
+                         nonzero_pattern, qdifference_map)
+    from .interaction import interaction_at_q, rotate_spinors
+    g = pb.geometry
+    norm = 1.0/len(pb.kpoints) # 1/N, N the number of unit cells
+    el, ho = rotate_spinors(pb.el, R), rotate_spinors(pb.ho, R)
+    elA, hoA = rotate_spinors(pb.elA, R), rotate_spinors(pb.hoA, R)
+    # exchange (Hartree) term. In the laboratory frame it vanishes
+    # identically on the spin-flip block -- its form factors are pair
+    # densities conj(electron)*hole, and an up electron and a down hole
+    # have no orbital in common -- but not in a rotated one: there it is
+    # the J(Q) S+ S- bubble of the transverse rung, the piece that puts a
+    # collinear exchange magnet's Goldstone mode back at zero. It is
+    # computed rather than assumed away in every frame, so that a mask
+    # which turned out not to be exactly spin-flip would show up as a
+    # wrong energy instead of a silently dropped term
     WQ = interaction_at_q(W, g, pb.Q)
     WmQ = np.conj(WQ) # W(-Q)
-    Fr = (np.conj(pb.el)*pb.ho)[m1] # resonant density form factors
-    Fa = (np.conj(pb.elA)*pb.hoA)[m2] # antiresonant ones
-    A = A + exchange_block(Fr, Fr, WQ, norm)
-    Abar = Abar + exchange_block(Fa, Fa, WmQ, norm)
-    B = B + exchange_block(Fr, Fa, WQ, norm, conjugate=False)
+    Fr = (np.conj(el)*ho)[m1] # resonant density form factors
+    Fa = (np.conj(elA)*hoA)[m2] # antiresonant ones
+    A = exchange_block(Fr, Fr, WQ, norm)
+    Abar = exchange_block(Fa, Fa, WmQ, norm)
+    B = exchange_block(Fr, Fa, WQ, norm, conjugate=False)
     # direct (ladder) term, W(k-k')
     qs, iqk = qdifference_map(pb.kpoints)
     Wqs = interaction_tensor(W, g, qs)
@@ -292,83 +334,171 @@ def masked_blocks(pb, W, m1, m2):
     iq11 = iqk[np.ix_(k1, k1)]
     iq22 = iqk[np.ix_(k2, k2)]
     iq12 = iqk[np.ix_(k1, k2)]
-    A = A - direct_block(pb.el[m1], pb.el[m1], pb.ho[m1], pb.ho[m1],
+    A = A - direct_block(el[m1], el[m1], ho[m1], ho[m1],
                          Wqs, iq11, rows, cols, norm)
-    Abar = Abar - direct_block(pb.elA[m2], pb.elA[m2], pb.hoA[m2],
-                               pb.hoA[m2], Wqs, iq22, rows, cols, norm)
-    B = B - direct_block(pb.el[m1], pb.hoA[m2], pb.elA[m2], pb.ho[m1],
+    Abar = Abar - direct_block(elA[m2], elA[m2], hoA[m2], hoA[m2],
+                               Wqs, iq22, rows, cols, norm)
+    B = B - direct_block(el[m1], hoA[m2], elA[m2], ho[m1],
                          Wqs, iq12, rows, cols, norm)
     return A, Abar, B
 
 
-def check_su2_interaction(W, tol=1e-8):
-    """Raise unless the interaction W is invariant under a global spin
+def _as_channels(W):
+    """A single interaction dictionary, a MultiHopping, a plain onsite
+    matrix, or already a list of (W,R) channels, as a list of channels"""
+    from ..multihopping import MultiHopping
+    if isinstance(W, list): return W
+    if isinstance(W, MultiHopping): W = W.get_dict()
+    if not isinstance(W, dict): W = {(0, 0, 0): W}
+    return [(W, None)]
+
+
+def _channel_couplings(channels):
+    """Return ({bond: ising coupling per frame}, worst non-Ising deviation
+    and where it is) for a list of channels.
+
+    The frames are labelled by what the Ising matrix of the channel is in
+    the laboratory frame: Sz_i Sz_j for R=None, and Sx_i Sx_j or Sy_i Sy_j
+    for a rotated one, read off R itself (see _frame_axis). Every bond is
+    also checked for the one thing no frame can make spin-rotation
+    invariant, an Sz_i n_j-like field term."""
+    ising = dict() # (d,i,j) -> [z, x, y]
+    worst, where = 0., None
+    for W, R in channels:
+        slot = _frame_axis(R)
+        for key, (dens, isg, field) in spin_block_parts(W).items():
+            d, i, j = key
+            if d == (0, 0, 0) and i == j: # onsite: Hubbard-like is fine
+                continue # checked separately in check_su2_interaction
+            if field > worst: worst, where = field, key
+            ising.setdefault(key, [0., 0., 0.])[slot] += isg
+    return ising, worst, where
+
+
+def _frame_axis(R):
+    """Which laboratory spin component the z axis of the frame R is: 0 for
+    z (R=None), 1 for x, 2 for y. A state psi is R psi in that frame, so a
+    frame operator sigma_z is R^dag sigma_z R in the laboratory one, which
+    is plus or minus one Pauli matrix for the rotations the exchange SCF
+    uses; the sign does not matter for an Ising coupling."""
+    if R is None: return 0
+    sz = np.array([[1., 0.], [0., -1.]])
+    s = R.conj().T@sz@R
+    comps = [abs(s[0, 0]), abs(s[0, 1].real), abs(s[0, 1].imag)] # z, x, y
+    return int(np.argmax(comps))
+
+
+def conserves_sz(W, tol=1e-8):
+    """True if the interaction commutes with the total Sz, which is what
+    makes the spin-flip block of a z-collinear state an exact block of
+    the kernel. An isotropic or uniaxial (x = y) exchange does; an
+    in-plane anisotropy (x != y) adds (Jx-Jy)/4 (S+S+ + h.c.), which
+    changes Sz by two and couples the S^- block to the S^+ one."""
+    ising, _, _ = _channel_couplings(_as_channels(W))
+    return all(abs(c[1]-c[2]) < tol for c in ising.values())
+
+
+def check_su2_interaction(W, tol=1e-8, recorded=False):
+    """Raise unless the interaction is invariant under a global spin
     rotation, which is what the Goldstone theorem this whole module rests
     on actually requires.
 
     W is a real-space density-density interaction in the spin-orbital
-    basis (the {(n1,n2,n3): matrix} dictionary of interaction.py). Written
-    as H = 1/2 sum W_(i s)(j s') n_(i s) n_(j s'), spin-rotation invariance
-    means:
+    basis (the {(n1,n2,n3): matrix} dictionary of interaction.py), or the
+    list of (W,R) spin-frame channels interaction.interaction_channels
+    builds from a Hamiltonian that recorded them. Written as
+    H = 1/2 sum W_(i s)(j s') n_(i s) n_(j s') in each frame, spin-rotation
+    invariance means:
 
-      - between DIFFERENT sites, the 2x2 spin block must not depend on
-        spin at all. A spin-dependent bond block is an Ising-like
-        Sz_i Sz_j coupling, whose SU(2) completion J S_i.S_j carries a
-        transverse rung J/2 (S+_i S-_j + h.c.) that is a spin-flip
-        two-body term and simply is not a density-density matrix -- so it
-        is not in W, cannot be put there, and is missing from the kernel.
       - on a SINGLE site, up-up = down-down and up-down = down-up. The
         Hubbard term U n_up n_dn is spin-rotation invariant despite
         looking spin dependent in this basis (n_up n_dn = n^2/4 - Sz^2,
         and n^2 = n for one orbital), which is why the onsite block is
-        checked differently from the bond ones rather than being required
-        to be spin independent too.
+        checked differently from the bond ones.
+      - between DIFFERENT sites, no Sz_i n_j-like field term, and an Ising
+        coupling Sz_i Sz_j only if the same coupling is present as
+        Sx_i Sx_j and Sy_i Sy_j, i.e. in the two rotated channels. That is
+        the isotropic exchange J S_i.S_j, whose transverse part
+        J/2 (S+_i S-_j + h.c.) is carried by those channels.
 
-    Rejecting rather than proceeding matters here because the failure is
-    silent: an Ising bond kernel returns a perfectly plausible-looking
-    magnon dispersion with a gap of order J at Q=0, and nothing about it
-    announces that the Goldstone mode is missing. See
-    future_development/magnons_tdhf.md for why the exchange (J) channel
-    cannot be fixed in the kernel alone."""
-    from ..multihopping import MultiHopping
-    if isinstance(W, MultiHopping): W = W.get_dict()
-    if not isinstance(W, dict): W = {(0, 0, 0): W}
+    The two ways this fails are different statements, and the message
+    says which one it is:
+
+      - an Ising bond coupling with no rotated channels at all. That is
+        what h.V looks like after SzSz, after SxSx/SySy (whose h.V is in
+        a rotated frame), for a hand-built exchange matrix, or with the
+        transverse channels switched off, and nothing on the Hamiltonian
+        says which. Only the exchange SCF (VJinteraction, and
+        get_mean_field_hamiltonian with J1/J2/J3/Jr) records the channels.
+      - rotated channels that do not match the Ising one: an anisotropic
+        exchange. The kernel carries it correctly, but the symmetry is
+        broken explicitly, the magnon gap is real, and there is no
+        Goldstone mode to measure.
+
+    recorded=True says the channels were read off h.Vchannels, so an
+    Ising coupling with no rotated channel beside it is a recorded
+    anisotropy (J1z alone, say) rather than a missing one, and the second
+    message is the right one.
+
+    Rejecting rather than proceeding matters because the failure is
+    silent: a kernel missing its transverse rung returns an
+    ordinary-looking magnon dispersion with a gap of order J at Q=0."""
+    channels = _as_channels(W)
     worst, where = 0., None
-    for d, m in W.items():
-        m = np.array(m)
-        n = m.shape[0]//2
-        for i in range(n):
-            for j in range(n):
-                uu, ud = m[2*i, 2*j], m[2*i, 2*j+1]
-                du, dd = m[2*i+1, 2*j], m[2*i+1, 2*j+1]
-                if tuple(d) == (0, 0, 0) and i == j: # onsite block
-                    dev = max(abs(uu-dd), abs(ud-du))
-                else: # different sites: no spin dependence allowed
-                    dev = max(abs(uu-ud), abs(uu-du), abs(uu-dd))
-                if dev > worst: worst, where = dev, (d, i, j)
+    for Wc, R in channels: # onsite blocks, frame by frame
+        for (d, i, j), (_, _, field) in spin_block_parts(Wc).items():
+            if d == (0, 0, 0) and i == j and field > worst:
+                worst, where = field, (d, i, j)
     if worst > tol:
         d, i, j = where
+        raise ValueError("the interaction is not invariant under a global "
+            "spin rotation: its onsite block on site %d at lattice "
+            "vector %s is spin dependent beyond a Hubbard term (largest "
+            "deviation %g), which is a one-body exchange field in "
+            "disguise, so a kernel built from it has no Goldstone mode "
+            "whatever symmetry the state has"%(i, d, worst))
+    ising, worst, where = _channel_couplings(channels)
+    if worst > tol:
+        d, i, j = where
+        raise ValueError("the interaction is not invariant under a global "
+            "spin rotation: its block between sites %d and %d at "
+            "lattice vector %s has an Sz_i n_j-like term (largest deviation "
+            "%g), which no spin frame can make isotropic, so a kernel "
+            "built from it has no Goldstone mode"%(i, j, d, worst))
+    nrot = sum(1 for _, R in channels if R is not None)
+    for key, (cz, cx, cy) in ising.items():
+        if max(abs(cz-cx), abs(cz-cy)) < tol: continue
+        d, i, j = key
+        if nrot == 0 and not recorded:
+            raise ValueError(
+                "the interaction has an Ising coupling Sz_i Sz_j between "
+                "orbitals %d and %d at lattice vector %s (%g) and nothing "
+                "else, so it is not invariant under a global spin rotation "
+                "and a kernel built from it has no Goldstone mode. This is "
+                "what h.V holds after SzSz, after SxSx/SySy (whose h.V is "
+                "written in a rotated spin frame), or for a hand-built "
+                "exchange matrix, and nothing on the Hamiltonian says "
+                "which: a genuine Ising interaction has a real magnon gap "
+                "of order J, while the Ising half of an isotropic exchange "
+                "is missing its transverse part J/2 (S+_i S-_j + h.c.) and "
+                "gives the same-looking gap where zero was required. For an "
+                "isotropic or anisotropic exchange, converge with "
+                "VJinteraction or get_mean_field_hamiltonian(J1=...), which "
+                "record the spin channels in h.Vchannels, and the "
+                "transverse part is then included. For a genuine SzSz "
+                "state, check_su2=False solves the Ising kernel of h.V as "
+                "it stands, which is the time-dependent Hartree-Fock of "
+                "that interaction (not of SxSx/SySy, whose h.V is in the "
+                "wrong frame)"%(i, j, d, 4*cz.real))
         raise ValueError(
-            "the interaction matrix is not invariant under a global spin "
-            "rotation (largest deviation %g, between orbitals %d and %d at "
-            "lattice vector %s), so a kernel built from it would not "
-            "conserve the total spin and would have no Goldstone mode -- "
-            "whatever symmetry the STATE has. This is what an exchange "
-            "(J1/J2/J3/Jr, or SzSz) interaction looks like here: only its "
-            "Ising part is a density-density matrix, and it is stored as "
-            "such in h.V, while the transverse rung "
-            "J/2 (S+_i S-_j + h.c.) that would make it isotropic is a "
-            "spin-flip two-body term with no density-density "
-            "representation. Solving this anyway would return a magnon "
-            "dispersion gapped by about J at Q=0 with nothing to say it is "
-            "wrong. For an ISOTROPIC exchange interaction the mean field "
-            "itself is fine (VJinteraction decouples the x and y channels "
-            "too, by rotation) and the site-basis RPA reconstructs the "
-            "matching vertex, so use h.get_magnon_bands(method=\'rpa\') "
-            "there -- its Goldstone mode is intact. Otherwise pass a "
-            "density-density interaction explicitly with V=, or see "
-            "future_development/magnons_tdhf.md."%(worst, where[1],
-                                                   where[2], tuple(d)))
+            "the exchange channels recorded in h.Vchannels are not equal "
+            "(between sites %d and %d at lattice vector %s: Sx_i Sx_j "
+            "%g, Sy_i Sy_j %g, Sz_i Sz_j %g), i.e. the exchange is "
+            "anisotropic and breaks spin-rotation symmetry explicitly. The "
+            "kernel carries every channel, so its spectrum is right, but "
+            "the magnon gap it gives is a real one and there is no "
+            "Goldstone mode to measure. Pass check_su2=False to compute "
+            "it"%(i, j, d, 4*cx.real, 4*cy.real, 4*cz.real))
 
 
 def _check_memory(dim, max_memory):
@@ -407,7 +537,8 @@ class MagnonProblem():
 
 
 def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
-                  max_memory=2.0, check_su2=True, metal=False):
+                  max_memory=2.0, check_su2=True, metal=False,
+                  transverse=True):
     """Return (pb,M,m1,m2): the pair basis, the time-dependent
     Hartree-Fock matrix whose eigenvalues are the magnon energies at Q,
     and the resonant/antiresonant pair masks it was built from.
@@ -418,6 +549,21 @@ def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
     spinflip_masks), and the interaction is checked for spin-rotation
     invariance first (check_su2), since without that there is no Goldstone
     mode to expect.
+
+    The interaction is the one the mean field was converged with: h.V,
+    plus, when the exchange SCF recorded them in h.Vchannels, the Sx_i Sx_j
+    and Sy_i Sy_j exchange channels, each as a density-density kernel in
+    its own rotated spin frame (interaction.interaction_channels). Those
+    two channels are the transverse rung J/2 (S+_i S-_j + h.c.) of an
+    exchange interaction; without them an isotropic J1=3 Neel honeycomb
+    gets a Q=0 magnon at 1.89 instead of zero. transverse=False leaves them
+    out, which is only useful to see that. V= replaces the whole
+    interaction by one laboratory-frame density-density matrix.
+
+    An exchange interaction whose Sx_i Sx_j and Sy_i Sy_j channels differ
+    does not conserve Sz, so the spin-flip block is not a block of its
+    kernel: channel='auto' then keeps the whole pair basis, and
+    channel='spinflip' raises.
 
     channel:
       "auto" (default)  restrict to the magnon block when the mean field
@@ -456,11 +602,24 @@ def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
     ferromagnet)."""
     require_spin(h,"magnons (there is no spin to flip in a spinless "
             "Hamiltonian)")
-    W = bare_interaction(h, V=V) # bare interaction, i.e. TDHF
-    if check_su2: check_su2_interaction(W)
     if channel not in ("auto", "spinflip", "all"):
         raise ValueError("channel must be 'auto', 'spinflip' or 'all', "
                 "got %r"%(channel,))
+    # bare interaction, i.e. TDHF, one density-density matrix per spin frame
+    # the mean field was decoupled in (see interaction_channels)
+    W = interaction_channels(h, V=V, transverse=transverse)
+    if check_su2: # recorded: the channels came from h.Vchannels
+        recorded = (V is None and transverse
+                    and getattr(h, "Vchannels", None) is not None)
+        check_su2_interaction(W, recorded=recorded)
+    if not conserves_sz(W): # an in-plane exchange anisotropy, x != y
+        if channel == "spinflip":
+            raise ValueError("this interaction does not conserve the total "
+                "Sz (its Sx_i Sx_j and Sy_i Sy_j exchange channels differ), "
+                "so the kernel couples the spin-lowering and spin-raising "
+                "pairs and there is no spin-flip block to restrict to. Use "
+                "channel='all'")
+        channel = "all"
     pb = PairBasis(h, Q=Q, nk=nk, nv=nv, nc=nc, metal=metal)
     masks = None
     if channel != "all":

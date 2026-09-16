@@ -273,7 +273,17 @@ class Hamiltonian():
         Salpeter) problem in the spin-flip electron-hole pair basis
         instead, which is where that rung belongs: it handles any
         density-density interaction, onsite or not, and has an exact
-        Goldstone mode at Q=0 (check it with get_goldstone_residual). In
+        Goldstone mode at Q=0 (check it with get_goldstone_residual).
+
+        "pair" and "tdhf" both take an EXCHANGE interaction too, when the
+        SCF recorded its spin channels in H.Vchannels: the Sx Sx and Sy Sy
+        channels carry the transverse part J/2 (S+_i S-_j + h.c.), which
+        h.V alone does not have. An Ising h.V with no H.Vchannels (SzSz,
+        SxSx, SySy, or a hand-built matrix) raises ValueError, since
+        nothing says whether that transverse part belongs to it. Unlike
+        "rpa", these two also keep the Fock rung of the exchange bonds, so
+        at finite q their dispersion differs from the "rpa" one (1.3687
+        against 1.3296 at q=0.1 on a J1=3 Neel honeycomb). In
         exchange it needs the same k-mesh the mean field was converged
         on, and by default a gapped reference -- pass metal=True for an
         itinerant magnet, which decides the occupied and empty sets per
@@ -293,8 +303,10 @@ class Hamiltonian():
         """Transverse (S+/S-) spin response computed in the basis of the
         interaction's PAIR index rather than of sites, which is what lets
         it carry a neighbour-shell density-density interaction -- the one
-        the site-basis RPA maps to exactly zero. Needs no gap, and returns
-        a frequency-resolved chi. See chitk.pairchi"""
+        the site-basis RPA maps to exactly zero. An exchange interaction
+        is carried as well, through the spin channels the SCF records in
+        H.Vchannels. Needs no gap, and returns a frequency-resolved chi.
+        See chitk.pairchi"""
         from . import chi
         return chi.transverse_spinchi(self,**kwargs)
     def get_magnon_energies(self,**kwargs):

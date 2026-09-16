@@ -34,11 +34,10 @@ def _require_onsite_only_V(H):
         this same ladder in the basis of the interaction's PAIR index
         where that rung actually lives (h.get_magnon_bands(method="pair"),
         h.get_transverse_spinchi -- keeps the frequency scan, needs no
-        gap, collinear states only), and bsetk/spinflip.py, which solves
-        the electron-hole pair eigenproblem
-        (h.get_magnon_bands(method="tdhf"), h.get_magnon_energies,
-        h.get_goldstone_residual -- no frequency grid, handles
-        non-collinear states too). Both have an exact Goldstone mode with
+        gap), and bsetk/spinflip.py, which solves the electron-hole pair
+        eigenproblem (h.get_magnon_bands(method="tdhf"),
+        h.get_magnon_energies, h.get_goldstone_residual -- no frequency
+        grid). Both handle non-collinear states. Both have an exact Goldstone mode with
         a V1 neighbor shell; both want the same k-mesh the SCF used.
       - a non-onsite H.V with no H.Vchannels beside it, e.g. one built by
         hand or by an SCF engine that does not record them. Nothing then

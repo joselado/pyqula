@@ -74,6 +74,97 @@ def bare_interaction(h,V=None):
         return {d: np.array(m,dtype=np.complex128) for d,m in v.items()}
 
 
+def interaction_channels(h,V=None,transverse=True):
+    """Return the interaction of h as a list of (W,R) channels, one per
+    spin frame the mean field was decoupled in.
+
+    W is a density-density interaction in the convention of
+    bare_interaction (factor of two included), and R is None or the 2x2
+    spin rotation that takes the laboratory frame into the frame where W
+    acts. The physical interaction is the sum over channels of W written
+    in its own frame, i.e. for a state psi the channel sees R psi.
+
+    Why this is needed. An isotropic exchange J S_i.S_j is not a
+    density-density interaction: only its Ising part J Sz_i Sz_j is, and
+    that is all h.V holds. The rest, J/2 (S+_i S-_j + S-_i S+_j), is a
+    spin-flip two-body term. The exchange SCF (scftk/spinspin.py's
+    _run_anisotropic_scf) handles it by writing J Sx_i Sx_j and
+    J Sy_i Sy_j as the same Ising matrix in two rotated frames, decoupling
+    each there and rotating the mean field back, and it records the three
+    channels as h.Vchannels. The time-dependent Hartree-Fock kernel is the
+    derivative of that same mean field with respect to the density
+    matrix, which is linear in the interaction, so it is the sum of the
+    density-density kernels of the three channels, each evaluated with
+    the single-particle states rotated into its frame. That is the
+    transverse rung, and building it this way makes the kernel consistent
+    with the mean field by construction rather than by a second
+    derivation.
+
+    The rotation matrices are the SCF's own (_AXIS_ROTATION). Which
+    rotation takes z into x or y, and with which sign, does not matter:
+    an Ising matrix is quadratic in the spin operator, so R and any R'
+    with R' sigma_z R'^dag = -R sigma_z R^dag give the same channel.
+
+    V, if given, is used as a single laboratory-frame density-density
+    interaction, exactly as bare_interaction takes it, and h.Vchannels is
+    ignored. transverse=False drops the rotated channels and returns only
+    h.V, i.e. the Ising part of an exchange interaction alone; it exists
+    to reproduce what the kernel was before the rung was built."""
+    W = bare_interaction(h,V=V) # the laboratory frame, h.V or V
+    out = [(W,None)]
+    if V is not None or not transverse: return out
+    ch = getattr(h,"Vchannels",None)
+    if ch is None: return out # nothing recorded, h.V is all there is
+    from ..scftk.spinspin import _AXIS_ROTATION
+    from ..rotate_spin import build_rotation_matrix
+    for axis in ("x","y"):
+        v = ch.get(axis,None)
+        if v is None: continue
+        v = V2dict(v)
+        if all(not np.any(np.array(m)) for m in v.values()): continue
+        R = build_rotation_matrix(1,**_AXIS_ROTATION[axis])
+        Wc = {d: 2.*np.array(m,dtype=np.complex128) for d,m in v.items()}
+        out.append((Wc,np.array(R,dtype=np.complex128)))
+    return out
+
+
+def rotate_spinors(c,R):
+    """Rotate the spin index of an array of state coefficients, c[...,a]
+    with a a spin-orbital index (2*i up, 2*i+1 down), into the frame R:
+    c'[...,2i+s] = sum_t R[s,t] c[...,2i+t]. R=None returns c unchanged."""
+    if R is None: return c
+    sh = c.shape
+    c4 = c.reshape(sh[:-1]+(sh[-1]//2,2))
+    return np.einsum("st,...it->...is",R,c4).reshape(sh)
+
+
+def spin_block_parts(W):
+    """Split every 2x2 spin block of a density-density interaction into
+    the parts that behave differently under a spin rotation.
+
+    For the block between site i and site j at lattice vector d, with
+    entries uu,ud,du,dd, returns {(d,i,j): (density,ising,field)} with
+
+      density = (uu+ud+du+dd)/4   coefficient of n_i n_j
+      ising   = (uu-ud-du+dd)/4   coefficient of 4 Sz_i Sz_j
+      field   = max(|uu-dd|,|ud-du|), an Sz_i n_j-like term
+
+    The density part is invariant under any spin rotation, the Ising part
+    is not unless the same coupling is present in x and y too, and the
+    field part never is."""
+    out = dict()
+    for d,m in V2dict(W).items():
+        m = np.array(m)
+        n = m.shape[0]//2
+        for i in range(n):
+            for j in range(n):
+                uu,ud = m[2*i,2*j],m[2*i,2*j+1]
+                du,dd = m[2*i+1,2*j],m[2*i+1,2*j+1]
+                out[(tuple(int(x) for x in d),i,j)] = ((uu+ud+du+dd)/4.,
+                        (uu-ud-du+dd)/4., max(abs(uu-dd),abs(ud-du)))
+    return out
+
+
 def V2dict(V):
     """Normalize an interaction to a {direction: matrix} dictionary"""
     if isinstance(V,MultiHopping): return V.get_dict()

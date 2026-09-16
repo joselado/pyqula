@@ -3215,7 +3215,7 @@ interactions because they keep different amounts of the ladder:
 |---|---|---|---|
 | onsite Hubbard $U$ | yes | yes | yes |
 | neighbour-shell density-density $V_1,V_2,\dots$ | **no** | yes | yes |
-| exchange $J_1,J_2,\dots$ (isotropic or anisotropic) | yes | **no** | **no** |
+| exchange $J_1,J_2,\dots$ (isotropic or anisotropic) | Goldstone mode yes, finite $q$ without the Fock term of the bonds | yes | yes |
 | metallic reference | yes | yes | with `metal=True` |
 | non-collinear (canted, spiral) state | yes | yes | yes |
 | frequency-resolved $\chi(\omega)$ | yes | yes | no (an eigenproblem) |
@@ -3260,14 +3260,33 @@ spiral state as well.
 
 The last row of the table is what `"tdhf"` is for: it gives the magnon
 energies as eigenvalues, with no frequency grid and no broadening, which is
-what the Goldstone residual is measured on. The three methods agree wherever
-more than one of them applies, and in a metal `"pair"` and `"tdhf"` both
-reproduce the exact saturated-ferromagnet dispersion.
+what the Goldstone residual is measured on. `"pair"` and `"tdhf"` agree with
+each other for every interaction in the table, and in a metal both reproduce
+the exact saturated-ferromagnet dispersion; `"rpa"` agrees with them for an
+onsite $U$.
 
-Exchange goes the other way. Its transverse part
-$J/2(S^+_iS^-_j+\mathrm{h.c.})$ has no density-density form at all, so
-neither `"pair"` nor `"tdhf"` can carry it, while `"rpa"` handles it through
-the mean field's own three spin channels. For an isotropic $J$, use `"rpa"`.
+What about exchange? An exchange interaction $J\,\vec S_i\cdot\vec S_j$ is
+not a density-density one: its Ising part $J S^z_iS^z_j$ is, but its
+transverse part $J/2(S^+_iS^-_j+\mathrm{h.c.})$ flips a spin on each site,
+and no matrix of the form $V_{ij}n_in_j$ can write it. The way the mean field
+handles it is by writing $S^x_iS^x_j$ and $S^y_iS^y_j$ as the same Ising term
+in two rotated spin frames, and the self-consistent calculation records the
+three spin channels on the Hamiltonian it returns. `"pair"` and `"tdhf"` read
+them and build the kernel of each channel in its own frame, which is exactly
+the derivative of that mean field, so the transverse part is included and
+the Goldstone mode sits at zero for an isotropic $J$ as it does for $U$. This
+requires a Hamiltonian from `VJinteraction` or from
+`get_mean_field_hamiltonian` with `J1`/`J2`/`J3`/`Jr`, which are the ones
+that record the channels.
+
+At $q=0$ all three methods give the Goldstone mode for an isotropic $J$, but
+at finite $q$ `"rpa"` gives a different number from the other two. The
+reason is the same as for $V_1$: the exchange bonds also enter through a Fock
+term on the pair index, and a vertex with one index per site has no place for
+it. For concreteness, on the antiferromagnetic honeycomb lattice with
+$J_1=3$ at `nk=6` the acoustic magnon at $q=0.1$ is at 1.3687 from `"pair"`
+and `"tdhf"` and at 1.3296 from `"rpa"`, so for exchange the pair-basis
+methods are the ones to use.
 
 ### Magnons from time-dependent Hartree-Fock
 
@@ -3330,14 +3349,22 @@ in $q$ only if the occupied set is symmetric under $k\to-k$, which a finite
 mesh need not make it: otherwise the $+q$ and $-q$ magnons genuinely differ.
 Choose the mesh so the occupied set is symmetric.
 
-The third is that the interaction must be a density-density one. An
-exchange interaction (`J1`/`J2`/`J3`/`Jr`, or `SzSz`) is refused: only its
-Ising part has a density-density form, and the transverse part
-$J/2(S^+_iS^-_j+\mathrm{h.c.})$, which is what makes it isotropic, does not,
-so this kernel cannot carry it. Solving the Ising part alone would give an
-ordinary-looking dispersion spuriously gapped by of order $J$. This is a
-limitation of the kernel and not of the mean field, which is genuinely SU(2)
-symmetric. For isotropic exchange, use `method="rpa"`.
+The third is where the interaction came from. An isotropic exchange
+(`J1`/`J2`/`J3`/`Jr`) is taken with its transverse part
+$J/2(S^+_iS^-_j+\mathrm{h.c.})$, through the spin channels the
+self-consistent calculation recorded, as described in "The three magnon
+routes" above, and it has its Goldstone mode like any other interaction.
+Two cases raise `ValueError` instead, each with a message saying why. The
+first is a Hamiltonian from `SzSz`, `SxSx` or `SySy`, or with a hand-built
+exchange matrix: these carry only an Ising term and no record of its spin
+channels, which is what an isotropic exchange that lost its transverse part
+would look like too, and solving that would give an ordinary-looking
+dispersion gapped by of order $J$ where zero is required. For a genuine
+`SzSz` state `check_su2=False` solves the Ising kernel as it stands, which is
+the right one, and its gap is real. The second is an anisotropic exchange
+(`J1x`, `J1y`, `J1z` unequal), which breaks spin rotation symmetry explicitly,
+meaning that its magnon gap is real and there is no Goldstone mode to check;
+`check_su2=False` computes that spectrum too, with every channel included.
 
 For a collinear state only the spin-flip pairs are needed, which is exact
 and much cheaper, and that is the default. A canted or spiral state has no
@@ -5200,9 +5227,9 @@ Compute the magnon bands of a magnetic mean-field state, scanned along a q-path.
 
 Optional arguments:
 
-- method="rpa" / "pair" / "tdhf": which ladder to sum. See "The three magnon routes" above for the coverage table; in short, "rpa" is the site basis (onsite U or neighbor-shell exchange), "pair" keeps the interaction's pair index (any density-density interaction, onsite or not, metals included, frequency-resolved), "tdhf" solves the electron-hole pair eigenproblem (any density-density interaction, no frequency grid).
+- method="rpa" / "pair" / "tdhf": which ladder to sum. See "The three magnon routes" above for the coverage table; in short, "rpa" is the site basis (onsite U or neighbor-shell exchange), "pair" keeps the interaction's pair index (any density-density interaction, onsite or not, and exchange through the spin channels the SCF records, metals included, frequency-resolved), "tdhf" solves the electron-hole pair eigenproblem (the same interactions, no frequency grid).
 
-- `"rpa"` takes the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`), with the interaction taken from the mean field: an onsite `h.V`, or a neighbor-shell exchange interaction through `h.Vchannels`, which the SCF records; a neighbor-shell density-density interaction is refused. It works for metals as well as insulators, and needs a frequency grid. `"tdhf"` solves the time-dependent Hartree-Fock problem in the spin-flip electron-hole pair basis: it handles a neighbor-shell density-density interaction, has an exact Goldstone mode, needs no frequency grid, and requires a gapped reference converged on the same `nk`
+- `"rpa"` takes the poles of the full spin RPA kernel (the same $S_x,S_y,S_z$ channel as `get_spinchi_full`/`get_iets_ldos`), with the interaction taken from the mean field: an onsite `h.V`, or a neighbor-shell exchange interaction through `h.Vchannels`, which the SCF records; a neighbor-shell density-density interaction is refused. It works for metals as well as insulators, and needs a frequency grid. `"tdhf"` solves the time-dependent Hartree-Fock problem in the spin-flip electron-hole pair basis: it handles a neighbor-shell density-density interaction and an exchange one whose spin channels the SCF recorded, has an exact Goldstone mode, needs no frequency grid, and requires a gapped reference converged on the same `nk` (or `metal=True`)
 
 - qpath=None, nq=20: the q-path (default path of the geometry) and number of q-points
 
@@ -5213,7 +5240,7 @@ Optional arguments:
 Returns `(qs,ws,gammas)` for `method="rpa"`: three flat 1D arrays of equal length, `qs` the integer q-point index along the path, `ws` the pole frequency, `gammas` its residual imaginary part. `method="tdhf"` returns `(qs,es)`, with `es` the (complex) magnon energy.
 
 ### h.get_transverse_spinchi()
-Return the spin response computed in the basis of the interaction's *pair* index rather than of sites, which is what lets it carry a neighbor-shell density-density interaction, the one the site-basis RPA maps to exactly zero. Needs no gapped reference and no global spin quantization axis, so it covers metals and non-collinear states alike, and returns a frequency-resolved, spin- and site-resolved $\chi(\omega)$.
+Return the spin response computed in the basis of the interaction's *pair* index rather than of sites, which is what lets it carry a neighbor-shell density-density interaction, the one the site-basis RPA maps to exactly zero, and an exchange interaction with its transverse part. Needs no gapped reference and no global spin quantization axis, so it covers metals and non-collinear states alike, and returns a frequency-resolved, spin- and site-resolved $\chi(\omega)$.
 
 Optional arguments:
 

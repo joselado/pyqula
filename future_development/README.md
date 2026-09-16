@@ -49,8 +49,12 @@ already reached once.
 - [`magnons_tdhf.md`](magnons_tdhf.md) -- the three magnon routes (site
   basis, the interaction's pair basis, and time-dependent Hartree-Fock in
   the electron-hole pair basis), what each covers and why, the Goldstone
-  and exact-reference measurements validating all three, and the one thing
-  still open (the transverse exchange rung in the pair-basis kernels).
+  and exact-reference measurements validating all three, how the
+  transverse rung of an exchange interaction was carried into the two
+  pair-basis kernels (checked against a brute-force TDHF reference), and
+  what is still open: SzSz/SxSx/SySy record no spin channels and are
+  refused, and the site-basis RPA disagrees with the other two for
+  exchange at finite q.
 
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
   X-wave nonlinear Drude spin conductivity covers, the measured performance

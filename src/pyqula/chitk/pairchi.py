@@ -38,6 +38,20 @@ mean field too (measured on a 120-degree triangular spiral: the Goldstone
 mode is at zero to the broadening, delta^2, where a transverse-only ladder
 left it gapped by 0.41).
 
+An exchange interaction J S_i.S_j is carried too, although only its Ising
+part is a density-density matrix. The exchange SCF records the Sx_i Sx_j
+and Sy_i Sy_j channels in h.Vchannels as the same Ising matrix written in
+two rotated spin frames, and each channel here gets the kernel above in
+the basis of its own rotated pair operators, brought back to the
+laboratory pair basis by the rotation of those operators (pair_rotation).
+Those two channels are the transverse part J/2 (S+_i S-_j + h.c.): without
+them a J1=3 Neel honeycomb has no Goldstone mode (smallest eigenvalue of
+1 + K chi0 at q=0 equal to 0.288), with them it goes as delta^2 down to
+the floor the SCF tolerance sets, and the
+magnon at q=0.1 agrees with bsetk/spinflip.py's to 1e-7. The pair basis
+then has to hold every spin combination of each site pair it touches,
+since a rotation mixes them.
+
 The physical spin response is contracted out of the diagonal pairs with
 the Pauli matrices, and comes back in the same (Sx,Sy,Sz) x site layout
 chitk.spinchi.spinchi_full uses.
@@ -194,15 +208,135 @@ def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20):
 
 
 def _setup(h, W=None, q=None):
-    """Shared preamble: the interaction, the pair basis and the kernel's
-    momentum-dependent Hartree block."""
-    from ..bsetk.interaction import bare_interaction, interaction_at_q
-    W = bare_interaction(h, V=W)
+    """Shared preamble: the interaction, the pair basis and the kernel.
+
+    The interaction comes as one density-density matrix per spin frame
+    (bsetk.interaction.interaction_channels): h.V in the laboratory frame
+    and, for an exchange interaction whose SCF recorded them in
+    h.Vchannels, its Sx_i Sx_j and Sy_i Sy_j channels in rotated frames.
+    Those two are the transverse rung J/2 (S+_i S-_j + h.c.). Each channel
+    has the kernel ladder_kernel builds, in the basis of its own rotated
+    pair operators, and is brought back to the laboratory pair basis by
+    the rotation of the pair operators, see pair_rotation. The kernel is
+    linear in the interaction, so the channels are then summed."""
+    from ..bsetk.interaction import interaction_channels, interaction_at_q
+    channels = interaction_channels(h, V=W)
+    if W is None: _require_recorded_exchange(h, channels)
     norb = h.get_multicell().get_dense().intra.shape[0]
-    pairs, xvals, diag = spinorbital_pairs(W, norb)
+    W0 = channels[0][0]
+    pairs, xvals, diag = spinorbital_pairs(W0, norb)
+    if len(channels) > 1: # rotated frames need spin-complete pair blocks
+        pairs, xvals, diag = _complete_spin_blocks(pairs, xvals, channels,
+                                                   norb)
     if q is None: q = [0., 0., 0.]
-    Wq = interaction_at_q(W, h.geometry, q)
-    return pairs, xvals, diag, ladder_kernel(pairs, xvals, diag, Wq)
+    index = {p: n for n, p in enumerate(pairs)}
+    K = np.zeros((len(pairs), len(pairs)), dtype=np.complex128)
+    for Wc, R in channels:
+        xc = np.array([_entry(Wc, p) for p in pairs], dtype=np.complex128)
+        Kc = ladder_kernel(pairs, xc, diag, interaction_at_q(Wc, h.geometry, q))
+        if R is not None:
+            T = pair_rotation(pairs, index, R)
+            Kc = T.conj().T@Kc@T
+        K += Kc
+    return pairs, xvals, diag, K
+
+
+def _entry(W, p):
+    """The interaction matrix element of the pair p = (a,b,R), zero if the
+    interaction has no entry there"""
+    a, b, d = p
+    for dd, m in W.items():
+        if tuple(int(x) for x in dd) == d: return m[a, b]
+    return 0.
+
+
+def _complete_spin_blocks(pairs, xvals, channels, norb, tol=1e-10):
+    """Extend the pair basis so that a spin rotation maps it onto itself.
+
+    A rotated channel acts on the rotated pair operators, and rotating
+    A_(i s, j t) mixes all four spin combinations of the same two sites.
+    So every site pair any channel touches has to be present with its
+    whole 2x2 spin block, and so does every onsite block (i s, i s'),
+    where the Hartree rung of a rotated frame lands. The pairs already
+    there keep their positions."""
+    have = set(pairs)
+    extra = []
+    def add(p):
+        if p not in have:
+            have.add(p)
+            extra.append(p)
+    for Wc, _ in channels:
+        for d, m in Wc.items():
+            d = tuple(int(x) for x in d)
+            m = np.array(m)
+            for a in range(norb):
+                for b in range(norb):
+                    if abs(m[a, b]) < tol: continue
+                    i, j = a//2, b//2
+                    for s in range(2):
+                        for t in range(2): add((2*i+s, 2*j+t, d))
+    for i in range(norb//2):
+        for s in range(2):
+            for t in range(2): add((2*i+s, 2*i+t, (0, 0, 0)))
+    pairs = pairs + extra
+    xvals = np.concatenate([xvals, np.zeros(len(extra), dtype=np.complex128)])
+    index = {p: n for n, p in enumerate(pairs)}
+    diag = np.array([index[(a, a, (0, 0, 0))] for a in range(norb)],
+                    dtype=np.int64)
+    return pairs, xvals, diag
+
+
+def pair_rotation(pairs, index, R):
+    """Return T, the matrix of the pair operators of the spin frame R in
+    terms of the laboratory ones, A'_P = sum_P' T[P,P'] A_P'.
+
+    A state with coefficients psi in the laboratory frame has R psi in the
+    rotated one (the convention of bsetk.interaction.rotate_spinors), so
+    c'_a = sum_b R[a,b] c_b and c'^dag_a = sum_b conj(R[a,b]) c^dag_b, and
+    the pair operator A_(a,b) = c^dag_a c_b picks up conj(R) on its first
+    index and R on its second. The response in the rotated frame is then
+    T chi T^dag, and a kernel K' written there is T^dag K' T in the
+    laboratory one."""
+    T = np.zeros((len(pairs), len(pairs)), dtype=np.complex128)
+    for n, (a, b, d) in enumerate(pairs):
+        i, s = a//2, a % 2
+        j, t = b//2, b % 2
+        for sp in range(2):
+            for tp in range(2):
+                T[n, index[(2*i+sp, 2*j+tp, d)]] = np.conj(R[s, sp])*R[t, tp]
+    return T
+
+
+def _require_recorded_exchange(h, channels, tol=1e-8):
+    """Raise if the interaction read off the Hamiltonian has an Ising bond
+    coupling Sz_i Sz_j and no recorded transverse channels.
+
+    That is h.V after SzSz, after SxSx/SySy (written in a rotated spin
+    frame), or for a hand-built exchange matrix, and nothing on the
+    Hamiltonian says which. For a genuine Ising interaction h.V alone is
+    the right kernel; for the Ising half of an isotropic exchange the
+    transverse rung is missing and the Goldstone mode with it (measured:
+    the smallest eigenvalue of 1 + K chi0 at q=0 is 0.288 on a J1=3 Neel
+    honeycomb instead of zero). So it is refused, and an explicit W= is
+    the way to say which one is meant."""
+    from ..bsetk.interaction import spin_block_parts
+    if getattr(h, "Vchannels", None) is not None: return # recorded
+    for (d, i, j), (_, ising, _) in spin_block_parts(channels[0][0]).items():
+        if d == (0, 0, 0) and i == j: continue # onsite, Hubbard-like
+        if abs(ising) > tol:
+            raise ValueError("the interaction h.V has an Ising coupling "
+                "Sz_i Sz_j between sites %d and %d at lattice vector %s "
+                "(%g) and the Hamiltonian records no transverse exchange "
+                "channels (h.Vchannels), so nothing says whether it is a "
+                "genuine Ising interaction (SzSz), the Ising half of an "
+                "isotropic exchange missing its transverse part "
+                "J/2 (S+_i S-_j + h.c.), or a matrix in a rotated spin "
+                "frame (SxSx/SySy). For an exchange interaction, converge "
+                "with VJinteraction or get_mean_field_hamiltonian(J1=...), "
+                "which record the channels; for a lab-frame Ising one, pass "
+                "the interaction explicitly as W=, e.g. "
+                "W=bsetk.interaction.bare_interaction(h)"%(i, j, d,
+                                                          4*ising.real))
 
 
 def pair_rpa_kernel(h, W=None, q=None, energies=None, delta=1e-2, nk=20):

@@ -2,32 +2,34 @@
 
 The Goldstone theorem the whole route is validated by needs the
 interaction to be invariant under a global spin rotation. A density-density
-interaction always is, onsite or not. An exchange (J1/J2/J3, SzSz)
-interaction is NOT, as pyqula stores it: h.V holds its Ising part, which
-is the only part expressible as a density-density matrix, while the
-transverse rung J/2 (S+_i S-_j + h.c.) that would make it isotropic is a
-spin-flip two-body term with no such representation.
+interaction always is, onsite or not. An exchange interaction is only
+when all three of its spin channels are there: h.V holds its Ising part
+Sz_i Sz_j, the only part expressible as a density-density matrix, and the
+transverse part J/2 (S+_i S-_j + h.c.) is carried by the Sx_i Sx_j and
+Sy_i Sy_j channels the exchange SCF records in h.Vchannels, each a
+density-density matrix in a rotated spin frame
+(bsetk.interaction.interaction_channels).
 
-That is not a small omission. Solving the Ising kernel anyway returns a
-perfectly ordinary looking magnon dispersion gapped by of order J at Q=0
-(measured 1.81 for J1=3 on the honeycomb), with nothing to say the
-acoustic branch should have been at zero -- so the interaction is checked
-up front instead.
+So what is refused now is narrower than it was, and each refusal says a
+different thing:
 
-The limitation is in this kernel, not in the mean field: VJinteraction
-decouples the x and y exchange channels as well (by rotating the density
-matrix into the frame where that axis is the computational z, see
-scftk/spinspin.py:580), so an isotropic-J mean field is a genuinely
-SU(2)-symmetric state and the site-basis RPA -- which rebuilds the x/y
-vertices by replicating the z one -- keeps its Goldstone mode on it. That
-is what test_the_site_basis_rpa_still_has_its_goldstone_mode_for_isotropic_j
-below pins, so that this guard is never mistaken for a statement about the
-physics of exchange mean fields.
+  - an Ising bond coupling with no recorded channels. SzSz, SxSx/SySy (whose
+    h.V is in a rotated frame) and a hand-built exchange matrix all look
+    like this, and so would an isotropic exchange that lost its transverse
+    part. Solving that last one anyway gives a perfectly ordinary looking
+    dispersion gapped by of order J at Q=0 (measured 1.89 for J1=3 on the
+    honeycomb), with nothing to say the acoustic branch should have been
+    at zero;
+  - recorded channels that differ, i.e. an anisotropic exchange. The
+    kernel is right there (tests/magnon/test_exchange_rung.py checks it
+    against a brute-force reference), but the magnon gap is real and there
+    is no Goldstone mode to check.
 """
 import numpy as np
 import pytest
 
 from pyqula import geometry
+from pyqula.bsetk.interaction import interaction_channels
 from pyqula.bsetk.spinflip import check_su2_interaction
 from pyqula.meanfield import VJinteraction
 from pyqula.scftk.spinspin import _build_density_v, _build_v
@@ -47,8 +49,37 @@ def test_an_exchange_interaction_is_refused():
     g = geometry.chain()
     h = g.get_hamiltonian()
     W = {d: 2*m for d, m in _build_v(h, J1=1.0).items()}
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="SzSz"):
         check_su2_interaction(W)
+
+
+def _with_channels(h, Jx, Jy, Jz):
+    """A Hamiltonian carrying h.V and h.Vchannels the way the exchange SCF
+    leaves them, without running one"""
+    h.V = _build_v(h, J1=Jz)
+    h.Vchannels = {"x": _build_v(h, J1=Jx), "y": _build_v(h, J1=Jy),
+                   "z": h.V, "d": _build_density_v(h)}
+    return h
+
+
+def test_an_exchange_interaction_with_its_channels_is_accepted():
+    """The same Ising matrix, now with the two rotated channels beside it:
+    that is the isotropic exchange, and it is spin-rotation invariant"""
+    g = geometry.chain()
+    h = _with_channels(g.get_hamiltonian(), 1.0, 1.0, 1.0)
+    channels = interaction_channels(h)
+    assert len(channels) == 3  # laboratory frame, x frame, y frame
+    check_su2_interaction(channels, recorded=True)  # must not raise
+    with pytest.raises(ValueError, match="SzSz"): # rung switched off
+        check_su2_interaction(interaction_channels(h, transverse=False))
+
+
+def test_an_anisotropic_exchange_is_refused_for_a_different_reason():
+    g = geometry.chain()
+    for J in ((1.0, 1.0, 1.5), (1.4, 1.0, 1.0), (0.0, 0.0, 1.0)):
+        h = _with_channels(g.get_hamiltonian(), *J)
+        with pytest.raises(ValueError, match="anisotropic"):
+            check_su2_interaction(interaction_channels(h), recorded=True)
 
 
 def test_a_zeeman_like_onsite_interaction_is_refused():
@@ -65,35 +96,40 @@ def test_a_zeeman_like_onsite_interaction_is_refused():
         check_su2_interaction({(0, 0, 0): m})
 
 
-@pytest.mark.slow
-def test_a_converged_exchange_mean_field_is_refused_end_to_end():
+def test_a_converged_exchange_mean_field_is_accepted_end_to_end():
     """The same guard, reached through the public API on a Hamiltonian
-    that really was converged with a J1 bond exchange rather than on a
-    hand-built matrix."""
-    g = geometry.honeycomb_lattice()
-    scf = VJinteraction(g.get_hamiltonian(), J1=3.0, filling=0.5,
-                         mf="antiferro", nk=NK, maxerror=1e-8, mix=0.3,
-                         maxite=2000)
-    hmf = scf.hamiltonian
+    that really was converged with a J1 bond exchange. With the channels
+    it records, the Goldstone mode is there; with them removed, which
+    leaves what SzSz would, it is refused rather than solved."""
+    g = geometry.chain().get_supercell(2)
+    g.get_sublattice()
+    hmf = VJinteraction(g.get_hamiltonian(), J1=3.0, filling=0.5,
+                        mf="antiferro", nk=NK, maxerror=1e-10, mix=0.3,
+                        maxite=2000).hamiltonian
     assert abs(hmf.get_vev("sz")[0]) > 0.1  # it did order
-    with pytest.raises(ValueError):
+    assert hmf.get_goldstone_residual(nk=NK) < 1e-8
+    hmf.Vchannels = None
+    with pytest.raises(ValueError, match="h.Vchannels"):
         hmf.get_goldstone_residual(nk=NK)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="h.Vchannels"):
         hmf.get_magnon_energies(nk=NK)
 
 
 @pytest.mark.slow
 def test_the_ising_kernel_really_would_have_been_gapped():
-    """The measurement behind the guard: switching the check off returns a
-    magnon spectrum with no Goldstone mode at all. Kept as a test so that
-    the number in the error message stays true, and so that a future
-    transverse-rung implementation has something to compare against."""
+    """The measurement behind the guard: dropping the transverse channels
+    and the check returns a magnon spectrum with no Goldstone mode at all,
+    measured 1.89 on the J1=3 honeycomb. Kept as a test so that the number
+    in the error message and the roadmap stays true."""
     g = geometry.honeycomb_lattice()
     scf = VJinteraction(g.get_hamiltonian(), J1=3.0, filling=0.5,
                          mf="antiferro", nk=NK, maxerror=1e-8, mix=0.3,
                          maxite=2000)
-    es = scf.hamiltonian.get_magnon_energies(nk=NK, check_su2=False, n=1)
+    es = scf.hamiltonian.get_magnon_energies(nk=NK, check_su2=False,
+                                             transverse=False, n=1)
     assert es[0].real > 1.0  # a gap of order J where zero was required
+    es = scf.hamiltonian.get_magnon_energies(nk=NK, n=1)
+    assert abs(es[0]) < 1e-3  # and with the rung, the Goldstone mode
 
 
 def _rpa_kernel_min_eigenvalue(h, nk, delta=1e-4, q=(0., 0., 0.)):
