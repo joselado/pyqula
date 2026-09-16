@@ -312,7 +312,7 @@ Hamiltonian with zero pairing must reproduce the normal-state answer.
   E(V1=2)-E(V1=1):  normal +0.79694045   BdG +2.39082135   ratio 3.0000
 ```
 
-**Status:** **fixed** in this session. Remainder reported by the fixing agent: Complete, but one pre-existing gap is untouched and stays open: the anomalous double-counting term that bug_audit.md already records as a known, documented omission. Everything here is about the zero-pairing scale mismatch; a BdG total energy with genuine pairing still lacks the pairing double-counting correction.
+**Status:** **fixed** in this session. Remainder reported by the fixing agent: Complete, but one pre-existing gap is untouched and stays open: the anomalous double-counting term that bug_audit.md already records as a known, documented omission. Everything here is about the zero-pairing scale mismatch; a BdG total energy with genuine pairing still lacks the pairing double-counting correction. (That remainder was closed on 16 September 2026: `superscf.get_dc_energy_anomalous` subtracts the pairing double counting, checked in `tests/scf/test_bdg_total_energy.py` against the BCS value, the stationarity of the mean-field energy, and a Hellmann-Feynman slope at fixed chemical potential.)
 
 ### 4. LocalProbe.didv(T=...) swallows the temperature alias that Heterostructure.didv honours and that a test pins
 

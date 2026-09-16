@@ -42,6 +42,39 @@ def anomalous_term_ij_jit(v,dm,out):
 
 
 
+def get_dc_energy_anomalous(mf,dm):
+    """Double-counting energy of the anomalous (pairing) mean field.
+
+    mf: Nambu mean-field dict, as returned by get_mf_bdg (its electron and
+    hole blocks are ignored, only the anomalous blocks are read).
+    dm: Nambu density matrix dict, as returned by h.get_density_matrix
+    (dm[i,j] = sum_occ conj(psi_i) psi_j, the transpose of the usual one).
+
+    The anomalous part of the interaction energy is a bilinear form in the
+    anomalous density matrix, and get_mf_bdg's anomalous mean field is its
+    derivative, so its expectation value counts that energy exactly twice.
+    The band energy of the BdG Hamiltonian therefore contains it twice and
+    this returns minus it once: -<MF_anomalous>/2, with
+    <X> = (1/2) sum_d Tr(dm[d].T X[d]) for a Nambu matrix, and no constant
+    term since the anomalous blocks carry no diagonal. It is the pairing
+    counterpart of densitydensity.get_dc_energy, which only accounts for
+    the Hartree and Fock terms.
+
+    Only the (0,1) block is read. Both mf and dm are Hermitian in real
+    space (X[d] = X[-d]^dagger, and mf holds every d together with -d), so
+    the (1,0) block contributes the complex conjugate of the (0,1) one,
+    and the sparse density matrices of the KPM and qtci backends fill in
+    only the (0,1) block, the one get_mf_bdg reads."""
+    from ..superconductivity import get_eh_sector
+    out = 0.0
+    for d in mf: # loop over directions
+        m = get_eh_sector(np.asarray(mf[d]),i=0,j=1)
+        if not np.any(m): continue # no pairing in this direction
+        out += np.sum(get_eh_sector(np.asarray(dm[d]),i=0,j=1)*m)
+    return -out.real/2.
+
+
+
 def enforce_eh_symmetry_anomalous(d01):
     """Enforce electron-hole symmetry in the two sectors"""
     d01 = enforce_eh_symmetry_anomalous_sector(d01)

@@ -646,6 +646,12 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         dm_dc = {key: superconductivity.get_eh_sector(m,i=0,j=0)
                 for (key,m) in scf.dm.items()}
     etot += get_dc_energy(scf.v,dm_dc) # add the double counting energy
+    if h.has_eh and kwargs.get("compute_anomalous",True):
+        # the pairing part of the interaction energy, which the band
+        # energy also counts twice (see get_dc_energy_anomalous)
+        from .superscf import get_dc_energy_anomalous
+        mf = get_mf(scf.v,scf.dm,has_eh=True)
+        etot += get_dc_energy_anomalous(mf,scf.dm)
     etot = etot.real
     scf.total_energy = etot
     if verbose>1:

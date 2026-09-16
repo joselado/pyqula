@@ -1986,7 +1986,7 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
 
 See the notebooks `03_spin_spin_exchange.ipynb`, `11_kpm_scf.ipynb` and `12_jax_scf_solvers.ipynb` in the folder above for executed versions of the three.
 
-All of the spin-spin exchange functions above also work on Bogoliubov-de Gennes (Nambu) Hamiltonians, set up with `h.turn_nambu()` or `h.setup_nambu_spinor()`, where the exchange channels are decoupled in the normal and in the anomalous channel, exactly as $U$/$V_1$/$V_2$/$V_3$ are. Exchange can therefore induce superconducting pairing on its own: an antiferromagnetic isotropic $J$, with no $U$ or $V$ at all, can decouple spontaneously into a purely superconducting singlet-paired state, the resonating-valence-bond mechanism behind exchange-driven superconductivity, while the ferromagnetic sign has no such tendency and stays magnetic. That instability has to be seeded coherently, with `h.add_swave(0.1)` on top of the Hamiltonian passed as `mf`, since a random guess has little overlap with it and usually relaxes back to zero pairing. A state carrying both magnetic and superconducting order can also emerge from an exchange field combined with an attractive $V_1$, as below. Note that the total energy returned with `return_total_energy=True` subtracts only the normal double-counting correction and not a matching one for the anomalous channel, so it is systematically off whenever a channel converges to a nonzero pairing amplitude; the converged Hamiltonian itself is unaffected, only that number:
+All of the spin-spin exchange functions above also work on Bogoliubov-de Gennes (Nambu) Hamiltonians, set up with `h.turn_nambu()` or `h.setup_nambu_spinor()`, where the exchange channels are decoupled in the normal and in the anomalous channel, exactly as $U$/$V_1$/$V_2$/$V_3$ are. Exchange can therefore induce superconducting pairing on its own: an antiferromagnetic isotropic $J$, with no $U$ or $V$ at all, can decouple spontaneously into a purely superconducting singlet-paired state, the resonating-valence-bond mechanism behind exchange-driven superconductivity, while the ferromagnetic sign has no such tendency and stays magnetic. That instability has to be seeded coherently, with `h.add_swave(0.1)` on top of the Hamiltonian passed as `mf`, since a random guess has little overlap with it and usually relaxes back to zero pairing. A state carrying both magnetic and superconducting order can also emerge from an exchange field combined with an attractive $V_1$, as below. The total energy returned with `return_total_energy=True` subtracts the double counting of the pairing mean field as well as of the normal one, so it is the mean-field energy of the paired state, and comparing it with the energy of an unpaired solution of the same interaction tells you which of the two is the ground state at the mean-field level:
 
 ```python
 h = g.get_hamiltonian(has_spin=True)
@@ -4694,10 +4694,9 @@ For a Nambu/BdG Hamiltonian this returns the *electronic* energy, i.e. the
 energy of the physical electrons rather than of the doubled Nambu spectrum,
 so at zero pairing it agrees with the normal-state answer for the same
 model. `nbands=` is not implemented there (raises `NotImplementedError`).
-Note the caveat under "Spin-spin exchange interactions": the double-counting
-correction subtracted by the mean-field total energy is the normal
-(Hartree-Fock) one only, never a matching anomalous one, so a total energy
-with genuine pairing is still missing that term
+Note that this is still the band energy: the mean-field total energy of a
+paired state, with the double counting of both the normal and the pairing
+mean field removed, is the one returned with `return_total_energy=True`
 
 ### h.get_density_matrix()
 Return the full density matrix of the occupied states, as a dense matrix in
@@ -5756,8 +5755,7 @@ On a BdG Hamiltonian every channel keeps the full normal+anomalous
 (pairing) treatment: $U$/$V_1$/$V_2$/$V_3$/$V_r$ as in
 `get_mean_field_hamiltonian`, and the exchange ($J$) channels identically,
 so exchange alone can induce superconducting pairing rather than only
-magnetism (see "Spin-spin exchange interactions" above, and the
-`total_energy` caveat recorded there).
+magnetism (see "Spin-spin exchange interactions" above).
 
 Returns the converged Hamiltonian (or `None` if the SCF did not converge)
 

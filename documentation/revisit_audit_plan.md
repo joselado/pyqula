@@ -438,7 +438,11 @@ progress. Read the linked note before touching anything nearby.
   closure primitive is validated to 1e-16 and reusable; the *sum*-truncation redesign
   around it is wrong by 10-90%, because the DC current is a genuinely unbounded
   sideband sum. Do not resurrect without new evidence.
-- **BdG `total_energy` anomalous dc-energy gap** — known, documented, unfixed by choice.
+- **BdG `total_energy` anomalous dc-energy gap** — fixed on 16 September 2026: the pairing
+  double counting is `superscf.get_dc_energy_anomalous`, subtracted in the density-density,
+  exchange and KPM energy tails, and checked against the BCS value, the variational
+  stationarity of the mean-field energy and a fixed-mu Hellmann-Feynman slope
+  (`tests/scf/test_bdg_total_energy.py`).
 - **AAA short-sweep length gate** — implemented (`afef383`), **explicitly rejected by
   the maintainer** as too system-dependent, reverted (`65c8499`). Attack build cost
   instead; all three queued build-speedup ideas are landed (`e0de870`, `d67d662`,

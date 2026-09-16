@@ -173,6 +173,13 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
         dm_dc = {key: superconductivity.get_eh_sector(m,i=0,j=0)
                 for (key,m) in scf.dm.items()}
     etot += get_dc_energy(scf.v, dm_dc)
+    if h.has_eh and kwargs.get("compute_anomalous",True):
+        # the pairing part, see the identical step in
+        # densitydensity.densitydensity
+        from .superscf import get_dc_energy_anomalous
+        from .densitydensity import get_mf
+        mf = get_mf(scf.v, scf.dm, has_eh=True)
+        etot += get_dc_energy_anomalous(mf, scf.dm)
     etot = etot.real
     scf.total_energy = etot
     if verbose>1:
