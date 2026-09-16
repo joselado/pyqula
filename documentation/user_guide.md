@@ -311,6 +311,30 @@ Fermi energy; for an insulator any Fermi energy inside the gap gives the same fi
 same keyword goes into `h.get_mean_field_hamiltonian(filling=...)` in the mean-field chapter,
 where the filling is kept fixed along the self-consistent calculation.
 
+What if the filling should differ from site to site, for example to model a charge
+imbalance between two sublattices imposed by a gate or a substrate? A single Fermi energy
+cannot do that, so the way we do this is by giving `h.set_filling()` one filling per site,
+and it then solves for one onsite energy per site such that every site reaches its own
+filling
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # honeycomb lattice, two sites per unit cell
+h = g.get_hamiltonian() # first-neighbor Hamiltonian
+h.set_filling(np.array([0.4,0.6])) # filling 0.4 on sublattice A, 0.6 on sublattice B
+occ = h.get_vev() # occupation of each site
+```
+
+Each entry keeps the convention of the scalar filling, the fraction of the states of that
+site that are occupied, so in this spinful example `occ` comes out as roughly 0.8 and 1.2
+electrons, and the average filling is the mean of the array, here half filling. The same
+per-site solve is reached with a scalar and `average=False`, which enforces the same filling
+on every site rather than on average. Note that on a finite island the levels are discrete
+and the total number of electrons is an integer, so fillings that add up to a fractional
+number of electrons are only reached through the broadening $\delta=0.01$ the solver uses,
+and the occupations should be read with `h.get_vev(delta=1e-2)`.
+
 
 # Observables
 
