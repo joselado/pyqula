@@ -15,32 +15,35 @@ h = g.get_hamiltonian() # spinful by default: 4 bands, two exactly
 h.add_haldane(0.2)
 h.shift_fermi(0.3) # put the Fermi level safely mid-gap (gap is [-0.9,0.9])
 
-# The full non-Abelian tensor resolves the two occupied (spin up/down)
-# bands individually: with no spin-orbit coupling the two spin channels do
-# not mix, so the tensor is block diagonal, and each diagonal block equals
-# the single-band result of the corresponding spinless problem
+# The full non-Abelian tensor, returned in the orbital basis (sum over the
+# occupied pair of |u_m> Q^{mn} <u_n|), which does not depend on the basis
+# the diagonalization picks inside the degenerate pair. With no spin-orbit
+# coupling it is block diagonal in spin, and the trace over the spin-up
+# orbitals (0 and 2) is the contribution of the spin-up electrons
 inds,g_na,omega_na = topology.quantum_geometric_tensor_path(h,occ_idxs=[0,1],
         nk=200,non_abelian=True)
+up,dn = [0,2],[1,3] # spin-orbital order: site 0 up/down, site 1 up/down
+spin_trace = lambda T,o: T[...,o,o].sum(axis=-1) # trace over orbitals o
 
 # The Abelian (band-trace) quantum metric/Berry curvature is exactly the
-# trace of the non-Abelian tensor over the occupied-band indices -- no
-# need for a second, separate k-path sweep to get it
-g_ab = g_na[:,:,:,0,0] + g_na[:,:,:,1,1]
-omega_ab = omega_na[:,:,:,0,0] + omega_na[:,:,:,1,1]
+# trace of the non-Abelian tensor -- no need for a second, separate k-path
+# sweep to get it
+g_ab = spin_trace(g_na,up) + spin_trace(g_na,dn)
+omega_ab = spin_trace(omega_na,up) + spin_trace(omega_na,dn)
 
 import matplotlib.pyplot as plt
 
 plt.subplot(1,2,1)
 plt.plot(inds,omega_ab[:,0,1].real,label="Abelian (trace)")
-plt.plot(inds,omega_na[:,0,1,0,0].real,label="band 0")
-plt.plot(inds,omega_na[:,0,1,1,1].real,label="band 1",linestyle="dashed")
+plt.plot(inds,spin_trace(omega_na,up)[:,0,1].real,label="spin up")
+plt.plot(inds,spin_trace(omega_na,dn)[:,0,1].real,label="spin down",linestyle="dashed")
 plt.xlabel("kpath") ; plt.xticks([]) ; plt.ylabel("Berry curvature")
 plt.legend()
 
 plt.subplot(1,2,2)
 plt.plot(inds,g_ab[:,0,0].real,label="Abelian (trace)")
-plt.plot(inds,g_na[:,0,0,0,0].real,label="band 0")
-plt.plot(inds,g_na[:,0,0,1,1].real,label="band 1",linestyle="dashed")
+plt.plot(inds,spin_trace(g_na,up)[:,0,0].real,label="spin up")
+plt.plot(inds,spin_trace(g_na,dn)[:,0,0].real,label="spin down",linestyle="dashed")
 plt.xlabel("kpath") ; plt.xticks([]) ; plt.ylabel("Quantum metric g_xx")
 plt.legend()
 

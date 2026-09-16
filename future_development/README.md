@@ -35,7 +35,8 @@ already reached once.
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
   be made the other: three findings that are decisions rather than repairs (the
-  QGT batching that is not output-equivalent, what the AAA's `converged` flag
+  QGT batching, since decided by returning the non-Abelian tensor in the
+  gauge-independent orbital basis, what the AAA's `converged` flag
   should mean, GPU Tier 2), three judgement calls (the one normalization
   deliberately left, the one aliasing sibling deliberately left, and the one
   assertion deliberately weakened), and where a third sweep should start.

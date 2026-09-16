@@ -99,40 +99,83 @@ def test_qgt_geometric_bounds_hold_pointwise():
 
 def test_qgt_nonabelian_matches_abelian_trace():
     """The band-trace ("Abelian") quantum geometric tensor must equal the
-    trace over the band-pair-resolved ("non-Abelian") tensor for the same
-    band subspace -- a basis-independent identity that must hold exactly
-    regardless of which orthonormal basis the diagonalization routine
-    picks inside a degenerate subspace."""
+    trace of the non-Abelian one, which is returned in the orbital basis,
+    Q_ij = sum_{m,n in S} |u_m> Q_ij^{mn} <u_n|, so the trace runs over
+    the orbitals."""
     h = _haldane_model(has_spin=True, t2=0.2) # 4 bands: 2 exactly spin-degenerate pairs
     for k in ([0.31, 0.17, 0.], [0.0, 0.0, 0.], [0.5, 0.2, 0.]):
         Q_ab = topology.quantum_geometric_tensor(h, k=k, occ_idxs=[0, 1])
         Q_na = topology.quantum_geometric_tensor(h, k=k, occ_idxs=[0, 1],
                                                    non_abelian=True)
-        assert np.allclose(Q_na[:, :, 0, 0] + Q_na[:, :, 1, 1], Q_ab)
+        assert Q_na.shape == (2, 2, 4, 4)
+        assert np.allclose(np.trace(Q_na, axis1=-2, axis2=-1), Q_ab)
 
 
 def test_qgt_nonabelian_spin_degenerate_block_diagonal():
     """With no spin-orbit coupling or Zeeman splitting the Haldane
     Hamiltonian is block diagonal in spin and the two spin channels are
-    identical copies of the same spinless problem. The non-Abelian quantum
-    geometric tensor of the resulting exactly spin-degenerate pair of
-    occupied bands must therefore: (i) vanish between the two spin
-    channels (no coupling between them), and (ii) have equal diagonal
-    blocks, each matching the single-band spinless result exactly -- this
-    is precisely the situation ordinary single-band Kubo formulas cannot
-    represent (degenerate energy denominator), which is the point of the
-    non-Abelian/multiband generalization implemented here."""
+    identical copies of the same spinless problem. The orbital-basis
+    non-Abelian tensor of the exactly spin-degenerate pair of occupied
+    bands must therefore vanish between spin-up and spin-down orbitals,
+    and each spin block must equal the spinless tensor. This is a
+    statement about the projector, so it holds whatever basis the
+    diagonalization picks inside the degenerate pair; in the band basis it
+    held only because the solver happened to return spin-pure vectors."""
     h_spinful = _haldane_model(has_spin=True, t2=0.2)
     h_spinless = _haldane_model(has_spin=False, t2=0.2)
     k = [0.31, 0.17, 0.]
     Q_na = topology.quantum_geometric_tensor(h_spinful, k=k, occ_idxs=[0, 1],
                                               non_abelian=True)
-    Q_ref = topology.quantum_geometric_tensor(h_spinless, k=k, occ_idxs=[0])
-    assert np.allclose(Q_na[:, :, 0, 1], 0.0, atol=1e-8) # no cross-spin coupling
-    assert np.allclose(Q_na[:, :, 1, 0], 0.0, atol=1e-8)
-    assert np.allclose(Q_na[:, :, 0, 0], Q_ref)
-    assert np.allclose(Q_na[:, :, 1, 1], Q_ref)
+    Q_ref = topology.quantum_geometric_tensor(h_spinless, k=k, occ_idxs=[0],
+                                              non_abelian=True)
+    up, dn = [0, 2], [1, 3] # spin-orbital order: site 0 up/down, site 1
+    block = lambda a, b: Q_na[:, :, a][:, :, :, b]
+    assert np.allclose(block(up, dn), 0.0, atol=1e-8) # no cross-spin part
+    assert np.allclose(block(dn, up), 0.0, atol=1e-8)
+    assert np.allclose(block(up, up), Q_ref)
+    assert np.allclose(block(dn, dn), Q_ref)
 
+
+def test_qgt_nonabelian_is_the_projector_derivative():
+    """The orbital-basis tensor is P d_iP d_jP P, with P the projector on
+    the chosen bands and d_i the derivative in reduced k. Check it against
+    a finite difference of P built directly from the eigenvectors, on a
+    model with Rashba coupling and an exchange field so the occupied pair
+    mixes spin, and check that no choice of basis inside the pair enters:
+    the finite difference only ever sees P."""
+    from pyqula import algebra
+    h = _haldane_model(has_spin=True, t2=0.2)
+    h.add_rashba(0.3)
+    h.add_exchange([0.1, 0.2, 0.1])
+    hk = h.get_hk_gen()
+    def P(k):
+        w = algebra.eigh(hk(k))[1][:, [0, 1]]
+        return w@w.conj().T
+    k0, dk = np.array([0.31, 0.17, 0.]), 1e-5
+    dP = [(P(k0 + dk*e) - P(k0 - dk*e))/(2*dk) for e in np.eye(3)[:2]]
+    P0 = P(k0)
+    Q_fd = np.array([[P0@dP[i]@dP[j]@P0 for j in range(2)] for i in range(2)])
+    Q_na = topology.quantum_geometric_tensor(h, k=k0, occ_idxs=[0, 1],
+                                              non_abelian=True)
+    assert np.max(np.abs(Q_na)) > 1.0 # the premise: a sizeable tensor
+    assert np.max(np.abs(Q_na - Q_fd)) < 1e-6
+
+
+def test_qgt_mesh_is_the_pointwise_tensor():
+    """The mesh is evaluated in batches of k-points, the single-k entry
+    point on its own; both must give the same numbers, in the non-Abelian
+    orbital basis too, including across a chunk boundary"""
+    from pyqula.topologytk import qgt
+    h = _haldane_model(has_spin=True, t2=0.2)
+    h.add_rashba(0.2)
+    hm, orders, hkgen, scale = qgt._multicell_and_orders(h)
+    ks = [np.random.default_rng(3).random(3)*[1, 1, 0] for _ in range(7)]
+    _, Qs = qgt._qgt_over_kpoints(hm, orders, hkgen, ks, [0, 1], True,
+                                  1e-8, scale, chunk=3)
+    for k, Q in zip(ks, Qs):
+        Qk = topology.quantum_geometric_tensor(h, k=k, occ_idxs=[0, 1],
+                                               non_abelian=True)
+        assert np.max(np.abs(Q - Qk)) < 1e-10
 
 _PAULI = {
     "x": np.array([[0, 1], [1, 0]], dtype=complex),
@@ -202,8 +245,8 @@ def test_qgt_nonabelian_berry_curvature_trace_matches_abelian():
     omega_na = topology.berry_curvature_from_qgt(Q_na, non_abelian=True)
     g_ab = topology.quantum_metric_from_qgt(Q_ab)
     g_na = topology.quantum_metric_from_qgt(Q_na, non_abelian=True)
-    assert np.allclose(omega_na[:, :, 0, 0] + omega_na[:, :, 1, 1], omega_ab)
-    assert np.allclose(g_na[:, :, 0, 0] + g_na[:, :, 1, 1], g_ab)
+    assert np.allclose(np.trace(omega_na, axis1=-2, axis2=-1), omega_ab)
+    assert np.allclose(np.trace(g_na, axis1=-2, axis2=-1), g_ab)
 
 
 def test_qgt_default_occ_idxs_follows_fermi_level_not_band_count():

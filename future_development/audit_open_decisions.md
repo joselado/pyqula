@@ -35,6 +35,22 @@ Note the QGT's *Abelian* (single-band) contractions are gauge invariant and
 could be batched safely; the non-Abelian multiband ones are the problem. Nobody
 has checked whether the hot path is actually the multiband one.
 
+**Decided and done (16 September 2026).** The premise of option (b) turned
+out to be the real issue: the band-indexed Q_ij^{mn} is only gauge covariant
+(it goes to U^dag Q U under a rotation of the subspace), so no choice of
+canonical gauge makes its entries physical, and the old spin-block test passed
+only because LAPACK happened to return spin-pure vectors for the degenerate
+pair. `non_abelian=True` now returns the tensor in the orbital basis,
+sum_{m,n} |u_m> Q^{mn} <u_n| = P dP dP P, which depends on the projector
+alone, so the diagonalization is batched (`_qgt_batch`, chunks of 256
+k-points). Checked against the serial code to 1e-13 (the old band tensor
+sandwiched back into the orbital basis), against a finite difference of the
+projector to 5e-8 on a spin-mixed model, and the Chern and analytic two-band
+tests are unchanged. The speedup on an nk=30 mesh was 2.5x at 36 orbitals and
+14x at 4, measured with another test run on the machine, so read those as
+indicative. The non-Abelian output changed shape, from
+(dim,dim,nocc,nocc) to (dim,dim,n,n).
+
 ### 1.2 `aaatk/selfenergy_aaa.py` -- what `converged=True` should mean
 
 `SelfenergyAAA` reports `converged=True` while the local relative error is 7.7%,

@@ -19,9 +19,19 @@
 # formula cannot handle. The quantum metric (symmetric part) and Berry
 # curvature (antisymmetric part) follow from Q as in the Abelian case.
 #
+# The band-resolved Q_ij^{mn} is only gauge covariant: a unitary rotation U
+# of the states of S, which any eigensolver is free to pick inside a
+# degenerate multiplet, turns it into U^dag Q U. So the non-Abelian tensor
+# returned here is the gauge-independent one, written in the orbital basis,
+#
+#   Q_ij(k) = sum_{m,n in S} |u_m> Q_ij^{mn} <u_n| = P d_iP d_jP P,
+#
+# with P the projector on S. Its trace is the Abelian tensor, and the
+# band-resolved tensor in any basis |v_m> of S is <v_m|Q_ij|v_n>.
+#
 # Numerical conventions (denominator convention, Abelian
 # g_ij=Re Q_ij/Omega_ij=-2 Im Q_ij, non-Abelian
-# Omega_ij^mn=i(Q_ij^mn-(Q_ij^nm)^*)/g_ij^mn=(Q_ij^mn+(Q_ij^nm)^*)/2) match
+# Omega_ij=i(Q_ij-Q_ij^dag)/g_ij=(Q_ij+Q_ij^dag)/2) match
 # PythTB's tb_model.quantum_geometric_tensor/berry_curvature/quantum_metric
 # (GPLv3, https://github.com/pythtb/pythtb). Correctness here is checked in
 # tests/topology/test_quantum_geometric_tensor.py against: (1) the Chern
@@ -35,7 +45,6 @@
 # overall rescaling of Q, so neither alone would catch a scale error).
 import numpy as np
 from .. import algebra
-from .. import current
 from .. import klist
 
 
@@ -47,7 +56,7 @@ def _multicell_and_orders(h):
     per-k-point function did real setup work -- filtering/densifying
     every hopping -- on every call, ~65x slower on a mesh sweep), and a
     characteristic hopping energy scale used to make degeneracy_tol
-    physically meaningful (see _quantum_geometric_tensor_at).
+    physically meaningful (see _qgt_batch).
 
     h.get_multicell() can hand back matrices stored as the legacy
     numpy.matrix (whose "*" operator means matrix product, not elementwise,
@@ -55,15 +64,17 @@ def _multicell_and_orders(h):
     get_supercell() keep their hoppings as numpy.matrix. Converting
     hm.intra and every hopping's .m to numpy.ndarray once, here, means
     multicell.derivative and every elementwise operation downstream in
-    this module (see current.hk_derivative and
-    _quantum_geometric_tensor_at) only ever see plain ndarrays -- no
+    this module (see _hk_derivatives_batch and
+    _qgt_batch) only ever see plain ndarrays -- no
     per-k-point or per-use patching needed. h.get_multicell() returns h
     itself unchanged if h is already multicell (see
     multicell.turn_multicell), so a Hamiltonian .copy() is taken first to
     avoid mutating the caller's own Hamiltonian in place."""
     hm = h.get_multicell().copy() # own copy: get_multicell() may alias h
-    hm.intra = np.asarray(hm.intra)
-    for t in hm.hopping: t.m = np.asarray(t.m)
+    # algebra.todense, not np.asarray: the latter turns a scipy sparse
+    # matrix (what get_supercell() stores) into a 0-d object array
+    hm.intra = algebra.todense(hm.intra)
+    for t in hm.hopping: t.m = algebra.todense(t.m)
     dim = h.dimensionality
     if dim==1: orders = [[1]]
     elif dim==2: orders = [[1,0],[0,1]]
@@ -78,27 +89,41 @@ def _multicell_and_orders(h):
     return hm,orders,hkgen,scale
 
 
-def _hk_derivatives(hm,orders,k):
+def _hk_derivatives_batch(hm,orders,ks):
     """Exact analytic k-derivatives dH/dk_i of a multicell Hamiltonian's
-    Bloch matrix at k, via current.hk_derivative -- the single shared,
-    correctly-normalized wrapper around multicell.derivative (see its
-    docstring for why derivative() alone is short by a factor of 2*pi per
-    order). Since H(k) = sum_R t_R exp(2 pi i k.R), these are exact (no
-    finite-difference error), unlike a numerical velocity operator. hm's
-    arrays are plain numpy.ndarray by construction (see
-    _multicell_and_orders), so the elementwise energy-denominator scaling
-    in _quantum_geometric_tensor_at is safe without any further coercion."""
-    return [current.hk_derivative(hm,k,order=o) for o in orders]
+    Bloch matrix at every k in ks, shape (nk,dim,n,n). Since
+    H(k) = intra + sum_R t_R exp(2 pi i k.R), dH/dk_i = sum_R
+    (2 pi i R_i) t_R exp(2 pi i k.R), with k in reduced coordinates; this
+    is current.hk_derivative (multicell.derivative times its missing
+    2*pi) evaluated for all k-points at once, and it is checked against a
+    finite difference of the projector in
+    tests/topology/test_quantum_geometric_tensor.py."""
+    ks = np.array([np.array(k,dtype=float)[:3] for k in ks])
+    n = hm.intra.shape[0]
+    dim = len(orders)
+    out = np.zeros((len(ks),dim,n,n),dtype=np.complex128)
+    for t in hm.hopping:
+        d = np.array(t.dir,dtype=float)
+        phase = np.exp(2j*np.pi*(ks[:,:len(d)]@d[:ks.shape[1]])) # (nk,)
+        for i,o in enumerate(orders):
+            pref = np.prod([(2j*np.pi*d[a])**o[a] for a in range(len(o))])
+            if pref==0.: continue
+            out[:,i] += phase[:,None,None]*(pref*np.asarray(t.m))[None]
+    return out
 
 
-def _quantum_geometric_tensor_at(hm,orders,hkgen,k,occ_idxs,non_abelian,
-        degeneracy_tol,scale):
-    """Core per-k-point computation, given an already-multicell Hamiltonian,
-    derivative orders and Bloch generator (see quantum_geometric_tensor_k
-    for the public, single-k-point entry point, and
-    quantum_geometric_tensor_path/_mesh for the versions that reuse
-    hm,orders,hkgen across many k-points instead of reconverting/rebuilding
-    them at every point).
+def _qgt_batch(hm,orders,hkgen,ks,occ_idxs,non_abelian,degeneracy_tol,
+        scale):
+    """Core computation for a batch of k-points, given an already-multicell
+    Hamiltonian, derivative orders and Bloch generator. Returns an array
+    with one tensor per k-point, (nk,dim,dim) for the trace over the
+    subspace or (nk,dim,dim,n,n) for the orbital-basis non-Abelian tensor
+    (see the module comment).
+
+    The diagonalization is batched (htk.eigenvectors), which is safe
+    because nothing returned depends on the basis the solver picks inside
+    a degenerate multiplet: the band-resolved tensor is built in whatever
+    basis comes out and then sandwiched back into the orbital basis.
 
     degeneracy_tol is interpreted as *relative* to `scale` (the
     Hamiltonian's characteristic hopping energy, from _multicell_and_orders)
@@ -109,37 +134,37 @@ def _quantum_geometric_tensor_at(hm,orders,hkgen,k,occ_idxs,non_abelian,
     blow the tensor up to a huge, effectively-noise-dominated value instead
     of raising), while over-eagerly flagging a perfectly healthy gap as
     degenerate on a meV-scale Hamiltonian."""
+    from ..htk.eigenvectors import hk_matrix_batch, parallel_diagonalization
     dim = len(orders)
-    dhs = _hk_derivatives(hm,orders,k)
-    hk = hkgen(k)
-    (es,ws) = algebra.eigh(hk) # es ascending, ws[:,n] eigenvector of es[n]
-    n = len(es)
-    if occ_idxs is None: occ_idxs = np.where(es<0.0)[0] # default: E<0 bands
-    occ_idxs = np.array(occ_idxs)
+    mats = hk_matrix_batch(hkgen,ks) # H(k) batch, densified
+    (es,ws) = parallel_diagonalization(mats) # ws[k][:,n] eigenvector of es[k][n]
+    nk,n = es.shape
+    occ_idxs = np.array(occ_idxs,dtype=int)
     cond_idxs = np.setdiff1d(np.arange(n),occ_idxs)
+    nocc = len(occ_idxs)
     if len(cond_idxs)==0: # subspace is everything, nothing to project onto
-        Q = np.zeros((dim,dim,len(occ_idxs),len(occ_idxs)),dtype=np.complex128)
-        return Q if non_abelian else np.trace(Q,axis1=-2,axis2=-1)
-    wsc = np.conjugate(ws)
-    # rotate the velocity operators into the eigenbasis: vrot[i][m,n] = <m|dH_i|n>
-    vrot = [wsc.T@dh@ws for dh in dhs]
-    Eo = es[occ_idxs]; Ec = es[cond_idxs]
-    denom = Eo[:,None] - Ec[None,:] # (n_occ,n_cond)
-    abs_tol = degeneracy_tol*scale
-    if np.any(np.abs(denom)<abs_tol):
+        if non_abelian:
+            return np.zeros((nk,dim,dim,n,n),dtype=np.complex128)
+        return np.zeros((nk,dim,dim),dtype=np.complex128)
+    Eo = es[:,occ_idxs]; Ec = es[:,cond_idxs]
+    denom = Eo[:,:,None] - Ec[:,None,:] # (nk,n_occ,n_cond)
+    if np.any(np.abs(denom)<degeneracy_tol*scale):
         raise ValueError("Degenerate bands across occ_idxs and its "
             "complement: the quantum geometric tensor requires a gap "
             "between the chosen subspace and the rest of the spectrum")
     inv_oc = 1./denom
-    inv_co = inv_oc.T
-    Q = np.zeros((dim,dim,len(occ_idxs),len(occ_idxs)),dtype=np.complex128)
-    for i in range(dim):
-        voc = vrot[i][np.ix_(occ_idxs,cond_idxs)]*inv_oc
-        for j in range(dim):
-            vco = vrot[j][np.ix_(cond_idxs,occ_idxs)]*inv_co
-            Q[i,j] = voc@vco
-    if non_abelian: return Q
-    return np.trace(Q,axis1=-2,axis2=-1) # sum over the subspace
+    dhs = _hk_derivatives_batch(hm,orders,ks) # (nk,dim,n,n)
+    wo = ws[:,:,occ_idxs] # (nk,n,n_occ)
+    wc = ws[:,:,cond_idxs] # (nk,n,n_cond)
+    # <m|dH_i|l> and <l|dH_j|n>, each divided by its energy difference
+    voc = np.conj(wo.transpose(0,2,1))[:,None]@dhs@wc[:,None] # (nk,dim,no,nc)
+    voc = voc*inv_oc[:,None]
+    vco = np.conj(wc.transpose(0,2,1))[:,None]@dhs@wo[:,None] # (nk,dim,nc,no)
+    vco = vco*inv_oc.transpose(0,2,1)[:,None]
+    Q = voc[:,:,None]@vco[:,None,:] # (nk,dim,dim,no,no)
+    if not non_abelian: return np.trace(Q,axis1=-2,axis2=-1)
+    # back to the orbital basis, where the solver's gauge drops out
+    return wo[:,None,None]@Q@np.conj(wo.transpose(0,2,1))[:,None,None]
 
 
 def quantum_geometric_tensor_k(h,k=[0.,0.,0.],occ_idxs=None,
@@ -153,22 +178,27 @@ def quantum_geometric_tensor_k(h,k=[0.,0.,0.],occ_idxs=None,
     and topologytk/operatorberry.py -- not just the lower half of the
     bands, so this tracks h.shift_fermi(...) the same way h.get_chern()
     does). Set non_abelian to True to get the full band-pair-resolved
-    tensor Q_ij^{mn}, instead of its trace (sum_{m in S} Q_ij^{mm}) over
-    the subspace.
+    tensor instead of its trace (sum_{m in S} Q_ij^{mm}) over the
+    subspace. It is returned in the orbital basis,
+    Q_ij = sum_{m,n in S} |u_m> Q_ij^{mn} <u_n|, which does not depend on
+    the basis the diagonalization picks inside a degenerate multiplet;
+    the band-resolved Q_ij^{mn} in a basis |v_m> of S of your choice is
+    <v_m|Q_ij|v_n>.
 
     degeneracy_tol is relative to the Hamiltonian's characteristic hopping
-    energy scale (see _multicell_and_orders/_quantum_geometric_tensor_at),
+    energy scale (see _multicell_and_orders/_qgt_batch),
     not an absolute energy.
 
     Returns
     -------
     Q : ndarray, complex
-      shape (dim,dim,len(occ_idxs),len(occ_idxs)) if non_abelian
+      shape (dim,dim,n,n) if non_abelian, n the number of orbitals
       shape (dim,dim) (trace over the subspace) otherwise
     """
     hm,orders,hkgen,scale = _multicell_and_orders(h)
-    return _quantum_geometric_tensor_at(hm,orders,hkgen,k,occ_idxs,
-            non_abelian,degeneracy_tol,scale)
+    occ_idxs = _resolve_occ_idxs(hkgen,k,occ_idxs)
+    return _qgt_batch(hm,orders,hkgen,[k],occ_idxs,non_abelian,
+            degeneracy_tol,scale)[0]
 
 
 def berry_curvature_from_qgt(Q,non_abelian=False):
@@ -205,30 +235,22 @@ def _resolve_occ_idxs(hkgen,k,occ_idxs):
 
 
 def _qgt_over_kpoints(hm,orders,hkgen,ks,occ_idxs,non_abelian,degeneracy_tol,
-        scale):
+        scale,chunk=256):
     """Shared core of quantum_geometric_tensor_path/_mesh: resolve
     occ_idxs once from the first k-point (see _resolve_occ_idxs) and
     evaluate the QGT at every k in ks, reusing the same hm/orders/hkgen/
     scale throughout. Returns (occ_idxs,Qs).
 
-    This loop is deliberately per-k-point rather than a batched
-    hk_matrix_batch + htk.eigenvectors.parallel_diagonalization, which is
-    the usual way to parallelize a k-mesh in this package. Batching would
-    replace algebra.eigh's eigenvectors with numba's, and the two agree on
-    the eigenvalues but not on the basis they pick inside a degenerate
-    subspace. The Abelian tensor traces over the chosen subspace and is
-    invariant under such a rotation (measured: agreement to 5e-14 on a 2x2
-    spinful Haldane supercell), but the non_abelian=True tensor Q_ij^{mn}
-    is only covariant -- the same measurement moves it by 4.9 out of a
-    |Q|max of 5.0 -- so a batched solver would silently change its value
-    and break, for instance, the spin-block-diagonality test in
-    tests/topology/test_quantum_geometric_tensor.py. Batching the
-    diagonalization here needs a fixed gauge for the occupied block first,
-    which is a design decision and not a speedup."""
+    The k-points go through _qgt_batch in chunks of `chunk`, which bounds
+    the memory of the (nk,dim,n,n) derivative and eigenvector arrays. This
+    used to be a serial per-k-point loop, because the non-Abelian tensor
+    was returned in the band basis and a batched solver picks a different
+    basis inside a degenerate multiplet; it is now returned in the orbital
+    basis, where that choice drops out."""
     occ_idxs = _resolve_occ_idxs(hkgen,ks[0],occ_idxs)
-    Qs = np.array([_quantum_geometric_tensor_at(hm,orders,hkgen,k,occ_idxs,
-             non_abelian,degeneracy_tol,scale) for k in ks])
-    return occ_idxs,Qs
+    Qs = [_qgt_batch(hm,orders,hkgen,ks[i:i+chunk],occ_idxs,non_abelian,
+            degeneracy_tol,scale) for i in range(0,len(ks),chunk)]
+    return occ_idxs,np.concatenate(Qs,axis=0)
 
 
 def quantum_geometric_tensor_path(h,kpath=None,nk=100,occ_idxs=None,

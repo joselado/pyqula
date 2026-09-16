@@ -2500,9 +2500,22 @@ $$
 where $m$ and $n$ run over the bands of the subspace and $l$ over the bands outside it, with
 the quantum metric $g_{ij}^{mn} = \mathrm{Re}\,Q_{ij}^{mn}$ (symmetric part) and Berry
 curvature $\Omega_{ij}^{mn} = -2\,\mathrm{Im}\,Q_{ij}^{mn}$ (antisymmetric part) recovered in
-the band-trace ("Abelian") case; setting `non_abelian=True` instead returns the full
-band-pair-resolved ("non-Abelian") tensor. What makes this form suitable for a genuinely
-multiorbital model is that only states *outside* $S$ enter the energy denominators, so it
+the band-trace ("Abelian") case. What about the tensor resolved per pair of bands, the
+"non-Abelian" one? Note that $Q_{ij}^{mn}$ is not gauge independent: rotating the states of
+$S$ among themselves, which is exactly the freedom a diagonalization has inside a degenerate
+multiplet, rotates the tensor too, so its individual entries are not physical, only its trace
+and its invariants are. For that reason `non_abelian=True` returns it in the orbital basis,
+
+$$
+Q_{ij}(\mathbf k) = \sum_{m,n\in S} |u_m\rangle\, Q_{ij}^{mn}\, \langle u_n|
+= P\,\partial_{k_i}P\,\partial_{k_j}P\,P ,
+$$
+
+with $P$ the projector on $S$, meaning that it depends on the subspace alone and not on the
+basis chosen inside it; its trace is the Abelian tensor, and the band-resolved tensor in any
+basis $|v_m\rangle$ of $S$ you choose is $\langle v_m|Q_{ij}|v_n\rangle$.
+
+What makes this form suitable for a genuinely multiorbital model is that only states *outside* $S$ enter the energy denominators, so it
 stays well defined when $S$ contains an exactly or nearly degenerate multiplet of bands, an
 exactly spin-degenerate pair, say, or several orbitals meeting at a high-symmetry point, which
 an ordinary single-band formula cannot handle. The derivative $\partial_{k_i} H$ is evaluated
@@ -2523,7 +2536,7 @@ h.shift_fermi(0.3) # put the Fermi level safely mid-gap (gap is [-0.9,0.9])
 Q = h.get_quantum_geometric_tensor(k=[0.1,0.2,0.],occ_idxs=[0,1]) # at a k-point
 g_metric = h.get_quantum_metric(k=[0.1,0.2,0.],occ_idxs=[0,1]) # quantum metric only
 
-# band-pair-resolved (non-Abelian) tensor of the two occupied bands
+# non-Abelian tensor of the two occupied bands, in the orbital basis
 Qna = topology.quantum_geometric_tensor(h,k=[0.1,0.2,0.],occ_idxs=[0,1],
         non_abelian=True)
 
@@ -2534,8 +2547,10 @@ C = topology.chern_from_qgt(h,nk=20,occ_idxs=[0,1])
 ```
 
 `Q` is a complex $2\times2$ array in two dimensions, one entry per pair of directions, and the
-metric is its real part; with `non_abelian=True` the tensor is resolved per pair of bands, a
-$2\times2\times2\times2$ array for the two occupied bands. Along the k-path the function
+metric is its real part; with `non_abelian=True` it is a $2\times2\times4\times4$ array, one
+$4\times4$ matrix in the spin-orbital basis per pair of directions, and since there is no
+spin-orbit coupling here it is block diagonal in spin, the trace over the spin-up orbitals
+being the contribution of the spin-up electrons. Along the k-path the function
 returns the position along the path and the metric and the curvature at each point, arrays
 with one $2\times2$ tensor per k-point, and integrating the curvature part over the Brillouin
 zone reproduces `h.get_chern()`, here $C=2$ for the spin-degenerate pair of occupied bands. A
@@ -5518,8 +5533,10 @@ Optional arguments:
 - occ_idxs=None: band indices of the chosen subspace (default: the bands
   with E<0, the same Fermi-level convention `h.get_chern()` uses, so this
   tracks `h.shift_fermi(...)`)
-- non_abelian=False: if True, return the full band-pair-resolved tensor
-  instead of its trace over the subspace
+- non_abelian=False: if True, return the full tensor in the orbital basis,
+  $\sum_{m,n\in S}|u_m\rangle Q^{mn}\langle u_n|$, an $n\times n$ matrix per pair of
+  directions that does not depend on the basis chosen inside a degenerate
+  subspace, instead of its trace over the subspace
 - degeneracy_tol=1e-8: energy tolerance used to detect a degeneracy
   between the chosen subspace and its complement (raises `ValueError`)
 
