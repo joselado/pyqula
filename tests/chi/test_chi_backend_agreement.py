@@ -63,7 +63,7 @@ def test_sparse_hamiltonian_reaches_every_backend():
     dense = _chiAB(_chain(), "explicit", 0.1)
     for kwargs in [dict(ij_mode="explicit"),
                    dict(ij_mode="accelerated"),
-                   dict(ij_mode="explicit", chi_cpugpu="GPU")]:
+                   dict(ij_mode="explicit", chi_cpugpu="GPU", chi_prec="double")]:
         mode = kwargs.pop("ij_mode")
         out = _chiAB(_make_sparse(_chain()), mode, 0.1, **kwargs)
         assert np.max(np.abs(dense - out)) < 1e-10, (mode, kwargs)

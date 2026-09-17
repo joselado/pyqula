@@ -41,7 +41,10 @@ SIZES_FULL = [4, 8, 12, 16, 24, 32, 48, 64]
 # CPU kernel takes ~10 s at N=32 and ~2.5 min at N=64 (N^4), while the device
 # side stays under a second
 
-METHODS = (("numba", "CPU"), ("jax", "GPU"))
+# (method name, chi_cpugpu, chi_prec); the first is the reference. The
+# precision is passed explicitly, since chi_prec defaults differ per backend
+METHODS = (("numba", "CPU", "double"), ("numba-single", "CPU", "single"),
+           ("jax", "GPU", "double"), ("jax-single", "GPU", "single"))
 
 NK = 4          # a folded BZ: few k-points, see the module docstring
 NW = 40         # frequencies
@@ -78,11 +81,11 @@ def run(sizes):
         energies = np.linspace(0.01, 1.0, NW)
         ref = None
         batch = []
-        for method, backend in METHODS:
-            def call(backend=backend):
+        for method, backend, prec in METHODS:
+            def call(backend=backend, prec=prec):
                 return chiAB_q(h, pAs=pAs, pBs=pBs, q=Q, nk=NK,
                                energies=energies, delta=DELTA,
-                               chi_cpugpu=backend)
+                               chi_cpugpu=backend, chi_prec=prec)
             t_cold, t_warm, (_, chis) = time_cold_warm(call)
             value = _quantity(chis)
             if method == "numba":

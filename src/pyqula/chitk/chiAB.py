@@ -23,7 +23,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                imode="mesh", # integration mode in momentum space
                ij_mode = "explicit", # loop over elements mode
                mode="matrix", # return object
-               chi_cpugpu="CPU" # backend for the Lindhard kernel
+               chi_cpugpu="CPU", # backend for the Lindhard kernel
+               chi_prec=None # precision of the Lindhard kernel
                ):
     """Compute AB response function
        - energies: energies of the dynamical response
@@ -40,9 +41,20 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
          back to jax's CPU backend if no GPU is present). The GPU path
          implements the mode="matrix", imode="mesh", ij_mode="explicit"
          combination only, and raises otherwise rather than silently
-         computing on the CPU"""
+         computing on the CPU
+       - chi_prec: "single" or "double", the precision of the Lindhard
+         contraction (mode="matrix"; both backends take both). Defaults
+         to "single" on the GPU, where a consumer card's double precision
+         is an order of magnitude slower, and to "double" on the CPU. The
+         eigendecompositions stay in double either way, and the result is
+         complex128 either way"""
     if chi_cpugpu not in ["CPU","GPU"]:
         raise ValueError("chi_cpugpu must be 'CPU' or 'GPU', got "+str(chi_cpugpu))
+    if chi_prec is None: # the fast option where one exists
+        chi_prec = "single" if chi_cpugpu=="GPU" else "double"
+    if chi_prec not in ["single","double"]:
+        raise ValueError("chi_prec must be 'single' or 'double', got "+repr(chi_prec))
+    cdtype = np.complex64 if chi_prec=="single" else np.complex128
     temp = T # redefine
     if temp is None: temp = delta # as delta
     hk = h.get_hk_gen() # get generator
@@ -70,6 +82,14 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     else: # pAs and pBs provided on input
         ij_mode = "explicit" # do the loop explicitly
         pass
+    if chi_prec=="single" and chi_cpugpu=="CPU" and (mode!="matrix"
+            or ij_mode!="explicit"): # (the GPU path has its own guard)
+        raise NotImplementedError("chi_prec='single' is only implemented "
+                "for mode='matrix' with ij_mode='explicit', got mode='"
+                +str(mode)+"', ij_mode='"+str(ij_mode)+"'")
+    if mode=="matrix": # the operators in the precision of the contraction
+        pAs_c = np.array(pAs,dtype=cdtype)
+        pBs_c = np.array(pBs,dtype=cdtype)
     ### now define the function to integrate
     def getk(k):
         m1 = hk(k) # get Hamiltonian
@@ -85,8 +105,9 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
 #            out = np.array([[getAB(pA,pB) for pA in pAs] for pB in pBs])
             # parallelized (over matrix elements) implementation
             parallel.set_num_threads() # set the number of threads
-            out = chiAB_matrix(ws1,es1,ws2,es2,energies,pAs,pBs,temp,delta)
-            return out # return array of matrices
+            out = chiAB_matrix(ws1.astype(cdtype),es1,ws2.astype(cdtype),
+                               es2,energies,pAs_c,pBs_c,temp,delta)
+            return np.array(out,dtype=np.complex128) # array of matrices
         elif mode=="trace": # return the trace
             out = np.array([getAB(pi@A,pi@B) for pi in projs])
             return np.mean(out,axis=0) # sum over the first axis
@@ -118,7 +139,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
             hks2 = np.array([algebra.todense(hk(np.array(k)+qv)) for k in ks],
                     dtype=np.complex128) # H(k+q)
             out = chi_matrix_kmesh_gpu(hks1,hks2,energies,np.array(pAs),
-                                       np.array(pBs),temp,delta)
+                                       np.array(pBs),temp,delta,
+                                       chi_prec=chi_prec)
         elif ij_mode=="accelerated": # (maybe?) accelerated function
             parallel.set_num_threads() # set the number of threads
             out = chiAB_matrix_ksum(h,ks,q,energies,A,B,temp,delta)
@@ -183,7 +205,12 @@ def chiAB_matrix(ws1,es1,ws2,es2,energies,Ais,Bjs,temp,delta):
     from scratch for every pair even though the former only depends on i
     and the latter only on j. Precomputing those transforms once per row
     and once per column operator (instead of once per pair) turns this
-    from an O(ni*nj*n^3) computation into O((ni+nj)*n^3 + ni*nj*n^2)."""
+    from an O(ni*nj*n^3) computation into O((ni+nj)*n^3 + ni*nj*n^2).
+
+    The precision of the contraction follows ws1/Ais (complex64 or
+    complex128, all three must match). The energy denominators are formed
+    in double precision and only then rounded, since es1-es2-omega is a
+    near-cancellation right where the response is large."""
     ni = len(Ais) # number of row operators
     nj = len(Bjs) # number of column operators
     n = len(ws1) # number of wavefunctions
@@ -195,20 +222,21 @@ def chiAB_matrix(ws1,es1,ws2,es2,energies,Ais,Bjs,temp,delta):
     cws2 = np.conjugate(ws2)
     ws1T = ws1.T
     ws2T = ws2.T
-    MA = np.zeros((ni,n,n),dtype=np.complex128) # <a|Ai|b>, per row operator
+    MA = np.zeros((ni,n,n),dtype=ws1.dtype) # <a|Ai|b>, per row operator
     for i in prange(ni):
         MA[i] = cws1@(Ais[i]@ws2T)
-    MB = np.zeros((nj,n,n),dtype=np.complex128) # <b|Bj|a>, per column operator
+    MB = np.zeros((nj,n,n),dtype=ws1.dtype) # <b|Bj|a>, per column operator
     for j in prange(nj):
         MB[j] = cws2@(Bjs[j]@ws1T)
-    out = np.zeros((ni,nj,len(energies)),dtype=np.complex128) # initialize
+    out = np.zeros((ni,nj,len(energies)),dtype=ws1.dtype) # initialize
     for i in prange(ni): # loop over rows of the matrix
         for a in range(n): # loop over wavefunctions of ws1
             oa = occs1[a] # first occupation
             for b in range(n): # loop over wavefunctions of ws2
                 fac0 = oa - occs2[b] # occupation factor
                 if np.abs(fac0)<cutoff: continue # skip contribution if too small
-                denom = fac0*(1./(es1[a]-es2[b] - energies + 1j*delta))
+                denom = (fac0*(1./(es1[a]-es2[b] - energies + 1j*delta))
+                         ).astype(ws1.dtype)
                 MAiab = MA[i,a,b]
                 for j in range(nj): # loop over columns of the matrix
                     out[i,j,:] += MAiab*MB[j,b,a]*denom

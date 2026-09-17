@@ -62,6 +62,18 @@ import jax.numpy as jnp
 from functools import partial
 
 
+# chi_prec -> (real, complex) dtype of the operator tensors and the GEMM
+_CHI_DTYPES = {"single": (np.float32, np.complex64),
+               "double": (np.float64, np.complex128)}
+
+
+def _chi_dtypes(chi_prec):
+    if chi_prec not in _CHI_DTYPES:
+        raise ValueError("chi_prec must be 'single' or 'double', got "
+                         +repr(chi_prec))
+    return _CHI_DTYPES[chi_prec]
+
+
 PAIR_PAD_QUANTUM = 2048 # pad the gathered pair list up to a multiple of
 # this, so that neighbouring k-points (whose survivor counts differ by a
 # few) share one compiled kernel instead of triggering a retrace each
@@ -133,29 +145,41 @@ _chi_from_tensors_jit = jax.jit(_chi_from_tensors)
 
 
 def chiAB_matrix_gpu(ws1,es1,ws2,es2,energies,Ais,Bjs,temp,delta,
-                     pair_pad=None):
+                     pair_pad=None,chi_prec="single"):
     """Drop-in replacement for chiAB.chiAB_matrix: same arguments, same
-    (nw,ni,nj) return value. Provided so the two can be diffed on
-    identical input; production calls should use chi_matrix_kmesh_gpu,
-    which keeps the whole k-mesh on the device."""
+    (nw,ni,nj) complex128 return value (with chi_prec="double" also the
+    same arithmetic). Provided so the two can be diffed on identical
+    input; production calls should use chi_matrix_kmesh_gpu, which keeps
+    the whole k-mesh on the device."""
+    rdt,cdt = _chi_dtypes(chi_prec)
     idx_ab,idx_ba,facs,dE = pair_plan(es1,es2,temp,delta,pair_pad=pair_pad)
-    TA,TB = _gathered_operator_tensors(jnp.asarray(ws1),jnp.asarray(ws2),
-                                       jnp.asarray(Ais),jnp.asarray(Bjs),
+    TA,TB = _gathered_operator_tensors(jnp.asarray(ws1,dtype=cdt),
+                                       jnp.asarray(ws2,dtype=cdt),
+                                       jnp.asarray(Ais,dtype=cdt),
+                                       jnp.asarray(Bjs,dtype=cdt),
                                        jnp.asarray(idx_ab),jnp.asarray(idx_ba))
-    out = _chi_from_tensors_jit(TA,TB,jnp.asarray(facs),jnp.asarray(dE),
-                                jnp.asarray(energies),delta)
-    return np.array(out)
+    out = _chi_from_tensors_jit(TA,TB,jnp.asarray(facs,dtype=cdt),
+                                jnp.asarray(dE,dtype=rdt),
+                                jnp.asarray(energies,dtype=rdt),delta)
+    return np.array(out,dtype=np.complex128)
 
 
 def chi_matrix_kmesh_gpu(hks1,hks2,energies,Ais,Bjs,temp,delta,
-                         pair_pad=None):
+                         pair_pad=None,chi_prec="single"):
     """Full k-mesh response, averaged over k, without returning to the
     host in between.
 
     hks1[ik], hks2[ik] are H(k) and H(k+q) for every k of the mesh. The
     eigendecompositions are done once as a single batched eigh; the pair
     plan is built for every k first so that one padded length covers the
-    whole mesh, which is what keeps the kernel compiled exactly once."""
+    whole mesh, which is what keeps the kernel compiled exactly once.
+
+    chi_prec sets the precision of the operator tensors and of the GEMM,
+    which is where the time goes. The eigendecompositions and the pair
+    plan stay in double precision either way: they are cheap, and doing
+    them in double keeps single precision's error at the rounding of the
+    contraction rather than compounding it with eigenvector error."""
+    rdt,cdt = _chi_dtypes(chi_prec)
     hks1 = jnp.asarray(hks1)
     hks2 = jnp.asarray(hks2)
     es1k,wsk1 = jnp.linalg.eigh(hks1) # batched over the mesh
@@ -174,20 +198,20 @@ def chi_matrix_kmesh_gpu(hks1,hks2,energies,Ais,Bjs,temp,delta,
         pair_pad = int(np.ceil(max(max(counts),1)/PAIR_PAD_QUANTUM)
                        *PAIR_PAD_QUANTUM)
         pair_pad = min(pair_pad,n*n)
-    Ais = jnp.asarray(Ais)
-    Bjs = jnp.asarray(Bjs)
-    energies = jnp.asarray(energies)
+    Ais = jnp.asarray(Ais,dtype=cdt)
+    Bjs = jnp.asarray(Bjs,dtype=cdt)
+    energies = jnp.asarray(energies,dtype=rdt)
     out = None
     for ik in range(nk): # loop over k, everything stays on the device
         idx_ab,idx_ba,facs,dE = pair_plan(es1k_h[ik],es2k_h[ik],temp,delta,
                                           pair_pad=pair_pad)
         # eigenvectors come back as columns; the kernel wants states as rows
-        ws1 = wsk1[ik].T
-        ws2 = wsk2[ik].T
+        ws1 = wsk1[ik].T.astype(cdt)
+        ws2 = wsk2[ik].T.astype(cdt)
         TA,TB = _gathered_operator_tensors(ws1,ws2,Ais,Bjs,
                                            jnp.asarray(idx_ab),
                                            jnp.asarray(idx_ba))
-        chik = _chi_from_tensors_jit(TA,TB,jnp.asarray(facs),jnp.asarray(dE),
-                                     energies,delta)
+        chik = _chi_from_tensors_jit(TA,TB,jnp.asarray(facs,dtype=cdt),
+                                     jnp.asarray(dE,dtype=rdt),energies,delta)
         out = chik if out is None else out + chik
-    return np.array(out/nk) # mean over the mesh, same as the CPU path
+    return np.array(out/nk,dtype=np.complex128) # mean over the mesh, as the CPU path

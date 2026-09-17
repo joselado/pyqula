@@ -1,10 +1,13 @@
 # GPU port of the RPA spin response
 
-Status: **Tiers 0-2 implemented, verified on the CPU fallback and measured
-on a V100 (833x at N=64, crossover near N=7, section 11); a run at N=100
-itself and on a newer card are what is left open.** Target: good performance for
-1d/2d systems with ~100 sites in the unit cell. Development on the local
-workstation (no GPU), timing and acceptance on a Triton GPU node. See
+Status: **Tiers 0-2 and 4 implemented. Tiers 0-2 were measured on a V100
+(833x at N=64, crossover near N=7, section 11) and on a GTX 1060; Tier 4
+(`chi_prec`, single precision, the GPU default) on the GTX 1060, ~220x over
+double-precision numba at N=64. A run at N=100 itself and on a newer card
+are what is left open.** Target: good performance for
+1d/2d systems with ~100 sites in the unit cell. Developed on a local
+workstation that at first had no GPU and now has a GTX 1060; data-centre
+timing on a Triton GPU node. See
 section 11 for exactly what landed and what is still open.
 
 This is a concrete tier for `documentation/gpu_porting_plan.md`, which
@@ -217,8 +220,10 @@ caught the KPM bug either).
 Add `chi_prec="double"|"single"` alongside, following `kpm_prec`. Not a
 Tier 1 deliverable -- only worth wiring once double precision is measured
 on the device, since on a data-centre card FP64 is fast enough that the
-single-precision option may not be worth its accuracy cost. Do not make it
-the default under any measurement.
+single-precision option may not be worth its accuracy cost. *(This
+originally said never to make single the default. The maintainer decided
+otherwise on 2026-09-17, after the consumer-card measurement of section
+11: single is the GPU default, double stays the CPU default. See Tier 4.)*
 
 ## 5. Tiers
 
@@ -320,7 +325,8 @@ same step cannot attribute either.
 
 ### Tier 4 -- single precision
 
-Only if Tier 2's measurements justify it. See section 4.
+Only if Tier 2's measurements justify it. See section 4. **Done**, see
+section 11.
 
 ## 6. Memory
 
@@ -477,9 +483,56 @@ still a host-side per-frequency solve; same reasoning. Both are now worth
 re-profiling -- see "What is still open" below, since the kernel they were
 measured against has since become ~800x faster.
 
-**Tiers 3 and 4 -- not started, and deliberately so.** The binned spectral
-acceleration and single precision both change the numbers; neither should
-be touched before the device measurement attributes the plain port.
+**Tier 3 -- not started, and deliberately so.** The binned spectral
+acceleration changes the numbers, and should not be touched before the
+device measurement attributes the plain port.
+
+**Tier 4 -- done (2026-09-17).** `chi_prec="single"|"double"` on `chiAB_q`,
+forwarded by every entry point the way `chi_cpugpu` is, defaulting to
+`"single"` under `chi_cpugpu="GPU"` and `"double"` on the CPU (the
+maintainer's call, made after the GTX 1060 numbers below). Both backends
+take both values:
+
+- *Device.* The batched `eigh` and the pair plan stay in double; only the
+  operator tensors `TA`/`TB` and the per-frequency GEMM run in
+  complex64, which is where the time is. The result is returned as
+  complex128.
+- *CPU.* `chiAB_matrix` follows the dtype of `ws1`/`Ais`; the energy
+  denominators are still formed in double and only then rounded. `pAs`
+  and `pBs` are now handed to numba as arrays rather than lists, which
+  also removes the reflected-list deprecation warning.
+- *Refusals.* `mode="trace"`/`"diagonal"` and `ij_mode="accelerated"` use
+  other kernels and raise `NotImplementedError` for `"single"` on the CPU
+  (the GPU path already refuses them), and so does the pair-basis route.
+
+Accuracy. A float32 GEMM puts the bare response ~1e-7 from double however
+its inputs are formed: with `TA`/`TB` and the denominators all built in
+double and only the product in float32, the error is still 1.4e-7 on the
+Neel honeycomb, so there is nothing left to recover by moving more of the
+kernel back to double. The RPA dressing amplifies that by the condition
+number of `1-V*chi0`: at q=0 on the gapped Neel honeycomb, next to the
+Goldstone mode, the dressed response is 2.6e-4 off. The Goldstone check
+(residual/delta constant as delta shrinks) still passes in single, so the
+rounding does not open a gap. The tests hold single to 1e-5 bare and 1e-3
+dressed.
+
+Timing on the GTX 1060 (`benchmarks/cases/rpa_spin_response.py`, nk=4,
+nw=40, warm, numba on 8 threads):
+
+| N | numba double | numba single | jax double | jax single |
+|---|---|---|---|---|
+| 8 | 0.019 s | 0.014 s | 0.056 s | 0.020 s |
+| 16 | 0.192 s | 0.100 s | 0.204 s | 0.023 s |
+| 32 | 8.00 s | 1.95 s | 0.721 s | 0.077 s |
+| 48 | 28.2 s | 11.7 s | 2.18 s | 0.153 s |
+| 64 | 80.5 s | 43.7 s | 4.98 s | 0.359 s |
+
+Single agrees with numba double to 1e-7 or better at every size. On the
+card it is 13-15x faster than double at N>=48, which is the FP64 penalty of
+section 11 showing up almost undiluted; on the CPU it is ~2x. Cold start in
+single is a flat 0.4-0.6 s. On a data-centre card the single/double gap
+should be closer to the ~2x of the hardware, so there the default buys much
+less; the numbers above are a consumer card's.
 
 ### What runs where: the port is chi0, not the whole RPA
 
@@ -633,12 +686,12 @@ roughly 2x a data-centre card shows. `tests/chi/test_chi_gpu.py` passes on the d
   per-frequency `solve` and the duplicated eigendecomposition are a much
   larger share of the remaining time than they were when they were
   deferred; re-profile a full `get_magnon_bands` q-path before deciding.
-- **Tiers 3 and 4** (binned spectral acceleration, single precision) remain
-  untouched. On a data-centre card they are unjustified: at 833x the plain
-  port already clears the problem this plan was written for. On a consumer
-  card Tier 4 is the one change that would matter: the measured 21x
-  complex64/complex128 GEMM gap on the GTX 1060 bounds what `chi_prec="single"`
-  could buy there, before counting its accuracy cost.
+- **Tier 3** (binned spectral acceleration) remains untouched and
+  unjustified: single precision already brought the consumer card to
+  ~220x, and the V100's double precision to 833x.
+- **Single precision on a data-centre card.** Tier 4 was measured only on
+  the GTX 1060; whether the single default is worth its rounding on a V100
+  or newer, where FP64 is not penalized, is unmeasured.
 
 ### Test coverage
 

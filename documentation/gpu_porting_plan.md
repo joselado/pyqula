@@ -1,8 +1,9 @@
 # GPU porting plan
 
 Status: **Tier 1 done** (KPM batched GPU path, see below); Tiers 2-4 not started. A
-separate tier for the RPA response kernel (`chi_cpugpu`) is implemented and measured on a
-V100 and a GTX 1060 -- see `future_development/gpu_rpa_spin_response.md`.
+separate tier for the RPA response kernel (`chi_cpugpu`, with `chi_prec` single precision
+as the GPU default) is implemented and measured on a V100 and a GTX 1060 -- see
+`future_development/gpu_rpa_spin_response.md`.
 This is a roadmap for future work, written after surveying the codebase for GPU-portable hot spots.
 It complements, and is independent of, the CPU-side `perf_optimization_plan` work (numba
 batching of dense diagonalization and KPM moments, already landed; SCF-loop redundancy

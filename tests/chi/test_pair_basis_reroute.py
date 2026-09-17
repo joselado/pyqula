@@ -94,6 +94,10 @@ def test_what_the_pair_basis_does_not_have_is_refused():
     es = np.linspace(0., 1., 3)
     with pytest.raises(NotImplementedError, match="chi_cpugpu"):
         h.get_spinchi_full(energies=es, nk=NK, chi_cpugpu="GPU")
+    with pytest.raises(NotImplementedError, match="chi_prec"):
+        h.get_spinchi_full(energies=es, nk=NK, chi_prec="single")
+    for chi_prec in (None, "double"):  # what the pair basis computes anyway
+        h.get_spinchi_full(energies=es, nk=NK, chi_prec=chi_prec)
     with pytest.raises(NotImplementedError, match="imode"):
         h.get_spinchi_full(energies=es, nk=NK, imode="adaptive")
     with pytest.raises(ValueError, match="accepted"):

@@ -29,6 +29,15 @@ from pyqula.chitk.spinchi import _full_spin_operators
 NK = 4  # small on purpose: these are correctness tests, not benchmarks
 ENERGIES = np.linspace(0.01, 1.0, 12)
 DELTA = 0.05
+# chi_prec and the relative agreement with the double precision numba
+# kernel it must reach, for the bare response and for the RPA-dressed one:
+# the last bits for double, rounding for single. A float32 GEMM puts the
+# bare response ~1e-7 from double however carefully its inputs are formed,
+# and the dressing amplifies that by the condition number of 1-V*chi0 --
+# on the gapped Neel honeycomb at q=0, next to its Goldstone mode, to
+# 2.6e-4. That is a property of the RPA near an instability, not a defect
+# of the single precision kernel, so the dressed tolerance is looser.
+PRECISIONS = [("double", 1e-10, 1e-10), ("single", 1e-5, 1e-3)]
 
 
 # ---------------------------------------------------------------- systems
@@ -80,9 +89,33 @@ def test_gpu_kernel_matches_the_numba_kernel(system, q, nops):
     h = SYSTEMS[system]()
     args = _kernel_input(h, q, nops=nops)
     ref = chiAB_mod.chiAB_matrix(*args)
-    got = chijax.chiAB_matrix_gpu(*args)
+    got = chijax.chiAB_matrix_gpu(*args, chi_prec="double")
     assert got.shape == ref.shape
     assert np.max(np.abs(ref - got)) < 1e-10*np.max(np.abs(ref))
+
+
+@pytest.mark.parametrize("system", list(SYSTEMS))
+@pytest.mark.parametrize("nops", [1, 3])
+def test_single_precision_kernels_are_close_to_the_double_one(system, nops):
+    """chi_prec="single" rounds the contraction in complex64: on the device
+    the result comes back complex128, on the CPU the numba kernel follows
+    the dtype of its input. Both agree with double precision to rounding
+    -- and not to the last bit, which would mean single never ran"""
+    pytest.importorskip("jax")
+    from pyqula.chitk import chijax
+    h = SYSTEMS[system]()
+    args = _kernel_input(h, [0.2, 0.1, 0.], nops=nops)
+    ref = chiAB_mod.chiAB_matrix(*args)
+    got = chijax.chiAB_matrix_gpu(*args, chi_prec="single")
+    assert got.dtype == np.complex128
+    ws1, es1, ws2, es2, energies, pAs, pBs, temp, delta = args
+    c64 = lambda x: np.array(x, dtype=np.complex64)
+    cpu = chiAB_mod.chiAB_matrix(c64(ws1), es1, c64(ws2), es2, energies,
+                                 c64(pAs), c64(pBs), temp, delta)
+    assert cpu.dtype == np.complex64
+    for out in (got, cpu):
+        err = np.max(np.abs(ref - out))/np.max(np.abs(ref))
+        assert 1e-12 < err < 1e-5, f"relative error {err}"
 
 
 def test_gpu_kernel_matches_at_low_temperature():
@@ -94,7 +127,7 @@ def test_gpu_kernel_matches_at_low_temperature():
     h = _honeycomb_neel()
     args = _kernel_input(h, [0.2, 0.1, 0.], temp=1e-3, delta=1e-2)
     ref = chiAB_mod.chiAB_matrix(*args)
-    got = chijax.chiAB_matrix_gpu(*args)
+    got = chijax.chiAB_matrix_gpu(*args, chi_prec="double")
     assert np.max(np.abs(ref - got)) < 1e-10*np.max(np.abs(ref))
 
 
@@ -115,7 +148,8 @@ def test_padding_does_not_change_the_answer(extra):
     count = int(np.sum(np.abs(o1[:, None] - o2[None, :]) >= DELTA/100.))
     assert 0 < count < n*n, "this system does not exercise the gather at all"
     ref = chiAB_mod.chiAB_matrix(*args)
-    got = chijax.chiAB_matrix_gpu(*args, pair_pad=min(count + extra, n*n))
+    got = chijax.chiAB_matrix_gpu(*args, pair_pad=min(count + extra, n*n),
+                                  chi_prec="double")
     assert np.max(np.abs(ref - got)) < 1e-10*np.max(np.abs(ref))
 
 
@@ -136,7 +170,10 @@ def test_too_small_a_pair_pad_raises_instead_of_truncating():
 @pytest.mark.parametrize("system", list(SYSTEMS))
 @pytest.mark.parametrize("q", [[0., 0., 0.], [0.2, 0.1, 0.]])
 @pytest.mark.parametrize("rpa", [True, False])
-def test_spinchi_full_matches_between_backends(system, q, rpa):
+@pytest.mark.parametrize("chi_prec,tol_bare,tol_rpa", PRECISIONS)
+@pytest.mark.parametrize("backend", ["GPU", "CPU"])
+def test_spinchi_full_matches_the_double_precision_cpu(system, q, rpa, chi_prec,
+                                                       tol_bare, tol_rpa, backend):
     """The whole chain get_spinchi_full -> chi_ops_RPA ->
     _chi_ops_matrix_vectorized -> chiAB -> chiAB_q -> kernel, on both
     backends, including the RPA dressing"""
@@ -144,20 +181,25 @@ def test_spinchi_full_matches_between_backends(system, q, rpa):
     h = SYSTEMS[system]()
     kw = dict(q=q, nk=NK, energies=ENERGIES, delta=DELTA, RPA=rpa)
     _, cpu = h.get_spinchi_full(**kw)
-    _, gpu = h.get_spinchi_full(chi_cpugpu="GPU", **kw)
-    cpu, gpu = np.array(cpu), np.array(gpu)
-    assert np.max(np.abs(cpu - gpu)) < 1e-10*np.max(np.abs(cpu))
+    _, got = h.get_spinchi_full(chi_cpugpu=backend, chi_prec=chi_prec, **kw)
+    cpu, got = np.array(cpu), np.array(got)
+    assert got.dtype == np.complex128
+    tol = tol_rpa if rpa else tol_bare
+    assert np.max(np.abs(cpu - got)) < tol*np.max(np.abs(cpu))
 
 
 @pytest.mark.parametrize("system", list(SYSTEMS))
-def test_spinchi_ladder_matches_between_backends(system):
+@pytest.mark.parametrize("chi_prec,tol_bare,tol_rpa", PRECISIONS)
+@pytest.mark.parametrize("backend", ["GPU", "CPU"])
+def test_spinchi_ladder_matches_the_double_precision_cpu(system, chi_prec,
+                                                         tol_bare, tol_rpa, backend):
     pytest.importorskip("jax")
     h = SYSTEMS[system]()
     kw = dict(q=[0.2, 0.1, 0.], nk=NK, energies=ENERGIES, delta=DELTA)
     _, cpu = h.get_spinchi_ladder(**kw)
-    _, gpu = h.get_spinchi_ladder(chi_cpugpu="GPU", **kw)
-    cpu, gpu = np.array(cpu), np.array(gpu)
-    assert np.max(np.abs(cpu - gpu)) < 1e-10*np.max(np.abs(cpu))
+    _, got = h.get_spinchi_ladder(chi_cpugpu=backend, chi_prec=chi_prec, **kw)
+    cpu, got = np.array(cpu), np.array(got)
+    assert np.max(np.abs(cpu - got)) < tol_rpa*np.max(np.abs(cpu))  # RPA=True
 
 
 def test_the_kernel_is_compiled_once_for_a_whole_q_scan():
@@ -193,8 +235,11 @@ class _Spy:
         self.calls = 0
         real = chijax.chi_matrix_kmesh_gpu
 
+        self.precisions = []
+
         def wrapper(*args, **kwargs):
             self.calls += 1
+            self.precisions.append(kwargs.get("chi_prec"))
             return real(*args, **kwargs)
 
         monkeypatch.setattr(chijax, "chi_matrix_kmesh_gpu", wrapper)
@@ -230,6 +275,22 @@ def test_the_gpu_kwarg_reaches_the_kernel_from_every_entry_point(monkeypatch):
     assert spy.calls > n, "get_densitychi_RPA dropped chi_cpugpu"
 
 
+def test_chi_prec_reaches_the_kernel_and_defaults_to_single(monkeypatch):
+    """chi_prec travels the same kwarg chain as chi_cpugpu, so it can be
+    dropped the same way; a dropped chi_prec would silently run the
+    default precision"""
+    pytest.importorskip("jax")
+    spy = _Spy(monkeypatch)
+    h = _doped_ferro_chain()
+    kw = dict(q=[0.2, 0., 0.], nk=NK, energies=ENERGIES, delta=DELTA,
+              chi_cpugpu="GPU")
+    h.get_spinchi_full(**kw)
+    h.get_spinchi_full(chi_prec="double", **kw)
+    h.get_magnon_bands(method="rpa", nq=2, nk=NK, energies=ENERGIES,
+                       delta=DELTA, chi_cpugpu="GPU", chi_prec="double")
+    assert spy.precisions == ["single", "double", "double", "double"]
+
+
 def test_the_default_backend_never_touches_the_device_code(monkeypatch):
     """chi_cpugpu defaults to CPU, and jax must stay out of the way there
     -- importing chijax flips process-global jax configuration, which the
@@ -260,6 +321,11 @@ def test_unsupported_settings_raise_rather_than_falling_back():
     with pytest.raises(ValueError):  # the adaptive integrator is per-point
         chiAB_mod.chiAB_q(h, pAs=pAs, pBs=pBs, imode="adaptive",
                           chi_cpugpu="GPU", **common)
+    with pytest.raises(ValueError, match="chi_prec"):  # not a precision
+        chiAB_mod.chiAB_q(h, pAs=pAs, pBs=pBs, chi_cpugpu="GPU",
+                          chi_prec="half", **common)
+    with pytest.raises(NotImplementedError, match="chi_prec"):  # other kernel
+        chiAB_mod.chiAB_q(h, mode="trace", chi_prec="single", **common)
 
 
 # ------------------------------------------------------ physics invariants
@@ -282,17 +348,19 @@ def test_goldstone_mode_survives_the_gpu_path():
     Ss = _full_spin_operators(hmf)
     Uv = _full_spin_U(hmf)
 
-    def residual(delta, backend):
+    def residual(delta, backend, chi_prec=None):
         _, kernels = rpa_kernel_ops(hmf, ops=Ss, V=Uv, q=[0., 0., 0.],
                                      energies=np.array([0.0]), delta=delta,
-                                     nk=300, chi_cpugpu=backend)
+                                     nk=300, chi_cpugpu=backend,
+                                     chi_prec=chi_prec)
         return np.min(np.abs(np.linalg.eigvals(kernels[0])))
 
     for delta in (0.02, 0.005):  # the two backends must not merely agree
         cpu = residual(delta, "CPU")   # with each other, they must both
-        gpu = residual(delta, "GPU")   # show the delta-linear signature
+        gpu = residual(delta, "GPU", "double")  # show the delta-linear signature
         assert abs(cpu - gpu) < 1e-8*max(abs(cpu), 1e-12)
-    ratio1 = residual(0.02, "GPU")/0.02
-    ratio2 = residual(0.005, "GPU")/0.005
-    assert 0.5 < ratio1/ratio2 < 2.0, (
-        f"residual/delta moved from {ratio1} to {ratio2}: not a Goldstone mode")
+    for chi_prec in ("double", "single"):  # single rounding must not open a gap
+        ratio1 = residual(0.02, "GPU", chi_prec)/0.02
+        ratio2 = residual(0.005, "GPU", chi_prec)/0.005
+        assert 0.5 < ratio1/ratio2 < 2.0, (f"{chi_prec}: residual/delta "
+            f"moved from {ratio1} to {ratio2}: not a Goldstone mode")

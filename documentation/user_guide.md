@@ -3111,6 +3111,33 @@ the number of sites in the cell. Passing `chi_cpugpu="GPU"` to any of them
 runs that kernel on a GPU instead, which pays off once the cell holds more
 than a few sites.
 
+The precision of that sum is chosen with `chi_prec`. On the GPU it is
+`"single"` by default, since the double-precision arithmetic of a consumer
+card can be an order of magnitude slower than its single-precision one, and
+`chi_prec="double"` switches it back; the CPU takes both values too, with
+`"double"` as its default. The eigenstates are obtained in double precision
+either way and the response comes back as double-precision numbers, so what
+single precision changes is only the rounding of the sum, which leaves the
+bare response within about $10^{-7}$ of the double-precision one
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.honeycomb_lattice() # two sites per cell
+h = g.get_hamiltonian() # first-neighbor hopping
+hmf = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="antiferro",nk=10) # Neel mean field
+es = np.linspace(0.01,1.0,50) # frequencies
+(es,chi) = hmf.get_spinchi_full(q=[0.2,0.,0.],nk=10,energies=es,delta=0.05,
+               chi_cpugpu="GPU",chi_prec="double") # the response on the GPU, in double precision
+```
+
+Note that the RPA dressing amplifies that rounding close to an instability or
+a Goldstone mode, where $1-U\chi$ is nearly singular: at $q=0$, next to the
+Goldstone mode of the Neel antiferromagnet above, the dressed response
+differs from the double-precision one by a few parts in $10^4$, so a
+calculation that needs the dressed response at a pole to more digits than
+that should use `chi_prec="double"`.
+
 ### RPA kernel poles and magnon bands
 
 Let us now find the collective modes directly, with
@@ -5231,6 +5258,8 @@ Optional arguments:
 - T=None: temperature of the occupations, equal to `delta` when not given
 
 - chi_cpugpu="CPU": where the Lindhard response is computed, `"CPU"` or `"GPU"` (falling back to the CPU if no GPU is visible); also accepted by `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles` and `get_magnon_bands(method="rpa")`. `mode="trace"`/`"diagonal"`, `imode="adaptive"` and an interaction that couples different sites are not available on the GPU and raise
+
+- chi_prec=None: precision of the Lindhard sum, `"single"` or `"double"`; unset, it is `"single"` on the GPU and `"double"` on the CPU. Accepted by the same functions as `chi_cpugpu`; `mode="trace"`/`"diagonal"` and an interaction that couples different sites are double precision only and raise for `"single"`
 
 ### h.get_rpa_kernel_poles()
 Compute the poles of the generic RPA kernel $1-V(q)\chi(q,\omega)$: the frequencies of the collective modes/instabilities of the interacting response.

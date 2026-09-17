@@ -60,7 +60,7 @@ def _use_pair_basis(H):
 
 
 _PAIR_ROUTE_KWARGS = ("energies","delta","nk","T","q","imode","ij_mode",
-                      "chi_cpugpu")
+                      "chi_cpugpu","chi_prec")
 
 
 def _pair_route_kwargs(H,kwargs):
@@ -79,6 +79,12 @@ def _pair_route_kwargs(H,kwargs):
             "interaction that couples different sites: its RPA spin "
             "response is summed in the pair basis (chitk.pairchi), which "
             "has no device backend"%(kwargs["chi_cpugpu"],))
+    if kwargs.get("chi_prec",None) not in (None,"double"): # unset is double here
+        raise NotImplementedError("chi_prec=%r is not implemented for an "
+            "interaction that couples different sites: its RPA spin "
+            "response is summed in the pair basis (chitk.pairchi), which "
+            "is double precision; leave chi_prec unset or use "
+            "'double'"%(kwargs["chi_prec"],))
     if kwargs.get("imode","mesh")!="mesh":
         raise NotImplementedError("imode=%r is not implemented for an "
             "interaction that couples different sites, whose RPA spin "
