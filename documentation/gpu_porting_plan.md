@@ -1,20 +1,23 @@
 # GPU porting plan
 
 Status: **Tier 1 done** (KPM batched GPU path, see below); Tiers 2-4 not started. A
-separate tier for the RPA response kernel (`chi_cpugpu`) is implemented on the CPU fallback
-and awaiting its device measurement -- see `future_development/gpu_rpa_spin_response.md`.
+separate tier for the RPA response kernel (`chi_cpugpu`) is implemented and measured on a
+V100 and a GTX 1060 -- see `future_development/gpu_rpa_spin_response.md`.
 This is a roadmap for future work, written after surveying the codebase for GPU-portable hot spots.
 It complements, and is independent of, the CPU-side `perf_optimization_plan` work (numba
 batching of dense diagonalization and KPM moments, already landed; SCF-loop redundancy
 still pending). Nothing here should be implemented without explicit user sign-off per tier,
 same as that plan.
 
-**No GPU hardware is available in the current dev environment** (`nvidia-smi` is absent,
-`jax.devices()` returns only a `CpuDevice`). Every tier below must therefore be validated
-two ways: (1) numerical correctness against the existing CPU reference, checked here via
-jax's transparent CPU fallback, and (2) actual speedup, which can only be measured on real
-GPU hardware and is out of scope until that's available. Don't claim a speedup number that
-wasn't measured on a GPU.
+**The dev workstation has a consumer GPU** (GeForce GTX 1060 6GB, Pascal) with a
+CUDA-built jax in a separate environment; the default environment's jax is CPU-only.
+Earlier tiers were written on a GPU-less machine and validated only through jax's CPU
+fallback, so every tier still needs checking two ways: (1) numerical correctness against
+the existing CPU reference, and (2) actual speedup, measured on a device. Don't claim a
+speedup number that wasn't measured on a GPU, and state the card with every number: a
+consumer card's FP64 is an order of magnitude behind its FP32 (21x on the GTX 1060, see
+`future_development/gpu_rpa_spin_response.md`), so data-centre and consumer ratios do not
+transfer.
 
 ## Why jax, not torch/cupy
 
@@ -99,8 +102,31 @@ CPU reference (real/complex input, single/double precision), an explicit multi-c
 (batch size > the default chunk, plus a small custom `gpu_batch_size` forcing many uneven
 chunks), and an end-to-end check through `kpm.tdos`/`kpm.ldos`/`kpm.full_trace`/
 `kpm.full_trace_A`. All of this is exercised transparently through jax's CPU fallback on
-this GPU-less machine; real GPU timing and real GPU memory behavior are still unmeasured
-(see the status note above) — the chunk size is a reasoned default, not a benchmarked one.
+this GPU-less machine at the time. On the GTX 1060 (2026-09-17) the same tests pass on the
+device, and the batched moments (64 vectors, 200 moments, 8-thread numba as the CPU side)
+measure:
+
+| sites | input | numba double | GPU double | GPU single |
+|---|---|---|---|---|
+| 10,000 | real | 0.25 s | 0.16 s | 0.12 s |
+| 10,000 | complex | 0.58 s | 0.35 s | 0.23 s |
+| 160,000 | real | 7.6 s | 4.4 s | 2.5 s |
+| 160,000 | complex | 15.6 s | 11.5 s | 7.8 s |
+
+Double precision on the device agrees with numba to ~1e-14 relative, single to ~3e-7.
+A 1.4-3x gain is modest because a sparse matvec is memory-bandwidth bound rather than
+FLOP bound, which is not where a consumer card beats a CPU by much. Real GPU memory
+behavior at `nvec=nsites` is still untested, so the chunk size is a reasoned default, not
+a benchmarked one.
+
+The same measurement exposed a CPU-side bug, since fixed: the numba kernels computed
+`2.*data[k]*a[col[k]]`, and the float64 literal promoted every single-precision product
+to double, so `kpm_prec="single"` on the CPU was *slower* than double at 10,000 sites.
+With `2*data` precomputed in the data's own dtype, CPU single is now 1.4-1.6x faster than
+double at 160,000 sites. One difference remains between the backends: numba accumulates
+the inner products sequentially in float32, so its single-precision error grows with
+system size (~8e-6 relative at 10,000 sites, ~4e-5 at 160,000), while jax's tree
+reduction stays at ~3e-7.
 
 ### 3. Sparse / Green's-function work — lower priority, needs its own research spike
 

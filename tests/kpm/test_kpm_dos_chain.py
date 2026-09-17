@@ -29,3 +29,21 @@ def test_kpm_dos_chain_matches_reference(tmp_path, monkeypatch):
                 delta=1e-2,
                 ntries=10)
     assert np.isclose(np.sum(y), 2220.0, rtol=0.15)
+
+
+def test_kpm_tdos_is_finite_at_the_window_edges():
+    """kpm.tdos samples energies out to 1.01 in rescaled units, just past
+    the edge of the Chebyshev domain. generate_profile used to evaluate its
+    1/sqrt(1-x^2) prefactor there too, so the first and last DOS points
+    were always NaN and any integral of the DOS came out NaN. The profile
+    vanishes outside (-1,1); check that it is finite everywhere and that
+    the DOS of normalized random vectors integrates to one."""
+    from pyqula import kpm
+    g = geometry.square_lattice().get_supercell(10)
+    g.dimensionality = 0
+    m = g.get_hamiltonian(has_spin=False).get_hk_gen()([0., 0., 0.])
+    np.random.seed(5)
+    x, y = kpm.tdos(m, scale=5., npol=100, ne=400, ntries=4)
+    assert np.all(np.isfinite(y))
+    assert y[0] == 0. and y[-1] == 0.
+    assert np.isclose(np.trapezoid(y, x), 1., atol=2e-2)

@@ -108,8 +108,7 @@ def test_kpm_cpugpu_reaches_public_dos_entry_points():
     _, ys_cpu = kpm.tdos(m, npol=30, ne=40, ntries=6, kpm_cpugpu="CPU")
     np.random.seed(123)
     _, ys_gpu = kpm.tdos(m, npol=30, ne=40, ntries=6, kpm_cpugpu="GPU")
-    mask = ~(np.isnan(ys_cpu) | np.isnan(ys_gpu))  # KPM edge-of-window artifact, unrelated to the backend
-    assert np.max(np.abs(ys_cpu[mask] - ys_gpu[mask])) < 1e-8
+    assert np.max(np.abs(ys_cpu - ys_gpu)) < 1e-8
 
     xs_cpu, ldos_cpu = kpm.ldos(m, i=0, npol=30, ne=40, kpm_cpugpu="CPU")
     xs_gpu, ldos_gpu = kpm.ldos(m, i=0, npol=30, ne=40, kpm_cpugpu="GPU")
@@ -145,8 +144,7 @@ def test_kpm_cpugpu_reaches_random_trace_operator_branch():
     _, ys_cpu = kpm.tdos(m, npol=20, ne=30, ntries=4, operator=P, kpm_cpugpu="CPU")
     np.random.seed(77)
     _, ys_gpu = kpm.tdos(m, npol=20, ne=30, ntries=4, operator=P, kpm_cpugpu="GPU")
-    mask = ~(np.isnan(ys_cpu) | np.isnan(ys_gpu))
-    assert np.max(np.abs(ys_cpu[mask] - ys_gpu[mask])) < 1e-8
+    assert np.max(np.abs(ys_cpu - ys_gpu)) < 1e-8
 
 
 def test_kpm_cpugpu_reaches_kdos_bands_operator_branch():

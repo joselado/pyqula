@@ -594,6 +594,30 @@ environment, not something about this test file). Nothing failed, and
 complex128 held on the device -- which is the thing that would silently
 break if `jax_enable_x64` were not set.
 
+### Consumer-card measurements (GeForce GTX 1060 6GB, 2026-09-17)
+
+The same `benchmarks/cases/rpa_spin_response.py` sweep on the dev workstation's
+Pascal consumer card, jax 0.11.1 + `jax-cuda12-plugin`. Unlike the V100 run, the numba
+side uses all 8 threads of the laptop CPU (i7-7700HQ), because that is the baseline a
+user of this machine actually has:
+
+| N | numba warm (8 threads) | jax/GTX 1060 warm | ratio | agreement |
+|---|---|---|---|---|
+| 4 | 0.005 s | 0.018 s | 0.3x | 6.4e-16 |
+| 8 | 0.020 s | 0.053 s | 0.4x | 1.9e-15 |
+| 12 | 0.067 s | 0.132 s | 0.5x | 9.0e-16 |
+| 16 | 0.201 s | 0.226 s | 0.9x | 3.4e-16 |
+| 24 | 1.100 s | 0.481 s | 2.3x | 2.3e-16 |
+| 32 | 5.188 s | 0.955 s | 5.4x | 6.8e-16 |
+| 48 | 30.307 s | 2.873 s | 10.5x | 5.7e-16 |
+| 64 | 81.395 s | 3.753 s | 21.7x | 3.4e-16 |
+
+The kernel is exact here too, and nothing retraced (cold start 0.5-4.5 s). But the
+crossover moves from N ~ 7 to N ~ 17, and at N=64 the card is 20x slower than the V100
+(3.75 s against 0.189 s). The reason is FP64: a bare `TA@TB` GEMM at the N=64 shape takes
+21.8 ms in complex128 and 1.0 ms in complex64 on this card, a **21x** gap, against the
+roughly 2x a data-centre card shows. `tests/chi/test_chi_gpu.py` passes on the device.
+
 ### What is still open
 
 - **A bigger card.** Everything above is a V100 (7.8 TFLOP/s FP64). An A100
@@ -610,8 +634,11 @@ break if `jax_enable_x64` were not set.
   larger share of the remaining time than they were when they were
   deferred; re-profile a full `get_magnon_bands` q-path before deciding.
 - **Tiers 3 and 4** (binned spectral acceleration, single precision) remain
-  untouched and unjustified: at 833x the plain port already clears the
-  problem this plan was written for.
+  untouched. On a data-centre card they are unjustified: at 833x the plain
+  port already clears the problem this plan was written for. On a consumer
+  card Tier 4 is the one change that would matter: the measured 21x
+  complex64/complex128 GEMM gap on the GTX 1060 bounds what `chi_prec="single"`
+  could buy there, before counting its accuracy cost.
 
 ### Test coverage
 

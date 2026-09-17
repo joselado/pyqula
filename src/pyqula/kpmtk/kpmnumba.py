@@ -95,6 +95,8 @@ def python_kpm_moments_complex(v,data,row,col,n=100):
     fixed buffers rotated between iterations (no copy, no reallocation)."""
     nsites = len(v)
     nnz = len(data)
+    data2 = data + data # 2*data in data's own dtype: a 2. literal in the
+    # loop would promote single precision to double on every term
     mus = np.zeros(2*n,dtype=v.dtype) # empty array for the moments
     am = v.copy() # zero vector
     a = Mtimesv(data,row,col,v) #m@v  # vector number 1
@@ -106,7 +108,7 @@ def python_kpm_moments_complex(v,data,row,col,n=100):
     ap = np.empty_like(v)
     for i in range(1,n):
         for s in range(nsites): ap[s] = -am[s]
-        for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+        for k in range(nnz): ap[row[k]] += data2[k]*a[col[k]]
         bk = a[0]-a[0]   # zero of a's dtype
         bk1 = a[0]-a[0]
         for s in range(nsites):
@@ -136,6 +138,8 @@ def python_kpm_moments_batch_complex(vs,data,row,col,n=100):
     nvec = vs.shape[0]
     nsites = vs.shape[1]
     nnz = len(data)
+    data2 = data + data # 2*data in data's own dtype: a 2. literal in the
+    # loop would promote single precision to double on every term
     mus = np.zeros((nvec,2*n),dtype=vs.dtype)
     for iv in prange(nvec):
         v = vs[iv]
@@ -148,7 +152,7 @@ def python_kpm_moments_batch_complex(vs,data,row,col,n=100):
         ap = np.empty_like(v)
         for i in range(1,n):
             for s in range(nsites): ap[s] = -am[s]
-            for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+            for k in range(nnz): ap[row[k]] += data2[k]*a[col[k]]
             bk = a[0]-a[0]   # zero of a's dtype
             bk1 = a[0]-a[0]
             for s in range(nsites):
@@ -188,6 +192,8 @@ def python_kpm_moments_real(v,data,row,col,n=100):
     instead of a chain of separate numpy temporaries."""
     nsites = len(v)
     nnz = len(data)
+    data2 = data + data # 2*data in data's own dtype: a 2. literal in the
+    # loop would promote single precision to double on every term
     mus = np.zeros(2*n,dtype=v.dtype) # empty array for the moments
     am = v.copy() # zero vector
     a = Mtimesv(data,row,col,v) #m@v  # vector number 1
@@ -199,7 +205,7 @@ def python_kpm_moments_real(v,data,row,col,n=100):
     ap = np.empty_like(v)
     for i in range(1,n):
         for s in range(nsites): ap[s] = -am[s]
-        for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+        for k in range(nnz): ap[row[k]] += data2[k]*a[col[k]]
         bk = a[0]-a[0]   # zero of a's dtype
         bk1 = a[0]-a[0]
         for s in range(nsites):
@@ -224,6 +230,8 @@ def python_kpm_moments_batch_real(vs,data,row,col,n=100):
     nvec = vs.shape[0]
     nsites = vs.shape[1]
     nnz = len(data)
+    data2 = data + data # 2*data in data's own dtype: a 2. literal in the
+    # loop would promote single precision to double on every term
     mus = np.zeros((nvec,2*n),dtype=vs.dtype)
     for iv in prange(nvec):
         v = vs[iv]
@@ -236,7 +244,7 @@ def python_kpm_moments_batch_real(vs,data,row,col,n=100):
         ap = np.empty_like(v)
         for i in range(1,n):
             for s in range(nsites): ap[s] = -am[s]
-            for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+            for k in range(nnz): ap[row[k]] += data2[k]*a[col[k]]
             bk = a[0]-a[0]   # zero of a's dtype
             bk1 = a[0]-a[0]
             for s in range(nsites):
@@ -302,6 +310,8 @@ def python_kpm_momentsA_batch_complex(vs,Avs,data,row,col,n=100):
     nvec = vs.shape[0]
     nsites = vs.shape[1]
     nnz = len(data)
+    data2 = data + data # 2*data in data's own dtype: a 2. literal in the
+    # loop would promote single precision to double on every term
     mus = np.zeros((nvec,n),dtype=vs.dtype)
     for iv in prange(nvec):
         v = vs[iv]
@@ -315,7 +325,7 @@ def python_kpm_momentsA_batch_complex(vs,Avs,data,row,col,n=100):
         ap = np.empty_like(v)
         for i in range(2,n):
             for s in range(nsites): ap[s] = -am[s]
-            for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+            for k in range(nnz): ap[row[k]] += data2[k]*a[col[k]]
             bk = a[0]-a[0] # zero of a's dtype
             for s in range(nsites):
                 bk += np.conjugate(ap[s])*Av[s]
@@ -330,6 +340,8 @@ def python_kpm_momentsA_batch_real(vs,Avs,data,row,col,n=100):
     nvec = vs.shape[0]
     nsites = vs.shape[1]
     nnz = len(data)
+    data2 = data + data # 2*data in data's own dtype: a 2. literal in the
+    # loop would promote single precision to double on every term
     mus = np.zeros((nvec,n),dtype=vs.dtype)
     for iv in prange(nvec):
         v = vs[iv]
@@ -343,7 +355,7 @@ def python_kpm_momentsA_batch_real(vs,Avs,data,row,col,n=100):
         ap = np.empty_like(v)
         for i in range(2,n):
             for s in range(nsites): ap[s] = -am[s]
-            for k in range(nnz): ap[row[k]] += 2.*data[k]*a[col[k]]
+            for k in range(nnz): ap[row[k]] += data2[k]*a[col[k]]
             bk = a[0]-a[0]
             for s in range(nsites):
                 bk += ap[s]*Av[s]
