@@ -39,7 +39,8 @@ already reached once.
   gauge-independent orbital basis, what the AAA's `converged` flag
   should mean, GPU Tier 2), three judgement calls (the one normalization
   deliberately left, the one aliasing sibling deliberately left, and the one
-  assertion deliberately weakened), and where a third sweep should start.
+  assertion deliberately weakened), and where a third sweep should start
+  (the bond pairing prefactor since pinned by a stationarity test).
 
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a

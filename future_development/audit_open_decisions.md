@@ -174,10 +174,14 @@ of how much is unexamined:
   four-point finite-difference stencil and the `nd=3` einsum loop have never
   been run. `tests/superfluid/` is 1d/2d only.
 - **`integration="qtci"` as an SCF density-matrix backend** -- untouched.
-- **The bond (`d != 0`) anomalous pairing prefactor**, verified structurally and
-  by SU(2) equivariance but never against an independent numeric gap equation.
-  A uniform prefactor error on the bond channel alone would have survived every
-  check that was run.
+- ~~**The bond (`d != 0`) anomalous pairing prefactor**~~, closed on 17
+  September 2026 by `tests/scf/test_bond_pairing_prefactor.py`: a mean-field
+  energy functional written by hand (Hartree, Fock and pairing contractions,
+  sharing no code with the SCF kernels) is stationary at the self-consistent
+  extended s-wave and triplet states of a doped V1=-2.5 chain, the slope
+  falling as eps^2 to 5e-10, while a factor of 2 or 1/2 on the pairing energy
+  gives a slope of order 0.1. The functional also reproduces
+  `scf.total_energy` to 7e-14.
 - **`scftk/broydenmixing.py`** -- not exercised at all.
 - **The per-site (array) filling branch** of `_run_anisotropic_scf`, whose
   Fermi handling is a separate code path from the one finding 19 repaired.
