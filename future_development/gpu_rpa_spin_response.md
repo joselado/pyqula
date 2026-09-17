@@ -1,7 +1,8 @@
 # GPU port of the RPA spin response
 
-Status: **Tiers 0-2 implemented and verified on the CPU fallback; the
-device measurement is the open item.** Target: good performance for
+Status: **Tiers 0-2 implemented, verified on the CPU fallback and measured
+on a V100 (833x at N=64, crossover near N=7, section 11); a run at N=100
+itself and on a newer card are what is left open.** Target: good performance for
 1d/2d systems with ~100 sites in the unit cell. Development on the local
 workstation (no GPU), timing and acceptance on a Triton GPU node. See
 section 11 for exactly what landed and what is still open.
@@ -431,7 +432,7 @@ rationalization:
 
 ## 11. Implementation status
 
-What is on disk (uncommitted at the time of writing), against the tiers
+What landed in `b4af1e6`, against the tiers
 above:
 
 **Tier 0 -- done.** `benchmarks/cases/rpa_spin_response.py`, registered in

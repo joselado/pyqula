@@ -46,6 +46,13 @@ already reached once.
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a
   quantics tensor-train route to large k-meshes.
+- [`gpu_rpa_spin_response.md`](gpu_rpa_spin_response.md) -- the jax port
+  of the Lindhard kernel behind the site-basis spin response
+  (`chi_cpugpu="GPU"`): what the switch moves to the device and what stays
+  host numpy (the RPA dressing), the measured 833x at N=64 on a V100 and
+  the crossover near N=7, and what is still open: a run at N=100 itself, a
+  newer card, re-profiling the deferred host-side items now that the kernel
+  is fast, and whether the pair-basis response wanted a port of its own.
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with
   the Goldstone/Ward-identity measurements that settle it.
