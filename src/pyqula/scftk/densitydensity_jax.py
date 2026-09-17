@@ -17,10 +17,11 @@
 #    midpoint between the n_occ_total-th and (n_occ_total+1)-th eigenvalue
 #    of the full (sorted, via jnp.sort) spectrum - jnp.sort's gradient is
 #    well defined away from ties, so this stays differentiable
-#  - occupations always use a finite smearing temperature T (default 1e-4)
-#    because jnp.linalg.eigh's eigenvector gradient is only well defined
-#    away from exact degeneracies; T=0/None silently falls back to the
-#    default rather than erroring
+#  - occupations always use a finite smearing temperature T (default 1e-4),
+#    because the step must be differentiable and a step-function occupation
+#    is not; T=0/None silently falls back to the default rather than
+#    erroring. Degenerate levels are not a problem: the density matrix is
+#    differentiated through fermi_projector, not through eigh's eigenvectors
 #
 # solver="newton"/"fsolve" do NOT scale to large systems: the mean field is
 # parameterized as a dense vector of every entry of every mf[direction]
@@ -96,6 +97,66 @@ from .mfconstrains import obj2mf
 from ..multihopping import MultiHopping
 
 default_T_jax = 1e-4
+
+
+# Below this eigenvalue splitting two levels count as degenerate in
+# fermi_projector's derivative. The divided difference (f_i-f_j)/(e_i-e_j)
+# loses ~1e-16/|e_i-e_j| to cancellation, the f' it is replaced by errs by
+# ~|f''| |e_i-e_j| ~ |e_i-e_j|/T^2, and the two balance near 1e-12 for T~1e-4
+_DEGENERATE_SPLITTING = 1e-10
+
+
+@jax.custom_jvp
+def fermi_projector(hks, mu, T):
+    """Return (P, es): the smeared projector P_k = V_k f(E_k) V_k^dagger,
+    f = sigmoid(-(e-mu)/T), and the eigenvalues es of each hks[k].
+
+    The value is what jnp.linalg.eigh plus an einsum would give. The point
+    is the derivative: differentiating that composition goes through eigh's
+    eigenvector tangent, which divides by e_i-e_j and is inf at an exact
+    degeneracy, so jax.jacfwd of the SCF step returns NaN whenever the
+    solver returns two degenerate levels bit-identical. cuSOLVER does that
+    (a symmetric chain's Newton SCF stalled on the GPU only, 2026-09-17);
+    LAPACK splits them by ~1e-16, giving finite but cancellation-dominated
+    terms. P itself is smooth in H, and its derivative is written without
+    eigenvectors' gauge in fermi_projector_jvp"""
+    es, vs = jnp.linalg.eigh(hks)
+    occ = jax.nn.sigmoid(-(es - mu) / T)
+    P = jnp.einsum('kie,ke,kje->kij', vs, occ, jnp.conj(vs))
+    return P, es
+
+
+@fermi_projector.defjvp
+def fermi_projector_jvp(primals, tangents):
+    """Daleckii-Krein derivative of f(H): with M = V^dagger dH V,
+    dP = V (G o M) V^dagger, G_ij = (f_i-f_j)/(e_i-e_j), and G_ij = f'(e)
+    for (near-)degenerate pairs, which is the limit of the quotient and
+    keeps the tangent finite. The mu and T tangents only move the
+    occupations, so they add a diagonal term. de_i = Re M_ii as for eigh.
+    Every mask depends on primals only, so the rule stays linear in the
+    tangents and jax can transpose it for jax.vjp/jax.grad"""
+    hks, mu, T = primals
+    dh, dmu, dT = tangents
+    es, vs = jnp.linalg.eigh(hks)
+    occ = jax.nn.sigmoid(-(es - mu) / T)
+    P = jnp.einsum('kie,ke,kje->kij', vs, occ, jnp.conj(vs))
+    # jnp.linalg.eigh symmetrizes its input, so the tangent is symmetrized too
+    dh = (dh + jnp.conj(jnp.swapaxes(dh, -1, -2))) / 2
+    M = jnp.einsum('kie,kij,kjf->kef', jnp.conj(vs), dh, vs)
+    fprime = -occ * (1. - occ) / T                         # df/de
+    de = es[:, :, None] - es[:, None, :]
+    df = occ[:, :, None] - occ[:, None, :]
+    degenerate = jnp.abs(de) < _DEGENERATE_SPLITTING
+    safe_de = jnp.where(degenerate, 1., de)
+    G = jnp.where(degenerate,
+            (fprime[:, :, None] + fprime[:, None, :]) / 2, df / safe_de)
+    # occupation change from mu and T at fixed eigenvalues
+    docc = occ * (1. - occ) * (dmu / T + (es - mu) * dT / T**2)
+    GM = G * M + jnp.einsum('ke,ef->kef', docc,
+            jnp.eye(es.shape[1], dtype=docc.dtype))
+    dP = jnp.einsum('kie,kef,kjf->kij', vs, GM, jnp.conj(vs))
+    des = jnp.real(jnp.diagonal(M, axis1=-2, axis2=-1))
+    return (P, es), (dP, des)
 
 
 def normal_term_ii_jax(v, dm):
@@ -189,18 +250,19 @@ def _get_step_core(dirs, dirs_all, n, compute_dd, compute_cross, add_dagger,
             return jnp.einsum('nij,n->ij', ms, phases)
 
         hks = jax.vmap(hk)(ks)                      # (nk,n,n)
-        es, vs = jnp.linalg.eigh(hks)                # (nk,n), (nk,n,n)
         nk = ks.shape[0]
         if has_filling_target:
+            es = jnp.linalg.eigvalsh(hks)            # (nk,n)
             es_sorted = jnp.sort(es.reshape(-1))
             mu_eff = 0.5 * (es_sorted[n_occ_total - 1] + es_sorted[n_occ_total])
         else:
             mu_eff = mu
+        # P[k] = V f(E) V^dagger, differentiable at degeneracies
+        P, es = fermi_projector(hks, mu_eff, T)      # (nk,n,n), (nk,n)
         occ = jax.nn.sigmoid(-(es - mu_eff) / T)     # (nk,n)
         kd = ks @ dir_phase.T                        # (nk,nt)
         phase = jnp.exp(1j * 2 * jnp.pi * kd)         # (nk,nt)
-        dm_all = jnp.einsum('kt,kie,ke,kje->tij', phase,
-                jnp.conj(vs), occ, vs) / nk           # (nt,n,n)
+        dm_all = jnp.einsum('kt,kji->tij', phase, P) / nk  # (nt,n,n)
         dm = {d: dm_all[i] for i, d in enumerate(dirs)}
         mfnew = get_mf_normal_jax(v_jnp, dm, dirs, compute_dd=compute_dd,
                 compute_cross=compute_cross, add_dagger=add_dagger)

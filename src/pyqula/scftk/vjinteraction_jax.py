@@ -30,8 +30,8 @@
 #    n_occ_total-th and (n_occ_total+1)-th eigenvalue of the full (sorted)
 #    spectrum, rather than a numpy root-find outside the trace
 #  - occupations always use a finite smearing temperature T (default 1e-4,
-#    see densitydensity_jax.default_T_jax) since jnp.linalg.eigh's eigenvector
-#    gradient is only well defined away from exact degeneracies
+#    see densitydensity_jax.default_T_jax) so the step is differentiable;
+#    degenerate levels are handled by densitydensity_jax.fermi_projector
 #
 # solver="error_gradient" (dispatched internally as densitydensity_jax's
 # solver="levenberg_marquardt"): minimizes ||step(x)-x||^2 -- not by
@@ -167,7 +167,7 @@ jax.config.update("jax_enable_x64", True)
 from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
         get_dc_energy, random_hermitian_guess)
 from .densitydensity_jax import (flatten_mf, unflatten_mf, make_bloch_stack,
-        get_mf_normal_jax, default_T_jax, solve_scf)
+        get_mf_normal_jax, default_T_jax, solve_scf, fermi_projector)
 from .spinspin import _build_v, _build_density_v, _channel_is_zero, _AXIS_ROTATION
 from .mfconstrains import obj2mf
 from ..multihopping import MultiHopping
@@ -243,18 +243,19 @@ def _get_step_core_vj(dirs, dirs_all, n, vz_active, vx_active, vy_active,
             return jnp.einsum('nij,n->ij', ms, phases)
 
         hks = jax.vmap(hk)(ks)                      # (nk,n,n)
-        es, vs = jnp.linalg.eigh(hks)                # (nk,n), (nk,n,n)
         nk = ks.shape[0]
         if has_filling_target:
+            es = jnp.linalg.eigvalsh(hks)            # (nk,n)
             es_sorted = jnp.sort(es.reshape(-1))
             mu_eff = 0.5 * (es_sorted[n_occ_total - 1] + es_sorted[n_occ_total])
         else:
             mu_eff = mu
+        # P[k] = V f(E) V^dagger, differentiable at degeneracies
+        P, es = fermi_projector(hks, mu_eff, T)      # (nk,n,n), (nk,n)
         occ = jax.nn.sigmoid(-(es - mu_eff) / T)     # (nk,n)
         kd = ks @ dir_phase.T                        # (nk,nt)
         phase = jnp.exp(1j * 2 * jnp.pi * kd)         # (nk,nt)
-        dm_all = jnp.einsum('kt,kie,ke,kje->tij', phase,
-                jnp.conj(vs), occ, vs) / nk           # (nt,n,n)
+        dm_all = jnp.einsum('kt,kji->tij', phase, P) / nk  # (nt,n,n)
         dm = {d: dm_all[i] for i, d in enumerate(dirs)}
 
         zero = dm[(0, 0, 0)] * 0.0
