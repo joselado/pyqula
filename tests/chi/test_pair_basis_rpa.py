@@ -266,18 +266,24 @@ def test_the_exchange_magnon_agrees_with_the_tdhf_pair_basis():
 
 
 def test_an_ising_interaction_without_recorded_channels_is_refused():
-    """What SzSz leaves behind, an Ising h.V and no h.Vchannels, is what an
-    isotropic exchange with its transverse part lost would look like too,
-    so the kernel is not built from it silently. Passing the interaction
-    explicitly as W= is how to say it is a genuine Ising one."""
+    """An Ising h.V with no h.Vchannels, a hand-built matrix or a
+    Hamiltonian that lost its channels, is what an isotropic exchange with
+    its transverse part lost would look like too, so the kernel is not
+    built from it silently. Passing the interaction explicitly as W= is how
+    to say it is a genuine Ising one. SzSz records its channel, and then
+    gives exactly the kernel of that explicit W."""
     from pyqula.meanfield import SzSz
     g = geometry.chain().get_supercell(2)
     g.get_sublattice()
     h = SzSz(g.get_hamiltonian(), J1=3.0, filling=0.5, mf="antiferro",
              nk=NK, maxerror=1e-10, mix=0.3, maxite=3000).hamiltonian
     assert abs(h.get_vev("sz")[0]) > 0.1
-    with pytest.raises(ValueError, match="SzSz"):
-        pairchi.pair_rpa_kernel(h, energies=np.array([0.0]), nk=NK)
+    _, K0 = pairchi.pair_rpa_kernel(h, energies=np.array([0.0]), nk=NK)
     _, K = pairchi.pair_rpa_kernel(h, W=bare_interaction(h),
                                    energies=np.array([0.0]), nk=NK)
     assert len(K) == 1
+    assert np.max(np.abs(K0[0] - K[0])) < 1e-12
+    lost = h.copy()
+    lost.Vchannels = None
+    with pytest.raises(ValueError, match="SzSz"):
+        pairchi.pair_rpa_kernel(lost, energies=np.array([0.0]), nk=NK)

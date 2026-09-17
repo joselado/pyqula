@@ -15,8 +15,13 @@ vertex is built per channel (chitk.spinchi._channel_spin_U), and the two
 cases are both correct and distinguishable. The test that this is right is
 the Goldstone theorem: the RPA kernel must be singular at q=0, w=0.
 
-A neighbor-shell DENSITY-DENSITY interaction is a different problem and
-stays refused -- see test_density_density_stays_refused below.
+That vertex is still only the site-separable part of an exchange between
+different sites: the Fock rung of the bonds lives on the electron-hole pair
+index, so the public entry points now sum such an interaction in the pair
+basis (chitk.pairchi), and the vertex itself is exercised here directly.
+A neighbor-shell DENSITY-DENSITY interaction, whose spin response is that
+rung and nothing else, goes the same way, see
+test_density_density_goes_through_the_pair_basis below.
 """
 import numpy as np
 import pytest
@@ -116,32 +121,40 @@ def test_an_anisotropic_exchange_gives_a_different_vertex_than_an_isotropic_one(
 
 
 @pytest.mark.slow
-def test_density_density_stays_refused():
-    """A neighbor-shell density-density interaction is not covered by this:
-    its contribution to the spin response is a Fock rung on the
-    electron-hole pair index, which a site-separable vertex cannot carry at
-    all (V2K_matrix maps it to exactly zero). Whether that matters depends
-    on the converged state rather than on the interaction, so it is still
-    refused rather than decided for the caller."""
+def test_density_density_goes_through_the_pair_basis():
+    """A neighbor-shell density-density interaction enters the spin
+    response only through a Fock rung on the electron-hole pair index,
+    which a site-separable vertex cannot carry (V2K_matrix maps it to
+    exactly zero). So the default method sums it in the pair basis, and
+    gives exactly what method="pair" gives with the same arguments."""
     h = _neel(U=3.0, V1=0.5)
-    assert h.Vchannels is not None  # the channels are recorded ...
-    with pytest.raises(ValueError):  # ... and it is still refused
-        h.get_magnon_bands(nq=2, energies=np.linspace(0.02, 3., 50),
-                            delta=3e-2, nk=NK)
+    assert h.Vchannels is not None
+    kw = dict(nq=2, energies=np.linspace(0.02, 3., 50), delta=3e-2, nk=NK)
+    a = h.get_magnon_bands(**kw)
+    b = h.get_magnon_bands(method="pair", T=3e-2, **kw)
+    assert len(a[0]) > 0
+    for x, y in zip(a, b):
+        assert np.allclose(x, y)
 
 
 @pytest.mark.slow
-def test_an_in_plane_anisotropic_exchange_refuses_the_ladder_channel():
-    """chi_{+-} lives in the transverse channel, so its vertex is the x
-    (equivalently y) coupling. With Jx != Jy there is no single one: S+/S-
-    is not an eigen-channel of the interaction, and the ladder response is
-    not defined. get_spinchi_full, which keeps the three channels apart,
-    still works."""
+def test_the_ladder_response_of_an_in_plane_anisotropic_exchange():
+    """With Jx != Jy, S+/S- is not an eigen-channel of the interaction, so
+    no site vertex exists for chi_{+-}. In the pair basis the ladder
+    response is still defined, and it must be the combination of the
+    full blocks that its operators say it is,
+    chi(S+,S-) = chi_xx + chi_yy - i chi_xy + i chi_yx.
+    Measured 5e-16 on the chain."""
     h = _neel(J1x=1.0)  # x channel only, y and z left at zero
-    with pytest.raises(ValueError):
-        h.get_spinchi_ladder(energies=np.linspace(0., 2., 5), delta=0.05,
-                              nk=NK)
-    h.get_spinchi_full(energies=np.linspace(0., 2., 5), delta=0.05, nk=NK)
+    kw = dict(energies=np.linspace(0., 2., 5), delta=0.05, nk=NK,
+              q=[0.2, 0., 0.])
+    _, L = h.get_spinchi_ladder(**kw)
+    _, F = h.get_spinchi_full(**kw)
+    n = len(h.geometry.r)
+    def b(i, j): return F[:, i*n:(i+1)*n, j*n:(j+1)*n]
+    comb = b(0, 0) + b(1, 1) - 1j*b(0, 1) + 1j*b(1, 0)
+    assert np.max(np.abs(L)) > 0.1
+    assert np.max(np.abs(L - comb)) < 1e-10
 
 
 @pytest.mark.slow
@@ -166,28 +179,26 @@ def test_an_easy_axis_anisotropy_gaps_the_magnon():
 
 @pytest.mark.slow
 def test_the_ladder_and_the_full_kernel_find_the_same_magnon():
-    """The transverse (S+/S-) vertex is built from the x channel while the
-    (Sx,Sy,Sz) one is built from all three, so the two are separate code
-    paths through chitk.spinchi. On an isotropic interaction they describe
-    the same excitation and must peak at the same energy.
+    """The transverse (S+/S-) response and the poles of the (Sx,Sy,Sz)
+    kernel are separate code paths, for the site vertex (U) and for the
+    pair basis (J1) alike. On an isotropic interaction they describe the
+    same excitation and must peak at the same energy.
 
-    Without this, the ladder's exchange vertex would be pinned only by
-    linearity from the onsite case (where Kx+Kd reduces to -U). Measured
-    at q=0.1 on the honeycomb Neel state: 0.4917 vs 0.4900 at U=3, and
-    1.3296 vs 1.3300 at J1=3 -- agreement to the 0.005 spacing of the
-    energy grid both are read off."""
-    from pyqula.chitk.rpa import build_ops_projectors, rpa_kernel_poles_ops
+    Measured at q=0.1 on the honeycomb Neel state: 0.4917 vs 0.4900 at U=3.
+    At J1=3 both come from the pair basis, 1.3687 from the poles, which is
+    the time-dependent Hartree-Fock value, against 1.3700 from the ladder
+    peak, agreement to the 0.005 spacing of the grid; the site vertex put
+    this magnon at 1.3296, without the Fock rung of the exchange bonds."""
     energies = np.linspace(0.005, 4., 800)
     q = [0.1, 0., 0.]
     for kw in ({"U": 3.0}, {"J1": 3.0}):
         h = _neel(**kw)
-        Ss = _full_spin_operators(h)
-        pAs, pBs = build_ops_projectors(h, Ss)
-        poles = rpa_kernel_poles_ops(h, V=_full_spin_U(h), pAs=pAs, pBs=pBs,
-                                      q=q, energies=energies, delta=2e-3,
-                                      nk=NK)
-        acoustic = min(p[0] for p in poles if abs(p[1]) < 0.02)
+        _, ws, gammas = h.get_magnon_bands(qpath=[q], nq=1,
+                                           energies=energies, delta=2e-3,
+                                           nk=NK)
+        acoustic = min(w for w, g in zip(ws, gammas) if abs(g) < 0.02)
         es, chis = h.get_spinchi_ladder(energies=energies, q=q, delta=2e-3,
                                          nk=NK)
         peak = es[np.argmax(np.abs([np.trace(c).imag for c in chis]))]
         assert abs(acoustic - peak) < 0.01, f"{kw}: {acoustic} vs {peak}"
+        if "J1" in kw: assert abs(acoustic - 1.3687) < 5e-3

@@ -124,7 +124,34 @@ def SzSz(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, constrains=[], callback_mf=None,
     v = _build_v(h, J1, J2, J3, Jr)
     constrain_cb = _callback_mf_constrains(h, constrains)
     callback_mf = _compose_callbacks(constrain_cb, callback_mf)
-    return densitydensity(h, v=v, callback_mf=callback_mf, **kwargs)
+    scf = densitydensity(h, v=v, callback_mf=callback_mf, **kwargs)
+    if getattr(scf, "hamiltonian", None) is not None:
+        _record_ising_channels(scf.hamiltonian, v, "z")
+    return scf
+
+
+def _record_ising_channels(h, v, axis):
+    """Record a single-axis exchange as h.Vchannels, the same x/y/z/d
+    layout _run_anisotropic_scf writes, with the Ising matrix v in the
+    `axis` channel and the other two at zero.
+
+    Without it an SzSz/SxSx/SySy result carries an Ising h.V and nothing
+    beside it, which is exactly what the Ising half of an isotropic
+    exchange with its transverse part lost looks like, so every spin
+    response refuses it. Recorded, it is an anisotropic exchange like
+    VJinteraction(J1z=...) and gets the kernel of that interaction.
+
+    For axis x or y the SCF ran in a rotated frame, so v is not the
+    laboratory z channel: h.V is set to that channel, zero, to keep h.V and
+    h.Vchannels in the same frame, which is what
+    bsetk.interaction.interaction_channels assumes."""
+    def zero():
+        return {d: np.zeros(np.shape(m), dtype=np.complex128)
+                for (d, m) in v.items()}
+    ch = {"x": zero(), "y": zero(), "z": zero(), "d": None}
+    ch[axis] = v
+    if axis != "z": h.V = ch["z"]
+    h.Vchannels = ch
 
 
 _AXIS_ROTATION = {
@@ -175,16 +202,25 @@ def _rotated_axis_exchange(h, axis, J1, J2, J3, Jr, constrains, **kwargs):
     bwd = dict(fwd); bwd["angle"] = -fwd["angle"]
     h0 = h.get_multicell().get_dense() # keep the original, unrotated reference
     hr = h0.copy()
+    # an interaction an earlier SCF left on the input is replaced by this
+    # one, and an anisotropic one would refuse the rotation
+    hr.V, hr.Vchannels = None, None
     hr.global_spin_rotation(**fwd) # rotate so that `axis` becomes computational z
     mf0 = kwargs.pop("mf", None)
     mf_rot = _rotate_mf_guess(h0, axis, mf0, **fwd)
     callback_mf = _rotated_constrains_callback(h0, constrains, fwd, bwd)
     scf = SzSz(hr, J1, J2, J3, Jr, mf=mf_rot, callback_mf=callback_mf, **kwargs)
     if scf.hamiltonian is not None:
+        v = scf.hamiltonian.V # the Ising matrix, in the rotated frame
+        # the z channel SzSz recorded is an anisotropic exchange, which a
+        # spin rotation refuses to carry; the channels are rewritten in the
+        # laboratory frame right after
+        scf.hamiltonian.Vchannels = None
         scf.hamiltonian.global_spin_rotation(**bwd) # rotate the result back
+        _record_ising_channels(scf.hamiltonian, v, axis)
     # scf.mf/scf.dm/scf.v are left expressed in the internally-rotated frame;
-    # scf.hamiltonian (the user-facing result) and scf.hamiltonian0 are in
-    # the original frame
+    # scf.hamiltonian (the user-facing result, with h.V and h.Vchannels) and
+    # scf.hamiltonian0 are in the original frame
     scf.hamiltonian0 = h0
     return scf
 
@@ -392,12 +428,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     ALSO stored, separately, as h.Vchannels = {"x": vx, "y": vy, "z": vz,
     "d": vd} -- that is what the spin-channel RPA
     (chitk.spinchi._channel_spin_U) reads to build a vertex matching this
-    mean field, and it is why get_magnon_bands/get_spinchi_full/
-    get_spinchi_ladder work on an exchange-converged Hamiltonian. They
-    still raise ValueError when the non-onsite part is a DENSITY-DENSITY
-    interaction, whose Fock rung no site-separable vertex can carry at all
-    -- see chitk.spinchi._require_onsite_only_V's docstring, and
-    h.get_magnon_bands(method="tdhf") for the route that does handle it.
+    mean field, and what chitk.pairchi and bsetk.spinflip read to build the
+    transverse rung of the exchange. get_magnon_bands/get_spinchi_full/
+    get_spinchi_ladder sum the response of any interaction that couples
+    different sites in the pair basis (see chitk.spinchi._use_pair_basis),
+    since no site-separable vertex can carry the Fock rung of those bonds.
 
     For a BdG (Nambu, h0.has_eh=True) Hamiltonian, density-density and
     exchange are kept as separate contributions summed each SCF iteration

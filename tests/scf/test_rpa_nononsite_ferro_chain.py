@@ -38,33 +38,31 @@ def test_vjinteraction_v1_only_converges_ferromagnetic_at_low_filling():
     hmf = scf.hamiltonian
     mz = hmf.get_vev("sz")
     assert abs(mz[0]) > 0.05, f"expected a sizable ferromagnetic moment, got {mz}"
-    # H.V picks up the neighbor-shell (non-onsite) keys -- this is exactly
-    # the H.V shape that chitk.spinchi._require_onsite_only_V now rejects
-    # (see test_magnon_bands_raises_on_v1_only_converged_hamiltonian below)
+    # H.V picks up the neighbor-shell (non-onsite) keys, which is what sends
+    # the spin response to the pair basis (see
+    # test_magnon_bands_of_a_v1_only_ferromagnet_come_from_the_pair_basis)
     assert len(hmf.V) > 1
     assert (0, 0, 0) in hmf.V
 
 
 @pytest.mark.slow
-def test_magnon_bands_raises_on_v1_only_converged_hamiltonian():
-    """get_magnon_bands must raise ValueError on a Hamiltonian whose H.V
-    comes from a folded-in density-density (V1) interaction -- i.e. a
-    genuinely non-onsite H.V reached through the normal SCF path, not just
-    a hand-built dict. Non-onsite spin-channel RPA (bond exchange alone,
-    density-density alone, or a combination) is not yet properly verified
-    against an independent reference, so chitk.spinchi._require_onsite_only_V
-    rejects it rather than silently returning an unverified number -- see
-    that function's docstring for the reasoning."""
+def test_magnon_bands_of_a_v1_only_ferromagnet_come_from_the_pair_basis():
+    """A ferromagnet ordered by a folded-in density-density V1 alone has no
+    site-basis spin vertex at all (V2K_matrix maps V_ij to exactly zero),
+    so the default get_magnon_bands sums the ladder in the pair basis,
+    where the Fock rung of V1 lives, and returns exactly what
+    method="pair" returns with the same arguments."""
     h, mf = _seeded_chain(filling=0.1)
     scf = VJinteraction(h, V1=1.1, filling=0.1, mf=mf, nk=200, mix=0.2,
                          maxerror=1e-8, maxite=1000)
     hmf = scf.hamiltonian
-    energies = np.linspace(0.01, 1.0, 40)
-    with pytest.raises(ValueError):
-        hmf.get_magnon_bands(nq=3, energies=energies, delta=2e-2, nk=100)
+    kw = dict(nq=3, energies=np.linspace(0.01, 1.0, 40), delta=2e-2, nk=100)
+    a = hmf.get_magnon_bands(**kw)
+    b = hmf.get_magnon_bands(method="pair", T=2e-2, **kw)
+    for x, y in zip(a, b):
+        assert np.allclose(x, y)
 
 
-@pytest.mark.slow
 def test_vjinteraction_j1_ferromagnetic_moment_grows_with_coupling_strength():
     """Same physical check as tests/scf/test_spinspin_ferro_chain.py's
     test_szsz_ferromagnetic_moment_grows_with_coupling_strength (H = J1
@@ -127,14 +125,9 @@ def test_vjinteraction_j1_antiferromagnetic_moment_grows_on_bichain():
     assert len(h_strong.V) > 1
 
     # get_magnon_bands RUNS on this genuinely multi-orbital, non-onsite
-    # H.V: an isotropic exchange interaction is one the spin RPA can build
-    # a matching vertex for, now that the SCF records its three channels
-    # separately in h.Vchannels. See
-    # tests/chi/test_exchange_channels_rpa.py for the Goldstone
-    # measurement that justifies letting it through, and
-    # test_magnon_bands_raises_on_v1_only_converged_hamiltonian above for
-    # the case that is still refused (a neighbor-shell density-density
-    # interaction, whose Fock rung no site-separable vertex can carry).
+    # H.V: an exchange between different sites, whose spin response is
+    # summed in the pair basis with the transverse channels the SCF
+    # records in h.Vchannels (see tests/chi/test_exchange_channels_rpa.py).
     assert h_strong.Vchannels is not None
     energies = np.linspace(0.01, 3.0, 40)
     qs, ws, gammas = h_strong.get_magnon_bands(nq=3, energies=energies,

@@ -54,10 +54,12 @@ already reached once.
   the electron-hole pair basis), what each covers and why, the Goldstone
   and exact-reference measurements validating all three, how the
   transverse rung of an exchange interaction was carried into the two
-  pair-basis kernels (checked against a brute-force TDHF reference), and
-  what is still open: SzSz/SxSx/SySy record no spin channels and are
-  refused, and the site-basis RPA disagrees with the other two for
-  exchange at finite q.
+  pair-basis kernels (checked against a brute-force TDHF reference), why
+  any interaction that couples different sites is now summed in the pair
+  basis even through the site-basis entry points, how SzSz/SxSx/SySy
+  record their channel and why a global spin rotation refuses an
+  anisotropic exchange, and what is still open (the Jr onsite terms,
+  Nambu, the local rotations, and the q-averaged site-basis response).
 
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
   X-wave nonlinear Drude spin conductivity covers, the measured performance

@@ -213,25 +213,27 @@ class Hamiltonian():
     def get_spinchi_ladder(self,**kwargs):
         """Spin-spin response function with ladder operators.
 
-        RPA=True (the default) needs an interaction the site-basis spin
-        vertex can represent: an onsite (Hubbard-like) H.V, or a
-        neighbor-shell EXCHANGE one, whose three spin channels the SCF
-        records in H.Vchannels. A neighbor-shell density-density
-        interaction raises ValueError, see
-        chitk.spinchi._require_onsite_only_V's docstring. This is the
-        transverse (S+/S-) channel, so an in-plane anisotropy (Kx != Ky)
-        also raises -- use get_spinchi_full there."""
+        With RPA=True (the default) an interaction that couples each site
+        only to itself (a Hubbard U) is dressed with the site-basis
+        vertex, which is exact there for the transverse response. An
+        interaction that couples
+        different sites, density-density or exchange, has a Fock rung on
+        the electron-hole pair index that vertex has no place for, so the
+        response is summed in the pair basis instead (chitk.pairchi), with
+        the same keyword arguments and defaults; see
+        chitk.spinchi._use_pair_basis."""
         from . import chi
         return chi.spinchi_ladder(self,**kwargs)
     def get_spinchi_full(self,**kwargs):
         """Full spin-spin response function.
 
-        RPA=True (the default) needs an interaction the site-basis spin
-        vertex can represent: an onsite (Hubbard-like) H.V, or a
-        neighbor-shell EXCHANGE one, whose three spin channels the SCF
-        records in H.Vchannels. A neighbor-shell density-density
-        interaction raises ValueError, see
-        chitk.spinchi._require_onsite_only_V's docstring."""
+        With RPA=True (the default) an interaction that couples each site
+        only to itself (a Hubbard U) is dressed with the site-basis
+        vertex, which is exact there for the transverse response. An
+        interaction that couples
+        different sites, density-density or exchange, is summed in the
+        pair basis instead (chitk.pairchi), with the same keyword
+        arguments and defaults; see chitk.spinchi._use_pair_basis."""
         from . import chi
         return chi.spinchi_full(self,**kwargs)
     def get_iets_ldos(self,**kwargs):
@@ -252,16 +254,14 @@ class Hamiltonian():
         """Return the magnon bands of a magnetic mean-field state, scanned
         along a q-path.
 
-        method="rpa" (the default) takes the poles of the site-basis spin
-        RPA kernel (the Sx,Sy,Sz channel used by
-        get_spinchi_full/get_iets_ldos) on a frequency grid. It works for
-        metals as well as insulators, and takes an onsite (Hubbard-like)
-        H.V or a neighbor-shell EXCHANGE interaction, whose three spin
-        channels the SCF records in H.Vchannels. It raises ValueError for
-        a neighbor-shell DENSITY-DENSITY one, whose contribution to the
-        spin response is a rung on the electron-hole pair index that a
-        site-separable vertex cannot represent at all (see
-        chitk.spinchi._require_onsite_only_V).
+        method="rpa" (the default) takes the poles of the spin RPA kernel
+        (the Sx,Sy,Sz channel used by get_spinchi_full/get_iets_ldos) on a
+        frequency grid, and works for metals as well as insulators. For an
+        interaction that couples each site only to itself (a Hubbard U)
+        the kernel is built with the site-basis vertex, which is exact
+        there for the transverse response; for one that couples different sites it is the pair-basis
+        ladder of method="pair", with the frequency grid, broadening and
+        k-mesh defaults of "rpa" (see chitk.spinchi._use_pair_basis).
 
         method="pair" sums the same ladder as "rpa" but in the basis of
         the interaction's pair index, where the rung of a neighbour-shell
@@ -278,14 +278,11 @@ class Hamiltonian():
         "pair" and "tdhf" both take an EXCHANGE interaction too, when the
         SCF recorded its spin channels in H.Vchannels: the Sx Sx and Sy Sy
         channels carry the transverse part J/2 (S+_i S-_j + h.c.), which
-        h.V alone does not have. An Ising h.V with no H.Vchannels (SzSz,
-        SxSx, SySy, or a hand-built matrix) raises ValueError, since
-        nothing says whether that transverse part belongs to it. Unlike
-        "rpa", these two also keep the Fock rung of the exchange bonds, so
-        at finite q their dispersion differs from the "rpa" one (1.3687
-        against 1.3296 at q=0.1 on a J1=3 Neel honeycomb). In
-        exchange it needs the same k-mesh the mean field was converged
-        on, and by default a gapped reference -- pass metal=True for an
+        h.V alone does not have. An Ising h.V with no H.Vchannels, e.g. a
+        hand-built matrix, raises ValueError, since nothing says whether
+        that transverse part belongs to it (SzSz, SxSx and SySy record
+        theirs, as an anisotropic exchange). "tdhf" needs the same k-mesh
+        the mean field was converged on, and by default a gapped reference -- pass metal=True for an
         itinerant magnet, which decides the occupied and empty sets per
         k-point instead. See bsetk.spinflip.magnon_bands_tdhf."""
         if method=="tdhf":

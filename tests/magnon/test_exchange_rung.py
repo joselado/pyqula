@@ -22,7 +22,8 @@ Three things are checked here:
   - the Goldstone mode, as ||M v|| on the rotation generator, on states
     whose moments point along a generic axis;
   - that what cannot be done honestly is refused with a reason: an Ising
-    h.V with no recorded channels (SzSz, SxSx/SySy, a hand-built matrix),
+    h.V with no recorded channels (a hand-built matrix, or one that lost
+    them; SzSz, SxSx and SySy record theirs),
     and an anisotropic exchange when a Goldstone mode is asked for.
 """
 import numpy as np
@@ -164,24 +165,42 @@ def test_an_anisotropic_exchange_spectrum_matches_the_reference(kw, Jxyz):
                                    channel="spinflip")
 
 
-def test_szsz_is_refused_but_its_ising_kernel_is_exact_when_asked_for():
-    """SzSz leaves an Ising h.V and records no channels, which is exactly
-    what the Ising half of an isotropic exchange with its transverse part
-    lost would look like. So it is refused, with a message that says why.
-    For a genuine SzSz state the Ising kernel of h.V is nevertheless the
-    right one, and check_su2=False gives it: the whole spectrum matches
-    the reference with only Sz_i Sz_j on the bonds."""
-    h = SzSz(_chain_cell().get_hamiltonian(), J1=3.0, filling=0.5,
-             mf="antiferro", nk=N, maxerror=1e-12, mix=0.3,
-             maxite=3000).hamiltonian
+def test_szsz_sxsx_sysy_record_their_channel_and_match_the_reference():
+    """SzSz records its coupling as the z channel with x and y at zero,
+    SxSx/SySy as their own axis, the layout an anisotropic exchange
+    (J1z alone) has. So a Goldstone mode is refused with the anisotropy
+    message, and check_su2=False solves the kernel: the whole spectrum
+    matches the reference with only Sz_i Sz_j on the bonds, and the three
+    axes give the same spectrum, measured 3e-13 apart.
+
+    Without the recorded channel, what SzSz used to leave, the Ising h.V
+    is refused, since it is also what an isotropic exchange that lost its
+    transverse part looks like."""
+    from pyqula.meanfield import SxSx, SySy
+    kw = dict(J1=3.0, filling=0.5, nk=N, maxerror=1e-12, mix=0.3,
+              maxite=3000)
+    h = SzSz(_chain_cell().get_hamiltonian(), mf="antiferro", **kw).hamiltonian
     assert abs(h.get_vev("sz")[0]) > 0.1
-    with pytest.raises(ValueError, match="SzSz"):
+    with pytest.raises(ValueError, match="anisotropic"):
         h.get_goldstone_residual(nk=N)
-    with pytest.raises(ValueError, match="SzSz"):
-        h.get_magnon_energies(nk=N)
     ref = _ring_tdhf(_ring_hamiltonian(h), _ring_interaction(
                          Jxyz=(0., 0., 3.0)))
-    assert np.max(np.abs(_pyqula_tdhf(h, check_su2=False) - ref)) < 1e-7
+    spec = _pyqula_tdhf(h, check_su2=False)
+    assert np.max(np.abs(spec - ref)) < 1e-7
+    g = _chain_cell()
+    for axis, solver in ((0, SxSx), (1, SySy)):
+        v = np.zeros(3)
+        v[axis] = 1.0
+        mf = g.get_hamiltonian()
+        mf.add_exchange([v*g.sublattice[i] for i in range(len(g.r))])
+        t = solver(g.get_hamiltonian(), mf=mf, **kw).hamiltonian
+        m = [t.get_vev(op)[0] for op in ("sx", "sy", "sz")]
+        assert abs(m[axis]) > 0.1
+        assert np.max(np.abs(_pyqula_tdhf(t, check_su2=False) - spec)) < 1e-8
+    lost = h.copy()
+    lost.Vchannels = None
+    with pytest.raises(ValueError, match="SzSz"):
+        lost.get_magnon_energies(nk=N)
 
 
 def test_goldstone_of_a_ferromagnet_seeded_along_a_generic_axis():

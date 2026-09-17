@@ -49,10 +49,11 @@ def bare_interaction(h,V=None):
             h.V holds the z channel only, never the x/y ones -- there is
             no single matrix that represents that interaction, so the
             kernel built from it is incomplete rather than merely scaled
-          - after SxSx/SySy, h.V is expressed in the internally-rotated
-            frame the SCF ran in, while the returned Hamiltonian is
-            rotated back, so the two do not share a spin frame
-        In both cases pass W explicitly instead of relying on h.V.
+          - after SxSx/SySy, h.V is the laboratory z channel, which is
+            zero, and the Ising matrix is recorded as the x (or y) channel
+            of h.Vchannels, the frame interaction_channels reads it in
+        In both cases h.V alone is not the interaction: pass W explicitly,
+        or use interaction_channels, which reads h.Vchannels too.
       - a dict / MultiHopping {(n1,n2,n3): matrix}: used directly as W (NOT
         halved -- a user-supplied interaction is taken at face value, in
         the H_int convention above).

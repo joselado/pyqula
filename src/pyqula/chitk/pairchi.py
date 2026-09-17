@@ -145,24 +145,24 @@ def ladder_kernel(pairs, xvals, diag, Wq):
 
 
 @jit(nopython=True, cache=True)
-def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, flip):
+def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, f1, f2):
     """Add one k-point's contribution to the pair response.
 
     chi0[P,P',w] += sum_{nm} (f_n - f_m) M_P conj(M_P') / (e1_n-e2_m-w+i d)
 
     with M_P = conj(u1[n,iP]) u2[m,jP] phase_P, iP/jP the spin-orbital
-    indices the pair operator connects and phase_P its Bloch phase. The
-    indices are spin-orbital ones and carry no assumption about a spin
-    quantization axis, which is what lets a non-collinear state through
-    (flip is unused and kept only for signature stability)."""
+    indices the pair operator connects, phase_P its Bloch phase, and f1/f2
+    the occupations of the two sets of states. The indices are spin-orbital
+    ones and carry no assumption about a spin quantization axis, which is
+    what lets a non-collinear state through."""
     npair = iP.shape[0]
     nb = e1.shape[0]
     nw = omegas.shape[0]
     M = np.zeros(npair, dtype=np.complex128)
     for n in range(nb):
-        fn = 1.0 if e1[n] < 0. else 0.0
+        fn = f1[n]
         for m in range(nb):
-            fm = 1.0 if e2[m] < 0. else 0.0
+            fm = f2[m]
             df = fn - fm
             if df == 0.: continue
             for P in range(npair):
@@ -177,9 +177,18 @@ def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, flip):
     return chi0
 
 
-def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20):
+def _occupations(e, T):
+    """Fermi occupations at temperature T, a step at the Fermi energy
+    (zero) for T=None or T=0. The tanh form does not overflow at low
+    temperature, the same choice chitk/chiAB.py and chitk/chijax.py make."""
+    if T is None or T == 0.: return np.where(e < 0., 1.0, 0.0)
+    return 0.5*(1. - np.tanh(0.5*e/T))
+
+
+def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20, T=None):
     """Return the non-interacting response in the pair basis, shape
-    (npair,npair,nomega), chi0_{P,P'} = <<A_P ; A_P'^dag>>."""
+    (npair,npair,nomega), chi0_{P,P'} = <<A_P ; A_P'^dag>>. T is the
+    temperature of the occupations, a step at the Fermi energy by default."""
     if energies is None: energies = np.linspace(-1., 1., 100)
     energies = np.array(energies, dtype=np.float64)
     if q is None: q = [0., 0., 0.]
@@ -203,7 +212,8 @@ def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20):
         # convention the Hamiltonian's own hoppings use
         phase = np.array([g.bloch_phase(d, k + q) for d in ds],
                          dtype=np.complex128)
-        _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, energies, delta, 0)
+        _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, energies, delta,
+                    _occupations(e1, T), _occupations(e2, T))
     return chi0/len(ks)
 
 
@@ -339,7 +349,8 @@ def _require_recorded_exchange(h, channels, tol=1e-8):
                                                           4*ising.real))
 
 
-def pair_rpa_kernel(h, W=None, q=None, energies=None, delta=1e-2, nk=20):
+def pair_rpa_kernel(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
+                    T=None):
     """Return (energies,kernels): the ladder kernel 1 + K chi0 in the pair
     basis, one matrix per frequency. Its zeros are the collective modes --
     the magnons -- exactly as chitk.rpa's 1 - V chi is for the site
@@ -347,25 +358,33 @@ def pair_rpa_kernel(h, W=None, q=None, energies=None, delta=1e-2, nk=20):
     if energies is None: energies = np.linspace(-1., 1., 100)
     energies = np.array(energies, dtype=np.float64)
     pairs, xvals, diag, K = _setup(h, W=W, q=q)
-    chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk)
+    chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk,
+                     T=T)
     iden = np.identity(len(pairs), dtype=np.complex128)
     return energies, [iden + K@chi0[:, :, w] for w in range(len(energies))]
 
 
 def pair_chi_rpa(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
-                 component=None):
+                 component=None, T=None, ops=None, opsB=None):
     """Return (energies,chi): the RPA-dressed SPIN response, one 3N x 3N
     tensor per frequency in the (Sx,Sy,Sz) x site convention
     chitk.spinchi.spinchi_full uses, so the two are directly comparable.
 
     The ladder is summed in the pair basis, where the interaction is
-    simple, and the spin response contracted out of it afterwards:
+    simple, and the response of two local spin operators A and B
+    contracted out of it afterwards:
 
-        <<S_a(i);S_b(j)>> = 1/4 sum (sigma_a)_{ss'} conj((sigma_b)_{t't})
-                                 chi_{(is,is'),(jt',jt)}
+        <<A(i);B(j)>> = sum A_{ss'} B_{tt'} chi_{(is,is'),(jt',jt)}
+
+    which for A = sigma_a/2 and B = sigma_b/2 is the spin response.
 
     component, if given as a pair of indices (a,b), returns only that spin
-    block instead of the full tensor.
+    block instead of the full tensor. T is the temperature of the
+    occupations, a step at the Fermi energy by default. ops and opsB are
+    lists of 2x2 matrices acting on the spin of one site, the operators A
+    and B of the contraction (opsB defaults to ops, and ops to the three
+    spin operators), which is how chitk.spinchi gets the S+/S- ladder
+    response out of the same ladder.
 
     W defaults to the interaction the mean field was converged with
     (bsetk.interaction's bare_interaction, factor of two included), so
@@ -373,15 +392,18 @@ def pair_chi_rpa(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
     self-consistent choice bsetk/spinflip.py makes."""
     if energies is None: energies = np.linspace(-1., 1., 100)
     energies = np.array(energies, dtype=np.float64)
+    if ops is None:
+        ops = [np.array([[0, 1], [1, 0]], dtype=np.complex128)/2.,
+               np.array([[0, -1j], [1j, 0]], dtype=np.complex128)/2.,
+               np.array([[1, 0], [0, -1]], dtype=np.complex128)/2.]
+    if opsB is None: opsB = ops
+    if len(ops) != len(opsB):
+        raise ValueError("ops and opsB must have the same length, got %d "
+                         "and %d" % (len(ops), len(opsB)))
     pairs, xvals, diag, K = _setup(h, W=W, q=q)
-    chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk)
-    iden = np.identity(len(pairs), dtype=np.complex128)
     norb = len(diag)
     nsite = norb//2
     index = {p: n for n, p in enumerate(pairs)}
-    sigma = [np.array([[0, 1], [1, 0]], dtype=np.complex128),
-             np.array([[0, -1j], [1j, 0]], dtype=np.complex128),
-             np.array([[1, 0], [0, -1]], dtype=np.complex128)]
     # every (i s, i s') pair is needed as an index; they are all diagonal
     # in the site, so they are in the basis already only when s == s'.
     # The rest are added here rather than in spinorbital_pairs, which
@@ -391,36 +413,27 @@ def pair_chi_rpa(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
     missing = [p for p in need if p not in index]
     if len(missing) > 0:
         pairs = pairs + missing
-        xvals = np.concatenate([xvals, np.zeros(len(missing),
-                                                dtype=np.complex128)])
         K2 = np.zeros((len(pairs), len(pairs)), dtype=np.complex128)
         K2[0:K.shape[0], 0:K.shape[1]] = K
         K = K2
         index = {p: n for n, p in enumerate(pairs)}
-        chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta,
-                         nk=nk)
-        iden = np.identity(len(pairs), dtype=np.complex128)
-    out = np.zeros((len(energies), 3*nsite, 3*nsite), dtype=np.complex128)
+    chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk,
+                     T=T)
+    iden = np.identity(len(pairs), dtype=np.complex128)
+    nop = len(ops)
+    L = np.zeros((nop*nsite, len(pairs)), dtype=np.complex128)
+    R = np.zeros((nop*nsite, len(pairs)), dtype=np.complex128)
+    for a in range(nop):
+        A, B = np.array(ops[a]), np.array(opsB[a])
+        for i in range(nsite):
+            for s in range(2):
+                for sp in range(2):
+                    L[a*nsite+i, index[(2*i+s, 2*i+sp, (0, 0, 0))]] = A[s, sp]
+                    R[a*nsite+i, index[(2*i+sp, 2*i+s, (0, 0, 0))]] = B[s, sp]
+    out = np.zeros((len(energies), nop*nsite, nop*nsite), dtype=np.complex128)
     for w in range(len(energies)):
         c0 = chi0[:, :, w]
-        chi = c0@algebra.inv(iden + K@c0)
-        for a in range(3):
-            for b in range(3):
-                for i in range(nsite):
-                    for j in range(nsite):
-                        acc = 0.0+0.0j
-                        for ss in range(2):
-                            for sp in range(2):
-                                if sigma[a][ss, sp] == 0.: continue
-                                for tp in range(2):
-                                    for t in range(2):
-                                        if sigma[b][tp, t] == 0.: continue
-                                        P = index[(2*i+ss, 2*i+sp, (0, 0, 0))]
-                                        Q = index[(2*j+tp, 2*j+t, (0, 0, 0))]
-                                        acc += (sigma[a][ss, sp]
-                                                *np.conj(sigma[b][tp, t])
-                                                *chi[P, Q])
-                        out[w, a*nsite+i, b*nsite+j] = acc/4.
+        out[w] = L@(c0@algebra.inv(iden + K@c0))@R.T
     if component is not None:
         a, b = component
         out = out[:, a*nsite:(a+1)*nsite, b*nsite:(b+1)*nsite]

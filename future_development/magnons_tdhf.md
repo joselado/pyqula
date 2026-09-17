@@ -12,7 +12,9 @@ here), and what is still open after it.
 spin response with a site-separable vertex, `chi@(1-V@chi)^-1`. Works for
 metals and insulators alike, needs only a frequency grid, and is exact for
 an onsite Hubbard U, where the transverse ladder rung lives on a single
-site. It is gated to onsite-only `h.V` (`_require_onsite_only_V`).
+site. The public entry points use it only for an interaction that
+couples each site to itself, and hand anything that couples different
+sites to the pair basis below (`_use_pair_basis`).
 
 `chitk/pairchi.py` -- **the same ladder in the interaction's pair basis**.
 Keeps the frequency scan and the metal support of the site basis and gains
@@ -390,16 +392,39 @@ that makes it drop V1: rebuilding the TDHF kernel with the direct
 terms untouched, gives 1.329616 and 2.448808 for J1=3 and 0.740740 and
 1.404663 for U=3, J1=1, the site-basis RPA numbers to within 3e-5 (its pole
 search runs at delta 5e-3). On a Neel state that rung cancels at q=0 and not at
-finite q. This was measured and not changed, and the user guide's
-statement that the routes agree wherever more than one applies was
-narrowed to say so.
+finite q.
+
+The resolution (17 September 2026) was to stop computing that number:
+`spinchi_full`, `spinchi_ladder` and `magnon_bands`, and through them
+`get_iets_ldos` and `get_qdos_iets`, now sum the ladder in the pair basis
+whenever any interaction the Hamiltonian carries (h.V or a recorded
+channel) couples two different sites, and keep the site vertex only for a
+same-site one, where it is exact for the transverse response. The test is on the matrix elements, not
+the lattice-vector keys: an SCF stores every neighbor-shell key even at
+zero coupling, and a 0D island keeps all of its bonds under (0,0,0), which
+is how a V1=1.5 ferromagnetic six-site island used to pass the old gate
+with a vertex that was identically zero. The site-basis keyword arguments
+and defaults carry over (energies from -3 to 3, delta=0.1, nk=60, T equal
+to delta, which is why `pair_chi0` gained a temperature), `chi_cpugpu="GPU"`
+and a Nambu Hamiltonian are refused on that route, and `q=None` averages
+the dressed response over the mesh rather than dressing the averaged bare
+one. Checked against the site vertex on Hubbard chains: the bare response
+agrees to 6e-17 and the dressed transverse blocks to 5e-14 (T=1e-3). The
+dressed zz block agrees only when the bare charge-Sz response vanishes:
+to 1e-15 on a nonmagnetic doped state, where that response is 4e-9, and
+to 2e-5 on the half-filled Neel state, where it is 1e-3, since the pair
+kernel couples Sz to the charge fluctuations and a spin-only vertex has no
+channel for them. At the default T=delta the site kernel also drops
+occupation differences below delta/100, which on a weakly magnetized
+doped state moved the zz block by 0.1; that cutoff is not in the pair
+basis.
 
 ### What is refused, and why
 
-- An Ising bond coupling in `h.V` with no `h.Vchannels`. That is what
-  `SzSz` leaves, what `SxSx`/`SySy` leave (in a rotated frame), and what a
+- An Ising bond coupling in `h.V` with no `h.Vchannels`. That is what a
   hand-built exchange matrix or a Hamiltonian that lost its channels looks
-  like, and nothing tells a genuine Ising interaction, whose Ising kernel
+  like (`SzSz`, `SxSx` and `SySy` record theirs, see "Still open" below),
+  and nothing tells a genuine Ising interaction, whose Ising kernel
   is exactly right and whose gap is real, from the Ising half of an
   isotropic exchange. `check_su2_interaction` refuses it with a message
   naming the cases, and `pairchi` refuses it unless the interaction is
@@ -426,25 +451,49 @@ Neel states, the metal and the spiral), `tests/magnon/test_interaction_guard.py`
 `tests/chi/test_pair_basis_rpa.py` (Goldstone with delta^2 scaling,
 agreement with TDHF, the SzSz refusal).
 
+### Closed on 17 September 2026
+
+- `SzSz`, `SxSx` and `SySy` record their coupling in `h.Vchannels`, as the
+  channel of their axis with the other two at zero, which is the layout
+  `VJinteraction(J1z=...)` writes. For `SxSx`/`SySy` the Ising matrix is
+  the x (or y) channel, read in the frame of `_AXIS_ROTATION` that the SCF
+  itself ran in, and `h.V` is set to the laboratory z channel, which is
+  zero, since `interaction_channels` reads `h.V` as that channel. They now
+  land in the recorded-anisotropy refusal, and with `check_su2=False` the
+  whole TDHF spectrum of the three agrees with `VJinteraction(J1z=3)` on
+  the two-site chain to 3e-13, and the pair-basis poles agree with it.
+- The site-basis RPA's finite-q disagreement for exchange: the site vertex
+  is no longer used for it, see "At finite q" above.
+- `global_spin_rotation` on a Hamiltonian with recorded channels checks
+  whether the rotation leaves the exchange tensor diag(Jx,Jy,Jz) of every
+  bond unchanged. It does for an isotropic exchange and for a rotation
+  about the axis of a uniaxial one, and the channels are then exact as
+  they stand; otherwise it raises, since the rotated tensor has
+  Sx_i Sy_j-like cross terms that no x/y/z channel form holds.
+  `_rotated_axis_exchange` clears the channels before rotating its result
+  back and writes the laboratory-frame ones after.
+
 ### Still open
 
-- `SzSz`, `SxSx` and `SySy` do not go through `_run_anisotropic_scf` and
-  record no channels, which is why they are refused. Recording
-  `{"z": v, "x": 0, "y": 0}` in `SzSz`, and the corresponding rotated
-  assignment in `SxSx`/`SySy`, would let them through with a correct
-  kernel. Not done, since it touches `scftk/spinspin.py`, which another
-  session was editing at the time.
-- The site-basis RPA's finite-q disagreement for exchange, above. Nothing
-  in `chitk/spinchi.py` was changed; whether to warn there or to point
-  exchange users at `method="pair"` is a decision for the maintainer.
-- A Hamiltonian whose channels were recorded and which is then rotated
-  with `global_spin_rotation` keeps its old `h.Vchannels`. For an isotropic
-  exchange that is still exact, since the three channels are equal; for an
-  anisotropic one it is not, and nothing catches it.
 - A `Jr` function is evaluated at zero distance as well, so its channels
-  carry onsite `Sa_i Sa_i` terms. The kernel is consistent with the SCF
-  either way, but no `Jr` case was checked against the reference.
-- BdG (Nambu) Hamiltonians are refused by `PairBasis` as before.
+  carry onsite `Sa_i Sa_i` terms (checked 17 September 2026: `Jr=1` gives
+  the same-site block [[1/4,-1/4],[-1/4,1/4]]). `Vr` does the same (its
+  same-site block is all ones), so skipping r=0 in `Jr` alone would make
+  the two conventions disagree; which one is intended is a decision, not a
+  repair. The kernel is consistent with the SCF either way, but no `Jr`
+  case was checked against the reference.
+- BdG (Nambu) Hamiltonians are refused by `PairBasis` as before, and now
+  also by the spin response when the interaction couples different sites,
+  where the site vertex used to give an approximate number.
+- The local rotations `align` and `generate_spin_spiral` do not check the
+  recorded channels. Unlike a global rotation they are not a symmetry of
+  even an isotropic exchange between different sites, so a check there
+  would refuse every neighbor-shell exchange; whether that is wanted is
+  open.
+- `q=None` on the site-basis route (a same-site interaction) still dresses
+  the q-averaged bare response with V(q=0), where the pair-basis route
+  averages the dressed response; the two local responses therefore differ
+  for a Hubbard U, and only the second is the local RPA response.
 
 ## Metals (done)
 

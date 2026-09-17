@@ -5,53 +5,146 @@ from .rpa import chi_ops_RPA
 # spin-response functions
 
 
+def _interaction_matrices(H):
+    """Every real-space interaction matrix H carries, h.V and the recorded
+    exchange channels alike, as a list of {(n1,n2,n3): matrix} dicts."""
+    from ..bsetk.interaction import V2dict
+    out = []
+    if getattr(H,"V",None) is not None: out.append(V2dict(H.V))
+    ch = getattr(H,"Vchannels",None)
+    if ch is not None:
+        for name in ("x","y","z","d"):
+            if ch.get(name,None) is not None: out.append(V2dict(ch[name]))
+    return out
+
+
+def _is_site_local(H,tol=1e-12):
+    """True if every interaction H carries couples each site only to
+    itself: nonzero only in the same-site 2x2 spin blocks of the (0,0,0)
+    matrix. That is the only case the site-basis vertex can carry; it is
+    exact there for the transverse response, and the longitudinal one
+    misses only the coupling of Sz to charge fluctuations, which a
+    spin-only vertex has no channel for (2e-5 on a half-filled Neel
+    Hubbard chain). A coupling between two different sites, in the same
+    cell or not, density-density or exchange, has a Fock rung on the
+    electron-hole PAIR index that a site-separable vertex has no place
+    for, and the lattice-vector keys alone do not say whether one is
+    there: an SCF stores every neighbor-shell key even at zero coupling,
+    and a 0D island keeps all of its bonds under (0,0,0)."""
+    for V in _interaction_matrices(H):
+        for d,m in V.items():
+            m = np.array(m)
+            if tuple(d)!=(0,0,0):
+                if np.max(np.abs(m))>tol: return False
+                continue
+            off = m.copy()
+            for i in range(m.shape[0]//2): off[2*i:2*i+2,2*i:2*i+2] = 0.
+            if np.max(np.abs(off))>tol: return False
+    return True
+
+
+def _use_pair_basis(H):
+    """True if the RPA spin response of H has to be summed in the pair
+    basis (chitk.pairchi) rather than with the site-basis vertex: H
+    carries an interaction and it is not site local, see _is_site_local.
+
+    Measured on the J1=3 Neel honeycomb, where both routes run, the site
+    vertex puts the acoustic magnon at 1.3296 (q=0.1) and 2.4488 (q=0.2)
+    against 1.3687 and 2.5074 from the pair basis and from time-dependent
+    Hartree-Fock, which a brute-force reference confirms; the difference
+    is exactly the Fock rung of the exchange bonds. For a V1-ordered
+    ferromagnet the site vertex is identically zero and gives no magnon
+    at all. So the public entry points take this route instead of
+    returning either number."""
+    return len(_interaction_matrices(H))>0 and not _is_site_local(H)
+
+
+_PAIR_ROUTE_KWARGS = ("energies","delta","nk","T","q","imode","ij_mode",
+                      "chi_cpugpu")
+
+
+def _pair_route_kwargs(H,kwargs):
+    """Translate the keyword arguments of the site-basis response into the
+    pair-basis ones, keeping the site-basis defaults (chitk.chiAB.chiAB_q:
+    energies from -3 to 3, delta=0.1, nk=60, a temperature equal to delta)
+    so that the same call means the same response on either route."""
+    unknown = sorted(set(kwargs) - set(_PAIR_ROUTE_KWARGS))
+    if len(unknown)>0:
+        raise ValueError("this Hamiltonian's interaction couples different "
+            "sites, so its RPA spin response is summed in the pair basis "
+            "(chitk.pairchi), which does not take %s; the accepted "
+            "keyword arguments are %s"%(unknown,list(_PAIR_ROUTE_KWARGS)))
+    if kwargs.get("chi_cpugpu","CPU")!="CPU":
+        raise NotImplementedError("chi_cpugpu=%r is not implemented for an "
+            "interaction that couples different sites: its RPA spin "
+            "response is summed in the pair basis (chitk.pairchi), which "
+            "has no device backend"%(kwargs["chi_cpugpu"],))
+    if kwargs.get("imode","mesh")!="mesh":
+        raise NotImplementedError("imode=%r is not implemented for an "
+            "interaction that couples different sites, whose RPA spin "
+            "response is summed in the pair basis (chitk.pairchi) on a "
+            "k-mesh; use imode='mesh'"%(kwargs["imode"],))
+    if H.has_eh:
+        raise NotImplementedError("the RPA spin response of a Nambu "
+            "Hamiltonian whose interaction couples different sites is not "
+            "implemented: the site-basis vertex drops the Fock rung of "
+            "those bonds, and the pair basis (chitk.pairchi) does not "
+            "handle the Nambu basis")
+    delta = kwargs.get("delta",0.1)
+    T = kwargs.get("T",None)
+    return dict(energies=kwargs.get("energies",np.linspace(-3.0,3.0,100)),
+                delta=delta,nk=kwargs.get("nk",60),
+                T=delta if T is None else T)
+
+
+def _pair_route_response(H,ops,opsB,**kwargs):
+    """The RPA response of the local spin operators ops/opsB (lists of 2x2
+    matrices) summed in the pair basis, in the layout of the site-basis
+    response: (energies, one (nop*N)x(nop*N) matrix per energy).
+
+    q=None follows chitk.chiAB.chiAB: the response averaged over the q
+    points of the k-mesh, i.e. the local one. Here each q is dressed on
+    its own before the average, which is the RPA of the local response
+    (the site basis averages the bare response and dresses it at q=0)."""
+    from .pairchi import pair_chi_rpa
+    kw = _pair_route_kwargs(H,kwargs)
+    q = kwargs.get("q",None)
+    if q is not None:
+        return pair_chi_rpa(H,q=q,ops=ops,opsB=opsB,**kw)
+    qs = H.geometry.get_kmesh(nk=kw["nk"])
+    chis = [pair_chi_rpa(H,q=qi,ops=ops,opsB=opsB,**kw)[1] for qi in qs]
+    return np.array(kw["energies"],dtype=np.float64),np.mean(chis,axis=0)
+
+
+_SPIN_OPS = [np.array([[0.,1.],[1.,0.]],dtype=np.complex128)/2.,
+             np.array([[0.,-1j],[1j,0.]],dtype=np.complex128)/2.,
+             np.array([[1.,0.],[0.,-1.]],dtype=np.complex128)/2.]
+
+
 def _require_onsite_only_V(H):
-    """Raise ValueError unless the spin (Sx,Sy,Sz)/(S+,S-) RPA vertex can
-    actually be built from what this Hamiltonian carries.
+    """Raise ValueError unless the site-basis (Sx,Sy,Sz)/(S+,S-) vertex can
+    be built from what this Hamiltonian carries.
+
+    The public entry points (spinchi_full, spinchi_ladder, magnon_bands)
+    never reach this for an interaction between different sites: they
+    send it to the pair basis first (_use_pair_basis). It is the guard of
+    the vertex builders _full_spin_U/_transverse_spin_K themselves, which
+    tests and internal callers use directly on the vertex math.
 
     Three cases pass. A plain onsite (Hubbard-like) H.V -- a single
-    (0,0,0) key, or a plain matrix, the only form that predates non-onsite
-    support. A Hamiltonian carrying H.Vchannels, the three exchange
-    channel matrices the SCF decoupled, whose density-density part is
-    onsite: the vertex is then built per channel by _channel_spin_U, which
-    is what makes a neighbor-shell EXCHANGE interaction (isotropic or
-    anisotropic) work here. And no interaction at all.
+    (0,0,0) key, or a plain matrix. A Hamiltonian carrying H.Vchannels
+    whose density-density part is onsite, for which the vertex is built
+    per channel by _channel_spin_U; for a neighbor-shell exchange that
+    vertex is the site-separable part only, missing the Fock rung of the
+    bonds. And no interaction at all.
 
-    What is rejected, and why:
-
-      - a non-onsite DENSITY-DENSITY interaction, even alongside an
-        exchange one. Its contribution to the spin response is the Fock
-        rung of V_ij acting on the electron-hole PAIR index, and a
-        site-separable vertex has nowhere to put a two-index object --
-        V2K_matrix maps a spin-independent V_ij to exactly zero. Whether
-        dropping it matters is a property of the converged STATE rather
-        than of the interaction (it cancels on a Neel state, where V1's
-        Fock term renormalizes the hopping spin-independently, and it is
-        fatal on a V1-ordered ferromagnet, whose vertex comes out
-        identically zero and whose kernel is then the identity), so it is
-        refused rather than decided for the caller. The route that is
-        right by construction there are two: chitk/pairchi.py, which sums
-        this same ladder in the basis of the interaction's PAIR index
-        where that rung actually lives (h.get_magnon_bands(method="pair"),
-        h.get_transverse_spinchi -- keeps the frequency scan, needs no
-        gap), and bsetk/spinflip.py, which solves the electron-hole pair
-        eigenproblem (h.get_magnon_bands(method="tdhf"),
-        h.get_magnon_energies, h.get_goldstone_residual -- no frequency
-        grid). Both handle non-collinear states. Both have an exact Goldstone mode with
-        a V1 neighbor shell; both want the same k-mesh the SCF used.
-      - a non-onsite H.V with no H.Vchannels beside it, e.g. one built by
-        hand or by an SCF engine that does not record them. Nothing then
-        says which interaction it came from: an isotropic J1 and an
-        anisotropic J1z leave exactly the same z-channel matrix in H.V, so
-        replicating it across the three spin channels would be a guess
-        that is right for one and wrong for the other.
-
-    If you understand the caveats and want to proceed anyway (e.g. for
-    regression-testing the underlying vertex math), build the interaction
-    matrix yourself and call chitk.rpa.chi_ops_RPA/rpa_kernel_poles_ops
-    directly instead of going through H.V -- the same way
-    chitk.densitychi's charge-channel functions (which never read H.V)
-    already do."""
+    What is rejected: a non-onsite density-density interaction, whose
+    contribution to the spin response is entirely a Fock rung on the
+    electron-hole pair index (V2K_matrix maps a spin-independent V_ij to
+    exactly zero), and a non-onsite H.V with no H.Vchannels beside it,
+    for which nothing says which interaction it came from: an isotropic
+    J1 and an anisotropic J1z leave exactly the same z-channel matrix in
+    H.V."""
     from ..multihopping import MultiHopping
     V = H.V
     if V is None: return # no interaction at all, nothing to check
@@ -95,6 +188,9 @@ def spinchi_ladder(H,v=[0.,0.,1.],RPA=True,**kwargs):
     # this is not finished yet
     sp = (sx + 1j*sy)/2. # ladder operator
     sm = (sx - 1j*sy)/2. # ladder operator
+    if RPA and _use_pair_basis(H): # an interaction between sites
+        spin_p = np.array([[0.,1.],[0.,0.]],dtype=np.complex128)
+        return _pair_route_response(H,[spin_p],[spin_p.T],**kwargs)
     if RPA: # RPA mode
         U = _transverse_spin_K(H) # per-channel vertex, if the SCF kept one
         if U is not None:
@@ -358,6 +454,8 @@ def _full_spin_operators(H):
 
 def spinchi_full(H,RPA=True,**kwargs):
     """Return the spin response function"""
+    if RPA and _use_pair_basis(H): # an interaction between sites
+        return _pair_route_response(H,_SPIN_OPS,_SPIN_OPS,**kwargs)
     Ss = _full_spin_operators(H)
     U = _full_spin_U(H) if RPA else None
     return chi_ops_RPA(H,ops=Ss,V=U,**kwargs) # non-interacting response
@@ -386,13 +484,13 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
     itself.
 
     Requires a Hamiltonian with a mean-field interaction set (H.V), e.g.
-    the output of get_mean_field_hamiltonian. An onsite (Hubbard-like) one
-    works, and so does a neighbor-shell EXCHANGE interaction, whose three
-    spin channels the SCF records in H.Vchannels. A neighbor-shell
-    DENSITY-DENSITY interaction raises ValueError -- see
-    _require_onsite_only_V's docstring for why that one has no vertex here
-    at all, and h.get_magnon_bands(method="pair") or method="tdhf" for the
-    routes that do handle it.
+    the output of get_mean_field_hamiltonian. An interaction that couples
+    each site only to itself (a Hubbard U) uses the site-basis vertex,
+    which is exact there for the transverse response. One that couples
+    different sites, density-density
+    or exchange, is scanned with the pair-basis ladder instead
+    (chitk.pairchi.magnon_bands_pair, see _use_pair_basis), with the
+    energies/delta/nk/T defaults of this function.
 
     Returns (qs,ws,gammas): qs is the integer index of the q-point along
     the path (the same convention used by get_bands for the k-axis),
@@ -403,6 +501,13 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
     returned as flat 1D arrays -- ready for a scatter-style dispersion
     plot -- rather than a ragged per-q array."""
     from .rpa import rpa_kernel_poles_ops, build_ops_projectors
+    if _use_pair_basis(H): # an interaction between sites
+        from .pairchi import magnon_bands_pair
+        if "q" in kwargs:
+            raise ValueError("magnon_bands scans a q-path, pass qpath or "
+                             "nq rather than q")
+        return magnon_bands_pair(H,qpath=qpath,nq=nq,
+                                 **_pair_route_kwargs(H,kwargs))
     Ss = _full_spin_operators(H)
     U = _full_spin_U(H)
     if U is None: raise ValueError("Hamiltonian has no mean-field "
