@@ -1031,8 +1031,13 @@ class Hamiltonian():
         hout.geometry.dimensionality = 1 # one dimensional
         return hout
     def get_multicell(self):
-        """Return a multicell Hamiltonian"""
-        return multicell.turn_multicell(self)
+        """Return a multicell copy of the Hamiltonian, a new object even
+        when this one is already multicell, so the result can be modified
+        without touching this one. Internal read-only callers that do not
+        want the copy use multicell.turn_multicell directly."""
+        h = multicell.turn_multicell(self)
+        if h is self: h = self.copy()
+        return h
     def turn_multicell(self):
         """Conver to multicell Hamiltonian"""
         h = multicell.turn_multicell(self)

@@ -66,11 +66,10 @@ def _multicell_and_orders(h):
     multicell.derivative and every elementwise operation downstream in
     this module (see _hk_derivatives_batch and
     _qgt_batch) only ever see plain ndarrays -- no
-    per-k-point or per-use patching needed. h.get_multicell() returns h
-    itself unchanged if h is already multicell (see
-    multicell.turn_multicell), so a Hamiltonian .copy() is taken first to
-    avoid mutating the caller's own Hamiltonian in place."""
-    hm = h.get_multicell().copy() # own copy: get_multicell() may alias h
+    per-k-point or per-use patching needed. h.get_multicell() returns a
+    copy, so converting its matrices does not touch the caller's
+    Hamiltonian."""
+    hm = h.get_multicell() # a copy, modified below
     # algebra.todense, not np.asarray: the latter turns a scipy sparse
     # matrix (what get_supercell() stores) into a 0-d object array
     hm.intra = algebra.todense(hm.intra)

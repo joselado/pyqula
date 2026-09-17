@@ -137,6 +137,20 @@ contract. **The clean resolution**, if it is wanted, is to split the two: keep
 workarounds be removed. Needs an idle-machine measurement of the decimation
 first.
 
+**Done (17 September 2026), the clean resolution.** `Hamiltonian.get_multicell`
+returns a copy when the receiver is already multicell, and
+`multicell.turn_multicell` keeps its O(1) return for internal read-only
+callers, which the per-energy `detect_longest_hopping` and the per-k-point
+`current.derivative` now call directly; the three `.copy()` workarounds are
+gone. Instead of a timing, the Hamiltonian copies were counted, which does
+not depend on what else runs on the machine: 401 before and 402 after for a
+whole `kdos.surface` call on the honeycomb lattice (20 energies, 10
+k-points), and none for 50 `current.derivative` calls, so the decimation
+gained nothing per energy. The regression test is
+`tests/hopping/test_hamiltonian_method_contracts.py`, which compares the
+spectrum rather than the bandwidth, since a uniform onsite shift leaves the
+bandwidth unchanged and a bandwidth test passes on the aliasing code too.
+
 ### 2.3 One assertion was deliberately weakened
 
 In `tests/scf/test_spinspin_rotational_symmetry.py`,

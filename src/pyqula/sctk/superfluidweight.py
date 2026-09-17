@@ -304,7 +304,7 @@ class TwistOperators():
     def __init__(self,h,gauge="atomic"):
         if gauge not in ("atomic","lattice"): raise ValueError(
                 "unknown gauge "+str(gauge)+" (use 'atomic' or 'lattice')")
-        hm = h.get_multicell().copy() # own copy: get_multicell may alias h
+        hm = h.get_multicell() # a copy, modified below
         # densify with algebra.todense: np.asarray on a scipy sparse matrix
         # returns a 0-d object array instead of the dense matrix
         hm.intra = algebra.todense(hm.intra)

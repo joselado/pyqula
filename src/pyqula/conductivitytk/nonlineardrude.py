@@ -116,7 +116,7 @@ def _spin_channels(h):
     for (s,channel) in [(1,"up"),(-1,"dn")]:
         hs = h.copy()
         hs.remove_spin(channel=channel)
-        out.append((s,hs.get_multicell().copy()))
+        out.append((s,hs.get_multicell()))
     return out
 
 

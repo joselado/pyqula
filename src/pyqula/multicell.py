@@ -32,7 +32,13 @@ class Hopping():
 
 
 def turn_multicell(h):
-    """Transform a normal hamiltonian into a multicell hamiltonian"""
+    """Transform a normal hamiltonian into a multicell hamiltonian.
+
+    Returns h itself, not a copy, when h is already multicell, which is
+    what keeps this O(1) for read-only internal callers on hot paths (e.g.
+    htk.kchain.detect_longest_hopping, once per energy in a decimation).
+    Anything that modifies the result goes through h.get_multicell(),
+    which copies."""
     if h.is_multicell: return h # if it is already multicell
     ho = h.copy() # copy hamiltonian
     # directions
@@ -555,7 +561,7 @@ from .htk.kchain import kchain
 
 def get_hopping_dict(h):
     """Return the hopping dictionary"""
-    h = h.get_multicell()
+    h = turn_multicell(h) # read only, the matrices are copied below
     out = dict()
     out[(0,0,0)] = h.intra.copy()
     for t in h.hopping: 

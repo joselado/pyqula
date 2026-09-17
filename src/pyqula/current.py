@@ -68,7 +68,8 @@ def weighted_current(h,nk=400,fun=None):
 def derivative(h,k,order=None):
   """Calculate the derivative of the Hamiltonian"""
   ## The order parameter is kind of weird now, this must be fixed ##
-  h = h.get_multicell() # get multicell Hamiltonian
+  from .multicell import turn_multicell
+  h = turn_multicell(h) # read only, called once per k-point
   if order is None:
 #    order = [1 for i in range(h.dimensionality)] # order of the derivative
     order = [1,0,0] # default

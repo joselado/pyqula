@@ -83,7 +83,8 @@ def kchain_NN(h,k=[0.,0.,0.]):
 
 
 def detect_longest_hopping(h,tol=1e-7):
-    h = h.get_multicell() # multicell Hamiltonian
+    from ..multicell import turn_multicell
+    h = turn_multicell(h) # read only, called once per energy in decimation
     out = 0 # initialize
     for t in h.hopping: # loop over hoppings
         if np.max(np.abs(t.m))>tol: # if bigger than the tolerance

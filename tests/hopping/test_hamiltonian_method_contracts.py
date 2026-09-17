@@ -79,6 +79,29 @@ def test_get_no_multicell_does_not_alias_in_three_dimensions():
     assert abs(bandwidth(h) - b0) < 1e-8, (bandwidth(h), b0)
 
 
+# --------------------------------------------------------------- get_multicell
+
+def spectrum(h):
+    (k, e) = h.get_bands(write=False)
+    return np.sort(e)
+
+
+def test_get_multicell_returns_a_hamiltonian_the_caller_may_mutate():
+    """The same contract for get_multicell, which used to hand back the
+    receiver whenever it was already multicell, so an onsite energy added
+    to the result shifted the original's bands too. The spectrum is
+    compared rather than the bandwidth, which a uniform shift leaves
+    unchanged."""
+    h = geometry.chain().get_hamiltonian()
+    h.turn_multicell()
+    e0 = spectrum(h)
+    h2 = h.get_multicell()
+    assert h2 is not h
+    h2.add_onsite(1.0)
+    assert np.max(np.abs(spectrum(h) - e0)) < 1e-8
+    assert np.max(np.abs(spectrum(h2) - e0 - 1.0)) < 1e-8
+
+
 def test_a_multicell_hamiltonian_still_converts_and_round_trips():
     """The conversion itself has to keep working: the non-multicell form of
     a 2d Hamiltonian must reproduce the same Bloch matrices."""

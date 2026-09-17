@@ -27,15 +27,15 @@ def _setup(h):
     and a characteristic hopping energy scale (used to make
     degeneracy_tol relative rather than absolute, as in topologytk/qgt.py).
 
-    As in topologytk/qgt.py's _multicell_and_orders: a .copy() is taken
-    because get_multicell() may hand back h itself, and every stored
-    matrix is coerced to a plain numpy.ndarray because Hamiltonians built
+    As in topologytk/qgt.py's _multicell_and_orders: get_multicell()
+    returns a copy, so the caller's Hamiltonian is untouched, and every
+    stored matrix is coerced to a plain numpy.ndarray because Hamiltonians built
     through get_supercell() keep their hoppings as the legacy
     numpy.matrix, whose "*" is a matrix product -- that would silently
     corrupt the elementwise algebra downstream. hkgen is built once here
     and reused at every k-point (rebuilding it per k-point does real setup
     work and is dramatically slower on a mesh sweep)."""
-    hm = h.get_multicell().copy() # own copy: get_multicell() may alias h
+    hm = h.get_multicell() # a copy, modified below
     hm.intra = np.asarray(hm.intra)
     for t in hm.hopping: t.m = np.asarray(t.m)
     dim = h.dimensionality
