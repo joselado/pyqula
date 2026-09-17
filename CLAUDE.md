@@ -228,7 +228,8 @@ deliberately left as they are.
   where a third sweep should start.
 - `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap for moving compute-heavy
   paths onto GPU via `jax` (already a hard dependency). Tier 1, the batched KPM GPU path
-  (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), is done; Tiers 2-4 are not started, covering batched dense
+  (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), and Tier 3, scoping the forced-CPU jax modules, are done; Tiers 2 and 4 are
+  not started, covering batched dense
   diagonalization (`htk/eigenvectors.py`) and why sparse/ARPACK-based Green's-function work is a
   harder/lower-priority case. Each tier wants explicit sign-off before it starts. Check the plan
   before starting any GPU-related work in this repo.

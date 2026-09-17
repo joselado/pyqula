@@ -8,7 +8,6 @@ from . import neighbor
 from scipy.sparse import csr_matrix,csc_matrix,coo_matrix
 
 import jax
-jax.config.update('jax_platform_name', 'cpu')
 
 zero = np.array(np.zeros((3,3)))  # real matrix
 iden = np.array(np.identity(3))  # real matrix
@@ -156,8 +155,19 @@ def energy_jax_master(thetaphi,bs,js,indsjs):
 
 from jax import jit
 from jax import grad
-energy_jax = jit(energy_jax_master) # jit jax function for energy
-jacobian_jax = jit(grad(energy_jax_master,argnums=0)) # jit jax gradient
+
+def jit_on_cpu(f):
+    """Jit f and run it on the CPU. The minimizer calls it from the host
+    once per step on a small problem, so a GPU only adds transfer overhead;
+    placing the inputs, rather than switching jax's platform globally,
+    leaves the GPU paths of the rest of the package untouched"""
+    fj = jit(f)
+    cpu = jax.devices("cpu")[0]
+    def fcpu(*args): return fj(*jax.device_put(args,cpu))
+    return fcpu
+
+energy_jax = jit_on_cpu(energy_jax_master) # jit jax function for energy
+jacobian_jax = jit_on_cpu(grad(energy_jax_master,argnums=0)) # jit jax gradient
 
 
 

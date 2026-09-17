@@ -87,3 +87,38 @@ def test_most_perp_basis_puts_aligned_vectors_in_plane():
     # vector (3rd axis) must vanish since the inputs were all
     # perpendicular to it by construction
     assert np.allclose(ovs[:, 2], 0., atol=1e-3)
+
+
+def _fresh_interpreter(code):
+    """Run code in a new interpreter, so that the imports it makes come
+    before anything else of jax or pyqula"""
+    import subprocess, sys, os
+    src = os.path.join(os.path.dirname(__file__), "..", "..", "src")
+    env = dict(os.environ, PYTHONPATH=os.path.abspath(src))
+    out = subprocess.run([sys.executable, "-c", code], env=env,
+                         capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr[-2000:]
+    return out.stdout.strip().splitlines()[-1]
+
+
+def test_importing_the_minimizers_leaves_jax_default_device_alone():
+    """Regression test: classicalspin and symmetrytk.localsymmetry used to
+    call jax.config.update('jax_platform_name','cpu') at import time. In a
+    script importing them first, that moved every later kpm_cpugpu="GPU"/
+    chi_cpugpu="GPU" call onto the CPU. They now place only their own
+    inputs on the CPU, so the default device is whatever jax picks alone"""
+    probe = "import jax.numpy as jnp; print(jnp.ones(2).devices())"
+    plain = _fresh_interpreter(probe)
+    after = _fresh_interpreter("\n".join([
+        "from pyqula import classicalspin",
+        "from pyqula.symmetrytk import localsymmetry",
+        "from pyqula.classicalspintk import align",
+        probe]))
+    assert after == plain
+    energy_device = _fresh_interpreter("\n".join([
+        "import numpy as np",
+        "from pyqula import classicalspin",
+        "e = classicalspin.energy_jax(np.ones(4), np.ones((2,3)),",
+        "        np.ones((1,3,3)), np.array([[0,1]]))",
+        "print(e.devices())"]))
+    assert "Cpu" in energy_device

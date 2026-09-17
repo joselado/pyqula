@@ -2,10 +2,9 @@ import numpy as np
 
 
 import jax
-jax.config.update('jax_platform_name', 'cpu')
 import jax.numpy as jnp
-from jax import jit
 from jax import grad
+from ..classicalspin import jit_on_cpu
 
 
 def generate_permutation(H,nk=20,error=1e-5,only_permutation=True):
@@ -22,8 +21,8 @@ def generate_permutation(H,nk=20,error=1e-5,only_permutation=True):
         error_master = error_commute_and_permutation
     else:
         error_master = error_commute
-    error_jax = jit(error_master) # jit jax function for error
-    jac_error_jax = jit(grad(error_master,argnums=0)) # jit jax gradient
+    error_jax = jit_on_cpu(error_master) # jit jax function for error
+    jac_error_jax = jit_on_cpu(grad(error_master,argnums=0)) # jit jax gradient
     #####
     def fun(Ua):
         return error_jax(Ua,ms) # return function

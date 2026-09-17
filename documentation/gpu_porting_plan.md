@@ -1,6 +1,7 @@
 # GPU porting plan
 
-Status: **Tier 1 done** (KPM batched GPU path, see below); Tiers 2-4 not started. A
+Status: **Tiers 1 and 3 done** (KPM batched GPU path; the forced-CPU modules no longer
+switch jax's platform globally); Tiers 2 and 4 not started. A
 separate tier for the RPA response kernel (`chi_cpugpu`, with `chi_prec` single precision
 as the GPU default) is implemented and measured on a V100 and a GTX 1060 -- see
 `future_development/gpu_rpa_spin_response.md`.
@@ -142,15 +143,24 @@ batching needs to pay off. Worth a dedicated feasibility spike later (e.g. cupy'
 eigensolvers, or reformulating as dense-batched recursive Green's function where
 `densedimension` allows), but don't bundle it with items 1–2.
 
-### 4. Modules that force jax onto CPU — needs investigation before touching
+### 4. Modules that forced jax onto CPU — **done**
 
-`classicalspin.py` and `symmetrytk/localsymmetry.py` both call
-`jax.config.update('jax_platform_name', 'cpu')` unconditionally, overriding whatever GPU
-would otherwise be picked up. The reason isn't yet understood from reading the code alone —
-possibilities include small problem sizes where GPU dispatch overhead isn't worth it,
-numerical-stability requirements, or avoiding GPU contention when these run under
-`parallel.pcall`'s multiprocess pool (multiple processes fighting over one GPU context can
-deadlock or serialize badly). Ask before lifting this restriction; it may be intentional.
+`classicalspin.py` and `symmetrytk/localsymmetry.py` used to call
+`jax.config.update('jax_platform_name', 'cpu')` at import time. The commits that added it
+gave no reason. The switch was global: in a script importing either module before any jax
+array existed (the normal order, imports at the top), every later `kpm_cpugpu="GPU"` or
+`chi_cpugpu="GPU"` call ran on the CPU while still printing "GPU available". Imported after
+jax had already placed an array, it did nothing, so the modules then ran on the GPU.
+
+Measured on the GTX 1060 (2026-09-17) with the platform switched either way, the GPU buys
+these modules nothing: both drive `scipy.optimize` from the host with one small jitted call
+per step, so per-call transfer dominates. A 400-spin `minimize_energy` takes 8.3 s on the
+CPU and 8.4 s on the GPU; `all_permutations(n=4)` on bilayer graphene 2.3 s against 5.1 s.
+The CPU placement was therefore kept but scoped: `classicalspin.jit_on_cpu` jits a function
+and `jax.device_put`s its inputs on the CPU (`jax.jit(device=...)` is deprecated in jax
+0.11), and `localsymmetry` and `classicalspintk/align.py` (same shape, previously on
+whatever device was default) use it too. jax's default device is no longer touched;
+`tests/classicalspin/test_classicalspin.py` checks that in a fresh interpreter.
 
 ## Proposed phased plan
 
@@ -163,8 +173,8 @@ process as the CPU perf plan.
   eventual payoff given how many call sites feed off `htk/eigenvectors.py`, but also the
   most engineering (deciding the CPU/GPU crossover, wiring a backend switch analogous to
   `kpm_cpugpu` through `dos.py`/`spectrum.py`/`bandstructure.py`/etc.).
-- **Tier 3 — audit the forced-CPU jax modules** (item 4 above). Find out why before
-  deciding whether to add a GPU option there too.
+- **Tier 3 — audit the forced-CPU jax modules** (item 4 above). **Done**: no GPU option,
+  the CPU placement is now local to those modules.
 - **Tier 4 — research spike only, not committed work**: sparse/Green's-function GPU
   feasibility (item 3 above). Write up findings before proposing an implementation tier.
 - **The RPA response kernel** (`chitk/chiAB.py::chiAB_matrix`, the `N^4` Lindhard
