@@ -75,6 +75,32 @@ small matrices/small k-meshes, where the existing numba CPU path may already be 
 the crossover point** before deciding whether to add a GPU path at all, and if so, whether
 it replaces or supplements the numba path.
 
+**Partial sweep, GTX 1060 (2026-09-17), stopped before completion.** Random dense Hermitian
+batches, warm times in seconds, numba `peigvalsh`/`parallel_diagonalization` on 8 threads
+against `jax.jit(jnp.linalg.eigvalsh/eigh)` on the device, host-device transfers included
+(what a drop-in replacement would pay). `err32` is the single-precision eigenvalue error
+relative to the spectral scale; double agrees with numba to <1e-10.
+
+| n | batch | numba vals | GPU double vals | GPU single vals | numba vecs | GPU double vecs | GPU single vecs | err32 |
+|---|---|---|---|---|---|---|---|---|
+| 8 | 4096 | 0.029 | 0.067 | 0.006 | 0.029 | 0.070 | 0.007 | 2e-6 |
+| 16 | 4096 | 0.076 | 0.152 | 0.011 | 0.077 | 0.157 | 0.018 | 3e-6 |
+| 32 | 256 | 0.055 | 0.086 | 0.006 | 0.057 | 0.090 | 0.007 | 6e-6 |
+| 32 | 4096 | 1.70 | 1.34 | 0.090 | 1.83 | 1.38 | 0.111 | 6e-6 |
+| 64 | 16 | 0.019 | 0.009 | 0.002 | 0.022 | 0.010 | 0.003 | 4e-7 |
+| 64 | 4096 | 7.68 | 1.88 | 0.365 | 7.73 | 2.04 | 0.446 | 1e-6 |
+| 128 | 256 | 2.10 | 0.60 | 0.088 | 2.14 | 0.50 | 0.083 | 1e-6 |
+| 256 | 16 | 0.48 | 0.14 | 0.030 | 0.66 | 0.15 | 0.033 | 1e-6 |
+
+What it already shows: on this card double precision loses below n~32 and wins 2-4x from
+n=64; single precision wins almost everywhere (5-20x) at ~1e-6 relative eigenvalue error,
+which is fine for DOS/bands but not for anything taking eigenvector differences. Rows for
+n>=256 with large batches and n=512/1024 were not reached. One hard constraint surfaced:
+cuSOLVER's batched Jacobi solver needs ~500 bytes of workspace per matrix entry, so a
+4096 x 64 x 64 batch asked for 7.75 GiB in one dispatch and failed on the 6 GB card. A GPU
+path must chunk by workspace, not by the size of the matrices themselves (2^21 entries per
+dispatch worked).
+
 ### 2. KPM moments, batched GPU path — `kpmtk/kpmnumba.py` / `kpmtk/kpmjax.py` — **done**
 
 `kpm_moments_batch`'s GPU branch used to loop in plain Python over the single-vector
@@ -161,6 +187,22 @@ and `jax.device_put`s its inputs on the CPU (`jax.jit(device=...)` is deprecated
 0.11), and `localsymmetry` and `classicalspintk/align.py` (same shape, previously on
 whatever device was default) use it too. jax's default device is no longer touched;
 `tests/classicalspin/test_classicalspin.py` checks that in a fresh interpreter.
+
+### 5. jax modules that already run on the GPU implicitly
+
+Without any switch, `scftk/densitydensity_jax.py`, `scftk/vjinteraction_jax.py`,
+`graphenetk/relax.py`, `transporttk/kappa_jax.py` (called from `transporttk/kappa.py`),
+`keldyshtk/current_jax.py` and `fermisurfacetk/swarmfs.py` place their arrays on the GPU
+whenever a CUDA jax is installed, which is not the explicit-dispatch convention below.
+Their test files (a proxy for realistic sizes) take the same time either way on the
+GTX 1060: GPU/CPU wall-time ratios 0.95-1.14, 2026-09-17. Nothing is gained, and whether
+to pin them to the CPU or give them a switch is still open.
+
+Running them on the device did expose a real bug, now fixed: the jax Newton SCF
+differentiated the density matrix through `eigh`'s eigenvector tangent, which is NaN at an
+exact degeneracy. cuSOLVER returns degenerate levels bit-identical where LAPACK splits
+them by ~1e-16, so the Newton SCF stalled only on the GPU.
+`densitydensity_jax.fermi_projector` now carries a Daleckii-Krein custom JVP.
 
 ## Proposed phased plan
 
