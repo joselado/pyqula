@@ -21,7 +21,6 @@ from pyqula import geometry
 from pyqula.chitk import spinchi
 from pyqula.chitk.pairchi import pair_chi_rpa
 from pyqula.meanfield import VJinteraction
-from testutils import gpu_backend
 
 NK = 6
 
@@ -93,12 +92,13 @@ def test_a_zero_dimensional_island_with_v1_is_not_site_local():
 def test_what_the_pair_basis_does_not_have_is_refused():
     h = _chain(U=1.0, J1=2.0)
     es = np.linspace(0., 1., 3)
-    with gpu_backend():
-        with pytest.raises(NotImplementedError, match="GPU"):
-            h.get_spinchi_full(energies=es, nk=NK)
+    # the device kernel of the pair basis (chitk/pairchijax.py) has both
+    # precisions; its CPU one is double only, and says so rather than
+    # quietly answering in double. The device agreement itself is
+    # tests/chi/test_pairchi_gpu.py
     with pytest.raises(NotImplementedError, match="chi_prec"):
         h.get_spinchi_full(energies=es, nk=NK, chi_prec="single")
-    for chi_prec in (None, "double"):  # what the pair basis computes anyway
+    for chi_prec in (None, "double"):  # what the CPU kernel computes anyway
         h.get_spinchi_full(energies=es, nk=NK, chi_prec=chi_prec)
     with pytest.raises(NotImplementedError, match="imode"):
         h.get_spinchi_full(energies=es, nk=NK, imode="adaptive")

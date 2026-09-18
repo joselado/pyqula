@@ -3109,7 +3109,10 @@ All of these RPA functions, `get_spinchi_ladder`, `get_spinchi_full`,
 pairs of eigenstates at every k-point whose cost grows as the fourth power of
 the number of sites in the cell. Calling `gpu.set_gpu(True)` first runs that
 kernel on a GPU instead, which pays off once the cell holds more than a few
-sites (see "Running on a GPU").
+sites (see "Running on a GPU"). The pair basis, which the same functions
+take for an interaction that couples different sites, has its own kernel on
+the device and follows the same switch, so the route the interaction picks
+does not change whether the calculation runs on a GPU.
 
 The precision of that sum is chosen with `chi_prec`. On the GPU it is
 `"single"` by default, since the double-precision arithmetic of a consumer
@@ -3242,9 +3245,8 @@ each site to itself, a Hubbard $U$, where it is exact for the transverse
 response, and sum the ladder in the pair basis of `method="pair"` (below) for
 anything that couples different sites, in the same cell or in different ones. The call is the same either way,
 with the same `energies`, `delta`, `nk` and temperature `T` (equal to `delta`
-unless given); what the pair basis does not have is the GPU kernel and the
-Nambu basis, and both are refused there rather than computed with the site
-vertex. With `q` left out, the response is averaged over the k-mesh after
+unless given); what the pair basis does not have is the Nambu basis, which
+is refused there rather than computed with the site vertex. With `q` left out, the response is averaged over the k-mesh after
 dressing each $q$, which is the local RPA response.
 
 ### The three magnon routes
@@ -5307,7 +5309,7 @@ Optional arguments:
 
 - T=None: temperature of the occupations, equal to `delta` when not given
 
-- chi_prec=None: precision of the Lindhard sum, `"single"` or `"double"`; unset, it is `"single"` on the GPU and `"double"` on the CPU. Also accepted by `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles` and `get_magnon_bands(method="rpa")`; `mode="trace"`/`"diagonal"` and an interaction that couples different sites are double precision only and raise for `"single"`. Where the response is computed is the package-wide switch `gpu.set_gpu` (see "Running on a GPU"), and `mode="trace"`/`"diagonal"`, `imode="adaptive"` and an interaction that couples different sites are not available on the GPU and raise
+- chi_prec=None: precision of the Lindhard sum, `"single"` or `"double"`; unset, it is `"single"` on the GPU and `"double"` on the CPU. Also accepted by `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles` and `get_magnon_bands(method="rpa")`, and by `get_transverse_spinchi` and `get_magnon_bands(method="pair")`, which sum the response in the pair basis; `mode="trace"`/`"diagonal"` are double precision only, as is the pair basis on the CPU, and raise for `"single"`. Where the response is computed is the package-wide switch `gpu.set_gpu` (see "Running on a GPU"), and `mode="trace"`/`"diagonal"` and `imode="adaptive"` are not available on the GPU and raise
 
 ### h.get_rpa_kernel_poles()
 Compute the poles of the generic RPA kernel $1-V(q)\chi(q,\omega)$: the frequencies of the collective modes/instabilities of the interacting response.
@@ -5347,6 +5349,8 @@ Optional arguments:
 - q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
 
 - component=None: a pair of spin indices `(a,b)` to return only that spin block instead of the full tensor
+
+- chi_prec=None: precision of the Lindhard sum in the pair basis, as in `get_chi`; the CPU kernel of this route is double precision only and raises for `"single"`
 
 Returns `(energies,chi)` with `chi` one $3N\times3N$ tensor per frequency, in the same $(S_x,S_y,S_z)\times$site layout `get_spinchi_full` uses.
 

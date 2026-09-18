@@ -11,7 +11,9 @@ Status: **Tiers 0-2 and 4 implemented. Tiers 0-2 were measured on a V100
 (833x at N=64, crossover near N=7, section 11) and on a GTX 1060; Tier 4
 (`chi_prec`, single precision, the GPU default) on the GTX 1060, ~220x over
 double-precision numba at N=64. A run at N=100 itself and on a newer card
-are what is left open.** Target: good performance for
+are what is left open. The pair basis, which sections 1 and 10 put out of
+scope and which the public entry points have since come to depend on, was
+ported afterwards and has its own section 12.** Target: good performance for
 1d/2d systems with ~100 sites in the unit cell. Developed on a local
 workstation that at first had no GPU and now has a GTX 1060; data-centre
 timing on a Triton GPU node. See
@@ -436,7 +438,8 @@ rationalization:
   routes -- see section 1. If a 100-site *non-collinear* or non-onsite-V
   case is the real target, that is a different plan, since the site-basis
   vertex refuses those interactions anyway
-  (`_require_onsite_only_V`).
+  (`_require_onsite_only_V`). **The pair basis was ported after all,
+  in section 12; `bsetk/spinflip.py` still has not been.**
 - `htk/eigenvectors.py`'s batched `eigh` (Tier 2 of
   `gpu_porting_plan.md`). Tier 2 here batches the eigendecomposition
   *locally* inside the chi path; folding that into the shared helper so
@@ -715,7 +718,7 @@ asserting `chi_cpugpu="GPU"` actually *reaches* the kernel from
 for the unsupported combinations; and the site-basis Goldstone invariant of
 `tests/chi/test_magnon_goldstone_doped_chain.py` re-run on the device path.
 
-### The scope question, still unanswered
+### The scope question, answered in section 12
 
 Section 1 assumes "the RPA spin response" means the site-basis route. The
 three commits preceding this work are all pair-basis transverse-RPA
@@ -723,3 +726,139 @@ three commits preceding this work are all pair-basis transverse-RPA
 target, the device-residency machinery here transfers but the kernel does
 not -- their cost is linear in N, or a Casida eigenproblem -- and that
 needs its own tier.
+
+That was the right guess about the machinery and the wrong one about the
+kernel: `chitk/pairchi.py`'s contraction turned out to be this same GEMM
+with the site index replaced by the pair index, so the port was a near-copy
+rather than a new tier (section 12). `bsetk/spinflip.py` remains as
+described, a Casida eigenproblem that needs its own.
+
+---
+
+## 12. The pair basis, ported (2026-09-18)
+
+Status: **done**, and it answers the scope question section 11 leaves
+open: the pair basis was the target too.
+
+Section 1 put `chitk/pairchi.py` out of scope, and section 10 listed it as
+a deliberate follow-up, on the grounds that its cost is linear in N rather
+than the N^4 of the site-basis kernel. That reasoning was about the *cost*
+and it still holds. What changed underneath it is *which route the public
+entry points take*: since `f8ead33` any interaction that couples different
+sites is summed in the pair basis even through `get_spinchi_full`,
+`get_spinchi_ladder`, `get_iets_ldos` and `get_magnon_bands`, and
+`chitk/spinchi.py` refused the device outright for exactly those calls. So
+on any Hamiltonian with a V1 or a J1 -- which is most of what the magnon
+work is about -- `gpu.set_gpu(True)` did nothing but raise. That refusal is
+what this closes.
+
+### What landed
+
+- **`src/pyqula/chitk/pairchijax.py`**: `band_pair_plan` (gather +
+  quantized padding), `_pair_operator_tensor`, `_chi_from_tensor`
+  (`lax.map` over frequencies) and `pair_chi0_kmesh_gpu` (batched `eigh`
+  over the mesh, accumulation without host round trips). It is
+  `chijax.py`'s structure with one operator tensor instead of two, since
+  both sides of the pair response carry the same pair operators and
+  TB = conj(TA); it imports `_chi_dtypes` and `PAIR_PAD_QUANTUM` from
+  `chijax` rather than copying them, so `chi_prec` cannot come to mean two
+  different things on the two routes.
+- **The selection rule is this module's, not `chiAB_matrix`'s.**
+  `_accumulate` drops a band pair on `df == 0.` exactly; the site-basis
+  kernel drops it below `delta/100`. Reusing the site-basis rule would
+  agree at zero temperature and silently drop contributions at finite
+  temperature and at small q, where every pair contributes a little.
+  `test_the_gather_keeps_the_pairs_a_finite_temperature_adds` pins the
+  difference on a spectrum pair at q=1e-6.
+- **Dispatch**: `pair_chi0` consults `gpu.get_gpu()`, as the convention of
+  `documentation/gpu_porting_plan.md` requires, and `pairchi._chi_prec`
+  resolves the precision (single on the device, double on the CPU, and the
+  CPU raises for `"single"` rather than quietly answering in double, since
+  `_accumulate` is complex128 only). `chi_prec` is threaded through
+  `pair_rpa_kernel`, `pair_chi_rpa` and `pair_rpa_poles`, and
+  `magnon_bands_pair` now maps its q-path with `spinchi._map_over_q`, so
+  with one device the scan stays in one process instead of forking
+  `parallel.pcall` workers that would each build their own context.
+- **`chitk/spinchi.py`**: the two `NotImplementedError`s of
+  `_pair_route_kwargs` (one for the device, one for `chi_prec`) are gone
+  and `chi_prec` is forwarded to the pair route. The `imode` and Nambu
+  refusals stay.
+
+### Device measurements (GeForce GTX 1060 6GB, 2026-09-18)
+
+Neel honeycomb supercells with U=3, V1=0.5, `nk=8`, 100 frequencies, one
+q-point. `npair` is the size of the pair basis, which is what the
+contraction is quadratic in. The CPU column is `_accumulate`.
+
+| cell | norb | npair | numba | device double | device single |
+|---|---|---|---|---|---|
+| 1x1 | 4 | 32 | 0.104 s | 0.253 s (0.4x) | 0.277 s (0.4x) |
+| 2x2 | 16 | 128 | 68.9 s | 2.37 s (29x) | 0.335 s (206x) |
+
+So there is a crossover in `npair` between 32 and 128, and below it the
+device loses -- the same shape the batched `eigh` sweep found in the matrix
+size. This is an argument for the switch staying opt-in, which it is, and
+not for a size threshold inside the dispatch: unlike `eigh`, whose callers
+cannot see how big their matrices are, anyone calling the pair basis knows
+how large their interaction's support is.
+
+One asymmetry to keep in mind before reading the 206x as a device number:
+`_accumulate` is a **serial** numba kernel (`@jit(nopython=True)`, no
+`parallel=True`), where the site-basis `chiAB_matrix` is `prange`-parallel.
+Part of that factor is therefore the CPU side using one core. Putting a
+`prange` on `_accumulate`'s outer band loop is an untaken CPU-side win of
+perhaps the thread count, and it would shrink these ratios accordingly
+without changing which side is faster at `npair=128`.
+
+### Correctness (measured on the device, not on the CPU fallback)
+
+| quantity | double | single |
+|---|---|---|
+| bare `pair_chi0` against `_accumulate` | 1.4e-15 | 2.6e-7 |
+| dressed `pair_chi_rpa` | 6.4e-15 | 3.6e-7 |
+| `get_spinchi_full` through the reroute | -- | 3.7e-7 |
+
+The dressed response stays at the rounding of the bare one here, rather
+than being amplified by the condition number of `1 + K chi0` the way the
+site-basis dressing is at q=0; that amplification is a property of how
+close the calculation sits to an instability, so the test tolerances keep
+the site-basis file's looser dressed bound rather than assuming this.
+
+The Goldstone invariant of the J1=3 Neel honeycomb survives both
+precisions. The smallest eigenvalue of `1 + K chi0` at q=0, w=0 goes as
+delta^2: 6.35e-6 at delta=1e-2 and 6.33e-8 at delta=1e-3 on the CPU and on
+the device in double precision (agreeing to 9e-16 absolutely), and 5.54e-8
+in single -- still a hundredfold drop for a tenfold delta, so single
+precision does not put a floor under the mode.
+
+### Test coverage
+
+`tests/chi/test_pairchi_gpu.py`, 28 tests: kernel-vs-numba across
+system/q/temperature; the selection rule; padding to lengths that are not
+the survivor count; `pair_pad` too small raising instead of truncating; a
+jit-cache assertion that a 3-q scan adds at most one compilation;
+end-to-end agreement through `pair_chi_rpa`, `get_spinchi_full` and
+`magnon_bands_pair`; a spy asserting the switch *reaches* the kernel from
+`get_spinchi_full`, `get_spinchi_ladder`, `get_transverse_spinchi` and
+`get_magnon_bands(method="pair")`, and that the default never does; the
+CPU refusal of `chi_prec="single"`; and the Goldstone invariant above.
+`tests/chi/test_pair_basis_reroute.py` lost its assertion that the device
+was refused, which is now wrong.
+
+### What is still open here
+
+- **The rest of the pair-basis tail.** Only `chi0` moved. `pair_chi_rpa`
+  still does `nw` host-side `npair^3` inversions (`algebra.inv(iden +
+  K@c0)`) and `pair_rpa_poles` an `np.linalg.eigvals` per frequency. At
+  `npair=128` those were noise next to a 63 s kernel; at 0.68 s they are
+  not, and the same re-profiling section 11 asks for on the site-basis
+  route is now due here. `jnp.linalg.solve` over a stacked frequency axis
+  is the obvious shape.
+- **A prange on `_accumulate`**, so the CPU baseline is not single-threaded
+  (above).
+- **A larger cell than 2x2.** The sweep above stops where the numba
+  baseline stops being affordable; the device side alone would go further.
+- **`bsetk/spinflip.py`** (TDHF, the third magnon route) is still not
+  ported, and its cost is a Casida eigenproblem rather than this
+  contraction, so it needs its own tier -- as does `bsetk/kernel.py`'s
+  ladder build, which is where a screened BSE spends its time.

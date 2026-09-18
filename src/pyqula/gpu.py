@@ -8,8 +8,9 @@ pyqula runs on the CPU unless it is asked not to:
     gpu.set_gpu(False)    # back to the CPU
 
 This is the single control. Routines with a GPU path (the KPM moments of
-kpmtk/kpmjax.py, the RPA Lindhard kernel of chitk/chijax.py, the batched
-dense diagonalization of htk/eigenvectors.py) consult get_gpu() and pick
+kpmtk/kpmjax.py, the RPA Lindhard kernel of chitk/chijax.py in the site
+basis and of chitk/pairchijax.py in the interaction's pair basis, the
+batched dense diagonalization of htk/eigenvectors.py) consult get_gpu() and pick
 their backend from it, and the jax modules with no CPU/GPU branch of their
 own (scftk/densitydensity_jax.py, scftk/vjinteraction_jax.py,
 graphenetk/relax.py, transporttk/kappa_jax.py, keldyshtk/current_jax.py,

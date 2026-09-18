@@ -252,6 +252,12 @@ process as the CPU perf plan.
   measurements in `future_development/gpu_rpa_spin_response.md`. It follows the conventions
   of this file (the `kpmjax` fallback pattern, an import kept inside the GPU branch) and is
   implemented through its Tier 2. Its `chi_cpugpu` argument is now the global switch.
+  The **pair-basis** kernel behind the same entry points, taken whenever the interaction
+  couples different sites (`chitk/pairchi.py::_accumulate` ->
+  `chitk/pairchijax.py`), was ported afterwards and is section 12 of that plan: the same
+  contraction with the site index replaced by the pair index, measured on the GTX 1060 at
+  29x in double and 206x in single at 128 pairs, and *slower* than the CPU at 32, so the
+  crossover is in the size of the pair basis.
 
 ## Process notes
 

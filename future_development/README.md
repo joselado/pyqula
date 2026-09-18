@@ -54,7 +54,13 @@ already reached once.
   FP64 penalty is why single precision, `chi_prec`, is the GPU default, at
   ~220x), and what is still open: a run at N=100 itself, a
   newer card, re-profiling the deferred host-side items now that the kernel
-  is fast, and whether the pair-basis response wanted a port of its own.
+  is fast. Its section 12 settles the question of whether the pair-basis
+  response wanted a port of its own: it did, since the public entry points
+  now take that route for any interaction between different sites and the
+  device was refused there outright, and the kernel turned out to be the
+  same contraction with the site index replaced by the pair index (29x
+  double, 206x single at 128 pairs on a GTX 1060, and slower than the CPU at
+  32, so the crossover is in the size of the pair basis).
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with
   the Goldstone/Ward-identity measurements that settle it.

@@ -74,6 +74,27 @@ import numpy as np
 from numba import jit
 
 from .. import algebra
+from .. import gpu
+
+
+def _chi_prec(chi_prec):
+    """Resolve the precision of the Lindhard contraction: single where a
+    device makes it worth it, double otherwise. The CPU kernel below is
+    complex128 only, so asking it for single precision is refused rather
+    than silently answered in double -- the same shape chitk/chiAB.py's
+    guard has for the site-basis kernel."""
+    use_gpu = gpu.get_gpu() # the package-wide CPU/GPU switch
+    if chi_prec is None: # the fast option where one exists
+        return "single" if use_gpu else "double"
+    if chi_prec not in ("single", "double"):
+        raise ValueError("chi_prec must be 'single' or 'double', got "
+                         + repr(chi_prec))
+    if chi_prec == "single" and not use_gpu:
+        raise NotImplementedError("chi_prec='single' is not implemented for "
+                "the CPU kernel of the pair basis (chitk.pairchi._accumulate "
+                "is double precision); call pyqula.gpu.set_gpu(True) for the "
+                "device kernel, which has both, or use chi_prec='double'")
+    return chi_prec
 
 
 def spinorbital_pairs(W, norb, tol=1e-10):
@@ -185,10 +206,21 @@ def _occupations(e, T):
     return 0.5*(1. - np.tanh(0.5*e/T))
 
 
-def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20, T=None):
+def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20, T=None,
+              chi_prec=None):
     """Return the non-interacting response in the pair basis, shape
     (npair,npair,nomega), chi0_{P,P'} = <<A_P ; A_P'^dag>>. T is the
-    temperature of the occupations, a step at the Fermi energy by default."""
+    temperature of the occupations, a step at the Fermi energy by default.
+
+    Whether the Lindhard contraction runs on the CPU (numba, _accumulate)
+    or on the GPU (jax, chitk/pairchijax.py) is the package-wide switch of
+    pyqula.gpu. chi_prec is the precision of that contraction, "single" or
+    "double"; it defaults to "single" under pyqula.gpu.set_gpu(True), where
+    a consumer card's double precision is an order of magnitude slower, and
+    to "double" on the CPU, whose kernel has no single precision path. The
+    eigendecompositions and the occupations stay in double either way, and
+    the result is complex128 either way."""
+    chi_prec = _chi_prec(chi_prec)
     if energies is None: energies = np.linspace(-1., 1., 100)
     energies = np.array(energies, dtype=np.float64)
     if q is None: q = [0., 0., 0.]
@@ -199,9 +231,28 @@ def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20, T=None):
     iP = np.array([p[0] for p in pairs], dtype=np.int64)
     jP = np.array([p[1] for p in pairs], dtype=np.int64)
     ds = [p[2] for p in pairs]
+    ks = g.get_kmesh(nk=nk)
+    if gpu.get_gpu(): # device path, the whole k-mesh at once
+        # imported here, never at module scope: pairchijax flips
+        # process-global jax configuration at import time, and the CPU path
+        # runs under parallel.pcall's fork-based pool
+        from .pairchijax import pair_chi0_kmesh_gpu
+        # hk(k) is sparse for an is_sparse Hamiltonian, and np.array of
+        # those gives a dtype=object array that jax rejects, so densify
+        hks1 = np.array([algebra.todense(hk(np.array(k, dtype=np.float64)))
+                         for k in ks], dtype=np.complex128)
+        hks2 = np.array([algebra.todense(hk(np.array(k, dtype=np.float64)+q))
+                         for k in ks], dtype=np.complex128)
+        # the pair operator carries exp(2 pi i (k+q).R), as below
+        phases = np.array([[g.bloch_phase(d, np.array(k, dtype=np.float64)+q)
+                            for d in ds] for k in ks], dtype=np.complex128)
+        return pair_chi0_kmesh_gpu(hks1, hks2, phases, iP, jP, energies, T,
+                                   delta, chi_prec=chi_prec)
+    # the accumulator of the CPU path, allocated after the branch above
+    # because it is the largest array here (npair^2 x nomega) and the
+    # device path has no use for it
     chi0 = np.zeros((len(pairs), len(pairs), len(energies)),
                     dtype=np.complex128)
-    ks = g.get_kmesh(nk=nk)
     for k in ks:
         k = np.array(k, dtype=np.float64)
         e1, w1 = algebra.eigh(hk(k))
@@ -350,7 +401,7 @@ def _require_recorded_exchange(h, channels, tol=1e-8):
 
 
 def pair_rpa_kernel(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
-                    T=None):
+                    T=None, chi_prec=None):
     """Return (energies,kernels): the ladder kernel 1 + K chi0 in the pair
     basis, one matrix per frequency. Its zeros are the collective modes --
     the magnons -- exactly as chitk.rpa's 1 - V chi is for the site
@@ -359,13 +410,14 @@ def pair_rpa_kernel(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
     energies = np.array(energies, dtype=np.float64)
     pairs, xvals, diag, K = _setup(h, W=W, q=q)
     chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk,
-                     T=T)
+                     T=T, chi_prec=chi_prec)
     iden = np.identity(len(pairs), dtype=np.complex128)
     return energies, [iden + K@chi0[:, :, w] for w in range(len(energies))]
 
 
 def pair_chi_rpa(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
-                 component=None, T=None, ops=None, opsB=None):
+                 component=None, T=None, ops=None, opsB=None,
+                 chi_prec=None):
     """Return (energies,chi): the RPA-dressed SPIN response, one 3N x 3N
     tensor per frequency in the (Sx,Sy,Sz) x site convention
     chitk.spinchi.spinchi_full uses, so the two are directly comparable.
@@ -418,7 +470,7 @@ def pair_chi_rpa(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
         K = K2
         index = {p: n for n, p in enumerate(pairs)}
     chi0 = pair_chi0(h, pairs, q=q, energies=energies, delta=delta, nk=nk,
-                     T=T)
+                     T=T, chi_prec=chi_prec)
     iden = np.identity(len(pairs), dtype=np.complex128)
     nop = len(ops)
     L = np.zeros((nop*nsite, len(pairs)), dtype=np.complex128)
@@ -479,10 +531,12 @@ def magnon_bands_pair(h, qpath=None, nq=20, **kwargs):
     Returns (qs,ws,gammas), the same flat-array convention as
     chitk.spinchi.magnon_bands: judge how well defined a mode is by
     abs(gammas), not by its sign."""
-    from .. import parallel
+    from .spinchi import _map_over_q
     qpath = h.geometry.get_kpath(qpath, nk=nq)
     def f(q): return pair_rpa_poles(h, q=q, **kwargs)
-    outs = parallel.pcall(f, qpath)
+    # serially under pyqula.gpu.set_gpu(True): with a single device,
+    # pcall's worker processes are contention rather than parallelism
+    outs = _map_over_q(f, qpath)
     qs, ws, gammas = [], [], []
     for iq, poles in enumerate(outs):
         for (w, gm) in poles:

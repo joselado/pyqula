@@ -75,17 +75,6 @@ def _pair_route_kwargs(H,kwargs):
             "sites, so its RPA spin response is summed in the pair basis "
             "(chitk.pairchi), which does not take %s; the accepted "
             "keyword arguments are %s"%(unknown,list(_PAIR_ROUTE_KWARGS)))
-    if gpu.get_gpu():
-        raise NotImplementedError("the GPU backend is not implemented for "
-            "an interaction that couples different sites: its RPA spin "
-            "response is summed in the pair basis (chitk.pairchi), which "
-            "has no device backend; call pyqula.gpu.set_gpu(False)")
-    if kwargs.get("chi_prec",None) not in (None,"double"): # unset is double here
-        raise NotImplementedError("chi_prec=%r is not implemented for an "
-            "interaction that couples different sites: its RPA spin "
-            "response is summed in the pair basis (chitk.pairchi), which "
-            "is double precision; leave chi_prec unset or use "
-            "'double'"%(kwargs["chi_prec"],))
     if kwargs.get("imode","mesh")!="mesh":
         raise NotImplementedError("imode=%r is not implemented for an "
             "interaction that couples different sites, whose RPA spin "
@@ -101,7 +90,10 @@ def _pair_route_kwargs(H,kwargs):
     T = kwargs.get("T",None)
     return dict(energies=kwargs.get("energies",np.linspace(-3.0,3.0,100)),
                 delta=delta,nk=kwargs.get("nk",60),
-                T=delta if T is None else T)
+                T=delta if T is None else T,
+                # unset means the fast option of whichever backend
+                # pyqula.gpu selects, as on the site-basis route
+                chi_prec=kwargs.get("chi_prec",None))
 
 
 def _pair_route_response(H,ops,opsB,**kwargs):
