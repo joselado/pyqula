@@ -117,8 +117,16 @@ import numpy as np
 from numba import jit,prange
 from .. import algebra
 from .. import parallel
+from .. import gpu
 from .interaction import bare_interaction,interaction_at_q,qkey
 from .pairbasis import select_bands
+
+
+def _chi_prec(chi_prec):
+    """Resolve the precision of the Brillouin zone sum; polarizability_jit
+    is complex128 only, which is the case gpu.resolve_prec covers"""
+    return gpu.resolve_prec(chi_prec,"chi_prec",
+            "bsetk.screening.polarizability_jit")
 
 
 class ScreenedInteraction():
@@ -299,14 +307,20 @@ def mesh_eigenstates(h,nk=10):
     h = h.get_multicell().get_dense()
     kpoints = np.array(h.geometry.get_kmesh(nk=nk),dtype=np.float64)
     hk = h.get_hk_gen()
-    eks,cks = [],[]
-    for k in kpoints:
-        e,w = algebra.eigh(hk(k))
-        eks.append(e) ; cks.append(np.array(w.T,dtype=np.complex128))
-    return kpoints,np.array(eks),np.array(cks)
+    # one batched diagonalization of the whole mesh rather than a Python
+    # loop over scalar eigh: this is htk/eigenvectors.py's shared helper,
+    # so it follows the package's thread count and its GPU switch too
+    from ..htk.eigenvectors import parallel_diagonalization
+    hks = np.array([algebra.todense(hk(k)) for k in kpoints],
+            dtype=np.complex128)
+    ek,ws = parallel_diagonalization(hks)
+    # eigenvectors come back as columns; this layout wants states as rows
+    ck = np.array(np.transpose(ws,(0,2,1)),dtype=np.complex128)
+    return kpoints,np.array(ek),ck
 
 
-def static_polarizability(h,nk=10,exclude=None,kpoints=None,ek=None,ck=None):
+def static_polarizability(h,nk=10,exclude=None,kpoints=None,ek=None,ck=None,
+        chi_prec=None):
     """Return (qs,chi0), the static RPA polarizability of h on its k-mesh.
 
     chi0 has shape (nq,norb,norb) and qs are the mesh points themselves --
@@ -320,7 +334,17 @@ def static_polarizability(h,nk=10,exclude=None,kpoints=None,ek=None,ck=None):
 
     kpoints/ek/ck let a caller that has already diagonalized on this mesh
     (a PairBasis, say) pass its own eigenstates in rather than repeating
-    the work; they must be on the mesh get_kmesh(nk=nk) returns."""
+    the work; they must be on the mesh get_kmesh(nk=nk) returns.
+
+    Whether the Brillouin zone sum runs on the CPU (numba,
+    polarizability_jit) or on the GPU (jax, bsetk/screeningjax.py) is the
+    package-wide switch of pyqula.gpu. chi_prec is the precision of that
+    sum, "single" or "double"; it defaults to "single" under
+    pyqula.gpu.set_gpu(True), where a consumer card's double precision is
+    an order of magnitude slower, and to "double" on the CPU, whose kernel
+    has no single precision path. The eigenstates stay in double either
+    way, and chi0 comes back complex128 either way."""
+    chi_prec = _chi_prec(chi_prec)
     if h.has_eh:
         raise ValueError("the polarizability is not implemented for "
             "Nambu/BdG Hamiltonians (h.has_eh). The eigenstates of a BdG "
@@ -357,8 +381,15 @@ def static_polarizability(h,nk=10,exclude=None,kpoints=None,ek=None,ck=None):
                 "bands, or use screening='rpa'")
     qs = kpoints # the q-mesh is the k-mesh
     ikq = mesh_sum_index(kpoints,qs)
-    parallel.set_num_threads() # honor parallel.py's thread configuration
-    chi0 = polarizability_jit(ck,ek,occ,ikq,allowed)
+    if gpu.get_gpu(): # device path, see bsetk/screeningjax.py
+        # imported here, never at module scope: screeningjax flips
+        # process-global jax configuration at import time, and the CPU
+        # path runs under parallel.pcall's fork-based pool
+        from .screeningjax import polarizability_gpu
+        chi0 = polarizability_gpu(ck,ek,occ,ikq,allowed,chi_prec=chi_prec)
+    else:
+        parallel.set_num_threads() # honor parallel.py's thread configuration
+        chi0 = polarizability_jit(ck,ek,occ,ikq,allowed)
     chi0 = (chi0 + np.conj(np.transpose(chi0,(0,2,1))))/2. # exactly Hermitian
     return qs,chi0
 
@@ -449,7 +480,8 @@ def charge_channel(vq,chi0q,ns,has_spin):
 
 
 def screened_interaction(h,V=None,nk=10,screening="rpa",exclude=None,
-        channel="charge",kpoints=None,ek=None,ck=None,tol=1e-6):
+        channel="charge",kpoints=None,ek=None,ck=None,tol=1e-6,
+        chi_prec=None):
     """Return the static RPA screened interaction of h as a
     ScreenedInteraction.
 
@@ -487,7 +519,7 @@ def screened_interaction(h,V=None,nk=10,screening="rpa",exclude=None,
             "exclude from the polarization, as exclude=(vbands,cbands)")
     v = bare_interaction(h,V=V) # bare interaction, real-space dictionary
     qs,chi0 = static_polarizability(h,nk=nk,exclude=exclude,
-            kpoints=kpoints,ek=ek,ck=ck)
+            kpoints=kpoints,ek=ek,ck=ck,chi_prec=chi_prec)
     norb = chi0.shape[1]
     if norb!=h.intra.shape[0]:
         raise ValueError("the interaction and the Hamiltonian disagree on "

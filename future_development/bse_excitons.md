@@ -998,3 +998,89 @@ invisible at Q=0.
   of `chitk/rpa.py`'s independent frequency-scan RPA.
 - `tests/bse/test_bse_tdhf_cluster.py` -- 0D cluster against a
   molecular-orbital TDHF built from explicit four-index Coulomb integrals.
+
+---
+
+## The polarizability on a GPU (2026-09-18)
+
+Status: **implemented, and it pays only in single precision on a consumer
+card.** `bsetk/screeningjax.py` is the device counterpart of
+`polarizability_jit`, reached the same way as every other GPU path in the
+package: `gpu.set_gpu(True)`, with `chi_prec` choosing the precision per
+call (`static_polarizability`, `screened_interaction`, and so
+`h.get_polarizability`, `h.get_screened_interaction`,
+`h.get_bse(screening="rpa"/"crpa")`). It follows
+`documentation/gpu_porting_plan.md`'s conventions and
+`future_development/gpu_rpa_spin_response.md`'s kernel shape: the
+transition index `g = (k,n,m)` is flattened and
+
+    chi0(q) = (rho^T * w) @ conj(rho)
+
+is one `(norb x G) x (G x norb)` GEMM per q-point, `G = nk*nb^2`.
+
+### It masks where the other kernels gather, and that was measured
+
+`chitk/chijax.py` and `chitk/pairchijax.py` gather the contributing
+transitions into a padded list, because their contraction is per k-point
+and carries a frequency axis. The first version here did the same and it
+was the wrong call: the output is only `norb x norb`, so the GEMM is
+small next to the cost of *preparing* it, and the per-q host-side numpy
+gather was essentially the entire device time. Building `rho` and the
+weights on the device and zeroing the excluded transitions instead does
+about twice the arithmetic and none of the host work. It also removes the
+padding quantum entirely -- every shape is fixed by `(nk,nb,norb)` alone,
+so the kernel compiles once whatever the occupations do, which
+`tests/bse/test_screening_gpu.py` asserts.
+
+### Measurements (GeForce GTX 1060 6GB, 2026-09-18)
+
+Gapped honeycomb supercells, `nk=6` (36 k-points, 36 q-points), minimum of
+three warm runs. The numba column is `polarizability_jit` on 8 threads.
+
+| cell | norb | numba | device double | device single |
+|---|---|---|---|---|
+| 1x1 | 4 | 0.016 s | 0.037 s (0.44x) | 0.019 s (0.89x) |
+| 2x2 | 16 | 0.027 s | 0.273 s (0.10x) | 0.041 s (0.66x) |
+| 3x3 | 36 | 0.384 s | 1.648 s (0.23x) | 0.049 s (7.9x) |
+| 4x4 | 64 | 2.942 s | 5.005 s (0.59x) | 0.442 s (6.6x) |
+
+**Single precision wins from about norb=36 up, by 7-8x. Double precision
+loses at every size measured.** That is the card, not the kernel: a bare
+FP64 GEMM on a GTX 1060 runs at 1/21 of its FP32 rate (measured in
+`gpu_rpa_spin_response.md` section 11), and masking rather than gathering
+doubles the arithmetic this kernel has to push through that penalty. On a
+data-centre card, where FP64 is half of FP32 rather than a thirty-second,
+double should behave like single does here -- **unmeasured**, and worth
+one run before anyone relies on it.
+
+The practical consequence is that `gpu.set_gpu(True)` with an explicit
+`chi_prec="double"` makes this particular route slower on this hardware.
+That is deliberate rather than papered over: the switch is documented as
+explicit, and silently sending a double-precision request back to the CPU
+is the failure mode the switch exists to prevent. The default under the
+switch is single, which is the case that pays.
+
+### Incidental, and it helps the CPU too
+
+`mesh_eigenstates` diagonalized the k-mesh in a Python loop over scalar
+`algebra.eigh`. It now calls `htk/eigenvectors.py`'s
+`parallel_diagonalization`, so it is batched over numba threads on the
+CPU and follows the same switch onto the device above
+`gpu_min_dimension`. This is one of the per-k `eigh` loops the GPU survey
+listed as a mechanical win; `bsetk/pairbasis.py:59` is the other one in
+this subpackage and is still unbatched.
+
+### What is still open
+
+- **A data-centre card**, to see whether double precision behaves the way
+  the FP64 ratio predicts (above).
+- **A chunk over k.** `rho` is materialized at `(nk, nb, nb, norb)` for
+  one q-point -- 75 MB at nk=36, nb=64, norb=64 in single. `lax.map` over
+  q keeps one alive at a time, but a much larger mesh or cell will want
+  the k axis chunked as well, in the style of `kpmtk/kpmjax.py`'s
+  `gpu_batch_size`.
+- **`bsetk/kernel.py::direct_block_jit`**, the ladder build, which is
+  where a screened BSE actually spends its time (`npair^2 * norb^2` once
+  screening is on, 21.6 s and 1.9 GB at nk=20 per "Measured cost of the
+  dense solver" above). It is the next candidate and needs the k-block
+  restructuring described there, not this file's shape.

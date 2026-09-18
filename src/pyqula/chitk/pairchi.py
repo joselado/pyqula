@@ -78,23 +78,12 @@ from .. import gpu
 
 
 def _chi_prec(chi_prec):
-    """Resolve the precision of the Lindhard contraction: single where a
-    device makes it worth it, double otherwise. The CPU kernel below is
-    complex128 only, so asking it for single precision is refused rather
-    than silently answered in double -- the same shape chitk/chiAB.py's
-    guard has for the site-basis kernel."""
-    use_gpu = gpu.get_gpu() # the package-wide CPU/GPU switch
-    if chi_prec is None: # the fast option where one exists
-        return "single" if use_gpu else "double"
-    if chi_prec not in ("single", "double"):
-        raise ValueError("chi_prec must be 'single' or 'double', got "
-                         + repr(chi_prec))
-    if chi_prec == "single" and not use_gpu:
-        raise NotImplementedError("chi_prec='single' is not implemented for "
-                "the CPU kernel of the pair basis (chitk.pairchi._accumulate "
-                "is double precision); call pyqula.gpu.set_gpu(True) for the "
-                "device kernel, which has both, or use chi_prec='double'")
-    return chi_prec
+    """Resolve the precision of the Lindhard contraction. The CPU kernel
+    below is complex128 only, which is the case gpu.resolve_prec covers;
+    chitk/chiAB.py's site-basis guard is a different one, since its numba
+    kernel follows the dtype of its input and so takes both."""
+    return gpu.resolve_prec(chi_prec, "chi_prec",
+                            "chitk.pairchi._accumulate")
 
 
 def spinorbital_pairs(W, norb, tol=1e-10):

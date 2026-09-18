@@ -45,7 +45,11 @@ already reached once.
 
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a
-  quantics tensor-train route to large k-meshes.
+  quantics tensor-train route to large k-meshes. Its last section is the
+  GPU port of the static polarizability behind the screened interaction,
+  and why that kernel masks where the other device kernels gather: it is
+  the one path in the package that loses in double precision on a
+  consumer card (7-8x in single from 36 orbitals up, 0.1-0.6x in double).
 - [`gpu_rpa_spin_response.md`](gpu_rpa_spin_response.md) -- the jax port
   of the Lindhard kernel behind the site-basis spin response
   (now reached with `gpu.set_gpu(True)`): what the switch moves to the device and what stays

@@ -258,6 +258,15 @@ process as the CPU perf plan.
   contraction with the site index replaced by the pair index, measured on the GTX 1060 at
   29x in double and 206x in single at 128 pairs, and *slower* than the CPU at 32, so the
   crossover is in the size of the pair basis.
+- **The static polarizability behind the screened interaction**
+  (`bsetk/screening.py::polarizability_jit` -> `bsetk/screeningjax.py`), which every
+  `screening="rpa"/"crpa"` BSE pays for, is ported too; the write-up and its measurements
+  are the last section of `future_development/bse_excitons.md`. It is the one device path
+  in the package that **loses in double precision on the GTX 1060** at every size measured
+  (0.1-0.6x) while winning 7-8x in single from about 36 orbitals up: its output is only
+  `norb x norb`, so it masks rather than gathers, which doubles the arithmetic pushed
+  through that card's 21x FP64 penalty. A data-centre card is expected to behave
+  differently and has not been tried.
 
 ## Process notes
 

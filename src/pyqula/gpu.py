@@ -100,6 +100,29 @@ def apply():
     jax.config.update("jax_default_device",get_device())
 
 
+def resolve_prec(prec,name,cpu_kernel):
+    """Resolve a per-call precision argument for a routine whose CPU
+    kernel is double precision only: single where the device makes it
+    worth it, double otherwise.
+
+    name is the argument's own name, for the messages, and cpu_kernel
+    names the double-only kernel so that the refusal says which one it is.
+    Asking the CPU for single precision is refused rather than silently
+    answered in double, since a run that quietly ignored the precision it
+    was given is the same failure mode set_gpu exists to prevent"""
+    if prec is None: # the fast option where one exists
+        return "single" if _enabled else "double"
+    if prec not in ("single","double"):
+        raise ValueError(name+" must be 'single' or 'double', got "
+                +repr(prec))
+    if prec=="single" and not _enabled:
+        raise NotImplementedError(name+"='single' is not implemented for "
+                "the CPU kernel of this routine ("+cpu_kernel+" is double "
+                "precision); call pyqula.gpu.set_gpu(True) for the device "
+                "kernel, which has both, or use "+name+"='double'")
+    return prec
+
+
 def check_removed_arguments(kwargs,name):
     """Raise for the per-call backend arguments this switch replaced, so
     that code passing them fails instead of silently running on the CPU"""

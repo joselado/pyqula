@@ -4551,6 +4551,18 @@ by memory bandwidth rather than by arithmetic. The batched diagonalization
 sits in between, and only pays from matrices of about 32 orbitals upward,
 so below that size it stays on the CPU even with the switch set.
 
+One sum runs against that pattern and is worth knowing about before
+setting the switch. The static polarizability behind the screened
+interaction (`get_polarizability`, `get_screened_interaction` and any
+`get_bse(screening=...)`) produces only a small matrix per q-point out of
+a very long sum, so what it asks of the device is a great many small
+products rather than a few large ones. On a consumer card it is faster
+than the processor in single precision from about 36 orbitals upward, by
+around seven times, and slower than the processor in double precision at
+every size, which is the one place in the library where asking for double
+precision on a GPU costs rather than buys. Leaving `chi_prec` unset gives
+single precision there, which is the case that pays.
+
 Precision is a separate choice, made per call rather than globally, because
 it changes the numbers and not only where they are computed. The KPM
 moments take `kpm_prec`, the Lindhard sum takes `chi_prec` and the batched
@@ -5458,10 +5470,12 @@ Optional arguments:
 
 - channel="charge": `"charge"` (standard GW, on site indices, spin-rotation invariant) or `"orbital"` (the full spin-orbital matrix, which breaks SU(2))
 
+- chi_prec=None: precision of the Brillouin zone sum that builds $\chi_0$, `"single"` or `"double"`; unset, it is `"single"` on the GPU and `"double"` on the CPU, whose kernel is double precision only and raises for `"single"`. Where that sum runs is the package-wide switch `gpu.set_gpu` (see "Running on a GPU"). This is the one sum in the library that a consumer card computes *more slowly* in double precision than the processor does, so on such a card leave it unset
+
 The returned object exposes `qs`, `Wq`, `chi0`, `bare`, `epsmin` (the smallest dielectric eigenvalue found over the mesh), `.at(q)` for the value at a mesh q-point and `.get_dict()` for the inverse Fourier transform back to a real-space interaction. Raises if an eigenvalue of $\varepsilon(q)$ reaches zero, which is a charge or spin instability of the mean field at that wavevector.
 
 ### h.get_polarizability()
-Return `(qs,chi0)`, the static polarizability of this Hamiltonian on its k-mesh, in the spin-orbital basis; `chi0` has shape `(nq,norb,norb)`. Takes `nk`, `exclude` and the precomputed-eigenstate arguments of `get_screened_interaction`.
+Return `(qs,chi0)`, the static polarizability of this Hamiltonian on its k-mesh, in the spin-orbital basis; `chi0` has shape `(nq,norb,norb)`. Takes `nk`, `exclude`, `chi_prec` and the precomputed-eigenstate arguments of `get_screened_interaction`.
 
 ### h.get_fermi_surface()
 Compute the spectral weight on a 2D k-mesh at a single energy.
