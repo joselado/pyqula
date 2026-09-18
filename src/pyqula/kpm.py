@@ -120,7 +120,8 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
               ntries=20,ewindow=None,frand=None,
               operator=None,x=None,**kwargs):
   """Return two arrays with energies and local DOS. Extra **kwargs (e.g.
-  kpm_cpugpu, kpm_prec) are forwarded to random_trace/get_moments_batch."""
+  kpm_prec) are forwarded to random_trace/get_moments_batch; the CPU/GPU
+  backend is the package-wide switch of pyqula.gpu."""
   if npol is None: npol = ne
   mus = random_trace(m_in/scale,ntries=ntries,n=npol,fun=frand,
           operator=operator,**kwargs)
@@ -173,8 +174,9 @@ def total_energy(m_in,scale=10.,npol=None,ne=500,ntries=20):
 
 
 def random_trace(m_in,ntries=20,n=200,fun=None,operator=None,**kwargs):
-  """ Calculates local DOS using the KPM. Extra **kwargs (e.g. kpm_cpugpu,
-  kpm_prec) are forwarded to get_moments_batch/get_moments_A_batch."""
+  """ Calculates local DOS using the KPM. Extra **kwargs (e.g. kpm_prec)
+  are forwarded to get_moments_batch/get_moments_A_batch; the CPU/GPU
+  backend is the package-wide switch of pyqula.gpu."""
   m = csc(m_in) # sparse matrix
   nd = m.shape[0] # length of the matrix
   if fun is not None: # check that dimensions are fine

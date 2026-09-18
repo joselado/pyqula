@@ -1,7 +1,15 @@
 # GPU porting plan
 
-Status: **Tiers 1 and 3 done** (KPM batched GPU path; the forced-CPU modules no longer
-switch jax's platform globally); Tiers 2 and 4 not started. A
+Status: **Tiers 1, 2 and 3 done** (KPM batched GPU path; batched dense diagonalization;
+the forced-CPU modules no longer switch jax's platform behind the package's back); Tier 4
+not started.
+
+**The backend is now one package-wide switch, `pyqula/gpu.py`.** `gpu.set_gpu(True)` puts
+every GPU-capable routine on the device and points jax's default device there, which is
+also how the jax modules with no backend branch of their own follow it; the default is the
+CPU. The per-call `kpm_cpugpu`/`chi_cpugpu` arguments this file describes below were
+removed in favour of it (they now raise, naming `set_gpu`), so read them as history. What
+stays per-call is precision: `kpm_prec`, `chi_prec`, `eigh_prec`. A
 separate tier for the RPA response kernel (`chi_cpugpu`, with `chi_prec` single precision
 as the GPU default) is implemented and measured on a V100 and a GTX 1060 -- see
 `future_development/gpu_rpa_spin_response.md`.
@@ -228,11 +236,13 @@ Each tier is independent and needs explicit user confirmation before implementat
 process as the CPU perf plan.
 
 - **Tier 1 — finish the KPM batched GPU path** (item 2 above). **Done.**
-- **Tier 2 — benchmark batched `eigh` on GPU** (item 1 above). Requires the size/batch
-  sweep described above before committing to an implementation; likely the highest
-  eventual payoff given how many call sites feed off `htk/eigenvectors.py`, but also the
-  most engineering (deciding the CPU/GPU crossover, wiring a backend switch analogous to
-  `kpm_cpugpu` through `dos.py`/`spectrum.py`/`bandstructure.py`/etc.).
+- **Tier 2 — batched `eigh` on GPU** (item 1 above). **Done.** The sweep above settled the
+  crossover, and `htk/eigenvectorsjax.py` holds the device path: `peigh`/`peigvalsh` send a
+  stack to it when `gpu.set_gpu(True)` is set and the matrices are at least
+  `eigenvectors.gpu_min_dimension` (32) wide, chunked by matrix entries because of the
+  cuSOLVER workspace. No call site needed changing, since the switch is global and both
+  entry points keep their signatures; `eigh_prec="single"` is available per call and is not
+  the default anywhere. Tests: `tests/parallel/test_eigh_gpu.py`.
 - **Tier 3 — audit the forced-CPU jax modules** (item 4 above). **Done**: no GPU option,
   the CPU placement is now local to those modules.
 - **Tier 4 — research spike only, not committed work**: sparse/Green's-function GPU
@@ -240,9 +250,8 @@ process as the CPU perf plan.
 - **The RPA response kernel** (`chitk/chiAB.py::chiAB_matrix`, the `N^4` Lindhard
   contraction behind every spin/charge RPA entry point) has its own plan and its own
   measurements in `future_development/gpu_rpa_spin_response.md`. It follows the conventions
-  of this file (`chi_cpugpu="CPU"|"GPU"`, the `kpmjax` fallback pattern, an import kept
-  inside the GPU branch) and is implemented through its Tier 2; what is missing is the
-  speedup itself, which needs a GPU node.
+  of this file (the `kpmjax` fallback pattern, an import kept inside the GPU branch) and is
+  implemented through its Tier 2. Its `chi_cpugpu` argument is now the global switch.
 
 ## Process notes
 
@@ -250,9 +259,10 @@ process as the CPU perf plan.
   correctness must be verified manually, the same way Tier 1/2 of the CPU perf plan were:
   new tests under `tests/` following the existing numerical-equivalence pattern (e.g.
   `tests/kpm/test_kpm_moments_A.py`), run against the CPU reference implementation.
-- Keep GPU dispatch **explicit**, not silently automatic (`kpm_cpugpu="CPU"|"GPU"` is the
-  established convention) — this keeps every GPU path benchmarkable against a known-correct
-  CPU baseline on demand, and keeps this GPU-less dev machine's test suite deterministic.
-- Preserve the CPU-fallback pattern from `kpmtk/kpmjax.py` (`is_gpu_available()` /
-  `JAX_PLATFORMS=cpu`) in any new GPU code path, so the package keeps working unmodified on
-  machines without a GPU.
+- Keep GPU dispatch **explicit**, not silently automatic: `gpu.set_gpu(True)` is the one
+  switch, and the default is the CPU. This keeps every GPU path benchmarkable against a
+  known-correct CPU baseline on demand, and keeps a test suite deterministic. A new GPU path
+  routes on `gpu.get_gpu()` rather than growing a second switch of its own.
+- Preserve the CPU fallback: `gpu.set_gpu(True)` on a machine with no device warns and runs
+  the same jax kernels on jax's CPU backend, so the package keeps working unmodified and
+  the jax code paths stay covered by the tests there.

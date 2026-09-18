@@ -90,6 +90,8 @@ import jax
 import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
+from .. import gpu
+gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 
 from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
         get_dc_energy, obj2geometryarray, get_mf_normal_core)

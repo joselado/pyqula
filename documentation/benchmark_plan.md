@@ -125,7 +125,8 @@ suite as an "either/or" case.
 
 ### Tier 2 — needs the honest GPU caveat
 
-4. **KPM moments, CPU vs GPU — `kpmtk/kpmnumba.py::kpm_moments_batch(kpm_cpugpu="CPU"|"GPU")`**,
+4. **KPM moments, CPU vs GPU — `kpmtk/kpmnumba.py::kpm_moments_batch` under
+   `gpu.set_gpu(False)|(True)`**,
    GPU branch dispatching to `kpmtk/kpmjax.py`. High potential value since
    `gpu_porting_plan.md` already flags the GPU batch path as an unbatched Python loop, but
    on any GPU-less dev machine this case must be labeled "numba vs jax-CPU-fallback", not a

@@ -1,18 +1,8 @@
-def is_gpu_available():
-    import jax
-    try:
-        jax.devices("gpu")
-        return True
-    except Exception: return False
-
-
-if is_gpu_available(): # GPU available
-    print("GPU available for KPM")
-    pass
-else: # use the CPU
-    print("GPU is NOT available for KPM, using the CPU")
-    import os
-    os.environ['JAX_PLATFORMS'] = 'cpu'
+from .. import gpu
+# the package-wide CPU/GPU switch decides where this module's kernels run
+# (pyqula/gpu.py); applying it here means importing kpmjax does not leave
+# the placement to jax's own default, which is the GPU whenever one exists
+gpu.apply()
 
 import numpy as np
 import jax

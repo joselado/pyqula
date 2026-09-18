@@ -3,6 +3,7 @@ import pytest
 
 from pyqula import kpm
 from pyqula.kpmtk.kpmnumba import kpm_moments_v
+from testutils import gpu_backend
 
 
 def _random_hermitian_and_vector(n, complex_input, seed):
@@ -26,7 +27,7 @@ def test_numba_cpu_moments_match_reference(complex_input, kpm_prec, tol):
     implementation, for real and complex input, at both precisions."""
     m, v = _random_hermitian_and_vector(20, complex_input, seed=1)
     ref = kpm.python_kpm_moments(v.astype(complex), m.astype(complex), n=25)
-    mus = kpm_moments_v(v, m, n=25, kpm_prec=kpm_prec, kpm_cpugpu="CPU")
+    mus = kpm_moments_v(v, m, n=25, kpm_prec=kpm_prec)
     assert np.max(np.abs(mus - ref)) < tol
 
 
@@ -38,6 +39,7 @@ def test_jax_backend_matches_numba_cpu(complex_input, kpm_prec, tol):
     both single and double precision."""
     pytest.importorskip("jax")
     m, v = _random_hermitian_and_vector(20, complex_input, seed=2)
-    mus_cpu = kpm_moments_v(v, m, n=25, kpm_prec=kpm_prec, kpm_cpugpu="CPU")
-    mus_jax = kpm_moments_v(v, m, n=25, kpm_prec=kpm_prec, kpm_cpugpu="GPU")
+    mus_cpu = kpm_moments_v(v, m, n=25, kpm_prec=kpm_prec)
+    with gpu_backend():
+        mus_jax = kpm_moments_v(v, m, n=25, kpm_prec=kpm_prec)
     assert np.max(np.abs(mus_cpu - mus_jax)) < tol

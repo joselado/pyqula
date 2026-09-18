@@ -3107,9 +3107,9 @@ All of these RPA functions, `get_spinchi_ladder`, `get_spinchi_full`,
 `get_magnon_bands(method="rpa")` and the density-channel
 `get_densitychi_RPA`, bottom out in the same Lindhard kernel, a sum over
 pairs of eigenstates at every k-point whose cost grows as the fourth power of
-the number of sites in the cell. Passing `chi_cpugpu="GPU"` to any of them
-runs that kernel on a GPU instead, which pays off once the cell holds more
-than a few sites.
+the number of sites in the cell. Calling `gpu.set_gpu(True)` first runs that
+kernel on a GPU instead, which pays off once the cell holds more than a few
+sites (see "Running on a GPU").
 
 The precision of that sum is chosen with `chi_prec`. On the GPU it is
 `"single"` by default, since the double-precision arithmetic of a consumer
@@ -3122,13 +3122,15 @@ bare response within about $10^{-7}$ of the double-precision one
 
 ```python
 from pyqula import geometry
+from pyqula import gpu
 import numpy as np
+gpu.set_gpu(True) # run the GPU kernels of the package on the device
 g = geometry.honeycomb_lattice() # two sites per cell
 h = g.get_hamiltonian() # first-neighbor hopping
 hmf = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="antiferro",nk=10) # Neel mean field
 es = np.linspace(0.01,1.0,50) # frequencies
 (es,chi) = hmf.get_spinchi_full(q=[0.2,0.,0.],nk=10,energies=es,delta=0.05,
-               chi_cpugpu="GPU",chi_prec="double") # the response on the GPU, in double precision
+               chi_prec="double") # the response in double precision
 ```
 
 Note that the RPA dressing amplifies that rounding close to an instability or
@@ -3240,7 +3242,7 @@ each site to itself, a Hubbard $U$, where it is exact for the transverse
 response, and sum the ladder in the pair basis of `method="pair"` (below) for
 anything that couples different sites, in the same cell or in different ones. The call is the same either way,
 with the same `energies`, `delta`, `nk` and temperature `T` (equal to `delta`
-unless given); what the pair basis does not have is `chi_cpugpu="GPU"` and the
+unless given); what the pair basis does not have is the GPU kernel and the
 Nambu basis, and both are refused there rather than computed with the site
 vertex. With `q` left out, the response is averaged over the k-mesh after
 dressing each $q$, which is the local RPA response.
@@ -4515,6 +4517,54 @@ therefore makes a whole sweep reproducible run to run, which is what you want
 when comparing two calculations that differ in a single parameter.
 
 
+# Running on a GPU
+
+Three of the heaviest kernels of the library have a second implementation
+written in jax, which runs on a GPU: the Chebyshev moments behind the KPM
+density of states, the Lindhard sum behind the RPA response functions, and
+the batched diagonalization of the Bloch Hamiltonian over a k-mesh, which
+band structures, densities of states and Berry curvatures all bottom out
+in. Which implementation runs is decided by one switch, and the package
+stays on the CPU until that switch is set
+
+```python
+from pyqula import gpu
+gpu.set_gpu(True) # every routine with a GPU path now uses the device
+```
+
+so that a script that never calls it computes what it computed before, on
+whichever machine it lands on. `gpu.set_gpu(False)` goes back to the CPU,
+and `gpu.is_gpu_available()` says whether jax sees a device at all, which
+is what to pass when a script should simply take what the machine offers.
+Asking for a GPU where there is none is not an error: the same jax kernels
+then run on jax's own CPU backend and give the same numbers, with a warning
+saying that the speedup is not there.
+
+How much the device buys depends on the shape of the calculation more than
+on its size. The Lindhard sum gains the most, since its cost grows as the
+fourth power of the number of sites in the cell and the whole k-mesh is
+contracted on the device at once. The Chebyshev moments gain little, a
+factor of one to three, because a sparse matrix-vector product is limited
+by memory bandwidth rather than by arithmetic. The batched diagonalization
+sits in between, and only pays from matrices of about 32 orbitals upward,
+so below that size it stays on the CPU even with the switch set.
+
+Precision is a separate choice, made per call rather than globally, because
+it changes the numbers and not only where they are computed. The KPM
+moments take `kpm_prec`, the Lindhard sum takes `chi_prec` and the batched
+diagonalization takes `eigh_prec`, each of them `"single"` or `"double"`.
+Double precision is the default everywhere except the Lindhard sum on the
+GPU, where single precision is the default because a consumer card can be
+an order of magnitude slower in double precision than in single. Single
+precision costs about six digits, which a density of states or a band
+structure does not notice, and which a quantity built from differences of
+nearly equal numbers does.
+
+A handful of routines written in jax have no CPU implementation of their
+own, among them the mean-field solvers reached with `use_jax=True`, the
+graphene relaxation and the jax Keldysh current. Those follow the same
+switch, so they too run on the CPU by default.
+
 # Errors and unsupported inputs
 
 Most routines only make sense for a Hamiltonian of a particular kind: a Berry
@@ -5257,9 +5307,7 @@ Optional arguments:
 
 - T=None: temperature of the occupations, equal to `delta` when not given
 
-- chi_cpugpu="CPU": where the Lindhard response is computed, `"CPU"` or `"GPU"` (falling back to the CPU if no GPU is visible); also accepted by `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles` and `get_magnon_bands(method="rpa")`. `mode="trace"`/`"diagonal"`, `imode="adaptive"` and an interaction that couples different sites are not available on the GPU and raise
-
-- chi_prec=None: precision of the Lindhard sum, `"single"` or `"double"`; unset, it is `"single"` on the GPU and `"double"` on the CPU. Accepted by the same functions as `chi_cpugpu`; `mode="trace"`/`"diagonal"` and an interaction that couples different sites are double precision only and raise for `"single"`
+- chi_prec=None: precision of the Lindhard sum, `"single"` or `"double"`; unset, it is `"single"` on the GPU and `"double"` on the CPU. Also accepted by `get_spinchi_full`, `get_qdos_iets`, `get_iets_ldos`, `get_rpa_kernel_poles` and `get_magnon_bands(method="rpa")`; `mode="trace"`/`"diagonal"` and an interaction that couples different sites are double precision only and raise for `"single"`. Where the response is computed is the package-wide switch `gpu.set_gpu` (see "Running on a GPU"), and `mode="trace"`/`"diagonal"`, `imode="adaptive"` and an interaction that couples different sites are not available on the GPU and raise
 
 ### h.get_rpa_kernel_poles()
 Compute the poles of the generic RPA kernel $1-V(q)\chi(q,\omega)$: the frequencies of the collective modes/instabilities of the interacting response.

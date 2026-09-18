@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from pyqula import kpm
+from testutils import gpu_backend
 from pyqula.kpmtk.kpmnumba import kpm_moments_batch, kpm_moments_A_batch
 
 
@@ -30,8 +31,9 @@ def test_jax_batched_moments_match_numba_cpu_batch(complex_input, kpm_prec, tol)
     the single-vector GPU kernel instead)."""
     pytest.importorskip("jax")
     m, vs = _random_hermitian_and_vectors(15, 5, complex_input, seed=10)
-    mus_cpu = kpm_moments_batch(vs, m, n=20, kpm_prec=kpm_prec, kpm_cpugpu="CPU")
-    mus_gpu = kpm_moments_batch(vs, m, n=20, kpm_prec=kpm_prec, kpm_cpugpu="GPU")
+    mus_cpu = kpm_moments_batch(vs, m, n=20, kpm_prec=kpm_prec)
+    with gpu_backend():
+        mus_gpu = kpm_moments_batch(vs, m, n=20, kpm_prec=kpm_prec)
     assert np.max(np.abs(mus_cpu - mus_gpu)) < tol
 
 
@@ -46,10 +48,11 @@ def test_jax_batched_moments_chunking_matches_unchunked():
     of very different sizes, all against the same CPU reference."""
     pytest.importorskip("jax")
     m, vs = _random_hermitian_and_vectors(12, 600, True, seed=13)
-    mus_cpu = kpm_moments_batch(vs, m, n=10, kpm_prec="double", kpm_cpugpu="CPU")
-    mus_gpu_default = kpm_moments_batch(vs, m, n=10, kpm_prec="double", kpm_cpugpu="GPU")
-    mus_gpu_small_chunk = kpm_moments_batch(vs, m, n=10, kpm_prec="double",
-            kpm_cpugpu="GPU", gpu_batch_size=7)
+    mus_cpu = kpm_moments_batch(vs, m, n=10, kpm_prec="double")
+    with gpu_backend():
+        mus_gpu_default = kpm_moments_batch(vs, m, n=10, kpm_prec="double")
+        mus_gpu_small_chunk = kpm_moments_batch(vs, m, n=10, kpm_prec="double",
+                gpu_batch_size=7)
     assert np.max(np.abs(mus_cpu - mus_gpu_default)) < 1e-8
     assert np.max(np.abs(mus_cpu - mus_gpu_small_chunk)) < 1e-8
 
@@ -59,7 +62,7 @@ def test_jax_batched_moments_chunking_matches_unchunked():
 def test_jax_batched_momentsA_match_numba_cpu_batch(complex_input, kpm_prec, tol):
     """Same check as above, for the operator-weighted batched moments
     (kpm_moments_A_batch / kpm_momentsA_batch_gpu), which previously had no
-    GPU path at all (kpm_cpugpu='GPU' raised ValueError)."""
+    GPU path at all (the GPU branch raised ValueError)."""
     pytest.importorskip("jax")
     rng = np.random.RandomState(11)
     m, vs = _random_hermitian_and_vectors(15, 5, complex_input, seed=12)
@@ -68,8 +71,9 @@ def test_jax_batched_momentsA_match_numba_cpu_batch(complex_input, kpm_prec, tol
     else:
         A = rng.random((15, 15))
     A = A + np.conjugate(A).T
-    mus_cpu = kpm_moments_A_batch(vs, m, A, n=20, kpm_prec=kpm_prec, kpm_cpugpu="CPU")
-    mus_gpu = kpm_moments_A_batch(vs, m, A, n=20, kpm_prec=kpm_prec, kpm_cpugpu="GPU")
+    mus_cpu = kpm_moments_A_batch(vs, m, A, n=20, kpm_prec=kpm_prec)
+    with gpu_backend():
+        mus_gpu = kpm_moments_A_batch(vs, m, A, n=20, kpm_prec=kpm_prec)
     assert np.max(np.abs(mus_cpu - mus_gpu)) < tol
 
 
@@ -81,55 +85,54 @@ def test_jax_batched_momentsA_chunking_matches_unchunked():
     m, vs = _random_hermitian_and_vectors(12, 600, True, seed=15)
     A = rng.random((12, 12)) + 1j*rng.random((12, 12))
     A = A + np.conjugate(A).T
-    mus_cpu = kpm_moments_A_batch(vs, m, A, n=10, kpm_prec="double", kpm_cpugpu="CPU")
-    mus_gpu_default = kpm_moments_A_batch(vs, m, A, n=10, kpm_prec="double", kpm_cpugpu="GPU")
-    mus_gpu_small_chunk = kpm_moments_A_batch(vs, m, A, n=10, kpm_prec="double",
-            kpm_cpugpu="GPU", gpu_batch_size=11)
+    mus_cpu = kpm_moments_A_batch(vs, m, A, n=10, kpm_prec="double")
+    with gpu_backend():
+        mus_gpu_default = kpm_moments_A_batch(vs, m, A, n=10, kpm_prec="double")
+        mus_gpu_small_chunk = kpm_moments_A_batch(vs, m, A, n=10, kpm_prec="double",
+                gpu_batch_size=11)
     assert np.max(np.abs(mus_cpu - mus_gpu_default)) < 1e-8
     assert np.max(np.abs(mus_cpu - mus_gpu_small_chunk)) < 1e-8
 
 
-def test_kpm_cpugpu_reaches_public_dos_entry_points():
-    """kpm_cpugpu must actually be selectable from the user-facing KPM
-    entry points (kpm.tdos/kpm.ldos/kpm.full_trace/kpm.full_trace_A), not
-    just from the low-level kpmnumba functions -- random_trace/random_trace_A
+def test_gpu_switch_reaches_public_dos_entry_points():
+    """The GPU backend must actually reach the user-facing KPM entry
+    points (kpm.tdos/kpm.ldos/kpm.full_trace/kpm.full_trace_A), not just
+    the low-level kpmnumba functions -- random_trace/random_trace_A
     /full_trace_A/tdos used to drop any **kwargs on the floor instead of
-    forwarding them to get_moments_batch/get_moments_A_batch, so kpm_cpugpu
-    could not reach these callers at all even though the GPU kernels
-    existed. Random tries are reseeded identically before each backend so
-    CPU and GPU see the same starting vectors."""
+    forwarding them to get_moments_batch/get_moments_A_batch, so the
+    backend could not reach these callers at all even though the GPU
+    kernels existed. Random tries are reseeded identically before each
+    backend so CPU and GPU see the same starting vectors."""
     pytest.importorskip("jax")
     from pyqula import geometry
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian()
     m = h.get_hk_gen()([0., 0., 0.])
 
-    np.random.seed(123)
-    _, ys_cpu = kpm.tdos(m, npol=30, ne=40, ntries=6, kpm_cpugpu="CPU")
-    np.random.seed(123)
-    _, ys_gpu = kpm.tdos(m, npol=30, ne=40, ntries=6, kpm_cpugpu="GPU")
-    assert np.max(np.abs(ys_cpu - ys_gpu)) < 1e-8
-
-    xs_cpu, ldos_cpu = kpm.ldos(m, i=0, npol=30, ne=40, kpm_cpugpu="CPU")
-    xs_gpu, ldos_gpu = kpm.ldos(m, i=0, npol=30, ne=40, kpm_cpugpu="GPU")
-    assert np.max(np.abs(ldos_cpu - ldos_gpu)) < 1e-8
-
-    mus_cpu = kpm.full_trace(m, n=15, kpm_cpugpu="CPU")
-    mus_gpu = kpm.full_trace(m, n=15, kpm_cpugpu="GPU")
-    assert np.max(np.abs(mus_cpu - mus_gpu)) < 1e-8
-
     A = np.eye(m.shape[0])
-    mus_cpu_A = kpm.full_trace_A(m, n=15, A=A, kpm_cpugpu="CPU")
-    mus_gpu_A = kpm.full_trace_A(m, n=15, A=A, kpm_cpugpu="GPU")
+    np.random.seed(123)
+    _, ys_cpu = kpm.tdos(m, npol=30, ne=40, ntries=6)
+    xs_cpu, ldos_cpu = kpm.ldos(m, i=0, npol=30, ne=40)
+    mus_cpu = kpm.full_trace(m, n=15)
+    mus_cpu_A = kpm.full_trace_A(m, n=15, A=A)
+    with gpu_backend():
+        np.random.seed(123)
+        _, ys_gpu = kpm.tdos(m, npol=30, ne=40, ntries=6)
+        xs_gpu, ldos_gpu = kpm.ldos(m, i=0, npol=30, ne=40)
+        mus_gpu = kpm.full_trace(m, n=15)
+        mus_gpu_A = kpm.full_trace_A(m, n=15, A=A)
+    assert np.max(np.abs(ys_cpu - ys_gpu)) < 1e-8
+    assert np.max(np.abs(ldos_cpu - ldos_gpu)) < 1e-8
+    assert np.max(np.abs(mus_cpu - mus_gpu)) < 1e-8
     assert np.max(np.abs(mus_cpu_A - mus_gpu_A)) < 1e-8
 
 
-def test_kpm_cpugpu_reaches_random_trace_operator_branch():
+def test_gpu_switch_reaches_random_trace_operator_branch():
     """random_trace's operator-weighted branch (kpm.py:191, the route
     behind kpm.pdos / projected-DOS calculations) calls get_moments_A_batch
     -- i.e. the newly-reachable kpm_momentsA_batch_gpu -- with the operator
     kwarg mixed in, unlike the plain tdos() call in
-    test_kpm_cpugpu_reaches_public_dos_entry_points which never touches
+    test_gpu_switch_reaches_public_dos_entry_points which never touches
     that branch. Check it separately since it's the call site with the
     most surrounding kwargs, and thus the one most likely to trip a
     CPU/GPU kwarg-handling mismatch."""
@@ -141,13 +144,14 @@ def test_kpm_cpugpu_reaches_random_trace_operator_branch():
     P = np.eye(m.shape[0])  # trivial projector, P^2 = P
 
     np.random.seed(77)
-    _, ys_cpu = kpm.tdos(m, npol=20, ne=30, ntries=4, operator=P, kpm_cpugpu="CPU")
-    np.random.seed(77)
-    _, ys_gpu = kpm.tdos(m, npol=20, ne=30, ntries=4, operator=P, kpm_cpugpu="GPU")
+    _, ys_cpu = kpm.tdos(m, npol=20, ne=30, ntries=4, operator=P)
+    with gpu_backend():
+        np.random.seed(77)
+        _, ys_gpu = kpm.tdos(m, npol=20, ne=30, ntries=4, operator=P)
     assert np.max(np.abs(ys_cpu - ys_gpu)) < 1e-8
 
 
-def test_kpm_cpugpu_reaches_kdos_bands_operator_branch():
+def test_gpu_switch_reaches_kdos_bands_operator_branch():
     """h.get_kdos_bands(mode='KPM', operator=...) is a second, independent
     production caller of the operator-weighted A-batch kernel (via
     kdos.kdos_bands -> kpm.pdos -> kpm.tdos's operator= argument -- not to
@@ -169,25 +173,27 @@ def test_kpm_cpugpu_reaches_kdos_bands_operator_branch():
 
     np.random.seed(9)
     out_cpu = h.get_kdos_bands(mode="KPM", operator=op, kpath=[k0],
-            ntries=3, delta=0.1, kpm_cpugpu="CPU")
-    np.random.seed(9)
-    out_gpu = h.get_kdos_bands(mode="KPM", operator=op, kpath=[k0],
-            ntries=3, delta=0.1, kpm_cpugpu="GPU")
+            ntries=3, delta=0.1)
+    with gpu_backend():
+        np.random.seed(9)
+        out_gpu = h.get_kdos_bands(mode="KPM", operator=op, kpath=[k0],
+                ntries=3, delta=0.1)
     assert np.max(np.abs(out_cpu - out_gpu)) < 1e-8
 
 
 def test_stray_kwarg_ignored_identically_on_cpu_and_gpu():
     """A kwarg that kpm_moments_batch/kpm_moments_A_batch don't recognize
-    (neither kpm_prec nor kpm_cpugpu) must be silently ignored by both
-    backends, not just the CPU/numba one -- kpm_moments_batch_gpu/
-    kpm_momentsA_batch_gpu now accept **kwargs and drop it, matching the
-    numba kernels (which never took any kwargs at all)."""
+    (kpm_prec aside) must be silently ignored by both backends, not just
+    the CPU/numba one -- kpm_moments_batch_gpu/kpm_momentsA_batch_gpu now
+    accept **kwargs and drop it, matching the numba kernels (which never
+    took any kwargs at all)."""
     pytest.importorskip("jax")
     from pyqula import geometry
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian()
     m = h.get_hk_gen()([0., 0., 0.])
 
-    for backend in ("CPU", "GPU"):
-        xs, ys = kpm.tdos(m, npol=20, ne=20, ntries=4, kpm_cpugpu=backend, bogus=1)
+    for on_gpu in (False, True):
+        with gpu_backend(on_gpu):
+            xs, ys = kpm.tdos(m, npol=20, ne=20, ntries=4, bogus=1)
         assert xs.shape == ys.shape

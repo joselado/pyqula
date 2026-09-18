@@ -1,5 +1,6 @@
 from .. import parallel
 from .. import algebra
+from .. import gpu
 from ..klist import kmesh
 import numpy as np
 import scipy.sparse.linalg as slg
@@ -80,7 +81,7 @@ from numba import jit,prange
 import numpy.linalg as nlg
 
 @jit(nopython=True,parallel=True,cache=True)
-def parallel_diagonalization(hks):
+def _parallel_diagonalization_numba(hks):
     """Diagonalize many matrices at once"""
     n = hks.shape[1] # size of the Hamiltonian
     nh = hks.shape[0] # number of Hamiltonians
@@ -95,10 +96,8 @@ def parallel_diagonalization(hks):
 
 
 
-peigh = parallel_diagonalization # alias
-
 @jit(nopython=True,parallel=True,cache=True)
-def peigvalsh(hks):
+def _peigvalsh_numba(hks):
     """Diagonalize many matrices at once in parallel"""
     n = hks.shape[1] # size of the Hamiltonian
     nh = hks.shape[0] # number of Hamiltonians
@@ -108,3 +107,45 @@ def peigvalsh(hks):
         es[i,:] = e[:] # store
     return es # return eigenergies
 
+
+# Below this matrix size the GPU loses to the 8-thread numba kernels in
+# double precision however large the batch, measured on a GTX 1060 (see
+# documentation/gpu_porting_plan.md): the solves are too small to fill the
+# card and the host-device transfers are not amortized. So the device is
+# used only from here up, even under pyqula.gpu.set_gpu(True)
+gpu_min_dimension = 32
+
+
+def _on_gpu(hks):
+    """Whether this stack goes to the device: the package-wide switch is on
+    and the matrices are big enough for it to pay"""
+    # np.shape, not hks.shape: a caller may hand in a list of matrices
+    return gpu.get_gpu() and np.shape(hks)[1]>=gpu_min_dimension
+
+
+def parallel_diagonalization(hks,eigh_prec="double"):
+    """Eigenvalues and eigenvectors of many matrices at once.
+
+    Runs the numba kernel on the CPU, or the jax one on the GPU under
+    pyqula.gpu.set_gpu(True) (see htk/eigenvectorsjax.py). eigh_prec picks
+    the precision of the device solve; "single" is several times faster
+    again on a consumer card, at ~1e-6 relative eigenvalue error, which is
+    fine for a density of states or a band structure and not for anything
+    differencing eigenvectors. The CPU kernel is double precision only"""
+    if _on_gpu(hks):
+        from .eigenvectorsjax import peigh_gpu
+        return peigh_gpu(hks,prec=eigh_prec)
+    return _parallel_diagonalization_numba(hks)
+
+
+peigh = parallel_diagonalization # alias
+
+
+def peigvalsh(hks,eigh_prec="double"):
+    """Eigenvalues of many matrices at once, the eigenvector-free
+    counterpart of parallel_diagonalization -- see there for the backend
+    and precision"""
+    if _on_gpu(hks):
+        from .eigenvectorsjax import peigvalsh_gpu
+        return peigvalsh_gpu(hks,prec=eigh_prec)
+    return _peigvalsh_numba(hks)

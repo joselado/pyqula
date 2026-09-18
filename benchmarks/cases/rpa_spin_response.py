@@ -1,6 +1,6 @@
 """The Lindhard kernel behind the RPA spin response: numba (CPU) against
-jax (`chi_cpugpu="GPU"`, which falls back to jax's CPU backend on a machine
-without a device).
+jax (`pyqula.gpu.set_gpu(True)`, which falls back to jax's CPU backend on a
+machine without a device).
 
 This is `chitk/chiAB.py::chiAB_matrix` versus `chitk/chijax.py`'s gathered
 GEMM formulation, driven through `chiAB_q` exactly as `get_spinchi_full`
@@ -28,6 +28,7 @@ a number any later speedup can be divided by.
 import numpy as np
 
 from pyqula import geometry
+from pyqula import gpu
 from pyqula.chitk.chiAB import chiAB_q
 from pyqula.chitk.rpa import build_ops_projectors
 from pyqula.chitk.spinchi import _full_spin_operators
@@ -41,10 +42,10 @@ SIZES_FULL = [4, 8, 12, 16, 24, 32, 48, 64]
 # CPU kernel takes ~10 s at N=32 and ~2.5 min at N=64 (N^4), while the device
 # side stays under a second
 
-# (method name, chi_cpugpu, chi_prec); the first is the reference. The
-# precision is passed explicitly, since chi_prec defaults differ per backend
-METHODS = (("numba", "CPU", "double"), ("numba-single", "CPU", "single"),
-           ("jax", "GPU", "double"), ("jax-single", "GPU", "single"))
+# (method name, on the GPU?, chi_prec); the first is the reference. The
+# precision is passed explicitly, since chi_prec's default follows the switch
+METHODS = (("numba", False, "double"), ("numba-single", False, "single"),
+           ("jax", True, "double"), ("jax-single", True, "single"))
 
 NK = 4          # a folded BZ: few k-points, see the module docstring
 NW = 40         # frequencies
@@ -81,11 +82,15 @@ def run(sizes):
         energies = np.linspace(0.01, 1.0, NW)
         ref = None
         batch = []
-        for method, backend, prec in METHODS:
-            def call(backend=backend, prec=prec):
-                return chiAB_q(h, pAs=pAs, pBs=pBs, q=Q, nk=NK,
-                               energies=energies, delta=DELTA,
-                               chi_cpugpu=backend, chi_prec=prec)
+        for method, on_gpu, prec in METHODS:
+            def call(on_gpu=on_gpu, prec=prec):
+                gpu.set_gpu(on_gpu) # the package-wide backend switch
+                try:
+                    return chiAB_q(h, pAs=pAs, pBs=pBs, q=Q, nk=NK,
+                                   energies=energies, delta=DELTA,
+                                   chi_prec=prec)
+                finally:
+                    gpu.set_gpu(False)
             t_cold, t_warm, (_, chis) = time_cold_warm(call)
             value = _quantity(chis)
             if method == "numba":

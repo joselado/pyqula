@@ -48,7 +48,7 @@ already reached once.
   quantics tensor-train route to large k-meshes.
 - [`gpu_rpa_spin_response.md`](gpu_rpa_spin_response.md) -- the jax port
   of the Lindhard kernel behind the site-basis spin response
-  (`chi_cpugpu="GPU"`): what the switch moves to the device and what stays
+  (now reached with `gpu.set_gpu(True)`): what the switch moves to the device and what stays
   host numpy (the RPA dressing), the measured 833x at N=64 on a V100 and
   the crossover near N=7 (21.7x and N~17 on a consumer GTX 1060, whose 21x
   FP64 penalty is why single precision, `chi_prec`, is the GPU default, at

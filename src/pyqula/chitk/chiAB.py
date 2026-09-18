@@ -3,6 +3,7 @@ import numba
 from numba import jit,prange
 from .. import algebra
 from .. import parallel
+from .. import gpu
 
 
 
@@ -23,7 +24,6 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                imode="mesh", # integration mode in momentum space
                ij_mode = "explicit", # loop over elements mode
                mode="matrix", # return object
-               chi_cpugpu="CPU", # backend for the Lindhard kernel
                chi_prec=None # precision of the Lindhard kernel
                ):
     """Compute AB response function
@@ -37,21 +37,21 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
        - imode: integration mode
        - ij_mode: loop ove elements mode
        - mode: output to return
-       - chi_cpugpu: "CPU" (numba, the default) or "GPU" (jax, falling
-         back to jax's CPU backend if no GPU is present). The GPU path
-         implements the mode="matrix", imode="mesh", ij_mode="explicit"
-         combination only, and raises otherwise rather than silently
-         computing on the CPU
        - chi_prec: "single" or "double", the precision of the Lindhard
          contraction (mode="matrix"; both backends take both). Defaults
-         to "single" on the GPU, where a consumer card's double precision
-         is an order of magnitude slower, and to "double" on the CPU. The
-         eigendecompositions stay in double either way, and the result is
-         complex128 either way"""
-    if chi_cpugpu not in ["CPU","GPU"]:
-        raise ValueError("chi_cpugpu must be 'CPU' or 'GPU', got "+str(chi_cpugpu))
+         to "single" under pyqula.gpu.set_gpu(True), where a consumer
+         card's double precision is an order of magnitude slower, and to
+         "double" on the CPU. The eigendecompositions stay in double
+         either way, and the result is complex128 either way
+
+       Whether the Lindhard kernel runs on the CPU (numba) or on the GPU
+       (jax) is the package-wide switch of pyqula.gpu. The device path
+       implements the mode="matrix", imode="mesh", ij_mode="explicit"
+       combination only, and raises otherwise rather than silently
+       computing on the CPU."""
+    use_gpu = gpu.get_gpu() # the package-wide CPU/GPU switch
     if chi_prec is None: # the fast option where one exists
-        chi_prec = "single" if chi_cpugpu=="GPU" else "double"
+        chi_prec = "single" if use_gpu else "double"
     if chi_prec not in ["single","double"]:
         raise ValueError("chi_prec must be 'single' or 'double', got "+repr(chi_prec))
     cdtype = np.complex64 if chi_prec=="single" else np.complex128
@@ -82,7 +82,7 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     else: # pAs and pBs provided on input
         ij_mode = "explicit" # do the loop explicitly
         pass
-    if chi_prec=="single" and chi_cpugpu=="CPU" and (mode!="matrix"
+    if chi_prec=="single" and not use_gpu and (mode!="matrix"
             or ij_mode!="explicit"): # (the GPU path has its own guard)
         raise NotImplementedError("chi_prec='single' is only implemented "
                 "for mode='matrix' with ij_mode='explicit', got mode='"
@@ -120,11 +120,12 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     ks = h.geometry.get_kmesh(nk=nk) # get the kmesh
     # call in parallel
     if imode=="mesh": # do a mesh
-        if chi_cpugpu=="GPU": # device path, whole kmesh at once
+        if use_gpu: # device path, whole kmesh at once
             if mode!="matrix" or ij_mode!="explicit":
-                raise ValueError("chi_cpugpu='GPU' only implements "
+                raise ValueError("the GPU backend only implements "
                         "mode='matrix' with ij_mode='explicit', got mode='"
-                        +str(mode)+"', ij_mode='"+str(ij_mode)+"'")
+                        +str(mode)+"', ij_mode='"+str(ij_mode)+"'; call "
+                        "pyqula.gpu.set_gpu(False) for the other modes")
             # imported here, never at module scope: chijax prints a banner
             # and flips process-global jax configuration at import time,
             # and the CPU path runs under parallel.pcall's fork-based pool
@@ -151,9 +152,9 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
             raise ValueError("unknown ij_mode; the accepted ones are "
                     "'accelerated' and 'explicit'")
     elif imode=="adaptive": # do a mesh
-        if chi_cpugpu=="GPU": # the adaptive integrator calls back per point
-            raise ValueError("chi_cpugpu='GPU' is not implemented for "
-                             "imode='adaptive'")
+        if use_gpu: # the adaptive integrator calls back per point
+            raise ValueError("the GPU backend is not implemented for "
+                    "imode='adaptive'; call pyqula.gpu.set_gpu(False)")
         from . import integration
         if h.dimensionality==0: out = getk([0.]) # single point
         elif h.dimensionality==1:

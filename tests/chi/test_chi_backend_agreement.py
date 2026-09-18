@@ -1,5 +1,7 @@
 import numpy as np
 
+from testutils import gpu_backend
+
 from pyqula import geometry, chi, algebra
 from pyqula.chitk import chiAB
 
@@ -61,12 +63,13 @@ def test_sparse_hamiltonian_reaches_every_backend():
     accelerated branch to scipy.linalg.eigh -- the hole hk_matrix_batch
     was added to close for the other numba paths."""
     dense = _chiAB(_chain(), "explicit", 0.1)
-    for kwargs in [dict(ij_mode="explicit"),
-                   dict(ij_mode="accelerated"),
-                   dict(ij_mode="explicit", chi_cpugpu="GPU", chi_prec="double")]:
+    for on_gpu, kwargs in [(False, dict(ij_mode="explicit")),
+                   (False, dict(ij_mode="accelerated")),
+                   (True, dict(ij_mode="explicit", chi_prec="double"))]:
         mode = kwargs.pop("ij_mode")
-        out = _chiAB(_make_sparse(_chain()), mode, 0.1, **kwargs)
-        assert np.max(np.abs(dense - out)) < 1e-10, (mode, kwargs)
+        with gpu_backend(on_gpu):
+            out = _chiAB(_make_sparse(_chain()), mode, 0.1, **kwargs)
+        assert np.max(np.abs(dense - out)) < 1e-10, (mode, on_gpu, kwargs)
 
 
 def _gauge_transform(h, phi):

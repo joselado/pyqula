@@ -60,8 +60,10 @@ def tp2v(thetaphi):
     return v0
   
 import jax.numpy as jnp
+from jax import jit
 from jax import grad
-from ..classicalspin import jit_on_cpu
+from .. import gpu
+gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 
 def perp_jax_master(thetaphi,vs):
     theta = thetaphi[0]
@@ -78,5 +80,5 @@ def perp_jax_master(thetaphi,vs):
         out = out - jnp.sum(w*w) # compute the norm
     return out
 
-perp_jax = jit_on_cpu(perp_jax_master) # jit jax function for energy
-jac_jax = jit_on_cpu(grad(perp_jax_master,argnums=0)) # jit jax gradient
+perp_jax = jit(perp_jax_master) # jit jax function for energy
+jac_jax = jit(grad(perp_jax_master,argnums=0)) # jit jax gradient

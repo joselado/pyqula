@@ -226,13 +226,19 @@ deliberately left as they are.
   open) and `bug_audit_2.md` (the eight-lens second sweep, 76 of 80 findings fixed), with the four
   that were decisions rather than repairs written up in `audit_open_decisions.md`, which is also
   where a third sweep should start.
+- **The CPU/GPU backend is one package-wide switch, `src/pyqula/gpu.py`.** `gpu.set_gpu(True)`
+  puts every GPU-capable routine on the device and points jax's default device there, so the
+  jax modules with no backend branch of their own follow it too; the default is the CPU, on
+  every machine. A new GPU path routes on `gpu.get_gpu()` rather than growing a switch of its
+  own, and precision stays per-call (`kpm_prec`, `chi_prec`, `eigh_prec`). The old per-call
+  `kpm_cpugpu`/`chi_cpugpu` arguments were removed and now raise.
 - `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap for moving compute-heavy
-  paths onto GPU via `jax` (already a hard dependency). Tier 1, the batched KPM GPU path
-  (`kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), and Tier 3, scoping the forced-CPU jax modules, are done; Tiers 2 and 4 are
-  not started, covering batched dense
-  diagonalization (`htk/eigenvectors.py`) and why sparse/ARPACK-based Green's-function work is a
-  harder/lower-priority case. Each tier wants explicit sign-off before it starts. Check the plan
-  before starting any GPU-related work in this repo.
+  paths onto GPU via `jax` (already a hard dependency). Tier 1 (the batched KPM GPU path,
+  `kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), Tier 2 (batched dense diagonalization,
+  `htk/eigenvectorsjax.py`) and Tier 3 (scoping the forced-CPU jax modules) are done; Tier 4,
+  why sparse/ARPACK-based Green's-function work is a harder/lower-priority case, is not
+  started. Each tier wants explicit sign-off before it starts. Check the plan before starting
+  any GPU-related work in this repo.
 - **HPC-cluster material never goes into git.** pyqula is a public repository; the maintainer's cluster
   details (login hosts, scratch paths, partition names, queue measurements, account-specific job scripts,
   run logs) are none of the public's business and must not reach GitHub. They live in `docs/` and in

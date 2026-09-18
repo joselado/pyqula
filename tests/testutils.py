@@ -57,3 +57,18 @@ def gapped_honeycomb(spinful=True, mass=0.8):
     h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=spinful)
     h.add_sublattice_imbalance(mass)
     return h.get_multicell().get_dense()
+
+
+@contextlib.contextmanager
+def gpu_backend(enabled=True):
+    """Run the block with the package-wide CPU/GPU switch set one way, and
+    restore it afterwards. The switch (pyqula.gpu) replaced the per-call
+    kpm_cpugpu/chi_cpugpu arguments, so a test comparing the two backends
+    toggles it around each call instead of passing a keyword"""
+    from pyqula import gpu
+    old = gpu.get_gpu()
+    gpu.set_gpu(bool(enabled))
+    try:
+        yield
+    finally:
+        gpu.set_gpu(old)

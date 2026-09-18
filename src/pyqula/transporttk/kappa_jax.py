@@ -58,6 +58,8 @@ _reference_rtol = 1e-6
 
 import jax
 jax.config.update("jax_enable_x64", True)
+from .. import gpu
+gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 import jax.numpy as jnp
 
 

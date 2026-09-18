@@ -2,6 +2,8 @@ import numpy as np
 import jax.numpy as jnp
 import jax
 import jax.numpy.linalg as jlg
+from .. import gpu
+gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 
 def fermi_surface(H,nk=100,reciprocal=True,nrep=1):
     """Return the Fermi surface with swarm optimization"""

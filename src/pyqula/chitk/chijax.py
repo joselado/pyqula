@@ -38,20 +38,10 @@ Two implementation points that are not cosmetic:
   reasoning as kpmtk/kpmjax.py's chunked batch dispatch.
 """
 
-def is_gpu_available():
-    import jax
-    try:
-        jax.devices("gpu")
-        return True
-    except Exception: return False
-
-
-if is_gpu_available(): # GPU available
-    print("GPU available for chi")
-    pass
-else: # use the CPU
-    import os
-    os.environ['JAX_PLATFORMS'] = 'cpu'
+from .. import gpu
+# the package-wide CPU/GPU switch decides where this kernel runs, see
+# pyqula/gpu.py and the note in kpmtk/kpmjax.py
+gpu.apply()
 
 import numpy as np
 import jax

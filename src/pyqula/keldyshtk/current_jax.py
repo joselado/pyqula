@@ -220,6 +220,8 @@ import jax
 # set before any jax array is created (mirrors kpmtk/kpmjax.py's own
 # x64 opt-in for the identical reason).
 jax.config.update("jax_enable_x64", True)
+from .. import gpu
+gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 import jax.numpy as jnp
 from jax import lax
 

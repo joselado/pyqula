@@ -13,10 +13,10 @@ GPU, which validates correctness and says nothing at all about speed: see
 future_development/gpu_rpa_spin_response.md for why any speedup number has
 to come from a measurement on an actual device.
 
-The end-to-end tests assert that chi_cpugpu="GPU" *reaches* the kernel,
-with a spy, not merely that the answer is right -- a dropped kwarg would
-silently give the right answer on the CPU, which is exactly how the
-analogous KPM switch landed broken the first time.
+The end-to-end tests assert that pyqula.gpu.set_gpu(True) *reaches* the
+kernel, with a spy, not merely that the answer is right -- a backend that
+never took effect would silently give the right answer on the CPU, which
+is exactly how the analogous KPM switch landed broken the first time.
 """
 import numpy as np
 import pytest
@@ -25,6 +25,7 @@ from pyqula import geometry
 from pyqula.chitk import chiAB as chiAB_mod
 from pyqula.chitk.rpa import build_ops_projectors
 from pyqula.chitk.spinchi import _full_spin_operators
+from testutils import gpu_backend
 
 NK = 4  # small on purpose: these are correctness tests, not benchmarks
 ENERGIES = np.linspace(0.01, 1.0, 12)
@@ -171,9 +172,9 @@ def test_too_small_a_pair_pad_raises_instead_of_truncating():
 @pytest.mark.parametrize("q", [[0., 0., 0.], [0.2, 0.1, 0.]])
 @pytest.mark.parametrize("rpa", [True, False])
 @pytest.mark.parametrize("chi_prec,tol_bare,tol_rpa", PRECISIONS)
-@pytest.mark.parametrize("backend", ["GPU", "CPU"])
+@pytest.mark.parametrize("on_gpu", [True, False])
 def test_spinchi_full_matches_the_double_precision_cpu(system, q, rpa, chi_prec,
-                                                       tol_bare, tol_rpa, backend):
+                                                       tol_bare, tol_rpa, on_gpu):
     """The whole chain get_spinchi_full -> chi_ops_RPA ->
     _chi_ops_matrix_vectorized -> chiAB -> chiAB_q -> kernel, on both
     backends, including the RPA dressing"""
@@ -181,7 +182,8 @@ def test_spinchi_full_matches_the_double_precision_cpu(system, q, rpa, chi_prec,
     h = SYSTEMS[system]()
     kw = dict(q=q, nk=NK, energies=ENERGIES, delta=DELTA, RPA=rpa)
     _, cpu = h.get_spinchi_full(**kw)
-    _, got = h.get_spinchi_full(chi_cpugpu=backend, chi_prec=chi_prec, **kw)
+    with gpu_backend(on_gpu):
+        _, got = h.get_spinchi_full(chi_prec=chi_prec, **kw)
     cpu, got = np.array(cpu), np.array(got)
     assert got.dtype == np.complex128
     tol = tol_rpa if rpa else tol_bare
@@ -190,14 +192,15 @@ def test_spinchi_full_matches_the_double_precision_cpu(system, q, rpa, chi_prec,
 
 @pytest.mark.parametrize("system", list(SYSTEMS))
 @pytest.mark.parametrize("chi_prec,tol_bare,tol_rpa", PRECISIONS)
-@pytest.mark.parametrize("backend", ["GPU", "CPU"])
+@pytest.mark.parametrize("on_gpu", [True, False])
 def test_spinchi_ladder_matches_the_double_precision_cpu(system, chi_prec,
-                                                         tol_bare, tol_rpa, backend):
+                                                         tol_bare, tol_rpa, on_gpu):
     pytest.importorskip("jax")
     h = SYSTEMS[system]()
     kw = dict(q=[0.2, 0.1, 0.], nk=NK, energies=ENERGIES, delta=DELTA)
     _, cpu = h.get_spinchi_ladder(**kw)
-    _, got = h.get_spinchi_ladder(chi_cpugpu=backend, chi_prec=chi_prec, **kw)
+    with gpu_backend(on_gpu):
+        _, got = h.get_spinchi_ladder(chi_prec=chi_prec, **kw)
     cpu, got = np.array(cpu), np.array(got)
     assert np.max(np.abs(cpu - got)) < tol_rpa*np.max(np.abs(cpu))  # RPA=True
 
@@ -245,54 +248,54 @@ class _Spy:
         monkeypatch.setattr(chijax, "chi_matrix_kmesh_gpu", wrapper)
 
 
-def test_the_gpu_kwarg_reaches_the_kernel_from_every_entry_point(monkeypatch):
+def test_the_switch_reaches_the_kernel_from_every_entry_point(monkeypatch):
     """Right answers are not evidence the switch works: the CPU path also
     gives right answers. Assert the device code actually ran"""
     pytest.importorskip("jax")
     spy = _Spy(monkeypatch)
     h = _doped_ferro_chain()
-    h.get_spinchi_full(q=[0.2, 0., 0.], nk=NK, energies=ENERGIES,
-                       delta=DELTA, chi_cpugpu="GPU")
-    assert spy.calls > 0, "get_spinchi_full dropped chi_cpugpu"
-    n = spy.calls
-    h.get_spinchi_ladder(q=[0.2, 0., 0.], nk=NK, energies=ENERGIES,
-                         delta=DELTA, chi_cpugpu="GPU")
-    assert spy.calls > n, "get_spinchi_ladder dropped chi_cpugpu"
-    n = spy.calls
-    h.get_iets_ldos(nk=NK, delta=DELTA, e=0.1, chi_cpugpu="GPU")
-    assert spy.calls > n, "get_iets_ldos dropped chi_cpugpu"
-    n = spy.calls
-    h.get_magnon_bands(method="rpa", nq=2, nk=NK, energies=ENERGIES,
-                       delta=DELTA, chi_cpugpu="GPU")
-    assert spy.calls > n, "get_magnon_bands(method='rpa') dropped chi_cpugpu"
-    n = spy.calls
-    h.get_qdos_iets(energies=ENERGIES, nq=2, nk=NK, delta=DELTA,
-                    chi_cpugpu="GPU")
-    assert spy.calls > n, "get_qdos_iets dropped chi_cpugpu"
-    n = spy.calls
-    h.get_densitychi_RPA(V1=0.5, q=[0.2, 0., 0.], nk=NK, energies=ENERGIES,
-                         delta=DELTA, chi_cpugpu="GPU")
-    assert spy.calls > n, "get_densitychi_RPA dropped chi_cpugpu"
+    with gpu_backend():
+        h.get_spinchi_full(q=[0.2, 0., 0.], nk=NK, energies=ENERGIES,
+                           delta=DELTA)
+        assert spy.calls > 0, "get_spinchi_full ignored the switch"
+        n = spy.calls
+        h.get_spinchi_ladder(q=[0.2, 0., 0.], nk=NK, energies=ENERGIES,
+                             delta=DELTA)
+        assert spy.calls > n, "get_spinchi_ladder ignored the switch"
+        n = spy.calls
+        h.get_iets_ldos(nk=NK, delta=DELTA, e=0.1)
+        assert spy.calls > n, "get_iets_ldos ignored the switch"
+        n = spy.calls
+        h.get_magnon_bands(method="rpa", nq=2, nk=NK, energies=ENERGIES,
+                           delta=DELTA)
+        assert spy.calls > n, "get_magnon_bands(method='rpa') ignored the switch"
+        n = spy.calls
+        h.get_qdos_iets(energies=ENERGIES, nq=2, nk=NK, delta=DELTA)
+        assert spy.calls > n, "get_qdos_iets ignored the switch"
+        n = spy.calls
+        h.get_densitychi_RPA(V1=0.5, q=[0.2, 0., 0.], nk=NK, energies=ENERGIES,
+                             delta=DELTA)
+        assert spy.calls > n, "get_densitychi_RPA ignored the switch"
 
 
 def test_chi_prec_reaches_the_kernel_and_defaults_to_single(monkeypatch):
-    """chi_prec travels the same kwarg chain as chi_cpugpu, so it can be
-    dropped the same way; a dropped chi_prec would silently run the
-    default precision"""
+    """chi_prec travels a kwarg chain of its own, so it can be dropped
+    somewhere along it; a dropped chi_prec would silently run the default
+    precision, which on the GPU is single"""
     pytest.importorskip("jax")
     spy = _Spy(monkeypatch)
     h = _doped_ferro_chain()
-    kw = dict(q=[0.2, 0., 0.], nk=NK, energies=ENERGIES, delta=DELTA,
-              chi_cpugpu="GPU")
-    h.get_spinchi_full(**kw)
-    h.get_spinchi_full(chi_prec="double", **kw)
-    h.get_magnon_bands(method="rpa", nq=2, nk=NK, energies=ENERGIES,
-                       delta=DELTA, chi_cpugpu="GPU", chi_prec="double")
+    kw = dict(q=[0.2, 0., 0.], nk=NK, energies=ENERGIES, delta=DELTA)
+    with gpu_backend():
+        h.get_spinchi_full(**kw)
+        h.get_spinchi_full(chi_prec="double", **kw)
+        h.get_magnon_bands(method="rpa", nq=2, nk=NK, energies=ENERGIES,
+                           delta=DELTA, chi_prec="double")
     assert spy.precisions == ["single", "double", "double", "double"]
 
 
 def test_the_default_backend_never_touches_the_device_code(monkeypatch):
-    """chi_cpugpu defaults to CPU, and jax must stay out of the way there
+    """The switch defaults to the CPU, and jax must stay out of the way there
     -- importing chijax flips process-global jax configuration, which the
     fork-based parallel.pcall pool of the CPU path must not inherit"""
     pytest.importorskip("jax")
@@ -314,16 +317,16 @@ def test_unsupported_settings_raise_rather_than_falling_back():
     ops = _full_spin_operators(h)
     pAs, pBs = build_ops_projectors(h, ops)
     common = dict(q=[0.2, 0., 0.], nk=2, energies=ENERGIES, delta=DELTA)
+    from pyqula import gpu
     with pytest.raises(ValueError):  # not a backend name
-        chiAB_mod.chiAB_q(h, pAs=pAs, pBs=pBs, chi_cpugpu="gpu", **common)
-    with pytest.raises(ValueError):  # trace/diagonal use a different kernel
-        chiAB_mod.chiAB_q(h, mode="trace", chi_cpugpu="GPU", **common)
-    with pytest.raises(ValueError):  # the adaptive integrator is per-point
-        chiAB_mod.chiAB_q(h, pAs=pAs, pBs=pBs, imode="adaptive",
-                          chi_cpugpu="GPU", **common)
-    with pytest.raises(ValueError, match="chi_prec"):  # not a precision
-        chiAB_mod.chiAB_q(h, pAs=pAs, pBs=pBs, chi_cpugpu="GPU",
-                          chi_prec="half", **common)
+        gpu.set_gpu("gpu")
+    with gpu_backend():
+        with pytest.raises(ValueError):  # trace/diagonal use a different kernel
+            chiAB_mod.chiAB_q(h, mode="trace", **common)
+        with pytest.raises(ValueError):  # the adaptive integrator is per-point
+            chiAB_mod.chiAB_q(h, pAs=pAs, pBs=pBs, imode="adaptive", **common)
+        with pytest.raises(ValueError, match="chi_prec"):  # not a precision
+            chiAB_mod.chiAB_q(h, pAs=pAs, pBs=pBs, chi_prec="half", **common)
     with pytest.raises(NotImplementedError, match="chi_prec"):  # other kernel
         chiAB_mod.chiAB_q(h, mode="trace", chi_prec="single", **common)
 
@@ -348,19 +351,19 @@ def test_goldstone_mode_survives_the_gpu_path():
     Ss = _full_spin_operators(hmf)
     Uv = _full_spin_U(hmf)
 
-    def residual(delta, backend, chi_prec=None):
-        _, kernels = rpa_kernel_ops(hmf, ops=Ss, V=Uv, q=[0., 0., 0.],
-                                     energies=np.array([0.0]), delta=delta,
-                                     nk=300, chi_cpugpu=backend,
-                                     chi_prec=chi_prec)
+    def residual(delta, on_gpu, chi_prec=None):
+        with gpu_backend(on_gpu):
+            _, kernels = rpa_kernel_ops(hmf, ops=Ss, V=Uv, q=[0., 0., 0.],
+                                         energies=np.array([0.0]), delta=delta,
+                                         nk=300, chi_prec=chi_prec)
         return np.min(np.abs(np.linalg.eigvals(kernels[0])))
 
     for delta in (0.02, 0.005):  # the two backends must not merely agree
-        cpu = residual(delta, "CPU")   # with each other, they must both
-        gpu = residual(delta, "GPU", "double")  # show the delta-linear signature
-        assert abs(cpu - gpu) < 1e-8*max(abs(cpu), 1e-12)
+        cpu = residual(delta, False)   # with each other, they must both
+        on_device = residual(delta, True, "double")  # show the delta-linear
+        assert abs(cpu - on_device) < 1e-8*max(abs(cpu), 1e-12)  # signature
     for chi_prec in ("double", "single"):  # single rounding must not open a gap
-        ratio1 = residual(0.02, "GPU", chi_prec)/0.02
-        ratio2 = residual(0.005, "GPU", chi_prec)/0.005
+        ratio1 = residual(0.02, True, chi_prec)/0.02
+        ratio2 = residual(0.005, True, chi_prec)/0.005
         assert 0.5 < ratio1/ratio2 < 2.0, (f"{chi_prec}: residual/delta "
             f"moved from {ratio1} to {ratio2}: not a Goldstone mode")

@@ -101,24 +101,24 @@ def _fresh_interpreter(code):
     return out.stdout.strip().splitlines()[-1]
 
 
-def test_importing_the_minimizers_leaves_jax_default_device_alone():
-    """Regression test: classicalspin and symmetrytk.localsymmetry used to
-    call jax.config.update('jax_platform_name','cpu') at import time. In a
-    script importing them first, that moved every later kpm_cpugpu="GPU"/
-    chi_cpugpu="GPU" call onto the CPU. They now place only their own
-    inputs on the CPU, so the default device is whatever jax picks alone"""
-    probe = "import jax.numpy as jnp; print(jnp.ones(2).devices())"
-    plain = _fresh_interpreter(probe)
-    after = _fresh_interpreter("\n".join([
+def test_the_minimizers_follow_the_package_gpu_switch():
+    """classicalspin and symmetrytk.localsymmetry used to call
+    jax.config.update('jax_platform_name','cpu') at import time, which in a
+    script importing them first moved every later GPU call of the process
+    onto the CPU. They now follow pyqula.gpu like everything else: the CPU
+    by default, the device when the switch is set. Run in a fresh
+    interpreter, since this session may already have imported them"""
+    on_import = _fresh_interpreter("\n".join([
         "from pyqula import classicalspin",
         "from pyqula.symmetrytk import localsymmetry",
         "from pyqula.classicalspintk import align",
-        probe]))
-    assert after == plain
-    energy_device = _fresh_interpreter("\n".join([
+        "import jax.numpy as jnp; print(jnp.ones(2).devices())"]))
+    assert "Cpu" in on_import, on_import
+    switched = _fresh_interpreter("\n".join([
         "import numpy as np",
-        "from pyqula import classicalspin",
+        "from pyqula import gpu, classicalspin",
+        "gpu.set_gpu(gpu.is_gpu_available())",
         "e = classicalspin.energy_jax(np.ones(4), np.ones((2,3)),",
         "        np.ones((1,3,3)), np.array([[0,1]]))",
-        "print(e.devices())"]))
-    assert "Cpu" in energy_device
+        "print(('Cuda' if gpu.is_gpu_available() else 'Cpu') in str(e.devices()))"]))
+    assert switched == "True", switched

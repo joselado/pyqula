@@ -29,6 +29,8 @@ from . import gsfe as gsfetk
 from . import elastic as elastictk
 
 jax.config.update("jax_enable_x64", True)
+from .. import gpu
+gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 
 
 def _layer_groups(z, tol=1e-3):

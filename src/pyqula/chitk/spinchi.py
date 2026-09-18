@@ -1,4 +1,5 @@
 import numpy as np
+from .. import gpu
 from .rpa import chi_AB_RPA
 from .rpa import chi_ops_RPA
 
@@ -60,7 +61,7 @@ def _use_pair_basis(H):
 
 
 _PAIR_ROUTE_KWARGS = ("energies","delta","nk","T","q","imode","ij_mode",
-                      "chi_cpugpu","chi_prec")
+                      "chi_prec")
 
 
 def _pair_route_kwargs(H,kwargs):
@@ -74,11 +75,11 @@ def _pair_route_kwargs(H,kwargs):
             "sites, so its RPA spin response is summed in the pair basis "
             "(chitk.pairchi), which does not take %s; the accepted "
             "keyword arguments are %s"%(unknown,list(_PAIR_ROUTE_KWARGS)))
-    if kwargs.get("chi_cpugpu","CPU")!="CPU":
-        raise NotImplementedError("chi_cpugpu=%r is not implemented for an "
-            "interaction that couples different sites: its RPA spin "
+    if gpu.get_gpu():
+        raise NotImplementedError("the GPU backend is not implemented for "
+            "an interaction that couples different sites: its RPA spin "
             "response is summed in the pair basis (chitk.pairchi), which "
-            "has no device backend"%(kwargs["chi_cpugpu"],))
+            "has no device backend; call pyqula.gpu.set_gpu(False)")
     if kwargs.get("chi_prec",None) not in (None,"double"): # unset is double here
         raise NotImplementedError("chi_prec=%r is not implemented for an "
             "interaction that couples different sites: its RPA spin "
@@ -475,9 +476,9 @@ def _map_over_q(f,qpath,**kwargs):
     device context and its own copy of the operator tensors), which is the
     failure mode documentation/gpu_porting_plan.md item 4 suspects behind
     classicalspin.py's unconditional CPU forcing. So under
-    chi_cpugpu="GPU" the q-loop stays in this process."""
+    pyqula.gpu.set_gpu(True) the q-loop stays in this process."""
     from .. import parallel
-    if kwargs.get("chi_cpugpu","CPU")=="GPU": # one device, one process
+    if gpu.get_gpu(): # one device, one process
         return [f(q) for q in qpath]
     return parallel.pcall(f,qpath) # CPU path, as before
 

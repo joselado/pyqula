@@ -1,5 +1,12 @@
 # GPU port of the RPA spin response
 
+**API note (2026-09-18):** the `chi_cpugpu="CPU"|"GPU"` argument this plan
+designed and refers to throughout was replaced by the package-wide switch
+`pyqula/gpu.py`: `gpu.set_gpu(True)` selects the device for every
+GPU-capable routine, and passing `chi_cpugpu` now raises. Everything else
+here, including `chi_prec` and every measurement, is unchanged; read
+`chi_cpugpu="GPU"` below as "with the switch set".
+
 Status: **Tiers 0-2 and 4 implemented. Tiers 0-2 were measured on a V100
 (833x at N=64, crossover near N=7, section 11) and on a GTX 1060; Tier 4
 (`chi_prec`, single precision, the GPU default) on the GTX 1060, ~220x over
