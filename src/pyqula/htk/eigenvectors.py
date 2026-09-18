@@ -149,3 +149,50 @@ def peigvalsh(hks,eigh_prec="double"):
         from .eigenvectorsjax import peigvalsh_gpu
         return peigvalsh_gpu(hks,prec=eigh_prec)
     return _peigvalsh_numba(hks)
+
+
+# Diagonalizing a Bloch generator over a k-mesh
+#
+# The pair below replaces the `mats = hk_matrix_batch(f,ks)` followed by
+# `peigh(mats)` that every k-mesh call site used to write out by hand. On
+# the CPU it is exactly that, unchanged. On the GPU it hands the Bloch
+# ingredients to the device instead of the finished stack, so the Bloch sum
+# is batched there rather than looped over on the host and only the
+# (nhop,n,n) hoppings cross the bus instead of the whole (nk,n,n) stack --
+# worth 1.3-1.4x in double and 2.7-6.1x in single on a GTX 1060 over
+# building the stack first (see documentation/gpu_porting_plan.md).
+#
+# The fused route needs the hoppings, which htk/bloch.py attaches to the
+# generator it builds. A generator without them -- a sparse Hamiltonian, a
+# zero-dimensional one, or any hand-written closure -- simply takes the
+# ordinary route, so these are safe to call with any generator.
+
+
+def bloch_on_gpu(f):
+    """The Bloch ingredients if this generator carries them and the device
+    is worth using for them, otherwise None"""
+    data = getattr(f,"bloch_data",None)
+    if data is None: return None # not a dense Bloch generator
+    if not gpu.get_gpu(): return None
+    if np.shape(data[0])[1]<gpu_min_dimension: return None # too small to pay
+    return data
+
+
+def peigh_bloch(f,ks,eigh_prec="double"):
+    """Eigenvalues and eigenvectors of the Bloch Hamiltonian f at every k
+    in ks, as parallel_diagonalization returns them"""
+    data = bloch_on_gpu(f)
+    if data is not None:
+        from .eigenvectorsjax import peigh_bloch_gpu
+        return peigh_bloch_gpu(data[0],data[1],ks,prec=eigh_prec)
+    return parallel_diagonalization(hk_matrix_batch(f,ks),eigh_prec=eigh_prec)
+
+
+def peigvalsh_bloch(f,ks,eigh_prec="double"):
+    """Eigenvalues of the Bloch Hamiltonian f at every k in ks, the
+    eigenvector-free counterpart of peigh_bloch"""
+    data = bloch_on_gpu(f)
+    if data is not None:
+        from .eigenvectorsjax import peigvalsh_bloch_gpu
+        return peigvalsh_bloch_gpu(data[0],data[1],ks,prec=eigh_prec)
+    return peigvalsh(hk_matrix_batch(f,ks),eigh_prec=eigh_prec)

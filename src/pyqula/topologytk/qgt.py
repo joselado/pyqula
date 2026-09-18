@@ -133,10 +133,9 @@ def _qgt_batch(hm,orders,hkgen,ks,occ_idxs,non_abelian,degeneracy_tol,
     blow the tensor up to a huge, effectively-noise-dominated value instead
     of raising), while over-eagerly flagging a perfectly healthy gap as
     degenerate on a meV-scale Hamiltonian."""
-    from ..htk.eigenvectors import hk_matrix_batch, parallel_diagonalization
+    from ..htk.eigenvectors import peigh_bloch
     dim = len(orders)
-    mats = hk_matrix_batch(hkgen,ks) # H(k) batch, densified
-    (es,ws) = parallel_diagonalization(mats) # ws[k][:,n] eigenvector of es[k][n]
+    (es,ws) = peigh_bloch(hkgen,ks) # ws[k][:,n] eigenvector of es[k][n]
     nk,n = es.shape
     occ_idxs = np.array(occ_idxs,dtype=int)
     cond_idxs = np.setdiff1d(np.arange(n),occ_idxs)

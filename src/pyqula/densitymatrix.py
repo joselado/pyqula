@@ -1,6 +1,5 @@
 from __future__ import print_function, division
 import numpy as np
-from .algebra import todense
 from numba import jit
 from . import parallel
 
@@ -71,21 +70,37 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     of threads instead of being dominated by IPC overhead. batch_size
     bounds how many k-points' eigenvectors are held in memory at once,
     keeping the memory footprint low regardless of how dense the k-mesh
-    is."""
-    from .htk.eigenvectors import parallel_diagonalization
+    is.
+
+    Under pyqula.gpu.set_gpu(True) this instead goes to dmtk/fulldmjax.py,
+    which keeps the whole calculation on the device: the eigenvectors are
+    the largest array here and they exist only to be summed away, so
+    sending them back to the host -- once per SCF iteration -- is the part
+    worth removing. What comes back is the finished (n,n) density matrix
+    per direction, whatever the k-mesh. batch_size does not apply there;
+    that route chunks the mesh itself, against the device's memory."""
+    from .htk.eigenvectors import peigh_bloch, bloch_on_gpu
     hk = h.get_hk_gen() # get the Hamiltonian generator
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
     fac = 1./len(ks) # normalization
+    bloch = bloch_on_gpu(hk) # the device route, where it is worth taking
+    if bloch is not None:
+        # everything stays on the device: the eigenvectors are the biggest
+        # array here and they exist only to be summed away, so they never
+        # come back to the host (see dmtk/fulldmjax.py)
+        from .dmtk.fulldmjax import full_dm_gpu
+        dirs = [[0.,0.,0.]] if ds is None else ds # the undirected dm is d=0
+        dm = fac*full_dm_gpu(bloch[0],bloch[1],ks,dirs,fermi=fermi,delta=delta)
+        if ds is None: return dm[0] # the single array
+        return {tuple(d): dm[i] for (i,d) in enumerate(ds)}
     dm = None # accumulator, one slot per batch
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
-        # hk(k) is sparse for an is_sparse Hamiltonian; np.array of those
-        # gives an object array that the numba kernels below reject with an
-        # opaque TypingError, so densify (this path diagonalizes fully
-        # anyway)
-        mats = np.array([todense(hk(k)) for k in kbatch],
-                dtype=np.complex128) # k-Hamiltonians in this batch
-        es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
+        # peigh_bloch densifies every H(k): hk(k) is sparse for an
+        # is_sparse Hamiltonian, and np.array of those gives an object
+        # array that the numba kernels below reject with an opaque
+        # TypingError (this path diagonalizes fully anyway)
+        es_batch,vs_batch = peigh_bloch(hk,kbatch) # diagonalize in parallel
         es_batch = es_batch-fermi # substract fermi energy
         if ds is None:
             contribs = full_dm_batch_vectorized(es_batch,vs_batch,delta=delta) # one per kpoint, in parallel
@@ -140,7 +155,7 @@ def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
     above it, just run the dense kernel for that direction and keep its
     full result -- strictly more information than requested, but correct
     and, past the crossover, cheaper too."""
-    from .htk.eigenvectors import parallel_diagonalization
+    from .htk.eigenvectors import peigh_bloch
     hk = h.get_hk_gen() # get the Hamiltonian generator
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
     fac = 1./len(ks) # normalization
@@ -149,13 +164,11 @@ def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
     outd = {d: np.zeros((n,n),dtype=np.complex128) for d in pairs}
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
-        # hk(k) is sparse for an is_sparse Hamiltonian; np.array of those
-        # gives an object array that the numba kernels below reject with an
-        # opaque TypingError, so densify (this path diagonalizes fully
-        # anyway)
-        mats = np.array([todense(hk(k)) for k in kbatch],
-                dtype=np.complex128) # k-Hamiltonians in this batch
-        es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
+        # peigh_bloch densifies every H(k): hk(k) is sparse for an
+        # is_sparse Hamiltonian, and np.array of those gives an object
+        # array that the numba kernels below reject with an opaque
+        # TypingError (this path diagonalizes fully anyway)
+        es_batch,vs_batch = peigh_bloch(hk,kbatch) # diagonalize in parallel
         es_batch = es_batch-fermi # substract fermi energy
         _accumulate_dm_batch(outd,pairs,threshold,es_batch,vs_batch,kbatch,delta)
     for d in outd: outd[d] *= fac # renormalize
@@ -219,7 +232,7 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     entirely different (de-paired) Hamiltonian, not just a shifted copy of
     the one the density matrix comes from, so this trick does not apply
     there."""
-    from .htk.eigenvectors import parallel_diagonalization
+    from .htk.eigenvectors import peigh_bloch
     # the T-aware Fermi search, because the density matrix below weights
     # the states with the Fermi-Dirac occupation at this same `delta`: a
     # T=0 eigenvalue count would hold a different number of electrons
@@ -240,13 +253,11 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     all_es = []
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
-        # hk(k) is sparse for an is_sparse Hamiltonian; np.array of those
-        # gives an object array that the numba kernels below reject with an
-        # opaque TypingError, so densify (this path diagonalizes fully
-        # anyway)
-        mats = np.array([todense(hk(k)) for k in kbatch],
-                dtype=np.complex128) # k-Hamiltonians in this batch
-        es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize in parallel
+        # peigh_bloch densifies every H(k): hk(k) is sparse for an
+        # is_sparse Hamiltonian, and np.array of those gives an object
+        # array that the numba kernels below reject with an opaque
+        # TypingError (this path diagonalizes fully anyway)
+        es_batch,vs_batch = peigh_bloch(hk,kbatch) # diagonalize in parallel
         batches.append((es_batch,vs_batch,kbatch))
         all_es.append(es_batch.ravel())
     fermi = get_fermi_energy_T(np.concatenate(all_es),filling,T=delta)

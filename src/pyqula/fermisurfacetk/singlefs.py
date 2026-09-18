@@ -166,14 +166,13 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
         kyout = rs[:,1] # y coordinate
         if mode=='eigen' and operator is None:
             # batched, numba-parallel path -- no interprocess dispatch
-            from ..htk.eigenvectors import peigvalsh, hk_matrix_batch
+            from ..htk.eigenvectors import peigvalsh_bloch
             ks = np.array([R(r)+k0 for r in rs]) # kpoints, change of basis applied
             kdos = np.zeros(len(rs),dtype=np.float64)
             batch_size = 64
             for i0 in range(0,len(rs),batch_size): # loop over batches of kpoints
                 kbatch = ks[i0:i0+batch_size]
-                mats = hk_matrix_batch(hk_gen,kbatch)
-                es_batch = peigvalsh(mats) # diagonalize the whole batch in parallel
+                es_batch = peigvalsh_bloch(hk_gen,kbatch) # diagonalize the whole batch in parallel
                 for ii in range(len(kbatch)):
                     es = es_batch[ii]
                     kdos[i0+ii] = np.sum(delta/((e-es)**2+delta**2))

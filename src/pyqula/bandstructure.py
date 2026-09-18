@@ -48,12 +48,11 @@ def current_bands(h,klist=None):
   fo = open("BANDS.OUT","w") # output file
   from . import current
   fj = current.current_operator(h) # function that generates the operator
-  from .htk.eigenvectors import peigh, hk_matrix_batch
-  # through hk_matrix_batch, which densifies every H(k) first: stacking
-  # them with np.array instead raises "must be real number, not
-  # csc_matrix" on a sparse Hamiltonian
-  hks = hk_matrix_batch(hkgen,[[k,0.,0.] for k in klist]) # H(k) batch
-  es_batch,ws_batch = peigh(hks) # batched numba eigh
+  from .htk.eigenvectors import peigh_bloch
+  # peigh_bloch densifies every H(k) first: stacking them with np.array
+  # instead raises "must be real number, not csc_matrix" on a sparse
+  # Hamiltonian
+  es_batch,ws_batch = peigh_bloch(hkgen,[[k,0.,0.] for k in klist]) # batched eigh
   for ik,k in enumerate(klist): # loop over kpoints
     jk = fj([k,0.,0.]) # get current operator
     evals,evecs = es_batch[ik],ws_batch[ik] # eigenvectors and eigenvalues
@@ -182,9 +181,8 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
       # common case (plain diagonalization, no operator): batch every
       # k-point's H(k) into one numba eigh call instead of pcall-ing
       # algebra.eigvalsh per k-point
-      from .htk.eigenvectors import peigvalsh, hk_matrix_batch
-      mats = hk_matrix_batch(hkgen,kpath)
-      es_batch = np.sort(peigvalsh(mats),axis=1) # (nk,n) sorted eigenvalues
+      from .htk.eigenvectors import peigvalsh_bloch
+      es_batch = np.sort(peigvalsh_bloch(hkgen,kpath),axis=1) # (nk,n) sorted
       esk = [] # list of per-k arrays, same shape as the old getek(k) output
       for k in range(len(kpath)):
         es = es_batch[k]

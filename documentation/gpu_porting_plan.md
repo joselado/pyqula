@@ -1,8 +1,9 @@
 # GPU porting plan
 
-Status: **Tiers 1, 2 and 3 done** (KPM batched GPU path; batched dense diagonalization;
-the forced-CPU modules no longer switch jax's platform behind the package's back); Tier 4
-not started.
+Status: **Tiers 1, 2, 2b, 2c and 3 done** (KPM batched GPU path; batched dense
+diagonalization, with the Bloch build fused into it and the density matrix kept on the
+device; the forced-CPU modules no longer switch jax's platform behind the package's
+back); Tier 4 not started.
 
 **The backend is now one package-wide switch, `pyqula/gpu.py`.** `gpu.set_gpu(True)` puts
 every GPU-capable routine on the device and points jax's default device there, which is
@@ -243,6 +244,65 @@ process as the CPU perf plan.
   cuSOLVER workspace. No call site needed changing, since the switch is global and both
   entry points keep their signatures; `eigh_prec="single"` is available per call and is not
   the default anywhere. Tests: `tests/parallel/test_eigh_gpu.py`.
+- **Tier 2b — fuse the Bloch build into the device solve.** **Done.** Tier 2 left the
+  *stack* being built on the host: `hk_matrix_batch` is a Python loop calling the Bloch
+  generator once per k-point, after which the whole `(nk,n,n)` array is transferred. That
+  was a rounding error while the solve was on the CPU and is not once it is on the device
+  — measured on the GTX 1060 at 15% of the pair's cost in double precision and 34% in
+  single (n=64-144, nk=900-1600). `htk/bloch.py` now attaches the hopping matrices and
+  their lattice vectors to the generator it builds (`f.bloch_data`), and
+  `htk/eigenvectors.py`'s new `peigh_bloch`/`peigvalsh_bloch` hand those to
+  `eigenvectorsjax.peigh_bloch_gpu`/`peigvalsh_bloch_gpu`, which do the Bloch sum on the
+  device inside the same jit as the solve. What crosses the bus is `(nhop,n,n)` once
+  instead of `(nk,n,n)` per call, and the host loop disappears. Measured end to end
+  through the dispatcher, against the same call with the host build:
+
+  | n | nk | double | single |
+  |---|---|---|---|
+  | 64 | 1600 | 1.29x | 2.52x |
+  | 144 | 900 | 1.19x | 1.85x |
+
+  The CPU route is unchanged and bit-for-bit identical (it is still `hk_matrix_batch`
+  followed by the numba kernels), and a generator with no `bloch_data` — a sparse
+  Hamiltonian, a 0d one, any hand-written closure — falls back to it, so the pair is safe
+  to call with any generator. The size threshold is Tier 2's `gpu_min_dimension`,
+  unchanged. Call sites migrated: `dos.py`, `filling.py`, `spectrum.py`,
+  `bandstructure.py`, `ldos.py`, `densitymatrix.py`, `fermisurface.py`,
+  `fermisurfacetk/singlefs.py`, `topologytk/berry.py`, `topologytk/qgt.py`. Not migrated:
+  `conductivitytk/kubo.py`, which reuses the stack afterwards for the velocity operators,
+  and `spectrum.py`'s total-energy branch, which reuses it for `eh_energy`. Tests:
+  `tests/parallel/test_bloch_eigh_gpu.py`.
+- **Tier 2c — keep the density matrix on the device.** **Done.** Tier 2b removed the host
+  build; this removes the host *return*. `densitymatrix.full_dm_accumulate` used to bring
+  every k-point's eigenvectors back as a `(nk,n,n)` complex128 stack and contract them on
+  the host with `dmtk/fulldm.py`'s numba kernels — the largest array in the calculation,
+  existing only to be summed away, and paid once per SCF iteration. `dmtk/fulldmjax.py`
+  now does the Bloch sum, the diagonalization, the occupations and the k-sum in one jit,
+  so what comes back is the finished `(nd,n,n)` whatever the k-mesh. Measured on the GTX
+  1060 against the numba route, three hopping directions, double precision throughout:
+
+  | n | nk^2 | CPU | GPU | |
+  |---|---|---|---|---|
+  | 36 | 400 | 0.255 s | 0.080 s | 3.17x |
+  | 64 | 400 | 0.525 s | 0.163 s | 3.23x |
+  | 144 | 256 | 1.879 s | 0.817 s | 2.30x |
+  | 256 | 100 | 2.733 s | 1.047 s | 2.61x |
+
+  Agreement with the numba route is to machine precision (2e-16 absolute on a density
+  matrix of order 0.5), since both are double precision and the only arithmetic
+  difference is the Fermi function, written on the device as a sigmoid so that a level a
+  bandwidth from the Fermi energy saturates instead of overflowing `exp` — at the default
+  `delta` of 1e-6, `es/delta` reaches 1e6 routinely. The undirected density matrix is the
+  d=(0,0,0) case of the directed one and takes the same path. `batch_size` does not apply
+  on the device route, which chunks the mesh itself. Tests:
+  `tests/densitymatrix/test_density_matrix_gpu.py`.
+
+  **A measurement caveat worth repeating**, since it nearly went into this file as fact:
+  the first run of this benchmark reported 25-45x, taken while the test suite was running
+  on the other cores. It was entirely an artifact of the loaded machine — the honest
+  figure is the 2.3-3.2x above. `CLAUDE.md` already says a timing taken while other jobs
+  run is meaningless; it is worth adding that a GPU comparison exaggerates it, because
+  only the CPU side of the ratio slows down.
 - **Tier 3 — audit the forced-CPU jax modules** (item 4 above). **Done**: no GPU option,
   the CPU placement is now local to those modules.
 - **Tier 4 — research spike only, not committed work**: sparse/Green's-function GPU

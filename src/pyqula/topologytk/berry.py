@@ -13,7 +13,7 @@
 import numpy as np
 import scipy.linalg as lg
 
-from ..htk.eigenvectors import parallel_diagonalization, hk_matrix_batch
+from ..htk.eigenvectors import peigh_bloch
 from .overlap import uij
 
 
@@ -55,8 +55,8 @@ def berry_curvature_mesh(h,ks,dk=0.01,batch_size=64):
         kb = ks[i0:i0+batch_size]
         nb = len(kb)
         corners = [kb[j][0:2]+off for j in range(nb) for off in offsets]
-        mats = hk_matrix_batch(hkgen,corners) # (4*nb,norb,norb)
-        es_all,vs_all = parallel_diagonalization(mats) # diagonalize the batch in parallel
+        # (4*nb,norb,norb): the four plaquette corners of every kpoint
+        es_all,vs_all = peigh_bloch(hkgen,corners) # diagonalize the batch in parallel
         for j in range(nb): # cheap post-processing: plain, serial
             wfs = []
             for c in range(4):

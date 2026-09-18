@@ -171,15 +171,14 @@ def ldosmap(h,energies=np.linspace(-1.0,1.0,40),delta=None,
   ks = [np.random.random(3) for ik in range(nk)] # kpoints
   if kwargs.get("num_bands") is None and not kwargs.get("non_hermitian",False):
       # batched, numba-parallel path -- no interprocess dispatch
-      from .htk.eigenvectors import parallel_diagonalization, hk_matrix_batch
+      from .htk.eigenvectors import peigh_bloch
       from .ldostk.ldoswaves import ldos_waves_from_eigsystem
       delta_discard = kwargs.get("delta_discard")
       ds = []
       batch_size = 64
       for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
           kbatch = ks[i0:i0+batch_size]
-          mats = hk_matrix_batch(hkgen,kbatch)
-          es_batch,vs_batch = parallel_diagonalization(mats) # diagonalize the batch in parallel
+          es_batch,vs_batch = peigh_bloch(hkgen,kbatch) # diagonalize the batch in parallel
           for ii,k in enumerate(kbatch):
               eigvec = vs_batch[ii].T # rows are eigenvectors
               ds.append(ldos_waves_from_eigsystem(es_batch[ii],eigvec,energies,
@@ -472,11 +471,11 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
     print("Diagonalizing in LDOS, DENSE mode")
     # the k-points are diagonalized in batches with the same numba-parallel
     # routine dos.py and ldosmap use, instead of one LAPACK call per k-point
-    from .htk.eigenvectors import parallel_diagonalization,hk_matrix_batch
+    from .htk.eigenvectors import peigh_bloch
     batch_size = 64
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
       kb = ks[i0:i0+batch_size] # kpoints in this batch
-      es,vs = parallel_diagonalization(hk_matrix_batch(hk,kb)) # diagonalize
+      es,vs = peigh_bloch(hk,kb) # diagonalize
       for (ii,k) in enumerate(kb): # loop over kpoints of the batch
         w = vs[ii].transpose() # rows are the eigenvectors
         evals += [ie for ie in es[ii]]

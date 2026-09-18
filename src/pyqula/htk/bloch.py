@@ -36,12 +36,18 @@ def bloch_matrix_generator(ms,ds,dim=1,use_jax=False):
         def f(k,**kwargs):
             return evaluate_bloch_matrix(ms,ds,
                     jnp.asarray(k,dtype=jnp.float64)[0:dim]) # call
-        return f
     else:
         def f(k,**kwargs):
             return evaluate_bloch_matrix_jit(ms,ds,
                     np.array(k,dtype=np.float64)[0:dim]) # call
-        return f
+    # The hopping matrices and their lattice vectors, carried on the
+    # generator itself so that a caller evaluating it over a whole k-mesh
+    # can rebuild the Bloch sum as one batched contraction instead of
+    # calling f once per k -- see htk/eigenvectors.py's peigh_bloch, which
+    # uses this to build the stack on the GPU rather than on the host.
+    # ds is already cropped to the dimensionality, so k must be too.
+    f.bloch_data = (ms,ds)
+    return f
 
 
 @jit(nopython=True,cache=True)

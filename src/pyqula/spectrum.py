@@ -45,9 +45,8 @@ def boolean_fermi_surface(h,write=True,output_file="BOOL_FERMI_MAP.OUT",
         kyout.append(y)
     rs = np.array(rs) # real space vectors
     ks = np.array([R@r for r in rs]) # change of basis
-    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
-    hks = hk_matrix_batch(hk_gen,ks) # H(k) batch, densified
-    es_batch = peigvalsh(hks) # batched numba eigh, shape (nk*nk,n)
+    from .htk.eigenvectors import peigvalsh_bloch
+    es_batch = peigvalsh_bloch(hk_gen,ks) # batched eigh, shape (nk*nk,n)
     for evals in es_batch: # loop over kpoints
       de = np.abs(evals - e) # difference with respect to fermi
       de = de[de<delta] # energies close to fermi
@@ -529,10 +528,9 @@ def eigenvalues_kmesh(h,nk=20):
     hkgen = h.get_hk_gen() # get the generator
     kx = np.linspace(0.,1.,nk,endpoint=False)
     ky = np.linspace(0.,1.,nk,endpoint=False)
-    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
-    mats = hk_matrix_batch(hkgen,[[ik,jk] for ik in kx for jk in ky])
-    # H(k) batch, ik outer, jk inner
-    es_batch = peigvalsh(mats) # batched numba eigh, shape (nk*nk,ne)
+    from .htk.eigenvectors import peigvalsh_bloch
+    # batched eigh over the mesh, ik outer and jk inner, shape (nk*nk,ne)
+    es_batch = peigvalsh_bloch(hkgen,[[ik,jk] for ik in kx for jk in ky])
     es = es_batch.reshape(nk,nk,ne) # reshape to match original layout
     return es # return all the energies
 

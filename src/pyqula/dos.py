@@ -136,9 +136,8 @@ def calculate_dos_hkgen(hkgen,ks,ndos=100,delta=None,
         es = np.concatenate([es,o]) # concatenate
     es = np.array(es) # convert to array
   else: # dense Hamiltonian: batch all k-points into one numba eigh call
-    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
-    mats = hk_matrix_batch(hkgen,ks) # H(k) batch, densified
-    es = peigvalsh(mats) # batched numba eigh, shape (len(ks),n)
+    from .htk.eigenvectors import peigvalsh_bloch
+    es = peigvalsh_bloch(hkgen,ks) # batched eigh, shape (len(ks),n)
     es = es.reshape(es.shape[0]*es.shape[1]) # 1d array
   nk = len(ks) # number of kpoints
   if energies is not None: # energies given on input
@@ -224,10 +223,9 @@ def dos2d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
     kys = np.linspace(0.,1.,nk)
     hkgen= h.get_hk_gen() # get hamiltonian generator
     weight = 1./(nk*nk)
-    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
+    from .htk.eigenvectors import peigvalsh_bloch
     ks = np.array([[ix,iy,0.] for ix in kxs for iy in kys]) # all kpoints
-    mats = hk_matrix_batch(hkgen,ks) # H(k) batch, densified
-    es_batch = peigvalsh(mats) # batched numba eigh, shape (nk*nk,n)
+    es_batch = peigvalsh_bloch(hkgen,ks) # batched eigh, shape (nk*nk,n)
     es = es_batch.reshape(es_batch.shape[0]*es_batch.shape[1]) # flatten
     ys = weight*calculate_dos(es,energies,delta) # add all contributions
     ys *= 1./np.pi # normalization of the Lorentzian
@@ -260,9 +258,8 @@ def dos1d_ewindow(h,energies=np.linspace(-1.,1.,30),delta=None,info=False,
     kxs = np.linspace(0.,1.,nk)
     hkgen= h.get_hk_gen() # get hamiltonian generator
     weight = 1./(nk)
-    from .htk.eigenvectors import peigvalsh, hk_matrix_batch
-    mats = hk_matrix_batch(hkgen,[[ix,0.,0.] for ix in kxs]) # H(k) batch, densified
-    es_batch = peigvalsh(mats) # batched numba eigh, shape (nk,n)
+    from .htk.eigenvectors import peigvalsh_bloch
+    es_batch = peigvalsh_bloch(hkgen,[[ix,0.,0.] for ix in kxs]) # batched eigh, (nk,n)
     es = es_batch.reshape(es_batch.shape[0]*es_batch.shape[1]) # flatten
     ys = weight*calculate_dos(es,energies,delta) # add all contributions
     ys *= 1./np.pi # normalization of the Lorentzian
