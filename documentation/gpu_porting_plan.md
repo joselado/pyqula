@@ -75,11 +75,11 @@ small matrices/small k-meshes, where the existing numba CPU path may already be 
 the crossover point** before deciding whether to add a GPU path at all, and if so, whether
 it replaces or supplements the numba path.
 
-**Partial sweep, GTX 1060 (2026-09-17), stopped before completion.** Random dense Hermitian
-batches, warm times in seconds, numba `peigvalsh`/`parallel_diagonalization` on 8 threads
-against `jax.jit(jnp.linalg.eigvalsh/eigh)` on the device, host-device transfers included
-(what a drop-in replacement would pay). `err32` is the single-precision eigenvalue error
-relative to the spectral scale; double agrees with numba to <1e-10.
+**Sweep on the GTX 1060 (2026-09-17/18).** Random dense Hermitian batches, warm times in
+seconds, numba `peigvalsh`/`parallel_diagonalization` on 8 threads against
+`jax.jit(jnp.linalg.eigvalsh/eigh)` on the device, host-device transfers included (what a
+drop-in replacement would pay). `err32` is the single-precision eigenvalue error relative
+to the spectral scale; double agrees with numba to <1e-10 everywhere.
 
 | n | batch | numba vals | GPU double vals | GPU single vals | numba vecs | GPU double vecs | GPU single vecs | err32 |
 |---|---|---|---|---|---|---|---|---|
@@ -90,16 +90,34 @@ relative to the spectral scale; double agrees with numba to <1e-10.
 | 64 | 16 | 0.019 | 0.009 | 0.002 | 0.022 | 0.010 | 0.003 | 4e-7 |
 | 64 | 4096 | 7.68 | 1.88 | 0.365 | 7.73 | 2.04 | 0.446 | 1e-6 |
 | 128 | 256 | 2.10 | 0.60 | 0.088 | 2.14 | 0.50 | 0.083 | 1e-6 |
+| 128 | 1024 | 4.10 | 1.75 | 0.320 | 3.99 | 1.93 | 0.389 | 2e-6 |
 | 256 | 16 | 0.48 | 0.14 | 0.030 | 0.66 | 0.15 | 0.033 | 1e-6 |
+| 256 | 64 | 1.33 | 0.49 | 0.114 | 1.40 | 0.57 | 0.134 | 1e-6 |
+| 256 | 256 | 6.38 | 2.00 | 0.483 | 6.59 | 2.29 | 0.588 | 2e-6 |
+| 512 | 16 | 2.53 | 0.68 | 0.150 | 2.77 | 0.72 | 0.164 | 3e-6 |
+| 512 | 64 | 11.3 | 2.70 | 0.608 | 13.1 | 3.02 | 0.662 | 2e-6 |
+| 1024 | 8 | 20.0 | 2.18 | 0.422 | 20.8 | 2.84 | 0.520 | 1e-6 |
+| 1024 | 16 | 39.9 | 5.56 | 0.989 | 40.1 | 5.74 | 1.04 | 1e-6 |
 
-What it already shows: on this card double precision loses below n~32 and wins 2-4x from
-n=64; single precision wins almost everywhere (5-20x) at ~1e-6 relative eigenvalue error,
-which is fine for DOS/bands but not for anything taking eigenvector differences. Rows for
-n>=256 with large batches and n=512/1024 were not reached. One hard constraint surfaced:
-cuSOLVER's batched Jacobi solver needs ~500 bytes of workspace per matrix entry, so a
-4096 x 64 x 64 batch asked for 7.75 GiB in one dispatch and failed on the 6 GB card. A GPU
-path must chunk by workspace, not by the size of the matrices themselves (2^21 entries per
-dispatch worked).
+The crossover is in the matrix size, not the batch size. Below n~32 double precision on the
+device loses to numba however large the batch, because the per-matrix solve is too small to
+fill the card and the transfers are not amortized. It breaks even near n=32, wins 2-4x at
+n=64-256, and 7-9x at n=512-1024 -- eigenvalues and eigenvectors behave the same, so
+`peigh` and `peigvalsh` would both benefit and neither needs its own crossover. Single
+precision wins everywhere, 5-40x, at ~1e-6 relative eigenvalue error: fine for DOS and
+bands, not for anything differencing eigenvectors, which is the same trade `chi_prec`
+already exposes for the RPA kernel.
+
+Note that n here is `limits.densedimension`-bounded (10,000) but realistically a few
+hundred, and a k-mesh gives batches of hundreds to thousands, so the wide-and-shallow
+corner (small n, huge batch) is the common one for bands/DOS and is exactly where the
+device does not help in double precision. A GPU option should therefore not be the
+default, and should probably not even be offered below a size threshold.
+
+One hard constraint surfaced: cuSOLVER's batched Jacobi solver needs ~500 bytes of
+workspace per matrix entry, so a 4096 x 64 x 64 batch asked for 7.75 GiB in one dispatch
+and failed on the 6 GB card. A GPU path must chunk by workspace, not by the size of the
+matrices themselves (2^21 entries per dispatch worked for every row above).
 
 ### 2. KPM moments, batched GPU path — `kpmtk/kpmnumba.py` / `kpmtk/kpmjax.py` — **done**
 
