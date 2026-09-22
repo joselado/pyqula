@@ -761,6 +761,43 @@ regression from a stale reference, which is how this one was resolved in the
 wrong direction. Where an independent code path computes the same quantity,
 assert the agreement *alongside* the pin.
 
+**Update -- re-opened a third time, then closed by removing the pin.** The
+pin was flipped back to `-13.738703648103538` after this entry was written,
+on the claim that "HEAD reproduces -13.7387036481035 to ~1e-14 (measured
+directly on a pristine `git archive HEAD` tree)". It does not, on the
+maintainer's own workstation: HEAD gives `-13.7353317530012`, exactly what
+this entry recorded, and the test was red again.
+
+What neither round established is *why* the two values differ, and that
+turned out to be the whole answer. They are the same Hamiltonian at Fermi
+offsets 3.24e-5 apart. `np.sum(e)` is taken after
+`h.set_filling(0.5, nk=1)`, which estimates the Fermi energy from a single
+Gamma point; over nk = 1,2,3,4,6,8,12 that estimate returns 0.1439, 0.0985,
+0.0035, 0.0489, 0.0035, 0.0175, 0.0035 -- it is not converged in any sense.
+All 104 eigenvalues carry the offset, so the sum amplifies it 104x, and
+"the eight nearest zero" is a discontinuous selection on top (move the
+offset by 1e-3 and the sum jumps from -13.74 to -10.17). `atol=1e-6` on it
+was pinning the Fermi energy to 1e-8. Measured across the same nk sweep the
+old pin gives -13.735, -10.822, -14.078, -13.873.
+
+So the quantity was never discriminating the Hamiltonian, and this entry's
+own advice -- keep the pin, add the independent path -- was the wrong call
+here: the pin had nothing to pin. It is replaced by fingerprints that are
+shift-invariant by construction (`Tr C^2` and `Tr C^3` of the centred Bloch
+matrix, needing no eigensolver at all, plus the total bandwidth) together
+with the exact structure of the moire cell (28 sites, lattice vectors of
+length sqrt(21) at 60 degrees, algebraic values rather than recorded ones).
+Measured over that same nk = 1..12 sweep and at one and eight BLAS threads,
+they move by at most 1.2e-12 relative, which is the precision the constants
+are written to rather than any real variation; the test allows 1e-10. A
+separate test asserts the invariance itself, so a future change to how the
+filling is estimated cannot make this file red a fourth time.
+
+The refined general point: a golden value is only worth pinning if it is
+insensitive to everything the test is not about. Prefer one that is
+invariant by construction -- and assert that invariance -- over one that
+merely happened to reproduce on the machine that recorded it.
+
 ---
 
 ## Method note
