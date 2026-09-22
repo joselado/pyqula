@@ -98,7 +98,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Local and full operator-resolved density of states [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/06_operator_resolved_dos.ipynb)
 - 0d, 1d, 2d and 3d tight binding models [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/07_0d_1d_2d_3d_models.ipynb)
 - Non-Hermitian Hamiltonians (gain/loss, non-reciprocal hopping), with complex-spectrum band structures, density of states, LDOS and Berry curvature
-- Electronic structure unfolding in supercells [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
+- Electronic structure unfolding in supercells, diagonal or general non-orthogonal ones such as sqrt(3)xsqrt(3), in one, two and three dimensions [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
 - Twisted bilayer graphene structural relaxation (GSFE + elastic energy minimization, AA-region shrinkage and AB/BA domain formation below a few degrees of twist)
 - Energy-resolved spin splitting of collinear magnets and altermagnets, either as a broadened density or as the maximum over the whole Brillouin zone
 - Nonlinear Drude spin conductivity at arbitrary order in the electric field, whose lowest nonvanishing order identifies the X-wave index (p, d, f, g, i) of an altermagnet without any spin-orbit coupling, together with the X-wave tight-binding models themselves

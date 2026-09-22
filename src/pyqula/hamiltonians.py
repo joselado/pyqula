@@ -518,6 +518,10 @@ class Hamiltonian():
     def get_kdos_bands(self,**kwargs):
         from .kdos import kdos_bands
         return kdos_bands(self,**kwargs)
+    def get_unfolded_kpath(self,*args,**kwargs):
+        """k-path of the primitive cell, in this supercell's coordinates"""
+        from .unfolding import get_unfolded_kpath
+        return get_unfolded_kpath(self,*args,**kwargs)
     def get_surface_kdos(self,**kwargs):
         from .kdos import surface_kdos
         return surface_kdos(self,**kwargs)

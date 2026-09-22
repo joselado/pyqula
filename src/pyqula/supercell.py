@@ -203,9 +203,33 @@ def target_angle_volume(g,angle=None,n=5,volume=None,same_length=False):
         mask &= np.abs(v-volume)<=1e-6
       idx = np.where(mask)[0]
       if len(idx)==0: return None # nothng found
-      out = [[[I[i],J[i],0],[K[i],L[i],0],[0,0,1]] for i in idx] # candidates
-      vs = [v[i] for i in idx] # their volumes
-      return [o for (v,o) in sorted(zip(vs,out))][0]
+      # among the candidates that satisfy the constraints, keep the most
+      # compact cell: smallest volume first, then the shortest pair of
+      # lattice vectors, then the least skewed pair. Ranking by volume
+      # alone left the rest of the choice to a lexicographic accident,
+      # and for a volume target with no angle constraint (which is what
+      # g.get_supercell(np.sqrt(3)) asks for) that returned a nearly
+      # degenerate cell: the sqrt(3) x sqrt(3) supercell of a triangular
+      # lattice came out with an angle of 3.7 degrees between lattice
+      # vectors 7.8 and 5.2 times the primal one, so the first neighbors
+      # of an atom fell outside the cells the hopping generator searches
+      # and the resulting Hamiltonian had no hoppings at all. The keys
+      # are rounded so that candidates which are geometrically identical
+      # up to floating point still fall through to the same lexicographic
+      # tie-break as before, which is what keeps the angle/same_length
+      # callers returning exactly the cell they returned before.
+      l2sum = np.sum(a1n*a1n,axis=1) + np.sum(a2n*a2n,axis=1) # compactness
+      skew = np.abs(np.sum(u1*u2,axis=1)) # |cos| between the two vectors
+      def cellkey(i): # ranking of a single candidate
+        # when a volume was requested every surviving candidate already has
+        # it, so the volume carries no information and is left out of the
+        # key; comparing it anyway would rank the candidates by the 1e-16
+        # noise of norm(cross(a1n,a2n)) before compactness ever got a say
+        vi = () if volume is not None else (float(v[i]),)
+        return vi + (round(float(l2sum[i]),8),round(float(skew[i]),8),
+                int(I[i]),int(J[i]),int(K[i]),int(L[i]))
+      i0 = min(idx,key=cellkey) # the best candidate
+      return [[int(I[i0]),int(J[i0]),0],[int(K[i0]),int(L[i0]),0],[0,0,1]]
     out = getm() # get rotation matrix
     if out is None: # no supercell found
       raise ValueError("no supercell with the requested angle or volume was "

@@ -110,6 +110,10 @@ class Geometry:
         write_sublattice(self)
     def get_kpath(self,*args,**kwargs):
         return klist.get_kpath(self,*args,**kwargs)
+    def get_unfolded_kpath(self,*args,**kwargs):
+        """k-path of the primitive cell, in this supercell's coordinates"""
+        from .unfolding import get_unfolded_kpath
+        return get_unfolded_kpath(self,*args,**kwargs)
     def write_positions(self,**kwargs):
         """Write the positions in a file"""
         write_positions(self,**kwargs)

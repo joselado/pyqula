@@ -95,6 +95,36 @@ def bloch_projector(h,g0=None):
 
 
 
+def get_unfolded_kpath(self,kpath=None,g0=None,**kwargs):
+    """Given a supercell, return the k-path of its primal cell written in
+    the reduced coordinates of the supercell, which is the path an
+    unfolded band structure has to be computed along.
+
+    The unfolding operator sends a supercell kpoint k to the primal-cell
+    kpoint Minv@k, with M the integer matrix such that the supercell
+    lattice vectors are A_supercell = M@A_primal, so tracing the primal
+    Brillouin zone means feeding it M@k0 for every k0 of the primal path.
+    For a diagonal supercell M=diag(n,n,1) that is just the primal path
+    times n, which is what the diagonal examples write by hand, and for a
+    sqrt(3) x sqrt(3) or any other non-orthogonal supercell it is the
+    rotation and rescaling that a per-axis multiplication cannot give.
+    M comes from get_supercell_map, the same route the projector takes,
+    so the path and the operator cannot disagree about the supercell."""
+    g = getattr(self,"geometry",self) # accept a Hamiltonian or a Geometry
+    if g0 is None:
+        g0 = getattr(g,"primal_geometry",None)
+        if g0 is None:
+            raise ValueError("the unfolded k-path needs the primal-cell "
+                    "geometry; build the supercell with store_primal=True, "
+                    "or pass the primal geometry as g0")
+    M = get_supercell_map(g,g0)[0] # A_supercell = M@A_primal
+    # the signature mirrors get_kpath's, so that the high-symmetry points
+    # can be named as they are there, g.get_unfolded_kpath(["G","K","M","G"])
+    k0 = np.array(g0.get_kpath(kpath,**kwargs)) # in the primal reduced basis
+    return k0@np.array(M,dtype=float).T # one k_supercell = M@k0 per row
+
+
+
 def get_supercell_map(g,g0):
     """Given a supercell geometry g and the primal geometry g0 it was
     built from, return (M,replicas,primal_indices): the integer matrix

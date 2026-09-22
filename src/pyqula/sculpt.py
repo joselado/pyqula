@@ -145,6 +145,15 @@ def rotate(g,angle):
     else: # 
       raise NotImplementedError("rotate is only implemented for geometries up "
               "to 2d")
+    if getattr(go,"primal_geometry",None) is not None:
+      # a supercell carries the primal cell it was built from, and the
+      # replica record that unfolding reads places every atom of the
+      # supercell at r0[primal] + n@A0, so the primal cell has to turn
+      # with it: leaving it behind makes the record stop describing the
+      # geometry, and get_supercell_map then throws it away and falls
+      # back to matching positions against an ideal diagonal supercell,
+      # which a rotated non-diagonal cell has no reason to match
+      go.primal_geometry = rotate(go.primal_geometry,angle)
     go.get_fractional() # get fractional coordinates 
     return go
 

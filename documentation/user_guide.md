@@ -2211,15 +2211,19 @@ g = geometry.honeycomb_lattice() # primitive geometry
 n = 3
 gs = g.get_supercell(n,store_primal=True) # supercell, keeping the primitive cell info
 h = gs.get_hamiltonian() # Hamiltonian of the supercell
-(k,e,d) = h.get_kdos_bands(operator="unfold",delta=1e-1) # unfolded spectral function
+kpath = gs.get_unfolded_kpath(nk=200) # primitive k-path, in supercell coordinates
+(k,e,d) = h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded weight
 ```
 
-`d` holds the unfolded spectral weight at each `(k,e)`, so that plotting a scatter of `k,e`
-colored or sized by `d` recovers the primitive-cell band structure out of the supercell
-calculation: the replicas that a plain `h.get_bands()` of the supercell would show carry no
-weight, and the Dirac cones of the honeycomb lattice reappear where they belong. The same
-`operator="unfold"` can be passed to `h.get_multi_fermi_surface()` to unfold constant-energy
-cuts. See `examples/2d/unfolding/main.py`, `examples/1d/unfolding/main.py` and
+`gs.get_unfolded_kpath()` gives the k-path of the primitive cell written in the coordinates of
+the supercell, which is the path the unfolded bands have to be drawn along, and the section
+"Which k-path to unfold along" below says what it does; `d` holds the unfolded spectral weight
+at each `(k,e)`, so that plotting a scatter of `k,e` colored or sized by `d` recovers the
+primitive-cell band structure out of the supercell calculation: the replicas that a plain
+`h.get_bands()` of the supercell would show carry no weight, and the Dirac cones of the
+honeycomb lattice reappear where they belong. The same `operator="unfold"` can be passed to
+`h.get_multi_fermi_surface()` to unfold constant-energy cuts. See
+`examples/2d/unfolding/main.py`, `examples/1d/unfolding/main.py` and
 `examples/readme_examples/unfolding_FS/main.py` for runnable versions, and
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb`
 for the executed notebook.
@@ -2245,7 +2249,8 @@ g = geometry.honeycomb_lattice() # primitive geometry
 M = [[2,1,0],[0,1,0],[0,0,1]] # non-diagonal supercell matrix, det(M)=2
 gs = g.get_supercell(M,store_primal=True) # supercell, keeping the primitive cell info
 h = gs.get_hamiltonian() # Hamiltonian of the supercell
-(k,e,d) = h.get_kdos_bands(operator="unfold",delta=1e-1) # unfolded spectral function
+kpath = gs.get_unfolded_kpath(nk=200) # primitive k-path, in supercell coordinates
+(k,e,d) = h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded weight
 ```
 
 The projector that the unfolding operator builds is a sum of Bloch phases over the replicas
@@ -2258,11 +2263,71 @@ from pyqula import geometry
 g = geometry.cubic_lattice() # three dimensional primitive geometry
 gs = g.get_supercell([2,2,2],store_primal=True) # supercell, keeping the primitive cell info
 h = gs.get_hamiltonian() # Hamiltonian of the supercell
-(k,e,d) = h.get_bands(operator="unfold") # unfolded band structure
+kpath = gs.get_unfolded_kpath(nk=200) # primitive k-path, in supercell coordinates
+(k,e,d) = h.get_bands(operator="unfold",kpath=kpath) # unfolded band structure
 ```
 
 See `examples/2d/unfolding_nonorthogonal/main.py` for a runnable version with a defect in the
 non-diagonal supercell, and `examples/3d/unfolding/main.py` for the three-dimensional one.
+
+A cell that is not a multiple of the primitive one along each lattice vector can also be asked
+for by its size alone, and the case that comes up most often is the $\sqrt3\times\sqrt3$
+supercell of a triangular or a honeycomb lattice, the cell of a three-sublattice charge order
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.triangular_lattice() # primitive geometry
+gs = g.get_supercell(np.sqrt(3),store_primal=True) # sqrt(3) x sqrt(3) supercell
+```
+
+A non-integer size is read as a request for a cell larger by that factor in area, three
+primitive cells here, and `get_supercell` returns the most compact cell of that size that can
+be built out of integer combinations of $\vec a_1$ and $\vec a_2$, which for the triangular
+lattice is the cell with $|\vec A_1|=|\vec A_2|=\sqrt3|\vec a_1|$ at 60 degrees from each
+other, rotated so that $\vec A_1$ points along $x$. Several integer matrices of determinant
+three describe that same cell, `gs.supercell_matrix` says which one was taken, and passing an
+explicit `M` is the way to fix both the matrix and the orientation rather than leaving them
+to the search. Compactness is what makes the cell usable and not just correct: a cell of the
+right volume but with a small angle between its lattice vectors puts the first neighbors of
+an atom outside the cells the hopping generator searches, and the Hamiltonian comes out with
+hoppings missing.
+
+## Which k-path to unfold along
+
+The unfolded band structure has to be drawn along the Brillouin zone of the primitive cell,
+and this is where a general supercell differs from an $n\times n$ one. The unfolding operator
+sends a momentum $\vec k$ of the supercell onto the momentum $M^{-1}\vec k$ of the primitive
+cell, so tracing the primitive Brillouin zone means feeding it $M\vec k_0$ for every point
+$\vec k_0$ of the primitive path. For a diagonal supercell that is the primitive path times
+$n$, which is how `examples/2d/unfolding/main.py` and the other diagonal examples write it by
+hand, and for a $\sqrt3\times\sqrt3$ cell it is a rotation as well as a rescaling, which no
+multiplication by a number can give. `gs.get_unfolded_kpath()` returns it for any supercell,
+diagonal or not
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.triangular_lattice() # primitive geometry
+gs = g.get_supercell(np.sqrt(3),store_primal=True) # sqrt(3) x sqrt(3) supercell
+h = gs.get_hamiltonian() # Hamiltonian of the supercell
+fons = lambda r: (np.sum((r - gs.r[0])**2)<1e-2)*0.6 # onsite in one of the three sites
+h.add_onsite(fons) # three-sublattice charge order
+kpath = gs.get_unfolded_kpath(nk=200) # primitive k-path, in supercell coordinates
+(k,e,d) = h.get_kdos_bands(operator="unfold",delta=1e-1,kpath=kpath) # unfolded weight
+```
+
+The k-points come back in the reduced coordinates of the supercell, which is what
+`h.get_bands()` and `h.get_kdos_bands()` take, so they go straight into `kpath=`, and the
+method takes the same arguments as `g.get_kpath()`, meaning that the high-symmetry points can
+be named as well, `gs.get_unfolded_kpath(["G","K","M","G"],nk=400)`, and they are the points of
+the primitive cell and not of the supercell. Plotting `k,e` colored by `d` gives the single
+band of the triangular lattice along $\Gamma$-K-M-K'-$\Gamma$, with a gap opened at K by the
+charge order and a faint shadow band where the folded replica carries the little weight that
+the modulation gives it. Along the supercell k-path instead, `gs.get_kpath()`, the same
+calculation traces a path through the primitive Brillouin zone that goes nowhere in
+particular, and this is the reason for asking for the primitive one. See
+`examples/2d/unfolding_sqrt3/main.py` for a runnable version.
 
 
 # Surface spectral functions
@@ -4701,7 +4766,30 @@ Optional arguments
 
 - store_primal=False: keep a reference to the primitive-cell geometry on the supercell, needed by `operator="unfold"` (see "Electronic structure folding and unfolding")
 
+A non-integer `nsuper` asks for a cell that many times larger by area, not that
+many primitive cells along each vector, so that `np.sqrt(3)` gives the
+$\sqrt3\times\sqrt3$ cell; the most compact cell of that size is returned, and
+this route is for 2d geometries only
+
 Returns a new geometry
+
+### g.get_unfolded_kpath()
+Return the k-path of the primitive cell, written in the reduced coordinates of
+this supercell, which is the path an unfolded band structure has to be computed
+along (see "Which k-path to unfold along"). Available on the Hamiltonian as
+`h.get_unfolded_kpath()` as well, and it needs the supercell to have been built
+with `store_primal=True`
+
+Arguments
+
+- kpath=None: the same as in `g.get_kpath()`, either an explicit list of
+  k-points or a list of high-symmetry labels, which are read in the primitive
+  cell and not in the supercell
+- g0=None: the primitive-cell geometry, when the supercell does not carry one
+- nk: number of k-points along the path, passed through to `g.get_kpath()`
+
+Returns an array of k-points, one per row, ready to be passed as `kpath=` to
+`h.get_bands()` or `h.get_kdos_bands()`
 
 ## Hamiltonian functions and methods
 
