@@ -55,10 +55,13 @@ empty `__init__.py`; with the default import mode pytest's package-root walk fro
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
 tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
-minutes, not under a minute. It currently collects **1910 tests** (`pytest tests --collect-only -q`),
-and a whole-suite run takes **~34 minutes** — measured twice on an idle machine, 33:40 and 34:18, so
-that figure is real rather than an estimate. `tests/scf` alone is ~15 min and `tests/keldysh` ~12 min.
-Treat any timing taken while other jobs are running as meaningless.
+minutes, not under a minute. It currently collects **1966 tests** (`pytest tests --collect-only -q`),
+and a whole-suite run takes **~37 minutes** — 37:34 on an idle machine at 1966 tests, after 33:40 and
+34:18 at the 1910 it collected before, so these figures are real rather than estimates. `tests/scf`
+alone is ~15 min and `tests/keldysh` ~12 min. Treat any timing taken while other jobs are running as
+meaningless. Watch out when tailing a running suite: pytest writes its progress without a newline
+until a 72-character line fills, so `tail -c` on a redirected log shows the same stale chunk for
+minutes and a healthy run looks stalled at a low percentage.
 
 `examples/` (organized by dimensionality: `0d/ 1d/ 2d/ 3d/`, plus `transport/`, `embedding/`, `wannier/`,
 `classicalspin/`, `latticegas/`) contains runnable `main.py` scripts that double as usage documentation —
