@@ -266,8 +266,10 @@ class SelfenergyAAA:
             green_renormalization_jit_batch -- see keldyshtk/current.py's
             _batch_selfenergy for the same batching pattern used elsewhere
             on this codebase's Keldysh path), falling back to a per-energy
-            Python loop over `get_selfenergy` otherwise (e.g. a LocalProbe,
-            which has no batched solve). Every solved energy is cached
+            Python loop over `get_selfenergy` otherwise -- both of this
+            codebase's junction types now carry a batched solve, so that
+            branch is for anything else passing this a bare scalar
+            evaluator. Every solved energy is cached
             into `solved` either way, so later rounds/validation calls
             reuse it exactly as before -- this is a pure batching of the
             SAME true solves the unbatched path made, not a change to what

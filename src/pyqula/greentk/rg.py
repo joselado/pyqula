@@ -244,7 +244,12 @@ def green_renormalization_jit(intra,inter,energy=0.0,delta=1e-4,
 
 
 ## this is an optimized version
-@jit(nopython=True)
+# cache=True, as on the batched twin below: compiling this kernel costs
+# ~10s (numba's linalg machinery dominates it), and without a cache every
+# fresh interpreter that solves a single selfenergy pays that again. It is
+# also what keeps that compile off whichever call site happens to be first
+# -- it used to land on whatever the profiler was pointed at.
+@jit(nopython=True, cache=True)
 def green_renormalization_jit_core(intra, inter, e, nite, error, truncate):
     ite = 0
     # Force C‑contiguity from the start

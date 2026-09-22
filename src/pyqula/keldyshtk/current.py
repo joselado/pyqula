@@ -203,7 +203,7 @@ def _prefetch_selfenergies_batch(ht, es, lead, delta, cache, keys):
     `np.array`) was profiled at ~1.2s of a 7.7s dc_current call over
     ~105000 already-dense matrices -- pure dispatch, no work."""
     if not hasattr(ht, "get_selfenergy_batch"):
-        return  # e.g. LocalProbe: fall back to per-energy solves in the caller
+        return  # no batched solve: fall back to per-energy ones in the caller
     miss = [i for i, k in enumerate(keys) if k not in cache]
     if not miss: return
     me = es[miss]
@@ -233,8 +233,9 @@ def _batch_selfenergy(ht, es, lead, delta, cache, selfenergy_qtci=None):
 
     With no interpolant at all (`selfenergy_qtci` not covering `lead`),
     `_prefetch_selfenergies_batch` fills `cache` with one batched Sancho-
-    Rubio solve per lead where available (falls back to solving lazily,
-    one at a time below, for e.g. a LocalProbe -- see that function)."""
+    Rubio solve per lead -- both a Heterostructure and a LocalProbe expose
+    one -- falling back to solving lazily, one at a time below, for
+    anything that does not (see that function)."""
     es = np.asarray(es)
     if selfenergy_qtci is not None and lead in selfenergy_qtci:
         interp = selfenergy_qtci[lead]
@@ -1006,15 +1007,17 @@ def _leads_share_selfenergy(ht, delta, erange):
     lead=1 (bulk sample-site GF, a completely different Green's-function
     calculation, `local_selfenergy`) are different physics by
     construction and will not match numerically at any sampled energy."""
-    probes = (0.0, 0.37*erange, -0.61*erange)
-    for e in probes:
-        s0 = algebra.todense(ht.get_selfenergy(e, lead=0, delta=delta,
-                                                pristine=True, numba=True))
-        s1 = algebra.todense(ht.get_selfenergy(e, lead=1, delta=delta,
-                                                pristine=True, numba=True))
-        if s0.shape != s1.shape or not np.allclose(s0, s1, rtol=1e-10, atol=1e-12):
-            return False
-    return True
+    probes = np.array([0.0, 0.37*erange, -0.61*erange])
+    def solve(lead): # the three probe energies, batched where that exists
+        if hasattr(ht, "get_selfenergy_batch"):
+            return np.asarray(ht.get_selfenergy_batch(probes, lead=lead,
+                                        delta=delta, pristine=True))
+        return np.array([algebra.todense(ht.get_selfenergy(e, lead=lead,
+                            delta=delta, pristine=True, numba=True))
+                         for e in probes])
+    s0, s1 = solve(0), solve(1)
+    if s0.shape != s1.shape: return False
+    return bool(np.allclose(s0, s1, rtol=1e-10, atol=1e-12))
 
 
 def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
@@ -1041,8 +1044,8 @@ def build_selfenergy_aaa(ht, voltage, nmax_max, delta=None,
     (selfenergy_method="aaa") but with a bounded build budget and a
     fallback to direct solves if that budget isn't enough to converge.
 
-    When `ht` exposes `get_selfenergy_batch` (Heterostructure does; a
-    LocalProbe does not), every candidate/validation round's true solves
+    When `ht` exposes `get_selfenergy_batch` (a Heterostructure and a
+    LocalProbe both do), every candidate/validation round's true solves
     are routed through it -- the numba prange-parallel Sancho-Rubio
     iteration (transporttk.selfenergy.get_selfenergy_batch, greentk.rg.
     green_renormalization_jit_batch) instead of one Python-level call per

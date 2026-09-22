@@ -196,6 +196,18 @@ batching needs to pay off. Worth a dedicated feasibility spike later (e.g. cupy'
 eigensolvers, or reformulating as dense-batched recursive Green's function where
 `densedimension` allows), but don't bundle it with items 1–2.
 
+**One member of this group has since been profiled and answered: no.** The Floquet-Keldysh
+dI/dV (`keldyshtk/current.py`, a LocalProbe with both probe and sample superconducting) is
+the shape here that looks most GPU-friendly -- thousands of independent quasienergy nodes,
+each a dense recursive Green's-function chain. It is not: the chain blocks are `dim x dim`
+with `dim` the lead unit cell's Nambu dimension, 4 for a spinful chain, an order of magnitude
+under Tier 2's measured n~32 crossover, and 91% of the call was not linear algebra at all but
+per-energy Python scaffolding in the lead self-energy. Batching that on the CPU and removing
+two per-energy deepcopies gave 5.2x with no device involved; the chain solve is now 41% of a
+call and still far too small to send. Measurements in the last section of
+`documentation/keldysh_sideband_decimation_plan.md`. A wide (ribbon) lead would clear the
+crossover and is the only version of this worth revisiting.
+
 ### 4. Modules that forced jax onto CPU — **done**
 
 `classicalspin.py` and `symmetrytk/localsymmetry.py` used to call

@@ -83,12 +83,21 @@ def kchain_NN(h,k=[0.,0.,0.]):
 
 
 def detect_longest_hopping(h,tol=1e-7):
-    from ..multicell import turn_multicell
-    h = turn_multicell(h) # read only, called once per energy in decimation
+    from ..multicell import turn_multicell,unit_cell_hoppings
+    if h.is_multicell or h.dimensionality>2:
+        pairs = [(t.dir,t.m) for t in turn_multicell(h).hopping]
+    else:
+        # read only, and called once per energy in a decimation: going
+        # through turn_multicell here would deepcopy the whole Hamiltonian,
+        # geometry included, only to look at the same matrices. That
+        # deepcopy was measured at a third of a LocalProbe Keldysh dI/dV
+        # point (keldyshtk/current.py), which calls this tens of thousands
+        # of times on one unchanging lead.
+        pairs = unit_cell_hoppings(h) # the daggers have the same |dir|
     out = 0 # initialize
-    for t in h.hopping: # loop over hoppings
-        if np.max(np.abs(t.m))>tol: # if bigger than the tolerance
-            nn = np.max(np.abs(t.dir))
+    for (d,m) in pairs: # loop over hoppings
+        if np.max(np.abs(m))>tol: # if bigger than the tolerance
+            nn = np.max(np.abs(d))
             if nn>out: out = nn # overwrite
     return out
 

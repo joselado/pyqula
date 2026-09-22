@@ -1008,3 +1008,113 @@ static-bias reference to 2.2e-3, the old one is off by **97.7%** (1.32e-2 agains
 5.77e-1). So the restored path fixes a latent wrong-answer bug for multi-orbital/spin-orbit leads
 that the original central-region code would have had. Regression test:
 `test_central_region_with_non_hermitian_lead_coupling`.
+
+## Update: the self-energy path is batched and the per-energy deepcopies are gone -- a LocalProbe dI/dV is 5.2x faster
+
+Profiling a single `LocalProbe.didv` on `examples/transport/decay_constant_keldysh`'s system
+(SC chain probe on an SC chain sample, `nmax=4, nmax_max=12, tol=5e-2`, one voltage) found the
+Floquet machinery was not where the time went at all:
+
+| piece | time | share |
+|---|---|---|
+| lead self-energies (`_batch_selfenergy`) | 10.01 s | 91% |
+| RGF chain solve (`_rgf_chain_batch_jit`) | 0.84 s | 7.6% |
+| chain assembly (`_assemble_chain_batch_jit`) | 0.03 s | 0.2% |
+
+4116 quasienergy nodes over 27 batched calls, chain arrays `(84, 19, 4, 4)`. Within that 91%,
+`copy.deepcopy` was **4.38 s** of `tottime` (9.42 s cumulative, 4.1M calls) against
+`green_renormalization_jit`'s 2.50 s -- the Python object churn cost more than the physics.
+
+### Three separate causes, all in the per-energy scaffolding
+
+**1. `detect_longest_hopping` deepcopied the Hamiltonian to read it.** It called
+`multicell.turn_multicell(h)`, which must copy (geometry included) before it can return a
+Hamiltonian, purely so the caller could look at `h.hopping`. `multicell.unit_cell_hoppings(h)`
+now names the cells a non-multicell Hamiltonian's `inter`/`tx`/`ty`/`txy`/`txmy` attributes
+stand for, `turn_multicell` is written in terms of it, and `detect_longest_hopping` reads them
+directly. One place describes those cells, so the two cannot drift apart --
+`tests/hopping/test_unit_cell_hoppings.py` asserts they agree, that `detect_longest_hopping`
+gives the same answer through either route, and that it no longer calls `h.copy()` at all.
+
+**2. `bloch_selfenergy` built a Bloch generator it never used.** `hk_gen = h.get_hk_gen()` ran
+unconditionally, and `get_hk_gen` goes through `get_multicell()`, another full deepcopy. Only
+`mode="full"` and `mode="full_adaptive"` ever call the generator; `"adaptive"` (what every
+LocalProbe self-energy uses) and `"renormalization"` go through the decimation and never touch
+it. It is built on first use now, so no mode has to know about the others.
+
+Those two alone: **11.13 s -> 6.79 s**, with the returned dI/dV bit-identical.
+
+**3. A LocalProbe had no batched self-energy, so the sideband sweep solved one energy at a
+time.** `_prefetch_selfenergies_batch` has always checked `hasattr(ht,"get_selfenergy_batch")`
+and fallen back to a Python loop without one; only `Heterostructure` had it, so every LocalProbe
+Keldysh call made 38,304 scalar Sancho-Rubio solves per dI/dV point, single-threaded, each with
+its own dispatch scaffolding (`np.eye`, `algebra.todense`, `surface_dyson_residual`). Both of a
+probe's self-energies reduce to a decimation on one fixed `(intra,inter)` pair, independent
+across energies, which is exactly what `greentk.rg.green_renormalization_jit_batch` already
+does over a numba `prange`. Added `LocalProbe.get_selfenergy_batch`, built on
+`lead_selfenergy_batch` (probe; a frozen lead is solved once and broadcast, since freezing it
+means evaluating at absolute zero energy whatever the bias), `generate_gf_batch` ->
+`greentk.selfenergy.bloch_selfenergy_batch` (sample) and `local_selfenergy_batch`.
+`bloch_selfenergy_batch` batches only the shape that can be batched -- 1d, first-neighbour,
+`mode="adaptive"` -- and loops over the scalar function for everything else, so it is always
+safe to call.
+
+### Measured (GeForce GTX 1060 box, CPU-only work, idle machine, min of 3 warm runs)
+
+| route | before, cold | after, cold | before, warm | after, warm |
+|---|---|---|---|---|
+| `selfenergy_method="direct"` (default) | 21.23 s | 2.34 s | 10.83 s | **2.09 s (5.2x)** |
+| `use_aaa=True` | 16.28 s | 6.50 s | 5.93 s | 4.93 s (1.2x) |
+
+The dI/dV is bit-identical on both routes (`0.326390789451540` direct, `0.326272911432475`
+aaa, before and after).
+
+End to end on the example script's own sweep (`examples/transport/decay_constant_keldysh`,
+four energies, one process, cold): **74.6 s -> 8.2 s** for the `didv` loop and **86.9 s ->
+17.1 s** for the `get_kappa` loop, with every printed value identical to eight digits and the
+same `nmax_max` warning as before.
+
+**The AAA route is now the slow one for a single call**, having been nearly 2x the faster one
+before. Its whole justification was that per-energy scalar solves were expensive; they are
+batched now, and what is left is the fit's own cost. It remains worth building when it is
+*shared* across a sweep (`build_shared_selfenergy`), which is what `didv(energies=...)` and
+`iv_curve` do; for one call, `"direct"` -- already the default since the accuracy work above --
+is now also clearly the faster choice. The `"aaa"` cold figure improved for a separate reason:
+`_leads_share_selfenergy` used the scalar entry point, which was the only thing in the whole
+path still forcing a compile of `green_renormalization_jit_core`; it takes the batch now.
+
+**`green_renormalization_jit_core` was never cached** (`@jit(nopython=True)`, while its batched
+twin carries `cache=True`). Compiling it costs ~10 s, which every fresh interpreter that solved
+a single self-energy paid, and which moved around the profile depending on which call site
+happened to be first -- it is what made the first measurement of the "aaa" route above look like
+a 15 s regression when it was a compile that had simply relocated. Now `cache=True`, like the
+twin.
+
+### What this does NOT change, and where the remaining time is
+
+The Floquet kernels are untouched: `_assemble_chain_batch_jit` and `_rgf_chain_batch_jit` are
+bit-for-bit what they were. The same breakdown afterwards, same case, same machine:
+
+| piece | before | after |
+|---|---|---|
+| lead self-energies | 10.01 s (91%) | 1.12 s (54%) |
+| RGF chain solve | 0.84 s (7.6%) | 0.85 s (41%) |
+| chain assembly | 0.03 s | 0.02 s |
+| total | 11.0 s | 2.09 s |
+
+The self-energy is no longer an order of magnitude above everything else, so the RGF chain is
+now a real share of the call for the first time -- which is the point at which a GPU port would
+be worth *asking* about. The answer is still no at these sizes: the chain blocks are `dim x dim`
+with `dim` the lead unit cell's Nambu dimension (4 for a spinful chain), an order of magnitude
+below the n~32 crossover that `documentation/gpu_porting_plan.md`'s Tier 2 sweep measured for
+device dense linear algebra, and the FLOP count is negligible either way. A wide (ribbon) lead,
+`dim = 4W`, would clear that crossover, but the sideband recursion is sequential, so it would
+have to be one fused `lax.scan` jit rather than per-step dispatches. Not started, and not
+currently justified.
+
+**Tests**: `tests/keldysh/test_localprobe_selfenergy_batch.py` (batched vs scalar self-energy for
+both leads, both `frozen_lead` settings, a multi-orbital sample probed away from site 0, a 2d
+sample taking `bloch_selfenergy_batch`'s fallback branch, and an end-to-end check that the
+Keldysh dI/dV is bit-identical with the batch removed), `tests/green/test_bloch_selfenergy_batch.py`
+(both branches against the scalar function), `tests/hopping/test_unit_cell_hoppings.py` (the
+anti-drift guard described above).

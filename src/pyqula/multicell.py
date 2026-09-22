@@ -31,6 +31,32 @@ class Hopping():
       return deepcopy(self)
 
 
+def unit_cell_hoppings(h):
+    """The (direction,matrix) pairs that a NON-multicell Hamiltonian's
+    dedicated attributes stand for -- `inter` in one dimension,
+    `tx/ty/txy/txmy` in two -- listing only the positive direction of each
+    pair, since the opposite one is its dagger.
+
+    This is the one place that knows which cells those attributes describe,
+    so that `turn_multicell` below (which builds a Hamiltonian around them,
+    and therefore has to copy) and a caller that only wants to *look* at
+    them (which must not) cannot drift apart. The matrices returned are the
+    Hamiltonian's own, not copies: read only."""
+    if h.is_multicell:
+        raise ValueError("unit_cell_hoppings needs a non-multicell "
+                "Hamiltonian; a multicell one stores its hoppings in "
+                "h.hopping already")
+    if h.dimensionality == 0: return []
+    elif h.dimensionality == 1: # one dimensional
+        return [((1,0,0),h.inter)]
+    elif h.dimensionality == 2: # two dimensional
+        return [((1,0,0),h.tx),((0,1,0),h.ty),
+                ((1,1,0),h.txy),((1,-1,0),h.txmy)]
+    else:
+        raise ValueError("unit_cell_hoppings is only defined up to two "
+                "dimensions, since a 3d Hamiltonian is always multicell")
+
+
 def turn_multicell(h):
     """Transform a normal hamiltonian into a multicell hamiltonian.
 
@@ -40,30 +66,20 @@ def turn_multicell(h):
     Anything that modifies the result goes through h.get_multicell(),
     which copies."""
     if h.is_multicell: return h # if it is already multicell
+    if h.dimensionality > 2: return h # 3d is always multicell
     ho = h.copy() # copy hamiltonian
-    # directions
-    dirs = []
-    if h.dimensionality == 0: ts = []
-    elif h.dimensionality == 1: # one dimensional
-      dirs.append(np.array([1,0,0]))
-      ts = [h.inter.copy()]
-      ho.inter = None
-    elif h.dimensionality == 2: # two dimensional
-      dirs.append(np.array([1,0,0]))
-      dirs.append(np.array([0,1,0]))
-      dirs.append(np.array([1,1,0]))
-      dirs.append(np.array([1,-1,0]))
-      ts = [h.tx.copy(),h.ty.copy(),h.txy.copy(),h.txmy.copy()]
+    pairs = unit_cell_hoppings(h) # cells those attributes stand for
+    # drop the attributes now superseded by the hopping list
+    if h.dimensionality == 1: ho.inter = None
+    elif h.dimensionality == 2:
       del ho.tx
       del ho.ty
       del ho.txy
       del ho.txmy
-    else: 
-        return h # 3d is always multicell
     dd = dict() # dictionary
     dd[(0,0,0)] = h.intra
-    for (d,t) in zip(dirs,ts): 
-        dd[tuple(d)] = t
+    for (d,t) in pairs: # set_dictionary copies every matrix it stores
+        dd[d] = t
         dd[tuple(-np.array(d))] = np.conjugate(t).T
     return set_dictionary(ho,dd) # return this Hamiltonian
 

@@ -85,6 +85,32 @@ class LocalProbe():
                     "or 1")
         if self.reuse_selfenergy: self._selfenergy_cache[key] = out
         return out
+    def get_selfenergy_batch(self,energies,lead=0,**kwargs):
+        """Batched twin of get_selfenergy: one lead, many energies at
+        once, returned as one (len(energies),dim,dim) array. The
+        counterpart of transporttk.selfenergy.get_selfenergy_batch for a
+        Heterostructure, and the reason keldyshtk.current's
+        `_prefetch_selfenergies_batch` stops falling back to per-energy
+        solves here: both of a probe's selfenergies come down to a
+        Sancho-Rubio decimation on one fixed (intra,inter) pair, which is
+        independent across energies and so runs as a single numba
+        prange-parallel call instead of tens of thousands of Python-level
+        ones per Floquet dI/dV point.
+
+        `self._selfenergy_cache` is deliberately not consulted or filled,
+        exactly as the Heterostructure version does not: the caller that
+        needs this batching keeps its own energy-keyed cache around the
+        whole sideband sweep."""
+        energies = np.asarray(energies)
+        if lead==0: # use the probe
+            return lead_selfenergy_batch(self,energies,**kwargs)
+        elif lead==1: # use the system
+            g = generate_gf_batch(self,energies,**kwargs)
+            return local_selfenergy_batch(self.H,g,i=self.i,
+                                energies=energies,**kwargs)
+        else:
+            raise ValueError("a local probe has two leads, so lead must be 0 "
+                    "or 1")
     def get_central_gmatrix(self,**kwargs):
         return get_central_gmatrix(self,**kwargs)
     def with_delta(self,delta):
@@ -219,6 +245,23 @@ def generate_gf(self,energy=0.0,numba=None,**kwargs):
         return gf
 
 
+def generate_gf_batch(self,energies,**kwargs):
+    """Batched twin of generate_gf: the sample's Green's function at every
+    energy at once, as one (len(energies),n,n) array, through
+    greentk.selfenergy.bloch_selfenergy_batch.
+
+    A reused Green's function (`reuse_gf`) is honoured on the way in, the
+    same energy-independent trick it is on the scalar path, but the batch
+    never fills that slot: there is no single energy it would belong to."""
+    if self.reuse_gf and self.gf is not None:
+        gf = np.asarray(self.gf)
+        return np.broadcast_to(gf,(len(energies),)+gf.shape)
+    from ..greentk.selfenergy import bloch_selfenergy_batch
+    return bloch_selfenergy_batch(self.H,energies,delta=self.bulk_delta,
+                                   mode=gfmode,
+                                   gtype=self.mode)[0]
+
+
 def lead_selfenergy(self,energy=0.0,numba=None,**kwargs):
      """Return the selfenergy of the lead"""
      if self.frozen_lead: energy = 0.0 # set as zero energy
@@ -240,6 +283,28 @@ def lead_selfenergy(self,energy=0.0,numba=None,**kwargs):
      sigma = cou@g@dagger(cou) # selfenergy
      return sigma
 
+
+def lead_selfenergy_batch(self,energies,**kwargs):
+    """Batched twin of lead_selfenergy: the probe lead's selfenergy at
+    every energy at once, as one (len(energies),dim,dim) array, through
+    the numba prange-parallel decimation
+    (greentk.rg.green_renormalization_jit_batch).
+
+    A frozen lead is solved once and broadcast rather than resolved per
+    entry -- freezing it means evaluating it at absolute zero energy
+    whatever the bias (see lead_selfenergy), so every entry of the batch
+    is the same matrix."""
+    from ..greentk.rg import green_renormalization_jit_batch
+    intra = self.lead.intra
+    inter = dagger(self.lead.inter)
+    cou = np.array(algebra.todense(inter)) # dense, for the batched matmul
+    if self.frozen_lead: es = np.zeros(1) # all of them are this one
+    else: es = np.asarray(energies,dtype=np.float64)
+    ggg,g = green_renormalization_jit_batch(intra,inter,es,delta=self.delta)
+    if self.frozen_lead:
+        g = np.broadcast_to(g,(len(energies),)+g.shape[1:])
+    return cou@g@dagger(cou) # selfenergy at every energy, batched matmul
+
 from ..htk.extract import local_hamiltonian
 
 def local_selfenergy(h,g,energy=0.0,i=0,delta=1e-5,**kwargs):
@@ -250,6 +315,27 @@ def local_selfenergy(h,g,energy=0.0,i=0,delta=1e-5,**kwargs):
     oi = local_hamiltonian(h,M,i=i) # local Hamiltonian
     iden = np.identity(gi.shape[0],dtype=np.complex128)
     out = algebra.inv(gi) - (energy+1j*delta)*iden + oi # local selfenergy
+    return -out
+
+
+def local_selfenergy_batch(h,g,energies,i=0,delta=1e-5,**kwargs):
+    """Batched twin of local_selfenergy: `g` carries a leading energy axis
+    and so does the result. The local block is a plain slice of each
+    Green's function (htk.extract.local_hamiltonian, which this takes
+    apart only so the slice is taken once for the whole batch rather than
+    per energy), so the only real work left is one batched inversion."""
+    from ..htk.extract import site_slice
+    g = np.asarray(g)
+    M = get_intra(h) # get intracell matrix
+    s = site_slice(h,i)
+    if s.stop>g.shape[-1]:
+        raise ValueError("site "+str(i)+" lies outside a matrix of "
+                "dimension "+str(g.shape[-1]))
+    gi = g[:,s,s] # local Green's function at every energy
+    oi = local_hamiltonian(h,M,i=i) # local Hamiltonian
+    iden = np.identity(gi.shape[-1],dtype=np.complex128)
+    e = (np.asarray(energies)+1j*delta)[:,None,None]*iden[None,:,:]
+    out = np.linalg.inv(gi) - e + oi[None,:,:] # local selfenergy
     return -out
 
 
