@@ -101,7 +101,13 @@ def get_surface_operator(h,operator):
   operator raised UnboundLocalError before any physics happened."""
   if operator is None: return np.identity(h.intra.shape[0],dtype=np.complex128)
   op = h.get_operator(operator) # resolve names, matrices and Operators alike
-  m = op.get_matrix() # the matrix it acts with
+  m = op.get_matrix(required=False) # the matrix it acts with
+  if m is None:
+      raise NotImplementedError("the surface spectral function applies the "
+              "operator as a single matrix, the same at every kpoint, so it "
+              "cannot take an operator that is defined only by its action on "
+              "a wavefunction (a k-dependent one such as \"unfold\", for "
+              "instance); use h.get_kdos_bands(mode=\"ED\") instead")
   from scipy.sparse import issparse
   if issparse(m): m = m.todense()
   return np.array(m)
@@ -196,6 +202,11 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
     # kpoints (it indexes get_bands's output by k-index), and get_kpath
     # also expands a list of high-symmetry-point labels into vectors
     kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
+    # resolve names ("unfold", "sz", ...) into an Operator once, for every
+    # mode: only the ED branch used to do it, by way of get_bands, so a
+    # string reached green.GtimesO and operators.Operator unresolved and
+    # died inside them. Resolving an Operator again is a no-op.
+    operator = h.get_operator(operator)
     if mode=="ED":
         # batched path: diagonalize the whole kpath at once via get_bands
         # (already numba-parallel, see bandstructure.get_bands_nd) instead
@@ -227,8 +238,17 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
       out = parallel.pcall(pfun,kpath) # compute all
     elif mode=="KPM": # KPM method
       if operator is not None: 
-          from .operators import Operator
-          operator = Operator(operator).get_matrix() # convert to matrix
+          # a matrix is the only form kpm.pdos takes; asking for one raises
+          # rather than returning None, which used to leave operator=None
+          # here and quietly produce an unweighted KDOS
+          m = operator.get_matrix(required=False)
+          if m is None:
+              raise NotImplementedError("the KPM kdos samples the operator "
+                      "as a matrix, so it cannot take an operator that is "
+                      "defined only by its action on a wavefunction (a "
+                      "k-dependent one such as \"unfold\", for instance); "
+                      "use mode=\"ED\" instead")
+          operator = m
       h = h.copy()
       h.turn_sparse()
       hkgen = h.get_hk_gen() # get generator

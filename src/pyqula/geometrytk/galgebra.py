@@ -18,6 +18,8 @@ def sum_geometries(g1,g2):
         if g1.primal_geometry is not None and g2.primal_geometry is not None:
             raise NotImplementedError("adding two geometries that both keep a "
                     "primal geometry is not implemented")
+        from ..sculpt import drop_supercell_record
+        drop_supercell_record(g) # the sum is not a supercell of anything
         return g
     elif type(g2)==np.ndarray: # array input
         g = g1.copy() # copy geometry

@@ -2248,9 +2248,21 @@ h = gs.get_hamiltonian() # Hamiltonian of the supercell
 (k,e,d) = h.get_kdos_bands(operator="unfold",delta=1e-1) # unfolded spectral function
 ```
 
-This works for 1D and 2D lattices; a 3x3 `M` on a 3D bulk geometry is not yet implemented. See
-`examples/2d/unfolding_nonorthogonal/main.py` for a runnable version with a defect in the
-non-diagonal supercell.
+The projector that the unfolding operator builds is a sum of Bloch phases over the replicas
+of the primitive cell, and nothing in it refers to the dimensionality, so all of this works
+the same way for a chain, for a two-dimensional lattice and for a bulk three-dimensional
+crystal, with a plain size or with a 3x3 `M`
+
+```python
+from pyqula import geometry
+g = geometry.cubic_lattice() # three dimensional primitive geometry
+gs = g.get_supercell([2,2,2],store_primal=True) # supercell, keeping the primitive cell info
+h = gs.get_hamiltonian() # Hamiltonian of the supercell
+(k,e,d) = h.get_bands(operator="unfold") # unfolded band structure
+```
+
+See `examples/2d/unfolding_nonorthogonal/main.py` for a runnable version with a defect in the
+non-diagonal supercell, and `examples/3d/unfolding/main.py` for the three-dimensional one.
 
 
 # Surface spectral functions
@@ -4870,6 +4882,20 @@ occupied states.
   one operator `A`, summed over the whole system
 - `h.get_several_vev([A,B,...])` does the same for a list of operators in
   one pass, sharing the diagonalization
+
+An operator that acts with a different matrix at every k-point, `"unfold"`
+above all, is applied inside the sum over the Brillouin zone rather than
+contracted with the k-summed density matrix, so `h.get_vev(operator="unfold")`
+gives the unfolded weight site by site
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # primitive geometry
+gs = g.get_supercell(2,store_primal=True) # supercell, keeping the primitive cell
+h = gs.get_hamiltonian(has_spin=False)
+h.add_onsite(lambda r: 100.0 if sum((r-gs.r[0])**2)<1e-2 else 0.0) # a vacancy
+d = h.get_vev(operator="unfold") # unfolded weight on each site
+```
 
 Optional arguments:
 

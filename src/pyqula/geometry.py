@@ -283,6 +283,7 @@ def supercell1d(g,nsuper):
   if g.atoms_have_names: # supercell sublattice
     go.atoms_names = g.atoms_names*nsuper
   go.get_fractional()
+  supercelltk.record_diagonal_supercell(go,len(g.r),nsuper,1,1) # unfolding
   return go
 
 

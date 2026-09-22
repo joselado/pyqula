@@ -26,7 +26,7 @@ def _todense(m):
     unreadable shape error. algebra.todense handles np.matrix and sparse
     alike, and an Operator is unwrapped to its matrix first."""
     if hasattr(m,"get_matrix"): # operators.Operator
-        om = m.get_matrix() # None if it is defined only by its action
+        om = m.get_matrix(required=False) # None if defined only by its action
         if om is None:
             raise NotImplementedError("the operator-resolved Berry curvature "
                     "needs an operator with a matrix representation, and this "

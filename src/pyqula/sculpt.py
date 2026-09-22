@@ -4,6 +4,33 @@ from . import algebra
 import numpy as np
 
 
+def keep_supercell_record(g,go,keep):
+  """Carry the unfolding replica bookkeeping (see supercell.py and
+  unfolding.bloch_projector) across an operation that keeps a subset of
+  the atoms of g, indexed by keep. The record travels with a geometry
+  through Geometry.copy(), and a geometry can be assembled in ways that
+  change the atom count without touching it (sculpt.add, for one), so a
+  record whose length no longer matches g is dropped rather than indexed
+  into -- a stale map is worse than none, and unfolding rebuilds one by
+  matching positions when it finds none."""
+  rep = getattr(g,"supercell_replica",None)
+  pri = getattr(g,"supercell_primal_index",None)
+  if rep is None or pri is None: return
+  rep = np.array(rep) ; pri = np.array(pri)
+  if len(rep)!=len(g.r) or len(pri)!=len(g.r): # stale, describes other atoms
+    drop_supercell_record(go) ; return
+  go.supercell_replica = rep[keep]
+  go.supercell_primal_index = pri[keep]
+
+
+def drop_supercell_record(go):
+  """Forget the unfolding replica bookkeeping, for an operation whose
+  output is not a supercell of anything in particular"""
+  go.supercell_matrix = None
+  go.supercell_replica = None
+  go.supercell_primal_index = None
+
+
 def remove(g,l):
   """ Remove certain atoms from the geometry"""
   lset = set(l) # membership test below is O(1) against a set, O(len(l)) against a list
@@ -32,11 +59,8 @@ def remove(g,l):
       if not i in lset:
         ab.append(g.sublattice[i]) # keep the index
     go.sublattice = ab # store the keeped atoms
-  ##### if built via get_supercell(M), keep the unfolding bookkeeping in sync
-  if getattr(g,"supercell_replica",None) is not None:
-    keep = [i for i in range(len(g.x)) if i not in lset]
-    go.supercell_replica = np.array(g.supercell_replica)[keep]
-    go.supercell_primal_index = np.array(g.supercell_primal_index)[keep]
+  ##### keep the unfolding bookkeeping in sync with the atoms kept
+  keep_supercell_record(g,go,[i for i in range(len(g.x)) if i not in lset])
   return go
 
 def intersec(g,f):
@@ -57,9 +81,7 @@ def remove_sites(g,store):
   if hasattr(gout, "frac_r"): del gout.frac_r # see remove()'s matching comment above
   if gout.has_sublattice: # if has sublattice, keep the indexes
     gout.sublattice = np.array(g.sublattice)[store==1]
-  if getattr(g,"supercell_replica",None) is not None:
-    gout.supercell_replica = np.array(g.supercell_replica)[store==1]
-    gout.supercell_primal_index = np.array(g.supercell_primal_index)[store==1]
+  keep_supercell_record(g,gout,store==1) # unfolding bookkeeping
   return gout
 
 
@@ -369,6 +391,7 @@ def add(g1,g2):
   g.has_fractional = False # site count changed, stale cached frac_r no longer valid
   if hasattr(g, "frac_r"): del g.frac_r # see remove()'s matching comment above
   g.has_sublattice = False
+  drop_supercell_record(g) # the sum of two geometries is not a supercell
   return g
 
 

@@ -482,14 +482,16 @@ def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=100,
 
 def GtimesO(g,o,k=[0.,0.,0.]):
     """Green function times operator"""
-    o = algebra.todense(o) # convert to dense operator if possible
     if o is None: return g # return Green function
-    elif type(o)==type(g): return g@o # return
-    elif callable(o): return o(g,k=k) # call the operator
+    # callables first: algebra.todense would have tried to build an array out
+    # of the operator itself and raised, so this branch used to be unreachable
+    if callable(o): return o(g,k=k) # call the operator
+    o = algebra.todense(o) # convert to dense operator if possible
+    if type(o)==type(g): return g@o # return
     else:
-        print(type(g),type(o))
-        raise TypeError("cannot multiply the Green function by this operator; "
-                "it must be a matrix of the same type or a callable")
+        raise TypeError("cannot multiply the Green function (a "+
+                str(type(g))+") by this operator (a "+str(type(o))+"); it "
+                "must be a matrix of the same type or a callable")
 
 
 

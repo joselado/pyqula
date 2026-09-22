@@ -1000,11 +1000,19 @@ class Hamiltonian():
         the same numbers as the normal-state description of that state.
         """
         n = len(self.geometry.r) # number of sites
-        ops = [operators.index(self,n=[i]) for i in range(n)]
         op = self.get_operator(operator) # get an operator
         if self.has_eh: # restrict to the electron sector, see above
             pe = operators.Operator(operators.get_electron(self))
             op = pe if op is None else pe*op*pe
+        if op is not None and op.matrix is None:
+            # an operator defined only by its action, and possibly a
+            # different one at every kpoint: the Brillouin-zone sum has to
+            # be done with the operator inside it, which spectrum.ev cannot
+            # do because it contracts against an already k-summed density
+            # matrix (see vev.kresolved_orbital_vev)
+            from .vev import kresolved_orbital_vev
+            return self.full2profile(kresolved_orbital_vev(self,op,**kwargs))
+        ops = [operators.index(self,n=[i]) for i in range(n)]
         if op is not None:
           ops = [(o*op).get_matrix() for o in ops] # define operators
         else:
@@ -1134,11 +1142,21 @@ class Hamiltonian():
         from .vev import get_dm_vev
         return get_dm_vev(self,A,**kwargs)
     def get_single_vev(self,A,**kwargs):
+        # a single number, as the user guide documents it: spectrum.ev
+        # returns one entry per operator and there is one operator here,
+        # so this used to hand back an array of length one
         A = self.get_operator(A) # get an operator
-        return spectrum.ev(self,operator=A.get_matrix(),**kwargs).real
+        if A.matrix is None: # applied inside the sum over kpoints, see get_vev
+            from .vev import kresolved_orbital_vev
+            return float(np.sum(kresolved_orbital_vev(self,A,**kwargs)))
+        return float(spectrum.ev(self,operator=A.get_matrix(),**kwargs).real[0])
     def get_several_vev(self,As,**kwargs):
-        As = [self.get_operator(A).get_matrix() for A in As] # get an operator
-        return spectrum.ev(self,operator=As,**kwargs).real
+        As = [self.get_operator(A) for A in As] # get an operator
+        if all(A.matrix is not None for A in As): # all of them are matrices
+            # contract them against one density matrix, built once
+            return spectrum.ev(self,operator=[A.get_matrix() for A in As],
+                    **kwargs).real
+        return np.array([self.get_single_vev(A,**kwargs) for A in As])
 
 
 hamiltonian = Hamiltonian

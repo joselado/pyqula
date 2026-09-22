@@ -123,6 +123,23 @@ def non_orthogonal_supercell(gin,m,ncheck=2,mode="fill",reducef=lambda x: x):
   
 
 
+def record_diagonal_supercell(go,nc,n1,n2,n3):
+  """Record, on a supercell built by the (n1,n2,n3) builders, which primal
+  replica and which primal atom every one of its atoms came from, and the
+  integer matrix M with A_supercell = M@A_primal. This is the same
+  bookkeeping that non_orthogonal_supercell records for a general matrix
+  supercell, and unfolding.bloch_projector consumes it directly instead of
+  re-deriving it by matching positions. The builders all fill their output
+  in the same nesting order -- n1 outermost, then n2, then n3, then the
+  atoms of the primal cell -- so it is a pure index decomposition."""
+  from .unfolding import decompose_supercell_index
+  replicas,primal = decompose_supercell_index(np.arange(nc*n1*n2*n3),nc,
+          (n1,n2,n3))
+  go.supercell_matrix = np.diag([n1,n2,n3]).astype(int)
+  go.supercell_replica = replicas
+  go.supercell_primal_index = primal
+
+
 def replicate3d(rs,a1,a2,a3,n1,n2,n3):
     nc = len(rs)
     ro = np.zeros((n1*n2*n3*nc,3)) # allocate output array
@@ -205,15 +222,21 @@ def infer_supercell(g,g0):
     """Given two geometries, guess which supercell is associated"""
     # this only works for orthogonal supercells
     def norm(v): return np.sqrt(v.dot(v))
+    # round, never truncate: the ratio of two norms of an exact supercell
+    # lands one ulp below the integer often enough (about 3.6% of random
+    # 1d cells, n=3,6,12 the usual culprits) that int() would silently
+    # return n-1
     if g.dimensionality==1:
-        nx = int(norm(g.a1)/norm(g0.a1)) # out
+        nx = int(round(norm(g.a1)/norm(g0.a1))) # out
         ny = 1
     elif g.dimensionality==2: # assume is orthogonal
-        nx = int(np.round(norm(g.a1)/norm(g0.a1),1)) # out
-        ny = int(np.round(norm(g.a2)/norm(g0.a2),1)) # out
+        nx = int(round(norm(g.a1)/norm(g0.a1))) # out
+        ny = int(round(norm(g.a2)/norm(g0.a2))) # out
     else:
-      raise NotImplementedError("infer_supercell is only implemented for 1d "
-              "and 2d geometries")
+      raise NotImplementedError("inferring the supercell size from the "
+              "lattice vectors is only implemented for 1d and 2d "
+              "geometries; build the supercell with get_supercell(), which "
+              "records the replica bookkeeping and needs no inference")
     # probably a check should be added here
     return (nx,ny,1)
       
@@ -241,6 +264,7 @@ def supercell2d(g,n1=1,n2=1):
   if g.atoms_have_names: # supercell sublattice
     go.atoms_names = g.atoms_names*n1*n2
   go.get_fractional() # get fractional coordinates
+  record_diagonal_supercell(go,len(g.r),n1,n2,1) # unfolding bookkeeping
   return go
 
 
@@ -289,6 +313,7 @@ def supercell3d(g,n1=1,n2=1,n3=1):
   if g.atoms_have_names: # supercell sublattice
     go.atoms_names = g.atoms_names*n1*n2*n3
   go.get_fractional() # get fractional coordinates
+  record_diagonal_supercell(go,nc,n1,n2,n3) # unfolding bookkeeping
   return go
 
 

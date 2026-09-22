@@ -339,7 +339,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   # Operator.get_matrix), so it is resolved once, here.
   if operator is None: op = None # no operator
   else:
-      op = operator.get_matrix() # get the matrix of the operator
+      op = operator.get_matrix(required=False) # matrix of the operator
       ## the case of projector operators should be implemented explicitly
       if op is None:
         raise NotImplementedError("the KPM DOS needs an operator with a "

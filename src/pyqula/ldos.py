@@ -348,7 +348,7 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
       h = h.get_dense()
       op = None # no operator
       if operator is not None:
-          op = operator.get_matrix() # matrix of the operator
+          op = operator.get_matrix(required=False) # matrix of the operator
           if op is None: # momentum dependent operator
               raise NotImplementedError("mode='green' integrates over the "
                 +"Brillouin zone before the operator is applied, so it "

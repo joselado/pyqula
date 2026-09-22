@@ -104,7 +104,7 @@ def test_unfolding_non_diagonal_supercell_weight_scales_with_remaining_orbitals(
 
 def test_unfolding_non_diagonal_supercell_matches_direct_diagonalization():
     """Direct correctness check for the k-remapping used by the
-    non-diagonal-M unfolding path (bloch_phase_matrix_matrix's
+    non-diagonal-M unfolding path (bloch_phase_matrix's
     k_primal = Minv@k_super). The two tests above are blind to a
     wrong Minv (e.g. using M instead of its inverse): one only keeps
     the n=(0,0,0) replica, where every phase factor is exp(i*0)=1
@@ -118,18 +118,19 @@ def test_unfolding_non_diagonal_supercell_matches_direct_diagonalization():
     that a) the union of h0's eigenvalues at those points exactly
     reproduces the supercell spectrum at k_super (pure Bloch-folding
     identity, independent of the unfolding operator itself), and b)
-    the "unfold" operator assigns full weight (n0, the primal orbital
-    count) to exactly the supercell eigenstates whose energy matches
-    h0's spectrum at the j=0 representative k0=Minv@k_super, and ~0
-    weight to the rest (which come from the other N-1 folded
-    primal k-points)."""
+    the "unfold" operator assigns full weight (N, the number of primal
+    replicas in the supercell) to exactly the supercell eigenstates
+    whose energy matches h0's spectrum at the j=0 representative
+    k0=Minv@k_super, and ~0 weight to the rest (which come from the
+    other N-1 folded primal k-points). This M has det(M)=2 and the
+    primal cell has n0=2 orbitals, so the two constants happen to
+    coincide here; test_unfolding_projector.py separates them."""
     g0 = geometry.honeycomb_lattice()
     M = np.array([[2, 1, 0], [0, 1, 0], [0, 0, 1]])  # non-diagonal, det=2
     Minv = np.linalg.inv(M.astype(float))
     g = g0.get_supercell(M, store_primal=True)
     h = g.get_hamiltonian(has_spin=False)
     h0 = g0.get_hamiltonian(has_spin=False)
-    n0 = h0.intra.shape[0]
 
     from pyqula.unfolding import bloch_projector
     op = bloch_projector(h)
@@ -161,6 +162,6 @@ def test_unfolding_non_diagonal_supercell_matches_direct_diagonalization():
         v = Vs[:, i]
         w = np.abs(op.m(v, k_super).dot(np.conjugate(v)))
         if np.any(np.isclose(Es[i], ref_energies, atol=1e-8)):
-            assert np.isclose(w, n0, atol=1e-6)
+            assert np.isclose(w, N, atol=1e-6)
         else:
             assert np.isclose(w, 0.0, atol=1e-6)

@@ -53,7 +53,15 @@ class Operator():
             if self.matrix is not None and a.matrix is not None:
                 out.matrix = self.get_matrix()@a.get_matrix()
                 out.m = lambda v,k=None: out.matrix@v # create dummy function
-            else: out.m = lambda v,k=None: self.m(a.m(v,k=k),k=k)
+            else:
+                # Operator(self) copied self.matrix, which is not the matrix
+                # of the composition; one of the two factors has none at all,
+                # so neither has the product. Leaving it in place made
+                # get_matrix() return the left factor alone, and the right one
+                # was then silently dropped (h.get_vev with a matrix-less
+                # operator returned the same numbers as with no operator)
+                out.matrix = None
+                out.m = lambda v,k=None: self.m(a.m(v,k=k),k=k)
             out.linear = self.linear and a.linear
             return out
         elif algebra.ismatrix(a): # matrix type
@@ -95,6 +103,7 @@ class Operator():
             out.m = lambda v,k=None: self.m(v,k=k) + a.m(v,k=k)
             if self.matrix is not None and a.matrix is not None:
                 out.matrix = self.matrix + a.matrix
+            else: out.matrix = None # not self's matrix, see __mul__
             out.linear = self.linear and a.linear
             return out
         else:
@@ -109,14 +118,28 @@ class Operator():
         """Define the call method"""
         return self.m(v,k=k) 
     def __matmul__(self,a): return self*a
-    def get_matrix(self,k=None):
-        """Return matrix if possible"""
-        if self.matrix is not None: 
-            if algebra.ismatrix(self.matrix): 
-                return self.matrix
-            else: 
-                raise TypeError("the stored operator is not a matrix but "
-                        "a "+str(type(self.matrix)))
+    def get_matrix(self,k=None,required=True):
+        """Return the matrix this operator acts with.
+
+        An Operator built from a function has none: it is defined only by
+        its action on a wavefunction, and when that action depends on the
+        kpoint (the unfolding projector, for one) no single matrix exists.
+        Asking for one raises, so that a routine needing a matrix fails
+        where the mistake is instead of silently computing an unweighted
+        quantity. Pass required=False to get None back and say in your own
+        message what your routine wanted the matrix for."""
+        if self.matrix is None:
+            if not required: return None # the caller will say what it needs
+            raise ValueError("this Operator is defined only by its action on "
+                    "a wavefunction and has no matrix representation, so the "
+                    "routine that asked for one cannot use it; build the "
+                    "operator from a matrix, or use a method that applies "
+                    "the operator to one state at a time")
+        if algebra.ismatrix(self.matrix):
+            return self.matrix
+        else:
+            raise TypeError("the stored operator is not a matrix but "
+                    "a "+str(type(self.matrix)))
     def inv(self):
         """Return the inverse operator"""
         if self.matrix is not None and self.linear: # input is a matrix
