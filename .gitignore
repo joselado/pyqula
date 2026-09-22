@@ -19,7 +19,10 @@ MULTI*
 *.TXT
 .ipynb_checkpoints
 .mpsfolder
-.claude/
+.claude/*
+# project skills are shared like the rest of the documentation; everything
+# else under .claude/ (local settings, session state) stays out
+!.claude/skills/
 examples/**/*.png
 benchmarks/results/
 CLAUDE.local.md

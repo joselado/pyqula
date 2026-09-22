@@ -144,66 +144,24 @@ in infinite systems use `embedding.Embedding(h, m=h_with_defect)`.
 
 ### Wannierization (`wanniertk/`)
 
-`h.get_wannier_hamiltonian(bands=[a,b], nk=...)` (`src/pyqula/wanniertk/wannierize.py`) Wannierizes a fixed,
-contiguous range of `h`'s bands (0-indexed, both ends inclusive, Wannierized jointly as one group) and
-returns a new, smaller multicell `Hamiltonian` whose real-space hoppings exactly reproduce that band
-subspace on the wannierization k-mesh. Passing `num_wann=` smaller than the selected range, with the
-`dis_win_min`/`dis_win_max`/`dis_froz_min`/`dis_froz_max` window keywords, turns on Souza-Marzari-Vanderbilt
-disentanglement, which the bundled port already implements — outside a frozen window the reproduction is of
-the optimal subspace rather than exact, which is the correct behaviour and what the tests assert.
-Disentanglement combined with `has_eh`, `symmetries=` or `auto_split_clusters` raises `NotImplementedError`
-naming the combination. It's built on
-[wannierpy](https://github.com/joselado/wannierpy)'s pure-Python Wannier90 port, bundled directly in this
-repo at `src/pyqula/wanniertk/wannierpy/` (no Fortran source, no compiled extension — the pure-Python
-backend needs neither; its only dependency is numpy, already required by pyqula) and imported normally by
-`wannierize.py`, not as an optional backend. See `examples/wannier/get_wannier_hamiltonian/main.py` for a
-runnable demo and `tests/wannier/` for correctness tests (exact-reproduction checks against the original
-spectrum).
+`h.get_wannier_hamiltonian(bands=[a,b], nk=...)` (`src/pyqula/wanniertk/wannierize.py`) returns a new,
+smaller multicell `Hamiltonian` reproducing a contiguous range of `h`'s bands, built on a pure-Python
+Wannier90 port bundled at `src/pyqula/wanniertk/wannierpy/` (no Fortran, no compiled extension). Load the
+`wannierization` skill before working on anything under `wanniertk/` or calling that method: it has the
+disentanglement window keywords, which combinations raise, and why the reproduction is of the optimal
+subspace rather than exact outside a frozen window.
 
 ## Error conventions
 
-Argument and Hilbert-space guards raise a real exception with a message saying what the
-routine requires: `ValueError` for a bad input value or a Hamiltonian in the wrong
-Hilbert space, `NotImplementedError` for a combination that is simply not built yet,
-`TypeError` for a wrong type. Two message-less forms were swept out of the package and
-should not come back: a bare `raise` (which surfaces as `RuntimeError: No active
-exception to reraise`, naming neither the input nor the requirement) and a bare
-`raise NotImplementedError` (which names the category but not what is unsupported).
-Where a guard's message can name the offending value -- the mode string, the two
-mismatched sizes, the type that was passed -- it does, rather than printing it and
-raising separately. The only bare `raise` left in `src/pyqula` is the jump-to-except
-idiom inside a `try` body (five sites), where it is control flow rather than an error
-report -- plus four ordinary re-raises inside `except` handlers, which re-raise a live
-exception and are not the message-less form at all. An AST walk therefore finds nine
-bare `raise` nodes in the package; nine is the expected count, not a regression.
-
-Options selected by a string (`mode=`, `solver=`, `channel=`, an operator name) should
-list the accepted values in the error, so a typo is self-diagnosing. Five dispatches go
-one step further and keep their names in a registry, so the accepted set can be
-enumerated and adding a name is one dict entry rather than a new `elif` branch --
-crucially, the advertised list is *derived from* the registry instead of being a second
-list maintained by hand beside the chain, so the two cannot drift:
-
-| dispatch | registry | names |
-| --- | --- | --- |
-| named operators | `operatorlist.py` | `operatorlist.get_operator_names()` |
-| mean-field guesses (`mf=`) | `meanfield.py` | `meanfield.get_guess_names()` |
-| pairing symmetries (`mode=`) | `sctk/pairing.py` | `pairing.get_pairing_modes()` |
-| high-symmetry kpoint labels | `kpointstk/labels.py` | `labels.get_label_names()` |
-| `h.extract(name)` quantities | `extract.py` | `extract.get_extractable_names()` |
-
-A new string-selected option should follow that shape rather than adding an `elif`.
-
-Hilbert-space requirements go through three shared guards in `check.py` --
-`require_spin(h,what)`, `require_nambu(h,what)` and `require_sublattice(h,what)` --
-where `what` is the noun phrase the message opens with (`"an exchange field"`,
-`"the d-vector"`). They supply the fixed tail naming the remedy (`h.turn_spinful()`,
-`h.setup_nambu_spinor()`), so a new routine does not reinvent either the wording or
-the fix. Use them instead of a hand-written `raise ValueError("... needs a spinful
-Hamiltonian")`. Guards that carry *more* information than the generic one -- the
-`check_mode("spinful_nambu")` family, which names both flags' values, and the local
-Hubbard-U guard, which points at the spinless `V1/V2/V3/Vr` alternative -- are
-deliberately left as they are.
+The package went through a deliberate sweep to reach a single, consistent shape for its
+errors, so **load the `error-conventions` skill before writing any `raise` in
+`src/pyqula`**, before adding or changing an option selected by a string, and before
+writing a guard on whether a Hamiltonian is spinful, has Nambu or has a sublattice. The
+short version: a real exception with a message naming what the routine requires, never a
+bare `raise`; a string-selected option lists its accepted values, derived from a registry
+rather than a hand-kept second list; Hilbert-space requirements go through the shared
+guards in `check.py`. The skill has the exception types, the registry table and the
+guards.
 
 ## Notes
 
@@ -212,13 +170,9 @@ deliberately left as they are.
 - `update.py` and `pipupdate.sh` are the maintainer's personal git-push / PyPI-publish shortcuts — not part
   of the library and not something to invoke on the user's behalf.
 - When a change adds or materially changes a user-facing feature, update `documentation/user_guide.md`
-  (and `README.md`'s FUNCTIONALITIES list where relevant) to describe it, following the existing style: a
-  short prose section with the physics/motivation, a runnable code snippet, and — for anything with a
-  method on `Hamiltonian`/`Geometry` — an entry in the "Main functions and methods" reference at the end of
-  the user guide. Before writing or rewriting any prose in the guide, read `documentation/VOICE.md`: it
-  describes the maintainer's voice per register (chapter prose, section intros, catalogue bullets), the
-  spelling decisions, what not to do, and which chapters are the maintainer's own prose (fix only) versus
-  Claude-written (convert).
+  (and `README.md`'s FUNCTIONALITIES list where relevant) to describe it. **Load the `user-guide-voice`
+  skill before writing a single sentence of it** — prose written without it reads like a language model
+  wrote it, which is the whole failure that skill exists to prevent.
 - `future_development/` holds maintainer-facing roadmaps for work that is planned, partially done, or
   scoped-but-not-started, with the measurements and dead ends that led to each conclusion recorded so
   they don't have to be re-derived. Check it before starting work in an area it covers, and add to it
@@ -229,19 +183,11 @@ deliberately left as they are.
   open) and `bug_audit_2.md` (the eight-lens second sweep, 76 of 80 findings fixed), with the four
   that were decisions rather than repairs written up in `audit_open_decisions.md`, which is also
   where a third sweep should start.
-- **The CPU/GPU backend is one package-wide switch, `src/pyqula/gpu.py`.** `gpu.set_gpu(True)`
-  puts every GPU-capable routine on the device and points jax's default device there, so the
-  jax modules with no backend branch of their own follow it too; the default is the CPU, on
-  every machine. A new GPU path routes on `gpu.get_gpu()` rather than growing a switch of its
-  own, and precision stays per-call (`kpm_prec`, `chi_prec`, `eigh_prec`). The old per-call
-  `kpm_cpugpu`/`chi_cpugpu` arguments were removed and now raise.
-- `documentation/gpu_porting_plan.md` is a maintainer-facing roadmap for moving compute-heavy
-  paths onto GPU via `jax` (already a hard dependency). Tier 1 (the batched KPM GPU path,
-  `kpmtk/kpmjax.py`/`kpmtk/kpmnumba.py`), Tier 2 (batched dense diagonalization,
-  `htk/eigenvectorsjax.py`) and Tier 3 (scoping the forced-CPU jax modules) are done; Tier 4,
-  why sparse/ARPACK-based Green's-function work is a harder/lower-priority case, is not
-  started. Each tier wants explicit sign-off before it starts. Check the plan before starting
-  any GPU-related work in this repo.
+- **The CPU/GPU backend is one package-wide switch, `src/pyqula/gpu.py`**, defaulting to the CPU on
+  every machine; a new GPU path routes on `gpu.get_gpu()` rather than growing a switch of its own.
+  Load the `gpu-backend` skill before any GPU, jax or device work: it has the precision arguments,
+  the tiered plan in `documentation/gpu_porting_plan.md` and which tiers are done. **Each tier wants
+  the maintainer's explicit sign-off before it starts** — propose, do not begin.
 - **HPC-cluster material never goes into git.** pyqula is a public repository; the maintainer's cluster
   details (login hosts, scratch paths, partition names, queue measurements, account-specific job scripts,
   run logs) are none of the public's business and must not reach GitHub. They live in `docs/` and in
