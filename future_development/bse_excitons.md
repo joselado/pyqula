@@ -1079,8 +1079,35 @@ this subpackage and is still unbatched.
   q keeps one alive at a time, but a much larger mesh or cell will want
   the k axis chunked as well, in the style of `kpmtk/kpmjax.py`'s
   `gpu_batch_size`.
-- **`bsetk/kernel.py::direct_block_jit`**, the ladder build, which is
-  where a screened BSE actually spends its time (`npair^2 * norb^2` once
-  screening is on, 21.6 s and 1.9 GB at nk=20 per "Measured cost of the
-  dense solver" above). It is the next candidate and needs the k-block
-  restructuring described there, not this file's shape.
+- **The dense solve, not the ladder build.** This list used to name
+  `bsetk/kernel.py::direct_block_jit` as where a screened BSE spends its
+  time. Profiled (2026-09-23, 8 CPU threads, full non-Tamm-Dancoff BSE,
+  spinful gapped honeycomb with U=1, V1=0.3, RPA screening), it is not:
+
+  | cell | nk | npair | nnz of W | ladder build | dense solve |
+  |---|---|---|---|---|---|
+  | 1x1 | 20x20 | 1600 | 16 | 1.6 s | 14.0 s |
+  | 2x2 | 8x8 | 4096 | 256 | 22.2 s | 205 s |
+
+  The Cholesky + `eigh` of `solve_pseudo_hermitian` is ten times the
+  ladder, so porting the ladder alone buys ~10% end to end. Porting the
+  solve instead was measured on the GTX 1060 as a single dense `eigh`
+  (random Hermitian, host transfer included):
+
+  | n | CPU (scipy) | device double | device single |
+  |---|---|---|---|
+  | 2048 | 2.8 s | 1.4 s | 0.29 s (6e-6 rel. error) |
+  | 4096 | 19.2 s | 10.1 s | 1.46 s (2e-6) |
+  | 8192 | -- | out of memory | -- |
+
+  Double precision gives only 2x on this card, and n=8192 -- the full BSE
+  matrix at npair=4096 -- does not fit: cuSOLVER asked for a 4 GB
+  workspace on top of the matrix. Single precision gives ~13x, at an
+  error that lands directly in the exciton energies. So on a consumer
+  card neither half pays in double; what is open is whether a device
+  solve with a precision argument is wanted anyway, and how both look on
+  a data-centre card. The ladder only becomes the larger share where
+  nnz grows faster than the solve, i.e. a Tamm-Dancoff run (npair^3
+  solve, a quarter of the full one) on a cell large enough that screening
+  fills W out to norb^2 -- the 3x3 case (npair ~ 11700) did not finish
+  in three hours on the CPU and was abandoned, so that is unmeasured.
