@@ -95,8 +95,7 @@
 # for one orbital.  This normalisation (no extra spin factor) is the one for
 # which the T=0 weak-coupling limit gives the full Drude weight n/m and the
 # single-band result reduces to Liang et al. Eq. (21); both are pinned by
-# tests.  A "spinless_nambu" Hamiltonian describes a single spin species
-# and its weight comes out exactly half of the spinful one.
+# tests.
 #
 # ---------------------------------------------------------------------------
 # THE ANALYTIC (KUBO) FORMULA -- the primary result
@@ -223,12 +222,9 @@ def electron_hole_signs(h):
 
     pyqula's spinful_nambu spinor is site-interleaved with four components
     per site, (c_up, c_dn, c^dag_dn, -c^dag_up), so the electrons are the
-    indices with i%4 < 2 (see superconductivity.py and sctk/reorder.py);
-    the spinless_nambu spinor is (c, c^dag) per site."""
+    indices with i%4 < 2 (see superconductivity.py and sctk/reorder.py)."""
     n = h.intra.shape[0]
     if h.check_mode("spinful_nambu"): return np.where(np.arange(n)%4<2,1.,-1.)
-    elif h.check_mode("spinless_nambu"):
-        return np.where(np.arange(n)%2<1,1.,-1.)
     else: raise ValueError("the superfluid weight requires a Nambu (BdG) "
             "Hamiltonian; call h.turn_nambu() or h.add_swave(...) first")
 
@@ -249,8 +245,7 @@ def twist_masks(h):
 
 def component_positions(h):
     """Cartesian position of every component of the Nambu basis, i.e. the
-    position of the site it belongs to (4 components per site in
-    spinful_nambu, 2 in spinless_nambu)."""
+    position of the site it belongs to (4 components per site)."""
     n = h.intra.shape[0]
     r = np.array(h.geometry.r)
     if n%len(r)!=0: raise ValueError("cannot map the Hamiltonian basis onto "
@@ -536,12 +531,6 @@ def _nambu2block_permutation(h):
         for i in range(ns):
             p[2*i] = 4*i ; p[2*i+1] = 4*i+1          # electrons, up/down
             p[2*i+2*ns] = 4*i+2 ; p[2*i+1+2*ns] = 4*i+3  # holes
-        return p
-    elif h.check_mode("spinless_nambu"):
-        ns = n//2
-        p = np.zeros(n,dtype=int)
-        for i in range(ns):
-            p[i] = 2*i ; p[i+ns] = 2*i+1
         return p
     else: raise ValueError("not a Nambu Hamiltonian")
 

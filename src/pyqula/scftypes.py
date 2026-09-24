@@ -369,7 +369,6 @@ from .scftk.coulomb import coulombscf
 from .scftk.densitydensity import densitydensity
 
 repulsive_hubbard = hubbardscf
-from .scftk.attractive_hubbard_spinless import attractive_hubbard
 
 
 def write_magnetization(mag):

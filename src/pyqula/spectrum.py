@@ -505,10 +505,7 @@ def get_filling_spinful_nambu(h,nk=10,**kwargs):
 
 def get_filling(h,**kwargs):
     """Get the filling of a Hamiltonian at this energy"""
-    if h.check_mode("spinless_nambu"): # spinless Nambu Hamiltonian
-        from .sctk import spinless
-        return spinless.get_filling(h,**kwargs)
-    elif h.check_mode("spinful_nambu"): # spinful Nambu
+    if h.check_mode("spinful_nambu"): # Nambu
         return get_filling_spinful_nambu(h,**kwargs)
     else:
         es = eigenvalues(h,**kwargs) # eigenvalues

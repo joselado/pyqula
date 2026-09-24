@@ -56,15 +56,9 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
           for i in range(len(rrep)): # loop over the atoms
               r0 = rrep[i] # get this center
               if not accept_center(r0): continue # skip this iteration
-              if h.has_eh:
-                if h.has_spin: # spinful
+              if h.has_eh: # always spinful
                   lodict[(tuple(d),4*i)] = get_orbital(r0,r) # store 
                   lodict[(tuple(d),4*i+1)] = get_orbital(r0,r) # store 
-           #       lodict[(tuple(d),4*i+2)] = 0. # store 
-           #       lodict[(tuple(d),4*i+3)] = 0. # store 
-                else:
-                    raise NotImplementedError("the atomic LDOS is not "
-                            "implemented for spinless Nambu Hamiltonians")
               else:
                 if h.has_spin: # spinful
                   lodict[(tuple(d),2*i)] = get_orbital(r0,r) # store 

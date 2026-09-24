@@ -1,8 +1,8 @@
 
 from ..geometry import same_site
 import numpy as np
-from ..kanemele import get_haldane_function
 from ..utilities import get_callable
+from ..check import require_sublattice
 from .dvector import dvector2delta
 
 
@@ -13,12 +13,23 @@ from .dvector import dvector2delta
 # callable and the caller's keyword bag, and returns the weight function
 # weightf(r1,r2) -> 2x2 pairing matrix.
 # (tests/superconductivity/test_pairing_modes.py builds every advertised one)
+#
+# Every weight has to obey Fermi antisymmetry, which in pyqula's Nambu basis
+# (c_up, c_dn, c_dn^dag, -c_up^dag) reads D_ij = sigma_y D_ji^T sigma_y: the
+# spin-singlet part even under i <-> j and the d-vector odd. A weight that
+# breaks it is not a pairing at all, since the part of the BdG matrix that
+# violates it adds only a constant to the many-body Hamiltonian, and yet it
+# shows up in the BdG spectrum. The "haldane"/"antihaldane" (odd singlet),
+# "swavez" (onsite triplet) and "SnnAB" (even triplet off a bipartite
+# lattice) modes did this and were removed.
 
 
-def _haldane_weight(H,stagger=False):
-    """Haldane-like (next-nearest-neighbor, complex) weight, spin diagonal"""
-    f = get_haldane_function(H.geometry,stagger=stagger)
-    return lambda r1,r2: f(r1,r2)*np.identity(2)
+def _on_sublattice(H,mode,weightf):
+    """Sublattice-resolved weights need a labeled sublattice. Without one
+    they added zero pairing without saying so (square lattice) or died in
+    get_index with an IndexError or an AttributeError"""
+    require_sublattice(H,"the '"+mode+"' pairing")
+    return weightf
 
 
 # mode -> builder(H,df,kwargs) -> weightf(r1,r2). The helpers the builders
@@ -34,21 +45,19 @@ _pairing_builders = {
   "chiral_fwave": lambda H,df,kw: get_triplet_generator(df,L=3,H=H,**kw),
   "chiral_dwave": lambda H,df,kw: lambda r1,r2: get_singlet(r1,r2,L=2,**kw),
   "chiral_gwave": lambda H,df,kw: lambda r1,r2: get_singlet(r1,r2,L=4,**kw),
-  "antihaldane": lambda H,df,kw: _haldane_weight(H,stagger=True),
-  "haldane": lambda H,df,kw: _haldane_weight(H,stagger=False),
-  "swavez": lambda H,df,kw: lambda r1,r2: same_site(r1,r2)*tauz,
   "px": lambda H,df,kw: lambda r1,r2: px(r1,r2),
   "dpid": lambda H,df,kw: lambda r1,r2: dpid(r1,r2,**kw),
-  "swaveA": lambda H,df,kw: lambda r1,r2: swaveA(H.geometry,r1,r2),
-  "swaveB": lambda H,df,kw: lambda r1,r2: swaveB(H.geometry,r1,r2),
-  "swavesublattice": lambda H,df,kw: lambda r1,r2: (
-          swaveB(H.geometry,r1,r2) - swaveA(H.geometry,r1,r2)),
+  "swaveA": lambda H,df,kw: _on_sublattice(H,"swaveA",
+          lambda r1,r2: swaveA(H.geometry,r1,r2)),
+  "swaveB": lambda H,df,kw: _on_sublattice(H,"swaveB",
+          lambda r1,r2: swaveB(H.geometry,r1,r2)),
+  "swavesublattice": lambda H,df,kw: _on_sublattice(H,"swavesublattice",
+          lambda r1,r2: swaveB(H.geometry,r1,r2) - swaveA(H.geometry,r1,r2)),
   "dx2y2": lambda H,df,kw: lambda r1,r2: dx2y2(r1,r2,H=H,**kw),
   "nodal_dwave": lambda H,df,kw: lambda r1,r2: dx2y2(r1,r2,H=H,**kw),
   "dxy": lambda H,df,kw: lambda r1,r2: dxy(r1,r2,H=H,**kw),
   "snn": lambda H,df,kw: lambda r1,r2: swavenn(r1,r2),
   "C3nn": lambda H,df,kw: lambda r1,r2: C3nn(r1,r2),
-  "SnnAB": lambda H,df,kw: lambda r1,r2: SnnAB(H.geometry,r1,r2),
   }
 
 
@@ -134,30 +143,6 @@ def C3nn(r1,r2):
 
 
 
-def C3nn(r1,r2):
-    """Function with first neighbor C3 profile"""
-    dr = r1-r2
-    dr2 = dr.dot(dr)
-    if 0.99<dr2<1.001: # first neighbor
-#        return dr[0]
-        phi = np.arctan2(dr[1],dr[0]) # angle
-        return 1.0*np.exp(1j*phi)*tauz
-    return 0.0*tauz
-
-
-
-def SnnAB(g,r1,r2):
-    """Swave between AB"""
-    dr = r1-r2
-    dr2 = dr.dot(dr)
-    if 0.99<dr2<1.001: # first neighbor
-        i = g.get_index(r1,replicas=True)
-        j = g.get_index(r2,replicas=True)
-        if g.sublattice[i]==1 and g.sublattice[j]==-1:
-          return 1.0*tauz
-        else: return -1.0*tauz
-#          return 1.0*np.matrix([[1.,0.],[0.,0.]])
-    return 0.0*iden
 
 
 

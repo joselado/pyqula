@@ -27,27 +27,22 @@ def test_identify_superconductivity_classifies_a_spinful_bdg():
     assert "Spin-singlet superconductivity" in out
 
 
-def test_identify_superconductivity_names_itself_on_a_spinless_bdg():
-    """Every route below identify_superconductivity reads the pairing out of
-    a 4x4 spin x electron-hole block per site, so a spinless BdG is not
-    supported. It used to reach the d-vector extraction and surface that
-    routine's message, which named the d-vector and not the classifier the
-    user actually called; the guard must name its own routine and the
-    Hilbert space it needs."""
+def test_a_bdg_built_from_a_spinless_chain_is_classified_as_spinful():
+    """A Nambu Hamiltonian is always spinful, so add_swave on a spinless
+    chain gives the same spin singlet as on a spinful one, and the
+    classifier reads it in the spin x electron-hole basis. It used to build
+    a spinless Nambu Hamiltonian that the classifier could only refuse."""
     (h0, h) = _spinless_bdg()
-    with pytest.raises(NotImplementedError) as e:
-        superconductivity.identify_superconductivity(h)
-    msg = str(e.value)
-    assert "identify_superconductivity" in msg
-    assert "spinless" in msg
-    with pytest.raises(NotImplementedError):
-        meanfield.identify_symmetry_breaking(h0, h)
+    assert h.check_mode("spinful_nambu")
+    out = meanfield.identify_symmetry_breaking(h0, h)
+    assert "up-down pairing" in out
+    assert "Spin-singlet superconductivity" in out
 
 
-def test_an_empty_spinless_nambu_hamiltonian_is_still_empty():
-    """The guard must not turn "there is nothing here" into an error. This is
-    the shape identify_symmetry_breaking passes in: the difference between
-    two Hamiltonians, which is zero when nothing broke."""
+def test_an_empty_bdg_hamiltonian_is_still_empty():
+    """Nothing to report is not an error. This is the shape
+    identify_symmetry_breaking passes in: the difference between two
+    Hamiltonians, which is zero when nothing broke."""
     g = geometry.chain()
     h = g.get_hamiltonian(has_spin=False)
     h.setup_nambu_spinor()

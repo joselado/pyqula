@@ -113,6 +113,19 @@ def test_public_api_dispatch():
     assert np.allclose(d["total"], a)
 
 
+def test_finite_difference_refuses_to_decompose():
+    """The finite difference has no conventional/geometric split. It used
+    to drop decompose=True in silence and hand back the bare tensor where
+    the caller indexes a dictionary"""
+    from pyqula import superfluid
+    h = geometry.square_lattice().get_hamiltonian()
+    h.add_onsite(-0.7)
+    h.add_swave(0.5)
+    for mode in ["finite_difference", "fd"]:
+        with pytest.raises(ValueError, match="decompose"):
+            superfluid.superfluid_weight(h, nk=4, mode=mode, decompose=True)
+
+
 def test_non_nambu_hamiltonian_is_rejected():
     h = geometry.square_lattice().get_hamiltonian()
     with pytest.raises(ValueError, match="Nambu"):

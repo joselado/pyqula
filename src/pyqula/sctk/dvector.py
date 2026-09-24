@@ -31,12 +31,11 @@ def dvector2deltas_old(ds):
 
 
 def check_spinful_nambu(h):
-    """Raise unless h has both the spin and the electron-hole degree of
-    freedom. Everything below reads the pairing out of a 4x4 spin x
-    electron-hole block per site (extract.extract_triplet_pairing), so on
-    any other Hilbert space it silently returns an array of the wrong
-    length -- zeros for a spinful non-Nambu Hamiltonian, an empty array
-    (and nan means) for a spinless Nambu one."""
+    """Raise unless h has the electron-hole degree of freedom (a Nambu
+    Hamiltonian is always spinful). Everything below reads the pairing out
+    of a 4x4 spin x electron-hole block per site
+    (extract.extract_triplet_pairing), so on a normal Hamiltonian it
+    silently returned an array of zeros of the wrong length."""
     if not h.check_mode("spinful_nambu"):
         raise ValueError("the d-vector needs a spinful Nambu Hamiltonian "
           +"(has_spin and has_eh); this one has has_spin="+str(h.has_spin)

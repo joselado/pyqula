@@ -72,9 +72,6 @@ def dos_site_kpm(h,energies=np.linspace(-1.,1.,1000),
         ds = ds1+ds2
     elif not h.has_spin and not h.has_eh: # spinless
         (es,ds) = get(i)
-    else:
-      raise NotImplementedError("the KPM site DOS is not implemented for "
-              "spinless Nambu Hamiltonians")
     f = interp1d(es,ds.real,bounds_error=False,fill_value=0.0)
     return energies,f(energies)
 

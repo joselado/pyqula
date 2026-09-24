@@ -5217,8 +5217,7 @@ Optional arguments
   `"directional"` also uses the bond direction, for a genuinely
   anisotropic strain
 
-Turns the Hamiltonian multicell. Not implemented for a spinless Nambu
-Hilbert space
+Turns the Hamiltonian multicell
 
 ### h.add_crystal_field()
 Add a crystal field: an onsite potential built from the local atomic
@@ -5262,7 +5261,7 @@ Optional arguments
 - mode="swave": the pairing symmetry: `"swave"`, `"extended_swave"`,
   `"triplet"`, `"pwave"`, `"chiral_pwave"`, `"dx2y2"`, `"dxy"`,
   `"nodal_dwave"`, `"chiral_dwave"`, `"nodal_fwave"`, `"chiral_fwave"`,
-  `"chiral_gwave"`, `"haldane"`, `"antihaldane"`, and several others. A
+  `"chiral_gwave"`, and several others. A
   callable returning the 2x2 pairing matrix for a pair of positions is also
   accepted. An unknown name raises `ValueError` listing every accepted one
 - d=[0.,0.,1.]: the d-vector, for the triplet channels
@@ -5272,12 +5271,13 @@ Put the Hamiltonian into its Nambu (electron-hole doubled) form, with zero
 pairing. This is the call the error messages of the superconducting
 routines point at: a superconducting quantity asked of a normal Hamiltonian
 needs the electron-hole degree of freedom to exist first. Equivalent to
-`h.add_swave(0.0)`. Modifies in place
+`h.add_swave(0.0)`. A Nambu Hamiltonian is always spinful, so a spinless
+one is made spinful first. Modifies in place
 
 ### h.turn_nambu()
-Add the electron-hole degree of freedom without adding any pairing. Lower
-level than `setup_nambu_spinor()`, which is the one to call normally.
-Modifies in place
+Add the electron-hole degree of freedom without adding any pairing, making a
+spinless Hamiltonian spinful first. Lower level than `setup_nambu_spinor()`,
+which is the one to call normally. Modifies in place
 
 ### h.turn_spinful()
 Add the spin degree of freedom to a spinless Hamiltonian, doubling every
@@ -5811,7 +5811,7 @@ Optional arguments:
 
 Returns a Cartesian `(dim,dim)` array, or a dictionary if `decompose=True`.
 `decompose=True` raises `ValueError` when the decomposition's assumptions
-do not hold.
+do not hold, and with `mode="finite_difference"`, which has no such split.
 
 ### h.get_bkt_temperature()
 Berezinskii-Kosterlitz-Thouless temperature of a 2d BdG Hamiltonian, from

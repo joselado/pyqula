@@ -29,8 +29,6 @@ def full2profile(h,profile,check=True):
   if h.has_spin == False and h.has_eh==False: out = np.array(profile)
   elif h.has_spin == True and h.has_eh==False:
     out = np.array([profile[2*i]+profile[2*i+1] for i in range(n//2)])
-  elif h.has_spin == False and h.has_eh==True:
-    out = np.array([profile[2*i]+profile[2*i+1] for i in range(n//2)])
   elif h.has_spin == True and h.has_eh==True:
     out = np.array([profile[4*i]+profile[4*i+1]+profile[4*i+2]+profile[4*i+3] for i in range(n//4)])
   else: # unknown

@@ -8,8 +8,7 @@ from .. import sculpt
 
 def orbitals_per_site(h):
     """Number of matrix rows belonging to one site of h.geometry (1 for a
-    spinless Hamiltonian, 2 for spinful or spinless-Nambu, 4 for
-    spinful-Nambu). pyqula stores those orbitals contiguously and
+    spinless Hamiltonian, 2 for spinful, 4 for Nambu). pyqula stores those orbitals contiguously and
     site-major, so site i owns rows [i*norb,(i+1)*norb) -- the assumption
     that lets a spatial region be lifted to matrix indices."""
     n = h.intra.shape[0] # dimension of the Hamiltonian matrix

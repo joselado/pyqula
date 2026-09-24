@@ -2,10 +2,10 @@
 import numpy as np
 
 def check_mode(h,n):
-    if n=="spinless_nambu":
-        if (not h.has_spin) and h.has_eh: return True
-        else: return False
-    elif n=="spinful_nambu":
+    # a Nambu Hamiltonian is always spinful in pyqula, so there is no
+    # "spinless_nambu" mode: turn_nambu() makes a spinless Hamiltonian
+    # spinful before doubling it
+    if n=="spinful_nambu":
         if h.has_spin and h.has_eh: return True
         else: return False
     elif n=="spinful":
@@ -15,8 +15,8 @@ def check_mode(h,n):
         if (not h.has_spin) and (not h.has_eh): return True
         else: return False
     else:
-        raise ValueError("unknown mode; check_mode accepts 'spinless', "
-                "'spinful', 'spinless_nambu' and 'spinful_nambu'")
+        raise ValueError("unknown mode '"+str(n)+"'; check_mode accepts "
+                "'spinless', 'spinful' and 'spinful_nambu'")
 
 
 

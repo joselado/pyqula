@@ -261,14 +261,8 @@ def get_dm_qtci(h, v, nk=None, fermi=0.0, T=1e-7, tolerance=1e-6,
 
     For BdG/Nambu Hamiltonians (h.has_eh) the required entries are
     determined by required_elements_eh instead of required_elements,
-    exactly as in kpmtk.densitymatrix_kpm.get_dm_kpm (same restriction to
-    spinful Nambu Hamiltonians)."""
+    exactly as in kpmtk.densitymatrix_kpm.get_dm_kpm."""
     if nk is None: nk = DEFAULT_NK
-    if getattr(h,"has_eh",False) and not getattr(h,"has_spin",True):
-        raise NotImplementedError("get_dm_qtci's BdG/Nambu path only "
-                "supports spinful Hamiltonians (h.has_spin=True); "
-                "spinless_nambu uses a different Nambu index convention "
-                "not implemented here")
     ds = [(0,0,0)] + [d for d in v if d!=(0,0,0)]
     if getattr(h,"has_eh",False):
         needed = required_elements_eh(v)

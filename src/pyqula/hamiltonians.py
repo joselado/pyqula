@@ -646,14 +646,6 @@ class Hamiltonian():
               return superconductivity.get_eh_sector(m,i=0,j=0)
           self.modify_hamiltonian_matrices(f) # modify the matrices
           self.has_eh = False # set to normal
-      elif self.check_mode("spinless_nambu"): 
-          # spinless Nambu matrices interleave electrons and holes, site by
-          # site (sctk.spinless.reorder), so the electron sector is the
-          # even rows and columns
-          def f(m):
-              return m[::2,::2]
-          self.modify_hamiltonian_matrices(f) # modify the matrices
-          self.has_eh = False # set to normal
       elif self.check_mode("spinful"): pass
       elif self.check_mode("spinless"): pass
       else:

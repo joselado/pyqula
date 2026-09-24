@@ -4,9 +4,9 @@ from ..algebra import todense
 
 
 def site_dof(h):
-    """Degrees of freedom per site: 1 (spinless), 2 (spinful or spinless
-    Nambu), 4 (spinful Nambu) -- has_spin and has_eh each independently
-    double the per-site block size."""
+    """Degrees of freedom per site: 1 (spinless), 2 (spinful), 4 (Nambu,
+    which is always spinful) -- has_spin and has_eh each double the
+    per-site block size."""
     dof = 2 if h.has_eh else 1
     if h.has_spin: dof *= 2
     return dof

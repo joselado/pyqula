@@ -31,14 +31,3 @@ def test_real_space_ldos_integrates_to_one_state():
         (e, y) = f(r)
         assert np.all(y >= 0.)  # a density of states is non-negative
         assert abs(np.trapezoid(y, e) - 1.0) < 5e-3
-
-
-def test_real_space_ldos_refuses_spinless_nambu():
-    """The routine has no spinless-Nambu branch and says so, rather than
-    falling through to a wrong Hilbert-space slicing."""
-    g = islands.get_geometry(name="honeycomb", n=2, nedges=3, rot=0.0)
-    h = g.get_hamiltonian(has_spin=False)
-    h.add_swave(0.2)  # spinless Nambu
-    f = ldos.ldosr_generator(h, es=np.linspace(-2., 2., 50), nn=4)
-    with pytest.raises(NotImplementedError, match="spinless Nambu"):
-        f(g.r[0])

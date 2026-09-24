@@ -16,18 +16,15 @@ def test_spin_operators_refuse_a_spinless_hamiltonian():
 
 
 @pytest.mark.parametrize("name", ["spair", "singlet"])
-def test_pairing_operators_refuse_a_spinless_nambu_hamiltonian(name):
+@pytest.mark.parametrize("has_spin", [True, False])
+def test_pairing_operators_match_the_nambu_hilbert_space(name, has_spin):
     """The pairing operators are singlet/d-vector components in the
-    spin x electron-hole basis. Built on a spinless Nambu Hamiltonian they
-    came out twice the size of its Hilbert space instead of raising."""
-    h = geometry.chain().get_hamiltonian(has_spin=False)
+    spin x electron-hole basis. A Nambu Hamiltonian is always spinful, so
+    even one built from a spinless chain has that basis."""
+    h = geometry.chain().get_hamiltonian(has_spin=has_spin)
     h.add_swave(0.2)
-    with pytest.raises(NotImplementedError):
-        h.get_operator(name)
-    hs = geometry.chain().get_hamiltonian()
-    hs.add_swave(0.2)
-    op = hs.get_operator(name).get_matrix()
-    assert op.shape == hs.intra.shape  # spinful Nambu is fine
+    op = h.get_operator(name).get_matrix()
+    assert op.shape == h.intra.shape == (4, 4)
 
 
 @pytest.mark.parametrize("name", ["spair", "singlet"])

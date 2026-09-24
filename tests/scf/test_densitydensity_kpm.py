@@ -105,20 +105,6 @@ def test_hubbard_kpm_transverse_mean_field_matches_ed():
         f"KPM transverse-spin Hubbard mean field diverges from ED: {diff}"
 
 
-def test_get_dm_kpm_rejects_spinless_bdg():
-    """get_dm_kpm's Nambu index mapping (required_elements_eh/
-    _local_nambu_index) assumes a spinful Nambu Hamiltonian (4 Nambu slots
-    per site); a spinless BdG Hamiltonian uses a different (2 slots per
-    site) convention it does not implement, and must fail loudly rather
-    than silently computing wrong density-matrix entries."""
-    h = geometry.chain().get_hamiltonian(has_spin=False)
-    h.setup_nambu_spinor()  # spinless_nambu: has_eh=True, has_spin=False
-    assert h.has_eh and not h.has_spin
-    v = {(0, 0, 0): np.zeros((1, 1), dtype=np.complex128)}
-    with pytest.raises(NotImplementedError):
-        get_dm_kpm(h, v, nk=4)
-
-
 def test_get_dm_kpm_matches_full_dm_for_bdg_hamiltonian():
     """required_elements_eh's Nambu-reordering index arithmetic must
     reproduce exact diagonalization's dense (2n)x(2n) density matrix for a

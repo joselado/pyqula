@@ -104,10 +104,7 @@ def remove_spinful_sector(h,removef,alldirs=True):
         out = deepcopy(dd) # copy the dictionary
         for d in (out if alldirs else [(0,0,0)]): # loop over directions
             m = out[d] # matrix of this direction
-            if has_eh and not has_spin:
-                raise NotImplementedError("the mean-field constrain is not "
-                        "implemented for spinless Nambu Hamiltonians")
-            elif not has_eh and has_spin: # spinful
+            if not has_eh and has_spin: # spinful
                 m = removef(m)
             elif has_eh and has_spin: # spinful
                 m01 = get_eh_sector(m,i=0,j=1) # anomalous part

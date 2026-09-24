@@ -12,11 +12,7 @@ def add_strain(h,sr,**kwargs):
       else:
           raise ValueError("cannot map orbital indices onto sites for this "
                   "Hilbert space")
-    else: 
-      if h.has_spin: indg = lambda i: i//4
-      else:
-          raise NotImplementedError("strain is not implemented for spinless "
-                  "Nambu Hamiltonians")
+    else: indg = lambda i: i//4 # Nambu, always spinful
     f = strain_mode(sr,**kwargs) # get the function depending on the mode
     def fm(m,r1,r2): # function to modify hopping
         return strain_matrix(m,r1,r2,indg,f)

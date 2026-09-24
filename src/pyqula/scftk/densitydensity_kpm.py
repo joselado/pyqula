@@ -141,8 +141,6 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
                 "takes a single scalar filling, got %r" % (filling,))
     from .densitydensity import get_dc_energy, electron_dimension
     from ..kpmtk.densitymatrix_kpm import get_fermi4filling_kpm
-    if h.has_eh:
-        if not h.has_spin: return NotImplemented  # only for spinful, as in ED
     h = h.get_multicell()
     h = h.get_dense()
     def callback_h(h):

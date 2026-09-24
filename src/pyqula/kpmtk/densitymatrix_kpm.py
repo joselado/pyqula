@@ -85,10 +85,8 @@ def _local_nambu_index(orb, sector):
     [up-electron, down-electron, down-hole, up-hole]). "sector" is "e" for
     the electron partner of orb, or "h" for its hole partner.
 
-    Only valid for spinful Nambu Hamiltonians (h.has_eh and h.has_spin) --
-    a spinless Nambu Hamiltonian has only 2 Nambu slots per site (electron,
-    hole; no spin), a different convention this formula does not describe
-    -- see get_dm_kpm's has_spin check."""
+    A Nambu Hamiltonian is always spinful in pyqula, so there are always
+    four slots per site."""
     site, spin = orb//2, orb % 2
     if sector == "e": return 4*site + spin
     elif sector == "h": return 4*site + 2 + spin
@@ -331,16 +329,7 @@ def get_dm_kpm(h, v, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL, ne=None,
     For BdG/Nambu Hamiltonians (h.has_eh) the required entries are
     determined by required_elements_eh instead of required_elements (see
     its docstring) -- both are then handed to the same per-k Bloch-KPM
-    engine, _dm_kpm_from_needed. required_elements_eh/_local_nambu_index
-    assume a *spinful* Nambu Hamiltonian (h.has_spin too); a spinless BdG
-    Hamiltonian uses a different (2 slots/site) Nambu convention this path
-    does not implement, so that combination is rejected explicitly rather
-    than silently mapped through the wrong formula."""
-    if getattr(h, "has_eh", False) and not getattr(h, "has_spin", True):
-        raise NotImplementedError("get_dm_kpm's BdG/Nambu path only "
-                "supports spinful Hamiltonians (h.has_spin=True); "
-                "spinless_nambu uses a different Nambu index convention "
-                "not implemented here")
+    engine, _dm_kpm_from_needed."""
     ds = [(0, 0, 0)] + [d for d in v if d != (0, 0, 0)]
     if getattr(h, "has_eh", False):
         needed = required_elements_eh(v)

@@ -11,7 +11,6 @@ from .algebra import dagger
 def get_eh_sector_odd_even(m,i=0,j=0):
     """ Return the electron hole sector of a matrix,
     assumming that the matrix is in full nambu form""" 
-    if i>1 or j>1: return NotImplemented # meaningless
     m = nambu2block(m) # reorder the matrix
     n = m.shape[0]//2 # number of orbitals
     if i==0 and j==0: return m[0:n,0:n] 
@@ -245,21 +244,11 @@ def add_swave_to_hamiltonian(self,delta,**kwargs):
           +str(sorted(kwargs))+"; it only takes the pairing amplitude. "
           +"For any other pairing symmetry use add_pairing(delta=...,"
           +"mode=...)")
-    from .operators import isnumber
-#    if isnumber(delta):
-#        if delta==0.0: return 
-    # spinless Hamiltonian
-    if self.check_mode("spinless") or self.check_mode("spinless_nambu"): 
-        from .sctk import spinless
-        spinless.add_swave_to_hamiltonian(self,delta)
-        # spinful Hamiltonian
-    elif self.check_mode("spinful") or self.check_mode("spinful_nambu"): 
-      self.turn_nambu() # add electron hole
-      self.intra = self.intra + add_swave(delta=delta,rs=self.geometry.r,is_sparse=self.is_sparse)
-    else:
-        raise ValueError("cannot add s-wave pairing to this Hamiltonian: "
-          +"it is neither spinless nor spinful (has_spin="
-          +str(self.has_spin)+", has_eh="+str(self.has_eh)+")")
+    # turn_nambu makes a spinless Hamiltonian spinful first, since a Nambu
+    # Hamiltonian is always spinful in pyqula
+    self.turn_nambu() # add electron hole
+    self.intra = self.intra + add_swave(delta=delta,rs=self.geometry.r,
+            is_sparse=self.is_sparse)
 
 
 
@@ -442,16 +431,6 @@ def identify_superconductivity(h,tol=1e-5):
     if not h.has_eh: return [] # empty list
     dd = h.get_multihopping()
     if dd.norm()<tol: return [] # nothing
-    # every route below (the d-vector, dict2absdeltas, the singlet/triplet
-    # extraction) reads the pairing out of a 4x4 spin x electron-hole block
-    # per site, so name the requirement here rather than letting the
-    # d-vector complain about a Hilbert space the caller never mentioned
-    if not h.check_mode("spinful_nambu"):
-        raise NotImplementedError("identify_superconductivity classifies the "
-          +"pairing in the spin x electron-hole basis, so it needs a spinful "
-          +"Nambu Hamiltonian; this one is spinless Nambu (has_spin="
-          +str(h.has_spin)+"). Use h.extract('swave') or sctk.spinless for "
-          +"the spinless case")
     out = [] # initialize the list
 #    out.append("Superconductivity") # is superconducting
     dv = h.get_average_dvector() # get the average d-vector
@@ -517,9 +496,10 @@ def turn_nambu(self):
   """Turn a Hamiltonian an Nambu Hamiltonian"""
   nambu = build_eh
   if self.check_mode("spinful_nambu"): return # do nothing
-  elif self.check_mode("spinless_nambu"): return # do nothing, already Nambu
-  elif self.check_mode("spinless"): self.turn_spinful() # error
-  elif self.check_mode("spinful"): pass # error
+  # a Nambu Hamiltonian is always spinful, so a spinless one is made
+  # spinful before the electron-hole doubling
+  elif self.check_mode("spinless"): self.turn_spinful()
+  elif self.check_mode("spinful"): pass
   else:
       raise NotImplementedError("this Hilbert space cannot be turned into a "
               "Nambu one")

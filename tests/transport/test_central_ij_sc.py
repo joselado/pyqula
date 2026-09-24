@@ -80,14 +80,8 @@ def test_superconducting_central_region_with_two_normal_leads():
     and must yield a subgap Andreev conductance within the BTK bound of
     2 per electron channel.
 
-    Note: even though every input here (both leads and the center) is
-    spinless, htk.mode.make_compatible's turn_nambu() has no way to
-    produce a purely spinless Nambu Hamiltonian from a plain spinless one
-    (its "spinless" branch always calls turn_spinful() first -- the same
-    thing heterostructures.build's own pairwise make_compatible calls do
-    in this situation, see test_central_heterostructure_matches_build_*
-    above using spinful leads from the start) -- so this ends up promoted
-    to 2 (spin) electron channels, not 1."""
+    Every input here is spinless, but a Nambu Hamiltonian is always
+    spinful, so this ends up with 2 (spin) electron channels, not 1."""
     g = geometry.chain()
     h_normal = g.get_hamiltonian(has_spin=False)
     hc = _finite_chain(3, has_spin=False)

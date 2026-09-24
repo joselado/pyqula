@@ -250,15 +250,6 @@ def get_pairing(h,ptype="s"):
   """Return an operator that calculates the expectation value of the
   s-wave pairing"""
   require_nambu(h,"a pairing operator")
-  if not h.check_mode("spinful_nambu"):
-      # these are all 4x4 (spin x electron-hole) blocks: built on a
-      # spinless Nambu Hamiltonian they came out twice the size of its
-      # Hilbert space instead of raising
-      raise NotImplementedError("the pairing operators ('spair', 'deltax',"
-        +" 'deltay', 'deltaz') are singlet/d-vector components in the "
-        +"spin x electron-hole basis, so they are only defined for a "
-        +"spinful Nambu Hamiltonian; this one is spinless Nambu. Use "
-        +"h.extract('swave') or sctk.spinless for the spinless case")
   if ptype=="s": op = superconductivity.spair
   elif ptype=="deltax": op = superconductivity.deltax
   elif ptype=="deltay": op = superconductivity.deltay
@@ -278,38 +269,23 @@ def get_electron(h):
   """Operator to project on the electron sector"""
   if not h.has_eh:
       return np.identity(h.intra.shape[0])
-  elif h.check_mode("spinful_nambu"): # only for e-h systems
-      op = superconductivity.proje
-      r = h.geometry.r
-      out = [[None for ri in r] for rj in r]
-      for i in range(len(r)): # loop over positions
-        out[i][i] = op
-      return bmat(out)
-  elif h.check_mode("spinless_nambu"):
-      from .sctk import spinless
-      return spinless.proje(h.intra.shape[0])
-  else:
-      raise ValueError("the electron projector needs a Nambu Hamiltonian; "
-              "call h.setup_nambu_spinor() first")
+  op = superconductivity.proje
+  r = h.geometry.r
+  out = [[None for ri in r] for rj in r]
+  for i in range(len(r)): # loop over positions
+    out[i][i] = op
+  return bmat(out)
 
 
 def get_hole(h):
   """Operator to project on the hole sector"""
-  if not h.has_eh:
-      require_nambu(h,"the hole projector")
-  elif h.check_mode("spinful_nambu"): # only for e-h systems
-      op = superconductivity.projh
-      r = h.geometry.r
-      out = [[None for ri in r] for rj in r]
-      for i in range(len(r)): # loop over positions
-        out[i][i] = op
-      return bmat(out)
-  elif h.check_mode("spinless_nambu"):
-      from .sctk import spinless
-      return spinless.projh(h.intra.shape[0])
-  else:
-      raise ValueError("the hole projector needs a Nambu Hamiltonian; call "
-              "h.setup_nambu_spinor() first")
+  require_nambu(h,"the hole projector")
+  op = superconductivity.projh
+  r = h.geometry.r
+  out = [[None for ri in r] for rj in r]
+  for i in range(len(r)): # loop over positions
+    out[i][i] = op
+  return bmat(out)
 
 
 def get_tauz(h):

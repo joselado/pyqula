@@ -75,16 +75,7 @@ def test_lead_hamiltonians_are_exposed_as_Hl_Hr():
     heterostructures.build's own constructors do -- several existing
     Heterostructure methods (get_kappa, surface_dos, get_dos, didv's SC
     auto-detection) read ht.Hl/ht.Hr directly and raise AttributeError
-    otherwise.
-
-    Uses spinful leads: a plain spinless lead trips an unrelated,
-    pre-existing bug in transporttk/kappa.py's generate_HT (it forces a
-    zero-pairing "spinless Nambu" lead via setup_nambu_spinor(), and
-    hamiltonians.py's remove_nambu() has no branch for that mode -- the
-    same class of gap as the turn_nambu() one fixed in superconductivity.py
-    for this feature, just in the sibling function, and reproducible with
-    plain heterostructures.build(spinless_lead1, spinless_lead2).get_kappa()
-    with no central-region involvement at all, so it's out of scope here)."""
+    otherwise."""
     lead = geometry.chain().get_hamiltonian(has_spin=True)
     hc = _finite_chain(4, has_spin=True)
     ht = hc.get_central_heterostructure(0, 3, left=lead, right=lead)

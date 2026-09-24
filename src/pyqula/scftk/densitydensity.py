@@ -621,8 +621,6 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     # read, not consumed: generic_densitydensity below still gets its own T
     T = kwargs.get("T",1e-7) # temperature, same default as that function
     integration = kwargs.get("integration","ed") # density-matrix backend
-    if h.has_eh:
-        if not h.has_spin: return NotImplemented # only for spinful
     h = h.get_multicell()
     h = h.get_dense()
     def callback_h(h):

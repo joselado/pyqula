@@ -51,15 +51,12 @@ class _Flags:
 def _promote_all(h,left,right,maxiter=4):
     """Promote h, left and right to a common has_spin/has_eh basis.
 
-    A single OR-and-promote pass is not enough: make_compatible's
-    turn_nambu() has no way to produce a purely spinless Nambu object from
-    a plain spinless one (its "spinless" branch always calls
-    turn_spinful() first, same as heterostructures.build's own pairwise
-    make_compatible calls end up doing), so promoting a spinless normal
-    lead against a spinless_nambu central region can silently pull
-    has_spin=True in on that one pass, changing what the OR target should
-    have been. Iterate to a fixed point instead, recomputing the target
-    from the actual post-promotion flags each round -- mirrors what
+    make_compatible's turn_nambu() makes a spinless Hamiltonian spinful
+    before the electron-hole doubling (a Nambu Hamiltonian is always
+    spinful), so promoting to has_eh can pull has_spin=True in as well,
+    changing what the OR target should have been. Iterate to a fixed point,
+    recomputing the target from the actual post-promotion flags each
+    round -- mirrors what
     build()'s own two-object h1=make_compatible(h1,h2);
     h2=make_compatible(h2,h1) sequence relies on to converge, generalized
     to three objects."""

@@ -156,8 +156,8 @@ def add_bfield(h,b=0.0,phi=0.0,mode="inplane",gauge="Landau"):
       raise NotImplementedError("an in-plane magnetic field is only "
               "implemented for Hamiltonians up to 2d")
     # number of orbitals per site: this used to assume 2 for a spinful
-    # Hamiltonian, which is wrong for a Nambu one (4 per site, or 2 for a
-    # spinless Nambu) and indexed off the end of the position list
+    # Hamiltonian, which is wrong for a Nambu one (4 per site) and indexed
+    # off the end of the position list
     nsites = len(h.geometry.r) # number of sites
     ndim = h.intra.shape[0] # dimension of the Hamiltonian
     if ndim%nsites!=0:

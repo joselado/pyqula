@@ -42,6 +42,15 @@ already reached once.
   of user-visible changes before upgrading -- two of them are breaking. It also records why the qtci backend was kept although its cross
   interpolation compresses nothing in 2D, and where a fourth sweep should start.
 
+- [`bug_audit_4.md`](bug_audit_4.md) -- the fourth sweep, on the
+  superconductivity routines: seven findings, all closed, among them four
+  pairing modes that broke Fermi antisymmetry (removed) and the spinless Nambu
+  Hilbert space (removed, so a Nambu Hamiltonian is always spinful). Read its
+  user-visible changes before upgrading, since three are breaking. It also
+  records the closed-form spectra, the Beenakker check and the exact
+  diagonalization the Nambu construction passed, and why a spectrum-level
+  particle-hole check cannot see a broken Fermi antisymmetry.
+
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
   be made the other: three findings that are decisions rather than repairs (the

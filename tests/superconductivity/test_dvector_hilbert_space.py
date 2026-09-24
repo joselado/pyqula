@@ -25,16 +25,6 @@ def test_spinful_non_nambu_is_refused():
         h.get_average_dvector(nk=2)
 
 
-def test_spinless_nambu_is_refused():
-    g, h = _chain(has_spin=False)
-    h.setup_nambu_spinor()
-    assert (not h.has_spin) and h.has_eh
-    with pytest.raises(ValueError):
-        h.get_dvector_non_unitarity(nk=2)
-    with pytest.raises(ValueError):
-        h.get_average_dvector(nk=2)
-
-
 def test_spinful_nambu_still_works():
     nsites = 6
     g, h = _chain(nsites)

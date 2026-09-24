@@ -169,13 +169,8 @@ def _extract_magnetization(component):
 
 
 def _extract_swave(self,h0,**kwargs):
-    if self.check_mode("spinful_nambu"):
-        return swave(self.intra)
-    elif self.check_mode("spinless_nambu"):
-        from .sctk import spinless
-        return spinless.extract_swave(self.intra)
-    else: # has_eh but neither Nambu mode: the guard names the requirement
-        require_nambu(self,"extracting the s-wave pairing")
+    require_nambu(self,"extracting the s-wave pairing")
+    return swave(self.intra)
 
 
 def _extract_CDW(self,h0,**kwargs):

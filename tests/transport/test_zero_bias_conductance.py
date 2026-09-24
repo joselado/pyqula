@@ -56,3 +56,21 @@ def test_andreev_doubling_at_zero_bias():
     for e in [0.0, 1e-9, 1e-4, 5e-3]:           # anywhere inside the gap
         assert abs(ht.didv(energy=e) - 4.0) < 1e-2, e
     assert abs(ht.didv(energy=0.05) - 2.0) < 0.1  # normal well above the gap
+
+
+@pytest.mark.parametrize("c", [0.8, 0.5, 0.3])
+def test_andreev_conductance_through_a_barrier_follows_beenakker(c):
+    """At zero bias a single spin-degenerate channel of normal transmission
+    T gives G_NS = 4 T^2/(2-T)^2 (Beenakker), against G_N = 2T. The formula
+    neglects corrections of order Delta over the bandwidth, and so does the
+    tolerance: the deviation is 9e-4 at Delta=1e-3 and 9e-3 at 1e-2"""
+    hn = heterostructures.build(_chain_lead(), _chain_lead())
+    hn.set_coupling(c)
+    T = hn.didv(energy=0.0)/2.
+    assert abs(T - 4*c**2/(1+c**2)**2) < 1e-6
+    hs = _chain_lead()
+    hs.add_swave(1e-3)
+    ht = heterostructures.build(_chain_lead(), hs)
+    ht.set_coupling(c)
+    ref = 4*T**2/(2-T)**2
+    assert abs(ht.didv(energy=0.0) - ref) < 2e-3*ref

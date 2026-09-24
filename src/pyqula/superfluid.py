@@ -54,7 +54,8 @@ def superfluid_weight(h,mode="kubo",decompose=False,**kwargs):
         conventional and quantum-geometric parts instead of a bare tensor.
         Only available under uniform on-site pairing and time-reversal
         symmetry; a ValueError is raised otherwise rather than reporting a
-        meaningless split.  Ignored for mode="finite_difference".
+        meaningless split.  Only defined for mode="kubo"; asking for it
+        with mode="finite_difference" raises a ValueError.
     nk : int
         Linear size of the BZ mesh (default 20).
     T : float
@@ -90,8 +91,17 @@ def superfluid_weight(h,mode="kubo",decompose=False,**kwargs):
             return superfluidweight.superfluid_weight_decomposition(h,**kwargs)
         return superfluidweight.superfluid_weight(h,**kwargs)
     elif mode in ["finite_difference","fd"]:
+        # the finite difference only has the grand potential, so it cannot
+        # split the weight; it used to drop decompose=True in silence and
+        # return the bare tensor where the caller expected a dictionary
+        if decompose:
+            raise ValueError("decompose=True is only available for "
+              +"mode='kubo'; the finite-difference weight has no "
+              +"conventional/geometric split")
         return superfluidweight.superfluid_weight_finite_difference(h,**kwargs)
-    else: raise ValueError("unknown superfluid weight mode "+str(mode))
+    else: raise ValueError("unknown superfluid weight mode '"+str(mode)
+            +"'; it must be one of ['kubo', 'analytic', "
+            +"'finite_difference', 'fd']")
 
 
 def bkt_temperature(h,**kwargs):

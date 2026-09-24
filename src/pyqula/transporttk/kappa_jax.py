@@ -18,9 +18,7 @@ differentiate it exactly, instead of sampling G at two nearby couplings
 (the default 0.9T/1.1T window) and fitting a secant slope through them.
 
 Because that tail is a hand-reimplementation of transporttk.smatrix's
-formula (minus unitarize.check_and_fix's unitarity correction, and minus
-LocalProbe's own has_spin=False/spinless-Nambu handling -- see
-applicable()'s docstring), kappa_branch cross-checks its own G(T) against
+formula (minus unitarize.check_and_fix's unitarity correction), kappa_branch cross-checks its own G(T) against
 one reference get_smatrix(...,check=True) call (reusing the already-solved
 selfenergies) each time and raises if they disagree beyond
 `_reference_rtol`; get_kappa_ratio_jax turns that into a clean fallback
@@ -38,8 +36,7 @@ Not covered here (get_kappa_ratio_jax returns None so callers fall back to
 transporttk.kappa's numeric path): finite temperature
 (get_kappa_finite_temperature_energies), a superconducting probe lead
 (Floquet-Keldysh dc_current, e.g. examples/transport/decay_constant_keldysh),
-a spinless-Nambu system, and Heterostructure (as opposed to LocalProbe)
-objects.
+and Heterostructure (as opposed to LocalProbe) objects.
 """
 import numpy as np
 
@@ -67,19 +64,9 @@ def applicable(ht):
     """Whether get_kappa_jax's exact-gradient shortcut is valid for this
     branch object (as produced by transporttk.kappa.generate_HT) --
     structural checks only, not the reference coupling T (callers check
-    T!=0 themselves once T is known).
-
-    Requires has_spin=True on both the sample and the probe: the Nambu
-    reordering _branch_arrays uses (sctk.reorder.block2nambu_matrix, the
-    same convention ht.get_eh_sector/didv_BdG rely on) hardcodes 4
-    degrees of freedom per site (2 spin x 2 nambu). A spinless-Nambu
-    system (has_eh=True, has_spin=False, directly buildable via
-    add_swave on a has_spin=False geometry) doesn't match that layout;
-    reject it here rather than silently reordering into nonsense."""
+    T!=0 themselves once T is known)."""
     if not isinstance(ht, LocalProbe): return False
     if not ht.has_eh: return False
-    if not (getattr(ht.H, "has_spin", False) and getattr(ht.lead, "has_spin", False)):
-        return False
     if _both_leads_superconducting(ht): return False
     return True
 

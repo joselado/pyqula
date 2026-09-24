@@ -32,6 +32,11 @@ def check_hamiltonian(h,tol=1e-5):
   """Do various checks in Hamiltonian, to ensure that nothing weird happens"""
   hk = h.get_hk_gen() # get generator
   if not h.non_hermitian: check_hermitian(h,tol=tol)
+  if h.has_eh and not h.has_spin:
+    raise ValueError("a Nambu Hamiltonian is always spinful in pyqula, and "
+      "this one has has_eh=True with has_spin=False. Build it with "
+      "h.setup_nambu_spinor() or h.add_swave(...), which make a spinless "
+      "Hamiltonian spinful first")
   if h.has_eh: # if it has electron hole degree of freedom
     v = np.random.random(3) # random kpoint
     m1 = hk(v) # Hamiltonian

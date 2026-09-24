@@ -68,13 +68,11 @@ def test_maxite_none_still_means_no_limit(monkeypatch):
 
 
 def test_the_other_numpy_loops_default_to_the_same_limit():
-    """The kpm loop and the spinless attractive Hubbard loop are too slow or
-    too special to drive past 1000 iterations here; their default is the
-    same one."""
+    """The kpm loop is too slow to drive past 1000 iterations here; its
+    default is the same one."""
     from pyqula.scftk.densitydensity_kpm import generic_densitydensity_kpm
-    from pyqula.scftk.attractive_hubbard_spinless import attractive_hubbard
     from pyqula.scftk.densitydensity import generic_densitydensity
     from pyqula.scftk.spinspin import Jinteraction
-    for fun in (generic_densitydensity_kpm, attractive_hubbard,
+    for fun in (generic_densitydensity_kpm,
             generic_densitydensity, Jinteraction):
         assert inspect.signature(fun).parameters["maxite"].default == 1000

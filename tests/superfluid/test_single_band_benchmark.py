@@ -125,18 +125,20 @@ def test_finite_pairing_gives_a_positive_semidefinite_symmetric_tensor():
             assert np.max(ev) > 1e-3, ev
 
 
-def test_spinless_nambu_gives_half_of_the_spinful_weight():
-    """pyqula's spinless_nambu mode carries a single spin species, so its
-    grand potential -- and with it the weight -- is exactly half of the
-    spinful one for the same model."""
+def test_a_spinless_model_gives_the_spinful_weight():
+    """A Nambu Hamiltonian is always spinful, so add_swave on a spinless
+    model gives the same BdG Hamiltonian, and the same weight, as on the
+    spinful one. It used to build a single-spin Nambu Hamiltonian with
+    exactly half of that weight."""
     g = geometry.square_lattice()
     hs = g.get_hamiltonian(has_spin=True)
     hs.add_onsite(-0.7) ; hs.add_swave(0.4)
     hl = g.get_hamiltonian(has_spin=False)
     hl.add_onsite(-0.7) ; hl.add_swave(0.4)
+    assert hl.check_mode("spinful_nambu")
     a = sw.superfluid_weight(hs, nk=16, T=0.)
     b = sw.superfluid_weight(hl, nk=16, T=0.)
-    assert np.allclose(a, 2.*b)
+    assert np.allclose(a, b)
 
 
 def _rashba_honeycomb():

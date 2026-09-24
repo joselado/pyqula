@@ -61,9 +61,6 @@ def get_spinless2full(h,time_reversal=False,is_hamiltonian=True):
             return build_eh(m2) # add e-h
         else: # just replicate the matrix (this is a temporal fix)
             return m2spin_sparse(m2) # replicate again
-  elif h.check_mode("spinless_nambu"): 
-      from .sctk import spinless
-      return spinless.nambu
   else:
     raise NotImplementedError("this Hilbert space cannot be promoted from the "
             "spinless form")

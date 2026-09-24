@@ -19,25 +19,23 @@ def _normal_chain(has_spin=True):
     return h
 
 
-@pytest.mark.parametrize("has_spin,mode",
-                         [(True, "spinful_nambu"), (False, "spinless_nambu")])
-def test_zero_pairing_bdg_reproduces_the_normal_state_entropy(has_spin, mode):
+@pytest.mark.parametrize("has_spin,nspin", [(True, 1), (False, 2)])
+def test_zero_pairing_bdg_reproduces_the_normal_state_entropy(has_spin, nspin):
     """Adding a Nambu doubling with zero pairing does not change the
     physical state, so the entanglement entropy must be unchanged. This
     checks both the factor 1/2 and the assumption that the Nambu
     components of a site are contiguous (a wrong orbital layout would
     scramble particle and hole blocks across the cut and break this).
-    Both Nambu flavors are checked: 4 components per site for a spinful
-    Hamiltonian and 2 for a spinless one."""
+    A Nambu Hamiltonian is always spinful, so one built from a spinless
+    chain carries both spin species and twice its entropy."""
     h = _normal_chain(has_spin=has_spin)
     h_bdg = h.copy()
     h_bdg.add_swave(0.0)
-    assert h_bdg.has_eh
-    assert h_bdg.check_mode(mode)
+    assert h_bdg.check_mode("spinful_nambu")
     for nsuper in [10, 14, 18]:
         s_normal = h.get_entanglement_entropy(nsuper=nsuper)
         s_bdg = h_bdg.get_entanglement_entropy(nsuper=nsuper)
-        assert abs(s_bdg - s_normal) < 1e-9
+        assert abs(s_bdg - nspin*s_normal) < 1e-9
 
 
 def test_bdg_entanglement_spectrum_is_particle_hole_symmetric():

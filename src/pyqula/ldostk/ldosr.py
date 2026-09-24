@@ -40,9 +40,6 @@ def ldosr_generator(h,rs=0.2,es=np.linspace(-1.,1.,100),
               if sector=="all":
                 yout = yout + calculate_dos(evals,es,delta,w=ds[:,4*ii+2])*ws[i]
                 yout = yout+ calculate_dos(evals,es,delta,w=ds[:,4*ii+3])*ws[i]
-            else:
-              raise NotImplementedError("the real-space LDOS is not "
-                      "implemented for spinless Nambu Hamiltonians")
         # calculate_dos returns pi times a sum of unit-normalized
         # Lorentzians (see dostk/eigtodos.py), so the 1/pi that makes this
         # a density of states is the caller's, exactly as in dos.dos_kmesh
