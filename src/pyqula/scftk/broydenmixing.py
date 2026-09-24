@@ -41,14 +41,29 @@
 # running plain linear mixing (mix=lam, the same damping factor as the
 # paper's own Pratt step, just repeated instead of applied once) until the
 # residual drops below `warmup_tol` before switching to the multisecant phase
-# converged on EVERY case tested, and did so in 2-10x fewer step_vec
-# evaluations than plain linear mixing alone at any fixed mix. This is a
-# standard practical pattern in the SCF-mixing literature (start with a few
-# safe linear-mixing steps before turning on Broyden/Pulay/DIIS acceleration)
-# -- broyden_mixing_solve below does it automatically, using the existing
-# `lam` parameter as the warm-up's mixing factor (so no new "how aggressive"
-# knob is introduced) and switching once the residual falls below
-# `warmup_tol` (default 1e-2).
+# converged on EVERY case tested. This is a standard practical pattern in
+# the SCF-mixing literature (start with a few safe linear-mixing steps
+# before turning on Broyden/Pulay/DIIS acceleration) -- broyden_mixing_solve
+# below does it automatically, using the existing `lam` parameter as the
+# warm-up's mixing factor (so no new "how aggressive" knob is introduced)
+# and switching once the residual falls below `warmup_tol` (default 1e-2).
+#
+# The warm-up is where most of the cost goes, so its mixing factor sets the
+# price. Counting density-matrix evaluations (numpy engine, maxerror=1e-6
+# or 1e-7): with lam=0.1, the default this module first shipped with, the
+# warm-up took 85-96% of every run and the solver was SLOWER than plain
+# linear mixing at mix=0.8 -- the 8-atom biased Lieb flake of
+# tests/scf/test_broydenmixing.py, 3 seeds, took 234/271/198 evaluations
+# against 92/103/89 for plain mix=0.8. With lam=0.5 the same flake took
+# 59/69/134, converging on every seed, and four periodic systems (honeycomb
+# AF U=3, honeycomb CDW V1=2, square s-wave U=-2, 3x3 honeycomb AF) went
+# from 134/102/50/168 to 32/27/14/38 (plain mix=0.8: 50/24/21/43), all to
+# the same fixed point. Loosening warmup_tol instead is NOT safe: at
+# warmup_tol=1.0 the flake failed to converge on 2 of 3 seeds, and with
+# lam=0.5 as well on all 3. So lam defaults to 0.5, warmup_tol stays at
+# 1e-2, and the claim is only that this is about as fast as well-tuned
+# plain mixing while not needing the mix to be tuned -- not that it beats
+# it. densitydensity.generic_densitydensity forwards a caller's mix= as lam.
 #
 # Only needs black-box evaluations of step_vec(x) -> F(x) (no Jacobian, no
 # autodiff), so one pure-numpy implementation serves both of this package's
@@ -66,7 +81,7 @@ import numpy as np
 
 
 def broyden_mixing_solve(step_vec, x0, maxite=500, tol=1e-8, m=8,
-        alpha=1e-4, R=0.1, sigma_bar=0.15, sigma0=None, lam=0.1,
+        alpha=1e-4, R=0.1, sigma_bar=0.15, sigma0=None, lam=0.5,
         warmup_tol=1e-2, verbose=0):
     """Solve x = step_vec(x) with the regularized, limited-memory multisecant
     Broyden mixing of Marks & Luke (arXiv:0801.3098), Omega dropped, preceded
