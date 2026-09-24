@@ -36,8 +36,10 @@ already reached once.
   areas the second one left unexercised (the jax SCF solvers, the 3D superfluid
   weight, the qtci SCF backend, Broyden mixing and the per-site filling): 18
   findings, **16 fixed**, each with a regression test that fails on the unfixed
-  source. Read its list of user-visible changes before upgrading -- one of them
-  is breaking. It also records why the qtci backend was kept although its cross
+  source, and two more fixed after it (the unbounded `maxite` default of the
+  numpy mean-field loops, now 1000, and `fsolve` stalling at a soft mode), with
+  the qtci resolution limit in high-symmetry metals closed too. Read its list
+  of user-visible changes before upgrading -- two of them are breaking. It also records why the qtci backend was kept although its cross
   interpolation compresses nothing in 2D, and where a fourth sweep should start.
 
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second

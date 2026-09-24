@@ -273,3 +273,22 @@ def test_qtci_total_energy_belongs_to_the_charge_it_holds_in_a_metal():
         for k in kmesh(2, nk=nkd)]).ravel())
     eref = es[:int(round(n*nkd**2))].sum()/nkd**2
     assert abs(e-eref) < 8e-3
+
+
+@pytest.mark.parametrize("nk", [8, 16])
+def test_qtci_fermi_level_holds_the_filling_in_a_high_symmetry_metal(nk):
+    """On the bare square lattice the Gauss-Kronrod nodes come in groups of
+    up to 8 symmetry-related states, and the Fermi level used to be cut
+    between whole groups even at T~0: for a 0.3 filling it held 0.320 at
+    nk=8 and 0.3095 at nk=16. The count at any T>0 is now bisected to the
+    filling itself, with the level at mu partly occupied, so the density
+    matrix on those nodes holds it exactly, and the Fermi level lands near
+    the dense-mesh one (-1.059), not 0.3 above it."""
+    from pyqula.qtcitk.densitymatrix_qtci import (get_fermi4filling_qtci,
+            full_dm_gk)
+    h = geometry.square_lattice().get_hamiltonian(has_spin=False)
+    mu = get_fermi4filling_qtci(h, 0.3, nk=nk, T=1e-7)
+    h.shift_fermi(-mu)
+    n = np.trace(full_dm_gk(h, [(0, 0, 0)], nk=nk, T=1e-7)[(0, 0, 0)]).real
+    assert abs(n - 0.3) < 1e-8
+    assert abs(mu - (-1.059)) < 0.1

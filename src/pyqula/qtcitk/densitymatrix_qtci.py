@@ -176,17 +176,21 @@ def get_fermi4filling_qtci(h, filling, nk=None, T=1e-7):
     is located on the Gauss-Kronrod nodes themselves, so the density
     matrix holds the requested charge up to the weight of one level.
 
-    The nodes are not equally weighted, so the count is a staircase with
-    uneven steps and at T~0 no Fermi level lands exactly on the target.
-    As in filling.get_fermi_energy, the cut goes midway between two
-    eigenvalues, at the one whose cumulative weight is closest to the
-    target; it never sits on a degenerate level. The steps can be coarse:
-    the nodes come in groups related by the lattice symmetries, and on a
-    square lattice at nk=8 the level next to the Fermi energy of a 0.3
-    filling is a group of 8 states that holds 0.09 electrons, and the
-    closest cut misses 0.6 electrons by 0.04. When T is not small against
-    the level spacing the Fermi-Dirac count is continuous, and the cut is
-    refined by bisection to the requested filling itself.
+    The nodes are not equally weighted, so at T=0 the count is a staircase
+    with uneven steps, and the steps can be coarse: the nodes come in groups
+    related by the lattice symmetries, and on a square lattice at nk=8 the
+    level next to the Fermi energy of a 0.3 filling is a group of 8 states
+    that holds 0.09 electrons. As in filling.get_fermi_energy, the first
+    guess cuts midway between two eigenvalues, at the one whose cumulative
+    weight is closest to the target, and it is kept whenever it already
+    holds the requested filling (an insulator, or a cut that happens to
+    land on it). Otherwise the Fermi-Dirac count at T, continuous for any
+    T>0, is bisected to the requested filling itself, so that at T~0 the
+    level at the Fermi energy is partly occupied, which is what the uniform
+    mesh does too when its cut falls inside a degenerate multiplet
+    (spectrum.get_fermi_energy_T). On that square lattice the whole-level
+    cut held 0.320 for a 0.3 filling with mu=-0.762, and the bisection
+    holds 0.300 with mu=-1.030, against -1.059 on a dense mesh.
 
     For a BdG Hamiltonian the count is done on the normal-state
     Hamiltonian, the same approximation spectrum.get_fermi4filling makes."""
@@ -219,22 +223,21 @@ def get_fermi4filling_qtci(h, filling, nk=None, T=1e-7):
     candidates += [(abs(cum[i]-target),(es[i]+es[i+1])/2.,cum[i])
             for i in icuts]
     candidates.append((abs(cum[-1]-target),es[-1]+e_reg,cum[-1]))
-    _,mu0,ntarget = min(candidates,key=lambda c: c[0])
+    _,mu0,_ = min(candidates,key=lambda c: c[0])
     if T is None or T<=0.: return mu0
-    if ntarget<=0. or ntarget>=norb: return mu0 # empty or full
+    if target<=0. or target>=norb: return mu0 # empty or full
     from scipy.special import expit
     def nelec(mu): return np.sum(ws*expit(-(es-mu)/T))
-    if abs(nelec(mu0)-ntarget)<1e-9*ntarget: return mu0 # T below spacing
-    # T smears the staircase into a continuous count, so the requested
-    # filling itself is reachable and is what the bisection aims for
-    ntarget = target
+    if abs(nelec(mu0)-target)<1e-9*target: return mu0 # the cut holds it
+    # any T>0 smears the staircase into a continuous count, so the requested
+    # filling itself is reachable, with the level at mu partly occupied
     from scipy.optimize import brentq
     width = max(4.*T,1e-6)
     wmax = 4.*(es[-1]-es[0]) + 40.*T + 1e-6
-    while nelec(mu0-width)>ntarget or nelec(mu0+width)<ntarget:
+    while nelec(mu0-width)>target or nelec(mu0+width)<target:
         if width>wmax: return mu0 # cannot bracket; keep the T=0 cut
         width *= 2.
-    return brentq(lambda mu: nelec(mu)-ntarget,mu0-width,mu0+width,
+    return brentq(lambda mu: nelec(mu)-target,mu0-width,mu0+width,
             xtol=1e-12)
 
 

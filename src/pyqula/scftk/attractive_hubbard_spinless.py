@@ -11,7 +11,7 @@ from .. import filesystem as fs
 mf_file = "MF.pkl" 
 
 def attractive_hubbard(h0,mf=None,mix=0.9,g=0.0,nk=8,solver="plain",
-        maxerror=1e-5,maxite=None,**kwargs):
+        maxerror=1e-5,maxite=1000,**kwargs):
     """Perform the SCF mean field"""
     if not h0.check_mode("spinless"): # sanity check
       raise ValueError("the spinless attractive Hubbard mean field needs a "

@@ -25,11 +25,15 @@ it printed.
 
 ## Status
 
-**16 fixed, one decided, one left as it is.** Every fix has a
+**16 fixed, one decided, one left as it is, and two more fixed after the
+sweep (#19, #20), as was the resolution limit #11 had left.** Every fix has a
 regression test that asserts the finding's oracle, and each of those tests
 fails on the unfixed source. The full suite on the merged fixes was stopped
 at 78% with no failure, and the qtci energy fix (#11) was checked with the qtci
-tests only; a complete run on the merged result is still owed.
+tests only; a complete run on the merged result is still owed, and it now also
+has to cover the jax side of #16, the qtci Fermi level of #11, the finite
+`maxite` default of #19 and the `fsolve` handover of #20, which were checked
+with their own tests only.
 
 - **Decided -- keep the qtci backend.** Its tensor cross interpolation
   compresses nothing in 2D (see #13). The maintainer's call on 2026-09-24 was
@@ -50,7 +54,8 @@ right one; two turn a silently ignored argument into an exception.
   Fermi level, with `.fermi` set, and the right energy at a fixed nonzero `mu`
   (#2).
 - `solver="newton"` and `"newton_krylov"` converge at a fixed filling where
-  they used to stop with `converged=False` (#3).
+  they used to stop with `converged=False` (#3), and so does `"fsolve"`,
+  which continues with Newton where it stalls (#20).
 - Both `use_jax=True` routes accept the same nine solver names, and an unknown
   name raises a `ValueError` listing them (#4).
 - **Breaking:** `solver=`, `gmres_tol=` or `gmres_restart=` on a spinful
@@ -64,11 +69,15 @@ right one; two turn a silently ignored argument into an exception.
   rounded to a whole number of k-states, as a scalar filling's is; only the
   site-resolved differences are held to `maxerror`.
 - `integration="qtci"` locates the Fermi level on the nodes its density matrix
-  is integrated on, sums the total energy there too, and returns the complete
-  density matrix in `scf.dm` (#11, #12).
-- `solver="broyden_mixing"` honours `mix=`, is silent at `verbose=0`, and warms
-  up with `lam=0.5`, taking 2.5-4.5x fewer density-matrix evaluations (#15,
-  #16).
+  is integrated on, holding the filling exactly at any T>0 by occupying the
+  level at the Fermi energy in part, sums the total energy there too, and
+  returns the complete density matrix in `scf.dm` (#11, #12).
+- **Breaking:** every numpy mean-field loop stops at `maxite=1000` by default
+  and returns `None` past it, where it used to run until it converged;
+  `maxite=None` restores no limit (#19).
+- `solver="broyden_mixing"` honours `mix=`, under both engines, is silent at
+  `verbose=0`, and warms up with `lam=0.5`, taking 2.5-4.5x fewer
+  density-matrix evaluations (#15, #16).
 
 ## 1. jax SCF
 
@@ -122,9 +131,15 @@ converges 12/12 (3/6 before) and newton_krylov 12/12 (1/12). Truncating at
 `rcond=1e-5`, which the finding suggested, made it worse (7/12).
 
 **Open.** The burst length of 60 was tuned on one system (biased AF chain, U=3,
-nk=10). `scf.iterations` counts outer iterations only. One newton_krylov seed
-took 779 outer iterations crawling on damped steps; a proper trust region is
-the principled follow-up, since `fsolve`'s dogleg is never trapped here.
+nk=10). `scf.iterations` counts outer iterations only. Over seeds 0 to 11 on
+that chain newton takes 23 to 119 outer iterations and newton_krylov 24 to
+365, the slow ones crawling on damped steps. A trust region was thought to be
+the principled follow-up, on the grounds that `fsolve`'s dogleg is never
+trapped here; that was measured on seeds 0 to 5 only, and it is not true (see
+#20). The one trust region in the package gets stuck at the soft mode that
+the Newton fallbacks leave, so replacing those fallbacks with a trust region
+would move the Newton solvers toward the behaviour that fails, and it is not
+the follow-up any more.
 
 ### 4. The unknown-solver error lists no names, and the two routes accept different names
 
@@ -178,8 +193,8 @@ the gap, is now found by bisection. 225 iterations on the same case.
 **Side effect.** Two spinon Zeeman tests moved to `mix=0.1` (`015bbf4`), the
 value the other spinon tests already use: with the uniform array now following
 the scalar path exactly, the chain at seed 0 and `mix=0.3` falls into the same
-period-7 limit cycle the scalar path has always had there. `maxite=None` is
-still unbounded, on both paths.
+period-7 limit cycle the scalar path has always had there. `maxite=None` was
+still unbounded on both paths when the sweep closed; see #19.
 
 ## 3. qtci SCF backend
 
@@ -194,13 +209,25 @@ one Fermi level.
 nodes). Low-symmetry metals now hold the filling (Rashba plus exchange, nk=8:
 0.589 before, 0.597 now, for 0.6), and at finite T it is exact to 1e-6.
 
-**Resolution limit, not fixed.** At T~0 the charge is right only to the weight
-of one level on the node grid, and the nodes come in symmetry-related groups:
-on the bare square lattice at filling 0.3 and nk=8 the level at the Fermi
-energy is 8 states holding 0.087 electrons, and the nearest cut holds 0.6405.
-A BdG run on that lattice overshoots the gap accordingly (0.764 against 0.70
-converged). Finite T, or a fractional occupation of the degenerate level, are
-the two ways out.
+**Resolution limit, fixed after the sweep.** At T~0 the charge was right only
+to the weight of one level on the node grid, and the nodes come in
+symmetry-related groups: on the bare square lattice at filling 0.3 and nk=8
+the level at the Fermi energy is 8 states holding 0.087 electrons, and the
+nearest cut holds 0.6405. On the maintainer's call of 2026-09-24,
+`get_fermi4filling_qtci` now keeps the whole-level cut only when it already
+holds the filling, and otherwise bisects the Fermi-Dirac count at T, which is
+continuous for any T>0, to the filling itself, so that the level at mu is
+partly occupied, as the uniform mesh does when its cut falls inside a
+degenerate multiplet. The spinless square lattice at filling 0.3 now holds
+0.300000 at nk=8 and 16 (0.320 and 0.3095 before), with mu=-1.030 and -0.969
+against -1.059 on a dense mesh (-0.762 and -0.828 before). For an attractive
+U=-2 on the spinful square lattice at filling 0.3 (`mf="swave"`), the pairing
+gap, twice the smallest |E| on a 60x60 mesh, is 0.430 with `ed` at nk=80
+(0.429 at nk=40); qtci gave 0.513 at nk=8 and 0.554 at nk=16 before, moving
+away from it, and gives 0.362 and 0.419 now, converging on it. What is left
+is the quadrature error of a step, which nk converges away.
+`test_qtci_fermi_level_holds_the_filling_in_a_high_symmetry_metal` fails on
+the unfixed source.
 
 **The energy.** With the Fermi level on the nodes but the band energy still on
 the uniform mesh, a bare square metal's energy missed the exact band energy of
@@ -248,9 +275,16 @@ that flake, which is why the warm-up stays.
 
 ### 16. The numpy engine ignores mix= and prints two "ERROR" lines per iteration at verbose=0
 
-**Status.** Fixed in `c100e2f`. The jax engine still warns that `mix` has no
-effect on `broyden_mixing`, while the numpy engine now forwards it as `lam`; the
-two engines disagree there.
+**Status.** Fixed in `c100e2f` for the numpy engine, which forwards `mix` as
+`lam`. The jax engine went on warning that `mix` had no effect on
+`broyden_mixing` and dropped it, except at `mix=0.1`, which it could not tell
+apart from its own default and so dropped in silence. It now forwards it too,
+on both the Vinteraction and the VJinteraction route: `mix` defaults to `None`
+there (meaning not given, so the warm-up keeps its own `lam=0.5`, and
+`fixed_point` its 0.1), and one `warn_if_mix_unused` serves both routes. On
+the antiferromagnetic honeycomb (U=3, nk=6, maxerror 1e-7) `mix=0.1` now takes
+144 evaluations and `mix=0.5` or no `mix` 32, all on the same energy to 1e-7;
+before, all three took 32.
 
 ## 5. 3D superfluid weight
 
@@ -271,13 +305,81 @@ Reproduced on both backends, but it is the documented `NotImplemented -> None`
 contract rather than a defect. It does make `get_dm_qtci`'s own spinless-Nambu
 error unreachable.
 
+## 7. Closed after the sweep
+
+### 19. maxite=None is unbounded on every numpy SCF loop
+
+A mean field that never converges never returned: `generic_densitydensity`
+(Vinteraction, hubbard, SzSz, SxSx, SySy), VJinteraction's own loop,
+`Jinteraction`, the kpm loop and the spinless attractive Hubbard loop all
+defaulted to `maxite=None`, while `hubbardscf` and the coulomb loop stopped at
+1000 and the jax engine and the Kondo lattice at 2000. The user guide
+documented the unbounded default and told the reader to set `maxite` by hand.
+
+**Status.** Fixed on the maintainer's call of 2026-09-24, which picked 1000
+over 2000 and over keeping `None`. Every numpy loop now defaults to
+`maxite=1000` and returns `None` (not converged) past it, with the existing
+"No convergence has been reached" print. `maxite=None` passed explicitly still
+means no limit. VJinteraction tells "not given" from `None` with a sentinel,
+as it already did for `T`, so its `use_jax=True` route keeps the jax engine's
+2000. The guide's convergence paragraph and its `maxite` bullet say so. One
+side effect: the numpy engine forwards `maxite` to `broyden_mixing_solve`
+whenever it is not `None`, so that solver's budget there is now 1000 by
+default instead of its own 500.
+`tests/scf/test_maxite_default.py` drives the guide's non-converging chain
+(J1=-2, filling 0.2, nk=8) through the SzSz loop and through VJinteraction,
+and the spinless bichain of the fourth-sweep list through Vinteraction, and
+each returns `None` after 1000 iterations; on the unfixed source each of them
+runs past the test's cap of 1100 iterations.
+
+**Not yet measured.** No full-suite run has exercised the finite default, so
+a test that needed more than 1000 plain-mixing iterations without saying so
+would now fail on a `None`, and that run is the way to find it.
+
+### 20. fsolve stops unconverged at the soft mode of #3 on a third of the seeds
+
+On the chain of #3 (U=3, nk=10, filling 0.5, T=1e-4, maxerror 1e-9)
+`solver="fsolve"` converged from seeds 0 to 5, which is where the claim that
+its dogleg is never trapped came from, and stopped from seeds 6, 7, 8 and 11
+with `ier=5` ("not making good progress") at E~-0.9964 and
+`converged=False`, identically on the source before this session. Where it
+stops, |r|~4e-2 but |J^T r|~3e-4 and J-I has a singular value of 3e-4 to
+7e-4, a near-stationary point of the merit |r|^2, which is the stall #3 met
+in the Newton loops.
+
+**Status.** Fixed on the maintainer's call of 2026-09-24. When MINPACK stops
+with `ier` 4 or 5 the rest of the evaluation budget goes to `newton_solve`
+from that point, whose Levenberg-Marquardt steps and kicks leave it: all 12
+seeds now reach E=-1.459374, the four that stalled in 38 to 179 evaluations.
+Newton's own kicks, bolted onto `fsolve` with a restart after each, did not
+work: after every kick of 60 steps at mix 0.1 it walked back to the same
+point. 60 steps at mix 0.5, or 300 at 0.1, did escape, but that is tuning on
+one system, the weakness #3 already records, and the maintainer picked the
+handover over it. `scf.iterations` is then `nfev` plus Newton's outer
+iterations. `test_vjinteraction_jax_fsolve_leaves_the_soft_mode_at_fixed_filling`
+fails on the unfixed source.
+
 ## Where a fourth sweep should start
 
-- The open items above: a trust region for the hand-rolled Newton loops (#3),
-  the qtci resolution limit in high-symmetry metals (#11), the jax/numpy
-  disagreement on `mix` for `broyden_mixing` (#16), `maxite=None` being
-  unbounded on every SCF path.
-- The jax `fixed_point` solver did not converge on a spinless two-site chain
-  with V1=3 at `mu=0`, nk=6, within 2000 iterations at `mix` 0.1 or 0.5. Hit
-  while writing a test, not investigated.
+- The open items above: the kick length of the hand-rolled Newton loops, tuned
+  on one system, and newton_krylov's crawl on damped steps (#3). The qtci
+  resolution limit in high-symmetry metals (#11) is closed. The jax/numpy
+  disagreement on `mix` for `broyden_mixing` (#16) and the unbounded
+  `maxite=None` (#19) are closed.
+- The jax `fixed_point` solver that did not converge on a spinless two-site
+  chain (`geometry.bichain()`, V1=3, `mu=0`, nk=6, `mf="CDW"`) is not a jax
+  defect, and nothing was changed for it. The numpy engine's plain mixing does
+  exactly the same on the same guess: after 2000 iterations at `mix=0.1` the
+  two stand at -1.18992 and -1.18982, and at `mix=0.5` both sit on the same
+  cycle at -0.768880. The reason is that at fixed `mu=0` the Hartree shift holds
+  the chain at a filling of about 0.32, not at half filling, so it is a metal,
+  and at T~0 a level at `mu` flips its occupation from one iteration to the
+  next; both engines converge at nk=7 and 8, stall again at nk=9, and converge
+  at nk=6 once T=1e-3. At that T there is one more thing to know: `newton` and
+  `fsolve` converge to E=-0.85422 with a real bond and filling 0.291, while
+  `fixed_point` and the numpy engine reach E=-0.87719 with a complex bond and
+  filling 0.333. Both are genuine fixed points (residuals 1e-7 and 1e-5), the
+  bond phase of the second shifting which k-points the nk=6 mesh occupies, so
+  a Newton solver can land on the higher one, which is a caveat on the solver
+  rather than a bug.
 - Nothing here ran on a GPU.

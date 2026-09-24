@@ -175,3 +175,53 @@ def test_scipy_solver_warns_that_mix_has_no_effect():
     import pytest
     with pytest.warns(UserWarning, match="no effect"):
         _af_honeycomb_scf(solver="broyden1", mix=0.5)
+
+
+def test_jax_broyden_mixing_uses_mix_on_both_routes():
+    """With use_jax=True, solver="broyden_mixing" takes mix= as the mixing
+    factor of its linear warm-up, as the numpy engine does, on both the
+    Vinteraction and the VJinteraction route. It used to be dropped (with a
+    warning that it had no effect, except at mix=0.1, which was taken for
+    the default): every mix then gave the same number of evaluations.
+    Without mix, broyden_mixing_solve's own lam=0.5 applies, and every run
+    lands on the same fixed point."""
+    import warnings
+    import pytest
+    pytest.importorskip("jax")
+    from pyqula import geometry
+    from pyqula.scftk.densitydensity import Vinteraction
+    from pyqula.scftk.spinspin import VJinteraction
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+    for fun in (Vinteraction, VJinteraction):
+        ites, energies = dict(), dict()
+        for mix in (None, 0.1, 0.5):
+            kwargs = dict() if mix is None else dict(mix=mix)
+            with warnings.catch_warnings():
+                warnings.simplefilter("error") # mix is read, so no warning
+                scf = fun(h.copy(), U=3.0, filling=0.5, nk=6,
+                        mf="antiferro", maxerror=1e-7, maxite=3000,
+                        verbose=0, use_jax=True, solver="broyden_mixing",
+                        **kwargs)
+            assert scf.converged
+            ites[mix], energies[mix] = scf.iterations, scf.total_energy
+        assert ites[0.1] > ites[0.5] # 144 against 32 when measured
+        assert ites[None] == ites[0.5] # the warm-up's own lam=0.5
+        assert max(energies.values()) - min(energies.values()) < 1e-6
+
+
+def test_jax_mix_still_warns_for_a_solver_that_never_reads_it():
+    """newton steps on its own damping, so mix given to it is reported
+    rather than dropped; not giving mix raises no warning."""
+    import warnings
+    import pytest
+    pytest.importorskip("jax")
+    from pyqula import geometry
+    from pyqula.scftk.spinspin import VJinteraction
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+    kwargs = dict(U=3.0, filling=0.5, nk=6, mf="antiferro", maxerror=1e-7,
+            verbose=0, use_jax=True, solver="newton")
+    with pytest.warns(UserWarning, match="no effect"):
+        VJinteraction(h.copy(), mix=0.3, **kwargs)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        VJinteraction(h.copy(), **kwargs)

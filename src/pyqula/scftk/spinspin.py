@@ -260,7 +260,7 @@ def _rotate_dict(dd, vector, angle):
 
 def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
         Jz1=0.0, Jz2=0.0, Jz3=0.0, Jxr=None, Jyr=None, Jzr=None,
-        mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
+        mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=1000,
         T=1e-7, verbose=0, constrains=[]):
     """Self-consistent anisotropic exchange mean field,
     H = sum Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j,
@@ -360,11 +360,15 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None, nd=None):
 # with "unset" (see the use_jax branch below)
 _T_UNSET = object()
 
+# the same for maxite: the numpy loop stops at 1000 iterations and the jax
+# engine at its own 2000, and maxite=None (no limit) must stay reachable
+_MAXITE_UNSET = object()
+
 
 def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
-        mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
-        T=_T_UNSET, verbose=0, constrains=[],
+        mf=None, filling=0.5, mu=None, mix=None, nk=8, maxerror=1e-5,
+        maxite=_MAXITE_UNSET, T=_T_UNSET, verbose=0, constrains=[],
         integration="ed", scale=None, npol=None, ne=None, cores=None,
         use_jax=False, solver=None, gmres_tol=None, gmres_restart=None):
     """Self-consistent mean field combining density-density interactions
@@ -555,7 +559,8 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     solver="newton" (default, uses jax.jacfwd for the exact Jacobian),
     "newton_krylov" (matrix-free, jax.jvp + GMRES, scales to larger systems
     than "newton"'s dense Jacobian), "fsolve" (scipy.optimize.fsolve/MINPACK
-    with the same jax.jacfwd Jacobian as fprime), "linear_mixing" (plain
+    with the same jax.jacfwd Jacobian as fprime, continuing with "newton"
+    where it stops making progress), "linear_mixing" (plain
     linear mixing through the same machinery, for comparison/large systems),
     "error_gradient" (minimizes ||step(x)-x||^2 as a nonlinear
     least-squares problem via matrix-free Levenberg-Marquardt (jax.jvp/
@@ -614,7 +619,8 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         # needs finite smearing away from degeneracies); an explicitly
         # passed T (including literally 1e-7) is always forwarded as-is
         T_jax = None if T is _T_UNSET else T
-        maxite_jax = 2000 if maxite is None else maxite
+        maxite_jax = 2000 if maxite is None or maxite is _MAXITE_UNSET \
+                else maxite
         return VJinteraction_jax(h0, V1=V1, V2=V2, V3=V3, U=U, Vr=Vr,
                 J1=J1, J2=J2, J3=J3, Jr=Jr, J1x=J1x, J1y=J1y, J1z=J1z,
                 mf=mf, filling=filling, mu=mu, nk=nk, maxerror=maxerror,
@@ -637,6 +643,8 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                 "are %s" % (jax_only_set, ", ".join(repr(s) for s in
                 get_jax_solver_names())))
     T = 1e-7 if T is _T_UNSET else T
+    mix = 0.1 if mix is None else mix # the plain-mixing factor
+    maxite = 1000 if maxite is _MAXITE_UNSET else maxite
     h1 = h0.get_multicell()
     if integration != "kpm": h1 = h1.get_dense() # see docstring above
     nd = h1.geometry.neighbor_distances() # shared by all four _build_*_v calls below

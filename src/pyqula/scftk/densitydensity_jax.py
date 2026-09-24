@@ -727,8 +727,19 @@ def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
     infodict['njev'] to infodict['nfev'] to see whether that is actually
     happening for a given problem size (njev << nfev means yes).
 
+    Being a trust region does not save it from the soft mode newton_solve
+    meets: on a biased antiferromagnetic chain at half filling it stopped
+    with ier=5 ("not making good progress") from 4 of 12 random seeds, at a
+    point with |r|~4e-2 where |J^T r|~3e-4 and J-I has a singular value
+    ~5e-4, a near-stationary point of the merit. Linear-mixing kicks of the
+    length newton_solve uses did not move it off (it came back to the same
+    point after each), so when it stalls the rest of the budget goes to
+    newton_solve from where it stopped, whose Levenberg-Marquardt steps and
+    kicks leave that point: 4/4 of those seeds then converge.
+
     MINPACK counts function evaluations, not iterations: maxite is passed
-    as maxfev, and the count returned (scf.iterations) is nfev."""
+    as maxfev, and the count returned (scf.iterations) is nfev, plus the
+    outer iterations of newton_solve when it took over."""
     from scipy.optimize import fsolve
     jac_fn = jax.jacfwd(step_vec)
     n = x0.shape[0]
@@ -742,10 +753,19 @@ def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
 
     x_sol, infodict, ier, mesg = fsolve(func, np.asarray(x0), fprime=jac,
             full_output=True, maxfev=maxite, xtol=tol)
+    nfev = infodict["nfev"]
     if verbose > 0:
-        print("fsolve: nfev", infodict["nfev"], "njev",
-                infodict.get("njev"), "ier", ier, mesg)
-    return jnp.asarray(x_sol), infodict["nfev"], ier == 1
+        print("fsolve: nfev", nfev, "njev", infodict.get("njev"), "ier",
+                ier, mesg)
+    # ier 4 and 5 are the two "not making good progress" stops; any other
+    # means converged (1), out of budget (2) or at xtol (3)
+    if ier in (4, 5) and nfev < maxite:
+        if verbose > 0:
+            print("fsolve stalled, continuing with newton_solve")
+        x, ite, converged = newton_solve(step_vec, jnp.asarray(x_sol),
+                maxite=maxite - nfev, tol=tol, verbose=verbose)
+        return x, nfev + ite, converged
+    return jnp.asarray(x_sol), nfev, ier == 1
 
 
 def fixed_point_solve(step_fn, x0, mu, dirs, n, mix=0.1, maxite=2000, tol=1e-5,
@@ -891,8 +911,9 @@ def _run_newton_krylov(step_jit, step_vec, x0, mu, o):
 def _run_fixed_point(step_jit, step_vec, x0, mu, o):
     # the mu fixed_point_solve tracks is superseded by the fresh
     # step_jit(x, mu) call in solve_scf, so it is dropped here
+    mix = 0.1 if o.mix is None else o.mix # mix=None means not given
     x, _, ite, converged = fixed_point_solve(step_jit, x0, mu, o.dirs, o.n,
-            mix=o.mix, maxite=o.maxite, tol=o.maxerror, verbose=o.verbose,
+            mix=mix, maxite=o.maxite, tol=o.maxerror, verbose=o.verbose,
             callback_mf=o.callback_mf)
     return x, ite, converged
 
@@ -912,8 +933,11 @@ def _run_levenberg_marquardt(step_jit, step_vec, x0, mu, o):
 def _run_broyden_mixing(step_jit, step_vec, x0, mu, o):
     # only ever calls step_vec as a black box, which accepts numpy input
     from .broydenmixing import broyden_mixing_solve
+    # mix is the mixing factor of the linear warm-up, as in the numpy
+    # engine; when not given, broyden_mixing_solve's own lam applies
+    bm_kwargs = dict() if o.mix is None else dict(lam=o.mix)
     x, ite, converged = broyden_mixing_solve(step_vec, x0, maxite=o.maxite,
-            tol=o.maxerror, verbose=o.verbose)
+            tol=o.maxerror, verbose=o.verbose, **bm_kwargs)
     return jnp.asarray(x), ite, converged
 
 
@@ -941,6 +965,22 @@ _JAX_SOLVER_ALIASES = {
         }
 
 _SOLVERS_WITH_CALLBACK_MF = ("fixed_point",)
+
+# The solvers that read mix: fixed_point mixes with it, and broyden_mixing
+# uses it for its linear warm-up. The others step on their own damping
+_SOLVERS_WITH_MIX = ("fixed_point", "broyden_mixing")
+
+
+def warn_if_mix_unused(solver, mix):
+    """Warn when mix is given to a solver that never reads it, rather than
+    dropping it in silence. mix=None means it was not given. The solver is
+    resolved first either way, so a misspelled name raises here"""
+    name = resolve_jax_solver(solver)
+    if mix is not None and name not in _SOLVERS_WITH_MIX:
+        warnings.warn("mix=%r has no effect for solver=%r (only "
+                "solver=\"fixed_point\"/\"linear_mixing\" and "
+                "\"broyden_mixing\" use linear mixing)" % (mix, solver),
+                stacklevel=3)
 
 
 def get_jax_solver_names():
@@ -1016,12 +1056,12 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
 
 
 def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
-        filling=None, T=None, mix=0.1, maxerror=1e-5, maxite=2000,
+        filling=None, T=None, mix=None, maxerror=1e-5, maxite=2000,
         solver="newton", compute_dd=True, compute_cross=True,
         add_dagger=True, verbose=0, callback_mf=None,
         gmres_tol=1e-6, gmres_restart=20, **kwargs):
     """JAX-differentiable analogue of densitydensity.generic_densitydensity.
-    maxite defaults to 2000 (vs. the numpy engine's unbounded default) since
+    maxite defaults to 2000 (the numpy engine's is 1000) since
     plain linear mixing from a cold/random start can need many hundreds of
     iterations at tight tolerance - see the "fixed_point" cases in the
     benchmark. solver="newton" converges in a handful of iterations when it
@@ -1038,12 +1078,7 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
         raise NotImplementedError("use_jax=True does not support the "
                 "anomalous/BdG mean field yet; use the default (numpy) engine")
     # resolved up front, so a misspelled solver fails before any work
-    if resolve_jax_solver(solver) != "fixed_point" and mix != 0.1:
-        # mix only controls solver="fixed_point"'s linear-mixing step -- see
-        # vjinteraction_jax.generic_vjinteraction_jax's identical check
-        warnings.warn("mix=%r has no effect for solver=%r (only "
-                "solver=\"fixed_point\"/\"linear_mixing\" uses linear mixing)"
-                % (mix, solver), stacklevel=2)
+    warn_if_mix_unused(solver, mix)
     if T is None:
         T = default_T_jax
     elif T <= 0:

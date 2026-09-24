@@ -43,7 +43,7 @@ mf_file = "MF.pkl"  # same filename densitydensity.py uses
 def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         maxerror=1e-5, callback_mf=None, callback_dm=None, load_mf=True,
         compute_cross=True, compute_dd=True, verbose=1,
-        compute_anomalous=True, compute_normal=True, maxite=None,
+        compute_anomalous=True, compute_normal=True, maxite=1000,
         T=1e-7, callback_h=None,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, **kwargs):
     """KPM analogue of scftk.densitydensity.generic_densitydensity.

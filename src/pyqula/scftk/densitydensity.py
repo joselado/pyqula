@@ -381,7 +381,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         maxerror=1e-5,callback_mf=None,callback_dm=None,
         load_mf=True,compute_cross=True,compute_dd=True,verbose=1,
         compute_anomalous=True,compute_normal=True,info=False,
-        maxite=None,
+        maxite=1000,
         T=1e-7, # temperature
         integration="ed", # "ed" (exact diagonalization) or "qtci"
         tolerance=1e-6, # qtci-only: crossinterpolate2 convergence tolerance

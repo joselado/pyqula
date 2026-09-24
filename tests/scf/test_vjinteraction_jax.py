@@ -416,8 +416,8 @@ def test_vjinteraction_jax_filling_holds_the_requested_electron_count():
 @pytest.mark.parametrize("solver", ["newton", "newton_krylov"])
 def test_vjinteraction_jax_newton_converges_at_fixed_filling(solver):
     """A biased antiferromagnetic chain at half filling, from random
-    guesses. fsolve, linear mixing and broyden mixing all reach
-    E=-1.459374 from every seed, and Newton does at a fixed mu. With a
+    guesses. Linear mixing and broyden mixing reach E=-1.459374 from every
+    seed, and Newton does at a fixed mu. With a
     filling target a nearly singular J-I used to give Newton a step of
     size ~1e4 that no amount of backtracking made useful, and it stopped
     with converged=False from these seeds. It must now converge to the
@@ -447,3 +447,20 @@ def test_vjinteraction_numpy_engine_refuses_jax_only_kwargs(kwargs):
         VJinteraction(h.copy(), U=2.0, mu=0.0, nk=4, **kwargs)
     for name in get_jax_solver_names():
         assert repr(name) in str(err.value)
+
+
+def test_vjinteraction_jax_fsolve_leaves_the_soft_mode_at_fixed_filling():
+    """The same chain as above. MINPACK's dogleg trust region stopped with
+    ier=5 ("not making good progress") at E~-0.9964 from these two seeds,
+    at a near-stationary point of |r|^2 (|r|~4e-2, |J^T r|~3e-4), and
+    reported converged=False. It now hands over to newton_solve there, and
+    must reach the state the other seeds and solvers reach."""
+    g = geometry.chain().get_supercell(2)
+    h = g.get_hamiltonian()
+    h.add_exchange([[0, 0, 0.2], [0, 0, -0.2]])
+    for seed in [6, 7]:  # both stalled before
+        np.random.seed(seed)
+        scf = VJinteraction(h.copy(), U=3., nk=10, filling=0.5,
+                maxerror=1e-9, T=1e-4, use_jax=True, solver="fsolve")
+        assert scf.converged
+        assert abs(scf.total_energy - (-1.459374)) < 1e-5

@@ -170,7 +170,7 @@ from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
         get_dc_energy, random_hermitian_guess)
 from .densitydensity_jax import (flatten_mf, unflatten_mf, make_bloch_stack,
         get_mf_normal_jax, default_T_jax, solve_scf, fermi_projector,
-        mu_for_filling, resolve_jax_solver)
+        mu_for_filling, warn_if_mix_unused)
 from .spinspin import _build_v, _build_density_v, _channel_is_zero, _AXIS_ROTATION
 from .mfconstrains import obj2mf
 from ..multihopping import MultiHopping
@@ -336,7 +336,7 @@ def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
 
 def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
         vz_exchange=None, vd_reference=None,
-        filling=None, T=None, mix=0.1, maxerror=1e-5, maxite=2000,
+        filling=None, T=None, mix=None, maxerror=1e-5, maxite=2000,
         solver="newton", verbose=0, gmres_tol=1e-6, gmres_restart=20):
     """JAX-differentiable analogue of spinspin._run_anisotropic_scf,
     restricted to the normal-state case -- see the module docstring for the
@@ -345,17 +345,12 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     spinspin._build_v/_build_density_v; vd (density-density) must already be
     folded into vz by the caller, exactly as VJinteraction itself does for
     has_eh=False."""
-    if resolve_jax_solver(solver) != "fixed_point" and mix != 0.1:
-        # mix only controls solver="linear_mixing"'s linear-mixing step --
-        # newton/fsolve/newton_krylov/error_gradient all use their own
-        # backtracking/damping (Levenberg-Marquardt's own lam for
-        # error_gradient), so a
-        # caller-tuned mix (e.g. carried over from the numpy engine, where
-        # it always matters) would otherwise be silently ignored with no
-        # signal at all
-        warnings.warn("mix=%r has no effect for solver=%r (only "
-                "solver=\"linear_mixing\"/\"fixed_point\" uses linear mixing)"
-                % (mix, solver), stacklevel=2)
+    # newton/fsolve/newton_krylov/error_gradient all use their own
+    # backtracking/damping (Levenberg-Marquardt's own lam for
+    # error_gradient), so a caller-tuned mix (e.g. carried over from the
+    # numpy engine, where it always matters) would otherwise be silently
+    # ignored with no signal at all
+    warn_if_mix_unused(solver, mix)
     if T is None:
         T = default_T_jax
     elif T <= 0:
@@ -525,8 +520,8 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     if not scf.converged:
         # unconditional (not gated on verbose), matching the numpy engine's
         # own "No convergence has been reached..." print -- maxite here is
-        # 2000 by default under use_jax=True even when the caller left the
-        # numpy engine's maxite=None (unbounded) default, so this is the
+        # 2000 by default under use_jax=True, and also when the caller
+        # passed maxite=None (no limit on the numpy engine), so this is the
         # only signal such a caller gets that the jax engine gave up early
         print("No convergence has been reached in", ite,
                 "iterations (solver=%r), stopping" % (solver,))
@@ -544,7 +539,7 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
 def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
         mf=None, filling=0.5, mu=None, nk=8, maxerror=1e-5, maxite=2000,
-        T=None, mix=0.1, verbose=0, solver="newton",
+        T=None, mix=None, verbose=0, solver="newton",
         gmres_tol=1e-6, gmres_restart=20):
     """JAX drop-in for spinspin.VJinteraction (use_jax=True path) -- see the
     module docstring for the scope restriction relative to the full numpy
