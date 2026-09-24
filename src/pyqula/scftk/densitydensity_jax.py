@@ -362,7 +362,12 @@ def build_step_function(hop0, v, ks, dirs, dirs_all, T,
 
 
 def diff_mf_vec(x0, x1):
-    return float(jnp.mean(jnp.abs(x0 - x1)))
+    """Largest entry of |x0-x1|: the SCF residual max|step(x)-x| every
+    solver in solve_scf compares with maxerror. It used to be the mean,
+    which let fixed_point report converged=True with a residual ~8x
+    maxerror. (The numpy engine's diff_mf is a sum over directions of
+    per-direction means, a different measure again)"""
+    return float(jnp.max(jnp.abs(x0 - x1)))
 
 
 def newton_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0, verbose=0,
@@ -720,7 +725,10 @@ def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
     rank-1 updates of the Jacobian between full recomputations instead of
     rebuilding the O(norb^2) x O(norb^2) Jacobian every iteration - compare
     infodict['njev'] to infodict['nfev'] to see whether that is actually
-    happening for a given problem size (njev << nfev means yes)."""
+    happening for a given problem size (njev << nfev means yes).
+
+    MINPACK counts function evaluations, not iterations: maxite is passed
+    as maxfev, and the count returned (scf.iterations) is nfev."""
     from scipy.optimize import fsolve
     jac_fn = jax.jacfwd(step_vec)
     n = x0.shape[0]
@@ -760,11 +768,12 @@ def fixed_point_solve(step_fn, x0, mu, dirs, n, mix=0.1, maxite=2000, tol=1e-5,
             xnew = flatten_mf({d: jnp.asarray(mfnew_np[d], dtype=jnp.complex128)
                 for d in dirs}, dirs)
         diff = diff_mf_vec(xnew, x)
-        x = (1 - mix) * x + mix * xnew
         if verbose > 0:
             print("ERROR in the SCF cycle", ite, diff)
         if diff < tol:
+            # x itself, whose residual was just measured, not the mixed one
             return x, cur_mu, ite, True
+        x = (1 - mix) * x + mix * xnew
     return x, cur_mu, maxite, False
 
 

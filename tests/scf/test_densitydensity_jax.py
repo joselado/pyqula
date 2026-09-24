@@ -338,3 +338,30 @@ def test_jax_solver_names_come_from_one_registry_on_both_routes():
         assert scf.converged
         e[solver] = scf.total_energy
     assert abs(e["linear_mixing"] - e["fixed_point"]) < 1e-10
+
+
+def test_densitydensity_jax_fixed_point_converged_means_residual_below_maxerror(
+        monkeypatch):
+    """scf.converged means max|step(x)-x| < maxerror for every use_jax=True
+    solver. fixed_point used to stop on the mean of |step(x)-x| instead and
+    returned the mixed x rather than the one it had measured, so it
+    reported converged=True with a residual ~8x maxerror. The residual is
+    recomputed here at the returned x."""
+    from pyqula.scftk import densitydensity_jax as ddj
+    residual = {}
+    solve_scf = ddj.solve_scf
+
+    def wrapped(step_jit, x0, mu, *args, **kwargs):
+        out = solve_scf(step_jit, x0, mu, *args, **kwargs)
+        x = out[0]
+        residual["max"] = float(np.max(np.abs(step_jit(x, mu)[0] - x)))
+        return out
+    monkeypatch.setattr(ddj, "solve_scf", wrapped)
+    g = geometry.bichain()
+    h0 = g.get_hamiltonian()
+    h1, mf = _biased_hamiltonian_and_guess(h0, seed=0, bias=0.8)
+    for maxerror in [1e-2, 1e-6]:
+        scf = Vinteraction(h1.copy(), nk=20, U=2., mf=mf.copy(), mu=0.0,
+                maxerror=maxerror, T=1e-4, use_jax=True, solver="fixed_point")
+        assert scf.converged
+        assert residual["max"] < maxerror
