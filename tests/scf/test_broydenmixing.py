@@ -120,3 +120,58 @@ def test_broyden_mixing_converges_from_cold_start_on_small_hubbard_flake():
                 load_mf=False, solver="broyden_mixing", maxerror=1e-6,
                 maxite=1500, verbose=0)
         assert scf.converged, f"seed={seed} did not converge"
+
+
+def _count_dm_calls(monkeypatch):
+    """Count density-matrix evaluations of the numpy SCF loop."""
+    from pyqula.scftk import densitydensity as dd
+    calls = [0]
+    orig = dd.get_dm
+    def counting(*args, **kwargs):
+        calls[0] += 1
+        return orig(*args, **kwargs)
+    monkeypatch.setattr(dd, "get_dm", counting)
+    return calls
+
+
+def _af_honeycomb_scf(**kwargs):
+    from pyqula import geometry
+    from pyqula.scftk.densitydensity import Vinteraction
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+    return Vinteraction(h, U=3.0, filling=0.5, nk=6, mf="antiferro",
+            load_mf=False, maxerror=1e-7, maxite=3000, verbose=0, **kwargs)
+
+
+def test_broyden_mixing_uses_mix_and_agrees_with_plain(monkeypatch):
+    """solver="broyden_mixing" in the numpy engine takes mix= as the
+    mixing factor of its linear warm-up (it used to be ignored): a
+    different mix changes the number of density-matrix evaluations, and
+    every run lands on the fixed point solver="plain" finds."""
+    calls = _count_dm_calls(monkeypatch)
+    ref = _af_honeycomb_scf(solver="plain", mix=0.8)
+    results = dict()
+    for mix in (0.1, 0.5):
+        calls[0] = 0
+        scf = _af_honeycomb_scf(solver="broyden_mixing", mix=mix)
+        assert scf.converged
+        assert abs(scf.total_energy-ref.total_energy) < 1e-6
+        diff = max(np.max(np.abs(scf.mf[d]-ref.mf[d])) for d in ref.mf)
+        assert diff < 1e-5
+        results[mix] = calls[0]
+    assert results[0.1] != results[0.5]
+    assert results[0.5] < results[0.1] # 32 against 134 when measured
+
+
+def test_broyden_mixing_is_silent_at_verbose_zero(capsys):
+    """The residual closure the non-plain solvers share printed two lines
+    per evaluation whatever verbose was."""
+    _af_honeycomb_scf(solver="broyden_mixing")
+    assert capsys.readouterr().out == ""
+
+
+def test_scipy_solver_warns_that_mix_has_no_effect():
+    """The scipy solvers never read mix; like the jax engine, passing it
+    warns instead of being silently dropped."""
+    import pytest
+    with pytest.warns(UserWarning, match="no effect"):
+        _af_honeycomb_scf(solver="broyden1", mix=0.5)
