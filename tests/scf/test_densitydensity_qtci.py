@@ -98,3 +98,80 @@ def test_mean_field_hamiltonian_qtci_smoke():
             verbose=0, return_total_energy=True, integration="qtci")
     assert h is not None
     assert np.isfinite(e)
+
+
+def _low_symmetry_metal():
+    """Square-lattice metal with Rashba coupling and a tilted exchange
+    field: these lift the spin and k-space degeneracies, so that on the
+    Gauss-Kronrod node grid every level is (nearly) its own step in the
+    electron count."""
+    h = geometry.square_lattice().get_hamiltonian(has_spin=True)
+    h.add_rashba(0.5)
+    h.add_exchange([0.4, 0., 0.1])
+    return h
+
+
+def _largest_level_weight(h, nk):
+    """Largest weight carried by one (degenerate) level on the node grid
+    get_dm_qtci integrates on -- the resolution of its electron count."""
+    from pyqula.qtcitk.densitymatrix_qtci import gk_node_grid
+    kx, ky, w = gk_node_grid(nk)
+    hk = h.get_hk_gen()
+    es = np.array([np.linalg.eigvalsh(hk([x, y, 0.])) for x, y in zip(kx, ky)])
+    E = es.ravel(); W = np.repeat(w, es.shape[1])
+    o = np.argsort(E); E, W = E[o], W[o]
+    groups = np.split(W, np.nonzero(np.diff(E) > 1e-10)[0]+1)
+    return max(np.sum(x) for x in groups)
+
+
+@pytest.mark.parametrize("nk", [8, 32])
+def test_qtci_density_matrix_holds_requested_filling_in_a_metal(nk):
+    """In a metal the Fermi level used by the qtci density matrix must be
+    found on the Gauss-Kronrod nodes that density matrix is integrated on:
+    one taken from the uniform mesh held 0.03-0.05 electrons too few out of
+    0.6. The trace must match 2*filling to half a level's weight, and beat
+    the uniform-mesh Fermi level."""
+    from pyqula.qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
+    from pyqula.scftk.densitydensity import get_dm
+    filling, T = 0.3, 1e-7
+    v = {(0, 0, 0): np.array([[0, .5], [.5, 0]], dtype=np.complex128)}
+    h0 = _low_symmetry_metal()
+    target = filling*h0.intra.shape[0]
+    h = h0.copy()
+    h.shift_fermi(-get_fermi4filling_qtci(h, filling, nk=nk, T=T))
+    n_new = np.trace(get_dm(h, v, nk=nk, integration="qtci", T=T)[(0, 0, 0)]).real
+    assert abs(n_new-target) <= 0.5*_largest_level_weight(h, nk) + 1e-8
+    hold = h0.copy()
+    hold.shift_fermi(-hold.get_fermi4filling(filling, nk=nk, T=T))
+    n_old = np.trace(get_dm(hold, v, nk=nk, integration="qtci", T=T)[(0, 0, 0)]).real
+    assert abs(n_new-target) < abs(n_old-target)
+
+
+def test_qtci_fermi_level_at_finite_temperature_is_exact():
+    """With a smearing T comparable to the level spacing the count is
+    continuous, and the qtci density matrix holds the filling exactly."""
+    from pyqula.qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
+    from pyqula.scftk.densitydensity import get_dm
+    h = _low_symmetry_metal()
+    v = {(0, 0, 0): np.array([[0, .5], [.5, 0]], dtype=np.complex128)}
+    h.shift_fermi(-get_fermi4filling_qtci(h, 0.3, nk=8, T=0.05))
+    n = np.trace(get_dm(h, v, nk=8, integration="qtci", T=0.05)[(0, 0, 0)]).real
+    assert abs(n-0.6) < 1e-6
+
+
+def test_qtci_scf_loop_density_matrix_holds_filling():
+    """The same invariant through the SCF wiring: the density matrix the
+    Vinteraction loop computes under integration="qtci" holds 2*filling
+    (to the node-grid resolution, about 0.03 electrons here)."""
+    from pyqula.scftk.densitydensity import Vinteraction
+    dms = []
+    def capture(dm):
+        dms.append(dm)
+        return dm
+    np.random.seed(0)
+    Vinteraction(_low_symmetry_metal(), U=1.0, filling=0.3, nk=8,
+            mf=None, load_mf=False, maxite=1, verbose=0,
+            integration="qtci", callback_dm=capture)
+    assert len(dms) > 0
+    for dm in dms:
+        assert abs(np.trace(dm[(0, 0, 0)]).real-0.6) < 0.015

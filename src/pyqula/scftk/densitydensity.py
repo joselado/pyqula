@@ -606,7 +606,14 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
           # Fermi-Dirac weight at this same T: a Fermi level located by a
           # T=0 eigenvalue count would hold a different number of
           # electrons than `filling` asks for
-          fermi = h.get_fermi4filling(filling,nk=h.nk,T=T) # get the filling
+          if integration=="qtci":
+              # on the Gauss-Kronrod nodes get_dm_qtci integrates on: in a
+              # metal, a Fermi level found on the uniform mesh holds a
+              # different charge on those nodes
+              from ..qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
+              fermi = get_fermi4filling_qtci(h,filling,nk=h.nk,T=T)
+          else:
+              fermi = h.get_fermi4filling(filling,nk=h.nk,T=T)
           if verbose>1: print("Fermi energy",fermi)
           h.fermi = fermi
           h.shift_fermi(-fermi) # shift by the fermi energy
