@@ -249,3 +249,27 @@ def test_qtci_scf_dm_is_complete():
     dm = scf.dm[(0, 0, 0)]
     assert abs(dm[0, 2]) > 0.2 # A-up/B-up hopping coherence
     assert np.max(np.abs(dm-ref)) < 1e-2
+
+
+def test_qtci_total_energy_belongs_to_the_charge_it_holds_in_a_metal():
+    """Under integration="qtci" the total energy of a nearly bare metal
+    must be the exact band energy of the charge its density matrix holds.
+    At T~0 a Fermi level on the Gauss-Kronrod nodes holds the requested
+    charge only up to the weight of one level there, and a band energy
+    summed on the uniform mesh instead belonged to a different charge: it
+    missed this reference by 1.7e-2 at nk=8, against 4.8e-3 now (which is
+    the quadrature error of a discontinuous integrand, and falls with nk)."""
+    from pyqula.klist import kmesh
+    from pyqula.qtcitk.densitymatrix_qtci import full_dm_gk
+    h0 = geometry.square_lattice().get_hamiltonian(has_spin=True)
+    nk = 8
+    h, e = h0.copy().get_mean_field_hamiltonian(U=1e-6, filling=0.3, nk=nk,
+            mf="ferro", integration="qtci", return_total_energy=True,
+            maxerror=1e-9, verbose=0)
+    n = np.trace(full_dm_gk(h, [(0, 0, 0)], nk=nk)[(0, 0, 0)]).real
+    nkd = 400 # dense reference: sum the n*nkd^2 lowest eigenvalues
+    hk = h0.get_hk_gen()
+    es = np.sort(np.array([np.linalg.eigvalsh(hk(k))
+        for k in kmesh(2, nk=nkd)]).ravel())
+    eref = es[:int(round(n*nkd**2))].sum()/nkd**2
+    assert abs(e-eref) < 8e-3

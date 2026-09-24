@@ -667,12 +667,6 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         # level (see get_fermi4filling_qtci)
         from ..qtcitk.densitymatrix_qtci import full_dm_gk
         scf.dm = full_dm_gk(h,ds,nk=h.nk,T=T)
-    etot = h.get_total_energy(nk=h.nk)
-    if mu is None:
-        # electron_dimension, not h.intra.shape[0]: N = filling*(number of
-        # electron states), which is not the Nambu-doubled dimension
-        etot += h.fermi*electron_dimension(h)*filling # add the Fermi energy
-    #print("Occupied energies",etot)
     # get_dc_energy assumes dm's shape matches v's, which is never
     # Nambu-doubled even when h (hence scf.dm) is BdG -- so the electron
     # sector must be extracted from scf.dm first for a BdG h, or this
@@ -685,6 +679,22 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         from .. import superconductivity
         dm_dc = {key: superconductivity.get_eh_sector(m,i=0,j=0)
                 for (key,m) in scf.dm.items()}
+    if integration=="qtci":
+        # the band energy and the charge on the same Gauss-Kronrod nodes
+        # as scf.dm: at T~0 a metal's Fermi level holds the requested
+        # charge only up to the weight of one level on those nodes (see
+        # get_fermi4filling_qtci), so the un-shift uses the charge the
+        # density matrix actually holds rather than filling*N
+        from ..qtcitk.densitymatrix_qtci import band_energy_gk
+        etot = band_energy_gk(h,nk=h.nk)
+        if mu is None:
+            etot += h.fermi*np.trace(dm_dc[(0,0,0)]).real
+    else:
+        etot = h.get_total_energy(nk=h.nk)
+        if mu is None:
+            # electron_dimension, not h.intra.shape[0]: N = filling*(number
+            # of electron states), which is not the Nambu-doubled dimension
+            etot += h.fermi*electron_dimension(h)*filling # add the Fermi energy
     etot += get_dc_energy(scf.v,dm_dc) # add the double counting energy
     if h.has_eh and kwargs.get("compute_anomalous",True):
         # the pairing part of the interaction energy, which the band

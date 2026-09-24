@@ -131,6 +131,38 @@ def full_dm_gk(h, ds, nk=None, T=1e-7):
     return dm
 
 
+def band_energy_gk(h, nk=None):
+    """Sum of the eigenvalues below zero, per unit cell, as a sum over the
+    Gauss-Kronrod node grid get_dm_qtci integrates on (gk_node_grid).
+
+    This is spectrum.total_energy on that grid instead of the uniform
+    mesh, with the same Nambu correction, E = (sum_{E<0} E_BdG + Tr h_e)/2.
+    In a metal a band energy summed on the uniform mesh does not belong to
+    the density matrix the SCF loop converged on the GK nodes: the two
+    grids hold different charges at the same Fermi level, and on a square
+    lattice at nk=8 mixing them moved the total energy by 2e-2."""
+    if h.dimensionality != 2:
+        raise NotImplementedError("band_energy_gk only supports 2D "
+                "Hamiltonians, the ones get_dm_qtci integrates; got "
+                "dimensionality=%d"%h.dimensionality)
+    kx,ky,w = gk_node_grid(nk)
+    hk_gen = h.get_hk_gen()
+    pediag = None # diagonal of the electron projector, only for Nambu
+    if h.has_eh:
+        from .. import operators
+        pediag = np.array(algebra.todense(operators.get_electron(h)))
+        pediag = pediag.diagonal().real
+    etot = 0.
+    for (x,y,wk) in zip(kx,ky,w):
+        hk = algebra.todense(hk_gen(np.array([x,y,0.])))
+        es = algebra.eigvalsh(hk)
+        ek = np.sum(es[es<0.])
+        if pediag is not None: # electronic energy of a BdG spectrum
+            ek = (ek + np.sum(pediag*np.asarray(hk).diagonal()).real)/2.
+        etot += wk*ek
+    return etot
+
+
 def get_fermi4filling_qtci(h, filling, nk=None, T=1e-7):
     """Fermi energy holding `filling` electrons under the quadrature that
     get_dm_qtci integrates the density matrix with.
