@@ -592,6 +592,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                     "apply constrains (they need concrete numpy arrays each "
                     "iteration, incompatible with jax tracing); use the "
                     "default (numpy) engine instead")
+        if is_iterable(filling):
+            raise NotImplementedError("VJinteraction's use_jax=True does "
+                    "not support a per-site (array) filling, got %r; use "
+                    "the default (numpy) engine, use_jax=False, for a "
+                    "per-site filling target" % (filling,))
         kpm_only = {"scale": scale, "npol": npol, "ne": ne, "cores": cores}
         kpm_only_set = {k: v for k, v in kpm_only.items() if v is not None}
         if kpm_only_set:

@@ -756,6 +756,10 @@ class Hamiltonian():
             # (that is Vinteraction_kpm's own separate entry point), so
             # route there explicitly instead of forwarding integration="kpm"
             # into Vinteraction's get_dm, which only accepts "ed"/"qtci"
+            if checkclass.is_iterable(kwargs.get("filling")) and not self.has_spin:
+                from . import check # a per-site filling needs VJinteraction
+                check.require_spin(self,"a per-site (array) filling "
+                        "(supported only by VJinteraction, integration=\"ed\")")
             if integration=="kpm":
                 scf = Vinteraction_kpm(self,**kwargs)
             else:

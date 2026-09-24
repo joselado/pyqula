@@ -132,6 +132,13 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
 def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, **kwargs):
     """KPM analogue of scftk.densitydensity.densitydensity"""
+    from ..checkclass import is_iterable
+    if is_iterable(filling): # see VJinteraction's docstring
+        raise NotImplementedError("A per-site (array) filling is only "
+                "supported by VJinteraction (h.get_mean_field_hamiltonian "
+                "with integration=\"ed\") for a spinful Hamiltonian; "
+                "the KPM density-density engine (Vinteraction_kpm) "
+                "takes a single scalar filling, got %r" % (filling,))
     from .densitydensity import get_dc_energy, electron_dimension
     from ..kpmtk.densitymatrix_kpm import get_fermi4filling_kpm
     if h.has_eh:

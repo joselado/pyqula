@@ -588,6 +588,14 @@ def get_array2mf(scf):
 
 def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     """Function for density-density interactions"""
+    from ..checkclass import is_iterable
+    if is_iterable(filling): # see VJinteraction's docstring
+        raise NotImplementedError("A per-site (array) filling is only "
+                "supported by VJinteraction (h.get_mean_field_hamiltonian "
+                "with integration=\"ed\") for a spinful Hamiltonian; "
+                "this density-density engine (Vinteraction, hubbard, SzSz, "
+                "SxSx, SySy) "
+                "takes a single scalar filling, got %r" % (filling,))
     if use_jax:
         from .densitydensity_jax import densitydensity_jax
         return densitydensity_jax(h,filling=filling,mu=mu,verbose=verbose,

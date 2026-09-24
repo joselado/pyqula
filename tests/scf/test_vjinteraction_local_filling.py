@@ -174,3 +174,31 @@ def test_array_filling_is_validated_before_any_scf_work():
     with pytest.raises(ValueError, match=r"in \[0,1\]"):
         meanfield.VJinteraction(h, U=1.0, nk=4, maxite=5,
                 filling=np.array([1.3, -0.2]))
+
+
+def test_array_filling_is_refused_by_routes_without_it():
+    """Only VJinteraction's numpy engine implements a per-site filling.
+    Every other route used to pass the array on to a scalar Fermi search
+    and fail with 'numpy.ndarray doesn't define __round__'; each now
+    refuses it by name before any SCF work."""
+    import pytest
+    g = geometry.chain().get_supercell(2)
+    filling = np.array([0.3, 0.7])
+    hs = g.get_hamiltonian(has_spin=False)
+    with pytest.raises(ValueError, match="per-site .* needs a spinful"):
+        hs.get_mean_field_hamiltonian(V1=1.0, filling=filling, nk=4,
+                maxite=5)
+    with pytest.raises(ValueError, match="per-site .* needs a spinful"):
+        hs.get_mean_field_hamiltonian(V1=1.0, filling=filling, nk=4,
+                maxite=5, integration="kpm")
+    hf = g.get_hamiltonian(has_spin=True)
+    with pytest.raises(NotImplementedError, match="per-site"):
+        meanfield.Vinteraction(hf, U=1.0, filling=filling, nk=4, maxite=5)
+    with pytest.raises(NotImplementedError, match="per-site"):
+        meanfield.Vinteraction(hs, V1=1.0, filling=filling, nk=4, maxite=5)
+    from pyqula.scftk.densitydensity_kpm import Vinteraction_kpm
+    with pytest.raises(NotImplementedError, match="per-site"):
+        Vinteraction_kpm(hf, U=1.0, filling=filling, nk=4, maxite=5)
+    with pytest.raises(NotImplementedError, match="use_jax=True .* per-site"):
+        meanfield.VJinteraction(hf, U=1.0, filling=filling, nk=4, maxite=5,
+                use_jax=True)
