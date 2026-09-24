@@ -17,7 +17,13 @@ def _magnetization(g, J1, zeeman, seed=0, nk=24):
     np.random.seed(seed)  # see test_spinon_constraint.py for why
     h = SpinonHamiltonian(g)
     h.add_zeeman(zeeman)
-    h2 = h.get_mean_field_hamiltonian(J1=J1, nk=nk, mix=0.3,
+    # mix=0.1, for the reason test_spinon_constraint.py's _run_chain gives:
+    # at 0.3 seed 0 settles into a limit cycle, the same one a scalar
+    # filling=0.5 falls into. The per-site filling used to dodge it only
+    # because its fixed-gain step on the total count lagged the Fermi
+    # level; now that the count is fixed exactly, a uniform per-site
+    # filling follows the scalar iterate step for step.
+    h2 = h.get_mean_field_hamiltonian(J1=J1, nk=nk, mix=0.1,
             maxerror=1e-6, maxite=2000)
     assert h2 is not None, "SCF did not converge"
     # mode="field" reads the magnetic term written in the Hamiltonian,
@@ -101,7 +107,7 @@ def test_add_exchange_matches_add_zeeman():
     np.random.seed(0)
     h = SpinonHamiltonian(g)
     h.add_exchange([0., 0., 0.3])
-    h2 = h.get_mean_field_hamiltonian(J1=1.0, nk=24, mix=0.3,
+    h2 = h.get_mean_field_hamiltonian(J1=1.0, nk=24, mix=0.1,
             maxerror=1e-6, maxite=2000)
     assert h2 is not None
     assert np.allclose(h2.local_occupation, occ_zeeman, atol=1e-6)
