@@ -5,6 +5,7 @@ from .. import inout
 import numpy as np
 import time
 import os
+import warnings
 from .. import filesystem as fs
 from .. import densitymatrix
 from copy import copy, deepcopy
@@ -376,7 +377,7 @@ from .mfconstrains import obj2mf
 
 mf_file = "MF.pkl" 
 
-def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
+def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         maxerror=1e-5,callback_mf=None,callback_dm=None,
         load_mf=True,compute_cross=True,compute_dd=True,verbose=1,
         compute_anomalous=True,compute_normal=True,info=False,
@@ -385,7 +386,14 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
         integration="ed", # "ed" (exact diagonalization) or "qtci"
         tolerance=1e-6, # qtci-only: crossinterpolate2 convergence tolerance
         callback_h=None,**kwargs):
-    """Perform the SCF mean field"""
+    """Perform the SCF mean field
+
+    mix: the linear-mixing factor. solver="plain" mixes with it (0.1 when
+    not given), and solver="broyden_mixing" uses it as the mixing factor
+    of its linear warm-up phase (broyden_mixing_solve's lam, whose own
+    default applies when not given). The scipy solvers ("krylov",
+    "anderson", "broyden1", "linear") have no use for it, and warn when
+    it is given."""
     if len(kwargs)>0:
         # this is the end of the mean-field call chain: anything left over
         # here is a keyword nobody consumed, and used to be dropped in
@@ -472,6 +480,7 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
       scf.tol = maxerror # maximum error
       return scf
     if solver=="plain":
+      if mix is None: mix = 0.1 # default linear mixing
       do_scf = True
 #      from .mixing import Mixing
 #      Mxg = Mixing() # initialize
@@ -512,10 +521,16 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
             scf1 = f(mf1) # compute function
             xn = fmf2a(scf1.mf) # new vector
             diff = x - xn # difference vector
-            print("ERROR",np.max(np.abs(diff)))
-            print()
+            if verbose>0:
+                print("ERROR",np.max(np.abs(diff)))
+                print()
             return x - xn # return vector
         x0 = fmf2a(scf.mf) # initial guess
+        if mix is not None and solver!="broyden_mixing":
+            # as densitydensity_jax warns for its own non-mixing solvers
+            warnings.warn("mix=%r has no effect for solver=%r (only "
+                    "solver=\"plain\" and solver=\"broyden_mixing\" use "
+                    "linear mixing)"%(mix,solver),stacklevel=2)
         # these methods do seem too efficient, but lets have them anyway
         if solver=="krylov":
             from scipy.optimize import newton_krylov
@@ -539,6 +554,9 @@ def generic_densitydensity(h0,mf=None,mix=0.1,v=None,nk=8,solver="plain",
             step_vec = lambda x: x - fsol(x)
             bm_kwargs = dict(tol=maxerror, verbose=verbose)
             if maxite is not None: bm_kwargs["maxite"] = maxite
+            # mix is the linear-mixing factor, which for this solver is
+            # the one of its warm-up phase
+            if mix is not None: bm_kwargs["lam"] = mix
             x, ite, converged = broyden_mixing_solve(step_vec, x0, **bm_kwargs)
             if not converged:
                 print("No convergence has been reached in",ite,
@@ -614,7 +632,14 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
           # Fermi-Dirac weight at this same T: a Fermi level located by a
           # T=0 eigenvalue count would hold a different number of
           # electrons than `filling` asks for
-          fermi = h.get_fermi4filling(filling,nk=h.nk,T=T) # get the filling
+          if integration=="qtci":
+              # on the Gauss-Kronrod nodes get_dm_qtci integrates on: in a
+              # metal, a Fermi level found on the uniform mesh holds a
+              # different charge on those nodes
+              from ..qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
+              fermi = get_fermi4filling_qtci(h,filling,nk=h.nk,T=T)
+          else:
+              fermi = h.get_fermi4filling(filling,nk=h.nk,T=T)
           if verbose>1: print("Fermi energy",fermi)
           h.fermi = fermi
           h.shift_fermi(-fermi) # shift by the fermi energy
@@ -630,11 +655,18 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     # fraction of each off-diagonal direction's matrix for a large system,
     # and eventually of the onsite one too. Recompute it in full once here,
     # exactly as spinspin._run_anisotropic_scf does at the end of its own
-    # loop; only for the path that actually went sparse (a dense recompute
+    # loop; only for the paths that actually went sparse (a dense recompute
     # would defeat the point of any other integrator)
+    ds = [(0,0,0)] + [d for d in scf.v if d!=(0,0,0)] # every direction
     if integration=="ed" and not h.has_eh:
-        ds = [(0,0,0)] + [d for d in scf.v] # every direction of the mean field
         scf.dm = h.get_density_matrix(ds=ds,nk=h.nk,T=T)
+    elif integration=="qtci":
+        # get_dm_qtci left every entry the mean field does not read at
+        # zero. Recomputed on the same Gauss-Kronrod nodes, not the uniform
+        # mesh: in a metal the two hold different charges at this Fermi
+        # level (see get_fermi4filling_qtci)
+        from ..qtcitk.densitymatrix_qtci import full_dm_gk
+        scf.dm = full_dm_gk(h,ds,nk=h.nk,T=T)
     etot = h.get_total_energy(nk=h.nk)
     if mu is None:
         # electron_dimension, not h.intra.shape[0]: N = filling*(number of
