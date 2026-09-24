@@ -103,3 +103,102 @@ def test_vjinteraction_converged_implies_occupation_within_tolerance():
     assert n_violations == 0, \
         f"{n_violations}/30 seeds falsely reported converged=True with " \
         "local_occupation outside tolerance"
+
+
+def test_array_filling_partially_filled_kshell_matches_scalar_at_default_T():
+    """A one-site spinful chain at filling 0.3 with nk=20 holds 12 of 40
+    states, so the level at the Fermi energy (4 degenerate states) is half
+    filled. The scalar path puts mu on that level; the array path used to
+    step the total count with a fixed gain and, at the default T=1e-7,
+    overshot that level forever (with maxite=None it never returned). The
+    array [0.3] must reproduce the scalar result, which is the free chain."""
+    g = geometry.chain()
+    res = []
+    for filling in (0.3, np.array([0.3])):
+        h = g.get_hamiltonian(has_spin=True)
+        np.random.seed(0)
+        res.append(meanfield.VJinteraction(h, U=0.0, nk=20, maxerror=1e-5,
+                mix=0.1, maxite=200, filling=filling))
+    scalar, array = res
+    assert scalar.converged and array.converged
+    assert np.allclose(array.local_occupation, 0.3, atol=1e-8)
+    assert np.isclose(array.total_energy, scalar.total_energy, atol=1e-7)
+    assert np.allclose(array.lam, scalar.hamiltonian.fermi, atol=1e-7)
+
+
+def test_uniform_array_filling_matches_scalar_off_commensurate_mesh():
+    """Off a commensurate mesh the scalar path rounds the filling to a
+    whole number of k-states; the array path fixes its total count with the
+    same Fermi search, so a uniform array must give the same state and
+    energy rather than chase an unreachable total count."""
+    g = geometry.triangular_lattice()
+    res = []
+    for filling in (0.3, np.array([0.3])):
+        h = g.get_hamiltonian(has_spin=True)
+        np.random.seed(1)
+        res.append(meanfield.VJinteraction(h, U=1.0, mf="ferroZ", nk=8,
+                maxerror=1e-6, mix=0.3, maxite=300, filling=filling))
+    scalar, array = res
+    assert scalar.converged and array.converged
+    assert np.isclose(array.total_energy, scalar.total_energy, atol=1e-6)
+
+
+def test_array_filling_converges_in_a_gapped_state():
+    """A charge-ordered, gapped 2-site chain (U=3, J1=0.5, T=0.05) with
+    targets [0.3,0.7]: the total-count part of the old fixed-gain step
+    crawled inside the gap (unconverged after 3000 iterations, where the
+    scalar path needs under 200). With the count fixed by a Fermi search it
+    converges in a few hundred iterations and hits both targets."""
+    g = geometry.chain().get_supercell(2)
+    h = g.get_hamiltonian(has_spin=True)
+    np.random.seed(3)
+    filling = np.array([0.3, 0.7])
+    scf = meanfield.VJinteraction(h, U=3.0, J1=0.5, mf="ferroZ",
+            filling=filling, nk=20, maxerror=1e-6, mix=0.3, maxite=600,
+            T=0.05)
+    assert scf.converged
+    assert np.allclose(scf.local_occupation, filling, atol=1e-5)
+
+
+def test_array_filling_is_validated_before_any_scf_work():
+    """A per-site filling needs one value per site, each a fraction in
+    [0,1]; a wrong length used to surface as a numpy broadcast error after
+    a diagonalization, and an unreachable target ran to maxite (forever by
+    default)."""
+    import pytest
+    g = geometry.chain().get_supercell(2)
+    h = g.get_hamiltonian(has_spin=True)
+    with pytest.raises(ValueError, match="one value per site"):
+        meanfield.VJinteraction(h, U=1.0, nk=4, maxite=5,
+                filling=np.array([0.3, 0.7, 0.5]))
+    with pytest.raises(ValueError, match=r"in \[0,1\]"):
+        meanfield.VJinteraction(h, U=1.0, nk=4, maxite=5,
+                filling=np.array([1.3, -0.2]))
+
+
+def test_array_filling_is_refused_by_routes_without_it():
+    """Only VJinteraction's numpy engine implements a per-site filling.
+    Every other route used to pass the array on to a scalar Fermi search
+    and fail with 'numpy.ndarray doesn't define __round__'; each now
+    refuses it by name before any SCF work."""
+    import pytest
+    g = geometry.chain().get_supercell(2)
+    filling = np.array([0.3, 0.7])
+    hs = g.get_hamiltonian(has_spin=False)
+    with pytest.raises(ValueError, match="per-site .* needs a spinful"):
+        hs.get_mean_field_hamiltonian(V1=1.0, filling=filling, nk=4,
+                maxite=5)
+    with pytest.raises(ValueError, match="per-site .* needs a spinful"):
+        hs.get_mean_field_hamiltonian(V1=1.0, filling=filling, nk=4,
+                maxite=5, integration="kpm")
+    hf = g.get_hamiltonian(has_spin=True)
+    with pytest.raises(NotImplementedError, match="per-site"):
+        meanfield.Vinteraction(hf, U=1.0, filling=filling, nk=4, maxite=5)
+    with pytest.raises(NotImplementedError, match="per-site"):
+        meanfield.Vinteraction(hs, V1=1.0, filling=filling, nk=4, maxite=5)
+    from pyqula.scftk.densitydensity_kpm import Vinteraction_kpm
+    with pytest.raises(NotImplementedError, match="per-site"):
+        Vinteraction_kpm(hf, U=1.0, filling=filling, nk=4, maxite=5)
+    with pytest.raises(NotImplementedError, match="use_jax=True .* per-site"):
+        meanfield.VJinteraction(hf, U=1.0, filling=filling, nk=4, maxite=5,
+                use_jax=True)

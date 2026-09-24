@@ -395,7 +395,13 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     _run_anisotropic_scf's array-filling branch for the mechanism
     (warm-started, co-converged with the mean field one diagonalization per
     outer SCF iteration, not solved to tight tolerance every iteration) and
-    its performance-vs-exactness tradeoff. Only supported for a
+    its performance-vs-exactness tradeoff. The total electron count,
+    mean(filling), is fixed by the same Fermi search a scalar filling
+    uses, so it is rounded to a whole number of k-states exactly as a
+    scalar filling is (a uniform array reproduces the scalar result), and
+    only the site-resolved differences are held to maxerror. The array
+    needs one entry per site, each in [0,1]; anything else raises
+    ValueError. Only supported for a
     normal-state (has_eh=False), integration="ed" Hamiltonian with mu=None
     (the default) -- combining an array filling with integration="kpm", a
     BdG (has_eh=True) h0, or an explicit mu all raise NotImplementedError
@@ -586,6 +592,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                     "apply constrains (they need concrete numpy arrays each "
                     "iteration, incompatible with jax tracing); use the "
                     "default (numpy) engine instead")
+        if is_iterable(filling):
+            raise NotImplementedError("VJinteraction's use_jax=True does "
+                    "not support a per-site (array) filling, got %r; use "
+                    "the default (numpy) engine, use_jax=False, for a "
+                    "per-site filling target" % (filling,))
         kpm_only = {"scale": scale, "npol": npol, "ne": ne, "cores": cores}
         kpm_only_set = {k: v for k, v in kpm_only.items() if v is not None}
         if kpm_only_set:
@@ -643,6 +654,14 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
             vz_exchange=vz_exchange, vd_reference=vd_reference,
             integration=integration, scale=scale, npol=npol, ne=ne,
             cores=cores)
+
+
+def _site_resolved(x):
+    """The site-resolved part of a per-site quantity, its mean removed:
+    the array-filling branch of _run_anisotropic_scf fixes the uniform
+    part (the total electron count) by a scalar Fermi search instead"""
+    x = np.asarray(x)
+    return x - np.mean(x)
 
 
 def _channel_is_zero(v):
@@ -940,6 +959,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 "otherwise reuses, use_sparse_dm, is itself only available "
                 "when has_eh=False); use a scalar filling (or mu=) for a "
                 "BdG Hamiltonian")
+    if array_filling:
+        filling_arr = np.asarray(filling, dtype=np.float64)
+        nsites = len(h1.geometry.r)
+        if filling_arr.shape != (nsites,):
+            raise ValueError("A per-site (array) filling needs exactly one "
+                    "value per site of the unit cell, %d here, got an array "
+                    "of shape %s" % (nsites, filling_arr.shape))
+        if np.any(filling_arr < 0.) or np.any(filling_arr > 1.):
+            raise ValueError("A per-site (array) filling is a fraction of "
+                    "each site's 2-orbital (up+down) capacity, so every "
+                    "entry must lie in [0,1], got %s" % (filling_arr,))
+    else:
+        filling_arr = None
     if array_filling and mu is not None:
         raise NotImplementedError("A per-site (array) filling cannot be "
                 "combined with an explicit mu= -- the array-filling branch "
@@ -1013,7 +1045,6 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # so f() below can mutate it in place as a closure cell (nonlocal would
     # also work but this matches this module's existing style of mutable
     # closure state, e.g. `outd` in densitymatrix._accumulate_dm_batch).
-    filling_arr = np.asarray(filling, dtype=np.float64) if array_filling else None
     lam_state = [np.zeros(len(h1.geometry.r))] if array_filling else [None]
 
     def _get_dm(h):
@@ -1222,12 +1253,21 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # iterations to converge, same as it would for `mf` itself.
             from ..densitymatrix import full_dm_accumulate_sparse_local_fermi
             delta = T if T != 0. else 1e-15 # see densitymatrix.full_dm's own T==0 guard
-            lam_used = lam_state[0]
-            dm_lab, occ = full_dm_accumulate_sparse_local_fermi(
+            #
+            # Only the site-resolved (mean-free) part of lam is stepped
+            # this way. Its uniform part, the total electron count, is set
+            # exactly inside full_dm_accumulate_sparse_local_fermi by the
+            # scalar path's own Fermi search (returned as mu): a fixed-gain
+            # step on the total count overshoots a partially filled k-shell
+            # forever near T=0 and crawls inside a gap at finite T.
+            lam_used = lam_state[0] # mean-free, see the step below
+            dm_lab, occ, mu_used = full_dm_accumulate_sparse_local_fermi(
                     h, sparse_pairs, filling_arr, lam_used, nk=nk, delta=delta)
-            h.fermi = lam_used.copy() # per-site array -- see Hamiltonian.shift_fermi
-            h.shift_fermi(-lam_used) # matches the lam dm_lab was computed at
-            lam_state[0] = lam_used + mix*(filling_arr - occ) # warm start for next call
+            lam_total = lam_used + mu_used
+            h.fermi = lam_total # per-site array -- see Hamiltonian.shift_fermi
+            h.shift_fermi(-lam_total) # matches the shift dm_lab was computed at
+            res = _site_resolved(filling_arr - occ)
+            lam_state[0] = lam_used + mix*res # warm start for next call
             local_occ = occ
         elif use_sparse_dm and mu is None:
             # combined: diagonalize the unshifted h once, deriving both the
@@ -1319,7 +1359,13 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # local occupations do not match `filling`, exactly the failure
             # mode this array-filling path exists to prevent. Reuses
             # `maxerror` (no separate tolerance kwarg) for both, same as mf.
-            occ_err = np.max(np.abs(filling_arr - scf.local_occupation))
+            #
+            # Only the site-resolved part is compared: the total count is
+            # the scalar Fermi search's, which rounds mean(filling) to a
+            # whole number of k-states exactly as a scalar filling does, so
+            # an incommensurate target would otherwise never converge
+            occ_err = np.max(np.abs(_site_resolved(
+                    filling_arr - scf.local_occupation)))
             diff = max(diff, occ_err)
         mf = mix_mf(mfnew, mf, mix=mix)
         if callback_mf is not None: mf = callback_mf(mf)
@@ -1349,7 +1395,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 # is exactly what let scf.converged=True ship with
                 # scf.local_occupation up to ~0.04 off target in ~5% of
                 # random-seed runs before this fix.
-                final_err = np.max(np.abs(filling_arr - scf.local_occupation))
+                final_err = np.max(np.abs(_site_resolved(
+                        filling_arr - scf.local_occupation)))
                 if final_err < maxerror:
                     scf.converged = True
                     break
