@@ -396,3 +396,18 @@ def test_vjinteraction_jax_documents_unsupported_configurations():
     with pytest.raises(NotImplementedError):
         VJinteraction(h.copy(), mu=0.0, U=2.0, use_jax=True,
                 constrains=["no_charge"])  # needs concrete numpy arrays
+
+
+def test_vjinteraction_jax_filling_holds_the_requested_electron_count():
+    """Same invariant as the spinless test in test_densitydensity_jax.py,
+    on the spinful route: honeycomb with nk=6 has a twelve-fold level
+    (six k-points times spin) second from the bottom, and filling=4/144
+    cuts it. Tr dm(0,0,0)/n must equal the filling."""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    filling = 4 / 144
+    scf = VJinteraction(h.copy(), U=1e-10, nk=6, filling=filling,
+            mf={(0, 0, 0): np.zeros((4, 4), dtype=complex)}, maxerror=1e-12,
+            maxite=3, T=1e-4, use_jax=True, solver="linear_mixing")
+    count = np.trace(scf.dm[(0, 0, 0)]).real / 4
+    assert abs(count - filling) < 1e-8

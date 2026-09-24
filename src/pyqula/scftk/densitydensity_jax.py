@@ -13,10 +13,11 @@
 #  - no callback_h/callback_dm/callback_mf hooks
 #  - a target filling IS supported by solver="newton": rather than resolving
 #    mu(filling) with a numpy sort/root-find outside the trace (which would
-#    break jax.jacfwd), mu is computed *inside* the trace each step as the
-#    midpoint between the n_occ_total-th and (n_occ_total+1)-th eigenvalue
-#    of the full (sorted, via jnp.sort) spectrum - jnp.sort's gradient is
-#    well defined away from ties, so this stays differentiable
+#    break jax.jacfwd), mu is computed *inside* the trace each step by
+#    mu_for_filling: the midpoint between the n_occ_total-th and
+#    (n_occ_total+1)-th eigenvalue when that already holds n_occ_total
+#    electrons at T (a gap), otherwise the root of the smeared count (the
+#    cut falls inside a degenerate multiplet) - differentiable either way
 #  - occupations always use a finite smearing temperature T (default 1e-4),
 #    because the step must be differentiable and a step-function occupation
 #    is not; T=0/None silently falls back to the default rather than
@@ -161,6 +162,59 @@ def fermi_projector_jvp(primals, tangents):
     return (P, es), (dP, des)
 
 
+# bisection steps for mu_for_filling: each halves a bracket a few bandwidths
+# wide, so this reaches adjacent float64 values with room to spare
+_MU_BISECTION_STEPS = 100
+
+
+def mu_for_filling(es, n_occ, T):
+    """Chemical potential holding n_occ electrons at temperature T in the
+    spectrum es (any shape), traceable and differentiable.
+
+    Mirrors spectrum.get_fermi_energy_T, which the numpy engine uses: the
+    T=0 cut, midway between the n_occ-th and (n_occ+1)-th level, is kept
+    whenever it already holds n_occ electrons at this T. That is the case
+    in a gap and fails when the cut falls inside a degenerate multiplet
+    (a star of k-points on a symmetric mesh), where the midpoint sits on
+    the level and sigmoid(0)=1/2 half-fills every member. There the count
+    sum_i sigmoid(-(e_i-mu)/T) = n_occ is solved for mu instead: bisection
+    on the stopped-gradient spectrum, then one Newton step on the live one.
+    At the root that step contributes exactly the implicit-function
+    derivative dmu = sum_i w_i de_i / sum_i w_i, w = f(1-f), which is what
+    jax.jacfwd of the SCF step needs."""
+    es = es.reshape(-1)
+    es_sorted = jnp.sort(es)
+    ntarget = jnp.asarray(n_occ, dtype=es.dtype)
+
+    def count(mu, e):
+        return jnp.sum(jax.nn.sigmoid(-(e - mu) / T))
+
+    mu_mid = 0.5 * (es_sorted[n_occ - 1] + es_sorted[n_occ])
+    exact = jnp.abs(count(mu_mid, es) - ntarget) < 1e-9 * ntarget
+    # bisection, outside the derivative
+    es_c = jax.lax.stop_gradient(es)
+    T_c = jax.lax.stop_gradient(T)
+    width = es_sorted[-1] - es_sorted[0]
+    lo = jax.lax.stop_gradient(es_sorted[0] - width - 40. * T - 1.)
+    hi = jax.lax.stop_gradient(es_sorted[-1] + width + 40. * T + 1.)
+
+    def bisect(_, bracket):
+        lo, hi = bracket
+        mid = 0.5 * (lo + hi)
+        below = jnp.sum(jax.nn.sigmoid(-(es_c - mid) / T_c)) < ntarget
+        return (jnp.where(below, mid, lo), jnp.where(below, hi, mid))
+    lo, hi = jax.lax.fori_loop(0, _MU_BISECTION_STEPS, bisect, (lo, hi))
+    mu_b = jax.lax.stop_gradient(0.5 * (lo + hi))
+    # one Newton step on the live spectrum carries the derivative
+    f = jax.nn.sigmoid(-(es - mu_b) / T)
+    dcount = jnp.sum(f * (1. - f)) / T
+    # the guard only matters in the branch jnp.where discards below (a
+    # gapped spectrum, where dcount underflows), and keeps its tangent finite
+    safe = jnp.where(dcount > 1e-300, dcount, 1.)
+    mu_count = mu_b - (jnp.sum(f) - ntarget) / safe
+    return jnp.where(exact, mu_mid, mu_count)
+
+
 def normal_term_ii_jax(v, dm):
     return jnp.diag(v @ jnp.diag(dm))
 
@@ -255,8 +309,7 @@ def _get_step_core(dirs, dirs_all, n, compute_dd, compute_cross, add_dagger,
         nk = ks.shape[0]
         if has_filling_target:
             es = jnp.linalg.eigvalsh(hks)            # (nk,n)
-            es_sorted = jnp.sort(es.reshape(-1))
-            mu_eff = 0.5 * (es_sorted[n_occ_total - 1] + es_sorted[n_occ_total])
+            mu_eff = mu_for_filling(es, n_occ_total, T)
         else:
             mu_eff = mu
         # P[k] = V f(E) V^dagger, differentiable at degeneracies
@@ -279,12 +332,11 @@ def build_step_function(hop0, v, ks, dirs, dirs_all, T,
     """Return step(x,mu) -> (xnew, dm, es, occ, mu_eff), the pure-JAX one
     SCF step. If n_occ_total is given (a fixed number of occupied states
     out of the nk*norb total, i.e. a filling target), mu is IGNORED and
-    instead computed inside the trace as the midpoint between the
-    n_occ_total-th and (n_occ_total+1)-th eigenvalue in the whole (sorted)
-    spectrum, via jnp.sort - unlike resolving mu(filling) with a numpy
-    sort/root-find outside the trace, this stays fully differentiable
-    (jnp.sort has a well-defined gradient away from ties) so solver="newton"
-    can handle a fixed filling directly, not just a fixed mu.
+    instead computed inside the trace by mu_for_filling, which holds
+    n_occ_total electrons at T - unlike resolving mu(filling) with a numpy
+    root-find outside the trace, this stays fully differentiable, so
+    solver="newton" can handle a fixed filling directly, not just a fixed
+    mu.
 
     The heavy computation itself lives in a cached, once-jitted core (see
     _get_step_core) shared across every call with the same structural shape

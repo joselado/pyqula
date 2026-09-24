@@ -26,9 +26,9 @@
 #    incompatible with jax tracing -- same restriction densitydensity_jax.py's
 #    solver="newton"/"fsolve"/"newton_krylov" already have for Vinteraction)
 #  - a target filling is supported the same way densitydensity_jax.py does:
-#    mu is resolved *inside* the trace each step as the midpoint between the
-#    n_occ_total-th and (n_occ_total+1)-th eigenvalue of the full (sorted)
-#    spectrum, rather than a numpy root-find outside the trace
+#    mu is resolved *inside* the trace each step by
+#    densitydensity_jax.mu_for_filling, rather than a numpy root-find
+#    outside the trace
 #  - occupations always use a finite smearing temperature T (default 1e-4,
 #    see densitydensity_jax.default_T_jax) so the step is differentiable;
 #    degenerate levels are handled by densitydensity_jax.fermi_projector
@@ -169,7 +169,8 @@ gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
         get_dc_energy, random_hermitian_guess)
 from .densitydensity_jax import (flatten_mf, unflatten_mf, make_bloch_stack,
-        get_mf_normal_jax, default_T_jax, solve_scf, fermi_projector)
+        get_mf_normal_jax, default_T_jax, solve_scf, fermi_projector,
+        mu_for_filling)
 from .spinspin import _build_v, _build_density_v, _channel_is_zero, _AXIS_ROTATION
 from .mfconstrains import obj2mf
 from ..multihopping import MultiHopping
@@ -248,8 +249,7 @@ def _get_step_core_vj(dirs, dirs_all, n, vz_active, vx_active, vy_active,
         nk = ks.shape[0]
         if has_filling_target:
             es = jnp.linalg.eigvalsh(hks)            # (nk,n)
-            es_sorted = jnp.sort(es.reshape(-1))
-            mu_eff = 0.5 * (es_sorted[n_occ_total - 1] + es_sorted[n_occ_total])
+            mu_eff = mu_for_filling(es, n_occ_total, T)
         else:
             mu_eff = mu
         # P[k] = V f(E) V^dagger, differentiable at degeneracies
@@ -287,7 +287,7 @@ def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
     """Return step(x,mu) -> (xnew, dm, es, occ, mu_eff), the pure-JAX one
     SCF step combining the z/x/y channels -- structurally
     densitydensity_jax.build_step_function (same Bloch-stack build,
-    vmap(eigh), mu-for-filling jnp.sort trick, per-direction dm
+    vmap(eigh), in-trace mu_for_filling, per-direction dm
     reconstruction via einsum) generalized from a single get_mf_normal_jax
     call to VJinteraction's three-channel combination, mirroring
     spinspin._run_anisotropic_scf.compute_mf restricted to the normal-state

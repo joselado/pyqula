@@ -228,3 +228,48 @@ def test_densitydensity_jax_documents_unsupported_configurations():
     h_nambu.turn_nambu()
     with pytest.raises(NotImplementedError):
         Vinteraction(h_nambu, mu=0.0, U=2.0, use_jax=True)  # no BdG support yet
+
+
+@pytest.mark.parametrize("solver", ["fixed_point", "newton"])
+@pytest.mark.parametrize("n_occ", [2, 4])
+def test_densitydensity_jax_filling_holds_the_requested_electron_count(solver,
+        n_occ):
+    """With a filling target the density matrix must hold exactly the
+    requested number of electrons, Tr dm(0,0,0)/n = filling. On the bare
+    honeycomb lattice with nk=6 the second level is a six-fold star of
+    k-points, so filling=2/72 puts the cut inside it. mu used to be the
+    midpoint of the two levels either side of the cut, which lands on the
+    level and half-fills all six, giving twice the requested count. The
+    numpy engine inverts the finite-T count, and so must this one."""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    filling = n_occ / 72
+    mf0 = {(0, 0, 0): np.zeros((2, 2), dtype=complex)}
+    scf = Vinteraction(h.copy(), V1=1e-10, nk=6, filling=filling, mf=mf0,
+            maxerror=1e-12, maxite=3, T=1e-4, use_jax=True, solver=solver)
+    count = np.trace(scf.dm[(0, 0, 0)]).real / 2
+    assert abs(count - filling) < 1e-8
+
+
+def test_mu_for_filling_derivative_matches_finite_differences():
+    """mu_for_filling solves the count inside the jax trace, and its
+    derivative is what Newton's Jacobian sees. Check it against central
+    finite differences on a spectrum where the cut falls in a multiplet
+    (the count branch) and on a gapped one (the midpoint branch)."""
+    from pyqula.scftk.densitydensity_jax import mu_for_filling
+    import jax.numpy as jnp
+    rng = np.random.default_rng(3)
+    T = 1e-2
+    degenerate = np.array([-1., 0., 0., 0., 0.003, 1., 2.])
+    gapped = np.array([-1., -0.8, 0.5, 1., 2.])
+    for es, n_occ in [(degenerate, 3), (gapped, 2)]:
+        es = jnp.asarray(es)
+        de = jnp.asarray(rng.random(es.shape) - 0.5)
+        mu = lambda t: mu_for_filling(es + t * de, n_occ, T)
+        _, dmu = jax.jvp(mu, (0.,), (1.,))
+        eps = 1e-6
+        fd = (mu(eps) - mu(-eps)) / (2 * eps)
+        assert abs(float(dmu) - float(fd)) < 1e-6
+        # and the count itself is right
+        count = jnp.sum(jax.nn.sigmoid(-(es - mu(0.)) / T))
+        assert abs(float(count) - n_occ) < 1e-9
