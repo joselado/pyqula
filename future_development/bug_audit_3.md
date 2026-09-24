@@ -27,7 +27,9 @@ it printed.
 
 **16 fixed, one decided, one left as it is.** Every fix has a
 regression test that asserts the finding's oracle, and each of those tests
-fails on the unfixed source. The whole suite passes on the merged result.
+fails on the unfixed source. The full suite on the merged fixes was stopped
+at 78% with no failure, and the qtci energy fix (#11) was checked with the qtci
+tests only; a complete run on the merged result is still owed.
 
 - **Decided -- keep the qtci backend.** Its tensor cross interpolation
   compresses nothing in 2D (see #13). The maintainer's call on 2026-09-24 was
