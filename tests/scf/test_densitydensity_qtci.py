@@ -177,6 +177,44 @@ def test_qtci_scf_loop_density_matrix_holds_filling():
         assert abs(np.trace(dm[(0, 0, 0)]).real-0.6) < 0.015
 
 
+def test_get_dm_qtci_matches_dense_mesh_in_a_gapped_insulator():
+    """For a gapped (smooth) integrand the Gauss-Kronrod rule is accurate:
+    every required entry agrees with a dense nk=80 mesh to 1e-3 at nk=8
+    (measured 8e-5), a far tighter check than the mean-field test above."""
+    from pyqula.kpmtk.densitymatrix_kpm import required_elements
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=True)
+    h.add_sublattice_imbalance(0.5)
+    v = _v1_interaction_dict(h)
+    need = required_elements(v)
+    ds = sorted({d for (d, i, j) in need})
+    ref = h.get_density_matrix(ds=ds, nk=80)
+    dq = get_dm_qtci(h, v, nk=8)
+    err = max(abs(dq[d][i, j]-ref[d][i, j]) for (d, i, j) in need)
+    assert err < 1e-3
+
+
+def test_get_dm_qtci_nambu_matches_dense_mesh():
+    """The BdG path (required_elements_eh): a frozen spinful s-wave
+    Hamiltonian's qtci density matrix agrees with a dense mesh on every
+    entry the anomalous mean field reads, and so does that mean field."""
+    from pyqula.kpmtk.densitymatrix_kpm import required_elements_eh
+    h = geometry.square_lattice().get_hamiltonian()
+    h.shift_fermi(-1.0)
+    h.setup_nambu_spinor()
+    h.add_swave(0.4)
+    v = {(0, 0, 0): np.zeros((2, 2), dtype=np.complex128)}
+    v[(0, 0, 0)][0, 1] = v[(0, 0, 0)][1, 0] = -1.5
+    need = required_elements_eh(v)
+    ds = sorted({d for (d, i, j) in need})
+    ref = h.get_density_matrix(ds=ds, nk=80)
+    dq = get_dm_qtci(h, v, nk=8)
+    assert max(abs(dq[d][i, j]-ref[d][i, j]) for (d, i, j) in need) < 1e-2
+    mq = get_mf(v, dq, has_eh=True)
+    mr = get_mf(v, ref, has_eh=True)
+    assert max(np.max(np.abs(mq[d]-mr[d])) for d in mr) < 3e-2
+    assert max(np.max(np.abs(mr[d])) for d in mr) > 0.1 # nontrivial pairing
+
 
 def test_full_dm_gk_agrees_with_get_dm_qtci_and_fills_every_entry():
     """full_dm_gk (what scf.dm reports under integration="qtci") is the
