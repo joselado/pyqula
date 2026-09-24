@@ -399,7 +399,9 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     mean(filling), is fixed by the same Fermi search a scalar filling
     uses, so it is rounded to a whole number of k-states exactly as a
     scalar filling is (a uniform array reproduces the scalar result), and
-    only the site-resolved differences are held to maxerror. Only supported for a
+    only the site-resolved differences are held to maxerror. The array
+    needs one entry per site, each in [0,1]; anything else raises
+    ValueError. Only supported for a
     normal-state (has_eh=False), integration="ed" Hamiltonian with mu=None
     (the default) -- combining an array filling with integration="kpm", a
     BdG (has_eh=True) h0, or an explicit mu all raise NotImplementedError
@@ -936,7 +938,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 "otherwise reuses, use_sparse_dm, is itself only available "
                 "when has_eh=False); use a scalar filling (or mu=) for a "
                 "BdG Hamiltonian")
-    filling_arr = np.asarray(filling, dtype=np.float64) if array_filling else None
+    if array_filling:
+        filling_arr = np.asarray(filling, dtype=np.float64)
+        nsites = len(h1.geometry.r)
+        if filling_arr.shape != (nsites,):
+            raise ValueError("A per-site (array) filling needs exactly one "
+                    "value per site of the unit cell, %d here, got an array "
+                    "of shape %s" % (nsites, filling_arr.shape))
+        if np.any(filling_arr < 0.) or np.any(filling_arr > 1.):
+            raise ValueError("A per-site (array) filling is a fraction of "
+                    "each site's 2-orbital (up+down) capacity, so every "
+                    "entry must lie in [0,1], got %s" % (filling_arr,))
+    else:
+        filling_arr = None
     if array_filling and mu is not None:
         raise NotImplementedError("A per-site (array) filling cannot be "
                 "combined with an explicit mu= -- the array-filling branch "

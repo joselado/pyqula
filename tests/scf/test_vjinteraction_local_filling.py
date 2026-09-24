@@ -158,3 +158,19 @@ def test_array_filling_converges_in_a_gapped_state():
             T=0.05)
     assert scf.converged
     assert np.allclose(scf.local_occupation, filling, atol=1e-5)
+
+
+def test_array_filling_is_validated_before_any_scf_work():
+    """A per-site filling needs one value per site, each a fraction in
+    [0,1]; a wrong length used to surface as a numpy broadcast error after
+    a diagonalization, and an unreachable target ran to maxite (forever by
+    default)."""
+    import pytest
+    g = geometry.chain().get_supercell(2)
+    h = g.get_hamiltonian(has_spin=True)
+    with pytest.raises(ValueError, match="one value per site"):
+        meanfield.VJinteraction(h, U=1.0, nk=4, maxite=5,
+                filling=np.array([0.3, 0.7, 0.5]))
+    with pytest.raises(ValueError, match=r"in \[0,1\]"):
+        meanfield.VJinteraction(h, U=1.0, nk=4, maxite=5,
+                filling=np.array([1.3, -0.2]))
