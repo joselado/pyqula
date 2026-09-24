@@ -273,3 +273,30 @@ def test_mu_for_filling_derivative_matches_finite_differences():
         # and the count itself is right
         count = jnp.sum(jax.nn.sigmoid(-(es - mu(0.)) / T))
         assert abs(float(count) - n_occ) < 1e-9
+
+
+@pytest.mark.parametrize("target", [dict(mu=0.5), dict(filling=0.5)])
+def test_densitydensity_jax_returned_hamiltonian_matches_numpy_engine(target):
+    """The same public call with use_jax=False and use_jax=True must return
+    the same Hamiltonian and total energy. The numpy engine returns h
+    measured from the Fermi level (shifted by -mu, or by -fermi with .fermi
+    set for a filling target); the jax engine used to return it unshifted
+    and summed the unshifted eigenvalues, so at a fixed nonzero mu its
+    total energy was off by mu*N. A spinless CDW on a two-site chain, which
+    is gapped, so both engines put the Fermi level at the same place."""
+    g = geometry.chain().get_supercell(2)
+    h = g.get_hamiltonian(has_spin=False)
+    mf = {(0, 0, 0): np.diag([0.5, -0.5]).astype(complex)}
+    k = [0.13, 0., 0.]
+    out = []
+    for extra in [dict(mix=0.5), dict(use_jax=True, solver="newton")]:
+        hh, e = h.get_mean_field_hamiltonian(V1=3., nk=10, T=1e-4,
+                maxerror=1e-10, mf=mf, return_total_energy=True,
+                **target, **extra)
+        out.append((hh, np.linalg.eigvalsh(hh.get_hk_gen()(k)), e))
+    (h_np, b_np, e_np), (h_jax, b_jax, e_jax) = out
+    assert np.max(np.abs(b_np - b_jax)) < 1e-7
+    assert abs(e_np - e_jax) < 1e-7
+    assert hasattr(h_np, "fermi") == hasattr(h_jax, "fermi")
+    if "filling" in target:
+        assert abs(h_np.fermi - h_jax.fermi) < 1e-7

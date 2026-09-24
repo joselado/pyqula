@@ -929,8 +929,21 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
         hop_final[d] = m
     h_final = h1.copy()
     set_hoppings(h_final, hop_final)
-    etot_band = float(jnp.sum(occ * es) / ks.shape[0])
-    etot = etot_band + get_dc_energy(v_np, dm_np)
+    # Measure the returned Hamiltonian from the Fermi level, as the numpy
+    # engine's callback_h (densitydensity.densitydensity) does: a filling
+    # target sets h.fermi and shifts by it, a fixed mu only shifts by mu and
+    # leaves .fermi unset. The total energy then comes from the same
+    # h.get_total_energy call on the shifted h, plus the fermi*N add-back for
+    # a filling target, rather than from sum(occ*es) on the unshifted
+    # spectrum, which is off by mu*N at a fixed nonzero mu.
+    # vjinteraction_jax.generic_vjinteraction_jax does the same
+    if n_occ_total is not None:
+        h_final.fermi = final_mu
+    h_final.shift_fermi(-final_mu)
+    etot = h_final.get_total_energy(nk=nk)
+    if n_occ_total is not None:
+        etot += h_final.fermi * n * filling
+    etot = float(np.real(etot)) + float(np.real(get_dc_energy(v_np, dm_np)))
     scf = SCF()
     scf.hamiltonian = h_final
     scf.hamiltonian.V = v
