@@ -1984,6 +1984,8 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
                                             solver="newton")
 ```
 
+The accepted names are `"newton"`, `"newton_krylov"`, `"fsolve"`, `"error_gradient"` (also called `"levenberg_marquardt"`), `"lbfgs"`, `"broyden_mixing"` and `"linear_mixing"` (also called `"fixed_point"`), the same for the spinful and the spinless mean-field functions, and an unknown name raises `ValueError` listing them. Without `use_jax=True` the loop is plain mixing, so `solver=` is read only together with it, and passing it alone raises `NotImplementedError` rather than being ignored.
+
 See the notebooks `03_spin_spin_exchange.ipynb`, `11_kpm_scf.ipynb` and `12_jax_scf_solvers.ipynb` in the folder above for executed versions of the three.
 
 All of the spin-spin exchange functions above also work on Bogoliubov-de Gennes (Nambu) Hamiltonians, set up with `h.turn_nambu()` or `h.setup_nambu_spinor()`, where the exchange channels are decoupled in the normal and in the anomalous channel, exactly as $U$/$V_1$/$V_2$/$V_3$ are. Exchange can therefore induce superconducting pairing on its own: an antiferromagnetic isotropic $J$, with no $U$ or $V$ at all, can decouple spontaneously into a purely superconducting singlet-paired state, the resonating-valence-bond mechanism behind exchange-driven superconductivity, while the ferromagnetic sign has no such tendency and stays magnetic. That instability has to be seeded coherently, with `h.add_swave(0.1)` on top of the Hamiltonian passed as `mf`, since a random guess has little overlap with it and usually relaxes back to zero pairing. A state carrying both magnetic and superconducting order can also emerge from an exchange field combined with an attractive $V_1$, as below. The total energy returned with `return_total_energy=True` subtracts the double counting of the pairing mean field as well as of the normal one, so it is the mean-field energy of the paired state, and comparing it with the energy of an unpaired solution of the same interaction tells you which of the two is the ground state at the mean-field level:
@@ -2518,6 +2520,8 @@ h = g.get_hamiltonian()
 hscf,e = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro",
         nk=8,maxerror=1e-4,return_total_energy=True,integration="qtci")
 ```
+
+In a metal the density matrix has a step at the Fermi surface, and a quadrature rule integrates a step slowly. The Fermi level is located on the same quadrature nodes the density matrix is integrated on, and the total energy is summed on them too, so that the charge and the energy belong to one another. At a temperature close to zero, however, the charge can only change by one level on those nodes at a time, and on a lattice with high symmetry, where the nodes come in groups related by the symmetry, that step is coarse: a square lattice at `filling=0.3` and `nk=8` holds 0.64 electrons per site instead of 0.6. A small finite temperature, such as `T=0.05`, smooths the step and brings the charge back to the requested filling. For a gapped system none of this applies, and qtci and the k-mesh sum agree. Note also that in two dimensions the density-matrix path ends up evaluating every node of the quadrature grid, so it is not cheaper than the k-mesh sum there.
 
 The tensor cross interpolation itself is a pure-Python port of
 `TensorCrossInterpolation.jl`, bundled with pyqula, so nothing extra needs installing. Note

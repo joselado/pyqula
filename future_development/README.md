@@ -32,6 +32,14 @@ already reached once.
   finding each one backs. Evidence, not a test suite: they print numbers a human
   reads and none of them asserts.
 
+- [`bug_audit_3.md`](bug_audit_3.md) -- the third sweep, aimed at the five
+  areas the second one left unexercised (the jax SCF solvers, the 3D superfluid
+  weight, the qtci SCF backend, Broyden mixing and the per-site filling): 18
+  findings, **16 fixed**, each with a regression test that fails on the unfixed
+  source. Read its list of user-visible changes before upgrading -- one of them
+  is breaking. It also records why the qtci backend was kept although its cross
+  interpolation compresses nothing in 2D, and where a fourth sweep should start.
+
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
   be made the other: three findings that are decisions rather than repairs (the

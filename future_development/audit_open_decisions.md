@@ -175,6 +175,12 @@ is more code but restores a real convergence assertion.
 
 ## 3. Where a third sweep should start
 
+**Done on 24 September 2026.** Every area below except the bond pairing
+prefactor, already closed, was swept in [`bug_audit_3.md`](bug_audit_3.md): 18
+findings, 16 fixed, the qtci backend kept by the maintainer's decision. That
+file's last section says where a fourth sweep should start. The list is kept
+as it was written, as the record of what the third sweep was aimed at.
+
 The eight lenses each recorded what they did not reach, in section 4 of
 [`bug_audit_2.md`](bug_audit_2.md). The largest gaps named there, in rough order
 of how much is unexamined:
