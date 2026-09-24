@@ -5653,7 +5653,7 @@ Optional arguments:
 - write=True, output_folder="QPI_IMPURITY": also write the MULTIQPI-style disk output
 
 ### h.get_spin_splitting_density()
-Compute the energy-resolved spin splitting of a collinear magnet as a smooth weighted density: every band pair contributes its squared splitting, broadened, at the mean energy of the pair. Returns `(energies,values)`.
+Compute the energy-resolved spin splitting of a collinear magnet as a smooth weighted density: every band pair contributes its squared splitting, broadened by a Lorentzian of unit area at the mean energy of the pair, so that the integral over energy is the squared splitting summed over bands and averaged over the Brillouin zone. Returns `(energies,values)`.
 
 Optional arguments:
 

@@ -225,3 +225,25 @@ def test_folding_is_harmless_when_the_splitting_is_k_independent():
                                                                   nbins=200)[1]
     assert np.isclose(d1.max(), 0.6, atol=1e-10)
     assert np.isclose(d2.max(), 0.6, atol=1e-10)  # folding changes nothing here
+
+
+def test_spin_splitting_density_integrates_to_the_squared_splitting():
+    """The density broadens every band pair's squared splitting with a
+    unit-area Lorentzian, so its integral over energy is the squared
+    splitting summed over bands and averaged over the zone. It used to be
+    pi times that, the one spectral routine that kept calculate_dos's
+    factor of pi."""
+    from pyqula import specialhamiltonian
+    from pyqula.klist import kmesh
+    h = specialhamiltonian.square_altermagnet(am=1.)
+    nk = 8
+    es = np.linspace(-40., 40., 40001)
+    xs, ys = h.get_spin_splitting_density(nk=nk, delta=0.2, energies=es)
+    integral = np.trapezoid(ys, xs)
+    hup = h.copy(); hup.remove_spin(channel="up")
+    hdn = h.copy(); hdn.remove_spin(channel="dn")
+    ref = np.mean([np.sum((np.sort(np.linalg.eigvalsh(hup.get_hk_gen()(k)))
+            - np.sort(np.linalg.eigvalsh(hdn.get_hk_gen()(k))))**2)
+            for k in kmesh(2, nk=nk)])
+    # the Lorentzian tails beyond +-40 hold 2*0.2/(pi*40) ~ 0.3% of it
+    assert abs(integral/ref - 1.) < 1e-2

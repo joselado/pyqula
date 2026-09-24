@@ -119,7 +119,8 @@ judgement calls that were made one way and could reasonably be made the other:
   not moved. Never a defect.
 - **#67** (the AAA convergence criterion) -- the behaviour is exactly what
   `SelfenergyAAA`'s docstring documents, and this file's own entry classifies it
-  as within contract. Changing what `converged=True` means is a contract change.
+  as within contract. Changing what `converged=True` means is a contract change,
+  which the maintainer made on 2026-09-24.
 - **#72** (GPU Tier 2) -- `documentation/gpu_porting_plan.md` requires explicit
   per-tier sign-off, and the crossover sweep it asks for needs a GPU to measure.
 
@@ -144,6 +145,13 @@ relying on the broken path will see a difference:
   a message naming the requirement: a spinless-Nambu junction's dI/dV, an
   operator-projected `precise_chern` in Wilson mode, an unimplemented
   non-Hermitian LDOS mode, and `frand` outside KPM mode.
+- Two of the decisions below were taken on 2026-09-24 and move numbers too.
+  **Breaking:** every value `h.get_spin_splitting_density()` returns is pi
+  times smaller, since it now divides out `calculate_dos`'s factor of pi like
+  the rest of the family. `SelfenergyAAA.converged` now means a local
+  relative error, so a fit that used to pass can report `False`, and then
+  `dc_current`, `didv` and the sweeps fall back to direct solves: slower, not
+  wrong. See `audit_open_decisions.md` sections 1.2 and 2.1.
 
 Roughly 28 assertions across ~20 test files were rewritten (#58), because they
 pinned `sum(bands)`, which is `Tr H(k)` and therefore zero for any hopping
@@ -157,7 +165,8 @@ strengthened.
 **Two judgement calls made by the orchestrator rather than by a finding**, so
 they are easy to reverse if the maintainer disagrees:
 
-- `fermisurfacetk/spinsplitting.py`'s missing `1/pi` was left alone. It is the
+- `fermisurfacetk/spinsplitting.py`'s missing `1/pi` was left alone (since
+  divided out, on the maintainer's call of 2026-09-24). It is the
   last member of the `calculate_dos` family that does not divide, but unlike the
   others it reports a splitting-weighted spectral density whose absolute scale
   is a convention rather than a sum rule, and no finding claims it is wrong.
@@ -2928,7 +2937,7 @@ tol=0.001 converged=True  max_abs=1.910e-01  max_rel(/max|Sigma|=10.365)=1.843e-
 tol=1e-06 converged=True  max_abs=1.448e-04  max_rel(/max|Sigma|=10.365)=1.397e-05
 ```
 
-**Status:** **not a repair** / left open. Remainder reported by the fixing agent: A design decision rather than a repair, and I am leaving the contract alone. The criterion is exactly what SelfenergyAAA's docstring documents ("against `tolerance` (relative to the largest sampled |Sigma|)"), and the audit itself classifies it as within contract. What it bounds -- the absolute self-energy error, scaled once per window -- is the quantity dc_current integrates over its sideband window, and the shipped default tolerance=1e-3 was tuned against dc_current's own current-convergence target (see the docstring and keldyshtk/current.py's discussion at :1335-1355); the measured end-to-end impact on the same fixture was 2e-3. Switching to a per-energy relative norm would make the same `tolerance` number mean a different thing in every window (typically ~5x stricter on the audit's fixture, where a band-edge near-singularity sets max|Sigma|=10.4 against a typical |Sigma|~2), which would flip `converged` flags that are consumed as a fallback switch in keldyshtk/current.py:1158 and :1520, keldyshtk/current_jax.py:592 and transporttk/didv.py:170 -- files I do not own and cannot fully test without running tests/keldysh whole. I would only make that change with the shipped Keldysh fixtures' converged flags measured before and after, and with the docstring's stated contract rewritten alongside, which is a maintainer decision rather than a bug fix.
+**Status:** **not a repair** / left open. Remainder reported by the fixing agent: A design decision rather than a repair, and I am leaving the contract alone. The criterion is exactly what SelfenergyAAA's docstring documents ("against `tolerance` (relative to the largest sampled |Sigma|)"), and the audit itself classifies it as within contract. What it bounds -- the absolute self-energy error, scaled once per window -- is the quantity dc_current integrates over its sideband window, and the shipped default tolerance=1e-3 was tuned against dc_current's own current-convergence target (see the docstring and keldyshtk/current.py's discussion at :1335-1355); the measured end-to-end impact on the same fixture was 2e-3. Switching to a per-energy relative norm would make the same `tolerance` number mean a different thing in every window (typically ~5x stricter on the audit's fixture, where a band-edge near-singularity sets max|Sigma|=10.4 against a typical |Sigma|~2), which would flip `converged` flags that are consumed as a fallback switch in keldyshtk/current.py:1158 and :1520, keldyshtk/current_jax.py:592 and transporttk/didv.py:170 -- files I do not own and cannot fully test without running tests/keldysh whole. I would only make that change with the shipped Keldysh fixtures' converged flags measured before and after, and with the docstring's stated contract rewritten alongside, which is a maintainer decision rather than a bug fix. **Decided on 2026-09-24**: converged now means a local relative error with the broadening as its floor, in the validation and in the fit's own stopping rule; see `audit_open_decisions.md` section 1.2.
 
 ### 68. gauss_inverse cannot return off-diagonal blocks when the block sizes differ, although landauer's own comment advertises that support
 

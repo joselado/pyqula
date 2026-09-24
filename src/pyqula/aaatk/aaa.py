@@ -23,14 +23,21 @@ import numpy as np
 from numba import jit
 
 
-def aaa(F, Z, tol=1e-13, mmax=100):
+def aaa(F, Z, tol=1e-13, mmax=100, scale=None):
     """Fit a barycentric rational interpolant to F=f(Z).
 
     `F`, `Z`: complex arrays of equal length (function values, sample
-    points). `tol`: relative stopping tolerance (relative to max|F|) on
-    the residual at points not yet chosen as support points. `mmax`: hard
+    points). `tol`: relative stopping tolerance (relative to `scale`, max|F|
+    when `scale` is None) on the residual at points not yet chosen as
+    support points. `mmax`: hard
     cap on the number of support points (safety net if `f` isn't well
     approximated by any modest-order rational function over this domain).
+    `scale`: optional positive array, one entry per sample point, that
+    replaces max|F| as the size the residual is measured against at that
+    point, both when picking the next support point and in the stopping
+    test; with a local scale the fit is accurate relative to the function
+    where it is small too, not only relative to its largest value. None
+    keeps the standard algorithm.
 
     Returns `(r, zj, fj, w, errvec)`: `r` is the callable interpolant
     (accepts a scalar or array of evaluation points), `zj`/`fj` the chosen
@@ -43,6 +50,8 @@ def aaa(F, Z, tol=1e-13, mmax=100):
     M = len(Z)
     Fmax = np.max(np.abs(F))
     if Fmax == 0.: Fmax = 1.
+    if scale is None: scale = Fmax*np.ones(M)
+    scale = np.asarray(scale, dtype=np.float64)
 
     J = list(range(M))                          # candidates not yet chosen
     zj = np.zeros(0, dtype=np.complex128)
@@ -53,7 +62,7 @@ def aaa(F, Z, tol=1e-13, mmax=100):
 
     mmax = min(mmax, M)
     for _ in range(mmax):
-        jj = int(np.argmax(np.abs(F[J] - R[J])))
+        jj = int(np.argmax(np.abs(F[J] - R[J])/scale[J]))
         j = J.pop(jj)
         zj = np.append(zj, Z[j])
         fj = np.append(fj, F[j])
@@ -75,9 +84,9 @@ def aaa(F, Z, tol=1e-13, mmax=100):
             R = (C @ (w * fj)) / (C @ w)
         R[np.isin(Z, zj)] = np.nan  # placeholders at support points, unused below
 
-        err = np.max(np.abs(F[J] - R[J])) if J else 0.0
-        errvec.append(err)
-        if err <= tol * Fmax:
+        res = np.abs(F[J] - R[J])
+        errvec.append(np.max(res) if J else 0.0)
+        if not J or np.max(res/scale[J]) <= tol:
             break
 
     return _BarycentricRational(zj, fj, w), zj, fj, w, errvec

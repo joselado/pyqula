@@ -47,9 +47,11 @@ already reached once.
   be made the other: three findings that are decisions rather than repairs (the
   QGT batching, since decided by returning the non-Abelian tensor in the
   gauge-independent orbital basis, what the AAA's `converged` flag
-  should mean, GPU Tier 2), three judgement calls (the one normalization
-  deliberately left, the aliasing sibling since resolved by making the
-  public `get_multicell` copy, and the one assertion deliberately weakened),
+  should mean, since decided as a local relative error with the broadening
+  as its floor, and GPU Tier 2, still open), three judgement calls (the one
+  normalization deliberately left, since divided out, the aliasing sibling
+  since resolved by making the public `get_multicell` copy, and the one
+  assertion deliberately weakened, since restored by pinning the gauge),
   and where a third sweep should start (the bond pairing prefactor since
   pinned by a stationarity test).
 

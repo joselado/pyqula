@@ -34,7 +34,14 @@ def average_spin_splitting(h,nk=20,tol=algebra.error):
 
 
 def spin_splitting_density(h,nk=20,energies=None,delta=1e-2,tol=algebra.error):
-    """Compute the average spin splitting in the BZ"""
+    """Energy-resolved spin splitting as a smooth density: every band pair
+    contributes its squared splitting (e_up - e_dn)^2, broadened by a
+    unit-area Lorentzian of width delta at its mean energy, averaged over
+    the Brillouin zone. Its integral over energy is therefore the squared
+    splitting summed over bands and averaged over k. calculate_dos returns
+    pi times a sum of unit-area Lorentzians, so it is divided by pi here, as
+    every density of states in the package is; this one used to keep the
+    factor."""
     if energies is None: energies = np.linspace(-3.0,3.0,400)
     check_collinear(h,tol=tol) # refuse rather than return a wrong number
     hup = h.copy() ; hup.remove_spin(channel="up")
@@ -50,8 +57,7 @@ def spin_splitting_density(h,nk=20,energies=None,delta=1e-2,tol=algebra.error):
         edn = np.sort(algebra.eigvalsh(hkdn(k))) # eigenvalues for dn
         de = (eup-edn)**2 # square difference
         ea = (eup + edn)/2. # average
-        return calculate_dos(ea,energies,delta,w=de)
-#        return np.sum(np.sqrt(de)) # square root
+        return calculate_dos(ea,energies,delta,w=de)/np.pi
     out = np.mean([am(k) for k in ks],axis=0) # average altermagnetism
     return energies,out # return result
 

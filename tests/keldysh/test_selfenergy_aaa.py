@@ -212,3 +212,43 @@ def test_build_selfenergy_aaa_shares_one_fit_for_a_symmetric_junction():
     lp = _superconducting_localprobe()
     interp_lp = build_selfenergy_aaa(lp, 0.02, 4, tolerance=1e-2)
     assert interp_lp[0] is not interp_lp[1]
+
+
+def _non_hermitian_two_orbital_chain():
+    """A two-orbital lead with a generic complex inter-cell block, whose
+    self-energy has a band-edge peak of |Sigma|~10 in [-3.5,3.5] and is
+    four to a thousand times smaller elsewhere."""
+    from pyqula.multihopping import MultiHopping
+    rs = np.random.RandomState(1)
+    T = 0.6*(rs.randn(2, 2)+1j*rs.randn(2, 2))
+    rs = np.random.RandomState(2)
+    A = 0.4*(rs.randn(2, 2)+1j*rs.randn(2, 2))
+    h = geometry.chain().get_supercell(2).get_hamiltonian(has_spin=False)
+    h.set_multihopping(MultiHopping({(0, 0, 0): A+A.conj().T,
+            (1, 0, 0): T, (-1, 0, 0): T.conj().T}))
+    return h
+
+
+def test_selfenergy_aaa_converged_means_locally_accurate():
+    """converged=True must mean the fit is within `tolerance` of the self-
+    energy where it is evaluated, not of its largest value in the window.
+    The criterion used to be relative to the window maximum, and on this
+    lead it reported converged=True with a 10% error at E~1.4, where |Sigma|
+    is small against its band-edge peak; the fit's own stopping rule had the
+    same normalization. Checked against direct solves on a grid the fit
+    never saw, relative to |Sigma| there with the broadening as the floor."""
+    h = _non_hermitian_two_orbital_chain()
+    ht = heterostructures.build(left=h, right=h, central=[h])
+    delta = 1e-4
+    get_se = lambda e: ht.get_selfenergy(e, lead=0, delta=delta,
+            pristine=True, numba=True)
+    get_se_batch = lambda es: ht.get_selfenergy_batch(es, lead=0,
+            delta=delta, pristine=True)
+    interp = SelfenergyAAA(get_se, 2, -3.5, 3.5, delta, tolerance=1e-3,
+            get_selfenergy_batch=get_se_batch)
+    assert interp.converged
+    es = np.linspace(-3.4, 3.4, 401)
+    true = np.array(get_se_batch(es))
+    err = np.max(np.abs(interp.call_batch(es)-true), axis=(1, 2))
+    local = np.max(np.abs(true), axis=(1, 2))
+    assert np.max(err/(local+delta)) < 1e-3 # 9e-5 when measured, 0.1 before

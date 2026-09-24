@@ -9,6 +9,11 @@ Nothing here is a bug waiting to be squashed. Each is a question with a real
 trade-off behind it, which is exactly why the fix pass stopped rather than
 guessing.
 
+On 2026-09-24 the maintainer decided three of the ones still open: the AAA
+`converged` flag (1.2), the factor of pi (2.1) and the weakened assertion
+(2.3); each section says what was chosen and what it changed. GPU Tier 2
+(1.3) is the one left open.
+
 ---
 
 ## 1. Three findings that are decisions, not repairs
@@ -70,6 +75,49 @@ that care, or switch to a mixed absolute/relative criterion
 now need more support points. If the latter, the AAA suites will need their
 tolerances revisited together, not one at a time.
 
+**Decided on 2026-09-24: the mixed criterion.** A fit is converged when at
+every validation energy the largest entry of |Sigma_fit - Sigma| is below
+`atol + tolerance*|Sigma|`, with |Sigma| the largest entry of the true
+self-energy at that energy. `atol` defaults to `tolerance*delta`, the
+broadening: a Green's function with broadening delta has |G|<=1/delta, so an
+error in Sigma below `tolerance*delta` moves it by less than a fraction
+`tolerance` of itself, and below that asking for relative accuracy means
+nothing. `validation_error` is now that local relative error,
+max |Sigma_fit - Sigma|/(atol/tolerance + |Sigma|).
+
+Changing the validation alone was not enough. On the audit's two-orbital
+lead the fit then never converged: refinement ran to `ncand_max=20000` with
+the local error stuck at 15%, because `aaa()` stops once its residual is
+below its tolerance times the largest |F| of the entry, so where |Sigma| is
+small the fit is never asked to be accurate. `aaa()` now takes an optional
+`scale`, one positive number per sample point, which replaces max|F| both in
+the greedy choice of the next support point and in the stopping test (the
+least-squares step is unchanged, and `scale=None` is the standard
+algorithm), and `SelfenergyAAA` passes the same floored local |Sigma| the
+validation uses.
+
+Measured on the leads of the reproduction, tolerance 1e-3, delta 1e-4, the
+local relative error on a 401-point grid the fit never saw:
+
+| Lead | Before | After | True solves before/after |
+| --- | --- | --- | --- |
+| single-orbital chain | 8.6e-5 | 6.9e-5 | 2385 / 2385 |
+| two-orbital, the audit's (seeds 1, 2) | 1.05e-1, converged=True | 9.0e-5 | 2385 / 3481 |
+| two-orbital, seeds 3, 4 | 2.4e-4 | 6.7e-5 | 3481 / 3481 |
+
+The audit's lead costs 46% more true solves and its build went from 1.7 s to
+13.7 s, the price of a flag that now means what it says. The 40 AAA-related
+tests (`tests/keldysh/test_selfenergy_aaa*.py`, `test_shared_selfenergy_sweeps.py`,
+`test_kappa_finite_temperature.py`, `test_current_jax.py` and
+`tests/green/test_rg_batch_thread_safety.py`) all pass unchanged, in 600 s
+against 386 s before, 1.55x. The cost falls on the superconducting leads: the
+catastrophic-cancellation dI/dV test went from 29 s to 69 s and the
+`nmax_max=40` current sweep from 32 s to 68 s, while
+`test_build_selfenergy_aaa_matches_direct_dc_current` went from 50 s to 37 s.
+The margin between the fit's own tolerance and the validation's
+(`aaa_tolerance=0.1*tolerance`) was kept at 10x; it is the first knob to
+revisit if the build cost matters more than that margin.
+
 ### 1.3 GPU Tier 2
 
 `documentation/gpu_porting_plan.md` requires explicit per-tier sign-off, and
@@ -110,6 +158,13 @@ consistency.
 **If it should change**: dividing by pi makes its energy integral the mean
 squared splitting per cell, which is at least an interpretable quantity. That is
 the argument for doing it. It is a one-line change plus whatever pins it.
+
+**Decided on 2026-09-24: divide.** `spin_splitting_density` now divides by pi,
+so its integral over energy is the squared splitting summed over bands and
+averaged over the zone, and every value it returns is pi times smaller than
+before. `test_spin_splitting_density_integrates_to_the_squared_splitting`
+pins that integral on the square altermagnet to 1%, the tails beyond the
+window holding 0.3% of it, and gives 3.13 times it on the unfixed source.
 
 ### 2.2 `multicell.turn_multicell` still aliases
 
@@ -170,6 +225,16 @@ look at, and that judgement is carried here rather than left in a diff. **If the
 weakening is not acceptable**, the alternative is to fix the gauge explicitly in
 the test (pin the phase of one bond and assert convergence of the rest), which
 is more code but restores a real convergence assertion.
+
+**Decided on 2026-09-24: pin the phase.** The test passes a `callback_mf` that
+makes the whole bond, bare hopping plus mean field, real at its largest entry
+after every mixing step, which is exactly the gauge freedom and nothing more,
+and it asserts `scf2.converged` again: the run converges to E=-0.697426 with no
+moment, where without the pin it stops unconverged at -0.695556. `SxSx` and
+`SySy` could not take a `callback_mf` before, since they pass their own to
+`SzSz` for the constrains and a second one collided with it as a `TypeError`;
+they now accept one, applied in the laboratory frame after the constrains, as
+`SzSz` does.
 
 ---
 

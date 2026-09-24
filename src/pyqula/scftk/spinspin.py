@@ -179,7 +179,7 @@ def _rotate_mf_guess(h0, axis, mf, **fwd):
     return {d: _gsr(m, **fwd) for (d, m) in mf.items()}
 
 
-def _rotated_constrains_callback(h0, constrains, fwd, bwd):
+def _rotated_constrains_callback(h0, constrains, fwd, bwd, callback_mf=None):
     """Build a callback_mf that enforces `constrains` in the LAB frame (as
     the user expects -- e.g. "no_offplane_magnetism" meaning the real z
     axis) even though the mean field iterate SzSz(hr,...) actually mixes
@@ -187,14 +187,19 @@ def _rotated_constrains_callback(h0, constrains, fwd, bwd):
     z axis. Passing `constrains` straight through to the inner SzSz call
     would enforce it against the ROTATED frame's z axis instead -- e.g.
     "no_offplane_magnetism" under SxSx would silently constrain the
-    physical x component (computational z in that frame), not z."""
-    if not constrains: return None
+    physical x component (computational z in that frame), not z.
+
+    A caller's own `callback_mf`, which SzSz accepts too, is applied in the
+    lab frame as well, after the constrains."""
+    if not constrains and callback_mf is None: return None
     from . import mfconstrains
-    def callback_mf(mf_rot):
+    def callback_rot(mf_rot):
         mf_lab = _rotate_dict(mf_rot, **bwd) # mf lives in Hamiltonian convention
-        mf_lab = mfconstrains.enforce_constrains(mf_lab, h0, constrains)
+        if constrains:
+            mf_lab = mfconstrains.enforce_constrains(mf_lab, h0, constrains)
+        if callback_mf is not None: mf_lab = callback_mf(mf_lab)
         return _rotate_dict(mf_lab, **fwd) # back into the rotated SCF's frame
-    return callback_mf
+    return callback_rot
 
 
 def _rotated_axis_exchange(h, axis, J1, J2, J3, Jr, constrains, **kwargs):
@@ -208,7 +213,8 @@ def _rotated_axis_exchange(h, axis, J1, J2, J3, Jr, constrains, **kwargs):
     hr.global_spin_rotation(**fwd) # rotate so that `axis` becomes computational z
     mf0 = kwargs.pop("mf", None)
     mf_rot = _rotate_mf_guess(h0, axis, mf0, **fwd)
-    callback_mf = _rotated_constrains_callback(h0, constrains, fwd, bwd)
+    callback_mf = _rotated_constrains_callback(h0, constrains, fwd, bwd,
+            callback_mf=kwargs.pop("callback_mf", None))
     scf = SzSz(hr, J1, J2, J3, Jr, mf=mf_rot, callback_mf=callback_mf, **kwargs)
     if scf.hamiltonian is not None:
         v = scf.hamiltonian.V # the Ising matrix, in the rotated frame

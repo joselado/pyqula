@@ -134,20 +134,29 @@ def test_sxsx_constrains_apply_in_the_lab_frame():
         "no_offplane_magnetism should not remove the (lab-frame) x order"
 
     h2 = g.get_hamiltonian(has_spin=True)
-    scf2 = meanfield.SxSx(h2, J1=-2.0, mf="ferroX", nk=10, maxerror=MAXERROR,
-            mix=0.3, maxite=300, filling=0.2,
-            constrains=["no_inplane_magnetism"])
-    # no `converged` assertion here, unlike scf1 above: once the constrain
-    # is enforced on the BOND mean field too (it has to be -- a
-    # spin-dependent hopping magnetizes the state even with a
+    # once the constrain is enforced on the BOND mean field too (it has to
+    # be -- a spin-dependent hopping magnetizes the state even with a
     # spin-symmetric onsite term), this run has no magnetic channel left
     # and settles onto a complex bond order whose PHASE is an exact flat
     # direction -- on a chain, t1 -> t1*exp(i*phi) is just a rigid shift of
     # the dispersion in k, so every phase has the same energy at fixed
-    # filling. |mf| converges (0.09541 here) while the phase cycles, so
-    # plain linear mixing never meets maxerror at any mix. What the test is
-    # about -- which axis the constrain acts on -- is unaffected.
-    assert scf2.hamiltonian is not None
+    # filling, and plain linear mixing lets it drift and never meets
+    # maxerror. Pinning that gauge, the whole bond t1+mf made real at its
+    # largest entry, leaves a loop that does converge
+    t = h2.get_dict()
+    def pin_bond_phase(mf):
+        out = dict(mf)
+        bond = t[(1, 0, 0)] + mf[(1, 0, 0)]
+        i = np.unravel_index(np.argmax(np.abs(bond)), bond.shape)
+        phase = bond[i]/abs(bond[i])
+        out[(1, 0, 0)] = bond/phase - t[(1, 0, 0)]
+        out[(-1, 0, 0)] = (t[(-1, 0, 0)] + mf[(-1, 0, 0)])*phase \
+                - t[(-1, 0, 0)]
+        return out
+    scf2 = meanfield.SxSx(h2, J1=-2.0, mf="ferroX", nk=10, maxerror=MAXERROR,
+            mix=0.3, maxite=300, filling=0.2,
+            constrains=["no_inplane_magnetism"], callback_mf=pin_bond_phase)
+    assert scf2.converged
     m2 = np.mean(np.abs(
         scf2.hamiltonian.get_magnetization(mode="field")), axis=0)
     assert np.max(m2) < 1e-3, \

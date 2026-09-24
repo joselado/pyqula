@@ -221,8 +221,25 @@ class SelfenergyAAA:
     points drawn uniformly at random across the *whole* `[emin,emax]`
     window (independent of where the candidates sit, so genuinely
     off-sample and not confined to the immediate neighborhood of an
-    existing candidate) -- against `tolerance` (relative to the largest
-    sampled |Sigma|). If any entry's fit saturated its support-point
+    existing candidate). The fit counts as converged when at every
+    validation energy the largest entry of |Sigma_fit - Sigma| is below
+    `atol + tolerance*|Sigma|`, with |Sigma| the largest entry of the true
+    self-energy at that same energy, so `tolerance` is a relative error of
+    the self-energy where it is evaluated, not of its largest value in the
+    window. It used to be the latter, which let a lead whose window holds a
+    band-edge peak of |Sigma|~10 report converged=True with a 7.7% error
+    where |Sigma|~2.5. `atol` defaults to `tolerance*delta`: an error in
+    Sigma below that changes a Green's function with broadening `delta`,
+    |G|<=1/delta, by less than a fraction `tolerance` of itself, so it is
+    where asking for relative accuracy stops meaning anything, near a zero
+    of Sigma. `validation_error` is the largest
+    |Sigma_fit - Sigma|/(atol/tolerance + |Sigma|) over the validation
+    energies, the number compared with `tolerance`. Each entry's own AAA fit
+    is measured against the same floored local |Sigma| (aaa's `scale`):
+    stopped relative to its largest value instead, it was never asked to be
+    accurate where Sigma is small, and the validation above then refined
+    the grid to `ncand_max` without converging. If any entry's fit
+    saturated its support-point
     budget (used every one of `mmax`, the signature of "not enough poles
     allowed", not "not enough samples"), `mmax` is escalated first;
     otherwise the candidate grid is refined via `_refine_grid`, which
@@ -251,8 +268,9 @@ class SelfenergyAAA:
                  tolerance=1e-3, ncand0=None, ncand_max=20000,
                  nvalidate=32, mmax0=100, mmax_max=400, aaa_tolerance=None,
                  maxrounds=20, refine_growth=0.5, get_selfenergy_batch=None,
-                 **kwargs):
+                 atol=None, **kwargs):
         if emax <= emin: raise ValueError("emax must be > emin")
+        if atol is None: atol = tolerance*delta # see the docstring
         self.dim = dim
         self.emin, self.emax = emin, emax
         if ncand0 is None: ncand0 = default_ncand(emax-emin, delta)
@@ -301,6 +319,10 @@ class SelfenergyAAA:
         converged = False
         for _round in range(maxrounds):
             Fmats = full_matrix_many(Z)
+            # each entry's fit is measured against |Sigma| at each candidate,
+            # floored as in the validation below, so that it is accurate
+            # where the self-energy is small too
+            local = atol/tolerance + np.max(np.abs(Fmats), axis=(1, 2))
             entries = {}
             saturated = False
             for i in range(dim):
@@ -309,7 +331,8 @@ class SelfenergyAAA:
                     if np.max(np.abs(Fij)) == 0.:
                         entries[(i, j)] = None
                         continue
-                    r, zj, *_ = aaa(Fij, Z, tol=aaa_tolerance, mmax=mmax)
+                    r, zj, *_ = aaa(Fij, Z, tol=aaa_tolerance, mmax=mmax,
+                            scale=local)
                     if len(zj) >= mmax: saturated = True
                     entries[(i, j)] = r
 
@@ -337,13 +360,14 @@ class SelfenergyAAA:
             bulk_val = rng.uniform(emin, emax, nvalidate)
             Zval = np.concatenate([feat_val, bulk_val])
             Trues = full_matrix_many(Zval)
-            denom = max(np.max(np.abs(Trues)), 1e-12)
             maxerr = 0.
             for e, true in zip(Zval, Trues):
                 approx = np.zeros((dim, dim), dtype=np.complex128)
                 for (i, j), r in entries.items():
                     if r is not None: approx[i, j] = r(np.complex128(e))
-                maxerr = max(maxerr, np.max(np.abs(approx-true))/denom)
+                # relative to |Sigma| at this energy, with atol as the floor
+                local = atol/tolerance + np.max(np.abs(true))
+                maxerr = max(maxerr, np.max(np.abs(approx-true))/local)
 
             if maxerr <= tolerance:
                 converged = True
