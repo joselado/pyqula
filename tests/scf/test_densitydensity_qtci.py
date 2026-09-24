@@ -175,3 +175,39 @@ def test_qtci_scf_loop_density_matrix_holds_filling():
     assert len(dms) > 0
     for dm in dms:
         assert abs(np.trace(dm[(0, 0, 0)]).real-0.6) < 0.015
+
+
+
+def test_full_dm_gk_agrees_with_get_dm_qtci_and_fills_every_entry():
+    """full_dm_gk (what scf.dm reports under integration="qtci") is the
+    same quadrature as get_dm_qtci: equal on the entries get_dm_qtci
+    computes, and nonzero where get_dm_qtci left a zero placeholder."""
+    from pyqula.qtcitk.densitymatrix_qtci import full_dm_gk
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=True)
+    h.add_sublattice_imbalance(0.5)
+    n = h.intra.shape[0]
+    v = {(0, 0, 0): np.eye(n, dtype=np.complex128)*0.5} # onsite only
+    dq = get_dm_qtci(h, v, nk=8)
+    full = full_dm_gk(h, [(0, 0, 0)], nk=8)
+    for i in range(n):
+        assert abs(dq[(0, 0, 0)][i, i]-full[(0, 0, 0)][i, i]) < 1e-7
+    assert dq[(0, 0, 0)][0, 2] == 0. # placeholder: v does not read it
+    ref = h.get_density_matrix(ds=[(0, 0, 0)], nk=80)[(0, 0, 0)]
+    assert np.max(np.abs(full[(0, 0, 0)]-ref)) < 1e-3
+
+
+@pytest.mark.slow
+def test_qtci_scf_dm_is_complete():
+    """scf.dm under integration="qtci" must be the full density matrix, not
+    the loop's partial one: the inter-sublattice coherence the Hubbard mean
+    field never reads used to be reported as exactly zero."""
+    from pyqula.scftk.densitydensity import Vinteraction
+    g = geometry.honeycomb_lattice()
+    scf = Vinteraction(g.get_hamiltonian(has_spin=True), U=1.0, filling=0.5,
+            mf="antiferro", nk=6, maxerror=1e-5, integration="qtci",
+            load_mf=False, verbose=0)
+    ref = scf.hamiltonian.get_density_matrix(ds=[(0, 0, 0)], nk=80)[(0, 0, 0)]
+    dm = scf.dm[(0, 0, 0)]
+    assert abs(dm[0, 2]) > 0.2 # A-up/B-up hopping coherence
+    assert np.max(np.abs(dm-ref)) < 1e-2

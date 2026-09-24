@@ -105,6 +105,32 @@ def gk_node_grid(nk=None):
     return kx.ravel(),ky.ravel(),w.ravel()
 
 
+def full_dm_gk(h, ds, nk=None, T=1e-7):
+    """Every entry of the density matrix for the directions ds, as a
+    direct sum over the Gauss-Kronrod node grid get_dm_qtci integrates on
+    (gk_node_grid). get_dm_qtci only computes the entries the mean field
+    reads and leaves the rest at zero; this is the full matrix under the
+    same quadrature, for reporting it once the SCF loop is done. In 2D the
+    cross interpolation samples the whole node grid, so on the entries
+    get_dm_qtci does compute the two agree to its tolerance."""
+    if h.dimensionality != 2:
+        raise NotImplementedError("full_dm_gk only supports 2D "
+                "Hamiltonians, the ones get_dm_qtci integrates; got "
+                "dimensionality=%d"%h.dimensionality)
+    kx,ky,w = gk_node_grid(nk)
+    hk_gen = h.get_hk_gen()
+    norb = h.intra.shape[0]
+    Tsafe = abs(T) if T!=0. else 1e-15
+    ds = [tuple(d) for d in ds]
+    dm = {d: np.zeros((norb,norb),dtype=np.complex128) for d in ds}
+    for (x,y,wk) in zip(kx,ky,w):
+        es,vs = algebra.eigh(hk_gen(np.array([x,y,0.])))
+        p = full_dm_python(es,vs.T,delta=Tsafe) # occupied projector
+        for d in ds:
+            dm[d] += wk*np.exp(2j*np.pi*(x*d[0]+y*d[1]))*p
+    return dm
+
+
 def get_fermi4filling_qtci(h, filling, nk=None, T=1e-7):
     """Fermi energy holding `filling` electrons under the quadrature that
     get_dm_qtci integrates the density matrix with.

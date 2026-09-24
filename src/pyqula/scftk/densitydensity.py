@@ -629,11 +629,18 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     # fraction of each off-diagonal direction's matrix for a large system,
     # and eventually of the onsite one too. Recompute it in full once here,
     # exactly as spinspin._run_anisotropic_scf does at the end of its own
-    # loop; only for the path that actually went sparse (a dense recompute
+    # loop; only for the paths that actually went sparse (a dense recompute
     # would defeat the point of any other integrator)
+    ds = [(0,0,0)] + [d for d in scf.v if d!=(0,0,0)] # every direction
     if integration=="ed" and not h.has_eh:
-        ds = [(0,0,0)] + [d for d in scf.v] # every direction of the mean field
         scf.dm = h.get_density_matrix(ds=ds,nk=h.nk,T=T)
+    elif integration=="qtci":
+        # get_dm_qtci left every entry the mean field does not read at
+        # zero. Recomputed on the same Gauss-Kronrod nodes, not the uniform
+        # mesh: in a metal the two hold different charges at this Fermi
+        # level (see get_fermi4filling_qtci)
+        from ..qtcitk.densitymatrix_qtci import full_dm_gk
+        scf.dm = full_dm_gk(h,ds,nk=h.nk,T=T)
     etot = h.get_total_energy(nk=h.nk)
     if mu is None:
         # electron_dimension, not h.intra.shape[0]: N = filling*(number of
