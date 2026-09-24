@@ -857,94 +857,148 @@ def lbfgs_solve(loss_fn, x0, maxite=2000, tol=1e-5, verbose=0, gtol=None):
     return jnp.asarray(res.x), int(res.nit)
 
 
+# Each use_jax=True solver is one entry here. A runner takes the jitted step,
+# its mu-bound vector form step_vec, the starting x0 and the SolverOptions,
+# and returns (x, iterations, converged). converged=None means the solver has
+# no residual-based notion of its own and solve_scf decides from the
+# residual at the returned x (lbfgs, whose L-BFGS-B stops on a gradient norm).
+
+def _run_newton(step_jit, step_vec, x0, mu, o):
+    return newton_solve(step_vec, x0, maxite=o.maxite, tol=o.maxerror,
+            verbose=o.verbose)
+
+
+def _run_fsolve(step_jit, step_vec, x0, mu, o):
+    return fsolve_solve(step_vec, x0, maxite=o.maxite, tol=o.maxerror,
+            verbose=o.verbose)
+
+
+def _run_newton_krylov(step_jit, step_vec, x0, mu, o):
+    return newton_krylov_solve(step_vec, x0, maxite=o.maxite, tol=o.maxerror,
+            verbose=o.verbose, gmres_tol=o.gmres_tol,
+            gmres_restart=o.gmres_restart)
+
+
+def _run_fixed_point(step_jit, step_vec, x0, mu, o):
+    # the mu fixed_point_solve tracks is superseded by the fresh
+    # step_jit(x, mu) call in solve_scf, so it is dropped here
+    x, _, ite, converged = fixed_point_solve(step_jit, x0, mu, o.dirs, o.n,
+            mix=o.mix, maxite=o.maxite, tol=o.maxerror, verbose=o.verbose,
+            callback_mf=o.callback_mf)
+    return x, ite, converged
+
+
+def _run_lbfgs(step_jit, step_vec, x0, mu, o):
+    residual_loss = jax.jit(lambda x: jnp.sum((step_vec(x) - x) ** 2))
+    x, ite = lbfgs_solve(residual_loss, x0, maxite=o.maxite, tol=o.maxerror,
+            verbose=o.verbose)
+    return x, ite, None
+
+
+def _run_levenberg_marquardt(step_jit, step_vec, x0, mu, o):
+    return levenberg_marquardt_solve(step_vec, x0, maxite=o.maxite,
+            tol=o.maxerror, verbose=o.verbose)
+
+
+def _run_broyden_mixing(step_jit, step_vec, x0, mu, o):
+    # only ever calls step_vec as a black box, which accepts numpy input
+    from .broydenmixing import broyden_mixing_solve
+    x, ite, converged = broyden_mixing_solve(step_vec, x0, maxite=o.maxite,
+            tol=o.maxerror, verbose=o.verbose)
+    return jnp.asarray(x), ite, converged
+
+
+# The use_jax=True solvers, shared by both routes into this engine
+# (Vinteraction through generic_densitydensity_jax, VJinteraction through
+# vjinteraction_jax). Only "fixed_point" works on concrete numpy arrays
+# between iterations, so it is the only one that can apply callback_mf
+_JAX_SOLVERS = {
+        "newton": _run_newton,
+        "fsolve": _run_fsolve,
+        "newton_krylov": _run_newton_krylov,
+        "fixed_point": _run_fixed_point,
+        "lbfgs": _run_lbfgs,
+        "levenberg_marquardt": _run_levenberg_marquardt,
+        "broyden_mixing": _run_broyden_mixing,
+        }
+
+# Names that describe what a solver does rather than the algorithm behind
+# it, documented by spinspin.VJinteraction: "error_gradient" minimizes the
+# SCF residual (currently by Levenberg-Marquardt, previously by L-BFGS-B)
+# and "linear_mixing" is plain linear mixing
+_JAX_SOLVER_ALIASES = {
+        "linear_mixing": "fixed_point",
+        "error_gradient": "levenberg_marquardt",
+        }
+
+_SOLVERS_WITH_CALLBACK_MF = ("fixed_point",)
+
+
+def get_jax_solver_names():
+    """Every solver= name the use_jax=True engine accepts, aliases included"""
+    return sorted(set(_JAX_SOLVERS) | set(_JAX_SOLVER_ALIASES))
+
+
+def resolve_jax_solver(solver):
+    """The registry name behind a solver= value, or ValueError listing the
+    accepted ones"""
+    name = _JAX_SOLVER_ALIASES.get(solver, solver) \
+            if isinstance(solver, str) else solver
+    if name not in _JAX_SOLVERS:
+        raise ValueError("unknown solver %r for use_jax=True; the accepted "
+                "ones are %s" % (solver, ", ".join(repr(s) for s in
+                get_jax_solver_names())))
+    return name
+
+
+class SolverOptions:
+    """The tuning knobs solve_scf passes on to the solver runners"""
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
 def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
         verbose, gmres_tol, gmres_restart, callback_mf=None):
     """Shared solver dispatch for generic_densitydensity_jax's and
     vjinteraction_jax.generic_vjinteraction_jax's use_jax=True paths --
-    drives x0 to a fixed point of step_jit via whichever solver= was
-    requested ("newton"/"fsolve"/"newton_krylov"/"fixed_point"/"lbfgs"/
-    "levenberg_marquardt"/"broyden_mixing"),
-    then evaluates step_jit exactly ONCE more at the converged x to get
-    everything callers need: final_mu, xfinal/dm/es/occ, and (solver=
-    "lbfgs" only, which has no residual-based convergence notion of its
-    own) the SCF-residual convergence check. Previously each of those was
-    computed via its own separate step_jit call in each of the two
-    call sites (up to 3 redundant full Bloch-build+batched-eigh passes for
-    solver="lbfgs" alone) -- see this function's git history for the
-    per-branch version this replaced.
+    drives x0 to a fixed point of step_jit with whichever solver= was
+    requested (any name in get_jax_solver_names(), aliases resolved through
+    resolve_jax_solver), then evaluates step_jit exactly ONCE more at the
+    converged x to get everything callers need: final_mu, xfinal/dm/es/occ,
+    and (solver="lbfgs" only, which has no residual-based convergence
+    notion of its own) the SCF-residual convergence check.
 
     Passing the ORIGINAL mu (not each solver's own possibly-different
     "final" mu) into that single trailing step_jit call is exactly correct:
     when a filling target is active (step_jit was built with n_occ_total
     set) step()'s mu_eff ignores its mu argument entirely and resolves it
     from n_occ_total instead, and for a fixed mu every solver's converged x
-    already has mu_eff == mu by construction (fixed_point_solve's own
-    tracked mu never drifts from the constant mu it started with in that
-    case either).
+    already has mu_eff == mu by construction.
 
-    Returns (x, final_mu, ite, converged, dm, es, occ). callback_mf (only
-    meaningful for solver="fixed_point"; applied on concrete numpy arrays
-    each iteration) raises NotImplementedError for every other solver, which
-    need x to stay a pure jax-traced value throughout."""
-    if solver in ("newton", "fsolve", "newton_krylov", "lbfgs",
-            "levenberg_marquardt", "broyden_mixing"):
-        if callback_mf is not None:
-            raise NotImplementedError("solver=%r cannot apply "
-                    "callback_mf/constrains (they need concrete numpy "
-                    "arrays each iteration, incompatible with jax tracing); "
-                    "use solver=\"fixed_point\" instead" % (solver,))
-        # not wrapped in jax.jit here: step_jit already dispatches into the
-        # cached, once-jitted core built by build_step_function/
-        # _get_step_core (see there) -- an extra jax.jit around this thin
-        # closure would just add its own fresh-per-call compile for no
-        # benefit, since the actual physics computation is already
-        # compiled and shared. jax.jacfwd/jax.jvp/jax.vjp/jax.grad (used
-        # by the solvers below) all work fine tracing through a plain
-        # Python function that calls an already-jitted one.
-        step_vec = lambda x: step_jit(x, mu)[0]
-    if solver == "newton":
-        x, ite, converged = newton_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose)
-    elif solver == "fsolve":
-        x, ite, converged = fsolve_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose)
-    elif solver == "newton_krylov":
-        x, ite, converged = newton_krylov_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose, gmres_tol=gmres_tol,
-                gmres_restart=gmres_restart)
-    elif solver == "fixed_point":
-        # the mu fixed_point_solve itself tracks/returns is superseded by
-        # the fresh step_jit(x, mu) call below (see this function's
-        # docstring), so it is not needed here
-        x, _, ite, converged = fixed_point_solve(step_jit, x0, mu, dirs, n,
-                mix=mix, maxite=maxite, tol=maxerror, verbose=verbose,
-                callback_mf=callback_mf)
-    elif solver == "lbfgs":
-        residual_loss = jax.jit(lambda x: jnp.sum((step_vec(x) - x) ** 2))
-        x, ite = lbfgs_solve(residual_loss, x0, maxite=maxite, tol=maxerror,
-                verbose=verbose)
-        converged = None  # resolved below, once xfinal is available
-    elif solver == "levenberg_marquardt":
-        x, ite, converged = levenberg_marquardt_solve(step_vec, x0,
-                maxite=maxite, tol=maxerror, verbose=verbose)
-    elif solver == "broyden_mixing":
-        # unlike newton/fsolve/newton_krylov/lbfgs, this solver never needs
-        # x to stay a traced jax value between iterations (no jacfwd/jvp/grad
-        # of step_vec involved -- it only ever calls step_vec(x) as a black
-        # box), so grouping it with those above (for the callback_mf check)
-        # is a simplicity choice, not a technical requirement the way it is
-        # for them; step_vec still works fine here since a jax.jit function
-        # accepts plain numpy input and converts internally
-        from .broydenmixing import broyden_mixing_solve
-        x, ite, converged = broyden_mixing_solve(step_vec, x0, maxite=maxite,
-                tol=maxerror, verbose=verbose)
-        x = jnp.asarray(x)
-    else:
-        raise ValueError("unrecognised solver for use_jax=True: %r" % (solver,))
+    Returns (x, final_mu, ite, converged, dm, es, occ). callback_mf (applied
+    on concrete numpy arrays each iteration) is only possible for
+    solver="fixed_point"; every other solver needs x to stay a jax value
+    throughout, and raises NotImplementedError when given one."""
+    name = resolve_jax_solver(solver)
+    if callback_mf is not None and name not in _SOLVERS_WITH_CALLBACK_MF:
+        raise NotImplementedError("solver=%r cannot apply "
+                "callback_mf/constrains (they need concrete numpy "
+                "arrays each iteration, incompatible with jax tracing); "
+                "use solver=\"fixed_point\" instead" % (solver,))
+    # not wrapped in jax.jit here: step_jit already dispatches into the
+    # cached, once-jitted core built by build_step_function/_get_step_core
+    # (see there), and jax.jacfwd/jvp/vjp/grad trace through a plain Python
+    # function calling an already-jitted one without trouble
+    step_vec = lambda x: step_jit(x, mu)[0]
+    options = SolverOptions(dirs=dirs, n=n, maxite=maxite, maxerror=maxerror,
+            mix=mix, verbose=verbose, gmres_tol=gmres_tol,
+            gmres_restart=gmres_restart, callback_mf=callback_mf)
+    x, ite, converged = _JAX_SOLVERS[name](step_jit, step_vec, x0, mu,
+            options)
 
     xfinal, dm, es, occ, final_mu = step_jit(x, mu)
     final_mu = float(final_mu)
-    if solver == "lbfgs":
+    if converged is None:
         # scf.converged still means the same thing here as for every other
         # solver -- the actual SCF residual, not L-BFGS-B's own gradient-norm
         # stopping criterion (see lbfgs_solve's docstring)
@@ -974,11 +1028,12 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     if h0.has_eh:
         raise NotImplementedError("use_jax=True does not support the "
                 "anomalous/BdG mean field yet; use the default (numpy) engine")
-    if solver != "fixed_point" and mix != 0.1:
+    # resolved up front, so a misspelled solver fails before any work
+    if resolve_jax_solver(solver) != "fixed_point" and mix != 0.1:
         # mix only controls solver="fixed_point"'s linear-mixing step -- see
         # vjinteraction_jax.generic_vjinteraction_jax's identical check
         warnings.warn("mix=%r has no effect for solver=%r (only "
-                "solver=\"fixed_point\" uses linear mixing)"
+                "solver=\"fixed_point\"/\"linear_mixing\" uses linear mixing)"
                 % (mix, solver), stacklevel=2)
     if T is None:
         T = default_T_jax

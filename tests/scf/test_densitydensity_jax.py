@@ -300,3 +300,41 @@ def test_densitydensity_jax_returned_hamiltonian_matches_numpy_engine(target):
     assert hasattr(h_np, "fermi") == hasattr(h_jax, "fermi")
     if "filling" in target:
         assert abs(h_np.fermi - h_jax.fermi) < 1e-7
+
+
+def test_jax_solver_names_come_from_one_registry_on_both_routes():
+    """solver= on the use_jax=True engine is a string-selected option, so an
+    unknown name must be refused with the accepted ones listed, and the
+    list must be the registry's (get_jax_solver_names), the same on the
+    spinless route (Vinteraction) and the spinful one (VJinteraction). The
+    two routes used to accept different sets: the spinless one refused
+    "linear_mixing" and "error_gradient", the names VJinteraction
+    documents, and its error listed no names at all."""
+    from pyqula.scftk.densitydensity_jax import (get_jax_solver_names,
+            resolve_jax_solver)
+    from pyqula.scftk.spinspin import VJinteraction
+    names = get_jax_solver_names()
+    assert "linear_mixing" in names and "error_gradient" in names
+    assert resolve_jax_solver("linear_mixing") == "fixed_point"
+    assert resolve_jax_solver("error_gradient") == "levenberg_marquardt"
+    g = geometry.chain().get_supercell(2)
+    hs = g.get_hamiltonian(has_spin=False)
+    hf = g.get_hamiltonian()
+    for call in [lambda: Vinteraction(hs.copy(), V1=2., mu=0., nk=4,
+                    use_jax=True, solver="bogus"),
+            lambda: VJinteraction(hf.copy(), U=2., mu=0., nk=4,
+                    use_jax=True, solver="bogus")]:
+        with pytest.raises(ValueError) as err:
+            call()
+        for name in names:
+            assert repr(name) in str(err.value)
+    # the aliases now work on the spinless route too, and give the same
+    # answer as the names they stand for
+    mf = {(0, 0, 0): np.diag([0.5, -0.5]).astype(complex)}
+    e = {}
+    for solver in ["linear_mixing", "fixed_point"]:
+        scf = Vinteraction(hs.copy(), V1=3., mu=0., nk=10, mf=mf, T=1e-4,
+                mix=0.5, maxerror=1e-8, use_jax=True, solver=solver)
+        assert scf.converged
+        e[solver] = scf.total_energy
+    assert abs(e["linear_mixing"] - e["fixed_point"]) < 1e-10

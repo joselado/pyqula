@@ -170,7 +170,7 @@ from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,
         get_dc_energy, random_hermitian_guess)
 from .densitydensity_jax import (flatten_mf, unflatten_mf, make_bloch_stack,
         get_mf_normal_jax, default_T_jax, solve_scf, fermi_projector,
-        mu_for_filling)
+        mu_for_filling, resolve_jax_solver)
 from .spinspin import _build_v, _build_density_v, _channel_is_zero, _AXIS_ROTATION
 from .mfconstrains import obj2mf
 from ..multihopping import MultiHopping
@@ -328,22 +328,10 @@ def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
     return step
 
 
-# VJinteraction/VJinteraction_jax's own public solver= names differ from
-# the internal dispatch names solve_scf (shared with Vinteraction/
-# densitydensity_jax.py, not renamed here) expects: "error_gradient"
-# describes what the solver does (minimizing the SCF residual, currently via
-# levenberg_marquardt_solve) rather than naming the specific algorithm
-# behind it, so that name can keep meaning the same thing even if the
-# algorithm behind it changes again (as it already has once, from
-# scipy L-BFGS-B to matrix-free Levenberg-Marquardt -- see the module
-# docstring's "solver='error_gradient'" section), and "linear_mixing" names
-# the algorithm itself rather than its role as a
-# baseline/comparison point ("fixed_point"). Translated once at the entry
-# point below so solve_scf's own dispatch (and its "lbfgs"/"fixed_point"
-# checks, shared verbatim with Vinteraction) never needs to know about the
-# VJinteraction-only names.
-_PUBLIC_SOLVER_NAMES = {"error_gradient": "levenberg_marquardt",
-        "linear_mixing": "fixed_point"}
+# The solver= names, including VJinteraction's documented "error_gradient"
+# and "linear_mixing", live in one registry in densitydensity_jax
+# (get_jax_solver_names/resolve_jax_solver), shared with Vinteraction's
+# use_jax=True route so both accept the same set.
 
 
 def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
@@ -357,7 +345,7 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     spinspin._build_v/_build_density_v; vd (density-density) must already be
     folded into vz by the caller, exactly as VJinteraction itself does for
     has_eh=False."""
-    if solver != "linear_mixing" and mix != 0.1:
+    if resolve_jax_solver(solver) != "fixed_point" and mix != 0.1:
         # mix only controls solver="linear_mixing"'s linear-mixing step --
         # newton/fsolve/newton_krylov/error_gradient all use their own
         # backtracking/damping (Levenberg-Marquardt's own lam for
@@ -366,9 +354,8 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
         # it always matters) would otherwise be silently ignored with no
         # signal at all
         warnings.warn("mix=%r has no effect for solver=%r (only "
-                "solver=\"linear_mixing\" uses linear mixing)"
+                "solver=\"linear_mixing\"/\"fixed_point\" uses linear mixing)"
                 % (mix, solver), stacklevel=2)
-    dispatch_solver = _PUBLIC_SOLVER_NAMES.get(solver, solver)
     if T is None:
         T = default_T_jax
     elif T <= 0:
@@ -452,13 +439,13 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     # solver="lbfgs" residual-minimization rationale (this module's own
     # docstring "solver='error_gradient'" section) and why the single
     # trailing step_jit(x, mu) call it makes is exactly correct here too.
-    # dispatch_solver (not the public `solver` name) is what solve_scf sees
-    # -- see _PUBLIC_SOLVER_NAMES above.
+    # solve_scf resolves the solver= aliases ("linear_mixing",
+    # "error_gradient") through the same registry the spinless route uses.
     # callback_mf is never passed (VJinteraction's use_jax=True path has no
     # such hook at all), so solve_scf's NotImplementedError branch for it
     # never triggers here.
     x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
-            dirs, n, dispatch_solver, maxite, maxerror, mix, verbose, gmres_tol,
+            dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
             gmres_restart)
     mf_final = unflatten_mf(x, dirs, n)
     dm_np = {d: np.asarray(dm[d]) for d in dirs}
