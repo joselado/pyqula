@@ -1103,7 +1103,48 @@ this subpackage and is still unbatched.
   Double precision gives only 2x on this card, and n=8192 -- the full BSE
   matrix at npair=4096 -- does not fit: cuSOLVER asked for a 4 GB
   workspace on top of the matrix. Single precision gives ~13x, at an
-  error that lands directly in the exciton energies. So on a consumer
+  error that lands directly in the exciton energies.
+
+  The whole `solve_pseudo_hermitian` chain (symmetrize, Cholesky,
+  `L^dag S L`, `eigh`, triangular solve) in one jit, on a random stable
+  pseudo-Hermitian matrix of the BSE's block shape, eigenvectors brought
+  back to the host (2026-09-24, GTX 1060):
+
+  | n | CPU | device double | device single |
+  |---|---|---|---|
+  | 2048 | 3.5 s | 2.3 s (1.5x, 3e-15) | 0.35 s (10x, 1e-6) |
+  | 4096 | 24.2 s | 16.8 s (1.45x, 4e-15) | 1.85 s (13x, 2e-6) |
+  | 8192 | -- | out of memory | out of memory |
+
+  The Cholesky, GEMM and triangular solve are FP64 work too, so the chain
+  pays less than `eigh` alone. n=8192 does not fit **even in single
+  precision**: syevd's workspace, not the matrix, is what the 6 GB card
+  runs out of. So a non-Tamm-Dancoff npair=4096 BSE cannot run on this
+  card at all, and in double the device buys ~1.5x on the part that is
+  ~90% of the runtime. That was judged too little to land on its own
+  (2026-09-24); nothing was built. If it is picked up, the design worked
+  out was:
+
+  - one precision argument `eigh_prec` on `BSE`, default `"double"`
+    (`chi_prec` defaults to single under the switch; this deliberately
+    does not, since the error is in the observable -- a reversible
+    call, not a settled one), refusing `"single"` on the CPU the way
+    `gpu.resolve_prec` does;
+  - the Tamm-Dancoff `eigh` through `htk/eigenvectors.py`'s
+    `parallel_diagonalization(A[None])`, which already has the switch;
+  - the full chain in a new `bsetk/solvejax.py`. **`jnp.linalg.cholesky`
+    returns NaNs instead of raising** on a non-positive-definite `S@H`,
+    and the CPU route relies on the `LinAlgError` to detect an unstable
+    reference and fall back to the general `eig`; the device route has
+    to test for NaN instead. (`jnp.linalg.eig` does place its result on
+    the GPU in jax 0.11.1.);
+  - an out-of-memory `RESOURCE_EXHAUSTED` re-raised as a `MemoryError`
+    that names `tda=True` and `gpu.set_gpu(False)`, never a silent CPU
+    fallback;
+  - `bsetk/spinflip.py` imports `solve_pseudo_hermitian` too, so the
+    switch would reach the TDHF magnons as well -- check the refusal
+    `magnons_tdhf.md` describes on that route before assuming it is
+    wanted there. So on a consumer
   card neither half pays in double; what is open is whether a device
   solve with a precision argument is wanted anyway, and how both look on
   a data-centre card. The ladder only becomes the larger share where
