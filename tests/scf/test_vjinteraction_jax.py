@@ -411,3 +411,23 @@ def test_vjinteraction_jax_filling_holds_the_requested_electron_count():
             maxite=3, T=1e-4, use_jax=True, solver="linear_mixing")
     count = np.trace(scf.dm[(0, 0, 0)]).real / 4
     assert abs(count - filling) < 1e-8
+
+
+@pytest.mark.parametrize("solver", ["newton", "newton_krylov"])
+def test_vjinteraction_jax_newton_converges_at_fixed_filling(solver):
+    """A biased antiferromagnetic chain at half filling, from random
+    guesses. fsolve, linear mixing and broyden mixing all reach
+    E=-1.459374 from every seed, and Newton does at a fixed mu. With a
+    filling target a nearly singular J-I used to give Newton a step of
+    size ~1e4 that no amount of backtracking made useful, and it stopped
+    with converged=False from these seeds. It must now converge to the
+    same state as fsolve."""
+    g = geometry.chain().get_supercell(2)
+    h = g.get_hamiltonian()
+    h.add_exchange([[0, 0, 0.2], [0, 0, -0.2]])
+    for seed in [0, 1]:  # both stopped unconverged before
+        np.random.seed(seed)
+        scf = VJinteraction(h.copy(), U=3., nk=10, filling=0.5,
+                maxerror=1e-9, T=1e-4, use_jax=True, solver=solver)
+        assert scf.converged
+        assert abs(scf.total_energy - (-1.459374)) < 1e-5

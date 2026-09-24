@@ -71,10 +71,10 @@
 # WARNING: for solver in {"newton","fsolve","newton_krylov"}, an unbiased
 # spinful Hamiltonian with an unbroken continuous spin-rotation symmetry
 # leaves the Jacobian singular along that marginal direction, and the
-# outer Newton loop can give up after zero completed iterations (the
-# backtracking line search finds no improving step even on the very first
-# try - see newton_solve's/newton_krylov_solve's "no backtracked step
-# improved the residual" branch). scf.converged is False in that case, but
+# outer Newton loop can give up (the backtracking line search, the
+# Levenberg-Marquardt fallback and the linear-mixing kicks all fail to find
+# an improving step - see newton_solve's/newton_krylov_solve's "stuck"
+# branch). scf.converged is False in that case, but
 # scf.total_energy is still populated with whatever the unconverged state
 # evaluates to (essentially the untouched initial guess) - this is easy to
 # miss since no exception is raised. See the WARNING in
@@ -366,7 +366,7 @@ def diff_mf_vec(x0, x1):
 
 
 def newton_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0, verbose=0,
-        max_backtrack=30):
+        max_backtrack=30, max_kicks=5, kick_steps=60, kick_mix=0.1):
     """Solve x = step_vec(x) with Newton's method on r(x) = step_vec(x) - x,
     using the exact JAX Jacobian (jax.jacfwd). A full undamped step can
     overshoot into a region where jnp.linalg.eigh's gradient is numerically
@@ -378,7 +378,17 @@ def newton_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0, verbose=0,
     (its argmax component can switch between vector entries between
     iterations), which was observed to stall the line search - accepting a
     step even though a smaller one would keep decreasing it, because the max
-    stops going down while the overall residual is still shrinking."""
+    stops going down while the overall residual is still shrinking.
+
+    When max_backtrack halvings of the Newton step never lower the merit (a
+    nearly singular J-I gives a huge step along a soft mode), a
+    Levenberg-Marquardt step is tried instead, with growing damping. When
+    that fails too, x is a stationary point of the merit with a nonzero
+    residual, and up to max_kicks times kick_steps linear-mixing steps
+    (x -> x + kick_mix*r) move it off before Newton resumes. On a biased
+    antiferromagnetic chain at half filling from random guesses this took
+    Newton from 3/6 converged seeds to 12/12; at a fixed mu, where plain
+    Newton already converged in ~5 iterations, none of it is reached."""
     def merit(r):
         return float(jnp.sum(jnp.abs(r) ** 2))
     jac_fn = jax.jacfwd(step_vec)
@@ -389,38 +399,101 @@ def newton_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0, verbose=0,
     r = fx - x
     err = float(jnp.max(jnp.abs(r)))
     m = merit(r)
+    kicks = 0
     for ite in range(maxite):
         if verbose > 0:
             print("Newton iteration", ite, "error", err)
         if err < tol:
             return x, ite, True
         J = jac_fn(x) - eye
-        # least-squares (pseudo-inverse) rather than a plain solve: a weak
-        # symmetry-breaking bias leaves J close to singular along the
-        # near-marginal direction, and lstsq degrades gracefully there
-        # instead of returning a huge, numerically meaningless step
+        # least-squares (pseudo-inverse) rather than a plain solve, so an
+        # exactly singular J (an unbroken continuous symmetry) still gives a
+        # step. A NEARLY singular one is not truncated at this rcond: a soft
+        # mode with singular value ~3e-6 (a staggered-Sz direction of a
+        # biased AF chain at fixed filling) gave |dx|~1e4, along which the
+        # merit first decreases only at a step of ~2^-35
         dx = jnp.linalg.lstsq(J, -r, rcond=1e-8)[0]
-        step = damping
-        x_try, err_try, m_try = x, err, m
-        for _ in range(max_backtrack):
-            x_try = x + step * dx
-            fx_try = step_vec(x_try)
-            r_try = fx_try - x_try
-            m_try = merit(r_try)
-            if m_try < m:
-                err_try = float(jnp.max(jnp.abs(r_try)))
-                break
-            step *= 0.5
-        else:
-            # no backtracked step improved the residual: stuck, stop early
+        accepted = _backtrack(step_vec, x, dx, m, damping, max_backtrack,
+                merit)
+        if accepted is None:
+            # the Newton direction is useless here: fall back to
+            # Levenberg-Marquardt steps, which turn toward steepest descent
+            # of the merit as lam grows (levenberg_marquardt_solve's
+            # accept/reject ladder, with the dense J already in hand)
+            accepted = _levenberg_marquardt_step(step_vec, x, J, r, m,
+                    merit)
+        if accepted is None and kicks < max_kicks:
+            # x is a stationary point of the merit with r != 0 (J^T r = 0
+            # along a soft mode), which no descent step can leave. Plain
+            # linear-mixing steps x -> x + mix*r ignore the merit and move
+            # off it; Newton then resumes from wherever they end up
+            kicks += 1
+            accepted = _mixing_kick(step_vec, x, r, merit, kick_steps,
+                    kick_mix)
+        if accepted is None:
+            # no damping level improved the residual either: stuck
             return x, ite, err < tol
-        x, fx, r, err, m = x_try, fx_try, r_try, err_try, m_try
+        x, fx, r, m = accepted
+        err = float(jnp.max(jnp.abs(r)))
     return x, maxite, err < tol
+
+
+def _backtrack(step_vec, x, dx, m, damping, max_backtrack, merit):
+    """Halve the step along dx until the merit drops below m. Returns
+    (x, step_vec(x), residual, merit) at the accepted point, or None. Any
+    comparison against NaN is False, so a NaN'd trial step is rejected"""
+    step = damping
+    for _ in range(max_backtrack):
+        x_try = x + step * dx
+        fx_try = step_vec(x_try)
+        r_try = fx_try - x_try
+        m_try = merit(r_try)
+        if m_try < m:
+            return x_try, fx_try, r_try, m_try
+        step *= 0.5
+    return None
+
+
+def _mixing_kick(step_vec, x, r, merit, nsteps, mix):
+    """nsteps of linear mixing from x, whose residual is r. Returns
+    (x, step_vec(x), residual, merit) at the end, or None if it went NaN"""
+    for _ in range(nsteps):
+        x = x + mix * r
+        fx = step_vec(x)
+        r = fx - x
+    m = merit(r)
+    if not np.isfinite(m):
+        return None
+    return x, fx, r, m
+
+
+def _levenberg_marquardt_step(step_vec, x, J, r, m, merit, lam_factor=10.,
+        max_tries=30):
+    """One accepted Levenberg-Marquardt step for newton_solve, or None:
+    dx = argmin |J dx + r|^2 + lam |dx|^2 with lam growing from a small
+    fraction of |J|^2 until the merit drops. Large lam gives
+    dx ~ -J^T r / lam, a short steepest-descent step, which lowers the merit
+    at any point that is not a stationary point of it"""
+    n = x.shape[0]
+    JtJ = J.T @ J
+    Jtr = J.T @ r
+    lam = 1e-6 * float(jnp.max(jnp.abs(jnp.diagonal(JtJ)))) + 1e-300
+    eye = jnp.eye(n, dtype=J.dtype)
+    for _ in range(max_tries):
+        dx = -jnp.linalg.solve(JtJ + lam * eye, Jtr)
+        x_try = x + dx
+        fx_try = step_vec(x_try)
+        r_try = fx_try - x_try
+        m_try = merit(r_try)
+        if m_try < m:
+            return x_try, fx_try, r_try, m_try
+        lam *= lam_factor
+    return None
 
 
 def newton_krylov_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0,
         verbose=0, max_backtrack=30, gmres_tol=1e-6, gmres_restart=20,
-        gmres_maxiter=None):
+        gmres_maxiter=None, max_kicks=5, kick_steps=60, kick_mix=0.1):
     """Matrix-free (Jacobian-free) Newton-Krylov: same damped-Newton outer
     loop and backtracking as newton_solve, but the linear system
     (J_step(x) - I) dx = -r(x) at each step is solved with GMRES using only
@@ -462,27 +535,69 @@ def newton_krylov_solve(step_vec, x0, maxite=50, tol=1e-10, damping=1.0,
     r = fx - x
     err = float(jnp.max(jnp.abs(r)))
     m = merit(r)
+    kicks = 0
     for ite in range(maxite):
         if verbose > 0:
             print("Newton-Krylov iteration", ite, "error", err)
         if err < tol:
             return x, ite, True
         dx = gmres_solve(x, -np.asarray(r))
-        step = damping
-        x_try, err_try, m_try = x, err, m
-        for _ in range(max_backtrack):
-            x_try = x + step * dx
+        accepted = _backtrack(step_vec, x, dx, m, damping, max_backtrack,
+                merit)
+        # the same two fallbacks as newton_solve, matrix-free
+        if accepted is None:
+            accepted = _levenberg_marquardt_step_matrix_free(step_vec, x, r,
+                    m, merit)
+        if accepted is None and kicks < max_kicks:
+            kicks += 1
+            accepted = _mixing_kick(step_vec, x, r, merit, kick_steps,
+                    kick_mix)
+        if accepted is None:
+            return x, ite, err < tol
+        x, fx, r, m = accepted
+        err = float(jnp.max(jnp.abs(r)))
+    return x, maxite, err < tol
+
+
+def _levenberg_marquardt_step_matrix_free(step_vec, x, r, m, merit,
+        lam_factor=10., max_tries=30, lsqr_iter_lim=20):
+    """_levenberg_marquardt_step with Jacobian-vector and
+    Jacobian-transpose-vector products (jax.jvp/jax.vjp) and scipy's damped
+    lsqr in place of the dense J, as levenberg_marquardt_solve does"""
+    from scipy.sparse.linalg import lsqr, LinearOperator
+    n = x.shape[0]
+    r_fn = lambda y: step_vec(y) - y
+    _, vjp = jax.vjp(r_fn, x)
+
+    def matvec(v_np):
+        return np.array(jax.jvp(r_fn, (x,), (jnp.asarray(v_np),))[1],
+                copy=True)
+
+    def rmatvec(u_np):
+        return np.array(vjp(jnp.asarray(u_np))[0], copy=True)
+    Jop = LinearOperator((n, n), matvec=matvec, rmatvec=rmatvec,
+            dtype=np.float64)
+    r_np = np.array(r, copy=True)
+    # scale the first damping to J: |J^T r|/|r| is a cheap lower estimate
+    # of its largest singular value
+    g = rmatvec(r_np)
+    lam = 1e-6 * (np.linalg.norm(g) / max(np.linalg.norm(r_np), 1e-300))**2
+    lam = max(lam, 1e-300)
+    # see levenberg_marquardt_solve for this benign warning from jax.vjp
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore",
+                message=".*Casting complex values to real.*")
+        for _ in range(max_tries):
+            dx = jnp.asarray(lsqr(Jop, -r_np, damp=np.sqrt(lam),
+                    iter_lim=lsqr_iter_lim)[0])
+            x_try = x + dx
             fx_try = step_vec(x_try)
             r_try = fx_try - x_try
             m_try = merit(r_try)
             if m_try < m:
-                err_try = float(jnp.max(jnp.abs(r_try)))
-                break
-            step *= 0.5
-        else:
-            return x, ite, err < tol
-        x, fx, r, err, m = x_try, fx_try, r_try, err_try, m_try
-    return x, maxite, err < tol
+                return x_try, fx_try, r_try, m_try
+            lam *= lam_factor
+    return None
 
 
 def levenberg_marquardt_solve(step_vec, x0, maxite=200, tol=1e-8, verbose=0,
