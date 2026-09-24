@@ -342,12 +342,25 @@ def full_dm_accumulate_sparse_local_fermi(h,pairs,filling,lam,nk=10,
     forwards delta=; independent of this work, not fixed here, see
     scftk.spinspin's per-site-filling design notes).
 
-    Returns (dm, occ): `dm` is full_dm_accumulate_sparse's usual
-    {direction: (n,n)} dict, computed at the given (UN-updated) `lam` -- the
-    caller is responsible for shifting whatever Hamiltonian this dm is
-    associated with by this same lam before using it downstream, exactly
-    paralleling how full_dm_accumulate_sparse_with_fermi's caller shifts by
-    the fermi it returns. `occ` is the per-site occupation FRACTION, shape
+    TOTAL CHARGE vs SITE-RESOLVED PART: only the site-resolved part of the
+    constraint is left to that proportional step. The uniform part, the
+    total electron count mean(filling), is fixed exactly at every call by a
+    scalar Fermi search (full_dm_accumulate_sparse_with_fermi, i.e.
+    spectrum.get_fermi_energy_T) on the lam-shifted spectrum, which returns
+    the extra uniform shift `mu`. A fixed-gain step cannot do that job: on
+    a finite k-mesh near T=0 the count is a staircase in the uniform shift
+    (the step overshoots a partially filled k-shell forever), and inside a
+    gap at finite T it is nearly flat (the step crawls). The Fermi search
+    sorts and counts instead, so it handles both, and it rounds the target
+    to a whole number of k-states exactly as the scalar path does.
+
+    Returns (dm, occ, mu): `dm` is full_dm_accumulate_sparse's usual
+    {direction: (n,n)} dict, computed at the given (UN-updated) `lam` plus
+    the uniform shift `mu` -- the caller is responsible for shifting
+    whatever Hamiltonian this dm is associated with by lam+mu before using
+    it downstream, exactly paralleling how
+    full_dm_accumulate_sparse_with_fermi's caller shifts by the fermi it
+    returns. `occ` is the per-site occupation FRACTION, shape
     (n_sites,), read off dm[(0,0,0)]'s diagonal as (dm_uu+dm_dd)/2 for each
     site -- valid only because scftk.spinspin._build_sparse_pairs
     always includes the full onsite (0,0,0) 2x2 spin block for every site
@@ -356,11 +369,16 @@ def full_dm_accumulate_sparse_local_fermi(h,pairs,filling,lam,nk=10,
     are actually active."""
     h_shifted = h.copy()
     h_shifted.shift_fermi(-np.asarray(lam))
-    dm = full_dm_accumulate_sparse(h_shifted,pairs,nk=nk,delta=delta,
+    # the uniform part of the constraint (the total electron count) is
+    # solved exactly here, by the same T-aware Fermi search the scalar path
+    # uses, on the lam-shifted spectrum: a uniform shift does not change
+    # the eigenvectors, so this costs no extra diagonalization
+    dm,mu = full_dm_accumulate_sparse_with_fermi(h_shifted,pairs,
+            float(np.mean(filling)),nk=nk,delta=delta,
             batch_size=batch_size,dense_fraction=dense_fraction)
     diag = np.real(np.diag(dm[(0,0,0)]))
     occ = (diag[0::2] + diag[1::2])/2.0 # (n_up+n_down)/2 per site, a fraction in [0,1]
-    return dm,occ
+    return dm,occ,mu
 
 
 def full_dm_simultaneous(h,nk=10,fermi=0.0,
