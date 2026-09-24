@@ -431,3 +431,19 @@ def test_vjinteraction_jax_newton_converges_at_fixed_filling(solver):
                 maxerror=1e-9, T=1e-4, use_jax=True, solver=solver)
         assert scf.converged
         assert abs(scf.total_energy - (-1.459374)) < 1e-5
+
+
+@pytest.mark.parametrize("kwargs", [dict(solver="bogus"),
+        dict(solver="fsolve"), dict(gmres_tol=1e-8), dict(gmres_restart=5)])
+def test_vjinteraction_numpy_engine_refuses_jax_only_kwargs(kwargs):
+    """solver=, gmres_tol= and gmres_restart= choose among the use_jax=True
+    solvers. The numpy engine always runs plain linear mixing, and used to
+    accept them silently, even solver="bogus", so a caller asking for
+    fsolve got linear mixing with no signal. Without use_jax=True they must
+    be refused, naming the accepted solvers."""
+    from pyqula.scftk.densitydensity_jax import get_jax_solver_names
+    h = geometry.chain().get_hamiltonian()
+    with pytest.raises(NotImplementedError) as err:
+        VJinteraction(h.copy(), U=2.0, mu=0.0, nk=4, **kwargs)
+    for name in get_jax_solver_names():
+        assert repr(name) in str(err.value)

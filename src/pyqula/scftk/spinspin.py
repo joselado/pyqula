@@ -366,7 +366,7 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=None,
         T=_T_UNSET, verbose=0, constrains=[],
         integration="ed", scale=None, npol=None, ne=None, cores=None,
-        use_jax=False, solver="newton", gmres_tol=1e-6, gmres_restart=20):
+        use_jax=False, solver=None, gmres_tol=None, gmres_restart=None):
     """Self-consistent mean field combining density-density interactions
     (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
     Vinteraction) with spin-spin exchange in a single SCF loop.
@@ -608,7 +608,23 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                 J1=J1, J2=J2, J3=J3, Jr=Jr, J1x=J1x, J1y=J1y, J1z=J1z,
                 mf=mf, filling=filling, mu=mu, nk=nk, maxerror=maxerror,
                 maxite=maxite_jax, T=T_jax, mix=mix, verbose=verbose,
-                solver=solver, gmres_tol=gmres_tol, gmres_restart=gmres_restart)
+                solver="newton" if solver is None else solver,
+                gmres_tol=1e-6 if gmres_tol is None else gmres_tol,
+                gmres_restart=20 if gmres_restart is None else gmres_restart)
+    # solver/gmres_* choose among the use_jax=True engine's solvers; the
+    # numpy engine below always runs plain linear mixing, so passing them
+    # without use_jax=True is refused rather than silently ignored
+    jax_only = {"solver": solver, "gmres_tol": gmres_tol,
+            "gmres_restart": gmres_restart}
+    jax_only_set = {k: v for k, v in jax_only.items() if v is not None}
+    if jax_only_set:
+        from .densitydensity_jax import get_jax_solver_names
+        raise NotImplementedError("VJinteraction's default (numpy) engine "
+                "always runs plain linear mixing, so these use_jax=True-only "
+                "kwargs have no effect and must not be silently ignored: %r. "
+                "Pass use_jax=True to choose a solver; the accepted ones "
+                "are %s" % (jax_only_set, ", ".join(repr(s) for s in
+                get_jax_solver_names())))
     T = 1e-7 if T is _T_UNSET else T
     h1 = h0.get_multicell()
     if integration != "kpm": h1 = h1.get_dense() # see docstring above
