@@ -138,40 +138,6 @@ def test_vjinteraction_jax_combined_v_and_anisotropic_j_matches_numpy_engine():
     assert diff < 1e-3
 
 
-def test_vjinteraction_jax_handles_filling():
-    """A target filling (mu=None) resolves mu *inside* the jax trace each
-    step (jnp.sort midpoint), rather than a numpy root-find outside it --
-    must converge to the same physics as the numpy engine for the same
-    filling target. Compared on total_energy only (not .mf/.hamiltonian):
-    from a raw random, unbiased seed this dimer has the same SU(2)-marginal-
-    direction degeneracy test_densitydensity_jax_newton_handles_filling
-    already documents for the plain-V engine -- the two engines can (and
-    empirically do) land on two different, exactly energy-degenerate points
-    on that marginal manifold, so only total_energy is a meaningful
-    invariant here. See
-    test_vjinteraction_jax_filling_target_hamiltonian_matches_numpy_engine
-    below for a biased (non-marginal) case where the returned Hamiltonian
-    itself is checked."""
-    g = geometry.dimer()
-    h = g.get_hamiltonian()
-    U = 2.0
-    rng = np.random.default_rng(3)
-    n = h.intra.shape[0]
-    m = rng.random((n, n)) - 0.5 + 1j * (rng.random((n, n)) - 0.5)
-    m = m + m.T.conjugate()
-    mf0 = {(0, 0, 0): m}
-
-    scf_np = VJinteraction(h.copy(), filling=0.5, U=U,
-            mf={k: v.copy() for k, v in mf0.items()},
-            maxerror=1e-6, verbose=0)
-    scf_jax = VJinteraction(h.copy(), filling=0.5, U=U,
-            mf={k: v.copy() for k, v in mf0.items()},
-            maxerror=1e-7, verbose=0, use_jax=True, solver="newton")
-
-    assert scf_np.converged and scf_jax.converged
-    assert abs(scf_np.total_energy - scf_jax.total_energy) < 1e-4
-
-
 def test_vjinteraction_jax_filling_target_hamiltonian_matches_numpy_engine():
     """Regression test for a real bug found during development: the numpy
     engine shifts every SCF iterate (hence its final scf.hamiltonian) by

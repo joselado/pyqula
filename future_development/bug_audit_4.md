@@ -44,7 +44,10 @@ six are
 `test_superconducting_energy_per_atom_matches_in_a_supercell`,
 `test_sc_gap_vs_temperature_is_bcs_like_and_mesh_independent` and
 `test_vjinteraction_jax_handles_filling`. This is the complete run that
-`bug_audit_3.md` said was still owed, and what it found is these six.
+`bug_audit_3.md` said was still owed, and what it found is these six. They
+were removed afterwards, the maintainer's call, which leaves 2081 tests;
+`tests/scf/test_scf_sc_critical_temperature.py` held only one of them and is
+gone as a whole.
 
 ## User-visible changes
 
@@ -215,6 +218,12 @@ gives the spinful answer.
 
 ## Left open
 
+- What the six removed tests pinned is untested now: the BCS-like shape of
+  the self-consistent gap against temperature, independent of the k-mesh
+  (`bug_audit_2.md` #63), the total energy per atom of a paired mean field
+  being the same in a supercell, the magnon dispersion along a path, and the
+  jax filling targets. Restoring any of them needs a guess that converges in
+  fewer than 1000 iterations, or `maxite=None` in the test.
 - `add_pairing(mode=callable)` does not check the callable for Fermi
   antisymmetry; `h.check()` catches a bad one.
 - `multihopping.MultiHopping.get_dagger` drops the dagger at $-R$ when the
