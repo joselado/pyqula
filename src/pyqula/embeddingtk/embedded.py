@@ -56,13 +56,17 @@ def embed_hamiltonian(self,**kwargs):
 
 
 
-def get_dm(self,delta=1e-2,emin=-10.,**kwargs):
-    """Get the density matrix"""
+def get_dm(self,delta=1e-2,emin=-10.,eps=1e-4,**kwargs):
+    """Get the density matrix
+
+    eps: absolute tolerance of the adaptive contour integral, kept apart
+        from the keywords that go to get_gf
+    """
     fa = lambda e: self.get_gf(energy=e,delta=delta,**kwargs) # advanced
     fr = lambda e: self.get_gf(energy=e,delta=-delta,**kwargs) # retarded
     from ..integration import complex128contour
-    Ra = complex128contour(fa,xmin=emin,xmax=0.,mode="upper") # return the integral
-    Rr = complex128contour(fr,xmin=emin,xmax=0.,mode="lower") # return the integral
+    Ra = complex128contour(fa,xmin=emin,xmax=0.,eps=eps,mode="upper") # return the integral
+    Rr = complex128contour(fr,xmin=emin,xmax=0.,eps=eps,mode="lower") # return the integral
     return 1j*(Ra-Rr)/(2.*np.pi) # return the density matrix
 
 
