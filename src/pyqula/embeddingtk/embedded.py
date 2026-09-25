@@ -9,8 +9,9 @@ class Embedded_Hamiltonian():
         self.H = H.copy() # copy Hamiltonian
         self.selfenergy = object2selfenergy(selfenergy,H)
         self.delta = delta
-    def get_density_matrix(self,**kwargs): 
-        return get_dm(self,delta=self.delta,**kwargs)
+    def get_density_matrix(self,delta=None,**kwargs):
+        if delta is None: delta = self.delta # default broadening
+        return get_dm(self,delta=delta,**kwargs)
     def get_gf(self,**kwargs):
         # Green's function of the Hamiltonian
         gf0 = self.H.get_gf(**kwargs) 
