@@ -113,3 +113,24 @@ def test_add_exchange_matches_add_zeeman():
     assert np.allclose(h2.local_occupation, occ_zeeman, atol=1e-6)
     assert np.allclose(h2.get_magnetization(mode="field"), m_zeeman,
                        atol=1e-6)
+
+
+def test_induced_moment_points_against_b():
+    """add_zeeman(b) writes +b.sigma = +2b.S, so in H=-h.S the physical
+    field is h=-2b and the induced moment is antiparallel to b, while the
+    field readout returns b itself. A generic direction, so that a sign
+    flip of any single component (sy under a transposed density matrix,
+    for instance) would tilt the moment off the axis."""
+    g = geometry.chain()
+    b = 0.1*np.array([0.3, 0.5, 0.2])
+    np.random.seed(0)
+    h = SpinonHamiltonian(g)
+    h.add_zeeman(list(b))
+    h2 = h.get_mean_field_hamiltonian(J1=1.0, nk=24, mix=0.1,
+            maxerror=1e-6, maxite=2000)
+    assert h2 is not None, "SCF did not converge"
+    bhat = b/np.linalg.norm(b)
+    mv = h2.get_magnetization(nk=24).sum(axis=0) # induced <S>
+    mf = h2.get_magnetization(mode="field").sum(axis=0)
+    assert np.allclose(mv/np.linalg.norm(mv), -bhat, atol=1e-3), mv
+    assert np.allclose(mf/np.linalg.norm(mf), bhat, atol=1e-3), mf

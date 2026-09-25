@@ -388,12 +388,10 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
     eigenvectors, and after adding all the contributions together.
     This can become memore expesive for large kmesh and moderate
     matrices"""
-    if h.dimensionality == 0: fac = 1.
-    elif h.dimensionality == 1: fac = 1./nk
-    elif h.dimensionality == 2: fac = 1./nk**2
-    elif h.dimensionality == 3: fac = 1./nk**3
-    else:
-        raise ValueError("the Hamiltonian must have dimensionality 0, 1, 2 or 3")
+    from .klist import kmesh
+    # the same mesh get_eigenvectors diagonalizes, so a list-valued nk
+    # works as it does in full_dm_accumulate
+    fac = 1./len(kmesh(h.dimensionality,nk=nk)) # normalization
     if ds is None: # no directions required
       es,vs = h.get_eigenvectors(nk=nk) # get eigenvectors
       es = es - fermi # shift by the Fermi energy
@@ -456,9 +454,19 @@ def restricted_dm(h,mode="KPM",pairs=[],
        
 from . import algebra
 
-def occupied_projector(m,delta=0.0):
-    """Return a projector onto the occupied states"""
+def occupied_projector(m,delta=None):
+    """Return a projector onto the states of m below zero energy.
+
+    What is returned is the TRANSPOSE of the projector, the same index
+    convention as full_dm (see its docstring), so take .T before using it
+    as P, as topologytk/realspace.py does.
+
+    delta is the width of the Fermi-Dirac occupation; None keeps
+    full_dm_python's own default smearing, and 0 is taken as a hard
+    cutoff at zero energy"""
     (es,vs) = algebra.eigh(m) # diagonalize
     vs = vs.T # transpose
-    return np.array(full_dm_python(es,np.array(vs)))
+    if delta is None: return np.array(full_dm_python(es,np.array(vs)))
+    if delta==0.: delta = 1e-15 # just very small, as in full_dm
+    return np.array(full_dm_python(es,np.array(vs),delta=delta))
 
