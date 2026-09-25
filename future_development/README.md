@@ -133,6 +133,26 @@ already reached once.
   workflow is and the test that pins it, and what a vortex implementation
   would actually need.
 
+- [`topological_invariants.md`](topological_invariants.md) -- which
+  topological invariants the package computes, the ones it does not, found
+  in a survey of arXiv in four families (one dimension and superconductors,
+  crystalline and higher-order topology in two dimensions, real space and
+  disorder, three dimensions with the non-Hermitian, driven, interacting and
+  bosonic cases), each with its reference, its algorithm, the existing piece
+  it builds on and a test with its expected value, most of them measured in
+  a prototype. It records the three repairs made while the survey ran (the
+  time reversal of a BdG Hamiltonian, so class DIII superconductors get
+  their $Z_2$; the Chern number from the Wannier-center winding; a $Z_2$
+  count that changed with the resolution on supercells), what was ruled
+  out and why (the quadrupole operator among them), nine loose ends found
+  while prototyping, and the recommended order. The first package, the general
+  Wilson loop with the 3D strong and weak $Z_2$ and the Chern vector, is built,
+  with the Fu-Kane parities as its oracle, and so are the second, the winding
+  number of chiral chains and the $Z_2$ of helical superconducting wires,
+  and the third, the spin Chern number that survives Rashba coupling and the
+  mirror Chern number. Still open: the Bott and spin Bott index, the last of
+  the first tier.
+
 - [`unreferenced_modules.md`](unreferenced_modules.md) -- the dead-module
   cleanup: how "unreferenced" was actually established (an AST walk of every
   import in the repo, since grep both over- and under-reports on module names

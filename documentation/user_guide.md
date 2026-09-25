@@ -2531,6 +2531,44 @@ The tensor cross interpolation itself is a pure-Python port of
 that the density-matrix path supports 2D Hamiltonians only. Runnable versions are in
 `examples/2d/chern_qtci/main.py` and `examples/2d/mean_field_qtci/main.py`.
 
+#### Winding of the hybrid Wannier centers
+
+We will now see a third way of obtaining the Chern number, `integration="wannier"`, which
+needs no Berry curvature at all and is the construction the $Z_2$ invariant of the next section
+is built on. Let us freeze the momentum $k_2$ along the second reciprocal direction, so that
+the system becomes a one-dimensional chain along the first, and take the Wilson loop of its
+occupied bands, the product of the overlaps of the Bloch states around that closed loop. The
+phases of its eigenvalues are the positions of the hybrid Wannier centers, the charge centers
+of states localized along the first direction and extended along the second, and as $k_2$
+goes once around the Brillouin zone their sum moves by $C$ lattice constants, meaning that the
+Chern number is the charge pumped across the unit cell in one cycle
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_haldane(0.05) # Add Haldane coupling
+C = h.get_chern(integration="wannier") # winding of the hybrid Wannier centers
+```
+
+The result is $C=2$, the same as the mesh sum. The winding is an integer by construction, and
+it is the right integer as long as the sum of the centers moves by less than half a lattice
+constant between two consecutive values of $k_2$, of which there are `nt`, 100 by default, with
+`nk` k-points along each Wilson loop, 30 by default. The centers move fastest where the gap is
+smallest, so it is the gap that sets `nt`: with a Haldane coupling of $0.02$ in the snippet
+above, `nt=20` returns 0 and `nt=50` already returns 2. The $Z_2$ invariant of the next section
+is the same count taken over half of the Brillouin zone, from $k_2=0$ to $k_2=1/2$, the number
+of times the centers cross a fixed line on the way, whose parity says whether the Kramers
+partners switch. The flow of the centers itself, the object one plots to see the pumping, is
+returned by `topology.z2_wannier_centers(h,full=True)`, with the momentum $k_2$ in its first
+row and one row per occupied band after it, each center as the phase $2\pi x$ of its fractional
+coordinate $x$ along the loop. `loop=` and `pump=` choose the two reciprocal directions, and
+`gauge="atomic"` places each orbital at its position in the cell rather than at its origin, as
+pyqula's Bloch Hamiltonian does, which leaves every winding as it is but moves the centers to
+where the charge actually sits, so it is the choice whenever the positions themselves matter,
+a polarization for instance. See `examples/2d/wannier_centers/main.py` for a runnable version
+that plots the flow.
+
 
 ### Z2 invariant
 
@@ -2560,6 +2598,237 @@ a mesh of `nk` momenta and `nt` pumping steps (60 each by default). `h.add_soc()
 term as `h.add_kane_mele()`. Note that `h.get_topological_invariant()` chooses between the two
 invariants for you, returning the $Z_2$ invariant when the Hamiltonian is time-reversal
 symmetric and the Chern number otherwise, and the Berry phase in one dimension.
+
+The same index classifies a superconductor that preserves time-reversal symmetry, what is
+called a class DIII superconductor, where it gives the parity of the number of helical pairs of
+Majorana states at each edge, in-gap states that a tunneling probe at the edge would see. For a
+Bogoliubov-de Gennes Hamiltonian the invariant is computed from its negative-energy states, and
+time-reversal symmetry is checked on the electron and on the hole part of the Nambu spinor, up
+to a global phase of the pairing, since a uniform phase of the order parameter is only a gauge
+choice. Let us take the simplest case, a helical p-wave superconductor on the square lattice,
+where spin up pairs as $p_x-ip_y$ and spin down as $p_x+ip_y$, so that the two spins carry
+opposite Chern numbers and time reversal exchanges them
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.square_lattice() # square lattice, band between -4 and 4
+h = g.get_hamiltonian() # spinful first-neighbor Hamiltonian
+h.add_onsite(2.0) # chemical potential at -2, above the band bottom
+def helical(r1,r2): # helical p-wave pairing, d-vector along the bond
+    dr = r1-r2 # bond vector
+    if abs(dr.dot(dr)-1.)>1e-4: return np.zeros((2,2)) # first neighbors only
+    return 1j*np.array([[0.,dr[0]-1j*dr[1]],[dr[0]+1j*dr[1],0.]]) # i d.sigma
+h.add_pairing(mode=helical,delta=0.3) # add the pairing, h is now a BdG Hamiltonian
+z2 = h.get_topological_invariant() # Z2 invariant of the superconductor
+```
+
+The result is $-1$ as long as the chemical potential is inside the band, and $+1$ once it is
+moved below the band bottom, `h.add_onsite(5.0)` instead of $2$, where there is no Fermi surface
+left to pair. Note that at half filling, `h.add_onsite(0.0)`, the Fermi surface goes through the
+$X$ points, where this pairing vanishes, so the gap closes there and the invariant is not
+defined. As a reference, the Kane-Mele insulator of the snippet above gives $+1$ once a
+small s-wave pairing is added to it, `h.add_swave(0.01)`, although its normal state gives
+$-1$: the Nambu doubling carries its helical edge twice, and a pairing gaps the pair, so a
+quantum spin Hall insulator is a trivial superconductor. See
+`examples/2d/z2_helical_superconductor/main.py` for the invariant across the band.
+
+### Spin Chern number and mirror Chern number
+
+The $Z_2$ invariant needs time reversal, and it is only a parity. We will now see two invariants
+that count the helical pairs themselves and survive when time reversal is broken, with
+`h.get_spin_chern()` and `h.get_mirror_chern()`. Both are built the same way: at every
+k-point the occupied states are split into two halves by the sign of an operator restricted to
+them, and each half has a Chern number of its own. The simplest case is the spin. When $s_z$ is
+conserved the halves are the two spin sectors, and the spin Chern number
+
+$$
+C_s = \frac{C_+ - C_-}{2}
+$$
+
+is half the difference of their Chern numbers, meaning that it counts the helical pairs at each
+edge, each spin going around the sample in the opposite direction. When $s_z$ is not conserved,
+by a Rashba coupling for instance, the halves are the eigenstates of $P s_z P$, the spin
+projected on the occupied states, and $C_s$ stays an integer as long as that projection keeps a
+gap around zero, which is checked; with time reversal its parity is the $Z_2$ invariant
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_kane_mele(0.1) # Add spin-orbit coupling
+h.add_rashba(0.1) # Add Rashba coupling, so that the spin is not conserved
+Cs = h.get_spin_chern() # spin Chern number
+```
+
+The result is $C_s=1$. Note that `topology.spin_chern` computes something else, the integral of
+the $s_z$-weighted Berry curvature, which is $C_\uparrow-C_\downarrow=2C_s$ while $s_z$ is
+conserved and is no longer an integer here, 2.097 with `nk=24`.
+
+The mirror Chern number splits the occupied states by the eigenvalues $\pm i$ of the mirror
+$z\to -z$ instead, which maps every momentum of a two-dimensional system onto itself, and it is
+$C_M=(C_{+i}-C_{-i})/2$. It is the invariant of a topological crystalline insulator, where it is
+the mirror, not time reversal, that protects the edge states. The mirror is found and verified
+from the geometry and the Hamiltonian, and the call raises when there is none, as with the
+Rashba coupling above, which breaks it
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # create honeycomb lattice
+h = g.get_hamiltonian() # create hamiltonian of the system
+h.add_kane_mele(0.1) # Add spin-orbit coupling
+h.add_exchange([0.,0.,0.3]) # out-of-plane exchange: breaks time reversal, keeps the mirror
+CM = h.get_mirror_chern() # mirror Chern number
+```
+
+The result is $C_M=-1$: for a single layer the mirror is $-i\sigma_z$, so $C_M=-C_s$, and it
+stays quantized under an out-of-plane exchange field, which keeps the mirror while breaking time
+reversal, so that no $Z_2$ invariant is defined at all. For two coupled layers, the AA bilayer
+of `specialhamiltonian.multilayer_graphene(l=[0,0])` with the same spin-orbit coupling, one
+finds $C_s=2$ with a trivial $Z_2$ invariant, two copies of the quantum spin Hall state, and
+$C_M=0$, since the two mirror sectors carry opposite Chern numbers. Both calls take `nk`, the
+k-points per direction of the mesh, 40 by default. See
+`examples/2d/spin_mirror_chern/main.py` for the two invariants as the Rashba coupling and the
+exchange field grow.
+
+### Strong and weak Z2 indices in three dimensions
+
+We will now see what the $Z_2$ invariant becomes in three dimensions, where
+`h.get_topological_invariant()` returns four of them. Let us take a plane of the Brillouin zone
+at a fixed momentum $k_i$ along one reciprocal lattice vector. At $k_i=0$ and at $k_i=1/2$ time
+reversal maps the plane onto itself, so each of these six planes is a two-dimensional
+time-reversal-symmetric insulator with a $Z_2$ invariant of its own, computed as in the previous
+section. Four combinations of them are independent, written $\nu_0;(\nu_1\nu_2\nu_3)$: the weak
+index $\nu_i$ is the invariant of the plane $k_i=1/2$, and the strong index $\nu_0$ is the
+product of the invariants of the planes $k_i=0$ and $k_i=1/2$, which comes out the same for the
+three directions. You can think of a weak topological insulator, $\nu_0=0$ with some $\nu_i=1$,
+as quantum spin Hall layers stacked along $\nu_1\vec b_1+\nu_2\vec b_2+\nu_3\vec b_3$, with
+Dirac cones only on the surfaces that cut the layers, while a strong one, $\nu_0=1$, has an odd
+number of Dirac cones on every surface, which is what ARPES sees. Let us take the Fu-Kane-Mele
+model, the diamond lattice with spin-orbit coupling between second neighbors, where the gap
+opens once one of the four first-neighbor bonds differs from the other three
+
+```python
+from pyqula import geometry
+g = geometry.diamond_lattice_minimal() # diamond lattice, two sites per cell
+h = g.get_hamiltonian() # first-neighbor hopping
+h.add_kane_mele(0.05) # spin-orbit coupling between second neighbors
+h.intra = 1.3*h.intra # make the bond inside the unit cell stronger
+z2 = h.get_topological_invariant() # strong and weak Z2 indices
+```
+
+The result is `(1, (1, 1, 1))`, a strong topological insulator. With that bond weaker than the
+other three instead, `h.intra = 0.7*h.intra`, it is `(0, (1, 1, 1))`, a weak topological
+insulator of layers stacked along the bond, and once the bond dominates, `h.intra =
+3.1*h.intra`, it is `(0, (0, 0, 0))`, a band insulator of decoupled dimers. Note that the
+indices are 0 or 1 here, rather than the $\pm 1$ of the two-dimensional invariant, since the
+weak ones are the components of a vector, and that they are given in the reciprocal lattice
+vectors of the geometry, so the weak vector depends on the choice of unit cell while $\nu_0$
+does not. Each of the six planes costs one two-dimensional invariant, with `nk` and `nt` as
+there, 60 by default, and the call raises if the strong index comes out different from the
+three directions, which means that the flow of some plane was not resolved or that the gap
+closes.
+
+When time reversal is broken, the same call returns the Chern vector $(C_1,C_2,C_3)$ instead,
+the Chern numbers of the planes at fixed $k_1$, $k_2$ and $k_3$, each counted with the Wilson
+loop along the next reciprocal lattice vector in cyclic order. For Chern insulator layers
+stacked along $\vec a_3$ it is $(0,0,C)$, with $C$ the Chern number of one layer, the Hall
+conductance of each layer in units of $e^2/h$. Both are also available directly, as
+`topology.z2_invariant_3d(h)` and `topology.chern_vector(h)`. See
+`examples/3d/z2_diamond/main.py` for the three phases of the diamond model.
+
+### Winding number of a chiral chain
+
+In one dimension `h.get_topological_invariant()` returns the Berry (Zak) phase, which is $0$ or
+$\pi$ and so only tells whether the number of zero modes at each end is even or odd. We will now
+see how to count them, with `h.get_winding_number()`. Let us take the simplest case, the
+Su-Schrieffer-Heeger chain, two sites per cell with an intracell hopping $t_1$ and an
+intercell hopping $t_2$. Its Hamiltonian only connects the two sublattices, so it anticommutes
+with the sublattice operator $S$, what is called a chiral symmetry, and in the eigenbasis of $S$
+the Bloch Hamiltonian is off-diagonal, with a block $q(k)$ between the two sublattices. The
+winding number is
+
+$$
+W = \frac{1}{2\pi i}\oint dk\, \partial_k \log\det q(k)
+$$
+
+meaning that it counts how many times the phase of $\det q(k)$ goes around as $k$ crosses the
+Brillouin zone, and it is the number of zero modes at each end of an open chain, all on one
+sublattice, which is what STM sees as a zero-bias peak at the end
+
+```python
+from pyqula import geometry
+g = geometry.bichain() # two-site chain with a sublattice
+def fun(r1,r2): # intracell hopping 0.5, intercell hopping 1
+    dr = r1-r2
+    if abs(dr.dot(dr)-1.)>1e-4: return 0. # first neighbors only
+    return 0.5 if abs((r1[0]+r2[0])/2.)<1e-4 else 1.0 # the intracell bond is centered at x=0
+h = g.get_hamiltonian(fun=fun,has_spin=False) # SSH chain
+W = h.get_winding_number() # winding number, with the sublattice operator
+```
+
+The result is $W=-1$, one zero mode per end, and it becomes $0$ once the intracell hopping is
+the stronger one; the sign follows which sublattice $S$ counts as positive. By default the
+chiral operator is the sublattice operator of a normal Hamiltonian, and for a Nambu
+Hamiltonian it is $\sigma_y\tau_y$ on every site, the chiral symmetry of a Bogoliubov-de Gennes
+Hamiltonian that is real in real space, so the same call counts the Majorana zero modes of a
+Kitaev chain
+
+```python
+from pyqula import geometry
+h = geometry.chain().get_hamiltonian() # spinful chain
+h.add_onsite(20.) # shift both spin bands up
+h.add_zeeman([0.,0.,20.]) # and bring one of them back to the Fermi energy
+h.add_pairing(mode="pwave",delta=0.3,d=[1.,0.,0.]) # p-wave pairing: a Kitaev chain
+W = h.get_winding_number() # sigma_y tau_y is the chiral operator by default
+```
+
+which gives $W=1$ for a chemical potential inside the band and $0$ outside it. The difference
+with the Zak phase appears with two such chains coupled by a weak rung hopping: they carry two
+Majorana zero modes at each end, $W=2$, and the Zak phase reads $0$, the same as a trivial
+chain. Any other chiral operator can be passed as `chiral=`, a name, a matrix or an `Operator`,
+and the call raises if it does not anticommute with the Hamiltonian, or if the gap closes. See
+`examples/1d/winding_kitaev_ladder/main.py` for the single chain and the ladder across the band.
+
+### Z2 invariant of a helical superconducting wire
+
+A wire that preserves time-reversal symmetry, a class DIII superconductor, has instead a
+Kramers pair of Majorana zero modes at each end, a zero-bias peak that a magnetic field splits,
+and neither of the invariants above sees it: the Zak phase adds up the two Kramers partners and
+is always trivial, and the winding with $\sigma_y\tau_y$, when the wire has that symmetry at
+all, counts them with opposite signs and gives $0$. We
+will now see how to compute the $Z_2$ invariant that does, which `h.get_topological_invariant()`
+returns for a time-reversal-symmetric Nambu chain. It is the Kramers polarization
+
+$$
+\nu = \det U \, \frac{\mathrm{Pf}\,\theta(0)}{\mathrm{Pf}\,\theta(\pi)}
+$$
+
+where $U$ is the product of the overlaps of the negative-energy states from $k=0$ to $k=\pi$
+and $\theta$ is the time reversal restricted to those states at the two time-reversal-invariant
+momenta, meaning that $\nu$ compares how the Kramers partners are paired at the two ends of half
+of the Brillouin zone, and it is $-1$ when they switch. Let us take a helical p-wave wire, where
+the two spins pair with opposite chirality, with Rashba spin-orbit coupling so that spin is not
+conserved, and with a competing s-wave pairing
+
+```python
+from pyqula import geometry
+h = geometry.chain().get_hamiltonian() # spinful chain
+h.add_onsite(0.5) # shift the band, keeping the Fermi energy inside it
+h.add_rashba(0.2) # Rashba spin-orbit coupling, so that spin is not conserved
+h.add_pairing(mode="pwave",delta=0.5j,d=[1.,0.,0.]) # helical p-wave pairing
+h.add_swave(0.2) # a competing s-wave pairing
+nu = h.get_topological_invariant() # Z2 invariant of the wire
+```
+
+The result is $-1$, a topological wire, and with the s-wave pairing above the p-wave one,
+`h.add_swave(1.3)`, it is $+1$, the gap closing in between, near $0.9$. When spin is conserved,
+without the Rashba coupling, $\nu$ is the Zak parity of one spin block, a Kitaev chain. Any basis
+of the negative-energy states is allowed at every $k$-point, so there is no gauge to fix, and
+the only resolution is the number `nk` of k-points from $0$ to $\pi$, 200 by default; a value of
+$\nu$ far from $\pm 1$ raises, asking for more. It is also available as
+`topology.z2_invariant_1d(h)`. See `examples/1d/z2_helical_wire/main.py` for the invariant as the
+s-wave pairing grows.
 
 See `examples/2d/z2_kane_mele/main.py` and `examples/2d/z2_transition/main.py` (the invariant
 across a transition driven by a sublattice imbalance) for runnable versions, and the
@@ -5069,12 +5338,15 @@ Optional arguments:
 
 
 ### h.get_topological_invariant()
-Return a topological invariant of the occupied bands: the Berry (Zak) phase
-in one dimension, the $Z_2$ invariant in two dimensions when the
-Hamiltonian is time-reversal symmetric, and the Chern number otherwise. A
-0d Hamiltonian has no Brillouin zone and 3D is not implemented, so both
-raise; for a 3D system take the Chern number of a 2D slice, or
-`topology.berry_phase(h,kpath=...)` along a chosen path.
+Return a topological invariant of the occupied bands: in one dimension the
+$Z_2$ invariant of a time-reversal-symmetric superconductor (class DIII),
+$\pm 1$, and the Berry (Zak) phase otherwise, the $Z_2$ invariant in two
+dimensions when the
+Hamiltonian is time-reversal symmetric, a BdG Hamiltonian included, and the
+Chern number otherwise, and in three dimensions the strong and weak $Z_2$
+indices `(nu0, (nu1, nu2, nu3))`, each 0 or 1, when it is time-reversal
+symmetric and the Chern vector `(C1, C2, C3)` otherwise. A 0d Hamiltonian
+has no Brillouin zone and raises `ValueError`.
 
 
 ### h.add_soc()
@@ -5732,19 +6004,57 @@ Optional arguments:
 
 Empty bins are `0.0` (not `NaN`), and states outside an explicitly requested window are dropped rather than clamped onto the end bins. Diagonalization is dense throughout, since a sparse solver would return only the eigenvalues nearest `E=0` and could miss the peak.
 
+### h.get_spin_chern()
+Return the spin Chern number $(C_+-C_-)/2$ of a two-dimensional spinful
+insulator, with the occupied states split by the sign of $P s_z P$, which
+stays quantized when $s_z$ is not conserved (see "Spin Chern number and mirror
+Chern number").
+
+Optional arguments:
+- operator="sz": the spin component, a name, a matrix or an `Operator`
+- nk=40: number of k-points per direction of the mesh
+
+It raises `ValueError` if the projected spin closes its gap or the system is
+a metal.
+
+### h.get_mirror_chern()
+Return the mirror Chern number $(C_{+i}-C_{-i})/2$ of a two-dimensional
+insulator with the mirror $z\to -z$, found and verified from the geometry and
+the Hamiltonian; it raises `ValueError` when there is no such mirror.
+
+Optional arguments:
+- nk=40: number of k-points per direction of the mesh
+
+### h.get_winding_number()
+Return the winding number of a one-dimensional Hamiltonian with a chiral
+symmetry, the number of zero modes at each end of an open chain (see "Winding
+number of a chiral chain").
+
+Optional arguments:
+- chiral=None: the chiral operator, a name, a matrix or an `Operator`; by
+  default the sublattice operator of a normal Hamiltonian and
+  $\sigma_y\tau_y$ on every site of a Nambu one. It raises `ValueError` if
+  the operator does not anticommute with the Hamiltonian
+- nk=200: number of k-points around the Brillouin zone
+
 ### h.get_chern()
 Return Chern number of the Hamiltonian.
 
 Optional arguments:
 - nk: number of kpoints, 10 for the default `integration="grid"` and 20 for
-  `integration="qtci"`
+  `integration="qtci"`; for `integration="wannier"`, the k-points along each
+  Wilson loop, 30 by default
 - integration="grid": how the Brillouin-zone integral is evaluated. "grid"
   (default) sums the Berry curvature over a uniform nk x nk mesh; "qtci"
   integrates it by quantics tensor cross interpolation plus Gauss-Kronrod
   quadrature, sampling adaptively instead of uniformly; accurate for a
   smooth curvature (a large gap) and unreliable for a sharply peaked one,
   where the mesh sum stays exactly quantized. See
-  "Tensor-cross-interpolation (qtci) integration"
+  "Tensor-cross-interpolation (qtci) integration". "wannier" counts the
+  winding of the hybrid Wannier centers instead, see "Winding of the hybrid
+  Wannier centers"; any other name raises `ValueError` listing the three
+- nt=100: for `integration="wannier"`, the number of momenta along the
+  second reciprocal direction; a small gap needs more of them
 - operator=None: a name, a matrix or an `Operator`, as for
   `h.get_berry_curvature()`. The operator-projected invariants
   (`topology.spin_chern`, `topology.operator_berry`) work on sparse

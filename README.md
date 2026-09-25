@@ -128,7 +128,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Static RPA screened interaction computed from the mean-field bands, with the dielectric matrix built in the charge channel as in GW (spin-rotation invariant), usable as the direct-term kernel of the Bethe-Salpeter equation (GW-BSE style, with cRPA as an option) or on its own
 
 ## Topological characterization ##
-- Berry phases, Berry curvatures, Chern numbers and Z2 invariants [[notebook]](jupyter-notebooks/functionalities/topological_characterization/01_chern_z2.ipynb)
+- Berry phases, Berry curvatures, Chern numbers (from the Berry curvature or from the winding of the hybrid Wannier centers), spin Chern numbers that survive Rashba coupling, mirror Chern numbers and Z2 invariants, of insulators and of time-reversal-symmetric superconductors, the strong and weak Z2 indices and the Chern vector in three dimensions, and in one dimension the winding number of chiral chains and the Z2 invariant of helical superconducting wires [[notebook]](jupyter-notebooks/functionalities/topological_characterization/01_chern_z2.ipynb)
 - Operator-resolved Chern numbers and Berry density [[notebook]](jupyter-notebooks/functionalities/topological_characterization/02_operator_resolved_chern.ipynb)
 - Frequency resolved topological density [[notebook]](jupyter-notebooks/functionalities/topological_characterization/03_frequency_resolved_topological_density.ipynb)
 - Spatially resolved topological flux [[notebook]](jupyter-notebooks/functionalities/topological_characterization/04_spatially_resolved_topological_flux.ipynb)
