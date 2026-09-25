@@ -7,7 +7,9 @@ from pyqula import topology
 import numpy as np
 
 # Multiorbital/multiband quantum geometric tensor of the Haldane model,
-# via the exact sum-over-states Kubo formula (see topologytk/qgt.py)
+# via the exact sum-over-states Kubo formula (see topologytk/qgt.py),
+# with the orbitals at their positions (gauge="atomic", the default) and
+# k in reduced coordinates, so index 0 is the direction of b1
 
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian() # spinful by default: 4 bands, two exactly
@@ -44,7 +46,7 @@ plt.subplot(1,2,2)
 plt.plot(inds,g_ab[:,0,0].real,label="Abelian (trace)")
 plt.plot(inds,spin_trace(g_na,up)[:,0,0].real,label="spin up")
 plt.plot(inds,spin_trace(g_na,dn)[:,0,0].real,label="spin down",linestyle="dashed")
-plt.xlabel("kpath") ; plt.xticks([]) ; plt.ylabel("Quantum metric g_xx")
+plt.xlabel("kpath") ; plt.xticks([]) ; plt.ylabel("Quantum metric g_11")
 plt.legend()
 
 plt.tight_layout()

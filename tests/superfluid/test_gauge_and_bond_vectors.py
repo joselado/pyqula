@@ -16,8 +16,8 @@ external reference:
 
 The default ("atomic") twist, built from d_ij = R + r_j - r_i, passes both.
 The lattice gauge is kept as an option because it is the convention of the
-Peotta/Toermae superfluid-weight literature and of pyqula's own
-h.get_quantum_metric(); the difference between them is exactly the
+Peotta/Toermae superfluid-weight literature (h.get_quantum_metric() takes
+the same gauge keyword); the difference between them is exactly the
 orbital-embedding dependence of the fixed-|Delta| superfluid weight
 discussed in Huhtinen, Herzog-Arbeitman, Chew, Bernevig & Toermae,
 PRB 106, 014518 (2022)."""

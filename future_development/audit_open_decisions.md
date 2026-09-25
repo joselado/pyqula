@@ -56,6 +56,28 @@ tests are unchanged. The speedup on an nk=30 mesh was 2.5x at 36 orbitals and
 indicative. The non-Abelian output changed shape, from
 (dim,dim,nocc,nocc) to (dim,dim,n,n).
 
+**Orbital positions, decided 25 September 2026.** A check of the tensor
+against the literature found that every oracle in its tests took P(k) from the
+same `hk_gen`, whose Bloch phase drops the orbital positions, so the suite
+could not see that the lattice gauge is not the physical one. On Haldane with
+a sublattice mass the Berry curvature at three C3-related k-points came out
+0.0266, 0.0265 and -0.0406 (identical spectra), the BZ average of Tr g went
+from 0.693 to 1.989 under a 2x1 supercell instead of doubling, and PythTB
+2.0.2, which the module cited as its reference and which puts tau_j - tau_i
+in the phase, differed pointwise by up to a factor of 20. The maintainer chose
+`gauge="atomic"` as the default, with `"lattice"` kept, as in the superfluid
+weight; the atomic term is the commutator 2 pi i [H, F_i] with the fractional
+positions, added in the lattice eigenbasis as 2 pi i <m|F_i|l>, and the new
+tests pin C3 symmetry, pointwise supercell unfolding in 2D and 3D, the SSH
+spread (d^2/4)(1+r^2)/(1-r^2) and PythTB agreement through the atomic
+projector. The Chern number is the same in both gauges. The same pass removed
+`topologytk/quantumgeometry.py`, whose "quantum geometry" came from an
+integrand antisymmetric in x and y and so never contained the metric (its one
+live routine, the real-space Berry map, moved to `topologytk/green.py`), added
+3D, and sized the k-batch from the number of orbitals (a fixed 256 cost 4.8 GB
+at 400 orbitals). The output is still in reduced coordinates; a Cartesian
+option was not added.
+
 ### 1.2 `aaatk/selfenergy_aaa.py` -- what `converged=True` should mean
 
 `SelfenergyAAA` reports `converged=True` while the local relative error is 7.7%,

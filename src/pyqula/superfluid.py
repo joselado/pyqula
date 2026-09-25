@@ -77,9 +77,9 @@ def superfluid_weight(h,mode="kubo",decompose=False,**kwargs):
         "atomic" (default) twists with the full bond vector R + r_j - r_i,
         which is the physical Peierls substitution.  "lattice" drops the
         intracell part and twists with R alone, reproducing the cell-gauge
-        convention of the Peotta/Toermae papers and of pyqula's own
-        h.get_quantum_metric(); the two differ only for cells holding more
-        than one orbital.
+        convention of the Peotta/Toermae papers; the two differ only for
+        cells holding more than one orbital.  h.get_quantum_metric() takes
+        the same keyword, with the same default.
 
     Returns
     -------

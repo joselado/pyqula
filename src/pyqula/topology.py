@@ -680,10 +680,7 @@ from .topologytk.green import berry_green
 from .topologytk.green import berry_operator
 
 
-from .topologytk.quantumgeometry import QG_green_rmap_kpoint
-
-def berry_green_rmap_kpoint(H,**kwargs):
-    return QG_green_rmap_kpoint(H,**kwargs).imag # return Berry part
+from .topologytk.green import berry_green_rmap_kpoint
 
 
 

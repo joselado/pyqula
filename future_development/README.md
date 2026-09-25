@@ -72,7 +72,8 @@ already reached once.
   sweep did NOT fix, and the calls that were made one way and could reasonably
   be made the other: three findings that are decisions rather than repairs (the
   QGT batching, since decided by returning the non-Abelian tensor in the
-  gauge-independent orbital basis, what the AAA's `converged` flag
+  gauge-independent orbital basis, together with the QGT's orbital-position
+  gauge, atomic by default since 25 September 2026, what the AAA's `converged` flag
   should mean, since decided as a local relative error with the broadening
   as its floor, and GPU Tier 2, still open), three judgement calls (the one
   normalization deliberately left, since divided out, the aliasing sibling

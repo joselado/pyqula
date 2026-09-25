@@ -69,9 +69,10 @@
 # GAUGE OPTION.  gauge="atomic" (the default) is the physical prescription
 # above.  gauge="lattice" reproduces the convention of Peotta & Toermae and
 # Liang et al., who write H(k) without the orbital positions and twist it
-# as k -> k+q; it is the convention in which pyqula's own quantum metric
-# (topologytk/qgt.py) is computed, and is kept so that the flat-band
-# identity below can be checked against it in a single consistent gauge.
+# as k -> k+q, and is kept for reproducing their numbers.  pyqula's own
+# quantum metric (topologytk/qgt.py) takes the same keyword with the same
+# default, so the flat-band identity below can be checked in either gauge,
+# as long as the twist and the metric use the same one.
 # The two differ only for multi-orbital cells, and the difference is
 # exactly the orbital-embedding dependence of the fixed-|Delta| superfluid
 # weight analysed by Huhtinen, Herzog-Arbeitman, Chew, Bernevig & Toermae,
@@ -149,9 +150,9 @@
 #
 # with E = sqrt(xi^2+|Delta|^2) of the flat band and g_{ab} its quantum
 # metric *in the same gauge as the twist*, in pyqula's normalisation --
-# i.e. with gauge="lattice", exactly what h.get_quantum_metric(k=k,
-# occ_idxs=[...the flat band...]) returns, traced over the subspace so that
-# it already contains both spin copies.  This is Liang et al. Eq. (23);
+# i.e. exactly what h.get_quantum_metric(k=k,occ_idxs=[...the flat
+# band...],gauge=gauge) returns, traced over the subspace so that it
+# already contains both spin copies.  This is Liang et al. Eq. (23);
 # their Eq. (24) normalises the metric as ds^2 = (1/2) g dk dk whereas
 # pyqula/topologytk/qgt.py (and the usual Provost-Vallee convention) uses
 # ds^2 = g dk dk, so their g is twice the one used here -- and their band
@@ -203,7 +204,7 @@
 #     large-Delta limit 2 t^2/|Delta| for the square lattice;
 #   * D_s = 0 at Delta=0 and finite T, D_s > 0 at finite Delta;
 #   * a flat-band model where D_conv = 0 and D_geom matches the quantum
-#     metric of topologytk/qgt.py;
+#     metric of topologytk/qgt.py, in each of the two gauges;
 #   * symmetry and positive semi-definiteness of the tensor;
 #   * the BKT self-consistency T = (pi/8) D_s(T).
 import numpy as np

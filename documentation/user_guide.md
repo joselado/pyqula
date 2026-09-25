@@ -1637,8 +1637,9 @@ lattice vector alone $D_s$ comes out anisotropic on the honeycomb lattice,
 which C3 symmetry forbids, and it changes when the same crystal is described
 with a supercell. The full bond vector gives an isotropic, supercell-invariant
 answer. The two agree only for a cell with one orbital. `gauge="lattice"`
-selects the other convention, the one used by Peotta and Törmä and by
-`h.get_quantum_metric()`: at fixed $|\Delta|$ the superfluid weight genuinely
+selects the other convention, the one used by Peotta and Törmä, and
+`h.get_quantum_metric()` takes the same keyword with the same default (see
+"Quantum geometric tensor (multiorbital/multiband)"): at fixed $|\Delta|$ the superfluid weight genuinely
 depends on where the orbitals sit, see Huhtinen, Herzog-Arbeitman, Chew,
 Bernevig and Törmä, Phys. Rev. B **106**, 014518.
 
@@ -2600,13 +2601,34 @@ basis $|v_m\rangle$ of $S$ you choose is $\langle v_m|Q_{ij}|v_n\rangle$.
 
 What makes this form suitable for a genuinely multiorbital model is that only states *outside* $S$ enter the energy denominators, so it
 stays well defined when $S$ contains an exactly or nearly degenerate multiplet of bands, an
-exactly spin-degenerate pair, say, or several orbitals meeting at a high-symmetry point, which
-an ordinary single-band formula cannot handle. The derivative $\partial_{k_i} H$ is evaluated
-analytically from the hoppings, with no finite-difference error, with $k$ in the same reduced
-(dimensionless, period-1) coordinates as the rest of pyqula's k-space code, not Cartesian
-$k$, so the absolute scale of the quantum metric depends on the reciprocal lattice if you
-convert to Cartesian coordinates yourself. `occ_idxs` defaults to the bands with $E<0$, the
-same convention `h.get_chern()` uses, so it tracks `h.shift_fermi(...)`.
+exactly spin-degenerate pair, say, the Kramers pairs of a model with inversion and time-reversal
+symmetry, or several orbitals meeting at a high-symmetry point, which an ordinary single-band
+formula cannot handle. The derivative $\partial_{k_i} H$ is evaluated analytically from the
+hoppings, with no finite-difference error, with $k$ in the same reduced (dimensionless,
+period-1) coordinates as the rest of pyqula's k-space code, $\mathbf k = \sum_i k_i \mathbf b_i$
+with $\mathbf b_i$ the reciprocal lattice vectors, so the tensor in Cartesian momenta, the one
+to compare with a continuum calculation, is $J Q J^T$ with $J_{\alpha i} = (\mathbf a_i)_\alpha/2\pi$.
+`occ_idxs` defaults to the bands with $E<0$, the same convention `h.get_chern()` uses, so it
+tracks `h.shift_fermi(...)`.
+
+Where do the orbitals sit inside the unit cell? The band structure does not care, but the
+Bloch states do, and so does their geometry. Writing the Bloch Hamiltonian with the phase
+$e^{i\mathbf k\cdot\mathbf R}$ of the lattice vector alone, as if every orbital sat at the
+origin of its cell, or with the full bond vector, $e^{i\mathbf k\cdot(\mathbf R+\mathbf r_j-\mathbf r_i)}$,
+gives the same bands and the same Chern number, since the two differ by a $\mathbf k$-dependent
+phase on each orbital, but a different Berry curvature and quantum metric at each $\mathbf k$ and
+a different Brillouin-zone integral of the metric. Only the second is the geometry of the
+crystal, meaning that it respects its point group (on the honeycomb lattice with a Haldane flux
+and a sublattice imbalance the Berry curvature is the same at three $\mathbf k$-points related
+by a $C_3$ rotation, while the first convention even changes its sign between them) and that it
+does not depend on how the crystal is divided into unit cells: the Brillouin-zone average of
+$\mathrm{Tr}\,g$, which is the gauge-invariant spread of the Wannier functions of the subspace,
+doubles exactly when the cell is doubled. `gauge="atomic"`, the default, places every orbital at
+its position in the geometry, and `gauge="lattice"` drops the positions, which is the
+convention of part of the work on flat-band superconductivity and the one to use to reproduce
+numbers derived in it; "Superfluid weight and BKT temperature" takes the same keyword, and this
+dependence on the orbital positions is discussed by Simon and Rudner, Phys. Rev. B **102**,
+165148.
 
 ```python
 from pyqula import geometry
@@ -2639,14 +2661,15 @@ with one $2\times2$ tensor per k-point, and integrating the curvature part over 
 zone reproduces `h.get_chern()`, here $C=2$ for the spin-degenerate pair of occupied bands. A
 degeneracy between the chosen subspace and the bands outside it is the one thing the formula
 cannot handle, and it raises a `ValueError` rather than dividing by a vanishing energy
-difference.
+difference. The same functions work in one and three dimensions, where the tensor has one and
+nine components, and `topology.quantum_geometric_tensor_mesh(h,nk=...)` returns it on a uniform
+k-mesh in any of them.
 
-See `examples/2d/quantum_geometric_tensor/main.py` for a runnable version and
+See `examples/2d/quantum_geometric_tensor/main.py` for a runnable version of the spin-resolved
+tensor above, `examples/2d/quantum_geometry/main.py` for the Berry curvature and the metric of
+the occupied bands along a k-path, and
 `jupyter-notebooks/functionalities/topological_characterization/06_quantum_geometric_tensor.ipynb`
-for an executed notebook. There is also an older, unrelated Green's-function estimator of the
-quantum geometry trace over the whole occupied manifold (not band- or band-pair-resolved),
-`pyqula.topologytk.quantumgeometry.get_QG_kpath`, see
-`examples/2d/quantum_geometry/main.py`.
+for an executed notebook.
 
 ## Berry curvature density in frequency space
 
@@ -5777,6 +5800,9 @@ Optional arguments:
   subspace, instead of its trace over the subspace
 - degeneracy_tol=1e-8: energy tolerance used to detect a degeneracy
   between the chosen subspace and its complement (raises `ValueError`)
+- gauge="atomic": `"atomic"` places every orbital at its position in the
+  geometry, the physical quantum geometry; `"lattice"` drops the positions
+  from the Bloch phase, as if every orbital sat at the origin of its cell
 
 ### h.get_quantum_metric()
 Same arguments as `h.get_quantum_geometric_tensor()`, but returns only the

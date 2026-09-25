@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from pyqula import geometry
 from pyqula import topology
@@ -18,12 +19,143 @@ def _haldane_model(has_spin=False, t2=0.2):
     return h
 
 
-def test_qgt_chern_matches_wilson_loop(tmp_path, monkeypatch):
+# --- independent oracles ------------------------------------------------
+# Everything below builds the Bloch Hamiltonian of either gauge from
+# h.get_hk_gen() and the geometry alone, without any of qgt.py's code.
+
+def _orbital_fractions(h):
+    """Fractional coordinates of every orbital along the periodic lattice
+    vectors, from a least-squares solve of r = sum_i f_i a_i (the site index
+    is the slowest one in pyqula's basis)"""
+    g = h.geometry
+    A = np.array([g.a1, g.a2, g.a3][:h.dimensionality])
+    f = np.linalg.lstsq(A.T, np.array(g.r).T, rcond=None)[0].T
+    return np.repeat(f, h.intra.shape[0]//len(g.r), axis=0)
+
+
+def _bloch_generator(h, gauge):
+    """k -> H(k) in the requested gauge: hk_gen itself for "lattice", and
+    D^dag H D with D = diag(exp(2 pi i k.f_j)) for "atomic", i.e. every
+    hopping carrying the full bond vector R + f_j - f_i in its phase"""
+    hk = h.get_hk_gen()
+    from pyqula import algebra
+    if gauge == "lattice":
+        return lambda k: np.asarray(algebra.todense(hk(k)))
+    f = _orbital_fractions(h)
+    dim = h.dimensionality
+    def hka(k):
+        ph = np.exp(2j*np.pi*(f@np.array(k, dtype=float)[:dim]))
+        return np.conj(ph)[:, None]*np.asarray(algebra.todense(hk(k)))*ph[None, :]
+    return hka
+
+
+def _projector_fd(h, k0, occ, gauge, dk=1e-5):
+    """P d_iP d_jP P by a central finite difference of the projector on the
+    bands occ, in reduced k, in the requested gauge"""
+    hk = _bloch_generator(h, gauge)
+    def P(k):
+        w = np.linalg.eigh(hk(k))[1][:, occ]
+        return w@w.conj().T
+    dim = h.dimensionality
+    k0 = np.array(k0, dtype=float)
+    dP = [(P(k0 + dk*e) - P(k0 - dk*e))/(2*dk) for e in np.eye(3)[:dim]]
+    P0 = P(k0)
+    return np.array([[P0@dP[i]@dP[j]@P0 for j in range(dim)]
+                     for i in range(dim)])
+
+
+def _cartesian_qgt(h, K, occ, gauge="atomic"):
+    """Abelian tensor at the Cartesian k-point K, in Cartesian components:
+    k_i = a_i.K/(2 pi) and Q_cart = J Q_red J^T with J[a,i] = a_i[a]/(2 pi)"""
+    g = h.geometry
+    dim = h.dimensionality
+    A = np.array([g.a1, g.a2, g.a3][:dim])[:, :dim]
+    kr = list(A@np.array(K)/(2*np.pi)) + [0.]*(3 - dim)
+    J = A.T/(2*np.pi)
+    Q = topology.quantum_geometric_tensor(h, k=kr, occ_idxs=occ, gauge=gauge)
+    return J@Q@J.T
+
+
+# --- models with degenerate multiplets ----------------------------------
+
+def _rashba_exchange():
+    """Occupied pair mixing spin, no degeneracy"""
+    h = _haldane_model(has_spin=True, t2=0.2)
+    h.add_rashba(0.3)
+    h.add_exchange([0.1, 0.2, 0.1])
+    return h, [0, 1], [[0.31, 0.17, 0.], [0.62, 0.05, 0.]]
+
+
+def _kane_mele():
+    """Inversion and time reversal: every band is an exact Kramers pair at
+    every k, so the solver picks an arbitrary basis of the occupied pair
+    everywhere, high-symmetry points included"""
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+    h.add_kane_mele(0.1)
+    ks = [[0.31, 0.17, 0.], [0., 0., 0.], [0.5, 0., 0.], [1/3., 1/3., 0.]]
+    return h, [0, 1], ks
+
+
+def _threefold():
+    """Three orbitals per site, with an exactly threefold degenerate lower
+    multiplet at every k, and a different random unitary mixing the three
+    orbitals of each site, so that the multiplet has no preferred basis"""
+    h1 = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    h1.add_haldane(0.2)
+    h1.add_sublattice_imbalance(0.1)
+    hm = h1.get_multicell()
+    rng = np.random.default_rng(7)
+    U = [np.linalg.qr(rng.normal(size=(3, 3)) + 1j*rng.normal(size=(3, 3)))[0]
+         for s in range(2)]
+    V = np.block([[U[0], np.zeros((3, 3))], [np.zeros((3, 3)), U[1]]])
+    lift = lambda m: V@np.kron(np.asarray(m), np.eye(3))@V.conj().T
+    hm.intra = lift(hm.intra)
+    for t in hm.hopping: t.m = lift(t.m)
+    return hm, [0, 1, 2], [[0.31, 0.17, 0.], [1/3., 1/3., 0.]]
+
+
+def _crossing():
+    """Two copies with different bandwidths, shifted so that their lower
+    bands cross exactly at k=(0.21,0.13) inside the chosen subspace, where
+    the individual eigenvectors are not smooth but the projector is"""
+    h1 = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    h1.add_haldane(0.2)
+    h1.add_sublattice_imbalance(0.2)
+    k0 = [0.21, 0.13, 0.]
+    c = 0.5*np.linalg.eigvalsh(h1.get_hk_gen()(k0))[0]
+    hm = h1.get_multicell()
+    lift = lambda m, s: (np.kron(np.asarray(m), np.diag([1., 0.5]))
+                         + s*np.kron(np.eye(2), np.diag([0., 1.])))
+    hm.intra = lift(hm.intra, c)
+    for t in hm.hopping: t.m = lift(t.m, 0.)
+    es = np.linalg.eigvalsh(hm.get_hk_gen()(k0))
+    assert abs(es[0] - es[1]) < 1e-12 # the premise: an exact crossing
+    return hm, [0, 1], [k0]
+
+
+def _diamond():
+    """A three-dimensional two-orbital cell"""
+    h = geometry.diamond_lattice_minimal().get_hamiltonian(has_spin=False)
+    h.add_sublattice_imbalance(0.5)
+    return h, [0], [[0.13, 0.41, 0.27], [0.5, 0.2, 0.7]]
+
+
+_MODELS = {"rashba": _rashba_exchange, "kane_mele": _kane_mele,
+           "threefold": _threefold, "crossing": _crossing,
+           "diamond": _diamond}
+
+
+# --- tests ---------------------------------------------------------------
+
+@pytest.mark.parametrize("gauge", ["atomic", "lattice"])
+def test_qgt_chern_matches_wilson_loop(tmp_path, monkeypatch, gauge):
     """Integrating the xy component of the Berry curvature obtained from
     the new sum-over-states quantum geometric tensor over the BZ must
     reproduce the Chern number of the (already tested) independent
     Fukui-Hatsugai-Suzuki Wilson-loop implementation, topology.chern --
-    both in the trivial (C=0) and Haldane-gapped (C=+-1) cases.
+    both in the trivial (C=0) and Haldane-gapped (C=+-1) cases, and in
+    both gauges, since their Berry curvatures differ by the curl of a
+    periodic function.
 
     Uses the same 2x2 supercell as test_haldane_chern.py's trivial case:
     on the bare (un-supercelled) honeycomb lattice with no Haldane flux the
@@ -40,14 +172,15 @@ def test_qgt_chern_matches_wilson_loop(tmp_path, monkeypatch):
 
     h_trivial = g.get_hamiltonian() # has_spin=True, as in test_haldane_chern.py
     c_wilson_triv = topology.chern(h_trivial, nk=8)
-    c_qgt_triv = topology.chern_from_qgt(h_trivial, nk=8, occ_idxs=occ_idxs)
+    c_qgt_triv = topology.chern_from_qgt(h_trivial, nk=8, occ_idxs=occ_idxs,
+                                         gauge=gauge)
     assert abs(round(c_wilson_triv)) == 0
     assert abs(c_qgt_triv) < 1e-2
 
     h = g.get_hamiltonian()
     h.add_haldane(0.2)
     c_wilson = topology.chern(h, nk=8)
-    c_qgt = topology.chern_from_qgt(h, nk=8, occ_idxs=occ_idxs)
+    c_qgt = topology.chern_from_qgt(h, nk=8, occ_idxs=occ_idxs, gauge=gauge)
     assert abs(round(c_wilson) - c_wilson) < 1e-6
     assert round(c_wilson) != 0
     assert np.isclose(c_qgt, c_wilson, atol=1e-2)
@@ -136,60 +269,209 @@ def test_qgt_nonabelian_spin_degenerate_block_diagonal():
     assert np.allclose(block(dn, dn), Q_ref)
 
 
-def test_qgt_nonabelian_is_the_projector_derivative():
+@pytest.mark.parametrize("gauge", ["atomic", "lattice"])
+@pytest.mark.parametrize("model", sorted(_MODELS))
+def test_qgt_nonabelian_is_the_projector_derivative(model, gauge):
     """The orbital-basis tensor is P d_iP d_jP P, with P the projector on
-    the chosen bands and d_i the derivative in reduced k. Check it against
-    a finite difference of P built directly from the eigenvectors, on a
-    model with Rashba coupling and an exchange field so the occupied pair
-    mixes spin, and check that no choice of basis inside the pair enters:
-    the finite difference only ever sees P."""
-    from pyqula import algebra
-    h = _haldane_model(has_spin=True, t2=0.2)
-    h.add_rashba(0.3)
-    h.add_exchange([0.1, 0.2, 0.1])
-    hk = h.get_hk_gen()
-    def P(k):
-        w = algebra.eigh(hk(k))[1][:, [0, 1]]
-        return w@w.conj().T
-    k0, dk = np.array([0.31, 0.17, 0.]), 1e-5
-    dP = [(P(k0 + dk*e) - P(k0 - dk*e))/(2*dk) for e in np.eye(3)[:2]]
-    P0 = P(k0)
-    Q_fd = np.array([[P0@dP[i]@dP[j]@P0 for j in range(2)] for i in range(2)])
-    Q_na = topology.quantum_geometric_tensor(h, k=k0, occ_idxs=[0, 1],
-                                              non_abelian=True)
-    assert np.max(np.abs(Q_na)) > 1.0 # the premise: a sizeable tensor
-    assert np.max(np.abs(Q_na - Q_fd)) < 1e-6
+    the chosen bands, in the Bloch basis of the chosen gauge, and d_i the
+    derivative in reduced k. Check it against a finite difference of P
+    built directly from the eigenvectors, on models whose subspace is an
+    exact Kramers pair at every k (Kane-Mele, high-symmetry points
+    included), an exactly threefold multiplet randomly mixed on every site,
+    an exact band crossing inside the subspace, a spin-mixed pair, and a
+    three-dimensional cell. The finite difference only ever sees P, so no
+    choice of basis inside a multiplet enters it."""
+    h, occ, ks = _MODELS[model]()
+    qmax = 0.
+    for k in ks:
+        Q = topology.quantum_geometric_tensor(h, k=k, occ_idxs=occ,
+                                              non_abelian=True, gauge=gauge)
+        Q_fd = _projector_fd(h, k, occ, gauge)
+        qmax = max(qmax, np.max(np.abs(Q_fd)))
+        assert np.max(np.abs(Q - Q_fd)) < 1e-6*max(1., np.max(np.abs(Q_fd)))
+    assert qmax > 1e-3 # the premise: a nonzero tensor somewhere
 
 
-def test_qgt_mesh_is_the_pointwise_tensor():
+def test_qgt_threefold_multiplet_is_three_copies():
+    """The threefold model is three copies of one two-band Hamiltonian
+    rotated by a unitary that acts within each site, so it keeps every
+    orbital at its site and the Abelian tensor of the multiplet must be
+    exactly three times that of a single copy, in either gauge"""
+    hm, occ, ks = _threefold()
+    h1 = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    h1.add_haldane(0.2)
+    h1.add_sublattice_imbalance(0.1)
+    for gauge in ["atomic", "lattice"]:
+        for k in ks:
+            Q3 = topology.quantum_geometric_tensor(hm, k=k, occ_idxs=occ,
+                                                   gauge=gauge)
+            Q1 = topology.quantum_geometric_tensor(h1, k=k, occ_idxs=[0],
+                                                   gauge=gauge)
+            assert np.allclose(Q3, 3.*Q1, rtol=1e-10, atol=1e-12)
+
+
+@pytest.mark.parametrize("gauge", ["atomic", "lattice"])
+def test_qgt_mesh_is_the_pointwise_tensor(gauge):
     """The mesh is evaluated in batches of k-points, the single-k entry
     point on its own; both must give the same numbers, in the non-Abelian
     orbital basis too, including across a chunk boundary"""
     from pyqula.topologytk import qgt
     h = _haldane_model(has_spin=True, t2=0.2)
     h.add_rashba(0.2)
-    hm, orders, hkgen, scale = qgt._multicell_and_orders(h)
+    hm, orders, hkgen, scale, frac = qgt._multicell_and_orders(h, gauge=gauge)
     ks = [np.random.default_rng(3).random(3)*[1, 1, 0] for _ in range(7)]
     _, Qs = qgt._qgt_over_kpoints(hm, orders, hkgen, ks, [0, 1], True,
-                                  1e-8, scale, chunk=3)
+                                  1e-8, scale, frac, chunk=3)
     for k, Q in zip(ks, Qs):
         Qk = topology.quantum_geometric_tensor(h, k=k, occ_idxs=[0, 1],
-                                               non_abelian=True)
+                                               non_abelian=True, gauge=gauge)
         assert np.max(np.abs(Q - Qk)) < 1e-10
 
-_PAULI = {
-    "x": np.array([[0, 1], [1, 0]], dtype=complex),
-    "y": np.array([[0, -1j], [1j, 0]], dtype=complex),
-    "z": np.array([[1, 0], [0, -1]], dtype=complex),
-}
+
+def test_qgt_is_c3_symmetric_in_the_atomic_gauge():
+    """A crystal symmetry must show up in the quantum geometry: on the
+    honeycomb lattice with a Haldane flux and a sublattice mass (symmetric
+    under a C3 rotation about a hexagon center) the Cartesian tensor must
+    obey Q(R K) = R Q(K) R^T, meaning that the Berry curvature is the same
+    at three rotated k-points and the metric rotates with them. That holds
+    only with the orbitals at their positions; the lattice gauge, which
+    puts both sites at the cell origin, breaks it (the Berry curvature at
+    the three points even changes sign), and the test checks that too, so
+    that it cannot pass vacuously"""
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    h.add_sublattice_imbalance(0.3)
+    h.add_haldane(0.15)
+    th = 2*np.pi/3
+    R = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+    K0 = np.array([0.7, 0.4])
+    def violation(gauge):
+        Q0 = _cartesian_qgt(h, K0, [0], gauge)
+        return max(np.max(np.abs(_cartesian_qgt(h, Rn@K0, [0], gauge)
+                                 - Rn@Q0@Rn.T))
+                   for Rn in (R, R@R))
+    assert violation("atomic") < 1e-12
+    assert violation("lattice") > 1e-2
 
 
-def _bloch_vector(hk):
-    """Pauli decomposition H(k) = d0*I + d.sigma of a 2x2 Bloch Hamiltonian."""
-    return np.array([np.real(np.trace(hk @ _PAULI[a]))/2. for a in "xyz"])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_qgt_does_not_depend_on_the_unit_cell(dim):
+    """Redescribing the same crystal with a doubled unit cell cannot change
+    its quantum geometry. The occupied states of the supercell at a
+    Cartesian K are those of the primitive cell at K and at K+b1/2 (b1 the
+    primitive reciprocal vector along the doubled direction), and with the
+    orbitals at their positions the two descriptions differ by a
+    k-independent unitary, so the Cartesian tensor of the supercell must be
+    exactly the sum of the two primitive ones, pointwise; averaged over the
+    BZ this is the statement that the Marzari-Vanderbilt gauge-invariant
+    spread (the BZ average of Tr g) of a cell twice as large is twice as
+    large. The lattice gauge fails it, which the test also checks."""
+    if dim == 2:
+        h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+        h.add_sublattice_imbalance(0.3)
+        h.add_haldane(0.15)
+        h2 = h.get_supercell([2, 1, 1])
+        Ks = [np.array([0.3, 0.5]), np.array([-0.2, 1.1])]
+    else:
+        h, _, _ = _diamond()
+        h2 = h.get_supercell([2, 1, 1])
+        Ks = [np.array([0.91, 1.32, -0.44])]
+    g = h.geometry
+    A = np.array([g.a1, g.a2, g.a3][:dim])[:, :dim]
+    b1 = 2*np.pi*np.linalg.inv(A).T[0]
+    def violation(gauge):
+        return max(np.max(np.abs(_cartesian_qgt(h2, K, [0, 1], gauge)
+                   - _cartesian_qgt(h, K, [0], gauge)
+                   - _cartesian_qgt(h, K + b1/2, [0], gauge))) for K in Ks)
+    assert violation("atomic") < 1e-12
+    assert violation("lattice") > 1e-2
 
 
-def test_qgt_matches_analytic_two_band_formula():
+@pytest.mark.parametrize("valley", [1, -1])
+def test_qgt_massive_dirac_point(valley):
+    """At the Dirac points of the honeycomb lattice with a sublattice mass m
+    the Bloch Hamiltonian is exactly H = v (tau q_x s_x + q_y s_y) + m s_z
+    to linear order in q, with v = 3 t a/2 (t=1 the hopping, a=1 the bond
+    length), so the lower band has Berry curvature -tau v^2/(2 m^2) and an
+    isotropic metric g_xx = g_yy = v^2/(4 m^2), g_xy = 0, in Cartesian
+    units (the valley-contrasting Berry curvature of Xiao, Yao and Niu,
+    PRL 99, 236809 (2007)); the sign of the curvature alternates between
+    the two valleys. H(K) is diagonal here, so both gauges agree at this
+    one point, and this test pins the Cartesian scale rather than the
+    gauge"""
+    m, v = 0.3, 1.5
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    h.add_sublattice_imbalance(m)
+    kr = [1/3., 1/3., 0.] if valley == 1 else [2/3., 2/3., 0.]
+    g = h.geometry
+    A = np.array([g.a1[:2], g.a2[:2]])
+    K = 2*np.pi*np.linalg.solve(A, np.array(kr[:2])) # A K/(2 pi) = kr
+    Q = _cartesian_qgt(h, K, [0])
+    assert np.isclose(-2*Q[0, 1].imag, -valley*v**2/(2*m**2))
+    assert np.allclose(Q.real, v**2/(4*m**2)*np.eye(2))
+
+
+@pytest.mark.parametrize("vw", [(1.0, 0.5), (0.3, 1.0), (1.0, 0.0)])
+def test_qgt_ssh_chain_closed_form(vw):
+    """SSH chain, bonds of equal length d=1 alternating between v and w
+    (lattice constant a=2). With r = min(v,w)/max(v,w) the BZ average of
+    the metric of the lower band has a closed form in each gauge, from the
+    winding angle phi(k) of the off-diagonal element, g = (1/4) (dphi/dk)^2.
+    With both orbitals at the cell origin (lattice gauge) it is
+    n^2/4 + r^2/(8 (1-r^2)) per unit of the dimensionless 2 pi-periodic k,
+    n the winding number of phi (1 when the intercell bond w is the
+    stronger), so it changes when v and w are exchanged, although that is
+    the same chain with the cell shifted by one site. With the orbitals at
+    +-d/2 (atomic gauge) the phase picks up k d, and the Marzari-Vanderbilt
+    spread of the Wannier function becomes Omega_I = (d^2/4) (1+r^2)/(1-r^2)
+    whichever bond is the stronger, which goes to (d/2)^2 in the dimerized
+    limit r=0, the spread of an orbital shared by two sites a distance d
+    apart, and diverges as the gap closes"""
+    v, w = vw
+    gc = geometry.chain().get_supercell(2) # sites at x=-0.5,0.5, a=2
+    xc = np.mean(np.array(gc.r)[:, 0])
+    def hopping(r1, r2):
+        if abs(np.linalg.norm(r1 - r2) - 1.) > 1e-5: return 0.
+        return v if abs((r1[0] + r2[0])/2. - xc) < 0.6 else w
+    h = gc.get_hamiltonian(fun=hopping, has_spin=False)
+    r = min(v, w)/max(v, w)
+    a = 2.
+    _, Qs = topology.quantum_geometric_tensor_mesh(h, nk=400, occ_idxs=[0],
+                                                   gauge="lattice")
+    g_red = np.mean(Qs[:, 0, 0].real) # reduced k, g_red = (2 pi)^2 g_k
+    n = 1 if w > v else 0 # winding number of the off-diagonal element
+    assert np.isclose(g_red/(2*np.pi)**2, n**2/4. + r**2/(8*(1 - r**2)),
+                      atol=1e-10)
+    _, Qs = topology.quantum_geometric_tensor_mesh(h, nk=400, occ_idxs=[0])
+    spread = np.mean(Qs[:, 0, 0].real)*(a/(2*np.pi))**2 # Cartesian
+    assert np.isclose(spread, (a**2/16.)*(1 + r**2)/(1 - r**2), atol=1e-10)
+
+
+def test_qgt_kane_mele_spin_chern_numbers():
+    """With inversion and time reversal every band of the Kane-Mele model
+    is an exact Kramers pair, so the occupied pair has no preferred basis
+    anywhere in the BZ, and its Abelian Berry curvature vanishes
+    identically. The non-Abelian tensor still carries the spin-resolved
+    information: S_z is conserved, the projector splits into spin blocks,
+    and the trace of the non-Abelian Berry curvature over the spin-up
+    orbitals integrates to C_up = +1 and over the spin-down ones to
+    C_dn = -1, the quantum spin Hall state of Kane and Mele, PRL 95,
+    226801 (2005)"""
+    from pyqula.topologytk import qgt
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+    h.add_kane_mele(0.1)
+    nk = 24
+    ks, Qs = topology.quantum_geometric_tensor_mesh(h, nk=nk, occ_idxs=[0, 1],
+                                                    non_abelian=True)
+    F = qgt.berry_curvature_from_qgt(Qs, non_abelian=True)[:, 0, 1]
+    up, dn = [0, 2], [1, 3]
+    chern = lambda o: np.sum(np.trace(F[:, o][:, :, o], axis1=1,
+                                      axis2=2)).real/(nk*nk*2*np.pi)
+    assert np.isclose(chern(up), 1., atol=1e-3)
+    assert np.isclose(chern(dn), -1., atol=1e-3)
+    assert np.max(np.abs(np.trace(F, axis1=1, axis2=2))) < 1e-10
+
+
+def test_qgt_matches_analytic_two_band_formula_in_both_gauges():
     """Independent analytic benchmark, computed without using any of this
     module's code: for a two-band Bloch Hamiltonian H(k) = d0(k) I +
     d(k).sigma (exactly the spinless Haldane model here), the lower band's
@@ -204,30 +486,36 @@ def test_qgt_matches_analytic_two_band_formula():
     metric (unlike the Chern-number and geometric-bound checks above,
     which are both invariant under an overall rescaling Q -> lambda^2 Q,
     so neither would catch e.g. a missing/duplicated prefactor). d(k) is
-    obtained directly from h.get_hk_gen() and differentiated with a plain
-    central finite difference here, entirely independent of qgt.py's
+    read off the Bloch Hamiltonian of each gauge, built here from
+    h.get_hk_gen() and the orbital positions, and differentiated with a
+    plain central finite difference, entirely independent of qgt.py's
     exact analytic multicell derivative."""
     h = _haldane_model(t2=0.2)
-    hkgen = h.get_hk_gen()
     dk = 1e-5
-    def dhat(k):
-        d = _bloch_vector(hkgen(np.array(k, dtype=float)))
-        return d/np.linalg.norm(d)
-    for k in ([0.1, 0.2, 0.], [0.31, 0.17, 0.], [0.05, 0.4, 0.]):
-        k = np.array(k, dtype=float)
-        ex, ey = np.array([1., 0., 0.]), np.array([0., 1., 0.])
-        dx = (dhat(k+dk*ex) - dhat(k-dk*ex))/(2*dk)
-        dy = (dhat(k+dk*ey) - dhat(k-dk*ey))/(2*dk)
-        g_analytic = 0.25*np.array([[np.dot(dx, dx), np.dot(dx, dy)],
-                                     [np.dot(dy, dx), np.dot(dy, dy)]])
-        omega_analytic = 0.5*np.dot(dhat(k), np.cross(dx, dy))
+    pauli = [np.array([[0, 1], [1, 0]], dtype=complex),
+             np.array([[0, -1j], [1j, 0]], dtype=complex),
+             np.array([[1, 0], [0, -1]], dtype=complex)]
+    for gauge in ["atomic", "lattice"]:
+        hk = _bloch_generator(h, gauge)
+        def dhat(k):
+            d = np.array([np.real(np.trace(hk(k)@s))/2. for s in pauli])
+            return d/np.linalg.norm(d)
+        for k in ([0.1, 0.2, 0.], [0.31, 0.17, 0.], [0.05, 0.4, 0.]):
+            k = np.array(k, dtype=float)
+            ex, ey = np.array([1., 0., 0.]), np.array([0., 1., 0.])
+            dx = (dhat(k+dk*ex) - dhat(k-dk*ex))/(2*dk)
+            dy = (dhat(k+dk*ey) - dhat(k-dk*ey))/(2*dk)
+            g_analytic = 0.25*np.array([[np.dot(dx, dx), np.dot(dx, dy)],
+                                         [np.dot(dy, dx), np.dot(dy, dy)]])
+            omega_analytic = 0.5*np.dot(dhat(k), np.cross(dx, dy))
 
-        Q = topology.quantum_geometric_tensor(h, k=k, occ_idxs=[0])
-        g_num = topology.quantum_metric_from_qgt(Q).real
-        omega_num = topology.berry_curvature_from_qgt(Q)[0, 1].real
+            Q = topology.quantum_geometric_tensor(h, k=k, occ_idxs=[0],
+                                                  gauge=gauge)
+            g_num = topology.quantum_metric_from_qgt(Q).real
+            omega_num = topology.berry_curvature_from_qgt(Q)[0, 1].real
 
-        assert np.allclose(g_num, g_analytic, atol=1e-5)
-        assert np.isclose(omega_num, omega_analytic, atol=1e-5)
+            assert np.allclose(g_num, g_analytic, atol=1e-5)
+            assert np.isclose(omega_num, omega_analytic, atol=1e-5)
 
 
 def test_qgt_nonabelian_berry_curvature_trace_matches_abelian():
@@ -278,6 +566,12 @@ def test_qgt_degenerate_subspace_without_gap_raises():
     sum-over-states denominator singular; this must fail loudly rather
     than silently return a wrong number."""
     h = _haldane_model(has_spin=True, t2=0.2)
-    import pytest
     with pytest.raises(ValueError):
         topology.quantum_geometric_tensor(h, k=[0.31, 0.17, 0.], occ_idxs=[0])
+
+
+def test_qgt_unknown_gauge_lists_the_accepted_ones():
+    h = _haldane_model(t2=0.2)
+    with pytest.raises(ValueError, match="atomic"):
+        topology.quantum_geometric_tensor(h, k=[0.31, 0.17, 0.],
+                                          gauge="cell")

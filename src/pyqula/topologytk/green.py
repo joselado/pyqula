@@ -151,3 +151,38 @@ def dOmega_dE(h,k=[0.,0.,0.],e=0.,**kwargs):
   return dOmega_dE_generator(h,**kwargs)(k=k,e=e)
 
 
+
+
+
+def berry_green_rmap_kpoint(h,emin=None,k=[0.,0.,0.],
+        ne=100,dk=0.0001,operator=None,integral_mode="complex",
+                  delta=0.002,integral=True,eps=1e-3,
+                  energy=0.0,emax=0.0):
+    """Return the spatially resolved Berry curvature at a certain kpoint,
+    one value per orbital, either integrated up to the Fermi energy
+    (integral=True) or at a single energy (integral=False)"""
+    from ..integration import integrate_matrix
+    f = h.get_gk_gen(delta=delta,canonical_phase=True) # green function generator
+    fgreen = berry_green_generator(f,k=k,dk=dk,operator=operator,full=True)
+    # No minimum energy provided
+    if emin is None and integral:
+        emin = algebra.eigvalsh(h.get_hk_gen()(k))[0] - 1.0
+        print("Minimum energy",emin)
+    def fint(x):
+      return np.diag(fgreen(x)) # return diagonal
+    ### The original function is defined in the complex plane,
+    # we will do a change of variables of the form z = re^(iphi) - r0
+    # so that dz = re^(iphi) i dphi
+    if integral: # integrate up to the fermi energy
+      def fint2(x):
+        """Function to integrate using a complex contour, from 0 to 1"""
+        de = emax-emin # energy window of the integration
+        ce = de/2. # center of the circle
+        z0 = -ce*np.exp(-1j*x*np.pi) # parametrize the circle
+        z = z0 + (emin+emax)/2. # shift the circle
+        print("Evaluating",x)
+        return 1j*(fint(z)*z0)*np.pi # integral after the change of variables
+      out = integrate_matrix(fint2,xlim=[0.,1.],eps=eps)
+      return (1j*out).imag # Berry curvature
+    else: # evaluate at the fermi energy
+      return (1j*fint(energy)).imag # Berry curvature

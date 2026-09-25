@@ -13,15 +13,18 @@ quantum metric of the flat band, Liang et al. Eq. (23),
     D_geom = (2 |Delta|^2/(V N_k)) sum_k [tanh(beta E/2)/E] g(k) ,
 
 with g from pyqula's own, independently implemented quantum geometric
-tensor (topologytk/qgt.py).  qgt.py works in pyqula's lattice (cell) gauge
-and in reduced coordinates, so the comparison is made with the superfluid
-weight in the same gauge (gauge="lattice") and with the metric converted to
-Cartesian coordinates -- a metric and a stiffness are not the same object
-unless both conventions are matched, and mismatching them is exactly the
-kind of silent factor this test exists to catch.  The identity is exact
+tensor (topologytk/qgt.py).  qgt.py works in reduced coordinates, so the
+metric is converted to Cartesian coordinates, and the comparison is made
+in each gauge separately, the superfluid weight and the metric both with
+the orbitals at their positions (gauge="atomic", the default of both) or
+both without (gauge="lattice", the convention of Liang et al.) -- a metric
+and a stiffness are not the same object unless both conventions are
+matched, and mismatching them is exactly the kind of silent factor this
+test exists to catch.  The identity is exact
 only for Delta small compared with the band gap, so the test also checks
 that the ratio approaches one as Delta shrinks."""
 import numpy as np
+import pytest
 
 from pyqula import geometry
 from pyqula.kpointstk.kmesh import kmesh
@@ -46,11 +49,12 @@ def sawtooth_chain(t=1., mu=-FLAT):
     return h
 
 
-def _metric_cartesian(h0, k, occ_idxs):
+def _metric_cartesian(h0, k, occ_idxs, gauge):
     """h0.get_quantum_metric in Cartesian coordinates.  qgt.py differentiates
     with respect to reduced k, so g^red_ij = sum_ab (G_i)_a (G_j)_b g^cart_ab
     with G_i the reciprocal lattice vectors, G_i.a_j = 2 pi delta_ij."""
-    gred = np.atleast_2d(h0.get_quantum_metric(k=k, occ_idxs=occ_idxs))
+    gred = np.atleast_2d(h0.get_quantum_metric(k=k, occ_idxs=occ_idxs,
+                                               gauge=gauge))
     a1 = h0.geometry.a1
     gg = 2.*np.pi/np.sqrt(a1.dot(a1))       # |G_1| for a chain along a1
     return gred/gg**2
@@ -66,19 +70,21 @@ def test_sawtooth_lower_band_is_flat_and_isolated():
     assert np.min(es[:, 2]) > np.sqrt(2.)-1e-8       # gapped from the rest
 
 
-def test_flat_band_weight_is_geometric_and_matches_the_quantum_metric():
+@pytest.mark.parametrize("gauge", ["atomic", "lattice"])
+def test_flat_band_weight_is_geometric_and_matches_the_quantum_metric(gauge):
     nk = 24
     h0 = sawtooth_chain()
     volume = 2.0                                     # |a1| of chain(2)
     ks = kmesh(1, nk=nk)
     # quantum metric of the flat band, traced over its two spin copies
-    gs = np.array([_metric_cartesian(h0, k, [0, 1]) for k in ks]).flatten()
+    gs = np.array([_metric_cartesian(h0, k, [0, 1], gauge)
+                   for k in ks]).flatten()
     ratios = []
     for delta in [0.2, 0.05, 0.01]:
         h = h0.copy()
         h.add_swave(delta)
         out = sw.superfluid_weight_decomposition(h, nk=nk, T=0.,
-                                                 gauge="lattice")
+                                                 gauge=gauge)
         # a flat band carries no group velocity: no conventional weight
         assert abs(out["conventional"][0, 0]) < 0.03*out["total"][0, 0]
         # E = |Delta| on the flat band, tanh(beta E/2) = 1 at T=0
