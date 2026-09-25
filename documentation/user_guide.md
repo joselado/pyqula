@@ -2061,10 +2061,12 @@ h2 = h.get_mean_field_hamiltonian(J1=1.0, nk=12)
 h2.get_magnetization()                 # induced <S> per site
 ```
 
-The argument of `add_zeeman` is the coefficient of $\vec\sigma$ (the Pauli matrices), not of
-$\vec S=\vec\sigma/2$, so the physical field $h$ in $H=-h\cdot S_i$ is twice the value passed
-in, the same convention `add_exchange` uses on an ordinary electronic Hamiltonian elsewhere
-in this guide. The one-fermion-per-site constraint is a constraint on the total occupation,
+The argument $\vec b$ of `add_zeeman` is the coefficient of $\vec\sigma$ (the Pauli matrices),
+not of $\vec S=\vec\sigma/2$, and it enters with a plus sign, as
+$+\vec b\cdot\vec\sigma=+2\vec b\cdot\vec S_i$, so the physical field in $H=-\vec h\cdot\vec S_i$ is $\vec h=-2\vec b$,
+meaning that the induced $\langle\vec S_i\rangle$ points against the vector passed in; this is
+the same convention `add_exchange` uses on an ordinary electronic Hamiltonian elsewhere in
+this guide. The one-fermion-per-site constraint is a constraint on the total occupation,
 not on the spin, so it stays exactly satisfied under a field while $\langle S_i\rangle$ is
 free to grow with it, saturating once the field dominates $J$.
 

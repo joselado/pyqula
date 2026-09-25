@@ -78,8 +78,9 @@ class SpinonHamiltonian(Hamiltonian):
         h2 = h.get_mean_field_hamiltonian(J1=1.0, nk=12)
 
     Note add_zeeman/add_exchange's argument b is the coefficient of sigma
-    (Pauli matrices, eigenvalues +-1), not of S=sigma/2 -- so the physical
-    field h in H=-h.S_i is 2*b, matching this argument's convention
+    (Pauli matrices, eigenvalues +-1), not of S=sigma/2, and it enters as
+    +b.sigma = +2b.S_i -- so the physical field h in H=-h.S_i is -2*b, and
+    the induced <S_i> points AGAINST b, matching this argument's convention
     everywhere else in pyqula (add_exchange/add_magnetism on an ordinary
     electronic Hamiltonian use the same sigma-not-S convention). The local
     constraint enforced by the array-filling machinery above (exactly one
