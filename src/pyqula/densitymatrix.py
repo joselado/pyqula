@@ -454,9 +454,19 @@ def restricted_dm(h,mode="KPM",pairs=[],
        
 from . import algebra
 
-def occupied_projector(m,delta=0.0):
-    """Return a projector onto the occupied states"""
+def occupied_projector(m,delta=None):
+    """Return a projector onto the states of m below zero energy.
+
+    What is returned is the TRANSPOSE of the projector, the same index
+    convention as full_dm (see its docstring), so take .T before using it
+    as P, as topologytk/realspace.py does.
+
+    delta is the width of the Fermi-Dirac occupation; None keeps
+    full_dm_python's own default smearing, and 0 is taken as a hard
+    cutoff at zero energy"""
     (es,vs) = algebra.eigh(m) # diagonalize
     vs = vs.T # transpose
-    return np.array(full_dm_python(es,np.array(vs)))
+    if delta is None: return np.array(full_dm_python(es,np.array(vs)))
+    if delta==0.: delta = 1e-15 # just very small, as in full_dm
+    return np.array(full_dm_python(es,np.array(vs),delta=delta))
 
