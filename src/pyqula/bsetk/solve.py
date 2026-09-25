@@ -53,8 +53,9 @@ class BSE():
     None means 4 for "iterative" and 1 for "qtt".
 
     gauge smooths the arbitrary phase algebra.eigh leaves on each Bloch
-    eigenvector (bsetk/gauge.py). It changes no energy -- it is a
-    block-diagonal unitary on the pair index -- so the default "auto"
+    eigenvector (bsetk/gauge.py). It changes no energy -- it rotates
+    only inside degenerate multiplets, where it commutes with the band
+    energies of the pair basis -- so the default "auto"
     turns it on only for solver="qtt", which cannot work without it, and
     leaves the other two in the raw gauge where it makes no difference.
     Setting it explicitly ("phase", "projection" or None) applies to every

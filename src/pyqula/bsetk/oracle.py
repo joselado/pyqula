@@ -30,6 +30,12 @@ consistent between k-points:
     references produces a perfectly valid gauge at each k and no smooth
     gauge overall, which is the one thing the quantics route cannot
     survive.
+
+Which bands form a degenerate multiplet is NOT fixed up front: it is read
+off each k-point's own energies when that k-point is diagonalized. The
+projection may rotate only inside a multiplet at that k, since dE stays
+diagonal on the band labels, and that is what keeps the spectrum
+invariant (see bsetk/gauge.py).
 """
 import numpy as np
 
@@ -112,8 +118,8 @@ class PairOracle():
         c1 = np.array(w1.T,dtype=np.complex128)[None,:,:]
         c2 = np.array(w2.T,dtype=np.complex128)[None,:,:]
         kw = dict(mode=self.gauge,trials=self.trials,refs=self.refs)
-        c1 = fix_gauge(c1,self.groups,**kw)[0]
-        c2 = fix_gauge(c2,self.groups,**kw)[0]
+        c1 = fix_gauge(c1,self.groups,ek=e1[None,:],**kw)[0]
+        c2 = fix_gauge(c2,self.groups,ek=e2[None,:],**kw)[0]
         out = (e1,c1,e2,c2)
         self._cache[ik] = out
         return out

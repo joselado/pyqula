@@ -2,10 +2,13 @@
 
 Two independent things are pinned here.
 
-1. Applying a gauge fix changes NO exciton energy. The gauge is a
-   block-diagonal unitary on the pair index, so the whole BSE matrix is
-   conjugated by a unitary and the spectrum is invariant. If this ever
-   fails, the gauge code is wrong -- it is never a modelling choice.
+1. Applying a gauge fix changes NO exciton energy. The gauge rotates
+   only inside degenerate multiplets, so it commutes with the band-energy
+   diagonal of the pair basis, the whole BSE matrix is conjugated by a
+   unitary and the spectrum is invariant. The models here have windows
+   that are degenerate or one band wide; test_bse_gauge_multiplet.py has
+   the ones where the two differ. If this ever fails, the gauge code is
+   wrong -- it is never a modelling choice.
 
 2. Under a gauge fix the quantics tensor-train rank of the kernel's
    factors SATURATES as the mesh is refined, while in the raw eigh gauge
@@ -75,7 +78,7 @@ def test_gauge_is_a_unitary_on_each_subspace():
     pb = PairBasis(h, nk=4)
     groups = [pb.vbands, pb.cbands]
     for mode in ("phase", "projection"):
-        ck = fix_gauge(pb.ck, groups, mode=mode,
+        ck = fix_gauge(pb.ck, groups, mode=mode, ek=pb.ek,
                        trials=default_trials(pb.ck, groups))
         for grp in groups:
             for ik in range(len(pb.kpoints)):

@@ -37,7 +37,10 @@ class PairBasis():
     gauge, if given, smooths the arbitrary phase (or intra-multiplet
     unitary) algebra.eigh leaves on each eigenvector -- see bsetk/gauge.py.
     It changes no observable: the exciton spectrum is invariant, because
-    the gauge is a block-diagonal unitary on the pair index. It exists for
+    the gauge rotates only inside degenerate multiplets, so it commutes
+    with the dE that build() keeps on the band labels (a rotation across
+    bands of different energy would not, which is why the projection
+    gauge does not rotate a whole window). It exists for
     the quantics solver, whose tensor-train ranks are destroyed by the raw
     gauge, and it is applied here (rather than only there) so the dense
     solver can be used to check that invariance directly."""
@@ -89,13 +92,13 @@ class PairBasis():
             trials = default_trials(self.ck,groups)
             refs = default_refs(self.ck)
             kw = dict(mode=gauge,trials=trials,refs=refs)
-            self.ck = fix_gauge(self.ck,groups,**kw)
+            self.ck = fix_gauge(self.ck,groups,ek=self.ek,**kw)
             # the SAME trial orbitals and reference orbitals at k+Q, so
             # the two are gauged consistently: a pair basis whose k and
             # k+Q sides were smoothed towards different references is not
             # smooth in the pair index, which is the only thing the gauge
             # is for
-            self.ckq = fix_gauge(self.ckq,groups,**kw)
+            self.ckq = fix_gauge(self.ckq,groups,ek=self.ekq,**kw)
         self.build()
     def build(self):
         """Build the flattened pair index and its coefficient arrays"""
