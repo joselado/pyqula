@@ -96,7 +96,7 @@ from .oracle import PairOracle
 def solve_qtt(h,V=None,Q=None,nk=16,nv=None,nc=None,kernel="full",
         neig=1,gauge="projection",screening=None,nkW=None,channel="charge",
         tolerance=1e-6,maxbonddim=None,unfolding="grouped",coarse_nk=8,
-        nsweep=24,maxdim=100,cutoff=1e-10,weight=None,seed=0,**kwargs):
+        nsweep=24,maxdim=100,cutoff=1e-10,weight=None,seed=0):
     """Solve the Tamm-Dancoff BSE with a quantics MPO and DMRG.
 
     Returns (oracle,W,Wx,(energies,amplitudes)) so that BSE can present

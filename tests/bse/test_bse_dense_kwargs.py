@@ -1,8 +1,9 @@
-"""The dense BSE solver refuses keywords it does not read.
+"""The BSE solvers refuse keywords they do not read.
 
 BSE takes **kwargs for the options of the iterative and quantics solvers,
 and the dense branch used to drop them without a word, so a misspelt nk or
-kernel ran the default calculation instead. metal= is refused as well: the
+kernel ran the default calculation instead; so did the quantics solver,
+whose own **kwargs nothing read. metal= is refused as well: the
 exciton kernel has no occupancy filter, so honouring it would build pairs
 between two occupied or two empty states."""
 import numpy as np
@@ -32,6 +33,12 @@ def test_exciton_bands_refuses_unknown_keywords():
     h, W = _system()
     with pytest.raises(TypeError, match="nkk"):
         h.get_exciton_bands(V=W, nk=4, nq=2, nkk=40)
+
+
+def test_qtt_refuses_unknown_keywords():
+    h, W = _system()
+    with pytest.raises(TypeError, match="nkk"):
+        h.get_bse(V=W, nk=16, tda=True, solver="qtt", nkk=40)
 
 
 def test_iterative_still_takes_its_own_options():
