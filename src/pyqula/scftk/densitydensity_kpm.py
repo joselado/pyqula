@@ -197,10 +197,11 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
 
 def hubbard_kpm(h, U=1.0, constrains=[], **kwargs):
     """KPM analogue of scftk.densitydensity.hubbard"""
-    from .densitydensity import obj2geometryarray
+    from .densitydensity import obj2geometryarray, reject_spinless_U
     h = h.copy()
     h.turn_multicell()
     U = obj2geometryarray(U, h.geometry)
+    reject_spinless_U(h, U) # the same refusal as Vinteraction_kpm
     n = len(h.geometry.r)
     if h.has_spin:
         zero = np.zeros((2*n,2*n),dtype=np.complex128)

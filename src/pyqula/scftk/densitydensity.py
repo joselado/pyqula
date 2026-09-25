@@ -718,6 +718,7 @@ def hubbard(h,U=1.0,constrains=[],**kwargs):
     h = h.copy() # copy Hamiltonian
     h.turn_multicell() # multicell Hamiltonian
     U = obj2geometryarray(U,h.geometry) # redefine as array 
+    reject_spinless_U(h,U) # the same refusal as Vinteraction
     n = len(h.geometry.r) # number of spinless sites
     if h.has_spin:
       zero = np.zeros((2*n,2*n),dtype=np.complex128)
