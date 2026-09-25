@@ -111,6 +111,7 @@ import numpy as np
 from .interaction import (interaction_channels,
                           spin_block_parts)
 from .pairbasis import PairBasis
+from .gauge import degenerate_groups
 from .solve import solve_pseudo_hermitian
 from ..check import require_spin
 
@@ -165,7 +166,7 @@ def spin_diagonalize(pb, tol=1e-8):
     def fix(es, cs): # cs[ik][n] = coefficients of band n
         out = np.array(cs, dtype=np.complex128, copy=True)
         for ik in range(out.shape[0]):
-            for group in _degenerate_groups(es[ik], tol=tol):
+            for group in degenerate_groups(es[ik], tol=tol):
                 if len(group) == 1: continue
                 sub = out[ik][group] # (ng,norb)
                 m = np.conj(sub)@Sz@sub.T # Sz inside the multiplet
@@ -176,18 +177,6 @@ def spin_diagonalize(pb, tol=1e-8):
     pb.ckq = fix(pb.ekq, pb.ckq)
     pb.build() # rebuild el/ho/elA/hoA from the rotated coefficients
     return pb
-
-
-def _degenerate_groups(es, tol=1e-8):
-    """Group the indices of a sorted energy list into degenerate blocks"""
-    groups, cur = [], [0]
-    for i in range(1, len(es)):
-        if abs(es[i]-es[i-1]) < tol: cur.append(i)
-        else:
-            groups.append(cur)
-            cur = [i]
-    groups.append(cur)
-    return groups
 
 
 def occupancy_masks(pb):

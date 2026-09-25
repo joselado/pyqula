@@ -687,6 +687,50 @@ common case, not the exotic one. `gauge="projection"` (project the band
 subspace onto trial orbitals, `U = A(A^dag A)^-1/2`, Wannier90's first
 step) is therefore the default.
 
+The projection rotates only inside a degenerate multiplet, never across a
+whole valence or conduction window, and this is what makes it spectrum
+invariant. The pair basis keeps the one-body part as the diagonal
+`e_c(k+Q) - e_v(k)` on the band labels, which is the one-body part of the
+rotated states only while `<w_n|H(k)|w_m>` stays diagonal, meaning only
+while the rotation commutes with the band energies. It first rotated each
+whole window, and every model above has windows that are either exactly
+degenerate or one band wide, where the two coincide, so the fifth bug
+audit found it: on a spinful chain with Rashba coupling and an exchange
+field along [0.3,0.5,0.2] the lowest exciton moved by 0.014, on the
+Rashba chain alone, degenerate only at the time-reversal invariant
+momenta, the quantics solver came out 0.058 low at nk=32, and the 1.5e-3
+error of the supercell table below was the same bug. Now each window is split per k-point into
+multiplets (energies within 1e-8, the grouping `spinflip` also uses), a
+multiplet is rotated onto the trial orbitals at its positions in the
+window, and a non-degenerate band is only phase-fixed against its own
+trial orbital, which is why `default_trials` now assigns one orbital per
+band rather than a set per window. Where two non-degenerate bands of one
+window cross between mesh points, the sorted labels swap character and
+the pair basis has a jump there whatever the trials are; that is the price
+of a diagonal `dE`, since only a rotation across the crossing bands could
+smooth it, and that is exactly the rotation that changes the spectrum.
+
+Re-measured before and after that change with the same script, at
+tolerance 1e-6: every model of the table gives the same rank on both
+sides, as it must, since its windows are one multiplet or one band. The
+two chain rows reproduce the table exactly (the spinful one with the
+single-factor rank of `test_bse_gauge.py`, the others with the stacked
+factor tensor, the term index as the first site) and the spinless
+honeycomb to within one, 56 / 62 / 62 against 57 / 62 / 63; the spinful
+honeycomb, with $U=1$, $V_1=0.6$ and $V_2=0.2$, gives 208 / 226 / 228
+rather than 182 / 248 / 274, the interaction behind that row not being
+recorded, but the same on both sides. The rank did grow on the models
+where the old rotation was wrong, since mixing the two bands of a window
+gave a smoother but wrong pair basis: the single-factor rank went from 13
+to 15 on the Rashba plus exchange chain and from 12 to 15 on the Rashba
+chain at nk=128 and 512, the stacked rank from 34 / 34 / 35 to
+35 / 36 / 37 on the Rashba chain (unchanged at 41 / 42 / 42 on the other,
+nk=32, 128, 512), and the bond dimension of the quantics kernel MPO at
+nk=64 and tolerance 1e-8 from 183 to 229 and from 80 to 118, which is the
+one place the growth is more than a few percent. Both still saturate with
+the mesh, and `solver="qtt"` now matches `solver="iterative"` there to
+1e-10.
+
 The plan proposed `wanniertk/` as the gauge supplier. That would not work:
 Wannierization is mesh-global, so it needs every k-point and puts the
 O(nk) scaling straight back. The projection gauge is **k-local** -- each
@@ -843,7 +887,7 @@ Reference numbers, 3x3 supercell, nk=8x8, tolerance 1e-4:
 
 | window | dense | iterative | qtt |
 |---|---|---|---|
-| nv=nc=2 (npair 256) | 0.9 s | 0.7 s | 9.9 s (err 1.5e-03) |
+| nv=nc=2 (npair 256) | 0.9 s | 0.7 s | 9.9 s (err 1.5e-03; re-measured 9e-16 once the projection gauge rotates only degenerate multiplets, see the gauge section) |
 | all bands (npair 5184) | 96.5 s | 9.1 s | did not finish in 35 min |
 
 ### What was built vs. what the plan expected
@@ -935,7 +979,9 @@ Bethe-Salpeter-type equations), arXiv:2607.00991.
 
 `bsetk/gauge.py` is independently useful: it is a k-local smooth-gauge
 utility with a spectrum-invariance test, and nothing about it is specific
-to the BSE.
+to the BSE, as long as whatever consumes the gauged states keeps the band
+energies diagonal, which is what the restriction to degenerate multiplets
+is for.
 
 
 ## Conventions and traps worth not re-discovering
