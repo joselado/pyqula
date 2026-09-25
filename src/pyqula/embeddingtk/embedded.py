@@ -10,6 +10,8 @@ class Embedded_Hamiltonian():
         self.selfenergy = object2selfenergy(selfenergy,H)
         self.delta = delta
     def get_density_matrix(self,delta=None,**kwargs):
+        """Return the density matrix, in the index convention of
+        Hamiltonian.get_density_matrix (see get_dm)"""
         if delta is None: delta = self.delta # default broadening
         return get_dm(self,delta=delta,**kwargs)
     def get_gf(self,**kwargs):
@@ -60,6 +62,12 @@ def embed_hamiltonian(self,**kwargs):
 def get_dm(self,delta=1e-2,emin=-10.,eps=1e-4,**kwargs):
     """Get the density matrix
 
+    It is returned in the index convention of densitymatrix.full_dm,
+    dm[i,j] = sum_occ conj(psi_i) psi_j, the transpose of the usual rho,
+    so that sum(dm*A) = Tr(dm.T@A) gives <A> here as it does for
+    Hamiltonian.get_density_matrix. The resolvent integral below gives
+    rho itself, hence the final transpose.
+
     eps: absolute tolerance of the adaptive contour integral, kept apart
         from the keywords that go to get_gf
     """
@@ -68,7 +76,8 @@ def get_dm(self,delta=1e-2,emin=-10.,eps=1e-4,**kwargs):
     from ..integration import complex128contour
     Ra = complex128contour(fa,xmin=emin,xmax=0.,eps=eps,mode="upper") # return the integral
     Rr = complex128contour(fr,xmin=emin,xmax=0.,eps=eps,mode="lower") # return the integral
-    return 1j*(Ra-Rr)/(2.*np.pi) # return the density matrix
+    rho = 1j*(Ra-Rr)/(2.*np.pi) # usual density matrix
+    return np.transpose(rho) # full_dm convention
 
 
 
