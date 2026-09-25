@@ -24,7 +24,22 @@ preserved here; each entry says what was run and what it printed.
 
 ## Status
 
-**Sixteen findings, none fixed yet.** The auditors filed fifteen and the
+**Sixteen findings, all closed.** Ten were repairs, and six were decisions
+the maintainer took on 25 September 2026: #1 (rotate the projection gauge
+inside degenerate multiplets only), #3 and with it #2 (drop the hole-hole
+block of the operator), #6 (transpose the embedding density matrix to the
+full_dm convention), #8 (fix `kpmtk/density` and keep it) and #15 (remove
+the embedding mean-field examples). The repairs were made by one agent per
+file-disjoint group, each in its own git worktree, and each group was then
+checked by a further agent that re-ran the original reproductions against
+the fix and ran every new test on a `git archive` copy of the unfixed source,
+where each test of a code fix fails; the decisions were carried out the same
+way in a second pass on top of the first, and the verifying agents of that
+pass also checked each fix on a system of their own. The whole suite on the
+ten repairs (`9a54246`) collects 2113 tests and all 2113 pass; on the final
+result (`01d20bd`), with the decisions, it collects 2129 and all 2129 pass.
+
+The auditors filed fifteen and the
 refuting agents confirmed all fifteen; the sixteenth (#9) is a crash one
 refuting agent ran into on the way, re-run afterwards. Three were reproduced
 again by hand after the sweep, on systems neither agent had used: the
@@ -43,10 +58,58 @@ KPM branch of `_run_anisotropic_scf` raise `NotImplementedError` on `has_eh`,
 and the Nambu energy of `Vinteraction_kpm` goes through `h.get_total_energy`,
 which carries the correction.
 
+## User-visible changes
+
+- **Breaking:** `Vinteraction_kpm`, and a spinless
+  `h.get_mean_field_hamiltonian(integration="kpm")`, raise `TypeError` on a
+  keyword nothing in the chain reads (a misspelt `filing=`, `kernel=`,
+  `solver=`, `use_jax=`) and on the old `selfconsistency` keywords (`g=`,
+  `mode=`, `vfun=`, `vc=`), and `ValueError` on a local $U$ on a spinless
+  Hamiltonian, as the exact engine already did; `nkp=` is taken as `nk=`
+  (#10).
+- **Breaking:** `h.get_bse()`, the `h.get_exciton_*()` methods and
+  `h.get_exciton_bands()` raise `TypeError` on a keyword the chosen solver
+  does not read, on the dense and on the quantics solver, `metal=` included
+  (#12).
+- A KPM mean-field call whose `scale` does not cover the spectrum after the
+  Fermi shift raises `ValueError` naming the requirement, where it used to
+  stop with a NaN message from scipy or iterate a NaN residual to `maxite`
+  (#11).
+- A spinful KPM mean field at finite temperature holds the requested
+  filling, and its total energy moves with it (#4). A KPM mean field no
+  longer diverges from its own roundoff, and a converged one is Hermitian
+  exactly; results that were not affected do not move (#5).
+- The default embedding density matrix is converged to about 1e-4 instead
+  of 1e-2, so its entries move at the level of 3e-3 on the audit's chain and
+  the default call costs two to three times as many Green's function
+  evaluations in 2D; `eps=` sets the tolerance (#7).
+  `Embedded_Hamiltonian.get_density_matrix(delta=...)` works (#9).
+- `h.get_density_matrix(nk=[n1,n2], dm_mode="simultaneous")` works (#13),
+  and `occupied_projector(m, delta=d)` smears with a Fermi-Dirac width `d`,
+  its default being unchanged (#14).
+- The guide and the `SpinonHamiltonian` docstring give $\vec h = -2\vec b$
+  for `add_zeeman(b)` (#16).
+- **Breaking:** on a BdG Hamiltonian, `get_single_vev`, `get_several_vev`
+  and `get_dm_vev` of a normal observable return half what they returned,
+  the value of the normal-state description of the same state, and
+  `get_vev` of a pairing operator returns its anomalous expectation value
+  per site instead of zero (#2, #3).
+- **Breaking:** `Embedding.get_density_matrix()` and
+  `Embedded_Hamiltonian.get_density_matrix()` return the transpose of what
+  they returned, the convention of `Hamiltonian.get_density_matrix()`: the
+  diagonal is the same and the imaginary part of the off-diagonal flips
+  (#6).
+- `solver="qtt"`, and an explicit `gauge="projection"` on the other solvers,
+  give the exciton spectrum of the raw gauge on windows of non-degenerate
+  bands, where they were off by up to 0.06 (#1).
+- `kpmtk.density.get_density` is right at every Fermi energy, and `npol`
+  and `kernel` take effect (#8). `examples/embedding/scf` and
+  `examples/embedding/scf_chain` are gone (#15).
+
 ## What to read first
 
 By the ordering the first sweep settled on, a silently wrong number before a
-crash:
+crash (all of them are fixed now):
 
 1. **#1, the projection gauge of the BSE.** `solver="qtt"` uses it by
    default, and on any model whose valence or conduction window holds more
@@ -122,7 +185,31 @@ either case. A regression test: the dense spectrum with
 `gauge="projection"` equals the one with `gauge=None` on the chain above, and
 `solver="qtt"` matches `solver="iterative"` on its lowest exciton.
 
-**Status.** Open.
+**Status.** Decided by the maintainer on 25 September 2026, the first fix
+above, and fixed in `f464a83`. At every k, `_projection_gauge` splits each
+window into degenerate multiplets (bands within 1e-8 in energy, grouped by
+`gauge.degenerate_groups`, which `spinflip` now imports instead of keeping its
+own copy) and rotates each multiplet onto the trial orbitals at its positions
+in the window, the diagonal block of the old rotation, so a non-degenerate
+band gets a phase only and `dE` stays diagonal. `fix_gauge` needs the band
+energies for this (`ek=`), and `default_trials` now gives each band one
+distinct orbital by its largest mesh-averaged weight, since with the old
+column order a z-collinear ferromagnetic chain had an overlap of exactly zero.
+Where two non-degenerate bands of one window cross between mesh points, the
+pair basis jumps there whatever the trials; only a rotation across the
+crossing could smooth it, and that is the rotation that changes the spectrum.
+The quantics solver is now exact on the finding's chain (error 1.39e-2 before,
+5.6e-16 after at `nk=16`), on a Rashba chain (5.8e-2 before, 4.9e-15 after at
+`nk=64`) and on the $3\times 3$ honeycomb supercell of `bse_excitons.md`
+(1.5e-3 before, 8.9e-16 after), where the error the roadmap reported was this
+bug. The price is in rank on those models: the kernel MPO at `nk=64` and
+tolerance 1e-8 grows by 25 and 48 percent, still saturating with the mesh,
+while every model whose windows are degenerate or one band wide keeps its rank
+digit for digit. A torus CIS on a spinful Kane-Mele honeycomb with a generic
+exchange agrees with the projection gauge to 3e-14 (6.9e-2 before), full and
+Tamm-Dancoff and with RPA screening. `tests/bse/test_bse_gauge_multiplet.py`;
+the docstrings, the guide's `gauge` bullet and `bse_excitons.md` now say when
+the gauge leaves the spectrum alone.
 
 ### 2. get_single_vev, get_several_vev and get_dm_vev count twice on a Nambu Hamiltonian
 
@@ -159,7 +246,12 @@ copying `pe*op*pe` would carry #3 into the three siblings. A regression test:
 for `h` with `add_swave(0.0)` and a random Hermitian matrix as well as
 `sx`, `sy`, `sz`, all three agree with the normal Hamiltonian.
 
-**Status.** Open.
+**Status.** Fixed with #3 in `51542fc`, by the rule decided there.
+`tests/vev/test_nambu_vev.py` compares all four methods on the BdG copy at
+zero pairing with the normal Hamiltonian, on a periodic model and on an
+island, and fails on the unfixed source with exactly twice the value.
+`get_dm_vev` also takes an operator defined only by its action now, which it
+refused even on a normal Hamiltonian.
 
 ### 3. get_vev of a pairing operator on a BdG Hamiltonian is identically zero
 
@@ -198,7 +290,18 @@ two is the maintainer's call, and it decides the shape of #2's fix as well. A
 regression test: `get_vev("spair")` on an s-wave chain equals the correlator
 built by hand, per site, and is zero at zero pairing.
 
-**Status.** Open.
+**Status.** Decided by the maintainer on 25 September 2026: drop the hole-hole
+block. Fixed in `51542fc` by one helper, `operators.vev_operator`, which
+returns `op - ph*op*ph` with `ph` the hole projector (the electron projector
+for `op=None`, so the occupation keeps its value), and which `get_vev`,
+`get_single_vev`, `get_several_vev`, `get_magnetization`, `vev.get_dm_vev` and
+`spectrum.real_space_vev` all go through. `get_vev("spair")` on the chain
+above is now -0.38024 on the site, equal to `get_single_vev("spair")`, which
+did not move, and a single site gives -0.8, twice the correlator of its Fock
+space. An operator with a normal and a pairing part keeps both, the normal
+part once. Two Nambu-structural operators change value under the rule:
+`get_single_vev("hole")` is now 0 and `get_single_vev("tauz")` the electron
+count, as `get_vev` already gave; nothing in the package reads them this way.
 
 ### 4. VJinteraction with integration="kpm" finds the Fermi level at T=0
 
@@ -235,7 +338,9 @@ $U=0$). Passing `T` to that one call brings the count to 0.20000.
 the onsite density matrix of the returned Hamiltonian at `T=0.05` equals 0.2
 to 1e-3.
 
-**Status.** Open.
+**Status.** Fixed in `aa4fc9c`; `tests/scf/test_kpm_fermi_temperature.py`
+holds the requested filling at `T=0.05`, and fails on the unfixed source with
+0.19145. The other callers of `get_fermi4filling_kpm` already passed `T`.
 
 ### 5. The KPM mean-field map amplifies the anti-Hermitian part of the mean field
 
@@ -296,7 +401,18 @@ anti-Hermitian seed, 30 iterations of `Vinteraction_kpm` on the Haldane
 model above keep $\max|\mathrm{mf}_d - \mathrm{mf}_{-d}^\dagger|$ below
 1e-12, and the same for `VJinteraction(integration="kpm")`.
 
-**Status.** Open.
+**Status.** Fixed in `da7bba0`, at the root rather than by symmetrizing
+afterwards: `_dm_kpm_from_needed` computes the per-k values only for the
+canonical pairs $(\min(i,j),\max(i,j))$, sets the other member by conjugation
+and takes a diagonal entry real, so the density matrix is Hermitian exactly
+whatever $H(k)$ is, and the Chebyshev work drops by about half. On a generic
+complex spinful Hamiltonian and on a Nambu one the new and old `get_dm_kpm`
+agree to 6e-17, so no result that was not affected moves. The docstring of
+`random_hermitian_guess` now says a Hermitian guess covers the first step
+only. `tests/scf/test_kpm_hermitian_density_matrix.py` seeds 1e-10 at the
+exact fixed point and asks for an anti-Hermitian part below 1e-12 after 30
+iterations of `Vinteraction_kpm` and 20 of `VJinteraction(integration="kpm")`;
+on the unfixed source it reaches 6.4e-4 and 4.3e-2.
 
 ### 6. The embedding density matrix is the transpose of every other one
 
@@ -330,7 +446,13 @@ docstrings; the maintainer's call. A regression test: for a 0d complex
 Hamiltonian, `Embedded_Hamiltonian(h).get_density_matrix()` agrees with
 `h.get_density_matrix()` to the broadening.
 
-**Status.** Open.
+**Status.** Decided by the maintainer on 25 September 2026: transpose. Fixed
+in `c33e8dc`; both embedding objects now return the full_dm convention and
+their docstrings say so, and `sum(dm*sy)` on the Rashba island gives -0.97279
+against -0.97277 from `full_dm`.
+`tests/embedding/test_embedding_density_matrix.py` compares with
+`h.get_density_matrix()` on an island and, off-diagonal included, with the
+block of a finite chain.
 
 ### 7. The quadrature tolerance of the embedding density matrix is fixed and swallowed
 
@@ -364,7 +486,14 @@ or less. Neither `delta` nor `nk` converges it away.
 test: the defect block agrees with a large finite chain to 1e-3 at
 `delta=1e-3`.
 
-**Status.** Open.
+**Status.** Fixed in `f54b4fa`: `get_dm` takes `eps=1e-4`, passed to both
+contour integrals and no longer forwarded to `get_gf`. At `eps` of 1e-3 and
+below the error against the finite chain stays at 6e-5 or less for every
+`emin` from -5 to -20. The price is in Green's function evaluations: 20, 36
+and 60 at `eps` 1e-2, 1e-3 and 1e-4 on the chain, and 44, 60 and 116 on a
+honeycomb defect at `nk=100`, so the default call in 2D costs roughly two to
+three times what it did. `tests/embedding/test_embedding_density_matrix.py`
+compares the defect block with a finite chain built in the test.
 
 ### 8. kpmtk.density.get_density is right only at fermi=0
 
@@ -395,7 +524,16 @@ fermi  1.0  exact 0.6122  get_density 0.0
 the kernel, or delete the module, since nothing in `src`, `tests` or
 `examples` calls it; the maintainer's call.
 
-**Status.** Open.
+**Status.** Decided by the maintainer on 25 September 2026: fix it and keep
+it. Fixed in `e1a1ffb`: the Fermi energy is divided by the scale, the constant
+term is $\mu_0\arccos(-x)$ with the sum entering with a minus sign, `npol`
+moments are computed and damped by the chosen kernel, and an unknown `kernel`
+raises `ValueError` listing `jackson`, `lorentz` and `fejer`. On the 400-site
+chain the largest error is 1.9e-3 at every Fermi energy and scale, and the
+three kernels agree to 3e-4. `tests/kpm/test_kpm_density_occupation.py`. The
+kernels are a small dict in `kpmtk/density.py`, while
+`momenttoprofile.generate_profile` keeps its own chain of `if`; merging the
+two into one registry is left.
 
 ### 9. Embedded_Hamiltonian.get_density_matrix(delta=...) raises TypeError
 
@@ -411,7 +549,8 @@ TypeError: get_dm() got multiple values for keyword argument 'delta'
 **Fix.** Take the caller's value when there is one, falling back to
 `self.delta`.
 
-**Status.** Open.
+**Status.** Fixed in `89883a3`;
+`test_embedded_hamiltonian_takes_the_callers_delta`.
 
 ### 10. Vinteraction_kpm swallows keywords that its exact sibling refuses
 
@@ -447,7 +586,13 @@ anywhere in the KPM mean field (the Jackson kernel is hardcoded).
 `generic_densitydensity_kpm`, and give `Vinteraction_kpm` the refusals of
 `Vinteraction`, sharing that code rather than copying it.
 
-**Status.** Open.
+**Status.** Fixed in `b76d457`. The three refusals moved out of
+`densitydensity.py` into `reject_leftover_kwargs`, `reject_legacy_kwargs` and
+`reject_spinless_U`, with their messages unchanged, and both engines call
+them. `solver=` and `use_jax=` are refused by the KPM route rather than
+consumed, since the KPM loop only mixes.
+`tests/scf/test_densitydensity_kpm_kwargs.py`, seven cases, all of which run
+the calculation on the unfixed source.
 
 ### 11. A KPM scale below the extent of the expanded spectrum is not checked
 
@@ -477,7 +622,18 @@ user scale unchecked as well.
 `_estimate_kpm_scale` already computes, on the shifted Hamiltonian, and raise
 a `ValueError` naming the minimum.
 
-**Status.** Open.
+**Status.** Fixed in `554f7e4`, with a sharper guard than the Gershgorin
+comparison suggested above, which would refuse a valid scale between the
+spectral radius and the bound: `_check_scale_covers_spectrum` checks the
+Chebyshev moments themselves, since $|\langle a|T_n(H)|b\rangle| \le 1$ holds
+exactly when the spectrum lies in $[-1,1]$, and raises a `ValueError` naming
+the requirement on a moment above 1, a NaN or an inf. On the chain with
+spectrum $[-2,2]$ a scale of 2.0 is accepted and 1.999 refused; on a gapped
+honeycomb of spectral radius 3.1623 and Gershgorin bound 4, 3.17 is accepted
+and 3.16 refused. It runs in both moment routines, so `get_fermi4filling_kpm`
+and `get_total_energy_kpm` are covered as well.
+`tests/scf/test_kpm_scale_guard.py`; the guide's catalogue entry for `scale`
+gained a sentence.
 
 ### 12. The dense BSE path swallows unknown keywords
 
@@ -492,7 +648,12 @@ while `kernel="none"` spelt right gives 1.8 and `nk=6` gives 1.6865307364.
 
 **Fix.** Raise `TypeError` in the dense branch when `kwargs` is not empty.
 
-**Status.** Open.
+**Status.** Fixed in `2b777ed`, and the same slip in `qtt.solve_qtt`, whose
+own `**kwargs` nothing read, in `79fa271`. `metal=True` is refused rather than
+forwarded: `PairBasis` would build every $(k,v,c)$ triple and leave the
+occupancy filter to the caller, and `build_blocks` has none, so honouring it
+would put pairs between two occupied or two empty states into the kernel.
+`tests/bse/test_bse_dense_kwargs.py`.
 
 ### 13. full_dm_simultaneous crashes on a list-valued k-mesh
 
@@ -508,7 +669,10 @@ a list.
 
 **Fix.** Normalize by the number of k-points actually used.
 
-**Status.** Open.
+**Status.** Fixed in `a9e7429`, normalizing by the mesh `get_eigenvectors`
+diagonalizes; a scalar `nk` gives the same factor as before.
+`tests/densitymatrix/test_simultaneous_kmesh.py` compares with a real-space
+supercell.
 
 ### 14. occupied_projector ignores delta
 
@@ -524,7 +688,11 @@ occupations are [0, 1] at `delta=1` and `delta=100` where Fermi-Dirac gives
 **Fix.** Forward it, with the $T=0$ guard `full_dm` uses, or drop the keyword
 so that passing it raises.
 
-**Status.** Open.
+**Status.** Fixed in `a700cd2`. The default is now `delta=None`, which makes
+exactly the old call, so the default output is bit-identical (same sha256 on
+both trees) and so is the real-space Chern number; an explicit `delta` is the
+Fermi-Dirac width. The docstring says the result is the transpose of the
+projector. `tests/densitymatrix/test_occupied_projector.py`.
 
 ### 15. The embedding mean-field examples call a removed method
 
@@ -539,7 +707,12 @@ victim today.
 **Fix.** Remove the two examples, or rebuild an embedding mean field, which
 would need #6 and #7 first; the maintainer's call.
 
-**Status.** Open.
+**Status.** Decided by the maintainer on 25 September 2026: remove. Removed in
+`3f0714a`, and the guide's embedding section no longer lists self-consistent
+defects among the scenarios under `examples/embedding/`. The embedding mean
+field is unbuilt: a self-consistent Hubbard mean field of an embedded region
+would take the density matrix of #6 and #7, and has neither code nor a
+roadmap.
 
 ### 16. The sign of the physical field of a spinon add_zeeman
 
@@ -554,7 +727,12 @@ consistent; the two texts have the sign wrong.
 [0.3,0.5,0.2] is exactly antiparallel to it, and a single spinful site with
 `add_zeeman([0.2,-0.5,0.4])` has $\langle\vec S\rangle\cdot\hat b = -1$.
 
-**Status.** Open.
+**Status.** Fixed in `76976b3` (the docstring and the guide) and `9a54246`
+(the same slip in a comment of
+`examples/spinon/heisenberg_chain_zeeman_field`).
+`tests/spinon/test_spinon_zeeman.py` pins the convention the code already had,
+so it passes on the unfixed source as well, as a test of a documentation fix
+can.
 
 ## Chased and cleared
 
@@ -656,4 +834,19 @@ consistent; the two texts have the sign wrong.
   whether an explicit `gauge="projection"` with screening moves the static
   polarizability measurably, which is the root cause of #1 and was reasoned,
   not run.
+- Three things the fix pass found and left: the exact-engine half of every
+  `examples/*/kpm_scf_benchmark*/main.py` stops with `TypeError:
+  VJinteraction() got an unexpected keyword argument 'load_mf'`, on the
+  unfixed source as well; `hubbard_kpm` still accepts a local $U$ on a
+  spinless Hamiltonian; and `kpm.tdos` and the other KPM DOS routines take a
+  user `scale` without the guard of #11. `documentation/user_guide.pdf` is
+  behind the Markdown until the next rebuild.
+- From the second pass: the degeneracy tolerance of the projection gauge is
+  fixed at 1e-8 and not exposed, while `pairbasis` warns about a nearly
+  degenerate window at 1e-6, and a pair split by less than the tolerance
+  moves the spectrum by at most its splitting; the quantics rank on
+  windows of non-degenerate bands grew (#1); the kernels of
+  `kpmtk/density` are a dict of their own rather than one registry with
+  `momenttoprofile` (#8); `spectrum.ev2d` is not Nambu-aware and does not go
+  through `vev_operator`.
 - Nothing here ran on a GPU.

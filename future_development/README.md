@@ -54,12 +54,14 @@ already reached once.
 - [`bug_audit_5.md`](bug_audit_5.md) -- the fifth sweep, on four places no
   sweep had run against an independent oracle: the KPM mean field, the
   routines that consume a density matrix, the backends that compute one, and
-  the BSE package. Sixteen findings, **none fixed yet**, among them a
-  projection gauge that moves the exciton energies of the quantics solver,
-  expectation values that count twice or return zero on a Nambu
-  Hamiltonian, and a KPM mean-field loop that amplifies its own roundoff. It
-  also records what was checked and found right, and where a sixth sweep
-  should start.
+  the BSE package. Sixteen findings, **all closed**, ten as repairs and six
+  as the maintainer's decisions: among them a projection gauge that moved
+  the exciton energies of the quantics solver, expectation values that
+  counted twice or returned zero on a Nambu Hamiltonian, and a KPM
+  mean-field loop that amplified its own roundoff and found its Fermi level
+  at the wrong temperature. Read its user-visible changes before upgrading,
+  since four are breaking. It also records what was checked and found
+  right, and where a sixth sweep should start.
 
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
