@@ -1231,8 +1231,11 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # _get_dm_kpm's docstring for why that's intentional (tried,
             # caused a confirmed NaN divergence).
             if mu is None:
+                # T, because _get_dm_kpm builds the density matrix with the
+                # Fermi-Dirac weight at this same T -- see the identical
+                # comment in densitydensity_kpm.densitydensity_kpm
                 fermi = get_fermi4filling_kpm(h, filling, nk=nk, scale=scale,
-                        npol=npol, ne=ne, cores=cores)
+                        npol=npol, ne=ne, cores=cores, T=T)
                 h.fermi = fermi
                 h.shift_fermi(-fermi)
             else:
