@@ -337,7 +337,8 @@ def build_step_function_vj(hop0, vz, vx, vy, ks, dirs, dirs_all, T,
 def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
         vz_exchange=None, vd_reference=None,
         filling=None, T=None, mix=None, maxerror=1e-5, maxite=2000,
-        solver="newton", verbose=0, gmres_tol=1e-6, gmres_restart=20):
+        solver="newton", verbose=0, gmres_tol=1e-6, gmres_restart=20,
+        kick_steps=60):
     """JAX-differentiable analogue of spinspin._run_anisotropic_scf,
     restricted to the normal-state case -- see the module docstring for the
     full scope restriction. vz/vx/vy are the (unpadded, possibly
@@ -441,7 +442,7 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     # never triggers here.
     x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
             dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
-            gmres_restart)
+            gmres_restart, kick_steps=kick_steps)
     mf_final = unflatten_mf(x, dirs, n)
     dm_np = {d: np.asarray(dm[d]) for d in dirs}
     mf_np = {d: np.asarray(mf_final[d]) for d in dirs}
@@ -540,7 +541,7 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
         mf=None, filling=0.5, mu=None, nk=8, maxerror=1e-5, maxite=2000,
         T=None, mix=None, verbose=0, solver="newton",
-        gmres_tol=1e-6, gmres_restart=20):
+        gmres_tol=1e-6, gmres_restart=20, kick_steps=60):
     """JAX drop-in for spinspin.VJinteraction (use_jax=True path) -- see the
     module docstring for the scope restriction relative to the full numpy
     engine (normal-state only, dense ED, no constrains). Builds the same
@@ -579,7 +580,7 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
 
     kwargs = dict(mf=mf, nk=nk, T=T, mix=mix, maxerror=maxerror, maxite=maxite,
             solver=solver, verbose=verbose, gmres_tol=gmres_tol,
-            gmres_restart=gmres_restart,
+            gmres_restart=gmres_restart, kick_steps=kick_steps,
             vz_exchange=vz_exchange, vd_reference=vd_reference)
     if mu is not None:
         return generic_vjinteraction_jax(h1, vz, vx, vy, mu=mu, filling=None,

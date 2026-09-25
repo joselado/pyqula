@@ -717,7 +717,8 @@ def levenberg_marquardt_solve(step_vec, x0, maxite=200, tol=1e-8, verbose=0,
         return x, maxite, err < tol
 
 
-def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
+def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0,
+        kick_steps=60):
     """Solve x = step_vec(x) with scipy.optimize.fsolve (MINPACK hybrj),
     using the exact JAX Jacobian (jax.jacfwd) as fprime. Unlike
     newton_solve's hand-rolled backtracking, MINPACK's Powell hybrid dogleg
@@ -739,7 +740,8 @@ def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
 
     MINPACK counts function evaluations, not iterations: maxite is passed
     as maxfev, and the count returned (scf.iterations) is nfev, plus the
-    outer iterations of newton_solve when it took over."""
+    outer iterations of newton_solve when it took over. kick_steps is the
+    length of newton_solve's kicks there."""
     from scipy.optimize import fsolve
     jac_fn = jax.jacfwd(step_vec)
     n = x0.shape[0]
@@ -763,7 +765,8 @@ def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0):
         if verbose > 0:
             print("fsolve stalled, continuing with newton_solve")
         x, ite, converged = newton_solve(step_vec, jnp.asarray(x_sol),
-                maxite=maxite - nfev, tol=tol, verbose=verbose)
+                maxite=maxite - nfev, tol=tol, verbose=verbose,
+                kick_steps=kick_steps)
         return x, nfev + ite, converged
     return jnp.asarray(x_sol), nfev, ier == 1
 
@@ -894,18 +897,18 @@ def lbfgs_solve(loss_fn, x0, maxite=2000, tol=1e-5, verbose=0, gtol=None):
 
 def _run_newton(step_jit, step_vec, x0, mu, o):
     return newton_solve(step_vec, x0, maxite=o.maxite, tol=o.maxerror,
-            verbose=o.verbose)
+            verbose=o.verbose, kick_steps=o.kick_steps)
 
 
 def _run_fsolve(step_jit, step_vec, x0, mu, o):
     return fsolve_solve(step_vec, x0, maxite=o.maxite, tol=o.maxerror,
-            verbose=o.verbose)
+            verbose=o.verbose, kick_steps=o.kick_steps)
 
 
 def _run_newton_krylov(step_jit, step_vec, x0, mu, o):
     return newton_krylov_solve(step_vec, x0, maxite=o.maxite, tol=o.maxerror,
             verbose=o.verbose, gmres_tol=o.gmres_tol,
-            gmres_restart=o.gmres_restart)
+            gmres_restart=o.gmres_restart, kick_steps=o.kick_steps)
 
 
 def _run_fixed_point(step_jit, step_vec, x0, mu, o):
@@ -1007,7 +1010,7 @@ class SolverOptions:
 
 
 def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
-        verbose, gmres_tol, gmres_restart, callback_mf=None):
+        verbose, gmres_tol, gmres_restart, callback_mf=None, kick_steps=60):
     """Shared solver dispatch for generic_densitydensity_jax's and
     vjinteraction_jax.generic_vjinteraction_jax's use_jax=True paths --
     drives x0 to a fixed point of step_jit with whichever solver= was
@@ -1027,8 +1030,17 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
     Returns (x, final_mu, ite, converged, dm, es, occ). callback_mf (applied
     on concrete numpy arrays each iteration) is only possible for
     solver="fixed_point"; every other solver needs x to stay a jax value
-    throughout, and raises NotImplementedError when given one."""
+    throughout, and raises NotImplementedError when given one. kick_steps
+    is the number of linear-mixing steps in each kick that moves the Newton
+    solvers (newton, newton_krylov, and newton after a stalled fsolve) off a
+    stationary point of the merit; 60 was tuned on one system, a biased
+    antiferromagnetic chain, so a case that stalls may want another."""
     name = resolve_jax_solver(solver)
+    if isinstance(kick_steps, bool) or not isinstance(kick_steps,
+            (int, np.integer)) or kick_steps < 1:
+        raise ValueError("kick_steps must be a positive integer, the "
+                "number of linear-mixing steps in each kick, got %r"
+                % (kick_steps,))
     if callback_mf is not None and name not in _SOLVERS_WITH_CALLBACK_MF:
         raise NotImplementedError("solver=%r cannot apply "
                 "callback_mf/constrains (they need concrete numpy "
@@ -1041,7 +1053,8 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
     step_vec = lambda x: step_jit(x, mu)[0]
     options = SolverOptions(dirs=dirs, n=n, maxite=maxite, maxerror=maxerror,
             mix=mix, verbose=verbose, gmres_tol=gmres_tol,
-            gmres_restart=gmres_restart, callback_mf=callback_mf)
+            gmres_restart=gmres_restart, callback_mf=callback_mf,
+            kick_steps=kick_steps)
     x, ite, converged = _JAX_SOLVERS[name](step_jit, step_vec, x0, mu,
             options)
 
@@ -1059,7 +1072,7 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
         filling=None, T=None, mix=None, maxerror=1e-5, maxite=2000,
         solver="newton", compute_dd=True, compute_cross=True,
         add_dagger=True, verbose=0, callback_mf=None,
-        gmres_tol=1e-6, gmres_restart=20, **kwargs):
+        gmres_tol=1e-6, gmres_restart=20, kick_steps=60, **kwargs):
     """JAX-differentiable analogue of densitydensity.generic_densitydensity.
     maxite defaults to 2000 (the numpy engine's is 1000) since
     plain linear mixing from a cold/random start can need many hundreds of
@@ -1130,7 +1143,7 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
             compute_dd, compute_cross, add_dagger, n_occ_total=n_occ_total)
     x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
             dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
-            gmres_restart, callback_mf=callback_mf)
+            gmres_restart, callback_mf=callback_mf, kick_steps=kick_steps)
     mf_final = unflatten_mf(x, dirs, n)
     dm_np = {d: np.asarray(dm[d]) for d in dirs}
     mf_np = {d: np.asarray(mf_final[d]) for d in dirs}

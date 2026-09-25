@@ -376,7 +376,8 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         mf=None, filling=0.5, mu=None, mix=None, nk=8, maxerror=1e-5,
         maxite=_MAXITE_UNSET, T=_T_UNSET, verbose=0, constrains=[],
         integration="ed", scale=None, npol=None, ne=None, cores=None,
-        use_jax=False, solver=None, gmres_tol=None, gmres_restart=None):
+        use_jax=False, solver=None, gmres_tol=None, gmres_restart=None,
+        kick_steps=None):
     """Self-consistent mean field combining density-density interactions
     (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
     Vinteraction) with spin-spin exchange in a single SCF loop.
@@ -590,7 +591,10 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     combining use_jax=True with any of those raises NotImplementedError/
     TypeError rather than silently ignoring the request. gmres_tol/
     gmres_restart tune solver="newton_krylov"'s GMRES linear solve (unused
-    otherwise). Needs the optional jax extra (`pip install pyqula[jax]`)."""
+    otherwise). kick_steps (60 when not given) is the number of
+    linear-mixing steps in each kick that moves solver="newton",
+    "newton_krylov" and a stalled "fsolve" off a stationary point of the
+    merit; the default was tuned on one system. Needs the optional jax extra (`pip install pyqula[jax]`)."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy/non-jax below -- checked first so the NotImplemented-sentinel contract holds regardless of use_jax
     if use_jax:
         if integration != "ed":
@@ -633,12 +637,13 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                 maxite=maxite_jax, T=T_jax, mix=mix, verbose=verbose,
                 solver="newton" if solver is None else solver,
                 gmres_tol=1e-6 if gmres_tol is None else gmres_tol,
-                gmres_restart=20 if gmres_restart is None else gmres_restart)
+                gmres_restart=20 if gmres_restart is None else gmres_restart,
+                kick_steps=60 if kick_steps is None else kick_steps)
     # solver/gmres_* choose among the use_jax=True engine's solvers; the
     # numpy engine below always runs plain linear mixing, so passing them
     # without use_jax=True is refused rather than silently ignored
     jax_only = {"solver": solver, "gmres_tol": gmres_tol,
-            "gmres_restart": gmres_restart}
+            "gmres_restart": gmres_restart, "kick_steps": kick_steps}
     jax_only_set = {k: v for k, v in jax_only.items() if v is not None}
     if jax_only_set:
         from .densitydensity_jax import get_jax_solver_names
