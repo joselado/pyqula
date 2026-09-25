@@ -1,7 +1,7 @@
 # compute vacuum expectation values
 
 import numpy as np
-from .operators import Operator
+from .operators import Operator, vev_operator
 
 def get_dm_vev(H,A,**kwargs):
     """Compute a vacuum expectation value of two operators"""
@@ -12,10 +12,17 @@ def get_dm_vev(H,A,**kwargs):
     # so the vev was the zero-temperature one whatever was asked for
     dm = H.get_density_matrix(**kwargs) # return the DM, as a matrix
     A = Operator(A) # convert to operator
+    # on a Nambu Hamiltonian the full density matrix counts a normal
+    # observable twice, so drop its hole-hole block as get_vev does
+    A = vev_operator(H,A)
     # transposed for the same reason as in spectrum.ev: full_dm's
     # convention is the transpose of the usual density matrix, so
     # contracting it directly gives <A*> instead of <A>
-    return np.trace(A@np.transpose(dm)) # return the expectation value
+    rho = np.transpose(dm) # the standard density matrix
+    if A.matrix is None: # defined only by its action, one column at a time
+        rho = np.asarray(rho)
+        return np.sum([A(rho[:,j])[j] for j in range(rho.shape[0])])
+    return np.trace(A@rho) # return the expectation value
 
 
 

@@ -293,6 +293,25 @@ def get_tauz(h):
   return get_electron(h)-get_hole(h)
 
 
+def vev_operator(h,op):
+  """The operator to sum over the occupied states to get <op>
+
+  With the electron-hole (Nambu) degree of freedom the sum runs over the
+  whole particle-hole-redundant set of negative-energy BdG states, and a
+  normal observable, which the Nambu lift puts both in the electron-electron
+  and in the hole-hole block, is counted twice. Dropping the hole-hole block
+  counts it once, and leaves a pairing operator, which lives in the
+  electron-hole blocks, untouched; restricting to the electron sector
+  instead, as get_vev and real_space_vev used to do, turned every pairing
+  operator into zero.
+  Applying it twice gives the same operator. op=None is the identity, whose
+  electron-electron block is the electron projector."""
+  if not h.has_eh: return op # nothing to drop
+  if op is None: return Operator(get_electron(h)) # the occupation
+  ph = Operator(get_hole(h)) # projector on the hole sector
+  return op - ph*op*ph # works for an operator without a matrix as well
+
+
 def get_bulk(h,fac=0.8):
     """Return the bulk operator"""
     r = h.geometry.r # positions

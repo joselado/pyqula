@@ -968,15 +968,11 @@ class Hamiltonian():
             # operators and shares the diagonalization between them
             nsites = len(self.geometry.r) # number of sites
             idx = [operators.index(self,n=[i]) for i in range(nsites)]
-            # the electron-sector restriction a Nambu Hamiltonian needs
-            # lives in get_vev, whose convention this shares
-            pe = None
-            if self.has_eh:
-                pe = operators.Operator(operators.get_electron(self))
             ops = []
             for name in ["sx","sy","sz"]:
                 op = self.get_operator(name) # spin operator
-                if pe is not None: op = pe*op*pe # electron sector
+                # counted once on a Nambu Hamiltonian, as in get_vev
+                op = operators.vev_operator(self,op)
                 ops += [(o*op).get_matrix() for o in idx]
             out = spectrum.ev(self,operator=ops,**kwargs).real
             mx,my,mz = out[:nsites],out[nsites:2*nsites],out[2*nsites:]
@@ -994,16 +990,17 @@ class Hamiltonian():
         states, so a physical one-body observable is counted twice: the
         site occupation of a BdG Hamiltonian came out as 2 where the
         identical normal-state Hamiltonian gives 1, and its moment twice
-        as large. The operator is therefore restricted to the electron
-        sector there, the same convention spectrum.get_filling_spinful_nambu
-        uses for the filling, so that a BdG description of a state returns
-        the same numbers as the normal-state description of that state.
+        as large. The hole-hole block of the operator is therefore dropped
+        there (operators.vev_operator), so that a BdG description of a
+        state returns the same numbers as the normal-state description of
+        that state, while a pairing operator, which lives in the
+        electron-hole blocks, keeps its value: get_vev("spair") is the
+        share of get_single_vev("spair") on each site. The electron-sector
+        restriction this used to apply made every pairing operator zero.
         """
         n = len(self.geometry.r) # number of sites
         op = self.get_operator(operator) # get an operator
-        if self.has_eh: # restrict to the electron sector, see above
-            pe = operators.Operator(operators.get_electron(self))
-            op = pe if op is None else pe*op*pe
+        op = operators.vev_operator(self,op) # counted once, see above
         if op is not None and op.matrix is None:
             # an operator defined only by its action, and possibly a
             # different one at every kpoint: the Brillouin-zone sum has to
@@ -1146,6 +1143,7 @@ class Hamiltonian():
         # returns one entry per operator and there is one operator here,
         # so this used to hand back an array of length one
         A = self.get_operator(A) # get an operator
+        A = operators.vev_operator(self,A) # counted once, see get_vev
         if A.matrix is None: # applied inside the sum over kpoints, see get_vev
             from .vev import kresolved_orbital_vev
             return float(np.sum(kresolved_orbital_vev(self,A,**kwargs)))
@@ -1153,9 +1151,12 @@ class Hamiltonian():
     def get_several_vev(self,As,**kwargs):
         As = [self.get_operator(A) for A in As] # get an operator
         if all(A.matrix is not None for A in As): # all of them are matrices
-            # contract them against one density matrix, built once
+            # contract them against one density matrix, built once, each
+            # counted once on a Nambu Hamiltonian, see get_vev
+            As = [operators.vev_operator(self,A) for A in As]
             return spectrum.ev(self,operator=[A.get_matrix() for A in As],
                     **kwargs).real
+        # get_single_vev drops the hole-hole block itself
         return np.array([self.get_single_vev(A,**kwargs) for A in As])
 
 

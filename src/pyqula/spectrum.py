@@ -230,16 +230,13 @@ def real_space_vev(h,operator=None,nk=1,nrep=3,name="REAL_SPACE_VEV.OUT",
     dm = densitymatrix.full_dm(h,nk=nk,**kwargs) # Gamma point DM
     if operator is None: operator = np.identity(dm.shape[0],dtype=np.complex128)
     operator = h.get_operator(operator) # convert to operator
-    if h.has_eh:
-        # with the electron-hole degree of freedom the sum runs over the
-        # whole particle-hole-redundant set of negative-energy BdG states,
-        # and full2profile below then adds the electron and hole entries of
-        # each site: every site came out as exactly 2.0 whatever the
-        # density was, destroying all the spatial information. Restricting
-        # the operator to the electron sector is the convention get_vev
-        # and get_filling_spinful_nambu already use.
-        pe = operators.Operator(operators.get_electron(h))
-        operator = pe*operator*pe
+    # with the electron-hole degree of freedom the sum runs over the
+    # whole particle-hole-redundant set of negative-energy BdG states,
+    # and full2profile below then adds the electron and hole entries of
+    # each site: every site came out as exactly 2.0 whatever the
+    # density was, destroying all the spatial information. Dropping the
+    # hole-hole block of the operator is the convention get_vev uses
+    operator = operators.vev_operator(h,operator)
     # densitymatrix.full_dm builds dm[i,j] = sum_occ conj(psi_i) psi_j, the
     # transpose of the usual rho, so contracting it untransposed evaluates
     # <A*> instead of <A> -- invisible for a real operator, a sign flip for
