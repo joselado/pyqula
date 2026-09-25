@@ -13,7 +13,11 @@ from pyqula.scftk.densitydensity_kpm import get_dm_kpm
 from pyqula.scftk.densitydensity import get_dc_energy, get_mf
 
 common = dict(maxerror=1e-4, mix=0.5, maxite=300, verbose=0,
-              load_mf=False, return_total_energy=True)
+              return_total_energy=True)
+# load_mf only exists in the KPM engine, which otherwise starts from a
+# stale MF.pkl left in the directory; the exact engine (VJinteraction)
+# never reads that file and refuses the keyword
+kpm_only = dict(load_mf=False)
 
 
 def crosscheck(hed, npol=200):
@@ -45,7 +49,7 @@ def run_case(label, build_h, filling=0.5, **kwargs):
     h_kpm = build_h()
     t0 = time.time()
     hkpm, ekpm = h_kpm.get_mean_field_hamiltonian_kpm(filling=filling,
-            npol=200, **common, **kwargs)
+            npol=200, **common, **kpm_only, **kwargs)
     t_kpm = time.time()-t0
 
     print(f"[0d:{label}] ED  energy={eed: .6f}  time={t_ed:6.2f}s")

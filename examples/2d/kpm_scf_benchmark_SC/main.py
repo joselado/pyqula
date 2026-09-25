@@ -18,16 +18,26 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 # (the swave case below uses filling=0.05) put the Fermi level very close
 # to the band edge, needing a much larger npol than the non-SC benchmarks
 # to resolve the gap accurately -- a standard KPM/Chebyshev resolution
-# effect, not specific to has_eh.
+# effect, not specific to has_eh. The same resolution sets a floor on the
+# KPM self-consistency error, which falls roughly as 1/npol and below which
+# the loop only cycles: at npol=600 the swave case sits between 3e-4 and
+# 6e-4, hence npol=1500 to reach maxerror=1e-4, and the triplet case sits
+# near 1e-3 even at npol=1000, hence its looser KPM tolerance (reaching
+# 1e-4 there would take npol near 10000).
 import time
 import numpy as np
 from pyqula import geometry
 
 common = dict(maxerror=1e-4, mix=0.5, maxite=150, verbose=0,
-              load_mf=False, return_total_energy=True)
+              return_total_energy=True)
+# load_mf only exists in the KPM engine, which otherwise starts from a
+# stale MF.pkl left in the directory; the exact engine (VJinteraction)
+# never reads that file and refuses the keyword
+kpm_only = dict(load_mf=False)
 
 
-def run_case(label, build_h, nk=8, npol=600, seed=None, **kwargs):
+def run_case(label, build_h, nk=8, npol=600, seed=None, kpm_maxerror=None,
+             **kwargs):
     if seed is not None: np.random.seed(seed)
     h_ed = build_h()
     t0 = time.time()
@@ -37,8 +47,10 @@ def run_case(label, build_h, nk=8, npol=600, seed=None, **kwargs):
     if seed is not None: np.random.seed(seed)
     h_kpm = build_h()
     t0 = time.time()
+    kpm = dict(common, **kpm_only)
+    if kpm_maxerror is not None: kpm["maxerror"] = kpm_maxerror
     hkpm, ekpm = h_kpm.get_mean_field_hamiltonian_kpm(nk=nk, npol=npol,
-            **common, **kwargs)
+            **kpm, **kwargs)
     t_kpm = time.time()-t0
 
     print(f"[2d-SC:{label}] ED  gap={hed.get_gap(): .6f}  energy={eed: .6f}  time={t_ed:6.2f}s")
@@ -64,7 +76,7 @@ def triangular_triplet():
 # Case 1: onsite attractive Hubbard U, conventional (swave) singlet
 # pairing, dilute filling -- as in examples/readme_examples/scf_SC
 hed_u, hkpm_u = run_case("U-swave", triangular_swave, U=-1.0, filling=0.05, mf="swave",
-        npol=600)
+        npol=1500)
 
 # Case 2: attractive first-neighbor V1 with a ferromagnetic exchange field,
 # unconventional (odd-parity/triplet) pairing -- as in
@@ -74,7 +86,7 @@ hed_u, hkpm_u = run_case("U-swave", triangular_swave, U=-1.0, filling=0.05, mf="
 # state, so matching it confirms the KPM path reproduces the unconventional
 # character of the state, not just its overall energy scale.
 hed_t, hkpm_t = run_case("V1-triplet", triangular_triplet, V1=-1.0,
-        filling=0.3, mf="random", npol=400, seed=2)
+        filling=0.3, mf="random", npol=1000, seed=2, kpm_maxerror=2e-3)
 d_ed = hed_t.get_dvector_non_unitarity()
 d_kpm = hkpm_t.get_dvector_non_unitarity()
 print(f"[2d-SC:V1-triplet] ED  <|d-vector non-unitarity|>={np.mean(np.abs(d_ed)):.4e}")

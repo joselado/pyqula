@@ -17,8 +17,11 @@ import time
 import numpy as np
 from pyqula import geometry
 
-common = dict(maxerror=1e-6, mix=0.5, maxite=300, verbose=0,
-              load_mf=False)
+common = dict(maxerror=1e-6, mix=0.5, maxite=300, verbose=0)
+# load_mf only exists in the KPM engine, which otherwise starts from a
+# stale MF.pkl left in the directory; the exact engine (VJinteraction)
+# never reads that file and refuses the keyword
+kpm_only = dict(load_mf=False)
 
 
 def chain():
@@ -34,7 +37,7 @@ def gap(nk, npol=None, seed=None, **kwargs):
         h = h.get_mean_field_hamiltonian(nk=nk, **common, **kwargs)
     else:
         h = h.get_mean_field_hamiltonian_kpm(nk=nk, npol=npol, **common,
-                **kwargs)
+                **kpm_only, **kwargs)
     return h.get_gap()/2.
 
 
