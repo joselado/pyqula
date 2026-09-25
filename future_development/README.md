@@ -49,7 +49,9 @@ already reached once.
   user-visible changes before upgrading, since three are breaking. It also
   records the closed-form spectra, the Beenakker check and the exact
   diagonalization the Nambu construction passed, and why a spectrum-level
-  particle-hole check cannot see a broken Fermi antisymmetry.
+  particle-hole check cannot see a broken Fermi antisymmetry. The small items
+  it left open (an unchecked pairing callable, `get_dagger` at $-R$, the BKT
+  bracket, two dead functions) were closed afterwards.
 
 - [`bug_audit_5.md`](bug_audit_5.md) -- the fifth sweep, on four places no
   sweep had run against an independent oracle: the KPM mean field, the
@@ -60,8 +62,11 @@ already reached once.
   counted twice or returned zero on a Nambu Hamiltonian, and a KPM
   mean-field loop that amplified its own roundoff and found its Fermi level
   at the wrong temperature. Read its user-visible changes before upgrading,
-  since four are breaking. It also records what was checked and found
-  right, and where a sixth sweep should start.
+  since five are breaking, one of them from after the sweep, when the things
+  its fix pass left were closed (a numpy-array `nk`, the KPM benchmark
+  examples, a spinless $U$ in the Hubbard wrappers, the `scale` of the KPM
+  density of states). It also records what was checked and found right, and
+  where a sixth sweep should start.
 
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably

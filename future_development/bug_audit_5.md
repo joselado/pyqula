@@ -105,6 +105,19 @@ which carries the correction.
 - `kpmtk.density.get_density` is right at every Fermi energy, and `npol`
   and `kernel` take effect (#8). `examples/embedding/scf` and
   `examples/embedding/scf_chain` are gone (#15).
+- **Breaking**, after the sweep: every KPM density of states, local density
+  of states and correlator routine, `h.get_dos(mode="KPM")` among them,
+  raises `ValueError` when its `scale` (10 by default) does not cover the
+  spectrum, where it used to return a profile that means nothing; and
+  `dos.dos0d_kpm`, `dos.dos0d_sites`, `dos.dos1d_sites`,
+  `kdos.kdos1d_sites` and the 1D branch of `kdos.write_surface_kpm` write a
+  density per unit energy, `1/scale` times what the two that ran wrote
+  before.
+- After the sweep: `meanfield.hubbardscf` and `meanfield.hubbardscf_kpm`
+  raise `ValueError` on a local $U$ on a spinless Hamiltonian, and an `nk`
+  given as a numpy array works wherever a list does. A keyword that the
+  `use_jax=True` engine does not read raises `TypeError` on the
+  `Vinteraction` route too, as it already did on `VJinteraction`'s.
 
 ## What to read first
 
@@ -798,6 +811,97 @@ can.
   for the RPA). `bsetk/oracle.py` is the lazily evaluated pair basis of the
   quantics solver, not an independent oracle.
 
+## Closed after the sweep
+
+The things the fix pass found and left were closed on 25 September 2026,
+each with a test that fails on the source before the change:
+
+- An `nk` given as a numpy array crashed every density-matrix route at the
+  `nk==1` test of `kpointstk/kmesh.py`, an array compared with a number
+  being an array whose truth value is ambiguous. `kmesh` now reads `nk`
+  through `np.asarray`: a scalar or a 0-d array is used in every direction,
+  a single entry is broadcast, and too few entries raise `ValueError`. The
+  same change makes `kmesh(1,nk=[6])` work, which died with a `TypeError`
+  because the 1D branch never read a list. `tests/densitymatrix/test_numpy_array_nk.py`.
+- The five `examples/*/kpm_scf_benchmark*/main.py` passed `load_mf=False` to
+  both engines, and only the KPM one has it: the exact engine behind
+  `get_mean_field_hamiltonian`, `VJinteraction`, never reads `MF.pkl` and
+  refuses the keyword, so the fix is in the examples, which now pass it to
+  the KPM call alone. Four of the five now run to the end. The fifth,
+  `examples/2d/kpm_scf_benchmark_SC`, gets past the `TypeError` and then
+  stops on a `None`, since neither of its KPM halves reaches the example's
+  `maxerror=1e-4`: each falls fast and then sits on a floor, which
+  more iterations do not lower. The s-wave case (`U=-1`, `filling=0.05`,
+  `npol=600`) drops to 4e-4 in eleven cycles and then repeats a three-cycle
+  between 3.3e-4 and 6.2e-4 for the next 990; the triplet case (`V1=-1`,
+  `filling=0.3`) cycles between 2.4e-3 and 8e-3 at `npol=400` and between
+  1e-3 and 3.3e-3 at `npol=1000`, a floor falling roughly as `1/npol`. The
+  s-wave case fails the same way on `df6def0`, the source before this
+  audit's fixes, so the floor is the example's, not a regression. Two ways
+  out were measured on the s-wave case: `maxerror=1e-3` on the KPM half
+  converges in 12 s to a gap 3.4e-4 from the exact one, and `npol=1500`
+  converges at 1e-4 in 69 s to a gap 2.5e-4 from it, while a temperature of
+  1e-2 on both halves converges but puts the two gaps 4.5e-3 apart. On the
+  triplet case, whose floor would need `npol` near 10000 to fall below
+  1e-4, `maxerror=5e-3` at `npol=400` stops in 11 cycles with a gap of
+  0.1351 against the exact 0.1472, and `maxerror=2e-3` at `npol=1000` in 17
+  cycles with 0.1449, the d-vector non-unitarity agreeing with the exact
+  2.291e-3 to 2e-5 in both. The maintainer's call on 25 September 2026 was
+  the finer expansion for the s-wave case and the looser tolerance for the
+  triplet one, so the example now runs the s-wave case at `npol=1500` and
+  `maxerror=1e-4`, and the triplet case at `npol=1000` with a KPM
+  `maxerror=2e-3`, and runs to the end: gaps 2.5e-4 and 2.3e-3 from the
+  exact ones, the non-unitarity 2.2890e-3 against 2.2909e-3.
+- `hubbard_kpm` accepted a local $U$ on a spinless Hamiltonian, and so did
+  the exact `densitydensity.hubbard` behind `meanfield.hubbardscf`, both
+  building a spinless onsite term that only shifts the chemical potential.
+  Both now call `reject_spinless_U`, as `Vinteraction` and
+  `Vinteraction_kpm` did. `tests/scf/test_spinless_hubbard_refused.py`.
+- The KPM density of states routines took a user `scale` on trust. The
+  moment test of #11 moved to `kpmtk/scaleguard.py`, which
+  `densitymatrix_kpm` now imports too, and `check_scale` runs after the
+  moments in `kpm.tdos` (and so `pdos` and `total_energy`), `kpm.dos`,
+  `kpm.correlator0d`, `kpm.dm_ij_energy`, `kpm.dm_vivj_energy`,
+  `kpmtk/ldos.get_ldos` (and so `edge_dos`), `kpmtk/density.get_density`,
+  `dos.dos0d_kpm`, the three `_sites` routines and `kdos.write_surface_kpm`.
+  The bound on a moment is one for a unit vector or an average over them,
+  $|v_i||v_j|$ for `dm_vivj_energy`, the number of sites for a sum over
+  sites, and $\sqrt{\|A\|_1\|A\|_\infty}$, an upper bound on the norm, for
+  the operator-weighted trace of `tdos(operator=A)`; the tolerance is 1e-6
+  in double precision and 1e-3 in single, where the recursion drifts by
+  roughly `npol` times the machine epsilon. On a matrix whose spectrum is
+  exactly $[-2,2]$ every route accepts `scale=2` and refuses 1.999, in both
+  precisions, and `h.get_dos(mode="KPM")` on a chain with onsite energies of
+  $\pm 12$ raises at the default `scale=10`, where it used to return a
+  density of states. `tests/kpm/test_kpm_dos_scale_guard.py`.
+- Found on the way: `dos0d_sites`, `dos1d_sites` and `kdos1d_sites` called
+  `kpm.local_dos`, which does not exist, so they died with an
+  `AttributeError`; they call `kpm.moments_local_dos` now. They and
+  `dos0d_kpm` wrote the profile per unit of the reduced energy $E/{\rm scale}$,
+  integrating to `scale` times the number of states, as did the 1D branch of
+  `write_surface_kpm` while its 2D branch, through `edge_dos`, wrote one per
+  unit energy; all of them divide by the scale now, so the site-resolved
+  ones integrate to the number of sites. None of them has a caller.
+- Found while exposing `kick_steps`: `generic_densitydensity_jax`, the end
+  of the `use_jax=True` route of `Vinteraction`, `hubbard` and the spin-spin
+  loops, took `**kwargs` and never read them, the shape of #10, so a
+  misspelled keyword ran with the default. The leftovers now raise
+  `TypeError`; `integration="ed"`, which the spinless
+  `get_mean_field_hamiltonian` always passes, is accepted, and any other
+  integration raises `NotImplementedError`.
+  `tests/scf/test_densitydensity_jax_leftover_kwargs.py`.
+- `documentation/user_guide.pdf` was rebuilt in `c02c455`, and again with the
+  guide sentences these changes needed.
+
+Each new test was also run on a `git archive` copy of the source before
+these changes, where every test of a fix fails (32 of the 49; the other 17
+pin cases that already worked, a scalar `nk` or a valid scale). The whole
+suite on the result collects 2178 tests and all 2178 pass. The `kick_steps`
+keyword recorded in `bug_audit_3.md` #3 came after that run and adds ten
+more, and the refusal of unread keywords in the jax engine five, 2193 in
+all; those fifteen and the 49 jax SCF tests pass, and the full suite was not
+run again on the last two commits.
+
 ## Left for the next sweep
 
 - The anti-Hermitian growth of #5 with a Hubbard interaction alone on a 2D
@@ -816,9 +920,7 @@ can.
   the 2D Li-Haldane cut and the ring entropies of periodic 1D and 2D
   Hamiltonians against an independent oracle (only 0d cuts were checked
   against exact diagonalization).
-- A numpy-array `nk` crashes every density-matrix route at
-  `kpointstk/kmesh.py:11` (`if nk==1`), while a list works; the sparse routes
-  called directly with `delta=0` and a level exactly at the Fermi energy;
+- The sparse density-matrix routes called directly with `delta=0` and a level exactly at the Fermi energy;
   k-meshes with `nsuper` other than 1, and the jax route in single precision,
   which `full_dm_accumulate` never requests; and whether
   `full_dm(dm_mode="simultaneous", batch_size=...)` refuses the forwarded
@@ -834,13 +936,6 @@ can.
   whether an explicit `gauge="projection"` with screening moves the static
   polarizability measurably, which is the root cause of #1 and was reasoned,
   not run.
-- Three things the fix pass found and left: the exact-engine half of every
-  `examples/*/kpm_scf_benchmark*/main.py` stops with `TypeError:
-  VJinteraction() got an unexpected keyword argument 'load_mf'`, on the
-  unfixed source as well; `hubbard_kpm` still accepts a local $U$ on a
-  spinless Hamiltonian; and `kpm.tdos` and the other KPM DOS routines take a
-  user `scale` without the guard of #11. `documentation/user_guide.pdf` is
-  behind the Markdown until the next rebuild.
 - From the second pass: the degeneracy tolerance of the projection gauge is
   fixed at 1e-8 and not exposed, while `pairbasis` warns about a nearly
   degenerate window at 1e-6, and a pair split by less than the tolerance

@@ -131,7 +131,12 @@ converges 12/12 (3/6 before) and newton_krylov 12/12 (1/12). Truncating at
 `rcond=1e-5`, which the finding suggested, made it worse (7/12).
 
 **Open.** The burst length of 60 was tuned on one system (biased AF chain, U=3,
-nk=10). `scf.iterations` counts outer iterations only. Over seeds 0 to 11 on
+nk=10). Since 25 September 2026 it is the keyword `kick_steps` of
+`VJinteraction` and `Vinteraction` with `use_jax=True`, forwarded to
+`newton`, `newton_krylov` and the Newton handover of a stalled `fsolve`
+(`tests/scf/test_newton_kick_steps.py`), the maintainer's call over a
+measured sweep, so a stalled case can be tuned without editing the source;
+the default of 60 was not re-measured. `scf.iterations` counts outer iterations only. Over seeds 0 to 11 on
 that chain newton takes 23 to 119 outer iterations and newton_krylov 24 to
 365, the slow ones crawling on damped steps. A trust region was thought to be
 the principled follow-up, on the grounds that `fsolve`'s dogleg is never
@@ -362,7 +367,8 @@ fails on the unfixed source.
 ## Where a fourth sweep should start
 
 - The open items above: the kick length of the hand-rolled Newton loops, tuned
-  on one system, and newton_krylov's crawl on damped steps (#3). The qtci
+  on one system and now exposed as `kick_steps` but not re-measured, and
+  newton_krylov's crawl on damped steps (#3). The qtci
   resolution limit in high-symmetry metals (#11) is closed. The jax/numpy
   disagreement on `mix` for `broyden_mixing` (#16) and the unbounded
   `maxite=None` (#19) are closed.

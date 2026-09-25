@@ -224,15 +224,36 @@ gives the spinful answer.
   being the same in a supercell, the magnon dispersion along a path, and the
   jax filling targets. Restoring any of them needs a guess that converges in
   fewer than 1000 iterations, or `maxite=None` in the test.
-- `add_pairing(mode=callable)` does not check the callable for Fermi
-  antisymmetry; `h.check()` catches a bad one.
-- `multihopping.MultiHopping.get_dagger` drops the dagger at $-R$ when the
-  block at $-R$ is absent. Every Hermitian Hamiltonian has both, so no
-  current caller is affected; the new `hopping2deltaud` builds both blocks
-  explicitly rather than rely on it.
-- `kanemele.get_haldane_function` has no caller since #1.
-- From L2's list, still as it was: `dvector_times_mij_map` is a byte-identical
-  copy of `dvector_times_rij_map`, `bkt_temperature` returns `tmax`, a bound,
-  when the stiffness is still above the line there, and the decomposition's
-  degenerate-band branch has not been run on a Rashba BdG. The duplicate
-  `C3nn` in `sctk/pairing.py` is gone.
+- From L2's list, the decomposition's degenerate-band branch has not been
+  run on a Rashba BdG. The duplicate `C3nn` in `sctk/pairing.py` is gone.
+
+## Closed after the sweep
+
+The small items this list used to carry were closed on 25 September 2026,
+each with a test that fails on the source before the change:
+
+- `add_pairing(mode=callable)` checks the callable for Fermi antisymmetry,
+  $D(\vec r_1,\vec r_2)=\sigma_y D(\vec r_2,\vec r_1)^T\sigma_y$, on every pair of
+  positions `add_pairing` evaluates, inside the cell and between the cell and
+  each neighboring replica, before the Hamiltonian is touched, and raises
+  `ValueError` naming the first pair that breaks it and by how much. Every
+  registered mode passes it to 1e-15 on a honeycomb, square and triangular
+  lattice and a chain, and the odd singlet and onsite triplet shapes of #1
+  fail it by 2, which is what settled that the rule applies to the 2x2 weight
+  the callable returns. `tests/superconductivity/test_callable_pairing_antisymmetry.py`.
+- `MultiHopping.get_dagger` writes the dagger of every block at $-R$ instead
+  of looking up the partner there, so a lone `(1,0,0)` block gets its dagger
+  at `(-1,0,0)` and `m + m.get_dagger()` is Hermitian for any `m`. The
+  comment in `operatortk/inplane_valley.py` that described the old behaviour
+  now says the check there is only a guard. `tests/hopping/test_multihopping_dagger.py`.
+- `bkt_temperature` doubles the bracket, up to `maxexpand=20` times, when
+  the stiffness is still above the Nelson-Kosterlitz line at `tmax`, and
+  raises `ValueError` when it never crosses, where it used to return `tmax`.
+  With the stiffness replaced by a closed form rising as $g(T)=1+T-T^2/5$ it
+  finds the crossing at $\sqrt 5$, where the old code returned the bound 1,
+  and a `tmax=0.1` given below a crossing at 2/3 comes back as 2/3.
+  `tests/superfluid/test_bkt_bracket.py`.
+- `kanemele.get_haldane_function` and `dvector_times_mij_map`, the
+  byte-identical copy of `dvector_times_rij_map`, are deleted; neither had a
+  caller in `src/`, `tests/`, `examples/`, the notebooks or the
+  documentation.

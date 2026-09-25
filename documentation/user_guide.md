@@ -4345,6 +4345,13 @@ number of polynomials is the spectral width of the Hamiltonian divided by
 `delta`, so a sharper density of states costs proportionally more
 matrix-vector products; `ntries` is the number of random vectors in the
 stochastic trace, and the noise in `y` goes down as more of them are averaged.
+The expansion also needs the whole spectrum inside $[-{\rm scale},{\rm scale}]$,
+since a Chebyshev polynomial grows exponentially outside $[-1,1]$, and the
+default is `scale=10` in units of the hopping; a Hamiltonian whose spectrum
+reaches further, through a large onsite energy or exchange field, needs a
+larger `scale`, and one that is too small raises a `ValueError` rather than
+returning a density of states that means nothing. The same holds for the
+routines of the `kpm` module below.
 
 The same expansion also gives non-local correlators and Green's functions
 without inverting a matrix, through the lower-level `kpm` module
@@ -5271,7 +5278,11 @@ Optional arguments
   `"nodal_dwave"`, `"chiral_dwave"`, `"nodal_fwave"`, `"chiral_fwave"`,
   `"chiral_gwave"`, and several others. A
   callable returning the 2x2 pairing matrix for a pair of positions is also
-  accepted. An unknown name raises `ValueError` listing every accepted one
+  accepted, and it has to obey Fermi antisymmetry,
+  $D(\vec r_1,\vec r_2)=\sigma_y D(\vec r_2,\vec r_1)^T\sigma_y$ (the singlet
+  part even under the exchange of the two positions, the d-vector odd), or it
+  raises `ValueError` naming the first pair that breaks it. An unknown name
+  raises `ValueError` listing every accepted one
 - d=[0.,0.,1.]: the d-vector, for the triplet channels
 
 ### h.setup_nambu_spinor()
@@ -5825,8 +5836,11 @@ do not hold, and with `mode="finite_difference"`, which has no such split.
 Berezinskii-Kosterlitz-Thouless temperature of a 2d BdG Hamiltonian, from
 the self-consistent Nelson-Kosterlitz criterion
 $T_{\rm BKT} = (\pi/8)D_s(T_{\rm BKT})$ at frozen $|\Delta|$. Arguments
-`nk=20`, `tmax=None`, `tol=1e-6`, `maxite=60`, plus `gauge`. Returns a
-float.
+`nk=20`, `tmax=None`, `tol=1e-6`, `maxite=60`, `maxexpand=20`, plus `gauge`.
+`tmax` is the upper end of the bisection, $(\pi/8)D_s(0)$ when not given;
+where the stiffness is still above the line there, the bracket is doubled up
+to `maxexpand` times, and a stiffness that never crosses the line raises
+`ValueError`. Returns a float.
 
 ### h.get_nonlinear_drude_conductivity()
 Compute the l-th order nonlinear Drude conductivity `sigma^{x^l1 y^l2 ; b}` of a collinear magnet, the quantity whose lowest nonvanishing order measures the X-wave index of an altermagnet (p:0, d:1, f:2, g:3, i:5). Requires spin to be a good quantum number.
@@ -6014,7 +6028,11 @@ Optional arguments:
   instead of plain mixing. `"error_gradient"` is the most robust of these on
   a generic Hamiltonian, `"newton"` the default; as local methods they can
   still stall short of `maxerror`, in which case the call returns `None`
-  like any other non-converged SCF, so always check for that. Restricted
+  like any other non-converged SCF, so always check for that. Where
+  `"newton"`, `"newton_krylov"` or a stalled `"fsolve"` sit at a stationary
+  point of the residual, they leave it with bursts of `kick_steps=60`
+  linear-mixing steps, a length tuned on one system, so a case that still
+  stalls can be tried with another. Restricted
   to a normal-state (non-BdG) Hamiltonian, dense exact diagonalization only
   (no `integration="kpm"`), and no `constrains`:
 ```python
