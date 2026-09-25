@@ -143,30 +143,6 @@ def haldane(r1,r2,rm,fun=0.0,sublattice=None):
 
 
 
-def get_haldane_function(g,stagger=False):
-    """Return a function that computes the Haldane coupling"""
-    rm = g.multireplicas(3)
-    def f(r1,r2):
-      m = haldane([r1],[r2],rm,fun=1.0).todense()[0,0]
-      if not stagger: return m # conventional Haldane
-      i = g.get_index(r1,replicas=True)
-      j = g.get_index(r2,replicas=True)
-      i = g.sublattice[i]
-      j = g.sublattice[j]
-      m = m*(i+j)/2
-      return m
-    return f # return function
-
-
-
-
-
-
-
-
-
-
-
 def add_haldane(h,t):
   """Add Haldane to a Hamiltonian"""
 #  if h.has_spin: raise # not for spinful

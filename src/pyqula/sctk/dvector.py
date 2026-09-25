@@ -116,22 +116,6 @@ def dvector_times_rij_map(h,nrep=4):
     m = np.round(m,5) # round values
     np.savetxt("DxR_MAP.OUT",m) # write in the file
 
-def dvector_times_mij_map(h,nrep=4):
-    """Compute the dvector times rij"""
-    check_spinful_nambu(h) # the extraction assumes this Hilbert space
-    h = h.supercell(nrep) # create a supercell (if needed)
-    hi = h.get_hopping_dict()[(0,0,0)]
-    dms = matrix2dvector(hi) # get the dvectors
-    rs = h.geometry.r[:,0:3] # get coordinates
-    ds = np.zeros(rs.shape,dtype=np.complex128) # array with the result
-    for i in range(len(rs)):
-        for j in range(len(rs)):
-            d = np.cross(dms[:,i,j],rs[i]-rs[j])
-            ds[i,:] = ds[i,:] + d # add contribution
-    m = np.array([rs[:,0],rs[:,1],rs[:,2],ds[:,0],ds[:,1],ds[:,2]]).T.real
-    m = np.round(m,5) # round values
-    np.savetxt("DxR_MAP.OUT",m) # write in the file
-
 
 def dvector_non_unitarity_map(h,nrep=2,**kwargs):
     """Write a real-space map of the d-vector non-unitarity to
