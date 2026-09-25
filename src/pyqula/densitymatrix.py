@@ -388,12 +388,10 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
     eigenvectors, and after adding all the contributions together.
     This can become memore expesive for large kmesh and moderate
     matrices"""
-    if h.dimensionality == 0: fac = 1.
-    elif h.dimensionality == 1: fac = 1./nk
-    elif h.dimensionality == 2: fac = 1./nk**2
-    elif h.dimensionality == 3: fac = 1./nk**3
-    else:
-        raise ValueError("the Hamiltonian must have dimensionality 0, 1, 2 or 3")
+    from .klist import kmesh
+    # the same mesh get_eigenvectors diagonalizes, so a list-valued nk
+    # works as it does in full_dm_accumulate
+    fac = 1./len(kmesh(h.dimensionality,nk=nk)) # normalization
     if ds is None: # no directions required
       es,vs = h.get_eigenvectors(nk=nk) # get eigenvectors
       es = es - fermi # shift by the Fermi energy
