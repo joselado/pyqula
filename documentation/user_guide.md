@@ -4982,6 +4982,12 @@ above all, is applied inside the sum over the Brillouin zone rather than
 contracted with the k-summed density matrix, so `h.get_vev(operator="unfold")`
 gives the unfolded weight site by site
 
+With the electron-hole (Nambu) degree of freedom the three methods count a
+normal observable once, so that a BdG Hamiltonian with zero
+pairing gives the same numbers as the normal one, and a pairing operator such
+as `"spair"` gives the anomalous expectation value, site by site with
+`h.get_vev("spair")`, whose sum is `h.get_single_vev("spair")`
+
 ```python
 from pyqula import geometry
 g = geometry.honeycomb_lattice() # primitive geometry

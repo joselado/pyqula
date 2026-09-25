@@ -122,8 +122,9 @@ def set_individual_filling(h,filling=0.5,**kwargs):
     a scalar, the same on every site, or an array with one value per
     site."""
     check_filling(filling) # complain about a meaningless filling
-    # states per site, counting only the electron sector: get_vev already
-    # restricts a Nambu Hamiltonian to it
+    # states per site, counting only the electron sector: the occupation
+    # get_vev returns for a Nambu Hamiltonian is that of its electron
+    # sector (operators.vev_operator)
     nper = 2 if h.has_spin else 1
     target = filling*nper # occupancy per site the solver aims at
     def fmin(ons):

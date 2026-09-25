@@ -933,9 +933,10 @@ class Hamiltonian():
           is what to report as one. Being a Brillouin-zone integral it
           needs a k-mesh: pass nk, or rely on the mesh a self-consistent
           Hamiltonian remembers from its own loop. With the electron-hole
-          (Nambu) degree of freedom it is read off the electron sector, so
-          that a BdG description of a state gives the same moment as the
-          normal-state description of that same state.
+          (Nambu) degree of freedom the hole-hole block of the spin
+          operators is dropped (operators.vev_operator), so that a BdG
+          description of a state gives the same moment as the normal-state
+          description of that same state.
 
         - mode="field" reads the magnetic *term written in the
           Hamiltonian* instead, i.e. the coefficients of sigma_x/y/z on
