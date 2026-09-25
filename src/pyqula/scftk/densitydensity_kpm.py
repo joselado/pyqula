@@ -52,7 +52,8 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
     this backend)."""
     from .densitydensity import (get_mf, mix_mf, diff_mf, update_hamiltonian,
             hamiltonian2dict, set_hoppings, SCF, random_hermitian_guess,
-            mf_matches_hamiltonian)
+            mf_matches_hamiltonian, reject_leftover_kwargs)
+    reject_leftover_kwargs(kwargs) # the end of the KPM call chain
     from .mfconstrains import obj2mf
     h1 = h0.copy()
     h1.nk = nk
@@ -236,7 +237,9 @@ def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
     bottlenecks (per-pair Chebyshev recursion, get_fermi4filling_kpm's
     O(n_orb) Fermi search). Reach for this engine only if you have
     confirmed it is actually faster for your system."""
-    from .densitydensity import obj2geometryarray
+    from .densitydensity import (obj2geometryarray, reject_legacy_kwargs,
+            reject_spinless_U)
+    kwargs = reject_legacy_kwargs(kwargs) # the same refusals as Vinteraction
     h = h.get_multicell()
     h = h.get_dense()
     nd = h.geometry.neighbor_distances()
@@ -250,6 +253,7 @@ def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
         hv = hv + hv1
     v = hv.get_hopping_dict()
     U = obj2geometryarray(U, h.geometry)
+    reject_spinless_U(h, U)
     if h.has_spin:
         for d in v:
             m = v[d] ; n = m.shape[0]

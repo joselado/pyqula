@@ -402,13 +402,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
     default applies when not given). The scipy solvers ("krylov",
     "anderson", "broyden1", "linear") have no use for it, and warn when
     it is given."""
-    if len(kwargs)>0:
-        # this is the end of the mean-field call chain: anything left over
-        # here is a keyword nobody consumed, and used to be dropped in
-        # silence (a misspelled filling= would run with the default)
-        raise TypeError("unexpected keyword argument(s) "
-          +str(sorted(kwargs))+" in the mean-field calculation; nothing "
-          +"in the call chain consumes them, so they would be ignored")
+    reject_leftover_kwargs(kwargs)
     if verbose>1: info=True
 #    if not h0.check_mode("spinless"): raise # sanity check
     h1 = h0.copy() # initial Hamiltonian
@@ -764,6 +758,50 @@ legacy_selfconsistency_kwargs = {
   }
 
 
+# The three refusals below are shared with the KPM engine
+# (densitydensity_kpm.py), so that both spell them the same way.
+
+def reject_leftover_kwargs(kwargs):
+    """Raise on the keywords left over at the end of a mean-field call
+    chain: nobody consumed them, and they used to be dropped in silence (a
+    misspelled filling= would run with the default)"""
+    if len(kwargs)>0:
+        raise TypeError("unexpected keyword argument(s) "
+          +str(sorted(kwargs))+" in the mean-field calculation; nothing "
+          +"in the call chain consumes them, so they would be ignored")
+
+
+def reject_legacy_kwargs(kwargs):
+    """Refuse the keywords of the old scftypes.selfconsistency interface
+    (see legacy_selfconsistency_kwargs), and return the keywords with the
+    old spelling nkp of the k-mesh renamed to nk"""
+    from ..utilities import rename_kwarg
+    kwargs = rename_kwarg(kwargs,"nkp","nk") # the old spelling of the k-mesh
+    legacy = [k for k in kwargs if k in legacy_selfconsistency_kwargs]
+    if len(legacy)>0:
+        msg = "".join(["\n  "+k+": "+legacy_selfconsistency_kwargs[k]
+                        for k in sorted(legacy)])
+        raise TypeError("keyword argument(s) "+str(sorted(legacy))+" belong "
+          +"to the old scftypes.selfconsistency interface and have no "
+          +"effect here -- a call that passes them silently runs with no "
+          +"interaction at all. The current spellings are:"+msg)
+    return kwargs
+
+
+def reject_spinless_U(h,U):
+    """Refuse a local Hubbard U (an array over the sites) on a spinless
+    Hamiltonian: the on-site Hubbard term is the up-down density-density
+    interaction, so it has no meaning without spin, and it used to be
+    built and then quietly dropped"""
+    if not h.has_spin and np.max(np.abs(U))>0.0:
+        raise ValueError("a local Hubbard U requires the spin degree of "
+          +"freedom (it is the interaction between the up and down "
+          +"densities on the same site), but this Hamiltonian has "
+          +"has_spin=False. Build it with g.get_hamiltonian(has_spin=True), "
+          +"or use the intersite interactions V1/V2/V3/Vr, which are "
+          +"defined for spinless fermions.")
+
+
 def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
         constrains=[],Vr=None,**kwargs):
     """Perform a mean-field calculation with density-density interactions
@@ -808,16 +846,7 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     reported total_energy is essentially just the unmodified initial guess
     evaluated once, not a converged answer.
     """
-    from ..utilities import rename_kwarg
-    kwargs = rename_kwarg(kwargs,"nkp","nk") # the old spelling of the k-mesh
-    legacy = [k for k in kwargs if k in legacy_selfconsistency_kwargs]
-    if len(legacy)>0:
-        msg = "".join(["\n  "+k+": "+legacy_selfconsistency_kwargs[k]
-                        for k in sorted(legacy)])
-        raise TypeError("keyword argument(s) "+str(sorted(legacy))+" belong "
-          +"to the old scftypes.selfconsistency interface and have no "
-          +"effect here -- a call that passes them silently runs with no "
-          +"interaction at all. The current spellings are:"+msg)
+    kwargs = reject_legacy_kwargs(kwargs)
     h = h.get_multicell() # multicell Hamiltonian
     h = h.get_dense()
     # define the function
@@ -832,16 +861,7 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
       hv = hv + hv1 # add the two Hamiltonians
     v = hv.get_hopping_dict() # hopping dictionary
     U = obj2geometryarray(U,h.geometry) # convert to array
-    if not h.has_spin and np.max(np.abs(U))>0.0:
-        # the on-site Hubbard term is the up-down density-density
-        # interaction, so it has no meaning without spin -- it used to be
-        # built here and then quietly dropped by the has_spin branch below
-        raise ValueError("a local Hubbard U requires the spin degree of "
-          +"freedom (it is the interaction between the up and down "
-          +"densities on the same site), but this Hamiltonian has "
-          +"has_spin=False. Build it with g.get_hamiltonian(has_spin=True), "
-          +"or use the intersite interactions V1/V2/V3/Vr, which are "
-          +"defined for spinless fermions.")
+    reject_spinless_U(h,U)
     if h.has_spin: #raise # not implemented
         for d in v: # loop
             m = v[d] ; n = m.shape[0]
