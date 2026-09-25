@@ -704,7 +704,8 @@ def _scalar_stiffness(D):
     return np.sqrt(d) if d>0. else 0.
 
 
-def bkt_temperature(h,nk=20,tmax=None,tol=1e-6,maxite=60,**kwargs):
+def bkt_temperature(h,nk=20,tmax=None,tol=1e-6,maxite=60,maxexpand=20,
+        **kwargs):
     """Berezinskii-Kosterlitz-Thouless temperature of a 2d BdG Hamiltonian,
     from the Nelson-Kosterlitz criterion
 
@@ -715,19 +716,33 @@ def bkt_temperature(h,nk=20,tmax=None,tol=1e-6,maxite=60,**kwargs):
     feedback, so this is the standard "frozen gap" BKT estimate, which
     overestimates T_BKT when it approaches the mean-field T_c.
 
-    Returns 0.0 if the criterion has no solution (D_s(0) too small)."""
+    Returns 0.0 if the criterion has no solution (D_s(0) too small).
+
+    tmax is the upper end of the bisection bracket, (pi/8) D_s(0) when not
+    given, which bounds T_BKT whenever D_s falls with T. When the stiffness
+    is still above the line at tmax (a tmax given too low, or a stiffness
+    that rises with T on a coarse k-mesh) the bracket is doubled until it
+    holds the crossing, rather than tmax being returned as if it were the
+    answer."""
     if h.dimensionality!=2:
         raise NotImplementedError("the BKT temperature is only defined for "
                 "dimensionality 2")
     ks = kmesh(2,nk=nk)
-    def f(T): # T - (pi/8) D_s(T), monotonically increasing in T
+    def f(T): # T - (pi/8) D_s(T), negative below T_BKT
         return T - np.pi/8.*_scalar_stiffness(
                 superfluid_weight(h,ks=ks,T=T,**kwargs))
     if tmax is None: tmax = np.pi/8.*_scalar_stiffness(
             superfluid_weight(h,ks=ks,T=0.,**kwargs))
     if tmax<=0.: return 0.0
-    if f(tmax)<0.: return tmax # stiffness still above the line at tmax
-    (t0,t1) = (0.,tmax)
+    t0 = 0. # f(0) = -(pi/8) D_s(0) is never positive
+    for i in range(maxexpand):
+        if f(tmax)>=0.: break # the crossing is inside [t0,tmax]
+        (t0,tmax) = (tmax,2.*tmax) # stiffness still above the line at tmax
+    else:
+        raise ValueError("the stiffness is still above the Nelson-Kosterlitz "
+                "line T = (pi/8) D_s(T) at T="+str(tmax/2.)+", after doubling "
+                "the bracket "+str(maxexpand)+" times; pass a larger tmax")
+    t1 = tmax
     for i in range(maxite):
         tm = (t0+t1)/2.
         if f(tm)>0.: t1 = tm
