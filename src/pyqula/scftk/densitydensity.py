@@ -157,6 +157,14 @@ def random_hermitian_guess(v,shape,scale=1.0):
     which blows up exponentially over npol recursion steps (observed:
     >1e40 mean-field magnitude after a single SCF iteration with the old,
     onsite-only-symmetrized guess) instead of just being somewhat wrong.
+    A Hermitian guess only covers that first step, though: the loop keeps
+    the mean field Hermitian afterwards only because the KPM density
+    matrix is Hermitian by construction (kpmtk.densitymatrix_kpm.
+    _dm_kpm_from_needed computes one entry of each conjugate pair and sets
+    the other by conjugation). When its two entries were computed
+    independently, roundoff reopened an anti-Hermitian part every
+    iteration and the loop amplified it until the recursion diverged,
+    from this guess just as from any other.
 
     scale multiplies every freshly-drawn direction's matrix by a real
     constant before its opposite direction (if any) mirrors it -- this

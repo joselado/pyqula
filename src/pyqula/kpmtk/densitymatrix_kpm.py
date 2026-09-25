@@ -250,8 +250,19 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
 
     needed = sorted(needed)
     ds = sorted({d for (d, i, j) in needed})
-    pairs = sorted({(i, j) for (_, i, j) in needed})
+    # H(k) is Hermitian, and so is any function of it, so the (j,i) value
+    # at each k is the conjugate of the (i,j) one. Computing both from
+    # their own moments lets roundoff open an anti-Hermitian part in the
+    # density matrix, which the mean-field loop amplifies by a fixed factor
+    # every iteration until the recursion diverges. Only i<=j is computed
+    # and i>j is set by conjugation below, which makes dm[-d][j,i] =
+    # conj(dm[d][i,j]) hold by construction and halves the moment work.
+    # This is Hermiticity of the whole matrix, so it holds just as well for
+    # an electron-hole entry of a Nambu H(k), whose partner is the
+    # hole-electron entry, not another pairing one.
+    pairs = sorted({(min(i, j), max(i, j)) for (_, i, j) in needed})
     pair_index = {p: idx for idx, p in enumerate(pairs)}
+    diagonal = np.array([i == j for (i, j) in pairs], dtype=bool)
 
     if scale is None:
         # one global scale for every k, so the occupied-energy window
@@ -298,7 +309,9 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
         ysr = mus_batch.real @ basis  # (len(pairs), ne)
         ysi = mus_batch.imag @ basis
         ys = ysr - 1j*ysi
-        return np.trapezoid(ys*weights[None, :], x=xin, axis=1)/np.pi
+        out = np.trapezoid(ys*weights[None, :], x=xin, axis=1)/np.pi
+        out[diagonal] = out[diagonal].real # a diagonal entry is its own conjugate
+        return out
 
     if cores is not None: parallel.set_cores(cores)
     results = parallel.pcall(compute_for_k, ks)  # one array of pair values per k
@@ -311,8 +324,9 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     for d in ds:
         phases = np.array([np.exp(2j*np.pi*np.dot(k, d)) for k in ks])
         for (i, j) in needed_by_d.get(d, []):
-            idx = pair_index[(i, j)]
+            idx = pair_index[(min(i, j), max(i, j))]
             col = np.array([r[idx] for r in results])
+            if i > j: col = col.conj() # see the pairs above
             dm[d][i, j] = fac*np.sum(phases*col)
     return dm
 

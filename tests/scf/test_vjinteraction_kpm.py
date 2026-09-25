@@ -156,17 +156,10 @@ def test_get_mean_field_hamiltonian_kpm_still_works_for_spinless_hamiltonian():
     load_mf=False: Vinteraction_kpm's SCF loop otherwise tries to
     warm-start from a cached MF.pkl in the cwd, which may be incompatible
     (different shape) with this Hamiltonian if left over from an unrelated
-    run. mf="random": densitydensity_kpm.py's own default (mf=None) guess
-    construction (a separate copy of the same pattern VJinteraction's
-    _run_anisotropic_scf used to have) only symmetrizes the onsite
-    (0,0,0) term, leaving off-diagonal directions independently random and
-    the overall guess non-Hermitian -- harmless for exact diagonalization,
-    but enough to blow up integration="kpm"'s Chebyshev recursion (see
-    _run_anisotropic_scf's now-fixed version of the same issue). Not fixed
-    here since densitydensity_kpm.py is shared by Vinteraction_kpm/
-    hubbard_kpm generally, out of scope for VJinteraction's own kpm mode;
-    mf="random" (meanfield.guess's Hermitian-by-construction random mode)
-    sidesteps it for this dispatch-only test."""
+    run. mf="random" (meanfield.guess's Hermitian random mode) was chosen
+    when densitydensity_kpm.py's own mf=None guess was still non-Hermitian;
+    that guess is random_hermitian_guess now, so it no longer matters for
+    this dispatch-only test."""
     g = geometry.chain()
     h = g.get_hamiltonian(has_spin=False)
     h_new = h.get_mean_field_hamiltonian(V1=1.0, filling=0.3, nk=6, mix=0.3,
