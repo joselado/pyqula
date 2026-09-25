@@ -238,7 +238,9 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     effectively-hard cutoff.
 
     Per-pair moments (get_moments_ij) are still computed one call per
-    (row,col,k) triple, each running its own O(npol) Chebyshev VECTOR
+    canonical (min(row,col),max(row,col)) pair and k, the other member of
+    a Hermitian pair being set by conjugation (see the comment above
+    `pairs` below), each running its own O(npol) Chebyshev VECTOR
     recursion -- but converting those moments into the requested
     density-matrix element used to also go through kpm.dm_ij_energy's own
     call to generate_profile per pair, which recomputes the

@@ -32,7 +32,7 @@ done_fields, magnetizations = [], []
 for b in fields:
     np.random.seed(0) # reproducible SCF seed, see the plain-chain example
     h = SpinonHamiltonian(g)
-    h.add_zeeman([0., 0., b]) # coefficient of sigma, i.e. h=2b in H=-h.S
+    h.add_zeeman([0., 0., b]) # coefficient of sigma, i.e. h=-2b in H=-h.S
     h2 = h.get_mean_field_hamiltonian(J1=J1, nk=24, mix=0.3,
             maxerror=1e-6, maxite=2000)
     if h2 is None:
