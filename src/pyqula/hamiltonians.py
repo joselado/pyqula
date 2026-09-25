@@ -134,6 +134,23 @@ class Hamiltonian():
     def get_berry_curvature(h,**kwargs):
         return topology.get_berry_curvature(h,**kwargs)
 
+    def get_spin_chern(h,**kwargs):
+        """Spin Chern number (C_+ - C_-)/2 of the occupied states split by
+        the sign of P s_z P, see topologytk/topologicalsector.py"""
+        from .topologytk.topologicalsector import spin_chern
+        return spin_chern(h,**kwargs)
+
+    def get_mirror_chern(h,**kwargs):
+        """Mirror Chern number (C_{+i} - C_{-i})/2 for the mirror z -> -z,
+        see topologytk/topologicalsector.py"""
+        from .topologytk.topologicalsector import mirror_chern
+        return mirror_chern(h,**kwargs)
+
+    def get_winding_number(h,**kwargs):
+        """Winding number of a one-dimensional Hamiltonian with a chiral
+        symmetry, see topology.winding_number"""
+        return topology.winding_number(h,**kwargs)
+
     def get_quantum_geometric_tensor(h,**kwargs):
         """Multiband (non-Abelian) quantum geometric tensor at a single
         k-point, see topologytk/qgt.py for the formula and references"""
@@ -657,28 +674,36 @@ class Hamiltonian():
     def get_topological_invariant(self,**kwargs):
         """Return a topological invariant of the occupied bands.
 
-        In one dimension this is the Berry (Zak) phase, in two the Z2
+        In one dimension this is the Z2 invariant for a time-reversal-
+        symmetric superconductor (class DIII) and the Berry (Zak) phase
+        otherwise, in two the Z2
         invariant for a time-reversal-symmetric Hamiltonian and the Chern
-        number otherwise. The 0d and 3d cases used to return None and
-        raise a bare `raise` respectively."""
+        number otherwise, and in three the strong and weak Z2 indices
+        (nu0,(nu1,nu2,nu3)) for a time-reversal-symmetric Hamiltonian and
+        the Chern vector (C1,C2,C3) otherwise. The 0d case used to return
+        None."""
         if self.dimensionality==0:
             raise ValueError("a 0-dimensional (finite) Hamiltonian has no "
               +"Brillouin zone, so no topological invariant is defined for "
               +"it; build a periodic system, or look at the spectrum of "
               +"the finite cluster instead")
         elif self.dimensionality==1:
+            if self.has_eh and self.has_time_reversal_symmetry():
+                return topology.z2_invariant_1d(self,**kwargs) # class DIII
             return topology.berry_phase(self,**kwargs) # Zak phase
         elif self.dimensionality==2: 
             if self.has_time_reversal_symmetry():
                 return topology.z2_invariant(self,**kwargs)
             else:
                 return topology.chern(self,**kwargs)
+        elif self.dimensionality==3:
+            if self.has_time_reversal_symmetry():
+                return topology.z2_invariant_3d(self,**kwargs)
+            else:
+                return topology.chern_vector(self,**kwargs)
         else:
-            raise NotImplementedError("no topological invariant is "
-              +"implemented for a 3-dimensional Hamiltonian; compute the "
-              +"Chern number of a 2d slice with get_chern on a fixed third "
-              +"momentum, or the Berry phase along a chosen k-path with "
-              +"topology.berry_phase(h,kpath=...)")
+            raise ValueError("no topological invariant is defined for a "
+              +"Hamiltonian of dimensionality "+str(self.dimensionality))
     def shift_fermi(self,fermi): self.add_onsite(fermi)  
     def first_neighbors(self):
       """ Create first neighbor hopping"""
