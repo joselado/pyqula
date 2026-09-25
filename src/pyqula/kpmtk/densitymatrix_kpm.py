@@ -185,6 +185,34 @@ def _estimate_kpm_scale(hk_gen,ks):
     return 1.1*max(estimate_bandwidth(hk_gen(k)) for k in ks)
 
 
+def _check_scale_covers_spectrum(mus, scale, given):
+    """Raise if Chebyshev moments of H(k)/scale show part of its spectrum
+    outside [-1,1]. For a Hermitian matrix with its spectrum inside that
+    interval every moment is bounded, |<a|T_n(H)|b>| <= 1 for unit vectors
+    a and b, while T_n grows exponentially outside it, so a moment past one
+    (or a NaN/inf) means that the scale is too small. This is exact rather
+    than a comparison with the Gershgorin bound _estimate_kpm_scale uses,
+    which is only an upper bound on the spectral radius and would refuse a
+    valid scale between the two; the tolerance only absorbs the roundoff a
+    spectrum edge sitting exactly at +-1 picks up along the recursion.
+    given says whether the scale came from the caller or from
+    _estimate_kpm_scale, which can only fail on a non-Hermitian H(k)."""
+    mus = np.asarray(mus)
+    if np.all(np.isfinite(mus)) and np.max(np.abs(mus)) <= 1. + 1e-6: return
+    if given:
+        raise ValueError("the KPM scale=%g does not cover the spectrum of "
+                "H(k): the Chebyshev expansion needs every eigenvalue inside "
+                "[-scale,scale], and in a mean-field loop that is the "
+                "spectrum after the Fermi shift, not the bare band "
+                "structure. Leave scale=None to have it estimated on the "
+                "Hamiltonian actually expanded, or pass a larger one"
+                % scale)
+    raise ValueError("the Chebyshev moments of H(k) diverge although the KPM "
+            "scale=%g was estimated from its Gershgorin bound, which only "
+            "happens when H(k) is not Hermitian; check that the Hamiltonian "
+            "and any mean-field guess passed in are Hermitian" % scale)
+
+
 def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
                          npol=DEFAULT_NPOL, ne=None, cores=None, T=0.0):
     """Shared per-k Bloch-KPM engine: given the (direction, row, col)
@@ -264,6 +292,7 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     pair_index = {p: idx for idx, p in enumerate(pairs)}
     diagonal = np.array([i == j for (i, j) in pairs], dtype=bool)
 
+    given = scale is not None # see _check_scale_covers_spectrum
     if scale is None:
         # one global scale for every k, so the occupied-energy window
         # used below means the same thing at every k-point
@@ -306,6 +335,7 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
             # dm[b,a] for the same (a,b) pair) -- so to land in dm[i,j]
             # here the call needs its arguments swapped.
             mus_batch[idx] = get_moments_ij(Hk_scaled, i=j, j=i, n=npol)
+        _check_scale_covers_spectrum(mus_batch, scale, given)
         ysr = mus_batch.real @ basis  # (len(pairs), ne)
         ysi = mus_batch.imag @ basis
         ys = ysr - 1j*ysi
@@ -402,6 +432,7 @@ def _kpm_dos_moments(h, nk, scale, npol, ne, cores):
     if ne is None: ne = npol*4
     ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
     hk_gen = h.get_hk_gen()
+    given = scale is not None # see _check_scale_covers_spectrum
     if scale is None:
         scale = _estimate_kpm_scale(hk_gen, ks)
     if scale <= 0:
@@ -412,7 +443,9 @@ def _kpm_dos_moments(h, nk, scale, npol, ne, cores):
 
     def moments_for_k(k):
         Hk = csr_matrix(hk_gen(k))
-        return kpm.full_trace(Hk/scale, n=npol)
+        mus = kpm.full_trace(Hk/scale, n=npol) # an average of bounded moments
+        _check_scale_covers_spectrum(mus, scale, given)
+        return mus
 
     if cores is not None: parallel.set_cores(cores)
     results = parallel.pcall(moments_for_k, ks)

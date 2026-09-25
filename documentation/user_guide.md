@@ -5997,8 +5997,10 @@ Optional arguments:
   rescaling (estimated automatically if not given), `npol` the number of
   Chebyshev moments, `ne` the number of energies sampled in the occupied
   window and `cores` the number of parallel workers across k-points; all
-  four are unused for `"ed"`. Also reachable through
-  `h.get_mean_field_hamiltonian(integration="kpm",...)`.
+  four are unused for `"ed"`. A `scale` given by hand has to cover the
+  spectrum of the Hamiltonian after the Fermi shift, not only the bare band
+  structure, and one that does not raises a `ValueError`. Also reachable
+  through `h.get_mean_field_hamiltonian(integration="kpm",...)`.
 - `use_jax=True, solver=...`: solve the same SCF fixed point $x=f(x)$ ($x$
   the mean-field parameters, $f$ one SCF iteration) with a nonlinear solver
   instead of plain mixing. `"error_gradient"` is the most robust of these on
