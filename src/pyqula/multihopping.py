@@ -54,12 +54,13 @@ class MultiHopping():
         if dd.norm()>1e-7: return False
         else: return True
     def get_dagger(self):
+        # the dagger of the block at R lives at -R, so every block is
+        # written there, and a block whose partner at -R is absent still
+        # has its dagger in the result
         out = dict()
         for key in self.dict:
-            key2 = tuple(-np.array(key,dtype=int))
-            # a missing key2 means that block is zero, so its dagger is too
-            if key2 in self.dict:
-                out[key] = np.conjugate(self.dict[key2].T)
+            key2 = tuple(int(-k) for k in np.array(key,dtype=int))
+            out[key2] = np.conjugate(self.dict[key].T)
         out = MultiHopping(out) # create a new object
         return out
     def copy(self):

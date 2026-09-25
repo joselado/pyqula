@@ -200,21 +200,13 @@ def add_valley_exchange(h,v):
         mh_taux = (mhT+mhTd)*0.5
         mh_tauy = (mhT-mhTd)*(-0.5j)
         mh = vx*mh_taux + vy*mh_tauy
-        # MultiHopping.get_dagger() treats a hopping-cell-direction
-        # missing its -direction counterpart as zero rather than
-        # reconstructing it (see multihopping.py), which could in
-        # principle leave mh non-Hermitian if some registry's
-        # contribution to a direction is pruned to exactly zero by the
-        # multicell hopping-dict machinery. This is not expected to
-        # trigger for h.geometry going through turn_multicell() above
-        # (which pre-establishes a symmetric +/-direction skeleton
-        # before any Kekule contribution is painted on), but check
-        # rather than silently add a non-Hermitian term to h.
+        # MultiHopping.get_dagger() writes the dagger of every block at
+        # -R, so mh is Hermitian by construction for real vx and vy; the
+        # check stays as a guard rather than silently add a
+        # non-Hermitian term to h.
         if not mh.is_hermitian(): raise RuntimeError(
                 "add_valley_exchange: the constructed valley-exchange "
-                "term is not Hermitian; this can happen for a "
-                "Hamiltonian whose multicell hopping directions were "
-                "not established via turn_multicell() before this call")
+                "term is not Hermitian, which needs real vx and vy")
         h.set_multihopping(h.get_multihopping()+mh)
 
 
