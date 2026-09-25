@@ -331,6 +331,7 @@ from .sctk.extract import extract_pairing
 from .sctk.extract import extract_singlet_pairing
 from .sctk.extract import extract_triplet_pairing
 from .sctk.pairing import pairing_generator
+from .sctk.pairing import check_fermi_antisymmetry
 from .sctk.fastdeltaud import hopping2deltaud
 
 
@@ -340,6 +341,8 @@ def add_pairing_to_hamiltonian(self,**kwargs):
     """ Add a general pairing matrix to a Hamiltonian"""
 #    self.get_eh_sector = get_eh_sector_odd_even # assign function
     df = pairing_generator(self,**kwargs) # function that outputs a 2x2 matrix
+    if callable(kwargs.get("mode")): # a registered mode obeys it already
+        check_fermi_antisymmetry(self,kwargs["mode"]) # before h is touched
     self.turn_nambu() # add electron hole terms
     r = self.geometry.r # positions 
     m = add_pairing(df,r1=r,r2=r) # intra cell

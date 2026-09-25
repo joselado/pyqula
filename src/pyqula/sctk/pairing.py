@@ -88,6 +88,40 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     matrixf = lambda r1,r2: deltaf((r1+r2)/2.)*weightf(r1,r2) 
     return matrixf # return function
 
+
+def check_fermi_antisymmetry(h,weightf,tol=1e-6):
+    """Raise if a pairing weight breaks Fermi antisymmetry,
+    D(r1,r2) = sigma_y D(r2,r1)^T sigma_y, on the pairs of positions that
+    add_pairing evaluates: every pair inside the cell, and every pair
+    between the cell and each of its neighboring replicas. The registered
+    modes obey it by construction, so this is only needed for a callable"""
+    sy = np.array([[0.,-1j],[1j,0.]])
+    r = h.geometry.r
+    replicas = [r] # the cell itself first, then its neighbors
+    for d in h.geometry.neighbor_directions():
+        if np.dot(d,d)>1e-4: replicas.append(h.geometry.replicas(d=d))
+    for r2 in replicas:
+        for r1i in r:
+            for r2j in r2:
+                w12 = np.array(weightf(r1i,r2j),dtype=np.complex128)
+                w21 = np.array(weightf(r2j,r1i),dtype=np.complex128)
+                if w12.shape!=(2,2):
+                    raise ValueError("a pairing callable must return the "
+                        "2x2 pairing matrix, and this one returned shape "
+                        +str(w12.shape))
+                dev = np.max(np.abs(w12 - sy@w21.T@sy))
+                if dev>tol:
+                    raise ValueError("the pairing callable breaks Fermi "
+                        "antisymmetry, which needs D(r1,r2) = "
+                        "sigma_y D(r2,r1)^T sigma_y (the singlet part even "
+                        "under r1 <-> r2 and the d-vector odd): at r1="
+                        +str(np.round(r1i,4))+", r2="+str(np.round(r2j,4))
+                        +" the two sides differ by "+str(dev)+". The part "
+                        "that breaks it is not a pairing, it only adds a "
+                        "constant to the many-body Hamiltonian, and yet it "
+                        "shows up in the BdG spectrum")
+
+
 # matrices for the e-h subsector
 iden = np.array([[1.,0.],[0.,1.]],dtype=np.complex128)
 tauz = np.array([[1.,0.],[0.,-1.]],dtype=np.complex128)
