@@ -11,6 +11,8 @@ def get_ldos(m_in,i=0,scale=10.,x=None,
   if npol is None: npol = ne
   mus = moments_local_dos(m_in/scale,
           i=i,n=npol,**kwargs) # get coefficients
+  from .scaleguard import check_scale
+  check_scale(mus,scale,kpm_prec=kwargs.get("kpm_prec","double"))
   xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
   ys = generate_profile(mus,xs,kernel=kernel)
   xs,ys = scale*xs,ys/scale # rescale data

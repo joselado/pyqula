@@ -52,9 +52,10 @@ def dos0d_kpm(h,use_kpm=True,scale=10,npol=100,ntries=100,fun=None):
   h.turn_sparse() # turn the hamiltonian sparse
   mus = np.array([0.0j for i in range(2*npol)]) # initialize polynomials
   mus = kpm.random_trace(h.intra/scale,ntries=ntries,n=npol,fun=fun)
+  kpm.check_scale(mus,scale)
   xs = np.linspace(-0.9,0.9,4*npol) # x points
   ys = kpm.generate_profile(mus,xs) # generate the profile
-  write_dos(xs*scale,ys) # write in file
+  write_dos(xs*scale,ys/scale) # a density per unit energy, not per unit x
 
 
 def dos0d_sites(h,sites=[0],scale=10.,npol=500,ewindow=None,refine_e=1.0):
@@ -65,11 +66,12 @@ def dos0d_sites(h,sites=[0],scale=10.,npol=500,ewindow=None,refine_e=1.0):
   mus = np.array([0.0j for i in range(2*npol)]) # initialize polynomials
   hk = h.intra # hamiltonian
   for isite in sites:
-    mus += kpm.local_dos(hk/scale,i=isite,n=npol)
+    mus += kpm.moments_local_dos(hk/scale,i=isite,n=npol)
+  kpm.check_scale(mus,scale,bound=len(sites)) # a sum of unit-vector moments
   if ewindow is None:  xs = np.linspace(-0.9,0.9,int(npol*refine_e)) # x points
   else:  xs = np.linspace(-ewindow/scale,ewindow/scale,npol) # x points
   ys = kpm.generate_profile(mus,xs) # generate the profile
-  write_dos(xs*scale,ys) # write in file
+  write_dos(xs*scale,ys/scale) # a density per unit energy, not per unit x
 
 
 
@@ -104,13 +106,14 @@ def dos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,info=False,ewindow=None):
   for k in ks: # loop over kpoints
     hk = hkgen(k) # hamiltonian
     for isite in sites:
-      mus += kpm.local_dos(hk/scale,i=isite,n=npol)
+      mus += kpm.moments_local_dos(hk/scale,i=isite,n=npol)
     if info: print("Done",k)
   mus /= nk # normalize by the number of kpoints
+  kpm.check_scale(mus,scale,bound=len(sites)) # a sum of unit-vector moments
   if ewindow is None:  xs = np.linspace(-0.9,0.9,npol) # x points
   else:  xs = np.linspace(-ewindow/scale,ewindow/scale,npol) # x points
   ys = kpm.generate_profile(mus,xs) # generate the profile
-  write_dos(xs*scale,ys) # write in file
+  write_dos(xs*scale,ys/scale) # a density per unit energy, not per unit x
 
 
 def calculate_dos_hkgen(hkgen,ks,ndos=100,delta=None,

@@ -43,9 +43,10 @@ def kdos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,kshift=0.,
     mus = np.array([0.0j for i in range(2*npol)]) # initialize polynomials
     hk = hkgen(k+kshift) # hamiltonian
     for isite in sites:
-      mus += kpm.local_dos(hk/scale,i=isite,n=npol)
+      mus += kpm.moments_local_dos(hk/scale,i=isite,n=npol)
+    kpm.check_scale(mus,scale,bound=len(sites)) # a sum of unit-vector moments
     ys = kpm.generate_profile(mus,xs) # generate the profile
-    write_kdos(k,xs*scale,ys,new=False) # write in file (append)
+    write_kdos(k,xs*scale,ys/scale,new=False) # per unit energy, appended
     if info: print("Done",k)
 
 #
@@ -311,10 +312,12 @@ def write_surface_kpm(h,ne=400,klist=None,scale=4.,npol=200,w=20,ntries=20):
       es = xs*scale
       # calculate the bulk
       mus = kpm.random_trace(h0/scale,ntries=ntries,n=npol,fun=gbulk)
-      dsb = kpm.generate_profile(mus,xs) # generate the profile
+      kpm.check_scale(mus,scale)
+      dsb = kpm.generate_profile(mus,xs)/scale # per unit energy
       # calculate the edge
       mus = kpm.random_trace(h0/scale,ntries=ntries,n=npol,fun=gedge)
-      ds = kpm.generate_profile(mus,xs) # generate the profile
+      kpm.check_scale(mus,scale)
+      ds = kpm.generate_profile(mus,xs)/scale # per unit energy
     else:
       raise ValueError("write_surface_kpm needs a 1d or 2d Hamiltonian")
     for (e,d1,d2) in zip(es,ds,dsb):

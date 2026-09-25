@@ -197,8 +197,8 @@ def _check_scale_covers_spectrum(mus, scale, given):
     spectrum edge sitting exactly at +-1 picks up along the recursion.
     given says whether the scale came from the caller or from
     _estimate_kpm_scale, which can only fail on a non-Hermitian H(k)."""
-    mus = np.asarray(mus)
-    if np.all(np.isfinite(mus)) and np.max(np.abs(mus)) <= 1. + 1e-6: return
+    from .scaleguard import moments_within_bound
+    if moments_within_bound(mus): return
     if given:
         raise ValueError("the KPM scale=%g does not cover the spectrum of "
                 "H(k): the Chebyshev expansion needs every eigenvalue inside "

@@ -31,6 +31,8 @@ def get_density(m_in,scale=None,fermi=0.,
   if scale is None: scale = estimate_bandwidth(m_in)
   if npol is None: npol = max([int(scale/delta),3])
   mus = moments_local_dos(m_in/scale,n=npol,**kwargs) # get coefficients
+  from .scaleguard import check_scale
+  check_scale(mus,scale,kpm_prec=kwargs.get("kpm_prec","double"))
   mus = kernels[kernel](mus) # damp the moments
   return get_density_from_mus(mus,fermi/scale) # obtain the density directly
 

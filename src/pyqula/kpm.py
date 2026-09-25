@@ -86,6 +86,17 @@ def get_momentsA(v,m,n=100,A=None,**kwargs):
 from .kpmtk.kpmnumba import kpm_moments_ij as get_moments_ij
 
 from .kpmtk.kpmnumba import kpm_moments_vivj as get_moments_vivj
+from .kpmtk.scaleguard import check_scale
+
+
+def operator_norm_bound(A):
+    """Upper bound on the spectral norm of the operator A, the bound on
+    the operator-weighted moments <T_n(m)v|A|v> of a unit vector v:
+    sqrt(|A|_1 |A|_inf), the largest column and row sums of |A|. One for
+    no operator"""
+    if A is None: return 1.
+    A = abs(csc(A))
+    return np.sqrt(np.max(A.sum(axis=0))*np.max(A.sum(axis=1)))
 
 
 def full_trace(m_in,n=200,**kwargs):
@@ -125,6 +136,8 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
   if npol is None: npol = ne
   mus = random_trace(m_in/scale,ntries=ntries,n=npol,fun=frand,
           operator=operator,**kwargs)
+  check_scale(mus,scale,bound=operator_norm_bound(operator),
+          kpm_prec=kwargs.get("kpm_prec","double"))
   if ewindow is None or abs(ewindow)>scale: # no window provided
     xs = np.linspace(-1.0,1.0,ne,endpoint=True)*1.01 # energies
   else:
@@ -230,6 +243,7 @@ def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=True,
     """Return two arrays with energies and local DOS"""
     if npol is None: npol = ne
     mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j)
+    check_scale(mus,scale)
     if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
     else: xs = x/scale # use from input
     ys = generate_green_profile(mus,xs,kernel="jackson")/scale*np.pi # so it is the Green function
@@ -245,6 +259,7 @@ def dm_ij_energy(m_in,i=0,j=0,scale=10.,npol=None,ne=500,x=None):
   """Return the correlation function"""
   if npol is None: npol = ne
   mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j)
+  check_scale(mus,scale)
   if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
   else: xs = x/scale # use from input
   ysr = generate_profile(mus.real,xs,kernel="jackson")/scale*np.pi # so it is the Green function
@@ -258,6 +273,8 @@ def dm_vivj_energy(m_in,vi,vj,scale=10.,npol=None,ne=500,x=None):
   """Return the correlation function"""
   if npol is None: npol = ne
   mus = get_moments_vivj(m_in/scale,vi,vj,n=npol)
+  check_scale(mus,scale,
+          bound=np.linalg.norm(np.ravel(vi))*np.linalg.norm(np.ravel(vj)))
   if np.sum(np.abs(mus.imag))>0.001:
 #    print("WARNING, off diagonal has nonzero imaginary elements",np.sum(np.abs(mus.imag)))
     pass
@@ -283,6 +300,7 @@ def dos(m_in,xs,ntries=20,n=200,scale=10.):
   """Return the density of states"""
   if scale is None: scale = 10.*np.max(np.abs(m_in.data)) # estimate of the value
   mus = random_trace(m_in/scale,ntries=ntries,n=n)
+  check_scale(mus,scale)
   ys = generate_profile(mus,xs/scale) # generate the DOS
   return ys # return the DOS 
 
