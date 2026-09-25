@@ -51,6 +51,16 @@ already reached once.
   diagonalization the Nambu construction passed, and why a spectrum-level
   particle-hole check cannot see a broken Fermi antisymmetry.
 
+- [`bug_audit_5.md`](bug_audit_5.md) -- the fifth sweep, on four places no
+  sweep had run against an independent oracle: the KPM mean field, the
+  routines that consume a density matrix, the backends that compute one, and
+  the BSE package. Sixteen findings, **none fixed yet**, among them a
+  projection gauge that moves the exciton energies of the quantics solver,
+  expectation values that count twice or return zero on a Nambu
+  Hamiltonian, and a KPM mean-field loop that amplifies its own roundoff. It
+  also records what was checked and found right, and where a sixth sweep
+  should start.
+
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
   be made the other: three findings that are decisions rather than repairs (the
