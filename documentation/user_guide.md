@@ -4147,7 +4147,7 @@ computes transport through the embedded defect. See
 `examples/embedding/single_impurity_1D/main.py` and
 `examples/embedding/honeycomb_vacancy/main.py` for runnable versions, the other scripts under
 `examples/embedding/` for further defect scenarios (vacancies, boundaries, Yu-Shiba-Rusinov
-states, self-consistent defects...), and
+states...), and
 `jupyter-notebooks/functionalities/spectral_functions/04_single_impurities_infinite.ipynb` for
 the executed notebook. The momentum-space picture of the same defect, the quasiparticle
 interference, is addressed in the Observables chapter.
