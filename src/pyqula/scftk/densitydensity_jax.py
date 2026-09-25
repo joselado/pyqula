@@ -1087,6 +1087,17 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     mixing scheme (regularized, limited-memory multisecant Broyden mixing,
     arXiv:0801.3098) rather than a root-finder/gradient method -- see
     broydenmixing.py's module docstring."""
+    # the end of the use_jax=True call chain: a keyword nothing consumed
+    # used to be dropped here in silence, so a misspelled kick_steps ran
+    # with the default. integration="ed" is what the spinless
+    # get_mean_field_hamiltonian always passes, and the only backend
+    integration = kwargs.pop("integration", "ed")
+    if integration != "ed":
+        raise NotImplementedError("use_jax=True computes the density "
+                "matrix by exact diagonalization only, integration=\"ed\"; "
+                "integration=%r has no jax counterpart" % (integration,))
+    from .densitydensity import reject_leftover_kwargs
+    reject_leftover_kwargs(kwargs)
     if h0.has_eh:
         raise NotImplementedError("use_jax=True does not support the "
                 "anomalous/BdG mean field yet; use the default (numpy) engine")
