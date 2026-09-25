@@ -78,3 +78,40 @@ def test_embedded_hamiltonian_takes_the_callers_delta():
     vo = v[:, e < 0.]
     rho = vo @ vo.conj().T
     assert np.allclose(np.diag(dm).real, np.diag(rho).real, atol=1e-3, rtol=0.)
+
+
+def test_embedded_hamiltonian_shares_the_full_dm_convention():
+    """Embedded_Hamiltonian.get_density_matrix used to return the usual
+    rho, the transpose of what Hamiltonian.get_density_matrix returns, so
+    the contraction sum(dm*A) that gives <A> on the latter gave <A*> on the
+    former, with the opposite sign for sy. On an island with complex
+    amplitudes both must agree to the broadening, and so must <sy>."""
+    from pyqula.embeddingtk.embedded import Embedded_Hamiltonian
+    g = geometry.chain().get_supercell(6)
+    g.dimensionality = 0
+    h = g.get_hamiltonian(has_spin=True)
+    h.add_rashba(0.5)
+    h.add_exchange([0.3, 0.5, 0.2])
+    h.add_onsite(lambda r: 0.2*np.cos(1.3*r[0]) + 0.1)
+    dm0 = _dense(h.get_density_matrix())
+    dm = np.array(Embedded_Hamiltonian(h, delta=1e-4).get_density_matrix())
+    assert np.max(np.abs(dm0 - dm0.T)) > 0.1 # the two conventions differ
+    assert np.allclose(dm, dm0, atol=1e-3, rtol=0.)
+    sy = _dense(h.get_operator("sy").get_matrix())
+    vev0 = np.sum(dm0*sy).real
+    assert abs(vev0) > 0.1
+    assert abs(np.sum(dm*sy).real - vev0) < 1e-3
+
+
+def test_defect_density_matrix_is_in_the_full_dm_convention():
+    """Embedding.get_density_matrix used to return the usual rho of the
+    defect cell. The whole block, off-diagonal included, must agree with
+    the full_dm-convention block of a long finite chain carrying the same
+    defect, which is the transpose of the occupied projector; the
+    imaginary part of the off-diagonal is what tells the two apart."""
+    h, hd = _rashba_chain_with_defect()
+    eb = embedding.Embedding(h, m=hd.intra)
+    dm = np.array(eb.get_density_matrix(delta=1e-3))
+    rho = _finite_chain_defect_block(h, hd, 601)
+    assert np.max(np.abs(rho - rho.T)) > 0.05 # the two conventions differ
+    assert np.allclose(dm, rho.T, atol=1e-3, rtol=0.)

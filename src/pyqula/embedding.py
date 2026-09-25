@@ -48,6 +48,9 @@ class Embedding():
     def get_gf(self,**kwargs):
         return get_gf(self,**kwargs)
     def get_density_matrix(self,**kwargs):
+        """Return the density matrix of the embedded cell, in the index
+        convention of Hamiltonian.get_density_matrix (see
+        embeddingtk.embedded.get_dm)"""
         return get_dm(self,**kwargs)
     def get_ldos(self,**kwargs):
         return get_ldos(self,**kwargs)
