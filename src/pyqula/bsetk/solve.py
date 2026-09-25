@@ -99,6 +99,16 @@ class BSE():
                 "for the same reason. tests/bse/test_bse_physics.py shows "
                 "the two agreeing at weak coupling, which is the regime "
                 "bound excitons live in"%(solver,))
+        if solver=="dense" and kwargs:
+            # the extra keywords are the other two solvers' own options,
+            # so here they would be dropped without a word, a misspelt
+            # nk or kernel included. metal= is refused too: PairBasis
+            # would build every (k,v,c) triple and leave the occupancy
+            # filter to the caller, and build_blocks has none
+            raise TypeError("solver='dense' got unexpected keyword "
+                "argument(s) %s; the extra options belong to "
+                "solver='iterative' (maxiter, tol, shift) and solver='qtt' "
+                "(see bsetk/qtt.solve_qtt)"%(", ".join(sorted(kwargs)),))
         if neig is None:
             # the quantics solver returns the lowest exciton only (see
             # qtt.solve_qtt for the measurements behind that), so the
