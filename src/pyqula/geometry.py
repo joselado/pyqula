@@ -571,8 +571,16 @@ read_xyz = readgeometry.read_xyz
 def get_supercell(self,nsuper,store_primal=False):
     """Creates a supercell"""
     from .checkclass import number2array
-    if store_primal: # store the primal geometry
-        self.primal_geometry = self.copy() 
+    if store_primal: # store the primal geometry, on the supercell only
+        # the builders below copy the geometry they are given, primal
+        # geometry included (and a builder that rotates the cell rotates
+        # it too, see sculpt.rotate), so they are handed a copy that
+        # carries it. It used to be set on self, so the geometry asked
+        # about kept it, and every later supercell of it inherited a
+        # primal geometry whether or not it asked for one
+        primal = self.copy()
+        self = self.copy()
+        self.primal_geometry = primal
     # a copy, never an alias of self: the caller is entitled to mutate
     # the returned geometry without touching the one it asked about
     if self.dimensionality==0: return self.copy() # zero dimensional

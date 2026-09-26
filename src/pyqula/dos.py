@@ -317,7 +317,7 @@ def convolve(x,y,delta=None):
 
 def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
         delta=0.01,nk=100,operator=None,
-        random=True,energies=None,info=False,
+        random=True,energies=None,info=False,write=True,
         **kwargs):
   """Calculate the KDOS bands using the KPM"""
   operator = h.get_operator(operator)
@@ -385,7 +385,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
       x = energies # redefine x
       ytot = finter(energies) # redefine y
   ytot = ytot*norm_dim # by the (projected) dimension
-  np.savetxt("DOS.OUT",np.array([x,ytot]).T) # save in file
+  if write: np.savetxt("DOS.OUT",np.array([x,ytot]).T) # save in file
   return (x,ytot)
 
 
@@ -401,21 +401,22 @@ def get_dos(self,**kwargs):
 
 
 def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
-            use_kpm=False,mode="ED",**kwargs):
-  """Calculate the density of states"""
+            use_kpm=False,mode="ED",write=True,**kwargs):
+  """Calculate the density of states.
+
+  write: whether DOS.OUT is written, in every mode. It is this function's
+  own argument, handed to each mode explicitly: left in **kwargs it
+  reached routines that do not take it, so mode="Green" raised TypeError,
+  mode="adaptive" raised it inside get_bands (which it gets twice there),
+  and mode="KPM" dropped it and wrote DOS.OUT whatever was asked"""
   if use_kpm: # KPM
       ewindow = max([abs(min(energies)),abs(min(energies))]) # window
-      return dos_kpm(h,ewindow=ewindow,ne=len(energies),**kwargs)
+      return dos_kpm(h,ewindow=ewindow,ne=len(energies),write=write,
+              **kwargs)
   else: # conventional methods
       if mode=="ED": # exact diagonalization
-          return dos_kmesh(h,energies=energies,**kwargs)
+          return dos_kmesh(h,energies=energies,write=write,**kwargs)
       elif mode in ["Green","RG"]: # Green function formalism
-          # write is this function's own argument, not green_operator's:
-          # it used to go into **kwargs and reach green_operator, which
-          # raised TypeError, while this branch wrote DOS.OUT
-          # unconditionally -- so mode="Green" was the one mode that both
-          # refused write= and ignored it
-          write = kwargs.pop("write",True)
           def fun(e):
               return green.green_operator(h,e=e,**kwargs)
           ds = parallel.pcall(fun,energies) # compute DOS with an operator
@@ -425,10 +426,12 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
           if write: np.savetxt("DOS.OUT",np.array([energies,ds]).T)
           return (energies,ds)
       elif mode=="KPM": 
-          return dos_kpm(h,energies=energies,**kwargs)
+          return dos_kpm(h,energies=energies,write=write,**kwargs)
       elif mode=="adaptive":
           from .dostk.adaptivedos import adaptive_dos
-          return adaptive_dos(h,energies=energies,**kwargs)
+          (es,ds) = adaptive_dos(h,energies=energies,**kwargs)
+          if write: write_dos(es,ds) # as the other modes do
+          return (es,ds)
       else: 
         raise ValueError("unknown mode "+str(mode)+"; the DOS accepts 'ED', "
                 "'KPM', 'adaptive', 'Green' and 'RG'")

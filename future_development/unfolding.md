@@ -197,6 +197,10 @@ predates the work here and was left alone.
   `biorthogonal=True` and `mode="KPM"` raises; operator weights of the
   default right-eigenvector kdos and bands changed at exactly degenerate
   levels, where they depended on the basis `eig` happened to return.
+- `get_dos(mode="KPM")` and `use_kpm=True` no longer write `DOS.OUT` when
+  given `write=False`, and `mode="adaptive"` accepts `write=`.
+- `get_supercell(store_primal=True)` no longer changes the geometry it is
+  called on.
 
 ## The two spectral functions of a non-Hermitian Hamiltonian
 
@@ -226,8 +230,7 @@ definition, and `mode="KPM"` raises for any non-Hermitian Hamiltonian.
 `get_bands(biorthogonal=True)` returns the complex weights
 $(R^{-1}OR)_{nn}$, which add up to $\mathrm{Tr}\,O$ at every kpoint, and
 refuses `num_bands` (ARPACK does not return the left vectors);
-`get_dos(biorthogonal=True)` refuses rather than keep the real part of the
-complex weights. Near an exceptional point $R$ is ill conditioned and the
+`get_dos(biorthogonal=True)` sums it over the Brillouin zone. Near an exceptional point $R$ is ill conditioned and the
 biorthogonal weights of the coalescing states grow large and cancel.
 
 Writing the Hermitian-limit test turned up a bug in the default: scipy's
@@ -243,8 +246,22 @@ of width $\delta+\gamma$ (biorthogonal) and $\delta$ (right), the weights
 against the trace and against the right ones without loss, and the
 refusals.
 
-## Found in passing
+## Found in passing, and fixed
 
-- Not unfolding-specific: `get_dos(mode="adaptive",
-  write=False)` raises `TypeError` because `adaptive_dos` forwards `write=`
-  to `get_bands` a second time.
+- `get_dos(write=...)` meant something different in every mode: `"ED"`
+  honoured it, `"Green"` popped it, `"KPM"` dropped it and wrote `DOS.OUT`
+  anyway, and `"adaptive"` raised `TypeError`, since it forwarded `write=`
+  to `get_bands` a second time. `get_dos_general` now takes it as its own
+  argument and hands it to each mode; `tests/dos/test_dos_write_every_mode.py`.
+- `get_supercell(store_primal=True)` set the primal copy on the geometry
+  the supercell was built from, so every later supercell of that geometry
+  inherited a primal geometry whether it asked or not. It now builds from a
+  copy that carries it, which keeps the rotation of a float-size cell (the
+  builders rotate the primal geometry with the cell) and leaves the
+  caller's geometry alone; `tests/geometry/test_supercell_bookkeeping.py`.
+- The non-Hermitian `get_dos(biorthogonal=True)` refused the keyword at
+  first; it now sums the Green's-function spectral function over the same
+  k-mesh, with the same default broadening and normalization as the
+  right-eigenvector DOS (`nonhermitiantk.dos.dos_biorthogonal`), checked
+  against the analytic lifetime-broadened DOS of a lossy chain and against
+  the k-average of the biorthogonal kdos.

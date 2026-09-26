@@ -1400,7 +1400,8 @@ with gain, $\mathrm{Im}\,E_n>0$, whose pole sits on the wrong side of the real a
 an exceptional point, where two eigenvectors coalesce, the biorthogonal weights of the two
 states grow large and cancel each other, and only their sum is meaningful.
 `h.get_bands(operator=...,biorthogonal=True)` returns those weights state by state, complex
-in general, adding up to the trace of the operator at every k-point.
+in general, adding up to the trace of the operator at every k-point, and
+`h.get_dos(biorthogonal=True)` sums the same spectral function over the Brillouin zone.
 
 ## What is and is not available
 
@@ -5351,7 +5352,9 @@ Optional arguments:
 
 For a non-Hermitian Hamiltonian only `mode="ED"` exists, and the extra
 `eigmode` argument chooses which part of the complex eigenvalue the
-broadening is centred on. See "Non-Hermitian Hamiltonians".
+broadening is centred on, while `biorthogonal=True` sums the Green's-function
+spectral function instead of the right-eigenvector one. See "Non-Hermitian
+Hamiltonians".
 
 Return energies and DOS
 

@@ -75,3 +75,24 @@ def test_infer_supercell_rounds_rather_than_truncating(a):
     for n in [2, 3, 4, 5, 6, 7, 12]:
         g = g0.get_supercell(n)
         assert infer_supercell(g, g0) == (n, 1, 1)
+
+
+def test_store_primal_leaves_the_geometry_it_was_built_from_alone():
+    """store_primal used to set the primal copy on the geometry the
+    supercell was built from, so that every later supercell of it carried
+    a primal geometry whether it asked for one or not"""
+    import numpy as np
+    from pyqula import geometry
+    g0 = geometry.triangular_lattice()
+    g = g0.get_supercell(2, store_primal=True)
+    assert g0.primal_geometry is None
+    assert g.primal_geometry is not None
+    assert g0.get_supercell(3).primal_geometry is None
+    # the float size rotates the cell, and the primal cell with it
+    gs = g0.get_supercell(np.sqrt(3), store_primal=True)
+    assert g0.primal_geometry is None
+    assert not np.allclose(gs.primal_geometry.a1, g0.a1)
+    h = gs.get_hamiltonian(has_spin=False)
+    (k, e, d) = h.get_bands(operator="unfold", kpath=[[0.1, 0.2, 0.]],
+                            write=False)
+    assert np.isclose(np.max(d), 3.)  # a whole band unfolds with weight 3

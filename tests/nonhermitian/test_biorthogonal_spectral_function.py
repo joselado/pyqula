@@ -108,5 +108,36 @@ def test_what_cannot_be_asked(tmp_path, monkeypatch):
     with pytest.raises(NotImplementedError):  # no left vectors from ARPACK
         h.get_bands(kpath=KPATH, operator="unfold", biorthogonal=True,
                     num_bands=2, write=False)
-    with pytest.raises(NotImplementedError):
-        h.get_dos(biorthogonal=True, nk=4, write=False)
+    with pytest.raises(ValueError):
+        h.get_dos(biorthogonal=True, eigmode="real", nk=4, write=False)
+
+
+def test_the_density_of_states_is_the_same_spectral_function(tmp_path,
+                                                             monkeypatch):
+    """On a chain with a uniform loss the biorthogonal density of states is
+    the Brillouin-zone average of Lorentzians of width delta+gamma, and the
+    default one of width delta; the biorthogonal one is also the average
+    of the biorthogonal kdos on the same kpoints"""
+    monkeypatch.chdir(tmp_path)
+    gamma, delta, nk = 0.25, 0.1, 20
+    h = geometry.chain().get_hamiltonian(has_spin=False, non_hermitian=True)
+    h.add_onsite(-1j * gamma)
+    from pyqula.klist import kmesh
+    ks = kmesh(1, nk=nk)
+    eps = np.array([np.real(eig(h.get_hk_gen()(k))[0]) for k in ks]).ravel()
+    def lorentz(w):
+        return np.sum(w / ((ENERGIES[:, None] - eps[None, :])**2 + w**2),
+                      axis=1) / np.pi / len(ks)
+    kw = dict(energies=ENERGIES, delta=delta, ks=ks, write=False)
+    (e, bio) = h.get_dos(biorthogonal=True, **kw)
+    (e, right) = h.get_dos(**kw)
+    assert np.allclose(bio, lorentz(delta + gamma), atol=1e-10)
+    assert np.allclose(right, lorentz(delta), atol=1e-10)
+    g = geometry.chain().get_supercell(4, store_primal=True)
+    hs = g.get_hamiltonian(has_spin=False, non_hermitian=True)
+    hs.add_onsite(lambda r: -1j * 0.3 * (1. + np.cos(np.pi * r[0] / 2.)))
+    kd = hs.get_kdos_bands(kpath=ks, operator="unfold", energies=ENERGIES,
+                           delta=delta, biorthogonal=True)[2]
+    (e, d) = hs.get_dos(biorthogonal=True, operator="unfold", **kw)
+    assert np.allclose(d, np.mean(kd.reshape(len(ks), -1), axis=0),
+                       atol=1e-10)
