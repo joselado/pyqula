@@ -29,10 +29,13 @@ def nwave_altermagnet(g,n=None,am=0.):
     def ft(r1,r2):
         dr = r1-r2 # distance
         if 0.2<dr.dot(dr)<1.1: # nearest neighbor
-            z = dr[0] + 1j*dr[1] # complex value
-            zn = z**n # power
-            tu = 1.+ am*z.real # up hopping
-            td = 1.+ am*z.imag  # down hopping
+            # the same for a bond and its reverse, so the hopping is
+            # reciprocal: it used to be 1+am*dx, and the Hamiltonian only
+            # came out Hermitian because the builder keeps one direction of
+            # each bond between cells, the one with dx<=0, and takes the
+            # other as its adjoint
+            tu = 1. - am*np.abs(dr[0]) # up hopping
+            td = 1. - am*np.abs(dr[1]) # down hopping
             return np.array([[tu,0.],[0.,td]]) # hopping matrix
         else: return np.zeros((2,2))
     h = g.get_hamiltonian(tij=ft,is_multicell=False,

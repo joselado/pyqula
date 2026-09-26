@@ -95,7 +95,10 @@ def test_sublattice_lowering_generator_starts_only_on_one_sublattice():
     from pyqula import operators
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=False)
-    operators.get_sigma_minus(h)  # must not raise
+    import warnings
+    with warnings.catch_warnings():  # it is one-way on purpose, so it is quiet
+        warnings.simplefilter("error")
+        operators.get_sigma_minus(h)  # must not raise
     a = [i for i in range(len(g.r)) if g.sublattice[i] == 1]
     assert len(a) > 0
 
@@ -106,7 +109,9 @@ def test_sublattice_lowering_generator_starts_only_on_one_sublattice():
         dr = r1 - r2
         return 1.0 if 0.9 < dr.dot(dr) < 1.1 else 0.0
 
-    intra = np.array(g.get_hamiltonian(has_spin=False, tij=fun).intra)
+    import pytest  # built as Hermitian, a one-way hopping is said to be one
+    with pytest.warns(UserWarning, match="not reciprocal"):
+        intra = np.array(g.get_hamiltonian(has_spin=False, tij=fun).intra)
     for i in range(intra.shape[0]):
         if i not in a:
             assert np.allclose(intra[i, :], 0.), (i, intra)

@@ -312,9 +312,23 @@ from .current import derivative
 
 
 
-def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0):
-  """ Gets a first neighbor hamiltonian"""
-  from .neighbor import parametric_hopping
+def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0,
+        spinful_generator=False):
+  """ Gets a first neighbor hamiltonian
+
+  spinful_generator: fc returns the 2x2 spin block of each pair of sites
+  instead of a number, and h must be spinful"""
+  from .neighbor import parametric_hopping,parametric_hopping_spinful
+  if spinful_generator:
+    if fc is None:
+      raise ValueError("a spinful hopping generator needs its hopping "
+              "function, pass it as fc")
+    if not h.has_spin:
+      raise ValueError("a spinful hopping generator returns 2x2 spin "
+              "blocks, so it needs a spinful Hamiltonian (has_spin=True)")
+    def build(r1,r2): return parametric_hopping_spinful(r1,r2,fc)
+  else:
+    def build(r1,r2): return h.spinless2full(parametric_hopping(r1,r2,fc))
   if fc is None:
     rcut = 2.1 # stop in this neighbor
     def fc(r1,r2):
@@ -327,7 +341,7 @@ def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0):
   h.is_multicell = True 
 # first neighbors hopping, all the matrices
   a1, a2, a3 = g.a1, g.a2, g.a3
-  h.intra = h.spinless2full(parametric_hopping(r,r,fc)) # intra matrix
+  h.intra = build(r,r) # intra matrix
   # generate directions
   dirs = h.geometry.neighbor_directions(n=cutoff) # directions of the hoppings
   # generate hoppings
@@ -341,7 +355,7 @@ def parametric_hopping_hamiltonian(h,cutoff=5,fc=None,rcut=5.0):
         if not close_enough(r,r2,rcut=rcut): # check if we can skip this one
 #          print("Skipping hopping",[i1,i2,i3])
           continue
-        t.m = h.spinless2full(parametric_hopping(r,r2,fc))
+        t.m = build(r,r2)
         t.dir = [i1,i2,i3] # store direction
         if np.sum(np.abs(t.m))>0.00001: h.hopping.append(t) # append 
   return h

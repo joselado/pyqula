@@ -19,7 +19,7 @@ for B in Bs:
   def ft(r1,r2):
       dr = r1-r2
       dr = dr.dot(dr)
-      if 0.9<dr<1.1: return 0.8*np.cos(r1[0]*B*np.pi) + 1.0
+      if 0.9<dr<1.1: return 0.8*np.cos((r1[0]+r2[0])/2.*B*np.pi) + 1.0 # at the bond midpoint, so t_ij = t_ji
       return 0.0
   h = g.get_hamiltonian(fun=ft,has_spin=False)
   

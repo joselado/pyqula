@@ -177,14 +177,15 @@ def parametric_hopping(r1,r2,fc,is_sparse=False):
 
 def parametric_hopping_spinful(r1,r2,fc,is_sparse=False):
     """ Generates a parametric hopping based on a function, that returns
-    a 2x2 matrix"""
-    m = [[None for i in range(len(r2))] for j in range(len(r1))]
+    a 2x2 matrix, the spin block of each pair of sites
+
+    The blocks are written straight into the matrix: they used to go
+    through scipy's bmat, which refuses a block list with no sparse block,
+    so any cell with more than one site failed"""
+    m = np.zeros((2*len(r1),2*len(r2)),dtype=np.complex128)
     for i in range(len(r1)):
       for j in range(len(r2)):
-        val = fc(r1[i],r2[j]) # add hopping based on function
-        m[i][j] = val # store this result
-    m = algebra.bmat(m) # convert to matrix
-    if not is_sparse: m = algebra.todense(m) # dense matrix
+        m[2*i:2*i+2,2*j:2*j+2] = fc(r1[i],r2[j]) # spin block of this pair
     return m
 
 

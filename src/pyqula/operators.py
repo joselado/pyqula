@@ -554,7 +554,11 @@ def get_sigma_minus(h):
         dr = r1-r2 # distance
         if 0.9<dr.dot(dr)<1.1: return 1.0 # get first neighbor
         return 0.0
-    h0 = h.geometry.get_hamiltonian(has_spin=h.has_spin,fun=fun) # FN coupling
+    import warnings
+    with warnings.catch_warnings(): # not reciprocal on purpose, see above
+        warnings.filterwarnings("ignore",message="the hopping function tij "
+                "is not reciprocal")
+        h0 = h.geometry.get_hamiltonian(has_spin=h.has_spin,fun=fun) # FN coupling
     hk = h0.get_hk_gen() # get generator
     return hk # return function
 
