@@ -145,7 +145,14 @@ def dvector_non_unitarity(h,nk=10):
     spin-triplet superconductor, and it points along +z for a pure up-up
     pairing. The d-vector is computed at each k-point of a uniform mesh,
     q is averaged over the mesh, and the pairing partners of each site
-    are summed over.
+    are summed over. That average is the sum of i*(d x d^*) over the bonds
+    of each site, so it does not depend on nk once the mesh resolves the
+    range of the pairing.
+
+    With a spin-singlet pairing on the same bonds, Delta Delta^dag also
+    carries the singlet-triplet interference 2*Re(psi^* d).sigma, which q
+    leaves out: it can move spin between the sites of a cell, but summed
+    over the cell it vanishes, so it carries no net spin.
 
     Optional arguments
        - nk = 10, number of k-points in each direction

@@ -290,6 +290,13 @@ from .sctk.dvector import delta2dvector
 
 def add_pairing(deltas=[[0.,0],[0.,0.]],is_sparse=True,r1=[],r2=[]):
   """ Adds a general pairing in real space"""
+  return embed_pairing_block(pairing_block(deltas,r1=r1,r2=r2))
+
+
+def pairing_block(deltas=[[0.,0],[0.,0.]],r1=[],r2=[]):
+  """Return the electron-hole block of a pairing between the sites at r1
+  and the sites at r2, with rows (site of r1, e_up/e_dn) and columns
+  (site of r2, h_dn/h_up)"""
   def get_pmatrix(r1i,r2j): # return the different pairings
     if callable(deltas): dv = deltas(r1i,r2j) # get the components
     else: dv = deltas
@@ -311,9 +318,12 @@ def add_pairing(deltas=[[0.,0],[0.,0.]],is_sparse=True,r1=[],r2=[]):
   for i in range(n): # loop over sites
     for j in range(n): # loop over sites
       pout[i][j] = get_pmatrix(r1[i],r2[j]) # get this pairing
-  diag = sp.identity(2*len(r1))*0. # zero matrix
-#  diag = csc_matrix(np.zeros((2*len(r1),2*len(r1)),dtype=np.complex128)) # diag
-  pout = bmat(pout) # convert to block matrix
+  return bmat(pout) # convert to block matrix
+
+
+def embed_pairing_block(pout):
+  """Put an electron-hole block in an otherwise empty Nambu matrix"""
+  diag = sp.identity(pout.shape[0])*0. # zero matrix
 #  mout = [[diag,pout],[np.conjugate(pout),diag]] # output matrix
   mout = [[diag,pout],[None,diag]] # output matrix
 #  mout = [[diag,pout],[pout,diag]] # output matrix
@@ -336,6 +346,7 @@ from .sctk.extract import extract_singlet_pairing
 from .sctk.extract import extract_triplet_pairing
 from .sctk.pairing import pairing_generator
 from .sctk.pairing import check_fermi_antisymmetry
+from .sctk.pairing import check_periodic_pairing
 from .sctk.fastdeltaud import hopping2deltaud
 
 
@@ -347,9 +358,21 @@ def add_pairing_to_hamiltonian(self,**kwargs):
     df = pairing_generator(self,**kwargs) # function that outputs a 2x2 matrix
     if callable(kwargs.get("mode")): # a registered mode obeys it already
         check_fermi_antisymmetry(self,kwargs["mode"]) # before h is touched
-    self.turn_nambu() # add electron hole terms
     r = self.geometry.r # positions 
-    m = add_pairing(df,r1=r,r2=r) # intra cell
+    # the electron-hole block towards every neighboring cell, all of them
+    # built before h is touched so that a pairing that is not periodic with
+    # the lattice is refused without leaving a half-modified Hamiltonian
+    blocks = {(0,0,0): pairing_block(df,r1=r,r2=r)} # intra cell
+    if self.dimensionality>0:
+      for d in self.geometry.neighbor_directions(): # loop over directions
+        if d.dot(d)<0.0001: continue # skip onsite
+        r2 = self.geometry.replicas(d=d) # positions
+        blocks[tuple(int(di) for di in d)] = pairing_block(df,r1=r,r2=r2)
+    callables = [name for name in ("d","delta","mode")
+                   if callable(kwargs.get(name))]
+    check_periodic_pairing(blocks,callables=callables)
+    self.turn_nambu() # add electron hole terms
+    m = embed_pairing_block(blocks[(0,0,0)]) # intra cell
     self.intra = self.intra + m + algebra.dagger(m)
     if self.dimensionality>0:
       if not self.is_multicell: # for multicell hamiltonians
@@ -360,8 +383,7 @@ def add_pairing_to_hamiltonian(self,**kwargs):
         # this is a workaround to be able to do triplets
         # do it for +k and -k
         if d.dot(d)<0.0001: continue # skip onsite
-        r2 = self.geometry.replicas(d=d) # positions
-        m = add_pairing(df,r1=r,r2=r2) # new matrix
+        m = embed_pairing_block(blocks[tuple(int(di) for di in d)])
 #        m2 = add_pairing(df,r1=r,r2=r2) # new matrix, the other way
         m2 = m
         if np.max(np.abs(m))>0.0001: # non zero

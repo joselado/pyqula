@@ -108,6 +108,47 @@ def test_dvector_rotates_like_a_magnetization(lattice, mode):
     assert np.allclose(mB, mA@R.T, atol=1e-8)
 
 
+def test_site_resolved_non_unitarity_is_that_of_delta_delta_dagger():
+    """On a three-site cell with a d-vector that differs on every bond, the
+    q of each site is the Brillouin-zone average of the spin part of
+    (Delta Delta^dag)_ii, read off the raw electron-hole block of H(k), and
+    the sum of i d x d^* over the bonds of that site. The three sites have
+    different q, so summing the wrong index of the pairing matrix fails"""
+    g = geometry.chain().supercell(3)
+    n = len(g.r)
+    def dfun(r):
+        p = 2.*np.pi*r[0]/3.
+        return np.array([1.+0.4*np.sin(p), 1j*(0.6+0.5*np.cos(p)),
+                         0.3*np.cos(2.*p)])
+    h = g.get_hamiltonian()
+    h.add_pairing(delta=0.3, mode="pwave", d=dfun)
+    q = h.get_dvector_non_unitarity(nk=6)
+    hk = h.get_hk_gen()
+    e = [4*i+s for i in range(n) for s in (0, 1)]
+    o = [4*i+s for i in range(n) for s in (2, 3)]
+    ks = g.get_kmesh(nk=6)
+    qref = np.zeros((n, 3))
+    for k in ks:
+        D = np.array(hk(k))[np.ix_(e, o)]
+        DD = D@D.conj().T
+        for i in range(n):
+            b = DD[2*i:2*i+2, 2*i:2*i+2]
+            qref[i] += [0.5*np.trace(s@b).real/len(ks) for s in sig]
+    qbond = np.zeros((n, 3))
+    for i in range(n):
+        for dx in (-1., 1.):
+            d = 0.3*dfun(g.r[i]+np.array([dx/2., 0., 0.]))
+            qbond[i] += (1j*np.cross(d, d.conj())).real
+    assert np.min(np.abs(np.diff(q[:, 2]))) > 1e-2 # the sites differ
+    assert np.allclose(q, qref, atol=1e-10)
+    assert np.allclose(q, qbond, atol=1e-10)
+    # and a unitary d, a real vector times a phase, has none
+    h = g.get_hamiltonian()
+    h.add_pairing(delta=0.3, mode="pwave",
+                  d=np.exp(0.7j)*np.array([0.2, -0.5, 0.9]))
+    assert np.allclose(h.get_dvector_non_unitarity(nk=6), 0., atol=1e-12)
+
+
 def test_pairing_operators_form_a_vector():
     """The onsite operators deltax, deltay, deltaz have electron-hole blocks
     sigma_x/2, sigma_y/2, sigma_z/2, the ones d.sigma couples to, so they

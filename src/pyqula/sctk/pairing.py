@@ -1,6 +1,7 @@
 
 from ..geometry import same_site
 import numpy as np
+import scipy.sparse as sp
 from ..utilities import get_callable
 from ..check import require_sublattice
 from .dvector import dvector2delta
@@ -120,6 +121,52 @@ def check_fermi_antisymmetry(h,weightf,tol=1e-6):
                         "that breaks it is not a pairing, it only adds a "
                         "constant to the many-body Hamiltonian, and yet it "
                         "shows up in the BdG spectrum")
+
+
+def check_periodic_pairing(blocks,callables=(),tol=1e-6):
+    """Raise unless the electron-hole blocks D_R that add_pairing built,
+    between the cell and its replica at R (a dict R -> 2n x 2n block, R=0
+    included), obey Fermi antisymmetry across cells,
+
+        D_R = S D_{-R}^T S,   S = 1 x sigma_y.
+
+    The pairing between site i of the cell and site j of the cell at R, and
+    the one between site j of the cell and site i of the cell at -R, are
+    the same bond seen from its two ends, but add_pairing evaluates them at
+    two positions a lattice vector apart. A d-vector, amplitude or weight
+    given as a function of position that is not periodic with the lattice
+    gives them two different values, and the part of the BdG matrix that
+    breaks the relation is not a pairing at all: it only adds a constant to
+    the many-body Hamiltonian, and yet it shows up in the BdG spectrum and
+    in the d-vector non-unitarity. callables names the arguments that were
+    given as functions, for the message"""
+    sy = np.array([[0.,-1j],[1j,0.]])
+    n = blocks[(0,0,0)].shape[0]//2 # number of sites
+    S = sp.kron(sp.identity(n),sy,format="csr")
+    scale = max([abs(b).max() if b.nnz>0 else 0. for b in blocks.values()])
+    if scale==0.: return # no pairing at all
+    for R in blocks:
+        mR = tuple(-np.array(R))
+        dev = sp.coo_matrix(blocks[R] - S@blocks[mR].T@S)
+        if dev.nnz==0: continue
+        a = np.argmax(np.abs(dev.data))
+        if np.abs(dev.data[a])<=tol*scale: continue
+        i = dev.row[a]//2 ; j = dev.col[a]//2 # the two sites
+        if len(callables)>0:
+            given = " and ".join(callables)+(" was" if len(callables)==1
+                        else " were")+" given as a function, and"
+        else: given = ""
+        raise ValueError("the pairing breaks Fermi antisymmetry between "
+            "unit cells, which needs a pairing given as a function of "
+            "position to be periodic with the lattice: "+given+" the "
+            "pairing between site "+str(i)+" of the cell and site "+str(j)
+            +" of the cell at R="+str(tuple(int(x) for x in R))+" differs "
+            "by "+str(np.round(np.abs(dev.data[a]),6))+" (of a largest "
+            "pairing "+str(np.round(scale,6))+") from the one between site "
+            +str(j)+" of the cell and site "+str(i)+" of the cell at -R, "
+            "which is the same bond seen from its other end. Make it "
+            "periodic, for instance on a supercell commensurate with the "
+            "modulation, or use a zero-dimensional geometry")
 
 
 # matrices for the e-h subsector

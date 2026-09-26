@@ -1506,7 +1506,8 @@ so that $d_z$ is the opposite-spin component $\Delta_{\uparrow\downarrow}$
 and $d_x,d_y$ encode the equal-spin ones,
 $\Delta_{\uparrow\uparrow}$ and $\Delta_{\downarrow\downarrow}$. Only
 $\Delta_{\uparrow\downarrow}$ can also host a spin-singlet contribution, which
-is antisymmetric under exchanging the two sites; pyqula projects it out before
+is antisymmetric under exchanging the two spins and even under exchanging the
+two sites, the opposite of the triplet; pyqula projects it out before
 reading off $d_z$, so that a state with both singlet and triplet order still
 gives the triplet d-vector alone.
 
@@ -5634,7 +5635,15 @@ Optional arguments
   part even under the exchange of the two positions, the d-vector odd), or it
   raises `ValueError` naming the first pair that breaks it. An unknown name
   raises `ValueError` listing every accepted one
-- d=[0.,0.,1.]: the d-vector, for the triplet channels
+- d=[0.,0.,1.]: the d-vector, for the triplet channels, a list or a callable
+  of the position
+
+A `delta` or `d` given as a function of the position has to be periodic with
+the lattice, since a bond between two cells is the same bond seen from either
+of its ends and has to carry the same pairing from both; a function that is
+not periodic raises `ValueError` naming the bond. A modulated pairing is set
+up on a supercell commensurate with the modulation, and a zero-dimensional
+geometry takes any function.
 
 ### h.setup_nambu_spinor()
 Put the Hamiltonian into its Nambu (electron-hole doubled) form, with zero
