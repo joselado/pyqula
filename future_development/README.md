@@ -156,6 +156,21 @@ already reached once.
   and the scattering-matrix one not reproduced. Still open: the Bott and spin
   Bott index, the last of the first tier.
 
+- [`unfolding.md`](unfolding.md) -- a check of `operator="unfold"` through
+  every mode of the routines that take it (bands, kdos, DOS, the Fermi
+  surfaces, QPI) against a brute-force oracle, and what came out of it. The
+  repairs: the Fermi surface changed scale by $1/\pi$ or $2\pi$ with the
+  mode, the KPM kdos was N times smaller than the other modes, and the QPI
+  dropped or misread its unfolding arguments. Three pieces built on it: ARPACK
+  eigenvectors made orthonormal inside degenerate levels (scipy routes a
+  complex Hermitian matrix to the non-Hermitian driver, so every sum over a
+  level double counted), an exact KPM route to unfolding from the primitive
+  Bloch states as start vectors (the KITE construction), and a Fermi-surface
+  and QPI mesh drawn in the primitive zone and mapped with $M$, for any
+  supercell. It lists the user-visible changes. Still open: which of two
+  definitions is the unfolded spectral function of a non-Hermitian
+  supercell.
+
 - [`unreferenced_modules.md`](unreferenced_modules.md) -- the dead-module
   cleanup: how "unreferenced" was actually established (an AST walk of every
   import in the repo, since grep both over- and under-reports on module names

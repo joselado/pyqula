@@ -596,6 +596,12 @@ Optional arguments
 - kpath, nk: the k-path and the number of k-points along it, as in `h.get_bands()`
 - mode: `"ED"` (default, diagonalization), `"green"` (Green's function) or `"KPM"` (Chebyshev expansion, for large sparse systems)
 
+The three modes compute the same quantity, the spectral weight summed over the orbitals of the
+unit cell, so that a system too large to diagonalize at every k-point can be moved from
+`mode="ED"` to `mode="KPM"` without changing the scale of the result; what changes is the line
+shape, since the Chebyshev expansion broadens each band with its kernel rather than with a
+Lorentzian of width `delta`.
+
 See `examples/1d/kdos_armchair/main.py` for a runnable version on a wide ribbon with
 `mode="KPM"`, and `jupyter-notebooks/functionalities/single_particle_hamiltonians/05_momentum_resolved_spectral_functions.ipynb`
 and `jupyter-notebooks/functionalities/spectral_functions/06_operator_momentum_resolved.ipynb`
@@ -666,6 +672,31 @@ out = h.get_multi_fermi_surface(nk=50,energies=np.linspace(-4,4,100),delta=0.1,
         nsuper=n,operator="unfold")
 ```
 
+Here the mesh is drawn in the reciprocal space of the supercell, and `nsuper=n` stretches it
+over the primitive Brillouin zone, which works for a supercell with the shape of the primitive
+cell, and not for one whose two lattice vectors have different lengths, where the mesh comes
+out sheared. For any supercell, pass `primal_mesh=True` instead: the mesh is then drawn in the
+Brillouin zone of the primitive cell, exactly as the Fermi surface of the primitive cell is,
+and every point of it is computed at its image in the supercell
+
+```python
+import numpy as np
+from pyqula import geometry
+g0 = geometry.triangular_lattice() # primitive geometry
+g = g0.get_supercell(np.sqrt(3),store_primal=True) # sqrt(3) x sqrt(3) supercell
+h = g.get_hamiltonian() # Hamiltonian of the supercell
+h.add_onsite(lambda r: 0.6 if np.linalg.norm(r-g.r[0])<1e-1 else 0.0) # charge order
+(kx,ky,fs) = h.get_fermi_surface(e=0.0,nk=50,delta=0.1,operator="unfold",
+        primal_mesh=True) # unfolded Fermi surface, on the primitive mesh
+```
+
+The unfolded Fermi surface comes out on the same mesh and in the same coordinates as the one
+of the primitive cell, so that the two can be compared point by point, and for a supercell
+without any modulation they are the same map, times the number of primitive cells in the
+supercell. Note that a supercell asked for by a non-integer size comes out rotated so that its
+first lattice vector lies along $x$, and the primitive cell it keeps is rotated with it, so its
+Fermi surface is drawn in that rotated frame.
+
 See `examples/readme_examples/fermi_surface/main.py`, `examples/2d/operator_fermi_surface/main.py` and `examples/readme_examples/unfolding_FS/main.py` for runnable versions.
 
 ## Quasiparticle interference
@@ -695,7 +726,7 @@ Optional arguments
 - nk: number of k-points per direction
 - delta: broadening
 - mode: `"pm"` (autoconvolution of the k-resolved spectral weight) or `"response"` (default, joint density of states of the clean band structure)
-- nunfold: for a defect embedded in an `nunfold`x`nunfold` supercell, unfold the QPI signal back onto the primitive Brillouin zone
+- nunfold: unfold the QPI of a supercell back onto the primitive Brillouin zone, given as the linear size of the supercell as in `g.get_supercell()`, $n$ for an $n\times n$ supercell and `np.sqrt(3)` for the $\sqrt3\times\sqrt3$ one
 
 The two modes differ in what they scatter. `"pm"` ("poor man's") autoconvolves the actual
 k-resolved spectral weight of the system, defect included, in q-space, which is the
@@ -2228,7 +2259,8 @@ at each `(k,e)`, so that plotting a scatter of `k,e` colored or sized by `d` rec
 primitive-cell band structure out of the supercell calculation: the replicas that a plain
 `h.get_bands()` of the supercell would show carry no weight, and the Dirac cones of the
 honeycomb lattice reappear where they belong. The same `operator="unfold"` can be passed to
-`h.get_multi_fermi_surface()` to unfold constant-energy cuts. See
+`h.get_multi_fermi_surface()` to unfold constant-energy cuts, with `primal_mesh=True` to draw
+them on the mesh of the primitive cell (see the section on Fermi surfaces). See
 `examples/2d/unfolding/main.py`, `examples/1d/unfolding/main.py` and
 `examples/readme_examples/unfolding_FS/main.py` for runnable versions, and
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb`
@@ -2334,6 +2366,47 @@ the modulation gives it. Along the supercell k-path instead, `gs.get_kpath()`, t
 calculation traces a path through the primitive Brillouin zone that goes nowhere in
 particular, and this is the reason for asking for the primitive one. See
 `examples/2d/unfolding_sqrt3/main.py` for a runnable version.
+
+## Unfolding a large supercell with the kernel polynomial method
+
+We will now see how to unfold a supercell too large to diagonalize at every k-point, with
+`h.get_kdos_bands(operator="unfold",mode="KPM")`. The cases where unfolding matters most, a
+moire pattern or a disordered region, are the ones with the largest supercells, and there the
+diagonalization that `mode="ED"` performs at each k-point is what limits the calculation. The
+unfolding operator projects onto the Bloch states of the primitive cell, one for each orbital
+$\alpha$ of the primitive cell, so the unfolded weight is the density of states of those Bloch
+states
+
+$$
+A(\vec k,\omega) = \sum_\alpha \langle \vec k,\alpha|\delta(\omega-H)|\vec k,\alpha\rangle
+$$
+
+where $|\vec k,\alpha\rangle$ is the Bloch state built out of orbital $\alpha$ over all its
+replicas in the supercell and $H$ is the Bloch Hamiltonian of the supercell at the momentum
+$\vec k$ maps to. Each term is a single Chebyshev expansion of the kernel polynomial method,
+started from the Bloch state itself, meaning that no random vectors are needed and the result
+carries no stochastic noise
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula import potentials
+g0 = geometry.triangular_lattice() # primitive geometry
+g = g0.get_supercell(12,store_primal=True) # supercell of 144 primitive cells
+h = g.get_hamiltonian() # Hamiltonian of the supercell
+fmoire = potentials.commensurate_potential(g,n=3,minmax=[0,1]) # moire potential
+h.add_onsite(fmoire) # onsite energy following the moire
+kpath = g.get_unfolded_kpath(nk=100) # primitive k-path, in supercell coordinates
+(k,e,d) = h.get_kdos_bands(operator="unfold",mode="KPM",delta=5e-2,kpath=kpath,
+        energies=np.linspace(-3,-1,200)) # unfolded weight, with the KPM
+```
+
+The arrays are the ones `mode="ED"` returns, and so is the weight under each band, since the
+two modes compute the same unfolded spectral weight; what differs is the line shape, as the
+Chebyshev expansion broadens each band with its kernel rather than with a Lorentzian, using a
+number of polynomials set by `delta`. The cost of each k-point grows linearly with the number
+of sites of the supercell instead of with its cube, which is what makes supercells of
+thousands of sites affordable, and a smaller `delta` costs proportionally more polynomials.
 
 
 # Surface spectral functions
@@ -5192,7 +5265,7 @@ Optional arguments:
 
 - energies, delta, nk: frequency range, broadening, k-point density
 
-- mode="ED": `"ED"` or `"KPM"` (equivalently `use_kpm=True`)
+- mode="ED": `"ED"`, `"green"` or `"KPM"` (equivalently `use_kpm=True`); all three return the spectral weight summed over the orbitals, and `operator="unfold"` works with each of them
 
 - frand=None: generator of the random vectors the KPM stochastic trace
   draws. Only the KPM path uses them, so passing it without `mode="KPM"`
@@ -5987,6 +6060,8 @@ Optional arguments:
 
 - operator=None: project/weight by an operator (e.g. `"sz"`, `"valley"`, `"unfold"`)
 
+- primal_mesh=False: draw the mesh in the Brillouin zone of the primitive cell of a supercell built with `store_primal=True`, the mesh an unfolded Fermi surface is drawn on
+
 Returns kx, ky and the Fermi-surface weight
 
 ### h.get_multi_fermi_surface()
@@ -5996,7 +6071,7 @@ Optional arguments:
 
 - energies=[0.0]: energies to compute
 
-- nk, delta, operator: as in `get_fermi_surface`
+- nk, delta, operator, primal_mesh: as in `get_fermi_surface`
 
 ### h.get_surface_kdos()
 Compute the surface and bulk spectral function of a semi-infinite system, from the surface Green's function (renormalization/decimation technique).
@@ -6018,7 +6093,7 @@ Optional arguments:
 
 - mode="response": `"pm"` ("poor man's", autoconvolves the actual k-resolved spectral weight, the physical QPI of a real scatterer) or `"response"` (cheaper Lindhard-like joint-DOS convolution of the clean bands)
 
-- nunfold=1: unfold the QPI of a defect embedded in an `nunfold`x`nunfold` supercell back onto the primitive Brillouin zone
+- nunfold=1: unfold the QPI of a supercell back onto the primitive Brillouin zone, given as the linear size of the supercell as in `g.get_supercell()` (`np.sqrt(3)` for the $\sqrt3\times\sqrt3$ one)
 
 ### h.get_qpi_impurity()
 Compute quasiparticle interference by placing real-space impurities in a supercell, computing the real-space LDOS by partial diagonalization, and Fourier transforming it directly (2D systems only). Returns `(r,ldos_r,q,qpi_q)`.
