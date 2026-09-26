@@ -152,7 +152,7 @@ def wannier_run(
         dis_win_max = params.dis_win_max if params.dis_win_max is not None else float(eigenvalues.max())
         dis_froz_min = params.dis_froz_min if params.dis_froz_min is not None else dis_win_min
 
-        u_matrix_opt, u_matrix, lwindow, M_wann_gauge, dis_converged = dis_main(
+        u_matrix_opt, u_matrix, lwindow, M_wann_gauge, dis_converged, dis_change = dis_main(
             A_matrix, M_matrix, eigenvalues, kmesh.nnlist, kmesh.wb, num_wann,
             dis_win_min, dis_win_max, params.frozen_states, dis_froz_min, params.dis_froz_max,
             params.dis_num_iter, params.dis_mix_ratio, params.dis_conv_tol, params.dis_conv_window,
@@ -162,9 +162,12 @@ def wannier_run(
             import warnings
             warnings.warn("backend='python': disentanglement did not converge within "
                           f"dis_num_iter={params.dis_num_iter} iterations (relative change "
-                          f"of Omega_I above dis_conv_tol={params.dis_conv_tol:g}); the "
-                          "frozen states are still reproduced exactly, pass a larger "
-                          "dis_num_iter for a converged subspace")
+                          f"of Omega_I {dis_change:.1e}, above dis_conv_tol="
+                          f"{params.dis_conv_tol:g}); the frozen states are still reproduced "
+                          "exactly. Pass a larger dis_num_iter for a converged subspace, "
+                          "which can take thousands of iterations at "
+                          f"dis_mix_ratio={params.dis_mix_ratio:g}; dis_mix_ratio=1.0 "
+                          "often converges in fewer but can be unstable")
     else:
         u_matrix, M_wann_gauge = overlap_project(A_matrix, M_matrix, kmesh.nnlist, sym=sym)
         u_matrix_opt = np.tile(np.eye(num_wann, dtype=complex)[:, :, None], (1, 1, num_kpts))

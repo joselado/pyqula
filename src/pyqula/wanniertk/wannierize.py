@@ -1228,10 +1228,22 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         k-point, and the outer window at least ``num_wann`` (the engine
         raises a ``ValueError`` naming the k-point otherwise).
     dis_num_iter : int, optional
-        Default 200. Maximum iterations of the Omega_I minimization.
-        Not reaching convergence within them is a warning, not an error
-        -- the frozen window is reproduced exactly either way, it is the
-        smoothness of the rest of the subspace that suffers.
+        Default 200, Wannier90's own. Maximum iterations of the Omega_I
+        minimization. Not reaching convergence within them is a warning,
+        not an error -- the frozen window is reproduced exactly either
+        way, it is the smoothness of the rest of the subspace that
+        suffers, and the warning gives the relative change of Omega_I
+        reached. A larger cap costs nothing where the minimization
+        converges early, but the hard cases really use the iterations:
+        one Wannier function out of graphene's two pz bands with
+        ``dis_froz_max=-1`` (nk from 8 to 12) needs 2000 to 4800 of them
+        at Wannier90's default mixing, ``dis_mix_ratio=0.5``, seven times
+        the time of the default at nk=12 and sixteen at nk=8, for an
+        Omega_I 2 to 6 percent lower, so the default stays at 200.
+        Passing ``win_keywords={"dis_mix_ratio":1.0}`` (no mixing)
+        brought the same cases to convergence in 650 to 1500 iterations;
+        Wannier90 notes that it often converges faster but can make the
+        minimization unstable, which is why 0.5 stays the default.
 
     Returns
     -------

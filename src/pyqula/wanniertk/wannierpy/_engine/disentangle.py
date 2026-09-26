@@ -301,7 +301,7 @@ def _dis_extract_symmetric(u_matrix_opt_init: np.ndarray, M_slim: np.ndarray, wi
             converged = True
             break
 
-    return u_matrix_opt, converged
+    return u_matrix_opt, converged, max(abs(h) for h in history)
 
 
 def dis_extract(u_matrix_opt_init: np.ndarray, M_slim: np.ndarray, windows: Windows, nnlist: np.ndarray,
@@ -316,7 +316,11 @@ def dis_extract(u_matrix_opt_init: np.ndarray, M_slim: np.ndarray, windows: Wind
     kept as a separate function rather than interleaved conditionals here
     because the symmetric path needs full zero-padded Z-matrix arrays (to
     interoperate with ``sitesym``'s symmetrization routines) instead of
-    this function's ragged frozen-subtracted per-k dict."""
+    this function's ragged frozen-subtracted per-k dict.
+
+    Returns (u_matrix_opt, converged, change), with change the largest
+    relative change of Omega_I over the last dis_conv_window iterations,
+    the quantity compared against dis_conv_tol."""
     if sym is not None:
         return _dis_extract_symmetric(
             u_matrix_opt_init, M_slim, windows, nnlist, wb, wbtot, num_wann,
@@ -383,7 +387,7 @@ def dis_extract(u_matrix_opt_init: np.ndarray, M_slim: np.ndarray, windows: Wind
             converged = True
             break
 
-    return u_matrix_opt, converged
+    return u_matrix_opt, converged, max(abs(h) for h in history)
 
 
 def _rotate_m(u: np.ndarray, M: np.ndarray, windows: Windows, nnlist: np.ndarray, num_wann: int,
@@ -444,7 +448,8 @@ def dis_main(A_matrix: np.ndarray, M_matrix_orig: np.ndarray, eigval: np.ndarray
              dis_conv_tol: float, dis_conv_window: int, sym=None):
     """Full disentanglement pipeline, mirroring ``dis_main`` in
     disentangle.F90. Returns (u_matrix_opt, u_matrix, lwindow, M_matrix,
-    converged) -- ``u_matrix``/``M_matrix`` are the initial-guess rotation
+    converged, change) -- ``change`` is the relative change of Omega_I
+    reached (see :func:`dis_extract`), and ``u_matrix``/``M_matrix`` are the initial-guess rotation
     and num_wann-gauge overlap matrices Wannierisation (phase 3) takes as
     its starting point.
 
@@ -479,7 +484,7 @@ def dis_main(A_matrix: np.ndarray, M_matrix_orig: np.ndarray, eigval: np.ndarray
 
     M_slim = slim_m(M_matrix_orig, windows, nnlist)
 
-    u_matrix_opt, converged = dis_extract(
+    u_matrix_opt, converged, change = dis_extract(
         u_matrix_opt, M_slim, windows, nnlist, wb, wbtot, num_wann,
         dis_num_iter, dis_mix_ratio, dis_conv_tol, dis_conv_window,
         sym=sym_win, lwindow=lwindow,
@@ -496,4 +501,4 @@ def dis_main(A_matrix: np.ndarray, M_matrix_orig: np.ndarray, eigval: np.ndarray
         if nd < num_bands:
             u_matrix_opt[nd:, :, k] = 0.0
 
-    return u_matrix_opt, u_matrix, lwindow, M_matrix, converged
+    return u_matrix_opt, u_matrix, lwindow, M_matrix, converged, change
