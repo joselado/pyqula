@@ -1,4 +1,5 @@
 import numpy as np
+from .. import algebra
 
 # Return topological objects in a sector of an operator #
 
@@ -83,10 +84,62 @@ def operator_gap(H,operator=None,nk=40):
     return gap
 
 
+def _band_extremum(hkgen,d,ks,es,ib,sign,nstart=3):
+    """Largest (sign=1) or smallest (sign=-1) energy of band ib over the
+    continuous Brillouin zone, as (energy,k), polished with a local
+    optimization started from the nstart best points of the mesh"""
+    from scipy.optimize import minimize
+    def f(k): # the band, sign-flipped so that its extremum is a minimum
+        kv = np.zeros(3) ; kv[:d] = k
+        return -sign*np.sort(algebra.eigvalsh(hkgen(kv)))[ib]
+    best = (np.inf,None)
+    for i in np.argsort(-sign*es[:,ib])[:nstart]: # best points of the mesh
+        r = minimize(f,np.array(ks[i])[:d],method="Nelder-Mead",
+                     options={"xatol":1e-8,"fatol":1e-10})
+        if r.fun<best[0]: best = (r.fun,r.x)
+    return -sign*best[0],best[1]
+
+
+def _check_insulator(H,nk=40):
+    """Raise if the occupied states, the ones below zero energy, are not
+    separated from the empty ones over the whole Brillouin zone.
+
+    A constant number of occupied states on the k-mesh is not enough: a
+    Fermi pocket that falls between the points of a coarse mesh leaves it
+    unchanged, and the split Chern numbers then came out as non-integers,
+    or as a wrong integer. So the top of the highest occupied band and the
+    bottom of the lowest empty one are followed over the continuous k,
+    starting from the extrema of the mesh"""
+    from .. import klist
+    hkgen = H.get_hk_gen()
+    d = H.dimensionality
+    ks = klist.kmesh(d,nk=nk)
+    es = np.array([np.sort(algebra.eigvalsh(hkgen(k))) for k in ks])
+    nocc = set(np.sum(es<0.,axis=1)) # occupied states at each k-point
+    if len(nocc)>1: return # operator_gap reports it
+    nocc = nocc.pop()
+    edges = [] # (band, energy, k) that are on the wrong side of zero
+    if nocc>0: # top of the highest occupied band
+        e,k = _band_extremum(hkgen,d,ks,es,nocc-1,1)
+        if e>=0.: edges.append((nocc-1,e,k))
+    if nocc<es.shape[1]: # bottom of the lowest empty band
+        e,k = _band_extremum(hkgen,d,ks,es,nocc,-1)
+        if e<=0.: edges.append((nocc,e,k))
+    if edges:
+        (ib,e,k) = edges[0]
+        raise ValueError("the number of occupied states changes over the "
+          +"Brillouin zone between the points of the k-mesh (nk="+str(nk)
+          +"): band "+str(ib)+" reaches E="+str(e)+" at k="
+          +str(np.round(k,4))+", on the other side of the Fermi energy at "
+          +"zero, so this is a metal and its Chern numbers are not defined")
+
+
 def split_chern(H,operator=None,nk=40,tol=1e-4):
     """(C_+ - C_-)/2 for the occupied states split by the sign of P O P,
-    raising if P O P closes its gap on the mesh"""
+    raising if P O P closes its gap on the mesh, or if the Hamiltonian is a
+    metal, with a Fermi pocket between the points of the mesh"""
     gap = operator_gap(H,operator=operator,nk=nk)
+    _check_insulator(H,nk=nk)
     if gap<tol:
         raise ValueError("the occupied states cannot be split by the sign "
           +"of the operator, since its projection on them has an eigenvalue "

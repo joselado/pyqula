@@ -86,6 +86,26 @@ def test_bilayer_carries_two_copies(tmp_path, monkeypatch):
     assert np.isclose(h.get_mirror_chern(nk=16), 0., atol=1e-8)
 
 
+@pytest.mark.parametrize("mass,exchange,nks", [
+    (0.28, 0.32, (10,)),  # came out as 0.576
+    (0.14, 0.32, (10, 20)),  # came out as a wrong integer, -1
+])
+def test_split_invariants_refuse_a_metal_between_the_mesh_points(
+        tmp_path, monkeypatch, mass, exchange, nks):
+    """At half filling these are metals with a small band overlap, and a
+    coarse k-mesh misses their Fermi pockets, so the number of occupied
+    states is the same on every point of the mesh. The split invariants
+    returned a non-integer or a wrong integer there instead of raising"""
+    monkeypatch.chdir(tmp_path)
+    h = _kane_mele(mass=mass, exchange=exchange)
+    h.set_filling(0.5)
+    for nk in nks:
+        with pytest.raises(ValueError, match="between the points of the"):
+            h.get_mirror_chern(nk=nk)
+        with pytest.raises(ValueError, match="between the points of the"):
+            h.get_spin_chern(nk=nk)
+
+
 def test_split_invariants_refuse_what_they_cannot_split(tmp_path,
                                                        monkeypatch):
     monkeypatch.chdir(tmp_path)
