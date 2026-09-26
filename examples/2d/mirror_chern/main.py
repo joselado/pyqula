@@ -5,6 +5,13 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 import numpy as np
 from pyqula import specialhamiltonian
+# Chern numbers of the two sectors of an operator that commutes with the
+# Hamiltonian, here the layer operator of an AB bilayer. It commutes only
+# because ti=0.0 decouples the layers, and it is not a mirror: AB stacking
+# has no mirror z -> -z. For the mirror Chern number of a Hamiltonian that
+# has one, h.get_mirror_chern() finds the mirror and splits by it, see
+# examples/2d/spin_mirror_chern
+
 # Hamiltonian
 h = specialhamiltonian.multilayer_graphene(l="AB",ti=0.0)
 # add opposite Haldane couplings to each layer

@@ -337,7 +337,10 @@ def find_point_group(g, h=None, orders=(2, 3, 4, 6), axes=None, centers=None,
     a honeycomb lattice's hexagon centers, or any atom position when
     ``centers`` is left at its default) are not found automatically --
     pass ``centers=`` explicitly (e.g. including ``g.r``), or construct
-    and pass a :class:`SymmetryOperation` directly, for those.
+    and pass a :class:`SymmetryOperation` directly, for those. The
+    inversion of the diamond lattice is one of them: it sits at the
+    midpoint of a bond, not at an atom or at the origin, so it is found
+    only with that midpoint among the ``centers``.
 
     Returns a list of :class:`SymmetryOperation` (if ``h`` is None) or
     :class:`CompiledSymmetry` (if ``h`` is given -- only operations that

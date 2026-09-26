@@ -598,7 +598,10 @@ def wannier_centers(h,nk=30,nt=100,nocc=None,full=False,loop=0,pump=1,
         pyqula's Bloch Hamiltonian does, which leaves every winding as it
         is; "atomic" places it at its position, so that the centers are
         positions (a phase 2 pi x for a center at the fractional
-        coordinate x along loop), which is what a polarization needs"""
+        coordinate x along loop), which is what a polarization needs
+    nocc: the number of bands, counted from the lowest, whose centers are
+        followed; by default the ones below zero energy. They have to be
+        separated from the band above them by a gap everywhere"""
     from .topologytk.qgt import _check_gauge,_orbital_fractions
     _check_gauge(gauge)
     dim = h.dimensionality
@@ -623,7 +626,7 @@ def wannier_centers(h,nk=30,nt=100,nocc=None,full=False,loop=0,pump=1,
     if full:  ts = np.linspace(0.,1.0,nt,endpoint=False)
     else:  ts = np.linspace(0.,0.5,nt) # from t=0 to t=1/2, both included
     hkgen = h.get_hk_gen() # Bloch Hamiltonian generator
-    wfall = [[occupied_states(hkgen,kvector(k,t)) for k in path]
+    wfall = [[occupied_states(hkgen,kvector(k,t),nocc=nocc) for k in path]
                 for t in ts]
     sizes = set([len(wf) for wft in wfall for wf in wft]) # occupied states
     if len(sizes)!=1:
@@ -693,6 +696,13 @@ def chern(h,integration="grid",**kwargs):
     Gauss-Kronrod quadrature), see chern_qtci, adaptively refining the
     sampling instead of relying on a fixed mesh density. "wannier" counts
     the winding of the hybrid Wannier centers, see wannier_winding.
+
+    An operator= weights the Berry curvature by an operator, see
+    mesh_chern. On a Nambu Hamiltonian the name "sz" is the physical spin,
+    sigma_z tau_0 in the basis (c_up, c_dn, c^dag_dn, -c^dag_up), which an
+    equal-spin pairing does not conserve: the two decoupled sectors of a
+    helical p-wave superconductor are labelled by sigma_z tau_z,
+    diag(1,-1,-1,1), and with "sz" the weighted Chern number is zero there.
     """
     if integration not in _chern_integrations:
         raise ValueError("unknown integration '"+str(integration)+"' for "
@@ -701,7 +711,8 @@ def chern(h,integration="grid",**kwargs):
     return _chern_integrations[integration](h,**kwargs)
 
 
-def wannier_winding(h,nk=30,nt=100,full=True,loop=0,pump=1,kfix=0.):
+def wannier_winding(h,nk=30,nt=100,full=True,loop=0,pump=1,kfix=0.,
+        nocc=None):
     """Signed number of times the hybrid Wannier centers cross a fixed line
 
     At each momentum t along the second reciprocal direction, the Wilson
@@ -727,6 +738,8 @@ def wannier_winding(h,nk=30,nt=100,full=True,loop=0,pump=1,kfix=0.):
     loop, pump, kfix: the directions and the plane, as for wannier_centers;
         exchanging loop and pump reverses the orientation, and so the sign
         of the Chern number
+    nocc: the number of bands counted from the lowest, as for
+        wannier_centers
 
     The count needs no tracking of the individual centers. Between two
     consecutive t the sum phi of the centers moves by dphi, brought into
@@ -742,7 +755,7 @@ def wannier_winding(h,nk=30,nt=100,full=True,loop=0,pump=1,kfix=0.):
     centers move fast where the gap is small, so a small gap needs a larger
     nt."""
     m = wannier_centers(h,nk=nk,nt=nt,full=full,loop=loop,pump=pump,
-            kfix=kfix)
+            kfix=kfix,nocc=nocc)
     x = m[1:] # centers, one row per occupied band and one column per t
     if full: x = np.concatenate([x,x[:,:1]],axis=1) # close the loop in t
     phi = np.sum(x,axis=0) # sum of the centers at each t
@@ -765,7 +778,8 @@ def z2_wannier_winding(h,nk=100,nt=100,nocc=None,**kwargs):
     """Z2 invariant from the Wannier-center flow over half of the Brillouin
     zone: +1 trivial, -1 topological, the parity of wannier_winding with
     full=False (loop, pump and kfix select the plane, as there)"""
-    return 1 - 2*(wannier_winding(h,nk=nk,nt=nt,full=False,**kwargs)%2)
+    return 1 - 2*(wannier_winding(h,nk=nk,nt=nt,full=False,nocc=nocc,
+                **kwargs)%2)
 
 
 def z2_invariant_3d(h,nk=60,nt=60):
@@ -823,6 +837,10 @@ def chern_vector(h,nk=30,nt=100,kfix=0.):
                     pump=(i+2)%3,kfix=kfix) for i in range(3))
 
 
+
+from .topologytk.nestedwilson import wannier_sector_polarization
+from .topologytk.nestedwilson import wannier_gap
+from .topologytk.nestedwilson import quadrupole_moment
 
 
 def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):

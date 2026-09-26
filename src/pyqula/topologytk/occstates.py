@@ -52,13 +52,19 @@ def occ_states_generator(h,k,**kwargs):
 
 
 
-def occupied_states(hkgen,k,window=None,max_waves=None):
-    """ Returns the WF of the occupied states in a 2d hamiltonian"""
+def occupied_states(hkgen,k,window=None,max_waves=None,nocc=None):
+    """ Returns the WF of the occupied states in a 2d hamiltonian: the
+    ones below zero energy, the ones inside window, or the lowest nocc"""
     hk = hkgen(k) # get hamiltonian
     if max_waves is None: es,wfs = algebra.eigh(hk) # diagonalize all waves
     else:  es,wfs = slg.eigsh(csc_matrix(hk),k=max_waves,which="SA",
                         sigma=0.0,tol=arpack_tol,maxiter=arpack_maxiter)
     wfs = np.conjugate(wfs.transpose()) # wavefunctions
+    if nocc is not None: # the lowest nocc states, whatever their energy
+        if not 0<nocc<=len(es):
+            raise ValueError("nocc must be between 1 and the "+str(len(es))
+              +" states that were computed, got "+str(nocc))
+        return np.array(wfs[np.argsort(es)[:nocc]])
     occwf = []
     for (ie,iw) in zip(es,wfs):  # loop over states
       if window is None: # no energy window
@@ -93,13 +99,18 @@ class Filter():
 
 
 def filter_state(opk,accept=lambda r: True, nmax = None):
-   """Flter certain states according to their eigenvalues"""
+   """Flter certain states according to their eigenvalues
+
+   The operator has to be Hermitian on the states, since its eigenvalues
+   are compared as real numbers; a unitary symmetry with eigenvalues +-i,
+   such as a mirror of spinful electrons, goes in as i times it."""
    def filt(wfs,k=None):
        n = wfs[0].shape[0]
        iden = np.identity(n,dtype=np.complex128)
        op = opk(iden,k=k) # evaluate at a kpoint if needed
        wfs = algebra.disentangle_manifold(wfs,op) # disentangle
        ls = algebra.get_representation(wfs,op) # get their eigenvalue
+       _check_hermitian(ls)
        ls = [ls[i,i].real for i in range(len(ls))]
        out = []
        for (l,w) in zip(ls,wfs):
@@ -108,6 +119,45 @@ def filter_state(opk,accept=lambda r: True, nmax = None):
        return out # return wavefunctions
    return Filter(filt) # return filter
 
+
+
+def _check_hermitian(m,tol=1e-6):
+    """Raise unless the matrix of an operator on a set of states is
+    Hermitian. The states are sorted by the real part of its eigenvalues,
+    so an operator with eigenvalues +-i used to put every state at zero,
+    and disentangle_manifold diagonalizes it with eigh, which reads one
+    triangle only"""
+    if len(m)==0: return
+    err = np.max(np.abs(m - np.conjugate(m.T)))
+    if err>tol*max(1.,np.max(np.abs(m))):
+        raise ValueError("the operator is not Hermitian on the occupied "
+          +"states (its matrix differs from its conjugate transpose by "
+          +str(err)+"), so its eigenvalues are not real and the states "
+          +"cannot be sorted by them. A unitary symmetry whose eigenvalues "
+          +"are +-i, such as a mirror of spinful electrons, has to be "
+          +"passed as i times it")
+
+
+def _commutation_check(opk,tol=1e-6):
+    """Filter that leaves the states as they are, after checking that the
+    operator maps their span into itself, which is what an operator that
+    commutes with the Hamiltonian does to the occupied states"""
+    def filt(wfs,k=None):
+        if len(wfs)==0: return wfs
+        v = np.conjugate(np.array(wfs)).T # the states, as columns
+        op = opk(np.identity(v.shape[0],dtype=np.complex128),k=k)
+        ov = op@v
+        err = np.max(np.abs(ov - v@(np.conjugate(v.T)@ov)))
+        if err>tol*max(1.,np.max(np.abs(op))):
+            raise ValueError("the operator does not commute with the "
+              +"Hamiltonian: it takes the occupied states out of their own "
+              +"span (by "+str(err)+"), so the occupied states have no "
+              +"definite eigenvalue of it and no sector to be sorted into. "
+              +"topologytk.topologicalsector.get_chern_operator_sign_sector "
+              +"splits them by the sign of P O P instead, which is what "
+              +"h.get_spin_chern() does with s_z")
+        return wfs
+    return Filter(filt)
 
 
 def max_valence_states(h,n=2):
@@ -159,7 +209,9 @@ def occ_states_sector_generator(H,operator=None,sector=1.0,
     else:
         focc = Filter(lambda wfs,**kwargs: wfs[0:nocc,:]) # lowest nocc
     fop = filter_state(operator,accept= lambda e: np.abs(sector-e)<tol)
-    return states_generator(H,filt=fop*focc)
+    # a non-commuting operator used to give a Chern number of zero, with
+    # every state rejected by the tolerance on its eigenvalue
+    return states_generator(H,filt=fop*_commutation_check(operator)*focc)
 
 
 

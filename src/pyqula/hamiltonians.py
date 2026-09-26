@@ -151,6 +151,16 @@ class Hamiltonian():
         symmetry, see topology.winding_number"""
         return topology.winding_number(h,**kwargs)
 
+    def get_wannier_sector_polarization(h,**kwargs):
+        """Polarization of a sector of the Wannier bands, from the nested
+        Wilson loop, see topologytk/nestedwilson.py"""
+        return topology.wannier_sector_polarization(h,**kwargs)
+
+    def get_quadrupole_moment(h,**kwargs):
+        """Quadrupole moment q_xy from the nested Wilson loop, see
+        topologytk/nestedwilson.py"""
+        return topology.quadrupole_moment(h,**kwargs)
+
     def get_quantum_geometric_tensor(h,**kwargs):
         """Multiband (non-Abelian) quantum geometric tensor at a single
         k-point, see topologytk/qgt.py for the formula and references"""

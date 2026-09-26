@@ -39,7 +39,7 @@ def bloch_matrix_generator(ms,ds,dim=1,use_jax=False):
     else:
         def f(k,**kwargs):
             return evaluate_bloch_matrix_jit(ms,ds,
-                    np.array(k,dtype=np.float64)[0:dim]) # call
+                    _real_momentum(k)[0:dim]) # call
     # The hopping matrices and their lattice vectors, carried on the
     # generator itself so that a caller evaluating it over a whole k-mesh
     # can rebuild the Bloch sum as one batched contraction instead of
@@ -48,6 +48,21 @@ def bloch_matrix_generator(ms,ds,dim=1,use_jax=False):
     # ds is already cropped to the dimensionality, so k must be too.
     f.bloch_data = (ms,ds)
     return f
+
+
+def _real_momentum(k):
+    """k as a float64 array. A complex k with a finite imaginary part is
+    refused: the cast to float64 used to drop that part with only a
+    ComplexWarning, and return the Bloch Hamiltonian at the real part"""
+    k = np.asarray(k)
+    if np.iscomplexobj(k):
+        if np.any(k.imag!=0.):
+            raise TypeError("the Bloch Hamiltonian takes a real momentum, "
+              +"and this one is complex, k="+str(k)+"; a complex momentum, "
+              +"as the generalized Brillouin zone of a non-Hermitian chain "
+              +"needs, is not built")
+        k = k.real
+    return np.array(k,dtype=np.float64)
 
 
 @jit(nopython=True,cache=True)
