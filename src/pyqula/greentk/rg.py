@@ -77,6 +77,40 @@ def surface_dyson_residual(gs,intra,inter,e):
     return np.max(np.abs(m@gs - np.identity(n,dtype=np.complex128)))
 
 
+def causality_violation(g,sign=1.):
+    """How far a Green's function is from being retarded (sign=1, a
+    positive delta) or advanced (sign=-1, a negative one): a retarded
+    Green's function has a positive semidefinite spectral function,
+    i(g - g^dag) >= 0, and an advanced one the opposite. This returns the
+    most negative eigenvalue of sign*i(g - g^dag) with the sign flipped
+    (zero when there is none), relative to the size of g. Works on one
+    matrix or on a batch of them, (nE,n,n).
+
+    The Dyson residual above cannot tell the retarded Green's function
+    from the advanced one: inside a band the Dyson equation is solved by
+    both, channel by channel. At an energy on an onsite level of a
+    multi-orbital lead with a tiny delta, the decimation can land on the
+    advanced solution for one channel with a residual of 1e-14: at E=0.5,
+    delta=1e-12, a chain with an exchange field of 0.5 tilted away from z
+    came out with one of its two channels advanced, and a junction built
+    on it lost that channel's transmission, a conductance of 0.96 instead
+    of 1.90."""
+    gd = np.conjugate(np.swapaxes(g,-1,-2))
+    emin = np.min(np.linalg.eigvalsh(sign*1j*(g-gd)),axis=-1)
+    scale = np.maximum(np.max(np.abs(g),axis=(-2,-1)),1.)
+    return np.maximum(-emin,0.)/scale
+
+
+def _causal_sign(intra,delta):
+    """The sign of i(g - g^dag) the answer must have: +1 for a retarded
+    Green's function (delta>0), -1 for an advanced one (delta<0), and 0
+    when there is no requirement, at delta=0 or for a lead with gain or
+    loss. The decimation always couples the cells with inter and its
+    conjugate, so only the onsite block can make the lead non-Hermitian"""
+    if not np.allclose(intra,algebra.dagger(intra)): return 0.
+    return float(np.sign(delta))
+
+
 def surface_dyson_residual_batch(g_surf,intra,inter,energies,delta):
     """surface_dyson_residual for a whole batch of energies at once.
 
@@ -145,27 +179,40 @@ def _fix_green_renormalization(g_bulk,g_surf,intra,inter,e):
     double precision cannot carry -- a multi-orbital lead with intra=0 at
     E=0 and delta=1e-12 is the standard example. Returning the less-bad
     of two wrong Green's functions is exactly the silent failure this
-    whole residual check exists to stop, so say so instead."""
+    whole residual check exists to stop, so say so instead.
+
+    Solving the Dyson equation is not enough on its own: the retarded and
+    the advanced Green's functions both solve it, so the answer must also
+    have the causality its delta asks for, see causality_violation."""
     res = surface_dyson_residual(g_surf,intra,inter,e)
-    if res<dyson_tolerance: return g_bulk,g_surf # the decimation is fine
+    sign = _causal_sign(intra,e[0,0].imag) # retarded, advanced or neither
+    causal = sign!=0.
+    bad = max(causality_violation(g_surf,sign),
+              causality_violation(g_bulk,sign)) if causal else 0.
+    if res<dyson_tolerance and bad<dyson_tolerance:
+        return g_bulk,g_surf # the decimation is fine
     gsr = surface_green_dyson(intra,inter,e) # this side
     res2 = surface_dyson_residual(gsr,intra,inter,e)
-    if not res2<dyson_tolerance: # neither of the two solves the equation
-        raise ValueError("the surface Green's function of this lead does "
-                "not satisfy its own Dyson equation at energy %g and "
-                "delta %g (best residual %.2e, required below %.1e). The "
-                "lead has a state essentially at that energy, where the "
-                "surface Green's function grows like 1/delta and double "
-                "precision cannot resolve it; use a larger delta, or "
-                "evaluate away from that energy."
-                %(e[0,0].real,e[0,0].imag,min(res,res2),dyson_tolerance))
-    dag = algebra.dagger
-    gsl = surface_green_dyson(intra,dag(inter),e) # the opposite side
-    n = intra.shape[0]
-    iden = np.identity(n,dtype=np.complex128)
-    gb = np.linalg.solve(e - intra - inter@gsr@dag(inter)
-                            - dag(inter)@gsl@inter, iden)
-    return gb,gsr
+    bad2 = causality_violation(gsr,sign) if causal else 0.
+    if res2<dyson_tolerance and bad2<dyson_tolerance:
+        dag = algebra.dagger
+        gsl = surface_green_dyson(intra,dag(inter),e) # the opposite side
+        n = intra.shape[0]
+        iden = np.identity(n,dtype=np.complex128)
+        gb = np.linalg.solve(e - intra - inter@gsr@dag(inter)
+                                - dag(inter)@gsl@inter, iden)
+        if not causal or causality_violation(gb,sign)<dyson_tolerance:
+            return gb,gsr
+    # neither of the two is a causal solution of the equation
+    raise ValueError("the surface Green's function of this lead is not a "
+            "causal solution of its own Dyson equation at energy %g and "
+            "delta %g (best residual %.2e, best causality violation %.2e, "
+            "both required below %.1e). The lead has a state essentially "
+            "at that energy, where the surface Green's function grows like "
+            "1/delta and double precision cannot resolve it; use a larger "
+            "delta, or evaluate away from that energy."
+            %(e[0,0].real,e[0,0].imag,min(res,res2),min(bad,bad2),
+              dyson_tolerance))
 
 
 def green_renormalization_python(intra,inter,energy=0.0,nite=None,
@@ -331,7 +378,12 @@ def green_renormalization_jit_batch(intra,inter,energies,delta=1e-4,
     # only the energies that actually fail go through the (rare, slow)
     # fixed-point fallback
     res = surface_dyson_residual_batch(g_surf,intra,inter,energies,delta)
-    for k in np.where(res>=dyson_tolerance)[0]:
+    sign = _causal_sign(intra,delta) # retarded, advanced or neither
+    if sign!=0.:
+        bad = np.maximum(causality_violation(g_surf,sign),
+                         causality_violation(g_bulk,sign))
+    else: bad = np.zeros(len(energies))
+    for k in np.where((res>=dyson_tolerance) | (bad>=dyson_tolerance))[0]:
         e = np.identity(intra.shape[0],dtype=np.complex128)*(energies[k]+1j*delta)
         gb,gs = _fix_green_renormalization(g_bulk[k],g_surf[k],intra,inter,e)
         g_bulk[k],g_surf[k] = gb,gs
