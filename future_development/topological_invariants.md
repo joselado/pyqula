@@ -34,7 +34,8 @@ since the first-tier package below was built.
 
 What is missing, in one sentence per family: in one dimension, since the second package
 below, only the disordered versions (the scattering and the real-space invariants); in two dimensions there is no polarization, no invariant computed from symmetry
-eigenvalues and nothing for higher-order or fragile topology; in real space there is no
+eigenvalues and nothing for fragile topology, and higher-order topology has the quadrupole
+moment only, since the nested Wilson loop was built; in real space there is no
 $Z_2$ marker, no Bott index and nothing that scales past dense diagonalization; in three
 dimensions there is nothing beyond the $Z_2$ indices and the Chern vector; and the non-Hermitian, Floquet, interacting and magnon
 cases have no invariant of their own.
@@ -135,6 +136,53 @@ bilayer of Kane-Mele layers, which gives $C_s=2$ with a trivial $Z_2$ and $C_M=0
 as the sector-Chern example it is; an AB bilayer has no $M_z$ at all, and
 `h.get_mirror_chern()` says so.
 
+## Built after the survey: the nested Wilson loop
+
+The fourth package, picked after the three above, is the nested Wilson loop of Benalcazar,
+Bernevig and Hughes (arXiv:1611.07987, with the algorithm of section VI of arXiv:1708.04230,
+read from the paper itself), in `topologytk/nestedwilson.py`, with
+`topology.wannier_sector_polarization`, `topology.wannier_gap`, `topology.quadrupole_moment`
+and the delegators `h.get_wannier_sector_polarization()` and `h.get_quadrupole_moment()`. It
+is a module of its own rather than an extension of `wannier_centers`, because it needs the
+eigenvectors of the Wilson loop at every base point, not only its eigenvalues. The occupied
+states are computed once on an `nk` x `nk` grid, as columns; the links are
+$F_k=\langle u_{k+dk}|u_k\rangle$, replaced by the unitary part of their polar
+decomposition, so that the loop $F_{N-1}\cdots F_0$ has eigenvalues $e^{2\pi i\nu}$ with
+$\nu$ a position (the sign convention of the paper, and the $+2\pi x$ convention that
+`wannier_centers` returns); the loop at base point $i+1$ is $F_iW_iF_i^\dagger$, so each line
+costs one product, and a Schur decomposition gives orthonormal eigenvectors. The sector "+"
+keeps $0<\nu<1/2$ and "-" keeps $-1/2<\nu<0$, and the count of each has to be the same at every
+k-point; the nested loop closes on the periodic image of the first Wannier-band state, which is
+the state itself in the lattice gauge and carries $e^{-2\pi i y}$ per orbital in the atomic
+gauge. The polarization at each $k_1$ is averaged after unwrapping, and a sector whose
+polarization winds (a Wannier sector with a Chern number) raises. Results are returned modulo 1
+in $[-1/4,3/4)$, so that neither 0 nor 1/2 sits at an edge where roundoff would flip it, and
+$q_{xy}$ is eq. VI.47, $p_y^{\nu_x^-}p_x^{\nu_y^-}+p_y^{\nu_x^+}p_x^{\nu_y^+}$. The routine
+raises when a Wannier center comes within `tol` (1e-4 by default) of 0 or 1/2; the Wannier gap
+of `square_2OTI` is 0.018 at $\delta=-0.3$, $2.4\cdot 10^{-4}$ at $-0.9$, $5.7\cdot 10^{-5}$ at
+$-0.95$ and zero at $-1$, where the plaquettes decouple with the bulk gap open.
+
+The checks (`tests/topology/test_nested_wilson_loop.py`):
+
+- An independent implementation: nestedWilsonLib (github.com/kuansenlin/nested_and_spin_resolved_Wilson_loop, GPL-3, on PythTB 1.7.2, installed in a scratch directory only) on a `square_2OTI(0.3)` whose mirrors are broken by onsite energies and complex intracell hoppings, so that nothing is quantized. In the lattice gauge the nested phase agreed at each of the 40 base points to $9\cdot 10^{-6}$ and its average to $3\cdot 10^{-6}$; in the atomic gauge, with the orbitals at their positions, to $3\cdot 10^{-5}$ at `nk=40` and $8\cdot 10^{-6}$ at 80. The difference falls by four when the mesh doubles, the discretization difference between its raw overlaps and the unitary links here. Its 2D routine returns the nested phase at one base point only, so the average was built by moving the base point; the four averaged values are pinned in the test
+- The nested loop over all the occupied states is the ordinary Wilson loop along the other direction, which `wannier_centers` computes by another code path: equal to $10^{-10}$ in both gauges, on the mirror-broken model. This is the check that catches a conjugated eigenvector or a wrong order of the product
+- The Wilson-loop eigenvalues do not depend on the base point, and agree with `wannier_centers` at base 0, to $10^{-12}$
+- An atomic limit in the atomic gauge, whose sector polarizations are the orbital coordinates, which fixes the sign and the origin
+- `square_2OTI` with $\delta=0.3$ and 0.6 gives the four polarizations and $q_{xy}$ equal to 1/2, and $\delta=-0.3$ gives 0, at `nk=20` and 31; with the two directions dimerized differently ($\gamma_x,\gamma_y=1.25,0.25$ with $\lambda=1$) only $p_y^{\nu_x}=1/2$ and $q_{xy}=0$, the classes of figs. 25 and 29 of the paper
+- The sum rule $p^{\nu^+}+p^{\nu^-}=p$, the total polarization, to $2\cdot 10^{-4}$ at `nk=40` on the mirror-broken model (a discretization error, since the Berry connection of the whole manifold traces over both sectors only in the limit)
+- A flipped sign of the nested phase fails six tests, conjugated Wilson-loop eigenvectors eight, and a nested loop closed without the periodic image three
+
+A real-space check of the corner charge was tried and not finished: on a 12 x 12 flake the four
+corner modes of $\delta=0.3$ are there (at $|E|=8\cdot 10^{-4}$, 84% of their weight within three
+sites of a corner, and none for $\delta=-0.3$), but a perturbation of $\pm 0.1$ on alternate
+quadrants, meant to split them, gave quadrant charges of $\pm 0.86$ and $\pm 0.07$ in the two
+phases rather than $\pm 1/2$ and 0, since it polarizes the bulk and the edges as well. A corner
+charge wants the perturbation near the corners only, or the filling-anomaly count of
+arXiv:1809.02142. What is left: the nested loop on a plane of a 3D zone (the `kfix` of
+`wannier_centers`), the octupole moment (a third nesting), sectors chosen by a window rather
+than by the lines 0 and 1/2, for Wannier gaps elsewhere, and the $C_4$ route of eq. VI.53,
+which needs the symmetry-eigenvalue primitive of the second tier.
+
 ## The candidates at a glance
 
 Effort is small (a function and a test on top of what exists), medium (a new building
@@ -158,7 +206,7 @@ block) or large. The tier is the recommended order, argued in the last section.
 | 3D Chern vector | A, 3D | the Wilson loop on three planes | stacked Haldane layers, $(0,0,C)$ and $(C,0,0)$ | small | done |
 | Weyl-point chirality | A, 3D | the sliced plaquette sum | chirality $\pm 1$ per node | small to medium | 2 |
 | Topological Hamiltonian $-G^{-1}(0,k)$ | interacting A, AII | a custom generator | Haldane plus flat bath levels | small | 2 |
-| Nested Wilson loop, quadrupole | $M_x,M_y$, 2D | the Wilson loop | `square_2OTI` $q_{xy}=1/2$ | medium | 3 |
+| Nested Wilson loop, quadrupole | $M_x,M_y$, 2D | the Wilson loop | `square_2OTI` $q_{xy}=1/2$ | medium | done |
 | Euler class | $C_2T$, 2D | the Wilson loop | three-band model $\pm 2$ (measured) | medium | 3 |
 | KPM stochastic Chern marker, Streda formula | A, 2D and 3D, millions of sites | `kpmtk` | Haldane at $10^5$ sites against `get_chern` | medium | 3 |
 | Spectral localizer | every class, gapless too | positions, a signature | Haldane island index 1 in the bulk | medium | 3 |
@@ -428,18 +476,21 @@ code offers, is within reach once the solver exists. Oracles: SpinW (GPL-3), Sun
 
 ## Loose ends found by the survey
 
-These were found while prototyping and were not repaired; each needs a look before the
-invariant that depends on it is built.
+These were found while prototyping and were not repaired then. They were all looked at on the
+same day as the nested Wilson loop, and each has its resolution at the end of its item: four
+repaired, each with a test in `tests/topology/test_survey_loose_ends.py` that fails on the
+unrepaired source, two left as they are by the maintainer's decision, two documented, and one
+not reproduced.
 
-- `transporttk.smatrix`: on a normal lead attached to a Kitaev lead at $\mu=-1$ (Zeeman 5 or 20, broadening $10^{-4}$ or $10^{-6}$) the Fisher-Lee scattering matrix came out non-unitary by order one ($\lVert SS^\dagger-1\rVert$ between 5.5 and 38), and the default `check=True` of `unitarize.check_and_fix` repaired it without a warning into $\det r=+0.14$, the wrong sign. Reported by the survey and not reproduced here; the Sancho-Rubio wrong-convergence trap at an onsite level is a candidate cause. A scattering invariant must at least refuse $\lvert\lvert\det r\rvert-1\rvert$ above a tolerance
-- `occ_states_sector_generator`: its tolerance of $10^{-3}$ on the operator eigenvalue rejects every state of $Ps_zP$ once Rashba coupling is present
-- `filter_state`: it reads the real part of the operator's matrix elements, so an operator with eigenvalues $\pm i$ gives zero in both sectors
-- `examples/2d/mirror_chern`: its layer operator is a mirror only at `ti=0.0`
-- `h.get_hk_gen()`: a complex momentum is cast to a real one with only a `ComplexWarning`
-- `find_point_group`: the default center misses the inversion of the diamond lattice, which sits at the bond midpoint
-- `densitymatrix.occupied_projector`: it returns the transpose of $P$, which flips the sign of anything built from $s_z$ or a current, as recorded for `full_dm`
-- `wannier_centers`, `z2_invariant`: their `nocc` argument is accepted and ignored
-- The operator `"sz"` of a Nambu Hamiltonian is the physical spin, $\sigma_z\tau_0$ in pyqula's basis, which equal-spin pairing does not conserve; the label of the two decoupled sectors of a helical p-wave superconductor is $\sigma_z\tau_z$, which is why `get_chern(operator="sz")` returns 0 there. Not a bug, but a user will trip on it
+- `transporttk.smatrix`: on a normal lead attached to a Kitaev lead at $\mu=-1$ (Zeeman 5 or 20, broadening $10^{-4}$ or $10^{-6}$) the Fisher-Lee scattering matrix came out non-unitary by order one ($\lVert SS^\dagger-1\rVert$ between 5.5 and 38), and the default `check=True` of `unitarize.check_and_fix` repaired it without a warning into $\det r=+0.14$, the wrong sign. Reported by the survey and not reproduced here; the Sancho-Rubio wrong-convergence trap at an onsite level is a candidate cause. A scattering invariant must at least refuse $\lvert\lvert\det r\rvert-1\rvert$ above a tolerance. **Not reproduced.** A normal lead (a spinful chain with `add_swave(0.)`, at half filling or with an onsite $-0.5$) attached to a Kitaev lead (onsite $Z+\mu$, Zeeman $Z=5$ and 20, `add_pairing(mode="pwave",delta=0.3,d=[1,0,0])`) at $\mu=-3,-1,0,1,1.5,3$, with `ht.delta` $10^{-4}$ (also its default) and $10^{-6}$: at $10^{-4}$ the lead self-energies are resolved only at that broadening, with a warning, the unitarity error is $3.5$ to $4\cdot 10^{-4}$ and $\det r$ is $-0.999$ inside the topological range and $+1$ outside, before and after `check_and_fix`; at $10^{-6}$ the normal lead at $\mu\neq 0$ raises from the Dyson-residual check of `greentk.rg` instead of answering. The guard above is still what the scattering invariant should carry
+- `occ_states_sector_generator`: its tolerance of $10^{-3}$ on the operator eigenvalue rejects every state of $Ps_zP$ once Rashba coupling is present. **Repaired:** it now checks that the operator maps the occupied states into their own span, which it does when it commutes with the Hamiltonian, and raises otherwise, pointing to the split by the sign of $POP$; with Rashba coupling and $s_z$ it used to return 0
+- `filter_state`: it reads the real part of the operator's matrix elements, so an operator with eigenvalues $\pm i$ gives zero in both sectors. **Repaired:** it raises when the operator is not Hermitian on the states (and `disentangle_manifold` diagonalizes with `eigh`, which reads one triangle only), saying to pass $iM$
+- `examples/2d/mirror_chern`: its layer operator is a mirror only at `ti=0.0`. **Documented:** the script says that it is the sector Chern number of an operator that commutes only because the layers decouple, that AB stacking has no mirror, and points to `h.get_mirror_chern()`
+- `h.get_hk_gen()`: a complex momentum is cast to a real one with only a `ComplexWarning`. **Repaired** in the dense generator (`htk/bloch.py`), which raises `TypeError` for a finite imaginary part and accepts a complex array whose imaginary part is zero; the sparse generator evaluates $e^{2\pi i k\cdot R}$ at the complex $k$ and is left as it is, and the jax path is not checked, since its $k$ can be traced
+- `find_point_group`: the default center misses the inversion of the diamond lattice, which sits at the bond midpoint. **Left as it is, by the maintainer's decision:** widening the default centers would change what every caller finds, the group averaging of the Wannierization among them, and the docstring already says to pass `centers=`; it now names the diamond case
+- `densitymatrix.occupied_projector`: it returns the transpose of $P$, which flips the sign of anything built from $s_z$ or a current, as recorded for `full_dm`. **Left as it is, by the maintainer's decision:** it keeps the index convention of `full_dm`, its docstring says so, and its one caller in the package takes `.T`
+- `wannier_centers`, `z2_invariant`: their `nocc` argument is accepted and ignored. **Repaired:** `occupied_states` takes `nocc`, the lowest `nocc` states whatever their energy, and `wannier_centers`, `wannier_winding`, `z2_wannier_winding` and `z2_invariant` pass it on, so `h.get_chern(integration="wannier",nocc=...)` works too
+- The operator `"sz"` of a Nambu Hamiltonian is the physical spin, $\sigma_z\tau_0$ in pyqula's basis, which equal-spin pairing does not conserve; the label of the two decoupled sectors of a helical p-wave superconductor is $\sigma_z\tau_z$, which is why `get_chern(operator="sz")` returns 0 there (measured $-2\cdot 10^{-8}$, and $-2.006$ with $\sigma_z\tau_z$ at `nk=20`, on the helical p-wave at $\mu=-2$). Not a bug, but a user will trip on it. **Documented** in the docstring of `topology.chern` and in the guide's section on the $Z_2$ invariant of a superconductor
 
 ## The recommended order
 
@@ -462,6 +513,7 @@ the magnon Chern number, and the Floquet, axion, GBZ and Hopf invariants.
 
 The general Wilson loop with the 3D $Z_2$ was picked first, the one-dimensional invariants
 second and the spin and mirror Chern numbers third, and all three are built, see the sections
-after the repairs. What is left of the first tier is the Bott and spin Bott index, and the next
+after the repairs; the nested Wilson loop, from the third tier, was built fourth, together with
+the loose ends. What is left of the first tier is the Bott and spin Bott index, and the next
 decision is whether it comes next or the second tier starts; each wants the maintainer's sign-off, and each is one function, one test against
 an independent route and one section of the guide.

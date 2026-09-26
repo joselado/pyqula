@@ -2630,8 +2630,13 @@ $X$ points, where this pairing vanishes, so the gap closes there and the invaria
 defined. As a reference, the Kane-Mele insulator of the snippet above gives $+1$ once a
 small s-wave pairing is added to it, `h.add_swave(0.01)`, although its normal state gives
 $-1$: the Nambu doubling carries its helical edge twice, and a pairing gaps the pair, so a
-quantum spin Hall insulator is a trivial superconductor. See
-`examples/2d/z2_helical_superconductor/main.py` for the invariant across the band.
+quantum spin Hall insulator is a trivial superconductor. Note that the Chern number of each
+spin cannot be read with `h.get_chern(operator="sz")`: for a Nambu Hamiltonian the name `"sz"` is
+the spin operator $\sigma_z\tau_0$, which this pairing does not conserve, and the curvature
+weighted by it integrates to zero, while the operator that labels the two decoupled sectors is
+$\sigma_z\tau_z$, `Operator(np.diag([1.,-1.,-1.,1.]))`, with which the weighted Chern number is
+$C_\uparrow-C_\downarrow=-2$. See `examples/2d/z2_helical_superconductor/main.py` for the
+invariant across the band.
 
 ### Spin Chern number and mirror Chern number
 
@@ -2690,6 +2695,57 @@ $C_M=0$, since the two mirror sectors carry opposite Chern numbers. Both calls t
 k-points per direction of the mesh, 40 by default. See
 `examples/2d/spin_mirror_chern/main.py` for the two invariants as the Rashba coupling and the
 exchange field grow.
+
+### Quadrupole moment and the nested Wilson loop
+
+We will now see how to compute the invariant of a quadrupole insulator, a two-dimensional
+insulator with no polarization and no Chern number whose topology shows up as a zero mode at
+each corner of a flake, a peak in the local density of states that STM would see at the
+corners and nowhere else, with `h.get_quadrupole_moment()`. In the section on the winding of the hybrid Wannier centers we saw
+that the Wilson loop along $\vec b_1$ has, at each momentum $k_2$ along the other direction,
+the hybrid Wannier centers $\nu_1(k_2)$ as the phases of its eigenvalues, meaning the positions
+along $\vec a_1$ of the occupied states once they are localized in that direction. When these
+Wannier bands split into two groups separated by a gap, one with $0<\nu_1<1/2$ and one with
+$-1/2<\nu_1<0$, each group is a sector of electrons sitting on one side of the unit cell along
+$\vec a_1$, and we can ask where the electrons of one sector sit along $\vec a_2$. The answer is
+a second Wilson loop, along $\vec b_2$, over the states of that sector alone, what is called the
+nested Wilson loop, and the phase of its determinant averaged over $k_1$ is the polarization of
+the sector along $\vec a_2$, written $p_2^{\nu_1^\pm}$. With a mirror symmetry along each
+direction every one of these polarizations is $0$ or $1/2$, and the quadrupole moment is
+
+$$
+q_{xy} = p_2^{\nu_1^-}p_1^{\nu_2^-} + p_2^{\nu_1^+}p_1^{\nu_2^+} \mod 1
+$$
+
+meaning that it is $1/2$ when the Wannier sectors are displaced by half a lattice constant along
+both directions, and $0$ otherwise. Let us take the Benalcazar-Bernevig-Hughes model, a square
+lattice with a flux $\pi$ through each plaquette and four sites per unit cell, with a hopping
+$1-\delta$ inside the cell and $1+\delta$ between cells
+
+```python
+from pyqula import specialhamiltonian
+h = specialhamiltonian.square_2OTI(delta=0.3) # quadrupole insulator, four sites per cell with pi flux
+q = h.get_quadrupole_moment() # quadrupole moment from the nested Wilson loops
+p = h.get_wannier_sector_polarization(loop=0,sector="+") # polarization along a2 of one Wannier sector
+```
+
+The result is $q_{xy}=1/2$, and each of the four sector polarizations is $1/2$. With the stronger
+hopping inside the cell, `delta=-0.3`, all of them are $0$, a trivial insulator, which is the same
+dimerization argument as in the Su-Schrieffer-Heeger chain applied along both directions at
+once, and an open flake of the first model has a zero mode at each corner while the second has
+none. With the two directions dimerized differently only one pair of sector polarizations is
+$1/2$, the Wannier sectors are displaced along one direction only, and $q_{xy}=0$. What makes
+this invariant different from the ones above is that the phase can change without any closing
+of the bulk gap, through a closing of the gap between the Wannier bands: for `delta=-1.0` the
+plaquettes decouple, every Wannier center sits at $0$, and the two sectors cannot be told apart.
+The call raises in that case, when a Wannier band comes closer than `tol` to $0$ or to $1/2$, and
+`topology.wannier_gap(h)` gives that distance. The polarizations are computed with every orbital
+at the origin of its unit cell, which is the convention that defines the quadrupole moment;
+`gauge="atomic"` places each orbital at its position instead, and then the sector polarizations
+are positions in the unit cell. The quantization of $q_{xy}$ relies on the two mirrors, and
+without them the formula above returns a number with no meaning. Both calls take `nk`, the
+k-points per direction, 40 by default. See `examples/2d/quadrupole/main.py` for the invariant
+across the transition, and `examples/0d/cornermodes/main.py` for the corner modes of the flake.
 
 ### Strong and weak Z2 indices in three dimensions
 
@@ -6037,6 +6093,32 @@ Optional arguments:
   the operator does not anticommute with the Hamiltonian
 - nk=200: number of k-points around the Brillouin zone
 
+### h.get_quadrupole_moment()
+Return the quadrupole moment $q_{xy}$ of a two-dimensional insulator with the
+mirrors $M_x$ and $M_y$, $0$ or $1/2$, from the Wannier-sector polarizations of
+the nested Wilson loops (see "Quadrupole moment and the nested Wilson loop").
+
+Optional arguments:
+- nk=40: number of k-points per direction of the mesh
+- nocc=None: number of bands, counted from the lowest, taken as occupied; by
+  default the ones below zero energy
+- tol=1e-4: smallest distance of the Wannier bands from $0$ and $1/2$ that is
+  accepted; below it this raises `ValueError`, since the Wannier gap closes
+
+### h.get_wannier_sector_polarization()
+Return the polarization along the other direction of one sector of the
+Wannier bands, from the nested Wilson loop, modulo 1 in $[-1/4,3/4)$ so that
+neither $0$ nor $1/2$ sits at an edge.
+
+Optional arguments:
+- loop=0: direction of the first Wilson loop; the polarization is along the
+  other one
+- sector="+": the Wannier bands with $0<\nu<1/2$, or `"-"` for those with
+  $-1/2<\nu<0$; any other name raises `ValueError` listing the two
+- gauge="lattice": every orbital at the origin of its cell, or `"atomic"`,
+  every orbital at its position
+- nk=40, nocc=None, tol=1e-4: as for `h.get_quadrupole_moment()`
+
 ### h.get_chern()
 Return Chern number of the Hamiltonian.
 
@@ -6055,6 +6137,8 @@ Optional arguments:
   Wannier centers"; any other name raises `ValueError` listing the three
 - nt=100: for `integration="wannier"`, the number of momenta along the
   second reciprocal direction; a small gap needs more of them
+- nocc=None: for `integration="wannier"`, the number of bands counted from the
+  lowest whose centers are followed; by default the ones below zero energy
 - operator=None: a name, a matrix or an `Operator`, as for
   `h.get_berry_curvature()`. The operator-projected invariants
   (`topology.spin_chern`, `topology.operator_berry`) work on sparse

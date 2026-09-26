@@ -150,8 +150,11 @@ already reached once.
   with the Fu-Kane parities as its oracle, and so are the second, the winding
   number of chiral chains and the $Z_2$ of helical superconducting wires,
   and the third, the spin Chern number that survives Rashba coupling and the
-  mirror Chern number. Still open: the Bott and spin Bott index, the last of
-  the first tier.
+  mirror Chern number, and then the nested Wilson loop with the quadrupole
+  moment, benchmarked against an independent GPL implementation. The nine
+  loose ends are closed, four repaired, two left by decision, two documented
+  and the scattering-matrix one not reproduced. Still open: the Bott and spin
+  Bott index, the last of the first tier.
 
 - [`unreferenced_modules.md`](unreferenced_modules.md) -- the dead-module
   cleanup: how "unreferenced" was actually established (an AST walk of every
