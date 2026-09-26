@@ -1928,7 +1928,7 @@ c^\dagger_{i,s} c_{i,s}
 c^\dagger_{j,s'} c_{j,s'}
 $$
 
-where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors; second and third neighbors enter `h.get_mean_field_hamiltonian()` in the same way as `V2` and `V3`, and an interaction with an arbitrary dependence on the distance as `Vr`. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all the anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first-neighbor interaction $V_1$.
+where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors; second and third neighbors enter `h.get_mean_field_hamiltonian()` in the same way as `V2` and `V3`, and an interaction with an arbitrary dependence on the distance as `Vr`. That interaction reaches up to a distance `rcut`, 5 by default in a periodic system, and it is kept or dropped one whole shell of equidistant pairs at a time, so that it has the symmetry of the lattice; in a finite system every pair is kept. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all the anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first-neighbor interaction $V_1$.
 
 The first term is the charge order term, that takes the form
 
@@ -6069,6 +6069,7 @@ Compute the density (charge) RPA response function for a `V1`/`V2`/`V3`-neighbor
 Optional arguments:
 
 - V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None: the density-density interaction, built the same way as `Vinteraction`/`VJinteraction`'s
+- rcut=None: range of `Vr`, every pair of sites up to that distance and none beyond it; `None` means 5 in a periodic system and every pair in a finite one
 
 - q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
 
@@ -6626,6 +6627,7 @@ Optional arguments:
 - U, V1, V2, V3, Vr: as in `get_mean_field_hamiltonian`
 - J1, J2, J3 = 0.: isotropic Heisenberg exchange for the first/second/third-neighbor shells (same shell convention as V1/V2/V3)
 - Jr=None: general distance-dependent isotropic exchange function, as `Vr`
+- rcut=None: range of `Vr` and `Jr`, every pair of sites up to that distance and none beyond it; `None` means 5 in a periodic system and every pair in a finite one
 - J1x, J1y, J1z = 0.: optional anisotropic correction added to J1 on the first-neighbor shell only (e.g. the effective first-neighbor Jz coupling is J1+J1z); second/third neighbors stay purely isotropic
 
 - mf, filling, nk, maxerror, mix, constrains: as above (only the plain-mixing solver is supported)
