@@ -263,20 +263,29 @@ def add_swave_to_hamiltonian(self,delta,**kwargs):
 
 
 def add_pxipy(delta=0.0,is_sparse=False,r1=None,r2=None):
-  """Add px x + py y pairing"""
-  def deltafun(r1i,r2i):
-    """Function to calculate the pairing"""
-    dr = r2i-r1i
-    dr2 = dr.dot(dr)
-    if 0.9<dr2<1.1: # first neighbor
-      dr = delta*dr/np.sqrt(dr2) # unit vector
-#      dr = np.cross(dr,np.array([0.,0.,1.]))
-      dr = [dr[0],1j*dr[1],0.]      
-#      dr = [0.,0.,dr[0]+1j*dr[1]]
-#      return dr
-      return dvector2deltas(dr) # return delta
-    else: return [0.,0.,0.] # zero vector
-  return add_pairing(deltas=deltafun,r1=r1,r2=r2)
+  """Return the chiral px+ipy pairing between the sites at r1 and the sites
+  at r2: first neighbors (distance 1) are paired with
+  delta*exp(i*phi)*sigma_z in the Nambu spinor, phi the angle of r1-r2,
+  a spin triplet with the d-vector along z. This is the matrix that
+  add_pairing(mode="chiral_pwave",d=[0.,0.,1.]) puts between those sites,
+  and on a chain it is a px pairing. delta is a number or a function of
+  the position, evaluated at the middle of each bond.
+
+  Like add_pairing, only the electron-hole part is returned, and its
+  dagger has to be added too: m + m^dag inside the cell, and m^dag
+  towards the replica at -R when r2 is the replica at R."""
+  if r1 is None or r2 is None:
+      raise ValueError("add_pxipy needs the positions of the two sets of "
+              "sites to pair, pass them as r1 and r2")
+  from .utilities import get_callable
+  from .sctk.pairing import get_triplet
+  deltaf = get_callable(delta) # amplitude as a function of position
+  dz = lambda r: [0.,0.,1.] # d-vector along z
+  def weight(r1i,r2j): # 2x2 pairing matrix of a pair of sites
+    return deltaf((r1i+r2j)/2.)*get_triplet(r1i,r2j,dz,L=1)
+  m = add_pairing(deltas=weight,r1=r1,r2=r2)
+  if is_sparse: return m
+  else: return m.todense()
 
 
 add_pwave = add_pxipy
