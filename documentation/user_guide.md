@@ -804,7 +804,7 @@ the range of the Brillouin zone; evaluating the direct-sum Fourier transform at 
 would show finite-size leakage even for a perfectly clean system, since only the commensurate
 points are free of it.
 
-See `examples/2d/qpi_realspace_impurity/main.py` for a runnable version that plots both the real-space LDOS and QPI(q).
+See `examples/2d/qpi_realspace_impurity/main.py` for a runnable version that plots both the real-space LDOS and QPI(q), and `jupyter-notebooks/functionalities/spectral_functions/07_qpi_maps.ipynb` for an executed notebook.
 
 ## Spin splitting of an altermagnet
 
@@ -872,7 +872,7 @@ meaningful quantity, and a silently wrong number would be worse than an error.
 Diagonalization is dense throughout, deliberately: a sparse solver returns only the
 eigenvalues nearest $E=0$, and the splitting commonly peaks far away from there.
 
-See `examples/2d/spin_splitting_vs_energy/main.py` for a runnable version plotting both curves (and showing the redundant-cell trap), and `examples/2d/altermagnetism_density/main.py` for the density alone.
+See `examples/2d/spin_splitting_vs_energy/main.py` for a runnable version plotting both curves (and showing the redundant-cell trap), `examples/2d/altermagnetism_density/main.py` for the density alone, and `jupyter-notebooks/functionalities/single_particle_hamiltonians/11_altermagnet_spin_splitting.ipynb` for an executed notebook.
 
 
 # Operators
@@ -994,7 +994,9 @@ degeneracies that a C3 or C6 axis forces at high-symmetry points, so an order th
 rule forbids comes out as an exact zero rather than as small numerical noise.
 
 See `examples/2d/xwave_nonlinear_spin_current/main.py` for a runnable version printing the
-whole selection-rule table.
+whole selection-rule table, and
+`jupyter-notebooks/functionalities/single_particle_hamiltonians/12_nonlinear_spin_conductivity.ipynb`
+for an executed notebook.
 
 ## Spin operators
 
@@ -1430,7 +1432,9 @@ rather than diagonalizing fully.
 See `examples/1d/NH_ldos/main.py` (the model above, resolved mode by mode),
 `examples/0d/non_hermitian_aah/main.py` and
 `examples/0d/non_hermitian_aah_dos/main.py` (a non-Hermitian Aubry-Andre chain
-swept over the modulation phase) for runnable versions.
+swept over the modulation phase) for runnable versions, and
+`jupyter-notebooks/functionalities/single_particle_hamiltonians/09_non_hermitian_hamiltonians.ipynb`
+for an executed notebook.
 
 
 # Superconductivity
@@ -1662,7 +1666,9 @@ spin spiral, with its non-unitarity map) and `examples/2d/SC_symmetry/main.py`
 (a mixed singlet and triplet pairing split into its two parts) for runnable
 versions, and
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/07_order_parameter_identification.ipynb`
-for how a self-consistent order parameter is identified.
+for how a self-consistent order parameter is identified. See
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/16_dvector_nonunitarity.ipynb`
+for an executed notebook on the non-unitarity.
 
 ## Superfluid weight and BKT temperature
 
@@ -1735,7 +1741,9 @@ $-\partial f/\partial E$ that collapses to a delta function, which a finite
 k-mesh cannot resolve, so $D_s$ comes out at the normal state's Drude weight
 rather than zero; use a temperature the mesh resolves when checking that a
 marginal state has no stiffness. See `examples/2d/superfluid_weight/main.py`
-for a runnable version.
+for a runnable version, and
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/15_superfluid_weight.ipynb`
+for an executed notebook.
 
 
 # Interactions at the mean-field level
@@ -2544,7 +2552,9 @@ minima, so the AA regions shrink and the AB/BA domains grow, by an amount that i
 the twist angle decreases, and the band structure computed from the relaxed positions is the
 one to compare against a measurement on a real sample. See
 `examples/2d/graphene_relax/main.py` for a runnable version comparing the rigid and relaxed
-lattices.
+lattices, and
+`jupyter-notebooks/functionalities/single_particle_hamiltonians/10_twisted_bilayer_relaxation.ipynb`
+for an executed notebook.
 
 
 # Topological insulators
@@ -2816,7 +2826,9 @@ finds $C_s=2$ with a trivial $Z_2$ invariant, two copies of the quantum spin Hal
 $C_M=0$, since the two mirror sectors carry opposite Chern numbers. Both calls take `nk`, the
 k-points per direction of the mesh, 40 by default. See
 `examples/2d/spin_mirror_chern/main.py` for the two invariants as the Rashba coupling and the
-exchange field grow.
+exchange field grow, and
+`jupyter-notebooks/functionalities/topological_characterization/08_spin_mirror_chern.ipynb`
+for an executed notebook.
 
 ### Quadrupole moment and the nested Wilson loop
 
@@ -2867,7 +2879,9 @@ at the origin of its unit cell, which is the convention that defines the quadrup
 are positions in the unit cell. The quantization of $q_{xy}$ relies on the two mirrors, and
 without them the formula above returns a number with no meaning. Both calls take `nk`, the
 k-points per direction, 40 by default. See `examples/2d/quadrupole/main.py` for the invariant
-across the transition, and `examples/0d/cornermodes/main.py` for the corner modes of the flake.
+across the transition, `examples/0d/cornermodes/main.py` for the corner modes of the flake, and
+`jupyter-notebooks/functionalities/topological_characterization/09_quadrupole_moment.ipynb`
+for an executed notebook.
 
 ### Strong and weak Z2 indices in three dimensions
 
@@ -2913,7 +2927,9 @@ loop along the next reciprocal lattice vector in cyclic order. For Chern insulat
 stacked along $\vec a_3$ it is $(0,0,C)$, with $C$ the Chern number of one layer, the Hall
 conductance of each layer in units of $e^2/h$. Both are also available directly, as
 `topology.z2_invariant_3d(h)` and `topology.chern_vector(h)`. See
-`examples/3d/z2_diamond/main.py` for the three phases of the diamond model.
+`examples/3d/z2_diamond/main.py` for the three phases of the diamond model, and
+`jupyter-notebooks/functionalities/topological_characterization/10_z2_three_dimensions.ipynb`
+for an executed notebook.
 
 ### Winding number of a chiral chain
 
@@ -2966,7 +2982,9 @@ with the Zak phase appears with two such chains coupled by a weak rung hopping: 
 Majorana zero modes at each end, $W=2$, and the Zak phase reads $0$, the same as a trivial
 chain. Any other chiral operator can be passed as `chiral=`, a name, a matrix or an `Operator`,
 and the call raises if it does not anticommute with the Hamiltonian, or if the gap closes. See
-`examples/1d/winding_kitaev_ladder/main.py` for the single chain and the ladder across the band.
+`examples/1d/winding_kitaev_ladder/main.py` for the single chain and the ladder across the band,
+and `jupyter-notebooks/functionalities/topological_characterization/11_one_dimensional_invariants.ipynb`
+for an executed notebook.
 
 ### Z2 invariant of a helical superconducting wire
 
@@ -3006,7 +3024,7 @@ of the negative-energy states is allowed at every $k$-point, so there is no gaug
 the only resolution is the number `nk` of k-points from $0$ to $\pi$, 200 by default; a value of
 $\nu$ far from $\pm 1$ raises, asking for more. It is also available as
 `topology.z2_invariant_1d(h)`. See `examples/1d/z2_helical_wire/main.py` for the invariant as the
-s-wave pairing grows.
+s-wave pairing grows, and the `11_one_dimensional_invariants.ipynb` notebook above.
 
 See `examples/2d/z2_kane_mele/main.py` and `examples/2d/z2_transition/main.py` (the invariant
 across a transition driven by a sublattice imbalance) for runnable versions, and the
@@ -3370,7 +3388,9 @@ insulator obeys the area law, and the Li-Haldane counting matches the Chern numb
 `examples/1d/entanglement_entropy_chain/main.py` (the central charge from a fit of the
 entropy against the region size) and `examples/2d/entanglement_spectrum_haldane/main.py` (the
 spectrum of the Haldane model next to that of a trivial insulator) for runnable versions
-ending in the plots.
+ending in the plots, and
+`jupyter-notebooks/functionalities/topological_characterization/12_entanglement.ipynb`
+for an executed notebook.
 
 
 # Response functions
@@ -3454,7 +3474,9 @@ honeycomb lattice $\sigma_{xx} = \sigma_{yy}$ to machine precision, and
 graphene reproduces its universal absorption $\pi e^2/4h$. Superconducting
 (Nambu) and 3d Hamiltonians raise `NotImplementedError`. See
 `examples/2d/optical_conductivity/main.py` and
-`examples/1d/optical_conductivity_chain/main.py` for runnable versions.
+`examples/1d/optical_conductivity_chain/main.py` for runnable versions, and
+`jupyter-notebooks/functionalities/response_functions/01_optical_conductivity.ipynb` and
+`02_drude_weight_f_sum_rule.ipynb` in the same folder for executed notebooks.
 
 ## Charge-charge response function
 
@@ -3512,7 +3534,9 @@ chis = [h.get_chi(q=[q,0.,0.],energies=np.linspace(-3,3,100),nk=40,delta=0.1)[1]
 
 What you see in that map is the particle-hole continuum of the band, the
 energies a scattering from $k$ to $k+q$ across the Fermi level can cost. See
-`examples/1d/charge_response/main.py` for a runnable version.
+`examples/1d/charge_response/main.py` for a runnable version, and
+`jupyter-notebooks/functionalities/response_functions/03_charge_response.ipynb`
+for an executed notebook.
 
 ## Generic operator-operator response function
 
@@ -3548,7 +3572,9 @@ sz = h.get_operator("sz") # any of the operators from the "Operators" section
 
 By default `A=B=`identity, which recovers the charge-charge response above.
 Any operator from the "Operators" section (spin, valley, sublattice, location,
-Nambu...) can be plugged in to build the corresponding susceptibility.
+Nambu...) can be plugged in to build the corresponding susceptibility. See
+`jupyter-notebooks/functionalities/response_functions/04_operator_response.ipynb`
+for an executed notebook.
 
 ## RKKY response function
 
@@ -3584,7 +3610,7 @@ What you see is a coupling that alternates in sign with the distance and
 decays, with a period set by the Fermi wavevector, which is why the snippet
 shifts the Fermi energy with the onsite term first.
 
-See `examples/1d/RKKY/main.py` and `examples/1d/rkky_minimal/main.py` (which compares `"pm"` and `"LR"` on the same system) for runnable versions.
+See `examples/1d/RKKY/main.py` and `examples/1d/rkky_minimal/main.py` (which compares `"pm"` and `"LR"` on the same system) for runnable versions, and `jupyter-notebooks/functionalities/response_functions/05_rkky.ipynb` for an executed notebook.
 
 ## Spin susceptibility and RPA
 
@@ -3892,6 +3918,10 @@ hold, so `h.global_spin_rotation()` refuses it, unless the rotation is about
 the axis of a uniaxial exchange; rotate the Hamiltonian before the mean-field
 calculation instead.
 
+See
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/19_magnons_pair_ladder.ipynb`
+for an executed notebook comparing the pair basis with the time-dependent Hartree-Fock magnons.
+
 ### Magnons from time-dependent Hartree-Fock
 
 You can think of a magnon as the same kind of object as an exciton: a bound
@@ -3978,7 +4008,9 @@ Goldstone mode survives to the tolerance the mean field was converged to. On
 a plain onsite Hubbard `U`, where both this and `method="rpa"` are exact,
 the two agree.
 
-See `examples/2d/magnon_bands_tdhf/main.py` for a runnable version.
+See `examples/2d/magnon_bands_tdhf/main.py` for a runnable version, and
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/18_magnons_tdhf.ipynb`
+for an executed notebook.
 
 ### Density (charge) response
 
@@ -4095,6 +4127,10 @@ it exhaust memory. A gapped reference state is required. A metallic filling
 has no well-defined electron-hole pair basis and is rejected, as are
 Nambu/BdG Hamiltonians, whose two-particle structure is different.
 
+See
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/17_excitons_bse.ipynb`
+for an executed notebook.
+
 ### Large k-meshes
 
 How fine a k-mesh an exciton needs is set by how tightly it is bound. A
@@ -4134,7 +4170,9 @@ for runnable comparisons of the three solvers, the second plotting the
 exciton envelope $|A(k)|^2$ over the Brillouin zone, and
 `examples/2d/excitons_bse/main.py` for the lowest exciton of a gapped
 honeycomb lattice detaching from the absorption edge as the Coulomb tail is
-turned up.
+turned up. See
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/20_bse_matrix_free_qtt.ipynb`
+for an executed notebook comparing the three solvers.
 
 ### Exciton band structure
 
@@ -4315,7 +4353,9 @@ The parameters, in short:
 - `channel` picks where the dielectric matrix is built. Leave it at `"charge"`, which keeps spin-rotation invariance exact
 - `nkW` is the mesh the screening is computed on. Raise it above `nk`, by an integer factor, when the screening needs more k-points than the exciton does
 
-See `examples/2d/screened_bse/main.py` for a runnable version.
+See `examples/2d/screened_bse/main.py` for a runnable version, and
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/21_screened_interaction.ipynb`
+for an executed notebook.
 
 
 # Quantum transport
@@ -4774,7 +4814,9 @@ combination. One gap in that guard is worth knowing about: `win_keywords=` is by
 unchecked passthrough merged after the check, so a window smuggled in through it can still
 reach the engine and be ignored; use the real `dis_froz_max=` argument, which is guarded. See
 `jupyter-notebooks/functionalities/wannierization/04_dimensionality_and_bdg.ipynb` for the
-executed notebook on Wannierizing in other dimensionalities and in the Nambu basis.
+executed notebook on Wannierizing in other dimensionalities and in the Nambu basis, and
+`jupyter-notebooks/functionalities/wannierization/05_band_disentanglement.ipynb` for the one on
+disentanglement.
 
 
 # Chebyshev kernel polynomial (KPM) methods
@@ -4846,18 +4888,21 @@ the exact Green's function calculation, and the notebooks in
 `jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/` for the local
 and non-local spectral functions and for a system too large to diagonalize.
 
-The Chebyshev moments can be computed on a GPU instead, by passing
-`kpm_cpugpu="GPU"` to any of the KPM functions:
+The Chebyshev moments can be computed on a GPU instead, by setting the
+package-wide switch of "Running on a GPU" before calling any of the KPM
+functions, and `kpm_prec` chooses the precision of the moments:
 
 ```python
+from pyqula import gpu
+gpu.set_gpu(True) # Chebyshev moments on the GPU from now on
 (x,y) = h.get_dos(mode="KPM",
             energies=np.linspace(-3.0,3.0,200),
             delta=1e-4,ntries=10,
-            kpm_cpugpu="GPU") # Chebyshev moments on a GPU
+            kpm_prec="single") # single precision moments
 ```
 
-When no GPU is available the moments fall back to the CPU, so the same script
-runs on both.
+When no GPU is available the same jax kernel runs on the CPU with a warning,
+so the same script runs on both.
 
 
 # Classical spin models
@@ -4923,7 +4968,9 @@ where it is mostly in-plane, which is the frame to draw it in with arrows.
 See `examples/classicalspin/` for runnable versions, including the 120-degree
 state above drawn as arrows together with its local energy (`perpendicular/`)
 and a ladder with a modulated exchange whose texture is then fed into a quantum
-Hamiltonian (`modulated_ladder/`).
+Hamiltonian (`modulated_ladder/`). See
+`jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/01_classical_heisenberg.ipynb` and
+`02_magnetization_textures.ipynb` in the same folder for executed notebooks.
 
 
 # Lattice gas models
@@ -4952,8 +4999,7 @@ from pyqula import latticegas
 
 g = geometry.triangular_lattice()
 g = supercell.turn_orthorhombic(g)
-g = g.get_supercell(10)
-g.dimensionality = 0
+g = g.get_supercell(10) # periodic, so no site sits at an edge
 
 lg = latticegas.LatticeGas(g,filling=1./3.) # 1/3 of the sites randomly occupied
 lg.add_interaction(Jij=[1.,1.,1.]) # first, second and third neighbor repulsion
@@ -4961,6 +5007,12 @@ es = lg.optimize_energy(temp=0.5,ntries=1e4) # simulated annealing
 ```
 
 The filling fixes the number of particles, which the swap moves conserve.
+The supercell keeps its periodicity, so the couplings wrap around its edges
+and every site has the same neighbors, as in the bulk. Setting
+`g.dimensionality = 0` before building the model cuts the bonds across the
+edges instead, which is what several of the scripts in `examples/latticegas/`
+do, and gives an open flake whose edge sites have fewer neighbors, so that
+the order and the filling near them differ from those of the bulk.
 `lg.den` holds the current 0/1 occupation array and `es` the energy along the
 anneal, which decreases and then flattens once the particles have found their
 arrangement; `temp` sets how often an uphill swap is accepted, and `ntries` the
@@ -4985,7 +5037,9 @@ disk.
 
 See `examples/latticegas/` for runnable versions of the anneal, the
 local-energy map, the correlators, and the grand-canonical scan of the filling
-against the chemical potential.
+against the chemical potential, and
+`jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/03_lattice_gas_monte_carlo.ipynb` and
+`05_correlators_thermodynamics.ipynb` in the same folder for executed notebooks.
 
 
 # Ising models
@@ -5010,15 +5064,16 @@ from pyqula import geometry
 from pyqula import latticeising
 
 g = geometry.square_lattice() # bipartite, so ferromagnetic order is not frustrated
-g = g.get_supercell(12)
-g.dimensionality = 0
+g = g.get_supercell(12) # periodic, so no site sits at an edge
 
 li = latticeising.LatticeIsing(g,m=0.0) # random +-1 spins, zero net magnetization
 li.add_interaction(Jij=[1.]) # first-neighbor ferromagnetic coupling
 es,ms = li.anneal(temps=[3.,1.,0.3,0.1,0.03],ntries=1e4) # simulated annealing
 ```
 
-`li.s` holds the current $\pm1$ spin array, `es` the energy along the anneal
+As in the lattice gas, the supercell is periodic, so that no site sits at an
+edge, and `g.dimensionality = 0` would turn it into an open flake. `li.s`
+holds the current $\pm1$ spin array, `es` the energy along the anneal
 and `ms` the total magnetization $\sum_i s_i$ along it. What you see in `ms` is
 the phase transition: at the high temperatures at the start of the schedule
 the magnetization per site, `ms/li.nsites`, fluctuates around zero, and as the
@@ -5046,7 +5101,9 @@ lattice sits near $2\times2.269$ in these units, not $2.269$.
 See `examples/latticeising/` for runnable versions of the anneal, a
 temperature scan (magnetization and specific heat), and maps of the local
 energy and the local field of a frustrated antiferromagnet on the triangular
-lattice.
+lattice, and
+`jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/04_ising_monte_carlo.ipynb` and
+`05_correlators_thermodynamics.ipynb` in the same folder for executed notebooks.
 
 
 # Parallelism and reproducibility
@@ -5138,6 +5195,10 @@ A handful of routines written in jax have no CPU implementation of their
 own, among them the mean-field solvers reached with `use_jax=True`, the
 graphene relaxation and the jax Keldysh current. Those follow the same
 switch, so they too run on the CPU by default.
+
+See
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/22_gpu_execution.ipynb`
+for an executed notebook comparing the two paths on each kernel.
 
 # Errors and unsupported inputs
 
