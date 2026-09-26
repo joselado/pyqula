@@ -164,7 +164,11 @@ deltadd = csc_matrix([[0.,0.,0.,0.],[0.,0.,0.,0.],[0.,1.,0.,0.],[0.,0.,0.,0.]])
 deltauu = dagger(deltauu)
 deltadd = dagger(deltadd)
 deltax = (deltadd - deltauu)/2.
-deltay = (deltadd + deltauu)/2j
+# the daggers above conjugate the 1/(2i) that would have been applied to the
+# undaggered pair, so it becomes i/2 here; with /2j the electron-hole block
+# of deltay was -sigma_y/2 against +sigma_x/2 and +sigma_z/2 for the other
+# two, and the three did not rotate together as a vector
+deltay = 1j*(deltadd + deltauu)/2.
 # this one is tricky, we only want the antisymmetric part
 deltaz = csc_matrix([[0.,0.,0.,0.],[0.,0.,0.,0.],[1.,0.,0.,0.],[0.,-1.,0.,0.]])/2.
 
