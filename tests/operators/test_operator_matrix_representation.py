@@ -93,12 +93,17 @@ def test_get_vev_honours_a_matrix_less_operator():
 
 def test_kpm_kdos_refuses_a_k_dependent_operator():
     """It sampled the operator as a matrix, got None, and produced an
-    unweighted KDOS without saying so"""
+    unweighted KDOS without saying so. The unfolding operator is no longer
+    an example, since the KPM kdos takes it exactly from its factor (see
+    tests/unfolding/test_unfolding_kpm.py), so the operator here is a
+    k-dependent one with neither a matrix nor a factor"""
+    from pyqula.operators import Operator
     g0 = geometry.honeycomb_lattice()
     g = g0.get_supercell(2, store_primal=True)
     h = g.get_hamiltonian(has_spin=False)
+    op = Operator(lambda v, k=None: np.cos(2. * np.pi * k[0]) * v)
     with pytest.raises(NotImplementedError):
-        h.get_kdos_bands(operator="unfold", mode="KPM", nk=2,
+        h.get_kdos_bands(operator=op, mode="KPM", nk=2,
                          energies=np.linspace(-1., 1., 3))
 
 

@@ -11,6 +11,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                     k0 = np.array([0.,0.]),
                     delta=None,refine_delta=1.0,operator=None,
                     mode='eigen',num_waves=10,info=False,
+                    primal_mesh=False,
                     backend="grid",tolerance=1e-3,**qtci_kwargs):
     """Calculates the Fermi surface of a 2d system.
 
@@ -28,7 +29,15 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     mesh is internally rounded up to the nearest power of two (2**R); if
     nk isn't already one, the reconstructed mesh is interpolated back down
     to the exact nk x nk grid the caller asked for, so the returned
-    (kx,ky,kdos) always matches the "grid" backend's shape/coordinates."""
+    (kx,ky,kdos) always matches the "grid" backend's shape/coordinates.
+
+    primal_mesh: for a supercell built with store_primal=True, draw the
+    mesh (and read k0) in the Brillouin zone of the primal cell, and
+    compute every point at its image in the supercell's reduced
+    coordinates, k_S = M@k_0 (see unfolding.get_primal_mesh_map). With
+    operator="unfold" this is the unfolded Fermi surface on the same mesh,
+    in the same coordinates, as the primal cell's own, for any supercell
+    matrix M."""
     operator = h.get_operator(operator) # get the operator
     if operator is not None: # operator given
         if not operator.linear:
@@ -50,9 +59,20 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     kyout = []
     if reciprocal: R = h.geometry.get_k2K_generator() # get function
     else:  R = lambda x: x
+    if primal_mesh: # mesh and k0 in the primal cell's Brillouin zone
+        from ..unfolding import get_primal_mesh_map
+        R = get_primal_mesh_map(h.geometry,reciprocal=reciprocal,k0=k0)
+        k0 = np.zeros(3) # the shift is already in R
     # setup a reasonable value for delta
     if delta is None:  delta = 3./refine_delta*2./nk
     #### function to calculate the weight ###
+    # Every mode returns sum_n <n|A|n> delta/((e-E_n)^2+delta^2), the
+    # weight that mode='eigen' without an operator has always returned (pi
+    # times the spectral function, without the 1/pi of a DOS). The operator
+    # branches of 'eigen' and 'lowest' go through h.get_dos, which does
+    # apply the 1/pi, and 'full' takes G^R-G^A, which is twice G^R; so they
+    # used to come out 1/pi and 2 times that, and the same unfolded or
+    # spin-resolved Fermi surface changed scale by 2*pi between two modes
     if mode=='full': # use full inversion
       def get_weight(hk,k=None):
         gf = algebra.inv((e+1j*delta)*iden - hk) # get green function
@@ -60,7 +80,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
         if callable(operator): # callable operator
            tdos = -(operator(gf,k=k)).imag # get imaginary part
         else: tdos = -(operator@gf).imag # get imaginary part
-        return np.trace(tdos).real # return trace
+        return np.trace(tdos).real/2. # G^R-G^A counts every pole twice
     elif mode=='eigen': # use full diagonalization
       def get_weight(hk,k=None):
         if operator is None:
@@ -70,10 +90,15 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
             tmp,ds = h.get_dos(ks=[k],operator=operator,
                         write=False,
                         energies=[e],delta=delta)
-            return ds[0] # return weight
+            return np.pi*ds[0] # undo get_dos's 1/pi, see above
     elif mode=='lowest': # use sparse diagonalization
       def get_weight(hk,k=None,**kwargs):
         if operator is None: # without operator
+            if num_waves>=hk.shape[0]-1: # more than ARPACK can return,
+                # fall back to all the states, as get_bands does for the
+                # operator branch below, rather than raise inside scipy
+                es = algebra.eigvalsh(hk)
+                return np.sum(delta/((e-es)**2+delta**2)) # return weight
             es,waves = slg.eigsh(hk,k=num_waves,sigma=e,
                     tol=arpack_tol,which="LM",
                               maxiter = arpack_maxiter)
@@ -85,7 +110,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
                         write=False,
                         energies=[0.],delta=delta,
                         num_bands=num_waves)
-            return ds[0] # return weight
+            return np.pi*ds[0] # undo get_dos's 1/pi, see above
     elif mode=='det': # use determinant method, this is not too stable
         if operator is not None:
             raise NotImplementedError("the determinant mode of the Fermi "

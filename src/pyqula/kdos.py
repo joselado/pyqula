@@ -188,11 +188,20 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
                  mode="ED",**kwargs):
     """Calculate the KDOS bands using the KPM.
 
+    Every mode returns the trace -Im Tr[O G(k,E)]/pi, the spectral weight
+    summed over the orbitals (weighted by the operator O, if any), so that
+    they can be compared: "ED" from the eigenstates, "green" from the
+    Green's function, and "KPM" from a Chebyshev expansion, stochastic
+    for a matrix O and exact for an O given by a factor, as the unfolding
+    one is.
+
     frand is the KPM random-vector generator (the one kpm.pdos and
     kpm.tdos take): it is what makes the KDOS a projected one, by drawing
     the random vectors from a subspace instead of the whole Hilbert
     space. It used to be accepted here and never forwarded, so the output
-    was the unprojected one and was byte-identical with and without it."""
+    was the unprojected one and was byte-identical with and without it.
+    With frand or P the KPM result is an average over the vectors drawn,
+    not a trace."""
     if use_kpm: mode ="KPM" # conventional method
     if frand is not None and mode!="KPM": # nothing to do with it here
         raise ValueError("frand is the KPM random-vector generator, and is "
@@ -238,7 +247,18 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
           return energies,np.array([gfun(e) for e in energies])
       out = parallel.pcall(pfun,kpath) # compute all
     elif mode=="KPM": # KPM method
-      if operator is not None: 
+      # an operator given as O(k) = U(k) U(k)^dagger, as the unfolding one
+      # is, has its weight taken exactly from the columns of U, one
+      # Chebyshev expansion each, with no random vectors (see
+      # kpm.factored_dos)
+      factor = getattr(operator,"factor",None)
+      if factor is not None:
+          if P is not None or frand is not None:
+              raise ValueError("the KPM kdos takes the weight of this "
+                      "operator exactly, from its factor, with no random "
+                      "vectors, so it cannot also take P or frand, which "
+                      "choose the random vectors")
+      elif operator is not None:
           # a matrix is the only form kpm.pdos takes; asking for one raises
           # rather than returning None, which used to leave operator=None
           # here and quietly produce an unweighted KDOS
@@ -246,21 +266,28 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
           if m is None:
               raise NotImplementedError("the KPM kdos samples the operator "
                       "as a matrix, so it cannot take an operator that is "
-                      "defined only by its action on a wavefunction (a "
-                      "k-dependent one such as \"unfold\", for instance); "
-                      "use mode=\"ED\" instead")
+                      "defined only by its action on a wavefunction and "
+                      "has no factor; use mode=\"ED\" instead")
           operator = m
       h = h.copy()
       h.turn_sparse()
       hkgen = h.get_hk_gen() # get generator
+      npol = 3*int(scale/delta) # number of polynomials
       def pfun(k): # do it for this k-point
-#        print("Doing",k)
         hk = hkgen(k) # get Hamiltonian
-        npol = 3*int(scale/delta) # number of polynomials
+        if factor is not None: # exact, from the factor
+            return kpm.factored_dos(hk,factor(k),scale=scale,npol=npol,
+                    ne=npol*4,ewindow=ewindow,x=energies,**kwargs)
         (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=npol*4,P=P,
                      operator=operator,frand=frand,
                      ewindow=ewindow,ntries=ntries,x=energies,
                      **kwargs) # compute
+        # pdos averages over unit random vectors, which is the trace over
+        # the N orbitals divided by N, while mode="ED" and mode="green"
+        # return the trace itself; this used to come out N times smaller
+        # than them. With P or frand the vectors are drawn from a subspace
+        # of the caller's choosing and the result stays an average over it
+        if P is None and frand is None: y = y*hk.shape[0]
         return (x,y)
       out = parallel.pcall(pfun,kpath) # compute all
     ### Now compute and write in a file

@@ -91,7 +91,12 @@ def bloch_projector(h,g0=None):
         P,Pd = get_projector(k) # projector onto the primal Bloch states
         return Pd@(P@v) # O@v, for v a single state or a whole matrix
     from .operators import Operator
-    return Operator(fun,linear=True) # return operator
+    op = Operator(fun,linear=True) # the operator
+    # O = P^dagger P = U U^dagger with U = P^dagger, whose n0 columns are
+    # the primal Bloch states (norm squared N_rep each): the KPM kdos takes
+    # the unfolded weight from them, one Chebyshev expansion per column
+    op.factor = lambda k: get_projector(k)[1]
+    return op
 
 
 
@@ -122,6 +127,38 @@ def get_unfolded_kpath(self,kpath=None,g0=None,**kwargs):
     # can be named as they are there, g.get_unfolded_kpath(["G","K","M","G"])
     k0 = np.array(g0.get_kpath(kpath,**kwargs)) # in the primal reduced basis
     return k0@np.array(M,dtype=float).T # one k_supercell = M@k0 per row
+
+
+
+def get_primal_mesh_map(g,reciprocal=True,k0=None):
+    """Given a supercell geometry g, return the function that takes a point
+    of a mesh drawn in the Brillouin zone of its primal cell to the reduced
+    coordinates of the supercell, which is the mesh an unfolded Fermi
+    surface has to be computed on.
+
+    The point is read as the primal cell's own Fermi surface reads it (a
+    Cartesian momentum through the primal geometry's get_k2K when
+    reciprocal is True, primal reduced coordinates otherwise), shifted by
+    k0 in primal reduced coordinates, and sent to k_S = M@k_0 as in
+    get_unfolded_kpath. Drawing the mesh through the supercell's own
+    get_k2K instead gives the primal zone only for a supercell of the
+    primal cell's shape: get_k2K normalizes every lattice vector on its
+    own, so a supercell whose vectors have different lengths shears it"""
+    g0 = getattr(g,"primal_geometry",None)
+    if g0 is None:
+        raise ValueError("the unfolded k-mesh needs the primal-cell "
+                "geometry; build the supercell with store_primal=True")
+    M = np.array(get_supercell_map(g,g0)[0],dtype=float) # A_S = M@A_0
+    if reciprocal: R0 = g0.get_k2K_generator() # as the primal cell's mesh
+    else: R0 = lambda r: np.array(r,dtype=float)
+    dk = np.zeros(3) # shift, in primal reduced coordinates
+    if k0 is not None: dk[0:len(k0)] = np.array(k0,dtype=float)[0:3]
+    def fun(r):
+        kv = np.zeros(3) # the point, padded to three components
+        ri = np.array(R0(r),dtype=float).ravel()
+        kv[0:len(ri)] = ri[0:3]
+        return M@(kv + dk) # in the reduced coordinates of the supercell
+    return fun
 
 
 

@@ -138,6 +138,15 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
           operator=operator,**kwargs)
   check_scale(mus,scale,bound=operator_norm_bound(operator),
           kpm_prec=kwargs.get("kpm_prec","double"))
+  return moments_to_dos(mus,scale=scale,ne=ne,ewindow=ewindow,
+          kernel=kernel,x=x)
+
+
+def moments_to_dos(mus,scale=10.,ne=500,ewindow=None,kernel="jackson",
+        x=None):
+  """Turn the Chebyshev moments of m/scale into a density on an energy
+  grid, ne points spanning the spectrum or the window ewindow,
+  interpolated onto the energies x when they are given"""
   if ewindow is None or abs(ewindow)>scale: # no window provided
     xs = np.linspace(-1.0,1.0,ne,endpoint=True)*1.01 # energies
   else:
@@ -151,6 +160,46 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
 #    f = interp1d(xs,ys,bounds_error=False,fill_value=[ys[0],ys[-1]])
     return x,f(x)
   else: return xs,ys
+
+
+def factored_moments(m,U,n=200,**kwargs):
+  """Chebyshev moments of Tr[U U^dagger T_j(m)] = sum_a <u_a|T_j(m)|u_a>,
+  j=0,...,2n-1, for the r columns u_a of the N x r matrix U, exactly.
+
+  This is the trace of an operator of rank r that is given as U U^dagger,
+  which takes r Chebyshev recursions, one per column, where the trace of a
+  general operator takes a stochastic average over random vectors. It is
+  how KITE computes the momentum-resolved spectral function, from Bloch
+  states as starting vectors (Joao et al., R. Soc. Open Sci. 7, 191809
+  (2020), arXiv:1910.05194, Sec. 4.4.1, Eqs. 41-43). The columns run as
+  one batch, one per numba thread or on the device, see
+  get_moments_batch. Returns an (r,2n) array with the moments of each
+  column normalized to one, and the squared norms of the columns, which
+  weigh them in the trace; the columns that are zero are left out of
+  both"""
+  from scipy.sparse import issparse
+  vs = U.T.toarray() if issparse(U) else np.array(U).T # one row per column
+  vs = np.array(vs,dtype=np.complex128)
+  w = np.sum(np.abs(vs)**2,axis=1) # squared norms
+  vs = vs[w>0.] ; w = w[w>0.] # an empty column adds nothing
+  if len(w)==0: return np.zeros((0,2*n),dtype=np.complex128),w
+  vs = vs/np.sqrt(w)[:,None] # unit vectors
+  mus = get_moments_batch(vs,csc(m),n=n,**kwargs) # (r,2n)
+  return mus,w
+
+
+def factored_dos(m_in,U,scale=10.,npol=None,ne=500,kernel="jackson",
+        ewindow=None,x=None,**kwargs):
+  """Density of Tr[U U^dagger delta(E-m)], with no stochastic trace: the
+  weight of the rank-r operator U U^dagger in the density of states of m,
+  from one Chebyshev expansion per column of U (see factored_moments)"""
+  if npol is None: npol = ne
+  mus,w = factored_moments(m_in/scale,U,n=npol,**kwargs)
+  if len(w)>0: # each row is the moments of a unit vector, bounded by one
+    check_scale(mus,scale,bound=1.,kpm_prec=kwargs.get("kpm_prec","double"))
+  mus = np.sum(w[:,None]*mus,axis=0) # the trace, weighted by the norms
+  return moments_to_dos(mus,scale=scale,ne=ne,ewindow=ewindow,
+          kernel=kernel,x=x)
 
 
 def pdos(m,P=None,**kwargs):

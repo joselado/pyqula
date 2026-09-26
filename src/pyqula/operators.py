@@ -26,6 +26,12 @@ class Operator():
         from .hamiltonians import Hamiltonian
         self.linear = linear
         self.matrix = None
+        # None, or a function of the kpoint returning an N x r matrix U with
+        # O(k) = U U^dagger, which lets a KPM expansion take the trace
+        # Tr[O delta(E-H)] exactly from the r columns of U (the unfolding
+        # projector has one, see unfolding.bloch_projector). A copy keeps
+        # it; a product or a sum, built out of a copy below, drops it
+        self.factor = None
         if algebra.ismatrix(m):
             self.m = lambda v,k=None: m@v # create dummy function
             self.matrix = m
@@ -34,6 +40,7 @@ class Operator():
             self.m = m.m
             self.linear = m.linear
             self.matrix = m.matrix
+            self.factor = m.factor # the same operator, the same factor
         elif isinstance(m, numbers.Number): 
             self.m = lambda v,k=None: m*v
         elif callable(m): 
@@ -50,6 +57,7 @@ class Operator():
         """Define the multiply method"""
         if type(a)==Operator:
             out = Operator(self)
+            out.factor = None # a product is not factored as self is
             if self.matrix is not None and a.matrix is not None:
                 out.matrix = self.get_matrix()@a.get_matrix()
                 out.m = lambda v,k=None: out.matrix@v # create dummy function
@@ -71,6 +79,7 @@ class Operator():
                 return self*Operator(a) # convert to operator
         elif algebra.isnumber(a): # single number, just multiply
             out = Operator(self) # make a copy
+            out.factor = None # nor a multiple
             if self.matrix is not None:
                 out.matrix = self.get_matrix()*a # multiply
                 out.m = lambda v,k=None: out.matrix@v # create dummy function
@@ -100,6 +109,7 @@ class Operator():
         """Define the add method"""
         if type(a)==Operator:
             out = Operator(self)
+            out.factor = None # nor a sum
             out.m = lambda v,k=None: self.m(v,k=k) + a.m(v,k=k)
             if self.matrix is not None and a.matrix is not None:
                 out.matrix = self.matrix + a.matrix

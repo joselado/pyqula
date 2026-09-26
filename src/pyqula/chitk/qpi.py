@@ -17,20 +17,38 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
     """Compute the QPI using a poor-mans convolution of the k-DOS"""
     if h.dimensionality!=2:
         raise ValueError("the QPI is only implemented for 2d Hamiltonians")
-    if reciprocal: fR = h.geometry.get_k2K_generator() # get matrix
+    if mode=="response": # built from the bare eigenvalues alone
+        # it takes no operator and does no unfolding, and both used to be
+        # dropped without a word, returning the plain QPI of the supercell
+        if kwargs.get("operator") is not None or nunfold!=1:
+            raise NotImplementedError("get_qpi(mode='response') is built "
+                    "from the eigenvalues alone and takes neither an "
+                    "operator nor nunfold (got operator="
+                    +str(kwargs.get("operator"))+", nunfold="+str(nunfold)
+                    +"); use mode='pm' to weight or unfold the QPI")
+    unfold = mode=="pm" and nunfold!=1 # unfold onto the primal zone
+    # the convolution below reads the q-points in the coordinates of the
+    # k-mesh, which are the primal cell's when unfolding, so they are
+    # mapped with the primal geometry then (the same map for an n x n
+    # supercell, a rotated one for the sqrt(3) x sqrt(3) cell)
+    gq = check_nunfold(h,nunfold) if unfold else h.geometry
+    if reciprocal: fR = gq.get_k2K_generator() # get matrix
     else:  fR = lambda x: x # get identity
     qs0 = h.geometry.get_kmesh(nk=nk*nsuper,nsuper=nsuper)
     qs0 = qs0 - np.mean(qs0,axis=0)
     qs = np.array([fR(q) for q in qs0]) # convert
     if mode=="pm": # poor man mode
         from ..fermisurface import fermi_surface_generator
+        # when unfolding, the mesh is [0,1]^2 in the reduced coordinates
+        # of the primal cell, computed at its image M@k in the supercell,
+        # so ks are primal coordinates whatever the supercell matrix M.
+        # This used to sample [0,nunfold]^2 in the supercell's coordinates
+        # and divide by nunfold, the same mesh for an nunfold x nunfold
+        # supercell and the wrong one for any other
         es,ks,ds = fermi_surface_generator(h,reciprocal=False,info=info,
                 energies=energies,delta=delta,
-                full_bz=True, # flag for unfolding
-                nsuper=nunfold,nk=nk,**kwargs)
-        # this is a quick fix for unfolding, 
-        # probably it should be better implemented
-        ks = ks/nunfold # redefine the kpoints for unfolding
+                full_bz=True, # the whole first Brillouin zone
+                primal_mesh=unfold,nsuper=1,nk=nk,**kwargs)
         # we now have the energies, k-points and DOS, lets do a convolution
         fp = lambda i: poor_man_qpi_single_energy(ks,ds[:,i],qs) # parallel function
         out = parallel.pcall(fp,range(len(es))) # compute in parallel
@@ -65,6 +83,31 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
     name = "DOS.OUT"
     np.savetxt(name,np.array([es,dosa]).T)
     fo.close()
+
+
+
+def check_nunfold(h,nunfold):
+    """Return the primal geometry the QPI is unfolded onto, after checking
+    that nunfold is the size of the supercell. The supercell matrix itself
+    is read from the geometry, so nunfold only has to agree with it, and it
+    is read as get_supercell reads a size: the linear size, nunfold**2
+    primal cells, so np.sqrt(3) for the sqrt(3) x sqrt(3) cell and n for
+    an n x n one"""
+    g0 = getattr(h.geometry,"primal_geometry",None)
+    if g0 is None:
+        raise ValueError("get_qpi unfolds (nunfold="+str(nunfold)+") only "
+                "a supercell built with store_primal=True, which the "
+                "unfolding operator needs as well")
+    from ..unfolding import get_supercell_map
+    M = get_supercell_map(h.geometry,g0)[0] # A_S = M@A_0
+    ncells = abs(np.linalg.det(np.array(M,dtype=float)))
+    if abs(nunfold**2-ncells)>1e-6*ncells:
+        raise ValueError("nunfold="+str(nunfold)+" does not match this "
+            "supercell, which holds "+str(int(round(ncells)))+" primal "
+            "cells; nunfold is its linear size, the square root of that, "
+            "as in get_supercell (np.sqrt(3) for the sqrt(3) x sqrt(3) "
+            "cell)")
+    return g0
 
 
 
