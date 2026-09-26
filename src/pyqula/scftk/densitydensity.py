@@ -804,11 +804,15 @@ def reject_spinless_U(h,U):
 
 
 def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
-        constrains=[],Vr=None,**kwargs):
+        constrains=[],Vr=None,rcut=None,**kwargs):
     """Perform a mean-field calculation with density-density interactions
     - U, local Hubbard interaction
     - V1, first neighbor interaction
     - V2, second neighbor interaction
+    - Vr, a function Vr(r1,r2) of two positions, and rcut its range: every
+      pair of sites up to rcut interacts and none beyond it. rcut=None
+      keeps every pair of a finite (0d) system and means 5.0 for a
+      periodic one, see specialhopping.distance_cut_interaction
 
     NOT the default engine behind Hamiltonian.get_mean_field_hamiltonian
     any more -- that now calls VJinteraction (scftk/spinspin.py),
@@ -856,11 +860,9 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     mgenerator = specialhopping.distance_hopping_matrix([V1/2.,V2/2.,V3/2.],nd[0:3])
     hv = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
             mgenerator=mgenerator) 
-    if Vr is not None:
-      hv1 = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
-              tij=Vr)
-      hv = hv + hv1 # add the two Hamiltonians
     v = hv.get_hopping_dict() # hopping dictionary
+    if Vr is not None: # every pair within rcut, whole distance shells
+      specialhopping.add_distance_cut_interaction(v,h.geometry,Vr,rcut=rcut)
     U = obj2geometryarray(U,h.geometry) # convert to array
     reject_spinless_U(h,U)
     if h.has_spin: #raise # not implemented

@@ -224,7 +224,7 @@ def hubbard_kpm(h, U=1.0, constrains=[], **kwargs):
 
 
 def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
-        Vr=None, **kwargs):
+        Vr=None, rcut=None, **kwargs):
     """KPM analogue of scftk.densitydensity.Vinteraction: mean
     field with density-density interactions (U onsite, V1/V2/V3 first/
     second/third neighbor), computed via sparse KPM instead of exact
@@ -248,11 +248,9 @@ def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
     mgenerator = specialhopping.distance_hopping_matrix([V1/2.,V2/2.,V3/2.],nd[0:3])
     hv = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
             mgenerator=mgenerator)
-    if Vr is not None:
-        hv1 = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
-                tij=Vr)
-        hv = hv + hv1
     v = hv.get_hopping_dict()
+    if Vr is not None: # every pair within rcut, as in Vinteraction
+        specialhopping.add_distance_cut_interaction(v,h.geometry,Vr,rcut=rcut)
     U = obj2geometryarray(U, h.geometry)
     reject_spinless_U(h, U)
     if h.has_spin:

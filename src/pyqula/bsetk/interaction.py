@@ -206,7 +206,7 @@ def interaction_at_q(W,g,q):
     return out
 
 
-def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None):
+def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None,rcut=None):
     """Build a density-density interaction W in this module's convention
     (see bare_interaction) from neighbor-shell couplings, using the same
     U/V1/V2/V3/Vr meaning scftk.densitydensity.Vinteraction and
@@ -232,16 +232,23 @@ def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None):
     diagonal too. The same-site diagonal it produces is discarded below
     (an electron does not interact with itself), so a soft cutoff there is
     only needed to avoid a division by zero, not to get the physics right.
+
+    rcut is the range of the Vr tail: every pair of sites up to that
+    distance interacts and every pair beyond it does not, so the tail keeps
+    the point-group symmetry of the lattice. The default None keeps every
+    pair of a finite (0d) system and means 5.0 for a periodic one (see
+    specialhopping.distance_cut_interaction). It does not touch the
+    V1/V2/V3 shells.
     """
     from .. import specialhopping
     nd = h.geometry.neighbor_distances() # neighbor shell distances
     mgenerator = specialhopping.distance_hopping_matrix([V1,V2,V3],nd[0:3])
     hv = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
             mgenerator=mgenerator)
+    v = {tuple(int(x) for x in d): np.array(m,dtype=np.complex128)
+            for d,m in hv.get_hopping_dict().items()} # spinless
     if Vr is not None:
-        hv = hv + h.geometry.get_hamiltonian(has_spin=False,
-                is_multicell=True,tij=Vr)
-    v = hv.get_hopping_dict() # spinless, site-resolved
+        specialhopping.add_distance_cut_interaction(v,h.geometry,Vr,rcut=rcut)
     # drop the same-site self-interaction: get_hamiltonian(tij=Vr)
     # evaluates the interaction for every pair of sites including a site
     # with itself, and an electron does not interact with itself. The

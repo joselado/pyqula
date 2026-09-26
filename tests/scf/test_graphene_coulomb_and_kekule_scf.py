@@ -24,7 +24,15 @@ def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatc
     interaction at all -- hence the re-recorded reference. `g` has no
     counterpart here (in the dead code path it was overloaded, naming the
     geometry in one place and a coupling in another), so the interaction is
-    `vfun` alone."""
+    `vfun` alone.
+
+    Re-recorded once more when Vr started keeping whole distance shells
+    (specialhopping.distance_cut_interaction): the reference before it,
+    141.0056528200021, came with an uneven fringe of pairs beyond distance
+    5 (22 of the 24 at 5.0, and partial shells out to 7.55). The new value
+    was checked against the old builder with the tail cut by hand: at a
+    range of 4.9, where the old builder keeps whole shells, the two agree
+    to every digit."""
     monkeypatch.chdir(tmp_path)
     g = geometry.triangular_lattice()
     g = g.supercell(2)
@@ -41,7 +49,7 @@ def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatc
                     mix=0.9, mf=mf, Vr=Vr)
     (k, e, c) = scf.hamiltonian.get_bands(operator="sz", nk=20)
     e, c = np.array(e), np.array(c)
-    assert np.isclose(np.sum(e), 141.0056528200021, atol=1e-4)
+    assert np.isclose(np.sum(e), 140.48297096853287, atol=1e-4)
 
     # The ferromagnetic guess survives the loop, and the state it converges
     # to is collinear: sz stays a good quantum number, so every band is a

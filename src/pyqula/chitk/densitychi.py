@@ -11,7 +11,7 @@ import numpy as np
 # builds the N-dimensional interaction the charge channel actually needs.
 
 
-def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None):
+def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None,rcut=None):
     """Build the per-site (N-dimensional, not spin-doubled) density-density
     interaction matrix for the charge/density RPA channel.
 
@@ -36,11 +36,10 @@ def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None):
             [V1/2.,V2/2.,V3/2.], nd[0:3])
     hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
             mgenerator=mgenerator)
-    if Vr is not None:
-        hv1 = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
-                tij=Vr)
-        hv = hv + hv1
     v = hv.get_hopping_dict()
+    if Vr is not None: # every pair within rcut, whole distance shells
+        specialhopping.add_distance_cut_interaction(v, h.geometry, Vr,
+                rcut=rcut)
     from ..scftk.densitydensity import obj2geometryarray
     Ua = obj2geometryarray(U,h.geometry)
     n = len(h.geometry.r)
@@ -49,7 +48,7 @@ def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None):
     return v
 
 
-def densitychi_RPA(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,**kwargs):
+def densitychi_RPA(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,rcut=None,**kwargs):
     """Return the density (charge) RPA response function for a
     V1/V2/V3 neighbor-shell (+ onsite U, + optional general Vr(r))
     density-density interaction -- same V1/V2/V3/U/Vr convention as
@@ -59,14 +58,15 @@ def densitychi_RPA(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,**kwargs):
     determined by V1/V2/V3/U/Vr, so it can dress the bare susceptibility of
     any Hamiltonian directly (h can also be an already-converged one, e.g.
     from VJinteraction, if you want the RPA response about that reference
-    state instead)."""
+    state instead). rcut is the range of Vr, as in Vinteraction."""
     from .rpa import chi_AB_RPA
     h1 = h.get_multicell().get_dense()
-    v = _density_v(h1,V1,V2,V3,U,Vr)
+    v = _density_v(h1,V1,V2,V3,U,Vr,rcut=rcut)
     return chi_AB_RPA(h1,V=v,**kwargs)
 
 
-def plasmon_bands(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,qpath=None,nq=20,**kwargs):
+def plasmon_bands(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,qpath=None,nq=20,
+        rcut=None,**kwargs):
     """Return the plasmon/charge-order bands: the poles of the density RPA
     kernel 1 - V(q)*chi0(q,omega) for a V1/V2/V3/U/Vr neighbor-shell
     density-density interaction, scanned along a q-path -- the charge-
@@ -82,11 +82,12 @@ def plasmon_bands(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,qpath=None,nq=20,**kwargs):
     frequency and gammas its residual imaginary part -- signed, so judge
     how sharp/well-defined a mode is by abs(gammas), not gammas directly
     (see rpa.py's _poles_from_chi_matrix docstring). Different q-points can
-    have different numbers of poles, so all three are flat 1D arrays."""
+    have different numbers of poles, so all three are flat 1D arrays. rcut
+    is the range of Vr, as in Vinteraction."""
     from .rpa import rpa_kernel_poles
     from .spinchi import _map_over_q
     h1 = h.get_multicell().get_dense()
-    v = _density_v(h1,V1,V2,V3,U,Vr)
+    v = _density_v(h1,V1,V2,V3,U,Vr,rcut=rcut)
     qpath = h1.geometry.get_kpath(qpath,nk=nq) # generate the q-path
     def f(q):
         return rpa_kernel_poles(h1,V=v,q=q,**kwargs)

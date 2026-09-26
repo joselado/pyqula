@@ -152,6 +152,63 @@ def distance_hopping_matrix(vs,ds):
         return distance_hopping_matrix_jit(r1,r2,vs,ds*ds,out) 
     return mgenerator
 
+def distance_cut_interaction(g,Vr,rcut=None):
+    """The pair interaction Vr(r1,r2) between every pair of sites closer
+    than rcut (a pair at exactly rcut is kept), as a spinless
+    {direction: matrix} dictionary with m[i,j] = Vr(r_i, r_j + R_d)
+
+    rcut=None keeps every pair of a finite (0d) geometry, whatever its
+    distance, and means rcut=5.0 for a periodic one, the range the
+    multicell builder uses by default. An explicit rcut applies in both.
+
+    The multicell builder behind get_hamiltonian(tij=...) keeps a whole
+    lattice cell as soon as one of its pairs is within its rcut, so on its
+    own it returns every pair below rcut plus an uneven fringe beyond it:
+    on the honeycomb lattice it kept 4 of the 6 pairs at distance 5 and
+    4 of the 12 at 5.29, which breaks the three-fold rotation of the
+    lattice. Here every cell that can hold a pair within rcut is built,
+    and then every pair beyond rcut is dropped, so each distance shell is
+    kept or dropped whole."""
+    nd = g.dimensionality
+    if rcut is None:
+        if nd==0: # a finite system has no fringe, every pair is kept
+            hv = g.get_hamiltonian(has_spin=False,is_multicell=True,tij=Vr)
+            return {tuple(int(x) for x in d): np.array(m,dtype=np.complex128)
+                    for d,m in hv.get_hopping_dict().items()}
+        rcut = 5.0
+    rcut = float(rcut)
+    if not rcut>0.:
+        raise ValueError("rcut, the range of the Vr interaction, must be "
+          +"positive, got "+str(rcut))
+    tol = 1e-6 # a shell sitting exactly at rcut is kept whole
+    r = np.array(g.r)
+    if nd>0: # number of cells needed to reach every pair within rcut
+        A = np.array([g.a1,g.a2,g.a3][:nd]) # periodic lattice vectors
+        B = np.linalg.pinv(A) # cell index of a vector R is R@B
+        span = np.max(np.linalg.norm(r[:,None,:]-r[None,:,:],axis=2))
+        ncells = int(np.ceil((rcut+span)*np.max(np.linalg.norm(B,axis=0))))+1
+    else: ncells = 0
+    hv = g.get_hamiltonian(has_spin=False,is_multicell=True,tij=Vr,
+            cutoff=ncells,rcut=rcut+10*tol)
+    out = dict()
+    for d,m in hv.get_hopping_dict().items():
+        d = tuple(int(x) for x in d)
+        R = d[0]*g.a1 + d[1]*g.a2 + d[2]*g.a3
+        dist = np.linalg.norm(r[None,:,:]+R-r[:,None,:],axis=2) # |r_j+R-r_i|
+        m = np.array(m,dtype=np.complex128)
+        m[dist>rcut+tol] = 0.
+        if np.max(np.abs(m))>0. or d==(0,0,0): out[d] = m
+    return out
+
+
+def add_distance_cut_interaction(v,g,Vr,rcut=None):
+    """Add the Vr interaction of distance_cut_interaction to the spinless
+    {direction: matrix} dictionary v, in place, and return v"""
+    for d,m in distance_cut_interaction(g,Vr,rcut=rcut).items():
+        v[d] = v[d] + m if d in v else m
+    return v
+
+
 @jit(nopython=True)
 def distance_hopping_matrix_jit(r1,r2,vs,ds2,out):
     """Return a hopping that to the 1-th neighbor is vs"""

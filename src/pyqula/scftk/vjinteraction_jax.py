@@ -541,7 +541,7 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         J1=0.0, J2=0.0, J3=0.0, Jr=None, J1x=0.0, J1y=0.0, J1z=0.0,
         mf=None, filling=0.5, mu=None, nk=8, maxerror=1e-5, maxite=2000,
         T=None, mix=None, verbose=0, solver="newton",
-        gmres_tol=1e-6, gmres_restart=20, kick_steps=60):
+        gmres_tol=1e-6, gmres_restart=20, kick_steps=60, rcut=None):
     """JAX drop-in for spinspin.VJinteraction (use_jax=True path) -- see the
     module docstring for the scope restriction relative to the full numpy
     engine (normal-state only, dense ED, no constrains). Builds the same
@@ -570,10 +570,10 @@ def VJinteraction_jax(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                 "instead of raising, if not caught here")
     h1 = h0.get_multicell().get_dense()
     nd = h1.geometry.neighbor_distances()  # shared by all three _build_*_v calls
-    vz = _build_v(h1, J1 + J1z, J2, J3, Jr, nd=nd)
-    vd = _build_density_v(h1, V1, V2, V3, U, Vr, nd=nd)
-    vx = _build_v(h1, J1 + J1x, J2, J3, Jr, nd=nd)
-    vy = _build_v(h1, J1 + J1y, J2, J3, Jr, nd=nd)
+    vz = _build_v(h1, J1 + J1z, J2, J3, Jr, nd=nd, rcut=rcut)
+    vd = _build_density_v(h1, V1, V2, V3, U, Vr, nd=nd, rcut=rcut)
+    vx = _build_v(h1, J1 + J1x, J2, J3, Jr, nd=nd, rcut=rcut)
+    vy = _build_v(h1, J1 + J1y, J2, J3, Jr, nd=nd, rcut=rcut)
     vz_exchange = vz  # keep the pure exchange z channel and the density
     vd_reference = vd  # part, for h.Vchannels -- see generic_vjinteraction_jax
     vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()  # fold density-density in

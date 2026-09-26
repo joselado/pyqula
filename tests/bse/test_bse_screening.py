@@ -320,8 +320,10 @@ def test_charge_channel_preserves_spin_rotation_invariance():
     assert same_opp["orbital"] > 1e-3             # orbital: split
     assert same_opp["charge"] < 1e-12             # charge: still equal
 
-    # and the multiplet the spectrum shows
-    spread = lambda b: b.get_energies(4).real[3] - b.get_energies(4).real[0]
+    # and the multiplet the spectrum shows. The lowest exciton level is
+    # eight-fold, a spin singlet and triplet in each of the two valleys;
+    # the orbital channel splits it four and four
+    spread = lambda b: b.get_energies(8).real[7] - b.get_energies(8).real[0]
     assert spread(h.get_bse(V=V, nk=6)) < 1e-10
     assert spread(h.get_bse(V=V, nk=6, screening="rpa",
                             channel="orbital")) > 1e-3

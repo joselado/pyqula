@@ -79,3 +79,80 @@ def test_missing_interaction_is_reported():
     h = geometry.honeycomb_lattice().get_hamiltonian()
     with pytest.raises(ValueError, match="no interaction"):
         bare_interaction(h)
+
+
+def _coulomb(r1, r2):
+    return 0.6 / np.sqrt((r1 - r2).dot(r1 - r2) + 0.25)
+
+
+def _pairs_by_distance(g, W, shift):
+    """Distance of every nonzero pair of a {direction: matrix} interaction,
+    with its value, reading every shift-th row and column (2 for a spinful
+    one, where the four spin blocks of a pair carry the same value)"""
+    out = []
+    for d, m in W.items():
+        R = d[0] * g.a1 + d[1] * g.a2 + d[2] * g.a3
+        n = m.shape[0] // shift
+        for i in range(n):
+            for j in range(n):
+                v = m[shift * i, shift * j]
+                if abs(v) > 1e-12:
+                    out.append((np.linalg.norm(g.r[j] + R - g.r[i]), v))
+    return out
+
+
+def _shell_sizes(g, rmax, ncells=12):
+    """Number of pairs of sites at each distance up to rmax, counted over a
+    region of cells far larger than rmax"""
+    sizes = dict()
+    for i1 in range(-ncells, ncells + 1):
+        for i2 in range(-ncells, ncells + 1):
+            R = i1 * g.a1 + i2 * g.a2
+            for i in range(len(g.r)):
+                for j in range(len(g.r)):
+                    dist = np.linalg.norm(g.r[j] + R - g.r[i])
+                    if 1e-6 < dist < rmax + 1e-6:
+                        key = round(dist, 5)
+                        sizes[key] = sizes.get(key, 0) + 1
+    return sizes
+
+
+@pytest.mark.parametrize("has_spin", [False, True])
+@pytest.mark.parametrize("rcut", [5.0, 7.5])
+def test_the_vr_tail_keeps_whole_distance_shells(has_spin, rcut):
+    """A long-range Vr is kept for every pair up to rcut and for no pair
+    beyond it, with every distance shell complete. The multicell builder
+    alone kept an uneven fringe past its range (4 of the 6 pairs at
+    distance 5 on the honeycomb lattice), which broke the three-fold
+    rotation of the lattice."""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=has_spin)
+    W = density_interaction(h, Vr=_coulomb, rcut=rcut)
+    pairs = _pairs_by_distance(g, W, 2 if has_spin else 1)
+    kept = dict()
+    for dist, v in pairs:
+        assert dist < rcut + 1e-6
+        # the value depends on the distance alone
+        assert abs(v - _coulomb(np.zeros(3), np.array([dist, 0., 0.]))) < 1e-10
+        kept[round(dist, 5)] = kept.get(round(dist, 5), 0) + 1
+    assert kept == _shell_sizes(g, rcut)
+
+
+def test_the_screened_nearest_neighbors_are_equivalent():
+    """The three nearest-neighbor bonds of the honeycomb lattice are
+    related by rotation, so the screened interaction must be the same on
+    all of them; the uneven Vr fringe made them 0.506 and 0.486."""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian()
+    h.add_sublattice_imbalance(1.0)
+    V = density_interaction(h, U=1.0, Vr=_coulomb)
+    W = h.get_screened_interaction(V=V, nk=8).get_dict()
+    nn = [v for dist, v in _pairs_by_distance(g, W, 2) if abs(dist - 1.) < 1e-3]
+    assert len(nn) == 6
+    assert np.max(np.abs(np.array(nn) - nn[0])) < 1e-8
+
+
+def test_a_nonpositive_rcut_is_rejected():
+    h = geometry.honeycomb_lattice().get_hamiltonian()
+    with pytest.raises(ValueError, match="rcut"):
+        density_interaction(h, Vr=_coulomb, rcut=0.)
