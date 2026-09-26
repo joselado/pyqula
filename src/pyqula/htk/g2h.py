@@ -53,6 +53,15 @@ def get_hamiltonian(self,tij=None,has_spin=True,
         mgenerator = tij.f # store the function
         tij = None # and set to None
     if self.dimensionality==3: is_multicell=True
+    # the single-cell storage of 1d and 2d Hamiltonians (inter, tx, ty...)
+    # keeps one direction of each bond and takes the other as its adjoint,
+    # which turns a non-reciprocal hopping (t_ij != t_ji^*) into a
+    # reciprocal one, so a non-Hermitian hopping is built as multicell,
+    # which evaluates both directions
+    if non_hermitian and self.dimensionality in [1,2] \
+            and (tij is not None or mgenerator is not None) \
+            and not spinful_generator:
+        is_multicell = True
     from ..hamiltonians import Hamiltonian
     h = Hamiltonian(self)  # create the object
     h.is_sparse = is_sparse
