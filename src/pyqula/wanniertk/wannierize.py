@@ -329,6 +329,80 @@ def _default_eh_trial_vectors(num_orbitals, particle_hole_perm, particle_hole_op
     return trial_vectors
 
 
+def _default_disentanglement_trial_vectors(hamiltonian_k, kpt_latt, band_indices,
+        num_orbitals, num_wann, dis_window, outside_weight=1e-2, tie_tol=1e-8):
+    """Default (num_orbitals,num_wann) trial projection matrix for a
+    disentangling run: ``num_wann`` of ``h``'s own orbitals, picked
+    deterministically by the column selection of the SCDM method (Damle,
+    Lin and Ying, arXiv:1507.03354; for entangled bands, Damle and Lin,
+    arXiv:1703.06958), a QR decomposition with column pivoting of the
+    weighted target states.
+
+    The target states are the selected bands inside the outer window on the
+    whole wannierization mesh (not only at Gamma, so that a frozen window
+    that misses Gamma still picks the orbitals), weighted by a two-level
+    version of SCDM's quasi-density-matrix weight: 1 inside the frozen
+    window, whose states the optimal subspace has to contain, and
+    ``outside_weight`` elsewhere in the outer window, so that the other
+    states only break ties or complete a frozen window that spans fewer
+    than ``num_wann`` orbitals. Without a frozen window every state in the
+    outer window has weight 1.
+
+    The pivoting runs as a pivoted Cholesky factorization of the Gram
+    matrix ``G = X^dagger X`` of the weighted states ``X`` (same pivots,
+    ``num_orbitals`` wide instead of one row per state), and an orbital
+    within a relative ``tie_tol`` of the largest remaining weight counts as
+    tied, the lowest index winning, so that symmetry-equivalent orbitals
+    (the two sublattices of graphene) do not get picked by rounding noise.
+
+    This replaces a fresh random draw, which seeded the Omega_I
+    minimization in a different local minimum on every call, so that two
+    identical calls returned different spreads and different bands."""
+    eigvals, eigvecs = [], []
+    for k in kpt_latt.T:
+        e, v = np.linalg.eigh(hamiltonian_k(k))
+        eigvals.append(e[band_indices])
+        eigvecs.append(v[:, band_indices])
+    eigvals = np.array(eigvals)  # (num_kpts, num_bands)
+    # the same defaults the disentanglement engine applies to the windows
+    win_min = dis_window["dis_win_min"]
+    win_max = dis_window["dis_win_max"]
+    win_min = float(eigvals.min()) if win_min is None else win_min
+    win_max = float(eigvals.max()) if win_max is None else win_max
+    froz_max = dis_window["dis_froz_max"]
+    froz_min = dis_window["dis_froz_min"]
+    froz_min = win_min if froz_min is None else froz_min
+
+    gram = np.zeros((num_orbitals, num_orbitals), dtype=complex)
+    for e, v in zip(eigvals, eigvecs):
+        in_window = (e >= win_min) & (e <= win_max)
+        if froz_max is None:
+            w = in_window.astype(float)
+        else:
+            frozen = in_window & (e >= froz_min) & (e <= froz_max)
+            w = np.where(frozen, 1.0, np.where(in_window, outside_weight, 0.0))
+        x = v * w  # columns are the weighted states
+        gram += np.conj(x) @ x.T  # sum of |w psi|^2 in the orbital basis
+
+    residual = np.real(np.diag(gram)).copy()
+    factor = np.zeros((num_orbitals, num_wann), dtype=complex)
+    chosen = []
+    for j in range(num_wann):
+        available = [i for i in range(num_orbitals) if i not in chosen]
+        rmax = max(residual[i] for i in available)
+        if rmax <= tie_tol * max(1.0, np.real(np.trace(gram))):
+            i = available[0]  # rank exhausted: the lowest unused orbital
+        else:
+            i = next(i for i in available if residual[i] >= rmax * (1.0 - tie_tol))
+            factor[:, j] = (gram[:, i] - factor[:, :j] @ np.conj(factor[i, :j])) / np.sqrt(residual[i])
+            residual -= np.abs(factor[:, j]) ** 2
+        chosen.append(i)
+    trial_vectors = np.zeros((num_orbitals, num_wann), dtype=complex)
+    for j, i in enumerate(chosen):
+        trial_vectors[i, j] = 1.0
+    return trial_vectors
+
+
 def _mesh_index_of(kpt_latt, targets, atol, on_miss):
     """For each column of ``targets`` (fractional k-points, any real
     values -- not necessarily pre-reduced to ``[0,1)``), the column index
@@ -1033,7 +1107,13 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         Fixed (k-independent) trial projection matrix seeding the CG
         minimization -- default: a random real matrix (fresh, unseeded draw
         each call), used to check that the converged spread/geometry don't
-        depend on the particular trial seed (see ``tests/wannier``).
+        depend on the particular trial seed (see ``tests/wannier``). When
+        disentangling (``num_wann`` below the selected range) the default
+        is instead ``num_wann`` of ``h``'s own orbitals, picked
+        deterministically from the frozen-window states (see
+        :func:`_default_disentanglement_trial_vectors`): the Omega_I
+        minimization has several local minima, and a random seed landed
+        in a different one on every call.
     num_iter, conv_tol, conv_window : optional
         Wannier90 CG minimization parameters, passed through
         ``win_keywords``.
@@ -1300,12 +1380,8 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         elif h.has_eh: # seed with electron-hole-paired trial orbitals, see docstring
             trial_vectors = _default_eh_trial_vectors(
                 num_orbitals, seed_particle_hole_perm, particle_hole_operator)
-        else:
+        elif not disentangling: # a disentangling default is chosen below, from the windows
             trial_vectors = np.random.default_rng().standard_normal((num_orbitals, num_wann))
-    trial_vectors = np.asarray(trial_vectors, dtype=complex)
-    if trial_vectors.shape != (num_orbitals, num_wann):
-        raise ValueError(f"trial_vectors must have shape ({num_orbitals},{num_wann}), "
-                          f"got {trial_vectors.shape}")
 
     mp_grid = _mp_grid(h, nk)
     kpt_latt = _monkhorst_pack(mp_grid)
@@ -1328,6 +1404,15 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         keywords.update({k: v for k, v in dis_window.items() if v is not None})
     if win_keywords:
         keywords.update(win_keywords)
+
+    if trial_vectors is None: # disentangling: deterministic SCDM-style orbitals
+        windows_used = {k: keywords.get(k) for k in dis_window}
+        trial_vectors = _default_disentanglement_trial_vectors(
+            hamiltonian_k, kpt_latt, band_indices, num_orbitals, num_wann, windows_used)
+    trial_vectors = np.asarray(trial_vectors, dtype=complex)
+    if trial_vectors.shape != (num_orbitals, num_wann):
+        raise ValueError(f"trial_vectors must have shape ({num_orbitals},{num_wann}), "
+                          f"got {trial_vectors.shape}")
 
     setup_result, run_result, H_k_mesh, W_k_mesh = _wannierize_one_group(
         seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,

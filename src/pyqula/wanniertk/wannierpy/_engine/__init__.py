@@ -160,7 +160,11 @@ def wannier_run(
         )
         if not dis_converged:
             import warnings
-            warnings.warn("backend='python': disentanglement did not converge within dis_num_iter")
+            warnings.warn("backend='python': disentanglement did not converge within "
+                          f"dis_num_iter={params.dis_num_iter} iterations (relative change "
+                          f"of Omega_I above dis_conv_tol={params.dis_conv_tol:g}); the "
+                          "frozen states are still reproduced exactly, pass a larger "
+                          "dis_num_iter for a converged subspace")
     else:
         u_matrix, M_wann_gauge = overlap_project(A_matrix, M_matrix, kmesh.nnlist, sym=sym)
         u_matrix_opt = np.tile(np.eye(num_wann, dtype=complex)[:, :, None], (1, 1, num_kpts))

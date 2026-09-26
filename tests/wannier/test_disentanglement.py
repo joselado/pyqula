@@ -3,10 +3,11 @@ selected band range, plus an optional frozen inner window) as wired into
 ``get_wannier_hamiltonian``.
 
 These tests assert invariants rather than recorded numbers, because the
-invariants are exactly what disentanglement promises and the numbers are
-not reproducible: the default trial projection is a fresh random draw
-each call and the CG/Z-matrix minimizations land on whichever local
-optimum they find.
+invariants are exactly what disentanglement promises, while the numbers
+depend on which local optimum of Omega_I the Z-matrix iteration lands on.
+The default trial projection is deterministic (orbitals picked from the
+frozen-window states), so the same call gives the same result, which the
+last tests check.
 
 The invariants:
 
@@ -287,3 +288,73 @@ def test_internal_find_u_contracts_window_relative_band_rows():
         caa = u_matrix_opt[:nd, :, k].conj().T @ A_matrix[n0:n0 + nd, :, k]
         Z, _, Vh = np.linalg.svd(caa)
         assert np.allclose(got[:, :, k], Z @ Vh, atol=1e-12)
+
+
+def test_default_disentanglement_is_the_same_on_every_call():
+    """The default trial projection of a disentangling run used to be a
+    fresh random draw, and since Omega_I has several local minima for
+    graphene's pz bands (one Wannier function out of two bands touching
+    at K), two identical calls returned spreads as different as 0.71 and
+    0.91 and visibly different bands near K. The default is now picked
+    deterministically, so two calls must agree to rounding, spread and
+    bands alike, and the frozen states must still be reproduced exactly."""
+    g = geometry.honeycomb_lattice()
+    h = g.get_hamiltonian(has_spin=False)
+    froz_max = -1.0
+
+    def run():
+        return h.get_wannier_hamiltonian(bands=[0, 1], num_wann=1, nk=8,
+                                         dis_froz_max=froz_max, cutoff=0.0)
+
+    with pytest.warns(UserWarning, match="dis_num_iter"):
+        hw1 = run()
+    with pytest.warns(UserWarning, match="dis_num_iter"):
+        hw2 = run()
+
+    assert abs(hw1.wannier_spread_total - hw2.wannier_spread_total) < 1e-10
+    f1, f2 = hw1.get_hk_gen(), hw2.get_hk_gen()
+    for k in np.random.default_rng(0).random((20, 2)): # off the mesh too
+        k3 = np.array([k[0], k[1], 0.0])
+        assert np.allclose(np.linalg.eigvalsh(f1(k3)), np.linalg.eigvalsh(f2(k3)),
+                           atol=1e-10)
+
+    worst, count = _frozen_reproduction_error(_spectra(h, hw1, nk=8, dim=2),
+                                              -np.inf, froz_max)
+    assert count > 0
+    assert worst < 1e-8
+
+
+def test_default_disentanglement_trial_orbitals_come_from_the_frozen_states():
+    """The default trial orbitals are picked by pivoting on the frozen
+    states (SCDM's column selection). In a chain whose three sites have
+    different onsite energies, a frozen window holding only the lowest
+    band has to pick the lowest site first; and for graphene, whose two
+    sublattices carry the same weight, the tie goes to the lowest orbital
+    index instead of to rounding noise."""
+    from pyqula.wanniertk.wannierize import (
+        _default_disentanglement_trial_vectors, _mp_grid, _monkhorst_pack)
+
+    def trial(h, bands, num_wann, window):
+        dim = h.dimensionality
+        hk = h.get_hk_gen()
+        def hamiltonian_k(k):
+            k3 = np.zeros(3)
+            k3[:dim] = k[:dim]
+            return hk(k3)
+        kpt_latt = _monkhorst_pack(_mp_grid(h, 6))
+        n = h.intra.shape[0]
+        dis_window = {"dis_win_min": None, "dis_win_max": None,
+                      "dis_froz_min": None, "dis_froz_max": None}
+        dis_window.update(window)
+        t = _default_disentanglement_trial_vectors(
+            hamiltonian_k, kpt_latt, list(range(bands[0], bands[1] + 1)), n,
+            num_wann, dis_window)
+        return [int(np.argmax(np.abs(t[:, j]))) for j in range(num_wann)]
+
+    h = geometry.chain().supercell(3).get_hamiltonian(has_spin=False)
+    h.add_onsite([0.0, -2.0, 1.0]) # site 1 lowest, then site 0, then site 2
+    assert trial(h, [0, 2], 1, {"dis_froz_max": -2.0})[0] == 1
+
+    g = geometry.honeycomb_lattice()
+    hg = g.get_hamiltonian(has_spin=False)
+    assert trial(hg, [0, 1], 1, {"dis_froz_max": -1.0}) == [0]
