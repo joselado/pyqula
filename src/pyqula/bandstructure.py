@@ -108,7 +108,10 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         full unfiltered set of energies at each k-point.
     """
     if num_bands is not None:
-      if num_bands>(h.intra.shape[0]-1): num_bands=None
+      # ARPACK finds at most N-2 eigenpairs of a complex N x N matrix
+      # (eigsh hands a complex one to eigs, which needs k<N-1), so
+      # N-1 bands used to get past this and raise TypeError there
+      if num_bands>=(h.intra.shape[0]-1): num_bands=None
     if isinstance(operator,(list,)):
         operator = [h.get_operator(o) for o in operator]
     elif operator is not None: operator = h.get_operator(operator)
@@ -125,8 +128,11 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
       h = h.copy()
       h.turn_sparse() # sparse Hamiltonian
       def diagf(m):
-        eig,eigvec = slg.eigsh(m,k=num_bands,which="LM",sigma=central_energy,
-                                    tol=arpack_tol,maxiter=arpack_maxiter)
+        # arpack_eigh rather than eigsh: an operator weight summed over a
+        # degenerate level needs its eigenvectors orthonormal, and eigsh
+        # does not return them so for a complex H(k)
+        eig,eigvec = algebra.arpack_eigh(m,k=num_bands,which="LM",
+                sigma=central_energy,tol=arpack_tol,maxiter=arpack_maxiter)
         if operator is None: return eig
         else: return (eig,eigvec)
     # open file and get generator
@@ -203,10 +209,12 @@ def smalleig(m,numw=10,evecs=False,e0=0.):
   Return the smallest eigenvalues using arpack
   """
   tol = arpack_tol
-  eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=e0,
+  if not evecs: # eigenvalues only
+    return slg.eigsh(m,k=numw,which="LM",sigma=e0,tol=tol,
+                       maxiter=arpack_maxiter,return_eigenvectors=False)
+  eig,eigvec = algebra.arpack_eigh(m,k=numw,which="LM",sigma=e0,
                                   tol=tol,maxiter=arpack_maxiter)
-  if evecs:  return eig,eigvec.transpose()  # return eigenvectors
-  else:  return eig  # return eigenvalues
+  return eig,eigvec.transpose()  # return eigenvectors
 
 
 def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
@@ -224,8 +232,8 @@ def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
   fo = open("BANDS.OUT","w")
   if operator is None: # if there is not an operator
     if h.dimensionality==0:  # dot
-      eig,eigvec = slg.eigsh(csc_matrix(h.intra),k=nbands,which="LM",sigma=0.0,
-                                  tol=arpack_tol,maxiter=arpack_maxiter)
+      eig,eigvec = algebra.arpack_eigh(csc_matrix(h.intra),k=nbands,
+              which="LM",sigma=0.0,tol=arpack_tol,maxiter=arpack_maxiter)
       eigvec = eigvec.transpose() # transpose
       iw = 0
       for i in range(len(eig)):
@@ -253,7 +261,7 @@ def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
       hkgen = h.get_hk_gen() # get generator
       for ik in k:
         hk = hkgen(ik) # get hamiltonians
-        eig,eigvec = slg.eigsh(hk,k=nbands,which="LM",sigma=0.0)
+        eig,eigvec = algebra.arpack_eigh(hk,k=nbands,which="LM",sigma=0.0)
         eigvec = eigvec.transpose() # tranpose the matrix
         if info:  print("Done",ik,end="\r")
         for (e,v) in zip(eig,eigvec): # loop over eigenvectors

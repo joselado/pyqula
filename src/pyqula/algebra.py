@@ -229,6 +229,56 @@ def matrix2vector(v):
 
 
 
+def arpack_eigh(m,k=6,return_eigenvectors=True,v0=None,**kwargs):
+    """scipy's eigsh, returning orthonormal eigenvectors.
+
+    ARPACK has no complex Hermitian driver, so scipy's eigsh hands a
+    complex matrix -- every H(k) away from the time-reversal points, and
+    every H(k) of a supercell -- to the non-Hermitian eigs. Its
+    eigenvectors are exact, but inside a degenerate level they are just
+    some basis of the eigenspace, not an orthonormal one: at the zone
+    center of a 4x4 triangular supercell, with an 8-fold and a 5-fold
+    level, their overlap matrix was 0.65-0.83 away from the identity.
+    Anything summed over states -- an operator weight, a local density
+    sum_n |v_n|^2, an occupied manifold -- then counted the same direction
+    several times. A Rayleigh-Ritz step on the returned subspace makes
+    them orthonormal again without changing the subspace, so the
+    eigenvalues are unchanged. The eigenpairs come out in ascending order.
+
+    The starting vector is a seeded random one unless one is given, see
+    smalleig for why neither an unseeded nor a structured one will do.
+    Every other keyword goes to scipy's eigsh."""
+    if v0 is None: v0 = np.random.RandomState(0).randn(m.shape[0])
+    if not return_eigenvectors:
+        return slg.eigsh(m,k=k,v0=v0,return_eigenvectors=False,**kwargs)
+    es,vs = slg.eigsh(m,k=k,v0=v0,**kwargs)
+    return rayleigh_ritz(m,vs)
+
+
+def rayleigh_ritz(m,vs):
+    """Orthonormal eigenpairs of the Hermitian m within the subspace
+    spanned by the columns of vs, in ascending order of energy. The
+    subspace must be an invariant one of m, as a set of its eigenvectors
+    is, and this is checked: a set that did not span one would come out
+    with eigenpairs that are not eigenpairs of m"""
+    q = np.linalg.qr(np.asarray(vs))[0] # orthonormal basis of the subspace
+    mq = np.asarray(m@q) # m applied to it
+    hq = np.conjugate(q.T)@mq # m in that basis
+    es,ws = dlg.eigh((hq+np.conjugate(hq.T))/2.) # Hermitian by construction
+    vs = q@ws # the eigenvectors, orthonormal
+    residual = np.max(np.abs(mq@ws - vs*es[None,:])) if len(es)>0 else 0.
+    # ARPACK's own tolerance bounds the residual by tol*|m| only, so the
+    # check is relative to |m| (its largest absolute row sum), and loose:
+    # it is there to catch a direction that is no eigenvector at all
+    scale = max(1.,float(np.max(np.abs(csc_matrix(m)).sum(axis=1))))
+    if residual>1e-3*scale:
+        raise ValueError("ARPACK returned vectors that do not span an "
+                "invariant subspace (largest residual "+str(residual)+
+                "); tighten its tolerance or ask for fewer states")
+    return es,vs
+
+
+
 def smalleig(m,numw=10,evecs=False,e0=0.,tol=arpack_tol):
     """
     Return the smallest eigenvalues using arpack
@@ -247,13 +297,16 @@ def smalleig(m,numw=10,evecs=False,e0=0.,tol=arpack_tol):
     # antisymmetric-sector eigenspaces -- deterministic but wrong. A
     # seeded random vector keeps runs reproducible without that blind
     # spot (probability zero of exact alignment with any symmetry
-    # subspace).
-    v0 = np.random.RandomState(0).randn(m.shape[0])
+    # subspace). That seeding fixes *which* subspace comes back when a
+    # level is cut; arpack_eigh, which puts the same seeded vector in
+    # place, also makes the vectors orthonormal *within* it, which the
+    # eigs driver that eigsh uses for a complex matrix does not.
     try:
-        eig,eigvec = slg.eigsh(m,k=numw,which="LM",sigma=e0,
-                                        tol=tol,v0=v0)
-        if evecs:  return eig,eigvec.transpose()  # return eigenvectors
-        else:  return eig  # return eigenvalues
+        if not evecs: # eigenvalues only, nothing to orthonormalize
+            return arpack_eigh(m,k=numw,which="LM",sigma=e0,tol=tol,
+                                        return_eigenvectors=False)
+        eig,eigvec = arpack_eigh(m,k=numw,which="LM",sigma=e0,tol=tol)
+        return eig,eigvec.transpose()  # return eigenvectors
     except:
         print("Switch to dense")
         if m.shape[0]>maxsize: raise

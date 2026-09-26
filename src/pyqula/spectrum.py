@@ -107,8 +107,9 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
     es_batch,ws_batch = peigh(hks) # batched numba eigh
   for ik,(x,y) in enumerate(xys):
       if not h.is_sparse: evals,waves = es_batch[ik],ws_batch[ik] # eigenvalues
-      else: evals,waves = slg.eigsh(hk_gen(ks[ik]),k=max(np.abs(nindex))*2,sigma=0.0,
-             tol=arpack_tol,which="LM") # eigenvalues
+      else: evals,waves = algebra.arpack_eigh(hk_gen(ks[ik]),
+              k=max(np.abs(nindex))*2,sigma=0.0,tol=arpack_tol,
+              which="LM") # orthonormal in degenerate levels
       waves = waves.transpose() # transpose
       epos,wfpos = [],[] # positive
       eneg,wfneg = [],[] # negative

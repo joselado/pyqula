@@ -33,7 +33,10 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         or "imag" it carries the single part that was asked for.
     """
     if num_bands is not None:
-      if num_bands>(h.intra.shape[0]-1): num_bands=None
+      # ARPACK's eigs finds at most N-2 eigenpairs of an N x N matrix
+      # (it needs k<N-1), so N-1 bands used to get past this and raise
+      # TypeError there
+      if num_bands>=(h.intra.shape[0]-1): num_bands=None
     if isinstance(operator,(list,)):
         operator = [h.get_operator(o) for o in operator]
     elif operator is not None: operator = h.get_operator(operator)

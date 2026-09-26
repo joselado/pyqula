@@ -14,7 +14,8 @@ arpack_maxiter = 10000
 
 def diagonalize(intra,n=20,e=0.0,mode="arpack"):
   if mode=="arpack":
-    eig,eigvec = slg.eigsh(csc_matrix(intra),k=n,which="LM",sigma=e,
+    from .algebra import arpack_eigh # orthonormal in degenerate levels
+    eig,eigvec = arpack_eigh(csc_matrix(intra),k=n,which="LM",sigma=e,
                                   tol=arpack_tol,maxiter=arpack_maxiter)
   else:
     eig,eigvec = lg.eigh(csc_matrix(intra).todense())

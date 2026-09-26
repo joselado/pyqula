@@ -109,8 +109,9 @@ def ldos0d_wf(h,e=0.0,delta=0.01,num_wf = 10,robust=False,tol=0):
     eig,eigvec = slg.eigs(intra,k=int(num_wf),which="LM",
                         sigma=e+1j*delta,tol=tol) 
     eig = eig.real # real part only
-  else: # Hermitic Hamiltonian
-    eig,eigvec = slg.eigsh(intra,k=int(num_wf),which="LM",sigma=e,tol=tol) 
+  else: # Hermitic Hamiltonian, orthonormal in degenerate levels
+    eig,eigvec = algebra.arpack_eigh(intra,k=int(num_wf),which="LM",
+                                         sigma=e,tol=tol)
   d = np.array([0.0 for i in range(intra.shape[0])]) # initialize
   for (v,ie) in zip(eigvec.transpose(),eig): # loop over wavefunctions
     v2 = (np.conjugate(v)*v).real # square of wavefunction
@@ -131,8 +132,9 @@ def ldos_arpack(intra,num_wf=10,robust=False,tol=0,e=0.0,delta=0.01):
     eig,eigvec = slg.eigs(intra,k=int(num_wf),which="LM",
                         sigma=e+1j*delta,tol=tol) 
     eig = eig.real # real part only
-  else: # Hermitic Hamiltonian
-    eig,eigvec = slg.eigsh(intra,k=int(num_wf),which="LM",sigma=e,tol=tol) 
+  else: # Hermitic Hamiltonian, orthonormal in degenerate levels
+    eig,eigvec = algebra.arpack_eigh(intra,k=int(num_wf),which="LM",
+                                         sigma=e,tol=tol)
   d = np.array([0.0 for i in range(intra.shape[0])]) # initialize
   for (v,ie) in zip(eigvec.transpose(),eig): # loop over wavefunctions
     v2 = (np.conjugate(v)*v).real # square of wavefunction
@@ -561,7 +563,7 @@ def ldos_finite(h,e=0.0,n=10,nwf=4,delta=0.0001):
     m[i][i+1] = inter
     m[i+1][i] = interH
   m = bmat(m) # convert to matrix
-  (ene,wfs) = slg.eigsh(m,k=nwf,which="LM",sigma=0.0) # diagonalize
+  (ene,wfs) = algebra.arpack_eigh(m,k=nwf,which="LM",sigma=0.0) # diagonalize
   wfs = wfs.transpose() # transpose wavefunctions
   dos = (wfs[0].real)*0.0 # calculate dos
   for (ie,f) in zip(ene,wfs): # loop over waves

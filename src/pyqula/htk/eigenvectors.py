@@ -21,7 +21,7 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
   if numw is not None: sparse = True
   if h.dimensionality==0:
     if not sparse: vv = algebra.eigh(h.intra)
-    if sparse: vv = slg.eigsh(csc(h.intra),k=numw,
+    if sparse: vv = algebra.arpack_eigh(csc(h.intra),k=numw,
             which="LM",sigma=energy,tol=1e-5)
     vecs = np.array([v for v in vv[1].transpose()])
     if kpoints: return vv[0],vecs,np.array([[0.,0.,0.] for e in vv[0]])
@@ -49,7 +49,8 @@ def get_eigenvectors(h,nk=10,kpoints=False,k=None,sparse=False,
         return eigvals,eigvecs
     # sparse Hamiltonians, eigsh may return a different number of
     # eigenstates per k-point, so they are unpacked one by one
-    fk = lambda k: slg.eigsh(csc(f(k)),k=numw,which="LM",sigma=energy,tol=1e-5)
+    fk = lambda k: algebra.arpack_eigh(csc(f(k)),k=numw,which="LM",
+            sigma=energy,tol=1e-5) # orthonormal in degenerate levels
     vvs = parallel.pcall(fk,kp)
     nume = sum([len(v[0]) for v in vvs]) # number of eigenvalues calculated
     eigvecs = np.zeros((nume,h.intra.shape[0]),dtype=np.complex128) # eigenvectors

@@ -15,8 +15,9 @@ def states_generator(h,filt=None,max_waves=None):
         if max_waves is None: 
             es,wfs = algebra.eigh(hk) # diagonalize all waves
         else:  
-            es,wfs = slg.eigsh(csc_matrix(hk),k=max_waves,which="SA",
-                        sigma=0.0,tol=arpack_tol,maxiter=arpack_maxiter)
+            es,wfs = algebra.arpack_eigh(csc_matrix(hk),k=max_waves,
+                        which="SA",sigma=0.0,tol=arpack_tol,
+                        maxiter=arpack_maxiter) # orthonormal states
 #        es,wfs = algebra.eigh(hk) # diagonalize all waves
         wfs = np.conjugate(wfs).T
         # now filter positive and negative energies
@@ -57,8 +58,9 @@ def occupied_states(hkgen,k,window=None,max_waves=None,nocc=None):
     ones below zero energy, the ones inside window, or the lowest nocc"""
     hk = hkgen(k) # get hamiltonian
     if max_waves is None: es,wfs = algebra.eigh(hk) # diagonalize all waves
-    else:  es,wfs = slg.eigsh(csc_matrix(hk),k=max_waves,which="SA",
-                        sigma=0.0,tol=arpack_tol,maxiter=arpack_maxiter)
+    else:  es,wfs = algebra.arpack_eigh(csc_matrix(hk),k=max_waves,
+                        which="SA",sigma=0.0,tol=arpack_tol,
+                        maxiter=arpack_maxiter) # orthonormal states
     wfs = np.conjugate(wfs.transpose()) # wavefunctions
     if nocc is not None: # the lowest nocc states, whatever their energy
         if not 0<nocc<=len(es):
