@@ -41,10 +41,10 @@ repository take it further:
   `wannier/`, `classicalspin/`, `latticegas/`, `latticeising/`, `spinon/`,
   `kondolattice/`, `minimal/` and `readme_examples/`), most of them ending
   in a figure. Most sections below point at the relevant ones
-- `jupyter-notebooks/functionalities/` holds 53 executed notebooks, one per
-  feature, grouped the same way as the README's functionality list
-  (single-particle Hamiltonians, mean field, topology, spectral functions,
-  KPM, Wannierization, transport). Each carries its physics discussion and
+- `jupyter-notebooks/functionalities/` holds one executed notebook for each
+  entry of the README's functionality list, grouped the same way
+  (single-particle Hamiltonians, mean field, topology, response functions,
+  spectral functions, KPM, Wannierization, transport, classical models). Each carries its physics discussion and
   its output plots inline, so they are the place to look for what a result
   should actually look like
 

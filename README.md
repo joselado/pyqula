@@ -63,13 +63,12 @@ build is at [documentation/user_guide.pdf](documentation/user_guide.pdf).
 Jupyter notebooks with tutorials can be found in the links below
 
 In this repository:
-- [`jupyter-notebooks/`](jupyter-notebooks) -- eleven step-by-step notebooks
+- [`jupyter-notebooks/`](jupyter-notebooks): eleven step-by-step notebooks,
   building up from lattice structure and band structure through
   self-consistency, Chern insulators, Jackiw-Rebbi solitons and quantum-dot
   modes
-- [`jupyter-notebooks/functionalities/`](jupyter-notebooks/functionalities) --
-  53 executed notebooks, matching the FUNCTIONALITIES list below -- 53 of its
-  79 bullets carry a link to theirs; the rest have no notebook yet
+- [`jupyter-notebooks/functionalities/`](jupyter-notebooks/functionalities):
+  one executed notebook for each entry of the FUNCTIONALITIES list below
 
 From the ["Advanced Quantum Materials course at Aalto University 2025"](https://github.com/joselado/Advanced_Quantum_Materials_2025)
 - [Electronic structure theory](https://github.com/joselado/Advanced_Quantum_Materials_2025/blob/main/jupyter-notebooks/session3.ipynb)
@@ -97,59 +96,63 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Momentum-resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/05_momentum_resolved_spectral_functions.ipynb)
 - Local and full operator-resolved density of states [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/06_operator_resolved_dos.ipynb)
 - 0d, 1d, 2d and 3d tight binding models [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/07_0d_1d_2d_3d_models.ipynb)
-- Non-Hermitian Hamiltonians (gain/loss, non-reciprocal hopping), with complex-spectrum band structures, density of states, LDOS and Berry curvature
-- Electronic structure unfolding in supercells, diagonal or general non-orthogonal ones such as sqrt(3)xsqrt(3), in one, two and three dimensions, by exact diagonalization or with the kernel polynomial method for large supercells [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
-- Twisted bilayer graphene structural relaxation (GSFE + elastic energy minimization, AA-region shrinkage and AB/BA domain formation below a few degrees of twist)
-- Energy-resolved spin splitting of collinear magnets and altermagnets, either as a broadened density or as the maximum over the whole Brillouin zone
-- Nonlinear Drude spin conductivity at arbitrary order in the electric field, whose lowest nonvanishing order identifies the X-wave index (p, d, f, g, i) of an altermagnet without any spin-orbit coupling, together with the X-wave tight-binding models themselves
+- Electronic structure unfolding in supercells [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb)
+- Non-Hermitian Hamiltonians [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/09_non_hermitian_hamiltonians.ipynb)
+- Structural relaxation of twisted bilayer graphene [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/10_twisted_bilayer_relaxation.ipynb)
+- Spin splitting of collinear magnets and altermagnets [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/11_altermagnet_spin_splitting.ipynb)
+- Nonlinear spin conductivity and the X-wave index of altermagnets [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/12_nonlinear_spin_conductivity.ipynb)
 
 ## Interacting mean-field Hamiltonians ##
 - Selfconsistent mean-field calculations with local/non-local interactions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/01_local_nonlocal_scf.ipynb)
 - Both collinear and non-collinear formalism [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/02_collinear_noncollinear.ipynb)
-- Direct spin-spin (Heisenberg-like) exchange mean field, SzSz/SxSx/SySy and combined anisotropic exchange, simultaneously with density-density interactions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/03_spin_spin_exchange.ipynb)
+- Spin-spin exchange mean field, including anisotropic exchange [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/03_spin_spin_exchange.ipynb)
 - Anomalous mean-field for non-collinear superconductors [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/04_anomalous_mf_sc.ipynb)
 - Full selfconsistency with all Wick terms for non-collinear superconductors [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/05_full_wick_noncollinear_sc.ipynb)
 - Constrained and unconstrained mean-field calculations [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/06_constrained_unconstrained.ipynb)
 - Automatic identification of order parameters for symmetry broken states [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/07_order_parameter_identification.ipynb)
 - Hermitian and non-Hermitian mean-field calculations [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/08_hermitian_nonhermitian.ipynb)
-- Random phase approximation many-body response functions, for interactions beyond onsite (spin and density/charge channels) [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/09_rpa_beyond_onsite.ipynb)
-- RPA collective modes (magnon bands, plasmon/charge-order bands) and Stoner/RPA instability detection [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/10_rpa_collective_modes.ipynb)
-- KPM (Chebyshev)-based mean-field SCF for large/sparse systems, avoiding diagonalization of the Bloch Hamiltonian [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/11_kpm_scf.ipynb)
-- JAX-derivative-based mean-field SCF solvers (Newton, matrix-free Newton-Krylov, matrix-free Levenberg-Marquardt residual minimization), differentiating through the self-consistency loop instead of plain mixing [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/12_jax_scf_solvers.ipynb)
-- Abrikosov-pseudofermion (RVB spinon) mean-field theory for spin-1/2 Heisenberg models, with the local one-fermion-per-site constraint enforced at every site individually [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/13_spinon_rvb.ipynb)
-- Abrikosov-pseudofermion (Read-Newns) mean-field theory for the Kondo lattice / periodic Anderson model (heavy fermions), with self-consistent hybridization and a per-site local-moment constraint [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/14_kondo_lattice.ipynb)
-- Superfluid weight of BdG Hamiltonians, split into conventional and quantum-geometric contributions (flat-band superconductivity), with the BKT temperature from the Nelson-Kosterlitz criterion
-- Spin-triplet d-vector of a BdG Hamiltonian and its non-unitarity vector $q = i(d \times d^*)$, the spin moment of the Cooper pairs, per site or as a real-space map
-- Excitons from the Bethe-Salpeter equation on top of mean field (full non-Tamm-Dancoff, at any exciton momentum), with binding energies, electron-hole amplitudes and exciton band structures
-- Magnons from time-dependent Hartree-Fock, i.e. the spin-flip channel of the same Bethe-Salpeter equation, for neighbor-shell as well as onsite density-density interactions and for exchange interactions with their transverse part, with an exact Goldstone mode as the built-in check
-- GPU execution of the heavy kernels behind one switch (`gpu.set_gpu(True)`): the RPA response kernel shared by the spin/charge susceptibilities, IETS maps and RPA magnon bands, the KPM Chebyshev moments, and the batched dense diagonalization over a k-mesh, in single or double precision (`chi_prec`, `kpm_prec`, `eigh_prec`)
-- Magnons from a pair-basis ladder, keeping the interaction's pair index so that a neighbor-shell density-density interaction, or an exchange interaction, enters the transverse spin response properly, frequency-resolved and without needing a gapped reference
-- Matrix-free and quantics-tensor-train Bethe-Salpeter solvers, which never build the dense BSE matrix: an exactly factorized kernel with an iterative eigensolver, and a quantics MPO solved by DMRG whose cost grows logarithmically with the k-mesh
-- Static RPA screened interaction computed from the mean-field bands, with the dielectric matrix built in the charge channel as in GW (spin-rotation invariant), usable as the direct-term kernel of the Bethe-Salpeter equation (GW-BSE style, with cRPA as an option) or on its own
+- Random phase approximation many-body response functions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/09_rpa_beyond_onsite.ipynb)
+- RPA collective modes and instability detection [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/10_rpa_collective_modes.ipynb)
+- Chebyshev-based mean-field calculations for large systems [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/11_kpm_scf.ipynb)
+- Mean-field solvers with automatic differentiation [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/12_jax_scf_solvers.ipynb)
+- Spinon mean-field theory of quantum spin models [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/13_spinon_rvb.ipynb)
+- Mean-field theory of Kondo lattices and heavy fermions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/14_kondo_lattice.ipynb)
+- Superfluid weight of superconductors and its quantum geometry [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/15_superfluid_weight.ipynb)
+- Non-unitarity of spin-triplet superconductors [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/16_dvector_nonunitarity.ipynb)
+- Excitons from the Bethe-Salpeter equation [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/17_excitons_bse.ipynb)
+- Magnons from time-dependent Hartree-Fock [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/18_magnons_tdhf.ipynb)
+- Magnons from a pair-basis ladder [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/19_magnons_pair_ladder.ipynb)
+- Matrix-free and tensor-network Bethe-Salpeter solvers [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/20_bse_matrix_free_qtt.ipynb)
+- Static RPA screened interaction [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/21_screened_interaction.ipynb)
+- GPU execution of the heavy kernels [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/22_gpu_execution.ipynb)
 
 ## Topological characterization ##
-- Berry phases, Berry curvatures, Chern numbers (from the Berry curvature or from the winding of the hybrid Wannier centers), spin Chern numbers that survive Rashba coupling, mirror Chern numbers and Z2 invariants, of insulators and of time-reversal-symmetric superconductors, the quadrupole moment of higher-order topological insulators from nested Wilson loops, the strong and weak Z2 indices and the Chern vector in three dimensions, and in one dimension the winding number of chiral chains and the Z2 invariant of helical superconducting wires [[notebook]](jupyter-notebooks/functionalities/topological_characterization/01_chern_z2.ipynb)
+- Berry phases, Berry curvatures, Chern numbers and Z2 invariants [[notebook]](jupyter-notebooks/functionalities/topological_characterization/01_chern_z2.ipynb)
 - Operator-resolved Chern numbers and Berry density [[notebook]](jupyter-notebooks/functionalities/topological_characterization/02_operator_resolved_chern.ipynb)
 - Frequency resolved topological density [[notebook]](jupyter-notebooks/functionalities/topological_characterization/03_frequency_resolved_topological_density.ipynb)
 - Spatially resolved topological flux [[notebook]](jupyter-notebooks/functionalities/topological_characterization/04_spatially_resolved_topological_flux.ipynb)
 - Real-space Chern density for amorphous systems [[notebook]](jupyter-notebooks/functionalities/topological_characterization/05_real_space_chern_amorphous.ipynb)
-- Multiorbital/multiband (non-Abelian) quantum geometric tensor and quantum metric [[notebook]](jupyter-notebooks/functionalities/topological_characterization/06_quantum_geometric_tensor.ipynb)
+- Non-Abelian quantum geometric tensor and quantum metric [[notebook]](jupyter-notebooks/functionalities/topological_characterization/06_quantum_geometric_tensor.ipynb)
 - Wilson loop and Green's function formalism [[notebook]](jupyter-notebooks/functionalities/topological_characterization/07_wilson_green_formalism.ipynb)
-- Free-fermion entanglement entropy and Li-Haldane entanglement spectrum from the correlation matrix, with the chiral spectral flow of a Chern insulator obtained from the bulk alone
+- Spin Chern and mirror Chern numbers [[notebook]](jupyter-notebooks/functionalities/topological_characterization/08_spin_mirror_chern.ipynb)
+- Quadrupole moment of higher-order topological insulators [[notebook]](jupyter-notebooks/functionalities/topological_characterization/09_quadrupole_moment.ipynb)
+- Strong and weak Z2 indices in three dimensions [[notebook]](jupyter-notebooks/functionalities/topological_characterization/10_z2_three_dimensions.ipynb)
+- Winding numbers and Z2 invariants in one dimension [[notebook]](jupyter-notebooks/functionalities/topological_characterization/11_one_dimensional_invariants.ipynb)
+- Entanglement entropy and entanglement spectrum [[notebook]](jupyter-notebooks/functionalities/topological_characterization/12_entanglement.ipynb)
 
 ## Response functions ##
-- Optical (frequency-dependent) conductivity tensor from the Kubo-Greenwood formula, giving optical absorption, the magneto-optical Kerr/Faraday response, and a DC Hall response quantized to the Chern number
-- Drude weight and the optical f-sum rule
-- Charge-charge (density-density) response function, and its RPA form for an onsite/neighbor-shell interaction
-- Generic operator-operator response function, for an arbitrary pair of operators
-- RKKY interaction between magnetic impurities, resolved in real space
+- Optical conductivity from the Kubo-Greenwood formula [[notebook]](jupyter-notebooks/functionalities/response_functions/01_optical_conductivity.ipynb)
+- Drude weight and the optical f-sum rule [[notebook]](jupyter-notebooks/functionalities/response_functions/02_drude_weight_f_sum_rule.ipynb)
+- Charge-charge response function and its RPA form [[notebook]](jupyter-notebooks/functionalities/response_functions/03_charge_response.ipynb)
+- Response functions between arbitrary operators [[notebook]](jupyter-notebooks/functionalities/response_functions/04_operator_response.ipynb)
+- RKKY interaction between magnetic impurities [[notebook]](jupyter-notebooks/functionalities/response_functions/05_rkky.ipynb)
 
 ## Spectral functions ##
 - Spectral functions in infinite geometries [[notebook]](jupyter-notebooks/functionalities/spectral_functions/01_spectral_infinite.ipynb)
 - Surface spectral functions for semi-infinite systems [[notebook]](jupyter-notebooks/functionalities/spectral_functions/02_surface_spectral_semiinfinite.ipynb)
 - Interfacial spectral function in semi-infinite junctions [[notebook]](jupyter-notebooks/functionalities/spectral_functions/03_interfacial_spectral_junctions.ipynb)
 - Single impurities in infinite systems [[notebook]](jupyter-notebooks/functionalities/spectral_functions/04_single_impurities_infinite.ipynb)
-- Real-space quasiparticle interference (QPI) maps from explicit impurities in a supercell
+- Quasiparticle interference maps [[notebook]](jupyter-notebooks/functionalities/spectral_functions/07_qpi_maps.ipynb)
 - Green's function renormalization algorithm [[notebook]](jupyter-notebooks/functionalities/spectral_functions/05_green_renormalization.ipynb)
 - Operator and momentum resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/spectral_functions/06_operator_momentum_resolved.ipynb)
 
@@ -159,32 +162,31 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Locally resolved expectation values [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/03_locally_resolved_expectation_values.ipynb)
 - Operator resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/04_operator_resolved_spectral_functions.ipynb)
 - Reaching system sizes up to 10000000 atoms on a single-core laptop [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/05_kpm_large_systems.ipynb)
-- GPU-accelerated (JAX) batched Chebyshev moment evaluation via `kpm_cpugpu="GPU"`
 
 ## Wannierization ##
 - Maximally-localized Wannier functions for a selected range of bands [[notebook]](jupyter-notebooks/functionalities/wannierization/01_maximally_localized_wannier.ipynb)
-- Exact reproduction of the selected band subspace on the wannierization mesh [[notebook]](jupyter-notebooks/functionalities/wannierization/02_exact_reproduction.ipynb)
-- Souza-Marzari-Vanderbilt band disentanglement, with outer and frozen energy windows
-- Point-group symmetry-enforced Wannierization, with rejection of band selections that slice through a symmetry-related degeneracy [[notebook]](jupyter-notebooks/functionalities/wannierization/03_symmetry_enforced_wannierization.ipynb)
+- Exact reproduction of the selected bands on the Wannier mesh [[notebook]](jupyter-notebooks/functionalities/wannierization/02_exact_reproduction.ipynb)
+- Band disentanglement with outer and frozen energy windows [[notebook]](jupyter-notebooks/functionalities/wannierization/05_band_disentanglement.ipynb)
+- Point-group symmetry-enforced Wannierization [[notebook]](jupyter-notebooks/functionalities/wannierization/03_symmetry_enforced_wannierization.ipynb)
 - Works for 0d, 1d, 2d and 3d periodic Hamiltonians, including Nambu/BdG [[notebook]](jupyter-notebooks/functionalities/wannierization/04_dimensionality_and_bdg.ipynb)
 
 ## Quantum transport ##
 - Metal-metal transport [[notebook]](jupyter-notebooks/functionalities/quantum_transport/01_metal_metal_transport.ipynb)
 - Metal-superconductor transport [[notebook]](jupyter-notebooks/functionalities/quantum_transport/02_metal_superconductor_transport.ipynb)
-- Transport through an arbitrary finite (0d) central region contacted by two 1D leads [[notebook]](jupyter-notebooks/functionalities/quantum_transport/03_finite_central_region_two_leads.ipynb)
+- Transport through a finite central region between two leads [[notebook]](jupyter-notebooks/functionalities/quantum_transport/03_finite_central_region_two_leads.ipynb)
 - Fully non-collinear Nambu basis [[notebook]](jupyter-notebooks/functionalities/quantum_transport/04_noncollinear_nambu_basis.ipynb)
 - Non-equilibrium Green's function formalism [[notebook]](jupyter-notebooks/functionalities/quantum_transport/05_negf_formalism.ipynb)
 - Operator-resolved transport [[notebook]](jupyter-notebooks/functionalities/quantum_transport/06_operator_resolved_transport.ipynb)
 - Differential decay rate [[notebook]](jupyter-notebooks/functionalities/quantum_transport/07_differential_decay_rate.ipynb)
 - Tunneling and contact scanning probe spectroscopy [[notebook]](jupyter-notebooks/functionalities/quantum_transport/08_tunneling_contact_probe.ipynb)
-- Multiple Andreev reflection and AC-Josephson current between two superconductors (Floquet-Keldysh formalism), including a superconducting local (STM-like) probe [[notebook]](jupyter-notebooks/functionalities/quantum_transport/09_mar_ac_josephson_sc_probe.ipynb)
+- Multiple Andreev reflection and the AC Josephson effect [[notebook]](jupyter-notebooks/functionalities/quantum_transport/09_mar_ac_josephson_sc_probe.ipynb)
 
 ## Classical spin models and lattice-gas Monte Carlo ##
-- Classical Heisenberg spin models with arbitrary exchange couplings
-- Local energy minimization and spatially resolved magnetization textures
-- Lattice-gas Monte Carlo with configurable site-site interactions, simulated annealing, and grand-canonical (fluctuating filling) sampling
-- Ising model Monte Carlo (single-spin-flip Metropolis and magnetization-conserving Kawasaki dynamics), with simulated annealing and multistart optimization
-- Density-density/spin-spin correlators and structure factor, and thermodynamic quantities (specific heat, susceptibility) from equilibrium sampling
+- Classical Heisenberg spin models with arbitrary exchange couplings [[notebook]](jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/01_classical_heisenberg.ipynb)
+- Local energy minimization and magnetization textures [[notebook]](jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/02_magnetization_textures.ipynb)
+- Lattice-gas Monte Carlo with configurable interactions [[notebook]](jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/03_lattice_gas_monte_carlo.ipynb)
+- Ising model Monte Carlo [[notebook]](jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/04_ising_monte_carlo.ipynb)
+- Correlators, structure factors and thermodynamics from sampling [[notebook]](jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/05_correlators_thermodynamics.ipynb)
 
 # EXAMPLES #
 A variety of examples can be found in pyqula/examples. Short examples are shown below

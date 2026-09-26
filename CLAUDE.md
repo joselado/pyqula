@@ -173,6 +173,14 @@ guards.
   (and `README.md`'s FUNCTIONALITIES list where relevant) to describe it. **Load the `user-guide-voice`
   skill before writing a single sentence of it** — prose written without it reads like a language model
   wrote it, which is the whole failure that skill exists to prevent.
+- **README's FUNCTIONALITIES list is brief, and every bullet has a notebook.** A bullet is a short noun
+  phrase in the maintainer's style ("Metal-superconductor transport", "Real-space Chern density for
+  amorphous systems"), and the bullet together with its `[[notebook]]` link fits on one rendered line:
+  75 characters of text at most, with no parenthetical lists, keyword names or "with ..." tails.
+  The detail goes in the opening paragraph of the notebook. Every bullet links to its own executed
+  notebook in `jupyter-notebooks/functionalities/<section>/`, so a new bullet comes with a new notebook.
+  In those notebooks, show at least one heatmap (a color map over k-space, real space, $(k,\omega)$ or a
+  parameter plane) instead of, or besides, a line plot whenever the physics allows one.
 - `future_development/` holds maintainer-facing roadmaps for work that is planned, partially done, or
   scoped-but-not-started, with the measurements and dead ends that led to each conclusion recorded so
   they don't have to be re-derived. Check it before starting work in an area it covers, and add to it

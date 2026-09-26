@@ -19,6 +19,22 @@ motivation, a runnable code snippet, and -- for anything with a method on `Hamil
 `Geometry` -- an entry in the "Main functions and methods" reference at the end of the
 guide.
 
+## README's FUNCTIONALITIES list
+
+The maintainer's bullets are the model: 3 to 8 words, one noun phrase, no parentheses, no
+keyword names ("Metal-superconductor transport", "Frequency resolved topological density").
+
+- A bullet and its `[[notebook]]` link fit on one rendered line, so the text stays at
+  75 characters at most. Cut parenthetical lists, backticked keywords and "with/including/
+  together with" tails. The cut detail becomes the opening paragraph of the notebook.
+- Every bullet links to its own executed notebook in
+  `jupyter-notebooks/functionalities/<section>/`. A new feature bullet comes with a new
+  notebook, never without one. Two bullets for the same feature become one.
+- In the notebook, show at least one heatmap (a color map over k-space, real space,
+  $(k,\omega)$ or a parameter plane) instead of, or besides, a line plot whenever the
+  physics allows one.
+- Do not re-voice the maintainer's own bullets; fix a typo at most.
+
 ## What VOICE.md covers, so you know what you are missing without it
 
 - **Who is speaking to whom**: the maintainer writing to a physicist who wants to compute
