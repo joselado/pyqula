@@ -62,8 +62,10 @@ def test_unfolding_recovers_the_primitive_chain_dispersion(tmp_path, monkeypatch
 
 def test_unfolded_kdos_peaks_on_the_primitive_chain_dispersion(tmp_path,
                                                                monkeypatch):
-    """get_kdos_bands computes the same unfolded spectral function through
-    the Green's function instead of the eigenvectors, so it must peak where
+    """get_kdos_bands turns the same unfolded weights into a spectral
+    function, broadening each right eigenstate at the real part of its
+    energy (its default, see test_biorthogonal_spectral_function.py for
+    the Green's function one), so it must peak where
     the unfolded band sits: at each k inside the energy window, the KDOS
     maximum must land on E(k) = 2t cos(k) to within one point of the energy
     mesh. It must also be non-negative, being a spectral weight."""

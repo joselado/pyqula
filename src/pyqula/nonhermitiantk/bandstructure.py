@@ -13,7 +13,7 @@ arpack_maxiter = 10000
 
 def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                     callback=None,central_energy=0.0,nk=400,
-                    ewindow=None,eigmode="complex",
+                    ewindow=None,eigmode="complex",biorthogonal=False,
                     output_file="BANDS.OUT",write=True,
                     silent=True):
     """
@@ -31,7 +31,23 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         real and the imaginary part in two columns (k, Re e, Im e, ...)
         rather than dropping half of the eigenvalue; with eigmode="real"
         or "imag" it carries the single part that was asked for.
+
+    biorthogonal: how an operator weighs each eigenstate. False (the
+        default) takes the right eigenvector alone, <R_n|A|R_n>/<R_n|R_n>,
+        which is real for a Hermitian A. True takes the left eigenvector
+        too, <L_n|A|R_n>/<L_n|R_n>, which is complex in general, and whose
+        sum over the states is Tr A exactly; it is the weight that the
+        Green's function (w - H)^-1 = sum_n |R_n><L_n|/(w - E_n) gives
+        each pole. The left eigenvectors are taken as the rows of R^-1, R
+        the matrix of right eigenvectors, which keeps them biorthonormal to
+        the right ones inside a degenerate level as well; close to an
+        exceptional point R is ill conditioned and these weights grow
+        large and cancel between the states that coalesce.
     """
+    if biorthogonal and num_bands is not None:
+        raise NotImplementedError("the biorthogonal weights need every "
+                "left eigenvector, which the ARPACK path (num_bands) does "
+                "not compute; leave num_bands out")
     if num_bands is not None:
       # ARPACK's eigs finds at most N-2 eigenpairs of an N x N matrix
       # (it needs k<N-1), so N-1 bands used to get past this and raise
@@ -70,6 +86,12 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         if callback is not None: callback(k,es) # call the function
       else:
         es,ws = diagf(hk)
+        if num_bands is None: # the dense eig, see orthonormal_levels
+            ws = orthonormal_levels(algebra.todense(hk),es,ws)
+        if biorthogonal: # <L_n|A|R_n>, the left vectors the rows of R^-1
+            rinv = algebra.inv(algebra.todense(ws)) # biorthonormal to R
+            ops = operator if isinstance(operator,(list,)) else [operator]
+            wlr = [biorthogonal_weights(A,ws,rinv,kpath[k]) for A in ops]
         ws = ws.transpose() # transpose eigenvectors
         def evaluate(w,k,A): # evaluate the operator
             if type(A)==operators.Operator:
@@ -81,10 +103,11 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                 waw = A(w) # call the operator
             else: waw = braket_wAw(w,A).real # calculate expectation value
             return waw # return the result
-        for (e,w) in zip(es,ws):  # loop over waves
+        for (n,(e,w)) in enumerate(zip(es,ws)):  # loop over waves
             if callable(ewindow):
                 if not ewindow(e): continue # skip iteration
-            if isinstance(operator, (list,)): # input is a list
+            if biorthogonal: waws = [wA[n] for wA in wlr]
+            elif isinstance(operator, (list,)): # input is a list
                 waws = [evaluate(w,k,A) for A in operator]
             else: waws = [evaluate(w,k,operator)]
             oi = [k,e] # create list
@@ -112,3 +135,45 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
       with open(output_file,"w") as f: np.savetxt(f,out.T) # write in file
     return esk
 
+
+
+
+def biorthogonal_weights(A,R,rinv,k):
+    """The biorthogonal weights (R^-1 A R)_nn of the operator A on the
+    eigenstates whose right eigenvectors are the columns of R, rinv being
+    R^-1, whose rows are the left eigenvectors normalized to <L_n|R_n>=1"""
+    if isinstance(A,operators.Operator): AR = A(R,k=k) # A on every column
+    elif callable(A): AR = A(R,k=k)
+    else: AR = A@R # a matrix
+    AR = np.asarray(algebra.todense(AR))
+    return np.sum(np.asarray(rinv)*AR.T,axis=1) # the diagonal of R^-1 A R
+
+
+
+def orthonormal_levels(m,es,vs,tol=1e-10):
+    """Right eigenvectors that are orthonormal inside every degenerate
+    level of m that has a basis of them.
+
+    scipy's eig returns some basis of a degenerate eigenspace, not an
+    orthonormal one, so that the right eigenvector weights <R|A|R>/<R|R>
+    of a level added up to more or less than its weight, Tr of A on the
+    eigenspace: in the Hermitian limit a level of weight 4 came out 4.17.
+    Any combination of the vectors of a level is an eigenvector too, so
+    they are replaced by an orthonormal basis of their span, which leaves
+    the weight of the level independent of the basis. This is done only
+    where the new vectors are still eigenvectors: at an exceptional point
+    the vectors that eig returns for the coalescing states are nearly
+    parallel, and an orthonormal basis of their span is not made of
+    eigenvectors, so such a level is left as it is"""
+    es = np.asarray(es) ; vs = np.array(vs)
+    scale = max(1.,np.max(np.abs(es))) if len(es)>0 else 1.
+    done = np.zeros(len(es),dtype=bool)
+    for i in range(len(es)):
+        if done[i]: continue
+        level = np.where(np.abs(es-es[i])<tol*scale)[0] # this level
+        done[level] = True
+        if len(level)<2: continue # nothing to orthonormalize
+        q = np.linalg.qr(vs[:,level])[0] # orthonormal basis of the span
+        e0 = np.mean(es[level])
+        if np.max(np.abs(m@q - e0*q))<1e-8*scale: vs[:,level] = q
+    return vs

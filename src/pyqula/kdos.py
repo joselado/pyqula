@@ -185,7 +185,7 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
                  P = None,
                  ewindow=4.0,delta=0.01,ntries=10,nk=100,
                  operator=None,energies=np.linspace(-3.0,3.0,200),
-                 mode="ED",**kwargs):
+                 mode="ED",biorthogonal=False,**kwargs):
     """Calculate the KDOS bands using the KPM.
 
     Every mode returns the trace -Im Tr[O G(k,E)]/pi, the spectral weight
@@ -201,7 +201,31 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
     space. It used to be accepted here and never forwarded, so the output
     was the unprojected one and was byte-identical with and without it.
     With frand or P the KPM result is an average over the vectors drawn,
-    not a trace."""
+    not a trace.
+
+    biorthogonal: which spectral function of a non-Hermitian Hamiltonian,
+    where the two definitions in use differ. False (the default, mode="ED"
+    only) weighs each eigenstate by its right eigenvector,
+    <R_n|O|R_n>/<R_n|R_n>, with a Lorentzian of width delta at Re E_n.
+    True is the Green's function one, -Im Tr[O G]/pi with
+    G = (w + i delta - H)^-1, which is sum_n <L_n|O|R_n>/<L_n|R_n> over
+    poles at the complex E_n, so that a state with Im E_n < 0 is broadened
+    by its lifetime (Kozii and Fu, arXiv:1708.05841, Eq. 24); it is what
+    mode="green" computes, and mode="ED" gives the same numbers from the
+    left and right eigenvectors. A Hermitian Hamiltonian has one spectral
+    function and ignores the keyword."""
+    if h.non_hermitian: # two spectral functions, and no Chebyshev one
+        if mode=="KPM" or use_kpm:
+            raise NotImplementedError("the KPM kdos expands in Chebyshev "
+                    "polynomials of a Hermitian matrix and cannot take a "
+                    "non-Hermitian Hamiltonian; use mode='ED' or "
+                    "mode='green'")
+        if mode=="green" and not biorthogonal:
+            raise ValueError("the Green's function of a non-Hermitian "
+                    "Hamiltonian gives the biorthogonal spectral function, "
+                    "sum_n <L_n|O|R_n> over its complex poles; pass "
+                    "biorthogonal=True to ask for it, or use mode='ED' for "
+                    "the one weighted by the right eigenvectors")
     if use_kpm: mode ="KPM" # conventional method
     if frand is not None and mode!="KPM": # nothing to do with it here
         raise ValueError("frand is the KPM random-vector generator, and is "
@@ -226,8 +250,10 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
         # failure mode the rest of this codebase's pcall->prange migration
         # was built to avoid.
         from .dostk.eigtodos import calculate_dos
+        if biorthogonal and h.non_hermitian: # -Im Tr[O G]/pi, pole by pole
+            return kdos_biorthogonal(h,kpath,operator,energies,delta,**kwargs)
         bout = h.get_bands(kpath=kpath,operator=operator,write=False,**kwargs)
-        kidx = bout[0].astype(int) # k-index per row
+        kidx = np.real(bout[0]).astype(int) # k-index per row
         es_col = bout[1] # energy per row
         w_col = bout[2] if len(bout)>2 else None # operator weight per row, if any
         out = [] # (energies,dos) pair per kpoint, matching the old pfun contract
@@ -290,7 +316,12 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
         if P is None and frand is None: y = y*hk.shape[0]
         return (x,y)
       out = parallel.pcall(pfun,kpath) # compute all
-    ### Now compute and write in a file
+    return write_kdos_bands(kpath,out)
+
+
+def write_kdos_bands(kpath,out):
+    """Write the (energies,kdos) pair of every kpoint to KDOS_BANDS.OUT,
+    and return its three columns: position along the path, energy, kdos"""
     ik = 0
     fo = open("KDOS_BANDS.OUT","w") # open file
     for k in kpath: # loop over kpoints
@@ -303,6 +334,30 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
       ik += 1
     fo.close()
     return np.genfromtxt("KDOS_BANDS.OUT").T
+
+
+def kdos_biorthogonal(h,kpath,operator,energies,delta,**kwargs):
+    """The biorthogonal spectral function of a non-Hermitian Hamiltonian,
+    -Im Tr[O G]/pi with G = (w + i delta - H)^-1, from its eigenstates:
+    sum_n w_n/(w + i delta - E_n) with w_n = <L_n|O|R_n>/<L_n|R_n> (one
+    without an operator) and E_n complex, which is mode="green" pole by
+    pole (see kdos_bands)"""
+    if kwargs.get("eigmode","complex")!="complex":
+        raise ValueError("the biorthogonal spectral function needs the "
+                "complex eigenvalues, whose imaginary part broadens each "
+                "state, so it takes no eigmode='"+str(kwargs["eigmode"])+"'")
+    bout = h.get_bands(kpath=kpath,operator=operator,write=False,
+            biorthogonal=True,**kwargs)
+    kidx = np.real(bout[0]).astype(int) # k-index per row
+    energies = np.array(energies,dtype=float)
+    out = [] # (energies,kdos) per kpoint
+    for ik in range(len(kpath)):
+        mask = kidx==ik
+        es = bout[1][mask] # complex eigenvalues
+        ws = bout[2][mask] if len(bout)>2 else np.ones(len(es)) # weights
+        g = ws[None,:]/(energies[:,None] + 1j*delta - es[None,:]) # poles
+        out.append((energies,-np.sum(g,axis=1).imag/np.pi))
+    return write_kdos_bands(kpath,out)
 
 
 

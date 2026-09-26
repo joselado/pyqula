@@ -15,5 +15,12 @@ def get_dos(self,mode="ED",use_kpm=False,**kwargs):
                 "mode='ED'; '"+str(mode)+"' assumes a real spectrum "
                 "(the KPM and adaptive modes expand in Chebyshev "
                 "polynomials of a Hermitian matrix)")
+    if kwargs.get("biorthogonal",False):
+        # get_bands would return the complex biorthogonal weights, and the
+        # Lorentzian sum below keeps their real part at Re E only, which is
+        # neither of the two spectral functions
+        raise NotImplementedError("the non-Hermitian DOS weighs the states "
+                "by their right eigenvectors only; the biorthogonal "
+                "spectral function is in h.get_kdos_bands(biorthogonal=True)")
     return get_dos_general(self,mode="ED",**kwargs)
 

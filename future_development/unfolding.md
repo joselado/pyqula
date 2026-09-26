@@ -5,7 +5,7 @@ k-resolved observable, and each of those routines computes its answer in
 several modes. This records a check of the operator through every mode, the
 repairs it led to, the three pieces built after it (orthonormal ARPACK
 eigenvectors, unfolding with the KPM, and the primitive-cell mesh for any
-supercell), and the one question left open.
+supercell), and the non-Hermitian spectral function in its two definitions.
 
 ## What was checked and found right
 
@@ -193,22 +193,58 @@ predates the work here and was left alone.
   `nunfold` whose square is the number of primitive cells.
 - `get_bands(num_bands=N-1)` and `get_fermi_surface(mode="lowest",
   num_waves=N-1)` fall back to a full diagonalization instead of raising.
+- On a non-Hermitian Hamiltonian, `get_kdos_bands(mode="green")` needs
+  `biorthogonal=True` and `mode="KPM"` raises; operator weights of the
+  default right-eigenvector kdos and bands changed at exactly degenerate
+  levels, where they depended on the basis `eig` happened to return.
 
-## What is open
+## The two spectral functions of a non-Hermitian Hamiltonian
 
-- **The non-Hermitian unfolded spectral function has two definitions.** The
-  `ED` kdos weights each right eigenvector by $\langle R|O|R\rangle$ and
-  places a Lorentzian of width $\delta$ at $\mathrm{Re}\,E$. The `green`
-  kdos takes $\mathrm{Tr}[O\,G]$, which is the biorthogonal
-  $\langle L|O|R\rangle$ with the full complex pole. They agree only when
-  the spectrum is real, and they disagree with no operator at all once
-  $\mathrm{Im}\,E\neq0$, so this is a property of the non-Hermitian
-  `kdos_bands` that unfolding exposes, not an unfolding bug. Which one is
-  "the" unfolded spectral function of a non-Hermitian supercell is a
-  formalism call that wants a reference. Neither mode was changed.
-  `tests/nonhermitian/test_unfolding_non_hermitian.py`'s second docstring
-  says it goes through the Green's function, but it runs the default `ED`
-  mode.
-- Found in passing, not unfolding-specific: `get_dos(mode="adaptive",
+The `ED` kdos weighed each right eigenvector by $\langle R|O|R\rangle$ with
+a Lorentzian of width $\delta$ at $\mathrm{Re}\,E$; the `green` kdos took
+$-\mathrm{Im}\,\mathrm{Tr}[O\,G]/\pi$, which is
+$\sum_n\langle L_n|O|R_n\rangle/\langle L_n|R_n\rangle$ over poles at the
+complex $E_n$. They agreed only for a real spectrum, and disagreed with no
+operator at all once $\mathrm{Im}\,E\neq0$. Both are in use. The Green's
+function one is the spectral function of an effective non-Hermitian
+Hamiltonian of finite-lifetime quasiparticles, $A=-\mathrm{Im}\,\mathrm{Tr}
+(G^R-G^A)$ with $G^R=(\omega-H)^{-1}$, Lorentzians at $\mathrm{Re}\,E$ of width
+$|\mathrm{Im}\,E|$ (Kozii and Fu, arXiv:1708.05841, Eq. 24). The right-right
+and the biorthogonal left-right expectation values are the two conventions
+of non-Hermitian quantum mechanics, and which one is physical is argued in
+both directions (arXiv:2303.05956 reviews it). The maintainer chose to keep
+both, with the right-eigenvector one as the default so that no existing
+output moved.
+
+`get_kdos_bands(biorthogonal=True)` is the Green's function one: `mode="ED"`
+computes it pole by pole from the eigenstates, the left eigenvectors taken
+as the rows of $R^{-1}$ so that they stay biorthonormal to the right ones
+inside a degenerate level, and `mode="green"` from the Green's function;
+the two agree to 1e-10. `mode="green"` on a non-Hermitian Hamiltonian
+raises without the keyword, so that a change of mode never changes the
+definition, and `mode="KPM"` raises for any non-Hermitian Hamiltonian.
+`get_bands(biorthogonal=True)` returns the complex weights
+$(R^{-1}OR)_{nn}$, which add up to $\mathrm{Tr}\,O$ at every kpoint, and
+refuses `num_bands` (ARPACK does not return the left vectors);
+`get_dos(biorthogonal=True)` refuses rather than keep the real part of the
+complex weights. Near an exceptional point $R$ is ill conditioned and the
+biorthogonal weights of the coalescing states grow large and cancel.
+
+Writing the Hermitian-limit test turned up a bug in the default: scipy's
+`eig` returns some basis of a degenerate level, not an orthonormal one, so
+the right-eigenvector weights of a level of weight 4 summed to 4.17 where
+the folded bands of a clean supercell meet. `orthonormal_levels` replaces
+the vectors of a degenerate level by an orthonormal basis of their span,
+only where that basis still consists of eigenvectors, so that an
+exceptional point, whose coalescing vectors are nearly parallel, is left
+alone. Pinned in `tests/nonhermitian/test_biorthogonal_spectral_function.py`:
+ED against green, the uniform-loss chain against the analytic Lorentzians
+of width $\delta+\gamma$ (biorthogonal) and $\delta$ (right), the weights
+against the trace and against the right ones without loss, and the
+refusals.
+
+## Found in passing
+
+- Not unfolding-specific: `get_dos(mode="adaptive",
   write=False)` raises `TypeError` because `adaptive_dos` forwards `write=`
   to `get_bands` a second time.

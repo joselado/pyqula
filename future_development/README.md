@@ -167,9 +167,10 @@ already reached once.
   level double counted), an exact KPM route to unfolding from the primitive
   Bloch states as start vectors (the KITE construction), and a Fermi-surface
   and QPI mesh drawn in the primitive zone and mapped with $M$, for any
-  supercell. It lists the user-visible changes. Still open: which of two
-  definitions is the unfolded spectral function of a non-Hermitian
-  supercell.
+  supercell. It also records the two spectral functions of a non-Hermitian
+  Hamiltonian (right-eigenvector weights, the default, and the biorthogonal
+  Green's-function one of Kozii and Fu, now both available and consistent
+  across modes), and lists the user-visible changes.
 
 - [`unreferenced_modules.md`](unreferenced_modules.md) -- the dead-module
   cleanup: how "unreferenced" was actually established (an AST walk of every

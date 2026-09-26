@@ -1355,6 +1355,53 @@ onsite energy is largest, as one would expect.
 `"complex"` and `"real"` give the same density of states there and `"imag"`
 gives the distribution of decay rates instead.
 
+## The two spectral functions of a non-Hermitian Hamiltonian
+
+We will now see why a non-Hermitian Hamiltonian has two momentum-resolved spectral
+functions, and how to ask `h.get_kdos_bands()` for either. In a Hermitian system an
+eigenstate is its own dual, so weighing it by an operator is unambiguous. A non-Hermitian
+one has right eigenvectors $|R_n\rangle$ and left eigenvectors $\langle L_n|$ that are
+different, and the weight of a state can be taken with the right eigenvector alone,
+$\langle R_n|O|R_n\rangle/\langle R_n|R_n\rangle$, or with both,
+$\langle L_n|O|R_n\rangle/\langle L_n|R_n\rangle$. The first is the default of
+`h.get_kdos_bands()`: each state is a Lorentzian of width `delta` at the real part of its
+energy, with a weight that is positive for a positive operator, which is the picture of the
+band structure one usually draws. The second is what the Green's function gives
+
+$$
+A(\vec k,\omega) = -\frac{1}{\pi}\,\mathrm{Im}\,\mathrm{Tr}\left[O\,(\omega+i\delta-H_{\vec k})^{-1}\right]
+= -\frac{1}{\pi}\,\mathrm{Im}\sum_n \frac{\langle L_n|O|R_n\rangle/\langle L_n|R_n\rangle}{\omega+i\delta-E_n}
+$$
+
+meaning that a state whose energy has an imaginary part $\mathrm{Im}\,E_n<0$ is broadened
+by it, its finite lifetime, which is how an effective non-Hermitian Hamiltonian describes
+quasiparticles that decay, and the spectral function an ARPES measurement of such
+quasiparticles sees. `biorthogonal=True` asks for it
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.chain().get_supercell(4,store_primal=True) # supercell of a chain
+h = g.get_hamiltonian(has_spin=False,non_hermitian=True) # non-Hermitian Hamiltonian
+h.add_onsite(lambda r: -0.3j*(1.+np.cos(np.pi*r[0]/2.))) # modulated loss
+kpath = g.get_unfolded_kpath(nk=100) # primitive k-path, in supercell coordinates
+(k,e,d) = h.get_kdos_bands(operator="unfold",kpath=kpath,
+        biorthogonal=True) # unfolded Green's-function spectral function
+```
+
+Compared with the default, each unfolded band comes out broader and lower, by the loss of
+the states it is made of. `mode="green"` computes the same numbers from the Green's function
+directly, which is why it refuses a non-Hermitian Hamiltonian unless `biorthogonal=True` is
+passed, so that changing the mode never changes which spectral function comes out, and
+`mode="KPM"` refuses one altogether, for the reason `h.get_dos()` does. The two spectral
+functions agree when the spectrum is real, and they differ in two ways otherwise: the Green's
+function one carries the lifetime of each state, and its weight can be negative for a state
+with gain, $\mathrm{Im}\,E_n>0$, whose pole sits on the wrong side of the real axis. Close to
+an exceptional point, where two eigenvectors coalesce, the biorthogonal weights of the two
+states grow large and cancel each other, and only their sum is meaningful.
+`h.get_bands(operator=...,biorthogonal=True)` returns those weights state by state, complex
+in general, adding up to the trace of the operator at every k-point.
+
 ## What is and is not available
 
 The band structure, the density of states, the LDOS and the Berry curvature
@@ -5247,6 +5294,8 @@ Optional arguments:
   `"imag"` (see "Non-Hermitian Hamiltonians"). With `"complex"` the written
   `BANDS.OUT` carries `k`, `Re E`, `Im E` and then the operator columns
 
+- biorthogonal=False: non-Hermitian Hamiltonians only, weigh each state by $\langle L|O|R\rangle/\langle L|R\rangle$ instead of by its right eigenvector (see "The two spectral functions of a non-Hermitian Hamiltonian")
+
 Without `kpath` the path is $\Gamma$-M for a square-like 2D lattice,
 $\Gamma$-K-M-K'-$\Gamma$ for a triangular-like one, and
 $\Gamma$-X-M-$\Gamma$-R for a 3D one; the 3D path leaves the $k_3=0$
@@ -5270,6 +5319,8 @@ Optional arguments:
 - frand=None: generator of the random vectors the KPM stochastic trace
   draws. Only the KPM path uses them, so passing it without `mode="KPM"`
   raises `ValueError`
+
+- biorthogonal=False: non-Hermitian Hamiltonians only, the Green's-function spectral function instead of the right-eigenvector one, and required by `mode="green"` (see "The two spectral functions of a non-Hermitian Hamiltonian")
 
 Returns k-path fraction, energy and spectral weight
 
