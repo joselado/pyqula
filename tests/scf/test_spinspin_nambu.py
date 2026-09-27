@@ -229,7 +229,14 @@ def test_vjinteraction_v_only_on_nambu_matches_vinteraction():
     un-extracted Nambu-sized density matrix for a BdG Hamiltonian, silently
     reading the wrong entries -- giving a total energy that was not even
     consistent between a primitive cell and a supercell of the same
-    system (see test_vjinteraction_nambu_supercell_consistency)."""
+    system (see test_vjinteraction_nambu_supercell_consistency).
+
+    Seeded: from mf="random" the VJinteraction loop does not converge
+    within maxite from every random start, and unseeded the start depends
+    on how many random numbers the tests before this one drew, so running
+    tests/scf as a whole failed here while the file alone passed (also on
+    the code before 2026-09-27; seeds 0-7 all converge to the same gap)."""
+    np.random.seed(0)
     g = geometry.bichain()
     h0 = g.get_hamiltonian()
 

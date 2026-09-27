@@ -7,7 +7,7 @@ Each localized moment is represented as S_j = 1/2 f_j^dagger sigma f_j
 f_j^dagger f_j = 1, and exchange-coupled to a conduction electron at the
 same site through the Coqblin-Schrieffer Kondo interaction. Following
 P. Coleman, "Heavy Fermions: electrons at the edge of magnetism",
-arXiv:cond-mat/0612006, Sec. III.C ("The Large N Kondo Lattice", Eq.
+arXiv:cond-mat/0612006, Sec. II.C ("The Large N Kondo Lattice", Eq.
 65-99), this is decoupled in the large-N (here N=2, spin-1/2) saddle-point
 approximation into a self-consistent hybridization field
 V_j = -(J/2) <f_j^dagger c_j> (a composite fermion, "half electron, half
@@ -64,7 +64,7 @@ this is the same approximation level Coleman's review presents as the
 standard Kondo-lattice mean field theory (the Read-Newns path integral,
 Eq. 80-81); it does not capture magnetism or superconductivity (both
 explicitly listed among the large-N approach's known limitations in the
-review's Sec. III.D), nor the combined Kondo-Heisenberg (RKKY + Kondo,
+review's Sec. II.D), nor the combined Kondo-Heisenberg (RKKY + Kondo,
 Eq. 133-134) model, which needs a Nambu-doubled SU(2) gauge theory and is
 out of scope here."""
 import numpy as np

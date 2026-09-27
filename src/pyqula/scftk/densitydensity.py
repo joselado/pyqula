@@ -243,6 +243,37 @@ def dm_sparse_pairs(v,ds,n,has_spin=True):
     return pairs
 
 
+def add_pair_interaction(v,g,Vr,rcut=None):
+    """Add the pair interaction Vr(r_i,r_j) of every pair of sites up to
+    rcut (specialhopping.distance_cut_interaction) to the interaction
+    dictionary v of a mean-field calculation, in place, and return v.
+
+    v stores half of the interaction of each pair, which is how V1/V2/V3
+    are stored (V1/2 on every first-neighbor entry) and U (U/2 on each of
+    the two up-down entries of a site): the decoupling (get_mf_normal)
+    visits every pair from both of its ends, through v[d] and v[-d], and
+    so counts it twice. Vr is halved here for the same reason, so that a
+    Vr equal to V1 on the first-neighbor shell is V1. It used to be stored
+    whole, which made the mean field of Vr the one of 2*Vr, twice the Vr
+    of bsetk.interaction.density_interaction and chitk.densitychi. The
+    exchange tail Jr goes through here as well, with the same meaning."""
+    from .. import specialhopping
+    for d,m in specialhopping.distance_cut_interaction(g,Vr,rcut=rcut).items():
+        v[d] = v[d] + m/2. if d in v else m/2.
+    return v
+
+
+def require_hermitian(h,what):
+    """Refuse a non-Hermitian Hamiltonian in a mean-field backend that has
+    no biorthogonal counterpart: only exact diagonalization builds the
+    biorthogonal density matrix (densitymatrix.biorthogonal_dm)"""
+    if getattr(h,"non_hermitian",False):
+        raise NotImplementedError(what+" needs a Hermitian Hamiltonian; a "
+                "non-Hermitian one is solved with its biorthogonal density "
+                "matrix, which only exact diagonalization builds: use "
+                "integration=\"ed\" (the default) without use_jax")
+
+
 def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     """Get the density matrix.
 
@@ -259,6 +290,7 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     path never sees it, so nothing needs to know which kwargs are safe for
     which backend other than this function itself."""
     if integration=="qtci":
+        require_hermitian(h,"integration=\"qtci\"")
         from ..qtcitk.densitymatrix_qtci import get_dm_qtci
         return get_dm_qtci(h,v,nk=nk,tolerance=tolerance,**kwargs)
     elif integration=="ed":
@@ -289,19 +321,24 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
 
 
 def get_mf(v,dm,has_eh=False,compute_anomalous=True,
-        compute_normal=True,**kwargs):
+        compute_normal=True,non_hermitian=False,**kwargs):
     """Get the mean field matrix.
 
     has_eh=True (BdG/Nambu Hamiltonian) delegates to superscf.get_mf_bdg,
     which combines the normal (Hartree+Fock) and anomalous (pairing)
     decoupling of the interaction into one self-contained step -- see its
     docstring for why both are needed. has_eh=False is the plain
-    Hartree-Fock decoupling, get_mf_normal below."""
+    Hartree-Fock decoupling, get_mf_normal below, which takes a
+    biorthogonal density matrix with non_hermitian=True."""
     if has_eh:
+        if non_hermitian:
+            raise NotImplementedError("the mean field of a non-Hermitian "
+                    "Hamiltonian is only implemented for a normal-state "
+                    "(non-Nambu) one")
         from .superscf import get_mf_bdg
         return get_mf_bdg(v,dm,compute_anomalous=compute_anomalous,
                 compute_normal=compute_normal,**kwargs)
-    else: return get_mf_normal(v,dm,**kwargs) # no BdG Hamiltonian
+    else: return get_mf_normal(v,dm,non_hermitian=non_hermitian,**kwargs)
 
 
 
@@ -332,12 +369,46 @@ def get_mf_normal_core(v,dm,keys,term_ii,term_jj,term_ij,dag,
 
 
 def get_mf_normal(v,dm,compute_dd=True,add_dagger=True,
-        compute_cross=True):
-    """Get the mean field"""
+        compute_cross=True,non_hermitian=False):
+    """Get the mean field. non_hermitian=True takes dm as the biorthogonal
+    density matrix of a non-Hermitian Hamiltonian, see
+    get_mf_normal_biorthogonal"""
+    if non_hermitian:
+        return get_mf_normal_biorthogonal(v,dm,compute_dd=compute_dd,
+                add_dagger=add_dagger,compute_cross=compute_cross)
     def dag(m): return m.T.conjugate()
     return get_mf_normal_core(v,dm,v.keys(),normal_term_ii,normal_term_jj,
             normal_term_ij,dag,compute_dd=compute_dd,
             add_dagger=add_dagger,compute_cross=compute_cross)
+
+
+def get_mf_normal_biorthogonal(v,dm,compute_dd=True,add_dagger=True,
+        compute_cross=True):
+    """Hartree-Fock mean field from the biorthogonal density matrix of a
+    non-Hermitian Hamiltonian (densitymatrix.biorthogonal_dm), whose
+    expectation values <c^dag_i c_j> are those of Brody's biorthogonal
+    quantum mechanics (arXiv:1308.2609, Eq. (27)).
+
+    The Hartree terms and the Fock term of the bond d are those of
+    get_mf_normal. What changes is the Fock term of the opposite bond -d:
+    get_mf_normal writes it as the Hermitian conjugate of the term of d,
+    which uses <c^dag_j c_i> = <c^dag_i c_j>^*, true for a Hermitian
+    density matrix and not for a biorthogonal one. It is computed here
+    from the density matrix instead, with normal_term_ji, which reduces to
+    that conjugate when dm is Hermitian and v real. The mean field that
+    comes out is not Hermitian in general."""
+    zero = dm[(0,0,0)]*0.0
+    mf = {d: zero for d in v.keys()} # initialize
+    for d in v.keys(): # loop over directions
+        d2 = (-d[0],-d[1],-d[2]) # minus this direction
+        if compute_cross: # the Fock terms of d and of -d
+            mf[d] = mf[d] + normal_term_ij(v[d],dm[d2])
+            if add_dagger:
+                mf[d2] = mf[d2] + normal_term_ji(v[d],dm[d])
+        if compute_dd: # the Hartree terms
+            mf[(0,0,0)] = mf[(0,0,0)] + normal_term_ii(v[d],dm[(0,0,0)])
+            mf[(0,0,0)] = mf[(0,0,0)] + normal_term_jj(v[d2],dm[(0,0,0)])
+    return mf
 
 
 
@@ -371,10 +442,20 @@ def electron_dimension(h):
     return n//2 if h.has_eh else n # undo the Nambu doubling
 
 
-def get_dc_energy(v,dm):
-    """Compute double counting energy"""
+def get_dc_energy(v,dm,non_hermitian=False):
+    """Compute double counting energy. non_hermitian=True takes dm as a
+    biorthogonal density matrix, where the Fock product
+    <c^dag_i c_j><c^dag_j c_i> is not |<c^dag_i c_j>|^2, and returns the
+    real part of the complex double counting"""
     out = 0.0
     dm00 = dm[(0,0,0)]
+    if non_hermitian:
+        n = np.diag(dm00) # biorthogonal occupations, complex in general
+        for d in v:
+            d2 = (-d[0],-d[1],-d[2])
+            out -= n@v[d]@n # Hartree, as in get_dc_energy_jit
+            out += np.sum(v[d]*dm[d]*dm[d2].T) # Fock, without conjugation
+        return out.real
     for d in v: # loop over interactions
         out += get_dc_energy_jit(v[d],dm00,dm[d])
     return out.real
@@ -464,7 +545,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
       # return the mean field
       mf = get_mf(v,dm,compute_cross=compute_cross,compute_dd=compute_dd,
               has_eh=h0.has_eh,compute_anomalous=compute_anomalous,
-              compute_normal=compute_normal) 
+              compute_normal=compute_normal,non_hermitian=h0.non_hermitian)
       if callback_mf is not None:
           mf = callback_mf(mf) # callback for the mean field
       t2 = time.perf_counter() # time
@@ -617,12 +698,14 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
                 "SxSx, SySy) "
                 "takes a single scalar filling, got %r" % (filling,))
     if use_jax:
+        require_hermitian(h,"use_jax=True")
         from .densitydensity_jax import densitydensity_jax
         return densitydensity_jax(h,filling=filling,mu=mu,verbose=verbose,
                 **kwargs)
     # read, not consumed: generic_densitydensity below still gets its own T
     T = kwargs.get("T",1e-7) # temperature, same default as that function
     integration = kwargs.get("integration","ed") # density-matrix backend
+    if integration=="qtci": require_hermitian(h,"integration=\"qtci\"")
     h = h.get_multicell()
     h = h.get_dense()
     def callback_h(h):
@@ -695,7 +778,7 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
             # electron_dimension, not h.intra.shape[0]: N = filling*(number
             # of electron states), which is not the Nambu-doubled dimension
             etot += h.fermi*electron_dimension(h)*filling # add the Fermi energy
-    etot += get_dc_energy(scf.v,dm_dc) # add the double counting energy
+    etot += get_dc_energy(scf.v,dm_dc,non_hermitian=h.non_hermitian) # add the double counting energy
     if h.has_eh and kwargs.get("compute_anomalous",True):
         # the pairing part of the interaction energy, which the band
         # energy also counts twice (see get_dc_energy_anomalous)
@@ -862,7 +945,7 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
             mgenerator=mgenerator) 
     v = hv.get_hopping_dict() # hopping dictionary
     if Vr is not None: # every pair within rcut, whole distance shells
-      specialhopping.add_distance_cut_interaction(v,h.geometry,Vr,rcut=rcut)
+      add_pair_interaction(v,h.geometry,Vr,rcut=rcut) # halved, as V1
     U = obj2geometryarray(U,h.geometry) # convert to array
     reject_spinless_U(h,U)
     if h.has_spin: #raise # not implemented

@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 # Abrikosov-pseudofermion (Read-Newns) mean-field theory for the Kondo
 # lattice / periodic Anderson model -- the standard minimal model of heavy
 # fermion compounds. Follows P. Coleman, "Heavy Fermions: electrons at the
-# edge of magnetism", arXiv:cond-mat/0612006, Sec. III.C (Eq. 65-99): each
+# edge of magnetism", arXiv:cond-mat/0612006, Sec. II.C (Eq. 65-99): each
 # localized moment is represented as S_j = 1/2 f_j^dagger sigma f_j
 # (Abrikosov pseudofermions, one per site of the conduction-electron
 # geometry, offset in z), exchange-coupled to the conduction electron at

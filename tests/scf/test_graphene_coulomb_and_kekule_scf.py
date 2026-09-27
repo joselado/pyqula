@@ -32,7 +32,15 @@ def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatc
     5 (22 of the 24 at 5.0, and partial shells out to 7.55). The new value
     was checked against the old builder with the tail cut by hand: at a
     range of 4.9, where the old builder keeps whole shells, the two agree
-    to every digit."""
+    to every digit.
+
+    Re-recorded a third time when the mean field started taking Vr as the
+    interaction of each pair, as it takes V1 (tests/scf/test_vr_per_pair.py):
+    it used to store Vr whole where it stores V1/2, so that it solved
+    2*Vr. The reference before it, 140.48297096853287, is the one of that
+    doubled interaction; the new one, 136.51565546396182, is what the old
+    code gives for Vr/2, to every digit, and the exchange splitting halves
+    with it, from 0.0078 to 0.0039."""
     monkeypatch.chdir(tmp_path)
     g = geometry.triangular_lattice()
     g = g.supercell(2)
@@ -49,14 +57,14 @@ def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatc
                     mix=0.9, mf=mf, Vr=Vr)
     (k, e, c) = scf.hamiltonian.get_bands(operator="sz", nk=20)
     e, c = np.array(e), np.array(c)
-    assert np.isclose(np.sum(e), 140.48297096853287, atol=1e-4)
+    assert np.isclose(np.sum(e), 136.51565546396182, atol=1e-4)
 
     # The ferromagnetic guess survives the loop, and the state it converges
     # to is collinear: sz stays a good quantum number, so every band is a
     # pure spin state, every site carries the same moment along z, and the
     # two spin species are pushed apart by an exchange splitting that is
-    # linear in the interaction (0.0078 at this Vr, 7.8e-5 at a hundredth
-    # of it).
+    # linear in the interaction (0.0039 at this Vr, 3.9e-5 at a hundredth
+    # of it; 0.0078 before Vr was taken per pair, see the docstring).
     #
     # The assertion this replaces was sum(c) == 0, which is nk*Tr(sz) over
     # a full band structure: zero for every Hamiltonian with a spin index,
@@ -68,7 +76,7 @@ def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatc
     assert np.allclose(mag[:, 2], mag[0, 2], atol=1e-3)  # the same on every site
     up, dn = np.sort(e[c > 0.5]), np.sort(e[c < -0.5])
     assert len(up) == len(dn)
-    assert abs(np.mean(dn - up)) > 0.005
+    assert abs(np.mean(dn - up)) > 0.0025 # 0.0039, see above
 
 
 @pytest.mark.slow

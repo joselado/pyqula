@@ -260,7 +260,21 @@ def real_space_vev(h,operator=None,nk=1,nrep=3,name="REAL_SPACE_VEV.OUT",
 
 def total_energy(h,nk=10,nbands=None,use_kpm=False,random=False,
         kp=None,mode="mesh",tol=1e-1,fermi=0.0):
-  """Return the total energy"""
+  """Return the total energy.
+
+  For a non-Hermitian Hamiltonian this is the real part of the sum of the
+  complex eigenvalues whose real part lies below fermi, the real part of
+  the biorthogonal expectation value of H in the state that
+  densitymatrix.biorthogonal_dm describes, on the k-mesh only"""
+  if h.non_hermitian:
+      if h.has_eh or use_kpm or nbands is not None or mode!="mesh":
+          raise NotImplementedError("the total energy of a non-Hermitian "
+            "Hamiltonian is only implemented for a normal-state "
+            "Hamiltonian, by diagonalizing it fully on the k-mesh "
+            "(mode='mesh', nbands=None, use_kpm=False)")
+      from .klist import kmesh
+      es = densitymatrix.nonhermitian_eigenvalues(h,nk=nk).real
+      return np.sum(es[es<fermi])/len(kmesh(h.dimensionality,nk=nk))
   if nbands is None: h = h.get_dense()
   if h.is_sparse and not use_kpm: 
       if nbands is None:
@@ -470,11 +484,16 @@ def get_fermi_energy_T(es,filling,T=0.):
 
 
 def get_fermi4filling(h,filling,nk=8,T=0.):
-    """Return the fermi energy for a certain filling"""
+    """Return the fermi energy for a certain filling. For a non-Hermitian
+    Hamiltonian it cuts the real parts of the complex eigenvalues, which
+    is how the states are occupied in densitymatrix.biorthogonal_dm"""
     if h.has_eh: # this is an approximation, accurate version to be written 
         h0 = h.copy()
         h0.remove_nambu()
         return get_fermi4filling(h0,filling,nk=nk,T=T) # workaround
+    elif h.non_hermitian: # the real parts, see biorthogonal_dm
+        es = densitymatrix.nonhermitian_eigenvalues(h,nk=nk).real
+        return get_fermi_energy_T(es,filling,T=T)
     else:
         es = eigenvalues(h,nk=nk,notime=True)
         return get_fermi_energy_T(es,filling,T=T)

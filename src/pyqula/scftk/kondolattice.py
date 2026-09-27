@@ -2,7 +2,7 @@
 public class and the full physics writeup). Implements the large-N
 Abrikosov-pseudofermion / Read-Newns mean-field theory of the Kondo lattice,
 following P. Coleman, "Heavy Fermions: electrons at the edge of magnetism",
-arXiv:cond-mat/0612006, Sec. III.C.2 ("Mean field theory of the Kondo
+arXiv:cond-mat/0612006, Sec. II.C.2 ("Mean field theory of the Kondo
 lattice") verbatim -- Eq. 65-99 there.
 
 The Coqblin-Schrieffer Kondo interaction at site j, Eq. 73,

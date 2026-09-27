@@ -78,7 +78,12 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     sending them back to the host -- once per SCF iteration -- is the part
     worth removing. What comes back is the finished (n,n) density matrix
     per direction, whatever the k-mesh. batch_size does not apply there;
-    that route chunks the mesh itself, against the device's memory."""
+    that route chunks the mesh itself, against the device's memory.
+
+    A non-Hermitian Hamiltonian (h.non_hermitian) gets its biorthogonal
+    density matrix instead, see biorthogonal_dm, always on the CPU."""
+    if h.non_hermitian: # left and right eigenvectors, see biorthogonal_dm
+        return biorthogonal_dm(h,ds=ds,nk=nk,fermi=fermi,delta=delta)
     from .htk.eigenvectors import peigh_bloch, bloch_on_gpu
     hk = h.get_hk_gen() # get the Hamiltonian generator
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
@@ -154,7 +159,13 @@ def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
     kernel and scatter its output into the (initially zero) container;
     above it, just run the dense kernel for that direction and keep its
     full result -- strictly more information than requested, but correct
-    and, past the crossover, cheaper too."""
+    and, past the crossover, cheaper too.
+
+    A non-Hermitian Hamiltonian gets the full biorthogonal density matrix
+    of every direction in pairs, see biorthogonal_dm."""
+    if h.non_hermitian: # every entry, which is more than was asked for
+        return biorthogonal_dm(h,ds=list(pairs),nk=nk,fermi=fermi,
+                delta=delta)
     from .htk.eigenvectors import peigh_bloch
     hk = h.get_hk_gen() # get the Hamiltonian generator
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
@@ -231,12 +242,23 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     case is out of scope: BdG's own get_fermi4filling diagonalizes an
     entirely different (de-paired) Hamiltonian, not just a shifted copy of
     the one the density matrix comes from, so this trick does not apply
-    there."""
+    there.
+
+    A non-Hermitian Hamiltonian takes the same route with its complex
+    eigenvalues and left and right eigenvectors: the Fermi energy cuts the
+    real parts of the eigenvalues, and the density matrix is the
+    biorthogonal one (see biorthogonal_dm)."""
     from .htk.eigenvectors import peigh_bloch
     # the T-aware Fermi search, because the density matrix below weights
     # the states with the Fermi-Dirac occupation at this same `delta`: a
     # T=0 eigenvalue count would hold a different number of electrons
     from .spectrum import get_fermi_energy_T
+    if h.non_hermitian: # one diagonalization for both, as below
+        eigs = biorthogonal_eigenstates(h,nk=nk)
+        fermi = get_fermi_energy_T(eigs[0].real.ravel(),filling,T=delta)
+        dm = biorthogonal_dm(h,ds=list(pairs),nk=nk,fermi=fermi,delta=delta,
+                eigs=eigs)
+        return dm,fermi
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
     n = h.intra.shape[0]
     if len(ks)*n*n*16 > max_memory_gb*1e9: # see max_memory_gb's docstring
@@ -387,7 +409,10 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
     """Compute the full density matrix by first computing all the
     eigenvectors, and after adding all the contributions together.
     This can become memore expesive for large kmesh and moderate
-    matrices"""
+    matrices. A non-Hermitian Hamiltonian gets its biorthogonal density
+    matrix, see biorthogonal_dm, which already works this way"""
+    if h.non_hermitian:
+        return biorthogonal_dm(h,ds=ds,nk=nk,fermi=fermi,delta=delta)
     from .klist import kmesh
     # the same mesh get_eigenvectors diagonalizes, so a list-valued nk
     # works as it does in full_dm_accumulate
@@ -416,6 +441,93 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
       outd = dict() # dictionary
       for i in range(len(ds)): outd[tuple(ds[i])] = out[i] # as dictionary
       return outd
+
+
+def biorthogonal_eigenstates(h,nk=10):
+    """Complex eigenvalues and biorthonormal eigenvectors of a
+    non-Hermitian Bloch Hamiltonian on the k-mesh of biorthogonal_dm.
+
+    Returns (es,lc,r), one row per k-point: es the eigenvalues, shape
+    (nks,n); r the right eigenvectors, shape (nks,n,n), as columns; and
+    lc = (R^-1)^T, whose column m is the complex conjugate of the left
+    eigenvector <L_m| normalized so that <L_m|R_m> = 1. The left
+    eigenvectors are taken as the rows of R^-1, as the biorthogonal
+    weights of nonhermitiantk/bandstructure.py are, which keeps them
+    biorthonormal to the right ones inside a degenerate level too. Close
+    to an exceptional point R is ill conditioned, and exactly at one it is
+    singular and there is no such basis."""
+    from .htk.eigenvectors import hk_matrix_batch
+    import scipy.linalg as lg
+    ks = np.array(h.geometry.get_kmesh(nk=nk)) # the mesh
+    mats = hk_matrix_batch(h.get_hk_gen(),ks) # H(k) at every k-point
+    n = mats.shape[1]
+    es = np.zeros((len(ks),n),dtype=np.complex128)
+    r = np.zeros((len(ks),n,n),dtype=np.complex128)
+    lc = np.zeros((len(ks),n,n),dtype=np.complex128)
+    for ik,m in enumerate(mats):
+        (es[ik],r[ik]) = lg.eig(m) # right eigenvectors as columns
+        try: lc[ik] = lg.inv(r[ik]).T # the rows of R^-1 are the <L_m|
+        except lg.LinAlgError:
+            raise ValueError("the non-Hermitian Hamiltonian is at an "
+                "exceptional point at k="+str(ks[ik])+": its eigenvectors "
+                "do not span the space, so there is no biorthogonal basis "
+                "to build the density matrix from") from None
+    return es,lc,r
+
+
+def biorthogonal_dm(h,ds=None,nk=10,fermi=0.0,delta=delta_dm,eigs=None):
+    """Density matrix of a non-Hermitian Hamiltonian, in the biorthogonal
+    sense: rho = sum_m f(Re E_m - fermi) |R_m><L_m| with <L_m|R_m> = 1, so
+    that Tr(rho A) is the sum of the biorthogonal expectation values
+    <L_m|A|R_m> of the occupied states (D. C. Brody, Biorthogonal quantum
+    mechanics, J. Phys. A 47, 035305 (2014), arXiv:1308.2609, Eqs. (10)
+    and (27)). The states are occupied by the real parts of their
+    energies, with the Fermi-Dirac weight of width delta, and rho is not
+    Hermitian: a density comes out complex when the Hamiltonian breaks
+    the symmetries that make it real.
+
+    What is returned has the index convention of full_dm, the transpose
+    of rho, dm[i,j] = sum_m f_m conj(L_m(i)) R_m(j), which is the
+    Hermitian dm[i,j] = sum_m f_m conj(psi_m(i)) psi_m(j) with the left
+    eigenvector in place of the first conj(psi): the mean-field kernels of
+    scftk/densitydensity.py read it exactly as they read a Hermitian one,
+    and for a Hermitian matrix the two coincide. Like full_dm_accumulate
+    it is a single array for ds=None, and a dictionary {direction: array}
+    otherwise, with the Bloch phase exp(2 pi i k.d) of each direction.
+
+    Every eigenvector of the mesh is held at once, which is fine for the
+    small cells a non-Hermitian calculation is usually done on. eigs
+    passes (es,lc,r) from biorthogonal_eigenstates, when the caller
+    already has them."""
+    from scipy.special import expit
+    if h.has_eh:
+        raise NotImplementedError("the biorthogonal density matrix is only "
+                "implemented for a normal-state (non-Nambu) Hamiltonian")
+    if delta==0.: delta = 1e-15 # just very small, as in full_dm
+    ks = np.array(h.geometry.get_kmesh(nk=nk)) # the mesh
+    if eigs is None: eigs = biorthogonal_eigenstates(h,nk=nk)
+    (es,lc,r) = eigs
+    occ = expit(-(es.real-fermi)/delta) # Fermi-Dirac weight of Re E
+    dirs = [(0,0,0)] if ds is None else ds
+    out = dict()
+    for d in dirs:
+        phase = np.exp(2j*np.pi*ks@np.array(d,dtype=np.float64)) # per k
+        w = lc*(occ*phase[:,None])[:,None,:] # weight every left column
+        out[tuple(d)] = np.einsum("kim,kjm->ij",w,r)/len(ks)
+    if ds is None: return out[(0,0,0)] # the single array
+    return out
+
+
+def nonhermitian_eigenvalues(h,nk=10):
+    """Complex eigenvalues of a non-Hermitian Hamiltonian on the k-mesh
+    of biorthogonal_dm, as a flat array. Its real parts are what the
+    Fermi energy of a mean-field calculation cuts, see
+    spectrum.get_fermi4filling"""
+    import scipy.linalg as lg
+    from .htk.eigenvectors import hk_matrix_batch
+    ks = np.array(h.geometry.get_kmesh(nk=nk)) # the mesh
+    mats = hk_matrix_batch(h.get_hk_gen(),ks) # H(k) at every k-point
+    return np.concatenate([lg.eigvals(m) for m in mats])
 
 
 from .dmtk.fulldm import full_dm_python

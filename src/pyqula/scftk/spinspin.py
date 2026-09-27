@@ -68,9 +68,10 @@ def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, nd=None, rcut=None):
             mgenerator=mgenerator)
     v = {tuple(d): np.array(m, dtype=np.complex128)
             for d, m in hv.get_hopping_dict().items()}
-    if Jr is not None: # every pair within rcut, whole distance shells
-        specialhopping.add_distance_cut_interaction(v, h.geometry, Jr,
-                rcut=rcut)
+    if Jr is not None: # every pair within rcut, whole distance shells,
+        # halved as J1/J2/J3 are, see densitydensity.add_pair_interaction
+        from .densitydensity import add_pair_interaction
+        add_pair_interaction(v, h.geometry, Jr, rcut=rcut)
     for d in v:
         m = v[d]
         n = m.shape[0]
@@ -342,9 +343,10 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None, nd=None,
     hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
             mgenerator=mgenerator)
     v = hv.get_hopping_dict()
-    if Vr is not None: # every pair within rcut, whole distance shells
-        specialhopping.add_distance_cut_interaction(v, h.geometry, Vr,
-                rcut=rcut)
+    if Vr is not None: # every pair within rcut, whole distance shells,
+        # halved as V1/V2/V3 are, see densitydensity.add_pair_interaction
+        from .densitydensity import add_pair_interaction
+        add_pair_interaction(v, h.geometry, Vr, rcut=rcut)
     U = obj2geometryarray(U, h.geometry)
     for d in v:
         m = v[d]
@@ -605,6 +607,8 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     merit; the default was tuned on one system. Needs the optional jax extra (`pip install pyqula[jax]`)."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy/non-jax below -- checked first so the NotImplemented-sentinel contract holds regardless of use_jax
     if use_jax:
+        from .densitydensity import require_hermitian
+        require_hermitian(h0,"use_jax=True")
         if integration != "ed":
             raise NotImplementedError("VJinteraction's use_jax=True only "
                     "supports integration=\"ed\" (dense exact "
@@ -962,6 +966,18 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 "only supports a normal-state (has_eh=False) Hamiltonian -- "
                 "see _run_anisotropic_scf's docstring for why the Nambu "
                 "case (vd in its own reordered basis) is out of scope here")
+    # a non-Hermitian h1 takes the biorthogonal density matrix, which only
+    # the exact-diagonalization path builds (densitymatrix.biorthogonal_dm),
+    # and whose mean field is decoupled without complex conjugation
+    # (densitydensity.get_mf_normal_biorthogonal)
+    non_hermitian = h1.non_hermitian
+    if integration == "kpm":
+        from .densitydensity import require_hermitian
+        require_hermitian(h1, "integration=\"kpm\"")
+    if non_hermitian and has_eh:
+        raise NotImplementedError("the mean field of a non-Hermitian "
+                "Hamiltonian is only implemented for a normal-state "
+                "(non-Nambu) one")
     # per-site (array) filling -- see the array-filling branch of f() below
     # (near densitymatrix.full_dm_accumulate_sparse_local_fermi) for the
     # implementation and its normalization convention. Two combinations are
@@ -1164,7 +1180,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         new has_eh-dependent kwarg) only needs updating in one place. See
         compute_mf's docstring for why vz/vx/vy (and, below, vd) now all go
         through this."""
-        return get_mf(v, dm, has_eh=has_eh)
+        return get_mf(v, dm, has_eh=has_eh, non_hermitian=non_hermitian)
 
     def compute_mf(dm_lab):
         """vz/vx/vy are decoupled exactly like vd (get_mf_bdg, full
@@ -1517,15 +1533,15 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             etot += h.fermi*electron_dimension(h)*filling
     dme = electron_sector(scf.dm)
     if vz_active:
-        etot += get_dc_energy(vz, dme)
+        etot += get_dc_energy(vz, dme, non_hermitian=non_hermitian)
     if vx_active:
         dm_x = _rot_dm(dme, Rx) # dm needs the conjugated rotation, see compute_mf
-        etot += get_dc_energy(vx, dm_x)
+        etot += get_dc_energy(vx, dm_x, non_hermitian=non_hermitian)
     if vy_active:
         dm_y = _rot_dm(dme, Ry)
-        etot += get_dc_energy(vy, dm_y)
+        etot += get_dc_energy(vy, dm_y, non_hermitian=non_hermitian)
     if vd_active:
-        etot += get_dc_energy(vd, dme)
+        etot += get_dc_energy(vd, dme, non_hermitian=non_hermitian)
     if has_eh:
         # the pairing part of every channel at once: compute_mf is the sum
         # of the rotated channel decouplings, so its anomalous blocks are

@@ -963,15 +963,18 @@ class Hamiltonian():
         Two different quantities go by this name:
 
         - mode="vev" (the default) returns the physical magnetization: the
-          per-site expectation value (<S_x>,<S_y>,<S_z>) over the occupied
-          states, i.e. get_vev("sx"/"sy"/"sz"). This is the moment, and it
-          is what to report as one. Being a Brillouin-zone integral it
-          needs a k-mesh: pass nk, or rely on the mesh a self-consistent
-          Hamiltonian remembers from its own loop. With the electron-hole
-          (Nambu) degree of freedom the hole-hole block of the spin
-          operators is dropped (operators.vev_operator), so that a BdG
-          description of a state gives the same moment as the normal-state
-          description of that same state.
+          per-site expectation value of the Pauli matrices,
+          (<sigma_x>,<sigma_y>,<sigma_z>), over the occupied states, i.e.
+          get_vev("sx"/"sy"/"sz") with sz = diag(1,-1). The z component is
+          n_up - n_dn, so a fully polarized electron gives 1, twice its
+          <S_z> = 1/2. This is the moment, and it is what to report as one
+          (halve it for the spin S = sigma/2). Being a Brillouin-zone
+          integral it needs a k-mesh: pass nk, or rely on the mesh a
+          self-consistent Hamiltonian remembers from its own loop. With
+          the electron-hole (Nambu) degree of freedom the hole-hole block
+          of the spin operators is dropped (operators.vev_operator), so
+          that a BdG description of a state gives the same moment as the
+          normal-state description of that same state.
 
         - mode="field" reads the magnetic *term written in the
           Hamiltonian* instead, i.e. the coefficients of sigma_x/y/z on

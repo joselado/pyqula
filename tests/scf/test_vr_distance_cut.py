@@ -130,11 +130,14 @@ def test_a_finite_system_keeps_every_pair():
     for i in range(n):
         for j in range(n):
             assert abs(v[(0, 0, 0)][i, j] - _coulomb(r[i], r[j])) < 1e-12
-    # and the mean-field builder sees the same, spin-doubled
+    # and the mean-field builder sees the same, spin-doubled and halved:
+    # its interaction dictionary stores half of every pair, as it stores
+    # V1/2 (tests/scf/test_vr_per_pair.py). This used to compare against v
+    # itself, when the mean field took Vr whole and so solved 2*Vr
     from pyqula.scftk.spinspin import _build_density_v
     h = g.get_hamiltonian(has_spin=True)
     vd = _build_density_v(h, Vr=_coulomb)
-    assert np.max(np.abs(vd[(0, 0, 0)][::2, ::2] - v[(0, 0, 0)])) < 1e-14
+    assert np.max(np.abs(vd[(0, 0, 0)][::2, ::2] - v[(0, 0, 0)]/2.)) < 1e-14
 
 
 def test_an_explicit_rcut_applies_to_a_finite_system_too():

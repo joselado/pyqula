@@ -140,7 +140,9 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
                 "with integration=\"ed\") for a spinful Hamiltonian; "
                 "the KPM density-density engine (Vinteraction_kpm) "
                 "takes a single scalar filling, got %r" % (filling,))
-    from .densitydensity import get_dc_energy, electron_dimension
+    from .densitydensity import (get_dc_energy, electron_dimension,
+            require_hermitian)
+    require_hermitian(h,"the KPM mean field (Vinteraction_kpm)")
     from ..kpmtk.densitymatrix_kpm import get_fermi4filling_kpm
     h = h.get_multicell()
     h = h.get_dense()
@@ -249,8 +251,9 @@ def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
     hv = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
             mgenerator=mgenerator)
     v = hv.get_hopping_dict()
-    if Vr is not None: # every pair within rcut, as in Vinteraction
-        specialhopping.add_distance_cut_interaction(v,h.geometry,Vr,rcut=rcut)
+    if Vr is not None: # every pair within rcut, halved as in Vinteraction
+        from .densitydensity import add_pair_interaction
+        add_pair_interaction(v,h.geometry,Vr,rcut=rcut)
     U = obj2geometryarray(U, h.geometry)
     reject_spinless_U(h, U)
     if h.has_spin:

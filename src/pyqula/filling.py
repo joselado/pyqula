@@ -41,7 +41,13 @@ def get_fermi_energy(es,filling,fermi_shift=0.0,
 
 
 def eigenvalues(h0,nk=10,notime=True):
-    """Return all the eigenvalues of a Hamiltonian"""
+    """Return all the eigenvalues of a Hamiltonian. For a non-Hermitian one
+    these are the real parts of its complex eigenvalues, the ones a Fermi
+    energy cuts (as spectrum.get_fermi4filling and
+    densitymatrix.biorthogonal_dm occupy the states)"""
+    if h0.non_hermitian: # a Hermitian eigensolver would read half of H
+        from .densitymatrix import nonhermitian_eigenvalues
+        return nonhermitian_eigenvalues(h0.get_dense(),nk=nk).real
     from . import klist
     from .htk.eigenvectors import peigvalsh_bloch
     h = h0.copy() # copy hamiltonian
