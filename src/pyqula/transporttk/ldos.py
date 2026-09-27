@@ -1,9 +1,11 @@
+from .. import filewrite
 from . import fullgreen
 import numpy as np
 from ..increase_hilbert import full2profile as spatial_dos
 
-def ldos(ht,operator=None,write=True,nsuper=None,kpath=None,**kwargs):
+def ldos(ht,operator=None,write=None,nsuper=None,kpath=None,**kwargs):
     """Compute the local density of states"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     def get(ht):
         if ht.dimensionality!=1:
             raise ValueError("the junction LDOS is only implemented for 1d "

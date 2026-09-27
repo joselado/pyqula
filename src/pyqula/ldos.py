@@ -1,4 +1,5 @@
 from __future__ import print_function
+from . import filewrite
 import scipy.sparse.linalg as slg
 import scipy.linalg as lg
 from scipy.sparse import csc_matrix as csc
@@ -16,9 +17,10 @@ from .increase_hilbert import full2profile as spatial_dos
 from . import filesystem as fs
 from .algebra import dagger
 
-def ldos0d(h,e=0.0,delta=0.01,write=True):
+def ldos0d(h,e=0.0,delta=0.01,write=None):
   """Calculates the local density of states of a Hamiltonian and
      writes it in file"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality==0:  # only for 0d
     iden = np.identity(h.intra.shape[0],dtype=np.complex128) # create identity
     g = algebra.inv( (e+1j*delta)*iden -h.intra ) # calculate green function
@@ -110,9 +112,10 @@ def dos_site(h,i=0,mode="ED",energies=np.linspace(-1.,1.,500),**kwargs):
 
 
 
-def ldos0d_wf(h,e=0.0,delta=0.01,num_wf = 10,robust=False,tol=0):
+def ldos0d_wf(h,e=0.0,delta=0.01,num_wf = 10,robust=False,tol=0,write=None):
   """Calculates the local density of states of a hamiltonian and
      writes it in file, using arpack"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality==0:  # only for 0d
     intra = csc_matrix(h.intra) # matrix
   else:
@@ -133,7 +136,8 @@ def ldos0d_wf(h,e=0.0,delta=0.01,num_wf = 10,robust=False,tol=0):
   d /= np.pi # normalize
   d = spatial_dos(h,d) # resum if necessary
   g = h.geometry  # store geometry
-  write_ldos(g.x,g.y,d,z=g.z) # write in file
+  if write: write_ldos(g.x,g.y,d,z=g.z) # write in file
+  return g.x,g.y,d
 
 
 
@@ -203,8 +207,9 @@ def ldosmap(h,energies=np.linspace(-1.0,1.0,40),delta=None,
 
 
 
-def spatial_energy_profile(h,**kwargs):
+def spatial_energy_profile(h,write=None,**kwargs):
   """Computes the DOS for each site of an slab, only for 2d"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality==0:
       pos = h.geometry.r[:,0]
   elif h.dimensionality==1: pos = h.geometry.r[:,1]
@@ -216,15 +221,16 @@ def spatial_energy_profile(h,**kwargs):
   if len(ds[0])!=len(pos): 
     raise ValueError("the LDOS map has "+str(len(ds[0]))+" entries and the "
             "list of positions has "+str(len(pos)))
-  f = open("DOSMAP.OUT","w")
-  f.write("# energy, index, DOS, position\n")
-  for ie in range(len(es)):
-    for ip in range(len(pos)):
-      f.write(str(es[ie])+"  ")
-      f.write(str(ip)+"  ")
-      f.write(str(ds[ie,ip])+"   ")
-      f.write(str(pos[ip])+"\n")
-  f.close()
+  if write:
+    f = open("DOSMAP.OUT","w")
+    f.write("# energy, index, DOS, position\n")
+    for ie in range(len(es)):
+      for ip in range(len(pos)):
+        f.write(str(es[ie])+"  ")
+        f.write(str(ip)+"  ")
+        f.write(str(ds[ie,ip])+"   ")
+        f.write(str(pos[ip])+"\n")
+    f.close()
   return es,np.transpose(ds) # retunr LDOS 
 
 
@@ -235,8 +241,9 @@ slabldos = spatial_energy_profile # redefine
 
 
 
-def ldos1d(h,e=0.0,delta=0.001,nrep=3):
+def ldos1d(h,e=0.0,delta=0.001,nrep=3,write=None):
   """ Calculate DOS for a 1d system"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   from . import green
   if h.dimensionality!=1: # only for 1d
     raise ValueError("ldos1d is only for 1d Hamiltonians")
@@ -247,7 +254,7 @@ def ldos1d(h,e=0.0,delta=0.001,nrep=3):
   x,y = g.x,g.y # get the coordinates
   go = h.geometry.copy() # copy geometry
   go = go.supercell(nrep) # create supercell
-  write_ldos(go.x,go.y,d.tolist()*nrep) # write in file
+  if write: write_ldos(go.x,go.y,d.tolist()*nrep) # write in file
   return d
 
 
@@ -330,7 +337,7 @@ def green2ldos(g,op=None):
 def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
              random=False,silent=True,interpolate=False,
              operator=None,return_rd = False,
-             write=True,**kwargs):
+             write=None,**kwargs):
     """ Calculate LDOS in a tight binding basis
 
     operator: None, or an operator spec (a name, a matrix, an Operator).
@@ -344,6 +351,7 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
         operator is only available in mode="arpack", since mode="green"
         has already integrated over the Brillouin zone.
     """
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from .utilities import check_delta
     check_delta(delta)
     if ks is not None and mode=="green":
@@ -447,7 +455,7 @@ def multi_ldos(h,projection="TB",**kwargs):
 
 def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
         nrep=3,nk=100,num_bands=20,
-        random=False,operator=None):
+        random=False,operator=None,write=None):
   """Calculate many LDOS, by diagonalizing the Hamiltonian
 
   operator: None, or an operator spec (a name, a matrix, an Operator).
@@ -456,6 +464,7 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
       mode="arpack" (see ldostk.ldoswaves), so the map written for a
       given energy is what get_ldos returns at that energy.
   """
+  write = filewrite.resolve(write,True) # the call, else the global switch
   print("Calculating eigenvectors in LDOS")
   ps = [] # weights
   evals,ws = [],[] # empty list
@@ -494,11 +503,6 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
         ps += [get_weight(iw,k) for iw in w] # weights
   ds = np.array([(np.conjugate(v)*v).real for v in ws]) # calculate densities
   del ws # remove the wavefunctions
-  fs.rmdir("MULTILDOS") # remove folder
-  fs.mkdir("MULTILDOS") # create folder
-  go = h.geometry.copy() # copy geometry
-  go = go.supercell(nrep) # create supercell
-  fo = open("MULTILDOS/MULTILDOS.TXT","w") # files with the names
   # The accumulation over eigenstates is bilinear, so the whole double loop
   # over energies and eigenstates is a single matrix product: the weight
   # matrix W[ie,n] = delta/((e-E_n)^2+delta^2)*p_n times the densities.
@@ -515,14 +519,26 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
       # over the Brillouin zone, the same two factors get_ldos applies
       out = (w@ds)/(np.pi*nkp) # LDOS of this block of energies
       outs += [spatial_dos(h,o) for o in out] # resum if necessary
+  # the same DOS the maps integrate to
+  from .dos import calculate_dos
+  es2 = np.linspace(min(energies),max(energies),len(energies)*10)
+  # same normalization as the maps above, and as dos.dos_kmesh
+  ys = calculate_dos(evals,es2,delta,w=None)/(np.pi*nkp) # compute DOS
+  out = (h.geometry.x,h.geometry.y,np.array(energies),np.array(outs))
+  if not write: return out
+  fs.rmdir("MULTILDOS") # remove folder
+  fs.mkdir("MULTILDOS") # create folder
+  go = h.geometry.copy() # copy geometry
+  go = go.supercell(nrep) # create supercell
+  fo = open("MULTILDOS/MULTILDOS.TXT","w") # files with the names
   ie = 0
   for e in energies: # loop over energies
     print("MULTILDOS for energy",e)
-    out = outs[ie] ; ie += 1 # get and increase
+    oute = outs[ie] ; ie += 1 # get and increase
     name0 = "LDOS_"+str(e)+"_.OUT" # name of the output
     name = "MULTILDOS/" + name0
     from .geometry import replicate_array
-    write_ldos(go.x,go.y,replicate_array(h.geometry,out,nrep=nrep),
+    write_ldos(go.x,go.y,replicate_array(h.geometry,oute,nrep=nrep),
                   output_file=name) # write in file
     fo.write(name0+"\n") # name of the file
     fo.flush() # flush
@@ -534,13 +550,9 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
           fmap.write(str(energies[ie])+"  ")
           fmap.write(str(outs[ie][ii])+"\n")
   fmap.close()
-  # Now calculate the DOS
-  from .dos import calculate_dos
-  es2 = np.linspace(min(energies),max(energies),len(energies)*10)
-  # same normalization as the maps above, and as dos.dos_kmesh
-  ys = calculate_dos(evals,es2,delta,w=None)/(np.pi*nkp) # compute DOS
   from .dos import write_dos
   write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")  
+  return out
 
 
 
@@ -561,8 +573,9 @@ def write_ldos(x,y,dos,output_file="LDOS.OUT",z=None):
 
 
 
-def ldos_finite(h,e=0.0,n=10,nwf=4,delta=0.0001):
+def ldos_finite(h,e=0.0,n=10,nwf=4,delta=0.0001,write=None):
   """Calculate the density of states for a finite system"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality!=1: # if it is not one dimensional
     raise ValueError("ldos_finite is only for 1d Hamiltonians")
   intra = csc(h.intra) # convert to sparse
@@ -583,7 +596,7 @@ def ldos_finite(h,e=0.0,n=10,nwf=4,delta=0.0001):
     dos += np.abs(f)*c # add contribution
   odos = spatial_dos(h,dos) # get the spatial distribution
   go = h.geometry.supercell(n) # get the supercell
-  write_ldos(go.x,go.y,odos) # write in a file
+  if write: write_ldos(go.x,go.y,odos) # write in a file
   return dos # return the dos
 
 

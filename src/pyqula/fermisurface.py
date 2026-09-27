@@ -1,4 +1,5 @@
 # library to deal with the spectral properties of the hamiltonian
+from . import filewrite
 import numpy as np
 import scipy.linalg as lg
 import scipy.sparse.linalg as slg
@@ -120,9 +121,10 @@ def fermi_surface_generator(h,
     return energies,rs,kdos
 
 
-def multi_fermi_surface(h,nk=None,delta=1e-2,write=True,
+def multi_fermi_surface(h,nk=None,delta=1e-2,write=None,
         output_folder="MULTIFERMISURFACE",**kwargs):
     """Compute several fermi surfaces"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if nk is None: nk = int(10./delta)
     energies,rs,kdos = fermi_surface_generator(h,nk=nk,delta=delta,**kwargs)
     if write: 

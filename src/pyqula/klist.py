@@ -1,12 +1,14 @@
 # generates diffeent types of klist
 
+from . import filewrite
 import numpy as np
 import scipy.linalg as lg
 from . import geometry
 from numba import jit
 
-def get_klist(g,ns,nk=100):
+def get_klist(g,ns,nk=100,write=None):
     """Return a klist from a list of names"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     # generate dictionary
     kdict = dict()
     kdict["G"] = [0.,0.,0.]
@@ -42,9 +44,11 @@ def get_klist(g,ns,nk=100):
         for ik in dk:
             ks.append(k0 + ik*kn) # new vector
     ks.append(kv[len(ns)-1]) # last one
-    fbl = open("BANDLINES.OUT","w")
-    for i in range(len(ns)): 
-        fbl.write(str(kinds[i])+" "+ns[i]+"\n")
+    if write:
+        fbl = open("BANDLINES.OUT","w")
+        for i in range(len(ns)):
+            fbl.write(str(kinds[i])+" "+ns[i]+"\n")
+        fbl.close()
     return ks # return vector
 
 
@@ -64,11 +68,13 @@ def py_ang(v1, v2):
 
 
 
-def _path_through(nodes,labels,nk=400):
+def _path_through(nodes,labels,nk=400,write=None):
   """Return a k-path visiting a list of high symmetry points, in reduced
   coordinates, with roughly nk points in total distributed proportionally
   to the length of each segment. Also writes KPOINTS_BANDS.OUT and
-  BANDLINES.OUT, like the other branches of default_kpath do."""
+  BANDLINES.OUT, like the other branches of default_kpath do, unless
+  write=False."""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   nodes = [np.array(n,dtype=np.float64) for n in nodes]
   ds = [np.linalg.norm(nodes[i+1]-nodes[i]) for i in range(len(nodes)-1)]
   dtot = sum(ds)
@@ -80,6 +86,7 @@ def _path_through(nodes,labels,nk=400):
           kout.append(nodes[i] + (nodes[i+1]-nodes[i])*j/ns[i])
   marks.append(len(kout)) # the last node
   kout.append(nodes[-1].copy()) # close the path
+  if not write: return kout
   fk = open("KPOINTS_BANDS.OUT","w")
   for k in kout: fk.write(str(k[0])+"   "+str(k[1])+"   "+str(k[2])+"\n")
   fk.close()
@@ -89,8 +96,10 @@ def _path_through(nodes,labels,nk=400):
   return kout
 
 
-def default_kpath(g,nk=400):
-  """ Input is geometry"""
+def default_kpath(g,nk=400,write=None):
+  """Default k-path of a geometry. In 2d and 3d it also writes
+  KPOINTS_BANDS.OUT and BANDLINES.OUT, unless write=False"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if g.dimensionality==0: return [0.] # return gamma point
   elif g.dimensionality==1: 
     return [np.array([k,0,0]) for k in np.linspace(0,1,nk)] # normal path
@@ -105,7 +114,7 @@ def default_kpath(g,nk=400):
              np.array([.5,.5,0.]),np.array([0.,0.,0.]),
              np.array([.5,.5,.5])]
     labels = ["\\Gamma","X","M","\\Gamma","R"]
-    return _path_through(nodes,labels,nk=nk)
+    return _path_through(nodes,labels,nk=nk,write=write)
   elif g.dimensionality > 1:
     b1 = np.array([1.,0.,0.])
     b2 = np.array([0.,1.,0.])
@@ -120,14 +129,14 @@ def default_kpath(g,nk=400):
 #    print("Path along",bm)
 #    b2 = np.array([.5,np.sqrt(3)/2])
 #    b2 = np.array([0.,-1.])
-    fk = open("KPOINTS_BANDS.OUT","w")  
-#    fk.write(str(nk)+"\n") # number of kpoints
     k = np.array([0.,0.,0.]) # old kpoint
     kout= []
     for i in range(nk):
       k += bm /(nk) # move kpoint 
-      fk.write(str(k[0])+"   "+str(k[1])+"\n    ")
       kout.append(k.copy()) # store in array
+    if not write: return kout
+    fk = open("KPOINTS_BANDS.OUT","w")
+    for k in kout: fk.write(str(k[0])+"   "+str(k[1])+"\n    ")
     fk.close()
     # write bandlines
     fbl = open("BANDLINES.OUT","w")
@@ -180,7 +189,8 @@ def write_klist(kl,output_file="klist.in"):
   fk.close()
 
 
-def custom_klist(kp = None,nk=100,write=True,scale=True):
+def custom_klist(kp = None,nk=100,write=None,scale=True):
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if kp==None:
     kp = [[0.,0.,0.],[.5,.0,0.],[.5,.5,0.],[.0,.0,0.]]  # define points
   kp = [np.array(k) for k in kp] # convert to arrays
@@ -201,32 +211,35 @@ def custom_klist(kp = None,nk=100,write=True,scale=True):
 custom = custom_klist # same function
 
 
-def kx(g,nk=400):
+def kx(g,nk=400,write=None):
   """ Input is geometry"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if g.dimensionality == 2:
     b1 = np.array([1.,0.])
     b2 = np.array([0.,1.])
-    fk = open("klist.in","w")  
-    fk.write(str(nk)+"\n") # number of kpoints
     k = -b1/2 # old kpoint
     kout= []
     for i in range(nk):
       k += (b1) /(nk) # move kpoint 
-      fk.write(str(k[0])+"   "+str(k[1])+"\n    ")
       kout.append(k.copy()) # store in array
-    fk.close()
-    # write bandlines
-    fbl = open("BANDLINES.OUT","w")
-    fbl.write("0   X_1\n")
-    fbl.write(str(nk/2)+"   \\Gamma\n")
-    fbl.write(str(nk)+"   X_1\n")
-    fbl.close()
+    if write:
+      fk = open("klist.in","w")
+      fk.write(str(nk)+"\n") # number of kpoints
+      for k in kout: fk.write(str(k[0])+"   "+str(k[1])+"\n    ")
+      fk.close()
+      # write bandlines
+      fbl = open("BANDLINES.OUT","w")
+      fbl.write("0   X_1\n")
+      fbl.write(str(nk/2)+"   \\Gamma\n")
+      fbl.write(str(nk)+"   X_1\n")
+      fbl.close()
   return kout # return klist
 
 
 
-def tr_path(nk=100,d=20,write=True):
+def tr_path(nk=100,d=20,write=None):
   """ Creates the special path to calculate the Z2 invariant"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   # d is the number of divisions
   w = 1.0/8 # heigh of the path
   ks = [] # initialice list
@@ -273,28 +286,31 @@ def tr_klist(nk=100,d=20):
 
 
 
-def default_v2(g,nk=400):
+def default_v2(g,nk=400,write=None):
   """ Input is geometry"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if g.dimensionality == 2:
     b1 = np.array([1.,0.])
     b2 = np.array([0.,1.])
-    fk = open("klist.in","w")  
-    fk.write(str(nk)+"\n") # number of kpoints
     k = np.array([0.,0.]) # old kpoint
     kout= []
     for i in range(nk):
       k += (b1-b2) /(nk) # move kpoint 
-      fk.write(str(k[0])+"   "+str(k[1])+"\n    ")
       kout.append(k.copy()) # store in array
-    fk.close()
-    # write bandlines
-    fbl = open("BANDLINES.OUT","w")
-    fbl.write("0   \\Gamma\n")
-    fbl.write(str(nk/3)+"   K\n")
-    fbl.write(str(nk/2)+"   M\n")
-    fbl.write(str(2*nk/3)+"   K'\n")
-    fbl.write(str(nk)+"   \\Gamma\n")
-    fbl.close()
+    if write:
+      fk = open("klist.in","w")
+      fk.write(str(nk)+"\n") # number of kpoints
+      for k in kout: fk.write(str(k[0])+"   "+str(k[1])+"\n    ")
+      fk.close()
+      # write bandlines
+      fbl = open("BANDLINES.OUT","w")
+      fbl.write("0   \\Gamma\n")
+      fbl.write(str(nk/3)+"   K\n")
+      fbl.write(str(nk/2)+"   M\n")
+      fbl.write(str(2*nk/3)+"   K'\n")
+      fbl.write(str(nk)+"   \\Gamma\n")
+      fbl.close()
+    return kout # it used to compute the path and return None
   else:
     raise NotImplementedError("default_v2 only knows the honeycomb-like "
             "k-path; use the labelled k-path machinery in kpointstk instead")
@@ -344,8 +360,17 @@ from .kpointstk.kmesh import kmesh
 
 
 
-def get_kpath_labels(g,ks,write=True,**kwargs):
-    """Return the k-path"""
+def get_kpath_labels(g,ks,write=None,**kwargs):
+    """Return the k-path through a list of high-symmetry labels.
+
+    The labels resolve to reduced coordinates that need not be neighbours
+    in the Brillouin zone (on the honeycomb lattice K = (-1/3,-1/3) and
+    M = (1/2,0)), so every point after the first is replaced by its
+    periodic replica closest to the one before it, and only then are the
+    segments drawn (kpointstk/locate.py, closest_path). A path built by
+    hand from the same coordinates skips that step. Also writes
+    BANDLINES.OUT, unless write=False."""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     kps = [label2k(g,k) for k in ks] # get the kpoints
     from .kpointstk.locate import k2path
     out = k2path(g,kps,**kwargs) # closest path

@@ -1,3 +1,4 @@
+from .. import filewrite
 import os
 import numpy as np
 from ..scftypes import scfclass
@@ -17,8 +18,9 @@ mf_file = "MF.pkl" # mean field file
 def coulombscf(h,g=1.0,nkp = 100,filling=0.5,mix=0.9,
                   maxerror=1e-05,silent=False,mf=None,
                   smearing=None,fermi_shift=0.0,
-                  maxite=1000,save=False,**kwargs):
+                  maxite=1000,save=False,write=None,**kwargs):
   """ Solve a selfconsistent Hubbard mean field"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   vc = coulomb_density_matrix(h.geometry,vc=2*g,**kwargs) # get the matrix
   mix = 1. - mix
   U = g # redefine
@@ -40,8 +42,9 @@ def coulombscf(h,g=1.0,nkp = 100,filling=0.5,mix=0.9,
   # get the pairs for the correlators
   ndim = nat # dimension
   totkp = nkp**(h.dimensionality) # total number of kpoints
-  file_etot = open("SCF_ENERGY.OUT","w")
-  file_error = open("SCF_ERROR.OUT","w")
+  # the energy and error of every iteration, or nowhere with write=False
+  file_etot = open("SCF_ENERGY.OUT" if write else os.devnull,"w")
+  file_error = open("SCF_ERROR.OUT" if write else os.devnull,"w")
   ite = 0 # iteration counter
   scf = scfclass(h) # create scf class
   while True: # infinite loop

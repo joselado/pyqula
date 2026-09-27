@@ -55,7 +55,7 @@ empty `__init__.py`; with the default import mode pytest's package-root walk fro
 resolve `import pyqula` to the repo root instead of `src/pyqula`. Some of these tests do a handful of
 repeated SCF/RPA calculations to check invariance and take several seconds each — the slowest individual
 tests (SCF/RPA, jax Newton solvers, Keldysh transport) run 10-25s each, so the full suite takes many
-minutes, not under a minute. It currently collects **2517 tests** (`pytest tests --collect-only -q`),
+minutes, not under a minute. It currently collects **2559 tests** (`pytest tests --collect-only -q`),
 and a whole-suite run takes **~37 minutes** — 37:34 on an idle machine at 1966 tests, after 33:40 and
 34:18 at the 1910 it collected before, so these figures are real rather than estimates. `tests/scf`
 alone is ~15 min and `tests/keldysh` ~12 min. Treat any timing taken while other jobs are running as
@@ -196,6 +196,13 @@ guards.
   Load the `gpu-backend` skill before any GPU, jax or device work: it has the precision arguments,
   the tiered plan in `documentation/gpu_porting_plan.md` and which tiers are done. **Each tier wants
   the maintainer's explicit sign-off before it starts** — propose, do not begin.
+- **Files written to the working directory go through one switch, `src/pyqula/filewrite.py`.**
+  A routine that writes an output file takes `write=None` and resolves it first thing with
+  `write = filewrite.resolve(write, <its own default>)`, so that a `write=` in the call wins,
+  then `filewrite.set_write()`, then the routine's default. A literal `write=True` default
+  would pass `True` down explicitly and override the switch. Internal calls that pass
+  `write=False` on purpose (intermediate computations) keep it. When a routine writes a file
+  and reads it back, build the result in memory instead, so `write=False` still works.
 - **HPC-cluster material never goes into git.** pyqula is a public repository; the maintainer's cluster
   details (login hosts, scratch paths, partition names, queue measurements, account-specific job scripts,
   run logs) are none of the public's business and must not reach GitHub. They live in `docs/` and in

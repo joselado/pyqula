@@ -1,5 +1,6 @@
 # kernel polynomial method libraries
 from __future__ import print_function,division
+from . import filewrite
 import scipy.sparse.linalg as lg
 from scipy.sparse import csc_matrix as csc
 import numpy.random as rand
@@ -287,7 +288,7 @@ def full_trace_A(m_in,n=200,A=None,**kwargs):
 
 
 
-def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=True,
+def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=None,
     x=None,kernel="jackson"):
     """Green's function G^R_ij(E) = <i|(E + i0 - m)^-1|j> between two sites
     from a Chebyshev expansion, real part included (Weisse et al., Rev.
@@ -309,6 +310,7 @@ def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=True,
     Sec. II.C.4), up to 10% of the height of a pole, which the truncation
     of its exp(-3n/N) at N=2*npol moments leaves. write=True also writes
     the three columns to CORRELATOR_KPM.OUT"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if npol is None: npol = ne
     mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j)
     check_scale(mus,scale)

@@ -384,7 +384,7 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         maxite=_MAXITE_UNSET, T=_T_UNSET, verbose=0, constrains=[],
         integration="ed", scale=None, npol=None, ne=None, cores=None,
         use_jax=False, solver=None, gmres_tol=None, gmres_restart=None,
-        kick_steps=None, rcut=None):
+        kick_steps=None, rcut=None, write=None):
     """Self-consistent mean field combining density-density interactions
     (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
     Vinteraction) with spin-spin exchange in a single SCF loop. rcut is
@@ -604,7 +604,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     otherwise). kick_steps (60 when not given) is the number of
     linear-mixing steps in each kick that moves solver="newton",
     "newton_krylov" and a stalled "fsolve" off a stationary point of the
-    merit; the default was tuned on one system. Needs the optional jax extra (`pip install pyqula[jax]`)."""
+    merit; the default was tuned on one system. Needs the optional jax extra (`pip install pyqula[jax]`).
+
+    write is accepted so that every mean-field entry point takes it, as
+    the spinless and KPM loops do (there it keeps the converged mean field
+    out of MF.pkl); this loop writes no file whatever its value."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy/non-jax below -- checked first so the NotImplemented-sentinel contract holds regardless of use_jax
     if use_jax:
         from .densitydensity import require_hermitian

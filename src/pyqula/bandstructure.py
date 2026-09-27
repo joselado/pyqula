@@ -2,6 +2,7 @@
 # special band structures
 
 from __future__ import print_function
+from . import filewrite
 import scipy.linalg as lg
 from scipy.sparse import csc_matrix
 import scipy.sparse.linalg as slg
@@ -19,8 +20,9 @@ arpack_tol = 1e-8
 arpack_maxiter = 10000
 
 
-def berry_bands(h,klist=None,mode=None,operator=None):
+def berry_bands(h,klist=None,mode=None,operator=None,write=None):
   """Calculate band structure resolved with Berry curvature"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   ks = [] # list of kpoints
   if mode is not None: # get the mode
     if mode=="sz": operator = operators.get_sz(h)
@@ -28,24 +30,24 @@ def berry_bands(h,klist=None,mode=None,operator=None):
       raise ValueError("unknown mode; berry_bands accepts 'sz', or an "
               "explicit operator")
 
-  fo = open("BANDS.OUT","w")
+  rows = [] # k index, energy, Berry curvature
   for ik in range(len(klist)): # loop over kpoints
     (es,bs) = topology.operator_berry_bands(h,k=klist[ik],operator=operator)
-    for (e,b) in zip(es,bs):
-      fo.write(str(ik)+"    "+str(e)+"    "+str(b)+"\n")
-  fo.close()
+    for (e,b) in zip(es,bs): rows.append([ik,e,b])
+  return _write_band_rows(rows,write)
 
 
 
-def current_bands(h,klist=None):
+def current_bands(h,klist=None,write=None):
   """Calcualte the band structure, with the bands"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality != 1: # only 1 dimensional
     raise ValueError("the current-resolved bands are only implemented for 1d "
             "Hamiltonians")
   # go for the rest
   hkgen = h.get_hk_gen() # get generator of the hamiltonian
   if klist is None:  klist = np.linspace(0,1.,100) # generate k points
-  fo = open("BANDS.OUT","w") # output file
+  rows = [] # k, energy, current
   from . import current
   fj = current.current_operator(h) # function that generates the operator
   from .htk.eigenvectors import peigh_bloch
@@ -59,8 +61,19 @@ def current_bands(h,klist=None):
     evecs = np.transpose(evecs) # transpose eigenvectors
     for (e,w) in zip(evals,evecs): # do the loop
         waw = braket_wAw(w,jk).real # product
-        fo.write(str(k)+"    "+str(e)+"   "+str(waw)+"\n")
-  fo.close()
+        rows.append([k,e,waw])
+  return _write_band_rows(rows,write)
+
+
+def _write_band_rows(rows,write):
+  """Write the rows of a band structure to BANDS.OUT if write, and return
+  them as columns"""
+  rows = np.real(np.array(rows,dtype=complex))
+  if write:
+    fo = open("BANDS.OUT","w")
+    for row in rows: fo.write("    ".join([str(x) for x in row])+"\n")
+    fo.close()
+  return rows.T
 
 
 
@@ -90,7 +103,7 @@ def get_bands(self,**kwargs):
 def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                     callback=None,central_energy=0.0,nk=400,
                     ewindow=None,
-                    output_file="BANDS.OUT",write=True,
+                    output_file="BANDS.OUT",write=None,
                     silent=True):
     """
     Get an n-dimensional bandstructure
@@ -107,6 +120,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         operator, batched or not); the callback, if any, still sees the
         full unfiltered set of energies at each k-point.
     """
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if num_bands is not None:
       # ARPACK finds at most N-2 eigenpairs of a complex N x N matrix
       # (eigsh hands a complex one to eigs, which needs k<N-1), so
@@ -137,7 +151,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         else: return (eig,eigvec)
     # open file and get generator
     hkgen = h.get_hk_gen() # generator hamiltonian
-    kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
+    kpath = h.geometry.get_kpath(kpath,nk=nk,write=write) # generate kpath
     ncols = 2+num_waw if operator is not None else 2 # k, e, (operators)
     def kes2rows(k,es):
       """Pack a k-point's energies into output rows, dropping the bands
@@ -218,18 +232,19 @@ def smalleig(m,numw=10,evecs=False,e0=0.):
 
 
 def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
-                   info = False,kpath = None,discard=None):
+                   info = False,kpath = None,discard=None,write=None):
   """
   Returns the lowest eigenvaleus of the system
   """
+  write = filewrite.resolve(write,True) # the call, else the global switch
   from scipy.sparse import csc_matrix
   if kpath is None: 
     # nkpoints used to be declared and never read, so the path length was
     # klist.default's own default whatever was asked for
-    k = klist.default(h.geometry,nk=nkpoints) # default path
+    k = klist.default(h.geometry,nk=nkpoints,write=write) # default path
   else: k = kpath
   import gc # garbage collector
-  fo = open("BANDS.OUT","w")
+  rows = [] # k index, energy and the operator if any
   if operator is None: # if there is not an operator
     if h.dimensionality==0:  # dot
       eig,eigvec = algebra.arpack_eigh(csc_matrix(h.intra),k=nbands,
@@ -240,18 +255,18 @@ def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
         if discard is not None: # use the function
           v = eigvec[i] # eigenfunction
           if discard(v): continue
-        fo.write(str(iw)+"     "+str(eig[i])+"\n")
+        rows.append([iw,eig[i]])
         iw += 1 # increase counter
     elif h.dimensionality>0: 
       hkgen = h.get_hk_gen() # get generator
-      for ik in k:  # ribbon
+      for (jk,ik) in enumerate(k):  # ribbon
         hk = hkgen(ik) # get hamiltonians
         gc.collect() # clean memory
         eig,eigvec = slg.eigsh(hk,k=nbands,which="LM",sigma=0.0)
         del eigvec # clean eigenvectors
         del hk # clean hk
-        for e in eig:
-          fo.write(str(ik)+"     "+str(e)+"\n")
+        for e in eig: rows.append([jk,e]) # the index, the k-vector used to
+                        # be written whole, brackets and all
         if info:  print("Done",ik,end="\r")
     else: # ups
       raise ValueError("the Hamiltonian must have a non-negative "
@@ -259,15 +274,14 @@ def lowest_bands(h,nkpoints=100,nbands=10,operator = None,
   else:  # if there is an operator
     if h.dimensionality==1:
       hkgen = h.get_hk_gen() # get generator
-      for ik in k:
+      for (jk,ik) in enumerate(k):
         hk = hkgen(ik) # get hamiltonians
         eig,eigvec = algebra.arpack_eigh(hk,k=nbands,which="LM",sigma=0.0)
         eigvec = eigvec.transpose() # tranpose the matrix
         if info:  print("Done",ik,end="\r")
         for (e,v) in zip(eig,eigvec): # loop over eigenvectors
-          a = braket_wAw(v,operator)
-          fo.write(str(ik)+"     "+str(e)+"     "+str(a)+"\n")
-  fo.close()
+          rows.append([jk,e,braket_wAw(v,operator)])
+  return _write_band_rows(rows,write)
 
 
 

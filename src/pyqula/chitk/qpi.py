@@ -7,14 +7,22 @@ from numba import jit
 from .. import filesystem as fs
 from .. import parallel
 from .. import interpolation
+from .. import filewrite
 
 
 def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
         output_folder="MULTIQPI",nsuper=2,integrate=False,
         mode = "response",info=False,
         nunfold = 1, # flag for unfolding
-        delta=1e-1,**kwargs):
-    """Compute the QPI using a poor-mans convolution of the k-DOS"""
+        delta=1e-1,write=None,**kwargs):
+    """Compute the QPI using a poor-mans convolution of the k-DOS.
+
+    Returns (q, energies, qpi): the q-points, (nq,3) in the coordinates of
+    the k-mesh, the energies, and the QPI intensity, (nenergies,nq), the
+    shape get_qpi_impurity returns. Unless write=False it also writes, in
+    output_folder, the QPI and the k-resolved DOS at each energy and an
+    index of those files, and the DOS to DOS.OUT"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if h.dimensionality!=2:
         raise ValueError("the QPI is only implemented for 2d Hamiltonians")
     if mode=="response": # built from the bare eigenvalues alone
@@ -62,16 +70,21 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
     else:
         raise ValueError("unknown mode; the QPI accepts 'pm' and 'response'")
 #    print(np.array(out).shape) ; exit()
-    # now write everything #
-    ########################################
-    fs.rmdir(output_folder) # remove folder
-    fs.mkdir(output_folder) # create folder
     kqpi = np.array([o[0] for o in out]).T # convert to array
     if integrate:
         kqpi = [np.mean(kqpi[:,0:i],axis=1) for i in range(len(es))]
         kqpi = [kp-np.min(kp) for kp in kqpi]
         kqpi = np.array(kqpi).T
     kdos = np.array([o[1] for o in out]).T # convert to array
+    if write: write_qpi(output_folder,qs0,es,kqpi,kdos,dosa)
+    return qs0,np.array(es),kqpi.T
+
+
+def write_qpi(output_folder,qs0,es,kqpi,kdos,dosa):
+    """Write the QPI and the k-resolved DOS of every energy to
+    output_folder, which is emptied first, and the DOS to DOS.OUT"""
+    fs.rmdir(output_folder) # remove folder
+    fs.mkdir(output_folder) # create folder
     fo = open(output_folder+"/"+output_folder+".TXT","w")
     for i in range(len(es)): # loop over energies
         filename = output_folder+"_"+str(es[i])+"_.OUT" # name

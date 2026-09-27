@@ -1,6 +1,7 @@
 # specialized routine to perform an SCF, taking as starting point an
 # attractive local interaction in a spinless Hamiltonian
 
+from .. import filewrite
 from .. import inout
 import numpy as np
 import time
@@ -474,7 +475,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         T=1e-7, # temperature
         integration="ed", # "ed" (exact diagonalization) or "qtci"
         tolerance=1e-6, # qtci-only: crossinterpolate2 convergence tolerance
-        callback_h=None,**kwargs):
+        callback_h=None,write=None,**kwargs):
     """Perform the SCF mean field
 
     mix: the linear-mixing factor. solver="plain" mixes with it (0.1 when
@@ -482,7 +483,12 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
     of its linear warm-up phase (broyden_mixing_solve's lam, whose own
     default applies when not given). The scipy solvers ("krylov",
     "anderson", "broyden1", "linear") have no use for it, and warn when
-    it is given."""
+    it is given.
+
+    write: False keeps the converged mean field out of MF.pkl in the
+    working directory. With load_mf=True an MF.pkl already there is still
+    read as the starting guess."""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     reject_leftover_kwargs(kwargs)
     if verbose>1: info=True
 #    if not h0.check_mode("spinless"): raise # sanity check
@@ -586,7 +592,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         if diff<maxerror: 
             scf = f(mfnew) # last iteration, with the unmixed mean field
             scf.converged = True # no convergence
-            inout.save(scf.mf,mf_file) # save the mean field
+            if write: inout.save(scf.mf,mf_file) # save the mean field
          #   scf.hamiltonian.check(tol=100*maxerror) # perform some sanity checks
             return scf
         if maxite is not None: # maximum number of iterations reached
@@ -652,7 +658,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         scf = f(mf) # compute the SCF with the solution
         if solver=="broyden_mixing": scf.converged = converged # store convergence flag
         scf.error = maxerror # store the error
-        inout.save(scf.mf,mf_file) # save the mean field
+        if write: inout.save(scf.mf,mf_file) # save the mean field
         return scf # return the mean field
 
 

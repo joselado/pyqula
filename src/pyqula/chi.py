@@ -1,3 +1,4 @@
+from . import filewrite
 import numpy as np
 import scipy.linalg as lg
 from . import parallel
@@ -96,8 +97,9 @@ def chargechi_row(h,i=0,es=np.linspace(-3.0,3.0,100),delta=1e-6,temp=1e-7):
 
 
 def chargechi_reciprocal(h,i=None,
-        es=np.linspace(-4.,4.,200),delta=1e-3,**kwargs):
+        es=np.linspace(-4.,4.,200),delta=1e-3,write=None,**kwargs):
     """Return the charge susceptibility in reciprocal space"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if h.dimensionality!=0:
         raise ValueError("the reciprocal-space charge susceptibility is only "
                 "implemented for 0d Hamiltonians")
@@ -114,15 +116,16 @@ def chargechi_reciprocal(h,i=None,
     freq = np.fft.fftfreq(len(cs[:,0])) # get the frequencies
     # perform the fourier transform
     fcs = np.array([np.fft.fft(ic) for ic in cs.T])
-    fo = open("CHIK.OUT","w")
     print(fcs.shape,es.shape,freq.shape)
-    for i in range(len(freq)):
-      for j in range(len(es)):
-#          fo.write(str(h.geometry.r[i,0])+"  ")
-          fo.write(str(freq[i])+"  ")
-          fo.write(str(es[j])+"  ")
-          fo.write(str(np.abs(fcs[j][i]))+"\n")
-    fo.close()
+    if write:
+      fo = open("CHIK.OUT","w")
+      for i in range(len(freq)):
+        for j in range(len(es)):
+            fo.write(str(freq[i])+"  ")
+            fo.write(str(es[j])+"  ")
+            fo.write(str(np.abs(fcs[j][i]))+"\n")
+      fo.close()
+    return freq,es,np.abs(fcs) # |chi(q,E)|, one row per energy
 
 
 

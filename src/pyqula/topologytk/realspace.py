@@ -14,11 +14,12 @@ the natural generalization (it is also what Q. Marsal, D. Varjas and A. G.
 Grushin use to normalize the marker on amorphous networks, arXiv:2003.13701,
 code at zenodo.3741829).
 """
+from .. import filewrite
 import numpy as np
 from .. import densitymatrix
 
 
-def real_space_chern(h,operator=None):
+def real_space_chern(h,operator=None,write=None):
     """Local Chern marker of a finite (0d) Hamiltonian, one value per site.
 
     The occupied states are those below zero energy, so a Hamiltonian whose
@@ -33,7 +34,9 @@ def real_space_chern(h,operator=None):
     - operator: restrict the marker to a subspace, as for h.get_chern()
 
     Returns the positions and the marker, and writes REAL_SPACE_CHERN.OUT
+    unless write=False
     """
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if h.dimensionality!=0:
         raise ValueError("the real-space Chern number is only defined for 0d "
                 "Hamiltonians")
@@ -55,7 +58,7 @@ def real_space_chern(h,operator=None):
     C = 2*np.pi*np.ravel(np.array(C)).imag # marker of each orbital, times an area
     C = h.full2profile(C) # sum over the orbitals of each site
     C = C/site_areas(h.geometry) # divide by the area of each site
-    h.geometry.write_profile(C,name="REAL_SPACE_CHERN.OUT")
+    if write: h.geometry.write_profile(C,name="REAL_SPACE_CHERN.OUT")
     return h.geometry.r,C # return result
 
 

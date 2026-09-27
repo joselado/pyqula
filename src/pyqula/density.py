@@ -1,4 +1,5 @@
 from __future__ import print_function,division
+from . import filewrite
 import numpy as np
 from .ldos import spatial_dos as spatial_density
 from scipy.sparse import csc_matrix
@@ -48,8 +49,9 @@ def restricted_density(intra,n=20,e=0.0,window=0.1,mode="arpack",
 
 def density(h,e=0.0,nk=20,mode="arpack",random=True,num_wf=20,
                 window=0.1,nrep=3,name="DENSITY.OUT",
-                window_mode="around",kpoints=None):
+                window_mode="around",kpoints=None,write=None):
   """ Calculate the electronic density"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.intra.shape[0]<100: mode="full"
   if h.dimensionality==0: nk = 1 # single kpoint
   hkgen = h.get_hk_gen() # get generator
@@ -68,7 +70,7 @@ def density(h,e=0.0,nk=20,mode="arpack",random=True,num_wf=20,
                    mode=mode,window_mode=window_mode) 
   d /= nk # normalize
   d = spatial_density(h,d) # sum if necessary
-  geometry.write_profile(h.geometry,d,name=name,nrep=nrep)
+  if write: geometry.write_profile(h.geometry,d,name=name,nrep=nrep)
   return d # return density
 
 

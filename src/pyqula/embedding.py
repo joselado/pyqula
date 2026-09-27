@@ -1,5 +1,6 @@
 # library to perform embedding calculations
 from __future__ import print_function
+from . import filewrite
 
 from . import green
 from . import parallel
@@ -111,8 +112,9 @@ class Embedding():
 
 def dos_impurity(h,vc=None,energies=np.linspace(-.5,.5,20),
                    mode="adaptive",delta=0.01,nk=50,silent=True,
-                   use_generator=False):
+                   use_generator=False,write=None):
   """ Calculates the green function using the embedding technique"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if vc is None: vc = h.intra  # assume perfect
   iden = np.identity(h.intra.shape[0],dtype=np.complex128)
   if use_generator:
@@ -132,16 +134,18 @@ def dos_impurity(h,vc=None,energies=np.linspace(-.5,.5,20),
     return [d,dv]
   out = np.array(parallel.pcall(pfun,energies)) # compute
   ds,dsv = out[:,0],out[:,1] # get the different data
-  np.savetxt("DOS_PRISTINE.OUT",np.array([energies,ds]).T)
-  np.savetxt("DOS_DEFECTIVE.OUT",np.array([energies,dsv]).T)
+  if write:
+    np.savetxt("DOS_PRISTINE.OUT",np.array([energies,ds]).T)
+    np.savetxt("DOS_DEFECTIVE.OUT",np.array([energies,dsv]).T)
   return ds,dsv # return object
 
 
 
 
 
-def bulk_and_surface(h1,nk=100,energies=np.linspace(-1.,1.,100),**kwargs):
+def bulk_and_surface(h1,nk=100,energies=np.linspace(-1.,1.,100),write=None,**kwargs):
   """Get the surface DOS of an interface"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   from scipy.sparse import csc_matrix,bmat
   if h1.dimensionality==2:
       kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
@@ -161,7 +165,7 @@ def bulk_and_surface(h1,nk=100,energies=np.linspace(-1.,1.,100),**kwargs):
     dos_sur += np.array([-algebra.trace(g[0]).imag for g in outs])
   dos_bulk /= len(kpath)
   dos_sur /= len(kpath)
-  np.savetxt("DOS.OUT",np.array([energies,dos_bulk,dos_sur]).T)
+  if write: np.savetxt("DOS.OUT",np.array([energies,dos_bulk,dos_sur]).T)
   return energies,dos_bulk,dos_sur
 
 

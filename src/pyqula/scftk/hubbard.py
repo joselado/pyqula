@@ -1,3 +1,4 @@
+from .. import filewrite
 import os
 import numpy as np
 from .. import algebra
@@ -18,8 +19,9 @@ mf_file = "MF.pkl" # mean field file
 def hubbardscf(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
                   maxerror=1e-05,silent=False,mf=None,
                   T=None,collinear=False,fermi_shift=0.0,
-                  maxite=1000,save=False,nk=None,U=None):
+                  maxite=1000,save=False,nk=None,U=None,write=None):
   """ Solve a selfconsistent Hubbard mean field"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   # alternative input variables
   if nk is not None: nkp = nk
   if U is not None: g = U
@@ -45,8 +47,9 @@ def hubbardscf(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
   # get the pairs for the correlators
   ndim = h.intra.shape[0] # dimension
   totkp = nkp**(h.dimensionality) # total number of kpoints
-  file_etot = open("SCF_ENERGY.OUT","w")
-  file_error = open("SCF_ERROR.OUT","w")
+  # the energy and error of every iteration, or nowhere with write=False
+  file_etot = open("SCF_ENERGY.OUT" if write else os.devnull,"w")
+  file_error = open("SCF_ERROR.OUT" if write else os.devnull,"w")
   ite = 0 # iteration counter
   scf = scfclass(h) # create scf class
   while True: # infinite loop
@@ -77,7 +80,7 @@ def hubbardscf(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
     file_error.flush()
     totcharge = np.sum(charge).real # total charge
     avcharge = totcharge/nat # average charge
-    htmp.write_magnetization() # write in a file
+    if write: htmp.write_magnetization() # write in a file
     if save: inout.save(mf,mf_file) # save the mean field
     ######
     if not silent:
@@ -109,7 +112,7 @@ def hubbardscf(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
   scf.total_energy = etot # store total energy
   scf.mf = mf # store mean field matrix
   scf.magnetization = mag # store magnetization
-  scf.hamiltonian.write_magnetization() # write magnetization into a file
+  if write: scf.hamiltonian.write_magnetization() # write magnetization into a file
   return scf # return mean field
 
 
@@ -173,8 +176,9 @@ def spinless_mean_field(wf,U,collinear=False,totkp=1):
 
 def hubbardscf_spinless(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
                   maxerror=1e-05,silent=False,mf=None,
-                  smearing=None,collinear=False,fermi_shift=0.0):
+                  smearing=None,collinear=False,fermi_shift=0.0,write=None):
   """ Solve a selfconsistent Hubbard mean field"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   mix = 1. - mix
   U = g # redefine
   if h.has_spin: # only for spinless systems
@@ -191,8 +195,9 @@ def hubbardscf_spinless(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
   # get the pairs for the correlators
   ndim = h.intra.shape[0] # dimension
   totkp = nkp**(h.dimensionality) # total number of kpoints
-  file_etot = open("SCF_ENERGY.OUT","w")
-  file_error = open("SCF_ERROR.OUT","w")
+  # the energy and error of every iteration, or nowhere with write=False
+  file_etot = open("SCF_ENERGY.OUT" if write else os.devnull,"w")
+  file_error = open("SCF_ERROR.OUT" if write else os.devnull,"w")
   ite = 0 # iteration counter
   scf = scfclass(h) # create scf class
   while True: # infinite loop
@@ -242,4 +247,4 @@ def hubbardscf_spinless(h,g=1.0,nkp = 100,filling=0.5,mag=None,mix=0.9,
   scf.total_energy = etot # store total energy
   scf.mf = mf # store mean field matrix
   scf.magnetization = mag
-  scf.hamiltonian.write_magnetization() # write magnetization into a file
+  if write: scf.hamiltonian.write_magnetization() # write magnetization into a file

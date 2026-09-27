@@ -1,8 +1,10 @@
+from .. import filewrite
 import numpy as np
 
 def kdos(self,kpath=None,energies=None,
-           write=True,**kwargs):
+           write=None,**kwargs):
     """Compute momentum-resolved spectral function"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     def fun(k,e):
         if self.dimensionality==2: # 2D heterostructure
             HT1 = self.generate(k)

@@ -134,10 +134,12 @@ def _check_insulator(H,nk=40):
           +"zero, so this is a metal and its Chern numbers are not defined")
 
 
-def split_chern(H,operator=None,nk=40,tol=1e-4):
+def split_chern(H,operator=None,nk=40,tol=1e-4,write=None):
     """(C_+ - C_-)/2 for the occupied states split by the sign of P O P,
     raising if P O P closes its gap on the mesh, or if the Hamiltonian is a
-    metal, with a Fermi pocket between the points of the mesh"""
+    metal, with a Fermi pocket between the points of the mesh. write goes
+    to mesh_chern, which writes each sector's CHERN.OUT and
+    BERRY_CURVATURE.OUT unless it is False"""
     gap = operator_gap(H,operator=operator,nk=nk)
     _check_insulator(H,nk=nk)
     if gap<tol:
@@ -145,12 +147,12 @@ def split_chern(H,operator=None,nk=40,tol=1e-4):
           +"of the operator, since its projection on them has an eigenvalue "
           +"of "+str(gap)+" on the k-mesh; the split invariant is not "
           +"defined when that gap closes")
-    cp = get_chern_operator_sign_sector(H,operator,sign=1,nk=nk)
-    cm = get_chern_operator_sign_sector(H,operator,sign=-1,nk=nk)
+    cp = get_chern_operator_sign_sector(H,operator,sign=1,nk=nk,write=write)
+    cm = get_chern_operator_sign_sector(H,operator,sign=-1,nk=nk,write=write)
     return (cp-cm)/2.
 
 
-def spin_chern(H,operator="sz",nk=40,tol=1e-4):
+def spin_chern(H,operator="sz",nk=40,tol=1e-4,write=None):
     """Spin Chern number C_s = (C_+ - C_-)/2 of a two-dimensional insulator,
     with the occupied states split by the sign of their spin, P s_z P
     (Sheng-Weng-Sheng-Haldane, cond-mat/0603054; Prodan, arXiv:0904.1894)
@@ -161,14 +163,16 @@ def spin_chern(H,operator="sz",nk=40,tol=1e-4):
     reversal, C_s modulo 2 is the Z2 invariant.
 
     operator: the spin component, a name, a matrix or an Operator
-    nk: k-points per direction of the mesh"""
+    nk: k-points per direction of the mesh
+    write: False to keep the Chern number and Berry curvature of each
+        sector out of CHERN.OUT and BERRY_CURVATURE.OUT"""
     from ..check import require_spin
     require_spin(H,"the spin Chern number")
     if H.dimensionality!=2:
         raise ValueError("the spin Chern number needs a two-dimensional "
           +"Hamiltonian, and this one has dimensionality "
           +str(H.dimensionality))
-    return split_chern(H,operator=operator,nk=nk,tol=tol)
+    return split_chern(H,operator=operator,nk=nk,tol=tol,write=write)
 
 
 def mirror_operator(H):

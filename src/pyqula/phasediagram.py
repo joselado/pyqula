@@ -1,4 +1,5 @@
 from __future__ import print_function
+from . import filewrite
 import numpy as np
 from scipy import interpolate
 
@@ -7,8 +8,9 @@ from scipy import interpolate
 
 def diagram2d(getquantity,x=np.linspace(0.,1.,20),
                y=np.linspace(0.,1.,20),filename="PHASE_DIAGRAM.OUT",
-               nite=4):
+               nite=4,write=None):
   """Evaluates a phase diagram, writting the quantities in a file"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   mz = np.zeros((len(x),len(y))) # 2d array
   mx = np.array([[ix for iy in y] for ix in x]) # 2d array
   my = np.array([[iy for iy in y] for ix in x]) # 2d array
@@ -20,11 +22,13 @@ def diagram2d(getquantity,x=np.linspace(0.,1.,20),
   # now interpolate and call
   mx,my,mz = selected_interpolation(getquantity,mx,my,mz,nite=nite) # interpolate
 
-  fo = open(filename,"w") # open file
-  for i in range(len(mx)): # loop over x
-    for j in range(len(my)): # loop over x
-      fo.write(str(mx[i,j])+"    "+str(my[i,j])+"    "+str(mz[i,j])+"\n") # write in file
-  fo.close() # close file
+  if write:
+    fo = open(filename,"w") # open file
+    for i in range(len(mx)): # loop over x
+      for j in range(len(my)): # loop over x
+        fo.write(str(mx[i,j])+"    "+str(my[i,j])+"    "+str(mz[i,j])+"\n") # write in file
+    fo.close() # close file
+  return mx,my,mz
 
 
 

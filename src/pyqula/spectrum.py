@@ -1,4 +1,5 @@
 # library to deal with the spectral properties of the hamiltonian
+from . import filewrite
 import numpy as np
 import scipy.linalg as lg
 import scipy.sparse.linalg as slg
@@ -20,10 +21,11 @@ arpack_maxiter = 10000
 
 
 
-def boolean_fermi_surface(h,write=True,output_file="BOOL_FERMI_MAP.OUT",
+def boolean_fermi_surface(h,write=None,output_file="BOOL_FERMI_MAP.OUT",
                     e=0.0,nk=50,nsuper=1,reciprocal=False,
                     delta=None):
     """Calculates the Fermi surface of a 2d system"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if h.dimensionality!=2: # continue if two dimensional
         raise ValueError("the boolean Fermi surface is only defined for 2d "
                 "Hamiltonians")
@@ -85,8 +87,9 @@ from .bandstructure import braket_wAw
 
 def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
                nk=50,nsuper=1,reciprocal=True,
-               operator=None,k0=[0.,0.]):
+               operator=None,k0=[0.,0.],write=None):
   """ Calculate a selected bands in a 2d Hamiltonian"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality!=2: # continue if two dimensional
       raise ValueError("selected_bands2d is only for 2d Hamiltonians")
   hk_gen = h.get_hk_gen() # gets the function to generate h(k)
@@ -97,8 +100,7 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
   # setup a reasonable value for delta
   # setup the operator
   operator = operator2list(operator) # convert into a list
-  fs.rmglob(output_file+"*") # delete previous files
-  fo = [open(output_file+"_"+str(i)+".OUT","w") for i in nindex] # files
+  rows = [[] for i in nindex] # kx, ky, energy and operators, per band
   xys = [(x,y) for x in kxs for y in kys] # all kpoint pairs
   ks = np.array([np.array(R)@np.array([x,y,0.]) for (x,y) in xys]) # change of basis
   if not h.is_sparse: # dense: batch every k-point's H(k) into one numba eigh call
@@ -127,24 +129,29 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
       epos = sorted(epos)
       eneg = -np.array(sorted(-np.array(eneg)))
       for (i,j) in zip(nindex,range(len(nindex))): # loop over desired bands
-        fo[j].write(str(x)+"     "+str(y)+"   ")
         if i>0: # positive
-          fo[j].write(str(epos[i-1])+"  ")
+          row = [x,y,epos[i-1]]
           for op in operator: # loop over operators
-            c = op.braket(wfpos[i-1]).real # expectation value
-            fo[j].write(str(c)+"  ") # write in file
-          fo[j].write("\n") # write in file
-          
+            row.append(op.braket(wfpos[i-1]).real) # expectation value
+          rows[j].append(row)
         if i<0: # negative
-          fo[j].write(str(eneg[abs(i)-1])+"  ")
+          row = [x,y,eneg[abs(i)-1]]
           for op in operator: # loop over operators
-            # wfneg, not wfpos: the energy written above is the valence
+            # wfneg, not wfpos: the energy stored above is the valence
             # one, so the expectation value has to come from the valence
             # eigenvector (the i>0 branch above is the same code on epos)
-            c = op.braket(wfneg[abs(i)-1]).real # expectation value
-            fo[j].write(str(c)+"  ") # write in file
-          fo[j].write("\n") # write in file
-  [f.close() for f in fo] # close file
+            row.append(op.braket(wfneg[abs(i)-1]).real) # expectation value
+          rows[j].append(row)
+  if write:
+    fs.rmglob(output_file+"*") # delete previous files
+    for (i,rj) in zip(nindex,rows): # one file per band
+      fo = open(output_file+"_"+str(i)+".OUT","w")
+      for row in rj:
+        fo.write(str(row[0])+"     "+str(row[1])+"   ")
+        for c in row[2:]: fo.write(str(c)+"  ")
+        fo.write("\n")
+      fo.close()
+  return [np.array(rj) for rj in rows] # kx, ky, energy, operators
 
 
 get_bands = selected_bands2d
@@ -153,8 +160,9 @@ get_bands = selected_bands2d
 
 
 def ev2d(h,nk=50,nsuper=1,reciprocal=False,
-               operator=None,k0=[0.,0.],kreverse=False):
+               operator=None,k0=[0.,0.],kreverse=False,write=None):
   """ Calculate the expectation value of a certain operator"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality!=2: # continue if two dimensional
       raise ValueError("ev2d is only for 2d Hamiltonians")
   # this sums an operator over EVERY occupied state, which a partial
@@ -171,7 +179,7 @@ def ev2d(h,nk=50,nsuper=1,reciprocal=False,
   else:  R = np.array(np.identity(3)) # get identity
   # setup the operator
   operator = operator2list(operator) # convert into a list
-  fo = open("EV2D.OUT","w") # open file
+  rows = [] # kx, ky and the expectation values
   xys = [(x,y) for x in kxs for y in kys] # all kpoint pairs
   ks = np.array([R@np.array([x,y,0.]) for (x,y) in xys]) # change of basis
   from .htk.eigenvectors import peigh
@@ -186,14 +194,20 @@ def ev2d(h,nk=50,nsuper=1,reciprocal=False,
         if e<0: # negative
           eneg.append(e)
           wfneg.append(w)
-      fo.write(str(x)+"     "+str(y)+"   ") # write k-point
+      row = [x,y] # k-point
       for op in operator: # loop over operators
           # op.braket, as selected_bands2d does: braket_wAw takes a matrix
           # and turns an operators.Operator into a zero-dimensional array
-          c = sum([op.braket(w) for w in wfneg]).real # expectation value
-          fo.write(str(c)+"  ") # write in file
+          row.append(sum([op.braket(w) for w in wfneg]).real) # expectation value
+      rows.append(row)
+  if write:
+    fo = open("EV2D.OUT","w") # open file
+    for row in rows:
+      fo.write(str(row[0])+"     "+str(row[1])+"   ") # write k-point
+      for c in row[2:]: fo.write(str(c)+"  ") # write in file
       fo.write("\n") # write in file
-  fo.close() # close file
+    fo.close() # close file
+  return np.array(rows) # kx, ky and one column per operator
 
 
 
@@ -223,8 +237,9 @@ def ev(h,operator=None,nk=30,**kwargs):
 
 
 def real_space_vev(h,operator=None,nk=1,nrep=3,name="REAL_SPACE_VEV.OUT",
-        **kwargs):
+        write=None,**kwargs):
     """Compute the expectation value in real space"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if nk>1: # only Gamma point implemented
         raise NotImplementedError("the real-space expectation value is only "
                 "implemented at the Gamma point, so nk must be 1")
@@ -246,7 +261,7 @@ def real_space_vev(h,operator=None,nk=1,nrep=3,name="REAL_SPACE_VEV.OUT",
     rho = operator(np.transpose(dm),k=[0.,0.,0.]) # compute the projected DM
     rho = np.diag(rho).real # extract the diagonal
     rho = h.full2profile(rho) # resum if necessary
-    h.geometry.write_profile(rho,nrep=nrep,name=name)
+    if write: h.geometry.write_profile(rho,nrep=nrep,name=name)
     return rho
 
 
@@ -367,8 +382,9 @@ from .filling import eigenvalues
 
 def reciprocal_map(h,f,nk=40,reciprocal=True,nsuper=1,
         filename="MAP.OUT",
-        write=True,verbosity=0,grid=False):
+        write=None,verbosity=0,grid=False):
     """ Calculates the reciprocal map of something"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if reciprocal: fR = h.geometry.get_k2K_generator()
     else: fR = lambda x: x
     if write: fo = open(filename,"w") # open file

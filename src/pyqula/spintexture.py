@@ -1,3 +1,4 @@
+from . import filewrite
 import numpy as np
 import scipy.linalg as lg
 
@@ -32,8 +33,9 @@ def kfun_map(h,nk=50,
     return kx,ky,out # return result
 
 
-def conduction_texture(h,n=2,**kwargs):
+def conduction_texture(h,n=2,write=None,**kwargs):
     """Compute the spin texture in the conduction band"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     def fun(hk,O=None):
         """Function to call"""
         es,ws = lg.eigh(hk) # diagonalize
@@ -55,9 +57,10 @@ def conduction_texture(h,n=2,**kwargs):
     dmy = [lg.det(myi).real for myi in my]
     tmx = [np.trace(mxi).real for mxi in mx]
     tmy = [np.trace(myi).real for myi in my]
-    # now save the data
-    np.savetxt("TRACE_TEXTURE.OUT",np.array([kx,ky,tmx,tmy]).T)
-    np.savetxt("DET_TEXTURE.OUT",np.array([kx,ky,dmx,dmy]).T)
+    if write: # now save the data
+        np.savetxt("TRACE_TEXTURE.OUT",np.array([kx,ky,tmx,tmy]).T)
+        np.savetxt("DET_TEXTURE.OUT",np.array([kx,ky,dmx,dmy]).T)
+    return kx,ky,np.array(tmx),np.array(tmy),np.array(dmx),np.array(dmy)
 
 
 

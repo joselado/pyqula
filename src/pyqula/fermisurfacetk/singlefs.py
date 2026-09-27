@@ -1,3 +1,4 @@
+from .. import filewrite
 import numpy as np
 from .. import algebra
 from .. import parallel
@@ -6,7 +7,7 @@ import scipy.sparse.linalg as slg
 arpack_tol = 1e-5
 arpack_maxiter = 10000
 
-def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
+def fermi_surface(h,write=None,output_file="FERMI_MAP.OUT",
                     e=0.0,nk=50,nsuper=1,reciprocal=True,
                     k0 = np.array([0.,0.]),
                     delta=None,refine_delta=1.0,operator=None,
@@ -38,6 +39,7 @@ def fermi_surface(h,write=True,output_file="FERMI_MAP.OUT",
     operator="unfold" this is the unfolded Fermi surface on the same mesh,
     in the same coordinates, as the primal cell's own, for any supercell
     matrix M."""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     operator = h.get_operator(operator) # get the operator
     if operator is not None: # operator given
         if not operator.linear:

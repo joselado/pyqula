@@ -1,3 +1,4 @@
+from .. import filewrite
 from ..parallel import pcall
 import numpy as np
 from ..integration import simpson
@@ -342,8 +343,9 @@ def didv_curve(ht, energies, **kwargs):
 
 
 def didv_kmap(self,kpath=None,energies=None,
-           write=True,**kwargs):
+           write=None,**kwargs):
     """Compute the momentum-resolved dIdV"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     def fun(k,e):
         if self.dimensionality==2: # 2D heterostructure
             HT1 = self.generate(k) # generate heterostructure

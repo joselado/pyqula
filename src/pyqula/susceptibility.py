@@ -1,3 +1,4 @@
+from . import filewrite
 import numpy as np
 from . import parallel
 from . import algebra
@@ -5,8 +6,9 @@ from . import magnetism
 from .check import require_spin
 
 def dominant_correlation(h0,filling=0.5,dm=1e-1,
-        write=False,**kwargs):
+        write=None,**kwargs):
     """Compute the dominant magnetic correlator"""
+    write = filewrite.resolve(write,False) # the call, else the global switch
     h = h0.copy() # copy hamiltonian
     h = h.get_dense()
     h.set_filling(filling) # set the desired filling

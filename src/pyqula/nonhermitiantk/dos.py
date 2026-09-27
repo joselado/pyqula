@@ -1,5 +1,6 @@
 # woorkaround for non Hermitian Hamiltonians
 
+from .. import filewrite
 import numpy as np
 from ..dos import get_dos_general
 
@@ -28,7 +29,7 @@ def get_dos(self,mode="ED",use_kpm=False,biorthogonal=False,**kwargs):
 
 
 def dos_biorthogonal(h,energies=np.linspace(-4.0,4.0,400),nk=100,
-        delta=None,ks=None,random=False,operator=None,write=True,
+        delta=None,ks=None,random=False,operator=None,write=None,
         chunk=2000,**kwargs):
     """The Brillouin-zone average of the biorthogonal spectral function,
     -Im Tr[O G(k,w)]/pi with G = (w + i delta - H_k)^-1, from the
@@ -37,6 +38,7 @@ def dos_biorthogonal(h,energies=np.linspace(-4.0,4.0,400),nk=100,
     E_n complex. The k-mesh, the default broadening and the normalization
     are the ones of the right-eigenvector DOS (dos.dos_kmesh), so that the
     two differ only in the spectral function they sum"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from ..klist import kmesh
     from ..dos import write_dos
     if kwargs.get("eigmode","complex")!="complex":

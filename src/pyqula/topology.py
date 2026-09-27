@@ -1,4 +1,5 @@
 # library to calculate topological properties
+from . import filewrite
 import numpy as np
 from scipy.sparse import bmat, csc_matrix
 import scipy.linalg as lg
@@ -22,11 +23,14 @@ arpack_maxiter = algebra.arpack_maxiter
 def get_berry_curvature_path(h,kpath=None,dk=0.01,
       window=None,max_waves=None,nk=600,
       mode="Wilson",delta=0.001,reciprocal=False,operator=None,
-      silent = True):
-    """Calculate and write in file the Berry curvature
-    in a certain kpath"""
+      silent = True,write=None):
+    """Berry curvature along a k-path. Returns the index of each kpoint
+    and the curvature there, and writes the kpoint and curvature to
+    BERRY_CURVATURE.OUT (and the path to the k-path files) unless
+    write=False"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     operator = get_operator(h,operator)
-    kpath = klist.get_kpath(h.geometry,kpath=kpath,nk=nk) # take default kpath
+    kpath = klist.get_kpath(h.geometry,kpath=kpath,nk=nk,write=write) # take default kpath
     tr = timing.Testimator("BERRY CURVATURE",silent=silent)
     ik = 0
     if operator is not None: mode="Green" # Green function mode
@@ -42,20 +46,22 @@ def get_berry_curvature_path(h,kpath=None,dk=0.01,
       else:
         raise ValueError("unknown mode for the Berry curvature; the accepted "
                 "ones are 'Wilson' and 'Green'")
-      return str(k[0])+"   "+str(k[1])+"   "+str(b)+"\n"
-    fo = open("BERRY_CURVATURE.OUT","w") # open file
+      return b
     if parallel.cores==1: # serial execution
+      bs = []
       for k in kpath:
         tr.remaining(ik,len(kpath))
         ik += 1
-        fo.write(getb(k)) # write result
-        fo.flush()
+        bs.append(getb(k))
     else: # parallel execution
-        out = parallel.pcall(getb,kpath)
-        for o in out: fo.write(o) # write
-    fo.close() # close file
-    m = np.genfromtxt("BERRY_CURVATURE.OUT").transpose()
-    return np.array(range(len(m[0]))),m[2]
+        bs = parallel.pcall(getb,kpath)
+    bs = np.array(bs,dtype=float)
+    if write:
+        fo = open("BERRY_CURVATURE.OUT","w") # open file
+        for (k,b) in zip(kpath,bs):
+            fo.write(str(k[0])+"   "+str(k[1])+"   "+str(b)+"\n")
+        fo.close() # close file
+    return np.arange(len(bs)),bs
 
 
 # alias for compatibility
@@ -66,7 +72,7 @@ write_berry = get_berry_curvature_path
 
 
 
-def berry_phase(h,nk=20,kpath=None,write=True):
+def berry_phase(h,nk=20,kpath=None,write=None):
     """ Calculates the Berry phase of a Hamiltonian
 
     SIGN CONVENTION. This returns +gamma in the standard discrete
@@ -77,6 +83,7 @@ def berry_phase(h,nk=20,kpath=None,write=True):
     SIGN CONVENTION docstring for the derivation. Checked against a direct
     King-Smith-Vanderbilt evaluation on closed k-loops (six digits).
     """
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if h.dimensionality==0:
         raise ValueError("a 0-dimensional Hamiltonian has no Brillouin "
           +"zone, so it has no Berry phase")
@@ -341,8 +348,10 @@ from .topologytk.overlap import uij
 
 
 def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None,
-        nk=None):
-    """ Calculates the chern number of a 2d system """
+        nk=None,write=None):
+    """ Calculates the chern number of a 2d system, and writes it to
+    CHERN.OUT unless write=False"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from scipy import integrate
     if nk is not None: # every sibling Chern path takes one; this one cannot
         raise ValueError("precise_chern integrates the Brillouin zone "
@@ -375,13 +384,16 @@ def precise_chern(h,dk=0.01, mode="Wilson",delta=0.0001,operator=None,
     c = integrate.dblquad(f,0.,1.,lambda x : 0., lambda x: 1.,epsabs=0.01,
                             epsrel=0.01)
     chern = c[0]/(2.*np.pi)
-    open("CHERN.OUT","w").write(str(chern)+"\n")
+    if write: open("CHERN.OUT","w").write(str(chern)+"\n")
     return chern
 
 
 def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
-        operator=None,kmesh=None):
-    """ Calculates the chern number of a 2d system """
+        operator=None,kmesh=None,write=None):
+    """ Calculates the chern number of a 2d system. Unless write=False it
+    also writes the Berry curvature on the mesh to BERRY_CURVATURE.OUT and
+    the Chern number to CHERN.OUT"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     c = 0.0
     ks = [] # array for kpoints
     bs = [] # array for berrys
@@ -412,13 +424,13 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
         bs = berry_curvature_mesh(h,ks,dk=dk)
     else: # per-kpoint dispatch
         bs = parallel.pcall(fberry,ks) # compute all the Berry curvatures
-    # write in file
-    fo = open("BERRY_CURVATURE.OUT","w") # open file
-    for (k,b) in zip(ks,bs):
-      fo.write(str(k[0])+"   ")
-      fo.write(str(k[1])+"   ")
-      fo.write(str(b)+"\n")
-    fo.close() # close file
+    if write: # write in file
+      fo = open("BERRY_CURVATURE.OUT","w") # open file
+      for (k,b) in zip(ks,bs):
+        fo.write(str(k[0])+"   ")
+        fo.write(str(k[1])+"   ")
+        fo.write(str(b)+"\n")
+      fo.close() # close file
     ################
     c = np.sum(bs) # sum berry curvatures
     if kmesh is None: # no kmesh provided
@@ -426,12 +438,12 @@ def mesh_chern(h,dk=-1,nk=10,delta=0.0001,mode="Wilson",
     else: # kmesh is given
         den = klist.infer_kmesh_density(kmesh,d=2) # infer the volume
         c = den*c/(2.*np.pi) # normalize
-    open("CHERN.OUT","w").write(str(c)+"\n")
+    if write: open("CHERN.OUT","w").write(str(c)+"\n")
     return c
 
 
 def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
-        nk=20,tolerance=1e-6,**kwargs):
+        nk=20,tolerance=1e-6,write=None,**kwargs):
     """Compute the Chern number of a 2D system by integrating the Berry
     curvature over the BZ with qutecipy, instead of summing it over a
     k-point mesh (see mesh_chern). qutecipy approximates the integrand as
@@ -472,6 +484,7 @@ def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
 
     See tests/topology/test_chern_qtci_accuracy.py, which pins the smooth
     case and records the sharp-case limitation."""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from .qtcitk.gkintegrate import gkorder_from_nk, integrate_robust
     operator = get_operator(h,operator) # accept a name, matrix or callable
     if dk<0: dk = 1./float(2*nk) # automatic dk, tied to the quadrature resolution
@@ -489,7 +502,7 @@ def chern_qtci(h,mode="Wilson",delta=0.0001,dk=-1,operator=None,
                   "accepted ones are 'Wilson' and 'Green'")
     c = integrate_robust(np.float64,f,GKorder,tolerance,**kwargs)
     c = c/(2.*np.pi) # normalize so that the integral gives an integer
-    open("CHERN.OUT","w").write(str(c)+"\n")
+    if write: open("CHERN.OUT","w").write(str(c)+"\n") # unless write=False
     return c
 
 
@@ -509,8 +522,9 @@ def get_berry_curvature_master(h,dk=None,nk=100,
         reciprocal=True,nsuper=1,window=None,
         kpath=None,
                max_waves=None,mode="Wilson",delta=0.001,operator=None,
-               write=True,verbose=0):
+               write=None,verbose=0):
     """ Return the Berry curvature in 2D reciprocal space """
+    write = filewrite.resolve(write,True) # the call, else the global switch
     operator = get_operator(h,operator) # accept a name, matrix or callable
     # get the right kpoints
     if kpath is None: # no kpath, just to a grid
@@ -581,7 +595,7 @@ z2_vanderbilt = z2_wannier_centers # for compatibility
 
 
 def wannier_centers(h,nk=30,nt=100,nocc=None,full=False,loop=0,pump=1,
-        kfix=0.,gauge="lattice"):
+        kfix=0.,gauge="lattice",write=None):
     """Flow of the hybrid Wannier centers (Soluyanov-Vanderbilt algorithm)
 
     Returns an array whose first row is the momentum t along the reciprocal
@@ -602,6 +616,7 @@ def wannier_centers(h,nk=30,nt=100,nocc=None,full=False,loop=0,pump=1,
     nocc: the number of bands, counted from the lowest, whose centers are
         followed; by default the ones below zero energy. They have to be
         separated from the band above them by a gap everywhere"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from .topologytk.qgt import _check_gauge,_orbital_fractions
     _check_gauge(gauge)
     dim = h.dimensionality
@@ -644,7 +659,6 @@ def wannier_centers(h,nk=30,nt=100,nocc=None,full=False,loop=0,pump=1,
             for (ik,k) in enumerate(path):
                 phase = np.exp(2j*np.pi*frac@kvector(k,t)[:dim])
                 wft[ik] = wft[ik]*phase[None,:] # rows are conjugated states
-    fo = open("WANNIER_CENTERS.OUT","w")
     # select a continuos gauge for the first wave
     for it in range(len(ts)-1): # loop over ts
       wfall[it+1][0] = smooth_gauge(wfall[it][0],wfall[it+1][0]) 
@@ -661,20 +675,21 @@ def wannier_centers(h,nk=30,nt=100,nocc=None,full=False,loop=0,pump=1,
       evals = lg.eigvals(m) # eigenvalues of the rotation 
       x = -np.angle(evals) # m is the conjugate of the Wilson loop, so the
                            # centers 2 pi x are minus the phases of m
-      fo.write(str(t)+"    ") # write pumping variable
-      row.append(t) # store
+      row.append(t) # store the pumping variable
       for ix in x: # loop over phases
-        fo.write(str(ix)+"  ")
         row.append(ix) # store
-      fo.write("\n")
       out.append(row) # store
-    fo.close()
+    if write: # one row per t: t, then the centers
+      fo = open("WANNIER_CENTERS.OUT","w")
+      for row in out: fo.write("    ".join([str(r) for r in row])+"\n")
+      fo.close()
     return np.array(out).transpose() # transpose the map
 
 
-def z2_invariant(h,nk=60,nt=60,nocc=None):
-  """Compute Z2 invariant with pumping of Wannier centers"""
-  return z2_wannier_winding(h,nk=nk,nt=nt,nocc=nocc)
+def z2_invariant(h,nk=60,nt=60,nocc=None,write=None):
+  """Compute Z2 invariant with pumping of Wannier centers. The flow of the
+  centers goes to WANNIER_CENTERS.OUT unless write=False"""
+  return z2_wannier_winding(h,nk=nk,nt=nt,nocc=nocc,write=write)
 
 
 
@@ -712,7 +727,7 @@ def chern(h,integration="grid",**kwargs):
 
 
 def wannier_winding(h,nk=30,nt=100,full=True,loop=0,pump=1,kfix=0.,
-        nocc=None):
+        nocc=None,write=None):
     """Signed number of times the hybrid Wannier centers cross a fixed line
 
     At each momentum t along the second reciprocal direction, the Wilson
@@ -755,7 +770,7 @@ def wannier_winding(h,nk=30,nt=100,full=True,loop=0,pump=1,kfix=0.,
     centers move fast where the gap is small, so a small gap needs a larger
     nt."""
     m = wannier_centers(h,nk=nk,nt=nt,full=full,loop=loop,pump=pump,
-            kfix=kfix,nocc=nocc)
+            kfix=kfix,nocc=nocc,write=write)
     x = m[1:] # centers, one row per occupied band and one column per t
     if full: x = np.concatenate([x,x[:,:1]],axis=1) # close the loop in t
     phi = np.sum(x,axis=0) # sum of the centers at each t
@@ -925,8 +940,9 @@ def quantum_metric(h,**kwargs):
 
 
 
-def spin_chern(h,nk=40,delta=0.00001,k0=[0.,0.],expandk=1.0):
+def spin_chern(h,nk=40,delta=0.00001,k0=[0.,0.],expandk=1.0,write=None):
   """Calculate the spin Chern number"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   kxs = np.linspace(-.5,.5,nk,endpoint=False)*expandk + k0[0]
   kys = np.linspace(-.5,.5,nk,endpoint=False)*expandk + k0[1]
   kk = [] # list of kpoints
@@ -935,12 +951,13 @@ def spin_chern(h,nk=40,delta=0.00001,k0=[0.,0.],expandk=1.0):
       kk.append(np.array([i,j])) # store vector
   sz = operators.get_sz(h) # get sz operator
   bs = [operator_berry(h,k=ki,operator=sz,delta=delta) for ki in kk] # get all berries
-  fo = open("BERRY_CURVATURE_SZ.OUT","w") # open file
-  for (k,b) in zip(kk,bs):
-    fo.write(str(k[0])+"   ")
-    fo.write(str(k[1])+"   ")
-    fo.write(str(b)+"\n")
-  fo.close() # close file
+  if write:
+    fo = open("BERRY_CURVATURE_SZ.OUT","w") # open file
+    for (k,b) in zip(kk,bs):
+      fo.write(str(k[0])+"   ")
+      fo.write(str(k[1])+"   ")
+      fo.write(str(b)+"\n")
+    fo.close() # close file
   bs = np.array(bs)/(2.*np.pi) # normalize by 2 pi
   return sum(bs)/len(kk)
 
@@ -995,11 +1012,12 @@ def spatial_berry_density(h,**kwargs):
 
 
 
-def Omega_rmap(h,nrep=5,k=[0.,0.,0.],operator=None,nk=None,**kwargs):
+def Omega_rmap(h,nrep=5,k=[0.,0.,0.],operator=None,nk=None,write=None,**kwargs):
   """
   Write the spatial resolved Berry curvature of a kpoint in a file.
   If nk is provided, it does a sum over reciprocal space
   """
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if operator is not None: # this is a dirty workaround
     if type(operator) is str:
       operator = h.get_operator(operator) 
@@ -1019,8 +1037,8 @@ def Omega_rmap(h,nrep=5,k=[0.,0.,0.],operator=None,nk=None,**kwargs):
     out = np.mean(out,axis=0) # resum
   from . import geometry
   from .ldos import spatial_dos
-  # write in a file
-  geometry.write_profile(h.geometry,
+  if write: # write in a file
+    geometry.write_profile(h.geometry,
           spatial_dos(h,out),name="BERRY_RMAP.OUT",nrep=nrep)
   return out
 
@@ -1032,12 +1050,12 @@ from .topologytk.green import dOmega_dE_generator
 
 
 def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
-               delta=None,operator=None,dk=0.01):
+               delta=None,operator=None,dk=0.01,write=None):
   """Compute a Berry density map dOmega/dE (k) at a fixed energy"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if delta is None: delta = 5./nk
   if reciprocal: R = h.geometry.get_k2K()
   else: R = np.array(np.identity(3))
-  fo = open("BERRY_DENSITY_KMAP.OUT","w") # open file
   nt = nk*nk # total number of points
   ik = 0
   ks = [] # list with kpoints
@@ -1053,17 +1071,21 @@ def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
       b = dOmega_dE(h,k=k,operator=operator,dk=dk) # get the density
       return b
   bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
-  for (b,k) in zip(bs,ks): # write everything
-      fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b)+"\n")
-      fo.flush()
-  fo.close() # close file
+  if write:
+    fo = open("BERRY_DENSITY_KMAP.OUT","w") # open file
+    for (b,k) in zip(bs,ks): # write everything
+        fo.write(str(k[0])+"   "+str(k[1])+"     "+str(b)+"\n")
+    fo.close() # close file
+  ks = np.array(ks)
+  return ks[:,0],ks[:,1],np.array(bs)
 
 
 
 def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
-        write=False,
+        write=None,
         es=np.linspace(-1.0,1.0,40)):
   """Compute the Chern density as a function of the energy"""
+  write = filewrite.resolve(write,False) # the call, else the global switch
   operator = get_operator(h,operator) # accept a name, matrix or callable
   ks = klist.kmesh(h.dimensionality,nk=nk)
   cs = np.zeros(es.shape[0]) # initialize

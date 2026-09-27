@@ -1,3 +1,4 @@
+from .. import filewrite
 import numpy as np
 from ..multihopping import MultiHopping
 from .. import algebra
@@ -168,8 +169,9 @@ def extract_custom_pairing(m,mode="all"):
 
 
 
-def extract_pairing_kmap(h,write=False,i=None,j=None,mode="all",**kwargs):
+def extract_pairing_kmap(h,write=None,i=None,j=None,mode="all",**kwargs):
     """Extract the pairing in reciprocal space"""
+    write = filewrite.resolve(write,False) # the call, else the global switch
     require_nambu(h,"the pairing k-map")
     h = get_anomalous_hamiltonian(h)
     if j is None: j = i # same site is the default

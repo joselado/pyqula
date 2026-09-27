@@ -1,16 +1,18 @@
 from __future__ import print_function
+from . import filewrite
 import scipy.linalg as lg
 import scipy.sparse.linalg as slg
 from scipy.sparse import csc_matrix,eye
 import numpy as np
 
 def correlator0d(m,energies=np.linspace(-10.,10.,400),i=0,j=0,delta=0.07,
-        write=True):
+        write=None):
   """Green's function G^R_ij(E) = <i|(E + i delta - m)^-1|j> from a matrix
   inversion at each energy. Returns (E, Re G^R_ij, -Im G^R_ij), so that for
   i=j the third array is pi times the local DOS, the same pair that the
   Chebyshev expansion kpm.correlator0d returns. write=True also writes the
   three columns to CORRELATOR.OUT"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   iden = np.identity(m.shape[0],dtype=np.complex128)
   zs = np.zeros(energies.shape[0],dtype=np.complex128)
   for (ie,e) in zip(range(len(energies)),energies):

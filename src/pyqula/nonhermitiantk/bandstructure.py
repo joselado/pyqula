@@ -1,3 +1,4 @@
+from .. import filewrite
 import numpy as np
 import scipy.sparse.linalg as slg
 from .. import algebra,operators
@@ -14,7 +15,7 @@ arpack_maxiter = 10000
 def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
                     callback=None,central_energy=0.0,nk=400,
                     ewindow=None,eigmode="complex",biorthogonal=False,
-                    output_file="BANDS.OUT",write=True,
+                    output_file="BANDS.OUT",write=None,
                     silent=True):
     """
     Get an n-dimensional bandstructure
@@ -44,6 +45,7 @@ def get_bands_nd(h,kpath=None,operator=None,num_bands=None,
         exceptional point R is ill conditioned and these weights grow
         large and cancel between the states that coalesce.
     """
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if biorthogonal and num_bands is not None:
         raise NotImplementedError("the biorthogonal weights need every "
                 "left eigenvector, which the ARPACK path (num_bands) does "

@@ -1,3 +1,4 @@
+from .. import filewrite
 import numpy as np
 from .. import filesystem as fs
 from ..dos import write_dos
@@ -9,7 +10,7 @@ from .fourier import ldos_fourier_transform,commensurate_qmesh
 
 def get_qpi_impurity(h,nsuper=10,impurities=[],energies=0.0,
         delta=0.05,num_waves=20,nk=2,
-        write=True,output_folder="QPI_IMPURITY",**kwargs):
+        write=None,output_folder="QPI_IMPURITY",**kwargs):
     """Real-space-impurity QPI: build a supercell of h, add a handful of
     real-space impurities (see qpitk.impurity.build_impurity_hamiltonian
     for the impurity spec format), compute the real-space LDOS map with
@@ -46,6 +47,7 @@ def get_qpi_impurity(h,nsuper=10,impurities=[],energies=0.0,
       q: (nsuper1*nsuper2,3) q-mesh spanning the primitive BZ
       qpi_q: QPI intensity |FT(ldos_r)|, (nsuper1*nsuper2,) or
         (nenergies,nsuper1*nsuper2), matching ldos_r's shape"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if h.dimensionality!=2: raise ValueError("get_qpi_impurity is only implemented for 2D Hamiltonians")
     g0 = h.geometry # primitive geometry, needed for the commensurate q-mesh
     hs = build_impurity_hamiltonian(h,nsuper,impurities)

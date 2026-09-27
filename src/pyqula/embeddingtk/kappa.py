@@ -1,5 +1,6 @@
 # summy class for the kappa method
 
+from .. import filewrite
 import numpy as np
 
 class DualLocalProbe():
@@ -17,7 +18,8 @@ class DualLocalProbe():
 
 
 
-def get_kappa(self,T=1e-2,write=True,nsuper=1,**kwargs):
+def get_kappa(self,T=1e-2,write=None,nsuper=1,**kwargs):
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from ..transporttk.localprobe import LocalProbe
     # see embeddingtk.didv.get_didv for why LocalProbe is built from
     # self.H (the pristine Hamiltonian) rather than the Embedding object

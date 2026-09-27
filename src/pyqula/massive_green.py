@@ -1,4 +1,5 @@
 # library to perform massive green function calculations
+from . import filewrite
 import os
 import numpy as np
 
@@ -30,42 +31,42 @@ def clean():
   fs.rmglob("pdos_storage*")
 
 
-def get_green(fun_gf,name="",energy=0.0,prec=prec):
+def get_green(fun_gf,name="",energy=0.0,prec=prec,write=None):
   """Looks for the green function at that energy, if it hasn't been calculated
   calculates it"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   foldername = "green_storage_"+name # name of the foler
   dirname = os.getcwd()+"/"+foldername # name of the foler
-  if not foldername in os.listdir(os.getcwd()):
+  if write and not foldername in os.listdir(os.getcwd()):
     fs.mkdir(foldername) # create the folder if nonexistent
   er = round(energy,prec) # round the energy value
   namefile = "green_"+str(er)+".npy" # name of the file
-  files = os.listdir(dirname) # files in the directory
-  if namefile in files: # check if it has been calculated
+  if os.path.isfile(dirname+"/"+namefile): # check if it has been calculated
     m = np.array(np.load(dirname+"/"+namefile)) # get the matrix
     return m # return the matrix
   else: # if it hasn't been calculated
     m = fun_gf(er) # calcualte green function
-    np.save(dirname+"/"+namefile,m) # save the matrix
+    if write: np.save(dirname+"/"+namefile,m) # save the matrix
     return m # return the matrix
 
 
 
-def get_pdos(fun_pd,name="",energy=0.0,prec=6):
+def get_pdos(fun_pd,name="",energy=0.0,prec=6,write=None):
   """Looks for the DOS at that energy, if it hasn't been calculated
   calculates it"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   foldername = "pdos_storage_"+name # name of the foler
   dirname = os.getcwd()+"/"+foldername # name of the foler
-  if not foldername in os.listdir(os.getcwd()):
+  if write and not foldername in os.listdir(os.getcwd()):
     fs.mkdir(foldername) # create the folder if nonexistent
   er = round(energy,prec) # round the energy value
   namefile = "pdos_"+str(er)+".dat" # name of the file
-  files = os.listdir(dirname) # files in the directory
-  if namefile in files: # check if it has been calculated
+  if os.path.isfile(dirname+"/"+namefile): # check if it has been calculated
     m = np.loadtxt(dirname+"/"+namefile) # get the matrix
     return m # return the matrix
   else: # if it hasn't been calculated
     m = fun_pd(er) # calcualte green function
-    np.savetxt(dirname+"/"+namefile,m) # save the matrix
+    if write: np.savetxt(dirname+"/"+namefile,m) # save the matrix
     return m # return the matrix
 
 

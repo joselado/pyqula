@@ -1,3 +1,4 @@
+from . import filewrite
 from . import specialhopping
 from . import specialgeometry
 import numpy as np
@@ -107,8 +108,9 @@ def TaS2_SOC(**kwargs):
 
 def TMDC_MX2(soc=0.0,cdw=0.0,g=None,tij=[1.0],
               drcdw = np.array([0.,0.,0.]), # shift in the CDW profile
-              normalize=True):
+              normalize=True,write=None):
     """Return the Hamiltonian of NbSe2"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if g is None: 
         g = geometry.triangular_lattice()  # triangular lattice
         if cdw!=0.0: g = g.get_supercell(3,store_primal=True)
@@ -133,7 +135,7 @@ def TMDC_MX2(soc=0.0,cdw=0.0,g=None,tij=[1.0],
         rc = np.mean(h.geometry.get_closest_position([.1,.1,0.],n=3),axis=0)
         rc = rc - np.array(drcdw) # add the shift
         f = lambda r: f0(r-rc)
-        h.geometry.write_profile(f)
+        if write: h.geometry.write_profile(f)
         h.add_onsite(f)
     h.set_filling(.5)
     h = h.get_dense() # dense Hamiltonian

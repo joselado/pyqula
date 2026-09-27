@@ -1,4 +1,5 @@
 from __future__ import print_function,division
+from . import filewrite
 import numpy as np
 from . import green
 from . import dos
@@ -28,9 +29,10 @@ def write_kdos(k=0.,es=[],ds=[],new=True):
 
 
 def kdos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,kshift=0.,
-                  ewindow=None,info=False):
+                  ewindow=None,info=False,write=None):
   """ Calculate kresolved density of states of
   a 1d system for a certain orbitals"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality!=1: # only for 1d
     raise ValueError("kdos1d_sites is only implemented for 1d Hamiltonians")
   ks = np.linspace(0.,1.,nk) # number of kpoints
@@ -38,7 +40,8 @@ def kdos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,kshift=0.,
   hkgen = h.get_hk_gen() # get generator
   if ewindow is None:  xs = np.linspace(-0.9,0.9,nk) # x points
   else:  xs = np.linspace(-ewindow/scale,ewindow/scale,nk) # x points
-  write_kdos() # initialize file
+  if write: write_kdos() # initialize file
+  out = [] # (k, energies, kdos) of every kpoint
   for k in ks: # loop over kpoints
     mus = np.array([0.0j for i in range(2*npol)]) # initialize polynomials
     hk = hkgen(k+kshift) # hamiltonian
@@ -46,8 +49,10 @@ def kdos1d_sites(h,sites=[0],scale=10.,nk=100,npol=100,kshift=0.,
       mus += kpm.moments_local_dos(hk/scale,i=isite,n=npol)
     kpm.check_scale(mus,scale,bound=len(sites)) # a sum of unit-vector moments
     ys = kpm.generate_profile(mus,xs) # generate the profile
-    write_kdos(k,xs*scale,ys/scale,new=False) # per unit energy, appended
+    if write: write_kdos(k,xs*scale,ys/scale,new=False) # per unit energy, appended
+    out.append((k,xs*scale,ys/scale))
     if info: print("Done",k)
+  return out
 
 #
 #def surface(h,energies=None,klist=None,delta=0.01):
@@ -185,7 +190,7 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
                  P = None,
                  ewindow=4.0,delta=0.01,ntries=10,nk=100,
                  operator=None,energies=np.linspace(-3.0,3.0,200),
-                 mode="ED",biorthogonal=False,**kwargs):
+                 mode="ED",biorthogonal=False,write=None,**kwargs):
     """Calculate the KDOS bands using the KPM.
 
     Every mode returns the trace -Im Tr[O G(k,E)]/pi, the spectral weight
@@ -213,7 +218,12 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
     by its lifetime (Kozii and Fu, arXiv:1708.05841, Eq. 24); it is what
     mode="green" computes, and mode="ED" gives the same numbers from the
     left and right eigenvectors. A Hermitian Hamiltonian has one spectral
-    function and ignores the keyword."""
+    function and ignores the keyword.
+
+    write=False returns the three columns (position along the path,
+    energy, kdos) without writing KDOS_BANDS.OUT, or the k-path files
+    BANDLINES.OUT and KPOINTS_BANDS.OUT, to the working directory."""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if h.non_hermitian: # two spectral functions, and no Chebyshev one
         if mode=="KPM" or use_kpm:
             raise NotImplementedError("the KPM kdos expands in Chebyshev "
@@ -235,7 +245,7 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
     # normalize the kpath up front: the ED branch below needs the actual
     # kpoints (it indexes get_bands's output by k-index), and get_kpath
     # also expands a list of high-symmetry-point labels into vectors
-    kpath = h.geometry.get_kpath(kpath,nk=nk) # generate kpath
+    kpath = h.geometry.get_kpath(kpath,nk=nk,write=write) # generate kpath
     # resolve names ("unfold", "sz", ...) into an Operator once, for every
     # mode: only the ED branch used to do it, by way of get_bands, so a
     # string reached green.GtimesO and operators.Operator unresolved and
@@ -251,7 +261,8 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
         # was built to avoid.
         from .dostk.eigtodos import calculate_dos
         if biorthogonal and h.non_hermitian: # -Im Tr[O G]/pi, pole by pole
-            return kdos_biorthogonal(h,kpath,operator,energies,delta,**kwargs)
+            return kdos_biorthogonal(h,kpath,operator,energies,delta,
+                    write=write,**kwargs)
         bout = h.get_bands(kpath=kpath,operator=operator,write=False,**kwargs)
         kidx = np.real(bout[0]).astype(int) # k-index per row
         es_col = bout[1] # energy per row
@@ -317,12 +328,18 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
         if P is None and frand is None: y = y*hk.shape[0]
         return (x,y)
       out = parallel.pcall(pfun,kpath) # compute all
-    return write_kdos_bands(kpath,out)
+    return write_kdos_bands(kpath,out,write=write)
 
 
-def write_kdos_bands(kpath,out):
+def write_kdos_bands(kpath,out,write=None):
     """Write the (energies,kdos) pair of every kpoint to KDOS_BANDS.OUT,
-    and return its three columns: position along the path, energy, kdos"""
+    and return its three columns: position along the path, energy, kdos.
+    write=False only returns them"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
+    if not write:
+        cols = [(np.full(len(x),ik/len(kpath)),np.real(x),np.real(y))
+                for (ik,(x,y)) in enumerate(out)]
+        return np.array([np.concatenate(c) for c in zip(*cols)])
     ik = 0
     fo = open("KDOS_BANDS.OUT","w") # open file
     for k in kpath: # loop over kpoints
@@ -337,12 +354,13 @@ def write_kdos_bands(kpath,out):
     return np.genfromtxt("KDOS_BANDS.OUT").T
 
 
-def kdos_biorthogonal(h,kpath,operator,energies,delta,**kwargs):
+def kdos_biorthogonal(h,kpath,operator,energies,delta,write=None,**kwargs):
     """The biorthogonal spectral function of a non-Hermitian Hamiltonian,
     -Im Tr[O G]/pi with G = (w + i delta - H)^-1, from its eigenstates:
     sum_n w_n/(w + i delta - E_n) with w_n = <L_n|O|R_n>/<L_n|R_n> (one
     without an operator) and E_n complex, which is mode="green" pole by
     pole (see kdos_bands)"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if kwargs.get("eigmode","complex")!="complex":
         raise ValueError("the biorthogonal spectral function needs the "
                 "complex eigenvalues, whose imaginary part broadens each "
@@ -358,7 +376,7 @@ def kdos_biorthogonal(h,kpath,operator,energies,delta,**kwargs):
         ws = bout[2][mask] if len(bout)>2 else np.ones(len(es)) # weights
         g = ws[None,:]/(energies[:,None] + 1j*delta - es[None,:]) # poles
         out.append((energies,-np.sum(g,axis=1).imag/np.pi))
-    return write_kdos_bands(kpath,out)
+    return write_kdos_bands(kpath,out,write=write)
 
 
 
@@ -411,9 +429,10 @@ def write_surface_kpm(h,ne=400,klist=None,scale=4.,npol=200,w=20,ntries=20):
 
 
 def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
-                    write=True,
+                    write=None,
                     delta=None,kpath=None,dh1=None,dh2=None,nk=50):
     """Get the surface DOS of an interface"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from scipy.sparse import csc_matrix,bmat
     if delta is None:
         delta = 1*(max(energies) - min(energies))/len(energies)
@@ -423,7 +442,7 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
       elif h1.dimensionality==3:
         g2d = h1.geometry.copy() # copy Hamiltonian
         g2d = sculpt.set_xy_plane(g2d)
-        kpath = klist.default(g2d,nk=nk)
+        kpath = klist.default(g2d,nk=nk,write=write)
       elif h1.dimensionality==2:
         kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
       else:
@@ -464,7 +483,11 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
         fo.write("# k, E, Bulk1, Surf1, Bulk2, Surf2, interface\n")
         for o in out: fo.write(o)
         fo.close()
-    return np.genfromtxt("KDOS_INTERFACE.OUT") # return data
+    # parsed from the same text the file gets: with write=False this used
+    # to read back a KDOS_INTERFACE.OUT it had not written, a stale one or
+    # none at all
+    from io import StringIO
+    return np.genfromtxt(StringIO("".join(out))) # return data
 
 
 
@@ -475,8 +498,9 @@ def interface(h1,h2,energies=np.linspace(-1.,1.,100),operator=None,
 def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
                     delta=0.01,kpath=None,hs=None,nsuper=None,
                     info = False,
-                    write=True,nk=None,**kwargs):
+                    write=None,nk=None,**kwargs):
     """Get the surface DOS of an interface"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if nk is None: nk = len(energies)
     h1 = h1.get_supercell(nsuper)
     from scipy.sparse import csc_matrix,bmat
@@ -484,7 +508,7 @@ def surface_kdos(h1,energies=np.linspace(-1.,1.,100),operator=None,
         if h1.dimensionality==3:
           g2d = h1.geometry.copy() # copy Hamiltonian
           g2d = sculpt.set_xy_plane(g2d)
-          kpath = klist.default(g2d,nk=nk)
+          kpath = klist.default(g2d,nk=nk,write=write)
         elif h1.dimensionality==2:
           kpath = [[k,0.,0.] for k in np.linspace(0.,1.,nk)]
         elif h1.dimensionality==1: kpath = [[0.,0.,0.0]] # one dummy point

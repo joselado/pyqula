@@ -1,3 +1,4 @@
+from . import filewrite
 import numpy as np
 from . import timing
 from . import parallel
@@ -5,12 +6,12 @@ from . import parallel
 
 
 def magnetic_response_map(h,nk=20,nq=20,j=[0.1,0.,0.],r=[0,0,1],
-          kp=None,qs=None):
+          kp=None,qs=None,write=None):
   """Generate a magnetic susceptibility map"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   h0 = h.copy() # copy Hamiltonian
 # function with the energy
   energy_qvector = energy_qvector_generator(h,j=j,r=r,kp=kp,nk=nk) 
-  f = open("SUSCEPTIBILITY.OUT","w")
   k2K = h.geometry.get_k2K_generator() # get the function
   # loop over qvectors
   if qs is None: # not provided
@@ -26,13 +27,14 @@ def magnetic_response_map(h,nk=20,nq=20,j=[0.1,0.,0.],r=[0,0,1],
     q = k2K(q0) # put in reciprocal coordinates
     return energy_qvector(q=q)
   es = parallel.pcall(fun,qs)
-  for (e,q0) in zip(es,qs): # loop
-#    est.iterate()
-#    e = energy_qvector(q=q)  # energy
-    f.write(str(q0[0])+"  "+str(q0[1])+"  "+str(e)+"\n")
-    f.flush()
-  f.close()
-  print("writen SUSCEPTIBILITY.OUT")
+  if write:
+    f = open("SUSCEPTIBILITY.OUT","w")
+    for (e,q0) in zip(es,qs): # loop
+      f.write(str(q0[0])+"  "+str(q0[1])+"  "+str(e)+"\n")
+    f.close()
+    print("writen SUSCEPTIBILITY.OUT")
+  qs = np.array(qs)
+  return qs[:,0],qs[:,1],np.array(es)
 
 
 

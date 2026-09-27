@@ -1,4 +1,5 @@
 import numpy as np
+from .. import filewrite
 
 from .. import algebra
 
@@ -25,11 +26,14 @@ class Embedded_Hamiltonian():
     def copy(self):
         from copy import deepcopy
         return deepcopy(self)
-    def get_ldos(self,**kwargs):
+    def get_ldos(self,write=None,**kwargs):
+        """LDOS of the embedded cell, returned as (positions, LDOS) and
+        written to LDOS.OUT unless write=False"""
+        write = filewrite.resolve(write,True) # the call, else the global switch
         A = get_A(self,**kwargs) # spectral function
         r = np.diag(A).real
         r = self.H.full2profile(r) # resum components
-        self.H.geometry.write_profile(r,name="LDOS.OUT")
+        if write: self.H.geometry.write_profile(r,name="LDOS.OUT")
         return self.H.geometry.r,r # return LDOS
     def get_kdos(self,**kwargs): return get_kdos(self,**kwargs)
 
@@ -88,24 +92,32 @@ def get_A(self,delta=1e-3,**kwargs):
 
 
 
-def get_kdos(self,energies=None,kpath=None,**kwargs):
-    """Compute k-resolved DOS"""
+def get_kdos(self,energies=None,kpath=None,write=None,**kwargs):
+    """Compute k-resolved DOS. Returns the k index, the energy and the
+    k-resolved DOS as three columns, and writes them to KDOS.OUT unless
+    write=False"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     def f(e,k): # function to evaluate
         gf0 = self.H.get_gk_gen(**kwargs)(e=e,k=k) # get Green's function
         selfe = self.selfenergy(energy=e,**kwargs) # selfenergy
         gf = algebra.inv(algebra.inv(gf0) - selfe) # full Green's function
         return -np.trace(gf).imag # return full Green's function
     if energies is None: energies = np.linspace(-1.0,1.0,100)
-    kpath = self.H.geometry.get_kpath(kpath=kpath) # get the kpath
-    fo = open("KDOS.OUT","w")
+    kpath = self.H.geometry.get_kpath(kpath=kpath,write=write) # get the kpath
+    out = [] # rows of k index, energy, kdos
     for ik in range(len(kpath)):
         print("Doing",ik)
         for ie in energies:
-            d = f(ie,kpath[ik])
-            fo.write(str(ik)+" ")
+            out.append([ik,ie,f(ie,kpath[ik])])
+    out = np.array(out).T # three columns
+    if write:
+        fo = open("KDOS.OUT","w")
+        for (ik,ie,d) in out.T:
+            fo.write(str(int(ik))+" ")
             fo.write(str(ie)+" ")
             fo.write(str(d)+"\n")
-    fo.close()
+        fo.close()
+    return out[0],out[1],out[2]
 
 
 

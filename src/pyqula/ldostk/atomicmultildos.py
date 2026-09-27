@@ -1,3 +1,4 @@
+from .. import filewrite
 import numpy as np
 from numba import jit
 import os
@@ -81,46 +82,51 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
     return f,evals,x,y,nkp # return generator
 
 
-def get_ldos(h,e=0.0,delta=0.05,**kwargs):
+def get_ldos(h,e=0.0,delta=0.05,write=None,**kwargs):
     """Compute a single LDOS"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     ldos_gen,evals,x,y,nkp = ldos_generator(h,e=e,delta=delta,**kwargs) 
     out = ldos_gen(e) # compute the LDOS
-    np.savetxt("LDOS.OUT",np.array([x,y,out]).T) # save
+    if write: np.savetxt("LDOS.OUT",np.array([x,y,out]).T) # save
     return x,y,out
 
 
-def get_density(h,e=0.0,delta=1e-3,**kwargs):
+def get_density(h,e=0.0,delta=1e-3,write=None,**kwargs):
     """Compute a single LDOS"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     ldos_gen,evals,x,y,nkp = profile_generator(h,e=e,delta=delta,
                                mode="density",**kwargs)
     out = ldos_gen(e) # compute the LDOS
-    np.savetxt("DENSITY.OUT",np.array([x,y,out]).T) # save
+    if write: np.savetxt("DENSITY.OUT",np.array([x,y,out]).T) # save
     return x,y,out
 
 
 
 
-def multi_ldos(h,energies=np.linspace(-2.0,2.0,100),delta=0.05,**kwargs):
+def multi_ldos(h,energies=np.linspace(-2.0,2.0,100),delta=0.05,write=None,**kwargs):
     """Compute the LDOS at different eenrgies, and add an envelop atomic
     orbital"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     ldos_gen,evals,x,y,nkp = ldos_generator(h,delta=delta,**kwargs) # get the generator
     # now compute all the LDOS
-    fs.rmdir("MULTILDOS")
-    fs.mkdir("MULTILDOS")
-    fo = open("MULTILDOS/MULTILDOS.TXT","w") # files with the names
-    for e in energies: # loop over energies
-        name0 = "LDOS_"+str(e)+"_.OUT" # name of the output
-        name = "MULTILDOS/" + name0
-        out = ldos_gen(e) # compute the LDOS
-        np.savetxt(name,np.array([x,y,out]).T) # save
-        fo.write(name0+"\n") # name of the file
-    fo.close()
-    from ..dos import calculate_dos,write_dos
-    es2 = np.linspace(min(energies),max(energies),len(energies)*10)
-    # same normalization as the maps above, and as dos.dos_kmesh: 1/pi
-    # for the Lorentzian and 1/nkp for the average over the Brillouin zone
-    ys = calculate_dos(evals,es2,delta,w=None)/(np.pi*nkp) # compute DOS
-    write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")
+    outs = np.array([ldos_gen(e) for e in energies]) # one map per energy
+    if write:
+        fs.rmdir("MULTILDOS")
+        fs.mkdir("MULTILDOS")
+        fo = open("MULTILDOS/MULTILDOS.TXT","w") # files with the names
+        for (e,out) in zip(energies,outs): # loop over energies
+            name0 = "LDOS_"+str(e)+"_.OUT" # name of the output
+            name = "MULTILDOS/" + name0
+            np.savetxt(name,np.array([x,y,out]).T) # save
+            fo.write(name0+"\n") # name of the file
+        fo.close()
+        from ..dos import calculate_dos,write_dos
+        es2 = np.linspace(min(energies),max(energies),len(energies)*10)
+        # same normalization as the maps above, and as dos.dos_kmesh: 1/pi
+        # for the Lorentzian and 1/nkp for the average over the Brillouin zone
+        ys = calculate_dos(evals,es2,delta,w=None)/(np.pi*nkp) # compute DOS
+        write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")
+    return x,y,np.array(energies),outs
 
 
 

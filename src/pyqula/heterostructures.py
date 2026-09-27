@@ -1,4 +1,5 @@
 from __future__ import print_function
+from . import filewrite
 import numpy as np
 import pylab as py
 from copy import deepcopy as dc
@@ -527,8 +528,9 @@ def eigenvalues(HT,numeig=10,effective=False,gf=None,full=False):
 
 
 
-def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=False):
+def effective_central_hamiltonian(HT,energy=0.0,delta=0.0001,write=None):
    """ Plots the local density of states in the central part"""
+   write = filewrite.resolve(write,False) # the call, else the global switch
    from .green import green_renormalization
    from .green import dyson
    # perform dyson calculation

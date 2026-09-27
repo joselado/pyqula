@@ -1,3 +1,4 @@
+from . import filewrite
 import numpy as np
 import scipy.linalg as lg
 from . import algebra
@@ -7,8 +8,9 @@ from . import filesystem as fs
 from . import parallel
 
 def evolve_local_state(h,i=0,ts=np.linspace(0.,20.,300),
-        mode="chi"):
+        mode="chi",write=None):
     """Evolve a state that is originally localized in a point"""
+    write = filewrite.resolve(write,True) # the call, else the global switch
     if h.dimensionality!=0: # only for 0d
         raise ValueError("the time evolution is only implemented for 0d "
                 "Hamiltonians")
@@ -18,18 +20,22 @@ def evolve_local_state(h,i=0,ts=np.linspace(0.,20.,300),
     if mode=="green": evol = evolve_green(h,i=i)
     elif mode=="chi": evol = evolve_chi(h,i=i,ts=ts)
     g = h.geometry
-    fs.rmdir("MULTITIMEEVOLUTION") # remove folder
-    fs.mkdir("MULTITIMEEVOLUTION") # create folder
-    fo = open("MULTITIMEEVOLUTION/MULTITIMEEVOLUTION.TXT","w")
+    outs = [] # the state at every time
     for t in ts: # loop over ts
         out = evol(t) # do the evolution
         print(np.sum(out))
-        out = spatial_dos(h,out) # resum if necessary
-        name = "TIMEEVOLUTION_T_"+str(t)+"_.OUT" # name
-        name2 = "MULTITIMEEVOLUTION/"+name # name
-        write_ldos(g.x,g.y,out,output_file=name2) # write the LDOS
-        fo.write(name+"\n") # write this file
-    fo.close()
+        outs.append(spatial_dos(h,out)) # resum if necessary
+    if write:
+        fs.rmdir("MULTITIMEEVOLUTION") # remove folder
+        fs.mkdir("MULTITIMEEVOLUTION") # create folder
+        fo = open("MULTITIMEEVOLUTION/MULTITIMEEVOLUTION.TXT","w")
+        for (t,out) in zip(ts,outs): # loop over ts
+            name = "TIMEEVOLUTION_T_"+str(t)+"_.OUT" # name
+            name2 = "MULTITIMEEVOLUTION/"+name # name
+            write_ldos(g.x,g.y,out,output_file=name2) # write the LDOS
+            fo.write(name+"\n") # write this file
+        fo.close()
+    return np.array(ts),np.array(outs) # one row per time
 
 
 

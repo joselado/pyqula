@@ -1,8 +1,10 @@
+from .. import filewrite
 import numpy as np
 
 # routines to compute the dIdV using the embedding method
 
-def get_didv(self,T=1e-2,write=True,nsuper=1,**kwargs):
+def get_didv(self,T=1e-2,write=None,nsuper=1,**kwargs):
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from ..transporttk.localprobe import LocalProbe
     # Build LocalProbe from the pristine Hamiltonian (self.H), not the
     # Embedding object itself: LocalProbe.__init__ needs real Hamiltonian
@@ -38,7 +40,8 @@ def get_didv(self,T=1e-2,write=True,nsuper=1,**kwargs):
 
 
 
-def get_didv_single(self,T=1e-2,write=True,i=0,nsuper=1,**kwargs):
+def get_didv_single(self,T=1e-2,write=None,i=0,nsuper=1,**kwargs):
+    write = filewrite.resolve(write,True) # the call, else the global switch
     from ..transporttk.localprobe import LocalProbe
     # see get_didv above for why LocalProbe is built from self.H (the
     # pristine Hamiltonian) rather than the Embedding object itself

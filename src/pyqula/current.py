@@ -1,3 +1,4 @@
+from . import filewrite
 import numpy as np
 import scipy.sparse.linalg as lg
 import scipy.linalg as lg
@@ -26,8 +27,9 @@ def fermi_current(h,nk=400,delta=0.5):
 
 
 
-def weighted_current(h,nk=400,fun=None):
+def weighted_current(h,nk=400,fun=None,write=None):
   """Calculate the Ground state current"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   if fun is None:
     delta = 0.01
     def fun(e): return (-np.tanh(e/delta) + 1.0)/2.0
@@ -59,7 +61,7 @@ def weighted_current(h,nk=400,fun=None):
   jgs /= nk # normalize
   # these three used to compute jgs and drop it on the floor -- the value
   # only ever reached the caller as a printed line and a file
-  np.savetxt("CURRENT1D.OUT",np.array([range(len(jgs)),jgs]).T)
+  if write: np.savetxt("CURRENT1D.OUT",np.array([range(len(jgs)),jgs]).T)
   return jgs # the current density, site by site
 
 

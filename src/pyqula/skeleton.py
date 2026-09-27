@@ -1,6 +1,7 @@
 # rountines to create hamiltonians ased on a certain skeleton,
 # used to build ribbons
 
+from . import filewrite
 from scipy.sparse import csc_matrix
 from scipy.sparse import bmat
 from . import sculpt
@@ -82,8 +83,9 @@ def build_ribbon(hin,g=None,n=20):
 
 
 
-def build_island(h,n=5,angle=30,nedges=6):
+def build_island(h,n=5,angle=30,nedges=6,write=None):
   """ Build an island starting from a 2d geometry"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   gin = geometry.triangular_lattice() # create lattice
   angle = sculpt.get_angle(h.geometry.a1,h.geometry.a2)/np.pi*180
   if np.abs(angle-60)<1.: gin.a2 = -gin.a2 # change the unit cell
@@ -133,14 +135,15 @@ def build_island(h,n=5,angle=30,nedges=6):
     go.atoms_names = go.atoms_names*len(g.r) # enlarge the list
   go.r2xyz() # fill the xyz values
   ho.geometry = go # store in the hamiltonian
-  go.write()
+  if write: go.write()
   return ho
 
 
 
 
-def image2island(impath,h,s=20):
+def image2island(impath,h,s=20,write=None):
   """ Build an island starting from a 2d geometry"""
+  write = filewrite.resolve(write,True) # the call, else the global switch
   gin = h.geometry # create lattice
   g = sculpt.image2island(impath,gin,s=s) # get the island
   angle = 0.0
@@ -194,7 +197,7 @@ def image2island(impath,h,s=20):
     go.atoms_names = go.atoms_names*len(g.r) # enlarge the list
   go.r2xyz() # fill the xyz values
   ho.geometry = go # store in the hamiltonian
-  go.write()
+  if write: go.write()
   return ho
 
 
