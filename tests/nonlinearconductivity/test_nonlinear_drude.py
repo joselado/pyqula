@@ -5,9 +5,16 @@ The headline test is the X-wave selection rule of Ezawa, arXiv:2411.16036
 (Phys. Rev. B 111, 125420 (2025)): a collinear magnet whose spin-splitting
 form factor is a harmonic of order l+1 generates a nonlinear spin current
 only from order l upwards, so the lowest nonvanishing order reads off the
-wave index -- p:0, d:1, f:2, g:3, i:5. That is the measurement of
-altermagnetic order this module exists for, and it needs no spin-orbit
-coupling.
+wave index -- d:1, f:2, g:3, i:5. That is the measurement of altermagnetic
+order this module exists for, and it needs no spin-orbit coupling.
+
+The p-wave magnet is not in that table. Its splitting only shifts the band
+rigidly in k, by opposite amounts for the two spins, so it has no spin
+current at any order (Ezawa, Sec. V), and the l = 0 entry vanishes for every
+Hamiltonian since its integrand is a total derivative. This file used to
+assert a p-wave threshold at l = 0, which was the k-mesh error of an exact
+zero (3.2e-4 at nk=48, 1.1e-11 at nk=384); the tests of the two zeros below
+replace it.
 
 The absolute normalization is pinned separately against the paper's closed
 form sigma_spin^{yyyyy;x} = 360 (e/hbar)^6 V^F J/(i w + 1/tau)^5 for the
@@ -30,8 +37,10 @@ from pyqula import multicell
 from pyqula.specialhamiltoniantk import xwave
 
 
-# lowest order at which each X-wave generates a nonlinear spin current
-THRESHOLD = {"p":0,"d":1,"f":2,"g":3,"i":5}
+# lowest order at which each X-wave generates a nonlinear spin current. The
+# p-wave magnet has none at any order, see
+# test_pwave_magnet_has_no_spin_current_at_any_order
+THRESHOLD = {"d":1,"f":2,"g":3,"i":5}
 
 # The triangular models use t = -1, whose band runs over [-6,3]; the square
 # ones over [-4,4]. A chemical potential a little above the band bottom puts
@@ -62,12 +71,69 @@ def test_selection_rule(wave):
     for l in range(l0):
         assert orders[l] < 1e-12, ("order %d should vanish for %s-wave"
                 % (l,wave))
-    # the surviving response varies a lot in size between the waves (the
-    # p-wave l=0 persistent spin current is the smallest, ~3e-4 here), so
-    # the "nonzero" side is asserted well above the 1e-12 zeros rather than
-    # at any particular scale
-    assert orders[l0] > 1e-5, ("order %d should be the threshold for "
+    # the surviving response varies between the waves, from 1.1e-2 (d) to
+    # 0.56 (i) here, so the "nonzero" side is asserted well above the 1e-12
+    # zeros rather than at any particular scale
+    assert orders[l0] > 1e-3, ("order %d should be the threshold for "
             "%s-wave" % (l0,wave))
+
+
+def test_pwave_magnet_has_no_spin_current_at_any_order():
+    """A p-wave magnet is spin split but carries no spin current at any
+    order (Ezawa, arXiv:2411.16036, Sec. V: "there is no spin-current
+    generation in p-wave magnets").
+
+    On the square lattice 2t cos kx + s J sin kx = sqrt(4t^2+J^2)
+    cos(kx - s phi), so the two spin bands are one band shifted rigidly
+    along kx by opposite amounts, and a zone integral does not see a rigid
+    shift. On a k-mesh the shift is not a translation of the mesh, which
+    splits the orders in two:
+
+    * odd l vanish exactly on any mesh, since inversion maps eps_up(k)
+      onto eps_dn(-k) and the two channels then cancel term by term;
+    * even l are the mesh error of an exact zero, which falls exponentially
+      with nk at finite T: 3.2e-4, 1.7e-5, 6.3e-8, 1.1e-11 at nk = 48, 96,
+      192, 384. A genuine response, like the d-wave one at l = 1, does not
+      move with nk.
+
+    The coarse-mesh value at l = 0 is what used to be read as a p-wave
+    threshold. The charge response at l = 1 is asserted as well, so that
+    the zero is not the trivial one of a chemical potential in a gap."""
+    h = _model("p")
+    kw = dict(lmax=4,T=0.02,mu=BOTTOM["p"]+0.5)
+    coarse = conductivity.nonlinear_drude_orders(h,nk=192,**kw)
+    fine = conductivity.nonlinear_drude_orders(h,nk=384,**kw)
+    for l in (1,3): # symmetry zeros, on any mesh
+        assert coarse[l] < 1e-12 and fine[l] < 1e-12
+    for l in (0,2,4): # mesh error of a zero: gone at nk=384
+        assert fine[l] < 1e-9
+        assert fine[l] < 1e-2*coarse[l]
+    charge = conductivity.nonlinear_drude_orders(h,channel="charge",nk=192,
+            **kw)
+    assert charge[1] > 1e-2 # the model is a metal, and conducts charge
+
+
+@pytest.mark.parametrize("wave",["p","d","f","g","i"])
+def test_zeroth_order_vanishes_for_every_wave(wave):
+    """The l = 0 entry is the current with no field applied. With F' = f,
+    f(eps) d eps/dk_b = d F(eps)/dk_b is a total derivative of a periodic
+    function, so the zone integral vanishes for every band: there is no
+    current in equilibrium, whatever the form factor.
+
+    Asserted for one spin channel at a time, so that no cancellation
+    between the two spins is involved. For d, f, g and i a point-group
+    symmetry makes it a machine zero on any mesh; for the p-wave, whose
+    single spin band is not symmetric about kx = 0, it is only the total
+    derivative that makes it vanish, and the mesh has to be fine enough
+    (see test_pwave_magnet_has_no_spin_current_at_any_order). The mesh
+    error falls as exp(-c nk T/v_F), so a temperature of 0.1 makes nk=128
+    enough for a machine zero (the p-wave gives 6e-10, 7e-12 and 8e-16 at
+    nk = 64, 96, 128), where T = 0.02 would need nk well above 384."""
+    h = _model(wave)
+    for channel in ["up","dn"]:
+        l0 = conductivity.nonlinear_drude_orders(h,lmax=0,channel=channel,
+                nk=128,T=0.1,mu=BOTTOM[wave]+0.5)[0]
+        assert l0 < 1e-12, (wave,channel,l0)
 
 
 def test_iwave_is_the_one_that_needs_fifth_order():

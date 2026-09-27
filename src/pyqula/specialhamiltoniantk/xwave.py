@@ -20,6 +20,15 @@
 # vanishes while the two spin Fermi surfaces are split -- altermagnetism for
 # even X, and an odd-parity "p/f-wave magnet" for odd X.
 #
+# The p-wave model is spin split but carries no spin current at any order of
+# the nonlinear Drude response (conductivity.nonlinear_drude_conductivity).
+# On the square lattice 2t cos kx + s J sin kx = sqrt(4t^2+J^2) cos(kx - s phi),
+# so the two spin bands are the same band shifted rigidly along kx by opposite
+# amounts, and a Brillouin-zone integral does not see the shift (Ezawa, Sec. V,
+# whose tight-binding model, Eq. (53), is this one with hbar^2/(m a^2) = -2t, up
+# to a constant). The d-, f-, g- and i-wave models respond from order 1, 2, 3
+# and 5 onwards.
+#
 # Why not just put a cos(n theta) factor on the nearest-neighbour bonds (the
 # thing specialhamiltoniantk/altermagnets.py's dead `n` argument gestures at):
 # on a triangular or honeycomb lattice the six nearest-neighbour directions all
@@ -38,9 +47,9 @@
 # Normalization: the fetched text of the paper garbles some of its prefactors,
 # so each one here is fixed instead by requiring the continuum expansion to
 # reproduce Ezawa's Eqs. (2)-(6) exactly. That derivation is redone as a test in
-# tests/xwave/test_xwave_models.py (a series expansion of the form factor about
-# Gamma against the target harmonic), so the constants below are checked rather
-# than quoted.
+# tests/nonlinearconductivity/test_xwave_models.py (a series expansion of the
+# form factor about Gamma against the target harmonic), so the constants below
+# are checked rather than quoted.
 import numpy as np
 
 from .. import geometry
@@ -129,7 +138,8 @@ def _form_factor(wave):
     """Return (lattice name, form factor as a _TrigPoly) for an X-wave.
 
     The prefactors are those that make the small-k expansion equal Ezawa's
-    Eqs. (2)-(6) exactly; tests/xwave/test_xwave_models.py rederives them."""
+    Eqs. (2)-(6) exactly; tests/nonlinearconductivity/test_xwave_models.py
+    rederives them."""
     if wave=="p": # J kx sigma_z, square lattice
         return "square",_sin(_EX)
     elif wave=="d": # J kx ky sigma_z, square lattice

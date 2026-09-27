@@ -232,8 +232,7 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
     every lower one integrates to zero over the Brillouin zone. The spin
     response therefore switches on at
 
-      p-wave: l = 0     d-wave: l = 1     f-wave: l = 2
-      g-wave: l = 3     i-wave: l = 5
+      d-wave: l = 1     f-wave: l = 2     g-wave: l = 3     i-wave: l = 5
 
     and reading off the lowest order at which a nonlinear spin current
     appears identifies the wave index -- a purely electrical measurement of
@@ -243,6 +242,20 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
     lowest nonvanishing order, not the only nonvanishing one, that carries
     the information. Use nonlinear_drude_orders for that sweep.
 
+    Two cases fall outside that counting. The order l = 0 vanishes for
+    every band of every Hamiltonian: f(eps) d eps/dk_b = d F(eps)/dk_b with
+    F' = f is a total derivative, whose zone integral is zero, so there is
+    no current in equilibrium. And a p-wave magnet has no spin current at
+    any order: 2t cos kx + s J sin kx = sqrt(4t^2+J^2) cos(kx - s phi) is
+    one band shifted rigidly along kx by opposite amounts for the two spins,
+    a zone integral does not see the shift, and so sigma_up = sigma_dn at
+    every order (arXiv:2411.16036, Sec. V). On a finite k-mesh both zeros
+    are reached only as nk grows, exponentially at finite T, because the
+    shift is not a translation of the mesh: the p-wave even orders are
+    3e-4, 2e-5, 6e-8 and 1e-11 at nk = 48, 96, 192, 384 (J = 0.3, T = 0.02,
+    half a hopping above the band bottom), while its odd orders vanish
+    exactly on any mesh, since inversion swaps the two spin channels.
+
     Parameters
     ----------
     h : Hamiltonian
@@ -251,8 +264,9 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
       Hamiltonian is rejected rather than silently mistreated)
     field : str
       one character per power of the electric field, e.g. "yyyyy" for the
-      fifth-order response to E_y. The empty string is l = 0, the
-      field-free persistent spin current.
+      fifth-order response to E_y. The empty string is l = 0, the current
+      with no field applied, which vanishes identically (see above) and
+      so only measures how converged the k-mesh is.
     current : str
       Cartesian direction b of the measured current
     channel : "spin", "charge", "up" or "dn"
@@ -294,8 +308,10 @@ def nonlinear_drude_components(h,l,**kwargs):
 def nonlinear_drude_orders(h,lmax=6,**kwargs):
     """X-wave selection-rule sweep: for each order l = 0..lmax, the largest
     |sigma^{x^l1 y^l2 ; b}| over that order's components. The lowest l with
-    a nonzero entry is the wave index readout (p:0, d:1, f:2, g:3, i:5).
-    Returns a list of floats."""
+    a nonzero entry is the wave index readout (d:1, f:2, g:3, i:5). A p-wave
+    magnet has no nonzero entry at all, and the l = 0 entry is zero for
+    every Hamiltonian; see nonlinear_drude_conductivity. Returns a list of
+    floats."""
     return nonlineardrude.nonlinear_drude_orders(h,lmax=lmax,**kwargs)
 
 

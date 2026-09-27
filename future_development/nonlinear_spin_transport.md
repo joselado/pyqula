@@ -7,12 +7,21 @@
 `specialhamiltoniantk/xwave.py`. This is the **electric** channel of Ezawa,
 *Phys. Rev. B* **111**, 125420 (2025), [arXiv:2411.16036][e2411]: the l-th
 order nonlinear Drude spin/charge conductivity, whose lowest nonvanishing
-order reads off the X-wave index (p:0, d:1, f:2, g:3, i:5). See the user
-guide section "Nonlinear spin current as a measurement of altermagnetic
-order".
+order reads off the X-wave index (d:1, f:2, g:3, i:5). The p-wave magnet has
+no spin current at any order, since its two spin bands are one band shifted
+rigidly in k (Ezawa, Sec. V), and the l = 0 entry is zero for every
+Hamiltonian, its integrand being a total derivative. Where no point-group
+symmetry forces them, both zeros are reached only exponentially in nk (for
+the p-wave the shift is not a translation of the mesh): its even orders are
+3.2e-4 at nk = 48 and 1.1e-11 at nk = 384, at J = 0.3 and T = 0.02.
+That mesh error was once read as a p-wave threshold at l = 0 (in the
+docstrings, the guide, the example, the notebook and a test asserting it);
+`test_pwave_magnet_has_no_spin_current_at_any_order` now pins the zero. See
+the user guide section "Nonlinear spin current as a measurement of
+altermagnetic order".
 
 Validated against the paper's own analytic results: the selection-rule
-table, the component relations `sigma^{yyyyy;x} = sigma^{xxxxx;y} =
+table (whose entry for the p-wave magnet is "None"), the component relations `sigma^{yyyyy;x} = sigma^{xxxxx;y} =
 -sigma^{xxxyy;y}`, and the absolute scale `360 V^F J`, recovered to 0.2% by
 extrapolating the lattice model into its continuum limit.
 

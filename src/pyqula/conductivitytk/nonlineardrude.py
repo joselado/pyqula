@@ -29,6 +29,38 @@ every lower one integrates to zero over the zone: d-wave responds at first
 order, f-wave at second, g-wave at third and i-wave at fifth. Reading off
 the lowest nonvanishing order therefore measures the wave index.
 
+That counting would put a p-wave magnet (form factor kx) at l = 0, and it
+is wrong there for two separate reasons.
+
+  * l = 0 vanishes for every band of every Hamiltonian. With F' = f,
+    f(eps) d eps/dk_b = d F(eps)/dk_b is a total derivative of a periodic
+    function, and its zone integral is zero: there is no current in
+    equilibrium. For the p-wave continuum model the constant first
+    derivative s J of the form factor is cancelled by the kinetic velocity
+    averaged over a Fermi sea that the same term has shifted to
+    kx = -m s J/hbar^2, which the counting leaves out (Ezawa's Eqs. (49)
+    and (50)).
+  * A p-wave magnet has no spin current at any order. On the square
+    lattice 2t cos kx + s J sin kx = sqrt(4t^2+J^2) cos(kx - s phi), so the
+    two spin bands are one band shifted rigidly along kx by +-phi. A zone
+    integral does not see a rigid shift, so sigma_up = sigma_dn at every
+    order and sigma_spin = 0 (Ezawa, Sec. V: "there is no spin-current
+    generation in p-wave magnets").
+
+Both zeros are exact for the zone integral but not, in general, for the sum
+over a uniform k-mesh: the mesh average of a k-derivative of a periodic
+function is not zero but the sum of its Fourier components at nonzero
+multiples of nk (aliasing), and the p-wave shift is not a translation of
+the mesh. The error falls exponentially with
+nk at finite T (the integrand is analytic in a strip of width ~T/v_F): for
+the p-wave model at J = 0.3, T = 0.02 and half a hopping above the band
+bottom, the even orders are 3.2e-4, 1.7e-5, 6.3e-8 and 1.1e-11 at nk = 48,
+96, 192 and 384. The p-wave odd orders vanish exactly on any Gamma-centered
+mesh, since inversion maps eps_up(k) onto eps_dn(-k). This is different from the zeros below the threshold of the
+d-, f-, g- and i-wave models, which are forced by a point-group symmetry
+that the mesh respects and so are machine zeros at any nk. A small entry
+that shrinks as the mesh is refined is a zero, not a threshold.
+
 Units and normalization
 -----------------------
 e = hbar = 1, as elsewhere in pyqula. The Brillouin-zone integral is taken
@@ -456,9 +488,12 @@ def nonlinear_drude_orders(h,lmax=6,channel="spin",nk=100,T=0.01,mu=0.,
 
     The lowest l at which this is nonzero is the order of the magnet, and so
     a direct readout of the X-wave index -- d gives 1, f gives 2, g gives 3
-    and i gives 5 (Ezawa, arXiv:2411.16036). Taking the maximum over
-    components matters: a d-wave altermagnet responds in sigma^{x;y} but not
-    in sigma^{x;x}, so a sweep of one fixed component would miss it.
+    and i gives 5 (Ezawa, arXiv:2411.16036). A p-wave magnet gives zero at
+    every order, and l = 0 is zero for any Hamiltonian (see the module
+    docstring); on a coarse mesh both show up as small numbers that fall
+    exponentially with nk rather than as machine zeros. Taking the maximum
+    over components matters: a d-wave altermagnet responds in sigma^{x;y}
+    but not in sigma^{x;x}, so a sweep of one fixed component would miss it.
 
     Every order is evaluated from a single set of channels. That is not just
     tidiness: on a multiorbital cell the cost is dominated by the
