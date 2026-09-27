@@ -72,7 +72,11 @@ def test_edge_projection_sees_the_in_gap_states(tmp_path, monkeypatch):
     n = h.intra.shape[0]
     energies = np.linspace(-1., 1., 21)
     def run(sites):
-        (k, e, d) = kdos.kdos_bands(h, use_kpm=True, nk=9, delta=0.3,
+        # delta is the half width of a level's peak (kpmtk.kernels.
+        # jackson_npol); the 0.3 this test used to pass meant a half width
+        # of about 0.19 under the old 3*scale/delta rule, and 0.3 now smears
+        # the bulk band edges into the |E|<0.15 window of the gap
+        (k, e, d) = kdos.kdos_bands(h, use_kpm=True, nk=9, delta=0.2,
                         ntries=8, frand=_projector(h, sites),
                         energies=energies)
         return np.mean(d[np.abs(e) < 0.15])  # weight inside the gap

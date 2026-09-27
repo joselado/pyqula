@@ -288,24 +288,59 @@ def full_trace_A(m_in,n=200,A=None,**kwargs):
 
 
 def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=True,
-    x=None):
-    """Return two arrays with energies and local DOS"""
+    x=None,kernel="jackson"):
+    """Green's function G^R_ij(E) = <i|(E + i0 - m)^-1|j> between two sites
+    from a Chebyshev expansion, real part included (Weisse et al., Rev.
+    Mod. Phys. 78, 275 (2006), arXiv:cond-mat/0504627, Eq. (140)), with no
+    matrix inversion.
+
+    Returns (E, Re G^R_ij, -Im G^R_ij), the same pair that
+    correlator.correlator0d returns from the matrix inversion, so that for
+    i=j the third array is pi times the local DOS. Joined as a complex
+    number, second + 1j*third is the complex conjugate of G^R_ij; the
+    retarded function is second - 1j*third.
+
+    npol: number of polynomials (2*npol moments), ne energies unless x
+    (the energies) is given, and the whole spectrum must lie inside
+    [-scale,scale]. kernel: "jackson" broadens each pole into a nearly
+    Gaussian peak of half width kpmtk.kernels.jackson_hwhm(scale,npol);
+    "lorentz" into a Lorentzian of half width 3*scale/(2*npol), the
+    G^R(E + i delta) of a matrix inversion with that delta (Weisse et al.,
+    Sec. II.C.4), up to 10% of the height of a pole, which the truncation
+    of its exp(-3n/N) at N=2*npol moments leaves. write=True also writes
+    the three columns to CORRELATOR_KPM.OUT"""
     if npol is None: npol = ne
     mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j)
     check_scale(mus,scale)
     if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
     else: xs = x/scale # use from input
-    ys = generate_green_profile(mus,xs,kernel="jackson")/scale*np.pi # so it is the Green function
-  #  imys = hilbert(ys).imag
-    if write: 
-        np.savetxt("CORRELATOR_KPM.OUT",np.array([scale*xs,-ys.imag,ys.real]).T)
+    # generate_green_profile gives conj(G^R_ij)/pi in units of the scale
+    ys = generate_green_profile(mus,xs,kernel=kernel)/scale*np.pi
+    # the same columns as the arrays returned, and as the CORRELATOR.OUT
+    # of correlator.correlator0d; it used to write (E, Im G^R, Re G^R)
+    if write:
+        np.savetxt("CORRELATOR_KPM.OUT",np.array([scale*xs,ys.real,ys.imag]).T)
     return (scale*xs,ys.real,ys.imag)
 
 
 
 
 def dm_ij_energy(m_in,i=0,j=0,scale=10.,npol=None,ne=500,x=None):
-  """Return the correlation function"""
+  """Energy-resolved density matrix between sites i and j,
+
+  pi<i|delta(E-m)|j> = pi sum_n <i|n><n|j> delta(E-E_n)
+                     = (i/2)[G^R_ij(E) - G^A_ij(E)],
+
+  with G^{R,A}_ij = <i|(E +- i0 - m)^-1|j>: the spectral part of the Green's
+  function, not the Green's function itself (for that, see correlator0d).
+  For i=j it is pi times the local DOS, for i!=j it integrates to zero
+  over the energy, and its integral up to the Fermi energy is pi times the
+  density matrix element <c_j^dagger c_i>. Returns (E, complex array).
+
+  npol: number of polynomials (2*npol moments), with the Jackson kernel,
+  so each level becomes a nearly Gaussian peak of half width
+  kpmtk.kernels.jackson_hwhm(scale,npol); the whole spectrum must lie
+  inside [-scale,scale]"""
   if npol is None: npol = ne
   mus = get_moments_ij(m_in/scale,n=npol,i=i,j=j)
   check_scale(mus,scale)
@@ -319,7 +354,8 @@ def dm_ij_energy(m_in,i=0,j=0,scale=10.,npol=None,ne=500,x=None):
 
 
 def dm_vivj_energy(m_in,vi,vj,scale=10.,npol=None,ne=500,x=None):
-  """Return the correlation function"""
+  """pi<vi|delta(E-m)|vj>, the energy-resolved density matrix of
+  dm_ij_energy between two arbitrary vectors instead of two sites"""
   if npol is None: npol = ne
   mus = get_moments_vivj(m_in/scale,vi,vj,n=npol)
   check_scale(mus,scale,
@@ -329,8 +365,11 @@ def dm_vivj_energy(m_in,vi,vj,scale=10.,npol=None,ne=500,x=None):
     pass
   if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
   else: xs = x/scale # use from input
-  ysr = generate_profile(mus.real,xs,kernel="lorentz")/scale*np.pi # so it is the Green function
-  ysi = generate_profile(mus.imag,xs,kernel="jackson")/scale*np.pi # so it is the Green function
+  # both parts with the Jackson kernel, as in dm_ij_energy: the real part
+  # used to take the Lorentz kernel, a different broadening of the same
+  # function
+  ysr = generate_profile(mus.real,xs,kernel="jackson")/scale*np.pi
+  ysi = generate_profile(mus.imag,xs,kernel="jackson")/scale*np.pi
   ys = ysr - 1j*ysi
   return (scale*xs,ys)
 

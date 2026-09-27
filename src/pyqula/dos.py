@@ -319,7 +319,18 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
         delta=0.01,nk=100,operator=None,
         random=True,energies=None,info=False,write=True,
         **kwargs):
-  """Calculate the KDOS bands using the KPM"""
+  """Density of states from a stochastic Chebyshev expansion, averaged
+  over an nk k-mesh (random k-points if random=True), optionally projected
+  onto a projector operator.
+
+  delta: energy resolution, the half width at half maximum of the peak a
+  single level gives, as the Lorentzian of mode="ED" (see
+  kpmtk.kernels.jackson_npol). It sets the number of polynomials, about
+  1.85 scale/delta, and the width narrows as sqrt(1-(E/scale)^2) away
+  from E=0. The Jackson kernel makes each peak nearly a Gaussian, about
+  1.5 times taller than the Lorentzian of the same half width.
+  scale: the whole spectrum must lie inside [-scale,scale]; it is raised to
+  twice the largest energy asked for when it is smaller"""
   operator = h.get_operator(operator)
   if energies is not None: # energies provided
       ewindow = np.max(np.abs(energies)) # true window
@@ -329,7 +340,8 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   ks = kmesh(h.dimensionality,nk=nk) # klist
   if random: ks = [np.random.random(3) for k in ks]
   ytot = np.zeros(ne) # initialize
-  npol = int(scale/delta) # number of polynomials
+  from .kpmtk.kernels import jackson_npol
+  npol = jackson_npol(scale,delta) # number of polynomials
   # dos_kpm's stochastic trace estimator (kpm.pdos) draws random vectors
   # confined to (and renormalized within) the operator's subspace, so it
   # converges to Tr[P f(H)]/Tr[P], the *per-state* projected DOS averaged
@@ -409,32 +421,31 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
   reached routines that do not take it, so mode="Green" raised TypeError,
   mode="adaptive" raised it inside get_bands (which it gets twice there),
   and mode="KPM" dropped it and wrote DOS.OUT whatever was asked"""
-  if use_kpm: # KPM
-      ewindow = max([abs(min(energies)),abs(min(energies))]) # window
-      return dos_kpm(h,ewindow=ewindow,ne=len(energies),write=write,
-              **kwargs)
-  else: # conventional methods
-      if mode=="ED": # exact diagonalization
-          return dos_kmesh(h,energies=energies,write=write,**kwargs)
-      elif mode in ["Green","RG"]: # Green function formalism
-          def fun(e):
-              return green.green_operator(h,e=e,**kwargs)
-          ds = parallel.pcall(fun,energies) # compute DOS with an operator
-          # green_operator returns the raw -Im[Tr G], not yet a DOS value;
-          # apply the same 1/pi normalization dos_kmesh (mode="ED") does
-          ds = np.array(ds)/np.pi
-          if write: np.savetxt("DOS.OUT",np.array([energies,ds]).T)
-          return (energies,ds)
-      elif mode=="KPM": 
-          return dos_kpm(h,energies=energies,write=write,**kwargs)
-      elif mode=="adaptive":
-          from .dostk.adaptivedos import adaptive_dos
-          (es,ds) = adaptive_dos(h,energies=energies,**kwargs)
-          if write: write_dos(es,ds) # as the other modes do
-          return (es,ds)
-      else: 
-        raise ValueError("unknown mode "+str(mode)+"; the DOS accepts 'ED', "
-                "'KPM', 'adaptive', 'Green' and 'RG'")
+  # use_kpm=True is mode="KPM", on the energies asked for; it used to go
+  # to dos_kpm with a window built from min(energies) twice and without
+  # the energies, and so returned the DOS on a grid of its own
+  if use_kpm: mode = "KPM"
+  if mode=="ED": # exact diagonalization
+      return dos_kmesh(h,energies=energies,write=write,**kwargs)
+  elif mode in ["Green","RG"]: # Green function formalism
+      def fun(e):
+          return green.green_operator(h,e=e,**kwargs)
+      ds = parallel.pcall(fun,energies) # compute DOS with an operator
+      # green_operator returns the raw -Im[Tr G], not yet a DOS value;
+      # apply the same 1/pi normalization dos_kmesh (mode="ED") does
+      ds = np.array(ds)/np.pi
+      if write: np.savetxt("DOS.OUT",np.array([energies,ds]).T)
+      return (energies,ds)
+  elif mode=="KPM":
+      return dos_kpm(h,energies=energies,write=write,**kwargs)
+  elif mode=="adaptive":
+      from .dostk.adaptivedos import adaptive_dos
+      (es,ds) = adaptive_dos(h,energies=energies,**kwargs)
+      if write: write_dos(es,ds) # as the other modes do
+      return (es,ds)
+  else:
+    raise ValueError("unknown mode "+str(mode)+"; the DOS accepts 'ED', "
+            "'KPM', 'adaptive', 'Green' and 'RG'")
 
 
 dos = get_dos # redefine

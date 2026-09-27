@@ -49,7 +49,14 @@ def generate_profile_jit(mus,xs):
 
 
 def generate_green_profile(mus,xs,kernel="jackson",**kwargs):
-  """ Uses the Chebychev expansion to create a certain profile"""
+  """Green's function from the Chebyshev moments mus[n] = <j|T_n(m)|i> of
+  kpmnumba.kpm_moments_ij, at the rescaled energies xs (Weisse et al., Rev.
+  Mod. Phys. 78, 275 (2006), arXiv:cond-mat/0504627, Eq. (140)).
+
+  Returns conj(G^R_ij(x))/pi, with G^R_ij(x) = <i|(x + i0 - m)^-1|j>, so
+  that for i=j its imaginary part is the local DOS, positive.
+  The conjugation comes from the moments being <j|T_n|i>, the conjugate
+  of <i|T_n|j>, together with the exp(+i n arccos x) of the expansion"""
   # initialize polynomials
   tm = np.zeros(xs.shape) +1.
   t = xs.copy()

@@ -7,6 +7,7 @@ from .ldos import moments_local_dos
 from .kernels import jackson_kernel
 from .kernels import lorentz_kernel
 from .kernels import fejer_kernel
+from .kernels import jackson_npol
 
 from .bandwidth import estimate_bandwidth
 
@@ -22,14 +23,18 @@ def get_density(m_in,scale=None,fermi=0.,
   """Return the electronic density below the energy fermi, for the
   vector selected by the keywords of moments_local_dos (i=site index).
 
-  delta: energy resolution, which sets npol when it is not given
+  delta: energy resolution, the half width at half maximum of the peak a
+  single level gives in the density of states, which sets npol when it is
+  not given (see kernels.jackson_npol, the same convention as the KPM
+  density of states): the occupation steps up over about that width
+  around each level
   npol: number of Chebyshev polynomials
   kernel: damping kernel of the expansion"""
   if kernel not in kernels:
       raise ValueError("unknown kernel "+repr(kernel)+"; the accepted ones "
               "are "+", ".join(sorted(kernels)))
   if scale is None: scale = estimate_bandwidth(m_in)
-  if npol is None: npol = max([int(scale/delta),3])
+  if npol is None: npol = jackson_npol(scale,delta)
   mus = moments_local_dos(m_in/scale,n=npol,**kwargs) # get coefficients
   from .scaleguard import check_scale
   check_scale(mus,scale,kpm_prec=kwargs.get("kpm_prec","double"))

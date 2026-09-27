@@ -34,10 +34,22 @@ def ldos0d(h,e=0.0,delta=0.01,write=True):
 
 def dos_site_kpm(h,energies=np.linspace(-1.,1.,1000),
         delta=0.01,scale = 10.0,i=0,nk=5,sector=None):
-    """Compute a local DOS using the KPM"""
+    """Local DOS at site i from a Chebyshev expansion seeded with the site
+    vector, summed over the spin and Nambu components of the site and
+    averaged over an nk k-mesh.
+
+    delta: energy resolution, the half width at half maximum of the peak a
+    single level gives, as the Lorentzian of the exact-diagonalization modes
+    (see kpmtk.kernels.jackson_npol). It sets the number of polynomials,
+    about 1.85 scale/delta, and the width narrows as sqrt(1-(E/scale)^2)
+    away from E=0. The Jackson kernel makes each peak nearly a Gaussian,
+    about 1.5 times taller than the Lorentzian of the same half width.
+    scale: the whole spectrum must lie inside [-scale,scale]
+    sector: None for the whole Nambu site, "electron" for its electron part"""
     h = h.copy()
     h.turn_sparse()
-    npol = 5*int(scale/delta) # number of polynomials
+    from .kpmtk.kernels import jackson_npol
+    npol = jackson_npol(scale,delta) # number of polynomials
     from . import kpm
     def getm(m,j): # for the matrix
       es,ds = kpm.ldos(m,i=j,scale=scale,npol=npol,ne=npol*5)

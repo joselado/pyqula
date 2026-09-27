@@ -70,7 +70,8 @@ def test_clean_supercell_unfolds_onto_the_primal_cell(lattice, M, tmp_path,
     k0 = np.array([0.13, 0.29, 0.])
     out = h.get_kdos_bands(kpath=[Ms @ k0], operator="unfold", mode="KPM",
                            delta=delta, energies=energies)
-    npol = 3 * int(10. / delta)  # what get_kdos_bands takes, with its
+    from pyqula.kpmtk.kernels import jackson_npol
+    npol = jackson_npol(10., delta)  # what get_kdos_bands takes, with its
     hk0 = h0.get_hk_gen()(k0)  # default scale=10 and ewindow=4
     x, ref = kpm.factored_dos(hk0, np.identity(hk0.shape[0]), scale=10.,
                               npol=npol, ne=4 * npol, ewindow=4.,

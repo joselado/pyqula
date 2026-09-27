@@ -4,15 +4,21 @@ import scipy.sparse.linalg as slg
 from scipy.sparse import csc_matrix,eye
 import numpy as np
 
-def correlator0d(m,energies=np.linspace(-10.,10.,400),i=0,j=0,delta=0.07):
-  """Calculate a certain correlator"""
+def correlator0d(m,energies=np.linspace(-10.,10.,400),i=0,j=0,delta=0.07,
+        write=True):
+  """Green's function G^R_ij(E) = <i|(E + i delta - m)^-1|j> from a matrix
+  inversion at each energy. Returns (E, Re G^R_ij, -Im G^R_ij), so that for
+  i=j the third array is pi times the local DOS, the same pair that the
+  Chebyshev expansion kpm.correlator0d returns. write=True also writes the
+  three columns to CORRELATOR.OUT"""
   iden = np.identity(m.shape[0],dtype=np.complex128)
   zs = np.zeros(energies.shape[0],dtype=np.complex128)
   for (ie,e) in zip(range(len(energies)),energies):
     m0 = lg.inv((e+1j*delta)*iden - m) # inverse
     zs[ie] = m0[i,j]
-  np.savetxt("CORRELATOR.OUT",np.array([energies,zs.real,-zs.imag]).T)
-  print("Saved correlator in CORRELATOR.OUT")
+  if write:
+    np.savetxt("CORRELATOR.OUT",np.array([energies,zs.real,-zs.imag]).T)
+    print("Saved correlator in CORRELATOR.OUT")
   return (energies,zs.real,-zs.imag)
 
 
@@ -29,7 +35,16 @@ def gs_correlator(m,i=0,j=0):
 
 
 def dm_ij_energy(m,ne=500,scale=10.,i=0,j=0,delta=0.07):
-  """Calculate a certain correlator"""
+  """Energy-resolved density matrix between sites i and j from a matrix
+  inversion at ne energies in [-scale,scale],
+
+  pi<i|delta(E-m)|j> = (i/2)[G^R_ij(E) - G^A_ij(E)],
+
+  with G^{R,A}_ij = <i|(E +- i delta - m)^-1|j>: the spectral part of the
+  Green's function, each level broadened into a Lorentzian of half width
+  delta, not the Green's function itself (for that, see correlator0d). For
+  i=j it is pi times the local DOS. It is the quantity kpm.dm_ij_energy
+  computes with a Chebyshev expansion. Returns (E, complex array)"""
   energies = np.linspace(-scale,scale,ne)
   iden = np.identity(m.shape[0],dtype=np.complex128)
   zs0 = np.zeros(energies.shape[0],dtype=np.complex128)

@@ -23,8 +23,13 @@ h.add_zeeman([0.,1.,0.])
 h.intra += np.diag(np.random.random(h.intra.shape[0]))
 i = 0
 j = 9
+# both return the energy-resolved density matrix pi <i|delta(E-H)|j>
+# = (i/2) [G^R_ij - G^A_ij], the spectral part of the Green's function,
+# not G_ij itself (kpm.correlator0d gives G^R_ij)
+from pyqula.kpmtk.kernels import jackson_npol
+npol = jackson_npol(10.,0.1) # KPM peaks of the same half width as delta=0.1
 t1 = time.time()
-(x,y) = kpm.dm_ij_energy(h.intra,npol=200,i=i,j=j,ne=1000)
+(x,y) = kpm.dm_ij_energy(h.intra,npol=npol,i=i,j=j,ne=1000)
 t2 = time.time()
 (x2,y2) = correlator.dm_ij_energy(h.intra,i=i,j=j,delta=0.1,ne=1000)
 t3 = time.time()
@@ -34,14 +39,14 @@ print("Time in inversion = ",t3-t2)
 plt.subplot(1,2,1)
 plt.title("Real part")
 plt.plot(x,y.real,marker="o",label="KPM")
-plt.plot(x2,y2.real,marker="o",label="Green")
-plt.xlabel("Energy") ; plt.ylabel("Re(G)")
+plt.plot(x2,y2.real,marker="o",label="inversion")
+plt.xlabel("Energy") ; plt.ylabel(r"Re $\pi\langle i|\delta(E-H)|j\rangle$")
 plt.legend()
 plt.subplot(1,2,2)
-plt.title("Imaginary part part")
+plt.title("Imaginary part")
 plt.plot(x,y.imag,marker="o",label="KPM")
-plt.plot(x2,y2.imag,marker="o",label="Green")
-plt.xlabel("Energy") ; plt.ylabel("Im(G)")
+plt.plot(x2,y2.imag,marker="o",label="inversion")
+plt.xlabel("Energy") ; plt.ylabel(r"Im $\pi\langle i|\delta(E-H)|j\rangle$")
 plt.legend()
 plt.show()
 

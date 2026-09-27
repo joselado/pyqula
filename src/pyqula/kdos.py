@@ -298,7 +298,8 @@ def kdos_bands(h,use_kpm=False,kpath=None,scale=10.0,frand=None,
       h = h.copy()
       h.turn_sparse()
       hkgen = h.get_hk_gen() # get generator
-      npol = 3*int(scale/delta) # number of polynomials
+      from .kpmtk.kernels import jackson_npol
+      npol = jackson_npol(scale,delta) # peaks of half width delta, as in mode="ED"
       def pfun(k): # do it for this k-point
         hk = hkgen(k) # get Hamiltonian
         if factor is not None: # exact, from the factor
