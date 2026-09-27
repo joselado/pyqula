@@ -224,8 +224,11 @@ gives the spinful answer.
   being the same in a supercell, the magnon dispersion along a path, and the
   jax filling targets. Restoring any of them needs a guess that converges in
   fewer than 1000 iterations, or `maxite=None` in the test.
-- From L2's list, the decomposition's degenerate-band branch has not been
-  run on a Rashba BdG. The duplicate `C3nn` in `sctk/pairing.py` is gone.
+- From L2's list, the decomposition's degenerate-band branch has now been
+  run on a Rashba BdG: the Kramers pair at Gamma no longer raises, and the
+  split converges with the mesh
+  (`tests/superfluid/test_decomposition.py::test_rashba_pair_at_gamma_gives_a_converging_split`).
+  The duplicate `C3nn` in `sctk/pairing.py` is gone.
 
 ## Closed after the sweep
 

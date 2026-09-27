@@ -164,12 +164,23 @@
 #     superfluid_weight(...,decompose=True) raises if either fails, rather
 #     than reporting a meaningless split.  The general Kubo result needs
 #     neither and is always available.
-#   * the split needs a resolvable normal-state band gap, because the
-#     interband pieces carry 1/(eps_m - eps_n).  Exactly degenerate bands
-#     with a vanishing interband current (the generic spin degeneracy) are
-#     handled by dropping those terms; a degeneracy with a *finite*
-#     interband current (a Kramers pair mixed by spin-orbit coupling, or a
-#     band touching sitting on the mesh) raises.
+#   * the interband pieces carry 1/(eps_m - eps_n), but only in
+#     combinations that stay finite as two bands meet, so the split is a
+#     Brillouin-zone integral of a bounded integrand even across a band
+#     touching.  Exactly degenerate bands that no current connects (the
+#     spin degeneracy, a Kramers pair of a system with inversion, where
+#     every current is a multiple of the identity on the pair) are handled
+#     by dropping those terms.  A touching that the current lifts linearly
+#     (the Dirac point K of the kagome and honeycomb lattices, which lies
+#     on the mesh when nk is a multiple of 3, or a Rashba pair at a
+#     time-reversal invariant momentum) makes the intraband part of the
+#     current depend on the direction the point is approached from.  A mesh
+#     point sitting exactly on one keeps its total, which is basis
+#     independent, and takes its conventional part as the average over the
+#     2*dim neighbouring points at k +- (small) e_a; that changes a single
+#     point of weight 1/N_k and makes the split continuous in nk.  Only a
+#     line of touchings running through the mesh point along a twist axis
+#     defeats that average, and raises.
 #   * even the total D_s at fixed |Delta| is not a property of the band
 #     structure alone: it depends on where the orbitals sit inside the cell
 #     (that is what the gauge option above is about) and, for non-uniform
@@ -205,6 +216,10 @@
 #   * D_s = 0 at Delta=0 and finite T, D_s > 0 at finite Delta;
 #   * a flat-band model where D_conv = 0 and D_geom matches the quantum
 #     metric of topologytk/qgt.py, in each of the two gauges;
+#   * a band touching on the mesh (kagome at nk a multiple of 3, a Rashba
+#     pair at Gamma) gives a split that is C3 isotropic, adds up to the
+#     Kubo weight, and agrees with the split on meshes that miss the
+#     touching;
 #   * symmetry and positive semi-definiteness of the tensor;
 #   * the BKT self-consistency T = (pi/8) D_s(T).
 import numpy as np
@@ -569,7 +584,12 @@ def _decomposition_at(es_n,J,K,delta,T,nd,tol):
     basis (see the module docstring).  es_n are the normal-state
     eigenvalues (mu already included), J[a] = W^dag v_a W the current
     matrix and K[(a,b)] = W^dag w_ab W its second derivative, both in that
-    basis.  Returns (conv,geom)."""
+    basis.  Returns (conv,geom).
+
+    Their sum is the Kubo weight of this k-point whatever the basis.  The
+    split itself depends on the basis inside a degenerate subspace when
+    that subspace carries a current (see _touching_on_the_mesh), and
+    superfluid_weight_decomposition does not use it there."""
     n = len(es_n)
     E = np.sqrt(es_n**2 + np.abs(delta)**2) # quasiparticle energies
     ratio = np.where(E>0.,es_n/np.where(E>0.,E,1.),0.) # xi/E
@@ -594,11 +614,6 @@ def _decomposition_at(es_n,J,K,delta,T,nd,tol):
     for a in range(nd):
         for b in range(a,nd):
             JJ = J[a]*J[b].T # [J_a]_mn [J_b]_nm
-            if np.max(np.abs(JJ[degen & ~same]))>tol*scale**2:
-                raise ValueError("degenerate normal-state bands with a "
-                    "finite interband current: the conventional/geometric "
-                    "decomposition is ill defined here (band touching, or "
-                    "spin-orbit-mixed Kramers pair)")
             para_c = 0. ; para_g = 0. # paramagnetic, intra- and interband
             for key in ww:
                 w = ww[key]*JJ
@@ -629,6 +644,80 @@ def _band_basis_quantities(ops,perm,k,tol):
     return es_n,J,K,delta
 
 
+def _touching_on_the_mesh(es_n,J,delta,tol):
+    """True when this k-point sits exactly on a band touching that the
+    current lifts: a group of degenerate normal-state bands on which some
+    current operator J_a is not a multiple of the identity, so that the
+    degeneracy splits linearly as k moves along e_a (the Dirac point K of
+    the kagome or honeycomb lattice when nk is a multiple of 3, a
+    Rashba-split pair at a time-reversal invariant momentum).  There the
+    band basis inside the group, and with it the part of the current
+    called intraband, depends on the direction the point is approached
+    from.  The test is on the traceless part of J_a inside the group, so
+    it does not depend on the basis eigh happened to return, and a
+    degeneracy that no current lifts (the spin degeneracy, a Kramers pair
+    of a system with inversion) is not a touching in this sense."""
+    scale = max(np.max(np.abs(es_n)),np.abs(delta),1e-12)
+    # es_n comes sorted from eigh, so a degenerate group is a run of it
+    breaks = np.nonzero(np.diff(es_n)>=tol*scale)[0]+1
+    for group in np.split(np.arange(len(es_n)),breaks):
+        if len(group)<2: continue
+        for Ja in J:
+            b = Ja[np.ix_(group,group)]
+            b = b - np.trace(b)/len(group)*np.identity(len(group))
+            if np.max(np.abs(b))>np.sqrt(tol)*scale: return True
+    return False
+
+
+def _touching_neighbours(ops,frac=1e-3):
+    """Reduced-coordinate shifts to the 2*dim points around a k-point, at
+    the same small Cartesian distance along +-e_a for every twist
+    direction e_a.  frac is the largest reduced component of a shift.
+    The +-e_a average e_a e_b to delta_ab/dim, which is the average over
+    all directions, so averaging over these points averages any quadratic
+    form in the direction of approach exactly -- the form the intraband
+    current takes around an isotropic Dirac cone."""
+    avecs = np.array([ops.geometry.a1,ops.geometry.a2,ops.geometry.a3])
+    proj = np.array([avecs@e for e in ops.dirs])/(2.*np.pi) # dk per unit Q
+    s = frac/np.max(np.abs(proj)) # one Cartesian distance for all of them
+    return [sign*s*p for p in proj for sign in (1.,-1.)]
+
+
+def _split_at(ops,perm,k,T,tol):
+    """(conv,geom,delta) of one k-point of the mesh.
+
+    The split is a Brillouin-zone integral of a bounded integrand, so it is
+    well defined even though a band touching makes it direction dependent
+    at the touching itself: the limit of the intraband part of the current
+    depends on the direction from which the point is approached.  When a
+    mesh point sits exactly on a touching, its total (which is basis
+    independent) is kept, and only the conventional part is taken as the
+    average over the neighbouring points of _touching_neighbours.  That
+    changes one point of weight 1/N_k by an amount that vanishes as the
+    mesh is refined, like any other sampling error, and makes the result
+    continuous in nk instead of raising for nk a multiple of 3 on the
+    kagome lattice."""
+    nd = len(ops.dirs)
+    es_n,J,K,delta = _band_basis_quantities(ops,perm,k,tol)
+    conv,geom = _decomposition_at(es_n,J,K,delta,T,nd,tol)
+    if not _touching_on_the_mesh(es_n,J,delta,tol): return conv,geom,delta
+    total = conv + geom # exact at the touching, whatever the basis
+    convs = []
+    for dk in _touching_neighbours(ops):
+        es_s,J_s,K_s,d_s = _band_basis_quantities(ops,perm,_pad3(k)+dk,tol)
+        if _touching_on_the_mesh(es_s,J_s,d_s,tol):
+            raise ValueError("the normal-state bands at k="+str(k)+" stay "
+                "degenerate, with a finite current between them, along a "
+                "twist direction: a line of band touchings runs through "
+                "this point of the mesh along one of the Cartesian axes, "
+                "where the conventional/geometric decomposition cannot be "
+                "sampled. Pass ks with a mesh that avoids the line, or use "
+                "h.get_superfluid_weight() without decompose=True")
+        convs.append(_decomposition_at(es_s,J_s,K_s,d_s,T,nd,tol)[0])
+    conv = np.mean(convs,axis=0)
+    return conv,total-conv,delta
+
+
 def superfluid_weight_decomposition(h,nk=20,T=0.0,ks=None,tol=1e-6,
         gauge="atomic"):
     """Superfluid weight split into its conventional and quantum-geometric
@@ -647,8 +736,7 @@ def superfluid_weight_decomposition(h,nk=20,T=0.0,ks=None,tol=1e-6,
     conv = np.zeros((nd,nd)) ; geom = np.zeros((nd,nd))
     delta = 0.
     for k in ks:
-        es_n,J,K,delta = _band_basis_quantities(ops,perm,k,tol)
-        c,g = _decomposition_at(es_n,J,K,delta,T,nd,tol)
+        c,g,delta = _split_at(ops,perm,k,T,tol)
         conv = conv + 0.5*c ; geom = geom + 0.5*g
     nrm = len(ks)*ops.volume
     conv = conv/nrm ; geom = geom/nrm

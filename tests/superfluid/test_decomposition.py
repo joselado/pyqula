@@ -84,17 +84,29 @@ def test_decomposition_refuses_broken_time_reversal_symmetry():
         sw.superfluid_weight_decomposition(h, nk=6, T=0.)
 
 
-def test_decomposition_refuses_degenerate_bands_with_interband_current():
-    """Rashba coupling leaves a Kramers degeneracy at the time-reversal
-    invariant momenta with a finite interband current: the interband
-    denominators of the split blow up there, and that must raise rather
-    than produce a huge meaningless number."""
+def test_rashba_pair_at_gamma_gives_a_converging_split():
+    """Rashba coupling leaves a Kramers pair at the time-reversal invariant
+    momenta with a finite current between its two members. This test used
+    to assert that the decomposition raises there, and since Gamma is on
+    every mesh that meant a Rashba model could never be decomposed at any
+    nk. The degeneracy is a single point that the current lifts linearly,
+    the interband denominators only enter in combinations that stay finite
+    across it, and the split is a Brillouin-zone integral of a bounded
+    integrand: the point on the mesh is a sampling question, not a failure
+    of the decomposition (see _split_at in sctk/superfluidweight.py). So
+    it now has to give a split that adds up to the Kubo weight and
+    converges with the mesh, the conventional part at nk=20 within 2% of
+    the one at nk=40 (0.1117 against 0.1126)."""
     h = geometry.honeycomb_lattice().get_hamiltonian()
     h.add_onsite(0.4)
     h.add_rashba(0.3)
     h.add_swave(0.3)
-    with pytest.raises(ValueError, match="degenerate normal-state bands"):
-        sw.superfluid_weight_decomposition(h, nk=6, T=0.)
+    out = sw.superfluid_weight_decomposition(h, nk=20, T=0.)
+    tot = sw.superfluid_weight(h, nk=20, T=0.)
+    assert np.max(np.abs(out["total"]-tot))/np.max(np.abs(tot)) < 1e-10
+    ref = sw.superfluid_weight_decomposition(h, nk=40, T=0.)
+    c, cref = out["conventional"][0, 0], ref["conventional"][0, 0]
+    assert abs(c-cref) < 2e-2*cref, (c, cref)
 
 
 def test_public_api_dispatch():
