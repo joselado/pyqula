@@ -10,8 +10,10 @@ h.add_haldane(0.1) # gapped, with E=0 inside the gap
 
 # Berry curvature and quantum metric of the occupied bands along a k-path,
 # from the quantum geometric tensor (the orbitals sit at their positions,
-# gauge="atomic", and k is in reduced coordinates)
-(ks,g_metric,omega) = topology.quantum_geometric_tensor_path(h,nk=200)
+# gauge="atomic"), with the derivatives along the Cartesian momentum so that
+# the trace of the metric is g_xx + g_yy and has the symmetry of the lattice
+(ks,g_metric,omega) = topology.quantum_geometric_tensor_path(h,nk=200,
+        coordinates="cartesian")
 trg = g_metric[:,0,0] + g_metric[:,1,1] # trace of the quantum metric
 be = omega[:,0,1] # Berry curvature
 

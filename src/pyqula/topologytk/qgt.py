@@ -77,12 +77,25 @@
 # closed-form two-band and SSH results, the exact massive-Dirac values at
 # the K point, the C3 symmetry and the supercell invariance above, and the
 # spin Chern numbers of the Kane-Mele model.
+#
+# COORDINATES. The tensor is computed with the derivatives along the
+# reduced momenta k_i (k = sum_i k_i b_i), the natural choice for a
+# Brillouin-zone integral of unit area, but since the b_i are not
+# orthogonal in general its components are not those of any orthonormal
+# frame: the trace of the reduced metric is not g_xx+g_yy and is not
+# invariant under the point group (on the honeycomb lattice it differs
+# between the three M points). coordinates="cartesian" returns
+# J Q J^T with J[a,i] = a_i[a]/(2 pi), the tensor in the Cartesian
+# momentum, checked in tests/topology/test_qgt_cartesian.py against a
+# finite difference of the projector along Cartesian directions.
 import numpy as np
 from .. import algebra
 from .. import klist
 
 
 _gauges = ("atomic","lattice") # accepted values of gauge=, see above
+
+_coordinates = ("reduced","cartesian") # accepted values of coordinates=
 
 _chunk_bytes = 2**28 # memory budget of one batch of k-points in _qgt_batch
 
@@ -91,6 +104,37 @@ def _check_gauge(gauge):
     """Raise unless gauge is one of the accepted values"""
     if gauge not in _gauges: raise ValueError("unknown gauge '"+str(gauge)
             +"'; it must be one of "+str(list(_gauges)))
+
+
+def _check_coordinates(coordinates):
+    """Raise unless coordinates is one of the accepted values"""
+    if coordinates not in _coordinates: raise ValueError("unknown "
+            "coordinates '"+str(coordinates)+"' for the quantum geometric "
+            "tensor; they must be one of "+str(list(_coordinates)))
+
+
+def _to_coordinates(h,Qs,coordinates):
+    """Bring a batch of tensors Qs, (nk,dim,dim) or (nk,dim,dim,n,n), from
+    the reduced coordinates it is computed in to the requested ones.
+
+    With k = sum_i k_i b_i and k_i = a_i.K/(2 pi) for a Cartesian momentum
+    K, d/dK_a = sum_i J[a,i] d/dk_i with J[a,i] = a_i[a]/(2 pi), so the
+    Cartesian tensor is J Q J^T on the two direction indices. It has the
+    three Cartesian components (x,y,z) whatever the dimensionality, built
+    from the true lattice vectors, with the components along a direction
+    that has no periodicity identically zero, as for the optical
+    conductivity. The reduced tensor is the one to integrate over the
+    Brillouin zone of unit area (chern_from_qgt); only the Cartesian one
+    has the point-group symmetry of the crystal, since the reciprocal
+    lattice vectors are not orthogonal in general, so that e.g. its trace
+    g_xx+g_yy is the same at the three M points of the honeycomb lattice,
+    and it is the one to compare with a continuum model."""
+    if coordinates=="reduced": return Qs
+    g = h.geometry
+    dim = Qs.shape[1]
+    A = np.array([g.a1,g.a2,g.a3][:dim],dtype=float) # (dim,3), rows a_i
+    J = A.T/(2.*np.pi) # (3,dim), J[a,i] = a_i[a]/(2 pi)
+    return np.einsum("ai,bj,kij...->kab...",J,J,Qs)
 
 
 def _orbital_fractions(h,n):
@@ -252,7 +296,8 @@ def _qgt_batch(hm,orders,hkgen,ks,occ_idxs,non_abelian,degeneracy_tol,
 
 
 def quantum_geometric_tensor_k(h,k=[0.,0.,0.],occ_idxs=None,
-        non_abelian=False,degeneracy_tol=1e-8,gauge="atomic"):
+        non_abelian=False,degeneracy_tol=1e-8,gauge="atomic",
+        coordinates="reduced"):
     """Quantum geometric tensor of a multiorbital Bloch Hamiltonian at a
     single k-point.
 
@@ -272,8 +317,13 @@ def quantum_geometric_tensor_k(h,k=[0.,0.,0.],occ_idxs=None,
     gauge="atomic" (default) places every orbital at its position in the
     geometry, which is the physical quantum geometry; gauge="lattice"
     drops the positions from the Bloch phase, as h.get_hk_gen() does (see
-    the module comment). The derivatives are with respect to k in reduced
-    coordinates, k = sum_i k_i b_i with b_i the reciprocal lattice vectors.
+    the module comment). With coordinates="reduced" (default) the
+    derivatives are with respect to k in reduced coordinates,
+    k = sum_i k_i b_i with b_i the reciprocal lattice vectors, and the
+    direction indices run over the periodic directions; with
+    coordinates="cartesian" they are with respect to the Cartesian
+    momentum, in units of the inverse of the geometry's length unit, and
+    run over x, y and z whatever the dimensionality (see _to_coordinates).
 
     degeneracy_tol is relative to the Hamiltonian's characteristic hopping
     energy scale (see _multicell_and_orders/_qgt_batch),
@@ -284,11 +334,14 @@ def quantum_geometric_tensor_k(h,k=[0.,0.,0.],occ_idxs=None,
     Q : ndarray, complex
       shape (dim,dim,n,n) if non_abelian, n the number of orbitals
       shape (dim,dim) (trace over the subspace) otherwise
+      with dim replaced by 3 for coordinates="cartesian"
     """
+    _check_coordinates(coordinates)
     hm,orders,hkgen,scale,frac = _multicell_and_orders(h,gauge=gauge)
     occ_idxs = _resolve_occ_idxs(hkgen,k,occ_idxs)
-    return _qgt_batch(hm,orders,hkgen,[k],occ_idxs,non_abelian,
-            degeneracy_tol,scale,frac)[0]
+    Qs = _qgt_batch(hm,orders,hkgen,[k],occ_idxs,non_abelian,
+            degeneracy_tol,scale,frac)
+    return _to_coordinates(h,Qs,coordinates)[0]
 
 
 def berry_curvature_from_qgt(Q,non_abelian=False):
@@ -356,13 +409,17 @@ def _qgt_over_kpoints(hm,orders,hkgen,ks,occ_idxs,non_abelian,degeneracy_tol,
 
 
 def quantum_geometric_tensor_path(h,kpath=None,nk=100,occ_idxs=None,
-        non_abelian=False,degeneracy_tol=1e-8,gauge="atomic"):
+        non_abelian=False,degeneracy_tol=1e-8,gauge="atomic",
+        coordinates="reduced"):
     """quantum_geometric_tensor_k evaluated along a k-path. Returns the
-    path index, the quantum metric and the Berry curvature at each point"""
+    path index, the quantum metric and the Berry curvature at each point,
+    in the coordinates of quantum_geometric_tensor_k"""
+    _check_coordinates(coordinates)
     hm,orders,hkgen,scale,frac = _multicell_and_orders(h,gauge=gauge)
     kpath = klist.get_kpath(h.geometry,kpath=kpath,nk=nk)
     occ_idxs,Qs = _qgt_over_kpoints(hm,orders,hkgen,kpath,occ_idxs,
             non_abelian,degeneracy_tol,scale,frac)
+    Qs = _to_coordinates(h,Qs,coordinates)
     g = quantum_metric_from_qgt(Qs,non_abelian=non_abelian)
     omega = berry_curvature_from_qgt(Qs,non_abelian=non_abelian)
     inds = np.array(range(len(Qs)))
@@ -370,15 +427,17 @@ def quantum_geometric_tensor_path(h,kpath=None,nk=100,occ_idxs=None,
 
 
 def quantum_geometric_tensor_mesh(h,nk=30,occ_idxs=None,non_abelian=False,
-        degeneracy_tol=1e-8,gauge="atomic"):
+        degeneracy_tol=1e-8,gauge="atomic",coordinates="reduced"):
     """quantum_geometric_tensor_k evaluated on a uniform k-mesh of nk points
-    per periodic direction. Returns the k-points and the QGT at every
-    point, e.g. for BZ integration or pointwise validation."""
+    per periodic direction. Returns the k-points, in reduced coordinates
+    whatever the coordinates of the tensor, and the QGT at every point,
+    e.g. for BZ integration or pointwise validation."""
+    _check_coordinates(coordinates)
     hm,orders,hkgen,scale,frac = _multicell_and_orders(h,gauge=gauge)
     ks = klist.kmesh(h.dimensionality,nk=nk)
     occ_idxs,Qs = _qgt_over_kpoints(hm,orders,hkgen,ks,occ_idxs,
             non_abelian,degeneracy_tol,scale,frac)
-    return ks,Qs
+    return ks,_to_coordinates(h,Qs,coordinates)
 
 
 def chern_from_qgt(h,nk=30,occ_idxs=None,gauge="atomic"):
