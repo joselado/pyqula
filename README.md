@@ -222,9 +222,10 @@ import numpy as np
 g = geometry.triangular_lattice() # geometry of a triangular lattice
 h = g.get_hamiltonian()  # get the Hamiltonian
 h.setup_nambu_spinor() # setup the Nambu form of the Hamiltonian
-h = h.get_mean_field_hamiltonian(U=-1.0,filling=0.15,mf="swave") # perform SCF
+# perform SCF, on a k-mesh that resolves the superconducting gap
+h = h.get_mean_field_hamiltonian(U=-2.0,filling=0.45,mf="swave",nk=40)
 # electron spectral-function
-h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-1.0,1.0,100))
+h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-2.0,2.0,200),delta=0.03)
 ```
 
 ![Alt text](images/scf_SC.png?raw=true "Interaction-driven superconductivity")
@@ -238,12 +239,13 @@ g = geometry.triangular_lattice() # generate the geometry
 h = g.get_hamiltonian() # create Hamiltonian of the system
 h.add_exchange([0.,0.,1.]) # add exchange field
 h.setup_nambu_spinor() # initialize the Nambu basis
-# perform a superconducting non-collinear mean-field calculation
-h = h.get_mean_field_hamiltonian(V1=-1.0,filling=0.3,mf="random")
+# perform a superconducting non-collinear mean-field calculation,
+# on a k-mesh that resolves the superconducting gap
+h = h.get_mean_field_hamiltonian(V1=-1.5,filling=0.3,mf="random",nk=40)
 # compute the non-unitarity of the spin-triplet superconducting d-vector
-d = h.get_dvector_non_unitarity() # non-unitarity of spin-triplet
+d = h.get_dvector_non_unitarity(nk=40) # non-unitarity of spin-triplet
 # electron spectral-function
-h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-2.0,2.0,400))
+h.get_kdos_bands(operator="electron",nk=400,energies=np.linspace(-2.0,2.0,200),delta=0.03)
 ```
 
 ![Alt text](images/scf_SC_triplet.png?raw=true "Interaction driven non-unitary spin-triplet superconductor")
