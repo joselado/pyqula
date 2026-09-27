@@ -18,6 +18,55 @@ _sy = np.asarray(sy.todense())
 _sz = np.asarray(sz.todense())
 
 
+def second_neighbor_cells(h,ncells,rcut=2.1):
+    """Return the cells, within ncells of the origin along each periodic
+    direction, holding a site closer than rcut to a site of the unit cell:
+    the cells a second neighbor of a site of the unit cell can sit in (the
+    first-neighbor distance is 1, and the generators below accept a
+    second-neighbor pair below a distance sqrt(4.1)). The origin comes
+    first. These are not the cells the Hamiltonian already has a hopping
+    to: a first-neighbor Hamiltonian of the diamond lattice has hoppings
+    to six cells, and the second neighbors sit in twelve."""
+    from .multicell import close_enough # check if two rs are close
+    g = h.geometry
+    dim = h.dimensionality
+    rng = list(range(-ncells,ncells+1)) # cells along one direction
+    cells = [(0,0,0)] # the origin always holds second neighbors
+    for i in (rng if dim>0 else [0]):
+        for j in (rng if dim>1 else [0]):
+            for k in (rng if dim>2 else [0]):
+                if (i,j,k)==(0,0,0): continue # already there
+                r2 = [ri + i*g.a1 + j*g.a2 + k*g.a3 for ri in g.r]
+                if close_enough(g.r,r2,rcut=rcut): cells.append((i,j,k))
+    return cells
+
+
+def _is_zero(m):
+    """Whether a coupling matrix has no nonzero entry"""
+    if isnumber(m): return m==0
+    if hasattr(m,"count_nonzero"): return m.count_nonzero()==0
+    return not np.any(m)
+
+
+def add_to_cell(h,d,m):
+    """Add the matrix m to the hopping of a multicell Hamiltonian towards
+    the cell d, creating that hopping when the Hamiltonian has none there
+    yet (and nothing when m is zero)"""
+    d = tuple(int(round(x)) for x in d)
+    if d==(0,0,0): # intracell
+        h.intra = h.intra + m
+        return
+    for hop in h.hopping: # an existing hopping towards that cell
+        if tuple(int(round(x)) for x in hop.dir)==d:
+            hop.m += m
+            return
+    if _is_zero(m): return # no bond towards that cell
+    from .multicell import Hopping
+    hop = Hopping(d=np.array(d),m=h.intra*0.0) # zero matrix, same type
+    hop.m += m
+    h.hopping.append(hop)
+
+
 def generalized_kane_mele(r1,r2,rm,fun=0.0,tol=1e-5):
     """Return the Kane-Mele generalized Hamiltonian.
 
@@ -199,16 +248,15 @@ def add_kane_mele(self,t,**kwargs):
       raise NotImplementedError("the Kane-Mele coupling is only implemented "
               "up to 3d for multicell Hamiltonians")
 
-    m = generalized_kane_mele(g.r,g.r,rs,fun=t,**kwargs) # kane mele coupling
-    m = self.spinful2full(m) # convert the matrix
-    self.intra = self.intra + m # add matrix
-    for i in range(len(self.hopping)): # loop over hoppings
-      d = self.hopping[i].dir
-#      print("Generating Haldane-like",d,end="\r")
-      r2 = [ri + d[0]*g.a1 + d[1]*g.a2 +d[2]*g.a3 for ri in g.r] # second vectors
-      m = generalized_kane_mele(g.r,r2,rs,fun=t) # kane mele coupling
+    # every cell a second neighbor can sit in, not only the cells the
+    # Hamiltonian already has a hopping to: a first-neighbor diamond
+    # Hamiltonian has none towards six of the twelve second neighbors
+    for d in second_neighbor_cells(self,ncells): # loop over cells
+      if d==(0,0,0): r2 = g.r # intracell
+      else: r2 = [ri + d[0]*g.a1 + d[1]*g.a2 +d[2]*g.a3 for ri in g.r] # second vectors
+      m = generalized_kane_mele(g.r,r2,rs,fun=t,**kwargs) # kane mele coupling
       m = self.spinful2full(m) # convert the matrix
-      self.hopping[i].m += m
+      add_to_cell(self,d,m) # add to the hopping towards that cell
     return
 
   else:  # conventional Hamiltonian
@@ -316,17 +364,15 @@ def add_haldane_like(self,t,spinless_generator,
         raise NotImplementedError("the Haldane-like coupling is only "
                 "implemented up to 3d for multicell Hamiltonians")
 
-#    self.intra += generator(g.r,g.r,rs,fun=t,sublattice=sublattice) # coupling
-    dirs = [[0,0,0]] + [t.dir for t in self.hopping] # directions
+    # every cell a second neighbor can sit in, not only the cells the
+    # Hamiltonian already has a hopping to (see add_kane_mele)
+    ncells = 0 if self.dimensionality==0 else self.geometry.get_ncells()
+    dirs = second_neighbor_cells(self,ncells) # directions
     def pfun(d): # function to parallelize
-#    for i in range(len(self.hopping)): # loop over hoppings
-#      print("Generating Haldane-like",d)
       r2 = self.geometry.replicas(d=d)
-      return generator(g.r,r2,rs,fun=t,sublattice=sublattice) 
+      return generator(g.r,r2,rs,fun=t,sublattice=sublattice)
     ms = parallel.pcall(pfun,dirs) # get matrices
-    self.intra = self.intra + ms[0] # intracell matrix
-    for i in range(len(self.hopping)):
-        self.hopping[i].m += ms[i+1] # store
+    for (d,m) in zip(dirs,ms): add_to_cell(self,d,m) # store
     return
 
   else:  # conventional Hamiltonian
