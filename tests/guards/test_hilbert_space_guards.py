@@ -145,7 +145,12 @@ def test_a_mistyped_keyword_is_rejected_rather_than_swallowed(call, suggestion):
     """These three took a **kwargs bag they never read, so a mistyped
     keyword was silently ignored and the routine ran with its default --
     the worst failure mode, because the result looks fine. The bag is gone,
-    so Python itself rejects the typo and suggests the real name."""
+    so Python itself rejects the typo, and from Python 3.13 on it also
+    suggests the real name (3.12 only names the unexpected keyword, which
+    for "fractionl" does not contain "fractional")."""
+    import sys
     with pytest.raises(TypeError) as e:
         call()
-    assert suggestion in str(e.value)
+    assert "unexpected keyword argument" in str(e.value)
+    if sys.version_info >= (3, 13):
+        assert suggestion in str(e.value)

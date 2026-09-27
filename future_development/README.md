@@ -126,6 +126,18 @@ already reached once.
   reproduce, with the Brillouin-zone-domain trap that produced a false
   positive), and why a gapped system returns an exact zero at every order.
 
+- [`notebook_physics_review.md`](notebook_physics_review.md) -- a physics
+  review of all 93 executed notebooks against their own figures and printed
+  numbers, which added a literature cell citing the matching figure or
+  equation to 56 of them, and the fix pass it led to: the library errors it
+  found (Kane-Mele couplings missing half the bonds on diamond, a
+  non-Hermitian mean field that dropped the non-Hermitian part, the SCF's Vr
+  twice the RPA's, half-strength shells in the charge RPA, a non-Hermitian
+  Wannier Hamiltonian, a local-probe S-matrix floor, a p-wave spin current
+  that was mesh noise, among others) and the notebooks re-run on converged,
+  reference-comparable cases. What it leaves open: a decimation that loops on
+  NaN, the RKKY routine's broadening, and a few conventions.
+
 - [`orbital_field_in_a_superconductor.md`](orbital_field_in_a_superconductor.md)
   -- why `add_peierls` refuses a Hamiltonian that already carries pairing
   (the anomalous term has no single Peierls phase; a real orbital field

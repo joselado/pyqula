@@ -923,9 +923,23 @@ harmonic of order `l+1` has a nonzero constant `(l+1)`-th derivative, and nothin
 survives the zone integral, so the spin response switches on at exactly one order and is
 silent below it:
 
-| wave | p | d | f | g | i |
-|---|---|---|---|---|---|
-| lowest order `l` | 0 | 1 | 2 | 3 | 5 |
+| wave | d | f | g | i |
+|---|---|---|---|---|
+| lowest order `l` | 1 | 2 | 3 | 5 |
+
+The p-wave magnet, whose form factor is `kx`, would sit at `l = 0` by this counting, and it is
+not in the table for two reasons. First, the zeroth order vanishes for every band of every
+Hamiltonian: with $F'=f$ the integrand $f\,\partial\epsilon/\partial k_b=\partial F(\epsilon)/\partial k_b$
+is a total derivative, whose zone integral is zero, meaning that there is no current in
+equilibrium. Second, on the lattice the p-wave splitting $J\sin k_x$ combines with the hopping
+$2t\cos k_x$ into a single cosine of amplitude $\sqrt{4t^2+J^2}$, so the two spin bands are the
+same band shifted rigidly along $k_x$ by opposite amounts, and a zone integral does not see
+that shift. A p-wave magnet has spin-split Fermi surfaces and no spin current at any order.
+Note that on a finite k-mesh these two zeros come out as small numbers, since the shift is not
+a translation of the mesh: at `nk=48` the p-wave magnet gives $3\times10^{-4}$ at the even
+orders, and this falls exponentially with `nk`, to $10^{-11}$ at `nk=384`. The zeros below
+the threshold of the d-, f-, g- and i-wave magnets are forced by symmetry and are exact on
+any mesh, so an entry that shrinks as the mesh is refined is a zero and not a threshold.
 
 Reading off the lowest order at which a nonlinear spin current appears therefore identifies
 the wave index. This is the content of Ezawa, *Phys. Rev. B* **111**, 125420
@@ -1408,13 +1422,27 @@ in general, adding up to the trace of the operator at every k-point, and
 ## What is and is not available
 
 The band structure, the density of states, the LDOS and the Berry curvature
-have genuine non-Hermitian versions. Everything else on a `non_hermitian=True`
-Hamiltonian falls back to the Hermitian formula, which may or may not be
-meaningful for a complex spectrum, so check before relying on it. The
-self-consistent mean field is one of those: it runs the ordinary
-self-consistent loop, and the density matrix it builds is the Hermitian one
-(see
+have genuine non-Hermitian versions, and so does the density matrix. The
+occupied states are those with the lowest real part of the energy, and each of
+them enters with its right eigenvector $|R\rangle$ and its left eigenvector
+$\langle L|$, normalized so that $\langle L|R\rangle=1$, so that
+$\rho=\sum_{\rm occ}|R\rangle\langle L|$ and an expectation value is the sum of
+the biorthogonal ones $\langle L|A|R\rangle$, complex in general.
+`h.get_density_matrix()` is built from this $\rho$, `h.get_vev()` and
+`h.get_magnetization()` return the real part of what it gives, and the self-consistent
+mean field is solved with it, so that the mean-field Hamiltonian is itself
+non-Hermitian. This works for a normal-state Hamiltonian with exact
+diagonalization, the default, and the KPM, `use_jax=True` and
+`integration="qtci"` refuse a non-Hermitian Hamiltonian with a
+`NotImplementedError`. A simple check of all this is the open Hatano-Nelson
+chain, whose non-reciprocal hopping an imaginary gauge transformation turns
+into the Hermitian hopping $\sqrt{t_Rt_L}$ without changing any density, so
+that with a Hubbard $U$ its self-consistent spectrum is that of the Hermitian
+chain (see
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/08_hermitian_nonhermitian.ipynb`).
+Everything else on a `non_hermitian=True` Hamiltonian falls back to the
+Hermitian formula, which may or may not be meaningful for a complex spectrum,
+so check before relying on it.
 
 One restriction is enforced rather than left to the caller: `h.get_dos()`
 accepts only `mode="ED"`, and refuses `use_kpm=True` and every other mode with
@@ -1647,8 +1675,8 @@ h = g.get_hamiltonian() # create Hamiltonian of the system
 h.add_exchange([0.,0.,3.]) # add exchange field
 h.setup_nambu_spinor() # initialize the Nambu basis
 # perform a superconducting non-collinear mean-field calculation
-h = h.get_mean_field_hamiltonian(V1=-1.0,filling=0.3,mf="random",nk=4)
-q = h.get_dvector_non_unitarity() # antiparallel to +z, as is h.get_magnetization()
+h = h.get_mean_field_hamiltonian(V1=-1.5,filling=0.3,mf="random",nk=30)
+q = h.get_dvector_non_unitarity(nk=30) # antiparallel to +z, as is h.get_magnetization()
 ```
 
 For an inhomogeneous system, `h.write_non_unitarity()` writes the same
@@ -1694,8 +1722,11 @@ the integral of the quantum metric (Peotta and Törmä, Nat. Commun. **6**,
 8944): a flat band has no velocity, so all of its stiffness is geometric,
 which is why a flat band can superconduct at all. The split is offered on top
 of the full result rather than used as the definition, and it is refused with
-a `ValueError` when its assumptions (uniform onsite pairing, time-reversal
-symmetry, a resolvable normal-state gap) do not hold. Let us compute both on
+a `ValueError` when its assumptions (uniform onsite pairing and time-reversal
+symmetry) do not hold. A band touching that lands on the k-mesh, such as the
+Dirac point of the kagome and honeycomb lattices when `nk` is a multiple of 3,
+does not stop it: the split is an integral over the Brillouin zone, and that
+single k-point is sampled from the points around it. Let us compute both on
 a square lattice away from half filling
 
 ```python
@@ -1900,11 +1931,11 @@ import numpy as np
 g = geometry.triangular_lattice() # geometry of a triangular lattice
 h = g.get_hamiltonian()  # get the Hamiltonian
 h.setup_nambu_spinor() # setup the Nambu form of the Hamiltonian
-h = h.get_mean_field_hamiltonian(U=-1.0,filling=
-                   0.15,mf="swave") # perform SCF
+h = h.get_mean_field_hamiltonian(U=-2.0,filling=
+                   0.45,mf="swave",nk=40) # perform SCF
 # electron spectral-function
 h.get_kdos_bands(operator="electron",nk=400,
-                   energies=np.linspace(-1.0,1.0,100))
+                   energies=np.linspace(-2.0,2.0,200),delta=0.03)
 ```
 
 The Nambu spinor has to be set up before the calculation, so that the anomalous contraction has a block of the Hamiltonian to go into; the guess `mf="swave"` seeds a uniform singlet pairing, which the loop then adjusts to its self-consistent value. The electron spectral function, projected with `operator="electron"` on the electron half of the Nambu spinor so that the hole copy of the bands does not appear, shows the normal-state band of the triangular lattice with a gap opened at the Fermi energy, and the gap grows with $|U|$. `h.get_kdos_bands()` is described in the section on momentum-resolved spectral functions.
@@ -1928,7 +1959,7 @@ c^\dagger_{i,s} c_{i,s}
 c^\dagger_{j,s'} c_{j,s'}
 $$
 
-where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors; second and third neighbors enter `h.get_mean_field_hamiltonian()` in the same way as `V2` and `V3`, and an interaction with an arbitrary dependence on the distance as `Vr`. That interaction reaches up to a distance `rcut`, 5 by default in a periodic system, and it is kept or dropped one whole shell of equidistant pairs at a time, so that it has the symmetry of the lattice; in a finite system every pair is kept. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all the anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first-neighbor interaction $V_1$.
+where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors; second and third neighbors enter `h.get_mean_field_hamiltonian()` in the same way as `V2` and `V3`, and an interaction with an arbitrary dependence on the distance as `Vr`, a function `Vr(r1,r2)` of the positions of two sites that is the interaction of each pair, exactly as $V_1$ is for a pair of first neighbors, so that a `Vr` equal to $V_1$ on first neighbors and zero beyond them is the same calculation as `V1`. That interaction reaches up to a distance `rcut`, 5 by default in a periodic system, and it is kept or dropped one whole shell of equidistant pairs at a time, so that it has the symmetry of the lattice; in a finite system every pair is kept. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all the anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first-neighbor interaction $V_1$.
 
 The first term is the charge order term, that takes the form
 
@@ -1985,11 +2016,11 @@ h = g.get_hamiltonian() # create Hamiltonian of the system
 h.add_exchange([0.,0.,1.]) # add exchange field
 h.setup_nambu_spinor() # initialize the Nambu basis
 # perform a superconducting non-collinear mean-field calculation
-h = h.get_mean_field_hamiltonian(V1=-1.0,
-                     filling=0.3,mf="random")
+h = h.get_mean_field_hamiltonian(V1=-1.5,
+                     filling=0.3,mf="random",nk=40)
 # electron spectral-function
 h.get_kdos_bands(operator="electron",nk=400,
-                   energies=np.linspace(-2.0,2.0,400))
+                   energies=np.linspace(-2.0,2.0,200),delta=0.03)
 ```
 
 The exchange field splits the two spin bands so far apart that singlet pairing between opposite spins has no states to pair at the Fermi energy, and the attractive $V_1$ pairs electrons of the same spin on neighboring sites instead: the converged state has an odd, spin-triplet order parameter, and the electron spectral function shows a gap at the Fermi energy in each of the two spin-split bands. The d-vector of that state, and how far it is from unitary, are the subject of the section on the spin-triplet d-vector in the chapter on superconductivity.
@@ -2169,7 +2200,7 @@ notebook `13_spinon_rvb.ipynb` in the folder above.
 Let us finally address the Kondo lattice, localized moments exchange-coupled to a conduction
 electron at the same site, the minimal model of heavy-fermion compounds, which
 `KondoLatticeHamiltonian` solves in the same pseudofermion language. Following Coleman's
-review (arXiv:cond-mat/0612006, section III.C), the model is written in its
+review (arXiv:cond-mat/0612006, section II.C), the model is written in its
 Coqblin-Schrieffer form $H=\sum_k\epsilon_k c^\dagger_kc_k + \tfrac{J}{N}\sum_j
 S_{ab}(j)c^\dagger_{jb}c_{ja}$, with $N=2$ for a spin-$\tfrac12$ moment, which is not the
 coefficient of a bare $J\vec S_j\cdot\vec s_j$ Heisenberg-form Kondo term (see the caveat
@@ -3072,7 +3103,11 @@ formula cannot handle. The derivative $\partial_{k_i} H$ is evaluated analytical
 hoppings, with no finite-difference error, with $k$ in the same reduced (dimensionless,
 period-1) coordinates as the rest of pyqula's k-space code, $\mathbf k = \sum_i k_i \mathbf b_i$
 with $\mathbf b_i$ the reciprocal lattice vectors, so the tensor in Cartesian momenta, the one
-to compare with a continuum calculation, is $J Q J^T$ with $J_{\alpha i} = (\mathbf a_i)_\alpha/2\pi$.
+to compare with a continuum calculation, is $J Q J^T$ with $J_{\alpha i} = (\mathbf a_i)_\alpha/2\pi$,
+and this is what `coordinates="cartesian"` returns, a $3\times3$ tensor in $x$, $y$ and $z$
+whatever the dimensionality. Only this one has the symmetry of the crystal, since the reciprocal
+lattice vectors are not orthogonal in general: on the honeycomb lattice the trace of the reduced
+metric is not $g_{xx}+g_{yy}$, and it differs between the three M points.
 `occ_idxs` defaults to the bands with $E<0$, the same convention `h.get_chern()` uses, so it
 tracks `h.shift_fermi(...)`.
 
@@ -3257,11 +3292,48 @@ bulk = np.argsort(np.linalg.norm(r-r.mean(axis=0),axis=1))[:len(r)//4] # innermo
 C = np.mean(c[bulk]) # bulk plateau value approximates the total Chern number
 ```
 
-For this island the marker sums to zero to machine precision and the innermost quarter of the
-sites average to about $1.9$, close to the $C=2$ of the spinful Haldane model of the Chern
-number section, while the outermost sites are strongly negative. See
+The marker of each site is divided by the area the site occupies, which is what makes it a
+density that reads the Chern number: the area of a site is the area of its Voronoi cell, the
+region of the plane closer to it than to any other site, which in a crystal is the area of the
+unit cell divided by the number of sites in it, while the sites at the edge, whose cells are
+open, take the mean area of the others. For this island the innermost quarter of the sites
+average to about $1.95$, close to the $C=2$ of the spinful Haldane model of the Chern number
+section; the missing few percent come from the small gap of $t_2=0.05$, and with $t_2=0.2$ the
+innermost sites read $2.00$. The outermost sites are strongly negative, and the marker times the
+area of each site adds up to zero over the whole island.
+
+The same marker works where there is no lattice at all, and we will now see it on an amorphous
+Chern insulator, the model of Agarwala and Shenoy. The sites are placed at random, uniformly and
+without any correlation between them, in a square, which is what `geometry.amorphous_lattice()`
+builds, each site hosts two orbitals, and every pair of sites closer than $R=4$ is connected by a
+hopping that decays exponentially with their distance and depends on the direction of the bond,
+which is what makes the model topological in a window of the mass $M$
+
+```python
+from pyqula import geometry
+from pyqula import topology
+from pyqula.geometrytk import amorphous
+from pyqula.topologytk.realspace import site_areas
+import numpy as np
+g = geometry.amorphous_lattice(L=36.,density=0.6,seed=0) # 778 sites at random positions
+h = amorphous.amorphous_chern_hamiltonian(g,M=-0.5) # Agarwala-Shenoy model, half filling
+(r,c) = topology.real_space_chern(h) # local marker, per site
+A = site_areas(g) # area of the Voronoi cell of each site
+bulk = np.max(np.abs(g.r[:,0:2]),axis=1)<6. # central square, far from the edges
+C = np.sum(c[bulk]*A[bulk])/np.sum(A[bulk]) # area-weighted average of the marker
+```
+
+The two orbitals of each site take the place of the spin, so `h` is spinful as far as pyqula is
+concerned, and the Hamiltonian comes shifted so that the Fermi energy of half filling is at zero,
+which is where `topology.real_space_chern()` takes the Fermi energy to be. The marker of each site now fluctuates
+strongly, since no two sites have the same surroundings, and since the sites do not occupy the
+same area the Chern number of a region is not the plain average of the marker but its average
+weighted by the area of each site. This gives $C\approx-1$, and the bulk marker goes to zero on
+both sides of the window $-2\lesssim M\lesssim1.2$ where Agarwala and Shenoy find a Bott index of
+$-1$ at this density: sharply at $M\approx-2$, and gradually at positive $M$, where it is already
+about $-1/2$ at $M=1$, since the gap of a sample of this size closes slowly there. See
 `jupyter-notebooks/functionalities/topological_characterization/05_real_space_chern_amorphous.ipynb`
-for the same marker on an amorphous lattice, where there is no Brillouin zone to compare with.
+for an executed notebook with the maps of the Chern density and the two transitions.
 
 ## Topological surface states
 
@@ -3298,11 +3370,12 @@ The real-space Berry curvature and Chern marker of the two sections above are ex
 topological marker: a local, position-resolved quantity, computable from the ground-state
 projector alone, that reveals a bulk topological invariant without relying on translational
 symmetry or a clean Brillouin zone. This is what makes topological markers the tool for
-disordered systems, finite flakes and islands, or systems with spatially varying parameters,
-a Haldane mass that changes sign across a boundary, say, or a topological insulator with
-dilute vacancies, where the marker density directly shows where the invariant is carried and
-where it changes. See `topology.real_space_chern` above for the code that computes it, and the
-`05_real_space_chern_amorphous.ipynb` notebook for a system with no lattice at all.
+disordered systems, finite flakes and islands, amorphous solids, or systems with spatially
+varying parameters, a Haldane mass that changes sign across a boundary, say, or a topological
+insulator with dilute vacancies, where the marker density directly shows where the invariant
+is carried and where it changes. See `topology.real_space_chern` above for the code that
+computes it, and the `05_real_space_chern_amorphous.ipynb` notebook for the amorphous Chern
+insulator of the section on the Chern number in real-space, a system with no lattice at all.
 
 
 # Entanglement
@@ -3486,21 +3559,24 @@ response function for a spinless system is computed as
 $$
 \chi(\omega,i,j) = 
 \sum_{n,m}
-f(\epsilon_n) (1-f(\epsilon_m))
+\left[f(\epsilon_n) - f(\epsilon_m)\right]
 \frac{
-\Psi_n(i)\Psi_m(j)
-\Psi^*_m(i)\Psi^*_n(j)
+\Psi^*_n(i)\Psi_m(i)
+\Psi^*_m(j)\Psi_n(j)
 }
 {
 \epsilon_n - \epsilon_m - \omega + i\delta
 }
 $$
 
-where $f(\epsilon)$ is the Fermi-Dirac distribution, so that only transitions
-from an occupied state $n$ to an empty state $m$ contribute, weighted by the
-amplitudes of both states at the two sites and resonating at the transition
-energy. For a periodic system the response is computed at a momentum transfer
-$q$, summing over the k-mesh
+where $f(\epsilon)$ is the Fermi-Dirac distribution, so that a pair of states
+contributes only when their occupations differ, weighted by the amplitudes of
+both states at the two sites and resonating at their energy difference. A
+transition from an occupied state $m$ to an empty state $n$ resonates at
+$\omega=\epsilon_n-\epsilon_m>0$, so the imaginary part of the diagonal
+response $\chi(\omega,i,i)$ is positive at positive frequency and negative at
+negative frequency. For a periodic system the response is computed at a
+momentum transfer $q$, summing over the k-mesh
 
 ```python
 from pyqula import geometry
@@ -3512,9 +3588,20 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 `es` holds the frequencies and `chis` one complex number per frequency, the
 response traced over the sites of the unit cell, whose imaginary part is what
 inelastic scattering measures. Note that at $q=0$ the response of the chain
-vanishes identically, since with a single band there is no state to scatter
-into at the same momentum; the scan below, at finite $q$, is where something
-appears.
+vanishes at any finite frequency, since with a single band there is no state
+to scatter into at the same momentum, and only its static limit survives,
+$\chi(\omega\to0)=-N(0)$ with $N(0)=1/\pi t$ the density of states at the
+Fermi level counting both spins, $-0.32$ here, spread by the broadening into
+a peak of width $\delta$ around zero frequency; the scan below, at finite $q$,
+is where the particle-hole continuum appears. That static limit comes from
+the pairs of states with the same energy, which on the k-mesh stand for the
+transitions within a band around them and enter with the derivative of the
+Fermi function, the $\delta\to0$ limit of the occupation factor over the
+energy difference. When $\delta$ is instead larger than the spacing of the
+energy differences on the mesh, the neighboring k-points already resolve
+those transitions and such a pair adds an error of order $1/n_k$, so a
+converged calculation at finite $\delta$ is better done with an odd `nk`,
+which keeps the pairs at a nesting wavevector off the mesh.
 
 Optional arguments
 - q: momentum transfer of the response function
@@ -3546,7 +3633,7 @@ be used instead, giving the generalized response
 
 $$
 \chi_{AB}(\omega,q) = \sum_{k,n,m}
-f(\epsilon_{k,n}) (1-f(\epsilon_{k+q,m}))
+\left[f(\epsilon_{k,n}) - f(\epsilon_{k+q,m})\right]
 \frac{
 \langle \Psi_{k,n}|A|\Psi_{k+q,m}\rangle
 \langle \Psi_{k+q,m}|B|\Psi_{k,n}\rangle
@@ -3557,7 +3644,8 @@ f(\epsilon_{k,n}) (1-f(\epsilon_{k+q,m}))
 $$
 
 where the perturbation couples through $B$, the measurement is of $A$, and
-the sum runs over the occupied states at $k$ and the empty ones at $k+q$.
+the sum runs over the pairs of states at $k$ and $k+q$ whose occupations
+differ.
 Taking both operators to be the spin along $z$ gives the longitudinal spin
 susceptibility of the chain
 
@@ -4335,11 +4423,19 @@ multiplet that should stay degenerate splits visibly in the orbital channel
 and stays degenerate in the charge one. Use the default. The two channels
 coincide exactly for a spinless Hamiltonian.
 
-Screening does not always weaken the interaction. With no onsite term the
-interaction matrix has zero trace, and screening then enhances it rather
-than reducing it, in the same way an RPA kernel enhances a magnetic
-instability. A Coulomb tail with no onsite term is simply missing its
-largest matrix element, so include a realistic $U$.
+Screening does not always weaken the interaction. It does when the
+charge-channel interaction $v^c(q)$ is positive definite at every $q$, as a
+physical repulsion is, since the static charge response is negative and
+$\varepsilon=1-v^c\chi^c$ then only reduces it. With no onsite term the
+interaction matrix has zero trace, so it has negative eigenvalues, and
+screening enhances the interaction along them rather than reducing it, in the
+same way an RPA kernel enhances a magnetic instability. A Coulomb tail with
+no onsite term is simply missing its largest matrix element, so include a
+realistic $U$, and note that $U>0$ is not enough: the eigenvalues of $v^c(q)$
+are $U/2$ plus those of the Fourier transform of the intersite interaction,
+which averages to zero over the Brillouin zone and so is negative somewhere
+(on the square lattice a first-neighbor $V_1$ gives $U/2-4V_1$ at the corner
+of the zone), and $U/2$ has to outweigh the most negative of them.
 
 Finally, if an eigenvalue of $\varepsilon(q)$ actually reaches zero, the RPA
 has diverged: that is a charge or spin instability of the mean field at that
@@ -4700,7 +4796,10 @@ print("Total spread Omega:",hwan.wannier_spread_total)
 
 One band was selected, so the Wannierized model has a single orbital per cell, and its centre
 and spread are the ones the minimization arrived at: the total spread $\Omega$ is what a
-maximally localized Wannier function has made as small as it can. The Wannierized Hamiltonian
+maximally localized Wannier function has made as small as it can. The minimization starts from
+the orbitals of the original model where the selected bands have most of their weight, here the
+site with the lower onsite energy, so that the same call always gives the same Wannier function,
+and `trial_vectors=` replaces that starting point by one of your choice. The Wannierized Hamiltonian
 `hwan` behaves like any other pyqula Hamiltonian, so its bands can be compared directly
 against the original model's
 
@@ -4711,7 +4810,14 @@ against the original model's
 
 The two coincide on the wannierization mesh, and the Wannier model interpolates smoothly
 between the mesh points, which is the point of doing this: a one-orbital model that carries the
-valence band of the two-orbital one. See `examples/wannier/get_wannier_hamiltonian/main.py` for
+valence band of the two-orbital one. The mesh fixes each hopping only up to a translation by the
+supercell of `nk` cells along each direction, so, as in Wannier90, the hoppings are placed on the
+cells of the Wigner-Seitz cell of that supercell, the ones closest to the origin, and a cell on its
+boundary carries the hopping divided by the number of equally close copies it has; this set of
+cells is symmetric under $R\to-R$, so the Bloch Hamiltonian of the Wannier model is Hermitian at
+every k and not only on the mesh. How good the interpolation is between the mesh points depends on
+how localized the Wannier functions are, so a band that comes close to another somewhere in the
+Brillouin zone needs a denser mesh. See `examples/wannier/get_wannier_hamiltonian/main.py` for
 a runnable version, and
 `jupyter-notebooks/functionalities/wannierization/01_maximally_localized_wannier.ipynb` and
 `02_exact_reproduction.ipynb` in the same folder for the executed notebooks.
@@ -4727,10 +4833,12 @@ rejected with a `ValueError` rather than silently returning a mis-symmetrized mo
 explicit `symmetrytk.pointgroup.SymmetryOperation` can be passed instead of `"auto"` to
 enforce a specific subgroup.
 
-A good illustration is kagome's flat band: it is exactly degenerate with the dispersive middle
-band at the K point, so no selection containing only the flat band is a union of whole
-multiplets. This is the topological obstruction behind kagome's flat band having no symmetric
-localized Wannier function, and the check catches it instead of returning a broken model
+A good illustration is kagome's flat band, the lowest of its three bands (index 0, at
+$E=-2$ in units of the hopping): it touches the dispersive middle band at the $\Gamma$ point, so
+no selection containing only the flat band is a union of whole multiplets there. This touching
+is why kagome's flat band on its own, which is not an isolated band, has no exponentially
+localized Wannier function, symmetric or not, and the check catches it instead of returning a
+broken model
 
 ```python
 from pyqula import geometry
@@ -4740,7 +4848,7 @@ g = geometry.kagome_lattice()
 h = g.get_hamiltonian(has_spin=False)
 
 try:
-    h.get_wannier_hamiltonian(bands=[2,2],nk=12,symmetries="auto")
+    h.get_wannier_hamiltonian(bands=[0,0],nk=12,symmetries="auto") # the flat band alone
 except ValueError as e:
     print("Flat band alone correctly rejected:",str(e).splitlines()[0])
 
@@ -4749,7 +4857,8 @@ hwan_sym = h.get_wannier_hamiltonian(bands=[0,2],nk=12,symmetries="auto")
 print("Symmetries enforced:",[c.op.name for c in hwan_sym.wannier_symmetries])
 ```
 
-The first call raises, and the message names the degeneracy it found; the second returns a
+The first call raises, and the message names the symmetry and the k-point, $\Gamma$, where the
+selection is not a union of whole multiplets; the second returns a
 three-orbital model whose Wannier functions transform into each other under the operations
 listed in `wannier_symmetries`. See `examples/wannier/get_wannier_hamiltonian/main.py` and
 `examples/wannier/symmetric_wannierization/main.py` for runnable versions of these two
@@ -4845,18 +4954,24 @@ g.dimensionality = 0
 h = g.get_hamiltonian(is_sparse=True,has_spin=False)
 (x,y) = h.get_dos(mode="KPM",
             energies=np.linspace(-3.0,3.0,200), # energies
-            delta=1e-4, # effective smearing (~1/npol)
+            delta=1e-2, # energy resolution, half width of the peak of a level
             ntries=10 # number of random vectors for the stochastic trace
             )
 ```
 
 `x` is the energy grid and `y` the density of states on it, the same quantity
 that exact diagonalization would give for a chain of this length. Two numbers
-set what you get. `delta` is the energy resolution of the expansion, and the
-number of polynomials is the spectral width of the Hamiltonian divided by
-`delta`, so a sharper density of states costs proportionally more
-matrix-vector products; `ntries` is the number of random vectors in the
-stochastic trace, and the noise in `y` goes down as more of them are averaged.
+set what you get. `delta` is the energy resolution of the expansion, the half
+width at half maximum of the peak that a single level gives, which is the width
+it gives the Lorentzian of `mode="ED"`, so that the two modes can be laid on top
+of each other. The expansion takes about $1.85\,{\rm scale}/\delta$ polynomials
+for it, so a sharper density of states costs proportionally more matrix-vector
+products, and each peak comes out nearly a Gaussian rather than a Lorentzian,
+about one and a half times taller and without the long tails. `delta` also has
+to stay larger than the spacing between the levels, $2\pi t/N\approx 0.002$ in
+the middle of the band of this chain, or `y` shows the individual levels.
+`ntries` is the number of random vectors in the stochastic trace, and the noise
+in `y` goes down as the inverse square root of their number.
 The expansion also needs the whole spectrum inside $[-{\rm scale},{\rm scale}]$,
 since a Chebyshev polynomial grows exponentially outside $[-1,1]$, and the
 default is `scale=10` in units of the hopping; a Hamiltonian whose spectrum
@@ -4879,8 +4994,14 @@ the Green's function $G_{ij}(E)$: for $i=j$ it is $\pi$ times the local density
 of states at that site, and for two different sites it integrates to zero over
 the energy, since the eigenstates form a complete basis, and its sign along the
 energy axis tells in which part of the spectrum the two sites are correlated.
-`npol` is the number of polynomials and sets the resolution, as `delta` did
-above.
+`npol` is the number of polynomials $n_{\rm pol}$ and sets the resolution, a
+peak of half width $1.85\,{\rm scale}/n_{\rm pol}$ for each level, the inverse
+of what `delta` did above. The Green's function itself, real part included,
+comes from the same moments with `kpm.correlator0d()`, which returns the
+energies, ${\rm Re}\,G_{ij}$ and $-{\rm Im}\,G_{ij}$, and with
+`kernel="lorentz"` broadens each pole into a Lorentzian of half width
+$1.5\,{\rm scale}/n_{\rm pol}$, the $G_{ij}(E+i\delta)$ that a matrix inversion
+gives.
 
 See `examples/0d/kpm_dos/main.py` and `examples/0d/kpm_correlator/main.py`
 for runnable versions, including a comparison of the KPM correlator against
@@ -6397,6 +6518,9 @@ Optional arguments:
 - gauge="atomic": `"atomic"` places every orbital at its position in the
   geometry, the physical quantum geometry; `"lattice"` drops the positions
   from the Bloch phase, as if every orbital sat at the origin of its cell
+- coordinates="reduced": `"reduced"` takes the derivatives along the reduced
+  momenta of the reciprocal lattice vectors; `"cartesian"` along the
+  Cartesian momentum, a $3\times3$ tensor in $x$, $y$ and $z$
 
 ### h.get_quantum_metric()
 Same arguments as `h.get_quantum_geometric_tensor()`, but returns only the
@@ -6463,7 +6587,7 @@ to `maxexpand` times, and a stiffness that never crosses the line raises
 `ValueError`. Returns a float.
 
 ### h.get_nonlinear_drude_conductivity()
-Compute the l-th order nonlinear Drude conductivity `sigma^{x^l1 y^l2 ; b}` of a collinear magnet, the quantity whose lowest nonvanishing order measures the X-wave index of an altermagnet (p:0, d:1, f:2, g:3, i:5). Requires spin to be a good quantum number.
+Compute the l-th order nonlinear Drude conductivity `sigma^{x^l1 y^l2 ; b}` of a collinear magnet, the quantity whose lowest nonvanishing order measures the X-wave index of an altermagnet (d:1, f:2, g:3, i:5; a p-wave magnet has none at any order, and `l = 0` is zero for any Hamiltonian). Requires spin to be a good quantum number.
 
 Optional arguments
 
@@ -6834,7 +6958,7 @@ Optional arguments:
 
 Returns kappa (a scalar, or an array matching `energies`)
 
-At `temp=0.` (the default), kappa is `d(log G)/d(log T)`: how steeply the conductance scales with the probe-sample coupling. For a `LocalProbe` whose probe lead is not itself superconducting it is an exact derivative, obtained with `jax.grad`; otherwise it is estimated from the conductance at two nearby couplings (0.9T and 1.1T). Which of the two applies is decided automatically, and the two agree to within the finite-difference bias of the secant. See `examples/transport/localprobe_kappa_1D` for a runnable version.
+At `temp=0.` (the default), kappa is the exponent `d(log G)/d(log T)` of the conductance divided by the same exponent with the pairing removed: how steeply the conductance scales with the probe-sample coupling, 1 for single-particle tunneling and 2 for Andreev reflection. For a `LocalProbe` whose probe lead is not itself superconducting each exponent is an exact derivative, obtained with `jax.grad`; otherwise it is estimated from the conductance at two nearby couplings (0.9T and 1.1T). Which of the two applies is decided automatically, and the two agree to within the finite-difference bias of the secant. Inside a superconducting gap, the broadening `delta` of a `LocalProbe` acts as a finite quasiparticle lifetime of the sample, which leaves a normal conductance $G_N\delta/\Delta$; since the Andreev one is $G_N^2/4$ in the tunneling limit, the plateau at 2 needs `delta` well below $\Delta G_N/4$ at the smallest coupling, `delta=1e-10` for a gap of 0.1 down to `T=1e-3`. See `examples/transport/localprobe_kappa_1D` for a runnable version, and `jupyter-notebooks/functionalities/quantum_transport/07_differential_decay_rate.ipynb` for the executed notebook.
 
 ## SpinModel functions and methods
 
