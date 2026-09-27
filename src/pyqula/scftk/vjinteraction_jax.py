@@ -162,8 +162,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-jax.config.update("jax_enable_x64", True)
-from .. import gpu
+from .. import gpu # also switches jax to double precision
 gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 
 from .densitydensity import (SCF, set_hoppings, hamiltonian2dict,

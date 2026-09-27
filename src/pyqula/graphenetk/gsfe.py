@@ -12,6 +12,7 @@ unit cell -- since the periodic dependence on registry is entirely carried
 by the dimensionless phases (v,w) below, this energy scale is independent
 of whatever length units the geometry itself uses.
 """
+from .. import gpu # switches jax to double precision, see pyqula/gpu.py
 import jax.numpy as jnp
 import numpy as np
 

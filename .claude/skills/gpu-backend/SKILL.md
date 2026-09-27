@@ -15,6 +15,12 @@ A new GPU path routes on `gpu.get_gpu()` rather than growing a switch of its own
 stays per-call: `kpm_prec`, `chi_prec`, `eigh_prec`. The old per-call `kpm_cpugpu` and
 `chi_cpugpu` arguments were removed and now raise.
 
+Importing `gpu.py` switches jax to double precision (`jax_enable_x64`) for the whole
+process, and that is the only place it is set. A new jax module imports `gpu` before it
+creates any jax array, rather than setting x64 itself: when eleven modules each set it at
+import, the jax code that did not ran in single or double precision depending on import
+order.
+
 ## The porting plan, and the sign-off rule
 
 `documentation/gpu_porting_plan.md` is the maintainer-facing roadmap for moving

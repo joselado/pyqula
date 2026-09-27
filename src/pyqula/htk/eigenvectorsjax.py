@@ -24,8 +24,7 @@ import numpy as np
 from .. import gpu
 gpu.apply() # the package-wide CPU/GPU switch, see pyqula/gpu.py
 
-import jax
-jax.config.update("jax_enable_x64",True) # keep "double" actually double
+import jax # in double precision, set by importing pyqula/gpu.py
 import jax.numpy as jnp
 
 # matrix entries per device dispatch, which bounds the solver workspace

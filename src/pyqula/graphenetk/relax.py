@@ -28,8 +28,7 @@ from scipy.optimize import minimize
 from . import gsfe as gsfetk
 from . import elastic as elastictk
 
-jax.config.update("jax_enable_x64", True)
-from .. import gpu
+from .. import gpu # also switches jax to double precision
 gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 
 

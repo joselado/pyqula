@@ -36,6 +36,7 @@ i.e. no bond-length or bond-angle change at all. In the smooth/affine
 limit all 3 H_ij coincide with the true displacement gradient H, so
 mean_ij e(H_ij) reduces to e(H) exactly -- the G,K calibration against
 Table 1 is unaffected."""
+from .. import gpu # switches jax to double precision, see pyqula/gpu.py
 import jax.numpy as jnp
 
 # Table 1 of arXiv:1805.06972, graphene column (meV per unit cell)

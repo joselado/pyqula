@@ -30,10 +30,24 @@ on the device anyway (see documentation/gpu_porting_plan.md).
 
 Precision is a separate axis and stays a per-call argument (kpm_prec,
 chi_prec), since it changes the numbers rather than where they are
-computed.
+computed. Importing this module switches jax to double precision for the
+whole process, see below.
 """
 
 import warnings
+
+import jax
+# jax computes in float32/complex64 unless told otherwise, and silently
+# truncates a float64/complex128 request down to them. Every jax module
+# of the package imports this one, so double precision is switched on
+# here, once, for all of them. It used to be switched on by eleven of them
+# at import, so the ones that did not (the classical spin minimizer among
+# them) ran in single or in double precision depending on what had been
+# imported before, and a degenerate classical spin texture came out
+# different. It has to be set before any jax array is created. The single
+# precision routes (kpm_prec, chi_prec, eigh_prec) ask for complex64
+# explicitly and are not affected.
+jax.config.update("jax_enable_x64",True)
 
 _enabled = False # the CPU until asked otherwise
 _available = None # cached, since probing imports and initializes jax

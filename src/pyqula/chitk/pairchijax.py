@@ -49,8 +49,6 @@ from .. import gpu
 gpu.apply()
 
 import jax
-jax.config.update("jax_enable_x64",True) # allow float64/complex128, which
-# jax does not use by default
 import jax.numpy as jnp
 
 # the precision table and the padding quantum are the site-basis kernel's,

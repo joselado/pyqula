@@ -215,11 +215,9 @@ import warnings
 import numpy as np
 
 import jax
-# JAX defaults to float32/complex64, which would silently truncate this
-# module's complex128 self-energy/Green's-function arithmetic -- must be
-# set before any jax array is created (mirrors kpmtk/kpmjax.py's own
-# x64 opt-in for the identical reason).
-jax.config.update("jax_enable_x64", True)
+# jax defaults to float32/complex64, which would silently truncate this
+# module's complex128 self-energy/Green's-function arithmetic; importing
+# pyqula/gpu.py switches it to double precision
 from .. import gpu
 gpu.apply() # follow the package-wide CPU/GPU switch, see pyqula/gpu.py
 import jax.numpy as jnp

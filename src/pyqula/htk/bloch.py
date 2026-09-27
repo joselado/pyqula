@@ -75,6 +75,7 @@ def evaluate_bloch_matrix_jit(ms,ds,k):
     return out
 
 
+from .. import gpu # switches jax to double precision, see pyqula/gpu.py
 import jax
 import jax.numpy as jnp
 

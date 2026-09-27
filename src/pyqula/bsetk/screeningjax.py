@@ -56,8 +56,6 @@ from .. import gpu
 gpu.apply()
 
 import jax
-jax.config.update("jax_enable_x64",True) # allow float64/complex128, which
-# jax does not use by default
 import jax.numpy as jnp
 from functools import partial
 
