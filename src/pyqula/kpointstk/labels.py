@@ -12,6 +12,14 @@ def _K(g):
     """Corner of the hexagonal Brillouin zone"""
     from .locate import target_moduli
     from .mapping import unitary
+    cosab = np.real(unitary(g.b1).dot(unitary(g.b2)))
+    if abs(abs(cosab)-0.5)>1e-3: # not a hexagonal Brillouin zone
+        raise ValueError("K and K' are the corners of a hexagonal Brillouin "
+            "zone, which needs reciprocal vectors at 60 or 120 degrees; "
+            "this lattice's are at %.1f degrees. They are defined for "
+            "triangular, honeycomb and kagome-like lattices; a square "
+            "lattice has G, X, Y and M instead"
+            % (np.degrees(np.arccos(np.clip(cosab,-1.,1.)))))
     vm = np.sqrt(3) # moduli
     k = g.k2K(target_moduli(unitary(g.b1),unitary(g.b2),vm))
     return k*2/(3.*np.sqrt(3))

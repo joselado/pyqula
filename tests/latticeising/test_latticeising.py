@@ -319,3 +319,13 @@ def test_optimize_energy_checkpoint_at_matches_state_at_that_step():
     np.random.seed(8)
     li2.optimize_energy(temp=0.5, ntries=30)
     assert np.array_equal(li2.s, s_at_30)
+
+
+def test_constructor_leaves_the_callers_geometry_alone():
+    """LatticeIsing used to set g.nrep = 1 on the geometry it was given,
+    an attribute nothing reads"""
+    g = geometry.square_lattice().get_supercell(3)
+    g.dimensionality = 0
+    before = set(vars(g))
+    latticeising.LatticeIsing(g)
+    assert set(vars(g)) == before

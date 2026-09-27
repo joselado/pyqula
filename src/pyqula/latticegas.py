@@ -11,7 +11,6 @@ from copy import deepcopy
 
 class LatticeGas():
     def __init__(self,g,filling=0.5): # geometry
-        g.nrep = 1
         self.geometry = g # store geometry
         self.nsites = len(g.r) # number of sites
         self.mu = np.zeros(len(g.r)) # chemical potential

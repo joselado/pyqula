@@ -122,3 +122,16 @@ def test_the_minimizers_follow_the_package_gpu_switch():
         "        np.ones((1,3,3)), np.array([[0,1]]))",
         "print(('Cuda' if gpu.is_gpu_available() else 'Cpu') in str(e.devices()))"]))
     assert switched == "True", switched
+
+
+def test_energy_is_a_python_number_and_minimize_can_be_silent(capsys):
+    """energy() used to hand back a zero-dimensional jax array, and
+    minimize_energy printed its result with no way to turn that off"""
+    np.random.seed(0)
+    g = geometry.triangular_lattice().get_supercell(3)
+    sm = classicalspin.SpinModel(g)
+    sm.add_heisenberg(Jij=[1.0])
+    capsys.readouterr() # drop anything printed while building the model
+    sm.minimize_energy(tries=1, silent=True)
+    assert capsys.readouterr().out == ""
+    assert type(sm.energy()) is float

@@ -151,7 +151,9 @@ class Geometry:
         self.update_reciprocal() # update reciprocal lattice vectors
         get_fractional(self,center=center) # get fractional coordinates
     def rotate(self,angle):
-      """Rotate the geometry"""
+      """Return the geometry rotated clockwise by angle, in degrees,
+      about the z axis (positions and lattice vectors), leaving this one
+      as it is. Only for geometries of dimensionality up to 2"""
       return sculpt.rotate(self,angle*np.pi/180)
     def clean(self,iterative=False):
       return sculpt.remove_unibonded(self,iterative=iterative)
@@ -168,7 +170,9 @@ class Geometry:
           self.sublattice = get_sublattice(self.r,**kwargs)
           self.has_sublattice = True
     def shift(self,r0):
-      """Shift all the positions by r0"""
+      """Move the origin to r0, in place: every position r becomes r-r0,
+      so the sites move by -r0. A periodic geometry then has its
+      positions wrapped back into the unit cell"""
       self.x[:] -= r0[0]
       self.y[:] -= r0[1]
       self.z[:] -= r0[2]

@@ -189,13 +189,15 @@ def kekule_registries(g):
             mn = a[:2]@Binv.T
             if np.max(np.abs(mn-np.round(mn)))>0.05:
                 raise ValueError(
-                    "kekule_registries requires a Kekule-commensurate "
-                    "geometry (a multiple-of-3 supercell of the "
-                    "primitive honeycomb cell) for periodic "
-                    "(dimensionality>0) Hamiltonians; lattice vector "
-                    "a%d=%s is not commensurate with the Kekule "
-                    "registry. Use e.g. geometry.supercell(3) (or any "
-                    "other multiple of 3) first." % (i+1,a))
+                    "the in-plane valley operators (valley_x, valley_y) "
+                    "and the in-plane part (vx,vy) of "
+                    "add_valley_exchange need a Kekule-commensurate "
+                    "geometry when periodic: a supercell of the "
+                    "primitive honeycomb cell whose size is a multiple "
+                    "of 3. Lattice vector a%d=%s is not commensurate "
+                    "with the Kekule registry; use e.g. "
+                    "g.get_supercell(3) (or any other multiple of 3) "
+                    "first." % (i+1,a))
 
     r2 = g.multireplicas(2)
     cs_all = _fast_remove_duplicated(hexagon_centers(r2,r2))

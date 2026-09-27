@@ -187,6 +187,12 @@ def add_valley_exchange(h,v):
     if not h.geometry.has_sublattice: raise ValueError(
             "valley exchange requires a honeycomb-like geometry with a"
             " sublattice index")
+    if callable(v): raise TypeError("add_valley_exchange takes a uniform "
+            "valley exchange v=(vx,vy,vz), three numbers, not a function "
+            "of position: its in-plane part is a Kekule bond texture "
+            "painted over the whole cell")
+    if np.shape(v)!=(3,): raise ValueError("add_valley_exchange takes "
+            "v=(vx,vy,vz), three numbers, got "+repr(v))
     (vx,vy,vz) = v
     h.turn_multicell()
     if vz!=0.: h.add_modified_haldane(vz/4.5)

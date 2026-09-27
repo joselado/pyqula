@@ -25,7 +25,6 @@ from .latticegas import (_build_adjacency, _row_sum_excluding,
 
 class LatticeIsing():
     def __init__(self,g,m=0.0): # geometry, initial magnetization
-        g.nrep = 1
         self.geometry = g # store geometry
         self.nsites = len(g.r) # number of sites
         self.b = np.zeros(len(g.r)) # external field

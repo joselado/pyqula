@@ -412,3 +412,13 @@ def test_anneal_checkpoint_at_uses_global_step_numbering():
     lg2.optimize_energy(temp=temps[0], ntries=ntries)
     lg2.optimize_energy(temp=temps[1], ntries=10)
     assert np.array_equal(lg2.den, lg.checkpoints[60])
+
+
+def test_constructor_leaves_the_callers_geometry_alone():
+    """LatticeGas used to set g.nrep = 1 on the geometry it was given, an
+    attribute nothing reads"""
+    g = geometry.triangular_lattice().get_supercell(3)
+    g.dimensionality = 0
+    before = set(vars(g))
+    latticegas.LatticeGas(g)
+    assert set(vars(g)) == before

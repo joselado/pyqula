@@ -41,3 +41,23 @@ def test_an_unknown_label_lists_the_accepted_ones(kl):
     assert kl in msg
     for name in labels.known_labels:
         assert name in msg, (name, msg)
+
+
+@pytest.mark.parametrize("kl", ["K", "K'"])
+def test_hexagonal_corner_on_a_square_lattice_says_why(kl):
+    """K used to fail on a square lattice with "no integer combination of
+    the two reciprocal vectors has moduli 1.73...", which does not say
+    that K is only defined for a hexagonal Brillouin zone"""
+    with pytest.raises(ValueError) as e:
+        labels.label2k(geometry.square_lattice(), kl)
+    assert "hexagonal" in str(e.value)
+
+
+@pytest.mark.parametrize("build", [geometry.honeycomb_lattice,
+    geometry.triangular_lattice, geometry.kagome_lattice,
+    lambda: geometry.honeycomb_lattice().get_supercell(3)])
+def test_hexagonal_corner_is_still_found_on_hexagonal_lattices(build):
+    """the check in front of K must not refuse a lattice it used to accept:
+    K sits at a third of the reciprocal vectors on every one of these"""
+    k = np.array(labels.label2k(build(), "K"))
+    assert np.max(np.abs(np.abs(k[:2]) - 1./3.)) < 1e-9

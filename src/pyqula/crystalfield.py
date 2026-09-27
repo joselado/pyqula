@@ -3,7 +3,15 @@ from scipy.sparse import csc_matrix
 
 
 def hartree(h,v=0.0,**kwargs):
-    """Add a crystal field to a Hamiltonian"""
+    """Add a crystal field to a Hamiltonian. v is its strength, a number:
+    the profile over the sites comes from the geometry itself, from the
+    neighbours each site has within rcut"""
+    if callable(v) or np.ndim(v)!=0:
+        raise TypeError("add_crystal_field takes the strength v of the "
+                "crystal field, a number, and got "+type(v).__name__+"; the "
+                "profile over the sites is computed from the geometry. For "
+                "an onsite energy that is a function of position, use "
+                "h.add_onsite(f)")
     if v==0.0: return
     m = cf_potential(h.geometry,vc=v,**kwargs) # get array
     m = m - np.min(m) # shift to zero

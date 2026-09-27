@@ -45,7 +45,7 @@ class SpinModel(): # class for a spin Hamiltonian
   def energy(self,**kwargs):
     """ Calculate the energy"""
     eout = energy(self.theta,self.phi,self.b,self.j,self.pairs)
-    return eout
+    return float(eout) # a number, not a zero-dimensional jax array
   def get_local_energy(self):
       from .classicalspintk.localenergy import get_local_energy
       return get_local_energy(self)
@@ -54,8 +54,10 @@ class SpinModel(): # class for a spin Hamiltonian
       return deepcopy(self)
   def get_magnetization(self):
       return get_magnetization(self)
-  def minimize_energy(self,theta0=None,phi0=None,tries=10,calle=None):
-    """Minimize the energy of the spin model"""
+  def minimize_energy(self,theta0=None,phi0=None,tries=10,calle=None,
+          silent=False):
+    """Minimize the energy of the spin model. silent=True does not print
+    the minimum energy found"""
     thetas = [None for i in range(tries)]
     phis = [None for i in range(tries)]
     es = [None for i in range(tries)]
@@ -68,8 +70,9 @@ class SpinModel(): # class for a spin Hamiltonian
         phis[i] = phi.copy()
         es[i] = e
     imin = es.index(min(es)) # minimum
-    print("Minimum energy",es[imin])
-    print("Minimum energy per spin",es[imin]/len(self.phi))
+    if not silent:
+        print("Minimum energy",es[imin])
+        print("Minimum energy per spin",es[imin]/len(self.phi))
     self.theta = thetas[imin].copy()
     self.phi = phis[imin].copy()
     self.update_magnetization()
