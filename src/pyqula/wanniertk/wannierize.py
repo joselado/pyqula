@@ -306,8 +306,9 @@ def _default_eh_trial_vectors(num_orbitals, particle_hole_perm, particle_hole_op
     Nambu/BdG Hamiltonian, with columns closed under electron-hole
     pairing (``trial_vectors[:,j] = particle_hole_operator @
     conj(trial_vectors[:,i])`` whenever ``particle_hole_perm[j,i]==1``)
-    instead of the spinless/spinful default's arbitrary first-``num_wann``
-    orbitals. Seeding the CG minimization with an already electron-hole-
+    instead of the spinless/spinful default's SCDM orbitals
+    (:func:`_default_trial_vectors`), which know nothing of the pairing.
+    Seeding the CG minimization with an already electron-hole-
     symmetric projection makes its (otherwise symmetry-unaware) converged
     gauge land closer to satisfying the pairing itself, which reduces how
     much :func:`_enforce_particle_hole_symmetry`'s post-hoc correction has
@@ -326,6 +327,34 @@ def _default_eh_trial_vectors(num_orbitals, particle_hole_perm, particle_hole_op
         assigned[i] = True
         assigned[j] = True
         seed_orbital += 1
+    return trial_vectors
+
+
+def _default_trial_vectors(hamiltonian_k, kpt_latt, band_indices, num_orbitals, num_wann):
+    """Default (num_orbitals,num_wann) trial projection matrix for a fixed
+    band range (no disentanglement): ``num_wann`` of ``h``'s own orbitals,
+    the ones the SCDM column selection (Damle, Lin and Ying,
+    arXiv:1507.03354, Algorithm 3) picks for the selected bands on the whole
+    wannierization mesh -- :func:`_default_disentanglement_trial_vectors`
+    with every selected state weighted by one -- in ascending orbital order,
+    so that Wannier function n starts from the n-th picked orbital (the
+    identity for a full band manifold).
+
+    Projecting the bands on a picked orbital, A(k) = C(k)^dagger e_i, is
+    the column P(k)e_i of the band projector that SCDM-k orthonormalizes
+    into a localized function, and the spread minimization starts from
+    there. This replaces a fresh random draw, which stopped the
+    minimization in a local minimum in about one call out of four for the
+    gapped honeycomb valence band: a total spread of 2.5 instead of 0.32,
+    centred away from the site with the lower onsite energy, where the band
+    lives and which SCDM picks."""
+    no_window = dict.fromkeys(("dis_win_min", "dis_win_max", "dis_froz_min", "dis_froz_max"))
+    picked = _default_disentanglement_trial_vectors(
+        hamiltonian_k, kpt_latt, band_indices, num_orbitals, num_wann, no_window)
+    orbitals = sorted(int(np.argmax(np.abs(picked[:, j]))) for j in range(num_wann))
+    trial_vectors = np.zeros((num_orbitals, num_wann), dtype=complex)
+    for j, i in enumerate(orbitals):
+        trial_vectors[i, j] = 1.0
     return trial_vectors
 
 
@@ -905,22 +934,133 @@ def _disentangled_gauge(U_matrix, U_matrix_opt, lwindow, eigenvalues, C_bare):
     return H_k_mesh, W_k_mesh
 
 
-def _mesh_to_real_space(M_k_mesh, kpt_latt, mp_grid):
-    """Inverse-Fourier-transform a (dim1,dim2,num_kpts) array sampled on
-    a Monkhorst-Pack mesh into a ``{R: (dim1,dim2) ndarray}`` dict, using
-    pyqula's own Bloch convention (H(k) = sum_R m_R exp(i 2*pi R.k), see
-    htk/bloch.py's evaluate_bloch_matrix_jit) -- shared by
-    :func:`_hopping_from_bloch` (Hamiltonian reconstruction) and
-    :func:`get_wannier_hamiltonian`'s own real-space Wannier function
-    reconstruction, which Fourier-transform different quantities with
-    the same convention so both stay expressed relative to the same
-    cell labels."""
-    num_kpts = M_k_mesh.shape[2]
-    axis_ranges = [np.fft.fftfreq(int(n)).astype(np.float64) * int(n) for n in mp_grid]
-    Rs = np.array(list(itertools.product(*axis_ranges)), dtype=np.float64)
-    phase = np.exp(-1j * 2 * np.pi * (Rs @ kpt_latt))  # (num_R,num_kpts)
-    M_R_all = np.einsum("rk,ijk->rij", phase, M_k_mesh) / num_kpts
-    return {tuple(int(round(x)) for x in Rs[idx]): M_R_all[idx] for idx in range(len(Rs))}
+def _fourier_coefficients(M_k_mesh, kpt_latt, cells):
+    """``(1/N) sum_k M(k) exp(-i 2*pi R.k)`` over the N mesh k-points, for
+    every row R of ``cells`` (integer lattice coordinates), shape
+    (num_cells,dim1,dim2). Only fixed by the mesh up to a translation of R
+    by a supercell vector (``mp_grid`` cells along each direction): which
+    representative of each such class is kept is decided by the callers,
+    :func:`_mesh_to_real_space` and :func:`_mesh_to_wannier_functions`."""
+    phase = np.exp(-1j * 2 * np.pi * (cells @ kpt_latt))  # (num_cells,num_kpts)
+    return np.einsum("rk,ijk->rij", phase, M_k_mesh) / M_k_mesh.shape[2]
+
+
+def _wigner_seitz_cells(mp_grid, real_lattice, dim, ws_distance_tol=1e-5):
+    """Cells R of the Wigner-Seitz cell of the Born-von Karman supercell
+    (``mp_grid`` unit cells of ``real_lattice`` along each periodic
+    direction, distances measured with the real metric of the lattice), as
+    an (nrpts,3) integer array, and their degeneracies ``ndegen``: the
+    number of supercell-equivalent images of R at the same, smallest
+    distance from the origin.
+
+    This is the set of cells and degeneracies of Wannier90's
+    ``hamiltonian_wigner_seitz`` (ported in
+    ``wannierpy/_engine/ws_vectors.py``, with the same tolerance on
+    distances), found one class of cells at a time rather than by
+    Wannier90's search over a fixed box of two supercells in every
+    direction. That box misses part of the cell, and the port raises, when
+    the mesh is much denser along one lattice vector than along another of
+    a non-orthogonal lattice (``nk=[12,2]`` on the honeycomb lattice);
+    here the search range follows from the lattice itself. Both give the
+    same cells wherever Wannier90's search succeeds.
+
+    The range: the closest image of a cell is no farther from the origin
+    than the corresponding cell of the supercell box centred on the
+    origin, and so no farther than its farthest corner, ``rho``; its
+    coordinate along a_i is then at most ``rho*|b_i|``, with b_i the dual
+    vectors (a_i.b_j = delta_ij), and one more supercell covers the offset
+    of the cell each class starts from."""
+    mp = np.asarray(mp_grid, dtype=np.int64)[:dim]
+    lattice = np.asarray(real_lattice, dtype=np.float64)[:dim]
+    metric = lattice @ lattice.T
+    corners = np.array(list(itertools.product([-0.5, 0.5], repeat=dim))) * mp
+    rho = np.sqrt(np.max(np.einsum("ci,ij,cj->c", corners, metric, corners)))
+    dual_norm = np.sqrt(np.diag(np.linalg.inv(metric)))
+    reach = np.ceil(rho * dual_norm / mp).astype(int) + 1
+    shifts = np.array(list(itertools.product(*[range(-t, t + 1) for t in reach]))) * mp
+    irvec, ndegen = [], []
+    for cell in itertools.product(*[range(n) for n in mp]): # one cell of every class
+        images = np.array(cell) + shifts
+        dist = np.einsum("pi,ij,pj->p", images, metric, images)
+        closest = images[np.abs(dist - dist.min()) < ws_distance_tol ** 2]
+        irvec.extend(closest)
+        ndegen.extend([len(closest)] * len(closest))
+    irvec = np.array(irvec, dtype=np.int64)
+    padded = np.zeros((len(irvec), 3), dtype=np.int64) # non-periodic directions: R=0
+    padded[:, :dim] = irvec
+    return padded, np.array(ndegen)
+
+
+def _mesh_to_real_space(M_k_mesh, kpt_latt, mp_grid, real_lattice, dim):
+    """Inverse-Fourier-transform a Hermitian (dim1,dim1,num_kpts) Bloch
+    matrix sampled on a Monkhorst-Pack mesh into a ``{R: (dim1,dim1)
+    ndarray}`` dict of real-space hoppings, in pyqula's own Bloch
+    convention (H(k) = sum_R m_R exp(i 2*pi R.k), see htk/bloch.py's
+    evaluate_bloch_matrix_jit), such that the resulting H(k) reproduces
+    ``M_k_mesh`` exactly at every mesh k-point and is Hermitian at every
+    k, on the mesh or not.
+
+    The mesh fixes m_R only up to a supercell translation of R (see
+    :func:`_fourier_coefficients`), so a set of cells has to be chosen.
+    The cells are those of the Wigner-Seitz cell of the Born-von Karman
+    supercell, each hopping divided by the degeneracy ``ndegen`` of its
+    cell (:func:`_wigner_seitz_cells`), which is Wannier90's
+    construction (the cells of ``hamiltonian_wigner_seitz``, and the
+    H(R)/ndegen(R) its band interpolation, ``plot_interpolate_bands``,
+    sums over):
+
+    - every class of cells equivalent modulo the supercell carries a total
+      weight sum(1/ndegen) = 1, so the mesh is reproduced exactly;
+    - the Wigner-Seitz cell is symmetric under R -> -R, with
+      ndegen(-R) = ndegen(R), and m_{-R} = m_R^dagger for a Hermitian
+      M(k), so H(k) is Hermitian at every k. A plain box of ``nk`` cells
+      per direction is not: for an even ``nk`` it holds R = -nk/2 but not
+      +nk/2, and H(k) away from the mesh picks up an anti-Hermitian part
+      (2e-2 for the gapped honeycomb valence band on an 8x8 mesh);
+    - the cells are the ones closest to the origin in real space, so on a
+      non-orthogonal lattice the hoppings sit on a hexagon rather than on a
+      skewed parallelogram, and the interpolation between mesh points is
+      better even where the box is Hermitian (odd ``nk``): a largest band
+      error of 4.7e-4 rather than 2.0e-3 away from the mesh for that
+      band on an 11x11 mesh.
+
+    This is the plain Wigner-Seitz construction, measured from the origin
+    for every pair of Wannier functions. Wannier90's ``use_ws_distance``
+    refinement measures it from the pair's own separation, R + tau_n -
+    tau_m, instead; that only changes anything for several Wannier
+    functions centred far apart within the cell, and is not implemented."""
+    irvec, ndegen = _wigner_seitz_cells(mp_grid, real_lattice, dim)
+    M_R_all = _fourier_coefficients(M_k_mesh, kpt_latt, irvec) / ndegen[:, None, None]
+    return {tuple(int(x) for x in irvec[idx]): M_R_all[idx] for idx in range(len(irvec))}
+
+
+def _mesh_to_wannier_functions(W_k_mesh, kpt_latt, mp_grid):
+    """Real-space Wannier function coefficients ``{R: (num_orbitals,
+    num_wann) ndarray}`` from the Bloch-gauge ones ``W_k_mesh`` (see
+    :func:`_wannierize_one_group`), with ``c_R[o,n]`` the amplitude of
+    Wannier function n, translated to cell R, on orbital o.
+
+    The sign is the opposite of :func:`_mesh_to_real_space`'s: W_k_mesh is
+    a Bloch expansion coefficient substituted directly into pyqula's
+    convention |k,o> = (1/sqrt(N)) sum_R exp(+i*2*pi*k.R) |R,o>, not a
+    Fourier-series coefficient like a hopping matrix, so
+    c_R = (1/N) sum_k W_k_mesh(k) exp(+i*2*pi*k.R) (every
+    examples/wannier/*/main.py plotting script assumes
+    wannier_functions[R][o,n] sits at h.geometry.r[o] + R*a1).
+
+    The cells are not the weighted Wigner-Seitz ones of the hoppings: a
+    Wannier function is a function on the lattice, so every class of cells
+    equivalent modulo the supercell has to appear exactly once. Splitting
+    a boundary amplitude a among ndegen images would still reproduce
+    W_k_mesh on the mesh, but with a total weight |a|^2/ndegen rather than
+    |a|^2, and the function would no longer be normalized. The cells are
+    the box of ``nk`` cells along each periodic direction around the home
+    cell, from -(nk-1)//2 to nk//2."""
+    axis_ranges = [-np.fft.fftfreq(int(n)) * int(n) for n in mp_grid]
+    cells = np.array(list(itertools.product(*axis_ranges)), dtype=np.float64)
+    coefficients = _fourier_coefficients(W_k_mesh, kpt_latt, -cells)
+    return {tuple(int(round(x)) for x in cells[idx]): coefficients[idx]
+            for idx in range(len(cells))}
 
 
 def _drop_negligible_cells(R_to_matrix, cutoff):
@@ -932,13 +1072,15 @@ def _drop_negligible_cells(R_to_matrix, cutoff):
             if R == (0, 0, 0) or np.max(np.abs(M)) > cutoff}
 
 
-def _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=1e-6):
+def _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, real_lattice, dim, cutoff=1e-6):
     """Inverse-Fourier-transform a (num_wann,num_wann,num_kpts) Bloch
     Hamiltonian sampled on a Monkhorst-Pack mesh into real-space hopping
     matrices -- so plugging the result into
     set_multihopping()/get_hk_gen() exactly reproduces H_k_mesh at every
-    mesh k-point (trigonometric interpolation elsewhere)."""
-    return _drop_negligible_cells(_mesh_to_real_space(H_k_mesh, kpt_latt, mp_grid), cutoff)
+    mesh k-point, and gives a Hermitian trigonometric interpolation
+    elsewhere (see :func:`_mesh_to_real_space`)."""
+    return _drop_negligible_cells(
+        _mesh_to_real_space(H_k_mesh, kpt_latt, mp_grid, real_lattice, dim), cutoff)
 
 
 def _offmesh_validation_kfracs(mp_grid):
@@ -958,14 +1100,18 @@ def _offmesh_validation_kfracs(mp_grid):
     return np.array(pts, dtype=np.float64).T
 
 
-def _offmesh_reproduction_error(H_k_mesh, kpt_latt, mp_grid, hamiltonian_k,
-                                 band_indices, val_kfracs, cutoff=1e-6):
+def _offmesh_reproduction_error(H_k_mesh, kpt_latt, mp_grid, real_lattice, dim,
+                                 hamiltonian_k, band_indices, val_kfracs, cutoff=1e-6):
     """Max eigenvalue deviation, at the :func:`_offmesh_validation_kfracs`
     points, between ``hamiltonian_k``'s true selected-band spectrum and
     the Fourier-interpolated reconstruction from ``H_k_mesh`` -- the
     direct accuracy measure used to choose between Wannierization
-    candidates (see ``_offmesh_validation_kfracs``)."""
-    hopping = _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=cutoff)
+    candidates (see ``_offmesh_validation_kfracs``). The reconstruction is
+    the same one :func:`get_wannier_hamiltonian` returns
+    (:func:`_hopping_from_bloch`), Hermitian at these points, so
+    ``eigvalsh`` sees the whole matrix rather than its lower triangle."""
+    hopping = _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, real_lattice, dim,
+                                  cutoff=cutoff)
     num_val = val_kfracs.shape[1]
     maxerr = 0.0
     for k in range(num_val):
@@ -1105,15 +1251,20 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         ``h.dimensionality`` entries.
     trial_vectors : (num_orbitals, num_wann) complex ndarray, optional
         Fixed (k-independent) trial projection matrix seeding the CG
-        minimization -- default: a random real matrix (fresh, unseeded draw
-        each call), used to check that the converged spread/geometry don't
-        depend on the particular trial seed (see ``tests/wannier``). When
-        disentangling (``num_wann`` below the selected range) the default
-        is instead ``num_wann`` of ``h``'s own orbitals, picked
-        deterministically from the frozen-window states (see
-        :func:`_default_disentanglement_trial_vectors`): the Omega_I
-        minimization has several local minima, and a random seed landed
-        in a different one on every call.
+        minimization. Default: ``num_wann`` of ``h``'s own orbitals, the
+        ones where the selected bands live, picked deterministically by the
+        column selection of the SCDM method (see
+        :func:`_default_trial_vectors`), so that repeated calls return the
+        same result. A random seed, the default before, stopped the spread
+        minimization in a local minimum in about one call out of four for
+        the gapped honeycomb valence band (a total spread of 2.5 rather
+        than 0.32, centred away from the site where the band lives). When
+        disentangling (``num_wann`` below the selected range) the orbitals
+        are picked
+        from the frozen-window states instead (see
+        :func:`_default_disentanglement_trial_vectors`), and for a Nambu/BdG
+        Hamiltonian the default is the identity (full manifold) or
+        electron-hole-paired orbitals (see :func:`_default_eh_trial_vectors`).
     num_iter, conv_tol, conv_window : optional
         Wannier90 CG minimization parameters, passed through
         ``win_keywords``.
@@ -1252,6 +1403,10 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         ``wanniertk.wannierhamiltonian.WannierHamiltonian`` -- every
         ordinary Hamiltonian method works unchanged) with ``num_wann``
         orbitals per cell, positioned at the computed Wannier centres.
+        Its hoppings sit on the cells of the Wigner-Seitz cell of the
+        ``nk`` supercell, each divided by its degeneracy (Wannier90's
+        construction, see ``_mesh_to_real_space``), so that its Bloch
+        Hamiltonian is Hermitian at every k, not only on the mesh.
         Also carries ``wannier_functions`` -- ``{R: (num_orbitals,
         num_wann) ndarray}``, the real-space Wannier function
         coefficients in ``h``'s own orbital basis (column n, row o: the
@@ -1392,8 +1547,7 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
         elif h.has_eh: # seed with electron-hole-paired trial orbitals, see docstring
             trial_vectors = _default_eh_trial_vectors(
                 num_orbitals, seed_particle_hole_perm, particle_hole_operator)
-        elif not disentangling: # a disentangling default is chosen below, from the windows
-            trial_vectors = np.random.default_rng().standard_normal((num_orbitals, num_wann))
+        # otherwise the SCDM orbitals of the selected bands, chosen below on the mesh
 
     mp_grid = _mp_grid(h, nk)
     kpt_latt = _monkhorst_pack(mp_grid)
@@ -1417,10 +1571,13 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     if win_keywords:
         keywords.update(win_keywords)
 
-    if trial_vectors is None: # disentangling: deterministic SCDM-style orbitals
+    if trial_vectors is None and disentangling: # SCDM orbitals of the windows
         windows_used = {k: keywords.get(k) for k in dis_window}
         trial_vectors = _default_disentanglement_trial_vectors(
             hamiltonian_k, kpt_latt, band_indices, num_orbitals, num_wann, windows_used)
+    elif trial_vectors is None: # SCDM orbitals of the selected bands
+        trial_vectors = _default_trial_vectors(
+            hamiltonian_k, kpt_latt, band_indices, num_orbitals, num_wann)
     trial_vectors = np.asarray(trial_vectors, dtype=complex)
     if trial_vectors.shape != (num_orbitals, num_wann):
         raise ValueError(f"trial_vectors must have shape ({num_orbitals},{num_wann}), "
@@ -1457,7 +1614,8 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
             offset = 0
             for cluster in clusters:
                 nwc = len(cluster)
-                tvc = np.eye(num_orbitals, dtype=complex)[:, :nwc]
+                tvc = _default_trial_vectors(hamiltonian_k, kpt_latt, cluster,
+                                             num_orbitals, nwc)
                 kwc = dict(keywords); kwc["num_wann"] = nwc
                 sres, rres, Hk_c, Wk_c = _wannierize_one_group(
                     seedname, mp_grid, kpt_latt, real_lattice, atom_symbols,
@@ -1473,9 +1631,11 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
                 offset += nwc
             val_kfracs = _offmesh_validation_kfracs(mp_grid)
             err_joint = _offmesh_reproduction_error(
-                H_k_mesh, kpt_latt, mp_grid, hamiltonian_k, band_indices, val_kfracs, cutoff)
+                H_k_mesh, kpt_latt, mp_grid, real_lattice, dim, hamiltonian_k,
+                band_indices, val_kfracs, cutoff)
             err_split = _offmesh_reproduction_error(
-                H_k_mesh_split, kpt_latt, mp_grid, hamiltonian_k, band_indices, val_kfracs, cutoff)
+                H_k_mesh_split, kpt_latt, mp_grid, real_lattice, dim, hamiltonian_k,
+                band_indices, val_kfracs, cutoff)
             if err_split < err_joint:
                 clusters_used = clusters
                 wann_centres = np.concatenate(centres_parts, axis=0)
@@ -1497,23 +1657,13 @@ def get_wannier_hamiltonian(h, bands=None, nk=12,
     if symmetry_group:
         H_k_mesh = _enforce_point_group_symmetry(H_k_mesh, W_k_mesh, kpt_latt, symmetry_group)
 
-    hopping = _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, cutoff=cutoff)
-    # W_k_mesh is already C_bare(k) @ U_matrix(k) (see _wannierize_one_group),
-    # so the same Fourier-transform-and-truncate step _hopping_from_bloch uses
-    # turns it into real-space Wannier function coefficients -- except
-    # _mesh_to_real_space extracts a Fourier SERIES coefficient (h_R = (1/N)
-    # sum_k H(k) exp(-i*2*pi*R.k), correct for a hopping matrix), while
-    # W_k_mesh is a Bloch expansion coefficient substituted directly into
-    # pyqula's convention |k,o> = (1/sqrt(N)) sum_R exp(+i*2*pi*k.R) |R,o>,
-    # which needs the opposite sign: c_R[o,n] = (1/N) sum_k W_k_mesh[o,n,k]
-    # exp(+i*2*pi*k.R). Reusing _mesh_to_real_space unmodified therefore
-    # returns the dict keyed by -R instead of R; negate the keys to match
-    # the documented convention (see the "Returns" docstring above and
-    # every examples/wannier/*/main.py plotting script, all of which assume
-    # wannier_functions[R][o,n] sits at h.geometry.r[o] + R*a1).
+    hopping = _hopping_from_bloch(H_k_mesh, kpt_latt, mp_grid, real_lattice, dim, cutoff=cutoff)
+    # W_k_mesh is already C_bare(k) @ U_matrix(k) (see _wannierize_one_group);
+    # its Fourier transform, truncated like the hoppings, gives the real-space
+    # Wannier function coefficients (with the opposite sign and on a different
+    # set of cells, see _mesh_to_wannier_functions)
     wannier_functions = _drop_negligible_cells(
-        {tuple(-x for x in R): M for R, M in
-         _mesh_to_real_space(W_k_mesh, kpt_latt, mp_grid).items()}, cutoff)
+        _mesh_to_wannier_functions(W_k_mesh, kpt_latt, mp_grid), cutoff)
 
     from .. import geometry as geometry_module
     from .wannierhamiltonian import WannierHamiltonian

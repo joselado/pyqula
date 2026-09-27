@@ -20,7 +20,7 @@ class WannierHamiltonian(Hamiltonian):
         convention as ``get_hk_gen()``, see ``htk/bloch.py``): column n,
         row o is the amplitude of Wannier function n -- translated to
         cell R relative to the home cell -- on orbital o of the original
-        Hamiltonian. See ``wannierize._wannier_functions_from_gauge`` for
+        Hamiltonian. See ``wannierize._mesh_to_wannier_functions`` for
         how these are reconstructed from the wannier90 CG gauge matrix.
     wannier_band_indices, wannier_num_wann,
     wannier_disentanglement_window, wannier_clusters, wannier_centres,

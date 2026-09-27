@@ -29,16 +29,16 @@ h = g.get_hamiltonian(has_spin=False)
 found = pointgroup.find_point_group(g, h=h)
 print("Point-group operations found:", [c.op.name for c in found])
 
-# kagome's famous flat band (index 2, the top band) is NOT, on its own, a
-# valid symmetric band selection: it is exactly degenerate with the middle
-# (dispersive) band at the K point, so no single band selection containing
-# only it is a union of whole symmetry-related multiplets everywhere on the
-# mesh -- get_wannier_hamiltonian raises instead of silently returning a
-# mis-symmetrized model (this is the real, well-known topological
-# obstruction behind why kagome's flat band alone has no symmetric
-# exponentially-localized Wannier function -- not a bug in the check)
+# kagome's flat band (index 0, the lowest band at E=-2, since the hopping is
+# +1) is NOT, on its own, a valid symmetric band selection: it touches the
+# middle (dispersive) band at the Gamma point, so a selection containing only
+# it is not a union of whole symmetry-related multiplets there --
+# get_wannier_hamiltonian raises instead of silently returning a
+# mis-symmetrized model (that touching is also why the flat band alone, which
+# is not an isolated band, has no exponentially-localized Wannier function,
+# symmetric or not -- not a bug in the check)
 try:
-    h.get_wannier_hamiltonian(bands=[2, 2], nk=12, num_iter=200, symmetries="auto")
+    h.get_wannier_hamiltonian(bands=[0, 0], nk=12, num_iter=200, symmetries="auto")
     print("\n(unexpected: no error for the flat band alone)")
 except ValueError as e:
     print("\nFlat band alone correctly rejected:\n ", str(e).splitlines()[0])
