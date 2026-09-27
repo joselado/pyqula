@@ -788,8 +788,10 @@ def z2_invariant_3d(h,nk=60,nt=60):
 
     The plane k_i=1/2 of the Brillouin zone is time-reversal symmetric and
     has a Z2 invariant of its own, which is the weak index nu_i, and the
-    strong index nu0 is the product of the invariants of the planes k_i=0
-    and k_i=1/2, which has to be the same for the three directions i
+    strong index nu0 is the sum modulo 2 of the invariants of the planes
+    k_i=0 and k_i=1/2 (the product of their signs (-1)^nu, in the +1/-1
+    form of Fu-Kane-Mele), which has to be the same for the three
+    directions i
     (Fu-Kane-Mele, cond-mat/0607699; Soluyanov-Vanderbilt, arXiv:1102.5600).
     Each plane goes through z2_wannier_winding, six planes in all; the
     weak indices are the components of G = nu1 b1 + nu2 b2 + nu3 b3 in the
@@ -1131,6 +1133,7 @@ def get_operator(h,op):
 from .topologytk import realspace
 
 real_space_chern = realspace.real_space_chern
+site_areas = realspace.site_areas # Voronoi area of each site, the marker's normalization
 
 
 from .topologytk.topologicalsector import get_berry_curvature_operator_sector

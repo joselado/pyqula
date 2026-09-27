@@ -15,9 +15,12 @@ corresponding periodic crystal (Bianco & Resta, PRB 84, 241106(R) (2011)).
 That is what is asserted here, against h.get_chern on the periodic Haldane
 lattice -- a genuinely independent code path (Fukui-Hatsugai-Suzuki Wilson
 loops on a k-mesh) applied to a different Hamiltonian. The finite island
-(n=6) reaches about 0.944 rather than 1, the usual few-percent deficit of a
-small bulk region, so the band is generous; what it must not do is come out
-near zero or with the wrong sign.
+(n=6) reaches about 0.980 rather than 1, the few-percent deficit of a small
+bulk region, so the band is generous; what it must not do is come out near
+zero or with the wrong sign. (It read 0.944 while the area per site was
+estimated from a disk that reached past the edges of the island; each site
+now takes the area of its Voronoi cell, the exact area per site here, see
+test_real_space_chern_normalization.py.)
 """
 import numpy as np
 import pytest

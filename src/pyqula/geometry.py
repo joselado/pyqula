@@ -250,6 +250,7 @@ class Geometry:
 
 
 from .geometrytk.lattices import *
+from .geometrytk.amorphous import amorphous_lattice # sites at random positions
 
 
 
