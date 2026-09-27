@@ -9,6 +9,10 @@ Nothing here is a bug waiting to be squashed. Each is a question with a real
 trade-off behind it, which is exactly why the fix pass stopped rather than
 guessing.
 
+Section 4, added on 27 September 2026, holds two more calls, raised by a
+downstream caller rather than by the sweep; the maintainer decided both the
+same day.
+
 On 2026-09-24 the maintainer decided three of the ones still open: the AAA
 `converged` flag (1.2), the factor of pi (2.1) and the weakened assertion
 (2.3); each section says what was chosen and what it changed. GPU Tier 2
@@ -297,3 +301,149 @@ One method note worth carrying forward, because it cost a full wrong ranking
 pass once already: grepping `tests/` for a module basename is wrong in **both**
 directions. Resolve each module to its public entry point first, then grep
 `tests/` *and* `examples/`.
+
+---
+
+## 4. Two calls raised by a downstream caller
+
+On 27 September 2026 the guiqula session, which wraps pyqula calls in a GUI,
+sent seven notes. Five were repairs and were made: `kdos_bands` and
+`get_bands` honour `write=False` (the k-path files included), clearer errors
+for `add_valley_exchange`, `add_crystal_field` and the K label on a
+non-hexagonal lattice, the `shift`/`rotate` docstrings, `LatticeGas` and
+`LatticeIsing` no longer setting `g.nrep` on the caller's geometry, and
+`SpinModel.energy()` returning a float with `minimize_energy(silent=True)`;
+a sixth, that a path through K and M on the honeycomb lattice relies on
+`closest_path` because the two labels are not neighbours in reduced
+coordinates, went into `get_kpath_labels`'s docstring. The two below change behaviour across the package, so they were put to the
+maintainer, who decided both on 27 September 2026.
+
+### 4.1 jax's double precision depends on what was imported first
+
+Eleven modules call `jax.config.update("jax_enable_x64",True)` at import
+(`htk/eigenvectorsjax.py`, `dmtk/fulldmjax.py`, `kpmtk/kpmjax.py`,
+`chitk/chijax.py`, `chitk/pairchijax.py`, `bsetk/screeningjax.py`,
+`scftk/densitydensity_jax.py`, `scftk/vjinteraction_jax.py`,
+`graphenetk/relax.py`, `keldyshtk/current_jax.py`,
+`transporttk/kappa_jax.py`). The jax users that do not set it --
+`classicalspin.py`, `classicalspintk/align.py`, `graphenetk/elastic.py`,
+`graphenetk/gsfe.py`, `fermisurfacetk/swarmfs.py`,
+`symmetrytk/localsymmetry.py`, and the jax branch of `htk/bloch.py`, which
+asks for `jnp.float64` and gets float32 without it -- run in single
+precision or in double depending on whether one of the eleven happened to be
+imported earlier in the same process.
+
+The reproduction, a 3x3 triangular Heisenberg model minimized with
+`np.random.seed(1)` and `tries=3`:
+
+| imported first | `jax_enable_x64` | E per site | `magnetization[0]` |
+| --- | --- | --- | --- |
+| nothing | False | -3.0000002384 | (-0.431, 0.868, 0.246) |
+| `scftk.densitydensity_jax` | True | -3.0000000000 | (-0.180, -0.620, -0.764) |
+
+The 120-degree state is degenerate, so which texture the minimizer lands on
+flips with the rounding. `gpu_rpa_spin_response.md` already records that
+without x64 every complex128 request is silently truncated to complex64.
+
+**The candidate fix.** Every jax module already imports `pyqula.gpu` and
+calls `gpu.apply()` at import, so setting x64 once there (at `gpu.py`'s
+import, or inside `apply`) and deleting the eleven scattered lines would make
+the precision the same whatever the import order. The single-precision
+routes (`kpm_prec`, `chi_prec`, `eigh_prec`) cast to complex64 explicitly
+and already run with x64 on, since their own modules set it, so they are
+unaffected.
+
+**Why it is a decision.** The seven modules above move from float32 to
+float64 when imported on their own, so their numbers (and the classical-spin
+texture in a degenerate case) change, and they get slower on a GPU, where
+FP64 is the expensive precision. Nothing in `tests/` pins the float32
+behaviour. guiqula works around it meanwhile by turning x64 on in its engine
+and in the scripts it exports.
+
+**Decided: double precision everywhere.** `gpu.py` switches x64 on at import
+and the eleven scattered lines are gone; `htk/bloch.py`,
+`graphenetk/elastic.py` and `graphenetk/gsfe.py`, the jax users that did not
+import `gpu`, now do. The reproduction above gives E per site
+-2.9999999999996 and the same texture, (-0.180, -0.620, -0.764), in both
+import orders, which
+`tests/classicalspin/test_precision_independent_of_imports.py` pins by
+running it in two fresh interpreters. The notebooks that minimize a
+classical spin model were executed in single precision and may land on a
+different, degenerate texture when re-run.
+
+### 4.2 Files written to the working directory with no way to turn it off
+
+`topology.chern` (and so `h.get_chern`) writes `CHERN.OUT` and
+`BERRY_CURVATURE.OUT`, `h.get_spin_chern` the same,
+`topology.get_berry_curvature_path` writes `BERRY_CURVATURE.OUT` (and the
+k-path files), `topology.z2_invariant` writes `WANNIER_CENTERS.OUT`, and
+`h.get_qpi` writes `DOS.OUT` and a `MULTIQPI` directory and returns `None`.
+`berry_phase`, `chern_density` and `get_bands` already take `write=`.
+
+**The candidate fix.** A `write=True` keyword on each, the way `get_bands`
+has one, and a return value for `get_qpi`. It is an API pass over several
+routines rather than a repair, and what `get_qpi` should return is a design
+question of its own.
+
+**Decided: a keyword on each, and a global switch over all of them.**
+`mesh_chern`, `precise_chern`, `chern_qtci`, `wannier_centers` (and through
+it `wannier_winding`, `z2_invariant`, `chern(integration="wannier")`),
+`get_berry_curvature_path`, `topologytk.topologicalsector.spin_chern` and
+`get_qpi` take `write=`. `get_berry_curvature_path` and `kdos.interface`
+used to read their own output file back, so with `write=False` they read a
+stale file or none; both now build their result in memory. `get_qpi`
+returns `(q, energies, qpi)`, with `qpi` of shape (nenergies, nq) as
+`get_qpi_impurity` returns it, and no longer empties `MULTIQPI/` when it is
+not writing.
+
+The maintainer also asked for one switch over every routine:
+`filewrite.set_write(True|False|None)` in `src/pyqula/filewrite.py`. Every
+function that takes `write=` now defaults to `None` and resolves it first
+thing with `filewrite.resolve(write, <its old default>)`: the call's value
+if given, else the switch, else the old default. The internal calls that
+pass `write=False` on purpose (kdos into `get_bands`, the Fermi surface
+into `get_dos`...) are intermediate computations and keep it.
+`tests/filewrite/test_global_write.py` checks, for eight routines, that the
+switch set to False writes nothing and returns the same numbers as
+`write=True`, and it resets the switch around every test, so that one test
+cannot leave the rest of the suite silenced.
+
+**What the switch does not reach.** Functions whose job is writing
+(`g.write()`, `h.write_hopping()`, `h.write_magnetization()`,
+`h.write_non_unitarity()`, the `write_*` helpers, `states.*`,
+`scftypes.extract`) are not meant to, nor are the cluster job scripts of
+`paralleltk` or the Wannier90 input, which `wannierpy` writes to a
+temporary directory. The first pass left about thirty computational
+routines that wrote with no keyword at all; the maintainer asked for them
+too, the same day, and they now take `write=None` resolved the same way.
+Among them are the mean-field loop, whose `MF.pkl` restart file is the
+most common file the package writes (`generic_densitydensity` and its KPM
+twin; `VJinteraction`, the spinful path, writes nothing and accepts
+`write` so that every mean-field entry point does), `h.get_density()`,
+`h.get_multildos()` in both projections, the older DOS, LDOS and k-list
+helpers, the embedding DOS, LDOS and k-DOS, `real_space_chern`,
+`real_space_vev`, `Omega_rmap`, `dOmega_dE_kmap`, the three band-structure
+writers of `bandstructure.py`, `selected_bands2d`, `ev2d`, the legacy
+Hubbard and Coulomb loops (their per-iteration files go to `os.devnull`),
+the `massive_green` disk caches (which still read an existing cache), and
+the geometry that `TMDC_MX2` and the island builders of `skeleton.py`
+wrote as a side effect of building a Hamiltonian.
+
+Twenty-five of them used to return nothing and only write, so with
+`write=False` they would have done nothing; they now return what they
+compute: `get_multildos` and `atomicmultildos.multi_ldos` return
+`(x, y, energies, ldos)`, as does the embedding `multildos`; the older
+`dos0d`, `dos0d_kpm`, `dos0d_sites`, `dos1d_sites`, `dos1d_ewindow`,
+`dos2d_ewindow` and `dos_ewindow` return `(energies, dos)`; `dos_surface`
+returns the energies with the surface and bulk DOS; `berry_bands`,
+`current_bands` and `lowest_bands` return the columns of their
+`BANDS.OUT`; `selected_bands2d` returns one array per band and `ev2d` one
+array; `conduction_texture`, `chargechi_reciprocal`,
+`magnetic_response_map`, `diagram2d`, `evolve_local_state`,
+`dOmega_dE_kmap`, `ldos0d_wf`, `kdos1d_sites` and the embedding
+`get_kdos` return their arrays too. Three small bugs went with them:
+`lowest_bands` wrote whole k-vectors, brackets included, into
+`BANDS.OUT` (it writes the k index now), `klist.default_v2` computed its
+path and returned `None`, and the embedding `multildos` never closed its
+index file. `tests/filewrite/test_global_write.py` covers eight of the
+newly converted routines in the same off-versus-on sweep.

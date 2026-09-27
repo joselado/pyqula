@@ -80,7 +80,15 @@ already reached once.
   since resolved by making the public `get_multicell` copy, and the one
   assertion deliberately weakened, since restored by pinning the gauge),
   and where a third sweep should start (the bond pairing prefactor since
-  pinned by a stationarity test).
+  pinned by a stationarity test). Its last section holds two calls raised by
+  guiqula on 27 September 2026 and decided the same day: jax's double
+  precision is now set once, in `gpu.py`, rather than as an import side
+  effect of eleven modules, and the topology and QPI routines take `write=`,
+  with a package-wide `filewrite.set_write()` over every routine that has
+  the keyword, which since the same day is every routine that computes
+  something and writes it (the mean-field `MF.pkl` included); it lists the
+  explicit writers the switch leaves alone, and the routines that now
+  return what they used to only write.
 
 - [`bse_excitons.md`](bse_excitons.md) -- Bethe-Salpeter/exciton roadmap:
   observables, iterative solvers, and a measured feasibility study of a

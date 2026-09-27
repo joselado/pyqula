@@ -77,6 +77,7 @@ sections above use, not every public method on those classes.
 - [Lattice gas models](#lattice-gas-models)
 - [Ising models](#ising-models)
 - [Parallelism and reproducibility](#parallelism-and-reproducibility)
+- [Files written to the working directory](#files-written-to-the-working-directory)
 - [Errors and unsupported inputs](#errors-and-unsupported-inputs)
 - [Main functions and methods](#main-functions-and-methods)
 
@@ -543,13 +544,17 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 ```
 
 To follow how the map evolves with energy, `h.get_multildos()` computes the LDOS at many
-energies at once, writing one file per energy to a `MULTILDOS/` folder (the frames of an
-LDOS(x,y,E) stack), plus a `MULTILDOS/DOS.OUT` holding the corresponding total DOS
+energies at once
 
 ```python
 import numpy as np
-h.get_multildos(energies=np.linspace(-2.0,2.0,100),projection="atomic")
+(x,y,es,ldos) = h.get_multildos(energies=np.linspace(-2.0,2.0,100),projection="atomic") # one map per energy
 ```
+
+where `x` and `y` are the positions and `ldos` holds one map per energy, one row for each
+of the energies `es`, so that the rows are the frames of an LDOS(x,y,E) stack. The same maps
+are written one file per energy to a `MULTILDOS/` folder, plus a `MULTILDOS/DOS.OUT` holding
+the corresponding total DOS, unless `write=False` is passed
 
 The maps and the `DOS.OUT` beside them carry the same normalization as `h.get_ldos()` and
 `h.get_dos()` on the same system, so a map can be read against a single-energy LDOS and the
@@ -709,17 +714,21 @@ wavevector $\vec q = \vec k - \vec k'$. The Fourier transform of that modulation
 energy is what is called the quasiparticle interference pattern, and it is what an STM
 measurement obtains by Fourier transforming a conductance map: a picture of the
 constant-energy contours of the band structure, and of which pairs of states the defect
-connects. `h.get_qpi()` computes it for 2D Hamiltonians; unlike the other observables here it
-does not return arrays but writes one file per energy to a folder (`MULTIQPI/` by default)
-and the density of states next to it in `DOS.OUT`
+connects. `h.get_qpi()` computes it for 2D Hamiltonians
 
 ```python
 import numpy as np
 from pyqula import geometry
 g = geometry.triangular_lattice()
 h = g.get_hamiltonian(has_spin=False)
-h.get_qpi(mode="pm",nk=50,delta=1e-1,energies=np.linspace(-6.,6.,100))
+(qs,es,qpi) = h.get_qpi(mode="pm",nk=50,delta=1e-1,energies=np.linspace(-6.,6.,100)) # QPI at each energy
 ```
+
+where `qs` holds the wavevectors $\vec q$, one per row, `es` the energies, and `qpi` the
+intensity of the pattern, one row per energy and one column per wavevector, so that a row of
+`qpi` plotted over `qs` is the map an STM measurement gives at that energy. The same maps are
+also written, one file per energy, to a folder (`MULTIQPI/` by default), with the density of
+states next to it in `DOS.OUT`, unless `write=False` is passed
 
 Optional arguments
 - energies: array of energies to compute
@@ -727,6 +736,7 @@ Optional arguments
 - delta: broadening
 - mode: `"pm"` (autoconvolution of the k-resolved spectral weight) or `"response"` (default, joint density of states of the clean band structure)
 - nunfold: unfold the QPI of a supercell back onto the primitive Brillouin zone, given as the linear size of the supercell as in `g.get_supercell()`, $n$ for an $n\times n$ supercell and `np.sqrt(3)` for the $\sqrt3\times\sqrt3$ one
+- write: `False` to return the maps without writing the folder and `DOS.OUT`
 
 The two modes differ in what they scatter. `"pm"` ("poor man's") autoconvolves the actual
 k-resolved spectral weight of the system, defect included, in q-space, which is the
@@ -5321,6 +5331,36 @@ See
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/22_gpu_execution.ipynb`
 for an executed notebook comparing the two paths on each kernel.
 
+# Files written to the working directory
+
+Most of the routines that compute an observable also write it to a file in the working
+directory, `BANDS.OUT` for the band structure, `DOS.OUT` for the density of states,
+`CHERN.OUT` for the Chern number and so on, which is convenient when a calculation runs as a
+script and is plotted afterwards, and less so inside a notebook or a larger program, where
+the returned arrays are all that is needed and the files only pile up. Each of these routines
+takes a `write` keyword with a default of its own, and we will now see how to set it for all
+of them at once, with `filewrite.set_write()`
+
+```python
+from pyqula import geometry
+from pyqula import filewrite
+filewrite.set_write(False) # no routine writes its files from now on
+g = geometry.honeycomb_lattice() # honeycomb lattice
+h = g.get_hamiltonian() # first-neighbor tight-binding Hamiltonian
+(k,e) = h.get_bands() # the band structure, and no BANDS.OUT
+(k,e) = h.get_bands(write=True) # a write given in the call wins over the switch
+filewrite.set_write(None) # back to the default of each routine
+```
+
+The order is always the same: a `write` given in the call, then the switch, and only when
+neither is set, the default of the routine. So `filewrite.set_write(True)` makes every
+routine write, including the few that do not by default, such as `topology.chern_density()`,
+and `write=False` in a single call keeps that call quiet whatever the switch says. The
+returned arrays do not depend on any of this, only the files do. The switch reaches every
+routine that takes a `write` keyword; the methods whose only purpose is to write a file, such
+as `g.write()` or `h.write_hopping()`, write whenever they are called.
+
+
 # Errors and unsupported inputs
 
 Most routines only make sense for a Hamiltonian of a particular kind: a Berry
@@ -5479,6 +5519,8 @@ Optional arguments:
 
 - biorthogonal=False: non-Hermitian Hamiltonians only, weigh each state by $\langle L|O|R\rangle/\langle L|R\rangle$ instead of by its right eigenvector (see "The two spectral functions of a non-Hermitian Hamiltonian")
 
+- write=True: also write `BANDS.OUT`, and the k-path files `KPOINTS_BANDS.OUT` and `BANDLINES.OUT`; `False` writes none of them (see "Files written to the working directory")
+
 Without `kpath` the path is $\Gamma$-M for a square-like 2D lattice,
 $\Gamma$-K-M-K'-$\Gamma$ for a triangular-like one, and
 $\Gamma$-X-M-$\Gamma$-R for a 3D one; the 3D path leaves the $k_3=0$
@@ -5504,6 +5546,8 @@ Optional arguments:
   raises `ValueError`
 
 - biorthogonal=False: non-Hermitian Hamiltonians only, the Green's-function spectral function instead of the right-eigenvector one, and required by `mode="green"` (see "The two spectral functions of a non-Hermitian Hamiltonian")
+
+- write=True: also write `KDOS_BANDS.OUT` and the k-path files; `False` only returns the arrays (see "Files written to the working directory")
 
 Returns k-path fraction, energy and spectral weight
 
@@ -6078,9 +6122,11 @@ Optional arguments:
 Return x, position, y position and LDOS
 
 ### h.get_multildos()
-Compute the LDOS at many energies, writing one file per energy to a
+Compute the LDOS at many energies. Returns `(x,y,energies,ldos)`, with
+`ldos` one row per energy, and writes one file per energy to a
 `MULTILDOS/` folder, together with a `MULTILDOS/DOS.OUT` holding the total
-DOS on the same energies and a `DOSMAP.OUT` in the working directory.
+DOS on the same energies and a `DOSMAP.OUT` in the working directory,
+unless `write=False`.
 The maps and that DOS carry the same normalization as `h.get_ldos()` and
 `h.get_dos()`, so they can be read against each other directly.
 
@@ -6322,7 +6368,7 @@ Optional arguments:
 Returns k, energy, surface spectral weight and bulk spectral weight; also writes `KDOS.OUT`
 
 ### h.get_qpi()
-Compute the quasiparticle-interference map (2D systems only). Writes output to disk (default `MULTIQPI/` folder plus `DOS.OUT`) rather than returning arrays.
+Compute the quasiparticle-interference map (2D systems only). Returns `(q,energies,qpi)`, with `qpi` one row per energy and one column per wavevector, and also writes the maps to a folder (default `MULTIQPI/`) and the DOS to `DOS.OUT`.
 
 Optional arguments:
 
@@ -6331,6 +6377,8 @@ Optional arguments:
 - mode="response": `"pm"` ("poor man's", autoconvolves the actual k-resolved spectral weight, the physical QPI of a real scatterer) or `"response"` (cheaper Lindhard-like joint-DOS convolution of the clean bands)
 
 - nunfold=1: unfold the QPI of a supercell back onto the primitive Brillouin zone, given as the linear size of the supercell as in `g.get_supercell()` (`np.sqrt(3)` for the $\sqrt3\times\sqrt3$ one)
+
+- write=True: `False` returns the arrays without writing any file (see "Files written to the working directory")
 
 ### h.get_qpi_impurity()
 Compute quasiparticle interference by placing real-space impurities in a supercell, computing the real-space LDOS by partial diagonalization, and Fourier transforming it directly (2D systems only). Returns `(r,ldos_r,q,qpi_q)`.
@@ -6390,6 +6438,8 @@ Chern number").
 Optional arguments:
 - operator="sz": the spin component, a name, a matrix or an `Operator`
 - nk=40: number of k-points per direction of the mesh
+- write=True: `False` keeps the Chern number and Berry curvature of each spin
+  sector out of `CHERN.OUT` and `BERRY_CURVATURE.OUT`
 
 It raises `ValueError` if the projected spin closes its gap or the system is
 a metal.
@@ -6464,6 +6514,9 @@ Optional arguments:
   `h.get_berry_curvature()`. The operator-projected invariants
   (`topology.spin_chern`, `topology.operator_berry`) work on sparse
   Hamiltonians too, which is what a moire or supercell model is
+- write=True: also write the Chern number to `CHERN.OUT` and, for
+  `integration="grid"`, the Berry curvature on the mesh to
+  `BERRY_CURVATURE.OUT`; `False` only returns the number
 
 ### h.get_berry_curvature()
 Return the Berry curvature of the occupied bands as a map over the
@@ -7041,6 +7094,7 @@ Optional arguments:
 - tries=10: number of independent minimizations; the lowest-energy one is kept
 - calle=None: optional extra function `calle(sm) -> float` added to the energy during
   minimization, e.g. a penalty favoring a particular texture
+- silent=False: `True` does not print the minimum energy found
 
 Updates `sm.theta`, `sm.phi` and `sm.magnetization` in place to the best try found, and
 returns `(theta,phi)`
