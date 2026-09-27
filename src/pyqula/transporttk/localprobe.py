@@ -5,7 +5,7 @@ from .. import green
 from copy import deepcopy
 from ..htk.mode import make_compatible
 
-delta_smatrix = 1e-12
+delta_smatrix = 1e-12 # kappa_jax clamps the lead broadening to it, as smatrix.get_smatrix does
 dagger = algebra.dagger
 gfmode = "adaptive"
 
@@ -123,7 +123,7 @@ class LocalProbe():
         exactly what the constructor argument means."""
         from copy import copy
         out = copy(self) # shallow, the Hamiltonians are shared
-        out.delta = delta # probe selfenergy and central Green's function
+        out.delta = delta # selfenergy of the probe lead
         out.bulk_delta = delta # Green's function of the sample
         # the cache is keyed on the (clamped) delta that get_smatrix hands
         # down, not on this one, so the copy must not share its entries,
@@ -341,14 +341,36 @@ def local_selfenergy_batch(h,g,energies,i=0,delta=1e-5,**kwargs):
 
 
 def get_central_gmatrix(P,selfl=None,selfr=None,energy=0.0):
-    """Return the (inverse) central Green's function"""
-    delta = P.delta # imaginary part
+    """Return the (inverse) central Green's function.
+
+    The central region is the probe's last cell and the probed site, and
+    it carries no imaginary broadening of its own: every anti-Hermitian
+    part of these blocks comes from the two selfenergies, the probe lead's
+    (selfl) and the rest of the sample's (selfr). That is what makes the
+    Fisher-Lee S-matrix built from them exactly unitary. Both blocks used
+    to carry an extra i*delta_smatrix, a sink coupled to no lead, which
+    took a T-independent 8*delta_smatrix (8e-12 for a spinful probe) out
+    of the reflected current and reported it as normal conductance: deep
+    in a superconducting gap and below T~1e-3 it outgrew the T^4 Andreev
+    conductance, and the decay rate kappa fell to 0.8 instead of 2.
+
+    The broadening that remains is the sample's own, bulk_delta in its
+    Green's function, which is a finite quasiparticle lifetime (a Dynes
+    broadening): inside a gap it leaves a normal conductance G_N*delta/Delta,
+    going as T^2 and vanishing with delta, which is physical for that
+    lifetime and not a numerical floor.
+
+    selfr is (E+i*d) - H_i - g^-1 for whatever broadening d it was
+    extracted with (local_selfenergy), so the sample block below is
+    g^-1 - i*d: the Green's function of the sample itself for d=0, and one
+    whose broadening is reduced from bulk_delta to bulk_delta-d otherwise
+    (get_smatrix extracts it with d<=delta_smatrix). When selfr is not
+    given it is extracted here with d=0."""
     if selfl is None: selfl = P.get_selfenergy(lead=0,energy=energy)
-    if selfr is None: selfr = P.get_selfenergy(lead=1,energy=energy)
-    if delta>delta_smatrix: delta = delta_smatrix # small delta is critical!
-    iden = np.identity(selfl.shape[0],dtype=complex)*(energy +1j*delta)
-    if P.frozen_lead:
-        idenl = np.identity(selfl.shape[0],dtype=complex)*1j*delta
+    if selfr is None: selfr = P.get_selfenergy(lead=1,energy=energy,delta=0.)
+    iden = np.identity(selfl.shape[0],dtype=complex)*energy
+    if P.frozen_lead: # the probe is evaluated at zero energy, see didv
+        idenl = np.zeros((selfl.shape[0],selfl.shape[0]),dtype=complex)
     else: idenl = iden
     hlist = [[None for i in range(2)] for j in range(2)] # list of matrices
     M = get_intra(P.H) # intracell matrix

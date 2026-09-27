@@ -60,8 +60,10 @@ def get_smatrix(ht,energy=0.0,delta=None,as_matrix=False,check=True):
     `delta` is the broadening, and defaults to the junction's own `delta`
     attribute. Passing it explicitly is exactly equivalent to building the
     junction with that attribute: the broadening is read in several places
-    below (the lead selfenergies, the central Green's function, and for a
-    LocalProbe also the bulk_delta of the sample Green's function), so an
+    below (the lead selfenergies and the central Green's function of a
+    Heterostructure; for a LocalProbe the selfenergy of the probe lead and
+    the bulk_delta of the sample Green's function, its central region
+    carrying no broadening of its own), so an
     explicit value is applied by rebinding the attribute on a copy rather
     than threaded into each of them one by one -- threading it reached
     only the lead selfenergies, where it is clamped to delta_smatrix
