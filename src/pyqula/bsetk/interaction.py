@@ -209,13 +209,19 @@ def interaction_at_q(W,g,q):
 def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None,rcut=None):
     """Build a density-density interaction W in this module's convention
     (see bare_interaction) from neighbor-shell couplings, using the same
-    U/V1/V2/V3/Vr meaning scftk.densitydensity.Vinteraction and
+    U/V1/V2/V3 meaning scftk.densitydensity.Vinteraction and
     Hamiltonian.get_mean_field_hamiltonian use:
 
       H_int = U sum_i n_i,up n_i,dn + sum_shells V_s sum_<ij>_s n_i n_j
 
     with n_i the total density of site i. Unlike Vinteraction this returns
     the bare W (not W/2), so it can be handed straight to the BSE as V=.
+    The Vr tail below is the interaction of each pair, sum_{i<j} Vr n_i n_j,
+    which is what chitk.densitychi and the mean field take too:
+    Vinteraction and VJinteraction store Vr in h.V halved, exactly as they
+    store V1/V2/V3 (scftk.densitydensity.add_pair_interaction), so the
+    bare_interaction of their h.V is this W, as long as Vr vanishes at
+    r1==r2 (the mean field keeps a same-site Vr, which is discarded here).
 
     This is the constructor to use for a screened interaction that is not
     the one the mean field was converged with -- a Hubbard-only h.V is far

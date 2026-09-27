@@ -54,8 +54,12 @@ def test_nesting_enhances_charge_instability_at_half_filling():
     exactly at half filling than away from it."""
     g = geometry.chain()
     q = [0.5, 0., 0.]  # q = pi
-    # V1(q=pi) = -V1 (the +1/-1 neighbor bonds pick up a pi Bloch phase at
-    # the zone boundary), so a REPULSIVE V1 is the one that drives a CDW
+    # V1(q=pi) = -2*V1 (the +1/-1 neighbor bonds each pick up a pi Bloch
+    # phase at the zone boundary; it was -V1 while _density_v halved the
+    # shells, see test_densitychi_convention.py, which moved the kernel at
+    # half filling from -0.10 to -1.20 and away from it from 0.79 to 0.57,
+    # both still on the same side of zero), so a REPULSIVE V1 is the one
+    # that drives a CDW
     # instability there -- the standard "electrons avoid each other on
     # neighboring sites -> checkerboard charge order" mechanism, enhanced
     # here by perfect nesting at half filling.

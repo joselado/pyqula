@@ -15,12 +15,24 @@ def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None,rcut=None):
     """Build the per-site (N-dimensional, not spin-doubled) density-density
     interaction matrix for the charge/density RPA channel.
 
-    V1/V2/V3/Vr (couplings between *different* sites) carry over directly
-    and unambiguously: (1/2) V_ij n_i n_j (i!=j, n_i the total occupation
-    at site i) is already a two-site term with no spin/charge mixing, so
-    its charge-channel coefficient is exactly V_ij -- same neighbor-shell
-    construction as scftk.spinspin._build_v/_build_density_v,
-    just without their spin-doubling step.
+    V1/V2/V3 (couplings between *different* sites) mean what they mean in
+    Vinteraction/VJinteraction and bsetk.interaction.density_interaction:
+    V_s n_i n_j for every bond <ij> of shell s, each bond counted once. The
+    Hartree potential that bond puts on site i is V_s times the density of
+    site j, so the kernel is V_s on the i->j entry and on the j->i entry
+    alike, and on a chain V(q) = 2 V1 cos(2 pi q). They are NOT halved
+    here: scftk.spinspin._build_density_v and Vinteraction store V_s/2 in
+    h.V, but get_mf_normal doubles that again (see
+    bsetk.interaction.bare_interaction), and a kernel built from the
+    halved value put every neighbour shell into the RPA at half its
+    strength (tests/chi/test_densitychi_convention.py).
+
+    Vr(r1,r2) is taken as the interaction of the pair, as
+    bsetk.interaction.density_interaction takes it, so the kernel is Vr on
+    both entries. The SCF takes Vr the same way: Vinteraction/VJinteraction
+    store it halved in h.V, as they store V1 (densitydensity.
+    add_pair_interaction), so a Vr equal to V1 on the first shell is the
+    same interaction in all three.
 
     The onsite U term needs care: U n_up n_down = (U/4)n^2 - (U/4)m_z^2
     (n = n_up+n_down, m_z = n_up-n_down) splits into a +U/4 coefficient of
@@ -33,7 +45,7 @@ def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None,rcut=None):
     from .. import specialhopping
     if nd is None: nd = h.geometry.neighbor_distances()
     mgenerator = specialhopping.distance_hopping_matrix(
-            [V1/2.,V2/2.,V3/2.], nd[0:3])
+            [V1,V2,V3], nd[0:3]) # per bond, not the halved SCF storage
     hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
             mgenerator=mgenerator)
     v = hv.get_hopping_dict()
@@ -51,8 +63,11 @@ def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None,rcut=None):
 def densitychi_RPA(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,rcut=None,**kwargs):
     """Return the density (charge) RPA response function for a
     V1/V2/V3 neighbor-shell (+ onsite U, + optional general Vr(r))
-    density-density interaction -- same V1/V2/V3/U/Vr convention as
-    scftk.densitydensity.Vinteraction/VJinteraction. Unlike the
+    density-density interaction, U sum_i n_iup n_idn + sum_s V_s
+    sum_<ij>_s n_i n_j with each bond counted once -- the U/V1/V2/V3 of
+    scftk.densitydensity.Vinteraction/VJinteraction and of
+    bsetk.interaction.density_interaction, whose Vr this one shares too
+    (see _density_v for the SCF's Vr). Unlike the
     spin channel (spinchi_full/magnon_bands), this does not need a
     converged mean-field Hamiltonian first: the interaction is fully
     determined by V1/V2/V3/U/Vr, so it can dress the bare susceptibility of
