@@ -60,7 +60,18 @@ def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, nd=None, rcut=None):
     rcut: range of the Jr tail, with the same meaning as for Vr (every
     pair up to rcut, whole distance shells; None keeps every pair of a 0d
     system and means 5.0 for a periodic one), see
-    specialhopping.distance_cut_interaction."""
+    specialhopping.distance_cut_interaction. The pair of a site with
+    itself is one of them, as it is for Vr: both enter as half the sum
+    over ordered pairs, H = 1/2 sum_ij [Vr(r_ij) n_i n_j + Jr(r_ij) S_i.S_j],
+    so Jr(0) is an onsite (Jr(0)/2) S_i.S_i, which at the mean-field level
+    is a Hubbard U = -3 Jr(0)/4 (the three channels each give -Jr(0)/4
+    n_up n_dn, and the same-spin entries drop out of Hartree-Fock), the
+    way Vr(0) is a Hubbard U = Vr(0). Measured: Jr(0)=-4 alone converges
+    to the Hamiltonian of U=3 to 2e-16 (tests/scf/test_vr_per_pair.py),
+    and the kernel built from it agrees with a brute-force reference
+    written with the same diagonal (tests/magnon/test_exchange_rung.py).
+    A Jr meant as a bond coupling only has to return zero at zero
+    distance."""
     if nd is None: nd = h.geometry.neighbor_distances() # distances to the neighbor shells
     mgenerator = specialhopping.distance_hopping_matrix(
             [J1/2., J2/2., J3/2.], nd[0:3])
@@ -390,7 +401,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     Vinteraction) with spin-spin exchange in a single SCF loop. rcut is
     the range of Vr and Jr: every pair of sites up to rcut interacts and none
     beyond it; None keeps every pair of a finite (0d) system and means 5.0
-    for a periodic one, see specialhopping.distance_cut_interaction.
+    for a periodic one, see specialhopping.distance_cut_interaction. The
+    pair of a site with itself is one of those pairs, so Vr(0) is an
+    onsite Hubbard U = Vr(0) and Jr(0) an onsite (Jr(0)/2) S_i.S_i, a
+    Hubbard U = -3 Jr(0)/4 at the mean-field level; a function meant as a
+    bond coupling only has to return zero at zero distance (see _build_v).
 
     J1/J2/J3 (+ Jr, a general distance-dependent function) are isotropic
     Heisenberg-like exchange, J*(Sx_i Sx_j + Sy_i Sy_j + Sz_i Sz_j), for the

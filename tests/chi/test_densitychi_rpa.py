@@ -25,6 +25,12 @@ so a pure-U interaction must enter the kernel as U/2 on the diagonal, not U.
 That factor is exactly the kind of thing that is easy to get wrong and
 invisible without an external check -- the spin channel uses -2U for the same
 physical U.
+
+The identity above holds at one momentum transfer, so every response here is
+taken at a fixed q. Left out, q=None is the local response, the average over
+the mesh of the response dressed at each q, and an average of dressed
+responses is not the dressing of the averaged bare one, so the series would
+not apply to it; that construction is pinned in test_local_rpa_response.py.
 """
 import numpy as np
 import pytest
@@ -34,6 +40,7 @@ from testutils import temporary_attr
 
 ENERGIES = np.linspace(0.5, 1.2, 4)
 NK, DELTA = 4, 0.2
+Q = [0.3, 0.1, 0.]  # one momentum transfer, where the RPA identity holds
 
 
 def _h():
@@ -44,7 +51,7 @@ def _h():
 def _chi(h, **kw):
     with temporary_attr(parallel, "cores", 1):
         es, chis = h.get_densitychi_RPA(energies=ENERGIES, nk=NK, delta=DELTA,
-                                        **kw)
+                                        q=Q, **kw)
     return es, np.asarray(chis)
 
 

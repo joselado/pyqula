@@ -284,3 +284,65 @@ def test_goldstone_of_a_non_collinear_exchange_magnet():
     assert hm.get_goldstone_residual(nk=nk) < 1e-8
     assert hm.get_goldstone_residual(nk=nk, transverse=False,
                                      check_su2=False) > 1e-4
+
+
+def _ring_pair_interaction(U, Jr):
+    """The tensor of _ring_interaction for a distance-dependent isotropic
+    exchange: Jr(d) S_i.S_j on every ordered pair of sites of the ring at
+    ring distance d, the pair of a site with itself included, where the
+    leading 1/2 of H makes it (Jr(0)/2) S_i.S_i. That is the convention of
+    VJinteraction's Jr (and Vr) at zero distance, half the sum over
+    ordered pairs, see tests/scf/test_vr_per_pair.py"""
+    ns = 2*N
+    v = np.zeros((2*ns,)*4, dtype=complex)
+    for i in range(ns):
+        v[2*i, 2*i+1, 2*i, 2*i+1] += U
+        v[2*i+1, 2*i, 2*i+1, 2*i] += U
+        for j in range(ns):
+            J = Jr(min(abs(i - j), ns - abs(i - j)))
+            if J == 0.: continue
+            for s in range(2):
+                for sp in range(2):
+                    for t in range(2):
+                        for tp in range(2):
+                            v[2*i+s, 2*j+t, 2*i+sp, 2*j+tp] += sum(
+                                J/4.*_SIGMA[a][s, sp]*_SIGMA[a][t, tp]
+                                for a in range(3))
+    return v
+
+
+def _distance_exchange(J0, J1):
+    """Jr(r1,r2) for VJinteraction: J0 on a site with itself, J1 on the
+    first-neighbor shell (distance 1), zero beyond"""
+    def f(r1, r2):
+        r = np.linalg.norm(np.array(r1) - np.array(r2))
+        if r < 1e-3: return J0
+        if abs(r - 1.) < 1e-3: return J1
+        return 0.
+    return f
+
+
+def test_a_distance_dependent_exchange_matches_the_reference_with_its_onsite_term():
+    """Jr is evaluated on every pair within rcut, a site with itself
+    included, so Jr(0) is an onsite (Jr(0)/2) S_i.S_i in the mean field
+    and in the kernel alike (at the mean-field level a Hubbard
+    U = -3 Jr(0)/4, pinned in tests/scf/test_vr_per_pair.py). The
+    reference tensor written with the same diagonal agrees on the whole
+    spectrum (measured 2.2e-9); written without it, it does not (1.54), so
+    the diagonal is in the kernel and not only in the mean field. The
+    state stays SU(2) symmetric, so its Goldstone mode is exact (7e-13)."""
+    J0, J1 = -1.0, 1.5
+    def Jd(onsite):
+        return lambda d: (J0 if onsite else 0.) if d == 0 else \
+            (J1 if d == 1 else 0.)
+    # the generalized tensor reproduces the first-neighbor one
+    assert np.allclose(_ring_pair_interaction(2.0, Jd(False)),
+                       _ring_interaction(U=2.0, Jxyz=(J1, J1, J1)))
+    h = _neel_chain(U=2.0, Jr=_distance_exchange(J0, J1), rcut=1.5)
+    assert abs(h.get_vev("sz")[0]) > 0.3
+    ref = _ring_tdhf(_ring_hamiltonian(h), _ring_pair_interaction(2.0, Jd(True)))
+    assert np.max(np.abs(_pyqula_tdhf(h) - ref)) < 1e-7
+    without = _ring_tdhf(_ring_hamiltonian(h),
+                         _ring_pair_interaction(2.0, Jd(False)))
+    assert np.max(np.abs(without - ref)) > 1e-2
+    assert h.get_goldstone_residual(nk=N) < 1e-8

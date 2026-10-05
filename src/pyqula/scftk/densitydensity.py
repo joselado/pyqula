@@ -257,7 +257,17 @@ def add_pair_interaction(v,g,Vr,rcut=None):
     Vr equal to V1 on the first-neighbor shell is V1. It used to be stored
     whole, which made the mean field of Vr the one of 2*Vr, twice the Vr
     of bsetk.interaction.density_interaction and chitk.densitychi. The
-    exchange tail Jr goes through here as well, with the same meaning."""
+    exchange tail Jr goes through here as well, with the same meaning.
+
+    The pair of a site with itself is one of the pairs, so Vr(0) lands on
+    the same-site block as Vr(0)/2 on every spin entry, i.e. the H_int of
+    bsetk.interaction.bare_interaction gets Vr(0) n_i n_i / 2, which on one
+    orbital is a Hubbard U = Vr(0) plus a one-body term that Hartree-Fock
+    drops (n_a n_a decouples to nothing). Jr(0) is the same diagonal with
+    the Sz_i Sz_j sign pattern, an onsite (Jr(0)/2) S_i.S_i; see
+    spinspin._build_v for what that is at the mean-field level. A
+    function meant as a bond coupling only has to return zero at zero
+    distance."""
     from .. import specialhopping
     for d,m in specialhopping.distance_cut_interaction(g,Vr,rcut=rcut).items():
         v[d] = v[d] + m/2. if d in v else m/2.

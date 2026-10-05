@@ -475,13 +475,6 @@ agreement with TDHF, the SzSz refusal).
 
 ### Still open
 
-- A `Jr` function is evaluated at zero distance as well, so its channels
-  carry onsite `Sa_i Sa_i` terms (checked 17 September 2026: `Jr=1` gives
-  the same-site block [[1/4,-1/4],[-1/4,1/4]]). `Vr` does the same (its
-  same-site block is all ones), so skipping r=0 in `Jr` alone would make
-  the two conventions disagree; which one is intended is a decision, not a
-  repair. The kernel is consistent with the SCF either way, but no `Jr`
-  case was checked against the reference.
 - BdG (Nambu) Hamiltonians are refused by `PairBasis` as before, and now
   also by the spin response when the interaction couples different sites,
   where the site vertex used to give an approximate number.
@@ -490,10 +483,46 @@ agreement with TDHF, the SzSz refusal).
   even an isotropic exchange between different sites, so a check there
   would refuse every neighbor-shell exchange; whether that is wanted is
   open.
-- `q=None` on the site-basis route (a same-site interaction) still dresses
-  the q-averaged bare response with V(q=0), where the pair-basis route
-  averages the dressed response; the two local responses therefore differ
-  for a Hubbard U, and only the second is the local RPA response.
+
+### Closed on 5 October 2026
+
+- `Jr` at zero distance: kept, as a convention rather than a repair. `Jr`
+  and `Vr` both enter as half the sum over ordered pairs of sites,
+  `H = 1/2 sum_ij [Vr(r_ij) n_i n_j + Jr(r_ij) S_i.S_j]`, the pair of a
+  site with itself included, so `Vr(0)` is an onsite Hubbard `U = Vr(0)`
+  and `Jr(0)` an onsite `(Jr(0)/2) S_i.S_i`, which at the mean-field level
+  is a Hubbard `U = -3 Jr(0)/4` (each of the three channels gives
+  `-Jr(0)/4 n_up n_dn`, and the same-spin entries drop out of
+  Hartree-Fock). Skipping r=0 in `Jr` alone would have made the two
+  conventions disagree; a bond coupling returns zero at zero distance.
+  Measured: `Vr(0)=3` and `Jr(0)=-4` alone each converge to the
+  Hamiltonian of `U=3` to 2e-16 on the ferromagnetic chain
+  (`tests/scf/test_vr_per_pair.py`); the Casida reference of the ring,
+  written with the same diagonal, agrees with the TDHF spectrum of the
+  U=2 Neel chain with `Jr` equal to -1 at r=0 and 1.5 at r=1 to 2.2e-9,
+  and written without the diagonal differs by 1.54, so the term is in the
+  kernel and not only in the mean field; the Goldstone residual of that
+  state is 7e-13 (`tests/magnon/test_exchange_rung.py`).
+- `q=None` on the site-basis route: `chi_AB_RPA` and `chi_ops_RPA`
+  (`chitk/rpa.py`, `_local_rpa_response`) now dress every q of the mesh on
+  its own and average afterwards, as the pair basis does, so the two
+  local responses of a Hubbard U agree: 3e-13 on every block of the
+  half-filled Neel Hubbard chain at nk=6, and 4e-12 on the transverse
+  blocks of a doped one (filling 0.35), whose zz block differs by 0.6
+  from the charge coupling the site vertex has no channel for. The old
+  recipe, the averaged bare response dressed with V(q=0), was off by 18
+  against a maximum of 19 on that chain (37 for the S+/S- ladder), since
+  the averaged bare response keeps the pole structure of no single q.
+  User-visible: the local response of `get_spinchi_full`,
+  `get_spinchi_ladder`, `get_iets_ldos` with `nk>1` and
+  `get_densitychi_RPA` called without a `q` changes (the charge channel
+  by 0.7 against a maximum of 1.3 on the chain with V1=0.6, U=0.5); a 0D
+  system and `nk=1` have a single q-point and are unchanged, and so is
+  every call at an explicit `q`, which is what all the notebooks and
+  examples do. The pole finders (`rpa_kernel_poles`, `get_rpa_kernel_poles`)
+  are per-q quantities and keep the old meaning of `q=None`, the kernel
+  of the averaged bare response at the Gamma point.
+  Test: `tests/chi/test_local_rpa_response.py`.
 
 ## Metals (done)
 

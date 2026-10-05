@@ -103,3 +103,47 @@ def test_the_jax_engine_builds_the_same_interaction():
         for key in set(x) | set(y):
             mx = x.get(key, 0.*x[(0, 0, 0)]) ; my = y.get(key, 0.*y[(0, 0, 0)])
             assert np.max(np.abs(np.array(mx) - np.array(my))) < 1e-12, key
+
+
+def _onsite(value):
+    """A pair interaction equal to value on a site with itself and zero on
+    every other pair"""
+    def f(r1, r2):
+        return value if np.linalg.norm(np.array(r1) - np.array(r2)) < 1e-6 \
+            else 0.
+    return f
+
+
+def test_vr_and_jr_at_zero_distance_are_an_onsite_hubbard_term():
+    """Vr and Jr are evaluated on every pair of sites within rcut, the pair
+    of a site with itself included, and both enter as half the sum over
+    ordered pairs, H = 1/2 sum_ij [Vr(r_ij) n_i n_j + Jr(r_ij) S_i.S_j],
+    whose diagonal is Vr(0) n_i n_i / 2 and Jr(0) S_i.S_i / 2. Written out
+    on one orbital, n_i n_i / 2 is n_up n_dn plus a one-body term and
+    S_i.S_i / 2 is -3/4 n_up n_dn plus one, and the one-body terms are what
+    Hartree-Fock makes of n_a n_a, nothing, so at the mean-field level
+    Vr(0) is a Hubbard U = Vr(0) and Jr(0) a Hubbard U = -3 Jr(0)/4.
+    Measured: Vr(0)=3 and Jr(0)=-4 each converge to the Hamiltonian of
+    U=3 to 2e-16, on a ferromagnetic state that is not a vacuous match.
+    tests/magnon/test_exchange_rung.py pins the same diagonal in the
+    magnon kernel against a brute-force reference."""
+    g = geometry.chain()
+    kw = dict(filling=0.2, mf="ferroZ", nk=40, maxerror=1e-11, mix=0.3,
+              maxite=3000)
+    u = meanfield.VJinteraction(g.get_hamiltonian(), U=3.0, **kw)
+    assert abs(u.hamiltonian.get_vev("sz")[0]) > 0.05
+    v = meanfield.VJinteraction(g.get_hamiltonian(), Vr=_onsite(3.0),
+                                rcut=0.5, **kw)
+    _same_scf(u, v)
+    j = meanfield.VJinteraction(g.get_hamiltonian(), Jr=_onsite(-4.0),
+                                rcut=0.5, **kw)
+    _same_scf(u, j)
+    # and the interaction itself: Jr(0) lands on the same-site block of
+    # every channel as Jr(0)/8 times the sign pattern of Sz_i Sz_j, the
+    # entry a bond with J1 = Jr(0) carries, which the bond has at both d
+    # and -d and the diagonal only once (hence the half)
+    from pyqula.scftk.spinspin import _build_v
+    vj = _build_v(g.get_hamiltonian().get_multicell(), Jr=_onsite(1.0),
+                  rcut=0.5)
+    assert list(vj) == [(0, 0, 0)]
+    assert np.allclose(vj[(0, 0, 0)], np.array([[1., -1.], [-1., 1.]])/8.)

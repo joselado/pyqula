@@ -102,9 +102,10 @@ def _pair_route_response(H,ops,opsB,**kwargs):
     response: (energies, one (nop*N)x(nop*N) matrix per energy).
 
     q=None follows chitk.chiAB.chiAB: the response averaged over the q
-    points of the k-mesh, i.e. the local one. Here each q is dressed on
-    its own before the average, which is the RPA of the local response
-    (the site basis averages the bare response and dresses it at q=0)."""
+    points of the k-mesh, i.e. the local one. Each q is dressed on its own
+    before the average, which is the RPA of the local response; the site
+    basis does the same (chitk.rpa._local_rpa_response), and where its
+    vertex is exact the two local responses agree to 3e-13."""
     from .pairchi import pair_chi_rpa
     kw = _pair_route_kwargs(H,kwargs)
     q = kwargs.get("q",None)

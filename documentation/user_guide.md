@@ -1969,7 +1969,7 @@ c^\dagger_{i,s} c_{i,s}
 c^\dagger_{j,s'} c_{j,s'}
 $$
 
-where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors; second and third neighbors enter `h.get_mean_field_hamiltonian()` in the same way as `V2` and `V3`, and an interaction with an arbitrary dependence on the distance as `Vr`, a function `Vr(r1,r2)` of the positions of two sites that is the interaction of each pair, exactly as $V_1$ is for a pair of first neighbors, so that a `Vr` equal to $V_1$ on first neighbors and zero beyond them is the same calculation as `V1`. That interaction reaches up to a distance `rcut`, 5 by default in a periodic system, and it is kept or dropped one whole shell of equidistant pairs at a time, so that it has the symmetry of the lattice; in a finite system every pair is kept. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all the anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first-neighbor interaction $V_1$.
+where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors; second and third neighbors enter `h.get_mean_field_hamiltonian()` in the same way as `V2` and `V3`, and an interaction with an arbitrary dependence on the distance as `Vr`, a function `Vr(r1,r2)` of the positions of two sites that is the interaction of each pair, exactly as $V_1$ is for a pair of first neighbors, so that a `Vr` equal to $V_1$ on first neighbors and zero beyond them is the same calculation as `V1`. That interaction reaches up to a distance `rcut`, 5 by default in a periodic system, and it is kept or dropped one whole shell of equidistant pairs at a time, so that it has the symmetry of the lattice; in a finite system every pair is kept. The pair of a site with itself is one of those pairs, so `Vr(0)` is an onsite Hubbard term, $U=V_r(0)$, and a function meant for the bonds alone returns zero at zero distance. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all the anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first-neighbor interaction $V_1$.
 
 The first term is the charge order term, that takes the form
 
@@ -2057,7 +2057,7 @@ n_{i,\uparrow}n_{j,\uparrow} - n_{i,\uparrow}n_{j,\downarrow}
 \right)
 $$
 
-is already a density-density interaction between spin-orbitals, so $S^z_iS^z_j$ is solved at the same mean-field level as the $U$/$V_1$/$V_2$/$V_3$ interactions above, with `h.get_szsz_mean_field_hamiltonian(J1=...)`. `J1`/`J2`/`J3` are the first-, second- and third-neighbor couplings and `Jr` a general distance-dependent one, the same convention as `V1`/`V2`/`V3`/`Vr`. The other two axes are `h.get_sxsx_mean_field_hamiltonian(...)` and `h.get_sysy_mean_field_hamiltonian(...)`. The bare interaction is SU(2) symmetric, so at the same coupling the three differ only in the axis the moment orders along.
+is already a density-density interaction between spin-orbitals, so $S^z_iS^z_j$ is solved at the same mean-field level as the $U$/$V_1$/$V_2$/$V_3$ interactions above, with `h.get_szsz_mean_field_hamiltonian(J1=...)`. `J1`/`J2`/`J3` are the first-, second- and third-neighbor couplings and `Jr` a general distance-dependent one, the same convention as `V1`/`V2`/`V3`/`Vr`. Both `Jr` and `Vr` are evaluated on every pair of sites up to `rcut`, the pair of a site with itself included, so a coupling meant for the bonds alone returns zero at zero distance, and a nonzero value there is an onsite term, described under `h.get_combined_mean_field_hamiltonian()` in the reference. The other two axes are `h.get_sxsx_mean_field_hamiltonian(...)` and `h.get_sysy_mean_field_hamiltonian(...)`. The bare interaction is SU(2) symmetric, so at the same coupling the three differ only in the axis the moment orders along.
 
 ```python
 from pyqula import geometry
@@ -3743,6 +3743,13 @@ the Goldstone mode of the broken spin-rotation symmetry.
 - `get_spinchi_full` computes the full $(S_x,S_y,S_z)$ tensor response
 - `RPA=True` (default) dresses the response with the interaction; `RPA=False` returns the bare response
 - `h.get_qdos_iets` scans `get_spinchi_full` over a q-path instead of a single q, giving the spin-excitation dispersion along high-symmetry directions
+
+With `q` left out, the response is dressed at every $q$ of the mesh and
+averaged afterwards, which is the local response, the one a probe sitting on
+a single site sees: the RPA series is summed at a fixed momentum transfer, so
+each $q$ has to be dressed on its own before the average, and dressing the
+averaged bare response instead would not be the response of any state. This
+local response is what `h.get_iets_ldos` builds its map from.
 
 The `"G","K","M"` path labels need a 2D lattice; on the antiferromagnetic
 honeycomb lattice the dispersion map along the path is
@@ -6167,7 +6174,7 @@ Compute the transverse ($S^+/S^-$) spin susceptibility, RPA-dressed by default u
 
 Optional arguments:
 
-- q=None, energies, delta, nk: as above, `None` again meaning the q-average
+- q=None, energies, delta, nk: as above; with `q` left out the response is dressed at every $q$ of the mesh and averaged afterwards, the local RPA response (the bare one, `RPA=False`, is the average of `get_chi`)
 
 - RPA=True: dress with the random-phase approximation; `False` for the bare response. An interaction that couples different sites is dressed in the pair basis of `h.get_transverse_spinchi()` instead of with the site vertex, with the same arguments (see "Interactions beyond onsite")
 
@@ -6182,7 +6189,7 @@ Optional arguments:
 
 - V=None (required): the interaction; a `ValueError` is raised if not given. Either a plain matrix (q-independent, onsite-only) or a real-space hopping dict/`MultiHopping` `{(n1,n2,n3): matrix}` for an interaction with support beyond the onsite cell, Fourier-transformed to $V(q)$ at this call's `q` (see "Interactions beyond onsite")
 
-- A=None, B=None, q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
+- A=None, B=None, q=None, energies, delta, nk: as in `get_chi`; a pole belongs to one $q$, so with `q` left out the kernel is built from the q-averaged bare response at $q=0$, unlike the response functions above, which dress each $q$ before averaging
 
 Returns an `(npoles,2)` array, one row per collective mode found, sorted by frequency: the pole frequency and its signed residual imaginary part (filter on its magnitude to keep only the sharp modes).
 
@@ -6210,7 +6217,7 @@ Optional arguments:
 
 - W=None: the interaction, defaulting to the one the mean field was converged with
 
-- q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
+- q=None, energies, delta, nk: as in `get_chi`; with `q` left out each $q$ is dressed on its own and the average taken afterwards, the local RPA response
 
 - component=None: a pair of spin indices `(a,b)` to return only that spin block instead of the full tensor
 
@@ -6236,9 +6243,9 @@ Compute the density (charge) RPA response function for a `V1`/`V2`/`V3`-neighbor
 Optional arguments:
 
 - V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None: the density-density interaction, built the same way as `Vinteraction`/`VJinteraction`'s
-- rcut=None: range of `Vr`, every pair of sites up to that distance and none beyond it; `None` means 5 in a periodic system and every pair in a finite one
+- rcut=None: range of `Vr`, every pair of sites up to that distance and none beyond it, the pair of a site with itself included; `None` means 5 in a periodic system and every pair in a finite one
 
-- q=None, energies, delta, nk: as in `get_chi`, `None` again meaning the q-average
+- q=None, energies, delta, nk: as in `get_chi`; with `q` left out each $q$ is dressed with its own $V(q)$ and the average taken afterwards, the local RPA response
 
 ### h.get_plasmon_bands()
 Compute the plasmon/charge-order bands: the poles of the density RPA kernel for a `V1`/`V2`/`V3`/`U`/`Vr` neighbor-shell density-density interaction, scanned along a q-path, the charge-channel analog of `get_magnon_bands`.
@@ -6761,7 +6768,7 @@ $J>0$ is antiferromagnetic, $J<0$ ferromagnetic.
 Optional arguments:
 
 - J1, J2, J3 = 0.: first/second/third-neighbor $J_z$ couplings
-- Jr=None: general distance-dependent coupling function, as `Vr` for `get_mean_field_hamiltonian`
+- Jr=None: general distance-dependent coupling function, as `Vr` for `get_mean_field_hamiltonian`; `Jr(0)` is an onsite $J_r(0)S^z_iS^z_i/2$, so a bond coupling returns zero at zero distance
 - filling, mf, nk, maxerror, mix, constrains: as in `get_mean_field_hamiltonian`
 - return_total_energy=False: also return the total energy
 
@@ -6803,8 +6810,8 @@ Optional arguments:
 
 - U, V1, V2, V3, Vr: as in `get_mean_field_hamiltonian`
 - J1, J2, J3 = 0.: isotropic Heisenberg exchange for the first/second/third-neighbor shells (same shell convention as V1/V2/V3)
-- Jr=None: general distance-dependent isotropic exchange function, as `Vr`
-- rcut=None: range of `Vr` and `Jr`, every pair of sites up to that distance and none beyond it; `None` means 5 in a periodic system and every pair in a finite one
+- Jr=None: general distance-dependent isotropic exchange function `Jr(r1,r2)`, as `Vr`; a site with itself is one of the pairs, so `Jr(0)` is an onsite $J_r(0)\,\vec S_i\cdot\vec S_i/2$, a Hubbard $U=-3J_r(0)/4$ at the mean-field level, and a bond coupling returns zero at zero distance
+- rcut=None: range of `Vr` and `Jr`, every pair of sites up to that distance and none beyond it, the pair of a site with itself included (`Vr(0)` is an onsite $U=V_r(0)$); `None` means 5 in a periodic system and every pair in a finite one
 - J1x, J1y, J1z = 0.: optional anisotropic correction added to J1 on the first-neighbor shell only (e.g. the effective first-neighbor Jz coupling is J1+J1z); second/third neighbors stay purely isotropic
 
 - mf, filling, nk, maxerror, mix, constrains: as above (only the plain-mixing solver is supported)

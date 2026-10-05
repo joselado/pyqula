@@ -23,8 +23,11 @@ def interaction_at_q(V,h,q):
        extended hopping.
     q=None (no q-point specified by the caller) is treated as the Gamma
     point (q=0), under which every dict reduces to the plain sum of its
-    matrices -- consistent with a caller that never mentions q at all
-    only ever having meant the onsite/zero-momentum interaction."""
+    matrices. The RPA response functions (chi_AB_RPA, chi_ops_RPA) never
+    reach here with q=None: their local response dresses every q of the
+    mesh on its own, see _local_rpa_response. The pole finders below do,
+    and a pole is a per-q quantity, so q=None there is the kernel of the
+    averaged bare response at the Gamma point, as it always was."""
     if V is None: return None
     if isinstance(V,MultiHopping): V = V.get_dict()
     if isinstance(V,dict):
@@ -37,10 +40,37 @@ def interaction_at_q(V,h,q):
     return V # plain matrix, q-independent
 
 
+def _local_rpa_response(h,f,**kwargs):
+    """The local (q=None) RPA response: f(q) evaluated at every point of
+    the q-mesh chiAB averages over when it is given no q (the k-mesh of
+    the geometry, nk points per direction, the same nk the response
+    integrates over) and averaged afterwards, so that every q is dressed
+    on its own, chi0(q)(1-V(q)chi0(q))^-1, before the average. That is the
+    RPA of the local response, the one a probe on a single site sees, and
+    what the pair basis (chitk.pairchi, through
+    spinchi._pair_route_response) computes too: the two agree to 3e-13 on
+    a half-filled Neel Hubbard chain at nk=6, where the site vertex is
+    exact. Dressing the averaged bare response with V(q=0) instead, which
+    is what chi_AB_RPA/chi_ops_RPA used to do, is the response of nothing:
+    on that chain it was off by 18 against a maximum of 19, since the
+    averaged bare response has no reason to keep the pole structure of any
+    single q. The bare response (V=None) is averaged by chiAB itself over
+    the same mesh, so this is only for the dressed one; a 0D geometry and
+    nk=1 have a single q-point and are unchanged."""
+    qs = h.geometry.get_kmesh(nk=kwargs.get("nk",60)) # chiAB's own mesh
+    out = [f(q) for q in qs] # dressed at every q
+    return out[0][0],np.mean([o[1] for o in out],axis=0)
+
+
 # compute general RPA response function
 def chi_AB_RPA(h,V=None,q=None,**kwargs):
-    """Compute the RPA chi for a hamiltonian"""
+    """Compute the RPA chi for a hamiltonian. With q=None and an
+    interaction, the local response: dressed at every q of the mesh and
+    averaged afterwards, see _local_rpa_response"""
     from ..chi import chiAB # get response function
+    if V is not None and q is None: # the local dressed response
+        return _local_rpa_response(h,lambda qi: chi_AB_RPA(h,V=V,q=qi,
+                                                            **kwargs),**kwargs)
     es,chis = chiAB(h,mode="matrix",q=q,**kwargs) # non-interacting response
     iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
     if V is not None: # finite interaction, RPA summation
@@ -93,9 +123,16 @@ def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,q=None,**kwargs):
     """Compute the RPA chi for a hamiltonian,
     return a tensor given a list of operators. This is
     for example useful to compute the full spin response
-    function"""
+    function. With q=None and an interaction, the local response: dressed
+    at every q of the mesh and averaged afterwards, see
+    _local_rpa_response"""
     from ..chi import chiAB # get response function
     nop = len(ops) # number of operators
+    if V is not None and q is None: # the local dressed response
+        if mode_rpa=="vectorized" and (pAs is None or pBs is None):
+            pAs,pBs = build_ops_projectors(h,ops) # once, not at every q
+        return _local_rpa_response(h,lambda qi: chi_ops_RPA(h,ops=ops,V=V,
+                    pAs=pAs,pBs=pBs,q=qi,**kwargs),**kwargs)
     # storage for the full response
     if mode_rpa=="sequential": # one by one
         chis = [[None for i in range(nop)] for j in range(nop)]

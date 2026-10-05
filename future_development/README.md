@@ -124,8 +124,11 @@ already reached once.
   any interaction that couples different sites is now summed in the pair
   basis even through the site-basis entry points, how SzSz/SxSx/SySy
   record their channel and why a global spin rotation refuses an
-  anisotropic exchange, and what is still open (the Jr onsite terms,
-  Nambu, the local rotations, and the q-averaged site-basis response).
+  anisotropic exchange, what was closed on 5 October 2026 (the `Jr`
+  onsite term, kept as the same convention as `Vr`, and the local
+  `q=None` response of the site basis, now the average of the dressed
+  response as in the pair basis), and what is still open (Nambu and the
+  local rotations).
 
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
   X-wave nonlinear Drude spin conductivity covers, the measured performance
