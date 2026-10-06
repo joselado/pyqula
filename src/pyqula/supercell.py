@@ -145,7 +145,7 @@ def replicate3d(rs,a1,a2,a3,n1,n2,n3):
     ro = np.zeros((n1*n2*n3*nc,3)) # allocate output array
     return replicate3d_jit(rs,a1,a2,a3,n1,n2,n3,ro) # compute
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def replicate3d_jit(rs,a1,a2,a3,n1,n2,n3,ro):
   """Function to make a three dimensional supercell"""
   nc = len(rs)
@@ -292,7 +292,7 @@ def supercell2d(g,n1=1,n2=1):
   return go
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def supercell2d_jit(r,n1,n2,a1,a2,rs):
     nc = len(r) # number of atoms in a cell
     n = nc*n1*n2 # total number of positions

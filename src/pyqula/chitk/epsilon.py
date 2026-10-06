@@ -31,7 +31,7 @@ def epsilonk_fs_2d(es,omega,delta,qs=None,nk=40):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def epsilonk_2d_jit(es,omega,delta,out):
     """Compute the response function in a 2d grid"""
     nx = es.shape[0] # nx
@@ -53,7 +53,7 @@ def epsilonk_2d_jit(es,omega,delta,out):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def fermisurface_2d_jit(es,omega,delta,out):
     """Compute the response function in a 2d grid"""
     nx = es.shape[0] # nx

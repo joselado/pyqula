@@ -36,7 +36,7 @@ def get_nnc(g,den,n=20,normalized=False,**kwargs):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def get_nnci_jit_v1(ri,rj,deni,denj,di,delta):
     """Compute a single correlator"""
     out = 0. # output value
@@ -65,7 +65,7 @@ def get_nnci_jit_v1(ri,rj,deni,denj,di,delta):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def get_nnci_jit(ri,rj,deni,denj,di,delta):
     """Compute a single correlator"""
     out = 0. # output value
@@ -115,7 +115,7 @@ def get_structure_factor(g,den,qpath=None,nq=60,qmax=None):
     return qpath,sq
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def _structure_factor_jit(rx,ry,rz,den0,qx,qy,qz):
     """Core double loop for get_structure_factor: |sum_i den0_i e^{-iq.r_i}|^2/N"""
     n = len(den0)

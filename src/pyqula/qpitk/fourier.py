@@ -22,7 +22,7 @@ def ldos_fourier_transform(r,ldos_r,q):
     return _ft_jit(r[:,0],r[:,1],r[:,2],ldos_r,q[:,0],q[:,1],q[:,2])
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def _ft_jit(rx,ry,rz,f,qx,qy,qz):
     n = len(f)
     nq = len(qx)

@@ -26,7 +26,7 @@ def Vijkl(h,n=4,fv=None):
     return get_vijkl_jit(ws,np.array(vs),out)
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def get_vijkl_jit(ws,vs,out):
     """Return the Vijkl elements, given a distance interaction vs"""
     n = len(ws) # number of wavefunctions

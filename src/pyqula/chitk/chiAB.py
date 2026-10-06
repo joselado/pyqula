@@ -193,7 +193,7 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
 DEGENERATE_TOL = 1e-8 # |e_a-e_b| below which a pair counts as degenerate
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def lindhard_pair(ea,eb,oa,ob,beta,delta):
     """Return (fac,de) for the Lindhard term fac/(de - omega + i*delta) of
     the pair of states a (energy ea, occupation oa) and b (eb, ob).
@@ -230,7 +230,7 @@ def lindhard_pair(ea,eb,oa,ob,beta,delta):
     return (oa - ob) + 0j,de
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     """Compute the response function for a single (A,B) operator pair.
     A and B are expected to be local operators, like Sz in site 0"""
@@ -254,7 +254,7 @@ def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     return out
 
 
-@jit(nopython=True,parallel=True)
+@jit(nopython=True,parallel=True,cache=True)
 def chiAB_matrix(ws1,es1,ws2,es2,energies,Ais,Bjs,temp,delta):
     """Compute the full ChiAB matrix.
     A naive implementation calls chiAB_jit once per (i,j) pair of
@@ -300,7 +300,7 @@ def chiAB_matrix(ws1,es1,ws2,es2,energies,Ais,Bjs,temp,delta):
     return np.transpose(out,(2,0,1)) # return transposed, first energy, then ij
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def chiAB_full_matrix_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     """Compute the full matrix of the response function.
     A and B are full operators, for example the full Sz operator"""
@@ -343,7 +343,7 @@ def chiAB_full_matrix_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     return outm # return result
 
 
-@jit(nopython=True,parallel=True)
+@jit(nopython=True,parallel=True,cache=True)
 def chiAB_full_matrix_jit_kmesh(ws1k,es1k,ws2k,es2k,omegas,A,B,T,delta):
     """Parallelize over kpoints"""
     nk = es1k[:,0].shape[0] # number of kpoints

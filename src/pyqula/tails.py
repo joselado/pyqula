@@ -65,7 +65,7 @@ def tails_python(vs):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def tails_python_jit(vs,out):
     """Python implementation, Return the log of the tails, 
     centered around the maximum"""

@@ -2,7 +2,7 @@ import numpy as np
 from .. import algebra
 from numba import jit
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def maximum_wannier_gap(m):
     """Return the maximum wannier gap"""
     x = m[0]
@@ -42,7 +42,7 @@ def smooth_gauge(w1,w2):
     R = algebra.dagger(U@V) # rotation matrix
     return smooth_rotation_jit(w2,R)
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def smooth_rotation_jit(w2,R):
     wnew = w2.copy()*0j # initialize
     wold = w2.copy() # old waves

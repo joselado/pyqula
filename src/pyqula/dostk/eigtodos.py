@@ -22,7 +22,7 @@ def calculate_dos(es,xs,d,w=None,parallel=True):
     else: ys = calculate_dos_jit_serial(es,xs,d,w) # compute
     return ys
   
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def calculate_dos_jit_serial(es,xs,d,w):
       ys = xs*0.
       for i in range(len(es)): # loop over energies

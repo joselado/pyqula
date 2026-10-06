@@ -187,7 +187,7 @@ def energy_numba(mu,pairs,js,den):
     return energy_numba_jit(mu,pairs,js,den)
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def energy_numba_jit(mu,pairs,js,den):
     """Compute the energy of the lattice gas model"""
     nump = len(pairs) # number of pairs
@@ -216,7 +216,7 @@ def _build_adjacency(n,pairs,js):
     return ptr,idx,jarr
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def _row_sum_excluding(ptr,idx,jarr,den,i,exclude):
     """sum_k J_{i,k}*den[k] over site i's neighbors, skipping `exclude`"""
     s = 0.
@@ -227,7 +227,7 @@ def _row_sum_excluding(ptr,idx,jarr,den,i,exclude):
     return s
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def swap_delta_energy(mu,ptr,idx,jarr,den,i1,i2):
     """Energy change from swapping den[i1] and den[i2]. Equivalent to
     energy_numba_jit(mu,pairs,js,den_after) - energy_numba_jit(mu,pairs,js,den_before)
@@ -242,7 +242,7 @@ def swap_delta_energy(mu,ptr,idx,jarr,den,i1,i2):
     return (mu[i1]-mu[i2])*(b-a) + 2.*(b-a)*(sum1-sum2)
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def flip_delta_energy(mu,ptr,idx,jarr,den,i):
     """Energy change from flipping den[i] (0<->1) in place, the
     grand-canonical move complementing swap_delta_energy (filling is
@@ -405,7 +405,7 @@ def get_susceptibility(ns,temp,burn=0.2):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def _row_sums_den_numba(ptr,idx,jarr,den):
     """sum_k J_ik*den[k] over each site's neighbors, via the CSR
     adjacency -- the row sum shared by get_local_energy/get_local_mu"""
@@ -419,7 +419,7 @@ def _row_sums_den_numba(ptr,idx,jarr,den):
     return out
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def _row_sums_numba(ptr,jarr):
     """sum_k J_ik over each site's neighbors, the normalize=True
     divisor for get_local_energy/get_local_mu"""

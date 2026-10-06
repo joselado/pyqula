@@ -24,7 +24,7 @@ def selfconvolve_fft(ds):
     return np.real(np.fft.ifft2(F*np.conj(F)))
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def selfconvolve_jit(ds,out):
     """Convolve a 2D array with itself using periodic boundary conditions.
     O(nx^2*ny^2) reference implementation, kept for testing against

@@ -79,7 +79,7 @@ def single_chargechi(h,i=0,j=0,temp=1e-7):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def elementchi(ws1,es1,ws2,es2,ii,jj,T):
     """Compute the response function"""
     out = 0j # initialize

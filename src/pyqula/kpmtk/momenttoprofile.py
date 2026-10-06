@@ -23,7 +23,7 @@ def generate_profile(mus,xs,kernel="jackson",**kwargs):
     return ys
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def generate_profile_jit(mus,xs):
     """Numba function to generate the moments"""
     ys = np.zeros(xs.shape,dtype=np.complex128) + mus[0] # first term

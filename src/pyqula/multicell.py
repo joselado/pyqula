@@ -491,7 +491,7 @@ def close_enough(rs1,rs2,rcut=2.0):
     return bool(np.any(dists<rcut))
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def close_enough_bruteforce(rs1,rs2,rcut=2.0):
     """O(len(rs1)*len(rs2)) reference implementation of close_enough,
     kept for testing against (see tests/geometry/test_neighbor_kdtree.py

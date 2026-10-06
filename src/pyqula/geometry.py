@@ -555,7 +555,7 @@ def array2function(g,v):
     return f # return function
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def array2function_jit(r,v,ir):
     n = len(r)
     for i in range(n):

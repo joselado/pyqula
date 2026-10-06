@@ -49,7 +49,7 @@ def get_index(g,r,replicas=False):
     return None # not found
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def get_index_jit(r0,rs):
     for i in range(len(rs)): # loop
         dr = r0 - rs[i] # different

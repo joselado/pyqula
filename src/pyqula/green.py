@@ -424,7 +424,7 @@ def green_generator(h,nk=20):
     return zero,selfenergy
   return getgreen # return function
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def getgreen_jit(wfs,es,energy,delta,zero):
     """Jit summation of Bloch Green's function"""
     shape = wfs[0].shape

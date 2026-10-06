@@ -2,7 +2,7 @@ import numpy as np
 from scipy.sparse import coo_matrix
 from numba import jit
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def sum_column(data,row,col,out):
     for i in range(len(data)): # loop over data
         r,c = row[i],col[i]

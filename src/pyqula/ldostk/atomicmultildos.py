@@ -6,7 +6,7 @@ from .. import filesystem as fs
 from numba import jit
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def jit_get_orbital(r0,rs,ratomic): 
     """Atomic orbital"""
     dr = rs-r0
@@ -183,7 +183,7 @@ def get_grids(g,nrep=1,dr=0.1,deltax=1.0,deltay=1.0):
     gridx,gridy = get_grids_jit(xp,yp,gridx,gridy)
     return gridx,gridy # return the grids
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def get_grids_jit(x,y,gridx,gridy):
     nx = len(x)
     ny = len(y)

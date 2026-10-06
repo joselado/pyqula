@@ -389,7 +389,7 @@ def get_kpath(g,kpath=None,**kwargs):
     else: return np.array(kpath) # assume is a valid list of vectors
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def kgrid2d(kxs,kys):
     """Return a list of kvector that create a grid over the inputs"""
     nx = len(kxs)

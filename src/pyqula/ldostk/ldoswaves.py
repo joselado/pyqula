@@ -48,7 +48,7 @@ from ..waves import get_waves
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def ldos_waves_jit(es,eigvec,eig,weights,v2s,ds,delta):
   for i in range(len(es)): # loop over energies
     energy = es[i] # energy

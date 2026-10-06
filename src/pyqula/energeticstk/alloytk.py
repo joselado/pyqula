@@ -167,7 +167,7 @@ def single_update(self,eold,ii,jj,T=1e-7):
 
 from numba import jit
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def fn_get_energy_i(r,s,n,a1,a2,a3,ii,em,dis):
     """Specialized function for first neighbor interaction only"""
     etot = 0.0

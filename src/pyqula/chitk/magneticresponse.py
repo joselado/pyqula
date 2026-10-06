@@ -43,7 +43,7 @@ def rkky_generator(h,delta=None,nk=100):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def rkky_loop(es,phis,fs,d1s,d2s,delta):
     """Summation for the RKKY interaction"""
     n = len(es) # number of states

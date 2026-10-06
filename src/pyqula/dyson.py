@@ -78,7 +78,7 @@ def dyson1d_hkgen(hkgen,nx,nkx,ez):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def dyson2d_jit(intra,tx,ty,txy,txmy,nx,ny,nkx,nky,ez,g):
     """jit version of the function"""
     n = intra.shape[0] # size of the matrix
@@ -243,7 +243,7 @@ def dyson2d_hkgen_jit(hkgen,nx,ny,nkx,nky,ez,g):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def dyson2d_gsk_jit(gs,nx,ny,nkx,nky,ez,g):
     """Compute full Gf from individual ones"""
     n = gs[0].shape[0] # size of the matrix

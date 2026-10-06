@@ -26,7 +26,7 @@ def circle_overlap(rs0,rs1):
         out.append(o) # store
     return np.array(out) # return the stacking
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def circle_overlap_jit(drs):
     out = 0. # initialize
     for dr in drs: # loop over distances

@@ -3,6 +3,9 @@ from scipy.sparse import coo_matrix
 from copy import deepcopy
 from numba import jit
 
+# _row_sum_excluding is compiled into swap_delta_energy_ising, whose numba
+# cache is keyed on this file only: after editing it in latticegas.py,
+# clear the cache (the __pycache__ *.nbi/*.nbc files) or the old one runs
 from .latticegas import (_build_adjacency, _row_sum_excluding,
         _normalize_checkpoint_steps, add_tensor as _add_tensor_gas,
         regroup as _regroup_pairs)
@@ -204,7 +207,7 @@ def ising_energy_numba(b,pairs,js,s):
     return ising_energy_numba_jit(b,pairs,js,s)
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def ising_energy_numba_jit(b,pairs,js,s):
     """Compute the energy of the Ising model, E = -sum_i b_i*s_i -
     sum_pairs J_ij*s_i*s_j (pairs lists both directions of every bond,
@@ -220,7 +223,7 @@ def ising_energy_numba_jit(b,pairs,js,s):
     return etot
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def flip_delta_energy_ising(b,ptr,idx,jarr,s,i):
     """Energy change from flipping s[i] -> -s[i] in place, the
     grand-canonical-like move complementing swap_delta_energy_ising
@@ -233,7 +236,7 @@ def flip_delta_energy_ising(b,ptr,idx,jarr,s,i):
     return 2.*b[i]*s[i] + 4.*s[i]*row
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def swap_delta_energy_ising(b,ptr,idx,jarr,s,i1,i2):
     """Energy change from swapping s[i1] and s[i2] (equivalently,
     flipping both simultaneously, since Ising spins only take 2
@@ -355,7 +358,7 @@ def random_spins(Ntot,N_up):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def _local_energy_numba(b,ptr,idx,jarr,s):
     """Local energy at every site, en[i] = -b[i]*s[i] -
     s[i]*sum_k J_ik*s[k], via the CSR adjacency (O(degree) per site,
@@ -372,7 +375,7 @@ def _local_energy_numba(b,ptr,idx,jarr,s):
     return out
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def _row_sums_numba(ptr,jarr):
     """sum_k J_ik over each site's neighbors, the normalize=True
     divisor for get_local_energy"""
@@ -400,7 +403,7 @@ def get_local_energy(LI,normalize=False):
     return out
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def _local_field_numba(b,ptr,idx,jarr,s):
     n = len(b)
     out = np.zeros(n)

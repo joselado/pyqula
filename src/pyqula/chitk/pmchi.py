@@ -20,7 +20,7 @@ def pmchi(h,energies=np.linspace(-3,3,300),delta=1e-2,**kwargs):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def chi_from_dos_jit(es,dos,T=1e-9,delta=1e-3,omega=None):
     """Compute the response function"""
     ne = len(es) # initial mesh of energies

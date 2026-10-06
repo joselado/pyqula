@@ -25,7 +25,7 @@ def chargechi(h,i=0,j=0,es=np.linspace(-3.0,3.0,100),delta=0.01,temp=1e-7):
     out = 0*es + 0j # initialize
     return es,elementchi(ws,esh,ws,esh,es,i,j,temp,delta,out)
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def elementchi(ws1,es1,ws2,es2,omegas,ii,jj,T,delta,out):
     """Compute the response function"""
     out  = out*0.0 # initialize

@@ -209,7 +209,7 @@ def add_distance_cut_interaction(v,g,Vr,rcut=None):
     return v
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def distance_hopping_matrix_jit(r1,r2,vs,ds2,out):
     """Return a hopping that to the 1-th neighbor is vs"""
     n = len(r1) # number of sites
@@ -309,7 +309,7 @@ def twisted_matrix_python(cutoff=10,**kwargs):
     
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def twisted_matrix_jit(rs1,rs2,ii,jj,data,cutoff=5.0,ti=0.3,lambi=8.0,
         mint = 1e-5,t=1.0,
         lamb=12.0,dl=3.0,lambz=10.0):

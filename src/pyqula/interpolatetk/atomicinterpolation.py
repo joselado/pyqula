@@ -6,7 +6,7 @@ from numba import jit
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def wave_jit(x,y,centers,heights,facx,facy,z):
   for i in range(len(centers)):
     c = centers[i]

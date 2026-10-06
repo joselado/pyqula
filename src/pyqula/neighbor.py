@@ -32,7 +32,7 @@ def find_close_neighbors_batch(r1,rs,d=2.0):
     return [np.array(js,dtype=np.int_) for js in neighbors]
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def find_close_neighbors_jit(r0,rs,d=2.0):
     """Return the indexes of the neighbors that are closer than a
     certain distance"""
@@ -81,7 +81,7 @@ def find_first_neighbor(r1,r2):
      if len(rows)==0: return np.zeros((0,2),dtype=np.int_)
      return np.array([rows,cols],dtype=np.int_).T
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def number_neighbors_jit(r1,r2):
     """Number of neighbors"""
     out = 0
@@ -94,7 +94,7 @@ def number_neighbors_jit(r1,r2):
          if 0.99<dr2<1.01: out += 1 # increase
     return out # number of neighbors
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def find_first_neighbor_jit(r1,r2,pairs):
     """Find the first neighbors"""
     out = 0
@@ -279,7 +279,7 @@ def neighbor_distances(g,n=4):
     return np.array([out[i+1] for i in range(len(out)-1)])[0:n] # return
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def neighbor_distances_jit(r,out):
     n = len(r) # number of sites
     k = 0

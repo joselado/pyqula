@@ -17,7 +17,7 @@ arpack_maxiter = 10000
 
 from numba import jit
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def fermi_weight(es,freqs,delta=1e-2):
     """Return the weigth on the energy"""
     ws = np.zeros(len(freqs),dtype=float) # weights

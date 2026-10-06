@@ -14,7 +14,7 @@ def crop_matrix(m,store):
 #    print(np.sum(np.abs(out))) 
     return out
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def crop_matrix_jit(m,store,mout):
     """Just retain the right elements"""
     ii = 0

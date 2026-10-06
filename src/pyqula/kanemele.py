@@ -129,7 +129,7 @@ def km_vector(ri,rj,rm,tol=1e-5):
   return km_vector_jit(np.array(ri).real,np.array(rj).real,v,np.array(rm).real,tol=tol)
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def km_vector_jit(ri,rj,v,rm,tol=1e-5):
     for k in range(rm.shape[0]): # look for an intermediate site
       dr1 = rm[k]-ri # difference

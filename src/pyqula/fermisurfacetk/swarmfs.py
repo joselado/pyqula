@@ -98,7 +98,7 @@ def generate_another_zero(k,hess,dk=0.1):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def select_unexplored_kpoint(ks1,ks2):
     """Given two lists of kpoints, select the kpoint
     from the second list which is the furthest from

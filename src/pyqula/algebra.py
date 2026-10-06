@@ -154,7 +154,7 @@ def todouble(vs,ind):
     vout = np.zeros((dim*2,nv),dtype=np.complex128) # output vector
     return todouble_jit(vs,ind,vout,nv,dim)
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def todouble_jit(vs,ind,vout,nv,dim):
     """Double the eigenvectors, jit routine"""
     for i in range(dim):

@@ -79,7 +79,7 @@ def kpm_moments_batch(vs,m,n=100,kpm_prec="double",**kwargs):
     return np.array(mus,dtype=np.complex128)
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def python_kpm_moments_complex(v,data,row,col,n=100):
     """Python routine to calculate moments.
 
@@ -169,7 +169,7 @@ def python_kpm_moments_batch_complex(vs,data,row,col,n=100):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def Mtimesv(data,row,col,v):
     """Matrix times vector"""
     out = np.zeros_like(v) # initilize
@@ -183,7 +183,7 @@ def Mtimesv(data,row,col,v):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def python_kpm_moments_real(v,data,row,col,n=100):
     """Python routine to calculate moments. See python_kpm_moments_complex
     for why the per-iteration work is fused into one O(nnz) sparse scatter
@@ -387,7 +387,7 @@ def kpm_moments_ij(m0,i=0,j=0,**kwargs):
 
 
 
-@jit(nopython=True)
+@jit(nopython=True,cache=True)
 def numba_kpm_moments_ij(vi,vj,data,row,col,n=100):
   """ Get the first n moments of a the |vi><vj| operator
   using the Chebychev recursion relations. See
