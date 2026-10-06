@@ -64,7 +64,9 @@ def test_nocc_selects_the_lowest_bands(tmp_path, monkeypatch):
     assert topology.z2_invariant(h, nk=20, nt=20) == -1
     h.add_onsite(10.)
     m = topology.wannier_centers(h, nk=20, nt=10, full=True, nocc=2)
-    assert np.max(np.abs(m - ref)) < 1e-10
+    # the centers are phases, defined modulo 2 pi: a center sitting at the
+    # branch cut can come out as +pi in one call and -pi in the other
+    assert np.max(np.abs(np.angle(np.exp(1j*(m - ref))))) < 1e-10
     assert topology.z2_invariant(h, nk=20, nt=20, nocc=2) == -1
     assert topology.wannier_winding(h, nk=20, nt=20, nocc=2) == 0
     with pytest.raises(ValueError, match="nocc"):

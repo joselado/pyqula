@@ -59,7 +59,13 @@ that moved records the old and new value and why.
 - **`Vr` and `Jr` in the SCF are per pair**, as V1 is and as the BSE and the
   charge RPA take them; they were effectively $2V_r$. The graphene Coulomb
   reference moved from 140.48297 to 136.51566 (exactly the old code at
-  $V_r/2$).
+  $V_r/2$). That test was removed on 6 October 2026: its ferromagnet was an
+  artifact of the 4x4 mesh, the Fermi level sitting inside an 8-fold
+  degenerate shell whose filling a tie-break decides, so the moment was two
+  states' worth (1/32 per site, 1/128 at an 8x8 mesh, zero at $T=0.01$) and
+  another machine filled the shell differently. Here the old code at
+  $V_r/2$ and the new one at $V_r$ give the same 137.98281, which confirms
+  the per-pair convention, but not the recorded number.
 - **Charge RPA** (`chitk/densitychi.py`) put every neighbour shell in at half
   strength; `V(q)` on a chain is now $2V_1\cos q$.
 - **Exactly degenerate pairs in the Lindhard function** (`chiAB.py`,

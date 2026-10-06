@@ -2,81 +2,8 @@ import numpy as np
 import pytest
 
 from pyqula import geometry
-from pyqula import scftypes
 from pyqula import meanfield
 from pyqula.specialhopping import twisted_matrix
-
-
-@pytest.mark.slow
-def test_graphene_coulomb_interaction_scf_matches_reference(tmp_path, monkeypatch):
-    """Regression check for a ferromagnetic-guess Coulomb (fastCoulomb
-    mode) SCF calculation on a triangular-lattice supercell, at a small
-    size (supercell(2) instead of (6), nk=4 instead of 10): the
-    sz-resolved band energies must match the values recorded from a
-    known-good run. Marked slow: SCF convergence and the all-pairs Coulomb
-    sum drive the runtime, not just the k-mesh.
-
-    The interaction is now given as `Vr`, the current spelling of a
-    distance-dependent density-density interaction. It used to be passed as
-    the old scftypes.selfconsistency arguments `mode="fastCoulomb"`,
-    `vfun=` and `g=3.0`; none of them exist in the signature that name is
-    now aliased to, so all three were dropped and the loop ran with no
-    interaction at all -- hence the re-recorded reference. `g` has no
-    counterpart here (in the dead code path it was overloaded, naming the
-    geometry in one place and a coupling in another), so the interaction is
-    `vfun` alone.
-
-    Re-recorded once more when Vr started keeping whole distance shells
-    (specialhopping.distance_cut_interaction): the reference before it,
-    141.0056528200021, came with an uneven fringe of pairs beyond distance
-    5 (22 of the 24 at 5.0, and partial shells out to 7.55). The new value
-    was checked against the old builder with the tail cut by hand: at a
-    range of 4.9, where the old builder keeps whole shells, the two agree
-    to every digit.
-
-    Re-recorded a third time when the mean field started taking Vr as the
-    interaction of each pair, as it takes V1 (tests/scf/test_vr_per_pair.py):
-    it used to store Vr whole where it stores V1/2, so that it solved
-    2*Vr. The reference before it, 140.48297096853287, is the one of that
-    doubled interaction; the new one, 136.51565546396182, is what the old
-    code gives for Vr/2, to every digit, and the exchange splitting halves
-    with it, from 0.0078 to 0.0039."""
-    monkeypatch.chdir(tmp_path)
-    g = geometry.triangular_lattice()
-    g = g.supercell(2)
-    h = g.get_hamiltonian(has_spin=True)
-    h = h.get_multicell()
-    mf = scftypes.guess(h, mode="ferro", fun=1.0)
-
-    def Vr(r1, r2):
-        r = np.linalg.norm(np.array(r1) - np.array(r2))
-        if r < 1e-2: return 0.0
-        else: return 2.0 * np.exp(-r)
-
-    scf = scftypes.selfconsistency(h, nk=4, filling=0.5,
-                    mix=0.9, mf=mf, Vr=Vr)
-    (k, e, c) = scf.hamiltonian.get_bands(operator="sz", nk=20)
-    e, c = np.array(e), np.array(c)
-    assert np.isclose(np.sum(e), 136.51565546396182, atol=1e-4)
-
-    # The ferromagnetic guess survives the loop, and the state it converges
-    # to is collinear: sz stays a good quantum number, so every band is a
-    # pure spin state, every site carries the same moment along z, and the
-    # two spin species are pushed apart by an exchange splitting that is
-    # linear in the interaction (0.0039 at this Vr, 3.9e-5 at a hundredth
-    # of it; 0.0078 before Vr was taken per pair, see the docstring).
-    #
-    # The assertion this replaces was sum(c) == 0, which is nk*Tr(sz) over
-    # a full band structure: zero for every Hamiltonian with a spin index,
-    # interacting or not, magnetic or not.
-    assert np.allclose(np.abs(c), 1., atol=1e-6)
-    mag = np.array(scf.hamiltonian.get_magnetization())
-    assert np.allclose(mag[:, :2], 0., atol=1e-6)  # collinear, along z
-    assert np.all(np.abs(mag[:, 2]) > 0.02)  # and ferromagnetic
-    assert np.allclose(mag[:, 2], mag[0, 2], atol=1e-3)  # the same on every site
-    up, dn = np.sort(e[c > 0.5]), np.sort(e[c < -0.5])
-    assert len(up) == len(dn)
-    assert abs(np.mean(dn - up)) > 0.0025 # 0.0039, see above
 
 
 @pytest.mark.slow
