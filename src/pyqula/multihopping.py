@@ -106,12 +106,14 @@ def dot_hopping_dict(hop1,hop2):
     for key2 in hop2:
         if key2 not in keys: keys.append(key2) # store
     for key in keys:
-        m1,m2 = 0.,0.
-        if key in hop1: 
-            m1 = np.array(algebra.todense(hop1[key]))
-        if key in hop2: 
-            m2 = np.array(algebra.todense(hop2[key]))
-        m = np.sum(np.conjugate(m1)*m2)
+        if key not in hop1 or key not in hop2: continue # contributes zero
+        m1,m2 = hop1[key],hop2[key]
+        # entry by entry, without making a sparse matrix dense: the
+        # Hermiticity check of a mean field goes through here, and turning
+        # each matrix dense made it quadratic in the number of sites
+        if issparse(m1): m = m1.conj().multiply(m2).sum()
+        elif issparse(m2): m = m2.multiply(np.conjugate(np.asarray(m1))).sum()
+        else: m = np.sum(np.conjugate(np.asarray(m1))*np.asarray(m2))
         out = out + m # add this contribution
     return out
 

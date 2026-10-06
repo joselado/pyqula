@@ -132,9 +132,19 @@ already reached once.
   finite-temperature states, and the four decisions taken on 6 October
   2026 (exact first then truncation, the Fermi level from the lagged exact
   trace, numba on the CPU and jax on the card, and the dense engine kept
-  with the sparse one as the default for a sparse Hamiltonian). Its first
-  step is built: the Hamiltonian construction, guesses and constraints are
-  linear in the number of sites, measured to $10^5$; the engine is not.
+  with the sparse one as the default for a sparse Hamiltonian), and the
+  four taken while the kernel was built. Its first three steps are built:
+  the Hamiltonian construction, guesses and constraints are linear in the
+  number of sites, measured to $10^5$, and so is the memory of the KPM
+  mean field of a sparse Hamiltonian through both entry points, Nambu
+  included, with the dense engine's mean field to roundoff; the CPU
+  recursion is a numba kernel with moment doubling, about four times the
+  jax CPU engine per starting column, the Fermi level comes from the
+  previous iteration's trace (with the measured change of path and of
+  converged state), so that an iteration at $10^4$ sites is 5.2 times
+  faster (3.9 with Nambu), the card compiles once per Hamiltonian, and the
+  convergence check of a sparse mean field no longer shrinks with the
+  size. The truncation that would make the time linear is not built.
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with
   the Goldstone/Ward-identity measurements that settle it.

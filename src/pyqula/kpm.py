@@ -100,15 +100,26 @@ def operator_norm_bound(A):
     return np.sqrt(np.max(A.sum(axis=0))*np.max(A.sum(axis=1)))
 
 
+# the most entries of the block of site-basis vectors full_trace hands to
+# the batched kernel at once (256 MB in complex128)
+_TRACE_CHUNK = 2**24
+
+
 def full_trace(m_in,n=200,**kwargs):
   """ Get full trace of the matrix, one site-basis vector per numba
-  thread (see kpm_moments_batch)"""
+  thread (see kpm_moments_batch). The vectors go in chunks of at most
+  _TRACE_CHUNK entries, so that the memory is linear in the dimension:
+  they used to be one dense nd x nd block, 2.6 TB at 4 x 10^5 orbitals"""
   m = csc(m_in) # saprse matrix
   nd = m.shape[0] # length of the matrix
-  from .kpmtk.ldos import index2vector
-  vs = np.array([index2vector(i,nd) for i in range(nd)])
-  mus = get_moments_batch(vs,m,n=n,**kwargs) # (nd,2n) moments, one row per site
-  return np.sum(mus,axis=0)/nd
+  chunk = max(1,min(nd,_TRACE_CHUNK//nd)) # vectors per batch
+  mus = 0.
+  for i0 in range(0,nd,chunk):
+      ii = np.arange(i0,min(nd,i0+chunk)) # the sites of this batch
+      vs = np.zeros((len(ii),nd),dtype=np.complex128)
+      vs[np.arange(len(ii)),ii] = 1. # one site-basis vector per row
+      mus = mus + np.sum(get_moments_batch(vs,m,n=n,**kwargs),axis=0)
+  return mus/nd
 
 
 

@@ -10,7 +10,8 @@
 #      Hamiltonian H(k) -- still sparse/no bigger than the unit cell --
 #      then get each needed <i|P_occ(H(k))|j> occupied-projector element
 #      from Chebyshev moments instead of diagonalizing H(k), every pair and
-#      every k-point in one block recursion (kpmtk/pairmomentsjax.py), and
+#      every k-point in one block recursion (kpmtk/pairmomentsnumba.py on
+#      the CPU, kpmtk/pairmomentsjax.py on the GPU), and
 #   2) only evaluate the (i, j) pairs that "v" actually has nonzero
 #      couplings for, instead of a dense block; the same per-k values are
 #      reused across every direction that needs them (see
@@ -30,7 +31,6 @@ from numba import jit
 from scipy.sparse import csr_matrix
 from scipy.special import expit
 
-from .. import kpm
 from .. import parallel
 from .bandwidth import estimate_bandwidth
 from .momenttoprofile import generate_profile
@@ -221,8 +221,9 @@ def resolve_kpm_prec(kpm_prec):
     None picks single precision on the device, where the card's float32
     makes it the fast option and it agrees with double to about 1e-8 in
     the density matrix (future_development/gpu_kpm_mean_field.md), and
-    double precision on the CPU. Both backends take either one explicitly."""
-    from .pairmomentsjax import get_precision_names
+    double precision on the CPU. Both backends take either one explicitly,
+    and the names are those of the backend in use."""
+    get_precision_names = _pair_moments().get_precision_names
     if kpm_prec is None:
         from .. import gpu
         return "single" if gpu.get_gpu() else "double"
@@ -235,7 +236,7 @@ def resolve_kpm_prec(kpm_prec):
 
 def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
                          npol=DEFAULT_NPOL, ne=None, cores=None, T=0.0,
-                         kpm_prec=None):
+                         kpm_prec=None, trace=False):
     """Shared Bloch-KPM engine: given the (direction, row, col)
     density-matrix entries to compute (in whatever index convention the
     caller's "needed" set already uses -- see required_elements/
@@ -257,31 +258,26 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     same tiny regularization (1e-15) full_dm itself uses, recovering an
     effectively-hard cutoff.
 
-    The moments of every pair and every k-point come from one block
-    recursion (kpmtk/pairmomentsjax.py) on the jax device that the
-    package-wide switch selects, the CPU or the GPU: the distinct starting
-    columns e_j form one dense block, and each step reads every pair it
-    needs with one gather. kpm_prec is the precision of that recursion (see
-    resolve_kpm_prec). This replaced one numba recursion per pair and per
-    k, which also never reached the device: the per-pair loop ran the same
-    recursion two or more times per site, and on a 1728-orbital island
-    took 27 s per evaluation against 1.6 s for the block in double
-    precision and 0.46 s in single on a consumer card, and about 5 s and
-    2.5 s on the six-core CPU of the same machine
-    (future_development/gpu_kpm_mean_field.md). Since every k-point goes in
-    one call, cores no longer splits the k-mesh here; it still sets the
-    package-wide core count, which the Fermi search uses.
+    The moments of every pair and every k-point come from a block
+    recursion whose columns are the distinct starting vectors e_j, on the
+    CPU with numba (kpmtk/pairmomentsnumba.py) and on the GPU with jax
+    (kpmtk/pairmomentsjax.py), as the package-wide switch selects.
+    kpm_prec is the precision of that recursion (see resolve_kpm_prec).
+    This replaced one numba recursion per pair and per k: the per-pair
+    loop ran the same recursion two or more times per site, and on a
+    1728-orbital island took 27 s per evaluation against 1.6 s for the
+    jax block in double precision and 0.46 s in single on a consumer card
+    (future_development/gpu_kpm_mean_field.md). cores no longer splits
+    the k-mesh here; it still sets the package-wide core count.
+
+    trace=True also returns the trace moments of H(k), see
+    _kpm_pair_values, as (dm, trace).
 
     A density-matrix entry is linear in its moments, so the energy
     integral of the Jackson-damped Chebyshev series against the Fermi
     weights is done once, on the basis, and each pair's value is the
     contraction of its moments with the resulting coefficients."""
-    kpm_prec = resolve_kpm_prec(kpm_prec)
-    if ne is None: ne = npol*4
     norb = h.intra.shape[0]
-    ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
-    hk_gen = h.get_hk_gen()
-
     needed = sorted(needed)
     ds = sorted({d for (d, i, j) in needed})
     # H(k) is Hermitian, and so is any function of it, so the (j,i) value
@@ -289,14 +285,68 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     # their own moments lets roundoff open an anti-Hermitian part in the
     # density matrix, which the mean-field loop amplifies by a fixed factor
     # every iteration until the recursion diverges. Only i<=j is computed
-    # and i>j is set by conjugation below, which makes dm[-d][j,i] =
-    # conj(dm[d][i,j]) hold by construction and halves the moment work.
-    # This is Hermiticity of the whole matrix, so it holds just as well for
-    # an electron-hole entry of a Nambu H(k), whose partner is the
-    # hole-electron entry, not another pairing one.
+    # (_kpm_pair_values) and i>j is set by conjugation below, which makes
+    # dm[-d][j,i] = conj(dm[d][i,j]) hold by construction and halves the
+    # moment work. This is Hermiticity of the whole matrix, so it holds
+    # just as well for an electron-hole entry of a Nambu H(k), whose
+    # partner is the hole-electron entry, not another pairing one.
     pairs = sorted({(min(i, j), max(i, j)) for (_, i, j) in needed})
     pair_index = {p: idx for idx, p in enumerate(pairs)}
-    diagonal = np.array([i == j for (i, j) in pairs], dtype=bool)
+    out = _kpm_pair_values(h, np.array(pairs, dtype=np.int64).reshape(-1, 2),
+            nk=nk, scale=scale, npol=npol, ne=ne, cores=cores, T=T,
+            kpm_prec=kpm_prec, trace=trace)
+    ks, vals = out[0], out[1]
+
+    needed_by_d = dict()
+    for d, i, j in needed: needed_by_d.setdefault(d, []).append((i, j))
+
+    dm = {d: np.zeros((norb, norb), dtype=np.complex128) for d in ds}
+    fac = 1./len(ks)
+    for d in ds:
+        phases = np.array([np.exp(2j*np.pi*np.dot(k, d)) for k in ks])
+        for (i, j) in needed_by_d.get(d, []):
+            col = vals[:, pair_index[(min(i, j), max(i, j))]]
+            if i > j: col = col.conj() # see the pairs above
+            dm[d][i, j] = fac*np.sum(phases*col)
+    if trace: return dm, out[2]
+    return dm
+
+
+def _pair_moments():
+    """The module of the block recursion the package-wide switch selects:
+    numba's on the CPU, jax's on the GPU. Both have pair_values and
+    trace_moments, and agree to roundoff"""
+    from .. import gpu
+    if gpu.get_gpu():
+        from . import pairmomentsjax
+        return pairmomentsjax
+    from . import pairmomentsnumba
+    return pairmomentsnumba
+
+
+def _kpm_pair_values(h, pairs, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
+        ne=None, cores=None, T=0.0, kpm_prec=None, trace=False):
+    """The occupied-projector entry <c^dag_i c_j> of every pair (i,j) of
+    pairs, an (npairs,2) integer array with i<=j, at every k-point of the
+    mesh: returns the k-points and an (nk,npairs) array. This is the part
+    of the KPM density matrix that both assemblies share, the dense one
+    (_dm_kpm_from_needed) and the sparse one (get_dm_kpm_sparse), so the
+    two engines compute the same numbers; see _dm_kpm_from_needed for the
+    method.
+
+    trace=True also returns (scale, mus), the scale of the expansion and
+    the first 2*npol Chebyshev moments of the density of states of H(k)
+    averaged over the orbitals and the k-mesh, (1/N) Tr T_n(H(k)/scale),
+    which is what the Fermi search inverts (see LaggedFermi). They come
+    from the same recursion as the density matrix, with the diagonal pair
+    of every orbital added to the pairs, which costs little when the
+    interaction already reads most diagonals."""
+    kpm_prec = resolve_kpm_prec(kpm_prec)
+    if ne is None: ne = npol*4
+    ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
+    hk_gen = h.get_hk_gen()
+    pairs = np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
+    diagonal = pairs[:, 0] == pairs[:, 1]
 
     given = scale is not None # see _check_scale_covers_spectrum
     if scale is None:
@@ -332,32 +382,72 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     cint = np.trapezoid(basis*weights[None, :], x=xin, axis=1)/np.pi
 
     if cores is not None: parallel.set_cores(cores)
-    from .pairmomentsjax import pair_values
+    backend = _pair_moments()
     ms = [csr_matrix(hk_gen(k))/scale for k in ks]
+    norb = ms[0].shape[0]
     # the pair (i,j) holds <e_i|T_n(H(k))|e_j>: the recursion starts from
     # e_j and is read on row i, which is the element dm[i,j] (see
     # densitymatrix.py's restricted_dm for the convention)
-    vals, mumax = pair_values(ms, pairs, cint, kpm_prec=kpm_prec)
+    if trace:
+        # every diagonal pair once, so the summed diagonal moments are the trace
+        keys = pairs[:, 0]*norb + pairs[:, 1]
+        every = np.union1d(keys, np.arange(norb, dtype=np.int64)*(norb + 1))
+        both = np.stack([every//norb, every % norb], axis=1)
+        vals, mumax, tr = backend.pair_values(ms, both, cint,
+                kpm_prec=kpm_prec, trace=True)
+        vals = vals[:, np.searchsorted(every, keys)]
+        mus = np.mean(tr, axis=0)/norb # k-average of the moments
+    else:
+        vals, mumax = backend.pair_values(ms, pairs, cint, kpm_prec=kpm_prec)
     _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
     vals = vals.conj()
     vals[:, diagonal] = vals[:, diagonal].real # a diagonal entry is its own conjugate
+    if trace: return ks, vals, (scale, mus.real)
+    return ks, vals
 
-    needed_by_d = dict()
-    for d, i, j in needed: needed_by_d.setdefault(d, []).append((i, j))
 
-    dm = {d: np.zeros((norb, norb), dtype=np.complex128) for d in ds}
+def get_dm_kpm_sparse(h, needed, nk=DEFAULT_NK, scale=None,
+        npol=DEFAULT_NPOL, ne=None, cores=None, T=0.0, kpm_prec=None,
+        trace=False):
+    """Sparse counterpart of _dm_kpm_from_needed, for a large sparse
+    Hamiltonian: needed is a dictionary {direction: (rows, cols)} of index
+    arrays, and the density matrix comes back as {direction: csr_matrix}
+    holding those entries only, so its memory is linear in their number
+    rather than norb^2 per direction. The values are those of
+    _dm_kpm_from_needed, from the same _kpm_pair_values, and the
+    bookkeeping is done on integer arrays (one int64 key per pair) rather
+    than on Python sets and dictionaries of tuples, which at 10^5 sites
+    would be millions of objects. trace=True also returns the trace
+    moments of H(k), see _kpm_pair_values, as (dm, trace)."""
+    norb = h.intra.shape[0]
+    ds = list(needed)
+    rows = [np.asarray(needed[d][0], dtype=np.int64) for d in ds]
+    cols = [np.asarray(needed[d][1], dtype=np.int64) for d in ds]
+    allr, allc = np.concatenate(rows), np.concatenate(cols)
+    # one key per unordered pair, i<=j, see _dm_kpm_from_needed
+    keys = np.minimum(allr, allc)*norb + np.maximum(allr, allc)
+    ukeys, inverse = np.unique(keys, return_inverse=True)
+    pairs = np.stack([ukeys//norb, ukeys % norb], axis=1)
+    out = _kpm_pair_values(h, pairs, nk=nk, scale=scale, npol=npol,
+            ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace)
+    ks, vals = out[0], out[1]
     fac = 1./len(ks)
-    for d in ds:
-        phases = np.array([np.exp(2j*np.pi*np.dot(k, d)) for k in ks])
-        for (i, j) in needed_by_d.get(d, []):
-            col = vals[:, pair_index[(min(i, j), max(i, j))]]
-            if i > j: col = col.conj() # see the pairs above
-            dm[d][i, j] = fac*np.sum(phases*col)
+    dm = dict()
+    start = 0
+    for d, r, c in zip(ds, rows, cols):
+        idx = inverse[start:start+len(r)] ; start += len(r)
+        phases = np.exp(2j*np.pi*np.array(ks) @ np.array(d, dtype=float))
+        v = vals[:, idx]
+        flip = r > c # the entries below the diagonal, by conjugation
+        v[:, flip] = v[:, flip].conj()
+        data = fac*(phases @ v)
+        dm[d] = csr_matrix((data, (r, c)), shape=(norb, norb))
+    if trace: return dm, out[2]
     return dm
 
 
 def get_dm_kpm(h, v, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL, ne=None,
-               cores=None, T=0.0, kpm_prec=None, **kwargs):
+               cores=None, T=0.0, kpm_prec=None, trace=False, **kwargs):
     """KPM-based analogue of scftk.densitydensity.get_dm: return
     a dictionary {direction: matrix} with the density matrix, but computing
     only the entries that v actually requires, each one through a sparse
@@ -369,20 +459,23 @@ def get_dm_kpm(h, v, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL, ne=None,
     determined by required_elements_eh instead of required_elements (see
     its docstring) -- both are then handed to the same per-k Bloch-KPM
     engine, _dm_kpm_from_needed. kpm_prec is the precision of its
-    Chebyshev recursion, see resolve_kpm_prec."""
+    Chebyshev recursion, see resolve_kpm_prec. trace=True also returns the
+    trace moments of H(k), see _kpm_pair_values, as (dm, trace)."""
     ds = [(0, 0, 0)] + [d for d in v if d != (0, 0, 0)]
     if getattr(h, "has_eh", False):
         needed = required_elements_eh(v)
     else:
         needed = required_elements(v)
-    dm = _dm_kpm_from_needed(h, needed, nk=nk, scale=scale, npol=npol,
-                              ne=ne, cores=cores, T=T, kpm_prec=kpm_prec)
+    out = _dm_kpm_from_needed(h, needed, nk=nk, scale=scale, npol=npol,
+            ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace)
+    dm = out[0] if trace else out
     # every direction v has a key for must be present in the output, even
     # if it happened to contribute no required entries of its own
     for d in ds:
         if d not in dm:
             dm[d] = np.zeros((h.intra.shape[0], h.intra.shape[0]),
                               dtype=np.complex128)
+    if trace: return dm, out[1]
     return dm
 
 
@@ -396,30 +489,18 @@ def _cumulative_trapz(y, x):
     return np.concatenate([[0.], np.cumsum(avg*dx)])
 
 
-def _kpm_dos_moments(h, nk, scale, npol, ne, cores, kpm_prec=None):
-    """Shared per-k Bloch-KPM engine for get_fermi4filling_kpm and
-    get_total_energy_kpm: samples the k-mesh, gets the Chebyshev moments of
-    the local density of states averaged over every orbital in the cell at
-    each k via kpm.full_trace -- a deterministic sum over all sites/
-    orbitals (looping i=0..norb-1), not a stochastic random-vector estimate
-    -- then k-averages those moments into a single total-DOS-per-orbital
-    profile (valid because moments are linear in the density of states, so
-    the k-average of the moments equals the moments of the k-averaged
-    DOS), and reconstructs it on the standard reduced-energy grid via the
-    Jackson kernel. Returns (scale, xs, ys): xs the reduced-energy grid
-    ([-0.99,0.99]), ys the (real-valued) reconstructed DOS profile on it --
-    ready for either a cumulative-integral inversion (Fermi search) or an
-    energy integral (total energy) downstream, so the two functions that
-    use this can never silently disagree about what "the DOS" means.
+def _kpm_trace(h, nk, scale, npol, cores, kpm_prec=None):
+    """The scale of the expansion and the first 2*npol Chebyshev moments of
+    the density of states of H(k), averaged over the orbitals and the
+    k-mesh, (1/N) Tr T_n(H(k)/scale): the trace is exact, one recursion
+    started on every orbital, not a stochastic estimate. The moments are
+    linear in the density of states, so their k-average is the moments of
+    the k-averaged density of states.
 
-    The trace is one recursion per orbital. On the CPU it is numba's
-    batched kernel (kpm.full_trace, one vector per thread, with the moment
-    doubling that halves the recursion), and on the device the block
-    kernel of the density matrix (pairmomentsjax.trace_moments) with every
-    k-point in one call, since the batched jax kernel behind full_trace is
-    a BCOO scatter-add that was no faster than numba on a consumer card.
-    kpm_prec is the precision of either, see resolve_kpm_prec."""
-    if ne is None: ne = npol*4
+    The trace comes from the block recursion of the density matrix
+    (pairmomentsnumba on the CPU, pairmomentsjax on the GPU) with every
+    orbital as a starting column and doubling, every k-point in one call.
+    kpm_prec is its precision, see resolve_kpm_prec."""
     ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
     hk_gen = h.get_hk_gen()
     given = scale is not None # see _check_scale_covers_spectrum
@@ -430,28 +511,92 @@ def _kpm_dos_moments(h, nk, scale, npol, ne, cores, kpm_prec=None):
                 "(it vanishes at every k) -- cannot set a KPM energy "
                 "scale; check that this Hamiltonian actually has "
                 "hopping/onsite terms in this sector")
-
     kpm_prec = resolve_kpm_prec(kpm_prec)
-    from .. import gpu
-    if gpu.get_gpu():
-        from .pairmomentsjax import trace_moments
-        ms = [csr_matrix(hk_gen(k))/scale for k in ks]
-        musk, mumax = trace_moments(ms, 2*npol, kpm_prec=kpm_prec)
-        _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
-        mus = np.mean(musk, axis=0)  # k-average of the moments
-    else:
-        def moments_for_k(k):
-            Hk = csr_matrix(hk_gen(k))
-            mus = kpm.full_trace(Hk/scale, n=npol, kpm_prec=kpm_prec) # an average of bounded moments
-            _check_scale_covers_spectrum(mus, scale, given, kpm_prec=kpm_prec)
-            return mus
-        if cores is not None: parallel.set_cores(cores)
-        results = parallel.pcall(moments_for_k, ks)
-        mus = sum(results)/len(results)  # k-average of the moments
+    if cores is not None: parallel.set_cores(cores)
+    ms = [csr_matrix(hk_gen(k))/scale for k in ks]
+    musk, mumax = _pair_moments().trace_moments(ms, 2*npol, kpm_prec=kpm_prec)
+    _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
+    return scale, np.mean(musk, axis=0).real # k-average of the moments
 
+
+def _dos_profile(mus, ne):
+    """The Jackson-kernel density of states per orbital of the moments mus,
+    on the reduced-energy grid xs ([-0.99,0.99], ne points): returns
+    (xs, ys)"""
     xs = np.linspace(-1.0, 1.0, ne, endpoint=True)*0.99  # reduced energies
     ys = generate_profile(mus, xs, kernel="jackson").real
+    return xs, ys
+
+
+def _kpm_dos_moments(h, nk, scale, npol, ne, cores, kpm_prec=None):
+    """Shared per-k Bloch-KPM engine for get_fermi4filling_kpm and
+    get_total_energy_kpm: the k-averaged trace moments of _kpm_trace,
+    reconstructed on the standard reduced-energy grid via the Jackson
+    kernel. Returns (scale, xs, ys): xs the reduced-energy grid
+    ([-0.99,0.99]), ys the (real-valued) reconstructed DOS profile on it --
+    ready for either a cumulative-integral inversion (Fermi search) or an
+    energy integral (total energy) downstream, so the two functions that
+    use this can never silently disagree about what "the DOS" means."""
+    if ne is None: ne = npol*4
+    scale, mus = _kpm_trace(h, nk, scale, npol, cores, kpm_prec=kpm_prec)
+    xs, ys = _dos_profile(mus, ne)
     return scale, xs, ys
+
+
+def _filling_count(scale, xs, ys, T=0.):
+    """From the density of states ys per orbital on the reduced-energy grid
+    xs of an expansion with this scale, the fraction of the states occupied
+    at a chemical potential, as a function count(mu) of mu in the energy
+    units of H, and the Fermi energy of a filling, as a function
+    fermi(filling). count(fermi(f)) is f, up to the grid.
+
+    The cumulative integral of the density of states gives the fraction of
+    orbitals occupied as a function of energy (0 at the sampled window's
+    bottom, 1 at its top), forced monotonic (np.maximum.accumulate) before
+    it is inverted: a finite-npol Jackson-kernel reconstruction is not
+    guaranteed nonnegative everywhere (Gibbs-type ringing near band
+    edges, gaps and van Hove singularities), which without this would make
+    the inversion via np.interp ill-defined.
+
+    At a finite T the count is the cumulative density of states convolved
+    with -df/dE, so that it holds as many electrons as the density matrix
+    built with Fermi-Dirac occupations at the same T (_dm_kpm_from_needed):
+    with a step count instead, the converged filling drifts away from the
+    requested one wherever the density of states is not symmetric about
+    mu, the defect repaired in spectrum.get_fermi_energy_T for the
+    exact-diagonalization path. The convolution is sampled in units of T
+    around mu rather than on the energy grid: a Fermi-Dirac weight
+    evaluated on the grid itself is a step whenever T is below the grid
+    spacing, as the mean field's default T=1e-7 always is, which made the
+    count a staircase in mu, pinned the Fermi level to a grid point that
+    jumped by a whole grid step as the mean field moved, and made the KPM
+    loop cycle at a floor instead of converging. With the cumulative
+    density of states interpolated linearly the count is continuous in mu
+    at any T, and below the grid spacing it is the T=0 count. The count is
+    monotonic in mu, so its inversion brackets it on the sampled window
+    and bisects."""
+    cdf = _cumulative_trapz(ys, xs)
+    cdf = np.maximum.accumulate(cdf)  # enforce monotonicity, see above
+    cdf = cdf/cdf[-1]  # normalize exactly to 1 across the sampled window
+    if T is None or T<=0.: # the step count
+        def count(mu): return np.interp(mu/scale, xs, cdf)
+        def fermi(filling): return scale*np.interp(filling, cdf, xs)
+        return count, fermi
+    Tr = T/scale # the grid is in reduced energies, so the temperature is too
+    u = np.linspace(-40.,40.,801) # energies around mu, in units of T
+    w = expit(u)*expit(-u) # -df/du, the derivative of the Fermi function
+    w = w/np.trapezoid(w,u)
+    def nelec(x): # occupied fraction at the reduced chemical potential x
+        occ = np.interp(x+Tr*u,xs,cdf,left=0.,right=1.)
+        return np.trapezoid(occ*w,u)
+    def count(mu): return nelec(mu/scale)
+    lo,hi = xs[0]-40.*Tr, xs[-1]+40.*Tr # well outside the window at this T
+    def fermi(filling):
+        if nelec(lo)>filling or nelec(hi)<filling: # not bracketed, keep T=0
+            return scale*np.interp(filling, cdf, xs)
+        from scipy.optimize import brentq
+        return scale*brentq(lambda x: nelec(x)-filling,lo,hi,xtol=1e-12)
+    return count, fermi
 
 
 def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
@@ -465,15 +610,9 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
     KPM.
 
     Gets the k-averaged, Jackson-kernel-reconstructed density-of-states
-    profile from _kpm_dos_moments (see its docstring). Its cumulative
-    integral gives the fraction of orbitals occupied as a function of
-    energy (0 at the sampled window's bottom, 1 at its top); inverting it
-    at the target filling gives the Fermi energy directly, with no
-    diagonalization anywhere. The cumulative integral is forced monotonic
-    (np.maximum.accumulate) before inversion: a finite-npol Jackson-kernel
-    KPM reconstruction is not guaranteed nonnegative everywhere (Gibbs-type
-    ringing near band edges/gaps/van Hove singularities), which without
-    this would make the inversion via np.interp silently ill-defined.
+    profile from _kpm_dos_moments (see its docstring) and inverts its
+    cumulative integral at the filling, at the temperature T (see
+    _filling_count).
 
     For BdG/Nambu Hamiltonians (h.has_eh), mirrors spectrum.
     get_fermi4filling's own workaround (an approximation, per that
@@ -489,41 +628,79 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
                 npol=npol, ne=ne, cores=cores, T=T, kpm_prec=kpm_prec)
     scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores,
             kpm_prec=kpm_prec)
-    cdf = _cumulative_trapz(ys, xs)
-    cdf = np.maximum.accumulate(cdf)  # enforce monotonicity, see docstring
-    cdf = cdf/cdf[-1]  # normalize exactly to 1 across the sampled window
-    ef_reduced = np.interp(filling, cdf, xs)
-    if T is None or T<=0.: return scale*ef_reduced # T=0, the step count
-    # Finite temperature: inverting the cumulative DOS is a STEP count, and
-    # the density matrix this Fermi level is handed to is built with
-    # Fermi-Dirac occupations instead (see _dm_kpm_from_needed). Wherever
-    # the density of states is not symmetric about mu the two hold
-    # different numbers of electrons, so the converged filling drifts away
-    # from the requested one as T grows -- the same defect repaired in
-    # spectrum.get_fermi_energy_T for the exact-diagonalization path, of
-    # which this is the KPM analogue. The electron count is monotonic in
-    # mu, so bracket it on the sampled window and bisect.
-    # The count is the cumulative DOS convolved with -df/dE, sampled in
-    # units of T around mu rather than on the energy grid. A Fermi-Dirac
-    # weight evaluated on the grid itself is a step whenever T is below
-    # the grid spacing, as the mean field's default T=1e-7 always is, which
-    # made the count a staircase in mu: the Fermi level was pinned to a
-    # grid point and jumped by a whole grid step as the mean field moved,
-    # and the KPM loop cycled at a floor instead of converging. With the
-    # cumulative DOS interpolated linearly the count is continuous in mu at
-    # any T, and below the grid spacing it is the T=0 inversion above.
-    Tr = T/scale # the grid is in reduced energies, so the temperature is too
-    u = np.linspace(-40.,40.,801) # energies around mu, in units of T
-    w = expit(u)*expit(-u) # -df/du, the derivative of the Fermi function
-    w = w/np.trapezoid(w,u)
-    def nelec(mu): # occupied fraction at this chemical potential
-        occ = np.interp(mu+Tr*u,xs,cdf,left=0.,right=1.)
-        return np.trapezoid(occ*w,u)
-    lo,hi = xs[0]-40.*Tr, xs[-1]+40.*Tr # well outside the window at this T
-    if nelec(lo)>filling or nelec(hi)<filling: # not bracketed, keep T=0
-        return scale*ef_reduced
-    from scipy.optimize import brentq
-    return scale*brentq(lambda mu: nelec(mu)-filling,lo,hi,xtol=1e-12)
+    count, fermi = _filling_count(scale, xs, ys, T=T)
+    return fermi(filling)
+
+
+class LaggedFermi:
+    """The Fermi level of a KPM mean-field loop at a fixed filling, taken
+    from the recursion of the previous iteration instead of a search of
+    its own. The trace that the Fermi search inverts, Tr T_n(H), is the
+    sum of the diagonal moments, which the density-matrix recursion
+    computes anyway once every orbital is a starting column, so on the CPU
+    the Fermi level costs nothing beyond the diagonals the interaction
+    does not read. Its price is a lag of one iteration: the Fermi level
+    of the density matrix of iteration n is that of the Hamiltonian of
+    iteration n-1, so the iterates are not at the requested filling
+    until the mean field stops moving. The loop then reads the filling
+    error of every density matrix from the same trace, and holds it to
+    the convergence tolerance together with the change in the mean field.
+    At convergence the Hamiltonian no longer changes, and the Fermi level
+    is the exact one.
+
+    The first Hamiltonian, which has no previous iteration, gets an exact
+    search (get_fermi4filling_kpm), and so does every Hamiltonian with
+    Nambu: its Fermi level is that of the electron-only Hamiltonian, which
+    is a different matrix from the one the recursion runs on.
+
+    The Fermi level a converged loop ends at is the one whose filling, read
+    from the trace of the expansion of the shifted Hamiltonian, is the
+    requested one to the tolerance. An exact search finds it from the
+    expansion of the unshifted Hamiltonian, whose scale is different, so
+    the two differ by what npol resolves, 2e-3 in the Fermi level of a
+    16-site Hubbard island at npol=150, which is not an error of either
+    but the KPM resolution of the Fermi level.
+
+    Use: shift(h) before the density matrix of h, which also sets h.fermi,
+    then update(h, trace) with the trace moments of that same shifted h
+    (get_dm_kpm and get_dm_kpm_sparse with trace=True), and wants_trace(h)
+    says whether update needs them. error is the filling error of the
+    last density matrix, the occupied fraction at the Fermi level it was
+    computed at minus the requested filling."""
+    def __init__(self, filling, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
+            ne=None, cores=None, T=0., kpm_prec=None):
+        self.filling = filling
+        self.kw = dict(nk=nk, scale=scale, npol=npol, ne=ne, cores=cores,
+                T=T, kpm_prec=kpm_prec)
+        self.ne = npol*4 if ne is None else ne
+        self.T = T
+        self.mu = None # the Fermi level the next Hamiltonian is shifted by
+        self.error = 0.
+
+    def wants_trace(self, h):
+        return not h.has_eh
+
+    def shift(self, h):
+        """Shift h by the Fermi level, searching for it when there is no
+        previous iteration to take it from"""
+        if self.mu is None or h.has_eh:
+            self.mu = get_fermi4filling_kpm(h, self.filling, **self.kw)
+        h.fermi = self.mu
+        h.shift_fermi(-self.mu)
+        return h
+
+    def update(self, h, trace):
+        """trace, the (scale, moments) of the shifted h of this iteration:
+        records its filling error, and moves the Fermi level of the next
+        iteration to the Fermi level of h"""
+        if not self.wants_trace(h):
+            self.error = 0.
+            return
+        scale, mus = trace
+        xs, ys = _dos_profile(mus, self.ne)
+        count, fermi = _filling_count(scale, xs, ys, T=self.T)
+        self.error = abs(count(0.) - self.filling)
+        self.mu = self.mu + fermi(self.filling)
 
 
 def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
@@ -591,3 +768,35 @@ def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
     if not np.any(mask): return 0.0  # nothing occupied in the sampled window
     integral = np.trapezoid((xs*ys)[mask], x=xs[mask])
     return norb*scale/norm*integral
+
+
+def get_band_energy_kpm(h, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
+        ne=None, cores=None, T=0.0, kpm_prec=None):
+    """The band energy Tr(H rho) per unit cell, from the KPM density matrix
+    on the entries of H only, sum_d sum_ij H_d[i,j] dm[d][i,j], so that it
+    costs memory linear in the number of hoppings: the total-energy term
+    that h.get_total_energy gets by diagonalizing. For a Nambu Hamiltonian
+    it is (sum_{E<0} E + Tr h_e)/2, as spectrum.total_energy explains, with
+    Tr h_e averaged over the same k-mesh. It is the energy of the
+    occupation the KPM density matrix describes, the Fermi function at T
+    resolved with npol moments, and so it differs from the sum of the
+    occupied eigenvalues by the KPM truncation, the error of the density
+    matrix itself, and by the thermal smearing at a finite T."""
+    from scipy.sparse import coo_matrix
+    hd = {tuple(int(x) for x in d): csr_matrix(m) for (d, m) in h.get_dict().items()}
+    needed = dict()
+    for d, m in hd.items():
+        c = coo_matrix(m)
+        needed[d] = (c.row.astype(np.int64), c.col.astype(np.int64))
+    dm = get_dm_kpm_sparse(h, needed, nk=nk, scale=scale, npol=npol, ne=ne,
+            cores=cores, T=T, kpm_prec=kpm_prec)
+    e = sum(m.multiply(dm[d]).sum() for (d, m) in hd.items())
+    if h.has_eh:
+        from ..superconductivity import get_eh_sector
+        ks = np.array(h.geometry.get_kmesh(nk=nk))
+        tr = 0.
+        for d, m in hd.items(): # Tr h_e(k), averaged over the k-mesh
+            phase = np.mean(np.exp(2j*np.pi*ks @ np.array(d, dtype=float)))
+            tr += get_eh_sector(m, i=0, j=0).diagonal().sum()*phase
+        e = (e + tr)/2.
+    return np.real(e)

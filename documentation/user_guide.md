@@ -2105,7 +2105,7 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
                                             mf="ferroZ",integration="kpm")
 ```
 
-The expansion resolves energies down to roughly the bandwidth divided by `npol`, the number of polynomials, so a magnetic splitting or a superconducting gap smaller than that is smeared out. In practice a self-consistent gap needs this resolution several times below it, and close to a transition, where a gapped and an ungapped solution have nearly the same energy, about ten times below it, or the loop can settle in the wrong one. The recursion behind it runs on the GPU once the device is selected (see [Running on a GPU](#running-on-a-gpu)), where `kpm_prec` decides its precision; single precision is the default there and moves the density matrix by about $10^{-8}$, far below what a finite `npol` leaves out, and `kpm_prec="double"` keeps it in double precision:
+The expansion resolves energies down to roughly the bandwidth divided by `npol`, the number of polynomials, so a magnetic splitting or a superconducting gap smaller than that is smeared out. In practice a self-consistent gap needs this resolution several times below it, and close to a transition, where a gapped and an ungapped solution have nearly the same energy, about ten times below it, or the loop can settle in the wrong one. The Fermi level of each iteration is taken from the Chebyshev recursion of the previous one instead of a search of its own, which makes it exact once the mean field stops changing, and the loop stops only when the filling of its last density matrix is the requested one; note that the path to convergence is then not the one of exact diagonalization, so where a model has several self-consistent states the two routes can settle in different ones from the same guess, and the lower total energy says which one to keep. The recursion behind it runs on the GPU once the device is selected (see [Running on a GPU](#running-on-a-gpu)), where `kpm_prec` decides its precision; single precision is the default there and moves the density matrix by about $10^{-8}$, far below what a finite `npol` leaves out, although the change of the mean field from one iteration to the next then stops at about $10^{-6}$ per entry, so a `maxerror` below that needs `kpm_prec="double"`, which keeps the recursion in double precision:
 
 ```python
 from pyqula import gpu
@@ -2117,6 +2117,21 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
 ```
 
 What comes back is the same self-consistent Hamiltonian as on the CPU to that accuracy, and what changes is the time per iteration; `gpu.set_gpu(False)` returns the rest of a script to the CPU.
+
+What limits this route on a large island is not only the time but the memory: for a dense Hamiltonian, the interaction, the density matrix and the mean field are each a matrix of the size of the whole island, which at $10^5$ sites does not fit in memory. A Hamiltonian built sparse, with `is_sparse=True`, keeps every one of them sparse through the whole loop, holding only the entries that the interaction couples, so the memory grows linearly with the number of sites, and this holds with spin-orbit coupling, with exchange and with the Nambu Hamiltonian of a superconductor alike:
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice().get_supercell(12) # a honeycomb island
+g.dimensionality = 0 # make it finite
+h = g.get_hamiltonian(has_spin=True,is_sparse=True) # keep the matrices sparse
+h.add_rashba(0.2) # spin-orbit coupling, so the moments are not collinear
+h = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="random",
+                                  integration="kpm",npol=150,mix=0.5,
+                                  maxerror=1e-3)
+```
+
+What comes back is the self-consistent Hamiltonian the dense route gives, to roundoff, and still sparse, so `h.extract("mx")` and its siblings read the exchange field site by site without diagonalizing anything. With a sparse Hamiltonian the tolerance `maxerror` is the change of the mean field per entry it holds, whatever the size of the island; the orientation of the moments, which the Rashba coupling selects only weakly, relaxes slowly under the mixing, so the snippet stops at a change of $10^{-3}$, reached in under a hundred iterations from a random guess, while $2\times10^{-4}$ takes about 400. What does not change is the time of an iteration, which grows as the square of the number of sites, since the occupations of every site come from a Chebyshev recursion over the whole island. The total energy is here the band energy of the KPM density matrix at zero temperature, $\mathrm{Tr}(H\rho)$, which reaches the sum of the occupied levels as `npol` grows, and a `Vr` or `Jr` on an island needs an explicit `rcut`, since without one every pair of sites interacts. Note that on a small island where the filling times the number of states is not a whole number, the KPM Fermi level holds that fractional number of electrons while exact diagonalization rounds it to whole states, so there the two routes converge to slightly different states. See `examples/0d/kpm_scf_sparse/main.py` for a runnable version with an antiferromagnet and a superconductor.
 
 A loop that refuses to converge under plain mixing can be handed to a nonlinear solver instead, with `use_jax=True`, which treats one iteration $x=f(x)$ of the loop as a root-finding problem for $x-f(x)=0$. `solver="error_gradient"` is the most robust of these on a generic Hamiltonian and the one to reach for first; `"newton"` is the default. These solvers are for the normal state only and do not accept `constrains`.
 
@@ -6839,8 +6854,10 @@ Optional arguments:
   exact diagonalization. `"kpm"` uses a per-k Chebyshev-moment (Kernel
   Polynomial Method) expansion instead, never diagonalizing the Bloch
   Hamiltonian $H(k)$, for systems too large to diagonalize or to hold as
-  a dense matrix (a big 0D flake, say); normal-state (non-BdG)
-  Hamiltonians only. With `"kpm"`, `scale=None` sets the KPM energy
+  a dense matrix (a big 0D flake, say). A Hamiltonian built with
+  `is_sparse=True` keeps every matrix of the loop sparse, with memory
+  linear in the number of sites, and is the only way to use `"kpm"` with a
+  Nambu Hamiltonian. With `"kpm"`, `scale=None` sets the KPM energy
   rescaling (estimated automatically if not given), `npol` the number of
   Chebyshev moments, `ne` the number of energies sampled in the occupied
   window and `cores` the number of parallel workers across k-points; all

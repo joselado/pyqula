@@ -180,9 +180,13 @@ Left open:
   $T_{2n}=2T_n^2-T_0$ and its odd partner, would halve the recursion for
   the pairs whose two indices are both starting columns, which for an
   onsite interaction is all of them, at the cost of inner products between
-  block columns. Not tried.
+  block columns. Built on the CPU since, not on the card; see
+  [`sparse_kpm_mean_field.md`](sparse_kpm_mean_field.md).
 - The jax CPU backend takes its thread count from XLA, so
-  `parallel.set_enabled(False)` does not make this engine serial.
+  `parallel.set_enabled(False)` does not make this engine serial. Moot
+  since the CPU runs a numba kernel instead
+  ([`sparse_kpm_mean_field.md`](sparse_kpm_mean_field.md)), which reads
+  the thread count of the package.
 - Past roughly $10^4$ orbitals the starting columns are split into several
   calls; that path is tested at small size with a forced budget, not timed
   at scale.

@@ -123,12 +123,22 @@ def mix_mf(mf,mf0,mix=0.8):
 
 
 def diff_mf(mf0,mf):
-    """Difference mean fields"""
+    """Difference mean fields: the mean modulus of the change of each
+    matrix, summed over the directions. A dense matrix is averaged over
+    all its entries, and a sparse one over the entries the two mean fields
+    hold, so that a sparse mean field is measured per entry whatever its
+    size: averaged over all N^2 entries, most of them zero, a change of 0.1
+    on every diagonal entry of 20,000 orbitals reads 1e-5"""
+    from scipy.sparse import issparse
     out = 0.0 # initialize
     for key in mf: # loop
-        if key not in mf0: out += np.mean(np.abs(mf[key]))
-        else: out += np.mean(np.abs(mf0[key] - mf[key])) # add contribution
-        #out += np.mean(np.abs(mf0[key] - mf[key])) # add contribution
+        if key not in mf0: d, held = mf[key], [mf[key]]
+        else: d, held = mf0[key] - mf[key], [mf0[key], mf[key]]
+        if all(issparse(m) for m in held):
+            stored = abs(held[0])
+            for m in held[1:]: stored = stored + abs(m) # either one holds
+            out += abs(d).sum()/max(1, stored.nnz)
+        else: out += np.mean(np.abs(d)) # over every entry
     return out # return
 
 

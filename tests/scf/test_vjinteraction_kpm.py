@@ -127,9 +127,17 @@ def test_get_mean_field_hamiltonian_kpm_matches_ed_for_spinful_hamiltonian():
     Hamiltonian must route through VJinteraction's new KPM backend (not
     error out, and not silently fall back to Vinteraction, which would
     drop the J1z exchange term) and give a result close to
-    integration="ed"."""
+    integration="ed".
+
+    At filling 0.15 the ferromagnet is fully polarized and its Fermi level
+    falls between two levels of the nk=10 mesh. At 0.2 it falls on the
+    degenerate pair at k=+-0.2, where a Fermi level moved by the KPM
+    resolution fills or empties the pair in the diagonalization behind
+    get_magnetization, and from this guess exact diagonalization stops in
+    a partially polarized state of higher energy, E=-0.564 against
+    -0.606, which the KPM loop with its lagged Fermi level does not."""
     g = geometry.chain()
-    params = dict(mf="ferroZ", nk=10, mix=0.3, maxite=300, filling=0.2,
+    params = dict(mf="ferroZ", nk=10, mix=0.3, maxite=300, filling=0.15,
             U=5.0, J1z=-1.0)
     h_ed = g.get_hamiltonian(has_spin=True)
     h_ed, e_ed = h_ed.get_mean_field_hamiltonian(return_total_energy=True,

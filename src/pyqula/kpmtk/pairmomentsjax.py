@@ -5,7 +5,8 @@ from .. import gpu
 gpu.apply()
 
 # Chebyshev moments <e_i|T_n(H)|e_j> of many (i,j) pairs and k-points at
-# once, for the KPM mean field (kpmtk/densitymatrix_kpm.py).
+# once, for the KPM mean field on the GPU (kpmtk/densitymatrix_kpm.py); on
+# the CPU the same two entry points are kpmtk/pairmomentsnumba.py.
 #
 # The recursion runs on a dense block whose columns are the distinct
 # starting vectors e_j, V_{n+1} = 2 H V_n - V_{n-1}, every k-point of the
@@ -31,6 +32,9 @@ _DTYPES = {"single": jnp.complex64, "double": jnp.complex128}
 # time, so this is about 1.6 GB in double precision
 _MAX_BLOCK = 2**25
 
+# the ELL width last used for a matrix of each dimension, see _ell
+_ELL_WIDTH = dict()
+
 
 def get_precision_names():
     """Every precision the kernels of this module accept"""
@@ -41,7 +45,14 @@ def _ell(ms):
     """ELL form of the matrices ms (one per k-point, all N x N): the
     pattern is the union over k, so that its width, and with it the
     compiled kernel, does not change with k. Returns data (nk,N,K) and
-    cols (N,K); a padding slot points at its own row with zero weight."""
+    cols (N,K); a padding slot points at its own row with zero weight.
+
+    In a mean-field loop the Hamiltonian changes every iteration, and an
+    entry that passes through zero drops out of its sparse form, which
+    would narrow the width by one and compile the kernel again; so a
+    width slightly below the last one used for the same dimension takes
+    that one instead, and only a much narrower pattern, a different
+    Hamiltonian, gets its own."""
     N = ms[0].shape[0]
     keys = []
     for m in ms:
@@ -55,6 +66,9 @@ def _ell(ms):
     rows, cols_nz = keys//N, keys % N # sorted by row, then column
     counts = np.bincount(rows, minlength=N)
     K = max(1, int(counts.max()) if len(rows) else 1)
+    last = _ELL_WIDTH.get(N, 0)
+    if K <= last <= K + max(2, K//4): K = last # see above
+    _ELL_WIDTH[N] = K
     first = np.concatenate([[0], np.cumsum(counts)[:-1]])
     slot = np.arange(len(rows)) - first[rows]
     cols = np.tile(np.arange(N)[:, None], (1, K))
@@ -88,62 +102,93 @@ def _recursion(data, cols, V0, rows, cidx, nm):
 
 
 @partial(jax.jit, static_argnums=(5,))
-def _contracted(data, cols, V0, rows, cidx, nm, coef):
-    """Per k-point, sum_n coef[n]*mus[n] for every pair, and the largest
-    modulus of a moment (for the scale guard). The sum is done in double
-    precision whatever the precision of the recursion, so that a single
-    precision run loses only what the recursion itself loses."""
+def _contracted(data, cols, V0, rows, cidx, nm, coef, diag):
+    """Per k-point, sum_n coef[n]*mus[n] for every pair, the largest
+    modulus of a moment (for the scale guard), and the moments summed over
+    the pairs whose weight in diag is one, the diagonal ones (the trace,
+    for the Fermi level). The sums are done in double precision whatever
+    the precision of the recursion, so that a single precision run loses
+    only what the recursion itself loses."""
     def one(d):
-        mus = _recursion(d, cols, V0, rows, cidx, nm)
-        return coef @ mus.astype(jnp.complex128), jnp.max(jnp.abs(mus))
-    return jax.vmap(one)(data)
-
-
-@partial(jax.jit, static_argnums=(5,))
-def _summed(data, cols, V0, rows, cidx, nm):
-    """Per k-point, the moments summed over the pairs (in double
-    precision), and the largest modulus of a moment"""
-    def one(d):
-        mus = _recursion(d, cols, V0, rows, cidx, nm)
-        return jnp.sum(mus.astype(jnp.complex128), axis=1), jnp.max(jnp.abs(mus))
+        mus = _recursion(d, cols, V0, rows, cidx, nm).astype(jnp.complex128)
+        return coef @ mus, jnp.max(jnp.abs(mus)), mus @ diag
     return jax.vmap(one)(data)
 
 
 def _blocks(ms, pairs, nm, kpm_prec):
     """Split the pairs by starting column and the k-points so that no call
-    exceeds _MAX_BLOCK, and yield, per call, the device arrays and where
-    its results go"""
+    exceeds _MAX_BLOCK, and yield, per call, the device arrays, the weight
+    of every pair in the trace, and where its results go: the k-points,
+    how many of them are real, and the pairs.
+
+    Every call has the same shapes, so that the kernel compiles once per
+    Hamiltonian rather than once per call: the last block of starting
+    columns is padded with zero columns, which stay zero, the pairs of
+    every block are padded to the most any block has with pairs on the
+    first row and column, and the k-points to a whole number of calls with
+    zero matrices, and what the padding computes is dropped. The blocks
+    and the groups of k-points are made as equal as the budget allows, so
+    that the padding is at most one column or k-point per call: padding a
+    last block of 220 columns to a first one of 3236 made a 3456-orbital
+    Nambu island 1.7 times slower on the card. Without it the
+    number of pairs changes from one block to the next, and 400 orbitals
+    spent 23 s in 19 compilations, at 3200 orbitals 2 min each."""
     dtype = _DTYPES[kpm_prec]
     N = ms[0].shape[0]
     data, cols = _ell(ms)
     cols = jnp.asarray(cols, dtype=jnp.int32)
-    starts = np.unique(pairs[:, 1])
+    order = np.argsort(pairs[:, 1], kind="stable")
+    pj = pairs[order, 1]
+    starts = np.unique(pj)
     ncol = max(1, min(len(starts), _MAX_BLOCK//(3*N)))
-    for c0 in range(0, len(starts), ncol):
-        chunk = starts[c0:c0+ncol]
-        sel = np.nonzero(np.isin(pairs[:, 1], chunk))[0]
-        cidx = jnp.asarray(np.searchsorted(chunk, pairs[sel, 1]), dtype=jnp.int32)
-        rows = jnp.asarray(pairs[sel, 0], dtype=jnp.int32)
-        V0 = jnp.zeros((N, len(chunk)), dtype)
+    ncol = -(-len(starts)//(-(-len(starts)//ncol))) # equal blocks, little padding
+    chunks = [starts[c0:c0+ncol] for c0 in range(0, len(starts), ncol)]
+    sels = [order[np.searchsorted(pj, c[0], side="left"):
+        np.searchsorted(pj, c[-1], side="right")] for c in chunks]
+    npad = max(len(sel) for sel in sels)
+    nk = len(ms)
+    nkc = min(nk, max(1, _MAX_BLOCK//(3*N*ncol + nm*npad)))
+    nkc = -(-nk//(-(-nk//nkc))) # equal groups of k-points, see ncol
+    nkpad = -(-nk//nkc)*nkc
+    if nkpad > nk:
+        data = np.concatenate([data, np.zeros((nkpad - nk,) + data.shape[1:],
+            dtype=data.dtype)])
+    for chunk, sel in zip(chunks, sels):
+        rows = np.zeros(npad, dtype=np.int32)
+        cidx = np.zeros(npad, dtype=np.int32)
+        diag = np.zeros(npad)
+        rows[:len(sel)] = pairs[sel, 0]
+        cidx[:len(sel)] = np.searchsorted(chunk, pairs[sel, 1])
+        diag[:len(sel)] = pairs[sel, 0] == pairs[sel, 1]
+        V0 = jnp.zeros((N, ncol), dtype)
         V0 = V0.at[jnp.asarray(chunk), jnp.arange(len(chunk))].set(1.)
-        nkc = max(1, _MAX_BLOCK//(3*N*len(chunk) + nm*len(sel)))
-        for k0 in range(0, len(ms), nkc):
+        rows, cidx = jnp.asarray(rows), jnp.asarray(cidx)
+        diag = jnp.asarray(diag, dtype=jnp.complex128)
+        for k0 in range(0, nkpad, nkc):
             d = jnp.asarray(data[k0:k0+nkc], dtype=dtype)
-            yield (d, cols, V0, rows, cidx), slice(k0, k0+nkc), sel
+            yield (d, cols, V0, rows, cidx), diag, \
+                    slice(k0, min(nk, k0+nkc)), min(nk, k0+nkc) - k0, sel
 
 
-def pair_values(ms, pairs, coef, kpm_prec="double"):
+def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
     """For every k-point (ms, the matrices H(k)/scale, spectrum inside
     [-1,1]) and every pair (i,j) of pairs, sum_n coef[n] <e_i|T_n(H)|e_j>,
-    as an (nk,npairs) array, with the largest modulus of any moment"""
+    as an (nk,npairs) array, with the largest modulus of any moment. With
+    trace=True, also the moments of the pairs with i=j summed over them,
+    as an (nk,len(coef)) array, which is the trace of T_n(H) when every
+    orbital has its diagonal pair"""
     pairs = np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
     coef = jnp.asarray(coef, dtype=jnp.float64)
     out = np.zeros((len(ms), len(pairs)), dtype=np.complex128)
-    mumax = [] # reduced with np.max, which keeps a NaN where max() may not
-    for args, ks, sel in _blocks(ms, pairs, len(coef), kpm_prec):
-        vals, m = _contracted(*args, len(coef), coef)
-        out[ks, sel] = np.asarray(vals)
-        mumax.append(np.max(np.asarray(m)))
+    tr = np.zeros((len(ms), len(coef)), dtype=np.complex128)
+    mumax = [0.] # reduced with np.max, which keeps a NaN where max() may not
+    if len(pairs):
+        for args, diag, ks, nreal, sel in _blocks(ms, pairs, len(coef), kpm_prec):
+            vals, m, t = _contracted(*args, len(coef), coef, diag)
+            out[ks, sel] = np.asarray(vals)[:nreal, :len(sel)]
+            tr[ks] += np.asarray(t)[:nreal]
+            mumax.append(np.max(np.asarray(m)[:nreal]))
+    if trace: return out, float(np.max(mumax)), tr
     return out, float(np.max(mumax))
 
 
@@ -153,10 +198,6 @@ def trace_moments(ms, nm, kpm_prec="double"):
     (nk,nm) array, with the largest modulus of any moment"""
     N = ms[0].shape[0]
     pairs = np.stack([np.arange(N), np.arange(N)], axis=1)
-    out = np.zeros((len(ms), nm), dtype=np.complex128)
-    mumax = [] # see pair_values
-    for args, ks, sel in _blocks(ms, pairs, nm, kpm_prec):
-        sums, m = _summed(*args, nm)
-        out[ks] += np.asarray(sums)
-        mumax.append(np.max(np.asarray(m)))
-    return out/N, float(np.max(mumax))
+    _, mumax, tr = pair_values(ms, pairs, np.zeros(nm), kpm_prec=kpm_prec,
+            trace=True)
+    return tr/N, mumax

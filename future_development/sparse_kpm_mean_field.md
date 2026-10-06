@@ -1,8 +1,10 @@
 # The KPM mean field for large sparse systems
 
-Status, 6 October 2026: **the first step is built** (the construction path,
-below), the KPM engine itself is not. This is the plan for a KPM
-mean field (`h.get_mean_field_hamiltonian_kpm`, and `integration="kpm"` of
+Status, 6 October 2026: **the first three steps are built** (the
+construction path, the sparse self-consistent loop under both KPM entry
+points, and the kernel with the lagged Fermi level, below); the truncation
+is not. This is the plan for a KPM mean field
+(`h.get_mean_field_hamiltonian_kpm`, and `integration="kpm"` of
 `h.get_mean_field_hamiltonian`) whose memory is linear in the number of
 orbitals, so that a self-consistent calculation on $10^5$ sites, with
 non-collinear magnetism or with a Nambu Hamiltonian, fits in memory. We will
@@ -194,6 +196,66 @@ sparse engine by default, a dense one to the dense engine, so that
 and the two engines are held to each other by the first of the checks below.
 This step gives linear memory, exact results and $N^2$ time.
 
+This step is built, in `scftk/sparsemeanfield.py`, in a simpler form than
+the one above: the interaction, the density matrix and the mean field are
+dictionaries of CSR matrices holding only the entries the interaction
+couples, rather than one fixed pattern with a data vector, and the mean
+field is assembled with sparse-matrix operations rather than numba loops,
+which already makes every step of an iteration other than the recursion
+linear and negligible (the mean field of 20,000 orbitals took below 0.01 s,
+as printed to two decimals). Both entry points route on `h.is_sparse`: `Vinteraction_kpm` (and
+`hubbard_kpm`) build the interaction with a KD-tree (`site_pairs`), and
+`VJinteraction` builds its four channels the same way, with the spin weights
+$\pm 1/4$ of the exchange channels, and asks for the density matrix on whole
+$2\times 2$ blocks when an exchange channel is decoupled in a rotated frame,
+since the rotation mixes the two indexes of each block; its dense KPM path
+still refuses a Nambu Hamiltonian, and its sparse one takes it. The density
+matrix comes from the same `_kpm_pair_values` as the dense engine, split out
+of `_dm_kpm_from_needed`, so the two engines agree to roundoff: the mean
+field after six iterations differs by below 1e-15 on a non-collinear Rashba
+Hubbard island, on a honeycomb lattice with $V_1$ on a k-mesh, on a Nambu
+island with attractive $U$ and an in-plane field, and through `VJinteraction`
+with isotropic and anisotropic exchange. The Nambu case with exchange, for
+which there is no dense KPM path, converges to exact diagonalization at a
+fixed chemical potential as `npol` grows (5e-3 in the normal part and 9e-3
+in the pairing at `npol=150`, 2e-4 and 3e-4 at 600). The total energy is
+$\mathrm{Tr}(H\rho)$ from the KPM density matrix on the hoppings
+(`get_band_energy_kpm`), with the trace of the electron block added and
+halved for Nambu as `spectrum.total_energy` does, taken at $T=0$ whatever
+the temperature of the loop, since the dense engine's energy is the sum of
+the occupied levels and the two have to stay comparable; against the sum of the
+occupied levels its relative error is 1e-3 to 2e-5 at `npol=100` and 2e-7 to
+5e-9 at 1600, on islands and on a k-mesh, normal and Nambu.
+
+Two quadratic pieces outside the mean field turned up on the way and are
+repaired with it: `MultiHopping.dot`, behind every Hermiticity check, made
+both matrices dense (2 GB at 1600 Nambu sites), and `kpm.full_trace`, behind
+the Fermi search, stacked one dense $N\times N$ block of site vectors; it now
+takes them in chunks of $2^{24}$ entries. With the working buffers of the
+recursion and of the trace made small, the traced memory of one iteration
+grows from 0.012 to 0.020 to 0.044 GB from 400 to 1600 to 6400 sites, and
+with the default buffers it saturates at a few hundred MB above the linear
+part.
+
+One iteration at 10,000 sites (20,000 spinful orbitals, `npol=100`) on six
+desktop cores takes 103 s for the Fermi search and 292 s for the density
+matrix, with a peak of 1.9 GB, which is the $N^2$ extrapolation of the dense
+engine's measured times, and on a consumer card 43 s and 44 s, with 1.4 GB.
+With Nambu (40,000 orbitals, the same island with attractive $U$) the
+density matrix takes 1184 s on the CPU and 182 s on the card, four times
+the normal case as $N^2$ says, at the same peak memory, while the Fermi
+search stays at 103 s and 43 s, since it runs on the electron sector. The
+Fermi search costs a third of an iteration in the normal case on the CPU,
+which is what the lagged trace of the next step removes.
+
+One difference with exact diagonalization that is a convention and not an
+error: for a filling whose number of electrons is not a whole number, as
+0.4 of the 18 electron states of a 9-site island, the Fermi search of
+exact diagonalization rounds it to whole states (7 electrons) while the KPM
+one holds the fractional count (7.2), so the two converge to slightly
+different states; at a whole number of electrons the two Fermi levels agree
+to 1e-5. The dense KPM engine has the same difference.
+
 **The kernel and the Fermi level.** On the CPU the recursion becomes a numba
 kernel, a CSR product with the block of starting orbitals in `prange` over
 its columns, compiled once and cached, with jax's ELL kernel kept for the
@@ -213,6 +275,126 @@ and exact at convergence, where the Hamiltonian no longer changes. It needs
 one trace pass before the first iteration, and the convergence criterion
 includes the filling error, since the iterates are not at the requested
 filling until the mean field stops moving.
+
+This step is built, with the doubling on the CPU only. The CPU kernel is
+`kpmtk/pairmomentsnumba.py`, with the two entry points of the jax one, and
+the package-wide switch picks between them. Three things set its speed,
+measured on a spinful square island of 10,000 sites with Rashba coupling
+(20,000 orbitals, ten stored entries per row) at `npol=100`. The block is
+kept as two real arrays, one for the real and one for the imaginary part,
+which numba vectorizes: a step of 256 columns took 17 ms against 38 ms with
+a complex array (on a laptop), and a Hamiltonian whose entries are exactly
+real at a k-point runs on the real part alone, 10 ms; exactly real, since a
+tolerance would drop the small imaginary seed of a chiral state in a
+mean-field loop. The width of the block: on six desktop cores a step costs
+the same per starting column from 64 to 256 columns, and 1.6 and 2.4 times
+more at 16 and 8, so a block holds at least 64 columns, and beyond 65,536
+orbitals the memory of the blocks grows linearly, at 2 kB per orbital in
+double precision. And the doubling, which on the pairs of an onsite Hubbard
+interaction took 3.7 ms per starting column against 5.4 ms read on the
+rows, 0.69 of the time rather than one half, since the inner products of
+the pairs that are not diagonal are taken one pair at a time; those of the
+diagonal pairs are the norms of the columns, taken for every column at
+once. Whether a block is doubled is decided by a cost model, with the
+orbitals of the pairs that are not starting columns added to the block when
+this pays, and never for every pair of a small cell, which the dense engine
+asks for on a k-mesh and whose inner products would cost $N^3$ per step.
+The jax engine of the previous step took 292 s for the same density
+matrix on the same cores, 14.6 ms per starting column, so the kernel is
+about four times faster. A first version split the rows of every block
+among the threads, which on a small cell costs more than the rows
+themselves: a two-orbital chain on 8 k-points took 0.29 s per density
+matrix against 5 ms with jax, which runs every k-point in one call. So a
+cell small enough runs one k-point per thread, and a block of at most 4096
+entries runs its rows in one thread, after which, on a laptop, the chain
+takes 1.5 ms, a six-orbital cell on 144 k-points 58 ms against 82 ms with
+jax, and honeycomb islands of 144 and 576 orbitals 0.04 s and 0.28 s
+against 0.10 s and 1.30 s. It agrees with the jax kernel to 1e-12 in double
+precision (`tests/scf/test_kpm_block_density_matrix.py`), and becomes
+serial with `parallel.set_enabled(False)`, which jax's CPU backend did not.
+
+The Fermi level is lagged in both engines, the dense and the sparse one
+(`LaggedFermi` in `kpmtk/densitymatrix_kpm.py`). The diagonal pair of every
+orbital is added to the pairs of the recursion, and the sum of their
+moments is the trace the Fermi search inverts. The first Hamiltonian gets
+an exact search, and so does every Nambu one, whose Fermi level is that of
+the electron-only Hamiltonian, a different matrix from the one the
+recursion runs on. The convergence check holds the filling error, read
+from the same trace, to the tolerance together with the change in the mean
+field. Three consequences were measured, all in
+`tests/scf/test_kpm_lagged_fermi.py` or `tests/scf/test_vjinteraction_kpm.py`.
+The path to convergence is not that of an exact search, so where several
+self-consistent states exist the loop can settle in another one: on the
+spinful chain at $U=5$, $J_{1z}=-1$ and filling 0.2 the lagged loop reaches
+the fully polarized state, at $E=-0.606$, where exact diagonalization from
+the same guess stops in a partially polarized one at $E=-0.564$, and stays
+in the polarized one when it is started there; the test that compared the
+two moved to filling 0.15, where both reach the polarized state. The
+converged state is not that of an exact search either, by what the
+expansion resolves: the lagged loop ends at the Fermi level whose filling,
+read on the expansion of the shifted Hamiltonian, is the requested one,
+while an exact search reads it on the unshifted one, whose scale is
+different, and on a 16-site Hubbard island at `npol=150` the two differ by
+2e-3 in the Fermi level and 1.5e-2 in the mean field. A final exact search,
+to return the Fermi level of the returned Hamiltonian, was tried and
+dropped, since it gives up the filling the convergence check measured. And
+on that island the lagged loop took 40 iterations where an exact search
+every iteration took 32.
+
+On the card every call of the kernel has one shape: the last block of
+starting columns is padded with zero columns, the pairs of every block to
+the most any block has, and the k-points to a whole number of calls, and
+the ELL width keeps the one last used for the same dimension when the
+pattern loses a few entries, so that the kernel compiles once per
+Hamiltonian. The diagonal moments are summed in the same kernel, so the
+lagged Fermi level is free on the card as well. The doubling was left out
+on the card, where its inner products would be summed in single precision.
+
+One iteration against the previous step, on six desktop cores and on the
+consumer card, the square island of 10,000 sites at `npol=100` and the
+honeycomb islands of the GPU roadmap at `npol=200` (the card in single
+precision; the exact search is the first iteration's, and with Nambu every
+iteration's, included):
+
+| case | orbitals | CPU | CPU before | card | card before |
+|---|---|---|---|---|---|
+| square, Hubbard | 20,000 | 76 s | 395 s | 44 s | 87 s |
+| square, Nambu | 40,000 | 334 s | 1287 s | 232 s | 225 s |
+| honeycomb, Hubbard | 1728 | 1.1 s | 6.2 s | 0.37 s | 0.82 s |
+| honeycomb, Hubbard | 3072 | 3.5 s | 18.0 s | 1.5 s | 2.8 s |
+| honeycomb, Nambu | 3456 | 5.7 s | 20.1 s | 1.8 s | 1.9 s |
+
+So on the CPU an iteration is 5 times faster in the normal case, the
+kernel and the lag together, and 4 times with Nambu, where the
+electron-only search stays (60 s of the 334 s), and the CPU now overtakes
+exact diagonalization already at 1728 orbitals (4.1 s) and at the
+3456-orbital Nambu island by 6 times (35.6 s). On the card the normal case
+is twice as fast, the trace now coming from the density-matrix recursion,
+and the Nambu case is unchanged, as it should be, since it neither
+lags nor doubles there. A first version of the padding padded a last
+block of 220 starting columns to the 3236 of the first one, which made the
+3456-orbital Nambu island 1.7 times slower on the card; the blocks and the
+groups of k-points are now made equal, so the padding is at most one
+column or k-point per call.
+
+Two more pieces of the loop were changed with this step. The convergence
+check (`diff_mf`) averaged the change of each matrix of the mean field over
+all of its $N^2$ entries, most of them zero, so a change of 0.1 on every
+diagonal entry of 20,000 orbitals read 1e-5 and passed the default
+`maxerror`, and at $10^5$ sites a loop would have stopped after its first
+iteration; a sparse mean field is now averaged over the entries it holds,
+and a dense one as before. Measured per entry, the change of the mean
+field in single precision stops at about 1e-6 (1e-6 to 3e-6 on the CPU,
+where the doubled moments are inner products of single-precision
+vectors, 8e-7 to 1e-6 on the card), which the diluted check hid, so a
+`maxerror` below that needs `kpm_prec="double"`. On a 16-site Hubbard
+island started from a uniform ferromagnet, the CPU run in single
+precision then left the state the double-precision run converges to (a
+net moment of 0.78, $E=-16.817$) for a less polarized one of lower energy
+(0.10, $E=-16.832$ after 200 iterations), so the first is a saddle point
+that the roundoff of single precision is enough to leave. And the trace of the exact search, the first iteration's and
+every Nambu one's, goes through the same block kernel instead of
+`kpm.full_trace`.
 
 **The truncated recursion.** An opt-in radius keyword, with the starting
 orbitals tiled in space so that a tile and its halo share one ball. With
@@ -246,9 +428,38 @@ decreasing with the radius in a gapped state.
 - The dense engine: kept, with the sparse engine the default whenever the
   Hamiltonian given is sparse, and the dense one for a dense Hamiltonian.
 
+Taken while the kernel was built, the same day:
+
+- The lag in both engines, so that they stay equal to roundoff at every
+  iteration. Kept apart were the lag in the sparse engine only, which
+  keeps the dense one on the path of exact diagonalization, and an opt-in
+  keyword with an exact search by default, at about 1.8 times the
+  density-matrix time per iteration.
+- On the card, the padding to one shape and the trace in the same kernel,
+  without the doubling.
+- The convergence check of a sparse mean field averaged over its stored
+  entries, the dense check unchanged. Kept apart were the stored entries
+  everywhere, which moves the iteration counts of every dense loop, and
+  leaving it with a `maxerror` that has to shrink with the size.
+- With Nambu, the Fermi level of the electron-only Hamiltonian searched
+  every iteration, the convention of the dense engine and of exact
+  diagonalization. Kept apart was the number equation on the electron
+  count of the BdG density matrix, free from the same recursion but a
+  different state at the same filling.
+
 ## Left open
 
-- The memory constant of the sparse path, which has to be measured at
-  $10^4$ to $10^5$ sites, not inferred.
+- The memory of the sparse path, measured at $10^4$ sites at 1.9 GB on the
+  CPU with the jax engine of the previous step, and not again with the
+  numba kernel, nor at $10^5$ sites, where an iteration should take about
+  two hours on six desktop cores, the 76 s at $10^4$ scaled as $N^2$.
+- The doubling on the card.
+- With Nambu, the exact search of the electron-only Fermi level every
+  iteration, a trace of half the orbitals.
+- `scf.dm` of the sparse engine holds only the entries the loop read, as
+  the dense KPM engine's does, and a Nambu one lacks the raw, unmapped
+  entries the dense engine also computes and never reads.
+- The per-site (array) filling of `VJinteraction` is still refused with
+  `integration="kpm"`, sparse or dense.
 - An a-posteriori error estimate for the truncation radius, beyond comparing
   two radii.

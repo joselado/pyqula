@@ -145,3 +145,142 @@ def test_the_jax_solvers_refuse_kpm_prec():
     with pytest.raises(NotImplementedError, match="kpm_prec"):
         h.get_mean_field_hamiltonian(U=1., use_jax=True, kpm_prec="single",
                 nk=4)
+
+
+def _hubbard_island(rashba):
+    """A spinful square island, complex with Rashba coupling and real
+    without it, scaled into [-1,1], and the pairs of an onsite Hubbard
+    interaction plus a first-neighbor one along x"""
+    g = geometry.square_lattice().get_supercell(5)
+    g.dimensionality = 0
+    h = g.get_hamiltonian(has_spin=True, is_sparse=True)
+    if rashba: h.add_rashba(0.3)
+    h.add_exchange([0., 0., 0.3])
+    ms = _scaled_hks(h, nk=1)
+    s = np.arange(ms[0].shape[0]//2)
+    pairs = np.concatenate([np.stack([2*s, 2*s], 1),
+        np.stack([2*s+1, 2*s+1], 1), np.stack([2*s, 2*s+1], 1),
+        np.stack([2*s, 2*s+2], 1)[:-1]])
+    return ms, pairs
+
+
+@pytest.mark.parametrize("kpm_prec", ["double", "single"])
+@pytest.mark.parametrize("rashba", [0., 0.3])
+@pytest.mark.parametrize("budget", [None, 2*50*8, 2*50*1])
+def test_the_numba_recursion_agrees_with_the_jax_one(budget, rashba, kpm_prec,
+        monkeypatch):
+    """The CPU kernel (pairmomentsnumba) against the device one
+    (pairmomentsjax), which share no code: a real and a complex H, blocks
+    that are doubled, read on the rows, and a mixture of both when the
+    budget splits the starting columns, in both precisions. The whole
+    island is one block small enough to run its rows in one thread; the
+    split blocks run them on all the threads"""
+    from pyqula.kpmtk import pairmomentsnumba
+    ms, pairs = _hubbard_island(rashba)
+    coef = np.random.default_rng(2).normal(size=80)
+    ref, _ = pairmomentsjax.pair_values(ms, pairs, coef, kpm_prec="double")
+    if budget is not None:
+        monkeypatch.setattr(pairmomentsnumba, "_MAX_BLOCK", budget)
+        monkeypatch.setattr(pairmomentsnumba, "_MIN_COLUMNS", 1)
+        monkeypatch.setattr(pairmomentsnumba, "_SERIAL_BLOCK", 0)
+    vals, mumax = pairmomentsnumba.pair_values(ms, pairs, coef,
+            kpm_prec=kpm_prec)
+    tol = 1e-12 if kpm_prec == "double" else 1e-4
+    assert np.max(np.abs(vals - ref)) < tol
+    assert mumax <= 1. + 1e-6
+
+
+def test_the_numba_recursion_reads_the_rows_of_a_dense_pair_set():
+    """Every pair of a small cell, which the dense engine asks for on a
+    k-mesh, is read on the rows, since doubling it would take an inner
+    product per pair and step, N^3 per step; the pairs of an onsite
+    interaction on an island are doubled. Both give the jax values, the
+    cell with one k-point per thread"""
+    from pyqula.kpmtk import pairmomentsnumba
+    ms = _scaled_hks(_noncollinear_chain(), nk=4)
+    n = ms[0].shape[0]
+    every = np.array([(i, j) for i in range(n) for j in range(i, n)])
+    assert not any(b[2] for b in pairmomentsnumba._plan(every, n, ms[0].nnz))
+    ms2, onsite = _hubbard_island(0.3)
+    onsite = onsite[:-(len(onsite)//4)] # the onsite pairs only
+    n2 = ms2[0].shape[0]
+    assert all(b[2] for b in pairmomentsnumba._plan(onsite, n2, ms2[0].nnz))
+    coef = np.linspace(1., -1., 40)
+    for m, p in [(ms, every), (ms2, onsite)]:
+        a, _ = pairmomentsnumba.pair_values(m, p, coef)
+        b, _ = pairmomentsjax.pair_values(m, p, coef)
+        assert np.max(np.abs(a - b)) < 1e-12
+
+
+@pytest.mark.parametrize("nm", [80, 81])
+def test_the_numba_trace_matches_numba_full_trace(nm):
+    """The doubled block trace against the per-vector batched kernel, for
+    an even and an odd number of moments"""
+    from pyqula.kpmtk import pairmomentsnumba
+    ms = _scaled_hks(_noncollinear_chain(), nk=4)
+    mt, _ = pairmomentsnumba.trace_moments(ms, nm)
+    for ik, m in enumerate(ms):
+        ref = kpm.full_trace(m, n=(nm + 1)//2)[:nm]
+        assert np.max(np.abs(mt[ik] - ref)) < 1e-12
+
+
+def test_the_numba_recursion_runs_serially_when_parallelism_is_disabled(
+        monkeypatch):
+    """parallel.set_enabled(False) clamps numba to one thread, which the
+    kernel reads when it splits the rows, so the CPU engine of the KPM
+    mean field becomes serial, which jax's CPU backend did not; the values
+    do not change beyond roundoff"""
+    import numba
+    from pyqula import parallel
+    from pyqula.kpmtk import pairmomentsnumba
+    monkeypatch.setattr(pairmomentsnumba, "_SERIAL_BLOCK", 0) # split the rows
+    ms, pairs = _hubbard_island(0.3)
+    coef = np.linspace(1., -1., 60)
+    ref, _ = pairmomentsnumba.pair_values(ms, pairs, coef)
+    was, threads = parallel.enabled, numba.get_num_threads()
+    try:
+        parallel.set_enabled(False)
+        assert numba.get_num_threads() == 1
+        vals, _ = pairmomentsnumba.pair_values(ms, pairs, coef)
+    finally: # set_enabled(True) lifts the clamp without restoring the count
+        parallel.set_enabled(was)
+        numba.set_num_threads(threads)
+    assert np.max(np.abs(vals - ref)) < 1e-13
+
+
+def test_every_device_call_has_one_shape(monkeypatch):
+    """The blocks of starting columns hold different numbers of pairs, and
+    the last block and the last group of k-points are shorter, but every
+    call of the device kernel gets the same shapes, padded, so that it
+    compiles once; the padding does not change the values"""
+    ms = _scaled_hks(_noncollinear_chain(), nk=5)
+    n = ms[0].shape[0]
+    pairs = [(i, j) for i in range(n) for j in range(i, n)] # 1, 2, 3, 4 per column
+    coef = np.linspace(1., -1., 30)
+    whole, _ = pairmomentsjax.pair_values(ms, pairs, coef)
+    kernel = pairmomentsjax._contracted
+    # columns 0 and 1 (3 pairs) and 2 and 3 (7 pairs), one k-point per call; and
+    # all four columns, two k-points per call, so the last call has one
+    for budget in [3*n*3 + 4, 2*(3*n*n + 30*len(pairs)) + 4]:
+        shapes = []
+        def recorded(*args):
+            shapes.append(tuple(np.shape(a) for a in args if hasattr(a, "shape")))
+            return kernel(*args)
+        monkeypatch.setattr(pairmomentsjax, "_contracted", recorded)
+        monkeypatch.setattr(pairmomentsjax, "_MAX_BLOCK", budget)
+        pieces, _ = pairmomentsjax.pair_values(ms, pairs, coef)
+        assert len(shapes) > 2 and len(set(shapes)) == 1, shapes
+        assert np.max(np.abs(whole - pieces)) < 1e-13
+
+
+def test_the_ell_width_survives_an_entry_passing_through_zero():
+    """In a mean-field loop an entry of H that passes through zero drops
+    out of its sparse form; the ELL width, which sets the compiled kernel,
+    stays the one already used for that dimension"""
+    m = csr_matrix(np.array([[0., 1., 1.], [1., 0., 1.], [1., 1., 0.5]]))
+    _, cols = pairmomentsjax._ell([m])
+    m2 = m.copy()
+    m2[0, 2] = 0.; m2[2, 0] = 0. # the widest row loses an entry
+    m2.eliminate_zeros()
+    _, cols2 = pairmomentsjax._ell([m2])
+    assert cols2.shape == cols.shape
