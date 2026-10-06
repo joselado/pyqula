@@ -46,12 +46,15 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         compute_cross=True, compute_dd=True, verbose=1,
         compute_anomalous=True, compute_normal=True, maxite=1000,
         T=1e-7, callback_h=None,
-        scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, write=None,**kwargs):
+        scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, write=None,
+        kpm_prec=None, **kwargs):
     """KPM analogue of scftk.densitydensity.generic_densitydensity.
     Only the "plain" mixing solver is implemented (the alternate
     root-finding solvers there are not KPM-specific and are not needed for
     this backend). write=False keeps the converged mean field out of MF.pkl
-    in the working directory."""
+    in the working directory. kpm_prec is the precision of the Chebyshev
+    recursion, None for single on the GPU and double on the CPU (see
+    kpmtk.densitymatrix_kpm.resolve_kpm_prec)."""
     write = filewrite.resolve(write,True) # the call, else the global switch
     from .densitydensity import (get_mf, mix_mf, diff_mf, update_hamiltonian,
             hamiltonian2dict, set_hoppings, SCF, random_hermitian_guess,
@@ -91,7 +94,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         if callback_h is not None: h = callback_h(h)
         t0 = time.perf_counter()
         dm = get_dm_kpm(h, v, nk=nk, scale=scale, npol=npol, ne=ne,
-                cores=cores, T=T)
+                cores=cores, T=T, kpm_prec=kpm_prec)
         if callback_dm is not None: dm = callback_dm(dm)
         t1 = time.perf_counter()
         mf = get_mf(v, dm, compute_cross=compute_cross,
@@ -134,7 +137,8 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
 
 
 def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
-        scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, **kwargs):
+        scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, kpm_prec=None,
+        **kwargs):
     """KPM analogue of scftk.densitydensity.densitydensity"""
     from ..checkclass import is_iterable
     if is_iterable(filling): # see VJinteraction's docstring
@@ -160,7 +164,7 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
             # away from `filling` as T grows
             fermi = get_fermi4filling_kpm(h, filling, nk=nk, scale=scale,
                     npol=npol, ne=ne, cores=cores,
-                    T=kwargs.get("T",1e-7))
+                    T=kwargs.get("T",1e-7), kpm_prec=kpm_prec)
             if verbose>1: print("Fermi energy",fermi)
             h.fermi = fermi
             h.shift_fermi(-fermi)
@@ -168,7 +172,7 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
         return h
     scf = generic_densitydensity_kpm(h, callback_h=callback_h,
             verbose=verbose, nk=nk, scale=scale, npol=npol, ne=ne,
-            cores=cores, **kwargs)
+            cores=cores, kpm_prec=kpm_prec, **kwargs)
     h = scf.hamiltonian
     etot = h.get_total_energy(nk=h.nk)
     # electron_dimension, not h.intra.shape[0] -- see the identical
@@ -235,14 +239,17 @@ def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
     second/third neighbor), computed via sparse KPM instead of exact
     diagonalization -- see kpmtk.densitymatrix_kpm.get_dm_kpm.
 
-    PERFORMANCE CAVEAT: measured far SLOWER than plain Vinteraction
-    (integration="ed") at small/moderate system sizes (order 100-500
-    sites) despite the batching work already done in
-    kpmtk.densitymatrix_kpm._dm_kpm_from_needed -- see that function's and
-    VJinteraction's docstrings for the measured numbers and remaining
-    bottlenecks (per-pair Chebyshev recursion, get_fermi4filling_kpm's
-    O(n_orb) Fermi search). Reach for this engine only if you have
-    confirmed it is actually faster for your system."""
+    Performance: the density matrix is one block Chebyshev recursion over
+    every orbital and k-point (kpmtk/pairmomentsjax.py), on the GPU when
+    pyqula.gpu.set_gpu(True), in single precision there unless kpm_prec
+    says otherwise. Per iteration, on honeycomb islands at npol=200 with a
+    consumer RTX A2000: 6.2 s on the CPU and 0.8 s on the card at 1728
+    orbitals, where exact diagonalization takes 4.1 s; 20 s and 1.9 s for
+    a 3456-orbital Nambu island, against 36 s. So on the CPU this engine
+    overtakes exact diagonalization at a few thousand orbitals, and on the
+    card it was faster at every island measured, from 768 orbitals
+    (future_development/gpu_kpm_mean_field.md). For a small cell on a
+    k-mesh exact diagonalization stays the faster choice."""
     from .densitydensity import (obj2geometryarray, reject_legacy_kwargs,
             reject_spinless_U)
     kwargs = reject_legacy_kwargs(kwargs) # the same refusals as Vinteraction

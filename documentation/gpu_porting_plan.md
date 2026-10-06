@@ -183,6 +183,15 @@ the inner products sequentially in float32, so its single-precision error grows 
 system size (~8e-6 relative at 10,000 sites, ~4e-5 at 160,000), while jax's tree
 reduction stays at ~3e-7.
 
+The KPM mean field does not use this path: on a consumer RTX A2000 this
+kernel was no faster than numba, and the mean field's density matrix was a
+per-pair numba loop the switch never reached. It has its own kernel since
+5 October 2026, `kpmtk/pairmomentsjax.py`, a block recursion over every
+starting column and k-point with the sparse product as ELL row gathers
+instead of the `BCOO` scatter-add; `future_development/gpu_kpm_mean_field.md`
+has the measurements. Whether the ELL form would also speed up this
+kernel's own `BCOO` product is untested.
+
 ### 3. Sparse / Green's-function work — lower priority, needs its own research spike
 
 `green.py`, `embedding.py`, `ldos.py`, `chitk/*`, `transporttk/*` (~30 `parallel.pcall`

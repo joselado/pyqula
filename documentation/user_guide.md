@@ -2105,6 +2105,19 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
                                             mf="ferroZ",integration="kpm")
 ```
 
+The expansion resolves energies down to roughly the bandwidth divided by `npol`, the number of polynomials, so a magnetic splitting or a superconducting gap smaller than that is smeared out. In practice a self-consistent gap needs this resolution several times below it, and close to a transition, where a gapped and an ungapped solution have nearly the same energy, about ten times below it, or the loop can settle in the wrong one. The recursion behind it runs on the GPU once the device is selected (see [Running on a GPU](#running-on-a-gpu)), where `kpm_prec` decides its precision; single precision is the default there and moves the density matrix by about $10^{-8}$, far below what a finite `npol` leaves out, and `kpm_prec="double"` keeps it in double precision:
+
+```python
+from pyqula import gpu
+gpu.set_gpu(True)
+h = g.get_hamiltonian(has_spin=True)
+h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
+                                            mf="ferroZ",integration="kpm",
+                                            npol=400,kpm_prec="single")
+```
+
+What comes back is the same self-consistent Hamiltonian as on the CPU to that accuracy, and what changes is the time per iteration; `gpu.set_gpu(False)` returns the rest of a script to the CPU.
+
 A loop that refuses to converge under plain mixing can be handed to a nonlinear solver instead, with `use_jax=True`, which treats one iteration $x=f(x)$ of the loop as a root-finding problem for $x-f(x)=0$. `solver="error_gradient"` is the most robust of these on a generic Hamiltonian and the one to reach for first; `"newton"` is the default. These solvers are for the normal state only and do not accept `constrains`.
 
 ```python
@@ -5304,7 +5317,13 @@ contracted on the device at once. The Chebyshev moments gain little, a
 factor of one to three, because a sparse matrix-vector product is limited
 by memory bandwidth rather than by arithmetic. The batched diagonalization
 sits in between, and only pays from matrices of about 32 orbitals upward,
-so below that size it stays on the CPU even with the switch set.
+so below that size it stays on the CPU even with the switch set. The KPM
+mean field is the exception among the Chebyshev routines: its density
+matrix needs one recursion per orbital, which runs as a single block over
+every orbital and every k-point, so the card works on a dense block rather
+than on one vector at a time, and on a consumer card an iteration of a cell
+with one to three thousand orbitals is six to ten times faster than on the
+processor.
 
 One sum runs against that pattern and is worth knowing about before
 setting the switch. The static polarizability behind the screened
@@ -5322,9 +5341,10 @@ Precision is a separate choice, made per call rather than globally, because
 it changes the numbers and not only where they are computed. The KPM
 moments take `kpm_prec`, the Lindhard sum takes `chi_prec` and the batched
 diagonalization takes `eigh_prec`, each of them `"single"` or `"double"`.
-Double precision is the default everywhere except the Lindhard sum on the
-GPU, where single precision is the default because a consumer card can be
-an order of magnitude slower in double precision than in single. Single
+Double precision is the default everywhere except the Lindhard sum and the
+KPM mean field on the GPU, where single precision is the default because a
+consumer card can be an order of magnitude slower in double precision than
+in single. Single
 precision costs about six digits, which a density of states or a band
 structure does not notice, and which a quantity built from differences of
 nearly equal numbers does.

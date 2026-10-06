@@ -9,8 +9,8 @@
 #      (h.geometry.get_kmesh), and at each k build the small Bloch
 #      Hamiltonian H(k) -- still sparse/no bigger than the unit cell --
 #      then get each needed <i|P_occ(H(k))|j> occupied-projector element
-#      via Chebyshev recursion (kpm.dm_ij_energy) instead of diagonalizing
-#      H(k), and
+#      from Chebyshev moments instead of diagonalizing H(k), every pair and
+#      every k-point in one block recursion (kpmtk/pairmomentsjax.py), and
 #   2) only evaluate the (i, j) pairs that "v" actually has nonzero
 #      couplings for, instead of a dense block; the same per-k values are
 #      reused across every direction that needs them (see
@@ -34,7 +34,6 @@ from .. import kpm
 from .. import parallel
 from .bandwidth import estimate_bandwidth
 from .momenttoprofile import generate_profile
-from .kpmnumba import kpm_moments_ij as get_moments_ij
 from .kernels import jackson_kernel
 
 # Shared defaults for the KPM SCF's tuning knobs. scftk/
@@ -185,7 +184,7 @@ def _estimate_kpm_scale(hk_gen,ks):
     return 1.1*max(estimate_bandwidth(hk_gen(k)) for k in ks)
 
 
-def _check_scale_covers_spectrum(mus, scale, given):
+def _check_scale_covers_spectrum(mus, scale, given, kpm_prec="double"):
     """Raise if Chebyshev moments of H(k)/scale show part of its spectrum
     outside [-1,1]. For a Hermitian matrix with its spectrum inside that
     interval every moment is bounded, |<a|T_n(H)|b>| <= 1 for unit vectors
@@ -196,9 +195,13 @@ def _check_scale_covers_spectrum(mus, scale, given):
     valid scale between the two; the tolerance only absorbs the roundoff a
     spectrum edge sitting exactly at +-1 picks up along the recursion.
     given says whether the scale came from the caller or from
-    _estimate_kpm_scale, which can only fail on a non-Hermitian H(k)."""
+    _estimate_kpm_scale, which can only fail on a non-Hermitian H(k).
+    kpm_prec is the precision the moments were computed in: a single
+    precision recursion drifts by about n*eps, so a state near zero energy,
+    where |T_2n(0)|=1, takes a moment past one by more than the double
+    precision tolerance and would be refused with a valid scale."""
     from .scaleguard import moments_within_bound
-    if moments_within_bound(mus): return
+    if moments_within_bound(mus, kpm_prec=kpm_prec): return
     if given:
         raise ValueError("the KPM scale=%g does not cover the spectrum of "
                 "H(k): the Chebyshev expansion needs every eigenvalue inside "
@@ -213,19 +216,36 @@ def _check_scale_covers_spectrum(mus, scale, given):
             "and any mean-field guess passed in are Hermitian" % scale)
 
 
+def resolve_kpm_prec(kpm_prec):
+    """The precision of the Chebyshev recursion of the KPM mean field:
+    None picks single precision on the device, where the card's float32
+    makes it the fast option and it agrees with double to about 1e-8 in
+    the density matrix (future_development/gpu_kpm_mean_field.md), and
+    double precision on the CPU. Both backends take either one explicitly."""
+    from .pairmomentsjax import get_precision_names
+    if kpm_prec is None:
+        from .. import gpu
+        return "single" if gpu.get_gpu() else "double"
+    if kpm_prec not in get_precision_names():
+        raise ValueError("kpm_prec must be one of %s (or None, single on "
+                "the GPU and double on the CPU), got %r"
+                % (", ".join(repr(x) for x in get_precision_names()), kpm_prec))
+    return kpm_prec
+
+
 def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
-                         npol=DEFAULT_NPOL, ne=None, cores=None, T=0.0):
-    """Shared per-k Bloch-KPM engine: given the (direction, row, col)
+                         npol=DEFAULT_NPOL, ne=None, cores=None, T=0.0,
+                         kpm_prec=None):
+    """Shared Bloch-KPM engine: given the (direction, row, col)
     density-matrix entries to compute (in whatever index convention the
     caller's "needed" set already uses -- see required_elements/
     required_elements_eh), sample the same k-mesh the exact-diagonalization
-    path uses (h.geometry.get_kmesh(nk=nk)), and at each k build the small
-    Bloch Hamiltonian H(k) and get each needed <i|P_occ(H(k))|j>
-    occupied-projector element via kpm.dm_ij_energy instead of
-    diagonalizing H(k). A given (i,j) pair's H(k)-projector only needs to
-    be computed once per k (not once per direction) -- every direction
-    that needs it reuses the same per-k value, weighted by the Bloch phase
-    exp(2*pi*i*k.d) and summed over k, exactly mirroring the
+    path uses (h.geometry.get_kmesh(nk=nk)), and get each needed
+    <i|P_occ(H(k))|j> occupied-projector element from the Chebyshev
+    moments of the Bloch Hamiltonian H(k) instead of diagonalizing it. A
+    given (i,j) pair is computed once per k (not once per direction): every
+    direction that needs it reuses the same per-k value, weighted by the
+    Bloch phase exp(2*pi*i*k.d) and summed over k, exactly mirroring the
     exact-diagonalization path's own phase convention (dmtk/fulldm.py).
 
     T is the same finite-temperature smearing scftk/
@@ -237,42 +257,26 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     same tiny regularization (1e-15) full_dm itself uses, recovering an
     effectively-hard cutoff.
 
-    Per-pair moments (get_moments_ij) are still computed one call per
-    canonical (min(row,col),max(row,col)) pair and k, the other member of
-    a Hermitian pair being set by conjugation (see the comment above
-    `pairs` below), each running its own O(npol) Chebyshev VECTOR
-    recursion -- but converting those moments into the requested
-    density-matrix element used to also go through kpm.dm_ij_energy's own
-    call to generate_profile per pair, which recomputes the
-    Jackson-kernel-damped Chebyshev-polynomial basis (a (2*npol,
-    ne)-shaped array) from scratch every single call even though it
-    depends only on scale/npol/ne/xin, none of which vary across pairs or
-    k. Building it once (`basis` below) and reducing each pair's moments
-    to its density-matrix value via one matrix-vector product against it
-    (batched into one matrix-matrix product across all pairs at a given k)
-    turned out to dominate the entire computation: profiled at 81% of
-    _dm_kpm_from_needed's total time on a 98-site/196-orbital honeycomb
-    Hubbard system (nk=4, npol=200, 392 needed pairs) before this change,
-    cutting the isolated density-matrix computation from ~20.7s to ~6.9s
-    there (~3x) -- verified against the exact-diagonalization ("ed") path
-    to ~1e-7.
+    The moments of every pair and every k-point come from one block
+    recursion (kpmtk/pairmomentsjax.py) on the jax device that the
+    package-wide switch selects, the CPU or the GPU: the distinct starting
+    columns e_j form one dense block, and each step reads every pair it
+    needs with one gather. kpm_prec is the precision of that recursion (see
+    resolve_kpm_prec). This replaced one numba recursion per pair and per
+    k, which also never reached the device: the per-pair loop ran the same
+    recursion two or more times per site, and on a 1728-orbital island
+    took 27 s per evaluation against 1.6 s for the block in double
+    precision and 0.46 s in single on a consumer card, and about 5 s and
+    2.5 s on the six-core CPU of the same machine
+    (future_development/gpu_kpm_mean_field.md). Since every k-point goes in
+    one call, cores no longer splits the k-mesh here; it still sets the
+    package-wide core count, which the Fermi search uses.
 
-    NOT yet batched, and left for a future pass (2026-07-27): the moment
-    recursion itself. get_moments_ij(m,i=a,j=b) internally starts a
-    Chebyshev VECTOR recursion from e_a and projects it onto e_b at each
-    step -- so every needed pair with the SAME starting index `a` (shared
-    whenever multiple density-matrix rows read the same column, e.g. all
-    4 entries of Hubbard's onsite 2x2 spin block per site share 2 starting
-    columns between them) redundantly reruns that recursion from scratch
-    instead of computing it once and extracting multiple projections from
-    it. Even with the fix already applied here, KPM remains far SLOWER
-    than "ed" at the system sizes actually measured (order 100-500 sites:
-    ED's dense per-k LAPACK diagonalization is extremely fast regardless
-    of algorithmic complexity at that scale) -- see VJinteraction's
-    docstring (scftk/spinspin.py) for the full measured
-    comparison. get_fermi4filling_kpm's own O(n_orb) per-orbital Fermi
-    search (below) is a separate, also-unaddressed cost of comparable or
-    greater size."""
+    A density-matrix entry is linear in its moments, so the energy
+    integral of the Jackson-damped Chebyshev series against the Fermi
+    weights is done once, on the basis, and each pair's value is the
+    contraction of its moments with the resulting coefficients."""
+    kpm_prec = resolve_kpm_prec(kpm_prec)
     if ne is None: ne = npol*4
     norb = h.intra.shape[0]
     ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
@@ -309,9 +313,8 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     xin = np.linspace(-0.99*scale, upper, ne)
     weights = expit(-xin/Tsafe)  # Fermi-Dirac occupation at temperature T
 
-    # get_moments_ij(...,n=npol) returns 2*npol moments (kpmnumba's own
-    # convention -- see numba_kpm_moments_ij), so the basis needs the same
-    # length to pair up with them below.
+    # 2*npol moments, the length kpmnumba's own moment routines return
+    # for n=npol, which the tests and the rest of the module assume
     n_moments = 2*npol
     xs_reduced = xin/scale
     Tbasis = _chebyshev_basis(xs_reduced, n_moments)  # (n_moments, ne)
@@ -324,29 +327,20 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     # from generate_profile's own normalization and dm_ij_energy's external
     # *np.pi cancel, leaving the plain /scale here)
     basis = (coef*jack_w)[:, None] * Tbasis / denom[None, :]  # (n_moments, ne)
-
-    def compute_for_k(k):
-        Hk = csr_matrix(hk_gen(k))
-        Hk_scaled = Hk/scale  # hoisted out of the pair loop: same for every pair at this k
-        mus_batch = np.zeros((len(pairs), n_moments), dtype=np.complex128)
-        for idx, (i, j) in enumerate(pairs):
-            # get_moments_ij(m,i=a,j=b) yields the moments for the density-
-            # matrix element conventionally written dm[b,a] (see
-            # densitymatrix.py's restricted_dm, which cross-checks its
-            # "KPM" mode called with (i=a,j=b) against its "full" mode's
-            # dm[b,a] for the same (a,b) pair) -- so to land in dm[i,j]
-            # here the call needs its arguments swapped.
-            mus_batch[idx] = get_moments_ij(Hk_scaled, i=j, j=i, n=npol)
-        _check_scale_covers_spectrum(mus_batch, scale, given)
-        ysr = mus_batch.real @ basis  # (len(pairs), ne)
-        ysi = mus_batch.imag @ basis
-        ys = ysr - 1j*ysi
-        out = np.trapezoid(ys*weights[None, :], x=xin, axis=1)/np.pi
-        out[diagonal] = out[diagonal].real # a diagonal entry is its own conjugate
-        return out
+    # the entry of a pair is conj(sum_n cint[n]*mu_n) for real cint: the
+    # profile of its moments, weighted by the occupation and integrated
+    cint = np.trapezoid(basis*weights[None, :], x=xin, axis=1)/np.pi
 
     if cores is not None: parallel.set_cores(cores)
-    results = parallel.pcall(compute_for_k, ks)  # one array of pair values per k
+    from .pairmomentsjax import pair_values
+    ms = [csr_matrix(hk_gen(k))/scale for k in ks]
+    # the pair (i,j) holds <e_i|T_n(H(k))|e_j>: the recursion starts from
+    # e_j and is read on row i, which is the element dm[i,j] (see
+    # densitymatrix.py's restricted_dm for the convention)
+    vals, mumax = pair_values(ms, pairs, cint, kpm_prec=kpm_prec)
+    _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
+    vals = vals.conj()
+    vals[:, diagonal] = vals[:, diagonal].real # a diagonal entry is its own conjugate
 
     needed_by_d = dict()
     for d, i, j in needed: needed_by_d.setdefault(d, []).append((i, j))
@@ -356,15 +350,14 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     for d in ds:
         phases = np.array([np.exp(2j*np.pi*np.dot(k, d)) for k in ks])
         for (i, j) in needed_by_d.get(d, []):
-            idx = pair_index[(min(i, j), max(i, j))]
-            col = np.array([r[idx] for r in results])
+            col = vals[:, pair_index[(min(i, j), max(i, j))]]
             if i > j: col = col.conj() # see the pairs above
             dm[d][i, j] = fac*np.sum(phases*col)
     return dm
 
 
 def get_dm_kpm(h, v, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL, ne=None,
-               cores=None, T=0.0, **kwargs):
+               cores=None, T=0.0, kpm_prec=None, **kwargs):
     """KPM-based analogue of scftk.densitydensity.get_dm: return
     a dictionary {direction: matrix} with the density matrix, but computing
     only the entries that v actually requires, each one through a sparse
@@ -375,14 +368,15 @@ def get_dm_kpm(h, v, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL, ne=None,
     For BdG/Nambu Hamiltonians (h.has_eh) the required entries are
     determined by required_elements_eh instead of required_elements (see
     its docstring) -- both are then handed to the same per-k Bloch-KPM
-    engine, _dm_kpm_from_needed."""
+    engine, _dm_kpm_from_needed. kpm_prec is the precision of its
+    Chebyshev recursion, see resolve_kpm_prec."""
     ds = [(0, 0, 0)] + [d for d in v if d != (0, 0, 0)]
     if getattr(h, "has_eh", False):
         needed = required_elements_eh(v)
     else:
         needed = required_elements(v)
     dm = _dm_kpm_from_needed(h, needed, nk=nk, scale=scale, npol=npol,
-                              ne=ne, cores=cores, T=T)
+                              ne=ne, cores=cores, T=T, kpm_prec=kpm_prec)
     # every direction v has a key for must be present in the output, even
     # if it happened to contribute no required entries of its own
     for d in ds:
@@ -402,7 +396,7 @@ def _cumulative_trapz(y, x):
     return np.concatenate([[0.], np.cumsum(avg*dx)])
 
 
-def _kpm_dos_moments(h, nk, scale, npol, ne, cores):
+def _kpm_dos_moments(h, nk, scale, npol, ne, cores, kpm_prec=None):
     """Shared per-k Bloch-KPM engine for get_fermi4filling_kpm and
     get_total_energy_kpm: samples the k-mesh, gets the Chebyshev moments of
     the local density of states averaged over every orbital in the cell at
@@ -418,19 +412,13 @@ def _kpm_dos_moments(h, nk, scale, npol, ne, cores):
     energy integral (total energy) downstream, so the two functions that
     use this can never silently disagree about what "the DOS" means.
 
-    PERFORMANCE NOTE (not addressed as of 2026-07-27, unlike
-    _dm_kpm_from_needed's per-pair profile reconstruction, which was): the
-    "deterministic sum over all sites/orbitals" above is exactly that --
-    one full kpm.full_trace moment computation per orbital, i.e. O(n_orb)
-    separate calls per k, each its own O(npol) recursion. This does not
-    share any of _dm_kpm_from_needed's batching (different call path
-    entirely), and measured as a comparable-or-larger fraction of a
-    VJinteraction "kpm" SCF iteration's total cost than the density matrix
-    itself once that was optimized (e.g. ~2.6s of a ~9s iteration on a
-    98-site/196-orbital honeycomb system, nk=4, npol=200). A stochastic
-    trace estimator (a handful of random vectors instead of one deterministic
-    vector per orbital) would be the standard KPM fix, at the cost of
-    trading exactness for statistical noise -- not attempted here."""
+    The trace is one recursion per orbital. On the CPU it is numba's
+    batched kernel (kpm.full_trace, one vector per thread, with the moment
+    doubling that halves the recursion), and on the device the block
+    kernel of the density matrix (pairmomentsjax.trace_moments) with every
+    k-point in one call, since the batched jax kernel behind full_trace is
+    a BCOO scatter-add that was no faster than numba on a consumer card.
+    kpm_prec is the precision of either, see resolve_kpm_prec."""
     if ne is None: ne = npol*4
     ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
     hk_gen = h.get_hk_gen()
@@ -443,15 +431,23 @@ def _kpm_dos_moments(h, nk, scale, npol, ne, cores):
                 "scale; check that this Hamiltonian actually has "
                 "hopping/onsite terms in this sector")
 
-    def moments_for_k(k):
-        Hk = csr_matrix(hk_gen(k))
-        mus = kpm.full_trace(Hk/scale, n=npol) # an average of bounded moments
-        _check_scale_covers_spectrum(mus, scale, given)
-        return mus
-
-    if cores is not None: parallel.set_cores(cores)
-    results = parallel.pcall(moments_for_k, ks)
-    mus = sum(results)/len(results)  # k-average of the moments
+    kpm_prec = resolve_kpm_prec(kpm_prec)
+    from .. import gpu
+    if gpu.get_gpu():
+        from .pairmomentsjax import trace_moments
+        ms = [csr_matrix(hk_gen(k))/scale for k in ks]
+        musk, mumax = trace_moments(ms, 2*npol, kpm_prec=kpm_prec)
+        _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
+        mus = np.mean(musk, axis=0)  # k-average of the moments
+    else:
+        def moments_for_k(k):
+            Hk = csr_matrix(hk_gen(k))
+            mus = kpm.full_trace(Hk/scale, n=npol, kpm_prec=kpm_prec) # an average of bounded moments
+            _check_scale_covers_spectrum(mus, scale, given, kpm_prec=kpm_prec)
+            return mus
+        if cores is not None: parallel.set_cores(cores)
+        results = parallel.pcall(moments_for_k, ks)
+        mus = sum(results)/len(results)  # k-average of the moments
 
     xs = np.linspace(-1.0, 1.0, ne, endpoint=True)*0.99  # reduced energies
     ys = generate_profile(mus, xs, kernel="jackson").real
@@ -459,7 +455,7 @@ def _kpm_dos_moments(h, nk, scale, npol, ne, cores):
 
 
 def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
-        npol=DEFAULT_NPOL, ne=None, cores=None, T=0.):
+        npol=DEFAULT_NPOL, ne=None, cores=None, T=0., kpm_prec=None):
     """KPM analogue of spectrum.get_fermi4filling: find the Fermi energy
     for a given filling without ever diagonalizing anything, so the KPM
     SCF (scftk/densitydensity_kpm.py) stays fully
@@ -490,8 +486,9 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
         h0 = h.copy()
         h0.remove_nambu()
         return get_fermi4filling_kpm(h0, filling, nk=nk, scale=scale,
-                npol=npol, ne=ne, cores=cores, T=T)
-    scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores)
+                npol=npol, ne=ne, cores=cores, T=T, kpm_prec=kpm_prec)
+    scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores,
+            kpm_prec=kpm_prec)
     cdf = _cumulative_trapz(ys, xs)
     cdf = np.maximum.accumulate(cdf)  # enforce monotonicity, see docstring
     cdf = cdf/cdf[-1]  # normalize exactly to 1 across the sampled window
@@ -530,7 +527,7 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
 
 
 def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
-        npol=DEFAULT_NPOL, ne=None, cores=None):
+        npol=DEFAULT_NPOL, ne=None, cores=None, kpm_prec=None):
     """KPM analogue of spectrum.total_energy's exact-diagonalization path
     (its nbands=None default, which VJinteraction's integration="kpm"
     branch used to call unconditionally for its post-convergence total
@@ -584,7 +581,8 @@ def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
                 "workaround here specifically would silently return the "
                 "wrong sector's energy rather than just being approximate")
     norb = h.intra.shape[0]
-    scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores)
+    scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores,
+            kpm_prec=kpm_prec)
     cdf = _cumulative_trapz(ys, xs)
     cdf = np.maximum.accumulate(cdf)  # enforce monotonicity, see get_fermi4filling_kpm
     norm = cdf[-1]  # same renormalization get_fermi4filling_kpm applies

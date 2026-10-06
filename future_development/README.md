@@ -112,6 +112,16 @@ already reached once.
   same contraction with the site index replaced by the pair index (29x
   double, 206x single at 128 pairs on a GTX 1060, and slower than the CPU at
   32, so the crossover is in the size of the pair basis).
+- [`gpu_kpm_mean_field.md`](gpu_kpm_mean_field.md) -- the KPM mean field
+  on the device: why it did not use it (a per-pair numba density matrix
+  the switch never reached, and a batched jax kernel no faster than numba
+  on a consumer card), the prototype that settled the shape (one block
+  recursion over every starting column and k-point, the sparse product as
+  ELL row gathers), and the port built from it: 5 to 7x per iteration on
+  the CPU and 20 to 75x on the card over the old engine, the card faster
+  than exact diagonalization from 768 orbitals up, with single precision
+  agreeing with double to 1e-8 along a whole SCF. What it leaves open is
+  listed at its end.
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with
   the Goldstone/Ward-identity measurements that settle it.
