@@ -292,14 +292,35 @@ def _guess_randomXY(h,h0,fun,mode):
 
 def _guess_random(h,h0,fun,mode):
     """A fully random Hermitian guess, built from h itself rather than
-    from the cleaned copy: every hopping of the dictionary is replaced"""
+    from the cleaned copy: every hopping of the dictionary is replaced.
+    For a sparse h the random entries are drawn on its sparsity pattern
+    and on the onsite block of every site (its spin, and its Nambu
+    partners if any), so the guess stays sparse: a dense random matrix
+    would make the first mean-field Hamiltonian of a large system dense"""
     dd = h.get_dict()
     for key in dd:
         n = dd[key].shape[0]
-        dd[key] = np.random.random((n,n))-.5 + 1j*(np.random.random((n,n))-.5)
+        if h.is_sparse: dd[key] = _random_on_pattern(h,dd[key],key)
+        else:
+            dd[key] = np.random.random((n,n))-.5 + 1j*(np.random.random((n,n))-.5)
     dd = MultiHopping(dd)
     dd = dd + dd.get_dagger()
     return dd.get_dict()
+
+def _random_on_pattern(h,m,key):
+    """Random complex entries on the nonzeros of the sparse matrix m, and,
+    for the onsite matrix, on the block of every site"""
+    from scipy.sparse import coo_matrix
+    from .algebra import block_diagonal
+    p = abs(coo_matrix(m)) # pattern of m
+    if key==(0,0,0): # every orbital of a site with every other one
+        ns = len(h.geometry.r) # number of sites
+        b = m.shape[0]//ns # orbitals per site
+        p = p + abs(block_diagonal(np.ones((ns,b,b))))
+    p = coo_matrix(p)
+    data = np.random.random(p.nnz)-.5 + 1j*(np.random.random(p.nnz)-.5)
+    return coo_matrix((data,(p.row,p.col)),shape=m.shape).tocsc()
+
 
 def _guess_dimerization(h,h0,fun,mode):
     return guess(h,mode="random",fun=fun)

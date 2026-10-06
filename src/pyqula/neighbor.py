@@ -267,31 +267,30 @@ def generate_parametric_hopping(h,f=None,mgenerator=None,
 
 def neighbor_distances(g,n=4):
     """Return distances to neighbors:
-    - n: number of neighbors wanted"""
+    - n: number of neighbors wanted
+    These are the n smallest distinct distances between two sites of a
+    supercell of g, rounded to 1e-6. The pairs are found with a KD-tree
+    inside a radius doubled until it holds n distinct distances, so the
+    cost is linear in the number of sites; the distance of every pair was
+    quadratic in time and memory (28 s at 10,000 sites, an 80 GB array at
+    100,000)."""
     nsuper = max([n//len(g.r)+3,3])
     g = g.supercell(nsuper) # create supercell
-    r = g.r # positions
-    n = len(r)
-    out = np.zeros(n*n) # empty array
-    out = neighbor_distances_jit(r,out) # distances
-    out = np.round(out,6) # unique distances
-    out = np.unique(out) # unique distances
-    return np.array([out[i+1] for i in range(len(out)-1)])[0:n] # return
-
-
-@jit(nopython=True,cache=True)
-def neighbor_distances_jit(r,out):
-    n = len(r) # number of sites
-    k = 0
-    for i in range(n):
-        for j in range(n):
-            dr = r[i]-r[j]
-            dis = dr[0]*dr[0]+dr[1]*dr[1]+dr[2]*dr[2]
-            dis = np.sqrt(dis) # square root
-            out[k] = dis # store
-            k+=1 # increase
-    return out
-
+    r = np.array(g.r) # positions
+    if len(r)<2: return np.array([]) # no pair of sites
+    from scipy.spatial import cKDTree
+    tree = cKDTree(r)
+    extent = np.sqrt(np.sum((np.max(r,axis=0)-np.min(r,axis=0))**2))
+    d1,_ = tree.query(r,k=2) # distance to the closest other site
+    rad = max(np.min(d1[:,1]),1e-6) # radius of the search
+    while True:
+        pairs = tree.query_pairs(rad,output_type="ndarray")
+        dr = r[pairs[:,0]]-r[pairs[:,1]]
+        out = np.sqrt(dr[:,0]*dr[:,0]+dr[:,1]*dr[:,1]+dr[:,2]*dr[:,2])
+        out = np.unique(np.round(out,6)) # unique distances
+        out = out[out>0.] # a site with itself, or two sites on top
+        if len(out)>=n or rad>=extent: return out[0:n] # or every pair is in
+        rad = 2*rad # not enough shells yet
 
 
 def neighbor_cells(num,dim=3):

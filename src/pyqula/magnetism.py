@@ -10,6 +10,20 @@ def float2array(z):
     if checkclass.is_iterable(z): return z # iterable, input is an array
     else: return [0.,0.,z] # input is a number
 
+
+def exchange_matrix(ms):
+    """Block-diagonal matrix with m_x sx + m_y sy + m_z sz on the spin
+    block of each site, ms the (n,3) array of the n local fields, built
+    in time linear in n (see algebra.block_diagonal)"""
+    from .algebra import block_diagonal
+    ms = np.asarray(ms,dtype=np.complex128)
+    if ms.ndim!=2 or ms.shape[1]!=3:
+        raise ValueError("the exchange field needs three components "
+                "[mx,my,mz] per site, got an array of shape "+str(ms.shape))
+    pauli = np.array([[[0.,1.],[1.,0.]],[[0.,-1j],[1j,0.]],
+        [[1.,0.],[0.,-1.]]],dtype=np.complex128) # sx, sy, sz
+    return block_diagonal(np.einsum("na,abc->nbc",ms,pauli))
+
 def add_zeeman(h,zeeman=[0.0,0.0,0.0]):
   """ Add Zeeman to the hamiltonian """
   # convert the input into a list
@@ -29,18 +43,11 @@ def add_zeeman(h,zeeman=[0.0,0.0,0.0]):
         if checkclass.is_iterable(m): return np.array(m) # it is an array
         else: return np.array([0.,0.,m]) # number
     else: return np.array([0.,0.,z]) # just a number
-  from scipy.sparse import coo_matrix as coo
-  from scipy.sparse import bmat
   if not h.has_spin:  h.turn_spinful()
   no = len(h.geometry.r) # number of orbitals (without spin)
-  # create matrix to add to the hamiltonian
-  bzee = [[None for i in range(no)] for j in range(no)]
-  # assign diagonal terms
   r = h.geometry.r  # z position
-  for i in range(no):
-      JJ = evaluate_J(zeeman,r[i],i) # evaluate the exchange
-      bzee[i][i] = JJ[0]*sx+JJ[1]*sy+JJ[2]*sz
-  bzee = bmat(bzee) # create matrix
+  JJ = [evaluate_J(zeeman,r[i],i) for i in range(no)] # exchange per site
+  bzee = exchange_matrix(JJ) # create matrix
   h.intra = h.intra + h.spinful2full(bzee) # Add matrix 
 
 
@@ -60,7 +67,6 @@ def add_antiferromagnetism(h,m):
   sublattice = h.geometry.sublattice  # if has sublattice
   if h.has_spin:
     natoms = len(h.geometry.x) # number of atoms
-    out = [[None for j in range(natoms)] for i in range(natoms)] # output matrix
     # create the array
     if checkclass.is_iterable(m): # iterable, input is an array
       if len(m)!=len(h.geometry.r):
@@ -70,12 +76,9 @@ def add_antiferromagnetism(h,m):
       mass = [m(h.geometry.r[i]) for i in range(natoms)] # call the function
     else: # assume it is a float
       mass = [m for i in range(natoms)] # create list
-    for i in range(natoms): # loop over atoms
-      mi = mass[i] # select the element
-      # add contribution to the Hamiltonian
-      mi = float2array(mi) # convert to array
-      out[i][i] = (sx*mi[0] + sy*mi[1] + sz*mi[2])*sublattice[i]
-    out = bmat(out) # turn into a matrix
+    # the field of each atom, staggered with its sublattice
+    mi = [np.array(float2array(mass[i]))*sublattice[i] for i in range(natoms)]
+    out = exchange_matrix(mi) # turn into a matrix
     h.intra = h.intra + h.spinful2full(out) # Add matrix 
   else: require_spin(h,"antiferromagnetism")
 
@@ -90,7 +93,6 @@ def add_magnetism(h,m):
   if h.has_spin:
     natoms = len(h.geometry.r) # number of atoms
     # create the array
-    out = [[None for j in range(natoms)] for i in range(natoms)] # output matrix
     if checkclass.is_iterable(m):
       if checkclass.is_iterable(m[0]) and len(m)==natoms: # input is an array
         mass = m # use as arrays
@@ -104,14 +106,8 @@ def add_magnetism(h,m):
     else: 
       raise TypeError("the exchange must be a vector, an array of vectors, or "
               "a callable of the position, and not a "+str(type(m)))
-    for i in range(natoms): # loop over atoms
-      mi = mass[i] # select the element
-#      print("First",mi)
-      mi = float2array(mi) # convert to array
-#      print("Second",mi)
-      # add contribution to the Hamiltonian
-      out[i][i] = sx*mi[0] + sy*mi[1] + sz*mi[2]
-    out = bmat(out) # turn into a matrix
+    mi = [float2array(mass[i]) for i in range(natoms)] # field per atom
+    out = exchange_matrix(mi) # turn into a matrix
     h.intra = h.intra + h.spinful2full(out) # Add matrix 
   else: require_spin(h,"an exchange field")
 

@@ -69,9 +69,7 @@ def eh_operator(m):
   """Return the electron hole symmetry operator, as a function"""
   n = m.shape[0]//4 # number of sites 
   from .hamiltonians import sy
-  msy = [[None for ri in range(n)] for j in range(n)]
-  for i in range(n): msy[i][i] = sy # add sy
-  msy = bmat(msy) # sy matrix in the electron subspace
+  msy = sp.kron(sp.identity(n),sy,format="csc") # sy in the electron subspace
   out = [[None,1j*msy],[-1j*msy,None]]
   out = bmat(out) # sparse matrix
   out = reorder(out) # reshufle the matrix
@@ -182,9 +180,9 @@ def time_reversal(m):
   """Do the spinful time reversal of this matrix"""
   from .hamiltonians import sy
   n = m.shape[0]//2 # number of spinful blocks
-  msy = [[None for ri in range(n)] for j in range(n)]
-  for i in range(n): msy[i][i] = sy # add sy
-  msy = bmat(msy) # as block matrix
+  # kron builds it in time linear in n; bmat on an n x n list of blocks
+  # was quadratic (183 s for setup_nambu_spinor at 10,000 sites)
+  msy = sp.kron(sp.identity(n),sy,format="csc") # as block matrix
   return msy*np.conjugate(m)*msy # return time reversal
 
 
@@ -283,7 +281,8 @@ def add_pxipy(delta=0.0,is_sparse=False,r1=None,r2=None):
   dz = lambda r: [0.,0.,1.] # d-vector along z
   def weight(r1i,r2j): # 2x2 pairing matrix of a pair of sites
     return deltaf((r1i+r2j)/2.)*get_triplet(r1i,r2j,dz,L=1)
-  m = add_pairing(deltas=weight,r1=r1,r2=r2)
+  # get_triplet pairs the first neighbors, at distance 1, only
+  m = add_pairing(deltas=weight,r1=r1,r2=r2,rcut=np.sqrt(1.01))
   if is_sparse: return m
   else: return m.todense()
 
@@ -297,37 +296,47 @@ from .sctk.dvector import delta2dvector
 
 
 
-def add_pairing(deltas=[[0.,0],[0.,0.]],is_sparse=True,r1=[],r2=[]):
+def add_pairing(deltas=[[0.,0],[0.,0.]],is_sparse=True,r1=[],r2=[],
+        rcut=None):
   """ Adds a general pairing in real space"""
-  return embed_pairing_block(pairing_block(deltas,r1=r1,r2=r2))
+  return embed_pairing_block(pairing_block(deltas,r1=r1,r2=r2,rcut=rcut))
 
 
-def pairing_block(deltas=[[0.,0],[0.,0.]],r1=[],r2=[]):
+def pairing_block(deltas=[[0.,0],[0.,0.]],r1=[],r2=[],rcut=None):
   """Return the electron-hole block of a pairing between the sites at r1
   and the sites at r2, with rows (site of r1, e_up/e_dn) and columns
-  (site of r2, h_dn/h_up)"""
+  (site of r2, h_dn/h_up). rcut is the largest distance at which the
+  pairing can be nonzero, when it is known: only the pairs within it are
+  evaluated, found with a KD-tree, so the cost is linear in the number of
+  sites. With rcut=None every pair of sites is evaluated, which is
+  quadratic and is what a pairing of unknown range needs."""
   def get_pmatrix(r1i,r2j): # return the different pairings
     if callable(deltas): dv = deltas(r1i,r2j) # get the components
     else: dv = deltas
-    duu = dv[0,1] # delta up up
-    ddd = dv[1,0] # delta dn dn
-    dud = dv[0,0] # delta up dn
-    ddu = dv[1,1] # delta up dn
+    dv = dv.toarray() if issparse(dv) else np.asarray(dv)
     # be aware of the minus signs coming from the definition of the
     # Nambu spinor!!!!!!!!!!!!!!!!!
     # c_up d_dn d^\dagger_dn -d^\dagger_up
-    D = csc_matrix([[dud,duu],[ddd,ddu]]) # SC matrix
-#    D = bmat([[None,D],[-D.H,None]]) # the minus sign comes from triplet
-    return D
-  # superconducting coupling
-  n = len(r1)  # number of sites
-  pout = [[None for i in range(n)] for j in range(n)] # initialize None matrix
-  # zeros in the diagonal
-#  for i in range(n): bout[i][i] = csc_matrix(np.zeros((4,4),dtype=np.complex128))
-  for i in range(n): # loop over sites
-    for j in range(n): # loop over sites
-      pout[i][j] = get_pmatrix(r1[i],r2[j]) # get this pairing
-  return bmat(pout) # convert to block matrix
+    # [[delta up dn, delta up up],[delta dn dn, delta dn up]]
+    return [[dv[0,0],dv[0,1]],[dv[1,0],dv[1,1]]] # SC matrix
+  r1,r2 = np.asarray(r1),np.asarray(r2)
+  n1,n2 = len(r1),len(r2) # number of sites
+  if rcut is None: # every pair of sites
+    ii,jj = np.divmod(np.arange(n1*n2),n2)
+  else: # only the pairs within rcut
+    from scipy.spatial import cKDTree
+    near = cKDTree(r1).query_ball_tree(cKDTree(r2),rcut)
+    ii = np.repeat(np.arange(n1),[len(x) for x in near])
+    jj = np.array([j for x in near for j in sorted(x)],dtype=int)
+  blocks = np.array([get_pmatrix(r1[i],r2[j]) for (i,j) in zip(ii,jj)],
+          dtype=np.complex128).reshape(len(ii),2,2)
+  a = np.arange(2)
+  rows = (2*ii)[:,None,None] + a[None,:,None] + 0*a[None,None,:]
+  cols = (2*jj)[:,None,None] + 0*a[None,:,None] + a[None,None,:]
+  out = csc_matrix((blocks.ravel(),(rows.ravel(),cols.ravel())),
+          shape=(2*n1,2*n2),dtype=np.complex128)
+  out.eliminate_zeros() # only the pairs that are actually paired
+  return out
 
 
 def embed_pairing_block(pout):
@@ -371,12 +380,14 @@ def add_pairing_to_hamiltonian(self,**kwargs):
     # the electron-hole block towards every neighboring cell, all of them
     # built before h is touched so that a pairing that is not periodic with
     # the lattice is refused without leaving a half-modified Hamiltonian
-    blocks = {(0,0,0): pairing_block(df,r1=r,r2=r)} # intra cell
+    rcut = getattr(df,"rcut",None) # range of the pairing, if it is known
+    blocks = {(0,0,0): pairing_block(df,r1=r,r2=r,rcut=rcut)} # intra cell
     if self.dimensionality>0:
       for d in self.geometry.neighbor_directions(): # loop over directions
         if d.dot(d)<0.0001: continue # skip onsite
         r2 = self.geometry.replicas(d=d) # positions
-        blocks[tuple(int(di) for di in d)] = pairing_block(df,r1=r,r2=r2)
+        blocks[tuple(int(di) for di in d)] = pairing_block(df,r1=r,r2=r2,
+                rcut=rcut)
     callables = [name for name in ("d","delta","mode")
                    if callable(kwargs.get(name))]
     check_periodic_pairing(blocks,callables=callables)

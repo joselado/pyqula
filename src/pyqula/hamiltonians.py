@@ -877,7 +877,7 @@ class Hamiltonian():
         Add Kekule coupling
         """
         if self.dimensionality==0: # zero dimensional
-          m = kekule.kekule_matrix(self.geometry.r,t=t)
+          m = kekule.kekule_matrix(self.geometry.r,t=t,sparse=self.is_sparse)
           self.intra = self.intra + self.spinless2full(m)
         else: # workaround for higher dimensionality
           r = self.geometry.multireplicas(2) # get many replicas

@@ -19,11 +19,12 @@ def block2nambu_matrix_sparse(m):
   The output is a set of block matrices for each site in the 
   Nambu form'''
   nr = m.shape[0]//4 # number of positions
-  col,row,data = [],[],[]
-  for i in range(nr): # electrons
-    col = col + [2*i,2*i+1,2*i+2*nr,2*i+1+2*nr]
-    row = row + [4*i,4*i+1,4*i+2,4*i+3]
-    data = data + [1.,1.,1.,1.]
+  i = np.arange(nr)
+  # for each site, its up and down electrons, then its down and up holes;
+  # built as arrays, since growing lists by concatenation was quadratic
+  col = np.stack([2*i,2*i+1,2*i+2*nr,2*i+1+2*nr],axis=1).ravel()
+  row = np.stack([4*i,4*i+1,4*i+2,4*i+3],axis=1).ravel()
+  data = np.ones(4*nr)
   R = sp.coo_matrix((data,(row,col)),shape=m.shape,dtype=complex)
   return R.T
 

@@ -80,14 +80,34 @@ def pairing_generator(self,delta=0.0,mode="swave",d=[0.,0.,1.],
     df = get_callable(d) # callable for the d-vector
     if callable(mode):
         weightf = mode # mode is a function returning a 2x2 pairing matrix
+        rcut = None # of unknown range, every pair has to be evaluated
     else:
         if mode not in _pairing_builders:
             raise ValueError("unknown pairing mode '"+str(mode)+"'; it must be "
               +"one of "+str(list(pairing_modes))+", or a callable returning "
               +"the 2x2 pairing matrix")
+        if kwargs.get("nn",1)>1 and "dist2" not in kwargs:
+            # the distance of the nn-th shell once, not once per pair
+            nn = kwargs["nn"]
+            kwargs = dict(kwargs) # leave the caller's dictionary alone
+            kwargs["dist2"] = self.geometry.get_neighbor_distances(n=nn)[nn-1]**2
         weightf = _pairing_builders[mode](self,df,kwargs)
+        rcut = _pairing_range(kwargs)
     matrixf = lambda r1,r2: deltaf((r1+r2)/2.)*weightf(r1,r2) 
+    matrixf.rcut = rcut # read by add_pairing, to skip the distant pairs
     return matrixf # return function
+
+
+def _pairing_range(kw):
+    """Distance beyond which every registered pairing weight vanishes:
+    each pairs a site with itself or with the sites at one distance, which
+    is 1 (the first neighbors) unless dist2 gives its square, which
+    pairing_generator sets from the nn-th neighbor shell when nn>1. The
+    margin covers the tolerance the weights compare the distance with.
+    tests/superconductivity/test_pairing_range.py checks every registered
+    mode against the evaluation of every pair, so a new weight with a
+    longer reach fails there instead of losing its distant pairs."""
+    return np.sqrt(max(1.0,kw.get("dist2",1.0))+1e-2)
 
 
 def check_fermi_antisymmetry(h,weightf,tol=1e-6):
@@ -261,7 +281,9 @@ def px(r1,r2):
 
 
 def get_triplet_generator(df,nn=1,H=None,**kwargs):
-    if nn>1: # more than first neighbor
+    dist2 = kwargs.pop("dist2",None) # square of the distance, if known
+    if dist2 is not None: pass
+    elif nn>1: # more than first neighbor
       dist = H.geometry.get_neighbor_distances(n=nn)[nn-1] # get this distance
       dist2 = dist**2
     else: dist2 = 1.0 # first neighbor
@@ -284,13 +306,16 @@ def get_triplet(r1,r2,df,L=1,dist2=1.0):
     else: return 0.0*tauz
 
 
-def get_singlet(r1,r2,L=2,phi0=0.,H=None,nn=1):
-    """Function for p-wave order"""
+def get_singlet(r1,r2,L=2,phi0=0.,H=None,nn=1,dist2=None):
+    """Function for p-wave order. dist2 is the square of the pairing
+    distance when the caller already has it, otherwise it is the nn-th
+    neighbor distance of H"""
     if L%2!=0:
         raise ValueError("a singlet order parameter needs an even angular "
                 "momentum L")
     dr = r1-r2 ; dr2 = dr.dot(dr)
-    if nn>1: # more than first neighbor
+    if dist2 is not None: pass
+    elif nn>1: # more than first neighbor
       dist = H.geometry.get_neighbor_distances(n=nn)[nn-1] # get this distance
       dist2 = dist**2
     else: dist2 = 1.0 # first neighbor

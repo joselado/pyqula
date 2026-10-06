@@ -122,6 +122,19 @@ already reached once.
   than exact diagonalization from 768 orbitals up, with single precision
   agreeing with double to 1e-8 along a whole SCF. What it leaves open is
   listed at its end.
+- [`sparse_kpm_mean_field.md`](sparse_kpm_mean_field.md) -- the plan for
+  a KPM mean field whose memory is linear in the number of orbitals, for
+  $10^5$ sites with non-collinear magnetism or Nambu: why the recursion
+  already scales and the dense or $n^2$ pieces around it do not (with
+  a quadratic `bmat` on the Hamiltonian construction path, measured at
+  10,000 sites), why the exact route is $N^2$ in time and practical to about
+  $10^4$ sites, the light-cone truncation that makes it linear in gapped or
+  finite-temperature states, and the four decisions taken on 6 October
+  2026 (exact first then truncation, the Fermi level from the lagged exact
+  trace, numba on the CPU and jax on the card, and the dense engine kept
+  with the sparse one as the default for a sparse Hamiltonian). Its first
+  step is built: the Hamiltonian construction, guesses and constraints are
+  linear in the number of sites, measured to $10^5$; the engine is not.
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with
   the Goldstone/Ward-identity measurements that settle it.

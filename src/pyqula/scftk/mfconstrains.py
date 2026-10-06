@@ -1,6 +1,7 @@
 
 import numpy as np
 from copy import deepcopy
+from scipy.sparse import issparse,csc_matrix
 from ..superconductivity import get_eh_sector
 from ..superconductivity import build_nambu_matrix
 
@@ -8,52 +9,63 @@ from ..superconductivity import build_nambu_matrix
 
 # different constrains for the meanfield calculation
 
-def remove_onsite_spinful(m):
-    n = m.shape[0]//2 # number of orbitals
-    for i in range(n):
-        d = (m[2*i,2*i] + m[2*i+1,2*i+1])/2. # average charge
-        m[2*i,2*i] -= d # set
-        m[2*i+1,2*i+1] -= d # set
+def _get_entries(m,rows,cols):
+    """The entries (rows[k],cols[k]) of a dense or sparse matrix"""
+    return np.asarray(m[rows,cols]).ravel()
+
+
+def _set_entries(m,rows,cols,values):
+    """Return m with its entries (rows[k],cols[k]) set to values, all in
+    one step. Setting them one at a time on a sparse matrix rebuilds it
+    every time its pattern changes, which made these constraints
+    quadratic in the number of sites"""
+    if issparse(m):
+        delta = values - _get_entries(m,rows,cols)
+        delta = csc_matrix((delta,(rows,cols)),shape=m.shape)
+        return (m + delta).asformat(m.format)
+    m[rows,cols] = values
     return m
+
+
+def _spin_indexes(m):
+    """Indexes of the up and down orbital of every site"""
+    i = np.arange(m.shape[0]//2) # number of orbitals
+    return 2*i,2*i+1
+
+
+def remove_onsite_spinful(m):
+    up,dn = _spin_indexes(m)
+    a,b = _get_entries(m,up,up),_get_entries(m,dn,dn)
+    d = (a + b)/2. # average charge
+    return _set_entries(m,np.concatenate([up,dn]),np.concatenate([up,dn]),
+            np.concatenate([a-d,b-d]))
 
 
 def remove_onsite_spinless(m):
-    n = m.shape[0] # number of orbitals
-    for i in range(n):
-        m[i,i] = 0. # set
-    return m
-
-
-
+    i = np.arange(m.shape[0]) # number of orbitals
+    return _set_entries(m,i,i,np.zeros(len(i)))
 
 
 def remove_magnetism_spinful(m):
-    n = m.shape[0]//2 # number of orbitals
-    for i in range(n):
-        d = (m[2*i,2*i] + m[2*i+1,2*i+1])/2. # average charge
-        m[2*i,2*i] = d # set
-        m[2*i+1,2*i+1] = d # set
-        m[2*i,2*i+1] = 0. # set
-        m[2*i+1,2*i] = 0. # set
-    return m
+    up,dn = _spin_indexes(m)
+    d = (_get_entries(m,up,up) + _get_entries(m,dn,dn))/2. # average charge
+    z = np.zeros(len(up))
+    return _set_entries(m,np.concatenate([up,dn,up,dn]),
+            np.concatenate([up,dn,dn,up]),np.concatenate([d,d,z,z]))
 
 
 def remove_offplane_magnetism_spinful(m):
-    n = m.shape[0]//2 # number of orbitals
-    for i in range(n):
-        d = (m[2*i,2*i] + m[2*i+1,2*i+1])/2. # average charge
-        m[2*i,2*i] = d # set
-        m[2*i+1,2*i+1] = d # set
-    return m
-
+    up,dn = _spin_indexes(m)
+    d = (_get_entries(m,up,up) + _get_entries(m,dn,dn))/2. # average charge
+    return _set_entries(m,np.concatenate([up,dn]),np.concatenate([up,dn]),
+            np.concatenate([d,d]))
 
 
 def remove_inplane_magnetism_spinful(m):
-    n = m.shape[0]//2 # number of orbitals
-    for i in range(n):
-        m[2*i,2*i+1] = 0. # set
-        m[2*i+1,2*i] = 0. # set
-    return m
+    up,dn = _spin_indexes(m)
+    z = np.zeros(len(up))
+    return _set_entries(m,np.concatenate([up,dn]),np.concatenate([dn,up]),
+            np.concatenate([z,z]))
 
 
 def remove_spinless_sector(h,removef,alldirs=True):

@@ -16,10 +16,18 @@ def hexagon_centers(r1, r2=None):
     """
     r1 = np.asarray(r1)
     r2 = r1 if r2 is None else np.asarray(r2)
-    diff = r1[:,None,:] - r2[None,:,:] # all pairwise differences
-    d2 = np.sum(diff*diff,axis=-1) # all pairwise squared distances
-    ii,jj = np.where((d2>3.9) & (d2<4.1)) # centers of an hexagon
-    return (r1[ii] + r2[jj])/2. # midpoints
+    # the pairs at distance 2 from a KD-tree, in the row-major order of
+    # the n x n array of distances that this used to build (an 80 GB
+    # array at 100,000 sites), since the centers found first are the
+    # ones retain() starts from
+    from scipy.spatial import cKDTree
+    near = cKDTree(r1).query_ball_tree(cKDTree(r2),np.sqrt(4.1))
+    ii = np.repeat(np.arange(len(r1)),[len(x) for x in near])
+    jj = np.array([j for x in near for j in sorted(x)],dtype=int)
+    diff = r1[ii] - r2[jj]
+    d2 = np.sum(diff*diff,axis=-1) # squared distances of those pairs
+    keep = (d2>3.9) & (d2<4.1) # centers of an hexagon
+    return (r1[ii[keep]] + r2[jj[keep]])/2. # midpoints
 
 
 def _fast_remove_duplicated(r,tol=1e-3):
@@ -40,15 +48,24 @@ def _retain_mask(centers,d,start_index):
     point). Vectorized: each iteration checks the whole remaining point
     set against the current frontier with numpy broadcasting instead of
     a double Python loop."""
+    from scipy.spatial import cKDTree
+    centers = np.asarray(centers)
     n = len(centers)
     kept = np.zeros(n,dtype=bool)
     kept[start_index] = True
     d2lo,d2hi = d*d-0.1,d*d+0.1
+    tree = cKDTree(centers)
     frontier = np.array([start_index])
     while len(frontier)>0:
-        diff = centers[frontier][:,None,:] - centers[None,:,:]
+        # the neighbors of the frontier from the KD-tree, rather than the
+        # frontier against every center, which grows as n^2
+        lists = tree.query_ball_point(centers[frontier],np.sqrt(d2hi))
+        jj = np.array([j for x in lists for j in x],dtype=int)
+        ff = np.repeat(frontier,[len(x) for x in lists])
+        diff = centers[ff] - centers[jj]
         d2 = np.sum(diff*diff,axis=-1)
-        near = np.any((d2>d2lo) & (d2<d2hi),axis=0)
+        near = np.zeros(n,dtype=bool)
+        near[jj[(d2>d2lo) & (d2<d2hi)]] = True
         new = near & (~kept)
         if not np.any(new): break
         kept = kept | new
@@ -292,12 +309,23 @@ def kekule_function(r,t=1.):
             return tfun(r1,r2)
         return 0.0
     # now define the function
-    def fm(rs1,rs2):
-      m = np.zeros((len(rs1),len(rs2)),dtype=np.complex128) # initialize matrix
-      for i in range(len(rs1)): # loop
-        for j in range(len(rs2)): # loop
-            m[i,j] = f(rs1[i],rs2[j]) # get kekule coupling
-      return m # return the Kekule matrix
+    def fm(rs1,rs2,sparse=False):
+      # f vanishes beyond the first neighbors, so only the pairs at
+      # distance up to 1 are evaluated, found with a KD-tree: linear in the
+      # number of sites, where evaluating every pair was quadratic (216 s
+      # for the kekule guess of a 10,000-site island)
+      from scipy.spatial import cKDTree
+      from scipy.sparse import csc_matrix
+      rs1,rs2 = np.asarray(rs1),np.asarray(rs2)
+      near = cKDTree(rs1).query_ball_tree(cKDTree(rs2),np.sqrt(1.01))
+      ii = np.repeat(np.arange(len(rs1)),[len(x) for x in near])
+      jj = np.array([j for x in near for j in x],dtype=int)
+      data = np.array([f(rs1[i],rs2[j]) for (i,j) in zip(ii,jj)],
+              dtype=np.complex128) # get kekule coupling
+      m = csc_matrix((data,(ii,jj)),shape=(len(rs1),len(rs2)))
+      m.eliminate_zeros()
+      if sparse: return m
+      return m.toarray() # return the Kekule matrix
     return fm # return the function
 
 
@@ -319,14 +347,15 @@ def bond_function_to_matrix(fun):
     return fm
 
 
-def kekule_matrix(r1,r2=None,**kwargs):
+def kekule_matrix(r1,r2=None,sparse=False,**kwargs):
     """
     Return a Kekule matrix for positions r, assuming
-    they are from a honeycomb-like lattice
+    they are from a honeycomb-like lattice, as a sparse matrix
+    if sparse=True and a dense array otherwise
     """
     if r2 is None: r2 = r1
     f = kekule_function(r1,**kwargs)
-    return f(r1,r2)
+    return f(r1,r2,sparse=sparse)
 
 
 def r_in_rs(r,rs):
