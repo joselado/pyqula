@@ -506,10 +506,22 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
     # spectrum.get_fermi_energy_T for the exact-diagonalization path, of
     # which this is the KPM analogue. The electron count is monotonic in
     # mu, so bracket it on the sampled window and bisect.
+    # The count is the cumulative DOS convolved with -df/dE, sampled in
+    # units of T around mu rather than on the energy grid. A Fermi-Dirac
+    # weight evaluated on the grid itself is a step whenever T is below
+    # the grid spacing, as the mean field's default T=1e-7 always is, which
+    # made the count a staircase in mu: the Fermi level was pinned to a
+    # grid point and jumped by a whole grid step as the mean field moved,
+    # and the KPM loop cycled at a floor instead of converging. With the
+    # cumulative DOS interpolated linearly the count is continuous in mu at
+    # any T, and below the grid spacing it is the T=0 inversion above.
     Tr = T/scale # the grid is in reduced energies, so the temperature is too
-    norm = np.trapezoid(ys,xs) # total weight, i.e. filling==1
+    u = np.linspace(-40.,40.,801) # energies around mu, in units of T
+    w = expit(u)*expit(-u) # -df/du, the derivative of the Fermi function
+    w = w/np.trapezoid(w,u)
     def nelec(mu): # occupied fraction at this chemical potential
-        return np.trapezoid(ys*expit(-(xs-mu)/Tr),xs)/norm
+        occ = np.interp(mu+Tr*u,xs,cdf,left=0.,right=1.)
+        return np.trapezoid(occ*w,u)
     lo,hi = xs[0]-40.*Tr, xs[-1]+40.*Tr # well outside the window at this T
     if nelec(lo)>filling or nelec(hi)<filling: # not bracketed, keep T=0
         return scale*ef_reduced

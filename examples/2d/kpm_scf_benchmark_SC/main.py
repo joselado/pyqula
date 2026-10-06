@@ -18,12 +18,12 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 # (the swave case below uses filling=0.05) put the Fermi level very close
 # to the band edge, needing a much larger npol than the non-SC benchmarks
 # to resolve the gap accurately -- a standard KPM/Chebyshev resolution
-# effect, not specific to has_eh. The same resolution sets a floor on the
-# KPM self-consistency error, which falls roughly as 1/npol and below which
-# the loop only cycles: at npol=600 the swave case sits between 3e-4 and
-# 6e-4, hence npol=1500 to reach maxerror=1e-4, and the triplet case sits
-# near 1e-3 even at npol=1000, hence its looser KPM tolerance (reaching
-# 1e-4 there would take npol near 10000).
+# effect, not specific to has_eh. The npol=1500 of the swave case and the
+# looser KPM tolerance of the triplet case were chosen when the KPM loop
+# cycled at a floor falling as 1/npol, which turned out to be the Fermi
+# level pinned to the KPM energy grid (future_development/bug_audit_5.md);
+# with that fixed, both cases converge at maxerror=1e-4 with npol=600 and
+# npol=400, the gaps then about 9e-4 and 1.2e-2 from the exact ones.
 import time
 import numpy as np
 from pyqula import geometry

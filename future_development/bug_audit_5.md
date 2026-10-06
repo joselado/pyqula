@@ -852,6 +852,25 @@ each with a test that fails on the source before the change:
   `maxerror=1e-4`, and the triplet case at `npol=1000` with a KPM
   `maxerror=2e-3`, and runs to the end: gaps 2.5e-4 and 2.3e-3 from the
   exact ones, the non-unitarity 2.2890e-3 against 2.2909e-3.
+  **Corrected on 5 October 2026: the floor was not the KPM resolution.**
+  It was the Fermi level, pinned to the energy grid of
+  `get_fermi4filling_kpm`. At the mean field's default `T=1e-7` its
+  finite-temperature inversion (`bug_audit_2.md` #19) evaluated the
+  Fermi-Dirac weight on that grid, where it is a step, so the electron
+  count was a staircase in $\mu$: the Fermi level stayed on one grid point
+  while the mean field moved and then jumped by a whole grid step,
+  $2\cdot 0.99\,s/(4\,n_{pol}-1)$ for a scale $s$, which is why the floor
+  fell as $1/n_{pol}$ and why a temperature of 1e-2 converged. The count is
+  now the cumulative density of states convolved with the derivative of the
+  Fermi function, continuous in $\mu$ at any $T$ and equal to the $T=0$
+  inversion below the grid spacing
+  (`tests/scf/test_kpm_fermi_temperature.py`, which fails on the source
+  before the change). With it the s-wave case converges at `npol=600` to
+  1e-5 in 16 cycles, to a gap of 0.12919 against the exact 0.13005, and the
+  triplet case at `npol=400` to 1e-4 in 30 cycles, to a gap of 0.1359
+  against 0.1477 and a non-unitarity of 2.421e-3 against 2.291e-3. The
+  example's `npol=1500` therefore buys only the accuracy of the gap, and
+  its looser triplet tolerance is no longer needed.
 - `hubbard_kpm` accepted a local $U$ on a spinless Hamiltonian, and so did
   the exact `densitydensity.hubbard` behind `meanfield.hubbardscf`, both
   building a spinless onsite term that only shifts the chemical potential.
