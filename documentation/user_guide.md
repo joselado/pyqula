@@ -521,7 +521,7 @@ Optional arguments
 - e: energy at which the LDOS is evaluated
 - delta: smearing of the LDOS
 - operator: operator to which the LDOS is projected (a name such as `"sz"`, a matrix, or an `Operator`), giving e.g. a spin-resolved real-space map instead of the charge one
-- mode: `"arpack"` (default, diagonalization on a k-mesh) or `"green"` (Green's function, 2D Hamiltonians only)
+- mode: `"arpack"` (default, diagonalization on a k-mesh), `"green"` (Green's function, 2D Hamiltonians only) or `"KPM"` (Chebyshev expansion, for large sparse Hamiltonians, see the local density of states of a large system in the KPM chapter)
 - projection: `"TB"` (default, one value per lattice site), `"TBRS"` (same, but interpolated onto a continuous real-space map for smoother plotting), or `"atomic"` (projected onto atomic orbitals rather than tight-binding sites)
 - num_bands: for large sparse Hamiltonians, only compute this many states around the target energy
 
@@ -529,9 +529,9 @@ The two evaluation modes weight an operator differently, and both integrate over
 the same operator-resolved density of states: `mode="arpack"` uses the expectation value
 $\langle \Psi | A | \Psi\rangle$ of each eigenstate times its local density $|\Psi(i)|^2$,
 while `mode="green"` uses the local matrix element $\mathrm{Re}\,\Psi^*(i)(A\Psi)(i)$, which
-is the genuinely local quantity for states that are not eigenstates of the operator. A
-momentum-dependent operator (`"valley"`) only works in `mode="arpack"`, since `mode="green"`
-has already integrated over the Brillouin zone.
+is the genuinely local quantity for states that are not eigenstates of the operator, and
+which `mode="KPM"` uses too. A momentum-dependent operator (`"valley"`) only works in
+`mode="arpack"`, since `mode="green"` has already integrated over the Brillouin zone.
 
 For a smoother map than one value per site, `projection="TBRS"` interpolates the same
 weights onto a continuous real-space grid
@@ -5082,6 +5082,83 @@ gpu.set_gpu(True) # Chebyshev moments on the GPU from now on
 When no GPU is available the same jax kernel runs on the CPU with a warning,
 so the same script runs on both.
 
+## The local density of states of a large system
+
+We will now see how to compute the local density of states of every site of a large
+system, the map that STM measures, with `h.get_multildos()` and `h.get_ldos()` in
+`mode="KPM"`. The local density of states of an orbital $i$ is the diagonal element of the
+spectral function, $D(\omega,i)=\langle i|\delta(\omega-H)|i\rangle$, and it is expanded in
+Chebyshev polynomials as the total one is, with the difference that the moments are now
+those of a single orbital
+
+$$
+D(\omega,i) = \frac{g_0\mu_0(i) + 2\sum_{m\geq 1} g_m\mu_m(i)\,T_m(\omega/s)}{\pi s\sqrt{1-(\omega/s)^2}},
+\qquad \mu_m(i)=\langle i|T_m(H/s)|i\rangle
+$$
+
+where $s$ is the scale that brings the spectrum inside $[-1,1]$, $T_m$ are the Chebyshev
+polynomials and $g_m$ the damping factors of the Jackson kernel, meaning that the map at
+every energy follows from one set of moments per orbital, and that those come from the
+Chebyshev recursion started on that orbital. Running that recursion over the whole system
+for every orbital costs the square of the number of sites, which is what puts an LDOS map of
+$10^5$ sites out of reach. The way we avoid it is by noting that after $m$ steps the vector
+started on orbital $i$ has only reached the sites within $m$ hops of it, and that the
+$2n_{\rm pol}$ moments of the expansion only need that vector up to $n_{\rm pol}-1$ steps,
+since $T_{2m}=2T_mT_m-T_0$ and $T_{2m+1}=2T_{m+1}T_m-T_1$ give two moments from each step.
+So the moments computed on the Hamiltonian restricted to the sites within $n_{\rm pol}-1$
+hops of an orbital are exactly those of the whole system, and the map costs the number of
+sites times the size of that ball, linear in the number of sites
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.honeycomb_lattice().get_supercell(80) # 12800 sites
+g.dimensionality = 0 # a finite island with zigzag edges
+h = g.get_hamiltonian(is_sparse=True,has_spin=False) # keep it sparse
+(x,y,es,ldos) = h.get_multildos(energies=np.linspace(-1.,1.,41), # energies
+                    mode="KPM", # Chebyshev expansion of every site
+                    delta=0.1, # energy resolution, half width of the peak of a level
+                    write=False) # return the maps without writing them
+```
+
+`ldos` holds one map per energy, one row for each energy of `es`, all of them from the same
+moments, so that 41 energies cost roughly what one does, and `h.get_ldos(e=0.,mode="KPM",
+delta=0.1)` returns the row at zero energy alone. For this island the 318 sites at its
+zigzag edges, about 2.5% of the sites, carry 56% of the weight at zero energy, which are the
+edge states, while at $E=\pm 1$ they carry 1.4%, less than their share, and summing a map
+over the sites gives the density of states at that energy, with the normalization of
+`h.get_dos(mode="KPM")`. The light cone changes the time of the calculation and not its
+result: the map is the one of the expansion over the whole island, to roundoff.
+
+What sets the cost of a site is the resolution. A peak of half width $\delta$ needs about
+$1.85\,s/\delta$ polynomials, here 62, and the ball of 61 hops holds about 5700 sites of the
+honeycomb lattice, a number that grows as $n_{\rm pol}^2$ in two dimensions, so that halving
+$\delta$ makes each site eight times more expensive (twice the steps on four times the
+sites), and the map only beats the recursion over the whole system once the sample is larger
+than that ball. You can think of it as the statement that a resolution $\delta$ sees the
+environment of a site up to a distance of roughly $v/\delta$, with $v$ the velocity of the
+states, whatever the size of the sample. The vector carries almost no weight near the edge
+of its light cone, so `kpm_radius` below $n_{\rm pol}$ gives a cheaper map that is converged
+in practice: on a disordered honeycomb island of 20000 sites at `npol=100`, the map at
+`kpm_radius=80`, 70, 60 and 50 differs from the exact one by $10^{-11}$, $2\times10^{-7}$,
+$5\times10^{-5}$ and $10^{-3}$ of its largest value, and at 60 it takes about a third of the
+time. How far below the light cone one can go depends on how fast the states move in units
+of the scale, so the radius is converged as a k-mesh is, by comparing two values.
+
+Optional arguments
+- delta: energy resolution, the half width at half maximum of the peak a level gives, as in `h.get_dos(mode="KPM")`
+- npol: number of polynomials, in place of `delta`; 200 when neither is given
+- kpm_radius: radius in hops of the region the recursion of each site runs on; `None` (default) gives the exact map, a smaller value a cheaper map of a finite cluster around each site
+- operator: an operator with a k-independent matrix, giving the local matrix element $\mathrm{Re}\,(A\rho)_{ii}$, the convention of `mode="green"`
+- scale: half width of the window that holds the spectrum, estimated from the Hamiltonian when not given
+- kpm_prec: precision of the recursion, `"double"` on the CPU and `"single"` on the GPU by default
+- nk: k-points per direction, for a periodic Hamiltonian, whose map is averaged over the Brillouin zone
+
+The recursion is the one behind the KPM mean field of "Interactions at the mean-field
+level", and it follows the same GPU switch, so a self-consistent state of $10^5$ sites can be
+read with the map that STM would measure on it, the spin-resolved one included with
+`operator="sz"`. See `examples/0d/kpm_ldos_map/main.py` for a runnable version.
+
 
 # Classical spin models
 
@@ -6158,13 +6235,21 @@ Optional arguments:
 - e: energy of the LDOS (`energy` is accepted as an alias, since that is
   how the Green's function, embedding and transport routines spell it)
 
-- delta=0.001: broadening of the LDOS, which must be positive
+- delta=None: broadening of the LDOS, which must be positive, 0.001 when not
+  given; in `mode="KPM"` the energy resolution of the expansion, with
+  `npol=200` polynomials when neither is given
 
 - operator=None: operator the LDOS is projected onto (a name, a matrix or an
-  `Operator`); see the LDOS section above for how the two modes weight it
+  `Operator`); see the LDOS section above for how the modes weight it
 
-- mode="arpack": `"arpack"` (diagonalization on a k-mesh) or `"green"`
-  (Green's function, 2D only)
+- mode="arpack": `"arpack"` (diagonalization on a k-mesh), `"green"`
+  (Green's function, 2D only) or `"KPM"` (Chebyshev expansion of every site,
+  linear in the number of sites, see "The local density of states of a large
+  system")
+
+- npol, kpm_radius, scale, kpm_prec: `mode="KPM"` only, the number of
+  polynomials, the radius in hops of the recursion of each site (`None` for
+  the exact map), the window of the spectrum and the precision
 
 - projection="TB": `"TB"`, `"TBRS"` (real-space interpolated) or `"atomic"`
 
@@ -6188,11 +6273,17 @@ Optional arguments:
 
 - energies=linspace(-1,1,100): energies to compute
 
-- delta, nk: broadening and k-point density, as in `h.get_ldos()`
+- delta, nk: broadening and k-point density, as in `h.get_ldos()`, with
+  `delta=0.01` when not given in the diagonalization mode
+
+- mode="diagonalization": `"diagonalization"` or `"KPM"`, the Chebyshev
+  expansion of every site, every energy from the same moments, taking the
+  options of `h.get_ldos()` in that mode
 
 - operator=None: operator the LDOS is projected onto, weighting each
   eigenstate by $\langle\Psi|A|\Psi\rangle$, the same convention
-  `h.get_ldos(mode="arpack")` uses. The older spelling `op=` is still
+  `h.get_ldos(mode="arpack")` uses; in `mode="KPM"` the local matrix element,
+  as in `h.get_ldos(mode="green")`. The older spelling `op=` is still
   accepted; passing both raises `TypeError`
 
 - projection="TB": `"TB"` or `"atomic"`. Anything else raises `ValueError`

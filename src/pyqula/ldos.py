@@ -334,11 +334,24 @@ def green2ldos(g,op=None):
     return -np.diag(g@op + op@g).imag/(2.*np.pi)
 
 
-def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
+def get_ldos_tb(h,e=0.0,delta=None,nrep=5,nk=None,ks=None,mode="arpack",
              random=False,silent=True,interpolate=False,
              operator=None,return_rd = False,
              write=None,**kwargs):
     """ Calculate LDOS in a tight binding basis
+
+    mode: "arpack" (or "diagonalization") broadens the eigenstates of H(k)
+        with a Lorentzian of half width delta (0.001 by default), "green"
+        reads the Green's function of a 2d Hamiltonian, and "KPM" expands
+        the LDOS of every orbital in Chebyshev polynomials with the Jackson
+        kernel, in a time linear in the number of sites (see
+        kpmtk/ldosmap.py), which is the mode for a large sparse
+        Hamiltonian. There delta is the half width at half maximum of the
+        peak a level gives, or npol=, the number of polynomials, sets it
+        (200 when neither is given), and kpm_radius=, scale= and kpm_prec=
+        are those of the KPM mean field: the map is exact for
+        kpm_radius=None, and a smaller radius in hops keeps a finite
+        cluster around each site.
 
     operator: None, or an operator spec (a name, a matrix, an Operator).
         The LDOS is then resolved with that operator instead of being the
@@ -353,7 +366,8 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
     """
     write = filewrite.resolve(write,True) # the call, else the global switch
     from .utilities import check_delta
-    check_delta(delta)
+    if delta is None and mode!="KPM": delta = 0.001 # Lorentzian broadening
+    if delta is not None: check_delta(delta)
     if ks is not None and mode=="green":
         raise ValueError("an explicit k-point list (ks) is incompatible "
           +"with mode='green', which integrates over the Brillouin zone")
@@ -395,9 +409,22 @@ def get_ldos_tb(h,e=0.0,delta=0.001,nrep=5,nk=None,ks=None,mode="arpack",
         ds += [ldos_diagonalization(hk,e=e,delta=delta,operator=operator,
                                     k=k,**kwargs)]
       d = np.mean(ds,axis=0) # average
+    elif mode=="KPM": # Chebyshev expansion, linear in the number of sites
+      from . import klist
+      from .kpmtk.ldosmap import ldos_map
+      if ks is None:
+        ks = klist.kmesh(h.dimensionality,nk=10 if nk is None else nk)
+        if random: ks = [np.random.random(3) for k in ks] # random mesh
+      kpm = {key:kwargs.pop(key) for key in ["npol","scale","kpm_radius",
+          "kpm_prec"] if key in kwargs} # the options of the expansion
+      if kwargs and not interpolate: # the interpolation takes the rest
+        raise TypeError("get_ldos with mode='KPM' got the unexpected "
+                "arguments "+", ".join(sorted(kwargs))+"; it takes delta or "
+                "npol, kpm_radius, scale and kpm_prec")
+      d = ldos_map(h,[e],ks,delta=delta,operator=operator,**kpm)[0][0]
     else: # not recognized
-      raise ValueError("unknown mode; the LDOS accepts 'green', 'arpack' and "
-              "'diagonalization'")
+      raise ValueError("unknown mode %r; the LDOS accepts 'green', 'arpack', "
+              "'diagonalization' and 'KPM'" % (mode,))
     # write result
     d = spatial_dos(h,d) # convert to spatial resolved DOS
     g = h.geometry  # store geometry
@@ -453,18 +480,74 @@ def multi_ldos(h,projection="TB",**kwargs):
               "'atomic'")
 
 
-def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
+def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=None,
         nrep=3,nk=100,num_bands=20,
-        random=False,operator=None,write=None):
-  """Calculate many LDOS, by diagonalizing the Hamiltonian
+        random=False,operator=None,write=None,mode="diagonalization",
+        **kwargs):
+  """Calculate many LDOS, by diagonalizing the Hamiltonian or from a
+  Chebyshev expansion
 
+  mode: "diagonalization" broadens the eigenstates with a Lorentzian of
+      half width delta (0.01 by default), and "KPM" expands the LDOS of
+      every orbital in Chebyshev polynomials, all the energies from one
+      recursion, in a time linear in the number of sites, with the
+      options of get_ldos in that mode (delta or npol, kpm_radius, scale,
+      kpm_prec).
   operator: None, or an operator spec (a name, a matrix, an Operator).
-      Each eigenstate is then weighted with its expectation value
-      <psi|A|psi>, which is the same convention get_ldos uses in
-      mode="arpack" (see ldostk.ldoswaves), so the map written for a
-      given energy is what get_ldos returns at that energy.
+      With mode="diagonalization" each eigenstate is weighted with its
+      expectation value <psi|A|psi>, which is the same convention get_ldos
+      uses in mode="arpack" (see ldostk.ldoswaves), so the map written for
+      a given energy is what get_ldos returns at that energy; with
+      mode="KPM" the map is the local matrix element Re(A rho)_ii, as in
+      get_ldos with mode="green" or "KPM".
   """
   write = filewrite.resolve(write,True) # the call, else the global switch
+  if operator is not None: operator = h.get_operator(operator) # resolve name
+  if mode=="KPM":
+    (outs,es2,ys) = _multi_ldos_kpm(h,energies,delta=delta,nk=nk,
+            random=random,operator=operator,**kwargs)
+  elif mode=="diagonalization":
+    if kwargs:
+      raise TypeError("multi_ldos with mode='diagonalization' got the "
+              "unexpected arguments "+", ".join(sorted(kwargs)))
+    if delta is None: delta = 0.01 # Lorentzian broadening
+    (outs,es2,ys) = _multi_ldos_diagonalization(h,energies,delta=delta,
+            nk=nk,num_bands=num_bands,random=random,operator=operator)
+  else:
+    raise ValueError("unknown mode %r; multi_ldos accepts 'diagonalization' "
+            "and 'KPM'" % (mode,))
+  out = (h.geometry.x,h.geometry.y,np.array(energies),np.array(outs))
+  if not write: return out
+  _write_multi_ldos(h,energies,outs,es2,ys,nrep)
+  return out
+
+
+def _multi_ldos_kpm(h,energies,delta=None,nk=100,random=False,
+        operator=None,**kwargs):
+  """The maps of multi_ldos_tb from the Chebyshev expansion
+  (kpmtk/ldosmap.py), one per energy, and the DOS they add up to, on a
+  grid ten times finer"""
+  from .kpmtk.ldosmap import ldos_map, kpm_ldos_basis
+  unknown = set(kwargs) - {"npol","scale","kpm_radius","kpm_prec"}
+  if unknown:
+    raise TypeError("multi_ldos with mode='KPM' got the unexpected "
+            "arguments "+", ".join(sorted(unknown))+"; it takes delta or "
+            "npol, kpm_radius, scale and kpm_prec")
+  ks = klist.kmesh(h.dimensionality,nk=nk) # get grid
+  if random: ks = [np.random.random(3) for k in ks] # random vectors
+  (ds,mus,scale) = ldos_map(h,energies,ks,delta=delta,operator=operator,
+          **kwargs)
+  outs = [spatial_dos(h,d) for d in ds] # resum if necessary
+  es2 = np.linspace(min(energies),max(energies),len(energies)*10)
+  # the trace of the maps, the moments averaged over the orbitals
+  ys = (mus*h.intra.shape[0])@kpm_ldos_basis(es2,scale,len(mus))
+  return outs,es2,ys
+
+
+def _multi_ldos_diagonalization(h,energies,delta=0.01,nk=100,num_bands=20,
+        random=False,operator=None):
+  """The maps of multi_ldos_tb from the eigenstates, one per energy, and
+  the DOS they add up to, on a grid ten times finer"""
   print("Calculating eigenvectors in LDOS")
   ps = [] # weights
   evals,ws = [],[] # empty list
@@ -473,7 +556,6 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
       ks = [np.random.random(3) for k in ks] # random vectors
       print("RANDOM vectors in LDOS")
   hk = h.get_hk_gen() # get generator
-  if operator is not None: operator = h.get_operator(operator) # resolve name
   def get_weight(v,k):
       """Weight of this eigenstate, its expectation value of the operator"""
       if operator is None: return 1.0 # no operator, plain charge LDOS
@@ -524,8 +606,12 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
   es2 = np.linspace(min(energies),max(energies),len(energies)*10)
   # same normalization as the maps above, and as dos.dos_kmesh
   ys = calculate_dos(evals,es2,delta,w=None)/(np.pi*nkp) # compute DOS
-  out = (h.geometry.x,h.geometry.y,np.array(energies),np.array(outs))
-  if not write: return out
+  return outs,es2,ys
+
+
+def _write_multi_ldos(h,energies,outs,es2,ys,nrep):
+  """Write the maps of multi_ldos_tb in MULTILDOS, one file per energy,
+  their list, DOSMAP.OUT and the DOS"""
   fs.rmdir("MULTILDOS") # remove folder
   fs.mkdir("MULTILDOS") # create folder
   go = h.geometry.copy() # copy geometry
@@ -551,8 +637,7 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=0.01,
           fmap.write(str(outs[ie][ii])+"\n")
   fmap.close()
   from .dos import write_dos
-  write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")  
-  return out
+  write_dos(es2,ys,output_file="MULTILDOS/DOS.OUT")
 
 
 

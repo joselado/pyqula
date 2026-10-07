@@ -164,10 +164,12 @@ def pair_values(backend, ms, pairs, coef, positions, radius,
     tiles in groups of _TILES_PER_CALL, each tile a member of one batch
     (one tile per thread on the CPU, and on the card every tile padded to
     the largest, so that the kernel compiles once whatever the sizes of
-    the regions); otherwise the tiles go one by one"""
+    the regions); otherwise the tiles go one by one. A coef with two axes
+    gives several contractions of every pair, as in the backends"""
     pairs = np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
     ms = [csr_matrix(m) for m in ms]
-    out = np.zeros((len(ms), len(pairs)), dtype=np.complex128)
+    out = np.zeros((len(ms), len(pairs)) + np.shape(coef)[1:],
+            dtype=np.complex128)
     tr = np.zeros((len(ms), len(coef)), dtype=np.complex128)
     mumax = 0.
     if len(pairs):

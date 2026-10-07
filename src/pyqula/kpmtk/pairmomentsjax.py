@@ -142,14 +142,16 @@ def _doubled(data, cols, V0, rows, ci, cj, diag, nm):
 
 
 def _one(d, cols, V0, rows, ci, cj, diag, weight, nm, doubled, coef):
-    """sum_n coef[n] mu_n of every pair, the largest modulus of a moment,
-    and the moments weighted by weight and summed over the pairs (the
-    trace, for the Fermi level); the sums in double precision whatever
-    the precision of the recursion"""
+    """sum_n coef[n] mu_n of every pair (for every column of coef when it
+    has two axes), the largest modulus of a moment, and the moments
+    weighted by weight and summed over the pairs (the trace, for the
+    Fermi level); the sums in double precision whatever the precision of
+    the recursion"""
     if doubled: mus = _doubled(d, cols, V0, rows, ci, cj, diag, nm)
     else: mus = _read(d, cols, V0, rows, cj, nm)
     mus = mus.astype(jnp.complex128)
-    return coef @ mus, jnp.max(jnp.abs(mus)), mus @ weight
+    return (jnp.tensordot(mus, coef, axes=(0, 0)), jnp.max(jnp.abs(mus)),
+            mus @ weight)
 
 
 @partial(jax.jit, static_argnums=(8, 9))
@@ -245,10 +247,11 @@ def _groups(n, size):
 def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
     """For every k-point (ms, the matrices H(k)/scale, spectrum inside
     [-1,1]) and every pair (i,j) of pairs, sum_n coef[n] <e_i|T_n(H)|e_j>,
-    as an (nk,npairs) array, with the largest modulus of any moment. With
-    trace=True, also the moments of the pairs with i=j summed over them,
-    as an (nk,len(coef)) array, which is the trace of T_n(H) when every
-    orbital has its diagonal pair.
+    as an (nk,npairs) array, with the largest modulus of any moment. A
+    coef of shape (nm,nc) gives nc contractions of the same moments, as
+    an (nk,npairs,nc) array. With trace=True, also the moments of the
+    pairs with i=j summed over them, as an (nk,len(coef)) array, which is
+    the trace of T_n(H) when every orbital has its diagonal pair.
 
     The blocks of starting columns and the k-points are split into calls
     of at most _MAX_BLOCK entries, and every call of a kind (doubled, or
@@ -261,10 +264,12 @@ def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
     orbitals 2 min each."""
     pairs = np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
     nm = len(coef)
+    shape = np.shape(coef)[1:] # the contractions of every pair
+    nc = int(np.prod(shape))
     coef = jnp.asarray(coef, dtype=jnp.float64)
     dtype = _DTYPES[kpm_prec]
     nk = len(ms)
-    out = np.zeros((nk, len(pairs)), dtype=np.complex128)
+    out = np.zeros((nk, len(pairs)) + shape, dtype=np.complex128)
     tr = np.zeros((nk, nm), dtype=np.complex128)
     mumax = [0.] # reduced with np.max, which keeps a NaN where max() may not
     if len(pairs) == 0:
@@ -278,7 +283,7 @@ def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
         if not group: continue
         width = max(len(b["columns"]) for b in group)
         npad = max(len(b["sel"]) for b in group)
-        nkc, nkpad = _groups(nk, _MAX_BLOCK//(3*N*width + nm*npad))
+        nkc, nkpad = _groups(nk, _MAX_BLOCK//(3*N*width + (nm + nc)*npad))
         d = data
         if nkpad > nk: d = np.concatenate([data, np.zeros((nkpad - nk,)
             + data.shape[1:], dtype=data.dtype)])
@@ -312,6 +317,8 @@ def pair_values_batch(problems, coef, kpm_prec="double", pad=None):
     Returns a list of (values, largest moment, trace), one per problem"""
     pad = dict() if pad is None else pad
     nm = len(coef)
+    shape = np.shape(coef)[1:] # the contractions of every pair
+    nc = int(np.prod(shape))
     coef = jnp.asarray(coef, dtype=jnp.float64)
     dtype = _DTYPES[kpm_prec]
     members = [] # (problem, block, k-point)
@@ -325,7 +332,7 @@ def pair_values_batch(problems, coef, kpm_prec="double", pad=None):
         for ib in range(len(plans[-1])):
             for ik in range(len(ms)): members.append((ip, ib, ik))
     nk = len(problems[0][0]) if problems else 0
-    results = [[np.zeros((nk, len(np.asarray(p).reshape(-1, 2))),
+    results = [[np.zeros((nk, len(np.asarray(p).reshape(-1, 2))) + shape,
         dtype=np.complex128), 0., np.zeros((nk, nm), dtype=np.complex128)]
         for (_, p) in problems]
     if not members: return [tuple(r) for r in results]
@@ -342,7 +349,8 @@ def pair_values_batch(problems, coef, kpm_prec="double", pad=None):
         width = max([len(b["columns"]) for b in blocks]
                 + [pad.get("width", 0)])
         npad = max([len(b["sel"]) for b in blocks] + [pad.get("npairs", 0)])
-        size, total = _groups(len(group), _MAX_BLOCK//(3*N*width + nm*npad))
+        size, total = _groups(len(group),
+                _MAX_BLOCK//(3*N*width + (nm + nc)*npad))
         group = group + [None]*(total - len(group))
         for g0 in range(0, total, size):
             arrays = []

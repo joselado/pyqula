@@ -148,7 +148,12 @@ already reached once.
   minute on six desktop cores in 1.2 GB (two minutes in 2.3 GB with Nambu).
   Left open: an a-posteriori estimate of the truncation error, the per-site
   filling with `integration="kpm"`, and the doubling on the card in single
-  precision.
+  precision. Its last section is what else the recursion makes linear in
+  the number of sites: the LDOS map of every site (`mode="KPM"` of
+  `h.get_ldos()` and `h.get_multildos()`), built and exact on the light
+  cone of the expansion, with the error measured below it, and the three
+  surveyed and not built, the KPM Chern marker, the Kubo-Bastin
+  conductivity and the Chebyshev time evolution, with what each needs.
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with
   the Goldstone/Ward-identity measurements that settle it.

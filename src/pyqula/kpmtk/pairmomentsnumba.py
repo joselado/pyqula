@@ -190,10 +190,11 @@ def _entry(cplx, Ar, Ai, r, c):
 
 @jit(nopython=True, cache=True)
 def _record(mu, n, p, diag, coef, out, tr, state):
-    """Add the moment mu_n of pair p to its contracted value, to the trace
-    when the pair is diagonal, and to the largest modulus in state[0],
-    with state[1] set by a moment that is not finite"""
-    out[p] += coef[n]*mu
+    """Add the moment mu_n of pair p to its contracted values, one per
+    column of coef, to the trace when the pair is diagonal, and to the
+    largest modulus in state[0], with state[1] set by a moment that is not
+    finite"""
+    for c in range(coef.shape[1]): out[p, c] += coef[n, c]*mu
     if diag[p]: tr[n] += mu
     m = abs(mu)
     if not np.isfinite(m): state[1] = 1.
@@ -222,7 +223,7 @@ def _doubled_init(cplx, Vr, Vi, columns, ci, cj, diag, coef):
     """The output arrays of a doubled block, the first moment of every pair,
     <e_i|H|e_j>, read on V_1, and the moments 0 and 1 recorded"""
     P = len(ci)
-    out = np.zeros(P, dtype=np.complex128)
+    out = np.zeros((P, coef.shape[1]), dtype=np.complex128)
     tr = np.zeros(len(coef), dtype=np.complex128)
     state = np.zeros(2)
     mu1 = np.zeros(P, dtype=np.complex128)
@@ -240,8 +241,9 @@ def _doubled_rows(cplx, indptr, indices, d2r, d2i, columns, ci, cj, diag,
     """The doubled recursion of one block, its rows split among the
     threads in nchunk pieces: columns are the orbitals of the block
     columns, ci and cj the block columns of the two orbitals of every
-    pair. Returns sum_n coef[n] mu_n for every pair, the moments summed
-    over the pairs flagged in diag, and the largest modulus of a moment"""
+    pair. Returns sum_n coef[n,c] mu_n for every pair and column c of
+    coef, the moments summed over the pairs flagged in diag, and the
+    largest modulus of a moment"""
     Vr, Vi, Wr, Wi = _start(cplx, indptr, indices, d2r, d2i, columns)
     out, tr, state, mu1, oi, oj = _doubled_init(cplx, Vr, Vi, columns, ci,
             cj, diag, coef)
@@ -302,7 +304,7 @@ def _read_rows(cplx, indptr, indices, d2r, d2i, columns, rows, cidx, diag,
     column of its starting vector. Returns what _doubled_rows does"""
     Vr, Vi, Wr, Wi = _start(cplx, indptr, indices, d2r, d2i, columns)
     N = Vr.shape[0]
-    out = np.zeros(len(rows), dtype=np.complex128)
+    out = np.zeros((len(rows), coef.shape[1]), dtype=np.complex128)
     tr = np.zeros(len(coef), dtype=np.complex128)
     state = np.zeros(2)
     _read_moments(0, cplx, Wr, Wi, rows, cidx, diag, coef, out, tr, state)
@@ -323,7 +325,7 @@ def _read_serial(cplx, indptr, indices, d2r, d2i, columns, rows, cidx, diag,
     """_read_rows with the rows one after the other"""
     Vr, Vi, Wr, Wi = _start(cplx, indptr, indices, d2r, d2i, columns)
     N = Vr.shape[0]
-    out = np.zeros(len(rows), dtype=np.complex128)
+    out = np.zeros((len(rows), coef.shape[1]), dtype=np.complex128)
     tr = np.zeros(len(coef), dtype=np.complex128)
     state = np.zeros(2)
     _read_moments(0, cplx, Wr, Wi, rows, cidx, diag, coef, out, tr, state)
@@ -347,7 +349,7 @@ def _doubled_members(cplx, indptr, indices, d2r, d2i, nrow, columns, ncol,
     stacked and padded with zeros, and its own number of rows, block
     columns and pairs (nrow, ncol, npair)"""
     M = indptr.shape[0]
-    out = np.zeros((M, ci.shape[1]), dtype=np.complex128)
+    out = np.zeros((M, ci.shape[1], coef.shape[1]), dtype=np.complex128)
     tr = np.zeros((M, len(coef)), dtype=np.complex128)
     mumax = np.zeros(M)
     for im in prange(M):
@@ -367,7 +369,7 @@ def _read_members(cplx, indptr, indices, d2r, d2i, nrow, columns, ncol,
     """_read_serial for every member of a batch at once, see
     _doubled_members"""
     M = indptr.shape[0]
-    out = np.zeros((M, rows.shape[1]), dtype=np.complex128)
+    out = np.zeros((M, rows.shape[1], coef.shape[1]), dtype=np.complex128)
     tr = np.zeros((M, len(coef)), dtype=np.complex128)
     mumax = np.zeros(M)
     for im in prange(M):
@@ -456,7 +458,9 @@ def _batch_fits(members_n_ncol):
 def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
     """For every k-point (ms, the matrices H(k)/scale, spectrum inside
     [-1,1]) and every pair (i,j) of pairs, sum_n coef[n] <e_i|T_n(H)|e_j>,
-    as an (nk,npairs) array, with the largest modulus of any moment. With
+    as an (nk,npairs) array, with the largest modulus of any moment. A
+    coef of shape (nm,nc) gives nc contractions of the same moments, as
+    an (nk,npairs,nc) array, for instance a local DOS at nc energies. With
     trace=True, also the moments of the pairs with i=j summed over them,
     as an (nk,len(coef)) array, which is the trace of T_n(H) when every
     orbital has its diagonal pair.
@@ -465,11 +469,12 @@ def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
     thread runs one k-point per thread; otherwise the k-points go one
     after the other, with the rows of each block split among the threads."""
     pairs = np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
-    coef = np.asarray(coef, dtype=np.float64)
+    shape = np.shape(coef)[1:] # the contractions of every pair
+    coef = np.asarray(coef, dtype=np.float64).reshape(len(coef), -1)
     dtype = _DTYPES[kpm_prec]
     ms = [csr_matrix(m) for m in ms]
     N = ms[0].shape[0]
-    out = np.zeros((len(ms), len(pairs)), dtype=np.complex128)
+    out = np.zeros((len(ms), len(pairs), coef.shape[1]), dtype=np.complex128)
     tr = np.zeros((len(ms), len(coef)), dtype=np.complex128)
     mumax = 0.
     blocks = _plan(pairs, N, max(m.nnz for m in ms)) if len(pairs) else []
@@ -485,6 +490,7 @@ def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
             out[ik, sel] = vals
             tr[ik] += t
             mumax = max(mumax, float(mm))
+    out = out.reshape((len(ms), len(pairs)) + shape)
     if trace: return out, mumax, tr
     return out, mumax
 
@@ -497,9 +503,11 @@ def pair_values_batch(problems, coef, kpm_prec="double", pad=None):
     a thread of its own when they fit in memory once per thread, which
     saves the problems the cost of splitting their few rows among the
     threads; otherwise each problem goes through pair_values. Returns a
-    list of (values, largest moment, trace), one per problem. pad, the
-    sizes the card pads to, is not needed here"""
-    coef = np.asarray(coef, dtype=np.float64)
+    list of (values, largest moment, trace), one per problem, the values
+    of the shape pair_values gives them. pad, the sizes the card pads to,
+    is not needed here"""
+    shape = np.shape(coef)[1:]
+    coef = np.asarray(coef, dtype=np.float64).reshape(len(coef), -1)
     dtype = _DTYPES[kpm_prec]
     members, where = [], []
     plans = []
@@ -516,15 +524,15 @@ def pair_values_batch(problems, coef, kpm_prec="double", pad=None):
                 where.append((ip, ik, block[1]))
     if not _batch_fits([(m.shape[0], len(b[0])) for (m, b, _) in members]
             or [(0, 0)]):
-        return [pair_values(ms, pairs, coef, kpm_prec=kpm_prec, trace=True)
-                for (ms, pairs, _) in plans]
-    results = [[np.zeros((len(ms), len(pairs)), dtype=np.complex128), 0.,
-        np.zeros((len(ms), len(coef)), dtype=np.complex128)]
+        return [pair_values(ms, pairs, coef.reshape((len(coef),) + shape),
+            kpm_prec=kpm_prec, trace=True) for (ms, pairs, _) in plans]
+    results = [[np.zeros((len(ms), len(pairs)) + shape, dtype=np.complex128),
+        0., np.zeros((len(ms), len(coef)), dtype=np.complex128)]
         for (ms, pairs, _) in plans]
     if members:
         for (ip, ik, sel), (vals, t, mm) in zip(where,
                 _run_members(members, coef, dtype)):
-            results[ip][0][ik, sel] = vals
+            results[ip][0][ik, sel] = vals.reshape((len(sel),) + shape)
             results[ip][2][ik] += t
             results[ip][1] = max(results[ip][1], float(mm))
     return [tuple(r) for r in results]

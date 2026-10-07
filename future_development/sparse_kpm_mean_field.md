@@ -3,7 +3,8 @@
 Status, 6 October 2026: **the four steps are built** (the construction
 path, the sparse self-consistent loop under both KPM entry points, the
 kernel with the lagged Fermi level, and the truncated recursion, below),
-and an iteration at $10^5$ sites takes under a minute. This is the plan for a KPM mean field
+and an iteration at $10^5$ sites takes under a minute; since 7 October the
+same recursion also gives the LDOS map of every site, see the last section. This is the plan for a KPM mean field
 (`h.get_mean_field_hamiltonian_kpm`, and `integration="kpm"` of
 `h.get_mean_field_hamiltonian`) whose memory is linear in the number of
 orbitals, so that a self-consistent calculation on $10^5$ sites, with
@@ -546,3 +547,101 @@ Taken while the kernel and the truncation were built, the same day:
 - The doubling on the card in single precision, its default, where it was
   no faster; a summation of the inner products in double precision would
   remove the precision loss but costs the card's float64.
+
+## Other observables of the same recursion, 7 October 2026
+
+Once the block recursion and its truncation exist, the question is which
+other calculation on a large sparse Hamiltonian they make linear in the
+number of sites. A survey of the package that day found the total density
+of states already linear (`h.get_dos(mode="KPM")`, a stochastic trace, 0.1,
+0.3 and 1.4 s at 3200, 12800 and 51200 sites of a honeycomb island), and
+four observables that were not: the LDOS map, `h.get_ldos()`, a dense
+diagonalization that took 7.8 s at 3200 sites and refused at 12800 through
+`algebra.maxsize`, with the per-site `dos_site_kpm` one full recursion per
+site and so quadratic for a map; the local Chern marker, `real_space_chern`,
+dense; the conductivity of a disordered sample, which exists only as the
+k-space Kubo-Greenwood formula of a clean crystal; and the time evolution,
+`timeevolution.py`, an `eigh` of the dense matrix in 0d only. The
+maintainer picked the LDOS map first.
+
+### The LDOS map, built
+
+`mode="KPM"` of `h.get_ldos()` and `h.get_multildos()`
+(`kpmtk/ldosmap.py`) reads the diagonal moments of every orbital from the
+block recursion, contracted at once with the Jackson-weighted Chebyshev
+basis at every energy asked for. The one change to the kernels is that
+`coef` may have a second axis: `pair_values` of both backends, the batched
+paths and the truncation take a coefficient matrix of shape `(nm,nc)` and
+return `nc` contractions of every pair, with a one-axis `coef` giving what
+it gave before, so the mean field is untouched (the 379 tests of the LDOS,
+KPM, KPM mean-field and DOS suites and of every caller of the LDOS routines
+pass).
+
+The radius needs no choice: $2n_{\rm pol}$ moments only need the vector of
+an orbital up to step $n_{\rm pol}-1$ with the doubling, so the recursion
+on the ball of $n_{\rm pol}-1$ hops around each tile is exact, and it is
+the default (`kpm_radius=None`), with a larger radius clamped to it. The
+tests hold it to the full recursion to $10^{-12}$ on an island and on a
+periodic supercell whose balls cross the cell, and the map to the
+expansion of the eigenstates, $\mu_n(i)=\sum_k|\psi_k(i)|^2T_n(E_k/s)$, to
+$10^{-12}$ for spinless, Rashba, Nambu and periodic Hamiltonians, the
+`operator=` map included, which is the local matrix element
+$\mathrm{Re}\,(A\rho)_{ii}$ of `mode="green"` rather than the
+eigenstate weighting of `mode="arpack"`.
+
+The light cone in hops is conservative, since the Chebyshev vector has
+almost no weight near its edge. On a disordered honeycomb island of 20,000
+sites at `npol=100` (scale 3.5), the map at a radius below the light cone
+differs from the exact one, relative to its largest value, by
+
+| `kpm_radius` | 99 | 80 | 70 | 60 | 50 | 40 | 30 |
+|---|---|---|---|---|---|---|---|
+| error | 6e-16 | 1e-11 | 2e-7 | 5e-5 | 9e-4 | 5e-3 | 2e-2 |
+| time (s) | 59 | 33 | 26 | 19 | 18 | 13 | 8 |
+
+with the full recursion at 83 s, all on a machine shared with other jobs
+(load 4 to 10), so the times are to be read as ratios. How fast the error
+falls depends on the velocity of the states in units of the scale, larger
+in a chain, so the default stays exact and a smaller radius is the user's
+call, converged by comparing two.
+
+The scaling, at `npol=50` (the light cone 49 hops, about 3700 sites in the
+bulk of the honeycomb lattice), against the full recursion, on the same
+shared machine:
+
+| sites | 20,000 | 45,000 | 80,000 | 125,000 |
+|---|---|---|---|---|
+| light cone (s) | 9.4 | 28.9 | 38.4 | 50.4 |
+| full recursion (s) | 47.8 | 310 | | |
+
+meaning about 0.4 to 0.6 ms per site whatever the size, the spread being
+the load of the machine (10 to 15), while the full recursion grows as the
+square and would take about 40 minutes at 125,000 sites. The maps agree
+with the full recursion to $10^{-15}$ where both were run.
+
+### Surveyed and not built
+
+- The KPM local Chern marker: tier 3 of
+  [`topological_invariants.md`](topological_invariants.md), with its
+  reference (arXiv:1905.02215) and oracle (Zenodo 2667604). Two routes now
+  exist. The stochastic one of the paper needs a primitive the recursion
+  does not have, the expanded projector applied to a block of vectors and
+  returned as vectors, which is the accumulation $\sum_n c_nV_n$ in
+  `_step_row` instead of the read on the rows. The local one is the
+  Bianco-Resta marker from the projector entries within twice a radius of
+  each site, which `get_dm_kpm_sparse` already computes in linear memory;
+  the KPM projector at zero temperature is not idempotent, so the marker
+  of a site should be taken with positions relative to that site, and the
+  radius converges only in a gapped state.
+- The Kubo-Bastin conductivity of a disordered sample (arXiv:1410.8140,
+  KITE arXiv:1910.05194, `kwant.kpm.conductivity` as the BSD benchmark):
+  the two-index moments $\mathrm{Tr}[v_aT_n(H)v_bT_m(H)]$ from a stochastic
+  trace, linear in the sites and quadratic in the number of moments, with
+  the velocity $i[H,r]$ that `conductivity.py` already builds. Oracles: the
+  k-space `optical_conductivity` of a clean supercell, and $\sigma_{xy}$ of
+  a Chern insulator against `get_chern`. The largest of the four.
+- The Chebyshev propagator,
+  $e^{-iHt}=\sum_n(2-\delta_{n0})(-i)^nJ_n(st)T_n(H/s)$, in place of the
+  dense `eigh` of `timeevolution.py`: linear in the sites per time, and the
+  mean square displacement of a wavepacket gives the diffusion constant,
+  a second route to the conductivity.
