@@ -236,7 +236,7 @@ def resolve_kpm_prec(kpm_prec):
 
 def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
                          npol=DEFAULT_NPOL, ne=None, cores=None, T=0.0,
-                         kpm_prec=None, trace=False):
+                         kpm_prec=None, trace=False, radius=None):
     """Shared Bloch-KPM engine: given the (direction, row, col)
     density-matrix entries to compute (in whatever index convention the
     caller's "needed" set already uses -- see required_elements/
@@ -271,7 +271,9 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     the k-mesh here; it still sets the package-wide core count.
 
     trace=True also returns the trace moments of H(k), see
-    _kpm_pair_values, as (dm, trace).
+    _kpm_pair_values, as (dm, trace). radius truncates the recursion to
+    the sites within that many hops of each starting orbital
+    (kpmtk/truncation.py), None for the full one.
 
     A density-matrix entry is linear in its moments, so the energy
     integral of the Jackson-damped Chebyshev series against the Fermi
@@ -294,7 +296,7 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     pair_index = {p: idx for idx, p in enumerate(pairs)}
     out = _kpm_pair_values(h, np.array(pairs, dtype=np.int64).reshape(-1, 2),
             nk=nk, scale=scale, npol=npol, ne=ne, cores=cores, T=T,
-            kpm_prec=kpm_prec, trace=trace)
+            kpm_prec=kpm_prec, trace=trace, radius=radius)
     ks, vals = out[0], out[1]
 
     needed_by_d = dict()
@@ -324,8 +326,23 @@ def _pair_moments():
     return pairmomentsnumba
 
 
+def _pair_values_of(h, radius):
+    """pair_values of the block recursion the switch selects, truncated to
+    radius hops (kpmtk/truncation.py) unless radius is None; h gives the
+    positions of the sites the tiles are cut from"""
+    from . import truncation
+    backend = _pair_moments()
+    radius = truncation.check_radius(radius)
+    if radius is None: return backend.pair_values
+    positions = h.geometry.r
+    def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
+        return truncation.pair_values(backend, ms, pairs, coef, positions,
+                radius, kpm_prec=kpm_prec, trace=trace)
+    return pair_values
+
+
 def _kpm_pair_values(h, pairs, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
-        ne=None, cores=None, T=0.0, kpm_prec=None, trace=False):
+        ne=None, cores=None, T=0.0, kpm_prec=None, trace=False, radius=None):
     """The occupied-projector entry <c^dag_i c_j> of every pair (i,j) of
     pairs, an (npairs,2) integer array with i<=j, at every k-point of the
     mesh: returns the k-points and an (nk,npairs) array. This is the part
@@ -340,7 +357,12 @@ def _kpm_pair_values(h, pairs, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
     which is what the Fermi search inverts (see LaggedFermi). They come
     from the same recursion as the density matrix, with the diagonal pair
     of every orbital added to the pairs, which costs little when the
-    interaction already reads most diagonals."""
+    interaction already reads most diagonals.
+
+    radius, a whole number of hops or None, truncates the recursion of
+    every starting orbital to the Hamiltonian restricted to the sites
+    within radius hops of its tile (kpmtk/truncation.py), so that its cost
+    is the size of that region rather than of the system."""
     kpm_prec = resolve_kpm_prec(kpm_prec)
     if ne is None: ne = npol*4
     ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
@@ -382,7 +404,7 @@ def _kpm_pair_values(h, pairs, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
     cint = np.trapezoid(basis*weights[None, :], x=xin, axis=1)/np.pi
 
     if cores is not None: parallel.set_cores(cores)
-    backend = _pair_moments()
+    pair_values = _pair_values_of(h, radius)
     ms = [csr_matrix(hk_gen(k))/scale for k in ks]
     norb = ms[0].shape[0]
     # the pair (i,j) holds <e_i|T_n(H(k))|e_j>: the recursion starts from
@@ -393,12 +415,12 @@ def _kpm_pair_values(h, pairs, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
         keys = pairs[:, 0]*norb + pairs[:, 1]
         every = np.union1d(keys, np.arange(norb, dtype=np.int64)*(norb + 1))
         both = np.stack([every//norb, every % norb], axis=1)
-        vals, mumax, tr = backend.pair_values(ms, both, cint,
-                kpm_prec=kpm_prec, trace=True)
+        vals, mumax, tr = pair_values(ms, both, cint, kpm_prec=kpm_prec,
+                trace=True)
         vals = vals[:, np.searchsorted(every, keys)]
         mus = np.mean(tr, axis=0)/norb # k-average of the moments
     else:
-        vals, mumax = backend.pair_values(ms, pairs, cint, kpm_prec=kpm_prec)
+        vals, mumax = pair_values(ms, pairs, cint, kpm_prec=kpm_prec)
     _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
     vals = vals.conj()
     vals[:, diagonal] = vals[:, diagonal].real # a diagonal entry is its own conjugate
@@ -408,7 +430,7 @@ def _kpm_pair_values(h, pairs, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
 
 def get_dm_kpm_sparse(h, needed, nk=DEFAULT_NK, scale=None,
         npol=DEFAULT_NPOL, ne=None, cores=None, T=0.0, kpm_prec=None,
-        trace=False):
+        trace=False, radius=None):
     """Sparse counterpart of _dm_kpm_from_needed, for a large sparse
     Hamiltonian: needed is a dictionary {direction: (rows, cols)} of index
     arrays, and the density matrix comes back as {direction: csr_matrix}
@@ -418,7 +440,8 @@ def get_dm_kpm_sparse(h, needed, nk=DEFAULT_NK, scale=None,
     bookkeeping is done on integer arrays (one int64 key per pair) rather
     than on Python sets and dictionaries of tuples, which at 10^5 sites
     would be millions of objects. trace=True also returns the trace
-    moments of H(k), see _kpm_pair_values, as (dm, trace)."""
+    moments of H(k), see _kpm_pair_values, as (dm, trace), and radius
+    truncates the recursion, see there too."""
     norb = h.intra.shape[0]
     ds = list(needed)
     rows = [np.asarray(needed[d][0], dtype=np.int64) for d in ds]
@@ -429,7 +452,8 @@ def get_dm_kpm_sparse(h, needed, nk=DEFAULT_NK, scale=None,
     ukeys, inverse = np.unique(keys, return_inverse=True)
     pairs = np.stack([ukeys//norb, ukeys % norb], axis=1)
     out = _kpm_pair_values(h, pairs, nk=nk, scale=scale, npol=npol,
-            ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace)
+            ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace,
+            radius=radius)
     ks, vals = out[0], out[1]
     fac = 1./len(ks)
     dm = dict()
@@ -447,7 +471,8 @@ def get_dm_kpm_sparse(h, needed, nk=DEFAULT_NK, scale=None,
 
 
 def get_dm_kpm(h, v, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL, ne=None,
-               cores=None, T=0.0, kpm_prec=None, trace=False, **kwargs):
+               cores=None, T=0.0, kpm_prec=None, trace=False, radius=None,
+               **kwargs):
     """KPM-based analogue of scftk.densitydensity.get_dm: return
     a dictionary {direction: matrix} with the density matrix, but computing
     only the entries that v actually requires, each one through a sparse
@@ -460,14 +485,16 @@ def get_dm_kpm(h, v, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL, ne=None,
     its docstring) -- both are then handed to the same per-k Bloch-KPM
     engine, _dm_kpm_from_needed. kpm_prec is the precision of its
     Chebyshev recursion, see resolve_kpm_prec. trace=True also returns the
-    trace moments of H(k), see _kpm_pair_values, as (dm, trace)."""
+    trace moments of H(k), see _kpm_pair_values, as (dm, trace), and radius
+    truncates the recursion, see there too."""
     ds = [(0, 0, 0)] + [d for d in v if d != (0, 0, 0)]
     if getattr(h, "has_eh", False):
         needed = required_elements_eh(v)
     else:
         needed = required_elements(v)
     out = _dm_kpm_from_needed(h, needed, nk=nk, scale=scale, npol=npol,
-            ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace)
+            ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace,
+            radius=radius)
     dm = out[0] if trace else out
     # every direction v has a key for must be present in the output, even
     # if it happened to contribute no required entries of its own
@@ -489,7 +516,7 @@ def _cumulative_trapz(y, x):
     return np.concatenate([[0.], np.cumsum(avg*dx)])
 
 
-def _kpm_trace(h, nk, scale, npol, cores, kpm_prec=None):
+def _kpm_trace(h, nk, scale, npol, cores, kpm_prec=None, radius=None):
     """The scale of the expansion and the first 2*npol Chebyshev moments of
     the density of states of H(k), averaged over the orbitals and the
     k-mesh, (1/N) Tr T_n(H(k)/scale): the trace is exact, one recursion
@@ -500,7 +527,8 @@ def _kpm_trace(h, nk, scale, npol, cores, kpm_prec=None):
     The trace comes from the block recursion of the density matrix
     (pairmomentsnumba on the CPU, pairmomentsjax on the GPU) with every
     orbital as a starting column and doubling, every k-point in one call.
-    kpm_prec is its precision, see resolve_kpm_prec."""
+    kpm_prec is its precision, see resolve_kpm_prec, and radius truncates
+    it, see _kpm_pair_values."""
     ks = [list(k) for k in h.geometry.get_kmesh(nk=nk)]
     hk_gen = h.get_hk_gen()
     given = scale is not None # see _check_scale_covers_spectrum
@@ -514,7 +542,11 @@ def _kpm_trace(h, nk, scale, npol, cores, kpm_prec=None):
     kpm_prec = resolve_kpm_prec(kpm_prec)
     if cores is not None: parallel.set_cores(cores)
     ms = [csr_matrix(hk_gen(k))/scale for k in ks]
-    musk, mumax = _pair_moments().trace_moments(ms, 2*npol, kpm_prec=kpm_prec)
+    N = ms[0].shape[0]
+    pairs = np.stack([np.arange(N), np.arange(N)], axis=1)
+    _, mumax, tr = _pair_values_of(h, radius)(ms, pairs, np.zeros(2*npol),
+            kpm_prec=kpm_prec, trace=True)
+    musk = tr/N
     _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
     return scale, np.mean(musk, axis=0).real # k-average of the moments
 
@@ -528,7 +560,8 @@ def _dos_profile(mus, ne):
     return xs, ys
 
 
-def _kpm_dos_moments(h, nk, scale, npol, ne, cores, kpm_prec=None):
+def _kpm_dos_moments(h, nk, scale, npol, ne, cores, kpm_prec=None,
+        radius=None):
     """Shared per-k Bloch-KPM engine for get_fermi4filling_kpm and
     get_total_energy_kpm: the k-averaged trace moments of _kpm_trace,
     reconstructed on the standard reduced-energy grid via the Jackson
@@ -538,7 +571,8 @@ def _kpm_dos_moments(h, nk, scale, npol, ne, cores, kpm_prec=None):
     energy integral (total energy) downstream, so the two functions that
     use this can never silently disagree about what "the DOS" means."""
     if ne is None: ne = npol*4
-    scale, mus = _kpm_trace(h, nk, scale, npol, cores, kpm_prec=kpm_prec)
+    scale, mus = _kpm_trace(h, nk, scale, npol, cores, kpm_prec=kpm_prec,
+            radius=radius)
     xs, ys = _dos_profile(mus, ne)
     return scale, xs, ys
 
@@ -600,7 +634,8 @@ def _filling_count(scale, xs, ys, T=0.):
 
 
 def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
-        npol=DEFAULT_NPOL, ne=None, cores=None, T=0., kpm_prec=None):
+        npol=DEFAULT_NPOL, ne=None, cores=None, T=0., kpm_prec=None,
+        radius=None):
     """KPM analogue of spectrum.get_fermi4filling: find the Fermi energy
     for a given filling without ever diagonalizing anything, so the KPM
     SCF (scftk/densitydensity_kpm.py) stays fully
@@ -612,7 +647,8 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
     Gets the k-averaged, Jackson-kernel-reconstructed density-of-states
     profile from _kpm_dos_moments (see its docstring) and inverts its
     cumulative integral at the filling, at the temperature T (see
-    _filling_count).
+    _filling_count). radius truncates the recursion of the trace, see
+    _kpm_pair_values.
 
     For BdG/Nambu Hamiltonians (h.has_eh), mirrors spectrum.
     get_fermi4filling's own workaround (an approximation, per that
@@ -625,9 +661,10 @@ def get_fermi4filling_kpm(h, filling, nk=DEFAULT_NK, scale=None,
         h0 = h.copy()
         h0.remove_nambu()
         return get_fermi4filling_kpm(h0, filling, nk=nk, scale=scale,
-                npol=npol, ne=ne, cores=cores, T=T, kpm_prec=kpm_prec)
+                npol=npol, ne=ne, cores=cores, T=T, kpm_prec=kpm_prec,
+                radius=radius)
     scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores,
-            kpm_prec=kpm_prec)
+            kpm_prec=kpm_prec, radius=radius)
     count, fermi = _filling_count(scale, xs, ys, T=T)
     return fermi(filling)
 
@@ -668,10 +705,10 @@ class LaggedFermi:
     last density matrix, the occupied fraction at the Fermi level it was
     computed at minus the requested filling."""
     def __init__(self, filling, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
-            ne=None, cores=None, T=0., kpm_prec=None):
+            ne=None, cores=None, T=0., kpm_prec=None, radius=None):
         self.filling = filling
         self.kw = dict(nk=nk, scale=scale, npol=npol, ne=ne, cores=cores,
-                T=T, kpm_prec=kpm_prec)
+                T=T, kpm_prec=kpm_prec, radius=radius)
         self.ne = npol*4 if ne is None else ne
         self.T = T
         self.mu = None # the Fermi level the next Hamiltonian is shifted by
@@ -704,7 +741,7 @@ class LaggedFermi:
 
 
 def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
-        npol=DEFAULT_NPOL, ne=None, cores=None, kpm_prec=None):
+        npol=DEFAULT_NPOL, ne=None, cores=None, kpm_prec=None, radius=None):
     """KPM analogue of spectrum.total_energy's exact-diagonalization path
     (its nbands=None default, which VJinteraction's integration="kpm"
     branch used to call unconditionally for its post-convergence total
@@ -759,7 +796,7 @@ def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
                 "wrong sector's energy rather than just being approximate")
     norb = h.intra.shape[0]
     scale, xs, ys = _kpm_dos_moments(h, nk, scale, npol, ne, cores,
-            kpm_prec=kpm_prec)
+            kpm_prec=kpm_prec, radius=radius)
     cdf = _cumulative_trapz(ys, xs)
     cdf = np.maximum.accumulate(cdf)  # enforce monotonicity, see get_fermi4filling_kpm
     norm = cdf[-1]  # same renormalization get_fermi4filling_kpm applies
@@ -771,7 +808,7 @@ def get_total_energy_kpm(h, fermi=0.0, nk=DEFAULT_NK, scale=None,
 
 
 def get_band_energy_kpm(h, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
-        ne=None, cores=None, T=0.0, kpm_prec=None):
+        ne=None, cores=None, T=0.0, kpm_prec=None, radius=None):
     """The band energy Tr(H rho) per unit cell, from the KPM density matrix
     on the entries of H only, sum_d sum_ij H_d[i,j] dm[d][i,j], so that it
     costs memory linear in the number of hoppings: the total-energy term
@@ -789,7 +826,7 @@ def get_band_energy_kpm(h, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
         c = coo_matrix(m)
         needed[d] = (c.row.astype(np.int64), c.col.astype(np.int64))
     dm = get_dm_kpm_sparse(h, needed, nk=nk, scale=scale, npol=npol, ne=ne,
-            cores=cores, T=T, kpm_prec=kpm_prec)
+            cores=cores, T=T, kpm_prec=kpm_prec, radius=radius)
     e = sum(m.multiply(dm[d]).sum() for (d, m) in hd.items())
     if h.has_eh:
         from ..superconductivity import get_eh_sector

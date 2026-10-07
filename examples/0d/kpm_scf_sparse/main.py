@@ -28,6 +28,19 @@ print("Antiferromagnet: mean |exchange field| =",np.mean(np.linalg.norm(m,axis=1
 print("                 sublattice-staggered field =",
         np.linalg.norm(np.mean(m*np.array(g.sublattice)[:,None],axis=0)))
 
+# the same loop with the recursion of every orbital truncated to the sites
+# within kpm_radius hops of it, which makes an iteration linear in the
+# number of sites; the antiferromagnet is gapped, so the density matrix
+# decays exponentially and the truncation converges with the radius
+for radius in [4,8]:
+    np.random.seed(1) # the same random guess for both radii
+    hr = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="random",
+            integration="kpm",npol=150,mix=0.5,maxerror=1e-3,
+            kpm_radius=radius) # truncated recursion
+    mr = np.array([hr.extract(c) for c in ["mx","my","mz"]]).T
+    print("  kpm_radius =",radius,": mean |exchange field| =",
+            np.mean(np.linalg.norm(mr,axis=1)))
+
 # a triangular island with attractive U, Rashba coupling and in-plane field
 g = geometry.triangular_lattice().get_supercell(12) # 144 sites
 g.dimensionality = 0 # make it finite

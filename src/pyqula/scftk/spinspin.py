@@ -394,8 +394,9 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         mf=None, filling=0.5, mu=None, mix=None, nk=8, maxerror=1e-5,
         maxite=_MAXITE_UNSET, T=_T_UNSET, verbose=0, constrains=[],
         integration="ed", scale=None, npol=None, ne=None, cores=None,
-        kpm_prec=None, use_jax=False, solver=None, gmres_tol=None,
-        gmres_restart=None, kick_steps=None, rcut=None, write=None):
+        kpm_prec=None, kpm_radius=None, use_jax=False, solver=None,
+        gmres_tol=None, gmres_restart=None, kick_steps=None, rcut=None,
+        write=None):
     """Self-consistent mean field combining density-density interactions
     (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
     Vinteraction) with spin-spin exchange in a single SCF loop. rcut is
@@ -526,8 +527,10 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     number of energies sampled in the occupied window; cores: number of
     parallel workers of the Fermi search on the CPU); kpm_prec is the
     precision of the Chebyshev recursion, None for single on the GPU and
-    double on the CPU (kpmtk.densitymatrix_kpm.resolve_kpm_prec); all five
-    are unused when integration="ed".
+    double on the CPU (kpmtk.densitymatrix_kpm.resolve_kpm_prec);
+    kpm_radius truncates the recursion of every starting orbital to the
+    sites within that many hops (kpmtk/truncation.py), None for the full
+    recursion; all six are unused when integration="ed".
 
     NOTE: unlike the "ed" path, scf.dm after convergence under
     integration="kpm" only holds the sparse subset of entries the SCF loop
@@ -628,7 +631,7 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                     "the default (numpy) engine, use_jax=False, for a "
                     "per-site filling target" % (filling,))
         kpm_only = {"scale": scale, "npol": npol, "ne": ne, "cores": cores,
-                "kpm_prec": kpm_prec}
+                "kpm_prec": kpm_prec, "kpm_radius": kpm_radius}
         kpm_only_set = {k: v for k, v in kpm_only.items() if v is not None}
         if kpm_only_set:
             raise NotImplementedError("VJinteraction's use_jax=True only "
@@ -698,7 +701,7 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
             maxerror, maxite, T, verbose, constrains, vd=vd,
             vz_exchange=vz_exchange, vd_reference=vd_reference,
             integration=integration, scale=scale, npol=npol, ne=ne,
-            cores=cores, kpm_prec=kpm_prec)
+            cores=cores, kpm_prec=kpm_prec, kpm_radius=kpm_radius)
 
 
 def _site_resolved(x):
@@ -887,7 +890,7 @@ def _rot_dm(dd, R):
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         maxerror, maxite, T, verbose, constrains, vd=None, vz_exchange=None,
         vd_reference=None, integration="ed", scale=None, npol=None, ne=None, cores=None,
-        kpm_prec=None):
+        kpm_prec=None, kpm_radius=None):
     """Shared SCF core for Jinteraction/VJinteraction: decouples the
     z-channel matrix `vz` directly (Hartree-Fock density-density in the
     lab/computational spin basis) and the x/y-channel matrices `vx`/`vy`
@@ -1142,12 +1145,14 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         from ..kpmtk.densitymatrix_kpm import (DEFAULT_NPOL, LaggedFermi,
                 _dm_kpm_from_needed, get_total_energy_kpm)
         if npol is None: npol = DEFAULT_NPOL # same default as get_dm_kpm
+        from ..kpmtk.truncation import check_radius
+        kpm_radius = check_radius(kpm_radius)
         # the Fermi level from the trace of the previous iteration's
         # recursion, see LaggedFermi; at T, because _get_dm_kpm builds the
         # density matrix with the Fermi-Dirac weight at this same T
         lagged = None if mu is not None else LaggedFermi(filling, nk=nk,
                 scale=scale, npol=npol, ne=ne, cores=cores, T=T,
-                kpm_prec=kpm_prec)
+                kpm_prec=kpm_prec, radius=kpm_radius)
         if sparse_kpm:
             from . import sparsemeanfield
             from scipy.sparse import csr_matrix
@@ -1164,7 +1169,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             def _get_dm_kpm(h, trace=False): # see the dense one below
                 out = get_dm_kpm_sparse(h, sparse_needed, nk=nk, scale=scale,
                         npol=npol, ne=ne, cores=cores, T=T, kpm_prec=kpm_prec,
-                        trace=trace)
+                        trace=trace, radius=kpm_radius)
                 dm = out[0] if trace else out
                 for d in list(v_dirs) + [tuple(-x for x in d) for d in v_dirs]:
                     if d not in dm:
@@ -1187,7 +1192,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # within one SCF iteration.
             out = _dm_kpm_from_needed(h, kpm_needed, nk=nk, scale=scale,
                     npol=npol, ne=ne, cores=cores, T=T, kpm_prec=kpm_prec,
-                    trace=trace)
+                    trace=trace, radius=kpm_radius)
             dm = out[0] if trace else out
             for d in v_dirs: # every requested direction must have a key,
                 if d not in dm: # even one contributing no needed entries
@@ -1569,7 +1574,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # takes a Nambu h, and the sparse double countings
         get_dc_energy = lambda v, dm, **kw: sparsemeanfield.get_dc_energy(v, dm)
         etot = get_band_energy_kpm(h, nk=nk, scale=scale, npol=npol, ne=ne,
-                cores=cores, T=0., kpm_prec=kpm_prec) # as the ED energy, T=0
+                cores=cores, T=0., kpm_prec=kpm_prec,
+                radius=kpm_radius) # as the ED energy, T=0
     elif use_kpm:
         # never diagonalize H(k), even for this final, once-per-call step:
         # h is already shifted to its own fermi=0 (see f()'s use_kpm
@@ -1578,7 +1584,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # default forces a dense diagonalization regardless of use_kpm --
         # see get_total_energy_kpm's docstring
         etot = get_total_energy_kpm(h, fermi=0.0, nk=nk, scale=scale,
-                npol=npol, ne=ne, cores=cores, kpm_prec=kpm_prec)
+                npol=npol, ne=ne, cores=cores, kpm_prec=kpm_prec,
+                radius=kpm_radius)
     else:
         etot = h.get_total_energy(nk=h.nk)
     if mu is None:

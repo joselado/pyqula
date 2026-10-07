@@ -122,29 +122,33 @@ already reached once.
   than exact diagonalization from 768 orbitals up, with single precision
   agreeing with double to 1e-8 along a whole SCF. What it leaves open is
   listed at its end.
-- [`sparse_kpm_mean_field.md`](sparse_kpm_mean_field.md) -- the plan for
-  a KPM mean field whose memory is linear in the number of orbitals, for
+- [`sparse_kpm_mean_field.md`](sparse_kpm_mean_field.md) -- the plan for a
+  KPM mean field whose memory is linear in the number of orbitals, for
   $10^5$ sites with non-collinear magnetism or Nambu: why the recursion
-  already scales and the dense or $n^2$ pieces around it do not (with
-  a quadratic `bmat` on the Hamiltonian construction path, measured at
-  10,000 sites), why the exact route is $N^2$ in time and practical to about
-  $10^4$ sites, the light-cone truncation that makes it linear in gapped or
-  finite-temperature states, and the four decisions taken on 6 October
-  2026 (exact first then truncation, the Fermi level from the lagged exact
-  trace, numba on the CPU and jax on the card, and the dense engine kept
-  with the sparse one as the default for a sparse Hamiltonian), and the
-  four taken while the kernel was built. Its first three steps are built:
+  already scales and the dense or $n^2$ pieces around it do not (with a
+  quadratic `bmat` on the Hamiltonian construction path, measured at 10,000
+  sites), why the exact route is $N^2$ in time and practical to about $10^4$
+  sites, the light-cone truncation that makes it linear in gapped or
+  finite-temperature states, and the four decisions taken on 6 October 2026
+  (exact first then truncation, the Fermi level from the lagged exact trace,
+  numba on the CPU and jax on the card, and the dense engine kept with the
+  sparse one as the default for a sparse Hamiltonian), and the five taken
+  while the kernel and the truncation were built. All four steps are built:
   the Hamiltonian construction, guesses and constraints are linear in the
-  number of sites, measured to $10^5$, and so is the memory of the KPM
-  mean field of a sparse Hamiltonian through both entry points, Nambu
-  included, with the dense engine's mean field to roundoff; the CPU
-  recursion is a numba kernel with moment doubling, about four times the
-  jax CPU engine per starting column, the Fermi level comes from the
-  previous iteration's trace (with the measured change of path and of
-  converged state), so that an iteration at $10^4$ sites is 5.2 times
-  faster (3.9 with Nambu), the card compiles once per Hamiltonian, and the
-  convergence check of a sparse mean field no longer shrinks with the
-  size. The truncation that would make the time linear is not built.
+  number of sites, measured to $10^5$, and so is the memory of the KPM mean
+  field of a sparse Hamiltonian through both entry points, Nambu included,
+  with the dense engine's mean field to roundoff; the CPU recursion is a
+  numba kernel with moment doubling (doubled on the card too, in double
+  precision only, where it pays), the Fermi level comes from the previous
+  iteration's trace (with the measured change of path and of converged
+  state), the convergence check of a sparse mean field no longer shrinks
+  with the size, and `kpm_radius` truncates the recursion of every orbital
+  to a ball of that many hops, with the error measured to fall exponentially
+  in a gapped state, so that an iteration at $10^5$ sites takes half a
+  minute on six desktop cores in 1.2 GB (two minutes in 2.3 GB with Nambu).
+  Left open: an a-posteriori estimate of the truncation error, the per-site
+  filling with `integration="kpm"`, and the doubling on the card in single
+  precision.
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with
   the Goldstone/Ward-identity measurements that settle it.

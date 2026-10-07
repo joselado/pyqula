@@ -58,11 +58,15 @@ def test_pair_values_match_the_per_pair_numba_recursion():
     assert mumax <= 1. + 1e-12
 
 
-def test_trace_moments_match_numba_full_trace():
+@pytest.mark.parametrize("nm", [80, 81])
+def test_trace_moments_match_numba_full_trace(nm):
+    """The device trace, doubled in double precision, for an even and an
+    odd number of moments"""
     ms = _scaled_hks(_noncollinear_chain(), nk=4)
-    mt, _ = pairmomentsjax.trace_moments(ms, 80)
+    mt, _ = pairmomentsjax.trace_moments(ms, nm)
     for ik, m in enumerate(ms):
-        assert np.max(np.abs(mt[ik] - kpm.full_trace(m, n=40))) < 1e-12
+        ref = kpm.full_trace(m, n=(nm + 1)//2)[:nm]
+        assert np.max(np.abs(mt[ik] - ref)) < 1e-12
 
 
 def test_chunking_does_not_change_the_result(monkeypatch):
@@ -248,11 +252,12 @@ def test_the_numba_recursion_runs_serially_when_parallelism_is_disabled(
     assert np.max(np.abs(vals - ref)) < 1e-13
 
 
-def test_every_device_call_has_one_shape(monkeypatch):
+def test_every_device_call_of_a_kind_has_one_shape(monkeypatch):
     """The blocks of starting columns hold different numbers of pairs, and
     the last block and the last group of k-points are shorter, but every
-    call of the device kernel gets the same shapes, padded, so that it
-    compiles once; the padding does not change the values"""
+    call of the device kernel of one kind (doubled, or read on the rows)
+    gets the same shapes, padded, so that it compiles once per kind; the
+    padding does not change the values"""
     ms = _scaled_hks(_noncollinear_chain(), nk=5)
     n = ms[0].shape[0]
     pairs = [(i, j) for i in range(n) for j in range(i, n)] # 1, 2, 3, 4 per column
@@ -262,14 +267,17 @@ def test_every_device_call_has_one_shape(monkeypatch):
     # columns 0 and 1 (3 pairs) and 2 and 3 (7 pairs), one k-point per call; and
     # all four columns, two k-points per call, so the last call has one
     for budget in [3*n*3 + 4, 2*(3*n*n + 30*len(pairs)) + 4]:
-        shapes = []
+        shapes = dict()
         def recorded(*args):
-            shapes.append(tuple(np.shape(a) for a in args if hasattr(a, "shape")))
+            kind = args[9] # doubled, the second static argument
+            shapes.setdefault(kind, []).append(tuple(np.shape(a)
+                for a in args if hasattr(a, "shape")))
             return kernel(*args)
         monkeypatch.setattr(pairmomentsjax, "_contracted", recorded)
         monkeypatch.setattr(pairmomentsjax, "_MAX_BLOCK", budget)
         pieces, _ = pairmomentsjax.pair_values(ms, pairs, coef)
-        assert len(shapes) > 2 and len(set(shapes)) == 1, shapes
+        assert sum(len(x) for x in shapes.values()) > 2
+        assert all(len(set(x)) == 1 for x in shapes.values()), shapes
         assert np.max(np.abs(whole - pieces)) < 1e-13
 
 
@@ -284,3 +292,17 @@ def test_the_ell_width_survives_an_entry_passing_through_zero():
     m2.eliminate_zeros()
     _, cols2 = pairmomentsjax._ell([m2])
     assert cols2.shape == cols.shape
+
+
+def test_the_device_doubles_in_double_precision_only():
+    """The pairs of an onsite interaction are doubled on the device as on
+    the CPU, in double precision; in single precision they are read on the
+    rows, since the doubled moments are inner products summed over every
+    orbital in the precision of the recursion"""
+    ms, pairs = _hubbard_island(0.3)
+    onsite = pairs[:-(len(pairs)//4)]
+    n, K = ms[0].shape[0], 10
+    assert all(b["doubled"] for b in pairmomentsjax._plan(onsite, n, K, 80,
+        "double"))
+    assert not any(b["doubled"] for b in pairmomentsjax._plan(onsite, n, K,
+        80, "single"))

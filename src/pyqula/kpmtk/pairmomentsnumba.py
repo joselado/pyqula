@@ -99,9 +99,10 @@ def _plan(pairs, N, nnz):
 # _products_row, shared by the drivers, which run the rows of one block
 # split among the threads (_doubled_rows, _read_rows), or one after the
 # other (_doubled_serial, _read_serial) for a block too small to split,
-# or for every k-point at once with one k-point per thread (_doubled_k,
-# _read_k), the case of a small cell on a k-mesh, where splitting its few
-# rows costs more than the rows themselves.
+# or for many independent members at once with one member per thread
+# (_doubled_members, _read_members): the k-points of a small cell on a
+# k-mesh, or the tiles of the truncated recursion, where splitting their
+# few rows costs more than the rows themselves.
 
 @jit(nopython=True, cache=True)
 def _step_row(r, cplx, indptr, indices, d2r, d2i, Vr, Vi, Wr, Wi):
@@ -338,36 +339,45 @@ def _read_serial(cplx, indptr, indices, d2r, d2i, columns, rows, cidx, diag,
 
 
 @jit(nopython=True, parallel=True, cache=True)
-def _doubled_k(cplx, indptr, indices, d2r, d2i, columns, ci, cj, diag, coef):
-    """_doubled_serial for every k-point at once, one k-point per thread:
-    the CSR arrays are stacked over k, indices and d2 padded with zeros to
-    the largest number of entries"""
-    nk = indptr.shape[0]
-    out = np.zeros((nk, len(ci)), dtype=np.complex128)
-    tr = np.zeros((nk, len(coef)), dtype=np.complex128)
-    mumax = np.zeros(nk)
-    for ik in prange(nk):
-        o, t, m = _doubled_serial(cplx[ik], indptr[ik], indices[ik], d2r[ik],
-                d2i[ik], columns, ci, cj, diag, coef)
-        out[ik] = o
-        tr[ik] = t
-        mumax[ik] = m
+def _doubled_members(cplx, indptr, indices, d2r, d2i, nrow, columns, ncol,
+        ci, cj, diag, npair, coef):
+    """_doubled_serial for every member of a batch at once, one member per
+    thread: the k-points of a small cell, or the tiles of the truncated
+    recursion (kpmtk/truncation.py). Each member has arrays of its own,
+    stacked and padded with zeros, and its own number of rows, block
+    columns and pairs (nrow, ncol, npair)"""
+    M = indptr.shape[0]
+    out = np.zeros((M, ci.shape[1]), dtype=np.complex128)
+    tr = np.zeros((M, len(coef)), dtype=np.complex128)
+    mumax = np.zeros(M)
+    for im in prange(M):
+        n, c, q = nrow[im], ncol[im], npair[im]
+        o, t, m = _doubled_serial(cplx[im], indptr[im, :n+1], indices[im],
+                d2r[im], d2i[im], columns[im, :c], ci[im, :q], cj[im, :q],
+                diag[im, :q], coef)
+        out[im, :q] = o
+        tr[im] = t
+        mumax[im] = m
     return out, tr, mumax
 
 
 @jit(nopython=True, parallel=True, cache=True)
-def _read_k(cplx, indptr, indices, d2r, d2i, columns, rows, cidx, diag, coef):
-    """_read_serial for every k-point at once, see _doubled_k"""
-    nk = indptr.shape[0]
-    out = np.zeros((nk, len(rows)), dtype=np.complex128)
-    tr = np.zeros((nk, len(coef)), dtype=np.complex128)
-    mumax = np.zeros(nk)
-    for ik in prange(nk):
-        o, t, m = _read_serial(cplx[ik], indptr[ik], indices[ik], d2r[ik],
-                d2i[ik], columns, rows, cidx, diag, coef)
-        out[ik] = o
-        tr[ik] = t
-        mumax[ik] = m
+def _read_members(cplx, indptr, indices, d2r, d2i, nrow, columns, ncol,
+        rows, cidx, diag, npair, coef):
+    """_read_serial for every member of a batch at once, see
+    _doubled_members"""
+    M = indptr.shape[0]
+    out = np.zeros((M, rows.shape[1]), dtype=np.complex128)
+    tr = np.zeros((M, len(coef)), dtype=np.complex128)
+    mumax = np.zeros(M)
+    for im in prange(M):
+        n, c, q = nrow[im], ncol[im], npair[im]
+        o, t, m = _read_serial(cplx[im], indptr[im, :n+1], indices[im],
+                d2r[im], d2i[im], columns[im, :c], rows[im, :q],
+                cidx[im, :q], diag[im, :q], coef)
+        out[im, :q] = o
+        tr[im] = t
+        mumax[im] = m
     return out, tr, mumax
 
 
@@ -399,21 +409,48 @@ def _run(m, block, diag, coef, dtype):
     return _read_rows(*args)
 
 
-def _run_k(ms, block, diag, coef, dtype):
-    """_run for every k-point at once, one k-point per thread"""
-    columns, sel, doubled, a, b = block
-    arrays = [_csr_arrays(m, dtype) for m in ms]
-    nnz = max(1, max(len(x[2]) for x in arrays))
-    def stacked(i, kind):
-        out = np.zeros((len(ms), nnz), dtype=kind)
-        for ik, x in enumerate(arrays): out[ik, :len(x[i])] = x[i]
-        return out
-    cplx = np.array([x[0] for x in arrays])
-    indptr = np.array([x[1] for x in arrays])
-    args = (cplx, indptr, stacked(2, np.int64), stacked(3, dtype),
-            stacked(4, dtype), columns, a, b, diag, coef)
-    if doubled: return _doubled_k(*args)
-    return _read_k(*args)
+def _run_members(members, coef, dtype):
+    """_run for every member of a batch at once, one member per thread:
+    members is a list of (matrix, block, diag), and the results come back
+    as a list of (values, trace, largest moment)"""
+    out = []
+    for doubled in (False, True):
+        group = [i for (i, (_, b, _)) in enumerate(members) if b[2] == doubled]
+        if not group: continue
+        arrays = [_csr_arrays(members[i][0], dtype) for i in group]
+        blocks = [members[i][1] for i in group]
+        diags = [members[i][2] for i in group]
+        def stacked(xs, kind):
+            a = np.zeros((len(xs), max(1, max(len(x) for x in xs))), dtype=kind)
+            for j, x in enumerate(xs): a[j, :len(x)] = x
+            return a
+        nrow = np.array([len(x[1]) - 1 for x in arrays])
+        indptr = np.zeros((len(group), nrow.max() + 1), dtype=np.int64)
+        for j, x in enumerate(arrays):
+            indptr[j, :len(x[1])] = x[1]
+            indptr[j, len(x[1]):] = x[1][-1] # empty padding rows
+        args = (np.array([x[0] for x in arrays]), indptr,
+                stacked([x[2] for x in arrays], np.int64),
+                stacked([x[3] for x in arrays], dtype),
+                stacked([x[4] for x in arrays], dtype), nrow,
+                stacked([b[0] for b in blocks], np.int64),
+                np.array([len(b[0]) for b in blocks]),
+                stacked([b[3] for b in blocks], np.int64),
+                stacked([b[4] for b in blocks], np.int64),
+                stacked(diags, np.bool_),
+                np.array([len(b[1]) for b in blocks]), coef)
+        driver = _doubled_members if doubled else _read_members
+        vals, tr, mm = driver(*args)
+        for j, i in enumerate(group):
+            out.append((i, (vals[j, :len(blocks[j][1])], tr[j], mm[j])))
+    return [r for (_, r) in sorted(out, key=lambda x: x[0])]
+
+
+def _batch_fits(members_n_ncol):
+    """Whether one block per thread of these (rows, columns) fits in
+    _MAX_BLOCK"""
+    return numba.get_num_threads()*max(n*c for (n, c) in members_n_ncol) \
+            <= _MAX_BLOCK
 
 
 def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
@@ -437,23 +474,60 @@ def pair_values(ms, pairs, coef, kpm_prec="double", trace=False):
     mumax = 0.
     blocks = _plan(pairs, N, max(m.nnz for m in ms)) if len(pairs) else []
     per_k = (len(ms) > 1 and len(blocks) == 1
-            and numba.get_num_threads()*N*len(blocks[0][0]) <= _MAX_BLOCK)
+            and _batch_fits([(N, len(blocks[0][0]))]))
     for block in blocks:
         sel = block[1]
         diag = pairs[sel, 0] == pairs[sel, 1]
         if per_k:
-            vals, t, mm = _run_k(ms, block, diag, coef, dtype)
-            out[:, sel] = vals
-            tr += t
-            mumax = max(mumax, float(np.max(mm)))
-            continue
-        for ik, m in enumerate(ms):
-            vals, t, mm = _run(m, block, diag, coef, dtype)
+            results = _run_members([(m, block, diag) for m in ms], coef, dtype)
+        else: results = [_run(m, block, diag, coef, dtype) for m in ms]
+        for ik, (vals, t, mm) in enumerate(results):
             out[ik, sel] = vals
             tr[ik] += t
-            mumax = max(mumax, mm)
+            mumax = max(mumax, float(mm))
     if trace: return out, mumax, tr
     return out, mumax
+
+
+def pair_values_batch(problems, coef, kpm_prec="double", pad=None):
+    """pair_values with trace=True for several independent problems, each
+    a list of matrices (one per k-point, the same number for every
+    problem) and its pairs: the tiles of the truncated recursion
+    (kpmtk/truncation.py). Every block of every problem and k-point runs in
+    a thread of its own when they fit in memory once per thread, which
+    saves the problems the cost of splitting their few rows among the
+    threads; otherwise each problem goes through pair_values. Returns a
+    list of (values, largest moment, trace), one per problem. pad, the
+    sizes the card pads to, is not needed here"""
+    coef = np.asarray(coef, dtype=np.float64)
+    dtype = _DTYPES[kpm_prec]
+    members, where = [], []
+    plans = []
+    for ip, (ms, pairs) in enumerate(problems):
+        pairs = np.asarray(pairs, dtype=np.int64).reshape(-1, 2)
+        ms = [csr_matrix(m) for m in ms]
+        blocks = _plan(pairs, ms[0].shape[0], max(m.nnz for m in ms)) \
+                if len(pairs) else []
+        plans.append((ms, pairs, blocks))
+        for block in blocks:
+            diag = pairs[block[1], 0] == pairs[block[1], 1]
+            for ik, m in enumerate(ms):
+                members.append((m, block, diag))
+                where.append((ip, ik, block[1]))
+    if not _batch_fits([(m.shape[0], len(b[0])) for (m, b, _) in members]
+            or [(0, 0)]):
+        return [pair_values(ms, pairs, coef, kpm_prec=kpm_prec, trace=True)
+                for (ms, pairs, _) in plans]
+    results = [[np.zeros((len(ms), len(pairs)), dtype=np.complex128), 0.,
+        np.zeros((len(ms), len(coef)), dtype=np.complex128)]
+        for (ms, pairs, _) in plans]
+    if members:
+        for (ip, ik, sel), (vals, t, mm) in zip(where,
+                _run_members(members, coef, dtype)):
+            results[ip][0][ik, sel] = vals
+            results[ip][2][ik] += t
+            results[ip][1] = max(results[ip][1], float(mm))
+    return [tuple(r) for r in results]
 
 
 def trace_moments(ms, nm, kpm_prec="double"):

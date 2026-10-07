@@ -1,9 +1,9 @@
 # The KPM mean field for large sparse systems
 
-Status, 6 October 2026: **the first three steps are built** (the
-construction path, the sparse self-consistent loop under both KPM entry
-points, and the kernel with the lagged Fermi level, below); the truncation
-is not. This is the plan for a KPM mean field
+Status, 6 October 2026: **the four steps are built** (the construction
+path, the sparse self-consistent loop under both KPM entry points, the
+kernel with the lagged Fermi level, and the truncated recursion, below),
+and an iteration at $10^5$ sites takes under a minute. This is the plan for a KPM mean field
 (`h.get_mean_field_hamiltonian_kpm`, and `integration="kpm"` of
 `h.get_mean_field_hamiltonian`) whose memory is linear in the number of
 orbitals, so that a self-consistent calculation on $10^5$ sites, with
@@ -401,6 +401,86 @@ orbitals tiled in space so that a tile and its halo share one ball. With
 truncation the lagged trace inherits the truncation error, which the
 convergence in the radius already controls.
 
+This step is built, in `kpmtk/truncation.py`, as the keyword
+`kpm_radius` of both entry points, a whole number of hops on the site
+graph, two sites joined whenever $H(k)$ has an entry between their
+orbitals at some k-point (a decision of 6 October 2026, over a distance in
+the units of the geometry): it is the light cone itself, so a spin flip or
+a pairing on one site is not a hop and a bond across a periodic cell is
+one. The sites of the starting orbitals are cut into tiles of at most 64
+orbitals by halving at the median along the longest side, and every tile
+runs on the Hamiltonian restricted to its region, the tile and the rows
+of its pairs with every site within the radius, found by a breadth-first
+search; the restriction keeps the spectrum inside that of $H$, so the scale
+of the expansion stays valid. The tiles are independent problems for the
+same kernels, so they go to the CPU one per thread (twice as fast as
+splitting the rows of each tile among the threads, 7.3 s against 15.0 s at
+10,000 sites on a laptop) and to the card as members of one batch, padded
+to one shape per kind, so that the kernel compiles once whatever the sizes
+of the regions. The density matrix, the lagged trace, the exact search
+(the electron-only one of a Nambu loop included) and the band energy all
+take the radius.
+
+The error falls exponentially with the radius in a gapped state, as it
+should. On a spinful honeycomb island of 200 sites with Rashba coupling
+and a sublattice imbalance of 0.6, at half filling and `npol=150`, the
+density matrix differs from the full one by 2.8e-2, 6.4e-3, 1.5e-3, 3.2e-4
+and 1.9e-5 at 2, 4, 6, 8 and 12 hops, and the self-consistent exchange
+field of a collinear antiferromagnet ($U=3$, 128 sites) by 0.11, 0.023,
+0.005 and 0.001 at 2 to 8 hops. The Fermi level of the same kind of
+island with 392 sites at filling 0.3, inside a band, differs by 1.3e-2 at
+2 hops and 5e-4 at 12 at zero temperature, slowly, as in a metal, and by
+8.5e-3 and 1e-6 at a temperature of 0.1; at half filling, inside the gap,
+it moves by up to 0.36, which changes nothing, since every Fermi level in
+the gap gives the same state.
+
+At `kpm_radius=10` and `npol=100` on the square islands of the previous
+table, the density matrix of an iteration and the exact search of the
+first one take, with the peak memory of the process:
+
+| case | orbitals | where | first search | iteration | memory |
+|---|---|---|---|---|---|
+| Hubbard, $10^4$ sites | 20,000 | CPU | 2.1 s | 2.5 s | 0.8 GB |
+| | | card | 2.3 s | 2.3 s | 1.9 GB |
+| Nambu, $10^4$ sites | 40,000 | CPU | 2.1 s | 10.6 s | 0.9 GB |
+| | | card | 1.9 s | 7.8 s | 2.2 GB |
+| Hubbard, $10^5$ sites | 199,712 | CPU | 19.5 s | 24.8 s | 0.9 GB |
+| | | card | 19.3 s | 19.2 s | 2.1 GB |
+| Nambu, $10^5$ sites | 399,424 | CPU | 19.5 s | 107 s | 1.5 GB |
+| | | card | 19.4 s | 81 s | 2.8 GB |
+
+(the Nambu iteration includes its electron-only search). So at $10^4$
+sites an iteration is 30 times faster than the full recursion on the CPU
+(2.5 s against 76 s, 10.6 s against 334 s), and from $10^4$ to $10^5$ sites
+the time grows by 10 and the memory barely moves, which is what linear
+means here: the memory is that of the tiles handed over at once
+(`_TILES_PER_CALL`), since handing over every tile at once took 9 GB at
+$4\times10^5$ orbitals. On the CPU the recursion is three quarters of a
+call at $10^5$ sites, the rest finding the regions (4.4 s, kept from one
+call to the next, since the site graph does not change along a loop) and
+restricting the matrices to them (2 s). The card is only 1.3 to 1.4
+times faster than the CPU here, against 3.4 for the full recursion; where
+its time goes was not measured. Four self-consistent iterations at
+$10^5$ sites, with the first search and the final energy, took 136 s on
+the CPU and 116 s on the card for the Hubbard model (a peak of 1.2 GB on
+the CPU), and 538 s and 399 s with Nambu (2.3 GB), the two backends giving
+the same errors of the loop to 1e-8.
+
+The doubling on the card is built too, with the same cost model as the
+CPU, and only in double precision. In double precision a density matrix
+takes 0.68 to 0.73 of the time it takes read on the rows (0.92 s against
+1.34 s for a 1728-orbital island, 4.3 s against 6.3 s for a 3456-orbital
+Nambu one, 94 s against 128 s for 20,000 orbitals). In single precision,
+the default on the card, it was no faster (0.26 s against 0.31 s, 1.35 s
+against 1.25 s, and 35 s against 22 s) and moved the density matrix by
+5e-8 instead of 1e-8, since its inner products are summed in single
+precision over every orbital, so there the blocks stay read on the rows.
+The 22 s of the 20,000-orbital island read on the rows in single
+precision (21 s again in a second run) is half the 44 s of the table of
+the previous step, with the same kernel apart from the padding; the
+difference was not traced.
+
+
 ## The checks
 
 The sparse engine against the present dense KPM engine where both run, which
@@ -428,7 +508,7 @@ decreasing with the radius in a gapped state.
 - The dense engine: kept, with the sparse engine the default whenever the
   Hamiltonian given is sparse, and the dense one for a dense Hamiltonian.
 
-Taken while the kernel was built, the same day:
+Taken while the kernel and the truncation were built, the same day:
 
 - The lag in both engines, so that they stay equal to roundoff at every
   iteration. Kept apart were the lag in the sparse engine only, which
@@ -446,16 +526,13 @@ Taken while the kernel was built, the same day:
   diagonalization. Kept apart was the number equation on the electron
   count of the BdG density matrix, free from the same recursion but a
   different state at the same filling.
+- The truncation radius `kpm_radius` in hops on the site graph, the light
+  cone itself. Kept apart was a distance in the units of the geometry,
+  like `rcut`, which needs minimum images in a periodic supercell and
+  whose exactness depends on the range of the hopping.
 
 ## Left open
 
-- The memory of the sparse path, measured at $10^4$ sites at 1.9 GB on the
-  CPU with the jax engine of the previous step, and not again with the
-  numba kernel, nor at $10^5$ sites, where an iteration should take about
-  two hours on six desktop cores, the 76 s at $10^4$ scaled as $N^2$.
-- The doubling on the card.
-- With Nambu, the exact search of the electron-only Fermi level every
-  iteration, a trace of half the orbitals.
 - `scf.dm` of the sparse engine holds only the entries the loop read, as
   the dense KPM engine's does, and a Nambu one lacks the raw, unmapped
   entries the dense engine also computes and never reads.
@@ -463,3 +540,9 @@ Taken while the kernel was built, the same day:
   `integration="kpm"`, sparse or dense.
 - An a-posteriori error estimate for the truncation radius, beyond comparing
   two radii.
+- With Nambu, the Fermi level of the electron-only Hamiltonian is still a
+  trace of its own every iteration, truncated with the rest when a radius
+  is given, a fifth of an iteration.
+- The doubling on the card in single precision, its default, where it was
+  no faster; a summation of the inner products in double precision would
+  remove the precision loss but costs the card's float64.

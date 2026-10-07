@@ -2131,7 +2131,19 @@ h = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="random",
                                   maxerror=1e-3)
 ```
 
-What comes back is the self-consistent Hamiltonian the dense route gives, to roundoff, and still sparse, so `h.extract("mx")` and its siblings read the exchange field site by site without diagonalizing anything. With a sparse Hamiltonian the tolerance `maxerror` is the change of the mean field per entry it holds, whatever the size of the island; the orientation of the moments, which the Rashba coupling selects only weakly, relaxes slowly under the mixing, so the snippet stops at a change of $10^{-3}$, reached in under a hundred iterations from a random guess, while $2\times10^{-4}$ takes about 400. What does not change is the time of an iteration, which grows as the square of the number of sites, since the occupations of every site come from a Chebyshev recursion over the whole island. The total energy is here the band energy of the KPM density matrix at zero temperature, $\mathrm{Tr}(H\rho)$, which reaches the sum of the occupied levels as `npol` grows, and a `Vr` or `Jr` on an island needs an explicit `rcut`, since without one every pair of sites interacts. Note that on a small island where the filling times the number of states is not a whole number, the KPM Fermi level holds that fractional number of electrons while exact diagonalization rounds it to whole states, so there the two routes converge to slightly different states. See `examples/0d/kpm_scf_sparse/main.py` for a runnable version with an antiferromagnet and a superconductor.
+What comes back is the self-consistent Hamiltonian the dense route gives, to roundoff, and still sparse, so `h.extract("mx")` and its siblings read the exchange field site by site without diagonalizing anything. With a sparse Hamiltonian the tolerance `maxerror` is the change of the mean field per entry it holds, whatever the size of the island; the orientation of the moments, which the Rashba coupling selects only weakly, relaxes slowly under the mixing, so the snippet stops at a change of $10^{-3}$, reached in under a hundred iterations from a random guess, while $2\times10^{-4}$ takes about 400. The time of an iteration grows as the square of the number of sites, since the occupations of every site come from a Chebyshev recursion over the whole island, which is what the truncation below removes. The total energy is here the band energy of the KPM density matrix at zero temperature, $\mathrm{Tr}(H\rho)$, which reaches the sum of the occupied levels as `npol` grows, and a `Vr` or `Jr` on an island needs an explicit `rcut`, since without one every pair of sites interacts. Note that on a small island where the filling times the number of states is not a whole number, the KPM Fermi level holds that fractional number of electrons while exact diagonalization rounds it to whole states, so there the two routes converge to slightly different states. See `examples/0d/kpm_scf_sparse/main.py` for a runnable version with an antiferromagnet and a superconductor.
+
+What makes an iteration grow as the square of the number of sites is that the recursion of every orbital runs over the whole island, while after $n$ steps the vector started on an orbital has only reached the sites within $n$ hops of it. So the occupations around an orbital, computed on the Hamiltonian restricted to the sites within $R$ hops of it, are exact up to the moment $2R$, and beyond it they are those of a finite cluster around the orbital. Whether that cluster is enough is decided by the state and not by the code: in a gapped state the density matrix decays exponentially, over a length of the order of the velocity over the gap, and at a finite temperature over the velocity over the temperature, so the error of the truncation falls exponentially with $R$, while in a metal at zero temperature the density matrix has a power-law tail and the truncation is not controlled. `kpm_radius` sets $R$, in hops between sites, so that a spin flip or a pairing on one site is not a hop:
+
+```python
+h = g.get_hamiltonian(has_spin=True,is_sparse=True) # the same island
+h.add_rashba(0.2)
+h = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="random",
+                                  integration="kpm",npol=150,mix=0.5,
+                                  maxerror=1e-3,kpm_radius=8)
+```
+
+The cost of an iteration is now the number of sites times the size of a ball of $R$ hops, linear in the number of sites, and the Fermi level and the total energy come from the same truncated recursion. The radius is converged as the k-mesh is, by comparing two values: for a collinear antiferromagnet of a half-filled honeycomb island at $U=3$, the exchange field differs from the one of the full recursion by 0.11, 0.023, 0.005 and 0.001 at 2, 4, 6 and 8 hops, meaning that every two hops gain a factor of about five. On six desktop cores, an iteration of the Hubbard model on a square island of $10^5$ sites with Rashba coupling takes about half a minute at `kpm_radius=10` and `npol=100`, and about two minutes with the Nambu spinor of a superconductor, in 1.2 and 2.3 GB of memory.
 
 A loop that refuses to converge under plain mixing can be handed to a nonlinear solver instead, with `use_jax=True`, which treats one iteration $x=f(x)$ of the loop as a root-finding problem for $x-f(x)=0$. `solver="error_gradient"` is the most robust of these on a generic Hamiltonian and the one to reach for first; `"newton"` is the default. These solvers are for the normal state only and do not accept `constrains`.
 
@@ -6860,8 +6872,11 @@ Optional arguments:
   Nambu Hamiltonian. With `"kpm"`, `scale=None` sets the KPM energy
   rescaling (estimated automatically if not given), `npol` the number of
   Chebyshev moments, `ne` the number of energies sampled in the occupied
-  window and `cores` the number of parallel workers across k-points; all
-  four are unused for `"ed"`. A `scale` given by hand has to cover the
+  window, `cores` the number of parallel workers across k-points and
+  `kpm_radius` the number of hops between sites the recursion of every
+  orbital is truncated to (`None`, the default, for the whole system), which
+  makes the time linear in the number of sites and is controlled in a gapped
+  state or at a finite temperature; all five are unused for `"ed"`. A `scale` given by hand has to cover the
   spectrum of the Hamiltonian after the Fermi shift, not only the bare band
   structure, and one that does not raises a `ValueError`. Also reachable
   through `h.get_mean_field_hamiltonian(integration="kpm",...)`.

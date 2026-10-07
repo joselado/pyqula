@@ -47,7 +47,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         compute_anomalous=True, compute_normal=True, maxite=1000,
         T=1e-7, callback_h=None,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, write=None,
-        kpm_prec=None, fermi=None, **kwargs):
+        kpm_prec=None, fermi=None, kpm_radius=None, **kwargs):
     """KPM analogue of scftk.densitydensity.generic_densitydensity.
     Only the "plain" mixing solver is implemented (the alternate
     root-finding solvers there are not KPM-specific and are not needed for
@@ -57,7 +57,9 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
     kpmtk.densitymatrix_kpm.resolve_kpm_prec). fermi is a
     kpmtk.densitymatrix_kpm.LaggedFermi that shifts every Hamiltonian by
     its Fermi level, after callback_h, and whose filling error enters the
-    convergence check."""
+    convergence check. kpm_radius truncates the recursion of every
+    starting orbital to the sites within that many hops
+    (kpmtk/truncation.py), None for the full recursion."""
     write = filewrite.resolve(write,True) # the call, else the global switch
     from .densitydensity import (get_mf, mix_mf, diff_mf, update_hamiltonian,
             hamiltonian2dict, set_hoppings, SCF, random_hermitian_guess,
@@ -97,7 +99,8 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         needed = sparsemeanfield.needed_entries(v,norb,has_eh=h0.has_eh)
         def get_dm(h, trace=False):
             out = get_dm_kpm_sparse(h, needed, nk=nk, scale=scale, npol=npol,
-                    ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace)
+                    ne=ne, cores=cores, T=T, kpm_prec=kpm_prec, trace=trace,
+                    radius=kpm_radius)
             dm = out[0] if trace else out
             for d in list(v)+[tuple(-x for x in d) for d in v]: # every one
                 if d not in dm: dm[d] = csr_matrix((norb,norb),dtype=np.complex128)
@@ -110,7 +113,8 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
     else:
         def get_dm(h, trace=False):
             return get_dm_kpm(h, v, nk=nk, scale=scale, npol=npol, ne=ne,
-                    cores=cores, T=T, kpm_prec=kpm_prec, trace=trace)
+                    cores=cores, T=T, kpm_prec=kpm_prec, trace=trace,
+                    radius=kpm_radius)
         def mf_from_dm(dm):
             return get_mf(v, dm, compute_cross=compute_cross,
                     compute_dd=compute_dd, has_eh=h0.has_eh,
@@ -182,8 +186,10 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
 
 def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
         scale=None, npol=DEFAULT_NPOL, ne=None, cores=None, kpm_prec=None,
-        **kwargs):
-    """KPM analogue of scftk.densitydensity.densitydensity"""
+        kpm_radius=None, **kwargs):
+    """KPM analogue of scftk.densitydensity.densitydensity. kpm_radius
+    truncates the recursion to that many hops (kpmtk/truncation.py), for
+    the density matrix, the Fermi level and the energy alike"""
     from ..checkclass import is_iterable
     if is_iterable(filling): # see VJinteraction's docstring
         raise NotImplementedError("A per-site (array) filling is only "
@@ -194,6 +200,8 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
     from .densitydensity import electron_dimension, require_hermitian
     require_hermitian(h,"the KPM mean field (Vinteraction_kpm)")
     from ..kpmtk.densitymatrix_kpm import LaggedFermi
+    from ..kpmtk.truncation import check_radius
+    kpm_radius = check_radius(kpm_radius)
     h = h.get_multicell()
     if not h.is_sparse: h = h.get_dense() # a sparse one stays sparse
     if mu is None:
@@ -204,7 +212,8 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
         # makes the converged electron count drift away from `filling` as
         # T grows
         fermi = LaggedFermi(filling, nk=nk, scale=scale, npol=npol, ne=ne,
-                cores=cores, T=kwargs.get("T",1e-7), kpm_prec=kpm_prec)
+                cores=cores, T=kwargs.get("T",1e-7), kpm_prec=kpm_prec,
+                radius=kpm_radius)
         callback_h = None
     else:
         fermi = None
@@ -213,14 +222,15 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
             return h
     scf = generic_densitydensity_kpm(h, callback_h=callback_h, fermi=fermi,
             verbose=verbose, nk=nk, scale=scale, npol=npol, ne=ne,
-            cores=cores, kpm_prec=kpm_prec, **kwargs)
+            cores=cores, kpm_prec=kpm_prec, kpm_radius=kpm_radius, **kwargs)
     h = scf.hamiltonian
     if h.is_sparse: # Tr(H rho) from KPM, rather than diagonalizing
         from ..kpmtk.densitymatrix_kpm import get_band_energy_kpm
         from . import sparsemeanfield as dc # its double countings, below
         # at T=0, as the sum of the occupied levels the dense engine takes
         etot = get_band_energy_kpm(h, nk=h.nk, scale=scale, npol=npol,
-                ne=ne, cores=cores, T=0., kpm_prec=kpm_prec)
+                ne=ne, cores=cores, T=0., kpm_prec=kpm_prec,
+                radius=kpm_radius)
     else:
         from . import densitydensity as dc
         etot = h.get_total_energy(nk=h.nk)
@@ -313,7 +323,11 @@ def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
     number of orbitals, above working buffers that are fixed up to 65,536
     orbitals and take 2 kB per orbital beyond (kpmtk/pairmomentsnumba.py);
     it gives the dense engine's mean field to roundoff. The time per
-    iteration still grows as the square of the number of orbitals. Its
+    iteration grows as the square of the number of orbitals, unless
+    kpm_radius truncates the recursion of every orbital to the sites within
+    that many hops (kpmtk/truncation.py), which makes it linear, with an
+    error that falls exponentially with the radius in a gapped state or at
+    a finite temperature and slowly in a metal at zero temperature. Its
     total energy is Tr(H rho) from the KPM density matrix rather than the
     sum of the diagonalized occupied levels, which it reaches as npol
     grows, and Vr on a finite system needs an explicit rcut
