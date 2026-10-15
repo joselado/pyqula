@@ -43,11 +43,23 @@ def get_conductances(T=1e-2,**kwargs):
         Gs = np.array([get_single(c=t,**kwargs) for t in ts]) # compute conductance
     return ts,Gs
 
-def get_power(ts,gs,delta=1e-8):
-    """Given hoppings and conductances, extract the power"""
-#    ts2 = ts[gs>delta]
-#    gs2 = gs[gs>delta]
-    p = np.polyfit(np.log(ts),np.log(gs),1)
+def get_power(ts,gs,energy=None):
+    """Given hoppings and conductances, extract the power k of G ~ t^k.
+
+    A negative dI/dV is physical in a junction between two
+    superconductors, and the power law holds for |G|, so conductances of
+    one sign are fitted through their absolute value. Conductances that
+    change sign or vanish across the coupling sweep have no power law,
+    which in practice means unconverged sidebands, and raise."""
+    gs = np.real(np.array(gs))
+    if not (np.all(gs>0.) or np.all(gs<0.)):
+        at = "" if energy is None else " at energy %g"%energy
+        raise ValueError("kappa needs a conductance of one sign at both "
+            +"couplings of the sweep, got G=%s%s for couplings %s; "%(
+                gs,at,np.array(ts))
+            +"this is usually unconverged Floquet sidebands, so use a "
+            +"tighter tol or a larger nmax_max")
+    p = np.polyfit(np.log(ts),np.log(np.abs(gs)),1)
     k = p[0]
     return k
 
@@ -66,8 +78,8 @@ def get_kappa(energy=0.0,energies=None,**kwargs):
         single = False
     ts,Gs = get_conductances(energies=energies,**kwargs)
     ks = []
-    for g in Gs.T: # loop over energies
-        k = get_power(ts,g)
+    for (e,g) in zip(energies,Gs.T): # loop over energies
+        k = get_power(ts,g,energy=e)
         ks.append(k)
     ks = np.array(ks)
     return ks[0] if single else ks # return kappa
@@ -268,7 +280,7 @@ def get_kappa_finite_temperature_energies(HT,energies=[0.0],temp=1e-2,**kwargs):
         call_kwargs.update(extra)
         ts,Gs = get_conductances_finite_temp(
             HT=ht,energies=energies,temp=temp,**call_kwargs)
-        return np.array([get_power(ts,g) for g in Gs.T])
+        return np.array([get_power(ts,g,energy=e) for (e,g) in zip(energies,Gs.T)])
     ks1 = branch_kappas(True)
     ks2 = branch_kappas(False)
     return ks1/ks2
