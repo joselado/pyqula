@@ -137,7 +137,7 @@ def test_a_nambu_loop_takes_the_radius_everywhere():
         np.random.seed(1)
         return meanfield.VJinteraction(h, U=-3., filling=0.3, mf="swave",
                 integration="kpm", npol=60, maxite=4, kpm_radius=radius,
-                verbose=0, write=False)
+                verbose=0, write=False, check_convergence=False)
     a, b, c = run(None), run(100), run(1)
     assert abs(a.total_energy - b.total_energy) < 1e-10
     assert _largest(a.mf, b.mf) < 1e-10

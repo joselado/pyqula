@@ -609,24 +609,42 @@ def order_parameter(self,name):
 
 
 
+from .scftk.convergence import MeanFieldConvergenceError
+
+
+def _raising(engine):
+    """The engine as a public entry point: a loop that stops before maxerror
+    raises MeanFieldConvergenceError, as the get_*_mean_field_hamiltonian
+    methods do, so an unconverged state is never returned silently. Pass
+    check_convergence=False to get the SCF object back with
+    .converged=False instead (the scftk engines themselves always do)."""
+    from functools import wraps
+    from .scftk.convergence import require_converged
+    @wraps(engine)
+    def f(*args,check_convergence=True,**kwargs):
+        scf = engine(*args,**kwargs)
+        if scf is NotImplemented: return scf # SzSz/SxSx/SySy sentinel
+        if check_convergence: require_converged(scf)
+        return scf
+    return f
+
+
 from .scftk import densitydensity
 
-hubbardscf = densitydensity.hubbard
-Vinteraction = densitydensity.Vinteraction
+hubbardscf = _raising(densitydensity.hubbard)
+Vinteraction = _raising(densitydensity.Vinteraction)
 
 from .scftk import densitydensity_kpm
 
-hubbardscf_kpm = densitydensity_kpm.hubbard_kpm
-Vinteraction_kpm = densitydensity_kpm.Vinteraction_kpm
+hubbardscf_kpm = _raising(densitydensity_kpm.hubbard_kpm)
+Vinteraction_kpm = _raising(densitydensity_kpm.Vinteraction_kpm)
 
 from .scftk.potentials import keldysh
 
-from .scftk.convergence import MeanFieldConvergenceError
-
 from .scftk import spinspin
 
-SzSz = spinspin.SzSz
-SxSx = spinspin.SxSx
-SySy = spinspin.SySy
-Jinteraction = spinspin.Jinteraction
-VJinteraction = spinspin.VJinteraction
+SzSz = _raising(spinspin.SzSz)
+SxSx = _raising(spinspin.SxSx)
+SySy = _raising(spinspin.SySy)
+Jinteraction = _raising(spinspin.Jinteraction)
+VJinteraction = _raising(spinspin.VJinteraction)

@@ -112,7 +112,7 @@ def test_vjinteraction_scf_dm_is_a_complete_density_matrix():
     h = g.get_hamiltonian(has_spin=True)
     scf = meanfield.VJinteraction(h, V1=0.3, U=1.0, J1=-0.3, J2=0.1,
             J1x=0.05, J1y=0.05, mf="ferroZ", nk=4, maxerror=1e-6, mix=0.3,
-            maxite=3, filling=0.3, verbose=0)
+            maxite=3, filling=0.3, verbose=0, check_convergence=False)
 
     _, v_dirs, _, n = _build_vj_matrices(g)
     dm_ref = get_dm(scf.hamiltonian, v_dirs, nk=4, T=1e-7, integration="ed")

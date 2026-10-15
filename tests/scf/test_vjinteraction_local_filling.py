@@ -95,7 +95,8 @@ def test_vjinteraction_converged_implies_occupation_within_tolerance():
         np.random.seed(seed)
         h = g.get_hamiltonian(has_spin=True, tij=[0.0])
         scf = meanfield.VJinteraction(h, J1=1.0, nk=24, mix=0.3,
-                maxerror=maxerror, maxite=1000, filling=filling, verbose=0)
+                maxerror=maxerror, maxite=1000, filling=filling, verbose=0,
+                check_convergence=False)
         if scf.converged:
             err = np.max(np.abs(scf.local_occupation - filling))
             if err >= 2*maxerror:

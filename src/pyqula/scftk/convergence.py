@@ -1,11 +1,12 @@
-"""The error raised by the get_*_mean_field_hamiltonian methods when the
-self-consistent loop stops without converging.
+"""The error raised when a self-consistent loop stops without converging.
 
-The engines themselves (Vinteraction, VJinteraction, SzSz, ...) still return
-their SCF object with .converged=False; only the Hamiltonian-level entry
-points, which would otherwise have nothing meaningful to return, raise. The
-engines record .iterations, .residual (the last error reached) and .tol
-(maxerror) on that object, which is what the message reports."""
+The get_*_mean_field_hamiltonian methods raise it, and so do the public
+engines of meanfield.py (meanfield.Vinteraction, VJinteraction, SzSz, ...),
+unless they are called with check_convergence=False. The scftk engines
+underneath still return their SCF object with .converged=False, for the
+library code that handles a failed loop itself. The engines record
+.iterations, .residual (the last error reached) and .tol (maxerror) on that
+object, which is what the message reports."""
 
 
 class MeanFieldConvergenceError(RuntimeError):

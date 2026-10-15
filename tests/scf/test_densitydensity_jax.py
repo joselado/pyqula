@@ -179,7 +179,7 @@ def test_densitydensity_jax_handles_mismatched_guess_directions():
     h = g.get_hamiltonian(has_spin=False)
     scf = Vinteraction(h, V1=6.0, mf="kekule", V2=4.0, nk=4, filling=0.5,
             mix=0.3, maxerror=1e-4, maxite=50, verbose=0,
-            use_jax=True, solver="fixed_point")
+            use_jax=True, solver="fixed_point", check_convergence=False)
     assert np.isfinite(scf.total_energy)
 
 
@@ -214,7 +214,8 @@ def test_densitydensity_jax_filling_holds_the_requested_electron_count(solver,
     filling = n_occ / 72
     mf0 = {(0, 0, 0): np.zeros((2, 2), dtype=complex)}
     scf = Vinteraction(h.copy(), V1=1e-10, nk=6, filling=filling, mf=mf0,
-            maxerror=1e-12, maxite=3, T=1e-4, use_jax=True, solver=solver)
+            maxerror=1e-12, maxite=3, T=1e-4, use_jax=True, solver=solver,
+            check_convergence=False)
     count = np.trace(scf.dm[(0, 0, 0)]).real / 2
     assert abs(count - filling) < 1e-8
 

@@ -93,7 +93,11 @@ All the mean-field methods of this page and of
 the number of iterations, the error reached and `maxerror`. In a sweep over a
 parameter, catch it with `try` and `except` to skip the points that do not
 converge. It is imported with
-`from pyqula.meanfield import MeanFieldConvergenceError`.
+`from pyqula.meanfield import MeanFieldConvergenceError`. The functions of
+`pyqula.meanfield` that run the loop directly, such as
+`meanfield.VJinteraction()`, raise the same error. With
+`check_convergence=False` they return the unconverged result instead, with
+`.converged` set to `False`.
 Four keywords control the convergence:
 
 - `nk` (default 8): the number of k-points per direction used to compute the

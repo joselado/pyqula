@@ -94,7 +94,8 @@ def test_vjinteraction_kpm_default_guess_is_hermitian_and_stable():
     g = geometry.chain()
     h = g.get_hamiltonian(has_spin=True)
     scf = meanfield.VJinteraction(h, U=5.0, J1z=-1.0, nk=10, filling=0.2,
-            mix=0.3, maxerror=1e-8, maxite=2, integration="kpm", npol=300)
+            mix=0.3, maxerror=1e-8, maxite=2, integration="kpm", npol=300,
+            check_convergence=False)
     for d, m in scf.mf.items():
         assert np.all(np.isfinite(m)), d
         assert np.max(np.abs(m)) < 10.0, (d, np.max(np.abs(m)))

@@ -17,7 +17,8 @@ def test_spontaneous_haldane_symmetry_breaking_matches_reference(tmp_path, monke
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=False)
     mf = meanfield.guess(h, "random")
-    scf = meanfield.Vinteraction(h, mf=mf, V2=2.0, nk=4, filling=0.5, mix=0.1)
+    scf = meanfield.Vinteraction(h, mf=mf, V2=2.0, nk=4, filling=0.5, mix=0.1,
+                                 check_convergence=False)
     assert scf.identify_symmetry_breaking() == ["Haldane"]
     hcorr = h - scf.hamiltonian
     (k, e) = hcorr.get_bands(nk=20)
