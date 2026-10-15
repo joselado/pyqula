@@ -514,7 +514,27 @@ def get_fermi4filling(h,filling,nk=8,T=0.):
         es = eigenvalues(h,nk=nk,notime=True)
         return get_fermi_energy_T(es,filling,T=T)
 
-def get_filling_spinful_nambu(h,nk=10,**kwargs):
+def _occupations(es,T):
+    """Occupations of the energies es at temperature T: a step at zero
+    energy when T is None or 0, the Fermi-Dirac weight otherwise"""
+    es = np.asarray(es)
+    if T is None or T<=0.: return (es<0.0).astype(float) # T=0 step
+    from scipy.special import expit
+    return expit(-es/T) # Fermi-Dirac occupations
+
+
+def _filling_temperature(h,T):
+    """The temperature get_filling counts at: the one given, else the T of
+    the self-consistent loop that produced h (h.temperature, stored next
+    to h.nk), else zero. Its zero of energy is the chemical potential the
+    loop found at that T, so states degenerate with the Fermi level sit
+    slightly below it and a step would count all of them as occupied (see
+    densitymatrix.default_smearing)."""
+    if T is None: T = getattr(h,"temperature",0.)
+    return T
+
+
+def get_filling_spinful_nambu(h,nk=10,T=None,**kwargs):
     """Filling of a spinful Nambu (BdG) Hamiltonian.
 
     Counting eigenvalues below zero, as the normal-state branch does, is
@@ -529,22 +549,27 @@ def get_filling_spinful_nambu(h,nk=10,**kwargs):
     pe = np.array(operators.get_electron(h).todense()) # electron projector
     (es,ws) = h.get_eigenvectors(nk=nk,**kwargs) # eigenvalues and vectors
     fac = 1./(nk**h.dimensionality) # number of kpoints
+    occ = _occupations(es,_filling_temperature(h,T)) # occupations
     ne = 0.0 # number of electrons per unit cell
-    for (e,w) in zip(es,ws): # loop over states
-        if e<0.0: ne += np.conjugate(w).dot(pe@w).real # electron weight
+    for (o,w) in zip(occ,ws): # loop over states
+        if o>0.: ne += o*np.conjugate(w).dot(pe@w).real # electron weight
     nstates = h.intra.shape[0]//2 # electron states per unit cell
     return ne*fac/nstates # return the filling
 
 
-def get_filling(h,**kwargs):
-    """Get the filling of a Hamiltonian at this energy"""
+def get_filling(h,T=None,**kwargs):
+    """Get the filling of a Hamiltonian at this energy.
+
+    T is the temperature of the count; None takes the one a
+    self-consistent h was converged at (h.temperature), and a Hamiltonian
+    not produced by a self-consistent loop is counted with a step at zero
+    energy"""
     if h.check_mode("spinful_nambu"): # Nambu
-        return get_filling_spinful_nambu(h,**kwargs)
+        return get_filling_spinful_nambu(h,T=T,**kwargs)
     else:
-        es = eigenvalues(h,**kwargs) # eigenvalues
-        es = np.array(es)
-        esf = es[es<0.0]
-        return len(esf)/len(es) # return filling
+        es = np.array(eigenvalues(h,**kwargs)) # eigenvalues
+        occ = _occupations(es,_filling_temperature(h,T)) # occupations
+        return float(np.sum(occ))/len(es) # return filling
 
 
 

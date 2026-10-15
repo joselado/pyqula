@@ -11,7 +11,25 @@ dm_mode = "accumulate" # default mode to compute density matrix
 # accumulate is the new mode, it may be worth checking
 # if it yields the same results as simultaneous
 
-def full_dm(h,T=delta_dm,dm_mode=dm_mode,delta=None,**kwargs):
+def default_smearing(h):
+    """The energy smearing a density matrix of h is built with when the
+    caller does not give one: the temperature of the self-consistent loop
+    that produced h (stored as h.temperature next to h.nk), or delta_dm
+    for any other Hamiltonian.
+
+    A converged Hamiltonian has its zero of energy at the chemical
+    potential the loop found at its own T, and that zero is only exact at
+    that T: two states degenerate with the Fermi level (the +k_F and -k_F
+    states of a chain whose electron count is even on the mesh) sit
+    roughly T*exp(-spacing/T) below it, not at it. Read at a smearing much
+    smaller than that offset, both are counted as fully occupied, one
+    electron too many on the mesh, while at the loop's own T they share
+    the electron as the loop did."""
+    T = getattr(h,"temperature",0.) # absent on pickles that predate it
+    if T is not None and T>0.: return T
+    return delta_dm
+
+def full_dm(h,T=None,dm_mode=dm_mode,delta=None,**kwargs):
     """Compute the full density matrix.
 
     INDEX CONVENTION, which is not the textbook one: this returns
@@ -40,11 +58,14 @@ def full_dm(h,T=delta_dm,dm_mode=dm_mode,delta=None,**kwargs):
     # "got multiple values for keyword argument 'delta'". Accept the
     # alias, and refuse the ambiguity loudly if both are given.
     if delta is not None:
-        if T!=delta_dm:
+        if T is not None:
             raise TypeError("full_dm got both T="+str(T)+" and delta="
               +str(delta)+", which are the same energy smearing under two "
               +"names; pass only one")
         T = delta
+    # no smearing given: the T a self-consistent h was converged at, so the
+    # observables read the occupations the loop converged, else delta_dm
+    if T is None: T = default_smearing(h)
     if T==0.: T = 1e-15 # just very small 
     if dm_mode=="accumulate":
         return full_dm_accumulate(h,delta=T,**kwargs)

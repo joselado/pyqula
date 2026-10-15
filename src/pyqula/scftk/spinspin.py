@@ -1060,6 +1060,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 "check on the very first iteration. Leave mu=None (the "
                 "default) for a per-site filling target")
     h1.nk = nk
+    h1.temperature = T # the smearing observables read it at
     # union of the three exchange channels' bond directions (+ vd's, if
     # given): in general the neighbor-shell hopping-dict builder could
     # prune a channel's key set differently depending on which of its J's

@@ -77,6 +77,7 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         v = {d: csr_matrix(m) for (d, m) in v.items()}
     h1 = h0.copy()
     h1.nk = nk
+    h1.temperature = T # the smearing observables read it at
     if mf is None:
         try:
             if load_mf:

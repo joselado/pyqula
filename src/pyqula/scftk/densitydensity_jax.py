@@ -1116,6 +1116,7 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     h1 = h0.copy()
     h1 = h1.get_dense()
     h1.nk = nk
+    h1.temperature = T # the smearing observables read it at
     hop0 = hamiltonian2dict(h1)  # numpy dict, bare hoppings
     n = hop0[(0, 0, 0)].shape[0]
     dirs = sorted(v.keys())

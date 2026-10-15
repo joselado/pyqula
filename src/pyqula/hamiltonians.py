@@ -976,8 +976,12 @@ class Hamiltonian():
           <S_z> = 1/2. This is the moment, and it is what to report as one
           (halve it for the spin S = sigma/2). Being a Brillouin-zone
           integral it needs a k-mesh: pass nk, or rely on the mesh a
-          self-consistent Hamiltonian remembers from its own loop. With
-          the electron-hole (Nambu) degree of freedom the hole-hole block
+          self-consistent Hamiltonian remembers from its own loop. The
+          same goes for the temperature: a self-consistent Hamiltonian is
+          read at the T it was converged at (h.temperature, see
+          densitymatrix.default_smearing), so that states degenerate with
+          its Fermi level share their electrons as they did in the loop;
+          pass T to override it. With the electron-hole (Nambu) degree of freedom the hole-hole block
           of the spin operators is dropped (operators.vev_operator), so
           that a BdG description of a state gives the same moment as the
           normal-state description of that same state.
