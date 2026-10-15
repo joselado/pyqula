@@ -272,6 +272,8 @@ use `hc.shift_fermi(eps)`, which keeps it a valid BdG Hamiltonian, and do not
 add to its diagonal by hand. See `examples/transport/floquet_keldysh_mar/main.py`
 for a runnable script.
 
+### Conductance at finite voltage
+
 `HT.didv()` chooses between the two formalisms with `method`:
 
 - `method="smatrix"`: the zero-temperature scattering formula above. The

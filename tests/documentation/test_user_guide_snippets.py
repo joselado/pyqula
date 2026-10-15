@@ -57,7 +57,9 @@ def _blocks():
         cur, heading = None, "(top)"
         in_reference = name.startswith(REFERENCE_PREFIX)
         for i, l in enumerate(lines):
-            if l.startswith("#") and cur is None:
+            # a block inherits from the blocks before it in the same `##`
+            # section, so a `###` subsection can continue the example above
+            if l.startswith(("# ", "## ")) and cur is None:
                 heading = l.strip()
             if l.strip().startswith("```python"):
                 cur = [i + 2, []]
@@ -111,7 +113,8 @@ def test_every_snippet_parses():
 def test_no_snippet_uses_an_undefined_name():
     """Each snippet must define, import, or inherit every name it reads.
 
-    Inheriting means an earlier snippet under the same heading bound it --
+    Inheriting means an earlier snippet in the same `##` section of the same
+    page bound it, `###` subsections included --
     the guide's running-example style, where a follow-up block calls another
     method on the `h` just built. A block that reads a name no neighbour
     ever bound is simply broken for a reader who copies it.

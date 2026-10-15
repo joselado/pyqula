@@ -73,6 +73,8 @@ returns it as one vector per site. The two spin bands of the converged
 Hamiltonian are split by an exchange field. This field is found by the
 calculation, it is not added by hand with `h.add_exchange()`.
 
+### Convergence
+
 All the mean-field methods of this page and of
 [Mean-field Hubbard models](mean-field.md) return `None` instead of a
 Hamiltonian when the loop does not converge. So check the result before using
@@ -95,6 +97,8 @@ smaller `mix` helps when the loop oscillates around a solution. On a large
 system 1000 iterations take long, so a smaller `maxite` is useful while you
 explore parameters.
 
+### Anisotropic exchange
+
 Different couplings along the three axes are given in one calculation with
 `h.get_exchange_mean_field_hamiltonian()`, here $J_z=-1$ and $J_x=-0.5$ on
 first neighbors:
@@ -105,6 +109,8 @@ h = h.get_exchange_mean_field_hamiltonian(Jz1=-1.0,Jx1=-0.5,
                                             filling=0.2,mf="ferroZ",
                                             nk=10,mix=0.3,maxite=300)
 ```
+
+### Exchange and density-density interactions together
 
 A model with both charge and magnetic correlations needs density-density
 interactions and exchange together. `h.get_combined_mean_field_hamiltonian()`
@@ -124,6 +130,8 @@ h = g.get_hamiltonian(has_spin=True)
 h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,
                                             filling=0.2,mf="ferroZ")
 ```
+
+### Superconductivity from exchange
 
 All the exchange methods also work on a Bogoliubov-de Gennes (BdG)
 Hamiltonian, after `h.turn_nambu()` or `h.setup_nambu_spinor()`. Then the
@@ -153,6 +161,8 @@ field removed. Comparing this energy with the one of an unpaired solution of
 the same interaction tells you which of the two is the ground state at the
 mean-field level.
 
+### Nonlinear solvers
+
 If a loop does not converge with plain mixing, it can be solved with a
 nonlinear solver instead, with `use_jax=True`. One iteration of the loop is a map
 $x\to f(x)$ of the mean field, and the solver looks for the root of
@@ -168,6 +178,8 @@ h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,filling=0.2,
                                             mf="ferroZ",use_jax=True,
                                             solver="newton")
 ```
+
+### Expectation values from the kernel polynomial method
 
 At each iteration the expectation values come from diagonalizing the Bloch
 Hamiltonian at every k-point, and for a large system this is the expensive
@@ -189,6 +201,8 @@ where a gapped and a gapless solution have almost the same energy. When a
 model has several self-consistent states, this route and exact
 diagonalization can converge to different ones from the same guess. Keep the
 one with the lower total energy.
+
+### On a GPU
 
 The same calculation can run on a GPU (see [GPU](gpu.md)). There `kpm_prec`
 sets the precision. Single precision, the default on the GPU, changes the
@@ -246,6 +260,8 @@ site by site without any diagonalization. Some points to keep in mind:
 
 See `examples/0d/kpm_scf_sparse/main.py` for a runnable script with an
 antiferromagnet and a superconductor.
+
+### Truncation to a radius
 
 The time of one iteration grows as the square of the number of sites, because
 the occupation of each orbital comes from a Chebyshev recursion over the

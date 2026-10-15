@@ -83,8 +83,11 @@ since $T_m(x)$ grows exponentially outside $[-1,1]$. The default is
 example with a large onsite energy or exchange field, needs a larger
 `scale`. If `scale` is too small, the code raises a `ValueError`.
 
+### Green's functions between two sites
+
 The same expansion also gives the Green's function between two sites $i$
-and $j$ of this chain, without inverting a matrix. The function `kpm.dm_ij_energy()` gives
+and $j$ of this chain, without inverting a matrix. The function
+`kpm.dm_ij_energy()` gives
 
 $$
 \pi\,\langle i|\delta(E-H)|j\rangle = \pi\sum_n \psi_n(i)\psi_n^*(j)\,\delta(E-E_n)
@@ -119,7 +122,10 @@ Green's function, and
 `jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/` for the local
 and non-local spectral functions of a system too large to diagonalize.
 
-The Chebyshev moments of the same density of states can also be computed on a GPU, with the switch described in
+### On a GPU
+
+The Chebyshev moments of the same density of states can also be computed on
+a GPU, with the switch described in
 [GPU](gpu.md). The keyword `kpm_prec` chooses single or double precision for
 the moments:
 

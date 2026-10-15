@@ -156,8 +156,10 @@ imaginary part can have either sign, so look at its absolute value: a small
 value means a sharp mode, a large value means a damped mode or numerical
 noise.
 
-For the magnons, `h.get_magnon_bands()` finds the poles in the spin channel, between $S_x$,
-$S_y$ and $S_z$, with the interaction of the converged mean field, along a
+### Magnon bands
+
+For the magnons, `h.get_magnon_bands()` finds the poles in the spin channel,
+between $S_x$, $S_y$ and $S_z$, with the interaction of the converged mean field, along a
 q-path. The result is the magnon dispersion of the ordered state:
 
 ```python
