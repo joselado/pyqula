@@ -25,12 +25,21 @@ def _K(g):
     return k*2/(3.*np.sqrt(3))
 
 
+def _M(g):
+    """M point: the corner (1/2,1/2) of a square or rectangular Brillouin
+    zone, and the edge center (1/2,0) of a hexagonal one"""
+    from .mapping import unitary
+    cosab = np.real(unitary(g.b1).dot(unitary(g.b2)))
+    if abs(cosab)<1e-3: return [.5,.5,0.] # orthogonal reciprocal vectors
+    return [.5,0.,0.]
+
+
 # label -> builder(g). Every label above Z lies in the k3=0 plane; the
 # three-dimensional ones were added because a 3d path used to be
 # impossible to write down.
 _labels = {
   "G":  lambda g: [0.,0.,0.],
-  "M":  lambda g: [0.5,0.,0.],
+  "M":  _M,
   "K":  _K,
   "K'": lambda g: -_K(g),
   "M1": lambda g: [.5,.0,.0],
