@@ -5,9 +5,9 @@ from pyqula.meanfield import VJinteraction
 nk = 24                                 # the SCF and the magnon share this mesh
 g = geometry.honeycomb_lattice()
 scf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
-                     mf="antiferro",nk=nk,maxerror=1e-8)
+                     mf="antiferro",nk=nk,mix=0.5,maxerror=1e-10)
 hmf = scf.hamiltonian
-print(hmf.get_goldstone_residual(nk=nk))          # 3e-8: zero to the SCF tolerance
+print(hmf.get_goldstone_residual(nk=nk))          # 3e-10: zero to the SCF tolerance
 qs,es = hmf.get_magnon_bands(method="tdhf",nk=nk,nq=90,n=2)
 x = (np.arange(90)+1)/90 # position along the path, from Gamma through K, M, K' to Gamma
 E = np.sort(es.real.reshape(90,2), axis=1) # two branches at each q

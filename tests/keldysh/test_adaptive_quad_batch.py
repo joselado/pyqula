@@ -88,7 +88,11 @@ def test_node_economy_matches_scipy_quad(name, f, a, b):
     use materially more integrand evaluations than scipy's own adaptive
     quadrature at the same tolerance (a small slack is allowed since the
     two refine along different paths -- bisecting a set of worst panels per
-    round vs. the single worst panel per step)."""
+    round vs. the single worst panel per step). The slack also pays for
+    the confirmation level: a panel is accepted only once its parent's
+    estimate agrees with it, so the rule bisects once more wherever it
+    refined, and the whole interval at least once (63 nodes where scipy
+    takes 21, 945 where it takes 525 on the narrow peak)."""
     nscipy = [0]
 
     def fscalar(x):
@@ -99,7 +103,7 @@ def test_node_economy_matches_scipy_quad(name, f, a, b):
     _, _, info = kq.adaptive_quad_batch(f, a, b, epsrel=1e-3, limit=50,
                                         full_output=True)
     assert info["converged"]
-    assert info["nevals"] <= 1.3*nscipy[0] + 21
+    assert info["nevals"] <= 2*nscipy[0] + 42
 
 
 def test_evaluates_in_batches_not_one_node_at_a_time():
@@ -123,12 +127,39 @@ def test_evaluates_in_batches_not_one_node_at_a_time():
     assert len(calls) < info["nevals"]/10  # rounds are far fewer than nodes
 
 
-def test_smooth_integrand_converges_on_the_first_batch():
-    """An integrand with no structure must cost exactly one 21-node round --
-    the node-economy floor a fixed composite grid cannot reach."""
+def test_smooth_integrand_converges_on_the_second_batch():
+    """An integrand with no structure must cost exactly two rounds, the
+    21 nodes of the whole interval and the 42 of its two halves that
+    confirm them -- the node-economy floor a fixed composite grid cannot
+    reach. Without the confirmation it is one round of 21 nodes."""
     _, _, info = kq.adaptive_quad_batch(lambda x: np.exp(-x), 0., 1.,
                                         epsrel=1e-3, full_output=True)
+    assert info["nrounds"] == 2 and info["nevals"] == 63
+    _, _, info = kq.adaptive_quad_batch(lambda x: np.exp(-x), 0., 1.,
+                                        epsrel=1e-3, full_output=True,
+                                        confirm=False)
     assert info["nrounds"] == 1 and info["nevals"] == 21
+
+
+def test_one_coincidental_estimate_does_not_end_the_refinement():
+    """The Gauss-Kronrod estimate of a single panel can agree with itself
+    by coincidence when neither of its node sets lands on a narrow peak.
+    On this integrand, a smooth background with a peak of width 5e-4, the
+    single-estimate rule accepts a refined panel that misses the peak and
+    returns the integral 6% low while reporting convergence; this is the
+    mechanism that halved one point of the STM-tip dI/dV (see
+    test_localprobe_quadrature_gap_edge). Requiring a panel to agree with
+    its parent too recovers the analytic value within the tolerance."""
+    c, eta = 0.7549549884803713, 0.0004941576057933379
+    f = lambda x: np.cos(3*x) + 0.02*eta/((x-c)**2 + eta**2)
+    exact = np.sin(3.)/3. + 0.02*(np.arctan((1.-c)/eta) + np.arctan(c/eta))
+    old, _, info = kq.adaptive_quad_batch(f, 0., 1., epsrel=1e-3,
+                                          full_output=True, confirm=False)
+    assert info["converged"] and abs(old-exact) > 1e-2*abs(exact)
+    new, _, info = kq.adaptive_quad_batch(f, 0., 1., epsrel=1e-3,
+                                          full_output=True)
+    assert info["converged"] and info["nrounds"] >= 2
+    assert abs(new-exact) <= 1e-3*abs(exact)
 
 
 def test_panel_limit_is_respected_and_reported():

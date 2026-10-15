@@ -6,7 +6,7 @@ from pyqula.meanfield import VJinteraction
 nk = 24                                 # the SCF and the magnon share this mesh
 g = geometry.honeycomb_lattice()
 hmf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
-                     mf="antiferro",nk=nk,maxerror=1e-8).hamiltonian
+                     mf="antiferro",nk=nk,mix=0.5,maxerror=1e-10).hamiltonian
 qs,ws,gammas = hmf.get_magnon_bands(method="pair",nq=90,
                     energies=np.linspace(1e-3,3.,400),delta=1e-3,nk=nk)
 es,chi = hmf.get_transverse_spinchi(energies=np.linspace(0.,2.,300),

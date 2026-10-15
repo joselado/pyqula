@@ -312,7 +312,7 @@ from pyqula.meanfield import VJinteraction
 nk = 24                                 # the SCF and the magnon share this mesh
 g = geometry.honeycomb_lattice()
 hmf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
-                     mf="antiferro",nk=nk,maxerror=1e-8).hamiltonian
+                     mf="antiferro",nk=nk,mix=0.5,maxerror=1e-10).hamiltonian
 qs,ws,gammas = hmf.get_magnon_bands(method="pair",nq=90,
                     energies=np.linspace(1e-3,3.,400),delta=1e-3,nk=nk)
 es,chi = hmf.get_transverse_spinchi(energies=np.linspace(0.,2.,300),
@@ -361,10 +361,10 @@ at each q-point, the gray dots. They are not other collective modes. A
 bare line that the interaction does not couple is not a pole: there the
 kernel goes through infinity, not through zero, so it is not listed.
 
-The mean field and the response use `nk=24`. On this mesh the
-self-consistent loop does not go below an error of about $3\times10^{-9}$,
-so we take `maxerror=1e-8`. With `nk=18` the magnon moves by at most
-$0.015t$, near K, and with `nk=30` it is at $0.89t$ at K too. The coarse
+The mean field and the response use `nk=24`. For this state the error of the
+self-consistent loop goes down slowly with the default mixing `mix=0.1`, so we
+take `mix=0.5`. Then `maxerror=1e-10` is reached in about 200 iterations.
+With `nk=18` the magnon moves by at most $0.015t$, near K, and with `nk=30` it is at $0.89t$ at K too. The coarse
 mesh `nk=6` gives a magnon that is wrong by up to $0.4t$ and a continuum of
 a few separate lines. The figure takes about five minutes.
 
@@ -395,9 +395,9 @@ from pyqula.meanfield import VJinteraction
 nk = 24                                 # the SCF and the magnon share this mesh
 g = geometry.honeycomb_lattice()
 scf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
-                     mf="antiferro",nk=nk,maxerror=1e-8)
+                     mf="antiferro",nk=nk,mix=0.5,maxerror=1e-10)
 hmf = scf.hamiltonian
-print(hmf.get_goldstone_residual(nk=nk))          # 3e-8: zero to the SCF tolerance
+print(hmf.get_goldstone_residual(nk=nk))          # 3e-10: zero to the SCF tolerance
 qs,es = hmf.get_magnon_bands(method="tdhf",nk=nk,nq=90,n=2)
 ```
 
@@ -413,8 +413,8 @@ The Goldstone theorem is the check. A magnetic state without spin-orbit
 coupling breaks the spin-rotation symmetry, so a uniform rotation of all the
 spins costs no energy, and there is a magnon at exactly zero energy at $Q=0$.
 `h.get_goldstone_residual()` measures the distance from this. It is
-proportional to the tolerance of the mean-field calculation, about $3\times10^{-8}$
-for `maxerror=1e-8`, so check it before reading any dispersion. A small
+proportional to the tolerance of the mean-field calculation, about $3\times10^{-10}$
+for `maxerror=1e-10`, so check it before reading any dispersion. A small
 imaginary part of the same size on the acoustic branch is expected.
 
 Three things matter:
@@ -463,6 +463,13 @@ is converged: it moves by at most $0.015t$ from `nk=18` to 24, and by
 $0.005t$ at K from `nk=24` to 30. The second mode near K and K' is the bottom
 of the electron-hole continuum, not a second magnon, and it converges more
 slowly: at K it is at $1.09t$, $1.01t$ and $0.97t$ for `nk=18`, 24 and 30.
+Its limit is the bottom of the continuum at K, the smallest
+$E_c(\mathbf k+\mathbf Q)-E_v(\mathbf k)$ of the mean-field bands, which is
+$0.91t$, the mean-field gap, since the valence band has its maximum at K and
+the conduction band its minimum at K'. On a finite mesh the lowest pair state
+sits above this edge and comes down to it only slowly as `nk` grows, so the
+second mode is a discrete level of the continuum and not a converged branch.
+The magnon at K, $0.89t$, is just below the edge.
 The figure takes about eight minutes.
 
 ??? example "Code of this figure (documentation/figures/spin_tdhf.py)"

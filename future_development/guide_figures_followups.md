@@ -68,6 +68,82 @@ work. This file keeps what was fixed, what was measured, and what is still open.
   re-executed (same figure), and the two README images of the Berry
   curvature were redrawn with the whole-zone window.
 
+- The finite-difference step of `topology.chern_density` and
+  `dOmega_dE_kmap` is now `dk=delta/25` by default instead of a fixed 0.02
+  (and 0.01), which was too large at every delta of 0.05 and below
+  (`topologytk/green.py`, `default_dk`). Test:
+  `tests/topology/test_chern_density_dk.py`, a step four times smaller gives
+  the same density, the old 0.02 does not.
+- The routines that scan a collective mode along a q-path
+  (`get_magnon_bands`, the pair and TDHF magnons, `get_plasmon_bands`,
+  `get_exciton_bands`, `get_qdos_iets`) took a list of vectors as the literal
+  list of q-points and ignored `nq`, so `qpath=[[0,0,0],[0.5,0,0]], nq=26`
+  was two points with no pole. They now go through `klist.get_qpath`: with
+  `nq` given, the vectors are the vertices of a path of `nq` points; without
+  it, or with `nq` equal to their number, they are the points, as before.
+  The k-path routines (`get_bands` and the others with a numeric `nk`
+  default) keep the literal list. Test: `tests/chi/test_qpath_nq.py`.
+- The second TDHF mode near K (1.09t, 1.01t, 0.97t at nk=18, 24, 30) is not a
+  defect: it is the lowest pair state of the spin-flip continuum, a discrete
+  level on a finite mesh, coming down to the bottom of the continuum at K,
+  which is the mean-field gap 0.9106t (the smallest E_c(k+K)-E_v(k), the
+  same at nk=60, 120 and 240 and for SCF meshes 24 and 30). spin-response.md
+  now says so.
+- The mean field of the U=3, V1=0.5 honeycomb antiferromagnet at `nk=24`
+  (spin-response.md, `spin_pair.py`, `spin_tdhf.py`) did not stall: with
+  `maxerror=1e-10` and the defaults it stopped at maxite=1000 with an error of
+  1.06e-9 (and `VJinteraction` returns `converged=False` there, it does not
+  raise; only the Hamiltonian methods raise). The error of the plain-mixing
+  loop falls geometrically with no floor, down to 1e-13 at iteration 1522.
+  The rate per iteration at `mix=0.1` is 0.974, 0.982, 0.982, 0.982 at nk=6,
+  12, 18, 24, and 0.947, 0.91, 0.88, 0.84 at mix=0.3, 0.5, 0.7, 0.9 at nk=24,
+  which is 1-mix*(1-lambda) with one slow eigenvalue lambda of about 0.82 of
+  the fixed-point map. So the error measure is not the cause: `diff_mf` is a
+  per-entry mean of mean-field matrices whose size does not depend on nk,
+  and the Fermi level comes from exact diagonalization. The guide and the two
+  scripts now use `mix=0.5, maxerror=1e-10`, converged in 220 iterations,
+  with a Goldstone residual of 2.5e-10 (2.6e-8 at the old 1e-8). The figures
+  were not regenerated, since a 1e-8 change in the mean field does not move
+  them. Test: `tests/scf/test_vj_antiferro_tight_tolerance.py`. Left open: a
+  Broyden or Anderson step in `_run_anisotropic_scf` would remove the need
+  to tune `mix` by hand, an architectural change to propose, not made here;
+  what the slow mode is physically was not traced.
+- The Keldysh STM-tip conductance (`transport_stmtip`) at `tol=2e-3`,
+  `nmax_max=40` returned one point, eV=0.2725, at 0.173 instead of 0.319,
+  with no warning. The sidebands were not the cause: both settings stop at
+  nmax=32, and with direct self-energies both give 0.3191. What the two
+  settings change is the window of the AAA fit of the self-energies that
+  `didv(energies=...)` builds for the whole sweep, and the fit is within its
+  1e-3 contract; the error is in the quasienergy integral at voltage+dv,
+  where the adaptive Gauss-Kronrod rule accepted the panel [0.069,0.138],
+  which holds the gap-edge peak at eV=Delta, with an estimated error of 9e-6
+  and an actual one of 8e-4, because its 10-point and 21-point sums agreed
+  by coincidence. So the current came out 1.2% low, and the finite
+  difference of `keldysh_didv`, which divides by Ip-Im, about 1/40 of the
+  current here, turned that into a factor 1.85 in dI/dV. scipy's `quad`
+  (`quadrature="adaptive_scipy"`) is fooled identically, and the tight
+  setting was right by luck, not by design. `adaptive_quad_batch`
+  (`keldyshtk/quadrature.py`) now takes as the error of each panel the
+  larger of its Gauss-Kronrod estimate and the disagreement between its
+  parent's estimate and the sum of the parent's two children, so a panel is
+  accepted only when two independent node sets agree, and the loose setting
+  gives 0.3191 at that point. `confirm=False` restores the old rule. The
+  price is one more level of bisection wherever the integral is refined:
+  an easy integrand takes 63 nodes instead of 21, and a whole `dc_current`
+  call 1428 instead of 630 nodes on the deep-subgap benchmark, 5418 instead
+  of 3906 on the worst-accuracy one and 252 instead of 84 on the
+  normal-normal junction. Tests: `tests/keldysh/test_quadrature_gap_edge.py`
+  and `test_one_coincidental_estimate_does_not_end_the_refinement` in
+  `tests/keldysh/test_adaptive_quad_batch.py`. Left open: two levels can
+  still agree by coincidence on a narrow enough peak, so this makes the
+  failure much rarer, not impossible; the epsrel=1e-3 of the quasienergy
+  integral is fixed inside `dc_current` and does not follow `tol`; and the
+  finite difference still amplifies a 1e-3 error of the current by Ip/(Ip-Im):
+  at this point a 1e-3 error of I=0.067 over 2dv=5.5e-3 is 1.2e-2 against
+  G=0.32, about 4%, so the tolerance bounds dI/dV to that, not to `tol`
+  (the measured gap between the loose and the tight setting is now 2e-4). The figure was not regenerated, since it already uses the tight
+  setting.
+
 ## Open
 
 - The Berry curvature density in energy (quantum-geometry page) reaches the
@@ -92,25 +168,5 @@ work. This file keeps what was fixed, what was measured, and what is still open.
   delta=0.05, nk=48, dk=0.002 and the full window (about 17 minutes on one
   core), whose plateau is 1.70; the density itself stays a comb of k-shells
   at this nk, since a smooth density at delta=0.05 needs nk above about 100.
-  Open for the library: the default dk=0.02 is too large for every delta
-  measured here (0.05 and below), and a default tied to delta (dk about delta/25) would
-  remove the error; the cost is one evaluation of five Green's functions per
-  k-point and energy, about 1.5 ms, which is what limits nk and delta here.
-- `h.get_plasmon_bands()` (and the other routines that take a q-path) use a
-  list of vectors as the literal list of q-points, so
-  `qpath=[[0,0,0],[0.5,0,0]], nq=26` is two points, q=0 and q=1/2, where there
-  is no pole, and `nq` is ignored without a word (`klist.get_kpath`). It is
-  the same convention as a k-path of `h.get_bands()`, so this is a trap more
-  than a bug: either say it in the docstrings, or interpolate the segments
-  when `nq` is given with explicit vectors.
-- The Keldysh STM-tip conductance (`transport_stmtip`) at `tol=2e-3`,
-  `nmax_max=40` returned one point, eV=0.2725, at half its value, with no
-  warning, while the run at `tol=5e-4`, `nmax_max=60` is smooth through it.
-  The adaptive sideband or integration loop may stop early on a point it
-  thinks converged; not traced.
-- The TDHF snippet of the honeycomb antiferromagnet at `nk=24`: the mean-field
-  loop stalls at an error of about 3e-9, so `maxerror=1e-10` raises the
-  convergence error; the guide now uses `maxerror=1e-8`, which leaves a
-  Goldstone residual of 3e-8. Why the error stalls is not traced.
-- The second TDHF mode near K is the bottom of the continuum and
-  is not converged in nk (1.09t, 1.01t, 0.97t at nk=18, 24, 30).
+  The default dk is now delta/25 (see Fixed), so this remaining deficit is
+  the broadening alone, not a defect of the formula.

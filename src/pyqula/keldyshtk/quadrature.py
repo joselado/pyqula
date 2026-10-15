@@ -12,7 +12,9 @@ can be used at all.
 
 `adaptive_quad_batch` keeps QUADPACK's node economy -- the same 21-point
 Gauss-Kronrod rule with the same embedded error estimator, so an easy
-integrand still converges on its first 21 nodes -- but restructures the
+integrand converges on its first 21 nodes and the 42 of the two halves
+that confirm them (see `confirm` in `adaptive_quad_batch`) -- but
+restructures the
 adaptive loop so that every panel awaiting evaluation in a given refinement
 round is evaluated in ONE batched call. Instead of "bisect the single worst
 panel, re-evaluate it" repeated serially (QUADPACK's QAG loop), it bisects
@@ -154,8 +156,33 @@ def _panel_rule(edges, fv):
     return result, np.maximum(50.*eps*resabs, err)
 
 
+def _bisect(fbatch, edges, res, err, cross, sel):
+    """Bisect the panels `sel` of `edges`, evaluate all of their children
+    in one batched call, and return the updated `(edges, res, err, cross)`
+    with the number of new integrand evaluations. The `cross` of each
+    child is half the disagreement between its parent's estimate and the
+    sum of the two children, the error that comparing two levels gives."""
+    nsel = len(sel)
+    left = edges[sel, 0]
+    right = edges[sel, 1]
+    mid = 0.5*(left+right)
+    new = np.empty((2*nsel, 2))
+    new[0::2, 0] = left; new[0::2, 1] = mid
+    new[1::2, 0] = mid; new[1::2, 1] = right
+    fvn = fbatch(_panel_nodes(new)).reshape(2*nsel, len(_X))
+    resn, errn = _panel_rule(new, fvn)
+    half = 0.5*np.abs(res[sel] - (resn[0::2] + resn[1::2]))
+    crossn = np.repeat(half, 2)
+    mask = np.ones(len(edges), dtype=bool)
+    mask[sel] = False
+    return (np.concatenate([edges[mask], new]),
+            np.concatenate([res[mask], resn]),
+            np.concatenate([err[mask], errn]),
+            np.concatenate([cross[mask], crossn]), fvn.size)
+
+
 def adaptive_quad_batch(fbatch, a, b, epsrel=1e-3, epsabs=0., limit=50,
-                        min_split=1, full_output=False):
+                        min_split=1, full_output=False, confirm=True):
     """Integrate `fbatch` over [a,b] with a globally adaptive composite
     Gauss-Kronrod 21 rule, evaluating one BATCH of nodes per refinement
     round (see the module docstring).
@@ -174,6 +201,25 @@ def adaptive_quad_batch(fbatch, a, b, epsrel=1e-3, epsabs=0., limit=50,
     even when fewer would do -- purely a batch-size knob (more nodes per
     round, fewer rounds), left at 1 (pure economy) by default.
 
+    `confirm=True` (the default) does not trust the Gauss-Kronrod estimate
+    of a panel alone. The error of each panel is the larger of its DQK21
+    estimate and half the disagreement between its parent's estimate and
+    the sum of the parent's two children, and the whole interval, which
+    has no parent, counts as unconfirmed until it has been bisected once.
+    A panel is therefore accepted only when two independent node sets,
+    its own and its parent's, give the same integral. The DQK21 estimate
+    compares two nested node sets and can be fooled when neither lands on
+    a narrow peak, and this was measured on dc_current's quasienergy
+    integral: a LocalProbe between two superconductors (Delta=0.1,
+    broadening 1e-3, eV=0.2752, nmax=32) had the panel [0.069,0.138],
+    holding the gap-edge peak at 0.100, accepted with an estimated error
+    of 9e-6 and an actual one of 8e-4, so the current came out 1.2% low
+    and the finite-difference dI/dV at half its value, with no warning
+    (scipy.integrate.quad is fooled identically). The price is one extra
+    level of bisection wherever the integral was refined, and an easy
+    integrand now takes 63 nodes in two rounds instead of 21 in one.
+    `confirm=False` restores the single-estimate rule.
+
     Returns the integral, or `(integral, abserr, info)` with
     `info = {"nevals","nrounds","npanels","converged"}` if `full_output`.
     No warning is raised on non-convergence -- the caller owns that policy
@@ -184,15 +230,20 @@ def adaptive_quad_batch(fbatch, a, b, epsrel=1e-3, epsabs=0., limit=50,
     edges = np.array([[a, b]], dtype=float)
     fv = fbatch(_panel_nodes(edges)).reshape(1, len(_X))
     res, err = _panel_rule(edges, fv)
+    # the whole interval has no parent to be compared with
+    cross = np.array([np.inf if confirm else 0.])
     nevals = fv.size
     nrounds = 1
     converged = False
     while True:
+        if not np.all(np.isfinite(err)):
+            break
+        tot = np.maximum(err, cross) if confirm else err
         total = res.sum()
-        toterr = err.sum()
+        toterr = tot.sum()
         target = max(epsabs, epsrel*abs(total))
-        if toterr <= target or not np.isfinite(toterr):
-            converged = bool(toterr <= target)
+        if toterr <= target:
+            converged = True
             break
         if len(edges) >= limit:
             break
@@ -201,31 +252,21 @@ def adaptive_quad_batch(fbatch, a, b, epsrel=1e-3, epsabs=0., limit=50,
         # target) under tolerance -- so a single dominant singular panel
         # costs one bisection, while a uniformly-hard integrand bisects
         # broadly, both in one batched round either way.
-        order = np.argsort(err)[::-1]
-        tail = np.cumsum(err[order][::-1])[::-1]  # tail[k] = sum(err[order][k:])
+        order = np.argsort(tot)[::-1]
+        tail = np.cumsum(tot[order][::-1])[::-1]  # tail[k] = sum(tot[order][k:])
         keep = np.nonzero(tail <= 0.5*target)[0]
         nsel = int(keep[0]) if len(keep) else len(edges)
         nsel = max(nsel, min_split, 1)
         nsel = min(nsel, len(edges), limit-len(edges))
         sel = order[:nsel]
-        left = edges[sel, 0]
-        right = edges[sel, 1]
-        mid = 0.5*(left+right)
-        new = np.empty((2*nsel, 2))
-        new[0::2, 0] = left; new[0::2, 1] = mid
-        new[1::2, 0] = mid; new[1::2, 1] = right
-        fvn = fbatch(_panel_nodes(new)).reshape(2*nsel, len(_X))
-        nevals += fvn.size
+        edges, res, err, cross, nnew = _bisect(fbatch, edges, res, err,
+                                               cross, sel)
+        nevals += nnew
         nrounds += 1
-        resn, errn = _panel_rule(new, fvn)
-        mask = np.ones(len(edges), dtype=bool)
-        mask[sel] = False
-        edges = np.concatenate([edges[mask], new])
-        res = np.concatenate([res[mask], resn])
-        err = np.concatenate([err[mask], errn])
     out = float(res.sum())
     if full_output:
-        return out, float(err.sum()), {"nevals": nevals, "nrounds": nrounds,
-                                       "npanels": len(edges),
-                                       "converged": converged}
+        abserr = float((np.maximum(err, cross) if confirm else err).sum())
+        return out, abserr, {"nevals": nevals, "nrounds": nrounds,
+                             "npanels": len(edges),
+                             "converged": converged}
     return out

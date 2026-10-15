@@ -1425,6 +1425,16 @@ def dc_current(ht, voltage, nmax=6, nmax_max=40, tol=1e-3, temperature=0.,
     normal-normal. Unlike `"fixed"` (below), this wins on every case shape
     benchmarked, which is why it is the default rather than opt-in.
 
+    Those node counts and timings predate the confirmation level of
+    `adaptive_quad_batch` (a panel is accepted only once its parent's
+    estimate agrees with it, see its docstring), added after a gap-edge
+    panel of a LocalProbe between two superconductors was accepted on a
+    coincidental Gauss-Kronrod estimate and halved one point of a dI/dV
+    curve. With it the same calls take 1428 nodes on the deep-subgap case
+    (from 630), 5418 on the worst-accuracy case (from 3906) and 252 on the
+    normal-normal junction (from 84), the currents moving by 7e-4, 5e-8
+    and 2e-6 relative.
+
     As with `"fixed"`, the `prange` parallelism inside the batched chain
     solver only delivers multi-threaded scaling in a single-process call:
     inside a `parallel.pcall` worker, `parallel.set_num_threads()` clamps
