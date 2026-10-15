@@ -80,7 +80,7 @@ def densitychi_RPA(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,rcut=None,**kwargs):
     return chi_AB_RPA(h1,V=v,**kwargs)
 
 
-def plasmon_bands(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,qpath=None,nq=20,
+def plasmon_bands(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,qpath=None,nq=None,
         rcut=None,**kwargs):
     """Return the plasmon/charge-order bands: the poles of the density RPA
     kernel 1 - V(q)*chi0(q,omega) for a V1/V2/V3/U/Vr neighbor-shell
@@ -103,7 +103,8 @@ def plasmon_bands(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,qpath=None,nq=20,
     from .spinchi import _map_over_q
     h1 = h.get_multicell().get_dense()
     v = _density_v(h1,V1,V2,V3,U,Vr,rcut=rcut)
-    qpath = h1.geometry.get_kpath(qpath,nk=nq) # generate the q-path
+    from ..klist import get_qpath
+    qpath = get_qpath(h1.geometry,qpath,nq) # generate the q-path
     def f(q):
         return rpa_kernel_poles(h1,V=v,q=q,**kwargs)
     outs = _map_over_q(f,qpath,**kwargs) # compute the poles at every q

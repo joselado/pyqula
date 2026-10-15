@@ -189,7 +189,7 @@ g = geometry.honeycomb_lattice() # create honeycomb lattice
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(0.05) # Add Haldane coupling
 es = np.arange(-3.5,3.5+1e-9,0.05) # from below the band to above it
-(es,cs,csi) = topology.chern_density(h,nk=12,delta=0.1,dk=0.004,es=es)
+(es,cs,csi) = topology.chern_density(h,nk=12,delta=0.1,es=es)
 ```
 
 `es` are the energies, `cs` the Berry curvature density at each energy, and
@@ -204,8 +204,8 @@ to the Chern number, and the snippet is chosen to respect the first three.
 
 - The integral starts at the first energy of `es`, so `es` must start below
   the bottom of the band, here $-3$. A window that starts at $-1$ misses the
-  curvature of the lower states: with `es` from $-1$ to $1$, the default
-  `delta=0.02` and `dk=0.02`, the plateau is $3.97$ at `nk=10`, $3.18$ at
+  curvature of the lower states: with `es` from $-1$ to $1$, `delta=0.02`
+  and `dk=0.02`, the plateau is $3.97$ at `nk=10`, $3.18$ at
   `nk=20` and $2.91$ at `nk=40`, and none of these is the Chern number.
 - The energy step must be at most `delta/2`, otherwise the peak of each
   state is not resolved. At `delta=0.05` and `nk=12` a step of `delta/4`
@@ -213,10 +213,10 @@ to the Chern number, and the snippet is chosen to respect the first three.
   $0.12$. The snippet has a step of $0.05$ for `delta=0.1`.
 - The derivatives in momentum are finite differences with a step `dk`, in
   units of the reciprocal lattice vectors. Over `dk` the bands must move by
-  much less than `delta`, and the default `dk=0.02` is too large for that.
-  At `delta=0.05` and `nk=20` the plateau is $1.62$ with `dk=0.02`, $1.69$
-  with `dk=0.005` and the same with `dk=0.001`. Take `dk` about `delta/25`
-  or smaller.
+  much less than `delta`, so the default is `dk=delta/25`. A fixed step is
+  too large at a small `delta`: at `delta=0.05` and `nk=20` the plateau is
+  $1.62$ with `dk=0.02`, $1.69$ with `dk=0.005` and the same with
+  `dk=0.001`.
 - The broadening `delta` spreads the curvature of the states above the gap
   into the gap. With `es` from $-3.5$ to $0$, a step of `delta/2` or smaller
   and a small enough `dk`, the plateau at zero energy is $1.70$ for
@@ -237,7 +237,7 @@ peaks near k-points where bands come close.
 
 The figure shows `cs` on the left and `csi` on the right, for the snippet
 with a smaller broadening and a finer mesh: `es` from $-3.5$ to $3.5$
-with a step of `delta/2`, `delta=0.05`, `dk=0.002` and `nk=48`. This takes
+with a step of `delta/2`, `delta=0.05` and `nk=48`. This takes
 about 17 minutes. A multiple of 3 for `nk` puts the K points on the mesh, so
 the band edges are where they should be. The gray band is the bulk gap, from
 $-0.225$ to $0.225$. The density has its two largest peaks at the band
@@ -261,6 +261,8 @@ plateau is converged while the density is not.
 - `nk`: number of k-points per direction of the mesh.
 - `es`: energies at which the density is computed.
 - `delta`: broadening of the Green's function.
+- `dk`: step of the finite differences in momentum, in units of the
+  reciprocal lattice vectors, `delta/25` by default.
 - `operator`: weight the curvature with an operator, as in `h.get_chern()`.
 - `write`: if `True`, also write `CHERN_DENSITY.OUT` and
   `CHERN_DENSITY_INTEGRATED.OUT`.

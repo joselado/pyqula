@@ -480,7 +480,7 @@ def _map_over_q(f,qpath,**kwargs):
     return parallel.pcall(f,qpath) # CPU path, as before
 
 
-def magnon_bands(H,qpath=None,nq=20,**kwargs):
+def magnon_bands(H,qpath=None,nq=None,**kwargs):
     """Return the magnon bands: the poles of the full spin RPA kernel
     (the same Sx,Sy,Sz channel used by spinchi_full/get_iets_ldos), scanned
     along a q-path. This is the collective-mode dispersion of the spin
@@ -525,7 +525,8 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
     # the operator/projector tensor is q-independent: build it once and
     # reuse it at every q-point instead of rebuilding it from Ss each time
     pAs,pBs = build_ops_projectors(H,Ss)
-    qpath = H.geometry.get_kpath(qpath,nk=nq) # generate the q-path
+    from ..klist import get_qpath
+    qpath = get_qpath(H.geometry,qpath,nq) # generate the q-path
     def f(q):
         return rpa_kernel_poles_ops(H,V=U,pAs=pAs,pBs=pBs,q=q,**kwargs)
     outs = _map_over_q(f,qpath,**kwargs) # compute the poles at every q
@@ -566,14 +567,15 @@ def get_iets_ldos(H,nk=1,delta=1e-2,e=0.,**kwargs):
 
 
 def get_qdos_iets(H,energies=np.linspace(0.,1.,100),
-                  qpath=None,nq=20,
+                  qpath=None,nq=None,
                   nk=10,delta=1e-2,**kwargs):
     """Return the momentum-resolved spin respose function"""
     def f(q):
         return H.get_spinchi_full(q=q,nk=nk,energies=energies,
                                 delta=delta,**kwargs)
     #out = parallel.pcall_deep(f,qs,cores=1) # compute all
-    qpath = H.geometry.get_kpath(qpath,nk=nq) # generate kpath
+    from ..klist import get_qpath
+    qpath = get_qpath(H.geometry,qpath,nq) # generate the q-path
 #    out = [f(q) for q in qpath] # compute all
     out = _map_over_q(f,qpath,**kwargs) # compute all
     qout = [] # empty list

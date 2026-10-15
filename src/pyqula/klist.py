@@ -389,6 +389,49 @@ def get_kpath(g,kpath=None,**kwargs):
     else: return np.array(kpath) # assume is a valid list of vectors
 
 
+def get_qpath(g,qpath=None,nq=None,nq_default=20):
+    """Return the q-path of a routine that scans the momentum of a
+    collective mode (magnons, plasmons, excitons).
+
+    qpath is None (the default path), a list of high-symmetry labels, or a
+    list of vectors in reduced coordinates. A list of vectors is the
+    literal list of q-points when nq is not given, and the vertices of a
+    path filled with nq points when it is, so qpath=[[0,0,0],[0.5,0,0]]
+    with nq=26 gives 26 points from 0 to 1/2; with nq equal to the number
+    of vectors, the vectors are the points. For a default or a labeled
+    path, nq is the density of points as in get_kpath, nq_default when
+    not given."""
+    if qpath is not None and type(qpath[0])!=str and nq is not None:
+        return interpolate_path(g,qpath,nq)
+    if nq is None: nq = nq_default
+    return get_kpath(g,qpath,nk=nq)
+
+
+def interpolate_path(g,vertices,n):
+    """n points along the path through the vertices (reduced coordinates),
+    both ends included, spread over the segments in proportion to their
+    length in Cartesian momentum, and every vertex on the path"""
+    vs = np.array([np.array(v,dtype=float) for v in vertices])
+    if n==len(vs): return vs # the vertices are the points
+    if len(vs)<2 or n<len(vs):
+        raise ValueError("a q-path filled with nq points needs at least two "
+                "vertices and nq at least the number of vertices, got "
+                +str(len(vs))+" vertices and nq="+str(n))
+    bs = [g.b1,g.b2,g.b3] # reciprocal vectors
+    def cart(dk): return sum(dk[i]*np.array(bs[i]) for i in range(len(dk)))
+    ls = np.array([np.linalg.norm(cart(vs[i+1]-vs[i])) for i in range(len(vs)-1)])
+    x = np.concatenate([[0.],np.cumsum(ls)]) # distance of each vertex
+    if x[-1]==0.: return np.array([vs[0] for i in range(n)])
+    t = np.linspace(0.,x[-1],n) # equally spaced in Cartesian length
+    t[np.argmin(np.abs(t[:,None]-x[None,:]),axis=0)] = x # vertices on the path
+    out = [] # the points
+    for ti in t:
+        i = min(np.searchsorted(x,ti,side="right")-1,len(vs)-2) # segment
+        s = (ti-x[i])/ls[i] if ls[i]>0. else 0.
+        out.append(vs[i] + s*(vs[i+1]-vs[i]))
+    return np.array(out)
+
+
 @jit(nopython=True,cache=True)
 def kgrid2d(kxs,kys):
     """Return a list of kvector that create a grid over the inputs"""

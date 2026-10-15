@@ -122,10 +122,22 @@ def berry_green_generator_sparse(f,k=[0.,0.,0.],
 
 
 
-def dOmega_dE_generator(h,operator=None,delta=0.02,dk=0.02):
+def default_dk(delta):
+  """Finite-difference step in k for a Green's function broadened by delta"""
+  return delta/25.
+
+
+def dOmega_dE_generator(h,operator=None,delta=0.02,dk=None):
   """Return a function that generates
   dOmega/dE (k,E), the derivative of the Berry curvature
-  with respect to the chamical potential"""
+  with respect to the chamical potential.
+
+  dk is the finite-difference step in k, in reduced coordinates. It must
+  be small against delta, since near a band edge the bands move by a few
+  times dk in units of t, so the default is delta/25; a fixed step of 0.02
+  underestimated the plateau of chern_density by 0.07 at delta=0.05
+  (future_development/guide_figures_followups.md)"""
+  if dk is None: dk = default_dk(delta)
   gf = h.get_gk_gen(delta=delta,canonical_phase=True) # green function generator
   def gI(e=0.,k=[0.,0.,0.]): # exact inverse Green's function, no extra inversion
       return gf(e=e,k=k,inv=True)

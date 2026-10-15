@@ -7,10 +7,10 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(0.05) # Add Haldane coupling
 # the snippet of the page, converged: the energies start below the bottom of
 # the band, with a step of delta/2, the k-mesh contains the K points (nk is a
-# multiple of 3), and the finite-difference step dk is small against delta
+# multiple of 3), and the finite-difference step dk is delta/25, the default
 delta = 0.05
 es = np.arange(-3.5,3.5+1e-9,delta/2)
-(es,cs,csi) = topology.chern_density(h,nk=48,es=es,delta=delta,dk=0.002)
+(es,cs,csi) = topology.chern_density(h,nk=48,es=es,delta=delta)
 print("plateau at zero energy:",np.interp(0.,es,csi))
 (k,e) = h.get_bands() # bands, to mark the gap
 gap = np.min(e[e>0]) # the gap is from -gap to gap

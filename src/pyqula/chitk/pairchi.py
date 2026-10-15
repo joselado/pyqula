@@ -587,7 +587,7 @@ def pair_rpa_poles(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
     return _zero_crossings(es, eigs)
 
 
-def magnon_bands_pair(h, qpath=None, nq=20, **kwargs):
+def magnon_bands_pair(h, qpath=None, nq=None, **kwargs):
     """Return the magnon bands from the pair-basis ladder, scanned along a
     q-path: the third route to the same physics.
 
@@ -607,7 +607,8 @@ def magnon_bands_pair(h, qpath=None, nq=20, **kwargs):
     chitk.spinchi.magnon_bands: judge how well defined a mode is by
     abs(gammas), not by its sign."""
     from .spinchi import _map_over_q
-    qpath = h.geometry.get_kpath(qpath, nk=nq)
+    from ..klist import get_qpath
+    qpath = get_qpath(h.geometry, qpath, nq)
     def f(q): return pair_rpa_poles(h, q=q, **kwargs)
     # serially under pyqula.gpu.set_gpu(True): with a single device,
     # pcall's worker processes are contention rather than parallelism

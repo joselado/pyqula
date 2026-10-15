@@ -810,7 +810,7 @@ def goldstone_residual(h, nk=10, relative=True, **kwargs):
     return res
 
 
-def magnon_bands_tdhf(h, qpath=None, nq=20, n=None, by="energy", **kwargs):
+def magnon_bands_tdhf(h, qpath=None, nq=None, n=None, by="energy", **kwargs):
     """Return the magnon bands E(Q) of a magnetic mean-field state, from
     the spin-flip channel of the Bethe-Salpeter equation.
 
@@ -846,7 +846,8 @@ def magnon_bands_tdhf(h, qpath=None, nq=20, n=None, by="energy", **kwargs):
                 "magnon_energies for its discrete spin excitations")
     if by not in ("energy", "weight"):
         raise ValueError("by must be 'energy' or 'weight', got %r"%(by,))
-    qpath = h.geometry.get_kpath(qpath, nk=nq) # generate the q-path
+    from ..klist import get_qpath
+    qpath = get_qpath(h.geometry, qpath, nq) # generate the q-path
     def f(q):
         if by == "energy": return magnon_energies(h, Q=q, n=n, **kwargs)
         es, w = magnon_spectrum(h, Q=q, **kwargs)

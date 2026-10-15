@@ -1074,7 +1074,7 @@ from .topologytk.green import dOmega_dE_generator
 
 
 def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,e=0.0,
-               delta=None,operator=None,dk=0.01,write=None):
+               delta=None,operator=None,dk=None,write=None):
   """Map of the energy-resolved Berry curvature dOmega/dE (k,e) at the
   energy e, with a Green's function broadening delta (5/nk by default),
   returned as (kx,ky,b), nk*nk points.
@@ -1086,7 +1086,8 @@ def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,e=0.0,
   momenta from -nsuper to nsuper. In both cases np.mean(b)/(2*np.pi) is
   the Brillouin-zone integral that chern_density returns at the energy e,
   whose integral in energy up to the Fermi level gives the Chern number
-  in the limit of a small delta"""
+  in the limit of a small delta. dk is the finite-difference step in k,
+  delta/25 by default"""
   write = filewrite.resolve(write,True) # the call, else the global switch
   if delta is None: delta = 5./nk
   if reciprocal: R = h.geometry.get_k2K()
@@ -1118,10 +1119,12 @@ def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,e=0.0,
 
 
 
-def chern_density(h,nk=10,operator=None,delta=0.02,dk=0.02,
+def chern_density(h,nk=10,operator=None,delta=0.02,dk=None,
         write=None,
         es=np.linspace(-1.0,1.0,40)):
-  """Compute the Chern density as a function of the energy"""
+  """Compute the Chern density as a function of the energy, the Brillouin
+  zone integral of dOmega/dE at each energy of es, and its cumulative
+  integral. dk is the finite-difference step in k, delta/25 by default"""
   write = filewrite.resolve(write,False) # the call, else the global switch
   operator = get_operator(h,operator) # accept a name, matrix or callable
   ks = klist.kmesh(h.dimensionality,nk=nk)

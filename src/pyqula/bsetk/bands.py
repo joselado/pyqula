@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def exciton_bands(h,qpath=None,nq=20,n=None,**kwargs):
+def exciton_bands(h,qpath=None,nq=None,n=None,**kwargs):
     """Return the exciton bands: the Bethe-Salpeter energies at finite
     center-of-mass momentum Q, scanned along a q-path.
 
@@ -44,7 +44,8 @@ def exciton_bands(h,qpath=None,nq=20,n=None,**kwargs):
     if h.dimensionality<1:
         raise ValueError("exciton bands need a periodic Hamiltonian, a 0d "
                 "system has no center-of-mass momentum to disperse in")
-    qpath = h.geometry.get_kpath(qpath,nk=nq) # generate the q-path
+    from ..klist import get_qpath
+    qpath = get_qpath(h.geometry,qpath,nq) # generate the q-path
     def f(q):
         return BSE(h,Q=q,**kwargs).get_energies(n=n)
     outs = parallel.pcall(f,qpath) # solve one BSE per q-point

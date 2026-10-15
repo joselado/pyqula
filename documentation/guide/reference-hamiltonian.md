@@ -723,8 +723,12 @@ Optional arguments:
   eigenvalue problem; it needs no frequency grid, has an exact Goldstone
   mode, and needs a gapped state converged on the same `nk` (or
   `metal=True`)
-- qpath=None, nq=20: the q-path (the default path of the geometry) and the
-  number of q-points
+- qpath=None: the q-path, the default path of the geometry, a list of
+  high-symmetry labels, or a list of vectors in reduced coordinates
+- nq=None: with a list of vectors, the number of points of the path through
+  them, so `qpath=[[0,0,0],[0.5,0,0]], nq=26` is 26 points from 0 to 1/2;
+  without it the vectors are the q-points themselves. For the default or a
+  labeled path, the density of points, 20 when not given
 - energies, delta, nk: as above, for `method="rpa"`
 - nk, n, channel, V: for `method="tdhf"`, the k-mesh (the same as in the
   mean-field calculation), the number of branches per q-point, the block
@@ -800,7 +804,7 @@ q-path. The charge analog of `h.get_magnon_bands()`.
 Optional arguments:
 
 - V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None: as in `h.get_densitychi_RPA()`
-- qpath=None, nq=20, energies, delta, nk: as in `h.get_magnon_bands()`
+- qpath=None, nq=None, energies, delta, nk: as in `h.get_magnon_bands()`
 
 Returns `(qs,ws,gammas)`, as `h.get_magnon_bands()`.
 
@@ -884,7 +888,8 @@ calculation per q-point along a path.
 
 Optional arguments:
 
-- qpath=None, nq=20: the q-path, as `kpath` in `h.get_bands()`
+- qpath=None, nq=None: the q-path and its number of points, as in
+  `h.get_magnon_bands()`
 - n=None: keep only the `n` lowest excitons at each q-point
 - V, nk, nv, nc, kernel, tda, max_memory, screening, nkW: as in
   `h.get_bse()`
