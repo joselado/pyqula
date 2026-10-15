@@ -322,11 +322,10 @@ state.
 from pyqula import geometry
 g = geometry.honeycomb_zigzag_ribbon() # get the geometry
 h = g.get_hamiltonian()  # get the Hamiltonian
-h.add_onsite(0.3) # add a sublattice imbalance
+h.add_onsite(0.3) # add a uniform onsite energy
 ipr = h.get_operator("IPR") # IPR operator
 ```
 
-Here the onsite energy 0.3 is the same on all sites, so it only shifts the
-bands. In this zigzag ribbon, `h.get_bands(operator=ipr)` gives the flat edge
+The onsite energy 0.3 only shifts the bands rigidly. In this zigzag ribbon, `h.get_bands(operator=ipr)` gives the flat edge
 states an IPR more than ten times larger than the bulk bands: close to the
 zone boundary the edge states live on a single site of the edge.
