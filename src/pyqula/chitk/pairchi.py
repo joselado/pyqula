@@ -481,28 +481,110 @@ def pair_chi_rpa(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
     return energies, out
 
 
-def pair_rpa_poles(h, **kwargs):
+PAIR_CHANNELS = ("auto", "spinflip", "all") # accepted channel= of the pole search
+
+
+def pair_sectors(pairs):
+    """Return the change of Sz each pair operator makes, one of -1, 0, +1
+    per pair. A_P = c^dag_a c_b with a up and b down is S^+-like (+1),
+    with a down and b up S^--like (-1), and with equal spins it is a
+    charge or longitudinal spin operator (0), following the spin-orbital
+    convention of the module (2*i up, 2*i+1 down)."""
+    return np.array([int(a % 2 == 0) - int(b % 2 == 0) for (a, b, _) in pairs],
+                    dtype=np.int64)
+
+
+def _conserves_sz(h, tol=1e-10):
+    """True if no matrix of the Hamiltonian connects an up and a down
+    spin-orbital, i.e. if the mean field is collinear along z and has no
+    spin-orbit coupling. Then chi0 does not couple the Sz sectors of the
+    pair basis."""
+    hd = h.get_multicell().get_dense()
+    for m in [hd.intra] + [t.m for t in hd.hopping]:
+        m = algebra.todense(m)
+        if np.max(np.abs(m[0::2, 1::2])) > tol: return False
+        if np.max(np.abs(m[1::2, 0::2])) > tol: return False
+    return True
+
+
+def _channel_pairs(h, pairs, K, channel, tol=1e-10):
+    """Return the indices of the pairs the pole search keeps.
+
+    For a state that conserves Sz, with an interaction that conserves it
+    too (K has no entry between different sectors), 1 + K chi0 is block
+    diagonal in the change of Sz of the pairs, see pair_sectors. The
+    sector with no change holds the charge and longitudinal spin excitons,
+    the two spin-flip sectors hold the magnons, so channel "auto" and
+    "spinflip" keep only the latter, as bsetk.spinflip.magnon_matrix does.
+    "auto" keeps every pair when there is no such block structure (a
+    canted or spiral state, spin-orbit coupling, an in-plane exchange
+    anisotropy), and "spinflip" raises then. "all" always keeps every
+    pair, so its poles include the Sz-conserving excitons."""
+    if channel not in PAIR_CHANNELS:
+        raise ValueError("channel must be one of %s, got %r"
+                         % (list(PAIR_CHANNELS), channel))
+    every = np.arange(len(pairs))
+    if channel == "all": return every
+    s = pair_sectors(pairs)
+    blocks = _conserves_sz(h)
+    if blocks:
+        cross = s[:, None] != s[None, :]
+        blocks = (not np.any(cross)) or np.max(np.abs(K[cross])) < tol
+    if not blocks:
+        if channel == "spinflip":
+            raise ValueError("channel='spinflip' needs a mean field and an "
+                "interaction that conserve Sz, so that the spin-flip pairs "
+                "are a block of 1 + K chi0; this one mixes the sectors (a "
+                "non-collinear state, spin-orbit coupling or an in-plane "
+                "exchange anisotropy). Use channel='auto' or 'all'")
+        return every
+    return every[s != 0]
+
+
+def pair_rpa_poles(h, W=None, q=None, energies=None, delta=1e-2, nk=20,
+                   T=None, chi_prec=None, channel="auto"):
     """Return the poles of the pair-basis ladder: the frequencies where an
-    eigenvalue of 1 + V chi0 crosses zero, i.e. the magnons. Same
+    eigenvalue of 1 + K chi0 crosses zero, i.e. the magnons. Same
     (npoles,2) [frequency, residual imaginary part] convention as
     chitk.rpa.rpa_kernel_poles, and the same warning about judging a mode
-    by the MAGNITUDE of that imaginary part rather than its sign."""
-    from .rpa import _poles_from_chi_matrix, _track_eigenvalue_branches
-    es, kernels = pair_rpa_kernel(h, **kwargs)
-    raw = np.array([np.linalg.eigvals(k) for k in kernels])
+    by the MAGNITUDE of that imaginary part rather than its sign.
+
+    channel selects the pairs, see _channel_pairs. By default ("auto") a
+    state that conserves Sz keeps only the spin-flip pairs, so the poles
+    are the magnons of bsetk.spinflip.magnon_energies; the pair basis
+    without that restriction also has the charge and longitudinal spin
+    excitons (measured on the U=3, V1=0.5 honeycomb Neel state at nk=6: a
+    fourfold one at 0.96 at Q=0, which TDHF gives with channel="all" and
+    which has no weight in the transverse spin response). Both spin-flip
+    sectors are kept, so each magnon of an antiferromagnet, a Sz=+1 and
+    Sz=-1 doublet, appears twice.
+
+    Two features of the scan to keep in mind. A sign change of the real
+    part through a pole of chi0, where the eigenvalue goes through
+    infinity rather than through zero, is a bare electron-hole pair of the
+    continuum and not a mode, so it is not returned (see chitk.rpa._zero_crossings
+    for the test). And the Goldstone mode of an antiferromagnet at Q=0 is a double zero at
+    w=0, which the broadening opens into a simple zero at w=delta (the
+    eigenvalue goes as delta^2 - w^2 there, and near Q=0 the acoustic
+    branch is found at sqrt(w_Q^2 + delta^2): measured on the same Neel
+    state at Q=(0.01,0.01), 0.11730 against 0.11728 at delta=1e-2, where
+    TDHF gives 0.11685). So when the grid starts
+    above zero, w=0 is added to the scan, and the Goldstone mode is
+    reported at about delta whenever the grid starts below that."""
+    from .rpa import _track_eigenvalue_branches, _zero_crossings
+    if energies is None: energies = np.linspace(-1., 1., 100)
+    es = np.array(energies, dtype=np.float64)
+    if np.min(es) > 0.: es = np.concatenate([[0.], es])
+    pairs, xvals, diag, K = _setup(h, W=W, q=q)
+    keep = _channel_pairs(h, pairs, K, channel)
+    chi0 = pair_chi0(h, [pairs[i] for i in keep], q=q, energies=es,
+                     delta=delta, nk=nk, T=T, chi_prec=chi_prec)
+    K = K[np.ix_(keep, keep)]
+    iden = np.identity(len(keep), dtype=np.complex128)
+    raw = np.array([np.linalg.eigvals(iden + K@chi0[:, :, w])
+                    for w in range(len(es))])
     eigs = _track_eigenvalue_branches(raw)
-    poles = []
-    for ib in range(eigs.shape[1]):
-        re, im = eigs[:, ib].real, eigs[:, ib].imag
-        for k in range(len(es)):
-            if re[k] == 0.0: poles.append((es[k], im[k]))
-            elif k+1 < len(es) and re[k]*re[k+1] < 0.:
-                t = -re[k]/(re[k+1]-re[k])
-                poles.append((es[k] + t*(es[k+1]-es[k]),
-                              im[k] + t*(im[k+1]-im[k])))
-    if len(poles) == 0: return np.zeros((0, 2))
-    poles.sort(key=lambda p: p[0])
-    return np.array(poles)
+    return _zero_crossings(es, eigs)
 
 
 def magnon_bands_pair(h, qpath=None, nq=20, **kwargs):
@@ -516,6 +598,10 @@ def magnon_bands_pair(h, qpath=None, nq=20, **kwargs):
     interaction, needs no gap, and returns a chi(omega) rather than an
     eigenvalue list. It costs a frequency grid, and its poles are limited
     by the broadening delta the way any frequency scan is.
+
+    The keyword arguments are those of pair_rpa_poles, channel included:
+    for a state that conserves Sz only the spin-flip pairs are kept by
+    default, and channel="all" adds the charge and longitudinal excitons.
 
     Returns (qs,ws,gammas), the same flat-array convention as
     chitk.spinchi.magnon_bands: judge how well defined a mode is by

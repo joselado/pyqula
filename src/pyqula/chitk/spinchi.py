@@ -64,17 +64,21 @@ _PAIR_ROUTE_KWARGS = ("energies","delta","nk","T","q","imode","ij_mode",
                       "chi_prec")
 
 
-def _pair_route_kwargs(H,kwargs):
+def _pair_route_kwargs(H,kwargs,also=()):
     """Translate the keyword arguments of the site-basis response into the
     pair-basis ones, keeping the site-basis defaults (chitk.chiAB.chiAB_q:
     energies from -3 to 3, delta=0.1, nk=60, a temperature equal to delta)
-    so that the same call means the same response on either route."""
-    unknown = sorted(set(kwargs) - set(_PAIR_ROUTE_KWARGS))
+    so that the same call means the same response on either route. also
+    names the keywords the caller takes itself (channel, for the pole
+    search of magnon_bands), which are accepted and listed but not
+    returned."""
+    accepted = list(_PAIR_ROUTE_KWARGS) + list(also)
+    unknown = sorted(set(kwargs) - set(accepted))
     if len(unknown)>0:
         raise ValueError("this Hamiltonian's interaction couples different "
             "sites, so its RPA spin response is summed in the pair basis "
             "(chitk.pairchi), which does not take %s; the accepted "
-            "keyword arguments are %s"%(unknown,list(_PAIR_ROUTE_KWARGS)))
+            "keyword arguments are %s"%(unknown,accepted))
     if kwargs.get("imode","mesh")!="mesh":
         raise NotImplementedError("imode=%r is not implemented for an "
             "interaction that couples different sites, whose RPA spin "
@@ -490,7 +494,8 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
     different sites, density-density
     or exchange, is scanned with the pair-basis ladder instead
     (chitk.pairchi.magnon_bands_pair, see _use_pair_basis), with the
-    energies/delta/nk/T defaults of this function.
+    energies/delta/nk/T defaults of this function, and channel= is passed
+    to its pole search (chitk.pairchi.pair_rpa_poles).
 
     Returns (qs,ws,gammas): qs is the integer index of the q-point along
     the path (the same convention used by get_bands for the k-axis),
@@ -506,8 +511,12 @@ def magnon_bands(H,qpath=None,nq=20,**kwargs):
         if "q" in kwargs:
             raise ValueError("magnon_bands scans a q-path, pass qpath or "
                              "nq rather than q")
+        # channel selects the pairs of the pole search only, so it is
+        # passed here and not returned by _pair_route_kwargs, which the
+        # response functions share
+        kw = _pair_route_kwargs(H,kwargs,also=("channel",))
         return magnon_bands_pair(H,qpath=qpath,nq=nq,
-                                 **_pair_route_kwargs(H,kwargs))
+                                 channel=kwargs.get("channel","auto"),**kw)
     Ss = _full_spin_operators(H)
     U = _full_spin_U(H)
     if U is None: raise ValueError("Hamiltonian has no mean-field "

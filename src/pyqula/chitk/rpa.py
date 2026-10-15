@@ -192,6 +192,68 @@ def _track_eigenvalue_branches(eigs):
     return tracked
 
 
+def _zero_crossings(es,eigs):
+    """Return the (npoles,2) [frequency, imaginary part] list of the zeros
+    of the eigenvalue branches eigs (shape (nw,nbranch)) of an RPA kernel,
+    1 - V chi0 here or 1 + K chi0 in chitk/pairchi.py, on the grid es.
+
+    A sign change of Re lambda is either a zero of lambda or a pole of
+    it, the eigenvalue going through infinity next to a pole of chi0, and
+    the sign of Im lambda times the slope of Re lambda tells which. chi0 is
+    evaluated at w - i delta (the 1/(de - w + i delta) of chitk/chiAB.py
+    and chitk/pairchi.py), so its poles and the zeros of a causal kernel
+    lie at Im w = +delta and above. Near a zero, lambda goes as
+    c (w - w*), and at the crossing Im lambda * dRe lambda/dw = -Im(w*)
+    abs(c)^2 < 0 for any complex c. Near a pole, lambda goes as
+    A/(w* - w), and the same product is +Im(w*) abs(A)^2/D^2 > 0. So a
+    crossing with a positive product is a pole of lambda and is dropped.
+    The test needs no threshold and does not depend on whether the grid
+    resolves delta: on the U=3, V1=0.5 honeycomb Neel state at nk=6 the
+    pair basis lost its crossings at 1.0024 (Gamma) and at 1.2430 and
+    1.3369 (q=(0.05,0.05)) with delta=1e-3 on a 400-point grid, and the
+    matching ones on a 1600-point grid with delta=1e-2, and kept every TDHF
+    magnon in both cases, the damped one at 1.28 included.
+
+    A third kind of crossing is a smooth sign change of Re lambda with
+    abs(lambda) flat and of order one, the eigenvalue passing far from
+    zero. The linear extrapolation then puts the zero on either side, so
+    the test drops some of these and keeps others, and the kept ones come
+    back with a large abs(gamma), which is the measure to judge them by.
+    Measured on the spinful chain with V1=0.6 at q=1/2 (plasmon_bands,
+    nk=2000, delta=2e-2): Re lambda changes sign at 0.596 while abs(lambda)
+    stays between 0.594 and 0.603 from 0.47 to 0.71, so that crossing,
+    returned before as a pole with abs(gamma)=0.60, is dropped."""
+    poles = []
+    n = len(es)
+    for ib in range(eigs.shape[1]): # loop over eigenvalue branches
+        re,im = eigs[:,ib].real,eigs[:,ib].imag
+        for k in range(n): # scan the grid, including the last point
+            if re[k]==0.0: # on the grid, the slope from the neighbors
+                slope = re[min(k+1,n-1)] - re[max(k-1,0)]
+                if im[k]*slope>0.: continue # a pole of lambda
+                poles.append((es[k],im[k]))
+            elif k+1<n and re[k]*re[k+1]<0.0: # a sign change
+                t = -re[k]/(re[k+1]-re[k]) # linear interpolation factor
+                g = im[k] + t*(im[k+1]-im[k])
+                if g*(re[k+1]-re[k])>0.: continue # a pole of lambda
+                poles.append((es[k] + t*(es[k+1]-es[k]),g))
+    if len(poles)==0: return np.zeros((0,2))
+    poles.sort(key=lambda p: p[0]) # sort by frequency
+    return np.array(poles)
+
+
+def _scan_from_zero(kwargs):
+    """Add w=0 to a frequency grid given as energies= that starts above
+    zero. The Goldstone mode of an antiferromagnet at Q=0 is a double zero
+    of the kernel at w=0, which the broadening opens into a simple zero at
+    w=delta, so a grid that starts at or above delta would miss it."""
+    es = kwargs.get("energies",None)
+    if es is None: return kwargs
+    es = np.array(es,dtype=np.float64)
+    if np.min(es)>0.: es = np.concatenate([[0.],es])
+    return dict(kwargs,energies=es)
+
+
 def _kernels_from_chis(chis,V):
     """RPA kernel matrices 1 - V*chi(omega), one per entry of chis (a
     matrix per frequency). Shared by _poles_from_chi_matrix (which only
@@ -211,28 +273,16 @@ def _poles_from_chi_matrix(es,chis,V):
     the residual imaginary part is signed (interpolated directly from the
     kernel eigenvalue, which can lie on either side of the real axis), so
     judge how sharp/well-defined a mode is by its *magnitude*, not its raw
-    value; do not filter with e.g. `gamma < tol` -- use `abs(gamma) < tol`."""
+    value; do not filter with e.g. `gamma < tol` -- use `abs(gamma) < tol`.
+    A sign change of the real part where the eigenvalue goes through
+    infinity, next to a pole of chi, is a bare electron-hole pair and not
+    a mode, and is not returned, see _zero_crossings."""
     if V is None: raise ValueError("V (interaction matrix) is required "
                                     "to locate the poles of the RPA kernel")
     kernels = _kernels_from_chis(chis,V)
     raw_eigs = np.array([np.linalg.eigvals(k) for k in kernels]) # (nw,N)
     eigs = _track_eigenvalue_branches(raw_eigs) # continuous branches
-    poles = [] # storage for the poles found
-    nw = len(es)
-    for ib in range(eigs.shape[1]): # loop over eigenvalue branches
-        re = eigs[:,ib].real
-        im = eigs[:,ib].imag
-        for k in range(nw): # scan the frequency grid, including the last point
-            if re[k]==0.0: # exactly on the grid (rare)
-                poles.append((es[k],im[k]))
-            elif k+1<nw and re[k]*re[k+1]<0.0: # sign change -> a zero crossing
-                t = -re[k]/(re[k+1]-re[k]) # linear interpolation factor
-                w0 = es[k] + t*(es[k+1]-es[k])
-                g0 = im[k] + t*(im[k+1]-im[k])
-                poles.append((w0,g0))
-    if len(poles)==0: return np.zeros((0,2))
-    poles.sort(key=lambda p: p[0]) # sort by frequency
-    return np.array(poles)
+    return _zero_crossings(es,eigs) # zeros only, not the crossings at infinity
 
 
 def rpa_kernel_poles(h,V=None,q=None,**kwargs):
@@ -246,9 +296,10 @@ def rpa_kernel_poles(h,V=None,q=None,**kwargs):
     same q. Returns an (npoles,2) array: [frequency, residual imaginary
     part], one row per collective mode found, sorted by frequency -- see
     _poles_from_chi_matrix's docstring for how to interpret the residual
-    imaginary part's sign."""
+    imaginary part's sign. An energies= grid that starts above zero gets
+    w=0 added, see _scan_from_zero."""
     from ..chi import chiAB # get response function
-    es,chis = chiAB(h,mode="matrix",q=q,**kwargs) # non-interacting response
+    es,chis = chiAB(h,mode="matrix",q=q,**_scan_from_zero(kwargs)) # non-interacting response
     Vq = interaction_at_q(V,h,q) if V is not None else None
     return _poles_from_chi_matrix(es,chis,Vq)
 
@@ -258,8 +309,10 @@ def rpa_kernel_poles_ops(h,ops=None,V=None,pAs=None,pBs=None,q=None,**kwargs):
     local operators (e.g. Sx,Sy,Sz), as used by chi_ops_RPA. pAs/pBs can be
     passed in (see build_ops_projectors) to reuse a q-independent operator
     tensor across many calls at different q, instead of rebuilding it from
-    ops every time."""
-    es,chis = _chi_ops_matrix_vectorized(h,ops=ops,pAs=pAs,pBs=pBs,q=q,**kwargs)
+    ops every time. As in rpa_kernel_poles, w=0 is added to a grid that
+    starts above zero, so the Goldstone mode is found at about delta."""
+    es,chis = _chi_ops_matrix_vectorized(h,ops=ops,pAs=pAs,pBs=pBs,q=q,
+                                         **_scan_from_zero(kwargs))
     Vq = interaction_at_q(V,h,q) if V is not None else None
     return _poles_from_chi_matrix(es,chis,Vq)
 
