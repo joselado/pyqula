@@ -73,3 +73,51 @@ def berry_curvature_mesh(h,ks,dk=0.01,batch_size=64):
             d = lg.det(m)
             bs[i0+j] = np.arctan2(d.imag,d.real)/(4.*dk*dk)
     return bs
+
+
+def whole_zone_window(g,maxint=10,tol=1e-8):
+    """Window of the Berry curvature map of a 2d geometry, in the Cartesian
+    momenta of the map (ki, with reduced momenta k = get_k2K() @ ki).
+
+    Returns (vx,vy,nzones). The window is the cell spanned by the two
+    vectors vx and vy, centered at Gamma, and it holds exactly nzones
+    Brillouin zones, so that the mean of a periodic quantity over a uniform
+    mesh of it is its mean over one zone.
+
+    When the reciprocal lattice has a vector along x and one along y, vx and
+    vy are the shortest of them (integer combinations m*B1+n*B2 with |m|,|n|
+    up to maxint), and the window is an axis-aligned rectangle: one zone for
+    a square or rectangular lattice, two for a hexagonal one. Otherwise (an
+    oblique lattice, or a lattice rotated with respect to the axes) vx and
+    vy are the two reciprocal lattice vectors themselves, and the window is
+    the parallelogram of one zone."""
+    if g.dimensionality!=2:
+        raise ValueError("the whole-zone window of the Berry curvature map "
+                "is only defined for 2d geometries, got dimensionality "
+                +str(g.dimensionality))
+    R = np.array(g.get_k2K())[:2,:2] # reduced momenta from Cartesian ones
+    B = np.linalg.inv(R) # columns: reciprocal lattice vectors, Cartesian
+    scale = np.max(np.abs(B))
+    vx,vy = None,None
+    for m in range(-maxint,maxint+1):
+        for n in range(-maxint,maxint+1):
+            v = m*B[:,0] + n*B[:,1]
+            if np.max(np.abs(v))<tol*scale: continue # zero vector
+            if abs(v[1])<tol*scale and v[0]>0: # along +x
+                if vx is None or v[0]<vx[0]: vx = np.array([v[0],0.])
+            if abs(v[0])<tol*scale and v[1]>0: # along +y
+                if vy is None or v[1]<vy[1]: vy = np.array([0.,v[1]])
+    if vx is None or vy is None: # no rectangle, take one zone
+        return B[:,0].copy(),B[:,1].copy(),1
+    nzones = int(round(abs(np.linalg.det(R@np.array([vx,vy]).T))))
+    return vx,vy,nzones
+
+
+def whole_zone_kmesh(g,nk=100,nsuper=1):
+    """Uniform nk x nk mesh of the window of whole_zone_window, repeated
+    nsuper times along each of its sides, as an array of Cartesian momenta
+    [kx,ky,0] (the first index runs along vx, the second along vy)"""
+    vx,vy,nzones = whole_zone_window(g)
+    ts = np.linspace(-nsuper/2.,nsuper/2.,nk,endpoint=False)
+    ks = [t1*vx + t2*vy for t1 in ts for t2 in ts]
+    return np.array([[k[0],k[1],0.] for k in ks])

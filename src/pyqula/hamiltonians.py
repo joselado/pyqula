@@ -136,6 +136,10 @@ class Hamiltonian():
     def get_berry_curvature(h,**kwargs):
         return topology.get_berry_curvature(h,**kwargs)
 
+    def get_berry_curvature_path(h,**kwargs):
+        """Berry curvature along a k-path, see topology.get_berry_curvature_path"""
+        return topology.get_berry_curvature_path(h,**kwargs)
+
     def get_spin_chern(h,**kwargs):
         """Spin Chern number (C_+ - C_-)/2 of the occupied states split by
         the sign of P s_z P, see topologytk/topologicalsector.py"""

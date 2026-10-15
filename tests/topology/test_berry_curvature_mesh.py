@@ -58,9 +58,6 @@ def test_get_berry_curvature_master_matches_serial_reference(tmp_path, monkeypat
     kx, ky, bs = h.get_berry_curvature(nk=nk, dk=dk, write=False)
 
     R = np.array(g.get_k2K())
-    ks = []
-    for x in np.linspace(-1, 1, nk, endpoint=False):
-        for y in np.linspace(-1, 1, nk, endpoint=False):
-            ks.append([x, y, 0.])
+    ks = [[x, y, 0.] for (x, y) in zip(kx, ky)] # the points of the map
     ref = np.array([topology.berry_curvature(h, R @ k, dk=dk) for k in ks])
     assert np.max(np.abs(np.array(bs) - ref)) < 1e-8

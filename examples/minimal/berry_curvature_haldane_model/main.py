@@ -13,7 +13,7 @@ g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(.05) # add Haldane hopping to the Hamiltonian
 (k,e) = h.get_bands() # get the bandstructure (also written to BANDS.OUT)
-(kb,b) = h.get_berry_curvature() # get the Berry curvature
+(kb,b) = h.get_berry_curvature_path() # Berry curvature along the k-path
 
 import matplotlib.pyplot as plt
 

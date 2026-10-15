@@ -523,15 +523,39 @@ def get_berry_curvature_master(h,dk=None,nk=100,
         kpath=None,
                max_waves=None,mode="Wilson",delta=0.001,operator=None,
                write=None,verbose=0):
-    """ Return the Berry curvature in 2D reciprocal space """
+    """Berry curvature map in 2D momentum space, returned as (kx,ky,b),
+    nk*nk points, the first index running along kx.
+
+    With reciprocal=True (default) and a 2d Hamiltonian, kx and ky are
+    Cartesian momenta, in the units of get_k2K(), and the mesh covers a
+    window centered at Gamma that
+    holds a whole number of Brillouin zones: a rectangle when the
+    reciprocal lattice has vectors along x and along y (one zone for a
+    square lattice, of side |b1|; two for a hexagonal one, of sides |b1|
+    and sqrt(3)|b1|), and otherwise the parallelogram spanned by the two
+    reciprocal lattice vectors, one zone, whose points are then not an
+    axis-aligned grid (topologytk.berry.whole_zone_window). nsuper repeats
+    the window nsuper times along each side.
+
+    With reciprocal=False kx and ky are reduced momenta, from -nsuper to
+    nsuper, so (2*nsuper)^2 zones. A 3d Hamiltonian keeps that square of
+    side 2*nsuper at kz=0, converted with get_k2K() when reciprocal=True.
+
+    b is the curvature per unit area of the reduced zone, whose area is
+    one, and for a 2d Hamiltonian the window is a union of whole zones, so the
+    Chern number of the occupied states is np.mean(b)/(2*np.pi)."""
     write = filewrite.resolve(write,True) # the call, else the global switch
     operator = get_operator(h,operator) # accept a name, matrix or callable
     # get the right kpoints
     if kpath is None: # no kpath, just to a grid
-        ks = [] # list with kpoints
-        for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-          for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-              ks.append([x,y,0.])
+        if reciprocal and h.dimensionality==2: # whole zones, Cartesian
+            from .topologytk.berry import whole_zone_kmesh
+            ks = whole_zone_kmesh(h.geometry,nk=nk,nsuper=nsuper)
+        else: # square mesh of the coordinates
+            ks = [] # list with kpoints
+            for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+              for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+                  ks.append([x,y,0.])
     else: # kpath provided
         ks = h.geometry.get_kpath(kpath,nk=nk)
         reciprocal = False # if given, assume they are in standard way
@@ -1049,27 +1073,40 @@ from .topologytk.green import dOmega_dE
 from .topologytk.green import dOmega_dE_generator
 
 
-def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,
+def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,e=0.0,
                delta=None,operator=None,dk=0.01,write=None):
-  """Compute a Berry density map dOmega/dE (k) at a fixed energy"""
+  """Map of the energy-resolved Berry curvature dOmega/dE (k,e) at the
+  energy e, with a Green's function broadening delta (5/nk by default),
+  returned as (kx,ky,b), nk*nk points.
+
+  The window is the one of get_berry_curvature_master: with
+  reciprocal=True and a 2d Hamiltonian, Cartesian momenta over a window
+  of whole Brillouin zones centered at Gamma
+  (topologytk.berry.whole_zone_window); with reciprocal=False, reduced
+  momenta from -nsuper to nsuper. In both cases np.mean(b)/(2*np.pi) is
+  the Brillouin-zone integral that chern_density returns at the energy e,
+  whose integral in energy up to the Fermi level gives the Chern number
+  in the limit of a small delta"""
   write = filewrite.resolve(write,True) # the call, else the global switch
   if delta is None: delta = 5./nk
   if reciprocal: R = h.geometry.get_k2K()
   else: R = np.array(np.identity(3))
-  nt = nk*nk # total number of points
-  ik = 0
-  ks = [] # list with kpoints
-  for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-    for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
-        ks.append([x,y,0.])
+  if reciprocal and h.dimensionality==2: # whole zones, Cartesian
+      from .topologytk.berry import whole_zone_kmesh
+      ks = whole_zone_kmesh(h.geometry,nk=nk,nsuper=nsuper)
+  else: # square mesh of the coordinates
+      ks = [] # list with kpoints
+      for x in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+        for y in np.linspace(-nsuper,nsuper,nk,endpoint=False):
+            ks.append([x,y,0.])
+  fdomega = dOmega_dE_generator(h,operator=get_operator(h,operator),
+          delta=delta,dk=dk) # built once, not per k-point
   tr = timing.Testimator("BERRY DENSITY",maxite=len(ks))
   def fp(ki): # function to compute the Berry curvature
       if parallel.cores == 1: tr.iterate()
       else: print("Doing",ki)
-      r = np.array(ki) # real space vectors
-      k = R@r # change of basis
-      b = dOmega_dE(h,k=k,operator=operator,dk=dk) # get the density
-      return b
+      k = R@np.array(ki) # change of basis
+      return fdomega(k=k,e=e) # get the density
   bs = parallel.pcall(fp,ks) # compute all the Berry curvatures
   if write:
     fo = open("BERRY_DENSITY_KMAP.OUT","w") # open file
