@@ -46,8 +46,12 @@ pairs to the emission pairs (beyond the Tamm-Dancoff approximation).
 By default the interaction is the one of a converged mean-field Hamiltonian,
 `h.V`. So the same interaction gives the Fock self-energy in `h` and the BSE
 kernel, and nothing is counted twice: this is time-dependent Hartree-Fock on
-top of Hartree-Fock. As an example, we converge a gapped antiferromagnet and
-compute its lowest excitons:
+top of Hartree-Fock. As an example, we converge a mean field on the gapped
+honeycomb lattice and compute its lowest excitons. Note that with these
+parameters the converged state is not magnetic: `hmf.get_vev("sz")` is of
+order $10^{-5}$, so it is the band insulator of the sublattice imbalance.
+At this imbalance, $0.6$, and with `nk=6`, the staggered moment appears only
+at about $U=3.2$, where it is $0.06$, and it is $0.46$ at $U=3.3$:
 
 ```python
 from pyqula import geometry
@@ -82,6 +86,28 @@ The binding energy is the lowest free electron-hole transition on the mesh
 minus the exciton energy, so a positive value means a bound exciton. With
 the Coulomb tail the lowest exciton separates from the band edge.
 
+![Left: exciton levels and free electron-hole pair levels of the gapped honeycomb lattice with a Coulomb tail. Right: weight of the lowest exciton over the Brillouin zone.](img/excitons_bse.png#only-light)
+![Left: exciton levels and free electron-hole pair levels of the gapped honeycomb lattice with a Coulomb tail. Right: weight of the lowest exciton over the Brillouin zone.](img/excitons_bse-dark.png#only-dark)
+
+The figure is for the second snippet, with the Coulomb tail. On the left,
+each line is one energy and its height the number of states there. The
+lowest free pair is at $2.165t$, with 24 states: three mesh points around
+each of K and K', times four spin states. The lowest exciton is at
+$1.856t$, so its binding energy is $0.309t$. It has eight states, two
+valleys times four spin states. The next excitons are at $1.994t$ (one
+state) and $2.052t$ (three states). On the right is the weight
+$\sum_{vc}|A_{vc}(k)|^2$ of the lowest exciton on the k-mesh, averaged over
+its eight states, with $k_1,k_2$ in units of the reciprocal lattice vectors.
+The weight sits on the mesh points next to K and K', where the gap is
+smallest. With `nk=8` the mesh does not contain K itself, so the band edge
+on the mesh is at $2.165t$ and not at the true gap $2t$.
+
+??? example "Code of this figure (documentation/figures/excitons_bse.py)"
+
+    ```python
+    --8<-- "excitons_bse.py"
+    ```
+
 - `h.get_exciton_energies()`: the exciton energies.
 - `h.get_exciton_binding_energies()`: the binding energies (positive means
   bound).
@@ -102,9 +128,16 @@ the Coulomb tail the lowest exciton separates from the band edge.
 
 The Hamiltonian is spinful, so the spin is part of the orbital index, and
 singlet and triplet excitons come from the same calculation. In a system
-with spin-rotation symmetry the lowest transition is four times degenerate.
-The full kernel splits it into a triplet, three times degenerate, and a
-singlet at higher energy; neither of the two terms alone does this.
+with spin-rotation symmetry each free electron-hole transition is four times
+degenerate in spin. The full kernel can split it into a triplet, three times
+degenerate, and a singlet; neither of the two terms alone gives this 3+1
+pattern. Not every level splits, and the singlet is not always the higher
+one. For the gapped honeycomb lattice with the Coulomb tail above, the
+lowest exciton stays eight times degenerate at $1.856t$, two valleys times
+four spin states. The 3+1 pattern appears higher up, with a singlet at
+$1.994t$ below a triplet at $2.052t$. With only an onsite term,
+`density_interaction(h2,U=1.0)` at `nk=6`, the singlet is above the triplet,
+at $2.917t$ against $2.704t$.
 
 The default `V=None` reads `h.V`, which is only the $z$ channel of an
 exchange interaction. It misses the $x$ and $y$ channels of an anisotropic
@@ -167,6 +200,30 @@ grows. See
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/20_bse_matrix_free_qtt.ipynb`
 for an executed notebook.
 
+![Left: binding energy of the lowest exciton of the gapped honeycomb lattice against the k-mesh. Right: weight of the lowest exciton over the Brillouin zone on the 30x30 mesh.](img/excitons_largek.png#only-light)
+![Left: binding energy of the lowest exciton of the gapped honeycomb lattice against the k-mesh. Right: weight of the lowest exciton over the Brillouin zone on the 30x30 mesh.](img/excitons_largek-dark.png#only-dark)
+
+The figure uses the first solver of the snippet, `solver="iterative"`, on
+meshes from 6x6 to 30x30 instead of `nk=1024`, so that it runs in about
+three minutes. Every mesh is a multiple of 3, so it contains K and K', the
+lowest free pair is at the true gap $2t$, and the binding energy is measured
+from it. On the left, the binding energy is $0.270t$ on the 6x6 mesh,
+$0.162t$ on 12x12 and $0.1553t$ on 30x30. From 21x21 on it changes by
+less than $10^{-4}t$. On a coarse mesh the attraction is sampled on too few
+points, and the binding is overestimated. On the right is the weight
+$\sum_{vc}|A_{vc}(k)|^2$ of the lowest exciton on the 30x30 mesh, averaged
+over the four states that the solver returns. It is a peak at K and K', the
+same in the two valleys, and it is close to zero at about $0.15$ reciprocal
+lattice vectors from them, four or five points of the mesh. This exciton is
+strongly bound, so about 20x20 is enough. A weakly bound exciton has a
+narrower peak, and it needs the much finer meshes of the snippet.
+
+??? example "Code of this figure (documentation/figures/excitons_largek.py)"
+
+    ```python
+    --8<-- "excitons_largek.py"
+    ```
+
 ### Exciton band structure
 
 An exciton moves through the crystal with center-of-mass momentum $Q$, so it
@@ -210,6 +267,25 @@ state of the pair, and the exciton energies become arbitrary too: in a
 time-reversal symmetric model $E_X(Q)$ is then not even in $Q$. pyqula gives
 a warning in this case. Use even `nv` and `nc` for a spin-degenerate
 Hamiltonian.
+
+![Exciton band structure of the gapped honeycomb lattice along the q-path, below the lowest free electron-hole pairs.](img/excitons_bands.png#only-light)
+![Exciton band structure of the gapped honeycomb lattice along the q-path, below the lowest free electron-hole pairs.](img/excitons_bands-dark.png#only-dark)
+
+The default path goes from next to $\Gamma$ through K, M and K' back to
+$\Gamma$. The excitons (blue) are below the free pairs (gray) at every $Q$.
+At $\Gamma$ the lowest exciton is at $1.856t$ and the lowest free pair at
+$2.165t$; at M they are at $2.42t$ and $2.83t$. So the binding energy is
+between $0.3t$ and $0.4t$ along the whole path. Near K and K' the exciton
+band has a second minimum, $1.864t$, almost as low as at $\Gamma$: this is
+the exciton made of an electron in one valley and a hole in the other.
+Each blue point is close to a second one, the members of the spin
+multiplets.
+
+??? example "Code of this figure (documentation/figures/excitons_bands.py)"
+
+    ```python
+    --8<-- "excitons_bands.py"
+    ```
 
 See `examples/2d/exciton_bands/main.py` for a runnable script, with the
 exciton band of a gapped honeycomb lattice below its electron-hole
@@ -291,6 +367,28 @@ used to see how far the screened interaction reaches, or given to
 `h.get_mean_field_hamiltonian(V=...)` for a screened-exchange mean field.
 `nkW` sets a finer mesh for the screening than for the exciton, and must be
 an integer multiple of `nk`.
+
+![Left: exciton levels with the bare and with the screened interaction. Right: bare and screened interaction between opposite spins against distance.](img/excitons_screening.png#only-light)
+![Left: exciton levels with the bare and with the screened interaction. Right: bare and screened interaction between opposite spins against distance.](img/excitons_screening-dark.png#only-dark)
+
+The figure uses the two snippets above. On the left, the lowest exciton
+moves up from $1.943t$ to $1.959t$ with screening, so the binding energy
+goes from $0.221t$ to $0.205t$. The higher excitons hardly move. On the
+right we take the interaction between opposite spins from `V` and from
+`W.get_dict()`, against the distance between the two sites; the
+first-neighbor distance is 1. The onsite term goes from $1.0$ to $0.94$,
+the first-neighbor term from $0.537$ to $0.50$, and the reduction becomes
+smaller at larger distance. So the screening is weak, a few percent,
+because the gap is large. `W.epsmin` is $0.90$, below 1: along one
+direction the interaction becomes a little stronger, the case explained
+at the end of this section. The tail of `V` stops at distance 5, and $W$
+from an 8x8 mesh repeats every 8 unit cells, so we do not plot it further.
+
+??? example "Code of this figure (documentation/figures/excitons_screening.py)"
+
+    ```python
+    --8<-- "excitons_screening.py"
+    ```
 
 Screening acts on the charge. The total density polarizes the medium, and the
 induced charge acts back on the total density. So with `channel="charge"`

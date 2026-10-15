@@ -76,6 +76,24 @@ spectrum that never comes close to zero. The entropy is given per parallel
 unit cell, averaged over `nk` momenta, and it counts both boundaries of the
 region.
 
+![Li-Haldane entanglement spectrum of the Haldane model and of a trivial insulator, against the momentum parallel to the cut.](img/entanglement_spectrum.png#only-light)
+![Li-Haldane entanglement spectrum of the Haldane model and of a trivial insulator, against the momentum parallel to the cut.](img/entanglement_spectrum-dark.png#only-dark)
+
+On the left is the spectrum of the snippet. On the right is the same lattice
+with a sublattice imbalance of $0.3$ instead of the Haldane coupling, a
+trivial insulator. In the Chern insulator two levels cross $\xi=0$ at
+$k_\parallel=1/2$, in opposite directions: one for each boundary of the
+region, so $2|C|=2$ crossings. In the trivial insulator no level comes closer
+to zero than $0.59$. The plot is cut at $\pm8$; the levels beyond are states
+almost fully inside or fully outside the region, which do not contribute to
+the entropy.
+
+??? example "Code of this figure (documentation/figures/entanglement_spectrum.py)"
+
+    ```python
+    --8<-- "entanglement_spectrum.py"
+    ```
+
 Keywords:
 
 - `region`: the region $A$, in one of the four forms above. `None` takes half

@@ -84,7 +84,36 @@ can compare the two. `GrapheneGeometry` works for any graphene multilayer
 (bilayer, twisted bilayer, twisted trilayer). The relaxation is stronger for
 smaller twist angles. The band structure of the relaxed lattice is the one
 to compare with an experiment on a real sample, for example with ARPES or
-with the local density of states measured by STM.
+with the local density of states measured by STM. The relaxation takes a
+few seconds, while `h.get_bands(num_bands=20)` on the 2884 atoms of this
+moiré cell takes several minutes, about 8 on a laptop.
+
+![In-plane displacement of the atoms of the top layer of the relaxed twisted bilayer, and the bands of the rigid and of the relaxed lattice.](img/relaxation_twisted.png#only-light)
+![In-plane displacement of the atoms of the top layer of the relaxed twisted bilayer, and the bands of the rigid and of the relaxed lattice.](img/relaxation_twisted-dark.png#only-dark)
+
+The left panel shows the displacement $\mathbf u$ of the atoms of the top
+layer, the difference between the positions of `g` and of `g0`, over several
+moiré cells. The atoms turn around each AA region (the dark centres of the
+rings, at the origin and at its copies by the moiré lattice vectors), and
+the bottom layer turns in the opposite direction. The displacement is zero
+at AA and at the centres of the AB and BA domains (the dark points between
+the rings), and it is largest, 0.025 in units of the carbon-carbon distance,
+on a ring around AA. So the relaxation is mostly a local rotation of the two
+layers around each AA region.
+
+The right panel shows the bands of the relaxed lattice (orange) and, as a
+reference, of the rigid one (gray). To keep the script short, the figure
+uses `nk=40` k-points. The two bands
+closest to zero energy are the central bands of the moiré, with their Dirac
+points at K and K'. The relaxation changes them by about 0.004 in units of
+the hopping: at M they go from $-0.023$ and $0.028$ to $-0.027$ and $0.031$, and
+at $\Gamma$ from $-0.054$ and $0.064$ to $-0.057$ and $0.068$.
+
+??? example "Code of this figure (documentation/figures/relaxation_twisted.py)"
+
+    ```python
+    --8<-- "relaxation_twisted.py"
+    ```
 
 See `examples/2d/graphene_relax/main.py` for a runnable script that compares
 the rigid and the relaxed lattices, and

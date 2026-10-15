@@ -45,6 +45,41 @@ The result is $C=2$. The Hamiltonian is spinful by default, and the Haldane
 term is the same for both spins, so each spin gives one. The same model with
 `has_spin=False` gives $C=1$.
 
+![Berry curvature of the Haldane model over the Brillouin zone, with the zone drawn as a hexagon.](img/topology_chern.png#only-light)
+![Berry curvature of the Haldane model over the Brillouin zone, with the zone drawn as a hexagon.](img/topology_chern-dark.png#only-dark)
+
+The map is the Berry curvature $\Omega(\mathbf k)$ of this snippet, computed
+with `h.get_berry_curvature(nk=100)`. It covers a rectangle of momenta
+centered at $\Gamma$, from $-0.577$ to $0.577$ in $k_x$ and from $-1$ to $1$
+in $k_y$, and this rectangle holds exactly two Brillouin zones. The curvature
+is periodic, so the figure shows the map repeated once along $k_x$, with one
+zone drawn as the gray hexagon. The curvature is in the units of the
+reduced Brillouin zone, whose area is one. It is concentrated at the six
+corners of the zone, the K and K' points, where the gap is smallest, from
+$-0.225$ to $0.225$. Its peak is about $620$, so the color scale is cut at
+$200$ to show the tails. The curvature has the same sign at K and at K', so
+the two valleys add up instead of cancelling. These sharp peaks are what the
+k-mesh has to resolve.
+
+Because the map holds a whole number of zones, the Chern number comes back
+from it as the mean of the curvature divided by $2\pi$. Here
+`np.mean(b)/(2*np.pi)` is $2.000$, the same as `h.get_chern()`. The window
+is chosen in the same way for every two-dimensional lattice. For a square
+lattice it is one zone, a square of side $|\mathbf b_1|$, and for a
+hexagonal lattice it is the rectangle of two zones of the figure, of sides
+$|\mathbf b_1|$ and $\sqrt{3}|\mathbf b_1|$. A lattice without such a
+rectangle, for example an oblique one, gets the parallelogram spanned by its
+two reciprocal lattice vectors, one zone, and then the points of the map are
+not on a rectangular grid. With `reciprocal=False` the map uses the reduced
+momenta from $-1$ to $1$, four zones, and the mean gives the Chern number
+too.
+
+??? example "Code of this figure (documentation/figures/topology_chern.py)"
+
+    ```python
+    --8<-- "topology_chern.py"
+    ```
+
 The integral is a sum over a k-mesh of `nk` points per direction, ten by
 default. The default sum counts the Berry phase around each small plaquette
 of the mesh, so it gives an integer at every `nk`. But the integer is only
@@ -62,7 +97,9 @@ Keywords:
   `"wannier"`, explained below.
 
 `h.get_berry_curvature()` returns the curvature $\Omega(\mathbf k)$ itself,
-as a map over the Brillouin zone.
+as a map over the Brillouin zone. `h.get_berry_curvature_path()` returns it
+along a k-path, by default the k-path of `h.get_bands()`, so that the peaks of the
+curvature can be put next to the band structure.
 
 See `examples/2d/chern/main.py` (a Chern insulator from Rashba coupling and
 an exchange field), `examples/2d/haldane_model/main.py` and
@@ -123,8 +160,10 @@ the product of the overlaps $\langle u_n(\mathbf k)|u_m(\mathbf k+\delta
 eigenvalues are the positions of the hybrid Wannier centers: the centers of
 charge of states that are localized along the first direction and extended
 along the second. When $k_2$ goes once around the Brillouin zone, the sum of
-the centers moves by $C$ lattice constants. So the Chern number is the charge
-pumped across the unit cell in one cycle.
+the centers moves by $-C$ lattice constants, with $C$ the Chern number of
+`h.get_chern()`. So for $C=2$ the centers move by two lattice constants
+towards negative positions. The Chern number is the charge pumped across the
+unit cell in one cycle, and its sign is the direction of the pumping.
 
 ```python
 from pyqula import geometry
@@ -153,6 +192,26 @@ $2\pi x$ of its fractional coordinate $x$ along the loop.
   instead of at the origin of the cell. The windings do not change, but the
   centers move to where the charge really is. Use it when the positions
   themselves matter, for example for a polarization.
+
+![Flow of the hybrid Wannier center of the Haldane model as the momentum k2 goes once around the Brillouin zone.](img/topology_wannier.png#only-light)
+![Flow of the hybrid Wannier center of the Haldane model as the momentum k2 goes once around the Brillouin zone.](img/topology_wannier-dark.png#only-dark)
+
+The figure shows this flow for the Haldane model of the snippet, with the
+center written as $x_1$, in units of the lattice constant. The two spins have
+the same center, so the two rows lie on top of each other. At $k_2=0$ the
+center is at $0$. It moves slowly, then fast near $k_2=1/3$, where the gap is
+smallest, and reaches the border of the cell, $x_1=-1/2$, at $k_2=1/2$. It
+comes back in at $+1/2$ and goes back to $0$ at $k_2=1$. So in one cycle each
+spin moves by one lattice constant towards negative $x_1$. The two spins
+together move by $-2$ lattice constants, so $C=2$.
+The plot repeats the center at $x_1\pm1$, so that the line is continuous
+across the border of the cell.
+
+??? example "Code of this figure (documentation/figures/topology_wannier.py)"
+
+    ```python
+    --8<-- "topology_wannier.py"
+    ```
 
 See `examples/2d/wannier_centers/main.py` for a script that plots the flow.
 
@@ -188,6 +247,26 @@ themselves, and the parity of the number of times the centers cross a fixed
 line tells which. The keywords are `nk` momenta along the loop and `nt`
 pumping steps, 60 each by default. `h.add_soc()` is the same term as
 `h.add_kane_mele()`.
+
+![Flow of the hybrid Wannier centers over half of the Brillouin zone, for the Kane-Mele model and for a trivial insulator.](img/topology_z2.png#only-light)
+![Flow of the hybrid Wannier centers over half of the Brillouin zone, for the Kane-Mele model and for a trivial insulator.](img/topology_z2-dark.png#only-dark)
+
+On the left is the flow of the Kane-Mele model of the snippet. On the right
+is the same lattice with a sublattice imbalance of $0.2$ instead of the
+spin-orbit coupling, a trivial insulator. In the Kane-Mele model the two
+Kramers partners start together at $x_1=0$ for $k_2=0$. They separate, and at
+$k_2=1/2$ they arrive at $x_1=+1/2$ and $x_1=-1/2$, which is the same point of
+the periodic cell. So each partner ends with a new partner: they have
+switched. In the trivial insulator the pair starts at $x_1=0.008$ and ends at
+$x_1=0.40$, still together. A horizontal line at any $x_1$ is crossed once by
+the Kane-Mele flow, and an even number of times, zero or two, by the trivial
+one. This parity is the invariant.
+
+??? example "Code of this figure (documentation/figures/topology_z2.py)"
+
+    ```python
+    --8<-- "topology_z2.py"
+    ```
 
 `h.get_topological_invariant()` chooses the invariant for you. In two
 dimensions it returns the $Z_2$ invariant when the Hamiltonian is
@@ -377,6 +456,25 @@ closer than `tol` to $0$ or to $1/2$, and `topology.wannier_gap(h)` gives
 this distance. The quantization of $q_{xy}$ needs the two mirrors; without
 them the formula gives a number with no meaning.
 
+![Wannier bands of the quadrupole insulator as a function of the momentum k2.](img/topology_quadrupole.png#only-light)
+![Wannier bands of the quadrupole insulator as a function of the momentum k2.](img/topology_quadrupole-dark.png#only-dark)
+
+The figure shows the Wannier bands $\nu_1(k_2)$ of the snippet, the hybrid
+Wannier centers along $\vec a_1$ from `topology.z2_wannier_centers(h,full=True)`.
+There are two, one per occupied band. They are mirror images of each other,
+and they form the two sectors: blue for $\nu_1>0$ and orange for
+$\nu_1<0$. They come closest to $0$ at $k_2=0$, at $\pm0.073$, which is the
+value of `topology.wannier_gap(h)`, and they reach $\pm0.25$ at $k_2=1/2$.
+They never touch $0$ or $1/2$, so the two sectors are well defined. The value
+of $q_{xy}$ is not visible in this picture: it comes from the nested Wilson
+loop over each sector, which gives the four polarizations $1/2$.
+
+??? example "Code of this figure (documentation/figures/topology_quadrupole.py)"
+
+    ```python
+    --8<-- "topology_quadrupole.py"
+    ```
+
 - `nk`: k-points per direction, 40 by default.
 - `gauge="atomic"`: put each orbital at its position in the cell. By default
   every orbital is at the origin of its cell, which is the convention that
@@ -479,6 +577,24 @@ W = h.get_winding_number() # winding number, with the sublattice operator
 The result is $W=-1$, one zero mode at each end. It becomes $0$ when the
 intracell hopping is the stronger one. The sign depends on which sublattice
 $S$ counts as positive.
+
+![The off-diagonal block q(k) of the SSH chain in the complex plane, as k crosses the Brillouin zone.](img/topology_winding.png#only-light)
+![The off-diagonal block q(k) of the SSH chain in the complex plane, as k crosses the Brillouin zone.](img/topology_winding-dark.png#only-dark)
+
+The figure shows $q(k)$ of the snippet in the complex plane, as $k$ crosses
+the Brillouin zone once. Each sublattice has one site, so $q(k)$ is a single
+number, and here it is $q(k)=0.5+e^{-ik}$, with $k$ in units of the inverse
+lattice constant. This is a circle: its center is the intracell hopping
+$0.5$, and its radius is the intercell hopping $1$. So the circle goes around
+zero, the black cross, once and clockwise, and this is $W=-1$. With the
+intracell hopping larger than the intercell one, the circle does not contain
+zero, and $W=0$.
+
+??? example "Code of this figure (documentation/figures/topology_winding.py)"
+
+    ```python
+    --8<-- "topology_winding.py"
+    ```
 
 For a normal Hamiltonian the default chiral operator is the sublattice
 operator. For a Nambu Hamiltonian it is $\sigma_y\tau_y$ on every site, the

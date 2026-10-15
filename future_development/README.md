@@ -245,13 +245,23 @@ already reached once.
   deliberately kept because deleting them is a public-API decision rather
   than a repair.
 
-- Computed figures in the user guide -- not built. The guide became a MkDocs
-  website (`documentation/guide/`, published by `.github/workflows/guide.yml`)
-  on 2026-10-15, in the same way as dmrgpy's, but without dmrgpy's second
-  step: a figure on each page computed by a `compute.py` and a `plot.py` in a
-  figures directory, shown in a light and a dark version, with the code in a
-  collapsed block (pymdownx.snippets). The pages still read the arrays aloud
-  and point at `examples/` and the notebooks for the plots.
+- Computed figures in the user guide -- built on 2026-10-15, in
+  `documentation/figures/` (its `README.md` has the conventions). Unlike
+  dmrgpy's `compute.py` plus `plot.py` plus `data.npz`, each figure is one
+  short script that computes and plots, because the maintainer asked for
+  code that is short and easy to read, and every pyqula figure runs in
+  seconds to minutes. The images are committed; nothing in CI recomputes
+  them, and no test runs the scripts (the static snippet test parses them),
+  so a change in the physics shows up only when `run_all.sh` is re-run.
+
+- [`guide_figures_followups.md`](guide_figures_followups.md) -- what running
+  every guide snippet for the figures turned up: the library bugs fixed with
+  it (the square-lattice M point, the atomic LDOS normalization, the pair
+  magnons at Gamma and their infinity crossings, the mean-field convergence
+  error, the scipy solvers, the whole-zone Berry curvature window and the
+  path method, the kappa sign guard), the S^zS^z chain that needs a small T,
+  and the few items still open (a T=0 magnetization count on a degenerate
+  Fermi level, the MAR cost sentence, two README images).
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

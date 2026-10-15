@@ -85,11 +85,51 @@ import numpy as np
 each energy, so the rows are the frames of a stack $D(x,y,\omega)$. The maps
 are also written to the folder `MULTILDOS/`, one file per energy, together
 with the total density of states in `MULTILDOS/DOS.OUT`, unless `write=False`
-is given. The maps have the same normalization as `h.get_ldos()`, and
-`DOS.OUT` the same as `h.get_dos()`, so they can be compared directly. With
+is given. `DOS.OUT` has the same normalization as `h.get_dos()`. With the
+default projection, `projection="TB"`, the maps have the same normalization
+as `h.get_ldos()`, and the sum of a map over the sites is the density of
+states at that energy. With `projection="atomic"` the map is a density on a
+continuous grid in real space. Each
+eigenstate is written in real space as
+$\Psi(\mathbf r)=\sum_n \Psi(n)\,\phi(\mathbf r-\mathbf r_n)$, with
+$\phi(\mathbf r)=e^{-|\mathbf r|/1.5}$ an atomic orbital, and the map is
+$|\Psi(\mathbf r)|^2$. The orbitals of neighboring sites overlap, so
+$|\Psi(\mathbf r)|^2$ also contains the interference between them. For this
+reason each state is normalized on the grid, before the broadening: the
+integral of its map, the sum over the grid times the area of one grid cell,
+is the weight the state has in the map of `projection="TB"`. The shape of
+each state does not change. As a result, the integral of an atomic map is
+the density of states at that energy, as the sum of a map with
+`projection="TB"`, and the intensities at different energies can be
+compared. For the zigzag ribbon with `delta=0.1` and `nk=200`, the integral
+of the atomic map is 13.3 at both $\omega=-2t$ and $\omega=2t$, the same as
+the sum of the tight-binding map, because the density of states is the same
+at the two energies. The interference is still in the shape: the maximum of
+the map is 2.6 times higher at $\omega=-2t$ than at $\omega=2t$. With
 an operator, `h.get_multildos()` uses the expectation value
 $\langle\Psi|A|\Psi\rangle$ times $|\Psi(n)|^2$, as `mode="arpack"` above.
 `projection="atomic"` does not accept an operator.
+
+![Local density of states of the zigzag ribbon at zero energy in real space, and resolved in position across the ribbon and energy.](img/ldos_zigzag.png#only-light)
+![Local density of states of the zigzag ribbon at zero energy in real space, and resolved in position across the ribbon and energy.](img/ldos_zigzag-dark.png#only-dark)
+
+On the left, the map at zero energy with `projection="TBRS"`, with the
+ribbon along the vertical axis. Lengths are in units of the first-neighbor
+distance $a$. The weight is on the outermost sites of the two edges, and it
+decays into the ribbon on every second site, on one sublattice only. On the
+right, the maps of `h.get_multildos()` at 100 energies, one
+row per energy, as a stack of STM maps. Here we use the default projection,
+one value per site, instead of `projection="atomic"`, so that each column is
+one site. You see a bright line at $\omega=0$ on the edge sites, with the
+value $2.8$, against $0.64$ on the next site of the same sublattice and zero
+on the other sublattice. Away from zero energy the weight spreads over the
+whole ribbon, with the bulk van Hove peaks at $\pm t$.
+
+??? example "Code of this figure (documentation/figures/ldos_zigzag.py)"
+
+    ```python
+    --8<-- "ldos_zigzag.py"
+    ```
 
 See `examples/0d/island/main.py` for a runnable script on a superconducting
 island with `projection="TBRS"`.
@@ -106,6 +146,25 @@ g = islands.get_geometry(name="honeycomb",n=3,nedges=3) # get an island
 h = g.get_hamiltonian() # get the Hamiltonian
 h.get_multildos(projection="atomic") # get the LDOS
 ```
+
+![Local density of states of a triangular honeycomb island at zero energy and at the first level above it, with the atomic projection.](img/ldos_island.png#only-light)
+![Local density of states of a triangular honeycomb island at zero energy and at the first level above it, with the atomic projection.](img/ldos_island-dark.png#only-dark)
+
+The island has 61 sites. Its Hamiltonian has five zero-energy states, the
+difference between the number of sites of the two sublattices. On the left,
+the map at $\omega=-0.02t$, the energy of the grid closest to zero, shows
+these states: the weight is on the outer sites of the three zigzag edges, on
+one sublattice, and it is almost zero inside. On the right,
+at the first level above them, $\omega=0.67t$, the weight is spread over the
+inside of the island, with a node line between the edge and the center. The
+small dots are the sites. Here we assign the output of `h.get_multildos()`
+to arrays, which the snippet above does not do.
+
+??? example "Code of this figure (documentation/figures/ldos_island.py)"
+
+    ```python
+    --8<-- "ldos_island.py"
+    ```
 
 The map at each energy is what STM measures on the island at that bias, and
 `DOS.OUT` is the spectrum of the whole island. See

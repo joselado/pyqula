@@ -39,6 +39,21 @@ energy, and $A(k,\omega)$ at each pair. By default the energies go from $-3$
 to $3$. The same three columns are written to `KDOS_BANDS.OUT`. The
 broadening `delta` is the width of each line in the heatmap.
 
+![Momentum-resolved spectral function of the triangular lattice along the k-path.](img/spectral_kdos.png#only-light)
+![Momentum-resolved spectral function of the triangular lattice along the k-path.](img/spectral_kdos-dark.png#only-dark)
+
+For the figure we take `energies=np.linspace(-4,7,300)`, because the default
+window from $-3$ to $3$ cuts the band. You see the single band of the
+triangular lattice, from $-3t$ at K and K' to $6t$ at $\Gamma$, with a
+local maximum at $-2t$ at M, the saddle point. The width of the line is the
+broadening.
+
+??? example "Code of this figure (documentation/figures/spectral_kdos.py)"
+
+    ```python
+    --8<-- "spectral_kdos.py"
+    ```
+
 The keywords are
 
 - `energies`: the energies $\omega$.
@@ -105,6 +120,27 @@ h = NbSe2(soc=0.9) # multi-orbital spin-orbit-coupled Hamiltonian
 (kx,ky,fs) = h.get_fermi_surface(e=0.,nk=100,delta=3e-1,operator="sz")
 ```
 
+![Fermi surface of the triangular lattice, and the spin-resolved Fermi surface of the NbSe2 model.](img/spectral_fermi.png#only-light)
+![Fermi surface of the triangular lattice, and the spin-resolved Fermi surface of the NbSe2 model.](img/spectral_fermi-dark.png#only-dark)
+
+The momenta are Cartesian, in units of $2\pi/a$. On the left, the Fermi
+surface of the triangular lattice at zero energy is a circle of radius
+$0.38$ around $\Gamma$, repeated around the neighboring reciprocal lattice
+points. For the figure we take `nk=150` instead of `nk=50`: with `nk=50`
+and `delta=1e-1` the contour breaks into dots, which is the k-mesh and not
+the physics. On the right, the NbSe2 model has a pocket around $\Gamma$ and
+pockets around K and K', at $k_x=\pm 0.67$. Each pocket at K and K' is split
+in two by the spin-orbit coupling, with opposite $\langle s_z\rangle$, and
+the order of the two colors is reversed between K and K'. This is the Ising
+spin-orbit coupling of NbSe2. The pocket around $\Gamma$ has a much weaker
+spin texture.
+
+??? example "Code of this figure (documentation/figures/spectral_fermi.py)"
+
+    ```python
+    --8<-- "spectral_fermi.py"
+    ```
+
 `h.get_multi_fermi_surface()` computes the same map at many energies, and
 writes one file per energy to the folder `MULTIFERMISURFACE/`. This shows
 how the constant-energy contours change away from the Fermi energy:
@@ -160,6 +196,28 @@ factor equal to the number of primitive cells in the supercell. Note that a supe
 non-integer size, as $\sqrt 3$ here, is rotated so that its first lattice
 vector is along $x$, and its Fermi surface is drawn in this rotated frame.
 
+![Unfolded Fermi surfaces at zero energy, of a point defect in a 3x3 supercell and of a three-sublattice charge order in a sqrt(3)xsqrt(3) supercell.](img/spectral_unfoldfs.png#only-light)
+![Unfolded Fermi surfaces at zero energy, of a point defect in a 3x3 supercell and of a three-sublattice charge order in a sqrt(3)xsqrt(3) supercell.](img/spectral_unfoldfs-dark.png#only-dark)
+
+Both maps are at zero energy, in units of $2\pi/a$ of the primitive cell.
+On the left, the frame of `h.get_multi_fermi_surface()` closest to zero
+energy, $\omega=-0.04t$, with the mesh divided by `n` to have the same
+units. The point defect is strong, one site in nine, and the circle of the
+clean lattice becomes a hexagon of about the same size, with weak shadow
+lines of the folded copies around it. On the right, the charge order of
+$0.6$ leaves the circle of radius $0.38$ almost unchanged at this energy.
+The neighboring circles are around $(\pm 1.15,0)$ and $(\pm 0.58,\pm 1)$,
+the reciprocal lattice of the rotated frame. For the figure we take `nk=100`
+instead of `nk=50`, so that the circle is a smooth line. The largest weight
+is $58$, three times the one of the primitive cell, as expected for three
+primitive cells in the supercell.
+
+??? example "Code of this figure (documentation/figures/spectral_unfoldfs.py)"
+
+    ```python
+    --8<-- "spectral_unfoldfs.py"
+    ```
+
 See `examples/readme_examples/fermi_surface/main.py`,
 `examples/2d/operator_fermi_surface/main.py` and
 `examples/readme_examples/unfolding_FS/main.py` for runnable scripts.
@@ -200,6 +258,24 @@ gap. In `ds` you see states that cross this gap: the helical edge states of
 the quantum spin Hall insulator. They exist at the edge and not in the bulk,
 and they are protected by time-reversal symmetry and the $Z_2$ invariant (see
 [Topological invariants](topological-invariants.md)).
+
+![Surface and bulk spectral functions of the Kane-Mele model with Rashba coupling.](img/spectral_surface.png#only-light)
+![Surface and bulk spectral functions of the Kane-Mele model with Rashba coupling.](img/spectral_surface-dark.png#only-dark)
+
+$k$ is the momentum along the edge, in units of $2\pi/L$ with $L$ the period
+of the edge. In the bulk (right), the bands have a gap at $k=1/3$ and
+$k=2/3$, the projections of K and K'. The gap goes from $0.075t$ to
+$0.22t$, the same as in the band structure of the two-dimensional crystal:
+the spin-orbit coupling opens it and the Rashba coupling makes it smaller. At the surface (left), two bright lines
+cross this gap and meet at $k=1/2$ near $\omega=0$. These are the helical
+edge states, which cross at the time-reversal invariant momentum. The color
+scale is the same in the two panels and saturates on the edge states.
+
+??? example "Code of this figure (documentation/figures/spectral_surface.py)"
+
+    ```python
+    --8<-- "spectral_surface.py"
+    ```
 
 See `examples/readme_examples/surface_2dTI/main.py` for a runnable script,
 and

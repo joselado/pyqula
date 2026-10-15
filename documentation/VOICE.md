@@ -188,11 +188,11 @@ the sections will build. Not "This chapter covers".
    ("where $n$ runs over the sites and $s,s'$ over the spin"). The chapter register.
 3. The simplest case, and the code for it. Every line of the block carries a trailing comment
    saying what it does physically; the block imports what it uses; it stops at the computed
-   arrays and leaves the plotting to the reader.
+   arrays. The plot is the figure of the section (5.8), not part of the snippet.
 4. What the result means: what the arrays contain, what to look for, what happens as the
    parameter grows ("the field splits the two spin bands by $2|\vec B|$"; "the band structure
-   shows both the electron and the hole states"). Read the plot aloud without the plot. Say
-   what the quantity corresponds to in an experiment when there is one.
+   shows both the electron and the hole states"). Then the figure of the section, read aloud
+   (5.8). Say what the quantity corresponds to in an experiment when there is one.
 5. `Optional arguments` as bullets, in the catalogue register.
 6. The caveats that change how a number should be read: the broadening, the k-mesh, the
    initial guess of a self-consistent calculation, an approximation that is uncontrolled. Each
@@ -257,10 +257,17 @@ gap opens regardless of where the chemical potential is".
 **5.7 Everyday analogy.** Rare in a guide. When the maintainer's prose has one, keep it; do
 not add new ones.
 
-**5.8 Read the plot aloud.** The snippet returns arrays and makes no figure, so the reading
-is of the arrays: "the band structure shows flat bands, the Landau levels, and between them
-dispersive bands, the states at the two edges of the ribbon". The executed notebook is where
-the reader goes for the figure; say so.
+**5.8 Read the plot aloud.** A section that computes an observable has one figure, computed
+by a short script in `documentation/figures/` (its `README.md` has the conventions and the
+markup), shown in a light and a dark version, with the script in a collapsed block under it.
+The calculation in the script is the snippet of the page, with the plotting lines added; if
+the figure needs another parameter (a field along $z$ so that the color can show $S_z$, a
+larger `nk`), the paragraph says so. The paragraph under the figure reads it with numbers
+taken from the computed arrays: "the lowest Landau level is at $-3.87$, close to
+$-4+2\pi B$", "the flat white bands are the Landau levels, in the bulk; the red and blue ones
+are the edge states". A heat map (a color map over $(k,\omega)$, over real space, over the
+Brillouin zone, or bands colored by an operator) is preferred over a line plot whenever the
+physics has one. The image's alternative text is one sentence saying what is plotted.
 
 **5.9 Tie the mathematics to what can be measured.** "This profile is what one measures with
 STM"; "the momentum-resolved spectral function is what ARPES measures"; "the transmission is
@@ -430,8 +437,9 @@ fifteen are the ones found in the course material; the guide adds six of its own
     profiling that produced it does not.
 17. **A section that is only an argument list.** Every method gets its physics sentence before
     the code, even a one-keyword subsection.
-18. **Promising a figure.** The snippets stop at the arrays. Say what to look for in them and
-    point at the script and the notebook that plot them; do not write "as shown in the figure".
+18. **A figure nobody reads.** Every figure gets the paragraph that reads it (5.8), with the
+    numbers it shows; do not write "as shown in the figure" and stop there. A section that
+    computes nothing (a keyword, a file, a switch) has no figure.
 19. **Re-voicing the maintainer's own sentences.** In the canonical chapters (section 1) the
     opening sentence of a chapter or subsection may be rewritten into the intro register,
     since it is the sentence a reader lands on and the one that names the method. Everything

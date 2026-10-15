@@ -130,6 +130,27 @@ point, one $2\times2$ tensor per k-point. The integral of the curvature over
 the Brillouin zone gives the Chern number, here $C=2$ for the two
 spin-degenerate occupied bands, the same as `h.get_chern()`.
 
+![Trace of the quantum metric and Berry curvature of the two occupied bands of the Haldane model over the Brillouin zone.](img/geometry_qgt.png#only-light)
+![Trace of the quantum metric and Berry curvature of the two occupied bands of the Haldane model over the Brillouin zone.](img/geometry_qgt-dark.png#only-dark)
+
+The figure shows the same tensor on a $60\times60$ k-mesh, from
+`topology.quantum_geometric_tensor_mesh(h,nk=60,occ_idxs=[0,1],coordinates="cartesian")`.
+We use Cartesian momenta, so that the maps have the hexagonal symmetry of the
+crystal. Momenta are in units of $1/d$, with $d$ the first-neighbor distance,
+and the tensor is in units of $d^2$. The trace of the metric,
+$g_{xx}+g_{yy}$, and the Berry curvature are both largest at the K and K'
+points, the corners of the hexagons, with $2.78$, and both are zero at
+$\Gamma$. The curvature is positive everywhere. At every k-point the trace of
+the metric is larger than or equal to the curvature, by at most $0.32$, and
+the two are equal at K and K'. Averaged over the Brillouin zone, the trace of
+the metric is $0.89$ and the curvature $0.83$.
+
+??? example "Code of this figure (documentation/figures/geometry_qgt.py)"
+
+    ```python
+    --8<-- "geometry_qgt.py"
+    ```
+
 - `occ_idxs`: the indices of the bands in $S$. By default, the bands with
   $E<0$, as in `h.get_chern()`, so it follows `h.shift_fermi()`.
 - `k`: the k-point, in reduced coordinates.
@@ -171,14 +192,50 @@ h.add_haldane(0.05) # Add Haldane coupling
 ```
 
 `es` are the energies, `cs` the Berry curvature density at each energy, and
-`csi` its cumulative integral. Inside the gap `csi` has a plateau, and when
-the integral goes over all the bands it comes back to zero, because the Berry
-curvatures of all the bands of a Hamiltonian add up to zero. Read this
-quantity as a qualitative profile in energy, not as a number. Its
-normalization is not the one of `h.get_chern()`: for the snippet above the
-plateau at zero energy is near $4$, twice the $C=2$ of
-`h.get_chern()`. It also needs a fine enough `nk` and a large enough `delta`,
-otherwise it shows spurious peaks near k-points where bands come close.
+`csi` its cumulative integral, which starts at the first energy of `es`.
+Inside the gap `csi` has a plateau, and when the integral goes over all the
+bands it comes back to zero, because the Berry curvatures of all the bands of
+a Hamiltonian add up to zero. The normalization is the one of
+`h.get_chern()`, but the plateau is the Chern number only in a limit that is
+expensive to reach, and three things decide how close it is.
+
+- The integral starts at the first energy of `es`, so `es` must start below
+  the bottom of the band, here $-3$. The snippet starts at $-1$ and misses the
+  curvature of the lower states: its plateau at zero energy is $3.97$ at
+  `nk=10`, $3.18$ at `nk=20` and $2.91$ at `nk=40`, and none of these is the
+  Chern number.
+- The energy step must be smaller than `delta`, otherwise the peak of each
+  state is not resolved. The snippet has a step of $0.05$ and the default
+  `delta=0.02`.
+- The broadening `delta` spreads the curvature of the states above the gap
+  into the gap. With `es` from $-3.5$ to $0$ and a step of `delta/4`, the
+  plateau at zero energy is $1.37$ for `delta=0.1` and $1.62$ for
+  `delta=0.05`, the same at `nk=20` and `nk=40`, and $1.79$ for
+  `delta=0.02` at `nk=20`. It goes up towards $C=2$ as `delta` goes down, slowly, and a
+  smaller `delta` needs a finer `nk` and a finer energy step.
+
+So read this quantity as a qualitative profile in energy, not as a number. It
+also needs a fine enough `nk` for its `delta`, otherwise it shows spurious
+peaks near k-points where bands come close.
+
+![Berry curvature density in energy of the Haldane model, and its cumulative integral.](img/geometry_chern_density.png#only-light)
+![Berry curvature density in energy of the Haldane model, and its cumulative integral.](img/geometry_chern_density-dark.png#only-dark)
+
+The figure shows `cs` on the left and `csi` on the right, for the snippet. The
+gray band is the bulk gap, from $-0.225$ to $0.225$. Inside the gap the
+density is close to zero, and the cumulative integral has its plateau, $3.97$
+at zero energy. The two large peaks of the density, at $\pm0.33$, are the
+band edges as the $10\times10$ mesh sees them: the mesh does not contain the
+K points, where the gap is smallest. The density is odd in energy here, so
+the cumulative integral comes back to zero at the end of the window. The
+height of the plateau is not the Chern number, because the window starts at
+$-1$, above the bottom of the band, as explained above.
+
+??? example "Code of this figure (documentation/figures/geometry_chern_density.py)"
+
+    ```python
+    --8<-- "geometry_chern_density.py"
+    ```
 
 - `nk`: number of k-points per direction of the mesh.
 - `es`: energies at which the density is computed.
@@ -188,8 +245,10 @@ otherwise it shows spurious peaks near k-points where bands come close.
   `CHERN_DENSITY_INTEGRATED.OUT`.
 
 The map of $\Xi(\mathbf k,\omega)$ over the Brillouin zone at one energy is
-given by `topology.dOmega_dE_kmap(h,nk=40)`, which writes it to
-`BERRY_DENSITY_KMAP.OUT`. See `examples/2d/berry_density/main.py`,
+given by `topology.dOmega_dE_kmap(h,nk=40,e=0.)`, which writes it to
+`BERRY_DENSITY_KMAP.OUT`. It covers the same window of whole Brillouin zones
+as `h.get_berry_curvature()`, so the mean of the map divided by $2\pi$ is
+the value of `cs` at that energy, for the same `delta` and `dk`. See `examples/2d/berry_density/main.py`,
 `examples/2d/chern_density/main.py` and `examples/2d/berry_density_kmap/main.py`,
 and
 `jupyter-notebooks/functionalities/topological_characterization/03_frequency_resolved_topological_density.ipynb`.
@@ -236,6 +295,21 @@ over the island. The Hamiltonian must be finite; a periodic one raises a
 `ValueError`. For a periodic system, build a large supercell and make it
 finite first. How to read the marker, and how to get the Chern number from
 it, is explained in [Topology in real space](real-space-topology.md).
+
+![Local Chern marker at each site of a triangular honeycomb island with the Haldane coupling.](img/geometry_realspace.png#only-light)
+![Local Chern marker at each site of a triangular honeycomb island with the Haldane coupling.](img/geometry_realspace-dark.png#only-dark)
+
+The figure shows `c` at each site of the island of the snippet, a triangle of
+$573$ sites, with the color scale cut at $\pm3$. Within a distance of $8$
+from the center, the marker is between $1.75$ and $2.02$, close to $C=2$. The
+sites of the outermost row are strongly negative, down to $-17.6$, and they
+compensate the bulk.
+
+??? example "Code of this figure (documentation/figures/geometry_realspace.py)"
+
+    ```python
+    --8<-- "geometry_realspace.py"
+    ```
 
 See `examples/0d/real_space_chern/main.py` and
 `jupyter-notebooks/functionalities/topological_characterization/04_spatially_resolved_topological_flux.ipynb`.

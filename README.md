@@ -4,6 +4,14 @@ models, in zero to three dimensions. With it we compute band structures,
 spectral functions, self-consistent mean-field states, superconductivity,
 topological invariants, response functions and quantum transport.
 
+The user guide is at <https://joselado.github.io/pyqula/>. It has one page per
+topic (Hamiltonians, spectral functions, superconductivity, mean field,
+topology, response functions, transport, Wannierization, KPM, classical spin
+and lattice-gas models), each with the formula, the physical meaning, runnable
+code and computed figures, and a reference of the `Geometry` and `Hamiltonian`
+methods and their arguments. The whole guide is also available as one
+[PDF](https://joselado.github.io/pyqula/user_guide.pdf).
+
 
 # INSTALLATION #
 ## With pip (release version) ##
@@ -48,14 +56,6 @@ pyqula needs at least these versions, and `pyproject.toml` enforces them:
 
 
 # Documentation #
-The user guide is at <https://joselado.github.io/pyqula/>. It has one page per
-topic (Hamiltonians, spectral functions, superconductivity, mean field,
-topology, response functions, transport, Wannierization, KPM, classical spin
-and lattice-gas models), each with the formula, the physical meaning and
-runnable code, and a reference of the `Geometry` and `Hamiltonian` methods and
-their arguments. The whole guide is also available as one
-[PDF](https://joselado.github.io/pyqula/user_guide.pdf).
-
 `examples/` contains several hundred runnable scripts, ordered by dimension
 (`0d/ 1d/ 2d/ 3d/`) and by topic (`transport/`, `embedding/`, `wannier/`,
 `classicalspin/`, `latticegas/` and others).

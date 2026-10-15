@@ -64,6 +64,23 @@ see the one-dimensional van Hove singularities at $E=\pm2$. A sparse
 Hamiltonian (`is_sparse=True`) is the natural choice, since the method never
 needs the dense matrix.
 
+![KPM density of states of a chain of 3000 sites, compared with the density of states of the infinite chain.](img/kpm_dos.png#only-light)
+![KPM density of states of a chain of 3000 sites, compared with the density of states of the infinite chain.](img/kpm_dos-dark.png#only-dark)
+
+The KPM density of states, divided by the number of sites (blue), follows
+the one of the infinite chain, $1/(\pi\sqrt{4t^2-E^2})$ (dashed). You see
+the two van Hove peaks at $E=\pm2$, and the minimum $1/(2\pi)=0.16$ at zero
+energy. Outside the band it is zero. The wiggles in the middle of the band
+are the noise of the stochastic trace with 10 random vectors: about $5\%$
+on average and up to $20\%$ at a single energy. They go down as
+$1/\sqrt R$ when you increase `ntries`.
+
+??? example "Code of this figure (documentation/figures/kpm_dos.py)"
+
+    ```python
+    --8<-- "kpm_dos.py"
+    ```
+
 Two numbers control the result:
 
 - `delta`: the energy resolution, the half width at half maximum of the peak
@@ -109,6 +126,26 @@ energy axis tells which part of the spectrum correlates the two sites. Here
 `npol` is the number of polynomials $n_{\rm pol}$, and each level becomes a
 peak of half width $1.85\,s/n_{\rm pol}$, the inverse of the relation for
 `delta` above.
+
+![Spectral part of the Green's function between a site and its neighbors in a long chain, as a function of distance and energy.](img/kpm_green.png#only-light)
+![Spectral part of the Green's function between a site and its neighbors in a long chain, as a function of distance and energy.](img/kpm_green-dark.png#only-dark)
+
+For the figure we take the site $i=1500$, in the middle of the chain and
+far from its ends, and compute the same quantity for $j=i$ to $i+30$. The
+first column, $j=i$, is $\pi$ times the LDOS: $0.50=\pi/(2\pi)$ at zero
+energy, with peaks at the band edges. At zero energy the value along the
+chain is $0.5, 0, -0.5, 0, 0.5, \dots$, the oscillation $\cos(k_F d)$ with
+$k_F=\pi/2$. Further away the sign changes faster along the energy axis, and
+the finite resolution of 200 polynomials washes it out. The integral over
+all energies is $\pi$ for $j=i$ and zero for the other sites. The integral
+up to zero energy, divided by $\pi$, is $0.5$ for $j=i$, the occupation of a
+site at half filling, and $-0.318=-1/\pi$ for the first neighbor.
+
+??? example "Code of this figure (documentation/figures/kpm_green.py)"
+
+    ```python
+    --8<-- "kpm_green.py"
+    ```
 
 The full Green's function, with its real part, comes from
 `kpm.correlator0d()`. It returns the energies, ${\rm Re}\,G^R_{ij}$ and
@@ -185,6 +222,22 @@ states. At $E=\pm1$ the same sites carry only 1.4%. The sum of a map over the
 sites is the density of states at that energy, with the normalization of
 `h.get_dos(mode="KPM")`. The result is the same as the expansion over the
 whole island, up to roundoff.
+
+![KPM local density of states of the left corner of a honeycomb island, at zero energy and at E=1.](img/kpm_ldos.png#only-light)
+![KPM local density of states of the left corner of a honeycomb island, at zero energy and at E=1.](img/kpm_ldos-dark.png#only-dark)
+
+Both maps show the left corner of the island, where two zigzag edges meet.
+At zero energy the bulk is dark, with a typical LDOS of $0.012$, and the
+outer sites of the two edges are bright, up to $2.8$ at the tip: these are
+the zigzag edge states. At $E=1$ the map is the opposite. The bulk is
+almost uniform, about $0.35$, and the outer edge sites are darker, down to
+$0.13$.
+
+??? example "Code of this figure (documentation/figures/kpm_ldos.py)"
+
+    ```python
+    --8<-- "kpm_ldos.py"
+    ```
 
 The cost of one site is set by the resolution. A peak of half width $\delta$
 needs about $1.85\,s/\delta$ polynomials, here 62, and the region of 61 hops

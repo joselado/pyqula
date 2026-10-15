@@ -29,6 +29,7 @@ import pytest
 from pyqula import geometry
 
 GUIDE = "documentation/guide"
+FIGURES = "documentation/figures"
 
 # The reference pages are a catalogue of signatures, not a tutorial: their
 # fragments illustrate a call on "the h you already have" and are not meant
@@ -64,14 +65,31 @@ def _blocks():
             if l.strip().startswith("```python"):
                 cur = [i + 2, []]
             elif l.strip() == "```" and cur is not None:
+                code, figure = _include("\n".join(cur[1]))
                 out.append({"line": "%s:%d" % (name, cur[0]),
-                            "code": "\n".join(cur[1]),
+                            "code": code,
                             "heading": name + " " + heading,
-                            "reference": in_reference})
+                            "reference": in_reference,
+                            "figure": figure})
                 cur = None
             elif cur is not None:
                 cur[1].append(l)
     return out
+
+
+def _include(code):
+    """(code, is_figure) of a block: the script a `--8<--` line includes.
+
+    The code of a figure sits in a collapsed block as one snippet include,
+    `--8<-- "<id>.py"`, resolved against documentation/figures/ as MkDocs
+    does. The script is checked as it is shown on the website.
+    """
+    from pathlib import Path
+    m = re.fullmatch(r'\s*--8<-- "([^"]+)"\s*', code)
+    if m is None:
+        return code, False
+    root = Path(__file__).resolve().parents[2] / FIGURES
+    return (root / m.group(1)).read_text(), True
 
 
 def _bound_and_read(code):
@@ -127,11 +145,14 @@ def test_no_snippet_uses_an_undefined_name():
         if b["heading"] != seen_heading:
             inherited, seen_heading = set(), b["heading"]
         bound, read = _bound_and_read(b["code"])
-        undefined = read - bound - inherited - builtin_names
+        # a figure script stands alone: it neither inherits nor passes on
+        visible = set() if b["figure"] else inherited
+        undefined = read - bound - visible - builtin_names
         if undefined:
             missing.append("%s (%s): %s" %
                            (b["line"], b["heading"], sorted(undefined)))
-        inherited |= bound
+        if not b["figure"]:
+            inherited |= bound
     assert not missing, ("user-guide snippets read names nothing defines:\n"
                          + "\n".join(missing))
 
@@ -160,7 +181,8 @@ def test_every_referenced_method_exists():
 @pytest.mark.parametrize("name", ["get_gap", "get_bandwidth", "get_filling",
                                   "get_total_energy", "get_density_matrix",
                                   "get_ipr", "get_vev", "get_single_vev",
-                                  "get_several_vev", "get_berry_curvature"])
+                                  "get_several_vev", "get_berry_curvature",
+                                  "get_berry_curvature_path"])
 def test_reference_chapter_documents_these_methods(name):
     """These were public and undocumented until the reference chapter grew
     entries for them; keep the entries from being dropped silently. Some

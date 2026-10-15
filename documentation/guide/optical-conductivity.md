@@ -102,6 +102,24 @@ the gap and starts at the gap. The second call computes the tensor at zero
 frequency with a small broadening, and $2\pi\sigma_{xy}$ comes out as $-1$,
 one conductance quantum with the sign of $-C$.
 
+![Real part of the longitudinal and Hall optical conductivity of the Haldane Chern insulator against frequency, with the band gap marked.](img/optical_chern.png#only-light)
+![Real part of the longitudinal and Hall optical conductivity of the Haldane Chern insulator against frequency, with the band gap marked.](img/optical_chern-dark.png#only-dark)
+
+The dashed line is the band gap, $1.8t$, from `h.get_gap()`. Below the gap
+the absorption $\mathrm{Re}\,\sigma_{xx}$ is almost zero; the small tail
+comes from the broadening `delta=0.05`. It rises at the gap and has its
+maximum, $6.2\,e^2/h$, at $\omega=2.0t$. The Hall part
+$\mathrm{Re}\,\sigma_{xy}$ starts at $-1.00\,e^2/h$ at $\omega=0$, the
+quantized value, goes down to $-4.2\,e^2/h$ at the gap, and changes sign
+at $\omega=2.0t$, where the absorption is maximal. The small wiggles above $\omega=2.5t$ come from the k-mesh,
+`nk=40`.
+
+??? example "Code of this figure (documentation/figures/optical_chern.py)"
+
+    ```python
+    --8<-- "optical_chern.py"
+    ```
+
 The keywords are
 
 - `energies`: the frequencies $\hbar\omega$.

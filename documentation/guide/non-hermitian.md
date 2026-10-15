@@ -49,6 +49,23 @@ because the hopping mixes sites with gain and sites with loss. To plot them
 you have to choose: `es.real` for the energy, `es.imag` for the gain or decay
 rate, or both in the complex plane.
 
+![The twenty complex eigenvalues of the chain with gain and loss, in the complex plane.](img/nonhermitian_spectrum.png#only-light)
+![The twenty complex eigenvalues of the chain with gain and loss, in the complex plane.](img/nonhermitian_spectrum-dark.png#only-dark)
+
+Each dot is one eigenvalue, with the energy on the horizontal axis and the
+gain rate on the vertical one. Twelve of the twenty eigenvalues are real,
+between $-1.54$ and $1.54$: these states are spread equally over the gain
+and the loss, so they neither grow nor decay. The other eight are close to
+the band edges, at $|\mathrm{Re}\,E|$ between $1.67$ and $1.88$, and come in
+pairs $E$ and $E^*$, with rates $\pm0.25$ and $\pm0.48$. The spectrum is
+also symmetric under $E\to-E$.
+
+??? example "Code of this figure (documentation/figures/nonhermitian_spectrum.py)"
+
+    ```python
+    --8<-- "nonhermitian_spectrum.py"
+    ```
+
 ## Choosing which part is the energy: eigmode
 
 The argument `eigmode` says which part of the complex eigenvalue is used as
@@ -83,6 +100,24 @@ print("it lives at x =",x[np.argmax(d)])
 
 The answer is $x=-0.5$, the site where the gain is largest. As expected, the
 most amplified state lives where the imaginary onsite energy is largest.
+
+![Local density of states of the chain with gain and loss, for each gain rate, as a function of the position.](img/nonhermitian_eigmode.png#only-light)
+![Local density of states of the chain with gain and loss, for each gain rate, as a function of the position.](img/nonhermitian_eigmode-dark.png#only-dark)
+
+Each row is the map `d` at one of the five gain rates of the spectrum,
+computed in the same way as in the snippet, and normalized to its largest
+value. The dashed line is the gain $0.6\cos(2\pi x/20)$ of each site. The
+states with the largest gain, $\mathrm{Im}\,E=0.48$, live around $x=0$,
+where the gain is largest, and the states with the largest loss,
+$\mathrm{Im}\,E=-0.48$, live around $x=\pm10$, where the loss is largest.
+The real states, $\mathrm{Im}\,E=0$, have their weight around $x=\pm5$,
+where the onsite energy is zero.
+
+??? example "Code of this figure (documentation/figures/nonhermitian_eigmode.py)"
+
+    ```python
+    --8<-- "nonhermitian_eigmode.py"
+    ```
 
 `h.get_dos()` always broadens the real part when `eigmode` is `"complex"` or
 `"real"`, so both give the same density of states. With `"imag"` it gives
@@ -144,6 +179,26 @@ state with gain, $\mathrm{Im}\,E_n>0$, whose pole is on the wrong side of the
 real axis. Close to an exceptional point, where two eigenvectors become the
 same, the biorthogonal weights of the two states become large and cancel
 each other, and only their sum has a meaning.
+
+![Unfolded spectral function of the chain with a modulated loss, with the right eigenvectors and with the Green's function.](img/nonhermitian_kdos.png#only-light)
+![Unfolded spectral function of the chain with a modulated loss, with the right eigenvectors and with the Green's function.](img/nonhermitian_kdos-dark.png#only-dark)
+
+For the figure we use a finer energy grid than the default,
+`energies=np.linspace(-3.,3.,601)`, so that the sharp peaks of the left
+panel are not lost between two energies. In both panels you see the cosine
+band of the chain, from $2$ at $k=0$ to $-2$ at $k=\pi$. All the states have
+the same decay rate here, $\mathrm{Im}\,E_n=-0.3$, the average loss of the
+four sites. In the left panel the peaks have the width $\delta=0.01$ and a
+height of up to $126$. In the right panel each peak has a full width of
+$0.61$, which is $2(0.3+\delta)$, and a height of about $4.2$, so the
+lifetime of the states is visible. Around $\omega=\pm1.4$ two folded bands
+of the supercell meet, and there the weight goes up to $5.4$.
+
+??? example "Code of this figure (documentation/figures/nonhermitian_kdos.py)"
+
+    ```python
+    --8<-- "nonhermitian_kdos.py"
+    ```
 
 The same choice exists in other functions:
 

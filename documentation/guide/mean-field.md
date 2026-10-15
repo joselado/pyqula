@@ -103,6 +103,26 @@ two different sites, and a cell with one site can only hold a ferromagnet. A
 larger $U$ gives larger moments and a larger gap. For large $U$ the gap grows
 linearly with $U$, with one localized electron per site.
 
+![Band structure of the self-consistent Neel state of the square lattice, and its magnetization in real space.](img/meanfield_collinear.png#only-light)
+![Band structure of the self-consistent Neel state of the square lattice, and its magnetization in real space.](img/meanfield_collinear-dark.png#only-dark)
+
+The script fixes the random seed, so that the figure is reproducible. On the
+left, the band structure has a gap of $0.77$ at zero energy. The
+exchange field on each site is $Um/2=0.38$, with $m=0.38$ the moment, and the
+gap is twice this field. The two flat bands at $\pm0.38$ are states of the
+k-path that lie on the Fermi surface of the non-interacting model. On the
+right, the $2\times2$ cell is repeated three times in each direction, and each
+site is colored by its moment along the moment of the first site. The moments
+are $\pm0.38$, red on one sublattice and blue on the other. This checkerboard
+is the Neel state, which neutron diffraction sees as a magnetic Bragg peak at
+$(\pi,\pi)$.
+
+??? example "Code of this figure (documentation/figures/meanfield_collinear.py)"
+
+    ```python
+    --8<-- "meanfield_collinear.py"
+    ```
+
 The main keywords are:
 
 - `U`: the Hubbard interaction, a number or one value per site.
@@ -115,8 +135,8 @@ The main keywords are:
   values. A metal needs more k-points than an insulator.
 - `maxerror`, `mix`: the convergence tolerance and the mixing.
 
-If the loop does not converge, the method returns `None` instead of a
-Hamiltonian. The page [Exchange interactions](exchange.md) discusses this
+If the loop does not converge, the method raises an error instead of
+returning a Hamiltonian. The page [Exchange interactions](exchange.md) discusses this
 case and the parameters that control it.
 
 See `examples/2d/hubbard_honeycomb/main.py` for the gap as a function of $U$
@@ -164,12 +184,38 @@ m = h.get_magnetization() # get the magnetization
 
 The magnetization now has two parts. The antiferromagnetic part alternates
 between the sublattices and lies in the plane perpendicular to the field. The
-uniform part is along the field and the same on every site. The moments tilt
-toward the field instead of flipping, as an antiferromagnet does in a field
-that is weak compared to its exchange, and a larger field tilts them more.
+uniform part is the same on every site, and it points opposite to the vector
+given to `h.add_zeeman()`, because the Zeeman term is $+\vec B\cdot\vec\sigma$
+(see [Building a Hamiltonian](hamiltonian.md)). The moments cant out of the
+plane instead of flipping, as an antiferromagnet does in a field that is weak
+compared to its exchange, and a larger field cants them more.
 The third array `c` returned by `h.get_bands(operator="sz")` is the spin
 projection $\langle S_z\rangle$ of each state, so the bands can be colored by
 it.
+
+From a random guess this loop does not always converge. In 2 of 40 random
+seeds it stops after `maxite` iterations and raises an error. For both of them
+a larger mixing, `mix=0.5`, or more iterations, `maxite=5000`, gives a
+converged state. Calling `np.random.seed()` before the calculation makes a
+run reproducible.
+
+![Bands of the canted antiferromagnet colored by the spin of each state, and the moments of the four sites.](img/meanfield_noncollinear.png#only-light)
+![Bands of the canted antiferromagnet colored by the spin of each state, and the moments of the four sites.](img/meanfield_noncollinear-dark.png#only-dark)
+
+The script fixes the random seed, so that the figure is reproducible. On the
+left, each band has a spin-up
+copy, higher in energy, and a spin-down copy, split by the Zeeman field. On
+the right are the moments of the four sites, in the plane of the Neel axis and
+of $z$. The antiferromagnetic part is $0.36$, in the plane. The uniform part
+is $-0.09$ on every site: it points along $-z$, opposite to the vector given
+to `h.add_zeeman()`, because the term is $+\vec B\cdot\vec\sigma$ (see
+[Building a Hamiltonian](hamiltonian.md)).
+
+??? example "Code of this figure (documentation/figures/meanfield_noncollinear.py)"
+
+    ```python
+    --8<-- "meanfield_noncollinear.py"
+    ```
 
 See `examples/readme_examples/scf_square/main.py` for this calculation with a
 plot of the bands and of the moments, and the notebook
@@ -217,6 +263,22 @@ finds its self-consistent value. The electron spectral function, with
 band of the triangular lattice with a gap at the Fermi energy. The gap grows
 with $|U|$. `h.get_kdos_bands()` is explained in
 [Spectral functions](spectral-functions.md).
+
+![Electron spectral function of the self-consistent s-wave superconductor on the triangular lattice.](img/meanfield_swave.png#only-light)
+![Electron spectral function of the self-consistent s-wave superconductor on the triangular lattice.](img/meanfield_swave-dark.png#only-dark)
+
+The self-consistent pairing is $\Delta_0=0.30$, so the gap at the Fermi
+energy goes from $-0.30$ to $0.30$. Away from the Fermi energy the spectral
+function follows the normal band, with its minimum at K at $-1.85$. The faint
+band above, with its minimum at $0.9$ at M, is the hole copy: its electron
+weight is small, but not zero. ARPES measures this spectral function below the
+Fermi energy.
+
+??? example "Code of this figure (documentation/figures/meanfield_swave.py)"
+
+    ```python
+    --8<-- "meanfield_swave.py"
+    ```
 
 See `examples/readme_examples/scf_SC/main.py` for a runnable script with a
 plot, and the notebook `04_anomalous_mf_sc.ipynb` in the folder above.
@@ -322,6 +384,24 @@ neighboring sites. The converged state has an odd, spin-triplet order
 parameter, and the electron spectral function shows a gap at the Fermi energy
 in each of the two spin-split bands. The d-vector of this state, and whether
 it is unitary, are computed in [Superconductivity](superconductivity.md).
+
+![Electron spectral function of the self-consistent spin-triplet superconductor on the triangular lattice.](img/meanfield_triplet.png#only-light)
+![Electron spectral function of the self-consistent spin-triplet superconductor on the triangular lattice.](img/meanfield_triplet-dark.png#only-dark)
+
+For the figure the loop uses `nk=20` instead of `nk=40`, to keep it short, and
+the script fixes the random seed.
+The smallest gap is $0.42$ with `nk=20` and about
+$0.40$ with `nk=40`, so the k-mesh changes it by a few percent. The figure shows the two
+copies of the triangular band, split by the exchange field. Both have a gap
+at the Fermi energy, and the smallest one is on the band that crosses the
+Fermi energy between $\Gamma$ and K. The moment is $-0.43$ along $z$, opposite
+to the exchange vector.
+
+??? example "Code of this figure (documentation/figures/meanfield_triplet.py)"
+
+    ```python
+    --8<-- "meanfield_triplet.py"
+    ```
 
 See `examples/readme_examples/scf_SC_triplet/main.py` for this calculation
 with a plot, `examples/2d/meanfield_V1V2V3/main.py` for a charge density wave

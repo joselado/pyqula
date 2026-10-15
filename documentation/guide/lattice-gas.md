@@ -29,8 +29,8 @@ fixed, so the filling, the fraction of occupied sites, does not change.
 ## Ordering of repulsive particles
 
 We take a triangular lattice with one third of the sites occupied, and a
-repulsion to first, second and third neighbors, so the particles have to stay
-as far from each other as possible:
+repulsion to first, second and third neighbors, so a pair of particles at
+the distance of first, second or third neighbors costs an energy $J=1$:
 
 ```python
 from pyqula import geometry
@@ -43,7 +43,7 @@ g = g.get_supercell(10) # periodic, so no site sits at an edge
 
 lg = latticegas.LatticeGas(g,filling=1./3.) # 1/3 of the sites randomly occupied
 lg.add_interaction(Jij=[1.,1.,1.]) # first, second and third neighbor repulsion
-es = lg.optimize_energy(temp=0.5,ntries=1e4) # simulated annealing
+es = lg.optimize_energy(temp=0.5,ntries=1e4) # Metropolis run at fixed temperature
 ```
 
 `lg.den` is the occupation of each site, 0 or 1, and `es` is the energy
@@ -53,6 +53,29 @@ every site has the same neighbors as in the bulk. With
 `g.dimensionality = 0` before building the model, the bonds across the
 border are cut instead, and we get a finite flake, where the sites at the
 edge have fewer neighbors and the order near the edge is different.
+
+![Occupied sites of the lattice gas after the run, the energy per site along the run, and the structure factor over a grid of wavevectors.](img/latticegas_order.png#only-light)
+![Occupied sites of the lattice gas after the run, the energy per site along the run, and the structure factor over a grid of wavevectors.](img/latticegas_order-dark.png#only-dark)
+
+For the figure we also compute `lg.get_structure_factor(nq=81)`, explained
+in the next paragraph. The energy per site (middle) goes down from 2.07
+for the random start to 1.27, and after about 4000 moves it only decreases
+slowly. At one third filling the particles cannot avoid all the three shells
+of neighbors. In the run of the figure each occupied site (left, orange) has
+on average 2.0 occupied first neighbors, 1.1 second and 0.66 third
+neighbors, so the particles form chains, and the energy per site is
+$(2.0+1.1+0.66)/3\approx1.27$. The structure factor (right) is zero at
+$\mathbf q=0$, and it has sharp peaks at finite $\mathbf q$, so the
+occupations are ordered. The script fixes the random seed. With another
+seed the positions of the peaks and the final energy change a little: one
+run of $10^4$ moves is 50 moves per site, and it can stop with domains of
+different orientations.
+
+??? example "Code of this figure (documentation/figures/latticegas_order.py)"
+
+    ```python
+    --8<-- "latticegas_order.py"
+    ```
 
 To find which order the particles form, look at the density-density
 correlator in real space, `get_correlator()`, and in reciprocal space,

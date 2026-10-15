@@ -46,6 +46,9 @@ markdown_extensions:
   - pymdownx.highlight
   - pymdownx.superfences
   - pymdownx.details
+  - pymdownx.snippets:
+      base_path: [documentation/figures]
+      check_paths: true
 
 extra_javascript:
   - javascripts/mathjax.js

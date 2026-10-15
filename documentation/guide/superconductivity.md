@@ -101,6 +101,22 @@ tunneling spectroscopy (STM) measures in a conventional superconductor. With
 electron weight, so you can tell the electron copy from the hole copy, and
 read the electron spectral function, which is what ARPES measures.
 
+![Bogoliubov-de Gennes bands of the triangular lattice with s-wave pairing, colored by the electron or hole character of each state.](img/superconductivity_swave.png#only-light)
+![Bogoliubov-de Gennes bands of the triangular lattice with s-wave pairing, colored by the electron or hole character of each state.](img/superconductivity_swave-dark.png#only-dark)
+
+The figure uses `nk=3000` points on the k-path, so that the zoom on the right
+is smooth. Red states are electrons and blue states are holes. The electron
+band goes from $6$ at $\Gamma$ to $-3$ at K, and the hole band is its mirror
+image. Where the two bands cross zero energy they mix, the color goes to the
+middle of the scale, and a gap opens. The zoom on the right shows the gap edges at $\pm0.2$ (dashed
+lines), so the gap is $2\Delta_0=0.4$.
+
+??? example "Code of this figure (documentation/figures/superconductivity_swave.py)"
+
+    ```python
+    --8<-- "superconductivity_swave.py"
+    ```
+
 The argument of `h.add_swave()` can also be a function of the position, to
 have a pairing that changes in space. For other pairing symmetries
 (p-wave, d-wave, a general d-vector) use `h.add_pairing(delta=...,mode=...)`.
@@ -180,6 +196,23 @@ The array has one row, for the single site of the chain, and only its $z$
 component is not zero, because of the relative phase $i$ between $d_x$ and
 $d_y$. The same p-wave pairing with a real d-vector, `d=[1.,0.,0.]`, is
 unitary and gives zero.
+
+![Bogoliubov-de Gennes bands of the chain with a unitary and a non-unitary p-wave pairing, colored by the spin of each state.](img/superconductivity_dvector.png#only-light)
+![Bogoliubov-de Gennes bands of the chain with a unitary and a non-unitary p-wave pairing, colored by the spin of each state.](img/superconductivity_dvector-dark.png#only-dark)
+
+Here we compare the two d-vectors, with the same `delta=0.3`. With the real
+d-vector $(1,0,0)$, $\vec q=0$ and both spins have the same gap, with edges at
+$\pm0.6$. The two spin bands have the same energy, so the color of each state
+is a mix of the two. With $\vec d=(1,i,0)$ only the spin-up electrons are
+paired. Their gap is twice as large, with edges at $\pm1.2$, and the spin-down
+bands cross zero energy without any gap. These are the two different gaps of
+a non-unitary state.
+
+??? example "Code of this figure (documentation/figures/superconductivity_dvector.py)"
+
+    ```python
+    --8<-- "superconductivity_dvector.py"
+    ```
 
 A non-unitary state can also come out of a self-consistent calculation. With
 an attractive first-neighbor interaction and a large exchange field (as in
@@ -293,6 +326,22 @@ which `h.get_bkt_temperature()` solves self-consistently in $T$. For the
 square lattice above it gives $T_{\rm BKT}\approx0.15$, in units of the
 hopping. $|\Delta|$ is kept fixed and does not decrease with temperature, so
 this is an upper bound.
+
+![Superfluid weight of the square lattice as a function of temperature, with the Nelson-Kosterlitz line.](img/superconductivity_superfluid.png#only-light)
+![Superfluid weight of the square lattice as a function of temperature, with the Nelson-Kosterlitz line.](img/superconductivity_superfluid-dark.png#only-dark)
+
+For this figure we compute $D_s^{xx}$ at 13 temperatures with the keyword `T`,
+instead of the single call at $T=0$. The superfluid weight is $0.76$ at low
+temperature and stays flat up to $T\approx0.05$. Then it decreases, because
+thermal quasiparticles reduce the stiffness. The BKT temperature is where the
+curve crosses the line $8T/\pi$, at $T=0.15$ with $D_s=0.38$. Above it $D_s$
+does not go to zero, because $|\Delta|$ is kept fixed.
+
+??? example "Code of this figure (documentation/figures/superconductivity_superfluid.py)"
+
+    ```python
+    --8<-- "superconductivity_superfluid.py"
+    ```
 
 Two keywords and one caveat:
 

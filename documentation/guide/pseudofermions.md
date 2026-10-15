@@ -86,7 +86,7 @@ decoupling. We add it with `h.add_zeeman()` or `h.add_exchange()` on the
 h = SpinonHamiltonian(g)
 h.add_zeeman([0., 0., 0.3])            # or h.add_exchange([0.,0.,0.3])
 h2 = h.get_mean_field_hamiltonian(J1=1.0, nk=12)
-h2.get_magnetization()                 # induced <S> per site
+h2.get_magnetization()                 # induced <sigma> per site, twice <S>
 ```
 
 The vector $\vec b$ given to `h.add_zeeman()` multiplies the Pauli matrices,
@@ -97,6 +97,30 @@ $\vec b$. This is the same convention as for electrons in
 occupation, not the spin, so it stays exact in a field, and
 $\langle \vec S_i\rangle$ grows with the field until it saturates when the
 field is large compared with $J$.
+
+In a field the loop is fragile. With the snippet above, only 1 of 5 random
+seeds converges, and the converged state has a different bond order
+$\chi_{ij}$ from the state without field, so its spinon band has another
+shape.
+
+![Spinon bands of the triangular lattice without and with a Zeeman field, colored by the spin of each state.](img/pseudofermions_spinon.png#only-light)
+![Spinon bands of the triangular lattice without and with a Zeeman field, colored by the spin of each state.](img/pseudofermions_spinon-dark.png#only-dark)
+
+The script fixes the random seed, so that the figure is reproducible. On the left, the
+spinon band without field goes from $-0.47$ to $0.57$ in units of $J$. It is
+half filled, so the spinons have a Fermi surface. On the right, with
+$b_z=0.3$, the two spin bands are split by $0.1$ and
+$\langle\sigma_z\rangle=-1/6$, so $\langle S_z\rangle=-1/12$ per site, against
+the field vector. The splitting is much smaller than the bare $2b_z=0.6$. The
+reason is the exchange with the six neighbors, which adds a field
+$6J\langle S_z\rangle=-0.5$ on $S_z$ and cancels most of it. The band also
+changes its shape, because the bond order in the field is another one.
+
+??? example "Code of this figure (documentation/figures/pseudofermions_spinon.py)"
+
+    ```python
+    --8<-- "pseudofermions_spinon.py"
+    ```
 
 See `examples/spinon/heisenberg_chain/main.py` and
 `examples/spinon/heisenberg_chain_zeeman_field/main.py` for runnable scripts,
@@ -162,6 +186,24 @@ heavy-fermion band seen in ARPES, and the hybridization gap is seen in STM
 and optical spectroscopy. The three attributes are the occupation of each
 f-site, the hybridization $V_j$ and the multiplier $\lambda_j$.
 
+![Heavy-fermion bands of the Kondo chain, colored by the weight of each state on the conduction and on the f-sites.](img/pseudofermions_kondo.png#only-light)
+![Heavy-fermion bands of the Kondo chain, colored by the weight of each state on the conduction and on the f-sites.](img/pseudofermions_kondo-dark.png#only-dark)
+
+Energies are measured from the chemical potential (dashed line). Blue states
+live on the conduction sites and red ones on the f-sites. The gray line is
+the bare conduction band, $2t\cos k$, as a reference. The f-level sits $0.05$
+above the chemical potential. The converged
+hybridization $V_j=0.37$ mixes it with the conduction band, and a gap opens
+between the top of the lower band, at $0.007$, and the bottom of the upper
+band, at $0.19$. Close to the gap the bands are flat and mostly red: these
+are the heavy quasiparticles.
+
+??? example "Code of this figure (documentation/figures/pseudofermions_kondo.py)"
+
+    ```python
+    --8<-- "pseudofermions_kondo.py"
+    ```
+
 The keywords and caveats are:
 
 - `J`: the Coqblin-Schrieffer coupling above.
@@ -205,7 +247,8 @@ two, give a function of the position instead of a vector (the f-sites are
 shifted in $z$). The constraint $\langle n_f\rangle=1$ stays exact in a field.
 The field competes with the Kondo singlet: at fixed $J$, $|V|$ decreases as
 the field grows, and a large enough field destroys the hybridized state. There
-the loop does not converge and returns `None`, instead of a small nonzero $V$.
+the loop does not converge and the call raises an error, instead of giving a
+small nonzero $V$.
 This is physics, not a numerical failure: it is the same decay to the $V=0$
 solution that a small $J$ gives.
 

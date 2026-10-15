@@ -1155,22 +1155,53 @@ $$\Omega(\mathbf k) = i\sum_{n\in\mathrm{occ}}\left(\langle\partial_{k_x}u_n|\pa
 as a map over the Brillouin zone, `(kx,ky,berry)`, three flat arrays. This
 is the curvature that `h.get_chern()` integrates.
 
+In two dimensions the map covers a whole number of Brillouin zones, and the curvature
+is per unit area of the reduced zone, whose area is one. So the Chern number
+is `np.mean(berry)/(2*np.pi)`, the same as `h.get_chern()` when `nk`
+resolves the curvature.
+
 Optional arguments:
 
-- nk=100: k-points per direction (the map has `nk*nk` points)
+- nk=100: k-points per direction (the map has `nk*nk` points, and
+  `berry.reshape(nk,nk)` has `kx` along the first index)
 - reciprocal=True: `kx,ky` in Cartesian coordinates, to plot a hexagonal
-  Brillouin zone without distortion. With `reciprocal=False` they are in
-  reduced coordinates. With `nsuper=1` the map covers $[-1,1)$ in both
-  reduced directions, four Brillouin zones, so
-  `np.sum(berry)*(2/nk)**2/(2*np.pi)` is four times `h.get_chern()`
+  Brillouin zone without distortion. The map covers a rectangle centered at
+  $\Gamma$ made of whole zones: one zone for a square lattice, a square of
+  side $|\mathbf b_1|$; two zones for a hexagonal lattice, of sides
+  $|\mathbf b_1|$ and $\sqrt{3}|\mathbf b_1|$. A lattice without such a
+  rectangle (an oblique one) gets the parallelogram of its two reciprocal
+  lattice vectors, one zone, whose points are not on a rectangular grid.
+  With `reciprocal=False`, `kx,ky` are reduced coordinates from $-1$ to $1$,
+  four zones
 - mode="Wilson": `"Wilson"` uses the Fukui-Hatsugai-Suzuki plaquettes;
   `"Green"` uses the Green's-function Kubo formula, and is used
   automatically with `operator`
 - operator=None: restrict the curvature to a subspace, for example
   `"valley"` for the valley-resolved curvature (see [Operators](operators.md))
-- nsuper=1: number of Brillouin zones in each direction
-- kpath: compute along a k-path instead of on a 2D mesh
+- nsuper=1: number of copies of the window in each direction
+- kpath: compute along a k-path instead of on a 2D mesh; for a curvature
+  to plot next to the bands, `h.get_berry_curvature_path()` is simpler
 - delta=0.001: broadening for `mode="Green"`
+- write=True: also write the map to `BERRY_MAP.OUT`
+
+## h.get_berry_curvature_path()
+Return the Berry curvature of the occupied bands along a k-path, the same
+$\Omega(\mathbf k)$ as `h.get_berry_curvature()`, as `(index,berry)`: the
+index of each k-point of the path and the curvature there. It is the
+curvature to plot under a band structure, where its peaks show the k-points
+of small gaps.
+
+Optional arguments:
+
+- kpath=None: the k-path, a list of k-points or of high-symmetry labels; by
+  default the k-path of `h.get_bands()`
+- nk=600: number of k-points of the path
+- reciprocal=False: with `True`, the k-points of `kpath` are Cartesian, in
+  the coordinates of `h.get_berry_curvature()`, instead of reduced
+- dk=0.01: side of the plaquette of the Wilson loop, in reduced coordinates
+- mode="Wilson", operator=None, delta=0.001: as in `h.get_berry_curvature()`
+- write=True: also write the k-points and the curvature to
+  `BERRY_CURVATURE.OUT`
 
 ## h.get_quantum_geometric_tensor()
 Return the quantum geometric tensor of a set of bands $S$ at one k-point,
@@ -1446,7 +1477,7 @@ Optional arguments:
 It also works for BdG Hamiltonians, with both the normal and the pairing
 channels.
 
-Returns the self-consistent Hamiltonian (or `None` if it did not converge)
+Returns the self-consistent Hamiltonian (it raises an error if the loop does not converge)
 
 ## h.get_sxsx_mean_field_hamiltonian() / h.get_sysy_mean_field_hamiltonian()
 The same as `h.get_szsz_mean_field_hamiltonian()`, for an $S^x_iS^x_j$ or
@@ -1469,7 +1500,7 @@ channels. An exchange interaction can give superconductivity: for example
 an antiferromagnetic $J$ alone, started from a random guess, can converge to
 a superconducting state.
 
-Returns the self-consistent Hamiltonian (or `None` if it did not converge)
+Returns the self-consistent Hamiltonian (it raises an error if the loop does not converge)
 
 ## h.get_combined_mean_field_hamiltonian()
 Self-consistent mean field of density-density interactions (onsite $U$,
@@ -1510,7 +1541,7 @@ Optional arguments:
 - `use_jax=True, solver=...`: find the self-consistent solution with a
   nonlinear solver instead of simple mixing. `"newton"` is the default and
   `"error_gradient"` the most robust. They can stop before `maxerror`, and
-  then the method returns `None` as for any calculation that does not
+  then the method raises an error as for any calculation that does not
   converge. Only for a normal (non-BdG) Hamiltonian, with exact
   diagonalization and without `constrains`:
 
@@ -1525,15 +1556,15 @@ For a BdG Hamiltonian all the channels include the normal and the pairing
 terms, so an exchange alone can give superconductivity and not only
 magnetism (see [Exchange interactions](exchange.md)).
 
-Returns the self-consistent Hamiltonian (or `None` if it did not converge)
+Returns the self-consistent Hamiltonian (it raises an error if the loop does not converge)
 
 `filling` can also be an array with one value per site, with the same
 meaning as the number (the fraction of the two states of the site that is
 occupied). Then $\langle n_i\rangle=$ `filling[i]` is imposed on each site,
 with one Lagrange multiplier (a local chemical potential) per site found in
 the same self-consistent loop. The converged potentials are in the `fermi`
-attribute of the result, and `None` means that the mean field or the
-constraint did not converge. Only for a normal (non-BdG) Hamiltonian with
+attribute of the result. If the mean field or the constraint does not
+converge, the method raises an error. Only for a normal (non-BdG) Hamiltonian with
 `integration="ed"` and `mu=None`. `SpinonHamiltonian` uses this to impose
 exactly one fermion per site.
 
@@ -1550,7 +1581,7 @@ the couplings are given to `h.get_mean_field_hamiltonian()` as `J1`, `J2`,
 - `h.get_mean_field_hamiltonian(J1=...,nk=...,...)`: the same arguments as
   `h.get_combined_mean_field_hamiltonian()`, except `filling`, since there
   is always exactly one fermion per site. Returns the self-consistent
-  Hamiltonian (or `None` if it did not converge), with two more attributes:
+  Hamiltonian (it raises an error if the loop does not converge), with two more attributes:
   - `h2.local_occupation`: $\langle n_i\rangle$ on each site (between 0 and
     2, it should be 1.0)
   - `h2.constraint_lambda`: the Lagrange multiplier of each site (a local
@@ -1568,8 +1599,8 @@ and $J$ is given to `h.get_mean_field_hamiltonian()` as `J`.
 
 - `h.get_mean_field_hamiltonian(J=...,filling=...,mf=(V,lam),nk=...,...)`:
   finds the hybridization and the Lagrange multiplier of the constraint
-  self-consistently. Returns the self-consistent Hamiltonian (or `None` if
-  it did not converge), with three more attributes:
+  self-consistently. Returns the self-consistent Hamiltonian (it raises an
+  error if the loop does not converge), with three more attributes:
   - `h2.local_occupation`: $\langle n_f\rangle$ on each localized site (it
     should be 1.0)
   - `h2.hybridization`: $V_j$ on each localized site

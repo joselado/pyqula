@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - "documentation/guide/**"
+      - "documentation/figures/**"
       - "documentation/build_guide_pdf.py"
       - "mkdocs.yml"
       - ".github/workflows/guide.yml"

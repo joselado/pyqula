@@ -77,6 +77,24 @@ orbitals. The quality of this interpolation depends on how localized the
 Wannier functions are. A band that comes close to another band somewhere in
 the Brillouin zone has wide Wannier functions, and needs a denser mesh `nk`.
 
+![Bands of the gapped honeycomb lattice colored by sublattice, with the band of the one-orbital Wannier model on top.](img/wannier_valence.png#only-light)
+![Bands of the gapped honeycomb lattice colored by sublattice, with the band of the one-orbital Wannier model on top.](img/wannier_valence-dark.png#only-dark)
+
+For the figure the bands of `h` are computed with `operator="sublattice"`,
+so the color gives the sublattice polarization of each state. The valence
+band (blue) lives mostly on the sublattice with onsite energy $-0.8$, and
+most strongly at K and K', where the gap is smallest, $2\times0.8$. The band
+of the Wannier model (dashed) lies on top of the valence band along the
+whole path, from $-3.10$ at $\Gamma$ to $-0.80$ at K. Its Wannier centre is
+at $(0.5,0)$, exactly on the site with onsite energy $-0.8$, and its spread
+is $\Omega=0.32$.
+
+??? example "Code of this figure (documentation/figures/wannier_valence.py)"
+
+    ```python
+    --8<-- "wannier_valence.py"
+    ```
+
 The mesh only fixes each hopping up to a translation by the supercell of
 `nk` cells. As in Wannier90, each hopping is put on the cell closest to the
 origin (the Wigner-Seitz cell of that supercell), so the Bloch Hamiltonian of
@@ -125,6 +143,22 @@ k-point, $\Gamma$, where the selection breaks a multiplet. The second call
 gives a model with three orbitals, whose Wannier functions transform into
 each other under the operations listed in `wannier_symmetries`.
 
+![Bands of the kagome lattice, with the bands of the symmetric three-orbital Wannier model on top.](img/wannier_kagome.png#only-light)
+![Bands of the kagome lattice, with the bands of the symmetric three-orbital Wannier model on top.](img/wannier_kagome-dark.png#only-dark)
+
+The three bands of the Wannier model (small orange dots) lie on the bands
+of the kagome lattice (blue): the flat band at $E=-2$, the Dirac crossings at
+K and K' at $E=1$, and the top of the band at $E=4$ at $\Gamma$. The largest
+difference between the two sets of energies along the path is $4\times10^{-10}$.
+You also see the touching at $\Gamma$ between the flat band and the middle
+band, which is the reason why the flat band alone is rejected.
+
+??? example "Code of this figure (documentation/figures/wannier_kagome.py)"
+
+    ```python
+    --8<-- "wannier_kagome.py"
+    ```
+
 See `examples/wannier/symmetric_wannierization/main.py` for a runnable
 script, and
 `jupyter-notebooks/functionalities/wannierization/03_symmetry_enforced_wannierization.ipynb`
@@ -171,6 +205,24 @@ frozen valence state, while the conduction band is not in the model at all.
 This is the price of a smooth, localized orbital, not an error. With
 `cutoff=0.0` all the real-space hoppings are kept; the default `cutoff=1e-6`
 drops the small ones and changes the last digits.
+
+![Bands of graphene and the band of the disentangled one-orbital Wannier model, with the frozen window shaded.](img/wannier_disentangle.png#only-light)
+![Bands of graphene and the band of the disentangled one-orbital Wannier model, with the frozen window shaded.](img/wannier_disentangle-dark.png#only-dark)
+
+Below $E=-1$ (shaded, the frozen window) the Wannier band (orange) is on
+top of the valence band of graphene (blue), from $-3$ at $\Gamma$ to $-1$ at
+M. Above $E=-1$ it leaves the valence band. Near K and K' it does not follow
+the kink of the Dirac cone; it goes smoothly through a maximum close to
+$E=0$ instead. This smooth band is what makes the Wannier function
+localized. With these keywords the call also prints a warning, because the
+minimization of $\Omega_I$ is not converged after the default 200
+iterations; the frozen window is reproduced anyway.
+
+??? example "Code of this figure (documentation/figures/wannier_disentangle.py)"
+
+    ```python
+    --8<-- "wannier_disentangle.py"
+    ```
 
 The keywords are:
 

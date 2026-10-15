@@ -76,6 +76,21 @@ a few percent, because the exchange field 0.5 is small compared with the
 bandwidth 4. This is the physics of the tunneling magnetoresistance in spin
 valves.
 
+![Conductance of the parallel and antiparallel junctions against energy, and the magnetoresistance.](img/transport_magnetoresistance.png#only-light)
+![Conductance of the parallel and antiparallel junctions against energy, and the magnetoresistance.](img/transport_magnetoresistance-dark.png#only-dark)
+
+The parallel conductance (left, blue) is exactly 2 at every energy, one
+channel per spin without any reflection. The antiparallel conductance
+(orange) is 1.875 at $E=0$ and goes down to 1.856 at $E=\pm0.5$. So the
+magnetoresistance (right) is 6.7% at zero energy and grows to 7.7% at the
+ends of the energy window.
+
+??? example "Code of this figure (documentation/figures/transport_magnetoresistance.py)"
+
+    ```python
+    --8<-- "transport_magnetoresistance.py"
+    ```
+
 See
 `jupyter-notebooks/functionalities/quantum_transport/01_metal_metal_transport.ipynb`
 for an executed notebook.
@@ -120,6 +135,25 @@ gap edges. This is the spectroscopy of a normal STM tip on a superconductor,
 and the transparency is what the experiment changes with the distance
 between the tip and the sample.
 
+![Conductance of a normal-superconductor junction against energy and transparency, normalized to its value outside the gap.](img/transport_andreev.png#only-light)
+![Conductance of a normal-superconductor junction against energy and transparency, normalized to its value outside the gap.](img/transport_andreev-dark.png#only-dark)
+
+For the map we take 16 transparencies instead of 6, and we divide each
+curve by its value at $E=-3\Delta$, outside the gap. At $T=1$ (top of the
+map, green curve) the conductance inside the gap is 1.94 times the one
+outside, close to the doubling of perfect Andreev reflection. When $T$ goes
+down, the inside of the gap becomes dark: at $T=0.334$ the conductance at
+$E=0$ is 0.25, and at $T=0.001$ it is $2\times10^{-6}$. At the same time the
+coherence peaks at $E=\pm\Delta$ appear, so the small-$T$ curve (blue) is the
+BCS density of states. The color scale is cut at 2.5, so the peaks are
+saturated.
+
+??? example "Code of this figure (documentation/figures/transport_andreev.py)"
+
+    ```python
+    --8<-- "transport_andreev.py"
+    ```
+
 See `examples/transport/andreev_reflection/main.py` for a runnable script,
 and
 `jupyter-notebooks/functionalities/quantum_transport/02_metal_superconductor_transport.ipynb`
@@ -159,6 +193,23 @@ junction object, so `didv`, `get_dos` and `get_kappa` all work on it.
   call raises a `ValueError`; use `get_dc_current` (below) instead.
 - `ht.landauer()` only works for normal junctions, since the Landauer formula
   counts single electrons. With a superconductor use `ht.didv()`.
+
+![Conductance of the normal lead, five-site cluster and superconducting lead against energy, with the gap shaded.](img/transport_central.png#only-light)
+![Conductance of the normal lead, five-site cluster and superconducting lead against energy, with the gap shaded.](img/transport_central-dark.png#only-dark)
+
+For the figure we compute the conductance on a grid of energies, besides
+the single value `G` at $E=0.02$ (orange dot). Here the normal lead is
+spinful, so it has two channels, and the conductance far from the gap goes
+to 2. Inside the gap (shaded, $|E|<0.05$) it is 4.00, exactly two times 2:
+the cluster is a piece of the same chain, so nothing reflects the electrons
+at the contacts, and Andreev reflection is perfect. Just outside the gap the
+conductance decays slowly back to 2, it is still 2.06 at $E=0.15$.
+
+??? example "Code of this figure (documentation/figures/transport_central.py)"
+
+    ```python
+    --8<-- "transport_central.py"
+    ```
 
 Only finite (0d) scattering regions are possible for now. See
 `examples/transport/central_region_ij/main.py` for a runnable script, and
@@ -202,6 +253,25 @@ by default only the pair `(0,1)`. `multiterminal.landauer(d,energy,ij=[(i,j)])`
 gives the same with the pairs written explicitly. The same disorder physics,
 with a chain of disordered cells between two clean leads, is in
 `examples/transport/disordered_transport/main.py`.
+
+![Transmission of the four-site chain against energy, clean and with disorder, and its disorder average against energy and disorder strength.](img/transport_device.png#only-light)
+![Transmission of the four-site chain against energy, clean and with disorder, and its disorder average against energy and disorder strength.](img/transport_device-dark.png#only-dark)
+
+For the figure we compute the transmission on a grid of energies, and we
+repeat it for disorder strengths from 0 to 4, each one averaged over 30
+random configurations. The clean chain (blue) transmits 1 inside the band,
+$|E|<2$, and 0 outside it; at the band edge $E=\pm2$ it is 0.49. With
+disorder the transmission goes down, faster near the band edges than at the
+centre of the band. At $E=0$ the average is 0.73 for a disorder 2 and 0.33
+for a disorder 4 (orange). The script fixes the random seed; with another
+seed these numbers change a little, since 30 configurations is a small
+average.
+
+??? example "Code of this figure (documentation/figures/transport_device.py)"
+
+    ```python
+    --8<-- "transport_device.py"
+    ```
 
 ## Multiple Andreev reflection and AC-Josephson current
 
@@ -250,13 +320,39 @@ vs = np.linspace(0.02,1.5,40)*0.1 # bias voltages
 Is = HT.get_iv_curve(vs) # MAR/AC-Josephson dc current
 ```
 
-`Is` is the DC current at each voltage in `vs`. Above $eV=2\Delta=0.2$ the
-current grows roughly linearly with the voltage, as in a normal junction. Below
-$2\Delta$ it is carried by multiple Andreev reflections, and it shows steps
-at $eV = 2\Delta/n$, sharper for a small transparency.
+`Is` is the DC current at each voltage in `vs`, from $0.02\Delta$ to
+$1.5\Delta$, so all the voltages are below $2\Delta=0.2$. There the current
+is carried by multiple Andreev reflections, and it shows steps at
+$eV = 2\Delta/n$, sharper for a small transparency; the steps $n=2,3,4$ are
+inside the window. Above $2\Delta$, outside this window, the current grows
+roughly linearly with the voltage, as in a normal junction.
 
-This is one of the most expensive calculations in the guide, roughly fifteen
-seconds per voltage for this junction. The reason is physical: the number of
+![DC current of the junction between two superconductors against the bias voltage, with the voltages 2Delta/n of multiple Andreev reflection.](img/transport_mar.png#only-light)
+![DC current of the junction between two superconductors against the bias voltage, with the voltages 2Delta/n of multiple Andreev reflection.](img/transport_mar-dark.png#only-dark)
+
+The figure is the snippet, with its 40 voltages from $0.02\Delta$ to
+$1.5\Delta$, and it runs in about two minutes. Below
+$0.2\Delta$ the current is smaller than $10^{-3}$. Then it grows in steps.
+It rises fast just below each voltage $2\Delta/n$ and becomes flatter just
+above it. Across $2\Delta/3$ it goes from $0.050$ at $0.63\Delta$ to $0.063$
+at $0.67\Delta$, and then only to $0.065$ at $0.70\Delta$. Across
+$2\Delta/2=\Delta$ it goes from $0.127$ at $0.97\Delta$ to $0.142$ at
+$1.01\Delta$, and above $\Delta$ it grows almost linearly, to $0.210$ at
+$1.5\Delta$. The step at $2\Delta/4$ is weaker, a kink at $0.48\Delta$. The
+current is in units of $et/h$. At the two lowest voltages the sidebands
+reach `nmax_max` and a warning says that these points are not converged.
+
+??? example "Code of this figure (documentation/figures/transport_mar.py)"
+
+    ```python
+    --8<-- "transport_mar.py"
+    ```
+
+This is one of the most expensive calculations in the guide. A call first
+builds the self-energy of the leads up to the largest voltage, in about ten
+seconds, and then each voltage takes from a fraction of a second to a few
+seconds, so give all the voltages in one call: the 40 voltages of the
+snippet take about two minutes. The reason is physical: the number of
 Andreev reflections that matter is about $2\Delta/eV$, and each one needs a
 Floquet sideband, so small voltages need many sidebands. The sidebands are
 added until $I_{dc}$ converges. If a voltage is very small, the number of
@@ -295,6 +391,26 @@ two superconductors above, this is the $dI/dV$ curve in the MAR regime:
 es = np.linspace(0.15,0.25,40)*0.1 # bias energies
 Gs = HT.didv(energies=es, nmax_max=40) # dI/dV curve
 ```
+
+![Conductance dI/dV of the junction between two superconductors at small bias voltage, with the voltages 2Delta/n of multiple Andreev reflection of order 8 to 13.](img/transport_finitev.png#only-light)
+![Conductance dI/dV of the junction between two superconductors at small bias voltage, with the voltages 2Delta/n of multiple Andreev reflection of order 8 to 13.](img/transport_finitev-dark.png#only-dark)
+
+The figure is the snippet, with its 40 voltages, and it runs in about three
+minutes. The window from $0.15\Delta$ to $0.25\Delta$ is deep inside the
+gap, where the current is carried by Andreev processes of order $n=8$ to
+$13$. The conductance is small, from $0.005$ to $0.26$ in units of $e^2/h$,
+and it is not smooth. It has a peak of $0.23$ at $0.23\Delta$, just above
+$2\Delta/9$, then a minimum of $0.20$ at $0.24\Delta$, and it rises again
+towards $2\Delta/8=0.25\Delta$. There is a shoulder at $0.21\Delta$, just
+above $2\Delta/10$, and weaker ones near $2\Delta/11$ and $2\Delta/12$. So
+each order $n$ gives a feature close to $2\Delta/n$, and the features are
+broad because the transparency, $0.5$, is not small.
+
+??? example "Code of this figure (documentation/figures/transport_finitev.py)"
+
+    ```python
+    --8<-- "transport_finitev.py"
+    ```
 
 ### A superconducting STM tip
 
@@ -342,6 +458,36 @@ with a coarse energy grid and few sidebands, and the notebooks
 `08_tunneling_contact_probe.ipynb` (normal tip) and
 `09_mar_ac_josephson_sc_probe.ipynb` (superconducting tip) in
 `jupyter-notebooks/functionalities/quantum_transport/`.
+
+![Conductance and decay rate of a superconducting STM tip on a superconducting sample against the bias voltage.](img/transport_stmtip.png#only-light)
+![Conductance and decay rate of a superconducting STM tip on a superconducting sample against the bias voltage.](img/transport_stmtip-dark.png#only-dark)
+
+The figure repeats the snippet at 16 voltages from $\Delta=0.1$ to $0.4$,
+in steps of $0.02$, and it runs in one to three minutes. On the left, the
+conductance has its largest peak, $1.95\,e^2/h$, at $eV=0.2$, the sum of the
+gaps of tip and sample, where the coherence peaks of the two densities of
+states meet. A second peak, $0.71\,e^2/h$, is at $eV=\Delta$, the voltage
+$2\Delta/2$ of the first Andreev reflection. Between the two the
+conductance is small, $0.03$ to $0.32\,e^2/h$. Above $2\Delta$ it goes down
+to about $0.27\,e^2/h$, the tunneling between the two continua. On the
+right, $\kappa$ is between $0.96$ and $1.09$ above $2\Delta$, so a single
+quasiparticle carries the current there. Below $2\Delta$, $\kappa$ is
+$1.8$ at $0.18$ and it grows to $6.2$ at $0.12$, so the current comes from
+processes that transfer several electrons. At $2\Delta$ itself
+$\kappa=0.35$, below one. With the snippet's `tol=5e-2` and `nmax_max=12`,
+the points from $\Delta$ to $0.24$ are not converged in the sidebands, and a
+warning says so, so the large values of $\kappa$ inside the gap are only
+indicative. Below $\Delta$ the conductance at this tolerance comes out
+negative, so these points are not converged either. At some of them it
+changes sign between the two transparencies that $\kappa$ needs, and there
+`get_kappa` stops with an error that asks for a tighter `tol` or a larger
+`nmax_max`. The figure starts at $\Delta$ for this reason.
+
+??? example "Code of this figure (documentation/figures/transport_stmtip.py)"
+
+    ```python
+    --8<-- "transport_stmtip.py"
+    ```
 
 `get_kappa` also takes a temperature `temp`, and then every conductance is
 the thermal average at that temperature. Like `didv`, it takes a single

@@ -38,7 +38,7 @@ the unit cell. For the chain at $q=0$:
 
 ```python
 from pyqula import geometry
-g = geometry.chain() # create honeycomb lattice
+g = geometry.chain() # create a chain
 h = g.get_hamiltonian() # create hamiltonian of the system
 (es,chis) = h.get_chi(q=[0.,0.,0.]) # get response function
 ```
@@ -80,8 +80,27 @@ chis = [h.get_chi(q=[q,0.,0.],energies=np.linspace(-3,3,100),nk=40,delta=0.1)[1]
 
 In this map you see the particle-hole continuum of the band: all the
 energies $\epsilon_{k+q}-\epsilon_k$ that it costs to move an electron from an
-occupied state $k$ to an empty state $k+q$. See
-`examples/1d/charge_response/main.py` for a runnable script, and
+occupied state $k$ to an empty state $k+q$.
+
+![Imaginary part of the charge response of the chain over momentum transfer and frequency.](img/charge_map.png#only-light)
+![Imaginary part of the charge response of the chain over momentum transfer and frequency.](img/charge_map-dark.png#only-dark)
+
+For the chain $\epsilon_k=2t\cos k$, and at half filling the continuum at
+momentum transfer $q$ goes from $2t|\sin 2\pi q|$ up to $4t|\sin\pi q|$.
+The weight is largest at the upper edge, the dark red lines. At small $q$ the continuum
+is a narrow line, $\omega\approx 4\pi t\,q$, set by the Fermi velocity. At
+$q=1/2$ it goes from zero up to $4t$, above the window of the plot, which
+stops at $3t$. The sign follows the frequency: red for $\omega>0$, blue for
+$\omega<0$. The horizontal stripes inside the continuum come from the k-mesh,
+`nk=40`.
+
+??? example "Code of this figure (documentation/figures/charge_map.py)"
+
+    ```python
+    --8<-- "charge_map.py"
+    ```
+
+See `examples/1d/charge_response/main.py` for a runnable script, and
 `jupyter-notebooks/functionalities/response_functions/03_charge_response.ipynb`
 for an executed notebook.
 
@@ -118,7 +137,26 @@ operator of the [Operators](operators.md) page (spin, valley, sublattice,
 position, Nambu) can be used, which gives the corresponding susceptibility.
 Note that the operator `"sz"` is the Pauli matrix $\sigma_z$, without the
 factor $1/2$, so for a spin-degenerate Hamiltonian without interactions the
-$S_z$ response above is equal to the charge response. See
+$S_z$ response above is equal to the charge response.
+
+![Real and imaginary part of the local spin response of the chain against frequency, with the charge response on top.](img/charge_operator.png#only-light)
+![Real and imaginary part of the local spin response of the chain against frequency, with the charge response on top.](img/charge_operator-dark.png#only-dark)
+
+Without `q`, the response is averaged over the momentum transfers of the
+k-mesh, so this is the local response of one site, not the $q=0$ response
+of the section above. Its static value is $\mathrm{Re}\,\chi(0)=-0.495$.
+The imaginary part is odd in $\omega$ and grows with $|\omega|$ inside the
+band. The dashed lines are `h.get_chi()` without operators, the charge
+response, and they lie exactly on the $S_z$ curves. The wiggles come from
+the k-mesh, `nk=40`.
+
+??? example "Code of this figure (documentation/figures/charge_operator.py)"
+
+    ```python
+    --8<-- "charge_operator.py"
+    ```
+
+See
 `jupyter-notebooks/functionalities/response_functions/04_operator_response.ipynb`
 for an executed notebook.
 
@@ -172,6 +210,23 @@ half filling, without the onsite energy, the coupling is negative
 (antiferromagnetic) at odd distances, between the two sublattices, and
 positive (ferromagnetic) at even distances, as expected for a bipartite
 lattice at half filling.
+
+![RKKY coupling of the chain against the distance from the reference site, ferromagnetic and antiferromagnetic values in two colors.](img/charge_rkky.png#only-light)
+![RKKY coupling of the chain against the distance from the reference site, ferromagnetic and antiferromagnetic values in two colors.](img/charge_rkky-dark.png#only-dark)
+
+The onsite energy moves the band to $2t\cos k+1$, so the Fermi energy is at
+$\cos k_F=-1/2$, $k_F=2\pi/3$, and the period $\pi/k_F$ is $1.5$ sites.
+On the lattice this gives a pattern that repeats every three sites: two
+antiferromagnetic values and one ferromagnetic value. The coupling is
+$-0.027$, $-0.025$ and $+0.028$ at distances 1, 2 and 3, and it decays to
+$-0.006$ at distance 10. Only the sites on one side are plotted, the other
+side is the same.
+
+??? example "Code of this figure (documentation/figures/charge_rkky.py)"
+
+    ```python
+    --8<-- "charge_rkky.py"
+    ```
 
 See `examples/1d/RKKY/main.py` and `examples/1d/rkky_minimal/main.py`, which
 compares `"pm"` and `"LR"` on the same system, for runnable scripts, and

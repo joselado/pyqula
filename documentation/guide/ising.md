@@ -46,11 +46,30 @@ es,ms = li.anneal(temps=[3.,1.,0.3,0.1,0.03],ntries=1e4) # simulated annealing
 
 `li.s` contains the spins, $\pm1$, `es` the energy along the run, and `ms` the
 total magnetization $\sum_i s_i$ along the run. In `ms` you see the phase
-transition. At the first temperatures the magnetization per site,
-`ms/li.nsites`, fluctuates around zero. When the temperature goes below
-$T_c$, it grows to $+1$ or $-1$, all the spins parallel, and the sign is
-chosen at random. As in the lattice gas, the supercell is periodic, and
+transition. All the temperatures of the snippet are below
+$T_c\approx4.54\,J$, so already in the first stage, at $T=3$, the
+magnetization per site `ms/li.nsites` grows from zero to $+1$ or $-1$, all
+the spins parallel, and the sign is chosen at random. To see the disordered
+phase, where the magnetization fluctuates around zero, add a first stage
+above $T_c$, as in the figure below. As in the lattice gas, the supercell is periodic, and
 `g.dimensionality = 0` makes it a finite flake.
+
+![Magnetization per site along the annealing run, and the spins at the end of the first and of the last temperature.](img/ising_ferro.png#only-light)
+![Magnetization per site along the annealing run, and the spins at the end of the first and of the last temperature.](img/ising_ferro-dark.png#only-dark)
+
+For the figure we add a first stage at $T=6$, above $T_c$, and we keep the
+spins at its end with `checkpoint_at`. At $T=6$ the magnetization per site
+(left) fluctuates around zero, between $-0.6$ and $0.5$ on this small
+lattice, and the spins form domains of both signs (middle). At $T=3$ it
+grows to $+1$ after about 3000 steps, and it stays there at the lower
+temperatures. At the end all the spins are parallel (right), and the energy
+is $-4J$ per site, two times the $-2J$ of the usual sum over bonds.
+
+??? example "Code of this figure (documentation/figures/ising_ferro.py)"
+
+    ```python
+    --8<-- "ising_ferro.py"
+    ```
 
 ## Keywords and other methods
 

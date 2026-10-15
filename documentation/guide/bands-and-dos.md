@@ -58,6 +58,22 @@ h = g.get_hamiltonian(has_spin=True)
 (k,e,c) = h.get_bands(operator="velocity") # bands colored by group velocity
 ```
 
+![Band structure of the honeycomb lattice, colored by the group velocity of each state.](img/bands_honeycomb.png#only-light)
+![Band structure of the honeycomb lattice, colored by the group velocity of each state.](img/bands_honeycomb-dark.png#only-dark)
+
+The two bands touch at zero energy at K and K', the Dirac points, and they
+reach $\pm 3t$ at $\Gamma$. The color is the group velocity. At the Dirac
+points it is $1.5\,ta/\hbar$, which is $3ta/2\hbar$, the Dirac velocity of
+graphene, with $a$ the first-neighbor distance. It goes to zero at $\Gamma$
+and at M, where the bands are flat. The flat bands at M, at $\pm t$, are the
+saddle points that give the van Hove singularities of the density of states.
+
+??? example "Code of this figure (documentation/figures/bands_honeycomb.py)"
+
+    ```python
+    --8<-- "bands_honeycomb.py"
+    ```
+
 With a list of operators, the output has one extra array per operator,
 `(k,e,c1,c2,...)`:
 
@@ -171,6 +187,27 @@ h = g.get_hamiltonian(has_spin=True)
 h.add_sublattice_imbalance(.4)
 (es,ds) = h.get_dos(operator="sublattice",nk=40,delta=5e-2)
 ```
+
+![Density of states of the triangular lattice, of the chain with Rashba coupling in two modes, and the sublattice-projected density of states of the honeycomb lattice.](img/bands_dos.png#only-light)
+![Density of states of the triangular lattice, of the chain with Rashba coupling in two modes, and the sublattice-projected density of states of the honeycomb lattice.](img/bands_dos-dark.png#only-dark)
+
+In the left panel, the density of states of the triangular lattice starts at
+$-3t$ and has its van Hove peak at $-2t$, with a height of $0.8$. The window
+stops at $4t$, so the integral over the window is $1.78$ and not $2$: the
+states between $4t$ and $6t$ are missing. The small ripples on the right of
+the peak come from the finite default k-mesh, and a larger `nk` removes them.
+In the middle panel, the ED (line) and the Green's function (dots) results
+fall on top of each other at every energy. In the right panel, the
+sublattice-projected density of states is zero for $|\omega|<0.4$, the gap
+of the sublattice imbalance. It is negative below the gap and positive above
+it, with its largest values at $\pm 1.08$, the van Hove peaks
+$\pm\sqrt{t^2+0.4^2}$ moved by the gap.
+
+??? example "Code of this figure (documentation/figures/bands_dos.py)"
+
+    ```python
+    --8<-- "bands_dos.py"
+    ```
 
 See `examples/1d/dos_GF/main.py` and `examples/2d/operator_dos/main.py` for
 runnable scripts, and

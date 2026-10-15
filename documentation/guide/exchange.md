@@ -68,17 +68,33 @@ h = h.get_szsz_mean_field_hamiltonian(J1=-2.0,filling=0.2,
 m = h.get_magnetization() # uniform moment along z
 ```
 
-Every site gets the same moment along $z$, and `h.get_magnetization()`
-returns it as one vector per site. The two spin bands of the converged
-Hamiltonian are split by an exchange field. This field is found by the
-calculation, it is not added by hand with `h.add_exchange()`.
+The loop converges, and every site gets the same moment along $z$, which
+`h.get_magnetization()` returns as one vector per site. But this moment is not
+a converged ferromagnet. It is $-0.2$ with `nk=10`, $-0.1$ with `nk=20`,
+$-0.05$ with `nk=40` and $-0.02$ with `nk=100`, so it scales as $2/n_k$: one
+electron on the k-mesh flips its spin, and the moment goes to zero for a fine
+mesh. So at $J_1=-2$ the chain is not a ferromagnet at the mean-field level. A
+real ferromagnet needs a larger coupling and a stronger guess. With $J_1=-6$,
+`nk=40` and a guess with an exchange field of 1 instead of the 0.1 of
+`"ferroZ"`, the loop converges to a fully polarized state, with moment $-0.4$,
+and its total energy is lower than the one of the unpolarized solution. On a
+finer mesh, `nk=60` or `nk=100`, this state needs a small temperature,
+`T=0.01`, for the reason given in the convergence section below. With
+the weak `"ferroZ"` guess the same $J_1=-6$ still gives $-0.05$, because the
+unpolarized state is also a self-consistent solution. In both cases the
+exchange field is found by the calculation, it is not added by hand with
+`h.add_exchange()`.
 
 ### Convergence
 
 All the mean-field methods of this page and of
-[Mean-field Hubbard models](mean-field.md) return `None` instead of a
-Hamiltonian when the loop does not converge. So check the result before using
-it. Four keywords control the convergence:
+[Mean-field Hubbard models](mean-field.md) raise an error,
+`MeanFieldConvergenceError`, when the loop does not converge. Its message gives
+the number of iterations, the error reached and `maxerror`. In a sweep over a
+parameter, catch it with `try` and `except` to skip the points that do not
+converge. It is imported with
+`from pyqula.meanfield import MeanFieldConvergenceError`.
+Four keywords control the convergence:
 
 - `nk` (default 8): the number of k-points per direction used to compute the
   expectation values.
@@ -92,8 +108,20 @@ it. Four keywords control the convergence:
 The k-mesh is usually the problem. If the mesh does not resolve the Fermi
 surface, the occupied states change from one iteration to the next, and no
 mixing helps. The chain above at `filling=0.2` never converges with `nk=8`,
-and converges at once with `nk=10`. So `nk` is the first thing to change. A
-smaller `mix` helps when the loop oscillates around a solution. On a large
+and converges at once with `nk=10`. The reason is that it converges when the
+mesh holds a whole number of electrons, $0.4\,n_k$, as for `nk=10` and
+`nk=15`, and not for `nk=8` or `nk=12`. So `nk` is the first thing to change. A
+smaller `mix` helps when the loop oscillates around a solution. A second
+problem appears when two states, at $k$ and $-k$, sit exactly at the Fermi
+level, as for the polarized chain at $J_1=-6$ with `nk=60` or `nk=100`. At the
+default temperature, $T=10^{-7}$, a very small change of the mean field puts
+one of them below the Fermi level and the other one above. At the next
+iteration the two swap, so the loop oscillates forever and no `mix` helps. A
+small temperature, `T=0.01` in units of the hopping, smooths the occupation of
+these two states, and the loop converges to the same state as at `nk=40`, with
+moment $-0.4$ and the same energy per site within $10^{-3}$. The same holds
+for `h.get_combined_mean_field_hamiltonian()`, for example with $U=5$ and
+$J_1=-1$ at `nk=40`. On a large
 system 1000 iterations take long, so a smaller `maxite` is useful while you
 explore parameters.
 
@@ -109,6 +137,10 @@ h = h.get_exchange_mean_field_hamiltonian(Jz1=-1.0,Jx1=-0.5,
                                             filling=0.2,mf="ferroZ",
                                             nk=10,mix=0.3,maxite=300)
 ```
+
+As for $S^zS^z$ above, the moment of this chain is $-0.2$ with `nk=10` and
+$-0.05$ with `nk=40`, so it scales as $2/n_k$ and is not a converged
+ferromagnet.
 
 ### Exchange and density-density interactions together
 
@@ -130,6 +162,11 @@ h = g.get_hamiltonian(has_spin=True)
 h = h.get_combined_mean_field_hamiltonian(U=5.0,J1=-1.0,
                                             filling=0.2,mf="ferroZ")
 ```
+
+This snippet runs with the default `nk=8` and gives a moment of $-0.375$, and
+with `nk=40` it gives $-0.05$, again $2/n_k$. So on this chain it shows how to
+call the method, not a converged ordered state. With `nk=100`, or with $U=10$
+or $J_1=-3$ at `nk=40`, the loop does not converge.
 
 ### Superconductivity from exchange
 
@@ -154,6 +191,12 @@ h.turn_nambu()
 h = h.get_combined_mean_field_hamiltonian(V1=-1.0,J1z=-0.3,
                                             filling=0.3,mf="random")
 ```
+
+With the default `nk=8` this result is not converged in the k-mesh: one run
+gave a gap of only 0.02 in the BdG bands, and another run did not converge.
+With `nk=20` and `nk=40` the gap is 0.14 and 0.15, and the moment is $-0.14$
+and $-0.15$, so here a k-mesh of at least `nk=20` gives a state with both
+magnetic and superconducting order.
 
 With `return_total_energy=True` the method also returns the mean-field total
 energy, with the double counting of both the normal and the pairing mean
@@ -257,6 +300,24 @@ site by site without any diagonalization. Some points to keep in mind:
   integer, KPM keeps the fractional number of electrons, while exact
   diagonalization rounds it to whole states. So the two converge to slightly
   different states.
+
+![Length of the self-consistent magnetic moment on each site of a honeycomb island with Rashba coupling.](img/exchange_island.png#only-light)
+![Length of the self-consistent magnetic moment on each site of a honeycomb island with Rashba coupling.](img/exchange_island-dark.png#only-dark)
+
+The map shows the length of the moment on each of the 288 sites of the
+island. In the bulk it is about $0.42$. On the zigzag edges, where a site has
+two neighbors instead of three, it grows to about $0.62$, and on the two
+corner sites, with one neighbor, it is $0.82$. The moment of every site is
+antiparallel to the ones of its neighbors, so this is the antiferromagnet of
+the honeycomb lattice, and its direction changes across the island because of
+the Rashba coupling. Spin-polarized STM would see the larger moments at the
+edges.
+
+??? example "Code of this figure (documentation/figures/exchange_island.py)"
+
+    ```python
+    --8<-- "exchange_island.py"
+    ```
 
 See `examples/0d/kpm_scf_sparse/main.py` for a runnable script with an
 antiferromagnet and a superconductor.

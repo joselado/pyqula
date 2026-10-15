@@ -17,7 +17,8 @@ sentence the maintainer wrote in the guide, the maintainer's sentence wins.
 When a change adds or materially changes a user-facing feature, update its page
 under `documentation/guide/` (the website, built by MkDocs from `mkdocs.yml`), and `README.md`'s FUNCTIONALITIES list where relevant. The
 existing style for a new feature is a short prose section with the physics and the
-motivation, a runnable code snippet, and -- for anything with a method on `Hamiltonian` or
+motivation, a runnable code snippet, a figure when the section computes an
+observable (`documentation/figures/README.md`), and -- for anything with a method on `Hamiltonian` or
 `Geometry` -- an entry on the reference pages `documentation/guide/reference-*.md`.
 
 ## README's FUNCTIONALITIES list

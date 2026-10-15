@@ -60,6 +60,25 @@ one. `tries` is the number of random starting points. A frustrated model has
 many local minima, so more starting points make it more likely to find the
 lowest one, and the lowest energy found is kept.
 
+![Spins of the 120-degree state on the triangular lattice, drawn as arrows in the plane of the spins and colored by sublattice.](img/classicalspins_120.png#only-light)
+![Spins of the 120-degree state on the triangular lattice, drawn as arrows in the plane of the spins and colored by sublattice.](img/classicalspins_120-dark.png#only-dark)
+
+The arrows are the spins, rotated with `most_perp_basis()` into the frame
+where they lie in the plane of the figure, and the $3\times3$ supercell is
+repeated to fill the window. The three colors are the three sublattices.
+The spins of each sublattice are parallel, and the three directions are at
+120 degrees from each other, so every triangle has one spin of each color.
+The minimum energy printed by the run is $-27$ for the 9 sites, so $-3J$ per
+site, the value found above. The common direction of the spins is random,
+since the energy does not depend on it; the script fixes the random seed, so
+it is the same in every run.
+
+??? example "Code of this figure (documentation/figures/classicalspins_120.py)"
+
+    ```python
+    --8<-- "classicalspins_120.py"
+    ```
+
 ## Other couplings
 
 - `add_heisenberg(Jij=[J1,J2,...])`: isotropic exchange to first, second, third neighbors, as in `g.get_hamiltonian(tij=...)`.

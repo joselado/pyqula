@@ -38,12 +38,35 @@ h = g.get_hamiltonian(has_spin=False)
 `qs` contains the wavevectors $\mathbf q$, one per row, `es` the energies,
 and `qpi` the intensity, with one row per energy and one column per
 wavevector. So one row of `qpi`, plotted over `qs`, is the QPI map of an STM
-measurement at that energy. For the triangular lattice near the band bottom,
-the contour is a small circle of radius $k_F$ around $\Gamma$, and the QPI
-map is a disk of radius $2k_F$, since $2k_F$ is the largest momentum that
-connects two points of the circle. The same maps are written to the folder `MULTIQPI/`, one file
+measurement at that energy. The band of the triangular lattice goes from
+$-3t$ at K and K' to $6t$ at $\Gamma$. So near the top of the band the
+contour is a small circle of radius $k_F$ around $\Gamma$, and the QPI map
+is a disk of radius $2k_F$, since $2k_F$ is the largest momentum that
+connects two points of the circle. Near the bottom of the band the contour
+is two small pockets, around K and K'. The same maps are written to the folder `MULTIQPI/`, one file
 per energy, with the density of states in `DOS.OUT`, unless `write=False` is
 given.
+
+![QPI maps of the triangular lattice, at an energy near the top of the band and at an energy near the bottom.](img/qpi_pm.png#only-light)
+![QPI maps of the triangular lattice, at an energy near the top of the band and at an energy near the bottom.](img/qpi_pm-dark.png#only-dark)
+
+The wavevectors are Cartesian, in units of $2\pi/a$, and the color scale
+stops at the 99th percentile, because the peak at $\mathbf q=0$ is much
+larger than the rest. With this sign of the hopping, the band of the
+triangular lattice goes from $-3t$ at K to $6t$ at $\Gamma$, so the small
+circle around $\Gamma$ is at the top of the band. At $\omega=5.03t$ (left)
+the contour is a circle of radius $k_F\approx 0.13$ and the QPI map is a
+disk of radius $0.27$, which is $2k_F$, repeated at every reciprocal lattice
+vector. At $\omega=-2.48t$ (right), near the bottom of the band, the contour
+is two small pockets around K and K'. The map has a disk at $\mathbf q=0$,
+from the scattering inside one pocket, and bright features at the K points of
+$\mathbf q$, from the scattering between the two pockets.
+
+??? example "Code of this figure (documentation/figures/qpi_pm.py)"
+
+    ```python
+    --8<-- "qpi_pm.py"
+    ```
 
 The keywords are
 
@@ -130,6 +153,30 @@ r,ldos_r,q,qpi_q = h.get_qpi_impurity(nsuper=10,
 `r` and `ldos_r` are the positions of the sites and the local density of
 states on them, the real-space map. `q` and `qpi_q` are the wavevectors and
 the QPI intensity, its Fourier transform.
+
+![Change of the local density of states around an impurity in the honeycomb lattice, and its Fourier transform.](img/qpi_impurity.png#only-light)
+![Change of the local density of states around an impurity in the honeycomb lattice, and its Fourier transform.](img/qpi_impurity-dark.png#only-dark)
+
+For the figure we take `nsuper=12` instead of `nsuper=10`, because the K
+points are on the $\mathbf q$ mesh only when the size is a multiple of
+three. Lengths are in units of the first-neighbor distance $a$. On the left,
+the change of the local density of states at $\omega=0.3t$ with respect to
+its mean. The color scale stops at the 98th percentile, so that the impurity
+site, where the density drops, does not hide the rest. You see the Friedel
+oscillations around the impurity, with a period of three sites. On the
+right, the QPI intensity on the 144 points of the mesh. The point at
+$\mathbf q=0$ is left out (white), since it is the mean density and it is
+300 times larger than the rest. The largest values are around the K points,
+at $|\mathbf q|\approx 2.4/a$, at a distance of about $0.3$ to $0.6/a$ from
+them, close to $2k_F=0.4/a$ of the Dirac cone at this energy. This is the
+scattering between the two valleys, and it gives the period of three sites
+in real space.
+
+??? example "Code of this figure (documentation/figures/qpi_impurity.py)"
+
+    ```python
+    --8<-- "qpi_impurity.py"
+    ```
 
 The keywords are
 

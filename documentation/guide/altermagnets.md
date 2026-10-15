@@ -54,6 +54,30 @@ print("largest spin splitting anywhere in the BZ:", ds.max())
 Both return `(energies, values)` with the same shape, so they can be plotted
 together. An energy bin without states gives `0.0`.
 
+![Bands of the square altermagnet colored by spin, and its spin splitting as a function of energy.](img/altermagnets_splitting.png#only-light)
+![Bands of the square altermagnet colored by spin, and its spin splitting as a function of energy.](img/altermagnets_splitting-dark.png#only-dark)
+
+The left panel shows the bands of this model along the path
+$\Gamma$-X-M-$\Gamma$-Y, colored by the spin of each state with
+`h.get_bands(operator="sz")`. With `am=1` the spin-up electrons hop only
+along $y$ and the spin-down electrons only along $x$, so
+$E^\uparrow=2\cos k_y$ and $E^\downarrow=2\cos k_x$. Along $\Gamma$-X the
+spin-up band (red) is flat at $2$ and the spin-down band (blue) goes down to
+$-2$. Along $\Gamma$-Y it is the opposite, and along M-$\Gamma$ the two bands
+are the same. This sign change of the splitting between the two directions
+is the d-wave symmetry. The right panel is the output of the snippet. The
+largest splitting is $4.0$, at mean energy $0$, which is the X point, where
+$E^\uparrow=2$ and $E^\downarrow=-2$. The largest splitting per bin (blue)
+is noisy, because each of the 400 bins only contains the few k-points of the
+mesh that fall inside it, and a bin without k-points gives zero. The density
+(orange) is smooth, with the same maximum.
+
+??? example "Code of this figure (documentation/figures/altermagnets_splitting.py)"
+
+    ```python
+    --8<-- "altermagnets_splitting.py"
+    ```
+
 The bands are paired by their index $n$, and you may ask if the $n$-th up
 band and the $n$-th down band are really partners. In an altermagnet this is
 safe. The two spin channels are related by a point-group operation $R$, so
@@ -173,6 +197,26 @@ The models are `specialhamiltonian.xwave_magnet(wave=...)`, with the names
 `pwave_magnet`, `dwave_altermagnet`, `fwave_magnet`, `gwave_altermagnet` and
 `iwave_altermagnet`. These are Ezawa's models, each on the lattice its
 symmetry needs: square for p, d and g, triangular for f and i.
+
+![Largest nonlinear spin conductivity at each order of the electric field, for the p-, d-, f-, g- and i-wave magnets.](img/altermagnets_orders.png#only-light)
+![Largest nonlinear spin conductivity at each order of the electric field, for the p-, d-, f-, g- and i-wave magnets.](img/altermagnets_orders-dark.png#only-dark)
+
+Each row is one model of `specialhamiltonian.xwave_magnet()`, with $J=0.3$
+and the chemical potential $0.5$ above the bottom of its band, as $\mu=-5.5$
+in the snippet for the i-wave one. The color is $\log_{10}$ of the output of
+`h.get_nonlinear_drude_orders()`, and the zeros are drawn at $10^{-16}$. In
+each row, the first bright cell is the threshold of the table: $l=1$ for
+d-wave ($0.011$), $l=2$ for f-wave ($0.041$), $l=3$ for g-wave ($0.053$) and
+$l=5$ for i-wave ($0.56$). Every cell below it is black, an exact zero. The
+d-, f- and g-wave rows also respond at higher orders, the higher harmonics.
+The p-wave row is the mesh error discussed above: $3\times10^{-4}$ at the
+even orders at `nk=48`, and it goes down when you increase `nk`.
+
+??? example "Code of this figure (documentation/figures/altermagnets_orders.py)"
+
+    ```python
+    --8<-- "altermagnets_orders.py"
+    ```
 
 Some things to keep in mind before using the result:
 

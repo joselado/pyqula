@@ -53,7 +53,26 @@ Zeeman field along $z$ the two spin bands get $+1$ and $-1$; with spin-orbit
 coupling the spin changes along the band. The names also work as strings,
 `operator="sz"`. In the same way you can resolve by spin the density of
 states, the Fermi surface and the momentum-resolved spectral function, which
-is what spin-resolved ARPES measures. See
+is what spin-resolved ARPES measures.
+
+![Bands of the triangular lattice with Rashba coupling and a Zeeman field, colored by the spin of each state.](img/operators_spin.png#only-light)
+![Bands of the triangular lattice with Rashba coupling and a Zeeman field, colored by the spin of each state.](img/operators_spin-dark.png#only-dark)
+
+To see the spin change along a band, we add to the snippet a Rashba
+coupling $0.3$ and a Zeeman field $0.3$ along $z$, and we color the bands
+with the expectation value of `sz`. At $\Gamma$ the two bands are split by
+$0.6=2\times0.3$, and their spin is $\pm1$, as in a pure Zeeman field.
+Between $\Gamma$ and $K$ the Rashba coupling turns the spin into the plane,
+and $|\langle S_z\rangle|$ goes down to $0.27$. At $K$, $M$ and $K'$ the two
+bands are again polarized along $z$, with $\langle S_z\rangle=\pm1.00$.
+
+??? example "Code of this figure (documentation/figures/operators_spin.py)"
+
+    ```python
+    --8<-- "operators_spin.py"
+    ```
+
+See
 `examples/2d/operator_fermi_surface/main.py` for a spin-resolved Fermi
 surface, and
 `jupyter-notebooks/functionalities/spectral_functions/06_operator_momentum_resolved.ipynb`
@@ -109,6 +128,26 @@ width a state is. With `h.get_bands(operator=y)` the states at the two edges
 get opposite values, and the bulk states are close to the center. This is
 the continuous version of the bulk-edge operator below.
 
+![Bands of a zigzag honeycomb ribbon with a Haldane coupling, colored by the position of each state across the ribbon.](img/operators_position.png#only-light)
+![Bands of a zigzag honeycomb ribbon with a Haldane coupling, colored by the position of each state across the ribbon.](img/operators_position-dark.png#only-dark)
+
+The triangular lattice of the snippet is periodic in both directions, so
+for the figure we use a zigzag honeycomb ribbon, with a Haldane coupling
+$0.1$ to have states at the edges, and we color the bands with the
+expectation value of `yposition`. The ribbon goes from $y=-14.5$ to
+$y=14.5$. The bulk bands are white, with $\langle y\rangle$ close to zero,
+and they have a gap between $-0.48$ and $0.48$. Inside the gap there are two
+bands that cross at $k=\pi$: the red one has $\langle y\rangle\approx 14$
+and the blue one $\langle y\rangle\approx -14$, so they live at the two
+opposite edges. They also have opposite velocities: these are the chiral
+edge states of the Haldane model.
+
+??? example "Code of this figure (documentation/figures/operators_position.py)"
+
+    ```python
+    --8<-- "operators_position.py"
+    ```
+
 ## Bulk-edge operator
 
 To know if a state sits at the edge or in the bulk, we use the edge and the
@@ -141,6 +180,21 @@ energy, the zigzag edge states, and a small weight for the dispersive bulk
 bands. So this is a quick way to find in-gap edge states in a band
 structure.
 
+![Bands of a zigzag honeycomb ribbon, colored by the weight of each state on the edge sites.](img/operators_edge.png#only-light)
+![Bands of a zigzag honeycomb ribbon, colored by the weight of each state on the edge sites.](img/operators_edge-dark.png#only-dark)
+
+The flat band at zero energy is bright: its weight on the edge grows from
+about $0.5$, where it joins the bulk bands, to $1.00$ at $k=\pi$. The bulk
+bands are dark, with weights below $0.30$. The edge sites are $20\%$ of the
+ribbon, so a state spread over the whole ribbon has a weight close to
+$0.2$, and this is the typical value of the bulk bands.
+
+??? example "Code of this figure (documentation/figures/operators_edge.py)"
+
+    ```python
+    --8<-- "operators_edge.py"
+    ```
+
 ## Valley operator
 
 In honeycomb lattices, and also in aligned and twisted multilayers, the
@@ -172,7 +226,24 @@ vall = h.get_operator("valley") # valley operator
 With `h.get_bands(operator=vall)` the states around $K$ and around $K'$ get
 opposite signs. This is most useful in a supercell or a moiré system, where
 the bands of the two valleys are folded on top of each other, and the valley
-operator is the way to separate them. See
+operator is the way to separate them.
+
+![Bands of a zigzag honeycomb ribbon, colored by the valley of each state.](img/operators_valley.png#only-light)
+![Bands of a zigzag honeycomb ribbon, colored by the valley of each state.](img/operators_valley-dark.png#only-dark)
+
+In the zigzag ribbon the two valleys are projected on two different
+momenta along the ribbon, one on each side of $k=\pi$. The bands on the
+left are blue and the ones on the right are red, with $\langle\tau_z\rangle$
+up to $\pm0.98$. The flat edge band goes from blue to red through white at
+$k=\pi$, where the edge state is an equal mix of the two valleys.
+
+??? example "Code of this figure (documentation/figures/operators_valley.py)"
+
+    ```python
+    --8<-- "operators_valley.py"
+    ```
+
+See
 `examples/1d/valley_operator/main.py` for the valley-resolved bands of a
 zigzag ribbon, `examples/2d/valley_bands/main.py` for a honeycomb supercell,
 and
@@ -220,7 +291,14 @@ dvy = spectrum.real_space_vev(hv,operator=hv.get_operator("valley_y"))
 
 `dvx` and `dvy` contain the expectation value of each component on every
 site, summed over the occupied states. If you draw $(\tau_x,\tau_y)$ as an
-arrow on each site, the arrows wind around the vacancy.
+arrow on each site, the largest arrows, up to $0.29$, are at the edges of
+the flake, because the zigzag edges have their own valley texture. Around
+the vacancy the arrows are up to $0.20$, and they wind once: when we go
+counterclockwise around the vacancy, on a ring of radius 1 to 3, the arrow
+turns once clockwise, a winding number of $-1$. To keep only the part created by the
+vacancy, we compute the same quantity on the pristine flake and subtract it,
+as `examples/0d/valley_vortex_vacancy/main.py` does. After this the arrows at
+the edges are below $0.002$, and the winding $-1$ around the vacancy stays.
 
 The valley vector can also enter the Hamiltonian. `h.add_valley_exchange(v)`,
 with $\vec v=(v_x,v_y,v_z)$, adds the term
@@ -276,6 +354,23 @@ weight separates the physical band structure from its hole copy, and it is
 the weight used to obtain the electron spectral function from the full
 Bogoliubov-de Gennes spectrum.
 
+![Bands of an s-wave superconductor on the triangular lattice, colored by the electron weight of each state.](img/operators_nambu.png#only-light)
+![Bands of an s-wave superconductor on the triangular lattice, colored by the electron weight of each state.](img/operators_nambu-dark.png#only-dark)
+
+The red band is the band of the triangular lattice, a pure electron with
+$|u|^2=1$, with its minimum $-3$ at $K$ and $K'$. The blue band is its hole
+copy, the same band with the opposite energy, with $|u|^2=0$. They meet at
+the Fermi momentum, where the pairing opens a gap between $-0.2$ and $0.2$,
+so $2\Delta=0.4$, and only there the color goes through white,
+$|u|^2=1/2$. We use `nk=1500` k-points instead of the default, because
+the band is steep where it crosses the Fermi energy.
+
+??? example "Code of this figure (documentation/figures/operators_nambu.py)"
+
+    ```python
+    --8<-- "operators_nambu.py"
+    ```
+
 ## Berry curvature operator
 
 The Berry curvature operator is an example of an operator that depends on
@@ -295,6 +390,23 @@ carry the Berry curvature, usually the states close to the gap edge. The
 integral of the Berry curvature of the occupied states over the Brillouin
 zone is the Chern number (see
 [Topological invariants](topological-invariants.md)).
+
+![Bands of the Haldane model on the honeycomb lattice, colored by the Berry curvature of each state.](img/operators_berry.png#only-light)
+![Bands of the Haldane model on the honeycomb lattice, colored by the Berry curvature of each state.](img/operators_berry-dark.png#only-dark)
+
+Here we take the spinless honeycomb lattice with a Haldane coupling $0.1$,
+`h.add_haldane(0.1)`, a Chern insulator with Chern number $1$, and color its
+bands with `operator="berry"`. The Berry curvature is large only close to
+the gap edges at $K$ and $K'$, at energies $\pm0.45$, where it reaches
+$\pm13.6$, and it is zero at $\Gamma$. It has the same sign at $K$ and at
+$K'$, which is why the Chern number is not zero, and the opposite sign in
+the two bands.
+
+??? example "Code of this figure (documentation/figures/operators_berry.py)"
+
+    ```python
+    --8<-- "operators_berry.py"
+    ```
 
 ## Inverse participation ratio operator
 
@@ -329,3 +441,19 @@ ipr = h.get_operator("IPR") # IPR operator
 The onsite energy 0.3 only shifts the bands rigidly. In this zigzag ribbon, `h.get_bands(operator=ipr)` gives the flat edge
 states an IPR more than ten times larger than the bulk bands: close to the
 zone boundary the edge states live on a single site of the edge.
+
+![Bands of a zigzag honeycomb ribbon, colored by the inverse participation ratio of each state.](img/operators_ipr.png#only-light)
+![Bands of a zigzag honeycomb ribbon, colored by the inverse participation ratio of each state.](img/operators_ipr-dark.png#only-dark)
+
+The color scale is logarithmic. The bulk bands have an IPR between $0.02$
+and $0.05$, close to $1/40=0.025$, the value for a state spread over the
+40 sites of the ribbon. The flat edge band at $E=0.3$ goes up to $1.00$
+close to $k=\pi$. Some points of this band have $0.5$ instead of $1$: the
+two edge states at the same energy are degenerate, and the
+diagonalization can mix them into a state that lives on both edges.
+
+??? example "Code of this figure (documentation/figures/operators_ipr.py)"
+
+    ```python
+    --8<-- "operators_ipr.py"
+    ```

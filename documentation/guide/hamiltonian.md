@@ -42,6 +42,18 @@ called `h.add_...()`, and they change `h` in place, so a calculation is a
 sequence of calls on the same object. If you want to keep the original
 Hamiltonian, make a copy first with `h.copy()`.
 
+![Band structure of the first-neighbor chain, with the cosine dispersion on top.](img/hamiltonian_chain.png#only-light)
+![Band structure of the first-neighbor chain, with the cosine dispersion on top.](img/hamiltonian_chain-dark.png#only-dark)
+
+The computed energies (dots) lie on the cosine $2t\cos k$ (dashed line). The
+band goes from $-2t$ at $k=\pi$ to $2t$ at $k=0$, so its width is $4t$.
+
+??? example "Code of this figure (documentation/figures/hamiltonian_chain.py)"
+
+    ```python
+    --8<-- "hamiltonian_chain.py"
+    ```
+
 See `examples/1d/linear_chain/main.py` for a runnable script, and
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/` for
 spinless, spinful and Nambu Hamiltonians in zero to three dimensions.
@@ -81,6 +93,19 @@ first- and third-neighbor hoppings keep it. The same list works for any
 lattice. Instead of a list, `tij` can also be a function of the two
 positions; see `g.get_hamiltonian()` in the
 [Geometry reference](reference-geometry.md).
+
+![Band structure of the chain with first-, second- and third-neighbor hopping.](img/hamiltonian_longrange.png#only-light)
+![Band structure of the chain with first-, second- and third-neighbor hopping.](img/hamiltonian_longrange-dark.png#only-dark)
+
+With $t_2=0.2$ and $t_3=0.3$ the band goes up to $3t$ at $k=0$ and down to
+$-2.2t$ at $k=\pi$, so it is not symmetric around zero energy anymore. The
+first-neighbor band (gray) is shown as a reference.
+
+??? example "Code of this figure (documentation/figures/hamiltonian_longrange.py)"
+
+    ```python
+    --8<-- "hamiltonian_longrange.py"
+    ```
 
 See `examples/1d/NNN_chain/main.py` for a runnable script.
 
@@ -147,6 +172,20 @@ $\pm|\vec B| = \pm 0.37$. If the Hamiltonian is spinless, the call first
 makes it spinful. The field can also change from site to site: give one
 vector per site, or a function of the position.
 
+![Band structure of the chain with a Zeeman field along z, colored by the spin of each state.](img/hamiltonian_zeeman.png#only-light)
+![Band structure of the chain with a Zeeman field along z, colored by the spin of each state.](img/hamiltonian_zeeman-dark.png#only-dark)
+
+Here the field is along $z$, $\vec B=(0,0,0.3)$, so that the color can show
+$\langle S_z\rangle$ of each state. The two spin bands are rigid copies of
+the cosine band, shifted by $\pm 0.3$. The spin parallel to the field is
+the higher band, because the term is $+\vec B\cdot\vec\sigma$.
+
+??? example "Code of this figure (documentation/figures/hamiltonian_zeeman.py)"
+
+    ```python
+    --8<-- "hamiltonian_zeeman.py"
+    ```
+
 `h.add_exchange()` adds exactly the same term. We use the name Zeeman when
 the field is external, and exchange when it is the magnetization of the
 material itself, for example the one we obtain in
@@ -190,6 +229,22 @@ moving in opposite directions. Each of them carries one quantum of
 conductance $e^2/h$, which is what a Hall measurement sees. For a honeycomb
 ribbon the same call gives the Landau levels of a Dirac equation, with one
 level at zero energy.
+
+![Bands of a square ribbon in a magnetic field, colored by the position of each state across the ribbon.](img/hamiltonian_landau.png#only-light)
+![Bands of a square ribbon in a magnetic field, colored by the position of each state across the ribbon.](img/hamiltonian_landau-dark.png#only-dark)
+
+The color is the position of each state across the ribbon, computed with
+`h.get_bands(operator="yposition")`. In the middle of the k-path the bands are
+flat and white: these are the Landau levels, in the bulk of the ribbon. The
+lowest one is at $-3.87$, close to $-4+2\pi B=-3.87$. Away from the middle
+the levels disperse and turn red or blue: they become edge states, localized
+at one edge or the other, and moving in opposite directions.
+
+??? example "Code of this figure (documentation/figures/hamiltonian_landau.py)"
+
+    ```python
+    --8<-- "hamiltonian_landau.py"
+    ```
 
 See `examples/1d/landau_levels_zigzag_ribbon/main.py` for a runnable script
 on a honeycomb ribbon.

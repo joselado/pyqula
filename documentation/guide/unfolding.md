@@ -60,6 +60,23 @@ cones of the honeycomb lattice appear at K, where they belong. To unfold a
 constant-energy cut, give the same operator to `h.get_multi_fermi_surface()`
 (see [Spectral functions](spectral-functions.md)).
 
+![Band structure of a 3x3 supercell of the honeycomb lattice, and the unfolded spectral function along the primitive k-path.](img/unfolding_honeycomb.png#only-light)
+![Band structure of a 3x3 supercell of the honeycomb lattice, and the unfolded spectral function along the primitive k-path.](img/unfolding_honeycomb-dark.png#only-dark)
+
+On the left, `h.get_bands(kpath=kpath)` of the supercell along the same path,
+with nine times more bands. In a $3\times 3$ supercell K folds onto
+$\Gamma$, so the folded bands also touch at zero energy at $\Gamma$. On the
+right, the unfolded weight shows only the two bands of the primitive cell,
+from $-3t$ to $3t$, with the Dirac points at K and K'. The weight under each
+band is nine times the one of the primitive cell, since the Bloch states are
+not normalized.
+
+??? example "Code of this figure (documentation/figures/unfolding_honeycomb.py)"
+
+    ```python
+    --8<-- "unfolding_honeycomb.py"
+    ```
+
 See `examples/2d/unfolding/main.py`, `examples/1d/unfolding/main.py` and
 `examples/readme_examples/unfolding_FS/main.py` for runnable scripts, and
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/08_unfolding_supercells.ipynb`
@@ -102,6 +119,25 @@ h = gs.get_hamiltonian() # Hamiltonian of the supercell
 kpath = gs.get_unfolded_kpath(nk=200) # primitive k-path, in supercell coordinates
 (k,e,d) = h.get_bands(operator="unfold",kpath=kpath) # unfolded band structure
 ```
+
+![Unfolded spectral function of a non-diagonal supercell of the honeycomb lattice, and unfolded bands of a 2x2x2 supercell of the cubic lattice.](img/unfolding_general.png#only-light)
+![Unfolded spectral function of a non-diagonal supercell of the honeycomb lattice, and unfolded bands of a 2x2x2 supercell of the cubic lattice.](img/unfolding_general-dark.png#only-dark)
+
+On the left, the non-diagonal supercell with $\det M=2$ unfolds to the same
+two bands of the honeycomb lattice as the $3\times 3$ one above. On the
+right, the $2\times2\times2$ supercell of the cubic lattice has eight bands,
+and the color is the unfolded weight of each state. One band has the full
+weight $8=N_c$: it goes from $6t$ at $\Gamma$ to $2t$ at X, $-2t$ at M, back
+to $6t$ at $\Gamma$ and to $-6t$ at R, which is the band
+$2t(\cos k_x+\cos k_y+\cos k_z)$ of the primitive cell. The other bands are
+the folded copies, with zero weight. Between X and M the band is degenerate
+with a folded copy, and the weight is shared between the two.
+
+??? example "Code of this figure (documentation/figures/unfolding_general.py)"
+
+    ```python
+    --8<-- "unfolding_general.py"
+    ```
 
 See `examples/2d/unfolding_nonorthogonal/main.py` for a runnable script with
 a defect in a non-diagonal supercell, and `examples/3d/unfolding/main.py` for
@@ -162,6 +198,23 @@ supercell, `gs.get_kpath()`, the same calculation goes along a path of the
 primitive Brillouin zone that has no special meaning. See
 `examples/2d/unfolding_sqrt3/main.py` for a runnable script.
 
+![Unfolded spectral function of the triangular lattice with a three-sublattice charge order, on a logarithmic color scale.](img/unfolding_sqrt3.png#only-light)
+![Unfolded spectral function of the triangular lattice with a three-sublattice charge order, on a logarithmic color scale.](img/unfolding_sqrt3-dark.png#only-dark)
+
+For the figure we take `energies=np.linspace(-4,3,300)`, since the default
+window starts at $-3$, the bottom of the band. The color scale is
+logarithmic, so that the weak shadow band is visible. At K and K' the charge
+order splits the bottom of the band into two states, at $-3.0t$ and $-2.6t$.
+The shadow band is the faint line that rises from M up to about $-0.5t$, and
+it crosses the main band at about $1.3t$, once between $\Gamma$ and K and
+once between K' and $\Gamma$, where a small gap opens.
+
+??? example "Code of this figure (documentation/figures/unfolding_sqrt3.py)"
+
+    ```python
+    --8<-- "unfolding_sqrt3.py"
+    ```
+
 ## Unfolding a large supercell with the kernel polynomial method
 
 The cases where unfolding matters most, a moire pattern or a disordered
@@ -187,6 +240,22 @@ kpath = g.get_unfolded_kpath(nk=100) # primitive k-path, in supercell coordinate
 (k,e,d) = h.get_kdos_bands(operator="unfold",mode="KPM",delta=5e-2,kpath=kpath,
         energies=np.linspace(-3,-1,200)) # unfolded weight, with the KPM
 ```
+
+![Unfolded spectral function of a triangular lattice with a moire potential, computed with the kernel polynomial method.](img/unfolding_kpm.png#only-light)
+![Unfolded spectral function of a triangular lattice with a moire potential, computed with the kernel polynomial method.](img/unfolding_kpm-dark.png#only-dark)
+
+The moire potential splits the bottom of the band into minibands. The lowest
+state is at K and K', at about $-2.7t$, above the $-3t$ of the clean lattice
+because the potential is positive. It is separated by a gap from the next
+minibands, which start at about $-2.5t$. Around M you see several copies of
+the band, shifted by the moire wavevectors, each one with a part of the
+weight.
+
+??? example "Code of this figure (documentation/figures/unfolding_kpm.py)"
+
+    ```python
+    --8<-- "unfolding_kpm.py"
+    ```
 
 The output is the same as with `mode="ED"`, with the same weight under each
 band. Only the line shape is different: the Chebyshev expansion broadens each
