@@ -1,5 +1,43 @@
 # Writing the user guide in the maintainer's voice
 
+## 0. The user register (October 2026): this section wins over the rest
+
+The maintainer locked this register for every text written for the users of pyqula: the
+user-guide pages, `README.md` (its FUNCTIONALITIES bullets included), the prose and markdown
+cells of the notebooks in `jupyter-notebooks/`, the comments that explain the physics in
+`examples/`, and release notes. It does not apply to code, docstrings, error messages or the
+maintainer's own records (`CLAUDE.md`, the skills, `future_development/`, commit messages).
+
+The user guide is a website, one page per topic under `documentation/guide/`, built with
+MkDocs Material from `mkdocs.yml` and published at https://joselado.github.io/pyqula/ by
+`.github/workflows/guide.yml`, in the same way as dmrgpy's guide. The PDF is built from the
+pages by `documentation/build_guide_pdf.py`. The single file `documentation/user_guide.md` is
+only a pointer now.
+
+The maintainer asked for the pages to be written in simple English, as a condensed matter
+physicist who is not a native speaker would write them, and approved the rewrite of
+`hamiltonian.md` as the model. This replaces the long chained sentences of sections 3.1 and 6
+(mean 32 words), which describe the lectures and no longer the guide. What the pages contain:
+
+- What is computed, the formula that defines it, and its physical meaning: the Hamiltonian or
+  the definition typeset, every symbol said in words, the units (energies in units of the
+  hopping $t$), the sign and normalization conventions the code actually uses, and the
+  experiment that measures it (STM, ARPES, transport, neutrons, optics) in one clause.
+- The code block, then what to look for in the returned arrays and how it changes with the
+  parameter.
+- The keywords that change the physics or the convergence, as one-line bullets.
+- Not the internals: no solver names, backend choices, registries, caching, file formats or
+  implementation history unless the reader has to choose between them for a physical or
+  accuracy reason, and then in one sentence.
+
+How the sentences look: short, mostly 10 to 20 words, one idea each, subject first; plain
+words ("use", "find", "gives", "so", "because"); "we" for the calculation and "you" for what
+the reader sees; no idioms, no rhetoric, no contractions, no em-dashes, no exclamation marks.
+Simple does not mean wrong: no manufactured mistakes, and every formula is checked against the
+code. The rules of sections 7 and 8 on words and spellings still hold. Code blocks are kept
+byte for byte through a prose pass (rule 20); cross references are links to the page
+(`[Mean-field Hubbard models](mean-field.md)`), never a section number.
+
 How `documentation/user_guide.md` is written, so that a session extending or rewriting it
 produces prose that reads like the maintainer's own chapters and not like a language model's
 default register. The voice is the one of the maintainer's lectures and lecture notes for the
@@ -493,7 +531,7 @@ list:
       adding the build-up before each snippet and the reading after it, a density the
       maintainer approved on the pilot. Growth from those two things is expected; growth from
       padding, repetition or material that belongs in `CLAUDE.md` is not.
-- [ ] `documentation/convert.sh` was re-run so the PDF matches the Markdown.
+- [ ] `mkdocs build` passes in strict mode, and `documentation/build_guide_pdf.py` builds the PDF.
 
 ---
 

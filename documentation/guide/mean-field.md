@@ -1,63 +1,57 @@
-# Interactions at the mean-field level
+# Mean-field Hubbard models
 
-Up to now every Hamiltonian in this guide has been a single-particle one, meaning that all
-its terms are bilinear, a creation and an annihilation operator. We will now see how
-electronic interactions, quartic terms with four fermionic operators, can be treated at the
-mean-field level: the interaction is replaced by a bilinear term that depends on expectation
-values, and since those expectation values depend in turn on the Hamiltonian, the problem is
-solved self-consistently. This is an uncontrolled approximation, but it is the practical
-workhorse for magnetism, charge order and superconductivity driven by interactions, and
-everything in this chapter goes through one method, `h.get_mean_field_hamiltonian()`, which
-returns a new Hamiltonian with the converged mean-field terms in it. We start with the
-Hubbard model, first collinear and then non-collinear, then let the same interaction produce
-superconductivity, then add interactions between neighbors, and finally treat spin-spin
-exchange, spin models and the Kondo lattice with the same machinery.
+So far all our Hamiltonians were single-particle Hamiltonians: every term is
+bilinear, one creation and one annihilation operator. An interaction between
+electrons is a quartic term, with four fermion operators, and the problem is
+then a quantum many-body one. In this page we treat interactions at the
+mean-field level. The quartic term is replaced by bilinear terms that depend
+on expectation values in the ground state. These expectation values depend
+on the Hamiltonian, so the problem is solved self-consistently.
+
+Mean field is an uncontrolled approximation. It does not capture quantum
+fluctuations, so it overestimates ordering, and in low dimensions it finds
+order where the exact ground state has none. Still, it is the practical way
+to describe magnetism, charge order and superconductivity driven by
+interactions. Everything in this page uses one method,
+`h.get_mean_field_hamiltonian()`, which returns a new Hamiltonian with the
+converged mean-field terms. The original `h` is not changed.
 
 ## The collinear Hubbard model
 
-We will start with the simplest interaction term, a local repulsive interaction in a spinful system. Our full Hamiltonian takes the form
+We start with the simplest interaction, a local repulsion in a spinful
+system, the Hubbard model,
 
 $$
-H = \sum_{\langle ij\rangle} c^\dagger_i c_{j} + h.c.
+H = \sum_{\langle ij\rangle,s} c^\dagger_{i,s} c_{j,s} + h.c.
 +
-U\sum_{i} 
-c^\dagger_{i,\uparrow} c_{i,\uparrow} 
-c^\dagger_{i,\downarrow} c_{i,\downarrow} 
-$$
-
-where the first term is the first-neighbor hopping of the previous chapters and $U$ is the
-energy cost of putting a spin-up and a spin-down electron on the same site. The interaction term $U\sum_{i}c^\dagger_{i,\uparrow}c_{i,\uparrow}c^\dagger_{i,\downarrow}c_{i,\downarrow}$ is solved at the mean-field level. The mean-field approximation consists in replacing the previous four-fermion operator by all the terms that arise by taking the expectation value of two of the fermions. In particular, in its simplest collinear form, the mean-field term takes the form
-
-$$
-H_U^{MF} = 
-U\sum_{i} 
-\langle c^\dagger_{i,\uparrow} c_{i,\uparrow} \rangle
-c^\dagger_{i,\downarrow} c_{i,\downarrow} 
-+
+U\sum_{i}
 c^\dagger_{i,\uparrow} c_{i,\uparrow}
-\langle c^\dagger_{i,\downarrow} c_{i,\downarrow} \rangle
+c^\dagger_{i,\downarrow} c_{i,\downarrow} .
 $$
 
-where $\langle\rangle$ denotes the ground state expectation value of those operators, meaning
-that each spin-down electron feels an onsite energy set by the density of spin-up electrons
-on its site, and the other way around. The full Hamiltonian thus takes the form
-
+The first term is the first-neighbor hopping, and $U$ is the energy cost of
+having a spin-up and a spin-down electron on the same site, in units of the
+hopping. The mean-field approximation replaces the quartic term by all the
+terms we get by taking the expectation value of two of the four operators.
+The simplest of them, the collinear (Hartree) terms, are
 
 $$
-H^{MF} = 
-\sum_{\langle ij\rangle} c^\dagger_i c_{j} + h.c.
+H_U^{MF} =
+U\sum_{i}
+\langle n_{i,\uparrow} \rangle n_{i,\downarrow}
 +
-U\sum_{i} 
-\langle c^\dagger_{i,\uparrow} c_{i,\uparrow} \rangle
-c^\dagger_{i,\downarrow} c_{i,\downarrow} 
-+
-c^\dagger_{i,\uparrow} c_{i,\uparrow}
-\langle c^\dagger_{i,\downarrow} c_{i,\downarrow} \rangle
+n_{i,\uparrow} \langle n_{i,\downarrow} \rangle ,
+\qquad n_{i,s} = c^\dagger_{i,s} c_{i,s} ,
 $$
 
-As a result, the mean-field Hamiltonian depends on the specific ground state of the system, and the ground state depends of course on the specific mean-field Hamiltonian. The previous circular dependence between the ground state and the mean-field Hamiltonian gives rise to a self-consistent problem. 
+where $\langle\cdot\rangle$ is the expectation value in the ground state. So
+an electron with spin down feels an onsite energy proportional to the density
+of spin-up electrons on its site, and the other way around. If the two
+densities are different, the two spins see different onsite energies: this is
+an exchange field, and the state is magnetic.
 
-This self-consistent condition is solved as follows. We start with an initial guess for the full many-body ground state, that we call $|GS_0\rangle$. With this initial state, we compute the mean-field Hamiltonian $H^{MF}_0$. This mean-field Hamiltonian allows us to compute a new many-body ground state $|GS_1\rangle$, which in turn allows us to compute a new mean-field Hamiltonian $H^{MF}_1$. The previous algorithm is represented as
+The mean-field Hamiltonian depends on the ground state, and the ground state
+depends on the mean-field Hamiltonian. We solve this by iteration:
 
 $$
 |GS_0\rangle
@@ -70,16 +64,23 @@ H^{MF}_1
 \rightarrow
 |GS_2\rangle
 \rightarrow
-H^{MF}_2
-\rightarrow
-...
+\cdots
 $$
 
-This iterative calculation is performed until $H^{MF}_n = H^{MF}_{n+1}$, at which point the algorithm has converged. In practice the loop stops when two successive mean fields differ by less than a tolerance, `maxerror`, and nothing in the Hamiltonian is symmetric anymore: the mean-field terms are what a symmetry-broken state looks like at the single-particle level, an onsite energy that differs between spins, or between sites, that the original Hamiltonian did not have.
+We start from an initial guess $|GS_0\rangle$, compute $H^{MF}_0$,
+diagonalize it to get a new ground state $|GS_1\rangle$, and so on. The loop
+stops when two successive mean fields differ by less than `maxerror`. Two
+things matter in practice:
 
-Two important notes can be taken from the previous approach. First, the final solution may be sensitive to the initial guess for the ground state. This guess corresponds to the initialization of the Hamiltonian, and it can be important for systems whose energy landscape has several local minima. A second point is that the update procedure from one iteration to the next can be done adiabatically, or very suddenly. This corresponds to the mixing between solutions, and for systems close to the critical point can lead to tricky convergence.
+- The result can depend on the initial guess. If the energy has several
+  local minima, different guesses can converge to different states. Try
+  several guesses, and compare the total energies.
+- The new mean field is mixed with the old one at each step. Close to a
+  phase transition the loop can converge slowly or oscillate.
 
-Let us now show an example of a mean-field calculation, with `h.get_mean_field_hamiltonian()`. We will take now a square lattice, make a 2x2 supercell and include local repulsive interactions at half filling. The obtained ground state is an antiferromagnetic Neel state that opens a gap at half filling
+As an example, we take a square lattice, a $2\times2$ supercell, and a
+repulsive $U$ at half filling. The ground state is an antiferromagnetic Neel
+state with a gap:
 
 ```python
 from pyqula import geometry
@@ -92,25 +93,62 @@ h = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,
 m = h.get_magnetization() # get the magnetization
 ```
 
-The result is a new Hamiltonian with the converged mean-field terms in it, and the original `h` is left as it was. What you see in its band structure is a gap at zero energy, of about $0.8$ for $U=2$, where the non-interacting square lattice at half filling is a metal; the magnetization is one vector per site, of equal magnitude and alternating sign between the two sublattices of the supercell, along a direction that the random initial guess picked, since nothing in the Hamiltonian selects one. The supercell is needed for the same reason: a Neel state has two inequivalent sites, and a single-site cell could only hold a ferromagnet. The guess `mf=` is one of the names listed by the library (`"random"`, `"antiferro"`, `"ferro"`, `"swave"` and others) or a Hamiltonian whose mean-field terms seed the calculation; `filling` is the keyword of "Setting a filling", enforced at every iteration; and the calculation returns `None` instead of a Hamiltonian when it does not converge, which is discussed at the end of the section on spin-spin exchange together with the parameters that decide it. Increasing $U$ makes the moments larger and the gap wider, up to a gap that grows linearly with $U$ in the strongly interacting limit, where each site holds one localized electron.
+Without interactions the half-filled square lattice is a metal. With $U=2$
+the band structure has a gap at zero energy of about $0.8$. The magnetization
+`m` has one vector per site. The vectors have the same length, about $0.38$,
+and opposite sign on the two sublattices. Their direction is set by the
+random initial guess, because the Hamiltonian has spin rotation symmetry and
+nothing selects a direction. We need the supercell because a Neel state has
+two different sites, and a cell with one site can only hold a ferromagnet. A
+larger $U$ gives larger moments and a larger gap. For large $U$ the gap grows
+linearly with $U$, with one localized electron per site.
 
-See `examples/2d/hubbard_honeycomb/main.py` for the gap as a function of $U$ on the honeycomb lattice, where the density of states vanishes at the Dirac point and the gap only opens above a critical interaction, and `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/02_collinear_noncollinear.ipynb` for the executed version.
+The main keywords are:
 
+- `U`: the Hubbard interaction, a number or one value per site.
+- `filling`: the filling, kept fixed at every iteration (see the filling
+  section of [Building a Hamiltonian](hamiltonian.md)).
+- `mf`: the initial guess. A name such as `"random"`, `"ferro"`,
+  `"antiferro"` or `"swave"`, or a Hamiltonian whose mean-field terms are used
+  as the starting point.
+- `nk`: the number of k-points per direction used to compute the expectation
+  values. A metal needs more k-points than an insulator.
+- `maxerror`, `mix`: the convergence tolerance and the mixing.
+
+If the loop does not converge, the method returns `None` instead of a
+Hamiltonian. The page [Exchange interactions](exchange.md) discusses this
+case and the parameters that control it.
+
+See `examples/2d/hubbard_honeycomb/main.py` for the gap as a function of $U$
+on the honeycomb lattice. There the density of states vanishes at the Dirac
+point, so a small $U$ does nothing, and the gap opens only above a critical
+interaction, around $U\approx 2.2$ at the mean-field level. The notebook
+`jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/02_collinear_noncollinear.ipynb`
+shows the executed version.
 
 ## Non-collinear Hubbard model
-Let us now see what happens when the magnetization is not restricted to point along one axis. In the mean-field ansatz considered above, only a single term in the Wick contraction was considered. This term is the collinear term in the z-direction, and allows accounting for solutions that have magnetization in the z-direction. However, in the presence of frustration, external magnetic field or spin-orbit coupling, the magnetization of a system may be non-collinear and pointing in an arbitrary direction. To account for that phenomenology, the mean-field Hamiltonian must include the non-collinear term that takes the form
+
+The collinear terms above only allow a magnetization along one axis. With
+frustration, an external field or spin-orbit coupling, the magnetization can
+point in any direction, and change direction from site to site. To describe
+this, the mean field also includes the spin-flip (Fock) term
 
 $$
 H_U^{ncMF} = -
-U\sum_{i} 
+U\sum_{i}
 \langle c^\dagger_{i,\downarrow} c_{i,\uparrow} \rangle
-c^\dagger_{i,\uparrow} c_{i,\downarrow} 
-+ h.c.
+c^\dagger_{i,\uparrow} c_{i,\downarrow}
++ h.c.,
 $$
 
-which is a spin-flip term on each site, set by the expectation value of the in-plane magnetization. When including this additional term, the full mean-field Hubbard Hamiltonian is rotationally invariant, meaning that it respects SO(3) spin rotational symmetry. This rotationally symmetric form is the default form implemented in the library, which is also why the direction of the Neel moments in the previous section was left to the initial guess.
+set by the in-plane magnetization of each site. With this term the
+mean-field Hubbard Hamiltonian has the full SO(3) spin rotation symmetry of
+the Hubbard model. pyqula always includes it. This is also why in the
+previous example the direction of the Neel moments was free.
 
-With the previous point in mind, we now solve a system that develops a non-collinear magnetic state. We take the square lattice considered in the section above, and we add an external magnetic field. The competition between Zeeman energy and antiferromagnetic correlations gives rise to a canted magnetic state
+We now take the same square lattice and add a Zeeman field along $z$. The
+Zeeman energy competes with the antiferromagnetic order, and the result is a
+canted state:
 
 ```python
 from pyqula import geometry
@@ -124,27 +162,41 @@ h = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,
 m = h.get_magnetization() # get the magnetization
 ```
 
-The magnetization now has two parts: an antiferromagnetic component, alternating between the sublattices, that lies in the plane perpendicular to the field, and a uniform component along the field, the same on every site. The moments cant toward the field rather than flipping, which is what an antiferromagnet does in a field that is weak compared to its exchange, and a larger field tilts them further. The third array returned by `h.get_bands(operator="sz")` is the spin projection of each state, so that the bands can be colored by it and the uniform component read off from the imbalance between up and down.
+The magnetization now has two parts. The antiferromagnetic part alternates
+between the sublattices and lies in the plane perpendicular to the field. The
+uniform part is along the field and the same on every site. The moments tilt
+toward the field instead of flipping, as an antiferromagnet does in a field
+that is weak compared to its exchange, and a larger field tilts them more.
+The third array `c` returned by `h.get_bands(operator="sz")` is the spin
+projection $\langle S_z\rangle$ of each state, so the bands can be colored by
+it.
 
-See `examples/readme_examples/scf_square/main.py` for this calculation ending in a plot of the bands and of the moments, and the notebook `02_collinear_noncollinear.ipynb` in the folder above.
+See `examples/readme_examples/scf_square/main.py` for this calculation with a
+plot of the bands and of the moments, and the notebook
+`02_collinear_noncollinear.ipynb` in the folder above.
 
+## Superconducting mean field
 
-## Superconducting mean-field
-
-In the cases above we focused on local repulsive interactions that promote collinear or non-collinear magnetism. However, local interactions can promote a different type of symmetry breaking, in particular gauge symmetry breaking associated to superconductivity. The emergence of superconductivity is associated to one of the Wick contractions of the mean-field, the anomalous term, that takes the form
-
+A local interaction can also break a different symmetry, the U(1) gauge
+symmetry, and give superconductivity. This comes from the anomalous
+contraction of the Hubbard term,
 
 $$
-H_U^{aMF} = 
-U\sum_{i} 
+H_U^{aMF} =
+U\sum_{i}
 \langle c_{i,\uparrow} c_{i,\downarrow} \rangle
-c^\dagger_{i,\downarrow} c^\dagger_{i,\uparrow} 
+c^\dagger_{i,\downarrow} c^\dagger_{i,\uparrow}
 + h.c.
 $$
 
-where the expectation value of two annihilation operators, the pairing amplitude, is the
-$\Delta_0$ of the s-wave term in the chapter on superconductivity, now obtained from the
-interaction rather than put in by hand. The previous term in the mean-field Hamiltonian can become non-zero for $U<0$, and yields an interaction induced superconducting state. This term in the mean-field Hamiltonian is automatically accounted for in Hamiltonians with a Nambu degree of freedom, of course apart from the collinear and non-collinear terms in the mean-field. We show below how an interaction induced superconducting state can be computed with pyqula, with `h.setup_nambu_spinor()` followed by `h.get_mean_field_hamiltonian()`
+The expectation value of two annihilation operators is the pairing amplitude.
+It plays the role of the $\Delta_0$ of the s-wave term in
+[Superconductivity](superconductivity.md), but now it comes from the
+interaction, with $|\Delta_0| = |U\langle c_{i,\uparrow} c_{i,\downarrow}\rangle|$, and
+is not added by hand. It can be different from zero for an attractive
+interaction, $U<0$. The anomalous terms are included when the Hamiltonian has
+the Nambu basis, together with the collinear and non-collinear ones. So we
+first call `h.setup_nambu_spinor()`, then `h.get_mean_field_hamiltonian()`:
 
 ```python
 from pyqula import geometry
@@ -159,75 +211,94 @@ h.get_kdos_bands(operator="electron",nk=400,
                    energies=np.linspace(-2.0,2.0,200),delta=0.03)
 ```
 
-The Nambu spinor has to be set up before the calculation, so that the anomalous contraction has a block of the Hamiltonian to go into; the guess `mf="swave"` seeds a uniform singlet pairing, which the loop then adjusts to its self-consistent value. The electron spectral function, projected with `operator="electron"` on the electron half of the Nambu spinor so that the hole copy of the bands does not appear, shows the normal-state band of the triangular lattice with a gap opened at the Fermi energy, and the gap grows with $|U|$. `h.get_kdos_bands()` is described in the section on momentum-resolved spectral functions.
+The guess `mf="swave"` starts from a uniform singlet pairing, and the loop
+finds its self-consistent value. The electron spectral function, with
+`operator="electron"` so that the hole copy of the bands is not shown, is the
+band of the triangular lattice with a gap at the Fermi energy. The gap grows
+with $|U|$. `h.get_kdos_bands()` is explained in
+[Spectral functions](spectral-functions.md).
 
-See `examples/readme_examples/scf_SC/main.py` for a runnable version ending in a plot, and the notebook `04_anomalous_mf_sc.ipynb` in the folder above.
+See `examples/readme_examples/scf_SC/main.py` for a runnable script with a
+plot, and the notebook `04_anomalous_mf_sc.ipynb` in the folder above.
 
+## Long-range interactions
 
-## Long range interactions
-
-Up to now we have considered interacting Hamiltonians that only have local (attractive or repulsive) Hubbard interactions. In the following we are going to consider systems that have many-body interactions also to a certain number of neighbors. Long range interactions are crucial to stabilize specific symmetry broken states, and in particular charge density waves, Peierls instabilities and unconventional superconductivity. The full Hamiltonian we will consider takes the form
+So far the interaction was only onsite. Interactions between neighbors are
+needed to get charge density waves, bond order (Peierls) instabilities and
+unconventional superconductivity. We now take
 
 $$
-H = \sum_{\langle ij\rangle} c^\dagger_i c_{j} + h.c.
+H = \sum_{\langle ij\rangle,s} c^\dagger_{i,s} c_{j,s} + h.c.
 +
 U\sum_{i}
-c^\dagger_{i,\uparrow} c_{i,\uparrow}
-c^\dagger_{i,\downarrow} c_{i,\downarrow}
+n_{i,\uparrow} n_{i,\downarrow}
 +
-V_1\sum_{\langle ij\rangle,s,s'} 
-c^\dagger_{i,s} c_{i,s}
-c^\dagger_{j,s'} c_{j,s'}
+V_1\sum_{\langle ij\rangle} n_i n_j ,
+\qquad n_i = \sum_s n_{i,s},
 $$
 
-where $U$ parametrizes onsite interactions and $V_1$ interactions between first neighbors; second and third neighbors enter `h.get_mean_field_hamiltonian()` in the same way as `V2` and `V3`, and an interaction with an arbitrary dependence on the distance as `Vr`, a function `Vr(r1,r2)` of the positions of two sites that is the interaction of each pair, exactly as $V_1$ is for a pair of first neighbors, so that a `Vr` equal to $V_1$ on first neighbors and zero beyond them is the same calculation as `V1`. That interaction reaches up to a distance `rcut`, 5 by default in a periodic system, and it is kept or dropped one whole shell of equidistant pairs at a time, so that it has the symmetry of the lattice; in a finite system every pair is kept. The pair of a site with itself is one of those pairs, so `Vr(0)` is an onsite Hubbard term, $U=V_r(0)$, and a function meant for the bonds alone returns zero at zero distance. The previous Hamiltonian gives rise to a variety of terms when performing a mean-field decoupling. By default, pyqula includes all the Wick contractions of the mean-field, and in the presence of Nambu spinors it includes all the anomalous contractions. Let us now briefly elaborate on some of the additional terms that arise due to the first-neighbor interaction $V_1$.
+where $U$ is the onsite interaction and $V_1$ the interaction between first
+neighbors, with each bond counted once. The keywords of
+`h.get_mean_field_hamiltonian()` are:
 
-The first term is the charge order term, that takes the form
+- `V1`, `V2`, `V3`: the interaction between first, second and third
+  neighbors.
+- `Vr`: a function `Vr(r1,r2)` of the positions of two sites, the
+  interaction of each pair, in the same convention as $V_1$. A `Vr` equal to
+  $V_1$ for first neighbors and zero beyond is the same calculation as `V1`.
+  The pair of a site with itself is included, so $V_r(0)$ acts as an onsite
+  $U=V_r(0)$; a function meant only for bonds must return zero at zero
+  distance.
+- `rcut`: the range of `Vr`, 5 by default in a periodic system. Whole shells
+  of pairs at the same distance are kept or dropped, so the interaction keeps
+  the symmetry of the lattice. In a finite system all pairs are kept.
+
+pyqula does the full Hartree-Fock decoupling: it keeps all the contractions,
+and with a Nambu basis also all the anomalous ones. The first-neighbor
+interaction $V_1$ gives three new kinds of terms. The first is the charge
+(Hartree) term,
 
 $$
 H^{MF} \sim
-\langle c^\dagger_{i,s} c_{i,s} \rangle
-c^\dagger_{j,s'} c_{j,s'}
+\langle n_{i,s} \rangle
+n_{j,s'} ,
 $$
 
-this term can give rise to a different charge imbalance between different sites, and it leads to charge density wave states.
-
-The second term we consider is the bond order, that takes the form
+so the energy of a site depends on the charge of its neighbors. It gives
+charge density waves, with different charge on different sites. The second
+is the bond (Fock) term,
 
 $$
 H^{MF} \sim
 \langle c^\dagger_{i,s} c_{j,s} \rangle
-c^\dagger_{j,s} c_{i,s} + h.c.
+c^\dagger_{j,s} c_{i,s} + h.c.,
 $$
 
-which leads to an interaction-enhanced hopping. If this happens in a non-uniform way in the system, the resulting state has a Peierls distortion.
-
-Among the anomalous terms, the mean-field Hamiltonian can generate
+which changes the hopping. If the change is not the same on all bonds, the
+state has a bond order, as in a Peierls distortion. The third kind are the
+anomalous terms,
 
 $$
 H^{MF} \sim
 \langle c^\dagger_{i,\uparrow} c^\dagger_{j,\uparrow} \rangle
-c_{j,\downarrow} c_{i,\downarrow} + h.c.
-$$
-
-
-$$
-H^{MF} \sim
+c_{j,\downarrow} c_{i,\downarrow} + h.c.,
+\qquad
 \langle c^\dagger_{i,\downarrow} c^\dagger_{j,\downarrow} \rangle
-c_{j,\uparrow} c_{i,\uparrow} + h.c.
-$$
-
-
-$$
-H^{MF} \sim
+c_{j,\uparrow} c_{i,\uparrow} + h.c.,
+\qquad
 \langle c^\dagger_{i,\uparrow} c^\dagger_{j,\downarrow} \rangle
 c_{j,\downarrow} c_{i,\uparrow} + h.c.
 $$
 
-where the first two terms correspond to the odd superconducting order, and the third term accounts for both even and odd orders. What this means is that a first-neighbor attraction can pair electrons on neighboring sites, with the same spin or with opposite spins, where the onsite $U$ of the previous section could only pair opposite spins on the same site.
+The first two pair electrons with the same spin, so they are odd (spin
+triplet). The third pairs opposite spins, and can be even or odd. So an
+attractive $V_1$ can pair electrons on neighboring sites, with the same or
+with opposite spin, while the onsite $U$ can only pair opposite spins on the
+same site.
 
-Below, we show an example in which an interaction-induced spin-triplet term is generated. By considering an electronic structure with a large Zeeman splitting and attractive first-neighbor interactions, a state with non-zero $\Delta_{\uparrow\uparrow}$ and $\Delta_{\downarrow\downarrow}$ emerges. 
-
+In the example below an attractive $V_1$ together with a large exchange field
+gives a spin-triplet superconductor, with $\Delta_{\uparrow\uparrow}$ and
+$\Delta_{\downarrow\downarrow}$ different from zero:
 
 ```python
 import numpy as np
@@ -244,6 +315,15 @@ h.get_kdos_bands(operator="electron",nk=400,
                    energies=np.linspace(-2.0,2.0,200),delta=0.03)
 ```
 
-The exchange field splits the two spin bands so far apart that singlet pairing between opposite spins has no states to pair at the Fermi energy, and the attractive $V_1$ pairs electrons of the same spin on neighboring sites instead: the converged state has an odd, spin-triplet order parameter, and the electron spectral function shows a gap at the Fermi energy in each of the two spin-split bands. The d-vector of that state, and how far it is from unitary, are the subject of the section on the spin-triplet d-vector in the chapter on superconductivity.
+The exchange field splits the two spin bands so much that, at the Fermi
+energy, there are no pairs of opposite spin and opposite momentum to form a
+singlet. The attractive $V_1$ then pairs electrons of the same spin on
+neighboring sites. The converged state has an odd, spin-triplet order
+parameter, and the electron spectral function shows a gap at the Fermi energy
+in each of the two spin-split bands. The d-vector of this state, and whether
+it is unitary, are computed in [Superconductivity](superconductivity.md).
 
-See `examples/readme_examples/scf_SC_triplet/main.py` for this calculation ending in a plot, `examples/2d/meanfield_V1V2V3/main.py` for a charge density wave driven by $V_1$, $V_2$ and $V_3$ in a spinless system, and the notebook `05_full_wick_noncollinear_sc.ipynb` in the folder above.
+See `examples/readme_examples/scf_SC_triplet/main.py` for this calculation
+with a plot, `examples/2d/meanfield_V1V2V3/main.py` for a charge density wave
+driven by $V_1$, $V_2$ and $V_3$ in a spinless system, and the notebook
+`05_full_wick_noncollinear_sc.ipynb` in the folder above.

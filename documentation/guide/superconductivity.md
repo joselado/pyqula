@@ -1,36 +1,28 @@
 # Superconductivity
-Up to now we have focused on Hamiltonians that contain only normal terms,
-namely that the full Hamiltonian can be written as
+
+So far all our Hamiltonians contained only normal terms,
 
 $$
-H_0 = \sum_{ijss'} t_{ijss'}c^\dagger_{i,s} c_{j,s'}
+H_0 = \sum_{ijss'} t_{ijss'}c^\dagger_{i,s} c_{j,s'} ,
 $$
 
-where $ij$ run over the sites and $ss'$ over the spins, so that every term
-destroys one electron and creates one, and the number of electrons is
-conserved.
-
-In the presence of superconductivity, an anomalous term appears in the
-Hamiltonian taking the form
-
+where $i,j$ run over the sites and $s,s'$ over the spin. Each term destroys
+one electron and creates one, so the number of electrons is conserved. In a
+superconductor there is also an anomalous term,
 
 $$
-H_{SC} = \sum_{ijss'} \Delta_{ij}^{ss'}c_{i,s} c_{j,s'} + h.c.
+H_{SC} = \sum_{ijss'} \Delta_{ij}^{ss'}c_{i,s} c_{j,s'} + h.c.,
 $$
 
-meaning that pairs of electrons are destroyed and created, so that the number
-of electrons is no longer conserved; the pairing amplitude $\Delta_{ij}^{ss'}$
-is what is called the superconducting order parameter, and it is what we will
-put in by hand in this chapter and obtain self-consistently from an attractive
-interaction in the mean-field chapter.
+which destroys or creates a pair of electrons, so the number of electrons is
+not conserved anymore. The pairing amplitude $\Delta_{ij}^{ss'}$ is the
+superconducting order parameter. In this page we add it by hand. In
+[Mean-field Hubbard models](mean-field.md) we obtain it self-consistently
+from an attractive interaction.
 
-To solve the Hamiltonian
+## The Nambu basis
 
-$$
-H = H_0 + H_{SC}
-$$
-
-we define a Nambu spinor that takes the form
+To solve $H = H_0 + H_{SC}$ we use the Nambu spinor of site $n$,
 
 $$
 \Psi_n =
@@ -39,67 +31,58 @@ c_{n,\uparrow} \\
 c_{n,\downarrow} \\
 c^\dagger_{n,\downarrow} \\
 -c^\dagger_{n,\uparrow} \\
-\end{pmatrix}
+\end{pmatrix} .
 $$
 
-
-You can think of the Nambu spinor as the two electron operators of site $n$
-stacked on top of a copy of their conjugates, so that a term creating two
-electrons becomes a hopping between the upper and the lower half of the
-spinor, and the problem is again a single-particle one. We then
-rewrite the Hamiltonian as
-$$
-H = \Psi^\dagger \mathcal H \Psi
-$$
-
-where $\mathcal H$ is the Nambu Hamiltonian, also called the Bogoliubov-de
-Gennes (BdG) Hamiltonian, a matrix twice as large as the normal one. In this
-new basis, the Hamiltonian can be written in a diagonal form as
+You can think of it as the two electron operators of the site, stacked on
+top of their conjugates. In this basis a term that creates two electrons
+becomes a hopping between the upper and the lower half of the spinor, so the
+problem is again a single-particle one,
 
 $$
-H = \sum_\alpha \epsilon_\alpha \Psi^\dagger_\alpha \Psi_\alpha
+H = \frac{1}{2}\Psi^\dagger \mathcal H \Psi + \text{const},
 $$
 
-where $\epsilon_\alpha$ are the Nambu eigenvalues. Because the lower half of
-the spinor is the conjugate of the upper one, the eigenvalues come in pairs
-$\pm\epsilon_\alpha$, an electron copy and a hole copy of every state, and the
-gap of the spectrum around zero energy is twice the smallest
-$|\epsilon_\alpha|$. In pyqula the doubled basis is set up by
-`h.setup_nambu_spinor()`, and the methods that add a pairing, `h.add_swave()`
-and `h.add_pairing()`, set it up on their own when it is not there yet; every
-observable of the guide, the band structure, the density of states, the LDOS,
-is then computed in the Nambu basis. A superconducting mean-field calculation
-needs the basis before it starts, which is why `h.setup_nambu_spinor()` is
-called explicitly in the mean-field chapter.
+where $\mathcal H$ is the Bogoliubov-de Gennes (BdG) Hamiltonian, a matrix
+twice as large as the normal one. Its lower diagonal block is the hole copy of
+$H_0$, and its off-diagonal blocks contain $\Delta$. Diagonalizing it gives
 
+$$
+H = \sum_\alpha \epsilon_\alpha \gamma^\dagger_\alpha \gamma_\alpha
++ \text{const},
+$$
+
+with $\gamma_\alpha$ the Bogoliubov quasiparticles. Because the lower half of
+the spinor is the conjugate of the upper half, the eigenvalues of
+$\mathcal H$ come in pairs $\pm\epsilon_\alpha$: every state has an electron
+copy and a hole copy. The gap of the spectrum around zero energy is
+$2\min|\epsilon_\alpha|$.
+
+`h.setup_nambu_spinor()` builds this doubled basis. `h.add_swave()` and
+`h.add_pairing()` build it themselves if it is not there. After this, every
+observable (band structure, density of states, LDOS) is computed in the
+Nambu basis. A Nambu Hamiltonian in pyqula is always spinful. For a
+superconducting mean-field calculation we call `h.setup_nambu_spinor()`
+before starting, as shown in [Mean-field Hubbard models](mean-field.md).
 
 ## s-wave superconductivity
 
-The simplest form of superconductivity is spin-singlet
-s-wave superconductivity. A minimal superconducting term of this form
-can be written as
+The simplest superconductor has spin-singlet s-wave pairing,
+
 $$
-H_{SC} = 
+H_{SC} =
 \Delta_0
-\sum_n 
-c_{n,\uparrow} c_{n,\downarrow} + h.c.
+\sum_n
+c_{n,\uparrow} c_{n,\downarrow} + h.c.,
 $$
 
 meaning that an electron with spin up and an electron with spin down on the
-same site are paired, with the same amplitude $\Delta_0$ on every site; this
-is the pairing of a conventional superconductor.
+same site form a pair, with the same amplitude $\Delta_0$ on every site. This
+is the pairing of a conventional superconductor. We take a triangular lattice,
 
-In the following, we address the electronic structure of a triangular
-lattice with s-wave superconductivity, whose Hamiltonian takes the form
+$$H = H_0 + H_{SC}, \qquad H_0 = \sum_{\langle ij\rangle} c^\dagger_i c_{j} + h.c.,$$
 
-$$H = H_0 + H_{SC} $$
-
-with 
-
-$$H_0 = \sum_{\langle ij\rangle} c^\dagger_i c_{j} + h.c.$$
-
-The previous Hamiltonian can be computed for $\Delta_0=0.2$ with
-`h.add_swave()` as
+and add the pairing $\Delta_0=0.2$ with `h.add_swave()`:
 
 ```python
 from pyqula import geometry
@@ -108,80 +91,81 @@ h = g.get_hamiltonian() # generate the Hamiltonian
 h.add_swave(0.2) # add s-wave superconductivity
 (k,e) = h.get_bands() # compute band structure
 ```
-Note that due to the BdG nature of the Hamiltonian, the band structure shows
-both the electron and the hole states. What you see is a gap of $2\Delta_0$
-opening at zero energy along the whole Fermi surface of the triangular
-lattice, regardless of where the Fermi surface is: an electron at the Fermi
-energy pays $\Delta_0$ to enter the superconductor whatever its momentum,
-which is the hallmark of s-wave pairing. Coloring the bands with
-`operator="electron"` in `h.get_bands()` tells the electron copy from the hole
-copy, which is how the spectral function of the electrons alone is read off a
-BdG band structure.
 
-See `examples/2d/comparison_swave/main.py` for a runnable version (the same
-gap put in with `h.add_swave()` and with `h.add_pairing(mode="swave")`, bands
-colored by their electron weight), and the notebooks
+The BdG band structure shows both the electron and the hole bands. A gap
+opens at zero energy, from $-\Delta_0$ to $+\Delta_0$, so it is $2\Delta_0$
+wide. It opens at every point of the Fermi surface, whatever its momentum:
+this is the signature of s-wave pairing, and it is the hard gap that
+tunneling spectroscopy (STM) measures in a conventional superconductor. With
+`operator="electron"` in `h.get_bands()` each state is colored by its
+electron weight, so you can tell the electron copy from the hole copy, and
+read the electron spectral function, which is what ARPES measures.
+
+The argument of `h.add_swave()` can also be a function of the position, to
+have a pairing that changes in space. For other pairing symmetries
+(p-wave, d-wave, a general d-vector) use `h.add_pairing(delta=...,mode=...)`.
+
+See `examples/2d/comparison_swave/main.py` for a runnable script, which adds
+the same gap with `h.add_swave()` and with `h.add_pairing(mode="swave")`.
+The notebooks
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/01_spinless_spinful_nambu_basis.ipynb`
 and
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/03_magnetism_soc_superconductivity.ipynb`
-for the Nambu basis and for superconductivity combined with magnetism and
-spin-orbit coupling. A pairing that arises from an attractive interaction
-rather than being put in by hand is the subject of the "Superconducting
-mean-field" section.
+show the Nambu basis, and superconductivity together with magnetism and
+spin-orbit coupling.
 
-## Spin-triplet d-vector and non-unitary superconductivity
+## Spin-triplet pairing and the d-vector
 
-In the s-wave case above the two paired electrons form a spin singlet. Let us
-now address the other possibility, a pair in a spin triplet, and see how
-pyqula characterizes it with `h.get_dvector_non_unitarity()`. For a
-spin-triplet superconductor the pairing is a symmetric $2\times2$ matrix in
-spin space, and the way it is parametrized is by a complex three-component
-d-vector $\vec d$ as
+In the s-wave case the two electrons of a pair form a spin singlet. The other
+possibility is a spin triplet, and we now see how to characterize it with
+`h.get_dvector_non_unitarity()`. For a triplet the pairing is a symmetric
+$2\times2$ matrix in spin space, and we write it with a complex
+three-component vector $\vec d$, the d-vector,
 
 $$
 \Delta = i (\vec d \cdot \vec \sigma) \sigma_y =
 \begin{pmatrix}
 -d_x + i d_y & d_z \\
 d_z & d_x + i d_y \\
-\end{pmatrix}
+\end{pmatrix} .
 $$
 
-so that $d_z$ is the opposite-spin component $\Delta_{\uparrow\downarrow}$
-and $d_x,d_y$ encode the equal-spin ones,
-$\Delta_{\uparrow\uparrow}$ and $\Delta_{\downarrow\downarrow}$. Only
-$\Delta_{\uparrow\downarrow}$ can also host a spin-singlet contribution, which
-is antisymmetric under exchanging the two spins and even under exchanging the
-two sites, the opposite of the triplet; pyqula projects it out before
-reading off $d_z$, so that a state with both singlet and triplet order still
-gives the triplet d-vector alone.
+So $d_z$ is the opposite-spin pairing $\Delta_{\uparrow\downarrow}$, and
+$d_x,d_y$ give the equal-spin pairings $\Delta_{\uparrow\uparrow}$ and
+$\Delta_{\downarrow\downarrow}$. The component $\Delta_{\uparrow\downarrow}$
+can also contain a singlet part. The singlet is odd when we exchange the two
+spins and even when we exchange the two sites, the opposite of the triplet,
+and pyqula removes it before computing $d_z$. So a state with both singlet
+and triplet pairing gives the d-vector of the triplet part only.
 
-What separates two classes of triplet states is the product
+Triplet states are of two kinds. We compute
 
 $$
 \Delta \Delta^\dagger = |\vec d|^2 \mathbb{1} + \vec q \cdot \vec \sigma,
 \qquad
-\vec q = i (\vec d \times \vec d^*)
+\vec q = i (\vec d \times \vec d^*) .
 $$
 
-When $\vec q = 0$ the state is **unitary**: $\Delta \Delta^\dagger$ is
-proportional to the identity, the two quasiparticle branches are degenerate,
-and the Cooper pairs carry no net spin. When $\vec q \neq 0$ the state is
-**non-unitary**: the gap is different for the two spin branches, and the pairs
-carry a spin moment $\vec q$, which is real by construction (the cross product
-of a vector with its own conjugate is purely imaginary). A $\vec d$ whose
-components share a common phase, a real vector times a global phase, is
-always unitary; non-unitarity requires a relative phase between components, as
-in $\vec d \propto (1, i, 0)$, which is a pure $\Delta_{\uparrow\uparrow}$
-pairing with $\vec q$ along $+z$. Non-unitary states therefore require broken
-time-reversal symmetry, and they appear naturally in ferromagnetic
-superconductors, where $\vec q$ is parallel to the magnetization because the
-pairs form in the majority band.
+- $\vec q = 0$: the state is unitary. $\Delta \Delta^\dagger$ is proportional
+  to the identity, the two quasiparticle branches have the same gap, and the
+  Cooper pairs have no net spin.
+- $\vec q \neq 0$: the state is non-unitary. The two spin branches have
+  different gaps, and the pairs carry a spin moment $\vec q$, which is a real
+  vector.
 
-`h.get_dvector_non_unitarity()` returns $\vec q$ per site, as an array of
-shape (number of sites, 3), with $\vec d$ evaluated on a uniform k-mesh,
-$\vec q$ averaged over that mesh and the pairing partners of each site summed
-over. As an illustration, let us put in by hand a p-wave pairing with
-$\vec d \propto (1,i,0)$, which is non-unitary with the pair spin along $+z$
+If all the components of $\vec d$ have the same phase, the state is always
+unitary. Non-unitarity needs a relative phase between the components, as in
+$\vec d \propto (1, i, 0)$, which is pure $\Delta_{\uparrow\uparrow}$ pairing
+with $\vec q$ along $+z$. So a non-unitary state breaks time-reversal
+symmetry. It appears naturally in ferromagnetic superconductors, where the
+pairs form in the majority band and $\vec q$ is parallel to the
+magnetization.
+
+`h.get_dvector_non_unitarity()` returns $\vec q$ for each site, an array of
+shape (number of sites, 3). The d-vector is computed on a uniform k-mesh,
+$\vec q$ is averaged over the mesh, and the contributions of all the pairing
+partners of a site are summed. As an example, we add by hand a p-wave pairing
+with $\vec d \propto (1,i,0)$:
 
 ```python
 from pyqula import geometry
@@ -192,14 +176,16 @@ h.add_pairing(delta=0.3,mode="pwave",d=[1.,1j,0.]) # up-up pairing
 q = h.get_dvector_non_unitarity(nk=20) # -> [[0., 0., 0.36]]
 ```
 
-The array has one row, the single site of the chain, and only its $z$
-component is nonzero, as the relative phase of $i$ between $d_x$ and $d_y$
-dictates; the same p-wave pairing with a real d-vector, `d=[1.,0.,0.]`, is
-unitary and returns zero. Non-unitary states also arise on their own from a
-self-consistent calculation: adding attractive first-neighbor interactions on
-top of a large Zeeman splitting, as in the example of the "Long range
-interactions" section, gives rise to a spin-triplet order whose $\vec q$
-follows the magnetization
+The array has one row, for the single site of the chain, and only its $z$
+component is not zero, because of the relative phase $i$ between $d_x$ and
+$d_y$. The same p-wave pairing with a real d-vector, `d=[1.,0.,0.]`, is
+unitary and gives zero.
+
+A non-unitary state can also come out of a self-consistent calculation. With
+an attractive first-neighbor interaction and a large exchange field (as in
+the long-range interaction example of
+[Mean-field Hubbard models](mean-field.md)), the ground state is a spin
+triplet whose $\vec q$ follows the magnetization:
 
 ```python
 from pyqula import geometry
@@ -212,55 +198,57 @@ h = h.get_mean_field_hamiltonian(V1=-1.5,filling=0.3,mf="random",nk=30)
 q = h.get_dvector_non_unitarity(nk=30) # antiparallel to +z, as is h.get_magnetization()
 ```
 
-For an inhomogeneous system, `h.write_non_unitarity()` writes the same
-quantity as a real-space map in `NON_UNITARITY_MAP.OUT`, with columns
-$(x,y,z,q_x,q_y,q_z)$. If all that is needed is whether the state is
-non-unitary at all, and not in which direction,
-`h.get_average_dvector(non_unitarity=True)` returns the k-averaged squared
-components of $\vec q$, a magnitude that carries no sign; the same method
-with its default `non_unitarity=False` returns
-$(|d_x|^2,|d_y|^2,|d_z|^2)$, and is what
-`superconductivity.identify_superconductivity` uses to label a state.
+Other related methods:
 
-See `examples/1d/dvector_map/main.py` (a self-consistent triplet state along a
-spin spiral, with its non-unitarity map) and `examples/2d/SC_symmetry/main.py`
-(a mixed singlet and triplet pairing split into its two parts) for runnable
-versions, and
+- `h.write_non_unitarity()`: writes $\vec q$ as a map in real space, for an
+  inhomogeneous system, in `NON_UNITARITY_MAP.OUT` with columns
+  $(x,y,z,q_x,q_y,q_z)$.
+- `h.get_average_dvector()`: returns $(|d_x|^2,|d_y|^2,|d_z|^2)$ averaged over
+  the Brillouin zone. With `non_unitarity=True` it returns the averaged
+  squares of the components of $\vec q$, which say if the state is
+  non-unitary but not in which direction.
+
+See `examples/1d/dvector_map/main.py` (a self-consistent triplet state on a
+spin spiral, with its map of non-unitarity) and `examples/2d/SC_symmetry/main.py`
+(a mixed singlet and triplet pairing separated into its two parts) for
+runnable scripts. The notebook
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/07_order_parameter_identification.ipynb`
-for how a self-consistent order parameter is identified. See
+shows how to identify a self-consistent order parameter, and
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/16_dvector_nonunitarity.ipynb`
-for an executed notebook on the non-unitarity.
+the non-unitarity.
 
 ## Superfluid weight and BKT temperature
 
-A finite pairing amplitude does not by itself make a superconductor: what
-carries the supercurrent is the rigidity of the state against winding the
-phase of the order parameter, and we will now see how to compute it with
-`h.get_superfluid_weight()`. This rigidity is the *superfluid weight*, also
-called the superfluid stiffness,
+A finite pairing amplitude alone does not make a superconductor. What carries
+a supercurrent is the stiffness of the state against a twist of the phase of
+the order parameter. We compute it with `h.get_superfluid_weight()`. This
+stiffness is the superfluid weight $D_s$,
 
 $$
-D_s^{ab} = \frac{1}{V}\frac{\partial^2 \Omega}{\partial Q_a \partial Q_b}
+D_s^{ab} = \frac{1}{V}\frac{\partial^2 \Omega}{\partial Q_a \partial Q_b},
 $$
 
-the second derivative of the grand potential with respect to the twist
-wavevector $\mathbf Q$ of the phase, at fixed $|\Delta|$. What is computed is
-the general multiband BdG expression of Liang and coworkers, Phys. Rev. B
-**95**, 024515.
+the second derivative of the grand potential $\Omega$ with respect to the
+wavevector $\mathbf Q$ of the phase twist, $\Delta \to \Delta e^{i\mathbf
+Q\cdot\mathbf r}$, at fixed $|\Delta|$, with $V$ the volume (area in two
+dimensions). The superfluid weight is proportional to the inverse square of
+the London penetration depth, so it is what a measurement of the magnetic
+penetration depth or of the kinetic inductance gives. pyqula computes it with
+the general multiband BdG formula of Phys. Rev. B **95**, 024515.
 
-The superfluid weight can also be split into two parts. The *conventional*
-part comes from the band velocities, and the *quantum-geometric* part from
-interband matrix elements. For an isolated flat band the second reduces to
-the integral of the quantum metric (Peotta and Törmä, Nat. Commun. **6**,
-8944): a flat band has no velocity, so all of its stiffness is geometric,
-which is why a flat band can superconduct at all. The split is offered on top
-of the full result rather than used as the definition, and it is refused with
-a `ValueError` when its assumptions (uniform onsite pairing and time-reversal
-symmetry) do not hold. A band touching that lands on the k-mesh, such as the
-Dirac point of the kagome and honeycomb lattices when `nk` is a multiple of 3,
-does not stop it: the split is an integral over the Brillouin zone, and that
-single k-point is sampled from the points around it. Let us compute both on
-a square lattice away from half filling
+The superfluid weight has two parts:
+
+- the conventional part, from the band velocities, the only one in a
+  single-band model.
+- the quantum-geometric part, from the interband matrix elements. For an
+  isolated flat band it is the integral of the quantum metric (Nat. Commun.
+  **6**, 8944). A flat band has no velocity, so all its stiffness is
+  geometric, and this is why a flat band can be superconducting at all.
+
+This split is only defined for uniform onsite pairing and with time-reversal
+symmetry; otherwise asking for it raises a `ValueError`, and only the total
+is available. We compute both parts for a square lattice away from half
+filling:
 
 ```python
 from pyqula import geometry
@@ -275,36 +263,51 @@ print(out["total"],out["conventional"],out["geometric"])
 print(h.get_bkt_temperature(nk=20)) # Nelson-Kosterlitz criterion
 ```
 
-`D` is the Cartesian tensor, isotropic on the square lattice, and the
-decomposition returns a dictionary whose `"geometric"` entry vanishes here:
-a single-band model has no other band to have matrix elements with, so all of
-its stiffness is conventional, and the geometric part only appears in a
-multiband model, a flat band above all.
+`D` is a $2\times2$ Cartesian tensor. On the square lattice it is isotropic,
+about $0.76$ on the diagonal. With `decompose=True` the result is a
+dictionary, and its `"geometric"` entry is zero here: a single band has no
+other band to couple to, so all its stiffness is conventional. The geometric
+part appears only in a multiband model, mostly for a flat band.
 
-The twist uses the full bond vector $\mathbf R + \mathbf r_j - \mathbf r_i$
-rather than the lattice vector $\mathbf R$ alone, and this matters. With the
-lattice vector alone $D_s$ comes out anisotropic on the honeycomb lattice,
-which C3 symmetry forbids, and it changes when the same crystal is described
-with a supercell. The full bond vector gives an isotropic, supercell-invariant
-answer. The two agree only for a cell with one orbital. `gauge="lattice"`
-selects the other convention, the one used by Peotta and Törmä, and
-`h.get_quantum_metric()` takes the same keyword with the same default (see
-"Quantum geometric tensor (multiorbital/multiband)"): at fixed $|\Delta|$ the superfluid weight genuinely
-depends on where the orbitals sit, see Huhtinen, Herzog-Arbeitman, Chew,
-Bernevig and Törmä, Phys. Rev. B **106**, 014518.
+The phase twist uses the full bond vector $\mathbf R + \mathbf r_j - \mathbf
+r_i$ between two orbitals, not only the lattice vector $\mathbf R$. This
+matters when the unit cell has more than one orbital. With the lattice vector
+alone, $D_s$ is anisotropic on the honeycomb lattice, which the $C_3$
+symmetry forbids, and it changes if we describe the same crystal with a
+supercell. With the full bond vector the result is isotropic and the same for
+any supercell. At fixed $|\Delta|$ the superfluid weight depends on where the
+orbitals sit (Phys. Rev. B **106**, 014518). `gauge="lattice"` uses the
+lattice vector only, which is the convention of Nat. Commun. **6**, 8944;
+`h.get_quantum_metric()` has the same keyword with the same default (see
+[Quantum geometry](quantum-geometry.md)).
 
-In two dimensions `h.get_bkt_temperature()` solves the Nelson-Kosterlitz
-criterion $T_{\rm BKT} = (\pi/8) D_s(T_{\rm BKT})$ self-consistently by
-bisection, at frozen $|\Delta|$ (there is no $\Delta(T)$ feedback, so it is
-an upper estimate); for the square lattice above it comes out at $0.15$ in
-units of the hopping. Setting `mode="finite_difference"` differentiates the
-grand potential numerically instead: much slower, but assumption-free. One
-caveat to know in advance: at $T=0$ with a *gapless normal state* and zero or
-tiny pairing, the paramagnetic and diamagnetic contributions cancel through a
-$-\partial f/\partial E$ that collapses to a delta function, which a finite
-k-mesh cannot resolve, so $D_s$ comes out at the normal state's Drude weight
-rather than zero; use a temperature the mesh resolves when checking that a
-marginal state has no stiffness. See `examples/2d/superfluid_weight/main.py`
-for a runnable version, and
+In two dimensions the superfluid weight gives the
+Berezinskii-Kosterlitz-Thouless (BKT) temperature, through the
+Nelson-Kosterlitz criterion
+
+$$
+T_{\rm BKT} = \frac{\pi}{8} D_s(T_{\rm BKT}) ,
+$$
+
+which `h.get_bkt_temperature()` solves self-consistently in $T$. For the
+square lattice above it gives $T_{\rm BKT}\approx0.15$, in units of the
+hopping. $|\Delta|$ is kept fixed and does not decrease with temperature, so
+this is an upper bound.
+
+Two keywords and one caveat:
+
+- `mode="finite_difference"`: computes the second derivative of $\Omega$
+  numerically. It is much slower, but it does not use the assumptions of the
+  analytic formula, so it is a good check.
+- `T`: the temperature, in units of the hopping.
+
+At $T=0$, for a normal state without a gap and zero or very small pairing,
+the diamagnetic and paramagnetic parts should cancel. This cancellation
+comes from a term $-\partial f/\partial E$ that becomes a delta function at
+$T=0$, and a finite k-mesh cannot resolve it. So $D_s$ comes out equal to the
+Drude weight of the normal state instead of zero. To check that a state has no
+stiffness, use a temperature that the k-mesh resolves.
+
+See `examples/2d/superfluid_weight/main.py` for a runnable script, and
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/15_superfluid_weight.ipynb`
 for an executed notebook.

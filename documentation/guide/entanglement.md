@@ -1,42 +1,57 @@
 # Entanglement
 
+In this page we compute the entanglement entropy of a region of a ground
+state, with `h.get_entanglement_entropy()`, and its entanglement spectrum,
+with `h.get_entanglement_spectrum()`.
+
 ## Entanglement entropy and entanglement spectrum
 
-We will now see how to compute the entanglement entropy of a region of a ground state, and
-its entanglement spectrum, with `h.get_entanglement_entropy()` and
-`h.get_entanglement_spectrum()`. The ground state of any non-interacting or mean-field
-Hamiltonian is a Slater determinant. For a Slater determinant the reduced density matrix of a
-spatial region $A$ is the exponential of a free-fermion operator, so it is completely fixed
-by the one-particle correlations inside $A$. The whole calculation therefore reduces to
-diagonalizing the restricted correlation matrix $C_{ij} = \langle c_i^\dagger c_j\rangle$
-($i,j \in A$). This gives occupations $\zeta_n \in [0,1]$, from which
+The ground state of a non-interacting or mean-field Hamiltonian is a Slater
+determinant. For a Slater determinant, the reduced density matrix of a region
+$A$ is the exponential of a single-particle operator, so it is fixed by the
+correlations inside $A$ only. We compute the correlation matrix restricted to
+the region,
+
+$$
+C_{ij} = \langle c_i^\dagger c_j\rangle, \qquad i,j \in A ,
+$$
+
+and diagonalize it. Its eigenvalues $\zeta_n$ are between 0 and 1, and they
+give
 
 $$
 S = -\sum_n \left[ \zeta_n \ln \zeta_n + (1-\zeta_n)\ln(1-\zeta_n)\right],
 \qquad
-\xi_n = \ln\frac{1-\zeta_n}{\zeta_n}
+\xi_n = \ln\frac{1-\zeta_n}{\zeta_n} ,
 $$
 
-are the entanglement entropy and the single-particle entanglement spectrum. An occupation
-exactly at 0 or 1 contributes nothing to the entropy, and an occupation at $1/2$ contributes
-the most. This is the correlation-matrix method of Peschel: only a matrix the size of the
-region is ever diagonalized, never the exponentially large reduced density matrix.
+the entanglement entropy $S$ and the single-particle entanglement spectrum
+$\xi_n$. An eigenvalue at 0 or 1 is a state fully outside or fully inside the
+region, and it does not contribute to the entropy. An eigenvalue at $1/2$,
+$\xi_n=0$, is a state shared equally between the region and the rest, and it
+contributes the most, $\ln 2$. Only a matrix of the size of the region is
+diagonalized, never the reduced density matrix itself, so large regions are
+cheap.
 
-The region is given as a list of site indices, a boolean mask, a callable on positions (the
-same convention as `sculpt`), or simply a fraction of the cells. Spin, sublattice and Nambu
-components are treated as extra orbitals of a site, so a region is always specified in terms
-of *sites*. A periodic Hamiltonian is first folded into a ring of `nsuper` unit cells, so
-region $A$ has **two** entanglement boundaries rather than one. Its entropy is therefore
-twice that of a single cut, which matters when comparing with a formula written for one
-boundary.
+The region is given as a list of site indices, a boolean mask, a function of
+the position, or a fraction of the cells. Spin, sublattice and Nambu
+components are orbitals of a site, so a region is always a set of sites. A
+periodic Hamiltonian is first folded into a ring of `nsuper` unit cells, so
+the region $A$ has two boundaries, not one. Its entropy is then twice the
+entropy of a single cut. Keep this in mind when comparing with a formula
+written for one boundary.
 
-The entanglement spectrum is where this becomes a topological probe. For a 2d Hamiltonian the
-momentum parallel to the cut remains a good quantum number, and $\xi_n(k_\parallel)$ is the
-Li-Haldane entanglement spectrum. For a Chern insulator its in-gap branches flow across
-$\xi=0$ and count $2|C|$ ($|C|$ chiral modes per boundary, two boundaries), mirroring the edge
-spectrum of the same model, while the entanglement spectrum of a trivial insulator stays
-gapped around $\xi=0$. This is entirely a bulk ground-state calculation: no ribbon and no
-open boundary is ever constructed, and the edge states are read off from the bulk alone
+### The entanglement spectrum as a topological probe
+
+In a two-dimensional system cut along one direction, the momentum
+$k_\parallel$ parallel to the cut is still a good quantum number, and
+$\xi_n(k_\parallel)$ is the Li-Haldane entanglement spectrum. For a Chern
+insulator, it has branches that cross $\xi=0$ inside its gap, $2|C|$ of them:
+$|C|$ chiral modes for each of the two boundaries. This is the same as the
+edge spectrum of the model. For a trivial insulator, the entanglement
+spectrum has a gap around $\xi=0$. This is a calculation of the bulk ground
+state only: no ribbon and no open boundary is built, and the edge states are
+read from the bulk.
 
 ```python
 from pyqula import geometry
@@ -52,35 +67,54 @@ print(h.get_chern(nk=20)) # 1.0
 print(h.get_entanglement_entropy(nsuper=10,nk=20))
 ```
 
-`ks` are the `nk` parallel momenta across the Brillouin zone, and `xis` has one row per
-momentum and one column per orbital of the region, ten here (half of a ring of ten cells,
-with two sites per cell). Plotting every column against `ks` shows the levels of the Chern
-insulator crossing $\xi=0$; the same plot for the honeycomb lattice gapped by a sublattice
-imbalance shows a spectrum that never comes close to zero. The entropy is per
-parallel unit cell, averaged over `nk` momenta, and counts both boundaries of the region.
+`ks` are the `nk` parallel momenta across the Brillouin zone. `xis` has one
+row per momentum and one column per orbital of the region, ten here (half of
+a ring of ten cells, with two sites per cell). If you plot every column
+against `ks`, you see the levels of the Chern insulator crossing $\xi=0$. The
+same plot for the honeycomb lattice gapped by a sublattice imbalance shows a
+spectrum that never comes close to zero. The entropy is given per parallel
+unit cell, averaged over `nk` momenta, and it counts both boundaries of the
+region.
 
-Optional arguments
+Keywords:
 
-- region: the region $A$, in any of the four forms above; `None` takes half of the system
-- nsuper: number of unit cells in the ring that is cut, for a periodic Hamiltonian
-- direction: lattice direction the cut is normal to, by default the last periodic one
-- kpar: a single parallel momentum; `None` on a 2d Hamiltonian sweeps or averages over `nk` of them
-- nk: number of parallel momenta
-- fermi: occupied states are those with $E<$ `fermi`, zero by default
+- `region`: the region $A$, in one of the four forms above. `None` takes half
+  of the system.
+- `nsuper`: number of unit cells of the ring, for a periodic Hamiltonian.
+- `direction`: the lattice direction normal to the cut, by default the last
+  periodic one.
+- `kpar`: a single parallel momentum. With `None`, a two-dimensional
+  Hamiltonian is swept or averaged over `nk` momenta.
+- `nk`: number of parallel momenta.
+- `fermi`: the states with $E<$ `fermi` are occupied, zero by default.
 
-Nambu/BdG Hamiltonians are handled with the full anomalous correlation matrix, whose basis
-doubling is divided out; `fermi` must stay at zero for them, since their chemical potential
-is already inside the Hamiltonian. Occupation is a hard $T=0$ cut. A level sitting exactly at
-the Fermi energy makes the ground state degenerate, so the routine raises rather than
-silently returning the entropy of an arbitrarily chosen determinant. On a ring this happens
-for particular values of `nsuper` (a half-filled chain with `nsuper` divisible by four, say),
-and changing the ring size by one is the remedy. The normalization is pinned by the critical
-chain, which reproduces the $c=1$ conformal-field-theory law
-$S = (c/3)\ln[(L/\pi)\sin(\pi l/L)]$ for a region of $l$ cells in a ring of $L$. A gapped 2d
-insulator obeys the area law, and the Li-Haldane counting matches the Chern number. See
-`examples/1d/entanglement_entropy_chain/main.py` (the central charge from a fit of the
-entropy against the region size) and `examples/2d/entanglement_spectrum_haldane/main.py` (the
-spectrum of the Haldane model next to that of a trivial insulator) for runnable versions
-ending in the plots, and
-`jupyter-notebooks/functionalities/topological_characterization/12_entanglement.ipynb`
-for an executed notebook.
+### Remarks
+
+For a Bogoliubov-de Gennes Hamiltonian, the correlation matrix includes the
+anomalous correlations $\langle c_i c_j\rangle$, and the doubling of the Nambu
+basis is divided out. `fermi` must stay at zero in this case, because the
+chemical potential is already in the Hamiltonian.
+
+The occupation is taken at zero temperature. A level exactly at the Fermi
+energy makes the ground state degenerate, and then the entropy depends on
+which state is chosen, so the call raises an error. On a ring this happens
+for some values of `nsuper`, for example for a half-filled chain with
+`nsuper` divisible by four. Changing the size of the ring by one solves it.
+
+As a reference, the critical chain gives the conformal field theory result
+with central charge $c=1$,
+
+$$
+S = \frac{c}{3}\ln\left[\frac{L}{\pi}\sin\frac{\pi l}{L}\right] ,
+$$
+
+for a region of $l$ cells in a ring of $L$ cells. A gapped two-dimensional
+insulator follows the area law instead, the entropy proportional to the
+length of the boundary.
+
+See `examples/1d/entanglement_entropy_chain/main.py` (the central charge from
+a fit of the entropy against the size of the region) and
+`examples/2d/entanglement_spectrum_haldane/main.py` (the spectrum of the
+Haldane model next to the one of a trivial insulator) for scripts that make
+the plots, and
+`jupyter-notebooks/functionalities/topological_characterization/12_entanglement.ipynb`.

@@ -1,73 +1,102 @@
 # Quantum geometry and Berry curvature
 
-## Quantum geometric tensor (multiorbital/multiband)
+The Berry curvature is only one part of the geometry of the Bloch states. In
+this page we compute the full quantum geometric tensor, whose other part is
+the quantum metric, and then we resolve the Berry curvature in energy and in
+real space.
 
-The Berry curvature is only half of the geometry of the Bloch states, and we will now see how
-to compute the whole of it, the quantum geometric tensor, with
-`h.get_quantum_geometric_tensor()`. Its antisymmetric part is the Berry curvature, and its
-symmetric part is the quantum metric, a measure of the distance between neighboring Bloch
-states, which is the quantity that matters in a flat band, where the curvature alone says
-nothing about how spread out the states are. For a chosen band subspace $S$ (e.g. the occupied
-bands) it is
+## Quantum geometric tensor
+
+The quantum geometric tensor is computed with
+`h.get_quantum_geometric_tensor()`. Its antisymmetric part is the Berry
+curvature. Its symmetric part is the quantum metric, which measures the
+distance between neighboring Bloch states. In a flat band the metric is the
+important quantity: it says how spread the states are, and it controls, for
+example, the superfluid weight of a flat-band superconductor (see
+[Superconductivity](superconductivity.md)).
+
+For a chosen subspace $S$ of bands, for example the occupied bands, the
+tensor is
 
 $$
 Q_{ij}^{mn}(\mathbf k) = \sum_{l \notin S}
 \frac{\langle u_m|\partial_{k_i} H|u_l\rangle \langle u_l|\partial_{k_j} H|u_n\rangle}
-{(E_m-E_l)(E_n-E_l)}, \qquad m,n \in S
+{(E_m-E_l)(E_n-E_l)}, \qquad m,n \in S ,
 $$
 
-where $m$ and $n$ run over the bands of the subspace and $l$ over the bands outside it, with
-the quantum metric $g_{ij}^{mn} = \mathrm{Re}\,Q_{ij}^{mn}$ (symmetric part) and Berry
-curvature $\Omega_{ij}^{mn} = -2\,\mathrm{Im}\,Q_{ij}^{mn}$ (antisymmetric part) recovered in
-the band-trace ("Abelian") case. What about the tensor resolved per pair of bands, the
-"non-Abelian" one? Note that $Q_{ij}^{mn}$ is not gauge independent: rotating the states of
-$S$ among themselves, which is exactly the freedom a diagonalization has inside a degenerate
-multiplet, rotates the tensor too, so its individual entries are not physical, only its trace
-and its invariants are. For that reason `non_abelian=True` returns it in the orbital basis,
+where $m$ and $n$ are bands of the subspace, $l$ runs over the bands outside
+it, $|u\rangle$ are the Bloch states and $E$ their energies. The quantum
+metric and the Berry curvature are
+
+$$
+g_{ij} = \mathrm{Re}\,\sum_{m\in S} Q_{ij}^{mm}, \qquad
+\Omega_{ij} = -2\,\mathrm{Im}\,\sum_{m\in S} Q_{ij}^{mm} .
+$$
+
+Only states outside $S$ appear in the energy denominators. So the formula is
+well defined when $S$ contains degenerate bands: a spin-degenerate pair, the
+Kramers pairs of a model with inversion and time-reversal symmetry, or
+several orbitals that meet at a high-symmetry point. The only case that
+fails is a degeneracy between $S$ and a band outside it, and then the call
+raises a `ValueError`. The derivative $\partial_{k_i} H$ is computed
+analytically from the hoppings, without finite differences.
+
+### The tensor of each pair of bands
+
+The individual entries $Q_{ij}^{mn}$ are not physical. A rotation of the
+states of $S$ among themselves, which is a free choice inside a degenerate
+multiplet, also rotates the tensor. Only its trace and its invariants are
+physical. For this reason `non_abelian=True` returns the tensor in the
+orbital basis,
 
 $$
 Q_{ij}(\mathbf k) = \sum_{m,n\in S} |u_m\rangle\, Q_{ij}^{mn}\, \langle u_n|
 = P\,\partial_{k_i}P\,\partial_{k_j}P\,P ,
 $$
 
-with $P$ the projector on $S$, meaning that it depends on the subspace alone and not on the
-basis chosen inside it; its trace is the Abelian tensor, and the band-resolved tensor in any
-basis $|v_m\rangle$ of $S$ you choose is $\langle v_m|Q_{ij}|v_n\rangle$.
+where $P$ is the projector on $S$. This depends only on the subspace, not on
+the basis chosen inside it. Its trace is the tensor above, and in any basis
+$|v_m\rangle$ of $S$ the tensor of each pair of bands is
+$\langle v_m|Q_{ij}|v_n\rangle$.
 
-What makes this form suitable for a genuinely multiorbital model is that only states *outside* $S$ enter the energy denominators, so it
-stays well defined when $S$ contains an exactly or nearly degenerate multiplet of bands, an
-exactly spin-degenerate pair, say, the Kramers pairs of a model with inversion and time-reversal
-symmetry, or several orbitals meeting at a high-symmetry point, which an ordinary single-band
-formula cannot handle. The derivative $\partial_{k_i} H$ is evaluated analytically from the
-hoppings, with no finite-difference error, with $k$ in the same reduced (dimensionless,
-period-1) coordinates as the rest of pyqula's k-space code, $\mathbf k = \sum_i k_i \mathbf b_i$
-with $\mathbf b_i$ the reciprocal lattice vectors, so the tensor in Cartesian momenta, the one
-to compare with a continuum calculation, is $J Q J^T$ with $J_{\alpha i} = (\mathbf a_i)_\alpha/2\pi$,
-and this is what `coordinates="cartesian"` returns, a $3\times3$ tensor in $x$, $y$ and $z$
-whatever the dimensionality. Only this one has the symmetry of the crystal, since the reciprocal
-lattice vectors are not orthogonal in general: on the honeycomb lattice the trace of the reduced
-metric is not $g_{xx}+g_{yy}$, and it differs between the three M points.
-`occ_idxs` defaults to the bands with $E<0$, the same convention `h.get_chern()` uses, so it
-tracks `h.shift_fermi(...)`.
+### Coordinates
 
-Where do the orbitals sit inside the unit cell? The band structure does not care, but the
-Bloch states do, and so does their geometry. Writing the Bloch Hamiltonian with the phase
-$e^{i\mathbf k\cdot\mathbf R}$ of the lattice vector alone, as if every orbital sat at the
-origin of its cell, or with the full bond vector, $e^{i\mathbf k\cdot(\mathbf R+\mathbf r_j-\mathbf r_i)}$,
-gives the same bands and the same Chern number, since the two differ by a $\mathbf k$-dependent
-phase on each orbital, but a different Berry curvature and quantum metric at each $\mathbf k$ and
-a different Brillouin-zone integral of the metric. Only the second is the geometry of the
-crystal, meaning that it respects its point group (on the honeycomb lattice with a Haldane flux
-and a sublattice imbalance the Berry curvature is the same at three $\mathbf k$-points related
-by a $C_3$ rotation, while the first convention even changes its sign between them) and that it
-does not depend on how the crystal is divided into unit cells: the Brillouin-zone average of
-$\mathrm{Tr}\,g$, which is the gauge-invariant spread of the Wannier functions of the subspace,
-doubles exactly when the cell is doubled. `gauge="atomic"`, the default, places every orbital at
-its position in the geometry, and `gauge="lattice"` drops the positions, which is the
-convention of part of the work on flat-band superconductivity and the one to use to reproduce
-numbers derived in it; "Superfluid weight and BKT temperature" takes the same keyword, and this
-dependence on the orbital positions is discussed by Simon and Rudner, Phys. Rev. B **102**,
-165148.
+The momenta are in reduced coordinates, $\mathbf k = \sum_i k_i \mathbf b_i$,
+with $\mathbf b_i$ the reciprocal lattice vectors and $k_i$ of period 1, as
+everywhere in pyqula. The tensor in Cartesian momenta, the one to compare with
+a continuum calculation, is $J Q J^T$ with
+$J_{\alpha i} = (\mathbf a_i)_\alpha/2\pi$. `coordinates="cartesian"` returns
+it, as a $3\times3$ tensor in $x$, $y$ and $z$. Only this tensor has the
+symmetry of the crystal, because the reciprocal lattice vectors are in
+general not orthogonal. For example, on the honeycomb lattice the trace of
+the reduced metric is not $g_{xx}+g_{yy}$, and it is different at the three
+M points.
+
+### Positions of the orbitals
+
+The band structure does not depend on where the orbitals are inside the unit
+cell, but the Bloch states do, and so does their geometry. We can write the
+Bloch Hamiltonian with the phase $e^{i\mathbf k\cdot\mathbf R}$ of the lattice
+vector only, as if every orbital were at the origin of its cell, or with the
+full bond vector, $e^{i\mathbf k\cdot(\mathbf R+\mathbf r_j-\mathbf r_i)}$.
+The two choices give the same bands and the same Chern number, but a
+different Berry curvature and quantum metric at each $\mathbf k$, and a
+different Brillouin-zone integral of the metric. Only the second one is the
+geometry of the crystal. It respects the point group: on the honeycomb lattice
+with a Haldane flux and a sublattice imbalance, the Berry curvature is the
+same at three $\mathbf k$-points related by a $C_3$ rotation, while with the
+first choice it even changes sign between them. And it does not depend on the
+choice of unit cell: the Brillouin-zone average of $\mathrm{Tr}\,g$, which is
+the gauge-invariant spread of the Wannier functions of the subspace, doubles
+exactly when the cell is doubled.
+
+- `gauge="atomic"` (default): every orbital at its position in the geometry.
+- `gauge="lattice"`: every orbital at the origin of its cell. This is the
+  convention of part of the work on flat-band superconductivity, and the one
+  to use to reproduce numbers from it. The dependence on the orbital
+  positions is discussed by Simon and Rudner, Phys. Rev. B **102**, 165148.
+
+### Code
 
 ```python
 from pyqula import geometry
@@ -90,42 +119,46 @@ inds,gpath,omegapath = topology.quantum_geometric_tensor_path(h,occ_idxs=[0,1])
 C = topology.chern_from_qgt(h,nk=20,occ_idxs=[0,1])
 ```
 
-`Q` is a complex $2\times2$ array in two dimensions, one entry per pair of directions, and the
-metric is its real part; with `non_abelian=True` it is a $2\times2\times4\times4$ array, one
-$4\times4$ matrix in the spin-orbital basis per pair of directions, and since there is no
-spin-orbit coupling here it is block diagonal in spin, the trace over the spin-up orbitals
-being the contribution of the spin-up electrons. Along the k-path the function
-returns the position along the path and the metric and the curvature at each point, arrays
-with one $2\times2$ tensor per k-point, and integrating the curvature part over the Brillouin
-zone reproduces `h.get_chern()`, here $C=2$ for the spin-degenerate pair of occupied bands. A
-degeneracy between the chosen subspace and the bands outside it is the one thing the formula
-cannot handle, and it raises a `ValueError` rather than dividing by a vanishing energy
-difference. The same functions work in one and three dimensions, where the tensor has one and
-nine components, and `topology.quantum_geometric_tensor_mesh(h,nk=...)` returns it on a uniform
-k-mesh in any of them.
+In two dimensions `Q` is a complex $2\times2$ array, one entry per pair of
+directions, and the metric is its real part. With `non_abelian=True` it is a
+$2\times2\times4\times4$ array: one $4\times4$ matrix in the spin-orbital basis
+for each pair of directions. There is no spin-orbit coupling here, so this
+matrix is block diagonal in spin, and the trace over the spin-up orbitals is
+the contribution of the spin-up electrons. Along the k-path the function
+returns the position along the path, and the metric and the curvature at each
+point, one $2\times2$ tensor per k-point. The integral of the curvature over
+the Brillouin zone gives the Chern number, here $C=2$ for the two
+spin-degenerate occupied bands, the same as `h.get_chern()`.
 
-See `examples/2d/quantum_geometric_tensor/main.py` for a runnable version of the spin-resolved
-tensor above, `examples/2d/quantum_geometry/main.py` for the Berry curvature and the metric of
-the occupied bands along a k-path, and
-`jupyter-notebooks/functionalities/topological_characterization/06_quantum_geometric_tensor.ipynb`
-for an executed notebook.
+- `occ_idxs`: the indices of the bands in $S$. By default, the bands with
+  $E<0$, as in `h.get_chern()`, so it follows `h.shift_fermi()`.
+- `k`: the k-point, in reduced coordinates.
+- `non_abelian`, `coordinates`, `gauge`: as explained above.
 
-## Berry curvature density in frequency space
+The same functions work in one and three dimensions, where the tensor has one
+and nine components, and `topology.quantum_geometric_tensor_mesh(h,nk=...)`
+returns it on a uniform k-mesh.
 
-The Chern number is a single integer for the whole set of occupied bands; we will now see how
-to resolve where in energy it comes from, with `topology.chern_density()`. The Berry curvature
-in frequency space is defined as 
+See `examples/2d/quantum_geometric_tensor/main.py` for the spin-resolved
+tensor above, `examples/2d/quantum_geometry/main.py` for the Berry curvature
+and the metric of the occupied bands along a k-path, and
+`jupyter-notebooks/functionalities/topological_characterization/06_quantum_geometric_tensor.ipynb`.
+
+## Berry curvature density in energy
+
+The Chern number is one integer for all the occupied bands. To see from which
+energies it comes, we use `topology.chern_density()`. The Berry curvature of
+the occupied states is written as an integral over energy,
 
 $$
-\Omega (\mathbf k) = \int_{-\infty}^{\epsilon_F} \Xi (\mathbf k,\omega) d\omega
+\Omega (\mathbf k) = \int_{-\infty}^{\epsilon_F} \Xi (\mathbf k,\omega)\, d\omega ,
 $$
 
-where $\Omega$ is the Berry curvature of the occupied bands and $\Xi (\mathbf k,\omega)$
-is the energy-resolved Berry curvature, meaning that $\Xi$ says how much curvature the states
-at each energy carry, and the Chern number is its integral up to the Fermi energy.
-`topology.chern_density` integrates $\Xi(\mathbf k,\omega)$ over the whole Brillouin zone at a
-set of energies, giving the frequency-resolved Berry-curvature density and its cumulative
-(energy-integrated) sum
+where $\Xi (\mathbf k,\omega)$ is the energy-resolved Berry curvature: how much
+curvature the states at energy $\omega$ carry. It is built from the Green's
+function with a broadening `delta`. `topology.chern_density()` integrates
+$\Xi(\mathbf k,\omega)$ over the Brillouin zone at a set of energies, and also
+returns its cumulative integral in energy.
 
 ```python
 from pyqula import geometry
@@ -137,49 +170,56 @@ h.add_haldane(0.05) # Add Haldane coupling
 (es,cs,csi) = topology.chern_density(h,nk=10,es=np.linspace(-1.0,1.0,40))
 ```
 
-`es` are the energies, `cs` the Berry-curvature density at each energy, and `csi` its
-cumulative integral. In the gap `csi` should plateau at a value related to the total Chern
-number of the occupied bands, and integrated over all the bands it returns to zero, since the
-Berry curvatures of all the bands of a Hamiltonian cancel. This estimator is numerically
-delicate: it needs a fine enough `nk` and a large enough `delta` to avoid spurious peaks near
-nearly degenerate k-points, and its overall sign and normalization are not guaranteed to
-match `h.get_chern()` (for the snippet above the plateau at zero energy sits near $4$, twice
-the $C=2$ of the Chern number section). Read it as a qualitative profile in frequency, and
-check any number it gives against `h.get_chern()`.
+`es` are the energies, `cs` the Berry curvature density at each energy, and
+`csi` its cumulative integral. Inside the gap `csi` has a plateau, and when
+the integral goes over all the bands it comes back to zero, because the Berry
+curvatures of all the bands of a Hamiltonian add up to zero. Read this
+quantity as a qualitative profile in energy, not as a number. Its
+normalization is not the one of `h.get_chern()`: for the snippet above the
+plateau at zero energy is near $4$, twice the $C=2$ of
+`h.get_chern()`. It also needs a fine enough `nk` and a large enough `delta`,
+otherwise it shows spurious peaks near k-points where bands come close.
 
-Optional arguments
+- `nk`: number of k-points per direction of the mesh.
+- `es`: energies at which the density is computed.
+- `delta`: broadening of the Green's function.
+- `operator`: weight the curvature with an operator, as in `h.get_chern()`.
+- `write`: if `True`, also write `CHERN_DENSITY.OUT` and
+  `CHERN_DENSITY_INTEGRATED.OUT`.
 
-- nk: number of k-points per direction of the mesh
-- es: array of energies at which the density is evaluated
-- delta: broadening of the Green's function the density is built from
-- operator: restrict the curvature to a subspace, as for `h.get_chern()`
-- write: if `True`, also write `CHERN_DENSITY.OUT` and `CHERN_DENSITY_INTEGRATED.OUT`
-
-The k-resolved counterpart at a single energy, $\Xi(\mathbf k,\omega)$ over a full k-mesh, can
-be obtained with `topology.dOmega_dE_kmap(h,nk=40)`, which writes the map to
+The map of $\Xi(\mathbf k,\omega)$ over the Brillouin zone at one energy is
+given by `topology.dOmega_dE_kmap(h,nk=40)`, which writes it to
 `BERRY_DENSITY_KMAP.OUT`. See `examples/2d/berry_density/main.py`,
-`examples/2d/chern_density/main.py` and `examples/2d/berry_density_kmap/main.py` for runnable
-versions, and
-`jupyter-notebooks/functionalities/topological_characterization/03_frequency_resolved_topological_density.ipynb`
-for an executed notebook.
+`examples/2d/chern_density/main.py` and `examples/2d/berry_density_kmap/main.py`,
+and
+`jupyter-notebooks/functionalities/topological_characterization/03_frequency_resolved_topological_density.ipynb`.
 
-## Berry curvature density in real-space
+## Berry curvature density in real space
 
-A Chern number needs a Brillouin zone, but the Berry curvature can also be resolved in real
-space, so that one sees where in the sample the topological flux is carried; this is what
-makes it usable on an island, a disordered sample or a supercell too large for a k-mesh. We
-will now see how to compute it with `topology.real_space_chern()`. The Berry curvature in
-real-space is defined as 
+A Chern number needs a Brillouin zone. The Berry curvature can also be
+resolved in real space, to see where in the sample the topological flux is.
+This also works for an island, a disordered sample, or a supercell too large
+for a k-mesh. It is computed with `topology.real_space_chern()`. The idea is
 
 $$
-\Omega (\mathbf k) = \int \Gamma (\mathbf k,\mathbf r) d^2 \mathbf r
+\Omega (\mathbf k) = \int \Gamma (\mathbf k,\mathbf r)\, d^2 \mathbf r ,
 $$
 
-where $\Omega$ is the Berry curvature of the occupied bands and $\Gamma (\mathbf k,\mathbf r)$
-is the spatially-resolved Berry curvature. Note that this object is meaningful for periodic
-systems with very large unit cells. In pyqula, the real-space Berry curvature is obtained from
-a Bianco-Resta-type commutator of the position operators and the projector on the occupied
-states, evaluated on a large real-space (0-dimensional) supercell or island
+where $\Gamma (\mathbf k,\mathbf r)$ is the Berry curvature resolved in
+position. In practice, for a finite system, pyqula computes a local Chern
+marker of the Bianco-Resta type,
+
+$$
+C(\mathbf r) = \frac{2\pi}{A_{\mathbf r}}\,
+\mathrm{Im}\,\langle \mathbf r|\, [PxP,\, PyP] \,|\mathbf r\rangle ,
+$$
+
+with $P$ the projector on the occupied states, $x$ and $y$ the position
+operators, the diagonal element summed over the orbitals of the site
+$\mathbf r$, and $A_{\mathbf r}$ the area of the site. The occupied states
+are those below zero energy, so a Hamiltonian whose gap is not at zero must
+be shifted first, for example with `h.set_filling(0.5)`. Deep in the bulk
+this local quantity is the Chern number.
 
 ```python
 from pyqula import islands
@@ -190,10 +230,12 @@ h.add_haldane(0.05) # Add Haldane coupling
 (r,c) = topology.real_space_chern(h) # spatially-resolved Berry curvature
 ```
 
-`r` are the site positions and `c` the local Berry-curvature marker at each site (the call
-also writes `REAL_SPACE_CHERN.OUT`, one value per site, ready to be plotted as a map over the
-island). The routine takes a finite Hamiltonian, and a periodic one raises a `ValueError`
-naming the requirement: to use it on a periodic system, build a large supercell and open it
-first. See `examples/0d/real_space_chern/main.py` for a runnable version and
-`jupyter-notebooks/functionalities/topological_characterization/04_spatially_resolved_topological_flux.ipynb`
-for an executed notebook.
+`r` are the positions of the sites and `c` the local marker at each site. The
+call also writes `REAL_SPACE_CHERN.OUT`, one value per site, to plot as a map
+over the island. The Hamiltonian must be finite; a periodic one raises a
+`ValueError`. For a periodic system, build a large supercell and make it
+finite first. How to read the marker, and how to get the Chern number from
+it, is explained in [Topology in real space](real-space-topology.md).
+
+See `examples/0d/real_space_chern/main.py` and
+`jupyter-notebooks/functionalities/topological_characterization/04_spatially_resolved_topological_flux.ipynb`.

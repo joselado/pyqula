@@ -33,18 +33,27 @@ here.
   routine requires, never a bare `raise`; a string-selected option lists its accepted
   values, derived from a registry rather than a hand-kept second list; Hilbert-space
   requirements go through the shared guards in `check.py`.
-- `user-guide-voice`, before writing a single sentence of `documentation/user_guide.md`
-  and before touching the FUNCTIONALITIES list in `README.md`. Prose written without it
+- `user-guide-voice`, before writing a single sentence of the user guide, the MkDocs pages
+  under `documentation/guide/` published at https://joselado.github.io/pyqula/, and
+  before touching the FUNCTIONALITIES list in `README.md`. Prose written without it
   reads like a language model wrote it, which is the failure it exists to prevent.
-- `refresh-docs`, when asked to refresh or rebuild the docs or the PDF guide, after
-  landing a feature or a batch of fixes, and before a release. It recounts the suite,
-  propagates every number that moved, re-runs `tests/documentation` and rebuilds the PDF.
+- `refresh-docs`, when asked to refresh or rebuild the docs, the website or the PDF
+  guide, after landing a feature or a batch of fixes, and before a release. It recounts
+  the suite, propagates every number that moved, re-runs `tests/documentation` and
+  builds the website and the PDF locally.
 - `gpu-backend`, before any GPU, jax or device work. Each tier of the porting plan wants
   the maintainer's explicit sign-off before it starts: propose, do not begin.
 - `wannierization`, before working under `src/pyqula/wanniertk/` or calling
   `h.get_wannier_hamiltonian()`.
 
 ## How to work here
+
+- **Every text written for the users is in one locked style**: the user-guide pages,
+  `README.md`, the notebook prose and the physics comments of `examples/`. Simple English as
+  a condensed matter physicist who is not a native speaker writes it: short sentences, the
+  formula and the physical meaning before the code, no internals.
+  `documentation/VOICE.md` section 0 defines it and `documentation/guide/hamiltonian.md` is
+  the model page; load `user-guide-voice` before writing any of these texts.
 
 - Prioritize readability over cleverness, and ask before an architectural change.
 - When a physics or numerical derivation (a mean-field, topology or Green's-function

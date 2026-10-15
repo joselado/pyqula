@@ -1,33 +1,27 @@
-# Setting up a Hamiltonian
+# Building a Hamiltonian
 
-Let us start with the simplest tight-binding model there is, a one-dimensional chain with
-hopping between first neighbors, and see how its band structure is computed. Everything else
-in this guide is built the same way: a geometry, the Hamiltonian generated from it, terms
-added to that Hamiltonian, and a quantity computed from the result. In this chapter we
-generate the Hamiltonian and add the first few terms to it, longer-range hoppings, an onsite
-energy, a Zeeman field, an orbital magnetic field and a filling; the observables come in the
-next chapter.
+Every calculation in pyqula follows the same steps. We build a geometry, we
+generate a tight-binding Hamiltonian from it, we add terms to this
+Hamiltonian, and we compute a quantity from it. In this page we see the
+first two steps, and the simplest terms: longer-range hopping, an onsite
+energy, a Zeeman field, an orbital magnetic field and a filling.
 
-The Hamiltonian of a one-dimensional tight-binding chain takes the form
+## The first-neighbor chain
 
-$$H = \sum_n c^\dagger_n c_{n+1} + h.c.$$
+The simplest tight-binding model is a one-dimensional chain with hopping
+between first neighbors,
 
-where $c^\dagger_n$ creates an electron at site $n$, so that each term moves an electron from
-site $n+1$ to site $n$ and its hermitian conjugate moves it back. The hopping is the unit of
-energy, $t=1$, and the distance between sites is the unit of length. This model can be
-diagonalized analytically, giving rise to a diagonal Hamiltonian of the form
+$$H = t\sum_n \left( c^\dagger_n c_{n+1} + c^\dagger_{n+1} c_n \right),$$
 
-$$
-H = \sum_k \epsilon_k \Psi^\dagger_k \Psi_k
-$$
+where $c^\dagger_n$ creates an electron at site $n$. The term
+$c^\dagger_n c_{n+1}$ moves an electron from site $n+1$ to site $n$, and
+the second term moves it back. In pyqula the hopping is the unit of energy,
+$t=1$, and the distance between first neighbors is the unit of length. The
+Hamiltonian is diagonal in momentum,
 
-where the energy-momentum dispersion takes the form
+$$H = \sum_k \epsilon_k\, c^\dagger_k c_k, \qquad \epsilon_k = 2t\cos k,$$
 
-$$
-\epsilon_k = 2\cos{k}
-$$
-
-With the pyqula library, the previous band structure can be computed as
+so the chain has a single band of width $4t$. With pyqula:
 
 ```python
 from pyqula import geometry
@@ -36,36 +30,37 @@ h = g.get_hamiltonian() # generate the Hamiltonian
 (k,e) = h.get_bands() # compute band structure
 ```
 
-The geometry holds the positions of the sites and the lattice vector, the Hamiltonian is
-generated from it with first-neighbor hopping, and `h.get_bands()` returns the k-points along
-the path and the energies at each of them, in this case the cosine band above. The
-Hamiltonian is spinful by default, meaning that every energy appears twice, once per spin; a
-spinless one is generated with `g.get_hamiltonian(has_spin=False)`. The methods that add a
-term to a Hamiltonian, all of them named `add_something`, modify `h` in place, so a
-calculation is a sequence of calls on the same object.
+The geometry `g` contains the positions of the sites and the lattice
+vectors. `g.get_hamiltonian()` generates the Hamiltonian with first-neighbor
+hopping $t=1$. `h.get_bands()` returns the k-points along a path and the
+energies at each k-point, here the cosine band $\epsilon_k=2\cos k$.
 
-See `examples/1d/linear_chain/main.py` for a runnable version ending in a plot (with a
-second-neighbor hopping added, so the band is not the pure cosine above), and the notebooks
-in `jupyter-notebooks/functionalities/single_particle_hamiltonians/` for the spinless,
-spinful and Nambu bases and for models from zero to three dimensions.
+The Hamiltonian is spinful by default, so every band appears twice, once for
+each spin. A spinless Hamiltonian is generated with
+`g.get_hamiltonian(has_spin=False)`. All the methods that add a term are
+called `h.add_...()`, and they change `h` in place, so a calculation is a
+sequence of calls on the same object. If you want to keep the original
+Hamiltonian, make a copy first with `h.copy()`.
 
-## Including second and third neighbor hopping
+See `examples/1d/linear_chain/main.py` for a runnable script, and
+`jupyter-notebooks/functionalities/single_particle_hamiltonians/` for
+spinless, spinful and Nambu Hamiltonians in zero to three dimensions.
 
-By default, the Hamiltonian generated includes only first-neighbor hopping, $t_1=1$. We will
-now see how to include hopping to sites further away, considering a generalized Hamiltonian
-of the form
+## Second and third neighbor hopping
+
+We now add hopping to sites further away. The Hamiltonian is
 
 $$
-H = 
+H =
 \sum_n c^\dagger_n c_{n+1} +
 t_2\sum_n c^\dagger_n c_{n+2} +
 t_3\sum_n c^\dagger_n c_{n+3} +
-h.c.
+h.c.,
 $$
 
-where $t_2$ and $t_3$ are the second- and third-neighbor hoppings, in units of $t_1$. Passing
-the list of hoppings to `g.get_hamiltonian()`, first neighbor first, generates this
-Hamiltonian; to compute the eigenvalues taking $t_2 =0.2$ and $t_3=0.3$, we write
+where $t_2$ and $t_3$ are the second- and third-neighbor hoppings, in units
+of the first-neighbor one. The list of hoppings is given to
+`g.get_hamiltonian()`, first neighbor first. For $t_2=0.2$ and $t_3=0.3$:
 
 ```python
 from pyqula import geometry
@@ -74,30 +69,33 @@ h = g.get_hamiltonian(tij=[1.0,0.2,0.3]) # Hamiltonian with t1,t2,t3
 (k,e) = h.get_bands() # compute band structure
 ```
 
-The dispersion is now $\epsilon_k = 2\cos k + 2t_2\cos 2k + 2t_3\cos 3k$, and what you see
-in the band structure is that the band is no longer symmetric between positive and negative
-energies: the second-neighbor hopping is what breaks that symmetry, while the first- and
-third-neighbor ones preserve it. The same list works for any geometry, and a function of the
-two positions or a hopping generator can be passed instead of the list; see
-`g.get_hamiltonian()` in the reference chapter.
+The dispersion is now
 
-See `examples/1d/NNN_chain/main.py` for a runnable version.
+$$\epsilon_k = 2\cos k + 2t_2\cos 2k + 2t_3\cos 3k .$$
 
-## Including an onsite energy
+In the band structure you see that the band is not symmetric anymore
+between positive and negative energies. The reason is the second-neighbor
+hopping: it connects two sites of the same sublattice, so it breaks the
+chiral (sublattice) symmetry $\epsilon_k \to -\epsilon_{k+\pi}$, while the
+first- and third-neighbor hoppings keep it. The same list works for any
+lattice. Instead of a list, `tij` can also be a function of the two
+positions; see `g.get_hamiltonian()` in the
+[Geometry reference](reference-geometry.md).
 
-An onsite energy changes the energy of an electron that sits on a site, without moving it.
-With the same value $\mu$ on every site it is a chemical potential,
+See `examples/1d/NNN_chain/main.py` for a runnable script.
 
-$$
-H =
-\mu \sum_n c^\dagger_n c_{n}
-$$
+## Onsite energy
 
-meaning that the whole band structure is shifted rigidly by $\mu$. Adding a uniform onsite
-energy is therefore how the Fermi energy of a Hamiltonian is moved, since the observables
-that depend on it, the filling, the density of states at the Fermi level, the expectation
-values, take zero energy as the Fermi energy. This can be added to the Hamiltonian with
-`h.add_onsite()` as
+An onsite energy changes the energy of an electron on a site, without
+moving it. With the same value $\mu$ on every site, it is a chemical
+potential,
+
+$$H_\mu = \mu \sum_n c^\dagger_n c_n ,$$
+
+and it shifts the whole band structure rigidly by $\mu$. All the observables
+in pyqula take zero energy as the Fermi energy, so adding a uniform onsite
+energy is the way to move the Fermi energy. It is added with
+`h.add_onsite()`:
 
 ```python
 from pyqula import geometry
@@ -107,48 +105,34 @@ mu = 0.3 # value of the onsite
 h.add_onsite(mu) # add onsite energy
 ```
 
-Possible inputs
+The argument can be
 
-- Float: the same onsite energy is added to all the sites
+- a float: the same onsite energy on every site.
+- a list or array: one onsite energy per site of the geometry.
+- a function of the position $\mathbf r$: the onsite energy of each site is
+  the function evaluated at its position.
 
-- Iterable (list or array): adds a different onsite energy to each site in the geometry, one
-  value per site
+A site-dependent onsite energy is how we build a potential: a sublattice
+imbalance in the honeycomb lattice, which opens a gap at the Dirac points; a
+single impurity, with a large onsite energy on one site (see
+[Quasiparticle interference](qpi.md)); or a smooth electrostatic potential
+from a gate.
 
-- Callable (function): adds a different onsite energy to each site according to its location
-  $\mathbf r$
+## Zeeman field
 
-A site-dependent onsite energy is how a potential landscape is built: a sublattice imbalance
-in the honeycomb lattice, a single impurity (an onsite energy much larger than the bandwidth
-on one site, as in the quasiparticle interference section), or a smooth electrostatic
-potential given as a function of the position.
-
-## Including an external Zeeman field
-
-We will now add an external magnetic field acting on the spin of the electrons, a Zeeman
-field, with `h.add_zeeman()`. We now include the existence of a spin degree of freedom,
-considering the Hamiltonian
+We now add an external magnetic field that acts on the spin of the
+electrons, with `h.add_zeeman()`. The Hamiltonian is $H = H_0 + H_Z$, with
 
 $$
-H = H_0 +H_Z
+H_0 = \sum_{n,s} c^\dagger_{n,s} c_{n+1,s} + h.c.,
+\qquad
+H_Z = \sum_{n,s,s'} \vec B \cdot \vec \sigma_{s,s'}\, c^\dagger_{n,s} c_{n,s'} ,
 $$
 
-where $H_0$ is the original tight-binding Hamiltonian
-
-$$
-H_0 = \sum_{n,s} c^\dagger_{n,s} c_{n+1,s} + h.c.
-$$
-
-and
-
-$$
-H_Z = \sum_{n,s,s'} \vec B \cdot \vec \sigma^{s,s'} c^\dagger_{n,s} c_{n,s'}
-$$
-
-with $n$ running over the sites and $s,s'$ running over the spin degree of freedom. The
-magnetic field takes the form $\vec B = (B_x,B_y,B_z)$, and $\sigma_\alpha$ are the spin
-Pauli matrices, so that the field splits the two spin bands by $2|\vec B|$ and sets the
-direction along which the spin is quantized. To add a magnetic field of the form
-$\vec B = (0.1,0.2,0.3)$ to our chain we write
+where $n$ runs over the sites, $s,s'$ over the spin, $\vec B=(B_x,B_y,B_z)$
+is the field in units of energy, and $\vec\sigma$ are the Pauli matrices. The
+field splits each band into two spin bands separated by $2|\vec B|$, with the
+spin parallel and antiparallel to $\vec B$. For $\vec B=(0.1,0.2,0.3)$:
 
 ```python
 from pyqula import geometry
@@ -158,27 +142,32 @@ h.add_zeeman([0.1,0.2,0.3]) # add the Zeeman field (modifies h in place)
 (k,e) = h.get_bands() # compute band structure
 ```
 
-The Hamiltonian is spinful by default, so the field acts on a spin degree of freedom that is
-already there; on a spinless Hamiltonian this call adds the spin degree of freedom first.
-The field can also differ from site to site, given as one vector per site or as a function
-of the position. The same kind of term, written as the magnetization of the material rather
-than as an external field, is `h.add_exchange()`: the two add the same matrix, and the name
-follows the physics, an exchange field being what a magnet has and what we will find
-self-consistently in the mean-field chapter.
+In the band structure, the two copies of the cosine band are now shifted by
+$\pm|\vec B| = \pm 0.37$. If the Hamiltonian is spinless, the call first
+makes it spinful. The field can also change from site to site: give one
+vector per site, or a function of the position.
 
-## Including an external orbital field
+`h.add_exchange()` adds exactly the same term. We use the name Zeeman when
+the field is external, and exchange when it is the magnetization of the
+material itself, for example the one we obtain in
+[Mean-field Hubbard models](mean-field.md).
 
-A magnetic field also acts on the orbital motion of the electrons, through the phase that a
-hopping picks up when an electron goes from one site to another. This is the Peierls
-substitution
+## Orbital magnetic field
+
+A magnetic field also acts on the orbital motion of the electrons. In a
+tight-binding model this enters as a phase in the hopping, the Peierls
+substitution,
 
 $$
-t_{\alpha \beta} \rightarrow t_{\alpha \beta} e ^{i\int_{r_\alpha}^{r_\beta} \vec A \cdot d \vec l}
+t_{\alpha \beta} \rightarrow t_{\alpha \beta}\,
+e^{i\int_{\mathbf r_\alpha}^{\mathbf r_\beta} \vec A \cdot d \vec l},
 $$
 
-where $\vec A$ is the vector potential, so that $\vec B = \nabla \times \vec A$, and the
-integral runs along the bond. Let us apply it to a ribbon, a system finite in one direction
-and periodic in the other, with `h.add_orbital_magnetic_field()`
+where $\vec A$ is the vector potential, $\vec B = \nabla \times \vec A$, and
+the integral goes along the bond. An electron that goes around a closed loop
+picks up a phase $2\pi\Phi/\Phi_0$, with $\Phi$ the flux through the loop and
+$\Phi_0$ the flux quantum. We apply it to a ribbon, a system finite in one
+direction and periodic in the other, with `h.add_orbital_magnetic_field()`:
 
 ```python
 from pyqula import geometry
@@ -190,27 +179,33 @@ h.add_orbital_magnetic_field(B) # add an out-of plane magnetic field
 (k,e) = h.get_bands() # compute the Landau-level band structure
 ```
 
-`B` is the magnetic flux through a plaquette of unit area, in units of the flux quantum, so
-that `B = 0.02` means one flux quantum every fifty plaquettes. What you see in the band
-structure is the quantum Hall effect: flat bands, the Landau levels, the lowest of them close
-to $-4 + 2\pi B$ for the square lattice, and between them dispersive bands that cross the
-gaps, the chiral states at the two edges of the ribbon, propagating in opposite directions on
-opposite edges. For a honeycomb ribbon the same call gives the Landau levels of the Dirac
-equation, with a level pinned at zero energy.
+`B` is the flux through a plaquette of unit area, in units of $\Phi_0$, so
+`B = 0.02` is one flux quantum every 50 plaquettes. The band structure shows
+the quantum Hall effect. There are flat bands, the Landau levels, and the
+lowest one is close to $-4 + 2\pi B$ for the square lattice, since near the
+band bottom the electrons behave as free electrons with cyclotron energy
+$4\pi B$. Between the Landau levels there are dispersive bands that cross the
+gap: these are the chiral edge states, one at each edge of the ribbon,
+moving in opposite directions. Each of them carries one quantum of
+conductance $e^2/h$, which is what a Hall measurement sees. For a honeycomb
+ribbon the same call gives the Landau levels of a Dirac equation, with one
+level at zero energy.
 
-See `examples/1d/landau_levels_zigzag_ribbon/main.py` for a runnable version on a honeycomb
-ribbon.
+See `examples/1d/landau_levels_zigzag_ribbon/main.py` for a runnable script
+on a honeycomb ribbon.
 
-## Setting a filling
+## Filling
 
-Up to now the Fermi energy of the chain has been at zero energy, which for the cosine band is
-half filling. If you want to enforce a certain filling $\nu$ in a Hamiltonian, the fraction
-of the states that are occupied, so that
+The filling $\nu$ is the fraction of the states that are occupied,
+
 $$
-\langle c^\dagger_n c_n \rangle = \nu
+\nu = \frac{1}{N}\sum_{n} \langle c^\dagger_n c_n \rangle ,
 $$
 
-on average over the sites and, in a spinful system, over the two spins, use
+where the sum goes over all the $N$ states of the unit cell (sites, and
+spins in a spinful system). Half filling is $\nu=0.5$, and for the
+first-neighbor chain it is the case of the Fermi energy at zero. To fix
+another filling we use `h.set_filling()`:
 
 ```python
 from pyqula import geometry
@@ -219,20 +214,21 @@ h = g.get_hamiltonian()
 h.set_filling(0.7) # enforce a filling
 ```
 
-`h.set_filling()` computes the Fermi energy that gives this filling on a k-mesh of `nk`
-points per direction, and adds the onsite energy that brings it to zero, so that afterwards
-every observable that takes zero as the Fermi energy is at the filling you asked for. The
-filling is a single number, enforced on average over the whole system, with $\nu = 0.5$ being
-half filling. For a metal the k-mesh matters, since the filling changes continuously with the
-Fermi energy; for an insulator any Fermi energy inside the gap gives the same filling. The
-same keyword goes into `h.get_mean_field_hamiltonian(filling=...)` in the mean-field chapter,
-where the filling is kept fixed along the self-consistent calculation.
+`h.set_filling()` finds the Fermi energy $E_F$ that gives this filling, using
+a k-mesh of `nk` points per direction, and then adds the onsite energy
+$-E_F$. After this, the Fermi energy is at zero, and every observable is
+computed at the filling you asked for. For a metal the k-mesh matters,
+because the filling changes continuously with $E_F$. For an insulator any
+$E_F$ inside the gap gives the same filling. The same keyword `filling`
+appears again in `h.get_mean_field_hamiltonian()`, where the filling is kept
+fixed during the self-consistent loop (see
+[Mean-field Hubbard models](mean-field.md)).
 
-What if the filling should differ from site to site, for example to model a charge
-imbalance between two sublattices imposed by a gate or a substrate? A single Fermi energy
-cannot do that, so the way we do this is by giving `h.set_filling()` one filling per site,
-and it then solves for one onsite energy per site such that every site reaches its own
-filling
+Sometimes we want a different filling on each site, for example a charge
+imbalance between two sublattices, created by a gate or a substrate. One
+Fermi energy cannot do this. Instead, we give one filling per site, and
+`h.set_filling()` finds one onsite energy per site so that each site has its
+own filling:
 
 ```python
 import numpy as np
@@ -243,11 +239,14 @@ h.set_filling(np.array([0.4,0.6])) # filling 0.4 on sublattice A, 0.6 on sublatt
 occ = h.get_vev() # occupation of each site
 ```
 
-Each entry keeps the convention of the scalar filling, the fraction of the states of that
-site that are occupied, so in this spinful example `occ` comes out as roughly 0.8 and 1.2
-electrons, and the average filling is the mean of the array, here half filling. The same
-per-site solve is reached with a scalar and `average=False`, which enforces the same filling
-on every site rather than on average. Note that on a finite island the levels are discrete
-and the total number of electrons is an integer, so fillings that add up to a fractional
-number of electrons are only reached through the broadening $\delta=0.01$ the solver uses,
-and the occupations should be read with `h.get_vev(delta=1e-2)`.
+Each number has the same meaning as before, the fraction of the states of
+that site that are occupied. In this spinful example a site has two states,
+so `occ` is roughly 0.8 and 1.2 electrons, and the average filling is 0.5. A
+single number with `average=False` gives the same filling on every site,
+instead of only on average.
+
+On a finite island the levels are discrete and the number of electrons is an
+integer. A set of fillings that gives a fractional number of electrons is
+only reached because of the broadening $\delta=0.01$ that the solver uses,
+so in this case the occupations should be read with
+`h.get_vev(delta=1e-2)`.

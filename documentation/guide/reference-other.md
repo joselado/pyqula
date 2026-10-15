@@ -4,28 +4,29 @@
 
 ### HT.get_dc_current()
 Compute the time-averaged (DC) current through a two-terminal junction at a
-given bias, using the Floquet-Keldysh formalism (see "Multiple Andreev
-reflection and AC-Josephson current"). Works for any combination of
-normal/superconducting leads built with `heterostructures.build(h1,h2)`,
-with or without an explicit `central=` Hamiltonian (the latter is solved
-by a general dense Floquet inversion, and assumes the bias drops across
-the junction's rightmost bond).
+bias voltage $V$, with the Floquet-Keldysh formalism. The leads can be
+normal or superconducting, built with `heterostructures.build(h1,h2)`, with
+or without a central region. With superconducting leads this includes
+multiple Andreev reflection. See [Quantum transport](transport.md).
 
 Arguments:
 
-- voltage: bias voltage
+- voltage: bias voltage $eV$
 
 Optional arguments:
 
-- nmax=6, nmax_max=40: initial/maximum number of Floquet sidebands (increased adaptively until convergence; a warning is issued if `nmax_max` is reached before `tol` is satisfied)
-- tol=1e-3: relative convergence tolerance used to decide when to stop increasing the sideband count
-- temperature=0.: lead temperature
-- delta=None: broadening (defaults to `HT.delta`); should be much smaller than the smallest relevant gap for small-gap superconductors
+- nmax=6, nmax_max=40: initial and maximal number of Floquet sidebands. The
+  number grows until the current converges to `tol`; a warning is printed
+  if `nmax_max` is reached first
+- tol=1e-3: relative tolerance on the current
+- temperature=0.: temperature of the leads
+- delta=None: broadening, by default `HT.delta`. It must be much smaller
+  than the smallest superconducting gap
 
 Returns the DC current
 
 ### HT.get_iv_curve()
-Convenience wrapper: `get_dc_current` evaluated over an array of voltages.
+`HT.get_dc_current()` for an array of voltages.
 
 Arguments:
 
@@ -34,367 +35,485 @@ Arguments:
 Returns an array of DC currents
 
 ### HT.didv_curve() / lp.didv_curve()
-Convenience wrapper: `didv` evaluated over an array of energies, in parallel, the array-native
-equivalent of `[ht.didv(energy=e) for e in es]`. Also reachable as `didv(energies=...)` (mutually
-exclusive with `didv`'s scalar `energy=...`, same convention as `get_kappa`). If `use_aaa=True`
-and the sweep resolves to the Floquet-Keldysh method, one AAA self-energy interpolant is built and
-shared across the whole sweep.
+The differential conductance $dI/dV$ for an array of energies, the same as
+`[ht.didv(energy=e) for e in es]`. It is also available as
+`didv(energies=...)`.
 
 Arguments:
 
 - energies: array of bias energies
-- any keyword argument accepted by `didv` (`method`, `delta`, `use_aaa`, `nmax_max`, `temp`, ...)
+- any keyword argument of `didv` (`method`, `delta`, `temp`, ...)
 
-Returns an array of dI/dV values
+Returns an array of $dI/dV$ values
 
-`T` means different things on the two classes. On a `Heterostructure`,
-`T` is the temperature. On a `LocalProbe` it is the probe *transparency*,
-the same knob as `LocalProbe(...,T=...)`, `set_coupling` and
-`get_kappa(T=...)`, and the temperature there is `temp` (or its alias
-`temperature`). Both `lp.didv(T=...)` and `lp.didv_curve(...,T=...)` honour
-it for that call alone, leaving the probe itself untouched.
-
-`delta=` passed to any of `didv`, `didv_curve` or `get_smatrix` likewise
-applies to that call, self-energies included, taking precedence over the
-junction's own attribute. For a `LocalProbe` it sets both the probe
-broadening and the sample's bulk broadening, exactly as the constructor
-argument does. `HT.with_delta(delta)`, `lp.with_delta(delta)` and
-`lp.with_coupling(T)` return a shallow copy with that one knob rebound,
-for when the same setting is wanted across several calls.
+Note that `T` means different things on the two classes. On a
+`Heterostructure`, `T` is the temperature. On a `LocalProbe`, `T` is the
+transparency of the probe, the coupling between probe and sample, and the
+temperature is `temp`. A `T=` or a `delta=` given to one call applies only to
+that call. `HT.with_delta(delta)`, `lp.with_delta(delta)` and
+`lp.with_coupling(T)` return a copy with a new broadening or coupling, to
+use in several calls.
 
 ### HT.get_kappa()
-Compute the superconducting/normal conductance power-law-ratio "kappa"
-diagnostic (also available as `LocalProbe.get_kappa()`, see "Multiple
-Andreev reflection and AC-Josephson current").
+Compute the exponent ratio $\kappa$, which tells single-particle tunneling
+from Andreev reflection (also `LocalProbe.get_kappa()`, see
+[Quantum transport](transport.md)).
 
 Optional arguments:
 
-- energy=0.0: energy at which to evaluate kappa (returns a scalar)
-- energies: array of energies to evaluate at once instead (returns an array); mutually exclusive with `energy`
-- temp=0.: temperature. The default is the zero-temperature result; a nonzero value thermally averages each conductance entering the power-law fit
-- T=1e-2: reference coupling the power-law exponent is extracted around
+- energy=0.0: energy at which $\kappa$ is computed (returns a number)
+- energies: array of energies instead (returns an array); do not give both
+- temp=0.: temperature. A finite value averages the conductances over the
+  Fermi window
+- T=1e-2: coupling around which the exponent is computed
 
-Returns kappa (a scalar, or an array matching `energies`)
+Returns $\kappa$, a number or an array like `energies`
 
-At `temp=0.` (the default), kappa is the exponent `d(log G)/d(log T)` of the conductance divided by the same exponent with the pairing removed: how steeply the conductance scales with the probe-sample coupling, 1 for single-particle tunneling and 2 for Andreev reflection. For a `LocalProbe` whose probe lead is not itself superconducting each exponent is an exact derivative, obtained with `jax.grad`; otherwise it is estimated from the conductance at two nearby couplings (0.9T and 1.1T). Which of the two applies is decided automatically, and the two agree to within the finite-difference bias of the secant. Inside a superconducting gap, the broadening `delta` of a `LocalProbe` acts as a finite quasiparticle lifetime of the sample, which leaves a normal conductance $G_N\delta/\Delta$; since the Andreev one is $G_N^2/4$ in the tunneling limit, the plateau at 2 needs `delta` well below $\Delta G_N/4$ at the smallest coupling, `delta=1e-10` for a gap of 0.1 down to `T=1e-3`. See `examples/transport/localprobe_kappa_1D` for a runnable version, and `jupyter-notebooks/functionalities/quantum_transport/07_differential_decay_rate.ipynb` for the executed notebook.
+$\kappa$ is the exponent $d\log G/d\log T$ of the conductance with the
+coupling $T$, divided by the same exponent with the pairing removed. It is
+1 for single-particle tunneling, since $G\propto T$, and 2 for Andreev
+reflection, since $G\propto T^2$. Inside a superconducting gap the
+broadening `delta` of a `LocalProbe` acts as a finite quasiparticle
+lifetime, and it gives a normal conductance $G_N\delta/\Delta$. The Andreev
+conductance is $G_N^2/4$ in the tunneling limit, so the plateau at 2 needs
+`delta` well below $\Delta G_N/4$ at the smallest coupling, for example
+`delta=1e-10` for a gap of 0.1 down to `T=1e-3`. See
+`examples/transport/localprobe_kappa_1D` and
+`jupyter-notebooks/functionalities/quantum_transport/07_differential_decay_rate.ipynb`.
 
 ## SpinModel functions and methods
 
+A `SpinModel` is a classical spin model with energy
+
+$$E = \sum_i \vec b_i \cdot \vec S_i + \sum_{ij} \vec S_i \cdot J_{ij} \cdot \vec S_j ,$$
+
+where $\vec S_i$ is a unit vector with angles $(\theta_i,\phi_i)$,
+$\vec b_i$ a magnetic field, and $J_{ij}$ a $3\times3$ exchange tensor. See
+[Classical spin models](classical-spins.md).
+
 ### sm.add_heisenberg()
-Add shell-based exchange couplings to the model, on top of any interactions already added
-(repeated calls accumulate).
+Add exchange couplings between neighbor shells. Several calls add up.
 
 Optional arguments:
 
-- Jij=None: list of shell couplings, e.g. `[J1,J2,J3]` for first/second/third neighbor
-  exchange; passed through to `Geometry.get_hamiltonian(tij=Jij)`, so anything that
-  constructor accepts for `tij` works here too (`None` is that constructor's own default,
-  first-neighbor hopping)
-- Jm=[1.,1.,1.]: diagonal $(J_x,J_y,J_z)$ weights, applied on top of `Jij`; use unequal
-  values for XXZ/Ising-like anisotropy
+- Jij=None: list of couplings of each shell, for example `[J1,J2,J3]` for
+  first, second and third neighbors. It accepts everything that `tij` of
+  `g.get_hamiltonian()` accepts; `None` is first neighbors with $J=1$
+- Jm=[1.,1.,1.]: diagonal weights $(J_x,J_y,J_z)$ multiplying `Jij`; use
+  different values for XXZ or Ising anisotropy
 
 Modifies `sm` in place, no return value
 
 ### sm.add_field()
-Add a uniform Zeeman field to every site's `sm.b`. Repeated calls accumulate (not overwrite).
+Add a uniform magnetic field $\vec b$ to every site. Several calls add up.
 
 Arguments:
 
-- v: 3-vector field, e.g. `[0.,0.,1.]`
+- v: the field, a 3-vector, for example `[0.,0.,1.]`
 
 ### sm.add_tensor() / sm.add_tensor_2d()
-Add a general pairwise tensor coupling $J_{ij}$ from a function `fun(r1,r2) -> 3x3 matrix`
-(see `generating_functions` below), rather than the fixed-form couplings `add_heisenberg`
-builds. `add_tensor` only considers pairs within the home cell; `add_tensor_2d` additionally
-sums periodic images `ia*a1 + ja*a2` for `ia,ja` in `[-ncells,ncells]`, and can rotate the
-coupling tensor of each image about $z$ by `vspiral[0]*ia + vspiral[1]*ja` (in units of
-$\pi$), a way to embed a spin-spiral wavevector directly into the exchange tensor.
+Add a general coupling tensor $J_{ij}$ given by a function
+`fun(r1,r2) -> 3x3 matrix` (see `generating_functions` below).
+`add_tensor` only couples sites inside the unit cell. `add_tensor_2d` also
+sums the periodic images $i_a\mathbf a_1 + j_a\mathbf a_2$ with
+$i_a,j_a$ in `[-ncells,ncells]`, and can rotate the tensor of each image
+around $z$ by the angle $\pi(v_0 i_a + v_1 j_a)$, with $(v_0,v_1)$ given by
+`vspiral`. This puts a spin-spiral wavevector into the exchange.
 
 Arguments:
 
-- fun: coupling function, e.g. one returned by `generating_functions`
+- fun: coupling function, for example one from `generating_functions`
 
 Optional arguments (`add_tensor_2d` only):
 
-- ncells=1: number of periodic images to sum on each side, along each lattice vector
-- vspiral=[0.,0.]: per-image in-plane rotation angle coefficients, see above
+- ncells=1: number of periodic images on each side, along each lattice
+  vector
+- vspiral=[0.,0.]: rotation angles per image, in units of $\pi$
 
 Modifies `sm` in place, no return value
 
 ### classicalspin.generating_functions()
-Factory returning a `fun(r1,r2) -> 3x3 matrix` two-point coupling function for a standard
-exchange form, for use with `add_tensor`/`add_tensor_2d`.
+Return a coupling function `fun(r1,r2) -> 3x3 matrix` of a common type, to
+use with `add_tensor` and `add_tensor_2d`.
 
 Optional arguments:
 
-- name="Heisenberg": one of `"Heisenberg"` (isotropic, cutoff `fc(distance)`), `"Linear"`
-  (dipolar $1/r^3$ tensor), `"RKKYTI"` (RKKY on a topological-insulator surface, PRB 81
-  233405), `"ZZ"` (Ising, $S^z_i S^z_j$ only), `"XYZ"` (diagonal, anisotropic weights `v`),
-  `"DM"` (Dzyaloshinskii-Moriya, with `v` the intermediate-ion/mirror direction, or a function
-  of the bond vector)
-- J=1.0: overall coupling strength
-- v=[0.,0.,1.]: form-dependent vector (or vector-valued function of the bond vector), see above
-- fc=None: distance-dependent cutoff/envelope, e.g. restricting `"Heisenberg"`/`"ZZ"` to first
-  neighbors (`0.9 < d < 1.1`, the default)
-- fdiff=lambda x,y: x-y: how the bond vector is computed from `(r1,r2)`; override for e.g. a
-  minimum-image convention
-- fr=None: extra rotation matrix `fr(r1,r2)` applied on top of the base coupling (defaults to
-  the identity)
+- name="Heisenberg": the type of coupling. `"Heisenberg"` is isotropic
+  exchange, cut by `fc(distance)`. `"Linear"` is the tensor
+  $J\,\hat r\hat r/r^3$, with $\hat r$ the bond direction. `"RKKYTI"` is the
+  RKKY coupling on the surface of a topological insulator,
+  $J(\tfrac32\hat r\hat r - 1)/r^3$. `"ZZ"` is Ising, only $S^z_i S^z_j$.
+  `"XYZ"` is diagonal with weights `v`. `"DM"` is a first-neighbor
+  Dzyaloshinskii-Moriya coupling $\vec D_{ij}\cdot(\vec S_i\times\vec S_j)$,
+  with $\vec D_{ij}$ along $\mathbf r_{ij}\times\vec v$, so `v` plays the
+  role of the direction of the intermediate ion (or a function of the bond
+  vector)
+- J=1.0: strength of the coupling
+- v=[0.,0.,1.]: vector used by the type, or a function of the bond vector
+- fc=None: function of the distance that cuts or modulates the coupling;
+  by default first neighbors (`0.9 < d < 1.1`)
+- fdiff=lambda x,y: x-y: how the bond vector is computed from `(r1,r2)`
+- fr=None: extra rotation matrix `fr(r1,r2)` applied to the coupling (by
+  default the identity)
 
 Returns the coupling function
 
 ### sm.minimize_energy()
-Multistart local minimization of the classical energy over every spin's $(\theta,\phi)$
-angles, by local gradient-based minimization of the
-energy (or, if `calle` is given, gradient-free Powell). Only the ground state at $\Gamma$ is
-found. There are no twisted boundary conditions, so an incommensurate (e.g. spiral) texture
-needs an explicit supercell that fits it.
+Find the classical ground state, by minimizing $E$ over the angles
+$(\theta_i,\phi_i)$ of all spins from several random starting points. Only
+states with the periodicity of the unit cell are found, so a spiral needs a
+supercell that fits it.
 
 Optional arguments:
 
-- theta0=None, phi0=None: initial angles; each try re-randomizes them in $[0,\pi]$/$[0,2\pi]$
-  when left as `None` (the default), which is what makes `tries` explore different basins;
-  passing explicit arrays starts every try from the same point (the optimizer itself is
-  deterministic), so `tries>1` is only useful with the default
-- tries=10: number of independent minimizations; the lowest-energy one is kept
-- calle=None: optional extra function `calle(sm) -> float` added to the energy during
-  minimization, e.g. a penalty favoring a particular texture
-- silent=False: `True` does not print the minimum energy found
+- theta0=None, phi0=None: starting angles. With `None` each try starts from
+  random angles, which is what makes `tries` useful. With explicit arrays
+  every try starts at the same point and gives the same result
+- tries=10: number of minimizations; the one with the lowest energy is
+  kept
+- calle=None: a function `calle(sm) -> float` added to the energy, for
+  example a penalty that favors a texture
+- silent=False: if `True`, the minimum energy is not printed
 
-Updates `sm.theta`, `sm.phi` and `sm.magnetization` in place to the best try found, and
+Sets `sm.theta`, `sm.phi` and `sm.magnetization` to the best result, and
 returns `(theta,phi)`
 
 ### sm.get_energy() / sm.energy()
-Evaluate the total energy $\sum_i \vec b_i \cdot \vec S_i + \sum_{ij} \vec S_i \cdot J_{ij}
-\cdot \vec S_j$ of the current `sm.theta`/`sm.phi` snapshot. Returns a scalar.
+The energy $E$ above for the current angles. Returns a number.
 
 ### sm.get_local_energy()
-Per-site breakdown of the current snapshot's energy: each site's own field term plus half of
-every exchange term it takes part in (as with `LatticeGas.get_local_energy()`, each bond's
-energy is split evenly between its two endpoints), so the values sum exactly to
-`sm.get_energy()`.
+The energy of each site: its field term plus half of each exchange term
+it belongs to. The values add up to `sm.get_energy()`.
 
 Returns an array over sites
 
 ### sm.get_magnetization()
-Convert the current `sm.theta`/`sm.phi` angles to Cartesian components.
+The Cartesian components of the spins,
+$\vec S_i = (\sin\theta_i\cos\phi_i,\sin\theta_i\sin\phi_i,\cos\theta_i)$.
 
 Returns `(mx,my,mz)`, arrays over sites
 
 ### align.most_perpendicular_vector() / align.most_perp_basis()
-(`classicalspintk.align`) Given a set of vectors (typically a `SpinModel`'s magnetization),
-find the direction most nearly perpendicular to all of them, and use it to build a rotated
-basis in which that direction is the new $z$ axis, i.e. the vectors end up mostly in the new
-$xy$ plane. Useful for plotting a magnetization texture (e.g. a skyrmion or spiral) as an
-in-plane quiver plot when it is not already aligned with a coordinate axis; see
-`examples/classicalspin/perpendicular/main.py`.
+(`classicalspintk.align`) Find the direction most perpendicular to a set of
+vectors, for example a magnetization, and rotate the vectors so that this
+direction is the new $z$ axis. The vectors are then mostly in the new $xy$
+plane, which helps to plot a skyrmion or a spiral as arrows in the plane.
+See `examples/classicalspin/perpendicular/main.py`.
 
-Returns a perpendicular unit vector, or (for `most_perp_basis`) the input vectors expressed in
-the rotated basis
+Returns the perpendicular unit vector, or (for `most_perp_basis`) the
+vectors in the rotated basis
 
 ## LatticeGas functions and methods
 
+A `LatticeGas` is a classical lattice gas with occupations $n_i=0,1$ and
+energy
+
+$$E = \sum_i \mu_i n_i + \sum_{i\neq j} J_{ij} n_i n_j ,$$
+
+where the sum runs over ordered pairs, so each bond counts twice. See
+[Lattice gas models](lattice-gas.md).
+
 ### lg.add_interaction()
-Add a coupling shell to the model, on top of any interactions already added (repeated calls accumulate).
+Add a density-density coupling $J_{ij}$ between neighbor shells. Several
+calls add up.
 
 Optional arguments:
 
-- Jij: list of shell couplings, e.g. `[J1,J2,J3]` for first/second/third neighbor $J_{ij} n_i n_j$ repulsion (or attraction, for negative values); passed through to `Geometry.get_hamiltonian(tij=Jij)`, so anything that constructor accepts for `tij` works here too
+- Jij: list of couplings of each shell, for example `[J1,J2,J3]`. A positive
+  value is repulsive and a negative one attractive. It accepts everything
+  that `tij` of `g.get_hamiltonian()` accepts
 
 Modifies `lg` in place, no return value
 
 ### lg.set_filling()
-Reset the occupation array `lg.den` to a new random configuration with a given filling fraction, discarding the current snapshot (e.g. to re-seed a fresh anneal, see `examples/latticegas/optimize/main.py`).
+Replace the occupations `lg.den` by a random configuration with a given
+filling, for example to start a new anneal.
 
 Arguments:
 
-- filling: fraction of sites occupied (rounded to the nearest integer site count)
+- filling: fraction of occupied sites (rounded to an integer number of
+  sites)
 
 ### lg.get_energy()
-Evaluate the total energy $\sum_i \mu_i n_i + \sum_{ij} J_{ij} n_i n_j$ of the current occupation snapshot `lg.den`. Returns a scalar.
+The energy $E$ above for the current occupations `lg.den`. Returns a
+number.
 
 ### lg.optimize_energy()
-Anneal `lg.den` towards a low-energy configuration with a Metropolis discrete-swap optimizer: at each step, 1-3 random occupied/empty site pairs are swapped (preserving the total filling) and accepted unconditionally if the energy does not increase, or with probability $e^{-\Delta E/T}$ otherwise. Only the energy change of each swap is computed, not the full energy, so the cost of a step is set by how many neighbors a site has rather than by the size of the system.
+Lower the energy with Metropolis moves at fixed filling. In each step one
+to three random pairs of an occupied and an empty site are swapped. The
+move is accepted if the energy does not increase, and with probability
+$e^{-\Delta E/T}$ otherwise.
 
 Optional arguments:
 
-- temp=0.1: Metropolis temperature (higher accepts more uphill moves; anneal by calling this repeatedly with decreasing `temp`, or see `lg.anneal()` below). `temp=0` runs zero-temperature (greedy) dynamics, where an uphill move is never accepted
-- ntries=1e5: number of swap attempts
-- resync_every=1000: how often (in swap attempts) to recompute the energy from scratch, bounding floating-point drift in the incremental tracking
-- patience=None: if set, stop early once this many attempts have passed without a new best energy being found (the returned array is truncated to what actually ran)
-- checkpoint_at=None: an int or iterable of ints; captures a copy of `lg.den` after that many attempts (1-indexed) into `lg.checkpoints` (a dict `step -> den` snapshot), independent of the final configuration, e.g. to inspect or animate how the configuration evolves partway through a run
+- temp=0.1: Metropolis temperature $T$. `temp=0` only accepts moves that
+  do not increase the energy
+- ntries=1e5: number of attempted swaps
+- resync_every=1000: every how many attempts the energy is recomputed from
+  scratch, to avoid accumulated rounding errors
+- patience=None: if given, stop after this many attempts without a new
+  lowest energy
+- checkpoint_at=None: an integer or a list of integers; a copy of `lg.den`
+  after that many attempts is stored in `lg.checkpoints`, a dictionary
+  `step -> den`
 
-Overwrites `lg.den` with the final configuration and returns the array of energies recorded at each attempt (whether or not it was accepted)
+Sets `lg.den` to the final configuration, and returns the energy after each
+attempt
 
 ### lg.anneal()
-Simulated annealing over a decreasing temperature schedule, running `lg.optimize_energy()` once per temperature in `temps`. The best configuration seen anywhere in the schedule is kept, since a high-temperature step can wander back up in energy before it ends.
+Simulated annealing: `lg.optimize_energy()` at each temperature of a
+decreasing list. The lowest-energy configuration of the whole schedule is
+kept.
 
 Optional arguments:
 
-- temps=None: sequence of temperatures, high to low; defaults to a 10-step geometric schedule from 2.0 down to 0.05 (any entry, including 0, is passed straight through to `lg.optimize_energy()`)
-- ntries=1e4: number of swap attempts per temperature
-- checkpoint_at=None: an int or iterable of ints; like `lg.optimize_energy()`'s `checkpoint_at`, but numbered continuously across the whole schedule (e.g. step 120 is the 20th attempt of the 3rd temperature stage if `ntries=100`), so a snapshot can be recovered after any number of annealing steps, not just the final/best configuration
-- any other keyword accepted by `lg.optimize_energy()` (e.g. `patience`, `resync_every`), applied at every temperature
+- temps=None: temperatures, from high to low; by default 10 temperatures
+  on a geometric scale from 2.0 to 0.05
+- ntries=1e4: attempts per temperature
+- checkpoint_at=None: as in `lg.optimize_energy()`, but counted over the
+  whole schedule
+- any other keyword of `lg.optimize_energy()`, used at every temperature
 
-Overwrites `lg.den` with the best configuration found and returns the concatenated energy trajectory across all temperatures
+Sets `lg.den` to the best configuration, and returns the energies of the
+whole schedule
 
 ### lg.optimize_energy_multistart()
-Run `nstart` independent anneals from independent random seeds at the current filling, and keep the lowest-energy result, which reduces the risk of a single anneal settling into a metastable configuration. Each restart is a full `lg.optimize_energy()` run; the restarts run in parallel once `parallel.set_cores()` has been called, and serially by default (see "Parallelism and reproducibility").
+Run `nstart` independent optimizations from random configurations at the
+current filling, and keep the lowest energy. This lowers the chance of
+ending in a metastable state. The runs are parallel after
+`parallel.set_cores()` (see [Parallelism](parallelism.md)).
 
 Optional arguments:
 
-- nstart=10: number of independent restarts
-- any other keyword accepted by `lg.optimize_energy()` (e.g. `temp`, `ntries`, `patience`), applied identically to every restart
+- nstart=10: number of runs
+- any other keyword of `lg.optimize_energy()` (`temp`, `ntries`,
+  `patience`...), the same for every run
 
-Overwrites `lg.den` with the best configuration found and returns its energy (a scalar)
+Sets `lg.den` to the best configuration, and returns its energy
 
 ### lg.optimize_grand_canonical()
-Grand-canonical Metropolis sampling/annealing: instead of swapping pairs at fixed filling, single sites are flipped (occupied $\leftrightarrow$ empty) and accepted/rejected the usual Metropolis way, so the total filling fluctuates under `lg.mu` rather than being conserved. This is the standard lattice-gas MC move set, useful for scanning a phase diagram vs. chemical potential, or for equilibrium sampling at one fixed temperature (see `latticegas.get_specific_heat()`/`get_susceptibility()` below). Unlike `lg.optimize_energy()`, it does not need both occupied and empty sites to start from: `lg.den` can start uniformly empty or full.
+Metropolis sampling in the grand-canonical ensemble. Single sites are
+switched between occupied and empty, so the filling is not fixed and is set
+by the chemical potential `lg.mu`. Use it to scan a phase diagram as a
+function of the chemical potential, or to sample at a fixed temperature for
+`latticegas.get_specific_heat()` and `get_susceptibility()`.
 
-Optional arguments: same as `lg.optimize_energy()` (`temp`, `ntries`, `resync_every`; no `patience`), except that `temp` defaults to `1.0` here rather than `0.1`. Grand-canonical sampling is usually wanted at a temperature, not as an anneal
+Optional arguments: the same as `lg.optimize_energy()` (`temp`, `ntries`,
+`resync_every`, without `patience`), but the default is `temp=1.0`
 
-Overwrites `lg.den` with the final configuration and returns `(es, ns)`: the energy trajectory and the filling (occupied-site count) trajectory, both arrays of length `ntries`
+Sets `lg.den` to the final configuration, and returns `(es, ns)`: the energy
+and the number of occupied sites after each attempt
 
 ### latticegas.get_specific_heat() / latticegas.get_susceptibility()
-Thermodynamic quantities from a trajectory sampled at one fixed temperature, as produced by `lg.optimize_energy()` or `lg.optimize_grand_canonical()` run at constant `temp` rather than annealed. `get_specific_heat(es, temp, burn=0.2)` gives $C=\mathrm{Var}(E)/T^2$ from an energy trajectory, and `get_susceptibility(ns, temp, burn=0.2)` gives $\mathrm{d}N/\mathrm{d}\mu=\mathrm{Var}(N)/T$ from a filling trajectory. The second is only meaningful in the grand canonical case, where the filling is free to fluctuate. `burn` is the leading fraction of the trajectory discarded as equilibration.
+Thermodynamic quantities from a trajectory sampled at a fixed temperature
+$T$, by `lg.optimize_energy()` or `lg.optimize_grand_canonical()`.
+`get_specific_heat(es, temp, burn=0.2)` gives the specific heat
+$C=\mathrm{Var}(E)/T^2$ from the energies. `get_susceptibility(ns, temp,
+burn=0.2)` gives the compressibility $dN/d\mu=\mathrm{Var}(N)/T$ from the
+number of particles; it only makes sense in the grand-canonical case, where
+$N$ fluctuates. `burn` is the fraction at the start of the trajectory that
+is thrown away as thermalization.
 
 ### lg.add_tensor()
-Add a custom coupling $J_{ij}=\mathrm{fun}(r_i,r_j)$ between every pair of sites, for interactions beyond `add_interaction()`'s fixed neighbor shells, e.g. a screened or dipolar $1/r^n$ form. Scalar analog of `classicalspin.SpinModel.add_tensor` (which returns a 3x3 tensor per pair); self-pairs are skipped, and pairs where `fun` evaluates to (near) zero are dropped.
+Add a coupling $J_{ij}=\mathrm{fun}(\mathbf r_i,\mathbf r_j)$ between all
+pairs of sites, for interactions beyond neighbor shells, for example a
+screened or dipolar $1/r^n$ interaction. Pairs with zero coupling are not
+stored.
 
 Modifies `lg` in place, no return value
 
 ### lg.regroup()
-Merge duplicate interaction-pair entries accumulated from repeated `add_interaction()`/`add_tensor()` calls (e.g. overlapping neighbor shells added twice), summing their couplings. A performance cleanup only; it does not change `lg.get_energy()`.
+Merge repeated pairs from several `add_interaction()` or `add_tensor()`
+calls, summing their couplings. The energy does not change, only the
+calculation gets faster.
 
 Modifies `lg` in place, no return value
 
 ### lg.write() / lg.read()
-Save/load the current occupation snapshot `lg.den` to/from a text file, the same checkpoint pattern as `classicalspin.SpinModel.write()`/`load_magnetism()`. `write()` forces `nrep=1` (no periodic replication) by default so `read()` round-trips exactly regardless of `lg.geometry.dimensionality`; `read()` raises `ValueError` if the file's site count does not match `lg.nsites`.
+Write the occupations `lg.den` to a text file, and read them back. `read()`
+raises `ValueError` if the number of sites in the file is not `lg.nsites`.
 
 Optional arguments:
 
-- name="DENSITY.OUT": file path
+- name="DENSITY.OUT": file name
 
 ### lg.get_local_energy() / lg.get_local_mu()
-Per-site breakdown of the current snapshot's energy. `get_local_energy()` returns each site's own contribution $\mu_i n_i + \sum_j J_{ij} n_i n_j$, summed over its interaction neighbors $j$ (`lg.get_energy()` itself counts every bond twice, once from each endpoint, so the values here sum exactly to `lg.get_energy()`, not to half of it); `get_local_mu()` instead evaluates that same expression with site `i` forced occupied, i.e. the energy cost/gain of occupying site `i` given its neighbors' current state.
+`get_local_energy()` gives the energy of each site,
+$\mu_i n_i + \sum_j J_{ij} n_i n_j$; the values add up to `lg.get_energy()`.
+`get_local_mu()` gives the same expression with site $i$ occupied, meaning
+the energy cost of putting a particle on site $i$ with its neighbors as they
+are.
 
 Optional arguments:
 
-- normalize=False: divide each site's value by the total coupling weight of its own interaction terms
+- normalize=False: divide the value of each site by the sum of its couplings
 
 Returns an array over sites
 
 ### lg.get_correlator()
-Neighbor-shell density-density correlator of the current snapshot `lg.den`, useful for detecting ordered ground states (e.g. after `optimize_energy`). `n` sets how many neighbor shells to return, `normalized` whether to divide out the mean occupation.
+The density-density correlator of the current occupations, as a function of
+the neighbor shell. It shows whether the ground state is ordered. `n` is
+the number of shells, `normalized` divides out the mean occupation.
 
-Returns `(distances, correlators)`, arrays of matching length
+Returns `(distances, correlators)`
 
 ### lg.get_structure_factor()
-Reciprocal-space structure factor $S(q)=|\sum_i (n_i-\bar n) e^{-iq\cdot r_i}|^2/N$ of the current snapshot `lg.den`, evaluated directly on the real-space site positions, the reciprocal-space companion to `lg.get_correlator()`: where the neighbor-shell correlator tells you the ordering length scale, $S(q)$ tells you the ordering wavevector. Subtracting the mean occupation makes $S(q=0)=0$ identically, so a peak elsewhere in $q$ is what signals order.
+The structure factor of the current occupations,
+
+$$S(\mathbf q)=\frac{1}{N}\left|\sum_i (n_i-\bar n)\, e^{-i\mathbf q\cdot \mathbf r_i}\right|^2 ,$$
+
+computed on the real positions of the sites. The correlator gives the
+length scale of the order, and $S(\mathbf q)$ gives its wavevector. Since
+the mean occupation $\bar n$ is subtracted, $S(\mathbf q=0)=0$, so a peak at
+another $\mathbf q$ signals order. This is the quantity measured in a
+diffraction experiment.
 
 Optional arguments:
 
-- qpath=None: explicit array of $q$ vectors to evaluate; if omitted, a default square grid of `nq`$\times$`nq` points spanning $\pm$`qmax` is used
-- nq=60: grid resolution when `qpath` is not given
-- qmax=None: half-width of the default grid; defaults to $2\pi/d$ set by the nearest-neighbor spacing $d$
+- qpath=None: array of $\mathbf q$ vectors. By default a square grid of
+  `nq`$\times$`nq` points between $-q_{max}$ and $q_{max}$
+- nq=60: points per direction of the default grid
+- qmax=None: size of the default grid; by default $2\pi/d$, with $d$ the
+  first-neighbor distance
 
-Returns `(qpath, sq)`: the array of $q$ vectors evaluated and the matching array of $S(q)$ values
+Returns `(qpath, sq)`, the $\mathbf q$ vectors and $S(\mathbf q)$
 
 
 ## LatticeIsing functions and methods
 
+A `LatticeIsing` is a classical Ising model with spins $s_i=\pm1$ and
+energy
+
+$$E = -\sum_i b_i s_i - \sum_{i\neq j} J_{ij} s_i s_j ,$$
+
+where the sum runs over ordered pairs, so each bond counts twice, which is
+two times the usual convention. See [Ising models](ising.md).
+
 ### li.add_interaction()
-Add a coupling shell to the model, on top of any interactions already added (repeated calls accumulate).
+Add an exchange $J_{ij}$ between neighbor shells. Several calls add up.
 
 Optional arguments:
 
-- Jij: list of shell couplings, e.g. `[J1,J2,J3]` for first/second/third neighbor $-J_{ij}s_is_j$ exchange; positive is ferromagnetic (opposite sign convention from `LatticeGas.add_interaction()`). Passed through to `Geometry.get_hamiltonian(tij=Jij)`, so anything that constructor accepts for `tij` works here too
+- Jij: list of couplings of each shell, for example `[J1,J2,J3]`. A
+  positive value is ferromagnetic (note the opposite sign to
+  `LatticeGas.add_interaction()`). It accepts everything that `tij` of
+  `g.get_hamiltonian()` accepts
 
 Modifies `li` in place, no return value
 
 ### li.add_field()
-Add an external (Zeeman-like) field to `li.b`.
+Add a magnetic field $b_i$.
 
 Arguments:
 
-- h: a scalar (applied uniformly to every site) or a per-site array
+- h: a number (the same on every site) or an array with one value per site
 
 Modifies `li` in place, no return value
 
 ### li.set_magnetization()
-Reset the spin array `li.s` to a new random $\pm1$ configuration with a given average magnetization, discarding the current snapshot.
+Replace the spins `li.s` by a random configuration with a given
+magnetization.
 
 Arguments:
 
-- m=0.0: target average magnetization in $[-1,1]$ (rounded to the nearest integer up-spin count)
+- m=0.0: average magnetization, between -1 and 1 (rounded to an integer
+  number of up spins)
 
 ### li.get_energy()
-Evaluate the total energy $-\sum_i b_i s_i - \sum_{ij} J_{ij} s_i s_j$ of the current spin snapshot `li.s`. Returns a scalar. Since `li.pairs` lists both directions of every bond, this is twice the usual sum-over-unordered-bonds convention.
+The energy $E$ above for the current spins `li.s`. Returns a number.
 
 ### li.get_magnetization()
-Return $\mathrm{mean}(s)$, the average magnetization per site of `li.s` (a scalar in $[-1,1]$).
+The magnetization per site, $m=\frac{1}{N}\sum_i s_i$, between -1 and 1.
 
 ### li.optimize_energy()
-Single-spin-flip Metropolis dynamics, the standard Ising Monte Carlo move set: at each step, one random site is flipped and accepted unconditionally if the energy does not increase, or with probability $e^{-\Delta E/T}$ otherwise. Magnetization is *not* conserved (it fluctuates under `li.b`), the spin analog of `LatticeGas.optimize_grand_canonical()`.
+Metropolis dynamics with single spin flips. In each step one random spin is
+flipped. The flip is accepted if the energy does not increase, and with
+probability $e^{-\Delta E/T}$ otherwise. The magnetization is not fixed.
 
 Optional arguments:
 
-- temp=1.0: Metropolis temperature; `temp=0` runs zero-temperature (greedy) dynamics
-- ntries=1e5: number of flip attempts
-- resync_every=1000: how often (in flip attempts) to recompute the energy from scratch, bounding floating-point drift in the incremental tracking
-- checkpoint_at=None: an int or iterable of ints; captures a copy of `li.s` after that many attempts (1-indexed) into `li.checkpoints` (a dict `step -> s` snapshot)
+- temp=1.0: Metropolis temperature $T$; `temp=0` only accepts flips that do
+  not increase the energy
+- ntries=1e5: number of attempted flips
+- resync_every=1000: every how many attempts the energy is recomputed from
+  scratch
+- checkpoint_at=None: an integer or a list of integers; a copy of `li.s`
+  after that many attempts is stored in `li.checkpoints`
 
-No `patience` option: unlike `optimize_conserved()`, this trajectory is meant to be fed to `latticegas.get_specific_heat()`/`get_susceptibility()`, and early truncation would silently bias those variance estimates.
+There is no `patience` option, because the trajectory is meant for
+`latticegas.get_specific_heat()` and `get_susceptibility()`, and stopping
+early would bias them.
 
-Overwrites `li.s` with the final configuration and returns `(es, ms)`: the energy trajectory and the total-magnetization ($\sum_i s_i$) trajectory, both arrays of length `ntries`
+Sets `li.s` to the final configuration, and returns `(es, ms)`: the energy
+and the total magnetization $\sum_i s_i$ after each attempt
 
 ### li.optimize_conserved()
-Kawasaki spin-exchange dynamics: at each step, one up spin and one down spin are picked at random and swapped, which conserves the total magnetization, the spin analog of `LatticeGas.optimize_energy()` (swap-based, fixed filling). Raises `ValueError` if `li.s` does not have both $+1$ and $-1$ present (e.g. after `set_magnetization(1.0)`).
+Kawasaki dynamics: in each step a random up spin and a random down spin are
+exchanged, so the magnetization is fixed. Raises `ValueError` if `li.s` does
+not contain both up and down spins.
 
-Optional arguments: same as `li.optimize_energy()`, except that `temp` defaults to `0.1` here rather than `1.0`, plus:
+Optional arguments: the same as `li.optimize_energy()`, but with default
+`temp=0.1`, and also:
 
-- patience=None: if set, stop early once this many attempts have passed without a new best energy being found (the returned array is truncated to what actually ran)
+- patience=None: if given, stop after this many attempts without a new
+  lowest energy
 
-Overwrites `li.s` with the final configuration and returns the array of energies recorded at each attempt
+Sets `li.s` to the final configuration, and returns the energy after each
+attempt
 
 ### li.anneal()
-Simulated annealing over a decreasing temperature schedule: calls `li.optimize_energy()` once per temperature in `temps`, keeping the best (lowest-energy) configuration seen across the whole schedule.
+Simulated annealing: `li.optimize_energy()` at each temperature of a
+decreasing list, keeping the lowest-energy configuration of the whole
+schedule.
 
 Optional arguments:
 
-- temps=None: sequence of temperatures, high to low; defaults to a 10-step geometric schedule from 2.0 down to 0.05
-- ntries=1e4: number of flip attempts per temperature
-- checkpoint_at=None: like `li.optimize_energy()`'s `checkpoint_at`, but numbered continuously across the whole schedule
-- any other keyword accepted by `li.optimize_energy()`, applied at every temperature
+- temps=None: temperatures from high to low; by default 10 temperatures on
+  a geometric scale from 2.0 to 0.05
+- ntries=1e4: attempts per temperature
+- checkpoint_at=None: as in `li.optimize_energy()`, counted over the whole
+  schedule
+- any other keyword of `li.optimize_energy()`, used at every temperature
 
-Overwrites `li.s` with the best configuration found and returns `(es, ms)`, the concatenated energy and magnetization trajectories across all temperatures
+Sets `li.s` to the best configuration, and returns `(es, ms)` for the whole
+schedule
 
 ### li.optimize_energy_multistart()
-Run `nstart` independent flip-based anneals from independent random seeds (same initial magnetization as the current `li.s`) and keep the lowest-energy result. Each restart is a full `li.optimize_energy()` run, in parallel or serially as for `lg.optimize_energy_multistart()`.
+Run `nstart` independent optimizations from random spins with the current
+magnetization, and keep the lowest energy. Parallel as in
+`lg.optimize_energy_multistart()`.
 
 Optional arguments:
 
-- nstart=10: number of independent restarts
-- any other keyword accepted by `li.optimize_energy()` (e.g. `temp`, `ntries`), applied identically to every restart
+- nstart=10: number of runs
+- any other keyword of `li.optimize_energy()` (`temp`, `ntries`), the same
+  for every run
 
-Overwrites `li.s` with the best configuration found and returns its energy (a scalar)
+Sets `li.s` to the best configuration, and returns its energy
 
 ### li.get_local_energy() / li.get_local_field()
-Per-site breakdown of the current snapshot. `get_local_energy()` returns each site's own contribution to `li.get_energy()` (values sum exactly to `li.get_energy()`, mirroring `LatticeGas.get_local_energy()`'s $j/2$ correction for the double-counted bonds). `get_local_field()` returns the effective field $h^{\mathrm{eff}}_i=b_i+2\sum_kJ_{ik}s_k$ seen by each site, defined so that flipping $s_i$ costs exactly $2s_ih^{\mathrm{eff}}_i$, the spin analog of `LatticeGas.get_local_mu()`.
+`get_local_energy()` gives the energy of each site; the values add up to
+`li.get_energy()`. `get_local_field()` gives the effective field on each
+site, $h^{\mathrm{eff}}_i=b_i+2\sum_k J_{ik}s_k$, so that flipping $s_i$
+costs exactly $2s_ih^{\mathrm{eff}}_i$.
 
 Returns an array over sites
 
 ### li.get_correlator() / li.get_structure_factor()
-Spin-spin correlator and reciprocal-space structure factor of the current snapshot `li.s`. See `LatticeGas.get_correlator()`/`get_structure_factor()` for the argument reference.
+The spin-spin correlator and the structure factor of the current spins
+`li.s`. The arguments are the same as in `lg.get_correlator()` and
+`lg.get_structure_factor()`.
 
 ### li.add_tensor() / li.regroup()
-Same as `LatticeGas.add_tensor()`/`regroup()`.
+The same as `lg.add_tensor()` and `lg.regroup()`.
 
 Modifies `li` in place, no return value
 
 ### li.write() / li.read()
-Save/load the current spin snapshot `li.s` to/from a text file. See `LatticeGas.write()`/`read()`. `read()` rounds to $\{-1,+1\}$ (sign, treating exact 0 as $+1$) to absorb the text round-trip's floating point noise, and raises `ValueError` if the file's site count does not match `li.nsites`.
+Write the spins `li.s` to a text file, and read them back. `read()` takes
+the sign of each value, so the spins are exactly $\pm1$, and raises
+`ValueError` if the number of sites in the file is not `li.nsites`.
 
 Optional arguments:
 
-- name="SPIN.OUT": file path
+- name="SPIN.OUT": file name

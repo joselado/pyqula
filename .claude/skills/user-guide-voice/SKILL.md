@@ -1,23 +1,24 @@
 ---
 name: user-guide-voice
-description: The maintainer's writing voice for documentation/user_guide.md -- the three registers (chapter prose, section intros, catalogue bullets), the spelling decisions, what not to write, and which chapters are the maintainer's own prose to fix rather than rewrite. Load this before writing or rewriting a single sentence of the user guide, including when merely adding a section for a new feature, and before touching README.md's FUNCTIONALITIES list. Prose written without it reads like a language model wrote it, which is the exact failure this exists to prevent.
+description: The maintainer's locked writing voice for every text written for pyqula's users (the user guide, README.md, notebook prose, example comments) and in particular for the user guide, the website pages under documentation/guide/ -- simple English written by a condensed matter physicist, the formula and the physical meaning before the code, no internals; plus the older registers (chapter prose, section intros, catalogue bullets), the spelling decisions, what not to write, and which chapters are the maintainer's own prose to fix rather than rewrite. Load this before writing or rewriting a single sentence of the user guide pages, including when merely adding a section for a new feature, and before writing or changing any text in README.md, in a notebook of jupyter-notebooks/ or in the comments of examples/. Prose written without it reads like a language model wrote it, which is the exact failure this exists to prevent.
 ---
 
 # Writing the pyqula user guide
 
 `documentation/VOICE.md` is the full reference and is the authority here. **Read it before
-writing** -- sections 1 to 4 first, then sections 5 to 8 as a reference while writing, then
+writing** -- section 0 first, which sets the register of the website and wins over the
+rest (short sentences in simple English, the formula and the physics before the code, no
+internals, `documentation/guide/hamiltonian.md` as the model page), then sections 1 to 4, then sections 5 to 8 as a reference while writing, then
 run the checklist in section 10 before finishing. When something in it disagrees with a
 sentence the maintainer wrote in the guide, the maintainer's sentence wins.
 
 ## When the guide has to change
 
-When a change adds or materially changes a user-facing feature, update
-`documentation/user_guide.md`, and `README.md`'s FUNCTIONALITIES list where relevant. The
+When a change adds or materially changes a user-facing feature, update its page
+under `documentation/guide/` (the website, built by MkDocs from `mkdocs.yml`), and `README.md`'s FUNCTIONALITIES list where relevant. The
 existing style for a new feature is a short prose section with the physics and the
 motivation, a runnable code snippet, and -- for anything with a method on `Hamiltonian` or
-`Geometry` -- an entry in the "Main functions and methods" reference at the end of the
-guide.
+`Geometry` -- an entry on the reference pages `documentation/guide/reference-*.md`.
 
 ## README's FUNCTIONALITIES list
 

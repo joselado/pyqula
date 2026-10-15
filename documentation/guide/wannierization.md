@@ -1,21 +1,41 @@
 # Wannierization
 
-We will now see how to build a smaller tight-binding model out of a chosen set of bands of a
-Hamiltonian, with `h.get_wannier_hamiltonian()`.
+Often we only care about a few bands, for example the bands near the Fermi
+energy. Wannierization builds a smaller tight-binding model that describes
+only these bands. We do this with `h.get_wannier_hamiltonian()`.
 
-A band, or a group of bands, that is separated from the rest by a gap can be described by
-localized orbitals centered on the unit cells, the Wannier functions, whose hoppings reproduce
-that band subspace. Wannierization is the construction of those functions with the smallest
-possible spread, and what it returns is a new tight-binding Hamiltonian with as many orbitals
-per cell as bands were selected, that can be used like any other Hamiltonian in this guide.
-`h.get_wannier_hamiltonian()` Wannierizes a contiguous range of a periodic Hamiltonian's bands
-and returns a new, smaller multicell Hamiltonian whose real-space hoppings reproduce that band
-subspace on the wannierization k-mesh. By default the range is taken as a fixed subspace,
-Wannierized jointly as one group, and reproduced exactly; passing a `num_wann` smaller than
-the range instead disentangles, which is the subject of the second subsection below.
+## Maximally localized Wannier functions
 
-As an example, consider a staggered honeycomb lattice, where a sublattice potential opens a
-gap and gives a genuinely dispersive valence band to Wannierize
+Take a group of $J$ bands that is separated from the other bands by a gap in
+the whole Brillouin zone. From their Bloch states $|\psi_{mk}\rangle$ we
+build localized orbitals, the Wannier functions,
+
+$$
+|w_{n\mathbf R}\rangle = \frac{1}{N_k}\sum_{\mathbf k} e^{-i\mathbf k\cdot\mathbf R}
+\sum_{m=1}^{J} U_{mn}(\mathbf k)\,|\psi_{m\mathbf k}\rangle ,
+$$
+
+where $\mathbf R$ is a unit cell, $N_k$ is the number of k-points of the
+mesh, and $U(\mathbf k)$ is a unitary $J\times J$ matrix at each k-point. The
+Bloch states have an arbitrary phase (a gauge), and $U(\mathbf k)$ uses this
+freedom. Maximally localized Wannier functions are the ones with the
+$U(\mathbf k)$ that minimizes the total spread
+
+$$
+\Omega = \sum_{n} \left[ \langle w_{n\mathbf 0}|r^2|w_{n\mathbf 0}\rangle
+- |\langle w_{n\mathbf 0}|\mathbf r|w_{n\mathbf 0}\rangle|^2 \right],
+$$
+
+the sum of the squared widths of the Wannier functions. The centre of
+function $n$ is $\langle w_{n\mathbf 0}|\mathbf r|w_{n\mathbf 0}\rangle$.
+In the basis of the Wannier functions the Hamiltonian has hoppings
+$t_{nm}(\mathbf R)=\langle w_{n\mathbf 0}|H|w_{m\mathbf R}\rangle$, and this is
+the new tight-binding model. It has one orbital per selected band, and it is
+a normal pyqula Hamiltonian.
+
+As an example we take the honeycomb lattice with a sublattice potential. The
+potential opens a gap, so the lower band (the valence band) is isolated and
+can be Wannierized alone:
 
 ```python
 from pyqula import geometry
@@ -33,51 +53,55 @@ print("Wannier spreads:",hwan.wannier_spreads)
 print("Total spread Omega:",hwan.wannier_spread_total)
 ```
 
-One band was selected, so the Wannierized model has a single orbital per cell, and its centre
-and spread are the ones the minimization arrived at: the total spread $\Omega$ is what a
-maximally localized Wannier function has made as small as it can. The minimization starts from
-the orbitals of the original model where the selected bands have most of their weight, here the
-site with the lower onsite energy, so that the same call always gives the same Wannier function,
-and `trial_vectors=` replaces that starting point by one of your choice. The Wannierized Hamiltonian
-`hwan` behaves like any other pyqula Hamiltonian, so its bands can be compared directly
-against the original model's
+`bands=[a,b]` selects the bands from index `a` to index `b`, both included,
+counted from the lowest one. One band is selected, so `hwan` has one orbital
+per cell. Its centre is close to the site with the lower onsite energy,
+where the valence band has most of its weight. The spreads are in units of
+the squared length of the geometry (the first-neighbor distance is 1). A
+larger gap gives a more localized Wannier function and a smaller $\Omega$.
+The minimization starts from the orbitals of the original model where the
+selected bands have most weight, so the same call always gives the same
+result; `trial_vectors=` sets another starting point.
+
+The bands of `hwan` can be compared with those of the original model:
 
 ```python
 (k,e) = h.get_bands(write=False)
 (kw,ew) = hwan.get_bands(write=False)
 ```
 
-The two coincide on the wannierization mesh, and the Wannier model interpolates smoothly
-between the mesh points, which is the point of doing this: a one-orbital model that carries the
-valence band of the two-orbital one. The mesh fixes each hopping only up to a translation by the
-supercell of `nk` cells along each direction, so, as in Wannier90, the hoppings are placed on the
-cells of the Wigner-Seitz cell of that supercell, the ones closest to the origin, and a cell on its
-boundary carries the hopping divided by the number of equally close copies it has; this set of
-cells is symmetric under $R\to-R$, so the Bloch Hamiltonian of the Wannier model is Hermitian at
-every k and not only on the mesh. How good the interpolation is between the mesh points depends on
-how localized the Wannier functions are, so a band that comes close to another somewhere in the
-Brillouin zone needs a denser mesh. See `examples/wannier/get_wannier_hamiltonian/main.py` for
-a runnable version, and
-`jupyter-notebooks/functionalities/wannierization/01_maximally_localized_wannier.ipynb` and
-`02_exact_reproduction.ipynb` in the same folder for the executed notebooks.
+`ew` is equal to the lower band of `e` at the k-points of the mesh, and
+between them the Wannier model interpolates smoothly. So we have a model
+with one orbital that carries the valence band of the model with two
+orbitals. The quality of this interpolation depends on how localized the
+Wannier functions are. A band that comes close to another band somewhere in
+the Brillouin zone has wide Wannier functions, and needs a denser mesh `nk`.
+
+The mesh only fixes each hopping up to a translation by the supercell of
+`nk` cells. As in Wannier90, each hopping is put on the cell closest to the
+origin (the Wigner-Seitz cell of that supercell), so the Bloch Hamiltonian of
+the Wannier model is Hermitian at every k, also between mesh points.
+
+See `examples/wannier/get_wannier_hamiltonian/main.py` for a runnable script,
+and `jupyter-notebooks/functionalities/wannierization/01_maximally_localized_wannier.ipynb`
+and `02_exact_reproduction.ipynb` in the same folder for executed notebooks.
 
 ## Symmetry-enforced Wannierization
 
-Let us now see how the point-group symmetry of the lattice is enforced on the Wannier
-functions, with `symmetries="auto"`. Passing it makes `get_wannier_hamiltonian` check, before
-Wannierizing, that the selected band range is a genuine union of point-group-related multiplets
-everywhere on the mesh, with the point group auto-detected from the geometry and the
-Hamiltonian. A band selection that instead slices through a symmetry-related degeneracy is
-rejected with a `ValueError` rather than silently returning a mis-symmetrized model. A list of
-explicit `symmetrytk.pointgroup.SymmetryOperation` can be passed instead of `"auto"` to
-enforce a specific subgroup.
+The Wannier functions should respect the point-group symmetry of the
+lattice. With `symmetries="auto"`, the point group is found from the
+geometry and the Hamiltonian, and the code first checks that the selected
+bands are a union of complete multiplets of this group at every k-point. If
+the selection cuts through a degeneracy protected by symmetry, the code
+raises a `ValueError` instead of returning a model with the wrong symmetry.
+A list of `symmetrytk.pointgroup.SymmetryOperation` can be given instead of
+`"auto"`, to enforce only a subgroup.
 
-A good illustration is kagome's flat band, the lowest of its three bands (index 0, at
-$E=-2$ in units of the hopping): it touches the dispersive middle band at the $\Gamma$ point, so
-no selection containing only the flat band is a union of whole multiplets there. This touching
-is why kagome's flat band on its own, which is not an isolated band, has no exponentially
-localized Wannier function, symmetric or not, and the check catches it instead of returning a
-broken model
+The flat band of the kagome lattice is a good example. It is the lowest of
+the three bands, at $E=-2$ in units of the hopping, and it touches the middle
+band at $\Gamma$. So a selection with only the flat band is not a union of
+complete multiplets at $\Gamma$. This touching is also the reason why the
+flat band alone has no exponentially localized Wannier functions:
 
 ```python
 from pyqula import geometry
@@ -96,24 +120,28 @@ hwan_sym = h.get_wannier_hamiltonian(bands=[0,2],nk=12,symmetries="auto")
 print("Symmetries enforced:",[c.op.name for c in hwan_sym.wannier_symmetries])
 ```
 
-The first call raises, and the message names the symmetry and the k-point, $\Gamma$, where the
-selection is not a union of whole multiplets; the second returns a
-three-orbital model whose Wannier functions transform into each other under the operations
-listed in `wannier_symmetries`. See `examples/wannier/get_wannier_hamiltonian/main.py` and
-`examples/wannier/symmetric_wannierization/main.py` for runnable versions of these two
-examples, and
+The first call raises an error, and the message gives the symmetry and the
+k-point, $\Gamma$, where the selection breaks a multiplet. The second call
+gives a model with three orbitals, whose Wannier functions transform into
+each other under the operations listed in `wannier_symmetries`.
+
+See `examples/wannier/symmetric_wannierization/main.py` for a runnable
+script, and
 `jupyter-notebooks/functionalities/wannierization/03_symmetry_enforced_wannierization.ipynb`
 for the executed notebook.
 
 ## Disentanglement
 
-A fixed band range only works when the range is separated from everything else by a gap across
-the whole Brillouin zone. Let us now see what to do when it is not, with `num_wann`.
-Graphene's two $p_z$ bands are the simplest counterexample: they touch at K, so neither of
-them is a smooth subspace on its own. Souza-Marzari-Vanderbilt disentanglement (Phys. Rev. B
-65, 035109) handles that case by extracting `num_wann` optimally connected states out of a
-larger set of *offered* bands, k-point by k-point. It is switched on by passing a `num_wann`
-smaller than the selected range, in which case `bands=[a,b]` only says which bands are offered.
+A selection of bands only works if these bands are separated from all the
+others by a gap in the whole Brillouin zone. Often they are not. The
+simplest case is graphene: its two $p_z$ bands touch at K, so neither band
+alone is a smooth set of states. Disentanglement solves this. From a larger
+set of offered bands it extracts, at each k-point, the subspace of
+`num_wann` states that changes most smoothly with k, meaning that it
+minimizes the gauge-invariant part $\Omega_I$ of the spread. This is the
+method of Souza, Marzari and Vanderbilt. It is switched on by giving a
+`num_wann` smaller than the number of selected bands; then `bands=[a,b]`
+only says which bands are offered.
 
 ```python
 import numpy as np
@@ -135,33 +163,35 @@ e0 = np.sort(np.linalg.eigvalsh(f0(k))) ; ew = np.linalg.eigvalsh(fw(k))
 print("frozen state reproduced to:",abs(ew[0]-e0[0]))
 ```
 
-What is reproduced changes with it, and this is the trade rather than a loss of accuracy: a
-disentangled Hamiltonian reproduces the states inside the **frozen inner window**
-(`dis_froz_min`/`dis_froz_max`) exactly at every mesh k-point, and deliberately does not
-reproduce the selected bands outside it. Outside the frozen window the extracted subspace is a
-different, smoother one, meaning that the last line above prints a number at machine precision
-for the frozen valence state while the conduction band is not in the model at all. Pass
-`cutoff=0.0` when testing that exactness, as above: the default `cutoff=1e-6` drops small
-real-space hoppings and with them the last few digits. An **outer window**
-(`dis_win_min`/`dis_win_max`) narrows which bands are offered at each k-point, so the number
-available varies across the mesh, which is the point of a window rather than a band range;
-every eigenvalue of the result then lies inside it. `dis_num_iter` (default 200) bounds the
-$\Omega_I$ minimization; not reaching convergence within it is a warning rather than an
-error, since the frozen window is reproduced either way.
+The model now reproduces exactly only the states inside the frozen window,
+below $E=-1$ here, at every k-point of the mesh. Outside the frozen window
+it does not reproduce the offered bands: it follows a smoother subspace
+instead. So the last line prints a number at machine precision for the
+frozen valence state, while the conduction band is not in the model at all.
+This is the price of a smooth, localized orbital, not an error. With
+`cutoff=0.0` all the real-space hoppings are kept; the default `cutoff=1e-6`
+drops the small ones and changes the last digits.
 
-The returned Hamiltonian carries `wannier_num_wann` and `wannier_disentanglement_window` (the
-four window values actually used, or `None` when not disentangling) alongside the centres and
-spreads.
+The keywords are:
 
-Combinations that would silently do nothing raise instead: a `dis_*` window without a smaller
-`num_wann` (disentanglement is switched on by the band count exceeding `num_wann`, so the
-window would be accepted and ignored), `dis_froz_min` without `dis_froz_max`, or a `num_wann`
-outside `1..len(bands)`. Disentanglement is not implemented together with a Nambu/BdG
-Hamiltonian, with `symmetries=`, or with `auto_split_clusters=True`, each naming the
-combination. One gap in that guard is worth knowing about: `win_keywords=` is by design an
-unchecked passthrough merged after the check, so a window smuggled in through it can still
-reach the engine and be ignored; use the real `dis_froz_max=` argument, which is guarded. See
-`jupyter-notebooks/functionalities/wannierization/04_dimensionality_and_bdg.ipynb` for the
-executed notebook on Wannierizing in other dimensionalities and in the Nambu basis, and
-`jupyter-notebooks/functionalities/wannierization/05_band_disentanglement.ipynb` for the one on
-disentanglement.
+- `num_wann`: number of Wannier functions; smaller than the number of selected bands switches on disentanglement.
+- `dis_froz_min`, `dis_froz_max`: the frozen (inner) window; states inside it are reproduced exactly. Give both, or only `dis_froz_max`.
+- `dis_win_min`, `dis_win_max`: the outer window; only the states inside it are offered at each k-point, so their number can change across the Brillouin zone.
+- `dis_num_iter`: maximal number of iterations of the $\Omega_I$ minimization (default 200); if it is not converged you get a warning, and the frozen window is reproduced anyway.
+
+The returned Hamiltonian has the attributes `wannier_num_wann` and
+`wannier_disentanglement_window` (the four window values used, or `None`
+without disentanglement), together with the centres and spreads.
+
+A window without a smaller `num_wann`, `dis_froz_min` without
+`dis_froz_max`, or a `num_wann` outside $1$ to the number of bands raises an
+error, since the window would be ignored otherwise. Disentanglement does not
+work together with a Nambu (BdG) Hamiltonian, with `symmetries=`, or with
+`auto_split_clusters=True`; these combinations raise a
+`NotImplementedError`. Always give the window with the `dis_*` keywords and
+not through `win_keywords=`, since this last one is passed on without any
+check.
+
+See `jupyter-notebooks/functionalities/wannierization/04_dimensionality_and_bdg.ipynb`
+for Wannierization in other dimensions and in the Nambu basis, and
+`05_band_disentanglement.ipynb` in the same folder for disentanglement.

@@ -1,12 +1,12 @@
 # Files written to the working directory
 
-Most of the routines that compute an observable also write it to a file in the working
-directory, `BANDS.OUT` for the band structure, `DOS.OUT` for the density of states,
-`CHERN.OUT` for the Chern number and so on, which is convenient when a calculation runs as a
-script and is plotted afterwards, and less so inside a notebook or a larger program, where
-the returned arrays are all that is needed and the files only pile up. Each of these routines
-takes a `write` keyword with a default of its own, and we will now see how to set it for all
-of them at once, with `filewrite.set_write()`
+Many methods that compute a quantity also write it to a file in the working
+directory: `BANDS.OUT` for the band structure, `DOS.OUT` for the density of
+states, `CHERN.OUT` for the Chern number, and so on. This is useful for a
+script that is plotted later, but in a notebook or inside a larger program
+the returned arrays are enough, and the files are not needed. Each of these
+methods has a keyword `write` with its own default, and
+`filewrite.set_write()` sets it for all of them at once:
 
 ```python
 from pyqula import geometry
@@ -19,10 +19,11 @@ h = g.get_hamiltonian() # first-neighbor tight-binding Hamiltonian
 filewrite.set_write(None) # back to the default of each routine
 ```
 
-The order is always the same: a `write` given in the call, then the switch, and only when
-neither is set, the default of the routine. So `filewrite.set_write(True)` makes every
-routine write, including the few that do not by default, such as `topology.chern_density()`,
-and `write=False` in a single call keeps that call quiet whatever the switch says. The
-returned arrays do not depend on any of this, only the files do. The switch reaches every
-routine that takes a `write` keyword; the methods whose only purpose is to write a file, such
-as `g.write()` or `h.write_hopping()`, write whenever they are called.
+The rule is always the same: first the `write` given in the call, then the
+switch, and only if neither is set, the default of the method. So
+`filewrite.set_write(True)` makes every method write its file, also the few
+that do not write by default, such as `topology.chern_density()`, and
+`write=False` in one call keeps that call silent, whatever the switch says.
+The returned arrays do not depend on this, only the files do. The methods
+whose only job is to write a file, such as `g.write()` or
+`h.write_hopping()`, always write.

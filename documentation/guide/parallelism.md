@@ -1,28 +1,31 @@
 # Parallelism and reproducibility
 
-Most of the calculations in this guide are sweeps: over k-points for a band
-structure, over energies for a density of states, over q-points for a response
-function, over restarts for an anneal. They run serially by default, one item
-after the other, and `parallel.set_cores(n)` spreads them over `n` worker
-processes; `parallel.set_enabled(False)` goes the other way and forces the
-whole package strictly serial, which is the setting to reach for when
-debugging.
+Many calculations are loops over independent items: k-points for a band
+structure, energies for a density of states, q-points for a response
+function, restarts for an annealing. By default they run one after the
+other. `parallel.set_cores(n)` runs them on `n` processes:
 
 ```python
 from pyqula import parallel
 parallel.set_cores(4)          # spread the sweeps over 4 processes
 ```
 
-The number of cores changes how long a sweep takes and nothing else. Results do
-not depend on the core count, including for the routines that draw random
-numbers, the stochastic trace of the KPM and the multistart anneals of the
-classical models: `cores=1` and `cores=8` give identical answers. Seeding numpy
-in the parent process
+The number of cores changes only the time of the calculation, not the
+result. This is also true for the calculations that use random numbers, such
+as the stochastic trace of the [kernel polynomial method](kpm.md) or the
+restarts of the classical models: `cores=1` and `cores=8` give the same
+numbers. So if you fix the random seed of numpy in your script,
 
 ```python
 import numpy as np
 np.random.seed(42)
 ```
 
-therefore makes a whole sweep reproducible run to run, which is what you want
-when comparing two calculations that differ in a single parameter.
+the whole calculation gives the same result every time. This is useful when
+you compare two calculations that differ in one parameter only.
+
+`parallel.set_enabled(False)` makes everything run on one core, with no
+parallel processes and no threads. Use it to debug a calculation, or to
+measure its time on a single core. `parallel.set_enabled(True)` allows
+parallel runs again, but it does not restore the previous number of cores,
+so call `parallel.set_cores(n)` again.

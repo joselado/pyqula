@@ -1,24 +1,51 @@
 # Quantum transport
 
-We will now see how to perform quantum transport calculations with pyqula, starting from the
-conductance of the simplest junctions between two leads and reaching the current through a
-voltage-biased superconducting one.
+In this page we compute the conductance of junctions. We start with two
+normal leads, then a normal lead and a superconductor, and we end with the
+current through a junction between two superconductors at finite voltage.
 
-A transport calculation puts a scattering region between two semi-infinite leads, each of them
-a periodic Hamiltonian of the kind built in the previous chapters, and asks how much current
-flows through it. The leads enter through their surface Green's functions, obtained with the
-same decimation as in the surface spectral functions, and the quantity computed is the
-differential conductance $dI/dV$, what a two-terminal measurement gives: for normal leads it
-is the Landauer transmission, in units of $e^2/h$ per open channel, and when a lead is
-superconducting it includes Andreev reflection, the process in which an electron arriving from
-the normal side is reflected as a hole while a Cooper pair enters the superconductor.
+A transport calculation has a scattering region between two semi-infinite
+leads. Each lead is a periodic Hamiltonian, of the kind built in
+[Building a Hamiltonian](hamiltonian.md). The leads enter through their
+self-energies $\Sigma_L(E)$ and $\Sigma_R(E)$, computed from the surface
+Green's function of each lead, and the Green's function of the scattering
+region is
+
+$$G(E) = \left[E + i\delta - H_C - \Sigma_L(E) - \Sigma_R(E)\right]^{-1}.$$
+
+For normal leads, the zero-temperature conductance is the Landauer formula,
+
+$$G = \frac{e^2}{h}\, T(E), \qquad
+T(E) = {\rm Tr}\left[\Gamma_L\, G\, \Gamma_R\, G^\dagger\right], \qquad
+\Gamma_{L,R} = i\left(\Sigma_{L,R} - \Sigma_{L,R}^\dagger\right),$$
+
+where $T(E)$ is the transmission, the sum of the transmission probabilities
+of all the channels. pyqula gives conductances in units of $e^2/h$, and
+counts the two spins as two channels, so a perfect spinful chain has $G=2$.
+This is the differential conductance $dI/dV$ at bias $V=E/e$ that a
+two-terminal measurement gives.
+
+When one lead is superconducting, the Hamiltonian is written in the Nambu
+basis (see [Superconductivity](superconductivity.md)), and the conductance
+is computed from the scattering matrix with the Blonder-Tinkham-Klapwijk
+formula,
+
+$$G(E) = \frac{e^2}{h}\left[N - R_{ee}(E) + R_{he}(E)\right],$$
+
+where $N$ is the number of channels of the normal lead,
+$R_{ee}={\rm Tr}\, r_{ee}^\dagger r_{ee}$ is the probability that an electron
+is reflected as an electron, and $R_{he}={\rm Tr}\, r_{he}^\dagger r_{he}$
+the probability that it is reflected as a hole. The second process is
+Andreev reflection: an electron from the normal side is reflected as a hole,
+and a Cooper pair enters the superconductor. It transfers a charge $2e$, so
+it adds to the conductance.
 
 ## Magnetoresistance in metal-metal transport
 
-As a specific example, here we will address how to compute the magnetoresistance of a junction
-between two magnetic metals, with `HT.didv()`. We build two copies of the same lead, give each
-one an exchange field pointing in a different direction, and compare the conductance of the
-parallel and antiparallel configurations
+We now compute the magnetoresistance of a junction between two magnetic
+metals, with `HT.didv()`. We make two copies of the same chain, add an
+exchange field to each of them, and compare the parallel and antiparallel
+configurations:
 
 ```python
 from pyqula import geometry
@@ -35,28 +62,39 @@ for name,m2 in [("parallel",[0.,0.,0.5]),("antiparallel",[0.,0.,-0.5])]:
     Gs[name] = [HT.didv(energy=e) for e in es] # calculate conductance
 ```
 
-The magnetoresistance follows from the two conductance curves,
-$\mathrm{MR} = (G_P - G_{AP})/G_{AP}$ evaluated at the Fermi energy. In the parallel
-configuration each spin channel sees the same bands on both sides of the junction and
-transmits perfectly, so the conductance at zero energy is 2, one per spin; in the antiparallel
-one a spin-up electron of the first lead arrives at a lead whose spin-up band is shifted the
-opposite way, the mismatch reflects part of it, and the conductance is smaller. For the chain
-above the effect is a few percent, since an exchange of 0.5 is small compared with the
-bandwidth of 4. See
-`jupyter-notebooks/functionalities/quantum_transport/01_metal_metal_transport.ipynb` for the
-executed notebook.
+`Gs["parallel"]` and `Gs["antiparallel"]` are the conductances $G_P$ and
+$G_{AP}$ at each energy, and the magnetoresistance is
+
+$$\mathrm{MR} = \frac{G_P - G_{AP}}{G_{AP}} .$$
+
+In the parallel configuration each spin sees the same band on both sides, so
+it is transmitted perfectly, and the conductance is 2, one per spin. In the
+antiparallel configuration the spin-up band of the first lead is shifted up
+and the one of the second lead is shifted down. This mismatch reflects part
+of the electrons, so the conductance is smaller. For this chain the effect is
+a few percent, because the exchange field 0.5 is small compared with the
+bandwidth 4. This is the physics of the tunneling magnetoresistance in spin
+valves.
+
+See
+`jupyter-notebooks/functionalities/quantum_transport/01_metal_metal_transport.ipynb`
+for an executed notebook.
 
 ## Superconductor-metal transport
 
-Here we address how transport between a superconducting lead and a metallic lead is computed,
-with `heterostructures.build()` and `HT.set_coupling()`. As a paradigmatic example, we will
-focus on the Andreev reflection regime and the tunneling regime. Below the gap an electron from
-the normal lead cannot enter the superconductor as a quasiparticle: it can only be reflected
-as a hole, leaving a Cooper pair behind, and since that process transfers a charge $2e$ it
-doubles the conductance of a transparent contact below the gap. At a tunneling contact Andreev
-reflection is suppressed, and the conductance instead follows the density of states of the
-superconductor, zero inside the gap and with coherence peaks at $\pm\Delta$. The loop over the
-transparency `T` goes from one limit to the other
+We now compute the conductance between a normal metal and a superconductor,
+with `heterostructures.build()` and `HT.set_coupling()`. There are two
+limits. At a transparent contact, an electron with energy inside the gap
+cannot enter the superconductor as a quasiparticle, so it is Andreev
+reflected as a hole with probability one, and the conductance below the gap
+is twice the normal one. At a tunneling contact Andreev reflection is
+suppressed, because it needs two electrons to tunnel. Then the conductance
+follows the density of states of the superconductor: zero inside the gap,
+and coherence peaks at $\pm\Delta$.
+
+`HT.set_coupling(T)` multiplies the hopping between the two sides of the
+junction by $T$, so $T=1$ is a perfect contact and $T\ll 1$ is a tunnel
+contact. The loop goes from one limit to the other:
 
 ```python
 from pyqula import geometry
@@ -74,21 +112,26 @@ for T in np.linspace(1e-3,1.0,6): # loop over transparencies
     Gs = [HT.didv(energy=e) for e in es] # calculate conductance
 ```
 
-`Gs` is the conductance curve at each transparency, and comparing it against its value outside
-the gap is the natural way to read it: at `T=1.0` the sub-gap conductance is twice the normal
-one, and at the lowest transparencies it vanishes inside the gap and peaks at the gap edge.
-This is the spectroscopy that a normal tip on a superconductor gives, and the transparency is
-the knob an experiment controls through the tip-sample distance. See
-`examples/transport/andreev_reflection/main.py` for a runnable version, and
+`Gs` is the conductance at each energy, for the last transparency of the
+loop. Compare it with its value outside the gap, $|E|>\Delta=0.01$. At
+`T=1.0` the conductance inside the gap is twice the one outside. At the
+smallest transparencies it goes to zero inside the gap and has peaks at the
+gap edges. This is the spectroscopy of a normal STM tip on a superconductor,
+and the transparency is what the experiment changes with the distance
+between the tip and the sample.
+
+See `examples/transport/andreev_reflection/main.py` for a runnable script,
+and
 `jupyter-notebooks/functionalities/quantum_transport/02_metal_superconductor_transport.ipynb`
-for the executed notebook.
+for an executed notebook.
 
 ## Transport through an arbitrary finite region
 
-The two examples above build the central scattering region out of copies of the leads' own
-unit cell. Let us now see how any finite (0d) Hamiltonian can act as the central region
-instead, contacted by two semi-infinite 1D chain leads attached at sites `i` and `j`, with
-`h.get_central_heterostructure(i,j,left=None,right=None)`
+In the two examples above, the scattering region is made of copies of the
+unit cell of the leads. We now use any finite (0d) Hamiltonian as the
+scattering region, for example a molecule or a quantum dot, with two
+semi-infinite chains attached at sites `i` and `j`, with
+`h.get_central_heterostructure(i,j,left=None,right=None)`:
 
 ```python
 from pyqula import geometry
@@ -105,27 +148,32 @@ ht = hc.get_central_heterostructure(0,4,left=h_normal,right=h_sc)
 G = ht.didv(energy=0.02) # Andreev conductance, via the BdG scattering-matrix formula
 ```
 
-It returns a plain `Heterostructure`, so `didv`, `get_dos`, `get_kappa` and the rest all work
-on it. The exception is `landauer`, which refuses a junction with a Nambu degree of freedom:
-the Landauer formula counts single-particle transmission, while a Cooper pair carries charge
-$2e$. Use `didv`, which applies the BdG scattering formula, in that case. `left` and `right`
-default to a plain spinless chain and `j` to the last site. At most one of `hc`, `left` and
-`right` may carry a pairing amplitude, so a superconducting central region between two normal
-leads is fine, and so is one superconducting lead, but two superconducting leads raise a
-`ValueError`: there is then no normal lead left to define a reflection amplitude against, and
-`get_dc_current`, addressed below, is the right tool instead. Only 0d central regions are
-supported so far. See `examples/transport/central_region_ij/main.py` for a runnable script,
-and
+`G` is the conductance at $E=0.02$, inside the gap $\Delta=0.05$ of the
+right lead, so it comes only from Andreev reflection. The result is a normal
+junction object, so `didv`, `get_dos` and `get_kappa` all work on it.
+
+- `left`, `right`: the two leads. By default each is a spinless chain.
+- `j`: the site of the second contact. By default the last site.
+- At most one of `hc`, `left` and `right` can be superconducting. With two
+  superconductors there is no normal lead to define the reflection, and the
+  call raises a `ValueError`; use `get_dc_current` (below) instead.
+- `ht.landauer()` only works for normal junctions, since the Landauer formula
+  counts single electrons. With a superconductor use `ht.didv()`.
+
+Only finite (0d) scattering regions are possible for now. See
+`examples/transport/central_region_ij/main.py` for a runnable script, and
 `jupyter-notebooks/functionalities/quantum_transport/03_finite_central_region_two_leads.ipynb`
-for the executed notebook.
+for an executed notebook.
 
 ## Landauer transmission through a real-space device
 
-`heterostructures` builds a junction out of two periodic Hamiltonians. Let us now see the
-other route, with `multiterminal.Device`: the leads and the scattering region are given as
-*geometries*, the hoppings between them are generated from the actual interatomic distances,
-and the Landauer transmission follows from the leads' self-energies. It is the natural form
-for a disordered or irregularly-shaped conductor, where there is no unit cell to repeat.
+There is a second way to build a junction, with `multiterminal.Device`. Here
+the leads and the scattering region are given as geometries, and the
+hoppings between them come from the real distances between the atoms. The
+transmission is the Landauer formula above,
+$T_{ij}={\rm Tr}[\Gamma_i G \Gamma_j G^\dagger]$ between leads $i$ and $j$.
+This is useful for a disordered or irregular conductor, which has no unit
+cell to repeat.
 
 ```python
 import numpy as np
@@ -144,44 +192,49 @@ d.biterminal(left_g=lead_cell(min(xs)-1.),right_g=lead_cell(max(xs)+1.),
 print("ballistic transmission:",d.transmission(energy=0.0)[0])
 ```
 
-A perfectly matched chain has one open channel and nothing to scatter off, so the transmission
-is 1 everywhere inside the band, to the tolerance of the lead decimation. Raising `disorder`
-puts random onsite energies in the central region and the transmission drops below 1 by an
-amount that depends on the realization drawn, meaning that a disorder-averaged result needs
-several draws. `d.transmission(energy=e)` returns a list with one entry per lead pair, the
-pair `(0,1)` by default; `multiterminal.landauer(d,energy,ij=[(i,j)])` is the same quantity
-as a plain function, with the pairs named explicitly. The same disorder physics done with the
-junction machinery, a chain of disordered cells between two clean leads, is in
+A perfect chain has one open channel and nothing to scatter, so the
+transmission is 1 for every energy inside the band. With `disorder` larger
+than zero, random onsite energies are added in the scattering region, and
+the transmission goes below 1. Its value depends on the random
+configuration, so a disorder average needs several configurations.
+`d.transmission(energy=e)` returns a list with one value per pair of leads,
+by default only the pair `(0,1)`. `multiterminal.landauer(d,energy,ij=[(i,j)])`
+gives the same with the pairs written explicitly. The same disorder physics,
+with a chain of disordered cells between two clean leads, is in
 `examples/transport/disordered_transport/main.py`.
 
 ## Multiple Andreev reflection and AC-Josephson current
 
-`didv` and `landauer` above are equilibrium, zero-bias linear-response quantities. Let us now
-see what happens when a finite voltage is applied across a junction between two
-superconductors, an SNS junction, with `HT.get_dc_current()`. A finite bias makes each lead's
-pairing phase wind in time, giving rise to multiple Andreev reflections (MAR), in which a
-quasiparticle bounces between the two superconductors gaining $eV$ at each crossing until it
-reaches the gap edge, and to an AC Josephson effect; the physically meaningful, measurable
-quantity is the time-averaged (DC) current $I_{dc}(V)$. `Heterostructure.get_dc_current(voltage)`
-computes it with the Floquet-Keldysh formalism of San-Jose, Cayao, Prada and Aguado, *New J.
-Phys.* **15**, 075019 ([arXiv:1301.4408](https://arxiv.org/abs/1301.4408)): the bias is
-gauged away from the (static) leads into a single, periodically time-dependent "weak link"
-hopping, and the resulting Floquet-space Dyson/Keldysh equations are solved to get
-$I_{dc}(V)$. It works for any combination of normal and superconducting leads, including the
-case of **two** superconducting leads, which the scattering-matrix formula behind `didv`
-cannot handle on its own (it has no normal lead to define a reflection amplitude against).
+So far all the conductances are at zero temperature and in linear response.
+We now apply a finite voltage $V$ to a junction between two superconductors,
+with `HT.get_dc_current()`. With a voltage, the phase difference of the two
+superconductors grows in time, $\dot\phi = 2eV/\hbar$, so the problem is
+periodic in time with the Josephson frequency. Two things appear. The first
+is the AC Josephson effect. The second is multiple Andreev reflection (MAR):
+a quasiparticle is Andreev reflected many times between the two
+superconductors, and it gains an energy $eV$ at each crossing, until it can
+leave above the gap. The process of order $n$ opens when $neV = 2\Delta$, so
+the current shows features at $eV = 2\Delta/n$. What a measurement sees is
+the time-averaged current $I_{dc}(V)$, and this is what is computed.
 
-`didv` reaches the same formalism through a `method` argument, so a conductance can be had
-without differentiating $I_{dc}$ by hand. `method="smatrix"` is the zero-temperature BdG
-scattering-matrix conductance, `method="keldysh"` differentiates `get_dc_current` at the bias
-`energy`, and the default `method="auto"` picks Keldysh when both leads are genuinely
-superconducting and the scattering matrix otherwise.
+The voltage is moved by a gauge transformation into a time-dependent phase
+of the hopping between the two leads,
+$t \to t\, e^{ieVt'/\hbar}$, and the problem is solved in Floquet space, with
+sidebands at energies $\epsilon + n eV$. The DC current is
 
-The two are different physical quantities rather than two ways of getting the same one,
-because the bias is applied differently: `"smatrix"` grounds the normal lead and drops the
-whole bias on the other, while `"keldysh"` biases both leads rigidly. So on a junction with one
-normal lead they disagree by an O(1) factor, and they keep disagreeing as the other lead's
-pairing is taken to zero. Let `method="auto"` choose.
+$$I_{dc}(V) = \frac{e}{h}\int_0^{eV} d\epsilon\;
+\sum_n {\rm Re}\,{\rm Tr}\left\{\left[G^r \Sigma_L^< + G^< \Sigma_L^a\right]_{nn}
+\tau_z\right\},$$
+
+where $G^r$ and $G^<$ are the retarded and lesser Floquet Green's functions,
+$\Sigma_L^<$ and $\Sigma_L^a$ the lesser and advanced self-energies of the
+left lead, and $\tau_z$ is $+1$ for electrons and $-1$ for holes. This is the
+formalism of San-Jose, Cayao, Prada and Aguado,
+[arXiv:1301.4408](https://arxiv.org/abs/1301.4408). The current is in units
+of $e/h$ times energy (in units of $t$), so that for two normal leads
+$dI_{dc}/dV$ is the conductance in units of $e^2/h$. It works for any pair of
+normal and superconducting leads, also for two superconductors, where the
+scattering formula of `didv` above cannot be used.
 
 ```python
 from pyqula import geometry
@@ -197,29 +250,72 @@ vs = np.linspace(0.02,1.5,40)*0.1 # bias voltages
 Is = HT.get_iv_curve(vs) # MAR/AC-Josephson dc current
 ```
 
-`Is` is the dc current at each bias, the curve a current-biased measurement of an SNS junction
-traces out. This is among the most expensive calculations in the guide, at roughly fifteen
-seconds per bias point for the SNS junction above, so a forty-point curve takes minutes. The
-reason is physical: the number of Andreev reflections that matter is the MAR order
-$2\Delta/eV$, which grows as the bias falls, and each one costs a Floquet sideband. The
-sidebands are added automatically until $I_{dc}$ converges, but a grid reaching very close to
-zero bias can exhaust `nmax_max` and warn that the sidebands did not converge. That point is
-inaccurate; nothing has crashed. Starting the grid a little higher is the cheap fix; raising
-`nmax_max` the expensive one.
+`Is` is the DC current at each voltage in `vs`. Above $eV=2\Delta=0.2$ the
+current grows roughly linearly with the voltage, as in a normal junction. Below
+$2\Delta$ it is carried by multiple Andreev reflections, and it shows steps
+at $eV = 2\Delta/n$, sharper for a small transparency.
 
-Only 1D leads are supported. A central region between the leads
-(`heterostructures.build(h1,h2,central=[hc])`, for example a quantum dot) works too, more
-slowly. The bias drops across the junction's rightmost bond, so the central region sits at the
-**left** lead's potential; detune it with `hc.shift_fermi(eps)`, which keeps it a valid BdG
-Hamiltonian, rather than by adding to its diagonal. See
-`examples/transport/floquet_keldysh_mar/main.py` for a runnable script.
+This is one of the most expensive calculations in the guide, roughly fifteen
+seconds per voltage for this junction. The reason is physical: the number of
+Andreev reflections that matter is about $2\Delta/eV$, and each one needs a
+Floquet sideband, so small voltages need many sidebands. The sidebands are
+added until $I_{dc}$ converges. If a voltage is very small, the number of
+sidebands can reach `nmax_max`, and a warning says that this point is not
+converged. Starting the voltages a bit higher is the cheap solution; a larger
+`nmax_max` is the expensive one.
 
-A `LocalProbe` is an STM-like tip weakly coupled to one site of an infinite sample, with the
-tip and the sample site playing the role of the two leads. The same choice of method applies:
-the scattering matrix by default, and the Floquet-Keldysh MAR current when tip and sample are
-both superconducting, which is the situation of a superconducting tip on a superconducting
-sample. On a `LocalProbe` the two methods do agree when the tip is normal, since the tip is
-grounded there exactly as the scattering matrix grounds it.
+Only 1D leads are possible. A central region between the leads, for example a
+quantum dot, can be added with `heterostructures.build(h1,h2,central=[hc])`,
+and it is slower. The voltage drops at the last bond on the right, so the
+central region is at the potential of the **left** lead. To move its levels,
+use `hc.shift_fermi(eps)`, which keeps it a valid BdG Hamiltonian, and do not
+add to its diagonal by hand. See `examples/transport/floquet_keldysh_mar/main.py`
+for a runnable script.
+
+`HT.didv()` chooses between the two formalisms with `method`:
+
+- `method="smatrix"`: the zero-temperature scattering formula above. The
+  normal lead is grounded and all the voltage drops on the other lead.
+- `method="keldysh"`: the derivative of $I_{dc}$ at voltage `energy`. Both
+  leads are biased rigidly.
+- `method="auto"` (default): `"keldysh"` if both leads are superconducting,
+  and `"smatrix"` otherwise.
+
+The two methods apply the voltage in a different way, so on a junction with
+one normal lead they do not give the same number, even when the pairing of
+the other lead goes to zero. Leave the default.
+
+`didv` takes a single `energy` and returns a number, or an array
+`energies=[...]` and returns an array, but not both. For the junction between
+two superconductors above, this is the $dI/dV$ curve in the MAR regime:
+
+```python
+es = np.linspace(0.15,0.25,40)*0.1 # bias energies
+Gs = HT.didv(energies=es, nmax_max=40) # dI/dV curve
+```
+
+### A superconducting STM tip
+
+A `LocalProbe` is an STM tip, a semi-infinite chain coupled to one site of an
+infinite sample. The tip and the sample play the role of the two leads, and
+`T` is the hopping between them. The choice of method is the same as above:
+the scattering formula by default, and the Floquet-Keldysh current when both
+tip and sample are superconducting. For a normal tip the two methods agree,
+because the tip is grounded in both.
+
+Besides the conductance, we compute the decay rate $\kappa$. In STM, the
+conductance changes with the tip height through the transparency $T$, and
+the exponent of this power law depends on how many electrons are transferred
+in each process. pyqula computes
+
+$$\kappa = \frac{d\ln G_S/d\ln T}{d\ln G_N/d\ln T},$$
+
+the ratio between the exponent with the superconductor and the exponent of
+the same junction with the pairing removed. In the tunnel limit
+$G_N\propto T^2$. A single quasiparticle also gives $G_S\propto T^2$, so
+$\kappa=1$, while Andreev reflection transfers two electrons,
+$G_S\propto T^4$, and $\kappa=2$. So $\kappa$ tells you which process carries
+the current at each energy, and it is measured by changing the tip height.
 
 ```python
 from pyqula import geometry
@@ -234,31 +330,23 @@ G = lp.didv(energy=0.25,nmax=4,nmax_max=12,tol=5e-2) # routed through Keldysh au
 k = lp.get_kappa(energy=0.25,nmax=4,nmax_max=12,tol=5e-2)
 ```
 
-This is considerably more expensive than the normal-probe case (each `didv` or `get_kappa`
-call runs several Floquet-Keldysh sideband sweeps), especially deep below the combined gap at
-low transparency, where the sideband sum converges slowly; see
-`examples/transport/decay_constant_keldysh/main.py` for a runnable script using a coarse
-energy grid and a modest sideband cutoff to keep the runtime reasonable, and
-`jupyter-notebooks/functionalities/quantum_transport/08_tunneling_contact_probe.ipynb` and
-`09_mar_ac_josephson_sc_probe.ipynb` in the same folder for the executed notebooks on the
-normal and the superconducting probe.
+`G` is the conductance and `k` the decay rate at voltage $0.25$, which is
+above the combined gap $2\Delta=0.2$ of tip and sample. This is much more
+expensive than with a normal tip, because each `didv` or `get_kappa` call
+solves several Floquet-Keldysh problems, and it is slowest deep inside the
+gap at small transparency. See
+`examples/transport/decay_constant_keldysh/main.py` for a runnable script
+with a coarse energy grid and few sidebands, and the notebooks
+`08_tunneling_contact_probe.ipynb` (normal tip) and
+`09_mar_ac_josephson_sc_probe.ipynb` (superconducting tip) in
+`jupyter-notebooks/functionalities/quantum_transport/`.
 
-`get_kappa` also accepts a `temp` argument for a thermally-averaged kappa (each conductance
-entering the power-law fit is `didv(temp=...)`'s thermal average rather than the
-zero-temperature value). Pass a single `energy` (returns a scalar, as above) or a whole
-`energies=[...]` array at once (returns an array):
+`get_kappa` also takes a temperature `temp`, and then every conductance is
+the thermal average at that temperature. Like `didv`, it takes a single
+`energy` or an array `energies=[...]`:
 
 ```python
 k = lp.get_kappa(energies=[0.1,0.25,0.4],temp=0.02,nmax=4,nmax_max=12,tol=5e-2)
 ```
 
-`Heterostructure.get_kappa` takes the same `temp` and `energies` arguments.
-
-`didv`'s `energy` and `energies` arguments are mutually exclusive, the same convention
-`get_kappa` uses: pass a single `energy` and get a scalar back, or a whole `energies=[...]`
-array at once and get an array.
-
-```python
-es = np.linspace(0.15,0.25,40)*0.1 # bias energies
-Gs = HT.didv(energies=es, nmax_max=40) # dI/dV curve
-```
+`HT.get_kappa()` of a junction takes the same `temp` and `energies`.

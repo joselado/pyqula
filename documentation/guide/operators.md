@@ -1,36 +1,43 @@
 # Operators
 
-When computing band structures, densities of states or expectation values we can pass an
-operator to filter the result, so that every state carries the expectation value of that
-operator next to its energy. Let us now go through the operators that are available, and
-comment on their physical meaning.
+An operator lets us ask a question about each eigenstate: which spin it has,
+where it is located, in which valley it is. In this page we see the
+operators that pyqula provides, their definition and their physical meaning.
 
-Operators in pyqula have some important properties. First, for periodic Hamiltonians they can
-have an intrinsic momentum dependence. Second, pyqula allows for native algebra between them,
-namely they can be summed or multiplied, automatically accounting for intrinsic momentum
-dependences. Third, they can be non-linear, providing a generalization of matrix operators.
+All of them are obtained with `h.get_operator(name)`, and they are used
+through the `operator=` argument of `h.get_bands()`, `h.get_dos()`,
+`h.get_ldos()`, `h.get_kdos_bands()` and `h.get_vev()`. For an eigenstate
+$|\Psi_n(\mathbf k)\rangle$ the quantity computed is the expectation value
 
-Every operator below is obtained with `h.get_operator(name)`, and goes into the `operator=`
-argument of `h.get_bands()`, `h.get_dos()`, `h.get_ldos()`, `h.get_kdos_bands()` or
-`h.get_vev()`: the band structure comes back with one extra column, the expectation value of
-the operator in each eigenstate, the density of states becomes the density of states weighted
-by that expectation value, and so on. The executed notebooks
+$$
+O_n(\mathbf k) = \langle \Psi_n(\mathbf k) | O | \Psi_n(\mathbf k)\rangle .
+$$
+
+With `h.get_bands()` this gives one extra array, the value $O_n(\mathbf k)$
+of each state, so you can color the band structure with it. With
+`h.get_dos()` each state enters the density of states with weight
+$O_n(\mathbf k)$, so you get, for example, the spin-up minus spin-down
+density of states. Operators can also be added and multiplied, and some of
+them depend on $\mathbf k$ or are not even linear, as we see below.
+
+See the executed notebooks
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/04_state_resolved_bands.ipynb`
-and `06_operator_resolved_dos.ipynb` show what an operator-resolved band structure and density
-of states look like. Before the operators themselves, the first section takes up a quantity
-that is not a matrix operator at all, the nonlinear spin current, which continues the
-altermagnet section of the previous chapter.
-
-
+and `06_operator_resolved_dos.ipynb` for operator-resolved band structures
+and densities of states.
 
 ## Spin operators
 
-The simplest operators are the spin operators
+The simplest operators are the spin operators,
+
 $$
-S_\alpha = \sum_n \sigma_\alpha^{\mu\nu} c^\dagger_{n,\mu} c_{n,\nu}
+S_\alpha = \sum_n \sum_{\mu\nu} \sigma_\alpha^{\mu\nu}\, c^\dagger_{n,\mu} c_{n,\nu},
+\qquad \alpha = x,y,z,
 $$
 
-with $\sigma_\alpha$ the Pauli matrices, that can be obtained as
+where $n$ runs over the sites, $\mu,\nu$ over the two spin states, and
+$\sigma_\alpha$ are the Pauli matrices. Note that there is no factor $1/2$,
+so the expectation value goes from $-1$ to $+1$. They need a spinful
+Hamiltonian.
 
 ```python
 from pyqula import geometry
@@ -41,25 +48,25 @@ sy = h.get_operator("sy") # Spin y component
 sz = h.get_operator("sz") # Spin z component
 ```
 
-Passing one of them to `h.get_bands(operator=sz)` colors each band by its spin projection,
-which is how a spin-split band structure, the one of the Zeeman field in the first chapter,
-is told apart from a spin-degenerate one; the three names also work directly as strings,
-`operator="sz"`. The same operators resolve the density of states, the Fermi surface and the
-momentum-resolved spectral function by spin, see `examples/2d/operator_fermi_surface/main.py`
-for a spin-resolved Fermi surface and the executed notebook
+With `h.get_bands(operator=sz)` each band carries its spin projection. In a
+Zeeman field along $z$ the two spin bands get $+1$ and $-1$; with spin-orbit
+coupling the spin changes along the band. The names also work as strings,
+`operator="sz"`. In the same way you can resolve by spin the density of
+states, the Fermi surface and the momentum-resolved spectral function, which
+is what spin-resolved ARPES measures. See
+`examples/2d/operator_fermi_surface/main.py` for a spin-resolved Fermi
+surface, and
 `jupyter-notebooks/functionalities/spectral_functions/06_operator_momentum_resolved.ipynb`
 for a spin-resolved spectral function.
 
 ## Listing the accepted names
 
-Every routine that takes an `operator` argument (`h.get_bands()`, `h.get_dos()`,
-`h.get_ldos()`, `h.get_kdos_bands()`, `h.get_vev()`, the topological invariants) accepts an
-`Operator`, a `Hamiltonian`, a `Potential`, a callable of the position, a bare matrix, or the
-name of one of the operators pyqula knows how to build. Named operators are not the only thing
-selected by a string: so are the mean-field initialization (`mf=`), the superconducting
-pairing symmetry (`mode=`), the high-symmetry k-point labels of a band path, and the
-quantities `h.extract()` pulls out of a Hamiltonian. If you do not remember a name, each
-accepted set can be listed
+The `operator` argument accepts an operator object, a matrix, a Hamiltonian,
+a function of the position, or a name. Other arguments are also chosen by a
+name: the initial guess of a mean-field calculation (`mf=`), the pairing
+symmetry (`mode=` of `h.add_pairing()`), the labels of the high-symmetry
+k-points, and the quantities of `h.extract()`. If you do not remember a
+name, you can print the list:
 
 ```python
 from pyqula import operatorlist, meanfield, extract
@@ -73,18 +80,20 @@ print(labels.get_label_names())       # every high-symmetry kpoint label
 print(extract.get_extractable_names())# every h.extract(...) quantity
 ```
 
-A name outside those lists raises a `ValueError` quoting both the offending name and the
-accepted ones, rather than failing somewhere downstream.
+A wrong name raises a `ValueError` that lists the accepted names.
 
 ## Location operator
 
-To understand the spatial location of the states we can use the spatial operators, that
-denote where wavefunctions are located in real space
+The position operators tell where a state is located in real space,
+
 $$
-R_\alpha = \sum_{r,s} r_\alpha c^\dagger_{r,s} c_{r,s}
+R_\alpha = \sum_{n,s} r^\alpha_n\, c^\dagger_{n,s} c_{n,s},
+\qquad \alpha = x,y,z,
 $$
 
-with $r_\alpha$ the component of the position of site $r$
+where $r^\alpha_n$ is the $\alpha$ component of the position of site $n$,
+and $s$ runs over the spin. The expectation value is the mean position of
+the state, $\langle R_\alpha\rangle = \sum_n r^\alpha_n |\Psi(n)|^2$.
 
 ```python
 from pyqula import geometry
@@ -95,29 +104,25 @@ y = h.get_operator("yposition") # y component
 z = h.get_operator("zposition") # z component
 ```
 
-The expectation value of `y` in each state of a ribbon says where across the width that
-state lives, so `h.get_bands(operator=y)` separates the states at the two edges from the bulk
-ones by their position, the continuous version of the bulk-edge operator that follows.
-
+In a ribbon periodic along $x$, the value of `y` says where across the
+width a state is. With `h.get_bands(operator=y)` the states at the two edges
+get opposite values, and the bulk states are close to the center. This is
+the continuous version of the bulk-edge operator below.
 
 ## Bulk-edge operator
 
-In order to know if a state is located at the edge or in the bulk of the system
-you can use the bulk-edge location operators. The edge operator takes value 1 for
-sites on the edge, and 0 for sites in the bulk.
-
+To know if a state sits at the edge or in the bulk, we use the edge and the
+bulk operators,
 
 $$
-\hat E  = \sum_{r\in \text{Edge},s} c^\dagger_{r,s} c_{r,s}
+\hat E = \sum_{n\in \text{edge},\,s} c^\dagger_{n,s} c_{n,s},
+\qquad
+\hat B = \sum_{n\in \text{bulk},\,s} c^\dagger_{n,s} c_{n,s},
+\qquad \hat E + \hat B = 1 .
 $$
 
-The bulk
-operator takes value 1 for sites in the bulk, and 0 for sites on the edge.
-
-$$
-\hat B  = \sum_{r\in \text{Bulk},s} c^\dagger_{r,s} c_{r,s}
-$$
-
+The expectation value of $\hat E$ is the weight of the state on the edge
+sites, between 0 and 1.
 
 ```python
 from pyqula import geometry
@@ -127,27 +132,35 @@ b = h.get_operator("bulk") # bulk operator
 e = h.get_operator("edge") # edge operator
 ```
 
-The two are defined by position rather than by connectivity: for a ribbon the sites in the
-outer tenth of the width on each side count as edge, for a finite island the sites at the
-outer part of the radius, and for a two-dimensional multilayer the outermost layers along
-$z$. In the zigzag ribbon above, `h.get_bands(operator=e)` gives an edge weight close to 1
-for the flat band at zero energy, the zigzag edge states, and a small one for the dispersive
-bulk bands, so the operator is a quick way to tell in-gap edge states from bulk states in a
-band structure.
+The edge sites are defined by their position. In a ribbon they are the sites
+in the outer 10% of the width on each side. In a finite island they are the
+sites in the outer part of the radius, and in a two-dimensional multilayer
+the outer layers along $z$. In the zigzag ribbon above,
+`h.get_bands(operator=e)` gives a weight close to 1 for the flat band at zero
+energy, the zigzag edge states, and a small weight for the dispersive bulk
+bands. So this is a quick way to find in-gap edge states in a band
+structure.
 
 ## Valley operator
 
-For honeycomb-like systems, including aligned and twisted multilayers, we can extract the
-valley degree of freedom of each state with the valley operator, `h.get_operator("valley")`.
-This operator takes the form
+In honeycomb lattices, and also in aligned and twisted multilayers, the
+low-energy states sit in two valleys, around $K$ and $K'$. The valley
+operator $\tau_z$ tells in which valley a state is. It is obtained with
+`h.get_operator("valley")`, and it is a second-neighbor hopping of the
+Haldane type,
 
 $$
-V = i \sum_{\langle \langle ij \rangle\rangle,s} \nu_{ij} \sigma_{ij}  c^\dagger_{r_i,s} c_{r_j,s}
+\tau_z \propto i \sum_{\langle\langle ij \rangle\rangle,s} \nu_{ij}\, \eta_{i}\,
+c^\dagger_{i,s} c_{j,s},
 $$
 
-where $\nu = \pm 1$ and $\sigma = \pm 1$ for clockwise/anticlockwise, sublattice A/B. This is
-the so-called anti-Haldane hopping, and takes opposite values in opposite valleys.
-It can be obtained for honeycomb systems as
+where the sum goes over second neighbors, $\nu_{ij}=\pm1$ for a clockwise or
+anticlockwise path from $j$ to $i$, and $\eta_i=\pm1$ for sublattice A or B.
+The factor $\eta_i$ is what makes it different from the Haldane term. The
+Haldane term is a mass, with opposite sign on the two sublattices. This
+"modified Haldane" coupling has the same sign on both sublattices and
+opposite sign in the two valleys. The operator is normalized so that its
+expectation value is close to $+1$ in one valley and $-1$ in the other.
 
 ```python
 from pyqula import geometry
@@ -156,24 +169,27 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 vall = h.get_operator("valley") # valley operator
 ```
 
-Its expectation value has opposite signs for the states around $K$ and around $K'$, so the
-band structure computed with `h.get_bands(operator=vall)` is colored by valley, with the two
-valleys at opposite ends of the color scale. This is most useful in a supercell, where the
-folded bands of the two valleys land on top of each other and the valley operator is what
-tells them apart. See `examples/1d/valley_operator/main.py` for the valley-resolved bands of a
-zigzag ribbon, `examples/2d/valley_bands/main.py` for those of a honeycomb supercell, and the
-executed notebook
+With `h.get_bands(operator=vall)` the states around $K$ and around $K'$ get
+opposite signs. This is most useful in a supercell or a moiré system, where
+the bands of the two valleys are folded on top of each other, and the valley
+operator is the way to separate them. See
+`examples/1d/valley_operator/main.py` for the valley-resolved bands of a
+zigzag ribbon, `examples/2d/valley_bands/main.py` for a honeycomb supercell,
+and
 `jupyter-notebooks/functionalities/single_particle_hamiltonians/04_state_resolved_bands.ipynb`.
 
 ## In-plane valley operators
 
-The operator above is the out-of-plane valley pseudospin $\tau_z$. We will now see how to
-obtain the two remaining components, $\tau_x$ and $\tau_y$, with `h.get_operator("valley_x")`
-and `h.get_operator("valley_y")`, giving access to the full valley vector
-$(\tau_x,\tau_y,\tau_z)$, the valley-space analogue of $(S_x,S_y,S_z)$ for real spin. They
-are built from a chiral Kekule coupling, symmetrized over the three inequivalent Kekule
-registries so that the result is exactly $C_3$-covariant about every atom and not only about
-special high-symmetry points, rather than from the second-neighbor coupling behind $\tau_z$
+The valley operator above is the $z$ component of a valley pseudospin. We now
+see the two other components, $\tau_x$ and $\tau_y$, with
+`h.get_operator("valley_x")` and `h.get_operator("valley_y")`. Together they
+give the full valley vector $(\tau_x,\tau_y,\tau_z)$, in the same way as
+$(S_x,S_y,S_z)$ for the spin. While $\tau_z$ measures in which valley a state
+is, $\tau_x$ and $\tau_y$ measure the coherent mixing of the two valleys, the
+intervalley coherence, which is what a Kekulé bond order or an
+intervalley-coherent state has. They are built from a Kekulé coupling, which
+connects $K$ and $K'$, averaged over the three Kekulé patterns so that the
+operator has the $C_3$ symmetry of the lattice around every site.
 
 ```python
 from pyqula import geometry
@@ -183,14 +199,14 @@ taux = h.get_operator("valley_x") # tau_x
 tauy = h.get_operator("valley_y") # tau_y
 ```
 
-Both require a honeycomb-like geometry with a sublattice index. For a periodic Hamiltonian
-they additionally require a Kekule-commensurate cell (a 3x3, or any other multiple-of-3,
-supercell of the primitive honeycomb cell) to be well defined, which is the reason for the
-`supercell(3)` above; a finite (0d) flake needs no such commensurability.
+Both need a honeycomb-like lattice with a sublattice index. In a periodic
+system the Kekulé pattern must fit in the unit cell, so we need a $3\times3$
+supercell (or a multiple of 3) of the primitive cell. This is why we use
+`supercell(3)` above. A finite flake has no such condition.
 
-A single vacancy in an otherwise pristine honeycomb flake is an atomically sharp,
-intervalley-scattering defect, and induces a vortex in the in-plane valley pseudospin around
-it, a nice way to see $\tau_x$ and $\tau_y$ in action
+A single vacancy in a honeycomb flake scatters electrons between the two
+valleys, and creates a vortex of the in-plane valley pseudospin around it.
+We compute $(\tau_x,\tau_y)$ on every site:
 
 ```python
 from pyqula import islands
@@ -202,13 +218,18 @@ dvx = spectrum.real_space_vev(hv,operator=hv.get_operator("valley_x"))
 dvy = spectrum.real_space_vev(hv,operator=hv.get_operator("valley_y"))
 ```
 
-What comes back is the expectation value of each component on every site of the flake, and
-plotting $(\tau_x,\tau_y)$ as an arrow on each site shows the in-plane valley pseudospin
-winding around the vacancy.
+`dvx` and `dvy` contain the expectation value of each component on every
+site, summed over the occupied states. If you draw $(\tau_x,\tau_y)$ as an
+arrow on each site, the arrows wind around the vacancy.
 
-The valley vector can also be coupled to, not only measured: `h.add_valley_exchange(v)`,
-with `v=(vx,vy,vz)`, adds a valley-space exchange term $\vec{v}\cdot(\tau_x,\tau_y,\tau_z)$
-to the Hamiltonian, the valley-pseudospin analogue of `h.add_exchange()` for real spin
+The valley vector can also enter the Hamiltonian. `h.add_valley_exchange(v)`,
+with $\vec v=(v_x,v_y,v_z)$, adds the term
+
+$$
+H_v = \vec v \cdot \vec \tau = v_x\tau_x + v_y\tau_y + v_z\tau_z ,
+$$
+
+a valley Zeeman field, in the same way as `h.add_exchange()` for the spin:
 
 ```python
 from pyqula import geometry
@@ -217,16 +238,25 @@ h = g.get_hamiltonian(has_spin=False)
 h.add_valley_exchange([0.1,0.05,0.2]) # (vx,vy,vz)
 ```
 
-See `examples/0d/valley_vortex_vacancy/main.py` and `examples/2d/valley_vortex/main.py` for
-runnable versions of the vacancy-vortex example.
+See `examples/0d/valley_vortex_vacancy/main.py` and
+`examples/2d/valley_vortex/main.py` for runnable scripts of the vacancy
+vortex.
 
 ## Nambu operators
 
-In the presence of superconductivity, you can project onto the electron or hole component of
-the Nambu spinor using the electron-hole operators. The Hamiltonian must already be in the
-Nambu (BdG) basis, meaning that some pairing has been added or `h.setup_nambu_spinor()` has
-been called; otherwise there is no hole sector to project onto, and the hole projector raises
-an error saying so
+In a superconductor the Hamiltonian is written in the Nambu basis, with an
+electron and a hole component for each site and spin (see
+[Superconductivity](superconductivity.md)). The operators `"electron"` and
+`"hole"` project on these two components,
+
+$$
+P_e = \sum_{n,s} |n,s,e\rangle\langle n,s,e|, \qquad
+P_h = \sum_{n,s} |n,s,h\rangle\langle n,s,h|, \qquad P_e + P_h = 1 .
+$$
+
+The Hamiltonian must already be in the Nambu basis, so some pairing must be
+added first, or `h.setup_nambu_spinor()` must be called. Otherwise the hole
+projector raises an error.
 
 ```python
 from pyqula import geometry
@@ -238,48 +268,55 @@ hole = h.get_operator("hole") # hole component
 (k,e,c) = h.get_bands(operator=electron) # electron weight of each state
 ```
 
-The electron weight is what separates the physical copy of the band structure from its
-spurious one: far from the Fermi energy a state is either purely electron, weight 1, or purely
-hole, weight 0, and only close to the superconducting gap do the two mix, with a weight of
-one half exactly at the gap edge. This is the same weight that turns the full BdG density of
-states into the electron spectral function of the superconductivity chapter.
+For a Bogoliubov quasiparticle $\gamma = u\, c + v\, c^\dagger$ the electron
+weight is $|u|^2$. Far from the Fermi energy a state is a pure electron
+($|u|^2=1$) or a pure hole ($|u|^2=0$). Only close to the gap do the two
+mix, and exactly at the Fermi momentum $|u|^2=|v|^2=1/2$. So the electron
+weight separates the physical band structure from its hole copy, and it is
+the weight used to obtain the electron spectral function from the full
+Bogoliubov-de Gennes spectrum.
 
 ## Berry curvature operator
 
-The Berry curvature operator is a first example of an operator that is intrinsically momentum
-dependent. The Berry curvature operator is defined as
+The Berry curvature operator is an example of an operator that depends on
+$\mathbf k$. It acts on an eigenstate as
 
 $$
- O |\Psi_k\rangle = \Omega(k,\epsilon_k) |\Psi_k \rangle
+O\, |\Psi_n(\mathbf k)\rangle = \Omega(\mathbf k,\epsilon_n(\mathbf k))\, |\Psi_n(\mathbf k) \rangle ,
 $$
 
-where $\Omega(k,\omega)$ is the Berry curvature evaluated at the momentum $k$ and energy
-$\omega$ of the eigenstate $|\Psi\rangle$. In particular, this operator allows to directly
-see the contribution to the Berry curvature of different states in the band structure. It is
-obtained as `h.get_operator("berry")`, it is defined for two-dimensional Hamiltonians, and it
-is evaluated through the Green's function at the energy of each state, with a broadening
-`delta` that defaults to `0.1`; passing it to `h.get_bands(operator="berry")` colors the bands
-of a Chern insulator by where their Berry curvature sits, and the Brillouin-zone integral of
-that curvature is the Chern number of the topological insulators chapter.
+where $\Omega(\mathbf k,\omega)$ is the Berry curvature at momentum
+$\mathbf k$, computed from the Green's function at the energy
+$\omega=\epsilon_n(\mathbf k)$ of the state, with a broadening `delta`
+(0.1 by default). It is obtained with `h.get_operator("berry")`, and it is
+defined only for two-dimensional Hamiltonians. With
+`h.get_bands(operator="berry")` you see which states of a Chern insulator
+carry the Berry curvature, usually the states close to the gap edge. The
+integral of the Berry curvature of the occupied states over the Brillouin
+zone is the Chern number (see
+[Topological invariants](topological-invariants.md)).
 
 ## Inverse participation ratio operator
 
-So far we have considered operators that are linear, namely that fulfill the condition
+All the operators above are linear, meaning that
 
 $$
-A (|\Psi_1 \rangle + |\Psi_2 \rangle) = 
-A |\Psi_1 \rangle + A|\Psi_2 \rangle 
+A (|\Psi_1 \rangle + |\Psi_2 \rangle) =
+A |\Psi_1 \rangle + A|\Psi_2 \rangle .
 $$
 
-There is however one operator that it is interesting to consider that does not fulfill such
-condition. The operator is the so-called inverse participation ratio, which we define as
+The inverse participation ratio (IPR) is an operator that is not linear. It
+is defined as
 
 $$
- O |\Psi\rangle = \sum_i | \langle i | \Psi \rangle |^4 |\Psi \rangle
+O |\Psi\rangle = \Big(\sum_i | \langle i | \Psi \rangle |^4\Big) |\Psi \rangle ,
 $$
 
-In particular, the previous operator allows to identify states that are highly localized in a
-few lattice sites, becoming useful to highlight impurity states and localized modes.
+where $i$ runs over all the components of the state (sites and spin). Its
+expectation value $\sum_i |\langle i|\Psi\rangle|^4$ is 1 for a state on a
+single site, and $1/N$ for a state spread equally over $N$ sites. So a large
+value means a localized state, for example an impurity state or an edge
+state.
 
 ```python
 from pyqula import geometry
@@ -289,8 +326,7 @@ h.add_onsite(0.3) # add a sublattice imbalance
 ipr = h.get_operator("IPR") # IPR operator
 ```
 
-Its expectation value is $\sum_i |\langle i|\Psi\rangle|^4$, which is 1 for a state sitting
-on a single site and $1/N$ for a state spread evenly over $N$ sites, so a large value flags a
-localized state: in the zigzag ribbon above, `h.get_bands(operator=ipr)` gives the edge
-states at zero energy an inverse participation ratio more than ten times larger than the one
-of the bulk bands.
+Here the onsite energy 0.3 is the same on all sites, so it only shifts the
+bands. In this zigzag ribbon, `h.get_bands(operator=ipr)` gives the flat edge
+states an IPR more than ten times larger than the bulk bands: close to the
+zone boundary the edge states live on a single site of the edge.

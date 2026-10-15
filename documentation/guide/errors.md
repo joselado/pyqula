@@ -1,26 +1,27 @@
 # Errors and unsupported inputs
 
-Most routines only make sense for a Hamiltonian of a particular kind: a Berry
-curvature needs a two-dimensional one, a spin operator needs the spin degree
-of freedom, a superconducting quantity needs the Nambu one, and an option
-selected by a string (`mode=`, `solver=`, `channel=`) needs one of a fixed set
-of strings. Those requirements are checked up front, before any calculation
-starts, and the exception says what was needed rather than only that something
-went wrong: `ValueError` for a value that cannot work (the Berry curvature of a
-Hamiltonian that is not two-dimensional, an unknown `mode` string, a spin
-operator on a spinless Hamiltonian), `NotImplementedError` for a combination
-that is not built yet, `TypeError` for an argument of the wrong kind. For a
-string-selected option the accepted values are listed in the message, so a
-typo is self-diagnosing:
+Many calculations only make sense for some Hamiltonians: a Berry curvature
+needs a two-dimensional Hamiltonian, a spin operator needs the spin degree of
+freedom, a superconducting quantity needs the Nambu one, and a keyword such
+as `mode=`, `solver=` or `channel=` accepts only some strings. pyqula checks
+these conditions before the calculation starts, and the error message says
+what is needed:
+
+- `ValueError`: a value that cannot work, for example an unknown `mode`, or a
+  spin operator on a spinless Hamiltonian.
+- `NotImplementedError`: a combination that is not available yet.
+- `TypeError`: an argument of the wrong type.
+
+For a keyword given as a string, the message lists the accepted values, so a
+typo is easy to find:
 
 ```
 ValueError: unknown mode ED2; the DOS accepts 'ED', 'KPM', 'adaptive', 'Green' and 'RG'
 ```
 
-Two messages name their own fix, and you will meet them: a superconducting
-quantity asked of a normal Hamiltonian says to call `h.setup_nambu_spinor()`
-first, and a spin quantity asked of a spinless one says to call
-`h.turn_spinful()`.
+Two messages tell you directly what to do. A superconducting quantity on a
+normal Hamiltonian asks you to call `h.setup_nambu_spinor()` first, and a
+spin quantity on a spinless Hamiltonian asks you to call `h.turn_spinful()`:
 
 ```python
 from pyqula import geometry
@@ -30,30 +31,20 @@ h.extract("mz")
 # h.turn_spinful() first, or build it with g.get_hamiltonian(has_spin=True)
 ```
 
-Note that the requirement is on *reading* a degree of freedom the Hamiltonian
-does not have. The methods that *add* a spin term, `h.add_exchange()`,
-`h.add_zeeman()`, `h.add_kane_mele()`, promote a spinless Hamiltonian to a
-spinful one rather than rejecting it, as we saw in the section on the Zeeman
-field. A third requirement of the same kind is the sublattice label, which
-several sublattice-resolved quantities need and an unlabeled cell does not
-have: `h.extract("CDW")` on such a cell says so rather than returning `None`.
+The check is only on reading a degree of freedom that the Hamiltonian does
+not have. The methods that add a spin term, such as `h.add_exchange()`,
+`h.add_zeeman()` and `h.add_kane_mele()`, make a spinless Hamiltonian
+spinful instead of raising an error (see
+[Building a Hamiltonian](hamiltonian.md)). In the same way, quantities
+resolved by sublattice need a unit cell with sublattice labels, and
+`h.extract("CDW")` on a cell without them raises an error instead of
+returning `None`.
 
-A second family of checks exists not because the routine cannot run, but
-because it could run and return a number that means nothing. Those raise
-rather than answer:
+Some other checks exist because the calculation could run, but the number it
+gives would have no meaning:
 
-- `h.get_average_spin_splitting()`, `h.get_spin_splitting_density()` and
-  `h.get_spin_splitting_vs_energy()` refuse a Hamiltonian whose spin
-  off-diagonal block does not vanish (Rashba, any spin-orbit term,
-  non-collinear order), naming the largest off-diagonal element found
-- `h.get_dos()` on a non-Hermitian Hamiltonian refuses every mode but `"ED"`,
-  and refuses `use_kpm=True`: the Chebyshev and adaptive expansions assume a
-  real spectrum (see "Non-Hermitian Hamiltonians")
-- `h.get_total_energy(fermi=...)` refuses a Nambu Hamiltonian, where a nonzero
-  `fermi` is not a rigid shift of the spectrum (the electron and hole blocks
-  move opposite ways). Use `h.shift_fermi(-mu)` on the Hamiltonian instead
-- the surface density of states refuses a momentum-dependent operator such as
-  `"valley"`, which its Green's function has already integrated over
-- the lead decimation behind `HT.didv()`, `h.get_dos(mode="RG")` and
-  `Embedding.get_gf()` refuses an energy sitting exactly on a lead level with
-  a broadening below about `1e-7`, and recommends a larger `delta`
+- `h.get_average_spin_splitting()`, `h.get_spin_splitting_density()` and `h.get_spin_splitting_vs_energy()` need $S_z$ to be conserved, and raise an error for a Hamiltonian with spin-orbit coupling or non-collinear order, giving the largest element that mixes the spins.
+- `h.get_dos()` of a non-Hermitian Hamiltonian only works with `mode="ED"`, since the other modes assume real energies (see [Non-Hermitian Hamiltonians](non-hermitian.md)).
+- `h.get_total_energy(fermi=...)` does not accept a Nambu Hamiltonian, because there a Fermi energy moves the electron and hole bands in opposite directions; use `h.shift_fermi(-mu)` on the Hamiltonian instead.
+- The surface density of states does not accept an operator that depends on momentum, such as `"valley"`, since the momentum is already integrated.
+- The lead Green's functions behind `HT.didv()`, `h.get_dos(mode="RG")` and `Embedding.get_gf()` raise an error for an energy exactly on a level of the lead with a broadening below about `1e-7`; use a larger `delta`.

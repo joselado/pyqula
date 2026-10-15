@@ -1,31 +1,40 @@
 # Charge and generic response functions
 
+In this page we compute the bare response function of a single-particle
+Hamiltonian: first the charge response, then the response of any pair of
+operators, and finally the RKKY coupling between two magnetic moments, which
+is a static response.
+
 ## Charge-charge response function
 
-Let us now look at the simplest response function, the one of the density at
-site $i$ to a potential at site $j$, with `h.get_chi()`. The charge-charge
-response function for a spinless system is computed as
+We put a small potential on site $j$ and look at the change of the density
+on site $i$. This is the charge-charge response function, computed with
+`h.get_chi()`. For a periodic system at momentum transfer $q$ it is the
+Lindhard function
+
 $$
-\chi(\omega,i,j) = 
-\sum_{n,m}
-\left[f(\epsilon_n) - f(\epsilon_m)\right]
+\chi_{ij}(q,\omega) = \frac{1}{N_k}\sum_{\mathbf k}\sum_{n,m}
+\left[f(\epsilon_{\mathbf k,n}) - f(\epsilon_{\mathbf k+q,m})\right]
 \frac{
-\Psi^*_n(i)\Psi_m(i)
-\Psi^*_m(j)\Psi_n(j)
+\Psi^*_{\mathbf k,n}(i)\,\Psi_{\mathbf k+q,m}(i)\;
+\Psi^*_{\mathbf k+q,m}(j)\,\Psi_{\mathbf k,n}(j)
 }
 {
-\epsilon_n - \epsilon_m - \omega + i\delta
-}
+\epsilon_{\mathbf k,n} - \epsilon_{\mathbf k+q,m} - \omega + i\delta
+} ,
 $$
 
-where $f(\epsilon)$ is the Fermi-Dirac distribution, so that a pair of states
-contributes only when their occupations differ, weighted by the amplitudes of
-both states at the two sites and resonating at their energy difference. A
-transition from an occupied state $m$ to an empty state $n$ resonates at
-$\omega=\epsilon_n-\epsilon_m>0$, so the imaginary part of the diagonal
-response $\chi(\omega,i,i)$ is positive at positive frequency and negative at
-negative frequency. For a periodic system the response is computed at a
-momentum transfer $q$, summing over the k-mesh
+where $\Psi_{\mathbf k,n}(i)$ is the amplitude of the eigenstate $n$ at
+momentum $\mathbf k$ on site $i$ (summed over spin), $\epsilon_{\mathbf k,n}$
+its energy, $f$ the Fermi-Dirac distribution and $\delta$ a broadening. A pair
+of states contributes only if one is occupied and the other is empty, and it
+resonates at the energy difference of the two states. A transition from an
+occupied state to an empty state at energy $\omega$ above gives a positive
+$\mathrm{Im}\,\chi_{ii}$ at $\omega>0$, and a negative one at $\omega<0$. The
+static limit is negative: a positive potential pushes electrons away.
+
+`h.get_chi()` returns $\chi_{ii}(q,\omega)$ averaged over the sites $i$ of
+the unit cell. For the chain at $q=0$:
 
 ```python
 from pyqula import geometry
@@ -34,31 +43,32 @@ h = g.get_hamiltonian() # create hamiltonian of the system
 (es,chis) = h.get_chi(q=[0.,0.,0.]) # get response function
 ```
 
-`es` holds the frequencies and `chis` one complex number per frequency, the
-response traced over the sites of the unit cell, whose imaginary part is what
-inelastic scattering measures. Note that at $q=0$ the response of the chain
-vanishes at any finite frequency, since with a single band there is no state
-to scatter into at the same momentum, and only its static limit survives,
-$\chi(\omega\to0)=-N(0)$ with $N(0)=1/\pi t$ the density of states at the
-Fermi level counting both spins, $-0.32$ here, spread by the broadening into
-a peak of width $\delta$ around zero frequency; the scan below, at finite $q$,
-is where the particle-hole continuum appears. That static limit comes from
-the pairs of states with the same energy, which on the k-mesh stand for the
-transitions within a band around them and enter with the derivative of the
-Fermi function, the $\delta\to0$ limit of the occupation factor over the
-energy difference. When $\delta$ is instead larger than the spacing of the
-energy differences on the mesh, the neighboring k-points already resolve
-those transitions and such a pair adds an error of order $1/n_k$, so a
-converged calculation at finite $\delta$ is better done with an odd `nk`,
-which keeps the pairs at a nesting wavevector off the mesh.
+`es` contains the frequencies and `chis` one complex number per frequency.
+The imaginary part is what inelastic scattering (electron energy loss,
+inelastic x-rays) measures. At $q=0$ the chain has a single band, so there is
+no other state at the same momentum to scatter into, and the response
+vanishes at any finite frequency. Only the static limit survives,
 
-Optional arguments
-- q: momentum transfer of the response function
-- energies: array of frequencies
-- delta: broadening
-- nk: number of k-points used in the Brillouin-zone integration
+$$\chi(\omega\to0) = -N(0),$$
 
-The charge-charge response can also be scanned over momentum transfer to build a $\chi(q,\omega)$ map
+with $N(0)=1/(\pi t)$ the density of states per site at the Fermi energy,
+counting both spins, so $-0.32$ here. With a finite broadening this appears as
+a peak of width $\delta$ around $\omega=0$. This static limit comes from pairs
+of states with the same energy, which are treated with $-\partial f/\partial
+\epsilon$, the limit $\delta\to0$ of the occupation factor over the energy
+difference. When $\delta$ is larger than the spacing of the energies on the
+k-mesh, these pairs give an error of order $1/n_k$, so for a converged
+calculation at finite $\delta$ use an odd `nk`.
+
+The keywords are
+
+- `q`: the momentum transfer, in units of the reciprocal lattice vectors.
+- `energies`: array of frequencies $\omega$.
+- `delta`: the broadening $\delta$. The temperature `T` is equal to `delta`
+  unless given.
+- `nk`: number of k-points per direction for the sum over the Brillouin zone.
+
+Scanning over $q$ gives a $\chi(q,\omega)$ map:
 
 ```python
 import numpy as np
@@ -68,35 +78,31 @@ qs = np.linspace(-1.,1.,40)
 chis = [h.get_chi(q=[q,0.,0.],energies=np.linspace(-3,3,100),nk=40,delta=0.1)[1] for q in qs]
 ```
 
-What you see in that map is the particle-hole continuum of the band, the
-energies a scattering from $k$ to $k+q$ across the Fermi level can cost. See
-`examples/1d/charge_response/main.py` for a runnable version, and
+In this map you see the particle-hole continuum of the band: all the
+energies $\epsilon_{k+q}-\epsilon_k$ that it costs to move an electron from an
+occupied state $k$ to an empty state $k+q$. See
+`examples/1d/charge_response/main.py` for a runnable script, and
 `jupyter-notebooks/functionalities/response_functions/03_charge_response.ipynb`
 for an executed notebook.
 
-## Generic operator-operator response function
+## Response of any pair of operators
 
-The same machinery works for any pair of operators. `h.get_chi()` computes
-the charge-charge response by default, but any two operators $A$ and $B$ can
-be used instead, giving the generalized response
+The same formula works for any two operators $A$ and $B$,
 
 $$
-\chi_{AB}(\omega,q) = \sum_{k,n,m}
-\left[f(\epsilon_{k,n}) - f(\epsilon_{k+q,m})\right]
+\chi_{AB}(q,\omega) = \frac{1}{N_k}\sum_{\mathbf k,n,m}
+\left[f(\epsilon_{\mathbf k,n}) - f(\epsilon_{\mathbf k+q,m})\right]
 \frac{
-\langle \Psi_{k,n}|A|\Psi_{k+q,m}\rangle
-\langle \Psi_{k+q,m}|B|\Psi_{k,n}\rangle
+\langle \Psi_{\mathbf k,n}|A|\Psi_{\mathbf k+q,m}\rangle
+\langle \Psi_{\mathbf k+q,m}|B|\Psi_{\mathbf k,n}\rangle
 }
 {
-\epsilon_{k,n} - \epsilon_{k+q,m} - \omega + i\delta
-}
+\epsilon_{\mathbf k,n} - \epsilon_{\mathbf k+q,m} - \omega + i\delta
+} ,
 $$
 
-where the perturbation couples through $B$, the measurement is of $A$, and
-the sum runs over the pairs of states at $k$ and $k+q$ whose occupations
-differ.
-Taking both operators to be the spin along $z$ gives the longitudinal spin
-susceptibility of the chain
+where the perturbation couples to $B$ and we measure $A$. Taking $A=B=S_z$
+gives the longitudinal spin susceptibility of the chain:
 
 ```python
 from pyqula import geometry
@@ -107,21 +113,30 @@ sz = h.get_operator("sz") # any of the operators from the "Operators" section
 (es,chi) = h.get_chi(A=sz,B=sz,energies=np.linspace(-2.,2.,100),nk=40,delta=0.1)
 ```
 
-By default `A=B=`identity, which recovers the charge-charge response above.
-Any operator from the "Operators" section (spin, valley, sublattice, location,
-Nambu...) can be plugged in to build the corresponding susceptibility. See
+By default $A=B$ is the identity, which gives the charge response above. Any
+operator of the [Operators](operators.md) page (spin, valley, sublattice,
+position, Nambu) can be used, which gives the corresponding susceptibility.
+Note that the operator `"sz"` is the Pauli matrix $\sigma_z$, without the
+factor $1/2$, so for a spin-degenerate Hamiltonian without interactions the
+$S_z$ response above is equal to the charge response. See
 `jupyter-notebooks/functionalities/response_functions/04_operator_response.ipynb`
 for an executed notebook.
 
-## RKKY response function
+## RKKY interaction
 
-Let us now use that response to couple two magnetic impurities. A moment
-placed in a metal polarizes the conduction electrons around it, and a second
-moment at some distance feels that polarization: the result is an effective
-exchange coupling between the two, the RKKY (Ruderman-Kittel-Kasuya-Yosida)
-interaction, which follows from the same non-interacting response function.
-`rkky.rkky_map` computes it between a reference site and every other site in
-the system, as a function of distance
+Now we use the static response to couple two magnetic impurities. A magnetic
+moment in a metal polarizes the conduction electrons around it, and a second
+moment at some distance feels this polarization. The result is an effective
+exchange coupling between the two moments, the
+Ruderman-Kittel-Kasuya-Yosida (RKKY) interaction,
+
+$$H_{\rm RKKY} = -J_{\rm RKKY}(\mathbf r)\, \vec S_i\cdot\vec S_j ,$$
+
+where $J_{\rm RKKY}(\mathbf r)$ is proportional to $J_K^2$, with $J_K$ the
+local exchange between each moment and the electrons, times the static spin
+response $\chi_{ij}(\omega=0)$ of the electrons between the two sites at
+distance $\mathbf r$. `rkky.rkky_map` computes it between a reference site
+and every other site up to some distance:
 
 ```python
 from pyqula import geometry
@@ -132,19 +147,33 @@ h.add_onsite(1.)
 m = rkky.rkky_map(h,n=10,mode="LR",nk=200) # linear-response RKKY vs distance
 ```
 
-Optional arguments
-- mode: `"LR"` for linear response, the same response function `get_chi` uses, or `"pm"` ("poor man's"), which adds a small magnetic perturbation at each site and measures the change in total energy
-- n: how many neighboring cells/distances to compute
-- nk: number of k-points used in the Brillouin-zone integration
+The keywords are
 
-`m` is an array whose columns are `(distance, ..., ..., RKKY energy)`; the RKKY energy is in the last column
+- `mode`: `"LR"` computes the static response function above. `"pm"` puts a
+  small magnetic field on each site and computes the change of the total
+  energy, which is slower but needs no response function.
+- `n`: up to how many unit cells away the coupling is computed.
+- `nk`: number of k-points per direction for the sum over the Brillouin zone.
+
+`m` has one row per site. The first three columns are the position
+$(x,y,z)$ of the site relative to the reference site, and the last column is
+the RKKY coupling:
 
 ```python
 x,e = m[:,0],m[:,3]
 ```
 
-What you see is a coupling that alternates in sign with the distance and
-decays, with a period set by the Fermi wavevector, which is why the snippet
-shifts the Fermi energy with the onsite term first.
+The coupling alternates in sign with the distance and decays, with a period
+$\pi/k_F$ set by the Fermi wavevector $k_F$. This is why the code moves the
+Fermi energy away from half filling with an onsite energy first. With the
+sign of $H_{\rm RKKY}$ above, a positive value is a ferromagnetic coupling and
+a negative value an antiferromagnetic one. As a reference: for the chain at
+half filling, without the onsite energy, the coupling is negative
+(antiferromagnetic) at odd distances, between the two sublattices, and
+positive (ferromagnetic) at even distances, as expected for a bipartite
+lattice at half filling.
 
-See `examples/1d/RKKY/main.py` and `examples/1d/rkky_minimal/main.py` (which compares `"pm"` and `"LR"` on the same system) for runnable versions, and `jupyter-notebooks/functionalities/response_functions/05_rkky.ipynb` for an executed notebook.
+See `examples/1d/RKKY/main.py` and `examples/1d/rkky_minimal/main.py`, which
+compares `"pm"` and `"LR"` on the same system, for runnable scripts, and
+`jupyter-notebooks/functionalities/response_functions/05_rkky.ipynb` for an
+executed notebook.

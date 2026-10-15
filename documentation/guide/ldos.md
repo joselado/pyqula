@@ -1,19 +1,26 @@
 # Local density of states
 
-## Local density of states
+In this page we resolve the density of states in space. This is the
+quantity that STM measures: the differential conductance $dI/dV$ at bias $V$
+and tip position $\mathbf r$ is, in a first approximation, proportional to
+the local density of states at energy $eV$ and position $\mathbf r$.
 
-We will now resolve the density of states in space, with `h.get_ldos()`, which gives the
-quantity that STM measures. The local density of states resolves the density of states by
-site: it counts how many states are in a certain energy window, weighted by how much of each
-state sits on site $n$. It is defined as
+## Local density of states at one energy
+
+The local density of states on site $n$ is
 
 $$
-D(\omega,n) = \int \delta(\omega-\epsilon_k) | \langle \Psi_k | n \rangle |^2 dk
+D(\omega,n) = \frac{1}{N_k}\sum_{k,\alpha}
+\delta(\omega-\epsilon_{k,\alpha})\, | \langle n | \Psi_{k,\alpha} \rangle |^2 ,
 $$
 
-where $\epsilon_k$ are the eigenenergies of the Hamiltonian and $\langle \Psi_k | n \rangle$
-is the amplitude of each eigenstate on site $n$, so that summing over the sites gives back
-the density of states. It can be used as shown below
+where $\epsilon_{k,\alpha}$ are the eigenenergies,
+$\langle n | \Psi_{k,\alpha}\rangle$ is the amplitude of the eigenstate on
+site $n$, and the delta function is broadened with a Lorentzian of width
+$\delta$. It counts the states at energy $\omega$, each one weighted by its
+probability on site $n$. The sum over all the sites gives back the density of
+states of [Band structures and DOS](bands-and-dos.md). We compute it with
+`h.get_ldos()`:
 
 ```python
 from pyqula import geometry
@@ -22,31 +29,41 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 (x,y,d) = h.get_ldos()
 ```
 
-`h.get_ldos()` returns three arrays, the x and y coordinates of the sites and the local
-density of states on each of them, at the energy `e` (zero by default). For the zigzag
-ribbon what you see at zero energy is that three quarters of the weight sits on the outermost
-sites of the two edges: these are the zigzag edge states, and this profile is what one
-measures with STM at a zigzag edge of graphene.
+`h.get_ldos()` returns three arrays: the $x$ and $y$ coordinates of the sites,
+and the local density of states on each site, at the energy `e` (zero by
+default). For a periodic system the unit cell is repeated a few times, so
+the map is easier to see. For the zigzag ribbon at zero energy, about three
+quarters of the weight is on the outermost sites of the two edges. These are
+the zigzag edge states, and this profile is what STM measures at a zigzag
+edge of graphene.
 
+The keywords are
 
-Optional arguments
-- e: energy at which the LDOS is evaluated
-- delta: smearing of the LDOS
-- operator: operator to which the LDOS is projected (a name such as `"sz"`, a matrix, or an `Operator`), giving e.g. a spin-resolved real-space map instead of the charge one
-- mode: `"arpack"` (default, diagonalization on a k-mesh), `"green"` (Green's function, 2D Hamiltonians only) or `"KPM"` (Chebyshev expansion, for large sparse Hamiltonians, see the local density of states of a large system in the KPM chapter)
-- projection: `"TB"` (default, one value per lattice site), `"TBRS"` (same, but interpolated onto a continuous real-space map for smoother plotting), or `"atomic"` (projected onto atomic orbitals rather than tight-binding sites)
-- num_bands: for large sparse Hamiltonians, only compute this many states around the target energy
+- `e`: the energy $\omega$.
+- `delta`: the broadening $\delta$.
+- `operator`: weight each state with an operator, for example `"sz"` for a
+  map of the spin density of states instead of the charge one.
+- `mode`: `"arpack"` (default, diagonalization on a k-mesh), `"green"`
+  (Green's function, 2D only) or `"KPM"` (Chebyshev expansion, for large
+  systems, see [Kernel polynomial method](kpm.md)).
+- `projection`: `"TB"` (default, one value per site), `"TBRS"` (the same
+  values, interpolated on a continuous grid in real space) or `"atomic"`
+  (each site replaced by an atomic orbital, which gives a smooth map closer
+  to an STM image).
+- `num_bands`: compute only this many states around `e`, for large
+  Hamiltonians.
 
-The two evaluation modes weight an operator differently, and both integrate over sites to
-the same operator-resolved density of states: `mode="arpack"` uses the expectation value
-$\langle \Psi | A | \Psi\rangle$ of each eigenstate times its local density $|\Psi(i)|^2$,
-while `mode="green"` uses the local matrix element $\mathrm{Re}\,\Psi^*(i)(A\Psi)(i)$, which
-is the genuinely local quantity for states that are not eigenstates of the operator, and
-which `mode="KPM"` uses too. A momentum-dependent operator (`"valley"`) only works in
-`mode="arpack"`, since `mode="green"` has already integrated over the Brillouin zone.
+With an operator $A$, the two modes do not compute exactly the same thing.
+`mode="arpack"` weights each eigenstate with its expectation value,
+$\langle\Psi|A|\Psi\rangle\,|\Psi(n)|^2$. `mode="green"` and `mode="KPM"` use
+the local matrix element $\textrm{Re}\,\Psi^*(n)(A\Psi)(n)$. The two agree
+for a state that is an eigenstate of $A$, and summed over the sites both
+give the same total. For a state whose spin, say, changes from site to site,
+only the local matrix element shows this change in the map. An operator that depends on momentum, such as `"valley"`, only
+works with `mode="arpack"`, because the Green's function has already summed
+over the Brillouin zone.
 
-For a smoother map than one value per site, `projection="TBRS"` interpolates the same
-weights onto a continuous real-space grid
+For a smoother map than one value per site, use `projection="TBRS"`:
 
 ```python
 from pyqula import geometry
@@ -55,36 +72,33 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 (x,y,d) = h.get_ldos(e=0.0,projection="TBRS") # interpolated real-space map
 ```
 
-To follow how the map evolves with energy, `h.get_multildos()` computes the LDOS at many
-energies at once
+To follow how the map changes with energy, as in a series of STM conductance
+maps at different biases, `h.get_multildos()` computes the local density of
+states at many energies at once:
 
 ```python
 import numpy as np
 (x,y,es,ldos) = h.get_multildos(energies=np.linspace(-2.0,2.0,100),projection="atomic") # one map per energy
 ```
 
-where `x` and `y` are the positions and `ldos` holds one map per energy, one row for each
-of the energies `es`, so that the rows are the frames of an LDOS(x,y,E) stack. The same maps
-are written one file per energy to a `MULTILDOS/` folder, plus a `MULTILDOS/DOS.OUT` holding
-the corresponding total DOS, unless `write=False` is passed
+`x` and `y` are the positions, `es` the energies, and `ldos` has one row for
+each energy, so the rows are the frames of a stack $D(x,y,\omega)$. The maps
+are also written to the folder `MULTILDOS/`, one file per energy, together
+with the total density of states in `MULTILDOS/DOS.OUT`, unless `write=False`
+is given. The maps have the same normalization as `h.get_ldos()`, and
+`DOS.OUT` the same as `h.get_dos()`, so they can be compared directly. With
+an operator, `h.get_multildos()` uses the expectation value
+$\langle\Psi|A|\Psi\rangle$ times $|\Psi(n)|^2$, as `mode="arpack"` above.
+`projection="atomic"` does not accept an operator.
 
-The maps and the `DOS.OUT` beside them carry the same normalization as `h.get_ldos()` and
-`h.get_dos()` on the same system, so a map can be read against a single-energy LDOS and the
-`DOS.OUT` against `h.get_dos()` without rescaling. An `operator=` is honoured here as it is
-by `get_ldos` (the older spelling `op=` still works, but passing both is a `TypeError`), and
-the weight it applies is the expectation value $\langle\Psi|A|\Psi\rangle$ of the eigenstate,
-a gauge-invariant number, times the local density, the same convention
-`get_ldos(mode="arpack")` uses. `projection="atomic"` does not accept an operator and says so
+See `examples/0d/island/main.py` for a runnable script on a superconducting
+island with `projection="TBRS"`.
 
-See `examples/0d/island/main.py` (single-energy, `projection="TBRS"`, superconducting island) and `examples/readme_examples/ldos_island/main.py` (`get_multildos`, `projection="atomic"`) for runnable versions.
+## Local density of states of a finite island
 
-
-## Spatially resolved density of states
-
-Let us now look at the local density of states of a finite island, resolved in space and
-scanned over a whole set of energies at once, with `h.get_multildos()`. For a triangular
-island of the honeycomb lattice, projected onto atomic orbitals rather than onto the
-tight-binding sites so that the map is smooth, we write
+On a finite island the states are discrete, and the map at each energy shows
+one or a few of them. For a triangular island of the honeycomb lattice, we
+compute the maps at many energies with `h.get_multildos()`:
 
 ```python
 from pyqula import islands
@@ -93,8 +107,7 @@ h = g.get_hamiltonian() # get the Hamiltonian
 h.get_multildos(projection="atomic") # get the LDOS
 ```
 
-The call writes one map per energy to a `MULTILDOS/` folder, with the density of states of the
-whole island next to them in `DOS.OUT`, and the map at a given energy is what one measures with
-STM at that bias. The arguments, the projections and the single-energy version are addressed in
-the section on the local density of states; see `examples/readme_examples/ldos_island/main.py`
-for a runnable version ending in the maps.
+The map at each energy is what STM measures on the island at that bias, and
+`DOS.OUT` is the spectrum of the whole island. See
+`examples/readme_examples/ldos_island/main.py` for a runnable script that
+plots the maps.

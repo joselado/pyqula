@@ -1,16 +1,31 @@
 # Quasiparticle interference
 
-## Quasiparticle interference
+In this page we compute what a single defect does to the local density of
+states of a two-dimensional system. A defect scatters an electron from a
+state with momentum $\mathbf k$ to a state with momentum $\mathbf k'$ on the
+same constant-energy contour. The incoming and the scattered waves interfere,
+so the local density of states around the defect oscillates with wavevector
+$\mathbf q = \mathbf k' - \mathbf k$. The Fourier transform of these
+oscillations at each energy is called the quasiparticle interference (QPI)
+pattern. In an experiment, it is obtained by STM as the Fourier transform of
+a conductance map $dI/dV(\mathbf r,V)$. It shows the constant-energy contours
+of the band structure, and which pairs of states the defect connects.
 
-Let us now see what a single defect does to the local density of states of a
-two-dimensional system, with `h.get_qpi()`. A defect scatters an electron from a state at
-momentum $\vec k$ to a state at $\vec k'$ on the same constant-energy contour, and the two
-interfere, so that the local density of states around the defect is modulated with
-wavevector $\vec q = \vec k - \vec k'$. The Fourier transform of that modulation at each
-energy is what is called the quasiparticle interference pattern, and it is what an STM
-measurement obtains by Fourier transforming a conductance map: a picture of the
-constant-energy contours of the band structure, and of which pairs of states the defect
-connects. `h.get_qpi()` computes it for 2D Hamiltonians
+## QPI from the spectral function
+
+The simplest estimate of the QPI pattern is the autocorrelation of the
+momentum-resolved spectral function,
+
+$$
+P(\mathbf q,\omega) = \sum_{\mathbf k} A(\mathbf k,\omega)\,A(\mathbf k+\mathbf q,\omega) ,
+$$
+
+where $A(\mathbf k,\omega)$ is the spectral weight at momentum $\mathbf k$ and
+energy $\omega$, broadened with a Lorentzian of width $\delta$ (see
+[Spectral functions](spectral-functions.md)). It counts all the pairs of
+states at energy $\omega$ separated by $\mathbf q$, so it is large for a
+$\mathbf q$ that connects two flat, parallel parts of the contour. This is
+`mode="pm"` of `h.get_qpi()`, for 2D Hamiltonians:
 
 ```python
 import numpy as np
@@ -20,30 +35,51 @@ h = g.get_hamiltonian(has_spin=False)
 (qs,es,qpi) = h.get_qpi(mode="pm",nk=50,delta=1e-1,energies=np.linspace(-6.,6.,100)) # QPI at each energy
 ```
 
-where `qs` holds the wavevectors $\vec q$, one per row, `es` the energies, and `qpi` the
-intensity of the pattern, one row per energy and one column per wavevector, so that a row of
-`qpi` plotted over `qs` is the map an STM measurement gives at that energy. The same maps are
-also written, one file per energy, to a folder (`MULTIQPI/` by default), with the density of
-states next to it in `DOS.OUT`, unless `write=False` is passed
+`qs` contains the wavevectors $\mathbf q$, one per row, `es` the energies,
+and `qpi` the intensity, with one row per energy and one column per
+wavevector. So one row of `qpi`, plotted over `qs`, is the QPI map of an STM
+measurement at that energy. For the triangular lattice near the band bottom,
+the contour is a small circle of radius $k_F$ around $\Gamma$, and the QPI
+map is a disk of radius $2k_F$, since $2k_F$ is the largest momentum that
+connects two points of the circle. The same maps are written to the folder `MULTIQPI/`, one file
+per energy, with the density of states in `DOS.OUT`, unless `write=False` is
+given.
 
-Optional arguments
-- energies: array of energies to compute
-- nk: number of k-points per direction
-- delta: broadening
-- mode: `"pm"` (autoconvolution of the k-resolved spectral weight) or `"response"` (default, joint density of states of the clean band structure)
-- nunfold: unfold the QPI of a supercell back onto the primitive Brillouin zone, given as the linear size of the supercell as in `g.get_supercell()`, $n$ for an $n\times n$ supercell and `np.sqrt(3)` for the $\sqrt3\times\sqrt3$ one
-- write: `False` to return the maps without writing the folder and `DOS.OUT`
+The keywords are
 
-The two modes differ in what they scatter. `"pm"` ("poor man's") autoconvolves the actual
-k-resolved spectral weight of the system, defect included, in q-space, which is the
-physically meaningful QPI signal for a real scatterer; `"response"` instead computes a
-cheaper Lindhard-like convolution of the joint density of states from the clean band
-structure only, ignoring the form factors of the wavefunctions.
+- `energies`: the energies $\omega$.
+- `nk`: number of k-points per direction.
+- `delta`: the broadening $\delta$.
+- `mode`: `"pm"`, the autocorrelation above, or `"response"` (default), a
+  nesting function of the clean bands, defined below.
+- `operator`: with `"unfold"`, the spectral function of a supercell is
+  unfolded to the primitive Brillouin zone (`mode="pm"` only).
+- `nunfold`: the linear size of the supercell for the unfolding, as in
+  `g.get_supercell()`: $n$ for an $n\times n$ supercell, `np.sqrt(3)` for a
+  $\sqrt3\times\sqrt3$ one.
+- `write`: `False` to return the maps without writing files.
 
-A single point defect embedded in a supercell, with the resulting QPI unfolded back onto the
-primitive cell, is the realistic case. The supercell must be built with `store_primal=True`
-so that pyqula remembers the primitive cell needed to unfold; `operator="unfold"` then
-resolves to the corresponding unfolding operator
+`mode="response"` uses only the energies of the bands, not the
+wavefunctions,
+
+$$
+R(\mathbf q,\omega) = \sum_{\mathbf k,\alpha,\beta}
+\Theta(\omega-\epsilon_{\mathbf k+\mathbf q,\alpha})\,
+\Theta(\epsilon_{\mathbf k,\beta}-\omega)\,
+\frac{\delta}{(\epsilon_{\mathbf k+\mathbf q,\alpha}-\epsilon_{\mathbf k,\beta})^2+\delta^2} ,
+$$
+
+which counts pairs of states, one below and one above $\omega$, with almost
+the same energy. It is a measure of the nesting of the contour at energy
+$\omega$. It is cheaper, but it ignores the form factors of the
+wavefunctions, and it does not accept an operator or unfolding.
+`mode="pm"` uses the real spectral weight of the system, defect included,
+and it is the one to use for a real scatterer.
+
+The realistic case is a single point defect in a supercell, with the QPI
+unfolded back to the Brillouin zone of the primitive cell. The supercell
+must be built with `store_primal=True`, so that the primitive cell is known
+for the unfolding:
 
 ```python
 import numpy as np
@@ -57,22 +93,30 @@ h.add_onsite(lambda r: 100.0 if np.linalg.norm(r-g.r[0])<1e-1 else 0.0) # a stro
 h.get_qpi(mode="pm",delta=1e-2,operator="unfold",nsuper=2,nk=140,nunfold=ns)
 ```
 
-This is the most expensive snippet in the guide: `mode="pm"` diagonalizes on an `nk`x`nk`
-mesh and then autoconvolves the result, so the cost grows quadratically with `nk` and the
-`nk=140` above takes minutes. Drop to `nk=60` (about 40 seconds) while setting a calculation
-up, and raise `nk` only for the final figure, since the q-space resolution of the QPI pattern
-is what it buys.
+This calculation is expensive. `mode="pm"` diagonalizes the Hamiltonian on an
+`nk` x `nk` mesh and then computes the autocorrelation, so `nk=140` takes
+minutes. Use `nk=60` (about 40 seconds) to prepare the calculation, and a
+large `nk` only for the final result, since `nk` sets the resolution in
+$\mathbf q$.
 
-See `examples/2d/multiqpi/main.py` (clean system, `mode="pm"`) and `examples/2d/multiqpi_unfold/main.py` (defect in a supercell, unfolded) for runnable versions.
+See `examples/2d/multiqpi/main.py` (clean system, `mode="pm"`) and
+`examples/2d/multiqpi_unfold/main.py` (defect in a supercell, unfolded) for
+runnable scripts.
 
-### Real-space-impurity QPI
+## QPI from a real-space impurity
 
-The modes of `h.get_qpi()` all work in reciprocal space: they convolve or scatter k-resolved
-spectral weight and never touch a real-space impurity. `h.get_qpi_impurity()` takes the
-direct route instead, the one an experiment takes: it builds a supercell of `h`, puts one or
-more actual impurities in it, computes the real-space LDOS map around them, and Fourier
-transforms that map to obtain the QPI signal as a function of $\vec q$. Unlike `get_qpi()`,
-it returns arrays rather than only writing to disk
+`h.get_qpi_impurity()` does the calculation in the same way as the
+experiment. It builds a supercell of `h`, puts one or more impurities in it,
+computes the local density of states $D(\mathbf r,\omega)$ around them (see
+[Local density of states](ldos.md)), and takes its Fourier transform,
+
+$$
+\textrm{QPI}(\mathbf q,\omega) =
+\left| \sum_{\mathbf r} e^{-i\mathbf q\cdot\mathbf r}\, D(\mathbf r,\omega) \right| .
+$$
+
+So here the interference of the scattered waves is included exactly, for the
+impurity potential you choose:
 
 ```python
 from pyqula import geometry
@@ -83,31 +127,33 @@ r,ldos_r,q,qpi_q = h.get_qpi_impurity(nsuper=10,
         energies=0.3,num_waves=60,nk=2,delta=0.2)
 ```
 
-The four arrays are the positions of the sites and the LDOS on them, and the q-points and the
-QPI weight on them, so the first pair is the real-space map and the second its Fourier
-transform.
+`r` and `ldos_r` are the positions of the sites and the local density of
+states on them, the real-space map. `q` and `qpi_q` are the wavevectors and
+the QPI intensity, its Fourier transform.
 
-Optional arguments
-- nsuper: supercell size (scalar or `(n1,n2)`)
-- impurities: list of dicts, each an onsite potential (`{"position": [x,y,z], "onsite": v}`, or `{"index": i, "onsite": v}` for a specific supercell site index) or a vacancy (`{"position": [x,y,z], "vacancy": True}`)
-- energies: a single energy or an array
-- num_waves: a starting guess for how many eigenstates nearest the requested energies to compute
-- nk, delta: as in `get_ldos`
+The keywords are
 
-A vacancy is modeled as a strong onsite potential rather than as a removed site, since
-deleting sites from a large sparse supercell Hamiltonian would require densifying it. The
-number of eigenstates `num_waves` is only a starting guess: it is grown automatically until
-the window covers `margin*delta` past every requested energy and never cuts a degenerate
-manifold in half, because summing over half a degenerate manifold is not basis independent
-and would leak spurious QPI weight even for a clean supercell.
+- `nsuper`: size of the supercell, a number or `(n1,n2)`.
+- `impurities`: a list of impurities. Each one is an onsite potential,
+  `{"position": [x,y,z], "onsite": v}` (or `{"index": i, "onsite": v}` for
+  a site of the supercell), or a vacancy,
+  `{"position": [x,y,z], "vacancy": True}`.
+- `energies`: one energy or an array of energies.
+- `num_waves`: a first guess for the number of eigenstates computed near
+  each energy. It is increased automatically when needed.
+- `nk`, `delta`: as in `h.get_ldos()`.
 
-No unfolding step is needed here: this route never diagonalizes supercell bands and projects
-them onto primitive Bloch states (which is what `get_qpi`'s `nunfold` and `store_primal` are
-for). It only Fourier transforms a real-space scalar density, evaluated directly at q spanning
-the full primitive Brillouin zone. `q` is fixed at exactly the `nsuper1`x`nsuper2` points
-commensurate with the supercell, meaning that `nsuper` sets the achievable q resolution, not
-the range of the Brillouin zone; evaluating the direct-sum Fourier transform at any other q
-would show finite-size leakage even for a perfectly clean system, since only the commensurate
-points are free of it.
+A vacancy is modeled as a very large onsite potential on the site, which in
+practice removes the site from the low-energy states.
 
-See `examples/2d/qpi_realspace_impurity/main.py` for a runnable version that plots both the real-space LDOS and QPI(q), and `jupyter-notebooks/functionalities/spectral_functions/07_qpi_maps.ipynb` for an executed notebook.
+The wavevectors `q` are the $n_1\times n_2$ points that are commensurate with
+the supercell, and they cover the whole Brillouin zone of the primitive cell.
+So `nsuper` sets the resolution in $\mathbf q$, not the range. Only these
+points are free of finite-size artifacts: at any other $\mathbf q$, even a
+clean supercell would give a signal. No unfolding is needed here, because the
+Fourier transform is done directly on the real-space density.
+
+See `examples/2d/qpi_realspace_impurity/main.py` for a runnable script that
+plots the real-space map and the QPI, and
+`jupyter-notebooks/functionalities/spectral_functions/07_qpi_maps.ipynb` for
+an executed notebook.

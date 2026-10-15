@@ -1,24 +1,25 @@
 # Band structures and density of states
 
-# Observables
+In this page we compute the two basic quantities of a periodic
+Hamiltonian: the band structure, the energies as a function of momentum, and
+the density of states, the number of states at each energy. The local,
+momentum-resolved and surface versions of the density of states are in
+[Local density of states](ldos.md) and
+[Spectral functions](spectral-functions.md).
 
-With a Hamiltonian in hand, let us now ask it for the quantities that describe its
-electronic structure: the band structure, the density of states and its local and
-momentum-resolved versions, the Fermi surface, the quasiparticle interference pattern of a
-defect, and the spin splitting of an altermagnet. Each of them is one method on the
-Hamiltonian, and each returns the arrays a plot is made of.
+## Band structure
 
-## Electronic band structures
-
-We will start with the band structure, with `h.get_bands()`. For any system that is periodic
-in space, we can compute the electronic band structure as given by
+For a system that is periodic in space, the momentum $k$ is a good quantum
+number, and the Hamiltonian is diagonal in the basis of the Bloch states,
 
 $$
-H = \sum_{k,\alpha} \epsilon_{k,\alpha} \Psi^\dagger_{k,\alpha} \Psi_{k,\alpha}
+H = \sum_{k,\alpha} \epsilon_{k,\alpha}\, \Psi^\dagger_{k,\alpha} \Psi_{k,\alpha} ,
 $$
 
-where $\alpha$ is the band index, meaning that at each momentum $k$ the Hamiltonian is
-diagonal with one energy per band. The previous calculation can be performed as
+where $\alpha$ is the band index and $\epsilon_{k,\alpha}$ is the energy of
+band $\alpha$ at momentum $k$. So at each $k$ there is one energy per band.
+This is the band structure, the quantity that ARPES measures for the
+occupied states. We compute it with `h.get_bands()`:
 
 ```python
 from pyqula import geometry
@@ -27,21 +28,28 @@ h = g.get_hamiltonian() # generate the Hamiltonian
 (k,e) = h.get_bands() # compute band structure
 ```
 
-`h.get_bands()` returns two arrays of the same length, the position along the k-path and one
-energy per band at each k-point, so the two together are the scatter plot of the band
-structure. For the honeycomb lattice what you see is the two bands touching at zero energy
-at the K point, the Dirac point, with a bandwidth of three times the hopping on each side.
+`h.get_bands()` returns two arrays of the same length: the position along the
+k-path, and the energy. Each k-point appears once for each band, so the two
+arrays together are a scatter plot of the band structure. For the honeycomb
+lattice you see two bands that touch at zero energy at the K point, the
+Dirac point. Each band extends to $\pm 3t$.
 
-Optional arguments
-- `kpath`: k-path to use, either a list of high-symmetry labels (e.g. `["G","K","M"]`) or explicit k-vectors; defaults to the geometry's standard path
-- `nk`: number of k-points along the path
-- `operator`: color/weight each band by the expectation value of an operator (or a list of operators), returning `(k,e,c)` instead of `(k,e)`
-- `num_bands`: for large sparse Hamiltonians, only compute this many bands around `central_energy`, instead of the full spectrum
+The keywords are
 
-Passing an operator computes its expectation value in every eigenstate and returns it as a
-third array, which is what colors the bands in a plot: the group velocity below tells apart
-flat bands from dispersive ones, and the spin operator `"sz"` tells apart the two spin
-channels of a magnet, which we will use in the mean-field chapter
+- `kpath`: the k-path, as a list of high-symmetry points (`["G","K","M"]`)
+  or of explicit k-vectors. By default, the standard path of the lattice.
+- `nk`: number of k-points along the path.
+- `operator`: an operator, or a list of operators, whose expectation value
+  is computed in each eigenstate. The output is then `(k,e,c)`.
+- `num_bands`: compute only this many bands around `central_energy`, for
+  large Hamiltonians.
+
+With an operator $A$, the third array is
+$\langle \Psi_{k,\alpha}|A|\Psi_{k,\alpha}\rangle$ for each state, and it is
+the color of the bands in a plot. For example, the group velocity tells
+apart flat bands from dispersive ones, and the spin operator `"sz"` tells
+apart the two spin channels of a magnet, which we use in
+[Mean-field Hubbard models](mean-field.md):
 
 ```python
 from pyqula import geometry
@@ -50,39 +58,47 @@ h = g.get_hamiltonian(has_spin=True)
 (k,e,c) = h.get_bands(operator="velocity") # bands colored by group velocity
 ```
 
-Passing a list of operators computes the expectation value of each of them for every eigenstate, returning one extra column per operator (`(k,e,c1,c2,...)` instead of `(k,e,c)`)
+With a list of operators, the output has one extra array per operator,
+`(k,e,c1,c2,...)`:
 
 ```python
 (k,e,c_sz,c_site) = h.get_bands(operator=["sz","site"]) # two operators at once
 ```
 
-For a very large system, a moire supercell say, diagonalizing the full Hamiltonian at every
-k-point is wasteful if only a handful of bands around the Fermi level are of interest.
-Passing `num_bands` switches to a sparse solver that computes only those bands
+The available operators are described in [Operators](operators.md).
+
+For a very large unit cell, for example a moire supercell, we usually only
+want a few bands near the Fermi energy. With `num_bands`, only these bands
+are computed, which is much faster than computing all of them:
 
 ```python
 (k,e) = h.get_bands(num_bands=20) # only the 20 bands closest to central_energy
 ```
 
-See `examples/2d/velocity_bands/main.py` and `examples/2d/strain_TBG/main.py` for runnable
-versions, and `jupyter-notebooks/functionalities/single_particle_hamiltonians/04_state_resolved_bands.ipynb`
-for an executed notebook with operator-colored bands.
-
-
+See `examples/2d/velocity_bands/main.py` and `examples/2d/strain_TBG/main.py`
+for runnable scripts, and
+`jupyter-notebooks/functionalities/single_particle_hamiltonians/04_state_resolved_bands.ipynb`
+for bands colored by an operator.
 
 ## Density of states
 
-We will now count the states rather than follow them along a path, with `h.get_dos()`. The
-density of states counts how many states are in a certain energy window. It is defined as
+The density of states counts how many states there are at energy $\omega$,
 
 $$
-D(\omega) = \int \delta(\omega-\epsilon_k) dk
+D(\omega) = \frac{1}{N_k}\sum_{k,\alpha} \delta(\omega-\epsilon_{k,\alpha})
+= -\frac{1}{\pi N_k}\sum_k \textrm{Im}\, \textrm{Tr}\, G(k,\omega+i\delta) ,
 $$
 
-where $\epsilon_k$ are the eigenenergies of the Hamiltonian, meaning that every band
-contributes a plateau where it disperses and a peak where it is flat, so that the density of
-states is where the van Hove singularities of a band structure show up. It can be used as
-shown below
+where $N_k$ is the number of k-points and
+$G(k,z) = (z - H_k)^{-1}$ is the Green's function. In practice the delta
+function is replaced by a Lorentzian of width $\delta$, the broadening. With
+this normalization, the integral of $D(\omega)$ over all energies is the
+number of states per unit cell, for example 2 for a spinful chain. A flat
+part of a band gives a peak in $D(\omega)$, and a saddle point gives a
+logarithmic peak, a van Hove singularity. The density of states is what is
+measured, averaged over space, by tunneling spectroscopy, and it controls
+the specific heat and the Pauli susceptibility. We compute it with
+`h.get_dos()`:
 
 ```python
 from pyqula import geometry
@@ -91,37 +107,37 @@ h = g.get_hamiltonian()  # get the Hamiltonian
 (es,ds) = h.get_dos()
 ```
 
-`h.get_dos()` returns the energies and the density of states at each of them, by default on
-a window from $-4$ to $4$ in units of the hopping, sampled on a k-mesh and broadened with a
-Lorentzian of width `delta`. For the triangular lattice what you see is a density of states
-that is not symmetric in energy, with a van Hove singularity at $E=-2$, the saddle point of
-the dispersion at the M point; the top of its band, at $E=6$, lies outside the default window,
-so pass `energies=` when the whole band is needed.
+`h.get_dos()` returns the energies and $D(\omega)$ at each energy. By default
+the energies go from $-4$ to $4$, in units of the hopping. For the triangular
+lattice the band goes from $-3$ to $6$, so the density of states is not
+symmetric. You see a van Hove singularity at $E=-2$, the energy of the saddle
+point at the M point. The top of the band, at $E=6$, is outside the default
+window, so give `energies=` when you need the whole band.
 
-Optional arguments
-- energies: array with the energies for which the DOS is computed
-- delta: smearing of the DOS
-- operator: operator to which the DOS is projected
-- mode: how the DOS is computed, `"ED"` (default), `"Green"`/`"RG"`, `"KPM"` or `"adaptive"`
-- nk: number of k-points per direction of the mesh, for `"ED"` and `"KPM"`
+The keywords are
 
-The four modes are four ways of doing the same integral. `"ED"` diagonalizes the Hamiltonian
-on a k-mesh and broadens the eigenvalues; `"Green"` and `"RG"` sum a Green's function at each
-energy, which pays off when only a handful of energies are needed; `"KPM"` expands the
-density of states in Chebyshev polynomials and is the choice for large sparse systems (see
-the section on Chebyshev kernel polynomial methods); `"adaptive"` does not sample a mesh at
-all: it integrates over the Brillouin zone with an error-controlled quadrature, tuned by
-`error=1e-1`, and uses `nk` only as a limit on how far it subdivides. `"Green"` and `"RG"`
-pass `nk` to the Brillouin-zone sum behind the self-energy, where it matters for
-`gmode="full"` and, in two dimensions, for `gmode="renormalization"`, but not for the default
-`gmode="adaptive"`.
+- `energies`: the energies where $D(\omega)$ is computed.
+- `delta`: the broadening $\delta$. For `mode="ED"` the default is
+  $5/$`nk`.
+- `operator`: project the density of states on an operator.
+- `mode`: how the integral is done: `"ED"` (default), `"Green"` (or
+  `"RG"`), `"KPM"` or `"adaptive"`.
+- `nk`: number of k-points per direction of the k-mesh.
 
-Whatever the mode, the result is normalized as a density of states, meaning that integrating
-it over the energies gives the number of states per unit cell: two for a spinful chain, and
-all four modes reproduce that number to better than 1% on the same window, so they can be
-compared with each other directly, and so can the density of states that `h.get_multildos()`
-writes next to an LDOS map. On the spinful chain below, with longer-range hopping and Rashba
-coupling, the two curves fall on top of each other
+The broadening should be larger than the energy spacing that the finite
+k-mesh gives, otherwise you see the k-mesh and not the band structure. So a
+smaller `delta` needs a larger `nk`.
+
+All modes compute the same quantity with the same normalization, and they
+differ only in cost. `"ED"` diagonalizes $H_k$ on a k-mesh. `"Green"`
+computes the Green's function at each energy, which is cheaper when you need
+only a few energies. `"KPM"` uses an expansion in Chebyshev polynomials and is
+the choice for very large systems (see
+[Kernel polynomial method](kpm.md)). `"adaptive"` integrates over the
+Brillouin zone with a quadrature that refines the k-mesh where it is needed,
+with a target error `error=1e-1`. In the example below, a spinful chain with
+longer-range hopping and Rashba spin-orbit coupling, the ED and Green's
+function results fall on top of each other:
 
 ```python
 from pyqula import geometry
@@ -134,10 +150,19 @@ energies = np.linspace(-4.,4.0,60)
 (e2,d2) = h.get_dos(energies=energies,delta=1e-2,mode="Green")
 ```
 
-An operator can be passed to project the DOS onto a subspace, e.g. the sublattice-resolved
-DOS of a gapped honeycomb lattice, where the sublattice imbalance puts the states below the
-gap on one sublattice and the states above it on the other, so that the projected density of
-states comes out with opposite signs on the two sides of the gap
+With an operator $A$, the projected density of states is
+
+$$
+D_A(\omega) = \frac{1}{N_k}\sum_{k,\alpha}
+\langle \Psi_{k,\alpha}|A|\Psi_{k,\alpha}\rangle\,
+\delta(\omega-\epsilon_{k,\alpha}) .
+$$
+
+For the sublattice operator, which is $+1$ on sublattice A and $-1$ on
+sublattice B, this is the difference between the density of states of the
+two sublattices. In a honeycomb lattice with a sublattice imbalance, the
+states below the gap live on one sublattice and the states above it on the
+other, so $D_A(\omega)$ has opposite signs on the two sides of the gap:
 
 ```python
 from pyqula import geometry
@@ -147,6 +172,7 @@ h.add_sublattice_imbalance(.4)
 (es,ds) = h.get_dos(operator="sublattice",nk=40,delta=5e-2)
 ```
 
-See `examples/1d/dos_GF/main.py` and `examples/2d/operator_dos/main.py` for runnable
-versions, and `jupyter-notebooks/functionalities/single_particle_hamiltonians/06_operator_resolved_dos.ipynb`
+See `examples/1d/dos_GF/main.py` and `examples/2d/operator_dos/main.py` for
+runnable scripts, and
+`jupyter-notebooks/functionalities/single_particle_hamiltonians/06_operator_resolved_dos.ipynb`
 for an executed notebook.

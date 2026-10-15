@@ -1,22 +1,39 @@
 # Classical spin models
 
-Up to now every model in this guide has been quantum, a Hamiltonian of
-fermionic operators to diagonalize. Let us now turn to classical spins, unit
-vectors sitting on the sites of a lattice, with `classicalspin.SpinModel`. Each
-spin is parametrized by a pair of angles $(\theta_i,\phi_i)$, and the spins
-interact through a real-space tensor exchange $\vec S_i \cdot J_{ij} \cdot \vec S_j$
-and an optional Zeeman field. Like the `LatticeGas` of the next chapter, the
-model takes its lattice and neighbor shells from a `Geometry` but is otherwise
-independent of the quantum `Hamiltonian`: the energy is evaluated directly from
-the angles, and the ground state is found by minimizing it, a local
-gradient-based minimization started several times from random angles, rather
-than by diagonalization. Only the $\Gamma$ point is supported, meaning that the
-spin configuration repeats with the unit cell you give it, so an incommensurate
-texture such as a spiral needs an explicit supercell large enough to hold it.
+All the other pages of this guide treat quantum models of electrons. Here we
+treat classical spins: unit vectors $\vec S_i$ on the sites of a lattice,
+with `classicalspin.SpinModel`. This is the right description of a magnet
+with large local moments at the classical level, and it gives the magnetic
+ground state, for example a spiral or a skyrmion texture, which can then be
+used as an exchange field in a quantum Hamiltonian.
 
-Let us take the simplest frustrated case, a triangular lattice with an
-antiferromagnetic first-neighbor exchange, where the three bonds of a triangle
-cannot all be satisfied at once:
+## The energy
+
+Each spin is given by two angles, $\vec S_i=(\sin\theta_i\cos\phi_i,\,
+\sin\theta_i\sin\phi_i,\,\cos\theta_i)$, and the energy is
+
+$$
+E = \sum_{i\neq j} \vec S_i \cdot J_{ij} \cdot \vec S_j + \sum_i \vec b_i\cdot\vec S_i ,
+$$
+
+where $J_{ij}$ is a $3\times3$ exchange tensor and $\vec b_i$ a magnetic
+field. The sum runs over $i$ and $j$ separately, so every bond appears twice,
+once as $(i,j)$ and once as $(j,i)$. A positive $J$ is antiferromagnetic.
+Note the sign of the field term: the energy is lowest when the spin points
+opposite to $\vec b$.
+
+The model uses the lattice and the neighbor shells of a `Geometry`, but it
+has nothing else in common with the quantum `Hamiltonian`. The ground state
+is found by minimizing $E$ over the angles, with a local gradient
+minimization started several times from random angles. The spin
+configuration repeats with the unit cell you give, so a spiral or any other
+texture with a longer period needs a supercell large enough to contain it.
+
+## The 120-degree state
+
+The simplest frustrated case is the triangular lattice with an
+antiferromagnetic first-neighbor exchange. The three bonds of a triangle
+cannot be all antiparallel at the same time.
 
 ```python
 from pyqula import geometry
@@ -32,35 +49,32 @@ sm.minimize_energy(tries=10) # multistart local minimization
 mx,my,mz = sm.get_magnetization() # per-site magnetization components
 ```
 
-`mx`, `my` and `mz` are the components of the unit vector on each site. What
-comes out is the 120-degree state: every pair of neighboring spins forms an
-angle of 120 degrees (their scalar product is $-1/2$ on every bond), the three
-spins of each triangle add up to zero, and so does the total magnetization, at
-an energy of $-3J$ per site. The $3\times3$ supercell is what makes this
-possible, since the pattern has three sublattices; on the primitive cell the
-only $\Gamma$-point configuration is the ferromagnetic one. The `tries`
-keyword is the number of random starting points of the minimization, and it
-matters for a frustrated model, which has many local minima: the lowest energy
-found over the restarts is the one kept.
+`mx`, `my` and `mz` are the three components of the spin on each site. The
+result is the 120-degree state. Two neighboring spins form an angle of 120
+degrees, so $\vec S_i\cdot\vec S_j=-1/2$ on every bond, the three spins of a
+triangle add up to zero, and so does the total magnetization. The energy is
+$-3J$ per site: six neighbors, $-J/2$ per bond, and each bond counted twice.
+The $3\times3$ supercell is needed because this state has three sublattices;
+on the primitive cell the only possible configuration is the ferromagnetic
+one. `tries` is the number of random starting points. A frustrated model has
+many local minima, so more starting points make it more likely to find the
+lowest one, and the lowest energy found is kept.
 
-`add_heisenberg` builds shell-based isotropic (or, via `Jm=[Jx,Jy,Jz]`,
-diagonally anisotropic, XXZ) couplings the same way `g.get_hamiltonian(tij=...)`
-does, so a list of exchanges is read as first, second, third neighbors. For
-other forms of coupling, `classicalspin.generating_functions(name=...)` returns
-ready-made two-point coupling functions: `"Linear"` (dipolar $1/r^3$),
-`"RKKYTI"` (RKKY on a topological-insulator surface, PRB 81 233405), `"ZZ"` and
-`"XYZ"` (Ising and anisotropic-diagonal), `"DM"` (Dzyaloshinskii-Moriya). These
-go into `add_tensor(fun)` (couplings within the home cell) or
-`add_tensor_2d(fun,ncells=...,vspiral=...)`, which also sums the periodic
-images and can twist the coupling tensor by a per-image angle to embed a
-spin-spiral wavevector. `get_local_energy()` gives the per-site energy, for a
-spatially resolved map of a skyrmion or a domain wall, and
-`classicalspintk.align.most_perp_basis()` rotates a texture into the frame
-where it is mostly in-plane, which is the frame to draw it in with arrows.
+## Other couplings
 
-See `examples/classicalspin/` for runnable versions, including the 120-degree
-state above drawn as arrows together with its local energy (`perpendicular/`)
-and a ladder with a modulated exchange whose texture is then fed into a quantum
-Hamiltonian (`modulated_ladder/`). See
-`jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/01_classical_heisenberg.ipynb` and
-`02_magnetization_textures.ipynb` in the same folder for executed notebooks.
+- `add_heisenberg(Jij=[J1,J2,...])`: isotropic exchange to first, second, third neighbors, as in `g.get_hamiltonian(tij=...)`.
+- `add_heisenberg(..., Jm=[Jx,Jy,Jz])`: anisotropic diagonal exchange, for example an XXZ model.
+- `add_field(v)`: the same field $\vec b$ on every site.
+- `classicalspin.generating_functions(name=...)`: ready-made couplings between two positions, `"Linear"` (dipolar, $1/r^3$), `"RKKYTI"` (RKKY on the surface of a topological insulator), `"ZZ"` and `"XYZ"` (Ising and anisotropic diagonal), `"DM"` (Dzyaloshinskii-Moriya).
+- `add_tensor(fun)`: add the coupling `fun` between the sites of the unit cell.
+- `add_tensor_2d(fun,ncells=...,vspiral=...)`: the same, summed over the periodic images, with an optional rotation of the coupling from image to image to describe a spin spiral with wavevector `vspiral`.
+- `get_local_energy()`: the energy of each site, for a map of a skyrmion or a domain wall.
+- `classicalspintk.align.most_perp_basis()`: rotates a texture into the frame where it is mostly in-plane, the frame to draw it with arrows.
+
+See `examples/classicalspin/` for runnable scripts, among them the
+120-degree state drawn with arrows and its local energy (`perpendicular/`),
+and a ladder with a modulated exchange whose texture is then used in a
+quantum Hamiltonian (`modulated_ladder/`). See
+`jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/01_classical_heisenberg.ipynb`
+and `02_magnetization_textures.ipynb` in the same folder for executed
+notebooks.
