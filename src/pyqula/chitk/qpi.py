@@ -143,7 +143,6 @@ def poor_man_qpi_convolve(ks,ds,qs):
     out = selfconvolve(dsg).reshape((nq*nq)) # do the convolution
     out = interpolation.interpolator2d(ksg[:,0],ksg[:,1],out,mode="periodic")(qs[:,0:2])
     dsout = interpolation.interpolator2d(ksg[:,0],ksg[:,1],f(ksg),mode="periodic")(qs[:,0:2])
-    print("Done QPI")
     return out,dsout
 
 
