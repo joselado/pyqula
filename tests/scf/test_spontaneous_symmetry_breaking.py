@@ -11,14 +11,17 @@ def test_spontaneous_haldane_symmetry_breaking_matches_reference(tmp_path, monke
     density-density interaction on honeycomb, at a coarse mesh (nk=4
     instead of 10): the identified symmetry breaking and the band energy
     sum of the mean-field correction must match the values recorded from a
-    known-good run. Marked slow: SCF convergence itself drives the
-    runtime, not the k-mesh."""
+    known-good run. The state is converged: plain mixing at mix=0.1 is
+    still at an error of 2e-5 to 3e-4 after 1000 iterations, and a larger
+    mix jumps to a charge density wave, while Broyden mixing reaches the
+    Haldane state from every random seed tried in about 140 iterations."""
     monkeypatch.chdir(tmp_path)
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=False)
+    np.random.seed(0)
     mf = meanfield.guess(h, "random")
     scf = meanfield.Vinteraction(h, mf=mf, V2=2.0, nk=4, filling=0.5, mix=0.1,
-                                 check_convergence=False)
+                                 solver="broyden_mixing")
     assert scf.identify_symmetry_breaking() == ["Haldane"]
     hcorr = h - scf.hamiltonian
     (k, e) = hcorr.get_bands(nk=20)
