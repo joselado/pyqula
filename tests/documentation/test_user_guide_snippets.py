@@ -1,4 +1,5 @@
-"""Static checks on the code snippets in documentation/user_guide.md.
+"""Static checks on the code snippets of the user guide, the pages under
+documentation/guide/ that MkDocs publishes as the website.
 
 Running all ~90 snippets takes well over an hour (several do self-consistent
 or Keldysh calculations), so this is deliberately *static*: it parses every
@@ -27,37 +28,47 @@ import pytest
 
 from pyqula import geometry
 
-GUIDE = "documentation/user_guide.md"
+GUIDE = "documentation/guide"
 
-# The reference chapter is a catalogue of signatures, not a tutorial: its
+# The reference pages are a catalogue of signatures, not a tutorial: their
 # fragments illustrate a call on "the h you already have" and are not meant
-# to stand alone. Everything before it is.
-REFERENCE_CHAPTER = "# Main functions and methods"
+# to stand alone. Everything else is.
+REFERENCE_PREFIX = "reference-"
+
+
+def _pages():
+    """(file name, lines) of every page of the guide, sorted by name."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2] / GUIDE
+    return [(p.name, p.read_text().split("\n"))
+            for p in sorted(root.glob("*.md"))]
 
 
 def _read_guide():
-    from pathlib import Path
-    root = Path(__file__).resolve().parents[2]
-    return (root / GUIDE).read_text().split("\n")
+    """All lines of all pages, as (page, line number, line)."""
+    return [(name, n, l) for name, lines in _pages()
+            for n, l in enumerate(lines, start=1)]
 
 
 def _blocks():
-    """Every ```python block, with the heading it sits under."""
-    lines = _read_guide()
-    out, cur, heading, in_reference = [], None, "(top)", False
-    for i, l in enumerate(lines):
-        if l.startswith("#") and cur is None:
-            heading = l.strip()
-            if heading == REFERENCE_CHAPTER:
-                in_reference = True
-        if l.strip().startswith("```python"):
-            cur = [i + 2, []]
-        elif l.strip() == "```" and cur is not None:
-            out.append({"line": cur[0], "code": "\n".join(cur[1]),
-                        "heading": heading, "reference": in_reference})
-            cur = None
-        elif cur is not None:
-            cur[1].append(l)
+    """Every ```python block, with the page and heading it sits under."""
+    out = []
+    for name, lines in _pages():
+        cur, heading = None, "(top)"
+        in_reference = name.startswith(REFERENCE_PREFIX)
+        for i, l in enumerate(lines):
+            if l.startswith("#") and cur is None:
+                heading = l.strip()
+            if l.strip().startswith("```python"):
+                cur = [i + 2, []]
+            elif l.strip() == "```" and cur is not None:
+                out.append({"line": "%s:%d" % (name, cur[0]),
+                            "code": "\n".join(cur[1]),
+                            "heading": name + " " + heading,
+                            "reference": in_reference})
+                cur = None
+            elif cur is not None:
+                cur[1].append(l)
     return out
 
 
@@ -93,7 +104,7 @@ def test_every_snippet_parses():
         try:
             ast.parse(b["code"])
         except SyntaxError as e:
-            bad.append("L%d: %s" % (b["line"], e))
+            bad.append("%s: %s" % (b["line"], e))
     assert not bad, "unparseable snippets in the user guide:\n" + "\n".join(bad)
 
 
@@ -115,7 +126,7 @@ def test_no_snippet_uses_an_undefined_name():
         bound, read = _bound_and_read(b["code"])
         undefined = read - bound - inherited - builtin_names
         if undefined:
-            missing.append("L%d (%s): %s" %
+            missing.append("%s (%s): %s" %
                            (b["line"], b["heading"], sorted(undefined)))
         inherited |= bound
     assert not missing, ("user-guide snippets read names nothing defines:\n"
@@ -132,13 +143,13 @@ def test_every_referenced_method_exists():
     # g.relax lives on the GrapheneGeometry subclass, documented as such
     allowed_missing = {("g", "relax")}
     bad = []
-    for n, line in enumerate(_read_guide(), start=1):
+    for page, n, line in _read_guide():
         for m in re.finditer(r"\b(h|g|geometry)\.([A-Za-z_0-9]+)\(", line):
             obj, name = m.group(1), m.group(2)
             if (obj, name) in allowed_missing:
                 continue
             if not hasattr(targets[obj], name):
-                bad.append("L%d: %s.%s" % (n, obj, name))
+                bad.append("%s:%d: %s.%s" % (page, n, obj, name))
     assert not bad, ("the user guide names methods that do not exist:\n"
                      + "\n".join(bad))
 
@@ -151,7 +162,8 @@ def test_reference_chapter_documents_these_methods(name):
     """These were public and undocumented until the reference chapter grew
     entries for them; keep the entries from being dropped silently. Some
     share one heading (the get_vev family), so match the method name in any
-    `###` entry rather than requiring an entry of its own."""
-    headings = [l for l in _read_guide() if l.startswith("### ")]
+    heading of the reference pages rather than requiring an entry of its own."""
+    headings = [l for page, n, l in _read_guide()
+                if page.startswith(REFERENCE_PREFIX) and l.startswith("#")]
     documented = any("h.%s(" % name in l for l in headings)
     assert documented, "no reference entry for h.%s in the user guide" % name

@@ -76,9 +76,11 @@ correct:
 
 All of these, for a user-facing feature:
 
-1. `documentation/user_guide.md` -- a prose section with the physics and
-   motivation plus a runnable snippet, in the existing style.
-2. `documentation/user_guide.md`, `# Main functions and methods` -- an entry,
+1. The topic page under `documentation/guide/` -- a section with the
+   formula, the physical meaning and a runnable snippet, in the voice of
+   `documentation/VOICE.md` section 0 (load `user-guide-voice`). A new page
+   also gets a line in the `nav` of `mkdocs.yml`.
+2. The reference pages `documentation/guide/reference-*.md` -- an entry,
    for anything with a method on `Hamiltonian` or `Geometry`.
 3. `README.md`, the `# FUNCTIONALITIES #` list -- a bullet where relevant.
 4. `examples/<dimensionality>/<name>/main.py` -- a runnable script. These
@@ -88,7 +90,8 @@ All of these, for a user-facing feature:
    bullets currently do; if you add a notebook, that count moves with it.
 
 Then run `python -m pytest tests/documentation` -- it statically checks that
-every method the guide names actually exists -- and rebuild the PDF. The
+every method the guide names actually exists -- and build the website
+locally with `mkdocs build`. The
 `refresh-docs` skill does that sweep.
 
 ## If you deliberately leave something unbuilt

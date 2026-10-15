@@ -1,0 +1,52 @@
+name: User guide
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "documentation/guide/**"
+      - "documentation/build_guide_pdf.py"
+      - "mkdocs.yml"
+      - ".github/workflows/guide.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the website
+        run: |
+          pip install mkdocs==1.6.1 mkdocs-material==9.7.7
+          mkdocs build
+      - name: Build the PDF
+        continue-on-error: true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pandoc texlive-xetex texlive-latex-recommended texlive-latex-extra texlive-fonts-recommended lmodern
+          python documentation/build_guide_pdf.py site/user_guide.pdf
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

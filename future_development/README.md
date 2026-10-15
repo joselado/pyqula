@@ -2,8 +2,8 @@
 
 Maintainer-facing roadmaps for work that is planned, partially done, or
 scoped-but-not-started. These are notes to a future implementer (human or
-Claude), not user documentation -- user-facing behaviour belongs in
-`documentation/user_guide.md` and `README.md`.
+Claude), not user documentation -- user-facing behaviour belongs in the
+user guide (the website pages under `documentation/guide/`) and `README.md`.
 
 A document here should say what exists today, what is missing, what was
 already measured or ruled out, and what the next decision point is, so that
@@ -244,6 +244,14 @@ already reached once.
   each was safe, and the seven that are unused but import cleanly and were
   deliberately kept because deleting them is a public-API decision rather
   than a repair.
+
+- Computed figures in the user guide -- not built. The guide became a MkDocs
+  website (`documentation/guide/`, published by `.github/workflows/guide.yml`)
+  on 2026-10-15, in the same way as dmrgpy's, but without dmrgpy's second
+  step: a figure on each page computed by a `compute.py` and a `plot.py` in a
+  figures directory, shown in a light and a dark version, with the code in a
+  collapsed block (pymdownx.snippets). The pages still read the arrays aloud
+  and point at `examples/` and the notebooks for the plots.
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

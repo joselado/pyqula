@@ -47,12 +47,13 @@ These are the minimum/recommended versions of several required libraries
 
 
 # Documentation #
-The [user guide](documentation/user_guide.md) is the main reference: a chapter
-per topic (Hamiltonians, observables, operators, superconductivity, mean field,
-topology, response functions, transport, Wannierization, KPM, classical spin and
-lattice-gas models), each with the physics and runnable snippets, followed by a
-reference of every `Geometry`/`Hamiltonian` method and its arguments. A PDF
-build is at [documentation/user_guide.pdf](documentation/user_guide.pdf).
+The user guide is at <https://joselado.github.io/pyqula/>. It has one page per
+topic (Hamiltonians, spectral functions, superconductivity, mean field,
+topology, response functions, transport, Wannierization, KPM, classical spin
+and lattice-gas models), each with the formula, the physical meaning and
+runnable code, and a reference of the `Geometry` and `Hamiltonian` methods and
+their arguments. The whole guide is also available as one
+[PDF](https://joselado.github.io/pyqula/user_guide.pdf).
 
 `examples/` holds several hundred runnable scripts organized by dimensionality
 (`0d/ 1d/ 2d/ 3d/`, plus `transport/`, `embedding/`, `wannier/`,

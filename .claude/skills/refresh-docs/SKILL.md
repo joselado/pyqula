@@ -1,6 +1,6 @@
 ---
 name: refresh-docs
-description: Refresh pyqula's documentation after a change - recount the test suite, propagate every number that moved, re-run the static user-guide checks, and rebuild documentation/user_guide.pdf. Use when asked to refresh, rebuild, or update the docs or the PDF guide, after landing a feature or a batch of fixes, or before a release.
+description: Refresh pyqula's documentation after a change - recount the test suite, propagate every number that moved, re-run the static user-guide checks, and build the user-guide website and its PDF locally. Use when asked to refresh, rebuild, or update the docs or the PDF guide, after landing a feature or a batch of fixes, or before a release.
 ---
 
 # Refreshing the documentation
@@ -48,7 +48,10 @@ ls jupyter-notebooks/functionalities/*.ipynb | wc -l
 
 If a feature landed since the last sweep, the FUNCTIONALITIES list in
 `README.md` (section starts at `# FUNCTIONALITIES #`) may need a bullet, and
-the user guide a section plus an entry in `# Main functions and methods`.
+the user guide a section on its topic page under `documentation/guide/`
+plus an entry on the matching reference page (`reference-hamiltonian.md`,
+`reference-geometry.md` or `reference-other.md`). A new page also needs a
+line in the `nav` of `mkdocs.yml`.
 
 ## 3. Re-run the static guide checks
 
@@ -56,29 +59,33 @@ the user guide a section plus an entry in `# Main functions and methods`.
 python -m pytest tests/documentation -v
 ```
 
-These parse every snippet in `user_guide.md` and check (a) that each name a
+These parse every snippet of the pages in `documentation/guide/` and check (a) that each name a
 snippet reads is one it defines, imports, or inherits from an earlier snippet
-in its section, and (b) that every `h.<method>` / `g.<method>` /
+in its section of the same page, and (b) that every `h.<method>` / `g.<method>` /
 `geometry.<factory>` the guide names -- in prose as well as code -- exists on
 the real object. They do not run the physics, so they cannot catch a wrong
 argument value; they catch the guide having drifted from the library.
 
-## 4. Rebuild the PDF
+## 4. Build the website and the PDF
+
+The guide is published at https://joselado.github.io/pyqula/ by
+`.github/workflows/guide.yml` on every push to master that touches
+`documentation/guide/`, `mkdocs.yml` or the PDF builder, so nothing is
+committed for it. Before pushing, build both locally to catch what the
+workflow would catch:
 
 ```bash
-(cd documentation && bash convert.sh)
+pip install mkdocs==1.6.1 mkdocs-material==9.7.7   # in a scratch venv
+mkdocs build -d <your session scratchpad>/site     # strict: a broken page link fails the build
+python documentation/build_guide_pdf.py <your session scratchpad>/user_guide.pdf
 ```
 
-`xelatex`, not the default `pdflatex`: the guide contains the Greek letters of
-the physics prose, and pdflatex fails on the first one it reaches. Confirm the
-build actually produced something new rather than leaving a stale file:
-
-```bash
-ls -la documentation/user_guide.pdf
-```
+The PDF joins the pages in the order of the `nav` in `mkdocs.yml` and needs
+pandoc and `xelatex` (the default `pdflatex` fails on the first Greek
+letter). It is not tracked in git; the workflow publishes it next to the site.
 
 ## 5. Report
 
 Say which numbers moved and what they moved from and to, whether
-`tests/documentation` passed, and that the PDF timestamp advanced. If a count
+`tests/documentation` passed, and whether the site and the PDF built. If a count
 was already correct, say so rather than implying you changed it.

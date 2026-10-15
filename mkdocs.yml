@@ -1,0 +1,99 @@
+site_name: pyqula user guide
+site_url: https://joselado.github.io/pyqula/
+repo_url: https://github.com/joselado/pyqula
+repo_name: joselado/pyqula
+docs_dir: documentation/guide
+site_dir: site
+strict: true
+validation:
+  anchors: warn
+  unrecognized_links: warn
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - toc.follow
+    - search.highlight
+    - content.code.copy
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.details
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-svg.js
+
+nav:
+  - Home: index.md
+  - Hamiltonians:
+      - Building a Hamiltonian: hamiltonian.md
+      - Operators: operators.md
+      - Non-Hermitian Hamiltonians: non-hermitian.md
+  - Spectra:
+      - Band structures and DOS: bands-and-dos.md
+      - Local density of states: ldos.md
+      - Spectral functions: spectral-functions.md
+      - Quasiparticle interference: qpi.md
+      - Band unfolding: unfolding.md
+      - Altermagnets: altermagnets.md
+  - Interactions:
+      - Superconductivity: superconductivity.md
+      - Mean-field Hubbard models: mean-field.md
+      - Exchange interactions: exchange.md
+      - Pseudofermion mean field: pseudofermions.md
+  - Topology:
+      - Topological invariants: topological-invariants.md
+      - Quantum geometry: quantum-geometry.md
+      - Topology in real space: real-space-topology.md
+      - Entanglement: entanglement.md
+  - Response:
+      - Optical conductivity: optical-conductivity.md
+      - Charge response and RKKY: charge-response.md
+      - Spin response and magnons: spin-response.md
+      - Excitons: excitons.md
+  - Transport:
+      - Quantum transport: transport.md
+      - Defects in infinite systems: embedding.md
+  - Methods:
+      - Kernel polynomial method: kpm.md
+      - Wannierization: wannierization.md
+      - Structural relaxation: relaxation.md
+      - Classical spin models: classical-spins.md
+      - Lattice gas models: lattice-gas.md
+      - Ising models: ising.md
+      - Parallelism: parallelism.md
+      - GPU: gpu.md
+      - Output files: files.md
+      - Errors: errors.md
+  - Reference:
+      - Geometry: reference-geometry.md
+      - Hamiltonian: reference-hamiltonian.md
+      - Other classes: reference-other.md
