@@ -980,7 +980,11 @@ Optional arguments:
 - mode="response": `"pm"` computes the autocorrelation of the
   momentum-resolved spectral function, the QPI of a real scatterer;
   `"response"` uses a joint density of states of the clean bands, which is
-  faster
+  faster; `"tmatrix"` computes a single impurity in the infinite system
+  with the T-matrix, and `"born"` the same impurity to first order
+- impurity=None: the impurity of `"tmatrix"` and `"born"`, a number (onsite
+  potential on the first site of the cell), one onsite potential per site,
+  or a matrix with the dimension of the cell
 - nunfold=1: unfold the QPI of a supercell to the Brillouin zone of the
   primitive cell, given as the linear size of the supercell (`np.sqrt(3)`
   for the $\sqrt3\times\sqrt3$ one)

@@ -14,8 +14,12 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
         output_folder="MULTIQPI",nsuper=2,integrate=False,
         mode = "response",info=False,
         nunfold = 1, # flag for unfolding
-        delta=1e-1,write=None,**kwargs):
-    """Compute the QPI using a poor-mans convolution of the k-DOS.
+        delta=1e-1,write=None,impurity=None,**kwargs):
+    """Compute the QPI, with the method selected by mode (see QPI_MODES):
+    "pm" the autocorrelation of the k-resolved DOS, "response" a nesting
+    function of the clean bands, "tmatrix" the T-matrix of a single
+    impurity (given by impurity, see qpitk.tmatrix.impurity_matrix) and
+    "born" its first order in the impurity.
 
     Returns (q, energies, qpi): the q-points, (nq,3) in the coordinates of
     the k-mesh, the energies, and the QPI intensity, (nenergies,nq), the
@@ -25,6 +29,26 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
     write = filewrite.resolve(write,True) # the call, else the global switch
     if h.dimensionality!=2:
         raise ValueError("the QPI is only implemented for 2d Hamiltonians")
+    if mode not in QPI_MODES:
+        raise ValueError("unknown QPI mode "+repr(mode)+"; the accepted "
+                "ones are "+", ".join(repr(m) for m in get_qpi_modes()))
+    if QPI_MODES[mode] is not None: # single impurity, from the T-matrix
+        if kwargs.get("operator") is not None or nunfold!=1:
+            raise NotImplementedError("get_qpi(mode="+repr(mode)+") "
+                    "computes the impurity directly in the primitive cell "
+                    "and takes neither an operator nor nunfold (got "
+                    "operator="+str(kwargs.get("operator"))+", nunfold="
+                    +str(nunfold)+")")
+        from ..qpitk import tmatrix
+        qs0 = tmatrix.tmatrix_qmesh(nk,nsuper) # on the k-mesh
+        out = QPI_MODES[mode](h,qs0,energies,nk=nk,delta=delta,
+                impurity=impurity)
+        es = energies
+        dosa = np.array([np.mean(o[1]) for o in out]) # clean DOS
+        return _finish_qpi(out,qs0,es,dosa,integrate,write,output_folder)
+    if impurity is not None:
+        raise ValueError("get_qpi(mode="+repr(mode)+") does not take an "
+                "impurity; use mode='tmatrix' or mode='born'")
     if mode=="response": # built from the bare eigenvalues alone
         # it takes no operator and does no unfolding, and both used to be
         # dropped without a word, returning the plain QPI of the supercell
@@ -67,9 +91,12 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
         out = epsilonk(h,energies=energies,nk=nk,delta=delta,qs=qs) # output
         es = energies # redefine the energies
         dosa = np.sum([o[1] for o in out],axis=1) # DOS
-    else:
-        raise ValueError("unknown mode; the QPI accepts 'pm' and 'response'")
-#    print(np.array(out).shape) ; exit()
+    return _finish_qpi(out,qs0,es,dosa,integrate,write,output_folder)
+
+
+def _finish_qpi(out,qs0,es,dosa,integrate,write,output_folder):
+    """Turn the list of (qpi,kdos) pairs of every energy into the arrays
+    get_qpi returns, and write them"""
     kqpi = np.array([o[0] for o in out]).T # convert to array
     if integrate:
         kqpi = [np.mean(kqpi[:,0:i],axis=1) for i in range(len(es))]
@@ -78,6 +105,27 @@ def get_qpi(h,reciprocal=True,nk=20,energies=np.linspace(-4.0,4.0,80),
     kdos = np.array([o[1] for o in out]).T # convert to array
     if write: write_qpi(output_folder,qs0,es,kqpi,kdos,dosa)
     return qs0,np.array(es),kqpi.T
+
+
+def _qpi_tmatrix(h,qs,energies,**kwargs):
+    from ..qpitk.tmatrix import get_qpi_tmatrix
+    return get_qpi_tmatrix(h,qs,energies,born=False,**kwargs)
+
+
+def _qpi_born(h,qs,energies,**kwargs):
+    from ..qpitk.tmatrix import get_qpi_tmatrix
+    return get_qpi_tmatrix(h,qs,energies,born=True,**kwargs)
+
+
+# the QPI modes of get_qpi: a single-impurity mode maps to the function
+# computing it, while "pm" and "response" (None) are computed in its body
+QPI_MODES = {"pm": None, "response": None,
+        "tmatrix": _qpi_tmatrix, "born": _qpi_born}
+
+
+def get_qpi_modes():
+    """Names of the QPI modes accepted by get_qpi"""
+    return list(QPI_MODES)
 
 
 def write_qpi(output_folder,qs0,es,kqpi,kdos,dosa):

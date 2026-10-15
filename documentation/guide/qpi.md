@@ -204,3 +204,131 @@ See `examples/2d/qpi_realspace_impurity/main.py` for a runnable script that
 plots the real-space map and the QPI, and
 `jupyter-notebooks/functionalities/spectral_functions/07_qpi_maps.ipynb` for
 an executed notebook.
+
+## QPI from the T-matrix
+
+We will now see how to compute the QPI of a single impurity in an infinite
+system, without a supercell. The way we do this is with the T-matrix. We take
+the clean Hamiltonian $H_0$ and one impurity $V$, which acts only inside the
+unit cell at the origin. The Green's function of the clean system is
+
+$$
+G_0(\mathbf k,\omega) = \left[\omega + i\delta - H_0(\mathbf k)\right]^{-1} ,
+$$
+
+where $H_0(\mathbf k)$ is the Bloch Hamiltonian and $\delta$ the broadening.
+The impurity scatters the electrons many times. The sum of all these
+scattering events is the T-matrix,
+
+$$
+T(\omega) = V\left[1 - G_0(\omega)\,V\right]^{-1},
+\qquad
+G_0(\omega) = \frac{1}{N}\sum_{\mathbf k} G_0(\mathbf k,\omega) ,
+$$
+
+where $G_0(\omega)$ is the local Green's function of the unit cell and $N$
+the number of k-points. Because the impurity is local, $T$ does not depend on
+momentum. The Green's function with the impurity is $G = G_0 + G_0 T G_0$,
+so the change of the local density of states has the Fourier transform
+
+$$
+\delta\rho(\mathbf q,\omega) = -\frac{1}{2\pi i}\sum_a
+e^{-i\mathbf q\cdot\boldsymbol\tau_a}
+\left[\Lambda_{aa}(\mathbf q,\omega) - \Lambda_{aa}^*(-\mathbf q,\omega)\right],
+\qquad
+\Lambda(\mathbf q,\omega) = \frac{1}{N}\sum_{\mathbf k}
+G_0(\mathbf k,\omega)\,T(\omega)\,G_0(\mathbf k-\mathbf q,\omega) ,
+$$
+
+where $a$ runs over the orbitals of the unit cell and $\boldsymbol\tau_a$ is
+the position of the site of orbital $a$, so the result is the Fourier
+transform of a real-space map, as in STM. This is the formalism of the review
+by Rhodes, Kohsaka, Hanaguri, Marques and Wahl
+([arXiv:2607.22487](https://arxiv.org/abs/2607.22487)). For a
+superconductor, only the electron part of the Nambu Green's function enters
+the trace. The QPI intensity is $|\delta\rho(\mathbf q,\omega)|$.
+
+When the impurity is weak, $T\approx V$. This is called the Born
+approximation, and it is the first order in $V$. For a point impurity in a
+single-band model with inversion symmetry, the expression above becomes
+$\delta\rho = -\frac{1}{\pi}\textrm{Im}[T\,\Lambda_0(\mathbf q)]$, where
+$\Lambda_0$ is the sum of $G_0(\mathbf k)G_0(\mathbf k-\mathbf q)$. In the
+Born approximation $T=V$ is real, so only $\textrm{Im}\,\Lambda_0$ enters. A
+strong impurity has a complex $T$, so $\textrm{Re}\,\Lambda_0$ enters too, and
+the shape of the pattern changes, not only its size.
+
+This is `mode="tmatrix"` of `h.get_qpi()`, and `mode="born"` for the Born
+approximation. The impurity is given with `impurity`:
+
+```python
+from pyqula import geometry
+g = geometry.square_lattice()
+h = g.get_hamiltonian(has_spin=False)
+(qs,es,qpi) = h.get_qpi(mode="tmatrix",impurity=5.0,nk=120,nsuper=2,
+        delta=1e-1,energies=[-1.0]) # a strong point impurity
+```
+
+As for the other modes, `qs` contains the wavevectors, one per row, in units
+of the reciprocal lattice vectors, `es` the energies, and `qpi` the
+intensity, with one row per energy and one column per wavevector. Here
+$\delta\rho$ contains only the change due to the impurity, so the point
+$\mathbf q=0$ is the change of the total density of states, and it is not
+much larger than the rest.
+
+![QPI map of a point impurity in the square lattice from the T-matrix, and a cut along the q_x axis compared with the Born approximation.](img/qpi_tmatrix.png#only-light)
+![QPI map of a point impurity in the square lattice from the T-matrix, and a cut along the q_x axis compared with the Born approximation.](img/qpi_tmatrix-dark.png#only-dark)
+
+The band of the square lattice goes from $-4t$ at M to $4t$ at $\Gamma$. At
+$\omega=-t$ the contour is a rounded square around M, with a radius
+$k_F=1/3$ along the axes, in units of $2\pi/a$. On the left, the QPI map of
+an impurity with $V=5t$. You see a rounded square of radius $2k_F=2/3$
+around every reciprocal lattice vector, so the lines cross the $q_x$ axis
+at $q_x=\pm 1/3$ and $\pm 2/3$. These are the vectors that connect the
+parallel sides of the contour, which give the strongest interference. On
+the right, the cut at $q_y=0$, each curve divided by its maximum. The peaks
+are at the same $\mathbf q$ for the T-matrix and for the Born approximation,
+since they come from the contour. The background is different: between
+$q_x=1/3$ and $2/3$ the Born result drops almost to zero, while the T-matrix
+stays at about $0.3$ of the peak. For this impurity $T\approx(1.1-1.1i)\,t$,
+so the real part of $\Lambda_0$ enters with the same weight as the
+imaginary part.
+
+??? example "Code of this figure (documentation/figures/qpi_tmatrix.py)"
+
+    ```python
+    --8<-- "qpi_tmatrix.py"
+    ```
+
+The keywords are
+
+- `impurity`: a number, an onsite potential on the first site of the unit
+  cell; a list with one onsite potential per site of the cell; or a matrix
+  with the dimension of the Hamiltonian of the cell, for example a magnetic
+  impurity $V\,\mathbf m\cdot\boldsymbol\sigma$ in a spinful system.
+- `nk`: number of k-points per direction. The wavevectors are on the same
+  mesh, so `nk` also sets the resolution in $\mathbf q$.
+- `nsuper`: number of Brillouin zones per direction covered by `qs`.
+- `energies`, `delta`, `write`: as in `mode="pm"`.
+
+The sum over k-points on an `nk` x `nk` mesh is the same as one impurity in a
+periodic system of `nk` x `nk` unit cells. So the result is exact for that
+system, and it is the same as `h.get_qpi_impurity()` with `nsuper=nk` and
+`nk=1`, at every $\mathbf q$ except $\mathbf q=0$, where the real-space map
+also contains the density of states of the clean system. For a single impurity in an infinite system, `nk` must be larger
+than the length over which the Friedel oscillations decay, which is about
+$v_F/\delta$ in units of the lattice constant, where $v_F$ is the Fermi
+velocity. In the figure $v_F\approx 1.7\,ta$ and $\delta=0.1t$, so this is
+about 20 unit cells, and `nk=120` is enough. With a smaller $\delta$,
+increase `nk`.
+
+The impurity matrix also lets you check a selection rule. With
+time-reversal symmetry, the two states of a Kramers pair give opposite
+contributions for a magnetic impurity. So in the Born approximation a
+magnetic impurity gives no QPI at all, even with a Rashba spin-orbit
+coupling. The T-matrix gives a signal at second order in $V$. In the
+square lattice with a Rashba coupling of $0.4t$, at $\omega=-t$, the
+largest QPI intensity of a magnetic impurity with $V=0.3t$ is about 14 times
+weaker than the one of a potential impurity of the same strength, and about
+3 times weaker for $V=t$.
+
+See `examples/2d/qpi_tmatrix/main.py` for a runnable script.
