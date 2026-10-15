@@ -1026,7 +1026,8 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
     from n_occ_total instead, and for a fixed mu every solver's converged x
     already has mu_eff == mu by construction.
 
-    Returns (x, final_mu, ite, converged, dm, es, occ). callback_mf (applied
+    Returns (x, final_mu, ite, converged, dm, es, occ, residual), residual
+    being max|F(x)-x| at the returned x. callback_mf (applied
     on concrete numpy arrays each iteration) is only possible for
     solver="fixed_point"; every other solver needs x to stay a jax value
     throughout, and raises NotImplementedError when given one. kick_steps
@@ -1059,12 +1060,13 @@ def solve_scf(step_jit, x0, mu, dirs, n, solver, maxite, maxerror, mix,
 
     xfinal, dm, es, occ, final_mu = step_jit(x, mu)
     final_mu = float(final_mu)
+    residual = float(jnp.max(jnp.abs(xfinal - x))) # reached SCF error
     if converged is None:
         # scf.converged still means the same thing here as for every other
         # solver -- the actual SCF residual, not L-BFGS-B's own gradient-norm
         # stopping criterion (see lbfgs_solve's docstring)
-        converged = bool(jnp.max(jnp.abs(xfinal - x)) < maxerror)
-    return x, final_mu, ite, bool(converged), dm, es, occ
+        converged = bool(residual < maxerror)
+    return x, final_mu, ite, bool(converged), dm, es, occ, residual
 
 
 def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
@@ -1151,7 +1153,7 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     # build_step_function/_get_step_core's docstrings
     step_jit = build_step_function(hop0, v, ks, dirs, dirs_all, T,
             compute_dd, compute_cross, add_dagger, n_occ_total=n_occ_total)
-    x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
+    x, final_mu, ite, converged, dm, es, occ, residual = solve_scf(step_jit, x0, mu,
             dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
             gmres_restart, callback_mf=callback_mf, kick_steps=kick_steps)
     mf_final = unflatten_mf(x, dirs, n)
@@ -1198,6 +1200,7 @@ def generic_densitydensity_jax(h0, mf=None, v=None, nk=8, mu=0.0,
     scf.total_energy = etot
     scf.mu = final_mu
     scf.iterations = ite
+    scf.residual = residual
     if verbose > 1:
         print("##################")
         print("Total energy", etot)

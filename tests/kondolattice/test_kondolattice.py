@@ -3,6 +3,7 @@ import pytest
 
 from pyqula import geometry
 from pyqula.kondolattice import KondoLatticeHamiltonian
+from pyqula.meanfield import MeanFieldConvergenceError
 
 # KondoLatticeHamiltonian implements the large-N Abrikosov-pseudofermion
 # (Read-Newns) mean-field theory of the Kondo lattice/periodic Anderson
@@ -88,15 +89,16 @@ def test_subcritical_J_does_not_falsely_converge():
     |V| happened to have reached once it dropped below maxerror -- a
     tolerance/iteration-count artifact, not a physical answer (it changed
     with maxerror). The residual is now relative to |V| itself, so this
-    case should consistently fail to converge (report None) regardless of
+    case should consistently fail to converge (raise) regardless of
     how tight or loose maxerror is, rather than agreeing on some nonzero
     value by coincidence."""
     h = _chain()
     seed = (np.array([0.3+0.0j]), np.array([0.0]))
     for maxerror in (1e-4, 1e-8):
-        h2 = h.get_mean_field_hamiltonian(J=0.9, filling=0.15, nk=100,
-                mf=seed, mix=0.3, maxerror=maxerror, maxite=500)
-        assert h2 is None, (maxerror, h2.hybridization if h2 else None)
+        with pytest.raises(MeanFieldConvergenceError,
+                match="did not converge in 500 iterations"):
+            h.get_mean_field_hamiltonian(J=0.9, filling=0.15, nk=100,
+                    mf=seed, mix=0.3, maxerror=maxerror, maxite=500)
 
 
 def test_local_occupation_is_one_nonuniform_supercell():

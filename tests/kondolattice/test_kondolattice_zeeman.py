@@ -1,7 +1,9 @@
 import numpy as np
+import pytest
 
 from pyqula import geometry
 from pyqula.kondolattice import KondoLatticeHamiltonian
+from pyqula.meanfield import MeanFieldConvergenceError
 
 # An external Zeeman field couples EXACTLY to both fermion species here --
 # the conduction electron (an ordinary electron) and the localized moment
@@ -92,7 +94,7 @@ def test_hybridization_is_suppressed_by_a_field():
 def test_strong_field_destroys_the_kondo_state():
     """Push the field past the (large-N mean-field) critical value where
     the hybridized branch stops being a genuine fixed point: the SCF must
-    correctly report non-convergence (None), exactly like a subcritical J
+    correctly report non-convergence (raise), exactly like a subcritical J
     (test_subcritical_J_does_not_falsely_converge) -- the relative-residual
     convergence check is what makes this the correct answer here rather
     than a silently wrong small-but-nonzero V, since a field-destroyed
@@ -102,11 +104,11 @@ def test_strong_field_destroys_the_kondo_state():
     h = _chain()
     seed = (np.array([0.3+0.0j]), np.array([0.0]))
     h.add_zeeman([0., 0., 0.2])
-    h2 = h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=150, mf=seed,
-            mix=0.3, maxerror=1e-6, maxite=3000)
-    assert h2 is None, (
-        "expected the Kondo state to be destroyed by a strong field",
-        h2.hybridization if h2 else None)
+    # the Kondo state is destroyed by a strong field
+    with pytest.raises(MeanFieldConvergenceError,
+            match="did not converge in 3000 iterations"):
+        h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=150, mf=seed,
+                mix=0.3, maxerror=1e-6, maxite=3000)
 
 
 def test_add_exchange_matches_add_zeeman():

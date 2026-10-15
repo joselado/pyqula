@@ -5,6 +5,7 @@ import pytest
 from scipy.sparse import csr_matrix, issparse
 
 from pyqula import geometry, meanfield
+from pyqula.meanfield import MeanFieldConvergenceError
 from pyqula.kpmtk import pairmomentsjax, pairmomentsnumba
 from pyqula.kpmtk.densitymatrix_kpm import get_band_energy_kpm
 from pyqula.scftk.densitydensity_kpm import Vinteraction_kpm
@@ -117,8 +118,10 @@ def _iteration_peak(L):
     h.setup_nambu_spinor()
     tracemalloc.start()
     try:
-        h.get_mean_field_hamiltonian_kpm(U=-2.0, filling=0.4, mf="swave",
-                npol=10, maxite=0, verbose=0, write=False)
+        # maxite=0 runs one iteration and stops, unconverged by design
+        with pytest.raises(MeanFieldConvergenceError):
+            h.get_mean_field_hamiltonian_kpm(U=-2.0, filling=0.4,
+                    mf="swave", npol=10, maxite=0, verbose=0, write=False)
         _, peak = tracemalloc.get_traced_memory()
     finally:
         tracemalloc.stop()

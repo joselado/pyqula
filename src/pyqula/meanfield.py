@@ -621,6 +621,8 @@ Vinteraction_kpm = densitydensity_kpm.Vinteraction_kpm
 
 from .scftk.potentials import keldysh
 
+from .scftk.convergence import MeanFieldConvergenceError
+
 from .scftk import spinspin
 
 SzSz = spinspin.SzSz

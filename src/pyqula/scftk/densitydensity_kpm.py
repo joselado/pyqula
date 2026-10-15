@@ -175,10 +175,12 @@ def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
         if diff<maxerror:
             scf = f(mfnew)
             scf.converged = True
+            scf.iterations, scf.residual = ite, diff
             if write: inout.save(scf.mf, mf_file) # MF.pkl, unless write=False
             return scf
         if maxite is not None and ite>=maxite:
             scf.converged = False
+            scf.iterations, scf.residual = ite, diff # for the error
             print("No convergence has been reached in",maxite,"iterations, stopping")
             return scf
         ite += 1

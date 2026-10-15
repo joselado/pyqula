@@ -23,6 +23,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 import glob
 import numpy as np
 from pyqula import geometry
+from pyqula.meanfield import MeanFieldConvergenceError
 
 g = geometry.honeycomb_lattice()
 
@@ -33,9 +34,10 @@ for U in Us:
     for name in glob.glob("*.pkl"): os.remove(name)  # no stale SCF guess
     h = g.get_hamiltonian()
     h.turn_nambu()               # BdG Hamiltonian, no pairing yet
-    h = h.get_mean_field_hamiltonian(U=-U, filling=0.2, mf="swave",
-                                     nk=10, mix=0.8, maxerror=1e-6)
-    if h is None:                # the SCF returns None if it did not converge
+    try:                         # the SCF raises an error if it does not converge
+        h = h.get_mean_field_hamiltonian(U=-U, filling=0.2, mf="swave",
+                                         nk=10, mix=0.8, maxerror=1e-6)
+    except MeanFieldConvergenceError:
         print("U =", U, "did not converge") ; continue
     delta = np.abs(np.mean(h.extract("swave")))
     # the tensor, split into its conventional and geometric contributions

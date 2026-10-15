@@ -189,11 +189,15 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, filling=0.5, mf=None, nk=8,
         if diff < maxerror:
             V, lam = Vnew, lamnew
             h, dm, A, nfocc = evaluate(V, lam)
-            converged = residual(V, A, nfocc) < maxerror
-            return _pack(h, dm, V, lam, nfocc, J, Q, nk, converged)
+            err = residual(V, A, nfocc)
+            scf = _pack(h, dm, V, lam, nfocc, J, Q, nk, err < maxerror)
+            scf.iterations, scf.residual, scf.tol = ite, err, maxerror
+            return scf
         V, lam = Vnew, lamnew
         if maxite is not None and ite >= maxite:
-            return _pack(h, dm, V, lam, nfocc, J, Q, nk, False)
+            scf = _pack(h, dm, V, lam, nfocc, J, Q, nk, False)
+            scf.iterations, scf.residual, scf.tol = ite, diff, maxerror
+            return scf
         ite += 1
 
 

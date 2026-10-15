@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from pyqula import geometry
+from pyqula.meanfield import MeanFieldConvergenceError
 
 
 class _TooManyIterations(Exception):
@@ -33,29 +34,30 @@ def _chain():
 
 @pytest.mark.parametrize("route", ["get_szsz_mean_field_hamiltonian",
     "get_mean_field_hamiltonian"])
-def test_a_mean_field_that_never_converges_returns_by_default(monkeypatch,
+def test_a_mean_field_that_never_converges_raises_by_default(monkeypatch,
         route):
     """maxite used to default to None, no limit, on every numpy SCF loop, so
     a calculation that never converges never returned. It now stops at 1000
-    iterations and returns None, both through the density-density loop
-    (SzSz) and through VJinteraction's own loop."""
+    iterations and raises MeanFieldConvergenceError, both through the
+    density-density loop (SzSz) and through VJinteraction's own loop."""
     calls = _count_iterations(monkeypatch)
     h = _chain()
-    out = getattr(h, route)(J1=-2.0, filling=0.2, mf="ferroZ", nk=8,
-            mix=0.3)
-    assert out is None
+    with pytest.raises(MeanFieldConvergenceError,
+            match=r"did not converge in 100[01] iterations.*maxerror=1\.0e-05"):
+        getattr(h, route)(J1=-2.0, filling=0.2, mf="ferroZ", nk=8, mix=0.3)
     assert 1000 <= calls[0] <= 1001
 
 
-def test_a_spinless_mean_field_that_never_converges_returns_by_default(
+def test_a_spinless_mean_field_that_never_converges_raises_by_default(
         monkeypatch):
     """The spinless density-density route: at fixed mu=0 the Hartree shift
     holds this chain at filling ~0.32, a metal whose level at mu flips its
     occupation on the nk=6 mesh at T~0."""
     calls = _count_iterations(monkeypatch)
     h = geometry.bichain().get_hamiltonian(has_spin=False)
-    out = h.get_mean_field_hamiltonian(V1=3.0, mu=0.0, nk=6, mf="CDW")
-    assert out is None
+    with pytest.raises(MeanFieldConvergenceError,
+            match=r"did not converge in 100[01] iterations.*larger maxite"):
+        h.get_mean_field_hamiltonian(V1=3.0, mu=0.0, nk=6, mf="CDW")
     assert 1000 <= calls[0] <= 1001
 
 

@@ -56,10 +56,10 @@ class SpinonHamiltonian(Hamiltonian):
     a value the caller supplies. Any interaction/SCF kwarg
     get_mean_field_hamiltonian otherwise accepts (V1/V2/V3/U for an
     additional density-density term, mf=, nk=, mix=, maxerror=, maxite=,
-    constrains=, ...) is forwarded unchanged; `scf.converged` (via
-    get_mean_field_hamiltonian's usual None-on-non-convergence return, see
-    hamiltonians._mean_field_scf_result) already implies the local
-    constraint itself converged to within `maxerror`, since
+    constrains=, ...) is forwarded unchanged; `scf.converged` (behind
+    get_mean_field_hamiltonian's usual MeanFieldConvergenceError on
+    non-convergence, see hamiltonians._mean_field_scf_result) already
+    implies the local constraint itself converged to within `maxerror`, since
     _run_anisotropic_scf folds the per-site occupation residual into the
     same convergence check as the mean field's own -- no separate
     tolerance to track.

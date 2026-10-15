@@ -36,8 +36,7 @@ seed = ([0.3+0.0j], [0.0]) # (V, lam) -- see the module docstring above
 h2, etot = h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=200,
         mf=seed, mix=0.3, maxerror=1e-6, maxite=3000,
         return_total_energy=True)
-if h2 is None:
-    raise RuntimeError("SCF did not converge")
+# if the SCF does not converge, the call above raises an error
 
 print("Converged <n_f> per localized site (target: 1.0)")
 print(h2.local_occupation)

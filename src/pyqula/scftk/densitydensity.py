@@ -498,12 +498,13 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         callback_h=None,write=None,**kwargs):
     """Perform the SCF mean field
 
-    mix: the linear-mixing factor. solver="plain" mixes with it (0.1 when
-    not given), and solver="broyden_mixing" uses it as the mixing factor
+    mix: the linear-mixing factor. solver="plain" and solver="linear"
+    (scipy's linearmixing, the same step) mix with it (0.1 when not
+    given), and solver="broyden_mixing" uses it as the mixing factor
     of its linear warm-up phase (broyden_mixing_solve's lam, whose own
-    default applies when not given). The scipy solvers ("krylov",
-    "anderson", "broyden1", "linear") have no use for it, and warn when
-    it is given.
+    default applies when not given). The other scipy solvers ("krylov",
+    "anderson", "broyden1") have no use for it, and warn when it is
+    given.
 
     write: False keeps the converged mean field out of MF.pkl in the
     working directory. With load_mf=True an MF.pkl already there is still
@@ -611,13 +612,15 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         #print("Mixing",dmix)
         if diff<maxerror: 
             scf = f(mfnew) # last iteration, with the unmixed mean field
-            scf.converged = True # no convergence
+            scf.converged = True # converged
+            scf.iterations, scf.residual = ite, diff # as reached
             if write: inout.save(scf.mf,mf_file) # save the mean field
          #   scf.hamiltonian.check(tol=100*maxerror) # perform some sanity checks
             return scf
         if maxite is not None: # maximum number of iterations reached
             if ite>=maxite:
                 scf.converged = False # no convergence
+                scf.iterations, scf.residual = ite, diff # for the error
                 print("No convergence has been reached in",maxite,"iterations, stopping")
                 return scf # return
         ite += 1 # increase number of iterations
@@ -635,11 +638,11 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
                 print()
             return x - xn # return vector
         x0 = fmf2a(scf.mf) # initial guess
-        if mix is not None and solver!="broyden_mixing":
+        if mix is not None and solver not in ("broyden_mixing","linear"):
             # as densitydensity_jax warns for its own non-mixing solvers
             warnings.warn("mix=%r has no effect for solver=%r (only "
-                    "solver=\"plain\" and solver=\"broyden_mixing\" use "
-                    "linear mixing)"%(mix,solver),stacklevel=2)
+                    "solver=\"plain\", solver=\"linear\" and "
+                    "solver=\"broyden_mixing\" use linear mixing)"%(mix,solver),stacklevel=2)
         # these methods do seem too efficient, but lets have them anyway
         if solver=="krylov":
             from scipy.optimize import newton_krylov
@@ -651,8 +654,15 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
             from scipy.optimize import broyden1
             x = broyden1(fsol,x0,f_tol=maxerror*100) # use the solver
         elif solver=="linear":
+            # scipy's linearmixing steps x -> x - alpha*F(x) with the
+            # Jacobian taken as -1/alpha, the convention of F(x)=g(x)-x.
+            # fsol is x-g(x), whose Jacobian is close to +1, so with
+            # scipy's default (positive) alpha every step went away from
+            # the fixed point and the error grew until it overflowed.
+            # alpha=-mix makes the step x + mix*(g(x)-x), the plain loop
             from scipy.optimize import linearmixing
-            x = linearmixing(fsol,x0,f_tol=maxerror*100) # use the solver
+            if mix is None: mix = 0.1 # as the plain loop
+            x = linearmixing(fsol,x0,alpha=-mix,f_tol=maxerror*100)
         elif solver=="broyden_mixing":
             # regularized, limited-memory multisecant Broyden mixing
             # (arXiv:0801.3098) -- see scftk/broydenmixing.py's
@@ -676,7 +686,13 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
                     "'broyden_mixing'")
         mf = fa2mf(x) # transform to MF
         scf = f(mf) # compute the SCF with the solution
-        if solver=="broyden_mixing": scf.converged = converged # store convergence flag
+        if solver=="broyden_mixing":
+            scf.converged = converged # store convergence flag
+            scf.iterations = ite
+            scf.residual = np.max(np.abs(x - fmf2a(scf.mf))) # reached error
+        else: # the scipy solvers raise NoConvergence when they fail
+            scf.converged = True
+            scf.residual = np.max(np.abs(x - fmf2a(scf.mf))) # reached error
         scf.error = maxerror # store the error
         if write: inout.save(scf.mf,mf_file) # save the mean field
         return scf # return the mean field
@@ -944,14 +960,13 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     directly if you need them.
 
     WARNING: if the SCF loop does not converge (e.g. maxite reached before
-    maxerror is met), the returned Hamiltonian is None, but the returned
-    total_energy is still whatever value was reached at that point, NOT
-    necessarily a meaningful self-consistent energy - this applies to
-    VJinteraction/get_mean_field_hamiltonian(return_total_energy=True) too.
-    Always check the SCF object's .converged attribute (or that the
-    returned Hamiltonian is not None) before trusting total_energy; do not
-    assume a returned number is correct just because no exception was
-    raised. This is easy to miss with
+    maxerror is met), the SCF object returned here has .converged=False,
+    and its .hamiltonian and .total_energy are whatever was reached at that
+    point, NOT a meaningful self-consistent answer. The Hamiltonian-level
+    entry points (get_mean_field_hamiltonian and its siblings) raise
+    scftk.convergence.MeanFieldConvergenceError in that case instead of
+    returning anything; when calling this function directly, always check
+    .converged before trusting the result. This is easy to miss with
     solver="newton"/"fsolve"/"newton_krylov" (use_jax=True): those can stop
     after zero completed iterations if the very first Newton/GMRES step
     fails to find an improving direction (e.g. an unbiased spinful

@@ -1527,6 +1527,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             print("No convergence has been reached in", maxite, "iterations, stopping")
             break
         ite += 1
+    scf.iterations, scf.residual = ite, diff # as reached, for the error
 
     if use_sparse_dm and not use_kpm:
         # scf.dm is a public field (Vinteraction/SzSz/SxSx/SySy's SCF

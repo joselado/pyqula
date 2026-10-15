@@ -24,6 +24,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 import numpy as np
 from pyqula import geometry
 from pyqula.spinon import SpinonHamiltonian
+from pyqula.meanfield import MeanFieldConvergenceError
 
 g = geometry.chain()
 J1 = 1.0
@@ -33,13 +34,13 @@ for b in fields:
     np.random.seed(0) # reproducible SCF seed, see the plain-chain example
     h = SpinonHamiltonian(g)
     h.add_zeeman([0., 0., b]) # coefficient of sigma, i.e. h=-2b in H=-h.S
-    h2 = h.get_mean_field_hamiltonian(J1=J1, nk=24, mix=0.3,
-            maxerror=1e-6, maxite=2000)
-    if h2 is None:
-        # plain-mixing SCF can fail to converge right at a metamagnetic
-        # (first-order-like) jump in the RVB spinon band occupation --
-        # skip rather than fail the example; a smaller mix/larger maxite
-        # can resolve individual problem points if needed
+    try:
+        h2 = h.get_mean_field_hamiltonian(J1=J1, nk=24, mix=0.3,
+                maxerror=1e-6, maxite=2000)
+    except MeanFieldConvergenceError:
+        # The SCF can fail to converge at a metamagnetic jump, where the
+        # occupation of the spinon bands changes suddenly. We skip this
+        # field. A smaller mix or a larger maxite can fix a single point.
         print("SCF did not converge for zeeman = %s, skipping" % b)
         continue
     if not np.allclose(h2.local_occupation, 1.0, atol=1e-3):

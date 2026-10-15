@@ -33,8 +33,7 @@ h = SpinonHamiltonian(g) # zero bare hopping -- a pure spin model
 # correction (and the constraint's own grand-potential term).
 h2, etot = h.get_mean_field_hamiltonian(J1=1.0, nk=24, mix=0.3,
         maxerror=1e-5, maxite=2000, return_total_energy=True)
-if h2 is None:
-    raise RuntimeError("SCF did not converge")
+# if the SCF does not converge, the call above raises an error
 
 print("Converged <n_i> per site (target: 1.0)")
 print(h2.local_occupation)

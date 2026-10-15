@@ -439,7 +439,7 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
     # callback_mf is never passed (VJinteraction's use_jax=True path has no
     # such hook at all), so solve_scf's NotImplementedError branch for it
     # never triggers here.
-    x, final_mu, ite, converged, dm, es, occ = solve_scf(step_jit, x0, mu,
+    x, final_mu, ite, converged, dm, es, occ, residual = solve_scf(step_jit, x0, mu,
             dirs, n, solver, maxite, maxerror, mix, verbose, gmres_tol,
             gmres_restart, kick_steps=kick_steps)
     mf_final = unflatten_mf(x, dirs, n)
@@ -521,13 +521,15 @@ def generic_vjinteraction_jax(h0, vz, vx, vy, mf=None, nk=8, mu=0.0,
         # unconditional (not gated on verbose), matching the numpy engine's
         # own "No convergence has been reached..." print -- maxite here is
         # 2000 by default under use_jax=True, and also when the caller
-        # passed maxite=None (no limit on the numpy engine), so this is the
-        # only signal such a caller gets that the jax engine gave up early
+        # passed maxite=None (no limit on the numpy engine), so this tells
+        # a direct caller of the engine that the jax engine gave up early
+        # (the get_*_mean_field_hamiltonian wrappers raise on top of it)
         print("No convergence has been reached in", ite,
                 "iterations (solver=%r), stopping" % (solver,))
     scf.total_energy = etot.real
     scf.mu = final_mu
     scf.iterations = ite
+    scf.residual = residual
     if verbose > 1:
         print("##################")
         print("Total energy", scf.total_energy)
