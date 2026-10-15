@@ -6,14 +6,14 @@ g = geometry.bichain() # two sites per cell, so Neel order fits in the cell
 h = g.get_hamiltonian(has_spin=True)
 seed = h.copy() ; seed.add_antiferromagnetism(0.5) # symmetry-breaking seed
 hmf = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf=seed,nk=100) # magnetic state
-(es,chis) = hmf.get_spinchi_ladder(energies=np.linspace(0.,2.,100),q=[0.1,0.,0.],nk=40,delta=2e-2)
-(es,chi0) = hmf.get_spinchi_ladder(energies=np.linspace(0.,2.,100),q=[0.1,0.,0.],nk=40,delta=2e-2,
+(es,chis) = hmf.get_spinchi_ladder(energies=np.linspace(0.,2.,400),q=[0.1,0.,0.],nk=40,delta=2e-2)
+(es,chi0) = hmf.get_spinchi_ladder(energies=np.linspace(0.,2.,400),q=[0.1,0.,0.],nk=40,delta=2e-2,
                                    RPA=False) # the bare response, as a reference
 
 g2 = geometry.honeycomb_lattice() # already two sublattices per cell
 h2 = g2.get_hamiltonian(has_spin=True)
 hmf2 = h2.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="antiferro")
-qdisp = hmf2.get_qdos_iets(energies=np.linspace(0.,2.,60),qpath=["G","K","M"],nq=30,nk=20,delta=1e-2)
+qdisp = hmf2.get_qdos_iets(energies=np.linspace(0.,2.,250),qpath=["G","K","M"],nq=120,nk=60,delta=1e-2)
 (qs,ws,chimap) = qdisp # q-points, frequencies, Im Tr chi(q,w)
 
 def draw(ax, c):

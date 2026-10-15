@@ -188,7 +188,8 @@ import numpy as np
 g = geometry.honeycomb_lattice() # create honeycomb lattice
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(0.05) # Add Haldane coupling
-(es,cs,csi) = topology.chern_density(h,nk=10,es=np.linspace(-1.0,1.0,40))
+es = np.arange(-3.5,3.5+1e-9,0.05) # from below the band to above it
+(es,cs,csi) = topology.chern_density(h,nk=12,delta=0.1,dk=0.004,es=es)
 ```
 
 `es` are the energies, `cs` the Berry curvature density at each energy, and
@@ -197,22 +198,35 @@ Inside the gap `csi` has a plateau, and when the integral goes over all the
 bands it comes back to zero, because the Berry curvatures of all the bands of
 a Hamiltonian add up to zero. The normalization is the one of
 `h.get_chern()`, but the plateau is the Chern number only in a limit that is
-expensive to reach, and three things decide how close it is.
+expensive to reach. The snippet takes about 20 seconds, and its plateau at
+zero energy is $1.63$, not $C=2$. Four things decide how close the plateau is
+to the Chern number, and the snippet is chosen to respect the first three.
 
 - The integral starts at the first energy of `es`, so `es` must start below
-  the bottom of the band, here $-3$. The snippet starts at $-1$ and misses the
-  curvature of the lower states: its plateau at zero energy is $3.97$ at
-  `nk=10`, $3.18$ at `nk=20` and $2.91$ at `nk=40`, and none of these is the
-  Chern number.
-- The energy step must be smaller than `delta`, otherwise the peak of each
-  state is not resolved. The snippet has a step of $0.05$ and the default
-  `delta=0.02`.
+  the bottom of the band, here $-3$. A window that starts at $-1$ misses the
+  curvature of the lower states: with `es` from $-1$ to $1$, the default
+  `delta=0.02` and `dk=0.02`, the plateau is $3.97$ at `nk=10`, $3.18$ at
+  `nk=20` and $2.91$ at `nk=40`, and none of these is the Chern number.
+- The energy step must be at most `delta/2`, otherwise the peak of each
+  state is not resolved. At `delta=0.05` and `nk=12` a step of `delta/4`
+  changes the plateau by $10^{-3}$, but a step of `delta` changes it by
+  $0.12$. The snippet has a step of $0.05$ for `delta=0.1`.
+- The derivatives in momentum are finite differences with a step `dk`, in
+  units of the reciprocal lattice vectors. Over `dk` the bands must move by
+  much less than `delta`, and the default `dk=0.02` is too large for that.
+  At `delta=0.05` and `nk=20` the plateau is $1.62$ with `dk=0.02`, $1.69$
+  with `dk=0.005` and the same with `dk=0.001`. Take `dk` about `delta/25`
+  or smaller.
 - The broadening `delta` spreads the curvature of the states above the gap
-  into the gap. With `es` from $-3.5$ to $0$ and a step of `delta/4`, the
-  plateau at zero energy is $1.37$ for `delta=0.1` and $1.62$ for
-  `delta=0.05`, the same at `nk=20` and `nk=40`, and $1.79$ for
-  `delta=0.02` at `nk=20`. It goes up towards $C=2$ as `delta` goes down, slowly, and a
-  smaller `delta` needs a finer `nk` and a finer energy step.
+  into the gap. With `es` from $-3.5$ to $0$, a step of `delta/2` or smaller
+  and a small enough `dk`, the plateau at zero energy is $1.70$ for
+  `delta=0.05` ($1.69$, $1.71$ and $1.70$ at `nk=20`, $24$ and $40$), $1.86$
+  for `delta=0.02` at `nk=20`, and between $1.92$ and $1.98$ for
+  `delta=0.01` at `nk=20`, $21$ and $30$, where the k-mesh is not converged
+  any more. It goes up towards $C=2$ as `delta` goes down, slowly, and a
+  smaller `delta` needs a finer `nk`, a finer energy step and a smaller `dk`.
+  The snippet, at `delta=0.1`, gives $1.63$, and the figure below is the
+  converged calculation at `delta=0.05`.
 
 So read this quantity as a qualitative profile in energy, not as a number. It
 also needs a fine enough `nk` for its `delta`, otherwise it shows spurious
@@ -221,15 +235,22 @@ peaks near k-points where bands come close.
 ![Berry curvature density in energy of the Haldane model, and its cumulative integral.](img/geometry_chern_density.png#only-light)
 ![Berry curvature density in energy of the Haldane model, and its cumulative integral.](img/geometry_chern_density-dark.png#only-dark)
 
-The figure shows `cs` on the left and `csi` on the right, for the snippet. The
-gray band is the bulk gap, from $-0.225$ to $0.225$. Inside the gap the
-density is close to zero, and the cumulative integral has its plateau, $3.97$
-at zero energy. The two large peaks of the density, at $\pm0.33$, are the
-band edges as the $10\times10$ mesh sees them: the mesh does not contain the
-K points, where the gap is smallest. The density is odd in energy here, so
-the cumulative integral comes back to zero at the end of the window. The
-height of the plateau is not the Chern number, because the window starts at
-$-1$, above the bottom of the band, as explained above.
+The figure shows `cs` on the left and `csi` on the right, for the snippet
+with a smaller broadening and a finer mesh: `es` from $-3.5$ to $3.5$
+with a step of `delta/2`, `delta=0.05`, `dk=0.002` and `nk=48`. This takes
+about 17 minutes. A multiple of 3 for `nk` puts the K points on the mesh, so
+the band edges are where they should be. The gray band is the bulk gap, from
+$-0.225$ to $0.225$. The density has its two largest peaks at the band
+edges, of opposite sign, and the cumulative integral has its plateau in the
+gap, $1.70$ at zero energy, the same as at `nk=24` within $0.01$. The dashed
+line is the Chern number, $C=2$: the plateau is below it by $0.30$, the
+curvature that `delta=0.05` moves into the gap. The density is odd in energy,
+so the cumulative integral comes back to zero at the end of the window. Away
+from the gap the density still oscillates. Each oscillation is a group of
+k-points of the mesh, which `delta=0.05` does not merge; from the energy step between
+neighboring k-points we estimate that a smooth density at this `delta` needs
+`nk` above about $100$. The integral averages the oscillations out, so the
+plateau is converged while the density is not.
 
 ??? example "Code of this figure (documentation/figures/geometry_chern_density.py)"
 

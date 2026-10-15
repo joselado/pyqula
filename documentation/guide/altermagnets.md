@@ -44,7 +44,7 @@ from pyqula import specialhamiltonian
 h = specialhamiltonian.square_altermagnet(am=1.)
 
 # largest spin splitting in each energy bin, over the whole BZ
-(es, ds) = h.get_spin_splitting_vs_energy(nk=100, nbins=400)
+(es, ds) = h.get_spin_splitting_vs_energy(nk=800, nbins=400)
 print("largest spin splitting anywhere in the BZ:", ds.max())
 
 # the smooth counterpart, on the same axes
@@ -68,9 +68,15 @@ are the same. This sign change of the splitting between the two directions
 is the d-wave symmetry. The right panel is the output of the snippet. The
 largest splitting is $4.0$, at mean energy $0$, which is the X point, where
 $E^\uparrow=2$ and $E^\downarrow=-2$. The largest splitting per bin (blue)
-is noisy, because each of the 400 bins only contains the few k-points of the
-mesh that fall inside it, and a bin without k-points gives zero. The density
-(orange) is smooth, with the same maximum.
+is the triangle $\Delta_{\rm max}=4-2|\bar E|$. At a fixed mean energy the
+splitting is largest when one spin sits at the top of its band, at $2$, so
+$E^\uparrow-E^\downarrow=2-(2\bar E-2)=4-2\bar E$ for $\bar E>0$. This curve
+needs a fine mesh, because each of the 400 bins must hold a k-point close to
+where its maximum is reached. With `nk=100` many bins fall far below the
+triangle, and some are empty and give zero. With `nk=800` every bin is within
+$0.005$ of the triangle, and `nk=1600` changes nothing visible. This takes
+about a minute. The density (orange) is smooth, with the same maximum, and it
+is already converged at `nk=100`.
 
 ??? example "Code of this figure (documentation/figures/altermagnets_splitting.py)"
 

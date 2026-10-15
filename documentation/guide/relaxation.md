@@ -102,12 +102,14 @@ on a ring around AA. So the relaxation is mostly a local rotation of the two
 layers around each AA region.
 
 The right panel shows the bands of the relaxed lattice (orange) and, as a
-reference, of the rigid one (gray). To keep the script short, the figure
-uses `nk=40` k-points. The two bands
+reference, of the rigid one (gray), with the default `nk=400` points on the
+k-path, as in the snippet. The two bands
 closest to zero energy are the central bands of the moiré, with their Dirac
 points at K and K'. The relaxation changes them by about 0.004 in units of
-the hopping: at M they go from $-0.023$ and $0.028$ to $-0.027$ and $0.031$, and
-at $\Gamma$ from $-0.054$ and $0.064$ to $-0.057$ and $0.068$.
+the hopping: at M they go from $-0.024$ and $0.029$ to $-0.028$ and $0.033$, and
+the levels closest to zero at $\Gamma$ go from $-0.057$ and $0.068$ to $-0.062$
+and $0.072$. The next bands come closer to the central ones: at M they go from
+$-0.083$ and $0.090$ to $-0.076$ and $0.082$.
 
 ??? example "Code of this figure (documentation/figures/relaxation_twisted.py)"
 

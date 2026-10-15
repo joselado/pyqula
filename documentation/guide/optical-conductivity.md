@@ -87,8 +87,8 @@ h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian
 h.add_haldane(0.2) # Chern insulator
 h.shift_fermi(0.3) # put the Fermi energy in the gap
 
-(ws,s) = h.get_optical_conductivity(energies=np.linspace(0.,4.,100),
-                                    nk=40,T=0.02,delta=0.05)
+(ws,s) = h.get_optical_conductivity(energies=np.linspace(0.,4.,401),
+                                    nk=200,T=0.02,delta=0.05)
 absorption = s[:,0,0].real # Re sigma_xx, the optical absorption
 
 # the DC Hall response is quantized to the Chern number
@@ -108,11 +108,13 @@ one conductance quantum with the sign of $-C$.
 The dashed line is the band gap, $1.8t$, from `h.get_gap()`. Below the gap
 the absorption $\mathrm{Re}\,\sigma_{xx}$ is almost zero; the small tail
 comes from the broadening `delta=0.05`. It rises at the gap and has its
-maximum, $6.2\,e^2/h$, at $\omega=2.0t$. The Hall part
+maximum, $6.45\,e^2/h$, at $\omega=2.0t$. The Hall part
 $\mathrm{Re}\,\sigma_{xy}$ starts at $-1.00\,e^2/h$ at $\omega=0$, the
-quantized value, goes down to $-4.2\,e^2/h$ at the gap, and changes sign
-at $\omega=2.0t$, where the absorption is maximal. The small wiggles above $\omega=2.5t$ come from the k-mesh,
-`nk=40`.
+quantized value, goes down to $-4.18\,e^2/h$ at the gap, and changes sign
+at $\omega=2.03t$, next to the maximum of the absorption. With `delta=0.05`
+the k-mesh has to be fine: at `nk=40` both curves have wiggles above the gap,
+which are the separate k-points of the mesh. At `nk=200` they are gone, and
+`nk=300` changes the curves by less than $2\times10^{-4}\,e^2/h$.
 
 ??? example "Code of this figure (documentation/figures/optical_chern.py)"
 

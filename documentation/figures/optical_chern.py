@@ -6,8 +6,8 @@ h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian
 h.add_haldane(0.2) # Chern insulator
 h.shift_fermi(0.3) # put the Fermi energy in the gap
 
-(ws,s) = h.get_optical_conductivity(energies=np.linspace(0.,4.,100),
-                                    nk=40,T=0.02,delta=0.05)
+(ws,s) = h.get_optical_conductivity(energies=np.linspace(0.,4.,401),
+                                    nk=200,T=0.02,delta=0.05)
 absorption = s[:,0,0].real # Re sigma_xx, the optical absorption
 
 # the DC Hall response is quantized to the Chern number

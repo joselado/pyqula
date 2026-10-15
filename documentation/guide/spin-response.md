@@ -38,7 +38,7 @@ g = geometry.bichain() # two sites per cell, so Neel order fits in the cell
 h = g.get_hamiltonian(has_spin=True)
 seed = h.copy() ; seed.add_antiferromagnetism(0.5) # symmetry-breaking seed
 hmf = h.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf=seed,nk=100) # magnetic state
-(es,chis) = hmf.get_spinchi_ladder(energies=np.linspace(0.,2.,100),q=[0.1,0.,0.],nk=40,delta=2e-2)
+(es,chis) = hmf.get_spinchi_ladder(energies=np.linspace(0.,2.,400),q=[0.1,0.,0.],nk=40,delta=2e-2)
 ```
 
 The imaginary part of `chis` has a sharp peak at the magnon energy at this
@@ -73,7 +73,7 @@ antiferromagnetic honeycomb lattice, the dispersion along the path is
 g2 = geometry.honeycomb_lattice() # already two sublattices per cell
 h2 = g2.get_hamiltonian(has_spin=True)
 hmf2 = h2.get_mean_field_hamiltonian(U=3.0,filling=0.5,mf="antiferro")
-qdisp = hmf2.get_qdos_iets(energies=np.linspace(0.,2.,60),qpath=["G","K","M"],nq=30,nk=20,delta=1e-2)
+qdisp = hmf2.get_qdos_iets(energies=np.linspace(0.,2.,250),qpath=["G","K","M"],nq=120,nk=60,delta=1e-2)
 ```
 
 Before reading the spectrum, check that the mean-field state is really
@@ -84,8 +84,9 @@ state is ordered. First, the unit cell must be able to hold the order: a
 `bichain` and `honeycomb_lattice` have two sublattices. Second, $U$ must be
 larger than the critical value: on the honeycomb lattice at half filling
 $U=2$ gives a moment of 0.002, so no order, and $U=3$ gives 0.44. The cost of
-`get_qdos_iets` is the product of `nq`, `nk` and the number of energies: the
-grid above takes less than a minute, a grid of 80, 40 and 100 about an hour.
+`get_qdos_iets` grows with `nq`, with the number of energies and with the
+number of k-points, $n_k^2$ in two dimensions: the grid above takes about
+five minutes.
 
 ![Left: transverse spin response of the antiferromagnetic chain at one momentum, with and without RPA. Right: spin response of the antiferromagnetic honeycomb lattice along a q-path, as a heat map.](img/spin_rpa.png#only-light)
 ![Left: transverse spin response of the antiferromagnetic chain at one momentum, with and without RPA. Right: spin response of the antiferromagnetic honeycomb lattice along a q-path, as a heat map.](img/spin_rpa-dark.png#only-dark)
@@ -93,13 +94,17 @@ grid above takes less than a minute, a grid of 80, 40 and 100 about an hour.
 On the left is the first snippet, the chain at $q=0.1$, with the bare
 response (`RPA=False`) added as a reference. Both are summed over the two
 sites of the cell and plotted on a log scale. The RPA response has one sharp
-peak, the magnon, at $\omega=0.38t$. The bare response has no peak there: it
+peak, the magnon, at $\omega=0.39t$. The bare response has no peak there: it
 has only the electron-hole continuum, which starts at the mean-field gap
-$1.86t$ and peaks at $2t$, with a tail below the gap from the broadening. On the right is `qdisp` of the honeycomb
-lattice, also on a log color scale. The bright line is the magnon. It starts
-at zero at $\Gamma$, the Goldstone mode, rises to about $1.25t$ along
-$\Gamma$-K, is at $1.15t$ at K and at $1.46t$ at M. The weaker signal above
-$1.5t$ is the electron-hole continuum.
+$1.86t$ and peaks at $2t$, with a tail below the gap from the broadening.
+With `nk=80` instead of 40 the two curves do not change. On the right is
+`qdisp` of the honeycomb lattice, also on a log color scale. The bright line
+is the magnon. It starts at zero at $\Gamma$, the Goldstone mode, rises to
+$1.25t$ along $\Gamma$-K, is at $1.16t$ at K and at $1.45t$ at M. The weaker
+signal above it is the electron-hole continuum. It starts at about $1.33t$ at
+$\Gamma$ and at K, and its lower edge is a bright line. The magnon is the
+same with `nk=30`, 40 and 60; the larger `nk` only makes the continuum
+smoother, so we use `nk=60`.
 
 ??? example "Code of this figure (documentation/figures/spin_rpa.py)"
 
@@ -185,7 +190,7 @@ between $S_x$, $S_y$ and $S_z$, with the interaction of the converged mean field
 q-path. The result is the magnon dispersion of the ordered state:
 
 ```python
-qs,ws,gammas = hmf.get_magnon_bands(nq=40,energies=np.linspace(0.01,3.,200),delta=2e-2,nk=40)
+qs,ws,gammas = hmf.get_magnon_bands(nq=200,energies=np.linspace(0.01,3.,600),delta=2e-2,nk=80)
 ```
 
 Each q-point can have a different number of poles, so `qs`, `ws` and `gammas`
@@ -200,10 +205,14 @@ $q=0$, the Goldstone mode, and an optical branch above it.
 ![Magnon bands of the antiferromagnetic chain: sharp poles and damped poles of the RPA kernel against momentum.](img/spin_magnons-dark.png#only-dark)
 
 Here we keep the poles with $|\gamma|<0.05$ as sharp. The acoustic branch
-goes from zero at $q=0$ up to $1.27t$ at $q=\pi$, and back to zero at $2\pi$.
-Above $1.9t$ the gray points are damped poles, the electron-hole continuum.
-The optical branch is the line of sharp points from $2.4t$ to $2.74t$
-around $q=\pi$, inside the continuum.
+goes from zero at $q=0$ up to $1.28t$ at $q=\pi$, and back to zero at $2\pi$.
+Above $2.06t$ the gray points are damped poles, the electron-hole continuum.
+On a finite k-mesh the continuum is a set of discrete lines, and the poles
+between them make the regular pattern of gray points; a finer `nk` makes it
+denser, not smoother. The optical branch is the line of sharp points from
+$2.35t$ to $2.74t$, between $q=\pi/2$ and $3\pi/2$, inside the continuum. The
+two branches are converged: with `nk=40` instead of 80 they move by less
+than $10^{-3}t$. The scan takes about half a minute.
 
 ??? example "Code of this figure (documentation/figures/spin_magnons.py)"
 
@@ -300,13 +309,13 @@ response:
 import numpy as np
 from pyqula import geometry
 from pyqula.meanfield import VJinteraction
-nk = 6                                  # the SCF and the magnon share this mesh
+nk = 24                                 # the SCF and the magnon share this mesh
 g = geometry.honeycomb_lattice()
 hmf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
-                     mf="antiferro",nk=nk,maxerror=1e-10).hamiltonian
-qs,ws,gammas = hmf.get_magnon_bands(method="pair",nq=20,
+                     mf="antiferro",nk=nk,maxerror=1e-8).hamiltonian
+qs,ws,gammas = hmf.get_magnon_bands(method="pair",nq=90,
                     energies=np.linspace(1e-3,3.,400),delta=1e-3,nk=nk)
-es,chi = hmf.get_transverse_spinchi(energies=np.linspace(0.,2.,100),
+es,chi = hmf.get_transverse_spinchi(energies=np.linspace(0.,2.,300),
                     q=[0.1,0.,0.],delta=1e-2,nk=nk)   # (Sx,Sy,Sz) x site chi(w)
 ```
 
@@ -335,22 +344,29 @@ mean-field calculation instead.
 ![Transverse spin response of the honeycomb antiferromagnet with U and V1 along the q-path, as a heat map, with the poles of the pair-basis magnon bands on top.](img/spin_pair.png#only-light)
 ![Transverse spin response of the honeycomb antiferromagnet with U and V1 along the q-path, as a heat map, with the poles of the pair-basis magnon bands on top.](img/spin_pair-dark.png#only-dark)
 
-For the map we call `hmf.get_transverse_spinchi()` at every q-point of the
+For the map we call `hmf.get_transverse_spinchi()` at 90 q-points of the
 default path, which goes from next to $\Gamma$ through K, M and K' back to
 $\Gamma$, and plot the trace of its imaginary part on a log color scale. The
-circles are the poles from `get_magnon_bands`. The lowest bright line is
-the magnon: $0.53t$ at the first point of the path, $0.86t$ near K and
-$1.64t$ at M. At $q=(0.1,0,0)$, the call of the snippet, the response has
-peaks at $0.59t$, $1.19t$ and $1.56t$. At $\Gamma$, on the right edge, the
-response is large at $\omega\to0$, the Goldstone mode, and the pole scan
-lists it at $\omega=10^{-3}$, the broadening `delta`. With
-`nk=6` the electron-hole continuum is a set of discrete lines. The circles
-above the magnon are on these lines, shifted by the interaction, for example
-$1.28t$ and $1.53t$ at the first point, and they are not other collective
-modes. A bare line that the interaction does not couple is not a pole: there
-the kernel goes through infinity, not through zero, so it is not listed. For
-this reason at $\Gamma$ the list has only the Goldstone mode and $1.44t$, and
-not the bottom of the continuum at $1.01t$.
+circles are the lowest pole from `get_magnon_bands` at each q-point, and the
+small gray dots are all the other poles. The lowest bright line is the
+magnon: $0.11t$ at the first point of the path, $0.89t$ at K and $1.67t$ at
+M, and the circles sit on it. At $q=(0.1,0,0)$, the call of the snippet, the
+magnon peak of the response is at $0.57t$. At $\Gamma$, on the right edge,
+the response is large at $\omega\to0$, the Goldstone mode, and the pole scan
+lists it at $\omega=10^{-3}$, the broadening `delta`. Above the magnon is
+the electron-hole continuum, which starts at about $0.9t$ to $1t$ near $\Gamma$ and K. On a
+finite k-mesh it is a set of discrete lines, and the interaction shifts each
+line that it couples into a pole, so the scan lists between 60 and 130 poles
+at each q-point, the gray dots. They are not other collective modes. A
+bare line that the interaction does not couple is not a pole: there the
+kernel goes through infinity, not through zero, so it is not listed.
+
+The mean field and the response use `nk=24`. On this mesh the
+self-consistent loop does not go below an error of about $3\times10^{-9}$,
+so we take `maxerror=1e-8`. With `nk=18` the magnon moves by at most
+$0.015t$, near K, and with `nk=30` it is at $0.89t$ at K too. The coarse
+mesh `nk=6` gives a magnon that is wrong by up to $0.4t$ and a continuum of
+a few separate lines. The figure takes about five minutes.
 
 ??? example "Code of this figure (documentation/figures/spin_pair.py)"
 
@@ -376,13 +392,13 @@ neighbors:
 import numpy as np
 from pyqula import geometry
 from pyqula.meanfield import VJinteraction
-nk = 6                                  # the SCF and the magnon share this mesh
+nk = 24                                 # the SCF and the magnon share this mesh
 g = geometry.honeycomb_lattice()
 scf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
-                     mf="antiferro",nk=nk,maxerror=1e-10)
+                     mf="antiferro",nk=nk,maxerror=1e-8)
 hmf = scf.hamiltonian
-print(hmf.get_goldstone_residual(nk=nk))          # 2e-10: the mode is exact
-qs,es = hmf.get_magnon_bands(method="tdhf",nk=nk,nq=20,n=2)
+print(hmf.get_goldstone_residual(nk=nk))          # 3e-8: zero to the SCF tolerance
+qs,es = hmf.get_magnon_bands(method="tdhf",nk=nk,nq=90,n=2)
 ```
 
 `qs` and `es` are flat arrays, as for `"rpa"`, with `qs` the index along the
@@ -397,8 +413,8 @@ The Goldstone theorem is the check. A magnetic state without spin-orbit
 coupling breaks the spin-rotation symmetry, so a uniform rotation of all the
 spins costs no energy, and there is a magnon at exactly zero energy at $Q=0$.
 `h.get_goldstone_residual()` measures the distance from this. It is
-proportional to the tolerance of the mean-field calculation, about $10^{-10}$
-for `maxerror=1e-10`, so check it before reading any dispersion. A small
+proportional to the tolerance of the mean-field calculation, about $3\times10^{-8}$
+for `maxerror=1e-8`, so check it before reading any dispersion. A small
 imaginary part of the same size on the acoustic branch is expected.
 
 Three things matter:
@@ -434,12 +450,20 @@ are exact, `"tdhf"` and `"rpa"` give the same magnons.
 ![The two lowest magnon branches of the honeycomb antiferromagnet with U and V1, from time-dependent Hartree-Fock, along the q-path.](img/spin_tdhf.png#only-light)
 ![The two lowest magnon branches of the honeycomb antiferromagnet with U and V1, from time-dependent Hartree-Fock, along the q-path.](img/spin_tdhf-dark.png#only-dark)
 
-The Goldstone residual is $2\times10^{-10}$, so the dispersion can be read.
+The Goldstone residual is $3\times10^{-8}$, so the dispersion can be read.
 The path starts next to $\Gamma$, not at it, and ends at $\Gamma$. There the
 lowest mode is at zero, the Goldstone mode, and the second one is at
-$1.01t$. At M the two modes are at $1.64t$ and $2.42t$. The lowest mode has
-the same energies as the magnon line of the pair-basis map above, for
-example $0.53t$ at the first point and $0.86t$ near K, as it should be.
+$0.91t$. At K the lowest mode is at $0.89t$, and at M the two modes are at
+$1.67t$ and $2.41t$. The lowest mode has the same energies as the lowest
+poles of the pair-basis map above, to $10^{-3}t$, as it should be. Both
+branches are smooth along the path with `nk=24`. On a coarse mesh, such as
+`nk=6`, they zigzag between neighboring $Q$, because the electron-hole pairs
+of the mesh at $k$ and $k+Q$ change from one $Q$ to the next. The lowest mode
+is converged: it moves by at most $0.015t$ from `nk=18` to 24, and by
+$0.005t$ at K from `nk=24` to 30. The second mode near K and K' is the bottom
+of the electron-hole continuum, not a second magnon, and it converges more
+slowly: at K it is at $1.09t$, $1.01t$ and $0.97t$ for `nk=18`, 24 and 30.
+The figure takes about eight minutes.
 
 ??? example "Code of this figure (documentation/figures/spin_tdhf.py)"
 
@@ -484,20 +508,26 @@ charge version of the Stoner instability of the spin channel.
 ![Imaginary part of the RPA charge response of the chain with a first-neighbor V1, over momentum transfer and frequency, with the edges of the electron-hole continuum.](img/spin_plasmon-dark.png#only-dark)
 
 The map is not in the snippet: we call `h.get_densitychi_RPA()` with the
-same `V1=0.6` at 21 values of $q$, with `nk=1000` to keep it fast, and plot
-it on a log color scale. The dashed lines are the edges of the free
-electron-hole continuum, $2t\sin 2\pi q$ and $4t\sin\pi q$. At small $q$,
-where $V(q)>0$, the RPA moves the weight to the upper edge and a little
-above it: this is the plasmon. Near $q=1/2$, where $V(q)<0$, the weight moves
-to the lower edge and below it, toward zero frequency: this is the soft
-charge mode of the charge-density wave. The snippet finds no pole in its
-window. At $q=1/2$ the real part of the kernel eigenvalue changes sign at
-$0.60t$, but the eigenvalue stays at about 0.6 in absolute value, so the
-kernel never comes close to zero. The weight that moves toward low frequency
-is a broad feature, not a mode. The window of the snippet, `energies` from
-0 to 1, misses the bound mode at $q=0.4$: it is at about $1.1t$, just below
-the edge of the continuum at $1.18t$. With `energies` up to $2t$ the same call finds it, at $1.115t$ with
-$|\gamma|=0.12$.
+same `V1=0.6` at 201 values of $q$ with `nk=1000`, and plot it on a log
+color scale. With `nk=3000` the map is the same. The dashed lines are the
+edges of the free electron-hole continuum, $2t\sin 2\pi q$ and $4t\sin\pi q$.
+The circles are the poles of `get_plasmon_bands` at 50 values of $q$, with
+`energies` from 0 to $4t$. At small $q$, where $V(q)>0$, the RPA moves the
+weight to the upper edge and a little above it: this is the plasmon. Its
+poles go from $0.28t$ at $q=0.02$, just above the edge, to $2.49t$ at
+$q=0.21$, where it enters the continuum and the poles stop. Their $|\gamma|$
+is between 0.11 and 0.3 from $q=0.04$ on, and 0.7 at $q=0.02$, so the
+plasmon is damped most at the smallest $q$. Near $q=1/2$, where $V(q)<0$, the weight moves to
+the lower edge and below it, toward zero frequency: this is the soft charge
+mode of the charge-density wave. Its poles go from $1.26t$ at $q=0.39$ down
+to $0.32t$ at $q=0.45$, below the edge, and they get sharper as the frequency
+goes down, $|\gamma|=0.01$ at $q=0.45$. Closer to $q=1/2$ there is no pole.
+At $q=1/2$ the real part of the kernel eigenvalue changes sign at $0.60t$,
+but the eigenvalue stays at about 0.6 in absolute value, so the kernel never
+comes close to zero. The window of the snippet, `energies` from 0 to 1,
+misses the mode at $q=0.4$, at $1.115t$, just below the edge of the
+continuum at $1.18t$; with `energies` up to $2t$ the same call finds it. The
+figure takes about three and a half minutes.
 
 ??? example "Code of this figure (documentation/figures/spin_plasmon.py)"
 

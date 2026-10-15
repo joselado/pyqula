@@ -42,10 +42,12 @@ it adds to the conductance.
 
 ## Magnetoresistance in metal-metal transport
 
-We now compute the magnetoresistance of a junction between two magnetic
-metals, with `HT.didv()`. We make two copies of the same chain, add an
-exchange field to each of them, and compare the parallel and antiparallel
-configurations:
+We now compute the conductance of a spin valve, a junction between two
+magnetic metals, with `HT.didv()`. We make two copies of the same chain and
+add an exchange field $J$ to each of them. The first lead is magnetized
+along $z$. In the second lead we rotate the magnetization in the $xz$
+plane, by an angle $\theta$ from the first one, so $\theta=0$ is the
+parallel and $\theta=\pi$ the antiparallel configuration:
 
 ```python
 from pyqula import geometry
@@ -53,37 +55,59 @@ from pyqula import heterostructures
 import numpy as np
 g = geometry.chain() # create the geometry
 h = g.get_hamiltonian() # create the Hamiltonian
-es = np.linspace(-.5,.5,50) # set of energies for dIdV
-Gs = dict()
-for name,m2 in [("parallel",[0.,0.,0.5]),("antiparallel",[0.,0.,-0.5])]:
-    h1 = h.copy() ; h1.add_exchange([0.,0.,0.5]) # first lead, fixed magnetization
-    h2 = h.copy() ; h2.add_exchange(m2) # second lead, parallel or antiparallel
+h.add_onsite(1.0) # the band is now [-1,3], and E=0 is close to its bottom
+thetas = np.linspace(0.,np.pi,61) # angles between the two magnetizations
+def conductance(J,theta): # conductance at E=0 for exchange J and angle theta
+    h1 = h.copy() ; h1.add_exchange([0.,0.,J]) # first lead, magnetization along z
+    h2 = h.copy() ; h2.add_exchange([J*np.sin(theta),0.,J*np.cos(theta)]) # rotated in the xz plane
     HT = heterostructures.create_leads_and_central(h1,h2,h1) # create the junction
-    Gs[name] = [HT.didv(energy=e) for e in es] # calculate conductance
+    return HT.didv(energy=0.0) # calculate conductance
+Js = [0.3,0.6,0.9,1.5] # exchange strengths, the last one is a half metal
+Gs = {J:np.array([conductance(J,t) for t in thetas]) for J in Js}
 ```
 
-`Gs["parallel"]` and `Gs["antiparallel"]` are the conductances $G_P$ and
-$G_{AP}$ at each energy, and the magnetoresistance is
+`Gs[J]` is the conductance $G(\theta)$ at $E=0$ for each angle, in units
+of $e^2/h$. The onsite energy moves the Fermi energy close to the bottom of
+the band, so that a moderate exchange field changes the bands a lot. The
+exchange field splits the band into a majority band, $[-1-J,3-J]$, and a
+minority band, $[-1+J,3+J]$. For $J<1$ both cross the Fermi energy, and the
+chain is a magnetic metal. For $J>1$ the minority band is above the Fermi
+energy, and only one spin is a metal: this is a half metal.
 
-$$\mathrm{MR} = \frac{G_P - G_{AP}}{G_{AP}} .$$
+In the parallel configuration each spin sees the same band on both sides,
+so it is transmitted perfectly. Then $G(0)$ is 2 for $J<1$, one per spin,
+and 1 for a half metal. When the second magnetization rotates, an electron
+in the majority band of the first lead has to enter the majority band of
+the second one, with its spin along the new direction. The overlap of the
+two spinors is $\cos(\theta/2)$, so the transmission goes down with the
+angle. The magnetoresistance is
 
-In the parallel configuration each spin sees the same band on both sides, so
-it is transmitted perfectly, and the conductance is 2, one per spin. In the
-antiparallel configuration the spin-up band of the first lead is shifted up
-and the one of the second lead is shifted down. This mismatch reflects part
-of the electrons, so the conductance is smaller. For this chain the effect is
-a few percent, because the exchange field 0.5 is small compared with the
-bandwidth 4. This is the physics of the tunneling magnetoresistance in spin
-valves.
+$$\mathrm{MR} = \frac{G_P - G_{AP}}{G_{AP}} ,$$
 
-![Conductance of the parallel and antiparallel junctions against energy, and the magnetoresistance.](img/transport_magnetoresistance.png#only-light)
-![Conductance of the parallel and antiparallel junctions against energy, and the magnetoresistance.](img/transport_magnetoresistance-dark.png#only-dark)
+with $G_P=G(0)$ and $G_{AP}=G(\pi)$. This is what a spin valve
+measures: its resistance depends on the angle between the two
+magnetizations.
 
-The parallel conductance (left, blue) is exactly 2 at every energy, one
-channel per spin without any reflection. The antiparallel conductance
-(orange) is 1.875 at $E=0$ and goes down to 1.856 at $E=\pm0.5$. So the
-magnetoresistance (right) is 6.7% at zero energy and grows to 7.7% at the
-ends of the energy window.
+![Conductance of a spin valve against the angle between the magnetizations of the two leads, for several exchange fields, and as a map over angle and exchange field.](img/transport_magnetoresistance.png#only-light)
+![Conductance of a spin valve against the angle between the magnetizations of the two leads, for several exchange fields, and as a map over angle and exchange field.](img/transport_magnetoresistance-dark.png#only-dark)
+
+On the left, every curve starts at its parallel value and goes down
+smoothly to its minimum at $\theta=\pi$. For $J=0.3$ the antiparallel
+conductance is $1.92$, so the magnetoresistance is only 4%, because the two
+spin bands are almost the same. It grows with the exchange field: $G_{AP}$
+is $1.65$ for $J=0.6$ and $0.99$ for $J=0.9$, where the minority band is
+close to leaving the Fermi energy, and the magnetoresistance is 103%. For
+the half metal, $J=1.5$, the conductance goes from 1 at $\theta=0$ to
+exactly zero at $\theta=\pi$, so the magnetoresistance is infinite. An
+electron of the first lead has no state with its spin in the second lead,
+and the minority band of the second lead is above the Fermi energy. The curve is
+close to $\cos^2(\theta/2)$ (dotted), the square of the overlap of the two
+spinors, but it is flatter near $\theta=0$. The overlap alone is the answer
+of a tunnel contact, and this junction is a transparent one, so it does not
+have to follow it. The map on the right shows the conductance for
+all the exchange fields from 0 to 2. The dashed line, $J=1$, separates the
+magnetic metal (below), where $G(0)=2$, from the half metal (above), where
+$G(0)=1$ and $G(\pi)=0$.
 
 ??? example "Code of this figure (documentation/figures/transport_magnetoresistance.py)"
 
@@ -138,15 +162,16 @@ between the tip and the sample.
 ![Conductance of a normal-superconductor junction against energy and transparency, normalized to its value outside the gap.](img/transport_andreev.png#only-light)
 ![Conductance of a normal-superconductor junction against energy and transparency, normalized to its value outside the gap.](img/transport_andreev-dark.png#only-dark)
 
-For the map we take 16 transparencies instead of 6, and we divide each
-curve by its value at $E=-3\Delta$, outside the gap. At $T=1$ (top of the
-map, green curve) the conductance inside the gap is 1.94 times the one
-outside, close to the doubling of perfect Andreev reflection. When $T$ goes
-down, the inside of the gap becomes dark: at $T=0.334$ the conductance at
-$E=0$ is 0.25, and at $T=0.001$ it is $2\times10^{-6}$. At the same time the
-coherence peaks at $E=\pm\Delta$ appear, so the small-$T$ curve (blue) is the
-BCS density of states. The color scale is cut at 2.5, so the peaks are
-saturated.
+For the map we take 101 transparencies instead of 6, in steps of 0.01, and
+201 energies, and we divide each curve by its value at $E=-3\Delta$,
+outside the gap. With 16 transparencies the map had visible steps along $T$.
+At $T=1$ (top of the map, green curve) the conductance inside the gap is
+1.94 times the one outside, close to the doubling of perfect Andreev
+reflection. When $T$ goes down, the inside of the gap becomes dark: at
+$T=0.331$ the conductance at $E=0$ is 0.25, and at $T=0.001$ it is
+$2\times10^{-6}$. At the same time the coherence peaks at $E=\pm\Delta$
+appear, so the small-$T$ curve (blue) is the BCS density of states. The
+color scale is cut at 2.5, so the peaks are saturated.
 
 ??? example "Code of this figure (documentation/figures/transport_andreev.py)"
 
@@ -257,15 +282,20 @@ with a chain of disordered cells between two clean leads, is in
 ![Transmission of the four-site chain against energy, clean and with disorder, and its disorder average against energy and disorder strength.](img/transport_device.png#only-light)
 ![Transmission of the four-site chain against energy, clean and with disorder, and its disorder average against energy and disorder strength.](img/transport_device-dark.png#only-dark)
 
-For the figure we compute the transmission on a grid of energies, and we
-repeat it for disorder strengths from 0 to 4, each one averaged over 30
-random configurations. The clean chain (blue) transmits 1 inside the band,
-$|E|<2$, and 0 outside it; at the band edge $E=\pm2$ it is 0.49. With
-disorder the transmission goes down, faster near the band edges than at the
-centre of the band. At $E=0$ the average is 0.73 for a disorder 2 and 0.33
-for a disorder 4 (orange). The script fixes the random seed; with another
-seed these numbers change a little, since 30 configurations is a small
-average.
+For the figure we compute the transmission at 81 energies, and we repeat it
+for 41 disorder strengths from 0 to 4, in steps of 0.1. Each point is the
+average over 400 random configurations, and the script takes about 17
+minutes. The clean chain (blue) transmits 1 inside the band, $|E|<2$, and 0
+outside it; at the band edge $E=\pm2$ it is 0.49. With disorder the
+transmission goes down, faster near the band edges than at the centre of
+the band. At $E=0$ the average is $0.74$ for a disorder 2 (green) and $0.41$
+for a disorder 4 (orange). The shaded bands are the statistical error of
+the average, the standard deviation over the configurations divided by
+$\sqrt{400}$. It is at most $0.015$, and it is what you still see as
+horizontal stripes in the map at strong disorder. With 100 configurations
+and another seed the error is twice as large, and the values at $E=0$ are
+$0.75\pm0.02$ and $0.38\pm0.03$, the same within the error.
+
 
 ??? example "Code of this figure (documentation/figures/transport_device.py)"
 
@@ -448,15 +478,15 @@ h = g.get_hamiltonian() ; h.shift_fermi(1.) ; h.add_swave(0.1) # SC sample
 lead = geometry.chain().get_hamiltonian() ; lead.shift_fermi(1.) ; lead.add_swave(0.1) # SC probe
 lp = LocalProbe(h,lead=lead,delta=1e-3)
 lp.T = 0.3 # reference transparency
-G = lp.didv(energy=0.25,nmax=4,nmax_max=12,tol=5e-2) # routed through Keldysh automatically
-k = lp.get_kappa(energy=0.25,nmax=4,nmax_max=12,tol=5e-2)
+G = lp.didv(energy=0.25,nmax=4,nmax_max=60,tol=5e-4) # routed through Keldysh automatically
+k = lp.get_kappa(energy=0.25,nmax=4,nmax_max=60,tol=5e-4)
 ```
 
 `G` is the conductance and `k` the decay rate at voltage $0.25$, which is
-above the combined gap $2\Delta=0.2$ of tip and sample. This is much more
-expensive than with a normal tip, because each `didv` or `get_kappa` call
-solves several Floquet-Keldysh problems, and it is slowest deep inside the
-gap at small transparency. See
+above the combined gap $2\Delta=0.2$ of tip and sample. The snippet takes
+about a minute, much more than with a normal tip, because each `didv` or
+`get_kappa` call solves several Floquet-Keldysh problems, and it is slowest
+deep inside the gap at small transparency. See
 `examples/transport/decay_constant_keldysh/main.py` for a runnable script
 with a coarse energy grid and few sidebands, and the notebooks
 `08_tunneling_contact_probe.ipynb` (normal tip) and
@@ -466,26 +496,37 @@ with a coarse energy grid and few sidebands, and the notebooks
 ![Conductance and decay rate of a superconducting STM tip on a superconducting sample against the bias voltage.](img/transport_stmtip.png#only-light)
 ![Conductance and decay rate of a superconducting STM tip on a superconducting sample against the bias voltage.](img/transport_stmtip-dark.png#only-dark)
 
-The figure repeats the snippet at 16 voltages from $\Delta=0.1$ to $0.4$,
-in steps of $0.02$, and it runs in one to three minutes. On the left, the
-conductance has its largest peak, $1.95\,e^2/h$, at $eV=0.2$, the sum of the
+The figure repeats the snippet at 41 voltages from $\Delta=0.1$ to $0.4$,
+in steps of $0.0075$, and at 11 more voltages between $0.19$ and $0.21$,
+around the peak at $2\Delta$. It takes about 20 minutes. On the left, the
+conductance has its largest peak, $1.98\,e^2/h$, at $eV=0.2$, the sum of the
 gaps of tip and sample, where the coherence peaks of the two densities of
-states meet. A second peak, $0.71\,e^2/h$, is at $eV=\Delta$, the voltage
-$2\Delta/2$ of the first Andreev reflection. Between the two the
-conductance is small, $0.03$ to $0.32\,e^2/h$. Above $2\Delta$ it goes down
-to about $0.27\,e^2/h$, the tunneling between the two continua. On the
-right, $\kappa$ is between $0.96$ and $1.09$ above $2\Delta$, so a single
-quasiparticle carries the current there. Below $2\Delta$, $\kappa$ is
-$1.8$ at $0.18$ and it grows to $6.2$ at $0.12$, so the current comes from
-processes that transfer several electrons. At $2\Delta$ itself
-$\kappa=0.35$, below one. With the snippet's `tol=5e-2` and `nmax_max=12`,
-the points from $\Delta$ to $0.24$ are not converged in the sidebands, and a
-warning says so, so the large values of $\kappa$ inside the gap are only
-indicative. Below $\Delta$ the conductance at this tolerance comes out
-negative, so these points are not converged either. At some of them it
-changes sign between the two transparencies that $\kappa$ needs, and there
-`get_kappa` stops with an error that asks for a tighter `tol` or a larger
-`nmax_max`. The figure starts at $\Delta$ for this reason.
+states meet. The peak is narrow, its half width is about $0.008$, so it
+needs the finer grid. A second peak, $0.75\,e^2/h$, is at $eV=\Delta$, the
+voltage $2\Delta/2$ of the first Andreev reflection. Between the two the
+conductance is small, $0.07$ to $0.41\,e^2/h$. Above $2\Delta$ it goes down
+to $0.26\,e^2/h$ at $eV=0.4$, the tunneling between the two continua.
+
+On the right, $\kappa$ is between $0.99$ and $1.02$ above $eV=0.22$, so a
+single quasiparticle carries the current there. Between $\Delta$ and
+$2\Delta$, $\kappa$ grows to $1.92$ at $eV\approx0.13$, close to 2: the
+current comes from Andreev reflection, which transfers two electrons. Near
+$2\Delta$ it drops, and at $2\Delta$ itself $\kappa=0.34$, below one,
+because the peak of the conductance there grows more slowly with $T$ than
+the normal conductance.
+
+These values need converged sidebands. With `tol=5e-4` and `nmax_max=60`,
+as in the snippet, the conductance and $\kappa$ change by less than $0.5\%$
+with respect to `tol=2e-3` and `nmax_max=40`. A looser tolerance is not
+enough: with `tol=5e-2` and `nmax_max=12` the conductance at $eV=0.25$ is
+7% too small, and inside the gap $\kappa$ comes out as large as $6$, while
+the converged value is below 2. With `tol=2e-3` one point, $eV=0.2725$,
+still came out at half its converged value. At a loose tolerance, `get_kappa`
+can also stop with an error, when the conductance changes sign between the
+two transparencies it needs, and the error asks for a tighter `tol` or a
+larger `nmax_max`. The figure starts at $\Delta$: below it
+the higher orders of multiple Andreev reflection need more sidebands, and we
+did not converge those points.
 
 ??? example "Code of this figure (documentation/figures/transport_stmtip.py)"
 

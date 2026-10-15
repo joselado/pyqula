@@ -5,13 +5,13 @@ g = geometry.bichain() # two sites per cell, so Neel order fits in the cell
 h = g.get_hamiltonian()
 seed = h.copy() ; seed.add_antiferromagnetism(0.5) # symmetry-breaking seed
 hmf = h.get_mean_field_hamiltonian(U=3.0,nk=100,mf=seed,filling=0.5)
-qs,ws,gammas = hmf.get_magnon_bands(nq=40,energies=np.linspace(0.01,3.,200),delta=2e-2,nk=40)
+qs,ws,gammas = hmf.get_magnon_bands(nq=200,energies=np.linspace(0.01,3.,600),delta=2e-2,nk=80)
 sharp = np.abs(gammas) < 0.05 # sharp modes, the others are damped
 
 def draw(ax, c):
-    ax.scatter(qs[~sharp], ws[~sharp], s=6, color=c.ink2, alpha=0.4,
+    ax.scatter(qs[~sharp], ws[~sharp], s=2, color=c.ink2, alpha=0.5,
                label="damped")
-    ax.scatter(qs[sharp], ws[sharp], s=14, color=c.blue, label="sharp")
+    ax.scatter(qs[sharp], ws[sharp], s=6, color=c.blue, label="sharp")
     style.kpath(ax, qs, ["0", r"$\pi$", r"$2\pi$"])
     ax.set_xlabel("momentum $q$ along the chain")
     ax.set_ylabel(r"frequency $\omega$ [$t$]")

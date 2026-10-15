@@ -42,8 +42,11 @@ broadening `delta` is the width of each line in the heatmap.
 ![Momentum-resolved spectral function of the triangular lattice along the k-path.](img/spectral_kdos.png#only-light)
 ![Momentum-resolved spectral function of the triangular lattice along the k-path.](img/spectral_kdos-dark.png#only-dark)
 
-For the figure we take `energies=np.linspace(-4,7,300)`, because the default
-window from $-3$ to $3$ cuts the band. You see the single band of the
+For the figure we take `energies=np.linspace(-4,7,1101)`, because the default
+window from $-3$ to $3$ cuts the band. We also take `nk=600` points on the
+k-path and `delta=0.05`. The energy step, $0.01$, and the change of the band
+energy between two k-points must both be smaller than `delta`, otherwise the
+line breaks into separate dots. You see the single band of the
 triangular lattice, from $-3t$ at K and K' to $6t$ at $\Gamma$, with a
 local maximum at $-2t$ at M, the saddle point. The width of the line is the
 broadening.

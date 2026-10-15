@@ -32,7 +32,7 @@ import numpy as np
 from pyqula import geometry
 g = geometry.triangular_lattice()
 h = g.get_hamiltonian(has_spin=False)
-(qs,es,qpi) = h.get_qpi(mode="pm",nk=50,delta=1e-1,energies=np.linspace(-6.,6.,100)) # QPI at each energy
+(qs,es,qpi) = h.get_qpi(mode="pm",nk=200,delta=1e-1,energies=np.linspace(-6.,6.,100)) # QPI at each energy
 ```
 
 `qs` contains the wavevectors $\mathbf q$, one per row, `es` the energies,
@@ -56,11 +56,14 @@ larger than the rest. With this sign of the hopping, the band of the
 triangular lattice goes from $-3t$ at K to $6t$ at $\Gamma$, so the small
 circle around $\Gamma$ is at the top of the band. At $\omega=5.03t$ (left)
 the contour is a circle of radius $k_F\approx 0.13$ and the QPI map is a
-disk of radius $0.27$, which is $2k_F$, repeated at every reciprocal lattice
+disk of radius $0.26$, which is $2k_F$, repeated at every reciprocal lattice
 vector. At $\omega=-2.48t$ (right), near the bottom of the band, the contour
 is two small pockets around K and K'. The map has a disk at $\mathbf q=0$,
 from the scattering inside one pocket, and bright features at the K points of
-$\mathbf q$, from the scattering between the two pockets.
+$\mathbf q$, from the scattering between the two pockets. The pockets are
+small, so they need a dense k-mesh: with `nk=50` the right map is noisy, and
+the maps at `nk=200` and `nk=300` agree within one percent. With
+a smaller $\delta$, increase `nk` again.
 
 ??? example "Code of this figure (documentation/figures/qpi_pm.py)"
 
@@ -157,20 +160,31 @@ the QPI intensity, its Fourier transform.
 ![Change of the local density of states around an impurity in the honeycomb lattice, and its Fourier transform.](img/qpi_impurity.png#only-light)
 ![Change of the local density of states around an impurity in the honeycomb lattice, and its Fourier transform.](img/qpi_impurity-dark.png#only-dark)
 
-For the figure we take `nsuper=12` instead of `nsuper=10`, because the K
-points are on the $\mathbf q$ mesh only when the size is a multiple of
-three. Lengths are in units of the first-neighbor distance $a$. On the left,
-the change of the local density of states at $\omega=0.3t$ with respect to
-its mean. The color scale stops at the 98th percentile, so that the impurity
-site, where the density drops, does not hide the rest. You see the Friedel
-oscillations around the impurity, with a period of three sites. On the
-right, the QPI intensity on the 144 points of the mesh. The point at
-$\mathbf q=0$ is left out (white), since it is the mean density and it is
-300 times larger than the rest. The largest values are around the K points,
-at $|\mathbf q|\approx 2.4/a$, at a distance of about $0.3$ to $0.6/a$ from
-them, close to $2k_F=0.4/a$ of the Dirac cone at this energy. This is the
-scattering between the two valleys, and it gives the period of three sites
-in real space.
+For the figure we take a much larger supercell, `nsuper=69`, so that the
+$\mathbf q$ mesh is fine and the oscillations decay well inside the
+supercell. The size is a multiple of three, because only then the K points
+are on the $\mathbf q$ mesh. With such a large supercell one k-point is
+enough (`nk=1`), and we can take a smaller broadening, $\delta=0.1t$. We ask
+for all the states with `num_waves`, which is a full diagonalization of
+9522 sites, and it takes about 3 minutes. With `nsuper=48` the maps are the
+same within a few percent. Lengths are in units of the first-neighbor
+distance $a$. On the left, the change of the local density of states at
+$\omega=0.3t$ with respect to its mean, within $12a$ of the impurity. The
+color scale stops at the 95th percentile, so that the impurity site, where
+the density drops, does not hide the rest. You see the Friedel oscillations
+around the impurity, with a period of $3a$ along $x$, and they decay with the
+distance. On the right, the QPI intensity over the $69\times 69$ points of
+the mesh, which cover one Brillouin zone. The point $\mathbf q=0$ is left
+out, since it is the mean density and it is about 4200 times larger than the
+rest. The brightest feature is then the disk around $\Gamma$, from the
+scattering inside one valley. Around K and K', at $|\mathbf q|\approx 2.4/a$,
+there is a ring of radius about $0.4/a$, which is $2k_F$ of the Dirac cone at
+this energy, brightest along the line to $\Gamma$. This is the scattering
+between the two valleys, and it gives the period of $3a$ in real space. For
+larger maps, or for a single impurity in an infinite system, use the
+T-matrix, described in [QPI from the T-matrix](#qpi-from-the-t-matrix): it
+gives the same result as this calculation with `nk=1` and `nsuper` equal to
+the `nk` of the T-matrix, at a much lower cost.
 
 ??? example "Code of this figure (documentation/figures/qpi_impurity.py)"
 

@@ -53,22 +53,33 @@ they take the mean area of the others.
 
 For this island the innermost quarter of the sites gives about $1.95$, close
 to the $C=2$ of the spinful Haldane model. The difference of a few percent
-comes from the small gap of $t_2=0.05$: with $t_2=0.2$ the innermost sites
-give $2.00$. The outermost sites are strongly negative, and the marker times
+comes from the small gap of $t_2=0.05$. A small gap means a long decay length
+of the edge into the bulk, and the island with `n=8` is not much larger than
+it, so its innermost quarter still feels the edge. A larger gap or a larger
+island removes the difference: with $t_2=0.2$ the innermost sites give
+$2.00$, and with $t_2=0.05$ the islands with `n=12` and `n=16` give $1.985$
+and $1.995$. The outermost sites are strongly negative, and the marker times
 the area adds up to zero over the whole island.
 
 ![Local Chern marker of each site against its distance to the center of the island, and its sum inside a radius R.](img/realspace_marker.png#only-light)
 ![Local Chern marker of each site against its distance to the center of the island, and its sum inside a radius R.](img/realspace_marker-dark.png#only-dark)
 
-On the left is the marker of each site against its distance to the center of
-the island. The innermost quarter of the sites, in orange, sits on the
-plateau, with mean $1.95$. Further out the marker spreads, between about
-$0.5$ and $2.2$, and the sites at the edge go down to $-17.6$. On the right
+The figure uses the larger island, `n=16`, with 2301 sites, which takes about
+two minutes. On the left is the marker of each site against its distance to
+the center of the island. The innermost quarter of the sites, in orange, sits
+on the plateau, with mean $1.995$. Further out the marker spreads, between
+about $0.7$ and $2.3$, and the sites at the edge go down to $-38$. On the right
 we add up the marker times the area of each site, for the sites closer than
-$R$ to the center. The sum grows with the area up to $R\approx11.5$, the
-distance from the center to the middle of an edge of the triangle, where it
-is $778$. Then the edge sites come in, and the sum goes down to zero, within
-$10^{-12}$, at the last site.
+$R$ to the center. In the bulk every site gives about $2$ times its area, so
+the sum follows $2$ times the area inside $R$ (dashed line). It grows up to
+$R\approx23.5$, the distance from the center to the middle of an edge of the
+triangle, where it is $3371$, against $3440$ for $2$ times the area. Then the
+edge sites come in, with their large negative marker, and the sum goes down
+to zero, within $10^{-11}$, at the last site. This zero is exact for any
+finite island: the marker of a site is a diagonal element of the commutator
+of $PxP$ and $PyP$, with $P$ the projector on the occupied states, and the
+sum of the diagonal elements, the trace, of a commutator of two finite
+matrices is zero. So the edge always gives back what the bulk carries.
 
 ??? example "Code of this figure (documentation/figures/realspace_marker.py)"
 

@@ -48,32 +48,44 @@ The KPM density of states is `h.get_dos()` with `mode="KPM"`:
 from pyqula import geometry
 import numpy as np
 g = geometry.chain()
-g = g.get_supercell(3000) # a big supercell
+g = g.get_supercell(100000) # a big supercell
 g.dimensionality = 0
 h = g.get_hamiltonian(is_sparse=True,has_spin=False)
 (x,y) = h.get_dos(mode="KPM",
-            energies=np.linspace(-3.0,3.0,200), # energies
+            energies=np.linspace(-3.0,3.0,601), # energies
             delta=1e-2, # energy resolution, half width of the peak of a level
-            ntries=10 # number of random vectors for the stochastic trace
+            ntries=40 # number of random vectors for the stochastic trace
             )
 ```
 
 `x` is the energy grid and `y` the density of states, the same quantity that
-exact diagonalization gives for this chain of 3000 sites. For a chain you
+exact diagonalization would give for this chain of $10^5$ sites. For a chain you
 see the one-dimensional van Hove singularities at $E=\pm2$. A sparse
 Hamiltonian (`is_sparse=True`) is the natural choice, since the method never
-needs the dense matrix.
+needs the dense matrix. This snippet takes about one minute.
 
-![KPM density of states of a chain of 3000 sites, compared with the density of states of the infinite chain.](img/kpm_dos.png#only-light)
-![KPM density of states of a chain of 3000 sites, compared with the density of states of the infinite chain.](img/kpm_dos-dark.png#only-dark)
+![KPM density of states of a chain of 100000 sites, compared with the density of states of the infinite chain.](img/kpm_dos.png#only-light)
+![KPM density of states of a chain of 100000 sites, compared with the density of states of the infinite chain.](img/kpm_dos-dark.png#only-dark)
 
 The KPM density of states, divided by the number of sites (blue), follows
-the one of the infinite chain, $1/(\pi\sqrt{4t^2-E^2})$ (dashed). You see
-the two van Hove peaks at $E=\pm2$, and the minimum $1/(2\pi)=0.16$ at zero
-energy. Outside the band it is zero. The wiggles in the middle of the band
-are the noise of the stochastic trace with 10 random vectors: about $5\%$
-on average and up to $20\%$ at a single energy. They go down as
-$1/\sqrt R$ when you increase `ntries`.
+the one of the infinite chain, $1/(\pi\sqrt{4t^2-E^2})$ (dashed), and the
+two curves lie on top of each other. You see the two van Hove peaks at
+$E=\pm2$, and the minimum $1/(2\pi)=0.16$ at zero energy. Outside the band
+it is zero. Inside the band, the only error is the noise of the stochastic
+trace. Each random vector already averages over the $N$ sites, so the noise
+goes down as $1/\sqrt{NR}$. For $|E|<1.5$ it is $0.5\%$ on average and at
+most $2\%$ at a single energy. With 3000 sites and 10 random vectors it was
+$5\%$ on average and up to $18\%$, and with $3\times10^5$ sites and 80
+vectors it is $0.2\%$, so the curve does not change any more at the scale of
+the figure.
+
+At the band edges the error is of another kind. The exact density of states
+diverges as $1/\sqrt{2-|E|}$, and the KPM curve cannot follow it, because
+every level is a peak of half width `delta`. So the divergence becomes a
+finite peak, $1.73$ per site at $E=\pm1.99$, and just inside the edge the
+curve is a little above the exact one. This does not improve with more
+sites or more random vectors. Only a smaller `delta` helps: with
+`delta=5e-3` the peak is $2.15$, and it keeps growing as `delta` goes down.
 
 ??? example "Code of this figure (documentation/figures/kpm_dos.py)"
 
@@ -93,7 +105,7 @@ Two numbers control the result:
   $1/\sqrt R$.
 
 `delta` must be larger than the distance between levels, here
-$2\pi t/N\approx 0.002$ in the middle of the band, otherwise `y` shows the
+$2\pi t/N\approx 6\times10^{-5}$ in the middle of the band, otherwise `y` shows the
 single levels of the finite chain. The spectrum must be inside $[-s,s]$,
 since $T_m(x)$ grows exponentially outside $[-1,1]$. The default is
 `scale=10` in units of the hopping. A Hamiltonian with a larger spectrum, for
@@ -223,15 +235,22 @@ sites is the density of states at that energy, with the normalization of
 `h.get_dos(mode="KPM")`. The result is the same as the expansion over the
 whole island, up to roundoff.
 
-![KPM local density of states of the left corner of a honeycomb island, at zero energy and at E=1.](img/kpm_ldos.png#only-light)
-![KPM local density of states of the left corner of a honeycomb island, at zero energy and at E=1.](img/kpm_ldos-dark.png#only-dark)
+![KPM local density of states of a whole honeycomb island of 12800 sites, at zero energy on a logarithmic color scale and at E=0.5.](img/kpm_ldos.png#only-light)
+![KPM local density of states of a whole honeycomb island of 12800 sites, at zero energy on a logarithmic color scale and at E=0.5.](img/kpm_ldos-dark.png#only-dark)
 
-Both maps show the left corner of the island, where two zigzag edges meet.
-At zero energy the bulk is dark, with a typical LDOS of $0.012$, and the
-outer sites of the two edges are bright, up to $2.8$ at the tip: these are
-the zigzag edge states. At $E=1$ the map is the opposite. The bulk is
-almost uniform, about $0.35$, and the outer edge sites are darker, down to
-$0.13$.
+Both maps show the whole island, a rhombus with four zigzag edges. At zero
+energy (left) the color scale is logarithmic, because the map covers three
+decades. The outer sites of the edges are bright: these are the zigzag edge
+states. Their typical LDOS is $1.1$, and $2.8$ at the sharp corners, so they
+are saturated, since the color scale is cut at $1.07$. Their weight decays
+into the island over a few rows, and the bulk is dark, with a typical LDOS
+of $0.012$. At the two blunt corners the edge
+states are suppressed. At $E=0.5$ (right, linear scale) the map is the
+opposite. The bulk is almost uniform, about $0.10$, and the edge sites are
+no longer special: they carry $2.4\%$ of the weight, about the same as
+their share of the sites. The brighter lines parallel to the edges are
+standing waves of the bulk states, reflected at the edge. The color scale is
+cut at $0.13$, and the brightest sites of the map reach $0.22$.
 
 ??? example "Code of this figure (documentation/figures/kpm_ldos.py)"
 

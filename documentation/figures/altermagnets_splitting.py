@@ -5,7 +5,7 @@ from pyqula import specialhamiltonian
 h = specialhamiltonian.square_altermagnet(am=1.)
 
 # largest spin splitting in each energy bin, over the whole BZ
-(es, ds) = h.get_spin_splitting_vs_energy(nk=100, nbins=400)
+(es, ds) = h.get_spin_splitting_vs_energy(nk=800, nbins=400)
 print("largest spin splitting anywhere in the BZ:", ds.max())
 
 # the smooth counterpart, on the same axes

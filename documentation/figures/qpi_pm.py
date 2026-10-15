@@ -4,7 +4,7 @@ from pyqula import geometry
 
 g = geometry.triangular_lattice()
 h = g.get_hamiltonian(has_spin=False)
-(qs,es,qpi) = h.get_qpi(mode="pm",nk=50,delta=1e-1,energies=np.linspace(-6.,6.,100)) # QPI at each energy
+(qs,es,qpi) = h.get_qpi(mode="pm",nk=200,delta=1e-1,energies=np.linspace(-6.,6.,100)) # QPI at each energy
 
 def draw(ax, c):
     for a, e0 in zip(ax, [5.0, -2.5]): # near the top and near the bottom of the band

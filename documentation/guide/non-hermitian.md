@@ -166,7 +166,7 @@ from pyqula import geometry
 g = geometry.chain().get_supercell(4,store_primal=True) # supercell of a chain
 h = g.get_hamiltonian(has_spin=False,non_hermitian=True) # non-Hermitian Hamiltonian
 h.add_onsite(lambda r: -0.3j*(1.+np.cos(np.pi*r[0]/2.))) # modulated loss
-kpath = g.get_unfolded_kpath(nk=100) # primitive k-path, in supercell coordinates
+kpath = g.get_unfolded_kpath(nk=400) # primitive k-path, in supercell coordinates
 (k,e,d) = h.get_kdos_bands(operator="unfold",kpath=kpath,
         biorthogonal=True) # unfolded Green's-function spectral function
 ```
@@ -184,12 +184,15 @@ each other, and only their sum has a meaning.
 ![Unfolded spectral function of the chain with a modulated loss, with the right eigenvectors and with the Green's function.](img/nonhermitian_kdos-dark.png#only-dark)
 
 For the figure we use a finer energy grid than the default,
-`energies=np.linspace(-3.,3.,601)`, so that the sharp peaks of the left
-panel are not lost between two energies. In both panels you see the cosine
+`energies=np.linspace(-3.,3.,1201)`, so that the sharp peaks of the left
+panel are not lost between two energies. The 400 points of the k-path are
+needed for the same reason: with 100 points the band moves by more than
+$\delta$ from one k-point to the next, and the left panel shows a dotted
+line. In both panels you see the cosine
 band of the chain, from $2$ at $k=0$ to $-2$ at $k=\pi$. All the states have
 the same decay rate here, $\mathrm{Im}\,E_n=-0.3$, the average loss of the
 four sites. In the left panel the peaks have the width $\delta=0.01$ and a
-height of up to $126$. In the right panel each peak has a full width of
+height of up to $127$, so the band is a thin line. In the right panel each peak has a full width of
 $0.61$, which is $2(0.3+\delta)$, and a height of about $4.2$, so the
 lifetime of the states is visible. Around $\omega=\pm1.4$ two folded bands
 of the supercell meet, and there the weight goes up to $5.4$.

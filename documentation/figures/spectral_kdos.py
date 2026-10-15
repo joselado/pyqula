@@ -4,7 +4,7 @@ from pyqula import geometry
 
 g = geometry.triangular_lattice() # get the geometry
 h = g.get_hamiltonian()  # get the Hamiltonian
-(k,e,d) = h.get_kdos_bands(energies=np.linspace(-4,7,300)) # the whole band
+(k,e,d) = h.get_kdos_bands(energies=np.linspace(-4,7,1101),nk=600,delta=0.05) # the whole band, on a dense path
 
 nk, ne = len(np.unique(k)), len(np.unique(e)) # k is the outer index
 (k,e,d) = [a.reshape(nk,ne) for a in (k,e,d)]

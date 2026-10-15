@@ -5,7 +5,7 @@ from pyqula import geometry
 # triangular lattice
 g = geometry.triangular_lattice() # get the geometry
 h = g.get_hamiltonian()  # get the Hamiltonian
-(es,ds) = h.get_dos()
+(es,ds) = h.get_dos(nk=400,delta=0.05) # the default broadening, 5/nk at nk=100, on a finer k-mesh
 
 # ED and Green's function on a chain with Rashba spin-orbit coupling
 g = geometry.chain()
@@ -19,7 +19,7 @@ energies = np.linspace(-4.,4.0,60)
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=True)
 h.add_sublattice_imbalance(.4)
-(es3,ds3) = h.get_dos(operator="sublattice",nk=40,delta=5e-2)
+(es3,ds3) = h.get_dos(operator="sublattice",nk=200,delta=5e-2)
 
 def draw(ax, c):
     ax[0].fill_between(es, ds, color=c.blue, alpha=0.3, lw=0)

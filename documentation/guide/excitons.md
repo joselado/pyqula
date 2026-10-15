@@ -78,7 +78,7 @@ from pyqula.bsetk.interaction import density_interaction
 h2 = g.get_hamiltonian()
 h2.add_sublattice_imbalance(1.0) # a gapped semiconductor
 W = density_interaction(h2,Vr=lambda r1,r2: 0.8/np.sqrt((r1-r2).dot(r1-r2)+0.25)) # Coulomb tail
-bse = h2.get_bse(V=W,nk=8)
+bse = h2.get_bse(V=W,nk=21)
 print(bse.get_energies()[0], bse.get_binding_energies()[0]) # lowest exciton, and how far below the gap
 ```
 
@@ -90,17 +90,23 @@ the Coulomb tail the lowest exciton separates from the band edge.
 ![Left: exciton levels and free electron-hole pair levels of the gapped honeycomb lattice with a Coulomb tail. Right: weight of the lowest exciton over the Brillouin zone.](img/excitons_bse-dark.png#only-dark)
 
 The figure is for the second snippet, with the Coulomb tail. On the left,
-each line is one energy and its height the number of states there. The
-lowest free pair is at $2.165t$, with 24 states: three mesh points around
-each of K and K', times four spin states. The lowest exciton is at
-$1.856t$, so its binding energy is $0.309t$. It has eight states, two
-valleys times four spin states. The next excitons are at $1.994t$ (one
-state) and $2.052t$ (three states). On the right is the weight
+each line is one energy and its height the number of states there. With
+`nk=21` the mesh contains K and K', because 21 is a multiple of 3, so the
+lowest free pair is at the true gap $2t$, with eight states: K and K', times four
+spin states. The next free pairs are at $2.087t$ (48 states) and $2.207t$ (24
+states). The lowest exciton is at $1.8445t$, so its binding energy is
+$0.1555t$. It has eight states, two valleys times four spin states. The next
+excitons are at $2.015t$ (eight states), $2.016t$ (one state) and $2.058t$
+(three states), already above the gap. On the right is the weight
 $\sum_{vc}|A_{vc}(k)|^2$ of the lowest exciton on the k-mesh, averaged over
 its eight states, with $k_1,k_2$ in units of the reciprocal lattice vectors.
-The weight sits on the mesh points next to K and K', where the gap is
-smallest. With `nk=8` the mesh does not contain K itself, so the band edge
-on the mesh is at $2.165t$ and not at the true gap $2t$.
+The weight is a peak at K and K', where the gap is smallest, and it falls to
+almost zero within three or four points of the mesh. The binding energy is
+converged: it is $0.1558t$ with `nk=18`, and the
+[Large k-meshes](#large-k-meshes) section below finds $0.1553t$ on meshes up
+to 30x30 in the Tamm-Dancoff approximation. A coarse mesh such as `nk=8`,
+which does not contain K, gives $0.309t$, measured from its own band edge
+at $2.165t$. The calculation takes about a minute.
 
 ??? example "Code of this figure (documentation/figures/excitons_bse.py)"
 
@@ -133,9 +139,9 @@ degenerate in spin. The full kernel can split it into a triplet, three times
 degenerate, and a singlet; neither of the two terms alone gives this 3+1
 pattern. Not every level splits, and the singlet is not always the higher
 one. For the gapped honeycomb lattice with the Coulomb tail above, the
-lowest exciton stays eight times degenerate at $1.856t$, two valleys times
+lowest exciton stays eight times degenerate at $1.8445t$, two valleys times
 four spin states. The 3+1 pattern appears higher up, with a singlet at
-$1.994t$ below a triplet at $2.052t$. With only an onsite term,
+$2.016t$ below a triplet at $2.058t$. With only an onsite term,
 `density_interaction(h2,U=1.0)` at `nk=6`, the singlet is above the triplet,
 at $2.917t$ against $2.704t$.
 

@@ -50,8 +50,13 @@ script writes only its two images.
 - Keep the parameters of the page. When the figure needs another one (a
   larger system, a field along $z$ so that the color can show $S_z$), the
   paragraph under the figure says so.
-- A script runs in a minute at most on a laptop. Use the smallest system and
-  k-mesh that show the physics.
+- A figure is converged: run it at two resolutions (k-mesh, number of
+  k-points on a path, system size, KPM moments, disorder configurations) and
+  keep the smaller one at which the picture and the numbers the paragraph
+  quotes stop changing. Most scripts then run in under a minute on one core,
+  and a few take up to 20 minutes (see Recompute); the snippet of the page
+  stays cheap, and when the figure needs more than the snippet, the paragraph
+  under it says so.
 - The colors are the ones of the dmrgpy guide, checked for color blindness
   in both themes; do not pick new ones.
 
@@ -82,3 +87,12 @@ path of the script instead of its code. The static snippet test
 bash documentation/figures/run_all.sh               # every figure
 python3 documentation/figures/hamiltonian_landau.py # one figure
 ```
+
+All of them take about two hours on one core, and most of that is
+a few slow scripts, timed on one core:
+`geometry_chern_density` and `transport_stmtip` about 20 minutes,
+`transport_device` 17, `relaxation_twisted` 10, `spin_tdhf` 8, `spin_rpa`
+and `spin_pair` 6, `transport_andreev` 5, `spin_plasmon` 3.5,
+`realspace_marker` 3, `qpi_impurity` 2.5 (with 3 GB of memory, a dense
+diagonalization of 9522 sites) and `transport_magnetoresistance` 2. Since
+the scripts are independent, they can run side by side, one per core.

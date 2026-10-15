@@ -236,7 +236,7 @@ g = g0.get_supercell(12,store_primal=True) # supercell of 144 primitive cells
 h = g.get_hamiltonian() # Hamiltonian of the supercell
 fmoire = potentials.commensurate_potential(g,n=3,minmax=[0,1]) # moire potential
 h.add_onsite(fmoire) # onsite energy following the moire
-kpath = g.get_unfolded_kpath(nk=100) # primitive k-path, in supercell coordinates
+kpath = g.get_unfolded_kpath(nk=300) # primitive k-path, in supercell coordinates
 (k,e,d) = h.get_kdos_bands(operator="unfold",mode="KPM",delta=5e-2,kpath=kpath,
         energies=np.linspace(-3,-1,200)) # unfolded weight, with the KPM
 ```
@@ -250,6 +250,15 @@ because the potential is positive. It is separated by a gap from the next
 minibands, which start at about $-2.5t$. Around M you see several copies of
 the band, shifted by the moire wavevectors, each one with a part of the
 weight.
+
+The k-path needs more points than for a band structure. Between two
+neighboring k-points a steep band moves in energy, and if this step is
+larger than `delta` the band shows up as a row of separate dots. With
+`nk=100` the steep branches of the map break into such dots. With `nk=300`
+they are continuous lines, and the map does not change any more when we go
+to `nk=600`. There is no other convergence parameter: the expansion has no
+random vectors, and the
+number of polynomials follows from `delta`.
 
 ??? example "Code of this figure (documentation/figures/unfolding_kpm.py)"
 

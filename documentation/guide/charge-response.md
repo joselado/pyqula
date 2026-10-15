@@ -74,8 +74,9 @@ Scanning over $q$ gives a $\chi(q,\omega)$ map:
 import numpy as np
 g = geometry.chain()
 h = g.get_hamiltonian()
-qs = np.linspace(-1.,1.,40)
-chis = [h.get_chi(q=[q,0.,0.],energies=np.linspace(-3,3,100),nk=40,delta=0.1)[1] for q in qs]
+qs = np.linspace(-1.,1.,401)
+es = np.linspace(-3.,3.,301) # frequencies
+chis = [h.get_chi(q=[q,0.,0.],energies=es,nk=401,delta=0.05)[1] for q in qs]
 ```
 
 In this map you see the particle-hole continuum of the band: all the
@@ -91,8 +92,11 @@ The weight is largest at the upper edge, the dark red lines. At small $q$ the co
 is a narrow line, $\omega\approx 4\pi t\,q$, set by the Fermi velocity. At
 $q=1/2$ it goes from zero up to $4t$, above the window of the plot, which
 stops at $3t$. The sign follows the frequency: red for $\omega>0$, blue for
-$\omega<0$. The horizontal stripes inside the continuum come from the k-mesh,
-`nk=40`.
+$\omega<0$. The k-mesh is converged: with `nk=801` instead of 401 the map
+changes by less than $0.01$, for a maximum of $3.7$. The width of the edges
+is the broadening `delta=0.05`. A k-mesh that is too coarse for this
+broadening gives horizontal stripes inside the continuum, so when you make
+`delta` smaller, make `nk` larger too. The map takes about 20 seconds.
 
 ??? example "Code of this figure (documentation/figures/charge_map.py)"
 
@@ -120,35 +124,47 @@ $$
 } ,
 $$
 
-where the perturbation couples to $B$ and we measure $A$. Taking $A=B=S_z$
-gives the longitudinal spin susceptibility of the chain:
+where the perturbation couples to $B$ and we measure $A$. Taking $A=B=S_x$
+gives the transverse spin susceptibility. We put the chain in a Zeeman field
+along $z$, so that the spin and the charge responses are different:
 
 ```python
 from pyqula import geometry
 import numpy as np
 g = geometry.chain()
 h = g.get_hamiltonian(has_spin=True)
-sz = h.get_operator("sz") # any of the operators from the "Operators" section
-(es,chi) = h.get_chi(A=sz,B=sz,energies=np.linspace(-2.,2.,100),nk=40,delta=0.1)
+h.add_zeeman([0.,0.,0.5]) # Zeeman field along z, splits the bands by 1.0
+sx = h.get_operator("sx") # any of the operators from the "Operators" section
+es = np.linspace(0.,2.,401)
+(es,chi) = h.get_chi(A=sx,B=sx,q=[0.02,0.,0.],energies=es,nk=2001,delta=0.02)
 ```
 
 By default $A=B$ is the identity, which gives the charge response above. Any
 operator of the [Operators](operators.md) page (spin, valley, sublattice,
 position, Nambu) can be used, which gives the corresponding susceptibility.
-Note that the operator `"sz"` is the Pauli matrix $\sigma_z$, without the
-factor $1/2$, so for a spin-degenerate Hamiltonian without interactions the
-$S_z$ response above is equal to the charge response.
+Note that the operator `"sx"` is the Pauli matrix $\sigma_x$, without the
+factor $1/2$. The operator `"sz"` would not show anything new here: it does
+not flip the spin, so with the field along $z$ its response is exactly the
+charge response.
 
-![Real and imaginary part of the local spin response of the chain against frequency, with the charge response on top.](img/charge_operator.png#only-light)
-![Real and imaginary part of the local spin response of the chain against frequency, with the charge response on top.](img/charge_operator-dark.png#only-dark)
+![Imaginary part of the transverse spin response and of the charge response of the chain in a Zeeman field, at one momentum transfer, against frequency.](img/charge_operator.png#only-light)
+![Imaginary part of the transverse spin response and of the charge response of the chain in a Zeeman field, at one momentum transfer, against frequency.](img/charge_operator-dark.png#only-dark)
 
-Without `q`, the response is averaged over the momentum transfers of the
-k-mesh, so this is the local response of one site, not the $q=0$ response
-of the section above. Its static value is $\mathrm{Re}\,\chi(0)=-0.495$.
-The imaginary part is odd in $\omega$ and grows with $|\omega|$ inside the
-band. The dashed lines are `h.get_chi()` without operators, the charge
-response, and they lie exactly on the $S_z$ curves. The wiggles come from
-the k-mesh, `nk=40`.
+The field moves the two spin bands apart in energy by $1.0t$,
+so flipping a spin costs the Zeeman splitting $1.0t$. The charge response,
+in orange, does not flip the spin. An electron goes from $k$ to $k+q$ in the
+same band, which costs the Fermi velocity times $q$, so there is one line at
+$0.245t$. The spin response, in blue, has nothing there. A $S_x$ perturbation
+moves an electron from one spin band to the other, so it costs the Zeeman
+splitting plus or minus the Fermi velocity times $q$, and there are two lines, at
+$0.75t$ and $1.245t$, one for the electrons that move to the right and one
+for those that move to the left. At $q=0$ the two lines merge into one at
+exactly $1.0t$: this is the precession of the spins in the field, the line
+that electron spin resonance measures. The lines are sharp because at small
+$q$ all the electron-hole pairs at this $q$ have about the same energy. The
+k-mesh is converged: with `nk=4001` the positions and the heights of the
+lines do not change. A finer `delta` makes the lines narrower and higher, and
+then `nk` has to grow with it.
 
 ??? example "Code of this figure (documentation/figures/charge_operator.py)"
 

@@ -4,10 +4,10 @@ from pyqula import geometry
 g = geometry.chain().get_supercell(4,store_primal=True) # supercell of a chain
 h = g.get_hamiltonian(has_spin=False,non_hermitian=True) # non-Hermitian Hamiltonian
 h.add_onsite(lambda r: -0.3j*(1.+np.cos(np.pi*r[0]/2.))) # modulated loss
-kpath = g.get_unfolded_kpath(nk=100) # primitive k-path, in supercell coordinates
+kpath = g.get_unfolded_kpath(nk=400) # primitive k-path, in supercell coordinates
 (k,e,d) = h.get_kdos_bands(operator="unfold",kpath=kpath,
         biorthogonal=True) # unfolded Green's-function spectral function
-es = np.linspace(-3.,3.,601) # a finer energy grid than the default, for the figure
+es = np.linspace(-3.,3.,1201) # a finer energy grid than the default, for the figure
 (k,e,d) = h.get_kdos_bands(operator="unfold",kpath=kpath,energies=es,biorthogonal=True)
 (k0,e0,d0) = h.get_kdos_bands(operator="unfold",kpath=kpath,energies=es) # the default one
 

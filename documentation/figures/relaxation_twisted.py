@@ -7,9 +7,9 @@ from pyqula.graphenetk.hamiltonian import GrapheneHamiltonian
 g0 = specialgeometry.twisted_bilayer(m0=15) # ~2 degree twist
 g = GrapheneGeometry(g0).relax() # AA area shrinks, AB/BA domains grow
 h = GrapheneHamiltonian(g)
-(k,e) = h.get_bands(num_bands=20,nk=40) # 40 k-points, to keep it short
+(k,e) = h.get_bands(num_bands=20)
 h0 = GrapheneHamiltonian(GrapheneGeometry(g0)) # the rigid lattice, as a reference
-(k0,e0) = h0.get_bands(num_bands=20,nk=40)
+(k0,e0) = h0.get_bands(num_bands=20)
 
 u = g.r - g0.r # in-plane displacement of each atom
 top = g0.r[:,2] > 0 # atoms of the top layer
@@ -27,13 +27,13 @@ def draw(ax, c):
     L = 1.1*np.linalg.norm(g0.a1)
     ax[0].set_xlim(-L, L) ; ax[0].set_ylim(-L, L) ; ax[0].set_aspect("equal")
     ax[0].set_xlabel("$x$") ; ax[0].set_ylabel("$y$")
-    ax[1].scatter(k0, e0, s=8, color=c.ink2, label="rigid")
-    ax[1].scatter(k, e, s=8, color=c.orange, label="relaxed")
+    ax[1].scatter(k0, e0, s=2, color=c.ink2, lw=0, label="rigid")
+    ax[1].scatter(k, e, s=2, color=c.orange, lw=0, label="relaxed")
     ticks = np.array([0, 1/3, 1/2, 2/3, 1])*max(k) # the path goes through K, M and K'
     ax[1].set_xticks(ticks, [r"$\Gamma$", "K", "M", "K'", r"$\Gamma$"])
     ax[1].set_xlim(0, max(k))
     ax[1].set_ylabel("energy [$t$]")
     ax[1].legend(loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2,
-                 markerscale=2)
+                 markerscale=5)
 
 style.save(draw, "relaxation_twisted", npanels=2)

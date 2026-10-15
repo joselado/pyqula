@@ -2,19 +2,20 @@ import numpy as np
 import style
 from pyqula import geometry
 from pyqula.meanfield import VJinteraction
-nk = 6                                  # the SCF and the magnon share this mesh
+nk = 24                                 # the SCF and the magnon share this mesh
 g = geometry.honeycomb_lattice()
 scf = VJinteraction(g.get_hamiltonian(),U=3.0,V1=0.5,filling=0.5,
-                     mf="antiferro",nk=nk,maxerror=1e-10)
+                     mf="antiferro",nk=nk,maxerror=1e-8)
 hmf = scf.hamiltonian
-print(hmf.get_goldstone_residual(nk=nk))          # 2e-10: the mode is exact
-qs,es = hmf.get_magnon_bands(method="tdhf",nk=nk,nq=20,n=2)
-x = (qs+1)/20 # position along the path, from Gamma through K, M, K to Gamma
-E = np.sort(es.real.reshape(20,2), axis=1) # two branches at each q
+print(hmf.get_goldstone_residual(nk=nk))          # 3e-8: zero to the SCF tolerance
+qs,es = hmf.get_magnon_bands(method="tdhf",nk=nk,nq=90,n=2)
+x = (np.arange(90)+1)/90 # position along the path, from Gamma through K, M, K' to Gamma
+E = np.sort(es.real.reshape(90,2), axis=1) # two branches at each q
+print(E[[0,29,44,89]]) # first point, K, M and Gamma
 
 def draw(ax, c):
-    ax.plot(x[::2], E[:,0], "o-", color=c.blue, label="lowest mode")
-    ax.plot(x[::2], E[:,1], "o-", color=c.orange, label="second mode")
+    ax.plot(x, E[:,0], "o-", ms=3, color=c.blue, label="lowest mode")
+    ax.plot(x, E[:,1], "o-", ms=3, color=c.orange, label="second mode")
     ax.set_xticks([1/3, 1/2, 2/3, 1], ["K", "M", "K'", r"$\Gamma$"])
     ax.set_xlim(0, 1.02)
     ax.set_ylim(0, None)

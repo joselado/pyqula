@@ -113,17 +113,27 @@ $\langle\Psi|A|\Psi\rangle$ times $|\Psi(n)|^2$, as `mode="arpack"` above.
 ![Local density of states of the zigzag ribbon at zero energy in real space, and resolved in position across the ribbon and energy.](img/ldos_zigzag.png#only-light)
 ![Local density of states of the zigzag ribbon at zero energy in real space, and resolved in position across the ribbon and energy.](img/ldos_zigzag-dark.png#only-dark)
 
-On the left, the map at zero energy with `projection="TBRS"`, with the
-ribbon along the vertical axis. Lengths are in units of the first-neighbor
+In both panels the position across the ribbon is the vertical axis. On the
+left, the map at zero energy with `projection="TBRS"`, with the ribbon along
+the horizontal axis. We take `nrep=12`, twelve unit cells of the ribbon, so
+that the map is not a thin strip. Lengths are in units of the first-neighbor
 distance $a$. The weight is on the outermost sites of the two edges, and it
 decays into the ribbon on every second site, on one sublattice only. On the
-right, the maps of `h.get_multildos()` at 100 energies, one
-row per energy, as a stack of STM maps. Here we use the default projection,
-one value per site, instead of `projection="atomic"`, so that each column is
-one site. You see a bright line at $\omega=0$ on the edge sites, with the
-value $2.8$, against $0.64$ on the next site of the same sublattice and zero
-on the other sublattice. Away from zero energy the weight spreads over the
-whole ribbon, with the bulk van Hove peaks at $\pm t$.
+right, the maps of `h.get_multildos()` at 401 energies, one column per
+energy, as a stack of STM maps. Here we use the default projection, one value
+per site, instead of `projection="atomic"`, so that each row is one site. We
+take `nk=1000` and `delta=0.05`. With the default `nk=100` and
+`delta=0.01` the map is speckled, for two reasons. The first is the k-mesh:
+the broadening is smaller than the energy step between neighboring k-points.
+At `nk=1000` this is gone, and `nk=3000` changes the map by less than
+$10^{-5}$. The second is physical: the ribbon has 40 sites in its unit cell,
+so 40 subbands, and the edge of each subband gives a sharp peak in energy.
+The larger `delta=0.05` smooths them, as the finite energy resolution of an
+STM does. You see a bright line at $\omega=0$ on the edge sites,
+with the value $2.8$, against $0.60$ on the next site of the same sublattice
+and almost zero on the other sublattice. Away from zero energy the weight
+spreads over the whole ribbon, with the bulk van Hove peaks at $\pm t$. The
+alternation from one row to the next is the sublattice.
 
 ??? example "Code of this figure (documentation/figures/ldos_zigzag.py)"
 

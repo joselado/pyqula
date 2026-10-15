@@ -185,23 +185,28 @@ from pyqula import geometry
 g = geometry.honeycomb_lattice()
 h = g.get_hamiltonian(has_spin=True)
 h.add_sublattice_imbalance(.4)
-(es,ds) = h.get_dos(operator="sublattice",nk=40,delta=5e-2)
+(es,ds) = h.get_dos(operator="sublattice",nk=200,delta=5e-2)
 ```
 
 ![Density of states of the triangular lattice, of the chain with Rashba coupling in two modes, and the sublattice-projected density of states of the honeycomb lattice.](img/bands_dos.png#only-light)
 ![Density of states of the triangular lattice, of the chain with Rashba coupling in two modes, and the sublattice-projected density of states of the honeycomb lattice.](img/bands_dos-dark.png#only-dark)
 
 In the left panel, the density of states of the triangular lattice starts at
-$-3t$ and has its van Hove peak at $-2t$, with a height of $0.8$. The window
+$-3t$ and has its van Hove peak at $-2t$, with a height of $0.77$. The window
 stops at $4t$, so the integral over the window is $1.78$ and not $2$: the
-states between $4t$ and $6t$ are missing. The small ripples on the right of
-the peak come from the finite default k-mesh, and a larger `nk` removes them.
-In the middle panel, the ED (line) and the Green's function (dots) results
+states between $4t$ and $6t$ are missing. For this panel we take `nk=400` and
+`delta=0.05`, the same broadening as the default `nk=100`. With the default
+k-mesh the curve has small regular ripples on the right of the peak. Each
+ripple is a group of k-points of the mesh, which the broadening does not
+merge. At `nk=400` they are gone, and `nk=800` changes the curve by less than
+$10^{-4}$. In the middle panel, the ED (line) and the Green's function (dots) results
 fall on top of each other at every energy. In the right panel, the
 sublattice-projected density of states is zero for $|\omega|<0.4$, the gap
-of the sublattice imbalance. It is negative below the gap and positive above
-it, with its largest values at $\pm 1.08$, the van Hove peaks
-$\pm\sqrt{t^2+0.4^2}$ moved by the gap.
+of the sublattice imbalance, up to the tails of the broadening. It is
+negative below the gap and positive above it, with its largest values,
+$\pm0.52$, at $\pm 1.08$, the van Hove peaks $\pm\sqrt{t^2+0.4^2}$ moved by
+the gap. Here `nk=200` is converged: `nk=400` changes the curve by less than
+$10^{-5}$.
 
 ??? example "Code of this figure (documentation/figures/bands_dos.py)"
 
