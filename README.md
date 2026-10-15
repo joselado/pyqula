@@ -1,6 +1,8 @@
 # SUMMARY #
-This is a **Py**thon library to compute **qu**antum-**la**ttice 
-tight-binding models in different dimensionalities.
+pyqula is a **Py**thon library for **qu**antum **la**ttice tight-binding
+models, in zero to three dimensions. With it we compute band structures,
+spectral functions, self-consistent mean-field states, superconductivity,
+topological invariants, response functions and quantum transport.
 
 
 # INSTALLATION #
@@ -10,13 +12,13 @@ pip install --upgrade pyqula
 ```
 
 ## Manual installation (most recent version) ##
-Clone the Github repository with
+To use the newest version, clone the GitHub repository
 
 ```bash
 git clone https://github.com/joselado/pyqula
 ```
 
-and add the "pyqula/src" path to your Python script with
+and add its `src` folder to the Python path of your script
 
 ```python
 import sys
@@ -24,8 +26,8 @@ sys.path.append(PATH_TO_PYQULA+"/src")
 ```
 
 ## Optional dependencies ##
-A few features depend on heavier, optional backends that are not installed by
-default. Install them with the relevant extra:
+A few features need libraries that are not installed by default. They come
+with these extras:
 ```bash
 pip install pyqula[mpi]        # MPI-parallel routines (mpi4py)
 pip install pyqula[dataframe]  # pandas-based data export
@@ -34,8 +36,7 @@ pip install pyqula[all]        # all of the above
 ```
 
 ## Recommended library versions
-These are the minimum/recommended versions of several required libraries
-(also enforced in `pyproject.toml`)
+pyqula needs at least these versions, and `pyproject.toml` enforces them:
 - numpy >= 2.1
 - scipy >= 1.13.1
 - matplotlib >= 3.10.0
@@ -55,19 +56,18 @@ runnable code, and a reference of the `Geometry` and `Hamiltonian` methods and
 their arguments. The whole guide is also available as one
 [PDF](https://joselado.github.io/pyqula/user_guide.pdf).
 
-`examples/` holds several hundred runnable scripts organized by dimensionality
-(`0d/ 1d/ 2d/ 3d/`, plus `transport/`, `embedding/`, `wannier/`,
-`classicalspin/`, `latticegas/`).
+`examples/` contains several hundred runnable scripts, ordered by dimension
+(`0d/ 1d/ 2d/ 3d/`) and by topic (`transport/`, `embedding/`, `wannier/`,
+`classicalspin/`, `latticegas/` and others).
 
 
 # Tutorials #
-Jupyter notebooks with tutorials can be found in the links below
+These Jupyter notebooks are tutorials that use pyqula.
 
 In this repository:
-- [`jupyter-notebooks/`](jupyter-notebooks): eleven step-by-step notebooks,
-  building up from lattice structure and band structure through
-  self-consistency, Chern insulators, Jackiw-Rebbi solitons and quantum-dot
-  modes
+- [`jupyter-notebooks/`](jupyter-notebooks): eleven notebooks, step by step,
+  from the lattice and its band structure to self-consistent calculations,
+  Chern insulators, Jackiw-Rebbi solitons and the modes of a quantum dot
 - [`jupyter-notebooks/functionalities/`](jupyter-notebooks/functionalities):
   one executed notebook for each entry of the FUNCTIONALITIES list below
 
@@ -190,7 +190,8 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Correlators, structure factors and thermodynamics from sampling [[notebook]](jupyter-notebooks/functionalities/classical_spin_models_monte_carlo/05_correlators_thermodynamics.ipynb)
 
 # EXAMPLES #
-A variety of examples can be found in pyqula/examples. Short examples are shown below
+Some short examples are below, each with the figure it gives. Many more are
+in `examples/`.
 
 
 ## Band structure of a Kagome lattice
