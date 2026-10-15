@@ -1,6 +1,7 @@
 import style
 from pyqula import geometry
 import numpy as np
+np.random.seed(1) # the same random vectors in every run
 g = geometry.chain()
 g = g.get_supercell(3000) # a big supercell
 g.dimensionality = 0

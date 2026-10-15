@@ -259,9 +259,10 @@ already reached once.
   it (the square-lattice M point, the atomic LDOS normalization, the pair
   magnons at Gamma and their infinity crossings, the mean-field convergence
   error, the scipy solvers, the whole-zone Berry curvature window and the
-  path method, the kappa sign guard), the S^zS^z chain that needs a small T,
-  and the few items still open (a T=0 magnetization count on a degenerate
-  Fermi level, the MAR cost sentence, two README images).
+  path method, the kappa sign guard, the temperature at which a mean-field
+  Hamiltonian is read), and the S^zS^z chain that needs a small T; nothing
+  is open except the slow approach of the broadened Chern density in
+  energy, which is physics rather than a defect.
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

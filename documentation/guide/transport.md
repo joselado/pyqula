@@ -352,10 +352,14 @@ This is one of the most expensive calculations in the guide. A call first
 builds the self-energy of the leads up to the largest voltage, in about ten
 seconds, and then each voltage takes from a fraction of a second to a few
 seconds, so give all the voltages in one call: the 40 voltages of the
-snippet take about two minutes. The reason is physical: the number of
-Andreev reflections that matter is about $2\Delta/eV$, and each one needs a
-Floquet sideband, so small voltages need many sidebands. The sidebands are
-added until $I_{dc}$ converges. If a voltage is very small, the number of
+snippet take about two minutes. The number of Andreev reflections that
+matter is about $2\Delta/eV$, and each one needs a Floquet sideband, so small
+voltages need more sidebands. The sidebands are added until $I_{dc}$
+converges. In the snippet this gives `nmax=14` above $0.5\Delta$, and the cap
+`nmax_max=40` at $0.13\Delta$ and below. This does not make small voltages slower,
+because the energy integral runs only from $0$ to $eV$, and a short window
+needs fewer energy points. In the snippet every voltage costs less than one
+second, at low and at high voltage. If a voltage is very small, the number of
 sidebands can reach `nmax_max`, and a warning says that this point is not
 converged. Starting the voltages a bit higher is the cheap solution; a larger
 `nmax_max` is the expensive one.

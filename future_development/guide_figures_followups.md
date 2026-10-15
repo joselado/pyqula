@@ -54,26 +54,25 @@ work. This file keeps what was fixed, what was measured, and what is still open.
   T=1e-7 a tiny imaginary hopping fills one and empties the other, which the
   next iteration reverses. `T=0.01` converges it; `exchange.md` says so. Test:
   `tests/scf/test_szsz_polarized_chain.py`.
+- Last round: observables read a mean-field Hamiltonian at the temperature
+  its loop converged at, stored as `h.temperature` next to `h.nk`
+  (`densitymatrix.default_smearing`, and `get_filling` with `T=None`). The
+  polarized S^zS^z chain at T=0.01 read a moment of -0.4024 (nk=60) and
+  -0.4100 (nk=100) instead of -0.4, because its pair of states at the Fermi
+  level sits about 1e-6 below zero and the default smearing of 1e-6 counted
+  both as full. A Hamiltonian that is not the result of a mean field has
+  temperature 0 and reads as before. The MAR cost sentence of transport.md
+  was rewritten from timings (every voltage costs under a second; small
+  voltages need more sidebands but integrate over a shorter window), the
+  outdated omega=0 comment of notebook 10 was fixed and the notebook
+  re-executed (same figure), and the two README images of the Berry
+  curvature were redrawn with the whole-zone window.
 
 ## Open
 
-- `h.get_magnetization()` on the converged polarized chain above reads -0.4024
-  at nk=60 and -0.4100 at nk=100 while the self-consistent density matrix gives
-  exactly 0.4: with the Fermi level on the degenerate pair, a count at T=0
-  takes one electron too many (1/nk).
-- `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/10_rpa_collective_modes.ipynb` has a code comment "omega=0 excluded: trivial
-  root of every kernel" that is out of date: the pole scans now add omega=0
-  themselves (for the Goldstone mode) and no spurious root appears there. Its
-  figure plots only |gamma|<0.05 poles, so it should not move; not re-executed.
-- transport.md says small voltages are the expensive ones in the MAR
-  calculation because they need many sidebands, but with the shared lead
-  self-energy built once, `dc_current` took 0.05 s at eV=0.05 against 1.5 s at
-  0.15. Not checked further.
 - The Berry curvature density in energy (quantum-geometry page) reaches the
   Chern number only slowly as delta goes down (plateau 1.37, 1.62 and 1.79 at
   delta=0.1, 0.05 and 0.02). This is the Lorentzian tail of a broadened
   Green's function, a deficit of roughly 2.7 delta ln(1/delta), not a defect
   of the formula; the contour-integrated Green's-function Chern number is the
-  exact limit.
-- The README images `images/berry_curvature.png` and `images/2DTSC.png` were
-  drawn with the old square window of the Berry curvature map.
+  exact limit. Nothing to fix unless a sharper density in energy is wanted.

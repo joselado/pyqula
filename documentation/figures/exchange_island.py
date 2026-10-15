@@ -1,6 +1,7 @@
 import numpy as np
 import style
 from pyqula import geometry
+np.random.seed(1) # the same random guess in every run
 g = geometry.honeycomb_lattice().get_supercell(12) # a honeycomb island
 g.dimensionality = 0 # make it finite
 h = g.get_hamiltonian(has_spin=True,is_sparse=True) # keep the matrices sparse
