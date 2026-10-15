@@ -35,6 +35,8 @@ def test_the_map_does_not_depend_on_the_k_mesh(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
     args = dict(e=0.4, delta=0.3, projection="atomic", **GRID)
-    coarse = h.get_ldos(nk=10, **args)[2]
-    fine = h.get_ldos(nk=20, **args)[2]
+    # nk=10 is not converged at this delta (the tight-binding map moves by
+    # 4% from nk=10 to nk=20), while nk=20 and nk=40 agree to 0.2%
+    coarse = h.get_ldos(nk=20, **args)[2]
+    fine = h.get_ldos(nk=40, **args)[2]
     assert np.max(np.abs(coarse-fine)) < 0.02*np.max(np.abs(fine))

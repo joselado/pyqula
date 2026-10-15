@@ -70,6 +70,7 @@ def profile_generator(h,delta=0.05,nrep=1,nk=20,dl=None,mode="LDOS",
     # now compute the real-space wavefunctions including the Bloch phase
     ds = get_real_space_density_batch(lodict,h.geometry,vs,ks,
                               has_spin=h.has_spin) # (nwf,ngrid) array
+    ds = normalize_per_state(ds,vs,x,y,h.geometry,nrep) # weight of each state
     from ..klist import kmesh
     nkp = len(kmesh(h.dimensionality,nk=nk)) # kpoints the mesh has
     if mode=="LDOS": # LDOS mode
@@ -165,6 +166,36 @@ def get_real_space_density_batch(lodict,g,vs,ks,has_spin=False):
         return project(wup) + project(wdn)
 
 
+
+
+def grid_cell_area(x,y):
+    """Area of one cell of the rectangular grid returned by get_grids"""
+    xs = np.unique(x) ; ys = np.unique(y)
+    if len(xs)<2 or len(ys)<2:
+        raise ValueError("the real-space grid of the atomic LDOS needs at "
+                "least two points in each direction; lower dr")
+    return (xs[1]-xs[0])*(ys[1]-ys[0])
+
+
+def normalize_per_state(ds,vs,x,y,g,nrep):
+    """Normalize the real-space density of every eigenstate on the grid.
+
+    The atomic orbitals are not normalized and the orbitals of neighboring
+    sites overlap, so |Psi(r)|^2 carries the cross terms between them and a
+    bonding state integrates to much more than an antibonding one. Each row
+    of ds is rescaled so that its integral over the grid (sum times the
+    area of a grid cell) is the weight the state has in the tight-binding
+    map, |v|^2 per unit cell times the number of unit cells the grid
+    covers. The shape of each state is unchanged, and the maps at
+    different energies have the same normalization as projection="TB"."""
+    area = grid_cell_area(x,y) # area of one cell of the grid
+    ncells = len(g.multireplicas(nrep-1))/len(g.r) # unit cells on the grid
+    weights = np.sum(np.abs(np.array(vs))**2,axis=1)*ncells # target weights
+    integrals = np.sum(ds,axis=1)*area # integral of each state on the grid
+    scale = np.zeros(len(integrals))
+    nonzero = integrals>0.
+    scale[nonzero] = weights[nonzero]/integrals[nonzero]
+    return ds*scale[:,None]
 
 
 def get_grids(g,nrep=1,dr=0.1,deltax=1.0,deltay=1.0):
