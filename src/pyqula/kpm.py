@@ -300,7 +300,7 @@ def full_trace_A(m_in,n=200,A=None,**kwargs):
 
 
 def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=None,
-    x=None,kernel="jackson"):
+    x=None,kernel="jackson",lorentz_lambda=3.):
     """Green's function G^R_ij(E) = <i|(E + i0 - m)^-1|j> between two sites
     from a Chebyshev expansion, real part included (Weisse et al., Rev.
     Mod. Phys. 78, 275 (2006), arXiv:cond-mat/0504627, Eq. (140)), with no
@@ -316,10 +316,13 @@ def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=None,
     (the energies) is given, and the whole spectrum must lie inside
     [-scale,scale]. kernel: "jackson" broadens each pole into a nearly
     Gaussian peak of half width kpmtk.kernels.jackson_hwhm(scale,npol);
-    "lorentz" into a Lorentzian of half width 3*scale/(2*npol), the
-    G^R(E + i delta) of a matrix inversion with that delta (Weisse et al.,
-    Sec. II.C.4), up to 10% of the height of a pole, which the truncation
-    of its exp(-3n/N) at N=2*npol moments leaves. write=True also writes
+    "lorentz" into a Lorentzian of half width
+    lorentz_lambda*scale/(2*npol), the G^R(E + i delta) of a matrix
+    inversion with that delta (Weisse et al., Sec. II.C.4), up to the
+    truncation of its exp(-lorentz_lambda n/N) at N=2*npol moments, about
+    10% of the height of a pole at the default lorentz_lambda=3. At a fixed
+    delta a larger lorentz_lambda needs npol=lorentz_lambda*scale/(2*delta)
+    and shrinks that error. write=True also writes
     the three columns to CORRELATOR_KPM.OUT"""
     write = filewrite.resolve(write,True) # the call, else the global switch
     if npol is None: npol = ne
@@ -328,7 +331,8 @@ def correlator0d(m_in,i=0,j=0,scale=10.,npol=None,ne=500,write=None,
     if x is None: xs = np.linspace(-1.0,1.0,ne,endpoint=True)*0.99 # energies
     else: xs = x/scale # use from input
     # generate_green_profile gives conj(G^R_ij)/pi in units of the scale
-    ys = generate_green_profile(mus,xs,kernel=kernel)/scale*np.pi
+    ys = generate_green_profile(mus,xs,kernel=kernel,
+            lorentz_lambda=lorentz_lambda)/scale*np.pi
     # the same columns as the arrays returned, and as the CORRELATOR.OUT
     # of correlator.correlator0d; it used to write (E, Im G^R, Re G^R)
     if write:

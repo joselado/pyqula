@@ -231,11 +231,12 @@ def test_vjinteraction_v_only_on_nambu_matches_vinteraction():
     consistent between a primitive cell and a supercell of the same
     system (see test_vjinteraction_nambu_supercell_consistency).
 
-    Seeded: from mf="random" the VJinteraction loop does not converge
-    within maxite from every random start, and unseeded the start depends
-    on how many random numbers the tests before this one drew, so running
-    tests/scf as a whole failed here while the file alone passed (also on
-    the code before 2026-09-27; seeds 0-7 all converge to the same gap)."""
+    From mf="random" at the default mix=0.1 the VJinteraction loop needs
+    523 to 998 iterations (40 seeds, all to the same state), against the
+    maxite=1000 limit, so whether it converged depended on how many random
+    numbers the tests before this one drew. At mix=0.5 the same 40 seeds
+    converge in 110 to 196 iterations to energies within 7e-7 of each other,
+    so the loop runs at mix=0.5; the seed only keeps the run reproducible."""
     np.random.seed(0)
     g = geometry.bichain()
     h0 = g.get_hamiltonian()
@@ -250,7 +251,7 @@ def test_vjinteraction_v_only_on_nambu_matches_vinteraction():
     h2.add_exchange([0.3, 0., 0.])
     h2.turn_nambu()
     scf_vj = meanfield.VJinteraction(h2, V1=-2.0, filling=0.3, mf="random",
-            nk=20, maxerror=MAXERROR)
+            nk=20, maxerror=MAXERROR, mix=0.5)
 
     assert scf_v.converged and scf_vj.converged
     assert np.isclose(scf_v.hamiltonian.get_gap(), scf_vj.hamiltonian.get_gap(),

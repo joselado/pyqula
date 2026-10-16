@@ -19,7 +19,7 @@ h2.add_swave(delta)
 
 vs = np.linspace(0.02,1.5,40)*delta # bias voltages
 for T in [0.1,0.5,1.0]: # loop over normal transparencies
-    HT = heterostructures.build(h1,h2) # create the SNS junction
+    HT = heterostructures.build(h1,h2) # junction between the two superconductors
     HT.set_coupling(T) # set the normal transparency of the junction
     Is = HT.get_iv_curve(vs) # multiple-Andreev-reflection dc current
 

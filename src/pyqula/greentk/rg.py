@@ -253,6 +253,16 @@ def green_renormalization_python(intra,inter,energy=0.0,nite=None,
       alpha = alpha_sol[:,n:]  # new alpha
       beta = beta_sol[:,:n]  # new beta
       ite += 1
+      # a decimation that overflowed never meets the threshold below (NaN <
+      # error is always False), so without this it loops forever; raising
+      # lets callers such as transporttk.smatrix escalate the broadening,
+      # and matches the numba twin, whose solve refuses a non-finite matrix
+      if not (np.all(np.isfinite(alpha)) and np.all(np.isfinite(beta))):
+        raise ValueError("the decimation of this lead diverged (non-finite "
+            "couplings after %d iterations) at energy %g and delta %g; the "
+            "lead has a state essentially at that energy, use a larger "
+            "delta, or evaluate away from that energy."
+            %(ite,np.real(energy),delta))
       # stop conditions
       if not nite is None:
         if ite > nite:  break

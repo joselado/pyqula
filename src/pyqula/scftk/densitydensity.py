@@ -499,7 +499,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
     """Perform the SCF mean field
 
     mix: the linear-mixing factor. solver="plain" and solver="linear"
-    (scipy's linearmixing, the same step) mix with it (0.1 when not
+    (scipy's linearmixing, the same step) mix with it (0.3 when not
     given), and solver="broyden_mixing" uses it as the mixing factor
     of its linear warm-up phase (broyden_mixing_solve's lam, whose own
     default applies when not given). The other scipy solvers ("krylov",
@@ -591,7 +591,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
       scf.tol = maxerror # maximum error
       return scf
     if solver=="plain":
-      if mix is None: mix = 0.1 # default linear mixing
+      if mix is None: mix = 0.3 # default linear mixing
       do_scf = True
 #      from .mixing import Mixing
 #      Mxg = Mixing() # initialize
@@ -662,7 +662,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
             # the fixed point and the error grew until it overflowed.
             # alpha=-mix makes the step x + mix*(g(x)-x), the plain loop
             from scipy.optimize import linearmixing
-            if mix is None: mix = 0.1 # as the plain loop
+            if mix is None: mix = 0.3 # as the plain loop
             x = linearmixing(fsol,x0,alpha=-mix,f_tol=maxerror*100)
         elif solver=="broyden_mixing":
             # regularized, limited-memory multisecant Broyden mixing
@@ -736,7 +736,7 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     if is_iterable(filling): # see VJinteraction's docstring
         raise NotImplementedError("A per-site (array) filling is only "
                 "supported by VJinteraction (h.get_mean_field_hamiltonian "
-                "with integration=\"ed\") for a spinful Hamiltonian; "
+                "with integration=\"ed\" or \"kpm\") for a spinful Hamiltonian; "
                 "this density-density engine (Vinteraction, hubbard, SzSz, "
                 "SxSx, SySy) "
                 "takes a single scalar filling, got %r" % (filling,))

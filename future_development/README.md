@@ -146,9 +146,9 @@ already reached once.
   to a ball of that many hops, with the error measured to fall exponentially
   in a gapped state, so that an iteration at $10^5$ sites takes half a
   minute on six desktop cores in 1.2 GB (two minutes in 2.3 GB with Nambu).
-  Left open: an a-posteriori estimate of the truncation error, the per-site
-  filling with `integration="kpm"`, and the doubling on the card in single
-  precision. Its last section is what else the recursion makes linear in
+  Left open: an a-posteriori estimate of the truncation error and the
+  doubling on the card in single precision (the per-site filling with
+  `integration="kpm"` was closed on 16 October 2026). Its last section is what else the recursion makes linear in
   the number of sites: the LDOS map of every site (`mode="KPM"` of
   `h.get_ldos()` and `h.get_multildos()`), built and exact on the light
   cone of the expansion, with the error measured below it, and the three
@@ -188,8 +188,10 @@ already reached once.
   twice the RPA's, half-strength shells in the charge RPA, a non-Hermitian
   Wannier Hamiltonian, a local-probe S-matrix floor, a p-wave spin current
   that was mesh noise, among others) and the notebooks re-run on converged,
-  reference-comparable cases. What it leaves open: a decimation that loops on
-  NaN, the RKKY routine's broadening, and a few conventions.
+  reference-comparable cases. What it leaves open: the RKKY routine's
+  broadening and a few conventions; the p-wave guess, the default mixing
+  (now 0.3), the decimation that looped on NaN, the Lorentz kernel's fixed
+  $\lambda$ and the Nambu random starts were closed on 16 October 2026.
 
 - [`orbital_field_in_a_superconductor.md`](orbital_field_in_a_superconductor.md)
   -- why `add_peierls` refuses a Hamiltonian that already carries pairing

@@ -62,3 +62,16 @@ def test_simultaneous_matches_accumulate_with_directions(nk):
     s = h.get_density_matrix(dm_mode="simultaneous", ds=ds, **kw)
     for d in a:
         assert np.max(np.abs(a[d] - s[d])) < 1e-12
+
+
+def test_simultaneous_refuses_an_accumulate_keyword_in_its_own_name():
+    """batch_size bounds the memory of dm_mode='accumulate' only. Passed
+    with dm_mode='simultaneous' it used to fail inside
+    full_dm_simultaneous, naming neither full_dm nor the mode."""
+    import pytest
+    from pyqula import geometry, densitymatrix
+    h = geometry.honeycomb_lattice().get_hamiltonian()
+    with pytest.raises(TypeError, match="dm_mode='simultaneous'.*batch_size"):
+        densitymatrix.full_dm(h, dm_mode="simultaneous", batch_size=4, nk=4)
+    # the keywords it does take still go through
+    densitymatrix.full_dm(h, dm_mode="simultaneous", nk=4, fermi=0.1)

@@ -1537,8 +1537,8 @@ Optional arguments:
 - integration="ed": the density matrix of each iteration is computed by
   exact diagonalization. `"kpm"` uses a Chebyshev (KPM) expansion instead,
   for systems too large to diagonalize. With `is_sparse=True` in
-  `g.get_hamiltonian()` the memory grows linearly with the number of sites,
-  and this is the only way to use `"kpm"` with a Nambu Hamiltonian. With
+  `g.get_hamiltonian()` the memory grows linearly with the number of sites.
+  A Nambu Hamiltonian also works, sparse or dense, and a dense one comes back dense. With
   `"kpm"`: `scale` is the energy window (found automatically if not given;
   if given, it must contain the whole spectrum, or it raises `ValueError`),
   `npol` the number of Chebyshev moments, `ne` the number of energies in the
@@ -1574,7 +1574,7 @@ with one Lagrange multiplier (a local chemical potential) per site found in
 the same self-consistent loop. The converged potentials are in the `fermi`
 attribute of the result. If the mean field or the constraint does not
 converge, the method raises an error. Only for a normal (non-BdG) Hamiltonian with
-`integration="ed"` and `mu=None`. `SpinonHamiltonian` uses this to impose
+`mu=None`, with `integration="ed"` or `"kpm"`. `SpinonHamiltonian` uses this to impose
 exactly one fermion per site.
 
 ## SpinonHamiltonian(g)

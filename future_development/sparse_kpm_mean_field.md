@@ -537,8 +537,16 @@ Taken while the kernel and the truncation were built, the same day:
 - `scf.dm` of the sparse engine holds only the entries the loop read, as
   the dense KPM engine's does, and a Nambu one lacks the raw, unmapped
   entries the dense engine also computes and never reads.
-- The per-site (array) filling of `VJinteraction` is still refused with
-  `integration="kpm"`, sparse or dense.
+- The per-site (array) filling of `VJinteraction` with `integration="kpm"`,
+  closed on 16 October 2026 on both engines: the scheme of the ED branch,
+  the site-resolved $\lambda$ stepped once per iteration with the uniform
+  part from the lagged Fermi level, and the occupation read off the diagonal
+  of the KPM density matrix (the sparse engine asks for every diagonal entry
+  when the filling is an array). On the gapped two-site chain ($U=3$,
+  $J_1=0.5$, $T=0.05$, targets 0.3 and 0.7) the per-site potentials agree
+  with exact diagonalization to 1e-5, the total energy to 2e-8 on the
+  sparse engine and 2e-5 on the dense one, in 446 iterations against 278
+  (`tests/scf/test_vjinteraction_local_filling.py`).
 - An a-posteriori error estimate for the truncation radius, beyond comparing
   two radii.
 - With Nambu, the Fermi level of the electron-only Hamiltonian is still a

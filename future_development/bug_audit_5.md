@@ -941,10 +941,13 @@ run again on the last two commits.
   against exact diagonalization).
 - The sparse density-matrix routes called directly with `delta=0` and a level exactly at the Fermi energy;
   k-meshes with `nsuper` other than 1, and the jax route in single precision,
-  which `full_dm_accumulate` never requests; and whether
+  which `full_dm_accumulate` never requests. Whether
   `full_dm(dm_mode="simultaneous", batch_size=...)` refuses the forwarded
-  keyword with a clear message, since `full_dm_simultaneous` has no such
-  parameter.
+  keyword clearly was checked on 16 October 2026: Python's own `TypeError`
+  named `full_dm_simultaneous`, which the caller never called, and not the
+  mode, so `full_dm` now refuses it in its own name, with the accepted
+  keywords read from the signature
+  (`tests/densitymatrix/test_simultaneous_kmesh.py`).
 - cRPA against an independent oracle, `nkW>nk` and the truncation of
   `ScreenedInteraction.get_dict`, the GPU screening path
   (`bsetk/screeningjax.py`), the exciton amplitudes, `exciton_bands` with

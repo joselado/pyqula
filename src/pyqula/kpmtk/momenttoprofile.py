@@ -10,11 +10,12 @@ from .kernels import jackson_kernel
 
 
 
-def generate_profile(mus,xs,kernel="jackson",**kwargs):
-    """ Uses the Chebychev expansion to create a certain profile"""
+def generate_profile(mus,xs,kernel="jackson",lorentz_lambda=3.,**kwargs):
+    """Uses the Chebychev expansion to create a certain profile.
+    lorentz_lambda is the lambda of kernel="lorentz", see lorentz_kernel"""
     # initialize polynomials
     if kernel=="jackson": mus = jackson_kernel(mus)
-    elif kernel=="lorentz": mus = lorentz_kernel(mus)
+    elif kernel=="lorentz": mus = lorentz_kernel(mus,lorentz_lambda)
     elif kernel=="fejer": mus = fejer_kernel(mus)
     else:
         raise ValueError("unknown kernel; the accepted ones are 'jackson', "
@@ -48,7 +49,8 @@ def generate_profile_jit(mus,xs):
 
 
 
-def generate_green_profile(mus,xs,kernel="jackson",**kwargs):
+def generate_green_profile(mus,xs,kernel="jackson",lorentz_lambda=3.,
+        **kwargs):
   """Green's function from the Chebyshev moments mus[n] = <j|T_n(m)|i> of
   kpmnumba.kpm_moments_ij, at the rescaled energies xs (Weisse et al., Rev.
   Mod. Phys. 78, 275 (2006), arXiv:cond-mat/0504627, Eq. (140)).
@@ -56,13 +58,14 @@ def generate_green_profile(mus,xs,kernel="jackson",**kwargs):
   Returns conj(G^R_ij(x))/pi, with G^R_ij(x) = <i|(x + i0 - m)^-1|j>, so
   that for i=j its imaginary part is the local DOS, positive.
   The conjugation comes from the moments being <j|T_n|i>, the conjugate
-  of <i|T_n|j>, together with the exp(+i n arccos x) of the expansion"""
+  of <i|T_n|j>, together with the exp(+i n arccos x) of the expansion.
+  lorentz_lambda is the lambda of kernel="lorentz", see lorentz_kernel"""
   # initialize polynomials
   tm = np.zeros(xs.shape) +1.
   t = xs.copy()
   ys = np.zeros(xs.shape,dtype=np.complex128) + mus[0]/2 # first term
   if kernel=="jackson": mus = jackson_kernel(mus)
-  elif kernel=="lorentz": mus = lorentz_kernel(mus)
+  elif kernel=="lorentz": mus = lorentz_kernel(mus,lorentz_lambda)
   elif kernel=="fejer": mus = fejer_kernel(mus)
   else:
       raise ValueError("unknown kernel; the accepted ones are 'jackson', "

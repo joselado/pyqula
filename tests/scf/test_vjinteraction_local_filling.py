@@ -161,6 +161,33 @@ def test_array_filling_converges_in_a_gapped_state():
     assert np.allclose(scf.local_occupation, filling, atol=1e-5)
 
 
+import pytest
+
+
+@pytest.mark.parametrize("sparse", [False, True])
+def test_array_filling_through_kpm_matches_exact_diagonalization(sparse):
+    """integration="kpm" used to refuse a per-site filling. It now takes
+    the ED branch's scheme, the site-resolved lam stepped once per
+    iteration with the uniform part from the lagged Fermi level and the
+    occupation read off the KPM density matrix, on both the dense and the
+    sparse engine. On the gapped chain above the per-site potentials agree
+    with exact diagonalization to the KPM resolution."""
+    g = geometry.chain().get_supercell(2)
+    filling = np.array([0.3, 0.7])
+    kw = dict(U=3.0, J1=0.5, mf="ferroZ", filling=filling, nk=20,
+            maxerror=1e-6, mix=0.3, maxite=1000, T=0.05)
+    np.random.seed(3)
+    ed = meanfield.VJinteraction(g.get_hamiltonian(has_spin=True), **kw)
+    h = g.get_hamiltonian(has_spin=True)
+    if sparse: h.turn_sparse()
+    np.random.seed(3)
+    kpm = meanfield.VJinteraction(h, integration="kpm", npol=400, **kw)
+    assert ed.converged and kpm.converged
+    assert np.allclose(kpm.local_occupation, filling, atol=1e-5)
+    assert np.max(np.abs(np.asarray(kpm.lam) - np.asarray(ed.lam))) < 1e-4
+    assert abs(kpm.total_energy - ed.total_energy) < 1e-4
+
+
 def test_array_filling_is_validated_before_any_scf_work():
     """A per-site filling needs one value per site, each a fraction in
     [0,1]; a wrong length used to surface as a numpy broadcast error after

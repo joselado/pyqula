@@ -70,6 +70,17 @@ def full_dm(h,T=None,dm_mode=dm_mode,delta=None,**kwargs):
     if dm_mode=="accumulate":
         return full_dm_accumulate(h,delta=T,**kwargs)
     elif dm_mode=="simultaneous":
+        # the accumulate-only keywords (batch_size, dense_fraction, ...)
+        # would otherwise fail inside full_dm_simultaneous, with a message
+        # that names neither full_dm nor the dm_mode that rules them out
+        import inspect
+        accepted = [p for p in inspect.signature(full_dm_simultaneous).parameters
+                    if p not in ("h","delta")]
+        extra = [k for k in kwargs if k not in accepted]
+        if extra:
+            raise TypeError("full_dm(dm_mode='simultaneous') does not take "
+                +", ".join(extra)+"; it accepts "+", ".join(accepted)
+                +", and the other keywords belong to dm_mode='accumulate'")
         return full_dm_simultaneous(h,delta=T,**kwargs)
     else:
         raise ValueError("unknown dm_mode; the density matrix accepts "

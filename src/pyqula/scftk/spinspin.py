@@ -283,7 +283,7 @@ def _rotate_dict(dd, vector, angle):
 
 def Jinteraction(h0, Jx1=0.0, Jx2=0.0, Jx3=0.0, Jy1=0.0, Jy2=0.0, Jy3=0.0,
         Jz1=0.0, Jz2=0.0, Jz3=0.0, Jxr=None, Jyr=None, Jzr=None,
-        mf=None, filling=0.5, mu=None, mix=0.1, nk=8, maxerror=1e-5, maxite=1000,
+        mf=None, filling=0.5, mu=None, mix=0.3, nk=8, maxerror=1e-5, maxite=1000,
         T=1e-7, verbose=0, constrains=[]):
     """Self-consistent anisotropic exchange mean field,
     H = sum Jx Sx_i Sx_j + Jy Sy_i Sy_j + Jz Sz_i Sz_j,
@@ -439,10 +439,12 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     only the site-resolved differences are held to maxerror. The array
     needs one entry per site, each in [0,1]; anything else raises
     ValueError. Only supported for a
-    normal-state (has_eh=False), integration="ed" Hamiltonian with mu=None
-    (the default) -- combining an array filling with integration="kpm", a
-    BdG (has_eh=True) h0, or an explicit mu all raise NotImplementedError
-    (see _run_anisotropic_scf's own checks for why each is out of scope).
+    normal-state (has_eh=False) Hamiltonian with mu=None (the default),
+    with integration="ed" or "kpm" (the KPM branch reads the occupation
+    off the diagonal of its density matrix and takes the uniform part from
+    the lagged Fermi level) -- combining an array filling with a BdG
+    (has_eh=True) h0 or an explicit mu raises NotImplementedError (see
+    _run_anisotropic_scf's own checks for why each is out of scope).
     scf.local_occupation (the converged <n_i> per site) and scf.lam /
     scf.hamiltonian.fermi (the converged per-site potentials) are exposed
     on the returned SCF object as diagnostics only when filling was given
@@ -514,8 +516,9 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     _run_anisotropic_scf's docstring): a BdG/Nambu VJinteraction call
     keeps `vd` in a differently-indexed (Nambu-reordered) basis that the
     sparse-position machinery of the dense KPM path does not know how to
-    translate, and passing integration="kpm" for a dense Nambu h0 raises
-    NotImplementedError. A sparse h0 (is_sparse=True) goes through the
+    translate, so a dense Nambu h0 with integration="kpm" is converted to
+    sparse and goes through the sparse engine below, and the resulting
+    Hamiltonian is returned dense. A sparse h0 (is_sparse=True) goes through the
     sparse engine of scftk/sparsemeanfield.py, which holds every channel,
     the density matrix and the mean field as sparse matrices, with memory
     linear in the number of orbitals, takes a Nambu h0, and gives the
@@ -673,10 +676,15 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                 "are %s" % (jax_only_set, ", ".join(repr(s) for s in
                 get_jax_solver_names())))
     T = 1e-7 if T is _T_UNSET else T
-    mix = 0.1 if mix is None else mix # the plain-mixing factor
+    mix = 0.3 if mix is None else mix # the plain-mixing factor
     maxite = 1000 if maxite is _MAXITE_UNSET else maxite
     h1 = h0.get_multicell()
     if integration != "kpm": h1 = h1.get_dense() # see docstring above
+    # a dense Nambu h1 has no dense KPM route (see the docstring above),
+    # so it takes the sparse engine, which gives the dense one's mean field
+    # to roundoff, and the result is handed back dense as it came in
+    dense_nambu_kpm = integration == "kpm" and h1.has_eh and not h1.is_sparse
+    if dense_nambu_kpm: h1.turn_sparse()
     if integration == "kpm" and h1.is_sparse: # the sparse engine, with
         # every channel as sparse matrices from a KD-tree (sparsemeanfield)
         from .sparsemeanfield import interaction, SZSZ
@@ -697,11 +705,14 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     if not h1.has_eh: # normal-state: fold density-density directly into vz
         vz = (MultiHopping(vz) + MultiHopping(vd)).get_dict()
         vd = None
-    return _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
+    scf = _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             maxerror, maxite, T, verbose, constrains, vd=vd,
             vz_exchange=vz_exchange, vd_reference=vd_reference,
             integration=integration, scale=scale, npol=npol, ne=ne,
             cores=cores, kpm_prec=kpm_prec, kpm_radius=kpm_radius)
+    if dense_nambu_kpm: scf.hamiltonian.turn_dense() # in place, so V,
+    # Vchannels and fermi stay on it
+    return scf
 
 
 def _site_resolved(x):
@@ -1017,14 +1028,6 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # explicitly out of scope, rejected here (fail before any SCF work,
     # rather than partway through the loop):
     array_filling = is_iterable(filling)
-    if array_filling and integration == "kpm":
-        raise NotImplementedError("VJinteraction's integration=\"kpm\" path "
-                "does not support a per-site (array) filling -- its Fermi/"
-                "occupation machinery (kpmtk.densitymatrix_kpm) only knows "
-                "how to target a single scalar filling via a deterministic "
-                "moment-based DOS integral, with no per-site local-chemical-"
-                "potential analogue implemented; use integration=\"ed\" "
-                "(the default) for a per-site filling target")
     if array_filling and has_eh:
         raise NotImplementedError("A per-site (array) filling is not "
                 "supported for a BdG (Nambu, has_eh=True) Hamiltonian -- "
@@ -1151,7 +1154,10 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         # the Fermi level from the trace of the previous iteration's
         # recursion, see LaggedFermi; at T, because _get_dm_kpm builds the
         # density matrix with the Fermi-Dirac weight at this same T
-        lagged = None if mu is not None else LaggedFermi(filling, nk=nk,
+        # with a per-site filling, the uniform part, the total count, is
+        # the scalar search's at mean(filling), as in the ED branch
+        lagged = None if mu is not None else LaggedFermi(
+                float(np.mean(filling_arr)) if array_filling else filling, nk=nk,
                 scale=scale, npol=npol, ne=ne, cores=cores, T=T,
                 kpm_prec=kpm_prec, radius=kpm_radius)
         if sparse_kpm:
@@ -1166,6 +1172,11 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # channel is decoupled in a rotated frame (see needed_entries)
             sparse_needed = sparsemeanfield.needed_entries(channels, n_dm,
                     has_eh=has_eh, blocks=vx_active or vy_active)
+            if array_filling: # the per-site occupation reads every diagonal
+                r0, c0 = sparse_needed.get((0, 0, 0), (np.zeros(0, int),)*2)
+                key = np.unique(np.concatenate([r0*n_dm + c0,
+                        np.arange(n_dm)*(n_dm + 1)]))
+                sparse_needed[(0, 0, 0)] = (key//n_dm, key % n_dm)
 
             def _get_dm_kpm(h, trace=False): # see the dense one below
                 out = get_dm_kpm_sparse(h, sparse_needed, nk=nk, scale=scale,
@@ -1320,11 +1331,30 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # _get_dm_kpm's per-k Chebyshev recursion -- see
             # VJinteraction's docstring
             if lagged is not None:
+                # per-site filling: the site-resolved lam of the previous
+                # iteration as a per-site shift, the uniform part from the
+                # lagged Fermi level, and the same proportional step on lam
+                # as the ED branch below, with the occupation read off the
+                # diagonal of the KPM density matrix
+                if array_filling:
+                    lam_used = lam_state[0]
+                    h.shift_fermi(-lam_used)
                 h = lagged.shift(h)
+                mu_used = lagged.mu
                 if lagged.wants_trace(h):
                     dm_lab, trace = _get_dm_kpm(h, trace=True)
                 else: dm_lab, trace = _get_dm_kpm(h), None
                 lagged.update(h, trace)
+                if array_filling:
+                    from scipy.sparse import issparse
+                    m0 = dm_lab[(0, 0, 0)]
+                    diag = np.real(m0.diagonal() if issparse(m0)
+                            else np.diag(m0))
+                    occ = (diag[0::2] + diag[1::2])/2.0
+                    h.fermi = lam_used + mu_used # per-site, as in ED
+                    lam_state[0] = lam_used + mix*_site_resolved(
+                            filling_arr - occ)
+                    local_occ = occ
             else:
                 h.shift_fermi(-mu)
                 dm_lab = _get_dm_kpm(h)

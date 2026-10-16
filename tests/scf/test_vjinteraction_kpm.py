@@ -101,18 +101,27 @@ def test_vjinteraction_kpm_default_guess_is_hermitian_and_stable():
         assert np.max(np.abs(m)) < 10.0, (d, np.max(np.abs(m)))
 
 
-def test_vjinteraction_kpm_rejects_nambu():
-    """VJinteraction's integration="kpm" path is only implemented for a
-    normal-state Hamiltonian -- see _run_anisotropic_scf's docstring for
-    why the Nambu case (vd in its own reordered basis) is out of scope --
-    and must fail loudly rather than silently falling back to ED or
-    misreading the Nambu-doubled density matrix."""
-    g = geometry.chain()
-    h = g.get_hamiltonian(has_spin=True)
+def test_dense_nambu_kpm_goes_through_the_sparse_engine():
+    """A dense Nambu Hamiltonian with integration="kpm" used to be refused
+    by get_mean_field_hamiltonian, while get_mean_field_hamiltonian_kpm
+    took it. It now takes the sparse engine and comes back dense, with the
+    gap of the dedicated KPM entry point and, to the KPM resolution, of
+    exact diagonalization."""
+    g = geometry.square_lattice()
+    h = g.get_hamiltonian()
+    h.add_onsite(0.3)
     h.setup_nambu_spinor()
-    with pytest.raises(NotImplementedError):
-        meanfield.VJinteraction(h, U=5.0, mf="ferroZ", nk=10,
-                maxerror=1e-6, mix=0.3, filling=0.2, integration="kpm")
+    kw = dict(U=-2.0, mf="swave", nk=6, mix=0.5, maxerror=1e-8)
+    he = h.get_mean_field_hamiltonian(**kw)
+    hk = h.get_mean_field_hamiltonian_kpm(npol=400, **kw)
+    hv = h.get_mean_field_hamiltonian(integration="kpm", npol=400, **kw)
+    assert not hv.is_sparse and not h.is_sparse
+    # the attributes the RPA and the observables read stay on it
+    assert hv.Vchannels is not None and hv.fermi is not None
+    def gap(x): return np.array(x.extract("swave")).ravel()
+    assert np.max(np.abs(gap(hv) - gap(hk))) < 1e-6
+    assert np.max(np.abs(gap(hv) - gap(he))) < 1e-3
+    assert abs(gap(he)[0]) > 0.1  # a real gap, not the trivial solution
 
 
 def test_vjinteraction_rejects_unknown_integration_value():

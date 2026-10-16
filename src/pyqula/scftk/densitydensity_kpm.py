@@ -41,7 +41,7 @@ mf_file = "MF.pkl"  # same filename densitydensity.py uses
 # import first.
 
 
-def generic_densitydensity_kpm(h0, mf=None, mix=0.1, v=None, nk=DEFAULT_NK,
+def generic_densitydensity_kpm(h0, mf=None, mix=0.3, v=None, nk=DEFAULT_NK,
         maxerror=1e-5, callback_mf=None, callback_dm=None, load_mf=True,
         compute_cross=True, compute_dd=True, verbose=1,
         compute_anomalous=True, compute_normal=True, maxite=1000,
@@ -197,7 +197,7 @@ def densitydensity_kpm(h, filling=0.5, mu=None, verbose=0, nk=DEFAULT_NK,
     if is_iterable(filling): # see VJinteraction's docstring
         raise NotImplementedError("A per-site (array) filling is only "
                 "supported by VJinteraction (h.get_mean_field_hamiltonian "
-                "with integration=\"ed\") for a spinful Hamiltonian; "
+                "with integration=\"ed\" or \"kpm\") for a spinful Hamiltonian; "
                 "the KPM density-density engine (Vinteraction_kpm) "
                 "takes a single scalar filling, got %r" % (filling,))
     from .densitydensity import electron_dimension, require_hermitian

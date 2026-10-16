@@ -362,7 +362,7 @@ bare line that the interaction does not couple is not a pole: there the
 kernel goes through infinity, not through zero, so it is not listed.
 
 The mean field and the response use `nk=24`. For this state the error of the
-self-consistent loop goes down slowly with the default mixing `mix=0.1`, so we
+self-consistent loop goes down slowly with the default mixing `mix=0.3`, so we
 take `mix=0.5`. Then `maxerror=1e-10` is reached in about 200 iterations.
 With `nk=18` the magnon moves by at most $0.015t$, near K, and with `nk=30` it is at $0.89t$ at K too. The coarse
 mesh `nk=6` gives a magnon that is wrong by up to $0.4t$ and a continuum of

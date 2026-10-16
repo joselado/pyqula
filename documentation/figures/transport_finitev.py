@@ -6,7 +6,7 @@ g = geometry.chain() # create the geometry
 h = g.get_hamiltonian() # create the Hamiltonian
 h1 = h.copy() ; h1.add_swave(0.1) # left superconducting lead
 h2 = h.copy() ; h2.add_swave(0.1) # right superconducting lead
-HT = heterostructures.build(h1,h2) # create the SNS junction
+HT = heterostructures.build(h1,h2) # junction between the two superconductors
 HT.set_coupling(0.5) # set the normal transparency of the weak link
 es = np.linspace(0.15,0.25,40)*0.1 # bias energies
 Gs = HT.didv(energies=es, nmax_max=40) # dI/dV curve

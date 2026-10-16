@@ -168,12 +168,6 @@ Beal-Monod) and the valley Chern number tending to 1 (topology 02).
 
 ## What is still open
 
-- `greentk/rg.py::green_renormalization_python` loops forever when the
-  decimation turns into NaN (`NaN < error` is never true). A finiteness check
-  that raises would let the $\delta$ escalation of `smatrix._lead_selfenergies`
-  take over. Reproducer: a chain lead with Rashba 0.6, Zeeman
-  $0.15(-0.6,0,0.8)$, onsite 2, s-wave 0.1, at $E=0.23164556962025312$,
-  $\delta=10^{-12}$.
 - The RKKY routine (`chitk/magneticresponse.py`): its default
   `delta=1/nk` never converges because the temperature shrinks with the mesh,
   the denominator carries a second $i\delta^2$ broadening, and the cost is
@@ -182,8 +176,6 @@ Beal-Monod) and the valley Chern number tending to 1 (topology 02).
 - The degenerate-pair term overcounts by $O(f'/n_k)$ when `delta` resolves
   the mesh and the mesh contains the nesting points (use an odd $n_k$); a
   conserving (Mermin, PRB 1, 2362) form would remove it.
-- `lorentz_kernel` has $\lambda=3$ fixed, which caps the KPM Green's function
-  at 5-10% of the matrix inversion; a `lambda` argument would close it.
 - Conventions still inconsistent: the SCF keeps $V_r(r,r)$ as an onsite term
   while `density_interaction` drops it; `get_berry_curvature` returns the
   lattice-gauge curvature (topology 07 explains it); the Heterostructure
@@ -196,19 +188,51 @@ Beal-Monod) and the valley Chern number tending to 1 (topology 02).
 - Notebook 15's small-$\Delta$ dispersive corner needs nk~48 (30 min) to
   converge; the Wannier-Mott hydrogenic comparison of mean-field 17 was not
   done (the Coulomb tail is cut at `rcut=5`).
-- The Nambu `VJinteraction` loop from `mf="random"` (bichain, $V_1=-2$,
-  exchange 0.3) does not converge within `maxite` from every random start;
-  `tests/scf/test_spinspin_nambu.py` failed when `tests/scf` ran as a whole,
-  also on the code before this pass, and is now seeded. Which starts fail,
-  and whether more mixing would fix them, was not looked into.
 - KPM 05's "about 6 GB" peak memory for $10^7$ sites is from the run before
   this pass and was not measured again (the KPM call now takes 109 s, 1.85
   times the polynomials at the same `delta`).
 - Cosmetic, left as they are: mean-field 08's $\kappa=0.30$ point is half
   cut at the heatmap's edge; tutorials 08 and 10 keep em-dashes and a
   contraction in their original sentences.
-- Small: `mf="pwave"` seeds opposite-spin pairing, a poor start for
-  equal-spin states; the SCF's default `mix=0.1` is 4 times slower than 0.5 on
-  the equal-spin triplet; `keldyshtk/current.py` has a stale docstring about
-  the local probe's broadening; the guide's MAR section calls `build(h1,h2)`
-  an SNS junction.
+
+## Closed on 16 October 2026
+
+- The decimation that looped on NaN: `green_renormalization_python` now
+  raises `ValueError` as soon as the decimated couplings stop being finite,
+  as the numba twin already did through its `solve`, and the broadening
+  escalation of `smatrix._lead_selfenergies` takes over. The reproducer is
+  the topological Rashba lead of quantum transport 04 at
+  $E=0.23164556962025312$: at the commit before, `didv` of its junction ran
+  past a 120 s timeout; now the decimation diverges after 49 iterations and
+  `didv` returns 0.400 with the escalation warning
+  (`tests/green/test_rg_nonfinite_decimation.py`).
+- `lorentz_kernel` takes $\lambda$ (`lorentz_lambda` of `kpm.correlator0d`,
+  `generate_profile` and `generate_green_profile`, default 3). On a 12-site
+  chain at $\delta=0.02$, with $n_{\rm pol}=\lambda s/(2\delta)$, the error
+  against the matrix inversion is 9% at $\lambda=3$, 1.1% at 5, 0.3% at 8 and
+  12, and against an inversion at $\delta\sqrt{1-(E/s)^2}$, the energy
+  dependence of the Lorentz half width, 9e-4 at 8 and 4e-4 at 12. On a
+  200-site chain, whose levels the broadening does not resolve, the error is
+  2% whatever $\lambda$ is, and it comes from that energy dependence, not
+  from the truncation (`tests/kpm/test_lorentz_lambda.py`).
+- The Nambu `VJinteraction` loop from `mf="random"` (bichain, $V_1=-2$,
+  exchange 0.3): 40 seeds at the default `mix=0.1` all converge, to the same
+  state (gap 0.83457, energy -3.170172), in 523 to 998 iterations against
+  `maxite=1000`, which is why the test depended on the random numbers drawn
+  before it. At `mix=0.3` they take 182 to 330 iterations, at `mix=0.5` 110 to
+  196, with energies within 7e-7. The test now runs at `mix=0.5`.
+- Two defaults, decided by the maintainer. `mf="pwave"` seeded d along z
+  only, the opposite-spin triplet, a poor start for an equal-spin state; it
+  now seeds d along (1,1,1), with the same amplitude, which is exactly the
+  sum of the three d components over $\sqrt3$ and puts weight on the
+  equal-spin and the opposite-spin entries of the Nambu blocks
+  (`tests/scf/test_pwave_guess_dvector.py`). The default linear mixing of
+  the numpy mean-field loops (`generic_densitydensity`, its `linear` solver,
+  `generic_densitydensity_kpm`, `Jinteraction` and `VJinteraction`) went
+  from 0.1 to 0.3: 0.1 was 4 times slower than 0.5 on the equal-spin
+  triplet and 5 times on the Nambu loop below, and the maintainer chose 0.3.
+  The jax `fixed_point` solver keeps its own 0.1.
+- The docstring of `keldyshtk/current.py` about the local probe says that the
+  central block carries no broadening of its own, and the guide, the figure
+  scripts and the MAR example call `build(h1,h2)` of two superconductors a
+  junction between them rather than an SNS junction.

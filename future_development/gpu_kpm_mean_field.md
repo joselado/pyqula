@@ -191,5 +191,9 @@ Left open:
   calls; that path is tested at small size with a forced budget, not timed
   at scale.
 - A data-centre card, where float64 is not 1/70 of float32, was not tried.
-- `h.get_mean_field_hamiltonian(integration="kpm")` still refuses a Nambu
-  Hamiltonian, which only `h.get_mean_field_hamiltonian_kpm` accepts.
+- `h.get_mean_field_hamiltonian(integration="kpm")` used to refuse a dense
+  Nambu Hamiltonian, which `h.get_mean_field_hamiltonian_kpm` accepted.
+  Closed on 16 October 2026: `VJinteraction` sends it through the sparse
+  engine and returns it dense, with the s-wave gap of the dedicated entry
+  point to 1e-6 on a square lattice at $U=-2$
+  (`tests/scf/test_vjinteraction_kpm.py`).

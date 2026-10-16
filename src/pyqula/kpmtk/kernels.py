@@ -27,12 +27,14 @@ def jackson_kernel(mus):
 
 
 @jit(nopython=True,cache=True)
-def lorentz_kernel(mus):
-  """ Modify coeficient using the Jackson Kernel"""
+def lorentz_kernel(mus,lamb=3.):
+  """Modify the coefficients with the Lorentz kernel,
+  sinh(lamb(1-n/N))/sinh(lamb), which turns a pole into a Lorentzian of
+  half width lamb*scale/N (Weisse et al., Rev. Mod. Phys. 78, 275 (2006),
+  Sec. II.C.4). At a fixed half width a larger lamb takes more moments and
+  leaves a smaller truncation error, of order exp(-lamb)"""
   mo = mus.copy() # copy array
   n = len(mo)
-  pn = np.pi/(n+1.) # factor
-  lamb = 3.
   for i in range(n):
     fac = np.sinh(lamb*(1.-i/n))/np.sinh(lamb)
     mo[i] *= fac

@@ -113,7 +113,9 @@ def _prepare_system_localprobe(lp):
     being probed (`lp.i` of `lp.H`), and the AC-carrying bond is the
     probe-sample tunneling link scaled by the transparency `lp.T` -- the
     same raw Hamiltonian block structure `localprobe.get_central_gmatrix`
-    dresses with self-energies and (energy+i*delta) for the smatrix method."""
+    dresses with self-energies for the smatrix method, at the bare energy:
+    that block carries no i*delta of its own, the only broadenings being
+    the probe lead's delta and the sample's bulk_delta in the selfenergies."""
     from ..htk.extract import local_hamiltonian
     from ..transporttk.localprobe import get_intra
     oi = algebra.todense(local_hamiltonian(lp.H, get_intra(lp.H), i=lp.i))

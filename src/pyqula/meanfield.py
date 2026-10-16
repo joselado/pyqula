@@ -366,7 +366,9 @@ def _guess_swave(h,h0,fun,mode):
 def _guess_pwave(h,h0,fun,mode):
     require_nambu(h,mode)
     for t in h0.hopping: t.m *= 0. # clean
-    h0.add_pairing(delta=fun,mode="pwave") # px+ipy pairing
+    # px+ipy pairing with d along (1,1,1), so that the equal-spin (d in the
+    # plane) and the opposite-spin (d along z) triplets are both seeded
+    h0.add_pairing(delta=fun,mode="pwave",d=np.array([1.,1.,1.])/np.sqrt(3.))
     hop = dict()
     hop[(0,0,0)] = h0.intra
     for t in h0.hopping: hop[tuple(t.dir)] = t.m

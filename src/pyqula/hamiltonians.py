@@ -792,7 +792,7 @@ class Hamiltonian():
             if checkclass.is_iterable(kwargs.get("filling")) and not self.has_spin:
                 from . import check # a per-site filling needs VJinteraction
                 check.require_spin(self,"a per-site (array) filling "
-                        "(supported only by VJinteraction, integration=\"ed\")")
+                        "(supported only by VJinteraction)")
             if integration=="kpm":
                 scf = Vinteraction_kpm(self,**kwargs)
             else:

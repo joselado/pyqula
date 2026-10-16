@@ -163,7 +163,12 @@ The full Green's function, with its real part, comes from
 `kpm.correlator0d()`. It returns the energies, ${\rm Re}\,G^R_{ij}$ and
 $-{\rm Im}\,G^R_{ij}$. With `kernel="lorentz"` each pole becomes a
 Lorentzian of half width $1.5\,s/n_{\rm pol}$, which is the
-$G^R_{ij}(E+i\delta)$ that a matrix inversion gives.
+$G^R_{ij}(E+i\delta)$ that a matrix inversion gives. The cutoff of the
+expansion leaves an error of about 10% on a sharp pole. The keyword
+`lorentz_lambda`, called $\lambda$ here, reduces it. The half width is then
+$\lambda s/(2n_{\rm pol})$, so for the same $\delta$ you need
+$n_{\rm pol}=\lambda s/(2\delta)$. The error falls roughly as $e^{-\lambda}$.
+On a small chain it is 9% at the default $\lambda=3$ and 0.3% at $\lambda=8$.
 
 See `examples/0d/kpm_dos/main.py` and `examples/0d/kpm_correlator/main.py`
 for runnable scripts, the second one with a comparison against the exact
