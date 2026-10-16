@@ -247,6 +247,7 @@ def ldos1d(h,e=0.0,delta=0.001,nrep=3,write=None):
   from . import green
   if h.dimensionality!=1: # only for 1d
     raise ValueError("ldos1d is only for 1d Hamiltonians")
+  if h.is_multicell: h = h.get_no_multicell() # the decimation needs h.inter
   gb,gs = green.green_renormalization(h.intra,h.inter,energy=e,delta=delta)
   d = [ -(gb[i,i]).imag for i in range(len(gb))] # get imaginary part
   d = spatial_dos(h,d) # convert to spatial resolved DOS

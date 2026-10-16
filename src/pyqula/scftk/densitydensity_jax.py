@@ -770,7 +770,7 @@ def fsolve_solve(step_vec, x0, maxite=2000, tol=1e-8, verbose=0,
     return jnp.asarray(x_sol), nfev, ier == 1
 
 
-def fixed_point_solve(step_fn, x0, mu, dirs, n, mix=0.1, maxite=2000, tol=1e-5,
+def fixed_point_solve(step_fn, x0, mu, dirs, n, mix=0.3, maxite=2000, tol=1e-5,
         verbose=0, callback_mf=None):
     """Linear-mixing fixed point, mirrors densitydensity.generic_densitydensity
     with solver="plain". mu is ignored by step_fn (in favor of an internally
@@ -913,7 +913,7 @@ def _run_newton_krylov(step_jit, step_vec, x0, mu, o):
 def _run_fixed_point(step_jit, step_vec, x0, mu, o):
     # the mu fixed_point_solve tracks is superseded by the fresh
     # step_jit(x, mu) call in solve_scf, so it is dropped here
-    mix = 0.1 if o.mix is None else o.mix # mix=None means not given
+    mix = 0.3 if o.mix is None else o.mix # mix=None means not given
     x, _, ite, converged = fixed_point_solve(step_jit, x0, mu, o.dirs, o.n,
             mix=mix, maxite=o.maxite, tol=o.maxerror, verbose=o.verbose,
             callback_mf=o.callback_mf)

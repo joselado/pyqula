@@ -231,7 +231,16 @@ Beal-Monod) and the valley Chern number tending to 1 (topology 02).
   `generic_densitydensity_kpm`, `Jinteraction` and `VJinteraction`) went
   from 0.1 to 0.3: 0.1 was 4 times slower than 0.5 on the equal-spin
   triplet and 5 times on the Nambu loop below, and the maintainer chose 0.3.
-  The jax `fixed_point` solver keeps its own 0.1.
+  The jax `fixed_point` solver (`linear_mixing`) followed, also at 0.3.
+- `Hamiltonian.turn_multicell`, in place, kept `h.inter` (and `tx`, `ty`,
+  `txy`, `txmy` in 2D) beside the new hopping list, where the copy of
+  `multicell.turn_multicell` drops them. It went stale at the first change
+  of the hoppings: `add_swave` on a chain left a 2x2 `inter` beside a 4x4
+  `intra`, and on a chain whose hopping was doubled after the conversion
+  `dos_surface` decimated with the old one, a bulk DOS of 0.756 at $E=1.5$
+  against the 0.270 of hopping 2. The method now drops them, and
+  `dos_surface` and `ldos1d` convert a multicell Hamiltonian before reading
+  `h.inter` (`tests/hopping/test_turn_multicell_drops_stale_inter.py`).
 - The docstring of `keldyshtk/current.py` about the local probe says that the
   central block carries no broadening of its own, and the guide, the figure
   scripts and the MAR example call `build(h1,h2)` of two superconductors a

@@ -25,6 +25,7 @@ def dos_surface(h,output_file="DOS.OUT",
   write = filewrite.resolve(write,True) # the call, else the global switch
   if h.dimensionality!=1: # only for 1d
     raise ValueError("the surface DOS is only implemented for 1d Hamiltonians")
+  if h.is_multicell: h = h.get_no_multicell() # the decimation needs h.inter
   dss,dsb = [],[] # surface and bulk DOS
   for e in energies: # loop over energies
     print("Done",e)

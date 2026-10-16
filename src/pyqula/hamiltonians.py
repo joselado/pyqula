@@ -1091,9 +1091,18 @@ class Hamiltonian():
         return h
     def turn_multicell(self):
         """Conver to multicell Hamiltonian"""
+        if self.is_multicell: return
         h = multicell.turn_multicell(self)
         self.is_multicell = True
         self.hopping = h.hopping # assign hopping
+        # drop the attributes the hopping list supersedes, as the copy of
+        # multicell.turn_multicell does: kept, h.inter went stale at the
+        # first change of the hoppings, and a routine that read it (the
+        # 1d decimation of dos_surface) used the old hopping in silence
+        if self.dimensionality == 1: self.inter = None
+        elif self.dimensionality == 2:
+            for name in ("tx","ty","txy","txmy"):
+                if hasattr(self,name): delattr(self,name)
     def get_no_multicell(self):
         """Return a multicell Hamiltonian"""
         h1 = multicell.turn_no_multicell(self)
