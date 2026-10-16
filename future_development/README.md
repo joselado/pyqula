@@ -260,9 +260,10 @@ already reached once.
   magnons at Gamma and their infinity crossings, the mean-field convergence
   error, the scipy solvers, the whole-zone Berry curvature window and the
   path method, the kappa sign guard, the temperature at which a mean-field
-  Hamiltonian is read), and the S^zS^z chain that needs a small T; nothing
-  is open except the slow approach of the broadened Chern density in
-  energy, which is physics rather than a defect.
+  Hamiltonian is read, the dk of the Berry density, the q-paths filled
+  with nq points, the Keldysh panel confirmation, the slow TDHF mean
+  field), the S^zS^z chain that needs a small T, and the broadened Chern
+  density, now closed on the real axis with exact_at; nothing is open.
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

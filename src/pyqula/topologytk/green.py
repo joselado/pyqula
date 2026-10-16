@@ -157,6 +157,30 @@ def dOmega_dE_generator(h,operator=None,delta=0.02,dk=None):
   return f
 
 
+def dOmega_dE_vertical(h,x,ks,operator=None,delta=0.02,dk=None,nodes=8):
+  """Sum over the k-points ks of the integral of the analytic continuation
+  of dOmega/dE along the vertical segment from x to x+i*delta, with a
+  Gauss-Legendre rule of nodes points in the imaginary part y (no node at
+  y=0). The cumulative integral of chern_density runs along the line
+  Im z = delta; adding this segment at its two ends moves the path down to
+  the real axis, which removes the broadening exactly, as long as x is
+  below the spectrum or inside a gap, where the integrand is smooth down
+  to y=0. Returns the complex sum, with the normalization of
+  berry_green_generator (not yet divided by the number of k-points)"""
+  if dk is None: dk = default_dk(delta)
+  ys,ws = np.polynomial.legendre.leggauss(nodes)
+  ys = (ys+1.)*delta/2. ; ws = ws*delta/2. # from [-1,1] to [0,delta]
+  out = 0.
+  for (y,w) in zip(ys,ws): # loop over the imaginary parts
+      gf = h.get_gk_gen(delta=y,canonical_phase=True) # G(x+iy)
+      def gI(e=0.,k=[0.,0.,0.]): return gf(e=e,k=k,inv=True)
+      for k in ks:
+          f = berry_green_generator(gf,k=k,dk=dk,operator=operator,
+                  full=False,gI=gI)
+          out += w*f(x)
+  return out
+
+
 def dOmega_dE(h,k=[0.,0.,0.],e=0.,**kwargs):
   """Compute dOmega/dE (k,E), the derivative of the Berry curvature
   with respect to the chamical potential"""

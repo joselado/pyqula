@@ -1121,10 +1121,23 @@ def dOmega_dE_kmap(h,nk=40,reciprocal=True,nsuper=1,e=0.0,
 
 def chern_density(h,nk=10,operator=None,delta=0.02,dk=None,
         write=None,
-        es=np.linspace(-1.0,1.0,40)):
+        es=np.linspace(-1.0,1.0,40),exact_at=None,nodes=8):
   """Compute the Chern density as a function of the energy, the Brillouin
   zone integral of dOmega/dE at each energy of es, and its cumulative
-  integral. dk is the finite-difference step in k, delta/25 by default"""
+  integral. dk is the finite-difference step in k, delta/25 by default.
+
+  The broadening delta moves part of the curvature of the states above an
+  energy below it, so the cumulative integral inside a gap is below the
+  Chern number by an amount that goes to zero only slowly with delta.
+  exact_at, a list of energies inside gaps (and within es, whose first
+  energy must be below the spectrum), returns a fourth array with the
+  cumulative integral at those energies without broadening: the path of
+  the integral is closed down to the real axis at both ends, with a
+  Gauss-Legendre rule of nodes points, which costs about nodes energies of
+  es per energy of exact_at. The result does not depend on delta, and on a
+  fine enough k-mesh it is the Chern number of the states below each
+  energy. Inside a band the closing segment is not smooth and the result
+  is meaningless."""
   write = filewrite.resolve(write,False) # the call, else the global switch
   operator = get_operator(h,operator) # accept a name, matrix or callable
   ks = klist.kmesh(h.dimensionality,nk=nk)
@@ -1149,7 +1162,20 @@ def chern_density(h,nk=10,operator=None,delta=0.02,dk=None,
   if write:
       np.savetxt("CHERN_DENSITY.OUT",np.array([es,cs]).T)
       np.savetxt("CHERN_DENSITY_INTEGRATED.OUT",np.array([es,csi]).T)
-  return (es,cs,csi)
+  if exact_at is None: return (es,cs,csi)
+  from .topologytk.green import dOmega_dE_vertical
+  exact_at = np.array(exact_at,dtype=float).reshape(-1)
+  tol = 1e-9*(1.+np.max(np.abs(es))) # rounding of the ends of es
+  if np.min(exact_at)<es[0]-tol or np.max(exact_at)>es[-1]+tol:
+      raise ValueError("the energies of exact_at must lie within es, from "
+              +str(es[0])+" to "+str(es[-1])+", got "+str(exact_at))
+  def vertical(x): # closing segment at the energy x
+      return dOmega_dE_vertical(h,x,ks,operator=operator,delta=delta,dk=dk,
+              nodes=nodes)/(len(ks)*np.pi*2)
+  c0 = vertical(es[0]) # below the spectrum
+  cex = np.array([np.interp(e,es,csi) + c0.imag - vertical(e).imag
+      for e in exact_at]) # the path closed on the real axis at both ends
+  return (es,cs,csi,cex)
 
 
 

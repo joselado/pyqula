@@ -189,18 +189,21 @@ g = geometry.honeycomb_lattice() # create honeycomb lattice
 h = g.get_hamiltonian() # create hamiltonian of the system
 h.add_haldane(0.05) # Add Haldane coupling
 es = np.arange(-3.5,3.5+1e-9,0.05) # from below the band to above it
-(es,cs,csi) = topology.chern_density(h,nk=12,delta=0.1,es=es)
+(es,cs,csi,cex) = topology.chern_density(h,nk=12,delta=0.1,es=es,exact_at=[0.])
 ```
 
 `es` are the energies, `cs` the Berry curvature density at each energy, and
 `csi` its cumulative integral, which starts at the first energy of `es`.
+`cex` is the cumulative integral without broadening at the energies of
+`exact_at`, explained below.
 Inside the gap `csi` has a plateau, and when the integral goes over all the
 bands it comes back to zero, because the Berry curvatures of all the bands of
 a Hamiltonian add up to zero. The normalization is the one of
-`h.get_chern()`, but the plateau is the Chern number only in a limit that is
-expensive to reach. The snippet takes about 20 seconds, and its plateau at
-zero energy is $1.63$, not $C=2$. Four things decide how close the plateau is
-to the Chern number, and the snippet is chosen to respect the first three.
+`h.get_chern()`, but the plateau of `csi` is the Chern number only in a
+limit that is expensive to reach. The snippet takes about 20 seconds, and its
+plateau at zero energy is $1.63$, not $C=2$. Four things decide how close the
+plateau is to the Chern number, and the snippet is chosen to respect the
+first three; the fourth is the broadening, which `exact_at` removes.
 
 - The integral starts at the first energy of `es`, so `es` must start below
   the bottom of the band, here $-3$. A window that starts at $-1$ misses the
@@ -222,13 +225,25 @@ to the Chern number, and the snippet is chosen to respect the first three.
   and a small enough `dk`, the plateau at zero energy is $1.70$ for
   `delta=0.05` ($1.69$, $1.71$ and $1.70$ at `nk=20`, $24$ and $40$), $1.86$
   for `delta=0.02` at `nk=20`, and between $1.92$ and $1.98$ for
-  `delta=0.01` at `nk=20`, $21$ and $30$, where the k-mesh is not converged
-  any more. It goes up towards $C=2$ as `delta` goes down, slowly, and a
-  smaller `delta` needs a finer `nk`, a finer energy step and a smaller `dk`.
-  The snippet, at `delta=0.1`, gives $1.63$, and the figure below is the
-  converged calculation at `delta=0.05`.
+  `delta=0.01` at `nk=20`, $21$ and $30$. It goes up towards $C=2$ as `delta`
+  goes down, slowly, and a smaller `delta` needs a finer `nk`, a finer energy
+  step and a smaller `dk`.
 
-So read this quantity as a qualitative profile in energy, not as a number. It
+The broadening can be removed exactly at energies inside a gap. The
+cumulative integral is an integral of an analytic function of the complex
+energy $\omega+i\delta$, along the line at height `delta`. Inside a gap that
+function is smooth down to the real axis, so we can close the path with a
+vertical segment from $\omega+i\delta$ down to $\omega$, and another one at
+the first energy of `es`, below the band. The result is the integral with no
+broadening at all, meaning that it does not depend on `delta`. This is what
+`exact_at` does, for the energies it lists. In the snippet `cex` is $2.56$,
+and $2.58$ with `delta=0.05`, while `csi` moves from $1.63$ to $2.08$. What is
+left is the k-mesh, since the curvature is a sum over the k-points of the
+mesh: `cex` is $2.01$ at `nk=24` and $1.99$ at `nk=36`, the Chern number. Each
+energy of `exact_at` costs about as much as 9 energies of `es`, and inside a
+band the vertical segment is not smooth, so the result there has no meaning.
+
+So read `csi` as a profile in energy, and `cex` as the number. The density
 also needs a fine enough `nk` for its `delta`, otherwise it shows spurious
 peaks near k-points where bands come close.
 
@@ -237,14 +252,15 @@ peaks near k-points where bands come close.
 
 The figure shows `cs` on the left and `csi` on the right, for the snippet
 with a smaller broadening and a finer mesh: `es` from $-3.5$ to $3.5$
-with a step of `delta/2`, `delta=0.05` and `nk=48`. This takes
-about 17 minutes. A multiple of 3 for `nk` puts the K points on the mesh, so
+with a step of `delta/2`, `delta=0.05`, `nk=48` and `exact_at=[0.]`. This
+takes about 15 minutes. A multiple of 3 for `nk` puts the K points on the mesh, so
 the band edges are where they should be. The gray band is the bulk gap, from
 $-0.225$ to $0.225$. The density has its two largest peaks at the band
 edges, of opposite sign, and the cumulative integral has its plateau in the
 gap, $1.70$ at zero energy, the same as at `nk=24` within $0.01$. The dashed
 line is the Chern number, $C=2$: the plateau is below it by $0.30$, the
-curvature that `delta=0.05` moves into the gap. The density is odd in energy,
+curvature that `delta=0.05` moves into the gap. The dot is `cex` at zero
+energy, $1.998$, the same integral without the broadening. The density is odd in energy,
 so the cumulative integral comes back to zero at the end of the window. Away
 from the gap the density still oscillates. Each oscillation is a group of
 k-points of the mesh, which `delta=0.05` does not merge; from the energy step between
@@ -261,6 +277,9 @@ plateau is converged while the density is not.
 - `nk`: number of k-points per direction of the mesh.
 - `es`: energies at which the density is computed.
 - `delta`: broadening of the Green's function.
+- `exact_at=None`: energies inside gaps where the cumulative integral is also
+  returned without broadening, as a fourth array.
+- `nodes=8`: number of points of the vertical segments of `exact_at`.
 - `dk`: step of the finite differences in momentum, in units of the
   reciprocal lattice vectors, `delta/25` by default.
 - `operator`: weight the curvature with an operator, as in `h.get_chern()`.

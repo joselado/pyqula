@@ -144,8 +144,6 @@ work. This file keeps what was fixed, what was measured, and what is still open.
   (the measured gap between the loose and the tight setting is now 2e-4). The figure was not regenerated, since it already uses the tight
   setting.
 
-## Open
-
 - The Berry curvature density in energy (quantum-geometry page) reaches the
   Chern number only slowly as delta goes down. The first numbers (plateau
   1.37, 1.62 and 1.79 at delta=0.1, 0.05 and 0.02) were taken at the default
@@ -170,3 +168,19 @@ work. This file keeps what was fixed, what was measured, and what is still open.
   at this nk, since a smooth density at delta=0.05 needs nk above about 100.
   The default dk is now delta/25 (see Fixed), so this remaining deficit is
   the broadening alone, not a defect of the formula.
+  Fixed by closing the path: the cumulative integral is the integral of an
+  analytic function along Im z = delta, and inside a gap the integrand is
+  smooth down to the real axis, so adding vertical segments at the energy
+  and at the first energy of es (below the band) removes the broadening
+  exactly. `chern_density(..., exact_at=[...])` returns that value
+  (`topologytk/green.py`, `dOmega_dE_vertical`, eight Gauss-Legendre nodes,
+  the same with sixteen). Spinful Haldane model, t2=0.05, at zero energy:
+  nk=12: 2.557 (delta=0.1) and 2.583 (delta=0.05), against 1.63 and 2.08
+  broadened; nk=24: 2.011 and 2.019; nk=36: 1.993 and 1.999, so it does
+  not depend on delta and goes to C=2 with the mesh. Test:
+  `tests/topology/test_chern_density_dk.py`.
+
+## Open
+
+
+Nothing is open.

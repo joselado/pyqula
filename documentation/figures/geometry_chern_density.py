@@ -10,8 +10,9 @@ h.add_haldane(0.05) # Add Haldane coupling
 # multiple of 3), and the finite-difference step dk is delta/25, the default
 delta = 0.05
 es = np.arange(-3.5,3.5+1e-9,delta/2)
-(es,cs,csi) = topology.chern_density(h,nk=48,es=es,delta=delta)
-print("plateau at zero energy:",np.interp(0.,es,csi))
+(es,cs,csi,cex) = topology.chern_density(h,nk=48,es=es,delta=delta,
+                                         exact_at=[0.]) # without broadening at E=0
+print("plateau at zero energy:",np.interp(0.,es,csi),"exact:",cex[0])
 (k,e) = h.get_bands() # bands, to mark the gap
 gap = np.min(e[e>0]) # the gap is from -gap to gap
 
@@ -19,6 +20,8 @@ def draw(ax, c):
     ax[0].plot(es, cs, color=c.blue)
     ax[1].plot(es, csi, color=c.orange)
     ax[1].axhline(2, color=c.ink2, lw=1.0, ls="--") # the Chern number
+    ax[1].plot([0.], cex, "o", color=c.blue, ms=7, label="exact_at=[0.]")
+    ax[1].legend(loc="upper right")
     ax[0].set_ylabel("Berry curvature density")
     ax[1].set_ylabel("cumulative integral")
     for axi in ax:
