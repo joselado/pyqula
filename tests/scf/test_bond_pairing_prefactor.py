@@ -112,7 +112,11 @@ def _check(guess, triplet, tmp_path, monkeypatch):
     assert np.max(np.abs(get_eh_sector(X[(0, 0, 0)], i=0, j=1))) < 1e-10
     assert max(np.abs(m).max() for m in anomalous.values()) > 0.3
     d = np.array(hs.get_average_dvector())
-    if triplet: assert abs(d[2]) > 0.3 and np.max(np.abs(d[:2])) < 1e-3
+    if triplet: # along the (1,1,1) that mf="pwave" seeds, since V1 is
+        # spin independent and leaves the direction of d to the guess
+        n = np.ones(3)/np.sqrt(3.)
+        assert np.linalg.norm(d) > 0.3
+        assert np.max(np.abs(d - np.dot(n, d)*n)) < 1e-3
     else: assert np.max(np.abs(d)) < 1e-3
     # the hand-written functional is the SCF's own total energy
     nel = filling*2*len(hs.geometry.r)
