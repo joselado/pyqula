@@ -240,8 +240,60 @@ def _midgap(h,nk=36):
 _stackings = ["H","R"] # stacking of one layer on the next, see multilayer
 
 
+# The five real d orbitals as symmetric traceless matrices Q, with the
+# orbital the quadratic form r.Q.r: xy, (x^2-y^2)/2, (3z^2-r^2)/(2 sqrt3),
+# xz, yz. They are orthonormal in the inner product 2 tr(Q1 Q2), and a
+# rotation R acts on them as Q -> R Q R^T.
+_dQ = {"xy":np.array([[0.,.5,0.],[.5,0.,0.],[0.,0.,0.]]),
+       "x2-y2":np.diag([.5,-.5,0.]),
+       "z2":np.diag([-1.,-1.,2.])/(2.*np.sqrt(3.)),
+       "xz":np.array([[0.,0.,.5],[0.,0.,0.],[.5,0.,0.]]),
+       "yz":np.array([[0.,0.,0.],[0.,0.,.5],[0.,.5,0.]])}
+_dbasis = ["z2","xy","x2-y2"] # the orbitals of the model, in its order
+_dm = {"z2":0,"xz":1,"yz":1,"xy":2,"x2-y2":2} # |m| about the z axis
+
+
+def _slater_koster(d,V):
+    """Two-center d-d hopping matrix for the bond vector d, in the basis
+    d_z2, d_xy, d_x2-y2, with V = (V_sigma,V_pi,V_delta) (Slater and
+    Koster, Phys. Rev. 94, 1498 (1954)).
+
+    In the frame of the bond, with z' along d, the hopping is diagonal in
+    the five d orbitals, V_sigma for m = 0, V_pi for |m| = 1 and V_delta
+    for |m| = 2. A rotation R that takes z to d gives the overlap of every
+    orbital of the crystal frame with every orbital of the bond frame,
+    U[i,m] = 2 tr(Q_i R Q_m R^T), and the hopping is U diag(V) U^T. This
+    is the Slater-Koster table, built by rotation rather than written
+    out, and is checked against the written table in tests/bandstructure.
+    The result does not depend on the rotation about d, since V depends
+    only on |m|, and it is even in d, as for any pair of d orbitals."""
+    n = np.array(d,dtype=np.float64)/np.linalg.norm(d)
+    zz = np.array([0.,0.,1.])
+    v = np.cross(zz,n) ; c = np.dot(zz,n) # Rodrigues rotation z -> n
+    if np.linalg.norm(v)<1e-12: R = np.eye(3)*np.sign(c)
+    else:
+        vx = np.array([[0.,-v[2],v[1]],[v[2],0.,-v[0]],[-v[1],v[0],0.]])
+        R = np.eye(3) + vx + vx@vx/(1.+c)
+    names = list(_dQ)
+    U = np.array([[2.*np.trace(_dQ[i]@R@_dQ[m]@R.T) for m in names]
+                  for i in _dbasis])
+    Vm = np.diag([V[_dm[m]] for m in names])
+    return U@Vm@U.T
+
+
+def _dz2_only(d,t):
+    """Hopping t between the d_z2 orbitals only"""
+    m = np.zeros((3,3),dtype=np.complex128)
+    m[0,0] = t
+    return m
+
+
+_interlayers = {"dz2":_dz2_only,"slater_koster":_slater_koster}
+
+
 def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
-        functional="GGA",soc=True,onsite=None,vdw_gap=3.0,fermi="midgap"):
+        functional="GGA",soc=True,onsite=None,vdw_gap=3.0,fermi="midgap",
+        interlayer="dz2"):
     """Multilayer of three-band MX2 monolayers, see
     specialhamiltonian.three_band_tmdc_multilayer for the documentation.
 
@@ -256,11 +308,15 @@ def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
     even under inversion, a layer with s = -1 has the hoppings E(-R) of the
     paper, and its spin-orbit term, lambda/2 Lz sz, is unchanged.
 
-    The interlayer hopping t_perp couples the d_z2 orbitals of the three
-    nearest metal atoms of two neighboring layers, at lateral distance
-    a/sqrt3. Their phases add to zero at K and K', so the valleys are not
-    coupled by it, while the d_z2 valence band at Gamma of a homobilayer is
-    split by exactly 6|t_perp|."""
+    The interlayer hopping acts between the three nearest metal atoms of
+    two neighboring layers, at lateral distance a/sqrt3. With
+    interlayer="dz2" it is t_perp between their d_z2 orbitals only: the
+    three phases add to zero at K and K', so the valleys are not coupled,
+    while the d_z2 valence band at Gamma of a homobilayer is split by
+    exactly 6|t_perp|. With interlayer="slater_koster", t_perp is
+    (V_sigma,V_pi,V_delta) and every pair of the three d orbitals is
+    coupled by the two-center integrals of the actual bond vector (see
+    _slater_koster), which couples the valleys too."""
     from .. import geometry
     from ..multihopping import MultiHopping
     if isinstance(stacking,str): stacking = [stacking]*(len(layers)-1)
@@ -270,9 +326,15 @@ def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
     for s in stacking:
         if s not in _stackings: raise ValueError("unknown stacking "
                 +repr(s)+", accepted values are "+", ".join(_stackings))
-    if np.isscalar(t_perp): t_perp = [t_perp]*(len(layers)-1)
-    if len(t_perp)!=len(layers)-1: raise ValueError("t_perp needs one value "
-            "per interface, "+str(len(layers)-1)+" here, got "+str(len(t_perp)))
+    if interlayer not in _interlayers: raise ValueError("unknown interlayer "
+            +repr(interlayer)+", accepted values are "
+            +", ".join(sorted(_interlayers)))
+    single = 0 if interlayer=="dz2" else 1 # array dimension of one value
+    if np.ndim(t_perp)==single: t_perp = [t_perp]*(len(layers)-1)
+    if np.ndim(t_perp)!=single+1 or len(t_perp)!=len(layers)-1:
+        raise ValueError("t_perp needs one value per interface, "
+            +str(len(layers)-1)+" here, each "+("a number" if single==0 else
+            "a triple (V_sigma,V_pi,V_delta)")+", got "+repr(t_perp))
     if onsite is None: onsite = [0.]*len(layers)
     if len(onsite)!=len(layers): raise ValueError("onsite needs one energy "
             "per layer, "+str(len(layers))+" here, got "+str(len(onsite)))
@@ -312,15 +374,17 @@ def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
             b = block(k2)
             b[3*l:3*l+3,3*l:3*l+3] += m
         block((0,0,0))[3*l:3*l+3,3*l:3*l+3] += onsite[l]*np.eye(3)
-    # interlayer d_z2 hoppings to the three nearest metal atoms
+    # interlayer hoppings to the three nearest metal atoms
     for l in range(nl-1):
-        i,j = 3*l,3*(l+1) # the d_z2 orbitals of the two layers
+        i,j = 3*l,3*(l+1) # first orbital of each of the two layers
         for n1 in range(-2,3):
             for n2 in range(-2,3):
                 d = c[l+1] + n1*a1 + n2*a2 - c[l] # lateral bond, cell (n1,n2)
                 if abs(np.linalg.norm(d)-a/np.sqrt(3.))>1e-6: continue
-                block((n1,n2,0))[i,j] += t_perp[l]
-                block((-n1,-n2,0))[j,i] += np.conj(t_perp[l])
+                d = d + np.array([0.,0.,z[l+1]-z[l]]) # full bond vector
+                m = _interlayers[interlayer](d,t_perp[l])
+                block((n1,n2,0))[i:i+3,j:j+3] += m
+                block((-n1,-n2,0))[j:j+3,i:i+3] += np.conj(m.T)
     h = g.get_hamiltonian(has_spin=False,is_multicell=True,
             tij=lambda r1,r2: 0.)
     h.set_multihopping(MultiHopping(hop))

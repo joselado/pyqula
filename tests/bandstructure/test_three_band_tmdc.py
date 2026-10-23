@@ -183,3 +183,68 @@ def test_t_perp_per_interface():
                 atol=1e-10)
     with pytest.raises(ValueError,match="t_perp needs one value"):
         specialhamiltonian.three_band_tmdc_multilayer(["MoS2"]*3,[0.1])
+
+
+def _sk_table(d,V):
+    """The Slater-Koster table of d-d two-center integrals as written in
+    Slater and Koster, Phys. Rev. 94, 1498 (1954), Table I, in the basis
+    d_z2, d_xy, d_x2-y2"""
+    l,m,n = np.array(d)/np.linalg.norm(d)
+    s,p,dd = V
+    r3 = np.sqrt(3.)
+    zz = (n*n-(l*l+m*m)/2)**2*s + 3*n*n*(l*l+m*m)*p + 0.75*(l*l+m*m)**2*dd
+    xyxy = 3*l*l*m*m*s + (l*l+m*m-4*l*l*m*m)*p + (n*n+l*l*m*m)*dd
+    xyx2 = 1.5*l*m*(l*l-m*m)*s + 2*l*m*(m*m-l*l)*p + 0.5*l*m*(l*l-m*m)*dd
+    xyz2 = (r3*l*m*(n*n-(l*l+m*m)/2)*s - 2*r3*l*m*n*n*p
+            + r3/2*l*m*(1+n*n)*dd)
+    x2x2 = (0.75*(l*l-m*m)**2*s + (l*l+m*m-(l*l-m*m)**2)*p
+            + (n*n+(l*l-m*m)**2/4)*dd)
+    x2z2 = (r3/2*(l*l-m*m)*(n*n-(l*l+m*m)/2)*s + r3*n*n*(m*m-l*l)*p
+            + r3/4*(1+n*n)*(l*l-m*m)*dd)
+    return np.array([[zz,xyz2,x2z2],[xyz2,xyxy,xyx2],[x2z2,xyx2,x2x2]])
+
+
+def test_slater_koster_matches_the_table():
+    """The two-center matrix, built by rotating the d orbitals into the
+    frame of the bond, equals the written Slater-Koster table for random
+    bonds and integrals"""
+    rng = np.random.default_rng(17)
+    for i in range(10):
+        d,V = rng.normal(size=3),rng.normal(size=3)
+        assert np.allclose(threebandtmdc._slater_koster(d,V),_sk_table(d,V),
+                atol=1e-12)
+
+
+def test_slater_koster_bilayer():
+    """With the Slater-Koster coupling the bilayer keeps the C3 symmetry
+    of the monolayer (equal energies at k and at k rotated by 120
+    degrees), the 2H bilayer keeps inversion (doubly degenerate bands
+    with spin-orbit coupling, no second harmonic), and unlike the d_z2
+    coupling it changes the energies at K"""
+    V = (-0.3,0.1,0.02)
+    kw = dict(interlayer="slater_koster")
+    h = specialhamiltonian.three_band_tmdc_multilayer(["MoS2","MoS2"],V,
+            soc=False,fermi=None,**kw)
+    A,B = _reciprocal(h)
+    c,s = np.cos(2*np.pi/3),np.sin(2*np.pi/3)
+    R = np.array([[c,-s],[s,c]])
+    for kr in np.random.default_rng(19).random((5,2)):
+        kr2 = A@(R@(kr@B))/(2.*np.pi)
+        assert np.allclose(np.linalg.eigvalsh(_hk(h,kr)),
+                np.linalg.eigvalsh(_hk(h,kr2)),atol=1e-10)
+    h0 = specialhamiltonian.three_band_tmdc("MoS2",soc=False,fermi=None)
+    e0 = np.linalg.eigvalsh(_hk(h0,[2./3.,2./3.]))
+    eK = np.linalg.eigvalsh(_hk(h,[2./3.,2./3.]))
+    assert np.max(np.abs(eK-np.sort(np.concatenate([e0,e0]))))>1e-3
+    hs = specialhamiltonian.three_band_tmdc_multilayer(["MoS2","MoS2"],V,**kw)
+    for kr in np.random.default_rng(21).random((4,2)):
+        es = np.linalg.eigvalsh(_hk(hs,kr))
+        assert np.allclose(es[0::2],es[1::2],atol=1e-10)
+    (w,chi) = hs.get_shg_conductivity(energies=[0.5],nk=18,delta=0.05,
+            components="yyy")
+    assert np.allclose(chi,0.,atol=1e-10)
+    with pytest.raises(ValueError,match="slater_koster"):
+        specialhamiltonian.three_band_tmdc_multilayer(["MoS2"]*2,0.1,
+                interlayer="sk")
+    with pytest.raises(ValueError,match="triple"):
+        specialhamiltonian.three_band_tmdc_multilayer(["MoS2"]*2,0.1,**kw)

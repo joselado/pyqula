@@ -130,7 +130,8 @@ def three_band_tmdc(material="MoS2",model="TNN",functional="GGA",soc=True,
 
 
 def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
-        functional="GGA",soc=True,onsite=None,vdw_gap=3.0,fermi="midgap"):
+        functional="GGA",soc=True,onsite=None,vdw_gap=3.0,fermi="midgap",
+        interlayer="dz2"):
     """Multilayer of three-band MX2 monolayers (see three_band_tmdc), for
     instance layers=["MoS2","MoS2","WSe2","WSe2"].
 
@@ -138,14 +139,19 @@ def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
     ----------
     layers : list of str
       the material of each layer, from the bottom
-    t_perp : float or list of float
-      interlayer hopping in eV between the d_z2 orbitals of the three
-      nearest metal atoms of two neighboring layers, one value for every
-      interface or a list with one value per interface. The three-band fit
-      has no interlayer hopping, so it has to be chosen: in a 2H
-      homobilayer it splits the d_z2 valence band at Gamma by exactly
-      6|t_perp|, and it does not couple the K valleys, where the phases
-      of the three bonds add to zero
+    t_perp : float, triple, or a list of them
+      interlayer hopping in eV between the three nearest metal atoms of two
+      neighboring layers, one value for every interface or a list with one
+      value per interface. The three-band fit has no interlayer hopping, so
+      it has to be chosen. With interlayer="dz2" it is a number, the
+      hopping between the d_z2 orbitals: in a 2H homobilayer it splits the
+      d_z2 valence band at Gamma by exactly 6|t_perp|, and it does not
+      couple the K valleys, where the phases of the three bonds add to
+      zero. With interlayer="slater_koster" it is (V_sigma,V_pi,V_delta)
+    interlayer : str
+      "dz2" (default), the d_z2-d_z2 hopping above, or "slater_koster", the
+      two-center d-d integrals V_sigma, V_pi, V_delta on the actual bond
+      vector, which couple all three orbitals and also the K valleys
     stacking : str or list of str
       "H" (default) puts the next layer rotated by 180 degrees, the 2H
       stacking, where a homobilayer is centrosymmetric; "R" keeps the
@@ -172,12 +178,13 @@ def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
     the stack centered at z = 0. The d_z2-only t_perp does not couple
     the K valleys, so close to the gap the layers stay almost
     independent: in a 2H bilayer a potential step between the layers
-    gives only a small in-plane second-harmonic response.
+    gives only a small in-plane second-harmonic response. The Slater-
+    Koster coupling has no such restriction.
     """
     from .specialhamiltoniantk import threebandtmdc
     return threebandtmdc.three_band_tmdc_multilayer(layers,t_perp,
             stacking=stacking,model=model,functional=functional,soc=soc,
-            onsite=onsite,vdw_gap=vdw_gap,fermi=fermi)
+            onsite=onsite,vdw_gap=vdw_gap,fermi=fermi,interlayer=interlayer)
 
 
 

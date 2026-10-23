@@ -56,8 +56,11 @@ independent check (`gauge="length"`, cold insulators only).
   2H bilayer with a 0.1 eV step between the layers: since the valleys are not coupled, the step
   alone hardly gives an in-plane response. For the tetralayer question (hybridization against
   the built-in field) this means the in-plane answer depends on the valley coupling, which the
-  d_z2-only t_perp leaves out; a Slater-Koster d-d interlayer hopping, or the eleven-band model,
-  is the next step if that coupling matters. t_perp itself has no fitted value: it should be
+  d_z2-only t_perp leaves out. `interlayer="slater_koster"` (V_sigma,V_pi,V_delta) now couples the
+  valleys: with (-0.3,0.1,0.02) eV the K valence band of the 2H MoS2 bilayer (spinless) splits by
+  6.6 meV and the 0.1 eV step gives 0.0084 nm^2/V, still small, so whether the step matters in the
+  heterostructure depends on integrals that are not fitted. The eleven-band model, with the
+  chalcogen orbitals that mediate the interlayer coupling, is the controlled alternative. t_perp itself has no fitted value: it should be
   chosen from the first-principles Gamma splitting of the bilayer. A heterostructure shares the
   average lattice constant and needs its band alignment set by hand through `onsite`.
 - Excitonic SHG (Taghizadeh and Pedersen, arXiv:1902.09141) on top of `bsetk/` is not built. In a

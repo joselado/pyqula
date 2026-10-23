@@ -413,6 +413,14 @@ between the two layers of a 2H MoS$_2$ bilayer breaks inversion, but its
 static in-plane second-harmonic susceptibility is only $0.002$ nm$^2$/V,
 against $0.59$ nm$^2$/V for the monolayer.
 
+A coupling of all three orbitals is given by `interlayer="slater_koster"`,
+with `t_perp` a triple $(V_{dd\sigma},V_{dd\pi},V_{dd\delta})$, the
+Slater-Koster two-center integrals between the $d$ orbitals on the actual
+bond, which goes from one metal atom to the next layer. This coupling also
+acts in the K valleys. The three integrals are not fitted, so they have to be
+chosen, for example from the splittings of the bilayer bands at $\Gamma$ and
+at K in a first-principles calculation.
+
 Two things have to be chosen by hand for a heterostructure. All layers share
 one lattice constant, the average of the layers, so MoS$_2$ ($3.19$ Å) and
 WSe$_2$ ($3.325$ Å) are both strained by 2% to $3.26$ Å, while each keeps its
