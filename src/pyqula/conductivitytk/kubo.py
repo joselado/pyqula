@@ -29,15 +29,17 @@ def _setup(h):
 
     As in topologytk/qgt.py's _multicell_and_orders: get_multicell()
     returns a copy, so the caller's Hamiltonian is untouched, and every
-    stored matrix is coerced to a plain numpy.ndarray because Hamiltonians built
-    through get_supercell() keep their hoppings as the legacy
-    numpy.matrix, whose "*" is a matrix product -- that would silently
-    corrupt the elementwise algebra downstream. hkgen is built once here
+    stored matrix is coerced to a plain dense numpy.ndarray because
+    Hamiltonians built through get_supercell() keep their hoppings as the
+    legacy numpy.matrix, whose "*" is a matrix product -- that would
+    silently corrupt the elementwise algebra downstream -- and those made
+    spinful with turn_spinful() keep them as scipy sparse matrices, which
+    np.asarray would wrap into a useless object array. hkgen is built once here
     and reused at every k-point (rebuilding it per k-point does real setup
     work and is dramatically slower on a mesh sweep)."""
     hm = h.get_multicell() # a copy, modified below
-    hm.intra = np.asarray(hm.intra)
-    for t in hm.hopping: t.m = np.asarray(t.m)
+    hm.intra = algebra.todense(hm.intra)
+    for t in hm.hopping: t.m = algebra.todense(t.m)
     dim = h.dimensionality
     g = h.geometry
     if dim==1:

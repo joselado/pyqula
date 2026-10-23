@@ -243,6 +243,14 @@ The keywords are
   same result for an insulator at $T=0$ with no degenerate bands, and is
   there as a check.
 
+For a TMD monolayer, the three-band model of
+[Transition metal dichalcogenides](hamiltonian.md#transition-metal-dichalcogenides)
+gives for MoS$_2$ a static sheet susceptibility $|\chi_{yyy}|=0.59$
+nm$^2$/V, with $x$ along the zigzag direction, of the same order as the
+$0.3$ nm$^2$/V of a model with more orbitals (Trolle et al., PRB **89**,
+235410 (2014)). With $x$ along zigzag the nonzero components are
+$\chi_{yyy}=-\chi_{yxx}=-\chi_{xxy}=-\chi_{xyx}$.
+
 The result counts the spin as the Hamiltonian does: a spinless Hamiltonian
 gives the response of one spin. Excitonic effects are not included, and in
 a TMD they move the resonances and change their weight.

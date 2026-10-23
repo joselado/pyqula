@@ -305,3 +305,76 @@ integer. A set of fillings that gives a fractional number of electrons is
 only reached because of the broadening $\delta=0.01$ that the solver uses,
 so in this case the occupations should be read with
 `h.get_vev(delta=1e-2)`.
+
+## Transition metal dichalcogenides
+
+We will now see a model of a real material, a monolayer of a transition
+metal dichalcogenide (TMD) MX$_2$, with M = Mo, W and X = S, Se, Te. Close
+to the band edges, the states are made of three $d$ orbitals of the metal
+atom, $d_{z^2}$, $d_{xy}$ and $d_{x^2-y^2}$. The metal atoms form a
+triangular lattice, and the Hamiltonian is
+
+$$
+H(\mathbf k) = \sum_{\mathbf R} e^{i\mathbf k\cdot\mathbf R} E(\mathbf R)
++ \frac{\lambda}{2} L_z s_z ,
+$$
+
+where $E(\mathbf R)$ is the $3\times3$ matrix of hoppings to the metal atom
+at lattice vector $\mathbf R$, with $\mathbf R$ up to the third neighbors,
+and the last term is the spin-orbit coupling of the metal atom. $L_z$ is
+the orbital angular momentum, which is $\pm2$ for
+$d_{xy}\pm i d_{x^2-y^2}$, and $s_z=\pm1$ is the spin. The hoppings and
+$\lambda$ were fitted to first-principles bands by Liu et al., PRB **88**,
+085433 (2013), and `specialhamiltonian.three_band_tmdc()` builds this model:
+
+```python
+from pyqula import specialhamiltonian
+h = specialhamiltonian.three_band_tmdc("MoS2") # MoS2, TNN model, GGA, with SOC
+(k,e,sz) = h.get_bands(operator="sz") # bands, and the spin of each state
+```
+
+Energies are in eV and lengths in Å, with the lattice constant of the
+paper, $a=3.19$ Å for MoS$_2$. The first-neighbor vector is along $x$, so
+$x$ is the zigzag direction. The Fermi energy is in the middle of the gap,
+so the lowest band of each spin is occupied, as in the undoped monolayer.
+
+![Band structure of monolayer MoS2 from the three-band model with spin-orbit coupling, colored by the spin of each state.](img/hamiltonian_tmdc.png#only-light)
+![Band structure of monolayer MoS2 from the three-band model with spin-orbit coupling, colored by the spin of each state.](img/hamiltonian_tmdc-dark.png#only-dark)
+
+The gap is direct, $1.58$ eV, at K and K'. At K the valence band is made of
+$d_{xy}\pm i d_{x^2-y^2}$, with $L_z=\pm2$, so the spin-orbit coupling
+splits it by $2\lambda=0.146$ eV. The upper valence band has one spin at K
+and the opposite spin at K', because time reversal exchanges the two
+valleys. This is the spin-valley locking of the TMDs. The conduction band
+at K is made of $d_{z^2}$, with $L_z=0$, and is not split in this model.
+The real splitting there, a few meV, comes from orbitals the model does
+not have.
+
+??? example "Code of this figure (documentation/figures/hamiltonian_tmdc.py)"
+
+    ```python
+    --8<-- "hamiltonian_tmdc.py"
+    ```
+
+The keywords are
+
+- `material`: `"MoS2"`, `"WS2"`, `"MoSe2"`, `"WSe2"`, `"MoTe2"` or
+  `"WTe2"`.
+- `model`: `"TNN"`, hoppings up to the third neighbors, which give the
+  three $d$ bands in the whole Brillouin zone, or `"NN"`, first neighbors
+  only, which is accurate only close to K.
+- `functional`: `"GGA"` or `"LDA"`, the first-principles bands of the fit.
+  The lattice constant changes with it.
+- `soc`: `True` adds the spin-orbit coupling with the $\lambda$ of the
+  material, a number sets $\lambda$ in eV, and `False` gives the spinless
+  model.
+- `fermi`: `"midgap"` puts the Fermi energy in the middle of the gap, and
+  `None` keeps the energies of the paper.
+
+Each orbital is a site of the geometry, and the three sites sit at the
+position of the metal atom, in the order $d_{z^2}$, $d_{xy}$,
+$d_{x^2-y^2}$. So `h.add_onsite()` with three values acts on the orbitals,
+and an exchange field or a mean-field term acts on each orbital. The model
+has no chalcogen $p$ orbitals. Because of this, the conduction band close to
+$\Gamma$ and the valence band close to M are only qualitative, and the
+model is best used for the physics of the K and K' valleys.

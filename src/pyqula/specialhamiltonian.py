@@ -89,6 +89,47 @@ from .specialhamiltoniantk.tmdc import doped_MoS2
 from .specialhamiltoniantk.heavyfermion import H2HFH
 
 
+def three_band_tmdc(material="MoS2",model="TNN",functional="GGA",soc=True,
+        fermi="midgap"):
+    """Three-band tight-binding model of a group-VIB transition metal
+    dichalcogenide monolayer MX2, from G.-B. Liu et al., PRB 88, 085433
+    (2013), arXiv:1305.6089: the d_z2, d_xy and d_x2-y2 orbitals of the
+    metal atom on a triangular lattice, which describe the bands around
+    the K and -K valleys.
+
+    Parameters
+    ----------
+    material : str
+      "MoS2", "WS2", "MoSe2", "WSe2", "MoTe2" or "WTe2"
+    model : str
+      "TNN" (default), hoppings up to third neighbors, which reproduce the
+      three d bands in the whole Brillouin zone, or "NN", first neighbors
+      only, accurate around K
+    functional : str
+      "GGA" (default) or "LDA", the first-principles bands the parameters
+      were fitted to; the lattice constant changes with it
+    soc : bool or float
+      True adds the onsite spin-orbit coupling lambda L.S of the paper,
+      with its lambda for the material, and makes the Hamiltonian spinful;
+      a number is used as lambda in eV; False gives the spinless model
+    fermi : "midgap", float or None
+      "midgap" puts the Fermi level in the middle of the gap of the
+      undoped monolayer, a number is the energy (in eV, in the paper's
+      zero) moved to zero, None keeps the paper's zero
+
+    Energies are in eV and lengths in Angstrom, with the lattice constant
+    of the paper. The nearest-neighbor vector is along x, so x is the
+    zigzag direction and K = (4 pi/(3a),0). Each orbital is a site of the
+    geometry, at the position of the metal atom, in the order d_z2, d_xy,
+    d_x2-y2. The model has no chalcogen p orbitals, so the conduction band
+    around Gamma and the valence band around M are only qualitative.
+    """
+    from .specialhamiltoniantk import threebandtmdc
+    return threebandtmdc.three_band_tmdc(material=material,model=model,
+            functional=functional,soc=soc,fermi=fermi)
+
+
+
 
 
 def NbSe2(**kwargs):

@@ -260,3 +260,18 @@ def test_unsupported_hamiltonians_raise():
     hsc.add_swave(0.2)
     with pytest.raises(NotImplementedError):
         conductivity.optical_conductivity(hsc, energies=[1.], nk=4)
+
+
+def test_spinful_multicell_hamiltonian():
+    """A multicell Hamiltonian made spinful with turn_spinful() stores its
+    hoppings as sparse matrices; the conductivity must accept them and
+    give twice the spinless value"""
+    h0 = geometry.triangular_lattice().get_hamiltonian(has_spin=False,
+            is_multicell=True)
+    h1 = h0.copy()
+    h1.turn_spinful()
+    kw = dict(energies=[0.5,1.5],nk=12,T=0.05,delta=0.1)
+    (w,s0) = h0.get_optical_conductivity(**kw)
+    (w,s1) = h1.get_optical_conductivity(**kw)
+    assert np.max(np.abs(s0))>1e-3
+    assert np.allclose(s1,2.*s0,atol=1e-10)

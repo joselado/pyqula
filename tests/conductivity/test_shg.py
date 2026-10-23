@@ -14,6 +14,7 @@ import pytest
 from pyqula import geometry
 from pyqula import sculpt
 from pyqula import conductivity
+from pyqula import specialhamiltonian
 from pyqula.conductivitytk import kubo
 from pyqula.conductivitytk import shg
 
@@ -235,3 +236,22 @@ def test_susceptibility_is_the_converted_conductivity():
             **kw)
     fac = 1.602176634e-19/8.8541878128e-12*1.45e-10/2.33**2/1e-18
     assert np.allclose(chi,1j*s/(2.*(w+0.1j))*fac,rtol=1e-12)
+
+
+def test_monolayer_mos2_against_trolle():
+    """Monolayer MoS2 from the three-band model of Liu et al. follows the
+    D3h pattern with x along the zigzag direction, chi_yyy = -chi_yxx =
+    -chi_xxy and chi_xxx = 0, and its static sheet susceptibility is of
+    the order of the 0.3 nm^2/V of Trolle, Seifert and Pedersen, PRB 89,
+    235410 (2014), arXiv:1310.0674, computed with an sp3d5 model. A three-
+    band model with a different gap can only agree in order of magnitude,
+    which is what is asserted (it gives 0.59 nm^2/V)"""
+    h = specialhamiltonian.three_band_tmdc("MoS2")
+    comps = ["yyy","yxx","xxy","xxx"]
+    (w,chi) = h.get_shg_susceptibility(energies=[0.,1.0],nk=30,T=0.,
+            delta=0.05,components=comps)
+    ref = np.max(np.abs(chi["yyy"]))
+    for c in ["yxx","xxy"]:
+        assert np.allclose(chi[c],-chi["yyy"],atol=1e-8*ref)
+    assert np.allclose(chi["xxx"],0.,atol=1e-8*ref)
+    assert 0.1<abs(chi["yyy"][0])<1.

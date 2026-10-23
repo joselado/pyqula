@@ -175,7 +175,8 @@ already reached once.
 - [`second_harmonic_generation.md`](second_harmonic_generation.md) -- the second-harmonic
   conductivity and susceptibility: why the velocity gauge with the third-derivative vertex is the
   default and the length gauge only a check, the two-gauge and finite-field measurements that pin
-  it, and what is open (a TMD model for the Trolle benchmark, excitonic SHG, 3D, sum- and
+  it, the order-of-magnitude check of monolayer MoS2 against Trolle et al. with the three-band TMD
+  model, and what is open (interlayer hopping for TMD multilayers, excitonic SHG, 3D, sum- and
   difference-frequency and shift currents).
 
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the

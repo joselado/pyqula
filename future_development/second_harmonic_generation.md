@@ -39,12 +39,15 @@ independent check (`gauge="length"`, cold insulators only).
 
 ## What is left open
 
-- The benchmark against Trolle, Seifert and Pedersen (arXiv:1310.0674), the monolayer MoS2 SHG, is
-  not done: it needs a TMD model with the right orbitals. The three-band model of Liu et al.
-  (arXiv:1305.6089), with the interlayer hopping added by hand, or the eleven-band model of Fang et
-  al. (arXiv:1506.08860), which carries interlayer and strain terms, are the two candidates.
-  Trolle's sp3d5 model gives a static sheet chi of 0.3 nm^2/V, so a three-band model can be
-  compared only in order of magnitude and in the position of the A/2, B/2 and C/2 features.
+- The benchmark against Trolle, Seifert and Pedersen (arXiv:1310.0674) is done in order of
+  magnitude only. The three-band model of Liu et al. (arXiv:1305.6089), now
+  `specialhamiltonian.three_band_tmdc()`, gives for monolayer MoS2 (TNN, GGA, with SOC) a static
+  sheet |chi_yyy| = 0.59 nm^2/V against Trolle's 0.3 nm^2/V from an sp3d5 model, with the D3h
+  pattern for x along zigzag, and a largest |chi_yyy| of 5.0 nm^2/V at 1.68 eV (nk=120,
+  delta=0.025 eV). The positions of the A/2, B/2 and C/2 features have not been compared. The
+  eleven-band model of Fang et al. (arXiv:1506.08860), which carries interlayer and strain terms,
+  is not built; the three-band model has no interlayer hopping, so a multilayer needs one added
+  by hand, between the d orbitals of neighboring metal atoms.
 - Excitonic SHG (Taghizadeh and Pedersen, arXiv:1902.09141) on top of `bsetk/` is not built. In a
   TMD the excitons move the resonances by several hundred meV and change their weight, so a
   single-particle chi2 is a statement about symmetry and trends, not about absolute peak positions.
