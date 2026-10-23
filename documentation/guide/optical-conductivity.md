@@ -137,8 +137,122 @@ Superconducting (Nambu) Hamiltonians and three-dimensional ones raise
 `NotImplementedError`; for a Nambu Hamiltonian the hole block carries the
 opposite charge, so the current is not $i[H,r]$.
 
-See `examples/2d/optical_conductivity/main.py` and
-`examples/1d/optical_conductivity_chain/main.py` for runnable scripts, and
+## Second-harmonic generation
+
+We will now see the response at second order in the field. A crystal
+without inversion symmetry, driven by light of frequency $\omega$, emits
+light at $2\omega$. This is second-harmonic generation (SHG). The current
+at $2\omega$ is
+
+$$
+J_a(2\omega) = \sigma_{abc}(2\omega;\omega,\omega)\,E_b(\omega)\,E_c(\omega),
+$$
+
+and $\sigma_{abc}$ is computed with `h.get_shg_conductivity()`. It is
+symmetric in $b$ and $c$. Experiments quote the susceptibility instead,
+$P_a(2\omega) = \epsilon_0 \chi_{abc} E_b E_c$. Since $J = dP/dt$, the two
+are related by
+
+$$
+\chi_{abc} = \frac{i\,\sigma_{abc}}{2(\omega+i\eta)\,\epsilon_0} ,
+$$
+
+and `h.get_shg_susceptibility()` returns $\chi_{abc}$ in SI units, in
+nm$^2$/V for a two-dimensional system. This is the sheet susceptibility.
+Divide it by a thickness to get a bulk value in nm/V.
+
+The response has two kinds of resonances. One appears when $2\hbar\omega$
+matches a transition $E_m-E_n$ between an occupied and an empty band, and
+the other appears when $\hbar\omega$ matches it. So the SHG spectrum shows
+the absorption features of the linear spectrum at half their energy, and
+also at their own energy. Every frequency has the same broadening,
+$\omega\to\omega+i\eta$, so the $2\omega$ poles have the broadening $2\eta$.
+
+Under inversion $\mathbf r\to-\mathbf r$ the current and the field change
+sign, so $\sigma_{abc}$ changes sign too, and it is exactly zero in a
+centrosymmetric crystal. This is why SHG is used to count layers in 2H
+stacks of transition metal dichalcogenides: an odd number of layers gives a
+signal, an even number gives almost none.
+
+The calculation uses the velocity operator of the tight-binding model, the
+same as in [The Kubo formula](#the-kubo-formula), and also the second and
+third derivatives of $H(\mathbf k)$ with respect to $\mathbf k$. With these
+terms the result is exact for the tight-binding model with any number of
+bands, and it does not depend on the gauge of the field.
+
+We take the honeycomb lattice with a staggered onsite energy, a two-band
+model of hexagonal boron nitride (hBN), with onsite energies
+$\pm3.9$ eV, hopping $t=2.33$ eV and bond length 1.45 Å:
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # honeycomb lattice, x is the armchair direction
+h = g.get_hamiltonian(has_spin=True) # spinful, so both spins are counted
+h.add_sublattice_imbalance(3.9/2.33) # onsite +-3.9 eV with t = 2.33 eV, as hBN
+
+# sheet susceptibility chi_xxx in nm^2/V, bond length 1.45 A and t = 2.33 eV
+(ws,chi) = h.get_shg_susceptibility(energies=np.linspace(0.,4.,401),
+                                    nk=200,T=0.,delta=0.02,components="xxx",
+                                    length_unit=1.45,energy_unit=2.33)
+print("static chi_xxx in nm^2/V:",chi[0].real)
+```
+
+`chi` is an array with one value per frequency. With `components` a list,
+for example `["xxx","xyy"]`, the result is a dictionary with one array per
+component. The point group of hBN is $D_{3h}$. With $x$ along the
+armchair direction, as in pyqula's honeycomb lattice, the only nonzero
+components are $\chi_{xxx}=-\chi_{xyy}=-\chi_{yxy}=-\chi_{yyx}$, and
+$\chi_{yyy}=0$.
+
+![Real and imaginary part of the second-harmonic sheet susceptibility of a two-band hBN model against frequency, with half the gap and the gap marked.](img/optical_shg.png#only-light)
+![Real and imaginary part of the second-harmonic sheet susceptibility of a two-band hBN model against frequency, with half the gap and the gap marked.](img/optical_shg-dark.png#only-dark)
+
+The static value is $\chi_{xxx}=2.6\times10^{-3}$ nm$^2$/V. The gap is
+$3.35t$, at the K point. The real part has its maximum,
+$2.1\times10^{-2}$ nm$^2$/V, at $\hbar\omega=1.67t$, half the gap: this is
+the $2\omega$ resonance with the band edge. The imaginary part has its
+maximum, $2.3\times10^{-2}$ nm$^2$/V, at $\hbar\omega=1.95t$, half of the
+transition at the M point, $3.90t$, where the density of states of the
+transitions is largest. The $\omega$ resonances start at the gap, where
+$\mathrm{Im}\,\chi_{xxx}$ changes sign, and they are weaker. The M transition
+appears again at $\hbar\omega=3.90t$, as a small dip. Here `nk=100` already gives the curves to 1%, and
+`nk=300` changes the curves by less than $2\times10^{-4}$ of their maximum
+compared with `nk=200`.
+
+??? example "Code of this figure (documentation/figures/optical_shg.py)"
+
+    ```python
+    --8<-- "optical_shg.py"
+    ```
+
+The keywords are
+
+- `energies`: the fundamental frequencies $\hbar\omega$.
+- `nk`: number of k-points per direction. As for the linear conductivity, a
+  small `delta` needs a large `nk`.
+- `T`: temperature of the Fermi function. A metal needs $T>0$.
+- `delta`: the broadening $\eta$ of each frequency.
+- `components`: one component such as `"xxx"`, or a list of them. Components
+  along $z$ of a two-dimensional system are allowed, since the positions of
+  the orbitals give the dipole along $z$.
+- `length_unit`, `energy_unit` (only for `h.get_shg_susceptibility()`): the
+  length unit of the geometry in Å and the energy unit of the Hamiltonian in
+  eV, used to convert to SI units.
+- `gauge`: `"velocity"` (the default) or `"length"`. The length gauge gives the
+  same result for an insulator at $T=0$ with no degenerate bands, and is
+  there as a check.
+
+The result counts the spin as the Hamiltonian does: a spinless Hamiltonian
+gives the response of one spin. Excitonic effects are not included, and in
+a TMD they move the resonances and change their weight.
+`h.get_shg_conductivity()` returns $\sigma_{abc}$ in units of
+$e^3 a^{3-d}/(\hbar t)$, with $a$ the length unit of the geometry and $d$
+the dimension.
+
+See `examples/2d/optical_conductivity/main.py`,
+`examples/1d/optical_conductivity_chain/main.py` and
+`examples/2d/second_harmonic_generation/main.py` for runnable scripts, and
 `01_optical_conductivity.ipynb` and `02_drude_weight_f_sum_rule.ipynb` in
 `jupyter-notebooks/functionalities/response_functions/` for executed
 notebooks.

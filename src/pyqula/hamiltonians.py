@@ -184,6 +184,18 @@ class Hamiltonian():
         from . import conductivity
         return conductivity.optical_conductivity(h,**kwargs)
 
+    def get_shg_conductivity(h,**kwargs):
+        """Second-harmonic conductivity sigma_abc(2w;w,w), see
+        conductivity.shg_conductivity for the formula and conventions"""
+        from . import conductivity
+        return conductivity.shg_conductivity(h,**kwargs)
+
+    def get_shg_susceptibility(h,**kwargs):
+        """Second-harmonic susceptibility chi_abc(2w;w,w) in nm^(4-d)/V,
+        see conductivity.shg_susceptibility"""
+        from . import conductivity
+        return conductivity.shg_susceptibility(h,**kwargs)
+
     def get_nonlinear_drude_conductivity(h,**kwargs):
         """l-th order nonlinear Drude conductivity sigma^{x^l1 y^l2 ; b},
         whose lowest nonvanishing order measures the X-wave index of a

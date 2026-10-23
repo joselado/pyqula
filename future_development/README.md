@@ -172,6 +172,12 @@ already reached once.
   response as in the pair basis), and what is still open (Nambu and the
   local rotations).
 
+- [`second_harmonic_generation.md`](second_harmonic_generation.md) -- the second-harmonic
+  conductivity and susceptibility: why the velocity gauge with the third-derivative vertex is the
+  default and the length gauge only a check, the two-gauge and finite-field measurements that pin
+  it, and what is open (a TMD model for the Trolle benchmark, excitonic SHG, 3D, sum- and
+  difference-frequency and shift currents).
+
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
   X-wave nonlinear Drude spin conductivity covers, the measured performance
   and its nb^3 scaling, why the thermal (spin-Nernst) channel is

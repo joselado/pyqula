@@ -204,6 +204,121 @@ def sum_rule_weight(h,nk=20,T=0.05):
     return kubo.sum_rule_weight(h,nk=nk,T=T)
 
 
+from .conductivitytk import shg
+
+
+def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
+        components=None,gauge="velocity",degeneracy_tol=1e-6):
+    """Second-harmonic conductivity sigma_abc(2w;w,w) of a 1D or 2D
+    periodic Hamiltonian, the second-order current at twice the frequency
+    of the field, J_a(2w) = sigma_abc(2w;w,w) E_b(w) E_c(w), symmetrized
+    in b and c.
+
+    Formula
+    -------
+    The density-matrix recursion of Passos, Ventura, Viana Parente Lopes,
+    Lopes dos Santos and Peres, PRB 97, 235446 (2018), arXiv:1712.04924,
+    in the velocity gauge (hbar = 1, carrier charge q = -e):
+
+      rho1^c_nm  = h^c_nm (f_m - f_n)/(w - (E_n - E_m))
+      rho2^bc_nm = ([h^b,rho1^c] + (1/2)[h^bc,rho0])_nm/(2w - (E_n - E_m))
+      sigma_abc  = -(q^3/w^2) (1/(N_k V_cell)) sum_k sum_nm
+                   [h^a_nm rho2^bc_mn + h^ab_nm rho1^c_mn
+                    + (1/2) h^abc_nn f_n delta_nm]
+
+    with h^a, h^ab and h^abc the eigenbasis matrix elements of the first,
+    second and third Cartesian k-derivatives of the Peierls-coupled Bloch
+    Hamiltonian (the full bond vector R + r_j - r_i, exactly as in
+    optical_conductivity, so h^a is its velocity operator). For a tight-
+    binding model with the position operator diagonal in the orbitals this
+    is exact for any number of bands: the second- and third-derivative
+    vertices are what the truncated velocity gauge of a continuum model
+    misses (Taghizadeh, Hipolito and Pedersen, PRB 96, 195413 (2017),
+    arXiv:1710.01300), and with them the two-band model is not zero. The
+    apparent 1/w^2 divergence cancels between the three terms.
+
+    Every frequency carries the same broadening, w -> w + i delta, so the
+    2w poles carry 2 i delta. Nothing is dropped: the intraband (Fermi-
+    surface) response of a metal enters through the cancellation between
+    the three terms rather than through an explicit -df/dE factor, so a
+    metal is allowed at T > 0, with the same caveat on T and nk as the
+    Drude part of optical_conductivity.
+
+    gauge="length" evaluates the same quantity in the length gauge, as a
+    sum over states with the interband Berry connection r^a_nm and its
+    generalized derivative r^a_nm;b (Sipe and Shkrebtii, PRB 61, 5337
+    (2000); Ibanez-Azpiroz, Tsirkin and Souza, PRB 97, 245143 (2018),
+    arXiv:1804.04030), the latter from the exact sum rule of the tight-
+    binding model, which includes the second-derivative term. It is an
+    independent check, not the production path: it drops the Fermi-
+    surface terms, so it needs T=0 and an insulator, and it divides by
+    band energy differences, so it needs a nondegenerate spectrum and
+    converges slowly in nk wherever two occupied bands come close. Where
+    it applies, it agrees with the velocity gauge to machine precision on
+    the same k-mesh.
+
+    Units and conventions
+    ---------------------
+    As in optical_conductivity: hbar = e = 1, energies in the
+    Hamiltonian's units t, lengths in the geometry's units a, the
+    chemical potential at zero, and the retarded branch with time
+    dependence exp(-i w t). sigma is then in units of e^3 a^(3-d)/(hbar t)
+    with d the dimensionality. The sign follows from q = -e, since the
+    response is odd in the charge. The spin degeneracy is whatever the
+    Hamiltonian has: a spinless model gives the response of one spin
+    species. The static limit is pinned in tests/conductivity against the
+    second derivative of the exact polarization of an isolated molecule
+    in a finite field.
+
+    Parameters
+    ----------
+    h : Hamiltonian
+      the (1D or 2D) periodic Hamiltonian, not Nambu
+    energies : array
+      fundamental frequencies hbar*w (default np.linspace(0.,4.,100))
+    nk : int
+      number of k-points per periodic direction
+    T : float
+      temperature of the Fermi occupations, delta by default
+    delta : float
+      broadening added to every frequency
+    components : str, list of str or None
+      Cartesian components such as "xxx" or ["xxx","xyy"]; None gives all
+      27. Components along a non-periodic direction (z of a 2D slab) are
+      meaningful, since the position operator is taken from the geometry
+    gauge : str
+      "velocity" (default) or "length", see above
+    degeneracy_tol : float
+      relative tolerance below which the length gauge treats two bands
+      as degenerate and refuses to run
+
+    Returns
+    -------
+    (energies, sigma) with sigma an array of len(energies) if components
+    is a single string, and a dict {component: array} otherwise.
+    """
+    return shg.shg_conductivity(h,energies=energies,nk=nk,T=T,delta=delta,
+            components=components,gauge=gauge,degeneracy_tol=degeneracy_tol)
+
+
+def shg_susceptibility(h,length_unit=1.0,energy_unit=1.0,**kwargs):
+    """Second-harmonic susceptibility chi_abc(2w;w,w) in SI units, the
+    quantity measured in an SHG experiment, P_a(2w) = epsilon_0 chi_abc
+    E_b(w) E_c(w). It is shg_conductivity converted through J = dP/dt,
+
+      chi_abc = i sigma_abc/(2 (w + i delta) epsilon_0),
+
+    with the broadening carried consistently, so that the static limit of
+    an insulator is finite. length_unit is the length unit of the geometry
+    in Angstrom and energy_unit the energy unit of the Hamiltonian in eV;
+    the result is in nm^(4-d)/V, i.e. the sheet susceptibility in nm^2/V
+    for a 2D system (divide by an effective thickness for a bulk value in
+    nm/V). Every other keyword is passed to shg_conductivity, with the
+    same return layout."""
+    return shg.shg_susceptibility(h,length_unit=length_unit,
+            energy_unit=energy_unit,**kwargs)
+
+
 from .conductivitytk import nonlineardrude
 
 

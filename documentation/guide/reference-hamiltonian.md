@@ -1383,6 +1383,37 @@ Returns `(energies,sigma)`, with `sigma` complex of shape `(nw,3,3)`, or
 `(nw,)` with `component`. The unit is $e^2/\hbar$, so $e^2/h$ is
 $1/(2\pi)$. 3D and Nambu Hamiltonians raise `NotImplementedError`.
 
+## h.get_shg_conductivity()
+Compute the second-harmonic conductivity $\sigma_{abc}(2\omega;\omega,\omega)$,
+the current at $2\omega$ driven by a field at $\omega$,
+$J_a(2\omega)=\sigma_{abc}E_b(\omega)E_c(\omega)$, symmetric in $b$ and $c$.
+It is zero in a crystal with inversion symmetry. See
+[Second-harmonic generation](optical-conductivity.md#second-harmonic-generation).
+
+Optional arguments:
+
+- energies=None: the fundamental frequencies $\omega$
+- nk=20: k-points per direction
+- T=None: temperature (by default equal to `delta`)
+- delta=0.1: broadening $\eta$ of each frequency
+- components=None: one component such as `"xxx"`, a list of them, or all 27
+- gauge="velocity": `"velocity"`, or `"length"` as a check for an insulator
+  at `T=0` with no degenerate bands
+- degeneracy_tol=1e-6: relative tolerance to treat two bands as degenerate in
+  the length gauge
+
+Returns `(energies,sigma)`, with `sigma` a complex array of length `nw` for one
+component and a dictionary of such arrays for a list. The unit is
+$e^3a^{3-d}/(\hbar t)$. 3D and Nambu Hamiltonians raise `NotImplementedError`.
+
+## h.get_shg_susceptibility()
+Return the second-harmonic susceptibility
+$\chi_{abc}=i\sigma_{abc}/(2(\omega+i\eta)\epsilon_0)$ in SI units, nm$^2$/V
+for a 2D system (the sheet susceptibility). Arguments `length_unit=1.0`, the
+length unit of the geometry in Å, `energy_unit=1.0`, the energy unit of the
+Hamiltonian in eV, and every argument of `h.get_shg_conductivity()`. Returns
+`(energies,chi)` in the same layout.
+
 ## h.get_drude_weight()
 Return the Drude weight tensor, the weight of the intraband
 $\delta(\omega)$ peak of $\mathrm{Re}\,\sigma(\omega)$. Arguments `nk=20`,
