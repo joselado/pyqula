@@ -129,6 +129,57 @@ def three_band_tmdc(material="MoS2",model="TNN",functional="GGA",soc=True,
             functional=functional,soc=soc,fermi=fermi)
 
 
+def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
+        functional="GGA",soc=True,onsite=None,vdw_gap=3.0,fermi="midgap"):
+    """Multilayer of three-band MX2 monolayers (see three_band_tmdc), for
+    instance layers=["MoS2","MoS2","WSe2","WSe2"].
+
+    Parameters
+    ----------
+    layers : list of str
+      the material of each layer, from the bottom
+    t_perp : float or list of float
+      interlayer hopping in eV between the d_z2 orbitals of the three
+      nearest metal atoms of two neighboring layers, one value for every
+      interface or a list with one value per interface. The three-band fit
+      has no interlayer hopping, so it has to be chosen: in a 2H
+      homobilayer it splits the d_z2 valence band at Gamma by exactly
+      6|t_perp|, and it does not couple the K valleys, where the phases
+      of the three bonds add to zero
+    stacking : str or list of str
+      "H" (default) puts the next layer rotated by 180 degrees, the 2H
+      stacking, where a homobilayer is centrosymmetric; "R" keeps the
+      orientation, the R (3R) stacking. One value for every interface, or
+      a list with one value per interface. In both, the metal atoms of
+      the next layer are shifted laterally by a/sqrt3. A model with only
+      metal orbitals cannot tell the 2Hc stacking of MoS2 (metal above
+      chalcogen) from 2Ha (metal above the hollow site): "H" covers both
+    model, functional, soc, fermi : as in three_band_tmdc, with each
+      layer keeping its own hoppings and spin-orbit coupling
+    onsite : list of float
+      an energy in eV added to each layer. The energies of the fit are
+      not aligned between different materials, so for a heterostructure
+      this sets the band alignment; it is also a potential step between
+      the layers
+    vdw_gap : float
+      distance in Angstrom between the chalcogen planes of neighboring
+      layers; the metal-metal distance is z_XX + vdw_gap, 6.13 A for MoS2
+
+    All layers share one lattice constant, the average of the layers' a,
+    with the hoppings of each layer unchanged, so a heterostructure of
+    materials with different a is strained to a common commensurate cell.
+    Lengths are in Angstrom and energies in eV, with x along zigzag and
+    the stack centered at z = 0. The d_z2-only t_perp does not couple
+    the K valleys, so close to the gap the layers stay almost
+    independent: in a 2H bilayer a potential step between the layers
+    gives only a small in-plane second-harmonic response.
+    """
+    from .specialhamiltoniantk import threebandtmdc
+    return threebandtmdc.three_band_tmdc_multilayer(layers,t_perp,
+            stacking=stacking,model=model,functional=functional,soc=soc,
+            onsite=onsite,vdw_gap=vdw_gap,fermi=fermi)
+
+
 
 
 

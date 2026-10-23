@@ -378,3 +378,48 @@ and an exchange field or a mean-field term acts on each orbital. The model
 has no chalcogen $p$ orbitals. Because of this, the conduction band close to
 $\Gamma$ and the valence band close to M are only qualitative, and the
 model is best used for the physics of the K and K' valleys.
+
+Several layers are built with `specialhamiltonian.three_band_tmdc_multilayer()`.
+The fit of Liu et al. has no hopping between layers, so we add one, $t_\perp$,
+between the $d_{z^2}$ orbitals of the three nearest metal atoms of two
+neighboring layers. These three bonds have phases that add to zero at K and
+K', so $t_\perp$ does not couple the layers in the valleys. At $\Gamma$ it
+splits the $d_{z^2}$ valence band of a homobilayer by $6|t_\perp|$, which is
+the quantity to compare with a first-principles band structure to choose
+$t_\perp$:
+
+```python
+from pyqula import specialhamiltonian
+# 2H bilayer of MoS2 on a 2H bilayer of WSe2, with an interlayer hopping of 0.1 eV
+h = specialhamiltonian.three_band_tmdc_multilayer(["MoS2","MoS2","WSe2","WSe2"],0.1,
+                                                  onsite=[0.,0.,0.5,0.5]) # illustrative alignment
+```
+
+With `stacking="H"`, the default, each layer is rotated by 180 degrees with
+respect to the one below, as in the 2H crystals. A 2H homobilayer then has
+inversion symmetry: with the spin-orbit coupling every band is doubly
+degenerate, and its second-harmonic response is zero (see
+[Second-harmonic generation](optical-conductivity.md#second-harmonic-generation)).
+With `stacking="R"` the layers keep their orientation, there is no
+inversion, and the bilayer gives second harmonic. `stacking` and `t_perp`
+can also be lists with one value per interface, so that, for example, only
+the hopping across a heterointerface is changed. Since the model has only
+metal orbitals, `"H"` cannot distinguish the metal-above-chalcogen and the
+metal-above-hollow versions of the 2H stacking.
+
+Because $t_\perp$ does not couple the layers in the valleys, close to the gap
+the layers stay almost independent. For example, a potential step of $0.1$ eV
+between the two layers of a 2H MoS$_2$ bilayer breaks inversion, but its
+static in-plane second-harmonic susceptibility is only $0.002$ nm$^2$/V,
+against $0.59$ nm$^2$/V for the monolayer.
+
+Two things have to be chosen by hand for a heterostructure. All layers share
+one lattice constant, the average of the layers, so MoS$_2$ ($3.19$ Å) and
+WSe$_2$ ($3.325$ Å) are both strained by 2% to $3.26$ Å, while each keeps its
+own hoppings. The onsite energies of different materials in the fit are not
+on a common scale, so `onsite`, one energy per layer, sets the band
+alignment, and it has to come from a first-principles calculation of the
+heterostructure. The same keyword gives a potential step between the layers.
+`vdw_gap`, $3.0$ Å by default, is the distance between the chalcogen planes
+of two layers, which gives a distance of $6.13$ Å between the metal planes
+of MoS$_2$.

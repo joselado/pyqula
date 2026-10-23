@@ -235,3 +235,102 @@ def _midgap(h,nk=36):
         for k in ks])
     vbm,cbm = np.max(es[:,:nocc]),np.min(es[:,nocc:])
     return (vbm+cbm)/2.
+
+
+_stackings = ["H","R"] # stacking of one layer on the next, see multilayer
+
+
+def three_band_tmdc_multilayer(layers,t_perp,stacking="H",model="TNN",
+        functional="GGA",soc=True,onsite=None,vdw_gap=3.0,fermi="midgap"):
+    """Multilayer of three-band MX2 monolayers, see
+    specialhamiltonian.three_band_tmdc_multilayer for the documentation.
+
+    Layer l has its metal atoms at the lateral position c_l and height z_l,
+    and an orientation s_l = +-1. An "H" interface puts the next layer at
+    c_l + delta with the opposite orientation, so the pair is the
+    inversion image of itself through the midpoint (the 2H stacking, with
+    the metal atoms of one layer above the chalcogens of the other); an
+    "R" interface puts it at c_l + delta with the same orientation (the R,
+    or 3R, stacking). delta = (a1 + 2 a2')/3 with a2' = R2 the second
+    lattice vector of the paper, |delta| = a/sqrt3. Since the d orbitals are
+    even under inversion, a layer with s = -1 has the hoppings E(-R) of the
+    paper, and its spin-orbit term, lambda/2 Lz sz, is unchanged.
+
+    The interlayer hopping t_perp couples the d_z2 orbitals of the three
+    nearest metal atoms of two neighboring layers, at lateral distance
+    a/sqrt3. Their phases add to zero at K and K', so the valleys are not
+    coupled by it, while the d_z2 valence band at Gamma of a homobilayer is
+    split by exactly 6|t_perp|."""
+    from .. import geometry
+    from ..multihopping import MultiHopping
+    if isinstance(stacking,str): stacking = [stacking]*(len(layers)-1)
+    if len(stacking)!=len(layers)-1: raise ValueError("stacking needs one "
+            "value per interface, "+str(len(layers)-1)+" here, got "
+            +str(len(stacking)))
+    for s in stacking:
+        if s not in _stackings: raise ValueError("unknown stacking "
+                +repr(s)+", accepted values are "+", ".join(_stackings))
+    if np.isscalar(t_perp): t_perp = [t_perp]*(len(layers)-1)
+    if len(t_perp)!=len(layers)-1: raise ValueError("t_perp needs one value "
+            "per interface, "+str(len(layers)-1)+" here, got "+str(len(t_perp)))
+    if onsite is None: onsite = [0.]*len(layers)
+    if len(onsite)!=len(layers): raise ValueError("onsite needs one energy "
+            "per layer, "+str(len(layers))+" here, got "+str(len(onsite)))
+    pars = [_parameters(m,model,functional) for m in layers]
+    a = np.mean([ap[0] for ap in pars]) # common lattice constant
+    a1,a2 = _lattice(a)
+    R2 = a1 + a2 # the paper's second lattice vector
+    delta = (a1 + R2)/3. # lateral shift between stacked layers
+    # orientation, lateral position and height of each layer
+    orient,c,z = [1],[np.zeros(3)],[0.]
+    for (l,s) in enumerate(stacking):
+        orient.append(-orient[-1] if s=="H" else orient[-1])
+        c.append(c[-1] + delta)
+        zxx = (_nn[functional][layers[l]][1] + _nn[functional][layers[l+1]][1])/2.
+        z.append(z[-1] + zxx + vdw_gap) # metal-metal distance
+    nl = len(layers)
+    g = geometry.triangular_lattice()
+    r = np.array([c[l] + np.array([0.,0.,z[l]]) for l in range(nl)
+                  for i in range(3)]) # three orbitals per metal atom
+    r[:,2] = r[:,2] - np.mean(z) # center the stack at z = 0
+    g.x,g.y,g.z = r[:,0],r[:,1],r[:,2]
+    g.xyz2r()
+    g.a1,g.a2 = a1,a2
+    g.a3 = np.array([0.,0.,np.max(r[:,2])-np.min(r[:,2])+20.])
+    g.has_sublattice = False
+    g.update_reciprocal()
+    g.get_fractional()
+    # intralayer hoppings, block diagonal
+    hop = {}
+    def block(key):
+        if key not in hop: hop[key] = np.zeros((3*nl,3*nl),dtype=np.complex128)
+        return hop[key]
+    for l in range(nl):
+        el = _real_space_hoppings(pars[l][0],pars[l][1])
+        for (key,m) in el.items():
+            k2 = key if orient[l]==1 else (-key[0],-key[1],0)
+            b = block(k2)
+            b[3*l:3*l+3,3*l:3*l+3] += m
+        block((0,0,0))[3*l:3*l+3,3*l:3*l+3] += onsite[l]*np.eye(3)
+    # interlayer d_z2 hoppings to the three nearest metal atoms
+    for l in range(nl-1):
+        i,j = 3*l,3*(l+1) # the d_z2 orbitals of the two layers
+        for n1 in range(-2,3):
+            for n2 in range(-2,3):
+                d = c[l+1] + n1*a1 + n2*a2 - c[l] # lateral bond, cell (n1,n2)
+                if abs(np.linalg.norm(d)-a/np.sqrt(3.))>1e-6: continue
+                block((n1,n2,0))[i,j] += t_perp[l]
+                block((-n1,-n2,0))[j,i] += np.conj(t_perp[l])
+    h = g.get_hamiltonian(has_spin=False,is_multicell=True,
+            tij=lambda r1,r2: 0.)
+    h.set_multihopping(MultiHopping(hop))
+    if soc is not False and soc is not None:
+        lambs = [_soc[m] if soc is True else float(soc) for m in layers]
+        h.turn_spinful()
+        Lz = np.array([[0.,0.,0.],[0.,0.,2j],[0.,-2j,0.]])
+        L = np.zeros((3*nl,3*nl),dtype=np.complex128)
+        for l in range(nl): L[3*l:3*l+3,3*l:3*l+3] = lambs[l]/2.*Lz
+        h.intra = h.intra + np.kron(L,np.diag([1.,-1.]))
+    if fermi=="midgap": h.shift_fermi(-_midgap(h))
+    elif fermi is not None: h.shift_fermi(-float(fermi))
+    return h

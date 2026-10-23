@@ -46,8 +46,20 @@ independent check (`gauge="length"`, cold insulators only).
   pattern for x along zigzag, and a largest |chi_yyy| of 5.0 nm^2/V at 1.68 eV (nk=120,
   delta=0.025 eV). The positions of the A/2, B/2 and C/2 features have not been compared. The
   eleven-band model of Fang et al. (arXiv:1506.08860), which carries interlayer and strain terms,
-  is not built; the three-band model has no interlayer hopping, so a multilayer needs one added
-  by hand, between the d orbitals of neighboring metal atoms.
+  is not built. Multilayers of the three-band model are
+  `specialhamiltonian.three_band_tmdc_multilayer()`, with an interlayer hopping t_perp between the
+  d_z2 orbitals of the three nearest metal atoms only (the maintainer's choice, 23 October 2026),
+  one value per interface,
+  which splits the Gamma valence band of a homobilayer by 6|t_perp| and cancels exactly at K and
+  K'. With it, at t_perp = 0.1 eV and nk=60, the static |chi_yyy| of MoS2 is 0.585 nm^2/V for the
+  monolayer, zero for the 2H bilayer, 1.187 nm^2/V for the R bilayer, and only 0.002 nm^2/V for the
+  2H bilayer with a 0.1 eV step between the layers: since the valleys are not coupled, the step
+  alone hardly gives an in-plane response. For the tetralayer question (hybridization against
+  the built-in field) this means the in-plane answer depends on the valley coupling, which the
+  d_z2-only t_perp leaves out; a Slater-Koster d-d interlayer hopping, or the eleven-band model,
+  is the next step if that coupling matters. t_perp itself has no fitted value: it should be
+  chosen from the first-principles Gamma splitting of the bilayer. A heterostructure shares the
+  average lattice constant and needs its band alignment set by hand through `onsite`.
 - Excitonic SHG (Taghizadeh and Pedersen, arXiv:1902.09141) on top of `bsetk/` is not built. In a
   TMD the excitons move the resonances by several hundred meV and change their weight, so a
   single-particle chi2 is a statement about symmetry and trends, not about absolute peak positions.

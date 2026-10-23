@@ -98,3 +98,88 @@ def test_options_are_checked():
         specialhamiltonian.three_band_tmdc(model="NNN")
     with pytest.raises(ValueError,match="LDA"):
         specialhamiltonian.three_band_tmdc(functional="PBE")
+
+
+def test_one_layer_is_the_monolayer():
+    """A multilayer of one layer is the monolayer"""
+    h1 = specialhamiltonian.three_band_tmdc_multilayer(["WSe2"],0.1)
+    h0 = specialhamiltonian.three_band_tmdc("WSe2")
+    for kr in np.random.default_rng(7).random((4,2)):
+        assert np.allclose(_hk(h1,kr),_hk(h0,kr),atol=1e-12)
+
+
+@pytest.mark.parametrize("stacking",["H","R"])
+def test_interlayer_hopping_at_gamma_and_K(stacking):
+    """In a homobilayer the d_z2 hopping t_perp to the three nearest metal
+    atoms adds to zero at K, so the bilayer has there the monolayer
+    energies twice, and at Gamma it splits the d_z2 band by 6|t_perp|"""
+    tp = 0.1
+    h = specialhamiltonian.three_band_tmdc_multilayer(["MoS2","MoS2"],tp,
+            stacking=stacking,soc=False,fermi=None)
+    h0 = specialhamiltonian.three_band_tmdc("MoS2",soc=False,fermi=None)
+    eK = np.linalg.eigvalsh(_hk(h,[2./3.,2./3.]))
+    e0 = np.linalg.eigvalsh(_hk(h0,[2./3.,2./3.]))
+    assert np.allclose(eK,np.sort(np.concatenate([e0,e0])),atol=1e-10)
+    eG = np.linalg.eigvalsh(_hk(h,[0.,0.]))
+    assert abs((eG[1]-eG[0])-6.*tp)<1e-10
+
+
+def test_2H_bilayer_is_centrosymmetric():
+    """With spin-orbit coupling, the 2H homobilayer has inversion and
+    time reversal, so every band is doubly degenerate, and its second-
+    harmonic response vanishes; the R bilayer has no inversion and
+    responds"""
+    h = specialhamiltonian.three_band_tmdc_multilayer(["MoS2","MoS2"],0.1)
+    for kr in np.random.default_rng(9).random((4,2)):
+        es = np.linalg.eigvalsh(_hk(h,kr))
+        assert np.allclose(es[0::2],es[1::2],atol=1e-10)
+    comps = ["yyy","zxx","yyz"]
+    kw = dict(energies=[0.5,1.0],nk=18,delta=0.05,components=comps)
+    (w,s) = h.get_shg_conductivity(**kw)
+    hr = specialhamiltonian.three_band_tmdc_multilayer(["MoS2","MoS2"],0.1,
+            stacking="R")
+    (w,sr) = hr.get_shg_conductivity(**kw)
+    ref = np.max(np.abs(sr["yyy"]))
+    assert ref>1e-2
+    for c in comps: assert np.allclose(s[c],0.,atol=1e-10*ref)
+
+
+def test_heterostructure_cell():
+    """A MoS2/MoS2/WSe2/WSe2 stack shares the average lattice constant,
+    and with fermi="midgap" one band per spin and layer is occupied"""
+    h = specialhamiltonian.three_band_tmdc_multilayer(
+            ["MoS2","MoS2","WSe2","WSe2"],0.1,onsite=[0.,0.,0.5,0.5])
+    a = (2*3.190 + 2*3.325)/4.
+    assert np.allclose(h.geometry.a1,[a,0.,0.])
+    for kr in np.random.default_rng(11).random((10,2)):
+        assert np.sum(np.linalg.eigvalsh(_hk(h,kr))<0.)==8
+
+
+def test_multilayer_options_are_checked():
+    with pytest.raises(ValueError,match="H, R"):
+        specialhamiltonian.three_band_tmdc_multilayer(["MoS2","MoS2"],0.1,
+                stacking="AB")
+    with pytest.raises(ValueError,match="one value per interface"):
+        specialhamiltonian.three_band_tmdc_multilayer(["MoS2"]*3,0.1,
+                stacking=["H"])
+    with pytest.raises(ValueError,match="one energy per layer"):
+        specialhamiltonian.three_band_tmdc_multilayer(["MoS2"]*2,0.1,
+                onsite=[0.])
+
+
+def test_t_perp_per_interface():
+    """With t_perp = [0.1,0.] the third layer is decoupled, so the
+    trilayer has at every k the levels of the 2H bilayer and of the
+    monolayer (the third layer has the orientation of the first)"""
+    h3 = specialhamiltonian.three_band_tmdc_multilayer(["MoS2"]*3,[0.1,0.],
+            soc=False,fermi=None)
+    h2 = specialhamiltonian.three_band_tmdc_multilayer(["MoS2"]*2,0.1,
+            soc=False,fermi=None)
+    h1 = specialhamiltonian.three_band_tmdc("MoS2",soc=False,fermi=None)
+    for kr in np.random.default_rng(13).random((5,2)):
+        ref = np.concatenate([np.linalg.eigvalsh(_hk(h2,kr)),
+                              np.linalg.eigvalsh(_hk(h1,kr))])
+        assert np.allclose(np.linalg.eigvalsh(_hk(h3,kr)),np.sort(ref),
+                atol=1e-10)
+    with pytest.raises(ValueError,match="t_perp needs one value"):
+        specialhamiltonian.three_band_tmdc_multilayer(["MoS2"]*3,[0.1])
