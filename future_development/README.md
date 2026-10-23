@@ -176,7 +176,8 @@ already reached once.
   conductivity and susceptibility: why the velocity gauge with the third-derivative vertex is the
   default and the length gauge only a check, the two-gauge and finite-field measurements that pin
   it, the order-of-magnitude check of monolayer MoS2 against Trolle et al. with the three-band TMD
-  model, and what is open (interlayer hopping for TMD multilayers, excitonic SHG, 3D, sum- and
+  model, the excitonic SHG from the Tamm-Dancoff BSE and how it was checked, and what is open
+  (fitted interlayer couplings for TMD multilayers, full non-Tamm-Dancoff excitons, 3D, sum- and
   difference-frequency and shift currents).
 
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the

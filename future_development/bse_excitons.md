@@ -65,12 +65,18 @@ hundreds -- unreachable densely, and routine with the Phase 4 solvers
 
 Straightforward, no new numerics needed.
 
-1. **Oscillator strengths and optical conductivity.** Velocity matrix
-   elements from `current.derivative(h,k,order=...)` (already used by
-   `operators.get_velocity`); the exciton's is
-   `V^a_X = sum_{cvk} A_X(k) v^a_{vc}(k)`, and bright/dark classification
-   follows. Gives the excitonic absorption spectrum, which is the point of
-   computing excitons at all.
+1. **Oscillator strengths and optical conductivity.** DONE (23 October
+   2026): `conductivitytk/excitonicoptics.py`,
+   `h.get_excitonic_optical_conductivity`, with the exciton dipoles
+   R_0n = sum_cvk A^n_cvk r_vc(k) from the Peierls velocity rotated with the
+   BSE's own eigenvectors, and the second-harmonic response on top of it
+   (`h.get_excitonic_shg_conductivity`, see
+   [`second_harmonic_generation.md`](second_harmonic_generation.md)). The
+   kernel="none" limit equals the interband Kubo conductivity exactly
+   (`tests/conductivity/test_excitonic_optics.py`). It uses the dense
+   Tamm-Dancoff solver with every exciton; the iterative and quantics
+   solvers, which return a few excitons, are not wired in, since the
+   absorption needs all of them in the window.
 2. **Exciton bands `E_X(Q)`** scanned along a q-path. DONE:
    `bsetk/bands.py`, `h.get_exciton_bands`, flat `(qs, es)` return in the
    `get_bands`/`plasmon_bands` convention, `parallel.pcall` over the path,

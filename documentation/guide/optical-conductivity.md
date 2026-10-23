@@ -258,9 +258,126 @@ a TMD they move the resonances and change their weight.
 $e^3 a^{3-d}/(\hbar t)$, with $a$ the length unit of the geometry and $d$
 the dimension.
 
+## Excitonic effects
+
+We will now see how the attraction between the electron and the hole
+changes the optical response of an insulator. In a two-dimensional
+semiconductor this attraction binds excitons below the gap (see
+[Excitons](excitons.md)), and both the absorption and the second harmonic
+change. We solve the Bethe-Salpeter equation (BSE) at zero momentum in the
+Tamm-Dancoff approximation, which gives the exciton energies $E_n$ and
+their amplitudes $A^n_{cv}(\mathbf k)$ on the electron-hole pairs. The
+dipole of exciton $n$ is
+
+$$
+R^a_{0n} = \sum_{cv\mathbf k} A^n_{cv}(\mathbf k)\, r^a_{vc}(\mathbf k),
+$$
+
+with $r^a_{vc}$ the interband dipole of the tight-binding model. The linear
+susceptibility is a sum over excitons,
+
+$$
+\chi_{ab}(\omega) = \frac{q^2}{N_k V_{\rm cell}} \sum_n \left[
+\frac{R^a_{0n} R^b_{n0}}{E_n-\omega} + \frac{R^b_{0n} R^a_{n0}}{E_n+\omega} \right],
+\qquad \sigma_{ab} = -i\omega\chi_{ab},
+$$
+
+computed with `h.get_excitonic_optical_conductivity()`, so a bright
+exciton is a peak in the absorption at $E_n$. The Hall part at zero
+frequency, which is fixed by the Chern number, is taken from the bands, as
+in [The Kubo formula](#the-kubo-formula).
+
+The second harmonic also needs the dipole between two excitons,
+$R_{nm}=\langle n|\mathbf r|m\rangle$. It contains the derivative of the
+exciton amplitude with respect to $\mathbf k$, so the exciton has to be
+smooth on the k-mesh. With it, the susceptibility is a sum over pairs of
+excitons (Ruan, Chan and Louie, arXiv:2310.09674),
+
+$$
+\chi_{abc} = \frac{q^3}{2N_kV_{\rm cell}} \sum_{nm} \left[
+\frac{R^a_{0n}R^b_{nm}R^c_{m0}}{(2\omega-E_n)(\omega-E_m)}
++ \frac{R^b_{0n}R^c_{nm}R^a_{m0}}{(2\omega+E_m)(\omega+E_n)}
+- \frac{R^c_{0n}R^a_{nm}R^b_{m0}}{(\omega-E_m)(\omega+E_n)}\right]
++ (b\leftrightarrow c),
+$$
+
+with $\omega\to\omega+i\eta$ in every frequency. It is computed with
+`h.get_excitonic_shg_conductivity()` and `h.get_excitonic_shg_susceptibility()`.
+The first term shows the two resonances of the second harmonic: an exciton
+at $2\hbar\omega=E_n$ and an exciton at $\hbar\omega=E_m$. Without the
+interaction, `kernel="none"`, the excitons are free electron-hole pairs,
+and both functions give back the results without excitons of the sections
+above.
+
+We take the gapped honeycomb lattice with the Coulomb tail of
+[Excitons](excitons.md), which binds an exciton at $1.845t$, below the gap
+$2t$:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.bsetk.interaction import density_interaction
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian(has_spin=False) # spinless, one spin species
+h.add_sublattice_imbalance(1.0) # gapped honeycomb lattice, gap 2t at K
+W = density_interaction(h,Vr=lambda r1,r2: 0.8/np.sqrt((r1-r2).dot(r1-r2)+0.25)) # Coulomb tail
+zero = {(0,0,0):np.zeros(h.intra.shape,dtype=np.complex128)} # no interaction
+
+kw = dict(energies=np.linspace(0.,2.6,261),nk=30,delta=0.04)
+(ws,s) = h.get_excitonic_optical_conductivity(V=W,component="xx",**kw)
+(ws,s0) = h.get_excitonic_optical_conductivity(V=zero,kernel="none",component="xx",**kw)
+(ws,chi) = h.get_excitonic_shg_susceptibility(V=W,components="xxx",**kw)
+(ws,chi0) = h.get_excitonic_shg_susceptibility(V=zero,kernel="none",components="xxx",**kw)
+```
+
+![Left: optical absorption of the gapped honeycomb lattice with and without the electron-hole interaction. Right: second-harmonic susceptibility with and without the interaction.](img/optical_excitonic.png#only-light)
+![Left: optical absorption of the gapped honeycomb lattice with and without the electron-hole interaction. Right: second-harmonic susceptibility with and without the interaction.](img/optical_excitonic-dark.png#only-dark)
+
+On the left, without the interaction the absorption starts at the gap.
+With it, the exciton at $1.845t$ is a peak of $6.9\,e^2/h$, below the gap.
+On the right, the exciton gives two peaks in the second harmonic. The
+first is at $\hbar\omega=0.92t$, half the exciton energy, where
+$|\chi_{xxx}|$ is $0.24$ nm$^2$/V against $0.055$ nm$^2$/V without the
+interaction. The second is at $\hbar\omega=1.84t$, the exciton energy itself.
+Even the static value grows, from $0.018$ to $0.028$ nm$^2$/V. Here the
+default units are used, a length unit of 1 Å and an energy unit of 1 eV.
+Above the gap both curves oscillate: these are the separate k-points of
+the $30\times30$ mesh, which does not resolve the broadening
+$\eta=0.04t$ there.
+
+??? example "Code of this figure (documentation/figures/optical_excitonic.py)"
+
+    ```python
+    --8<-- "optical_excitonic.py"
+    ```
+
+The keywords are those of the sections above, `energies`, `nk`, `delta`,
+`component` or `components`, and the ones of the BSE: the interaction `V`
+(by default `h.V` from a mean field), `nv` and `nc` to keep a window of
+bands, `kernel`, `screening` and `gauge`. A few things to keep in mind:
+
+- The BSE is solved with all its excitons, so the cost grows as the cube of
+  the number of electron-hole pairs, $N_k$ times the number of valence
+  and conduction bands. A $30\times30$ mesh of a spinless two-band model
+  (900 pairs) takes a few seconds. For spinful MoS$_2$ in the three-band
+  model (eight pairs per k-point) it takes $3$ s on a $12\times12$ mesh,
+  $23$ s on $18\times18$ and $2$ minutes on $24\times24$. A $30\times30$
+  mesh needs about 3.3 GB, above the default limit of the BSE, which is
+  raised with `max_memory=4`.
+- The k-derivative of the exciton needs a mesh that resolves the exciton
+  in momentum and the broadening. A bound exciton that spans only a few
+  k-points makes components that should be equal by symmetry differ by
+  about $10^{-4}$ of the signal on a $21\times21$ mesh.
+- The excitons are in the Tamm-Dancoff approximation, which keeps only the
+  absorption pairs. This is the usual choice and is accurate for bound
+  excitons well below the gap.
+- The band structure is used as it is. For a real material it should
+  include the gap correction of a GW calculation, or a scissor shift.
+
 See `examples/2d/optical_conductivity/main.py`,
 `examples/1d/optical_conductivity_chain/main.py` and
-`examples/2d/second_harmonic_generation/main.py` for runnable scripts, and
+`examples/2d/second_harmonic_generation/main.py` and
+`examples/2d/excitonic_optics/main.py` for runnable scripts, and
 `01_optical_conductivity.ipynb` and `02_drude_weight_f_sum_rule.ipynb` in
 `jupyter-notebooks/functionalities/response_functions/` for executed
 notebooks.

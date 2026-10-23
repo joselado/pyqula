@@ -319,6 +319,103 @@ def shg_susceptibility(h,length_unit=1.0,energy_unit=1.0,**kwargs):
             energy_unit=energy_unit,**kwargs)
 
 
+from .conductivitytk import excitonicoptics
+
+
+def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
+        component=None,**bse_kwargs):
+    """Optical conductivity sigma_ab(w) of a 1D or 2D insulator with the
+    electron-hole interaction, from the Bethe-Salpeter equation (BSE) in
+    the Tamm-Dancoff approximation at Q=0.
+
+    Formula
+    -------
+    With E_n the exciton energies and R^a_0n = <0|R_a|n> =
+    sum_cvk A^n_cvk r^a_vc(k) the dipole of exciton n with the ground
+    state (A^n the BSE amplitudes, r_vc = v_vc/(i(E_v - E_c)) the
+    interband dipoles of the Peierls-coupled model),
+
+      chi_ab(w)   = (q^2/(N_k V_cell)) sum_n [ R^a_0n R^b_n0/(E_n - w)
+                                             + R^b_0n R^a_n0/(E_n + w) ]
+      sigma_ab(w) = -i w chi_ab(w) ,   w -> w + i delta
+
+    (Taghizadeh and Pedersen, PRB 97, 205432 (2018), arXiv:1804.04869,
+    Eq. (TensorFirstB)). This route through J = dP/dt misses the
+    frequency-independent antisymmetric part of sigma, the Berry-curvature
+    (Hall) term, which in an insulator is fixed by the Chern number and is
+    not changed by the excitons; it is added at the independent-particle
+    level, -i q^2/(N_k V_cell) sum_vck (r^a_vc r^b_cv - r^a_cv r^b_vc),
+    from the bands of the BSE window, so with nv or nc restricting the
+    bands it is not the full Chern-number term. Without interaction, kernel="none",
+    it equals
+    the interband part of optical_conductivity at T=0 exactly, which is
+    what tests/conductivity checks. The units are those of
+    optical_conductivity, and the same 3x3 tensor (or one component) is
+    returned.
+
+    Every other keyword goes to the BSE (see bse.get_bse): the
+    interaction V (by default h.V, from a mean field), nv and nc for the
+    band window, kernel, screening, nkW, channel and gauge. The BSE is
+    solved densely with every exciton, so the cost grows as the cube of
+    the number of electron-hole pairs, nk^d times nv times nc.
+    """
+    return excitonicoptics.excitonic_optical_conductivity(h,energies=energies,
+            nk=nk,delta=delta,component=component,**bse_kwargs)
+
+
+def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
+        components=None,**bse_kwargs):
+    """Second-harmonic conductivity sigma_abc(2w;w,w) of a 1D or 2D
+    insulator with the electron-hole interaction, from the Tamm-Dancoff
+    BSE at Q=0, in the same units and conventions as shg_conductivity.
+
+    Formula
+    -------
+    The length-gauge sum over exciton states of Ruan, Chan and Louie,
+    arXiv:2310.09674, Eq. (1) (the same as Taghizadeh and Pedersen,
+    arXiv:1804.04869),
+
+      chi_abc = (q^3/(2 N_k V_cell)) sum_nm [
+          R^a_0n R^b_nm R^c_m0/((2w - E_n)(w - E_m))
+        + R^b_0n R^c_nm R^a_m0/((2w + E_m)(w + E_n))
+        - R^c_0n R^a_nm R^b_m0/((w - E_m)(w + E_n)) ] + (b <-> c)
+
+    with w -> w + i delta in every frequency (so 2w carries 2 i delta, as
+    in shg_conductivity), and sigma = -2 i w chi. R_nm = <n|R|m> is the
+    position operator between two excitons. It is evaluated without a
+    smooth gauge: a pair vector g is written as the orbital matrix
+    Phi_k = sum_vc g_vck |u_ck><u_vk|, which does not depend on the phases
+    of the Bloch eigenvectors and is periodic in k, and the position
+    operator acts on it as i dPhi/dK + [tau,Phi], with tau the orbital
+    positions and a spectral k-derivative on the mesh. The sums over
+    excitons are done through the resolvent (z - A)^-1 of the BSE matrix,
+    diagonalized once.
+
+    Without interaction (kernel="none") it reproduces shg_conductivity at
+    T=0, with and without time reversal, converging with nk: the
+    k-derivative of the pair amplitudes has
+    to resolve the resonances, so the mesh needs a spacing below delta
+    divided by the band velocity, as for the single-particle response.
+    It is also invariant under the gauge of the eigenvectors and keeps the
+    symmetry of the crystal, both checked in tests/conductivity.
+
+    Every other keyword goes to the BSE, as in
+    excitonic_optical_conductivity. Returns (energies, sigma), with sigma
+    an array for one component and a dict for a list.
+    """
+    return excitonicoptics.excitonic_shg_conductivity(h,energies=energies,
+            nk=nk,delta=delta,components=components,**bse_kwargs)
+
+
+def excitonic_shg_susceptibility(h,length_unit=1.0,energy_unit=1.0,
+        **kwargs):
+    """Excitonic second-harmonic susceptibility in SI units, nm^(4-d)/V,
+    the conversion of excitonic_shg_conductivity described in
+    shg_susceptibility"""
+    return excitonicoptics.excitonic_shg_susceptibility(h,
+            length_unit=length_unit,energy_unit=energy_unit,**kwargs)
+
+
 from .conductivitytk import nonlineardrude
 
 

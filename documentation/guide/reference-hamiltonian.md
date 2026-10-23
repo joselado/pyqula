@@ -1414,6 +1414,35 @@ length unit of the geometry in Å, `energy_unit=1.0`, the energy unit of the
 Hamiltonian in eV, and every argument of `h.get_shg_conductivity()`. Returns
 `(energies,chi)` in the same layout.
 
+## h.get_excitonic_optical_conductivity()
+Compute the optical conductivity $\sigma_{ab}(\omega)$ of an insulator with
+the electron-hole interaction, from the Bethe-Salpeter equation in the
+Tamm-Dancoff approximation. A bright exciton is a peak at its energy. See
+[Excitonic effects](optical-conductivity.md#excitonic-effects).
+
+Optional arguments:
+
+- energies=None: the frequencies $\omega$
+- nk=20: k-points per direction
+- delta=0.1: broadening $\eta$
+- component=None: for example `"xx"`, to return only that component
+- V, nv, nc, kernel, screening, gauge: options of the Bethe-Salpeter
+  equation, as in `h.get_bse()`
+
+Returns `(energies,sigma)` as `h.get_optical_conductivity()`.
+
+## h.get_excitonic_shg_conductivity()
+Compute the second-harmonic conductivity $\sigma_{abc}(2\omega;\omega,\omega)$
+with excitons, from the Bethe-Salpeter equation in the Tamm-Dancoff
+approximation. Arguments `energies`, `nk`, `delta`, `components` and the
+options of the Bethe-Salpeter equation. Returns the same as
+`h.get_shg_conductivity()`.
+
+## h.get_excitonic_shg_susceptibility()
+Return the second-harmonic susceptibility with excitons in SI units,
+nm$^2$/V in 2D. Arguments `length_unit`, `energy_unit` and those of
+`h.get_excitonic_shg_conductivity()`.
+
 ## h.get_drude_weight()
 Return the Drude weight tensor, the weight of the intraband
 $\delta(\omega)$ peak of $\mathrm{Re}\,\sigma(\omega)$. Arguments `nk=20`,

@@ -300,6 +300,12 @@ def shg_susceptibility(h,length_unit=1.0,energy_unit=1.0,**kwargs):
     sheet susceptibility of a 2D system)."""
     delta = kwargs.get("delta",0.1)
     energies,sigma = shg_conductivity(h,**kwargs)
+    return to_susceptibility(h,energies,sigma,delta,length_unit,energy_unit)
+
+
+def to_susceptibility(h,energies,sigma,delta,length_unit,energy_unit):
+    """Convert a second-harmonic conductivity (an array, or a dict of
+    arrays) to the SI susceptibility, see shg_susceptibility"""
     d = h.dimensionality
     a = length_unit*1e-10 # in m
     fac = _e_over_eps0*a**(3-d)/energy_unit**2/(1e-9)**(4-d)

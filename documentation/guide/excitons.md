@@ -118,6 +118,9 @@ at $2.165t$. The calculation takes about a minute.
 - `h.get_exciton_binding_energies()`: the binding energies (positive means
   bound).
 - `h.get_exciton_states()`: the energies and the amplitudes $A_{vc}(k)$.
+- `h.get_excitonic_optical_conductivity()`, `h.get_excitonic_shg_conductivity()`:
+  the optical absorption and the second harmonic with the excitons, see
+  [Excitonic effects](optical-conductivity.md#excitonic-effects).
 - `h.get_bse()`: the solved problem; its `pairs` attribute gives the k-point
   and the two bands of each pair, to resolve the amplitudes in momentum or
   by band.

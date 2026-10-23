@@ -63,9 +63,32 @@ independent check (`gauge="length"`, cold insulators only).
   chalcogen orbitals that mediate the interlayer coupling, is the controlled alternative. t_perp itself has no fitted value: it should be
   chosen from the first-principles Gamma splitting of the bilayer. A heterostructure shares the
   average lattice constant and needs its band alignment set by hand through `onsite`.
-- Excitonic SHG (Taghizadeh and Pedersen, arXiv:1902.09141) on top of `bsetk/` is not built. In a
-  TMD the excitons move the resonances by several hundred meV and change their weight, so a
-  single-particle chi2 is a statement about symmetry and trends, not about absolute peak positions.
+- Excitonic SHG is built (23 October 2026, `conductivitytk/excitonicoptics.py`): the length-gauge
+  sum over Tamm-Dancoff excitons of Ruan, Chan and Louie (arXiv:2310.09674, Eq. (1)), done through the
+  resolvent of the BSE matrix, diagonalized once. The position operator between two excitons is
+  applied to the exciton written as an orbital matrix Phi_k = sum A_cvk |u_ck><u_vk|, which is free of
+  the Bloch phases and periodic in k, as i dPhi/dK + [tau,Phi] with a spectral k-derivative, so no
+  smooth gauge is needed (the step ab initio codes do with a gauge construction). An independent
+  derivation by a second agent gave the same prefactor q^3/(2 N_k V_cell), the same three terms and
+  2w -> 2w + 2i eta. Measured: the kernel="none" limit reproduces `shg.py`, to 1e-4 below the
+  resonances at nk=24 and on a resonance (w=2.2, eta=0.1) to 20%, 2% and 0.3% at nk=24, 36, 48; the
+  result is invariant under the eigenvector gauge (4e-14); with a Coulomb tail on the gapped
+  honeycomb lattice the D3h relation xyy = -xxx holds to 1e-4 of the signal at nk=21 below the gap
+  (the bound exciton spans three or four mesh points), and the exciton at 1.845 t gives a peak at
+  w = 0.92 t four times the response without interaction. The linear version misses, through
+  J = dP/dt, the frequency-independent Hall term; it is added at the independent-particle level,
+  which makes the zero-interaction limit exact for every component, including the Haldane model.
+  The second-order zero-interaction limit holds without time reversal too: with a Haldane term
+  (gap 1.55) it agrees with `shg.py` to 1e-4 of the largest component at nk=24 below the half gap,
+  and with a smaller gap (0.65) at nk=48, where at nk=24 even `shg.py` is not converged. With the
+  interaction on there is no external reference: every check is internal (zero-interaction limit,
+  gauge invariance, lattice symmetry) or qualitative (the 2w enhancement at the bright exciton, as
+  in Ruan et al.).
+  Cost for spinful MoS2 (three-band, eight pairs per k-point): 3 s at nk=12, 23 s at 18, 117 s at 24;
+  nk=30 needs 3.3 GB. Open: the antiresonant terms use the resonant (Tamm-Dancoff) excitons, as in
+  both papers, and are not checked against a full BSE; the iterative and quantics BSE solvers, which
+  would reach finer meshes, return only a few excitons and are not wired in; a truncation to the
+  excitons in an energy window is not offered.
 - Three-dimensional Hamiltonians are rejected, as in the linear Kubo code, because
   `kubo._setup` has no 3D branch.
 - The length gauge leaves out the Fermi-surface terms, so it is a check for cold insulators only;

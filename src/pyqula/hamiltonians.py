@@ -196,6 +196,24 @@ class Hamiltonian():
         from . import conductivity
         return conductivity.shg_susceptibility(h,**kwargs)
 
+    def get_excitonic_optical_conductivity(h,**kwargs):
+        """Optical conductivity with excitons, from the Tamm-Dancoff BSE,
+        see conductivity.excitonic_optical_conductivity"""
+        from . import conductivity
+        return conductivity.excitonic_optical_conductivity(h,**kwargs)
+
+    def get_excitonic_shg_conductivity(h,**kwargs):
+        """Second-harmonic conductivity with excitons, from the
+        Tamm-Dancoff BSE, see conductivity.excitonic_shg_conductivity"""
+        from . import conductivity
+        return conductivity.excitonic_shg_conductivity(h,**kwargs)
+
+    def get_excitonic_shg_susceptibility(h,**kwargs):
+        """Second-harmonic susceptibility with excitons, in nm^(4-d)/V,
+        see conductivity.excitonic_shg_susceptibility"""
+        from . import conductivity
+        return conductivity.excitonic_shg_susceptibility(h,**kwargs)
+
     def get_nonlinear_drude_conductivity(h,**kwargs):
         """l-th order nonlinear Drude conductivity sigma^{x^l1 y^l2 ; b},
         whose lowest nonvanishing order measures the X-wave index of a
