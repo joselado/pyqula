@@ -73,10 +73,9 @@ def test_shg_noninteracting_limit_is_the_single_particle_shg(haldane):
 def test_interacting_shg_is_gauge_invariant_and_symmetric():
     """With the Coulomb tail, the response does not change when the
     eigenvectors are put in a different gauge, the components forbidden by
-    the mirror y -> -y vanish, and xyy = -xxx below the gap. The last one
-    holds to 1e-4 of the signal at nk=21: the bound exciton is localized
-    within three or four mesh points of K, and the spectral k-derivative
-    of its envelope is not exactly C3 symmetric on that mesh"""
+    the mirror y -> -y vanish, and xyy = -xxx below the gap, the C3
+    relation, exactly on the mesh since the position operator is built on
+    the bond vectors of the lattice"""
     h = _gapped_honeycomb()
     W = _coulomb(h)
     comps = ["xxx","xyy","yyy","yxx"]
@@ -87,7 +86,27 @@ def test_interacting_shg_is_gauge_invariant_and_symmetric():
     assert ref>1e-2
     for c in comps: assert np.allclose(sg[c],s[c],atol=1e-10*ref)
     for c in ["yyy","yxx"]: assert np.allclose(s[c],0.,atol=1e-10*ref)
-    assert np.allclose(s["xyy"],-s["xxx"],atol=1e-3*ref)
+    assert np.allclose(s["xyy"],-s["xxx"],atol=1e-10*ref)
+
+
+def test_shg_of_a_stacked_bilayer_keeps_c3():
+    """In an R-stacked bilayer the second layer sits at a third of the
+    cell, and the C3 rotation about a metal atom maps it to itself only up
+    to a lattice vector. The components that C3v forbids (xxx, xyy, yxy for
+    this orientation) vanish in the velocity gauge, and must vanish here
+    too, on a coarse mesh where the resonances are not resolved; a
+    k-derivative in reduced coordinates gave xxx at 5% of the signal at
+    nk=9"""
+    from pyqula import specialhamiltonian
+    h = specialhamiltonian.three_band_tmdc_multilayer(["MoS2","MoS2"],0.1,
+            stacking="R",soc=False)
+    comps = ["xxx","xyy","yxy","yyy","yxx","xxy"]
+    (w,s) = h.get_excitonic_shg_conductivity(V=_zero(h),kernel="none",
+            energies=[0.95,1.05],nk=9,delta=0.1,components=comps)
+    ref = np.max(np.abs(s["yyy"]))
+    assert ref>1e-2
+    for c in ["xxx","xyy","yxy"]: assert np.allclose(s[c],0.,atol=1e-10*ref)
+    for c in ["yxx","xxy"]: assert np.allclose(s[c],-s["yyy"],atol=1e-10*ref)
 
 
 def test_excitons_enhance_the_shg_at_their_resonance():

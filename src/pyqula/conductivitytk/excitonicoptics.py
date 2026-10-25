@@ -53,16 +53,24 @@ class _PositionOperator():
       Phi_k = sum_{vc} g_{kvc} |u_ck><u_vk| ,
 
     which does not depend on the phases of the Bloch eigenvectors and, in
-    pyqula's lattice gauge, is periodic in the reduced momentum. The
-    position operator, diagonal in the orbitals with positions R + tau,
-    acts on it as
+    pyqula's lattice gauge, is periodic in the reduced momentum. Its
+    Fourier transform on the mesh, phi_ij(R), is the amplitude of an
+    electron on orbital i of cell R and a hole on orbital j of cell 0, and
+    the position operator multiplies it by their relative coordinate,
 
-      X^a Phi = i dPhi/dK_a + [tau_a, Phi] ,
+      X^a phi_ij(R) = -(R + tau_j - tau_i)_a phi_ij(R) ,
 
-    and the result is projected back onto the pairs. The k-derivative is
-    spectral on the uniform periodic mesh, so no smooth gauge of the
-    eigenvectors is needed, which is the step that ab initio
-    implementations do with a gauge-fixing construction."""
+    which is i dPhi/dK + [tau,Phi] written in real space. On the periodic
+    mesh R is only defined modulo the supercell, and it is taken as the
+    minimal image of the bond, the R that makes |R + tau_j - tau_i|
+    shortest (ties averaged, which for a one-site cell is the spectral
+    derivative without its Nyquist mode). The bond is a geometric object,
+    so the operator transforms as a vector under every point-group
+    operation of the lattice, which a derivative in reduced coordinates
+    does not do once the orbitals sit away from the origin of the cell
+    (the C3 of a stacked multilayer). No smooth gauge of the eigenvectors
+    is needed, which is the step that ab initio implementations do with a
+    gauge-fixing construction."""
     def __init__(self,h,pb,nk):
         self.dim = h.dimensionality
         self.nks = [nk]*self.dim
@@ -71,15 +79,12 @@ class _PositionOperator():
         n = self.C.shape[1]
         self.Cc = np.array([c[self.cb] for c in self.C]) # (nk,nc,norb)
         self.Cv = np.array([c[self.vb] for c in self.C]) # (nk,nv,norb)
-        r = np.array(h.geometry.r)
-        self.tau = np.repeat(r,n//len(r),axis=0) # orbital positions
-        hm,orders,hkgen,jac,dr,cellvol,scale = kubo._setup(h)
-        self.jac = jac # jac[i,a] = a_i[a]/(2 pi)
-        # 2 pi i times the integer frequency of each reduced direction
-        self.freqs = [2j*np.pi*np.fft.fftfreq(m)*m for m in self.nks]
-        for (f,m) in zip(self.freqs,self.nks):
-            if m%2==0: f[m//2] = 0. # drop the Nyquist mode, it has no
-                                    # well-defined derivative
+        g = h.geometry
+        r = np.array(g.r)
+        avecs = np.array([g.a1,g.a2][:self.dim])
+        F = _bond_vectors(r,avecs,nk) # (3,nk..,nsites,nsites)
+        m = n//len(r) # orbitals per site
+        self.F = np.repeat(np.repeat(F,m,axis=-1),m,axis=-2)
     def to_orbital(self,g):
         """Phi_k for a batch of pair vectors g (npair,nb)"""
         nk,nv,nc = len(self.C),len(self.vb),len(self.cb)
@@ -92,26 +97,37 @@ class _PositionOperator():
         out = np.einsum("kci,kijb,kvj->kvcb",np.conj(self.Cc),M,self.Cv,
                 optimize=True)
         return out.reshape(-1,M.shape[-1])
-    def derivatives(self,Phi):
-        """d Phi/dk_i along every reduced direction, spectrally"""
-        shape = Phi.shape
-        P = Phi.reshape(tuple(self.nks)+shape[1:])
-        Pf = np.fft.fftn(P,axes=tuple(range(self.dim)))
-        out = []
-        for i in range(self.dim):
-            f = self.freqs[i].reshape([-1 if j==i else 1
-                    for j in range(self.dim)]+[1]*(len(shape)-1))
-            out.append(np.fft.ifftn(Pf*f,axes=tuple(range(self.dim)))
-                    .reshape(shape))
-        return out
-    def apply(self,a,g,dks=None,Phi=None):
+    def apply(self,a,g):
         """X^a g for a batch of pair vectors g (npair,nb)"""
-        if Phi is None: Phi = self.to_orbital(g)
-        if dks is None: dks = self.derivatives(Phi)
-        M = 1j*sum(self.jac[i,a]*dks[i] for i in range(self.dim))
-        t = self.tau[:,a]
-        M = M + (t[None,:,None,None] - t[None,None,:,None])*Phi
+        Phi = self.to_orbital(g)
+        shape = Phi.shape
+        axes = tuple(range(self.dim))
+        P = np.fft.fftn(Phi.reshape(tuple(self.nks)+shape[1:]),axes=axes)
+        P = P*self.F[a][...,None] # the bond vector of every R and (i,j)
+        M = np.fft.ifftn(P,axes=axes).reshape(shape)
         return self.to_pairs(M)
+
+
+def _bond_vectors(r,avecs,nk):
+    """F[a,m...,i,j] = -(R + tau_j - tau_i)_a for the mesh frequency m
+    (one index per lattice direction), with R = sum_l (m_l + nk p_l) a_l
+    the minimal image of the bond from site i to site j on the nk-periodic
+    supercell, averaged over the images of equal length"""
+    dim,ns = len(avecs),len(r)
+    grid = np.meshgrid(*[np.arange(nk)]*dim,indexing="ij")
+    shifts = np.meshgrid(*[np.arange(-2,3)]*dim,indexing="ij")
+    shifts = [s.reshape((-1,)+(1,)*dim) for s in shifts]
+    # every candidate lattice vector, (ncand,nk..,3)
+    Rs = sum((grid[l][None]+nk*shifts[l])[...,None]*avecs[l]
+            for l in range(dim))
+    F = np.zeros((3,)+(nk,)*dim+(ns,ns))
+    for i in range(ns):
+        dv = Rs[...,None,:] + (r[None,:,:] - r[i]) # (ncand,nk..,ns,3)
+        d2 = np.sum(dv*dv,axis=-1)
+        sel = d2<=d2.min(axis=0)[None]*(1.+1e-8) + 1e-10
+        dm = np.sum(dv*sel[...,None],axis=0)/np.sum(sel,axis=0)[...,None]
+        F[...,i,:] = -np.moveaxis(dm,-1,0)
+    return F
 
 
 def _check_delta(delta):

@@ -364,10 +364,17 @@ bands, `kernel`, `screening` and `gauge`. A few things to keep in mind:
   $23$ s on $18\times18$ and $2$ minutes on $24\times24$. A $30\times30$
   mesh needs about 3.3 GB, above the default limit of the BSE, which is
   raised with `max_memory=4`.
-- The k-derivative of the exciton needs a mesh that resolves the exciton
-  in momentum and the broadening. A bound exciton that spans only a few
-  k-points makes components that should be equal by symmetry differ by
-  about $10^{-4}$ of the signal on a $21\times21$ mesh.
+- Near a resonance the electron-hole pairs change over a momentum
+  $\eta/v$, with $v$ the band velocity, and the second harmonic needs this
+  change. So the broadening has to be at least $v\Delta k/2$, with
+  $\Delta k$ the mesh spacing. For a three-band TMD tetralayer,
+  $\eta=0.1$ eV on a $24\times24$ mesh is within 3% of the converged
+  result without interaction, and $\eta=0.05$ eV needs a $48\times48$ mesh.
+  The components that the symmetry forbids are zero on every mesh.
+- Above the gap, keep all the conduction bands in `nc`. A narrow window
+  misses transitions in the frequency range, and two close conduction
+  bands at the edge of the window make the result jump from one k-point to
+  the next.
 - The excitons are in the Tamm-Dancoff approximation, which keeps only the
   absorption pairs. This is the usual choice and is accurate for bound
   excitons well below the gap.

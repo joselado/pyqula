@@ -385,19 +385,21 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
     position operator between two excitons. It is evaluated without a
     smooth gauge: a pair vector g is written as the orbital matrix
     Phi_k = sum_vc g_vck |u_ck><u_vk|, which does not depend on the phases
-    of the Bloch eigenvectors and is periodic in k, and the position
-    operator acts on it as i dPhi/dK + [tau,Phi], with tau the orbital
-    positions and a spectral k-derivative on the mesh. The sums over
-    excitons are done through the resolvent (z - A)^-1 of the BSE matrix,
-    diagonalized once.
+    of the Bloch eigenvectors and is periodic in k. Its Fourier transform
+    on the mesh is an electron-hole amplitude phi_ij(R), and the position
+    operator, i dPhi/dK + [tau,Phi], multiplies it by the bond vector
+    -(R + tau_j - tau_i), with R the shortest image on the nk-periodic
+    supercell. The sums over excitons are done through the resolvent
+    (z - A)^-1 of the BSE matrix, diagonalized once.
 
     Without interaction (kernel="none") it reproduces shg_conductivity at
-    T=0, with and without time reversal, converging with nk: the
-    k-derivative of the pair amplitudes has
-    to resolve the resonances, so the mesh needs a spacing below delta
-    divided by the band velocity, as for the single-particle response.
-    It is also invariant under the gauge of the eigenvectors and keeps the
-    symmetry of the crystal, both checked in tests/conductivity.
+    T=0, with and without time reversal, converging with nk: the pair
+    amplitudes vary over delta/v in k near a resonance, with v the band
+    velocity, so the mesh spacing dk needs delta >= v dk/2, and above
+    the gap the window nc has to hold every conduction band. It is
+    invariant under the gauge of the eigenvectors and keeps the point
+    group of the crystal exactly on every mesh, also for a stacked
+    multilayer, all checked in tests/conductivity.
 
     Every other keyword goes to the BSE, as in
     excitonic_optical_conductivity. Returns (energies, sigma), with sigma

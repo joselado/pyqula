@@ -78,6 +78,22 @@ independent check (`gauge="length"`, cold insulators only).
   w = 0.92 t four times the response without interaction. The linear version misses, through
   J = dP/dt, the frequency-independent Hall term; it is added at the independent-particle level,
   which makes the zero-interaction limit exact for every component, including the Haldane model.
+- The position operator of the excitonic SHG was rebuilt on 25 October 2026. The spectral
+  derivative in reduced coordinates broke C3 in a stacked multilayer: the layers at a third of the
+  cell map onto themselves only up to a lattice vector and a k-dependent Bloch phase, so no Fourier
+  box in reduced coordinates is covariant (square box 0.91, hexagonal box 0.33, Marzari-Vanderbilt
+  differences 0.45 to 0.56, as the C3 violation of the operator on a three-band tetralayer at nk=24).
+  The operator now multiplies the real-space pair amplitude phi_ij(R) by the bond vector
+  -(R + tau_j - tau_i), shortest image on the supercell, ties averaged (1e-13). On that tetralayer at
+  nk=24, delta=0.025, nc=4, the forbidden components went from 0.8 to 1e-12 of yyy. The second
+  defect is resolution and is not fixed by any operator: the resonant pair amplitude has width
+  delta/v in k, so convergence needs delta >= v dk/2 and every conduction band (the velocity gauge
+  itself is 14% off at delta=0.025, nk=24). Against the velocity gauge at nk=120 with nc=8, the
+  kernel="none" limit is within 2.7% of yyy at nk=24, delta=0.1, 4.1% under 1% uniaxial strain,
+  and 8% (mean 4%) at nk=48, delta=0.05 strained. Left open: an all-band window at nk>24 is beyond
+  the dense BSE (nc=8 at nk=24 is about 22 GB), and kernel="none" still diagonalizes a diagonal
+  matrix; the commutator form X R(z) d = R(z) X d + i R(z) V R(z) d was measured as an exact-C3
+  kernel="none" cross-check but is worse under strain, so it was not built.
   The second-order zero-interaction limit holds without time reversal too: with a Haldane term
   (gap 1.55) it agrees with `shg.py` to 1e-4 of the largest component at nk=24 below the half gap,
   and with a smaller gap (0.65) at nk=48, where at nk=24 even `shg.py` is not converged. With the
