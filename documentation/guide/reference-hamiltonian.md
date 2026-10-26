@@ -1426,6 +1426,9 @@ Optional arguments:
 - nk=20: k-points per direction
 - delta=0.1: broadening $\eta$
 - component=None: for example `"xx"`, to return only that component
+- method="dense": `"dense"` diagonalizes the Bethe-Salpeter matrix,
+  `"kpm"` sums over the excitons with a Chebyshev expansion and gives the
+  same result at a cost linear in the number of k-points, for fine meshes
 - V, nv, nc, kernel, screening, gauge: options of the Bethe-Salpeter
   equation, as in `h.get_bse()`
 
@@ -1434,8 +1437,9 @@ Returns `(energies,sigma)` as `h.get_optical_conductivity()`.
 ## h.get_excitonic_shg_conductivity()
 Compute the second-harmonic conductivity $\sigma_{abc}(2\omega;\omega,\omega)$
 with excitons, from the Bethe-Salpeter equation in the Tamm-Dancoff
-approximation. Arguments `energies`, `nk`, `delta`, `components` and the
-options of the Bethe-Salpeter equation. Returns the same as
+approximation. Arguments `energies`, `nk`, `delta`, `components`, `method`
+as in `h.get_excitonic_optical_conductivity()`, and the options of the
+Bethe-Salpeter equation. Returns the same as
 `h.get_shg_conductivity()`.
 
 ## h.get_excitonic_shg_susceptibility()

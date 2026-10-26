@@ -353,11 +353,24 @@ def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
     optical_conductivity, and the same 3x3 tensor (or one component) is
     returned.
 
+    method selects how the sum over excitons is done:
+      "dense"  the BSE matrix is diagonalized, so the cost grows as the
+               cube of the number of electron-hole pairs, nk^d times nv
+               times nc
+      "kpm"    the resolvent (w + i delta - A)^-1 of the BSE matrix A is
+               expanded in Chebyshev polynomials of A at complex energy
+               (bsetk/chebyshev.py), from products of the low-rank
+               factorized A with vectors, so the matrix is never formed and
+               the cost is linear in the number of pairs. The imaginary
+               part of the energy damps the series, so it converges to the
+               dense result itself, with about 20 s/delta moments for a
+               spectrum of half width s. A screened interaction needs a
+               real-space truncation first (see bse.get_bse), as for
+               solver="iterative".
+
     Every other keyword goes to the BSE (see bse.get_bse): the
     interaction V (by default h.V, from a mean field), nv and nc for the
-    band window, kernel, screening, nkW, channel and gauge. The BSE is
-    solved densely with every exciton, so the cost grows as the cube of
-    the number of electron-hole pairs, nk^d times nv times nc.
+    band window, kernel, screening, nkW, channel and gauge.
     """
     return excitonicoptics.excitonic_optical_conductivity(h,energies=energies,
             nk=nk,delta=delta,component=component,**bse_kwargs)
@@ -390,7 +403,10 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
     operator, i dPhi/dK + [tau,Phi], multiplies it by the bond vector
     -(R + tau_j - tau_i), with R the shortest image on the nk-periodic
     supercell. The sums over excitons are done through the resolvent
-    (z - A)^-1 of the BSE matrix, diagonalized once.
+    (z - A)^-1 of the BSE matrix, diagonalized once with method="dense",
+    or expanded in Chebyshev polynomials with method="kpm", as in
+    excitonic_optical_conductivity, which reaches the meshes that the
+    resolution delta >= v dk/2 asks for with every conduction band.
 
     Without interaction (kernel="none") it reproduces shg_conductivity at
     T=0, with and without time reversal, converging with nk: the pair
@@ -401,8 +417,9 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
     group of the crystal exactly on every mesh, also for a stacked
     multilayer, all checked in tests/conductivity.
 
-    Every other keyword goes to the BSE, as in
-    excitonic_optical_conductivity. Returns (energies, sigma), with sigma
+    Every other keyword (method included) goes as in
+    excitonic_optical_conductivity; wbatch is the number of frequencies
+    done together. Returns (energies, sigma), with sigma
     an array for one component and a dict for a list.
     """
     return excitonicoptics.excitonic_shg_conductivity(h,energies=energies,

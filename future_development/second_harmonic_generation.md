@@ -102,9 +102,11 @@ independent check (`gauge="length"`, cold insulators only).
   in Ruan et al.).
   Cost for spinful MoS2 (three-band, eight pairs per k-point): 3 s at nk=12, 23 s at 18, 117 s at 24;
   nk=30 needs 3.3 GB. Open: the antiresonant terms use the resonant (Tamm-Dancoff) excitons, as in
-  both papers, and are not checked against a full BSE; the iterative and quantics BSE solvers, which
-  would reach finer meshes, return only a few excitons and are not wired in; a truncation to the
-  excitons in an energy window is not offered.
+  both papers, and are not checked against a full BSE. The finer meshes are reached since 26 October
+  2026 by `method="kpm"`, a Chebyshev expansion of the resolvent that never diagonalizes the BSE,
+  with the all-band kernel="none" comparison against this velocity gauge on the monolayer up to
+  nk=120 and on the tetralayer up to nk=96 recorded in `kpm_excitonic_optics.md`; the iterative
+  and quantics solvers, which return only a few excitons, are not needed for it.
 - Three-dimensional Hamiltonians are rejected, as in the linear Kubo code, because
   `kubo._setup` has no 3D branch.
 - The length gauge leaves out the Fermi-surface terms, so it is a check for cold insulators only;

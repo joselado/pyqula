@@ -969,10 +969,13 @@ Bethe-Salpeter-type equations), arXiv:2607.00991.
   done because every other solver returns amplitudes. It returns an empty
   array above four million pairs rather than making the allocation the
   solver existed to avoid.
-- **Optical absorption** still wants all excitons, so it needs a
-  Chebyshev/KPM treatment of the BSE operator rather than a few-lowest
-  solver. The matrix-free apply built here is exactly what such a KPM
-  expansion would need.
+- **Optical absorption** wants all excitons. Built on 26 October 2026 as
+  `method="kpm"` of the excitonic optics, a Chebyshev expansion of the
+  resolvent driven by the matrix-free apply built here; see
+  `kpm_excitonic_optics.md`.
+- **A matrix-free full A/B solver** for the absorption does not need the
+  Lanczos run in the `S@H` inner product either: the Chebyshev resolvent
+  of the full matrix converges too, see `kpm_excitonic_optics.md`.
 - **A spinful 2D quantics run is not tested end to end.** The rank
   measurement covers it (bond dimension ~274 against ~63 spinless, for
   the same physics twice over), and the machinery has no 2D-specific or

@@ -9,20 +9,85 @@ from . import kubo
 from . import shg
 
 
-def _bse(h,nk,bse_kwargs):
+class _DenseResolvent():
     """Tamm-Dancoff BSE at Q=0 on the nk mesh, dense, so that every
     exciton is available: energies E[n] and amplitudes U[p,n] over the
-    pairs p = (k,v,c), the exciton n being sum_p U[p,n] c+_ck c_vk |0>"""
-    from ..bsetk.solve import BSE
+    pairs p = (k,v,c), the exciton n being sum_p U[p,n] c+_ck c_vk |0>.
+    The resolvent (z - A)^-1 = U diag(1/(z - E)) U^+"""
+    def __init__(self,h,nk,bse_kwargs):
+        from ..bsetk.solve import BSE
+        b = BSE(h,nk=nk,tda=True,solver="dense",**bse_kwargs)
+        self.pairs = b.pairs
+        self.E,self.U = np.real(b.energies),np.array(b.amplitudes.T)
+    def apply(self,D,zs):
+        """(z - A)^-1 D, D of shape (npair,ncol). Returns (npair,ncol,nz)"""
+        Ud = np.conj(self.U.T)@D # (nexc,ncol)
+        den = 1./(zs[None,:]-self.E[:,None]) # (nexc,nz)
+        return np.array([self.U@(Ud[:,a,None]*den)
+            for a in range(D.shape[1])]).transpose(1,0,2)
+    def braket(self,D,zs):
+        """D_a^+ (z - A)^-1 D_b. Returns (nz,ncol,ncol)"""
+        Ud = np.conj(self.U.T)@D
+        den = 1./(zs[None,:]-self.E[:,None])
+        return np.einsum("na,nb,nz->zab",np.conj(Ud),Ud,den,optimize=True)
+
+
+class _ChebyshevResolvent():
+    """The same resolvent through a Chebyshev expansion of the matrix-free
+    BSE block (bsetk/chebyshev.py), never forming nor diagonalizing it, so
+    the cost is linear in the number of pairs"""
+    _keys = ("V","nv","nc","kernel","screening","nkW","channel","gauge")
+    def __init__(self,h,nk,bse_kwargs):
+        from ..bsetk.pairbasis import PairBasis
+        from ..bsetk.interaction import bare_interaction
+        from ..bsetk.solve import get_direct_interaction
+        from ..bsetk.factorize import KernelFactorization
+        from ..bsetk import chebyshev
+        bad = sorted(k for k in bse_kwargs if k not in self._keys)
+        if bad: raise TypeError("method='kpm' got unexpected keyword "
+                "argument(s) %s; it accepts %s"%(", ".join(bad),
+                    ", ".join(self._keys)))
+        kw = dict(bse_kwargs)
+        V,kernel = kw.get("V"),kw.get("kernel","full")
+        gauge = kw.get("gauge","auto")
+        if gauge=="auto": gauge = None # as in BSE, the result is exact in any gauge
+        self.pairs = PairBasis(h,nk=nk,nv=kw.get("nv"),nc=kw.get("nc"),
+                gauge=gauge)
+        Wx = bare_interaction(h,V=V)
+        W = get_direct_interaction(h,self.pairs,V=V,nk=nk,
+                screening=kw.get("screening"),nkW=kw.get("nkW"),
+                kernel=kernel,channel=kw.get("channel","charge"))
+        self.f = KernelFactorization(self.pairs,W,Wx=Wx,kernel=kernel,
+                block="A")
+        self.c,self.s = chebyshev.spectral_bounds(self.f)
+        self.cheb = chebyshev
+    def apply(self,D,zs):
+        return self.cheb.resolvent_apply(self.f.matvec,D,zs,self.c,self.s)
+    def braket(self,D,zs):
+        return self.cheb.resolvent_braket(self.f.matvec,D,zs,self.c,self.s)
+
+
+# how the resolvent of the BSE is evaluated, selected by method=
+_methods = {"dense":_DenseResolvent,"kpm":_ChebyshevResolvent}
+
+
+def get_methods():
+    """The accepted values of method="""
+    return sorted(_methods)
+
+
+def _bse(h,nk,method,bse_kwargs):
+    """The resolvent of the Tamm-Dancoff BSE at Q=0, with every exciton"""
     if h.dimensionality not in (1,2): raise NotImplementedError(
             "the excitonic optical response is only implemented for "
             "dimensionality 1 or 2, got "+str(h.dimensionality))
     for key in ["Q","tda","solver"]:
         if key in bse_kwargs: raise ValueError("the excitonic response "
-                "fixes "+key+" (Q=0, tda=True, solver='dense'), it cannot "
-                "be passed")
-    b = BSE(h,nk=nk,tda=True,solver="dense",**bse_kwargs)
-    return b,np.real(b.energies),np.array(b.amplitudes.T)
+                "fixes "+key+" (Q=0, tda=True, and the solver through "
+                "method=), it cannot be passed")
+    if method not in _methods: raise ValueError("method must be one of "
+            "%s, got %r"%(", ".join(repr(m) for m in get_methods()),method))
+    return _methods[method](h,nk,bse_kwargs)
 
 
 def _pair_dipoles(h,pb):
@@ -136,29 +201,23 @@ def _check_delta(delta):
             "delta="+str(delta))
 
 
-def _resolvent(E,U,Ud,z):
-    """(z - A)^{-1} d for a batch of complex z, with A = U diag(E) U^+ and
-    Ud = U^+ d precomputed. Returns (npair,nz)"""
-    return U@(Ud[:,None]/(z[None,:]-E[:,None]))
-
-
 def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
-        component=None,**bse_kwargs):
+        component=None,method="dense",**bse_kwargs):
     """Excitonic optical conductivity, see
     conductivity.excitonic_optical_conductivity"""
     if energies is None: energies = np.linspace(0.,4.,100)
     _check_delta(delta)
     w = np.array(energies,dtype=np.float64) + 1j*delta
-    b,E,U = _bse(h,nk,bse_kwargs)
-    d,cellvol = _pair_dipoles(h,b.pairs)
-    R0 = U.T@np.conj(d).T # R0[n,a] = <0|R_a|n> = sum_p U[p,n] conj(d_p)
+    res = _bse(h,nk,method,bse_kwargs)
+    d,cellvol = _pair_dipoles(h,res.pairs)
+    # G[z,a,c] = d_a^+ (z - A)^-1 d_c, at z = w and z = -w
+    G = res.braket(d.T,np.concatenate([w,-w]))
+    Gp,Gm = G[:len(w)],G[len(w):]
     sigma = np.zeros((len(w),3,3),dtype=np.complex128)
     for a in range(3):
         for c in range(3):
-            num1 = R0[:,a]*np.conj(R0[:,c]) # R^a_0n R^c_n0
-            num2 = R0[:,c]*np.conj(R0[:,a]) # R^c_0n R^a_n0
-            chi = (num1[None,:]/(E[None,:]-w[:,None])
-                   + num2[None,:]/(E[None,:]+w[:,None])).sum(axis=1)
+            # sum_n R^a_0n R^c_n0/(E_n - w) + R^c_0n R^a_n0/(E_n + w)
+            chi = -Gp[:,a,c] - Gm[:,c,a]
             # J = dP/dt misses the frequency-independent antisymmetric
             # (Berry curvature) part of the conductivity, which for an
             # insulator is its Chern number and is not changed by the
@@ -167,7 +226,7 @@ def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
             # the kernel="none" limit the Kubo result for every component
             hall = -1j*np.sum(np.conj(d[a])*d[c] - d[a]*np.conj(d[c]))
             sigma[:,a,c] = (-1j*w*chi + hall)*shg._charge**2
-    sigma = sigma/(len(b.pairs.kpoints)*cellvol)
+    sigma = sigma/(len(res.pairs.kpoints)*cellvol)
     if component is not None:
         return np.real(w),sigma[:,kubo._index(component[0]),
                 kubo._index(component[1])]
@@ -175,7 +234,7 @@ def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
 
 
 def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
-        components=None,wbatch=16,**bse_kwargs):
+        components=None,wbatch=16,method="dense",**bse_kwargs):
     """Excitonic second-harmonic conductivity sigma_abc(2w;w,w), see
     conductivity.excitonic_shg_conductivity"""
     if energies is None: energies = np.linspace(0.,4.,100)
@@ -185,31 +244,31 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
     if components is None: components = shg._all_components
     if single: components = [components]
     trip,full,triplets,pairs,ipair = shg._triplets(components)
-    b,E,U = _bse(h,nk,bse_kwargs)
-    pb = b.pairs
+    res = _bse(h,nk,method,bse_kwargs)
+    pb = res.pairs
     d,cellvol = _pair_dipoles(h,pb)
-    Ud = np.conj(U.T)@d.T # U^+ d^a for the three directions, (nexc,3)
     X = _PositionOperator(h,pb,nk)
     def dag(x,y): return np.sum(np.conj(x)*y,axis=0) # x^+ y, per column
     chi = np.zeros((len(energies),len(full)),dtype=np.complex128)
     for i0 in range(0,len(energies),wbatch): # batches of frequencies
         w = energies[i0:i0+wbatch] + 1j*delta
-        # resolvents applied to the dipoles, one column per frequency
-        Fm1 = [_resolvent(E,U,Ud[:,a],w) for a in range(3)] # (w - A)^-1 d
-        Fp2 = [_resolvent(E,U,Ud[:,a],-2.*w) for a in range(3)] # (-2w-A)^-1
+        nw = len(w)
+        # the four resolvents applied to the three dipoles, one column per
+        # frequency: (w - A)^-1 d, (-2w - A)^-1 d, and the two whose
+        # Hermitian conjugates appear on the left, at conj(2w) and -conj(w)
+        F = res.apply(d.T,np.concatenate([w,-2.*w,np.conj(2.*w),
+            -np.conj(w)]))
+        Fm1 = [F[:,a,0:nw] for a in range(3)] # (w - A)^-1 d^a
+        Fp2 = [F[:,a,nw:2*nw] for a in range(3)] # (-2w - A)^-1 d^a
+        L2 = [F[:,a,2*nw:3*nw] for a in range(3)] # ((2w - A)^-1)^+ d^a
+        Lm = [-F[:,a,3*nw:] for a in range(3)] # ((w + A)^-1)^+ d^a
         for (t,(a,bb,c)) in enumerate(full):
             # term 1: d^a+ (2w - A)^-1 X^b (w - A)^-1 d^c
-            y = X.apply(bb,Fm1[c])
-            l = _resolvent(E,U,Ud[:,a],np.conj(2.*w)) # ((2w-A)^-1)^+ d^a
-            T1 = dag(l,y)
+            T1 = dag(L2[a],X.apply(bb,Fm1[c]))
             # term 2: d^b+ (w + A)^-1 X^c (2w + A)^-1 d^a
-            y = X.apply(c,-Fp2[a]) # (2w + A)^-1 d^a = -(-2w - A)^-1 d^a
-            l = -_resolvent(E,U,Ud[:,bb],-np.conj(w)) # ((w+A)^-1)^+ d^b
-            T2 = dag(l,y)
+            T2 = dag(Lm[bb],X.apply(c,-Fp2[a]))
             # term 3: -d^c+ (w + A)^-1 X^a (w - A)^-1 d^b
-            y = X.apply(a,Fm1[bb])
-            l = -_resolvent(E,U,Ud[:,c],-np.conj(w)) # ((w+A)^-1)^+ d^c
-            T3 = -dag(l,y)
+            T3 = -dag(Lm[c],X.apply(a,Fm1[bb]))
             chi[i0:i0+wbatch,t] = T1 + T2 + T3
     chi = chi*shg._charge**3/(2.*len(pb.kpoints)*cellvol)
     out = {}

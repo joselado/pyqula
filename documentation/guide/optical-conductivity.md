@@ -364,6 +364,14 @@ bands, `kernel`, `screening` and `gauge`. A few things to keep in mind:
   $23$ s on $18\times18$ and $2$ minutes on $24\times24$. A $30\times30$
   mesh needs about 3.3 GB, above the default limit of the BSE, which is
   raised with `max_memory=4`.
+- For finer meshes use `method="kpm"`. Then the sums over excitons are
+  done with a Chebyshev expansion of the BSE matrix at the complex energy
+  $\hbar\omega+i\eta$, and the matrix is never diagonalized. The result
+  is the same as with the default `method="dense"`, to $10^{-8}$ of its
+  maximum. The cost grows only linearly with the number of pairs, and as
+  $1/\eta$. For spinful MoS$_2$ with the interaction, 16 frequencies of one
+  second-harmonic component take $3$ s on an $18\times18$ mesh and less
+  than $2$ minutes on $60\times60$.
 - Near a resonance the electron-hole pairs change over a momentum
   $\eta/v$, with $v$ the band velocity, and the second harmonic needs this
   change. So the broadening has to be at least $v\Delta k/2$, with
