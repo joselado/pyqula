@@ -252,6 +252,17 @@ exact degeneracy. cuSOLVER returns degenerate levels bit-identical where LAPACK 
 them by ~1e-16, so the Newton SCF stalled only on the GPU.
 `densitydensity_jax.fermi_projector` now carries a Daleckii-Krein custom JVP.
 
+### 6. The Chebyshev resolvent of the excitonic optics: **done**
+
+`method="kpm"` of `h.get_excitonic_optical_conductivity()` and
+`h.get_excitonic_shg_conductivity()` runs its recursion on the device with the switch on
+(`bsetk/chebyshevjax.py`, maintainer's go-ahead of 2026-10-26), in double precision or with
+`kpm_prec="single"`. The matvec is the convolution apply of `bsetk/convolution.py` written in
+jax, dense batched contractions plus a device FFT. On an RTX A2000 single precision is 2.6 to
+3.3 times faster end to end than six CPU cores and differs from double by 1e-5 to 5e-5 of the
+maximum; double gains 1.0 to 1.6 times. The numbers and what is left on the host are in
+`future_development/kpm_excitonic_optics.md`.
+
 ## Proposed phased plan
 
 Each tier is independent and needs explicit user confirmation before implementation, same
@@ -359,6 +370,10 @@ process as the CPU perf plan.
   switch, and the default is the CPU. This keeps every GPU path benchmarkable against a
   known-correct CPU baseline on demand, and keeps a test suite deterministic. A new GPU path
   routes on `gpu.get_gpu()` rather than growing a second switch of its own.
+- Ask for `jax.lax.Precision.HIGHEST` in every float32 product. On an Ampere or later card
+  jax runs float32 matmuls in TF32 by default, a ten-bit mantissa, which put the single
+  precision Chebyshev resolvent of the excitonic optics 8e-4 away from double on the RTX A2000
+  against 4e-6 on jax's CPU backend. A test on jax's CPU backend cannot see this.
 - Preserve the CPU fallback: `gpu.set_gpu(True)` on a machine with no device warns and runs
   the same jax kernels on jax's CPU backend, so the package keeps working unmodified and
   the jax code paths stay covered by the tests there.

@@ -369,9 +369,16 @@ bands, `kernel`, `screening` and `gauge`. A few things to keep in mind:
   $\hbar\omega+i\eta$, and the matrix is never diagonalized. The result
   is the same as with the default `method="dense"`, to $10^{-8}$ of its
   maximum. The cost grows only linearly with the number of pairs, and as
-  $1/\eta$. For spinful MoS$_2$ with the interaction, 16 frequencies of one
-  second-harmonic component take $3$ s on an $18\times18$ mesh and less
-  than $2$ minutes on $60\times60$.
+  $1/\eta$. It does not depend on the range of the interaction, and a
+  screened interaction (`screening="rpa"`) works as well. For spinful
+  MoS$_2$ with the interaction, 16 frequencies of one second-harmonic
+  component take $0.3$ s on an $18\times18$ mesh and $3$ s on
+  $60\times60$. A TMD tetralayer with every band takes less than a
+  minute on $48\times48$.
+- With `method="kpm"` the calculation also runs on a GPU. Call
+  `gpu.set_gpu(True)` first (`from pyqula import gpu`). It runs in double
+  precision. With `kpm_prec="single"` it is faster, and the result changes
+  by up to $5\times10^{-5}$ of its maximum.
 - Near a resonance the electron-hole pairs change over a momentum
   $\eta/v$, with $v$ the band velocity, and the second harmonic needs this
   change. So the broadening has to be at least $v\Delta k/2$, with

@@ -1429,6 +1429,8 @@ Optional arguments:
 - method="dense": `"dense"` diagonalizes the Bethe-Salpeter matrix,
   `"kpm"` sums over the excitons with a Chebyshev expansion and gives the
   same result at a cost linear in the number of k-points, for fine meshes
+- kpm_prec="double": with `method="kpm"` on the GPU (`gpu.set_gpu(True)`),
+  `"single"` is faster and changes the result by up to $5\times10^{-5}$ of its maximum
 - V, nv, nc, kernel, screening, gauge: options of the Bethe-Salpeter
   equation, as in `h.get_bse()`
 
@@ -1438,7 +1440,7 @@ Returns `(energies,sigma)` as `h.get_optical_conductivity()`.
 Compute the second-harmonic conductivity $\sigma_{abc}(2\omega;\omega,\omega)$
 with excitons, from the Bethe-Salpeter equation in the Tamm-Dancoff
 approximation. Arguments `energies`, `nk`, `delta`, `components`, `method`
-as in `h.get_excitonic_optical_conductivity()`, and the options of the
+and `kpm_prec` as in `h.get_excitonic_optical_conductivity()`, and the options of the
 Bethe-Salpeter equation. Returns the same as
 `h.get_shg_conductivity()`.
 

@@ -45,7 +45,8 @@ one (36 for a 4-orbital cell with U+V1+V2). A tabulated, RPA-screened
 interaction is the exception -- inverse Fourier transforming it over the
 mesh gives nk real-space vectors, so R = nk*norb^2 and the rank
 independence is lost. Truncate it in real space first; see
-screening.ScreenedInteraction.get_dict and the note in solve.py.
+screening.ScreenedInteraction.get_dict and the note in solve.py. The
+convolution apply of bsetk/convolution.py takes it as it is, at Q=0.
 
 The factorization is exact, not an approximation: tests/bse/
 test_bse_factorize.py reconstructs kernel.build_blocks' own dense blocks
@@ -115,8 +116,9 @@ class KernelFactorization():
         out = self.diag[:,None]*X
         if self.nterm>0:
             # sum_t c_t L_t (R_t^dag X); the inner product first, so the
-            # npair x npair matrix is never formed
-            proj = self.right.conj()@X # (nterm,ncol)
+            # npair x npair matrix is never formed; conj(R)@X is taken as
+            # conj(R@conj(X)), so the (nterm,npair) factor is not copied
+            proj = np.conj(self.right@np.conj(X)) # (nterm,ncol)
             out = out + self.left.T@(self.coefs[:,None]*proj)
         return out[:,0] if vec else out
     def to_dense(self):

@@ -359,14 +359,19 @@ def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
                times nc
       "kpm"    the resolvent (w + i delta - A)^-1 of the BSE matrix A is
                expanded in Chebyshev polynomials of A at complex energy
-               (bsetk/chebyshev.py), from products of the low-rank
-               factorized A with vectors, so the matrix is never formed and
-               the cost is linear in the number of pairs. The imaginary
-               part of the energy damps the series, so it converges to the
-               dense result itself, with about 20 s/delta moments for a
-               spectrum of half width s. A screened interaction needs a
-               real-space truncation first (see bse.get_bse), as for
-               solver="iterative".
+               (bsetk/chebyshev.py), from products of A with vectors, so
+               the matrix is never formed and the cost is linear in the
+               number of pairs. The product is a convolution over the
+               k-mesh (bsetk/convolution.py), whose cost does not depend
+               on the range of the interaction, and which takes a
+               screened interaction tabulated on the mesh as it is. The
+               imaginary part of the energy damps the series, so it
+               converges to the dense result itself, with about 20 s/delta
+               moments for a spectrum of half width s. With
+               pyqula.gpu.set_gpu(True) the expansion runs on the GPU
+               (bsetk/chebyshevjax.py), in double precision, or in single
+               precision with kpm_prec="single", which agrees with double
+               to 1e-5 to 5e-5 of the maximum.
 
     Every other keyword goes to the BSE (see bse.get_bse): the
     interaction V (by default h.V, from a mean field), nv and nc for the
@@ -419,7 +424,9 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
 
     Every other keyword (method included) goes as in
     excitonic_optical_conductivity; wbatch is the number of frequencies
-    done together. Returns (energies, sigma), with sigma
+    done together, by default as many as fit in about 2 GB
+    (excitonicoptics.batch_memory), since with method="kpm" every batch
+    runs the Chebyshev recursion again. Returns (energies, sigma), with sigma
     an array for one component and a dict for a list.
     """
     return excitonicoptics.excitonic_shg_conductivity(h,energies=energies,

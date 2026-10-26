@@ -4,9 +4,11 @@
 # entry points of conductivity.py (excitonic_optical_conductivity and
 # excitonic_shg_conductivity); this module holds the machinery.
 import numpy as np
+import numba
 
 from . import kubo
 from . import shg
+from .. import parallel
 
 
 class _DenseResolvent():
@@ -35,13 +37,17 @@ class _DenseResolvent():
 class _ChebyshevResolvent():
     """The same resolvent through a Chebyshev expansion of the matrix-free
     BSE block (bsetk/chebyshev.py), never forming nor diagonalizing it, so
-    the cost is linear in the number of pairs"""
-    _keys = ("V","nv","nc","kernel","screening","nkW","channel","gauge")
+    the cost is linear in the number of pairs. The block is applied as a
+    convolution on the mesh (bsetk/convolution.py), and with the GPU
+    switched on (pyqula/gpu.py) the recursion runs on the device
+    (bsetk/chebyshevjax.py), in the precision kpm_prec"""
+    _keys = ("V","nv","nc","kernel","screening","nkW","channel","gauge",
+            "kpm_prec")
     def __init__(self,h,nk,bse_kwargs):
         from ..bsetk.pairbasis import PairBasis
         from ..bsetk.interaction import bare_interaction
         from ..bsetk.solve import get_direct_interaction
-        from ..bsetk.factorize import KernelFactorization
+        from ..bsetk.convolution import ConvolutionKernel
         from ..bsetk import chebyshev
         bad = sorted(k for k in bse_kwargs if k not in self._keys)
         if bad: raise TypeError("method='kpm' got unexpected keyword "
@@ -57,13 +63,34 @@ class _ChebyshevResolvent():
         W = get_direct_interaction(h,self.pairs,V=V,nk=nk,
                 screening=kw.get("screening"),nkW=kw.get("nkW"),
                 kernel=kernel,channel=kw.get("channel","charge"))
-        self.f = KernelFactorization(self.pairs,W,Wx=Wx,kernel=kernel,
-                block="A")
-        self.c,self.s = chebyshev.spectral_bounds(self.f)
+        self.f = ConvolutionKernel(self.pairs,W,Wx=Wx,kernel=kernel)
         self.cheb = chebyshev
+        from .. import gpu
+        self.prec = kw.get("kpm_prec","double")
+        self.device = gpu.get_gpu()
+        matvec = None
+        if self.device:
+            from ..bsetk import chebyshevjax
+            matvec = chebyshevjax.host_matvec(self.f,self.prec)
+            self.cheb = chebyshevjax
+        elif self.prec!="double": raise ValueError("kpm_prec=%r needs the "
+                "GPU path, pyqula.gpu.set_gpu(True); the CPU expansion "
+                "runs in double precision"%(self.prec,))
+        self.c,self.s = chebyshev.spectral_bounds(self.f,matvec=matvec)
     def apply(self,D,zs):
+        if self.f.nterm==0: # kernel="none", A is diagonal, so exactly
+            return D[:,:,None]/(zs[None,None,:]-self.f.diag[:,None,None])
+        if self.device: # the device kernels take the block itself
+            return self.cheb.resolvent_apply(self.f,D,zs,self.c,self.s,
+                    kpm_prec=self.prec)
         return self.cheb.resolvent_apply(self.f.matvec,D,zs,self.c,self.s)
     def braket(self,D,zs):
+        if self.f.nterm==0:
+            den = 1./(zs[None,:]-self.f.diag[:,None]) # (npair,nz)
+            return np.einsum("pa,pb,pz->zab",np.conj(D),D,den,optimize=True)
+        if self.device:
+            return self.cheb.resolvent_braket(self.f,D,zs,self.c,self.s,
+                    kpm_prec=self.prec)
         return self.cheb.resolvent_braket(self.f.matvec,D,zs,self.c,self.s)
 
 
@@ -142,35 +169,43 @@ class _PositionOperator():
         self.vb,self.cb = pb.vbands,pb.cbands
         self.C = pb.ck # (nk,norb,norb), rows the eigenvectors
         n = self.C.shape[1]
-        self.Cc = np.array([c[self.cb] for c in self.C]) # (nk,nc,norb)
-        self.Cv = np.array([c[self.vb] for c in self.C]) # (nk,nv,norb)
+        Cc = np.array([c[self.cb] for c in self.C]) # (nk,nc,norb)
+        Cv = np.array([c[self.vb] for c in self.C]) # (nk,nv,norb)
+        # the arrays the gather and scatter of bsetk/convolution.py read,
+        # with every orbital channel (i,j)
+        self.CcT = np.ascontiguousarray(np.swapaxes(Cc,1,2))
+        self.CvcT = np.ascontiguousarray(np.swapaxes(np.conj(Cv),1,2))
+        self.Ccc,self.Cv = np.ascontiguousarray(np.conj(Cc)),Cv
+        self.ia,self.ib = np.repeat(np.arange(n),n),np.tile(np.arange(n),n)
         g = h.geometry
         r = np.array(g.r)
         avecs = np.array([g.a1,g.a2][:self.dim])
         F = _bond_vectors(r,avecs,nk) # (3,nk..,nsites,nsites)
         m = n//len(r) # orbitals per site
-        self.F = np.repeat(np.repeat(F,m,axis=-1),m,axis=-2)
-    def to_orbital(self,g):
-        """Phi_k for a batch of pair vectors g (npair,nb)"""
-        nk,nv,nc = len(self.C),len(self.vb),len(self.cb)
-        G = g.reshape(nk,nv,nc,-1)
-        # Phi[k,i,j,b] = sum_{vc} Cc[k,c,i] G[k,v,c,b] conj(Cv[k,v,j])
-        return np.einsum("kci,kvcb,kvj->kijb",self.Cc,G,np.conj(self.Cv),
-                optimize=True)
-    def to_pairs(self,M):
-        """Projection <u_ck|M_k|u_vk> back onto the pairs"""
-        out = np.einsum("kci,kijb,kvj->kvcb",np.conj(self.Cc),M,self.Cv,
-                optimize=True)
-        return out.reshape(-1,M.shape[-1])
+        F = np.repeat(np.repeat(F,m,axis=-1),m,axis=-2)
+        # one channel axis, broadcast over the columns
+        self.F = F.reshape((3,)+tuple(self.nks)+(1,n*n))
     def apply(self,a,g):
-        """X^a g for a batch of pair vectors g (npair,nb)"""
-        Phi = self.to_orbital(g)
-        shape = Phi.shape
+        """X^a g for a batch of pair vectors g (npair,nb): the pair vectors
+        as orbital matrices Phi_k[i,j] = sum_vc g_kvc C_c(k)_i conj(C_v(k)_j),
+        multiplied by the bond vector in real space, and projected back"""
+        from ..bsetk.convolution import _gather,_scatter
+        import scipy.fft
+        nk,nv,nc = len(self.C),len(self.vb),len(self.cb)
+        ncol = g.shape[1]
+        G = np.ascontiguousarray(g,dtype=np.complex128).reshape(nk,nv,nc,ncol)
+        Phi = np.empty((nk,ncol,len(self.ia)),dtype=np.complex128)
+        parallel.set_num_threads()
+        _gather(self.CcT,self.CvcT,G,self.ia,self.ib,Phi)
         axes = tuple(range(self.dim))
-        P = np.fft.fftn(Phi.reshape(tuple(self.nks)+shape[1:]),axes=axes)
-        P = P*self.F[a][...,None] # the bond vector of every R and (i,j)
-        M = np.fft.ifftn(P,axes=axes).reshape(shape)
-        return self.to_pairs(M)
+        w = numba.get_num_threads()
+        P = scipy.fft.fftn(Phi.reshape(tuple(self.nks)+Phi.shape[1:]),
+                axes=axes,workers=w,overwrite_x=True)
+        P *= self.F[a] # the bond vector of every R and (i,j)
+        M = scipy.fft.ifftn(P,axes=axes,workers=w,overwrite_x=True)
+        out = np.zeros((nk,nv,nc,ncol),dtype=np.complex128)
+        _scatter(self.Ccc,self.Cv,M.reshape(Phi.shape),self.ia,self.ib,out)
+        return out.reshape(-1,ncol)
 
 
 def _bond_vectors(r,avecs,nk):
@@ -233,8 +268,21 @@ def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
     return np.real(w),sigma
 
 
+batch_memory = 2. # GB, the frequencies of one batch of the SHG
+
+
+def _frequency_batch(pb,nfreq):
+    """How many frequencies of the SHG fit in batch_memory: per frequency,
+    the resolvents at four energies on three dipoles, and about three
+    copies of the orbital matrices of the position operator. Each batch
+    runs the Chebyshev recursion again, so the larger the better"""
+    nk,norb = len(pb.kpoints),pb.el.shape[1]
+    per = 16.*(12*pb.npair + 3*nk*norb**2) # bytes per frequency
+    return int(max(1,min(nfreq,batch_memory*1e9//per)))
+
+
 def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
-        components=None,wbatch=16,method="dense",**bse_kwargs):
+        components=None,wbatch=None,method="dense",**bse_kwargs):
     """Excitonic second-harmonic conductivity sigma_abc(2w;w,w), see
     conductivity.excitonic_shg_conductivity"""
     if energies is None: energies = np.linspace(0.,4.,100)
@@ -248,6 +296,7 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
     pb = res.pairs
     d,cellvol = _pair_dipoles(h,pb)
     X = _PositionOperator(h,pb,nk)
+    if wbatch is None: wbatch = _frequency_batch(pb,len(energies))
     def dag(x,y): return np.sum(np.conj(x)*y,axis=0) # x^+ y, per column
     chi = np.zeros((len(energies),len(full)),dtype=np.complex128)
     for i0 in range(0,len(energies),wbatch): # batches of frequencies

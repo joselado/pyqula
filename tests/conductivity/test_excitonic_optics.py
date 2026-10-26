@@ -152,24 +152,50 @@ def test_chebyshev_route_equals_the_dense_one(spinful):
     for c in comps: assert np.allclose(s1[c],s0[c],atol=1e-8*ref)
 
 
-def test_chebyshev_scale_is_guarded():
-    """An interval that misses part of the spectrum makes the Chebyshev
-    vectors grow past their bound, and the expansion refuses"""
+def test_chebyshev_route_takes_a_screened_interaction():
+    """The RPA-screened direct term is tabulated on the mesh, and the
+    Chebyshev route takes it as it is and agrees with the dense one, for
+    the absorption and for the second harmonic"""
+    h = _gapped_honeycomb()
+    kw = dict(energies=[0.9225,1.845,2.5],nk=12,delta=0.05,V=_coulomb(h))
+    (w,s0) = h.get_excitonic_optical_conductivity(**kw)
+    (w,s1) = h.get_excitonic_optical_conductivity(screening="rpa",**kw)
+    (w,s2) = h.get_excitonic_optical_conductivity(screening="rpa",
+            method="kpm",**kw)
+    ref = np.max(np.abs(s1))
+    assert np.max(np.abs(s1-s0))>1e-3*ref # the screening is there
+    assert np.allclose(s2,s1,atol=1e-8*ref)
+    (w,s1) = h.get_excitonic_shg_conductivity(screening="rpa",
+            components="xxx",**kw)
+    (w,s2) = h.get_excitonic_shg_conductivity(screening="rpa",
+            components="xxx",method="kpm",**kw)
+    assert np.allclose(s2,s1,atol=1e-8*np.max(np.abs(s1)))
+
+
+def test_chebyshev_resolvent_and_scale_guard():
+    """The expanded resolvent solves (z - A) x = D, its brakets (from
+    vectors of half the order) are D^+ x, and an interval that misses part
+    of the spectrum makes the Chebyshev vectors grow past their bound, and
+    the expansion refuses"""
     from pyqula.bsetk.pairbasis import PairBasis
     from pyqula.bsetk.interaction import bare_interaction
-    from pyqula.bsetk.factorize import KernelFactorization
+    from pyqula.bsetk.convolution import ConvolutionKernel
     from pyqula.bsetk import chebyshev
     h = _gapped_honeycomb()
     pb = PairBasis(h,nk=6)
     W = bare_interaction(h,V=_coulomb(h))
-    f = KernelFactorization(pb,W,Wx=W,block="A")
+    f = ConvolutionKernel(pb,W,Wx=W)
     c,s = chebyshev.spectral_bounds(f)
     D = np.random.default_rng(1).normal(size=(pb.npair,2))+0j
-    zs = np.array([1.5+0.1j])
-    x = chebyshev.resolvent_apply(f.matvec,D,zs,c,s)[...,0]
-    assert np.allclose(np.array(1.5+0.1j)*x - f.matvec(x),D,atol=1e-8)
-    with pytest.raises(ValueError,match="diverges"):
-        chebyshev.resolvent_apply(f.matvec,D,zs,c,0.5*s)
+    zs = np.array([1.5+0.1j,-0.4+0.05j])
+    x = chebyshev.resolvent_apply(f.matvec,D,zs,c,s)
+    for i,z in enumerate(zs):
+        assert np.allclose(z*x[...,i] - f.matvec(x[...,i]),D,atol=1e-8)
+    G = chebyshev.resolvent_braket(f.matvec,D,zs,c,s)
+    assert np.allclose(G,np.einsum("pa,pbz->zab",np.conj(D),x),atol=1e-8)
+    for route in [chebyshev.resolvent_apply,chebyshev.resolvent_braket]:
+        with pytest.raises(ValueError,match="diverges"):
+            route(f.matvec,D,zs,c,0.5*s)
 
 
 def test_options_are_checked():

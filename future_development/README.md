@@ -174,9 +174,12 @@ already reached once.
 
 - [`kpm_excitonic_optics.md`](kpm_excitonic_optics.md) -- the Chebyshev resolvent behind
   `method="kpm"` of the excitonic absorption and second harmonic: why no kernel is needed, the
-  equality with the dense route, the all-band comparison with the velocity gauge on the MoS2
-  monolayer and a TMD tetralayer, and what is open (non-Tamm-Dancoff absorption without a Lanczos
-  metric, the convolution apply that removes the term-count wall of large cells, the GPU port).
+  equality with the dense route, the BSE block applied as a convolution on the mesh (exact,
+  independent of the range of the interaction, taking a screened W), the device path and why it
+  needs `Precision.HIGHEST`, the timings of every step on the MoS2 monolayer and a TMD
+  tetralayer, the all-band comparison with the velocity gauge, and what is open
+  (non-Tamm-Dancoff absorption without a Lanczos metric, the convolution for the eigensolvers,
+  the position operator on the device).
 - [`second_harmonic_generation.md`](second_harmonic_generation.md) -- the second-harmonic
   conductivity and susceptibility: why the velocity gauge with the third-derivative vertex is the
   default and the length gauge only a check, the two-gauge and finite-field measurements that pin
