@@ -3,6 +3,7 @@
 # The physics, the units and the conventions are documented in the public
 # entry points of conductivity.py (excitonic_optical_conductivity and
 # excitonic_shg_conductivity); this module holds the machinery.
+import numbers
 import numpy as np
 import numba
 
@@ -249,6 +250,12 @@ def _bond_vectors(r,avecs,nk):
     return F
 
 
+def _check_scissor(scissor):
+    if isinstance(scissor,bool) or not isinstance(scissor,numbers.Real):
+        raise TypeError("scissor is a rigid shift of every electron-hole "
+                "pair energy, a real number, got %r"%(scissor,))
+
+
 def _check_delta(delta):
     if not delta>0.: raise ValueError("the broadening delta must be "
             "positive, the exciton sums have poles on the real axis, got "
@@ -256,16 +263,18 @@ def _check_delta(delta):
 
 
 def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
-        component=None,method="dense",**bse_kwargs):
+        component=None,method="dense",scissor=0.,**bse_kwargs):
     """Excitonic optical conductivity, see
     conductivity.excitonic_optical_conductivity"""
     if energies is None: energies = np.linspace(0.,4.,100)
     _check_delta(delta)
+    _check_scissor(scissor)
     w = np.array(energies,dtype=np.float64) + 1j*delta
     res = _bse(h,nk,method,bse_kwargs)
     d,cellvol = _pair_dipoles(h,res.pairs)
-    # G[z,a,c] = d_a^+ (z - A)^-1 d_c, at z = w and z = -w
-    G = res.braket(d.T,np.concatenate([w,-w]))
+    # G[z,a,c] = d_a^+ (z - A)^-1 d_c, at z = w and z = -w. The scissor
+    # shifts A to A + s, and (z - A - s)^-1 is the resolvent of A at z - s
+    G = res.braket(d.T,np.concatenate([w,-w]) - scissor)
     Gp,Gm = G[:len(w)],G[len(w):]
     sigma = np.zeros((len(w),3,3),dtype=np.complex128)
     for a in range(3):
@@ -301,12 +310,14 @@ def _frequency_batch(pb,nfreq):
 
 
 def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
-        components=None,wbatch=None,method="dense",**bse_kwargs):
+        components=None,wbatch=None,method="dense",scissor=0.,
+        **bse_kwargs):
     """Excitonic second-harmonic conductivity sigma_abc(2w;w,w), see
     conductivity.excitonic_shg_conductivity"""
     if energies is None: energies = np.linspace(0.,4.,100)
     energies = np.array(energies,dtype=np.float64)
     _check_delta(delta)
+    _check_scissor(scissor)
     single = isinstance(components,str)
     if components is None: components = shg._all_components
     if single: components = [components]
@@ -327,9 +338,11 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
         nw = len(w)
         # the four resolvents applied to the three dipoles, one column per
         # frequency: (w - A)^-1 d, (-2w - A)^-1 d, and the two whose
-        # Hermitian conjugates appear on the left, at conj(2w) and -conj(w)
+        # Hermitian conjugates appear on the left, at conj(2w) and -conj(w).
+        # The scissor shifts A to A + s, which is every energy z to z - s,
+        # with the dipoles and X left at the bands
         F = res.apply(d.T,np.concatenate([w,-2.*w,np.conj(2.*w),
-            -np.conj(w)]))
+            -np.conj(w)]) - scissor)
         Fm1 = [F[:,a,0:nw] for a in range(3)] # (w - A)^-1 d^a
         Fp2 = [F[:,a,nw:2*nw] for a in range(3)] # (-2w - A)^-1 d^a
         L2 = [F[:,a,2*nw:3*nw] for a in range(3)] # ((2w - A)^-1)^+ d^a

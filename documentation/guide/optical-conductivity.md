@@ -393,8 +393,12 @@ bands, `kernel`, `screening` and `gauge`. A few things to keep in mind:
 - The excitons are in the Tamm-Dancoff approximation, which keeps only the
   absorption pairs. This is the usual choice and is accurate for bound
   excitons well below the gap.
-- The band structure is used as it is. For a real material it should
-  include the gap correction of a GW calculation, or a scissor shift.
+- The band structure is used as it is. For a real material the gap
+  should include the correction of a GW calculation. The simplest way is a
+  scissor shift, `scissor=0.3`, which adds $0.3$ to the energy of every
+  electron-hole pair and keeps the dipoles of the bands. So every exciton
+  and every resonance moves up by $0.3$, and the binding energies do not
+  change.
 
 See `examples/2d/optical_conductivity/main.py`,
 `examples/1d/optical_conductivity_chain/main.py` and

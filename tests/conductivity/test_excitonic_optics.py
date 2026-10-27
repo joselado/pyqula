@@ -257,3 +257,76 @@ def test_kpm_options_are_checked():
         with pytest.raises(ValueError,match="wbatch"):
             h.get_excitonic_shg_conductivity(components="xxx",wbatch=wbatch,
                     **kw)
+
+
+def _exciton_sums(h,es,nk,delta,s,comps,V):
+    """The linear and second-harmonic responses written as explicit sums
+    over the excitons of the dense BSE, with every energy E_n replaced by
+    E_n + s and the dipoles and the position operator left at the bands,
+    which is what a length-gauge scissor means"""
+    from pyqula.conductivitytk import excitonicoptics as eo
+    from pyqula.conductivitytk import shg, kubo
+    res = eo._bse(h,nk,"dense",dict(V=V))
+    pb = res.pairs
+    E,U = res.E + s,res.U
+    d,cellvol = eo._pair_dipoles(h,pb)
+    R = np.conj(U.T)@d.T # R[n,a] = <n|R_a|0>
+    X = eo._PositionOperator(h,pb,nk)
+    Xn = [np.conj(U.T)@X.apply(a,U) for a in range(3)] # <n|X_a|m>
+    norm = len(pb.kpoints)*cellvol
+    w = np.array(es) + 1j*delta
+    sig = np.zeros((len(w),3,3),dtype=np.complex128)
+    for a in range(3):
+        for c in range(3):
+            chi = np.sum(np.conj(R[:,a,None])*R[:,c,None]/(E[:,None]-w)
+                + np.conj(R[:,c,None])*R[:,a,None]/(E[:,None]+w),axis=0)
+            hall = -1j*np.sum(np.conj(d[a])*d[c] - d[a]*np.conj(d[c]))
+            sig[:,a,c] = (-1j*w*chi + hall)*shg._charge**2/norm
+    def chi3(a,b,c):
+        out = []
+        for z in w:
+            out.append(np.conj(R[:,a])@(Xn[b]/np.outer(2*z-E,z-E))@R[:,c]
+                + np.conj(R[:,b])@(Xn[c]/np.outer(z+E,2*z+E))@R[:,a]
+                - np.conj(R[:,c])@(Xn[a]/np.outer(z+E,z-E))@R[:,b])
+        return np.array(out)*shg._charge**3/(2.*norm)
+    out = {}
+    for comp in comps:
+        (a,b,c) = [kubo._index(x) for x in comp]
+        out[comp] = -2j*w*(chi3(a,b,c) + chi3(a,c,b))
+    return sig,out
+
+
+@pytest.mark.parametrize("method",["dense","kpm"])
+def test_scissor_shifts_every_exciton_energy(method):
+    """The scissor is the rigid shift E_n -> E_n + s of every exciton in
+    the sums over excitons, with the dipoles and the position operator at
+    the unshifted bands. Both routes agree with those sums written out
+    explicitly, with the Coulomb interaction on, for the absorption and
+    for the second harmonic, and a zero scissor changes nothing"""
+    h = _gapped_honeycomb()
+    s = 0.272
+    es = [0.6,1.2,1.845+0.272,2.5]
+    comps = ["xxx","yxy"]
+    kw = dict(energies=es,nk=6,delta=0.05,V=_coulomb(h),method=method)
+    sig,shg = _exciton_sums(h,es,6,0.05,s,comps,_coulomb(h))
+    (w,s1) = h.get_excitonic_optical_conductivity(scissor=s,**kw)
+    ref = np.max(np.abs(sig))
+    assert ref>1e-2
+    assert np.allclose(s1,sig,atol=1e-8*ref)
+    (w,s0) = h.get_excitonic_optical_conductivity(**kw)
+    assert np.max(np.abs(s1-s0))>1e-2*ref # the scissor is there
+    (w,s2) = h.get_excitonic_optical_conductivity(scissor=0.,**kw)
+    assert np.allclose(s2,s0,atol=1e-12*ref)
+    (w,x1) = h.get_excitonic_shg_conductivity(components=comps,scissor=s,
+            **kw)
+    ref = np.max(np.abs(shg["xxx"]))
+    assert ref>1e-3
+    for c in comps: assert np.allclose(x1[c],shg[c],atol=1e-8*ref)
+
+
+def test_scissor_is_checked():
+    h = _gapped_honeycomb()
+    kw = dict(energies=[1.],nk=6,V=_zero(h))
+    for bad in (0.2+0.1j,"0.2",[0.2],True):
+        with pytest.raises(TypeError,match="scissor"):
+            h.get_excitonic_optical_conductivity(scissor=bad,**kw)

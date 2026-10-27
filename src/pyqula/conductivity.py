@@ -323,7 +323,7 @@ from .conductivitytk import excitonicoptics
 
 
 def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
-        component=None,**bse_kwargs):
+        component=None,scissor=0.,**bse_kwargs):
     """Optical conductivity sigma_ab(w) of a 1D or 2D insulator with the
     electron-hole interaction, from the Bethe-Salpeter equation (BSE) in
     the Tamm-Dancoff approximation at Q=0.
@@ -373,16 +373,24 @@ def excitonic_optical_conductivity(h,energies=None,nk=20,delta=0.1,
                precision with kpm_prec="single", which agrees with double
                to 1e-5 to 5e-5 of the maximum.
 
+    scissor is a rigid shift s of every electron-hole pair energy,
+    A -> A + s, with the interband dipoles left at the bands of h: the
+    scissor of the length gauge, which moves the gap of a tight-binding
+    model to the measured (or GW) one without changing its wavefunctions.
+    It is done as the resolvent of A at w - s, the same for both methods,
+    and with kernel="none" it moves every resonance E_c - E_v by s.
+
     Every other keyword goes to the BSE (see bse.get_bse): the
     interaction V (by default h.V, from a mean field), nv and nc for the
     band window, kernel, screening, nkW, channel and gauge.
     """
     return excitonicoptics.excitonic_optical_conductivity(h,energies=energies,
-            nk=nk,delta=delta,component=component,**bse_kwargs)
+            nk=nk,delta=delta,component=component,scissor=scissor,
+            **bse_kwargs)
 
 
 def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
-        components=None,**bse_kwargs):
+        components=None,scissor=0.,**bse_kwargs):
     """Second-harmonic conductivity sigma_abc(2w;w,w) of a 1D or 2D
     insulator with the electron-hole interaction, from the Tamm-Dancoff
     BSE at Q=0, in the same units and conventions as shg_conductivity.
@@ -422,15 +430,17 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
     group of the crystal exactly on every mesh, also for a stacked
     multilayer, all checked in tests/conductivity.
 
-    Every other keyword (method included) goes as in
-    excitonic_optical_conductivity; wbatch is the number of frequencies
+    Every other keyword (method and scissor included) goes as in
+    excitonic_optical_conductivity, the scissor shifting E_n to E_n + s in
+    every denominator with R_0n and R_nm left at the bands; wbatch is the number of frequencies
     done together, by default as many as fit in about 2 GB
     (excitonicoptics.batch_memory), since with method="kpm" every batch
     runs the Chebyshev recursion again. Returns (energies, sigma), with sigma
     an array for one component and a dict for a list.
     """
     return excitonicoptics.excitonic_shg_conductivity(h,energies=energies,
-            nk=nk,delta=delta,components=components,**bse_kwargs)
+            nk=nk,delta=delta,components=components,scissor=scissor,
+            **bse_kwargs)
 
 
 def excitonic_shg_susceptibility(h,length_unit=1.0,energy_unit=1.0,
