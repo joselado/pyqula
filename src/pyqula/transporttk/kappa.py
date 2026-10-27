@@ -167,6 +167,7 @@ def generate_HT(ht,SC=True,**kwargs):
         out = ht.copy() # make a copy
         out.H = f(out.H)
         out.lead = f(out.lead)
+        out.normalize_lead() # f leaves the lead multicell, without inter
         return out
     elif type(ht)==DualLocalProbe: # Dual Localprobe object
         if SC: return ht.SC_LP

@@ -138,3 +138,19 @@ def test_decay_constant_keldysh_case_still_works_end_to_end():
     D = 0.1
     val = lp.get_kappa(energy=1.3*2*D, nmax=4, nmax_max=12, tol=5e-2)
     assert np.isfinite(val)
+
+
+def test_dual_local_probe_matches_local_probe():
+    """DualLocalProbe (the per-site kappa of an Embedding) strips the
+    pairing with LocalProbe.remove_pairing, LocalProbe.get_kappa with
+    generate_HT: two routes to the same normal branch, so the same kappa.
+    Both used to lose the probe lead's inter-cell hopping, since setting
+    up the Nambu spinor turns the lead multicell and drops lead.inter."""
+    from pyqula.embeddingtk.kappa import DualLocalProbe
+    lp = _normal_probe_localprobe()
+    dual = DualLocalProbe(lp)
+    assert dual.normal_LP.lead.inter is not None
+    k_dual = dual.get_kappa(energy=0.05, T=lp.T)
+    k_lp = lp.get_kappa(energy=0.05)
+    assert np.isfinite(k_dual)
+    assert abs(k_dual-k_lp) < 1e-10

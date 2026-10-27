@@ -203,6 +203,13 @@ class LocalProbe():
     def remove_pairing(self):
         self.H.remove_pairing()
         self.lead.remove_pairing()
+        self.normalize_lead()
+    def normalize_lead(self):
+        """Put the probe lead back in the non-multicell form __init__
+        stores, after a change that turned it multicell (setting up the
+        Nambu spinor does): lead_selfenergy reads lead.inter, which
+        turn_multicell drops."""
+        self.lead = self.lead.get_no_multicell()
     def get_kappa(self,T=None,temp=0.,**kwargs):
         """Kappa (SC/normal conductance power-law ratio). temp=0 (default)
         keeps the original zero-temperature get_kappa_ratio behavior
