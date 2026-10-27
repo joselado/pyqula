@@ -32,15 +32,15 @@ _HI = jax.lax.Precision.HIGHEST
 nb = 16 # recursion steps per compiled block
 
 
+assert set(_DTYPES)==set(chebyshev._precisions) # one name per precision
+
+
 def get_precision_names():
     """Every precision the kernels of this module accept"""
-    return sorted(_DTYPES)
+    return chebyshev.get_precision_names()
 
 
-def _check_precision(kpm_prec):
-    if kpm_prec not in _DTYPES: raise ValueError("kpm_prec must be one of "
-            "%s, got %r"%(", ".join(repr(p) for p in get_precision_names()),
-                kpm_prec))
+def _check_precision(kpm_prec): chebyshev.check_precision(kpm_prec)
 
 
 def _block(f,kpm_prec):
@@ -221,7 +221,7 @@ def resolvent_braket(f,D,zs,c,s,kpm_prec="double"):
     first,block_apply,block_moments = _kernels(f,kpm_prec)[0:3]
     N = chebyshev.number_of_moments(zs,c,s)
     nblock = int(np.ceil(max(N//2+1-2,1)/nb))
-    M = 2+nblock*nb # vectors v_0 ... v_M-1
+    M = 2+nblock*nb # vectors v_0 ... v_M-1, moments up to 2M-2
     D = np.asarray(D,dtype=np.complex128)
     ncol = D.shape[1]
     norm2 = np.sum(np.abs(D)**2,axis=0)
@@ -230,7 +230,7 @@ def resolvent_braket(f,D,zs,c,s,kpm_prec="double"):
     v = first(Dj,cj,sj)
     mu0 = np.asarray(jnp.conj(Dj).T@Dj,dtype=np.complex128)
     mu1 = np.asarray(jnp.conj(v).T@Dj,dtype=np.complex128) # <v_1|v_0>
-    mus = np.zeros((2*M,ncol,ncol),dtype=np.complex128)
+    mus = np.zeros((2*M-1,ncol,ncol),dtype=np.complex128)
     mus[0],mus[1] = mu0,mu1
     sq1 = np.asarray(jnp.conj(v).T@v,dtype=np.complex128)
     mus[2] = 2.*sq1 - mu0
@@ -245,5 +245,5 @@ def resolvent_braket(f,D,zs,c,s,kpm_prec="double"):
         ns = np.arange(2+b*nb,2+(b+1)*nb)
         mus[2*ns] = 2.*sq - mu0
         mus[2*ns-1] = 2.*cross - mu1
-    g = _coefficients(zs,c,s,2*M)
+    g = _coefficients(zs,c,s,2*M-1)
     return np.einsum("nz,nab->zab",g,mus)

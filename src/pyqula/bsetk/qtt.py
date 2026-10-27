@@ -180,9 +180,8 @@ class LazyKernel():
     with F[m,a] = conj(el[m,a]) ho[m,a]. Everything it needs comes from
     PairOracle, which diagonalizes only the k-points actually asked for."""
     def __init__(self,pb,W,Wx=None,kernel="full"):
-        if kernel not in ("full","direct","exchange","none"):
-            raise ValueError("kernel must be one of 'full', 'direct', "
-                    "'exchange', 'none', got %r"%(kernel,))
+        from .kernel import kernel_terms
+        self.direct,self.exchange = kernel_terms(kernel)
         self.pairs = pb
         self.kernel = kernel
         self.W = W
@@ -237,9 +236,9 @@ class LazyKernel():
         Fm,elm,hom = self._pair_data(int(m))
         Fn,eln,hon = self._pair_data(int(n))
         out = 0.0+0.0j
-        if self.kernel in ("full","exchange"):
+        if self.exchange:
             out = out + self.norm*(Fm@self.WQ@np.conj(Fn))
-        if self.kernel in ("full","direct"):
+        if self.direct:
             ikm = int(m)//self.pairs.nband
             ikn = int(n)//self.pairs.nband
             Wq = self._direct_W(ikm,ikn)
@@ -482,15 +481,25 @@ def run_dmrg(mpo,grid,neig=1,nsweep=24,maxdim=100,cutoff=1e-10,weight=None,
     this code, and a better excited-state driver (a proper block DMRG, or
     a shift-invert on the MPO) would slot straight in here. Until then,
     several excitons come from bsetk/iterative.py."""
-    from dmrgpy.pyitensor.mpsalgebra import randomMPS, inner
-    from dmrgpy.pyitensor.dmrg import dmrg, dmrg_excited
     from dmrgpy.pyitensor.sweeps import Sweeps
     sites = _Sites(grid.pyqula_sites)
     sweeps = Sweeps(nsweep)
     sweeps.maxdim = maxdim
     sweeps.cutoff = cutoff
     sweeps.niter = 4
+    # randomMPS draws from numpy's global generator, so it is seeded for
+    # reproducibility and given back afterwards, so that a solve does not
+    # reseed the caller's random stream
+    state = np.random.get_state()
     np.random.seed(seed)
+    try: return _run_dmrg(mpo,grid,neig,sweeps,sites,weight,maxdim)
+    finally: np.random.set_state(state)
+
+
+def _run_dmrg(mpo,grid,neig,sweeps,sites,weight,maxdim):
+    """The DMRG runs of run_dmrg, with the random state already set"""
+    from dmrgpy.pyitensor.mpsalgebra import randomMPS, inner
+    from dmrgpy.pyitensor.dmrg import dmrg, dmrg_excited
     states,energies = [],[]
     for i in range(neig):
         psi = randomMPS(sites,min(maxdim,8))
@@ -542,6 +551,12 @@ def _amplitudes(states,grid,max_npair=4_000_000):
     dims = list(grid.localdimensions())
     npair = int(np.prod(dims))
     if npair>max_npair:
+        import warnings
+        warnings.warn("the exciton amplitudes are not reconstructed: the "
+            "pair basis has %d pairs, above max_npair=%d, and the full "
+            "vector is the one allocation this solver exists to avoid. "
+            "BSE.amplitudes comes back with no columns; the energies are "
+            "unaffected"%(npair,max_npair),stacklevel=4)
         return np.zeros((len(states),0),dtype=np.complex128)
     perm = _site_to_variable_order(grid)
     out = []

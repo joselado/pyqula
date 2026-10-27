@@ -115,6 +115,15 @@ class PairOracle():
         k = self.kpoint(ik)
         e1,w1 = algebra.eigh(self.hk(k))
         e2,w2 = algebra.eigh(self.hk(k+self.Q))
+        nocc = self.vbands[-1] + 1 # the window sits at the gap
+        if np.sum(e1<0.)!=nocc or np.sum(e2<0.)!=nocc:
+            raise ValueError("the band window of this quantics BSE was "
+                "found on a coarse submesh with %d occupied bands, but mesh "
+                "point %d has %d (and %d at k+Q): a band crosses the Fermi "
+                "level between the coarse points, so this mesh has no gap "
+                "and no electron-hole pair basis. Raise coarse_nk, or use "
+                "solver='iterative', whose pair basis checks every point"
+                %(nocc,ik,np.sum(e1<0.),np.sum(e2<0.)))
         c1 = np.array(w1.T,dtype=np.complex128)[None,:,:]
         c2 = np.array(w2.T,dtype=np.complex128)[None,:,:]
         kw = dict(mode=self.gauge,trials=self.trials,refs=self.refs)

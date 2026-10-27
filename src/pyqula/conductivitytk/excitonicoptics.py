@@ -67,6 +67,7 @@ class _ChebyshevResolvent():
         self.cheb = chebyshev
         from .. import gpu
         self.prec = kw.get("kpm_prec","double")
+        chebyshev.check_precision(self.prec) # before the device question
         self.device = gpu.get_gpu()
         lanczos = None
         if self.device:
@@ -114,6 +115,10 @@ def _bse(h,nk,method,bse_kwargs):
                 "method=), it cannot be passed")
     if method not in _methods: raise ValueError("method must be one of "
             "%s, got %r"%(", ".join(repr(m) for m in get_methods()),method))
+    if method!="kpm" and "kpm_prec" in bse_kwargs: raise TypeError(
+            "kpm_prec is the precision of the Chebyshev expansion of "
+            "method='kpm'; method=%r diagonalizes in double precision"
+            %(method,))
     return _methods[method](h,nk,bse_kwargs)
 
 
@@ -311,6 +316,10 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
     d,cellvol = _pair_dipoles(h,pb)
     X = _PositionOperator(h,pb,nk)
     if wbatch is None: wbatch = _frequency_batch(pb,len(energies))
+    elif not (int(wbatch)==wbatch and wbatch>=1): raise ValueError("wbatch "
+            "is the number of frequencies per batch, a positive integer, "
+            "got %r"%(wbatch,))
+    wbatch = int(wbatch)
     def dag(x,y): return np.sum(np.conj(x)*y,axis=0) # x^+ y, per column
     chi = np.zeros((len(energies),len(full)),dtype=np.complex128)
     for i0 in range(0,len(energies),wbatch): # batches of frequencies
@@ -362,7 +371,9 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
 def excitonic_shg_susceptibility(h,length_unit=1.0,energy_unit=1.0,**kwargs):
     """Excitonic second-harmonic susceptibility in SI units, see
     conductivity.excitonic_shg_susceptibility"""
-    delta = kwargs.get("delta",0.1)
+    import inspect # the default delta is the conductivity's own
+    delta = kwargs.get("delta",inspect.signature(
+        excitonic_shg_conductivity).parameters["delta"].default)
     energies,sigma = excitonic_shg_conductivity(h,**kwargs)
     return shg.to_susceptibility(h,energies,sigma,delta,length_unit,
             energy_unit)

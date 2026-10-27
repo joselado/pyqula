@@ -46,6 +46,10 @@ def exciton_bands(h,qpath=None,nq=None,n=None,**kwargs):
                 "system has no center-of-mass momentum to disperse in")
     from ..klist import get_qpath
     qpath = get_qpath(h.geometry,qpath,nq) # generate the q-path
+    if n is not None and kwargs.get("solver","dense")=="iterative":
+        # the iterative solver returns neig excitons, 4 by default, which
+        # n would otherwise only truncate
+        kwargs.setdefault("neig",n)
     def f(q):
         return BSE(h,Q=q,**kwargs).get_energies(n=n)
     outs = parallel.pcall(f,qpath) # solve one BSE per q-point

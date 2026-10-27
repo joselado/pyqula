@@ -22,6 +22,23 @@ from numba import njit, prange
 from ..kpmtk import scaleguard
 
 tol = 1e-9 # truncation of the series, |q|^N, relative to its first term
+
+# the precisions of the expansion, kpm_prec=. The CPU recursion runs in
+# double only, the device one in both (chebyshevjax._DTYPES maps each name
+# to its jax types)
+_precisions = ("double","single")
+
+
+def get_precision_names():
+    """Every value kpm_prec= accepts"""
+    return sorted(_precisions)
+
+
+def check_precision(kpm_prec):
+    """Refuse a kpm_prec that is not one of the precisions"""
+    if kpm_prec not in _precisions: raise ValueError("kpm_prec must be one "
+            "of %s, got %r"%(", ".join(repr(p) for p in get_precision_names()),
+                kpm_prec))
 max_moments = 200000 # the series is refused beyond this
 
 
@@ -224,9 +241,9 @@ def resolvent_braket(matvec,D,zs,c,s):
     D = np.ascontiguousarray(D,dtype=np.complex128) # and so every v_n
     r,q = _coefficients(zs,c,s)
     N = number_of_moments(zs,c,s)
-    M = N//2 + 1 # vectors v_0 ... v_M-1 give the moments up to 2M-1 >= N
+    M = N//2 + 1 # vectors v_0 ... v_M-1 give the moments up to 2M-2 >= N-1
     ncol = D.shape[1]
-    mus = np.zeros((2*M,ncol,ncol),dtype=np.complex128)
+    mus = np.zeros((2*M-1,ncol,ncol),dtype=np.complex128)
     norm2 = np.sum(np.abs(D)**2,axis=0)
     vm = D
     v = (matvec(D) - c*D)/s
@@ -241,7 +258,7 @@ def resolvent_braket(matvec,D,zs,c,s):
         if n%32==0 or n==M-1: # the diagonal moments <d|T_2n|d>
             check_moments(np.einsum("naa->na",mus[2*n0:2*n+1:2]),norm2,c,s)
             n0 = n+1
-    ns = np.arange(2*M)
-    g = 2.*q[None,:]**ns[:,None]/r[None,:] # (2M,nz)
+    ns = np.arange(2*M-1)
+    g = 2.*q[None,:]**ns[:,None]/r[None,:] # (2M-1,nz)
     g[0] = g[0]/2.
     return np.einsum("nz,nab->zab",g,mus)/s

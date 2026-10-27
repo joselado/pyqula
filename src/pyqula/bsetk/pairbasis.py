@@ -50,6 +50,8 @@ class PairBasis():
                 "Hamiltonians (h.has_eh): a superconducting mean field "
                 "needs a different two-particle structure, not the "
                 "electron-hole pair basis built here")
+        from .gauge import check_gauge
+        check_gauge(gauge) # before the diagonalization of the whole mesh
         h = h.get_multicell().get_dense() # canonical form
         self.h = h
         self.geometry = h.geometry

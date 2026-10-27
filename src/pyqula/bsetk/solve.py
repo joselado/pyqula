@@ -110,6 +110,15 @@ class BSE():
                 "argument(s) %s; the extra options belong to "
                 "solver='iterative' (maxiter, tol, shift) and solver='qtt' "
                 "(see bsetk/qtt.solve_qtt)"%(", ".join(sorted(kwargs)),))
+        if solver=="iterative" and screening is not None:
+            # refused here, before the screened interaction is computed,
+            # rather than by the factorization once it has been
+            raise ValueError("solver='iterative' applies the kernel through "
+                "its low-rank factorization, which needs a real-space "
+                "interaction, and a screened interaction is tabulated on "
+                "the mesh. Truncate it in real space with "
+                "ScreenedInteraction.get_dict(cutoff=...) and pass that as "
+                "V=, or use solver='dense'")
         if neig is None:
             # the quantics solver returns the lowest exciton only (see
             # qtt.solve_qtt for the measurements behind that), so the
@@ -263,7 +272,8 @@ def get_direct_interaction(h,pb,V=None,nk=10,screening=None,nkW=None,
     if screening is None: return bare_interaction(h,V=V)
     if hasattr(screening,"at"): return screening # precomputed, reuse it
     from .screening import screened_interaction
-    if kernel in ("exchange","none"):
+    from .kernel import kernel_terms
+    if not kernel_terms(kernel)[0]: # no direct term to screen
         warnings.warn("screening=%r has no effect with kernel=%r: the "
             "screened interaction only enters the direct (ladder) term, "
             "and the exchange term deliberately keeps the bare "

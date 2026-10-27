@@ -368,3 +368,39 @@ def test_full_problem_is_refused():
     V = density_interaction(h, V1=0.8)
     with pytest.raises(ValueError, match="Tamm-Dancoff"):
         h.get_bse(V=V, nk=8, tda=False, solver="qtt")
+
+
+def test_oracle_refuses_a_band_crossing_between_coarse_points(monkeypatch):
+    """The band window of the quantics solver is found on a coarse
+    submesh, so a valence band that rises above the Fermi level only
+    between coarse points is not seen there. The oracle checks the
+    occupations of every point it diagonalizes, and refuses where it used
+    to build a pair with no gap"""
+    import warnings
+    from pyqula import hamiltonians
+    def hk(k):
+        k = np.array(k)[0] if np.ndim(k) > 0 else k
+        d = (k - 1./16 + 0.5) % 1. - 0.5 # distance to k=1/16
+        return np.diag([-1. + 2.*np.exp(-(d/0.01)**2), 1.]).astype(complex)
+    h = geometry.chain().supercell(2).get_hamiltonian(has_spin=False)
+    h = h.get_multicell().get_dense()
+    monkeypatch.setattr(hamiltonians.Hamiltonian, "get_hk_gen",
+                        lambda self: hk)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore") # the coarse-submesh warning
+        o = PairOracle(h, nk=16, coarse_nk=8)
+    with pytest.raises(ValueError, match="coarse_nk"):
+        o.pair_arrays([1]) # the pair at k=1/16
+
+
+def test_qtt_leaves_the_global_random_state_alone():
+    """The DMRG starts from a random MPS drawn from numpy's global
+    generator; the solve seeds it for reproducibility and gives the
+    caller's state back"""
+    h = spinless_chain()
+    W = density_interaction(h, V1=0.8)
+    np.random.seed(7)
+    ref = np.random.random()
+    np.random.seed(7)
+    h.get_bse(V=W, nk=32, tda=True, solver="qtt")
+    assert np.random.random() == ref

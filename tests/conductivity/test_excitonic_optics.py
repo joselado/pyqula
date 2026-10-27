@@ -238,3 +238,22 @@ def test_lanczos_bounds_hold_the_spectrum(spinful):
     assert abs(e0-es[0])<1e-4*width and abs(e1-es[-1])<1e-4*width
     c,s = chebyshev.spectral_bounds(f)
     assert c-s<es[0] and es[-1]<c+s
+
+
+def test_kpm_options_are_checked():
+    """A misspelt precision is refused with the accepted names on the CPU
+    too, rather than being sent to the GPU question; a precision given to
+    the dense route says which route it belongs to; and a frequency batch
+    must hold at least one frequency (a negative one used to return an
+    all-zero spectrum)"""
+    h = _gapped_honeycomb()
+    kw = dict(energies=[1.],nk=6,V=_zero(h))
+    with pytest.raises(ValueError,match="'double', 'single'"):
+        h.get_excitonic_optical_conductivity(method="kpm",kpm_prec="doubel",
+                **kw)
+    with pytest.raises(TypeError,match="method='kpm'"):
+        h.get_excitonic_optical_conductivity(kpm_prec="double",**kw)
+    for wbatch in (0,-2,1.5):
+        with pytest.raises(ValueError,match="wbatch"):
+            h.get_excitonic_shg_conductivity(components="xxx",wbatch=wbatch,
+                    **kw)

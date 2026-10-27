@@ -69,6 +69,22 @@ decision.
 import numpy as np
 
 
+# every gauge= mode fix_gauge accepts, None included
+_modes = (None,"none","phase","projection")
+
+
+def get_gauge_names():
+    """Every string gauge= accepts, besides None"""
+    return sorted(m for m in _modes if m is not None)
+
+
+def check_gauge(mode):
+    """Refuse an unknown gauge before anything is diagonalized"""
+    if mode not in _modes: raise ValueError("gauge must be one of %s or "
+            "None, got %r"%(", ".join(repr(m) for m in get_gauge_names()),
+                mode))
+
+
 def fix_gauge(ck,groups,mode="phase",trials=None,refs=None,ek=None):
     """Return a gauge-fixed copy of ck, shape (nk,nband,norb) with
     ck[ik][n] = C^{n,k}.
@@ -100,8 +116,7 @@ def fix_gauge(ck,groups,mode="phase",trials=None,refs=None,ek=None):
                 "the exciton spectrum")
         if trials is None: trials = default_trials(ck,groups)
         return _projection_gauge(ck,ek,groups,trials)
-    raise ValueError("gauge must be 'phase', 'projection' or None, got %r"
-            %(mode,))
+    check_gauge(mode) # raises, every accepted mode returned above
 
 
 def _phase_gauge(ck,refs):

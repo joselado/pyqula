@@ -500,17 +500,20 @@ def check_su2_interaction(W, tol=1e-8, recorded=False):
             "it"%(i, j, d, 4*cx.real, 4*cy.real, 4*cz.real))
 
 
-def _check_memory(dim, max_memory):
+def _check_memory(dim, max_memory, full=True):
     """Raise before allocating a magnon matrix that would not fit.
 
     solve.py's check_memory is written in terms of a pair count and
     advises narrowing the band window or turning the Tamm-Dancoff
     approximation on, neither of which applies here -- the magnon problem
     has no free tda switch, and its dimension is already the restricted
-    one. Same arithmetic (a complex128 matrix plus the eigensolver's
-    working copies, measured at about four times the matrix itself),
-    different advice."""
-    gb = dim*dim*16/1e9*4.
+    one. Same arithmetic, a complex128 matrix plus the eigensolver's
+    working copies: about four times the matrix for the resonant block
+    alone (full=False) and eight for the full problem, whose
+    pseudo-Hermitian solve keeps the Cholesky factor, the Hermitian
+    matrix and both sets of eigenvectors alive, as check_memory measures.
+    Different advice."""
+    gb = dim*dim*16/1e9*(8. if full else 4.)
     if gb > max_memory:
         raise MemoryError("this magnon calculation needs about %.1f GB "
             "(a %d x %d dense matrix plus eigensolver workspace), above "
@@ -633,7 +636,8 @@ def magnon_matrix(h, Q=None, nk=10, V=None, channel="auto", nv=None, nc=None,
         m1, m2 = occupancy_masks(pb) # still only the pairs that exist
         op = 0 # generator picked by weight, see goldstone_vector
     else: m1, m2, op = masks
-    _check_memory(int(np.sum(m1)+np.sum(m2)), max_memory)
+    _check_memory(int(np.sum(m1)+np.sum(m2)), max_memory,
+                  full=bool(np.any(m2)))
     A, Abar, B = masked_blocks(pb, W, m1, m2)
     if Abar.shape[0] == 0: M = A # saturated: no de-excitation half at all
     else: M = np.block([[A, B], [-B.conj().T, -np.conj(Abar)]])
@@ -777,6 +781,12 @@ def magnon_spectrum(h, **kwargs):
     S = np.ones(p.M.shape[0])
     if p.n2 > 0: S[p.n1:] = -1. # the Casida metric diag(1,-1)
     ov = np.abs(ws.conj()@(S*v))**2
+    # the residue of a mode is |x^+ S v|^2 with x normalized in the metric,
+    # x^+ S x = 1, and ws are normalized to one in the Euclidean norm, so
+    # x = w/sqrt(metric). Leaving the metric out underweighted the modes
+    # with a large de-excitation part, the Goldstone mode first (0.81
+    # against 0.93 on the honeycomb Neel state at Q=0.05)
+    ov = ov/np.maximum(np.abs(metric),1e-14)
     denom = np.sum(ov)
     if denom > 0: ov = ov/denom
     order = np.argsort(es.real)

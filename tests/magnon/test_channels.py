@@ -131,3 +131,27 @@ def test_restricted_spectrum_is_a_subset_when_band_spins_cross():
         assert len(a) < len(b)
         worst = max(np.min(np.abs(b - x)) for x in a)
         assert worst < 1e-10, f"restricted energy missing at Q={Q}: {worst}"
+
+
+def test_magnon_weights_are_residues_in_the_metric():
+    """weights[i] is the residue |x_i^+ S v|^2 of the spin generator v in
+    mode i, with x_i normalized in the Casida metric, x^+ S x = 1, and the
+    weights summed to one. With the Euclidean norm instead, the modes with
+    a large de-excitation part came out underweighted, the Goldstone mode
+    first (0.81 against 0.93 here)"""
+    from pyqula.bsetk.solve import solve_pseudo_hermitian
+    h = _neel_honeycomb()
+    Q = [0.05, 0., 0.]
+    es, w = spinflip.magnon_spectrum(h, Q=Q, nk=NK)
+    p = spinflip.magnon_matrix(h, Q=Q, nk=NK)
+    e, x = solve_pseudo_hermitian(p.M)
+    S = np.ones(p.M.shape[0])
+    S[p.n1:] = -1.
+    norm = np.real(np.einsum("ia,a,ia->i", x.conj(), S, x))
+    keep = norm > 0. # the excitation branch
+    e, x = e[keep], x[keep]/np.sqrt(norm[keep])[:, None]
+    ref = np.abs(x.conj() @ (S*spinflip.goldstone_vector(p)))**2
+    ref = ref/np.sum(ref)
+    order = np.argsort(e.real)
+    assert np.allclose(es, e[order])
+    assert np.allclose(w, ref[order], atol=1e-8)
