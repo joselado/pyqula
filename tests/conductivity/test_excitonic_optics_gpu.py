@@ -72,3 +72,25 @@ def test_single_precision_needs_the_device():
             with pytest.raises(ValueError,match="'double', 'single'"):
                 h.get_excitonic_optical_conductivity(energies=[1.],nk=6,
                         V=V,method="kpm",kpm_prec="half")
+
+
+@pytest.mark.parametrize("kpm_prec,tol",[("double",1e-6),("single",1e-4)])
+def test_device_lanczos_finds_the_edges(kpm_prec,tol):
+    """The Lanczos run of the spectral bounds is compiled on the device,
+    and only its tridiagonal elements come back; its edges must be the
+    exact ones of the block up to the convergence of the run"""
+    from pyqula.bsetk.pairbasis import PairBasis
+    from pyqula.bsetk.interaction import bare_interaction
+    from pyqula.bsetk.convolution import ConvolutionKernel
+    from pyqula.bsetk import chebyshev
+    h,V = _model()
+    pb = PairBasis(h,nk=12)
+    W = bare_interaction(h,V=V)
+    f = ConvolutionKernel(pb,W,Wx=W)
+    es = np.linalg.eigvalsh(f.to_dense())
+    width = es[-1] - es[0]
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        with gpu_backend(True):
+            e0,e1 = chebyshev.lanczos_edges(chebyshevjax.lanczos(f,kpm_prec))
+    assert abs(e0-es[0])<tol*width and abs(e1-es[-1])<tol*width

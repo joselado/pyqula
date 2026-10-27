@@ -212,3 +212,29 @@ def test_options_are_checked():
     with pytest.raises(TypeError,match="max_memory"):
         h.get_excitonic_optical_conductivity(energies=[1.],nk=6,
                 V=_zero(h),method="kpm",max_memory=4.)
+
+
+@pytest.mark.parametrize("spinful",[False,True])
+def test_lanczos_bounds_hold_the_spectrum(spinful):
+    """The interval of the Chebyshev expansion comes from one Lanczos run
+    that gives both edges. A Ritz value always lies inside the spectrum,
+    so the edges must sit inside the exact ones and close to them, and the
+    margin is what makes the interval hold it all. The spinful case has
+    degenerate edges"""
+    from pyqula.bsetk.pairbasis import PairBasis
+    from pyqula.bsetk.interaction import bare_interaction
+    from pyqula.bsetk.convolution import ConvolutionKernel
+    from pyqula.bsetk import chebyshev
+    h = _gapped_honeycomb()
+    if spinful: h.turn_spinful()
+    pb = PairBasis(h,nk=9 if spinful else 12)
+    W = bare_interaction(h,V=_coulomb(h))
+    f = ConvolutionKernel(pb,W,Wx=W)
+    assert f.npair>64 # the Lanczos route, not the dense one
+    es = np.linalg.eigvalsh(f.to_dense())
+    width = es[-1] - es[0]
+    e0,e1 = chebyshev.lanczos_edges(chebyshev.host_lanczos(f.matvec,f.npair))
+    assert es[0]-1e-10<=e0 and e1<=es[-1]+1e-10
+    assert abs(e0-es[0])<1e-4*width and abs(e1-es[-1])<1e-4*width
+    c,s = chebyshev.spectral_bounds(f)
+    assert c-s<es[0] and es[-1]<c+s

@@ -57,16 +57,21 @@ class PairBasis():
         self.Q = np.array(Q,dtype=np.float64)
         self.kpoints = np.array(h.geometry.get_kmesh(nk=nk),dtype=np.float64)
         hk = h.get_hk_gen() # Bloch Hamiltonian generator
+        self.Qzero = not np.any(np.abs(self.Q)>1e-12)
         eks,cks,ekqs,ckqs = [],[],[],[]
         for k in self.kpoints: # loop over the mesh
             e1,w1 = algebra.eigh(hk(k))
-            e2,w2 = algebra.eigh(hk(k+self.Q))
             eks.append(e1) ; cks.append(np.array(w1.T,dtype=np.complex128))
+            if self.Qzero: continue # k+Q is k, diagonalized once
+            e2,w2 = algebra.eigh(hk(k+self.Q))
             ekqs.append(e2) ; ckqs.append(np.array(w2.T,dtype=np.complex128))
         self.ek = np.array(eks) # (nk,norb) energies at k
         self.ck = np.array(cks) # (nk,norb,norb), ck[ik][n] = C^{n,k}
-        self.ekq = np.array(ekqs) # energies at k+Q
-        self.ckq = np.array(ckqs) # coefficients at k+Q
+        if self.Qzero: # copies, since a gauge rotates the two separately
+            self.ekq,self.ckq = self.ek.copy(),self.ck.copy()
+        else:
+            self.ekq = np.array(ekqs) # energies at k+Q
+            self.ckq = np.array(ckqs) # coefficients at k+Q
         self.metal = metal
         if metal: # occupancy decided per k-point, see select_bands
             if nv is not None or nc is not None:
@@ -105,34 +110,34 @@ class PairBasis():
         nk = len(self.kpoints)
         vb,cb = self.vbands,self.cbands
         norb = self.ck.shape[1]
-        npair = nk*len(vb)*len(cb)
+        nv,nc = len(vb),len(cb)
+        npair = nk*nv*nc
         self.npair = npair
+        # the pair m = (ik,iv,ic) is row m of every array, with ic fastest
+        shape = (nk,nv,nc,norb)
+        def pairs(C,bands,axis): # the coefficients of bands, per pair
+            Cb = C[:,bands,:] # (nk,nbands,norb)
+            out = np.empty(shape,dtype=np.complex128) # one copy, owned
+            out[...] = Cb[:,:,None,:] if axis==1 else Cb[:,None,:,:]
+            return out.reshape(npair,norb)
         # resonant: hole (v,k), electron (c,k+Q)
-        el = np.zeros((npair,norb),dtype=np.complex128)
-        ho = np.zeros((npair,norb),dtype=np.complex128)
-        # antiresonant: hole (v,k+Q), electron (c,k)
-        elA = np.zeros((npair,norb),dtype=np.complex128)
-        hoA = np.zeros((npair,norb),dtype=np.complex128)
-        dE = np.zeros(npair,dtype=np.float64) # resonant energies
-        dEA = np.zeros(npair,dtype=np.float64) # antiresonant energies
-        kindex = np.zeros(npair,dtype=np.int64) # k-point of each pair
-        labels = [] # (ik,iv,ic) of each pair, for postprocessing
-        m = 0
-        for ik in range(nk): # loop over k-points
-            for iv in vb: # loop over valence bands
-                for ic in cb: # loop over conduction bands
-                    el[m] = self.ckq[ik][ic] ; ho[m] = self.ck[ik][iv]
-                    elA[m] = self.ck[ik][ic] ; hoA[m] = self.ckq[ik][iv]
-                    dE[m] = self.ekq[ik][ic] - self.ek[ik][iv]
-                    dEA[m] = self.ek[ik][ic] - self.ekq[ik][iv]
-                    kindex[m] = ik
-                    labels.append((ik,iv,ic))
-                    m += 1
-        self.el,self.ho = el,ho
-        self.elA,self.hoA = elA,hoA
-        self.dE,self.dEA = dE,dEA
-        self.kindex = kindex
-        self.labels = labels
+        self.el,self.ho = pairs(self.ckq,cb,2),pairs(self.ck,vb,1)
+        self.dE = (self.ekq[:,cb][:,None,:] - self.ek[:,vb][:,:,None]
+                ).reshape(-1) # resonant energies
+        # antiresonant: hole (v,k+Q), electron (c,k). At Q=0 these are the
+        # resonant arrays themselves, shared rather than copied, which
+        # halves the largest arrays of the pair basis
+        if self.Qzero and np.array_equal(self.ckq,self.ck):
+            self.elA,self.hoA,self.dEA = self.el,self.ho,self.dE
+        else:
+            self.elA,self.hoA = pairs(self.ck,cb,2),pairs(self.ckq,vb,1)
+            self.dEA = (self.ek[:,cb][:,None,:] - self.ekq[:,vb][:,:,None]
+                    ).reshape(-1) # antiresonant energies
+        self.kindex = np.repeat(np.arange(nk),nv*nc) # k-point of each pair
+        # (ik,iv,ic) of each pair, for postprocessing
+        ik,iv,ic = np.meshgrid(np.arange(nk),vb,cb,indexing="ij")
+        self.labels = list(zip(ik.reshape(-1).tolist(),
+                iv.reshape(-1).tolist(),ic.reshape(-1).tolist()))
 
 
 def select_bands(ek,nv=None,nc=None):

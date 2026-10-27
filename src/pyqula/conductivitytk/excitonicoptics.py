@@ -68,15 +68,15 @@ class _ChebyshevResolvent():
         from .. import gpu
         self.prec = kw.get("kpm_prec","double")
         self.device = gpu.get_gpu()
-        matvec = None
+        lanczos = None
         if self.device:
             from ..bsetk import chebyshevjax
-            matvec = chebyshevjax.host_matvec(self.f,self.prec)
+            lanczos = chebyshevjax.lanczos(self.f,self.prec)
             self.cheb = chebyshevjax
         elif self.prec!="double": raise ValueError("kpm_prec=%r needs the "
                 "GPU path, pyqula.gpu.set_gpu(True); the CPU expansion "
                 "runs in double precision"%(self.prec,))
-        self.c,self.s = chebyshev.spectral_bounds(self.f,matvec=matvec)
+        self.c,self.s = chebyshev.spectral_bounds(self.f,lanczos=lanczos)
     def apply(self,D,zs):
         if self.f.nterm==0: # kernel="none", A is diagonal, so exactly
             return D[:,:,None]/(zs[None,None,:]-self.f.diag[:,None,None])
@@ -189,7 +189,12 @@ class _PositionOperator():
         """X^a g for a batch of pair vectors g (npair,nb): the pair vectors
         as orbital matrices Phi_k[i,j] = sum_vc g_kvc C_c(k)_i conj(C_v(k)_j),
         multiplied by the bond vector in real space, and projected back"""
-        from ..bsetk.convolution import _gather,_scatter
+        return self.backward(a,self.forward(g))
+    def forward(self,g):
+        """The pair vectors g (npair,nb) as orbital matrices in real space,
+        phi_ij(R), which do not depend on the direction of X and so serve
+        all three"""
+        from ..bsetk.convolution import _gather
         import scipy.fft
         nk,nv,nc = len(self.C),len(self.vb),len(self.cb)
         ncol = g.shape[1]
@@ -198,13 +203,22 @@ class _PositionOperator():
         parallel.set_num_threads()
         _gather(self.CcT,self.CvcT,G,self.ia,self.ib,Phi)
         axes = tuple(range(self.dim))
-        w = numba.get_num_threads()
-        P = scipy.fft.fftn(Phi.reshape(tuple(self.nks)+Phi.shape[1:]),
-                axes=axes,workers=w,overwrite_x=True)
-        P *= self.F[a] # the bond vector of every R and (i,j)
-        M = scipy.fft.ifftn(P,axes=axes,workers=w,overwrite_x=True)
+        return scipy.fft.fftn(Phi.reshape(tuple(self.nks)+Phi.shape[1:]),
+                axes=axes,workers=numba.get_num_threads(),overwrite_x=True)
+    def backward(self,a,P):
+        """X^a applied to the output of forward, as pair vectors"""
+        from ..bsetk.convolution import _scatter
+        import scipy.fft
+        nk,nv,nc = len(self.C),len(self.vb),len(self.cb)
+        ncol = P.shape[-2]
+        axes = tuple(range(self.dim))
+        # times the bond vector of every R and (i,j), into a new array, so
+        # P serves the other directions too
+        M = scipy.fft.ifftn(P*self.F[a],axes=axes,
+                workers=numba.get_num_threads(),overwrite_x=True)
         out = np.zeros((nk,nv,nc,ncol),dtype=np.complex128)
-        _scatter(self.Ccc,self.Cv,M.reshape(Phi.shape),self.ia,self.ib,out)
+        parallel.set_num_threads()
+        _scatter(self.Ccc,self.Cv,M.reshape(nk,ncol,-1),self.ia,self.ib,out)
         return out.reshape(-1,ncol)
 
 
@@ -311,14 +325,31 @@ def excitonic_shg_conductivity(h,energies=None,nk=20,delta=0.1,
         Fp2 = [F[:,a,nw:2*nw] for a in range(3)] # (-2w - A)^-1 d^a
         L2 = [F[:,a,2*nw:3*nw] for a in range(3)] # ((2w - A)^-1)^+ d^a
         Lm = [-F[:,a,3*nw:] for a in range(3)] # ((w + A)^-1)^+ d^a
+        # for every triplet t = (a,b,c), the sum of the three terms
+        #   1:  d^a+ (2w - A)^-1 X^b (w - A)^-1 d^c
+        #   2:  d^b+ (w + A)^-1 X^c (2w + A)^-1 d^a
+        #   3: -d^c+ (w + A)^-1 X^a (w - A)^-1 d^b
+        # Each X product depends on a direction and a source vector only,
+        # so the products are grouped by source: one forward transform per
+        # source, one backward transform per direction it is needed in,
+        # used by every term and triplet that needs it before the next one
+        # is made. That is at most 6 forward and 18 backward transforms
+        # per batch, where one per term and triplet was 81 of each for
+        # every component
+        uses = {} # (source,direction) -> [(triplet,left vector,sign)]
         for (t,(a,bb,c)) in enumerate(full):
-            # term 1: d^a+ (2w - A)^-1 X^b (w - A)^-1 d^c
-            T1 = dag(L2[a],X.apply(bb,Fm1[c]))
-            # term 2: d^b+ (w + A)^-1 X^c (2w + A)^-1 d^a
-            T2 = dag(Lm[bb],X.apply(c,-Fp2[a]))
-            # term 3: -d^c+ (w + A)^-1 X^a (w - A)^-1 d^b
-            T3 = -dag(Lm[c],X.apply(a,Fm1[bb]))
-            chi[i0:i0+wbatch,t] = T1 + T2 + T3
+            uses.setdefault((("m1",c),bb),[]).append((t,L2[a],1.))
+            uses.setdefault((("p2",a),c),[]).append((t,Lm[bb],1.))
+            uses.setdefault((("m1",bb),a),[]).append((t,Lm[c],-1.))
+        sources = {("m1",c):Fm1[c] for c in range(3)}
+        sources.update({("p2",a):-Fp2[a] for a in range(3)})
+        for src in sorted({s for (s,_) in uses}):
+            P = X.forward(sources[src])
+            for (s,b) in sorted(uses):
+                if s!=src: continue
+                XF = X.backward(b,P)
+                for (t,L,sign) in uses[(s,b)]:
+                    chi[i0:i0+wbatch,t] += sign*dag(L,XF)
     chi = chi*shg._charge**3/(2.*len(pb.kpoints)*cellvol)
     out = {}
     for (comp,(a,bb,c)) in zip(components,trip):

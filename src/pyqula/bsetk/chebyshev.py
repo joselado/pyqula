@@ -25,15 +25,14 @@ tol = 1e-9 # truncation of the series, |q|^N, relative to its first term
 max_moments = 200000 # the series is refused beyond this
 
 
-def spectral_bounds(f,margin=0.02,matvec=None):
+def spectral_bounds(f,margin=0.02,lanczos=None):
     """Center c and half width s of an interval holding the spectrum of
-    the Hermitian block f (a factorize.KernelFactorization). The extreme
-    eigenvalues come from Lanczos, which is reliable for a value even when
-    the edge is degenerate, and a Ritz value always lies inside the true
-    interval, hence the margin. A tolerance of 1e-4 places them to about
-    1e-5 of the width, far inside the margin, at a third of the matvecs
-    of a tight one. matvec replaces f.matvec, for a device copy of the
-    block"""
+    the Hermitian block f (a convolution.ConvolutionKernel or a
+    factorize.KernelFactorization). The extreme eigenvalues come from one
+    Lanczos run, which gives both edges at once and is reliable for a
+    value even when the edge is degenerate, and a Ritz value always lies
+    inside the true interval, hence the margin. lanczos replaces the host
+    recursion, for a device copy of the block (see lanczos_edges)"""
     n = f.npair
     if n<=64:
         es = np.linalg.eigvalsh(f.to_dense())
@@ -41,18 +40,70 @@ def spectral_bounds(f,margin=0.02,matvec=None):
     elif f.nterm==0: # the diagonal alone
         emin,emax = np.min(f.diag),np.max(f.diag)
     else:
-        import scipy.sparse.linalg as sla
-        if matvec is None: matvec = f.matvec
-        op = sla.LinearOperator((n,n),matvec=matvec,rmatvec=matvec,
-                dtype=np.complex128) # Hermitian
-        v0 = np.ones(n,dtype=np.complex128) # deterministic start
-        emax = sla.eigsh(op,k=1,which="LA",v0=v0,tol=1e-4,
-                return_eigenvectors=False)[0]
-        emin = sla.eigsh(op,k=1,which="SA",v0=v0,tol=1e-4,
-                return_eigenvectors=False)[0]
+        if lanczos is None: lanczos = host_lanczos(f.matvec,n)
+        emin,emax = lanczos_edges(lanczos)
     c = 0.5*(emax+emin)
     s = 0.5*(emax-emin)*(1.+margin) + margin*(abs(c)+1e-3)
     return c,s
+
+
+def start_vector(n):
+    """The deterministic start of the Lanczos run. A fixed-seed random
+    vector rather than a constant one, which a symmetry of the block can
+    make orthogonal to the eigenvector of an edge"""
+    rng = np.random.default_rng(0)
+    v = rng.normal(size=n) + 1j*rng.normal(size=n)
+    return v/np.linalg.norm(v)
+
+
+def host_lanczos(matvec,n):
+    """A Lanczos recursion on the host without reorthogonalization, as a
+    function of the number of steps m that returns the next m diagonal
+    and off-diagonal elements of the tridiagonal matrix. The loss of
+    orthogonality only duplicates converged Ritz values, which leaves the
+    extreme ones untouched"""
+    v = start_vector(n)
+    state = [v,np.zeros_like(v),0.]
+    def run(m):
+        v,vm,b = state
+        als,bes = np.zeros(m),np.zeros(m)
+        for i in range(m):
+            w = matvec(v) - b*vm
+            als[i] = np.real(np.vdot(v,w))
+            w -= als[i]*v
+            bes[i] = b = np.linalg.norm(w)
+            if b==0.: break # an invariant subspace, nothing more to find
+            vm,v = v,w/b
+        state[:] = v,vm,b
+        return als,bes
+    return run
+
+
+def lanczos_edges(run,nb=16,maxsteps=400,rtol=1e-5):
+    """The lowest and highest Ritz values of a Lanczos run, extended by
+    about nb steps at a time (run may return a different number) until
+    both move by less than rtol of the width
+    between two extensions. On the TMD tetralayer at nk=48 that took 50
+    steps and put the edges within 2e-5 of ARPACK's, far inside the margin
+    of spectral_bounds, at 0.055 s on an RTX A2000 in single precision
+    against 1.9 s for the two ARPACK runs it replaced, whose host work was
+    most of the cost. The scale guard of the recursion (check_moments) is
+    the backstop if an edge is missed"""
+    from scipy.linalg import eigvalsh_tridiagonal
+    als,bes,old = [],[],None
+    while len(als)<maxsteps:
+        a,b = run(nb)
+        als,bes = np.concatenate([als,a]),np.concatenate([bes,b])
+        if np.any(b==0.): # invariant subspace, the edges are exact
+            m = len(als) - len(b) + int(np.argmax(b==0.)) + 1
+            als,bes = als[:m],bes[:m]
+        es = eigvalsh_tridiagonal(als,bes[:-1]) if len(als)>1 else als
+        e0,e1 = es[0],es[-1]
+        if np.any(b==0.): break
+        if old is not None and max(abs(e0-old[0]),abs(e1-old[1])) \
+                <= rtol*max(e1-e0,1e-12): break
+        old = (e0,e1)
+    return e0,e1
 
 
 def _coefficients(zs,c,s):

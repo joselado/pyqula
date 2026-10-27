@@ -260,8 +260,11 @@ them by ~1e-16, so the Newton SCF stalled only on the GPU.
 `kpm_prec="single"`. The matvec is the convolution apply of `bsetk/convolution.py` written in
 jax, dense batched contractions plus a device FFT. On an RTX A2000 single precision is 2.6 to
 3.3 times faster end to end than six CPU cores and differs from double by 1e-5 to 5e-5 of the
-maximum; double gains 1.0 to 1.6 times. The numbers and what is left on the host are in
-`future_development/kpm_excitonic_optics.md`.
+maximum; double gains 1.0 to 1.6 times. Since the review of 26 October 2026 the Lanczos run of
+the spectral bounds is compiled on the device too, and the kernels take the block as arguments,
+so a second call on the same mesh does not compile again; single precision is then about six
+times faster than the CPU, for the absorption and for the SHG of the tetralayer at nk=48. The
+numbers and what is left on the host are in `future_development/kpm_excitonic_optics.md`.
 
 ## Proposed phased plan
 

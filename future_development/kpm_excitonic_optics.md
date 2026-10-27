@@ -24,11 +24,16 @@ is what makes every check an equality on the same mesh. The number of moments is
 the largest |q| of the requested energies for a truncation of 1e-9 (`chebyshev.tol`), which is
 about 20 s/delta at the center of the spectrum and does not depend on the number of pairs.
 
-The spectral interval comes from two `eigsh` calls on the operator with a deterministic start
-vector and a tolerance of 1e-4, widened by 2%; the tolerance places the edges to about 1e-5 of
-the width (measured on the MoS2 monolayer at nk=12 and 36 against the dense spectrum) at a third
-of the matvecs of the 1e-8 used at first, which made the bounds cost as much as the recursion. The ARPACK objection of `iterative.py` (it cannot
-resolve a degenerate multiplet) does not apply: an extreme eigenvalue is wanted, not its
+The spectral interval comes from one Lanczos run without reorthogonalization, which gives both
+edges at once, from a fixed-seed random start vector, extended 16 steps at a time until both edges
+move by less than 1e-5 of the width, and widened by 2%. On the tetralayer at nk=36 that is 48
+steps, with the edges within 6e-5 of the width of the converged ones, far inside the margin. It
+replaced two ARPACK `eigsh` calls at a tolerance of 1e-4, whose host work was most of their cost:
+on the tetralayer at nk=48 they took 1.9 s with the device matvec, against 0.07 s for the same
+Lanczos compiled on the card, and 4.6 s on the CPU against about 2 s. The loss of orthogonality
+only duplicates converged Ritz values, so the extreme ones are untouched. The ARPACK objection of
+`iterative.py` (it cannot resolve a degenerate multiplet) does not apply either: an extreme
+eigenvalue is wanted, not its
 eigenspace. The diagonal moments <d|T_n(A')|d> are checked against |d|^2 by
 `chebyshev.check_moments` (on `kpmtk/scaleguard`) on every block of the recursion, which is the backstop if the
 interval misses an edge (pinned by `test_chebyshev_scale_is_guarded`). A polynomial of A never
@@ -100,12 +105,20 @@ then copied its input.
 `bsetk/chebyshevjax.py` writes the matvec in jax and runs the recursion in compiled blocks of 16
 steps (`jax.lax.scan`), folding each block into the result with one matrix product, so the host
 only sees the diagonal moments of the scale guard; the brakets of the absorption use the halved
-recursion as on the CPU, and the Lanczos bounds use the device matvec too. It routes on
+recursion as on the CPU, and the Lanczos run of the bounds is compiled on the device too, so
+that only its tridiagonal elements come back. It routes on
 `gpu.get_gpu()`, and precision is per call, `kpm_prec="double"` (default) or `"single"`; on the
 CPU `"single"` raises. Unlike the numba kernels, the device matvec gathers and scatters whole
 orbital matrices with dense contractions and picks the channels only for the FFT: a
 channel-by-channel scatter lowers to atomic adds, and was 3x slower in single precision on the
 tetralayer (8.4 ms against 2.7 ms per matvec at nk=48, on an RTX A2000).
+
+The kernels are module-level jitted functions that take the device arrays of the block as
+arguments, with the shapes as a static argument, rather than closures over the arrays. With
+closures every call made a new block, so jax traced and compiled everything again: 0.45 s for
+the Lanczos run and 0.7 s for the recursion of each call on the tetralayer at nk=48 in single
+precision, out of 3.2 s for the absorption. Now a second call on the same mesh reuses the
+compiled code, and only the first call of a process compiles.
 
 Every contraction asks for `Precision.HIGHEST`. Without it jax runs float32 products on an
 Ampere or later card in TF32, with a ten-bit mantissa, and the single-precision resolvent came
@@ -174,6 +187,38 @@ exact, so these runs would take seconds):
   off on the meshes 24, 36, 48, so the slow part is the resolution delta >= v dk/2 and not the
   gauge. C3 holds to 1e-13.
 
+After the review of 26 October 2026 (the Lanczos bounds on the CPU and the device, the
+compiled-once device kernels, the leaner pair basis and the regrouped position operator), on
+the same workstation, tetralayer at nk=48, second call in the process, SHG yyy at 16
+frequencies / absorption at 301 energies:
+
+| route | before | after |
+| --- | --- | --- |
+| CPU | 24.1 / 16.0 s | 20.5 / 12.7 s |
+| GPU double | 13.9 / 10.4 s | 10.0 / 6.6 s |
+| GPU single | 6.7 / 5.3 s | 3.4 / 2.1 s |
+
+The first call of a process pays the compilation, 4.6 / 3.1 s in single precision. The spectra
+agree with the code before to 1e-12 in double precision, and single precision stays within 8e-6
+(SHG) and 4e-5 (absorption) of the CPU. In single precision what is left is the recursion, 1.7 /
+1.4 s, the position operator on the host, about 0.8 s, and the pair basis, 0.4 s (1.1 s before,
+when it diagonalized k and k+Q separately at Q=0 and filled its arrays in a Python loop). On the
+CPU of that workstation one Lanczos step costs about 30 ms against 9 ms for the same matvec
+applied repeatedly to one vector; it depends on the content of the vector and not on the
+allocation (fixed buffers changed nothing), and on the 14-thread workstation the same run takes
+48 steps in 0.27 s at nk=36, so the cause was not found. With every component of the SHG, the
+default, the tetralayer at nk=36 went from 34.2 s to 18.7 s on the 14-thread workstation, mostly
+from the position operator, whose 81 applies per batch (one per term and triplet) had cost 17.1
+s: they are now at most 6 forward and 18 backward transforms, made one source at a time so that
+the memory per frequency does not grow.
+
+One caveat on the tetralayer numbers. `density_interaction` cuts the Vr tail at `rcut=5.0` by
+default, and the layers of this stack are 6.13, 6.25 and 6.36 apart, so the benchmark has no
+interlayer electron-hole interaction at all: only 144 of the 576 orbital channels are non-zero,
+the intralayer ones, and interlayer excitons are not bound. An `rcut` that reaches the next
+layer is the physical setting for a heterostructure, and it multiplies the channels of the FFT
+by up to four, so the timings above understate that case.
+
 ## Left open
 
 The numbers of the first item were measured while planning, on the dense matrices of the
@@ -196,9 +241,13 @@ same models, before the implementation.
   finite Q, the antiresonant and the coupling blocks are not built, and the coupling block is
   what the non-Tamm-Dancoff item above needs.
 - **The position operator on the device.** On the GPU path the SHG still brings the resolvent
-  vectors back to the host for the position operator, 9 calls per frequency batch, 0.19 s each
-  on the tetralayer at nk=48 with the numba kernels; together with the pair basis it is most of
-  what is left on the host.
+  vectors back to the host for the position operator, a forward transform per source vector and
+  a backward one per direction it is needed in, about 0.8 s for one component on the tetralayer
+  at nk=48; together with the pair basis it is most of what is left on the host.
+- **A channel-wise device matvec.** Gathering only the channels where W is non-zero, with the
+  mesh on the last axes of the FFT and the scatter as a contraction with a one-hot matrix, gave
+  2.16 ms against 2.67 ms per matvec in single precision on the tetralayer at nk=48, but 23.6 ms
+  against 16.5 ms in double, so it was not adopted.
 - **An exciton density of states** by a stochastic trace with the Jackson kernel, the analogue
   of `kpm.random_trace`, on the same engine. Not asked for.
 
