@@ -118,7 +118,8 @@ from numba import jit,prange
 from .. import algebra
 from .. import parallel
 from .. import gpu
-from .interaction import bare_interaction,interaction_at_q,qkey
+from .interaction import (bare_interaction,interaction_at_q,qkey,
+        bloch_phases,regular_mesh)
 from .pairbasis import select_bands
 
 
@@ -203,12 +204,12 @@ class ScreenedInteraction():
         below tol are dropped."""
         nq = len(self.qs)
         ds = _mesh_vectors(self.nkmesh,self.geometry.dimensionality)
+        # every lattice vector at once, as one matrix product over q
+        ph = np.conj(bloch_phases(self.geometry,self.qs,ds)) # (nq,nd)
+        Wq = np.asarray(self.Wq,dtype=np.complex128)
+        ms = (ph.T@Wq.reshape(nq,-1)).reshape((len(ds),)+Wq.shape[1:])/nq
         out = dict()
-        for d in ds:
-            m = np.zeros(self.Wq[0].shape,dtype=np.complex128)
-            for iq,q in enumerate(self.qs):
-                m = m + self.Wq[iq]*np.conj(self.geometry.bloch_phase(d,q))
-            m = m/nq
+        for d,m in zip(ds,ms):
             if np.max(np.abs(m))>tol: out[d] = m
         return out
     def __str__(self):
@@ -284,6 +285,18 @@ def mesh_sum_index(kpoints,qs):
     k-point (modulo a reciprocal lattice vector) and the whole
     polarizability needs only ONE diagonalization per mesh point rather
     than one per (k,q) pair."""
+    mesh = regular_mesh(kpoints)
+    if mesh is not None and np.allclose(np.asarray(kpoints)[0],0.):
+        # integer arithmetic on the multi-indices of the mesh, instead of
+        # nk*nq dictionary lookups (5.7 s at 1296 points)
+        n,dim = mesh
+        qn = np.asarray(qs,dtype=np.float64)*n
+        iqn = np.rint(qn)
+        if np.max(np.abs(qn-iqn))<1e-6:
+            idx = np.array(np.unravel_index(np.arange(len(kpoints)),
+                (n,)*dim)) # (dim,nk)
+            s = (idx[:,:,None] + iqn.T[:dim,None,:].astype(np.int64))%n
+            return np.ravel_multi_index(tuple(s),(n,)*dim).astype(np.int64)
     index = {qkey(k): i for i,k in enumerate(kpoints)}
     nk,nq = len(kpoints),len(qs)
     ikq = np.zeros((nk,nq),dtype=np.int64)
@@ -354,7 +367,12 @@ def static_polarizability(h,nk=10,exclude=None,kpoints=None,ek=None,ck=None,
             "is particle-hole symmetric about zero, so nothing downstream "
             "would notice. A superconducting screened interaction needs "
             "the Nambu-resolved response, not this one")
-    if kpoints is None or ek is None or ck is None:
+    given = [x is not None for x in (kpoints,ek,ck)]
+    if any(given) and not all(given): raise ValueError("kpoints, ek and ck "
+            "reuse eigenstates that are already computed and are given "
+            "together or not at all, got only %s"%(", ".join(n for n,x in
+                zip(("kpoints","ek","ck"),given) if x),))
+    if not any(given):
         kpoints,ek,ck = mesh_eigenstates(h,nk=nk)
     select_bands(ek) # validate: this raises if there is no gap at zero
     occ = np.array(ek<0.,dtype=np.float64) # Fermi energy is zero

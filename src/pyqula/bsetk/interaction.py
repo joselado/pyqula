@@ -69,10 +69,25 @@ def bare_interaction(h,V=None):
                 "(get_mean_field_hamiltonian), which stores the "
                 "interaction it converged with as h.V")
         v = V2dict(h.V)
-        return {d: 2.*np.array(m,dtype=np.complex128) for d,m in v.items()}
+        return _require_real({d: 2.*np.array(m,dtype=np.complex128)
+            for d,m in v.items()})
     else: # explicit interaction, taken at face value
         v = V2dict(V)
-        return {d: np.array(m,dtype=np.complex128) for d,m in v.items()}
+        return _require_real({d: np.array(m,dtype=np.complex128)
+            for d,m in v.items()})
+
+
+def _require_real(W,tol=1e-10):
+    """Refuse a density-density interaction with a complex W_ij(d). Every
+    density-density interaction is real, and the kernel relies on it:
+    W(-Q) is taken as conj(W(Q)) (kernel.build_blocks, factorize.py), which
+    a complex W(d) would make silently wrong at finite Q"""
+    scale = max([np.max(np.abs(m)) for m in W.values()]+[1.])
+    worst = max([np.max(np.abs(np.imag(m))) for m in W.values()]+[0.])
+    if worst>tol*scale: raise ValueError("a density-density interaction "
+            "W_ij(d) is real, got an imaginary part of %g; the kernel takes "
+            "W(-Q) = conj(W(Q)), which holds only for a real W(d)"%worst)
+    return W
 
 
 def interaction_channels(h,V=None,transverse=True):
@@ -184,6 +199,28 @@ def qkey(q):
     return tuple(np.round(q,7)%1.0)
 
 
+def regular_mesh(kpoints,tol=1e-8):
+    """(n,dim) when the k-points are those of a regular n^dim mesh
+    k_0 + (i_1,...,i_dim)/n in the order geometry.get_kmesh returns them,
+    point i at the multi-index np.unravel_index(i,(n,)*dim), and None
+    otherwise. On such a mesh a sum or a difference of two points is
+    integer arithmetic on the multi-indices, which is what replaces the
+    nk^2 dictionary lookups of qkey in kernel.qdifference_map and
+    screening.mesh_sum_index"""
+    kpoints = np.asarray(kpoints,dtype=np.float64)
+    nk = len(kpoints)
+    for dim in (1,2,3):
+        n = int(round(nk**(1./dim)))
+        if n**dim!=nk: continue
+        idx = np.array(np.unravel_index(np.arange(nk),(n,)*dim)).T
+        dk = kpoints[:,:dim] - kpoints[0,:dim] - idx/n
+        if np.max(np.abs(dk-np.round(dk)))>tol: continue
+        rest = kpoints[:,dim:] - kpoints[0,dim:] # constant beyond dim
+        if rest.size>0 and np.max(np.abs(rest-np.round(rest)))>tol: continue
+        return n,dim
+    return None
+
+
 def interaction_at_q(W,g,q):
     """Fourier transform a real-space interaction dictionary at a q-point,
     W(q) = sum_d W(d) exp(2 pi i q.d). This is the exact same Bloch-phase
@@ -204,6 +241,30 @@ def interaction_at_q(W,g,q):
         phase = g.bloch_phase(d,q)
         out = m*phase if out is None else out + m*phase
     return out
+
+
+def bloch_phases(g,qs,ds):
+    """exp(2 pi i q.d) for every q of qs and every lattice vector of ds,
+    (nq,nd), with the components geometry.bloch_phase keeps for the
+    dimensionality of g, as one matrix product"""
+    dim = g.dimensionality
+    qs = np.asarray(qs,dtype=np.float64).reshape(-1,np.shape(qs)[-1])
+    ds = np.asarray(ds,dtype=np.float64).reshape(-1,3)
+    if dim==0: return np.ones((len(qs),len(ds)),dtype=np.complex128)
+    return np.exp(2j*np.pi*(qs[:,:dim]@ds[:,:dim].T))
+
+
+def interaction_at_qs(W,g,qs):
+    """W(q) at every q of qs, (nq,norb,norb). For a real-space dictionary
+    this is one matrix product over its lattice vectors instead of one
+    Fourier sum per q, which matters on the meshes of thousands of points
+    the matrix-free routes are for"""
+    if hasattr(W,"at"):
+        return np.array([W.at(q) for q in qs],dtype=np.complex128)
+    ds = list(W.keys())
+    ms = np.array([W[d] for d in ds],dtype=np.complex128) # (nd,norb,norb)
+    ph = bloch_phases(g,qs,ds) # (nq,nd)
+    return (ph@ms.reshape(len(ds),-1)).reshape((len(ph),)+ms.shape[1:])
 
 
 def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None,rcut=None):

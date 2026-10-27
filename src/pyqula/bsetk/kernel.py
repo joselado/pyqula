@@ -1,7 +1,28 @@
 import numpy as np
 from numba import jit,prange
 from .. import parallel
-from .interaction import interaction_at_q,qkey
+from .interaction import interaction_at_q,interaction_at_qs,qkey,regular_mesh
+
+
+# The terms of the BSE kernel each kernel= option includes, as (direct,
+# exchange). Every module that builds the kernel (here, factorize.py,
+# convolution.py, qtt.py) reads its options from this one table
+_kernel_terms = {"full":(True,True),"direct":(True,False),
+        "exchange":(False,True),"none":(False,False)}
+
+
+def get_kernel_names():
+    """Every value kernel= accepts"""
+    return sorted(_kernel_terms)
+
+
+def kernel_terms(kernel):
+    """(direct,exchange): whether kernel= includes the direct (ladder) and
+    the exchange (Hartree) term"""
+    if kernel not in _kernel_terms: raise ValueError("kernel must be one "
+            "of %s, got %r"%(", ".join(repr(k) for k in get_kernel_names()),
+                kernel))
+    return _kernel_terms[kernel]
 
 
 def qdifference_map(kpoints):
@@ -28,6 +49,19 @@ def qdifference_map(kpoints):
     low-rank factorization uses the mesh points themselves and so
     disagreed with the rounded reference at exactly that size."""
     nk = len(kpoints)
+    mesh = regular_mesh(kpoints)
+    if mesh is not None:
+        # the same map from the multi-indices of the mesh: the class of
+        # (i,j) is the point j' whose difference with point 0 matches,
+        # k_i - k_j = k_0 - k_j' mod G, and the first occurrence of every
+        # class is in row 0, so qs is exactly what the loop below gives,
+        # at O(nk^2) integer work instead of nk^2 dictionary lookups (11.7
+        # s at 1296 points)
+        n,dim = mesh
+        idx = np.array(np.unravel_index(np.arange(nk),(n,)*dim)) # (dim,nk)
+        diff = (idx[:,None,:] - idx[:,:,None])%n # idx_j - idx_i
+        iq = np.ravel_multi_index(tuple(diff),(n,)*dim).astype(np.int64)
+        return np.array(kpoints[0] - kpoints,dtype=np.float64),iq
     keys,qs = dict(),[]
     iq = np.zeros((nk,nk),dtype=np.int64)
     for i in range(nk):
@@ -43,8 +77,7 @@ def qdifference_map(kpoints):
 
 def interaction_tensor(W,g,qs):
     """Return the (nq,norb,norb) array of W(q) for every q in qs"""
-    out = [interaction_at_q(W,g,q) for q in qs]
-    return np.array(out,dtype=np.complex128)
+    return interaction_at_qs(W,g,qs)
 
 
 def nonzero_pattern(Wqs,tol=1e-10):
@@ -155,16 +188,23 @@ def build_blocks(pb,W,Wx=None,kernel="full"):
                  independent-particle transition energies
     """
     if Wx is None: Wx = W # exchange defaults to the direct interaction
+    direct,exchange = kernel_terms(kernel)
+    if not hasattr(Wx,"at") and not (direct and hasattr(W,"at")):
+        # real-space dictionaries: each block is exactly a diagonal plus a
+        # fixed number of rank-one terms (factorize.py), so it is one
+        # matrix product, where the loop below does O(nnz) scalar work per
+        # element (3.5 s against a few ms at npair=1024 on the honeycomb
+        # lattice with V1 and V2). The loop stays for a tabulated W in the
+        # direct term; W does not enter without it
+        from .factorize import KernelFactorization
+        return tuple(KernelFactorization(pb,W,Wx=Wx,kernel=kernel,
+                block=b).to_dense() for b in ("A","Abar","B"))
     g = pb.geometry
     norm = 1.0/len(pb.kpoints) # 1/N, N the number of unit cells
     A = np.diag(pb.dE).astype(np.complex128)
     Abar = np.diag(pb.dEA).astype(np.complex128)
     B = np.zeros((pb.npair,pb.npair),dtype=np.complex128)
-    if kernel=="none": return A,Abar,B
-    if kernel not in ("full","direct","exchange"):
-        raise ValueError("kernel must be one of 'full', 'direct', "
-                "'exchange', 'none', got %r"%(kernel,))
-    if kernel in ("full","exchange"): # exchange (Hartree) term
+    if exchange: # exchange (Hartree) term
         WQ = interaction_at_q(Wx,g,pb.Q) # W(+Q), the BARE interaction
         WmQ = np.conj(WQ) # W(-Q); W(d) is real, so this is the same as
         # interaction_at_q(W,g,-pb.Q), just without a second Fourier sum
@@ -184,7 +224,7 @@ def build_blocks(pb,W,Wx=None,kernel="full"):
         A = A + exchange_block(Fr,Fr,WQ,norm)
         Abar = Abar + exchange_block(Fa,Fa,WmQ,norm)
         B = B + exchange_block(Fr,Fa,WQ,norm,conjugate=False)
-    if kernel in ("full","direct"): # direct (screened) term, W(k-k')
+    if direct: # direct (screened) term, W(k-k')
         qs,iqk = qdifference_map(pb.kpoints)
         Wqs = interaction_tensor(W,g,qs)
         rows,cols = nonzero_pattern(Wqs)

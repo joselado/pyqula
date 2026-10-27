@@ -51,6 +51,21 @@ The default `max_memory=2.0` refuses nk=24. This is the wall everything
 below is about -- and which Phase 4 removed; `solver="iterative"` and
 `solver="qtt"` never allocate this matrix at all.
 
+What the time is spent on. Since the review of 26 October 2026 the blocks
+are built from the exact low-rank factorization of `factorize.py`, one
+matrix product per block, whenever the interaction is a real-space
+dictionary; the numba loop of `kernel.direct_block` stays for a tabulated,
+screened W in the direct term. On the spinful honeycomb lattice with U=1
+and V1=0.5 at nk=20 the build went from 0.66 s to 0.02 s and the whole
+dense solve stays at 13 to 14 s, all of it in the pseudo-Hermitian
+diagonalization, so the table above is the eigensolver's; with a longer
+interaction, the spinless honeycomb lattice with V1 and V2 at Q=(0.1,0.05)
+and nk=32, the build alone was 4.0 s and is now 0.01 s. The distinct
+k-k' differences of `kernel.qdifference_map` and the k+q index of
+`screening.mesh_sum_index` are integer arithmetic on the multi-indices of
+the mesh, the same maps as the dictionary lookups they replace, 0.02 s
+against 5.5 s at 1296 points.
+
 ### Why the wall matters physically
 
 The same system's lowest exciton energy over that mesh sequence:

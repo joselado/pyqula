@@ -30,7 +30,8 @@ import numba
 from numba import njit, prange
 import scipy.fft
 
-from .interaction import interaction_at_q
+from .interaction import interaction_at_q,interaction_at_qs
+from .kernel import kernel_terms
 from .. import parallel
 
 
@@ -41,9 +42,7 @@ class ConvolutionKernel():
     and matvec"""
     def __init__(self,pb,W,Wx=None,kernel="full"):
         if Wx is None: Wx = W # exchange defaults to the direct interaction
-        if kernel not in ("full","direct","exchange","none"):
-            raise ValueError("kernel must be one of 'full', 'direct', "
-                    "'exchange', 'none', got %r"%(kernel,))
+        direct,exchange = kernel_terms(kernel)
         if np.any(np.abs(pb.Q)>1e-12): raise NotImplementedError(
                 "the convolution apply is only implemented at Q=0, got "
                 "Q="+str(pb.Q))
@@ -73,11 +72,10 @@ class ConvolutionKernel():
         # scattered back
         chans = np.zeros(0,dtype=np.int64)
         self.direct = None
-        if kernel in ("full","direct"):
+        if direct:
             # W at every mesh difference k_i - k_0, so that the direct
             # term is a cyclic convolution
-            Wq = np.array([interaction_at_q(W,g,k-pb.kpoints[0])
-                for k in pb.kpoints],dtype=np.complex128) # (nk,norb,norb)
+            Wq = interaction_at_qs(W,g,pb.kpoints-pb.kpoints[0]) # (nk,norb,norb)
             Wq = Wq.reshape(nk,norb*norb)
             chans = np.nonzero(np.max(np.abs(Wq),axis=0)>1e-12)[0]
             Wq = Wq[:,chans].reshape(self.nks+(1,-1)) # over the columns
@@ -86,7 +84,7 @@ class ConvolutionKernel():
             if len(chans)>0: self.direct = -np.fft.fftn(Wq,axes=axes)/nk
         self.ndirect = len(chans)
         self.exchange = None
-        if kernel in ("full","exchange"):
+        if exchange:
             WQ = interaction_at_q(Wx,g,pb.Q)/nk
             if np.max(np.abs(WQ))>1e-12:
                 self.exchange = WQ
@@ -111,10 +109,12 @@ class ConvolutionKernel():
         nk,nv,nc = self.shape
         nch = len(self.ia)
         ncol = X.shape[1]
-        if ncol not in self._buffers: # reused, a fresh one page-faults
-            self._buffers[ncol] = (np.empty((nk,ncol,nch),
+        if ncol not in self._buffers: # reused, a fresh one page-faults;
+            # only the last column count is kept, so that the Lanczos
+            # vector, the recursion block and to_dense do not all stay
+            self._buffers = {ncol:(np.empty((nk,ncol,nch),
                 dtype=np.complex128),np.empty((nk,ncol,nch),
-                dtype=np.complex128))
+                dtype=np.complex128))}
         Z,M = self._buffers[ncol]
         parallel.set_num_threads() # honor parallel.py's thread configuration
         Xk = np.ascontiguousarray(X,dtype=np.complex128).reshape(nk,nv,nc,ncol)
@@ -148,9 +148,12 @@ def _mesh_shape(kpoints,dim):
     nk = len(kpoints)
     n = int(round(nk**(1./dim)))
     shape = (n,)*dim
-    idx = np.array(np.unravel_index(np.arange(nk),shape)).T # (nk,dim)
-    dk = (kpoints[:,:dim] - kpoints[0,:dim]) - idx/n
-    if n**dim!=nk or np.max(np.abs(dk-np.round(dk)))>1e-8:
+    ok = n**dim==nk # checked first, unravel_index needs it
+    if ok:
+        idx = np.array(np.unravel_index(np.arange(nk),shape)).T # (nk,dim)
+        dk = (kpoints[:,:dim] - kpoints[0,:dim]) - idx/n
+        ok = np.max(np.abs(dk-np.round(dk)))<=1e-8
+    if not ok:
         raise ValueError("the convolution apply needs the k-points of a "
                 "regular n^%d mesh in the order of geometry.get_kmesh"%dim)
     return shape
