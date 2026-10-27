@@ -94,7 +94,7 @@ Straightforward, no new numerics needed.
    interacting terms expose it. `bsetk/pairbasis.select_bands` now warns
    when the window splits a multiplet. Any later work that truncates the
    pair basis (the Phase 4 solvers especially) has to respect the same
-   rule -- and both of them do, in their own way: `iterative._request`
+   rule -- and both of them do, in their own way: `iterative._block_size`
    grows the eigenvalue request past a degenerate multiplet of the
    diagonal, and the quantics solver's `gauge="projection"` exists
    precisely because a degenerate subspace has no well-defined phase to
@@ -623,7 +623,7 @@ states, preconditioning nothing and wrecking the conditioning. Shifting
 the denominator by a fixed fraction of the diagonal's own spread fixes it
 completely, and costs nothing.
 
-**ARPACK is 100x faster, its eigenvalues are exact, and it still cannot be
+**ARPACK is fast, its eigenvalues are exact, and it still cannot be
 used.** A single-start-vector Lanczos builds a Krylov space containing
 each *distinct* eigenvalue once, so it cannot resolve eigenvalue
 MULTIPLICITY: a degenerate level comes back once and the remaining slots
@@ -660,9 +660,17 @@ until it does not cut a degenerate multiplet of the diagonal
 (`iterative._block_size`, the same rule `select_bands` applies to band
 windows). Measured: 3.8e-12 at nk=256/1024/4096, and bit-for-bit identical
 across repeated runs on the degenerate case (3.33e-15 every time). It
-costs 1.6 / 3.6 / 23.9 s at those meshes where ARPACK alone would take
-~0.2 s. That is the price of a reference implementation being a reference:
-the same answer every time.
+first cost 1.6 / 3.6 / 23.9 s at those meshes. Two things made it slow,
+found in the review of 26 October 2026: scipy's tolerance applies to every
+column of the block, and the padding columns converge last, so every call
+ran to `maxiter=800`; and the block size was read off the kernel
+diagonal, which splits the multiplets of dE at the 1/N level, so the block
+never grew past one. The solver now runs in chunks of 20 iterations, each
+restarted from the previous Ritz vectors, stops when the residuals of the
+wanted excitons fall below `tol`, warns when `maxiter` cuts it short, and
+sizes its block on dE. It takes 0.07 / 0.09 / 0.24 s on the same meshes,
+against 0.34 / 0.34 / 2.68 s for the version before on the same machine,
+with the same energies to eleven digits.
 
 ## The quantics tensor-train route -- BUILT
 

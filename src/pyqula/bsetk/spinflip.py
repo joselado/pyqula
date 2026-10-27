@@ -216,9 +216,12 @@ def spinflip_masks(pb, tol=1e-6):
           down, so that S^- creates them
       m2  pairs whose ANTIRESONANT partner lowers the total spin. The
           antiresonant state of the pair labelled (v,c) is the
-          de-excitation c^dag_v c_c, which raises Sz by exactly what the
-          resonant one lowers -- so m2 is the mask of the pairs with the
-          OPPOSITE resonant spin change, hole down and electron up.
+          de-excitation c^dag_{v,k+Q} c_{c,k}, and m2 is read off its own
+          spin change. When every band has the same spin at k and at k+Q
+          that is the mask of the pairs with the OPPOSITE resonant spin
+          change, hole down and electron up; when an up and a down band
+          swap order along the mesh it is not, and at finite Q only the
+          antiresonant pair itself gives the right set.
 
     Restricting both halves to m1 (the obvious thing to do) throws away
     the de-excitation half of the spin-lowering generator, and with it the
@@ -248,10 +251,17 @@ def spinflip_masks(pb, tol=1e-6):
     iv = np.array([l[1] for l in pb.labels])
     ic = np.array([l[2] for l in pb.labels])
     dsz = szkq[ik, ic] - szk[ik, iv] # spin change of the resonant pair
+    # spin change of the antiresonant pair of the same label, c^dag_{v,k+Q}
+    # c_{c,k}. It is -dsz only when every band has the same spin at k and
+    # at k+Q, which fails once an up and a down band swap order somewhere
+    # on the mesh, so it is read off that pair itself
+    dszA = szkq[ik, iv] - szk[ik, ic]
     lower = (np.abs(dsz + 1.) < tol) # excitations S^- creates
     raise_ = (np.abs(dsz - 1.) < tol) # excitations S^+ creates
-    if np.any(lower & o1): return lower & o1, raise_ & o2, -1 # S^- channel
-    if np.any(raise_ & o1): return raise_ & o1, lower & o2, +1 # S^+ channel
+    lowerA = (np.abs(dszA + 1.) < tol) # de-excitations of the S^- channel
+    raiseA = (np.abs(dszA - 1.) < tol) # de-excitations of the S^+ channel
+    if np.any(lower & o1): return lower & o1, lowerA & o2, -1 # S^- channel
+    if np.any(raise_ & o1): return raise_ & o1, raiseA & o2, +1 # S^+ channel
     return None # no spin-flip pair at all, nothing to restrict to
 
 

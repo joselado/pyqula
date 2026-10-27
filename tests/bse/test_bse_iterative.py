@@ -117,3 +117,27 @@ def test_beyond_the_dense_memory_wall():
     assert len(es) == 2 and np.all(np.isfinite(es))
     # and it is below the independent-particle gap, i.e. actually bound
     assert es[0] < np.min(b.pairs.dE) + 1e-9
+
+
+def test_iterative_stops_on_the_wanted_excitons(monkeypatch):
+    """The block carries extra columns to span a degenerate cluster, and
+    they converge last, so a stopping rule on the whole block ran every
+    call to maxiter: 800 iterations where a few tens give the same
+    energies. The solver stops on the residuals of the neig lowest
+    instead, which keeps the number of products with the kernel far below
+    maxiter times the block, and warns when maxiter cuts it short"""
+    from pyqula.bsetk import factorize
+    calls = []
+    matvec = factorize.KernelFactorization.matvec
+    def counted(self, x):
+        calls.append(1)
+        return matvec(self, x)
+    monkeypatch.setattr(factorize.KernelFactorization, "matvec", counted)
+    h = gapped_ionic_chain()
+    W = density_interaction(h, U=1.0, V1=0.5, V2=0.3)
+    kw = dict(V=W, nk=512, tda=True, solver="iterative", neig=NEIG)
+    e = h.get_bse(**kw).get_energies().real
+    assert len(calls) < 200, len(calls)
+    with pytest.warns(UserWarning, match="LOBPCG stopped"):
+        e2 = h.get_bse(maxiter=2, **kw).get_energies().real
+    assert np.max(np.abs(e2 - e)) > 1e-12 # what the warning is about

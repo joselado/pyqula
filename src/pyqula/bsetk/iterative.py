@@ -23,17 +23,16 @@ small meshes and this one is the route for large ones.
 
 Cost, honestly: this is O(nk) diagonalizations of h plus O(nterm*npair)
 work per matrix-vector product, so it is AT LEAST linear in the mesh
-rather than logarithmic -- and somewhat worse than linear in practice
-(1.6 / 3.6 / 23.9 s at nk = 256 / 1024 / 4096), because the iteration
-count grows too as the band-edge cluster densifies. It removes the memory wall, not the linear scaling;
+rather than logarithmic (0.07 / 0.09 / 0.24 s at nk = 256 / 1024 /
+4096 on the spinless chain of tests/bse/test_bse_iterative.py). It removes the memory wall, not the linear scaling;
 bsetk/qtt.py is what addresses the latter. In exchange it needs no gauge
 fixing, no tensor-train tolerance and no extra dependency, so it is also
 the reference that harder sibling is checked against.
 
 THE EIGENSOLVER HAS TWO TRAPS IN IT, and the fast option loses to both.
 
-ARPACK is the obvious first choice: it is 100x faster than anything else
-here (0.2 s against 24 s at nk=4096) and its eigenvalues are exact. But a
+ARPACK is the obvious first choice: it is fast and its eigenvalues are
+exact. But a
 single-start-vector Lanczos CANNOT resolve
 eigenvalue MULTIPLICITY: the Krylov space it builds contains each
 distinct eigenvalue once, so a degenerate level comes back once and the
@@ -75,11 +74,12 @@ a reference implementation must not have.
 So what is implemented is a shifted-Jacobi-preconditioned LOBPCG from a
 DETERMINISTIC starting block -- unit vectors on the smallest diagonal
 entries, widened until it does not cut a degenerate multiplet of the
-diagonal (the same rule select_bands applies to band windows). Exact to
+transition energies (the same rule select_bands applies to band
+windows), stopped on the residuals of the wanted excitons only. Exact to
 4e-15 on the degenerate case and 3.8e-12 at every mesh size tried, run to
-run. Measured cost 1.6 / 3.6 / 23.9 s at nk = 256 / 1024 / 4096, where ARPACK
-alone would take about 0.2 s. That is the price of a reference
-implementation being a reference: the same answer every time.
+run, which is the point of a reference implementation: the same answer
+every time. Stopping on the whole block instead ran every call to maxiter,
+and cost 0.34 / 0.34 / 2.68 s at nk = 256 / 1024 / 4096.
 """
 import numpy as np
 import scipy.sparse.linalg as sla
@@ -112,19 +112,56 @@ def solve_iterative(pb,W,Wx=None,kernel="full",neig=4,maxiter=800,
         n = min(neig,npair)
         return es[0:n],np.array(ws.T[0:n],dtype=np.complex128)
     op = as_linear_operator(f)
-    d = f.diagonal().real
-    X = _starting_block(d,_block_size(d,neig,npair),npair)
-    M = _preconditioner(d,npair,shift)
+    # the block size and the starting block follow the multiplets of the
+    # transition energies dE, which the kernel diagonal splits at the 1/N
+    # level, so that seeding them from f.diagonal() never grew the block
+    # past a multiplet (3.7 s against 0.4 s on the spinful honeycomb
+    # lattice with an extended interaction); the preconditioner keeps the
+    # whole diagonal
+    de = np.array(f.diag,dtype=np.float64)
+    X = _starting_block(de,_block_size(de,neig,npair),npair)
+    M = _preconditioner(f.diagonal().real,npair,shift)
+    return _lobpcg_lowest(op,f.matvec,X,M,neig,tol,maxiter)
+
+
+def _lobpcg_lowest(op,matvec,X,M,neig,tol,maxiter,chunk=20):
+    """The neig lowest eigenpairs from a block LOBPCG, stopped on the
+    residuals of those neig only.
+
+    scipy's tol applies to every column of the block, and the columns past
+    neig, which are there to span a degenerate cluster, converge last, so
+    a single call always ran to maxiter (800 iterations where 30 gave the
+    same energies to 1e-15 on the spinful ionic chain). The block is
+    therefore run in chunks, each restarted from the Ritz vectors of the
+    previous one, until the residuals |A x - E x| of the wanted neig fall
+    below tol. An eigenvalue error is quadratic in the residual, so the
+    energies are still good to about tol when the residual only reaches
+    sqrt(tol); above that the result is returned with a warning rather
+    than as if it had converged"""
     import warnings
-    with warnings.catch_warnings():
-        # LOBPCG warns whenever it stops short of the requested residual,
-        # which it does routinely on a degenerate cluster while having the
-        # eigenvalues to full precision
-        warnings.simplefilter("ignore")
-        es,ws = sla.lobpcg(op,X,M=M,tol=tol,maxiter=maxiter,largest=False)
-    order = np.argsort(es.real)[0:neig]
-    return (np.array(es.real[order],dtype=np.float64),
-            np.array(ws[:,order].T,dtype=np.complex128))
+    done = 0
+    while True:
+        it = min(chunk,maxiter-done)
+        with warnings.catch_warnings():
+            # LOBPCG warns whenever it stops short of the requested
+            # residual on any column of the block, which the check below
+            # replaces with one on the wanted columns
+            warnings.simplefilter("ignore")
+            es,ws = sla.lobpcg(op,X,M=M,tol=tol,maxiter=it,largest=False)
+        done += it
+        order = np.argsort(es.real)[0:neig]
+        e,w = es.real[order],ws[:,order]
+        res = np.linalg.norm(matvec(w) - w*e[None,:],axis=0)
+        res = np.max(res/np.linalg.norm(w,axis=0))
+        if res<=tol or done>=maxiter: break
+        X = ws
+    if res>np.sqrt(tol): warnings.warn("LOBPCG stopped after %d iterations "
+            "with a residual %.1e on the %d lowest excitons, above %.1e: "
+            "the energies are only accurate to about the residual squared "
+            "over the level spacing. Raise maxiter"%(done,res,neig,
+                np.sqrt(tol)),stacklevel=3)
+    return (np.array(e,dtype=np.float64),
+            np.array(w.T,dtype=np.complex128))
 
 
 def _starting_block(d,nblock,npair):

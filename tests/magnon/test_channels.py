@@ -94,3 +94,40 @@ def test_degenerate_multiplets_do_not_hide_the_spin_flip_block():
     for nk in (4, 6):
         p = spinflip.magnon_matrix(h, Q=[0., 0., 0.], nk=nk)
         assert p.n1 == p.pb.npair//4, f"no spin-flip block found at nk={nk}"
+
+
+def _crossing_spin_bands():
+    """A gapped ionic chain whose two spin species hop differently and are
+    split by a Zeeman term, so that the lowest band is up at k=0 and down
+    at k=pi. The band index then does not carry the same spin at k and at
+    k+Q, which a Neel or ferromagnetic test state never shows: there the
+    spin of band n is the same everywhere in the Brillouin zone"""
+    g = geometry.chain().supercell(2)
+    h = g.get_hamiltonian()
+    hop, onsite, zeeman = {0: 1.0, 1: 0.3}, [1.0, -1.0], 0.3
+    h.intra = np.zeros((4, 4), dtype=np.complex128)
+    h.inter = np.zeros((4, 4), dtype=np.complex128)
+    for s in (0, 1): # up, down
+        for i in (0, 1):
+            h.intra[2*i+s, 2*i+s] = onsite[i] + zeeman*(1-2*s)
+        h.intra[s, 2+s] = h.intra[2+s, s] = hop[s]
+        h.inter[2+s, s] = hop[s] # site 1 to site 0 of the next cell
+    return h
+
+
+def test_restricted_spectrum_is_a_subset_when_band_spins_cross():
+    """The de-excitation half of the Casida matrix needs the pairs whose
+    OWN spin change is the opposite of the excitation one. That is the
+    same set as reading it off the excitation pair only when every band
+    keeps its spin between k and k+Q, so this case is what separates
+    them; with the wrong set the restricted spectrum missed the exact one
+    by 3e-4 here at Q=0.25"""
+    from pyqula.bsetk.interaction import density_interaction
+    h = _crossing_spin_bands()
+    V = density_interaction(h, U=1.0)
+    for Q in ([0.25, 0., 0.], [0.4, 0., 0.]):
+        a = np.sort(h.get_magnon_energies(nk=8, Q=Q, V=V, channel="auto").real)
+        b = np.sort(h.get_magnon_energies(nk=8, Q=Q, V=V, channel="all").real)
+        assert len(a) < len(b)
+        worst = max(np.min(np.abs(b - x)) for x in a)
+        assert worst < 1e-10, f"restricted energy missing at Q={Q}: {worst}"
