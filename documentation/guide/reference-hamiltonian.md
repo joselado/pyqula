@@ -900,6 +900,44 @@ unstable. Note that `nv` and `nc` must not cut a degenerate group of bands
 (a spinful Hamiltonian without spin-orbit coupling or magnetism needs even
 `nv` and `nc`); otherwise a warning is printed.
 
+## h.get_exciton_kdos_bands()
+Return the exciton density of states $A(\mathbf Q,\omega)$ along a q-path,
+the exciton bands as a spectral function, optionally projected with an
+operator on the electron or on the hole. It uses a Chebyshev expansion of
+the Tamm-Dancoff BSE, so it works on k-meshes where `h.get_exciton_bands()`
+is too expensive.
+
+Optional arguments:
+
+- qpath=None, nq=None: the q-path and its number of points, as in
+  `h.get_exciton_bands()`
+- energies=None: the energy grid, by default 200 points over the spectrum
+- delta=0.05: the broadening; the cost grows as one over `delta`
+- operator=None: an operator as in `h.get_bands(operator=...)`, for example
+  `"sublatticeA"` or `"Sz"`
+- particle="electron": the particle the operator acts on, `"electron"` or
+  `"hole"`
+- nrand=20, seed=0: the random vectors of the trace; it is exact once
+  `nrand` reaches the number of pairs
+- method="kpm": `"kpm"` for the Chebyshev expansion, `"dense"` for the full
+  diagonalization
+- V, nk, nv, nc, kernel, screening, nkW, channel: as in `h.get_bse()`
+
+Returns `(qs,es,ds)`, flat arrays as in `h.get_kdos_bands()`: the index of
+the q-point along the path, the energy and the spectral weight per unit
+cell.
+
+## h.get_exciton_structure_factor()
+Return the excitonic dynamical structure factor $S(\mathbf Q,\omega)$ along
+a q-path, the response to a density fluctuation at momentum $\mathbf Q$
+measured by EELS and inelastic x-ray scattering. Dark excitons do not
+appear in it.
+
+Optional arguments: qpath, nq, energies, delta, method, V, nk, nv, nc,
+kernel, screening, nkW and channel, as in `h.get_exciton_kdos_bands()`.
+
+Returns `(qs,es,ss)`, flat arrays as in `h.get_kdos_bands()`.
+
 ## h.get_screened_interaction()
 Return the static RPA screened interaction
 $W(\mathbf q)=\varepsilon^{-1}(\mathbf q)v(\mathbf q)$, with

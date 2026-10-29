@@ -48,10 +48,19 @@ the mean field itself (screening.py), which is the GW-BSE-style
 construction -- the exchange term keeps the bare interaction, as it must.
 Read bsetk/screening.py before using it: a fitted Hubbard U is already an
 effective screened interaction and must not be screened a second time.
+
+exciton_kdos_bands and exciton_structure_factor give the exciton bands as
+a spectral function along a q-path, the density of states of the excitons
+(projected on the electron or the hole with an operator) and the excitonic
+part of S(Q,w). They come from a Chebyshev expansion of the Tamm-Dancoff
+block at finite Q, applied as a convolution on the mesh, so they reach
+meshes that the dense diagonalization of exciton_bands cannot. See
+bsetk/spectral.py.
 """
 
 from .bsetk.solve import BSE
 from .bsetk.bands import exciton_bands
+from .bsetk.spectral import exciton_kdos_bands, exciton_structure_factor
 from .bsetk.spinflip import (goldstone_residual, magnon_bands_tdhf,
                              magnon_energies)
 

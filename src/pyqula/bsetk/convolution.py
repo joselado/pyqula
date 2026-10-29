@@ -1,4 +1,5 @@
-"""The resonant BSE block at Q=0 applied as a convolution on the k-mesh.
+"""The resonant BSE block at momentum Q applied as a convolution on the
+k-mesh.
 
 factorize.KernelFactorization writes the direct term as one rank-one
 projector per non-zero entry (a,b,d) of the real-space interaction, so its
@@ -11,8 +12,9 @@ same term is a convolution over the mesh. With the pairs n = (k,v,c),
     Z_ab(k)      = sum_vc C_c(k)_a x[k,v,c] conj(C_v(k)_b) ,
 
 where C_c(k) and C_v(k) are the conduction and valence eigenvectors of the
-pair (pb.el and pb.ho). Z is the pair vector written as a matrix in orbital
-space, gathered once per k-point, and the convolution is done by FFT on the
+pair (pb.el and pb.ho), the conduction one taken at k+Q. Z is the pair
+vector written as a matrix in orbital space, gathered once per k-point,
+and the convolution is done by FFT on the
 mesh, with W tabulated at the mesh differences k - k'. That table is the
 real-space dictionary folded onto the nk-periodic supercell, which is what
 the Bloch phases of the factorization do as well, so the two applies are
@@ -21,8 +23,13 @@ cost is O(npair norb + norb^2 N log N) per column and the memory
 O(norb^2 N), independent of the range of the interaction, and a tabulated
 (RPA-screened) W enters as it is, which the factorization has to refuse.
 
-The exchange term at Q=0 needs no lattice sum at all: it is the orbital
-diagonal of the same Z, summed over the mesh and contracted with W(Q=0),
+The convolution does not see Q: the direct term couples the pair
+(k,k+Q) to (k',k'+Q) through W(k - k'), so the same table of mesh
+differences serves every Q, on the mesh or not, and Q only enters through
+the conduction eigenvectors at k+Q and through W(Q) in the exchange term.
+
+The exchange term needs no lattice sum at all: it is the orbital diagonal
+of the same Z, summed over the mesh and contracted with W(Q),
 and it is scattered back with the same projection.
 """
 import numpy as np
@@ -36,16 +43,13 @@ from .. import parallel
 
 
 class ConvolutionKernel():
-    """The resonant block A = diag(dE) + X - D of a Q=0 pair basis, with
+    """The resonant block A = diag(dE) + X - D of a pair basis, with
     the attributes of factorize.KernelFactorization that a matrix-free
     solver needs: npair, diag, nterm (zero only for the diagonal alone)
     and matvec"""
     def __init__(self,pb,W,Wx=None,kernel="full"):
         if Wx is None: Wx = W # exchange defaults to the direct interaction
         direct,exchange = kernel_terms(kernel)
-        if np.any(np.abs(pb.Q)>1e-12): raise NotImplementedError(
-                "the convolution apply is only implemented at Q=0, got "
-                "Q="+str(pb.Q))
         if pb.metal: raise NotImplementedError("the convolution apply "
                 "needs the same band window at every k-point, which a "
                 "metallic pair basis does not have")

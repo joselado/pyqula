@@ -179,7 +179,9 @@ already reached once.
   needs `Precision.HIGHEST`, the timings of every step on the MoS2 monolayer and a TMD
   tetralayer, the all-band comparison with the velocity gauge, and what is open
   (non-Tamm-Dancoff absorption without a Lanczos metric, the convolution for the eigensolvers,
-  the position operator on the device).
+  the position operator on the device). Also the exciton spectral functions at finite Q built
+  on the same engine, the projected density of states and the structure factor, with the
+  supercell check that pins the phase of the density vertex.
 - [`second_harmonic_generation.md`](second_harmonic_generation.md) -- the second-harmonic
   conductivity and susceptibility: why the velocity gauge with the third-derivative vertex is the
   default and the length gauge only a check, the two-gauge and finite-field measurements that pin

@@ -1,6 +1,6 @@
 """The convolution apply of the BSE block is EXACT.
 
-bsetk/convolution.py applies the resonant block at Q=0 by writing every
+bsetk/convolution.py applies the resonant block at momentum Q by writing every
 pair vector as a matrix in orbital space and doing the direct term as a
 convolution over the k-mesh, with the interaction tabulated at the mesh
 differences. That is the same matrix kernel.build_blocks writes down, not
@@ -68,9 +68,31 @@ def test_convolution_takes_a_tabulated_screened_interaction(nkW):
     assert np.max(np.abs(f.to_dense() - A)) / np.max(np.abs(A)) < 1e-13
 
 
-def test_convolution_is_only_built_at_zero_momentum():
-    h = gapped_ionic_chain()
-    W = bare_interaction(h, V=density_interaction(h, U=1.0))
-    pb = PairBasis(h, Q=[0.1, 0., 0.], nk=6)
-    with pytest.raises(NotImplementedError, match="Q=0"):
-        ConvolutionKernel(pb, W)
+@pytest.mark.parametrize("name", ["chain", "honeycomb", "spinful U"])
+@pytest.mark.parametrize("kernel", ["full", "direct", "exchange"])
+@pytest.mark.parametrize("onmesh", [True, False])
+def test_convolution_at_finite_momentum(name, kernel, onmesh):
+    """The convolution does not see Q: the pair (k,k+Q) couples to
+    (k',k'+Q) through W(k-k'), so the same table serves a Q on the mesh
+    and one off it, and only the exchange term takes W(Q)"""
+    h, kw, nk = _model(name)
+    W = bare_interaction(h, V=density_interaction(h, **kw))
+    Q = [1./nk, 2./nk, 0.] if onmesh else [0.13, 0.27, 0.]
+    if h.dimensionality == 1: Q[1] = 0.
+    pb = PairBasis(h, Q=Q, nk=nk)
+    A = build_blocks(pb, W, Wx=W, kernel=kernel)[0]
+    f = ConvolutionKernel(pb, W, Wx=W, kernel=kernel)
+    assert np.max(np.abs(f.to_dense() - A)) / np.max(np.abs(A)) < 1e-13
+
+
+def test_convolution_takes_a_screened_interaction_at_finite_momentum():
+    """A tabulated W enters the direct term at the mesh differences, which
+    do not depend on Q, while the exchange term keeps the bare W(Q)"""
+    h = gapped_honeycomb(spinful=False)
+    V = density_interaction(h, V1=0.6, V2=0.2)
+    pb = PairBasis(h, Q=[0.13, 0.27, 0.], nk=6)
+    W = get_direct_interaction(h, pb, V=V, nk=6, screening="rpa")
+    Wx = bare_interaction(h, V=V)
+    A = build_blocks(pb, W, Wx=Wx)[0]
+    f = ConvolutionKernel(pb, W, Wx=Wx)
+    assert np.max(np.abs(f.to_dense() - A)) / np.max(np.abs(A)) < 1e-13

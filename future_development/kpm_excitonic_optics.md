@@ -236,9 +236,9 @@ same models, before the implementation.
   `excitonicoptics.py` does not have. The SHG stays Tamm-Dancoff: neither source paper
   (arXiv:2310.09674, arXiv:1804.04869) has a non-Tamm-Dancoff formula.
 - **The convolution apply for the eigensolvers.** `bsetk/iterative.py` and `bsetk/qtt.py`
-  still use the low-rank factorization, with its memory and its refusal of a tabulated W. At
-  Q=0 `ConvolutionKernel` has the interface the iterative solver needs (npair, diag, matvec);
-  finite Q, the antiresonant and the coupling blocks are not built, and the coupling block is
+  still use the low-rank factorization, with its memory and its refusal of a tabulated W.
+  `ConvolutionKernel` has the interface the iterative solver needs (npair, diag, matvec), now at
+  any Q. The antiresonant and the coupling blocks are not built, and the coupling block is
   what the non-Tamm-Dancoff item above needs.
 - **The position operator on the device.** On the GPU path the SHG still brings the resolvent
   vectors back to the host for the position operator, a forward transform per source vector and
@@ -248,8 +248,22 @@ same models, before the implementation.
   mesh on the last axes of the FFT and the scatter as a contraction with a one-hot matrix, gave
   2.16 ms against 2.67 ms per matvec in single precision on the tetralayer at nk=48, but 23.6 ms
   against 16.5 ms in double, so it was not adopted.
-- **An exciton density of states** by a stochastic trace with the Jackson kernel, the analogue
-  of `kpm.random_trace`, on the same engine. Not asked for.
+- **Exciton spectral functions at finite Q: built** (30 October 2026, `bsetk/spectral.py`,
+  `h.get_exciton_kdos_bands()` and `h.get_exciton_structure_factor()`). The resonant block was
+  already Q-aware in its arrays (conduction states at k+Q, exchange from W(Q)), and the direct
+  term couples (k,k+Q) to (k',k'+Q) through W(k-k'), so removing the Q=0 guard was the whole
+  change; it equals `build_blocks` to 1e-16 on and off the mesh, screened W included. The
+  density of states is a random-phase trace with the projection <O r|T_n|r> taken on the vectors
+  of one recursion, no Jackson kernel (the complex energy damps the series as for the optics);
+  an electronic operator acts on the electron at k+Q or, transposed, on the hole at k, inside
+  the band window. The structure factor uses the density vertex with the phase
+  exp(2 pi i Q.f_a) on the fractional orbital positions, which a doubled cell pins: the right
+  sign gives the same S per primitive cell to 1e-14, the flipped one differs by 51% and no
+  phase by 82%. Against the dense route both agree to 1e-10. Cost on the spinful MoS2 three-band
+  model with nv=nc=2, nk=12: 11 q-points in 13 s on the CPU. Open: the device route (the matvec
+  is the one `chebyshevjax.py` already has, so it is a routing change, which wants the sign-off of
+  the GPU plan), the non-Tamm-Dancoff version (needs the coupling block above), and the q-path
+  helper writes `KPOINTS_BANDS.OUT` and `BANDLINES.OUT`, as for `get_exciton_bands`.
 
 Deliberately not built: the two-variable Chebyshev expansion of the second-order conductivity
 (Joao and Lopes arXiv:1810.03732), N^2 moments for disordered independent particles, when

@@ -300,6 +300,114 @@ See `examples/2d/exciton_bands/main.py` for a runnable script, with the
 exciton band of a gapped honeycomb lattice below its electron-hole
 continuum.
 
+### Exciton spectral functions
+
+We will now see how to compute the exciton bands as a spectral function, in
+the same way as `h.get_kdos_bands()` does it for electrons. `h.get_exciton_bands()`
+diagonalizes the whole BSE matrix at each $\mathbf Q$, so the k-mesh has to
+stay small. For a map over $(\mathbf Q,\omega)$ we do not need every
+eigenvector. We need the exciton spectral function
+
+$$
+A(\mathbf Q,\omega) = -\frac{1}{\pi N}\,\text{Im}\,\text{Tr}
+\left[ O\,(\omega + i\delta - H_{\mathbf Q})^{-1} \right] ,
+$$
+
+where $H_{\mathbf Q}$ is the BSE matrix at center-of-mass momentum
+$\mathbf Q$ in the Tamm-Dancoff approximation, $N$ is the number of
+k-points, $\delta$ the broadening and $O$ an optional operator. Without an
+operator, $A$ is the exciton density of states, the number of excitons per
+unit cell and per energy, and it integrates to $n_v n_c$. pyqula computes
+it with a Chebyshev expansion, as in [the KPM page](kpm.md), so the BSE
+matrix is never built nor diagonalized. The trace is taken with `nrand`
+random vectors.
+
+The operator acts on the electron or on the hole of each pair. For a
+projector on a set of atoms, $A$ is weighted by the probability that the
+electron (`particle="electron"`) or the hole (`particle="hole"`) of the
+exciton sits on those atoms. Every operator of `h.get_bands(operator=...)`
+can be used, for example `"sublatticeA"` or `"Sz"`. The projections on all
+the atoms add up to the total.
+
+The second quantity is the excitonic dynamical structure factor
+
+$$
+S(\mathbf Q,\omega) = -\frac{1}{\pi N}\,\text{Im}\,
+\langle \rho_{\mathbf Q}|(\omega + i\delta - H_{\mathbf Q})^{-1}
+|\rho_{\mathbf Q}\rangle ,
+$$
+
+where $|\rho_{\mathbf Q}\rangle$ is the density fluctuation at momentum
+$\mathbf Q$, written in the basis of electron-hole pairs. This is what
+momentum-resolved electron energy loss spectroscopy (EELS) and inelastic
+x-ray scattering measure. An exciton that does not couple to the density
+is dark, and it does not appear in $S$.
+
+```python
+# h2 and W as in the section above
+import numpy as np
+from pyqula import geometry
+from pyqula.bsetk.interaction import density_interaction
+g = geometry.honeycomb_lattice()
+h2 = g.get_hamiltonian()
+h2.add_sublattice_imbalance(1.0) # a gapped semiconductor
+W = density_interaction(h2,Vr=lambda r1,r2: 0.8/np.sqrt((r1-r2).dot(r1-r2)+0.25))
+ws = np.linspace(1.7,3.0,300) # energy grid
+opts = dict(V=W,nq=20,nk=18,nv=2,nc=2,energies=ws,delta=0.05)
+qs,es,ds = h2.get_exciton_kdos_bands(**opts) # exciton density of states
+qs,es,da = h2.get_exciton_kdos_bands(operator="sublatticeA",**opts) # electron on A
+qs,es,ss = h2.get_exciton_structure_factor(**opts) # what EELS measures
+```
+
+This takes a few minutes on one core; with `nk=12` and `delta=0.1` it is
+faster, but the continuum splits into lines. The three arrays are flat, as
+in `h.get_kdos_bands()`: `qs` is the index of
+the q-point along the path, `es` the energy and `ds` the spectral weight.
+The ratio `da/ds` is the probability that the electron sits on sublattice
+A. At the bottom of the exciton band, $\omega=1.86t$, it is 0.95 at
+$\Gamma$ and at K, and the hole sits on sublattice B with the same
+probability, because the conduction band lives on A and the valence band
+on B. In the continuum, at $\omega=2.8t$, it goes down to 0.85.
+
+- `nk`: the k-mesh. The continuum is a smooth band only when `delta` is
+  larger than its level spacing on the mesh, otherwise it splits into lines.
+- `delta`: the broadening. The cost grows as one over `delta`.
+- `nrand`: the number of random vectors of the trace, 20 by default. The
+  noise goes down as one over the square root of `nrand`, and with `nrand`
+  at least the number of pairs the trace is exact.
+- `energies`: the energy grid, by default 200 points over the whole
+  spectrum along the path. The default builds the BSE at every q-point two
+  times, so give the grid when you know the energy window.
+- `operator`, `particle`: the projection, only in
+  `h.get_exciton_kdos_bands()`.
+- `method="dense"`: the same quantities from the full diagonalization, as a
+  reference on a small mesh.
+
+Both functions use the Tamm-Dancoff approximation, while
+`h.get_exciton_bands()` solves the full BSE by default. The two agree at weak
+coupling, which is the regime of bound excitons.
+
+![Exciton density of states and structure factor of the gapped honeycomb lattice along the q-path.](img/excitons_spectral.png#only-light)
+![Exciton density of states and structure factor of the gapped honeycomb lattice along the q-path.](img/excitons_spectral-dark.png#only-dark)
+
+The figure uses `nq=40` for a smoother map, and a square-root color scale,
+because the continuum holds most of the states. In the density of states
+(left), the lower edge is the exciton band of the previous figure: $1.85t$
+at $\Gamma$ and $1.86t$ at K and K'. Above it, from about $2.2t$, the
+continuum starts. The structure factor (right) goes to zero at $\Gamma$,
+since a uniform density change creates no electron-hole pair between two
+bands. Away from $\Gamma$, the bound exciton is the bright line that rises
+to $2.2t$ on the way to K and K', where it enters the continuum.
+
+??? example "Code of this figure (documentation/figures/excitons_spectral.py)"
+
+    ```python
+    --8<-- "excitons_spectral.py"
+    ```
+
+See `examples/2d/exciton_kdos_bands/main.py` for a runnable script with the
+projected map.
+
 ### The screened interaction
 
 So far the interaction in the kernel is the bare one. But an electron and a

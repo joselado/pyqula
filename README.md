@@ -122,6 +122,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Superfluid weight of superconductors and its quantum geometry [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/15_superfluid_weight.ipynb)
 - Non-unitarity of spin-triplet superconductors [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/16_dvector_nonunitarity.ipynb)
 - Excitons from the Bethe-Salpeter equation [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/17_excitons_bse.ipynb)
+- Exciton bands as spectral functions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/23_exciton_spectral_functions.ipynb)
 - Magnons from time-dependent Hartree-Fock [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/18_magnons_tdhf.ipynb)
 - Magnons from a pair-basis ladder [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/19_magnons_pair_ladder.ipynb)
 - Matrix-free and tensor-network Bethe-Salpeter solvers [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/20_bse_matrix_free_qtt.ipynb)

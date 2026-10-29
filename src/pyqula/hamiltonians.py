@@ -434,6 +434,17 @@ class Hamiltonian():
         flat (qs,es) arrays, same convention as get_bands"""
         from . import bse
         return bse.exciton_bands(self,**kwargs)
+    def get_exciton_kdos_bands(self,**kwargs):
+        """Return the exciton density of states A(Q,w) along a q-path,
+        projected with an operator on the electron or on the hole, as flat
+        (qs,es,ds) arrays, same convention as get_kdos_bands"""
+        from . import bse
+        return bse.exciton_kdos_bands(self,**kwargs)
+    def get_exciton_structure_factor(self,**kwargs):
+        """Return the excitonic dynamical structure factor S(Q,w) along a
+        q-path, as flat (qs,es,ss) arrays"""
+        from . import bse
+        return bse.exciton_structure_factor(self,**kwargs)
     def get_hopping_dict(self):
         """Return the dictionary with the hoppings"""
         return multicell.get_hopping_dict(self)
