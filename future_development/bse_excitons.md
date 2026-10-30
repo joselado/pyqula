@@ -110,8 +110,8 @@ Straightforward, no new numerics needed.
    when the window splits a multiplet. Any later work that truncates the
    pair basis (the Phase 4 solvers especially) has to respect the same
    rule -- and both of them do, in their own way: `iterative._block_size`
-   grows the eigenvalue request past a degenerate multiplet of the
-   diagonal, and the quantics solver's `gauge="projection"` exists
+   ends the eigensolver's block at the end of a degenerate multiplet of
+   the diagonal where one is near, and the quantics solver's `gauge="projection"` exists
    precisely because a degenerate subspace has no well-defined phase to
    fix.
 3. **Envelope visualization**: `|A_vc(k)|²` over the BZ, and its real-space
@@ -670,10 +670,11 @@ to span a degenerate eigenspace, and one run in three still came back
 against 24 s at nk=4096, since the seed has to be a whole block).
 
 What is implemented is shifted-Jacobi LOBPCG from a **deterministic**
-starting block -- unit vectors on the smallest diagonal entries, widened
-until it does not cut a degenerate multiplet of the diagonal
-(`iterative._block_size`, the same rule `select_bands` applies to band
-windows). Measured: 3.8e-12 at nk=256/1024/4096, and bit-for-bit identical
+starting block -- unit vectors on the smallest diagonal entries, a few
+columns wider than `neig` and ending where a degenerate multiplet of the
+diagonal ends, if one ends nearby (`iterative._block_size`; it used to
+grow until it did not cut a multiplet, which the review of 30 October 2026
+replaced, see the end of this section). Measured: 3.8e-12 at nk=256/1024/4096, and bit-for-bit identical
 across repeated runs on the degenerate case (3.33e-15 every time). It
 first cost 1.6 / 3.6 / 23.9 s at those meshes. Two things made it slow,
 found in the review of 26 October 2026: scipy's tolerance applies to every
@@ -686,6 +687,23 @@ wanted excitons fall below `tol`, warns when `maxiter` cuts it short, and
 sizes its block on dE. It takes 0.07 / 0.09 / 0.24 s on the same meshes,
 against 0.34 / 0.34 / 2.68 s for the version before on the same machine,
 with the same energies to eleven digits.
+
+The growth rule itself was the next cost, found in the review of 30
+October 2026. On a 2D lattice a multiplet of dE is a whole star of
+k-points times the spin: on the spinful gapped honeycomb lattice at
+nk=48 (U=1 plus a Coulomb tail) the lowest transition is 8-fold, at K and
+K' with spin, and the next one is a ring of 48. Growing the block until it
+did not cut a multiplet took it from 12 to 56 columns for `neig=4`, and
+the Rayleigh-Ritz step of LOBPCG on a block of that size, not the kernel
+apply, was the time: 10.3 s. Blocks of 8, 12 and 16 gave the same four
+energies to twelve digits in 1.2, 1.9 and 2.4 s, and with `neig=10` a
+block of 12, which cuts the ring, gave the same ten energies as the block
+of 56 in 2.8 s against 10.3 s. So cutting a multiplet of dE costs
+convergence speed, not exactness, for LOBPCG; it is ARPACK's single
+Krylov vector that cannot hold a multiplet. The block now ends at the
+last multiplet boundary between `neig` and `neig + max(8,neig)`, or at
+the first one above that within as many columns again, or at
+`neig + max(8,neig)` itself.
 
 ## The quantics tensor-train route -- BUILT
 
@@ -1230,3 +1248,124 @@ this subpackage and is still unbatched.
   solve, a quarter of the full one) on a cell large enough that screening
   fills W out to norb^2 -- the 3x3 case (npair ~ 11700) did not finish
   in three hours on the CPU and was abandoned, so that is unmeasured.
+
+---
+
+## The review of 30 October 2026: profiling, and two bugs
+
+We profiled ten workloads of the package (dense full and Tamm-Dancoff BSE, the iterative solver
+in 1D and 2D, exciton bands, the screened BSE, the excitonic absorption and second harmonic by
+both routes, the exciton density of states and the magnon bands) and changed what the profiles
+pointed at. Every change was checked against the code before it, and the energies agree to 1e-14
+unless said otherwise. The machine was shared with other jobs during the whole session, so every
+timing below comes from runs of the old and the new code alternated in the same minutes, or
+from both versions inside one process.
+
+**The pair basis diagonalizes the mesh in one batched call.** `pairbasis.mesh_eigenstates` goes
+through `htk/eigenvectors.py`'s `parallel_diagonalization`, as `screening.mesh_eigenstates`
+already did, so it follows the thread count and the GPU switch. This was the last per-k `eigh`
+loop of the subpackage that the GPU section above lists. The quantics oracle diagonalizes its
+single k-points through the same function, because `test_oracle_reproduces_the_pair_basis`
+compares the raw-gauge eigenvectors of the two, and two LAPACK drivers give two different
+phases. The exciton density of states moved by 0.6% at `nrand=20` with this change, which is the
+stochastic trace seeing another gauge; with the exact trace (`nrand` above `npair`) the two
+versions agree to 1e-9.
+
+**The quantics solver evaluates the kernel in batches.** Its cross interpolation asked for one
+matrix element per Python call, and decoded each quantics index on its own: in a 13 s run of
+the spinless chain at nk=16384, 4.3 s went to the elements and 2.8 s to the decoding.
+`qtt._KernelElements` gives `CachedFunction` the batch protocol it already supports, with
+`LazyKernel.elements` and `grids_to_pairs` doing the same arithmetic on arrays (equal to the
+scalar path to 1e-17 on the Rashba chain with an exchange field and on the honeycomb lattice,
+every `kernel=`); the run takes 9.4 s against 14.5 s. The batched diagonalization above first
+made it slower, because the oracle asks for two k-points at a time and the threaded kernel costs
+0.5 ms to launch; below 16 matrices `mesh_eigenstates` runs the same LAPACK call serially, 14
+microseconds, with bit-identical eigenvectors.
+
+**The dense solver uses the divide and conquer driver.** `lg.eigh(..., driver="evd")` is twice
+as fast as the default MRRR driver on the Tamm-Dancoff block (0.21 s against 0.41 s at
+npair=1152, 0.7 s against 1.4 s at 2048) and 1.2 to 1.3 times on the full problem, with the same
+energies to 1e-14. On top of that the full problem only takes the positive half back through
+the triangular solve: L^dag S L is congruent to S, so by Sylvester's law of inertia its upper n1
+eigenvalues are exactly the positive branch `BSE.solve` keeps.
+
+**The iterative solver applies the block as a convolution when that is cheaper.** A product with
+the low-rank factors costs about 1e-9 s per term, pair and column, and one with the convolution
+of `convolution.py` about 5e-8 s per orbital channel, k-point and column, nearly all of it in the
+FFTs. So `iterative.resonant_block` takes the convolution when nterm nv nc is above 50 channels,
+which is a long-range tail on a spinful lattice: on the spinful honeycomb lattice with U and a
+Coulomb tail (500 terms, 16 channels) at nk=96 the solve took 4.3 s against 13.2 s, and the 300
+MB of factors are gone. U+V1 on the same lattice (40 terms) stays with the factors, 2.6 times
+faster per product there. `ConvolutionKernel.diagonal` gives the preconditioner its diagonal,
+checked against the dense block in `test_convolution_diagonal_is_the_diagonal_of_the_block`.
+Solving the iterative BSE with a screened interaction would now only need the refusal in
+`solve.py` lifted, since the convolution takes a tabulated W; that was not done here.
+
+**The Sz rotation of the magnon pair basis is one stacked eigh per multiplet size.**
+`spinflip.spin_diagonalize` made one 2x2 `eigh` call per degenerate multiplet, 6912 calls and 40%
+of the time for the magnon bands of the Neel honeycomb state at nk=12. With this and the batched
+pair basis the twelve q-points take 1.65 s against 3.36 s.
+
+**Bug: the Casida metric assumed two halves of equal size.** `solve_pseudo_hermitian` built
+S = diag(1,...,1,-1,...,-1) split in the middle of the matrix. The exciton BSE has two halves of
+the same size, but the magnon problem of `spinflip.py` does not as soon as the magnet is not an
+antiferromagnet: on the Lieb ferrimagnet at half filling there are one spin-lowering pair per
+k-point and four of the other kind. With S split in the wrong place, S@H is not Hermitian, so the
+Cholesky failed every time and the result came from the general non-Hermitian solver, which the
+docstring of `solve_pseudo_hermitian` measures as several digits less accurate on a degenerate
+spectrum; and when n1 + n2 is odd (the same ferrimagnet at nk=5, 25 + 100 pairs) the call
+crashed with a broadcasting error. It now takes `n1`, which the magnon callers pass, and at
+finite Q the Hermitian route runs again and agrees with the general solver to 3e-14. Pinned by
+`tests/magnon/test_channels.py::test_casida_solve_takes_halves_of_different_sizes` and
+`test_magnons_of_a_ferrimagnet_with_an_odd_number_of_pairs`.
+
+**Bug: a down-polarized ferrimagnet lost its acoustic magnon.** `spinflip.spinflip_masks` took
+the S^- channel whenever it had a pair. In that channel the Casida norm of the Goldstone vector
+is <[S^+,S^-]> = 2 Sz, so for a state polarized down the acoustic mode has negative norm and sits
+in the half `magnon_energies` discards. The Lieb ferrimagnet polarized down returned 0.906 at
+Q=0 and its exact spin-flipped image 0 (the Goldstone mode), with 0.228 against 1.374 at
+Q=(0.2,0.1). The channel is now chosen by the sign of the total Sz of the occupied states, S^-
+for zero or positive, so an antiferromagnet is unchanged, and both polarizations give the same
+spectrum. `goldstone_residual` could not see it, since M v = 0 holds for either generator. The
+diagnosis and the rule were checked independently, by a second model, before the change. Pinned
+by `test_a_ferrimagnet_has_the_same_magnons_polarized_up_or_down`. Left open: the other channel
+is physical too (the gapped exchange mode, 0.906 here), and there is no option to ask for it.
+
+**The screened exciton bands build W once.** `exciton_bands` with `screening="rpa"` rebuilt the
+same screened interaction at every q-point, which its docstring told the user to avoid by hand.
+It is now built once on the mesh, as `spectral.py` already did: 1.0 s against 2.4 s for six
+q-points of the spinful honeycomb lattice with `nkW=2 nk`, identical energies. The dipoles of the
+excitonic optics are one stacked product over the mesh instead of a loop over k-points.
+
+What was checked and found right, so that a later review does not start there: the exciton
+energies at finite Q, the screened BSE, the iterative solver, the Chebyshev density of states and
+structure factor, the exciton bands and the dense absorption are invariant to 1e-15 under a
+change of unit cell (atom B of the honeycomb lattice moved by a lattice vector); on the spinful
+honeycomb lattice with Rashba coupling and a canted exchange field, the negative branch at +Q is
+minus the positive branch at -Q to 5e-14, and the iterative solver equals the dense one to 2e-15;
+the 0D and 3D models give the same energies with the dense and the iterative solver, and the
+Chebyshev density of states equals the dense one in 1D and 3D.
+
+Left open from this review: the default `shift=0.1` of the iterative preconditioner. With the
+default `neig=4` the solver on the spinless chain at nk=4096 ran to `maxiter` in 15 s and warned,
+residual 2e-5, its second energy 6e-8 off: three of the four wanted states sit in the
+electron-hole continuum, whose level spacing goes like 1/nk^2. A smaller shift fixes it, and
+measured with Q=(0.05,0,0) (times on a loaded machine):
+
+| case | shift=0.1 | 0.01 | 0.003 |
+|---|---|---|---|
+| spinless chain, nk=4096, neig=4 (Q=0) | 15.4 s, warns | 3.8 s | -- |
+| spinless honeycomb, Coulomb tail, nk=96, neig=4 | 28.5 s | 1.9 s | 2.3 s |
+| spinful honeycomb, U and tail, nk=48, neig=4 | 1.4 s | 1.1 s | 1.5 s |
+| Rashba chain with exchange, nk=512, neig=6 | 1.8 s | 0.7 s | 0.7 s |
+| spinless chain, nk=4096, neig=1 | 0.5 s | 1.0 s | 2.1 s |
+| spinless chain, nk=65536, neig=1 | 4.4 s | 11.1 s (0.03: 8.5 s) | -- |
+| spinless chain, nk=65536, neig=4 | 181 s, warns | 179 s | -- |
+
+with the same energies to ten digits wherever both converged. So a smaller shift is much faster
+when the wanted states reach into the continuum, which the default `neig=4` usually means, and
+two to three times slower for a lone bound state on a very fine 1D mesh, where the shift exists
+for. Which default to take was left to the maintainer. The FFT of the convolution apply is
+most of its cost and is overhead bound at these sizes (a 60x60 mesh with 12 channels takes 1 ms
+per transform pair), and neither moving the batch axes first nor `fft2` with `overwrite_x`
+changed it.

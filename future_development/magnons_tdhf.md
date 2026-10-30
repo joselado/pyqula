@@ -475,6 +475,11 @@ agreement with TDHF, the SzSz refusal).
 
 ### Still open
 
+- The TDHF magnons return one spin-flip channel, chosen since 30 October
+  2026 by the sign of the total Sz so that it holds the acoustic branch
+  (before, a ferrimagnet polarized down lost it; see the review of that
+  date at the end of `bse_excitons.md`). The other channel, the gapped
+  exchange mode of a ferrimagnet, cannot be asked for.
 - BdG (Nambu) Hamiltonians are refused by `PairBasis` as before, and now
   also by the spin response when the interaction couples different sites,
   where the site vertex used to give an approximate number.

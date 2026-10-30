@@ -97,6 +97,11 @@ already reached once.
   and why that kernel masks where the other device kernels gather: it is
   the one path in the package that loses in double precision on a
   consumer card (7-8x in single from 36 orbitals up, 0.1-0.6x in double).
+  After it, the review of 30 October 2026: what profiling found (a
+  56-wide LOBPCG block, denormal Chebyshev coefficients, the convolution
+  apply for long-range tails) and two magnon bugs, a Casida
+  metric split in the wrong place and a ferrimagnet polarized down that
+  lost its acoustic branch.
 - [`gpu_rpa_spin_response.md`](gpu_rpa_spin_response.md) -- the jax port
   of the Lindhard kernel behind the site-basis spin response
   (now reached with `gpu.set_gpu(True)`): what the switch moves to the device and what stays

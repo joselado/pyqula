@@ -51,8 +51,9 @@ harmonic needs the vectors, since the position operator sits between two resolve
 term is d^+ (z1 - A)^-1 X (z2 - A)^-1 d, two resolvents and not three (the three-resolvent
 structure belongs to the velocity gauge of `shg.py`). The four resolvent sets of a frequency
 batch, at w, -2w, conj(2w) and -conj(w), come from one recursion on the three dipole vectors
-(`resolvent_apply`), the vectors being accumulated in blocks of 32 so that the sum over n is a
-matrix product. The recursion does not depend on the frequency, so every batch of frequencies
+(`resolvent_apply`), the vectors being accumulated in blocks a quarter as wide as the number of
+energies, so that the sum over n is a matrix product, and each energy stopping at its own number of
+moments (see the review of 30 October 2026 at the end of the measured section). The recursion does not depend on the frequency, so every batch of frequencies
 runs it again; `wbatch=None` takes as many frequencies as fit in 2 GB
 (`excitonicoptics.batch_memory`), which put the 131 frequencies of the example in one batch and
 took it from 12 s to 8 s. The budget is host memory; on the device the result of a batch lives
@@ -218,6 +219,28 @@ interlayer electron-hole interaction at all: only 144 of the 576 orbital channel
 the intralayer ones, and interlayer excitons are not bound. An `rcut` that reaches the next
 layer is the physical setting for a heterostructure, and it multiplies the channels of the FFT
 by up to four, so the timings above understate that case.
+
+The review of 30 October 2026 found that three quarters of the CPU time of the second harmonic
+was in the sum over n of `resolvent_apply`, and that the reason was the floating point, not the
+amount of work. An energy far from the spectrum, like -2w and -conj(w) of the SHG, has a small
+|q|, so its coefficient q^n reaches the denormal numbers long before the series of the energy
+nearest the middle of the spectrum stops, and a matrix product with denormal entries runs tens
+of times slower. On the gapped honeycomb lattice at nk=60 with the 524 energies of the example,
+the sum took 20 s against 3 s for the 956 matvecs, and 0.8 s once the coefficients past each
+energy's own truncation, |q|^n < tol, are set to exactly zero (`chebyshev._series`). The same
+zeros enter the brakets, the device coefficients and the trace of `spectral.py`. On top of that
+the energies are sorted by their number of moments, so the product of a block only runs over the
+energies whose series is not finished (here 160 moments on average against 956 for the
+slowest), and the block holds a quarter as many vectors as there are energies, 131 here against
+32, so that the result is read and written a few times rather than thirty. A block of all 524
+was as fast, but its buffer is as large as the result, which would have doubled the memory that
+`batch_memory` budgets for a batch of frequencies; at a quarter the batch takes 1.25 times the
+budget. The example call of
+`examples/2d/excitonic_optics_kpm` at nk=60 went from 12 to 14 s to 3.5 s for the SHG and from
+2.1 to 2.7 s to 1.7 s for the absorption (a loaded machine, both versions run alternately), and
+the results moved by 1e-9 relative to their maximum, which is the tolerance of the series. The
+unexplained 30 ms Lanczos step against 9 ms for the bare matvec, above, also depends on the
+content of the vector; whether denormals are behind it too was not checked on that workstation.
 
 ## Left open
 
