@@ -674,7 +674,7 @@ def magnon_energies(h, n=None, **kwargs):
         es, _ = _solve_resonant(p.M)
         es = np.sort(es)
     else:
-        es, ws = solve_pseudo_hermitian(p.M)
+        es, ws = solve_pseudo_hermitian(p.M, n1=p.n1)
         ws = ws/np.linalg.norm(ws, axis=1)[:, None]
         norm = (np.sum(np.abs(ws[:, 0:p.n1])**2, axis=1)
                 - np.sum(np.abs(ws[:, p.n1:])**2, axis=1))
@@ -771,7 +771,7 @@ def magnon_spectrum(h, **kwargs):
         keep = np.arange(len(es))
         metric = np.ones(len(es))
     else:
-        es, ws = solve_pseudo_hermitian(p.M)
+        es, ws = solve_pseudo_hermitian(p.M, n1=p.n1)
         ws = ws/np.linalg.norm(ws, axis=1)[:, None]
         metric = (np.sum(np.abs(ws[:, 0:p.n1])**2, axis=1)
                   - np.sum(np.abs(ws[:, p.n1:])**2, axis=1))
