@@ -133,13 +133,14 @@ def _pair_dipoles(h,pb):
     vb,cb = pb.vbands,pb.cbands
     nk = len(pb.kpoints)
     out = np.zeros((3,nk,len(vb),len(cb)),dtype=np.complex128)
+    Cc = np.conj(pb.ck[:,cb,:]) # (nk,nc,norb), rows are the eigenvectors
+    CvT = np.swapaxes(pb.ck[:,vb,:],1,2) # (nk,norb,nv)
+    dE = pb.ek[:,cb][:,:,None] - pb.ek[:,vb][:,None,:] # (nk,nc,nv)
     for a in range(3):
         va = shg._cartesian_derivative(tms,d,ph,[a]) # (nk,n,n), orbitals
-        for ik in range(nk):
-            C = pb.ck[ik] # rows are the eigenvectors
-            m = np.conj(C[cb])@va[ik]@C[vb].T # <c|v_a|v>, (nc,nv)
-            dE = pb.ek[ik][cb][:,None] - pb.ek[ik][vb][None,:]
-            out[a,ik] = (m/(1j*dE)).T # (nv,nc), the pair order (k,v,c)
+        m = Cc@va@CvT # <c|v_a|v>, (nk,nc,nv), one stacked product
+        # (nv,nc) per k-point, the pair order (k,v,c)
+        out[a] = np.swapaxes(m/(1j*dE),1,2)
     return out.reshape(3,-1),cellvol
 
 

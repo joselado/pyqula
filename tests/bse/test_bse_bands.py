@@ -34,6 +34,29 @@ def test_bands_match_a_direct_fixed_Q_solve():
         assert np.max(np.abs(es[qs == iq] - direct)) < 1e-12
 
 
+def test_screened_bands_match_a_direct_fixed_Q_solve(monkeypatch):
+    """screening="rpa" along a path builds the screened interaction once
+    and reuses it at every q-point, which must give what a screened BSE
+    at each Q gives on its own"""
+    from pyqula.bsetk import screening
+    h, W = _system()
+    qpath = [[0., 0., 0.], [0.15, 0., 0.], [0.4, 0., 0.]]
+    kw = dict(OPTS, nv=None, nc=None, nkW=2*NK)
+    calls = []
+    build = screening.screened_interaction
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return build(*args, **kwargs)
+    monkeypatch.setattr(screening, "screened_interaction", counted)
+    qs, es = h.get_exciton_bands(V=W, qpath=qpath, n=3, screening="rpa",
+                                 **kw)
+    assert len(calls) == 1
+    for iq, q in enumerate(qpath): # loop over the path
+        direct = h.get_exciton_energies(V=W, Q=q, n=3, screening="rpa",
+                                        **kw)
+        assert np.max(np.abs(es[qs == iq] - direct)) < 1e-12
+
+
 def test_exciton_dispersion_is_even_in_Q():
     """The model is time-reversal symmetric, so the exciton at +Q and the
     one at -Q are degenerate: E_X(Q) = E_X(-Q). This is a check on the
