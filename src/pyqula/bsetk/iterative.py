@@ -73,9 +73,9 @@ a reference implementation must not have.
 
 So what is implemented is a shifted-Jacobi-preconditioned LOBPCG from a
 DETERMINISTIC starting block -- unit vectors on the smallest diagonal
-entries, widened until it does not cut a degenerate multiplet of the
-transition energies (the same rule select_bands applies to band
-windows), stopped on the residuals of the wanted excitons only. Exact to
+entries, a few columns wider than neig and ending, where it can, at
+the end of a degenerate multiplet of the transition energies (see
+_block_size), stopped on the residuals of the wanted excitons only. Exact to
 4e-15 on the degenerate case and 3.8e-12 at every mesh size tried, run to
 run, which is the point of a reference implementation: the same answer
 every time. Stopping on the whole block instead ran every call to maxiter,
@@ -194,28 +194,37 @@ def _preconditioner(d,npair,shift):
             dtype=np.complex128)
 
 
-def _block_size(d,neig,npair,tol=1e-8,maxgrow=64):
+def _block_size(d,neig,npair,tol=1e-8):
     """How wide the eigensolver's block should be.
 
-    Wider than neig, and not by a fixed margin: the block is grown until
-    it does not CUT a degenerate multiplet of the diagonal. The
-    interaction is a small perturbation on the transition energies, so a
-    multiplet of dE is a near-multiplet of the block, and a block that
-    splits one cannot span the corresponding cluster -- which is the
-    failure mode this module's docstring measures. This is the same rule
-    pairbasis._warn_degenerate_window applies to band windows, for the
-    same reason.
+    At least neig, and preferably ending where a degenerate multiplet of
+    the diagonal ends. The interaction is a small perturbation on the
+    transition energies, so a multiplet of dE is a near-multiplet of the
+    block, and the columns past neig converge fastest when the block
+    holds a whole one. The target is neig + max(8,neig) columns; the
+    block ends at the last multiplet boundary between neig and the
+    target, or, if there is none, at the first one past the target
+    within as many columns again, or at the target itself.
 
-    maxgrow caps the growth: on a near-degenerate diagonal every entry is
-    within tol of the next and it would not stop on its own."""
+    Searching down first is what keeps the block small on a 2D lattice,
+    where a multiplet of dE is a star of k-points times the spin, 48
+    states on the ring around K and K' of the spinful honeycomb lattice
+    at nk=48. Growing up to the end of that ring made the block 56 wide
+    for neig=4, and 10 s against 1.2 s for the block of 8 that ends at
+    the boundary below, with the same energies to twelve digits. Cutting
+    a multiplet costs speed, not exactness: blocks of 12 and 16 there
+    give the same energies too, which is why the target is kept when no
+    boundary is near."""
     ds = np.sort(d)
-    k = min(neig+max(8,neig),npair-1)
-    grown = 0
-    while k<npair-1 and grown<maxgrow and \
-            abs(ds[k]-ds[k-1])<tol*max(1.,abs(ds[k-1])):
-        k += 1
-        grown += 1
-    return k
+    last = npair-1 # LOBPCG wants a block narrower than the matrix
+    k0 = min(neig+max(8,neig),last)
+    def boundary(k): # is there a gap between the k-th and (k+1)-th entry?
+        return abs(ds[k]-ds[k-1])>=tol*max(1.,abs(ds[k-1]))
+    for k in range(k0,neig-1,-1): # the last boundary below the target
+        if boundary(k): return k
+    for k in range(k0+1,min(2*k0-neig,last)+1): # the first one above
+        if boundary(k): return k
+    return k0
 
 
 def as_linear_operator(f):
