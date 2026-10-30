@@ -1,4 +1,5 @@
 import numpy as np
+from numba import njit
 from .. import algebra
 
 
@@ -58,22 +59,15 @@ class PairBasis():
         if Q is None: Q = [0.,0.,0.]
         self.Q = np.array(Q,dtype=np.float64)
         self.kpoints = np.array(h.geometry.get_kmesh(nk=nk),dtype=np.float64)
-        hk = h.get_hk_gen() # Bloch Hamiltonian generator
         self.Qzero = not np.any(np.abs(self.Q)>1e-12)
-        eks,cks,ekqs,ckqs = [],[],[],[]
-        for k in self.kpoints: # loop over the mesh
-            e1,w1 = algebra.eigh(hk(k))
-            eks.append(e1) ; cks.append(np.array(w1.T,dtype=np.complex128))
-            if self.Qzero: continue # k+Q is k, diagonalized once
-            e2,w2 = algebra.eigh(hk(k+self.Q))
-            ekqs.append(e2) ; ckqs.append(np.array(w2.T,dtype=np.complex128))
-        self.ek = np.array(eks) # (nk,norb) energies at k
-        self.ck = np.array(cks) # (nk,norb,norb), ck[ik][n] = C^{n,k}
+        # energies (nk,norb) and coefficients (nk,norb,norb), ck[ik][n] =
+        # C^{n,k}, at k and at k+Q
+        hk = h.get_hk_gen() # Bloch Hamiltonian generator
+        self.ek,self.ck = mesh_eigenstates(hk,self.kpoints)
         if self.Qzero: # copies, since a gauge rotates the two separately
             self.ekq,self.ckq = self.ek.copy(),self.ck.copy()
         else:
-            self.ekq = np.array(ekqs) # energies at k+Q
-            self.ckq = np.array(ckqs) # coefficients at k+Q
+            self.ekq,self.ckq = mesh_eigenstates(hk,self.kpoints+self.Q)
         self.metal = metal
         if metal: # occupancy decided per k-point, see select_bands
             if nv is not None or nc is not None:
@@ -140,6 +134,41 @@ class PairBasis():
         ik,iv,ic = np.meshgrid(np.arange(nk),vb,cb,indexing="ij")
         self.labels = list(zip(ik.reshape(-1).tolist(),
                 iv.reshape(-1).tolist(),ic.reshape(-1).tolist()))
+
+
+def mesh_eigenstates(hk,kpoints):
+    """Return (ek,ck), the energies (nk,norb) and the eigenvectors as rows
+    (nk,norb,norb) of the Bloch Hamiltonian generator hk at every k-point,
+    from one batched diagonalization (htk/eigenvectors.py's, so it follows
+    the thread count and the GPU switch) rather than a Python loop over
+    scalar eigh. Every pair basis of this package diagonalizes through
+    here, the quantics oracle's single k-points included, so that the
+    raw gauge of an eigenvector does not depend on which one built it"""
+    from ..htk.eigenvectors import parallel_diagonalization,_on_gpu
+    hks = np.array([algebra.todense(hk(k)) for k in kpoints],
+            dtype=np.complex128)
+    if len(hks)<16 and not _on_gpu(hks):
+        # the same LAPACK call without the thread launch, which costs 0.5
+        # ms and was 2 s of a quantics run that asks for two k-points at
+        # a time; the eigenvectors are bit for bit the same
+        ek,ws = _eigh_serial(hks)
+    else: ek,ws = parallel_diagonalization(hks)
+    # eigenvectors come back as columns, the pair basis wants rows
+    ck = np.ascontiguousarray(np.transpose(ws,(0,2,1)),dtype=np.complex128)
+    return np.array(ek,dtype=np.float64),ck
+
+
+@njit(cache=True)
+def _eigh_serial(hks):
+    """htk/eigenvectors.py's numba kernel, without the prange"""
+    nh,n = hks.shape[0],hks.shape[1]
+    es = np.zeros((nh,n),dtype=np.float64)
+    ws = np.zeros((nh,n,n),dtype=np.complex128)
+    for i in range(nh):
+        e,w = np.linalg.eigh(hks[i])
+        es[i,:] = e
+        ws[i,:,:] = w
+    return es,ws
 
 
 def select_bands(ek,nv=None,nc=None):

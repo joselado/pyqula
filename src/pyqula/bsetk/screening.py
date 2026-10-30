@@ -317,19 +317,11 @@ def mesh_eigenstates(h,nk=10):
     layout PairBasis stores them in -- so a BSE that already has them can
     hand them straight to static_polarizability instead of paying for a
     second set of diagonalizations."""
+    from . import pairbasis
     h = h.get_multicell().get_dense()
     kpoints = np.array(h.geometry.get_kmesh(nk=nk),dtype=np.float64)
-    hk = h.get_hk_gen()
-    # one batched diagonalization of the whole mesh rather than a Python
-    # loop over scalar eigh: this is htk/eigenvectors.py's shared helper,
-    # so it follows the package's thread count and its GPU switch too
-    from ..htk.eigenvectors import parallel_diagonalization
-    hks = np.array([algebra.todense(hk(k)) for k in kpoints],
-            dtype=np.complex128)
-    ek,ws = parallel_diagonalization(hks)
-    # eigenvectors come back as columns; this layout wants states as rows
-    ck = np.array(np.transpose(ws,(0,2,1)),dtype=np.complex128)
-    return kpoints,np.array(ek),ck
+    ek,ck = pairbasis.mesh_eigenstates(h.get_hk_gen(),kpoints) # one batched solve
+    return kpoints,ek,ck
 
 
 def static_polarizability(h,nk=10,exclude=None,kpoints=None,ek=None,ck=None,
