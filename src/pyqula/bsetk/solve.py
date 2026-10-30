@@ -38,10 +38,13 @@ class BSE():
                   and every exciton, and the only one whose behavior is
                   unchanged by this option existing. Its cost is the
                   (2*npair)^2 matrix that check_memory guards.
-      "iterative" apply the kernel matrix-free through its exact low-rank
-                  factorization (bsetk/factorize.py) and run LOBPCG for
-                  the neig lowest excitons. No dense matrix ever exists,
-                  so the memory wall is gone; Tamm-Dancoff only.
+      "iterative" apply the kernel matrix-free, through its exact
+                  low-rank factorization (bsetk/factorize.py) or as a
+                  convolution on the mesh (bsetk/convolution.py),
+                  whichever is cheaper (iterative.resonant_block), and
+                  run LOBPCG for the neig lowest excitons. No dense
+                  matrix ever exists, so the memory wall is gone;
+                  Tamm-Dancoff only.
       "qtt"       quantics tensor train: compress the kernel into an MPO
                   and solve it with DMRG (bsetk/qtt.py). Cost grows with
                   log(nk) rather than nk, at the price of a smooth-gauge
@@ -111,12 +114,12 @@ class BSE():
                 "solver='iterative' (maxiter, tol, shift) and solver='qtt' "
                 "(see bsetk/qtt.solve_qtt)"%(", ".join(sorted(kwargs)),))
         if solver=="iterative" and screening is not None:
-            # refused here, before the screened interaction is computed,
-            # rather than by the factorization once it has been
-            raise ValueError("solver='iterative' applies the kernel through "
-                "its low-rank factorization, which needs a real-space "
-                "interaction, and a screened interaction is tabulated on "
-                "the mesh. Truncate it in real space with "
+            # refused here, before the screened interaction is computed.
+            # The convolution apply of iterative.resonant_block would take
+            # a tabulated W; lifting this refusal is a decision not taken
+            raise ValueError("solver='iterative' does not take a screened "
+                "interaction, which is tabulated on the mesh rather than "
+                "given in real space. Truncate it in real space with "
                 "ScreenedInteraction.get_dict(cutoff=...) and pass that as "
                 "V=, or use solver='dense'")
         if neig is None:

@@ -39,6 +39,28 @@ def test_iterative_matches_dense_chain(kernel, Q):
     assert np.max(np.abs(np.sort(got.get_energies().real) - np.sort(ref))) < 1e-8
 
 
+def test_iterative_takes_the_convolution_for_a_long_range_tail():
+    """A Coulomb tail on the spinful lattice has hundreds of rank-one
+    terms, so iterative.resonant_block applies the block as a convolution
+    on the mesh instead (see its docstring for the costs); the excitons
+    must be the dense ones all the same, at a finite momentum too"""
+    from pyqula.bsetk import iterative
+    from pyqula.bsetk.convolution import ConvolutionKernel
+    from pyqula.bsetk.pairbasis import PairBasis
+    from pyqula.bsetk.interaction import bare_interaction
+    h = gapped_honeycomb(spinful=True)
+    W = density_interaction(h, U=1.0,
+            Vr=lambda r1, r2: 0.6/np.sqrt((r1-r2).dot(r1-r2)+0.25))
+    Q = [0.125, 0.25, 0.]
+    Wb = bare_interaction(h, V=W)
+    f = iterative.resonant_block(PairBasis(h, nk=8, Q=Q), Wb, Wx=Wb)
+    assert isinstance(f, ConvolutionKernel)
+    kw = dict(V=W, nk=8, Q=Q, kernel="full")
+    ref = h.get_bse(tda=True, **kw).get_energies(n=NEIG).real
+    got = h.get_bse(tda=True, solver="iterative", neig=NEIG, **kw)
+    assert np.max(np.abs(got.get_energies().real - ref)) < 1e-8
+
+
 def test_iterative_matches_dense_honeycomb():
     h = gapped_honeycomb(spinful=False)
     W = density_interaction(h, V1=0.6, V2=0.2)
@@ -137,7 +159,7 @@ def test_iterative_stops_on_the_wanted_excitons(monkeypatch):
     W = density_interaction(h, U=1.0, V1=0.5, V2=0.3)
     kw = dict(V=W, nk=512, tda=True, solver="iterative", neig=NEIG)
     e = h.get_bse(**kw).get_energies().real
-    assert len(calls) < 200, len(calls)
+    assert 0 < len(calls) < 200, len(calls) # the factorization is used
     with pytest.warns(UserWarning, match="LOBPCG stopped"):
         e2 = h.get_bse(maxiter=2, **kw).get_energies().real
     assert np.max(np.abs(e2 - e)) > 1e-12 # what the warning is about

@@ -80,6 +80,7 @@ class ConvolutionKernel():
             # W at every mesh difference k_i - k_0, so that the direct
             # term is a cyclic convolution
             Wq = interaction_at_qs(W,g,pb.kpoints-pb.kpoints[0]) # (nk,norb,norb)
+            self.W0 = Wq[0] # W at k - k' = 0, for the diagonal
             Wq = Wq.reshape(nk,norb*norb)
             chans = np.nonzero(np.max(np.abs(Wq),axis=0)>1e-12)[0]
             Wq = Wq[:,chans].reshape(self.nks+(1,-1)) # over the columns
@@ -140,6 +141,22 @@ class ConvolutionKernel():
         # back onto the pairs, <C_c(k)|M(k)|C_v(k)>, added to the diagonal
         _scatter(self.Ccc,self.Cv,M,self.ia,self.ib,out.reshape(nk,nv,nc,ncol))
         return out[:,0] if vec else out
+    def diagonal(self):
+        """The diagonal of the block, without applying it: per pair m,
+        with F_a = C_c(k)_a conj(C_v(k)_a), the exchange term is
+        sum_ab conj(F_a) W_ab(Q) F_b / N and the direct one
+        sum_ab |C_c(k)_a|^2 W_ab(0) |C_v(k)_b|^2 / N, W(0) being the
+        interaction at k - k' = 0"""
+        pb = self.pairs
+        out = np.array(self.diag,dtype=np.complex128)
+        if self.exchange is not None: # already divided by N
+            F = pb.el*np.conj(pb.ho)
+            out += np.einsum("ma,ab,mb->m",np.conj(F),self.exchange,F,
+                    optimize=True)
+        if self.direct is not None:
+            out -= np.einsum("ma,ab,mb->m",np.abs(pb.el)**2,self.W0,
+                    np.abs(pb.ho)**2,optimize=True)/len(pb.kpoints)
+        return out
     def to_dense(self):
         """The dense block, for tests and small meshes only"""
         return self.matvec(np.eye(self.npair,dtype=np.complex128))

@@ -142,6 +142,24 @@ class KernelFactorization():
         return out
 
 
+def number_of_terms(pb,W,Wx=None,kernel="full"):
+    """The nterm of the resonant block's factorization, counted on the
+    interaction without building the factors, with the same thresholds
+    as _direct_factors and _exchange_factors, or None for a tabulated
+    interaction in the direct term, which has no factorization"""
+    if Wx is None: Wx = W
+    direct,exchange = kernel_terms(kernel)
+    n = 0
+    if exchange:
+        WQ = interaction_at_q(Wx,pb.geometry,pb.Q)
+        n += int(np.count_nonzero(np.abs(WQ)>1e-10))
+    if direct:
+        if hasattr(W,"at"): return None
+        n += sum(int(np.count_nonzero(np.abs(np.array(m,
+            dtype=np.complex128))>1e-10)) for m in W.values())
+    return n
+
+
 def _block_diagonal(pb,block):
     """The independent-particle transition energies of a block"""
     if block=="A": return np.array(pb.dE,dtype=np.float64)

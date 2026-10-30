@@ -5,8 +5,11 @@ fit, and npair = nk*nv*nc grows fast in exactly the knob a user turns
 first. This module removes that wall: bsetk/factorize.py writes the
 resonant block as a diagonal plus a fixed number of rank-one terms, so the
 matrix-vector product costs O(nterm*npair) and needs O(nterm*npair)
-memory. A block eigensolver on top of that returns the lowest excitons at
-meshes where the dense matrix would be hundreds of gigabytes.
+memory, and bsetk/convolution.py applies the same block as a convolution
+on the mesh, whose cost does not depend on the range of the interaction;
+resonant_block takes whichever is cheaper. A block eigensolver on top of
+that returns the lowest excitons at meshes where the dense matrix would
+be hundreds of gigabytes.
 
 This is exact, not an approximation: the operator applied is the same
 resonant block build_blocks assembles, to machine precision. The only
@@ -100,9 +103,9 @@ def solve_iterative(pb,W,Wx=None,kernel="full",neig=4,maxiter=800,
     amplitudes come back in the same (nexciton,npair) layout
     BSE.amplitudes uses, so downstream code does not have to care which
     solver ran."""
-    f = KernelFactorization(pb,W,Wx=Wx,kernel=kernel,block="A")
     if neig<1:
         raise ValueError("neig must be at least 1")
+    f = resonant_block(pb,W,Wx=Wx,kernel=kernel)
     npair = pb.npair
     if npair<=max(4*neig,32):
         # too small for an iterative solver to be either faster or more
@@ -122,6 +125,36 @@ def solve_iterative(pb,W,Wx=None,kernel="full",neig=4,maxiter=800,
     X = _starting_block(de,_block_size(de,neig,npair),npair)
     M = _preconditioner(f.diagonal().real,npair,shift)
     return _lobpcg_lowest(op,f.matvec,X,M,neig,tol,maxiter)
+
+
+def resonant_block(pb,W,Wx=None,kernel="full"):
+    """The resonant block as a matrix-free operator, from the low-rank
+    factorization (factorize.py) or as a convolution on the mesh
+    (convolution.py), whichever applies faster. Both are exact and agree
+    to machine precision, they only cost differently.
+
+    A product with the factorization costs about 1e-9 s per term, pair
+    and column, and its factors take 16 bytes per term and pair; one with
+    the convolution about 5e-8 s per orbital channel, k-point and column,
+    in the FFTs, whatever the range of the interaction. So the
+    convolution wins when nterm*nv*nc is above about 50 channels, which
+    is a long-range tail on a spinful lattice: on the spinful honeycomb
+    lattice with U and a Coulomb tail (500 terms, 16 channels) it is 1.7
+    times faster per product and the whole solve at nk=96 took 4.3 s
+    against 13.2 s, without the 300 MB of factors. A short-range
+    interaction stays with the factorization, which is 2.6 times faster
+    for U+V1 on the same lattice (40 terms) and six times on the spinless
+    chain with V1. A tabulated (screened) interaction can only be
+    applied as a convolution. Measured on a 14-thread workstation, 30
+    October 2026"""
+    from .factorize import number_of_terms
+    from .convolution import ConvolutionKernel
+    if pb.geometry.dimensionality>0 and not pb.metal:
+        c = ConvolutionKernel(pb,W,Wx=Wx,kernel=kernel)
+        nvnc = len(pb.vbands)*len(pb.cbands)
+        nterm = number_of_terms(pb,W,Wx=Wx,kernel=kernel)
+        if nterm is None or nterm*nvnc>50*len(c.ia): return c
+    return KernelFactorization(pb,W,Wx=Wx,kernel=kernel,block="A")
 
 
 def _lobpcg_lowest(op,matvec,X,M,neig,tol,maxiter,chunk=20):
@@ -228,7 +261,8 @@ def _block_size(d,neig,npair,tol=1e-8):
 
 
 def as_linear_operator(f):
-    """Wrap a KernelFactorization as a scipy LinearOperator.
+    """Wrap a KernelFactorization or a ConvolutionKernel as a scipy
+    LinearOperator.
 
     The operator is Hermitian, so rmatvec is matvec; scipy needs it
     spelled out anyway."""

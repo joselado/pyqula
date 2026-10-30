@@ -53,6 +53,20 @@ def test_convolution_reproduces_the_dense_block(name, kernel):
     assert np.allclose(f.matvec(x[:, 0]), A@x[:, 0], atol=1e-12*scale)
 
 
+@pytest.mark.parametrize("name", ["chain", "honeycomb", "spinful U", "tmd"])
+@pytest.mark.parametrize("kernel", ["full", "direct", "exchange", "none"])
+def test_convolution_diagonal_is_the_diagonal_of_the_block(name, kernel):
+    """The diagonal the iterative solver preconditions with, computed
+    without applying the block, at a momentum off the mesh"""
+    h, kw, nk = _model(name)
+    W = bare_interaction(h, V=density_interaction(h, **kw))
+    pb = PairBasis(h, nk=nk, Q=[0.13, 0.31, 0.])
+    f = ConvolutionKernel(pb, W, Wx=W, kernel=kernel)
+    A = f.to_dense()
+    scale = max(1., np.max(np.abs(A)))
+    assert np.max(np.abs(f.diagonal() - np.diag(A))) / scale < 1e-13
+
+
 @pytest.mark.parametrize("nkW", [6, 12])
 def test_convolution_takes_a_tabulated_screened_interaction(nkW):
     """The RPA-screened direct term is tabulated on a mesh, on the BSE mesh
