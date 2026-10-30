@@ -210,7 +210,9 @@ def spinflip_masks(pb, tol=1e-6):
     and no such block exists.
 
     The two halves of the matrix need DIFFERENT subsets, which is the one
-    thing about this restriction that is easy to get wrong:
+    thing about this restriction that is easy to get wrong. Written here
+    for the S^- channel (the S^+ one, chosen below for a state polarized
+    down, is the same with up and down exchanged):
 
       m1  resonant pairs that lower the total spin, hole up and electron
           down, so that S^- creates them
@@ -236,9 +238,19 @@ def spinflip_masks(pb, tol=1e-6):
 
     Which of the two spin channels is the resonant one depends on which
     way the state polarized, and that is not something a caller should
-    have to arrange: a mean field that came out polarized DOWN has no
-    S^--lowerable pair at all, and its magnons are the S^+ excitations
-    instead. The returned third element says which generator the block
+    have to arrange. In the S^- channel the Casida norm of the Goldstone
+    vector, X^dag X - Y^dag Y, is <[S^+,S^-]> = 2 Sz, so for a state
+    polarized DOWN the acoustic magnon has negative norm, sits in the half
+    magnon_energies discards, and what is kept is the gapped branch. The
+    channel is therefore chosen by the sign of the total Sz of the
+    occupied states: S^- when it is positive or zero (an antiferromagnet
+    has the Goldstone mode in both), S^+ when it is negative, the other
+    one only when the chosen one has no pair. Choosing S^- whenever it had
+    a pair, as this did before 30 October 2026, was right for a saturated
+    magnet, which has no S^- pair when polarized down, and wrong for a
+    ferrimagnet: the Lieb ferrimagnet polarized down gave 0.906 at Q=0
+    instead of the Goldstone zero of the same state polarized up.
+    The returned third element says which generator the block
     belongs to, -1 for S^- and +1 for S^+, so goldstone_vector can build
     the matching one. Both are equally physical -- they are each other's
     image under a spin flip -- and an antiferromagnet has both."""
@@ -260,8 +272,15 @@ def spinflip_masks(pb, tol=1e-6):
     raise_ = (np.abs(dsz - 1.) < tol) # excitations S^+ creates
     lowerA = (np.abs(dszA + 1.) < tol) # de-excitations of the S^- channel
     raiseA = (np.abs(dszA - 1.) < tol) # de-excitations of the S^+ channel
-    if np.any(lower & o1): return lower & o1, lowerA & o2, -1 # S^- channel
-    if np.any(raise_ & o1): return raise_ & o1, raiseA & o2, +1 # S^+ channel
+    sminus = (lower & o1, lowerA & o2, -1) # S^- channel
+    splus = (raise_ & o1, raiseA & o2, +1) # S^+ channel
+    # 2 Sz in the window, the norm of the Goldstone vector in the S^-
+    # channel; it grows with the mesh, so the tolerance does too
+    sz = np.sum(szk[pb.occk])
+    first, second = (splus, sminus) if sz < -tol*len(pb.kpoints) \
+            else (sminus, splus)
+    for (m1, m2, op) in (first, second):
+        if np.any(m1): return m1, m2, op
     return None # no spin-flip pair at all, nothing to restrict to
 
 

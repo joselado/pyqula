@@ -155,3 +155,79 @@ def test_magnon_weights_are_residues_in_the_metric():
     order = np.argsort(e.real)
     assert np.allclose(es, e[order])
     assert np.allclose(w, ref[order], atol=1e-8)
+
+
+def test_casida_solve_takes_halves_of_different_sizes():
+    """A magnon problem has an excitation half and a de-excitation half of
+    different sizes as soon as the magnet is not an antiferromagnet. The
+    metric of solve_pseudo_hermitian has to follow that split, or the
+    Cholesky of S@H fails every time and a matrix of odd size cannot be
+    solved at all. Checked on stable random Casida matrices against the
+    general eigensolver"""
+    import scipy.linalg as lg
+    from pyqula.bsetk.solve import solve_pseudo_hermitian
+    rng = np.random.default_rng(3)
+    def herm(n):
+        x = rng.normal(size=(n, n)) + 1j*rng.normal(size=(n, n))
+        return (x + x.conj().T)/10. + 3.*np.identity(n)
+    for (n1, n2) in [(8, 4), (4, 8), (10, 3)]:
+        b = 0.2*(rng.normal(size=(n1, n2)) + 1j*rng.normal(size=(n1, n2)))
+        M = np.block([[herm(n1), b], [-b.conj().T, -np.conj(herm(n2))]])
+        es, ws = solve_pseudo_hermitian(M, n1=n1)
+        ref = lg.eig(M)[0]
+        assert np.max(np.abs(es.imag)) == 0. # the Hermitian route ran
+        assert np.max(np.abs(np.sort(es.real) - np.sort(ref.real))) < 1e-12
+        assert np.max(np.abs(M@ws.T - ws.T*es[None, :])) < 1e-12
+        # the positive branch is the upper n1 of the spectrum
+        ep, _ = solve_pseudo_hermitian(M, n1=n1, positive=True)
+        assert len(ep) == n1 and np.min(ep.real) > 0.
+
+
+def test_magnons_of_a_ferrimagnet_with_an_odd_number_of_pairs():
+    """The Lieb lattice at half filling is a ferrimagnet, with one
+    spin-flip pair per k-point of one kind against four of the other, so
+    at nk=5 the Casida matrix is 25 + 100 = 125 wide. It used to fail with
+    a broadcasting error"""
+    g = geometry.lieb_lattice()
+    scf = VJinteraction(g.get_hamiltonian(), filling=0.5, mf="ferro", nk=5,
+                        maxerror=1e-10, mix=0.3, maxite=3000, U=3.0,
+                        verbose=0)
+    h = scf.hamiltonian
+    Q = [0.2, 0.1, 0.]
+    p = spinflip.magnon_matrix(h, Q=Q, nk=5)
+    assert (p.n1 + p.n2) % 2 == 1
+    es = np.sort(h.get_magnon_energies(nk=5, Q=Q).real)
+    ev, vr = np.linalg.eig(p.M) # the general route, by the metric
+    vr = vr.T/np.linalg.norm(vr.T, axis=1)[:, None]
+    met = (np.sum(np.abs(vr[:, :p.n1])**2, axis=1)
+           - np.sum(np.abs(vr[:, p.n1:])**2, axis=1))
+    ref = np.sort(ev[np.argsort(-met)[:p.n1]].real)
+    assert np.max(np.abs(es - ref)) < 1e-10
+
+
+def test_a_ferrimagnet_has_the_same_magnons_polarized_up_or_down():
+    """The same Lieb ferrimagnet, and its exact image under a spin flip
+    (spin indices swapped in every hopping and in h.V): the magnons are
+    the same, Goldstone zero included. Choosing the S^- channel whenever
+    it had a pair kept the gapped branch of the down-polarized state
+    (0.906 at Q=0), since there the acoustic mode has negative norm"""
+    g = geometry.lieb_lattice()
+    scf = VJinteraction(g.get_hamiltonian(), filling=0.5, mf="ferro",
+                        nk=NK, maxerror=1e-10, mix=0.3, maxite=3000, U=3.0,
+                        verbose=0)
+    h1 = scf.hamiltonian.get_multicell()
+    n = h1.intra.shape[0]
+    P = np.zeros((n, n))
+    for i in range(n//2): P[2*i, 2*i+1] = P[2*i+1, 2*i] = 1.
+    h2 = h1.copy()
+    h2.intra = P@h1.intra@P.T
+    for t in h2.hopping: t.m = P@t.m@P.T
+    h2.V = {k: P@np.array(m)@P.T for k, m in h1.V.items()}
+    assert np.sum(h1.get_vev("sz"))*np.sum(h2.get_vev("sz")) < 0.
+    for Q in [[0., 0., 0.], [0.2, 0.1, 0.]]:
+        e1 = np.sort(h1.get_magnon_energies(nk=NK, Q=Q).real)
+        e2 = np.sort(h2.get_magnon_energies(nk=NK, Q=Q).real)
+        assert len(e1) == len(e2)
+        assert np.max(np.abs(e1 - e2)) < 1e-8
+    e0 = np.sort(h1.get_magnon_energies(nk=NK, Q=[0., 0., 0.]).real)
+    assert abs(e0[0]) < 1e-6 # the Goldstone mode is kept
