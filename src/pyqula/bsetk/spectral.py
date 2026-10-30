@@ -197,9 +197,7 @@ class _Chebyshev():
         R = np.ascontiguousarray(R,dtype=np.complex128)
         for (n0,V) in cheb._recursion(self.f.matvec,R,self.c,self.s,N):
             mus = np.einsum("pi,npi->n",np.conj(P),V,optimize=True)
-            ns = np.arange(n0,n0+len(V))
-            g = 2.*qs[None,:]**ns[:,None]/r[None,:] # (nb,nz)
-            if n0==0: g[0] = g[0]/2.
+            g = cheb._series(r,qs,np.arange(n0,n0+len(V))) # (nb,nz)
             t += mus@g
         return -np.imag(t/self.s)/np.pi
     def braket(self,D,es,delta):

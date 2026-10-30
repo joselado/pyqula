@@ -133,6 +133,33 @@ def _coefficients(zs,c,s):
     return r,q
 
 
+def _series(r,q,ns):
+    """The coefficients 2 q^n / r of T_n in the resolvent, (len(ns),nz),
+    with the n=0 one halved, and exactly zero from the moment on where
+    |q|^n has fallen below tol, the same truncation number_of_moments
+    makes for the energy that needs the most.
+
+    The zeros are not an optimization of the arithmetic but of the
+    floating point: an energy far from the spectrum, like the -2w of the
+    second harmonic, has a small |q|, and its q^n runs through the
+    denormal numbers on the way to zero, where every product costs tens
+    of times more. A block of them in the sum over n made the matrix
+    product of the second harmonic at nk=60 take 20 s where it takes 0.7
+    s with the zeros"""
+    nq = _moments(q)
+    g = 2.*q[None,:]**ns[:,None]/r[None,:]
+    g[ns[:,None]>=nq[None,:]] = 0.
+    if ns[0]==0: g[0] = g[0]/2.
+    return g
+
+
+def _moments(q):
+    """The number of moments each energy needs, from its q"""
+    with np.errstate(divide="ignore"):
+        n = np.ceil(np.log(tol)/np.log(np.abs(q))) + 1
+    return np.maximum(np.nan_to_num(n,posinf=2,neginf=2),2).astype(np.int64)
+
+
 def number_of_moments(zs,c,s):
     """Moments needed for the series to fall below tol at every energy"""
     r,q = _coefficients(zs,c,s)
@@ -177,15 +204,15 @@ def _combine(vp,v,vm,c,s):
         vp[i] = 2.*(vp[i] - c*v[i])/s - vm[i]
 
 
-def _recursion(matvec,D,c,s,N):
-    """Yield blocks of Chebyshev vectors T_n(A') D, as (n0,V) with V of
+def _recursion(matvec,D,c,s,N,nb=32):
+    """Yield blocks of nb Chebyshev vectors T_n(A') D, as (n0,V) with V of
     shape (nb,npair,ncol), checking the diagonal moments <d|T_n|d> against
     their bound |d|^2, which only fails if the spectrum is not inside
-    [c - s, c + s]"""
+    [c - s, c + s]. The blocks are there so that the sums over n are
+    matrix products"""
     norm2 = np.sum(np.abs(D)**2,axis=0)
     def check(V): check_moments(np.einsum("pc,npc->nc",np.conj(D),V),
             norm2,c,s)
-    nb = 32 # vectors per block, so the sums over n are matrix products
     # one buffer, refilled for every block, so the consumer has to be done
     # with a block before asking for the next one
     V = np.empty((min(nb,N),)+D.shape,dtype=np.complex128)
@@ -206,16 +233,38 @@ def _recursion(matvec,D,c,s,N):
 def resolvent_apply(matvec,D,zs,c,s):
     """(z - A)^-1 D for every z of zs, D of shape (npair,ncol). Returns
     (npair,ncol,nz)"""
+    from scipy.linalg.blas import zgemm
     D = np.ascontiguousarray(D,dtype=np.complex128) # and so every v_n
     r,q = _coefficients(zs,c,s)
     N = number_of_moments(zs,c,s)
     npair,ncol = D.shape
-    out = np.zeros((npair*ncol,len(r)),dtype=np.complex128)
-    for (n0,V) in _recursion(matvec,D,c,s,N):
-        ns = np.arange(n0,n0+len(V))
-        g = 2.*q[None,:]**ns[:,None]/r[None,:] # (nb,nz)
-        if n0==0: g[0] = g[0]/2.
-        out += V.reshape(len(V),-1).T@g
+    # The series of each energy stops at its own number of moments: an
+    # energy far from the spectrum, like the -2w and -w of the second
+    # harmonic, needs far fewer than the one closest to its middle, and
+    # the sum over n is the bulk of the cost. With the energies sorted by
+    # that number, the ones still running at moment n are a leading set
+    # of columns of out
+    nq = _moments(q)
+    order = np.argsort(-nq,kind="stable")
+    r,q,nq = r[order],q[order],nq[order]
+    # Fortran ordered, so that zgemm adds every block into a leading set
+    # of its columns in place, with no temporary of the size of out
+    out = np.zeros((npair*ncol,len(r)),dtype=np.complex128,order="F")
+    # a quarter as many vectors per block as there are energies: each
+    # product reads and writes the columns of out still running, so blocks
+    # of 32 against 524 energies spent their time in memory traffic, and
+    # the block buffer, a quarter of out, keeps the memory of a batch of
+    # frequencies within a quarter of what excitonicoptics.batch_memory
+    # budgets for out alone
+    nb = int(min(N,max(32,len(r)//4)))
+    for (n0,V) in _recursion(matvec,D,c,s,N,nb=nb):
+        m = int(np.sum(nq>n0)) # the energies whose series is not done
+        g = _series(r[:m],q[:m],np.arange(n0,n0+len(V))) # (nb,m)
+        # V^T of the C-ordered block is Fortran ordered, so not copied
+        o = zgemm(1.,V.reshape(len(V),-1).T,g,beta=1.,c=out[:,:m],
+                overwrite_c=1)
+        if not np.shares_memory(o,out): out[:,:m] = o
+    out = out[:,np.argsort(order)] # back to the order of zs
     return out.reshape(npair,ncol,len(r))/s
 
 
@@ -258,7 +307,5 @@ def resolvent_braket(matvec,D,zs,c,s):
         if n%32==0 or n==M-1: # the diagonal moments <d|T_2n|d>
             check_moments(np.einsum("naa->na",mus[2*n0:2*n+1:2]),norm2,c,s)
             n0 = n+1
-    ns = np.arange(2*M-1)
-    g = 2.*q[None,:]**ns[:,None]/r[None,:] # (2M-1,nz)
-    g[0] = g[0]/2.
+    g = _series(r,q,np.arange(2*M-1)) # (2M-1,nz)
     return np.einsum("nz,nab->zab",g,mus)/s

@@ -183,10 +183,7 @@ def _coefficients(zs,c,s,n):
     """The coefficients of T_0 ... T_n-1 for every energy, with the 1/s of
     the resolvent folded in"""
     r,q = chebyshev._coefficients(zs,c,s)
-    ns = np.arange(n)
-    g = 2.*q[None,:]**ns[:,None]/r[None,:]
-    g[0] = g[0]/2.
-    return g/s
+    return chebyshev._series(r,q,np.arange(n))/s
 
 
 def resolvent_apply(f,D,zs,c,s,kpm_prec="double"):
