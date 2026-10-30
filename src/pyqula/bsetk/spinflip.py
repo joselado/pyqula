@@ -157,21 +157,26 @@ def spin_diagonalize(pb, tol=1e-8):
     legitimate because Sz commutes with a collinear mean-field
     Hamiltonian, so the two are simultaneously diagonalizable and this
     picks the common eigenbasis."""
-    from .. import algebra
     norb = pb.ck.shape[1]
-    Sz = np.zeros((norb, norb), dtype=np.complex128)
-    for i in range(norb//2):
-        Sz[2*i, 2*i] = 0.5
-        Sz[2*i+1, 2*i+1] = -0.5
+    sz = np.tile([0.5, -0.5], norb//2) # the diagonal of Sz
     def fix(es, cs): # cs[ik][n] = coefficients of band n
         out = np.array(cs, dtype=np.complex128, copy=True)
+        # the multiplets of the whole mesh, grouped by size, so that each
+        # size is one stacked eigh rather than one call per multiplet
+        # (6912 calls of a 2x2 eigh were 40% of the magnon bands of the
+        # Neel honeycomb at nk=12)
+        bysize = dict()
         for ik in range(out.shape[0]):
             for group in degenerate_groups(es[ik], tol=tol):
                 if len(group) == 1: continue
-                sub = out[ik][group] # (ng,norb)
-                m = np.conj(sub)@Sz@sub.T # Sz inside the multiplet
-                _, u = algebra.eigh((m+m.conj().T)/2.)
-                out[ik][group] = (np.array(u).T)@sub
+                bysize.setdefault(len(group), []).append((ik, group))
+        for items in bysize.values():
+            iks = np.array([ik for (ik, _) in items])
+            ns = np.array([group for (_, group) in items])
+            sub = out[iks[:, None], ns] # (nmult,ng,norb)
+            m = np.einsum("gia,a,gja->gij", np.conj(sub), sz, sub)
+            _, u = np.linalg.eigh((m+np.conj(np.swapaxes(m, 1, 2)))/2.)
+            out[iks[:, None], ns] = np.swapaxes(u, 1, 2)@sub
         return out
     pb.ck = fix(pb.ek, pb.ck)
     pb.ckq = fix(pb.ekq, pb.ckq)
