@@ -3,8 +3,9 @@
 A topological invariant is defined in the Brillouin zone, but its
 consequences are local: the bulk carries a quantized Berry flux and the edges
 carry the states that cross the gap. In this page we compute the Chern number
-from the local marker of a finite sample, also without any lattice, and the
-spectral function at the edge of a semi-infinite system.
+from the local marker of a finite sample, also without any lattice, the Bott
+index of a disordered sample, and the spectral function at the edge of a
+semi-infinite system.
 
 ## Chern number in real space
 
@@ -160,6 +161,109 @@ or systems where the parameters change in space, for example a Haldane mass
 that changes sign across a boundary, or a topological insulator with dilute
 vacancies. The map of the marker shows where the invariant is carried, and
 where it changes.
+
+## Bott index of a disordered sample
+
+The local marker gives the invariant only as an average over the bulk. The
+Bott index gives it as one integer for the whole sample. It is equal to the
+Chern number, and it needs no translational symmetry. The sample is a
+periodic supercell of $N$ sites, closed into a torus, so it has no edge. We
+take $P$, the projector on the states below zero energy, and the
+fractional coordinates $X$ and $Y$ of the orbitals along the two lattice
+vectors of the supercell, between $0$ and $1$. On a torus $X$ is not a
+well-defined operator, but $e^{2\pi i X}$ is. So we define
+
+$$
+U = P e^{2\pi i X} P, \qquad V = P e^{2\pi i Y} P,
+\qquad
+B = \frac{1}{2\pi} \,{\rm Im}\, {\rm Tr} \log \left( V U V^\dagger U^\dagger \right) .
+$$
+
+In a trivial insulator the projected positions almost commute, $VUV^\dagger
+U^\dagger$ is close to the identity, and $B=0$. In a Chern insulator they
+cannot commute, and the phases of the eigenvalues of $VUV^\dagger U^\dagger$
+add up to $2\pi C$. Before the trace $U$ and $V$ are replaced by their
+unitary part, which keeps $B$ an integer. The difference with the Chern
+number of the k-space routines is of order $1/L$, with $L$ the size of the
+supercell, so in practice they agree as soon as the supercell is larger
+than the localization length.
+
+```python
+from pyqula import geometry
+import numpy as np
+g = geometry.honeycomb_lattice() # honeycomb lattice
+h = g.get_hamiltonian(has_spin=False) # spinless Hamiltonian
+h.add_haldane(0.15) # Haldane coupling, C=1
+h = h.get_supercell(12) # periodic supercell of 288 sites
+rng = np.random.default_rng(0) # random numbers
+W = 3.0 # strength of the disorder
+h.add_onsite(W*(rng.random(len(h.geometry.r))-0.5)) # Anderson disorder
+B = h.get_bott_index() # Bott index
+```
+
+This gives $B=1$, and the same value for any other random sample at this
+disorder: the disorder is about twice the clean gap of $1.35$, but the
+states at the Fermi energy are localized, so the invariant survives. The
+sign follows the order of the two lattice vectors, as `h.get_chern()` does,
+so for a clean crystal $B$ is exactly the value of `h.get_chern()`.
+
+With time reversal $B=0$, and the invariant is the spin Bott index. The
+occupied states are split by the sign of their projected spin, $P s_z P$,
+into $P_+$ and $P_-$, and
+
+$$
+B_s = \frac{1}{2} \left( B_+ - B_- \right),
+$$
+
+with $B_\pm$ the Bott index of $P_\pm$. It is the spin Chern number of a
+disordered sample. Its parity is the $Z_2$ invariant, so $B_s=1$ in a
+quantum spin Hall insulator. The spin $s_z$ does not have to be conserved.
+What matters is that the spectrum of $P s_z P$ keeps a gap around zero.
+`h.get_spin_bott_index()` raises only when an eigenvalue of $P s_z P$ is at
+zero, so a $B_s$ that is not an integer means that the two halves are not
+separated.
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # honeycomb lattice
+h = g.get_hamiltonian(has_spin=True) # spinful Hamiltonian
+h.add_kane_mele(0.1) # Kane-Mele spin-orbit coupling
+h.add_rashba(0.05) # Rashba coupling, s_z is not conserved
+Bs = h.get_supercell(8).get_spin_bott_index() # spin Bott index
+```
+
+This gives $B_s=1$, with $B=0$, and adding a sublattice imbalance of $0.8$
+gives $B_s=0$, the trivial insulator.
+
+![Bott index of the Haldane model and spin Bott index of the Kane-Mele model with Rashba coupling, against the strength of the disorder.](img/realspace_bott.png#only-light)
+![Bott index of the Haldane model and spin Bott index of the Kane-Mele model with Rashba coupling, against the strength of the disorder.](img/realspace_bott-dark.png#only-dark)
+
+The figure shows the two indices of twenty disordered samples of 288 sites
+for each disorder strength $W$, in gray, and their average, in color. Every
+single sample gives an integer. For weak disorder all the samples give the
+clean value, $B=1$ on the left and $B_s=1$ on the right. Between $W=4.5$
+and $W=6.5$ on the left, and between $W=4$ and $W=6$ on the right, more and
+more samples give $0$, and above that all of them do: the disorder localizes
+every state and the sample becomes an Anderson insulator. The transition is not sharp because the samples are
+finite. With $8\times8$ supercells and six samples the average moves by up
+to $0.2$ inside the window, and not at all outside it, so the plateaus are
+converged and the exact position of the transition is not.
+
+??? example "Code of this figure (documentation/figures/realspace_bott.py)"
+
+    ```python
+    --8<-- "realspace_bott.py"
+    ```
+
+The keywords of both methods:
+- tol=1e-8: the smallest distance to zero of an energy level, and for the
+  spin Bott index of an eigenvalue of $P s_z P$, that is accepted
+- operator="sz": for `h.get_spin_bott_index()`, the spin component that
+  splits the occupied states
+
+The Hamiltonian has to be two dimensional, and the Fermi energy at zero; a
+level exactly at zero, as at the Dirac points of the clean honeycomb
+lattice, raises an error.
 
 ## Topological surface states
 

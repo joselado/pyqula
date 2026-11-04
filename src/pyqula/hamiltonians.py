@@ -152,6 +152,19 @@ class Hamiltonian():
         from .topologytk.topologicalsector import mirror_chern
         return mirror_chern(h,**kwargs)
 
+    def get_bott_index(h,**kwargs):
+        """Bott index of a periodic supercell at k=0, the Chern number of a
+        disordered sample, see topologytk/bott.py"""
+        from .topologytk.bott import bott_index
+        return bott_index(h,**kwargs)
+
+    def get_spin_bott_index(h,**kwargs):
+        """Spin Bott index (B_+ - B_-)/2 of a periodic supercell at k=0, with
+        the occupied states split by the sign of P s_z P, see
+        topologytk/bott.py"""
+        from .topologytk.bott import spin_bott_index
+        return spin_bott_index(h,**kwargs)
+
     def get_winding_number(h,**kwargs):
         """Winding number of a one-dimensional Hamiltonian with a chiral
         symmetry, see topology.winding_number"""

@@ -36,7 +36,7 @@ What is missing, in one sentence per family: in one dimension, since the second 
 below, only the disordered versions (the scattering and the real-space invariants); in two dimensions there is no polarization, no invariant computed from symmetry
 eigenvalues and nothing for fragile topology, and higher-order topology has the quadrupole
 moment only, since the nested Wilson loop was built; in real space there is no
-$Z_2$ marker, no Bott index and nothing that scales past dense diagonalization; in three
+$Z_2$ marker and nothing that scales past dense diagonalization, since the Bott index was built; in three
 dimensions there is nothing beyond the $Z_2$ indices and the Chern vector; and the non-Hermitian, Floquet, interacting and magnon
 cases have no invariant of their own.
 
@@ -183,6 +183,61 @@ arXiv:1809.02142. What is left: the nested loop on a plane of a 3D zone (the `kf
 than by the lines 0 and 1/2, for Wannier gaps elsewhere, and the $C_4$ route of eq. VI.53,
 which needs the symmetry-eigenvalue primitive of the second tier.
 
+## Built after the survey: the Bott and spin Bott indices
+
+The fifth package closes the first tier: the Bott index of Loring and Hastings
+(arXiv:1005.4883) and the spin Bott index of Huang and Liu (arXiv:1810.00081, Eqs. (5) to (11),
+read from the TeX source), in `topologytk/bott.py`, with the delegators `h.get_bott_index()` and
+`h.get_spin_bott_index()`. The sample is a two-dimensional periodic supercell taken at $k=0$,
+the occupied states are those below zero energy, and $X$, $Y$ are the fractional coordinates
+along a1 and a2 from `qgt._orbital_fractions`. $U$ and $V$ are written in the occupied states,
+$W^\dagger e^{2\pi iX}W$ of size $N_{occ}$, which gives the same index as the full matrices with
+$1-P$ added, since that block only adds eigenvalues equal to one; both are replaced by their
+unitary part $ZW^\dagger$ from the singular value decomposition, as Huang and Liu do, and $B$ is
+the sum of the phases of the eigenvalues of $VUV^\dagger U^\dagger$ over $2\pi$. The result is a
+float, not rounded, so a non-integer says the sample is too small. The spin Bott index
+diagonalizes $Ps_zP$ in the occupied states and takes the Bott index of each sign;
+`split_bott(h,operator=...)` is the general function and `spin_bott_index` the thin wrapper, as
+for `split_chern` and `spin_chern`.
+
+The sign. Swapping a1 and a2 flips $B$, and it also flips `h.get_chern()`, which integrates in
+the reduced coordinates of the same vectors: Haldane $t_2=0.1$ gives $C=B=+1$ on the default
+honeycomb lattice and $C=B=-1$ with the two vectors swapped. The maintainer's decision of 4
+November 2026 keeps both following the order of the lattice vectors, so $B$ equals `get_chern`
+on every lattice, and neither is the Cartesian $\sigma_{xy}$ on a left-handed pair. PyBott (GPL-3)
+takes the product in the other order, $UVU^{-1}V^{-1}$, and so returns $-B$; its `compute_uv`
+also takes the period as max minus min of the positions unless `lx`, `ly` are given, one
+lattice spacing short of the torus. Its code was read, not run: executing the downloaded
+package was refused in this session, so the external oracle is still to be run. The
+independent route in the tests is the k-space Chern number.
+
+The tolerance on a level at zero energy is 1e-8, not the 1e-4 of `split_chern`: in a disordered
+sample a localized level came within $3\cdot 10^{-5}$ of zero in one of the strongly
+disordered $12\times12$ Haldane supercells of the guide figure, and the index stays defined in that mobility gap; what has to be refused is a
+level exactly at zero, as the Dirac points of a clean honeycomb supercell whose size is a
+multiple of three.
+
+The checks (`tests/topology/test_bott_index.py`): $B$ equals `get_chern` on the Haldane model
+for both signs of $t_2$ and on both sides of $M_c=4.5\,t_2$ (pyqula's Haldane hopping carries the factor $\sqrt3/2$ of the Kane-Mele one, so the clean gap is $9t_2$ and not $6\sqrt3 t_2$), to $10^{-8}$ at supercells 4
+and 7; both flip together with a1 and a2; a rigid shift of every site leaves $B$ unchanged to
+$10^{-10}$; Anderson disorder $W=1$ keeps $B=1$ for three seeds and $W=16$ gives 0; the spin
+Bott index equals `get_spin_chern` on the Kane-Mele model with Rashba couplings up to
+$\lambda_R=\lambda_{SO}$ and 0 above the critical imbalance, with $B=0$, at supercells 4 and 6;
+and the refusals of a spinless, a one-dimensional and a gapless Hamiltonian. Measured while
+building it: on a $12\times12$ Haldane supercell ($t_2=0.15$, clean gap 1.35) every sample is an
+integer, the average over samples is 1 up to $W=4$ and 0 from $W=7$, and the same for the
+Kane-Mele model with Rashba coupling; at $8\times8$ the average inside the window moves by up to
+0.2 with six samples. The plane of sublattice mass and disorder at $10\times10$ shows the
+topological Anderson insulator: for $M$ between 0.7 and 1.0, above $M_c=0.675$, the average over eight samples reaches 0.4 to 1 for $W$ between 1.5 and 5. One $12\times12$
+spinless supercell takes about 0.02 s; the cost is the dense diagonalization at $k=0$, so the
+reach is a few thousand orbitals.
+
+What is left: the external PyBott run; a sparse route for large samples (the occupied
+projector from a KPM or a shift-invert window, which `sparse_kpm_mean_field.md` would supply);
+the Bott index of an open flake, which the edge states spoil, and of the amorphous samples of
+`geometry.amorphous_lattice()`, which needs a periodic amorphous geometry first; and a check that
+$U$ and $V$ are far from singular, so that a non-integer result raises instead of returning.
+
 ## The candidates at a glance
 
 Effort is small (a function and a test on top of what exists), medium (a new building
@@ -197,7 +252,7 @@ block) or large. The tier is the recommended order, argued in the last section.
 | $Z_2$ of a helical wire | DIII, 1D | the BdG time reversal, a Pfaffian | the Zak parity of one spin block, for every $\mu$ | small | done |
 | Spin Chern number with Rashba (Prodan) | none needed, 2D | `filter_state` by sign | Kane-Mele-Rashba $C_s=1$, with $(-1)^{C_s}=Z_2$ | small | done |
 | Mirror Chern with the mirror found | $M_z$, 2D | `pointgroup.compile_symmetry` | Kane-Mele $C_M=-1$, also under an out-of-plane field | small | done |
-| Bott and spin Bott index | A, AII, 2D torus | a supercell at $\Gamma$ | Haldane $B=\pm 1$; Kane-Mele spin Bott 1 below $m_c$ | small | 1 |
+| Bott and spin Bott index | A, AII, 2D torus | a supercell at $\Gamma$ | Haldane $B=\pm 1$; Kane-Mele spin Bott 1 below $m_c$ | small | done |
 | Symmetry eigenvalues at high-symmetry momenta | point groups, 2D and 3D | `pointgroup.compile_symmetry` | the parities above | small | 2 |
 | Fu-Kane parity $Z_2$, $Z_4$ indicator, Chern mod $n$, corner charge | inversion, $C_n$, 2D and 3D | the eigenvalues | diamond $Z_4=2$ in the strong phase (measured) | small each | 2 |
 | Local $Z_2$ and spin Chern markers, Katsura-Koma index | AII, 2D, disordered | `real_space_chern` | Kane-Mele island, bulk 1 below $m_c$ | small | 2 |
@@ -514,6 +569,6 @@ the magnon Chern number, and the Floquet, axion, GBZ and Hopf invariants.
 The general Wilson loop with the 3D $Z_2$ was picked first, the one-dimensional invariants
 second and the spin and mirror Chern numbers third, and all three are built, see the sections
 after the repairs; the nested Wilson loop, from the third tier, was built fourth, together with
-the loose ends. What is left of the first tier is the Bott and spin Bott index, and the next
-decision is whether it comes next or the second tier starts; each wants the maintainer's sign-off, and each is one function, one test against
-an independent route and one section of the guide.
+the loose ends, and the Bott and spin Bott indices fifth, which closes the first tier. The next
+decision is which piece of the second tier starts; each wants the maintainer's sign-off, and each
+is one function, one test against an independent route and one section of the guide.

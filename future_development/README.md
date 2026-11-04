@@ -243,8 +243,13 @@ already reached once.
   mirror Chern number, and then the nested Wilson loop with the quadrupole
   moment, benchmarked against an independent GPL implementation. The nine
   loose ends are closed, four repaired, two left by decision, two documented
-  and the scattering-matrix one not reproduced. Still open: the Bott and spin
-  Bott index, the last of the first tier.
+  and the scattering-matrix one not reproduced. The Bott and spin Bott
+  indices of a disordered periodic supercell, the last of the first tier,
+  are built too (4 November 2026), with their sign following the order of
+  the lattice vectors as `h.get_chern()` does; left open there are the run
+  against PyBott, a sparse route for large samples and a guard on a
+  non-integer result. The next decision is which piece of the second tier
+  starts.
 
 - [`unfolding.md`](unfolding.md) -- a check of `operator="unfold"` through
   every mode of the routines that take it (bands, kdos, DOS, the Fermi

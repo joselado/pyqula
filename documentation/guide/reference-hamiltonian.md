@@ -1114,6 +1114,43 @@ Optional arguments:
 It raises `ValueError` if the projected spin has no gap or the system is a
 metal.
 
+## h.get_bott_index()
+Return the Bott index of the states below zero energy of a two-dimensional
+periodic supercell, taken at $k=0$,
+
+$$B = \frac{1}{2\pi}\,{\rm Im}\,{\rm Tr}\log\left(VUV^\dagger U^\dagger\right),
+\qquad U = Pe^{2\pi iX}P,\quad V = Pe^{2\pi iY}P,$$
+
+with $X$ and $Y$ the fractional coordinates along the two lattice vectors.
+It is the Chern number of a disordered or amorphous sample, an integer when
+the supercell is larger than the localization length. Its sign follows the
+order of the lattice vectors, as for `h.get_chern()`. See
+[Topology in real space](real-space-topology.md).
+
+Optional arguments:
+- tol=1e-8: the smallest distance of an energy level to zero that is
+  accepted
+
+It raises `ValueError` if the Hamiltonian is not two dimensional or has a
+level at zero energy.
+
+## h.get_spin_bott_index()
+Return the spin Bott index $(B_+-B_-)/2$ of a two-dimensional spinful
+periodic supercell at $k=0$, with the occupied states split by the sign of
+$P s_z P$ and $B_\pm$ the Bott index of each half. It is the spin Chern
+number of a disordered sample, and its parity is the $Z_2$ invariant. See
+[Topology in real space](real-space-topology.md).
+
+Optional arguments:
+- operator="sz": the spin component, a name, a matrix or an `Operator`
+- tol=1e-8: the smallest distance to zero of an energy level and of an
+  eigenvalue of $P s_z P$ that is accepted
+
+It raises `ValueError` if the Hamiltonian is spinless, not two dimensional,
+or has a level at zero energy, or if an eigenvalue of $P s_z P$ is within
+`tol` of zero. A result that is not an integer means that $P s_z P$ is
+close to closing its gap.
+
 ## h.get_mirror_chern()
 Return the mirror Chern number $(C_{+i}-C_{-i})/2$ of a two-dimensional
 insulator with the mirror symmetry $z\to -z$, with $C_{\pm i}$ the Chern
