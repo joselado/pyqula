@@ -16,7 +16,8 @@ same day.
 On 2026-09-24 the maintainer decided three of the ones still open: the AAA
 `converged` flag (1.2), the factor of pi (2.1) and the weakened assertion
 (2.3); each section says what was chosen and what it changed. GPU Tier 2
-(1.3) is the one left open.
+(1.3) was the one left open, and it is closed now: the maintainer signed it
+off and it landed, see its section.
 
 ---
 
@@ -159,6 +160,11 @@ a GPU, and that constant would have to become size-aware.
 
 **The decision.** Yours, per the plan's own rule. Nothing should start without
 it.
+
+**Closed.** The maintainer signed Tier 2 off, and Tiers 2, 2b and 2c landed
+in September 2026 (2b in `3bfaa35`, which also keeps the density matrix on the
+device). `documentation/gpu_porting_plan.md` records what each tier moved to
+the device and the measured crossover.
 
 ---
 

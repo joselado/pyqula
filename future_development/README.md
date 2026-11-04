@@ -75,7 +75,7 @@ already reached once.
   gauge-independent orbital basis, together with the QGT's orbital-position
   gauge, atomic by default since 25 September 2026, what the AAA's `converged` flag
   should mean, since decided as a local relative error with the broadening
-  as its floor, and GPU Tier 2, still open), three judgement calls (the one
+  as its floor, and GPU Tier 2, since signed off and landed), three judgement calls (the one
   normalization deliberately left, since divided out, the aliasing sibling
   since resolved by making the public `get_multicell` copy, and the one
   assertion deliberately weakened, since restored by pinning the gauge),
