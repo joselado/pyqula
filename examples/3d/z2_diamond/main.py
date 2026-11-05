@@ -16,6 +16,9 @@ for s in scales:
     h.add_kane_mele(0.05) # spin-orbit coupling between second neighbors
     h.intra = s*h.intra # rescale the bond inside the unit cell
     (nu0,nus) = h.get_topological_invariant(nk=30,nt=30) # Z2 indices
-    print("bond =",s,"t   Z2 indices =",str(nu0)+";"+"".join(map(str,nus)))
+    k1 = h.get_z4_indicator() # Z4 indicator from the inversion eigenvalues
+    print("bond =",s,"t   Z2 indices =",str(nu0)+";"+"".join(map(str,nus)),"  kappa1 =",k1)
 # a weaker bond gives a weak TI 0;(111), a stronger one a strong TI 1;(111),
-# and a bond beyond 3t a band insulator 0;(000)
+# and a bond beyond 3t a band insulator 0;(000); kappa1 is nu0 modulo 2, and
+# the weak phase has kappa1=2, so kappa1=2 is a second-order topological
+# insulator only when the weak indices are zero too

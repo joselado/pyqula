@@ -251,10 +251,10 @@ already reached once.
   non-integer result. The symmetry eigenvalues of the occupied states, with
   the Chern number modulo $n$ and the parity $Z_2$, are built too
   (5 November 2026), and so is the corner charge for $C_2$, $C_4$ and $C_6$,
-  checked against flakes, the start of the symmetry branch of the section on
-  higher-order topology, which lists what is left there: the multipole
-  chiral number, the octupole moment, the $Z_4$ second-order indicator and
-  the $C_3$ corner charge.
+  checked against flakes, and the $Z_4$ indicator in three dimensions, the
+  symmetry branch of the section on higher-order topology, which lists what
+  is left there: the multipole chiral number, the octupole moment, the $C_3$
+  corner charge and a real-space check of the hinge modes.
 
 - [`unfolding.md`](unfolding.md) -- a check of `operator="unfold"` through
   every mode of the routines that take it (bands, kdos, DOS, the Fermi

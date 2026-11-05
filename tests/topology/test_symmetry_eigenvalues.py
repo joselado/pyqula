@@ -375,3 +375,84 @@ def test_corner_charge_of_the_kekule_honeycomb(delta, expected):
     h = g.get_hamiltonian(has_spin=False)
     h.add_kekule(delta)
     assert abs(h.get_corner_charge() - expected) < 1e-8
+
+
+# Z4 indicator: kappa_1 of Khalaf, Po, Vishwanath and Watanabe
+# (arXiv:1711.11589) with time reversal, z_4 of the magnetic space group P-1
+# without, checked against the strong and weak Z2 indices of the Wannier
+# flow and against the Chern vector
+
+def _doubled(h, lam=0.8, gamma=0.1):
+    """Two copies of h, the second at the positions scaled by lam about the
+    bond center of the diamond lattice, so that the inversion is kept, and
+    an onsite coupling gamma between the copies"""
+    from scipy.linalg import block_diag
+    h = h.get_multicell()
+    g = h.geometry
+    c = (np.array(g.r[0]) + np.array(g.r[1]))/2.
+    h2 = h.copy()
+    g2 = h2.geometry
+    g2.r = np.concatenate([np.array(g.r), c + lam*(np.array(g.r) - c)])
+    g2.r2xyz()
+    g2.has_fractional = False
+    g2.get_fractional()
+
+    def dense(m): return np.array(m.todense() if hasattr(m, "todense") else m)
+    n = h.intra.shape[0]
+    h2.intra = block_diag(dense(h.intra), dense(h.intra)) + \
+        gamma*np.kron(np.array([[0., 1.], [1., 0.]]), np.eye(n))
+    for t in h2.hopping: t.m = block_diag(dense(t.m), dense(t.m))
+    return h2
+
+
+@pytest.mark.parametrize("bond,s", [(0, 0.7), (2, 1.3), (1, 3.5)])
+def test_kappa1_and_the_z2_indices(bond, s, tmp_path, monkeypatch):
+    """kappa_1 = nu_0 mod 2; two copies of a strong topological insulator
+    give kappa_1 = 2 with every Z2 index zero, the inversion-protected
+    higher-order topological insulator, and two copies of a weak or of a
+    trivial one give 0"""
+    monkeypatch.chdir(tmp_path)
+    h = _diamond(bond, s)
+    z2 = topology.z2_invariant_3d(h, nk=20, nt=20)
+    k1 = h.get_z4_indicator()
+    assert k1 % 2 == z2[0]
+    hd = _doubled(h)
+    assert hd.has_time_reversal_symmetry()
+    assert topology.z2_invariant_3d(hd, nk=20, nt=20) == (0, (0, 0, 0))
+    assert hd.get_z4_indicator() == (2 if z2[0] == 1 else 0)
+    assert hd.get_z4_indicator() == (2*k1) % 4
+
+
+@pytest.mark.parametrize("J", [0.02, 0.1])
+def test_axion_insulator_from_a_magnetized_strong_insulator(J, tmp_path,
+                                                            monkeypatch):
+    """A uniform exchange breaks time reversal but keeps the inversion; the
+    strong topological insulator becomes an axion insulator, z_4 = 2 with a
+    zero Chern vector, while the gap stays open"""
+    monkeypatch.chdir(tmp_path)
+    h = _diamond(2, 1.3)
+    assert h.get_z4_indicator() == 1 # kappa_1, with time reversal
+    h.add_exchange([0., 0., J])
+    assert not h.has_time_reversal_symmetry()
+    assert h.get_z4_indicator() == 2 # z_4, without
+    assert tuple(topology.chern_vector(h, nk=20, nt=40)) == (0, 0, 0)
+
+
+def test_an_odd_z4_is_a_semimetal():
+    """Between the weak and the strong phase a large exchange field opens a
+    region where the gap is open at the eight momenta, but the number of
+    occupied states of parity -1 is odd, so the gap closes elsewhere, at
+    Weyl points; the indicator raises instead of returning an odd z_4"""
+    h = _diamond(0, 1.0)
+    h.add_exchange([0., 0., 0.3])
+    with pytest.raises(ValueError, match="Weyl"):
+        h.get_z4_indicator()
+
+
+def test_z4_indicator_raises_when_the_gap_closes_and_in_2d():
+    h = _diamond(2, 1.3)
+    h.add_exchange([0., 0., 0.3]) # the exchange closes the gap
+    with pytest.raises(ValueError, match="not mapped onto themselves|not an insulator"):
+        h.get_z4_indicator()
+    with pytest.raises(ValueError, match="three-dimensional"):
+        _kane_mele(1.).get_z4_indicator()

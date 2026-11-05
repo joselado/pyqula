@@ -183,7 +183,7 @@ arXiv:1809.02142. What is left: the nested loop on a plane of a 3D zone (the `kf
 than by the lines 0 and 1/2, for Wannier gaps elsewhere, and the $C_4$ route of eq. VI.53,
 which needs the symmetry-eigenvalue primitive of the second tier.
 
-## Built after the survey: the symmetry eigenvalues, the Chern number modulo n, the parity Z2 and the corner charge
+## Built after the survey: the symmetry eigenvalues, the Chern number modulo n, the parity Z2, the corner charge and the Z4 indicator
 
 The sixth package, picked on 5 November 2026 as the start of the symmetry branch of the
 higher-order plan below, is in `topologytk/symmetryeigenvalues.py`, with the delegators
@@ -248,8 +248,33 @@ fails the stack test. A side finding: `h.remove_sites()` fails on a Hamiltonian 
 `intra`, since the numba crop receives a `csc_matrix`; the notebook crops the dense matrix
 instead.
 
-Not built here, and the next decision: the $Z_4$ second-order indicator, and the $C_3$ corner
-charge. A test of the
+The $Z_4$ indicator followed, as `h.get_z4_indicator()`: $\kappa_1=\frac14\sum_K(n_K^+-n_K^-)$
+mod 4 with time reversal and spin (eq. defk1 of the TeX source of arXiv:1711.11589), and
+$z_4=\frac12\sum_K(n_K^+-n_K^-)$ mod 4 otherwise, with $\theta=\pi z_4/2$ from eq.
+magnetoelectric of arXiv:1010.4335. The same eigenvalues give $z_4=2\kappa_1$ on a
+time-reversal-symmetric insulator, so the method returns $\kappa_1$ when the Hamiltonian is
+spinful with time reversal and $z_4$ otherwise, which the docstring and the guide say. The parity
+constraint of arXiv:1010.4335 (eq. constraint, an even total number of occupied odd states in
+an insulator) makes $z_4$ even, since $z_4=-\sum_K n_K^-$ mod 4; an odd $z_4$ raises, naming
+Weyl points. A first version tested the parity of $\sum_K(n_K^+-n_K^-)$, which is always even,
+and returned odd values: the notebook's map of the magnetized diamond model showed $z_4=1$ and 3
+in two wedges around the transitions at $s=1$ and $s=3$, and at $s=1$, $J=0.3$ the direct gap
+closes to $10^{-12}$ at $(0.524,0,0.524)$ and its images, Weyl nodes away from the TRIMs.
+
+Checked (`tests/topology/test_symmetry_eigenvalues.py`): $\kappa_1=\nu_0$ mod 2 against
+`z2_invariant_3d` on a weak, a strong and a trivial phase of the diamond model with one bond
+scaled; two copies of each, the second at positions scaled by 0.8 about the bond center, which
+keeps the inversion, with an onsite coupling 0.1: $\kappa_1=2$ for the doubled strong phase
+with `z2_invariant_3d` $=(0,(0,0,0))$, the second-order insulator, and 0 for the doubled weak and
+trivial ones; a uniform exchange 0.02 and 0.1 on the strong phase gives $z_4=2$ with a zero
+Chern vector, the axion insulator; 0.3 closes the gap and raises; the Weyl case raises. A
+reversed sign of $\kappa_1$ fails two tests. Note that the weak phase of the diamond model with
+the bond inside the cell scaled (the guide's model) has $\kappa_1=2$, as arXiv:1711.11589 says a
+weak phase may, so $\kappa_1=2$ is a second-order insulator only with zero weak indices. Not
+verified: the hinge modes themselves, on a rod, for either the second-order or the axion case.
+
+Not built here, and the next decision: the $C_3$ corner charge, and a real-space check of the
+hinge modes. A test of the
 primitive by a gauge rotation inside a degenerate multiplet was not possible from outside,
 since `eigh` returns $s_z$ eigenstates for Kane-Mele, which are also $C_3$ eigenstates.
 
@@ -326,7 +351,8 @@ block) or large. The tier is the recommended order, argued in the last section.
 | Symmetry eigenvalues at high-symmetry momenta | point groups, 2D and 3D | `pointgroup.compile_symmetry` | the parities above | small | done |
 | Fu-Kane parity $Z_2$, Chern mod $n$ | inversion, $C_n$, 2D and 3D | the eigenvalues | the Wannier-flow $Z_2$, `get_chern` | small each | done |
 | Corner charge, $C_2$, $C_4$, $C_6$ | $C_n$ and time reversal, spinless, 2D | the eigenvalues | Kekulé 1/2, $h_{1b}\oplus h_{2c}$ 3/4, against a flake | small | done |
-| $Z_4$ indicator, $C_3$ corner charge | inversion, $C_3$, 2D and 3D | the eigenvalues | diamond $Z_4=2$ in the strong phase (measured) | small each | 2 |
+| $Z_4$ indicator, $\kappa_1$ and magnetic $z_4$ | inversion, 3D | the eigenvalues | doubled strong TI $\kappa_1=2$, magnetized strong TI $z_4=2$ | small | done |
+| $C_3$ corner charge | $C_3$, 2D | the eigenvalues | a $C_3$ model with $P=0$, against a flake | small | 2 |
 | Local $Z_2$ and spin Chern markers, Katsura-Koma index | AII, 2D, disordered | `real_space_chern` | Kane-Mele island, bulk 1 below $m_c$ | small | 2 |
 | Scattering invariant $\mathrm{sign}\det r$ | D (DIII, BDI), 1D disordered | `transporttk.smatrix` | Kitaev wire $-1$ inside, $+1$ outside (measured) | small, after a guard | 2 |
 | Point-gap winding, biorthogonal Chern | non-Hermitian, 1D and 2D | `get_hk_gen`, `mesh_chern` | Hatano-Nelson $w=\mathrm{sign}(g)$ | small | 2 |

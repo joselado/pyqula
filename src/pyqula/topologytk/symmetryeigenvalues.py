@@ -227,6 +227,89 @@ def inversion_centers(h):
     return out
 
 
+def _find_inversion(h, center):
+    """The compiled inversion of h, about center or, if center is None,
+    about the first candidate of inversion_centers that is a symmetry"""
+    if center is not None:
+        return compile_operation(h, inversion_operation(center))
+    for cen in inversion_centers(h):
+        c = compile_symmetry(h, inversion_operation(cen))
+        if c is not None: return c
+    raise ValueError("no inversion center was found among the midpoints of "
+      +"the first site and its images, so this Hamiltonian has no inversion "
+      +"symmetry")
+
+
+def _parity_counts(h, c, nocc):
+    """(n_+, n_-) at each time-reversal-invariant momentum, as a dict"""
+    dim = h.dimensionality
+    out = {}
+    for n in np.ndindex(*([2]*dim)):
+        k = np.array(n)/2.
+        xi = symmetry_eigenvalues(h, c, k, nocc=nocc)
+        if np.max(np.abs(xi - np.round(xi.real))) > 1e-4:
+            raise ValueError("the inversion eigenvalues at "+str(k.tolist())
+              +" are not +1 or -1: "+str(xi))
+        out[n] = (int(np.sum(xi.real > 0.)), int(np.sum(xi.real < 0.)))
+    _check_filling({n: sum(v) for (n, v) in out.items()})
+    return out
+
+
+def z4_indicator(h, center=None, nocc=None):
+    """Z4 symmetry indicator of a three-dimensional insulator with
+    inversion, from the numbers n_+ and n_- of occupied states with parity
+    +1 and -1 at the eight time-reversal-invariant momenta K.
+
+    With time reversal and spin (class AII; Khalaf, Po, Vishwanath and
+    Watanabe, arXiv:1711.11589, eq. defk1 of the TeX source),
+
+        kappa_1 = (1/4) sum_K (n_+ - n_-)  mod 4,
+
+    where every state of a Kramers pair is counted. kappa_1 = nu_0 mod 2,
+    so 1 and 3 are strong topological insulators, and kappa_1 = 2 with all
+    the Z2 indices zero is the higher-order topological insulator with
+    helical hinge modes, for instance two copies of a strong one.
+
+    Without time reversal (class A, the space group P-1 with magnetism),
+
+        z_4 = (1/2) sum_K (n_+ - n_-)  mod 4,
+
+    which gives the axion angle theta = pi z_4/2 mod 2 pi (Turner, Zhang,
+    Mong and Vishwanath, arXiv:1010.4335, eq. magnetoelectric of the TeX
+    source). Since z_4 = -sum_K n_- mod 4, the parity constraint of an
+    insulator in that paper (eq. constraint, an even total number of
+    occupied states of parity -1) makes z_4 even; an odd z_4 means that the
+    gap closes somewhere, for instance at Weyl points away from the
+    time-reversal-invariant momenta, and this raises. With zero Chern
+    numbers, z_4 = 2 is the axion insulator, with chiral hinge modes. Note that for the same time-reversal-symmetric insulator
+    z_4 = 2 kappa_1, so the two numbers are not the same quantity.
+
+    center: the inversion center, searched as in parity_z2 by default
+
+    Returns kappa_1 for a spinful Hamiltonian with time reversal, and z_4
+    otherwise, an integer between 0 and 3."""
+    if h.dimensionality != 3:
+        raise ValueError("the Z4 indicator needs a three-dimensional "
+          +"Hamiltonian, and this one has dimensionality "
+          +str(h.dimensionality)+"; use parity_z2 in two dimensions")
+    c = _find_inversion(h, center)
+    counts = _parity_counts(h, c, nocc)
+    s = sum(p - m for (p, m) in counts.values())
+    if h.has_spin and h.has_time_reversal_symmetry(): # kappa_1
+        if s % 4 != 0:
+            raise ValueError("the sum of n_+ - n_- over the time-reversal-"
+              +"invariant momenta is "+str(s)+", not a multiple of 4, so the "
+              +"occupied states are not Kramers pairs")
+        return (s//4) % 4
+    if (s//2) % 2 != 0:
+        raise ValueError("z_4 = "+str((s//2) % 4)+" is odd: the total "
+          +"number of occupied states of parity -1 at the time-reversal-"
+          +"invariant momenta is odd, which no insulator has, so the gap "
+          +"closes somewhere else in the Brillouin zone, for instance at Weyl "
+          +"points")
+    return (s//2) % 4
+
+
 def parity_z2(h, center=None, nocc=None):
     """Z2 invariant of a time-reversal-symmetric insulator with inversion,
     from the parities of the occupied states at the time-reversal-invariant
@@ -253,15 +336,7 @@ def parity_z2(h, center=None, nocc=None):
         raise ValueError("the parity Z2 invariant needs time-reversal "
           +"symmetry, which this Hamiltonian breaks; use chern_mod_n or "
           +"the Chern number instead")
-    if center is None:
-        for cen in inversion_centers(h):
-            c = compile_symmetry(h, inversion_operation(cen))
-            if c is not None: break
-        else:
-            raise ValueError("no inversion center was found among the "
-              +"midpoints of the first site and its images, so this "
-              +"Hamiltonian has no inversion symmetry")
-    else: c = compile_operation(h, inversion_operation(center))
+    c = _find_inversion(h, center)
     delta = {}
     counts = {}
     for n in np.ndindex(*([2]*dim)):

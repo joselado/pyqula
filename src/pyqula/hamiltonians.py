@@ -195,6 +195,11 @@ class Hamiltonian():
         rotation invariants, see topologytk/symmetryeigenvalues.py"""
         return topology.corner_charge(h,**kwargs)
 
+    def get_z4_indicator(h,**kwargs):
+        """Z4 symmetry indicator of a three-dimensional insulator with
+        inversion, see topologytk/symmetryeigenvalues.py"""
+        return topology.z4_indicator(h,**kwargs)
+
     def get_parity_z2(h,**kwargs):
         """Fu-Kane Z2 invariant from the inversion eigenvalues at the
         time-reversal-invariant momenta, see topologytk/symmetryeigenvalues.py"""

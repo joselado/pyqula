@@ -701,8 +701,72 @@ call raises an error. The $C_3$ case is not available, because its relation
 uses a complex eigenvalue, and so it depends on which of the two valleys is
 called $K$.
 
-See `examples/2d/symmetry_indicators/main.py` for these invariants across
-their transitions.
+### Z4 indicator in three dimensions
+
+In three dimensions the inversion eigenvalues give more than the $Z_2$
+indices. With $n_K^\pm$ the number of occupied states with parity $\pm1$ at
+the time-reversal-invariant momentum $K$, counting both states of every
+Kramers pair, the indicator
+
+$$
+\kappa_1 = \frac14 \sum_{K} \left(n_K^+ - n_K^-\right) \mod 4
+$$
+
+is an integer between 0 and 3, and $\kappa_1=\nu_0$ modulo 2. So
+$\kappa_1=1$ and $3$ are strong topological insulators. The new case is
+$\kappa_1=2$ with all the $Z_2$ indices equal to zero: no Dirac cone on any
+surface, but a helical mode along the hinges of an inversion-symmetric
+crystal, the edges where two surfaces meet. This is a second-order
+topological insulator, and the simplest one is two copies of a strong
+topological insulator, coupled. This is computed with
+`h.get_z4_indicator()`.
+
+```python
+g = geometry.diamond_lattice_minimal() # diamond lattice, two sites per cell
+h = g.get_hamiltonian() # first-neighbor hopping
+h.add_kane_mele(0.05) # spin-orbit coupling between second neighbors
+h.intra = 1.3*h.intra # make the bond inside the unit cell stronger
+k1 = h.get_z4_indicator() # Z4 indicator, with time reversal
+h.add_exchange([0.,0.,0.05]) # a uniform exchange field breaks time reversal
+z4 = h.get_z4_indicator() # Z4 indicator, without time reversal
+```
+
+The strong topological insulator of the previous section gives
+$\kappa_1=3$. With the bond weaker than the other three, the weak
+topological insulator $0;(111)$, it gives $\kappa_1=2$: a weak topological
+insulator can also have $\kappa_1=2$, so the $Z_2$ indices of
+`h.get_topological_invariant()` are needed to tell it from a second-order
+one. Without time reversal the states are no longer Kramers pairs,
+and the indicator is
+
+$$
+z_4 = \frac12 \sum_{K} \left(n_K^+ - n_K^-\right) \mod 4 ,
+$$
+
+which is $2\kappa_1$ for a time-reversal symmetric insulator. With the
+exchange field, `z4` is $2$, and the Chern vector is still zero. This is an
+axion insulator: its magnetoelectric response has $\theta=\pi$, meaning
+$\theta = \pi z_4/2$, and each surface with a gap carries a half-integer
+quantum Hall effect. In a crystal with inversion it has chiral modes along
+the hinges. With an exchange field of $0.3$ the gap closes, and the call
+raises an error. It also raises when $z_4$ would be odd: the total number of
+occupied states of parity $-1$ is then odd, which no insulator has, so the
+gap closes somewhere else in the Brillouin zone, at Weyl points. This is
+what happens in this model near the transitions between its phases, once
+the exchange field is large.
+
+- `center`: the inversion center, found automatically by default.
+- `nocc`: use the lowest `nocc` bands instead of the bands below zero
+  energy.
+
+Note that `h.get_z4_indicator()` returns $\kappa_1$ for a spinful Hamiltonian
+with time reversal and $z_4$ otherwise, so the two numbers of one material
+are not compared directly.
+
+See `examples/2d/symmetry_indicators/main.py` and
+`examples/3d/z2_diamond/main.py` for these invariants across their
+transitions, and
+`jupyter-notebooks/functionalities/topological_characterization/14_symmetry_eigenvalues.ipynb`.
 
 ## Winding number of a chiral chain
 

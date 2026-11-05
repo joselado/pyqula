@@ -1245,6 +1245,19 @@ Optional arguments:
 - center=(0,0,0): the center of the unit cell from which the flake is built
 - nocc=None: as in `h.get_symmetry_eigenvalues()`
 
+## h.get_z4_indicator()
+Return the $Z_4$ indicator of a three-dimensional insulator with inversion,
+from the parities of the occupied states at the eight time-reversal-invariant
+momenta: $\kappa_1=\frac14\sum_K(n_K^+-n_K^-)$ modulo 4 for a spinful
+Hamiltonian with time reversal, and $z_4=\frac12\sum_K(n_K^+-n_K^-)$ modulo 4
+otherwise. $\kappa_1=2$ with zero $Z_2$ indices is a second-order topological
+insulator, and $z_4=2$ with a zero Chern vector is an axion insulator. See
+[Topological invariants](topological-invariants.md).
+
+Optional arguments:
+- center=None: the inversion center, found automatically by default
+- nocc=None: as in `h.get_symmetry_eigenvalues()`
+
 ## h.get_parity_z2()
 Return the $Z_2$ invariant of an insulator with time reversal and inversion,
 from the inversion eigenvalues at the time-reversal-invariant momenta: $\nu$,
