@@ -53,6 +53,27 @@ def test_remove_sites_keeps_the_supported_case_consistent():
     assert h.intra.shape[0] == len(h.geometry.r)
 
 
+def test_remove_sites_gives_the_same_hamiltonian_for_sparse_and_dense():
+    """A sparse intra used to reach the numba crop and fail; cropping it must
+    give the same matrices as cropping the dense one, and stay sparse."""
+    import scipy.sparse as sp
+    g = geometry.honeycomb_lattice().get_supercell(2)
+    hd = g.get_hamiltonian(has_spin=False)
+    hd.add_onsite(lambda r: r[0])  # break the equivalence of the sites
+    hs = hd.copy()
+    hs.turn_sparse()
+    store = np.ones(len(g.r), dtype=int)
+    store[[0, 3]] = 0
+    hd.remove_sites(store)
+    hs.remove_sites(store)
+    assert sp.issparse(hs.intra)
+    assert np.allclose(hs.intra.toarray(), hd.intra)
+    k = [0.13, 0.31, 0.]  # a generic k-point, so every hopping enters
+    ms = hs.get_hk_gen()(k)
+    ms = ms.toarray() if sp.issparse(ms) else ms
+    assert np.allclose(ms, hd.get_hk_gen()(k))
+
+
 # ------------------------------------------------------------ get_no_multicell
 
 def test_get_no_multicell_returns_a_hamiltonian_the_caller_may_mutate():

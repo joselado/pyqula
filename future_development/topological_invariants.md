@@ -244,9 +244,9 @@ topological, where the flake shows an edge charge that grows with its size), and
 `honeycomb_lattice_C6()` with `h.add_kekule(-0.3)` (1/2) and `+0.3` (0). The paper's $C_4$
 generator $H_2^{(4)}$ was tried and dropped: as written it is gapless at half filling, its
 second and third bands touch at $E=0$. Returning the electronic charge instead of the total
-fails the stack test. A side finding: `h.remove_sites()` fails on a Hamiltonian with a sparse
-`intra`, since the numba crop receives a `csc_matrix`; the notebook crops the dense matrix
-instead.
+fails the stack test. A side finding: `h.remove_sites()` failed on a Hamiltonian with a sparse
+`intra`, since the numba crop received a `csc_matrix`; the crop now slices a sparse matrix
+and keeps it sparse, with a test that the sparse and dense paths give the same Bloch matrix.
 
 The $Z_4$ indicator followed, as `h.get_z4_indicator()`: $\kappa_1=\frac14\sum_K(n_K^+-n_K^-)$
 mod 4 with time reversal and spin (eq. defk1 of the TeX source of arXiv:1711.11589), and
