@@ -183,7 +183,7 @@ arXiv:1809.02142. What is left: the nested loop on a plane of a 3D zone (the `kf
 than by the lines 0 and 1/2, for Wannier gaps elsewhere, and the $C_4$ route of eq. VI.53,
 which needs the symmetry-eigenvalue primitive of the second tier.
 
-## Built after the survey: the symmetry eigenvalues, the Chern number modulo n and the parity Z2
+## Built after the survey: the symmetry eigenvalues, the Chern number modulo n, the parity Z2 and the corner charge
 
 The sixth package, picked on 5 November 2026 as the start of the symmetry branch of the
 higher-order plan below, is in `topologytk/symmetryeigenvalues.py`, with the delegators
@@ -217,8 +217,39 @@ The checks (`tests/topology/test_symmetry_eigenvalues.py`):
 - The parity $Z_2$ about three inversion centers that differ by half lattice vectors is the same
 - A rotation with the opposite orientation fails 8 tests, and dropping the $(-1)^F$ fails 7
 
-Not built here, and the next decision: the corner charge of arXiv:1809.02142 and the $Z_4$
-second-order indicator, which now need only their own formula and oracle. A test of the
+The corner charge of arXiv:1809.02142 followed the same day, as `h.get_corner_charge()`, from
+eq. CornerIndices of the TeX source of the main text for $C_2$, $C_4$ and $C_6$. The index of
+the paper is the electronic charge in units of $e<0$, so the routine returns $-Q/e$ modulo 1,
+the total charge of electrons and ions in units of $|e|$; the stack $h_{1b}\oplus h_{2c}$ at
+3/8 filling gives 3/4, the $3|e|/4$ of fig. 1(a) of the paper, which fixes the sign. The
+indices for $C_2$, $C_4$ and $C_6$ use only real eigenvalues once time reversal is imposed
+($[M_2^{(4)}]=[M_4^{(4)}]$), so they do not depend on the orientation of the rotation. The
+$C_3$ index $\frac{e}{3}[K_2^{(3)}]$ uses a complex eigenvalue at $K$, so it depends on which
+valley is called $K$, which the paper fixes only in a figure; it raises `NotImplementedError`.
+The paper's own $C_3$ generators (the breathing kagome models) have a nonzero polarization, so
+they cannot fix it either, and a $C_3$ model with $P=0$ and a flake oracle would be needed. The
+rotation center has to be the center of the unit cell from which the flake is built (Wyckoff
+1a); a vanishing polarization is checked from the $C_2$ eigenvalues and raises otherwise. The
+$C_2$ index is the charge of each of the two halves of a flake, $n/2$ times the $C_n$ corner
+charge modulo 1, which the tests check.
+
+The oracle is a flake of whole unit cells, cut into $n$ pinwheel sectors of whole cells related
+by the rotation, with the central cell shared, ions $n_{occ}$ per cell, and the Fermi level in
+the largest spectral gap around the neutral filling, so that the corner multiplet is all filled
+or all empty. With chiral symmetry and every negative-energy state filled, the density is
+exactly 1/2 on every site and the sector charge is zero whatever the phase, which is why the
+multiplet has to be treated as a whole. Checked: the Kekulé model $H_2^{(6)}$ of the paper
+(1/2 for $t_0<1$, 0 above), the stack (3/4 and 0, and a raise when only one block is
+topological, where the flake shows an edge charge that grows with its size), and
+`honeycomb_lattice_C6()` with `h.add_kekule(-0.3)` (1/2) and `+0.3` (0). The paper's $C_4$
+generator $H_2^{(4)}$ was tried and dropped: as written it is gapless at half filling, its
+second and third bands touch at $E=0$. Returning the electronic charge instead of the total
+fails the stack test. A side finding: `h.remove_sites()` fails on a Hamiltonian with a sparse
+`intra`, since the numba crop receives a `csc_matrix`; the notebook crops the dense matrix
+instead.
+
+Not built here, and the next decision: the $Z_4$ second-order indicator, and the $C_3$ corner
+charge. A test of the
 primitive by a gauge rotation inside a degenerate multiplet was not possible from outside,
 since `eigh` returns $s_z$ eigenstates for Kane-Mele, which are also $C_3$ eigenstates.
 
@@ -294,7 +325,8 @@ block) or large. The tier is the recommended order, argued in the last section.
 | Bott and spin Bott index | A, AII, 2D torus | a supercell at $\Gamma$ | Haldane $B=\pm 1$; Kane-Mele spin Bott 1 below $m_c$ | small | done |
 | Symmetry eigenvalues at high-symmetry momenta | point groups, 2D and 3D | `pointgroup.compile_symmetry` | the parities above | small | done |
 | Fu-Kane parity $Z_2$, Chern mod $n$ | inversion, $C_n$, 2D and 3D | the eigenvalues | the Wannier-flow $Z_2$, `get_chern` | small each | done |
-| $Z_4$ indicator, corner charge | inversion, $C_n$, 2D and 3D | the eigenvalues | diamond $Z_4=2$ in the strong phase (measured) | small each | 2 |
+| Corner charge, $C_2$, $C_4$, $C_6$ | $C_n$ and time reversal, spinless, 2D | the eigenvalues | Kekulé 1/2, $h_{1b}\oplus h_{2c}$ 3/4, against a flake | small | done |
+| $Z_4$ indicator, $C_3$ corner charge | inversion, $C_3$, 2D and 3D | the eigenvalues | diamond $Z_4=2$ in the strong phase (measured) | small each | 2 |
 | Local $Z_2$ and spin Chern markers, Katsura-Koma index | AII, 2D, disordered | `real_space_chern` | Kane-Mele island, bulk 1 below $m_c$ | small | 2 |
 | Scattering invariant $\mathrm{sign}\det r$ | D (DIII, BDI), 1D disordered | `transporttk.smatrix` | Kitaev wire $-1$ inside, $+1$ outside (measured) | small, after a guard | 2 |
 | Point-gap winding, biorthogonal Chern | non-Hermitian, 1D and 2D | `get_hk_gen`, `mesh_chern` | Hatano-Nelson $w=\mathrm{sign}(g)$ | small | 2 |

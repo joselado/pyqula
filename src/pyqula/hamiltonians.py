@@ -190,6 +190,11 @@ class Hamiltonian():
         states, see topologytk/symmetryeigenvalues.py"""
         return topology.chern_mod_n(h,**kwargs)
 
+    def get_corner_charge(h,**kwargs):
+        """Fractional corner charge of a C_n-symmetric insulator from its
+        rotation invariants, see topologytk/symmetryeigenvalues.py"""
+        return topology.corner_charge(h,**kwargs)
+
     def get_parity_z2(h,**kwargs):
         """Fu-Kane Z2 invariant from the inversion eigenvalues at the
         time-reversal-invariant momenta, see topologytk/symmetryeigenvalues.py"""

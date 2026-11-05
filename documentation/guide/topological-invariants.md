@@ -647,7 +647,61 @@ call raises an error when time reversal or inversion is broken, and when
 the gap closes at one of the momenta, where the states below zero energy do
 not form a representation of the inversion.
 
-See `examples/2d/symmetry_indicators/main.py` for both invariants across
+### Corner charge
+
+A crystalline insulator can have zero Chern number and zero polarization, and
+still be different from an atomic insulator. Take a flake made of whole unit
+cells, with a $C_n$ rotation. The electrons of the bulk can sit away from the
+center of the unit cell, for example on the bonds between cells. Then the
+cells at a corner miss part of their electrons. The number of electrons
+needed for neutrality and the number of states below the gap do not match,
+which is what is called a filling anomaly. As a result each corner carries a
+fractional charge, a multiple of $e/n$, while the bulk and the edges are
+neutral. This charge is fixed by the rotation eigenvalues of the occupied
+bands. For $C_6$ the relation is
+
+$$
+Q = -\left(\tfrac14 [M_1^{(2)}] + \tfrac16 [K_1^{(3)}]\right) \mod 1 ,
+$$
+
+where $[\Pi_p] = \#\Pi_p - \#\Gamma_p$ is the number of occupied bands with
+the eigenvalue $e^{2\pi i(p-1)/n}$ at the momentum $\Pi$, minus the same
+number at $\Gamma$, and the minus sign makes $Q$ the total charge of the
+electrons and the ions, in units of $|e|$. The relations for $C_2$ and $C_4$
+have the same form. This is computed with `h.get_corner_charge()`, and STM
+or a local charge measurement would see it as a charge accumulated at each
+corner of the flake. We take the honeycomb lattice with a Kekulé modulation
+of the hopping, in a unit cell of six sites around one hexagon.
+
+```python
+g = geometry.honeycomb_lattice_C6() # honeycomb lattice, six sites around a hexagon
+h = g.get_hamiltonian(has_spin=False) # spinless, first-neighbor hopping
+h.add_kekule(-0.3) # weaker hopping inside the hexagon of the cell
+q = h.get_corner_charge() # corner charge, in units of |e|
+```
+
+The result is $q=1/2$. The strong bonds are between the cells, so each of
+the three electrons of a cell sits on a bond between two cells, half in each
+of them. At a corner of the flake these bonds are cut, and the charge that
+is left is $e/2$ modulo $e$. With `h.add_kekule(0.3)` the strong bonds are
+inside the hexagon, the electrons sit at the center of the cell, and $q=0$.
+For a spinless model with a chiral symmetry, like this one, $q=1/2$ comes
+with $n$ zero modes at the corners.
+
+- `n`: 2, 4 or 6. By default it is the largest one that is a symmetry. With
+  $C_2$ the two related sectors are halves of the flake, so $q$ is the
+  charge of each half.
+- `center`: the center of the unit cell, the origin by default. The flake
+  is built from whole cells centered on the rotation axis, and another choice
+  of unit cell gives another corner charge.
+
+The relations hold only for a spinless Hamiltonian with time reversal and
+zero polarization. With a nonzero polarization the edges are charged, and the
+call raises an error. The $C_3$ case is not available, because its relation
+uses a complex eigenvalue, and so it depends on which of the two valleys is
+called $K$.
+
+See `examples/2d/symmetry_indicators/main.py` for these invariants across
 their transitions.
 
 ## Winding number of a chiral chain

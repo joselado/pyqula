@@ -889,6 +889,7 @@ from .topologytk.symmetryeigenvalues import rotation_operation
 from .topologytk.symmetryeigenvalues import inversion_operation
 from .topologytk.symmetryeigenvalues import chern_mod_n
 from .topologytk.symmetryeigenvalues import parity_z2
+from .topologytk.symmetryeigenvalues import corner_charge
 
 
 def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):

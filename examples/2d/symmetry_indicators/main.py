@@ -36,3 +36,13 @@ for s in [1.,1.5,2.5,3.]: # hopping of the bond along x, in units of t
     print("bond =",s,"t   parity Z2 =",h.get_parity_z2())
 # the Dirac cones merge at s=2, the gap closes at a time-reversal-invariant
 # momentum, and beyond it the strong bonds form a trivial insulator, Z2=0
+
+# Corner charge of the honeycomb lattice with a Kekule modulation of the
+# hopping, in a unit cell of six sites around one hexagon
+g = geometry.honeycomb_lattice_C6() # six sites around a hexagon
+for delta in [-0.3,-0.1,0.1,0.3]: # Kekule modulation of the hopping
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_kekule(delta) # delta<0 weakens the bonds inside the hexagon
+    print("Kekule =",delta,"  corner charge =",h.get_corner_charge())
+# the corner charge is 1/2 when the strong bonds join different cells, and
+# 0 when they are inside the cell

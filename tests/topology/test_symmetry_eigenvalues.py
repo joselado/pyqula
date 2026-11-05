@@ -201,3 +201,177 @@ def test_parity_z2_needs_inversion():
     h.add_sublattice_imbalance(0.1)
     with pytest.raises(ValueError, match="no inversion"):
         h.get_parity_z2()
+
+
+# Corner charge (Benalcazar, Li and Hughes, arXiv:1809.02142), checked
+# against the charge counted on a C_n-symmetric flake of whole unit cells:
+# the ions carry nocc per cell, the corner multiplet is filled or emptied as
+# a whole by putting the Fermi level in the largest spectral gap around the
+# bulk filling, and the flake is cut into n pinwheel sectors of whole cells,
+# each holding one corner, with the central cell shared equally.
+
+def _kekule_cell(t0):
+    """H_2^(6) of arXiv:1809.02142: six sites on a hexagon of radius 1,
+    hopping t0 around the hexagon and 1 between hexagons; a corner charge
+    1/2 for t0<1"""
+    s3 = np.sqrt(3.)
+    a1, a2 = np.array([3., 0, 0]), np.array([1.5, 1.5*s3, 0])
+    sites = [np.array([np.cos(np.pi/3*j), np.sin(np.pi/3*j), 0.])
+             for j in range(6)]
+    R = {0: (1, 0), 1: (0, 1), 2: (-1, 1), 3: (-1, 0), 4: (0, -1), 5: (1, -1)}
+    bonds = {}
+    for j in range(6):
+        bonds[(j, (j+1) % 6, (0, 0))] = t0
+        bonds[(j, (j+3) % 6, R[j])] = 1.
+    return a1, a2, sites, bonds, np.zeros(6), 3
+
+
+def _stack_cell(top1b, top2c, t=0.2):
+    """h_1b (+) h_2c of arXiv:1809.02142 at 3/8 filling: a 2D SSH model and
+    two perpendicular SSH chains, weakly coupled, each in its topological
+    phase (inter-cell hopping 1, intra-cell t) or in the trivial one (the
+    two exchanged, the same spectrum). Each block alone has a polarization
+    (1/2,1/2), so the stack has zero polarization only when both are
+    topological or both trivial"""
+    d = 0.3
+    a1, a2 = np.array([1., 0, 0]), np.array([0., 1, 0])
+    sites = [np.array([d, d, 0]), np.array([-d, d, 0]), np.array([-d, -d, 0]),
+             np.array([d, -d, 0]), np.array([d, 0, 0]), np.array([0, d, 0]),
+             np.array([-d, 0, 0]), np.array([0, -d, 0])]
+    A1, B1 = (t, 1.) if top1b else (1., t)
+    A2, B2 = (t, 1.) if top2c else (1., t)
+    bonds = {}
+    for j in range(4): bonds[(j, (j+1) % 4, (0, 0))] = A1
+    bonds[(0, 1, (1, 0))] = B1; bonds[(3, 2, (1, 0))] = B1
+    bonds[(0, 3, (0, 1))] = B1; bonds[(1, 2, (0, 1))] = B1
+    bonds[(4, 6, (0, 0))] = A2; bonds[(5, 7, (0, 0))] = A2
+    bonds[(4, 6, (1, 0))] = B2; bonds[(5, 7, (0, 1))] = B2
+    for (i, j) in [(0, 4), (1, 5), (2, 6), (3, 7), (0, 5), (1, 6), (2, 7), (3, 4)]:
+        bonds[(i, j, (0, 0))] = 0.05 # a coupling that keeps C4
+    return a1, a2, sites, bonds, 0.6*np.ones(8), 3
+
+
+def _bulk_from_cell(cell):
+    a1, a2, sites, bonds, onsite, nocc = cell
+    A = np.array([a1[:2], a2[:2]]).T
+    S = np.array(sites)
+
+    def ident(r):
+        for (i, s) in enumerate(S):
+            f = np.linalg.solve(A, (r - s)[:2])
+            if np.allclose(f, np.round(f), atol=1e-6):
+                return i, np.round(f).astype(int)
+        raise AssertionError("not a site of the lattice")
+
+    def fun(r1, r2):
+        (i, R1), (j, R2) = ident(r1), ident(r2)
+        dR = tuple(R2 - R1)
+        if i == j and dR == (0, 0): return onsite[i]
+        if (i, j, dR) in bonds: return bonds[(i, j, dR)]
+        if (j, i, (-dR[0], -dR[1])) in bonds: return bonds[(j, i, (-dR[0], -dR[1]))]
+        return 0.
+    g = geometry.square_lattice()
+    g.a1, g.a2 = a1, a2
+    g.r = np.array(sites)
+    g.r2xyz()
+    g.get_fractional()
+    return g.get_hamiltonian(fun=fun, has_spin=False)
+
+
+def _flake_sector_charges(cell, n, L, corner_angle, square):
+    """Total charge of each of the n pinwheel sectors of a flake, a square
+    of (2L+1)^2 cells or a hexagon of cells of radius L"""
+    a1, a2, sites, bonds, onsite, nocc = cell
+    cells = [(i, j) for i in range(-L, L+1) for j in range(-L, L+1)
+             if square or abs(i + j) <= L]
+    index = {c: m for (m, c) in enumerate(cells)}
+    ns = len(sites)
+    H = np.zeros((ns*len(cells), ns*len(cells)))
+    for (m, (i, j)) in enumerate(cells):
+        for s in range(ns): H[m*ns + s, m*ns + s] = onsite[s]
+        for ((s1, s2, dR), t) in bonds.items():
+            c2 = (i + dR[0], j + dR[1])
+            if c2 not in index: continue
+            p, q = m*ns + s1, index[c2]*ns + s2
+            H[p, q] = H[q, p] = t
+    e, v = np.linalg.eigh(H)
+    nb = nocc*len(cells) # electrons of a neutral flake
+    w = e[nb - 6*n: nb + 6*n]
+    k = np.argmax(np.diff(w))
+    rho = np.sum(np.abs(v[:, e < (w[k] + w[k+1])/2.])**2, axis=1)
+    sectors = np.zeros(n)
+    for (m, (i, j)) in enumerate(cells):
+        q = nocc - np.sum(rho[m*ns:(m+1)*ns]) # ions minus electrons
+        if (i, j) == (0, 0):
+            sectors += q/n
+            continue
+        r = i*a1 + j*a2
+        ang = (np.arctan2(r[1], r[0]) - corner_angle + np.pi/n) % (2*np.pi)
+        sectors[int(np.floor(ang/(2*np.pi/n) + 1e-9)) % n] += q
+    return sectors
+
+
+@pytest.mark.parametrize("cell,n,expected", [
+    (_kekule_cell(0.5), 6, 0.5),
+    (_kekule_cell(1.5), 6, 0.),
+    (_stack_cell(True, True), 4, 0.75),
+    (_stack_cell(False, False), 4, 0.),
+])
+def test_corner_charge_matches_the_flake(cell, n, expected):
+    """The index gives the charge of every corner of the flake, modulo 1,
+    and 3/4 for the stack is the 3|e|/4 of fig. 1(a) of the paper, which
+    fixes the sign: the index of the paper is the electronic charge"""
+    h = _bulk_from_cell(cell)
+    q = h.get_corner_charge(n=n)
+    assert abs(q - expected) < 1e-8
+    assert abs(h.get_corner_charge() - expected) < 1e-8 # the largest C_n
+    square = (n == 4)
+    sectors = _flake_sector_charges(cell, n, 4, np.pi/4 if square else 0.,
+                                    square)
+    for s in sectors:
+        assert abs((s - q + 0.5) % 1. - 0.5) < 1e-3
+
+
+@pytest.mark.parametrize("cell,n", [(_kekule_cell(0.5), 6),
+                                    (_stack_cell(True, True), 4)])
+def test_c2_corner_index_is_the_charge_of_half_the_flake(cell, n):
+    """With C2 only, the two sectors are halves of the flake, so the C2
+    index is n/2 times the corner charge of the C_n index, modulo 1"""
+    h = _bulk_from_cell(cell)
+    q2 = h.get_corner_charge(n=2)
+    assert abs((q2 - n/2*h.get_corner_charge(n=n) + 0.5) % 1. - 0.5) < 1e-8
+    square = (n == 4)
+    for s in _flake_sector_charges(cell, 2, 4, np.pi/4 if square else 0.,
+                                   square):
+        assert abs((s - q2 + 0.5) % 1. - 0.5) < 1e-3
+
+
+@pytest.mark.parametrize("top", [(True, False), (False, True)])
+def test_corner_charge_with_a_polarization_raises(top):
+    """Only one block topological: a polarization (1/2,1/2), charged edges"""
+    h = _bulk_from_cell(_stack_cell(*top))
+    with pytest.raises(ValueError, match="polarization"):
+        h.get_corner_charge(n=4)
+
+
+def test_corner_charge_needs_a_spinless_time_reversal_insulator():
+    h = _bulk_from_cell(_kekule_cell(0.5))
+    with pytest.raises(NotImplementedError, match="K"):
+        h.get_corner_charge(n=3)
+    hs = h.copy()
+    hs.add_haldane(0.05)
+    with pytest.raises(ValueError, match="time-reversal"):
+        hs.get_corner_charge()
+    with pytest.raises(ValueError, match="spinless"):
+        _haldane(0.1, spin=True).get_corner_charge()
+
+
+@pytest.mark.parametrize("delta,expected", [(-0.3, 0.5), (0.3, 0.)])
+def test_corner_charge_of_the_kekule_honeycomb(delta, expected):
+    """The C6 cell of the honeycomb lattice with a Kekule modulation of the
+    hopping: weaker bonds inside the hexagon of the cell give the phase of
+    _kekule_cell(t0<1), with corner charge 1/2"""
+    g = geometry.honeycomb_lattice_C6()
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_kekule(delta)
+    assert abs(h.get_corner_charge() - expected) < 1e-8

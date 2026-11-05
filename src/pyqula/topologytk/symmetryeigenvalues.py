@@ -283,3 +283,104 @@ def parity_z2(h, center=None, nocc=None):
     weak = tuple(int(np.prod([d for (n, d) in delta.items() if n[i] == 1]) < 0)
                  for i in range(3))
     return (nu, weak)
+
+
+def _rotation_count(h, m, k, center, nocc):
+    """Number of occupied states at k with each C_m eigenvalue
+    e^{2 pi i (p-1)/m}, as an array indexed by p-1"""
+    ev = symmetry_eigenvalues(h, rotation_operation(m, center), k, nocc=nocc)
+    x = np.angle(ev)/(2*np.pi/m)
+    if np.max(np.abs(x - np.round(x))) > 1e-4:
+        raise ValueError("the C"+str(m)+" eigenvalues at "+str(list(k[:2]))
+          +" are not m-th roots of unity: "+str(ev))
+    p = np.round(x).astype(int) % m
+    return np.array([np.sum(p == i) for i in range(m)])
+
+
+def corner_charge(h, n=None, center=(0., 0., 0.), nocc=None):
+    """Fractional charge bound to each corner of a C_n-symmetric flake of a
+    two-dimensional insulator with time reversal and without spin, in units
+    of |e| and modulo 1, from the rotation invariants of the occupied bands
+    (Benalcazar, Li and Hughes, arXiv:1809.02142, eq. CornerIndices of the
+    TeX source of the main text):
+
+        Q4 = e/4 ([X1] + 2 [M1^(4)] + 3 [M2^(4)])
+        Q2 = e/4 (-[X1] - [Y1] + [M1^(2)])
+        Q6 = e/4 [M1^(2)] + e/6 [K1^(3)]
+
+    with [Pi_p] = #Pi_p - #Gamma_p, the number of occupied bands with the
+    eigenvalue e^{2 pi i (p-1)/n} at the momentum Pi minus the same number at
+    Gamma. These Q are electronic charges in units of e<0, so the charge
+    returned here, the total of the electrons and the ions, is -Q/e modulo 1.
+
+    The flake is built from whole unit cells centered on the rotation axis,
+    so center has to be the center of the unit cell, the Wyckoff position
+    1a, and a different choice of unit cell gives a different corner charge.
+    The formulas need a vanishing polarization, which is checked from the
+    C2 eigenvalues and raises otherwise, since then the edges carry a charge
+    that grows with their length. The C3 case is not built: its index uses
+    an eigenvalue that is not real, so it depends on which of the two
+    valleys is K.
+
+    n: 2, 4 or 6; by default the largest of them that is a symmetry"""
+    if h.dimensionality != 2:
+        raise ValueError("the corner charge needs a two-dimensional "
+          +"Hamiltonian, and this one has dimensionality "
+          +str(h.dimensionality))
+    if h.has_spin:
+        raise ValueError("the corner charge formulas hold for a spinless "
+          +"Hamiltonian, where a 2 pi rotation is the identity; this one is "
+          +"spinful")
+    if not h.has_time_reversal_symmetry():
+        raise ValueError("the corner charge needs time-reversal symmetry, "
+          +"a real Hamiltonian, which this one breaks")
+    if n is None:
+        for m in (6, 4, 2):
+            if compile_symmetry(h, rotation_operation(m, center)) is not None:
+                n = m
+                break
+        else:
+            raise ValueError("this Hamiltonian has no C2, C4 or C6 rotation "
+              +"about the z axis through "+str(list(center))
+              +"; pass the center of the unit cell")
+    if n == 3:
+        raise NotImplementedError("the corner charge of a C3-symmetric "
+          +"insulator is not built, since its index depends on which valley "
+          +"is K; use n=6 when the lattice also has C6")
+    if n not in (2, 4, 6):
+        raise ValueError("n must be one of 2, 4 or 6, got "+str(n))
+    compile_operation(h, rotation_operation(n, center)) # raise if absent
+    gamma = np.zeros(3)
+    def fixed(m):
+        return [k for k in invariant_momenta(h, rotation_operation(m, center))
+                if not np.allclose(k, gamma)]
+    def count(m, k): return _rotation_count(h, m, k, center, nocc)
+    k2 = fixed(2) # the three momenta with C2 other than Gamma
+    c2g = count(2, gamma)
+    c2 = [count(2, k) for k in k2]
+    counts = {(0., 0.): int(np.sum(c2g))}
+    for (k, c) in zip(k2, c2): counts[tuple(np.round(k[:2], 4))] = int(np.sum(c))
+    _check_filling(counts)
+    for (k, c) in zip(k2, c2): # (-1)^{2 p} = prod zeta(X)/zeta(Gamma)
+        if (c[1] - c2g[1]) % 2 != 0:
+            raise ValueError("the polarization of the occupied bands is not "
+              +"zero (the C2 eigenvalues at "+str(list(k[:2]))+" and at Gamma "
+              +"differ by an odd number of signs), so the edges are charged "
+              +"and the corner charge is not defined")
+    if n == 2:
+        inv = [c[0] - c2g[0] for c in c2] # [Pi_1] at the three momenta
+        M = [i for (i, k) in enumerate(k2) if np.allclose(k[:2], [.5, .5])][0]
+        XY = [i for i in range(3) if i != M]
+        q = (-inv[XY[0]] - inv[XY[1]] + inv[M])/4.
+    elif n == 4:
+        k4 = fixed(4)
+        X = [k for k in k2 if not any(np.allclose(k, q) for q in k4)][0]
+        cg4, cm4 = count(4, gamma), count(4, k4[0])
+        x1 = count(2, X)[0] - c2g[0]
+        q = (x1 + 2*(cm4[0] - cg4[0]) + 3*(cm4[1] - cg4[1]))/4.
+    else:
+        K = fixed(3)[0]
+        m1 = c2[0][0] - c2g[0]
+        k1 = count(3, K)[0] - count(3, gamma)[0]
+        q = m1/4. + k1/6.
+    return float((-q) % 1.)

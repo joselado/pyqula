@@ -1231,6 +1231,20 @@ Optional arguments:
 - center=(0,0,0): a point of the rotation axis
 - nocc=None: as in `h.get_symmetry_eigenvalues()`
 
+## h.get_corner_charge()
+Return the fractional charge at each corner of a $C_n$-symmetric flake of a
+spinless two-dimensional insulator with time reversal and zero polarization,
+in units of $|e|$ and modulo 1, from the rotation eigenvalues of the
+occupied bands. It is the total charge of the electrons and the ions. The
+method raises `ValueError` when the polarization is not zero. See
+[Topological invariants](topological-invariants.md).
+
+Optional arguments:
+- n=None: 2, 4 or 6; by default the largest one that is a symmetry. For
+  $n=2$ the result is the charge of each half of the flake
+- center=(0,0,0): the center of the unit cell from which the flake is built
+- nocc=None: as in `h.get_symmetry_eigenvalues()`
+
 ## h.get_parity_z2()
 Return the $Z_2$ invariant of an insulator with time reversal and inversion,
 from the inversion eigenvalues at the time-reversal-invariant momenta: $\nu$,

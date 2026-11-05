@@ -250,10 +250,11 @@ already reached once.
   against PyBott, a sparse route for large samples and a guard on a
   non-integer result. The symmetry eigenvalues of the occupied states, with
   the Chern number modulo $n$ and the parity $Z_2$, are built too
-  (5 November 2026), the start of the symmetry branch of the section on
+  (5 November 2026), and so is the corner charge for $C_2$, $C_4$ and $C_6$,
+  checked against flakes, the start of the symmetry branch of the section on
   higher-order topology, which lists what is left there: the multipole
-  chiral number, the corner charge, the octupole moment and the $Z_4$
-  second-order indicator. The next decision is which of these starts.
+  chiral number, the octupole moment, the $Z_4$ second-order indicator and
+  the $C_3$ corner charge.
 
 - [`unfolding.md`](unfolding.md) -- a check of `operator="unfold"` through
   every mode of the routines that take it (bands, kdos, DOS, the Fermi
