@@ -1204,6 +1204,45 @@ Optional arguments:
   each orbital at its position
 - nk=40, nocc=None, tol=1e-4: as in `h.get_quadrupole_moment()`
 
+## h.get_symmetry_eigenvalues(op,k)
+Return the eigenvalues of the point-group operation `op` on the occupied
+states at the momentum `k`, sorted by their phase. `op` comes from
+`topology.rotation_operation(n,center)` or
+`topology.inversion_operation(center)`, and `k` has to be one of
+`topology.invariant_momenta(h,op)`. For a spinful Hamiltonian a rotation
+acts on the spin too, so $C_n$ has eigenvalues with $\lambda^n=-1$. The
+method raises `ValueError` when `op` is not a symmetry, when `op` moves `k`,
+and when the gap closes at `k`. See
+[Topological invariants](topological-invariants.md).
+
+Optional arguments:
+- nocc=None: number of occupied bands, counted from the lowest; by default
+  the bands below zero energy
+
+## h.get_chern_mod_n()
+Return the Chern number modulo $n$, an integer between 0 and $n-1$, of a
+two-dimensional insulator with a $C_n$ rotation about the $z$ axis, from the
+rotation eigenvalues of the occupied bands at the rotation-invariant
+momenta. A Chern number $-1$ gives $n-1$. See
+[Topological invariants](topological-invariants.md).
+
+Optional arguments:
+- n=None: 2, 3, 4 or 6; by default the largest one that is a symmetry
+- center=(0,0,0): a point of the rotation axis
+- nocc=None: as in `h.get_symmetry_eigenvalues()`
+
+## h.get_parity_z2()
+Return the $Z_2$ invariant of an insulator with time reversal and inversion,
+from the inversion eigenvalues at the time-reversal-invariant momenta: $\nu$,
+0 or 1, in two dimensions, and the strong and weak indices
+$(\nu_0,(\nu_1,\nu_2,\nu_3))$ in three. See
+[Topological invariants](topological-invariants.md).
+
+Optional arguments:
+- center=None: the inversion center; by default it is searched among the
+  midpoints of the first site and its images
+- nocc=None: as in `h.get_symmetry_eigenvalues()`
+
 ## h.get_chern()
 Return the Chern number of the occupied bands,
 

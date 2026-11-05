@@ -180,6 +180,21 @@ class Hamiltonian():
         topologytk/nestedwilson.py"""
         return topology.quadrupole_moment(h,**kwargs)
 
+    def get_symmetry_eigenvalues(h,op,k,**kwargs):
+        """Eigenvalues of a point-group operation on the occupied states at
+        an invariant momentum, see topologytk/symmetryeigenvalues.py"""
+        return topology.symmetry_eigenvalues(h,op,k,**kwargs)
+
+    def get_chern_mod_n(h,**kwargs):
+        """Chern number modulo n from the C_n eigenvalues of the occupied
+        states, see topologytk/symmetryeigenvalues.py"""
+        return topology.chern_mod_n(h,**kwargs)
+
+    def get_parity_z2(h,**kwargs):
+        """Fu-Kane Z2 invariant from the inversion eigenvalues at the
+        time-reversal-invariant momenta, see topologytk/symmetryeigenvalues.py"""
+        return topology.parity_z2(h,**kwargs)
+
     def get_quantum_geometric_tensor(h,**kwargs):
         """Multiband (non-Abelian) quantum geometric tensor at a single
         k-point, see topologytk/qgt.py for the formula and references"""

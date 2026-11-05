@@ -143,6 +143,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Winding numbers and Z2 invariants in one dimension [[notebook]](jupyter-notebooks/functionalities/topological_characterization/11_one_dimensional_invariants.ipynb)
 - Entanglement entropy and entanglement spectrum [[notebook]](jupyter-notebooks/functionalities/topological_characterization/12_entanglement.ipynb)
 - Bott and spin Bott indices of disordered systems [[notebook]](jupyter-notebooks/functionalities/topological_characterization/13_bott_index.ipynb)
+- Invariants from symmetry eigenvalues [[notebook]](jupyter-notebooks/functionalities/topological_characterization/14_symmetry_eigenvalues.ipynb)
 
 ## Response functions ##
 - Optical conductivity from the Kubo-Greenwood formula [[notebook]](jupyter-notebooks/functionalities/response_functions/01_optical_conductivity.ipynb)

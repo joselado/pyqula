@@ -542,6 +542,114 @@ units of $e^2/h$. Both are also available as `topology.z2_invariant_3d(h)` and
 three phases of the diamond model, and
 `jupyter-notebooks/functionalities/topological_characterization/10_z2_three_dimensions.ipynb`.
 
+## Invariants from symmetry eigenvalues
+
+We will now see how a crystal symmetry gives a topological invariant from a
+few momenta only. Take a point-group operation $g$, a rotation or the
+inversion, and a momentum $\vec k$ that $g$ maps onto itself, up to a
+reciprocal lattice vector. At such a momentum the Bloch states are also
+eigenstates of $g$. Their eigenvalues are the symmetry labels of the bands,
+the same labels that a group-theory analysis of ARPES or DFT bands uses. For
+a rotation $C_n$ of a spinless state they are the $n$-th roots of unity,
+$\lambda^n=1$. For a spinful state the rotation acts on the spin too, a
+rotation by $2\pi$ gives $-1$, and $\lambda^n=-1$.
+
+These labels are computed with `h.get_symmetry_eigenvalues(op,k)`, for the
+occupied states, the ones below zero energy. The operation is built with
+`topology.rotation_operation(n,center)`, the rotation by $2\pi/n$ about the
+$z$ axis through the point `center`, or with
+`topology.inversion_operation(center)`. The momenta that the operation leaves
+invariant are given by `topology.invariant_momenta(h,op)`, in units of the
+reciprocal lattice vectors.
+
+### Chern number modulo n
+
+In a two-dimensional insulator with a $C_n$ rotation, the Chern number is
+fixed modulo $n$ by the rotation eigenvalues of the occupied bands. For
+$C_3$ the relation is
+
+$$
+e^{2\pi i C/3} = \prod_{m\in\text{occ}} (-1)^F\,\theta_m(\Gamma)\,\theta_m(K)\,\theta_m(K') ,
+$$
+
+where $\theta_m(\vec k)$ is the $C_3$ eigenvalue of the band $m$ at the
+momentum $\vec k$, and $F=1$ for a spinful Hamiltonian and $0$ for a
+spinless one. The relations for $C_2$, $C_4$ and $C_6$ have the same form:
+$C_4$ uses its eigenvalues at $\Gamma$ and $M$ and the $C_2$ eigenvalues at
+$X$, and $C_6$ uses its eigenvalues at $\Gamma$, the $C_3$ eigenvalues at
+$K$ and the $C_2$ eigenvalues at $M$. So the Hall conductance in units of
+$e^2/h$ is known modulo $n$ from three or four momenta, without any
+integral over the Brillouin zone. We take the Haldane model, which has a
+$C_3$ rotation about every site.
+
+```python
+from pyqula import geometry
+from pyqula import topology
+g = geometry.honeycomb_lattice() # honeycomb lattice
+h = g.get_hamiltonian(has_spin=False) # first-neighbor hopping
+h.add_haldane(0.1) # Haldane coupling, Chern number 1
+c3 = h.get_chern_mod_n(n=3,center=g.r[0]) # Chern number modulo 3, C3 about a site
+c2 = h.get_chern_mod_n(n=2) # Chern number modulo 2, C2 about the origin
+op = topology.rotation_operation(3,center=g.r[0]) # the C3 rotation
+ks = topology.invariant_momenta(h,op) # Gamma, K and K'
+ev = [h.get_symmetry_eigenvalues(op,k) for k in ks] # C3 eigenvalue of the occupied band
+```
+
+Both `c3` and `c2` are $1$, the Chern number of the model. The three momenta
+are $\Gamma$ and the two valleys, and the eigenvalue of the occupied band is
+$1$ at $\Gamma$ and at one valley and $e^{2\pi i/3}$ at the other one. With
+the opposite Haldane coupling the Chern number is $-1$, and `c3` is $2$,
+since the result is always between $0$ and $n-1$. Now the eigenvalue
+$e^{-2\pi i/3}$ is at the other valley, so the Chern number is read from
+which valley carries the nontrivial label.
+
+- `n`: 2, 3, 4 or 6. By default it is the largest one that is a symmetry
+  about `center`.
+- `center`: a point of the rotation axis, the origin by default. The Chern
+  number does not depend on it, but the rotation has to be a symmetry about
+  it. In `honeycomb_lattice()` the origin is the center of a bond, so it has
+  $C_2$ but not $C_3$.
+- `nocc`: use the lowest `nocc` bands instead of the bands below zero
+  energy.
+
+### Z2 invariant from the inversion eigenvalues
+
+With inversion and time reversal, the $Z_2$ invariant has a simple form. At
+the time-reversal-invariant momenta $\Gamma_i$ the inversion eigenvalues are
+$\pm 1$, and the two states of a Kramers pair have the same one. With
+$\delta_i$ the product of the eigenvalues at $\Gamma_i$, taking one state
+per Kramers pair, the invariant is
+
+$$
+(-1)^\nu = \prod_i \delta_i ,
+$$
+
+meaning that the band inversion at a single $\Gamma_i$ changes $\nu$. In two
+dimensions the product runs over the four momenta. In three dimensions the
+product over the eight momenta gives the strong index $\nu_0$, and the
+product over the four momenta with $k_i=1/2$ gives the weak index $\nu_i$.
+This is computed with `h.get_parity_z2()`.
+
+```python
+g = geometry.honeycomb_lattice() # honeycomb lattice
+h = g.get_hamiltonian() # spinful, first-neighbor hopping
+h.add_kane_mele(0.1) # Kane-Mele spin-orbit coupling
+z2 = h.get_parity_z2() # Z2 invariant from the inversion eigenvalues
+```
+
+The result is $1$, the quantum spin Hall insulator. Note that it is $\nu$,
+$0$ or $1$, and not the $\pm 1$ of `topology.z2_invariant(h)`. For the
+Fu-Kane-Mele diamond model of the previous section it gives
+`(1, (1, 1, 1))`, the same four indices as `h.get_topological_invariant()`,
+from eight momenta only. The inversion center is found automatically, and
+any of them gives the same $\nu$; it can also be passed as `center=`. The
+call raises an error when time reversal or inversion is broken, and when
+the gap closes at one of the momenta, where the states below zero energy do
+not form a representation of the inversion.
+
+See `examples/2d/symmetry_indicators/main.py` for both invariants across
+their transitions.
+
 ## Winding number of a chiral chain
 
 In one dimension `h.get_topological_invariant()` returns the Berry (Zak)

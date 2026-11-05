@@ -33,8 +33,8 @@ Chern number otherwise, and in three the strong and weak $Z_2$ indices or the Ch
 since the first-tier package below was built.
 
 What is missing, in one sentence per family: in one dimension, since the second package
-below, only the disordered versions (the scattering and the real-space invariants); in two dimensions there is no polarization, no invariant computed from symmetry
-eigenvalues and nothing for fragile topology, and higher-order topology has the quadrupole
+below, only the disordered versions (the scattering and the real-space invariants); in two dimensions there is no polarization, only the Chern number modulo $n$ and the parity $Z_2$ from symmetry
+eigenvalues, nothing for fragile topology, and higher-order topology has the quadrupole
 moment only, since the nested Wilson loop was built; in real space there is no
 $Z_2$ marker and nothing that scales past dense diagonalization, since the Bott index was built; in three
 dimensions there is nothing beyond the $Z_2$ indices and the Chern vector; and the non-Hermitian, Floquet, interacting and magnon
@@ -183,6 +183,45 @@ arXiv:1809.02142. What is left: the nested loop on a plane of a 3D zone (the `kf
 than by the lines 0 and 1/2, for Wannier gaps elsewhere, and the $C_4$ route of eq. VI.53,
 which needs the symmetry-eigenvalue primitive of the second tier.
 
+## Built after the survey: the symmetry eigenvalues, the Chern number modulo n and the parity Z2
+
+The sixth package, picked on 5 November 2026 as the start of the symmetry branch of the
+higher-order plan below, is in `topologytk/symmetryeigenvalues.py`, with the delegators
+`h.get_symmetry_eigenvalues(op,k)`, `h.get_chern_mod_n()` and `h.get_parity_z2()`, and
+`topology.rotation_operation`, `topology.inversion_operation` and `topology.invariant_momenta`
+to build the operation and find its momenta. The primitive compiles the operation with
+`compile_symmetry`, checks that it maps $k$ onto $k+G$, writes it in the occupied states as
+$U^\dagger P(k) U$ and raises when $PU\neq UA$, which is what a closing gap or an `nocc` through a
+multiplet gives. In pyqula's lattice gauge $H(k+G)=H(k)$ exactly, so no position phase enters
+and the eigenvalues are those of the physical operator about the given center. The invariant
+momenta are found as the fixed points of $k\to M^{-T}k$ modulo 1 among the fractions 0, 1/2,
+1/3, 2/3, 1/4, 3/4, 1/6 and 5/6, not from a table.
+
+The Chern number modulo $n$ follows eqs. ChernC2, ChernC4, ChernC3 and ChernC6 of the TeX
+source of arXiv:1207.5767, including the factor $(-1)^F$ per occupied band, which the paper
+writes for $C_3$, $C_4$ and $C_6$ only. With the counterclockwise rotation of
+`rotation_operation` the result has the sign of `h.get_chern()` with no correction. The parity
+$Z_2$ counts the occupied states of parity $-1$ at each time-reversal-invariant momentum (TRIM), $\delta_i=(-1)^{n_-/2}$, and
+searches the inversion center among the midpoints $(r_0+r_j+R)/2$, which covers every inversion
+of the crystal; the result does not depend on the center, since moving it by half a lattice
+vector flips the parities at an even number of momenta of each product.
+
+The checks (`tests/topology/test_symmetry_eigenvalues.py`):
+
+- QWZ on the square lattice (spin-dependent hopping $t s_z$, Rashba 1, exchange $m$), C4 acting on the spin: C mod 4 and mod 2 equal `get_chern` for $m=\pm1,\pm3$ ($C=\mp1$) and $m=5$ ($C=0$)
+- Haldane, spinless and spinful with one occupied band (exchange 4, onsite 4), $t_2=\pm0.1$: C6 and C3 about a hexagon center, C3 about a site, C2 about the bond center and about a hexagon center, all equal to `get_chern` modulo $n$. The spinful case at odd filling is what fixes the $(-1)^F$
+- The eigenvalues satisfy $\lambda^n=1$ spinless and $-1$ spinful
+- A Fermi level inside the bands raises, from a guard on the number of occupied states at the invariant momenta, which each pass the representation check on their own
+- Kane-Mele with the bonds along $x$ scaled by $s$: parity $Z_2$ equal to the Wannier flow of `z2_invariant` (which returns $(-1)^\nu$) at $s=1,1.5$ (1) and $2.5,4$ (0), and to the spin Chern number in a prototype. The Dirac cones merge at $s=2$, at a TRIM, so the transition is at 2 and not at 3; at $s=2$ the routine raises
+- Diamond Fu-Kane-Mele, a weak, a strong and a trivial phase: equal to `z2_invariant_3d`
+- The parity $Z_2$ about three inversion centers that differ by half lattice vectors is the same
+- A rotation with the opposite orientation fails 8 tests, and dropping the $(-1)^F$ fails 7
+
+Not built here, and the next decision: the corner charge of arXiv:1809.02142 and the $Z_4$
+second-order indicator, which now need only their own formula and oracle. A test of the
+primitive by a gauge rotation inside a degenerate multiplet was not possible from outside,
+since `eigh` returns $s_z$ eigenstates for Kane-Mele, which are also $C_3$ eigenstates.
+
 ## Built after the survey: the Bott and spin Bott indices
 
 The fifth package closes the first tier: the Bott index of Loring and Hastings
@@ -253,8 +292,9 @@ block) or large. The tier is the recommended order, argued in the last section.
 | Spin Chern number with Rashba (Prodan) | none needed, 2D | `filter_state` by sign | Kane-Mele-Rashba $C_s=1$, with $(-1)^{C_s}=Z_2$ | small | done |
 | Mirror Chern with the mirror found | $M_z$, 2D | `pointgroup.compile_symmetry` | Kane-Mele $C_M=-1$, also under an out-of-plane field | small | done |
 | Bott and spin Bott index | A, AII, 2D torus | a supercell at $\Gamma$ | Haldane $B=\pm 1$; Kane-Mele spin Bott 1 below $m_c$ | small | done |
-| Symmetry eigenvalues at high-symmetry momenta | point groups, 2D and 3D | `pointgroup.compile_symmetry` | the parities above | small | 2 |
-| Fu-Kane parity $Z_2$, $Z_4$ indicator, Chern mod $n$, corner charge | inversion, $C_n$, 2D and 3D | the eigenvalues | diamond $Z_4=2$ in the strong phase (measured) | small each | 2 |
+| Symmetry eigenvalues at high-symmetry momenta | point groups, 2D and 3D | `pointgroup.compile_symmetry` | the parities above | small | done |
+| Fu-Kane parity $Z_2$, Chern mod $n$ | inversion, $C_n$, 2D and 3D | the eigenvalues | the Wannier-flow $Z_2$, `get_chern` | small each | done |
+| $Z_4$ indicator, corner charge | inversion, $C_n$, 2D and 3D | the eigenvalues | diamond $Z_4=2$ in the strong phase (measured) | small each | 2 |
 | Local $Z_2$ and spin Chern markers, Katsura-Koma index | AII, 2D, disordered | `real_space_chern` | Kane-Mele island, bulk 1 below $m_c$ | small | 2 |
 | Scattering invariant $\mathrm{sign}\det r$ | D (DIII, BDI), 1D disordered | `transporttk.smatrix` | Kitaev wire $-1$ inside, $+1$ outside (measured) | small, after a guard | 2 |
 | Point-gap winding, biorthogonal Chern | non-Hermitian, 1D and 2D | `get_hk_gen`, `mesh_chern` | Hatano-Nelson $w=\mathrm{sign}(g)$ | small | 2 |
@@ -546,6 +586,71 @@ not reproduced.
 - `densitymatrix.occupied_projector`: it returns the transpose of $P$, which flips the sign of anything built from $s_z$ or a current, as recorded for `full_dm`. **Left as it is, by the maintainer's decision:** it keeps the index convention of `full_dm`, its docstring says so, and its one caller in the package takes `.T`
 - `wannier_centers`, `z2_invariant`: their `nocc` argument is accepted and ignored. **Repaired:** `occupied_states` takes `nocc`, the lowest `nocc` states whatever their energy, and `wannier_centers`, `wannier_winding`, `z2_wannier_winding` and `z2_invariant` pass it on, so `h.get_chern(integration="wannier",nocc=...)` works too
 - The operator `"sz"` of a Nambu Hamiltonian is the physical spin, $\sigma_z\tau_0$ in pyqula's basis, which equal-spin pairing does not conserve; the label of the two decoupled sectors of a helical p-wave superconductor is $\sigma_z\tau_z$, which is why `get_chern(operator="sz")` returns 0 there (measured $-2\cdot 10^{-8}$, and $-2.006$ with $\sigma_z\tau_z$ at `nk=20`, on the helical p-wave at $\mu=-2$). Not a bug, but a user will trip on it. **Documented** in the docstring of `topology.chern` and in the guide's section on the $Z_2$ invariant of a superconductor
+
+## Higher-order topology: what is left after the nested Wilson loop
+
+This section, written on 5 November 2026, collects in one place the higher-order pieces that
+are still missing, so that the next one can be picked without reading the whole survey again.
+What exists is the quadrupole moment $q_{xy}$ and the Wannier-sector polarizations from the
+nested Wilson loop, with the corner modes of `square_2OTI` shown on a flake in
+`examples/0d/cornermodes`. What is missing is any integer that counts corner states, any
+corner charge, anything in three dimensions, and anything that works without translation
+symmetry. The arXiv references below were checked against their arXiv records on that day.
+There are four candidates, and each one follows the `new-feature` checklist: one function in
+`topologytk/`, a delegator on `Hamiltonian`, one test against an independent route, and the
+five documentation surfaces.
+
+- **Multipole chiral number** (Benalcazar and Cerjan, arXiv:2109.06892, PRL 128, 127601). It
+  is a real-space integer for chiral-symmetric systems (class AIII and BDI), built from the
+  sublattice quadrupole operators $e^{2\pi i xy/L_xL_y}$ projected on the two sublattices of
+  the chiral operator, and it counts the zero-energy states at each corner. This is the
+  quantity STM sees as a zero-bias peak at a corner. It fits pyqula well for three reasons:
+  it works on `square_2OTI`, where the $C_n$ corner-charge formula does not apply because of
+  the $\pi$ flux; it gives an integer $N_{xy}$ to set against $q_{xy}=1/2$ on the same model;
+  and it replaces the real-space corner check that was tried and not finished in the nested
+  Wilson loop section. It needs no symmetry primitive, only the chiral operator that
+  `h.get_winding_number()` already takes as `chiral=`, and a supercell like the Bott index, so it would live
+  next to `topologytk/bott.py`. The survey found no open-source implementation, so the independent
+  route is spectral: the number of exact zero modes per corner of an open flake, resolved by
+  sublattice, and the multipole winding number of Lin and Lee (arXiv:2401.03699,
+  Commun. Phys. 7, 393), which uses a twisted boundary at a corner. The test invariants are
+  $N_{xy}=1$ for $\delta>0$ and 0 for $\delta<0$, an $N_{xy}$ that does not change under a
+  chiral-preserving disorder smaller than the gap, and a stacked pair of BBH models giving 2,
+  where $q_{xy}$ reads 0. Cost: small to medium.
+- **Corner charge and filling anomaly from $C_n$ eigenvalues** (Benalcazar, Li and Hughes,
+  arXiv:1809.02142, PRB 99, 245151). The corner charge $Q_n$ in units of $e/n$ comes from
+  the rotation invariants $[\Pi_p]=\#\Pi_p-\#\Gamma_p$ of the occupied bands, for instance
+  $Q_4=\frac{e}{4}([X_1]+2[M_1]+3[M_2])$, valid at zero polarization and with $C_n^n=+1$.
+  It is the second-tier item already listed under symmetry eigenvalues. Its primitive,
+  `h.get_symmetry_eigenvalues()`, is built (see the section on it above). The test is the $C_6$ Kekulé honeycomb at
+  half filling (the geometry exists in `kekule.py` and `examples/2d/kekule_hopping`), with a
+  corner charge $e/2$ checked against the charge counted on a $C_6$-symmetric flake around
+  one corner, with the filling anomaly removed. Cost: small once the primitive is there,
+  which is itself small.
+- **Octupole moment and the nested loop on a plane of a 3D zone** (arXiv:1611.07987, section
+  on the octupole, algorithm in arXiv:1708.04230). A third nesting of the Wilson loop in
+  `nestedwilson.py`, and the `kfix` of `wannier_centers` passed down to the nested loop. It
+  needs a 3D BBH builder next to `square_2OTI` in `specialhamiltoniantk/highorderTI.py`. The
+  tests are $o_{xyz}=1/2$ on the cubic BBH model with a positive dimerization and 0 with a
+  negative one, and $q_{xy}$ on a $k_z$ plane of a stack of decoupled 2D BBH layers equal to
+  the 2D value at every $k_z$. Cost: medium, since the Wannier gap has to be tracked at two
+  levels of nesting.
+- **Second-order topology in three dimensions** (Schindler and others, arXiv:1708.03636,
+  Sci. Adv. 4, eaat0346). The hinge modes of a $C_4T$-symmetric or inversion-symmetric
+  insulator are diagnosed by the $Z_4$ indicator, which is equal to 2 with vanishing weak
+  indices, together with a vanishing strong $Z_2$. This needs the same symmetry primitive as
+  the corner charge, and then it is a few lines. The test is the $Z_4=2$ already measured on
+  diamond in the survey, with a staggered magnetization that breaks time reversal but keeps
+  $C_4T$, and the hinge states counted on a rod. Cost: small after the primitive.
+
+Two small loose ends of the nested Wilson loop stay as they are recorded above: the Wannier
+sectors chosen by a window rather than by the lines 0 and 1/2, and the $C_4$ route of eq.
+VI.53, which also waits for the symmetry primitive. As a result the plan has two branches.
+The multipole chiral number stands alone. The symmetry-eigenvalue primitive unlocks the
+corner charge, the $Z_4$ second-order indicator and the $C_4$ route together, and also the
+Fu-Kane and Chern-mod-$n$ items of the second tier. The maintainer picked the symmetry branch
+first, and its primitive, the Chern number modulo $n$ and the parity $Z_2$ are built, see their
+section above.
 
 ## The recommended order
 

@@ -883,6 +883,13 @@ from .topologytk.nestedwilson import wannier_sector_polarization
 from .topologytk.nestedwilson import wannier_gap
 from .topologytk.nestedwilson import quadrupole_moment
 
+from .topologytk.symmetryeigenvalues import symmetry_eigenvalues
+from .topologytk.symmetryeigenvalues import invariant_momenta
+from .topologytk.symmetryeigenvalues import rotation_operation
+from .topologytk.symmetryeigenvalues import inversion_operation
+from .topologytk.symmetryeigenvalues import chern_mod_n
+from .topologytk.symmetryeigenvalues import parity_z2
+
 
 def operator_berry(hin,k=[0.,0.],operator=None,delta=0.00001,ewindow=None):
     """Calculates the Berry curvature using an arbitrary operator

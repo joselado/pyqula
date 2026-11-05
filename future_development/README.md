@@ -248,8 +248,12 @@ already reached once.
   are built too (4 November 2026), with their sign following the order of
   the lattice vectors as `h.get_chern()` does; left open there are the run
   against PyBott, a sparse route for large samples and a guard on a
-  non-integer result. The next decision is which piece of the second tier
-  starts.
+  non-integer result. The symmetry eigenvalues of the occupied states, with
+  the Chern number modulo $n$ and the parity $Z_2$, are built too
+  (5 November 2026), the start of the symmetry branch of the section on
+  higher-order topology, which lists what is left there: the multipole
+  chiral number, the corner charge, the octupole moment and the $Z_4$
+  second-order indicator. The next decision is which of these starts.
 
 - [`unfolding.md`](unfolding.md) -- a check of `operator="unfold"` through
   every mode of the routines that take it (bands, kdos, DOS, the Fermi
