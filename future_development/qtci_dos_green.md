@@ -6,8 +6,9 @@ Green's function of a crystal, with the measurements that decided what went into
 It follows `qtci_optical_response.md`, which found the same structure for the optical
 conductivity. What is built is in `dostk/simplexdos.py`, reached as
 `h.get_dos(integration="triangle")` and `h.get_dos(integration="qtci")`, with tests in
-`tests/dos/test_dos_simplex.py` and `tests/green/test_green_simplex.py`. What is open is at
-the end.
+`tests/dos/test_dos_simplex.py` and `tests/green/test_green_simplex.py`. The local density
+of states of every site uses the same kernel, reached as `h.get_ldos(integration="triangle")`
+and `h.get_multildos(integration="triangle")`. What is open is at the end.
 
 ## The construction
 
@@ -275,6 +276,95 @@ fast. At delta = 1e-6 and error=1e-3 it did not finish in 900 s, at error=1e-4 i
 and at error=1e-6 10 s. At delta = 1e-5, error=1e-3 took 197 s against 4.7 s at 1e-5. The
 quadrature seems to spend its budget on a poorly resolved integrand before it reaches
 the tolerance; error=1e-5 or tighter is the better default at small delta.
+
+## The local density of states
+
+The LDOS on site i is the DOS with the projector on site i as the weight. So the weight of
+band n on site i is the sum of |u_n,a|^2 over the orbitals a of that site, its spin and
+Nambu components included, averaged over degenerate multiplets like the other weights. With
+an operator it is multiplied by <u_n|O|u_n>, which is the convention of the diagonalization
+mode of `get_ldos`. The simplex kernel already sums one channel per weight, so one
+diagonalization of the mesh and one simplex sum give every site at every energy. The code is
+`simplexdos.ldos_triangle_counted` and `simplexdos.ldos_qtci_counted`, reached as
+`h.get_ldos(integration="triangle")` (modes "arpack" and "diagonalization"),
+`h.get_multildos(integration="triangle")` (mode "diagonalization") and
+`ldos.ldosmap(h,integration="triangle")`, with "qtci" in 2D. The accepted values come from
+`ldos.get_integration_names()`. The output is one value per site, so the nrep replication
+and the files `LDOS.OUT`, `MULTILDOS/` and `DOSMAP.OUT` are the ones of the diagonalization
+mode. For `MULTILDOS/DOS.OUT` the DOS on the ten times finer grid comes from the same band
+energies, with no new diagonalization. Tests are in `tests/ldos/test_ldos_simplex.py`.
+
+The checks are exact relations or independent paths. The weights of a band add up to one
+over the sites, so the sum of the LDOS over the sites is the triangle DOS of `h.get_dos` on
+the same mesh, to 1e-10 relative, in 1D, 2D and 3D, at delta = 0 and 1e-2. At delta = 0.1
+the triangle LDOS at nk = 60 to 120 equals the diagonalization mode at nk = 150 to 3e-3
+relative, on a Lieb lattice with three inequivalent sites and, with sz as the operator, on
+spinful graphene with Rashba coupling and an exchange field along a generic direction. A
+spinful Hamiltonian without spin terms gives twice the spinless LDOS to rounding, so the
+spin is summed correctly.
+
+The benchmark is spinless graphene, t = 1, with a sublattice imbalance m = 0.3, so the two
+sites differ. Here there is an exact reference. The total DOS is rho_0(sqrt(E^2 - m^2))
+|E|/sqrt(E^2 - m^2), with rho_0 the DOS of pristine graphene, and the band at energy E has a
+weight (E + m)/(2E) on the site at +m, meaning that the two LDOS are in the ratio
+(E + m)/(E - m). At delta = 1e-3 the reference is this LDOS convolved numerically with the
+Lorentzian. There are 161 energies from -3.2 to 3.2, shifted by 0.0037. The error is the
+largest absolute error over both sites and all energies; in parentheses, the largest error
+at more than 0.05 from the singular energies (the gap edges +-m, the van Hove energies
++-sqrt(1 + m^2) and the band edges). The LDOS is of order 0.1 to 0.4 in the band. The mesh is
+odd and divisible by 3 (see the flat simplices below). Wall time on four cores, for all 161
+energies and both sites; "grid" is `multi_ldos` in mode "diagonalization", which is what
+the triangle replaces. The machine carried a load of about three from other jobs during the
+runs, so the times are an upper bound rather than a clean measurement.
+
+| method | delta | diagonalizations | max error | time (s) |
+|---|---|---|---|---|
+| grid nk = 256 | 1e-3 | 66k | 1.5 (0.12) | 1.9 |
+| grid nk = 512 | 1e-3 | 262k | 0.57 (0.051) | 8.1 |
+| grid nk = 1024 | 1e-3 | 1.0M | 0.16 (0.018) | 33 |
+| triangle nk = 129 | 1e-3 | 17k | 0.015 (9.8e-4) | 1.8 |
+| triangle nk = 255 | 1e-3 | 65k | 2.7e-3 (2.6e-4) | 4.2 |
+| triangle nk = 513 | 1e-3 | 263k | 2.4e-4 (5.4e-5) | 18 |
+| triangle nk = 1023 | 1e-3 | 1.0M | 3.0e-4 (9.5e-6) | 53 |
+| qtci R = 8 | 1e-3 | 49k | 1.6e-3 (2.4e-4) | 11 |
+| qtci R = 9 | 1e-3 | 99k | 6.1e-4 (4.8e-5) | 33 |
+| qtci R = 10 | 1e-3 | 125k | 4.5e-4 (1.1e-5) | 78 |
+| triangle nk = 129 | 0 | 17k | 0.082 (3.0e-3) | 0.05 |
+| triangle nk = 255 | 0 | 65k | 0.011 (7.9e-4) | 0.14 |
+| triangle nk = 513 | 0 | 263k | 0.018 (2.2e-4) | 0.57 |
+| triangle nk = 1023 | 0 | 1.0M | 7.2e-3 (7.5e-5) | 1.8 |
+| qtci R = 8 | 0 | 50k | 0.026 (7.0e-4) | 6.7 |
+| qtci R = 9 | 0 | 96k | 0.012 (2.2e-4) | 8.4 |
+| qtci R = 10 | 0 | 125k | 4.4e-3 (7.5e-5) | 10 |
+
+What we learn from this table:
+
+- The picture is the one of the DOS. At delta = 1e-3 the grid at nk = 1024 is still off by
+  0.16, while the triangle mesh at nk = 255 gives 2.7e-3 with 16 times fewer
+  diagonalizations. Away from the singular energies the triangle error falls by four to
+  five per doubling, second order. The full max stops at about 3e-4 from nk = 513 on,
+  which is the numerical convolution of the reference at the van Hove energies, as for the
+  DOS.
+- At delta = 0 the full max does not converge smoothly. It sits at the energy closest to a
+  gap edge, where the exact LDOS jumps from zero to a finite value, and where it lands
+  depends on the mesh. Away from these points the error is second order. A pointwise check
+  at E = 0.6, close to the gap edge, shows the same: the ratio of the two LDOS misses
+  (E + m)/(E - m) by 8e-3, 1.8e-2, 1.0e-2 and 3e-4 at nk = 51, 99, 201 and 399, while at
+  E = 1.4 and -2.1 it is within 2e-4 from nk = 99 on.
+- QTCI has six fields here (two band energies and four site weights) and saturates at about
+  125k diagonalizations, a factor of 8 below the triangle mesh at the same accuracy at
+  R = 10. In wall time it loses on this two-band model, as for the DOS: the cost is in the
+  cross interpolations and in the simplex sum, not in the 2 x 2 diagonalizations.
+- The number of sites enters the simplex sum as the length of the inner loop over
+  channels; the simplex average of the resolvent is computed once for all of them. Per
+  energy the LDOS of the two sites took 0.33 s at nk = 1023, against 0.12 s for the DOS
+  at nk = 1024 in the first table, which was measured in another session, so the
+  comparison is rough. For qtci the number of fields is the number of bands times one plus
+  the number of sites, so qtci is for small cells.
+
+The grid row stops at nk = 1024 because `multi_ldos` in mode "diagonalization" keeps every
+eigenvector of the mesh as a Python list; at nk = 2048 that is 8M arrays. The triangle path
+keeps only the band energies and the site weights.
 
 ## Limits of the linear interpolation that were found on the way
 
