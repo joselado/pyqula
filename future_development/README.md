@@ -202,7 +202,11 @@ already reached once.
   diagonalizations at delta = 1e-3 t, and QTCI of the smooth transition
   energies and weights adds 2 to 15 on top. The triangle sum is now built
   once for all frequencies, 24 to 50 times faster, and the gain holds in
-  supercells up to 32 bands. Open: many bands, metals, SHG and 3D.
+  supercells up to 32 bands. A band window (`ewindow=`, or `nv`/`nc`) keeps
+  only the bands near E_F, with exact Re sigma below the window and a
+  Kramers-Kronig bias of Im sigma, measured; it brings a 1084-orbital
+  twisted bilayer from 16 GB at nk = 6 to 2.9 GB at nk = 36. Open: many
+  bands, metals, SHG and 3D.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products
