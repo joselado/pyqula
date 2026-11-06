@@ -127,21 +127,30 @@ smallest entries are not better than that.
 | grid nk = 1024 | 1.0M | 3.3e-2 | 1.1e-1 | 48 s |
 | grid nk = 2048 | 4.2M | 7.0e-3 | 2.4e-2 | 203 s |
 | grid nk = 4096 | 16.8M | 1.3e-3 | 4.6e-3 | 856 s |
-| triangle nk = 128 | 16k | 1.9e-1 | 3.3e-2 | 3 s |
-| triangle nk = 256 | 65k | 5.4e-2 | 5.1e-3 | 9 s |
-| triangle nk = 512 | 262k | 1.3e-2 | 1.4e-3 | 34 s |
-| triangle nk = 1024 | 1.0M | 2.6e-3 | 3.2e-4 | 124 s |
-| qtci R = 8 + triangle | 56.5k | 5.4e-2 | 5.1e-3 | 19 s |
-| qtci R = 9 + triangle | 134k | 1.3e-2 | 1.4e-3 | 53 s |
-| qtci R = 10 + triangle | 201k | 2.7e-3 | 4.0e-4 | 161 s |
-| qtci R = 11 + triangle | 238k | 3.1e-4 (*) | 1.6e-4 (*) | 600 s |
+| triangle nk = 128 | 16k | 1.9e-1 | 3.3e-2 | 2.0 s |
+| triangle nk = 256 | 65k | 5.4e-2 | 5.1e-3 | 6.4 s |
+| triangle nk = 512 | 262k | 1.3e-2 | 1.4e-3 | 24 s |
+| triangle nk = 1024 | 1.0M | 2.6e-3 | 3.2e-4 | 55 s |
+| qtci R = 8 + triangle | 56.5k | 5.4e-2 | 5.1e-3 | 22 s |
+| qtci R = 9 + triangle | 134k | 1.3e-2 | 1.4e-3 | 31 s |
+| qtci R = 10 + triangle | 201k | 2.7e-3 | 4.0e-4 | 52 s |
+| qtci R = 11 + triangle | 238k | 3.1e-4 (*) | 1.6e-4 (*) | 126 s |
 
 (*) R = 11 is the mesh of the reference, so this is only the interpolation
 error; the true error is that of the reference, about 9e-4 and 1e-4.
 
+The wall times of the triangle and qtci rows are those of the source kernel
+(see "Cost of the simplex sum" below), measured on 4 cores of a workstation
+that other jobs kept busy. With the direct sum over simplices they were 3,
+9, 34 and 124 s for the triangle at nk = 128 to 1024, and 19, 53, 161 and
+600 s for qtci at R = 8 to 11. The diagonalization counts and the errors are
+those of the first runs: the qtci counts of the new run differ by up to 4%
+(56.9k, 130k, 194k and 230k). The source kernel does not touch the
+interpolation, and the reason for the difference was not traced.
+
 Above the w edge the triangle method converges at second order (3.3e-2,
 5.1e-3, 1.4e-3, 3.2e-4) and nk = 512 is three times better than the grid at
-nk = 4096, with 64 times fewer diagonalizations and 25 times less wall time.
+nk = 4096, with 64 times fewer diagonalizations and 36 times less wall time.
 Over the whole window it converges more slowly at first, because the error
 sits exactly at the two edges, w = 0.3 t and w = 0.6 t. There the response
 at delta = 1e-3 is sharply peaked, and the linear interpolation moves the
@@ -157,24 +166,26 @@ about 4e-4 over the whole window):
 | grid nk = 1024 | 1.0M | 1.2e-2 | 7.6e-3 | 47 s |
 | grid nk = 2048 | 4.2M | 5.5e-3 | 1.1e-3 | 164 s |
 | grid nk = 4096 | 16.8M | 4.0e-4 | 2.1e-4 | 652 s |
-| triangle nk = 64 | 4k | 5.6e-2 | 5.6e-2 | 15 s |
-| triangle nk = 128 | 16k | 1.9e-2 | 1.3e-2 | 39 s |
-| triangle nk = 256 | 65k | 5.5e-3 | 2.8e-3 | 103 s |
-| triangle nk = 512 | 262k | 1.3e-3 | 5.5e-4 | 401 s |
-| qtci R = 8 + triangle | 65.5k (of 65.5k) | 5.5e-3 | 2.8e-3 | 138 s |
-| qtci R = 9 + triangle | 249k (of 262k) | 1.3e-3 | 5.6e-4 | 451 s |
+| triangle nk = 64 | 4k | 5.6e-2 | 5.6e-2 | 0.4 s |
+| triangle nk = 128 | 16k | 1.9e-2 | 1.3e-2 | 2.0 s |
+| triangle nk = 256 | 65k | 5.5e-3 | 2.8e-3 | 8.2 s |
+| triangle nk = 512 | 262k | 1.3e-3 | 5.5e-4 | 33 s |
+| triangle nk = 1024 | 1.0M | (reference) | (reference) | 184 s |
+| qtci R = 8 + triangle | 65.5k (of 65.5k) | 5.5e-3 | 2.8e-3 | 71 s |
+| qtci R = 9 + triangle | 249k (of 262k) | 1.3e-3 | 5.6e-4 | 178 s |
 
 The triangle result converges at second order here too (5.6e-2, 1.9e-2,
-5.5e-3, 1.3e-3). The gain over the grid is smaller than on the honeycomb
-lattice. The triangle at nk = 256 equals the grid at nk = 2048, which is 64
-times fewer diagonalizations but only 1.6 times less wall time, because the
-simplex sum is expensive: each product of three bands costs twelve third
-divided differences per triangle and per frequency, so for this model the
-sum, not the diagonalization, is the cost. On wall time the grid wins on
-this model: the triangle at nk = 512 takes 401 s for 1.3e-3, the grid at
-nk = 4096 takes 652 s for 4e-4, which is already the error of the
-reference. This is a loss, and it comes from the cost per frequency, the
-first item of the list below.
+5.5e-3, 1.3e-3). The wall times are again those of the source kernel. With
+the direct sum they were 15, 39, 103, 401 and about 1800 s for nk = 64 to
+1024, and qtci took 138 and 451 s, because each product of three bands
+cost twelve third divided differences per triangle and per frequency. Then
+the grid won on wall time on this model. With the source kernel the triangle
+wins on wall time as well. The triangle at nk = 256 equals the grid at
+nk = 2048 in error, with 64 times fewer diagonalizations and 20 times less
+wall time (8.2 s against 164 s). The triangle at nk = 512 gives 1.3e-3 in
+33 s; the grid needs nk = 4096 and 652 s for an error below that, and this
+error, 4e-4, is already the one of the reference. So on MoS2 the triangle
+is now 5 to 20 times faster than the grid at equal error.
 
 ## QTCI of the smooth fields: a gain in diagonalizations for two bands only
 
@@ -200,11 +211,14 @@ diagonalizations, and then does the same triangle sum on the 2^R mesh.
   elements, and there are many of them: 25 terms kept for three bands (37
   before pruning), each with a real and an imaginary part. The union of the
   pivots of all these interpolations covers almost the whole mesh.
-- In wall time qtci never wins. The simplex sum on the 2^R mesh costs the
-  same as on the uniform mesh, and it is the dominant cost (600 s at R = 11
-  against 594 s for the triangle at nk = 2048 on the honeycomb lattice), so
-  qtci only pays where a diagonalization is expensive, which is not the case
-  for these small models.
+- In wall time qtci does not win for these small models. With the direct
+  sum the simplex sum was the dominant cost (600 s at R = 11 against 594 s
+  for the triangle at nk = 2048 on the honeycomb lattice). With the source
+  kernel the sum is cheap, and on the honeycomb lattice qtci at R = 10 and
+  the triangle at nk = 1024 take the same time (52 s and 55 s). On MoS2
+  the interpolation of 25 terms is the cost: 71 s against 8.2 s at R = 8,
+  178 s against 33 s at R = 9. So qtci only pays where a diagonalization is
+  expensive.
 
 So for the SHG the triangle method is the gain. QTCI on top of it saves
 diagonalizations for a two-band model, by about the same factor as for the
@@ -212,13 +226,90 @@ linear response, and saves nothing for the three-band model up to R = 9.
 
 ## What is left open
 
-- **Cost of the simplex sum.** The kernel runs frequency by frequency, and
-  for a three-band model the products dominate: 1768 s at nk = 1024 for 28
-  frequencies on four threads. The fix of the linear note applies here too
-  with one more step: the weighted joint density of states of each term
-  (piecewise polynomial in E on a linear triangle) built once, then
-  convolved with the resonant factors. For the products this needs the
-  density of a pair (A, B) on the triangle, which is not built.
+- **Cost of the simplex sum (built, 6 November 2026).** The direct sum ran
+  frequency by frequency, and for a three-band model the products
+  dominated: 1768 s at nk = 1024 for 28 frequencies on four threads. Now the
+  sum is built once, as for the linear conductivity
+  (`qtci_optical_response.md`). Every resonant factor is a divided
+  difference of psi_d over nodes that do not depend on w: the vertex values
+  of E_m - E_n for a single resonance at w, their halves for one at 2w, and
+  the bottom and top nodes of the prism tetrahedra for a product of three
+  bands. The branches (recursion or Taylor series of a cluster of close
+  nodes, and the exact cases B = 0 and B = A) do not depend on w either,
+  once the Taylor test compares the span of a cluster with delta and not
+  with its distance to the pole. This change of the test moves the direct
+  sum only by rounding (2.8e-10 of the largest entry on MoS2 at nk = 256),
+  and it makes the two kernels take the same branches. So we run the
+  recursion of the divided differences backwards once, and the whole sum
+  becomes a list of sources in x = e - z at a single z: psi_d at the nodes,
+  indexed by k-point and node type and merged by energy; pairs of nodes
+  closer than delta/4, in closed form; and a few Taylor clusters of three or
+  more close nodes. The w and 2w families share z, because the 2w nodes are
+  halved energies. The terms of the cases B = 0 and B = A carry 1/z and are
+  kept as a second family of coefficients. The build runs in parallel over
+  rows of the mesh, in three sets of rows that share no vertex, and it gives
+  the same sources bit for bit on 1 and on 4 threads (checked at odd and
+  even nk). The direct sum stays as
+  `_sigma_from_fields(..., kernel="simplices")` for the test.
+
+  Wall times of the sum alone, both kernels on the same fields and back to
+  back in one process, on 4 cores of a workstation that other jobs kept
+  busy (load 12 to 19 on 16 threads), delta = 1e-3. The new time includes
+  the build of the sources:
+
+  | model | nk | frequencies | old (s) | new (s) | build (s) | max difference / max abs(sigma) |
+  |---|---|---|---|---|---|---|
+  | gapped honeycomb, xxx | 256 | 55 | 9.0 | 0.65 | 0.43 | 2.5e-12 |
+  | gapped honeycomb, xxx | 512 | 55 | 39.1 | 3.4 | 1.7 | 2.1e-12 |
+  | gapped honeycomb, xxx | 1024 | 55 | 160 | 16.2 | 7.4 | 1.9e-12 |
+  | MoS2, yyy | 128 | 28 | 17.9 | 1.16 | 1.16 | 5.7e-11 |
+  | MoS2, yyy | 256 | 28 | 78.3 | 5.6 | 2.6 | 8.5e-10 |
+  | MoS2, yyy | 512 | 28 | 314 | 23.6 | 10.8 | 4.8e-10 |
+  | MoS2, yyy | 1024 | 28 | 1659 | 112 | 55 | 2.1e-9 |
+
+  The gain is 10 to 15. The fields (diagonalization, velocities and term
+  weights) take 2.7, 11.5 and 42 s on the honeycomb lattice and 1.1, 4.8,
+  13 and 54 s on MoS2 at the same meshes, so for MoS2 the sum is still the
+  larger part. The full spectra with the public call, against the earlier
+  runs of the direct sum on the same machine, are in the two delta = 1e-3
+  tables above: on MoS2 at nk = 1024 the new spectrum differs from the one
+  of the direct sum before the change of the Taylor test by 2.1e-9 of the
+  largest entry, the same level as in the table.
+
+  The difference between the kernels is rounding, not discretization. A
+  reference in extended precision (numpy longdouble, the same branches)
+  gives the error of each kernel. On MoS2 both are at the same level: at
+  nk = 24 and 48, the direct sum is off by 3.2e-11 and 2.4e-10 of the
+  largest entry, and the source kernel by 3.9e-11 and 2.7e-10. On the
+  gapped honeycomb lattice at nk = 48 the two errors are 3.9e-14 and
+  4.4e-13. The worst case we found is the three-sublattice triangular
+  lattice of the tests at nk = 24: 1.8e-13 for the direct sum and 3.7e-11
+  for the source kernel. It sits in the products of three bands, and it is
+  in the coefficients and not in their evaluation (evaluating the same
+  coefficients in extended precision changes nothing). Simplex by simplex
+  the two kernels have errors of the same size; only in the sum over
+  simplices do the errors of the direct sum cancel and those of the sources
+  do not. The likely reason, not proven: the coefficients of the nodes are
+  of order 1/gap^3 and their rounding differs from simplex to simplex,
+  while the recursion of the direct sum makes the same rounding in the
+  simplices that share a node. Compensated (double-double) arithmetic in the build
+  would cure this; it was not tried, because the level is five orders of
+  magnitude below the discretization error. The new test asserts agreement
+  to 1e-9 of the largest entry at nk = 40 (two bands) and nk = 24 (three
+  bands), where the measured differences are 3e-13 and 3.7e-11.
+
+  Most clusters are pairs. A pair stored as its Taylor series needs about
+  25 coefficients, and the number of pairs grows as nk^3 at fixed delta
+  (the triangles times the chance that two nodes are closer than delta/4):
+  at nk = 512 on MoS2 there are 6.0M pairs against 1.4M merged nodes. So a
+  pair is evaluated in closed form from its two nodes, which took the memory
+  at nk = 512 from 146M Taylor coefficients (2.3 GB) to 7M. At nk = 1024
+  there are 41M pairs, 3.3M Taylor clusters with 93M coefficients (1.5 GB)
+  and 5.5M nodes. What stays open: the pairs and clusters then dominate the
+  cost per frequency, about 0.45 s per frequency at nk = 512 and 2 s at
+  nk = 1024 on 4 cores, and their number grows as nk^3. Merging
+  the pairs that are equal (symmetry-related k-points, spin copies), or a
+  far-field expansion of all the sources, would reduce this.
 - **Below the absorption edge.** The 1/z^2 prefactor amplifies the
   O(1/nk^2) residual of the sum rule that cancels it. Inside the gap the
   integrand is smooth and the grid is better; not measured in detail below
