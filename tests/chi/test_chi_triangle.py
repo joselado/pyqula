@@ -169,3 +169,56 @@ def test_integration_names_come_from_the_registry():
         _chi(h,q=[0.1,0.,0.],nk=4,integration="triangle",imode="adaptive")
     with pytest.raises(ValueError):
         _chi(h,q=[0.1,0.,0.],nk=4,integration="triangle",delta=-1.)
+
+
+def _kernels_agree(h,rtol=1e-10,**kw):
+    """the source kernel against the reference kernel, which evaluates
+    every piece at every frequency"""
+    out = {}
+    for kernel in ("simplices","sources"):
+        old = simplexchi.default_kernel
+        simplexchi.default_kernel = kernel
+        try: out[kernel] = _chi(h,integration="triangle",**kw)
+        finally: simplexchi.default_kernel = old
+    ref = out["simplices"]
+    assert np.max(np.abs(out["sources"]-ref)) < rtol*np.max(np.abs(ref))
+
+
+def test_source_kernel_matches_the_reference_kernel():
+    """The source kernel builds the pieces once and sums every frequency
+    over the bins of transition energy, by their moments far from the
+    frequency and piece by piece near it. It has to give the reference
+    kernel to 1e-10 of the largest value: at a finite and at zero
+    broadening, at T = 0 and at finite T with delta >= T, on a spinful
+    model with the degenerate pairs of the spin copies, in 1D and in 3D"""
+    ws = np.linspace(0.02,6.,40)
+    h = _square()
+    kw = dict(q=[0.3,0.1,0.],energies=ws,nk=40,mode="trace")
+    _kernels_agree(h,delta=1e-3,T=0.,**kw)
+    _kernels_agree(h,delta=0.,T=0.,**kw)
+    _kernels_agree(h,delta=2e-3,T=2e-3,**kw)
+    _kernels_agree(h,delta=0.,T=0.,q=[0.5,0.5,0.],energies=[0.],nk=40,
+                   mode="trace")
+    hs = _honeycomb(has_spin=True)
+    kw = dict(q=[0.21,0.07,0.],energies=ws,nk=16,A="sz",B="sz",
+              mode="matrix")
+    _kernels_agree(hs,delta=1e-3,T=0.,**kw)
+    _kernels_agree(hs,delta=5e-3,T=5e-3,**kw)
+    _kernels_agree(hs,delta=1e-2,T=0.,q=[0.,0.,0.],energies=ws,nk=16,
+                   mode="diagonal")
+    hc = geometry.chain().get_hamiltonian(has_spin=False)
+    _kernels_agree(hc,delta=1e-3,T=0.,q=[0.13,0.,0.],energies=ws,nk=200,
+                   mode="trace")
+    h3 = geometry.cubic_lattice().get_hamiltonian(has_spin=False)
+    h3.add_onsite(0.5)
+    _kernels_agree(h3,delta=1e-2,T=0.,q=[0.11,0.23,0.05],energies=ws,nk=6,
+                   mode="trace")
+
+
+def test_kernel_names_come_from_the_registry():
+    h = _square()
+    with pytest.raises(ValueError) as err:
+        simplexchi.chi_triangle(h,q=[0.1,0.,0.],energies=[0.],nk=4,
+                pAs=[np.identity(1)],pBs=[np.identity(1)],kernel="pieces")
+    for name in simplexchi._kernels:
+        assert name in str(err.value)

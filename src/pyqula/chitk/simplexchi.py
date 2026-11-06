@@ -354,6 +354,39 @@ def _knots(en,em,D,p,w,T,tbreaks,resonance,kn):
 
 
 @jit(nopython=True,cache=True)
+def _interval(a,b,T):
+    """the piece [a,b] of the integral over x in the variable f(x): the
+    sign of the mirror x = -u, the ends f(u1) and the span f(u0) - f(u1)"""
+    if b<=0.: # mirror: x = -u, u in [-b,-a]
+        sg = -1.; u0 = -b; u1 = -a
+    else:
+        sg = 1.; u0 = a; u1 = b
+    f0 = _fermi(u0,T); f1 = _fermi(u1,T)
+    return sg,f1,f0-f1
+
+
+@jit(nopython=True,cache=True)
+def _graded_node(q,sg,f1,span,T):
+    """the node q of a piece of the integral over x: whether it is kept,
+    the chemical potential x and the weight of the quadrature"""
+    # graded nodes, phi = f1 + span g(u) with the septic smoothstep
+    # g, whose g' = 140 u^3 (1-u)^3 vanishes at both ends. The T=0
+    # weights can have a logarithmic singularity at a breakpoint
+    # (a mesh edge on which D = 0, the perfect nesting of the
+    # square lattice at (pi,pi)), which plain Gauss-Legendre nodes
+    # resolve only slowly: on that case at T = 5e-2, nk = 64 and
+    # 128, 8 plain nodes were off by 6e-6 relative, 12 graded ones
+    # by 7e-8, against 48 nodes
+    u = 0.5*(1.+_gx[q])
+    g = u**4*(35.-84.*u+70.*u*u-20.*u**3)
+    dg = 140.*u**3*(1.-u)**3
+    phi = f1+span*g
+    if phi<=0. or phi>=1.: return False,0.,0.
+    x = sg*T*(np.log1p(-phi)-np.log(phi))
+    return True,x,0.5*_gw[q]*span*dg
+
+
+@jit(nopython=True,cache=True)
 def _quadrature(en,em,D,p,omegas,iw0,iw1,delta,T,degenerate,tbreaks,
         resonance,out,acc,ws,kn):
     """the convolution of the T=0 weights with -f'(x) for the frequencies
@@ -362,30 +395,27 @@ def _quadrature(en,em,D,p,omegas,iw0,iw1,delta,T,degenerate,tbreaks,
     for i in range(m-1):
         a = kn[i]; b = kn[i+1]
         if b<=a: continue
-        if b<=0.: # mirror: x = -u, u in [-b,-a]
-            sg = -1.; u0 = -b; u1 = -a
-        else:
-            sg = 1.; u0 = a; u1 = b
-        f0 = _fermi(u0,T); f1 = _fermi(u1,T)
-        span = f0-f1
+        sg,f1,span = _interval(a,b,T)
         if span<=0.: continue
         for q in range(_gx.shape[0]):
-            # graded nodes, phi = f1 + span g(u) with the septic smoothstep
-            # g, whose g' = 140 u^3 (1-u)^3 vanishes at both ends. The T=0
-            # weights can have a logarithmic singularity at a breakpoint
-            # (a mesh edge on which D = 0, the perfect nesting of the
-            # square lattice at (pi,pi)), which plain Gauss-Legendre nodes
-            # resolve only slowly: on that case at T = 5e-2, nk = 64 and
-            # 128, 8 plain nodes were off by 6e-6 relative, 12 graded ones
-            # by 7e-8, against 48 nodes
-            u = 0.5*(1.+_gx[q])
-            g = u**4*(35.-84.*u+70.*u*u-20.*u**3)
-            dg = 140.*u**3*(1.-u)**3
-            phi = f1+span*g
-            if phi<=0. or phi>=1.: continue
-            x = sg*T*(np.log1p(-phi)-np.log(phi))
-            _kernel0(en,em,D,p,x,omegas,iw0,iw1,delta,degenerate,
-                    0.5*_gw[q]*span*dg,out,acc,ws)
+            ok,x,wq = _graded_node(q,sg,f1,span,T)
+            if not ok: continue
+            _kernel0(en,em,D,p,x,omegas,iw0,iw1,delta,degenerate,wq,out,
+                    acc,ws)
+
+
+@jit(nopython=True,cache=True)
+def _constant_window(en,em,p,L):
+    """whether both bands keep one side of the window [-L,L] on every
+    vertex, so that the T=0 weights do not depend on x inside it"""
+    for b in range(2):
+        e = en if b==0 else em
+        below = 0; above = 0
+        for i in range(p):
+            if e[i]<=-L: below += 1
+            elif e[i]>=L: above += 1
+        if not (below==p or above==p): return False
+    return True
 
 
 @jit(nopython=True,cache=True)
@@ -396,16 +426,7 @@ def _kernelT(en,em,D,p,omegas,delta,T,degenerate,tbreaks,out,acc,ws,kn):
     features in x are at least T wide and the frequencies share the
     nodes"""
     nw = omegas.shape[0]
-    L = tbreaks[-1]*T
-    const = True # does every band keep one side of the window?
-    for b in range(2):
-        e = en if b==0 else em
-        below = 0; above = 0
-        for i in range(p):
-            if e[i]<=-L: below += 1
-            elif e[i]>=L: above += 1
-        if not (below==p or above==p): const = False
-    if const:
+    if _constant_window(en,em,p,tbreaks[-1]*T):
         _kernel0(en,em,D,p,0.,omegas,0,nw,delta,degenerate,1.,out,acc,ws)
         return
     if delta<T:
@@ -415,6 +436,33 @@ def _kernelT(en,em,D,p,omegas,delta,T,degenerate,tbreaks,out,acc,ws,kn):
     else:
         _quadrature(en,em,D,p,omegas,0,nw,delta,T,degenerate,tbreaks,
                 False,out,acc,ws,kn)
+
+
+@jit(nopython=True,cache=True)
+def _pair_fields(sim,E1,E2,it,n,m,tol,L,En,Em,D):
+    """the energies En, Em and the transition energy D of the pair (n,m)
+    on the vertices of the simplex it. Returns whether the pair can
+    contribute at a chemical potential of the window [-L,L], and whether
+    its transition energy vanishes on the whole simplex"""
+    p = sim.shape[1]
+    nmin = 1e300; nmax = -1e300
+    mmin = 1e300; mmax = -1e300
+    dmax = 0.
+    for v in range(p):
+        En[v] = E1[sim[it,v],n]
+        Em[v] = E2[sim[it,v],m]
+        D[v] = En[v]-Em[v]
+        nmin = min(nmin,En[v]); nmax = max(nmax,En[v])
+        mmin = min(mmin,Em[v]); mmax = max(mmax,Em[v])
+        dmax = max(dmax,abs(D[v]))
+    degenerate = dmax<tol
+    # skip a pair with an empty A and B at every chemical potential of
+    # the window [-L,L]
+    if degenerate: return not (nmin>=L or nmax<=-L),True
+    # A needs nmin < x < mmax, B mmin < x < nmax
+    a = nmin<L and mmax>-L and nmin<mmax
+    b = mmin<L and nmax>-L and mmin<nmax
+    return (a or b),False
 
 
 @jit(nopython=True,parallel=True,cache=True)
@@ -443,27 +491,10 @@ def _weights_jit(sim,E1,E2,omegas,delta,T,tol,tbreaks,out):
         acc = np.zeros(p,dtype=np.complex128)
         res = np.zeros((p,nw),dtype=np.complex128)
         for n in range(nb):
-            nmin = 1e300; nmax = -1e300
-            for v in range(p):
-                En[v] = E1[sim[it,v],n]
-                nmin = min(nmin,En[v]); nmax = max(nmax,En[v])
             for m in range(nb):
-                mmin = 1e300; mmax = -1e300
-                dmax = 0.
-                for v in range(p):
-                    Em[v] = E2[sim[it,v],m]
-                    D[v] = En[v]-Em[v]
-                    mmin = min(mmin,Em[v]); mmax = max(mmax,Em[v])
-                    dmax = max(dmax,abs(D[v]))
-                degenerate = dmax<tol
-                # skip a pair with an empty A and B at every chemical
-                # potential of the window [-L,L]
-                if degenerate:
-                    if nmin>=L or nmax<=-L: continue
-                else: # A needs nmin < x < mmax, B mmin < x < nmax
-                    a = nmin<L and mmax>-L and nmin<mmax
-                    b = mmin<L and nmax>-L and mmin<nmax
-                    if not (a or b): continue
+                active,degenerate = _pair_fields(sim,E1,E2,it,n,m,tol,L,
+                        En,Em,D)
+                if not active: continue
                 for v in range(p):
                     for iw in range(nw): res[v,iw] = 0.
                 if T==0.:
@@ -508,9 +539,396 @@ def _multiplet_average_pairs(E1,E2,W,tol):
                         for b in range(m,e2[m]): W[ik,a,b,iw] = acc
 
 
+# ------------------------------------------------------------ source kernel
+#
+# The weight kernel above redoes the divided differences of every piece at
+# every frequency. The pieces themselves do not depend on the frequency:
+# at T = 0 and at every node x of the shared finite-T quadrature (delta
+# >= T) the tiling is fixed, and a piece is fully given by the transition
+# energies D_s on its nodes and, per node, the coefficient
+#   c_s = coef sgn vol sum_j C_sj G_j,
+# with G_j the matrix elements of the vertex j of the parent simplex,
+# already contracted over the operators and averaged over the degenerate
+# multiplets (that average is moved from the weights to G, which is exact
+# for the contraction). The response at w is sum_s c_s r_s(w), with r_s
+# the minus conjugate of the vertex averages of _vertex_averages.
+#
+# The pieces are the sources, but they are not merged by exact keys as in
+# conductivitytk/kubosimplex.py: there the frequency-independent branch
+# rule (exact partial fractions above a spread of delta) loses
+# eps (|x|/s)^d on a simplex of spread s at distance |x| from the
+# resonance, which is acceptable for d = 2 but not for the repeated-node
+# tables here, d = 3 in 2D and 4 in 3D, and has no scale at all at delta
+# = 0. Instead the sources are grouped in bins of energy, in the manner of
+# a fast multipole sum on a line. A piece of spread s goes to the finest
+# level whose bin width b >= s, so that its nodes lie within b of the
+# center c of its bin. Far from the bin, |z - c| > _far b, the average of
+# mu_s/(z - D) over the piece is the series
+#   sum_n (p-1)! n!/(n+p)! h_n(y_0..y_(p-1),y_s) u^(n+1),
+# y = D - c, u = 1/(z - c), h_n the complete homogeneous symmetric
+# polynomial (the series of the Taylor branch of dostk.simplexdos), whose
+# terms are bounded by (b/|z-c|)^n/p, so _nmom terms give 4^-30. The
+# moments of every bin are summed once over its sources, and every
+# frequency costs the bins far from it, by their series, plus the pieces
+# of the bins near it, by the exact divided differences of the weight
+# kernel with the same branches. The near bins are a few per level, so
+# the exact work per frequency is a small fraction of the pieces.
+
+_lev = 12 # the finest bins are 2^-_lev of the range of the transition
+          # energies, the coarsest one is the whole range
+_far = 4. # a bin of width b is summed by its moments where |z - c| > _far b
+_nmom = 30 # terms of the series of a bin, (1/_far)^_nmom < 1e-18
+_maxsrc = 2**21 # pieces held at once
+_maxsim = 2**18 # simplices per pass of the piece kernel
+
+
+@jit(nopython=True,cache=True)
+def _workspace(p,ntb):
+    """the work arrays of the tiling and of the divided differences"""
+    I = np.zeros((p,p))
+    for i in range(p): I[i,i] = 1.
+    ws2 = (np.zeros(p),np.zeros(p),np.zeros(p,dtype=np.int64),
+           np.zeros(p,dtype=np.complex128),np.zeros(p+1),
+           np.zeros(p+1,dtype=np.complex128),
+           np.zeros(p,dtype=np.complex128),np.zeros(_nterms+1),
+           np.zeros(p+1,dtype=np.complex128))
+    ws = (I,np.zeros((3,p,p)),np.zeros((_maxpieces,p,p)),
+          np.zeros(_maxpieces),np.zeros(p),np.zeros(p),np.zeros(p),ws2,
+          _R,_NR)
+    kn = np.zeros(4+2*p+p*(p-1)+2*ntb)
+    return ws,kn
+
+
+@jit(nopython=True,cache=True)
+def _bin_of(t,p,dmin,span,off):
+    """flat index of the bin of a piece with node energies t"""
+    tmin = t[0]; tmax = t[0]
+    for i in range(1,p):
+        tmin = min(tmin,t[i]); tmax = max(tmax,t[i])
+    s = tmax-tmin
+    b = span*2.**(-_lev)
+    L = 0
+    while L<_lev and s>b:
+        b *= 2.
+        L += 1
+    j = int((0.5*(tmin+tmax)-dmin)/b)
+    j = max(0,min(j,off[L+1]-off[L]-1))
+    return off[L]+j
+
+
+@jit(nopython=True,cache=True)
+def _is_near(c,b,w,delta):
+    """whether the bin of center c and width b is summed piece by piece
+    at the frequency w"""
+    return (w-c)*(w-c)+delta*delta<=(_far*b)*(_far*b)
+
+
+@jit(nopython=True,cache=True)
+def _emit0(write,En,Em,D,p,x,degenerate,coef,kv,G,n,m,ws,acc,i0,pt,pc,pb,
+        dgrow,dmin,span,off):
+    """the pieces of the T=0 response at chemical potential x, times coef,
+    written from index i0 on (write=True) or only counted. A degenerate
+    pair adds its Fermi surface term to dgrow instead. Returns the new
+    number of pieces"""
+    I,P1,C,sgn,tmp,en,em,ws2,R,NR = ws
+    for i in range(p):
+        en[i] = En[i]-x
+        em[i] = Em[i]-x
+    nc = G.shape[3]
+    if degenerate:
+        if write:
+            for v in range(p): acc[v] = 0.
+            _fermi_surface(en,p,-1.+0j,acc,ws2,_harm,_fact)
+            for v in range(p):
+                for c in range(nc): dgrow[c] += coef*acc[v]*G[kv[v],n,m,c]
+        return i0
+    npc = _regions(en,em,p,R,NR,I,P1,C,sgn,tmp)
+    for ic in range(npc):
+        vol = abs(_det(C[ic],p))
+        if vol==0.: continue
+        if write:
+            f = coef*sgn[ic]*vol
+            for s in range(p):
+                a = 0.
+                for j in range(p): a += C[ic,s,j]*D[j]
+                pt[i0,s] = a
+                for c in range(nc):
+                    z = 0j
+                    for j in range(p): z += C[ic,s,j]*G[kv[j],n,m,c]
+                    pc[i0,s,c] = f*z
+            pb[i0] = _bin_of(pt[i0],p,dmin,span,off)
+        i0 += 1
+    return i0
+
+
+@jit(nopython=True,cache=True)
+def _emitT(write,En,Em,D,p,T,degenerate,tbreaks,kv,G,n,m,ws,acc,kn,i0,pt,
+        pc,pb,dgrow,dmin,span,off):
+    """the pieces at temperature T on the nodes that every frequency
+    shares, the path of _kernelT for delta >= T"""
+    if _constant_window(En,Em,p,tbreaks[-1]*T):
+        return _emit0(write,En,Em,D,p,0.,degenerate,1.,kv,G,n,m,ws,acc,i0,
+                pt,pc,pb,dgrow,dmin,span,off)
+    nkn = _knots(En,Em,D,p,0.,T,tbreaks,False,kn)
+    for i in range(nkn-1):
+        a = kn[i]; b = kn[i+1]
+        if b<=a: continue
+        sg,f1,sp = _interval(a,b,T)
+        if sp<=0.: continue
+        for q in range(_gx.shape[0]):
+            ok,x,wq = _graded_node(q,sg,f1,sp,T)
+            if not ok: continue
+            i0 = _emit0(write,En,Em,D,p,x,degenerate,wq,kv,G,n,m,ws,acc,i0,
+                    pt,pc,pb,dgrow,dmin,span,off)
+    return i0
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _pieces_jit(write,sim,it0,it1,E1,E2,G,T,tol,tbreaks,offs,pt,pc,pb,dg,
+        dmin,span,off):
+    """the pieces of the simplices it0..it1-1. With write=False offs[i]
+    receives the number of pieces of the simplex it0+i; with write=True
+    they are written from offs[i] on, and dg[i] takes the Fermi surface
+    terms of its degenerate pairs"""
+    p = sim.shape[1]; nb = E1.shape[1]
+    nsim = it1-it0
+    L = tbreaks[-1]*T
+    nblk = min(nsim,256)
+    for blk in prange(nblk): # the work arrays are allocated per block
+        ws,kn = _workspace(p,tbreaks.shape[0])
+        En = np.zeros(p); Em = np.zeros(p); D = np.zeros(p)
+        acc = np.zeros(p,dtype=np.complex128)
+        for i in range((blk*nsim)//nblk,((blk+1)*nsim)//nblk):
+            it = it0+i
+            kv = sim[it]
+            n0 = offs[i] if write else 0
+            for n in range(nb):
+                for m in range(nb):
+                    active,degenerate = _pair_fields(sim,E1,E2,it,n,m,tol,
+                            L,En,Em,D)
+                    if not active: continue
+                    if T==0.:
+                        n0 = _emit0(write,En,Em,D,p,0.,degenerate,1.,kv,G,
+                                n,m,ws,acc,n0,pt,pc,pb,dg[i],dmin,span,off)
+                    else:
+                        n0 = _emitT(write,En,Em,D,p,T,degenerate,tbreaks,kv,
+                                G,n,m,ws,acc,kn,n0,pt,pc,pb,dg[i],dmin,span,
+                                off)
+            if not write: offs[i] = n0
+
+
+@jit(nopython=True,cache=True)
+def _sort_by_bin(pb,nbins):
+    """counting sort of the pieces by bin: the order, and the start of
+    every bin in it"""
+    starts = np.zeros(nbins+1,dtype=np.int64)
+    for i in range(pb.shape[0]): starts[pb[i]+1] += 1
+    for b in range(nbins): starts[b+1] += starts[b]
+    pos = starts[:-1].copy()
+    order = np.zeros(pb.shape[0],dtype=np.int64)
+    for i in range(pb.shape[0]):
+        order[pos[pb[i]]] = i
+        pos[pb[i]] += 1
+    return order,starts
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _moments_jit(order,starts,occ,pt,pc,binc,binw,fk,mom):
+    """mom[b,n] += the moments of the pieces of every occupied bin b, in
+    units of its width, mom[b,n] = sum (p-1)! n!/(n+p)! h_n(y,y_s) c_s with
+    y = (D - c)/b. Each bin belongs to one task"""
+    p = pt.shape[1]; nc = pc.shape[2]
+    for ib in prange(occ.shape[0]):
+        b = occ[ib]
+        c0 = binc[b]; w = binw[b]
+        H = np.zeros(_nmom)
+        y = np.zeros(p)
+        for idx in range(starts[b],starts[b+1]):
+            i = order[idx]
+            for s in range(p): y[s] = (pt[i,s]-c0)/w
+            H[0] = 1.
+            for k in range(1,_nmom): H[k] = 0.
+            for v in range(p): # h_n(y_0..y_v)
+                for k in range(1,_nmom): H[k] += y[v]*H[k-1]
+            for s in range(p): # one more variable, y_s
+                hs = 1.
+                for k in range(_nmom):
+                    if k>0: hs = H[k]+y[s]*hs
+                    f = fk[k]*hs
+                    for c in range(nc): mom[b,k,c] += f*pc[i,s,c]
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _near_jit(order,starts,pt,pc,binc,binw,off,dmin,span,omegas,delta,
+        nchunk,part):
+    """part[iw,ic] = the exact sum over the pieces of the bins near the
+    frequency iw, the share ic of every such bin"""
+    p = pt.shape[1]; nc = pc.shape[2]
+    nw = omegas.shape[0]
+    nlev = off.shape[0]-1
+    for task in prange(nw*nchunk):
+        iw = task//nchunk; ic = task%nchunk
+        w = omegas[iw]
+        ws,kn = _workspace(p,0)
+        t,tb,ib,pbuf,tt,dcol,a,h,d = ws[7]
+        acc = np.zeros(nc,dtype=np.complex128)
+        for L in range(nlev):
+            nbl = off[L+1]-off[L]
+            b = span*2.**(L-_lev)
+            jc = (w-dmin)/b
+            if jc<-10. or jc>nbl+10.: continue
+            j0 = max(0,int(jc)-int(_far)-2)
+            j1 = min(nbl-1,int(jc)+int(_far)+2)
+            for j in range(j0,j1+1):
+                fb = off[L]+j
+                if not _is_near(binc[fb],binw[fb],w,delta): continue
+                n0 = starts[fb]; n1 = starts[fb+1]
+                for idx in range(n0+(ic*(n1-n0))//nchunk,
+                                 n0+((ic+1)*(n1-n0))//nchunk):
+                    i = order[idx]
+                    for s in range(p): t[s] = pt[i,s]-w
+                    _vertex_averages(t,p,-delta,_harm,_fact,h,d,tb,ib,pbuf,
+                            tt,dcol,a)
+                    for s in range(p):
+                        g = -np.conj(a[s])
+                        for c in range(nc): acc[c] += g*pc[i,s,c]
+        for c in range(nc): part[iw,ic,c] = acc[c]
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _far_jit(occ,mom,binc,binw,omegas,delta,out):
+    """out[iw] += the series of every occupied bin far from the frequency
+    iw, minus its conjugate as in _add_pieces"""
+    nc = mom.shape[2]
+    for iw in prange(omegas.shape[0]):
+        w = omegas[iw]
+        acc = np.zeros(nc,dtype=np.complex128)
+        for ib in range(occ.shape[0]):
+            b = occ[ib]
+            c0 = binc[b]; bw = binw[b]
+            if _is_near(c0,bw,w,delta): continue
+            ub = 1./complex(w-c0,-delta) # conj(1/(z - c))
+            r = bw*ub
+            ar = abs(r)
+            pw = ub
+            q = 1.
+            for k in range(_nmom):
+                for c in range(nc): acc[c] -= mom[b,k,c]*pw
+                q *= ar
+                if q<1e-18: break
+                pw *= r
+        for c in range(nc): out[iw,c] += acc[c]
+
+
+def _bins(dmin,span):
+    """offsets of the levels in the flat list of bins, and the center and
+    the width of every bin"""
+    nbl = [2**(_lev-L)+1 for L in range(_lev+1)]
+    off = np.concatenate([[0],np.cumsum(nbl)]).astype(np.int64)
+    binc = np.zeros(off[-1]); binw = np.zeros(off[-1])
+    for L in range(_lev+1):
+        b = span*2.**(L-_lev)
+        j = np.arange(nbl[L])
+        binc[off[L]:off[L+1]] = dmin+(j+0.5)*b
+        binw[off[L]:off[L+1]] = b
+    return off,binc,binw
+
+
+def _static_factors(omegas,delta):
+    """_static_factor at every frequency"""
+    if delta>0.: return 1j*delta/(1j*delta-omegas)
+    return (omegas==0.).astype(np.complex128)
+
+
+def response_sources(dim,nk,E1,E2,G,omegas,delta,T):
+    """sum over k and the pairs (n at k, m at k+q) of the simplex
+    integration of G[k,n,m,c] (f_n - f_m)/(E_n - E_m - w + i delta) at
+    zero chemical potential, normalized to the Brillouin zone, as an
+    (nw,nc) array. G holds the matrix elements already averaged over the
+    degenerate multiplets. At T > 0 it needs delta >= T, where the
+    frequencies share the nodes of the quadrature in x"""
+    import numba
+    from ..dostk.simplexdos import simplices, _degeneracy_tol
+    if T>0. and delta<T:
+        raise ValueError("the source kernel of the triangle response needs "
+                "delta >= T at finite temperature, got delta="+str(delta)
+                +" and T="+str(T))
+    sim,frac = simplices(dim,nk)
+    E1 = np.ascontiguousarray(E1,dtype=np.float64)
+    E2 = np.ascontiguousarray(E2,dtype=np.float64)
+    G = np.ascontiguousarray(G,dtype=np.complex128)
+    omegas = np.ascontiguousarray(omegas,dtype=np.float64)
+    tol = _degeneracy_tol(np.concatenate([E1,E2]))
+    ns,p = sim.shape
+    nw = len(omegas); nc = G.shape[3]
+    delta = float(delta); T = float(T)
+    dmin = float(np.min(E1)-np.max(E2)); dmax = float(np.max(E1)-np.min(E2))
+    span = max(dmax-dmin,1e-8*max(1.,abs(dmin),abs(dmax)))
+    off,binc,binw = _bins(dmin,span)
+    nbins = len(binc)
+    fk = np.array([np.prod(np.arange(1.,p))*np.prod(np.arange(1.,k+1))
+            /np.prod(np.arange(1.,k+p+1)) for k in range(_nmom)])
+    mom = np.zeros((nbins,_nmom,nc),dtype=np.complex128)
+    occupied = np.zeros(nbins,dtype=np.bool_)
+    parallel.set_num_threads()
+    out = np.zeros((nw,nc),dtype=np.complex128)
+    dgsum = np.zeros(nc,dtype=np.complex128)
+    maxsrc = max(1024,min(_maxsrc,int(2e8)//(p*(8+16*nc)+8)))
+    e0 = np.zeros((0,p)); c0 = np.zeros((0,p,nc),dtype=np.complex128)
+    b0 = np.zeros(0,dtype=np.int64)
+    for s0 in range(0,ns,_maxsim):
+        s1 = min(ns,s0+_maxsim)
+        counts = np.zeros(s1-s0,dtype=np.int64)
+        _pieces_jit(False,sim,s0,s1,E1,E2,G,T,tol,_tbreaks,counts,e0,c0,b0,
+                np.zeros((s1-s0,nc),dtype=np.complex128),dmin,span,off)
+        cum = np.cumsum(counts)
+        i0 = 0
+        while i0<len(counts): # passes of at most maxsrc pieces
+            base = cum[i0-1] if i0>0 else 0
+            i1 = int(np.searchsorted(cum,base+maxsrc,side="right"))
+            i1 = max(i1,i0+1)
+            cnt = counts[i0:i1]
+            npc = int(np.sum(cnt))
+            offs = np.concatenate([[0],np.cumsum(cnt)[:-1]]).astype(np.int64)
+            pt = np.zeros((npc,p)); pc = np.zeros((npc,p,nc),dtype=np.complex128)
+            pb = np.zeros(npc,dtype=np.int64)
+            dg = np.zeros((i1-i0,nc),dtype=np.complex128)
+            _pieces_jit(True,sim,s0+i0,s0+i1,E1,E2,G,T,tol,_tbreaks,offs,pt,
+                    pc,pb,dg,dmin,span,off)
+            dgsum += np.sum(dg,axis=0)
+            if npc>0:
+                order,starts = _sort_by_bin(pb,nbins)
+                occ = np.nonzero(starts[1:]>starts[:-1])[0].astype(np.int64)
+                occupied[occ] = True
+                _moments_jit(order,starts,occ,pt,pc,binc,binw,fk,mom)
+                nchunk = max(1,min(npc//256,
+                        -(-4*numba.get_num_threads()//max(nw,1))))
+                part = np.zeros((nw,nchunk,nc),dtype=np.complex128)
+                _near_jit(order,starts,pt,pc,binc,binw,off,dmin,span,omegas,
+                        delta,nchunk,part)
+                out += np.sum(part,axis=1)
+            i0 = i1
+    _far_jit(np.nonzero(occupied)[0].astype(np.int64),mom,binc,binw,omegas,
+            delta,out)
+    out += dgsum[None,:]*_static_factors(omegas,delta)[:,None]
+    return out*frac
+
+
 # ------------------------------------------------------------ driver
 
 _chunk = 2**15 # simplices per call of the weight kernel
+
+
+@jit(nopython=True,cache=True)
+def _scatter_add(sim,out,W):
+    """W[k,n,m,iw] += out[it,n,m,v,iw] for k the vertex v of simplex it"""
+    nb = W.shape[1]; nw = W.shape[3]; p = sim.shape[1]
+    for it in range(sim.shape[0]):
+        for v in range(p):
+            k = sim[it,v]
+            for n in range(nb):
+                for m in range(nb):
+                    for iw in range(nw): W[k,n,m,iw] += out[it,n,m,v,iw]
 
 
 def pair_weights(dim,nk,E1,E2,omegas,delta,T):
@@ -528,7 +946,7 @@ def pair_weights(dim,nk,E1,E2,omegas,delta,T):
     nw = len(omegas)
     tol = _degeneracy_tol(np.concatenate([E1,E2]))
     parallel.set_num_threads()
-    W = np.zeros(nkk*nb*nb*nw,dtype=np.complex128)
+    W = np.zeros((nkk,nb,nb,nw),dtype=np.complex128)
     p = sim.shape[1]
     chunk = max(1,min(_chunk,2**23//(nb*nb*p*nw+1)))
     for i0 in range(0,len(sim),chunk):
@@ -536,14 +954,13 @@ def pair_weights(dim,nk,E1,E2,omegas,delta,T):
         out = np.zeros((len(s),nb,nb,p,nw),dtype=np.complex128)
         _weights_jit(s,E1,E2,omegas,float(delta),float(T),tol,_tbreaks,
                 out)
-        # flat index of (vertex k, n, m, iw)
-        idx = (((s[:,None,None,:,None]*nb + np.arange(nb)[None,:,None,None,None])
-                *nb + np.arange(nb)[None,None,:,None,None])*nw
-                + np.arange(nw)[None,None,None,None,:])
-        idx = np.broadcast_to(idx,out.shape).ravel()
-        W += np.bincount(idx,weights=out.real.ravel(),minlength=len(W))
-        W += 1j*np.bincount(idx,weights=out.imag.ravel(),minlength=len(W))
-    W = W.reshape((nkk,nb,nb,nw))*frac
+        # a serial scatter costs the size of the chunk. A bincount over
+        # the whole W per chunk (the code before) cost the size of W at
+        # every chunk; with W kept below max_memory_gb by blocks of
+        # frequencies, the number of those passes grew as nk^(2 dim), and
+        # it took most of the time at nk = 1024 and 2048 in 2D
+        _scatter_add(s,out,W)
+    W = W*frac
     _multiplet_average_pairs(E1,E2,W,tol)
     return W
 
@@ -572,15 +989,81 @@ def _eigen(hkgen,ks,batch,vectors):
         else: yield i0,(peigvalsh(hks),None)
 
 
+def _chi_simplices(dim,nk,E1,E2,energies,delta,T,elements,diag,ni,nj):
+    """the weights of every vertex at every frequency (pair_weights), then
+    contracted with the matrix elements. Returns the response and the
+    number of passes over the matrix elements"""
+    nkk,n = E1.shape
+    nw = len(energies)
+    out = np.zeros((nw,ni) if diag else (nw,ni,nj),dtype=np.complex128)
+    wblock = max(1,int(max_memory_gb*1e9/4)//(nkk*n*n*16)) # frequencies
+    npass = 0
+    for w0 in range(0,nw,wblock):
+        ew = energies[w0:w0+wblock]
+        W = pair_weights(dim,nk,E1,E2,ew,delta,T) # (k,n,m,w)
+        npass += 1
+        for i0,MA,MB in elements():
+            kb = len(MA)
+            Wk = W[i0:i0+kb].reshape(kb,n*n,len(ew))
+            if diag:
+                out[w0:w0+wblock] += np.einsum("kpw,kip,kip->wi",Wk,MA,MB,
+                        optimize=True)
+            else:
+                out[w0:w0+wblock] += np.einsum("kpw,kip,kjp->wij",Wk,MA,MB,
+                        optimize=True)
+    return out,npass
+
+
+def _chi_sources(dim,nk,E1,E2,energies,delta,T,elements,diag,ni,nj):
+    """the matrix elements contracted first, G[k,n,m,c] for the components
+    c = i (diag) or (i,j), then the source kernel (response_sources), by
+    blocks of components that keep G below max_memory_gb/4. The pieces
+    are rebuilt for every block. Returns the response and the number of
+    passes over the matrix elements"""
+    from ..dostk.simplexdos import _degeneracy_tol
+    nkk,n = E1.shape
+    nw = len(energies)
+    comps = [(i,i) for i in range(ni)] if diag else [(i,j)
+            for i in range(ni) for j in range(nj)]
+    tol = _degeneracy_tol(np.concatenate([E1,E2]))
+    cblock = max(1,int(max_memory_gb*1e9/4)//(nkk*n*n*16))
+    out = np.zeros((nw,len(comps)),dtype=np.complex128)
+    npass = 0
+    for c0 in range(0,len(comps),cblock):
+        cs = comps[c0:c0+cblock]
+        ia = np.array([c[0] for c in cs]); ib = np.array([c[1] for c in cs])
+        G = np.zeros((nkk,n*n,len(cs)),dtype=np.complex128)
+        for i0,MA,MB in elements():
+            G[i0:i0+len(MA)] = np.transpose(MA[:,ia]*MB[:,ib],(0,2,1))
+        npass += 1
+        G = G.reshape(nkk,n,n,len(cs))
+        # the multiplet average of the weights, moved to G
+        _multiplet_average_pairs(E1,E2,G,tol)
+        out[:,c0:c0+len(cs)] = response_sources(dim,nk,E1,E2,G,energies,
+                delta,T)
+        del G
+    if not diag: out = out.reshape(nw,ni,nj)
+    return out,npass
+
+
+_kernels = {
+    "sources": _chi_sources, # the pieces built once, every frequency a sum
+    "simplices": _chi_simplices, # every piece at every frequency
+}
+default_kernel = "sources"
+
+
 def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
-        pAs=None,pBs=None,delta=0.1,T=0.,mode="matrix",counted=False):
+        pAs=None,pBs=None,delta=0.1,T=0.,mode="matrix",counted=False,
+        kernel=None):
     """Bare response of chitk.chiAB.chiAB_q with the linear simplex
     integration of the k-sum on the uniform nk^dim mesh, for the operators
     pAs[i] and pBs[j] (the site projectors times A and B). Returns
     (energies, out) in the layout of chiAB_q for mode="matrix", "trace"
     and "diagonal". delta = 0 and T = 0 are allowed and are the exact
     limits. With counted=True also returns the number of
-    diagonalizations"""
+    diagonalizations. kernel picks the evaluation of the simplex sum, one
+    of _kernels, default_kernel when None; the two agree to rounding"""
     check_hamiltonian(h)
     if not delta>=0.:
         raise ValueError("integration='triangle' of the response function "
@@ -629,28 +1112,26 @@ def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
             for (i0,(e1,u1)),(_,(e2,u2)) in zip(
                     _eigen(hkgen,ks,batch,True),_eigen(hkgen,kq,batch,True)):
                 yield i0,u1,u2
-    out = np.zeros((nw,ni) if diag else (nw,ni,nj),dtype=np.complex128)
-    wblock = max(1,int(max_memory_gb*1e9/4)//(len(ks)*n*n*16)) # frequencies
-    for w0 in range(0,nw,wblock):
-        ew = energies[w0:w0+wblock]
-        W = pair_weights(dim,nk,E1,E2,ew,delta,T) # (k,n,m,w)
-        if not keep: ndiag += 2*len(ks)
+    def elements(): # <n,k|A_i|m,k+q> as [k,i,nm], <m,k+q|B_j|n,k> as [k,j,nm]
         for i0,U1,U2 in vectors():
             kb = len(U1)
-            Wk = W[i0:i0+kb].reshape(kb,n*n,len(ew))
-            # <n,k|A_i|m,k+q> as [k,i,n,m], <m,k+q|B_j|n,k> as [k,j,n,m]
             MA = np.conj(np.transpose(U1,(0,2,1)))[:,None] @ (
                     pAs[None] @ U2[:,None])
             MB = np.conj(np.transpose(U2,(0,2,1)))[:,None] @ (
                     pBs[None] @ U1[:,None])
             MA = MA.reshape(kb,ni,n*n)
             MB = np.transpose(MB,(0,1,3,2)).reshape(kb,nj,n*n)
-            if diag:
-                out[w0:w0+wblock] += np.einsum("kpw,kip,kip->wi",Wk,MA,MB,
-                        optimize=True)
-            else:
-                out[w0:w0+wblock] += np.einsum("kpw,kip,kjp->wij",Wk,MA,MB,
-                        optimize=True)
+            yield i0,MA,MB
+    if kernel is None: kernel = default_kernel
+    if kernel not in _kernels:
+        raise ValueError("unknown kernel "+repr(kernel)+" of the triangle "
+                "response, accepted values are "+", ".join(_kernels))
+    # at finite T with delta < T the nodes of the quadrature in x include
+    # the resonance of each frequency, so the frequencies share no pieces
+    if T>0. and delta<T: kernel = "simplices"
+    out,npass = _kernels[kernel](dim,nk,E1,E2,energies,delta,T,elements,
+            diag,ni,nj)
+    if not keep: ndiag += 2*len(ks)*npass
     if mode=="trace": out = np.mean(out,axis=1)
     if counted: return energies,out,ndiag
     return energies,out
