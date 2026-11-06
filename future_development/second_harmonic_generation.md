@@ -39,6 +39,9 @@ independent check (`gauge="length"`, cold insulators only).
 
 ## What is left open
 
+- The k-integral at small broadening is done since 6 November 2026 by `integration="triangle"`
+  and `integration="qtci"` (`conductivitytk/shgsimplex.py`); the construction, the measured second
+  order and the comparison with the grid are in `qtci_shg.md`.
 - The benchmark against Trolle, Seifert and Pedersen (arXiv:1310.0674) is done in order of
   magnitude only. The three-band model of Liu et al. (arXiv:1305.6089), now
   `specialhamiltonian.three_band_tmdc()`, gives for monolayer MoS2 (TNN, GGA, with SOC) a static
