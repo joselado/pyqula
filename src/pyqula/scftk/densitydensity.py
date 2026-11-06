@@ -295,10 +295,74 @@ def require_hermitian(h,what):
                 "integration=\"ed\" (the default) without use_jax")
 
 
+def _get_dm_ed(h,v,nk=None,tolerance=None,**kwargs):
+    """integration="ed": exact diagonalization on the uniform k-mesh"""
+    if nk is None: nk = 1
+    ds = [(0,0,0)] # directions
+    for key in v: ds.append(key) # store the vector
+    # normal state, and v is the interaction dictionary (not just a
+    # list of directions, which carries no pattern to build a mask
+    # from -- scftk.spinspin's post-convergence recompute passes one,
+    # and wants the full matrices anyway): compute only the entries
+    # the mean field reads, with the same kernel VJinteraction uses,
+    # instead of a full (n,n) matmul per direction and kpoint
+    if not h.has_eh and isinstance(v,dict):
+        from ..densitymatrix import full_dm_accumulate_sparse, delta_dm
+        T = kwargs.pop("T",delta_dm) # the energy smearing
+        if T==0.: T = 1e-15 # as densitymatrix.full_dm does
+        pairs = dm_sparse_pairs(v,ds,h.intra.shape[0],
+                has_spin=h.has_spin)
+        return full_dm_accumulate_sparse(h,pairs,nk=nk,delta=T,**kwargs)
+    dms = h.get_density_matrix(ds=ds,nk=nk,**kwargs) # get all the density matrices
+    return dms # return dictionary
+
+
+def _get_dm_qtci(h,v,nk=None,tolerance=1e-6,**kwargs):
+    """integration="qtci": every entry the mean field reads as its own
+    tensor cross interpolation over the Brillouin zone"""
+    require_hermitian(h,"integration=\"qtci\"")
+    from ..qtcitk.densitymatrix_qtci import get_dm_qtci
+    return get_dm_qtci(h,v,nk=nk,tolerance=tolerance,**kwargs)
+
+
+def _get_dm_triangle(h,v,nk=None,tolerance=None,T=0.,**kwargs):
+    """integration="triangle": linear simplex integration of the
+    occupations on the uniform k-mesh, see dmtk.simplexdm"""
+    from ..dmtk import simplexdm
+    if nk is None: nk = simplexdm.default_nk
+    ds = [(0,0,0)] + [d for d in v if tuple(d)!=(0,0,0)]
+    return simplexdm.get_dm(h,ds,nk=nk,T=T,
+            bloechl=simplexdm.bloechl_default,**kwargs)
+
+
+# the density-matrix backends of the SCF loop, by the name integration=
+# selects them with
+dm_integrations = {
+    "ed": _get_dm_ed, # exact diagonalization on the k-mesh
+    "qtci": _get_dm_qtci, # tensor cross interpolation of each entry
+    "triangle": _get_dm_triangle, # linear simplex integration of the step
+    }
+
+
+def get_integration_names():
+    """Accepted values of integration= in get_dm and in the mean-field
+    entry points that go through densitydensity (Vinteraction, hubbard)"""
+    return list(dm_integrations)
+
+
+def check_integration(integration):
+    """Refuse an integration= that no backend implements"""
+    if integration not in dm_integrations:
+        raise ValueError("unknown integration %r for the mean-field density "
+                "matrix; it must be one of %s"%(integration,
+                    get_integration_names()))
+
+
 def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     """Get the density matrix.
 
-    integration: "ed" (default) computes it by exact diagonalization on a
+    integration: one of get_integration_names().
+    "ed" (default) computes it by exact diagonalization on a
     k-mesh (h.get_density_matrix), with nk defaulting to 1 if not given.
     "qtci" instead integrates each required entry over the BZ with
     qutecipy (tensor cross interpolation), see
@@ -307,37 +371,15 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     (scftk.densitydensity.generic_densitydensity); nk defaults
     to get_dm_qtci's own DEFAULT_NK if not given (nk=None is forwarded
     through rather than substituting a different, ED-only default here).
-    tolerance only applies to (and is only forwarded for) "qtci"; the "ed"
-    path never sees it, so nothing needs to know which kwargs are safe for
-    which backend other than this function itself."""
-    if integration=="qtci":
-        require_hermitian(h,"integration=\"qtci\"")
-        from ..qtcitk.densitymatrix_qtci import get_dm_qtci
-        return get_dm_qtci(h,v,nk=nk,tolerance=tolerance,**kwargs)
-    elif integration=="ed":
-        if nk is None: nk = 1
-        ds = [(0,0,0)] # directions
-#    if h.dimensionality>0:
-        for key in v: ds.append(key) # store the vector
-        # normal state, and v is the interaction dictionary (not just a
-        # list of directions, which carries no pattern to build a mask
-        # from -- scftk.spinspin's post-convergence recompute passes one,
-        # and wants the full matrices anyway): compute only the entries
-        # the mean field reads, with the same kernel VJinteraction uses,
-        # instead of a full (n,n) matmul per direction and kpoint
-        if not h.has_eh and isinstance(v,dict):
-            from ..densitymatrix import full_dm_accumulate_sparse, delta_dm
-            T = kwargs.pop("T",delta_dm) # the energy smearing
-            if T==0.: T = 1e-15 # as densitymatrix.full_dm does
-            pairs = dm_sparse_pairs(v,ds,h.intra.shape[0],
-                    has_spin=h.has_spin)
-            return full_dm_accumulate_sparse(h,pairs,nk=nk,delta=T,**kwargs)
-        dms = h.get_density_matrix(ds=ds,nk=nk,**kwargs) # get all the density matrices
-        return dms # return dictionary
-    else:
-        raise ValueError("integration must be 'ed' or 'qtci', got %r -- "
-                "unrecognized values used to silently fall back to 'ed' "
-                "with no warning"%(integration,))
+    "triangle" diagonalizes the same uniform mesh as "ed" but integrates
+    the Fermi step exactly over the linearly interpolated bands (the linear
+    tetrahedron method in 3D), see dmtk.simplexdm; it returns every entry
+    of each direction. tolerance only applies to "qtci"; the other
+    backends never see it, so nothing needs to know which kwargs are safe
+    for which backend other than this function itself."""
+    check_integration(integration)
+    return dm_integrations[integration](h,v,nk=nk,tolerance=tolerance,
+            **kwargs)
 
 
 
@@ -493,7 +535,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         compute_anomalous=True,compute_normal=True,info=False,
         maxite=1000,
         T=1e-7, # temperature
-        integration="ed", # "ed" (exact diagonalization) or "qtci"
+        integration="ed", # one of get_integration_names()
         tolerance=1e-6, # qtci-only: crossinterpolate2 convergence tolerance
         callback_h=None,write=None,**kwargs):
     """Perform the SCF mean field
@@ -748,7 +790,11 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     # read, not consumed: generic_densitydensity below still gets its own T
     T = kwargs.get("T",1e-7) # temperature, same default as that function
     integration = kwargs.get("integration","ed") # density-matrix backend
+    check_integration(integration)
     if integration=="qtci": require_hermitian(h,"integration=\"qtci\"")
+    if integration=="triangle":
+        from ..dmtk import simplexdm
+        simplexdm.check_hamiltonian(h,"integration=\"triangle\"")
     h = h.get_multicell()
     h = h.get_dense()
     def callback_h(h):
@@ -764,6 +810,12 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
               # different charge on those nodes
               from ..qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
               fermi = get_fermi4filling_qtci(h,filling,nk=h.nk,T=T)
+          elif integration=="triangle":
+              # on the simplices the density matrix is integrated on, where
+              # the charge is a continuous function of the Fermi level, so
+              # the density matrix holds exactly the requested filling
+              from ..dmtk import simplexdm
+              fermi = simplexdm.get_fermi4filling(h,filling,nk=h.nk,T=T)
           else:
               fermi = h.get_fermi4filling(filling,nk=h.nk,T=T)
           if verbose>1: print("Fermi energy",fermi)
@@ -793,6 +845,8 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         # level (see get_fermi4filling_qtci)
         from ..qtcitk.densitymatrix_qtci import full_dm_gk
         scf.dm = full_dm_gk(h,ds,nk=h.nk,T=T)
+    # integration="triangle" already computed every entry of every
+    # direction in the last iteration, on the same simplices
     # get_dc_energy assumes dm's shape matches v's, which is never
     # Nambu-doubled even when h (hence scf.dm) is BdG -- so the electron
     # sector must be extracted from scf.dm first for a BdG h, or this
@@ -813,6 +867,15 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         # density matrix actually holds rather than filling*N
         from ..qtcitk.densitymatrix_qtci import band_energy_gk
         etot = band_energy_gk(h,nk=h.nk)
+        if mu is None:
+            etot += h.fermi*np.trace(dm_dc[(0,0,0)]).real
+    elif integration=="triangle":
+        # the band energy of the linear bands on the same simplices, with
+        # the step at the Fermi level, as "ed" and "qtci" sum it; the charge
+        # the density matrix holds is the requested one to 1e-12
+        from ..dmtk import simplexdm
+        etot = simplexdm.band_energy(h,nk=h.nk,
+                bloechl=simplexdm.bloechl_default)
         if mu is None:
             etot += h.fermi*np.trace(dm_dc[(0,0,0)]).real
     else:
@@ -951,12 +1014,17 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     equivalence checks), so don't remove or extend it speculatively -- only
     touch it if a bug is found here specifically.
 
-    integration: "ed" (default) computes the density matrix at each SCF
+    integration: one of scftk.densitydensity.get_integration_names().
+    "ed" (default) computes the density matrix at each SCF
     step by exact diagonalization on a k-mesh. "qtci" instead integrates
     each required density-matrix entry over the BZ with qutecipy (tensor
     cross interpolation) -- see scftk.densitydensity.get_dm and
     qtcitk.densitymatrix_qtci.get_dm_qtci; only 2D Hamiltonians are
-    supported for "qtci". VJinteraction does not support this (or
+    supported for "qtci". "triangle" integrates the Fermi step exactly
+    over the bands interpolated linearly in the triangles (2D),
+    tetrahedra (3D) or segments (1D) of the same k-mesh, the case where
+    it pays being a metal at low temperature, see dmtk.simplexdm.
+    VJinteraction does not support "qtci" or "triangle" (or
     solver=/compute_cross=/etc. below) at all -- call Vinteraction
     directly if you need them.
 

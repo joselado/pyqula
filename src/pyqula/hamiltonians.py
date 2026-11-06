@@ -867,7 +867,9 @@ class Hamiltonian():
             # integration mode -- Vinteraction itself never learned "kpm"
             # (that is Vinteraction_kpm's own separate entry point), so
             # route there explicitly instead of forwarding integration="kpm"
-            # into Vinteraction's get_dm, which only accepts "ed"/"qtci"
+            # into Vinteraction's get_dm, which accepts the names of
+            # scftk.densitydensity.get_integration_names() ("ed", "qtci",
+            # "triangle")
             if checkclass.is_iterable(kwargs.get("filling")) and not self.has_spin:
                 from . import check # a per-site filling needs VJinteraction
                 check.require_spin(self,"a per-site (array) filling "
