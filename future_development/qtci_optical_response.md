@@ -140,6 +140,31 @@ the direct basis-rotation test exercises the averaging.
   truncation. This is not urgent: on the same 4 cores the bands,
   velocities and pair fields of the 1024^2 gapped honeycomb take 9.7 s,
   more than the 5.2 s of the triangle sum at 701 frequencies.
+
+  The gain survives in larger unit cells. We take n x n supercells of the
+  gapped honeycomb (sublattice imbalance 0.3, spinless), with and without a
+  random onsite energy of width 0.2 t, at 201 frequencies, delta = 1e-3 t,
+  on 4 cores. The random onsite energy removes the exact degeneracies, so
+  no sources merge. Times are in seconds, "fields" is the diagonalization,
+  the velocities and the pair fields.
+
+  | cell | bands | nk | pairs | fields | old sum | new sum | max diff / max |
+  |---|---|---|---|---|---|---|---|
+  | 1x1 | 2 | 256 | 1 | 0.61 | 2.22 | 0.14 | 2e-12 |
+  | 2x2 | 8 | 128 | 12 | 0.35 | 6.63 | 0.42 | 2e-9 |
+  | 3x3 | 18 | 96 | 57 | 1.12 | 17.7 | 1.24 | 2e-10 |
+  | 4x4 | 32 | 64 | 126 | 6.06 | 17.5 | 1.10 | 9e-10 |
+  | 2x2, random | 8 | 128 | 16 | 0.35 | 8.96 | 1.22 | 5e-10 |
+  | 3x3, random | 18 | 96 | 81 | 1.02 | 25.4 | 3.56 | 3e-10 |
+  | 4x4, random | 32 | 64 | 256 | 5.39 | 35.7 | 4.88 | 4e-10 |
+
+  So the new sum is 13 to 16 times faster in the clean cells and about 7
+  times faster in the random ones, where it gains only from building the
+  sources once. In the clean cells the pruning drops the pairs with zero
+  velocity matrix elements (126 of 256 at 4x4). The number of stored pairs
+  grows as (bands/2)^2 for an insulator, so in large cells the cost is the
+  pairs and the fields, not the frequencies: at 32 bands the fields
+  already cost as much as the sum.
 - **Many bands.** The fields are ordered by band index, so they have kinks
   where bands cross. The triangle sum still converges (the crossings are a
   set of measure zero), but the QTCI rank grows. Not measured beyond two
