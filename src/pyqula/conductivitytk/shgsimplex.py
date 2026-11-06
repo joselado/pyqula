@@ -954,19 +954,16 @@ def sigma_qtci(h,energies,nk,T,delta,trip,degeneracy_tol,tolerance=1e-6,
         info=None):
     """The same on a 2^R x 2^R mesh (nk rounded up to a power of two), with
     the band energies and the term weights reconstructed from a quantics
-    tensor cross interpolation of each one, all of them sharing one cache of
-    diagonalizations. info, if a dict, receives the number of
-    diagonalizations and the ranks"""
+    tensor cross interpolation of each one (qtcitk/meshfields.qtci_fields),
+    all of them sharing one cache of diagonalizations. info, if a dict,
+    receives the number of diagonalizations and the ranks"""
     check_broadening(delta)
     if h.dimensionality!=2:
         raise NotImplementedError("integration='qtci' of the second-harmonic "
                 "conductivity is only implemented in 2D, got dimensionality "
                 +str(h.dimensionality)+"; use integration='triangle', in 1D "
                 "a fine mesh is already cheap")
-    from ..qutecipytk import crossinterpolate2
-    from ..qutecipytk.tensortrain.core import tensortrain
-    from ..qutecipytk.tensortrain.batcheval import BatchEvaluator
-    import itertools
+    from ..qtcitk.meshfields import qtci_fields
     sym = _symmetrized_triplets(trip)
     symarr = np.array(sym,dtype=np.int64)
     tms,dirs,d,hkgen,cellvol,scale = shg._derivative_tensors(h)
@@ -974,7 +971,8 @@ def sigma_qtci(h,energies,nk,T,delta,trip,degeneracy_tol,tolerance=1e-6,
     nb = tms.shape[1]
     R = max(1,int(np.ceil(np.log2(nk)))) # bits per direction
     n = 2**R
-    # coarse scan: fixes the terms that matter and seeds the pivots
+    # coarse scan: fixes the terms and the fields that matter (qtci_fields
+    # repeats it on the same points to seed the pivots)
     nc0 = 2**min(R,5)
     ks0 = kubo._kmesh(h,nc0)
     cat = _term_catalogue(nb)
@@ -983,83 +981,56 @@ def sigma_qtci(h,energies,nk,T,delta,trip,degeneracy_tol,tolerance=1e-6,
     keep = keep>1e-12*max(np.max(keep),1e-300)
     terms = cat[0][keep]
     W0 = W0[:,keep]
-    cache = {} # grid index (i,j) -> (es, W of the kept terms)
-    def ensure(ij):
-        new = [q for q in dict.fromkeys(ij) if q not in cache]
-        if not new: return
-        ks = np.zeros((len(new),3))
-        ks[:,:2] = np.array(new,dtype=np.float64)/n
-        e,W = _fields(tms,dirs,d,hkgen,ks,T,symarr,cat,tol)
-        W = W[:,keep]
-        for q,a,b in zip(new,e,W): cache[q] = (a,b)
     def value(kind,p,c,e,W):
         if kind=="E": return e[...,p]
         if kind=="re": return W[...,p,c].real
         return W[...,p,c].imag
-    fields = [("E",p,None) for p in range(nb)]
+    candidates = [("E",p,None) for p in range(nb)]
     for p in range(len(terms)):
         for c in range(len(sym)):
-            fields += [("re",p,c),("im",p,c)]
-    weights = 2**np.arange(R-1,-1,-1)
-    def decode(keys): # interleaved bits (x,y) per scale, most significant first
-        q = np.array(keys,dtype=np.int64).reshape(-1,R,2)
-        return list(zip((q[:,:,0]@weights).tolist(),(q[:,:,1]@weights).tolist()))
-    def encode(i,j):
-        out = []
-        for s in range(R): out += [(i>>(R-1-s))&1,(j>>(R-1-s))&1]
-        return out
-    localdims = [2]*(2*R)
-    class Field(BatchEvaluator):
-        def __init__(self,kind,p,c): self.key = (kind,p,c)
-        def evalmany(self,keys):
-            ij = decode(keys)
-            ensure(ij)
-            kind,p,c = self.key
-            return np.array([value(kind,p,c,*cache[q]) for q in ij])
-        def __call__(self,x): return self.evalmany([tuple(x)])[0]
-        def batchevaluate(self,L,Rr,ncent):
-            nl = len(L[0]) if len(L) else 0
-            cd = localdims[nl:nl+ncent]
-            combos = list(itertools.product(*[range(dd) for dd in cd]))
-            keys = [tuple(l)+cc+tuple(r) for l in L for cc in combos for r in Rr]
-            return self.evalmany(keys).reshape(len(L),*cd,len(Rr))
-    npts = n*n
-    es = np.zeros((npts,nb))
-    W = np.zeros((npts,len(terms),len(sym)),dtype=np.complex128)
-    xaxes = list(range(0,2*R,2)); yaxes = list(range(1,2*R,2))
-    stride = n//nc0 # coarse point (i,j) is the fine point (i,j)*stride
-    ranks = {}
+            candidates += [("re",p,c),("im",p,c)]
+    # the fields to interpolate, and where every other field comes from
     wscale = np.max(np.abs(W0),axis=(0,2)) # size of each term's weight
-    done = [] # (coarse values, fine values) of the fields interpolated so far
-    for (kind,p,c) in fields:
+    fields = [] # (kind,p,c) of the fields given to qtci_fields
+    coarse = [] # their values on the coarse scan
+    alias = [] # (kind,p,c,index in fields,sign) of every nonzero field
+    for (kind,p,c) in candidates:
         f0 = value(kind,p,c,es0,W0)
         if np.max(np.abs(f0))==0.: continue # identically zero
         # a part that is only rounding noise (the imaginary part of a weight
         # that is real) would be interpolated to full rank: it is zero
         if kind!="E" and np.max(np.abs(f0))<1e-10*wscale[p]: continue
-        full = None
-        for (g0,gfull) in done: # equal or opposite to a field already done
-            # on all the points of the coarse scan: the same function (a
-            # symmetry of the model), interpolated once
+        found = None
+        for i,g0 in enumerate(coarse): # equal or opposite to a field already
+            # kept on all the points of the coarse scan: the same function
+            # (a symmetry of the model), interpolated once
             for sgn in (1.,-1.):
                 if np.max(np.abs(f0-sgn*g0))<1e-12*np.max(np.abs(f0)):
-                    full = sgn*gfull ; break
-            if full is not None: break
-        if full is None:
-            i0 = int(np.argmax(np.abs(f0)))
-            piv = [encode((i0//nc0)*stride,(i0%nc0)*stride)]
-            tci,rk,errors = crossinterpolate2(np.float64,Field(kind,p,c),
-                    localdims,initialpivots=piv,tolerance=tolerance,
-                    maxbonddim=400,pivotsearch="full")
-            ranks[(kind,p,c)] = max(rk) if len(rk) else 0
-            full = tensortrain(tci).fulltensor()
-            full = np.transpose(full,xaxes+yaxes).reshape(npts) # row-major
-            done.append((f0,full))
+                    found = (i,sgn) ; break
+            if found is not None: break
+        if found is None:
+            found = (len(fields),1.)
+            fields.append((kind,p,c))
+            coarse.append(f0)
+        alias.append((kind,p,c)+found)
+    def evaluate(ks): # the kept fields at the k-points ks
+        e,W = _fields(tms,dirs,d,hkgen,ks,T,symarr,cat,tol)
+        W = W[:,keep]
+        out = np.zeros((len(ks),len(fields)))
+        for f,(kind,p,c) in enumerate(fields): out[:,f] = value(kind,p,c,e,W)
+        return out
+    vals,ncalls,rk = qtci_fields(evaluate,R,len(fields),tolerance=tolerance,
+            ncoarse=nc0)
+    npts = n*n
+    es = np.zeros((npts,nb))
+    W = np.zeros((npts,len(terms),len(sym)),dtype=np.complex128)
+    for (kind,p,c,f,sgn) in alias:
+        full = sgn*vals[:,f]
         if kind=="E": es[:,p] = full
         elif kind=="re": W[:,p,c] += full
         else: W[:,p,c] += 1j*full
     if isinstance(info,dict):
-        info["diagonalizations"] = len(cache)
-        info["ranks"] = ranks
+        info["diagonalizations"] = ncalls
+        info["ranks"] = dict(zip(fields,rk))
     s = _sigma_from_fields(2,n,es,terms,W,energies,delta,cellvol,tol)
     return _unpack(s,sym,trip)

@@ -2,7 +2,8 @@
 # 2^R x 2^R k-mesh, shared by the qtci integrations that run a simplex sum
 # on top of the reconstructed fields: the DOS, the LDOS and the Green's
 # function of dostk/simplexdos.py, the optical conductivity of
-# conductivitytk/kubosimplex.py and the mean-field density matrix of
+# conductivitytk/kubosimplex.py, the second-harmonic conductivity of
+# conductivitytk/shgsimplex.py and the mean-field density matrix of
 # qtcitk/densitymatrix_qtci.py. The fields are the band energies, the
 # transition energies and the weights, which are smooth in k, so each one
 # has a low rank, while the sharp resolvent is integrated afterwards.
