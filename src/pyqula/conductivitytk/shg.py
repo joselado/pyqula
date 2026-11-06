@@ -238,8 +238,57 @@ _gauges = {"velocity":_velocity,"length":_length} # gauge= registry
 _all_components = [x+y+z for x in "xyz" for y in "xyz" for z in "xyz"]
 
 
+def _sigma2_grid(h,energies,nk,T,delta,trip,gauge,degeneracy_tol,
+        tolerance=None):
+    """Second-harmonic conductivity of the Cartesian triplets trip as a
+    plain sum over the uniform mesh, symmetrized in the last two indices,
+    as an array (len(energies),len(trip))"""
+    trip,full,triplets,pairs,ipair = _triplets(
+            ["xyz"[a]+"xyz"[b]+"xyz"[c] for (a,b,c) in trip])
+    tms,dirs,d,hkgen,cellvol,scale = _derivative_tensors(h)
+    ks = kubo._kmesh(h,nk)
+    parallel.set_num_threads() # set the number of threads for numba
+    acc = np.zeros((len(energies),len(full)),dtype=np.complex128)
+    for i0 in range(0,len(ks),_kbatch): # loop over batches of k-points
+        kb = ks[i0:i0+_kbatch]
+        es,h1,h2,h3 = _eigenbasis_derivatives(tms,dirs,d,hkgen,kb)
+        f = kubo._fermi(es,T)
+        acc += _gauges[gauge](es,f,h1,h2,h3,energies,delta,triplets,
+                pairs,ipair,full,degeneracy_tol*scale)
+    acc = acc/(len(ks)*cellvol) # (1/V) sum_k, with V = N_k * V_cell
+    return np.array([(acc[:,full.index((a,b,c))]+acc[:,full.index((a,c,b))])/2.
+            for (a,b,c) in trip]).T # symmetrize in the last two indices
+
+
+def _sigma2_triangle(h,energies,nk,T,delta,trip,gauge,degeneracy_tol,
+        tolerance=None):
+    from . import shgsimplex
+    return shgsimplex.sigma_triangle(h,energies,nk,T,delta,trip,
+            degeneracy_tol)
+
+
+def _sigma2_qtci(h,energies,nk,T,delta,trip,gauge,degeneracy_tol,
+        tolerance=1e-6):
+    from . import shgsimplex
+    return shgsimplex.sigma_qtci(h,energies,nk,T,delta,trip,degeneracy_tol,
+            tolerance=tolerance)
+
+
+_integrations = {
+    "grid": _sigma2_grid, # plain sum over the mesh
+    "triangle": _sigma2_triangle, # exact resonances over linear simplices
+    "qtci": _sigma2_qtci, # the same on a quantics-interpolated fine mesh
+    }
+
+
+def get_integration_names():
+    """Accepted values of integration= in shg_conductivity"""
+    return list(_integrations)
+
+
 def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
-        components=None,gauge="velocity",degeneracy_tol=1e-6):
+        components=None,gauge="velocity",degeneracy_tol=1e-6,
+        integration="grid",tolerance=1e-6):
     """Second-harmonic conductivity sigma_abc(2w;w,w), see
     conductivity.shg_conductivity for the documentation"""
     if energies is None: energies = np.linspace(0.,4.,100)
@@ -262,21 +311,18 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     if gauge=="length" and T>0.: raise ValueError("the length-gauge path "
             "leaves out the Fermi-surface terms and is exact only for a cold "
             "insulator: it needs T=0, got T="+str(T))
-    trip,full,triplets,pairs,ipair = _triplets(components)
-    tms,dirs,d,hkgen,cellvol,scale = _derivative_tensors(h)
-    ks = kubo._kmesh(h,nk)
-    parallel.set_num_threads() # set the number of threads for numba
-    acc = np.zeros((len(energies),len(full)),dtype=np.complex128)
-    for i0 in range(0,len(ks),_kbatch): # loop over batches of k-points
-        kb = ks[i0:i0+_kbatch]
-        es,h1,h2,h3 = _eigenbasis_derivatives(tms,dirs,d,hkgen,kb)
-        f = kubo._fermi(es,T)
-        acc += _gauges[gauge](es,f,h1,h2,h3,energies,delta,triplets,
-                pairs,ipair,full,degeneracy_tol*scale)
-    acc = acc/(len(ks)*cellvol) # (1/V) sum_k, with V = N_k * V_cell
-    out = {} # symmetrize in the last two indices
-    for (comp,(a,b,c)) in zip(components,trip):
-        out[comp] = (acc[:,full.index((a,b,c))]+acc[:,full.index((a,c,b))])/2.
+    if integration not in _integrations: raise ValueError("unknown "
+            "integration "+repr(integration)+" for the second-harmonic "
+            "conductivity, accepted values are "
+            +", ".join(get_integration_names()))
+    if integration!="grid" and gauge!="velocity": raise NotImplementedError(
+            "integration="+repr(integration)+" of the second-harmonic "
+            "conductivity is only implemented in the velocity gauge, got "
+            "gauge="+repr(gauge))
+    trip = _triplets(components)[0]
+    s = _integrations[integration](h,energies,nk,T,delta,trip,gauge,
+            degeneracy_tol,tolerance=tolerance)
+    out = {comp:s[:,i] for (i,comp) in enumerate(components)}
     if single: return energies,out[components[0]]
     return energies,out
 

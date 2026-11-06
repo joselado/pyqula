@@ -237,7 +237,8 @@ from .conductivitytk import shg
 
 
 def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
-        components=None,gauge="velocity",degeneracy_tol=1e-6):
+        components=None,gauge="velocity",degeneracy_tol=1e-6,
+        integration="grid",tolerance=1e-6):
     """Second-harmonic conductivity sigma_abc(2w;w,w) of a 1D or 2D
     periodic Hamiltonian, the second-order current at twice the frequency
     of the field, J_a(2w) = sigma_abc(2w;w,w) E_b(w) E_c(w), symmetrized
@@ -319,7 +320,33 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       "velocity" (default) or "length", see above
     degeneracy_tol : float
       relative tolerance below which the length gauge treats two bands
-      as degenerate and refuses to run
+      as degenerate and refuses to run (and below which the triangle
+      integration treats two energy differences as equal)
+    integration : str
+      how the k-integral is done, one of shg.get_integration_names():
+      "grid" (default) sums the formula over the uniform nk mesh, which
+      needs a mesh whose transition-energy spacing is below delta.
+      "triangle" splits the mesh into simplices, interpolates the band
+      energies and the weights linearly inside each one and integrates the
+      resonant factors 1/(w - E_nm) and 1/(2w - E_mn) over it exactly
+      (conductivitytk/shgsimplex.py), so the mesh only has to resolve the
+      bands, not the broadening. In a two-band model every resonant
+      factor is integrated exactly on the interpolated bands; the products
+      of a resonance at w and one at 2w of three different bands are not
+      linear on a triangle and are integrated through a triangulation of
+      the prism triangle x [0,1], averaged over the vertex orderings. Both
+      converge at second order in 1/nk. The 1/w^2 prefactor of the
+      velocity gauge amplifies the O(1/nk^2) error at small w, so below
+      the absorption edge the grid, which converges exponentially there,
+      is the better choice. "qtci" (2D only) does the same on a 2^R x 2^R
+      mesh, nk rounded up to a power of two, whose band energies and
+      weights come from a quantics tensor cross interpolation instead of a
+      diagonalization at every point. Both need delta > 0 and the velocity
+      gauge, and neither removes the mesh requirement set by T at a Fermi
+      surface
+    tolerance : float
+      relative tolerance of the tensor cross interpolation of each field,
+      only used by integration="qtci"
 
     Returns
     -------
@@ -327,7 +354,8 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     is a single string, and a dict {component: array} otherwise.
     """
     return shg.shg_conductivity(h,energies=energies,nk=nk,T=T,delta=delta,
-            components=components,gauge=gauge,degeneracy_tol=degeneracy_tol)
+            components=components,gauge=gauge,degeneracy_tol=degeneracy_tol,
+            integration=integration,tolerance=tolerance)
 
 
 def shg_susceptibility(h,length_unit=1.0,energy_unit=1.0,**kwargs):
