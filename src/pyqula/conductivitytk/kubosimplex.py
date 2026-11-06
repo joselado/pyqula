@@ -7,9 +7,10 @@
 # mesh, so it needs a mesh whose energy spacing is below delta. Here the
 # transition energy dE_nm(k) and the weight W^ab_nm(k) = ratio_nm v^a_nm v^b_mn
 # are interpolated linearly inside each simplex of the mesh (segments in 1D,
-# triangles in 2D), and the resolvent is integrated over the simplex
-# exactly. The mesh then only has to resolve the smooth functions dE and W,
-# not the broadening, and every frequency comes from the same mesh.
+# triangles in 2D, tetrahedra in 3D), and the resolvent is integrated over
+# the simplex exactly. The mesh then only has to resolve the smooth
+# functions dE and W, not the broadening, and every frequency comes from the
+# same mesh.
 #
 # The simplex average of a function phi(e(k)) with e linear in k is given by
 # the Hermite-Genocchi formula, d! times the d-th divided difference of the
@@ -151,7 +152,7 @@ def _sigma_simplex_jit(simplices,dE,W,trans,diag,omegas,delta,harm,fact):
     frequencies, so each thread owns one output row. Not normalized: the
     caller multiplies by i, the simplex volume fraction and 1/V_cell."""
     ns = simplices.shape[0]
-    nv = simplices.shape[1] # vertices per simplex, 2 or 3
+    nv = simplices.shape[1] # vertices per simplex, 2, 3 or 4
     npair = dE.shape[1]
     nc = W.shape[2]
     nw = omegas.shape[0]
@@ -188,9 +189,13 @@ def _sigma_simplices(simplices,dE,W,trans,diag,omegas,delta):
 
 
 def simplices(dim,nk):
-    """Simplices of the periodic nk (1D) or nk x nk (2D) mesh, as vertex
-    indices into the row-major list of klist.kmesh, and the volume fraction
-    of the Brillouin zone each one covers"""
+    """Simplices of the periodic nk (1D), nk x nk (2D) or nk^3 (3D) mesh,
+    as vertex indices into the row-major list of klist.kmesh, and the
+    volume fraction of the Brillouin zone each one covers. The 3D
+    tetrahedra are those of dostk/simplexdos.py"""
+    if dim==3:
+        from ..dostk.simplexdos import simplices as simplices3d
+        return simplices3d(3,nk)
     if dim==1:
         i = np.arange(nk)
         return np.stack([i,(i+1)%nk],axis=1).astype(np.int64),1./nk
@@ -484,10 +489,18 @@ _kernels = {
 
 
 def _sigma_from_fields(dim,nk,pairs,dE,W,comps,trans,energies,delta,cellvol,
-        kernel="sources"):
+        kernel=None):
     """Assemble the 3x3 tensor from the stored pair fields on the mesh.
     kernel="simplices" is the direct sum over simplices, kept as the
-    reference that the tests compare the default against."""
+    reference that the tests compare the default against. The source
+    kernel is written out for segments and triangles only, so in 3D the
+    default (kernel=None) is the direct kernel, whose divided differences
+    (simplexdos._dd) take any number of vertices."""
+    if kernel is None: kernel = "simplices" if dim==3 else "sources"
+    if kernel=="sources" and dim==3: raise NotImplementedError(
+        "the source kernel of the simplex optical conductivity is only "
+        "written for segments and triangles (1D and 2D), not for the "
+        "tetrahedra of 3D; use kernel='simplices'")
     if kernel not in _kernels:
         raise ValueError("unknown simplex kernel "+repr(kernel)+
                 ", accepted values are "+", ".join(_kernels))

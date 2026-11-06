@@ -251,11 +251,14 @@ def test_component_selection_and_channel_switches():
 
 
 def test_unsupported_hamiltonians_raise():
-    """Zero-dimensional and three-dimensional Hamiltonians, and Nambu
-    (superconducting) ones, are rejected rather than silently wrong."""
-    h3 = geometry.cubic_lattice().get_hamiltonian(has_spin=False)
-    with pytest.raises(NotImplementedError):
-        conductivity.optical_conductivity(h3, energies=[1.], nk=4)
+    """Zero-dimensional Hamiltonians, and Nambu (superconducting) ones, are
+    rejected rather than silently wrong (3D crystals are covered in
+    test_optical_3d.py)."""
+    g0 = geometry.chain().supercell(4)
+    g0.dimensionality = 0
+    h0 = g0.get_hamiltonian(has_spin=False)
+    with pytest.raises(NotImplementedError, match="dimensionality 0"):
+        conductivity.optical_conductivity(h0, energies=[1.], nk=4)
     hsc = geometry.chain().get_hamiltonian(has_spin=True)
     hsc.add_swave(0.2)
     with pytest.raises(NotImplementedError):

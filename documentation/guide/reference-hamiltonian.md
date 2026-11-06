@@ -1298,14 +1298,16 @@ Optional arguments:
   curvature to `BERRY_CURVATURE.OUT`
 
 ## h.get_anomalous_hall_conductivity()
-Return the intrinsic Hall conductivity of a two-dimensional metal or
-insulator, in units of $e^2/h$, the Berry curvature integrated over the
-Fermi sea,
+Return the intrinsic Hall conductivity of a two- or three-dimensional
+metal or insulator, the Berry curvature integrated over the Fermi sea, in
+units of $e^2/h$ in 2D,
 
 $$\sigma_{xy} = \frac{1}{2\pi}\sum_n\int_{BZ} f(E_n(\mathbf k)-\mu)\,\Omega_n(\mathbf k)\, d^2k .$$
 
-Inside a gap it is the Chern number of `h.get_chern()`. See
-[Topological invariants](topological-invariants.md).
+Inside a gap it is the Chern number of `h.get_chern()`. In 3D the integral
+runs over the 3D zone with $1/(2\pi)^2$ in front, and the result is in
+units of $e^2/h$ per unit length; a stack of Chern layers with spacing $c$
+gives $C/c$. See [Topological invariants](topological-invariants.md).
 
 Optional arguments:
 - fermi=0.: the Fermi energy $\mu$, a number or an array, which then gives
@@ -1320,8 +1322,10 @@ Optional arguments:
   default; it lowers the error at a given `nk`
 - degeneracy_tol=1e-6: bands closer than this, in units of the hopping,
   count as one degenerate multiplet
+- direction="xy": the plane of $\sigma_{ab}$, `"xy"`, `"yz"` or `"zx"`
+  (a reversed pair flips the sign); in 2D only `"xy"` can be nonzero
 
-It raises `ValueError` if the Hamiltonian is not two dimensional, and
+It raises `ValueError` if the Hamiltonian is not two or three dimensional, and
 `NotImplementedError` for a Nambu or a non-Hermitian Hamiltonian.
 
 ## h.get_berry_curvature()
@@ -1547,15 +1551,16 @@ Optional arguments:
 - component=None: for example `"xy"`, to return only that component
 - degeneracy_tol=1e-6: relative tolerance to treat two bands as degenerate
 - integration="grid": `"grid"` sums over the k-mesh; `"triangle"` integrates
-  the resolvent exactly over the triangles of the mesh, for a broadening below
-  the mesh resolution; `"qtci"` does the same on a $2^R\times2^R$ mesh built
+  the resolvent exactly over the triangles of the mesh (tetrahedra in 3D),
+  for a broadening below the mesh resolution; `"qtci"` does the same on a $2^R\times2^R$ mesh built
   from a quantics tensor cross interpolation, 2D only. See
   [Small broadening](optical-conductivity.md#small-broadening)
 - tolerance=1e-6: relative accuracy of the interpolation, only for `"qtci"`
 
 Returns `(energies,sigma)`, with `sigma` complex of shape `(nw,3,3)`, or
-`(nw,)` with `component`. The unit is $e^2/\hbar$, so $e^2/h$ is
-$1/(2\pi)$. 3D and Nambu Hamiltonians raise `NotImplementedError`.
+`(nw,)` with `component`. The unit is $e^2/\hbar$ times $a^{2-d}$ in $d$
+dimensions, so $e^2/h$ is $1/(2\pi)$ in 2D. Nambu Hamiltonians, and
+`"qtci"` in 3D, raise `NotImplementedError`.
 
 ## h.get_shg_conductivity()
 Compute the second-harmonic conductivity $\sigma_{abc}(2\omega;\omega,\omega)$,

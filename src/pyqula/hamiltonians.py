@@ -137,8 +137,9 @@ class Hamiltonian():
         return topology.get_berry_curvature(h,**kwargs)
 
     def get_anomalous_hall_conductivity(h,**kwargs):
-        """Fermi-sea anomalous Hall conductivity of a 2D metal or insulator,
-        in units of e^2/h, see topologytk/anomaloushall.py"""
+        """Fermi-sea anomalous Hall conductivity of a 2D or 3D metal or
+        insulator, in units of e^2/h (2D) or e^2/h per unit length (3D),
+        see topologytk/anomaloushall.py"""
         return topology.anomalous_hall_conductivity(h,**kwargs)
 
     def get_berry_curvature_path(h,**kwargs):

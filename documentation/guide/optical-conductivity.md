@@ -135,9 +135,11 @@ The keywords are
   `"triangle"` and `"qtci"` for a small broadening, see
   [Small broadening](#small-broadening).
 
-The formula works for one- and two-dimensional Hamiltonians.
-Superconducting (Nambu) Hamiltonians and three-dimensional ones raise
-`NotImplementedError`; for a Nambu Hamiltonian the hole block carries the
+The formula works for one-, two- and three-dimensional Hamiltonians. In
+three dimensions $\sigma$ is a bulk conductivity, in units of
+$e^2/(\hbar a)$. A stack of decoupled layers with spacing $c$ gives the
+sheet conductance of one layer divided by $c$. Superconducting (Nambu)
+Hamiltonians raise `NotImplementedError`: the hole block carries the
 opposite charge, so the current is not $i[H,r]$.
 
 ## Small broadening
@@ -248,7 +250,12 @@ The keywords of the two integrations are
 - `tolerance`: relative accuracy of the interpolation, only for `"qtci"`.
 
 `"qtci"` works for two-dimensional Hamiltonians only; in one dimension
-`"triangle"` on a fine mesh is already cheap. A full script is in
+`"triangle"` on a fine mesh is already cheap. In three dimensions
+`"triangle"` cuts each cube of the mesh into six tetrahedra and integrates
+the resolvent exactly over each one. At $\eta=10^{-2}t$ on a stack of
+Chern insulators it needs about 100 times fewer k-points than the grid for
+the same accuracy at the absorption edge. Its cost grows with the number of
+frequencies, so in 3D ask only for the frequencies you need. A full script is in
 `examples/2d/optical_conductivity_triangle/main.py`.
 
 ## Second-harmonic generation

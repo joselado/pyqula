@@ -156,6 +156,90 @@ What converged and what did not:
   mesh spacing, as for the density matrix. The test uses this regime, since
   a converged uniform reference is cheap there.
 
+## 3D crystals (7 November 2026)
+
+The question was how to define the Fermi-sea Hall conductivity of a 3D
+crystal with the same code, and whether the tetrahedra gain over the
+uniform mesh there as the triangles do in 2D.
+
+The definition. In 3D the Hall conductivity is a conductivity, a current
+density per field, so the integral runs over the 3D zone with one more
+1/(2 pi),
+
+sigma_ab = (e^2/h) (1/(2 pi)^2) sum_n int d^3k f(E_n(k) - mu) Omega^ab_n(k),
+
+with Omega^ab_n = -2 Im sum_m <n|v_a|m><m|v_b|n>/(E_n - E_m)^2. On a uniform
+mesh both the 2D and the 3D formula are (2 pi/V_cell) times the mesh mean of
+sum_n f Omega_n, with V_cell the area or the volume, so one code serves both.
+The output is a number in units of e^2/(h a), a the length unit of the
+geometry, for the plane chosen by `direction=` ("xy" by default, Omega_z;
+"yz" is Omega_x and "zx" is Omega_y; a reversed pair flips the sign; the six
+names are a registry, `get_direction_names()`). We chose one component per
+call rather than the Hall vector, so that the 2D call and its return type do
+not change. For decoupled Chern layers with spacing c it is C/c, and in a
+3D insulator it is a component of G/(2 pi), with G a reciprocal lattice
+vector. The velocities are the 3D Kubo velocities of `conductivitytk/kubo.py`
+(see `qtci_optical_response.md`), and the tetrahedron weights are those of
+`dmtk/simplexdm.py` in 3D.
+
+What was checked (`tests/topology/test_anomalous_hall_3d.py`). A stack of
+decoupled Haldane layers gives C/c in the gap, the same number as the 2D
+result per spacing to rounding, with or without the Bloechl term. In a
+metal the grid gives the 2D result per spacing to rounding. The tetrahedra
+of `simplexdos.py` share the (0,0,0)-(1,1,1) diagonal, so for decoupled
+layers they project onto the triangles cut along (0,0)-(1,1), which is the
+2D mesh of the same layer in the basis (a1,-a2). The weights here are exact
+linear integrals, not vertex averages, so the 3D result per spacing is the
+2D result in that basis to rounding, without the Bloechl term, whose
+coefficient depends on the dimension (with it they differ by 2e-4 at
+nk = 24). In the basis (a1,a2) the 2D result differs at second order,
+1.3e-2 at nk = 24. With a kz dependent mass the tetrahedra converge at
+second order to the mean over kz of the 2D slices, the insulator gives 1/c,
+and rotating the crystal by x->y, y->z, z->x moves sigma_xy to sigma_yz to
+rounding.
+
+The measurement. The model is the one of the optical note: the Haldane
+layer stacked along z with c = 2 and the interlayer hopping diag(0.05,-0.05),
+here at mu = 0.5, a 3D metal, at T = 0. The reference is the mean over 16
+slices in kz of the 2D triangle result at nk = 512, divided by c:
+0.359536. The in-plane velocities do not depend on kz, so this is exact up
+to the 2D error, about 2e-5, and the kz mean of a smooth periodic function,
+which converges exponentially. Four cores; the time is the whole call.
+
+| nk | k-points | tetrahedra | no Bloechl | grid | time tetrahedra (s) | time grid (s) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 16 | 4096 | 1.7e-2 | | | 0.04 | |
+| 24 | 13824 | 5.2e-3 | | | 0.14 | |
+| 32 | 32768 | 2.9e-3 | 7.5e-3 | 1.1e-3 | 0.34 | 0.30 |
+| 48 | 110592 | 1.2e-3 | | | 1.2 | |
+| 64 | 262144 | 7.2e-4 | 1.8e-3 | 1.0e-4 | 2.8 | 2.4 |
+| 96 | 884736 | 3.1e-4 | 7.9e-4 | -6.6e-5 | 9.3 | 8.1 |
+| 128 | 2097152 | | 4.4e-4 | -1.6e-4 | | 19 |
+| 160 | 4096000 | | | 1.2e-4 | | 38 |
+| 192 | 7077888 | | | 5.9e-5 | | 65 |
+
+The errors are absolute, on a value of 0.36 (0.72 per layer spacing).
+
+What this means. The tetrahedra converge at second order, smoothly and from
+one side, and the Bloechl term divides the error by 2.5. The grid at T = 0
+does not converge in this range: its error oscillates between 6e-5 and 1.6e-4
+from nk = 64 to 192. But it is already small at nk = 64, smaller than the
+tetrahedra at nk = 96. So in this 3D metal the grid wins at T = 0, which is
+the opposite of 2D. The reason is the averaging over kz. On a single 2D slice
+(the slice at kz = 1/4, at the same mu) the grid error oscillates at 1e-3
+up to nk = 256 (-6.9e-3 at nk = 64, -1.8e-3 at 128, 7.3e-4 at 256), while
+the triangle falls as 1/nk^2 (8.8e-4 at 64, 2.2e-4 at 128, 5.1e-5 at 256),
+as in the 2D measurement above. In 3D the grid error of each slice has its
+own sign and they cancel in the mean over the nk slices, while the error of
+the tetrahedra has the same sign in every slice and does not cancel. What
+the tetrahedra keep is a predictable error: the Richardson extrapolation
+of nk = 64 and 96 gives the reference to 1.9e-5, and of 48 and 96 to 4e-6,
+which no combination of grid results does. We kept "triangle" as the
+default in 3D too, for this reason and so that the default does not depend
+on the dimension. One model is not a rule, and a 3D metal with a Fermi
+surface that is the same in every slice (a stack of decoupled layers) has
+no such cancellation.
+
 ## Choices
 
 - A new function, not an option of `topology.chern`: `chern` and its alias
@@ -185,8 +269,9 @@ What converged and what did not:
   primitive cell gives at nk = 96, so the folding costs a factor of order
   one in nk here. The uniform mesh of the supercell at nk = 60 gives the
   primitive nk = 120 result to 1e-13, since it is the same set of states.
-- 3D, the tetrahedron version. The weights exist (`simplexdm` in 3D), but
-  the velocities of `conductivitytk/kubo.py` are only built in 1D and 2D.
+- 3D is built (see "3D crystals"). Open there: the full Hall vector in one
+  call, and a reason to prefer the grid or the tetrahedra in a 3D metal
+  beyond the one model measured.
 - The qtci mesh of the density matrix was not tried here.
 - Only the intrinsic, Fermi-sea term is computed. The Fermi-surface terms
   of disorder (side jump, skew scattering) are not in a band calculation.

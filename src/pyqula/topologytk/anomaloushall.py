@@ -1,12 +1,20 @@
-# Intrinsic anomalous Hall conductivity of a 2D crystal, metal or insulator,
-# from the Fermi-sea integral of the Berry curvature,
+# Intrinsic anomalous Hall conductivity of a 2D or 3D crystal, metal or
+# insulator, from the Fermi-sea integral of the Berry curvature,
 #   sigma_xy = (e^2/h) (1/2 pi) sum_n int d^2k f(E_n(k) - fermi) Omega_n(k),
-# with the integral over the Brillouin zone.
+# with the integral over the Brillouin zone. In 3D the same integral runs
+# over the 3D zone with an extra 1/(2 pi),
+#   sigma_ab = (e^2/h) (1/(2 pi)^2) sum_n int d^3k f Omega^ab_n,
+# a conductivity per unit length: for decoupled layers of Chern number C
+# and spacing c it is C/c. In both cases the mean over a uniform mesh gives
+# sigma = (2 pi/V_cell) mean_k sum_n f Omega_n, with V_cell the area in 2D
+# and the volume in 3D, so one code serves both.
 #
 # The Berry curvature of each band is the Kubo sum over the other bands,
-#   Omega_n = -2 Im sum_{m not in the multiplet of n}
-#             <n|v_x|m><m|v_y|n> / (E_n - E_m)^2,
-# with the Cartesian velocities of conductivitytk/kubo.py, v = dH/dk + i[H,r],
+#   Omega^ab_n = -2 Im sum_{m not in the multiplet of n}
+#             <n|v_a|m><m|v_b|n> / (E_n - E_m)^2,
+# with (a,b) = (x,y) by default and, in 3D, the plane chosen by direction=
+# ("yz" is Omega_x, "zx" is Omega_y, a reversed pair flips the sign),
+# and with the Cartesian velocities of conductivitytk/kubo.py, v = dH/dk + i[H,r],
 # which carry the full bond vector (the atomic gauge). The gauge matters
 # here, unlike for the Chern number: the curvature of the lattice gauge
 # differs from the atomic one by the curl of <u_n|r|u_n>, a total derivative
@@ -34,7 +42,15 @@
 # ones convolved with -f'(x), and the Bloechl term). A fully occupied
 # triangle gives every vertex the uniform weight 1/nk^2, so in an insulator
 # the triangle and the grid are the same number. In a metal the error is of
-# second order in 1/nk at any T, T=0 included.
+# second order in 1/nk at any T, T=0 included. In 3D the same holds with
+# the six tetrahedra per cube of dostk/simplexdos.py, which share the
+# diagonal from (0,0,0) to (1,1,1) of the reduced mesh. For decoupled
+# layers stacked along a3, the three tetrahedra above a triangle fill the
+# prism on it, so the 3D weights are the 2D ones of triangles cut along
+# (0,0)-(1,1), which is the 2D mesh of the same layer in the basis
+# (a1,-a2): there the two agree to rounding, and with the basis (a1,a2)
+# at second order in 1/nk. The Bloechl term breaks this, since its
+# coefficient depends on the dimension (2e-4 for a Haldane metal at nk=24).
 #
 # Degeneracies. The weights are averaged over the degenerate multiplets at
 # each k, and the pairs inside a multiplet are left out of Omega, with the
@@ -88,8 +104,8 @@ def _band_curvature_jit(es,vx,vy,tol,out):
 
 def check_hamiltonian(h):
     """Refuse what the Fermi-sea Hall conductivity does not cover"""
-    if h.dimensionality!=2:
-        raise ValueError("the anomalous Hall conductivity needs a 2D "
+    if h.dimensionality not in (2,3):
+        raise ValueError("the anomalous Hall conductivity needs a 2D or 3D "
                 "periodic Hamiltonian, got dimensionality "
                 +str(h.dimensionality))
     if h.has_eh:
@@ -99,19 +115,41 @@ def check_hamiltonian(h):
     check_simplex(h,"the anomalous Hall conductivity")
 
 
-def band_curvature_mesh(h,nk=default_nk,degeneracy_tol=1e-6):
-    """Band energies es[k,n] and Kubo Berry curvatures Omega[k,n] (Cartesian,
-    per unit area of k-space) on the uniform nk x nk mesh, row-major as
-    klist.kmesh, together with the cell area and the absolute degeneracy
-    tolerance, degeneracy_tol times the hopping scale of h"""
+# direction= of anomalous_hall_conductivity -> the Cartesian pair (a,b) of
+# sigma_ab, whose curvature is built from v_a and v_b
+_directions = {"xy":(0,1),"yz":(1,2),"zx":(2,0),
+               "yx":(1,0),"zy":(2,1),"xz":(0,2)}
+
+
+def get_direction_names():
+    """Accepted values of direction= in anomalous_hall_conductivity"""
+    return list(_directions)
+
+
+def _axes(direction):
+    if direction not in _directions:
+        raise ValueError("unknown direction "+repr(direction)+" of the "
+                "anomalous Hall conductivity; it must be one of "
+                +str(get_direction_names()))
+    return _directions[direction]
+
+
+def band_curvature_mesh(h,nk=default_nk,degeneracy_tol=1e-6,direction="xy"):
+    """Band energies es[k,n] and Kubo Berry curvatures Omega^ab[k,n]
+    (Cartesian, per unit area of k-space, (a,b) set by direction) on the
+    uniform nk^dim mesh, row-major as klist.kmesh, together with the cell
+    area (2D) or volume (3D) and the absolute degeneracy tolerance,
+    degeneracy_tol times the hopping scale of h"""
     check_hamiltonian(h)
+    a,b = _axes(direction)
+    dim = h.dimensionality
     from ..conductivitytk import kubo
     from ..dostk.simplexdos import uniform_mesh
     setup = kubo._setup(h)
     setup = (setup,kubo._hopping_arrays(setup[0]))
     cellvol,scale = setup[0][5],setup[0][6]
     tol = degeneracy_tol*scale
-    ks = uniform_mesh(2,nk)
+    ks = uniform_mesh(dim,nk)
     n = setup[0][0].intra.shape[0]
     batch = int(max(64,min(2**14,_max_batch_bytes/(48.*n*n))))
     es = np.zeros((len(ks),n))
@@ -120,26 +158,27 @@ def band_curvature_mesh(h,nk=default_nk,degeneracy_tol=1e-6):
     for i0 in range(0,len(ks),batch):
         eb,vb = kubo._bands_and_velocities(h,ks[i0:i0+batch],setup=setup)[:2]
         ob = np.zeros(eb.shape)
-        _band_curvature_jit(eb,np.ascontiguousarray(vb[:,0]),
-                np.ascontiguousarray(vb[:,1]),tol,ob)
+        _band_curvature_jit(eb,np.ascontiguousarray(vb[:,a]),
+                np.ascontiguousarray(vb[:,b]),tol,ob)
         es[i0:i0+len(eb)] = eb
         om[i0:i0+len(eb)] = ob
     return es,om,cellvol,tol
 
 
-def _grid_weights(es,nk,fermi,T,tol,bloechl):
+def _grid_weights(dim,es,nk,fermi,T,tol,bloechl):
     """Fermi occupations on the uniform mesh, divided by the number of
     k-points (bloechl does not apply)"""
     x = es-fermi
     if T<=0.: f = np.where(x<0.,1.,0.)
     else: f = 1./(1.+np.exp(np.clip(x/T,-500.,500.)))
-    return f/nk**2
+    return f/nk**dim
 
 
-def _triangle_weights(es,nk,fermi,T,tol,bloechl):
-    """Linear triangle weights, averaged over the degenerate multiplets"""
+def _triangle_weights(dim,es,nk,fermi,T,tol,bloechl):
+    """Linear triangle (2D) or tetrahedron (3D) weights, averaged over the
+    degenerate multiplets"""
     from ..dmtk.simplexdm import simplex_weights, _multiplet_average_real
-    w = simplex_weights(2,nk,es,mu=fermi,T=T,bloechl=bloechl)
+    w = simplex_weights(dim,nk,es,mu=fermi,T=T,bloechl=bloechl)
     _multiplet_average_real(es,w,tol)
     return w
 
@@ -157,14 +196,23 @@ def get_integration_names():
 
 
 def anomalous_hall_conductivity(h,fermi=0.,T=0.,nk=default_nk,
-        integration="triangle",bloechl=None,degeneracy_tol=1e-6):
-    """Intrinsic anomalous Hall conductivity of a 2D Hamiltonian, the
+        integration="triangle",bloechl=None,degeneracy_tol=1e-6,
+        direction="xy"):
+    """Intrinsic anomalous Hall conductivity of a 2D or 3D Hamiltonian, the
     Fermi-sea integral of the Berry curvature,
-      sigma_xy = (1/2 pi) sum_n int d^2k f(E_n(k) - fermi) Omega_n(k),
-    in units of e^2/h. In a gap it is the Chern number of h.get_chern()
-    (right-handed lattice basis); in a metal it is not quantized. The
-    conductivity.py and kpmkubo convention, e^2/hbar with
+      sigma_xy = (1/2 pi) sum_n int d^2k f(E_n(k) - fermi) Omega_n(k)
+    in 2D, in units of e^2/h. In a gap it is the Chern number of
+    h.get_chern() (right-handed lattice basis); in a metal it is not
+    quantized. The conductivity.py and kpmkubo convention, e^2/hbar with
     sigma_xy 2 pi = -C, is minus this divided by 2 pi.
+
+    In 3D it is
+      sigma_ab = (1/(2 pi)^2) sum_n int d^3k f(E_n(k) - fermi) Omega^ab_n(k),
+    a conductivity, in units of e^2/(h a) with a the length unit of the
+    geometry (the unit of g.r and of the lattice vectors), with (a,b) the
+    plane chosen by direction. For decoupled Chern layers stacked with a
+    spacing c it is C/c. In a 3D insulator it is quantized in the same
+    way, a component of G/(2 pi) with G a reciprocal lattice vector.
 
     Parameters
     ----------
@@ -186,6 +234,11 @@ def anomalous_hall_conductivity(h,fermi=0.,T=0.,nk=default_nk,
     degeneracy_tol : float
       relative tolerance (in units of the hopping scale) below which two
       bands at the same k count as one multiplet
+    direction : str
+      one of get_direction_names(), the Cartesian pair ab of sigma_ab:
+      "xy" (default) is the curvature Omega_z, "yz" is Omega_x and "zx" is
+      Omega_y, and a reversed pair ("yx") flips the sign. In 2D only "xy"
+      can be nonzero, since there is no current along z
 
     Returns
     -------
@@ -198,11 +251,14 @@ def anomalous_hall_conductivity(h,fermi=0.,T=0.,nk=default_nk,
     if bloechl is None: bloechl = bloechl_default
     T = 0. if T is None else float(abs(T))
     es,om,cellvol,tol = band_curvature_mesh(h,nk=nk,
-            degeneracy_tol=degeneracy_tol)
+            degeneracy_tol=degeneracy_tol,direction=direction)
     wf = _integrations[integration]
+    dim = h.dimensionality
     fermis = np.atleast_1d(np.array(fermi,dtype=np.float64))
-    out = np.array([np.sum(wf(es,nk,float(mu),T,tol,bloechl)*om)
+    out = np.array([np.sum(wf(dim,es,nk,float(mu),T,tol,bloechl)*om)
         for mu in fermis])
-    out = out*2.*np.pi/cellvol # (1/2 pi) int d^2k = (2 pi/A_cell) mean_k
+    # (1/2 pi) int d^2k = (2 pi/A_cell) mean_k in 2D, and
+    # (1/(2 pi)^2) int d^3k = (2 pi/V_cell) mean_k in 3D
+    out = out*2.*np.pi/cellvol
     if np.ndim(fermi)==0: return float(out[0])
     return out

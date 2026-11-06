@@ -205,8 +205,13 @@ already reached once.
   supercells up to 32 bands. A band window (`ewindow=`, or `nv`/`nc`) keeps
   only the bands near E_F, with exact Re sigma below the window and a
   Kramers-Kronig bias of Im sigma, measured; it brings a 1084-orbital
-  twisted bilayer from 16 GB at nk = 6 to 2.9 GB at nk = 36. Open: many
-  bands, metals, SHG and 3D.
+  twisted bilayer from 16 GB at nk = 6 to 2.9 GB at nk = 36. In 3D the
+  Kubo velocities and the tetrahedra are built: at delta = 1e-2 t on a
+  stack of Chern insulators the tetrahedra need about 100 times fewer
+  k-points than the grid at the absorption edge (8e-2 at nk = 24 against
+  nk = 160), 40 times less wall time there, and reach 1e-2 at nk = 64 to
+  96, out of reach of the grid. Open: many bands, metals, SHG, the source
+  kernel for tetrahedra and qtci in 3D.
 
 - [`tetrahedron_density_matrix.md`](tetrahedron_density_matrix.md) -- the
   triangle and tetrahedron density matrix of the mean field,
@@ -234,8 +239,12 @@ already reached once.
   gap it is the Chern number and both are the same number. At T = 1e-3 t a
   1e-3 accuracy takes nk = 64 with the triangle against 192 to 256 uniform,
   8 to 12 times less wall time, with 1/nk^2 convergence; the atomic gauge
-  matters once C3 is broken. Open: band crossings, 3D, qtci, the README
-  bullet and its notebook.
+  matters once C3 is broken. In 3D it is a conductivity per unit length,
+  C/c for Chern layers of spacing c, with `direction=` choosing the plane;
+  there, in a metal at T = 0, the grid error averages out over kz and the
+  grid beats the tetrahedra (1e-4 at nk = 64 against 7e-4), while the
+  tetrahedra converge smoothly at second order and extrapolate to 2e-5.
+  Open: band crossings, qtci, the README bullet and its notebook.
 
 - [`tetrahedron_susceptibility.md`](tetrahedron_susceptibility.md) -- the
   triangle and tetrahedron bare susceptibility, `integration="triangle"` of

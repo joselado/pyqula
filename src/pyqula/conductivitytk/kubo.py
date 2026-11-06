@@ -65,9 +65,13 @@ def _cell_factors(h):
         orders = [[1,0],[0,1]]
         avecs = np.array([g.a1,g.a2])
         cellvol = np.linalg.norm(np.cross(g.a1,g.a2)) # area of the unit cell
+    elif dim==3:
+        orders = [[1,0,0],[0,1,0],[0,0,1]]
+        avecs = np.array([g.a1,g.a2,g.a3])
+        cellvol = abs(np.dot(g.a1,np.cross(g.a2,g.a3))) # volume of the cell
     else: raise NotImplementedError(
-        "optical conductivity only implemented for dimensionality 1 or 2 "
-        "(current.derivative, the shared k-derivative, has no 3D branch)")
+        "the Kubo velocities are implemented for dimensionality 1, 2 or 3, "
+        "got dimensionality "+str(dim))
     return orders,np.array(avecs)/(2.*np.pi),cellvol
 
 
@@ -452,6 +456,9 @@ def _sigma_triangle(h,energies,nk,T,delta,intraband,interband,
 
 def _sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
         tolerance=1e-6,window=None):
+    if h.dimensionality==3: raise NotImplementedError(
+        "integration='qtci' of the optical conductivity is not implemented "
+        "in 3D; use integration='triangle' (tetrahedra) or 'grid'")
     from . import kubosimplex
     return kubosimplex.sigma_qtci(h,energies,nk,T,delta,intraband,
             interband,degeneracy_tol,tolerance=tolerance,window=window)

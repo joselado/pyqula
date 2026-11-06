@@ -277,10 +277,26 @@ Keywords:
 - `T`: the temperature, 0 by default.
 - `nk`: number of k-points per direction, 100 by default.
 - `integration`: `"triangle"` (default) or `"grid"`.
+- `direction`: the plane of the Hall response in 3D, `"xy"` by default.
 
 Two bands that cross inside the Fermi sea are fine. A crossing exactly at
 the Fermi energy needs a finer mesh, because the curvature of the two bands
 is peaked there with opposite signs.
+
+The same method works for a three-dimensional crystal. There the integral
+runs over the 3D Brillouin zone,
+
+$$
+\sigma_{xy} = \frac{e^2}{h}\,\frac{1}{(2\pi)^2} \sum_n \int_{\rm BZ}
+f(E_n(\mathbf k)-\mu)\, \Omega^z_n(\mathbf k)\, d^3 \mathbf k ,
+$$
+
+and $\sigma_{xy}$ is a bulk conductivity, in units of $e^2/h$ per unit
+length. For a stack of decoupled Chern layers with spacing $c$ it is $C/c$.
+The plane is chosen with `direction`: `"xy"` (the default) uses
+$\Omega^z$, `"yz"` uses $\Omega^x$ and `"zx"` uses $\Omega^y$. The
+triangles of the mesh become tetrahedra, six per cube, and the error still
+goes as $1/n_k^2$.
 
 See `examples/2d/anomalous_hall/main.py` for a script that plots
 $\sigma_{xy}$ against the Fermi energy.

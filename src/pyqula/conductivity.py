@@ -69,9 +69,11 @@ Units and conventions
 * hbar = e = 1. Energies (and hbar*omega) are in the Hamiltonian's own
   units (i.e. hopping units), lengths in the geometry's units (i.e.
   lattice-constant units, taken from the actual lattice vectors g.a1,
-  g.a2 -- so a rescaled geometry does change the answer, as it must).
+  g.a2, g.a3 -- so a rescaled geometry does change the answer, as it must).
 * sigma is then returned in units of e^2/hbar times a^(2-d) with d the
-  dimensionality: e^2/hbar (a sheet conductance) in 2D, e^2*a/hbar in 1D.
+  dimensionality: e^2/hbar (a sheet conductance) in 2D, e^2*a/hbar in 1D,
+  e^2/(hbar a) (a bulk conductivity) in 3D. A 3D stack of decoupled layers
+  with spacing c gives the 2D sheet conductance of one layer divided by c.
   Note e^2/h = e^2/(2 pi hbar), so a value sigma_xy = 1/(2 pi) here is one
   conductance quantum e^2/h.
 * The chemical potential is zero, as everywhere else in pyqula: states
@@ -130,13 +132,13 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
         intraband=True,interband=True,component=None,degeneracy_tol=1e-6,
         integration="grid",tolerance=1e-6,ewindow=None,nv=None,nc=None):
     """Compute the Kubo-Greenwood optical conductivity tensor
-    sigma_ab(omega) of a 1D or 2D periodic Hamiltonian (see the module
+    sigma_ab(omega) of a 1D, 2D or 3D periodic Hamiltonian (see the module
     docstring for the formula, the units and the sign conventions).
 
     Parameters
     ----------
     h : Hamiltonian
-      the (1D or 2D) periodic Hamiltonian
+      the (1D, 2D or 3D) periodic Hamiltonian
     energies : array
       frequencies hbar*omega at which to evaluate the conductivity
       (default np.linspace(0.,4.,100)). Re sigma_aa is even in omega and
@@ -169,7 +171,7 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       "grid" (default) sums the formula over the uniform nk mesh, which
       needs a mesh whose transition-energy spacing is below delta.
       "triangle" splits the mesh into simplices (segments in 1D, triangles
-      in 2D), interpolates the transition energies and the weights
+      in 2D, six tetrahedra per cube in 3D), interpolates the transition energies and the weights
       linearly inside each one, and integrates the resolvent over it
       exactly (conductivitytk/kubosimplex.py). The mesh then only has to
       resolve the bands, not the broadening: at delta = 1e-3 t on a gapped
@@ -177,8 +179,11 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       needs nk = 8192. It converges at second order in 1/nk, so for a
       smooth integrand (delta larger than the band features, or a
       frequency inside a gap) the grid, which converges exponentially
-      there, is the better choice. "qtci" (2D only) does the same on a
-      2^R x 2^R mesh, nk rounded up to a power of two, where the
+      there, is the better choice. In 3D every tetrahedron is summed at
+      every frequency (the direct kernel of kubosimplex.py), so the cost
+      is the number of tetrahedra, 6 nk^3, times the band pairs times the
+      frequencies. "qtci" (2D only, 3D raises NotImplementedError) does the
+      same on a 2^R x 2^R mesh, nk rounded up to a power of two, where the
       transition energies and weights are reconstructed from a quantics
       tensor cross interpolation instead of computed on every point: for
       smooth bands the number of diagonalizations saturates with R (81k
@@ -244,7 +249,7 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
 
 
 def drude_weight(h,nk=20,T=0.05,degeneracy_tol=1e-6):
-    """Drude (intraband) weight tensor D_ab of a 1D or 2D periodic
+    """Drude (intraband) weight tensor D_ab of a 1D, 2D or 3D periodic
     Hamiltonian,
 
       D_ab = (1/(N_k V_cell)) sum_{k,n} (-df/dE)(E_nk) v^a_nn v^b_nn
@@ -264,7 +269,7 @@ def sum_rule_weight(h,nk=20,T=0.05):
 
       W_ab = (1/(N_k V_cell)) sum_{k,n} f_nk <n|d2H/dK_a dK_b|n>
 
-    of a 1D or 2D periodic Hamiltonian, computed from the exact second
+    of a 1D, 2D or 3D periodic Hamiltonian, computed from the exact second
     k-derivative of the Bloch Hamiltonian -- i.e. independently of the
     conductivity itself. It is the right-hand side of the f-sum rule,
     int_{-inf}^{inf} Re sigma_ab(omega) domega = pi*W_ab, and equals the

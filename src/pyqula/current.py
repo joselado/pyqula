@@ -97,9 +97,21 @@ def derivative(h,k,order=None):
         tk = pref*t.m * np.exp(1j*np.pi*2.*phi) # derivative of the first
         mout = mout + tk # add to the hamiltonian
       return mout
+  elif h.dimensionality == 3: # three dimensional
+      k = np.array(k) # convert to array
+      mout = h.intra*0.0 # initialize
+      for t in h.hopping: # loop over matrices
+        d = np.array(t.dir) # vector director of hopping
+        phi = d.dot(k) # phase
+        pref = 1.0+0j # total prefactor
+        for i in range(3): pref = pref*(d[i]*1j)**order[i]
+        tk = pref*t.m * np.exp(1j*np.pi*2.*phi) # derivative of the hopping
+        mout = mout + tk # add to the hamiltonian
+      return mout
   else:
     raise NotImplementedError("the k-derivative of the Hamiltonian is only "
-            "implemented for 1d and 2d Hamiltonians")
+            "implemented for 1d, 2d and 3d Hamiltonians, got dimensionality "
+            +str(h.dimensionality))
 
 
 def hk_derivative(h,k,order=None):

@@ -455,7 +455,7 @@ def get_velocity(h):
     def f(w,k=[0.,0.,0.]):
         return vk(k)@w
     return f
-  elif h.dimensionality==2:
+  elif h.dimensionality in (2,3):
     # the Cartesian band speed |<v>|, with v_alpha = i[H,r_alpha] built by
     # conductivitytk.kubo (the shared, benchmarked velocity: it applies
     # current.hk_derivative's 2*pi normalization, the reduced->Cartesian
@@ -475,8 +475,8 @@ def get_velocity(h):
     return Operator(f)
   else:
     raise NotImplementedError("the velocity operator is only implemented "
-      +"for dimensionality 1 and 2 (current.derivative, the shared "
-      +"k-derivative, has no 3D branch)")
+      +"for dimensionality 1, 2 and 3, got dimensionality "
+      +str(h.dimensionality))
 
 
 

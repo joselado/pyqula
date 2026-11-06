@@ -274,6 +274,103 @@ subset eigensolver still reduces the whole 1084 x 1084 matrix to
 tridiagonal form, so the window does not remove that n^3; it removes the n^2 per k-point of the memory and the
 (n/2)^2 of the pairs.
 
+## 3D crystals (7 November 2026)
+
+The question was whether the optical conductivity of a 3D crystal can use
+the same machinery, and whether the tetrahedra gain over the uniform mesh
+at small delta as the triangles do in 2D.
+
+What was built. The Kubo velocities of `conductivitytk/kubo.py` now exist in
+3D, in the atomic gauge, with the intracell bonds included as in 2D:
+`_cell_factors` gives the three derivative orders, the Jacobian a_i/(2 pi)
+and the cell volume, and `current.derivative` has a 3D branch, so the
+single-k velocity of `operators.get_velocity` works too. The grid sum needed
+nothing else. `integration="triangle"` in 3D uses the six tetrahedra per
+cube of `dostk/simplexdos.py`, which share the (0,0,0)-(1,1,1) diagonal of
+the reduced mesh, with the vertex average of the weights and the
+Hermite-Genocchi simplex average of the resolvent, 3! psi_3[e_0..e_3]. The
+direct kernel of `kubosimplex.py` already took any number of vertices,
+since its divided differences are those of `simplexdos._dd`. The source
+kernel does not: it is written out for segments and triangles only (the
+branches of `_simplex_sources` and the Taylor series of `_point_value` stop
+at three vertices). So in 3D the default kernel is the direct one, and
+`kernel="sources"` raises NotImplementedError. `integration="qtci"` in 3D
+raises NotImplementedError, from `kubo.py`, so the qtci path itself was not
+touched. In 3D sigma is a conductivity, in units of e^2/(hbar a).
+
+What was checked (`tests/conductivity/test_optical_3d.py`). The band velocity
+of the simple cubic band at a generic k is the finite difference of the
+band, to 1e-8. The whole velocity matrix of an eight-site cubic cell with a
+staggered onsite, intracell bonds included, is the sparse full-bond-vector
+construction of `kpmkubo.py`, an independent code, to 1e-12, in the
+single-k and in the batched path. A stack of decoupled Haldane layers with
+spacing c gives c sigma_3D = sigma_2D on the grid, to 1e-12, and nothing
+along z. The f-sum rule holds: on a 3D insulator at nk = 24 the frequency
+integral of Re sigma is pi W, with W from the second k-derivative of H, to
+1e-3 in the plane and 1e-4 along z (the difference is the mesh mean of the
+band curvature, which falls off exponentially with nk). The tetrahedra keep
+the spectral weight of the mesh: their frequency integral is the one of the
+grid on the same mesh, to 1e-4.
+
+Decoupled layers and the tetrahedra. For a field that does not depend on
+k3, the three tetrahedra above a triangle of the in-plane mesh fill the
+prism on it, and that triangle is cut along (0,0)-(1,1). This is the 2D
+mesh of the same layer in the basis (a1,-a2), not in the basis (a1,a2), whose
+triangles are cut along (1,0)-(0,1). So the transition energies are
+interpolated exactly as in 2D in the basis (a1,-a2). The weights are not:
+a tetrahedron counts one of its projected vertices twice in its vertex
+average. As a result c sigma_3D and the 2D result in the basis (a1,-a2)
+differ at second order, by 8e-3, 2.7e-3 and 7.3e-4 relative at nk = 8, 16
+and 32 (Haldane, delta = 0.1, T = 0.05). The anomalous Hall conductivity,
+whose weights are exact linear integrals, does agree to rounding (see
+`triangle_anomalous_hall.md`). We kept the decomposition of `simplexdos.py`:
+cutting the cubes along (1,0,0)-(0,1,1) instead makes the tetrahedra project
+onto the triangles of the basis (a1,a2), but it lengthens the diagonal of
+the face-centered cubic mesh, and the 3D Green's function test of
+`tests/green/test_green_simplex.py` then misses its bound (2.3e-2 against
+2e-2 at nk = 32).
+
+The measurement. The model is the Haldane layer (t2 = 0.1, staggered onsite
+0.2) stacked along z with spacing c = 2 and the interlayer hopping
+diag(0.05,-0.05), a mass that depends on kz. It is an insulator with a gap
+from -0.15 to 0.15 and C = 1 at every kz. We take 40 frequencies from 0.1 t
+to 4 t, delta = 1e-2 t, T = 1e-3 t, the interband part only, and four cores.
+The reference is the Richardson extrapolation of the tetrahedra at nk = 64
+and 96 (the tetrahedra at nk = 96 are within 6e-3, 1.1e-2 and 7e-3 of it for
+xx, xy and zz). Errors are relative to the largest value of each component,
+the largest over the frequencies and, in brackets, the median.
+
+| integration | nk | k-points | time (s) | xx | xy | zz |
+|---|---|---|---|---|---|---|
+| tetrahedra | 16 | 4096 | 0.4 | 0.10 (2.3e-2) | 0.16 (4.5e-2) | 0.21 (2.1e-2) |
+| tetrahedra | 24 | 13824 | 1.2 | 5.0e-2 (1.2e-2) | 8.7e-2 (2.3e-2) | 0.12 (9.8e-3) |
+| tetrahedra | 32 | 32768 | 2.7 | 3.7e-2 (7.7e-3) | 6.4e-2 (1.3e-2) | 6.9e-2 (4.9e-3) |
+| tetrahedra | 48 | 110592 | 8.7 | 2.0e-2 (3.1e-3) | 3.8e-2 (5.7e-3) | 3.1e-2 (2.1e-3) |
+| tetrahedra | 64 | 262144 | 18 | 1.3e-2 (1.8e-3) | 2.6e-2 (3.1e-3) | 1.6e-2 (1.4e-3) |
+| tetrahedra | 96 | 884736 | 50 | 5.9e-3 (8.2e-4) | 1.1e-2 (1.4e-3) | 7.0e-3 (6.3e-4) |
+| grid | 32 | 32768 | 0.35 | 0.98 (5.2e-2) | 0.92 (6.7e-2) | 1.8 (0.13) |
+| grid | 64 | 262144 | 3.1 | 0.47 (1.4e-2) | 0.45 (1.9e-2) | 0.70 (4.3e-2) |
+| grid | 96 | 884736 | 10 | 0.20 (5.9e-3) | 0.19 (9.8e-3) | 0.40 (2.7e-2) |
+| grid | 128 | 2097152 | 24 | 0.13 (5.4e-3) | 0.12 (6.3e-3) | 0.23 (1.8e-2) |
+| grid | 160 | 4096000 | 47 | 8.0e-2 (3.4e-3) | 7.7e-2 (4.7e-3) | 0.15 (1.3e-2) |
+
+What this means. The largest error of the tetrahedra falls at second order,
+and it sits at the absorption edge, where the transition energy has its
+minimum and the linear interpolation is worst, as in 2D. At equal largest
+error the tetrahedra need about 100 times fewer k-points: 8e-2 takes nk = 24
+(1.4e4 points, 1.2 s) with the tetrahedra and nk = 160 (4.1e6 points, 47 s)
+with the grid, and 1e-2 is out of reach of the grid in memory (it extrapolates
+to nk of about 450, 9e7 points), while the tetrahedra reach it at nk = 64 to
+96. Along z, where the velocity is small and the grid error is largest, the
+gain is the largest. The median error, away from the edge, gains less: the
+grid at nk = 160 is about the tetrahedra at nk = 24 (along z) to 48 (in the
+plane), 300 to 40 times fewer points. In wall time the tetrahedra pay for
+the direct kernel, about 1.7 microseconds per k-point and frequency for the
+one band pair of this model on four cores, against 0.3 for the grid, so the gain in time is about 40 at a largest error of
+8e-2, and it shrinks as the number of frequencies grows. With many bands
+the diagonalization dominates again and the gain in k-points is a gain in
+time.
+
 ## What is left open
 
 - **Cost per frequency (built, 6 November 2026).** The triangle sum used to
@@ -469,6 +566,12 @@ tridiagonal form, so the window does not remove that n^3; it removes the n^2 per
   `kpmtk/`, in the spirit of KITE. It has no k-mesh and no band labels,
   and it will be cross-checked against this windowed path on the cells
   where both run.
-- **3D.** The Kubo module has no 3D branch (`current.derivative` has none).
-  With one, tetrahedra need the third divided difference of
-  psi_3, and the gain over a uniform nk^3 mesh should be larger still.
+- **3D, what is still open (built otherwise, 7 November 2026, see "3D
+  crystals").** The source kernel for tetrahedra: the cost of the direct
+  kernel grows as the tetrahedra times the pairs times the frequencies, so
+  a long spectrum on a fine mesh is where it would help. It needs psi_3 at
+  the vertices and the confluent pieces of a tetrahedron (edges, triangles
+  and the whole simplex) as point sources, with their own Taylor series.
+  Also open: qtci in 3D, a choice of the tetrahedron diagonal adapted to the
+  lattice (the shortest one in reciprocal space), and the SHG and the
+  excitonic optics in 3D, whose velocities now exist.
