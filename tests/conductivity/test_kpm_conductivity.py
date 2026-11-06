@@ -46,6 +46,11 @@ def test_chebyshev_moments_match_the_diagonalization():
     mu = next(kpmkubo.moments(st,trace="exact"))
     ref = kpmkubo.exact_moments(st)
     assert np.max(np.abs(mu-ref)) < 1e-10*np.max(np.abs(ref))
+    # a tiny memory budget stores a few polynomials at a time and runs the
+    # left set again for every block, with the same result
+    assert kpmkubo._block_size(18,18,2,st.M,1e-4) < st.M
+    mu = next(kpmkubo.moments(st,trace="exact",memory=1e-4))
+    assert np.max(np.abs(mu-ref)) < 1e-10*np.max(np.abs(ref))
 
 
 def test_kpm_absorption_matches_the_band_calculation():

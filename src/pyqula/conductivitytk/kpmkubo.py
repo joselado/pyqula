@@ -336,8 +336,13 @@ def _probe_blocks(n,trace,ntries,rng,exact_block=64):
             X[np.arange(i0,i1),np.arange(i1-i0)] = 1.
             out.append(X)
         yield out
-    else: raise ValueError("unknown trace '"+str(trace)+"' for the KPM "
-            "conductivity; it must be one of "+str(get_trace_names()))
+    else: _check_trace(trace)
+
+
+def _check_trace(trace):
+    if trace not in _traces: raise ValueError("unknown trace '"+str(trace)
+            +"' for the KPM conductivity; it must be one of "
+            +str(get_trace_names()))
 
 
 def _block_size(n,ncol,nd,M,memory):
@@ -661,6 +666,7 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
       must be True, the expansion does not separate the two channels
     """
     _check_channels(intraband,interband)
+    _check_trace(trace)
     if energies is None: energies = np.linspace(0.,4.,100)
     energies = np.array(energies,dtype=np.float64)
     if T is None: T = delta # same default as kubo.optical_conductivity
@@ -723,6 +729,7 @@ def dc_conductivity(h,fermi=0.,nk=1,T=None,delta=0.1,npol=None,ntries=10,
     sigma of shape (3,3), or (len(fermi),3,3) for an array of Fermi levels,
     real; with return_error=True the tuple (sigma, error)
     """
+    _check_trace(trace)
     if T is None: T = delta
     st = _Setup(h,nk=nk,delta=delta,npol=npol,kernel=kernel,
             lorentz_lambda=lorentz_lambda,scale=scale,volume=volume)
