@@ -56,7 +56,8 @@
 # integral over x is split at the vertex energies of both bands, at 0, at
 # a fixed set of multiples of T up to 40 T, and at the energies where a
 # cut through an edge of the simplex meets the resonance D = w, and each
-# piece is done by Gauss-Legendre quadrature in the variable f(x). A pair
+# piece is done by Gauss-Legendre quadrature in the variable f(x), on
+# nodes graded towards both ends of the piece (see _quadrature). A pair
 # whose two bands keep the same side of the window on every vertex has an
 # x-independent T=0 response there, which is evaluated once.
 #
