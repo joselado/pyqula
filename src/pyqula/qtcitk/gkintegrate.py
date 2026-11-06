@@ -1,9 +1,10 @@
-# Shared helpers for "qtci" (Gauss-Kronrod quadrature folded into a tensor
-# cross interpolation, via the vendored qutecipy port at qutecipytk/) BZ
-# integration, used by both topology.chern_qtci and this package's own
-# densitymatrix_qtci.get_dm_qtci -- factored out so the two features can't
-# silently drift apart on the nk-to-quadrature-order mapping or on how a
-# zero-valued integrand at the default pivot is handled.
+# Helpers for "qtci" BZ integration by Gauss-Kronrod quadrature folded into a
+# tensor cross interpolation (the vendored qutecipy port at qutecipytk/),
+# used by topology.chern_qtci: the nk-to-quadrature-order mapping and the
+# handling of a zero-valued (or underflowing) integrand at the default pivot.
+# The qtci mean-field density matrix no longer uses this rule, since it
+# cannot integrate a metallic Fermi step; it interpolates the band fields on
+# a uniform mesh and applies the triangle weights (densitymatrix_qtci.py).
 import numpy as np
 
 

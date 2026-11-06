@@ -213,8 +213,11 @@ already reached once.
   `integration="triangle"`: exact filling, the right magnetic state on coarse
   meshes at low T, about 4 times fewer k-points for the magnetization and
   about 64 for the total energy and the bond densities with the Bloechl
-  term. Exact diagonalization wins at T = 1e-2 t on dense meshes, qtci loses
-  on these metals, and an insulator gains nothing. Open: RPA chi(q) and the
+  term. Exact diagonalization wins at T = 1e-2 t on dense meshes, and an
+  insulator gains nothing. The qtci mean field is rebuilt on the same
+  weights: it now reaches the right state on metals, with 4% of the mesh
+  on the square ferromagnet at nk = 256 but nearly the whole mesh on the
+  honeycomb one up to nk = 128. Open: RPA chi(q) and the
   anomalous Hall of metals with the same occupations, BdG, VJinteraction.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
