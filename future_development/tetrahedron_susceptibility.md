@@ -337,7 +337,7 @@ several thousand, in three dimensions.
 At T = 5e-2 the tetrahedra converge at second order to the converged
 grid (the error falls by 4.2 from nk = 16 to 32). At T = 1e-3 the
 tetrahedra at nk = 64, 262k k-points and 100 s, beat the grid at
-nk = 256, 17M k-points. The tetrahedron cost per k-point is high: 18
+nk = 256, 17M k-points. The tetrahedron cost per k-point is high: up to 9
 sub-tetrahedra per region and a quadrature in x on every tetrahedron near
 the Fermi surface.
 
