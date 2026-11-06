@@ -76,7 +76,7 @@ Per random vector and k-point, the left set L_n = T_n(H~) v_a |r> and the
 right set R_m = v_b T_m(H~) |r> are built with sparse products, and
 mu_nm = L_n^dagger R_m is a dense complex matrix product. The cost is 2 M
 sparse products plus N M^2 operations at BLAS speed, and the memory is
-(1 + 2 nd) N B complex numbers, with nd the number of Cartesian directions
+2 nd N B complex numbers, with nd the number of Cartesian directions
 and B <= M the number of polynomials stored at once. B is set by the
 memory= budget. When B < M the left set is recomputed M/B times, so a
 smaller memory costs more sparse products but never more memory.
@@ -342,7 +342,7 @@ def _probe_blocks(n,trace,ntries,rng,exact_block=64):
 
 def _block_size(n,ncol,nd,M,memory):
     """Number of polynomials stored at once within the memory budget (GB)"""
-    per = (1+2*nd)*n*ncol*16. # bytes per stored polynomial
+    per = 2*nd*n*ncol*16. # bytes per stored polynomial, left and right
     return int(max(1,min(M,np.floor(memory*1e9/per))))
 
 
@@ -369,12 +369,11 @@ def _vector_moments(H,vs,X,a,b,M,memory):
             n1 = min(M,n0+B)
             for i_n in range(n1-n0):
                 t = next(left)
-                for ia in range(nd):
-                    L[ia,i_n] = t[:,ia*ncol:(ia+1)*ncol].ravel()
+                for ia in range(nd): # stored conjugated, for the product
+                    L[ia,i_n] = t[:,ia*ncol:(ia+1)*ncol].ravel().conj()
             for ia in range(nd):
-                Lc = L[ia,:n1-n0].conj()
                 for ib in range(ia,nd): # (b,a) follows from (a,b) below
-                    mu[ia,ib,n0:n1,m0:m1] += Lc@R[ib,:m1-m0].T
+                    mu[ia,ib,n0:n1,m0:m1] += L[ia,:n1-n0]@R[ib,:m1-m0].T
     # Tr[v_b T_n v_a T_m] = Tr[v_a T_m v_b T_n], so mu^ba = (mu^ab)^T
     for ia in range(nd):
         for ib in range(ia+1,nd): mu[ib,ia] = mu[ia,ib].T
@@ -517,7 +516,7 @@ def absorptive(st,mu,energies,fermi=0.,T=0.,ne=None):
     inside = (E>st.emin-pad)&(E<st.emax+pad)
     phit = _phi(x,M)/(np.pi*a) # phi_n times sqrt(1-x^2)
     nd = len(st.dirs)
-    Y = mu@phit # Y[a,b,n,j] = sum_m mu_nm phi~_m(E_j)
+    Y = mu.real@phit + 1j*(mu.imag@phit) # Y[a,b,n,j] = sum_m mu_nm phi~_m(E_j)
     Y = np.ascontiguousarray(np.transpose(Y.reshape((nd*nd,M,ne)),(2,0,1)))
     parallel.set_num_threads()
     out = np.zeros((len(energies),3,3),dtype=np.complex128)
@@ -566,7 +565,9 @@ def bastin(st,mu,fermis,T=0.,ne=None):
     # of the first. A stochastic estimate is Hermitian only on average, so
     # it is symmetrized first, which leaves the estimate unbiased
     muH = (mu + np.conj(np.swapaxes(mu,2,3)))/2.
-    I = 2.*np.sum(P[None,None]*(muH@Tm),axis=2).real
+    re,im = muH.real@Tm,muH.imag@Tm # two real products, not a complex one
+    I = 2.*(np.sum(P.real[None,None]*re,axis=2) -
+            np.sum(P.imag[None,None]*im,axis=2))
     I = I/(np.pi*a**2*(1.-e**2)**2)
     E = a*e + b
     for i,mf in enumerate(fermis):
