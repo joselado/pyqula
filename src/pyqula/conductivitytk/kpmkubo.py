@@ -614,7 +614,7 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
         component=None,npol=None,ntries=10,kernel="jackson",
         lorentz_lambda=3.,trace="stochastic",seed=None,fermi=0.,
         scale=None,memory=2.,volume=None,ne=None,return_error=False,
-        intraband=True,interband=True,**kwargs):
+        intraband=True,interband=True):
     """
     integration="kpm"
     -----------------
