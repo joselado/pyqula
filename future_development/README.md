@@ -204,6 +204,16 @@ already reached once.
   once for all frequencies, 24 to 50 times faster, and the gain holds in
   supercells up to 32 bands. Open: many bands, metals, SHG and 3D.
 
+- [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
+  the second-harmonic conductivity. Single resonances and same-pair products
+  are exact; three-band products go through a prism triangulation averaged
+  over the vertex orderings, and all of it is second order in 1/nk. At
+  delta = 1e-3 t the triangle needs 64 times fewer diagonalizations than the
+  grid; on two bands it is 25 times faster in wall time, and on three-band
+  MoS2 it loses in wall time. QTCI saves diagonalizations only for two bands.
+  Open: the cost per frequency of the simplex sum, QTCI for many bands,
+  metals, an exact three-band product, and 3D.
+
 - [`qtci_dos_green.md`](qtci_dos_green.md) -- the triangle and tetrahedron
   integration of the DOS (`h.get_dos(integration="triangle")`, `"qtci"`)
   needs 250 to 1000 times fewer diagonalizations than the uniform mesh at
