@@ -128,7 +128,7 @@ from .conductivitytk import kubo
 
 def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
         intraband=True,interband=True,component=None,degeneracy_tol=1e-6,
-        integration="grid",tolerance=1e-6):
+        integration="grid",tolerance=1e-6,ewindow=None,nv=None,nc=None):
     """Compute the Kubo-Greenwood optical conductivity tensor
     sigma_ab(omega) of a 1D or 2D periodic Hamiltonian (see the module
     docstring for the formula, the units and the sign conventions).
@@ -191,6 +191,41 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     tolerance : float
       relative tolerance of the tensor cross interpolation of each field,
       only used by integration="qtci"
+    ewindow : float, pair or None
+      band window, for large unit cells: only the bands close to the Fermi
+      level are diagonalized (a subset eigensolver, or a shift-invert one
+      above limits.densedimension), the velocity is rotated only on them,
+      and only their pairs are stored, so the cost per k-point goes from
+      n^3 to about n^2 nw and the memory from n^2 to nw^2, with nw the
+      bands kept. ewindow = W keeps every band that comes inside (-W, W)
+      at some k-point of the mesh; a pair (emin, emax) gives an asymmetric
+      window. Off (None) by default, which keeps all the bands.
+    nv, nc : int or None
+      the same window given as band counts: the nv bands below and the nc
+      above the Fermi level. Not together with ewindow.
+
+      The bands kept are a fixed range of band indices, the same at every
+      k-point, because the triangle and qtci integrations interpolate the
+      fields by band index: a band that enters the window anywhere on the
+      mesh is kept everywhere, and in a metal every band that crosses the
+      Fermi level is kept as well. The range is grown until this holds on
+      the whole mesh, and it is not allowed to cut a degenerate multiplet.
+      For integration="qtci" it is fixed on the coarse 32x32 scan, with a
+      warning if a later k-point needs more bands. On the sparse path the
+      bands are counted from the Fermi level instead, since a shift-invert
+      solver does not give the band index; this is the same labelling for
+      an insulator, while in a metal it changes where a band crosses the
+      Fermi level.
+
+      What is exact and what is not: a pair left out with a nonzero
+      occupation factor has one band below the Fermi level and one above,
+      and one of them outside (emin, emax), so its transition energy is
+      above min(-emin, emax). Re sigma(omega), the absorption, at omega
+      below that energy is then exact up to the Lorentzian tails of the
+      pairs left out, of order delta/(dE - omega)^2. Im sigma gets a
+      Kramers-Kronig contribution from every pair, so the window shifts it
+      by a smooth function of omega, roughly linear at small omega for a
+      diagonal component, which goes to zero only as the window grows.
 
     Returns
     -------
@@ -200,7 +235,8 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     return kubo.optical_conductivity(h,energies=energies,nk=nk,T=T,
             delta=delta,intraband=intraband,interband=interband,
             component=component,degeneracy_tol=degeneracy_tol,
-            integration=integration,tolerance=tolerance)
+            integration=integration,tolerance=tolerance,ewindow=ewindow,
+            nv=nv,nc=nc)
 
 
 def drude_weight(h,nk=20,T=0.05,degeneracy_tol=1e-6):

@@ -40,6 +40,21 @@ def _setup(h):
     hm = h.get_multicell() # a copy, modified below
     hm.intra = algebra.todense(hm.intra)
     for t in hm.hopping: t.m = algebra.todense(t.m)
+    orders,jac,cellvol = _cell_factors(h)
+    hkgen = hm.get_hk_gen() # build once, reuse at every k-point
+    scale = max(np.max(np.abs(hm.intra)),
+                max((np.max(np.abs(t.m)) for t in hm.hopping),default=0.0),
+                1e-12) # characteristic hopping energy (floored, so that a
+                       # Hamiltonian with vanishing hoppings still gets a
+                       # small but nonzero scale)
+    dr = _bond_vectors(h,hm.intra.shape[0])
+    return hm,orders,hkgen,jac,dr,cellvol,scale
+
+
+def _cell_factors(h):
+    """The derivative orders (one per periodic direction), the
+    reduced->Cartesian Jacobian jac[i,alpha] = a_i[alpha]/(2 pi) (see
+    _velocities) and the unit cell volume"""
     dim = h.dimensionality
     g = h.geometry
     if dim==1:
@@ -53,15 +68,7 @@ def _setup(h):
     else: raise NotImplementedError(
         "optical conductivity only implemented for dimensionality 1 or 2 "
         "(current.derivative, the shared k-derivative, has no 3D branch)")
-    hkgen = hm.get_hk_gen() # build once, reuse at every k-point
-    scale = max(np.max(np.abs(hm.intra)),
-                max((np.max(np.abs(t.m)) for t in hm.hopping),default=0.0),
-                1e-12) # characteristic hopping energy (floored, so that a
-                       # Hamiltonian with vanishing hoppings still gets a
-                       # small but nonzero scale)
-    jac = np.array(avecs)/(2.*np.pi) # jac[i,alpha] = a_i[alpha]/(2 pi)
-    dr = _bond_vectors(h,hm.intra.shape[0])
-    return hm,orders,hkgen,jac,dr,cellvol,scale
+    return orders,np.array(avecs)/(2.*np.pi),cellvol
 
 
 def _bond_vectors(h,n):
@@ -76,6 +83,12 @@ def _bond_vectors(h,n):
     the charge vertex is not the identity (the hole block carries the
     opposite charge), so the current operator is not i[H,r] and this
     module's formula does not apply as written."""
+    rr = _orbital_positions(h,n)
+    return np.array([rr[None,:,a]-rr[:,None,a] for a in range(3)])
+
+
+def _orbital_positions(h,n):
+    """Position of every orbital, (n,3), see _bond_vectors"""
     if h.has_eh: raise NotImplementedError(
         "optical conductivity is not implemented for Nambu (superconducting) "
         "Hamiltonians: the charge current operator there is not i[H,r]")
@@ -83,8 +96,7 @@ def _bond_vectors(h,n):
     nsites = len(r)
     if n%nsites!=0: raise ValueError(
         "Hamiltonian dimension is not a multiple of the number of sites")
-    rr = np.repeat(r,n//nsites,axis=0) # one position per orbital
-    return np.array([rr[None,:,a]-rr[:,None,a] for a in range(3)])
+    return np.repeat(r,n//nsites,axis=0) # one position per orbital
 
 
 def _hopping_arrays(hm):
@@ -409,10 +421,10 @@ def _sigma_jit(dE,ratio,vs,omegas,delta):
 
 
 def _sigma_grid(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
-        tolerance=None):
+        tolerance=None,window=None):
     """Optical conductivity tensor as a plain sum over the uniform mesh"""
     ks = _kmesh(h,nk)
-    es,vs,cellvol,scale = _bands_and_velocities(h,ks)
+    es,vs,cellvol,scale = mesh_bands(h,ks,window,degeneracy_tol)
     ratio,dE = _response_weights(es,T,degeneracy_tol*scale,
             intraband=intraband,interband=interband)
     parallel.set_num_threads() # set the number of threads for numba
@@ -420,18 +432,29 @@ def _sigma_grid(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     return sigma/(len(ks)*cellvol) # (1/V) sum_k, with V = N_k * V_cell
 
 
+def mesh_bands(h,ks,window,degeneracy_tol):
+    """Bands and velocity matrix elements on the k-points ks: all the
+    bands if window is None, else those of the band window
+    (kubowindow.py)"""
+    if window is None: return _bands_and_velocities(h,ks)
+    from . import kubowindow
+    es,vs,cellvol,scale,_ = kubowindow.bands_and_velocities(h,ks,window,
+            tol_rel=degeneracy_tol)
+    return es,vs,cellvol,scale
+
+
 def _sigma_triangle(h,energies,nk,T,delta,intraband,interband,
-        degeneracy_tol,tolerance=None):
+        degeneracy_tol,tolerance=None,window=None):
     from . import kubosimplex
     return kubosimplex.sigma_triangle(h,energies,nk,T,delta,intraband,
-            interband,degeneracy_tol)
+            interband,degeneracy_tol,window=window)
 
 
 def _sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
-        tolerance=1e-6):
+        tolerance=1e-6,window=None):
     from . import kubosimplex
     return kubosimplex.sigma_qtci(h,energies,nk,T,delta,intraband,
-            interband,degeneracy_tol,tolerance=tolerance)
+            interband,degeneracy_tol,tolerance=tolerance,window=window)
 
 
 _integrations = {
@@ -448,9 +471,11 @@ def get_integration_names():
 
 def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
         intraband=True,interband=True,component=None,degeneracy_tol=1e-6,
-        integration="grid",tolerance=1e-6):
+        integration="grid",tolerance=1e-6,ewindow=None,nv=None,nc=None):
     """Kubo-Greenwood optical conductivity tensor, see
     conductivity.optical_conductivity for the documentation."""
+    from .kubowindow import get_window
+    window = get_window(ewindow=ewindow,nv=nv,nc=nc)
     if integration not in _integrations:
         raise ValueError("unknown integration '"+str(integration)+"' for "
           +"the optical conductivity; it must be one of "
@@ -459,7 +484,7 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     energies = np.array(energies,dtype=np.float64)
     if T is None: T = delta # same default as chitk/chiAB.py
     sigma = _integrations[integration](h,energies,nk,T,delta,intraband,
-            interband,degeneracy_tol,tolerance=tolerance)
+            interband,degeneracy_tol,tolerance=tolerance,window=window)
     if component is not None:
         return energies,sigma[:,_index(component[0]),_index(component[1])]
     return energies,sigma

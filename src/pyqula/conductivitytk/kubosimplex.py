@@ -479,12 +479,13 @@ def _sigma_from_fields(dim,nk,pairs,dE,W,comps,trans,energies,delta,cellvol,
 
 # ------------------------------------------------------------ public paths
 
-def sigma_triangle(h,energies,nk,T,delta,intraband,interband,degeneracy_tol):
+def sigma_triangle(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
+        window=None):
     """Optical conductivity tensor with the simplex integration on the
     uniform nk mesh, see conductivity.optical_conductivity"""
     check_broadening(delta)
     ks = kubo._kmesh(h,nk)
-    es,vs,cellvol,scale = kubo._bands_and_velocities(h,ks)
+    es,vs,cellvol,scale = kubo.mesh_bands(h,ks,window,degeneracy_tol)
     pairs,dE,W,comps,trans = pair_fields(es,vs,T,degeneracy_tol*scale,
             intraband,interband)
     pairs,dE,W = _prune(pairs,dE,W)
@@ -493,7 +494,7 @@ def sigma_triangle(h,energies,nk,T,delta,intraband,interband,degeneracy_tol):
 
 
 def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
-        tolerance=1e-6):
+        tolerance=1e-6,window=None):
     """Optical conductivity tensor with the simplex integration on a
     2^R x 2^R mesh (nk rounded up to a power of two), where the smooth
     fields dE and W are not computed on every point but reconstructed from
@@ -509,15 +510,26 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     from ..qutecipytk.tensortrain.core import tensortrain
     R = max(1,int(np.ceil(np.log2(nk)))) # bits per direction
     n = 2**R
-    setup = kubo._setup(h)
-    setup = (setup,kubo._hopping_arrays(setup[0]))
-    cellvol,scale = setup[0][5],setup[0][6]
+    nc0 = 2**min(R,5)
+    ks0 = kubo._kmesh(h,nc0)
+    if window is None:
+        setup = kubo._setup(h)
+        setup = (setup,kubo._hopping_arrays(setup[0]))
+        cellvol,scale = setup[0][5],setup[0][6]
+        def bands(ks):
+            return kubo._bands_and_velocities(h,ks,setup=setup)[:2]
+        es0,vs0 = bands(ks0)
+    else: # the band range is fixed on the coarse scan, then only checked
+        from . import kubowindow
+        ws = kubowindow.WindowSetup(h)
+        es0,vs0,cellvol,scale,rng = kubowindow.bands_and_velocities(h,ks0,
+                window,tol_rel=degeneracy_tol,ws=ws)
+        def bands(ks):
+            return kubowindow.bands_and_velocities(h,ks,window,
+                    tol_rel=degeneracy_tol,ws=ws,fixed=rng)[:2]
     tol = degeneracy_tol*scale
     # coarse scan: fixes the pairs and components that matter, and seeds
     # the pivots of every field at its largest value
-    nc0 = 2**min(R,5)
-    ks0 = kubo._kmesh(h,nc0)
-    es0,vs0,_,_ = kubo._bands_and_velocities(h,ks0,setup=setup)
     axes = _active_axes(vs0)
     pairs,dE0,W0,comps,trans = pair_fields(es0,vs0,T,tol,intraband,interband,
             axes=axes)
@@ -541,7 +553,7 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
         if not new: return
         ks = np.zeros((len(new),3))
         ks[:,:2] = np.array(new,dtype=np.float64)/n
-        es,vs,_,_ = kubo._bands_and_velocities(h,ks,setup=setup)
+        es,vs = bands(ks)
         _,dE,W,_,_ = pair_fields(es,vs,T,tol,intraband,interband,
                 axes=axes,pairs=pairs)
         for q,a,b in zip(new,dE,W): cache[q] = (a,b)
