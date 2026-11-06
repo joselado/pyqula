@@ -146,7 +146,7 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       for the diagonal components.
     nk : int
       number of k-points per periodic direction (a 2D calculation uses
-      nk*nk points)
+      nk*nk points, a 3D one nk^3)
     T : float
       temperature of the Fermi occupations. Defaults to delta, following
       the same convention as chitk/chiAB.py. T = 0 gives sharp step

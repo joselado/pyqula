@@ -4,9 +4,10 @@ uniform grid and with the tetrahedron integration.
 The invariants: the band velocity is the k-derivative of the band, and the
 whole velocity matrix agrees with the independent sparse construction of
 kpmkubo.py; a stack of decoupled layers gives the 2D sheet conductance per
-layer spacing, exactly on the grid, and exactly with the tetrahedra when
-the 2D layer is meshed in the basis (a1,-a2), whose triangles are the
-projections of the tetrahedra; with an interlayer hopping the tetrahedra
+layer spacing, exactly on the grid, and to second order with the
+tetrahedra, whose projections are the triangles of the 2D layer meshed in
+the basis (a1,-a2) (not exactly, since the vertex average of a tetrahedron
+counts one projected vertex twice); with an interlayer hopping the tetrahedra
 converge at second order to a dense grid; and the f-sum rule holds in 3D.
 """
 import numpy as np
