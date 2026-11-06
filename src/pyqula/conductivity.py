@@ -209,7 +209,8 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       fields by band index: a band that enters the window anywhere on the
       mesh is kept everywhere, and in a metal every band that crosses the
       Fermi level is kept as well. The range is grown until this holds on
-      the whole mesh, and it is not allowed to cut a degenerate multiplet.
+      the whole mesh, and it is not allowed to cut a degenerate multiplet
+      at a k-point where the window asks for the edge band.
       For integration="qtci" it is fixed on the coarse 32x32 scan, with a
       warning if a later k-point needs more bands. On the sparse path the
       bands are counted from the Fermi level instead, since a shift-invert
