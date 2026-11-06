@@ -506,8 +506,7 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
                 "conductivity is only implemented in 2D, got dimensionality "
                 +str(h.dimensionality)+"; use integration='triangle', in 1D "
                 "a fine mesh is already cheap")
-    from ..qutecipytk import crossinterpolate2
-    from ..qutecipytk.tensortrain.core import tensortrain
+    from ..qtcitk.meshfields import qtci_fields
     R = max(1,int(np.ceil(np.log2(nk)))) # bits per direction
     n = 2**R
     nc0 = 2**min(R,5)
@@ -528,8 +527,8 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
             return kubowindow.bands_and_velocities(h,ks,window,
                     tol_rel=degeneracy_tol,ws=ws,fixed=rng)[:2]
     tol = degeneracy_tol*scale
-    # coarse scan: fixes the pairs and components that matter, and seeds
-    # the pivots of every field at its largest value
+    # coarse scan: fixes the pairs and components that matter (qtci_fields
+    # repeats it on the same points to seed the pivots)
     axes = _active_axes(vs0)
     pairs,dE0,W0,comps,trans = pair_fields(es0,vs0,T,tol,intraband,interband,
             axes=axes)
@@ -543,64 +542,25 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
             if a>b: continue
             fields.append(("re",p,c))
             if a!=b: fields.append(("im",p,c))
-    def value(kind,p,c,dE,W):
-        if kind=="dE": return dE[...,p]
-        if kind=="re": return W[...,p,c].real
-        return W[...,p,c].imag
-    cache = {} # grid index (i,j) -> (dE[p], W[p,c]) of the stored pairs
-    def ensure(ij):
-        new = [q for q in dict.fromkeys(ij) if q not in cache]
-        if not new: return
-        ks = np.zeros((len(new),3))
-        ks[:,:2] = np.array(new,dtype=np.float64)/n
+    def evaluate(ks): # every field at the k-points ks
         es,vs = bands(ks)
-        _,dE,W,_,_ = pair_fields(es,vs,T,tol,intraband,interband,
+        _,dEk,Wk,_,_ = pair_fields(es,vs,T,tol,intraband,interband,
                 axes=axes,pairs=pairs)
-        for q,a,b in zip(new,dE,W): cache[q] = (a,b)
-    weights = 2**np.arange(R-1,-1,-1)
-    def decode(keys): # interleaved bits (x,y) per scale, most significant first
-        q = np.array(keys,dtype=np.int64).reshape(-1,R,2)
-        return list(zip((q[:,:,0]@weights).tolist(),(q[:,:,1]@weights).tolist()))
-    def encode(i,j):
-        out = []
-        for s in range(R):
-            out += [(i>>(R-1-s))&1,(j>>(R-1-s))&1]
+        out = np.zeros((len(ks),len(fields)))
+        for f,(kind,p,c) in enumerate(fields):
+            if kind=="dE": out[:,f] = dEk[:,p]
+            elif kind=="re": out[:,f] = Wk[:,p,c].real
+            else: out[:,f] = Wk[:,p,c].imag
         return out
-    localdims = [2]*(2*R)
-    from ..qutecipytk.tensortrain.batcheval import BatchEvaluator
-    import itertools
-    class Field(BatchEvaluator):
-        def __init__(self,kind,p,c): self.key = (kind,p,c)
-        def evalmany(self,keys):
-            ij = decode(keys)
-            ensure(ij)
-            kind,p,c = self.key
-            return np.array([value(kind,p,c,*cache[q]) for q in ij])
-        def __call__(self,x): return self.evalmany([tuple(x)])[0]
-        def batchevaluate(self,L,Rr,ncent):
-            nl = len(L[0]) if len(L) else 0
-            cd = localdims[nl:nl+ncent]
-            combos = list(itertools.product(*[range(d) for d in cd]))
-            keys = [tuple(l)+c+tuple(r) for l in L for c in combos for r in Rr]
-            return self.evalmany(keys).reshape(len(L),*cd,len(Rr))
+    vals,ncalls,ranks = qtci_fields(evaluate,R,len(fields),
+            tolerance=tolerance,ncoarse=nc0)
     npts = n*n
     dE = np.zeros((npts,len(pairs)),dtype=np.float64)
     W = np.zeros((npts,len(pairs),len(comps)),dtype=np.complex128)
-    xaxes = list(range(0,2*R,2)); yaxes = list(range(1,2*R,2))
-    stride = n//nc0 # coarse point (i,j) is the fine point (i,j)*stride
-    for (kind,p,c) in fields:
-        f0 = value(kind,p,c,dE0,W0)
-        if np.max(np.abs(f0))==0.: continue # identically zero, e.g. Im W_xx
-        i0 = int(np.argmax(np.abs(f0)))
-        piv = [encode((i0//nc0)*stride,(i0%nc0)*stride)]
-        tci,ranks,errors = crossinterpolate2(np.float64,Field(kind,p,c),
-                localdims,initialpivots=piv,tolerance=tolerance,
-                maxbonddim=400,pivotsearch="full")
-        full = tensortrain(tci).fulltensor()
-        full = np.transpose(full,xaxes+yaxes).reshape(npts) # row-major (i,j)
-        if kind=="dE": dE[:,p] = full
-        elif kind=="re": W[:,p,c] += full
-        else: W[:,p,c] += 1j*full
+    for f,(kind,p,c) in enumerate(fields):
+        if kind=="dE": dE[:,p] = vals[:,f]
+        elif kind=="re": W[:,p,c] += vals[:,f]
+        else: W[:,p,c] += 1j*vals[:,f]
     for c,(a,b) in enumerate(comps): # the (b,a) components, by conjugation
         if a>b: W[:,:,c] = np.conjugate(W[:,:,trans[c]])
     return _sigma_from_fields(2,n,pairs,dE,W,comps,trans,energies,delta,cellvol)
