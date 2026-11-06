@@ -331,8 +331,7 @@ def _get_dm_triangle(h,v,nk=None,tolerance=None,T=0.,**kwargs):
     from ..dmtk import simplexdm
     if nk is None: nk = simplexdm.default_nk
     ds = [(0,0,0)] + [d for d in v if tuple(d)!=(0,0,0)]
-    return simplexdm.get_dm(h,ds,nk=nk,T=T,
-            bloechl=simplexdm.bloechl_default,**kwargs)
+    return simplexdm.get_dm(h,ds,nk=nk,T=T,**kwargs)
 
 
 # the density-matrix backends of the SCF loop, by the name integration=
@@ -874,8 +873,7 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         # the step at the Fermi level, as "ed" and "qtci" sum it; the charge
         # the density matrix holds is the requested one to 1e-12
         from ..dmtk import simplexdm
-        etot = simplexdm.band_energy(h,nk=h.nk,
-                bloechl=simplexdm.bloechl_default)
+        etot = simplexdm.band_energy(h,nk=h.nk)
         if mu is None:
             etot += h.fermi*np.trace(dm_dc[(0,0,0)]).real
     else:

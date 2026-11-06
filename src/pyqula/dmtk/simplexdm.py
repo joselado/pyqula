@@ -42,7 +42,7 @@
 # the first-neighbor vectors of a honeycomb metal at T=0, the exact phase
 # being emulated by sampling the linear fields on an m times finer mesh
 # (future_development/tetrahedron_density_matrix.md). The largest error
-# over the entries was the same within 15% at every nk from 24 to 192,
+# over the entries was the same within 7% at every nk from 24 to 192,
 # 1.35e-5 with the phase in the field and 1.40e-5 with m = 8 at nk = 192.
 # So the exact phase buys nothing, and only the phase in the field is
 # built. As a result an insulator at T=0 gives exactly the density matrix
@@ -72,9 +72,10 @@
 # below) and the density matrix holds the requested charge to 1e-12, with
 # no partly occupied level. When the requested charge is held on a whole
 # interval of mu (a gap at T=0), the middle of the interval is returned.
-# The band energy is the sum of w_n(k) E_n(k) with the same weights at T=0,
-# which is the exact band energy of the linear bands, so the total energy
-# of the mean field is summed with the same construction.
+# The band energy is the sum of w_n(k) E_n(k) with the same weights at T=0
+# (the exact band energy of the linear bands, plus the Bloechl term of
+# point 4), so the total energy of the mean field is summed with the same
+# construction.
 #
 # 4. The Bloechl correction. Bloechl, Jepsen and Andersen add to the weights
 #   dw_j = sum_{T containing j} D_T(mu) c_dim sum_{i in T} (e_i - e_j),
@@ -94,10 +95,17 @@
 # -c_dim D_T sum_{ij} (X_i - X_j)(e_i - e_j)/2. In particular, on a model
 # where each band carries one fixed orbital and spin (a one-orbital
 # Hubbard ferromagnet that reads only the onsite density matrix), it is
-# exactly zero on the mean field and only changes the band energy. It is
-# also not variational: the mean field it gives is not the stationary
-# point of the total energy it gives. It is off by default, and the
-# measurements that decided this are in the note above.
+# exactly zero on the mean field and only changes the band energy. For
+# X = E, the band energy, it removes the leading 1/nk^2 error: on a curved
+# square-lattice band at nk = 64 the error goes from 6e-4 to 2e-7. It is
+# not variational, there is no total energy whose stationary point is the
+# corrected mean field, so we checked that the loop reaches the same state:
+# the measurements in future_development/tetrahedron_density_matrix.md
+# show the corrected and uncorrected mean fields converging to the same
+# limit, the bond order of a V1 metal to 2e-9 at nk = 128. It improved the
+# bond order by a factor 300 at nk = 32 there, the total energy by a
+# factor 100 to 4000, and left the magnetization of a ferromagnet
+# unchanged, as it has to. So it is on by default (bloechl_default).
 #
 # The weights are averaged over degenerate multiplets at each k before the
 # contraction, which is the same as averaging the projector over the
@@ -120,8 +128,8 @@ _tbreaks = np.array([1.,2.,3.,4.,6.,8.,10.,12.,14.,18.,24.,32.,_tcut])
 
 
 default_nk = 20 # mesh of get_dm when the caller gives none
-bloechl_default = False # whether the mean field adds the Bloechl term,
-                        # see point 4 of the module comment
+bloechl_default = True # whether the mean field adds the Bloechl term,
+                       # see point 4 of the module comment
 
 
 def bloechl_coefficient(dim):
@@ -519,14 +527,16 @@ def get_fermi4filling(h,filling,nk=20,T=0.):
     return fermi_from_energies(mesh.dim,nk,mesh.energies(),filling,T=T)
 
 
-def get_dm(h,ds,nk=20,T=0.,bloechl=False,counted=False):
+def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False):
     """Density matrix {d: (n,n) matrix} of h at zero chemical potential for
     the lattice vectors ds, from the simplex integration of the
     occupations on the uniform nk^dim mesh at temperature T, in the
     convention of densitymatrix.full_dm (dm[d][i,j] = <c^dag_i c_j> between
-    the cell 0 and the cell d, up to that convention's transpose). With
-    counted=True also returns the number of diagonalizations"""
+    the cell 0 and the cell d, up to that convention's transpose).
+    bloechl=None takes bloechl_default. With counted=True also returns the
+    number of diagonalizations"""
     check_hamiltonian(h,"the simplex density matrix")
+    if bloechl is None: bloechl = bloechl_default
     mesh = _Mesh(h,nk)
     ds = [tuple(int(x) for x in d) for d in ds]
     n = mesh.n
@@ -561,11 +571,13 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=False,counted=False):
     return dm
 
 
-def band_energy(h,nk=20,bloechl=False):
+def band_energy(h,nk=20,bloechl=None):
     """Sum of the band energies below zero per unit cell, int theta(-E) E,
     with the simplex weights at T=0 on the uniform nk^dim mesh: the exact
-    band energy of the linearly interpolated bands"""
+    band energy of the linearly interpolated bands, plus the Bloechl term
+    when bloechl (None takes bloechl_default)"""
     check_hamiltonian(h,"the simplex band energy")
+    if bloechl is None: bloechl = bloechl_default
     mesh = _Mesh(h,nk)
     es = mesh.energies()
     w = simplex_weights(mesh.dim,nk,es,mu=0.,T=0.,bloechl=bloechl)

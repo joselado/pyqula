@@ -85,7 +85,7 @@ def test_bloechl_band_energy_converges_faster():
     h = geometry.square_lattice().get_hamiltonian(has_spin=False)
     h.add_onsite(0.9) # a metal
     ref = simplexdm.band_energy(h,nk=512,bloechl=True)
-    err = abs(simplexdm.band_energy(h,nk=32)-ref)
+    err = abs(simplexdm.band_energy(h,nk=32,bloechl=False)-ref)
     errb = abs(simplexdm.band_energy(h,nk=32,bloechl=True)-ref)
     assert err>1e-4 # the plain linear method is visibly off at nk=32
     assert errb<err/20.
@@ -175,18 +175,20 @@ def test_filling_is_conserved_in_a_metal():
 
 def test_metal_agrees_with_dense_ed():
     """A partly polarized Hubbard ferromagnet at T=0.05: the triangle mean
-    field converges at second order in 1/nk to the one of exact
-    diagonalization on a mesh dense enough for that T (nk=96 holds the
-    magnetization to 1e-5)"""
+    field, with the Bloechl term (the default, which is not variational),
+    converges at second order in 1/nk to the one of exact diagonalization
+    on a mesh dense enough for that T (nk=96 holds the magnetization to
+    1e-5)"""
     scf24,m24 = _ferro("triangle",24,5e-2)
     scf48,m48 = _ferro("triangle",48,5e-2)
     # from the triangle state, which only saves iterations
     scfe,me = _ferro("ed",96,5e-2,mf=scf48.mf)
     assert abs(m48-me)<3e-3
     assert abs(m48-me)<abs(m24-me)/3. # about 4
-    e24 = abs(scf24.total_energy-scfe.total_energy)
-    e48 = abs(scf48.total_energy-scfe.total_energy)
-    assert e48<3e-3 and e48<e24/3.
+    # with the Bloechl term the total energy is already at the level of
+    # the reference at nk=24 (3e-5); without it, 7e-3
+    assert abs(scf24.total_energy-scfe.total_energy)<1e-4
+    assert abs(scf48.total_energy-scfe.total_energy)<1e-4
     assert abs(scf48.hamiltonian.fermi-scfe.hamiltonian.fermi)<2e-3
 
 
@@ -216,6 +218,24 @@ def test_insulator_agrees_with_ed():
     for d in out[0].dm:
         assert np.max(np.abs(out[0].dm[d]-out[1].dm[d]))<1e-8
     assert abs(out[0].total_energy-out[1].total_energy)<1e-8
+
+
+def test_bloechl_and_plain_reach_the_same_state(monkeypatch):
+    """The Bloechl term is not variational, so check that the loop with it
+    and the loop without it converge to the same limit: the bond density
+    of a spinless V1 metal, which the term does change, at two meshes"""
+    def bond(nk,bl):
+        monkeypatch.setattr(simplexdm,"bloechl_default",bl)
+        h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+        np.random.seed(1)
+        scf = Vinteraction(h,V1=1.5,filling=0.35,nk=nk,integration="triangle",
+                T=1e-3,mf="random",maxerror=1e-10,solver="broyden_mixing",
+                load_mf=False,write=False,verbose=0)
+        return abs(scf.dm[(0,0,0)][0,1])
+    b = {(nk,bl):bond(nk,bl) for nk in (32,64) for bl in (False,True)}
+    ref = (4*b[(64,False)]-b[(32,False)])/3 # second order without it
+    assert abs(b[(64,True)]-ref)<abs(b[(64,False)]-ref)/10.
+    assert abs(b[(64,True)]-b[(32,True)])<abs(b[(64,False)]-b[(32,False)])/10.
 
 
 def test_mean_field_hamiltonian_entry_point():
