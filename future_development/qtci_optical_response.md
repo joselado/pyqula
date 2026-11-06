@@ -81,13 +81,65 @@ the direct basis-rotation test exercises the averaging.
 
 ## What is left open
 
-- **Cost per frequency.** The kernel evaluates the triangle sum frequency by
-  frequency (prange over frequencies). On a 1024 x 1024 mesh with 701
-  frequencies this takes about three minutes for two bands, and it is the
-  dominant cost of both paths. The fix is to build the weighted joint DOS
-  J(E) once (the density of a linear function on a triangle is piecewise
-  linear in E) and convolve it with the resolvent, which removes the
-  dependence on the number of frequencies. Not built.
+- **Cost per frequency (built, 6 November 2026).** The triangle sum used to
+  be evaluated triangle by triangle at every frequency. The branches of
+  the formula (exact divided difference, or the Taylor series of a
+  confluent edge or triangle) depend on the vertex energies and on delta,
+  but not on omega. So the sum is a fixed list of sources: psi_2 at the
+  vertex energies, and a few point terms at the middle of the confluent
+  edges and triangles. This is the weighted joint DOS, a sum of linear
+  B-splines, stored by its knots. We build the list once, with the vertex
+  sources indexed by k-point, so the six triangles that share a vertex
+  share one source. Sources with exactly the same energy are merged, which
+  also merges the copies of a spinful model and the points related by an
+  exact symmetry. Then each frequency costs one sum over the sources. The
+  old kernel is kept as `_sigma_from_fields(..., kernel="simplices")` for
+  the test that compares the two. Wall times on 4 cores of one workstation,
+  both kernels on the same pair fields, the new time including the build
+  of the sources (0.55 to 0.6 s at 2M triangle-pairs), delta = 1e-3 unless
+  noted, frequencies on [0, 7] t:
+
+  | model | mesh | frequencies | bands | old (s) | new (s) | max difference / max abs(sigma) |
+  |---|---|---|---|---|---|---|
+  | gapped honeycomb | 256^2 | 701 | 2 | 7.7 | 0.33 | 1.8e-12 |
+  | gapped honeycomb | 512^2 | 701 | 2 | 30.8 | 1.32 | 8.2e-12 |
+  | gapped honeycomb | 1024^2 | 701 | 2 | 122.7 | 5.17 | 2.1e-11 |
+  | gapped honeycomb, delta = 1e-2 | 1024^2 | 701 | 2 | 122.3 | 5.38 | 1.4e-11 |
+  | gapped honeycomb | 1024^2 | 50 | 2 | 8.9 | 0.97 | 2.6e-11 |
+  | gapped honeycomb, spinful | 512^2 | 701 | 4 | 123.1 | 2.43 | 5.7e-12 |
+  | Haldane, spinful | 512^2 | 701 | 4 | 123.8 | 2.82 | 2.6e-10 |
+  | dimerized chain | 20000 | 701 | 2 | 0.70 | 0.21 | 1.8e-16 |
+
+  The gain is about 24 at two bands and about 45 to 50 for the spinful
+  copies, where the merge removes the duplicate energies. The 1024^2 mesh
+  keeps 0.6M vertex sources out of 2M triangles, because the merge also
+  catches the symmetry-related k-points. The difference with the old
+  kernel is not a discretization error, it is rounding. Both kernels
+  cancel terms of size 1/tolc^2 (tolc = 1e-2 delta) in the divided
+  differences, and the old kernel's own comment bounds this at about
+  eps delta/tolc^2. A reference in extended precision (numpy longdouble,
+  same branches) gives the size of it: for the spinful Haldane model at
+  delta = 1e-3 the old kernel is off by 3.2e-10, 2.3e-11 and 1.0e-10 of the
+  largest entry at nk = 128, 256 and 512, and the new one by 5.0e-10,
+  9.9e-11 and 2.1e-10. On the gapped honeycomb at nk = 1024 the two errors
+  are 2.0e-11 and 2.8e-11. So the new path is up to 4 times noisier than the
+  old one, and both are at the rounding level of the formula. Compensated
+  (Kahan) summation in the evaluation changed nothing, so the error is in
+  the terms and not in the accumulation. The new test asserts agreement to
+  1e-10 of the largest entry at nk = 40, where the measured difference is
+  about 1e-12.
+
+  Binning the joint DOS on a fine energy grid was not built. It is
+  approximate, with an error of order (bin/delta)^2, so agreement at 1e-10
+  needs a bin of about 1e-5 delta. That is more points than there are
+  sources, so it would not be faster than the exact route. What stays open:
+  the cost is still linear in the number of frequencies times the number
+  of sources (about 6.5 ms per frequency at 0.6M sources on 4 cores). A
+  far-field expansion of the sources (the 1D fast multipole method for the
+  Cauchy kernel) would remove that factor, at the price of a controlled
+  truncation. This is not urgent: on the same 4 cores the bands,
+  velocities and pair fields of the 1024^2 gapped honeycomb take 9.7 s,
+  more than the 5.2 s of the triangle sum at 701 frequencies.
 - **Many bands.** The fields are ordered by band index, so they have kinks
   where bands cross. The triangle sum still converges (the crossings are a
   set of measure zero), but the QTCI rank grows. Not measured beyond two

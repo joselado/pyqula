@@ -200,3 +200,44 @@ def test_qtci_is_two_dimensional_only():
     h = geometry.chain().get_hamiltonian(has_spin=False)
     with pytest.raises(NotImplementedError):
         conductivity.optical_conductivity(h, nk=16, integration="qtci")
+
+
+def _kernel_pair(h, nk, ws, T, delta):
+    """The simplex sum of the same pair fields with the default kernel,
+    which builds the sources once and sums them per frequency, and with
+    the direct sum over simplices at every frequency"""
+    from pyqula.conductivitytk import kubosimplex
+    ks = kubo._kmesh(h, nk)
+    es, vs, cellvol, scale = kubo._bands_and_velocities(h, ks)
+    pairs, dE, W, comps, trans = kubosimplex.pair_fields(es, vs, T,
+            1e-6*scale, True, True)
+    pairs, dE, W = kubosimplex._prune(pairs, dE, W)
+    args = (h.dimensionality, nk, pairs, dE, W, comps, trans, ws, delta,
+            cellvol)
+    return (kubosimplex._sigma_from_fields(*args),
+            kubosimplex._sigma_from_fields(*args, kernel="simplices"))
+
+
+def test_source_kernel_equals_the_sum_over_simplices():
+    """The default kernel rewrites the sum over simplices as a sum over its
+    sources (the vertex energies, and the middle points of the confluent
+    edges and simplices), built once for all frequencies. It is the same
+    sum with the additions in another order, so the two agree to rounding,
+    not to a discretization error. The divided differences cancel terms of
+    size 1/tolc^2 with tolc = 1e-2 delta, which sets the tolerance. Checked
+    on a gapped and on a spinful Chern insulator, where every band is a
+    degenerate pair, at a broadening below and above the mesh spacing, and
+    in 1D, where the simplices are segments."""
+    ws = np.linspace(0., 7., 41)
+    for h in [_gapped_honeycomb(), _haldane(has_spin=True)]:
+        for delta in [1e-3, 3e-2]:
+            s_new, s_old = _kernel_pair(h, 40, ws, 0.01, delta)
+            scale = np.max(np.abs(s_old))
+            assert np.max(np.abs(s_new-s_old)) < 1e-10*scale
+    assert np.max(np.abs(s_old[:,0,1].real)) > 0.1*scale # Hall part compared
+    g = geometry.chain().get_supercell(2)
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_onsite(lambda r: 0.4*np.cos(np.pi*r[0]))
+    for delta in [1e-3, 3e-2]:
+        s_new, s_old = _kernel_pair(h, 300, ws, 0.01, delta)
+        assert np.max(np.abs(s_new-s_old)) < 1e-10*np.max(np.abs(s_old))
