@@ -223,7 +223,10 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       and one of them outside (emin, emax), so its transition energy is
       above min(-emin, emax). Re sigma(omega), the absorption, at omega
       below that energy is then exact up to the Lorentzian tails of the
-      pairs left out, of order delta/(dE - omega)^2. Im sigma gets a
+      pairs left out, of order delta/(dE - omega)^2. With nv, nc the
+      covered frequency is instead the lowest transition energy of a pair
+      left out, which is set by the bands just outside the range on the
+      mesh and not by a number given in the call. Im sigma gets a
       Kramers-Kronig contribution from every pair, so the window shifts it
       by a smooth function of omega, roughly linear at small omega for a
       diagonal component, which goes to zero only as the window grows.

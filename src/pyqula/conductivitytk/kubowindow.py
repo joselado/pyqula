@@ -186,22 +186,30 @@ def _sparse_near_fermi(ws,k,nb,na):
         kk = 2*kk
 
 
-def _sparse_counts(ws,ks,nb,na):
-    """nb bands below and na above the Fermi level, counted from it, on
-    every k-point of ks"""
-    nk,nw = len(ks),nb+na
-    es = np.zeros((nk,nw))
-    vs = np.zeros((nk,3,nw,nw),dtype=np.complex128)
-    for ik,k in enumerate(ks):
-        e,U = _sparse_near_fermi(ws,k,nb,na)
-        if len(e)<nw: raise ValueError("the band window needs "+str(nb)
-                +" bands below and "+str(na)+" above the Fermi level at "
-                "every k-point, and the spectrum at k="+str(list(k))+" has "
-                "fewer; on the sparse path the window must lie inside the "
-                "spectrum, give a narrower one")
-        es[ik] = e
-        vs[ik] = ws.velocities(k,e,U)
-    return es,vs
+def _sparse_counts(ws,ks,nb,na,nprobe):
+    """nb bands below and na above the Fermi level, counted from it, with
+    up to nprobe more on each side, on every k-point of ks. Returns the
+    energies, the velocities and the number of probe bands, the same on
+    both sides, that the spectrum has at every k-point."""
+    sel = []
+    for k in ks:
+        e,U = _sparse_near_fermi(ws,k,nb+nprobe,na+nprobe)
+        nbk,nak = int(np.sum(e<0.)),int(np.sum(e>=0.))
+        if nbk<nb or nak<na: raise ValueError("the band window needs "
+                +str(nb)+" bands below and "+str(na)+" above the Fermi "
+                "level at every k-point, and the spectrum at k="
+                +str(list(k))+" has fewer; on the sparse path the window "
+                "must lie inside the spectrum, give a narrower one")
+        sel.append((e,ws.velocities(k,e,U),nbk)) # small, nw^2 per k-point
+        nprobe = min(nprobe,nbk-nb,nak-na)
+    nw = nb+na+2*nprobe # the probes that every k-point has
+    es = np.zeros((len(ks),nw))
+    vs = np.zeros((len(ks),3,nw,nw),dtype=np.complex128)
+    for ik,(e,v,nbk) in enumerate(sel):
+        i0 = nbk-nb-nprobe
+        es[ik] = e[i0:i0+nw]
+        vs[ik] = v[:,i0:i0+nw,i0:i0+nw]
+    return es,vs,nprobe
 
 
 # ------------------------------------------------------------ the range
@@ -311,13 +319,8 @@ def bands_and_velocities(h,ks,window,tol_rel=1e-6,ws=None,fixed=None):
     while True:
         if ws.sparse:
             nb,na = rng
-            for plo in range(_nprobe,-1,-1): # fewer probes at the ends
-                try:
-                    es,vs = _sparse_counts(ws,ks,nb+plo,na+plo)
-                    break
-                except ValueError:
-                    if plo==0: raise
-            phi = plo
+            es,vs,plo = _sparse_counts(ws,ks,nb,na,_nprobe)
+            phi = plo # fewer probes only where the spectrum ends
             lo,hi = 0,nb+na
         else:
             lo,hi = rng

@@ -101,6 +101,10 @@ def test_window_in_a_metal_keeps_the_bands_fixed_across_k():
     _, s0 = conductivity.optical_conductivity(h, **kw)
     _, s1 = conductivity.optical_conductivity(h, ewindow=1.6, **kw)
     assert np.max(np.abs((s1-s0).real)) < 1e-3*np.max(np.abs(s0.real))
+    # the mesh is really metallic: the number of occupied bands changes
+    from pyqula.conductivitytk import kubo
+    es = kubo._bands_and_velocities(h, kubo._kmesh(h, 24))[0]
+    assert len(np.unique(np.sum(es < 0., axis=1))) > 1
 
 
 def test_window_does_not_cut_a_degenerate_multiplet():
