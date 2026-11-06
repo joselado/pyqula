@@ -222,10 +222,11 @@ already reached once.
   are exact; three-band products go through a prism triangulation averaged
   over the vertex orderings, and all of it is second order in 1/nk. At
   delta = 1e-3 t the triangle needs 64 times fewer diagonalizations than the
-  grid; on two bands it is 25 times faster in wall time, and on three-band
-  MoS2 it loses in wall time. QTCI saves diagonalizations only for two bands.
-  Open: the cost per frequency of the simplex sum, QTCI for many bands,
-  metals, an exact three-band product, and 3D.
+  grid. The sum is now built once for all frequencies (15 times faster on
+  MoS2), so the triangle beats the grid in wall time on both models, by 5 to
+  20 times on MoS2. QTCI saves diagonalizations only for two bands and never
+  wall time. Open: QTCI for many bands, metals, an exact three-band product,
+  and 3D.
 
 - [`qtci_dos_green.md`](qtci_dos_green.md) -- the triangle and tetrahedron
   integration of the DOS (`h.get_dos(integration="triangle")`, `"qtci"`)
