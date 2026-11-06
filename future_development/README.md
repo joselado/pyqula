@@ -208,6 +208,15 @@ already reached once.
   twisted bilayer from 16 GB at nk = 6 to 2.9 GB at nk = 36. Open: many
   bands, metals, SHG and 3D.
 
+- [`tetrahedron_density_matrix.md`](tetrahedron_density_matrix.md) -- the
+  triangle and tetrahedron density matrix of the mean field,
+  `integration="triangle"`: exact filling, the right magnetic state on coarse
+  meshes at low T, about 4 times fewer k-points for the magnetization and
+  about 64 for the total energy and the bond densities with the Bloechl
+  term. Exact diagonalization wins at T = 1e-2 t on dense meshes, qtci loses
+  on these metals, and an insulator gains nothing. Open: RPA chi(q) and the
+  anomalous Hall of metals with the same occupations, BdG, VJinteraction.
+
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products
   are exact; three-band products go through a prism triangulation averaged
