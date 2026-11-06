@@ -9,6 +9,7 @@ import pytest
 from pyqula import geometry
 from pyqula import conductivity
 from pyqula.conductivitytk import shg
+from pyqula.conductivitytk import kubo
 from pyqula.conductivitytk import shgsimplex
 
 
@@ -196,3 +197,46 @@ def test_options_are_checked():
     hc = geometry.chain().get_hamiltonian(has_spin=False)
     with pytest.raises(NotImplementedError,match="2D"):
         hc.get_shg_conductivity(energies=[1.],nk=8,integration="qtci")
+
+
+def _kernels_on_the_same_fields(h,trip,nk,ws,delta):
+    """Both simplex kernels, the source kernel (the default) and the
+    direct sum over simplices, on the same fields of the uniform mesh"""
+    sym = shgsimplex._symmetrized_triplets(trip)
+    tms,dirs,d,hkgen,cellvol,scale = shg._derivative_tensors(h)
+    tol = 1e-6*scale
+    cat = shgsimplex._term_catalogue(tms.shape[1])
+    ks = kubo._kmesh(h,nk)
+    es,W = shgsimplex._fields(tms,dirs,d,hkgen,ks,1e-3,
+            np.array(sym,dtype=np.int64),cat,tol)
+    terms,W = shgsimplex._prune(cat[0],W)
+    out = [shgsimplex._sigma_from_fields(h.dimensionality,nk,es,terms,W,
+            np.array(ws),delta,cellvol,tol,kernel=k)
+            for k in ["sources","simplices"]]
+    return out,terms
+
+
+def test_source_kernel_equals_the_direct_sum():
+    """The source kernel builds the coefficients of the simplex sum once
+    and then sums them per frequency. It takes the same branches as the
+    direct sum, so the two agree to rounding, not to the discretization
+    error. A two-band model (only single resonances and the exact product
+    cases) and a three-band one (products of three different bands, with
+    the prism pieces), at a broadening below the energy spacing of the
+    mesh, where many nodes fall in the Taylor clusters"""
+    cases = [(_gapped_honeycomb(),[(0,0,0)],40,[0.35,0.8,1.5,2.6]),
+            (_triangular_three_sublattice(),[(0,0,0),(1,0,1)],24,
+                [1.2,2.0,3.0,4.5])]
+    for h,trip,nk,ws in cases:
+        for delta in [1e-3,2e-2]:
+            (new,old),terms = _kernels_on_the_same_fields(h,trip,nk,ws,delta)
+            scale = np.max(np.abs(old))
+            assert scale>0.
+            assert np.max(np.abs(new-old))<1e-9*scale
+    three = (terms[:,0]==shgsimplex._PRODUCT) & (terms[:,3]!=terms[:,4]) \
+            & ((terms[:,1]!=terms[:,3]) | (terms[:,2]!=terms[:,4]))
+    assert np.any(three) # products of three different bands are there
+    with pytest.raises(ValueError) as err:
+        shgsimplex._sigma_from_fields(2,4,None,None,None,[1.],1e-2,1.,1e-6,
+                kernel="direct")
+    for name in shgsimplex._kernels: assert name in str(err.value)

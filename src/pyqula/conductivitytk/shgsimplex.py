@@ -197,10 +197,10 @@ def _weights_jit(es,f,h1,h2,h3,trip,Ti,Tii,Tiii,Tiv,Tv,nterm,tol):
 
 # ------------------------------------------------------------ divided differences
 
-_ratio = 0.25 # a cluster of nodes within this fraction of its distance to
-              # the pole is done by its Taylor series, which converges as
+_ratio = 0.25 # a cluster of nodes with a span below this fraction of delta
+              # is done by its Taylor series, which converges at least as
               # _ratio^k; a wider one by the recursion, which then divides
-              # by a span at least _ratio times the distance to the pole
+              # by a span of at least _ratio times delta
 
 
 @jit(nopython=True,cache=True)
@@ -233,7 +233,7 @@ def _dd_taylor(x,i,j,d,z,hbuf):
     m = m/(r+1)
     y = m-z
     span = x[j]-x[i]
-    rho = span/abs(y)
+    rho = span/abs(z.imag) # an upper bound of span/abs(y), independent of w
     if rho<1e-12: K = 0
     else: K = min(hbuf.shape[0]-1,int(np.log(1e-17)/np.log(rho))+4)
     for k in range(K+1): hbuf[k] = 0.
@@ -259,11 +259,11 @@ def _dd_taylor(x,i,j,d,z,hbuf):
 
 @jit(nopython=True,cache=True)
 def _small(x,i,j,z):
-    """whether the Taylor series applies to the cluster of nodes x_i..x_j"""
-    m = 0.
-    for q in range(i,j+1): m += x[q]
-    m = m/(j-i+1)
-    return x[j]-x[i]<_ratio*abs(m-z)
+    """whether the Taylor series applies to the cluster of nodes x_i..x_j.
+    The distance of a real node to the pole is at least delta = Im z, so
+    the test uses delta and not abs(m - z): then the branch does not depend
+    on w, and the source kernel below takes exactly the same branches"""
+    return x[j]-x[i]<_ratio*abs(z.imag)
 
 
 @jit(nopython=True,cache=True)
@@ -387,6 +387,491 @@ def _shg_simplex_jit(sims,es,Wt,terms,omegas,delta,tol):
     return out
 
 
+# ------------------------------------------------------------ source kernel
+#
+# The branches of _shg_simplex_jit depend on the vertex energies, on delta
+# and on the degeneracy tolerance, never on w: _small compares the span of a
+# cluster of nodes with delta, and the exact cases B = 0 and B = A are
+# decided from the vertex energies. Every divided difference is linear in
+# the values it combines, so the whole sum over simplices and terms is a
+# sum of fixed coefficients times a few functions of y = e - z at fixed
+# energies e:
+#   psi_d(y) at a node (psi_2 on triangles, psi_1 on segments), where the
+#     nodes are the energy differences E_j - E_i at the vertices or their
+#     halves (the 2w shell and the top face of the prism);
+#   psi_d[a,b] for a pair of nodes closer than _ratio*delta;
+#   a Taylor series at the mean m of a larger cluster of close nodes, in
+#     psi_2, psi_1 and the powers of v = delta/(z - m).
+# We build the coefficients once. For one divided difference this is the
+# recursion of _dd_psi run backwards: the coefficient of the top entry
+# F[0,n] is pushed down the table to the entries it is made of, and it
+# ends either on a node, F[i,i], or on a cluster that _dd_psi does by its
+# Taylor series. The node coefficients are indexed by k-point and by node
+# type, so the simplices that share a vertex share one source, and sources
+# with exactly the same energy are merged. The terms of the cases B = 0 and
+# B = A carry a factor 1/z, kept as a second family of coefficients. Then
+# each frequency costs one sum over the sources. This is the same sum as
+# _shg_simplex_jit, term by term, with the additions in another order and
+# with the pairs below in closed form, so the two agree to rounding.
+#
+# Most clusters are pairs, and their number grows as nk^3 at fixed delta
+# (the triangles times the chance that two nodes are closer than
+# _ratio*delta), so a pair is not stored as its Taylor series (some 25
+# coefficients) but by its two nodes, and evaluated in closed form: with
+# y = a - z, h = b - a and s = h/(2y + h),
+#   psi_2[a,b] = -(ln y + s + (1 + s) S'),  psi_1[a,b] = -2 S/(2y + h),
+#   S = atanh(s)/s = 1 + S',  S' = s^2/3 + s^4/5 + ...,
+# where abs(s) < 0.15, so S' converges fast and nothing cancels.
+
+_maxcluster = 80 # clusters of one simplex and one term: at most six per
+                 # divided difference, twelve divided differences
+_maxbasis = 48 # psi_2, psi_1 and the powers of v of one Taylor cluster
+
+
+@jit(nopython=True,cache=True)
+def _cluster_sources(x,i,j,d,delta,c,fam,cm,cf,cl,cc,ncl,hbuf):
+    """c times psi_d[x_i..x_j] for a cluster of close nodes. A cluster q
+    keeps its energy cm[q,0], its multiplier cm[q,1], its order cm[q,2] and
+    its nodes cm[q,3:], its family cf[q] and its number of basis functions
+    cl[q], with cl[q] = 0 for a pair. A Taylor cluster (three nodes or
+    more) keeps the coefficients cc[q] of the basis (psi_2, psi_1, v, v^2,
+    ...) of the Taylor series of _dd_taylor, for a unit multiplier, with
+    v = delta/(z - m); the deviations are scaled by delta, so no large power
+    of 1/delta is formed. The same cluster appears in several pieces of a
+    prism; it is then stored once, with the multipliers added. Returns the
+    new number of clusters"""
+    r = j-i
+    for q in range(ncl): # the same nodes already met in this simplex
+        if cf[q]!=fam or cm[q,2]!=r: continue
+        same = True
+        for t in range(r+1):
+            if cm[q,3+t]!=x[i+t]: same = False
+        if same:
+            cm[q,1] += c
+            return ncl
+    cm[ncl,1] = c
+    cm[ncl,2] = r
+    for t in range(r+1): cm[ncl,3+t] = x[i+t]
+    cf[ncl] = fam
+    if r==1: # a pair, evaluated in closed form
+        cm[ncl,0] = x[i]
+        cl[ncl] = 0
+        return ncl+1
+    m = 0.
+    for q in range(i,j+1): m += x[q]
+    m = m/(r+1)
+    span = x[j]-x[i]
+    rho = span/delta # as in _dd_taylor
+    if rho<1e-12: K = 0
+    else: K = min(hbuf.shape[0]-1,int(np.log(1e-17)/np.log(rho))+4)
+    for k in range(K+1): hbuf[k] = 0.
+    hbuf[0] = 1.
+    for q in range(i,j+1): # h_k of the scaled deviations
+        dv = (x[q]-m)/delta
+        for k in range(1,K+1): hbuf[k] += dv*hbuf[k-1]
+    L = max(2,r+K-d+3)
+    for b in range(L): cc[ncl,b] = 0.
+    scale = 1./delta**(r-d+1)
+    for k in range(K+1):
+        if k==1: continue # h_1 = 0
+        p = r+k
+        if p<d: # p = 1 < d = 2 (not reached for r >= 2)
+            cc[ncl,1] += hbuf[k]
+            continue
+        fac = 1. # p!/(p-d)!
+        for q in range(p-d+1,p+1): fac *= q
+        cc[ncl,p-d+2] += scale*hbuf[k]/fac # coefficient of v^(p-d+1)
+    cm[ncl,0] = m
+    cl[ncl] = L
+    return ncl+1
+
+
+@jit(nopython=True,cache=True)
+def _dd_sources(x,lab,n,d,delta,s,fam,cn,cm,cf,cl,cc,ncl,C,hbuf):
+    """s times psi_d[x_0..x_n] as sources, with the branches of _dd_psi:
+    the coefficient of psi_d at node q is added to cn[lab[q],fam], the
+    clusters are appended from index ncl on. Returns the new ncl"""
+    for i in range(1,n+1): # insertion sort, carrying the labels along
+        v = x[i] ; lv = lab[i] ; q = i-1
+        while q>=0 and x[q]>v:
+            x[q+1] = x[q] ; lab[q+1] = lab[q] ; q -= 1
+        x[q+1] = v ; lab[q+1] = lv
+    for i in range(n+1):
+        for j in range(n+1): C[i,j] = 0.
+    C[0,n] = s
+    for r in range(n,-1,-1): # from the top of the table down
+        for i in range(n+1-r):
+            j = i+r
+            c = C[i,j]
+            if c==0.: continue
+            if r==0: cn[lab[i],fam] += c # a node
+            elif x[j]-x[i]<_ratio*delta: # a cluster, as in _small
+                ncl = _cluster_sources(x,i,j,d,delta,c,fam,cm,cf,cl,cc,ncl,
+                        hbuf)
+            else: # F[i,j] = (F[i+1,j]-F[i,j-1])/(x_j-x_i)
+                g = c/(x[j]-x[i])
+                C[i+1,j] += g
+                C[i,j-1] -= g
+    return ncl
+
+
+@jit(nopython=True,cache=True)
+def _piece_sources(ea,ec,i0,i1,i2,i3,na,nv,delta,s,cn,cm,cf,cl,cc,ncl,
+        x,lab,C,hbuf):
+    """sources of s times one piece of the prism, see _piece. Label v is
+    the bottom node of vertex v, label nv+v its top node"""
+    idx = (i0,i1,i2,i3)
+    n = 0
+    for q in range(4):
+        if idx[q]<0: break
+        if q<na:
+            x[q] = ea[idx[q]] ; lab[q] = idx[q]
+        else:
+            x[q] = ec[idx[q]] ; lab[q] = nv+idx[q]
+        n += 1
+    return _dd_sources(x,lab,n-1,n-2,delta,s,0,cn,cm,cf,cl,cc,ncl,C,hbuf)
+
+
+@jit(nopython=True,cache=True)
+def _term_sources(kind,ea,eb,ec,nv,tol,delta,cn,cm,cf,cl,cc,x,lab,C,hbuf):
+    """Sources of one simplex and one term, with the branches of
+    _shg_simplex_jit, for a unit weight. Node coefficients go to
+    cn[label,family] (family 0: plain, family 1: times 1/z), labels v and
+    nv+v are the full and the halved node of vertex v. Returns the number
+    of clusters and whether the halved nodes are those of B (True) or of
+    A (False)"""
+    for v in range(2*nv):
+        cn[v,0] = 0. ; cn[v,1] = 0.
+    d = nv-1
+    fac = 1. if d==1 else 2.
+    isb0 = True ; isba = True # B = 0, B = A at every vertex
+    for v in range(nv):
+        if abs(eb[v])>tol: isb0 = False
+        if abs(eb[v]-ea[v])>tol: isba = False
+    ncl = 0
+    if kind==_SINGLE: # fac psi_d[A]
+        for v in range(nv):
+            x[v] = ea[v] ; lab[v] = v
+        ncl = _dd_sources(x,lab,d,d,delta,fac,0,cn,cm,cf,cl,cc,ncl,C,hbuf)
+        return ncl,False
+    if kind==_DOUBLE: # (1/2) fac psi_d[A/2]
+        for v in range(nv):
+            x[v] = 0.5*ea[v] ; lab[v] = nv+v
+        ncl = _dd_sources(x,lab,d,d,delta,0.5*fac,0,cn,cm,cf,cl,cc,ncl,C,
+                hbuf)
+        return ncl,False
+    if isb0 or isba: # (1/2z) fac psi_d[A], or (1/z) fac (psi_d[A] - ...
+        s = 0.5*fac if isb0 else fac
+        for v in range(nv):
+            x[v] = ea[v] ; lab[v] = v
+        ncl = _dd_sources(x,lab,d,d,delta,s,1,cn,cm,cf,cl,cc,ncl,C,hbuf)
+        if not isb0: # ... - (1/2) psi_d[A/2])
+            for v in range(nv):
+                x[v] = 0.5*ea[v] ; lab[v] = nv+v
+            ncl = _dd_sources(x,lab,d,d,delta,-0.5*fac,1,cn,cm,cf,cl,cc,ncl,
+                    C,hbuf)
+        return ncl,False
+    for v in range(nv): ec[v] = 0.5*eb[v]
+    if nv==2: # the pieces of _product_average
+        ncl = _piece_sources(ea,ec,0,1,0,-1,2,nv,delta,0.25,cn,cm,cf,cl,cc,
+                ncl,x,lab,C,hbuf)
+        ncl = _piece_sources(ea,ec,1,0,1,-1,1,nv,delta,0.25,cn,cm,cf,cl,cc,
+                ncl,x,lab,C,hbuf)
+        ncl = _piece_sources(ea,ec,1,0,1,-1,2,nv,delta,0.25,cn,cm,cf,cl,cc,
+                ncl,x,lab,C,hbuf)
+        ncl = _piece_sources(ea,ec,0,0,1,-1,1,nv,delta,0.25,cn,cm,cf,cl,cc,
+                ncl,x,lab,C,hbuf)
+        return ncl,True
+    for p in range(3):
+        ncl = _piece_sources(ea,ec,0,1,2,p,3,nv,delta,2./6.,cn,cm,cf,cl,cc,
+                ncl,x,lab,C,hbuf)
+        ncl = _piece_sources(ea,ec,p,0,1,2,1,nv,delta,2./6.,cn,cm,cf,cl,cc,
+                ncl,x,lab,C,hbuf)
+    for p in range(3):
+        for q in range(3):
+            if q==p: continue
+            r = 3-p-q
+            ncl = _piece_sources(ea,ec,q,r,p,q,2,nv,delta,1./6.,cn,cm,cf,
+                    cl,cc,ncl,x,lab,C,hbuf)
+    return ncl,True
+
+
+@jit(nopython=True,cache=True)
+def _row_sources(write,ir,rows,sims,es,W,terms,tslot,tol,delta,Av,
+        qa,qh,qf,qw,ep,pf,pstart,plen,cp,pw,oq,ot,oc):
+    """Sources of all the simplices of one row of the mesh and all the
+    terms. With write=False it only counts the pairs, the Taylor clusters
+    and their coefficients; with write=True it adds the node coefficients
+    to Av, and writes the pairs (nodes qa, qa+qh, family qf, weights qw)
+    from index oq on and the Taylor clusters (energy ep, family pf,
+    coefficients cp[pstart:pstart+plen], weights pw) from index ot and
+    coefficient oc on. Returns the three counts"""
+    nv = sims.shape[1]
+    nterm = terms.shape[0]
+    nt = W.shape[2]
+    cn = np.zeros((2*nv,2))
+    cm = np.zeros((_maxcluster,7)) ; cf = np.zeros(_maxcluster,dtype=np.int64)
+    cl = np.zeros(_maxcluster,dtype=np.int64)
+    cc = np.zeros((_maxcluster,_maxbasis))
+    x = np.zeros(4) ; lab = np.zeros(4,dtype=np.int64)
+    C = np.zeros((4,4)) ; hbuf = np.zeros(_maxbasis)
+    ea = np.zeros(nv) ; eb = np.zeros(nv) ; ec = np.zeros(nv)
+    wbar = np.zeros(nt,dtype=np.complex128)
+    nq = 0 ; ntay = 0 ; nc = 0
+    for s in range(rows.shape[1]): # loop over the simplices of the row
+        it = rows[ir,s]
+        for p in range(nterm): # loop over terms
+            kind = terms[p,0]
+            if kind==_FLAT: continue # a constant, added by the caller
+            for v in range(nv):
+                kv = sims[it,v]
+                ea[v] = es[kv,terms[p,2]] - es[kv,terms[p,1]]
+                eb[v] = es[kv,terms[p,4]] - es[kv,terms[p,3]]
+            ncl,useb = _term_sources(kind,ea,eb,ec,nv,tol,delta,cn,cm,cf,cl,
+                    cc,x,lab,C,hbuf)
+            if not write:
+                for c in range(ncl):
+                    if cl[c]==0: nq += 1
+                    else:
+                        ntay += 1 ; nc += cl[c]
+                continue
+            for t in range(nt): wbar[t] = 0.
+            for v in range(nv):
+                for t in range(nt): wbar[t] += W[sims[it,v],p,t]
+            for t in range(nt): wbar[t] = wbar[t]/nv
+            hs = tslot[p,2] if useb else tslot[p,1]
+            for v in range(nv):
+                kv = sims[it,v]
+                for fam in range(2):
+                    if cn[v,fam]!=0.:
+                        for t in range(nt):
+                            Av[kv,tslot[p,0],fam,t] += cn[v,fam]*wbar[t]
+                    if cn[nv+v,fam]!=0.:
+                        for t in range(nt):
+                            Av[kv,hs,fam,t] += cn[nv+v,fam]*wbar[t]
+            for c in range(ncl):
+                if cl[c]==0: # a pair
+                    g = oq+nq
+                    qa[g] = cm[c,3] ; qh[g] = cm[c,4]-cm[c,3] ; qf[g] = cf[c]
+                    for t in range(nt): qw[g,t] = cm[c,1]*wbar[t]
+                    nq += 1
+                else: # a Taylor cluster
+                    g = ot+ntay
+                    ep[g] = cm[c,0] ; pf[g] = cf[c]
+                    pstart[g] = oc+nc ; plen[g] = cl[c]
+                    for b in range(cl[c]): cp[oc+nc+b] = cc[c,b]
+                    for t in range(nt): pw[g,t] = cm[c,1]*wbar[t]
+                    ntay += 1 ; nc += cl[c]
+    return nq,ntay,nc
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _count_sources_jit(rows,sims,es,W,terms,tslot,tol,delta):
+    """number of pairs, of Taylor clusters and of their coefficients, per
+    row of the mesh"""
+    nrow = rows.shape[0]
+    counts = np.zeros((nrow,3),dtype=np.int64)
+    A0 = np.zeros((1,1,2,1),dtype=np.complex128)
+    e0 = np.zeros(1) ; i0 = np.zeros(1,dtype=np.int64)
+    c0 = np.zeros((1,1),dtype=np.complex128)
+    for ir in prange(nrow): # parallel loop over rows
+        a,b,c = _row_sources(False,ir,rows,sims,es,W,terms,tslot,tol,delta,
+                A0,e0,e0,i0,c0,e0,i0,i0,i0,e0,c0,0,0,0)
+        counts[ir,0] = a ; counts[ir,1] = b ; counts[ir,2] = c
+    return counts
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _write_sources_jit(rowids,rows,sims,es,W,terms,tslot,tol,delta,Av,
+        qa,qh,qf,qw,ep,pf,pstart,plen,cp,pw,offsets):
+    """write the sources of the rows rowids, which share no vertex, so that
+    two threads never add to the same entry of Av"""
+    for q in prange(rowids.shape[0]): # parallel loop over rows
+        ir = rowids[q]
+        _row_sources(True,ir,rows,sims,es,W,terms,tslot,tol,delta,Av,
+                qa,qh,qf,qw,ep,pf,pstart,plen,cp,pw,
+                offsets[ir,0],offsets[ir,1],offsets[ir,2])
+
+
+def _mesh_rows(dim,nk):
+    """The simplices of simplices(dim,nk) grouped by row of the mesh (all
+    the simplices of row i have their vertices in the rows i and i+1), and
+    three sets of rows such that two rows of one set share no vertex"""
+    i = np.arange(nk)
+    if dim==1: rows = i[:,None]
+    else:
+        t1 = i[:,None]*nk + i[None,:]
+        rows = np.concatenate([t1,nk*nk+t1],axis=1)
+    last = nk-1 if nk%2==1 else -1 # in an odd ring, row nk-1 touches row 0
+    phases = [i[(i%2==0) & (i!=last)],i[i%2==1],i[i==last]]
+    return np.ascontiguousarray(rows,dtype=np.int64),phases
+
+
+def _node_slots(terms):
+    """The node types, an ordered band pair (i,j) and whether the energy
+    E_j - E_i is halved, and for each term the slots of its full A node,
+    its halved A node and its halved B node (-1 where there is none)"""
+    slots = {}
+    def slot(i,j,half):
+        if (i,j,half) not in slots: slots[(i,j,half)] = len(slots)
+        return slots[(i,j,half)]
+    tslot = -np.ones((len(terms),3),dtype=np.int64)
+    for p,(kind,a0,a1,b0,b1) in enumerate(terms):
+        if kind==_FLAT: continue
+        tslot[p,0] = slot(a0,a1,0)
+        if kind==_SINGLE: continue
+        tslot[p,1] = slot(a0,a1,1)
+        if kind==_PRODUCT and (b0,b1)!=(0,0): tslot[p,2] = slot(b0,b1,1)
+    return np.array(list(slots),dtype=np.int64).reshape(-1,3),tslot
+
+
+def shg_sources(dim,nk,es,terms,W,delta,tol):
+    """All the sources of the simplex sum, see the comment above, as a
+    dict: nodes (energies ev, coefficients cv[i,family,t]), pairs (nodes qa
+    and qa+qh, families qf, weights qw), Taylor clusters (energies ep,
+    families pf, coefficients cp[pstart:pstart+plen], weights pw) and the
+    constant of the terms without resonance"""
+    from .kubosimplex import _merge
+    sims,_ = simplices(dim,nk)
+    rows,phases = _mesh_rows(dim,nk)
+    npts = es.shape[0]
+    nt = W.shape[2]
+    slots,tslot = _node_slots(terms)
+    es = np.ascontiguousarray(es) ; W = np.ascontiguousarray(W)
+    const = np.zeros(nt,dtype=np.complex128)
+    for p in np.nonzero(terms[:,0]==_FLAT)[0]: # sum of the vertex averages
+        wt = np.zeros((len(sims),nt),dtype=np.complex128)
+        for v in range(sims.shape[1]): wt += W[sims[:,v],p]
+        const += np.sum(wt/sims.shape[1],axis=0)
+    parallel.set_num_threads() # set the number of threads for numba
+    counts = _count_sources_jit(rows,sims,es,W,terms,tslot,tol,delta)
+    offsets = np.zeros((len(rows),3),dtype=np.int64)
+    offsets[1:] = np.cumsum(counts,axis=0)[:-1]
+    nq,ntay,nc = np.sum(counts,axis=0)
+    Av = np.zeros((npts,len(slots),2,nt),dtype=np.complex128)
+    s = dict(qa=np.zeros(nq),qh=np.zeros(nq),qf=np.zeros(nq,dtype=np.int64),
+            qw=np.zeros((nq,nt),dtype=np.complex128),
+            ep=np.zeros(ntay),pf=np.zeros(ntay,dtype=np.int64),
+            pstart=np.zeros(ntay,dtype=np.int64),
+            plen=np.zeros(ntay,dtype=np.int64),cp=np.zeros(nc),
+            pw=np.zeros((ntay,nt),dtype=np.complex128),const=const)
+    for rowids in phases:
+        if len(rowids)==0: continue
+        _write_sources_jit(rowids.astype(np.int64),rows,sims,es,W,terms,
+                tslot,tol,delta,Av,s["qa"],s["qh"],s["qf"],s["qw"],s["ep"],
+                s["pf"],s["pstart"],s["plen"],s["cp"],s["pw"],offsets)
+    E = np.zeros((npts,len(slots))) # node energies, as in _shg_simplex_jit
+    for q,(i,j,half) in enumerate(slots):
+        E[:,q] = es[:,j]-es[:,i]
+        if half: E[:,q] = 0.5*E[:,q]
+    Av = Av.reshape(npts*len(slots),2*nt)
+    nz = np.any(Av!=0.,axis=1)
+    ev,cv = _merge(E.ravel()[nz],Av[nz])
+    del Av
+    s["ev"] = ev ; s["cv"] = np.ascontiguousarray(cv.reshape(-1,2,nt))
+    return s
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _evaluate_sources_jit(ev,cv,vkind,qa,qh,qf,qw,ep,pf,pstart,plen,cp,pw,
+        const,omegas,delta,nchunk):
+    """Sum of all sources at every frequency, the output of
+    _shg_simplex_jit. The parallel loop runs over (frequency, chunk of
+    sources), each task writing its own partial sum, so the result does not
+    depend on the number of threads"""
+    nw = omegas.shape[0]
+    nt = cv.shape[2]
+    nvs = ev.shape[0]
+    nqs = qa.shape[0]
+    nps = ep.shape[0]
+    part = np.zeros((nw,nchunk,2,nt),dtype=np.complex128)
+    for task in prange(nw*nchunk): # parallel loop over frequency and chunk
+        iw = task//nchunk
+        ic = task%nchunk
+        z = omegas[iw] + 1j*delta
+        acc = np.zeros((2,nt),dtype=np.complex128)
+        i0 = (ic*nvs)//nchunk
+        i1 = ((ic+1)*nvs)//nchunk
+        for i in range(i0,i1): # nodes
+            y = ev[i]-z
+            if vkind==2: f = -(y*np.log(y)-y) # psi_2
+            else: f = -np.log(y) # psi_1
+            for fam in range(2):
+                for t in range(nt): acc[fam,t] += cv[i,fam,t]*f
+        i0 = (ic*nqs)//nchunk
+        i1 = ((ic+1)*nqs)//nchunk
+        for i in range(i0,i1): # pairs, see the comment above
+            y = qa[i]-z
+            u = 2.*y+qh[i]
+            sv = qh[i]/u
+            s2 = sv*sv
+            sp = 0j # S - 1
+            tk = s2
+            for k in range(1,40):
+                sp += tk/(2*k+1)
+                if abs(tk)<1e-17: break
+                tk = tk*s2
+            if vkind==2: f = -(np.log(y)+sv+(1.+sv)*sp) # psi_2[a,b]
+            else: f = -2.*(1.+sp)/u # psi_1[a,b]
+            fam = qf[i]
+            for t in range(nt): acc[fam,t] += qw[i,t]*f
+        i0 = (ic*nps)//nchunk
+        i1 = ((ic+1)*nps)//nchunk
+        for i in range(i0,i1): # Taylor clusters
+            y = ep[i]-z
+            ly = np.log(y)
+            v = -delta/y # delta/(z - m)
+            o = pstart[i]
+            f = cp[o]*(-(y*ly-y)) + cp[o+1]*(-ly) # psi_2 and psi_1
+            vq = v
+            for b in range(2,plen[i]):
+                f += cp[o+b]*vq
+                vq = vq*v
+            fam = pf[i]
+            for t in range(nt): acc[fam,t] += pw[i,t]*f
+        for fam in range(2):
+            for t in range(nt): part[iw,ic,fam,t] = acc[fam,t]
+    out = np.zeros((nw,nt),dtype=np.complex128)
+    for iw in range(nw):
+        z = omegas[iw] + 1j*delta
+        for t in range(nt):
+            a0 = 0j ; a1 = 0j
+            for ic in range(nchunk):
+                a0 += part[iw,ic,0,t] ; a1 += part[iw,ic,1,t]
+            out[iw,t] = const[t] + a0 + a1/z
+    return out
+
+
+def _sum_sources(dim,nk,es,terms,W,energies,delta,tol):
+    """Same output as _sum_simplices, from the sources"""
+    import numba
+    s = shg_sources(dim,nk,es,terms,W,delta,tol)
+    vkind = 2 if dim==2 else 1
+    nw = len(energies)
+    nsrc = len(s["ev"])+len(s["qa"])+len(s["ep"])
+    # enough tasks to keep every thread busy when there are few frequencies
+    nchunk = max(1,min(nsrc//1024,-(-4*numba.get_num_threads()//max(nw,1))))
+    return _evaluate_sources_jit(s["ev"],s["cv"],vkind,s["qa"],s["qh"],
+            s["qf"],s["qw"],s["ep"],s["pf"],s["pstart"],s["plen"],s["cp"],
+            s["pw"],s["const"],energies,delta,nchunk)
+
+
+def _sum_simplices(dim,nk,es,terms,W,energies,delta,tol):
+    """The direct sum, every simplex at every frequency"""
+    sims,_ = simplices(dim,nk)
+    Wt = np.zeros((len(sims),)+W.shape[1:],dtype=np.complex128)
+    for v in range(sims.shape[1]): Wt += W[sims[:,v]]
+    Wt = Wt/sims.shape[1] # vertex average of the weights
+    return _shg_simplex_jit(sims,np.ascontiguousarray(es),Wt,terms,energies,
+            delta,tol)
+
+
+_kernels = {
+    "sources": _sum_sources, # sources built once, then summed per frequency
+    "simplices": _sum_simplices, # every simplex at every frequency
+}
+
+
 # ------------------------------------------------------------ fields
 
 def _fields(tms,dirs,d,hkgen,ks,T,trip,cat,tol):
@@ -415,15 +900,18 @@ def _prune(terms,W,rtol=1e-12):
     return terms[keep],W[:,keep]
 
 
-def _sigma_from_fields(dim,nk,es,terms,W,energies,delta,cellvol,tol):
-    """Simplex sum and normalization, from the fields on the mesh"""
-    sims,frac = simplices(dim,nk)
-    Wt = np.zeros((len(sims),)+W.shape[1:],dtype=np.complex128)
-    for v in range(sims.shape[1]): Wt += W[sims[:,v]]
-    Wt = Wt/sims.shape[1] # vertex average of the weights
+def _sigma_from_fields(dim,nk,es,terms,W,energies,delta,cellvol,tol,
+        kernel="sources"):
+    """Simplex sum and normalization, from the fields on the mesh.
+    kernel="simplices" is the direct sum over simplices, kept as the
+    reference that the tests compare the default against"""
+    if kernel not in _kernels:
+        raise ValueError("unknown simplex kernel "+repr(kernel)+
+                ", accepted values are "+", ".join(_kernels))
+    frac = 1./(2*nk*nk) if dim==2 else 1./nk # as in simplices(dim,nk)
+    energies = np.asarray(energies,dtype=np.float64)
     parallel.set_num_threads() # set the number of threads for numba
-    s = _shg_simplex_jit(sims,np.ascontiguousarray(es),Wt,terms,energies,
-            delta,tol)
+    s = _kernels[kernel](dim,nk,es,terms,W,energies,delta,tol)
     z = energies + 1j*delta
     return s*(-shg._charge**3)/(z*z)[:,None]*frac/cellvol
 
