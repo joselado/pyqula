@@ -122,3 +122,10 @@ def test_refuses_a_one_dimensional_hamiltonian():
     h = geometry.chain().get_hamiltonian()
     with pytest.raises(ValueError, match="2D"):
         h.get_anomalous_hall_conductivity(nk=8)
+
+
+def test_refuses_a_nambu_hamiltonian():
+    h = geometry.honeycomb_lattice().get_hamiltonian()
+    h.setup_nambu_spinor()
+    with pytest.raises(NotImplementedError, match="Nambu"):
+        h.get_anomalous_hall_conductivity(nk=8)

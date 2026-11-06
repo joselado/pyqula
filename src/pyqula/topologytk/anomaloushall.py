@@ -92,6 +92,9 @@ def check_hamiltonian(h):
         raise ValueError("the anomalous Hall conductivity needs a 2D "
                 "periodic Hamiltonian, got dimensionality "
                 +str(h.dimensionality))
+    if h.has_eh:
+        raise NotImplementedError("the anomalous Hall conductivity is only "
+                "implemented for a normal-state (non-Nambu) Hamiltonian")
     from ..dmtk.simplexdm import check_hamiltonian as check_simplex
     check_simplex(h,"the anomalous Hall conductivity")
 
