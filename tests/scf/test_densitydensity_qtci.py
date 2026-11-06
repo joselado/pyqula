@@ -292,3 +292,48 @@ def test_qtci_fermi_level_holds_the_filling_in_a_high_symmetry_metal(nk):
     n = np.trace(full_dm_gk(h, [(0, 0, 0)], nk=nk, T=1e-7)[(0, 0, 0)]).real
     assert abs(n - 0.3) < 1e-8
     assert abs(mu - (-1.059)) < 0.1
+
+
+def test_integrate_robust_skips_a_pivot_that_underflows():
+    """A density-matrix entry that is zero up to rounding (a spin-off-
+    diagonal entry of a collinear ferromagnet) can hold a subnormal value at
+    a node, 1e-322 on the honeycomb ferromagnet. That value is nonzero, but
+    times the Gauss-Kronrod weight it underflows to exactly zero, and the
+    cross interpolation stopped the mean field with "maxsamplevalue is
+    zero!". It has to be skipped like a zero, and the rule then gives zero."""
+    from pyqula.qtcitk.gkintegrate import integrate_robust, gkorder_from_nk
+    from pyqula.qutecipytk.gausskronrod import kronrod
+    GKorder = gkorder_from_nk(16)
+    x, _, _ = kronrod(GKorder//2, -1, 1)
+    kc = (x[len(x)//2]+1)/2 # the central node, the first diagonal hit
+    tiny = np.nextafter(0., 1.) # the smallest subnormal
+    def f(k):
+        return tiny if (k[0] == kc and k[1] == kc) else 0.
+    assert integrate_robust(np.complex128, f, GKorder, 1e-6) == 0.
+
+
+def _frozen_square_ferromagnet(m=0.474, U=6.0):
+    """The Hubbard ferromagnet of the square lattice at filling 0.4, as a
+    rigid exchange split U*m/2, with the Fermi level on the qtci nodes"""
+    from pyqula.qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
+    h = geometry.square_lattice().get_hamiltonian(has_spin=True)
+    h.add_exchange([0., 0., U*m/2.])
+    h.shift_fermi(-get_fermi4filling_qtci(h, 0.4, nk=16, T=1e-3))
+    return h
+
+
+def test_get_dm_qtci_warns_in_a_metal_and_not_in_an_insulator():
+    """The Gauss-Kronrod rule does not resolve a Fermi step at any nk: on
+    the square-lattice ferromagnet its magnetization is off by 1e-3 to 1e-1
+    at nk=8 to 256, with no trend, and the mean field lands in a nearly
+    nonmagnetic state. A band that crosses the Fermi level on the nodes must give a warning
+    that names the triangle integration; a gapped state must not."""
+    import warnings
+    v = {(0, 0, 0): np.ones((2, 2), dtype=np.complex128)}
+    with pytest.warns(UserWarning, match="triangle"):
+        get_dm_qtci(_frozen_square_ferromagnet(), v, nk=16, T=1e-3)
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+    h.add_sublattice_imbalance(0.5) # gap of 1 around E=0
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        get_dm_qtci(h, {(0, 0, 0): np.eye(4, dtype=np.complex128)}, nk=8)

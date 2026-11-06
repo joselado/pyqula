@@ -370,6 +370,8 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     (scftk.densitydensity.generic_densitydensity); nk defaults
     to get_dm_qtci's own DEFAULT_NK if not given (nk=None is forwarded
     through rather than substituting a different, ED-only default here).
+    It is for gapped Hamiltonians: in a metal its Gauss-Kronrod rule does
+    not resolve the Fermi step at any nk, and it warns.
     "triangle" diagonalizes the same uniform mesh as "ed" but integrates
     the Fermi step exactly over the linearly interpolated bands (the linear
     tetrahedron method in 3D), see dmtk.simplexdm; it returns every entry
@@ -1018,7 +1020,9 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     each required density-matrix entry over the BZ with qutecipy (tensor
     cross interpolation) -- see scftk.densitydensity.get_dm and
     qtcitk.densitymatrix_qtci.get_dm_qtci; only 2D Hamiltonians are
-    supported for "qtci". "triangle" integrates the Fermi step exactly
+    supported for "qtci", and it is for gapped states: its Gauss-Kronrod
+    rule does not resolve the Fermi step of a metal at any nk, and it
+    warns when a band crosses the Fermi level. "triangle" integrates the Fermi step exactly
     over the bands interpolated linearly in the triangles (2D),
     tetrahedra (3D) or segments (1D) of the same k-mesh, the case where
     it pays being a metal at low temperature, see dmtk.simplexdm.

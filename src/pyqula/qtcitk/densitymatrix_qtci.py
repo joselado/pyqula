@@ -14,10 +14,17 @@
 # nk-to-GKorder mapping and zero-pivot-safe integration (see topology.
 # chern_qtci for the same helpers): GKorder grows only logarithmically
 # with nk, since Gauss-Kronrod quadrature converges spectrally -- for a
-# smooth integrand, i.e. a gapped system. In a metal at small T the
-# projector jumps at the Fermi surface and the rule converges slowly; the
-# SCF loop then locates the Fermi level on these same nodes
-# (get_fermi4filling_qtci below) so that the charge at least matches.
+# smooth integrand, i.e. a gapped system. In a metal the projector jumps
+# at the Fermi surface, and the rule of GKorder^2 nodes (21x21 at nk=32,
+# 33x33 at nk=256) integrates the step no better than a uniform mesh of
+# the same size, so the density matrix does not converge with nk at all.
+# The cross interpolation itself is exact here: on the square-lattice
+# Hubbard ferromagnet get_dm_qtci equals the plain sum over the node grid
+# (full_dm_gk) to every printed digit, and the whole error is the rule.
+# get_dm_qtci warns when a band crosses the Fermi level (warn_if_metal);
+# a metal goes to integration="triangle". The SCF loop locates the Fermi
+# level on these same nodes (get_fermi4filling_qtci below) so that the
+# charge at least matches.
 #
 # Only the (direction,i,j) entries actually needed by the interaction
 # dictionary "v" are computed (kpmtk.densitymatrix_kpm.required_elements),
@@ -64,12 +71,15 @@ def _dm_qtci_from_needed(h, needed, nk=DEFAULT_NK, fermi=0.0, T=1e-7,
     GKorder = gkorder_from_nk(nk)
 
     cache = {} # (kx,ky) -> occupied-state projector matrix, shared across
-    def projector(k):                     # every entry computed below
+    erange = [np.inf*np.ones(norb),-np.inf*np.ones(norb)] # every band's
+    def projector(k):                     # range on the nodes visited
         key = (k[0],k[1])
         if key not in cache:
             hk = hk_gen(np.array([k[0],k[1],0.]))
             es,vs = algebra.eigh(hk)
             es = es-fermi
+            erange[0] = np.minimum(erange[0],es)
+            erange[1] = np.maximum(erange[1],es)
             cache[key] = full_dm_python(es,vs.T,delta=Tsafe)
         return cache[key]
 
@@ -85,7 +95,37 @@ def _dm_qtci_from_needed(h, needed, nk=DEFAULT_NK, fermi=0.0, T=1e-7,
                 return projector(k)[i,j]*phase
             dm[d][i,j] = integrate_robust(np.complex128,f,GKorder,
                     tolerance,**kwargs)
+    warn_if_metal(erange,nk,GKorder)
     return dm
+
+
+def warn_if_metal(erange,nk,GKorder):
+    """Warn when a band crosses the Fermi level on the nodes, so that the
+    integrand has a Fermi surface. erange is (lowest, highest) energy of
+    every band over the nodes, measured from the Fermi level.
+
+    The Gauss-Kronrod rule is spectral for a smooth integrand only. In a
+    metal the occupied projector has a step at the Fermi surface, of width
+    T/v_F in k, and a rule of GKorder^2 nodes integrates it no better than
+    a uniform mesh of the same size. The number of nodes grows only like
+    log2(nk)^2 (21x21 at nk=32, 33x33 at nk=256), so raising nk does not
+    help. On the square-lattice Hubbard ferromagnet (U=6, filling 0.4) a
+    frozen exchange split gave a magnetization off by 1e-3 to 1e-1 at
+    nk=8 to 256, with no trend in nk, at T=1e-2 as at T=1e-3, and the
+    mean field converged to a nearly nonmagnetic state
+    (future_development/tetrahedron_density_matrix.md). In a gap every band is entirely above
+    or below the Fermi level, and nothing is said."""
+    crossing = np.nonzero((erange[0]<0.) & (erange[1]>0.))[0]
+    if len(crossing)==0: return
+    import warnings
+    warnings.warn("integration=\"qtci\" integrates the occupations with a "
+            "Gauss-Kronrod rule of %dx%d k-points at nk=%d, and the bands %s "
+            "cross the Fermi level, so the integrand has a Fermi step that "
+            "this rule does not resolve at any nk (the number of points "
+            "grows like log2(nk)^2). The density matrix of a metal does "
+            "not converge with nk, and the mean field can converge to "
+            "another state; use integration=\"triangle\" for a metal"%(GKorder,
+                GKorder,nk,crossing.tolist()),stacklevel=3)
 
 
 def gk_node_grid(nk=None):
@@ -261,7 +301,10 @@ def get_dm_qtci(h, v, nk=None, fermi=0.0, T=1e-7, tolerance=1e-6,
 
     For BdG/Nambu Hamiltonians (h.has_eh) the required entries are
     determined by required_elements_eh instead of required_elements,
-    exactly as in kpmtk.densitymatrix_kpm.get_dm_kpm."""
+    exactly as in kpmtk.densitymatrix_kpm.get_dm_kpm.
+
+    This is for gapped Hamiltonians. In a metal the Fermi step is not
+    resolved at any nk, and a warning says so (warn_if_metal)."""
     if nk is None: nk = DEFAULT_NK
     ds = [(0,0,0)] + [d for d in v if d!=(0,0,0)]
     if getattr(h,"has_eh",False):

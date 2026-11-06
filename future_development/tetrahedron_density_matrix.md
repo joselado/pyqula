@@ -353,15 +353,103 @@ at these small meshes the triangle costs more wall time (1.0 s against
 ### qtci
 
 `integration="qtci"` loses on these metals. On the square-lattice
-ferromagnet it converges at nk = 8 to 32 (and at 64 to 256 in a run on
-another machine, not in the tables) to a state with m between 0.005 and
-0.25 instead of 0.474, with a few thousand diagonalizations. Its density
-matrix of a frozen exchange-split band is off by 2e-3 to 1e-2 in the
-magnetization at nk = 16 to 256, and does not converge with nk, so the
-loop falls into another fixed point. On the honeycomb ferromagnet it stops
-at nk = 16 with `ValueError: maxsamplevalue is zero!` from the cross
-interpolation of one entry. We did not look further into either. The step
-at the Fermi surface is what a Gauss-Kronrod rule handles worst.
+ferromagnet it converges at nk = 8 to 64 to a state with m between 0.005
+and 0.25 instead of 0.474, with a few thousand diagonalizations. On the
+honeycomb ferromagnet it stopped at nk = 16 with `ValueError:
+maxsamplevalue is zero!`. These are two different problems, and only the
+second one is a bug that can be fixed in place.
+
+Why does the loop find the wrong state? We froze the mean field as a rigid
+exchange split U m_in/2 of the square lattice (U = 6, filling 0.4), took
+the Fermi level of each method from its own search, and read back the
+magnetization m_out. A self-consistent state is a fixed point,
+m_out = m_in. The qtci density matrix is integrated on the tensorized
+Gauss-Kronrod rule of `qtcitk/gkintegrate.py`, with 4 ceil(log2 nk) + 1
+nodes per axis, so the table gives the size of that grid. "ed, same size"
+is the uniform mesh with the same number of points. The reference is the
+triangle at nk = 512. T = 1e-3:
+
+| m_in | reference | grid | qtci nodes | ed, same size |
+|---|---|---|---|---|
+| 0.05 | 0.0553 | 13x13 (nk = 8) | 0.1595 | 0.0888 |
+| 0.05 | 0.0553 | 21x21 (nk = 32) | 0.0224 | 0.0567 |
+| 0.05 | 0.0553 | 25x25 (nk = 64) | 0.0560 | 0.0436 |
+| 0.05 | 0.0553 | 29x29 (nk = 128) | 0.0809 | 0.0464 |
+| 0.05 | 0.0553 | 33x33 (nk = 256) | 0.0615 | 0.0523 |
+| 0.474 | 0.4740 | 13x13 (nk = 8) | 0.4571 | 0.5148 |
+| 0.474 | 0.4740 | 21x21 (nk = 32) | 0.4405 | 0.4558 |
+| 0.474 | 0.4740 | 25x25 (nk = 64) | 0.4828 | 0.4672 |
+| 0.474 | 0.4740 | 29x29 (nk = 128) | 0.4835 | 0.4744 |
+| 0.474 | 0.4740 | 33x33 (nk = 256) | 0.4867 | 0.4711 |
+
+Three hypotheses are ruled out by this table. The cross interpolation is
+exact here: `get_dm_qtci` equals the plain sum over the node grid
+(`full_dm_gk`) to every printed digit, at every m_in and nk, so neither the
+pivot search nor the tolerance plays a role. The Fermi search on the nodes
+holds the charge exactly, 0.80000 in every case. And the temperature is not
+the point: at T = 1e-2 the same table moves by 1.3e-2 at most, the errors
+stay of the same size, and the benchmark rows at T = 1e-2 are as wrong as
+those at T = 1e-3.
+
+What remains is the rule itself. The occupied projector has a step at the
+Fermi surface, and a Gauss-Kronrod rule is spectral only for a smooth
+integrand. On a step it does no better than a uniform mesh of the same
+size, which is a few hundred to a thousand points. The number of nodes
+grows only like log2(nk)^2, so raising nk does not help: the error in m
+goes from 1e-3 to 1e-1 between nk = 8 and 256, with no trend. The part that matters most
+for the loop is the response at small m, which measures U times the
+density of states at the Fermi level. The true map has m_out/m_in = 1.1 at
+m_in = 0.05, so the paramagnet is only weakly unstable. On the 21x21 grid
+the ratio is 0.45, the paramagnet becomes stable, and the loop from
+`mf="ferro"` goes there (m = 0.005). The uniform mesh fails in the same way
+for the same reason (exact diagonalization at nk <= 64 and T = 1e-3 in the
+tables above). So qtci of the projector cannot resolve a metallic Fermi
+step at any nk it offers, and this is not something a tolerance or a pivot
+fixes.
+
+The crash is a separate bug. One of the entries the loop reads, a
+spin-off-diagonal element of the collinear state, is zero up to rounding:
+at most 2.3e-16 on the whole grid. At one node it held the subnormal value
+-1.04e-322. `integrate_robust` accepted that node as a nonzero pivot, but
+the cross interpolation tests the value times the Gauss-Kronrod weight and
+the normalization, here 0.0074 times 289, and the product underflows to
+exactly zero. Now `integrate_robust` tests that same weighted value, so
+such a node is skipped like a zero, and a field that is zero in this sense
+at every node integrates to zero, the exact value of the rule.
+
+What is in the code now:
+
+- `gkintegrate.integrate_robust` seeds the cross interpolation only on a
+  node whose weighted value is nonzero. This removes the crash, and it is
+  shared with `topology.chern_qtci`.
+- `get_dm_qtci` warns when a band crosses the Fermi level on the nodes,
+  meaning that the integrand has a Fermi surface, and the warning names
+  `integration="triangle"`. In a gap every band is entirely above or below
+  the Fermi level, so there is no threshold and nothing is said. It warns
+  and does not raise, because the qtci tests run metals on purpose (the
+  Fermi search on the nodes and the total energy of the charge the density
+  matrix holds).
+- The docstrings of `get_dm`, `Vinteraction` and `get_dm_qtci` say that
+  qtci is for gapped states.
+
+The qtci rows rerun with the fix, T = 1e-3, errors against the same
+references as the tables above:
+
+| model | nk | diagonalizations | iterations | wall (s) | error in m | error in mu | error in E | filling |
+|---|---|---|---|---|---|---|---|---|
+| square | 8 | 5.4k | 13 | 1 | 2.3e-01 | 2.7e-01 | 6.5e-03 | 0.400000000 |
+| square | 16 | 2.3k | 0 | 1 | 4.5e-01 | 2.1e-01 | 2.7e-02 | 0.400000000 |
+| square | 32 | 5.3k | 3 | 1 | 4.7e-01 | 3.4e-01 | 2.0e-02 | 0.400000000 |
+| square | 64 | 11k | 6 | 2 | 4.2e-01 | 3.5e-01 | 2.5e-02 | 0.400000000 |
+| honeycomb | 8 | 7.1k | 18 | 7 | 4.2e-02 | 6.7e-02 | 2.7e-03 | 0.350000000 |
+| honeycomb | 16 | 0.23M | 400 | 119 | 7.1e-02 | 6.6e-02 | 1.2e-03 | 0.350000000 |
+| honeycomb | 32 | 14k | 13 | 8 | 5.0e-02 | 5.9e-02 | 1.9e-03 | 0.350000000 |
+
+The square rows are the same as before to every digit, as expected, since
+the fix does not touch the node sum. The honeycomb at nk = 16 now runs. It
+needs 400 iterations, and it lands at m = 0.315 instead of 0.244. These
+runs were on one workstation with a load of 5 to 7 on 14 cores, so the
+wall times are only indicative.
 
 ## What wins and what loses
 
@@ -406,6 +494,15 @@ loaded.
 - A 3D mean-field benchmark was not run. The tetrahedron density matrix is
   only checked against a dense mesh on a cubic metal, in the tests.
 - Bands that cross are interpolated with a kink, as in the simplex DOS.
+- qtci for a metal. What would work is the route the DOS and the optical
+  conductivity already take (`qtci_dos_green.md`, `qtci_optical_response.md`):
+  a quantics cross interpolation of the smooth fields, the band energies
+  and the projector entries of each band, on a 2^R x 2^R mesh, and then
+  the triangle weights of `dmtk/simplexdm.py` on the reconstructed fields.
+  This replaces the Gauss-Kronrod grid, its Fermi search and its band
+  energy, and it changes what nk means for qtci. The two spin bands of a
+  ferromagnet cross, so fields sorted by energy jump there and cost rank,
+  which is the open problem those notes record too. Not built.
 - At T well above the mesh spacing v_F/nk, a hybrid that uses the plain
   Fermi occupation on the simplices far from mu would keep the exponential
   convergence of exact diagonalization there. Not tried.
