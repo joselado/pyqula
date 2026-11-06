@@ -127,7 +127,8 @@ from .conductivitytk import kubo
 
 
 def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
-        intraband=True,interband=True,component=None,degeneracy_tol=1e-6):
+        intraband=True,interband=True,component=None,degeneracy_tol=1e-6,
+        integration="grid",tolerance=1e-6):
     """Compute the Kubo-Greenwood optical conductivity tensor
     sigma_ab(omega) of a 1D or 2D periodic Hamiltonian (see the module
     docstring for the formula, the units and the sign conventions).
@@ -163,6 +164,33 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       band pairs closer in energy than degeneracy_tol times the
       Hamiltonian's characteristic hopping scale are treated as
       degenerate, i.e. through the -df/dE limit of the occupation factor
+    integration : str
+      how the k-integral is done, one of kubo.get_integration_names():
+      "grid" (default) sums the formula over the uniform nk mesh, which
+      needs a mesh whose transition-energy spacing is below delta.
+      "triangle" splits the mesh into simplices (segments in 1D, triangles
+      in 2D), interpolates the transition energies and the weights
+      linearly inside each one, and integrates the resolvent over it
+      exactly (conductivitytk/kubosimplex.py). The mesh then only has to
+      resolve the bands, not the broadening: at delta = 1e-3 t on a gapped
+      honeycomb, nk = 256 gives 1e-3 relative accuracy where the grid
+      needs nk = 8192. It converges at second order in 1/nk, so for a
+      smooth integrand (delta larger than the band features, or a
+      frequency inside a gap) the grid, which converges exponentially
+      there, is the better choice. "qtci" (2D only) does the same on a
+      2^R x 2^R mesh, nk rounded up to a power of two, where the
+      transition energies and weights are reconstructed from a quantics
+      tensor cross interpolation instead of computed on every point: for
+      smooth bands the number of diagonalizations saturates with R (81k
+      for nk = 4096 on the gapped honeycomb, against 16.8M). Both need
+      delta > 0. Neither removes the mesh requirement set by T: the
+      occupation factors of a metal have a step of width T at the Fermi
+      surface, which the linear interpolation resolves only to first order
+      and which costs rank in the interpolation, and the Drude term is the
+      grid sum in all three.
+    tolerance : float
+      relative tolerance of the tensor cross interpolation of each field,
+      only used by integration="qtci"
 
     Returns
     -------
@@ -171,7 +199,8 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     """
     return kubo.optical_conductivity(h,energies=energies,nk=nk,T=T,
             delta=delta,intraband=intraband,interband=interband,
-            component=component,degeneracy_tol=degeneracy_tol)
+            component=component,degeneracy_tol=degeneracy_tol,
+            integration=integration,tolerance=tolerance)
 
 
 def drude_weight(h,nk=20,T=0.05,degeneracy_tol=1e-6):

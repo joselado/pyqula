@@ -282,7 +282,7 @@ def _hk(hkgen,k):
     return np.asarray(algebra.todense(hkgen(k)))
 
 
-def _bands_and_velocities(h,ks):
+def _bands_and_velocities(h,ks,setup=None):
     """Diagonalize H(k) on every k-point of ks and rotate the Cartesian
     velocity operators into the instantaneous eigenbasis. Returns the band
     energies es[k,n], the velocity matrix elements vs[k,alpha,n,m] =
@@ -303,9 +303,15 @@ def _bands_and_velocities(h,ks):
     below is built to be invariant under exactly that freedom (see
     _response_weights and drude_weight), and the invariance is checked
     directly in tests/conductivity/test_kubo_batched_paths.py -- the
-    physical output is what must agree, never vs itself."""
-    hm,orders,hkgen,jac,dr,cellvol,scale = _setup(h)
-    tms,dirs = _hopping_arrays(hm) # hoppings, stacked once for the mesh
+    physical output is what must agree, never vs itself.
+
+    setup, if given, is the tuple (_setup(h), _hopping_arrays(...)) built
+    once by a caller that diagonalizes many small sets of k-points (the
+    quantics path of kubosimplex.py), so that it is not rebuilt per call."""
+    if setup is None:
+        hm,orders,hkgen,jac,dr,cellvol,scale = _setup(h)
+        tms,dirs = _hopping_arrays(hm) # hoppings, stacked once for the mesh
+    else: (hm,orders,hkgen,jac,dr,cellvol,scale),(tms,dirs) = setup
     nk = len(ks)
     n = hm.intra.shape[0]
     es = np.zeros((nk,n),dtype=np.float64)
@@ -402,20 +408,58 @@ def _sigma_jit(dE,ratio,vs,omegas,delta):
     return 1j*out
 
 
-def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
-        intraband=True,interband=True,component=None,degeneracy_tol=1e-6):
-    """Kubo-Greenwood optical conductivity tensor, see
-    conductivity.optical_conductivity for the documentation."""
-    if energies is None: energies = np.linspace(0.,4.,100)
-    energies = np.array(energies,dtype=np.float64)
-    if T is None: T = delta # same default as chitk/chiAB.py
+def _sigma_grid(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
+        tolerance=None):
+    """Optical conductivity tensor as a plain sum over the uniform mesh"""
     ks = _kmesh(h,nk)
     es,vs,cellvol,scale = _bands_and_velocities(h,ks)
     ratio,dE = _response_weights(es,T,degeneracy_tol*scale,
             intraband=intraband,interband=interband)
     parallel.set_num_threads() # set the number of threads for numba
     sigma = _sigma_jit(dE,ratio,vs,energies,delta)
-    sigma = sigma/(len(ks)*cellvol) # (1/V) sum_k, with V = N_k * V_cell
+    return sigma/(len(ks)*cellvol) # (1/V) sum_k, with V = N_k * V_cell
+
+
+def _sigma_triangle(h,energies,nk,T,delta,intraband,interband,
+        degeneracy_tol,tolerance=None):
+    from . import kubosimplex
+    return kubosimplex.sigma_triangle(h,energies,nk,T,delta,intraband,
+            interband,degeneracy_tol)
+
+
+def _sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
+        tolerance=1e-6):
+    from . import kubosimplex
+    return kubosimplex.sigma_qtci(h,energies,nk,T,delta,intraband,
+            interband,degeneracy_tol,tolerance=tolerance)
+
+
+_integrations = {
+    "grid": _sigma_grid, # plain sum over the mesh
+    "triangle": _sigma_triangle, # exact resolvent over linear simplices
+    "qtci": _sigma_qtci, # the same on a quantics-interpolated fine mesh
+    }
+
+
+def get_integration_names():
+    """Accepted values of integration= in optical_conductivity"""
+    return list(_integrations)
+
+
+def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
+        intraband=True,interband=True,component=None,degeneracy_tol=1e-6,
+        integration="grid",tolerance=1e-6):
+    """Kubo-Greenwood optical conductivity tensor, see
+    conductivity.optical_conductivity for the documentation."""
+    if integration not in _integrations:
+        raise ValueError("unknown integration '"+str(integration)+"' for "
+          +"the optical conductivity; it must be one of "
+          +str(get_integration_names()))
+    if energies is None: energies = np.linspace(0.,4.,100)
+    energies = np.array(energies,dtype=np.float64)
+    if T is None: T = delta # same default as chitk/chiAB.py
+    sigma = _integrations[integration](h,energies,nk,T,delta,intraband,
+            interband,degeneracy_tol,tolerance=tolerance)
     if component is not None:
         return energies,sigma[:,_index(component[0]),_index(component[1])]
     return energies,sigma
