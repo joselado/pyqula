@@ -177,10 +177,35 @@ def calculate_dos_hkgen(hkgen,ks,ndos=100,delta=None,
 
 
 def dos_kmesh(h,nk=100,delta=None,random=False,ks=None,
-        write=None,
+        write=None,integration="grid",tolerance=1e-6,
         energies=np.linspace(-1,1,200),**kwargs):
-    """Compute the DOS in a k-mesh by using the bandstructure function"""
+    """Compute the DOS in a k-mesh by using the bandstructure function.
+
+    integration: how the k-integral is done, one of
+    get_integration_names(). "grid" sums Lorentzians of width delta over
+    the mesh (delta defaults to 5/nk). "triangle" interpolates the bands
+    linearly inside each segment, triangle or tetrahedron of the uniform
+    nk mesh and integrates the resolvent over each one exactly, so the
+    mesh only has to resolve the bands, not delta, and delta=0 (the
+    default for this integration) is the exact limit. "qtci" is the
+    triangle integration in 2D on a 2^R mesh whose band energies come from
+    a quantics tensor cross interpolation, with the given tolerance. Both
+    take an operator= with a matrix, whose expectation value weights each
+    state; ks and random are for "grid" only."""
     write = filewrite.resolve(write,True) # the call, else the global switch
+    if integration not in _integrations:
+        raise ValueError("unknown integration '"+str(integration)+"' for "
+                "the DOS; it must be one of "+str(get_integration_names()))
+    if integration!="grid":
+        if ks is not None or random:
+            raise ValueError("ks and random only apply to "
+                    "integration='grid', got integration='"
+                    +str(integration)+"'")
+        if delta is None: delta = 0. # the exact limit
+        es,ys = _integrations[integration](h,energies,nk=nk,delta=delta,
+                tolerance=tolerance,**kwargs)
+        if write: write_dos(es,ys) # write in file
+        return (es,ys)
     if ks is None:  ks = kmesh(h.dimensionality,nk=nk)
     if delta is None: delta = 5./nk # not provided
     if random: ks = [np.random.random(3) for k in ks]
@@ -192,6 +217,28 @@ def dos_kmesh(h,nk=100,delta=None,random=False,ks=None,
     ys *= 1./np.pi # normalization of the Lorentzian
     if write: write_dos(energies,ys) # write in file
     return (energies,ys) # return result
+
+
+def _dos_triangle(h,energies,nk=100,delta=0.,operator=None,tolerance=None):
+    from .dostk.simplexdos import dos_triangle
+    return dos_triangle(h,energies,nk=nk,delta=delta,operator=operator)
+
+
+def _dos_qtci(h,energies,nk=128,delta=0.,operator=None,tolerance=1e-6):
+    from .dostk.simplexdos import dos_qtci
+    return dos_qtci(h,energies,nk=nk,delta=delta,operator=operator,
+            tolerance=tolerance)
+
+
+_integrations = {"grid":None, # the Lorentzian sum of dos_kmesh itself
+        "triangle":_dos_triangle,
+        "qtci":_dos_qtci,
+        }
+
+
+def get_integration_names():
+    """Accepted values of integration= in dos_kmesh and h.get_dos()"""
+    return list(_integrations)
 
 
 
@@ -440,6 +487,10 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
             use_kpm=False,mode="ED",write=None,**kwargs):
   """Calculate the density of states.
 
+  mode: the formalism, one of get_dos_modes(). "ED" diagonalizes a
+  k-mesh and takes integration="grid", "triangle" or "qtci" (see
+  dos_kmesh).
+
   write: whether DOS.OUT is written, in every mode. It is this function's
   own argument, handed to each mode explicitly: left in **kwargs it
   reached routines that do not take it, so mode="Green" raised TypeError,
@@ -450,27 +501,45 @@ def get_dos_general(h,energies=np.linspace(-4.0,4.0,400),
   # to dos_kpm with a window built from min(energies) twice and without
   # the energies, and so returned the DOS on a grid of its own
   if use_kpm: mode = "KPM"
-  if mode=="ED": # exact diagonalization
-      return dos_kmesh(h,energies=energies,write=write,**kwargs)
-  elif mode in ["Green","RG"]: # Green function formalism
-      def fun(e):
-          return green.green_operator(h,e=e,**kwargs)
-      ds = parallel.pcall(fun,energies) # compute DOS with an operator
-      # green_operator returns the raw -Im[Tr G], not yet a DOS value;
-      # apply the same 1/pi normalization dos_kmesh (mode="ED") does
-      ds = np.array(ds)/np.pi
-      if write: np.savetxt("DOS.OUT",np.array([energies,ds]).T)
-      return (energies,ds)
-  elif mode=="KPM":
-      return dos_kpm(h,energies=energies,write=write,**kwargs)
-  elif mode=="adaptive":
-      from .dostk.adaptivedos import adaptive_dos
-      (es,ds) = adaptive_dos(h,energies=energies,**kwargs)
-      if write: write_dos(es,ds) # as the other modes do
-      return (es,ds)
-  else:
-    raise ValueError("unknown mode "+str(mode)+"; the DOS accepts 'ED', "
-            "'KPM', 'adaptive', 'Green' and 'RG'")
+  if mode not in _dos_modes:
+    raise ValueError("unknown mode "+str(mode)+"; the DOS accepts "
+            +str(get_dos_modes()))
+  return _dos_modes[mode](h,energies,write,**kwargs)
+
+
+def _mode_ed(h,energies,write,**kwargs): # exact diagonalization
+  return dos_kmesh(h,energies=energies,write=write,**kwargs)
+
+
+def _mode_green(h,energies,write,**kwargs): # Green function formalism
+  def fun(e):
+      return green.green_operator(h,e=e,**kwargs)
+  ds = parallel.pcall(fun,energies) # compute DOS with an operator
+  # green_operator returns the raw -Im[Tr G], not yet a DOS value;
+  # apply the same 1/pi normalization dos_kmesh (mode="ED") does
+  ds = np.array(ds)/np.pi
+  if write: np.savetxt("DOS.OUT",np.array([energies,ds]).T)
+  return (energies,ds)
+
+
+def _mode_kpm(h,energies,write,**kwargs):
+  return dos_kpm(h,energies=energies,write=write,**kwargs)
+
+
+def _mode_adaptive(h,energies,write,**kwargs):
+  from .dostk.adaptivedos import adaptive_dos
+  (es,ds) = adaptive_dos(h,energies=energies,**kwargs)
+  if write: write_dos(es,ds) # as the other modes do
+  return (es,ds)
+
+
+_dos_modes = {"ED":_mode_ed,"Green":_mode_green,"RG":_mode_green,
+        "KPM":_mode_kpm,"adaptive":_mode_adaptive}
+
+
+def get_dos_modes():
+  """Accepted values of mode= in h.get_dos()"""
+  return list(_dos_modes)
 
 
 dos = get_dos # redefine
