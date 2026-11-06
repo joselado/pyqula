@@ -447,7 +447,9 @@ references as the tables above:
 
 The square rows are the same as before to every digit, as expected, since
 the fix does not touch the node sum. The honeycomb at nk = 16 now runs. It
-needs 400 iterations, and it lands at m = 0.315 instead of 0.244. These
+needs 400 iterations, the cap, and its residual falls below 1e-9 only at
+that last step, so the loop reports it converged. It lands at m = 0.315
+instead of 0.244. These
 runs were on one workstation with a load of 5 to 7 on 14 cores, so the
 wall times are only indicative.
 
