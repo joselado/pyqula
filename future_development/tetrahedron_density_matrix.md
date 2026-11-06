@@ -122,8 +122,11 @@ The band energy is sum w_n(k) E_n(k) with the same weights at T=0, which is
 the exact band energy of the linear bands, plus the Bloechl term below. As
 for `"ed"` and `"qtci"`, it is the T=0 sum at the Fermi level of the loop,
 while the double counting is taken from the density matrix at T. The
-un-shift by the Fermi level uses the trace of the density matrix, as
-`"qtci"` does since commit a8596b6.
+un-shift by the Fermi level adds mu times the requested charge, filling
+times the number of electron states, as `"ed"` does. In a normal state this
+is the trace of the density matrix to 1e-12. It used the trace itself
+before, which is not the same thing in a superconductor (see The total
+energy of a superconductor).
 
 ## The Bloechl correction
 
@@ -624,17 +627,12 @@ pivots of each bond, and not their products, was not tried.
 - The Gauss-Kronrod path is gone: `gk_node_grid`, `full_dm_gk`,
   `band_energy_gk`, and the warning `warn_if_metal`, since metals work now.
   `gkintegrate.py` stays, because `topology.chern_qtci` integrates with it.
-- Bogoliubov-de Gennes Hamiltonians are still accepted, which the triangle
-  refuses. The weights are those of the quasiparticle bands at zero energy,
-  the Fermi level is found on the normal state, and the band energy is
-  (sum_{E<0} E_BdG + Tr h_e)/2. On a frozen s-wave state this band energy
-  equals exact diagonalization on the same mesh to 1e-9. The total energy
-  of a BdG mean field adds mu times the charge the density matrix holds, as
-  the old qtci did, while exact diagonalization adds mu times the filling.
-  In a superconductor the two charges differ (0.608 against 0.600 for
-  U = -2 at filling 0.3 on the square lattice), so the two total energies
-  differ by 1.3e-2 there. That convention is older than this change, and
-  it is not settled here.
+- Bogoliubov-de Gennes Hamiltonians are accepted. The weights are those of
+  the quasiparticle bands at zero energy, the Fermi level is found on the
+  normal state, and the band energy is (sum_{E<0} E_BdG + Tr h_e)/2. On a
+  frozen s-wave state this band energy equals exact diagonalization on the
+  same mesh to 1e-9. The total energy of the mean field is settled in The
+  total energy of a superconductor.
 - `tests/scf/test_densitydensity_qtci.py` checks that qtci equals the
   triangle on the same mesh for a frozen low-symmetry metal (complex
   entries, nonzero d), that the eigenpairs of the Fermi search are reused
@@ -642,6 +640,91 @@ pivots of each bond, and not their products, was not tried.
   reaches the triangle state of the square ferromagnet at nk = 8 (m, mu and
   E to 1e-6, in about 10 s), and that an insulator gives the mean field of
   exact diagonalization.
+
+## The total energy of a superconductor
+
+The question is which constant the mean field adds back to the band energy
+of a Bogoliubov-de Gennes state. The band energy is summed for the
+Hamiltonian shifted by its Fermi level, so together with the double
+counting it is the grand potential Omega = <H - mu N>. With `mu=None` the
+driver adds mu N back. `"ed"` took N = N0, the requested charge, filling
+times the number of electron states. qtci took the trace of the density
+matrix, the charge of the paired state. In a normal state these are the
+same number. In a superconductor they are not, because the Fermi level
+comes from the normal state (as in `spectrum.get_fermi4filling`, which
+removes the Nambu part before counting), and the paired state at that level
+holds another charge.
+
+For concreteness we take the spinful square lattice with first-neighbor
+hopping, e(k) = 2(cos 2 pi k1 + cos 2 pi k2) in pyqula's sign, U = -2,
+filling 0.3 and `mf="swave"`. As a reference we wrote the BCS mean field by
+hand, with no pyqula: the trial state is the ground state of the BdG
+Hamiltonian with a Hartree shift s and a gap D, and
+Omega = mean_k 2 (e_k - mu) n_k + U (n^2 + F^2), with n the density per spin
+and F = <c_dn c_up>, the Wick contraction of U n_up n_dn. At mu = -1.68 on
+a 1600 x 1600 mesh it gives Omega = -0.6126340, D = 0.2131 and
+N = 0.60014, and the same numbers on 400 x 400 and at T = 1e-3, since the
+state is gapped. Three checks decide.
+
+- At fixed mu the gradient of Omega in (s, D) is 6e-12, while the gradient
+  of <H> = Omega + mu N is (0.470, -0.076). So <H> is not stationary at
+  fixed mu, because the charge moves with the pairing.
+- Hellmann-Feynman at fixed mu: dOmega/dU = 0.10139026 against
+  <n_up n_dn> = 0.10139026, while d<H>/dU = 0.345.
+- pyqula at `mu=-1.68` adds no constant at all, and it gives the grand
+  potential of the hand-written mean field: -0.61263418 with `"ed"` and
+  -0.61263417 with qtci at nk = 64, and -0.61261336 with both at nk = 32.
+  So the band energy and the double counting of both paths were right, and
+  only the constant was in question.
+
+As a result Omega + mu N0, with N0 fixed, is the quantity that is
+stationary at fixed mu and obeys Hellmann-Feynman, and <H> is neither. This
+is what `"ed"` returned. It is also what a user of
+`h.get_mean_field_hamiltonian()` gets, since for a spinful Hamiltonian
+with `integration="ed"` that goes through `VJinteraction`, which adds the
+same constant. With the Fermi level of the normal state at filling 0.3 the
+hand-written mean field gives mu = -1.66514 and N = 0.60615 on an
+800 x 800 mesh, Omega + mu N0 = -1.6206807 and <H> = -1.6309261. So the two
+conventions are 1.03e-2 apart on a converged mesh; the 1.3e-2 quoted
+before was on a coarse one.
+
+So every integration adds mu N0 now, in one place in
+`scftk/densitydensity.py`, after the three band energies. In a normal state
+this changes nothing for the triangle, whose density matrix holds N0 to
+1e-12, and it changes qtci by mu times its filling error, roughly 1e-8. The
+triangle also accepts a BdG Hamiltonian now, with the construction of
+qtci: the weights of the quasiparticle bands at zero energy, the Fermi
+level of the normal state, and the band energy
+(sum_{E<0} E_BdG + Tr h_e)/2. In a gapped superconductor every triangle is
+full or empty, so at fixed mu the triangle is exact diagonalization on the
+same mesh, to 1e-8 in the test.
+
+The total energy at `mu=None`, U = -2, filling 0.3, against the reference
+Omega + mu N0 = -1.6206807:
+
+| nk | `"ed"` | `"triangle"` | qtci before | qtci now |
+|---:|---:|---:|---:|---:|
+| 16 | -1.6209185 | -1.6210916 | -1.6399936 | -1.6210916 |
+| 32 | -1.6206118 | -1.6206856 | -1.6335518 | -1.6206856 |
+| 64 | -1.6206583 | -1.6206841 | -1.6312758 | -1.6206841 |
+
+Before, qtci converged to <H> = -1.6309 instead. What is left between
+`"ed"` and the triangle is the Fermi level, not the energy. `"ed"` counts
+the eigenvalues of the normal state on the mesh, a staircase (mu = -1.6836
+at nk = 16 against -1.6564 for the triangle), while the triangle charge is
+continuous in mu. The energy only moves with mu as mu (N - N0), 6e-3 here,
+so a Fermi level that is 3e-2 off costs about 2e-4 at nk = 16. At nk = 64
+the triangle is within 4e-6 of the reference and `"ed"` within 3e-5. The
+charge of the paired state of `"ed"`, 0.6012 at nk = 16 and 0.6044 at
+nk = 64, moves with that staircase too, and it is not a second bug.
+
+`tests/scf/test_densitydensity_bdg_energy.py` checks this at nk = 16: the
+three integrations agree to 1e-8 (triangle) and 1e-6 (qtci) at fixed mu,
+and to 1e-3 and 1e-6 at a filling; the reported energy at `mu=None` is
+Omega at the converged level plus mu N0, with Omega written out by hand
+from the projector on the mesh, for each integration; when the pairing
+is scaled by 1 + x at fixed mu, dOmega/dx = 3e-10 and d<H>/dx = -8e-3; and
+dOmega/dU = <n_up n_dn> to 1e-6.
 
 ## What wins and what loses
 
@@ -675,10 +758,13 @@ loaded.
   the simplices (the tetrahedron Lindhard function), and the Hall
   conductivity of a metal needs its Fermi-sea term with the step on the
   simplices. Neither is built.
-- Bogoliubov-de Gennes Hamiltonians are refused, and so are non-Hermitian
-  ones. For BdG the weights at mu = 0 of the quasiparticle bands would do,
-  with the Fermi search on the normal state, as `"ed"` does; qtci does
-  exactly this on its reconstructed mesh (see qtci above).
+- Non-Hermitian Hamiltonians are refused. Bogoliubov-de Gennes ones are
+  accepted now, with the Fermi level of the normal state, so the paired
+  state does not hold the requested charge (0.606 instead of 0.600 for
+  U = -2 at filling 0.3 on the square lattice). A Fermi search on the charge
+  of the paired state itself would hold it, and then the reported energy
+  would also be <H>; it is not built, here or in "ed"
+  (`spectrum.get_fermi4filling` makes the same approximation).
 - `VJinteraction`, the default engine of `h.get_mean_field_hamiltonian`
   for a spinful Hamiltonian, does not take `"triangle"`. The entry point
   routes it to `Vinteraction`, which has no exchange terms J.

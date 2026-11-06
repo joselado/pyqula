@@ -858,30 +858,36 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         from .. import superconductivity
         dm_dc = {key: superconductivity.get_eh_sector(m,i=0,j=0)
                 for (key,m) in scf.dm.items()}
+    # the band energy of h, which is shifted by its Fermi level, so this is
+    # the expectation value of H - mu N
     if integration=="qtci":
-        # the band energy with the triangle weights at T=0 on the same
-        # reconstructed mesh as scf.dm; the un-shift uses the charge the
-        # density matrix holds, which is the requested one to the
-        # interpolation tolerance
+        # with the triangle weights at T=0 on the same reconstructed mesh
+        # as scf.dm
         from ..qtcitk.densitymatrix_qtci import band_energy_qtci
         etot = band_energy_qtci(h,nk=h.nk,
                 tolerance=kwargs.get("tolerance",1e-6))
-        if mu is None:
-            etot += h.fermi*np.trace(dm_dc[(0,0,0)]).real
     elif integration=="triangle":
         # the band energy of the linear bands on the same simplices, with
-        # the step at the Fermi level, as "ed" and "qtci" sum it; the charge
-        # the density matrix holds is the requested one to 1e-12
+        # the step at the Fermi level, as "ed" and "qtci" sum it
         from ..dmtk import simplexdm
         etot = simplexdm.band_energy(h,nk=h.nk)
-        if mu is None:
-            etot += h.fermi*np.trace(dm_dc[(0,0,0)]).real
     else:
         etot = h.get_total_energy(nk=h.nk)
-        if mu is None:
-            # electron_dimension, not h.intra.shape[0]: N = filling*(number
-            # of electron states), which is not the Nambu-doubled dimension
-            etot += h.fermi*electron_dimension(h)*filling # add the Fermi energy
+    if mu is None:
+        # add back mu N with N the requested charge, filling times the
+        # number of electron states (electron_dimension, not the
+        # Nambu-doubled h.intra.shape[0]), for every integration. In a
+        # normal state this is the charge the density matrix holds (to
+        # 1e-12 for "triangle", to the interpolation tolerance for "qtci").
+        # In a superconductor it is not: the Fermi level comes from the
+        # normal state, and the paired state at that level holds another
+        # charge (0.606 instead of 0.600 for U=-2 at filling 0.3 on the
+        # square lattice). Then Omega + mu N with the requested N is the
+        # quantity that is stationary in the pairing amplitude at fixed mu
+        # and obeys Hellmann-Feynman in U, while mu times the actual charge
+        # gives <H>, which is neither (future_development/
+        # tetrahedron_density_matrix.md)
+        etot += h.fermi*electron_dimension(h)*filling
     etot += get_dc_energy(scf.v,dm_dc,non_hermitian=h.non_hermitian) # add the double counting energy
     if h.has_eh and kwargs.get("compute_anomalous",True):
         # the pairing part of the interaction energy, which the band

@@ -217,9 +217,13 @@ already reached once.
   insulator gains nothing. The qtci mean field is rebuilt on the same
   weights: it now reaches the right state on metals, with 4% of the mesh
   on the square ferromagnet at nk = 256 but nearly the whole mesh on the
-  honeycomb one up to nk = 128. Open: RPA chi(q), BdG, VJinteraction. The
-  anomalous Hall of metals with the same occupations is built, see the next
-  entry.
+  honeycomb one up to nk = 128. The total energy of a BdG mean field is
+  settled: every integration adds mu times the requested charge, as "ed"
+  did, which is the grand potential plus a constant, stationary at fixed mu
+  (qtci added mu times the paired charge, 1.03e-2 lower on the converged
+  mesh); the triangle accepts BdG now. Open: RPA chi(q), a BdG Fermi level
+  on the paired charge, VJinteraction. The anomalous Hall of metals with the
+  same occupations is built, see the next entry.
 
 - [`triangle_anomalous_hall.md`](triangle_anomalous_hall.md) -- the
   Fermi-sea anomalous Hall conductivity of a 2D metal,

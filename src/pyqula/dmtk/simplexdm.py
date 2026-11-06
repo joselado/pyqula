@@ -114,6 +114,17 @@
 # bands are ordered by energy at each k, so two bands that cross are
 # interpolated with a kink, which costs an error of order one in a window
 # of width of order v/nk around the crossing.
+#
+# A Bogoliubov-de Gennes (Nambu) Hamiltonian is integrated in the same way,
+# with the weights of the quasiparticle bands at zero energy, as exact
+# diagonalization does with its Fermi-Dirac weights. In a gapped
+# superconductor no quasiparticle band crosses zero, so every simplex is
+# full or empty and the density matrix is the one of exact diagonalization
+# on the same mesh. The Fermi level is located on the normal state (the
+# electron block), the same approximation spectrum.get_fermi4filling makes,
+# and the band energy is the electronic one, (sum_{E<0} E_BdG + Tr h_e)/2,
+# as in spectrum.total_energy. qtcitk/densitymatrix_qtci.py does the same on
+# its reconstructed mesh.
 import numpy as np
 from numba import jit, prange
 
@@ -474,10 +485,6 @@ def check_hamiltonian(h,what):
         raise NotImplementedError(what+" needs a Hermitian Hamiltonian; a "
                 "non-Hermitian one is solved with its biorthogonal density "
                 "matrix, which only integration=\"ed\" builds")
-    if h.has_eh:
-        raise NotImplementedError(what+" is only implemented for a "
-                "normal-state (non-Nambu) Hamiltonian; use integration="
-                "\"ed\" for a Bogoliubov-de Gennes one")
 
 
 max_memory_gb = 2. # eigenvectors of the whole mesh kept above this are
@@ -521,7 +528,13 @@ class _Mesh():
 def get_fermi4filling(h,filling,nk=20,T=0.):
     """Fermi energy that holds `filling` (a fraction of the states) under
     the simplex integration of the density matrix, on the uniform nk^dim
-    mesh. See the module comment, point 3"""
+    mesh. See the module comment, point 3. For a Bogoliubov-de Gennes
+    Hamiltonian the count is done on the normal state, the same
+    approximation spectrum.get_fermi4filling makes"""
+    if h.has_eh:
+        h0 = h.copy()
+        h0.remove_nambu()
+        return get_fermi4filling(h0,filling,nk=nk,T=T)
     check_hamiltonian(h,"the simplex Fermi level")
     mesh = _Mesh(h,nk)
     return fermi_from_energies(mesh.dim,nk,mesh.energies(),filling,T=T)
@@ -575,12 +588,22 @@ def band_energy(h,nk=20,bloechl=None):
     """Sum of the band energies below zero per unit cell, int theta(-E) E,
     with the simplex weights at T=0 on the uniform nk^dim mesh: the exact
     band energy of the linearly interpolated bands, plus the Bloechl term
-    when bloechl (None takes bloechl_default)"""
+    when bloechl (None takes bloechl_default). For a Bogoliubov-de Gennes
+    Hamiltonian it is the electronic energy,
+    E = (sum_{E<0} E_BdG + Tr h_e)/2, with Tr h_e the onsite trace of the
+    electron block, which is the mean of Tr h_e(k) over the mesh, as in
+    spectrum.total_energy"""
     check_hamiltonian(h,"the simplex band energy")
     if bloechl is None: bloechl = bloechl_default
     mesh = _Mesh(h,nk)
-    return band_energy_from_energies(mesh.dim,nk,mesh.energies(),
+    e = band_energy_from_energies(mesh.dim,nk,mesh.energies(),
             bloechl=bloechl)
+    if h.has_eh:
+        from .. import operators, algebra
+        pe = np.array(algebra.todense(operators.get_electron(h)))
+        intra = np.array(algebra.todense(h.intra))
+        e = (e+np.sum(pe.diagonal().real*intra.diagonal().real))/2.
+    return e
 
 
 def band_energy_from_energies(dim,nk,es,bloechl=True):

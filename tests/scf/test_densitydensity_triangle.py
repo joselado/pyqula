@@ -131,12 +131,9 @@ def test_unknown_integration_lists_the_registry():
     assert "triangle" in densitydensity.get_integration_names()
 
 
-def test_refuses_nambu_and_finite():
-    h = geometry.square_lattice().get_hamiltonian(has_spin=True)
-    h.setup_nambu_spinor()
-    with pytest.raises(NotImplementedError):
-        Vinteraction(h,U=-1.,filling=0.3,nk=4,integration="triangle",
-                load_mf=False,write=False,verbose=0)
+def test_refuses_finite():
+    # a Bogoliubov-de Gennes Hamiltonian is accepted, see
+    # test_densitydensity_bdg_energy.py
     g = geometry.chain().supercell(4)
     g.set_finite() # a finite system has no Brillouin zone
     with pytest.raises(ValueError):
