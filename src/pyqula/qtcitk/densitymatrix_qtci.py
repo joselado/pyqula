@@ -1,322 +1,330 @@
-# qtci (quantics/Gauss-Kronrod tensor cross interpolation) alternative to
-# scftk/densitydensity.py's get_dm.
+# qtci (quantics tensor cross interpolation) alternative to the density
+# matrix of scftk/densitydensity.py's get_dm, for the self-consistent mean
+# field (integration="qtci").
 #
-# get_dm computes a dense density-matrix block per direction by exact
-# diagonalization on a k-mesh (densitymatrix.py's full_dm), averaging the
-# per-k occupied-state projector with np.mean-like normalization. Here we
-# instead replace that discrete k-mesh average by a continuous BZ integral,
-# done element by element: for each required (direction d, row i, column j)
-# entry, dm[d][i,j] = integral over the BZ of exp(2*pi*i*k.d)*P(k)[i,j],
-# where P(k) is the occupied-state projector of the Bloch Hamiltonian H(k)
-# (same physics/convention as dmtk/fulldm.py's full_dm_python, just
-# evaluated at a continuous k instead of summed over a fixed mesh). Each
-# entry's integral is approximated with qutecipy via gkintegrate's shared
-# nk-to-GKorder mapping and zero-pivot-safe integration (see topology.
-# chern_qtci for the same helpers): GKorder grows only logarithmically
-# with nk, since Gauss-Kronrod quadrature converges spectrally -- for a
-# smooth integrand, i.e. a gapped system. In a metal the projector jumps
-# at the Fermi surface, and the rule of GKorder^2 nodes (21x21 at nk=32,
-# 33x33 at nk=256) integrates the step no better than a uniform mesh of
-# the same size, so the density matrix does not converge with nk at all.
-# The cross interpolation itself is exact here: on the square-lattice
-# Hubbard ferromagnet get_dm_qtci equals the plain sum over the node grid
-# (full_dm_gk) to every printed digit, and the whole error is the rule.
-# get_dm_qtci warns when a band crosses the Fermi level (warn_if_metal);
-# a metal goes to integration="triangle". The SCF loop locates the Fermi
-# level on these same nodes (get_fermi4filling_qtci below) so that the
-# charge at least matches.
+# This is the triangle integration of dmtk/simplexdm.py on a uniform
+# 2^R x 2^R mesh whose fields come from a cross interpolation instead of a
+# diagonalization at every point. The density matrix at a lattice vector d,
+#   dm[d]_ij = int dk sum_n f(E_n(k)) e^{2 pi i k.d} conj(u_n,i(k)) u_n,j(k),
+# has a Fermi step that no smooth quadrature resolves, but it is the
+# contraction of two smooth fields with the triangle occupation weights:
+# the band energies E_n(k), and the field
+#   X_n(k) = e^{2 pi i k.d} conj(u_n,i(k)) u_n,j(k),
+# averaged over the degenerate multiplet of n at each k, which is the
+# field simplexdm contracts. So the E_n, and the X_n of the entries the
+# mean field reads, are reconstructed on the whole mesh from quantics TCIs
+# (qtcitk/meshfields.py, shared with the qtci DOS and conductivity) that
+# share one cache of diagonalizations, and the triangle weights of
+# simplexdm, with the Bloechl term, are applied to the reconstructed mesh.
+# Of the entries (d,i,j) and (-d,j,i), complex conjugates of each other,
+# only one is interpolated.
 #
-# Only the (direction,i,j) entries actually needed by the interaction
-# dictionary "v" are computed (kpmtk.densitymatrix_kpm.required_elements),
-# mirroring that module's own "don't build a dense block you don't need"
-# strategy -- important here since every entry pays its own qtci overhead.
-# H(k) is diagonalized at most once per k-point regardless of how many
-# entries/directions need it, via a plain dict cache shared across every
-# entry's independent integral (qutecipy's own pivot search, within a
-# single entry's integral, revisits the same k-nodes many times too; see
-# CachedFunction in fermisurfacetk/singlefs.py for that finer-grained
-# case -- here the cache is coarser, shared across entries instead).
+# The fields are interpolated together, one TCI for the energies and one
+# for all the X_n, with the field index as an extra tensor site
+# (meshfields.qtci_stacked_fields), not one TCI per field. One TCI per
+# field normalizes each field by its own maximum, so an entry that is zero
+# up to rounding (the spin-off-diagonal entry of a collinear ferromagnet)
+# is interpolated down to its noise at full rank: on the honeycomb
+# ferromagnet of future_development/tetrahedron_density_matrix.md at
+# 2^7 x 2^7 that took 49 s and every point of the mesh, against 1.4 s and
+# 76% of the mesh for the stacked TCI, with the same error of 1e-6. The
+# stacked TCI also shares its pivots in k between fields.
 #
-# Each entry is integrated by its own independent, sequential qutecipy
-# call (not parallelized via paralleltk.pcall, unlike kpmtk's per-k KPM
-# engine): the cache above is a plain in-process dict keyed by k, and its
-# whole point is to be shared across every entry's pivot search within one
-# process; handing entries out to separate worker processes would give
-# each one its own empty cache, forcing H(k) to be rediagonalized from
-# scratch per worker instead of at most once overall.
+# The Fermi level is found on the same weights
+# (simplexdm.fermi_from_energies), so the density matrix holds the
+# requested charge to the accuracy of the interpolation, and the band
+# energy is summed with the same weights. nk means the mesh: it is rounded
+# up to a power of two, 2^R.
+#
+# The SCF loop finds the Fermi level of h and then asks for the density
+# matrix of h shifted by that level. The shift moves every band energy by
+# the same constant and leaves the eigenvectors alone, so the Fermi search
+# keeps its eigenvectors and its reconstructed energies (_last_mesh), and
+# the density matrix of the shifted Hamiltonian reuses both: one
+# diagonalization per visited k-point serves the two passes of an
+# iteration. The match is checked on the Bloch matrices themselves
+# (_shift_from), so any other Hamiltonian starts from scratch.
+#
+# The bands are ordered by energy at each k, so two bands that cross give
+# fields with a kink, which costs rank, as in the qtci DOS.
+#
+# The earlier qtci density matrix integrated each entry with a tensorized
+# Gauss-Kronrod rule of 4 ceil(log2 nk)+1 nodes per axis. That is spectral
+# in a gap, but it does not resolve a metallic Fermi step at any nk, and it
+# was removed (future_development/tetrahedron_density_matrix.md has the
+# measurements, including the comparison on a gapped state).
 import numpy as np
 
-from .. import algebra
-from ..dmtk.fulldm import full_dm_python
+from .. import parallel
 from ..kpmtk.densitymatrix_kpm import required_elements, required_elements_eh
-from .gkintegrate import gkorder_from_nk, integrate_robust
+from .meshfields import qtci_stacked_fields
 
 DEFAULT_NK = 8
 
 
-def _dm_qtci_from_needed(h, needed, nk=DEFAULT_NK, fermi=0.0, T=1e-7,
-        tolerance=1e-6, **kwargs):
-    """Shared per-entry qtci engine: given the (direction, row, col)
-    density-matrix entries to compute (see required_elements/
-    required_elements_eh), integrate each one over the BZ with qutecipy.
-    H(k) is diagonalized at most once per (kx,ky) node visited by any
-    entry's pivot search (shared cache), not once per entry."""
-    if h.dimensionality != 2:
-        raise NotImplementedError("get_dm_qtci only supports 2D "
-                "Hamiltonians (the qutecipy BZ integration is over kx,ky "
-                "in [0,1]x[0,1]); got dimensionality=%d"%h.dimensionality)
-    hk_gen = h.get_hk_gen()
-    norb = h.intra.shape[0]
-    Tsafe = abs(T) if T!=0. else 1e-15
-    GKorder = gkorder_from_nk(nk)
-
-    cache = {} # (kx,ky) -> occupied-state projector matrix, shared across
-    erange = [np.inf*np.ones(norb),-np.inf*np.ones(norb)] # every band's
-    def projector(k):                     # range on the nodes visited
-        key = (k[0],k[1])
-        if key not in cache:
-            hk = hk_gen(np.array([k[0],k[1],0.]))
-            es,vs = algebra.eigh(hk)
-            es = es-fermi
-            erange[0] = np.minimum(erange[0],es)
-            erange[1] = np.maximum(erange[1],es)
-            cache[key] = full_dm_python(es,vs.T,delta=Tsafe)
-        return cache[key]
-
-    ds = sorted({d for (d,i,j) in needed})
-    dm = {d: np.zeros((norb,norb),dtype=np.complex128) for d in ds}
-    needed_by_d = dict()
-    for d,i,j in needed: needed_by_d.setdefault(d,[]).append((i,j))
-    for d in ds:
-        dvec = np.array(d,dtype=np.float64)
-        for (i,j) in needed_by_d[d]:
-            def f(k,i=i,j=j): # default args freeze the loop variables
-                phase = np.exp(2j*np.pi*(k[0]*dvec[0]+k[1]*dvec[1]))
-                return projector(k)[i,j]*phase
-            dm[d][i,j] = integrate_robust(np.complex128,f,GKorder,
-                    tolerance,**kwargs)
-    warn_if_metal(erange,nk,GKorder)
-    return dm
-
-
-def warn_if_metal(erange,nk,GKorder):
-    """Warn when a band crosses the Fermi level on the nodes, so that the
-    integrand has a Fermi surface. erange is (lowest, highest) energy of
-    every band over the nodes, measured from the Fermi level.
-
-    The Gauss-Kronrod rule is spectral for a smooth integrand only. In a
-    metal the occupied projector has a step at the Fermi surface, of width
-    T/v_F in k, and a rule of GKorder^2 nodes integrates it no better than
-    a uniform mesh of the same size. The number of nodes grows only like
-    log2(nk)^2 (21x21 at nk=32, 33x33 at nk=256), so raising nk does not
-    help. On the square-lattice Hubbard ferromagnet (U=6, filling 0.4) a
-    frozen exchange split gave a magnetization off by 1e-3 to 1e-1 at
-    nk=8 to 256, with no trend in nk, at T=1e-2 as at T=1e-3, and the
-    mean field converged to a nearly nonmagnetic state
-    (future_development/tetrahedron_density_matrix.md). In a gap every band is entirely above
-    or below the Fermi level, and nothing is said."""
-    crossing = np.nonzero((erange[0]<0.) & (erange[1]>0.))[0]
-    if len(crossing)==0: return
-    import warnings
-    warnings.warn("integration=\"qtci\" integrates the occupations with a "
-            "Gauss-Kronrod rule of %dx%d k-points at nk=%d, and the bands %s "
-            "cross the Fermi level, so the integrand has a Fermi step that "
-            "this rule does not resolve at any nk (the number of points "
-            "grows like log2(nk)^2). The density matrix of a metal does "
-            "not converge with nk, and the mean field can converge to "
-            "another state; use integration=\"triangle\" for a metal"%(GKorder,
-                GKorder,nk,crossing.tolist()),stacklevel=3)
-
-
-def gk_node_grid(nk=None):
-    """The tensorized Gauss-Kronrod rule get_dm_qtci integrates with, at
-    this nk: returns (kx, ky, w), flat arrays over every node pair, with
-    the product weights w summing to one on [0,1]^2. It is the same rule
-    integrate_robust hands to qutecipy (same kronrod call, same GKorder
-    from gkorder_from_nk), so a sum over it is the quadrature the density
-    matrix is built with."""
-    from ..qutecipytk.gausskronrod import kronrod
+def mesh_exponent(nk):
+    """R of the 2^R x 2^R mesh for a requested nk, rounded up"""
     if nk is None: nk = DEFAULT_NK
-    nodes1d,weights1d,_ = kronrod(gkorder_from_nk(nk)//2,-1,1)
-    knode = (nodes1d+1)/2 # [-1,1] -> [0,1]
-    w1 = weights1d/2 # so that the weights sum to one on [0,1]
-    kx,ky = np.meshgrid(knode,knode,indexing="ij")
-    w = np.outer(w1,w1)
-    return kx.ravel(),ky.ravel(),w.ravel()
+    return max(1,int(np.ceil(np.log2(nk))))
 
 
-def full_dm_gk(h, ds, nk=None, T=1e-7):
-    """Every entry of the density matrix for the directions ds, as a
-    direct sum over the Gauss-Kronrod node grid get_dm_qtci integrates on
-    (gk_node_grid). get_dm_qtci only computes the entries the mean field
-    reads and leaves the rest at zero; this is the full matrix under the
-    same quadrature, for reporting it once the SCF loop is done. In 2D the
-    cross interpolation samples the whole node grid, so on the entries
-    get_dm_qtci does compute the two agree to its tolerance."""
-    if h.dimensionality != 2:
-        raise NotImplementedError("full_dm_gk only supports 2D "
-                "Hamiltonians, the ones get_dm_qtci integrates; got "
-                "dimensionality=%d"%h.dimensionality)
-    kx,ky,w = gk_node_grid(nk)
-    hk_gen = h.get_hk_gen()
-    norb = h.intra.shape[0]
-    Tsafe = abs(T) if T!=0. else 1e-15
-    ds = [tuple(d) for d in ds]
-    dm = {d: np.zeros((norb,norb),dtype=np.complex128) for d in ds}
-    for (x,y,wk) in zip(kx,ky,w):
-        es,vs = algebra.eigh(hk_gen(np.array([x,y,0.])))
-        p = full_dm_python(es,vs.T,delta=Tsafe) # occupied projector
-        for d in ds:
-            dm[d] += wk*np.exp(2j*np.pi*(x*d[0]+y*d[1]))*p
-    return dm
+def check_hamiltonian(h,what):
+    """Refuse what the qtci density matrix does not cover"""
+    if h.dimensionality!=2:
+        raise NotImplementedError(what+" is only implemented in 2D (the "
+                "quantics interpolation runs on a 2^R x 2^R mesh), got "
+                "dimensionality %d; use integration=\"triangle\""
+                %h.dimensionality)
+    if getattr(h,"non_hermitian",False):
+        raise NotImplementedError(what+" needs a Hermitian Hamiltonian; a "
+                "non-Hermitian one is solved with its biorthogonal density "
+                "matrix, which only integration=\"ed\" builds")
 
 
-def band_energy_gk(h, nk=None):
-    """Sum of the eigenvalues below zero, per unit cell, as a sum over the
-    Gauss-Kronrod node grid get_dm_qtci integrates on (gk_node_grid).
+class _Eigen():
+    """Eigenpairs of h at the points of the 2^R x 2^R mesh, each point
+    diagonalized once; ndiag counts the diagonalizations"""
+    def __init__(self,h,R):
+        if h.is_sparse: h = h.get_dense()
+        self.hkgen = h.get_hk_gen()
+        self.R = R
+        self.n = 2**R
+        self.nb = h.intra.shape[0]
+        self.es = {} # (i,j) -> energies
+        self.U = {} # (i,j) -> eigenvectors as columns
+        self.ndiag = 0
+    def _diagonalize(self,ks):
+        from ..dostk.simplexdos import _hk_batch
+        from ..htk.eigenvectors import parallel_diagonalization
+        parallel.set_num_threads()
+        es,U = parallel_diagonalization(_hk_batch(self.hkgen,ks))
+        self.ndiag += len(ks)
+        return es,U
+    def __call__(self,ks):
+        """energies (m,nb) and eigenvectors (m,nb,nb) at the mesh points ks"""
+        ij = [tuple(q) for q in np.rint(np.asarray(ks)[:,:2]*self.n
+            ).astype(np.int64).tolist()]
+        new = [q for q in dict.fromkeys(ij) if q not in self.es]
+        if new:
+            knew = np.zeros((len(new),3))
+            knew[:,:2] = np.array(new,dtype=np.float64)/self.n
+            es,U = self._diagonalize(knew)
+            for q,e,u in zip(new,es,U):
+                self.es[q] = e
+                self.U[q] = u
+        return (np.array([self.es[q] for q in ij]),
+                np.array([self.U[q] for q in ij]))
 
-    This is spectrum.total_energy on that grid instead of the uniform
-    mesh, with the same Nambu correction, E = (sum_{E<0} E_BdG + Tr h_e)/2.
-    In a metal a band energy summed on the uniform mesh does not belong to
-    the density matrix the SCF loop converged on the GK nodes: the two
-    grids hold different charges at the same Fermi level, and on a square
-    lattice at nk=8 mixing them moved the total energy by 2e-2."""
-    if h.dimensionality != 2:
-        raise NotImplementedError("band_energy_gk only supports 2D "
-                "Hamiltonians, the ones get_dm_qtci integrates; got "
-                "dimensionality=%d"%h.dimensionality)
-    kx,ky,w = gk_node_grid(nk)
-    hk_gen = h.get_hk_gen()
-    pediag = None # diagonal of the electron projector, only for Nambu
-    if h.has_eh:
-        from .. import operators
-        pediag = np.array(algebra.todense(operators.get_electron(h)))
-        pediag = pediag.diagonal().real
-    etot = 0.
-    for (x,y,wk) in zip(kx,ky,w):
-        hk = algebra.todense(hk_gen(np.array([x,y,0.])))
-        es = algebra.eigvalsh(hk)
-        ek = np.sum(es[es<0.])
-        if pediag is not None: # electronic energy of a BdG spectrum
-            ek = (ek + np.sum(pediag*np.asarray(hk).diagonal()).real)/2.
-        etot += wk*ek
-    return etot
+
+def _bloch_data(h):
+    if h.is_sparse: return None
+    return getattr(h.get_hk_gen(),"bloch_data",None)
 
 
-def get_fermi4filling_qtci(h, filling, nk=None, T=1e-7):
-    """Fermi energy holding `filling` electrons under the quadrature that
-    get_dm_qtci integrates the density matrix with.
+_last_mesh = None # what the last Fermi search reconstructed, see _shift_from
 
-    spectrum.get_fermi4filling counts eigenvalues on the uniform nk mesh.
-    In a metal at small T the occupied-state projector has a step at the
-    Fermi surface, and a Fermi level located on one grid holds a
-    different number of electrons on another: taking it from the uniform
-    mesh and then integrating on the Gauss-Kronrod nodes lost 0.03-0.05
-    electrons out of 0.6 on a square-lattice metal. Here the Fermi level
-    is located on the Gauss-Kronrod nodes themselves, so the density
-    matrix holds the requested charge up to the weight of one level.
 
-    The nodes are not equally weighted, so at T=0 the count is a staircase
-    with uneven steps, and the steps can be coarse: the nodes come in groups
-    related by the lattice symmetries, and on a square lattice at nk=8 the
-    level next to the Fermi energy of a 0.3 filling is a group of 8 states
-    that holds 0.09 electrons. As in filling.get_fermi_energy, the first
-    guess cuts midway between two eigenvalues, at the one whose cumulative
-    weight is closest to the target, and it is kept whenever it already
-    holds the requested filling (an insulator, or a cut that happens to
-    land on it). Otherwise the Fermi-Dirac count at T, continuous for any
-    T>0, is bisected to the requested filling itself, so that at T~0 the
-    level at the Fermi energy is partly occupied, which is what the uniform
-    mesh does too when its cut falls inside a degenerate multiplet
-    (spectrum.get_fermi_energy_T). On that square lattice the whole-level
-    cut held 0.320 for a 0.3 filling with mu=-0.762, and the bisection
-    holds 0.300 with mu=-1.030, against -1.059 on a dense mesh.
+def _shift_from(h,last,R,tolerance):
+    """c when h is the Hamiltonian of the last Fermi search plus c times the
+    identity, on the same mesh and at the same tolerance; None otherwise"""
+    if last is None or last["R"]!=R or last["tolerance"]!=tolerance:
+        return None
+    data = _bloch_data(h)
+    if data is None: return None
+    ms,ds = data
+    ms0,ds0 = last["bloch"]
+    if ms.shape!=ms0.shape or not np.array_equal(ds,ds0): return None
+    diff = ms-ms0
+    onsite = np.all(ds==0.,axis=1)
+    if np.any(diff[~onsite]!=0.): return None
+    d0 = np.sum(diff[onsite],axis=0)
+    c = d0[0,0].real
+    scale = 1e-12*max(1.,np.max(np.abs(ms0)))
+    if np.max(np.abs(d0-c*np.identity(len(d0))))>scale: return None
+    return c
 
-    For a BdG Hamiltonian the count is done on the normal-state
-    Hamiltonian, the same approximation spectrum.get_fermi4filling makes."""
+
+def _energies(h,R,tolerance):
+    """band energies of h reconstructed on the 2^R x 2^R mesh, with the
+    eigenpair cache they were computed with, the number of
+    diagonalizations this call did and the bond dimensions of the TCI.
+    When h is the Hamiltonian of the last Fermi search shifted by a
+    constant, that search's energies and eigenpairs are reused"""
+    c = _shift_from(h,_last_mesh,R,tolerance)
+    if c is not None:
+        m = _last_mesh
+        return m["es"]+c,m["eigen"],0,m["ranks"]
+    eigen = _Eigen(h,R)
+    nb = eigen.nb
+    es,ncalls,ranks = qtci_stacked_fields(lambda ks: eigen(ks)[0],R,nb,
+            tolerance=tolerance)
+    return np.ascontiguousarray(es),eigen,eigen.ndiag,ranks
+
+
+def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6):
+    """Fermi energy that holds `filling` (a fraction of the states) under
+    the qtci density matrix: the triangle charge of the band energies
+    reconstructed on the 2^R x 2^R mesh, which is continuous in the Fermi
+    level, so the filling is reached exactly on that mesh. The energies
+    and the eigenpairs are kept, so that the density matrix of h shifted
+    by this level does not diagonalize the same points again. For a
+    Bogoliubov-de Gennes Hamiltonian the count is done on the normal
+    state, the same approximation spectrum.get_fermi4filling makes"""
+    global _last_mesh
     if h.has_eh:
         h0 = h.copy()
         h0.remove_nambu()
-        return get_fermi4filling_qtci(h0,filling,nk=nk,T=T)
-    if h.dimensionality != 2:
-        raise NotImplementedError("get_fermi4filling_qtci only supports 2D "
-                "Hamiltonians, the ones get_dm_qtci integrates; got "
-                "dimensionality=%d"%h.dimensionality)
-    from ..filling import check_filling
-    check_filling(filling)
-    kx,ky,w = gk_node_grid(nk)
-    hk_gen = h.get_hk_gen()
+        return get_fermi4filling_qtci(h0,filling,nk=nk,T=T,
+                tolerance=tolerance)
+    check_hamiltonian(h,"the qtci Fermi level")
+    from ..dmtk import simplexdm
+    R = mesh_exponent(nk)
+    es,eigen,nd,ranks = _energies(h,R,tolerance)
+    mu = simplexdm.fermi_from_energies(2,2**R,es,filling,T=T)
+    data = _bloch_data(h)
+    # the eigenvectors are kept for the next call only below the memory
+    # limit of the triangle mesh; above it the density matrix starts over
+    keep = len(eigen.U)*eigen.nb**2*16 <= simplexdm.max_memory_gb*1e9
+    if data is not None and keep:
+        _last_mesh = dict(R=R,tolerance=tolerance,es=es,eigen=eigen,
+                ranks=ranks,bloch=(data[0].copy(),data[1].copy()))
+    return mu
+
+
+def _canonical_entries(needed):
+    """the entries to interpolate: of (d,i,j) and (-d,j,i), whose fields
+    are complex conjugates of each other, only one"""
+    out = set()
+    for (d,i,j) in needed:
+        d = tuple(int(x) for x in d)
+        other = (tuple(-x for x in d),j,i)
+        out.add(min((d,i,j),other))
+    return sorted(out)
+
+
+def dm_entries_qtci(h,needed,nk=None,T=1e-7,tolerance=1e-6,bloechl=None,
+        counted=False):
+    """The density-matrix entries `needed`, a set of (d,i,j), of h at zero
+    chemical potential, as {d: (n,n) matrix} with the other entries zero.
+    Returns also the number of diagonalizations and the bond dimensions of
+    the cross interpolations when counted"""
+    check_hamiltonian(h,"the qtci density matrix")
+    from ..dmtk import simplexdm
+    from ..dostk.simplexdos import _multiplet_average, _degeneracy_tol
+    if bloechl is None: bloechl = simplexdm.bloechl_default
+    R = mesh_exponent(nk)
+    n = 2**R
+    es,eigen,ndiag,eranks = _energies(h,R,tolerance)
+    nd0 = eigen.ndiag
+    entries = _canonical_entries(needed)
+    nb = eigen.nb
     norb = h.intra.shape[0]
-    es = np.array([algebra.eigvalsh(hk_gen(np.array([x,y,0.])))
-        for (x,y) in zip(kx,ky)]) # (nodes,norb)
-    ws = np.repeat(w,norb) # the weight of every eigenvalue
-    es = es.ravel()
-    order = np.argsort(es)
-    es,ws = es[order],ws[order]
-    target = filling*norb # electrons per unit cell
-    cum = np.cumsum(ws) # electrons below each cut
-    # a cut is allowed only between two distinct eigenvalues
-    gap = np.diff(es) > 1e-10*max(1.,np.max(np.abs(es)))
-    icuts = np.nonzero(gap)[0] # cut between es[i] and es[i+1]
-    e_reg = 1e-5 # as filling.get_fermi_energy, for an empty or full band
-    candidates = [(abs(target),es[0]-e_reg,0.)] # nothing occupied
-    candidates += [(abs(cum[i]-target),(es[i]+es[i+1])/2.,cum[i])
-            for i in icuts]
-    candidates.append((abs(cum[-1]-target),es[-1]+e_reg,cum[-1]))
-    _,mu0,_ = min(candidates,key=lambda c: c[0])
-    if T is None or T<=0.: return mu0
-    if target<=0. or target>=norb: return mu0 # empty or full
-    from scipy.special import expit
-    def nelec(mu): return np.sum(ws*expit(-(es-mu)/T))
-    if abs(nelec(mu0)-target)<1e-9*target: return mu0 # the cut holds it
-    # any T>0 smears the staircase into a continuous count, so the requested
-    # filling itself is reachable, with the level at mu partly occupied
-    from scipy.optimize import brentq
-    width = max(4.*T,1e-6)
-    wmax = 4.*(es[-1]-es[0]) + 40.*T + 1e-6
-    while nelec(mu0-width)>target or nelec(mu0+width)<target:
-        if width>wmax: return mu0 # cannot bracket; keep the T=0 cut
-        width *= 2.
-    return brentq(lambda mu: nelec(mu)-target,mu0-width,mu0+width,
-            xtol=1e-12)
+    dvecs = np.array([e[0] for e in entries],dtype=np.float64).reshape(-1,3)
+    I = np.array([e[1] for e in entries],dtype=np.int64)
+    J = np.array([e[2] for e in entries],dtype=np.int64)
+    ne = len(entries)
+    def evaluate(ks):
+        e,U = eigen(ks)
+        W = np.transpose(U[:,I,:].conj()*U[:,J,:],(0,2,1)) # (k,band,entry)
+        W = np.ascontiguousarray(W)
+        _multiplet_average(e,W,_degeneracy_tol(e))
+        ph = np.exp(2j*np.pi*(np.asarray(ks)@dvecs.T)) # (k,entry)
+        return (W*ph[:,None,:]).reshape(len(ks),nb*ne)
+    ds = sorted({tuple(int(x) for x in d) for (d,i,j) in needed}
+            |{tuple(int(x) for x in e[0]) for e in entries})
+    dm = {d: np.zeros((norb,norb),dtype=np.complex128) for d in ds}
+    xranks = []
+    if ne>0:
+        X,ncalls,xranks = qtci_stacked_fields(evaluate,R,nb*ne,
+                tolerance=tolerance,dtype=np.complex128)
+        w = simplexdm.simplex_weights(2,n,es,mu=0.,T=T,bloechl=bloechl)
+        vals = np.einsum("kn,kne->e",w,X.reshape(n*n,nb,ne),optimize=True)
+        for (d,i,j),x in zip(entries,vals):
+            dm[d][i,j] = x
+            dm[tuple(-y for y in d)][j,i] = np.conj(x)
+    # only the entries asked for, as the other backends that compute a
+    # subset leave the rest at zero
+    out = {d: np.zeros((norb,norb),dtype=np.complex128) for d in ds}
+    for (d,i,j) in needed:
+        d = tuple(int(x) for x in d)
+        out[d][i,j] = dm[d][i,j]
+    if counted: return out,ndiag+eigen.ndiag-nd0,list(eranks)+list(xranks)
+    return out
 
 
-def get_dm_qtci(h, v, nk=None, fermi=0.0, T=1e-7, tolerance=1e-6,
-        **kwargs):
-    """qtci-based analogue of scftk.densitydensity.get_dm: return
-    a dictionary {direction: matrix} with the density matrix, computing
-    only the entries v actually requires, each one as a BZ integral (via
-    qutecipy) of the occupied-state projector instead of a k-mesh average.
-    Same {direction: matrix} contract as get_dm, so it is a drop-in
-    replacement inside the same (conventional) SCF loop -- see
-    scftk.densitydensity.get_dm's integration="qtci" branch.
+def get_dm_qtci(h,v,nk=None,fermi=0.0,T=1e-7,tolerance=1e-6,bloechl=None,
+        counted=False):
+    """qtci analogue of scftk.densitydensity.get_dm: a dictionary
+    {direction: matrix} with the density matrix of h at zero chemical
+    potential (fermi shifts it), computing only the entries the interaction
+    v requires, from the triangle weights on the 2^R x 2^R mesh (nk rounded
+    up to a power of two) with the band energies and the band projectors
+    reconstructed from quantics cross interpolations (see the module
+    comment). So this is integration="triangle" at the same mesh, up to
+    the interpolation tolerance, with fewer diagonalizations when the
+    fields have a low rank. It works for a metal as for an insulator.
 
-    A direction with no required entries at all (e.g. an interaction v[d]
-    that is exactly all-zero for that d) is backfilled below with an
-    all-zero matrix rather than actually integrated -- correct for the
-    mean field itself (a zero-everywhere v[d] contributes nothing
-    regardless), but note dm[d] is then a placeholder, not a genuinely
-    computed occupation/coherence matrix; the same convention is used by
-    kpmtk.densitymatrix_kpm.get_dm_kpm.
+    The interpolation adds an error to each entry, 8e-9 against the
+    triangle on the honeycomb ferromagnet at 64x64 and tolerance=1e-6
+    (3e-10 at 1e-8), and the pivots of the cross interpolation change from
+    one iteration to the next. So the SCF residual has a floor of that
+    size, and maxerror has to stay above it: that mean field did not reach
+    maxerror=1e-9 in 400 iterations at the default tolerance, and stops
+    at 1e-7 as the triangle does at 1e-9 (future_development/
+    tetrahedron_density_matrix.md), as for a KPM mean field.
 
-    For BdG/Nambu Hamiltonians (h.has_eh) the required entries are
-    determined by required_elements_eh instead of required_elements,
-    exactly as in kpmtk.densitymatrix_kpm.get_dm_kpm.
-
-    This is for gapped Hamiltonians. In a metal the Fermi step is not
-    resolved at any nk, and a warning says so (warn_if_metal)."""
-    if nk is None: nk = DEFAULT_NK
-    ds = [(0,0,0)] + [d for d in v if d!=(0,0,0)]
-    if getattr(h,"has_eh",False):
-        needed = required_elements_eh(v)
-    else:
-        needed = required_elements(v)
-    dm = _dm_qtci_from_needed(h,needed,nk=nk,fermi=fermi,T=T,
-            tolerance=tolerance,**kwargs)
-    # every direction v has a key for must be present in the output, even
-    # if it happened to contribute no required entries of its own
-    for d in ds:
-        if d not in dm:
-            dm[d] = np.zeros((h.intra.shape[0],h.intra.shape[0]),
-                    dtype=np.complex128)
+    A direction of v with no required entry gets an all-zero matrix, a
+    placeholder that is correct for the mean field, as in
+    kpmtk.densitymatrix_kpm.get_dm_kpm. For a Bogoliubov-de Gennes
+    Hamiltonian the entries are those of required_elements_eh, and the
+    weights are those of the quasiparticle bands at zero energy.
+    bloechl=None takes dmtk.simplexdm.bloechl_default. With counted=True
+    also returns the number of diagonalizations and the bond dimensions of
+    the cross interpolations"""
+    if h.has_eh: needed = required_elements_eh(v)
+    else: needed = required_elements(v)
+    if fermi!=0.:
+        h = h.copy()
+        h.shift_fermi(-fermi)
+    res = dm_entries_qtci(h,needed,nk=nk,T=T,tolerance=tolerance,
+            bloechl=bloechl,counted=counted)
+    dm = res[0] if counted else res
+    norb = h.intra.shape[0]
+    for d in [(0,0,0)]+[tuple(d) for d in v]:
+        if d not in dm: dm[d] = np.zeros((norb,norb),dtype=np.complex128)
+    if counted: return (dm,)+tuple(res[1:])
     return dm
+
+
+def full_dm_qtci(h,ds,nk=None,T=1e-7,tolerance=1e-6,bloechl=None):
+    """Every entry of the density matrix for the lattice vectors ds, with
+    the construction of get_dm_qtci. The SCF loop only computes the
+    entries the mean field reads; this is the full matrix, for reporting
+    it once the loop is done"""
+    norb = h.intra.shape[0]
+    needed = {(tuple(int(x) for x in d),i,j) for d in ds
+            for i in range(norb) for j in range(norb)}
+    return dm_entries_qtci(h,needed,nk=nk,T=T,tolerance=tolerance,
+            bloechl=bloechl)
+
+
+def band_energy_qtci(h,nk=None,tolerance=1e-6,bloechl=None):
+    """Sum of the band energies below zero per unit cell, with the triangle
+    weights at T=0 (and the Bloechl term, bloechl=None takes
+    dmtk.simplexdm.bloechl_default) on the band energies reconstructed on
+    the 2^R x 2^R mesh, as simplexdm.band_energy does on the exact ones.
+    For a Bogoliubov-de Gennes Hamiltonian it is the electronic energy,
+    E = (sum_{E<0} E_BdG + Tr h_e)/2, with Tr h_e the onsite trace of the
+    electron block, which is the mean of Tr h_e(k) over the zone"""
+    check_hamiltonian(h,"the qtci band energy")
+    from ..dmtk import simplexdm
+    if bloechl is None: bloechl = simplexdm.bloechl_default
+    R = mesh_exponent(nk)
+    es,eigen,nd,ranks = _energies(h,R,tolerance)
+    e = simplexdm.band_energy_from_energies(2,2**R,es,bloechl=bloechl)
+    if h.has_eh:
+        from .. import operators, algebra
+        pe = np.array(algebra.todense(operators.get_electron(h)))
+        intra = np.array(algebra.todense(h.intra))
+        e = (e+np.sum(pe.diagonal().real*intra.diagonal().real))/2.
+    return e

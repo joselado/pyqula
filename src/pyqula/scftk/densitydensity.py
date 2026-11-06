@@ -318,8 +318,9 @@ def _get_dm_ed(h,v,nk=None,tolerance=None,**kwargs):
 
 
 def _get_dm_qtci(h,v,nk=None,tolerance=1e-6,**kwargs):
-    """integration="qtci": every entry the mean field reads as its own
-    tensor cross interpolation over the Brillouin zone"""
+    """integration="qtci": the triangle weights on a 2^R x 2^R mesh whose
+    band energies and projectors come from quantics cross interpolations,
+    see qtcitk.densitymatrix_qtci"""
     require_hermitian(h,"integration=\"qtci\"")
     from ..qtcitk.densitymatrix_qtci import get_dm_qtci
     return get_dm_qtci(h,v,nk=nk,tolerance=tolerance,**kwargs)
@@ -338,7 +339,7 @@ def _get_dm_triangle(h,v,nk=None,tolerance=None,T=0.,**kwargs):
 # selects them with
 dm_integrations = {
     "ed": _get_dm_ed, # exact diagonalization on the k-mesh
-    "qtci": _get_dm_qtci, # tensor cross interpolation of each entry
+    "qtci": _get_dm_qtci, # triangle on cross-interpolated fields
     "triangle": _get_dm_triangle, # linear simplex integration of the step
     }
 
@@ -363,15 +364,13 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     integration: one of get_integration_names().
     "ed" (default) computes it by exact diagonalization on a
     k-mesh (h.get_density_matrix), with nk defaulting to 1 if not given.
-    "qtci" instead integrates each required entry over the BZ with
-    qutecipy (tensor cross interpolation), see
-    qtcitk.densitymatrix_qtci.get_dm_qtci -- same {direction: matrix}
-    return contract, so it is a drop-in replacement in the SCF loop below
-    (scftk.densitydensity.generic_densitydensity); nk defaults
-    to get_dm_qtci's own DEFAULT_NK if not given (nk=None is forwarded
+    "qtci" is the triangle integration below on a 2^R x 2^R mesh (nk
+    rounded up to a power of two) whose band energies and band projectors
+    are reconstructed from quantics cross interpolations instead of a
+    diagonalization at every point, see qtcitk.densitymatrix_qtci.get_dm_qtci;
+    it computes only the entries the mean field reads, and nk defaults to
+    get_dm_qtci's own DEFAULT_NK if not given (nk=None is forwarded
     through rather than substituting a different, ED-only default here).
-    It is for gapped Hamiltonians: in a metal its Gauss-Kronrod rule does
-    not resolve the Fermi step at any nk, and it warns.
     "triangle" diagonalizes the same uniform mesh as "ed" but integrates
     the Fermi step exactly over the linearly interpolated bands (the linear
     tetrahedron method in 3D), see dmtk.simplexdm; it returns every entry
@@ -806,11 +805,11 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
           # T=0 eigenvalue count would hold a different number of
           # electrons than `filling` asks for
           if integration=="qtci":
-              # on the Gauss-Kronrod nodes get_dm_qtci integrates on: in a
-              # metal, a Fermi level found on the uniform mesh holds a
-              # different charge on those nodes
+              # on the triangles of the reconstructed mesh get_dm_qtci
+              # integrates on, which also keeps the eigenpairs for it
               from ..qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
-              fermi = get_fermi4filling_qtci(h,filling,nk=h.nk,T=T)
+              fermi = get_fermi4filling_qtci(h,filling,nk=h.nk,T=T,
+                      tolerance=kwargs.get("tolerance",1e-6))
           elif integration=="triangle":
               # on the simplices the density matrix is integrated on, where
               # the charge is a continuous function of the Fermi level, so
@@ -841,11 +840,10 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         scf.dm = h.get_density_matrix(ds=ds,nk=h.nk,T=T)
     elif integration=="qtci":
         # get_dm_qtci left every entry the mean field does not read at
-        # zero. Recomputed on the same Gauss-Kronrod nodes, not the uniform
-        # mesh: in a metal the two hold different charges at this Fermi
-        # level (see get_fermi4filling_qtci)
-        from ..qtcitk.densitymatrix_qtci import full_dm_gk
-        scf.dm = full_dm_gk(h,ds,nk=h.nk,T=T)
+        # zero. Recomputed with the same construction, on the same mesh
+        from ..qtcitk.densitymatrix_qtci import full_dm_qtci
+        scf.dm = full_dm_qtci(h,ds,nk=h.nk,T=T,
+                tolerance=kwargs.get("tolerance",1e-6))
     # integration="triangle" already computed every entry of every
     # direction in the last iteration, on the same simplices
     # get_dc_energy assumes dm's shape matches v's, which is never
@@ -861,13 +859,13 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         dm_dc = {key: superconductivity.get_eh_sector(m,i=0,j=0)
                 for (key,m) in scf.dm.items()}
     if integration=="qtci":
-        # the band energy and the charge on the same Gauss-Kronrod nodes
-        # as scf.dm: at T~0 a metal's Fermi level holds the requested
-        # charge only up to the weight of one level on those nodes (see
-        # get_fermi4filling_qtci), so the un-shift uses the charge the
-        # density matrix actually holds rather than filling*N
-        from ..qtcitk.densitymatrix_qtci import band_energy_gk
-        etot = band_energy_gk(h,nk=h.nk)
+        # the band energy with the triangle weights at T=0 on the same
+        # reconstructed mesh as scf.dm; the un-shift uses the charge the
+        # density matrix holds, which is the requested one to the
+        # interpolation tolerance
+        from ..qtcitk.densitymatrix_qtci import band_energy_qtci
+        etot = band_energy_qtci(h,nk=h.nk,
+                tolerance=kwargs.get("tolerance",1e-6))
         if mu is None:
             etot += h.fermi*np.trace(dm_dc[(0,0,0)]).real
     elif integration=="triangle":
@@ -1016,13 +1014,12 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
 
     integration: one of scftk.densitydensity.get_integration_names().
     "ed" (default) computes the density matrix at each SCF
-    step by exact diagonalization on a k-mesh. "qtci" instead integrates
-    each required density-matrix entry over the BZ with qutecipy (tensor
-    cross interpolation) -- see scftk.densitydensity.get_dm and
+    step by exact diagonalization on a k-mesh. "qtci" is "triangle" on a
+    2^R x 2^R mesh whose band energies and band projectors come from
+    quantics cross interpolations (qutecipy) instead of a diagonalization
+    at every point -- see scftk.densitydensity.get_dm and
     qtcitk.densitymatrix_qtci.get_dm_qtci; only 2D Hamiltonians are
-    supported for "qtci", and it is for gapped states: its Gauss-Kronrod
-    rule does not resolve the Fermi step of a metal at any nk, and it
-    warns when a band crosses the Fermi level. "triangle" integrates the Fermi step exactly
+    supported for "qtci". "triangle" integrates the Fermi step exactly
     over the bands interpolated linearly in the triangles (2D),
     tetrahedra (3D) or segments (1D) of the same k-mesh, the case where
     it pays being a metal at low temperature, see dmtk.simplexdm.

@@ -1,8 +1,10 @@
-"""Robustness contract of qtcitk/gkintegrate.py, the primitive shared by
-topology.chern(integration="qtci") and scftk's get_dm_qtci backend.
+"""Robustness contract of qtcitk/gkintegrate.py, the primitive that
+topology.chern(integration="qtci") integrates with. (The qtci mean-field
+density matrix used it too, until it moved to the triangle weights on a
+quantics-interpolated mesh, qtcitk/densitymatrix_qtci.py.)
 
-Both entry points are already validated end to end against external oracles
-(analytic Chern on Haldane models; the full dense density matrix), so what is
+The entry point is already validated end to end against external oracles
+(analytic Chern on Haldane models), so what is
 tested here is the part those end-to-end tests cannot see: the nk-to-order
 mapping, whether the requested tolerance is actually honoured, and the
 zero-integrand pivot search -- the branch that decides where to seed the
@@ -92,8 +94,8 @@ def test_tolerance_is_honoured_and_tightening_it_helps():
 
 
 def test_complex_dtype_keeps_both_parts():
-    """get_dm_qtci integrates complex density-matrix entries, so a complex
-    dtype must carry the imaginary part through, not silently drop it.
+    """A complex dtype must carry the imaginary part through, not silently
+    drop it.
     int exp(2 i pi kx) ky = 0 + 0i; int (kx + i ky) = 0.5 + 0.5i."""
     got = integrate_robust(np.complex128,lambda k: k[0]+1j*k[1],15,TOL)
     assert abs(got-(0.5+0.5j)) < 1e-9

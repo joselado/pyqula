@@ -579,6 +579,12 @@ def band_energy(h,nk=20,bloechl=None):
     check_hamiltonian(h,"the simplex band energy")
     if bloechl is None: bloechl = bloechl_default
     mesh = _Mesh(h,nk)
-    es = mesh.energies()
-    w = simplex_weights(mesh.dim,nk,es,mu=0.,T=0.,bloechl=bloechl)
+    return band_energy_from_energies(mesh.dim,nk,mesh.energies(),
+            bloechl=bloechl)
+
+
+def band_energy_from_energies(dim,nk,es,bloechl=True):
+    """band_energy from the band energies es[k,n] of the uniform nk^dim
+    mesh (row-major, as klist.kmesh), measured from the Fermi level"""
+    w = simplex_weights(dim,nk,es,mu=0.,T=0.,bloechl=bloechl)
     return float(np.sum(w*es))

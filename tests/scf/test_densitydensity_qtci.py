@@ -1,10 +1,18 @@
+"""integration="qtci" of the mean-field density matrix
+(qtcitk/densitymatrix_qtci.py): the triangle weights of dmtk/simplexdm.py on
+a 2^R x 2^R mesh whose band energies and band projectors come from quantics
+cross interpolations. On the same mesh it must agree with
+integration="triangle" to the interpolation tolerance, in a metal as in an
+insulator."""
 import numpy as np
 import pytest
 
 from pyqula import geometry
 from pyqula import specialhopping
+from pyqula.dmtk import simplexdm
+from pyqula.qtcitk import densitymatrix_qtci
 from pyqula.qtcitk.densitymatrix_qtci import get_dm_qtci
-from pyqula.scftk.densitydensity import get_mf, get_dc_energy
+from pyqula.scftk.densitydensity import get_mf, get_dc_energy, Vinteraction
 
 
 def _v1_interaction_dict(h, V1=1.0):
@@ -31,14 +39,14 @@ def _v1_interaction_dict(h, V1=1.0):
 
 
 def test_get_dm_qtci_matches_full_dm_for_v1_interaction():
-    """get_dm_qtci's per-element BZ integration must reproduce the same
-    mean field / double-counting energy as exact diagonalization's k-mesh
-    average, for a first-neighbor (V1) interaction on a frozen periodic 2D
-    Hamiltonian -- isolating get_dm_qtci's own correctness from any SCF
-    convergence-path sensitivity."""
+    """In a gap every triangle is full or empty, so the triangle density
+    matrix is the one of exact diagonalization on the same mesh, and the
+    qtci one must reproduce its mean field and double-counting energy for a
+    first-neighbor (V1) interaction on a frozen 2D insulator, to the
+    interpolation tolerance."""
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=True)
-    h.add_sublattice_imbalance(0.2)  # seed a nontrivial charge pattern
+    h.add_sublattice_imbalance(0.2)  # a gap of 0.4 at the Fermi level
     v = _v1_interaction_dict(h)
 
     dm_ed = h.get_density_matrix(ds=list(v.keys()), nk=8)
@@ -48,19 +56,17 @@ def test_get_dm_qtci_matches_full_dm_for_v1_interaction():
     mf_qtci = get_mf(v, dm_qtci)
     for d in v:
         diff = np.max(np.abs(mf_ed[d]-mf_qtci[d]))
-        assert diff < 1e-2, f"direction {d}: |mf_ed-mf_qtci|={diff}"
+        assert diff < 1e-6, f"direction {d}: |mf_ed-mf_qtci|={diff}"
     ediff = abs(get_dc_energy(v, dm_ed) - get_dc_energy(v, dm_qtci))
-    assert ediff < 1e-2
+    assert ediff < 1e-6
 
 
 def test_get_dm_qtci_handles_symmetry_protected_zero_entries():
     """Some required (direction,i,j) entries are identically zero over the
     whole BZ for symmetry reasons (e.g. a spin-off-diagonal density-matrix
     element in a spin-conserving Hamiltonian, as in this onsite-only, no
-    spin-mixing case). qutecipy's TensorCI2 refuses to start if its single
-    default seed point (k=(0,0)) happens to sample zero
-    ("maxsamplevalue is zero!"), so get_dm_qtci must detect and special-case
-    identically-zero entries instead of crashing."""
+    spin-mixing case). The cross interpolation must not crash on them and
+    must give zero."""
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=True)
     n = h.intra.shape[0]
@@ -71,9 +77,8 @@ def test_get_dm_qtci_handles_symmetry_protected_zero_entries():
 
 
 def test_get_dm_qtci_rejects_non_2d():
-    """get_dm_qtci integrates over a 2D BZ (kx,ky in [0,1]x[0,1]); anything
-    else must fail loudly rather than silently integrating over the wrong
-    domain."""
+    """get_dm_qtci interpolates on a 2D mesh; anything else must fail
+    loudly rather than silently integrating over the wrong domain."""
     h = geometry.chain().get_hamiltonian()
     v = {(0, 0, 0): np.zeros((1, 1), dtype=np.complex128)}
     with pytest.raises(NotImplementedError):
@@ -85,12 +90,7 @@ def test_mean_field_hamiltonian_qtci_smoke():
     """End-to-end wiring check: get_mean_field_hamiltonian(integration=
     "qtci") must run through Vinteraction -> densitydensity ->
     generic_densitydensity -> get_dm -> get_dm_qtci and converge to *some*
-    self-consistent Hamiltonian. Not compared bit-for-bit against the
-    exact-diagonalization SCF trajectory: two independent SCF trajectories
-    can settle into distinct, individually valid (near-degenerate) fixed
-    points even when both density-matrix backends are correct -- the
-    frozen-Hamiltonian tests above already isolate get_dm_qtci's own
-    correctness from that path-dependence."""
+    self-consistent Hamiltonian."""
     g = geometry.honeycomb_lattice()
     np.random.seed(1)
     h, e = g.get_hamiltonian().get_mean_field_hamiltonian(
@@ -102,35 +102,67 @@ def test_mean_field_hamiltonian_qtci_smoke():
 
 def _low_symmetry_metal():
     """Square-lattice metal with Rashba coupling and a tilted exchange
-    field: these lift the spin and k-space degeneracies, so that on the
-    Gauss-Kronrod node grid every level is (nearly) its own step in the
-    electron count."""
+    field: complex projectors that vary along every band, and no spin
+    symmetry left"""
     h = geometry.square_lattice().get_hamiltonian(has_spin=True)
     h.add_rashba(0.5)
     h.add_exchange([0.4, 0., 0.1])
     return h
 
 
-def _largest_level_weight(h, nk):
-    """Largest weight carried by one (degenerate) level on the node grid
-    get_dm_qtci integrates on -- the resolution of its electron count."""
-    from pyqula.qtcitk.densitymatrix_qtci import gk_node_grid
-    kx, ky, w = gk_node_grid(nk)
-    hk = h.get_hk_gen()
-    es = np.array([np.linalg.eigvalsh(hk([x, y, 0.])) for x, y in zip(kx, ky)])
-    E = es.ravel(); W = np.repeat(w, es.shape[1])
-    o = np.argsort(E); E, W = E[o], W[o]
-    groups = np.split(W, np.nonzero(np.diff(E) > 1e-10)[0]+1)
-    return max(np.sum(x) for x in groups)
+@pytest.mark.parametrize("nk", [8, 64])
+def test_qtci_matches_the_triangle_on_the_same_mesh_in_a_metal(nk):
+    """The qtci density matrix is the triangle one on the 2^R mesh with
+    interpolated fields, so every entry, with a Bloch phase and complex
+    values, must agree with integration="triangle" at the same nk to the
+    interpolation tolerance. The Fermi level comes from the qtci search,
+    so the density matrix of the shifted Hamiltonian reuses its
+    eigenpairs."""
+    from pyqula.qtcitk.densitymatrix_qtci import (get_fermi4filling_qtci,
+            dm_entries_qtci)
+    h = _low_symmetry_metal().get_multicell()
+    h.shift_fermi(-get_fermi4filling_qtci(h, 0.3, nk=nk, T=1e-3))
+    ds = [(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)]
+    needed = {(d, i, j) for d in ds for i in range(2) for j in range(2)}
+    dq = dm_entries_qtci(h, needed, nk=nk, T=1e-3)
+    ref = simplexdm.get_dm(h, ds, nk=nk, T=1e-3)
+    err = max(abs(dq[d][i, j]-ref[d][i, j]) for (d, i, j) in needed)
+    assert err < 1e-6
+    assert abs(ref[(1, 0, 0)][0, 1]) > 1e-2 # a nontrivial bond entry
+
+
+def test_qtci_reuses_the_eigenpairs_of_the_fermi_search_only_for_a_shift():
+    """The density matrix of the Hamiltonian of the Fermi search shifted
+    by a constant diagonalizes no point again, and gives what a fresh
+    computation gives; any other change of the Hamiltonian starts from
+    scratch."""
+    from pyqula.qtcitk.densitymatrix_qtci import (get_fermi4filling_qtci,
+            dm_entries_qtci)
+    needed = {((0, 0, 0), 0, 1), ((1, 0, 0), 1, 0), ((0, 0, 0), 0, 0)}
+    h = _low_symmetry_metal().get_multicell()
+    h.shift_fermi(-get_fermi4filling_qtci(h, 0.3, nk=16, T=1e-3))
+    dm, ndiag, ranks = dm_entries_qtci(h, needed, nk=16, T=1e-3, counted=True)
+    assert ndiag == 0
+    densitymatrix_qtci._last_mesh = None # forget the Fermi search
+    dm2, ndiag2, ranks = dm_entries_qtci(h, needed, nk=16, T=1e-3,
+            counted=True)
+    assert ndiag2 > 0
+    for (d, i, j) in needed:
+        assert abs(dm[d][i, j]-dm2[d][i, j]) < 1e-12
+    get_fermi4filling_qtci(h, 0.3, nk=16, T=1e-3)
+    h2 = h.copy()
+    h2.add_exchange([0., 0., 0.01]) # not a shift
+    dm3, ndiag3, ranks = dm_entries_qtci(h2, needed, nk=16, T=1e-3,
+            counted=True)
+    assert ndiag3 > 0
 
 
 @pytest.mark.parametrize("nk", [8, 32])
 def test_qtci_density_matrix_holds_requested_filling_in_a_metal(nk):
-    """In a metal the Fermi level used by the qtci density matrix must be
-    found on the Gauss-Kronrod nodes that density matrix is integrated on:
-    one taken from the uniform mesh held 0.03-0.05 electrons too few out of
-    0.6. The trace must match 2*filling to half a level's weight, and beat
-    the uniform-mesh Fermi level."""
+    """In a metal the charge of the triangle weights is continuous in the
+    Fermi level, so the Fermi level found on the reconstructed mesh holds
+    the filling to the interpolation tolerance, while the one of the
+    uniform-mesh eigenvalue count does not."""
     from pyqula.qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
     from pyqula.scftk.densitydensity import get_dm
     filling, T = 0.3, 1e-7
@@ -140,7 +172,7 @@ def test_qtci_density_matrix_holds_requested_filling_in_a_metal(nk):
     h = h0.copy()
     h.shift_fermi(-get_fermi4filling_qtci(h, filling, nk=nk, T=T))
     n_new = np.trace(get_dm(h, v, nk=nk, integration="qtci", T=T)[(0, 0, 0)]).real
-    assert abs(n_new-target) <= 0.5*_largest_level_weight(h, nk) + 1e-8
+    assert abs(n_new-target) < 1e-6
     hold = h0.copy()
     hold.shift_fermi(-hold.get_fermi4filling(filling, nk=nk, T=T))
     n_old = np.trace(get_dm(hold, v, nk=nk, integration="qtci", T=T)[(0, 0, 0)]).real
@@ -148,8 +180,8 @@ def test_qtci_density_matrix_holds_requested_filling_in_a_metal(nk):
 
 
 def test_qtci_fermi_level_at_finite_temperature_is_exact():
-    """With a smearing T comparable to the level spacing the count is
-    continuous, and the qtci density matrix holds the filling exactly."""
+    """With a smearing T comparable to the level spacing the qtci density
+    matrix holds the filling too."""
     from pyqula.qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
     from pyqula.scftk.densitydensity import get_dm
     h = _low_symmetry_metal()
@@ -161,9 +193,7 @@ def test_qtci_fermi_level_at_finite_temperature_is_exact():
 
 def test_qtci_scf_loop_density_matrix_holds_filling():
     """The same invariant through the SCF wiring: the density matrix the
-    Vinteraction loop computes under integration="qtci" holds 2*filling
-    (to the node-grid resolution, about 0.03 electrons here)."""
-    from pyqula.scftk.densitydensity import Vinteraction
+    Vinteraction loop computes under integration="qtci" holds 2*filling."""
     dms = []
     def capture(dm):
         dms.append(dm)
@@ -174,13 +204,13 @@ def test_qtci_scf_loop_density_matrix_holds_filling():
             integration="qtci", callback_dm=capture)
     assert len(dms) > 0
     for dm in dms:
-        assert abs(np.trace(dm[(0, 0, 0)]).real-0.6) < 0.015
+        assert abs(np.trace(dm[(0, 0, 0)]).real-0.6) < 1e-6
 
 
 def test_get_dm_qtci_matches_dense_mesh_in_a_gapped_insulator():
-    """For a gapped (smooth) integrand the Gauss-Kronrod rule is accurate:
-    every required entry agrees with a dense nk=80 mesh to 1e-3 at nk=8
-    (measured 8e-5), a far tighter check than the mean-field test above."""
+    """In a gap the triangle density matrix is the uniform-mesh one, which
+    converges exponentially: every required entry agrees with a dense
+    nk=80 mesh to 1e-3 at nk=8 (measured 2e-4) and to 1e-5 at nk=16."""
     from pyqula.kpmtk.densitymatrix_kpm import required_elements
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=True)
@@ -189,9 +219,10 @@ def test_get_dm_qtci_matches_dense_mesh_in_a_gapped_insulator():
     need = required_elements(v)
     ds = sorted({d for (d, i, j) in need})
     ref = h.get_density_matrix(ds=ds, nk=80)
-    dq = get_dm_qtci(h, v, nk=8)
-    err = max(abs(dq[d][i, j]-ref[d][i, j]) for (d, i, j) in need)
-    assert err < 1e-3
+    for nk, tol in ((8, 1e-3), (16, 1e-5)):
+        dq = get_dm_qtci(h, v, nk=nk)
+        err = max(abs(dq[d][i, j]-ref[d][i, j]) for (d, i, j) in need)
+        assert err < tol
 
 
 def test_get_dm_qtci_nambu_matches_dense_mesh():
@@ -208,7 +239,7 @@ def test_get_dm_qtci_nambu_matches_dense_mesh():
     need = required_elements_eh(v)
     ds = sorted({d for (d, i, j) in need})
     ref = h.get_density_matrix(ds=ds, nk=80)
-    dq = get_dm_qtci(h, v, nk=8)
+    dq = get_dm_qtci(h, v, nk=16)
     assert max(abs(dq[d][i, j]-ref[d][i, j]) for (d, i, j) in need) < 1e-2
     mq = get_mf(v, dq, has_eh=True)
     mr = get_mf(v, ref, has_eh=True)
@@ -216,18 +247,18 @@ def test_get_dm_qtci_nambu_matches_dense_mesh():
     assert max(np.max(np.abs(mr[d])) for d in mr) > 0.1 # nontrivial pairing
 
 
-def test_full_dm_gk_agrees_with_get_dm_qtci_and_fills_every_entry():
-    """full_dm_gk (what scf.dm reports under integration="qtci") is the
-    same quadrature as get_dm_qtci: equal on the entries get_dm_qtci
+def test_full_dm_qtci_agrees_with_get_dm_qtci_and_fills_every_entry():
+    """full_dm_qtci (what scf.dm reports under integration="qtci") is the
+    same construction as get_dm_qtci: equal on the entries get_dm_qtci
     computes, and nonzero where get_dm_qtci left a zero placeholder."""
-    from pyqula.qtcitk.densitymatrix_qtci import full_dm_gk
+    from pyqula.qtcitk.densitymatrix_qtci import full_dm_qtci
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=True)
     h.add_sublattice_imbalance(0.5)
     n = h.intra.shape[0]
     v = {(0, 0, 0): np.eye(n, dtype=np.complex128)*0.5} # onsite only
     dq = get_dm_qtci(h, v, nk=8)
-    full = full_dm_gk(h, [(0, 0, 0)], nk=8)
+    full = full_dm_qtci(h, [(0, 0, 0)], nk=8)
     for i in range(n):
         assert abs(dq[(0, 0, 0)][i, i]-full[(0, 0, 0)][i, i]) < 1e-7
     assert dq[(0, 0, 0)][0, 2] == 0. # placeholder: v does not read it
@@ -240,7 +271,6 @@ def test_qtci_scf_dm_is_complete():
     """scf.dm under integration="qtci" must be the full density matrix, not
     the loop's partial one: the inter-sublattice coherence the Hubbard mean
     field never reads used to be reported as exactly zero."""
-    from pyqula.scftk.densitydensity import Vinteraction
     g = geometry.honeycomb_lattice()
     scf = Vinteraction(g.get_hamiltonian(has_spin=True), U=1.0, filling=0.5,
             mf="antiferro", nk=6, maxerror=1e-5, integration="qtci",
@@ -251,46 +281,42 @@ def test_qtci_scf_dm_is_complete():
     assert np.max(np.abs(dm-ref)) < 1e-2
 
 
-def test_qtci_total_energy_belongs_to_the_charge_it_holds_in_a_metal():
-    """Under integration="qtci" the total energy of a nearly bare metal
-    must be the exact band energy of the charge its density matrix holds.
-    At T~0 a Fermi level on the Gauss-Kronrod nodes holds the requested
-    charge only up to the weight of one level there, and a band energy
-    summed on the uniform mesh instead belonged to a different charge: it
-    missed this reference by 1.7e-2 at nk=8, against 4.8e-3 now (which is
-    the quadrature error of a discontinuous integrand, and falls with nk)."""
+def test_qtci_total_energy_of_a_metal_is_the_triangle_one():
+    """Under integration="qtci" the total energy of a nearly bare metal is
+    the band energy of the triangle weights with the Bloechl term on the
+    reconstructed mesh: it equals integration="triangle" at the same nk to
+    the interpolation tolerance, and a dense exact sum to 1e-3 at nk=8,
+    where the Gauss-Kronrod rule of the earlier qtci missed it by 4.8e-3."""
     from pyqula.klist import kmesh
-    from pyqula.qtcitk.densitymatrix_qtci import full_dm_gk
     h0 = geometry.square_lattice().get_hamiltonian(has_spin=True)
     nk = 8
-    h, e = h0.copy().get_mean_field_hamiltonian(U=1e-6, filling=0.3, nk=nk,
-            mf="ferro", integration="qtci", return_total_energy=True,
-            maxerror=1e-9, verbose=0)
-    n = np.trace(full_dm_gk(h, [(0, 0, 0)], nk=nk)[(0, 0, 0)]).real
-    nkd = 400 # dense reference: sum the n*nkd^2 lowest eigenvalues
+    kw = dict(U=1e-6, filling=0.3, nk=nk, mf="ferro", T=1e-7,
+            return_total_energy=True, maxerror=1e-9, verbose=0)
+    h, e = h0.copy().get_mean_field_hamiltonian(integration="qtci", **kw)
+    ht, et = h0.copy().get_mean_field_hamiltonian(integration="triangle", **kw)
+    assert abs(e-et) < 1e-6
+    nkd = 400 # dense reference: sum the 0.6*nkd^2 lowest eigenvalues
     hk = h0.get_hk_gen()
     es = np.sort(np.array([np.linalg.eigvalsh(hk(k))
         for k in kmesh(2, nk=nkd)]).ravel())
-    eref = es[:int(round(n*nkd**2))].sum()/nkd**2
-    assert abs(e-eref) < 8e-3
+    eref = es[:int(round(0.6*nkd**2))].sum()/nkd**2
+    assert abs(e-eref) < 1e-3
 
 
 @pytest.mark.parametrize("nk", [8, 16])
 def test_qtci_fermi_level_holds_the_filling_in_a_high_symmetry_metal(nk):
-    """On the bare square lattice the Gauss-Kronrod nodes come in groups of
-    up to 8 symmetry-related states, and the Fermi level used to be cut
-    between whole groups even at T~0: for a 0.3 filling it held 0.320 at
-    nk=8 and 0.3095 at nk=16. The count at any T>0 is now bisected to the
-    filling itself, with the level at mu partly occupied, so the density
-    matrix on those nodes holds it exactly, and the Fermi level lands near
-    the dense-mesh one (-1.059), not 0.3 above it."""
+    """On the bare square lattice the levels of a coarse mesh are highly
+    degenerate, and a Fermi level cut between levels missed a 0.3 filling
+    by 0.02. On the triangles the charge is continuous, so the density
+    matrix holds the filling, and the Fermi level lands near the
+    dense-mesh one (-1.059)."""
     from pyqula.qtcitk.densitymatrix_qtci import (get_fermi4filling_qtci,
-            full_dm_gk)
+            full_dm_qtci)
     h = geometry.square_lattice().get_hamiltonian(has_spin=False)
     mu = get_fermi4filling_qtci(h, 0.3, nk=nk, T=1e-7)
     h.shift_fermi(-mu)
-    n = np.trace(full_dm_gk(h, [(0, 0, 0)], nk=nk, T=1e-7)[(0, 0, 0)]).real
-    assert abs(n - 0.3) < 1e-8
+    n = np.trace(full_dm_qtci(h, [(0, 0, 0)], nk=nk, T=1e-7)[(0, 0, 0)]).real
+    assert abs(n - 0.3) < 1e-6
     assert abs(mu - (-1.059)) < 0.1
 
 
@@ -299,8 +325,9 @@ def test_integrate_robust_skips_a_pivot_that_underflows():
     diagonal entry of a collinear ferromagnet) can hold a subnormal value at
     a node, 1e-322 on the honeycomb ferromagnet. That value is nonzero, but
     times the Gauss-Kronrod weight it underflows to exactly zero, and the
-    cross interpolation stopped the mean field with "maxsamplevalue is
-    zero!". It has to be skipped like a zero, and the rule then gives zero."""
+    cross interpolation stopped with "maxsamplevalue is zero!". It has to be
+    skipped like a zero, and the rule then gives zero. integrate_robust is
+    what topology.chern_qtci integrates with."""
     from pyqula.qtcitk.gkintegrate import integrate_robust, gkorder_from_nk
     from pyqula.qutecipytk.gausskronrod import kronrod
     GKorder = gkorder_from_nk(16)
@@ -312,28 +339,50 @@ def test_integrate_robust_skips_a_pivot_that_underflows():
     assert integrate_robust(np.complex128, f, GKorder, 1e-6) == 0.
 
 
-def _frozen_square_ferromagnet(m=0.474, U=6.0):
-    """The Hubbard ferromagnet of the square lattice at filling 0.4, as a
-    rigid exchange split U*m/2, with the Fermi level on the qtci nodes"""
-    from pyqula.qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
-    h = geometry.square_lattice().get_hamiltonian(has_spin=True)
-    h.add_exchange([0., 0., U*m/2.])
-    h.shift_fermi(-get_fermi4filling_qtci(h, 0.4, nk=16, T=1e-3))
-    return h
+def _scf_pair(model, nk, other="triangle"):
+    """the qtci mean field of one model and the one of another integration
+    on the same mesh, from the same guess"""
+    if model == "square": # the partly polarized Hubbard ferromagnet
+        h = geometry.square_lattice().get_hamiltonian(has_spin=True)
+        kw = dict(U=6.0, filling=0.4, mf="ferro", T=1e-3)
+    else: # a sublattice-imbalance insulator at half filling
+        h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+        h.add_sublattice_imbalance(0.5)
+        kw = dict(U=1.0, filling=0.5, mf="ferro", T=1e-7)
+    out = []
+    for integration in ("qtci", other):
+        np.random.seed(1)
+        out.append(Vinteraction(h.copy(), nk=nk, integration=integration,
+            solver="broyden_mixing", maxerror=1e-8, load_mf=False,
+            write=False, verbose=0, **kw))
+    return out
 
 
-def test_get_dm_qtci_warns_in_a_metal_and_not_in_an_insulator():
-    """The Gauss-Kronrod rule does not resolve a Fermi step at any nk: on
-    the square-lattice ferromagnet its magnetization is off by 1e-3 to 1e-1
-    at nk=8 to 256, with no trend, and the mean field lands in a nearly
-    nonmagnetic state. A band that crosses the Fermi level on the nodes must give a warning
-    that names the triangle integration; a gapped state must not."""
-    import warnings
-    v = {(0, 0, 0): np.ones((2, 2), dtype=np.complex128)}
-    with pytest.warns(UserWarning, match="triangle"):
-        get_dm_qtci(_frozen_square_ferromagnet(), v, nk=16, T=1e-3)
-    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
-    h.add_sublattice_imbalance(0.5) # gap of 1 around E=0
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        get_dm_qtci(h, {(0, 0, 0): np.eye(4, dtype=np.complex128)}, nk=8)
+def _magnetization(dm):
+    n = dm.shape[0]
+    return sum((dm[2*i, 2*i]-dm[2*i+1, 2*i+1]).real for i in range(n//2))
+
+
+def test_qtci_scf_reaches_the_triangle_state_on_the_square_ferromagnet():
+    """The square-lattice Hubbard ferromagnet (U=6, filling 0.4, T=1e-3) is
+    a metal with both spin Fermi surfaces. The Gauss-Kronrod rule of the
+    earlier qtci did not resolve them and converged to m=0.005 instead of
+    m=0.474. The qtci mean field must now reach the triangle state of the
+    same mesh: the same magnetization, Fermi level and total energy, with
+    the filling exact."""
+    sq, st = _scf_pair("square", 8)
+    assert sq.converged and st.converged
+    mq, mt = _magnetization(sq.dm[(0, 0, 0)]), _magnetization(st.dm[(0, 0, 0)])
+    assert abs(mt) > 0.4 # the ferromagnet, not the paramagnet
+    assert abs(mq-mt) < 1e-6
+    assert abs(sq.hamiltonian.fermi-st.hamiltonian.fermi) < 1e-6
+    assert abs(sq.total_energy-st.total_energy) < 1e-6
+    assert abs(np.trace(sq.dm[(0, 0, 0)]).real-0.8) < 1e-6
+
+
+def test_qtci_scf_matches_ed_in_an_insulator():
+    """In an insulator every triangle is full or empty, so the qtci mean
+    field must be the one of exact diagonalization on the same mesh."""
+    sq, se = _scf_pair("insulator", 8, other="ed")
+    assert abs(sq.total_energy-se.total_energy) < 1e-7
+    assert np.max(np.abs(sq.dm[(0, 0, 0)]-se.dm[(0, 0, 0)])) < 1e-6

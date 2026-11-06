@@ -352,12 +352,20 @@ at these small meshes the triangle costs more wall time (1.0 s against
 
 ### qtci
 
-`integration="qtci"` loses on these metals. On the square-lattice
-ferromagnet it converges at nk = 8 to 64 to a state with m between 0.005
-and 0.25 instead of 0.474, with a few thousand diagonalizations. On the
-honeycomb ferromagnet it stopped at nk = 16 with `ValueError:
-maxsamplevalue is zero!`. These are two different problems, and only the
-second one is a bug that can be fixed in place.
+`integration="qtci"` is now the triangle integration on a mesh whose fields
+come from a cross interpolation. The maintainer decided this on 2026-11-06,
+after the Gauss-Kronrod version lost on both metals. What follows is first
+why the old one failed, then the new construction and its measurements.
+
+#### Why the Gauss-Kronrod rule failed
+
+The first qtci density matrix integrated every entry the mean field reads
+with a tensorized Gauss-Kronrod rule. On the square-lattice ferromagnet it
+converged at nk = 8 to 64 to a state with m between 0.005 and 0.25 instead
+of 0.474. On the honeycomb ferromagnet it first stopped with `ValueError:
+maxsamplevalue is zero!` (a pivot that underflows, fixed in
+`gkintegrate.integrate_robust`), and then landed at m = 0.315 instead of
+0.244 after 400 iterations.
 
 Why does the loop find the wrong state? We froze the mean field as a rigid
 exchange split U m_in/2 of the square lattice (U = 6, filling 0.4), took
@@ -382,9 +390,9 @@ triangle at nk = 512. T = 1e-3:
 | 0.474 | 0.4740 | 29x29 (nk = 128) | 0.4835 | 0.4744 |
 | 0.474 | 0.4740 | 33x33 (nk = 256) | 0.4867 | 0.4711 |
 
-Three hypotheses are ruled out by this table. The cross interpolation is
-exact here: `get_dm_qtci` equals the plain sum over the node grid
-(`full_dm_gk`) to every printed digit, at every m_in and nk, so neither the
+Three hypotheses are ruled out by this table. The cross interpolation was
+exact there: the old `get_dm_qtci` equalled the plain sum over the node grid
+(`full_dm_gk`, removed since) to every printed digit, at every m_in and nk, so neither the
 pivot search nor the tolerance plays a role. The Fermi search on the nodes
 holds the charge exactly, 0.80000 in every case. And the temperature is not
 the point: at T = 1e-2 the same table moves by 1.3e-2 at most, the errors
@@ -407,51 +415,233 @@ tables above). So qtci of the projector cannot resolve a metallic Fermi
 step at any nk it offers, and this is not something a tolerance or a pivot
 fixes.
 
-The crash is a separate bug. One of the entries the loop reads, a
-spin-off-diagonal element of the collinear state, is zero up to rounding:
-at most 2.3e-16 on the whole grid. At one node it held the subnormal value
--1.04e-322. `integrate_robust` accepted that node as a nonzero pivot, but
-the cross interpolation tests the value times the Gauss-Kronrod weight and
-the normalization, here 0.0074 times 289, and the product underflows to
-exactly zero. Now `integrate_robust` tests that same weighted value, so
-such a node is skipped like a zero, and a field that is zero in this sense
-at every node integrates to zero, the exact value of the rule.
+#### The construction
 
-What is in the code now:
+The density matrix is the contraction of two smooth fields with the triangle
+weights: the band energies E_n(k), and the field
+X_n(k) = e^{2 pi i k.d} conj(u_n,i(k)) u_n,j(k), averaged over the degenerate
+multiplet of n at each k. These are the fields `simplexdm.get_dm` contracts.
+So qtci reconstructs them on a 2^R x 2^R mesh from quantics cross
+interpolations, as the DOS and the optical conductivity do
+(`qtcitk/meshfields.py`), and then applies the triangle weights of
+`simplexdm`, with the Bloechl term, to the reconstructed mesh. In the code
+this is `qtcitk/densitymatrix_qtci.py`:
 
-- `gkintegrate.integrate_robust` seeds the cross interpolation only on a
-  node whose weighted value is nonzero. This removes the crash, and it is
-  shared with `topology.chern_qtci`.
-- `get_dm_qtci` warns when a band crosses the Fermi level on the nodes,
-  meaning that the integrand has a Fermi surface, and the warning names
-  `integration="triangle"`. In a gap every band is entirely above or below
-  the Fermi level, so there is no threshold and nothing is said. It warns
-  and does not raise, because the qtci tests run metals on purpose (the
-  Fermi search on the nodes and the total energy of the charge the density
-  matrix holds).
-- The docstrings of `get_dm`, `Vinteraction` and `get_dm_qtci` say that
-  qtci is for gapped states.
+- nk means the mesh, rounded up to a power of two, 2^R.
+- The Fermi level is found on the triangle charge of the reconstructed
+  energies (`simplexdm.fermi_from_energies`), so the filling is exact on
+  that mesh, up to the interpolation.
+- The band energy is the sum of the T=0 weights with the Bloechl term
+  times the reconstructed energies, as `simplexdm.band_energy` does on the
+  exact ones (`band_energy_qtci`).
+- Of the entries (d,i,j) and (-d,j,i), which are complex conjugates, only
+  one is interpolated.
+- The SCF loop finds the Fermi level of H and then asks for the density
+  matrix of H minus mu. A constant shift moves every band energy by mu and
+  leaves the eigenvectors alone. So the Fermi search keeps its eigenpairs
+  and its reconstructed energies, and the density matrix of the shifted
+  Hamiltonian reuses both. The match is checked on the Bloch matrices
+  themselves, and any other Hamiltonian starts from scratch. One
+  diagonalization per visited point serves both passes of an iteration,
+  while the triangle diagonalizes its mesh twice. The eigenvectors are
+  kept only below the memory limit of the triangle,
+  `simplexdm.max_memory_gb`, and they stay in memory until the next Fermi
+  search replaces them.
 
-The qtci rows rerun with the fix, T = 1e-3, errors against the same
-references as the tables above:
+#### One TCI per field, or one for all
 
-| model | nk | diagonalizations | iterations | wall (s) | error in m | error in mu | error in E | filling |
-|---|---|---|---|---|---|---|---|---|
-| square | 8 | 5.4k | 13 | 1 | 2.3e-01 | 2.7e-01 | 6.5e-03 | 0.400000000 |
-| square | 16 | 2.3k | 0 | 1 | 4.5e-01 | 2.1e-01 | 2.7e-02 | 0.400000000 |
-| square | 32 | 5.3k | 3 | 1 | 4.7e-01 | 3.4e-01 | 2.0e-02 | 0.400000000 |
-| square | 64 | 11k | 6 | 2 | 4.2e-01 | 3.5e-01 | 2.5e-02 | 0.400000000 |
-| honeycomb | 8 | 7.1k | 18 | 7 | 4.2e-02 | 6.7e-02 | 2.7e-03 | 0.350000000 |
-| honeycomb | 16 | 0.23M | 400 | 119 | 7.1e-02 | 6.6e-02 | 1.2e-03 | 0.350000000 |
-| honeycomb | 32 | 14k | 13 | 8 | 5.0e-02 | 5.9e-02 | 1.9e-03 | 0.350000000 |
+The DOS interpolates each field with its own TCI. For the density matrix this
+fails, for a reason that has nothing to do with the physics. A TCI
+normalizes its tolerance by the largest value of its field. The
+spin-off-diagonal entry of a collinear ferromagnet is zero up to rounding,
+about 1e-17, so its own TCI interpolates the rounding noise, at full rank.
+So we interpolate all the X_n with one TCI, with the field index as an extra
+tensor site in front of the 2R bits (`meshfields.qtci_stacked_fields`).
+The tolerance is then relative to the largest field, and every field shares
+the pivots in k. The energies get a second TCI of the same kind.
 
-The square rows are the same as before to every digit, as expected, since
-the fix does not touch the node sum. The honeycomb at nk = 16 now runs. It
-needs 400 iterations, the cap, and its residual falls below 1e-9 only at
-that last step, so the loop reports it converged. It lands at m = 0.315
-instead of 0.244. These
-runs were on one workstation with a load of 5 to 7 on 14 cores, so the
-wall times are only indicative.
+We measured the X fields of the frozen honeycomb ferromagnet (exchange 0.183,
+the Hubbard entries, 24 fields of which 8 are not zero), the frozen gapped
+honeycomb with a tilted exchange field and the V1 entries (64 fields), and
+the square-lattice Rashba metal with a tilted exchange field and the Hubbard
+entries (6 fields).
+"Points" is the number of distinct k-points the interpolation diagonalized.
+The largest error against the exact fields is 1e-6 to 2e-6 in every row.
+
+| model | R | per field: points | per field: rank, time (s) | stacked: points | stacked: rank, time (s) |
+|---|---|---|---|---|---|
+| honeycomb ferromagnet | 7 | 16384 (100%) | 128, 49 | 12481 (76%) | 45, 1.4 |
+| same, noise fields removed by hand | 7 | 16094 (98%) | 50, 8.7 | | |
+| gapped honeycomb | 7 | 16384 (100%) | 48, 70 | 12467 (76%) | 83, 5.1 |
+| honeycomb ferromagnet | 8 | | | 25720 (39%) | 48, 3.0 |
+| honeycomb ferromagnet | 9 | | | 29922 (11%) | 48, 3.0 |
+| gapped honeycomb | 8 | | | 21627 (33%) | 85, 8.1 |
+| gapped honeycomb | 9 | | | 20782 (8%) | 85, 6.2 |
+| Rashba metal | 8 | | | 35185 (54%) | 72, 5.4 |
+| Rashba metal | 9 | | | 54114 (21%) | 73, 7.8 |
+
+With the field index as the last site instead of the first, the stacked
+TCI visited 23k to 110k points at R = 8 and 9, up to five times more on the
+gapped model, so it goes first. The DOS and the conductivity still use one
+TCI per field. Their fields are not zero up to rounding, but they may gain
+from the shared pivots too. Not measured.
+
+#### Band crossings
+
+The fields are sorted by energy at each k, so where two bands cross they
+have a kink, as in the simplex DOS. None of the three benchmark states has
+a crossing. The square ferromagnet is a rigid spin split of one band. In
+the honeycomb ferromagnet the split, 0.37, is smaller than the sublattice
+gap, 0.6, so the smallest gap between consecutive bands is 0.235 on the
+mesh. With an exchange of 0.5 on the same honeycomb, the up and down bands
+cross on a line, and the smallest gap on the mesh is 1.4e-3. There the
+stacked TCI of the X fields at R = 8 needs 37317 points and rank 81, against
+22446 points and rank 49 at exchange 0.183. So a crossing costs about 1.7
+times the points here.
+
+#### The mean field
+
+This is the benchmark above: T = 1e-3, Broyden mixing, the references of
+the tables above, four cores of a workstation loaded by other jobs (a load
+of 6 to 10 on 16 cores), so the wall times are only indicative. The qtci
+tolerance is 1e-6. "Per iteration" is the number of diagonalizations of the
+last iteration, Fermi search and density matrix together, and in
+parentheses the fraction of the mesh. For the triangle it is the mesh
+twice. The last column but one is the difference in m from the triangle
+at the same nk.
+
+Square-lattice ferromagnet, maxerror = 1e-9:
+
+| method | nk | diagonalizations | per iteration | iterations | wall (s) | error in m | error in mu | error in E | qtci minus triangle in m | filling |
+|---|---|---|---|---|---|---|---|---|---|---|
+| qtci | 32 | 0.072M | 1024 (100%) | 69 | 27 | 4.8e-03 | 1.5e-03 | 1.1e-06 | 2e-16 | 0.400000000 |
+| qtci | 64 | 0.14M | 2164 (52%) | 70 | 30 | 1.2e-03 | 3.9e-04 | 1.2e-06 | 0 | 0.400000000 |
+| qtci | 128 | 0.18M | 2562 (15%) | 70 | 40 | 3.2e-04 | 1.2e-04 | 1.2e-07 | 9e-16 | 0.400000000 |
+| qtci | 256 | 0.22M | 2911 (4%) | 70 | 64 | 7.8e-05 | 2.7e-05 | 2e-15 | 2e-16 | 0.400000000 |
+| triangle | 32 | 0.15M | 2048 | 69 | 7 | 4.8e-03 | 1.5e-03 | 1.1e-06 | | 0.400000000 |
+| triangle | 64 | 0.59M | 8192 | 70 | 14 | 1.2e-03 | 3.9e-04 | 1.2e-06 | | 0.400000000 |
+| triangle | 128 | 2.4M | 32768 | 70 | 32 | 3.2e-04 | 1.2e-04 | 1.2e-07 | | 0.400000000 |
+| triangle | 256 | 9.4M | 131072 | 70 | 70 | 7.8e-05 | 2.7e-05 | reference | | 0.400000000 |
+
+Honeycomb ferromagnet, maxerror = 1e-7 for qtci unless said, 1e-9 for the
+triangle:
+
+| method | nk | diagonalizations | per iteration | iterations | wall (s) | error in m | error in mu | error in E | qtci minus triangle in m | filling |
+|---|---|---|---|---|---|---|---|---|---|---|
+| qtci | 32 | 0.027M | 1024 (100%) | 25 | 11 | 5.1e-03 | 1.3e-03 | 7.7e-06 | 1e-08 | 0.350000000 |
+| qtci | 64 | 0.12M | 4096 (100%) | 29 | 27 | 1.5e-03 | 4.0e-04 | 1.1e-06 | 9e-08 | 0.349999999 |
+| qtci, maxerror 1e-9 | 64 | 1.2M | 4092 (99%) | 400 (not converged) | 327 | 1.5e-03 | 4.0e-04 | 1.1e-06 | 1e-08 | 0.350000002 |
+| qtci | 128 | 0.45M | 14935 (91%) | 30 | 56 | 3.6e-04 | 9.4e-05 | 1.5e-08 | 2e-07 | 0.349999997 |
+| qtci, tolerance 1e-8, maxerror 1e-9 | 128 | 0.50M | 16186 (99%) | 30 | 81 | 3.6e-04 | 9.4e-05 | 7.9e-09 | 2e-10 | 0.350000000 |
+| qtci | 256 | 1.0M | 35515 (54%) | 29 | 93 | 9.2e-05 | 2.4e-05 | 7.6e-08 | 3e-08 | 0.349999993 |
+| triangle | 32 | 0.057M | 2048 | 26 | 4 | 5.1e-03 | 1.3e-03 | 7.7e-06 | | 0.350000000 |
+| triangle | 64 | 0.24M | 8192 | 27 | 9 | 1.5e-03 | 4.0e-04 | 1.1e-06 | | 0.350000000 |
+| triangle | 128 | 0.98M | 32768 | 28 | 17 | 3.6e-04 | 9.4e-05 | 7.4e-09 | | 0.350000000 |
+| triangle | 256 | 3.8M | 131072 | 27 | 41 | 9.2e-05 | 2.4e-05 | 2.5e-09 | | 0.350000000 |
+
+What these say:
+
+- qtci now reaches the triangle state on both metals at every nk, with the
+  same errors against the references. On the square ferromagnet it is the
+  triangle to rounding, because its fields are trivial: the projectors of
+  the two spin bands are constant, and the largest rank is 9.
+- On the square ferromagnet the saving grows with the mesh. At nk = 256 an
+  iteration diagonalizes 4% of the mesh, 45 times fewer points than the
+  triangle, and the whole run takes about the same wall time.
+- On the honeycomb ferromagnet qtci needs nearly the whole mesh up to
+  nk = 128, 91 to 100% per iteration, and half of it at nk = 256. It saves
+  a factor 2 to 4 in diagonalizations, mostly because the triangle
+  diagonalizes the mesh twice, and it is 2 to 3 times slower in wall time,
+  since a 4 x 4 diagonalization costs less than the cross interpolation.
+  That is the honest outcome for this model: the gain in points starts only
+  at R = 8 and grows from there, as the frozen measurements above show
+  (11% of the mesh at R = 9).
+- The pivots of the cross interpolation change from one iteration to the
+  next, and each entry carries an interpolation error, 8e-9 at tolerance
+  1e-6 and 3e-10 at 1e-8, against the triangle on the same mesh at nk = 64.
+  So the residual of the loop has a floor. At maxerror = 1e-9 the
+  honeycomb run at nk = 64 did not converge in 400 iterations, while at
+  maxerror = 1e-7 it stops after 29, as the triangle does at 1e-9. A
+  tolerance of 1e-8 lowers the floor below 1e-9 and costs 10% more points
+  at nk = 128. The filling is exact up to the same interpolation error,
+  7e-9 at worst.
+
+#### A gapped state
+
+Honeycomb, sublattice imbalance 0.5, U = 1, half filling, T = 1e-7. The
+reference is exact diagonalization at nk = 128. In a gap every triangle is
+full or empty, so the triangle is exact diagonalization on the same mesh,
+which converges exponentially, and qtci reproduces it up to the
+interpolation error. The old Gauss-Kronrod path was run from the previous
+commit.
+
+| method | nk | diagonalizations | iterations | wall (s) | error in E | error in the charge order |
+|---|---|---|---|---|---|---|
+| Gauss-Kronrod qtci | 8 | 3380 | 7 | 6 | 1.0e-04 | 1.2e-04 |
+| Gauss-Kronrod qtci | 16 | 5780 | 7 | 2 | 2.0e-05 | 4.9e-05 |
+| Gauss-Kronrod qtci | 32 | 8820 | 7 | 3 | 6.7e-06 | 3.2e-05 |
+| Gauss-Kronrod qtci | 64 | 12500 | 7 | 4 | 4.6e-06 | 5.4e-05 |
+| qtci | 8 | 512 | 7 | 2 | 1.3e-04 | 3.2e-04 |
+| qtci | 16 | 2048 | 7 | 3 | 7.0e-06 | 7.7e-05 |
+| qtci | 32 | 8192 | 7 | 4 | 8.1e-11 | 2.4e-09 |
+| qtci | 64 | 61406 | 14 | 14 | 2.8e-08 | 8.6e-09 |
+| ed | 32 | 18432 | 7 | 0.4 | 8.1e-11 | 2.4e-09 |
+
+The charge order is the difference of the charges of the two sublattices.
+For the same number of diagonalizations the new qtci is better than the
+Gauss-Kronrod rule: 7.0e-6 in E with 2048 against 2.0e-5 with 5780, and
+8e-11 with 8192. The Gauss-Kronrod rule stops improving at about 5e-6 in E
+and 5e-5 in the charge order. The frozen density matrix of the same model
+with a tilted exchange field and the V1 entries says the same. Against
+exact diagonalization at nk = 240, the Gauss-Kronrod rule gives 5.1e-5 with
+289 points and 5.2e-6 with 441, and the new qtci gives 3.4e-6 with 256 and
+7.9e-10 with 1024. So no gapped case is better with the old path, and it
+was removed. At nk = 64 qtci needs most of the mesh again and sits on its
+interpolation floor of about 1e-8. In a gap a uniform mesh of nk = 32 has
+already converged, so there is no reason to go there.
+
+#### Between iterations
+
+Every iteration starts the cross interpolation from scratch, with the coarse
+scan of 32 x 32 points. The first and the last iteration diagonalize about
+the same number of points (1959 and 2164 on the square ferromagnet at
+nk = 64, 32498 and 35515 on the honeycomb at nk = 256), so nothing is
+learned from one iteration to the next. We tried to seed the TCI of a
+nearby Hamiltonian (the honeycomb ferromagnet at exchange 0.184, seeded
+from 0.183, R = 8) with the global pivots of the converged one. That set
+has 10749 pivots, and the seeded run diagonalized the whole mesh, 65536
+points in 64 s, against 23119 points in 5 s from scratch. So the naive
+reuse is much worse, and it was not built. A reuse that keeps only the
+pivots of each bond, and not their products, was not tried.
+
+#### What is in the code now
+
+- `get_dm_qtci`, `get_fermi4filling_qtci`, `full_dm_qtci` and
+  `band_energy_qtci` in `qtcitk/densitymatrix_qtci.py` are the triangle
+  construction above, and `scftk/densitydensity.py` calls them in its qtci
+  branches. qtci stays 2D only, since the quantics interpolation of
+  `meshfields.py` runs on a 2D mesh.
+- The Gauss-Kronrod path is gone: `gk_node_grid`, `full_dm_gk`,
+  `band_energy_gk`, and the warning `warn_if_metal`, since metals work now.
+  `gkintegrate.py` stays, because `topology.chern_qtci` integrates with it.
+- Bogoliubov-de Gennes Hamiltonians are still accepted, which the triangle
+  refuses. The weights are those of the quasiparticle bands at zero energy,
+  the Fermi level is found on the normal state, and the band energy is
+  (sum_{E<0} E_BdG + Tr h_e)/2. On a frozen s-wave state this band energy
+  equals exact diagonalization on the same mesh to 1e-9. The total energy
+  of a BdG mean field adds mu times the charge the density matrix holds, as
+  the old qtci did, while exact diagonalization adds mu times the filling.
+  In a superconductor the two charges differ (0.608 against 0.600 for
+  U = -2 at filling 0.3 on the square lattice), so the two total energies
+  differ by 1.3e-2 there. That convention is older than this change, and
+  it is not settled here.
+- `tests/scf/test_densitydensity_qtci.py` checks that qtci equals the
+  triangle on the same mesh for a frozen low-symmetry metal (complex
+  entries, nonzero d), that the eigenpairs of the Fermi search are reused
+  only for a shift, that the filling is held to 1e-6, that the mean field
+  reaches the triangle state of the square ferromagnet at nk = 8 (m, mu and
+  E to 1e-6, in about 10 s), and that an insulator gives the mean field of
+  exact diagonalization.
 
 ## What wins and what loses
 
@@ -487,7 +677,8 @@ loaded.
   simplices. Neither is built.
 - Bogoliubov-de Gennes Hamiltonians are refused, and so are non-Hermitian
   ones. For BdG the weights at mu = 0 of the quasiparticle bands would do,
-  with the Fermi search on the normal state, as `"ed"` does.
+  with the Fermi search on the normal state, as `"ed"` does; qtci does
+  exactly this on its reconstructed mesh (see qtci above).
 - `VJinteraction`, the default engine of `h.get_mean_field_hamiltonian`
   for a spinful Hamiltonian, does not take `"triangle"`. The entry point
   routes it to `Vinteraction`, which has no exchange terms J.
@@ -496,15 +687,13 @@ loaded.
 - A 3D mean-field benchmark was not run. The tetrahedron density matrix is
   only checked against a dense mesh on a cubic metal, in the tests.
 - Bands that cross are interpolated with a kink, as in the simplex DOS.
-- qtci for a metal. What would work is the route the DOS and the optical
-  conductivity already take (`qtci_dos_green.md`, `qtci_optical_response.md`):
-  a quantics cross interpolation of the smooth fields, the band energies
-  and the projector entries of each band, on a 2^R x 2^R mesh, and then
-  the triangle weights of `dmtk/simplexdm.py` on the reconstructed fields.
-  This replaces the Gauss-Kronrod grid, its Fermi search and its band
-  energy, and it changes what nk means for qtci. The two spin bands of a
-  ferromagnet cross, so fields sorted by energy jump there and cost rank,
-  which is the open problem those notes record too. Not built.
+- qtci for a metal is built, as the triangle on a quantics-interpolated
+  mesh (see qtci above). What is open there: on a two-orbital model it
+  needs nearly the whole mesh up to 2^7 x 2^7 and loses in wall time; it is
+  2D only; every iteration starts its cross interpolation from scratch,
+  and a reuse of the pivots bond by bond was not tried; and the stacked
+  TCI of all the fields may help the qtci DOS and conductivity too, which
+  still use one TCI per field.
 - At T well above the mesh spacing v_F/nk, a hybrid that uses the plain
   Fermi occupation on the simplices far from mu would keep the exponential
   convergence of exact diagonalization there. Not tried.
