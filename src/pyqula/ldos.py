@@ -170,8 +170,22 @@ from .ldostk.ldoswaves import ldos_waves
 
 
 def ldosmap(h,energies=np.linspace(-1.0,1.0,40),delta=None,
-        nk=40,operator=None,**kwargs):
-  """Write a map of the ldos using full diagonalization"""
+        nk=40,operator=None,integration="grid",tolerance=1e-6,**kwargs):
+  """Write a map of the ldos using full diagonalization
+
+  integration: one of get_integration_names(). "grid" averages the
+  Lorentzian-broadened eigenstates over nk random k-points, with delta
+  the energy spacing by default. "triangle" and "qtci" use instead the
+  uniform nk^d mesh and the simplex integration of get_ldos, with
+  delta=0 (the exact limit) by default."""
+  if integration!="grid":
+    if kwargs:
+      raise TypeError("ldosmap with integration='"+str(integration)+"' got "
+              "the unexpected arguments "+", ".join(sorted(kwargs)))
+    ds,mesh = simplex_ldos(h,energies,integration=integration,nk=nk,
+            delta=0. if delta is None else delta,operator=operator,
+            tolerance=tolerance)
+    return energies,ds
   if h.dimensionality == 0: nk = 1
   if delta is None:
     delta = (np.max(energies)-np.min(energies))/len(energies) # delta
@@ -335,10 +349,63 @@ def green2ldos(g,op=None):
     return -np.diag(g@op + op@g).imag/(2.*np.pi)
 
 
+def _ldos_triangle(h,energies,nk=None,delta=0.,operator=None,
+        tolerance=None):
+    from .dostk.simplexdos import ldos_triangle_counted
+    out = ldos_triangle_counted(h,energies,nk=100 if nk is None else nk,
+            delta=delta,operator=operator)
+    return out[1],out[3]
+
+
+def _ldos_qtci(h,energies,nk=None,delta=0.,operator=None,tolerance=1e-6):
+    from .dostk.simplexdos import ldos_qtci_counted
+    out = ldos_qtci_counted(h,energies,nk=128 if nk is None else nk,
+            delta=delta,operator=operator,tolerance=tolerance)
+    return out[1],out[3]
+
+
+_integrations = {"grid":None, # the Lorentzian sum over a k-mesh of each mode
+        "triangle":_ldos_triangle,
+        "qtci":_ldos_qtci,
+        }
+
+
+def get_integration_names():
+    """Accepted values of integration= in get_ldos, multi_ldos and
+    ldosmap"""
+    return list(_integrations)
+
+
+def check_integration(integration):
+    if integration not in _integrations:
+        raise ValueError("unknown integration '"+str(integration)+"' for "
+                "the LDOS; it must be one of "+str(get_integration_names()))
+
+
+def simplex_ldos(h,energies,integration="triangle",nk=None,delta=0.,
+        operator=None,tolerance=1e-6):
+    """The LDOS of every site at every energy from a simplex integration
+    (not "grid"), as a (len(energies),nsites) array, and the band mesh
+    that gives the DOS with no new diagonalization"""
+    check_integration(integration)
+    if integration=="grid":
+        raise ValueError("simplex_ldos takes a simplex integration, one of "
+                +str([n for n in get_integration_names() if n!="grid"]))
+    if operator is not None:
+        operator = h.get_operator(operator)
+        if operator.get_matrix(required=False) is None:
+            raise NotImplementedError("integration='"+str(integration)+"' "
+                    "weights the bands at the vertices of the mesh with the "
+                    "matrix of the operator, so it cannot take a "
+                    "k-dependent operator; use integration='grid'")
+    return _integrations[integration](h,np.asarray(energies,dtype=float),
+            nk=nk,delta=delta,operator=operator,tolerance=tolerance)
+
+
 def get_ldos_tb(h,e=0.0,delta=None,nrep=5,nk=None,ks=None,mode="arpack",
              random=False,silent=True,interpolate=False,
              operator=None,return_rd = False,
-             write=None,**kwargs):
+             write=None,integration="grid",tolerance=1e-6,**kwargs):
     """ Calculate LDOS in a tight binding basis
 
     mode: "arpack" (or "diagonalization") broadens the eigenstates of H(k)
@@ -364,16 +431,49 @@ def get_ldos_tb(h,e=0.0,delta=None,nrep=5,nk=None,ks=None,mode="arpack",
         differs for states that are not eigenstates of A. A k-dependent
         operator is only available in mode="arpack", since mode="green"
         has already integrated over the Brillouin zone.
+
+    integration: how mode="arpack" (or "diagonalization") integrates over
+        k, one of get_integration_names(). "grid" averages over the
+        uniform nk mesh (nk=10 by default), and the mesh must resolve
+        delta. "triangle" interpolates the bands and the weight of each
+        band on each site linearly inside each segment, triangle or
+        tetrahedron of the uniform nk^d mesh (nk=100 by default) and
+        integrates the resolvent exactly, so the mesh only has to resolve
+        the bands, and delta=0 (the default for this integration) is the
+        exact limit; the site weights sum to the triangle DOS of
+        h.get_dos(integration="triangle"). "qtci" is the same in 2D on a
+        2^R mesh whose fields come from a quantics tensor cross
+        interpolation with the given tolerance (nk=128 by default). Both
+        take an operator with a matrix, and neither takes ks or random.
     """
     write = filewrite.resolve(write,True) # the call, else the global switch
+    check_integration(integration)
     from .utilities import check_delta
-    if delta is None and mode!="KPM": delta = 0.001 # Lorentzian broadening
-    if delta is not None: check_delta(delta)
-    if ks is not None and mode=="green":
-        raise ValueError("an explicit k-point list (ks) is incompatible "
-          +"with mode='green', which integrates over the Brillouin zone")
+    if integration=="grid":
+        if delta is None and mode!="KPM": delta = 0.001 # Lorentzian
+        if delta is not None: check_delta(delta)
+        if ks is not None and mode=="green":
+            raise ValueError("an explicit k-point list (ks) is incompatible "
+              +"with mode='green', which integrates over the Brillouin zone")
+    else: # the simplex integrations of the diagonalization mode
+        if mode not in ("arpack","diagonalization"):
+            raise ValueError("integration='"+str(integration)+"' applies "
+                    "to mode='arpack' and mode='diagonalization', got "
+                    "mode="+repr(mode))
+        if kwargs and not interpolate: # the interpolation takes the rest
+            raise TypeError("get_ldos with integration='"+str(integration)
+                    +"' got the unexpected arguments "
+                    +", ".join(sorted(kwargs)))
+        if ks is not None or random:
+            raise ValueError("ks and random only apply to integration='grid'"
+                    ", got integration='"+str(integration)+"'")
+        if delta is None: delta = 0. # the exact limit
     if operator is not None: operator = h.get_operator(operator)
-    if mode=="green":
+    if integration!="grid": # one value per site already, spin summed
+      ds,mesh = simplex_ldos(h,[e],integration=integration,nk=nk,
+              delta=delta,operator=operator,tolerance=tolerance)
+      d = ds[0]
+    elif mode=="green":
       from . import green
       if h.dimensionality!=2: # only for 2d
         raise ValueError("the Green's function LDOS is only implemented for "
@@ -427,7 +527,7 @@ def get_ldos_tb(h,e=0.0,delta=None,nrep=5,nk=None,ks=None,mode="arpack",
       raise ValueError("unknown mode %r; the LDOS accepts 'green', 'arpack', "
               "'diagonalization' and 'KPM'" % (mode,))
     # write result
-    d = spatial_dos(h,d) # convert to spatial resolved DOS
+    if integration=="grid": d = spatial_dos(h,d) # spatially resolved DOS
     g = h.geometry  # store geometry
     x,y,z,r = g.x,g.y,g.z,g.r # get the coordinates
     if nrep>1:
@@ -484,7 +584,7 @@ def multi_ldos(h,projection="TB",**kwargs):
 def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=None,
         nrep=3,nk=100,num_bands=20,
         random=False,operator=None,write=None,mode="diagonalization",
-        **kwargs):
+        integration="grid",tolerance=1e-6,**kwargs):
   """Calculate many LDOS, by diagonalizing the Hamiltonian or from a
   Chebyshev expansion
 
@@ -501,10 +601,34 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=None,
       a given energy is what get_ldos returns at that energy; with
       mode="KPM" the map is the local matrix element Re(A rho)_ii, as in
       get_ldos with mode="green" or "KPM".
+  integration: for mode="diagonalization", one of get_integration_names().
+      "triangle" and "qtci" are the simplex integrations of get_ldos on the
+      uniform nk^d mesh, with delta=0 (the exact limit) by default: one
+      diagonalization of the mesh gives the map at every energy, and the
+      DOS written beside the maps comes from the same band energies.
+      num_bands does not apply to them.
   """
   write = filewrite.resolve(write,True) # the call, else the global switch
+  check_integration(integration)
   if operator is not None: operator = h.get_operator(operator) # resolve name
-  if mode=="KPM":
+  if integration!="grid":
+    if mode!="diagonalization":
+      raise ValueError("integration='"+str(integration)+"' applies to "
+              "mode='diagonalization', got mode="+repr(mode))
+    if kwargs:
+      raise TypeError("multi_ldos with integration='"+str(integration)+"' "
+              "got the unexpected arguments "+", ".join(sorted(kwargs)))
+    if random:
+      raise ValueError("random only applies to integration='grid', got "
+              "integration='"+str(integration)+"'")
+    if delta is None: delta = 0. # the exact limit
+    ds,mesh = simplex_ldos(h,energies,integration=integration,nk=nk,
+            delta=delta,operator=operator,tolerance=tolerance)
+    outs = list(ds) # one map per energy, one value per site
+    from .dostk.simplexdos import dos_from_band_mesh
+    es2 = np.linspace(min(energies),max(energies),len(energies)*10)
+    ys = dos_from_band_mesh(mesh,es2,delta) # the DOS of the same mesh
+  elif mode=="KPM":
     (outs,es2,ys) = _multi_ldos_kpm(h,energies,delta=delta,nk=nk,
             random=random,operator=operator,**kwargs)
   elif mode=="diagonalization":

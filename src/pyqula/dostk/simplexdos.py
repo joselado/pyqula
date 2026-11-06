@@ -349,7 +349,10 @@ class _Fields():
     energies es[k,n] and the weights W[k,n,c] the simplex sum needs:
     kind="dos" gives W = 1, kind="operator" the multiplet-averaged
     <u_n|O|u_n>, kind="green" the multiplet-averaged projector
-    u_n,i u_n,j^* flattened over (i,j). ndiag counts the diagonalizations"""
+    u_n,i u_n,j^* flattened over (i,j), and kind="site" the
+    multiplet-averaged density of u_n on each site, its spin and Nambu
+    components summed, times <u_n|O|u_n> with an operator. ndiag counts
+    the diagonalizations"""
     def __init__(self,h,kind="dos",operator=None,batch=2**15):
         if h.is_sparse: h = h.get_dense()
         self.hkgen = h.get_hk_gen()
@@ -357,7 +360,15 @@ class _Fields():
         self.batch = batch
         self.ndiag = 0
         self.op = None
-        if kind=="operator":
+        if kind=="site": # orbital -> site, the resummation of the LDOS maps
+            from ..increase_hilbert import full2profile
+            n = h.intra.shape[0]
+            iden = np.identity(n)
+            self.sites = np.array([full2profile(h,iden[i]) for i in range(n)],
+                    dtype=np.float64) # (orbitals, sites)
+            batch = max(1,min(batch,2**22//(n*self.sites.shape[1]+1)))
+            self.batch = batch # keep the batch of densities small
+        if operator is not None and kind in ("operator","site"):
             from .. import algebra
             self.op = np.asarray(algebra.todense(
                 h.get_operator(operator).get_matrix()),dtype=np.complex128)
@@ -381,6 +392,13 @@ class _Fields():
                     w = np.einsum("kin,ij,kjn->kn",U.conj(),self.op,U,
                             optimize=True).real
                     W = w[:,:,None].astype(np.complex128)
+                elif self.kind=="site": # density on each site
+                    rho = (U.real**2 + U.imag**2) # (k,orbital,band)
+                    if self.op is not None: # times <u_n|O|u_n>
+                        rho = rho*np.einsum("kin,ij,kjn->kn",U.conj(),
+                                self.op,U,optimize=True).real[:,None,:]
+                    W = np.einsum("kin,ic->knc",rho,self.sites,
+                            optimize=True).astype(np.complex128)
                 else: # projector P_n[i,j] = U[i,n] U[j,n]^*
                     n = U.shape[1]
                     W = np.einsum("kin,kjn->knij",U,U.conj(),optimize=True)
@@ -406,17 +424,24 @@ def simplex_sum(dim,nk,es,W,energies,delta):
 
 def simplex_dos_from_fields(dim,nk,es,W,energies,delta):
     """the (projected) density of states from the fields on the mesh"""
+    return simplex_channels_from_fields(dim,nk,es,W,energies,delta)[:,0]
+
+
+def simplex_channels_from_fields(dim,nk,es,W,energies,delta):
+    """the density of states of every channel c of the real weights
+    W[k,n,c] (a site of the LDOS, or the one channel of the DOS), from the
+    fields on the mesh: a (len(energies),nc) real array"""
     energies = np.asarray(energies,dtype=np.float64)
     if delta>0.:
-        return -simplex_sum(dim,nk,es,W,energies,delta)[:,0].imag/np.pi
+        return -simplex_sum(dim,nk,es,W,energies,delta).imag/np.pi
     sim,frac = simplices(dim,nk)
     order = np.argsort(energies)
     parallel.set_num_threads()
     import numba
     nchunk = 8*numba.get_num_threads()
     out = _simplex_dos0(sim,np.ascontiguousarray(es),np.ascontiguousarray(W),
-            energies[order],nchunk,_harm,_fact)[:,0]*frac
-    res = np.zeros(len(energies))
+            energies[order],nchunk,_harm,_fact)*frac
+    res = np.zeros((len(energies),W.shape[2]))
     res[order] = out
     return res
 
@@ -570,6 +595,66 @@ def dos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
 def dos_qtci(h,energies,nk=128,delta=0.,operator=None,tolerance=1e-6):
     return dos_qtci_counted(h,energies,nk=nk,delta=delta,operator=operator,
             tolerance=tolerance)[0:2]
+
+
+# ------------------------------------------------------------ local DOS
+
+def ldos_triangle_counted(h,energies,nk=100,delta=0.,operator=None):
+    """Local density of states of every site of the unit cell, its spin and
+    Nambu components summed, from the simplex integration on the uniform
+    nk^d mesh, at every energy: (energies, ldos, ndiag, mesh) with ldos a
+    (len(energies),nsites) array and mesh the (dim, nk, band energies) that
+    dos_from_band_mesh takes. The weight of band n on site i is the
+    multiplet-averaged sum of |u_n,a|^2 over the orbitals a of site i,
+    times <u_n|O|u_n> with an operator (the convention of the
+    diagonalization mode of ldos.get_ldos). One diagonalization of the mesh
+    gives every site and every energy, and the sum over sites is the
+    triangle DOS to rounding"""
+    check_broadening(delta)
+    dim = h.dimensionality
+    if dim not in (1,2,3):
+        raise ValueError("the simplex LDOS needs a periodic Hamiltonian of "
+                "dimensionality 1, 2 or 3, got "+str(dim))
+    fields = _Fields(h,kind="site",operator=operator)
+    es,W = fields(uniform_mesh(dim,nk))
+    energies = np.asarray(energies,dtype=np.float64)
+    ds = simplex_channels_from_fields(dim,nk,es,W,energies,delta)
+    return energies,ds,fields.ndiag,(dim,nk,es)
+
+
+def ldos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
+        tolerance=1e-6):
+    """The local DOS of ldos_triangle_counted on a 2^R x 2^R mesh (nk
+    rounded up to a power of two), with the band energies and the weight of
+    every band on every site reconstructed from one QTCI per field, in 2D"""
+    check_broadening(delta)
+    if h.dimensionality!=2:
+        raise NotImplementedError("the qtci integration of the LDOS is only "
+                "implemented in 2D, got dimensionality "
+                +str(h.dimensionality)+"; use integration='triangle'")
+    R = max(1,int(np.ceil(np.log2(nk))))
+    fields = _Fields(h,kind="site",operator=operator)
+    nb = h.intra.shape[0]
+    ns = fields.sites.shape[1]
+    def evaluate(ks):
+        es,W = fields(ks)
+        return np.concatenate([es,W.real.reshape(len(es),nb*ns)],axis=1)
+    vals,ncalls,ranks = qtci_fields(evaluate,R,nb*(1+ns),
+            tolerance=tolerance)
+    es = np.ascontiguousarray(vals[:,:nb])
+    W = np.ascontiguousarray(vals[:,nb:].reshape(len(es),nb,ns)
+            ).astype(np.complex128)
+    energies = np.asarray(energies,dtype=np.float64)
+    ds = simplex_channels_from_fields(2,2**R,es,W,energies,delta)
+    return energies,ds,fields.ndiag,(2,2**R,es)
+
+
+def dos_from_band_mesh(mesh,energies,delta):
+    """the DOS from the band energies a simplex LDOS call already has, the
+    mesh tuple it returns, with no new diagonalization"""
+    dim,nk,es = mesh
+    W = np.ones((es.shape[0],es.shape[1],1),dtype=np.complex128)
+    return simplex_dos_from_fields(dim,nk,es,W,energies,delta)
 
 
 # ------------------------------------------------------------ Green's function
