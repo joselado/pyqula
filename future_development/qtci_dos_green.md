@@ -168,7 +168,9 @@ order 0.25 there), second order again. At delta = 1e-3, where it is of order 0.5
 
 The triangle mesh gains a factor of about 16 over the uniform mesh here. QTCI now has eight
 fields (four energies, four weights, ranks 48 to 74), and its gain over the triangle mesh
-drops to 1.7 at R = 9 and 4 at R = 10.
+drops to 1.7 at R = 9 and 4 at R = 10. At delta = 0 it is the same: qtci at R = 10 gives
+4.0e-4 with 245k diagonalizations, the triangle mesh at nk = 1024 4.0e-4 with 1.0M. A
+tolerance of 1e-8 instead of 1e-6 raises the count to 405k to 419k and changes nothing.
 
 ## The cubic lattice in 3D
 

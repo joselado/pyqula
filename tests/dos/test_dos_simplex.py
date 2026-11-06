@@ -142,6 +142,22 @@ def test_multiplet_average_is_basis_independent():
     assert np.max(np.abs(did-dtot)) < 1e-10
 
 
+def test_multiplet_average_acts_only_inside_a_multiplet():
+    """The averaging itself, on weights that would differ without it: the
+    rows of a degenerate pair become equal and keep their sum, and a
+    non-degenerate band is left as it is"""
+    rng = np.random.default_rng(1)
+    es = np.array([[-1.,0.3,0.3,2.],[-1.,-0.5,0.3,2.]])
+    W = rng.normal(size=(2,4,3))+1j*rng.normal(size=(2,4,3))
+    W0 = W.copy()
+    simplexdos._multiplet_average(es,W,1e-8)
+    assert np.allclose(W[0,1],W[0,2])
+    assert np.allclose(W[0,1]+W[0,2],W0[0,1]+W0[0,2])
+    assert np.allclose(W[0,[0,3]],W0[0,[0,3]])
+    assert np.allclose(W[1],W0[1]) # no degeneracy at this k
+    assert not np.allclose(W0[0,1],W0[0,2]) # the test is not vacuous
+
+
 def test_qtci_reproduces_the_triangle_on_the_same_mesh():
     """The qtci path runs the triangle integration on a 2^R mesh whose
     band energies come from a cross interpolation, so on the same mesh it
