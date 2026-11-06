@@ -221,8 +221,9 @@ already reached once.
   settled: every integration adds mu times the requested charge, as "ed"
   did, which is the grand potential plus a constant, stationary at fixed mu
   (qtci added mu times the paired charge, 1.03e-2 lower on the converged
-  mesh); the triangle accepts BdG now. Open: RPA chi(q), a BdG Fermi level
-  on the paired charge, VJinteraction. The anomalous Hall of metals with the
+  mesh); the triangle accepts BdG now. Open: a BdG Fermi level on the
+  paired charge, VJinteraction. RPA chi(q) is built, see
+  `tetrahedron_susceptibility.md`. The anomalous Hall of metals with the
   same occupations is built, see the next entry.
 
 - [`triangle_anomalous_hall.md`](triangle_anomalous_hall.md) -- the
@@ -235,6 +236,18 @@ already reached once.
   8 to 12 times less wall time, with 1/nk^2 convergence; the atomic gauge
   matters once C3 is broken. Open: band crossings, 3D, qtci, the README
   bullet and its notebook.
+
+- [`tetrahedron_susceptibility.md`](tetrahedron_susceptibility.md) -- the
+  triangle and tetrahedron bare susceptibility, `integration="triangle"` of
+  `chiAB_q` and of everything built on it (`h.get_chi()`, the RPA spin and
+  density response, the site-basis magnons). It gives U_c and the static
+  chi_0 of metals to 1e-5 with 4 to 256 times fewer k-points than the grid
+  at T <= 1e-3, and the dynamic response with an error that does not depend
+  on delta (64 times fewer k-points at delta = 1e-3). At high T, and at
+  delta = 1e-2 for the dynamic response, the grid converges exponentially and
+  wins. An odd nk is needed at a commensurate nesting vector. Open: the cost
+  of the dynamic response, a high-T hybrid, the pair-basis route, and the
+  delta/100 cutoff of the library grid on degenerate pairs.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products
