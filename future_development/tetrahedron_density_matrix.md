@@ -262,9 +262,11 @@ What these say:
   exact diagonalization at nk = 256 (1.5e-6), 64 times fewer k-points.
   Without the correction the triangle loses the energy at every mesh. The
   reason for this is that the total energy of exact diagonalization is
-  stationary in the density matrix, so its error is quadratic in the error
-  of the density matrix, while the band energy of the uncorrected linear
-  bands carries the 1/nk^2 interpolation error directly.
+  stationary in the density matrix, so to leading order its error is
+  quadratic in the error of the density matrix (its band energy, a plain
+  sum of a step on the mesh, has an error of its own too, which is small
+  here). The band energy of the uncorrected linear bands carries the
+  1/nk^2 interpolation error directly.
 - At T = 1e-2 exact diagonalization wins from nk = 512 on, where its
   convergence becomes exponential: 1e-6 in m, against 2e-5 for the
   triangle at nk = 512. This is the crossover we expected, at nk of order

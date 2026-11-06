@@ -491,7 +491,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     See Vinteraction and Jinteraction for further background on the
     density-density and exchange conventions respectively; only the
     plain-mixing solver is supported (unlike Vinteraction/SzSz/SxSx/SySy),
-    and integration is restricted to "ed" (default) or "kpm" (no "qtci").
+    and integration is restricted to "ed" (default) or "kpm". Through
+    h.get_mean_field_hamiltonian, integration="qtci" or "triangle" (the
+    linear simplex integration of the Fermi step, dmtk.simplexdm) is
+    routed to scftk.densitydensity.Vinteraction instead, which has the
+    density-density terms (U, V1, V2, V3, Vr) and no exchange terms J.
 
     integration="ed" computes the per-iteration density matrix by exact
     diagonalization -- dense, or restricted to the sparse (direction,row,
