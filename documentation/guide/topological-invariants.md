@@ -215,6 +215,76 @@ across the border of the cell.
 
 See `examples/2d/wannier_centers/main.py` for a script that plots the flow.
 
+### Hall conductivity of a metal
+
+The Chern number is the Hall conductivity when the Fermi energy is in a gap.
+When the Fermi energy is inside a band, the Hall conductivity is not
+quantized any more, and it is the integral of the Berry curvature over the
+Fermi sea, the occupied part of the Brillouin zone,
+
+$$
+\sigma_{xy} = \frac{e^2}{h}\,\frac{1}{2\pi} \sum_n \int_{\rm BZ}
+f(E_n(\mathbf k)-\mu)\, \Omega_n(\mathbf k)\, d^2 \mathbf k .
+$$
+
+Here $f$ is the Fermi function at the Fermi energy $\mu$ and temperature
+$T$, and $\Omega_n$ is the Berry curvature of band $n$. This is the
+intrinsic anomalous Hall conductivity of a ferromagnetic metal, which is
+measured in a Hall experiment at zero magnetic field. It is computed with
+`h.get_anomalous_hall_conductivity()`, in units of $e^2/h$. Inside a gap it
+gives the Chern number of `h.get_chern()`.
+
+The Berry curvature of each band is computed from the velocity operator,
+with every orbital at its real position in the cell. In a metal this
+matters: the curvature in a different choice of positions differs by a term
+that vanishes over a full band, but not over a Fermi sea.
+
+We take the Haldane model with a staggered onsite energy. It is a Chern
+insulator with $C=1$, with a gap from $-0.25$ to $0.25$, and we move the
+Fermi energy across the gap and into the bands.
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # honeycomb lattice
+h = g.get_hamiltonian(has_spin=False) # spinless Hamiltonian
+h.add_haldane(0.1) # Haldane coupling
+h.add_sublattice_imbalance(0.2) # staggered onsite energy
+fermis = np.linspace(-1.,1.,9) # Fermi energies
+s = h.get_anomalous_hall_conductivity(fermi=fermis,nk=100,T=1e-3)
+```
+
+Inside the gap, at $\mu=0$, the result is $1.000$, the Chern number. Once the
+Fermi energy enters a band, $\sigma_{xy}$ goes down: $0.718$ at
+$\mu=\pm 0.5$, $0.520$ at $\pm 0.75$ and $0.264$ at $\pm 1$. The two bands
+carry opposite curvature, so filling part of the upper band, or emptying
+part of the lower one, removes part of the Hall response. The result is the
+same at $\pm\mu$ for this model.
+
+In a metal the Fermi step cuts the k-mesh. The default integration
+interpolates the bands and the curvature linearly inside each triangle of
+the mesh and integrates the step exactly, so the error goes as $1/n_k^2$ at
+any temperature, $T=0$ included. With `integration="grid"` the Fermi
+function is summed on the mesh points, and in a metal this only converges
+when the energy spacing of the mesh is below $T$. At $T=10^{-3}$ the
+triangle gives $\sigma_{xy}$ to $10^{-3}$ at `nk=64`, while the grid needs
+`nk=192` or more. In a gap both give the same number.
+
+Keywords:
+
+- `fermi`: the Fermi energy, a number or an array; the mesh is diagonalized
+  once for all of them.
+- `T`: the temperature, 0 by default.
+- `nk`: number of k-points per direction, 100 by default.
+- `integration`: `"triangle"` (default) or `"grid"`.
+
+Two bands that cross inside the Fermi sea are fine. A crossing exactly at
+the Fermi energy needs a finer mesh, because the curvature of the two bands
+is peaked there with opposite signs.
+
+See `examples/2d/anomalous_hall/main.py` for a script that plots
+$\sigma_{xy}$ against the Fermi energy.
+
 ## Z2 invariant
 
 With time-reversal symmetry the Chern number is zero. The invariant that

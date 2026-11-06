@@ -229,8 +229,8 @@ already reached once.
   gap it is the Chern number and both are the same number. At T = 1e-3 t a
   1e-3 accuracy takes nk = 64 with the triangle against 192 to 256 uniform,
   8 to 12 times less wall time, with 1/nk^2 convergence; the atomic gauge
-  matters once C3 is broken. Open: band crossings, 3D, qtci, the
-  documentation surfaces.
+  matters once C3 is broken. Open: band crossings, 3D, qtci, the README
+  bullet and its notebook.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products

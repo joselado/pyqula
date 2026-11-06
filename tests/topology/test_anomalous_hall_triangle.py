@@ -18,7 +18,7 @@ from pyqula.topologytk import anomaloushall
 
 def _haldane(t2=0.1, imbalance=0.2):
     """Spinless Haldane model with a staggered onsite, C=1 at half filling,
-    gap from about -0.4 to 0.4, a metal at fermi=0.5"""
+    gap from -0.25 to 0.25, a metal at fermi=0.5"""
     g = geometry.honeycomb_lattice()
     h = g.get_hamiltonian(has_spin=False)
     h.add_haldane(t2)

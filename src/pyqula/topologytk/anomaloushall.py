@@ -10,7 +10,10 @@
 # which carry the full bond vector (the atomic gauge). The gauge matters
 # here, unlike for the Chern number: the curvature of the lattice gauge
 # differs from the atomic one by the curl of <u_n|r|u_n>, a total derivative
-# that integrates to zero over a filled band but not over a Fermi sea. So
+# that integrates to zero over a filled band but not over a Fermi sea
+# (measured on a strained honeycomb metal, 0.697 against 0.690, see
+# future_development/triangle_anomalous_hall.md; C3 symmetry makes the
+# difference vanish, so an unstrained honeycomb cannot see it). So
 # the Wilson-loop plaquettes of topology.berry_curvature, which live in the
 # lattice gauge and are set to zero where the number of occupied states
 # changes inside the plaquette, are not used for a metal.
@@ -46,8 +49,9 @@
 #
 # Units and sign. The result is in units of e^2/h, and in a gap it is the
 # Chern number of h.get_chern() for a right-handed lattice basis (a1 x a2
-# along +z); the curvature here is Cartesian, so a left-handed basis flips
-# the sign of get_chern but not of this. conductivity.py and
+# along +z). The curvature here is Cartesian while get_chern works in the
+# reduced coordinates, so for a left-handed basis we expect the two to
+# differ by a sign (reasoned, not tested). conductivity.py and
 # conductivitytk/kpmkubo.py give sigma_xy in units of e^2/hbar with
 # sigma_xy 2 pi = -C, so the same physical quantity there is
 # -anomalous_hall_conductivity/(2 pi).

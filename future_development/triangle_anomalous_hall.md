@@ -82,7 +82,7 @@ agreement to 1e-6 (it is 2e-10 with delta = 1e-7).
 Two metals, at T = 1e-3 in units of the hopping, four Fermi levels each:
 
 - the spinless Haldane model, t2 = 0.1 with a staggered onsite 0.2 (C = 1
-  at half filling, gap of about 0.8), at mu = 0.5, 0.8, 1.5 and 2.2;
+  at half filling, gap from -0.25 to 0.25), at mu = 0.5, 0.8, 1.5 and 2.2;
 - the spinful square lattice with Rashba 0.5 and out-of-plane exchange 0.6,
   at mu = -3, -2, -0.5 and 1.
 
@@ -168,8 +168,10 @@ What converged and what did not:
 - The result is in units of e^2/h with the sign of `h.get_chern()`, so it
   is the Chern number in a gap. `conductivity.py` and `kpmkubo` give
   sigma_xy in e^2/hbar with sigma_xy 2 pi = -C, so the same quantity there
-  is minus this divided by 2 pi. The curvature is Cartesian, so for a
-  left-handed lattice basis `get_chern` flips sign and this does not.
+  is minus this divided by 2 pi. The curvature is Cartesian while
+  `get_chern` works in the reduced coordinates, so for a left-handed
+  lattice basis we expect the two to differ by a sign. This is reasoned,
+  not tested.
 
 ## What is left open
 
@@ -190,5 +192,7 @@ What converged and what did not:
   of disorder (side jump, skew scattering) are not in a band calculation.
 - Nambu and non-Hermitian Hamiltonians are refused, as in the triangle
   density matrix.
-- The user guide, the reference page, the README list, an example and a
-  notebook were not written for this method.
+- The user guide section (in the topological invariants page), the
+  reference entry and the example `examples/2d/anomalous_hall/main.py` are
+  written. The README FUNCTIONALITIES bullet and its notebook are not,
+  since a bullet there comes with its own executed notebook.

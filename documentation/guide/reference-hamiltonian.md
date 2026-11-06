@@ -1297,6 +1297,33 @@ Optional arguments:
 - write=True: also write the Chern number to `CHERN.OUT` and the Berry
   curvature to `BERRY_CURVATURE.OUT`
 
+## h.get_anomalous_hall_conductivity()
+Return the intrinsic Hall conductivity of a two-dimensional metal or
+insulator, in units of $e^2/h$, the Berry curvature integrated over the
+Fermi sea,
+
+$$\sigma_{xy} = \frac{1}{2\pi}\sum_n\int_{BZ} f(E_n(\mathbf k)-\mu)\,\Omega_n(\mathbf k)\, d^2k .$$
+
+Inside a gap it is the Chern number of `h.get_chern()`. See
+[Topological invariants](topological-invariants.md).
+
+Optional arguments:
+- fermi=0.: the Fermi energy $\mu$, a number or an array, which then gives
+  an array
+- T=0.: the temperature of the Fermi function
+- nk=100: k-points per direction
+- integration="triangle": `"triangle"` integrates the Fermi step exactly in
+  each triangle of the mesh and converges as $1/n_k^2$ in a metal;
+  `"grid"` sums the Fermi function on the mesh points, which in a metal
+  needs a mesh spacing below $T$
+- bloechl=None: add the Bloechl correction to the triangle weights, on by
+  default; it lowers the error at a given `nk`
+- degeneracy_tol=1e-6: bands closer than this, in units of the hopping,
+  count as one degenerate multiplet
+
+It raises `ValueError` if the Hamiltonian is not two dimensional, and
+`NotImplementedError` for a Nambu or a non-Hermitian Hamiltonian.
+
 ## h.get_berry_curvature()
 Return the Berry curvature of the occupied bands,
 
