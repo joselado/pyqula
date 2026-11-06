@@ -417,7 +417,11 @@ def _evaluate_sources_jit(ev,cv,vkind,ep,tp,yp,ca,omegas,delta,nchunk):
 def _merge(keys,*cs):
     """Merge the sources whose keys (one row of exactly equal numbers per
     source) coincide, adding their coefficients, and drop those whose
-    coefficients all vanish. Returns the merged keys and coefficients."""
+    coefficients all vanish. Returns the merged keys and coefficients.
+    A 1D array of keys is one key per source, and comes back 1D."""
+    if keys.ndim==1: # one key per source, as shgsimplex passes them
+        out = _merge(keys[:,None],*cs)
+        return (out[0][:,0],)+out[1:]
     if keys.shape[0]==0: return (keys,)+cs
     if keys.shape[1]==1: order = np.argsort(keys[:,0],kind="stable")
     else: order = np.lexsort(keys.T[::-1])
