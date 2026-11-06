@@ -61,7 +61,7 @@ def _use_pair_basis(H):
 
 
 _PAIR_ROUTE_KWARGS = ("energies","delta","nk","T","q","imode","ij_mode",
-                      "chi_prec")
+                      "chi_prec","integration")
 
 
 def _pair_route_kwargs(H,kwargs,also=()):
@@ -84,6 +84,11 @@ def _pair_route_kwargs(H,kwargs,also=()):
             "interaction that couples different sites, whose RPA spin "
             "response is summed in the pair basis (chitk.pairchi) on a "
             "k-mesh; use imode='mesh'"%(kwargs["imode"],))
+    if kwargs.get("integration","grid")!="grid":
+        raise NotImplementedError("integration=%r is not implemented for an "
+            "interaction that couples different sites, whose RPA spin "
+            "response is summed in the pair basis (chitk.pairchi) on the "
+            "uniform mesh; use integration='grid'"%(kwargs["integration"],))
     if H.has_eh:
         raise NotImplementedError("the RPA spin response of a Nambu "
             "Hamiltonian whose interaction couples different sites is not "

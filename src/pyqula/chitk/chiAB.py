@@ -24,7 +24,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                imode="mesh", # integration mode in momentum space
                ij_mode = "explicit", # loop over elements mode
                mode="matrix", # return object
-               chi_prec=None # precision of the Lindhard kernel
+               chi_prec=None, # precision of the Lindhard kernel
+               integration="grid" # how the k-sum is done
                ):
     """Compute AB response function
        - energies: energies of the dynamical response
@@ -37,6 +38,21 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
        - imode: integration mode
        - ij_mode: loop ove elements mode
        - mode: output to return
+       - integration: how the k-sum is done, one of
+         get_integration_names(). "grid" sums the Lindhard terms over the
+         uniform mesh. "triangle" interpolates the bands at k and k+q and
+         the matrix elements linearly inside the segments, triangles or
+         tetrahedra of the same mesh (1D, 2D, 3D) and integrates the two
+         Fermi steps and the resonance exactly (chitk/simplexchi.py), so
+         that the mesh only resolves the bands: it converges at second
+         order in 1/nk at any T and delta, T=0 and delta=0 included. It
+         takes imode="mesh" in double precision on the CPU, for
+         mode="matrix", "trace" and "diagonal". At a commensurate
+         nesting vector, (1/2,1/2) of the square lattice, an even nk puts
+         the line E(k) = E(k+q) on mesh edges and converges irregularly;
+         an odd nk converges at second order. Where T is above the
+         energy spacing of the mesh, nk of order v/T, the grid converges
+         exponentially and is the better choice
        - chi_prec: "single" or "double", the precision of the Lindhard
          contraction (mode="matrix"; both backends take both). Defaults
          to "single" under pyqula.gpu.set_gpu(True), where a consumer
@@ -98,6 +114,21 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
     else: # pAs and pBs provided on input
         ij_mode = "explicit" # do the loop explicitly
         pass
+    if integration not in _integrations:
+        raise ValueError("unknown integration '"+str(integration)+"' of the "
+                "response function; it must be one of "
+                +str(get_integration_names()))
+    if integration!="grid":
+        if imode!="mesh":
+            raise NotImplementedError("integration='"+integration+"' sums "
+                    "on the uniform mesh, imode='mesh', got imode='"
+                    +str(imode)+"'")
+        if use_gpu or chi_prec!="double":
+            raise NotImplementedError("integration='"+integration+"' runs "
+                    "in double precision on the CPU only; call "
+                    "pyqula.gpu.set_gpu(False) and leave chi_prec unset")
+        return _integrations[integration](h,q=q,energies=energies,nk=nk,
+                pAs=pAs,pBs=pBs,delta=delta,T=temp,mode=mode)
     if chi_prec=="single" and not use_gpu and (mode!="matrix"
             or ij_mode!="explicit"): # (the GPU path has its own guard)
         raise NotImplementedError("chi_prec='single' is only implemented "
@@ -188,6 +219,20 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
 
 
 
+
+
+def _chi_triangle(h,**kwargs):
+    from .simplexchi import chi_triangle
+    return chi_triangle(h,**kwargs)
+
+
+_integrations = {"grid":None, # the Lindhard sum of chiAB_q itself
+                 "triangle":_chi_triangle}
+
+
+def get_integration_names():
+    """Accepted values of integration= of the response functions"""
+    return list(_integrations)
 
 
 DEGENERATE_TOL = 1e-8 # |e_a-e_b| below which a pair counts as degenerate
