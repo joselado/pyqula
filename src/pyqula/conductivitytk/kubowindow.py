@@ -19,9 +19,11 @@
 #     across the mesh, the range is [min N - nv, max N + nc), so every band
 #     that crosses the Fermi level is kept as well.
 # The range is first estimated from the eigenvalues on a few k-points, and
-# then checked on the whole mesh with one probe band below and one above
-# it; if a probe band enters the window, or is degenerate with the edge
-# band, the range grows and the mesh is done again.
+# then checked on the whole mesh with a few probe bands below and above
+# it; if a probe band enters the window, or the edge cuts a degenerate
+# multiplet where the window asks for the edge band, the range grows. The
+# probe bands are kept when the growth fits inside them, and the mesh is
+# done again only when it does not.
 import warnings
 import numpy as np
 import scipy.linalg as dlg
@@ -35,6 +37,7 @@ _full_eigh_dimension = 200 # below this, the batched numba eigh of all the
                            # bands is cheaper than the scipy subset solver
 _kbatch = 64 # k-points diagonalized together on the batched path
 _nprescan = 16 # k-points of the first estimate of the range
+_nprobe = 4 # bands computed beyond each edge of the range, to check it
 
 
 class BandWindow():
@@ -240,27 +243,53 @@ def _first_range(ws,window,ks):
     return max(lo,0),min(hi,ws.n)
 
 
-def _violations(window,es,lo,hi,tol,probe_lo,probe_hi):
+def _requested(window,es,cols,side):
+    """Whether the band in column cols of es (one per k-point) is one that
+    the window asks for at that k-point: inside (emin,emax), or among the
+    nv bands below (side=-1) or the nc above (side=+1) the Fermi level"""
+    e = es[np.arange(len(es)),cols] if np.ndim(cols) else es[:,cols]
+    if window.energy: return (e>window.emin)&(e<window.emax)
+    if side<0:
+        nb = np.sum((es<0.)&(np.arange(es.shape[1])[None,:]>=cols),axis=1)
+        return (e<0.)&(nb<=window.nv)
+    na = np.sum((es>=0.)&(np.arange(es.shape[1])[None,:]<=cols),axis=1)
+    return (e>=0.)&(na<=window.nc)
+
+
+def _growth(window,es,nw,plo,phi,tol):
     """How many bands the range has to grow by, below and above, for the
-    window to hold on these k-points. es holds the bands of the range with
-    a probe band on each side where there is one (probe_lo, probe_hi). A
-    probe band that enters the window, or is degenerate with the edge band
-    of the range, is added. In the count form, there must be nv bands of
-    the range below the Fermi level and nc above at every k-point."""
-    grow_lo = grow_hi = 0
-    nw = hi-lo
-    core = es[:,int(probe_lo):int(probe_lo)+nw]
+    window to hold on these k-points. The columns of es are plo probe bands
+    below the range, its nw bands, and phi probe bands above it.
+
+    A probe band that enters the energy window at some k-point is added,
+    and so is every band between it and the range. In the count form the
+    range must hold nv bands below the Fermi level and nc above at every
+    k-point. Then the edge of the range is not allowed to cut a degenerate
+    multiplet at a k-point where the edge band is one the window asks for:
+    there the band kept would be a combination fixed by the eigensolver.
+    Where the edge band lies outside the window its pairs are among those
+    the window drops anyway, which is what keeps a model with near
+    degeneracies at every k-point (the two valleys of a twisted bilayer)
+    from growing the range without end."""
+    core = es[:,plo:plo+nw]
     if window.energy:
-        if probe_lo and np.any(es[:,0]>window.emin): grow_lo = 1
-        if probe_hi and np.any(es[:,-1]<window.emax): grow_hi = 1
+        glo = max([j for j in range(1,plo+1)
+                if np.any(es[:,plo-j]>window.emin)],default=0)
+        ghi = max([j for j in range(1,phi+1)
+                if np.any(es[:,plo+nw-1+j]<window.emax)],default=0)
     else:
         nbelow = np.sum(core<0.,axis=1) # bands of the range below E_F
-        grow_lo = max(0,window.nv-int(np.min(nbelow)))
-        grow_hi = max(0,window.nc-int(np.min(nw-nbelow)))
-    # do not cut a degenerate multiplet at the edges of the range
-    if probe_lo and np.any(np.abs(core[:,0]-es[:,0])<tol): grow_lo = max(grow_lo,1)
-    if probe_hi and np.any(np.abs(es[:,-1]-core[:,-1])<tol): grow_hi = max(grow_hi,1)
-    return grow_lo,grow_hi
+        glo = max(0,window.nv-int(np.min(nbelow)))
+        ghi = max(0,window.nc-int(np.min(nw-nbelow)))
+    c = plo-glo # column of the new lowest band
+    while 0<c<=plo and np.any((np.abs(es[:,c]-es[:,c-1])<tol)
+            &_requested(window,es,c,-1)):
+        glo += 1; c -= 1
+    c = plo+nw-1+ghi # column of the new highest band
+    while plo+nw-1<=c<es.shape[1]-1 and np.any(
+            (np.abs(es[:,c+1]-es[:,c])<tol)&_requested(window,es,c,1)):
+        ghi += 1; c += 1
+    return glo,ghi
 
 
 def bands_and_velocities(h,ks,window,tol_rel=1e-6,ws=None,fixed=None):
@@ -282,25 +311,36 @@ def bands_and_velocities(h,ks,window,tol_rel=1e-6,ws=None,fixed=None):
     while True:
         if ws.sparse:
             nb,na = rng
-            es,vs = _sparse_counts(ws,ks,nb+1,na+1) # one probe each side
-            plo = phi = True
+            for plo in range(_nprobe,-1,-1): # fewer probes at the ends
+                try:
+                    es,vs = _sparse_counts(ws,ks,nb+plo,na+plo)
+                    break
+                except ValueError:
+                    if plo==0: raise
+            phi = plo
             lo,hi = 0,nb+na
         else:
             lo,hi = rng
-            a,b = max(lo-1,0),min(hi+1,ws.n) # one probe band each side
+            a,b = max(lo-_nprobe,0),min(hi+_nprobe,ws.n) # probes each side
             es,vs = _dense_range(ws,ks,a,b)
-            plo,phi = a<lo,b>hi
-        glo,ghi = _violations(window,es,lo,hi,tol,plo,phi)
-        if ws.sparse: grown = (nb+glo,na+ghi)
-        else: grown = (max(lo-glo,0),min(hi+ghi,ws.n))
-        i0 = int(plo) # drop the probes
-        es = np.ascontiguousarray(es[:,i0:i0+hi-lo])
-        vs = np.ascontiguousarray(vs[:,:,i0:i0+hi-lo,i0:i0+hi-lo])
-        if grown==tuple(rng): break
+            plo,phi = lo-a,b-hi
+        glo,ghi = _growth(window,es,hi-lo,plo,phi,tol)
+        end_lo,end_hi = plo<_nprobe,phi<_nprobe # the spectrum ends there
+        if end_lo: glo = min(glo,plo)
+        if end_hi: ghi = min(ghi,phi)
         if fixed is not None:
-            warnings.warn("the band window "+str(tuple(rng))+" fixed on the "
-                "coarse scan misses bands that enter the window on later "
-                "k-points; give a wider window")
+            if glo or ghi: warnings.warn("the band window "+str(tuple(rng))
+                +" fixed on the coarse scan misses bands that enter the "
+                "window on later k-points; give a wider window")
+            glo = ghi = 0
+        if ws.sparse: rng = (nb+glo,na+ghi)
+        else: rng = (lo-glo,hi+ghi)
+        if (glo<plo or end_lo) and (ghi<phi or end_hi):
+            # the bands added are probes already computed, and the probes
+            # left beyond them verify the new edges: keep them
+            i0,i1 = plo-glo,plo+hi-lo+ghi
+            es = np.ascontiguousarray(es[:,i0:i1])
+            vs = np.ascontiguousarray(vs[:,:,i0:i1,i0:i1])
             break
-        rng = tuple(int(x) for x in grown) # grow and do the mesh again
+        # else grow beyond the probes and do the mesh again
     return es,vs,ws.cellvol,ws.scale,tuple(int(x) for x in rng)
