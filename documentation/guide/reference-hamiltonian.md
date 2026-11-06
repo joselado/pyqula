@@ -1519,6 +1519,12 @@ Optional arguments:
 - intraband=True, interband=True: include each of the two parts
 - component=None: for example `"xy"`, to return only that component
 - degeneracy_tol=1e-6: relative tolerance to treat two bands as degenerate
+- integration="grid": `"grid"` sums over the k-mesh; `"triangle"` integrates
+  the resolvent exactly over the triangles of the mesh, for a broadening below
+  the mesh resolution; `"qtci"` does the same on a $2^R\times2^R$ mesh built
+  from a quantics tensor cross interpolation, 2D only. See
+  [Small broadening](optical-conductivity.md#small-broadening)
+- tolerance=1e-6: relative accuracy of the interpolation, only for `"qtci"`
 
 Returns `(energies,sigma)`, with `sigma` complex of shape `(nw,3,3)`, or
 `(nw,)` with `component`. The unit is $e^2/\hbar$, so $e^2/h$ is

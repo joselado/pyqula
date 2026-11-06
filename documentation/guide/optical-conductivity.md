@@ -131,11 +131,125 @@ The keywords are
 - `delta`: the broadening $\eta$.
 - `intraband`, `interband`: switch on or off the Drude part and the interband
   part.
+- `integration`: how the k-integral is done, `"grid"` (the default), or
+  `"triangle"` and `"qtci"` for a small broadening, see
+  [Small broadening](#small-broadening).
 
 The formula works for one- and two-dimensional Hamiltonians.
 Superconducting (Nambu) Hamiltonians and three-dimensional ones raise
 `NotImplementedError`; for a Nambu Hamiltonian the hole block carries the
 opposite charge, so the current is not $i[H,r]$.
+
+## Small broadening
+
+We will now see how to compute the absorption with a very small broadening
+$\eta$. On a k-mesh, every k-point gives a Lorentzian of width $\eta$ at its
+transition energy $E_m(\mathbf k)-E_n(\mathbf k)$. Two neighboring k-points
+have transition energies that differ by roughly the velocity of
+$E_m-E_n$ times the mesh spacing. When this difference is larger than
+$\eta$, the Lorentzians do not overlap, and the spectrum shows every k-point
+as a separate spike. For $\eta=10^{-3}t$ on the honeycomb lattice, the
+grid sum needs thousands of k-points per direction.
+
+The way we avoid this is by doing the k-integral differently. The
+transition energies $E_m-E_n$ and the weights
+$\frac{f_n-f_m}{E_m-E_n}v^a_{nm}v^b_{mn}$ are smooth functions of
+$\mathbf k$. Only the resolvent $1/(\hbar\omega+i\eta-(E_m-E_n))$ is sharp.
+We split the k-mesh into triangles, take the transition energy as linear
+inside each triangle, and integrate the resolvent over the triangle exactly,
+
+$$
+\frac{1}{A}\int_{\triangle} \frac{d^2k}{z-E(\mathbf k)} =
+2\,\psi[E_1,E_2,E_3],
+\qquad
+\psi(E) = -(E-z)\ln(E-z) + (E-z),
+$$
+
+where $z=\hbar\omega+i\eta$, $A$ is the area of the triangle, $E_1,E_2,E_3$
+are the transition energies at its corners, and $\psi[E_1,E_2,E_3]$ is the
+second divided difference of $\psi$. The weight is taken as its average over
+the three corners. In one dimension the triangles are segments. This is the
+two-dimensional version of the tetrahedron method of band structure codes.
+As a result, the mesh only has to resolve the bands and not the broadening,
+and all frequencies come from the same mesh.
+
+We compare the two integrations on a gapped honeycomb lattice, on the same
+mesh:
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_lattice() # create a honeycomb lattice
+h = g.get_hamiltonian(has_spin=False) # get the Hamiltonian
+h.add_sublattice_imbalance(0.3) # gapped honeycomb, gap 0.6
+
+ws = np.linspace(0.,3.5,701) # frequencies
+kw = dict(energies=ws,nk=256,T=1e-3,delta=1e-3) # broadening far below the mesh spacing
+(ws,sg) = h.get_optical_conductivity(integration="grid",**kw) # sum over the k-mesh
+(ws,st) = h.get_optical_conductivity(integration="triangle",**kw) # exact integral over triangles
+```
+
+`sg` and `st` are the conductivity tensors of the two integrations, with
+the same shape as before.
+
+![Real part of the optical conductivity of a gapped honeycomb lattice at a broadening of 0.001 t, from a plain sum over a 256 by 256 k-mesh, which is a set of spikes, and from the triangle integration on the same mesh, which is a smooth curve.](img/optical_triangle.png#only-light)
+![Real part of the optical conductivity of a gapped honeycomb lattice at a broadening of 0.001 t, from a plain sum over a 256 by 256 k-mesh, which is a set of spikes, and from the triangle integration on the same mesh, which is a smooth curve.](img/optical_triangle-dark.png#only-dark)
+
+With the grid sum the absorption is a set of spikes, the single k-points
+of the mesh. With the triangle integration the curve is smooth. It is zero
+below the gap $0.6t$, jumps at the gap, and has a sharp peak at
+$\hbar\omega=2.09t$, the van Hove singularity of the transitions at the M
+point. Doubling the mesh to `nk=512` changes the triangle curve by less
+than $0.01\,e^2/h$, except exactly at the absorption edge. There the
+transition energy has its minimum, and the linear interpolation is worst.
+
+??? example "Code of this figure (documentation/figures/optical_triangle.py)"
+
+    ```python
+    --8<-- "optical_triangle.py"
+    ```
+
+The triangle result converges as $1/n_k^2$. For a smooth integrand, a
+broadening larger than the band features or a frequency inside the gap,
+the grid sum converges faster, so there `integration="grid"` is the better
+choice. The triangle integration removes the mesh limit set by $\eta$, not
+the one set by the temperature: in a metal the occupations jump at the
+Fermi surface within a width $T$, and the Drude term is computed as in the
+grid sum.
+
+With `integration="qtci"` the same triangle integral runs on a mesh of
+$2^R\times2^R$ points, with `nk` rounded up to a power of two. The
+transition energies and the weights are not computed on every point of
+this mesh. They are learned from a small set of k-points with a quantics
+tensor cross interpolation, which works because they are smooth, and then
+rebuilt on the whole mesh:
+
+```python
+(ws,sq) = h.get_optical_conductivity(energies=[1.0,2.0],nk=1024,T=1e-3,
+                                     delta=1e-3,integration="qtci")
+```
+
+On the gapped honeycomb, the number of diagonalizations stops growing with
+the mesh: `nk=4096` needs about $8\times10^4$ of them instead of
+$1.7\times10^7$. On the same mesh the result agrees with
+`integration="triangle"` to about $10^{-5}$ relative, and to $10^{-3}$ at
+the absorption edge. This helps when one
+diagonalization is expensive, for a Hamiltonian with many orbitals. For a
+two-band model the triangle integration on a plain mesh is already cheap.
+Band crossings and the Fermi surface of a metal are not smooth, and they
+make the interpolation more expensive.
+
+The keywords of the two integrations are
+
+- `integration`: `"grid"`, `"triangle"` or `"qtci"`.
+- `nk`: for `"triangle"`, the mesh that resolves the bands; for `"qtci"`, the
+  fine mesh, rounded up to a power of two.
+- `delta`: must be positive for `"triangle"` and `"qtci"`.
+- `tolerance`: relative accuracy of the interpolation, only for `"qtci"`.
+
+`"qtci"` works for two-dimensional Hamiltonians only; in one dimension
+`"triangle"` on a fine mesh is already cheap. A full script is in
+`examples/2d/optical_conductivity_triangle/main.py`.
 
 ## Second-harmonic generation
 

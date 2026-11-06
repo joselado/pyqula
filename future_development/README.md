@@ -195,6 +195,14 @@ already reached once.
   (fitted interlayer couplings for TMD multilayers, full non-Tamm-Dancoff excitons, 3D, sum- and
   difference-frequency and shift currents).
 
+- [`qtci_optical_response.md`](qtci_optical_response.md) -- where QTCI helps
+  the k-integral of the optical conductivity and where it does not: QTCI of
+  sigma itself loses or ties against the uniform mesh, the joint (k, omega)
+  interpolation loses, the triangle integration gives about a factor 1000 in
+  diagonalizations at delta = 1e-3 t, and QTCI of the smooth transition
+  energies and weights adds 2 to 15 on top. Open: the joint-DOS convolution
+  that removes the cost per frequency, many bands, metals, SHG and 3D.
+
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
   X-wave nonlinear Drude spin conductivity covers, the measured performance
   and its nb^3 scaling, why the thermal (spin-Nernst) channel is
