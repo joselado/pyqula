@@ -217,8 +217,20 @@ already reached once.
   insulator gains nothing. The qtci mean field is rebuilt on the same
   weights: it now reaches the right state on metals, with 4% of the mesh
   on the square ferromagnet at nk = 256 but nearly the whole mesh on the
-  honeycomb one up to nk = 128. Open: RPA chi(q) and the
-  anomalous Hall of metals with the same occupations, BdG, VJinteraction.
+  honeycomb one up to nk = 128. Open: RPA chi(q), BdG, VJinteraction. The
+  anomalous Hall of metals with the same occupations is built, see the next
+  entry.
+
+- [`triangle_anomalous_hall.md`](triangle_anomalous_hall.md) -- the
+  Fermi-sea anomalous Hall conductivity of a 2D metal,
+  `h.get_anomalous_hall_conductivity()`, the Kubo Berry curvature in the
+  atomic gauge integrated with the triangle weights of the density matrix
+  (`integration="triangle"`, default) or the uniform mesh (`"grid"`). In a
+  gap it is the Chern number and both are the same number. At T = 1e-3 t a
+  1e-3 accuracy takes nk = 64 with the triangle against 192 to 256 uniform,
+  8 to 12 times less wall time, with 1/nk^2 convergence; the atomic gauge
+  matters once C3 is broken. Open: band crossings, 3D, qtci, the
+  documentation surfaces.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products

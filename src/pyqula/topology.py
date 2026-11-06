@@ -1201,6 +1201,10 @@ def chern_density(h,nk=10,operator=None,delta=0.02,dk=None,
 # anything, since the name always resolved to chern at import time.
 hall_conductivity = chern
 
+# The Fermi-sea Hall conductivity at any Fermi level and temperature, metals
+# included, with the triangle or the uniform integration of the Fermi sea
+from .topologytk.anomaloushall import anomalous_hall_conductivity
+
 
 
 
