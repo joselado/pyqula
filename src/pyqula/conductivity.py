@@ -668,10 +668,24 @@ def fermi_volume(h,nk=100,T=0.01,mu=0.,channel="charge"):
     return nonlineardrude.fermi_volume(h,nk=nk,T=T,mu=mu,channel=channel)
 
 
-# integration="kpm": the Chebyshev double expansion of conductivitytk/kpmkubo.py
+# integration="kpm": the Chebyshev double expansion of conductivitytk/kpmkubo.py.
+# It takes keywords of its own (npol, ntries, kernel...), so it is dispatched
+# here, before the band signature, and the accepted names are the union of
+# the band registry (kubo) and the KPM one.
 from .conductivitytk import kpmkubo
 _optical_conductivity_bands = optical_conductivity
+
+
+def get_integration_names():
+    """Accepted values of integration= in optical_conductivity"""
+    return kubo.get_integration_names()+kpmkubo.get_integration_names()
+
+
 def optical_conductivity(h,*args,integration="grid",**kwargs):
+    if integration not in get_integration_names():
+        raise ValueError("unknown integration "+repr(integration)+" for the "
+                "optical conductivity, accepted values are "
+                +", ".join(get_integration_names()))
     if integration in kpmkubo.get_integration_names():
         return kpmkubo.optical_conductivity(h,*args,**kwargs)
     return _optical_conductivity_bands(h,*args,integration=integration,

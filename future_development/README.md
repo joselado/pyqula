@@ -228,6 +228,14 @@ already reached once.
   wall time. Open: QTCI for many bands, metals, an exact three-band product,
   and 3D.
 
+- [`kpm_optical_conductivity.md`](kpm_optical_conductivity.md) -- the
+  Chebyshev (KPM) Kubo conductivity of `integration="kpm"` and
+  `h.get_dc_conductivity()`: the double-moment formulas, the sign of the
+  Kubo-Bastin expression, delta as the line width, and the checks against
+  the bands, the f-sum rule and the Chern number up to 10^6 orbitals, with
+  where a k-mesh still wins. Open: the GPU, the Hall response at finite
+  frequency and the SHG.
+
 - [`qtci_dos_green.md`](qtci_dos_green.md) -- the triangle and tetrahedron
   integration of the DOS (`h.get_dos(integration="triangle")`, `"qtci"`)
   needs 250 to 1000 times fewer diagonalizations than the uniform mesh at
