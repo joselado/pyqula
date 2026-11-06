@@ -666,3 +666,15 @@ def fermi_volume(h,nk=100,T=0.01,mu=0.,channel="charge"):
     results of arXiv:2411.16036 are expressed in terms of, so ratios of a
     conductivity to it are free of the (2 pi)^D convention."""
     return nonlineardrude.fermi_volume(h,nk=nk,T=T,mu=mu,channel=channel)
+
+
+# integration="kpm": the Chebyshev double expansion of conductivitytk/kpmkubo.py
+from .conductivitytk import kpmkubo
+_optical_conductivity_bands = optical_conductivity
+def optical_conductivity(h,*args,integration="grid",**kwargs):
+    if integration in kpmkubo.get_integration_names():
+        return kpmkubo.optical_conductivity(h,*args,**kwargs)
+    return _optical_conductivity_bands(h,*args,integration=integration,
+            **kwargs)
+optical_conductivity.__doc__ = _optical_conductivity_bands.__doc__ + \
+        kpmkubo.optical_conductivity.__doc__

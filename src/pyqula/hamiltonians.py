@@ -222,6 +222,13 @@ class Hamiltonian():
         from . import conductivity
         return conductivity.optical_conductivity(h,**kwargs)
 
+    def get_dc_conductivity(h,**kwargs):
+        """DC conductivity tensor of a large sparse Hamiltonian by the
+        Kubo-Bastin formula with a Chebyshev double expansion, including
+        the Hall conductivity, see conductivitytk/kpmkubo.py"""
+        from .conductivitytk import kpmkubo
+        return kpmkubo.dc_conductivity(h,**kwargs)
+
     def get_shg_conductivity(h,**kwargs):
         """Second-harmonic conductivity sigma_abc(2w;w,w), see
         conductivity.shg_conductivity for the formula and conventions"""
