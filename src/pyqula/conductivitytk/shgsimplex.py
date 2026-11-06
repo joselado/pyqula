@@ -95,8 +95,17 @@ from numba import jit, prange
 
 from . import kubo
 from . import shg
-from .kubosimplex import simplices, check_broadening
+from .kubosimplex import simplices
 from .. import parallel
+
+
+def check_broadening(delta):
+    """The simplex integral needs a finite broadening: at delta = 0 the
+    logarithms have their branch point on the real axis"""
+    if not delta>0.:
+        raise ValueError("the triangle and qtci integrations of the "
+                "second-harmonic conductivity need a positive broadening "
+                "delta, got delta="+str(delta))
 
 
 # ------------------------------------------------------------ term catalogue
@@ -532,17 +541,32 @@ def sigma_qtci(h,energies,nk,T,delta,trip,degeneracy_tol,tolerance=1e-6,
     xaxes = list(range(0,2*R,2)); yaxes = list(range(1,2*R,2))
     stride = n//nc0 # coarse point (i,j) is the fine point (i,j)*stride
     ranks = {}
+    wscale = np.max(np.abs(W0),axis=(0,2)) # size of each term's weight
+    done = [] # (coarse values, fine values) of the fields interpolated so far
     for (kind,p,c) in fields:
         f0 = value(kind,p,c,es0,W0)
         if np.max(np.abs(f0))==0.: continue # identically zero
-        i0 = int(np.argmax(np.abs(f0)))
-        piv = [encode((i0//nc0)*stride,(i0%nc0)*stride)]
-        tci,rk,errors = crossinterpolate2(np.float64,Field(kind,p,c),
-                localdims,initialpivots=piv,tolerance=tolerance,
-                maxbonddim=400,pivotsearch="full")
-        ranks[(kind,p,c)] = max(rk) if len(rk) else 0
-        full = tensortrain(tci).fulltensor()
-        full = np.transpose(full,xaxes+yaxes).reshape(npts) # row-major (i,j)
+        # a part that is only rounding noise (the imaginary part of a weight
+        # that is real) would be interpolated to full rank: it is zero
+        if kind!="E" and np.max(np.abs(f0))<1e-10*wscale[p]: continue
+        full = None
+        for (g0,gfull) in done: # equal or opposite to a field already done
+            # on all the points of the coarse scan: the same function (a
+            # symmetry of the model), interpolated once
+            for sgn in (1.,-1.):
+                if np.max(np.abs(f0-sgn*g0))<1e-12*np.max(np.abs(f0)):
+                    full = sgn*gfull ; break
+            if full is not None: break
+        if full is None:
+            i0 = int(np.argmax(np.abs(f0)))
+            piv = [encode((i0//nc0)*stride,(i0%nc0)*stride)]
+            tci,rk,errors = crossinterpolate2(np.float64,Field(kind,p,c),
+                    localdims,initialpivots=piv,tolerance=tolerance,
+                    maxbonddim=400,pivotsearch="full")
+            ranks[(kind,p,c)] = max(rk) if len(rk) else 0
+            full = tensortrain(tci).fulltensor()
+            full = np.transpose(full,xaxes+yaxes).reshape(npts) # row-major
+            done.append((f0,full))
         if kind=="E": es[:,p] = full
         elif kind=="re": W[:,p,c] += full
         else: W[:,p,c] += 1j*full
