@@ -7,6 +7,33 @@ from .kchain import green_kchain
 
 
 
+_selfenergy_modes = ("adaptive","renormalization","full","full_adaptive",
+        "triangle")
+
+
+def _triangle_green(h,nk=100,energy=0.0,delta=1e-2,gtype="bulk"):
+  """Bulk Green's function and selfenergy of a 3d crystal from the
+  tetrahedron integration of the band projectors on the uniform nk^3 mesh
+  (dostk/simplexdos.green_triangle). The mesh only has to resolve the
+  bands, not delta. In 1d and 2d the decimation of mode="adaptive" is
+  faster at equal accuracy (future_development/qtci_dos_green.md), so
+  this mode is only offered in 3d."""
+  if h.dimensionality!=3:
+      raise ValueError("mode='triangle' of the Bloch selfenergy is only for "
+              "3d crystals, got dimensionality "+str(h.dimensionality)+
+              "; in 1d and 2d use mode='adaptive', which is faster at "
+              "equal accuracy")
+  if gtype!="bulk":
+      raise NotImplementedError("mode='triangle' gives the bulk Green's "
+              "function only, got gtype="+repr(gtype))
+  from ..dostk.simplexdos import green_triangle
+  h = h.get_dense()
+  g = green_triangle(h,[energy],nk=nk,delta=delta)[0]
+  e = np.identity(g.shape[0])*(energy + delta*1j)
+  selfenergy = e - algebra.todense(h.intra) - algebra.inv(g)
+  return g,selfenergy
+
+
 def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
                          mode="adaptive", # algorithm for integration
                          gtype="bulk", # bulk or surface
@@ -14,6 +41,11 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
   """ Calculates the selfenergy of a cell defect,
       input is a hamiltonian class"""
   if mode=="adaptative": mode = "adaptive"
+  if mode not in _selfenergy_modes:
+      raise ValueError("unknown mode "+repr(mode)+" for the Bloch "
+              "selfenergy, accepted values are "+", ".join(_selfenergy_modes))
+  if mode=="triangle": # 3d only, see _triangle_green
+      return _triangle_green(h,nk=nk,energy=energy,delta=delta,gtype=gtype)
   from ..htk.kchain import detect_longest_hopping
   if detect_longest_hopping(h)==1:
       def gr(h):
@@ -140,7 +172,8 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
         # chain in the y direction
     else:
       raise NotImplementedError("the adaptive selfenergy is only implemented "
-              "for 1d and 2d Hamiltonians")
+              "for 1d and 2d Hamiltonians; for a 3d crystal use "
+              "mode='triangle'")
   elif mode=="full_adaptive":
     fint = lambda k: algebra.inv(e - hk_gen(k))  # green's function
     if d==1: # adaptive 1D

@@ -256,10 +256,19 @@ mesh serves every energy. For 41 energies from 0.9 to 1.1, across the van Hove e
 So for a sweep at an accuracy of 1e-3 the triangle mesh is 4 to 8 times faster, and for
 anything tighter the adaptive mode is faster and a thousand times more accurate. A mode that
 only wins at a loose tolerance on 2D sweeps is not worth a new branch of `bloch_selfenergy`,
-so it is not wired in. The function stays as `simplexdos.green_triangle(h,energies,nk,delta)`,
-tested against the adaptive mode and against the DOS (-Im Tr G/pi equals the triangle DOS to
-rounding on the same mesh). It works in 3D, where `bloch_selfenergy` has no mode at all;
-that would be the reason to wire it in, and it is a decision for the maintainer.
+so it is not wired in for 1D and 2D. The function stays as
+`simplexdos.green_triangle(h,energies,nk,delta)`, tested against the adaptive mode and
+against the DOS (-Im Tr G/pi equals the triangle DOS to rounding on the same mesh).
+
+In 3D `bloch_selfenergy` had no mode at all, so there the tetrahedra are wired in as
+`bloch_selfenergy(h,mode="triangle")`, for 3D only and for the bulk Green's function only;
+in 1D and 2D this mode raises and points to `mode="adaptive"`. On a two-site diamond
+crystal with a sublattice imbalance of 0.3, at delta = 0.3 t, the uniform mesh converges
+fast (1e-4 at nk = 24), while the tetrahedra converge at roughly second order: the error of
+the full 2x2 matrix is 3e-3 to 1.8e-2 of its largest entry at nk = 24 and 1e-3 to 6e-3 at
+nk = 48, largest in the gap. So at a large broadening a uniform sum is the better choice,
+and the tetrahedra are for a small delta, where the uniform mesh needs nk of order
+bandwidth/delta in each of the three directions.
 
 A side observation on the adaptive mode: a loose error makes it slow at small delta, not
 fast. At delta = 1e-6 and error=1e-3 it did not finish in 900 s, at error=1e-4 it took 37 s,
