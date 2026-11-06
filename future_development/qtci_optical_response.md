@@ -308,21 +308,98 @@ tridiagonal form, so the window does not remove that n^3; it removes the n^2 per
   The gain is about 24 at two bands and about 45 to 50 for the spinful
   copies, where the merge removes the duplicate energies. The 1024^2 mesh
   keeps 0.6M vertex sources out of 2M triangles, because the merge also
-  catches the symmetry-related k-points. The difference with the old
-  kernel is not a discretization error, it is rounding. Both kernels
-  cancel terms of size 1/tolc^2 (tolc = 1e-2 delta) in the divided
-  differences, and the old kernel's own comment bounds this at about
-  eps delta/tolc^2. A reference in extended precision (numpy longdouble,
-  same branches) gives the size of it: for the spinful Haldane model at
-  delta = 1e-3 the old kernel is off by 3.2e-10, 2.3e-11 and 1.0e-10 of the
-  largest entry at nk = 128, 256 and 512, and the new one by 5.0e-10,
-  9.9e-11 and 2.1e-10. On the gapped honeycomb at nk = 1024 the two errors
-  are 2.0e-11 and 2.8e-11. So the new path is up to 4 times noisier than the
-  old one, and both are at the rounding level of the formula. Compensated
-  (Kahan) summation in the evaluation changed nothing, so the error is in
-  the terms and not in the accumulation. The new test asserts agreement to
-  1e-10 of the largest entry at nk = 40, where the measured difference is
-  about 1e-12.
+  catches the symmetry-related k-points. These times and differences are
+  those of the kernels as first built; the precision fix below changed
+  both kernels.
+
+  Precision of the two kernels (fixed, 6 November 2026). The difference
+  in the last column was first read as the rounding level of the formula.
+  It was not. Both kernels switched from the exact divided difference to a
+  second order Taylor series when the spread s of a triangle was below
+  tolc = 1e-2 delta. The cancellation of a divided difference grows like
+  eps (|x|/s)^2, with |x| = |c - z| and c the mean energy, so a spread
+  just above tolc far from resonance loses a lot. For the triangle 0.5,
+  0.5 + 0.4 s, 0.5 + s at omega = 0 and delta = 1e-6, against mpmath at 60
+  digits, the direct kernel was off by 0.10, 0.027 and 4e-4 at s = 3e-8,
+  1e-7 and 1e-6, and the source kernel by 1.0, 0.063 and 7e-4. The
+  second order series had a second defect: it took the variance of the
+  uncentered energies, which loses eps c^2/delta^2 on resonance (1e-4 of
+  the triangle at delta = 1e-6, 1e-10 at delta = 1e-3). Segments in 1D
+  were fine to about 2e-8.
+
+  The direct kernel now calls `simplexdos._dd`, which decides per
+  frequency: a cluster of nodes goes to its Taylor series when its spread
+  is below 0.05 |c - z|. The source kernel decides once for all
+  frequencies, so it cannot compare with |c - z|. It expands a triangle
+  or an edge when s < delta, and runs the series until it converges. The
+  term of order n is bounded by (2 s/(3 |c - z|))^n and |c - z| >= delta
+  at any real omega, so the series converges everywhere, in up to about 80
+  terms on resonance and a few far from it. The series is evaluated on
+  w = (e - c)/(z - c), so no large power of 1/(z - c) appears. Worst
+  relative error of one triangle over spreads from 1e-4 to 100 delta and
+  |c - z| up to 1e4 delta (10 t at delta = 1e-3) or 1e6 delta (1 t at
+  delta = 1e-6):
+
+  | kernel | delta | before | after |
+  |---|---|---|---|
+  | direct | 1e-3 | 4e-4 | 9e-13 |
+  | source | 1e-3 | 3e-4 | 4e-8 |
+  | direct | 1e-6 | 2 | 2e-12 |
+  | source | 1e-6 | 2 | 1e-4 |
+
+  The 4e-8 and 1e-4 left in the source kernel sit at a spread just above
+  delta and the largest |x|, where its divided difference still loses
+  eps (|x|/s)^2. Below s = delta it is exact to rounding.
+
+  The reference for the full sums is now a numpy longdouble sum (eps 1e-19)
+  with the per-frequency rule and 24 Taylor terms, checked against mpmath
+  to 1e-15 per triangle over the same map. The reference used before kept
+  the branches of the kernels, so it saw the rounding but not the
+  truncation of the second order series. Error as a fraction of the
+  largest entry, delta = 1e-3, 141 frequencies on [0, 7] t:
+
+  | model | nk | source before | source after | direct before | direct after |
+  |---|---|---|---|---|---|
+  | Haldane, spinful | 128 | 5.8e-10 | 5.0e-12 | 5.0e-10 | 4.2e-14 |
+  | Haldane, spinful | 256 | 7.5e-11 | 3.6e-12 | 3.3e-11 | 1.1e-13 |
+  | Haldane, spinful | 512 | 2.8e-10 | 1.7e-12 | 1.0e-10 | 1.5e-13 |
+  | gapped honeycomb | 128 | 7.9e-13 | 7.5e-13 | 3.8e-13 | 2.2e-14 |
+  | gapped honeycomb | 256 | 2.6e-12 | 2.6e-12 | 1.8e-12 | 3.6e-14 |
+  | gapped honeycomb | 512 | 8.1e-12 | 8.2e-13 | 8.3e-12 | 6.6e-14 |
+
+  So the 1e-10 floor of the spinful Haldane model was the switch rule, and
+  it is gone. The direct kernel is now at 1e-13. The source kernel keeps
+  about 1e-12, which is the cancellation in its vertex sources, the
+  B-spline form of the sum, for triangles of ordinary spread. At nk = 40
+  on the spinful Haldane model it is 1.7e-11, before and after, from edges
+  just above delta in wide triangles; the test of the two kernels keeps
+  its 1e-10. Re sigma_xx of the gapped honeycomb with the triangle at
+  nk = 256 (the row of the first table) moved by 4e-13 of its largest
+  value, so no physics result of this note changes.
+
+  We scanned the threshold of the source kernel on the spinful Haldane
+  model at nk = 512. With s < alpha delta, alpha = 0.01 (the old rule),
+  0.1, 0.25, 0.5 and 1 give 2.8e-10, 2.9e-11, 1.6e-11, 5.2e-12 and
+  1.7e-12, with 6.6k, 23k, 48k, 85k and 146k edge sources against 0.29M
+  vertex sources. We took alpha = 1, since the series still converges at
+  a rate 2/3 on resonance. A second rule, s < 0.05 times the distance from c
+  to the frequency grid, also expands the triangles far from the whole
+  spectrum, the reverse terms at -dE among them. At a factor 0.01 it made
+  1.3M simplex sources out of 17k and cost 6 s per 141 frequencies
+  instead of 1 s, for 8e-12 instead of 1.7e-12. It was not kept.
+
+  Cost. The source kernel pays for the longer series: on the spinful
+  Haldane model at 512^2 and 701 frequencies it took 7.2 s against 3.1 s
+  before, on the gapped honeycomb 2.3 s against 1.9 s. The direct kernel
+  is about as fast as before (115 s against 104 s, 19 s against 25 s),
+  because most triangles are far from most frequencies and take a short
+  series instead of three logarithms. These are 14 threads of one
+  workstation at a load of 7 to 22 from other jobs, so only the ratios
+  mean something. What is still open: an edge or a triangle with s
+  between delta and a few delta could be kept as a point source that
+  decides per frequency between its series and its divided difference.
+  That would remove the residual of the source kernel at a cost in
+  evaluation that was not measured.
 
   Binning the joint DOS on a fine energy grid was not built. It is
   approximate, with an error of order (bin/delta)^2, so agreement at 1e-10

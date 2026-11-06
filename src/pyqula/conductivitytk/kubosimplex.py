@@ -30,6 +30,11 @@ from numba import jit, prange
 
 from . import kubo
 from .. import parallel
+# numba's cache does not see edits in another file: after a change to
+# simplexdos._dd, clear __pycache__ or touch this file
+from ..dostk.simplexdos import _dd, _sort_small
+from ..dostk.simplexdos import _harm as _dos_harm, _fact as _dos_fact
+from ..dostk.simplexdos import _nterms as _dos_nterms
 
 
 def check_broadening(delta):
@@ -121,78 +126,41 @@ def _prune(pairs,dE,W,rtol=1e-12):
 
 
 # ------------------------------------------------------------ simplex kernel
-
-@jit(nopython=True,cache=True)
-def _sort3(a,b,c):
-    if a>b: a,b = b,a
-    if b>c: b,c = c,b
-    if a>b: a,b = b,a
-    return a,b,c
-
-
-@jit(nopython=True,cache=True)
-def _psi1(e,z): return -np.log(e-z)
-
-
-@jit(nopython=True,cache=True)
-def _psi2(e,z):
-    x = e-z
-    return -(x*np.log(x)-x)
-
-
-@jit(nopython=True,cache=True)
-def _segment_average(e0,e1,z,tolc):
-    """average of 1/(z-E) over a segment with linear E from e0 to e1"""
-    h = abs(e1-e0)
-    if h<tolc: # confluent: Taylor series around the midpoint
-        u = 1./(z-0.5*(e0+e1))
-        return u + u*u*u*h*h/12.
-    return (_psi1(e1,z)-_psi1(e0,z))/(e1-e0)
-
-
-@jit(nopython=True,cache=True)
-def _dd1_psi2(a,b,z,tolc):
-    """first divided difference of psi_2, with the confluent limit"""
-    h = b-a
-    if h<tolc:
-        mid = 0.5*(a+b)
-        u = 1./(z-mid)
-        return _psi1(mid,z) + u*u*h*h/24.
-    return (_psi2(b,z)-_psi2(a,z))/h
-
-
-@jit(nopython=True,cache=True)
-def _triangle_average(e0,e1,e2,z,tolc):
-    """average of 1/(z-E) over a triangle with linear E taking the values
-    e0, e1, e2 at the vertices: 2 psi_2[e0,e1,e2]"""
-    e0,e1,e2 = _sort3(e0,e1,e2)
-    s = e2-e0
-    if s<tolc: # confluent: second order Taylor series around the mean
-        mean = (e0+e1+e2)/3.
-        var = (e0*e0+e1*e1+e2*e2+e0*e1+e0*e2+e1*e2)/6. - mean*mean
-        u = 1./(z-mean)
-        return u + u*u*u*var
-    return 2.*(_dd1_psi2(e1,e2,z,tolc)-_dd1_psi2(e0,e1,z,tolc))/s
-
+#
+# Both kernels evaluate the divided differences of psi_d exactly, or by a
+# Taylor series around the mean of the nodes when they are close. What
+# "close" means sets the precision. A plain divided difference over nodes
+# of spread s, at a distance |x| = |c - z| from z, cancels terms and loses
+# digits like eps (|x|/s)^d, so for a nearly flat simplex far from
+# resonance it fails even when s is much larger than delta. A spread
+# compared with delta alone (the rule used here before) gave a relative
+# error of 0.1 for a triangle of spread 3e-8 at |x| = 0.5 and delta = 1e-6.
+# The second order series used below that spread also took the variance
+# of the uncentered energies, which loses eps c^2/delta^2 near resonance.
+#
+# The direct kernel works frequency by frequency, so it uses the rule of
+# dostk/simplexdos.py directly: every cluster of nodes whose spread is
+# below 0.05 |c - z| goes to its Taylor series, up to 14 terms.
 
 @jit(nopython=True,parallel=True,cache=True)
-def _sigma_simplex_jit(simplices,dE,W,trans,diag,omegas,delta):
+def _sigma_simplex_jit(simplices,dE,W,trans,diag,omegas,delta,harm,fact):
     """Sum over simplices and stored pairs of the vertex-averaged weight
-    times the exact simplex average of the resolvent, for every frequency
-    and every Cartesian pair. As in kubo._sigma_jit the parallel loop runs
-    over frequencies, so each thread owns one output row. Not normalized:
-    the caller multiplies by i, the simplex volume fraction and 1/V_cell."""
+    times the simplex average of the resolvent, for every frequency and
+    every Cartesian pair, with the divided differences of
+    simplexdos._dd. As in kubo._sigma_jit the parallel loop runs over
+    frequencies, so each thread owns one output row. Not normalized: the
+    caller multiplies by i, the simplex volume fraction and 1/V_cell."""
     ns = simplices.shape[0]
     nv = simplices.shape[1] # vertices per simplex, 2 or 3
     npair = dE.shape[1]
     nc = W.shape[2]
     nw = omegas.shape[0]
-    tolc = 1e-2*delta # below this energy spread the Taylor series is exact
-                      # to (spread/delta)^3, above it the divided difference
-                      # loses at most eps*delta/tolc^2 to cancellation
     out = np.zeros((nw,nc),dtype=np.complex128)
     for iw in prange(nw): # parallel loop over frequencies
-        z = omegas[iw] + 1j*delta
+        w = omegas[iw]
+        t = np.zeros(nv+1)
+        hbuf = np.zeros(_dos_nterms+1)
+        d = np.zeros(nv+1,dtype=np.complex128)
         acc = np.zeros(nc,dtype=np.complex128)
         wbar = np.zeros(nc,dtype=np.complex128)
         for it in range(ns): # loop over simplices
@@ -200,20 +168,23 @@ def _sigma_simplex_jit(simplices,dE,W,trans,diag,omegas,delta):
                 for c in range(nc): wbar[c] = 0.
                 for v in range(nv):
                     for c in range(nc): wbar[c] += W[simplices[it,v],p,c]
-                e0 = dE[simplices[it,0],p]
-                e1 = dE[simplices[it,1],p]
-                if nv==2:
-                    sf = _segment_average(e0,e1,z,tolc)
-                    if not diag[p]: sr = _segment_average(-e0,-e1,z,tolc)
-                else:
-                    e2 = dE[simplices[it,2],p]
-                    sf = _triangle_average(e0,e1,e2,z,tolc)
-                    if not diag[p]: sr = _triangle_average(-e0,-e1,-e2,z,tolc)
-                for c in range(nc):
-                    acc[c] += wbar[c]*sf
-                    if not diag[p]: acc[c] += wbar[trans[c]]*sr
+                for v in range(nv): t[v] = dE[simplices[it,v],p]-w
+                _sort_small(t,nv)
+                sf = fact[nv-1]*_dd(nv-1,t,nv,-delta,harm,fact,hbuf,d)
+                for c in range(nc): acc[c] += wbar[c]*sf
+                if not diag[p]: # the pair (m,n), at energy -dE
+                    for v in range(nv): t[v] = -dE[simplices[it,v],p]-w
+                    _sort_small(t,nv)
+                    sr = fact[nv-1]*_dd(nv-1,t,nv,-delta,harm,fact,hbuf,d)
+                    for c in range(nc): acc[c] += wbar[trans[c]]*sr
         out[iw] = acc/nv
     return out
+
+
+def _sigma_simplices(simplices,dE,W,trans,diag,omegas,delta):
+    """The direct sum over simplices at every frequency"""
+    return _sigma_simplex_jit(simplices,dE,W,trans,diag,omegas,delta,
+            _dos_harm,_dos_fact)
 
 
 def simplices(dim,nk):
@@ -234,22 +205,39 @@ def simplices(dim,nk):
 
 # ------------------------------------------------------------ source kernel
 #
-# The branches of _sigma_simplex_jit depend on the vertex energies and on
-# delta, never on omega. So the whole sum over simplices and pairs is a sum
-# of fixed coefficients times a few functions of x = e - z:
+# The default kernel decides the branch of each simplex once, for all
+# frequencies, so the whole sum over simplices and pairs is a sum of fixed
+# coefficients times a few functions of x = e - z:
 #   psi_2(x) (psi_1(x) in 1D) at the vertex energies (exact branches),
-#   psi_1(x) and 1/x^2 at the middle of a confluent edge,
-#   1/x and 1/x^3 at the mean of a confluent simplex.
+#   psi_1(x) plus a series in (h/x)^2 at the middle of a close edge,
+#   the Taylor series of a close simplex around its mean.
 # In other words the weighted joint density of states, a sum of linear
 # B-splines, is stored by its knots. The coefficients are built once, the
 # vertex ones indexed by k-point, so the simplices sharing a vertex share
 # one source, and the sum is then evaluated per frequency over the sources.
-# This is the same sum as _sigma_simplex_jit, term by term, with the
-# additions in another order.
+#
+# The branch cannot depend on omega here, so the rule has to hold at every
+# frequency at once. A simplex (or an edge) of spread s is expanded when
+# s < _alpha delta. Its Taylor term of order n is bounded by
+# (2 s/(3 |c - z|))^n, and |c - z| >= delta for every real omega, so the
+# series converges at a rate of at least 2 _alpha/3 for any omega; it runs
+# until two terms in a row are below 1e-17 of the sum, which takes up to
+# about 80 terms on resonance and a few far from it. The series keeps its
+# first order term, which vanishes for the exact mean, because the stored
+# center is the rounded mean. What is left is the exact branch for a
+# simplex of spread just above _alpha delta, evaluated at a frequency far
+# from its mean, which loses eps (|x|/s)^2 of that simplex. The rule used
+# before, s < 1e-2 delta with a second order series, lost 1e4 times more
+# there. Only a rule per frequency removes this last loss, and that is
+# what the direct kernel above does.
+
+_alpha = 1. # see above
+_nmax = 100 # largest order of the Taylor series of a point source
+
 
 @jit(nopython=True,cache=True)
 def _sort3i(a,b,c,ia,ib,ic):
-    """_sort3, carrying along the vertex indices"""
+    """sort three energies, carrying along the vertex indices"""
     if a>b:
         a,b = b,a
         ia,ib = ib,ia
@@ -263,30 +251,32 @@ def _sort3i(a,b,c,ia,ib,ic):
 
 
 @jit(nopython=True,cache=True)
-def _add_point(write,n,ep,tp,ca,cb,e,t,wbar,fa,fb):
-    """append a point source of type t at energy e, with coefficients
-    fa*wbar and fb*wbar of its two kernels; the counting pass only counts"""
+def _add_point(write,n,ep,tp,yp,ca,e,t,y0,y1,y2,wbar,f):
+    """append a point source of type t at energy e, with shape (y0,y1,y2)
+    and coefficients f*wbar; the counting pass only counts"""
     if write:
         ep[n] = e
         tp[n] = t
-        for c in range(wbar.shape[0]):
-            ca[n,c] = fa*wbar[c]
-            cb[n,c] = fb*wbar[c]
+        yp[n,0] = y0
+        yp[n,1] = y1
+        yp[n,2] = y2
+        for c in range(wbar.shape[0]): ca[n,c] = f*wbar[c]
     return n+1
 
 
 @jit(nopython=True,cache=True)
-def _simplex_sources(write,e0,e1,e2,k0,k1,k2,nv,wbar,tolc,
-        Av,p,n,ep,tp,ca,cb):
-    """sources of one simplex and one pair, with the branches of
-    _segment_average and _triangle_average. Av[k,p,c] collects the vertex
-    coefficients, the point sources go to (ep,tp,ca,cb) from index n on.
-    Type 1: psi_1 and 1/x^2, type 2: 1/x and 1/x^3. Returns the new n."""
+def _simplex_sources(write,e0,e1,e2,k0,k1,k2,nv,wbar,tolc,Av,p,n,
+        ep,tp,yp,ca):
+    """sources of one simplex and one pair. Av[k,p,c] collects the vertex
+    coefficients, the point sources go to (ep,tp,yp,ca) from index n on.
+    Type 1: an edge of half-length yp[0], psi_2[m-yp[0],m+yp[0]]. Type 2:
+    a simplex with the vertex energies m + yp, its Taylor series. Returns
+    the new n."""
     if nv==2: # segment
         h = abs(e1-e0)
-        if h<tolc: # confluent, u + u^3 h^2/12 with u = -1/x
-            n = _add_point(write,n,ep,tp,ca,cb,0.5*(e0+e1),2,wbar,
-                    -1.,-h*h/12.)
+        cm = 0.5*(e0+e1)
+        if h<tolc: # Taylor
+            n = _add_point(write,n,ep,tp,yp,ca,cm,2,e0-cm,e1-cm,0.,wbar,1.)
         elif write: # (psi_1(e1)-psi_1(e0))/(e1-e0)
             f = 1./(e1-e0)
             for c in range(wbar.shape[0]):
@@ -295,20 +285,20 @@ def _simplex_sources(write,e0,e1,e2,k0,k1,k2,nv,wbar,tolc,
         return n
     e0,e1,e2,k0,k1,k2 = _sort3i(e0,e1,e2,k0,k1,k2)
     s = e2-e0
-    if s<tolc: # confluent, u + u^3 var
-        mean = (e0+e1+e2)/3.
-        var = (e0*e0+e1*e1+e2*e2+e0*e1+e0*e2+e1*e2)/6. - mean*mean
-        return _add_point(write,n,ep,tp,ca,cb,mean,2,wbar,-1.,-var)
-    # 2 (dd1(e1,e2) - dd1(e0,e1))/s
+    cm = (e0+e1+e2)/3.
+    if s<tolc: # Taylor
+        return _add_point(write,n,ep,tp,yp,ca,cm,2,e0-cm,e1-cm,e2-cm,
+                wbar,1.)
+    # 2 (psi_2[e1,e2] - psi_2[e0,e1])/s
     for side in range(2):
         if side==0:
             a = e1; b = e2; ka = k1; kb = k2; sgn = 2./s
         else:
             a = e0; b = e1; ka = k0; kb = k1; sgn = -2./s
         h = b-a
-        if h<tolc: # confluent edge, psi_1(mid) + u^2 h^2/24
-            n = _add_point(write,n,ep,tp,ca,cb,0.5*(a+b),1,wbar,
-                    sgn,sgn*h*h/24.)
+        m = 0.5*(a+b)
+        if h<tolc: # close edge
+            n = _add_point(write,n,ep,tp,yp,ca,m,1,0.5*h,0.,0.,wbar,sgn)
         elif write: # (psi_2(b)-psi_2(a))/h
             f = sgn/h
             for c in range(wbar.shape[0]):
@@ -318,17 +308,15 @@ def _simplex_sources(write,e0,e1,e2,k0,k1,k2,nv,wbar,tolc,
 
 
 @jit(nopython=True,cache=True)
-def _sources_jit(write,simplices,dE,W,trans,diag,delta,
-        Af,Ar,ep,tp,ca,cb):
+def _sources_jit(write,simplices,dE,W,trans,diag,tolc,Af,Ar,ep,tp,yp,ca):
     """Build (write=True) or count (write=False) the sources of the whole
-    simplex sum. Af and Ar take the vertex coefficients of the forward
-    (energy dE) and reverse (energy -dE) terms. Returns the number of
-    point sources."""
+    simplex sum, with the clusters of spread below tolc Taylor expanded.
+    Af and Ar take the vertex coefficients of the forward (energy dE) and
+    reverse (energy -dE) terms. Returns the number of point sources."""
     ns = simplices.shape[0]
     nv = simplices.shape[1]
     npair = dE.shape[1]
     nc = W.shape[2]
-    tolc = 1e-2*delta # as in _sigma_simplex_jit
     wbar = np.zeros(nc,dtype=np.complex128)
     wrev = np.zeros(nc,dtype=np.complex128)
     n = 0
@@ -345,16 +333,53 @@ def _sources_jit(write,simplices,dE,W,trans,diag,delta,
             e1 = dE[k1,p]
             e2 = dE[k2,p]
             n = _simplex_sources(write,e0,e1,e2,k0,k1,k2,nv,wbar,tolc,
-                    Af,p,n,ep,tp,ca,cb)
+                    Af,p,n,ep,tp,yp,ca)
             if not diag[p]:
                 for c in range(nc): wrev[c] = wbar[trans[c]]
                 n = _simplex_sources(write,-e0,-e1,-e2,k0,k1,k2,nv,wrev,
-                        tolc,Ar,p,n,ep,tp,ca,cb)
+                        tolc,Ar,p,n,ep,tp,yp,ca)
     return n
 
 
+@jit(nopython=True,cache=True)
+def _point_value(t,x,y0,y1,y2,nv):
+    """value of a point source at x = m - z, see _simplex_sources"""
+    small = 0
+    if t==1: # psi_1(m) + sum over even n >= 2 of (y0/x)^n/(n (n+1))
+        q = y0/x
+        q2 = q*q
+        aq = abs(q)
+        pw = 1.+0j
+        acc = 0j
+        for n in range(2,_nmax+1,2):
+            pw *= q2
+            term = pw/(n*(n+1))
+            acc += term
+            if abs(term)<=1e-17*aq: break
+        return -np.log(x)+acc
+    # sum_n (nv-1)! n!/(nv-1+n)! h_n(y) u^(n+1), u = 1/(z-m), recurring on
+    # w = y u so that no power of u appears alone
+    u = -1./x
+    w0 = y0*u; w1 = y1*u; w2 = y2*u
+    H0 = 1.+0j; H1 = 1.+0j; H2 = 1.+0j # h_n(w_0..w_i), i = 0..2
+    acc = 1.+0j
+    for n in range(1,_nmax+1):
+        H0 = w0*H0
+        H1 = H0+w1*H1
+        if nv==3:
+            H2 = H1+w2*H2
+            term = H2*(2./((n+1)*(n+2)))
+        else: term = H1/(n+1)
+        acc += term
+        if abs(term)<=1e-17*abs(acc): # stop after two negligible terms
+            small += 1
+            if small==2: break
+        else: small = 0
+    return u*acc
+
+
 @jit(nopython=True,parallel=True,cache=True)
-def _evaluate_sources_jit(ev,cv,vkind,ep,tp,ca,cb,omegas,delta,nchunk):
+def _evaluate_sources_jit(ev,cv,vkind,ep,tp,yp,ca,omegas,delta,nchunk):
     """Sum of all sources at every frequency. The parallel loop runs over
     (frequency, chunk of sources), each task writing its own partial sum,
     so the result does not depend on the number of threads."""
@@ -362,6 +387,7 @@ def _evaluate_sources_jit(ev,cv,vkind,ep,tp,ca,cb,omegas,delta,nchunk):
     nc = cv.shape[1]
     nvs = ev.shape[0]
     nps = ep.shape[0]
+    nv = 3 if vkind==2 else 2 # vertices per simplex
     part = np.zeros((nw,nchunk,nc),dtype=np.complex128)
     for task in prange(nw*nchunk): # parallel loop over frequency and chunk
         iw = task//nchunk
@@ -378,14 +404,8 @@ def _evaluate_sources_jit(ev,cv,vkind,ep,tp,ca,cb,omegas,delta,nchunk):
         i0 = (ic*nps)//nchunk
         i1 = ((ic+1)*nps)//nchunk
         for i in range(i0,i1): # point sources
-            x = ep[i]-z
-            if tp[i]==1:
-                fa = -np.log(x)
-                fb = 1./(x*x)
-            else:
-                fa = 1./x
-                fb = fa*fa*fa
-            for c in range(nc): acc[c] += ca[i,c]*fa + cb[i,c]*fb
+            f = _point_value(tp[i],ep[i]-z,yp[i,0],yp[i,1],yp[i,2],nv)
+            for c in range(nc): acc[c] += ca[i,c]*f
         for c in range(nc): part[iw,ic,c] = acc[c]
     out = np.zeros((nw,nc),dtype=np.complex128)
     for iw in range(nw):
@@ -394,67 +414,68 @@ def _evaluate_sources_jit(ev,cv,vkind,ep,tp,ca,cb,omegas,delta,nchunk):
     return out
 
 
-def _merge(e,*cs):
-    """Merge the sources with exactly the same energy, adding their
-    coefficients, and drop those whose coefficients all vanish"""
-    if len(e)==0: return (e,)+cs
-    order = np.argsort(e,kind="stable")
-    e = e[order]
+def _merge(keys,*cs):
+    """Merge the sources whose keys (one row of exactly equal numbers per
+    source) coincide, adding their coefficients, and drop those whose
+    coefficients all vanish. Returns the merged keys and coefficients."""
+    if keys.shape[0]==0: return (keys,)+cs
+    if keys.shape[1]==1: order = np.argsort(keys[:,0],kind="stable")
+    else: order = np.lexsort(keys.T[::-1])
+    keys = keys[order]
     cs = [c[order] for c in cs]
-    idx = np.nonzero(np.concatenate([[True],e[1:]!=e[:-1]]))[0]
-    e = e[idx]
+    new = np.concatenate([[True],np.any(keys[1:]!=keys[:-1],axis=1)])
+    idx = np.nonzero(new)[0]
+    keys = keys[idx]
     cs = [np.add.reduceat(c,idx,axis=0) for c in cs]
-    nz = np.zeros(len(e),dtype=np.bool_)
+    nz = np.zeros(len(keys),dtype=np.bool_)
     for c in cs: nz |= np.any(c!=0.,axis=1)
-    return (e[nz],)+tuple(c[nz] for c in cs)
+    return (keys[nz],)+tuple(c[nz] for c in cs)
 
 
-def simplex_sources(simplices,dE,W,trans,diag,delta):
+def simplex_sources(simplices,dE,W,trans,diag,delta,alpha=_alpha):
     """All the sources of the simplex sum, see _sources_jit: vertex sources
-    (energies ev, coefficients cv) and point sources (energies ep, types tp,
-    coefficients ca and cb of the two kernels of each type)"""
+    (energies ev, coefficients cv) and point sources (energies ep, types
+    tp, shapes yp, coefficients ca)"""
     npts,npair = dE.shape
     nc = W.shape[2]
     A = np.zeros((2,npts,npair,nc),dtype=np.complex128) # forward, reverse
     e0 = np.zeros(0); t0 = np.zeros(0,dtype=np.int64)
-    c0 = np.zeros((0,nc),dtype=np.complex128)
-    npoint = _sources_jit(False,simplices,dE,W,trans,diag,delta,
-            A[0],A[1],e0,t0,c0,c0) # first pass: count the point sources
+    y0 = np.zeros((0,3)); c0 = np.zeros((0,nc),dtype=np.complex128)
+    args = (simplices,dE,W,trans,diag,float(alpha*delta),A[0],A[1])
+    npoint = _sources_jit(False,*args,e0,t0,y0,c0) # count the point sources
     ep = np.zeros(npoint); tp = np.zeros(npoint,dtype=np.int64)
-    ca = np.zeros((npoint,nc),dtype=np.complex128)
-    cb = np.zeros((npoint,nc),dtype=np.complex128)
-    _sources_jit(True,simplices,dE,W,trans,diag,delta,A[0],A[1],ep,tp,ca,cb)
+    yp = np.zeros((npoint,3)); ca = np.zeros((npoint,nc),dtype=np.complex128)
+    _sources_jit(True,*args,ep,tp,yp,ca)
     A = A.reshape(-1,nc)
     nz = np.any(A!=0.,axis=1) # e.g. the reverse term of a diagonal pair
     ev = np.concatenate([dE.ravel(),-dE.ravel()])[nz]
-    ev,cv = _merge(ev,A[nz])
+    ev,cv = _merge(ev[:,None],A[nz])
     del A
-    pts = [] # merge each type of point source separately
-    for t in (1,2):
-        m = tp==t
-        e,a,b = _merge(ep[m],ca[m],cb[m])
-        pts.append((e,np.full(len(e),t,dtype=np.int64),a,b))
-    ep,tp,ca,cb = [np.concatenate([q[i] for q in pts]) for i in range(4)]
-    return ev,cv,ep,tp,ca,cb
+    # the point sources merge when their type, energy and shape coincide,
+    # as in the copies of a spinful model
+    keys,ca = _merge(np.concatenate([tp[:,None].astype(np.float64),ep[:,None],
+            yp],axis=1),ca)
+    tp = keys[:,0].astype(np.int64)
+    return (ev[:,0].copy(),cv,keys[:,1].copy(),tp,
+            np.ascontiguousarray(keys[:,2:]),ca)
 
 
 def _sigma_sources(simplices,dE,W,trans,diag,omegas,delta):
-    """Same output as _sigma_simplex_jit, from the sources"""
+    """The output of _sigma_simplices, from the sources"""
     import numba
-    ev,cv,ep,tp,ca,cb = simplex_sources(simplices,dE,W,trans,diag,delta)
+    ev,cv,ep,tp,yp,ca = simplex_sources(simplices,dE,W,trans,diag,delta)
     vkind = 2 if simplices.shape[1]==3 else 1
     nw = len(omegas)
     nsrc = len(ev)+len(ep)
     # enough tasks to keep every thread busy when there are few frequencies
     nchunk = max(1,min(nsrc//1024,-(-4*numba.get_num_threads()//max(nw,1))))
-    return _evaluate_sources_jit(ev,np.ascontiguousarray(cv),vkind,ep,tp,
-            np.ascontiguousarray(ca),np.ascontiguousarray(cb),omegas,
-            delta,nchunk)
+    return _evaluate_sources_jit(ev,np.ascontiguousarray(cv),vkind,ep,tp,yp,
+            np.ascontiguousarray(ca),omegas,delta,nchunk)
 
 
 _kernels = {
     "sources": _sigma_sources, # sources built once, then summed per frequency
-    "simplices": _sigma_simplex_jit, # every simplex at every frequency
+    "simplices": _sigma_simplices, # every simplex at every frequency
 }
 
 

@@ -30,8 +30,9 @@
 # criterion is relative to |c - z| and not to delta: the cancellation of a
 # plain divided difference grows like (|x|/spread)^m, which matters for a
 # nearly flat simplex far from resonance even when the spread is much
-# larger than delta. kubosimplex.py switches on the spread over delta,
-# which is enough at the delta of an optical spectrum but not below 1e-4.
+# larger than delta. The direct kernel of kubosimplex.py calls _dd as it
+# is; its source kernel needs a rule independent of the energy and uses
+# spread < delta with a longer series instead.
 #
 # The weights are averaged over the vertices of each simplex and over
 # degenerate multiplets at each vertex, as in kubosimplex.py: a single

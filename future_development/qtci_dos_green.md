@@ -22,18 +22,22 @@ average of 1/(z - E) is d! times the d-th divided difference of the d-th antider
 1/(z - E) over the vertex energies. The result is exact for any delta, delta = 0 included,
 where -Im/pi is the density of a linear function on the simplex (the tent in 2D).
 
-The kernel is not the one of `kubosimplex.py`, for one reason. There the divided
-difference switches to a Taylor series when the spread of the vertex energies is below
-1e-2 delta. The cancellation of a plain divided difference grows like (|E - z|/spread)^d,
-so for a nearly flat simplex far from resonance it loses digits even when the spread is
-much larger than delta. At the delta of an optical spectrum this does not matter; at
-delta = 1e-6, or 0, it does: for a triangle at energies 0.5, 0.5 + 0.4 s, 0.5 + s, with
-E = 0 and delta = 1e-6, the kubosimplex kernel has a relative error of 0.10, 0.027 and
-4e-4 at s = 3e-8, 1e-7 and 1e-6, against a 50-digit evaluation, and the new one is exact
-to rounding. The new kernel switches on the spread over |c - z|, with c
-the mean vertex energy, and expands every cluster of close nodes in its Taylor series with
+The kernel was first written apart from the one of `kubosimplex.py`, for one reason. There
+the divided difference switched to a Taylor series when the spread of the vertex energies
+was below 1e-2 delta. The cancellation of a plain divided difference grows like
+(|E - z|/spread)^d, so for a nearly flat simplex far from resonance it loses digits even
+when the spread is much larger than delta. At the delta of an optical spectrum this
+matters little; at delta = 1e-6, or 0, it matters a lot: for a triangle at energies 0.5,
+0.5 + 0.4 s, 0.5 + s, with E = 0 and delta = 1e-6, that rule has a relative error of 0.10,
+0.027 and 4e-4 at s = 3e-8, 1e-7 and 1e-6, against a 50-digit evaluation, and the kernel
+here is exact to rounding. This kernel switches on the spread over |c - z|, with c the
+mean vertex energy, and expands every cluster of close nodes in its Taylor series with
 the complete homogeneous symmetric polynomials, up to 14 terms. One routine covers d = 1,
-2 and 3 and any number of confluent nodes.
+2 and 3 and any number of confluent nodes. Over a map of spread from 1e-4 to 100 delta
+and |c - z| up to 1e6 delta, its worst relative error on one triangle is 1.6e-12, at the
+edge of the switch. The direct kernel of `kubosimplex.py` now calls this routine. The
+source kernel there cannot use it, because it fixes the branch of a triangle once for all
+frequencies; see the item on the cost per frequency in `qtci_optical_response.md`.
 
 The weights are the vertex mean over each simplex, averaged over degenerate multiplets at
 each k, as in `kubosimplex.py`. For the DOS the weight is one, or <u_n|O|u_n> for an
@@ -411,7 +415,8 @@ keeps only the band energies and the site weights.
   conserved quantum number (sz without spin-orbit coupling) before the integration.
 - **QTCI with an operator, and in 3D.** The qtci path takes an operator in 2D (the weights
   are interpolated as one more field per band); a 3D quantics grid is not built.
-- **Shared helpers with kubosimplex.py.** `simplexdos.qtci_fields` is a generic copy of the
-  cached cross interpolation inside `kubosimplex.sigma_qtci`, and the kernel is a more robust
-  version of the one there. Once nobody else is editing `kubosimplex.py`, it can call
-  `simplexdos` for both, which would also make its small-delta limit safe.
+- **Shared helpers with kubosimplex.py (done, 6 November 2026).** The cached cross
+  interpolation of the fields is one function, `qtcitk/meshfields.qtci_fields`, called by
+  the qtci DOS, the qtci LDOS and `kubosimplex.sigma_qtci`. The DOS and LDOS give the same
+  numbers bit by bit as before. The direct kernel of `kubosimplex.py` calls `_dd` from
+  here. `conductivitytk/shgsimplex.py` still has its own copy of the interpolation.

@@ -220,14 +220,16 @@ def _kernel_pair(h, nk, ws, T, delta):
 
 def test_source_kernel_equals_the_sum_over_simplices():
     """The default kernel rewrites the sum over simplices as a sum over its
-    sources (the vertex energies, and the middle points of the confluent
-    edges and simplices), built once for all frequencies. It is the same
-    sum with the additions in another order, so the two agree to rounding,
-    not to a discretization error. The divided differences cancel terms of
-    size 1/tolc^2 with tolc = 1e-2 delta, which sets the tolerance. Checked
-    on a gapped and on a spinful Chern insulator, where every band is a
-    degenerate pair, at a broadening below and above the mesh spacing, and
-    in 1D, where the simplices are segments."""
+    sources (the vertex energies, and the close edges and simplices
+    expanded around their middle), built once for all frequencies. It is
+    the same integral of the same interpolant, so the two agree to
+    rounding, not to a discretization error. The direct sum decides the
+    Taylor branch per frequency and is exact to about 1e-13 of the largest
+    entry; the source kernel cannot, and its divided differences over
+    spreads just above delta lose up to 2e-11 of it here, which sets the
+    tolerance. Checked on a gapped and on a spinful Chern insulator, where
+    every band is a degenerate pair, at a broadening below and above the
+    mesh spacing, and in 1D, where the simplices are segments."""
     ws = np.linspace(0., 7., 41)
     for h in [_gapped_honeycomb(), _haldane(has_spin=True)]:
         for delta in [1e-3, 3e-2]:
@@ -241,3 +243,44 @@ def test_source_kernel_equals_the_sum_over_simplices():
     for delta in [1e-3, 3e-2]:
         s_new, s_old = _kernel_pair(h, 300, ws, 0.01, delta)
         assert np.max(np.abs(s_new-s_old)) < 1e-10*np.max(np.abs(s_old))
+
+
+def _triangle_quadrature(e, omega, delta, n=64):
+    """Average of 1/(omega + i delta - E) over a triangle with E linear
+    between the vertex energies e, by Gauss-Legendre quadrature on the
+    square of the Duffy map. The energies are measured from omega first,
+    which is exact close to resonance, so for an integrand that is smooth
+    on the scale of the triangle this is exact to rounding"""
+    x, w = np.polynomial.legendre.leggauss(n)
+    x = 0.5*(x+1.); w = 0.5*w
+    u, v = np.meshgrid(x, x, indexing="ij")
+    wu, wv = np.meshgrid(w, w, indexing="ij")
+    a = u; b = (1.-u)*v # a point of the unit triangle, Jacobian 1-u
+    t = e-omega
+    x = t[0] + a*(t[1]-t[0]) + b*(t[2]-t[0]) # E - omega
+    return 2.*np.sum(wu*wv*(1.-u)/(1j*delta-x))
+
+
+def test_nearly_flat_triangle_far_from_resonance():
+    """A triangle whose transition energies spread by s far from the
+    frequency, here energies 0.5, 0.5+0.4s, 0.5+s at omega=0 with
+    delta=1e-6. The plain divided difference cancels terms of size
+    (|x|/s)^2 there, so a switch to the Taylor series on s compared with
+    delta alone lost up to 10% of this simplex. The direct kernel must give
+    the quadrature value to rounding, far from resonance and on it. The
+    source kernel expands below s = delta only, so at s = delta it takes
+    the divided difference, which loses about eps |x|/s of the simplex."""
+    from pyqula.conductivitytk import kubosimplex
+    delta = 1e-6
+    sim = np.array([[0,1,2]], dtype=np.int64)
+    W = np.ones((3,1,1), dtype=np.complex128)
+    args = (np.zeros(1,dtype=np.int64), np.ones(1,dtype=np.bool_))
+    for s in [3e-8, 1e-7, 1e-6]:
+        e = np.array([0.5, 0.5+0.4*s, 0.5+s])
+        for omega in [0., 0.5+0.5*s]: # far from the triangle, and on it
+            ref = _triangle_quadrature(e, omega, delta)
+            for name in ["sources", "simplices"]:
+                val = kubosimplex._kernels[name](sim, e[:,None], W, *args,
+                        np.array([omega]), delta)[0,0]
+                tol = 1e-9 if (name=="sources" and s>=delta) else 1e-12
+                assert abs(val-ref) < tol*abs(ref)
