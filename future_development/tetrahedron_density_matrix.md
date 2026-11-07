@@ -1167,6 +1167,96 @@ anomalous entries with the Nambu indices directly now, the same number to
 Fermi search of the normal state, about 40% of an iteration of this
 one-site cell, which was not touched.
 
+#### The staircase of the offset
+
+Is a better treatment of the staircase worth building? In a state with no
+gap on the mesh the requested charge N0 falls inside a jump of the paired
+charge, so no offset holds it, and the step sends x across the jump at
+every evaluation (see "The gapless Zeeman state" below). We measured three
+treatments on the Zeeman state against the gapped states of this section:
+U = -2, filling 0.3, B = 0.3, `mf="swave"`, `maxerror=1e-10`, T = 1e-7,
+with `"ed"` and the triangle, Broyden mixing and the plain loop. As a
+reference we take the offset held at zero, which is the Fermi level of the
+normal state: it has no staircase of x at all, so the gap between it and
+the present step is what the oscillation of x costs. The root find is the other design
+of "The Fermi level of a superconductor": at each Hamiltonian, `brentq` on
+the paired charge inside the window, and the offset of the loop is the
+root. The shell filling is a stand-in for option (b), the partly filled
+level: when the charge at mu - eps and at mu + eps lie on the two sides of
+N0, and differ by more than 100 kappa 2 eps, the density matrix is
+w rho(mu - eps) + (1 - w) rho(mu + eps), with w chosen so that it holds N0
+exactly. Here eps = 1e-5. This is the occupation a finite T gives to the
+shell at mu, to order eps, but it costs two more density matrices per
+iteration, while the same filling inside the density matrix would cost
+none. Iterations, and the extra density matrices of the root find:
+
+| nk | integration | solver | now | x = 0 | root find | its extra dm | shell filled |
+|---:|---|---|---:|---:|---:|---:|---:|
+| 16 | `"ed"` | Broyden | 41 | 36 | 36 | 527 | 38 |
+| 16 | triangle | Broyden | 41 | 32 | 28 | 1193 | 38 |
+| 32 | `"ed"` | Broyden | 36 | 28 | 27 | 438 | 34 |
+| 32 | triangle | Broyden | 36 | 22 | 23 | 1000 | 34 |
+| 16 | `"ed"` | plain | 350 | 363 | 322 | 3020 | 340 |
+| 16 | triangle | plain | 355 | 368 | 320 | 6713 | 340 |
+| 32 | `"ed"` | plain | 273 | 278 | 270 | 2453 | 272 |
+| 32 | triangle | plain | 274 | 279 | 270 | 5628 | 271 |
+
+The wall times, on three reserved cores of a loaded workstation, with one
+run before the timed ones so that the numba compilation is not in them:
+with Broyden at nk = 16, 0.89 s now, 0.91 s at x = 0 and 6.4 s with the
+root find for `"ed"`, and 0.57, 0.51 and 7.5 s for the triangle; at
+nk = 32, 2.1, 1.8 and 17 s for `"ed"`, and 1.0, 0.49 and 10 s for the
+triangle. The plain loop at nk = 16 takes 7.1, 8.3 and 45 s for `"ed"`.
+
+So the root find does not pay. It needs 9 to 15 density matrices per
+iteration with `"ed"` and 20 to 40 with the triangle, whose paired charge
+is a true step with half a level on it, so that `brentq` only stops at its
+tolerance in x. It is 7 to 13 times slower with Broyden and 6 to 10 times
+with the plain loop. It also changes the gapped states, since the offset is then the
+exact root at each iteration: the s-wave state at nk = 16 needs 21
+iterations instead of 23, the d-wave state 18 instead of 20, and the weak
+U = -1 at nk = 16 11 instead of 13, at 11 extra density matrices per
+iteration, 3.5 s against 0.70 s for the s-wave state with `"ed"`. The
+reason why it cannot do better is that every run ends in the normal state:
+the pairing dies, the window closes as Delta^3, and the root find, like
+the step, leaves mu at the Fermi level of the normal state. The charge
+error at the end, 1.6e-3 per cell at nk = 16 and -3.9e-4 at nk = 32, is the
+staircase of the Fermi search of the normal state, and no offset touches
+it.
+
+What the oscillation of x costs is the gap between the first two
+columns: 5 and 9 Broyden iterations at nk = 16 with `"ed"` and the
+triangle, 8 and 14 at nk = 32, which on this cell is at most 0.5 s. The
+root find recovers it, and in the plain loop and for the triangle at
+nk = 16 it goes a few iterations below x = 0 too, but each of its
+iterations costs 9 to 40 density matrices, so it loses in wall time
+everywhere. In the plain loop the present step is already faster than
+x = 0, by 5 to 13 iterations. So we leave the step as it is.
+
+The shell filling answers a different question. It holds N0 exactly, to
+1e-16, in the gapless state too, and `"ed"` and the triangle then end in
+the same state, E = -1.626407234195 and mu = -1.6044293647 at nk = 16,
+where today they differ by 8.1e-7 in the energy and 6.5e-4 in the Fermi
+level (this energy is the band energy of the loop, of the Hamiltonian and
+not of the interpolated density matrix, so it is a check of the state and
+not the energy a built version would report). It never fires in the gapped states: the s-wave state at nk = 16,
+the d-wave state and the weak U = -1 at nk = 16 and 24, with both
+integrations and both solvers, keep their counts and their energies to
+1e-12. The jump test is needed for that. Without it the interpolation
+also fires on the smooth charge of a gapped state: at eps = 1e-5 it moves
+the d-wave energy by 2.2e-11, and the weak U = -1 at nk = 16 no longer
+converges in 1000 Broyden iterations; at eps = 1e-3 it moves the s-wave
+energy by 6.6e-9. Its iterations are only a few below the
+present ones, 3 and 2 with Broyden and up to 15 in the plain loop. With
+the offset held at zero and the shells filled, Broyden needs 23 and 25
+iterations at nk = 16 and 32, so most of the remaining cost of the
+gapless state is the motion of x while the pairing still lives, which
+the filled shell does not remove. That combination cannot hold the charge
+of a gapped state, so it is a diagnosis and not a design. Building the
+shell filling changes how the density matrix of a BdG Hamiltonian is
+computed, in `"ed"` and in `dmtk/simplexdm.py`, so it waits for a
+decision (see "What is left open").
+
 #### The gapless Zeeman state
 
 Why does the Zeeman state need 57 Broyden iterations at nk = 16 and 53 at
@@ -1471,6 +1561,26 @@ loaded.
   without a gap it keeps the staircase of `"ed"`. A triangle integration
   of a gapless BdG state with the continuous charge of the normal state
   would need the electron and hole bands unsorted. Not tried.
+- The partly filled shell of a gapless BdG state. A root find of the
+  offset per iteration was measured and does not pay: on the Zeeman state
+  it needs 9 to 40 extra density matrices per iteration and 7 to 13 times
+  the wall time with Broyden, for about the iterations of the offset held
+  at zero, and it changes the counts of the gapped states (see "The
+  staircase of the offset"). The step is left as it is, since what an
+  offset can still save is 5 to 14 Broyden iterations, at most 0.5 s on
+  that cell. What would hold the charge of a gapless state is to fill the
+  shell at mu in part inside the density matrix: after the
+  diagonalization, the BdG levels with |E| below a tolerance get an
+  occupation f, and their partners at -E get 1 - f, with f in [0, 1] set
+  so that the trace of the electron block is N0. The band energy has to
+  use the same occupation. It costs no extra diagonalization. A stand-in
+  with two more density matrices holds N0 to 1e-16 in the Zeeman state,
+  gives `"ed"` and the triangle the same state (today they differ by
+  8.1e-7 in the energy at nk = 16), saves 2 to 3 Broyden iterations and up
+  to 15 plain ones, and leaves every gapped state as it is. It changes
+  how the density matrix of a BdG Hamiltonian is computed, in `"ed"` and
+  in `dmtk/simplexdm.py`, and the density matrix then needs N0 as an
+  argument, so it waits for the maintainer.
 - qtci with V1 on a BdG Hamiltonian stopped with "Non-Hermitian BdG mean
   field" from a random guess. This is closed (see "qtci from a random
   guess"): the onsite diagonal of the qtci density matrix had an
