@@ -59,7 +59,11 @@
 # piece is done by Gauss-Legendre quadrature in the variable f(x), on
 # nodes graded towards both ends of the piece (see _quadrature). A pair
 # whose two bands keep the same side of the window on every vertex has an
-# x-independent T=0 response there, which is evaluated once.
+# x-independent T=0 response there, which is evaluated once. So does a
+# piece of x between the energy ranges of the two bands on the simplex
+# (_interval_kind), where the whole simplex is in A or in B: its nodes
+# are replaced by one evaluation times f(a) - f(b), and these pieces of
+# each pair are summed into one evaluation for A and one for B.
 #
 # The weights are summed over the simplices that share each vertex, and
 # averaged over the degenerate multiplets of n at k and of m at k+q, which
@@ -387,21 +391,67 @@ def _graded_node(q,sg,f1,span,T):
 
 
 @jit(nopython=True,cache=True)
+def _interval_kind(en,em,p,a,b):
+    """how the T=0 weights depend on x inside the piece (a,b) of the
+    integral over x, whose ends are knots, so that no vertex energy lies
+    inside it: -1 when a band has vertices on both sides of x and the
+    tiling moves with x, 1 when the whole simplex is in A (every E_n < x
+    < every E_m), 2 when it is in B, and 0 when A and B are empty. In the
+    last three cases the weights are the same at every x of the piece"""
+    x = 0.5*(a+b)
+    nn = 0; nm = 0
+    for i in range(p):
+        if en[i]<x: nn += 1
+        if em[i]<x: nm += 1
+    if (nn>0 and nn<p) or (nm>0 and nm<p): return -1
+    if nn==p and nm==0: return 1
+    if nm==p and nn==0: return 2
+    return 0
+
+
+@jit(nopython=True,cache=True)
 def _quadrature(en,em,D,p,omegas,iw0,iw1,delta,T,degenerate,tbreaks,
         resonance,out,acc,ws,kn):
     """the convolution of the T=0 weights with -f'(x) for the frequencies
-    omegas[iw0:iw1], on the breakpoints of the frequency omegas[iw0]"""
+    omegas[iw0:iw1], on the breakpoints of the frequency omegas[iw0]. A
+    piece of x where the weights do not depend on x (_interval_kind >= 0)
+    is the weights at one x times the weight f(a) - f(b) of the piece,
+    which is the sum of the weights of its nodes to rounding, so the
+    pieces of A and those of B are each evaluated once"""
     m = _knots(en,em,D,p,omegas[iw0],T,tbreaks,resonance,kn)
+    wA = 0.; wB = 0.; xA = 0.; xB = 0.
     for i in range(m-1):
         a = kn[i]; b = kn[i+1]
         if b<=a: continue
+        kind = _interval_kind(en,em,p,a,b)
+        if kind==0: continue
         sg,f1,span = _interval(a,b,T)
         if span<=0.: continue
-        for q in range(_gx.shape[0]):
-            ok,x,wq = _graded_node(q,sg,f1,span,T)
-            if not ok: continue
-            _kernel0(en,em,D,p,x,omegas,iw0,iw1,delta,degenerate,wq,out,
-                    acc,ws)
+        if kind==1:
+            wA += span; xA = 0.5*(a+b)
+            continue
+        if kind==2:
+            wB += span; xB = 0.5*(a+b)
+            continue
+        _interval_nodes(en,em,D,p,a,b,omegas,iw0,iw1,delta,T,degenerate,1.,
+                out,acc,ws)
+    if wA>0.:
+        _kernel0(en,em,D,p,xA,omegas,iw0,iw1,delta,degenerate,wA,out,acc,ws)
+    if wB>0.:
+        _kernel0(en,em,D,p,xB,omegas,iw0,iw1,delta,degenerate,wB,out,acc,ws)
+
+
+@jit(nopython=True,cache=True)
+def _interval_nodes(en,em,D,p,a,b,omegas,iw0,iw1,delta,T,degenerate,coef,
+        out,acc,ws):
+    """the graded quadrature over the piece (a,b) of x, times coef"""
+    sg,f1,span = _interval(a,b,T)
+    if span<=0.: return
+    for q in range(_gx.shape[0]):
+        ok,x,wq = _graded_node(q,sg,f1,span,T)
+        if not ok: continue
+        _kernel0(en,em,D,p,x,omegas,iw0,iw1,delta,degenerate,coef*wq,out,
+                acc,ws)
 
 
 @jit(nopython=True,cache=True)
@@ -543,8 +593,8 @@ def _multiplet_average_pairs(E1,E2,W,tol):
 #
 # The weight kernel above redoes the divided differences of every piece at
 # every frequency. The pieces themselves do not depend on the frequency:
-# at T = 0 and at every node x of the shared finite-T quadrature (delta
-# >= T) the tiling is fixed, and a piece is fully given by the transition
+# at T = 0 and at every node x of the shared finite-T quadrature the
+# tiling is fixed, and a piece is fully given by the transition
 # energies D_s on its nodes and, per node, the coefficient
 #   c_s = coef sgn vol sum_j C_sj G_j,
 # with G_j the matrix elements of the vertex j of the parent simplex,
@@ -573,6 +623,17 @@ def _multiplet_average_pairs(E1,E2,W,tol):
 # of the bins near it, by the exact divided differences of the weight
 # kernel with the same branches. The near bins are a few per level, so
 # the exact work per frequency is a small fraction of the pieces.
+#
+# With delta < T the reference kernel adds to the knots in x the energies
+# where a cut through an edge meets the resonance of each frequency, so
+# its nodes depend on the frequency. Those knots only fall inside the
+# pieces of x where the tiling moves, and only for the frequencies inside
+# the range of D on the simplex. The source kernel keeps the shared nodes
+# for every frequency and adds, for those simplices and frequencies, the
+# quadrature on the refined pieces of x minus the one on the shared
+# pieces, evaluated directly (_resonance_fix). This is the reference
+# result to rounding, at the cost of a few pieces of x per simplex and
+# frequency that crosses it.
 
 _lev = 12 # the finest bins are 2^-_lev of the range of the transition
           # energies, the coarsest one is the whole range
@@ -667,35 +728,103 @@ def _emitT(En,Em,D,p,T,degenerate,tbreaks,kv,G,n,m,ws,acc,kn,i0,pt,
         return _emit0(En,Em,D,p,0.,degenerate,1.,kv,G,n,m,ws,acc,i0,
                 pt,pc,pb,dgrow,dmin,span,off)
     nkn = _knots(En,Em,D,p,0.,T,tbreaks,False,kn)
-    for i in range(nkn-1):
+    wA = 0.; wB = 0.; xA = 0.; xB = 0.
+    for i in range(nkn-1): # as in _quadrature
         a = kn[i]; b = kn[i+1]
         if b<=a: continue
+        kind = _interval_kind(En,Em,p,a,b)
+        if kind==0: continue
         sg,f1,sp = _interval(a,b,T)
         if sp<=0.: continue
+        if kind==1:
+            wA += sp; xA = 0.5*(a+b)
+            continue
+        if kind==2:
+            wB += sp; xB = 0.5*(a+b)
+            continue
         for q in range(_gx.shape[0]):
             ok,x,wq = _graded_node(q,sg,f1,sp,T)
             if not ok: continue
             i0 = _emit0(En,Em,D,p,x,degenerate,wq,kv,G,n,m,ws,acc,i0,
                     pt,pc,pb,dgrow,dmin,span,off)
+    if wA>0.:
+        i0 = _emit0(En,Em,D,p,xA,degenerate,wA,kv,G,n,m,ws,acc,i0,pt,pc,pb,
+                dgrow,dmin,span,off)
+    if wB>0.:
+        i0 = _emit0(En,Em,D,p,xB,degenerate,wB,kv,G,n,m,ws,acc,i0,pt,pc,pb,
+                dgrow,dmin,span,off)
     return i0
 
 
+@jit(nopython=True,cache=True)
+def _resonance_fix(En,Em,D,p,omegas,delta,T,degenerate,tbreaks,kv,G,n,m,ws,
+        acc,kn,kr,res,fix):
+    """fix[iw] += the T=0 weights contracted with G, integrated over x on
+    the knots of the frequency iw minus the same on the shared knots, for
+    every frequency whose resonance D = w crosses an edge of the simplex.
+    With delta < T the reference kernel adds the resonance to the knots
+    (_knots with resonance), and the two lists only differ in the pieces
+    of x that hold a resonance knot, so the shared pieces plus this
+    difference are the reference result. kr holds the resonance knots"""
+    if _constant_window(En,Em,p,tbreaks[-1]*T): return
+    nw = omegas.shape[0]; nc = G.shape[3]
+    dlo = D[0]; dhi = D[0]
+    for i in range(1,p):
+        dlo = min(dlo,D[i]); dhi = max(dhi,D[i])
+    nkn = -1
+    for iw in range(nw):
+        w = omegas[iw]
+        if not (w>dlo and w<dhi): continue # no sign change on an edge
+        if nkn<0: nkn = _knots(En,Em,D,p,0.,T,tbreaks,False,kn)
+        nr = _knots(En,Em,D,p,w,T,tbreaks,True,kr)
+        for v in range(p): res[v,iw] = 0.
+        changed = False
+        j = 0 # kr is the merge of kn and the resonance knots, both sorted
+        for i in range(nkn-1):
+            a = kn[i]; b = kn[i+1]
+            if b<=a: continue
+            while j<nr and kr[j]<=a: j += 1
+            if j>=nr or kr[j]>=b: continue # no resonance knot inside
+            if _interval_kind(En,Em,p,a,b)!=-1: continue
+            changed = True
+            _interval_nodes(En,Em,D,p,a,b,omegas,iw,iw+1,delta,T,
+                    degenerate,-1.,res,acc,ws)
+            c0 = a
+            while j<nr and kr[j]<b:
+                if kr[j]>c0:
+                    _interval_nodes(En,Em,D,p,c0,kr[j],omegas,iw,iw+1,delta,
+                            T,degenerate,1.,res,acc,ws)
+                    c0 = kr[j]
+                j += 1
+            _interval_nodes(En,Em,D,p,c0,b,omegas,iw,iw+1,delta,T,
+                    degenerate,1.,res,acc,ws)
+        if not changed: continue
+        for c in range(nc):
+            z = 0j
+            for v in range(p): z += res[v,iw]*G[kv[v],n,m,c]
+            fix[iw,c] += z
+
+
 _group = 64 # consecutive simplices per group of the piece kernels
+_maxblk = 256 # blocks of groups of the piece kernels
 
 
 @jit(nopython=True,cache=True)
 def _max_pieces(En,Em,D,p,T,degenerate,tbreaks,kn):
     """an upper bound to the number of pieces _emitT or _emit0 writes for
-    one pair: the nodes of the quadrature in x times the largest number of
-    tiles of the two regions, 2 (p-1)^2"""
+    one pair: the nodes of the quadrature in x on the pieces of x where
+    the tiling moves, times the largest number of tiles of the two
+    regions, 2 (p-1)^2, plus the whole simplex in A and in B"""
     if degenerate: return 0
     tiles = 2*(p-1)*(p-1)
     if T==0. or _constant_window(En,Em,p,tbreaks[-1]*T): return tiles
     nkn = _knots(En,Em,D,p,0.,T,tbreaks,False,kn)
     nodes = 0
     for i in range(nkn-1):
-        if kn[i+1]>kn[i]: nodes += _gx.shape[0]
-    return nodes*tiles
+        if kn[i+1]>kn[i] and _interval_kind(En,Em,p,kn[i],kn[i+1])==-1:
+            nodes += _gx.shape[0]
+    # plus the whole simplex in A and in B, one piece each
+    return nodes*tiles+2
 
 
 @jit(nopython=True,parallel=True,cache=True)
@@ -706,7 +835,7 @@ def _bounds_jit(sim,it0,it1,E1,E2,T,tol,tbreaks,bound):
     nsim = it1-it0
     L = tbreaks[-1]*T
     ngr = (nsim+_group-1)//_group
-    nblk = min(ngr,256)
+    nblk = min(ngr,_maxblk)
     for blk in prange(nblk):
         kn = np.zeros(4+2*p+p*(p-1)+2*tbreaks.shape[0])
         En = np.zeros(p); Em = np.zeros(p); D = np.zeros(p)
@@ -725,20 +854,27 @@ def _bounds_jit(sim,it0,it1,E1,E2,T,tol,tbreaks,bound):
 
 @jit(nopython=True,parallel=True,cache=True)
 def _pieces_jit(sim,it0,it1,E1,E2,G,T,tol,tbreaks,offs,pt,pc,pb,dg,
-        dmin,span,off):
+        dmin,span,off,omegas,delta,fix):
     """the pieces of the simplices it0..it1-1, written from offs[i] on for
     the simplex it0+i; the slots left over keep pb = -1. dg[i] takes the
-    Fermi surface terms of its degenerate pairs. The groups of simplices
-    are dealt to the blocks in turn, so that every block gets its share of
-    the simplices near the Fermi surface (prange splits the blocks
-    statically), and the work arrays are allocated per block"""
+    Fermi surface terms of its degenerate pairs. With T > delta, fix[blk]
+    takes the resonance corrections (_resonance_fix) of the block blk, and
+    there are at most len(fix) blocks.
+    The groups of simplices are dealt to the blocks in turn, so that every
+    block gets its share of the simplices near the Fermi surface (prange
+    splits the blocks statically), and the work arrays are allocated per
+    block"""
     p = sim.shape[1]; nb = E1.shape[1]
     nsim = it1-it0
     L = tbreaks[-1]*T
     ngr = (nsim+_group-1)//_group
-    nblk = min(ngr,256)
+    nblk = min(ngr,fix.shape[0])
+    resonant = T>0. and delta<T
+    nw = omegas.shape[0]
     for blk in prange(nblk):
         ws,kn = _workspace(p,tbreaks.shape[0])
+        kr = np.zeros(kn.shape[0])
+        res = np.zeros((p,nw),dtype=np.complex128)
         En = np.zeros(p); Em = np.zeros(p); D = np.zeros(p)
         acc = np.zeros(p,dtype=np.complex128)
         for g in range(blk,ngr,nblk):
@@ -758,6 +894,10 @@ def _pieces_jit(sim,it0,it1,E1,E2,G,T,tol,tbreaks,offs,pt,pc,pb,dg,
                             n0 = _emitT(En,Em,D,p,T,degenerate,tbreaks,kv,G,
                                     n,m,ws,acc,kn,n0,pt,pc,pb,dg[i],dmin,
                                     span,off)
+                            if resonant:
+                                _resonance_fix(En,Em,D,p,omegas,delta,T,
+                                        degenerate,tbreaks,kv,G,n,m,ws,acc,
+                                        kn,kr,res,fix[blk])
 
 
 @jit(nopython=True,cache=True)
@@ -902,14 +1042,12 @@ def response_sources(dim,nk,E1,E2,G,omegas,delta,T):
     integration of G[k,n,m,c] (f_n - f_m)/(E_n - E_m - w + i delta) at
     zero chemical potential, normalized to the Brillouin zone, as an
     (nw,nc) array. G holds the matrix elements already averaged over the
-    degenerate multiplets. At T > 0 it needs delta >= T, where the
-    frequencies share the nodes of the quadrature in x"""
+    degenerate multiplets. At T > 0 the frequencies share the nodes of
+    the quadrature in x; with delta < T the pieces of x that hold the
+    resonance of a frequency are corrected for that frequency
+    (_resonance_fix)"""
     import numba
     from ..dostk.simplexdos import simplices, _degeneracy_tol
-    if T>0. and delta<T:
-        raise ValueError("the source kernel of the triangle response needs "
-                "delta >= T at finite temperature, got delta="+str(delta)
-                +" and T="+str(T))
     sim,frac = simplices(dim,nk)
     E1 = np.ascontiguousarray(E1,dtype=np.float64)
     E2 = np.ascontiguousarray(E2,dtype=np.float64)
@@ -930,6 +1068,14 @@ def response_sources(dim,nk,E1,E2,G,omegas,delta,T):
     parallel.set_num_threads()
     out = np.zeros((nw,nc),dtype=np.complex128)
     dgsum = np.zeros(nc,dtype=np.complex128)
+    resonant = T>0. and delta<T
+    # the resonance corrections, one row per block of the piece kernel, at
+    # most 256 blocks and 2e8 bytes as for the pieces (the number of blocks
+    # does not depend on the threads, so neither does the sum)
+    nfix = _maxblk
+    if resonant: nfix = max(1,min(_maxblk,int(2e8)//(nw*nc*16)))
+    fix = np.zeros((nfix,nw,nc) if resonant else (nfix,0,nc),
+            dtype=np.complex128)
     maxsrc = max(1024,min(_maxsrc,int(2e8)//(p*(8+16*nc)+8)))
     for s0 in range(0,ns,_maxsim):
         s1 = min(ns,s0+_maxsim)
@@ -948,7 +1094,7 @@ def response_sources(dim,nk,E1,E2,G,omegas,delta,T):
             pb = np.full(npc,-1,dtype=np.int64)
             dg = np.zeros((i1-i0,nc),dtype=np.complex128)
             _pieces_jit(sim,s0+i0,s0+i1,E1,E2,G,T,tol,_tbreaks,offs,pt,pc,pb,
-                    dg,dmin,span,off)
+                    dg,dmin,span,off,omegas,delta,fix)
             dgsum += np.sum(dg,axis=0)
             order,starts = _sort_by_bin(pb,nbins)
             npc = len(order)
@@ -971,6 +1117,7 @@ def response_sources(dim,nk,E1,E2,G,omegas,delta,T):
     _far_jit(np.nonzero(occupied)[0].astype(np.int64),mom,binc,binw,omegas,
             delta,out)
     out += dgsum[None,:]*_static_factors(omegas,delta)[:,None]
+    if resonant: out += np.sum(fix,axis=0)
     return out*frac
 
 
@@ -1188,9 +1335,6 @@ def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
     if kernel not in _kernels:
         raise ValueError("unknown kernel "+repr(kernel)+" of the triangle "
                 "response, accepted values are "+", ".join(_kernels))
-    # at finite T with delta < T the nodes of the quadrature in x include
-    # the resonance of each frequency, so the frequencies share no pieces
-    if T>0. and delta<T: kernel = "simplices"
     out,npass = _kernels[kernel](dim,nk,E1,E2,energies,delta,T,elements,
             diag,ni,nj)
     if not keep: ndiag += 2*len(ks)*npass

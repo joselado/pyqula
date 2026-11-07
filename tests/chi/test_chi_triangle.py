@@ -189,14 +189,21 @@ def test_source_kernel_matches_the_reference_kernel():
     over the bins of transition energy, by their moments far from the
     frequency and piece by piece near it. It has to give the reference
     kernel to 1e-10 of the largest value: at a finite and at zero
-    broadening, at T = 0 and at finite T with delta >= T, on a spinful
-    model with the degenerate pairs of the spin copies, in 1D and in 3D"""
+    broadening, at T = 0, at finite T with delta >= T and with delta < T
+    (the resonance corrections), on a spinful model with the degenerate
+    pairs of the spin copies, in 1D and in 3D"""
     ws = np.linspace(0.02,6.,40)
     h = _square()
     kw = dict(q=[0.3,0.1,0.],energies=ws,nk=40,mode="trace")
     _kernels_agree(h,delta=1e-3,T=0.,**kw)
     _kernels_agree(h,delta=0.,T=0.,**kw)
     _kernels_agree(h,delta=2e-3,T=2e-3,**kw)
+    # delta < T, where the pieces of x that hold the resonance of a
+    # frequency are corrected for that frequency, and the static response
+    _kernels_agree(h,delta=1e-3,T=1e-2,**kw)
+    _kernels_agree(h,delta=0.,T=2e-3,**kw)
+    _kernels_agree(h,delta=0.,T=1e-3,q=[0.5,0.5,0.],energies=[0.],nk=40,
+                   mode="trace")
     _kernels_agree(h,delta=0.,T=0.,q=[0.5,0.5,0.],energies=[0.],nk=40,
                    mode="trace")
     hs = _honeycomb(has_spin=True)
@@ -204,6 +211,7 @@ def test_source_kernel_matches_the_reference_kernel():
               mode="matrix")
     _kernels_agree(hs,delta=1e-3,T=0.,**kw)
     _kernels_agree(hs,delta=5e-3,T=5e-3,**kw)
+    _kernels_agree(hs,delta=1e-3,T=5e-3,**kw)
     mem = simplexchi.max_memory_gb # one component per block of the sources
     simplexchi.max_memory_gb = 1e-6
     try: _kernels_agree(hs,delta=1e-3,T=0.,**kw)
@@ -217,6 +225,42 @@ def test_source_kernel_matches_the_reference_kernel():
     h3.add_onsite(0.5)
     _kernels_agree(h3,delta=1e-2,T=0.,q=[0.11,0.23,0.05],energies=ws,nk=6,
                    mode="trace")
+    _kernels_agree(h3,delta=1e-3,T=2e-2,q=[0.11,0.23,0.05],energies=ws,nk=6,
+                   mode="trace")
+
+
+def test_a_piece_of_x_with_a_fixed_tiling_is_evaluated_once():
+    """Where no vertex energy lies inside a piece (a,b) of the integral
+    over x and every band keeps one side of x on the whole simplex, the
+    T=0 weights do not depend on x, and both kernels replace the graded
+    nodes of the piece by one evaluation times f(a) - f(b). That has to
+    be the node sum to rounding, for triangles and tetrahedra, at a finite
+    and at zero broadening"""
+    rng = np.random.default_rng(3)
+    T = 1e-3
+    for p in (3,4):
+        ws,kn = simplexchi._workspace(p,len(simplexchi._tbreaks))
+        omegas = np.linspace(-0.05,0.05,7)
+        for trial in range(20):
+            en = -0.01-0.02*rng.random(p) # every E_n below the piece
+            em = 0.03+0.02*rng.random(p) # every E_m above it
+            if trial%2: en,em = em,-em-0.04 # region B instead of A
+            D = en-em
+            a,b = sorted(rng.uniform(-0.005,0.02,2)) if trial%2==0 else \
+                  sorted(rng.uniform(-0.02,0.005,2))
+            kind = simplexchi._interval_kind(en,em,p,a,b)
+            assert kind==(1 if trial%2==0 else 2)
+            for delta in (1e-3,0.):
+                acc = np.zeros(p,dtype=np.complex128)
+                nodes = np.zeros((p,len(omegas)),dtype=np.complex128)
+                simplexchi._interval_nodes(en,em,D,p,a,b,omegas,0,len(omegas),
+                        delta,T,False,1.,nodes,acc,ws)
+                once = np.zeros((p,len(omegas)),dtype=np.complex128)
+                sg,f1,span = simplexchi._interval(a,b,T)
+                simplexchi._kernel0(en,em,D,p,0.5*(a+b),omegas,0,len(omegas),
+                        delta,False,span,once,acc,ws)
+                assert np.max(np.abs(once)) > 0.
+                assert np.max(np.abs(nodes-once)) < 1e-13*np.max(np.abs(once))
 
 
 def test_kernel_names_come_from_the_registry():
