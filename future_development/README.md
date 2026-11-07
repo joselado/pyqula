@@ -219,8 +219,18 @@ already reached once.
   where that matters are kept whole and summed per frequency, and those
   far from the frequency window go to energy bins. It is 4 to 14 times
   faster than the direct sum (7 at nk = 64 and 400 frequencies), and 130
-  times faster than the grid at the same largest error. Open: many bands,
-  metals, SHG, the tetrahedra kept whole near the window, and qtci in 3D.
+  times faster than the grid at the same largest error. The 2D cost of the
+  tetrahedron change is measured and given back: the moments of the bins
+  stop at the order each simplex needs, and a simplex kept whole goes to
+  the moments of its bin at the frequencies far from it (the spinful
+  Haldane model at 512^2 back to 2.8 s from 3.7 s, at the same error
+  against a longdouble reference). A kept tetrahedron is now split along
+  its Newton table, so that only its close edges and faces are evaluated
+  per frequency, and every point source is summed with the others of its
+  energy bin far from it: the 3D kernel at nk = 24 is 2 times faster at 400
+  frequencies and 15% at 40, and the 2D one 1.6 times, at the same
+  precision against mpmath and longdouble references. Open: many bands,
+  metals, SHG, the build at few frequencies, and qtci in 3D.
 
 - [`tetrahedron_density_matrix.md`](tetrahedron_density_matrix.md) -- the
   triangle and tetrahedron density matrix of the mean field,

@@ -695,14 +695,136 @@ entry. The tetrahedra kept whole are wider than the triangles, a median
 distance of 0.23 t from the center of their bin, so a third of their
 (simplex, frequency) pairs are still near and left to `_dd`.
 
-What is still open. In 3D these near pairs are now the cost. One wide
+What was still open then. In 3D these near pairs were the cost. One wide
 tetrahedron makes R large for its whole bin, so a set of moments per class
 of distance inside a bin would let the narrow ones go to the moments
 earlier. The other route is to keep only the close edge of such a
 tetrahedron per frequency, so that the rest cancels like (|x|/s)^2 and the
-edges, shared by four to six tetrahedra, merge. The far-field expansion of
-all the sources, the open item on the cost per frequency below, is the
-general form of both.
+edges, shared by four to six tetrahedra, merge. The second route was
+built, together with a far-field sum of all the point sources, see the
+next subsection.
+
+### Split tetrahedra and point sources far from resonance (7 November 2026)
+
+The question was how to make the tetrahedra kept whole cheaper in 3D
+without losing precision, and where the rest of the time per frequency
+goes.
+
+Why the tetrahedra were kept whole. On the layered model at nk = 24 the
+tetrahedra kept whole, 7000 point sources after the merge, are wide
+(median spread 0.34 t) but have a close pair of nodes: 99.5% of them have a gap below 3 delta. The loss of the vertex
+form comes from that pair, not from the whole tetrahedron. Read down the
+Newton table: the top split divides by the wide spread s and cancels little,
+while the edge of spread s' of a few delta, far from resonance, cancels like
+|x|/s'. So we keep in vertex form what is safe and evaluate per frequency
+only the nodes of the table that cancel too much.
+
+The rule (`_decompose` in `kubosimplex.py`). A tetrahedron whose vertex form
+loses more than `_tol` = 3e-11 of its peak (the old rule, unchanged) gets
+a rounding budget, a fraction `_budget` of `_tol` of its peak. Top down, a
+node of the table whose vertex form stays within its budget stays in vertex
+form; a node whose two children, evaluated per frequency, would each stay
+within half of its budget is split, with half of the budget to each child;
+any other node is evaluated per frequency with `simplexdos._dd`. The
+budgets of the leaves add up to that of the tetrahedron, so the bound of
+the old rule still holds. The decision is taken once, in the count pass,
+and stored in the branch flag as a bit per node, so the other passes only
+read it. Since the edges and faces are shared by neighboring tetrahedra,
+they merge like the Taylor sources.
+
+Which budget. The precision is the hard part, because the parts of a split
+tetrahedron are much larger than the whole: on the 9886 tetrahedra that
+the old rule keeps whole in one direction or both, against mpmath at 110 digits and relative to
+the largest entry of the whole sum, the kept-whole sum is exact to
+6.0e-15 (the direct kernel 7.2e-15), and the split one to 2.9e-13, 2.7e-13
+and 8.0e-14 with budgets 1, 1/4 and 1/10. On the whole sum, against an
+mpmath reference of all 165888 tetrahedron pairs at 40 frequencies
+(13 minutes on three cores), the direct kernel is exact to 3.2e-14 and the
+source kernel to 1.8e-13 before the change; with the split this is 3.5e-13,
+4.6e-13, 3.4e-13, 2.2e-13, 1.6e-13 and 1.8e-13 for budgets 1, 1/4, 1/10,
+1/30, 1/100 and 1/1000. So we take 1/100. Note that these numbers move by
+some 30% between neighboring budgets, so differences below that are the
+rounding of the largest entry, not a trend. With 1/100 the 7000 kept
+point sources become 4742 edges and 4679 faces after the merge; with
+budget 1 they would be 1991 edges.
+
+The split alone pays little. The time per frequency of the kept part falls,
+but the rest of the sum stays: at 400 frequencies the kernel went from
+0.49 s to 0.44 s, and at 40 frequencies it was 3% slower, since the build
+does more. A first version took the decision in all four passes and made
+the 2D kernel 25% slower; storing it in the flag removed that.
+
+Where the time per frequency goes. The evaluation of the split kernel at
+400 frequencies took 0.32 s: 0.18 s for the 5015 Taylor sources, 0.11 s for
+the nodes evaluated per frequency, 0.03 s for the energy bins and 0.025 s
+for the 3741 vertex sources. So the Taylor sources, narrow clusters of
+spread below delta, were the main cost, and they are evaluated at every
+frequency although almost all frequencies are far from them.
+
+The point sources far from resonance. Every point source, a Taylor series
+or a node evaluated per frequency, now belongs to a set: its energy bin,
+with the two kinds apart, since the second is wider. A set keeps the
+moments of its sources around its center C and the largest distance R of
+their nodes from C. The expansion of a source of m+1 nodes for psi_K has,
+besides the powers of 1/(z - C) of the bins, the terms
+psi_(K-i)(C - z) h_(i-m)(y)/i! for the orders i < K, a logarithm and its
+products (`_add_node_moments`). At a frequency with
+(w - C)^2 + delta^2 >= (R/0.5)^2 the set gives the sum of its sources,
+with the orders that its rate R/|z - C| needs at that frequency, and at the
+others each source is evaluated one by one. The moments are built from the
+merged sources, in parallel over the sets and in a fixed order inside a
+set, so the result does not depend on the number of threads. The layered
+model has 316 sets.
+
+The measurement. Three cores of the workstation, other jobs on the
+machine (load 7 to 9), all versions loaded in one process and called in
+turn on the same saved pair fields, eight calls each, the smallest time.
+"Sets only" is the new code with the budget 0, so every kept tetrahedron
+stays whole and only the sets act.
+
+| case | before | sets only | sets and split |
+|---|---|---|---|
+| 3D, nk = 24, 40 frequencies | 0.149 | 0.127 | 0.127 |
+| 3D, nk = 24, 400 frequencies | 0.607 | 0.433 | 0.300 |
+| 2D spinful Haldane, 512^2, 141 frequencies | 2.098 | 1.312 | 1.321 |
+
+The 3D case is the layered model of "The source kernel on tetrahedra",
+interband, T = 1e-3 t, delta = 1e-2 t, on [0.1, 4] t; the 2D case is that
+of "The 2D cost of the tetrahedron kernel". So the 3D kernel is 2 times
+faster at 400 frequencies and 15% faster at 40, and the 2D kernel 1.6
+times faster. The split is what gives the second factor of 1.4 in 3D at
+400 frequencies, and it does nothing in 2D, where the kept triangles were
+already cheap. At 40 frequencies the build, about 0.1 s, is now most of the
+time.
+
+What it costs in precision. On the 3D case the source kernel is within
+2.1e-13 and 2.3e-13 of the direct kernel at 40 and 400 frequencies
+(1.8e-13 and 2.6e-13 before), and within 2.0e-13 of the mpmath reference
+(1.8e-13 before). In 2D, against the longdouble references of "Precision of
+the two kernels", the spinful Haldane model is within 7.0e-13, 6.6e-13 and
+7.5e-13 of the largest entry at nk = 128, 256 and 512 and delta = 1e-3,
+2.75e-12 and 1.09e-12 at nk = 128 and 256 and delta = 1e-5, and 9.0e-14
+and 3.5e-14 at delta = 1e-2, the numbers of before to two digits. On the
+random tetrahedra of `test_tetrahedron_sources.py` the worst entries
+against mpmath are those of before, 4.0e-12, 2.9e-12 and 1.8e-12 of the
+peak at delta = 1e-2, 1e-3 and 1e-6, which sit in tetrahedra in vertex
+form. A new test checks that three tetrahedra with close pairs are split
+into edges and faces and agree with the direct kernel to 1e-12 of their
+peak.
+
+What was measured and left out. The energy bins of the far simplices
+still run their Horner sum over all 60 orders, although their simplices
+stop after 30 orders on average in 3D (8 in 2D). Skipping the orders that
+vanish gives the same numbers bitwise, but it took 0.294 s against 0.300 s
+at 400 frequencies and 1.336 s against 1.321 s in 2D, inside the noise, so
+it was not kept.
+
+What is left open. At 40 frequencies in 3D the build is now the cost, and
+in it the count, the merge and the moments passes, each 0.01 to 0.03 s on
+three cores. The energy bins of the far simplices and the sets could also
+take the rate of each frequency for their own truncation, as the sets now
+do. The budget 1/100 is set on one model; a model with many more close
+pairs could want a check of the precision again.
 
 ## What is left open
 
