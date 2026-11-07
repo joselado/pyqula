@@ -173,3 +173,16 @@ def test_unknown_direction_lists_the_accepted_ones():
         h3.get_anomalous_hall_conductivity(nk=4, direction="xx")
     for name in anomaloushall.get_direction_names():
         assert name in str(err.value)
+
+
+def test_a_2d_hamiltonian_refuses_an_out_of_plane_direction():
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    h.add_haldane(0.1)
+    with pytest.raises(ValueError, match="in the plane"):
+        h.get_anomalous_hall_conductivity(nk=8,direction="yz")
+
+
+def test_operator_berry_runs_on_a_3d_hamiltonian():
+    from pyqula import topology
+    h = geometry.cubic_lattice().get_hamiltonian(has_spin=False)
+    topology.operator_berry(h,k=[0.1,0.2,0.3])

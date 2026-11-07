@@ -238,7 +238,7 @@ def anomalous_hall_conductivity(h,fermi=0.,T=0.,nk=default_nk,
       one of get_direction_names(), the Cartesian pair ab of sigma_ab:
       "xy" (default) is the curvature Omega_z, "yz" is Omega_x and "zx" is
       Omega_y, and a reversed pair ("yx") flips the sign. In 2D only "xy"
-      can be nonzero, since there is no current along z
+      and "yx" are accepted, since there is no current along z
 
     Returns
     -------
@@ -248,6 +248,11 @@ def anomalous_hall_conductivity(h,fermi=0.,T=0.,nk=default_nk,
         raise ValueError("unknown integration "+repr(integration)+" for the "
                 "anomalous Hall conductivity; it must be one of "
                 +str(get_integration_names()))
+    _axes(direction) # refuse an unknown direction first
+    if h.dimensionality==2 and direction not in ("xy","yx"):
+        raise ValueError("a 2D Hamiltonian has a Hall conductivity only in "
+                "the plane, direction='xy' or 'yx', got direction="
+                +repr(direction))
     if bloechl is None: bloechl = bloechl_default
     T = 0. if T is None else float(abs(T))
     es,om,cellvol,tol = band_curvature_mesh(h,nk=nk,

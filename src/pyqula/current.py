@@ -75,6 +75,7 @@ def derivative(h,k,order=None):
   if order is None:
 #    order = [1 for i in range(h.dimensionality)] # order of the derivative
     order = [1,0,0] # default
+  order = list(order)+[0]*(3-len(order)) # a missing direction is not derived
   if h.dimensionality == 0: return None
   elif h.dimensionality == 1: # one dimensional
       mout = h.intra*0.0 # initialize
