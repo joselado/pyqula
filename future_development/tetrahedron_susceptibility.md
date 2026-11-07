@@ -685,15 +685,34 @@ local response below:
 - the local response, q = None, is the loop over the q-mesh on the
   two-diagonalization route to 1e-12, and diagonalizes nk^dim
   Hamiltonians in total;
-- a generic q gives the same numbers bit by bit, and the `eigen` keyword
-  is refused by the grid and by a call on another mesh.
+- a q off a mesh q by 1e-9 takes the generic route, 2 nk^dim
+  diagonalizations, and gives the response of the mesh q on the shared
+  route to 1e-6 of the largest entry, on both models (measured 2.8e-9 on
+  the square lattice and 1.4e-9 on the supercell, linear in the distance
+  down to 1e-11); this is the check
+  of the generic route against a different piece of code, since the two
+  meet at the mesh q. A q off the mesh by 1e-14 in q nk is snapped and
+  gives the response of the mesh q exactly;
+- on a spinful chain at nk = 24 and a spinful cubic metal at nk = 5, a
+  mesh q, q = None and the local response give the two-diagonalization
+  route to 1e-12, at T = 0 with delta = 1e-2, static and at one
+  frequency, `mode="matrix"` and `"trace"`, and the local response
+  diagonalizes nk^dim Hamiltonians;
+- the local RPA response, `chi_AB_RPA` and `chi_ops_RPA` with an
+  interaction and q = None, diagonalizes nk^dim Hamiltonians for all its
+  q against 2 nk^(2 dim) on the two-diagonalization route, and the two
+  agree to 1e-12;
+- the `eigen` keyword is refused by the grid and by a call on another
+  mesh, and a `MeshEigen` of another Hamiltonian with the same shape, of
+  a copy of h, or of h changed in place after the diagonalization raises
+  a ValueError, at a mesh q and at a generic q.
 
 The reference route is the same code with the detection of a mesh q
 switched off (`simplexchi.mesh_q_tol = -1`), which is the code before the
 change for every q.
 
-With these, `tests/chi` has 242 tests. They all pass on a machine
-without a GPU. On the workstation with the card, 232 pass and 10 fail:
+With these, `tests/chi` has 252 tests. They all pass on a machine
+without a GPU. On the workstation with the card, 242 pass and 10 fail:
 the single-precision device paths of `test_chi_gpu.py` and
 `test_pairchi_gpu.py`, which fail in the same way with the code before
 these changes, and do not touch the triangle.
@@ -841,8 +860,14 @@ exp(2 pi i G.R) are 1. So the bands and the eigenvectors at k + q are
 those of the mesh, reindexed by a roll of the mesh along each direction.
 `simplexchi.mesh_shift` gives that index map, ks[perm] = (ks + q) mod 1,
 and returns None for a q off the mesh. A q is on the mesh when q nk is an
-integer to 1e-8, which also absorbs the rounding of the `linspace` in
-`klist.kmesh`.
+integer to 1e-12 of its size (`simplexchi.mesh_q_tol`). The rounding of
+the `linspace` in `klist.kmesh` is a few machine epsilons of q nk, so
+every q of the mesh is found. A snapped q is evaluated as the mesh point
+exactly, so the error of the snap is chi(q) - chi(q on the mesh), of order
+the distance eps between the two, and with this tolerance eps is at most
+1e-12/nk, the level of the rounding of the sum itself. The first version
+took 1e-8, which snapped a q off the mesh by 1e-8/nk and moved the
+response by about 1e-9.
 
 `chi_triangle` now takes the bands at k + q from the index map for every q
 on the mesh, q = None and q = 0 included, and diagonalizes the mesh once.
@@ -852,7 +877,21 @@ first use and keeps the band energies and, when one copy fits
 q keeps its eigenvectors up to twice the mesh size. `chiAB` with q = None
 and `integration="triangle"` passes one `MeshEigen` to every q of its
 mesh, through the `eigen` keyword of `chiAB_q`, so the whole local
-response diagonalizes the mesh once. The grid route does not change,
+response diagonalizes the mesh once. The local RPA response,
+`rpa._local_rpa_response`, which dresses every q of the mesh on its own
+before the average, passes one `MeshEigen` in the same way, so
+`chi_AB_RPA`, `chi_ops_RPA` and the site-basis spin response at q = None
+diagonalize the mesh once too.
+
+A `MeshEigen` belongs to one Hamiltonian object. `chi_triangle` checks
+that the `eigen` it is given was built from the same h, by identity, and
+that the hoppings of h are those it diagonalized, so a `MeshEigen` of
+another Hamiltonian with the same shape, of a copy of h, or of h changed
+in place since, raises a ValueError instead of giving the bands of the
+wrong Hamiltonian. The first version compared only nk, the dimension and
+the number of bands. A copy with the same hoppings would give the right
+numbers and is refused anyway, since identity is the check that cannot
+be fooled. The grid route does not change,
 since its Lindhard kernel builds its eigenpairs at every k itself. The
 degenerate multiplets need no change either: the products of the matrix
 elements summed over a multiplet do not depend on the basis that eigh
@@ -903,7 +942,28 @@ the machine. The time is in the triangle kernel at every q, about 0.5 s
 per q on the square lattice and 2 s on the honeycomb supercell, and the
 kernel is not shared, since its pairs (n at k, m at k + q) change with q.
 Sharing the diagonalization pays where a diagonalization is a sizable part
-of one q, a large unit cell on a coarse mesh, which we did not time.
+of one q, a large unit cell on a coarse mesh.
+
+So we timed that case too: the spinful 4x4 honeycomb supercell, 64 bands,
+at nk = 6, the local response, static, `mode="trace"`, delta = T = 1e-2,
+on three cores. The diagonalizations go from 2,592 to 36, and the result
+agrees with the code before to 2e-18 of its value. The two codes were run
+back to back three times, at a load of 4.6 to 7:
+
+| order | before | after |
+|---|---|---|
+| after, then before | 463 s | 400 s |
+| before, then after | 435 s | 426 s |
+| before, then after | 425 s | 420 s |
+
+One diagonalization with the eigenvectors, H(k) built and batched, takes
+about 2 ms there, so the 2,556 diagonalizations removed are worth about
+5 s, 1 percent of the wall time. The spread of the three pairs, from 1 to
+14 percent, is the load of the machine, and the saving we can claim is
+the 1 percent. The time is again in the triangle kernel, about 11.5 s per
+q with 64 bands and 32 site operators. So even for a large unit cell on a
+coarse mesh the shared diagonalization is a small saving, and what it
+buys is the count, nk^dim instead of 2 nk^(2 dim), not the wall time.
 
 ## What is left open
 
@@ -930,3 +990,16 @@ of one q, a large unit cell on a coarse mesh, which we did not time.
   would catch it. Not built.
 - The single-precision and GPU paths of the grid are not offered for the
   triangle.
+- The loops over a q-path, `magnon_bands` and `get_qdos_iets`, do not
+  share a `MeshEigen`, since their q are not points of the k-mesh. Only
+  the local response, q = None, shares one.
+- A pair of states at k and k + q that are degenerate within the
+  multiplet tolerance, 1e-8 of the largest band energy, is handled as a
+  degenerate pair, so the response jumps where the splitting crosses that
+  tolerance. On the spinful 2x2 honeycomb supercell at nk = 4, a q off
+  the mesh q (1/4, 1/2) by 1e-7 moves the response by 1.1e-2 of its
+  largest entry, against 1.4e-9 at 1e-9, so some pairs there are
+  degenerate on the mesh; on the square lattice the same shift is
+  2.8e-7. Which pairs, and why, we did not check. This is the rule of
+  the kernel and does not depend on the shared mesh, and a smoother
+  crossover was not tried.
