@@ -69,7 +69,15 @@
 # averaged over the degenerate multiplets of n at k and of m at k+q, which
 # makes the result independent of the basis eigh picks inside a multiplet.
 # The bands are ordered by energy at each k, so two bands that cross are
-# interpolated with a kink, as in the simplex DOS.
+# interpolated with a kink, as in the simplex DOS. At a mesh q where the
+# bands at k+q cross on the mesh points (a folded supercell), chi is then
+# not continuous in q: off the mesh q it depends on the direction of
+# approach, and its value at the mesh q is the mean of these limits. The
+# step is a mesh error of second order, 1.5e-3 of the largest entry at
+# nk = 16 on a 2x2 honeycomb supercell, so a q-path through such points
+# shows a small step that a finer mesh removes. A basis per simplex removes
+# it at no gain in accuracy, see future_development/
+# tetrahedron_susceptibility.md, "A basis per simplex for crossing bands".
 import numpy as np
 from numba import jit, prange
 
