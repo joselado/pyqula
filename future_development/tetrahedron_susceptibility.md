@@ -144,9 +144,9 @@ exact static limit. "Grid" is the same Lindhard sum on the same uniform
 mesh, with the degenerate pairs of `lindhard_pair` and delta = 1e-7, in a
 version vectorized over k for this benchmark. The library grid of
 `chiAB_q` gives the same numbers where we ran it (nk = 64 to 256 on the
-square lattice, 48 and 96 on the honeycomb), up to the cutoff described in
-the open list, but it costs about 0.3 ms per k-point at one frequency
-here, so it was not run on the large meshes. The errors are absolute, in units of 1/t.
+square lattice, 48 and 96 on the honeycomb), up to the pair cutoff it
+had then (see the pair cutoff of the grid), but it costs about 0.3 ms per
+k-point at one frequency here, so it was not run on the large meshes. The errors are absolute, in units of 1/t.
 
 The references. At T = 5e-2, 1e-2 and 1e-3 the grid at the largest mesh
 (nk = 8192 on the square lattice, 6144 on the honeycomb) is converged
@@ -441,16 +441,41 @@ per k-point at T = 1e-3, so nk = 64 takes 100 s. At a commensurate
 nesting vector an even nk converges irregularly, and an odd nk has to be
 used.
 
+## The pair cutoff of the grid
+
+The library grid of `chiAB_q` used to skip every pair with
+abs(fac) < delta/100, with fac the Lindhard factor of `lindhard_pair`.
+For a degenerate pair fac = i delta f', so the test dropped every
+degenerate pair with abs(f') < 0.01 at any delta, and at the default
+delta = 0.1 it also dropped every pair with abs(f_a - f_b) < 1e-3. On a
+honeycomb and a square metal, spinless and spinful, at T = 5e-2 and 0.1
+and nk = 24, this made the grid differ from the same sum without any skip
+by 7e-7 to 2e-4 at a generic q and by 7e-5 to 2e-3 at q = 0, where every
+pair is degenerate. The kernels now skip a pair only when
+abs(fac) < 1e-14 delta (`chiAB.PAIR_TOL`). This is a bound on the pair
+itself, since its term is at most abs(fac)/delta at every frequency, so
+the grid now equals the sum without skip to 1e-15, and
+`tests/chi/test_chi_grid_lindhard_sum.py` checks it to 1e-12. At low T
+the new rule keeps few extra pairs: some 35 to 40 T away from the Fermi
+level a filled occupation rounds to exactly 1 and an empty one, exp(-e/T),
+falls below 1e-14 delta.
+The three numba kernels and the jax pair plan use the same rule; the jax
+one ran on jax's CPU backend only, not on a device. On a spinful
+honeycomb metal at nk = 64 and 128, 50 energies, `mode="matrix"` and
+`"trace"`, the wall time of `chiAB_q` moved by -8 to +8 percent in
+interleaved runs on a shared machine, while two repeats of the same run
+differ by up to 25 percent, so the change is below what this measurement
+resolves. The kernels alone, at one k-point, take 0.9 to 1.3 times the
+old time for this 4-band cell, and 1.5 times for a 64-band supercell at
+T = delta = 0.1, where the most new pairs enter (1.05 to 1.4 at T = 0.01).
+That cost is the pairs the old cutoff dropped although they contribute,
+so a large cell at high T pays it in full. The pair-basis kernel
+of `chitk/pairchi.py` has its own rule, it skips only f_n - f_m = 0
+exactly, so it keeps every pair this cutoff dropped, but it has no
+degenerate pair term either; that was not changed.
+
 ## What is left open
 
-- The library grid of `chiAB_q` skips every pair with
-  abs(f_a - f_b) < delta/100, and for a degenerate pair that test is
-  applied to i delta f', so it drops the degenerate pairs with
-  abs(f') < 0.01 at any delta. On the honeycomb metal at T = 5e-2 this
-  makes the library grid differ from the same sum without the cutoff by
-  3e-5 to 5e-5, and at the default delta = 0.1 the cutoff drops every
-  pair with abs(f_a - f_b) < 1e-3. It is not changed here, since it
-  changes the grid results; the benchmark used the sum without it.
 - The cost of the dynamic response. The tiling and the divided
   differences are redone at every frequency and every quadrature node.
   The source kernel of `conductivitytk/kubosimplex.py`, which stores the

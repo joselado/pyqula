@@ -25,7 +25,8 @@ and it is bit-for-bit the same arithmetic as the numba loop (verified to
 
 Two implementation points that are not cosmetic:
 
-- The numba kernel skips pairs with |f_a-f_b| < delta/100, which at low
+- The numba kernel skips pairs with |fac| < chiAB.PAIR_TOL*delta, a pair
+  whose contribution is below 1e-14 at every frequency, which at low
   temperature is every occupied-occupied and empty-empty pair. Reproducing
   that as a mask would multiply zeros; here the surviving pairs are
   *gathered* into a compact index list. The number of survivors varies with
@@ -95,6 +96,14 @@ def _pair_factors(es1,es2,temp,delta):
     return fac,dE
 
 
+def pair_survivors(fac,delta):
+    """Return the boolean mask of the pairs that chiAB_matrix does not
+    skip, |fac| >= chiAB.PAIR_TOL*delta, the pairs whose contribution
+    |fac|/delta is not negligible at some frequency"""
+    from .chiAB import PAIR_TOL
+    return np.abs(fac) >= PAIR_TOL*delta
+
+
 def pair_plan(es1,es2,temp,delta,pair_pad=None):
     """Return (idx_ab, idx_ba, facs, dE), the gathered+padded list of
     (a,b) pairs that survive the occupation cutoff of chiAB_matrix.
@@ -104,9 +113,8 @@ def pair_plan(es1,es2,temp,delta,pair_pad=None):
     entries carry facs=0, so they contribute exactly zero to the result
     while keeping every device-side shape constant."""
     n = len(es1)
-    cutoff = delta/100. # same cutoff as the numba kernel
     fac,dEab = _pair_factors(es1,es2,temp,delta) # (n,n) each
-    sel = np.abs(fac) >= cutoff # the pairs the numba loop does not skip
+    sel = pair_survivors(fac,delta) # the pairs the numba loop does not skip
     idx = np.flatnonzero(sel.ravel()) # flat (a,b) indices
     count = len(idx)
     if pair_pad is None: # quantize, so nearby k-points share a compilation
@@ -195,11 +203,10 @@ def chi_matrix_kmesh_gpu(hks1,hks2,energies,Ais,Bjs,temp,delta,
     nk = hks1.shape[0]
     if pair_pad is None: # one padded length for the whole mesh
         n = hks1.shape[1]
-        cutoff = delta/100.
         counts = []
         for ik in range(nk):
             fac,_ = _pair_factors(es1k_h[ik],es2k_h[ik],temp,delta)
-            counts.append(int(np.sum(np.abs(fac)>=cutoff)))
+            counts.append(int(np.sum(pair_survivors(fac,delta))))
         pair_pad = int(np.ceil(max(max(counts),1)/PAIR_PAD_QUANTUM)
                        *PAIR_PAD_QUANTUM)
         pair_pad = min(pair_pad,n*n)

@@ -254,9 +254,10 @@ already reached once.
   at T <= 1e-3, and the dynamic response with an error that does not depend
   on delta (64 times fewer k-points at delta = 1e-3). At high T, and at
   delta = 1e-2 for the dynamic response, the grid converges exponentially and
-  wins. An odd nk is needed at a commensurate nesting vector. Open: the cost
-  of the dynamic response, a high-T hybrid, the pair-basis route, and the
-  delta/100 cutoff of the library grid on degenerate pairs.
+  wins. An odd nk is needed at a commensurate nesting vector. The delta/100
+  pair cutoff of the library grid, which biased it by up to 2e-3 at q = 0,
+  is replaced by a bound on what the pair contributes. Open: the cost of the
+  dynamic response, a high-T hybrid and the pair-basis route.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products

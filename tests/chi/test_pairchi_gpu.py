@@ -11,9 +11,9 @@ rather than against expectations.
 
 The selection rule is this module's own and differs from the site-basis
 kernel's: `_accumulate` drops a band pair on `f_n - f_m == 0` exactly,
-where chiAB_matrix drops it below delta/100. Reproducing the wrong one
-would be invisible at zero temperature and wrong at finite temperature, so
-both are covered below.
+where an absolute cutoff such as delta/100 would drop more. Reproducing
+the wrong one would be invisible at zero temperature and wrong at finite
+temperature, so both are covered below.
 
 The end-to-end tests assert with a spy that pyqula.gpu.set_gpu(True)
 *reaches* the kernel, not merely that the answer is right: a backend that
@@ -152,7 +152,7 @@ def test_single_precision_is_close_to_double_but_not_identical(system):
 
 def test_the_gather_keeps_the_pairs_a_finite_temperature_adds():
     """_accumulate skips a band pair only when f_n-f_m is exactly zero, not
-    when it is small. Borrowing the site-basis kernel's delta/100 cutoff
+    when it is small. Borrowing an absolute cutoff such as delta/100
     instead would agree at T=None and quietly drop contributions here"""
     pytest.importorskip("jax")
     from pyqula.chitk import pairchijax
@@ -162,7 +162,7 @@ def test_the_gather_keeps_the_pairs_a_finite_temperature_adds():
     from pyqula import algebra
     k = np.array([0.1, 0., 0.])
     # a small q: the two spectra then differ by much less than the width
-    # the site-basis cutoff discards, so the band pairs that contribute do
+    # a delta/100 cutoff discards, so the band pairs that contribute do
     # so with a small but strictly nonzero occupation difference. This is
     # the q -> 0 limit of the response, not a contrived input
     e1 = algebra.eigh(hk(k))[0]
@@ -171,7 +171,7 @@ def test_the_gather_keeps_the_pairs_a_finite_temperature_adds():
     f2 = pairchi._occupations(e2, DELTA)
     df = f1[:, None] - f2[None, :]
     exact = int(np.sum(df != 0.))  # this module's rule
-    cutoff = int(np.sum(np.abs(df) >= DELTA/100.))  # the site-basis one
+    cutoff = int(np.sum(np.abs(df) >= DELTA/100.))  # an absolute cutoff
     assert cutoff < exact, "the two selection rules agree here, so this "\
                            "system cannot tell them apart"
     facs = pairchijax.band_pair_plan(e1, e2, f1, f2)[2]

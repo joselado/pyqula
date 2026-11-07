@@ -27,11 +27,10 @@ with jax.lax.map rather than vmap, which would materialize one scaled copy
 of T per frequency at once.
 
 One thing differs from chijax and matters for correctness: the numba
-kernel here skips a band pair on `df == 0.` exactly, not on
-`|df| < delta/100`. That is a different set of survivors -- at finite
-temperature almost every pair contributes, where the site-basis kernel
-drops the ones below its cutoff -- so the gather below reproduces this
-module's own rule and the two must not be unified.
+kernel here skips a band pair on `df == 0.` exactly, not on the
+site-basis rule `|fac| < chiAB.PAIR_TOL*delta`, and it has no degenerate
+pair term. That is a different set of survivors, so the gather below
+reproduces this module's own rule and the two must not be unified.
 
 Memory, since the pair basis is the wide one: the operator tensor is
 (npair, G) with G up to nb^2, and the result is (npair, npair, nw). Both

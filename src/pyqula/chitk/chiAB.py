@@ -236,6 +236,20 @@ def get_integration_names():
 
 
 DEGENERATE_TOL = 1e-8 # |e_a-e_b| below which a pair counts as degenerate
+PAIR_TOL = 1e-14 # a pair is skipped when |fac| < PAIR_TOL*delta, see below
+
+# The kernels skip a pair (a,b) when |fac| < PAIR_TOL*delta, fac as
+# lindhard_pair returns it. That is a bound on what the pair contributes:
+# |fac/(de - omega + i*delta)| <= |fac|/delta at every omega, for a
+# degenerate pair (fac = i*delta*f', de = 0) as for any other, so a skipped
+# pair changes the response by less than PAIR_TOL times its matrix
+# elements. At low T this still drops the occupied-occupied and
+# empty-empty pairs more than some 35 to 40 T from the Fermi level: a
+# filled occupation rounds to exactly 1 there, and an empty one,
+# exp(-e/T), falls below PAIR_TOL*delta. The previous cutoff, |fac| < delta/100, was not relative to
+# the contribution: it dropped every degenerate pair with |f'| < 1e-2 at
+# any delta, and at delta = 0.1 every pair with |f_a - f_b| < 1e-3, which
+# biased the response of metals at T = 0.05 to 0.1 by up to 2e-3.
 
 
 @jit(nopython=True,cache=True)
@@ -279,7 +293,7 @@ def lindhard_pair(ea,eb,oa,ob,beta,delta):
 def chiAB_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     """Compute the response function for a single (A,B) operator pair.
     A and B are expected to be local operators, like Sz in site 0"""
-    cutoff = delta/100 # cutoff for occupation difference
+    cutoff = PAIR_TOL*delta # below it the pair contributes nothing
     beta = 1./T # thermal broadening
     out  = np.zeros(omegas.shape[0],dtype=np.complex128) # initialize
     n = len(ws1) # number of wavefunctions
@@ -316,7 +330,7 @@ def chiAB_matrix(ws1,es1,ws2,es2,energies,Ais,Bjs,temp,delta):
     ni = len(Ais) # number of row operators
     nj = len(Bjs) # number of column operators
     n = len(ws1) # number of wavefunctions
-    cutoff = delta/100 # cutoff for occupation difference
+    cutoff = PAIR_TOL*delta # below it the pair contributes nothing
     beta = 1./temp # thermal broadening
     occs1 = 1./(1. + np.exp(beta*es1)) # occupations
     occs2 = 1./(1. + np.exp(beta*es2)) # occupations
@@ -357,7 +371,7 @@ def chiAB_full_matrix_jit(ws1,es1,ws2,es2,omegas,A,B,T,delta):
     nj = ni # number of operators
     outm = np.zeros((ni,nj,len(omegas)),dtype=np.complex128) # initialize
     # now do the loop over wavefunctions
-    cutoff = delta/100 # cutoff for occupation difference
+    cutoff = PAIR_TOL*delta # below it the pair contributes nothing
     beta = 1./T # thermal broadening
     n = len(ws1) # number of wavefunctions
     Aws2 = (A@ws2.T).T # compute all the applied wavefunctions

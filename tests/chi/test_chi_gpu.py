@@ -120,7 +120,7 @@ def test_single_precision_kernels_are_close_to_the_double_one(system, nops):
 
 
 def test_gpu_kernel_matches_at_low_temperature():
-    """The occupation cutoff |f_a-f_b| < delta/100 discards every
+    """The pair cutoff |fac| < PAIR_TOL*delta discards every
     occupied-occupied and empty-empty pair once temp << the gap, which is
     the regime where the gather has the most to get wrong"""
     pytest.importorskip("jax")
@@ -144,9 +144,8 @@ def test_padding_does_not_change_the_answer(extra):
     ws1, es1, ws2, es2 = args[0], args[1], args[2], args[3]
     n = len(es1)
     # how many pairs actually survive the cutoff, without any padding
-    o1 = chijax._occupations(es1, DELTA)
-    o2 = chijax._occupations(es2, DELTA)
-    count = int(np.sum(np.abs(o1[:, None] - o2[None, :]) >= DELTA/100.))
+    fac = chijax._pair_factors(es1, es2, DELTA, DELTA)[0]
+    count = int(np.sum(chijax.pair_survivors(fac, DELTA)))
     assert 0 < count < n*n, "this system does not exercise the gather at all"
     ref = chiAB_mod.chiAB_matrix(*args)
     got = chijax.chiAB_matrix_gpu(*args, pair_pad=min(count + extra, n*n),
