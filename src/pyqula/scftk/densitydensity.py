@@ -384,7 +384,7 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     shell: None, or for a Bogoliubov-de Gennes h at a filling the
     superscf.ShellFilling of its superscf.BdGFermiLevel. "ed" and
     "triangle" then fill the shell of levels at zero energy in part when
-    the charge jumps across the requested one there, so that a gapless
+    the charge misses the requested one, so that a gapless
     state holds it; "qtci" does not use it. Without it the density matrix
     is the one of before."""
     check_integration(integration)

@@ -197,15 +197,12 @@ class ShellFilling:
     instead. The shell is the set of BdG levels with |E| < tol, with
     tol = max(width*T, 1e-6/(kappa*Nk)): the levels that the Fermi-Dirac
     weight at T does not turn into a step (width = 40), and at T=0 a floor
-    far below the level spacing 1/(kappa*Nk) of the mesh. The jump is
-    read on the levels within jump_width*T of zero (jump_width = 5), the
-    ones the Fermi-Dirac weight fills in part, by more than 1/150. This is
-    where the Fermi search of the normal state puts a degenerate level
-    that it fills in part, within T ln(15) < 3 T when one electron or more
-    of 16 states is in it, so that the level stays at mu, as the star of
-    the Zeeman state does. A state whose Fermi level falls between two
-    levels further apart than that has no jump there and keeps its charge
-    error.
+    far below the level spacing 1/(kappa*Nk) of the mesh. At T>0 the
+    fill is then a shift of the chemical potential at T inside the shell,
+    which holds N0 whenever the charge of the shell can, and at T=0 it
+    fills the degenerate levels at zero energy in part. A state whose
+    Fermi level falls between two levels further apart than the shell at
+    T=0 has no level to fill there and keeps its charge error.
 
     The occupations of the shell are the ones of the chemical potential
     mu + y*Ts to first order, so that the whole range where the
@@ -269,12 +266,16 @@ class ShellFilling:
     than held electrons per cell, so that a shell that holds its charge
     already, as the triangle of the chain above with its own weights, is
     left alone, and when N0 lies strictly between the charges of the shell
-    emptied and filled in charge (y to minus and plus infinity), while
-    the charge of the levels within jump_width*Ts, the jump, is larger
-    than jump_factor times the charge kappa*2*jump_width*Ts that a smooth
-    density of states puts in that window: a smearing that resolves the
-    level spacing makes the charge continuous, and then there is no jump
-    to fill. test(dm) says whether this holds.
+    emptied and filled in charge (y to minus and plus infinity), so that
+    the shell can hold it. test(dm) says whether this holds. A first
+    version also asked for a jump of the charge, the charge of the levels
+    within 5 Ts larger than 10 times the one a smooth density of states
+    puts there, to keep gapped states unchanged, which the arming does
+    now. That test went round a cycle of two iterations in the Zeeman
+    state at T=1.4e-3 to 1.6e-3: the jump was 11.8 and 7.8 times the
+    smooth charge in turn, the fill fired every second iteration, its
+    Hartree term moved the star relative to the window of 5 T, and the
+    loop did not converge in 1000 iterations.
 
     A fill also gives correction, (1/2) Tr H (rho_filled - rho) per unit
     cell, with rho the density matrix before the fill and H the
@@ -301,9 +302,7 @@ class ShellFilling:
     the k-points with levels in the shell are kept), and fill(dm) at the
     end."""
     width = 40. # the shell is |E| < width*T
-    jump_width = 5. # the jump is read on |E| < jump_width*T
     floor = 1e-6 # at T=0, the shell in units of the level spacing
-    jump_factor = 10. # a jump is this many times the smooth charge
     qzero = 1e-10 # a smaller |q| is a level with no charge
     held = 1e-12 # a charge error per cell below this is held already
     degeneracy = 1e-12 # levels closer than this are one multiplet
@@ -395,27 +394,21 @@ class ShellFilling:
         n = get_charge_bdg(dm)
         nk = float(self.nkpoints)
         self._group()
-        old, c0, c1, jump = 0., 0., 0., 0.
+        old, c0, c1 = 0., 0., 0.
         for (ks,es,em,vs,occ,Q) in self.groups:
             old += np.sum(occ*np.real(np.einsum("gmm->gm",Q)+1.)/2.)/nk
             q,R = np.linalg.eigh(Q)
             a,b = self._charges(q)
             c0 += a/nk # emptied in charge, the vectors of q<0 are filled
             c1 += b/nk # and filled in charge, the vectors of q>0
-            mask = (np.abs(es)<self.jump_width*self.ts).astype(float)
-            a,b = self._charges(np.linalg.eigvalsh(
-                Q*mask[:,:,None]*mask[:,None,:])) # the levels at mu
-            jump += (b-a)/nk
             for ig in np.nonzero(np.any(np.abs(q)<=self.qzero,axis=1))[0]:
                 z = np.abs(q[ig])<=self.qzero # no charge: the occupation
                 Rz = R[ig][:,z] # of their energies at any y
                 e = np.linalg.eigvalsh(Rz.conj().T@(em[ig][:,None]*Rz))
                 c = np.sum(expit(-e/self.ts)*(1.+q[ig][z])/2.)/nk
                 c0, c1 = c0+c, c1+c
-        self.c0, self.c1, self.jump = c0+n-old, c1+n-old, jump
-        smooth = self.kappa*2.*self.jump_width*self.ts # no jump at mu
-        return bool(jump>self.jump_factor*smooth and
-                self.c0<self.charge0<self.c1)
+        self.c0, self.c1 = c0+n-old, c1+n-old
+        return bool(self.c0<self.charge0<self.c1) # the shell can hold N0
 
     def _occupations(self,y):
         """Rotations, occupations and charge per cell of the shell at y"""
@@ -546,8 +539,8 @@ class BdGFermiLevel:
     so that the charge is exactly N0, which in a shell degenerate at zero
     energy gives the occupations f and 1-f to its two charges (see
     ShellFilling). It fires only when the density matrix misses N0 and
-    the charge jumps across N0 there, so a gapped state or one that holds
-    its charge already does not change, and only once the pairing is
+    the shell can hold it, so a state that holds its charge already does
+    not change, and only once the pairing is
     below the smearing of the shell, or its window below the shell at
     T=0, so that while the pairing lives the offset alone holds the
     charge. With it the Zeeman state below (U=-2 at

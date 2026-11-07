@@ -143,6 +143,21 @@ def test_the_energy_is_continuous_across_a_whole_charge(integration, T):
     assert abs((b.total_energy-a.total_energy)-mu*dN) < 1e-10
 
 
+@pytest.mark.parametrize("integration", ["ed", "triangle"])
+def test_the_gapless_state_converges_at_a_temperature_of_the_shell(
+        integration):
+    """At T=1.5e-3 the star of the Zeeman state sits a few T from mu. A
+    test on the jump of the charge within 5 T, which decided whether to
+    fill, went round a cycle of two iterations there: the fill moved the
+    star out of the window and the next one moved it back, and the loop
+    did not converge in 1000 iterations. Now the shell is filled whenever
+    it is armed and the charge is not held"""
+    scf = _swave(0.3, integration=integration, T=1.5e-3, maxite=300)
+    assert scf.converged
+    assert abs(scf.charge_error) < 1e-10
+    assert superscf.pairing_amplitude(scf.hamiltonian) < 1e-8
+
+
 def _no_shell(monkeypatch):
     """Switch the shell off: start says it may never be filled"""
     start = superscf.ShellFilling.start
@@ -156,10 +171,7 @@ def _no_shell(monkeypatch):
     dict(integration="ed"), dict(integration="triangle"),
     # the pairing lives, Delta=3.1e-3 of the order of T, and the charge
     # misses N0 by 3.5e-3; at T=0 weights this state moved by 2e-10
-    dict(integration="triangle", U=-0.5, nk=32, T=1e-3),
-    # the pairing dies, the shell is armed and never filled; when the band
-    # energy of an armed shell was Tr H rho, this energy moved by 8.6e-6
-    dict(integration="ed", U=-0.5, nk=32, T=2e-3)])
+    dict(integration="triangle", U=-0.5, nk=32, T=1e-3)])
 def test_a_state_whose_shell_is_not_filled_does_not_change(case,
         monkeypatch):
     """The same iterations, energy and density matrix, bit for bit, as

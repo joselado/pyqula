@@ -117,7 +117,7 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
 
     shell: None, or a scftk.superscf.ShellFilling for a Bogoliubov-de
     Gennes h at a filling, which fills the shell of levels at zero energy
-    in part when the charge jumps across the requested one there. While
+    in part when the charge misses the requested one. While
     the pairing lives, shell.start says so and the density matrix is the
     one without shell. Once it has died, the shell takes the eigenpairs
     of the k-points with levels in it. On the device route the density

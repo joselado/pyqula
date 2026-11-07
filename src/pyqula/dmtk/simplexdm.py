@@ -699,11 +699,11 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
     bloechl=None takes bloechl_default. With counted=True also returns the
     number of diagonalizations. shell: None, or for a Bogoliubov-de Gennes
     h at a filling a scftk.superscf.ShellFilling, which fills the shell of
-    levels at zero energy in part when the charge jumps across the
-    requested one there, as in densitymatrix.full_dm_accumulate, since the
-    triangle of a BdG h is the step of exact diagonalization. When the
-    triangle density matrix misses the charge inside a jump at zero
-    energy (shell.test), the density matrix is the one of exact
+    levels at zero energy in part when the charge misses the requested
+    one, as in densitymatrix.full_dm_accumulate, since the triangle of a
+    BdG h is the step of exact diagonalization. When the triangle density
+    matrix misses the charge and the shell can hold it (shell.test), the
+    density matrix is the one of exact
     diagonalization at T on the same mesh, with its shell filled if it
     still misses the charge; otherwise it is the triangle density matrix
     of before"""
@@ -750,7 +750,7 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
         return dm
     dm = build(w)
     if shell is not None and shell.test(dm):
-        # the triangle misses the charge inside a jump at zero energy. The
+        # the triangle misses the charge and the shell can hold it. The
         # triangle of a BdG h is meant to be the step of exact
         # diagonalization, but at T>0 the simplices with an edge on a level
         # at zero have a density of states at mu, and their Bloechl term
