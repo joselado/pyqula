@@ -29,7 +29,11 @@
 # ferromagnet of future_development/tetrahedron_density_matrix.md at
 # 2^7 x 2^7 that took 49 s and every point of the mesh, against 1.4 s and
 # 76% of the mesh for the stacked TCI, with the same error of 1e-6. The
-# stacked TCI also shares its pivots in k between fields.
+# stacked TCI also shares its pivots in k between fields. The rank cap is
+# meshfields.stacked_maxbonddim, 800, as in the qtci LDOS: on a layered
+# four-band metal at 128^3 the X fields reached the cap of 400 of one
+# field, with an error of 2.3e-5 against the tetrahedra, and 5e-9 at rank
+# 512 under the cap of 800 (future_development/tetrahedron_density_matrix.md).
 #
 # The Fermi level is found on the same weights
 # (simplexdm.fermi_from_energies), so the density matrix holds the
@@ -58,7 +62,7 @@ import numpy as np
 
 from .. import parallel
 from ..kpmtk.densitymatrix_kpm import required_elements, required_elements_eh
-from .meshfields import qtci_stacked_fields
+from .meshfields import qtci_stacked_fields, stacked_maxbonddim
 
 DEFAULT_NK = 8
 
@@ -160,7 +164,8 @@ def _energies(h,R,tolerance):
     eigen = _Eigen(h,R)
     nb = eigen.nb
     es,ncalls,ranks = qtci_stacked_fields(lambda ks: eigen(ks)[0],R,nb,
-            tolerance=tolerance,dim=h.dimensionality)
+            tolerance=tolerance,dim=h.dimensionality,
+            maxbonddim=stacked_maxbonddim)
     return np.ascontiguousarray(es),eigen,eigen.ndiag,ranks
 
 
@@ -240,7 +245,8 @@ def dm_entries_qtci(h,needed,nk=None,T=1e-7,tolerance=1e-6,bloechl=None,
     xranks = []
     if ne>0:
         X,ncalls,xranks = qtci_stacked_fields(evaluate,R,nb*ne,
-                tolerance=tolerance,dtype=np.complex128,dim=dim)
+                tolerance=tolerance,dtype=np.complex128,dim=dim,
+                maxbonddim=stacked_maxbonddim)
         w = simplexdm.simplex_weights(dim,n,es,mu=0.,T=T,bloechl=bloechl)
         vals = np.einsum("kn,kne->e",w,X.reshape(n**dim,nb,ne),optimize=True)
         for (d,i,j),x in zip(entries,vals):

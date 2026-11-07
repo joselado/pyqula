@@ -32,9 +32,14 @@ import numpy as np
 # (future_development/qtci_optical_response.md)
 stacked_maxbonddim = 800
 
-# bit ordering of the 3D mesh, see the module comment. The two orders were
-# compared on the simple cubic band and on a layered two-band metal, see
-# future_development/qtci_dos_green.md (the section on 3D)
+# bit ordering of the 3D mesh, see the module comment. On the bonds between
+# two scales, the only bonds the fused train has, both orders reach the
+# same rank (3, 6, 6, 6, 4 on the simple cubic band at R = 6, at most 154
+# against 159 on a layered two-band model). The interleaved train has
+# sites of dimension 2 instead of 8, so it samples fewer points for the
+# same rank: 3.5k against 13.1k diagonalizations of the 64^3 mesh of the
+# cubic band, 232k against all 262k on a layered semimetal
+# (future_development/qtci_dos_green.md, the section on 3D)
 ordering3d = "interleaved"
 
 _orderings = ("interleaved","fused")

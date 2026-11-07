@@ -622,8 +622,8 @@ pivots of each bond, and not their products, was not tried.
 - `get_dm_qtci`, `get_fermi4filling_qtci`, `full_dm_qtci` and
   `band_energy_qtci` in `qtcitk/densitymatrix_qtci.py` are the triangle
   construction above, and `scftk/densitydensity.py` calls them in its qtci
-  branches. qtci stays 2D only, since the quantics interpolation of
-  `meshfields.py` runs on a 2D mesh.
+  branches. Since 7 November 2026 they work in 2D and in 3D, see qtci in
+  3D below; a chain is refused.
 - The Gauss-Kronrod path is gone: `gk_node_grid`, `full_dm_gk`,
   `band_energy_gk`, and the warning `warn_if_metal`, since metals work now.
   `gkintegrate.py` stays, because `topology.chern_qtci` integrates with it.
@@ -640,6 +640,99 @@ pivots of each bond, and not their products, was not tried.
   reaches the triangle state of the square ferromagnet at nk = 8 (m, mu and
   E to 1e-6, in about 10 s), and that an insulator gives the mean field of
   exact diagonalization.
+
+#### qtci in 3D (7 November 2026)
+
+The qtci mean field now runs in 3D: the band energies and the fields X_n
+are interpolated on a 2^R x 2^R x 2^R mesh with three quantics coordinates,
+in the interleaved bit order of `qtcitk/meshfields.py` (the comparison of
+the two orders is in `qtci_dos_green.md`, the section on the qtci DOS in
+3D), and the tetrahedron weights of simplexdm are applied to the
+reconstructed mesh. `tests/scf/test_densitydensity_qtci_3d.py` checks that
+the density matrix of a cubic metal with Rashba coupling and a tilted
+exchange field (complex entries, bonds along x, z and (1,1,1)) is the
+tetrahedron one of the same 8^3 mesh to 1e-6, and that the mean field of
+the cubic Hubbard ferromagnet (U = 10, filling 0.3, T = 1e-3, a metal with
+m = 0.590 and about 0.005 minority electrons) reaches the tetrahedron state
+of the same mesh: m, mu and E agree to 1e-14 there, and the test asks for
+1e-6. A partly polarized state, U = 7 (m = 0.279), agrees as well, to
+1e-14, but takes 140 s per integration, so it is not in the tests.
+
+The question for the benchmark is whether the nk^3 growth of the mesh makes
+qtci pay. One iteration of the mean field, the Fermi search and the
+density matrix together, on a frozen Hamiltonian, at T = 0, tolerance
+1e-6, with the onsite spin blocks of every site, the entries a Hubbard U
+reads. Three models: the simple cubic band in an exchange field of 1.5 (two
+bands, a ferromagnetic metal), and two spinful layered models, gapped
+graphene layers (sublattice imbalance 0.3) stacked with the interlayer
+hopping tm times the sublattice sign, so a mass m(kz) = 0.3 + 2 tm cos kz,
+in an exchange field of 0.5 (four bands), with tm = 0.3 (the mass changes
+sign, a semimetal before the exchange) and tm = 0.1 (the mass stays
+positive). At filling 0.3 four bands hold 1.2 electrons, so the Fermi
+level is inside the second band and both layered models are metals. The triangle diagonalizes the
+mesh twice, once for the Fermi level and once for the density matrix. The
+error is the largest difference of an entry from the tetrahedra on the same
+mesh. The rank is the largest bond dimension of the TCI of the energies and
+of the one of the X fields. Four cores of a workstation that other jobs
+kept busy (load 6 to 9 on 16 cores).
+
+| model | R | mesh | method | diagonalizations (share) | rank E, X | error | time (s) | memory (GB) |
+|---|---|---|---|---|---|---|---|---|
+| cubic | 5 | 32^3 | tetrahedron | 65536 (2) | | | 0.62 | 0.4 |
+| cubic | 5 | 32^3 | qtci | 3210 (0.098) | 11, 1 | 2e-16 | 0.82 | 0.4 |
+| cubic | 6 | 64^3 | tetrahedron | 524288 (2) | | | 3.86 | 0.6 |
+| cubic | 6 | 64^3 | qtci | 5326 (0.020) | 12, 1 | 2e-16 | 3.57 | 0.6 |
+| cubic | 7 | 128^3 | tetrahedron | 4.19M (2) | | | 30.1 | 2.0 |
+| cubic | 7 | 128^3 | qtci | 6288 (0.0030) | 11, 1 | 1e-15 | 27.1 | 2.0 |
+| layered, tm = 0.3 | 5 | 32^3 | tetrahedron | 65536 (2) | | | 0.85 | |
+| layered, tm = 0.3 | 5 | 32^3 | qtci | 32768 (1) | 138, 161 | 4e-10 | 3.74 | |
+| layered, tm = 0.3 | 6 | 64^3 | tetrahedron | 524288 (2) | | | 5.00 | |
+| layered, tm = 0.3 | 6 | 64^3 | qtci | 260488 (0.99) | 244, 336 | 9e-09 | 26.3 | |
+| layered, tm = 0.3 | 7 | 128^3 | tetrahedron | 4.19M (2) | | | 38.0 | 2.8 |
+| layered, tm = 0.3 | 7 | 128^3 | qtci | 1.32M (0.63) | 358, 403 | 4.7e-06 | 86.6 | 4.4 |
+| layered, tm = 0.1 | 5 | 32^3 | tetrahedron | 65536 (2) | | | 0.77 | |
+| layered, tm = 0.1 | 5 | 32^3 | qtci | 32768 (1) | 127, 153 | 2e-09 | 2.90 | |
+| layered, tm = 0.1 | 6 | 64^3 | tetrahedron | 524288 (2) | | | 5.20 | |
+| layered, tm = 0.1 | 6 | 64^3 | qtci | 255631 (0.98) | 215, 313 | 6e-09 | 18.9 | |
+| layered, tm = 0.1 | 7 | 128^3 | tetrahedron | 4.19M (2) | | | 40.2 | 2.8 |
+| layered, tm = 0.1 | 7 | 128^3 | qtci | 1.22M (0.58) | 346, 404 | 2.3e-05 | 87.6 | 4.3 |
+| layered, tm = 0.1 | 7 | 128^3 | qtci, cap 800 | 1.32M (0.63) | 345, 512 | 5.0e-09 | 112 | 4.4 |
+
+What we read from it:
+
+- On the cubic ferromagnet qtci diagonalizes 0.3% of the 128^3 mesh, 670
+  times fewer points than the tetrahedra, and the fields are exact: the
+  energies are cosines of rank 11, and the X fields of a collinear magnet
+  without spin mixing are constant (rank 1). Even so it is only 10% faster
+  (27 s against 30 s), because the tetrahedron weights and the Fermi search
+  on 12.6M tetrahedra are most of the time, and they are the same for both.
+- On the layered models qtci needs the whole mesh at 32^3 and 64^3, and 58
+  to 63% at 128^3, so 3.2 to 3.4 times fewer diagonalizations than the
+  tetrahedra, which diagonalize the mesh twice. It is 2.2 times slower in
+  wall time at 128^3 and 3.6 to 5.3 times slower below, and it takes 4.4 GB
+  against 2.8 GB. The ranks are high, 350 for the energies and 400 for the
+  X fields at 128^3. In the exchange field of 0.5 the conduction band of one
+  spin crosses the valence band of the other wherever the gap is below 1,
+  and each crossing is a kink of the bands ordered by energy, which costs
+  rank; the dependence on kz adds to it.
+- At 128^3 the TCI of the X fields stops at the rank cap of 400 of
+  `qtci_stacked_fields`, and the error rises from 1e-8 to 4.7e-6 and
+  2.3e-5, above the tolerance. With the cap of 800 of the qtci LDOS
+  (`meshfields.stacked_maxbonddim`) the layered model with tm = 0.1 stops at
+  rank 512 with an error of 5.0e-9, at the same share of the mesh (0.63)
+  and in 112 s instead of 88 s. So the qtci density matrix takes that cap
+  now, in 2D as in 3D; it only changes a TCI that reached 400.
+
+So in 3D qtci saves k-points, by a large factor on smooth bands and by about
+3 on the layered models at 128^3, but it does not save wall time on any of
+these models, since the tetrahedron weights on the full mesh cost as much
+as the diagonalization of two or four bands. At T = 1e-3 the gap is wider:
+the Fermi search at finite temperature took 33 s at 32^3 on the cubic band
+for the tetrahedra and 37 s for qtci, against 0.6 s and 0.8 s at T = 0, and
+131 s at 64^3; the weights at T = 1e-3 are 20 times slower than at T = 0 on
+another machine (1.45 s against 0.08 s at 32^3), and the Fermi search,
+which evaluates the charge at many trial levels, 20 times as well (10.2 s
+against 0.5 s). That cost is the same for both methods.
 
 ## The total energy of a superconductor
 
@@ -770,13 +863,22 @@ loaded.
   routes it to `Vinteraction`, which has no exchange terms J.
 - The Fermi search and the density matrix diagonalize the mesh twice per
   iteration, as `"ed"` does. Sharing the eigenvectors would save a factor 2.
-- A 3D mean-field benchmark was not run. The tetrahedron density matrix is
-  only checked against a dense mesh on a cubic metal, in the tests.
+- A 3D mean-field benchmark of the tetrahedra against a dense mesh was not
+  run; the tetrahedron density matrix is only checked against a dense mesh
+  on a cubic metal, in the tests. The 3D qtci is measured against the
+  tetrahedra on the same mesh (qtci in 3D above). The finite-temperature
+  Fermi search on the tetrahedra is 20 times slower than at T = 0 (33 s at
+  32^3), which makes a 3D mean field at T > 0 slow with either method; a
+  Fermi search that evaluates the charge at fewer trial levels, or the
+  T = 0 level as a start, would remove most of it. Not tried.
 - Bands that cross are interpolated with a kink, as in the simplex DOS.
 - qtci for a metal is built, as the triangle on a quantics-interpolated
   mesh (see qtci above). What is open there: on a two-orbital model it
-  needs nearly the whole mesh up to 2^7 x 2^7 and loses in wall time; it is
-  2D only; every iteration starts its cross interpolation from scratch,
+  needs nearly the whole mesh up to 2^7 x 2^7 and loses in wall time; in
+  3D it saves k-points (0.3% of 128^3 on the cubic band, about 60% on
+  layered four-band models) but not wall time, because the tetrahedron
+  weights on the full mesh dominate, and the X fields of the layered
+  models reach rank 512 at 128^3; every iteration starts its cross interpolation from scratch,
   and a reuse of the pivots bond by bond was not tried; and the stacked
   TCI of all the fields may help the qtci DOS and conductivity too, which
   still use one TCI per field.

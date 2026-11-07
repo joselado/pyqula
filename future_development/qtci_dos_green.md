@@ -5,8 +5,9 @@ tetrahedra in 3D) and its QTCI variant give for the density of states and for th
 Green's function of a crystal, with the measurements that decided what went into the code.
 It follows `qtci_optical_response.md`, which found the same structure for the optical
 conductivity. What is built is in `dostk/simplexdos.py`, reached as
-`h.get_dos(integration="triangle")` and `h.get_dos(integration="qtci")`, with tests in
-`tests/dos/test_dos_simplex.py` and `tests/green/test_green_simplex.py`. The local density
+`h.get_dos(integration="triangle")` and `h.get_dos(integration="qtci")` (2D and 3D), with
+tests in `tests/dos/test_dos_simplex.py`, `tests/dos/test_dos_qtci_3d.py` and
+`tests/green/test_green_simplex.py`. The local density
 of states of every site uses the same kernel, reached as `h.get_ldos(integration="triangle")`
 and `h.get_multildos(integration="triangle")`. What is open is at the end.
 
@@ -493,6 +494,129 @@ the wall time of the call, not by more than 2, and qtci saves nothing on
 that model in either form. The graphene tables above keep the numbers of
 the per-field form, which is still the one of the DOS.
 
+## The qtci DOS in 3D (7 November 2026)
+
+The question is whether qtci pays in 3D, where the mesh grows as nk^3. The
+qtci DOS now runs on a 2^R x 2^R x 2^R mesh, with three quantics
+coordinates, and the tetrahedra of the section on the cubic lattice are
+summed on the reconstructed band energies. The quantics mesh is in
+`qtcitk/meshfields.py`, shared with the qtci density matrix of the mean
+field. The test is `tests/dos/test_dos_qtci_3d.py`: on the same mesh the
+qtci DOS is the tetrahedron DOS to the interpolation tolerance, in both bit
+orderings, and a stack of decoupled layers gives the 2D qtci DOS of the
+layer. For that last test note that the six tetrahedra of a cube share its
+main diagonal, so their projections on the layer are the two triangles of
+the square cut along (0,0)-(1,1), while the 2D mesh cuts it along
+(1,0)-(0,1). So the stack is the layer written in the lattice basis
+(a1,-a2). With unit weights the two agree exactly, because a band that does
+not depend on kz is linear in each tetrahedron in the same way as in the
+triangle under it, and the three tetrahedra above one triangle fill its
+prism uniformly.
+
+### The bit ordering
+
+A mesh point has three coordinates of R bits each. We tried two orders of
+the bits along the tensor train, both with the scales in order: interleaved,
+3R sites of dimension 2 (x1 y1 z1 x2 y2 z2 ...), and fused, R sites of
+dimension 8, one per scale. The fused train only has the bonds between two
+scales, so its largest rank is lower, but on those bonds the two orders give
+the same rank: 3, 6, 6, 6, 4 on the cubic band at R = 6 in both, and at most
+154 (interleaved) against 159 (fused) on the gapped layered model below at
+R = 6. What differs is the number of points: a site of dimension 8 makes
+every update sample 16 times more entries than a site of dimension 2 at the
+same rank. Tolerance 1e-6, one TCI per band:
+
+| model | R | ordering | diagonalizations (share) | largest rank | time (s) |
+|---|---|---|---|---|---|
+| cubic | 5 | interleaved | 3151 (0.096) | 9 | 0.32 |
+| cubic | 5 | fused | 5015 (0.153) | 6 | 0.32 |
+| cubic | 6 | interleaved | 3492 (0.013) | 9 | 0.76 |
+| cubic | 6 | fused | 13142 (0.050) | 6 | 0.88 |
+| layered semimetal | 5 | interleaved | 32763 (1.00) | 120 | 1.03 |
+| layered semimetal | 5 | fused | 32768 (1) | 64 | 0.63 |
+| layered semimetal | 6 | interleaved | 231706 (0.88) | 193 | 4.0 |
+| layered semimetal | 6 | fused | 262144 (1) | 188 | 3.9 |
+| layered insulator | 5 | interleaved | 32344 (0.99) | 110 | 0.99 |
+| layered insulator | 5 | fused | 32768 (1) | 64 | 0.64 |
+| layered insulator | 6 | interleaved | 223319 (0.85) | 159 | 4.2 |
+| layered insulator | 6 | fused | 262144 (1) | 159 | 3.4 |
+
+So the rank where the two can be compared is the same, and the interleaved
+order needs 1.6 to 3.8 times fewer diagonalizations on the cubic band and
+12 to 15% fewer on the layered models at R = 6. The code keeps the
+interleaved order in 3D (`meshfields.ordering3d`); the other one is
+`ordering="fused"` of `simplexdos.dos_qtci_counted`. A rank of 64 at R = 5 in
+the fused train is the largest possible on that bond (8 x 8), so at 32^3 the
+layered bands are not compressed at all.
+
+### Share of the mesh and wall time
+
+Three models. The simple cubic band, t = 1, one band. A layered two-band
+model: gapped graphene layers (sublattice imbalance 0.3) stacked along z
+with the interlayer hopping diag(tm,-tm), so the mass is m(kz) = 0.3 + 2 tm
+cos kz. With tm = 0.3 the mass changes sign and the bands touch on two
+nodal lines, the layered semimetal; with tm = 0.1 the mass stays between 0.1
+and 0.5, the layered insulator. The DOS is at delta = 0 on 201 energies,
+tolerance 1e-6, the interleaved order. The error is
+max|rho_qtci - rho_tet| / max|rho_tet| with the tetrahedra on the same
+mesh, so it is the interpolation error alone. "Sum" is the time of the
+tetrahedron sum alone, which is the same for the two methods, since qtci
+sums the same 6 n^3 tetrahedra on the reconstructed mesh. Four cores of a
+workstation that other jobs kept busy (load 6 to 9 on 16 cores), so the
+times are indicative. The largest memory was 1.9 GB, at R = 7.
+
+| model | R | mesh | method | diagonalizations (share) | rank | error | time (s) | sum (s) |
+|---|---|---|---|---|---|---|---|---|
+| cubic | 5 | 32^3 | tetrahedron | 32768 (1) | | | 0.16 | 0.15 |
+| cubic | 5 | 32^3 | qtci | 2628 (0.080) | 8 | 1.7e-15 | 0.29 | |
+| cubic | 6 | 64^3 | tetrahedron | 262144 (1) | | | 0.63 | 0.55 |
+| cubic | 6 | 64^3 | qtci | 3685 (0.014) | 9 | 1.3e-15 | 0.78 | |
+| cubic | 7 | 128^3 | tetrahedron | 2.10M (1) | | | 3.71 | 2.90 |
+| cubic | 7 | 128^3 | qtci | 4078 (0.0019) | 9 | 1.5e-15 | 3.16 | |
+| layered semimetal | 5 | 32^3 | tetrahedron | 32768 (1) | | | 0.21 | 0.18 |
+| layered semimetal | 5 | 32^3 | qtci | 32757 (1.00) | 120 | 9.2e-07 | 0.98 | |
+| layered semimetal | 6 | 64^3 | tetrahedron | 262144 (1) | | | 1.03 | 0.75 |
+| layered semimetal | 6 | 64^3 | qtci | 235376 (0.90) | 191 | 9.8e-07 | 5.08 | |
+| layered semimetal | 7 | 128^3 | tetrahedron | 2.10M (1) | | | 6.65 | 3.70 |
+| layered semimetal | 7 | 128^3 | qtci | 885066 (0.42) | 211 | 1.1e-06 | 14.9 | |
+| layered insulator | 5 | 32^3 | tetrahedron | 32768 (1) | | | 0.42 | 0.22 |
+| layered insulator | 5 | 32^3 | qtci | 32418 (0.99) | 109 | 1.6e-06 | 1.02 | |
+| layered insulator | 6 | 64^3 | tetrahedron | 262144 (1) | | | 1.14 | 0.84 |
+| layered insulator | 6 | 64^3 | qtci | 218652 (0.83) | 161 | 1.9e-06 | 4.34 | |
+| layered insulator | 7 | 128^3 | tetrahedron | 2.10M (1) | | | 7.10 | 4.06 |
+| layered insulator | 7 | 128^3 | qtci | 724443 (0.35) | 178 | 4.7e-06 | 10.3 | |
+
+What we read from it:
+
+- In diagonalizations qtci pays more in 3D than in 2D, as expected from the
+  nk^3 growth of the mesh. The cubic band is a sum of three cosines, which
+  has rank 9 and is interpolated exactly (an error of 1e-15), and the
+  number of points barely grows with R: 2.6k, 3.7k and 4.1k, so 0.19% of the
+  128^3 mesh, 500 times fewer points than the tetrahedra. On the layered
+  models the share falls from 1 at 32^3 to 0.83 to 0.90 at 64^3 and 0.35 to
+  0.42 at 128^3, so a factor of 2.1 to 2.4 per step in R. The rank is 110 to
+  210, four times the one of graphene in 2D (about 45), since the band now
+  depends on kz through the mass as well; in principle the rank of the 2D
+  layer multiplies with the one of m(kz). The semimetal, with its nodal lines,
+  costs 20% more points than the insulator at 128^3.
+- In wall time qtci does not pay on these models. On the cubic band it is
+  15% faster at 128^3 (3.2 s against 3.7 s) and slower below, and on the
+  layered models it is 1.5 to 5 times slower at every R. The reason is the
+  same as in 2D, only stronger: the tetrahedron sum, the same for both, is
+  most of the time (2.9 s of 3.7 s on the cubic band at 128^3), so qtci can
+  only save the rest: there 0.8 s of diagonalizations become 0.26 s of
+  interpolation, and a 1 x 1 or
+  2 x 2 diagonalization costs less than the cross interpolation at rank
+  180. qtci would pay in wall time for many bands, where one diagonalization
+  costs nb^3, if the bands stay smooth, and at R = 8, where the share of the
+  layered models should fall again by a factor of about 2. At R = 8 the tetrahedron
+  sum alone holds 100M tetrahedra, 3.2 GB of vertex indices, so that mesh
+  was not run.
+
+So 3D is where qtci saves most k-points, but not wall time: the
+tetrahedron sum on the full reconstructed mesh is what costs, for both
+methods, and what is left to win is the diagonalization of a few bands.
+
 ## Limits of the linear interpolation that were found on the way
 
 - **Flat simplices.** A simplex whose vertices all sit at one energy is a delta function in
@@ -536,8 +660,13 @@ the per-field form, which is still the one of the DOS.
   the sum rule. Not built.
 - **Band crossings.** See above: band tracking by overlap of eigenvectors, or a split by a
   conserved quantum number (sz without spin-orbit coupling) before the integration.
-- **QTCI with an operator, and in 3D.** The qtci path takes an operator in 2D (the weights
-  are interpolated as one more field per band); a 3D quantics grid is not built.
+- **QTCI with an operator, and in 3D (3D done, 7 November 2026).** The qtci path takes an
+  operator (the weights are interpolated as one more field per band), in 2D and in 3D. The
+  3D quantics mesh is built, see the section on the qtci DOS in 3D; it saves k-points but
+  not wall time on few-band models, because the tetrahedron sum on the full mesh dominates.
+  The qtci LDOS and the qtci conductivities stay 2D only and raise
+  NotImplementedError in 3D. A sum of the tetrahedra on the tensor train itself, without
+  the full mesh, is what would make qtci pay in wall time in 3D; it is not built.
 - **Shared helpers with kubosimplex.py (done, 6 November 2026).** The cached cross
   interpolation of the fields is one function, `qtcitk/meshfields.qtci_fields`, called by
   the qtci DOS, the qtci LDOS and `kubosimplex.sigma_qtci`. The DOS and LDOS give the same

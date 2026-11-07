@@ -231,7 +231,13 @@ already reached once.
   insulator gains nothing. The qtci mean field is rebuilt on the same
   weights: it now reaches the right state on metals, with 4% of the mesh
   on the square ferromagnet at nk = 256 but nearly the whole mesh on the
-  honeycomb one up to nk = 128. The total energy of a BdG mean field is
+  honeycomb one up to nk = 128. qtci runs in 3D too, and reaches the
+  tetrahedron state of a cubic Hubbard ferromagnet to 1e-14; at 128^3 it
+  diagonalizes 0.3% of the mesh on the cubic band and about 60% on layered
+  four-band metals, but it is only 10% faster on the first and 2.2 times
+  slower on the second, since the tetrahedron weights on the full mesh
+  dominate; the X fields reached the rank cap of 400 there, so the cap is
+  800 now. The total energy of a BdG mean field is
   settled: every integration adds mu times the requested charge, as "ed"
   did, which is the grand potential plus a constant, stationary at fixed mu
   (qtci added mu times the paired charge, 1.03e-2 lower on the converged
@@ -307,11 +313,17 @@ already reached once.
   diagonalizations than one per field at the same error, and is twice as
   slow on a 32-band supercell, so the qtci LDOS uses it and the qtci DOS
   keeps one per field. On disordered supercells qtci saves nothing in
-  either form.
+  either form. In 3D (2^R x 2^R x 2^R, interleaved bits, which need 1.6 to
+  3.8 times fewer points than fused ones at the same rank) qtci diagonalizes
+  0.19% of the 128^3 mesh on the cubic band and 35 to 42% on layered
+  two-band models, but it does not win in wall time: the tetrahedron sum on
+  the full mesh dominates both, and qtci is 15% faster on the cubic band
+  and 1.5 to 2.2 times slower on the layered ones at 128^3.
   The triangle bulk Green's function loses to
   `bloch_selfenergy(mode="adaptive")` at equal accuracy in 1D and 2D, so it
   is wired in only for 3D crystals, as `bloch_selfenergy(mode="triangle")`.
-  Open: the cost per energy at finite delta, band crossings.
+  Open: the cost per energy at finite delta, band crossings, a tetrahedron
+  sum on the tensor train for 3D qtci, the qtci LDOS in 3D.
 
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
   X-wave nonlinear Drude spin conductivity covers, the measured performance
