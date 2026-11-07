@@ -13,6 +13,11 @@ def chiAB(h,q=None,nk=60,**kwargs):
         return chiAB_q(h,q=q,nk=nk,**kwargs)
     else:
         qs = h.geometry.get_kmesh(nk=nk) # get the kmesh
+        if kwargs.get("integration","grid")=="triangle":
+            # every q of the mesh takes its bands at k+q from the same
+            # diagonalization of the k-mesh, done once on first use
+            from .simplexchi import MeshEigen
+            kwargs = dict(kwargs,eigen=MeshEigen(h,nk))
         out = [chiAB_q(h,q=q,nk=nk,
                        **kwargs) for q in qs] # get all the k kpoints
         return out[0][0],np.mean([o[1] for o in out],axis=0)
@@ -25,7 +30,8 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                ij_mode = "explicit", # loop over elements mode
                mode="matrix", # return object
                chi_prec=None, # precision of the Lindhard kernel
-               integration="grid" # how the k-sum is done
+               integration="grid", # how the k-sum is done
+               eigen=None, # shared diagonalization of the mesh (triangle)
                ):
     """Compute AB response function
        - energies: energies of the dynamical response
@@ -59,6 +65,10 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
          card's double precision is an order of magnitude slower, and to
          "double" on the CPU. The eigendecompositions stay in double
          either way, and the result is complex128 either way
+       - eigen: a chitk.simplexchi.MeshEigen of h and nk, the
+         diagonalization of the k-mesh shared by the q on the mesh, which
+         chiAB passes to every q of the local response (q=None) with
+         integration="triangle". Only integration="triangle" takes it
 
        Each pair of states a (at k) and b (at k+q) contributes
        (f_a-f_b)<a|A|b><b|B|a>/(e_a-e_b-omega+i*delta). A degenerate pair,
@@ -128,7 +138,11 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
                     "in double precision on the CPU only; call "
                     "pyqula.gpu.set_gpu(False) and leave chi_prec unset")
         return _integrations[integration](h,q=q,energies=energies,nk=nk,
-                pAs=pAs,pBs=pBs,delta=delta,T=temp,mode=mode)
+                pAs=pAs,pBs=pBs,delta=delta,T=temp,mode=mode,eigen=eigen)
+    if eigen is not None:
+        raise NotImplementedError("eigen, the shared diagonalization of "
+                "the mesh, is only taken by integration='triangle', got "
+                "integration='"+str(integration)+"'")
     if chi_prec=="single" and not use_gpu and (mode!="matrix"
             or ij_mode!="explicit"): # (the GPU path has its own guard)
         raise NotImplementedError("chi_prec='single' is only implemented "

@@ -1256,6 +1256,62 @@ def _eigen(hkgen,ks,batch,vectors):
         else: yield i0,(peigvalsh(hks),None)
 
 
+mesh_q_tol = 1e-8 # q*nk within this of integers is a q on the mesh
+
+
+def mesh_shift(q,dim,nk):
+    """The index map of a q on the uniform nk^dim mesh, or None.
+
+    For q with every component times nk an integer to mesh_q_tol, k+q is
+    the mesh point (k+q) mod 1, whose Bloch Hamiltonian is the one at k+q
+    up to the phases exp(2 pi i G.R) = 1, so the bands at k+q are those of
+    the mesh, reindexed. Returns perm with ks[perm] = (ks+q) mod 1 for ks
+    the row-major uniform_mesh(dim,nk), or None for a q off the mesh"""
+    qv = np.zeros(3)
+    if q is not None:
+        qa = np.array(q,dtype=np.float64).ravel()
+        qv[:len(qa)] = qa[:3]
+    if np.any(np.abs(qv[dim:])>mesh_q_tol): return None
+    s = qv[:dim]*nk
+    si = np.rint(s)
+    if np.max(np.abs(s-si))>mesh_q_tol: return None
+    idx = np.arange(nk**dim).reshape((nk,)*dim)
+    shift = tuple(-int(x) for x in si) # np.roll(a,-s)[i] = a[i+s]
+    return np.roll(idx,shift,axis=tuple(range(dim))).ravel()
+
+
+class MeshEigen:
+    """The eigenpairs of h on the uniform nk^dim mesh, diagonalized once on
+    first use and shared by every q of the mesh: the band energies always,
+    the eigenvectors when one copy of them fits max_memory_gb. chiAB with
+    q=None and integration="triangle" passes one to every chi_triangle of
+    its q-mesh, and chi_triangle builds its own for a single q on the
+    mesh. ndiag counts the diagonalizations it has done"""
+    def __init__(self,h,nk):
+        self.h = h
+        self.nk = nk
+        self.E = None # (nk^dim, n) band energies
+        self.U = None # (nk^dim, n, n) eigenvectors as columns, or None
+        self.ndiag = 0
+    def get(self,batch):
+        """(E, U), diagonalizing the mesh on the first call"""
+        if self.E is None:
+            from ..dostk.simplexdos import uniform_mesh
+            h = self.h
+            if h.is_sparse: h = h.get_dense()
+            ks = uniform_mesh(h.dimensionality,self.nk)
+            n = h.intra.shape[0]
+            keep = len(ks)*n*n*16 <= max_memory_gb*1e9 # one copy
+            E = np.zeros((len(ks),n))
+            U = np.zeros((len(ks),n,n),dtype=np.complex128) if keep else None
+            for i0,(e,u) in _eigen(h.get_hk_gen(),ks,batch,keep):
+                E[i0:i0+len(e)] = e
+                if keep: U[i0:i0+len(e)] = u
+            self.E,self.U = E,U
+            self.ndiag += len(ks)
+        return self.E,self.U
+
+
 def _chi_simplices(dim,nk,E1,E2,energies,delta,T,elements,diag,ni,nj):
     """the weights of every vertex at every frequency (pair_weights), then
     contracted with the matrix elements. Returns the response and the
@@ -1324,15 +1380,24 @@ default_kernel = "sources"
 
 def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
         pAs=None,pBs=None,delta=0.1,T=0.,mode="matrix",counted=False,
-        kernel=None):
+        kernel=None,eigen=None,reuse_mesh=True):
     """Bare response of chitk.chiAB.chiAB_q with the linear simplex
     integration of the k-sum on the uniform nk^dim mesh, for the operators
     pAs[i] and pBs[j] (the site projectors times A and B). Returns
     (energies, out) in the layout of chiAB_q for mode="matrix", "trace"
     and "diagonal". delta = 0 and T = 0 are allowed and are the exact
     limits. With counted=True also returns the number of
-    diagonalizations. kernel picks the evaluation of the simplex sum, one
-    of _kernels, default_kernel when None; the two agree to rounding"""
+    diagonalizations done by this call. kernel picks the evaluation of the
+    simplex sum, one of _kernels, default_kernel when None; the two agree
+    to rounding.
+
+    A q on the mesh (q = None, q = 0, every component times nk an integer)
+    takes the bands at k+q from those at k, an index map of the mesh
+    (mesh_shift), so the mesh is diagonalized once, nk^dim times instead
+    of 2 nk^dim. eigen, a MeshEigen of the same h and nk, shares that
+    diagonalization between calls, as chiAB does over the q of the local
+    response. reuse_mesh=False diagonalizes k+q anyway, the route of a
+    generic q, kept as the reference of the tests"""
     check_hamiltonian(h)
     if not delta>=0.:
         raise ValueError("integration='triangle' of the response function "
@@ -1365,22 +1430,53 @@ def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
     if diag and ni!=nj:
         raise ValueError("mode='"+mode+"' needs as many A as B operators, "
                 "got "+str(ni)+" and "+str(nj))
-    # band energies (and eigenvectors) at k and k+q
-    E1 = np.zeros((len(ks),n)); E2 = np.zeros((len(ks),n))
-    U1s,U2s = [],[]
-    for (i0,(e1,u1)),(_,(e2,u2)) in zip(_eigen(hkgen,ks,batch,keep),
-                                        _eigen(hkgen,kq,batch,keep)):
-        E1[i0:i0+len(e1)] = e1; E2[i0:i0+len(e2)] = e2
-        if keep: U1s.append(u1); U2s.append(u2)
-    ndiag = 2*len(ks)
-    def vectors(): # (i0, U at k, U at k+q) per batch
-        if keep:
-            for i0,u1,u2 in zip(range(0,len(ks),batch),U1s,U2s):
-                yield i0,u1,u2
-        else:
-            for (i0,(e1,u1)),(_,(e2,u2)) in zip(
-                    _eigen(hkgen,ks,batch,True),_eigen(hkgen,kq,batch,True)):
-                yield i0,u1,u2
+    perm = mesh_shift(q,dim,nk) if reuse_mesh else None
+    if perm is not None: # a q on the mesh: k+q is a mesh point
+        if eigen is None: eigen = MeshEigen(h,nk)
+        if eigen.nk!=nk or eigen.h.dimensionality!=dim \
+                or eigen.h.intra.shape[0]!=n:
+            raise ValueError("eigen must hold the mesh of this call, nk="
+                    +str(nk)+" in "+str(dim)+"D with "+str(n)+" bands, got "
+                    "nk="+str(eigen.nk)+" in "+str(eigen.h.dimensionality)
+                    +"D with "+str(eigen.h.intra.shape[0])+" bands")
+        ndiag0 = eigen.ndiag
+        E1,U1 = eigen.get(batch)
+        E2 = E1[perm]
+        ndiag = eigen.ndiag - ndiag0
+        keep = U1 is not None
+        identity = np.array_equal(perm,np.arange(len(ks)))
+        def vectors(): # (i0, U at k, U at k+q) per batch
+            if keep:
+                for i0 in range(0,len(ks),batch):
+                    yield i0,U1[i0:i0+batch],U1[perm[i0:i0+batch]]
+            elif identity:
+                for i0,(_,u1) in _eigen(hkgen,ks,batch,True):
+                    yield i0,u1,u1
+            else:
+                for (i0,(_,u1)),(_,(_,u2)) in zip(
+                        _eigen(hkgen,ks,batch,True),
+                        _eigen(hkgen,ks[perm],batch,True)):
+                    yield i0,u1,u2
+        npair = 1 if identity else 2 # diagonalizations per k and pass
+    else:
+        # band energies (and eigenvectors) at k and k+q
+        E1 = np.zeros((len(ks),n)); E2 = np.zeros((len(ks),n))
+        U1s,U2s = [],[]
+        for (i0,(e1,u1)),(_,(e2,u2)) in zip(_eigen(hkgen,ks,batch,keep),
+                                            _eigen(hkgen,kq,batch,keep)):
+            E1[i0:i0+len(e1)] = e1; E2[i0:i0+len(e2)] = e2
+            if keep: U1s.append(u1); U2s.append(u2)
+        ndiag = 2*len(ks)
+        def vectors(): # (i0, U at k, U at k+q) per batch
+            if keep:
+                for i0,u1,u2 in zip(range(0,len(ks),batch),U1s,U2s):
+                    yield i0,u1,u2
+            else:
+                for (i0,(e1,u1)),(_,(e2,u2)) in zip(
+                        _eigen(hkgen,ks,batch,True),
+                        _eigen(hkgen,kq,batch,True)):
+                    yield i0,u1,u2
+        npair = 2
     def elements(): # <n,k|A_i|m,k+q> as [k,i,nm], <m,k+q|B_j|n,k> as [k,j,nm]
         for i0,U1,U2 in vectors():
             kb = len(U1)
@@ -1397,7 +1493,7 @@ def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
                 "response, accepted values are "+", ".join(_kernels))
     out,npass = _kernels[kernel](dim,nk,E1,E2,energies,delta,T,elements,
             diag,ni,nj)
-    if not keep: ndiag += 2*len(ks)*npass
+    if not keep: ndiag += npair*len(ks)*npass
     if mode=="trace": out = np.mean(out,axis=1)
     if counted: return energies,out,ndiag
     return energies,out
