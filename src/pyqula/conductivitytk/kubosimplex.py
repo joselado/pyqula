@@ -254,9 +254,13 @@ def simplices(dim,nk):
 # farthest frequency), and when it is above _tol of the peak of the
 # simplex, the whole simplex is one point source evaluated per frequency
 # with simplexdos._dd, as the direct kernel does. In 2D the loss is
-# quadratic and few triangles are kept whole. In 3D it is cubic. Without
-# this rule the source kernel lost up to 1e-9 of the peak of a tetrahedron
-# at delta = 1e-2 and all of it at delta = 1e-6.
+# quadratic: on the spinful Haldane model at delta = 1e-3 the rule keeps
+# 0.3%, 1.1% and 3.2% of the forward triangle pairs whole at nk = 128, 256
+# and 512, and without it the sum is still within 1.5e-12 of a longdouble
+# reference instead of 7e-13. At delta = 1e-5 it matters: 2.4e-10 without
+# it at nk = 128, 2.8e-12 with it. In 3D the loss is cubic. Without this
+# rule the source kernel lost up to 1e-9 of the peak of a tetrahedron at
+# delta = 1e-2 and all of it at delta = 1e-6.
 #
 # Most of the simplices that this rule keeps whole are far from every
 # frequency of the window, the reverse terms at -dE above all. Those go
@@ -266,6 +270,11 @@ def simplices(dim,nk):
 # converges at a rate _rho or better at every frequency of the window and
 # has no cancellation, and the bin keeps the sum of these moments. A bin
 # costs _kmax terms per frequency, whatever the number of simplices in it.
+# A simplex adds only the orders it needs to its bin: its term of order k
+# is below r^k of the first, with r its own rate, so it stops at r^k <
+# 1e-18, the size of the last of the _kmax terms at the rate _rho. On the
+# 2D models of the tests at nk = 512 and the window [0, 7] t, the binned
+# triangles (all the reverse terms) stop after 8 terms on average.
 # On the 3D test model at nk = 48 and delta = 1e-2 this leaves 7% of the
 # simplex pairs kept whole, against 35% without the bins.
 
@@ -417,6 +426,11 @@ def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
     sco = np.zeros(2*nv)
     for it in range(i0,i1): # loop over simplices
         for p in range(npair): # loop over stored pairs
+            if mode>0: # the branches are known, skip what this mode leaves
+                skip = True # the binned simplices for mode=3, the rest else
+                for r in range(1 if diag[p] else 2):
+                    if (flag[it,p,r]==2)==(mode==3): skip = False
+                if skip: continue
             for c in range(nc): wbar[c] = 0.
             for v in range(nv):
                 for c in range(nc): wbar[c] += W[simplices[it,v],p,c]
@@ -424,6 +438,7 @@ def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
             for c in range(nc): wrev[c] = wbar[trans[c]]
             for r in range(2): # forward, and the pair (m,n) at energy -dE
                 if r==1 and diag[p]: break
+                if mode>0 and (flag[it,p,r]==2)!=(mode==3): continue
                 sg = 1. if r==0 else -1.
                 for v in range(nv):
                     kv[v] = simplices[it,v]
@@ -446,8 +461,11 @@ def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
                             slo,shi,sco)>tol: flag[it,p,r] = 1
                     else: flag[it,p,r] = 0
                 if flag[it,p,r]==2:
-                    if mode==3: _add_moments(e,nv,C,wbar if r==0 else wrev,
-                            M,j,fact)
+                    if mode==3:
+                        rad = max(abs(e[0]-C),abs(e[nv-1]-C))
+                        D = max(wlo-C,C-whi,0.)
+                        _add_moments(e,nv,C,wbar if r==0 else wrev,M,j,fact,
+                                rad/np.sqrt(D*D+delta*delta))
                     continue
                 if mode==3: continue
                 n = _simplex_sources(mode,e,kv,nv,wbar if r==0 else wrev,
@@ -457,17 +475,23 @@ def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
 
 
 @jit(nopython=True,cache=True)
-def _add_moments(e,nv,C,wbar,M,j,fact):
+def _add_moments(e,nv,C,wbar,M,j,fact,r):
     """add the simplex with nodes e to the moments of bin j, of center C:
     K! psi_K[e] = sum_k K! k!/(k+K)! h_k(e - C) u^(k+1), u = 1/(z - C),
-    which converges for |z - C| > max |e - C|"""
+    which converges for |z - C| > max |e - C|. h_k of K+1 numbers below
+    rad in size has (k+K)!/(k! K!) terms, so the term of order k is below
+    r^k |u|, with r = rad |u| the rate of the window, and the series
+    stops when r^k < 1e-18, as _kmax terms do at the largest rate _rho"""
     K = nv-1
     y0 = e[0]-C; y1 = e[1]-C
     y2 = e[2]-C if nv>2 else 0.
     y3 = e[3]-C if nv>3 else 0.
     H0 = 1.; H1 = 1.; H2 = 1.; H3 = 1. # h_k(y_0..y_i), i = 0..3
     g = 1. # K! k!/(k+K)!
-    for k in range(M.shape[1]):
+    kmax = M.shape[1]
+    if r<1e-18: kmax = 1
+    elif r<_rho: kmax = min(kmax,int(np.ceil(np.log(1e-18)/np.log(r))))
+    for k in range(kmax):
         if k>0:
             H0 = y0*H0
             H1 = H0+y1*H1
@@ -505,9 +529,11 @@ def _sources_jit(mode,simplices,dE,W,trans,diag,tolc,fact,harm,wlo,whi,
 
 
 @jit(nopython=True,parallel=True,cache=True)
-def _moments_jit(simplices,dE,W,trans,diag,fact,harm,flag,bins,M):
+def _moments_jit(simplices,dE,W,trans,diag,fact,harm,wlo,whi,delta,flag,
+        bins,M):
     """Moments M[g,j,k,c] of the binned simplices, group g of the simplices
-    in its own copy, in parallel over the groups"""
+    in its own copy, in parallel over the groups; [wlo,whi] is the
+    frequency window, which sets how many moments each simplex needs"""
     ns = simplices.shape[0]
     ng = M.shape[0]
     e0 = np.zeros(1); t0 = np.zeros(1,dtype=np.int64)
@@ -515,21 +541,26 @@ def _moments_jit(simplices,dE,W,trans,diag,fact,harm,flag,bins,M):
     A0 = np.zeros((1,1,1),dtype=np.complex128)
     for g in prange(ng): # parallel loop over groups of simplices
         _chunk_sources(3,(g*ns)//ng,((g+1)*ns)//ng,0,simplices,dE,W,trans,
-                diag,0.,fact,harm,0.,0.,1.,0.,flag,A0,A0,e0,t0,y0,c0,bins,
-                M[g])
+                diag,0.,fact,harm,wlo,whi,delta,0.,flag,A0,A0,e0,t0,y0,c0,
+                bins,M[g])
 
 
-@jit(nopython=True,cache=True)
+@jit(nopython=True,parallel=True,cache=True)
 def _vertex_sources_jit(simplices,dE,W,trans,diag,tolc,fact,harm,flag,
         Af,Ar):
     """Add the vertex coefficients of the whole simplex sum to Af (forward,
     energy dE) and Ar (reverse, energy -dE), with the branches stored in
-    flag. Serial, since the simplices sharing a vertex add to one entry."""
-    e0 = np.zeros(1); t0 = np.zeros(1,dtype=np.int64)
-    y0 = np.zeros((1,4)); c0 = np.zeros((1,1),dtype=np.complex128)
-    M0 = np.zeros((1,1,1),dtype=np.complex128)
-    _chunk_sources(2,0,simplices.shape[0],0,simplices,dE,W,trans,diag,tolc,
-            fact,harm,0.,0.,1.,0.,flag,Af,Ar,e0,t0,y0,c0,np.zeros(2),M0)
+    flag. In parallel over the stored pairs, whose entries are their own,
+    and serial over the simplices, since the simplices sharing a vertex add
+    to one entry, so the result does not depend on the number of threads."""
+    for p in prange(dE.shape[1]): # parallel loop over stored pairs
+        e0 = np.zeros(1); t0 = np.zeros(1,dtype=np.int64)
+        y0 = np.zeros((1,4)); c0 = np.zeros((1,1),dtype=np.complex128)
+        M0 = np.zeros((1,1,1),dtype=np.complex128)
+        _chunk_sources(2,0,simplices.shape[0],0,simplices,dE[:,p:p+1],
+                W[:,p:p+1],trans,diag[p:p+1],tolc,fact,harm,0.,0.,1.,0.,
+                flag[:,p:p+1],Af[:,p:p+1],Ar[:,p:p+1],e0,t0,y0,c0,
+                np.zeros(2),M0)
 
 
 @jit(nopython=True,cache=True)
@@ -699,7 +730,8 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
     # number of threads
     ng = max(1,min(16,ns//4096))
     M = np.zeros((ng,_nbins,_kmax,nc),dtype=np.complex128)
-    _moments_jit(simplices,dE,W,trans,diag,_dos_fact,_dos_harm,flag,bins,M)
+    _moments_jit(simplices,dE,W,trans,diag,_dos_fact,_dos_harm,
+            float(window[0]),float(window[1]),float(delta),flag,bins,M)
     M = M.sum(axis=0)
     used = np.nonzero(np.any(M!=0.,axis=(1,2)))[0]
     Cb = bins[0]+(used+0.5)*bins[1]
