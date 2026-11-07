@@ -87,7 +87,9 @@ def test_broyden_needs_fewer_iterations_with_the_solver_step(integration,
     old = _dwave(integration=integration)
     for scf in new+[old]: assert scf.converged
     assert new[0].iterations == new[1].iterations
-    assert new[0].total_energy == new[1].total_energy
+    # not to the last digit: the sums of a threaded BLAS can be ordered
+    # differently between two runs
+    assert abs(new[0].total_energy-new[1].total_energy) < 1e-12
     assert abs(new[0].total_energy-old.total_energy) < 1e-8
     charge = [superscf.get_charge_bdg(s.dm) for s in (new[0], old)]
     assert abs(charge[0]-0.8) < 1e-8 and abs(charge[1]-0.8) < 1e-8
