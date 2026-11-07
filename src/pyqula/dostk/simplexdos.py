@@ -32,7 +32,8 @@
 # nearly flat simplex far from resonance even when the spread is much
 # larger than delta. The direct kernel of kubosimplex.py calls _dd as it
 # is; its source kernel needs a rule independent of the energy and uses
-# spread < delta with a longer series instead.
+# spread < delta with a longer series instead, and calls _dd per frequency
+# for the simplices whose vertex form would cancel too much.
 #
 # The weights are averaged over the vertices of each simplex and over
 # degenerate multiplets at each vertex, as in kubosimplex.py: a single

@@ -17,7 +17,6 @@ from pyqula import geometry
 from pyqula import multihopping
 from pyqula import conductivity
 from pyqula.conductivitytk import kubo
-from pyqula.conductivitytk import kubosimplex
 
 
 def _dense(m):
@@ -235,18 +234,3 @@ def test_qtci_refuses_3d():
     with pytest.raises(NotImplementedError, match="3D"):
         conductivity.optical_conductivity(h3, nk=8, integration="qtci")
 
-
-def test_source_kernel_refuses_tetrahedra_and_the_default_is_direct():
-    """The source kernel is written for segments and triangles only"""
-    h3 = _stack(_haldane(), tm=0.1)
-    ks = kubo._kmesh(h3, 4)
-    es, vs, cellvol, scale = kubo._bands_and_velocities(h3, ks)
-    pairs, dE, W, comps, trans = kubosimplex.pair_fields(es, vs, 0.01,
-            1e-6*scale, True, True)
-    args = (3, 4, pairs, dE, W, comps, trans, np.array([0.5, 1.]), 0.1,
-            cellvol)
-    with pytest.raises(NotImplementedError, match="tetrahedra"):
-        kubosimplex._sigma_from_fields(*args, kernel="sources")
-    s0 = kubosimplex._sigma_from_fields(*args)
-    s1 = kubosimplex._sigma_from_fields(*args, kernel="simplices")
-    assert np.max(np.abs(s0-s1)) == 0.
