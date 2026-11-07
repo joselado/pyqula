@@ -600,21 +600,107 @@ the same calls at 400 frequencies took 3.3, 30 and 59 s, a gain of 2.7 to
 3.8 against the direct kernel of that session: the bins are what makes the source kernel pay in 3D. Against the grid
 at the same largest error the tetrahedra are now about 130 times faster at
 40 frequencies and 80 times at 400, instead of 40 with the direct kernel.
-In 2D the source kernel has not become faster: on 512^2 meshes at 141
-frequencies, delta = 1e-3 t, the gapped honeycomb takes 0.59 s against
-0.57 s before, and the spinful Haldane model 2.24 s against 1.83 s, since
-some triangles are now kept whole. The two versions agree to 9e-13 and
-1.8e-12 of the largest entry there, the level of the earlier source kernel
-against the longdouble reference (1.7e-12 at 512^2 in "Precision of the
-two kernels").
+In 2D the tetrahedron change first made the source kernel slower, and
+the next subsection gives that time back.
 
-What is still open. The tetrahedra kept whole are forward terms near the
-window, about a third of them at delta = 1e-3, and they are now the cost. Two routes could reduce it: keep only the close edge of such a
+### The 2D cost of the tetrahedron kernel (7 November 2026)
+
+The question was why the 2D source kernel became slower with the change
+above, and whether the rule that keeps a simplex whole, written for the
+cubic loss of the tetrahedra, is needed in 2D at all. The first numbers,
+0.59 s against 0.57 s on the gapped honeycomb and 2.24 s against 1.83 s on
+the spinful Haldane model, came from 14 threads of a loaded workstation.
+
+The measurement. Three cores of one workstation, numba and BLAS threads at
+3, with other jobs sharing the cores, so only the ratios inside one row
+mean something. The three kernels are loaded in one process and called in
+turn, ten times each on the same saved pair fields: the kernel of 671795e,
+before the tetrahedra, the kernel of aacdd26, and the kernel now. The
+models are those of "Precision of the two kernels": the spinful Haldane
+model (t2 = 0.2, Fermi level at 0.3 t) and the gapped honeycomb
+(imbalance 0.3), T = 0.01 t, delta = 1e-3 t, 141 frequencies on [0, 7] t.
+Times of the kernel in seconds, the smallest of the ten calls and, in
+brackets, the median.
+
+| model | mesh | 671795e | aacdd26 | now |
+|---|---|---|---|---|
+| spinful Haldane | 512^2 | 2.86 (3.01) | 3.66 (3.82) | 2.77 (2.94) |
+| spinful Haldane | 256^2 | 0.46 (0.59) | 0.64 (0.73) | 0.53 (0.56) |
+| gapped honeycomb | 512^2 | 0.79 (1.00) | 0.90 (1.06) | 0.80 (0.90) |
+
+Separate processes in alternation, four passes of two calls, gave the
+same picture with more noise: 2.33, 3.07 and 2.53 s for the spinful
+Haldane model at 512^2 in one hour, 2.82, 3.60 and 2.51 s in another.
+
+Where the time went. The kernel of aacdd26 lost its time in the build of
+the sources, not in the sum per frequency. On the spinful Haldane model at
+512^2 its build took about 1.5 s against 0.8 s, of which 0.53 s were the
+moments of the bins, 60 terms for every one of the 2.1M binned triangle
+pairs (all the reverse terms at -dE), and 0.28 s the serial pass that adds
+the vertex coefficients. Its sum per frequency was in fact cheaper, about
+1.3 s against 1.5 s, since the bins take the reverse terms out of the
+vertex sources (0.14M of them against 0.29M). The triangles kept whole cost
+about 0.17 s of that sum: the rule keeps 336, 5592 and 68112 forward
+triangle pairs whole at nk = 128, 256 and 512 (0.3%, 1.1% and 3.2% of
+them), 43842 point sources after the merge at 512^2.
+
+Is the rule needed in 2D? With the rule off (a bound of 1e300 instead of
+3e-11), the spinful Haldane model is within 1.5e-12, 1.3e-12 and 8.6e-13
+of the largest entry of the longdouble reference at nk = 128, 256 and 512,
+against 7.0e-13, 6.6e-13 and 7.5e-13 with the rule, so at delta = 1e-3 it
+buys a factor of two at most. At delta = 1e-5 it is needed: without it the
+error is 2.4e-10 at nk = 128 and 2.3e-11 at 256, with it 2.8e-12 and
+1.1e-12, and a bound of 1e-10 already gives 6.3e-12 and 8.9e-12. At
+delta = 1e-2 the error is 9e-14 or less either way. Bounds between 3e-11
+and 1e-10 at delta = 1e-3 do not move the error in one direction (2.3e-12
+at nk = 256 for 6e-11), since a triangle kept whole also breaks the
+cancellation of the vertex coefficients it shares with its neighbors. So
+the rule stays as it is in 2D, and the triangles it keeps were made
+cheaper instead. `tests/conductivity/test_source_kernel_2d_precision.py`
+checks the kernel against the longdouble sum, now in the test itself, at
+nk = 128 on both models: to 3e-12 of the largest entry at delta = 1e-3,
+and to 1e-11 at delta = 1e-5, which fails without the rule.
+
+What was changed (`kubosimplex.py`).
+
+- A binned simplex adds only the orders it needs. Its term of order k is
+  below r^k of the first, with r its own rate over the window, so it
+  stops at r^k < 1e-18, which is what 60 terms give at the largest rate
+  1/2. The reverse triangles stop after 8 terms on average.
+- The passes over the simplices skip the pairs whose branch belongs to
+  another pass, and the vertex pass runs in parallel over the band pairs,
+  whose entries are their own. These two leave the output bitwise the
+  same, and it still does not depend on the number of threads.
+- A simplex kept whole is close to some frequency of the window but far
+  from most of them. It now also adds its moments, to 60 terms, to a
+  second set of moments of its energy bin, and the bin keeps the largest
+  distance R of these nodes from its center C. At a frequency with
+  (w - C)^2 + delta^2 >= (R/0.5)^2 they all converge at a rate 1/2 or
+  better and the bin gives their sum; at the others each one goes through
+  `simplexdos._dd` as before. One decision per bin and frequency serves
+  both loops, so no simplex is counted twice or left out. On the spinful
+  Haldane model at 512^2 the kept-whole triangles sit in 17 bins, and
+  0.7% of the (simplex, frequency) pairs are left to `_dd`. This moves the
+  result by 1.6e-14 of the largest entry, and the errors against the
+  longdouble reference above are those of aacdd26 to two digits.
+
+3D. On the layered Haldane model of the table above at nk = 24
+(interband part, T = 1e-3 t, delta = 1e-2 t, frequencies on [0.1, 4] t,
+same three cores), the source kernel takes 0.20 s at 40 frequencies and
+0.73 s at 400, against 0.27 s and 1.27 s for aacdd26, the smallest of six
+calls in separate processes, and the result moves by 8e-15 of the largest
+entry. The tetrahedra kept whole are wider than the triangles, a median
+distance of 0.23 t from the center of their bin, so a third of their
+(simplex, frequency) pairs are still near and left to `_dd`.
+
+What is still open. In 3D these near pairs are now the cost. One wide
+tetrahedron makes R large for its whole bin, so a set of moments per class
+of distance inside a bin would let the narrow ones go to the moments
+earlier. The other route is to keep only the close edge of such a
 tetrahedron per frequency, so that the rest cancels like (|x|/s)^2 and the
-edges, shared by four to six tetrahedra, merge; or split the window per
-simplex into the frequencies near it, done exactly, and those far from it,
-done by the bins, which is the far-field expansion of the open item on the
-cost per frequency below.
+edges, shared by four to six tetrahedra, merge. The far-field expansion of
+all the sources, the open item on the cost per frequency below, is the
+general form of both.
 
 ## What is left open
 
