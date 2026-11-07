@@ -133,7 +133,7 @@ def test_source_kernel_reaches_the_longdouble_sum_in_2d():
     sim, frac = kubosimplex.simplices(2, nk)
     haldane = _fields(_spinful_haldane(), nk)
     gapped = _fields(_gapped_honeycomb(), nk)
-    for fields, delta, tol in [(haldane, 1e-3, 3e-12), (gapped, 1e-3, 3e-12),
+    for fields, delta, tol in [(haldane, 1e-3, 2e-12), (gapped, 1e-3, 2e-12),
             (haldane, 1e-5, 1e-11)]:
         dE, W, trans, diag = fields
         ref = _reference(sim, dE, W, trans, diag, ws, delta)

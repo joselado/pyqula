@@ -544,7 +544,9 @@ kernels agree to 2.6e-13, 7.6e-13 and 2.6e-12 of the largest entry at
 nk = 24, 48 and 64.
 
 What it costs. A simplex kept whole costs as much per frequency as in the
-direct kernel, so the gain is set by how many are left. Fraction of the
+direct kernel (since the change in "The 2D cost of the tetrahedron
+kernel" below, only at the frequencies near it), so the gain is set by
+how many are left. Fraction of the
 simplex pairs kept whole (a pair is a tetrahedron with the transition at
 dE, or the reverse one at -dE), on the layered model with the window
 [0.1, 4] t:
@@ -658,7 +660,7 @@ cancellation of the vertex coefficients it shares with its neighbors. So
 the rule stays as it is in 2D, and the triangles it keeps were made
 cheaper instead. `tests/conductivity/test_source_kernel_2d_precision.py`
 checks the kernel against the longdouble sum, now in the test itself, at
-nk = 128 on both models: to 3e-12 of the largest entry at delta = 1e-3,
+nk = 128 on both models: to 2e-12 of the largest entry at delta = 1e-3,
 and to 1e-11 at delta = 1e-5, which fails without the rule.
 
 What was changed (`kubosimplex.py`).
