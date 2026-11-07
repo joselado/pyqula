@@ -10,14 +10,21 @@ g-wave and i-wave altermagnets, and perfectly nonreciprocal spin-current in
 f-wave magnets", arXiv:2411.16036 (Phys. Rev. B 111, 125420 (2025)), Eq.
 (Drude). For a Hamiltonian in which spin is a good quantum number, so that
 each spin channel s = +-1 is an independent single-band problem, solving the
-semiclassical Boltzmann equation recursively in the electric field gives,
-for the current expanded as j_b = sum sigma^{x^l1 y^l2 ; b} E_x^l1 E_y^l2,
+semiclassical Boltzmann equation recursively in the electric field gives
 
   sigma_s^{x^l1 y^l2 ; b} =  (-e/hbar)^(l1+l2+1) / (i w + 1/tau)^(l1+l2)
                              * Int d^D k f_s^(0) d^(l1+l2+1) eps_s
                                          / (dk_x^l1 dk_y^l2 dk_b)
 
-and the spin and charge responses are
+This is the symmetric tensor component sigma_{b a1...al} with l1 of the
+field indices a_j equal to x and l2 = l - l1 equal to y, which is what
+_sigma returns. The current is then
+
+  j_b = sum_{l1} binom(l,l1) sigma^{x^l1 y^l2 ; b} E_x^l1 E_y^l2,
+
+since binom(l,l1) orderings of the field indices give the same component;
+an expansion without the binomial undercounts every mixed term (at l = 2,
+sigma^{xy;b} enters j_b with a factor 2). The spin and charge responses are
 
   sigma_spin   = (sigma_up - sigma_dn)/2,
   sigma_charge =  sigma_up + sigma_dn.

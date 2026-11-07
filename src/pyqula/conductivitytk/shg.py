@@ -2,7 +2,8 @@
 # periodic tight-binding Hamiltonian. The physics, the units and the sign
 # conventions are documented in the public entry point, conductivity.py
 # (shg_conductivity) -- read that first; this module only holds the
-# machinery.
+# machinery, plus the length-gauge second-order conductivity at two
+# frequencies (sigma2_length), the independent check of the photocurrents.
 import numpy as np
 from numba import jit, prange
 
@@ -152,52 +153,87 @@ def _sigma2_length(es,f,h1,h2,omegas,delta,triplets,degeneracy_tol):
     """Length-gauge second-order conductivity sigma_abc(w,w) summed over a
     batch of k-points, for a cold insulator: the independent code path the
     tests check the velocity gauge against. Same output layout as
-    _sigma2_velocity_jit.
+    _sigma2_velocity_jit. It is the two-frequency kernel _sigma2_length2
+    at w1 = w2 = w, see there for the formula"""
+    return _sigma2_length2(es,f,h1,h2,omegas,omegas,delta,triplets,
+            degeneracy_tol)[0]
+
+
+def _sigma2_length2(es,f,h1,h2,w1s,w2s,delta,triplets,degeneracy_tol):
+    """Length-gauge second-order conductivity sigma_abc(w1,w2) summed over
+    a batch of k-points, for a cold insulator, at the frequency pairs
+    (w1s[i],w2s[i]) and for every ordered triplet (a,b,c), unsymmetrized:
+    the field along b is at w1 and the one along c at w2, and the caller
+    averages with the partner (a,c,b) at (w2,w1).
 
     Passos et al., PRB 97, 235446 (2018), Eq. (secondgamma), with the
     covariant derivatives written out in the eigenbasis (Sipe and
-    Shkrebtii, PRB 61, 5337 (2000)):
+    Shkrebtii, PRB 61, 5337 (2000)), every frequency carrying the same
+    broadening w -> w + i delta:
 
       [D^c,rho0]_nm  = i f_nm r^c_nm
-      Y^c_nm         = i f_nm r^c_nm/(w - (E_n - E_m))
+      Y^c_nm         = i f_nm r^c_nm/(w2 - (E_n - E_m))
+      (Y^c_nm);b     = i f_nm [r^c_nm;b/(w2 - (E_n - E_m))
+                       + r^c_nm Delta^b_nm/(w2 - (E_n - E_m))^2]
       [D^b,Y^c]_mn   = (Y^c_mn);b - i sum_p (r^b_mp Y^c_pn - Y^c_mp r^b_pn)
-      sigma_abc      = -q^3 sum_nm h^a_nm [D^b,Y^c]_mn/(2w - (E_m - E_n))
+      sigma_abc      = -q^3 sum_nm h^a_nm [D^b,Y^c]_mn/(w1 + w2 - (E_m - E_n))
 
-    with r^a_nm = h^a_nm/(i(E_n - E_m)) the interband Berry connection and
-    its generalized derivative r^c_nm;b obtained from the exact identity
-    [D^b,h^c] = h^bc of the tight-binding model (the sum rule of
-    Ibanez-Azpiroz, Tsirkin and Souza, PRB 97, 245143 (2018), Eq. (32),
-    here including the second-derivative term). The terms with a k-
-    derivative of the occupations are left out, which is exact only for an
-    insulator at T=0, and every band pair must be nondegenerate, since r
-    and r;b divide by the energy differences."""
+    with Delta^b_nm = h^b_nn - h^b_mm, r^a_nm = h^a_nm/(i(E_n - E_m)) the
+    interband Berry connection and its generalized derivative r^c_nm;b
+    obtained from the exact identity [D^b,h^c] = h^bc of the tight-binding
+    model (the sum rule of Ibanez-Azpiroz, Tsirkin and Souza, PRB 97,
+    245143 (2018), Eq. (32), here including the second-derivative term).
+    The terms with a k-derivative of the occupations are left out, which
+    is exact only for an insulator at T=0, and every band pair must be
+    nondegenerate, since r and r;b divide by the energy differences.
+
+    On a mesh the two gauges agree to rounding only where a symmetry
+    cancels the mesh sums of total k-derivatives (the aaa components, or
+    C3 with a mirror); otherwise they agree once nk has converged. The
+    double pole of the Delta term is the slow part of the length gauge: on
+    a strained honeycomb lattice at delta = 0.02 and w = 1.5 it still
+    differs from the velocity gauge by more than the value itself at
+    nk = 96, while its static limit has converged at nk = 48.
+
+    Returns the total and, separately, its n = m part
+    sum_n h^a_nn [D^b,Y^c]_nn/(w1 + w2), which at (w,-w) is the pole of
+    the injection current (see sigma2_length_diagonal), both of shape
+    (len(w1s),len(triplets))."""
     nk,n = es.shape
-    out = np.zeros((len(omegas),len(triplets)),dtype=np.complex128)
-    for ik in range(nk):
-        e = es[ik] ; fk = f[ik]
-        dE = e[:,None] - e[None,:] # dE[n,m] = E_n - E_m
-        off = ~np.eye(n,dtype=bool)
-        if np.min(np.abs(dE[off]))<degeneracy_tol: raise ValueError(
+    w1s = np.asarray(w1s,dtype=np.float64)
+    w2s = np.asarray(w2s,dtype=np.float64)
+    out = np.zeros((len(w1s),len(triplets)),dtype=np.complex128)
+    outd = np.zeros((len(w1s),len(triplets)),dtype=np.complex128)
+    dE = es[:,:,None] - es[:,None,:] # dE[k,n,m] = E_n - E_m
+    dET = np.swapaxes(dE,1,2) # E_m - E_n at [k,n,m]
+    off = ~np.eye(n,dtype=bool)
+    if n>1 and np.min(np.abs(dE[:,off]))<degeneracy_tol: raise ValueError(
             "the length-gauge path needs a nondegenerate spectrum at every "
             "k-point")
-        inv = np.where(off,1./np.where(off,dE,1.),0.)
-        r = [h1[ik,a]*inv/1j for a in range(3)] # r^a_nm
-        Delta = [np.real(np.diag(h1[ik,a]))[:,None]
-                 - np.real(np.diag(h1[ik,a]))[None,:] for a in range(3)]
-        def rgd(c,b): # generalized derivative r^c_nm;b
-            gd = h2[ik,b,c] + 1j*(r[b]@h1[ik,c] - h1[ik,c]@r[b])
-            return (gd - 1j*Delta[b]*r[c])*inv/1j
-        fnm = fk[:,None] - fk[None,:] # f_nm = f_n - f_m
-        for iw,w0 in enumerate(omegas):
-            w = w0 + 1j*delta
-            g1 = 1./(w - dE) # 1/(w - (E_n - E_m))
-            g2 = 1./(2.*w - dE.T) # 1/(2w - (E_m - E_n)) at [n,m]
-            for t,(a,b,c) in enumerate(triplets):
-                Y = 1j*fnm*r[c]*g1
-                Yb = 1j*fnm*(rgd(c,b)*g1 + r[c]*Delta[b]*g1**2)
-                Z = Yb - 1j*(r[b]@Y - Y@r[b]) # [D^b,Y^c]
-                out[iw,t] += -_charge**3*np.sum(h1[ik,a]*Z.T*g2)
-    return out
+    inv = np.where(off,1./np.where(off,dE,1.),0.)
+    r = h1*inv[:,None]/1j # r^a_nm, (nk,3,n,n)
+    vd = np.real(np.diagonal(h1,axis1=2,axis2=3)) # h^a_nn, (nk,3,n)
+    Delta = vd[:,:,:,None] - vd[:,:,None,:] # Delta^a_nm = h^a_nn - h^a_mm
+    rgds = {} # generalized derivatives r^c_nm;b, built once per (c,b)
+    def rgd(c,b):
+        if (c,b) not in rgds:
+            gd = h2[:,b,c] + 1j*(r[:,b]@h1[:,c] - h1[:,c]@r[:,b])
+            rgds[(c,b)] = (gd - 1j*Delta[:,b]*r[:,c])*inv/1j
+        return rgds[(c,b)]
+    fnm = f[:,:,None] - f[:,None,:] # f_nm = f_n - f_m
+    for iw in range(len(w1s)):
+        z1 = w1s[iw] + 1j*delta
+        z2 = w2s[iw] + 1j*delta
+        g1 = 1./(z2 - dE) # 1/(w2 - (E_n - E_m))
+        g2 = 1./(z1 + z2 - dET) # 1/(w1 + w2 - (E_m - E_n)) at [n,m]
+        for t,(a,b,c) in enumerate(triplets):
+            Y = 1j*fnm*r[:,c]*g1
+            Yb = 1j*fnm*(rgd(c,b)*g1 + r[:,c]*Delta[:,b]*g1**2)
+            Z = Yb - 1j*(r[:,b]@Y - Y@r[:,b]) # [D^b,Y^c]
+            out[iw,t] = -_charge**3*np.sum(h1[:,a]*np.swapaxes(Z,1,2)*g2)
+            Zd = np.diagonal(Z,axis1=1,axis2=2) # [D^b,Y^c]_nn, (nk,n)
+            outd[iw,t] = -_charge**3*np.sum(vd[:,a]*Zd)/(z1 + z2)
+    return out,outd
 
 
 def _triplets(components):
@@ -262,6 +298,9 @@ def _sigma2_grid(h,energies,nk,T,delta,trip,gauge,degeneracy_tol,
 
 def _sigma2_triangle(h,energies,nk,T,delta,trip,gauge,degeneracy_tol,
         tolerance=None):
+    if h.dimensionality==3: raise NotImplementedError("integration="
+            "'triangle' of the second-harmonic conductivity is only "
+            "implemented in 1D and 2D, not in 3D; use integration='grid'")
     from . import shgsimplex
     return shgsimplex.sigma_triangle(h,energies,nk,T,delta,trip,
             degeneracy_tol)
@@ -269,6 +308,9 @@ def _sigma2_triangle(h,energies,nk,T,delta,trip,gauge,degeneracy_tol,
 
 def _sigma2_qtci(h,energies,nk,T,delta,trip,gauge,degeneracy_tol,
         tolerance=1e-6):
+    if h.dimensionality==3: raise NotImplementedError("integration="
+            "'qtci' of the second-harmonic conductivity is only implemented "
+            "in 2D, not in 3D; use integration='grid'")
     from . import shgsimplex
     return shgsimplex.sigma_qtci(h,energies,nk,T,delta,trip,degeneracy_tol,
             tolerance=tolerance)
@@ -286,6 +328,19 @@ def get_integration_names():
     return list(_integrations)
 
 
+def _check_hamiltonian(h,delta):
+    """Guards shared by shg_conductivity and sigma2_length"""
+    if h.dimensionality not in (1,2,3): raise NotImplementedError(
+            "the second-order conductivity is only implemented for "
+            "dimensionality 1, 2 or 3, got "+str(h.dimensionality))
+    if h.has_eh: raise NotImplementedError("the second-harmonic "
+            "conductivity is not implemented for Nambu (superconducting) "
+            "Hamiltonians: the charge current operator there is not i[H,r]")
+    if not delta>0.: raise ValueError("the broadening delta must be "
+            "positive, the response has a 1/(w + i delta)^2 prefactor, got "
+            "delta="+str(delta))
+
+
 def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
         components=None,gauge="velocity",degeneracy_tol=1e-6,
         integration="grid",tolerance=1e-6):
@@ -297,15 +352,7 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     single = isinstance(components,str)
     if components is None: components = _all_components
     if single: components = [components]
-    if h.dimensionality not in (1,2): raise NotImplementedError(
-            "the second-harmonic conductivity is only implemented for "
-            "dimensionality 1 or 2, got "+str(h.dimensionality))
-    if h.has_eh: raise NotImplementedError("the second-harmonic "
-            "conductivity is not implemented for Nambu (superconducting) "
-            "Hamiltonians: the charge current operator there is not i[H,r]")
-    if not delta>0.: raise ValueError("the broadening delta must be "
-            "positive, the response has a 1/(w + i delta)^2 prefactor, got "
-            "delta="+str(delta))
+    _check_hamiltonian(h,delta)
     if gauge not in _gauges: raise ValueError("unknown gauge "+repr(gauge)
             +", accepted values are "+", ".join(sorted(_gauges)))
     if gauge=="length" and T>0.: raise ValueError("the length-gauge path "
@@ -325,6 +372,94 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     out = {comp:s[:,i] for (i,comp) in enumerate(components)}
     if single: return energies,out[components[0]]
     return energies,out
+
+
+def _sigma2_length_grid(h,w1s,w2s,nk,delta,components,degeneracy_tol):
+    """Total and diagonal part of the length-gauge sigma_abc(w1,w2) on the
+    uniform mesh, averaged with the (b,w1) <-> (c,w2) partner, as two
+    arrays (len(w1s),len(components)), see sigma2_length"""
+    w1s = np.atleast_1d(np.array(w1s,dtype=np.float64))
+    w2s = np.atleast_1d(np.array(w2s,dtype=np.float64))
+    if w1s.shape!=w2s.shape: raise ValueError("w1s and w2s are the two "
+            "frequencies of each pair and need the same length, got "
+            +str(len(w1s))+" and "+str(len(w2s)))
+    _check_hamiltonian(h,delta)
+    trip,full,triplets,pairs,ipair = _triplets(components)
+    tms,dirs,d,hkgen,cellvol,scale = _derivative_tensors(h)
+    ks = kubo._kmesh(h,nk)
+    parallel.set_num_threads() # set the number of threads for numba
+    acc = np.zeros((2,2,len(w1s),len(full)),dtype=np.complex128)
+    for i0 in range(0,len(ks),_kbatch): # loop over batches of k-points
+        kb = ks[i0:i0+_kbatch]
+        es,h1,h2,h3 = _eigenbasis_derivatives(tms,dirs,d,hkgen,kb)
+        f = kubo._fermi(es,0.)
+        tol = degeneracy_tol*scale
+        acc[0] += np.array(_sigma2_length2(es,f,h1,h2,w1s,w2s,delta,full,
+                tol)) # (b,w1),(c,w2)
+        acc[1] += np.array(_sigma2_length2(es,f,h1,h2,w2s,w1s,delta,full,
+                tol)) # (b,w2),(c,w1), the partners
+    acc = acc/(len(ks)*cellvol) # (1/V) sum_k, with V = N_k * V_cell
+    def sym(p): # average (a,b,c) at (w1,w2) with (a,c,b) at (w2,w1)
+        return np.array([(acc[0,p][:,full.index((a,b,c))]
+                + acc[1,p][:,full.index((a,c,b))])/2.
+                for (a,b,c) in trip]).T
+    return sym(0),sym(1)
+
+
+def _components_out(s,components):
+    """dict of arrays, or one array for a single component string"""
+    if isinstance(components,str): return s[:,0]
+    return {comp:s[:,i] for (i,comp) in enumerate(components)}
+
+
+def sigma2_length(h,w1s,w2s,nk=20,delta=0.1,components=None,
+        degeneracy_tol=1e-6):
+    """Second-order conductivity sigma_abc(w1+w2;w1,w2) of a cold
+    insulator in the length gauge, at the frequency pairs (w1s[i],w2s[i]),
+    J_a(w1+w2) = sigma_abc(w1,w2) E_b(w1) E_c(w2), see _sigma2_length2 for
+    the formula. Every frequency carries the broadening w -> w + i delta,
+    so the pole at w1 + w2 carries 2 i delta; the occupations are those at
+    T=0 and the spectrum must be nondegenerate.
+
+    sigma is averaged over the two orderings of the fields, (b,w1) with
+    (c,w2), so sigma_abc(w1,w2) = sigma_acb(w2,w1), and it is not symmetric
+    in b and c at w1 != w2. At w1 = w2 it is the length-gauge
+    shg_conductivity. At (w,-w) it is the rectified current of the real
+    field E(t) = Re E0 exp(-iwt), J_a = (1/2) sigma_abc(w,-w) E0_b E0_c^*,
+    whose diagonal part (sigma2_length_diagonal) is eta_abc/delta, the
+    injection rate over the broadening, and whose remainder is the shift
+    current.
+
+    Units and conventions are those of shg_conductivity. Returns a dict
+    {component: array of len(w1s)}, or one array if components is a single
+    string."""
+    if components is None: components = _all_components
+    comps = [components] if isinstance(components,str) else components
+    s = _sigma2_length_grid(h,w1s,w2s,nk,delta,comps,degeneracy_tol)[0]
+    return _components_out(s,components)
+
+
+def sigma2_length_diagonal(h,w1s,w2s,nk=20,delta=0.1,components=None,
+        degeneracy_tol=1e-6):
+    """The n = m part of sigma2_length,
+
+      -q^3 (1/(N_k V_cell)) sum_k sum_n h^a_nn [D^b,Y^c]_nn/(w1 + w2 + 2 i delta)
+
+    averaged with the same partner. Since Y^c_nn = 0 it involves only the
+    interband pairs, and at (w,-w) delta times it is the injection rate
+
+      eta_abc = (pi q^3/2) (1/(N_k V_cell)) sum_k sum_{n!=m} f_nm
+                (h^a_mm - h^a_nn) r^b_mn r^c_nm L_delta(w - (E_m - E_n))
+
+    with L_delta(x) = (delta/pi)/(x^2 + delta^2), exactly at any delta and
+    nk: the principal parts of the two orderings cancel and only the
+    Lorentzian survives. eta_acb = eta_abc^*, so the bc-symmetric part is
+    the linear injection, odd under time reversal, and the bc-antisymmetric
+    part the circular one. Same arguments and return as sigma2_length."""
+    if components is None: components = _all_components
+    comps = [components] if isinstance(components,str) else components
+    s = _sigma2_length_grid(h,w1s,w2s,nk,delta,comps,degeneracy_tol)[1]
+    return _components_out(s,components)
 
 
 _e_over_eps0 = 1.602176634e-19/8.8541878128e-12 # e/epsilon_0, in V m
