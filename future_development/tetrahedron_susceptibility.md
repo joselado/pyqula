@@ -665,7 +665,11 @@ once numba has compiled the kernels:
   kernels take this shortcut, so the agreement of the two kernels does
   not test it.
 
-With these, `tests/chi` passes, 196 tests.
+With these, `tests/chi` has 229 tests. They all pass on a machine
+without a GPU. On the workstation with the card, 219 pass and 10 fail:
+the single-precision device paths of `test_chi_gpu.py` and
+`test_pairchi_gpu.py`, which fail in the same way with the code before
+these changes, and do not touch the triangle.
 
 ## What wins and what loses
 
