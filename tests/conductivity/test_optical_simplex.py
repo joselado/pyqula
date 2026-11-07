@@ -269,7 +269,10 @@ def test_nearly_flat_triangle_far_from_resonance():
     delta alone lost up to 10% of this simplex. The direct kernel must give
     the quadrature value to rounding, far from resonance and on it. The
     source kernel expands below s = delta only, so at s = delta it takes
-    the divided difference, which loses about eps |x|/s of the simplex."""
+    the divided difference, which loses about eps (|x|/s)^2 of the value
+    far from resonance. It keeps that vertex form because the loss is
+    below 3e-11 of the peak of the triangle, about 1/delta, so here it
+    is 1.5e-10 of the far value."""
     from pyqula.conductivitytk import kubosimplex
     delta = 1e-6
     sim = np.array([[0,1,2]], dtype=np.int64)

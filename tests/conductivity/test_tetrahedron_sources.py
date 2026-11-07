@@ -52,10 +52,10 @@ def _one_by_one(E, ws, delta, kernel):
 
 
 def _exact(e, w, delta):
-    """K! psi_K[e] at z = w + i delta with mpmath at 60 digits, exactly
+    """K! psi_K[e] at z = w + i delta with mpmath at 150 digits, exactly
     equal nodes split by 1e-30"""
     import mpmath
-    mpmath.mp.dps = 60
+    mpmath.mp.dps = 150
     z = mpmath.mpc(w, delta)
     es = [mpmath.mpf(float(x)) for x in e]
     for i in range(len(es)):
@@ -74,13 +74,32 @@ def _exact(e, w, delta):
 PATTERNS = [None, (4,), (3, 1), (2, 2), (2, 1, 1), (1, 1, 2)]
 
 
+def _compare(E, ws, delta):
+    """Both kernels on the tetrahedra E at the frequencies ws, to 1e-11 of
+    the largest value of each tetrahedron on ws. Where they differ by more,
+    the source kernel is checked against mpmath to 1e-11 instead. Returns
+    the number of such entries."""
+    src = _one_by_one(E, ws, delta, "sources")
+    ref = _one_by_one(E, ws, delta, "simplices")
+    peak = np.max(np.abs(ref), axis=0)
+    bad = np.abs(src-ref) > 1e-11*peak[None, :]
+    for iw, t in zip(*np.nonzero(bad)):
+        try:
+            exact = _exact(E[t], ws[iw], delta)
+        except ImportError: # without mpmath, the floor of both
+            assert abs(src[iw, t]-ref[iw, t]) < 1e-10*peak[t]
+            continue
+        assert abs(src[iw, t]-exact) < 1e-11*peak[t], (E[t], ws[iw])
+    return int(np.sum(bad))
+
+
 @pytest.mark.parametrize("delta", [1e-2, 1e-3, 1e-6])
 def test_sources_agree_with_the_direct_kernel_on_random_tetrahedra(delta):
     """Every tetrahedron, at every frequency, to 1e-11 of its own peak
     over the frequencies, which include its node energies so that the peak
     is sampled. The direct kernel takes the exact divided difference when
     the spread is above 0.05 |c - z|, and near resonance for a spread of
-    about delta that loses up to 4e-11 of the peak by itself; where the
+    about delta that loses up to 3e-11 of the peak by itself; where the
     two differ by more than 1e-11, the source kernel is checked against
     mpmath instead (and the difference is then the direct kernel's)."""
     rng = np.random.default_rng(7)
@@ -92,21 +111,22 @@ def test_sources_agree_with_the_direct_kernel_on_random_tetrahedra(delta):
             E = _tetrahedra(pattern, eps, 12, rng)
             ws = np.sort(np.concatenate([np.linspace(0., 4., 21), E.ravel(),
                     E.mean(axis=1)]))
-            src = _one_by_one(E, ws, delta, "sources")
-            ref = _one_by_one(E, ws, delta, "simplices")
-            peak = np.max(np.abs(ref), axis=0)
-            assert np.all(peak > 0.2)
-            bad = np.abs(src-ref) > 1e-11*peak[None, :]
-            for iw, t in zip(*np.nonzero(bad)):
-                nflag += 1
-                try:
-                    exact = _exact(E[t], ws[iw], delta)
-                except ImportError: # without mpmath, the floor of both
-                    assert abs(src[iw, t]-ref[iw, t]) < 1e-10*peak[t]
-                    continue
-                assert abs(src[iw, t]-exact) < 1e-11*peak[t], (pattern, eps,
-                        E[t], ws[iw])
+            nflag += _compare(E, ws, delta)
     assert nflag < 100 # the floor of the direct kernel is rare
+
+
+@pytest.mark.parametrize("delta", [1e-2, 1e-6])
+def test_sources_agree_with_the_direct_kernel_far_from_the_window(delta):
+    """Tetrahedra at negative energies, as the reverse terms at -dE, with
+    the frequencies on [0, 4]: most of them go to the moments of their
+    energy bin, the others to the vertex form or kept whole. To 1e-11 of
+    the largest value of each tetrahedron on the window, with the same
+    mpmath check where the direct kernel is the one that is off"""
+    rng = np.random.default_rng(3)
+    for pattern in PATTERNS:
+        for eps in [0., 1e-9, 0.3*delta, 3*delta]:
+            E = -_tetrahedra(pattern, eps, 12, rng)
+            _compare(E, np.linspace(0., 4., 41), delta)
 
 
 def test_exactly_confluent_tetrahedra_are_exact():

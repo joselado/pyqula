@@ -254,18 +254,30 @@ def simplices(dim,nk):
 # farthest frequency), and when it is above _tol of the peak of the
 # simplex, the whole simplex is one point source evaluated per frequency
 # with simplexdos._dd, as the direct kernel does. In 2D the loss is
-# quadratic and few triangles are kept whole. In 3D it is cubic: on a
-# mesh of nk = 48 a third (delta = 1e-2) to a half (delta = 1e-3) of the
-# tetrahedra are kept whole, most of them reverse terms at -dE, which lie
-# farthest from a positive frequency window. Without this rule the source
-# kernel lost up to 1e-9 of the peak of a tetrahedron at delta = 1e-2 and
-# all of it at delta = 1e-6.
+# quadratic and few triangles are kept whole. In 3D it is cubic. Without
+# this rule the source kernel lost up to 1e-9 of the peak of a tetrahedron
+# at delta = 1e-2 and all of it at delta = 1e-6.
+#
+# Most of the simplices that this rule keeps whole are far from every
+# frequency of the window, the reverse terms at -dE above all. Those go
+# to energy bins instead: a simplex whose nodes lie within _rho of the
+# distance from the center C of its bin to the window is expanded around
+# C, K! psi_K[e] = sum_k K! k!/(k+K)! h_k(e - C) (z - C)^-(k+1), which
+# converges at a rate _rho or better at every frequency of the window and
+# has no cancellation, and the bin keeps the sum of these moments. A bin
+# costs _kmax terms per frequency, whatever the number of simplices in it.
+# On the 3D test model at nk = 48 and delta = 1e-2 this leaves 7% of the
+# simplex pairs kept whole, against 35% without the bins.
 
 _alpha = 1. # see above
 _nmax = 200 # largest order of the Taylor series of a point source
 _tol = 3e-11 # largest rounding error of a simplex in its vertex form,
 # relative to its peak, before it is evaluated per frequency instead
 _direct = 10 # type of a point source evaluated by simplexdos._dd
+_nbins = 512 # energy bins of the far simplices
+_rho = 0.5 # a simplex goes to its bin when its nodes are within _rho times
+# the distance from the bin center to the frequency window
+_kmax = 60 # order of the expansion of a bin, _rho^_kmax < 1e-17
 
 
 @jit(nopython=True,cache=True)
@@ -386,11 +398,13 @@ def _simplex_sources(mode,e,kv,nv,wbar,tolc,Av,p,n,ep,tp,yp,ca,fact,
 
 @jit(nopython=True,cache=True)
 def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
-        wlo,whi,delta,tol,flag,Af,Ar,ep,tp,yp,ca):
+        wlo,whi,delta,tol,flag,Af,Ar,ep,tp,yp,ca,bins,M):
     """the sources of the simplices i0..i1-1, see _sources_jit, from point
     index n on. mode=0 also decides the branch of every simplex and pair,
-    flag[it,p,0] forward and flag[it,p,1] reverse, 1 when it is kept whole.
-    Returns the new n."""
+    flag[it,p,0] forward and flag[it,p,1] reverse: 0 for the vertex form,
+    1 when it is kept whole, 2 when it goes to its energy bin. mode=3 adds
+    the binned simplices to the moments M[j,k,c] of the bins, whose
+    centers are bins[0] + (j+1/2) bins[1]. Returns the new n."""
     nv = simplices.shape[1]
     npair = dE.shape[1]
     nc = W.shape[2]
@@ -415,37 +429,94 @@ def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
                     kv[v] = simplices[it,v]
                     e[v] = sg*dE[kv[v],p]
                 _sort_nodes(e,kv,nv)
+                C = 0.
+                j = 0
+                if mode==0 or mode==3: # the bin of the simplex
+                    cm = 0.
+                    for v in range(nv): cm += e[v]
+                    cm /= nv
+                    j = int((cm-bins[0])/bins[1])
+                    j = min(max(j,0),M.shape[0]-1)
+                    C = bins[0]+(j+0.5)*bins[1]
                 if mode==0:
-                    big = _vertex_error(e,nv,tolc,fact,harm,wlo,whi,delta,
-                            slo,shi,sco)>tol
-                    flag[it,p,r] = 1 if big else 0
+                    rad = max(abs(e[0]-C),abs(e[nv-1]-C))
+                    D = max(wlo-C,C-whi,0.)
+                    if rad*rad<=_rho*_rho*(D*D+delta*delta): flag[it,p,r] = 2
+                    elif _vertex_error(e,nv,tolc,fact,harm,wlo,whi,delta,
+                            slo,shi,sco)>tol: flag[it,p,r] = 1
+                    else: flag[it,p,r] = 0
+                if flag[it,p,r]==2:
+                    if mode==3: _add_moments(e,nv,C,wbar if r==0 else wrev,
+                            M,j,fact)
+                    continue
+                if mode==3: continue
                 n = _simplex_sources(mode,e,kv,nv,wbar if r==0 else wrev,
                         tolc,Af if r==0 else Ar,p,n,ep,tp,yp,ca,fact,
                         slo,shi,sco,flag[it,p,r]==1)
     return n
 
 
+@jit(nopython=True,cache=True)
+def _add_moments(e,nv,C,wbar,M,j,fact):
+    """add the simplex with nodes e to the moments of bin j, of center C:
+    K! psi_K[e] = sum_k K! k!/(k+K)! h_k(e - C) u^(k+1), u = 1/(z - C),
+    which converges for |z - C| > max |e - C|"""
+    K = nv-1
+    y0 = e[0]-C; y1 = e[1]-C
+    y2 = e[2]-C if nv>2 else 0.
+    y3 = e[3]-C if nv>3 else 0.
+    H0 = 1.; H1 = 1.; H2 = 1.; H3 = 1. # h_k(y_0..y_i), i = 0..3
+    g = 1. # K! k!/(k+K)!
+    for k in range(M.shape[1]):
+        if k>0:
+            H0 = y0*H0
+            H1 = H0+y1*H1
+            H2 = H1+y2*H2
+            H3 = H2+y3*H3
+            g *= k/(k+K)
+        hk = H1 if nv==2 else (H2 if nv==3 else H3)
+        f = g*hk
+        for c in range(wbar.shape[0]): M[j,k,c] += f*wbar[c]
+
+
 @jit(nopython=True,parallel=True,cache=True)
 def _sources_jit(mode,simplices,dE,W,trans,diag,tolc,fact,harm,wlo,whi,
-        delta,tol,chunk,start,flag,ep,tp,yp,ca):
+        delta,tol,chunk,start,flag,ep,tp,yp,ca,bins,nbins):
     """Count (mode=0) or write (mode=1) the point sources of the whole
     simplex sum, in parallel over chunks of simplices; the point sources of
     chunk ic go from start[ic] on. Clusters of spread below tolc are Taylor
     expanded. A simplex whose vertex form would lose more than tol of its
     peak at a frequency of [wlo,whi] is kept whole, as a point source
-    evaluated per frequency; the count decides this and stores it in flag.
-    Returns the number of point sources of every chunk."""
+    evaluated per frequency, and a simplex far from the window goes to the
+    moments of its energy bin; the count decides this and stores it in
+    flag. Returns the number of point sources of every chunk."""
     ns = simplices.shape[0]
     nchunk = (ns+chunk-1)//chunk
     count = np.zeros(nchunk,dtype=np.int64)
     A0 = np.zeros((1,1,1),dtype=np.complex128) # the vertices are not written
+    M0 = np.zeros((nbins,1,1),dtype=np.complex128) # nor the moments
     for ic in prange(nchunk): # parallel loop over chunks of simplices
         n0 = start[ic] if mode==1 else 0
         n = _chunk_sources(mode,ic*chunk,min(ns,(ic+1)*chunk),n0,simplices,
                 dE,W,trans,diag,tolc,fact,harm,wlo,whi,delta,tol,flag,A0,A0,
-                ep,tp,yp,ca)
+                ep,tp,yp,ca,bins,M0)
         count[ic] = n-n0
     return count
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _moments_jit(simplices,dE,W,trans,diag,fact,harm,flag,bins,M):
+    """Moments M[g,j,k,c] of the binned simplices, group g of the simplices
+    in its own copy, in parallel over the groups"""
+    ns = simplices.shape[0]
+    ng = M.shape[0]
+    e0 = np.zeros(1); t0 = np.zeros(1,dtype=np.int64)
+    y0 = np.zeros((1,4)); c0 = np.zeros((1,1),dtype=np.complex128)
+    A0 = np.zeros((1,1,1),dtype=np.complex128)
+    for g in prange(ng): # parallel loop over groups of simplices
+        _chunk_sources(3,(g*ns)//ng,((g+1)*ns)//ng,0,simplices,dE,W,trans,
+                diag,0.,fact,harm,0.,0.,1.,0.,flag,A0,A0,e0,t0,y0,c0,bins,
+                M[g])
 
 
 @jit(nopython=True,cache=True)
@@ -456,8 +527,9 @@ def _vertex_sources_jit(simplices,dE,W,trans,diag,tolc,fact,harm,flag,
     flag. Serial, since the simplices sharing a vertex add to one entry."""
     e0 = np.zeros(1); t0 = np.zeros(1,dtype=np.int64)
     y0 = np.zeros((1,4)); c0 = np.zeros((1,1),dtype=np.complex128)
+    M0 = np.zeros((1,1,1),dtype=np.complex128)
     _chunk_sources(2,0,simplices.shape[0],0,simplices,dE,W,trans,diag,tolc,
-            fact,harm,0.,0.,1.,0.,flag,Af,Ar,e0,t0,y0,c0)
+            fact,harm,0.,0.,1.,0.,flag,Af,Ar,e0,t0,y0,c0,np.zeros(2),M0)
 
 
 @jit(nopython=True,cache=True)
@@ -524,7 +596,7 @@ def _point_value(m,K,x,y0,y1,y2,y3,harm):
 
 @jit(nopython=True,parallel=True,cache=True)
 def _evaluate_sources_jit(ev,cv,K,ep,tp,yp,ca,omegas,delta,nchunk,harm,
-        fact):
+        fact,Cb,Mb):
     """Sum of all sources at every frequency. The parallel loop runs over
     (frequency, chunk of sources), each task writing its own partial sum,
     so the result does not depend on the number of threads."""
@@ -557,6 +629,13 @@ def _evaluate_sources_jit(ev,cv,K,ep,tp,yp,ca,omegas,delta,nchunk,harm,
             else: f = _point_value(tp[i],K,ep[i]-z,yp[i,0],yp[i,1],yp[i,2],
                     yp[i,3],harm)
             for c in range(nc): acc[c] += ca[i,c]*f
+        if ic==0: # the bins, sum_k M_k u^(k+1) by Horner
+            for jb in range(Cb.shape[0]):
+                u = 1./(z-Cb[jb])
+                for c in range(nc):
+                    hs = 0j
+                    for k in range(Mb.shape[1]-1,-1,-1): hs = hs*u+Mb[jb,k,c]
+                    acc[c] += hs*u
         for c in range(nc): part[iw,ic,c] = acc[c]
     out = np.zeros((nw,nc),dtype=np.complex128)
     for iw in range(nw):
@@ -591,8 +670,8 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
         tol=None):
     """All the sources of the simplex sum for the frequencies in
     window = (wmin,wmax), see _sources_jit: vertex sources (energies ev,
-    coefficients cv of psi_K) and point sources (energies ep, types tp,
-    shapes yp, coefficients ca)"""
+    coefficients cv of psi_K), point sources (energies ep, types tp,
+    shapes yp, coefficients ca) and energy bins (centers Cb, moments Mb)"""
     if alpha is None: alpha = _alpha
     if tol is None: tol = _tol
     npts,npair = dE.shape
@@ -604,15 +683,26 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
     nchunk = (ns+chunk-1)//chunk
     args = (simplices,dE,W,trans,diag,tolc,_dos_fact,_dos_harm,
             float(window[0]),float(window[1]),float(delta),float(tol),chunk)
+    # energy bins of the far simplices, over the range of +-dE
+    emax = max(float(np.max(np.abs(dE))) if dE.size else 0.,1e-300)
+    bins = np.array([-emax,2.*emax/_nbins])
     e0 = np.zeros(0); t0 = np.zeros(0,dtype=np.int64)
     y0 = np.zeros((0,4)); c0 = np.zeros((0,nc),dtype=np.complex128)
     count = _sources_jit(0,*args,np.zeros(nchunk,dtype=np.int64),flag,
-            e0,t0,y0,c0) # count the point sources and decide the branches
+            e0,t0,y0,c0,bins,_nbins) # count the points, decide the branches
     start = np.concatenate([[0],np.cumsum(count)[:-1]]).astype(np.int64)
     npoint = int(np.sum(count))
     ep = np.zeros(npoint); tp = np.zeros(npoint,dtype=np.int64)
     yp = np.zeros((npoint,4)); ca = np.zeros((npoint,nc),dtype=np.complex128)
-    _sources_jit(1,*args,start,flag,ep,tp,yp,ca)
+    _sources_jit(1,*args,start,flag,ep,tp,yp,ca,bins,_nbins)
+    import numba
+    ng = max(1,min(numba.get_num_threads(),ns//4096))
+    M = np.zeros((ng,_nbins,_kmax,nc),dtype=np.complex128)
+    _moments_jit(simplices,dE,W,trans,diag,_dos_fact,_dos_harm,flag,bins,M)
+    M = M.sum(axis=0)
+    used = np.nonzero(np.any(M!=0.,axis=(1,2)))[0]
+    Cb = bins[0]+(used+0.5)*bins[1]
+    Mb = np.ascontiguousarray(M[used])
     A = np.zeros((2,npts,npair,nc),dtype=np.complex128) # forward, reverse
     _vertex_sources_jit(simplices,dE,W,trans,diag,tolc,_dos_fact,_dos_harm,
             flag,A[0],A[1])
@@ -628,7 +718,7 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
             yp],axis=1),ca)
     tp = keys[:,0].astype(np.int64)
     return (ev[:,0].copy(),cv,keys[:,1].copy(),tp,
-            np.ascontiguousarray(keys[:,2:]),ca)
+            np.ascontiguousarray(keys[:,2:]),ca,Cb,Mb)
 
 
 def _sigma_sources(simplices,dE,W,trans,diag,omegas,delta):
@@ -636,15 +726,16 @@ def _sigma_sources(simplices,dE,W,trans,diag,omegas,delta):
     import numba
     omegas = np.asarray(omegas,dtype=np.float64)
     window = (np.min(omegas),np.max(omegas)) if len(omegas) else (0.,0.)
-    ev,cv,ep,tp,yp,ca = simplex_sources(simplices,dE,W,trans,diag,delta,
-            window)
+    ev,cv,ep,tp,yp,ca,Cb,Mb = simplex_sources(simplices,dE,W,trans,diag,
+            delta,window)
     K = simplices.shape[1]-1 # 1, 2 or 3 in 1D, 2D or 3D
     nw = len(omegas)
     nsrc = len(ev)+len(ep)
     # enough tasks to keep every thread busy when there are few frequencies
     nchunk = max(1,min(nsrc//1024,-(-4*numba.get_num_threads()//max(nw,1))))
     return _evaluate_sources_jit(ev,np.ascontiguousarray(cv),K,ep,tp,yp,
-            np.ascontiguousarray(ca),omegas,delta,nchunk,_dos_harm,_dos_fact)
+            np.ascontiguousarray(ca),omegas,delta,nchunk,_dos_harm,_dos_fact,
+            Cb,Mb)
 
 
 _kernels = {
