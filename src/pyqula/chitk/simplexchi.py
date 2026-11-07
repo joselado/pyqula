@@ -729,6 +729,9 @@ def _emitT(En,Em,D,p,T,degenerate,tbreaks,kv,G,n,m,ws,acc,kn,i0,pt,
                 pt,pc,pb,dgrow,dmin,span,off)
     nkn = _knots(En,Em,D,p,0.,T,tbreaks,False,kn)
     wA = 0.; wB = 0.; xA = 0.; xB = 0.
+    lo = np.empty(p); hi = np.empty(p) # a band below or above every node
+    for v in range(p):
+        lo[v] = -1.; hi[v] = 1.
     for i in range(nkn-1): # as in _quadrature
         a = kn[i]; b = kn[i+1]
         if b<=a: continue
@@ -742,18 +745,75 @@ def _emitT(En,Em,D,p,T,degenerate,tbreaks,kv,G,n,m,ws,acc,kn,i0,pt,
         if kind==2:
             wB += sp; xB = 0.5*(a+b)
             continue
+        side = 0 if degenerate else _complement(En,Em,p,0.5*(a+b))
+        if side!=0:
+            emin = En[0]
+            for v in range(p): emin = min(emin,En[v],Em[v])
+            for v in range(p):
+                lo[v] = min(a,emin)-1.; hi[v] = b+1.
         for q in range(_gx.shape[0]):
             ok,x,wq = _graded_node(q,sg,f1,sp,T)
             if not ok: continue
-            i0 = _emit0(En,Em,D,p,x,degenerate,wq,kv,G,n,m,ws,acc,i0,
-                    pt,pc,pb,dgrow,dmin,span,off)
-    if wA>0.:
-        i0 = _emit0(En,Em,D,p,xA,degenerate,wA,kv,G,n,m,ws,acc,i0,pt,pc,pb,
+            if side==0:
+                i0 = _emit0(En,Em,D,p,x,degenerate,wq,kv,G,n,m,ws,acc,i0,
+                        pt,pc,pb,dgrow,dmin,span,off)
+            elif side==1: # A = S - (the part E_n > x of S, in B)
+                wA += wq
+                i0 = _emit0(En,lo,D,p,x,False,wq,kv,G,n,m,ws,acc,i0,
+                        pt,pc,pb,dgrow,dmin,span,off)
+            elif side==2: # -B = -S + (the part E_n < x of S, in A)
+                wB += wq
+                i0 = _emit0(En,hi,D,p,x,False,wq,kv,G,n,m,ws,acc,i0,
+                        pt,pc,pb,dgrow,dmin,span,off)
+            elif side==3: # A = S - (the part E_m < x of S, in B)
+                wA += wq
+                i0 = _emit0(hi,Em,D,p,x,False,wq,kv,G,n,m,ws,acc,i0,
+                        pt,pc,pb,dgrow,dmin,span,off)
+            else: # -B = -S + (the part E_m > x of S, in A)
+                wB += wq
+                i0 = _emit0(lo,Em,D,p,x,False,wq,kv,G,n,m,ws,acc,i0,
+                        pt,pc,pb,dgrow,dmin,span,off)
+    if degenerate: # A and B of a degenerate pair carry no Fermi surface
+        if wA>0.:
+            i0 = _emit0(En,Em,D,p,xA,True,wA,kv,G,n,m,ws,acc,i0,pt,pc,pb,
+                    dgrow,dmin,span,off)
+        if wB>0.:
+            i0 = _emit0(En,Em,D,p,xB,True,wB,kv,G,n,m,ws,acc,i0,pt,pc,pb,
+                    dgrow,dmin,span,off)
+        return i0
+    for v in range(p):
+        lo[v] = -1.; hi[v] = 1.
+    if wA>0.: # the whole simplex in A
+        i0 = _emit0(lo,hi,D,p,0.,False,wA,kv,G,n,m,ws,acc,i0,pt,pc,pb,
                 dgrow,dmin,span,off)
-    if wB>0.:
-        i0 = _emit0(En,Em,D,p,xB,degenerate,wB,kv,G,n,m,ws,acc,i0,pt,pc,pb,
+    if wB>0.: # and in B
+        i0 = _emit0(hi,lo,D,p,0.,False,wB,kv,G,n,m,ws,acc,i0,pt,pc,pb,
                 dgrow,dmin,span,off)
     return i0
+
+
+@jit(nopython=True,cache=True)
+def _complement(En,Em,p,x):
+    """whether the region of a piece of x where only one band moves is
+    tiled with fewer pieces as the whole simplex minus the rest: 0 when
+    not, and otherwise which of the four cases of _emitT applies. With
+    the other band on one side of x, the region is the part E < x or E >
+    x of the moving band E, whose tiling has _NR[p-2,k] pieces for k
+    vertices inside it, and the whole simplex adds nothing, since it is
+    summed into one piece per pair"""
+    nn = 0; nm = 0
+    for i in range(p):
+        if En[i]<x: nn += 1
+        if Em[i]<x: nm += 1
+    if nm==0 and nn>0 and nn<p: # A = the part E_n < x
+        if _NR[p-2,p-nn]<_NR[p-2,nn]: return 1
+    elif nm==p and nn>0 and nn<p: # B = the part E_n > x
+        if _NR[p-2,nn]<_NR[p-2,p-nn]: return 2
+    elif nn==p and nm>0 and nm<p: # A = the part E_m > x
+        if _NR[p-2,nm]<_NR[p-2,p-nm]: return 3
+    elif nn==0 and nm>0 and nm<p: # B = the part E_m < x
+        if _NR[p-2,p-nm]<_NR[p-2,nm]: return 4
+    return 0
 
 
 @jit(nopython=True,cache=True)
