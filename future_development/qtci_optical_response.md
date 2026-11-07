@@ -824,7 +824,185 @@ in it the count, the merge and the moments passes, each 0.01 to 0.03 s on
 three cores. The energy bins of the far simplices and the sets could also
 take the rate of each frequency for their own truncation, as the sets now
 do. The budget 1/100 is set on one model; a model with many more close
-pairs could want a check of the precision again.
+pairs could want a check of the precision again. The next subsection
+answers these three points.
+
+### The budget on more models, and the error that grew with nk (7 November 2026)
+
+The questions were whether the budget 1/100 is safe on other models, why
+the error of the source kernel grew from 2e-13 to 7e-13 of the largest
+entry between nk = 24 and 48 on the layered model while the direct kernel
+stayed near 5e-14, and what the build costs at 40 frequencies.
+
+The reference. An mpmath sum of every tetrahedron took 13 minutes at
+nk = 24, too slow for six models and three broadenings. The reference is
+now a hybrid. Where the nodes of a tetrahedron are within 0.3 |z - c| of
+their mean c, we take the moment series around c in longdouble, 48
+orders, which does not cancel. Elsewhere we take the vertex form in
+longdouble, where its rounding bound, 8 eps times the sum of |terms|
+times the weight, is below 1e-15 of the largest entry over the square
+root of the number of tetrahedron pairs, and mpmath for the rest (0.6% to
+7% of the entries). This takes 20 s at nk = 24 and 2 minutes at nk = 48 on
+three cores, and it agrees with the full mpmath reference to 7e-16 of
+the largest entry. A bound 100 times stricter moved it by 6e-17 on the
+model with close pairs.
+
+The models. All are 3D, with the interband part, T = 1e-3 t and 40
+frequencies on [0.1, 4] t:
+
+- layered: the Haldane layers of "3D crystals", interlayer mass 0.05 t, at
+  nk = 24 and 48;
+- layered, tm = 1e-3: the same with an interlayer mass of 1e-3 t, so that
+  most tetrahedra have a close pair of nodes along kz;
+- cubic metal: the spinful simple cubic band with Rashba coupling 0.3 t,
+  an exchange field (0.1, 0.2, 0.3) t and the Fermi level 1 t inside the
+  band, so the weights live near the Fermi surface;
+- diamond: first-neighbor diamond lattice, with its nodal lines at E = 0;
+- diamond, spinful: the same with the Fu-Kane-Mele spin-orbit coupling
+  0.1 t, so every band is a Kramers pair.
+
+Why the error grew with nk. We summed each class of tetrahedra alone, with
+both kernels and with its own reference: forward at dE and reverse at -dE,
+and in each the vertex form, the binned ones and the split ones. On the
+layered model at nk = 24 and delta = 1e-2 the forward tetrahedra in vertex
+form carry all the error, 1.2e-13 against 9e-15 for the direct kernel on
+the same class, while the split ones are at 5e-15 and the binned ones at
+1e-17. The reason is that the vertex sources cancel at every frequency: the
+sum of |coefficient| |psi_3| over them is 5.0e3 times the largest entry at
+nk = 24 and 8.3e3 at nk = 48. A plain running sum of such terms loses eps
+times this times a factor that grows with the number of terms, which is
+the growth with nk. The direct kernel does not see it, since far from z
+it takes the Taylor series of each tetrahedron, which does not cancel.
+We tried three fixes on the layered model at delta = 1e-2.
+
+- Vertex coefficients in double-double, accumulated without rounding:
+  2.2e-13 to 2.1e-13 at nk = 24, so the coefficients are fine and the loss
+  is in the sum per frequency. Not kept.
+- A compensated sum (Knuth's two-sum) of the vertex sources only: 6.6e-14
+  at nk = 24 and 1.2e-13 at nk = 48 (with the double-double coefficients,
+  which change nothing measurable).
+- A compensated sum of every term of the sum per frequency: 2.8e-14 and
+  5.2e-14, against 3.2e-14 and 6.5e-14 for the direct kernel.
+
+The third one is the fix (`_kadd` in `kubosimplex.py`). Two sources are
+added plainly before each compensated addition: on four models this gives
+the same error as compensating every source, while blocks of 4 and 16 gave
+up to 1.5 and 2.5 times more. What is left is the rounding of each term,
+eps times the root of the sum of the squared terms, and it moves by about
+50% with the order of the summation; the result on the cubic metal moved
+from 3.8e-13 to 2.2e-13 just with the order of the merged sources.
+
+The error table. Largest error over frequencies and components, relative
+to the largest entry of the reference. "Before" is the kernel of b343d03;
+the other columns are the kernel now, with the budget b and the vertex
+bound `_tol` = 3e-11 unless noted.
+
+| model | nk | delta | direct | before | b = 1 | b = 1/10 | b = 1/100 | b = 1/1000 | b = 0 | b = 1/100, `_tol` = 3e-12 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| layered | 24 | 1e-2 | 3.2e-14 | 2.2e-13 | 4.3e-14 | 3.3e-14 | 6.2e-14 | 6.4e-14 | 6.4e-14 | 6.5e-15 |
+| layered | 24 | 1e-4 | 2.3e-14 | 1.1e-13 | 2.3e-13 | 9.3e-14 | 7.1e-14 | 9.0e-14 | 9.3e-14 | 9.0e-15 |
+| layered | 24 | 1e-6 | 4.3e-14 | 1.5e-13 | 3.4e-13 | 6.8e-14 | 6.8e-14 | 9.0e-14 | 9.0e-14 | 1.1e-14 |
+| layered | 48 | 1e-2 | 6.5e-14 | 7.4e-13 | 5.6e-14 | 5.6e-14 | 7.9e-14 | 7.1e-14 | 7.1e-14 | 1.1e-14 |
+| layered | 48 | 1e-4 | 7.2e-14 | 5.9e-14 | 1.2e-13 | 7.6e-14 | 1.1e-14 | 9.6e-15 | 1.2e-14 | 2.0e-15 |
+| layered | 48 | 1e-6 | 5.0e-13 | 1.4e-13 | 2.4e-13 | 8.0e-14 | 6.8e-15 | 5.9e-15 | 5.3e-15 | 2.8e-15 |
+| layered, tm = 1e-3 | 24 | 1e-2 | 2.1e-13 | 4.0e-13 | 2.0e-13 | 9.1e-14 | 7.6e-14 | 7.6e-14 | 7.6e-14 | 6.6e-15 |
+| layered, tm = 1e-3 | 24 | 1e-4 | 1.1e-13 | 1.4e-13 | 1.2e-13 | 1.2e-13 | 1.1e-13 | 1.2e-13 | 1.1e-13 | 1.1e-13 |
+| layered, tm = 1e-3 | 24 | 1e-6 | 5.4e-14 | 5.6e-14 | 1.2e-13 | 1.7e-13 | 5.6e-14 | 5.5e-14 | 5.4e-14 | 5.5e-14 |
+| cubic metal | 24 | 1e-2 | 1.7e-14 | 5.9e-13 | 3.5e-13 | 2.5e-13 | 2.2e-13 | 2.2e-13 | 2.2e-13 | 8.6e-15 |
+| cubic metal | 24 | 1e-4 | 1.7e-14 | 4.5e-13 | 2.0e-13 | 3.4e-13 | 3.2e-13 | 3.2e-13 | 3.2e-13 | 3.5e-15 |
+| cubic metal | 24 | 1e-6 | 1.5e-14 | 3.1e-13 | 1.7e-13 | 1.6e-13 | 1.6e-13 | 1.6e-13 | 1.6e-13 | 3.7e-15 |
+| diamond | 24 | 1e-2 | 5.3e-14 | 2.3e-13 | 2.1e-13 | 1.5e-13 | 2.2e-13 | 2.2e-13 | 2.1e-13 | 3.6e-14 |
+| diamond | 24 | 1e-4 | 3.5e-14 | 1.3e-13 | 1.6e-13 | 1.1e-13 | 1.6e-13 | 1.6e-13 | 1.6e-13 | 3.0e-14 |
+| diamond | 24 | 1e-6 | 5.2e-14 | 1.6e-13 | 1.1e-13 | 9.6e-14 | 1.3e-13 | 1.3e-13 | 1.3e-13 | 3.5e-14 |
+| diamond, spinful | 24 | 1e-2 | 1.8e-13 | 3.9e-13 | 1.3e-13 | 1.2e-13 | 9.3e-14 | 9.2e-14 | 9.2e-14 | 1.4e-14 |
+| diamond, spinful | 24 | 1e-4 | 1.6e-13 | 4.9e-13 | 2.4e-13 | 1.9e-13 | 1.7e-13 | 1.7e-13 | 1.7e-13 | 1.2e-14 |
+| diamond, spinful | 24 | 1e-6 | 1.9e-13 | 5.2e-13 | 1.9e-13 | 1.4e-13 | 1.3e-13 | 1.3e-13 | 1.3e-13 | 1.3e-14 |
+
+What the table says. With the compensated sum the budget 1/100 is as
+precise as keeping the tetrahedra whole (b = 0) on every model, while 1
+and 1/10 are worse at small delta (3.4e-13 and 1.7e-13 where b = 0 gives
+9e-14 and 5e-14). So the budget stays at 1/100. Before the compensated sum
+the budgets could not be told apart, since every column sat on the floor
+of the plain sum. The kernel now is better than before, or equal, on every
+row but one: the diamond at delta = 1e-4, 1.6e-13 against 1.3e-13, inside
+the 50% that the order of the summation moves. On the layered model the error
+no longer grows with nk, so a rule tied to the number of tetrahedra is not
+needed. What still separates the source kernel from the direct one on the
+metal and the diamond is not the budget but the vertex bound `_tol`: each
+tetrahedron in vertex form may lose 3e-11 of its own peak, and the metal,
+whose weights sit on a few tetrahedra near the Fermi surface, adds these
+up to 1.6e-13 to 3.2e-13. With `_tol` = 3e-12 every row is below 4e-14 except
+the one at tm = 1e-3 and delta = 1e-4, where both kernels are 1.1e-13
+from the reference. That floor is shared with the direct kernel, so it
+sits in the per-frequency divided differences of `simplexdos._dd`; it was
+not followed further. Note also that the direct kernel is not the better
+of the two everywhere: it is at 5.0e-13 on the layered model at nk = 48
+and delta = 1e-6, where the source kernel is at 7e-15.
+
+The single logarithm. A point source has two nodes or more (a single node
+is a vertex source), so `_add_node_moments` never writes the order 0 of
+`Ls`, and its logarithm was computed for nothing. The terms of orders 1
+to K-1 of a far set also share one logarithm, ln(Cs - z), so a far set
+now costs one logarithm per frequency instead of K.
+
+The bins of the far simplices. Each bin now keeps the largest distance of
+its nodes from its center and takes the orders that its rate needs at each
+frequency, as the sets do. At 400 frequencies in 3D this took the kernel
+from 0.353 s to 0.327 s, in 2D from 1.457 s to 1.429 s, and at 40
+frequencies it is inside the noise. It was kept.
+
+The build at 40 frequencies. On the layered model at nk = 24 the build
+is about three quarters of the call, on three cores, the smallest of six
+calls: the count pass 0.016 s, the write pass 0.008 s, the moments of
+the bins 0.026 s, the vertex pass 0.012 s, the merge of the 91332 point
+sources into 14436 0.035 s (0.012 s of it the lexicographic sort of their
+keys), the moments of the sets 0.008 s, the sum of the 16 copies of the
+moments of the bins 0.006 s. Two simple changes were tried and dropped: a
+sort by energy first with the ties sorted in numba was slower than the
+lexicographic sort (0.017 s against 0.012 s), and 6 groups of moments
+instead of 16 saved 0.008 s but would cap the parallel pass at 6 threads.
+Two were kept: the merge of the vertex sources takes the default sort
+instead of the stable one, since equal keys only need a deterministic
+order (0.055 s against 0.077 s for the 2.1M keys of the 2D model), and
+the test for vanishing vertex coefficients runs on a float view of the
+array.
+
+The cost. Three cores of the workstation with other jobs on the machine,
+the kernels loaded in one process and called in turn on the same saved
+pair fields, ten calls each, the smallest time in seconds. The 2D case is
+the spinful Haldane model at 512^2 and 141 frequencies of "The 2D cost of
+the tetrahedron kernel", the 3D case the layered model at nk = 24 and
+delta = 1e-2. The last two columns change only the bound `_tol` (and the
+budget) in 3D and 2D alike.
+
+| case | before | now | `_tol` = 1e-12, b = 1 | `_tol` = 3e-12, b = 1/100 |
+|---|---|---|---|---|
+| 2D, 512^2, 141 frequencies | 1.350 | 1.376 | 2.659 | 2.354 |
+| 3D, nk = 24, 40 frequencies | 0.121 | 0.112 | 0.159 | 0.196 |
+| 3D, nk = 24, 400 frequencies | 0.297 | 0.274 | 0.312 | 0.778 |
+
+So the 2D kernel costs the same within the noise (the medians are 1.436 s
+and 1.443 s), and the 3D kernel is 7% to 8% faster. In 2D the error against
+the longdouble references of "Precision of the two kernels" falls from
+7.5e-13 to 7.8e-14 at 512^2, from 6.6e-13 to 2.9e-13 at 256^2 and from
+7.0e-13 to 3.5e-13 at 128^2 (delta = 1e-3). A tighter `_tol` doubles the
+2D cost, so it is not for 2D. In 3D, `_tol` = 1e-12 with the budget 1
+costs 42% at 40 frequencies and 14% at 400 against the kernel now (31% and
+5% against the kernel before). It gives at most 5.4e-14 on every row of
+the table, the level of the direct kernel on that row, and 1.1e-13 on the
+shared floor, measured with the compensated sum on every source.
+
+`tests/conductivity/test_tetrahedron_sources.py` has a new test: on the
+layered model at nk = 24 the two kernels agree to 1.2e-13 of the largest
+entry. The kernel now gives 6.3e-14 there, and the kernel before 2.2e-13.
+
+What is left open. Whether 3D should take the tighter `_tol` = 1e-12 with
+the budget 1, 15 to 80 times more precise on the metal and the diamond for
+14% to 42% more time, is a choice left open. The 1.1e-13 that both
+kernels share on the model with close pairs at delta = 1e-4 points to
+`simplexdos._dd`. The merge of the point sources is a third of the build
+at 40 frequencies; a merge written in numba, which sorts and sums in one
+pass, would be the next thing to try.
 
 ## What is left open
 
