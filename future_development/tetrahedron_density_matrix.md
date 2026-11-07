@@ -1132,16 +1132,16 @@ fixed number of BLAS threads; the test asks for the same count and the
 energy to 1e-12, since a threaded BLAS may order its sums differently.
 Over the d-wave guesses with delta = 0.01, 0.05, 0.2, 0.3 and 0.5 `"ed"`
 needed 44, 50, 43, 63 and 23 iterations before and needs 23, 21, 19, 18
-and 15 now. The s-wave state at nk = 32 and 64 needs 23 and 24, against 28 and
-31. qtci with the s-wave state at nk = 8, where the gap is barely resolved,
-converges in 16 iterations against 22, to the same energy. Two cases got
-slower: the Zeeman case with qtci (321 against 300, where the
-interpolation noise of the charge keeps the window open longer) and the
-Zeeman case with `"ed"` at nk = 32 (53 against 42). At nk = 64 the Zeeman
-case does not converge in 1000 iterations, before as now. Why the Zeeman
-case is slow, and what was done about it, is in "The gapless Zeeman state"
-below. The wall
-time follows the iterations: on three reserved cores of a loaded
+and 15 now. The s-wave state at nk = 32 and 64 needs 23 and 24, against
+28 and 31. qtci with the s-wave state at nk = 8, where the gap is barely
+resolved, converges in 16 iterations against 22, to the same energy. The
+Zeeman case with `"ed"` at nk = 32 got slower, 53 against 42. The Zeeman
+case with qtci gave 321 against 300, but its count is not reproducible
+from run to run, so these two numbers do not rank the two steps. At
+nk = 64 the Zeeman case does not converge in 1000 iterations, before as
+now. Why the Zeeman case is slow, and what was done about it, is in "The
+gapless Zeeman state" below. The wall time follows the iterations: on
+three reserved cores of a loaded
 workstation the d-wave state takes 0.44 s against 1.7 s with `"ed"`, and
 the s-wave state at nk = 64 3.5 s against 5.3 s.
 
