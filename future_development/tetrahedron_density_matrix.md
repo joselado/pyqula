@@ -733,7 +733,11 @@ for the tetrahedra and 37 s for qtci, against 0.6 s and 0.8 s at T = 0, and
 131 s at 64^3; the weights at T = 1e-3 are 20 times slower than at T = 0 on
 another machine (1.45 s against 0.08 s at 32^3), and the Fermi search,
 which evaluates the charge at many trial levels, 20 times as well (10.2 s
-against 0.5 s). That cost is the same for both methods.
+against 0.5 s). That cost was the same for both methods. It is gone since
+the Fermi search is a safeguarded Newton step with the simplex DOS as its
+derivative (`simplex_fermi_search.md`): 4 charge evaluations instead of 11,
+each one cheaper, so at 32^3 and T = 1e-2 the search takes 0.20 s against
+20.8 s before, and 0.019 s against 0.55 s at T = 0.
 
 ## The total energy of a superconductor
 
@@ -1234,11 +1238,11 @@ loaded.
 - A 3D mean-field benchmark of the tetrahedra against a dense mesh was not
   run; the tetrahedron density matrix is only checked against a dense mesh
   on a cubic metal, in the tests. The 3D qtci is measured against the
-  tetrahedra on the same mesh (qtci in 3D above). The finite-temperature
-  Fermi search on the tetrahedra is 20 times slower than at T = 0 (33 s at
-  32^3), which makes a 3D mean field at T > 0 slow with either method; a
-  Fermi search that evaluates the charge at fewer trial levels, or the
-  T = 0 level as a start, would remove most of it. Not tried.
+  tetrahedra on the same mesh (qtci in 3D above). The slow
+  finite-temperature Fermi search of the tetrahedra (33 s at 32^3) is
+  solved by the Newton search of `simplex_fermi_search.md` (0.20 s at
+  32^3 and T = 1e-2); what is left of a 3D mean field at T > 0 is the
+  weights themselves.
 - Bands that cross are interpolated with a kink, as in the simplex DOS.
 - qtci for a metal is built, as the triangle on a quantics-interpolated
   mesh (see qtci above). What is open there: on a two-orbital model it

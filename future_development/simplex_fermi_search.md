@@ -67,14 +67,15 @@ at T=1e-3 and 2.4e-3 above it at T=1e-2. On the symmetric one the old
 level is the middle up to roundoff, but that roundoff is 1.1e-8 at
 T=1e-3, because N is flat to 1e-15 at the old edges.
 
-At T=0 the old search could also miss the middle completely. When the flat
-charge came out 1e-16 below the target, brentq saw no sign change inside
-the gap and stopped at the conduction edge. The check at mu0 +- 1e-8 then
-saw the band above, took the level for a metal, and returned E_c. This
-happens with both gapped honeycomb models at nk = 32 when the charge is
-the sum of `simplex_weights`, and it did not happen at nk = 64 with
-`simplex_charge`. So which answer you got depended on the sign of a
-roundoff. The new search does not depend on it, since the plateau is
+At T=0 a bracketing search can also miss the middle completely. When the
+flat charge comes out 1e-16 below the target, brentq sees no sign change
+inside the gap and stops at the conduction edge. The check at mu0 +- 1e-8
+then sees the band above, takes the level for a metal, and returns E_c.
+This happens with both gapped honeycomb models at nk = 32 when the charge
+is the sum of `simplex_weights`. The old search itself, which used
+`simplex_charge`, returned the middle on these two models at nk = 32 and
+64, to 9e-15. So the old answer was right here, but it depended on the
+sign of a roundoff. The new search does not depend on it, since the plateau is
 found from D = 0 and not from the sign of N - target.
 
 None of this has an effect on any computed quantity. On a plateau every weight is constant in mu,

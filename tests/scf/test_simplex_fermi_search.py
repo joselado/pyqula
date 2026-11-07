@@ -95,8 +95,7 @@ def test_insulator_returns_the_middle_of_the_gap(asymmetric,T,counted):
     """With the filling in the gap the charge is exactly flat between the
     top of the valence vertices and the bottom of the conduction vertices
     (at T>0 beyond the cutoff of the Fermi function, which this gap
-    exceeds), and the search returns the middle; the bracketing search
-    lands somewhere in the gap"""
+    exceeds), and the search returns the middle, from one evaluation"""
     h = _gapped(asymmetric)
     nk = 32
     es = _energies(h,nk)
@@ -106,11 +105,6 @@ def test_insulator_returns_the_middle_of_the_gap(asymmetric,T,counted):
     assert abs(mu-(ev+ec)/2.)<1e-12
     assert abs(_charge(2,nk,es,mu,T)-1.)<1e-12
     assert nev<=5
-    # the bracketing search is not always the middle: here at T=0 the flat
-    # charge is 1e-16 below the target, so brentq stops at the conduction
-    # edge, and the check at mu0 +- eps sees the band and keeps it
-    ref = _brentq_reference(2,nk,es,0.5,T)
-    assert ev-1e-12<=ref<=ec+1e-12
 
 
 @pytest.mark.parametrize("dim", [1,2,3])
