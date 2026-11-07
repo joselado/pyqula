@@ -295,7 +295,7 @@ def require_hermitian(h,what):
                 "integration=\"ed\" (the default) without use_jax")
 
 
-def _get_dm_ed(h,v,nk=None,tolerance=None,**kwargs):
+def _get_dm_ed(h,v,nk=None,tolerance=None,shell=None,**kwargs):
     """integration="ed": exact diagonalization on the uniform k-mesh"""
     if nk is None: nk = 1
     ds = [(0,0,0)] # directions
@@ -313,26 +313,28 @@ def _get_dm_ed(h,v,nk=None,tolerance=None,**kwargs):
         pairs = dm_sparse_pairs(v,ds,h.intra.shape[0],
                 has_spin=h.has_spin)
         return full_dm_accumulate_sparse(h,pairs,nk=nk,delta=T,**kwargs)
+    if shell is not None: kwargs["shell"] = shell # a BdG h at a filling
     dms = h.get_density_matrix(ds=ds,nk=nk,**kwargs) # get all the density matrices
     return dms # return dictionary
 
 
-def _get_dm_qtci(h,v,nk=None,tolerance=1e-6,**kwargs):
+def _get_dm_qtci(h,v,nk=None,tolerance=1e-6,shell=None,**kwargs):
     """integration="qtci": the triangle weights on a 2^R x 2^R mesh whose
     band energies and projectors come from quantics cross interpolations,
-    see qtcitk.densitymatrix_qtci"""
+    see qtcitk.densitymatrix_qtci. It does not fill the shell of a gapless
+    BdG state, so shell is not used"""
     require_hermitian(h,"integration=\"qtci\"")
     from ..qtcitk.densitymatrix_qtci import get_dm_qtci
     return get_dm_qtci(h,v,nk=nk,tolerance=tolerance,**kwargs)
 
 
-def _get_dm_triangle(h,v,nk=None,tolerance=None,T=0.,**kwargs):
+def _get_dm_triangle(h,v,nk=None,tolerance=None,T=0.,shell=None,**kwargs):
     """integration="triangle": linear simplex integration of the
     occupations on the uniform k-mesh, see dmtk.simplexdm"""
     from ..dmtk import simplexdm
     if nk is None: nk = simplexdm.default_nk
     ds = [(0,0,0)] + [d for d in v if tuple(d)!=(0,0,0)]
-    return simplexdm.get_dm(h,ds,nk=nk,T=T,**kwargs)
+    return simplexdm.get_dm(h,ds,nk=nk,T=T,shell=shell,**kwargs)
 
 
 # the density-matrix backends of the SCF loop, by the name integration=
@@ -377,7 +379,14 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     tetrahedron method in 3D), see dmtk.simplexdm; it returns every entry
     of each direction. tolerance only applies to "qtci"; the other
     backends never see it, so nothing needs to know which kwargs are safe
-    for which backend other than this function itself."""
+    for which backend other than this function itself.
+
+    shell: None, or for a Bogoliubov-de Gennes h at a filling the
+    superscf.ShellFilling of its superscf.BdGFermiLevel. "ed" and
+    "triangle" then fill the shell of levels at zero energy in part when
+    the charge jumps across the requested one there, so that a gapless
+    state holds it; "qtci" does not use it. Without it the density matrix
+    is the one of before."""
     check_integration(integration)
     return dm_integrations[integration](h,v,nk=nk,tolerance=tolerance,
             **kwargs)
@@ -621,7 +630,8 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
       t0 = time.perf_counter() # time
       # get_dm itself decides which kwargs (e.g. tolerance) are safe to
       # forward to which backend, so this call never needs to know that
-      dm = get_dm(h,v,nk=nk,T=T,integration=integration,tolerance=tolerance)
+      dm = get_dm(h,v,nk=nk,T=T,integration=integration,tolerance=tolerance,
+              shell=getattr(fermi_level,"shell",None)) # see BdGFermiLevel
       if callback_dm is not None:
           dm = callback_dm(dm) # callback for the density matrix
       t1 = time.perf_counter() # time
@@ -933,6 +943,11 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         etot = simplexdm.band_energy(h,nk=h.nk)
     else:
         etot = h.get_total_energy(nk=h.nk)
+    if fermi_level is not None:
+        # the step band energy above, corrected on the shell that the last
+        # density matrix filled in part, so that it is the band energy of
+        # the same occupations (zero when the shell was not filled)
+        etot += fermi_level.shell.energy
     if mu is None:
         # add back mu N with N the requested charge, filling times the
         # number of electron states (electron_dimension, not the

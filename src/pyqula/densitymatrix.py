@@ -90,7 +90,7 @@ def full_dm(h,T=None,dm_mode=dm_mode,delta=None,**kwargs):
 
 def full_dm_accumulate(h,nk=10,fermi=0.0,
         delta=delta_dm,
-        ds=None,batch_size=16):
+        ds=None,batch_size=16,shell=None):
     """Compute the full density matrix by adding the
     contributions to the matrix kpoint by kpoint. K-points are processed
     in batches: each batch is diagonalized in parallel across numba
@@ -113,7 +113,13 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     that route chunks the mesh itself, against the device's memory.
 
     A non-Hermitian Hamiltonian (h.non_hermitian) gets its biorthogonal
-    density matrix instead, see biorthogonal_dm, always on the CPU."""
+    density matrix instead, see biorthogonal_dm, always on the CPU.
+
+    shell: None, or a scftk.superscf.ShellFilling for a Bogoliubov-de
+    Gennes h at a filling, which fills the shell of levels at zero energy
+    in part when the charge jumps across the requested one there. It takes
+    the eigenpairs of the shell from the batches below, so it stays on the
+    CPU."""
     if h.non_hermitian: # left and right eigenvectors, see biorthogonal_dm
         return biorthogonal_dm(h,ds=ds,nk=nk,fermi=fermi,delta=delta)
     from .htk.eigenvectors import peigh_bloch, bloch_on_gpu
@@ -121,7 +127,8 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
     fac = 1./len(ks) # normalization
     bloch = bloch_on_gpu(hk) # the device route, where it is worth taking
-    if bloch is not None:
+    if shell is not None: shell.start(h,delta,len(ks))
+    if bloch is not None and shell is None:
         # everything stays on the device: the eigenvectors are the biggest
         # array here and they exist only to be summed away, so they never
         # come back to the host (see dmtk/fulldmjax.py)
@@ -149,12 +156,18 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
                 contribs = full_dm_batch_d_vectorized(es_batch,vs_batch,kbatch,
                         np.array(d,dtype=np.float64),delta=delta) # one per kpoint, in parallel
                 batch_total[idir] = np.sum(contribs,axis=0) # pool the batch's contributions
+        if shell is not None: # the occupations of the kernels above
+            from scipy.special import expit
+            shell.collect(kbatch,es_batch,vs_batch,expit(-es_batch/delta))
         dm = batch_total if dm is None else dm+batch_total # pool across batches
     dm = dm*fac # renormalize
-    if ds is None: return dm # return the single array
+    if ds is None:
+        if shell is not None: dm = shell.fill({(0,0,0): dm})[(0,0,0)]
+        return dm # return the single array
     else: # if ds were given
         outd = dict() # dictionary
         for i in range(len(ds)): outd[tuple(ds[i])] = dm[i,:,:] # as dictionary
+        if shell is not None: shell.fill(outd) # the shell at zero energy
         return outd
     
 

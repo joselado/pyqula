@@ -690,16 +690,21 @@ def get_fermi4filling(h,filling,nk=20,T=0.):
     return fermi_from_energies(mesh.dim,nk,mesh.energies(),filling,T=T)
 
 
-def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False):
+def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
     """Density matrix {d: (n,n) matrix} of h at zero chemical potential for
     the lattice vectors ds, from the simplex integration of the
     occupations on the uniform nk^dim mesh at temperature T, in the
     convention of densitymatrix.full_dm (dm[d][i,j] = <c^dag_i c_j> between
     the cell 0 and the cell d, up to that convention's transpose).
     bloechl=None takes bloechl_default. With counted=True also returns the
-    number of diagonalizations"""
+    number of diagonalizations. shell: None, or for a Bogoliubov-de Gennes
+    h at a filling a scftk.superscf.ShellFilling, which fills the shell of
+    levels at zero energy in part when the charge jumps across the
+    requested one there, as in densitymatrix.full_dm_accumulate, since the
+    triangle of a BdG h is the step of exact diagonalization"""
     check_hamiltonian(h,"the simplex density matrix")
     if bloechl is None: bloechl = bloechl_default
+    if not h.has_eh: shell = None # a normal state holds its charge already
     mesh = _Mesh(h,nk)
     ds = [tuple(int(x) for x in d) for d in ds]
     n = mesh.n
@@ -710,7 +715,20 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False):
         es_all.append(es)
         if keep: stored.append(U)
     es = np.concatenate(es_all)
-    w = simplex_weights(mesh.dim,nk,es,mu=0.,T=T,bloechl=bloechl)
+    nkp = len(mesh.ks)
+    Tw = T # the temperature of the weights
+    if shell is not None:
+        shell.start(h,T,nkp)
+        # a level in the shell, at zero energy: at T>0 the simplices with
+        # an edge on it have a density of states at mu, and their Bloechl
+        # term moves the weight c_dim to their far vertices, far from mu
+        # (1/24 of a level at E = 0.29 and 0.77 in the Zeeman state of
+        # future_development/tetrahedron_density_matrix.md), which is not
+        # the step of exact diagonalization. At T=0 it is the step. Only
+        # when the shell may be filled, once the window of the offset has
+        # closed (see superscf.ShellFilling)
+        if shell.window<=shell.tol and np.any(np.abs(es)<shell.tol): Tw = 0.
+    w = simplex_weights(mesh.dim,nk,es,mu=0.,T=Tw,bloechl=bloechl)
     from ..dostk.simplexdos import _degeneracy_tol
     _multiplet_average_real(es,w,_degeneracy_tol(es))
     dm = {d: np.zeros((n,n),dtype=np.complex128) for d in ds}
@@ -718,6 +736,8 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False):
     def add(i0,U):
         wk = w[i0:i0+len(U)]
         ks = mesh.ks[i0:i0+len(U)]
+        if shell is not None: # the occupations of the weights, in [0,1]
+            shell.collect(ks,es[i0:i0+len(U)],U,wk*nkp)
         active = np.nonzero(np.any(wk!=0.,axis=0))[0] # bands with weight
         if len(active)==0: return
         Ua = U[:,:,active]
@@ -730,6 +750,7 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False):
         for i0,U in zip(range(0,len(mesh.ks),mesh.batch),stored): add(i0,U)
     else: # second pass
         for i0,es2,U in mesh.eigenpairs(): add(i0,U)
+    if shell is not None: shell.fill(dm) # the shell at zero energy
     if counted: return dm,mesh.ndiag
     return dm
 

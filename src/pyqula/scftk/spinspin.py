@@ -1131,12 +1131,12 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # closure state, e.g. `outd` in densitymatrix._accumulate_dm_batch).
     lam_state = [np.zeros(len(h1.geometry.r))] if array_filling else [None]
 
-    def _get_dm(h):
+    def _get_dm(h, shell=None):
         if use_sparse_dm:
             from ..densitymatrix import full_dm_accumulate_sparse
             delta = T if T != 0. else 1e-15 # see densitymatrix.full_dm's own T==0 guard
             return full_dm_accumulate_sparse(h, sparse_pairs, nk=nk, delta=delta)
-        return get_dm(h, v_dirs, nk=nk, T=T, integration="ed")
+        return get_dm(h, v_dirs, nk=nk, T=T, integration="ed", shell=shell)
 
     # KPM density-matrix path (integration="kpm", only reached when
     # use_sparse_dm is True -- see the NotImplementedError check above):
@@ -1435,7 +1435,9 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                                    # the eigenvectors above are unaffected by it
         elif bdg_fermi is not None:
             h = bdg_fermi.shift(h, fermi_offset[0])
-            dm_lab = _get_dm(h)
+            # the shell of a gapless state is filled in part, see
+            # superscf.ShellFilling
+            dm_lab = _get_dm(h, shell=bdg_fermi.shell)
             # the offset of the next call, as lam_state above
             fermi_offset[0] = bdg_fermi.step(fermi_offset[0], dm_lab)
         else:
@@ -1653,6 +1655,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 radius=kpm_radius)
     else:
         etot = h.get_total_energy(nk=h.nk)
+    if bdg_fermi is not None: # the shell the last density matrix filled
+        etot += bdg_fermi.shell.energy # see densitydensity.densitydensity
     if mu is None:
         if array_filling:
             # per-site generalization of the scalar correction below: h.fermi

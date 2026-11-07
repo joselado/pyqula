@@ -231,13 +231,21 @@ def test_nambu_normal_state_has_the_magnetization_of_the_normal_state(
     normal Hamiltonian. Before, the triangle put the Nambu state at
     another charge, where it was a ferromagnet (mz=0.006 at nk=64) while
     the normal one was not. The Nambu triangle and qtci are the step of
-    exact diagonalization on the same mesh (a vertex on a level is occupied
-    by half), so the reference is the normal state with "ed" at T=0; the
-    continuous charge of the normal triangle is out of reach of a sorted
-    BdG spectrum. The Bloechl term of the triangles near the level makes
-    the two differ by about 1e-4 (mz=0.00293 against 0.00282 at nk=64)"""
+    exact diagonalization on the same mesh, so the reference is the normal
+    state with "ed" at T=0; the continuous charge of the normal triangle is
+    out of reach of a sorted BdG spectrum.
+
+    At filling 0.35 the requested charge is 2867.2 electrons on the mesh,
+    and a star of k-points sits at zero energy. The normal state cannot
+    hold a fractional charge, while the Nambu one fills the star in part
+    and holds it exactly (scftk.superscf.ShellFilling). How the star is
+    filled moves the magnetization, mz=0.00220 against 0.00282, but not the
+    energy, which is the same to 1e-10, since the star is at zero energy:
+    the mean field at T=0 does not fix the magnetization inside it. So the
+    energy is compared tightly, and the magnetization only to the size of
+    the star, which still rules out the ferromagnet of before"""
     nk = 64 # at nk=32 the normal state at T=0 does not converge
-    mz = []
+    out = []
     for nambu, integ in ((False, "ed"), (True, integration)):
         h = geometry.square_lattice().get_hamiltonian(has_spin=True)
         if nambu: h.setup_nambu_spinor()
@@ -247,6 +255,9 @@ def test_nambu_normal_state_has_the_magnetization_of_the_normal_state(
                 maxerror=1e-9 if integ!="qtci" else 1e-8,
                 load_mf=False, write=False, verbose=0)
         assert scf.converged
-        mz.append(abs(np.mean(scf.hamiltonian.extract("mz"))))
-    tol = 1e-6 if integration=="ed" else 3e-4
-    assert abs(mz[1]-mz[0]) < tol # the size, the ferro guess picks a sign
+        out.append(scf)
+    normal, nambu = out
+    assert abs(nambu.charge_error) < 1e-10 # the charge is held
+    assert abs(nambu.total_energy-normal.total_energy) < 1e-8
+    mz = [abs(np.mean(s.hamiltonian.extract("mz"))) for s in out]
+    assert abs(mz[1]-mz[0]) < 1e-3 # the size, the ferro guess picks a sign
