@@ -110,3 +110,19 @@ def test_a_gapless_state_gives_the_same_result_with_the_solver_step(
     assert abs(new.total_energy-old.total_energy) < 1e-8
     assert abs(new.charge_error-old.charge_error) < 1e-8
     assert abs(new.hamiltonian.fermi-old.hamiltonian.fermi) < 1e-8
+
+
+def test_no_gap_warning_after_the_maxite_cut(capsys):
+    """A loop stopped at maxite says nothing about the gap of its state,
+    so the warning of a charge that is not held is not printed"""
+    np.random.seed(1)
+    scf = Vinteraction(_h0(), V1=-1.5, filling=0.3, nk=8, maxite=10,
+            load_mf=False, write=False, verbose=0)
+    assert not scf.converged
+    assert "no gap" not in capsys.readouterr().out
+    fl = superscf.BdGFermiLevel(_h0(), 0.3, None)
+    fl.error = 0.1
+    fl.warn(1e-5, converged=False)
+    assert capsys.readouterr().out == ""
+    fl.warn(1e-5, converged=True)
+    assert "no gap" in capsys.readouterr().out

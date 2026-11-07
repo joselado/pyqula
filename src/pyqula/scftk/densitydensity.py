@@ -877,7 +877,7 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
             fermi_level=fermi_level,**kwargs)
     if fermi_level is not None: # the charge of the paired state, N-N0
         scf.charge_error = fermi_level.error
-        fermi_level.warn(kwargs.get("maxerror",1e-5))
+        fermi_level.warn(kwargs.get("maxerror",1e-5),scf.converged)
     # Now compute the total energy
     h = scf.hamiltonian
     # scf.dm is user-visible, while the loop above only ever computed the

@@ -344,9 +344,11 @@ class BdGFermiLevel:
         self.residual = abs(xnew-x)
         return xnew
 
-    def warn(self,maxerror):
+    def warn(self,maxerror,converged=True):
         """Say so when a converged loop does not hold the charge, which is
-        the case of a state with no gap on the mesh"""
+        the case of a state with no gap on the mesh. A loop stopped at
+        maxite says nothing about the gap, so then nothing is printed"""
+        if not converged: return
         if abs(self.error)>100*maxerror:
             print("The paired state holds the requested charge to %.1e "
                     "electrons per cell, not to the tolerance: its "

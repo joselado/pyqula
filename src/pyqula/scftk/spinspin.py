@@ -1591,7 +1591,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     scf.iterations, scf.residual = ite, diff # as reached, for the error
     if bdg_fermi is not None: # the charge of the paired state, N-N0
         scf.charge_error = bdg_fermi.error
-        bdg_fermi.warn(maxerror)
+        bdg_fermi.warn(maxerror, scf.converged)
 
     if use_sparse_dm and not use_kpm:
         # scf.dm is a public field (Vinteraction/SzSz/SxSx/SySy's SCF
