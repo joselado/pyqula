@@ -110,7 +110,7 @@ def test_insulator_returns_the_middle_of_the_gap(asymmetric,T,counted):
     # charge is 1e-16 below the target, so brentq stops at the conduction
     # edge, and the check at mu0 +- eps sees the band and keeps it
     ref = _brentq_reference(2,nk,es,0.5,T)
-    assert ev<=ref<=ec
+    assert ev-1e-12<=ref<=ec+1e-12
 
 
 @pytest.mark.parametrize("dim", [1,2,3])

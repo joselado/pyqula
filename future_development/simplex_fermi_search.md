@@ -90,7 +90,7 @@ second-neighbor hopping of 0.2 (asymmetric case), both at half filling.
 
 | case | nk | T | old evaluations | new evaluations | abs(mu_new - mu_old) |
 |---|---|---|---|---|---|
-| square metal | 64 | 0, 1e-3, 1e-2 | 11 | 4 | 2e-16 at most |
+| square metal | 64 | 0, 1e-3, 1e-2 | 11 | 4 | 1e-15 at most |
 | square metal | 256 | 0, 1e-3, 1e-2 | 10 to 11 | 3 | 9e-16 at most |
 | honeycomb metal | 256 | 0, 1e-3, 1e-2 | 9 to 11 | 3 | 1.2e-14 at most |
 | chain | 400 | 0, 1e-3, 1e-2 | 9 to 10 | 1 to 3 | 0 |
