@@ -536,15 +536,16 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     """Optical conductivity tensor with the simplex integration on a
     2^R x 2^R mesh (nk rounded up to a power of two), where the smooth
     fields dE and W are not computed on every point but reconstructed from
-    a quantics tensor cross interpolation, see
-    conductivity.optical_conductivity"""
+    a quantics tensor cross interpolation of all of them at once (the
+    field index is one more tensor site, so the tolerance is relative to
+    the largest field), see conductivity.optical_conductivity"""
     check_broadening(delta)
     if h.dimensionality!=2:
         raise NotImplementedError("integration='qtci' of the optical "
                 "conductivity is only implemented in 2D, got dimensionality "
                 +str(h.dimensionality)+"; use integration='triangle', in 1D "
                 "a fine mesh is already cheap")
-    from ..qtcitk.meshfields import qtci_fields
+    from ..qtcitk.meshfields import qtci_stacked_fields,stacked_maxbonddim
     R = max(1,int(np.ceil(np.log2(nk)))) # bits per direction
     n = 2**R
     nc0 = 2**min(R,5)
@@ -565,8 +566,8 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
             return kubowindow.bands_and_velocities(h,ks,window,
                     tol_rel=degeneracy_tol,ws=ws,fixed=rng)[:2]
     tol = degeneracy_tol*scale
-    # coarse scan: fixes the pairs and components that matter (qtci_fields
-    # repeats it on the same points to seed the pivots)
+    # coarse scan: fixes the pairs and components that matter
+    # (qtci_stacked_fields repeats it on the same points to seed the pivots)
     axes = _active_axes(vs0)
     pairs,dE0,W0,comps,trans = pair_fields(es0,vs0,T,tol,intraband,interband,
             axes=axes)
@@ -590,8 +591,12 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
             elif kind=="re": out[:,f] = Wk[:,p,c].real
             else: out[:,f] = Wk[:,p,c].imag
         return out
-    vals,ncalls,ranks = qtci_fields(evaluate,R,len(fields),
-            tolerance=tolerance,ncoarse=nc0)
+    # one TCI of all the fields: it shares the pivots in k, so it needs
+    # fewer diagonalizations than one TCI per field when the fields are few,
+    # and its rank grows with their number, hence the larger rank cap
+    # (future_development/qtci_optical_response.md)
+    vals,ncalls,ranks = qtci_stacked_fields(evaluate,R,len(fields),
+            tolerance=tolerance,ncoarse=nc0,maxbonddim=stacked_maxbonddim)
     npts = n*n
     dE = np.zeros((npts,len(pairs)),dtype=np.float64)
     W = np.zeros((npts,len(pairs),len(comps)),dtype=np.complex128)

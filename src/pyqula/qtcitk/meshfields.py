@@ -9,6 +9,14 @@
 # has a low rank, while the sharp resolvent is integrated afterwards.
 import numpy as np
 
+# rank cap of qtci_stacked_fields in the qtci LDOS and optical
+# conductivity. The rank of one TCI of all the fields grows with their
+# number: on a 2x2 supercell with 80 conductivity fields it reached 460 at
+# R = 7 and 572 at R = 8, so the cap of 400 of one field stopped the
+# interpolation before its tolerance
+# (future_development/qtci_optical_response.md)
+stacked_maxbonddim = 800
+
 
 def qtci_fields(evaluate,R,nfield,tolerance=1e-6,maxbonddim=400,ncoarse=32,
         dtype=np.float64):

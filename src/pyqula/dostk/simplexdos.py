@@ -498,7 +498,15 @@ def dos_triangle_counted(h,energies,nk=100,delta=0.,operator=None):
 
 # ------------------------------------------------------------ qtci
 
-from ..qtcitk.meshfields import qtci_fields # shared with kubosimplex
+# The DOS runs one interpolation per field (qtci_fields), the LDOS one
+# interpolation of all the fields at once, with the field index as an extra
+# tensor site (qtci_stacked_fields). The stacked form needs fewer
+# diagonalizations when the fields are few, but its rank grows with their
+# number: it was twice as fast as one per field for the 72 fields of the
+# LDOS of an 8-band supercell, and about half as fast for the 32 band
+# energies of a 32-band supercell, see future_development/qtci_dos_green.md
+from ..qtcitk.meshfields import qtci_fields
+from ..qtcitk.meshfields import qtci_stacked_fields,stacked_maxbonddim
 
 
 def dos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
@@ -563,7 +571,9 @@ def ldos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
         tolerance=1e-6):
     """The local DOS of ldos_triangle_counted on a 2^R x 2^R mesh (nk
     rounded up to a power of two), with the band energies and the weight of
-    every band on every site reconstructed from one QTCI per field, in 2D"""
+    every band on every site reconstructed from one QTCI of all the fields
+    at once, in 2D. The tolerance is relative to the largest value of any
+    field"""
     check_broadening(delta)
     if h.dimensionality!=2:
         raise NotImplementedError("the qtci integration of the LDOS is only "
@@ -576,8 +586,8 @@ def ldos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
     def evaluate(ks):
         es,W = fields(ks)
         return np.concatenate([es,W.real.reshape(len(es),nb*ns)],axis=1)
-    vals,ncalls,ranks = qtci_fields(evaluate,R,nb*(1+ns),
-            tolerance=tolerance)
+    vals,ncalls,ranks = qtci_stacked_fields(evaluate,R,nb*(1+ns),
+            tolerance=tolerance,maxbonddim=stacked_maxbonddim)
     es = np.ascontiguousarray(vals[:,:nb])
     W = np.ascontiguousarray(vals[:,nb:].reshape(len(es),nb,ns)
             ).astype(np.complex128)

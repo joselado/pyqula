@@ -186,16 +186,17 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       same on a 2^R x 2^R mesh, nk rounded up to a power of two, where the
       transition energies and weights are reconstructed from a quantics
       tensor cross interpolation instead of computed on every point: for
-      smooth bands the number of diagonalizations saturates with R (81k
-      for nk = 4096 on the gapped honeycomb, against 16.8M). Both need
+      smooth bands the number of diagonalizations saturates with R (44k
+      for nk = 1024 on the gapped honeycomb, against 1.05M). Both need
       delta > 0. Neither removes the mesh requirement set by T: the
       occupation factors of a metal have a step of width T at the Fermi
       surface, which the linear interpolation resolves only to first order
       and which costs rank in the interpolation, and the Drude term is the
       grid sum in all three.
     tolerance : float
-      relative tolerance of the tensor cross interpolation of each field,
-      only used by integration="qtci"
+      relative tolerance of the tensor cross interpolation of the fields,
+      one interpolation of all of them at once, so relative to the
+      largest field; only used by integration="qtci"
     ewindow : float, pair or None
       band window, for large unit cells: only the bands close to the Fermi
       level are diagonalized (a subset eigensolver, or a shift-invert one
