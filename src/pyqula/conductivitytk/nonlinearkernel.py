@@ -18,6 +18,7 @@
 # second harmonic is (1/2) Re[sigma(w,w) E0^2 exp(-2 i w t)], the
 # rectified current (1/2) sigma(w,-w) |E0|^2, and a static field gives
 # J = sigma(0,...,0) E^n.
+import functools
 import itertools
 import math
 import warnings
@@ -39,9 +40,14 @@ _batch_bytes = 1e9 # memory budget of the vertices and density matrices of
 
 
 def _backend():
-    """Array module of the recursion. numpy on the CPU; the recursion is
-    written as functional array code (no slice assignment into its arrays)
-    so that jax.numpy can be plugged in here for the device"""
+    """Array module of the recursion, from the package-wide CPU/GPU switch
+    (pyqula/gpu.py): numpy on the CPU and jax.numpy on the device. The
+    recursion (_row) is written as functional array code, with no slice
+    assignment into its arrays, so the same function runs on both"""
+    from .. import gpu # sets jax to double precision before any jax array
+    if gpu.get_gpu():
+        import jax.numpy as jnp
+        return jnp
     return np
 
 
@@ -142,11 +148,45 @@ def _batch_vertices(tms,dirs,d,hkgen,kb,vertices,T):
     return es,kubo._fermi(es,T),verts
 
 
-def _batch_sum(xp,es,f,verts,omegas,labels,terms,suffixes,dtype):
-    """Unnormalized k-sum over one batch of the trace part of the
-    conductivity, sum_k sum_p (1/p!) Tr[h^{b a1..ap} rho^{a(p+1)..an}],
-    averaged over the orderings of the fields, for every frequency row and
-    every component, as a (nw,ncomp) array.
+def _program(labels,terms,suffixes,vertices):
+    """The recursion and the traces of _plan as a fixed list of operations
+    on integer indices into the lists of vertices and suffixes, a hashable
+    tuple, so that the device kernel can be compiled once per plan.
+
+    steps[i] builds rho of suffixes[i]: the frequency classes of its fields
+    and, for every m, the index of the vertex h^{a1..am}, the index of the
+    shorter suffix it acts on (-1 for rho^(0)) and m. traces lists the
+    distinct pairs (vertex, suffix) of every Tr[h^{b a1..ap} rho^{...}],
+    and comps[ic] the traces of component ic with their weights
+    (ordering weight)/p!, summed over the orderings that share a trace"""
+    n = len(labels[0]) - 1 # the order
+    iv = {v:i for (i,v) in enumerate(vertices)}
+    isuf = {s:i for (i,s) in enumerate(suffixes)}
+    steps = []
+    for s in suffixes:
+        parts = tuple((iv[_vertex(tuple(x[0] for x in s[:m]))],
+                isuf[s[m:]] if m<len(s) else -1,m)
+                for m in range(1,len(s)+1))
+        steps.append((tuple(c for (a,c) in s),parts))
+    traces = dict()
+    comps = []
+    for (lab,tt) in zip(labels,terms):
+        comp = dict()
+        for (fields,weight) in tt:
+            for p in range(n+1):
+                key = (iv[_vertex((lab[0],)+tuple(x[0] for x in fields[:p]))],
+                        isuf[fields[p:]] if p<n else -1)
+                it = traces.setdefault(key,len(traces))
+                comp[it] = comp.get(it,0.) + weight/math.factorial(p)
+        comps.append(tuple(comp.items()))
+    return tuple(steps),tuple(traces),tuple(comps)
+
+
+def _row(xp,mm,dE,df,f,hv,w,program):
+    """The trace part of the conductivity at one frequency row w (its n
+    complex frequencies) for every component, an (ncomp,) array, summed
+    over the k-points of a batch. hv[i] is vertex i on the batch, mm the
+    matrix product (numpy's, or jax's at full float32 precision).
 
     With rho^(0) = diag(f) and dE_nm = E_n - E_m the recursion is
     Passos et al., Eq. (rho), with hbar = 1:
@@ -155,41 +195,148 @@ def _batch_sum(xp,es,f,verts,omegas,labels,terms,suffixes,dtype):
                         /(w1 + ... + wp - dE_nm)
 
     and [h,rho^(0)]_nm = h_nm (f_m - f_n). The denominators never vanish
-    for complex frequencies, so degenerate bands need no special care"""
-    n = len(omegas[0])
+    for complex frequencies, so degenerate bands need no special care.
+    Written without slice assignment, so that jax can trace it"""
+    steps,traces,comps = program
+    rho = []
+    for (cls,parts) in steps: # level by level, shorter suffixes first
+        num = 0.
+        for (i,j,m) in parts:
+            v = hv[i]
+            if j<0: c = v*df # [h,rho^(0)]
+            else: c = mm(v,rho[j]) - mm(rho[j],v)
+            num = num + c/math.factorial(m)
+        Om = sum(w[c] for c in cls) # frequency sum of the suffix
+        rho.append(num/(Om - dE))
+    tr = []
+    for (i,j) in traces:
+        A = hv[i]
+        if j<0: # Tr[A rho^(0)] = sum_n A_nn f_n
+            tr.append(xp.sum(xp.diagonal(A,axis1=1,axis2=2)*f))
+        else: # Tr[A rho] = sum_nm A_nm rho_mn
+            tr.append(xp.sum(A*xp.swapaxes(rho[j],1,2)))
+    return xp.stack([sum(wt*tr[i] for (i,wt) in comp) for comp in comps])
+
+
+def _batch_sum(xp,es,f,verts,omegas,labels,terms,suffixes,dtype):
+    """Unnormalized k-sum over one batch of the trace part of the
+    conductivity, sum_k sum_p (1/p!) Tr[h^{b a1..ap} rho^{a(p+1)..an}],
+    averaged over the orderings of the fields, for every frequency row and
+    every component, as a (nw,ncomp) array, one row at a time (see _row).
+    This is the CPU path; the device one is _device_sum"""
+    vertices = list(verts)
+    program = _program(labels,terms,suffixes,vertices)
     es = xp.asarray(es)
     f = xp.asarray(f,dtype=dtype)
     dE = (es[:,:,None] - es[:,None,:]).astype(dtype) # E_n - E_m
     df = f[:,None,:] - f[:,:,None] # f_m - f_n
-    hv = {v:xp.asarray(m,dtype=dtype) for (v,m) in verts.items()}
+    hv = [xp.asarray(verts[v],dtype=dtype) for v in vertices]
+    ws = np.array(omegas,dtype=dtype)
     out = np.zeros((len(omegas),len(terms)),dtype=np.complex128)
     for iw in range(len(omegas)): # loop over frequency tuples
-        w = omegas[iw]
-        rho = dict()
-        for s in suffixes: # level by level, shorter suffixes first
-            num = 0.
-            for m in range(1,len(s)+1):
-                v = hv[_vertex(tuple(x[0] for x in s[:m]))]
-                rest = s[m:]
-                if len(rest)==0: c = v*df # [h,rho^(0)]
-                else: c = v@rho[rest] - rho[rest]@v
-                num = num + c/math.factorial(m)
-            Om = sum(w[c] for (a,c) in s) # frequency sum of the suffix
-            rho[s] = num/(dtype(Om) - dE)
-        for (ic,tt) in enumerate(terms): # loop over components
-            b = labels[ic][0]
-            acc = 0j
-            for (fields,weight) in tt: # loop over orderings of the fields
-                for p in range(n+1):
-                    A = hv[_vertex((b,)+tuple(x[0] for x in fields[:p]))]
-                    rest = fields[p:]
-                    if len(rest)==0: # Tr[A rho^(0)] = sum_n A_nn f_n
-                        tr = xp.sum(xp.diagonal(A,axis1=1,axis2=2)*f)
-                    else: # Tr[A rho] = sum_nm A_nm rho_mn
-                        tr = xp.sum(A*xp.swapaxes(rho[rest],1,2))
-                    acc += weight*complex(tr)/math.factorial(p)
-            out[iw,ic] = acc
+        out[iw] = np.asarray(_row(xp,xp.matmul,dE,df,f,hv,ws[iw],program))
     return out
+
+
+# The device path
+#
+# On the device the recursion of one frequency row is a fixed graph of
+# batched (nk,n,n) matmuls once the plan is fixed, so it is compiled with
+# the plan (_program) static and vmapped over a chunk of frequency rows:
+# the device sees (nw,nk,n,n) arrays. The eigenpairs come from
+# htk/eigenvectorsjax.peigh_gpu, the vertices are built and rotated on the
+# device and stay there for the whole frequency sweep of their k-batch.
+# The last k-batch and the last frequency chunk are padded to the shape of
+# the others, so the kernel compiles once per call: a padded k-point is a
+# copy of a real one with zero occupations, which makes every rho and every
+# trace vanish there exactly, and a padded frequency row is dropped.
+#
+# Every contraction asks for Precision.HIGHEST: without it jax runs float32
+# products on an Ampere or later card in TF32, with a ten-bit mantissa
+# (see bsetk/chebyshevjax.py).
+
+_device_bytes = 1e9 # device memory budget of the rho of one k-batch and
+                    # frequency chunk, see _device_sum. The compiled sweep
+                    # needs about as much again in work buffers, and the
+                    # card may be shared with other jax processes
+
+
+@functools.lru_cache(maxsize=None)
+def _device_kernels():
+    """The two compiled device functions, built once per process: the
+    eigenbasis vertices of a k-batch, and the frequency sweep"""
+    from .. import gpu # double precision before any jax array
+    import jax
+    import jax.numpy as jnp
+    hi = jax.lax.Precision.HIGHEST
+    def mm(a,b): return jnp.matmul(a,b,precision=hi)
+    def vertices(ph,W,wb):
+        """<n|d^m H/dK_a1..dK_am|m> for every vertex, (nvert,nk,n,n), from
+        the Bloch phases ph (nk,nhop), the vertex hoppings W
+        (nvert,nhop,n,n) and the eigenvectors wb (nk,n,n)"""
+        hk = jnp.einsum("kh,vhnm->vknm",ph,W,precision=hi)
+        wc = jnp.conj(jnp.swapaxes(wb,1,2)) # the bras <n|
+        return mm(mm(wc[None],hk),wb[None])
+    def sweep(hv,dE,df,f,ws,program):
+        def row(w): return _row(jnp,mm,dE,df,f,hv,w,program)
+        return jax.vmap(row)(ws)
+    return jax.jit(vertices),jax.jit(sweep,static_argnums=(5,))
+
+
+def _device_chunks(nk,n,nvertices,nsuffixes,nw,itemsize):
+    """k-points per batch and frequency rows per chunk of the device
+    sweep. The k-batch is the one of the CPU path; the vmapped sweep then
+    holds the density matrices of every suffix for every row of the chunk,
+    so the chunk is what fits in _device_bytes"""
+    kbatch = min(nk,_batch_size(n,nvertices,nsuffixes))
+    per_kw = (nsuffixes + 6)*n*n*itemsize # one k-point and one row
+    wchunk = int(min(nw,max(1,_device_bytes/(kbatch*per_kw))))
+    return kbatch,wchunk
+
+
+def _pad(a,size,fill=None):
+    """a padded along its first axis to size, with copies of its last
+    entry (fill=None) or with fill"""
+    if len(a)>=size: return a
+    extra = np.repeat(a[-1:],size-len(a),axis=0)
+    if fill is not None: extra = np.full_like(extra,fill)
+    return np.concatenate([a,extra])
+
+
+def _device_sum(tms,dirs,d,hkgen,ks,vertices,T,omegas,labels,terms,
+        suffixes,prec):
+    """The unnormalized k-sum of _batch_sum over the whole mesh ks, on the
+    device, as an (nw,ncomp) complex128 array"""
+    from ..htk import eigenvectorsjax
+    import jax.numpy as jnp
+    dtype = np.complex64 if prec=="single" else np.complex128
+    nb = tms.shape[1]
+    program = _program(labels,terms,suffixes,vertices)
+    kbatch,wchunk = _device_chunks(len(ks),nb,len(vertices),len(suffixes),
+            len(omegas),np.dtype(dtype).itemsize)
+    fvertices,sweep = _device_kernels()
+    W = np.array([tms*np.prod([1j*d[:,a] for a in v],axis=0) for v in
+            vertices]) # hoppings of every vertex, (nvert,nhop,n,n)
+    W = jnp.asarray(W,dtype=dtype)
+    ws = np.array(omegas,dtype=dtype)
+    acc = np.zeros((len(omegas),len(labels)),dtype=np.complex128)
+    for i0 in range(0,len(ks),kbatch): # loop over batches of k-points
+        kb = np.array(ks[i0:i0+kbatch])
+        es,wb = eigenvectorsjax.peigh_gpu(hk_matrix_batch(hkgen,kb),
+                prec=prec)
+        f = _pad(kubo._fermi(es,T),kbatch,fill=0.) # empty padded k-points
+        es,wb,kb = _pad(es,kbatch),_pad(wb,kbatch),_pad(kb,kbatch)
+        ph = kubo._bloch_phases(dirs,kb)
+        hv = fvertices(jnp.asarray(ph,dtype=dtype),W,
+                jnp.asarray(wb,dtype=dtype))
+        dE = jnp.asarray(es[:,:,None] - es[:,None,:],dtype=dtype)
+        df = jnp.asarray(f[:,None,:] - f[:,:,None],dtype=dtype)
+        fd = jnp.asarray(f,dtype=dtype)
+        for j0 in range(0,len(ws),wchunk): # loop over chunks of frequencies
+            wj = ws[j0:j0+wchunk]
+            out = sweep(hv,dE,df,fd,jnp.asarray(_pad(wj,wchunk)),program)
+            acc[j0:j0+len(wj)] += np.asarray(out,dtype=np.complex128)[:len(wj)]
+    return acc
 
 
 def nonlinear_response(h,order,omegas,components,nk=20,T=0.1,
@@ -210,9 +357,13 @@ def nonlinear_response(h,order,omegas,components,nk=20,T=0.1,
                          sum_{p=0}^{n} (1/p!) Tr[h^{b a1..ap} rho^{a(p+1)..an}]
 
     averaged over the n! orderings of the pairs (a_j,w_j), with the
-    density matrices of _batch_sum. degeneracy_tol is accepted for the
+    density matrices of _row. degeneracy_tol is accepted for the
     uniform signature of the nonlinear routines: the recursion never
-    divides by a band energy difference, so it is not used"""
+    divides by a band energy difference, so it is not used.
+
+    Under pyqula.gpu.set_gpu(True) the recursion runs on the device
+    (_device_sum), where prec="single" is also accepted; the CPU path is
+    double precision only"""
     from .. import gpu
     if not isinstance(order,(int,np.integer)) or order<1: raise ValueError(
         "the order of the nonlinear conductivity is a positive integer, "
@@ -242,12 +393,16 @@ def nonlinear_response(h,order,omegas,components,nk=20,T=0.1,
     nb = tms.shape[1]
     kbatch = _batch_size(nb,len(vertices),len(suffixes))
     xp = _backend()
-    parallel.set_num_threads() # set the number of threads for numba
-    acc = np.zeros((len(omegas),len(labels)),dtype=np.complex128)
-    for i0 in range(0,len(ks),kbatch): # loop over batches of k-points
-        es,f,verts = _batch_vertices(tms,dirs,d,hkgen,ks[i0:i0+kbatch],
-                vertices,T)
-        acc += _batch_sum(xp,es,f,verts,omegas,labels,terms,suffixes,dtype)
+    if xp is np: # the CPU path
+        parallel.set_num_threads() # set the number of threads for numba
+        acc = np.zeros((len(omegas),len(labels)),dtype=np.complex128)
+        for i0 in range(0,len(ks),kbatch): # loop over batches of k-points
+            es,f,verts = _batch_vertices(tms,dirs,d,hkgen,ks[i0:i0+kbatch],
+                    vertices,T)
+            acc += _batch_sum(xp,es,f,verts,omegas,labels,terms,suffixes,
+                    dtype)
+    else: acc = _device_sum(tms,dirs,d,hkgen,ks,vertices,T,omegas,labels,
+            terms,suffixes,prec) # the device path
     pref = (1j**order)*_charge**(order+1)/np.prod(omegas,axis=1)
     return acc*pref[:,None]/(len(ks)*cellvol) # (1/V) sum_k, V = N_k V_cell
 
