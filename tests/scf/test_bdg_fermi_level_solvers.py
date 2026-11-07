@@ -11,6 +11,8 @@ import pytest
 from pyqula import geometry
 from pyqula.scftk import superscf
 from pyqula.scftk.densitydensity import Vinteraction
+from pyqula.superconductivity import get_eh_sector
+from pyqula import algebra
 
 NK = 16
 
@@ -126,3 +128,20 @@ def test_no_gap_warning_after_the_maxite_cut(capsys):
     assert capsys.readouterr().out == ""
     fl.warn(1e-5, converged=True)
     assert "no gap" in capsys.readouterr().out
+
+
+def test_pairing_amplitude_is_the_largest_anomalous_entry():
+    """The pairing amplitude read from the Nambu indices directly, against
+    the anomalous block of the reordered matrix, on a Hamiltonian with
+    hoppings between cells and several sites"""
+    h = geometry.honeycomb_lattice().get_supercell(2).get_hamiltonian(
+            has_spin=True)
+    h.setup_nambu_spinor()
+    h.add_pairing(mode="dx2y2", delta=0.3)
+    h.add_swave(0.1)
+    ref = 0.
+    for m in h.get_dict().values():
+        a = get_eh_sector(algebra.todense(m), i=0, j=1)
+        ref = max(ref, float(np.max(np.abs(a))))
+    assert ref > 0.1
+    assert abs(superscf.pairing_amplitude(h)-ref) < 1e-14

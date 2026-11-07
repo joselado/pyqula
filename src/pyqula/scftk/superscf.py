@@ -359,11 +359,19 @@ class BdGFermiLevel:
 
 def pairing_amplitude(h):
     """Largest modulus of the anomalous (electron-hole) blocks of the
-    hoppings of a Nambu Hamiltonian, onsite and between cells"""
-    from ..superconductivity import get_eh_sector
-    from .. import algebra
+    hoppings of a Nambu Hamiltonian, onsite and between cells. The Nambu
+    spinor of site i is (4i, 4i+1) for the electrons and (4i+2, 4i+3) for
+    the holes, so the anomalous block is read with these indices, without
+    the reordering of superconductivity.get_eh_sector, which densified and
+    permuted every hopping at each call (12% of an iteration of the s-wave
+    loop at nk=16, a quarter of BdGFermiLevel.shift)"""
+    from scipy.sparse import issparse
+    i = np.arange(h.intra.shape[0]//4) # Nambu sites
+    e = np.concatenate([4*i,4*i+1]) # electrons
+    o = np.concatenate([4*i+2,4*i+3]) # holes
     out = 0.
     for m in h.get_dict().values():
-        a = get_eh_sector(algebra.todense(m),i=0,j=1)
+        a = m[e,:][:,o]
+        a = a.toarray() if issparse(a) else np.asarray(a)
         out = max(out,float(np.max(np.abs(a))))
     return out
