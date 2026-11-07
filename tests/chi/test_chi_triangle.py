@@ -204,6 +204,10 @@ def test_source_kernel_matches_the_reference_kernel():
               mode="matrix")
     _kernels_agree(hs,delta=1e-3,T=0.,**kw)
     _kernels_agree(hs,delta=5e-3,T=5e-3,**kw)
+    mem = simplexchi.max_memory_gb # one component per block of the sources
+    simplexchi.max_memory_gb = 1e-6
+    try: _kernels_agree(hs,delta=1e-3,T=0.,**kw)
+    finally: simplexchi.max_memory_gb = mem
     _kernels_agree(hs,delta=1e-2,T=0.,q=[0.,0.,0.],energies=ws,nk=16,
                    mode="diagonal")
     hc = geometry.chain().get_hamiltonian(has_spin=False)

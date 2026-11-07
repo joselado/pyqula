@@ -1077,16 +1077,18 @@ def _chi_simplices(dim,nk,E1,E2,energies,delta,T,elements,diag,ni,nj):
 def _chi_sources(dim,nk,E1,E2,energies,delta,T,elements,diag,ni,nj):
     """the matrix elements contracted first, G[k,n,m,c] for the components
     c = i (diag) or (i,j), then the source kernel (response_sources), by
-    blocks of components that keep G below max_memory_gb/4. The pieces
-    are rebuilt for every block. Returns the response and the number of
-    passes over the matrix elements"""
+    blocks of components that keep G, and the moments of the bins, below
+    max_memory_gb/4. The pieces are rebuilt for every block. Returns the
+    response and the number of passes over the matrix elements"""
     from ..dostk.simplexdos import _degeneracy_tol
     nkk,n = E1.shape
     nw = len(energies)
     comps = [(i,i) for i in range(ni)] if diag else [(i,j)
             for i in range(ni) for j in range(nj)]
     tol = _degeneracy_tol(np.concatenate([E1,E2]))
-    cblock = max(1,int(max_memory_gb*1e9/4)//(nkk*n*n*16))
+    nbins = sum(2**(_lev-L)+1 for L in range(_lev+1)) # as in _bins
+    cblock = max(1,int(max_memory_gb*1e9/4)//max(nkk*n*n*16,
+            nbins*_nmom*16))
     out = np.zeros((nw,len(comps)),dtype=np.complex128)
     npass = 0
     for c0 in range(0,len(comps),cblock):
