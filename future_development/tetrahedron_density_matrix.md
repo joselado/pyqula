@@ -840,8 +840,9 @@ paired state, N = Tr rho_e(0,0,0), the trace of its electron block, which
 all three integrations compute (qtci now always computes the diagonal of
 the onsite block for a BdG Hamiltonian, also on sites with no
 interaction). The next offset is x - g (N - N0)/(2 kappa), with
-kappa = dN/dmu of the normal state, from two Fermi searches at filling
-0.25 and 0.35 on the first Hamiltonian, and g a gain, 1 at the start. The
+kappa = dN/dmu of the normal state, from two Fermi searches at the
+filling plus and minus 0.05 on the first Hamiltonian, and g a gain, 1 at
+the start. The
 plain loop holds the size of this step to `maxerror`, together with the
 change of the mean field. Broyden mixing and the scipy solvers take x as
 the last entry of their vector, so their fixed point has the step at rest.
@@ -1019,11 +1020,15 @@ loaded.
   Broyden iterations in the Zeeman case). The root find per iteration, the
   other design, should not have this problem, at a few density matrices
   per iteration. It was not built.
-- Numbers of the user guide that come from a BdG mean field at a filling
-  move with the BdG Fermi level, and the guide was not updated: the
-  self-consistent Delta_0 of the triangular s-wave state of the mean-field
-  chapter, and the gaps and moments of the triplet and non-unitary
-  examples.
+- The user guide moved with the BdG Fermi level. The figures of the s-wave
+  and triplet examples of the mean-field chapter were made again, and the
+  numbers in the text are the new ones: Delta_0 from 0.30 to 0.29, the
+  band minimum at K from -1.85 to -1.90, the hole copy at M from 0.9 to
+  0.92, the triplet gap from 0.42 to 0.39 at nk = 20 and from 0.40 to 0.38
+  at nk = 40. The qtci gap of the topological-invariants chapter changed
+  too: at nk = 8 the old loop lost the pairing, instead of the 16% quoted,
+  and now it is 10% too large. The run of the exchange chapter with a
+  random guess and nk = 8 (a gap of 0.02) was not checked.
 - `VJinteraction`, the default engine of `h.get_mean_field_hamiltonian`
   for a spinful Hamiltonian, does not take `"triangle"`. The entry point
   routes it to `Vinteraction`, which has no exchange terms J.

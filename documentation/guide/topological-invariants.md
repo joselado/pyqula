@@ -144,8 +144,9 @@ hscf,e = h.get_mean_field_hamiltonian(U=2.0,filling=0.5,mf="antiferro",
 For an insulator, `"qtci"` and the k-mesh sum agree. For a metal, the
 density matrix has a step at the Fermi surface, and a quadrature rule
 converges slowly on a step. For an attractive $U=-2$ on the square lattice
-at `filling=0.3`, the pairing gap is 16% too small at `nk=8` and within 3%
-at `nk=16`. This mode works for two-dimensional Hamiltonians only, and in
+at `filling=0.3`, the pairing gap is 10% too large at `nk=8` and within 3%
+at `nk=16`. At `nk=8` the mesh does not resolve the gap, and the loop
+says that the paired state does not hold the filling exactly. This mode works for two-dimensional Hamiltonians only, and in
 two dimensions it is not cheaper than the k-mesh sum. See
 `examples/2d/chern_qtci/main.py` and `examples/2d/mean_field_qtci/main.py`.
 
