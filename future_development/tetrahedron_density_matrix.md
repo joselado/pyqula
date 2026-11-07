@@ -1237,6 +1237,83 @@ plays no role in it. At nk = 16 and 32 a smearing of 1e-3 does not
 change the picture: the charge error is still the one of the staircase,
 and the counts stay high.
 
+Why does the normal state fail at nk = 64 and not at 16 or 32? The
+way we see it is by writing the normal state as a map of one number.
+The field is along z and U is onsite, so the mean field is diagonal in
+spin, and with the charge held by the Fermi search the only thing that
+moves is the splitting s of the onsite up and down energies. The Zeeman
+term gives s0 = 0.6 and the Hartree term adds -U m, with m = n_up -
+n_down per site, so the map is s -> s' = 0.6 + 2 m(s), where m(s) is the
+magnetization of the density matrix at the splitting s. We evaluated
+m(s) with the Fermi search and the density matrix of the loop, on the
+same mesh, and checked it against the logged loop. With `"ed"` at
+T = 1e-7, m(s) is a staircase. Between s = 0.465 and 0.473 it is
+-0.0625 (1101 up and 1357 down electrons in 4096 cells), and between
+0.474 and 0.48 it is -0.06640625 (1093 up and 1365 down). The step in
+between is one star of 8 k-points, related by the C4v symmetry of the
+square lattice, that moves from up to down: m jumps by 16/4096 = 3.9e-3
+and s' by 7.8e-3. The map sends the lower tread to s' = 0.475 and the
+upper one to s' = 0.4672, so each tread maps into the other one, and no
+fixed point sits on a tread. The fixed point is on the step: bisection
+finds it at s = 0.47353025, where 8 up levels sit 1.46e-7 below mu and
+8 down levels 1.46e-7 above it, 1.5 T, and the 16 states hold 8
+electrons with fractional occupations, m = -0.063235. So the fixed point
+exists, but only because the Fermi-Dirac weight at T = 1e-7 smooths the
+step over about 1.3e-6 in s, and the slope of the map there is ds'/ds =
+-5.9e3. A linear mixing is stable only for a mix below 2/5.9e3, about
+3e-4. In Broyden mixing the pairs that straddle the step are dropped by
+the restart, since the residual grows by a factor 24 across it, and the
+pairs on one tread fit a flat map. To reach
+`maxerror=1e-10` the loop would need s to 2e-14.
+
+The logged loops show exactly this. Broyden mixing without Nambu
+cycles between the two treads, with s between 0.4706 and 0.4744 and m
+alternating -0.0625 and -0.0664, the same 8 k-points flipping every
+time. The pair of levels nearest mu is at 2e-5 to 1.5e-3 from it,
+far above T. The residual of the cycle, 1e-3 to 5e-3, is the size of
+the step of the map, 7 orders of magnitude above `maxerror`, so a looser
+tolerance does not help either: 1e-3 would not pass. The plain loop
+ends in a cycle of period 4 between the same two treads. At nk = 16 and
+32 the fixed point is on a tread. There a degenerate star of one spin
+sits exactly on mu and is filled in part (the down star at nk = 16, and
+the up star at nk = 32, with 1 electron in its 8 states), the nearest star of
+the other spin is 5.7e-3 and 2.5e-2 away, and moving s moves the whole
+star with mu, so m does not change and the map is flat. Both converge in
+7 Broyden iterations. Which case one gets is a coincidence of the mesh,
+not a defect of the Fermi search.
+
+The slope at the fixed point goes as 1/T: ds'/ds = -5.9e3, -600, -61
+and -6.7 at T = 1e-7, 1e-6, 1e-5 and 1e-4, with the two stars of the
+step at 1.3 T to 1.5 T from mu, and -0.88 at T = 1e-3, where the two
+stars sit at 0.6 T from mu and the step is smeared out. Broyden mixing of the normal state
+with `"ed"` at nk = 64 does not converge in 300 iterations at T = 1e-6
+and 1e-5, and converges in 29 at T = 1e-4 and in 13 at 1e-3. So the
+smearing has to bring the slope down to about 10, which here means
+T = 1e-4 or more, still a hundred times below the distance to the next
+stars on this mesh, 1.3e-2 and 2.6e-2. With `integration="triangle"` the charge is a
+continuous function of mu and the map is smooth: m(s) changes linearly,
+from -0.06475 at s = 0.465 to -0.06684 at s = 0.48, and the slope of the
+map at its fixed point, s = 0.469308, is -0.29. The normal state with the
+triangle at T = 1e-7 converges in 7 Broyden iterations at nk = 16, 32 and
+64, and in 62 plain iterations at nk = 64, to E = -1.62721044 at nk = 64
+against -1.62721013 at nk = 32. With Nambu the triangle does not help:
+from `mf="swave"` at nk = 64 and T = 1e-7, `"ed"` and the triangle both
+stop at 1000 Broyden iterations without converging, since the triangle of
+a BdG Hamiltonian is the step of exact diagonalization (see "The
+triangle of a BdG Hamiltonian is the step").
+
+So there is nothing to fix in the Fermi search, the stopping rule or
+Broyden mixing: the map that `"ed"` defines at T = 1e-7 on this mesh has
+its fixed point on a step 1e-6 wide, and no mixing reaches it. A
+condition that recognizes such a step and switches the integration
+would be a gate on one mesh, and none was added. What a user should do
+with a metal at T to 0: use `integration="triangle"` for a normal state,
+or take T large enough that the step of one star is smooth, 1e-4 or
+more at nk = 64 here. For a superconductor whose pairing dies, the
+triangle does not help, and a T of this size does: with Nambu at nk = 64
+and T = 1e-4, `"ed"` converges in 41 Broyden iterations from
+`mf="swave"`, to the energy of the normal state at the same T to 2e-12.
+
 Is it the history of Broyden? A shorter memory makes it worse: m = 3
 gives 80 and 60 at x = 0, and 308 and 327 with the offset; m = 16 gives
 63 and 52 with the offset. Scaling the offset entry of the vector by 0.1
@@ -1290,7 +1367,7 @@ others. The gapped qtci states converge in 23 and 20 iterations every
 time. A qtci run of a metal needs a `maxerror` above its noise floor.
 
 What the restart does not touch is the case at nk = 64, which is the
-normal state at T = 0, and the pairing that dies slowly: the residual of
+normal state at T = 0 with its fixed point on a step (see above), and the pairing that dies slowly: the residual of
 the pairing goes down by a factor 0.88 to 0.93 per step of the warm-up,
 so about 14 of the 36 to 41 iterations are spent before the multisecant
 phase starts. That is a pairing near its critical field, which decays
@@ -1414,7 +1491,15 @@ loaded.
   problem, at a few density matrices per iteration. It was not built.
   At nk = 64 the Zeeman case does not converge with either Fermi level,
   because the normal state at T = 1e-7 does not converge on that mesh,
-  without Nambu too; at T = 1e-3 it converges in 23 iterations. The qtci
+  without Nambu too; at T = 1e-3 it converges in 23 iterations. This is
+  understood and has no fix in the code (see "The gapless Zeeman
+  state"): the fixed point of the normal state with `"ed"` sits on the
+  step of one star of 8 k-points that crosses mu, smoothed by T over
+  1.3e-6 in the splitting, where the map has a slope of -5.9e3. The
+  normal state with the triangle converges in 7 iterations at nk = 64,
+  and with `"ed"` from T = 1e-4 on. With Nambu the triangle keeps the
+  step, so a superconductor whose pairing dies needs T of that size, or
+  the unsorted BdG triangle of the item above. The qtci
   count of this state is not reproducible at `maxerror=1e-10`, which is
   below the noise of its residual.
 - The user guide moved with the BdG Fermi level. The figures of the s-wave
