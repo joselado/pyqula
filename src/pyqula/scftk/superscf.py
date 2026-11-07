@@ -235,6 +235,26 @@ class BdGFermiLevel:
     the step gives up the loop converges with a charge error, which stays
     in error, and warn says so.
 
+    The halving gain, the damping and the give-up are a history of the
+    loop, so they belong to the plain loop only. A quasi-Newton solver
+    (Broyden mixing, the scipy solvers) takes the offset as one more entry
+    of its vector and fits a model of the map from that vector to the next
+    one, which only works if the map is a function of the vector. With the
+    gain inside, the same trial vector gave a different step at each call:
+    for a d-wave state from V1=-2 with U=1 at filling 0.4 on the square
+    lattice the gain moved between 1 and 0.18 in one Broyden run, which
+    then needed 48 iterations. So those solvers call step with
+    adaptive=False, a step that depends only on the Hamiltonian and the
+    offset: the Newton step -(N-N0)/kappa, clipped to the window, and zero
+    when it is longer than the whole window, 2*bound, since then no offset
+    in the window holds the charge on the linear estimate. This last rule
+    replaces the give-up for the solvers. In a state whose pairing dies
+    out, the charge error is a staircase of order one k-shell while the
+    window closes as Delta^3, so the step soon becomes longer than the
+    window and the offset stays at zero, the Fermi level of the normal
+    state, which is where the give-up of the plain loop ends too. The
+    d-wave state above needs 20 iterations with it.
+
     Use: shift(h,x) on each Hamiltonian before its density matrix (it sets
     h.fermi), then step(x,dm) for the offset of the next iteration, which
     also leaves the charge error N-N0 in error and the size of the step in
@@ -289,10 +309,20 @@ class BdGFermiLevel:
         h.shift_fermi(-h.fermi)
         return h
 
-    def step(self,x,dm):
+    def step(self,x,dm,adaptive=True):
         """Offset of the next iteration, from the density matrix of the
-        Hamiltonian shift(h,x) gave"""
+        Hamiltonian shift(h,x) gave. adaptive=False is the step of the
+        quasi-Newton solvers, which depends only on x and dm: no gain, no
+        damping and no give-up (see the class docstring)"""
         self.error = get_charge_bdg(dm) - self.charge0
+        if not adaptive: # the map of x and dm alone, for a solver
+            dx = -self.error/self.kappa # the Newton step of the offset
+            # longer than the window: no offset in it holds the charge,
+            # wherever x is, so the Fermi level of the normal state
+            if abs(dx)>2.*self.bound: xnew = 0.
+            else: xnew = float(np.clip(self.x+dx,-self.bound,self.bound))
+            self.residual = abs(xnew-x)
+            return xnew
         if self.last is not None: # halve on a change of sign, else grow
             if self.last*self.error<0.:
                 # a change of sign at the smallest gain is no progress
@@ -335,4 +365,3 @@ def pairing_amplitude(h):
         a = get_eh_sector(algebra.todense(m),i=0,j=1)
         out = max(out,float(np.max(np.abs(a))))
     return out
-

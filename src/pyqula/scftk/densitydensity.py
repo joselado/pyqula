@@ -561,7 +561,8 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
     that step and holds its size, fermi_level.residual, to maxerror
     together with the change of the mean field; the other solvers take x
     as the last entry of their vector, so their fixed point has the step
-    at rest."""
+    at rest, and call fermi_level.step(x,dm,adaptive=False), a step that
+    depends on x and dm alone, since they fit a model of that map."""
     write = filewrite.resolve(write,True) # the call, else the global switch
     reject_leftover_kwargs(kwargs)
     if verbose>1: info=True
@@ -644,7 +645,10 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
       scf.v = v # store interaction
       scf.tol = maxerror # maximum error
       if fermi_level is not None: # the step of the chemical potential
-          scf.x, scf.x_next = x, fermi_level.step(x,dm)
+          # the other solvers need a map of their vector alone, so the
+          # adaptive gain of the step is only for the plain loop
+          scf.x = x
+          scf.x_next = fermi_level.step(x,dm,adaptive=(solver=="plain"))
           scf.charge_error = fermi_level.error
           scf.fermi_residual = fermi_level.residual
       return scf
