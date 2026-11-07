@@ -134,9 +134,244 @@ while that entry moves from 0.1771 to 0.1840, 0.1845 and 0.1847. This is
 the kink of the crossing bands listed in what is left open, seen as a
 direction dependence at a mesh q. So `simplexchi.py` does not change, and
 the multiplet average stays the value at a mesh q, since it does not
-depend on the basis and it is the mean of the limits. One point,
+depend on the basis and it is the mean of the limits. A basis chosen per
+simplex removes the direction dependence; the next section measures it
+and leaves the decision to the maintainer. One point,
 k + q = (3/4, 1/2), splits only quadratically, by 1e-11 at eps = 1e-6,
 and stays averaged in the whole scan.
+
+### A basis per simplex for crossing bands
+
+We will now see whether a basis chosen per simplex removes the kink of
+crossing bands and the direction dependence at a mesh q, and what it
+costs. The prototype is [`chi_simplex_basis.py`](chi_simplex_basis.py) in
+this folder; nothing of it is in the library.
+
+The library takes E_n and G_nm at each vertex, with the bands sorted by
+energy, and averages G over the degenerate multiplets of the vertex. The
+prototype works per simplex, separately on the bands at k and on the bands
+at k + q:
+
+1. At a vertex where a multiplet is degenerate, but not on the whole
+   simplex, the basis of the multiplet is fixed by first-order degenerate
+   perturbation theory along a direction d into the simplex: the
+   eigenvectors of P (dH/dk . d) P, with P the projector on the multiplet
+   and dH/dk from the Bloch hoppings. d combines the two edges from the
+   vertex with the weights 0.618 and 0.382, so that it does not run along
+   a high-symmetry line. What stays degenerate after this (the Gamma point
+   of the supercell, which splits only quadratically, and the spin
+   partners) is aligned to the reference vertex by the polar
+   decomposition of its overlap. We call this the kp rotation. The polar
+   rotation, the variant of the plan, aligns every degenerate multiplet to
+   the reference vertex directly.
+2. The bands are relabeled at every vertex by the largest overlap
+   |<b at v|a at r>|^2 with the reference vertex r, the vertex with the
+   most distinct levels, by a greedy assignment inside each cluster of
+   bands.
+3. The relabeled energies are interpolated linearly, so the exact kernel
+   of the library applies unchanged. Every simplex that changed gets
+   private copies of its vertices, with its own energies and the matrix
+   elements of its relabeled eigenvectors, and goes through the source
+   kernel with the others. The simplices that did not change keep the
+   shared vertices and the multiplet average.
+
+Since the basis at each vertex is an eigenbasis, the 2x2 block of the
+Hamiltonian in it is diagonal at every vertex, and the eigenvalues of its
+linear interpolation are the relabeled energies interpolated linearly. So
+this is the "eigenvalues of the interpolated block" of the plan, in the
+case where the two bands of the block are not coupled. The crossings of
+the supercell are of this kind: its bands are the primitive bands folded,
+labeled by the primitive momentum. We checked it on the mesh, since at
+every point k + q0 of nk = 4 the eigenvectors split by a shift along four
+directions are the same pair of states (the overlap matrices are
+permutations), except at Gamma. For an avoided crossing the block has an
+off-diagonal part, and its eigenvalues are not linear in k. That variant
+needs a kernel for non-linear energies, or a subdivision of the simplex,
+and was not built.
+
+Two things went wrong on the way, and both are worth knowing. The first
+version took as a cluster the bands whose sorted energy ranges on the
+simplex overlap. This misses crossings. Two bands that cross inside a
+triangle swap their order between the vertices, and their sorted ranges
+can be disjoint by up to the spread of their difference. One triangle of
+nk = 16 has a band that goes from -1.94 to -1.77 and one that goes from
+-1.77 to -1.94 between two vertices, and both sit at -1.80 on the third
+vertex; sorted, they are two bands whose ranges only touch at that vertex.
+They touched within the multiplet tolerance at the mesh q and missed it by
+1e-5 next to it, so the relabeling switched on and off with the direction,
+and the direction dependence stayed (1.3e-3 at nk = 16, against 1.5e-3 in
+the library). The clusters now take the bands whose ranges come within
+twice the largest range of a band on the simplex, which on this supercell
+is every band on most triangles. The second is the coarsest mesh. At
+nk = 4 a triangle is a quarter of the Brillouin zone of the supercell, the
+eigenvectors at its vertices have no clear overlaps, and the greedy
+assignment matched bands 1.2 t apart.
+
+The check of the plumbing. With the rotation and the relabeling switched
+off, every simplex on private vertices and no multiplet average, the
+prototype gives the library on the supercell with a random onsite energy
+of 0.2 (no degeneracy left on the mesh) at q = (0.137, 0.211), nk = 8 and
+12, at delta = T = 0 and at delta = T = 1e-2: identical bit by bit
+spinless, and to 2e-15 spinful, where the spin partners are degenerate on
+every simplex and their weights are equal, so the sum over them does not
+depend on the basis.
+
+#### The direction dependence
+
+The same scan as in the section above: the spinless 2x2 honeycomb
+supercell with onsite 0.3 at q0 = (1/4, 1/2), shifted by eps = 1e-6 along
+u = (0.6, 0.8), along -u and along eight more directions, `mode="matrix"`,
+omega = 0 and 0.3, in units of the largest entry. The spread is the
+largest difference between two directions, the jump the mean of the
+directions minus the value at q0 itself:
+
+| nk | library spread | library jump | kp spread | kp jump | polar spread | polar jump |
+|---|---|---|---|---|---|---|
+| 4 | 2.4e-2 | 7e-8 | 1.1e-2 | 5.2e-3 | 1.1e-2 | 1.1e-2 |
+| 8 | 7.0e-3 | 4e-8 | 2.6e-6 | 9.6e-5 | 2.6e-6 | 7.3e-4 |
+| 16 | 1.8e-3 | 7e-9 | 2.7e-6 | 3.0e-6 | 2.7e-6 | 6.7e-5 |
+| 32 | 4.7e-4 | 2e-9 | 2.7e-6 | 3.0e-7 | 2.7e-6 | 8.1e-6 |
+
+The rows are for delta = T = 0. delta = T = 1e-2 gives the same numbers to
+two digits, and so does the spinful supercell at nk = 8 and 16, where the
+kp jump is 3.2e-5 and 1.7e-6. With kp, the spread from nk = 8 on is the
+linear change of chi with q, 1.28 eps per unit shift, between u and -u: at
+eps = 1e-7 it is 2.6e-7 and 2.7e-7 at nk = 8 and 16, ten times smaller. So
+the direction dependence is gone. What is left at q0 itself, the kp jump,
+falls by a factor 10 to 30 per doubling of nk. We did not isolate where
+it comes from; the Gamma multiplet, which kp leaves to the polar
+alignment, is one candidate. The polar rotation removes the direction
+dependence at eps = 1e-6 too, but not at eps = 1e-7, where its spread is
+1.4e-4 and 1.9e-5 at nk = 8 and 16. There the smallest splittings, about
+5e-8, come close to the multiplet tolerance of 3.3e-8, which is probably
+why: the polar basis of a degenerate multiplet is not the limit of the
+split eigenvectors, and the same mismatch leaves a jump at q0 that falls
+only by a factor 8 to 11 per doubling.
+The kp basis is that limit, so it does not see where the tolerance falls.
+At nk = 4 neither works, for the reason above.
+
+The value at q0 moves too: kp differs from the multiplet average by
+6.3e-3, 1.2e-3 and 2.1e-4 at nk = 8, 16 and 32, about half the library
+spread, as it should, since the multiplet average is the mean of the two
+sides.
+
+#### The convergence in nk
+
+Does the per-simplex basis converge faster? The clean measurement is the
+static response at T = delta = 0, where the triangle is second order and
+two meshes extrapolate. The reference is the mean of the library and the
+kp results extrapolated in 1/nk^2 from nk = 128 and 256; the two
+extrapolations agree to 2e-7 at q0, 2e-6 at q = (0.137, 0.211) and 2e-8 on
+the supercell with the onsite energy 0.1 added on one site, which breaks
+the primitive translations and opens the crossings into avoided crossings.
+The errors, in units of the largest entry:
+
+| nk | q0, library | q0, kp | generic q, library | generic q, kp | avoided, library | avoided, kp |
+|---|---|---|---|---|---|---|
+| 8 | 3.7e-3 | 5.5e-3 | 6.2e-3 | 5.7e-3 | 7.1e-3 | 8.2e-3 |
+| 16 | 1.2e-3 | 1.4e-3 | 1.6e-3 | 1.8e-3 | 2.0e-3 | 2.4e-3 |
+| 32 | 2.2e-4 | 2.4e-4 | 3.9e-4 | 4.2e-4 | 5.5e-4 | 5.0e-4 |
+| 64 | 5.4e-5 | 5.6e-5 | 1.0e-4 | 1.0e-4 | 1.5e-4 | 1.3e-4 |
+| 128 | 1.3e-5 | 1.3e-5 | 2.5e-5 | 2.6e-5 | 3.7e-5 | 3.7e-5 |
+| 256 | 3.2e-6 | 3.2e-6 | 6.4e-6 | 6.4e-6 | 9.3e-6 | 9.3e-6 |
+
+Both are second order with the same prefactor, and the per-simplex basis
+gains nothing. The difference between the two falls faster than the error
+at q0 (3.2e-3, 3.0e-4, 3.9e-5, 3.6e-6, 4.8e-7, 5.6e-8 from nk = 8 to 256,
+roughly nk^-3), so in the static response the kink is a higher-order term
+there. At the generic q it falls more slowly, 1.4e-5, 5.2e-6 and 2.0e-6
+at nk = 64, 128 and 256, a third of the error at nk = 256, which is also
+the size of the gap between the two extrapolations; we did not find out
+which of the two carries this part.
+
+The dynamic response, and the static one at finite T, against the library
+grid at nk = 1536, at delta = T = 1e-2 and omega = 0, 0.5 and 1.5. At the
+generic q the grid at nk = 768 agrees with nk = 1536 to 2e-14, 4e-7 and
+1e-6. At q0 its static value converges only like 1/nk, 9e-5 and 5e-5 off
+at nk = 512 and 768, so there the reference itself is uncertain by about
+5e-5 at omega = 0; we did not look into why. Errors in units of the largest
+entry, at the generic q:
+
+| nk | omega = 0, library | omega = 0, kp | omega = 0.5, library | omega = 0.5, kp | omega = 1.5, library | omega = 1.5, kp |
+|---|---|---|---|---|---|---|
+| 8 | 4.2e-3 | 3.8e-3 | 8.2e-3 | 8.7e-3 | 8.2e-2 | 4.9e-2 |
+| 16 | 1.0e-3 | 1.2e-3 | 2.3e-3 | 2.1e-3 | 1.9e-2 | 1.8e-2 |
+| 32 | 2.6e-4 | 2.8e-4 | 4.5e-4 | 4.9e-4 | 6.9e-3 | 3.9e-3 |
+| 64 | 6.7e-5 | 6.9e-5 | 1.2e-4 | 1.1e-4 | 1.3e-3 | 1.0e-3 |
+
+At q0 and on the avoided crossings the picture is the same: at nk = 64
+the static errors are 9.2e-5 and 9.3e-5 at q0 and 9.6e-5 and 8.7e-5 on the
+avoided crossings, and the dynamic ones differ between the two codes by
+-45 to +65 percent, in both directions from one nk to the next. The
+signed static error has the same sign and nearly the same size in the two
+codes at every nk, so kp does not land on the other side of the
+reference. At omega = 1.5 the error is set by the resonance at delta =
+1e-2, which needs a finer mesh in both codes, and the crossings are not
+what limits it. On the avoided crossings there is no exact degeneracy, so
+kp and polar are the same code there, and relabeling through a gap of
+0.1 neither helps nor hurts at these meshes.
+
+#### The cost per q
+
+On three cores of the workstation at a load of 7 to 8, the library source
+kernel against the prototype, two passes each, interleaved, wall time of
+the whole call:
+
+| case | nk | library (s) | prototype (s) | ratio | simplices changed |
+|---|---|---|---|---|---|
+| q0, T = 0, static | 32 | 0.85, 0.69 | 1.29, 1.21 | 1.5 to 1.75 | 63% |
+| q0, T = 0, static | 64 | 3.04, 2.96 | 5.01, 4.30 | 1.45 to 1.65 | 37% |
+| generic q, T = 0, static | 64 | 2.70, 2.94 | 4.15, 4.78 | 1.55 to 1.6 | 33% |
+| q0, T = 1e-2, 3 frequencies | 32 | 7.40, 6.34 | 8.29, 7.05 | 1.1 | 63% |
+| generic q, T = 1e-2, 3 frequencies | 32 | 6.92, 6.63 | 7.67, 6.97 | 1.05 to 1.1 | 59% |
+
+The transport itself, the overlaps, the rotations and the relabeling,
+takes 0.04 to 0.16 s, 2 to 10 percent of the call. Most of the extra cost
+is the matrix elements on the private vertices, 0.5 to 2 s against a
+kernel of 0.5 to 2.9 s at T = 0. In 2D a changed simplex holds three
+vertices of its own, against half a vertex per simplex on the shared mesh,
+so at nk = 64 the matrix elements are built on 3.0 to 3.2 times as many vertices,
+and the private G no longer fit `max_memory_gb/4` in one block, so the
+kernel ran twice. In 3D it would be four vertices per tetrahedron against
+one sixth. At finite T the kernel dominates and the overhead is 5 to 12
+percent. The changed fraction falls with nk, from 63 to 37 percent between
+nk = 32 and 64, since the crossings are lines, so the overhead falls too,
+but slowly. The prototype also diagonalizes k + q at q0, where the library
+takes the mesh, which is 0.06 to 0.13 s of the difference.
+
+These numbers are for 8 bands. The overlaps cost nb^2 norb per private
+vertex, against nb^2 pairs per simplex in the kernel, so for the 64 and
+200 band cells of the local response the transport is no longer a few
+percent, and it was not measured there. The kp rotation reads the Bloch
+hoppings of the generator (`bloch_data`); a library version would want a
+finite difference where those are missing. Tetrahedra were not tried.
+
+#### What we take from this
+
+The per-simplex basis does what it was meant to do: from nk = 8 on the
+response at a q next to a mesh q no longer depends on the direction, and
+the value at the mesh q is the limit from every side, to 3e-7 at nk = 32.
+It does not make the integration more accurate. The static and the dynamic
+errors are second order with the same prefactor in both codes, on true
+crossings and on avoided ones, so the kink of the sorted bands is not what
+limits the convergence on these models. It costs 1.45 to 1.75 times per q
+at T = 0 and 1.05 to 1.12 times at T = 1e-2, at the edge of the 1.5 that
+would make it a plain improvement, and it turns the matrix elements into a
+quantity per simplex. Since that is an architectural change, the prototype
+stays out of the library, and the choice is the maintainer's:
+
+- Keep the multiplet average. No cost and no change. A mesh q keeps a
+  step of the size of the discretization error, half the library spread
+  in the table above (3.5e-3, 9e-4 and 2.4e-4 at nk = 8, 16 and 32), and
+  the value at the mesh q stays the mean of the directional limits.
+- Add the per-simplex basis as an option of the source kernel, off by
+  default, storing the private matrix elements only for the pairs that
+  involve a relabeled band. It buys a response that is continuous in q,
+  for a q-path or a scan that passes through mesh points, at the measured
+  1.05 to 1.75 times before that storage change.
+- Make it the default. The same continuity for every call, at the same
+  cost, with nk = 4 meshes of a supercell still unreliable, since the
+  overlaps there do not identify the bands.
 
 ## Finite temperature
 
@@ -1050,10 +1285,15 @@ at 200. It pays in wall time only for cells of many hundreds of bands.
   the crossing. The models here have no crossing near the Fermi level.
   At a mesh q where every k + q falls on a crossing, the same kink makes
   the response depend on the direction from which q is approached, by a
-  step that falls as nk^-2 (see a mesh q on a band crossing). Choosing
-  the basis of a degenerate pair per simplex, so that it follows the
-  eigenvectors at the other vertices, would remove both, but it makes the
-  matrix elements a quantity per simplex instead of per vertex. Not built.
+  step that falls as nk^-2 (see a mesh q on a band crossing). A basis per
+  simplex, which follows the eigenvectors at the other vertices, is
+  prototyped in `chi_simplex_basis.py` and measured in the section on a
+  basis per simplex for crossing bands: it removes the direction
+  dependence from nk = 8 on, does not change the convergence in nk, and
+  costs 1.45 to 1.75 times per q at T = 0 and 1.05 to 1.12 times at
+  T = 1e-2. It makes the matrix elements a quantity per simplex instead
+  of per vertex, so it is not in the library; the options for the
+  maintainer are at the end of that section.
 - At T = 0 and a perfect nesting vector the response is infinite, and the
   triangle returns a finite number that grows with nk instead of
   refusing. A check for pieces with D = 0 on an edge at w = 0 and T = 0
