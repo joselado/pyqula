@@ -725,16 +725,22 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
             warnings.warn("mix=%r has no effect for solver=%r (only "
                     "solver=\"plain\", solver=\"linear\" and "
                     "solver=\"broyden_mixing\" use linear mixing)"%(mix,solver),stacklevel=2)
-        # these methods do seem too efficient, but lets have them anyway
+        # these methods do seem too efficient, but lets have them anyway.
+        # The scipy solvers stop when the largest entry of fsol is below
+        # f_tol, so f_tol=maxerror is the criterion of the plain loop and of
+        # broyden_mixing, and scf.converged means the same for all of them.
+        # krylov and anderson used the scipy default (6e-6) and broyden1
+        # and linear 100*maxerror, while the loop was marked converged, so
+        # a BdG state stopped short of its charge was told it had no gap
         if solver=="krylov":
             from scipy.optimize import newton_krylov
-            x = newton_krylov(fsol,x0,rdiff=1e-3) # use the solver
+            x = newton_krylov(fsol,x0,rdiff=1e-3,f_tol=maxerror) # use the solver
         elif solver=="anderson":
             from scipy.optimize import anderson
-            x = anderson(fsol,x0) # use the solver
+            x = anderson(fsol,x0,f_tol=maxerror) # use the solver
         elif solver=="broyden1":
             from scipy.optimize import broyden1
-            x = broyden1(fsol,x0,f_tol=maxerror*100) # use the solver
+            x = broyden1(fsol,x0,f_tol=maxerror) # use the solver
         elif solver=="linear":
             # scipy's linearmixing steps x -> x - alpha*F(x) with the
             # Jacobian taken as -1/alpha, the convention of F(x)=g(x)-x.
@@ -744,7 +750,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
             # alpha=-mix makes the step x + mix*(g(x)-x), the plain loop
             from scipy.optimize import linearmixing
             if mix is None: mix = 0.3 # as the plain loop
-            x = linearmixing(fsol,x0,alpha=-mix,f_tol=maxerror*100)
+            x = linearmixing(fsol,x0,alpha=-mix,f_tol=maxerror)
         elif solver=="broyden_mixing":
             # regularized, limited-memory multisecant Broyden mixing
             # (arXiv:0801.3098) -- see scftk/broydenmixing.py's
@@ -772,8 +778,10 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
             scf.iterations = ite
             scf.residual = np.max(np.abs(x - fnew(scf))) # reached error
         else: # the scipy solvers raise NoConvergence when they fail
-            scf.converged = True
             scf.residual = np.max(np.abs(x - fnew(scf))) # reached error
+            # the residual of the last evaluation, at the tolerance the
+            # solver was given (fsol of x is evaluated once more above)
+            scf.converged = bool(scf.residual<=maxerror)
         scf.error = maxerror # store the error
         if write: inout.save(scf.mf,mf_file) # save the mean field
         return scf # return the mean field
