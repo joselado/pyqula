@@ -71,7 +71,11 @@
 # is located on the same simplices as the density matrix (get_fermi4filling
 # below) and the density matrix holds the requested charge to 1e-12, with
 # no partly occupied level. When the requested charge is held on a whole
-# interval of mu (a gap at T=0), the middle of the interval is returned.
+# interval of mu (a gap at T=0, or at T>0 a gap wider than 2 _tcut T, since
+# the Fermi function is cut there), the middle of the gap is returned. The
+# search is a safeguarded Newton iteration with the simplex DOS as the
+# derivative (fermi_from_energies), three or four charge evaluations in a
+# metal (future_development/simplex_fermi_search.md).
 # The band energy is the sum of w_n(k) E_n(k) with the same weights at T=0
 # (the exact band energy of the linear bands, plus the Bloechl term of
 # point 4), so the total energy of the mean field is summed with the same
@@ -382,24 +386,6 @@ def _simplex_weights_jit(sim,es,mu,T,bcoef,gx,gw,tbreaks,out):
 
 
 @jit(nopython=True,parallel=True,cache=True)
-def _simplex_charge_jit(sim,es,mu,T,gx,gw,tbreaks):
-    """sum over simplices and bands of the occupied fraction"""
-    ns = sim.shape[0]; p = sim.shape[1]; nb = es.shape[1]
-    acc = 0.
-    for it in prange(ns):
-        e = np.zeros(p); perm = np.zeros(p,dtype=np.int64)
-        w = np.zeros(p); tmp = np.zeros(p)
-        kn = np.zeros(p+3+2*tbreaks.shape[0])
-        c = 0.
-        for n in range(nb):
-            _sorted_vertices(es,sim,it,n,mu,e,perm,p)
-            if T>0.: c += _weights_T(e,p,T,gx,gw,tbreaks,w,tmp,kn)
-            else: c += _step_weights(e,p,0.,w)
-        acc += c
-    return acc
-
-
-@jit(nopython=True,parallel=True,cache=True)
 def _multiplet_average_real(es,w,tol):
     """replace w[k,n] by its mean over the degenerate multiplet of n"""
     for ik in prange(es.shape[0]):
@@ -413,6 +399,101 @@ def _multiplet_average_real(es,w,tol):
                 for m in range(i,j): acc += w[ik,m]
                 for m in range(i,j): w[ik,m] = acc/(j-i)
             i = j
+
+
+# ------------------------------------------------------------ charge and DOS
+#
+# The Fermi search needs the charge N(mu) and its derivative, the density
+# of states, at each trial level. The kernel below gives both in one pass
+# over the simplices. The occupied fraction of a simplex is the closed form
+# of sum_j w_j, so no weight array is formed, and at T>0 the fraction and
+# the DOS are read at the same quadrature nodes and knots as _weights_T and
+# _dos_T.
+
+@jit(nopython=True,cache=True)
+def _step_fraction(e,p,mu):
+    """T=0 occupied fraction of the simplex, sum of _step_weights, in closed
+    form for sorted vertex energies"""
+    if mu<=e[0]: return 0.
+    if mu>=e[p-1]: return 1.
+    if p==2: return (mu-e[0])/(e[1]-e[0])
+    if p==3:
+        if mu<e[1]: return (mu-e[0])**2/((e[1]-e[0])*(e[2]-e[0]))
+        return 1.-(e[2]-mu)**2/((e[2]-e[0])*(e[2]-e[1]))
+    if mu<e[1]:
+        return (mu-e[0])**3/((e[1]-e[0])*(e[2]-e[0])*(e[3]-e[0]))
+    if mu<e[2]:
+        x = mu-e[1]; e10 = e[1]-e[0]
+        return (e10*e10+3.*e10*x+3.*x*x-(e[2]+e[3]-e[0]-e[1])*x**3
+                /((e[2]-e[1])*(e[3]-e[1])))/((e[2]-e[0])*(e[3]-e[0]))
+    return 1.-(e[3]-mu)**3/((e[3]-e[0])*(e[3]-e[1])*(e[3]-e[2]))
+
+
+@jit(nopython=True,cache=True)
+def _charge_dos_T(e,p,T,gx,gw,tbreaks,kn):
+    """occupied fraction and DOS of the simplex at temperature T, for sorted
+    vertex energies measured from mu, with the knots and nodes of _weights_T
+    and _dos_T. A flat simplex is a step, f(e - mu), whose derivative
+    f(1-f)/T is its DOS"""
+    L = tbreaks[-1]*T
+    if e[0]>=L: return 0.,0.
+    if e[p-1]<=-L: return 1.,0.
+    ftop = _fermi(e[p-1],T)
+    if e[p-1]<=e[0]: return ftop,ftop*(1.-ftop)/T
+    c = ftop; d = 0.
+    m = _knots(e,p,T,tbreaks,kn)
+    for i in range(m-1):
+        a = kn[i]; b = kn[i+1]
+        if b<=a: continue
+        if b<=0.: # mirror, as in _piece
+            sgn = -1.; u0 = -b; u1 = -a
+        else:
+            sgn = 1.; u0 = a; u1 = b
+        f0 = _fermi(u0,T); f1 = _fermi(u1,T)
+        h = (f0-f1)/2.; cc = (f0+f1)/2.
+        if h<=0.: continue
+        for q in range(gx.shape[0]):
+            phi = cc+h*gx[q]
+            x = sgn*T*(np.log1p(-phi)-np.log(phi))
+            c += gw[q]*h*_step_fraction(e,p,x)
+            d += gw[q]*h*_step_dos(e,p,x)
+    return c,d
+
+
+_block = 1024 # simplices per task of the charge kernel
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _charge_dos_jit(sim,es,mu,T,gx,gw,tbreaks):
+    """sum over simplices and bands of the occupied fraction and of the
+    DOS, in blocks so that the sum does not depend on the threads"""
+    ns = sim.shape[0]; p = sim.shape[1]; nb = es.shape[1]
+    L = tbreaks[-1]*T
+    nblk = (ns+_block-1)//_block
+    cs = np.zeros(nblk); ds = np.zeros(nblk)
+    for ib in prange(nblk):
+        e = np.zeros(p); perm = np.zeros(p,dtype=np.int64)
+        kn = np.zeros(p+3+2*tbreaks.shape[0])
+        c = 0.; d = 0.
+        for it in range(ib*_block,min(ns,(ib+1)*_block)):
+            for n in range(nb):
+                lo = es[sim[it,0],n]; hi = lo
+                for v in range(1,p):
+                    x = es[sim[it,v],n]
+                    if x<lo: lo = x
+                    if x>hi: hi = x
+                if lo-mu>=L: continue # empty, also at T=0
+                if hi-mu<=-L: # full
+                    c += 1.
+                    continue
+                _sorted_vertices(es,sim,it,n,mu,e,perm,p)
+                if T>0.:
+                    cc,dd = _charge_dos_T(e,p,T,gx,gw,tbreaks,kn)
+                    c += cc; d += dd
+                else:
+                    c += _step_fraction(e,p,0.); d += _step_dos(e,p,0.)
+        cs[ib] = c; ds[ib] = d
+    return np.sum(cs),np.sum(ds)
 
 
 # ------------------------------------------------------------ weights
@@ -446,40 +527,98 @@ def simplex_weights(dim,nk,es,mu=0.,T=0.,bloechl=False):
 def simplex_charge(dim,nk,es,mu=0.,T=0.):
     """Electrons per unit cell at chemical potential mu and temperature T,
     the sum of simplex_weights without forming them"""
+    return simplex_charge_dos(dim,nk,es,mu=mu,T=T)[0]
+
+
+def simplex_charge_dos(dim,nk,es,mu=0.,T=0.):
+    """Electrons per unit cell and density of states per unit cell, dN/dmu,
+    at chemical potential mu and temperature T, in one pass"""
     from ..dostk.simplexdos import simplices
     sim,frac = simplices(dim,nk)
+    es = np.ascontiguousarray(es,dtype=np.float64)
     T = 0. if T is None else float(abs(T))
+    return _charge_and_dos(sim,frac,es,float(mu),T)
+
+
+def _charge_and_dos(sim,frac,es,mu,T):
+    """(N, dN/dmu) per unit cell on the simplices sim of volume frac"""
     parallel.set_num_threads()
-    return _simplex_charge_jit(sim,np.ascontiguousarray(es,dtype=np.float64),
-            float(mu),T,_gx,_gw,_tbreaks)*frac
+    c,d = _charge_dos_jit(sim,es,mu,T,_gx,_gw,_tbreaks)
+    return c*frac,d*frac
+
+
+def _staircase_guess(es,target):
+    """Fermi level of the uniform mesh, each state counted as a step that is
+    half occupied at its energy, interpolated linearly between two states.
+    target is the charge per unit cell"""
+    x = es.ravel()
+    if len(x)<2: return float(x[0])
+    t = target*es.shape[0]-0.5 # fractional index into the sorted energies
+    i = int(np.clip(np.floor(t),0,len(x)-2))
+    s = np.partition(x,[i,i+1])
+    a = min(max(t-i,0.),1.)
+    return float(s[i]+a*(s[i+1]-s[i]))
 
 
 def fermi_from_energies(dim,nk,es,filling,T=0.):
     """Chemical potential at which the simplex integration holds the
     fraction `filling` of the states. N(mu) is continuous, so the requested
     charge is reached exactly; when it is reached on a whole interval (a
-    gap), the middle of the interval is returned"""
-    from scipy.optimize import brentq
+    gap), the middle of the interval is returned.
+
+    The root is found by a safeguarded Newton iteration, with the DOS of the
+    same simplices as the derivative, inside a bracket that bisection takes
+    over when a Newton step leaves it or does not halve. It starts from the
+    level of the uniform mesh, so that a metal takes three or four charge
+    evaluations. N is exactly flat on an interval where no simplex is
+    within the cutoff of the Fermi function (tcut T, zero at T=0), and the
+    DOS is exactly zero there. A level on such an interval that holds the
+    charge returns its middle, which is the middle of the gap between the
+    vertex energies on each side, at every T"""
     from ..filling import check_filling
+    from ..dostk.simplexdos import simplices
     check_filling(filling)
+    es = np.ascontiguousarray(es,dtype=np.float64)
     nb = es.shape[1]
     target = filling*nb
     emin,emax = float(np.min(es)),float(np.max(es))
-    pad = 1e-6+50.*abs(T)
+    T = 0. if T is None else float(abs(T))
+    pad = 1e-6+50.*T
     if target<=0.: return emin-pad
     if target>=nb: return emax+pad
-    def n(mu): return simplex_charge(dim,nk,es,mu=mu,T=T)
+    sim,frac = simplices(dim,nk)
     tol = 1e-12*nb
-    lo,hi = emin-pad,emax+pad
-    xtol = 1e-14*max(1.,abs(emax)+abs(emin))
-    mu0 = brentq(lambda mu: n(mu)-target,lo,hi,xtol=xtol)
-    eps = 1e-8*max(1.,emax-emin)
-    if abs(n(mu0-eps)-target)>tol or abs(n(mu0+eps)-target)>tol:
-        return mu0 # a metal, or a band edge at T>0: the root is unique
-    # the charge is held on a whole interval (a gap): its middle
-    m1 = brentq(lambda mu: n(mu)-(target-tol),lo,mu0,xtol=xtol)
-    m2 = brentq(lambda mu: n(mu)-(target+tol),mu0,hi,xtol=xtol)
-    return (m1+m2)/2.
+    L = _tbreaks[-1]*T # beyond L the Fermi function is a step
+    lo,hi = emin-pad,emax+pad # N(lo) = 0 and N(hi) = nb, exactly
+    xtol = 1e-14*max(1.,abs(emax)+abs(emin)) # bracket width that stops
+    xstop = 1e-13*max(1.,abs(emax)+abs(emin)) # Newton step that stops
+    mu = _staircase_guess(es,target)
+    if not lo<mu<hi: mu = (lo+hi)/2.
+    dxold = hi-lo
+    for it in range(200): # bisection alone needs about 60
+        c,d = _charge_and_dos(sim,frac,es,mu,T)
+        r = c-target
+        if r<0.: lo = mu
+        elif r>0.: hi = mu
+        if d==0.: # N is flat around mu, between two vertex energies
+            below = es[es<=mu-L]; above = es[es>=mu+L]
+            if abs(r)<=tol and len(below)>0 and len(above)>0:
+                return (float(np.max(below))+float(np.min(above)))/2.
+            # not at the charge: skip the flat interval
+            if r<0. and len(above)>0: lo = max(lo,float(np.min(above))-L)
+            if r>0. and len(below)>0: hi = min(hi,float(np.max(below))+L)
+        elif r==0.: return mu
+        step = r/d if d>0. else 0.
+        new = mu-step
+        if d>0. and lo<new<hi and abs(step)<=0.5*abs(dxold): # Newton
+            dxold = step
+            if abs(step)<=xstop: return new
+        else: # bisection
+            dxold = 0.5*(hi-lo)
+            new = lo+dxold
+            if hi-lo<=xtol: return new
+        mu = new
+    return mu
 
 
 # ------------------------------------------------------------ the mesh
