@@ -244,14 +244,12 @@ class ShellFilling:
     pairing has died out or was never there, and then the levels of the
     shell are states of one charge, which the first-order shift of the
     chemical potential treats exactly. The second condition does not
-    depend on T and is the one that matters at low T: in the Zeeman state
-    (U=-2, B=0.3, nk=16) the paired charge jumps while the pairing is
-    still about 1e-4, and with a gate on the pairing alone, at 1e-8 times
-    the bandwidth, Broyden mixing without its restart went round the gate
-    and did not converge in 300 iterations, with the pairing between 7e-8
-    and 7e-6. While the pairing lives, the offset of BdGFermiLevel is what
-    holds the charge: filling the shell broke the ferromagnetic triplet
-    chain of tests/scf/test_unconventional_superconductivity.py (nk=6,
+    depend on T and is the one that matters at low T, since in the Zeeman
+    state (U=-2, B=0.3, nk=16) the paired charge jumps while the pairing
+    is still about 1e-4. While the pairing lives, the offset of
+    BdGFermiLevel is what holds the charge: filling the shell broke the
+    ferromagnetic triplet chain of
+    tests/scf/test_unconventional_superconductivity.py (nk=6,
     Delta=1.73), whose level at the node k=1/2 converges to mu, since once
     filled the mean field pushed it 0.18 away and the loop went round a
     cycle of 22 iterations. The gate went through three versions before
@@ -259,10 +257,12 @@ class ShellFilling:
     states: against the shell, 40 T, the s-wave state with U=-1 at T=1e-2
     (Delta=0.025) in every iteration, and against Ts the one with U=-0.5
     at nk=32 and T=1e-3 (Delta=3.1e-3), whose energy then moved by 6e-7.
-    The pairing alone, against Ts or 1e-8 W, let the Zeeman state above go
-    round the gate without the restart of Broyden mixing. So the pairing
-    is compared with Ts, and the window only with the shell at T=0, which
-    is far below any live pairing. A density matrix that is not armed is
+    The pairing alone, against Ts or 1e-8 times the bandwidth, let Broyden
+    mixing without its restart go round the gate in the Zeeman state, 300
+    iterations without convergence with the pairing between 7e-8 and
+    7e-6; with the window it converges in 51. So the pairing is compared
+    with Ts, and the window only with the shell at T=0, which is far
+    below any live pairing. A density matrix that is not armed is
     exactly the one of before, on the device route too.
 
     An armed shell is filled when the density matrix misses N0 by more

@@ -1614,8 +1614,7 @@ The price is that an armed state at T > 0 whose fill never fires now
 reports Tr H rho at T and not the step band energy, which is a count at
 T = 0. Every such row of the measurements has a dead pairing, or one
 below T. With `"ed"` the energy moves up by the thermal energy, roughly
-as T^2; with the triangle, whose own weights are not Fermi-Dirac, it
-moves down:
+as T^2; with the triangle it moves down, which we did not look into:
 
 | state | integration | Delta at the end | dE |
 |---|---|---:|---:|
