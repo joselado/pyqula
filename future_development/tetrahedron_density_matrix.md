@@ -857,34 +857,46 @@ Writing mu around mu_n has two reasons. The Hartree shift moves mu_n, so
 the offset only carries the effect of the pairing, of order Delta^2/W.
 And when the pairing vanishes, the paired charge at mu_n is the normal
 one, so x = 0 is exactly the old Fermi level. Three safeguards come from
-the states without a gap on the mesh. The reason for all three is that
-the charge of `"ed"` in such a state is a staircase in mu, and the one of
-the triangles has kinks where the electron and hole bands cross. So no
-offset may hold N0, and a fixed step oscillates around a jump. First, the
-offset is clipped to a window |x| <= 2 Delta^3/(Delta^2 + Delta_s^2), with
-Delta the largest anomalous entry of the Hamiltonian and
-Delta_s = 1e-3 W, W = (electron states)/kappa. The window is 2 Delta for a
-sizable pairing, and it closes as Delta^3 when the pairing dies out, so
-that the old Fermi level comes back. Second, the gain halves each time
-N - N0 changes sign, and grows back by 1.5 while it does not. Third, after
-eight changes of sign with |N - N0| above 1e-6 (below that it is the noise
-of qtci), the step gives up and sets x = 0 for the rest of the loop, which
-is then the old loop. A gapped state settles in one or two changes of sign.
-In all these cases the loop converges with the charge error of the old
-Fermi level, and it prints one line when that error is above
+the states without a gap on the mesh. The reason for all three is that the
+charge of such a state is a staircase in mu, for `"ed"` and for the
+triangles alike (see "The triangle of a BdG Hamiltonian is the step"), so the offset has to sit on a
+level, where the smearing makes the charge continuous, or no offset holds
+N0 at all, and a fixed step oscillates around a jump. First, the offset is
+clipped to a window |x| <= 2 Delta^3/(Delta^2 + Delta_s^2), with Delta the
+largest anomalous entry of the Hamiltonian and Delta_s = 1e-3 W,
+W = (electron states)/kappa. The window is 2 Delta for a sizable pairing,
+and it closes as Delta^3 when the pairing dies out, so that the old Fermi
+level comes back. Second, the gain halves each time N - N0 changes sign,
+down to 1/64, and grows back by 1.5 while it does not. Third, the step
+gives up and sets x = 0 for the rest of the loop, which is then the old
+loop, in two cases: after eight steps in a row held by the window, and
+after eight changes of sign at the smallest gain with |N - N0| above 1e-6
+(below that it is the noise of qtci). A gapped state never gets there.
+When the step gives up, the loop converges with the charge error of the
+old Fermi level, and it prints one line when that error is above
 100 maxerror. The error is also in `scf.charge_error`.
 
-The three safeguards came out of failures. A window of 2 Delta that sets x
-back to zero when it leaves it gave a cycle of period three for qtci at
-nk = 8, where the gap is not resolved and the paired charge wants an
-offset of -0.3 with Delta = 0.1. A window that does not close made the
-loop slow when the pairing dies, since x stays at the edge of a shrinking
-window and moves mu across the levels of the mesh (more than 400
-iterations against 41 for the Zeeman case below). And the halving gain
-alone froze x at a wrong value on the ferromagnetic chain of
-`tests/scf/test_unconventional_superconductivity.py`, a triplet with
-nodes on the mesh points at nk = 6, which then did not converge in 1000
-iterations; with the give-up it converges in 51, against 50 before.
+The three safeguards came out of failures, all in the tests of
+`tests/scf`. A window of 2 Delta that sets x back to zero when it leaves
+it gave a cycle of period three for qtci at nk = 8. A window that does not
+close made the loop slow when the pairing dies, since x stays at the edge
+of a shrinking window and moves mu across the levels of the mesh (more
+than 400 iterations against 41 for the Zeeman case below). The halving
+gain with no floor and no give-up froze x at a wrong value on the
+ferromagnetic chain of `tests/scf/test_unconventional_superconductivity.py`,
+a triplet with nodes on the mesh points at nk = 6, which then did not
+converge in 1000 iterations. A give-up after eight changes of sign at any
+gain fixed that chain, but it made the result depend on the random
+guess: on the ferromagnetic bichain with V1 = -2 and J1 = -1 of
+`tests/scf/test_spinspin_nambu.py` and `tests/scf/test_spinspin_supercell.py`
+about half of the random guesses gave up during the first 20 iterations
+and ended at the old Fermi level, with a charge error of 0.197 per cell and
+E = -3.10296, and the other half held the charge, E = -3.12367. Counting
+only the changes of sign at the smallest gain, six random guesses out of
+six hold the charge, the chain converges in 78 iterations (50 before) to
+the same triplet, and the triangular ferromagnet of
+`tests/scf/test_nonunitarity_triangular.py` at nk = 4, which the window
+gives up, keeps its recorded d-vector.
 
 For concreteness we take again U = -2 on the spinful square lattice, with
 `solver="broyden_mixing"` and `maxerror=1e-10` (1e-8 for qtci). The
@@ -951,11 +963,13 @@ Other states, all at nk = 16:
   Delta = 0.029. The old code at the new mu, fixed, finds the same state
   and the same energy to 1e-10, so this is the charge and not a second
   difference.
-- No pairing, U = 2 with Nambu: the Fermi level and the energy are the
-  old ones, to 3e-12.
+- No pairing, U = 2 with Nambu and `"ed"`: the Fermi level and the energy
+  are the old ones, to 3e-12. With the triangle they are now the ones of
+  `"ed"` (see "The triangle of a BdG Hamiltonian is the step").
 - s-wave with a Zeeman field 0.3, larger than the gap, where the pairing
-  dies: with Broyden, `"ed"` goes from 41 to 64 iterations and the
-  triangle from 19 to 25, to the old state and the old charge.
+  dies: with Broyden, `"ed"` goes from 41 to 89 iterations, to the old
+  state and the old charge. The triangle goes from 19 to 109 iterations,
+  and now ends at the charge of `"ed"` (0.6016) instead of 0.5859.
 - Attractive V1 = -2.5 on the spinful chain at filling 0.3: before, the
   extended s-wave singlet from `mf="swave"` held 0.514 electrons per cell
   and the triplet from `mf="pwave"` 0.713, instead of 0.6. At 0.6 both
@@ -964,10 +978,9 @@ Other states, all at nk = 16:
   guess is not stable there and moves slowly to the triplet. So the
   singlet test of `tests/scf/test_bond_pairing_prefactor.py` runs at
   filling 0.2 now, where the singlet is the converged state.
-- qtci at nk = 8 (U = -2, filling 0.3), where the gap is not resolved: the
-  old loop lost the pairing (Delta = 7e-4). Now the offset stays at the
-  edge of its window, Delta = 0.233 against 0.213 on a converged mesh, and
-  the loop says that the charge is not held.
+- qtci at nk = 8 (U = -2, filling 0.3), where the gap is barely resolved:
+  the old loop lost the pairing (Delta = 7e-4). Now it holds the charge,
+  with Delta = 0.233 against 0.213 on a converged mesh.
 
 The cost per iteration is the one of before, one density matrix and one
 normal-state Fermi search, plus two Fermi searches at the start. What
@@ -991,7 +1004,12 @@ by hand, so <H>; the three integrations agree at a filling to 1e-8 in the
 energy and in the Fermi level (1e-6 for qtci); `VJinteraction` holds the
 filling too; and a Nambu state without pairing keeps the normal-state
 Fermi level to 1e-10, with the energy of a run at that fixed mu plus
-mu N0. The checks at fixed mu are unchanged.
+mu N0. The checks at fixed mu are unchanged. Two more check the triangle
+of a BdG Hamiltonian at nk = 32: with U = -1 the triangle and qtci give
+the pairing of `"ed"` (to 1e-6 and 1e-5), and a Nambu state with U = 2
+from a ferromagnetic guess has the magnetization of the normal state with
+`"ed"` at T = 0 (to 3e-4 for the triangle and qtci, whose Bloechl term
+moves it by about 1e-4).
 
 Not touched. The KPM engines keep the normal-state Fermi level for a
 Nambu Hamiltonian (`LaggedFermi.shift` searches it each iteration on the
@@ -1035,7 +1053,7 @@ loaded.
   accepted, and their Fermi level is found on the charge of the paired
   state (see "The Fermi level of a superconductor").
 - For a BdG Hamiltonian the triangle is the step of exact
-  diagonalization on the same mesh (see the next section), so in a state
+  diagonalization on the same mesh (see "The triangle of a BdG Hamiltonian is the step"), so in a state
   without a gap it keeps the staircase of `"ed"`. A triangle integration
   of a gapless BdG state with the continuous charge of the normal state
   would need the electron and hole bands unsorted. Not tried.

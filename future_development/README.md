@@ -246,9 +246,11 @@ already reached once.
   iteration, converged with the mean field, in Vinteraction and
   VJinteraction), so the paired state holds the filling and the energy is
   <H> (U = -2 at filling 0.3 held 0.606 before; U = -6 at filling 0.1 held
-  0.334 instead of 0.2). Open: VJinteraction with the triangle, the
-  triangle charge of a gapless BdG state, a slower loop when the pairing
-  dies. RPA chi(q) is built, see
+  0.334 instead of 0.2). The BdG triangle is the step of exact
+  diagonalization on the same mesh, so its Fermi search counts that step
+  now (the old triangle count lost the pairing of U = -1 and made a Nambu
+  ferromagnet). Open: VJinteraction with the triangle, a slower loop when
+  the pairing dies. RPA chi(q) is built, see
   `tetrahedron_susceptibility.md`. The anomalous Hall of metals with the
   same occupations is built, see the next entry.
 
