@@ -1005,11 +1005,14 @@ energy and in the Fermi level (1e-6 for qtci); `VJinteraction` holds the
 filling too; and a Nambu state without pairing keeps the normal-state
 Fermi level to 1e-10, with the energy of a run at that fixed mu plus
 mu N0. The checks at fixed mu are unchanged. Two more check the triangle
-of a BdG Hamiltonian at nk = 32: with U = -1 the triangle and qtci give
-the pairing of `"ed"` (to 1e-6 and 1e-5), and a Nambu state with U = 2
-from a ferromagnetic guess has the magnetization of the normal state with
-`"ed"` at T = 0 (to 3e-4 for the triangle and qtci, whose Bloechl term
-moves it by about 1e-4).
+of a BdG Hamiltonian: with U = -1 at nk = 32 the triangle and qtci give
+the pairing of `"ed"` (to 1e-6 and 1e-5), and at nk = 64 a Nambu state
+with U = 2 from a ferromagnetic guess has the magnetization of the normal
+state with `"ed"` at T = 0 (to 3e-4 for the triangle, whose Bloechl term
+moves it by about 1e-4). qtci is left out of the gapless checks: on a
+degenerate level its energy at a filling differs from the one at the
+fixed level by a few k-states (3.7e-4), and its Nambu ferromagnet at
+nk = 64 takes minutes.
 
 Not touched. The KPM engines keep the normal-state Fermi level for a
 Nambu Hamiltonian (`LaggedFermi.shift` searches it each iteration on the
