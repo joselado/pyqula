@@ -1092,7 +1092,7 @@ the plain loop recorded above. `VJinteraction` has no call site to change:
 its numpy engine refuses `solver=` and always runs plain mixing, and its
 jax engine refuses a Nambu Hamiltonian.
 
-Three other stateless steps were tried, all at nk = 16. The clipped step
+Four other stateless steps were tried, all at nk = 16. The clipped step
 with the damping of the plain loop, 0.5, and no rule for the window: the
 d-wave state needs 24, but the Zeeman case gets worse, 114 for `"ed"`
 against 89, because x bangs on the two edges of the shrinking window and

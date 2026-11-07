@@ -618,7 +618,8 @@ def fermi_from_energies(dim,nk,es,filling,T=0.):
             new = lo+dxold
             if hi-lo<=xtol: return new
         mu = new
-    return mu
+    raise RuntimeError("the simplex Fermi search did not converge in 200 "
+            "steps, target charge "+str(target)+", last level "+str(mu))
 
 
 # ------------------------------------------------------------ the mesh
