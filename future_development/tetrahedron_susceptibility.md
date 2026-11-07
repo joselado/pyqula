@@ -665,8 +665,35 @@ once numba has compiled the kernels:
   kernels take this shortcut, so the agreement of the two kernels does
   not test it.
 
-With these, `tests/chi` has 229 tests. They all pass on a machine
-without a GPU. On the workstation with the card, 219 pass and 10 fail:
+`tests/chi/test_local_response_shared_mesh.py` checks the shared
+diagonalization of the local response, described in the section on the
+local response below:
+
+- the index map of a mesh q gives the mesh point (k + q) mod 1 in 1D, 2D
+  and 3D, for negative shifts and shifts beyond one reciprocal vector,
+  and a q off the mesh, or along a direction the lattice does not have,
+  has no index map;
+- q = None, q = 0 and two mesh q take nk^dim diagonalizations, a generic
+  q 2 nk^dim, both from `counted=True` and from a counter on
+  `simplexchi._eigen`;
+- the shared route gives the two-diagonalization route to 1e-12 of the
+  largest entry, on a spinful square lattice with an exchange field and
+  on the spinful 2x2 honeycomb supercell, at q = None and two mesh q,
+  static and dynamic, at delta = 1e-2 and at delta = T = 0,
+  `mode="matrix"` and `"trace"`, also with the eigenvectors recomputed
+  at every pass (`max_memory_gb` lowered);
+- the local response, q = None, is the loop over the q-mesh on the
+  two-diagonalization route to 1e-12, and diagonalizes nk^dim
+  Hamiltonians in total;
+- a generic q gives the same numbers bit by bit, and the `eigen` keyword
+  is refused by the grid and by a call on another mesh.
+
+The reference route is the same code with the detection of a mesh q
+switched off (`simplexchi.mesh_q_tol = -1`), which is the code before the
+change for every q.
+
+With these, `tests/chi` has 242 tests. They all pass on a machine
+without a GPU. On the workstation with the card, 232 pass and 10 fail:
 the single-precision device paths of `test_chi_gpu.py` and
 `test_pairchi_gpu.py`, which fail in the same way with the code before
 these changes, and do not touch the triangle.
@@ -794,6 +821,90 @@ spectrum of M: on the chain at T = 2e-2, which is paramagnetic, its
 smallest eigenvalue goes from 0.683 to 0.262, since the Stoner
 denominator now has the Pauli term in it.
 
+## The local response
+
+We will now see how the local response, q = None, shares one
+diagonalization of the k-mesh between all its q. The local response is
+the average of chi_0(q) over the q-mesh, the response a probe on a single
+site sees. `chiAB` computed it by calling `chiAB_q` at every q of
+`h.geometry.get_kmesh(nk)`, and with the triangle every call diagonalized
+the mesh at k and again at k + q. So the local response cost
+2 nk^(2 dim) diagonalizations, and a single call at q = 0 cost twice what
+it needs.
+
+The q of the local response are points of the k-mesh, and this is what
+makes the sharing possible. `klist.kmesh(dim, nk)` gives the points i/nk
+in the row-major order of `simplexdos.uniform_mesh`. For a q with every
+component times nk an integer, k + q is the mesh point (k + q) mod 1, and
+the Bloch Hamiltonian there is the one at k + q, since the phases
+exp(2 pi i G.R) are 1. So the bands and the eigenvectors at k + q are
+those of the mesh, reindexed by a roll of the mesh along each direction.
+`simplexchi.mesh_shift` gives that index map, ks[perm] = (ks + q) mod 1,
+and returns None for a q off the mesh. A q is on the mesh when q nk is an
+integer to 1e-8, which also absorbs the rounding of the `linspace` in
+`klist.kmesh`.
+
+`chi_triangle` now takes the bands at k + q from the index map for every q
+on the mesh, q = None and q = 0 included, and diagonalizes the mesh once.
+The diagonalization lives in `simplexchi.MeshEigen`, which diagonalizes on
+first use and keeps the band energies and, when one copy fits
+`max_memory_gb`, the eigenvectors; a generic q needs two copies, so a mesh
+q keeps its eigenvectors up to twice the mesh size. `chiAB` with q = None
+and `integration="triangle"` passes one `MeshEigen` to every q of its
+mesh, through the `eigen` keyword of `chiAB_q`, so the whole local
+response diagonalizes the mesh once. The grid route does not change,
+since its Lindhard kernel builds its eigenpairs at every k itself. The
+degenerate multiplets need no change either: the products of the matrix
+elements summed over a multiplet do not depend on the basis that eigh
+picks, and `_multiplet_average_pairs` averages the weights over the
+multiplet. A generic q takes exactly the route of before.
+
+When the eigenvectors do not fit, they are recomputed at every pass over
+the matrix elements, as for a generic q, at the mesh points
+(k + q) mod 1. A mesh q then costs nk^dim for the band energies plus
+2 nk^dim per pass (nk^dim per pass at q = 0), against 2 nk^dim plus
+2 nk^dim per pass before.
+
+The counts, from `counted=True` and from a counter on `simplexchi._eigen`,
+are nk^dim at q = None, q = 0 and q = (1/nk, 2/nk), and 2 nk^dim at a
+generic q. The local response of the spinful square lattice at nk = 32
+goes from 2,097,152 to 1,024 diagonalizations, and the one of the spinful
+2x2 honeycomb supercell, 16 bands, at nk = 16 from 131,072 to 256.
+
+The numbers do not move. We compared with the code before the change on
+the spinful square lattice at nk = 16 and the 2x2 honeycomb supercell at
+nk = 8, static and at 5 frequencies, delta = 1e-2, `mode="matrix"` and
+`"trace"`. At q = None and q = 0 the two are identical, bit by bit. At
+q = (1/nk, 2/nk) they are identical on the square lattice and agree to
+1.2e-15 of the largest entry on the honeycomb supercell, also with the
+eigenvectors recomputed at every pass. A generic q gives identical
+numbers. The local responses timed below agree with the old ones to
+7e-16.
+
+The wall time does not move, and the reason is that the
+diagonalizations were never the cost. The local response, `mode="trace"`,
+delta = T = 1e-2, takes on three cores:
+
+| model | nk | energies | before | after |
+|---|---|---|---|---|
+| spinful square | 32 | static | 524 s (477 s) | 484 s (488 s) |
+| spinful square | 32 | 20 | 1888 s | 1586 s |
+| spinful 2x2 honeycomb | 16 | static | 718 s (518 s) | 511 s (509 s) |
+| spinful 2x2 honeycomb | 16 | 20 | 948 s | 745 s |
+
+The first numbers come from two series, the old code at a load of 6 to
+14 and the new code at a load of 2 to 8. The numbers in parentheses come
+from the two codes run back to back at a load of 2 to 4, and they differ
+by +2 and -2 percent. One diagonalization of the whole mesh takes 0.5 ms
+on the square lattice at nk = 32 and 11 ms on the honeycomb supercell at
+nk = 16, so the diagonalizations removed were worth 1.1 s and 5.5 s of
+the local response. So the gap between the two series is the load of
+the machine. The time is in the triangle kernel at every q, about 0.5 s
+per q on the square lattice and 2 s on the honeycomb supercell, and the
+kernel is not shared, since its pairs (n at k, m at k + q) change with q.
+Sharing the diagonalization pays where a diagonalization is a sizable part
+of one q, a large unit cell on a coarse mesh, which we did not time.
+
 ## What is left open
 
 - The cost of the dynamic response at finite T, now 3.5 to 6 times the
@@ -806,10 +917,6 @@ denominator now has the Pauli term in it.
   from the Fermi level, where the triangle buys nothing, would keep the
   exponential convergence of the grid there, as in the density-matrix
   note. Not tried.
-- The local response, q = None, averages chiAB_q over the q-mesh, so it
-  diagonalizes the whole mesh again at every q. It works with the
-  triangle, but sharing the eigenvectors of k + q across q would save a
-  factor nk^dim in diagonalizations. Not built.
 - The pair-basis spin response (`chitk/pairchi.py`), used for an
   interaction between different sites, refuses `integration="triangle"`.
   Its pair fields are the same kind of smooth matrix elements, so the
