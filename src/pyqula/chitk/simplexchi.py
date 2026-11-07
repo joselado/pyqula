@@ -567,7 +567,7 @@ def _multiplet_average_pairs(E1,E2,W,tol):
 #   sum_n (p-1)! n!/(n+p)! h_n(y_0..y_(p-1),y_s) u^(n+1),
 # y = D - c, u = 1/(z - c), h_n the complete homogeneous symmetric
 # polynomial (the series of the Taylor branch of dostk.simplexdos), whose
-# terms are bounded by (b/|z-c|)^n/p, so _nmom terms give 4^-30. The
+# terms are bounded by (b/|z-c|)^n/p, so _nmom terms give 3^-40. The
 # moments of every bin are summed once over its sources, and every
 # frequency costs the bins far from it, by their series, plus the pieces
 # of the bins near it, by the exact divided differences of the weight
@@ -576,8 +576,8 @@ def _multiplet_average_pairs(E1,E2,W,tol):
 
 _lev = 12 # the finest bins are 2^-_lev of the range of the transition
           # energies, the coarsest one is the whole range
-_far = 4. # a bin of width b is summed by its moments where |z - c| > _far b
-_nmom = 30 # terms of the series of a bin, (1/_far)^_nmom < 1e-18
+_far = 3. # a bin of width b is summed by its moments where |z - c| > _far b
+_nmom = 40 # terms of the series of a bin, (1/_far)^_nmom < 1e-18
 _maxsrc = 2**21 # pieces held at once
 _maxsim = 2**18 # simplices per pass of the piece kernel
 
@@ -624,50 +624,47 @@ def _is_near(c,b,w,delta):
 
 
 @jit(nopython=True,cache=True)
-def _emit0(write,En,Em,D,p,x,degenerate,coef,kv,G,n,m,ws,acc,i0,pt,pc,pb,
+def _emit0(En,Em,D,p,x,degenerate,coef,kv,G,n,m,ws,acc,i0,pt,pc,pb,
         dgrow,dmin,span,off):
     """the pieces of the T=0 response at chemical potential x, times coef,
-    written from index i0 on (write=True) or only counted. A degenerate
-    pair adds its Fermi surface term to dgrow instead. Returns the new
-    number of pieces"""
+    written from index i0 on. A degenerate pair adds its Fermi surface
+    term to dgrow instead. Returns the new number of pieces"""
     I,P1,C,sgn,tmp,en,em,ws2,R,NR = ws
     for i in range(p):
         en[i] = En[i]-x
         em[i] = Em[i]-x
     nc = G.shape[3]
     if degenerate:
-        if write:
-            for v in range(p): acc[v] = 0.
-            _fermi_surface(en,p,-1.+0j,acc,ws2,_harm,_fact)
-            for v in range(p):
-                for c in range(nc): dgrow[c] += coef*acc[v]*G[kv[v],n,m,c]
+        for v in range(p): acc[v] = 0.
+        _fermi_surface(en,p,-1.+0j,acc,ws2,_harm,_fact)
+        for v in range(p):
+            for c in range(nc): dgrow[c] += coef*acc[v]*G[kv[v],n,m,c]
         return i0
     npc = _regions(en,em,p,R,NR,I,P1,C,sgn,tmp)
     for ic in range(npc):
         vol = abs(_det(C[ic],p))
         if vol==0.: continue
-        if write:
-            f = coef*sgn[ic]*vol
-            for s in range(p):
-                a = 0.
-                for j in range(p): a += C[ic,s,j]*D[j]
-                pt[i0,s] = a
-                for c in range(nc):
-                    z = 0j
-                    for j in range(p): z += C[ic,s,j]*G[kv[j],n,m,c]
-                    pc[i0,s,c] = f*z
-            pb[i0] = _bin_of(pt[i0],p,dmin,span,off)
+        f = coef*sgn[ic]*vol
+        for s in range(p):
+            a = 0.
+            for j in range(p): a += C[ic,s,j]*D[j]
+            pt[i0,s] = a
+            for c in range(nc):
+                z = 0j
+                for j in range(p): z += C[ic,s,j]*G[kv[j],n,m,c]
+                pc[i0,s,c] = f*z
+        pb[i0] = _bin_of(pt[i0],p,dmin,span,off)
         i0 += 1
     return i0
 
 
 @jit(nopython=True,cache=True)
-def _emitT(write,En,Em,D,p,T,degenerate,tbreaks,kv,G,n,m,ws,acc,kn,i0,pt,
+def _emitT(En,Em,D,p,T,degenerate,tbreaks,kv,G,n,m,ws,acc,kn,i0,pt,
         pc,pb,dgrow,dmin,span,off):
     """the pieces at temperature T on the nodes that every frequency
     shares, the path of _kernelT for delta >= T"""
     if _constant_window(En,Em,p,tbreaks[-1]*T):
-        return _emit0(write,En,Em,D,p,0.,degenerate,1.,kv,G,n,m,ws,acc,i0,
+        return _emit0(En,Em,D,p,0.,degenerate,1.,kv,G,n,m,ws,acc,i0,
                 pt,pc,pb,dgrow,dmin,span,off)
     nkn = _knots(En,Em,D,p,0.,T,tbreaks,False,kn)
     for i in range(nkn-1):
@@ -678,84 +675,142 @@ def _emitT(write,En,Em,D,p,T,degenerate,tbreaks,kv,G,n,m,ws,acc,kn,i0,pt,
         for q in range(_gx.shape[0]):
             ok,x,wq = _graded_node(q,sg,f1,sp,T)
             if not ok: continue
-            i0 = _emit0(write,En,Em,D,p,x,degenerate,wq,kv,G,n,m,ws,acc,i0,
+            i0 = _emit0(En,Em,D,p,x,degenerate,wq,kv,G,n,m,ws,acc,i0,
                     pt,pc,pb,dgrow,dmin,span,off)
     return i0
 
 
+_group = 64 # consecutive simplices per group of the piece kernels
+
+
+@jit(nopython=True,cache=True)
+def _max_pieces(En,Em,D,p,T,degenerate,tbreaks,kn):
+    """an upper bound to the number of pieces _emitT or _emit0 writes for
+    one pair: the nodes of the quadrature in x times the largest number of
+    tiles of the two regions, 2 (p-1)^2"""
+    if degenerate: return 0
+    tiles = 2*(p-1)*(p-1)
+    if T==0. or _constant_window(En,Em,p,tbreaks[-1]*T): return tiles
+    nkn = _knots(En,Em,D,p,0.,T,tbreaks,False,kn)
+    nodes = 0
+    for i in range(nkn-1):
+        if kn[i+1]>kn[i]: nodes += _gx.shape[0]
+    return nodes*tiles
+
+
 @jit(nopython=True,parallel=True,cache=True)
-def _pieces_jit(write,sim,it0,it1,E1,E2,G,T,tol,tbreaks,offs,pt,pc,pb,dg,
-        dmin,span,off):
-    """the pieces of the simplices it0..it1-1. With write=False offs[i]
-    receives the number of pieces of the simplex it0+i; with write=True
-    they are written from offs[i] on, and dg[i] takes the Fermi surface
-    terms of its degenerate pairs"""
+def _bounds_jit(sim,it0,it1,E1,E2,T,tol,tbreaks,bound):
+    """bound[i] >= the number of pieces of the simplex it0+i, without
+    tiling it"""
     p = sim.shape[1]; nb = E1.shape[1]
     nsim = it1-it0
     L = tbreaks[-1]*T
-    nblk = min(nsim,256)
-    for blk in prange(nblk): # the work arrays are allocated per block
+    ngr = (nsim+_group-1)//_group
+    nblk = min(ngr,256)
+    for blk in prange(nblk):
+        kn = np.zeros(4+2*p+p*(p-1)+2*tbreaks.shape[0])
+        En = np.zeros(p); Em = np.zeros(p); D = np.zeros(p)
+        for g in range(blk,ngr,nblk):
+            for i in range(g*_group,min(nsim,(g+1)*_group)):
+                n0 = 0
+                for n in range(nb):
+                    for m in range(nb):
+                        active,degenerate = _pair_fields(sim,E1,E2,it0+i,n,
+                                m,tol,L,En,Em,D)
+                        if active:
+                            n0 += _max_pieces(En,Em,D,p,T,degenerate,
+                                    tbreaks,kn)
+                bound[i] = n0
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _pieces_jit(sim,it0,it1,E1,E2,G,T,tol,tbreaks,offs,pt,pc,pb,dg,
+        dmin,span,off):
+    """the pieces of the simplices it0..it1-1, written from offs[i] on for
+    the simplex it0+i; the slots left over keep pb = -1. dg[i] takes the
+    Fermi surface terms of its degenerate pairs. The groups of simplices
+    are dealt to the blocks in turn, so that every block gets its share of
+    the simplices near the Fermi surface (prange splits the blocks
+    statically), and the work arrays are allocated per block"""
+    p = sim.shape[1]; nb = E1.shape[1]
+    nsim = it1-it0
+    L = tbreaks[-1]*T
+    ngr = (nsim+_group-1)//_group
+    nblk = min(ngr,256)
+    for blk in prange(nblk):
         ws,kn = _workspace(p,tbreaks.shape[0])
         En = np.zeros(p); Em = np.zeros(p); D = np.zeros(p)
         acc = np.zeros(p,dtype=np.complex128)
-        for i in range((blk*nsim)//nblk,((blk+1)*nsim)//nblk):
-            it = it0+i
-            kv = sim[it]
-            n0 = offs[i] if write else 0
-            for n in range(nb):
-                for m in range(nb):
-                    active,degenerate = _pair_fields(sim,E1,E2,it,n,m,tol,
-                            L,En,Em,D)
-                    if not active: continue
-                    if T==0.:
-                        n0 = _emit0(write,En,Em,D,p,0.,degenerate,1.,kv,G,
-                                n,m,ws,acc,n0,pt,pc,pb,dg[i],dmin,span,off)
-                    else:
-                        n0 = _emitT(write,En,Em,D,p,T,degenerate,tbreaks,kv,
-                                G,n,m,ws,acc,kn,n0,pt,pc,pb,dg[i],dmin,span,
-                                off)
-            if not write: offs[i] = n0
+        for g in range(blk,ngr,nblk):
+            for i in range(g*_group,min(nsim,(g+1)*_group)):
+                it = it0+i
+                kv = sim[it]
+                n0 = offs[i]
+                for n in range(nb):
+                    for m in range(nb):
+                        active,degenerate = _pair_fields(sim,E1,E2,it,n,m,
+                                tol,L,En,Em,D)
+                        if not active: continue
+                        if T==0.:
+                            n0 = _emit0(En,Em,D,p,0.,degenerate,1.,kv,G,n,m,
+                                    ws,acc,n0,pt,pc,pb,dg[i],dmin,span,off)
+                        else:
+                            n0 = _emitT(En,Em,D,p,T,degenerate,tbreaks,kv,G,
+                                    n,m,ws,acc,kn,n0,pt,pc,pb,dg[i],dmin,
+                                    span,off)
 
 
 @jit(nopython=True,cache=True)
 def _sort_by_bin(pb,nbins):
-    """counting sort of the pieces by bin: the order, and the start of
-    every bin in it"""
+    """counting sort of the pieces by bin, the slots with pb = -1 left
+    out: the order, and the start of every bin in it"""
     starts = np.zeros(nbins+1,dtype=np.int64)
-    for i in range(pb.shape[0]): starts[pb[i]+1] += 1
+    for i in range(pb.shape[0]):
+        if pb[i]>=0: starts[pb[i]+1] += 1
     for b in range(nbins): starts[b+1] += starts[b]
     pos = starts[:-1].copy()
-    order = np.zeros(pb.shape[0],dtype=np.int64)
+    order = np.zeros(starts[nbins],dtype=np.int64)
     for i in range(pb.shape[0]):
+        if pb[i]<0: continue
         order[pos[pb[i]]] = i
         pos[pb[i]] += 1
     return order,starts
 
 
 @jit(nopython=True,parallel=True,cache=True)
-def _moments_jit(order,starts,occ,pt,pc,binc,binw,fk,mom):
+def _moments_jit(order,starts,occ,tasks,pt,pc,binc,binw,fk,mom):
     """mom[b,n] += the moments of the pieces of every occupied bin b, in
     units of its width, mom[b,n] = sum (p-1)! n!/(n+p)! h_n(y,y_s) c_s with
-    y = (D - c)/b. Each bin belongs to one task"""
+    y = (D - c)/b. The task it owns the occupied bins
+    occ[tasks[it]:tasks[it+1]], about the same number of pieces each"""
     p = pt.shape[1]; nc = pc.shape[2]
-    for ib in prange(occ.shape[0]):
-        b = occ[ib]
-        c0 = binc[b]; w = binw[b]
+    for it in prange(tasks.shape[0]-1):
         H = np.zeros(_nmom)
         y = np.zeros(p)
-        for idx in range(starts[b],starts[b+1]):
-            i = order[idx]
-            for s in range(p): y[s] = (pt[i,s]-c0)/w
-            H[0] = 1.
-            for k in range(1,_nmom): H[k] = 0.
-            for v in range(p): # h_n(y_0..y_v)
-                for k in range(1,_nmom): H[k] += y[v]*H[k-1]
-            for s in range(p): # one more variable, y_s
-                hs = 1.
-                for k in range(_nmom):
-                    if k>0: hs = H[k]+y[s]*hs
-                    f = fk[k]*hs
-                    for c in range(nc): mom[b,k,c] += f*pc[i,s,c]
+        for ib in range(tasks[it],tasks[it+1]):
+            b = occ[ib]
+            _bin_moments(order,starts[b],starts[b+1],pt,pc,binc[b],binw[b],
+                    fk,H,y,mom[b])
+
+
+@jit(nopython=True,cache=True)
+def _bin_moments(order,n0,n1,pt,pc,c0,w,fk,H,y,mb):
+    """mb[n] += the moments of the pieces order[n0:n1] around c0, in units
+    of w. H and y are work space"""
+    p = pt.shape[1]; nc = pc.shape[2]
+    for idx in range(n0,n1):
+        i = order[idx]
+        for s in range(p): y[s] = (pt[i,s]-c0)/w
+        H[0] = 1.
+        for k in range(1,_nmom): H[k] = 0.
+        for v in range(p): # h_n(y_0..y_v)
+            for k in range(1,_nmom): H[k] += y[v]*H[k-1]
+        for s in range(p): # one more variable, y_s
+            hs = 1.
+            for k in range(_nmom):
+                if k>0: hs = H[k]+y[s]*hs
+                f = fk[k]*hs
+                for c in range(nc): mb[k,c] += f*pc[i,s,c]
 
 
 @jit(nopython=True,parallel=True,cache=True)
@@ -767,7 +822,9 @@ def _near_jit(order,starts,pt,pc,binc,binw,off,dmin,span,omegas,delta,
     nw = omegas.shape[0]
     nlev = off.shape[0]-1
     for task in prange(nw*nchunk):
-        iw = task//nchunk; ic = task%nchunk
+        # share-major, so that the static split of prange gives every
+        # thread all the frequencies
+        ic = task//nw; iw = task%nw
         w = omegas[iw]
         ws,kn = _workspace(p,0)
         t,tb,ib,pbuf,tt,dcol,a,h,d = ws[7]
@@ -874,35 +931,38 @@ def response_sources(dim,nk,E1,E2,G,omegas,delta,T):
     out = np.zeros((nw,nc),dtype=np.complex128)
     dgsum = np.zeros(nc,dtype=np.complex128)
     maxsrc = max(1024,min(_maxsrc,int(2e8)//(p*(8+16*nc)+8)))
-    e0 = np.zeros((0,p)); c0 = np.zeros((0,p,nc),dtype=np.complex128)
-    b0 = np.zeros(0,dtype=np.int64)
     for s0 in range(0,ns,_maxsim):
         s1 = min(ns,s0+_maxsim)
-        counts = np.zeros(s1-s0,dtype=np.int64)
-        _pieces_jit(False,sim,s0,s1,E1,E2,G,T,tol,_tbreaks,counts,e0,c0,b0,
-                np.zeros((s1-s0,nc),dtype=np.complex128),dmin,span,off)
-        cum = np.cumsum(counts)
+        bound = np.zeros(s1-s0,dtype=np.int64)
+        _bounds_jit(sim,s0,s1,E1,E2,T,tol,_tbreaks,bound)
+        cum = np.cumsum(bound)
         i0 = 0
-        while i0<len(counts): # passes of at most maxsrc pieces
+        while i0<len(bound): # passes of at most maxsrc slots
             base = cum[i0-1] if i0>0 else 0
             i1 = int(np.searchsorted(cum,base+maxsrc,side="right"))
             i1 = max(i1,i0+1)
-            cnt = counts[i0:i1]
+            cnt = bound[i0:i1]
             npc = int(np.sum(cnt))
             offs = np.concatenate([[0],np.cumsum(cnt)[:-1]]).astype(np.int64)
-            pt = np.zeros((npc,p)); pc = np.zeros((npc,p,nc),dtype=np.complex128)
-            pb = np.zeros(npc,dtype=np.int64)
+            pt = np.empty((npc,p)); pc = np.empty((npc,p,nc),dtype=np.complex128)
+            pb = np.full(npc,-1,dtype=np.int64)
             dg = np.zeros((i1-i0,nc),dtype=np.complex128)
-            _pieces_jit(True,sim,s0+i0,s0+i1,E1,E2,G,T,tol,_tbreaks,offs,pt,
-                    pc,pb,dg,dmin,span,off)
+            _pieces_jit(sim,s0+i0,s0+i1,E1,E2,G,T,tol,_tbreaks,offs,pt,pc,pb,
+                    dg,dmin,span,off)
             dgsum += np.sum(dg,axis=0)
+            order,starts = _sort_by_bin(pb,nbins)
+            npc = len(order)
             if npc>0:
-                order,starts = _sort_by_bin(pb,nbins)
                 occ = np.nonzero(starts[1:]>starts[:-1])[0].astype(np.int64)
                 occupied[occ] = True
-                _moments_jit(order,starts,occ,pt,pc,binc,binw,fk,mom)
-                nchunk = max(1,min(npc//256,
-                        -(-4*numba.get_num_threads()//max(nw,1))))
+                cnt = np.cumsum(starts[occ+1]-starts[occ])
+                ntask = min(len(occ),16*numba.get_num_threads())
+                tasks = np.searchsorted(cnt,np.arange(ntask+1)*(cnt[-1]/ntask),
+                        side="left")
+                tasks[0] = 0; tasks[-1] = len(occ)
+                tasks = np.maximum.accumulate(tasks).astype(np.int64)
+                _moments_jit(order,starts,occ,tasks,pt,pc,binc,binw,fk,mom)
+                nchunk = max(1,min(npc//256,4*numba.get_num_threads()))
                 part = np.zeros((nw,nchunk,nc),dtype=np.complex128)
                 _near_jit(order,starts,pt,pc,binc,binw,off,dmin,span,omegas,
                         delta,nchunk,part)
