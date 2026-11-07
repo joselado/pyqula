@@ -266,10 +266,9 @@ already reached once.
   out (a Zeeman field above the gap) now holds the filling exactly: "ed"
   and the triangle fill the shell at zero energy in part inside the
   density matrix, and then give the same state (they differed by 8.1e-7
-  in the energy), with the band energy Tr H rho, continuous across the
-  fill; a gapless state with the pairing alive is not touched. Open:
-  whether a dead Nambu state at T > 0 should report Tr H rho, as now, or
-  the step band energy of the normal state, VJinteraction with the triangle, a slower loop when the pairing
+  in the energy), with the step band energy plus the change the fill
+  makes, continuous across the fill; a gapless state with the pairing
+  alive is not touched. Open: VJinteraction with the triangle, a slower loop when the pairing
   dies, the shell of a gapless state with the pairing alive, and a gapless
   state whose Fermi level falls between two levels instead of on one. RPA chi(q) is built, see
   `tetrahedron_susceptibility.md`. The anomalous Hall of metals with the
