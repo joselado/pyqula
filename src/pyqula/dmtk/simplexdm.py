@@ -115,16 +115,24 @@
 # interpolated with a kink, which costs an error of order one in a window
 # of width of order v/nk around the crossing.
 #
-# A Bogoliubov-de Gennes (Nambu) Hamiltonian is integrated in the same way,
-# with the weights of the quasiparticle bands at zero energy, as exact
-# diagonalization does with its Fermi-Dirac weights. In a gapped
-# superconductor no quasiparticle band crosses zero, so every simplex is
-# full or empty and the density matrix is the one of exact diagonalization
-# on the same mesh. The Fermi level is located on the normal state (the
-# electron block), the same approximation spectrum.get_fermi4filling makes,
-# and the band energy is the electronic one, (sum_{E<0} E_BdG + Tr h_e)/2,
-# as in spectrum.total_energy. qtcitk/densitymatrix_qtci.py does the same on
-# its reconstructed mesh.
+# For a Bogoliubov-de Gennes (Nambu) Hamiltonian the triangle reduces to
+# the step density matrix of exact diagonalization on the same mesh. The
+# reason is that the spectrum is symmetric, E and -E, and the bands are
+# sorted at each k, so the lower half of the bands is below zero at every
+# k and the upper half above: no simplex is ever partly occupied. In a
+# gapped superconductor this is the exact answer on the mesh. In a state
+# without a gap it is the staircase of exact diagonalization, and the
+# continuous charge of the triangles is lost. So the Fermi level of a BdG
+# Hamiltonian is counted as exact diagonalization counts it, on the normal
+# state (the electron block) of the same mesh (spectrum.get_fermi4filling
+# at T=0, since a vertex on a level is occupied by half, as a step and not
+# as a Fermi-Dirac weight), and not with the triangles: the triangle count of the normal state is a
+# different number, and the density matrix at that level held another
+# charge (0.3604 instead of 0.35 per state with no pairing at nk=32). A
+# mean field then corrects the level on the charge of the paired state
+# (scftk.superscf.BdGFermiLevel). The band energy is the electronic one,
+# (sum_{E<0} E_BdG + Tr h_e)/2, as in spectrum.total_energy.
+# qtcitk/densitymatrix_qtci.py does the same on its reconstructed mesh.
 import numpy as np
 from numba import jit, prange
 
@@ -529,13 +537,14 @@ def get_fermi4filling(h,filling,nk=20,T=0.):
     """Fermi energy that holds `filling` (a fraction of the states) under
     the simplex integration of the density matrix, on the uniform nk^dim
     mesh. See the module comment, point 3. For a Bogoliubov-de Gennes
-    Hamiltonian the count is done on the normal state, the same
-    approximation spectrum.get_fermi4filling makes; a mean field corrects
-    it on the charge of the paired state (scftk.superscf.BdGFermiLevel)"""
+    Hamiltonian the triangle density matrix is the step one of exact
+    diagonalization on the same mesh (see the module comment), so the
+    count is the one of exact diagonalization on the normal state,
+    spectrum.get_fermi4filling; a mean field corrects it on the charge of
+    the paired state (scftk.superscf.BdGFermiLevel)"""
     if h.has_eh:
-        h0 = h.copy()
-        h0.remove_nambu()
-        return get_fermi4filling(h0,filling,nk=nk,T=T)
+        from ..spectrum import get_fermi4filling as get_fermi4filling_ed
+        return get_fermi4filling_ed(h,filling,nk=nk,T=0.) # the step
     check_hamiltonian(h,"the simplex Fermi level")
     mesh = _Mesh(h,nk)
     return fermi_from_energies(mesh.dim,nk,mesh.energies(),filling,T=T)

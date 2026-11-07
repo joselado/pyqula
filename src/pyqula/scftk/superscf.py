@@ -216,21 +216,24 @@ class BdGFermiLevel:
     energy scale of the bands. So the window is 2 Delta for a sizable
     pairing, and closes as Delta^3 when the pairing dies out: a Hamiltonian
     with no pairing gets exactly the Fermi level of the normal state, as
-    before. The gain halves each time the charge error changes sign, and
-    grows back by regain up to 1 while it does not. This matters for a
-    Nambu Hamiltonian whose state has no gap on the mesh (no pairing, a
-    pairing that dies out, a Bogoliubov Fermi surface, or a gap the mesh
-    does not resolve): there the charge of "ed" is a staircase in mu and
-    the one of the triangles has the kinks of the crossing electron and
-    hole bands, so no offset may hold N0. The halving gain lets the offset
-    settle at a jump instead of oscillating around it, and the window keeps
-    it from running away. When the error has changed sign patience times
-    (errors below flip_floor are not counted, they are the noise of the
-    interpolation of qtci), the step gives up: the offset is set to zero
-    for the rest of the loop, which is then the loop with the Fermi level
-    of the normal state, as before. A state with a gap settles in a few
-    changes of sign at most. In all these cases the loop converges with a
-    charge error, which stays in error, and warn says so.
+    before. The gain halves each time the charge error changes sign, down
+    to gain_min, and grows back by regain up to 1 while it does not. This
+    matters for a Nambu Hamiltonian whose state has no gap on the mesh (no
+    pairing, a pairing that dies out, a Bogoliubov Fermi surface, or a gap
+    the mesh does not resolve): there the charge is a staircase in mu (the
+    triangle density matrix of a BdG Hamiltonian is the step one of exact
+    diagonalization, see dmtk/simplexdm.py), so the offset may have to sit
+    on a level, where the smearing T makes the charge continuous, or no
+    offset may hold N0 at all. The halving gain lets the offset settle on a
+    level instead of oscillating around it. The step gives up, and sets
+    the offset to zero for the rest of the loop, which is then the loop
+    with the Fermi level of the normal state as before, in two cases: when
+    the window has held the step patience times in a row, and when the
+    error has changed sign flip_patience times at the smallest gain (errors
+    below flip_floor are not counted, they are the noise of the
+    interpolation of qtci). A state with a gap settles long before. When
+    the step gives up the loop converges with a charge error, which stays
+    in error, and warn says so.
 
     Use: shift(h,x) on each Hamiltonian before its density matrix (it sets
     h.fermi), then step(x,dm) for the offset of the next iteration, which
@@ -244,7 +247,9 @@ class BdGFermiLevel:
     halve = 0.5 # factor of the gain when the error changes sign
     regain = 1.5 # growth of the gain while the error keeps its sign
     small = 1e-3 # a pairing below small*W closes the window
-    patience = 8 # changes of sign of the error before giving up
+    patience = 8 # steps in a row held by the window, to give up
+    flip_patience = 8 # changes of sign at the smallest gain, to give up
+    gain_min = 1./64. # the smallest gain
     flip_floor = 1e-6 # smaller errors are noise, and their signs not counted
 
     def __init__(self,h,filling,search):
@@ -257,7 +262,7 @@ class BdGFermiLevel:
         self.error = 0.
         self.residual = 0.
         self.gain, self.last = 1., None
-        self.flips, self.frozen = 0, False
+        self.flips, self.clipped, self.frozen = 0, 0, False
 
     def compressibility(self,h,df=0.05):
         """dN/dmu of the normal state of h around the requested filling,
@@ -290,16 +295,22 @@ class BdGFermiLevel:
         self.error = get_charge_bdg(dm) - self.charge0
         if self.last is not None: # halve on a change of sign, else grow
             if self.last*self.error<0.:
-                self.gain = self.halve*self.gain
-                if min(abs(self.last),abs(self.error))>self.flip_floor:
+                # a change of sign at the smallest gain is no progress
+                if self.gain<=self.gain_min and \
+                        min(abs(self.last),abs(self.error))>self.flip_floor:
                     self.flips += 1
+                self.gain = max(self.gain_min,self.halve*self.gain)
             else: self.gain = min(1.,self.regain*self.gain)
         self.last = self.error
-        if self.flips>=self.patience: self.frozen = True
+        if self.flips>=self.flip_patience: self.frozen = True
         if self.frozen: xnew = 0. # the Fermi level of the normal state
         else:
             xnew = self.x - self.gain*self.damping*self.error/self.kappa
+            if abs(xnew)>self.bound: self.clipped += 1 # held by the window
+            else: self.clipped = 0
             xnew = float(np.clip(xnew,-self.bound,self.bound)) # the window
+            if self.clipped>=self.patience: # the charge is out of reach
+                self.frozen, xnew = True, 0.
         self.residual = abs(xnew-x)
         return xnew
 

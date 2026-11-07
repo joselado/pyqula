@@ -912,6 +912,31 @@ and so at the charge 0.606. At nk = 64 the three are within 2e-7 of it.
 Before, the triangle was 4e-6 and `"ed"` 3e-5 away from the old
 reference.
 
+### The triangle of a BdG Hamiltonian is the step
+
+A reviewer found that the triangle density matrix of a BdG Hamiltonian is
+exactly the step density matrix of exact diagonalization on the same mesh.
+The spectrum is E and -E, and the bands are sorted at each k, so the lower
+half of the bands is below zero at every k: no simplex is ever partly
+occupied, and a vertex on a level is occupied by half, the average of its
+multiplet. But the Fermi level came from the continuous triangle count of
+the normal state, a different number. So the density matrix held another
+charge even with no pairing: 0.3477, 0.3604 and 0.3528 per state at
+nk = 16, 32 and 64 for 0.35, and qtci 0.3613 at nk = 32. In a mean field
+this lost the pairing (U = -1, filling 0.3, nk = 24: `"ed"` has
+|F| = 0.0298, the triangle 0) and made a spurious ferromagnet (U = 2,
+`mf="ferro"`, nk = 64: mz = 0.00586 with Nambu, 0 without). The Fermi
+search of a BdG Hamiltonian in `simplexdm.get_fermi4filling` and
+`get_fermi4filling_qtci` is now the count of exact diagonalization at
+T = 0 on the same mesh, the count of the step, and the mean field then
+corrects it on the paired charge. With it the triangle and qtci give the
+pairing of `"ed"` on the same mesh, and a Nambu state without pairing the
+magnetization of the normal state with `"ed"` at T = 0. The normal
+triangle (mz = 0 there) is out of reach: the charge of the sorted BdG
+bands is a staircase. The numbers of the reproducers before and after
+are in the report of this change; the tests are in
+`tests/scf/test_densitydensity_bdg_energy.py`.
+
 Other states, all at nk = 16:
 
 - U = -6 at filling 0.1, a strongly paired state: the old Fermi level put
@@ -949,11 +974,14 @@ normal-state Fermi search, plus two Fermi searches at the start. What
 changes is the number of iterations, because the loop has one more
 unknown. For the s-wave state at filling 0.3 Broyden needs 27, 28 and 31
 iterations at nk = 16, 32 and 64 with `"ed"`, against 21, 22 and 22, and
-about 24 for qtci against 22. The wall time, on four idle cores, moves
-with the iterations: at nk = 64 it is 3.1 s against 2.1 s for `"ed"`,
-5.0 s against 3.8 s for the triangle, and 24 s against 22 s for qtci.
-`VJinteraction` with plain mixing needs about the same number of
-iterations as before (185 against 188 at nk = 16).
+about 24 for qtci against 22; at filling 0.2, 11 to 19 against 9 to 11.
+The wall time moves with the iterations. It was measured on four reserved
+cores of a workstation that had other jobs, with the old and the new code
+run one after the other: at nk = 64 and filling 0.3 it is 3.1 s against
+2.1 s for `"ed"`, 5.0 s against 3.8 s for the triangle, and 24 s against
+22 s for qtci. `VJinteraction` with plain mixing needs about the same
+number of iterations as before: 212, 204 and 206 at nk = 16, 32 and 64,
+against 215, 208 and 213, with 18.5 s against 23.7 s at nk = 64.
 
 `tests/scf/test_densitydensity_bdg_energy.py` checks now, at nk = 16: the
 paired state holds the requested filling (0.3 and 0.2) to 1e-8 (1e-6 for
@@ -1006,13 +1034,11 @@ loaded.
 - Non-Hermitian Hamiltonians are refused. Bogoliubov-de Gennes ones are
   accepted, and their Fermi level is found on the charge of the paired
   state (see "The Fermi level of a superconductor").
-- In a BdG state without a gap the triangle charge is wrong, because the
-  electron and hole bands cross at zero energy and the linear
-  interpolation of the sorted bands mixes them. With no pairing at all,
-  U = 2 on the square lattice at filling 0.3 and nk = 16 holds 0.633
-  instead of 0.600 (`"ed"` holds 0.602, its staircase), and with a Zeeman
-  field 0.3 it holds 0.586. This was there before the change of the Fermi
-  level, and it is not fixed.
+- For a BdG Hamiltonian the triangle is the step of exact
+  diagonalization on the same mesh (see the next section), so in a state
+  without a gap it keeps the staircase of `"ed"`. A triangle integration
+  of a gapless BdG state with the continuous charge of the normal state
+  would need the electron and hole bands unsorted. Not tried.
 - qtci with V1 on a BdG Hamiltonian (V1 = -1.5 on the square lattice)
   stops with "Non-Hermitian BdG mean field", in the old code as in the new.
 - A state with a Bogoliubov Fermi surface, or one whose pairing dies in the

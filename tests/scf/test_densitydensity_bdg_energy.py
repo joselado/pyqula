@@ -197,3 +197,56 @@ def test_bdg_total_energy_obeys_hellmann_feynman_at_fixed_mu():
     pa = get_eh_sector(pm.T, i=0, j=1)
     nn = pe[0, 0].real*pe[1, 1].real-abs(pe[0, 1])**2+np.sum(np.abs(pa)**2)/2.
     assert abs((ep-em)/(2*dU)-nn) < 1e-6
+
+
+def _swave(integration, U=-1.0, nk=32):
+    np.random.seed(1)
+    scf = Vinteraction(_h0(), U=U, filling=FILLING, mf="swave", nk=nk,
+            integration=integration, solver="broyden_mixing",
+            maxerror=1e-9 if integration!="qtci" else 1e-8, load_mf=False,
+            write=False, verbose=0)
+    assert scf.converged
+    dm = scf.hamiltonian.get_density_matrix(ds=[(0,0,0)], nk=nk, T=1e-7)
+    return np.max(np.abs(get_eh_sector(dm[(0,0,0)], i=0, j=1)))
+
+
+def test_triangle_and_qtci_bdg_keep_the_pairing_of_ed():
+    """For a BdG Hamiltonian the triangle density matrix is the step one of
+    exact diagonalization on the same mesh, since the sorted bands are
+    never partly occupied. Its Fermi level used to come from the triangle
+    count of the normal state, a different number, and with U=-1 at
+    filling 0.3 the triangle lost the pairing that "ed" finds. Now the
+    three integrations give the same pairing on the same mesh"""
+    a = {i: _swave(i) for i in ("ed", "triangle", "qtci")}
+    assert a["ed"] > 1e-2
+    assert abs(a["triangle"]-a["ed"]) < 1e-6
+    assert abs(a["qtci"]-a["ed"]) < 1e-5
+
+
+@pytest.mark.parametrize("integration", ["ed", "triangle", "qtci"])
+def test_nambu_normal_state_has_the_magnetization_of_the_normal_state(
+        integration):
+    """A repulsive U from a ferromagnetic guess, with and without the Nambu
+    basis: the Nambu state has no pairing, so it must be the state of the
+    normal Hamiltonian. Before, the triangle put the Nambu state at
+    another charge, where it was a ferromagnet (mz=0.006 at nk=64) while
+    the normal one was not. The Nambu triangle and qtci are the step of
+    exact diagonalization on the same mesh (a vertex on a level is occupied
+    by half), so the reference is the normal state with "ed" at T=0; the
+    continuous charge of the normal triangle is out of reach of a sorted
+    BdG spectrum. The Bloechl term of the triangles near the level makes
+    the two differ by about 1e-4 (mz=0.00293 against 0.00282 at nk=64)"""
+    nk = 32
+    mz = []
+    for nambu, integ in ((False, "ed"), (True, integration)):
+        h = geometry.square_lattice().get_hamiltonian(has_spin=True)
+        if nambu: h.setup_nambu_spinor()
+        np.random.seed(1)
+        scf = Vinteraction(h, U=2.0, filling=0.35, mf="ferro", nk=nk, T=0.,
+                integration=integ, solver="broyden_mixing",
+                maxerror=1e-9 if integ!="qtci" else 1e-8,
+                load_mf=False, write=False, verbose=0)
+        assert scf.converged
+        mz.append(abs(np.mean(scf.hamiltonian.extract("mz"))))
+    tol = 1e-6 if integration=="ed" else 3e-4
+    assert abs(mz[1]-mz[0]) < tol # the size, the ferro guess picks a sign

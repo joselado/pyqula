@@ -176,16 +176,16 @@ def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6):
     level, so the filling is reached exactly on that mesh. The energies
     and the eigenpairs are kept, so that the density matrix of h shifted
     by this level does not diagonalize the same points again. For a
-    Bogoliubov-de Gennes Hamiltonian the count is done on the normal
-    state, the same approximation spectrum.get_fermi4filling makes; a mean
-    field corrects it on the charge of the paired state
-    (scftk.superscf.BdGFermiLevel)"""
+    Bogoliubov-de Gennes Hamiltonian the triangle weights are the step of
+    exact diagonalization (see dmtk/simplexdm.py), so the count is the one
+    of exact diagonalization on the normal state of the same 2^R x 2^R
+    mesh, spectrum.get_fermi4filling; a mean field corrects it on the
+    charge of the paired state (scftk.superscf.BdGFermiLevel)"""
     global _last_mesh
     if h.has_eh:
-        h0 = h.copy()
-        h0.remove_nambu()
-        return get_fermi4filling_qtci(h0,filling,nk=nk,T=T,
-                tolerance=tolerance)
+        from ..spectrum import get_fermi4filling as get_fermi4filling_ed
+        return get_fermi4filling_ed(h,filling,nk=2**mesh_exponent(nk),
+                T=0.) # the step
     check_hamiltonian(h,"the qtci Fermi level")
     from ..dmtk import simplexdm
     R = mesh_exponent(nk)
