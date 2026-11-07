@@ -256,17 +256,22 @@ already reached once.
   density response, the site-basis magnons). It gives U_c and the static
   chi_0 of metals to 1e-5 with 4 to 256 times fewer k-points than the grid
   at T <= 1e-3, and the dynamic response with an error that does not depend
-  on delta (64 times fewer k-points at delta = 1e-3). At high T, and at
-  delta = 1e-2 for the dynamic response, the grid converges exponentially and
-  wins. An odd nk is needed at a commensurate nesting vector. The delta/100
+  on delta (64 times fewer k-points at delta = 1e-3). The dynamic response
+  goes through a source kernel (bins of transition energy, summed by their
+  moments far from each frequency), 11 to 94 times faster at T = 0 and 15 to
+  37 at T = 1e-3 than the first kernel, the same numbers to 1e-13; the T = 0
+  cost had grown like nk^4 through a bincount. At delta = 1e-3 it now also
+  wins in wall time, 7 times at equal accuracy. At high T, and at delta =
+  1e-2 for the dynamic response, the grid converges exponentially and wins.
+  An odd nk is needed at a commensurate nesting vector. The delta/100
   pair cutoff of the library grid, which biased it by up to 2e-3 at q = 0,
   is replaced by a bound on what the pair contributes. The pair basis of
   `chitk/pairchi.py` had no degenerate pair term, so at q = 0 a metal lost
   its whole Fermi-surface term there (0.205 on a square metal, which is all
   of its static chi_0 at q = 0); it now uses the site-basis rule, the two routes agree
   to 2e-15, and the Goldstone residual of ferromagnetic and spiral metals
-  does not move. Open: the cost of the dynamic response, a high-T hybrid
-  and the triangle on the pair-basis route.
+  does not move. Open: finite T still costs 10 times T = 0, a high-T
+  hybrid and the triangle on the pair-basis route.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products

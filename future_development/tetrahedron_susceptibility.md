@@ -375,12 +375,129 @@ and differ from the T = 1e-3 ones by 1.8e-4 of the largest value at every
 nk from 128 on, which is the physical effect of the temperature, not a
 discretization error.
 
-The dynamic response at finite T is expensive: 6 to 18 times the T = 0
-cost, because every simplex near the Fermi surface goes through the
-quadrature in x, and every node of it through the tiling and the
-divided differences of all the frequencies. The T = 0 cost itself grows
-faster than the number of simplices (8 s, 53 s and 536 s at nk = 512,
-1024 and 2048); we did not find out where.
+The wall times in this table are those of the first kernel. The next
+section says why they grew faster than the mesh, and what they are now.
+
+### The cost of the dynamic response
+
+We will now see why the cost of the dynamic response grew faster than
+the number of simplices, and how the frequencies were made cheap.
+
+The superlinear cost at T = 0 came from the accumulation, not from the
+integration. The weight kernel works on chunks of 32768 simplices, and
+the weights of each chunk were added to the vertex weights W[k,n,m,w]
+with a bincount over the whole of W. W is kept below `max_memory_gb` by
+blocks of frequencies, so one block holds about 3e7 entries at any nk,
+and the number of bincount passes is the number of chunks times the
+number of blocks, which grows like nk^4 in 2D: 16 passes at nk = 512,
+192 at nk = 1024 and 2304 at nk = 2048. At nk = 1024 one chunk took
+0.50 s in the kernel and 0.46 s in the bincount, on four busy cores. A
+serial scatter of each chunk into W costs the size of the chunk, and
+this alone makes the cost linear in the number of simplices. The first
+kernel stays in the code with this fix, as the reference kernel
+`"simplices"` of `simplexchi._kernels`.
+
+What does not depend on the frequency? At T = 0 the tiling of each
+simplex into pieces is fixed, and a piece is given by the transition
+energies D_s on its nodes and, per node, the coefficient
+c_s = sgn vol sum_j C_sj G_j, where G_j are the matrix elements of the
+vertex j, already contracted over the operators. The multiplet average
+is moved from the weights to G, which gives the same contraction
+exactly. So the response at w is a sum over the pieces of
+sum_s c_s r_s(w), and the pieces are the sources of the default kernel
+`"sources"`.
+
+The merging by exact keys of `conductivitytk/kubosimplex.py` does not
+carry over. There the branch rule does not depend on the frequency: a
+simplex of spread s above delta is evaluated by partial fractions, which
+loses eps (|x|/s)^d at a distance |x| from the resonance. For the
+optical conductivity d = 2. Here the repeated node of the vertex weights
+makes d = 3 for triangles and d = 4 for tetrahedra, so at nk = 2048,
+with s about 0.01 and |x| up to 6, the loss is about 1e-8 per source,
+and at delta = 0, which the static response uses, the rule has no scale
+at all. Instead the pieces go into bins of transition energy, as in a
+fast multipole sum on a line. A piece of spread s goes to the finest
+level whose bin width b is at least s, so its nodes lie within b of the
+center c of its bin. Far from the bin, |z - c| > 3 b, the average of
+mu_s/(z - D) over the piece is a series in u = 1/(z - c) whose
+coefficients are the complete homogeneous polynomials of the node
+energies, the series of the Taylor branch of `dostk/simplexdos.py`, and
+its terms fall at least like 3^-n, so 40 terms converge to 1e-19. The
+moments of each bin are summed once over its pieces. Each frequency then
+costs the series of the bins far from it, a few thousand, plus the
+pieces of the bins near it, which are evaluated exactly, with the same
+divided differences and the same branches as the reference kernel. The
+near bins are a few per level, and they hold about 1 to 5 percent of the
+pieces, fewer on finer meshes.
+
+At finite T with delta >= T the frequencies share the nodes of the
+quadrature in x, so each node only adds pieces, with the weight of the
+node in their coefficients, and the same kernel applies. With delta < T
+the nodes include the resonance of each frequency, nothing is shared,
+and the call goes to the reference kernel. This is also the static
+response at finite T, delta = 0 at one frequency, where there is
+nothing to share anyway.
+
+The numba loops split their range statically, so the bins, the near sums
+and the simplices are dealt to the threads in tasks of about equal work;
+before this the moments of the dense bins all went to one thread. The
+pass that counted the pieces before writing them, which tiled every
+simplex twice, is replaced by an upper bound from the knots of the
+quadrature.
+
+The same benchmark as above, delta = 1e-3, 60 frequencies, on four
+cores of the shared workstation (load 5 to 8), with the first kernel and
+with the source kernel in the same session, the first kernel first:
+
+| nk | first kernel, T=0 (s) | source kernel, T=0 (s) | first kernel, T=1e-3 (s) | source kernel, T=1e-3 (s) | agreement |
+|---|---|---|---|---|---|
+| 256 | 1.7 | 0.16 | 39 | 2.7 | 1e-14 |
+| 512 | 6.7 | 0.49 | 106 | 6.4 | 3e-14 |
+| 1024 | 44 | 1.7 | 391 | 17 | 4e-14 |
+| 2048 | 587 | 6.3 | 2249 | 61 | 7e-14 |
+
+The agreement is the largest difference between the two kernels over T =
+0 and T = 1e-3, divided by the largest abs(chi_0). A second run of nk =
+1024 at T = 0 right after, with both kernels, gave 60 s and 3.3 s, so
+the load moved the wall times by up to a factor 2 and the ratios are
+the numbers to read. The gain is a factor 11 to 94 at T = 0 and 15 to
+37 at T = 1e-3, and it grows with nk, because the bins get finer with
+the pieces. The T = 0 cost now grows like the number of simplices, a
+factor 3.1 to 3.8 per doubling of nk. At delta = 1e-2 the source kernel
+takes 0.3, 1.4, 5.0 and 11 s at T = 0 and 6.3, 17, 36 and 99 s at T =
+1e-3, more than at delta = 1e-3; we think this is the Taylor branch of
+the near pieces, whose rule compares the spread with |c - z| and so
+expands more clusters at a larger delta, but we did not check it. The
+errors against nk = 2048 are those of the first table to two digits,
+at both temperatures and both broadenings.
+
+Finite T is still about 10 times the T = 0 cost (17 times at nk = 256,
+10 times at nk = 2048): the quadrature in x gives 14 to 19 pieces per
+simplex at nk = 256 and 512, against 0.45 at T = 0, and each piece is
+tiled and enters the moments once. Before, the ratio looked smaller at
+large nk only because the T = 0 cost carried the bincount. On a profile
+at nk = 512 the tiling takes about 40 percent of the finite-T time, the
+moments 20 percent and the near pieces 35 percent.
+
+Now the triangle against the grid at equal accuracy, at T = 1e-3. The
+grid is the same Lindhard sum on the uniform mesh, with the band
+energies from the same diagonalization and a numba sum over k on the
+same four cores; its errors are those of the first table.
+
+| nk | grid, delta=1e-3 | grid wall (s) | grid, delta=1e-2 | grid wall (s) |
+|---|---|---|---|---|
+| 512 | 1.1e-01 | 0.4 | 3.4e-03 | 0.4 |
+| 1024 | 3.5e-02 | 1.1 | 9.3e-04 | 1.4 |
+| 2048 | 1.4e-02 | 4.7 | 6.9e-05 | 4.5 |
+| 4096 | 4.1e-03 | 19 | 5.6e-05 | 18 |
+
+At delta = 1e-3 the triangle at nk = 256 has an error of 5.3e-3 in 2.7 s,
+where the grid at nk = 4096 has 4.1e-3 in 19 s, so the triangle now also
+wins in wall time, by a factor 7, and at nk = 512 (1.3e-3 in 6.4 s) it
+is better than any grid we ran. At T = 0 the same triangle takes 0.16 s.
+At delta = 1e-2 the grid still wins: 9.3e-4 in 1.4 s at nk = 1024,
+against 8.4e-4 in 17 s for the triangle at nk = 512, and 6.9e-5 in 4.5
+s at nk = 2048, which the triangle does not reach below nk = 2048.
 
 ## The tests
 
@@ -410,9 +527,15 @@ once numba has compiled the kernels:
 - the q = 0 sum rule and the small-q limit on a cubic metal, through the
   tetrahedra;
 - the accepted values of `integration` are those of the registry, and the
-  combinations that are not built raise.
+  combinations that are not built raise;
+- the source kernel gives the reference kernel, which evaluates every
+  piece at every frequency, to 1e-10 of the largest value: at delta =
+  1e-3 and at delta = 0, at T = 0 and at finite T with delta = T, on the
+  square lattice, on a spinful honeycomb metal with the degenerate pairs
+  of the spin copies, on a chain and on a cubic metal, and the names of
+  the kernels come from their registry.
 
-With these, `tests/chi` passes, 194 tests.
+With these, `tests/chi` passes, 196 tests.
 
 ## What wins and what loses
 
@@ -428,15 +551,18 @@ agrees with the converged grid to 6e-9. At perfect nesting the triangle
 follows the ln^2(1/T) growth of chi_0(Q) down to T = 1e-4, where the
 grid is wrong by 4 percent at nk = 8192. The dynamic response at small
 delta converges at second order with an error that does not depend on
-delta, so at delta = 1e-3 it needs 64 times fewer k-points than the grid.
+delta, so at delta = 1e-3 it needs 64 times fewer k-points than the grid,
+and with the source kernel it is also 7 times faster in wall time at
+equal accuracy.
 
 The losses. Where T is above the energy spacing of the mesh the grid
 converges exponentially: at T = 5e-2 and nk = 256 both take about 17 s,
 but the grid is exact to 3e-9 and the triangle is off by 2e-5. The
 triangle cost also grows with T, because the window of 40 T covers more
 of the band, so on large meshes at high T it is the slower of the two. The dynamic response
-at delta = 1e-2 is the same story. The dynamic response at finite T
-costs 6 to 18 times the T = 0 one. In 3D the tetrahedra cost about 0.4 ms
+at delta = 1e-2 is the same story: the grid reaches 1e-3 ten times
+faster. The dynamic response at finite T costs about 10 times the T = 0
+one, through the quadrature in x. In 3D the tetrahedra cost about 0.4 ms
 per k-point at T = 1e-3, so nk = 64 takes 100 s. At a commensurate
 nesting vector an even nk converges irregularly, and an odd nk has to be
 used.
@@ -536,13 +662,13 @@ denominator now has the Pauli term in it.
 
 ## What is left open
 
-- The cost of the dynamic response. The tiling and the divided
-  differences are redone at every frequency and every quadrature node.
-  The source kernel of `conductivitytk/kubosimplex.py`, which stores the
-  weighted joint DOS by its knots and evaluates every frequency as one
-  sum, would apply to the T = 0 pieces, since their branches depend on
-  delta but not on w. Not built. The superlinear growth of the T = 0
-  cost with nk was not looked into.
+- The cost of the dynamic response at finite T, about 10 times the
+  T = 0 one. The pieces of every node of the quadrature in x are tiled
+  and summed separately, and a node of one simplex shares nothing with
+  the next node. With delta < T nothing is shared between the
+  frequencies either, and the call goes to the reference kernel. The
+  tetrahedra in 3D have not been timed with the source kernel, and the
+  larger cost at delta = 1e-2 than at 1e-3 was not looked into.
 - A hybrid for high T: the plain Fermi occupation on the simplices far
   from the Fermi level, where the triangle buys nothing, would keep the
   exponential convergence of the grid there, as in the density-matrix
