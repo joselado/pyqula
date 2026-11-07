@@ -86,21 +86,48 @@ def test_the_gapless_state_holds_the_charge_with_ed_and_the_triangle(zeeman,
 
 @pytest.mark.parametrize("T", [1e-7, 1e-3])
 def test_the_energy_of_the_fill_is_the_one_of_its_density_matrix(zeeman, T):
-    """With the shell filled the band energy is the one of the filled
-    density matrix, (Tr H rho + Tr h_e)/2 per cell summed over the hoppings
-    of H, at T=1e-3 too, where the Fermi-Dirac weight is not a step on
-    many levels: the shell holds all of them"""
-    h = _unfilled(zeeman[("ed", T)])
-    hd = {d: np.array(algebra.todense(m)) for (d, m) in h.get_dict().items()}
-    v = {d: np.zeros((2, 2)) for d in hd}
-    ee = get_eh_sector(hd[(0, 0, 0)], i=0, j=0)
-    def band(dm):
-        return (sum(np.sum(hd[d]*dm[d]) for d in hd).real
+    """Once the shell is armed, the band energy is the one of the density
+    matrix that is returned, (Tr H rho + Tr h_e)/2 per cell summed over the
+    hoppings of H, filled or not, at T=1e-3 too, where the Fermi-Dirac
+    weight is not a step on many levels"""
+    def check(h, filled):
+        hd = {d: np.array(algebra.todense(m))
+                for (d, m) in h.get_dict().items()}
+        ee = get_eh_sector(hd[(0, 0, 0)], i=0, j=0)
+        shell = _shell(h)
+        dm = get_dm(h, {d: np.zeros((2, 2)) for d in hd}, nk=NK, T=T,
+                integration="ed", shell=shell)
+        if filled: assert shell.fired
+        band = (sum(np.sum(hd[d]*dm[d]) for d in hd).real
                 + np.trace(ee).real)/2.
-    shell = _shell(h)
-    filled = get_dm(h, v, nk=NK, T=T, integration="ed", shell=shell)
-    assert shell.fired
-    assert abs(band(filled)-(h.get_total_energy(nk=NK)+shell.energy)) < 1e-12
+        assert abs(band-shell.band) < 1e-12
+    check(_unfilled(zeeman[("ed", T)]), True)
+    # the Hamiltonian the loop returns holds the charge by itself
+    check(zeeman[("ed", T)].hamiltonian, None)
+
+
+@pytest.mark.parametrize("T", [1e-7, 1e-3])
+@pytest.mark.parametrize("integration", ["ed", "triangle"])
+def test_the_energy_is_continuous_across_a_whole_charge(integration, T):
+    """At filling 154/512 the requested charge is a whole number of states
+    of the mesh, and the normal Fermi search holds it without the fill;
+    1e-7 electrons per cell below, the fill holds it. The energy has to
+    move by mu dN between the two. With the step band energy for the held
+    state and the band energy of the filled one it jumped by 2e-7, and
+    the triangle kept its own charge miss at the whole charge"""
+    out = []
+    for filling in (154./512., 154./512.-5e-8):
+        np.random.seed(1)
+        scf = Vinteraction(_h0(0.3), U=-2., filling=filling, mf="swave",
+                nk=NK, solver="broyden_mixing", maxerror=1e-10, T=T,
+                integration=integration, load_mf=False, write=False,
+                verbose=0)
+        assert scf.converged and abs(scf.charge_error) < 1e-11
+        out.append(scf)
+    a, b = out
+    dN = -1e-7 # electrons per cell, two electron states per cell
+    mu = (a.hamiltonian.fermi+b.hamiltonian.fermi)/2.
+    assert abs((b.total_energy-a.total_energy)-mu*dN) < 1e-10
 
 
 def _no_shell(monkeypatch):

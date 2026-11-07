@@ -118,11 +118,13 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     shell: None, or a scftk.superscf.ShellFilling for a Bogoliubov-de
     Gennes h at a filling, which fills the shell of levels at zero energy
     in part when the charge jumps across the requested one there. While
-    the window of its offset is open (the pairing lives), shell.start
-    says so and the density matrix is the one without shell, on the
-    device route too. Once the window has closed, the shell takes its
-    eigenpairs from the batches below, so the density matrix is computed
-    on the CPU."""
+    the pairing lives, shell.start says so and the density matrix is the
+    one without shell. Once it has died, the shell takes the band
+    energies of every batch and the eigenpairs of the k-points with levels
+    in the shell. On the device
+    route the density matrix stays on the device, and the shell takes the
+    band energies of the mesh from one more pass of eigenvalues there and
+    diagonalizes again only its own k-points, on the host."""
     if h.non_hermitian: # left and right eigenvectors, see biorthogonal_dm
         return biorthogonal_dm(h,ds=ds,nk=nk,fermi=fermi,delta=delta)
     from .htk.eigenvectors import peigh_bloch, bloch_on_gpu
@@ -131,15 +133,28 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     fac = 1./len(ks) # normalization
     bloch = bloch_on_gpu(hk) # the device route, where it is worth taking
     if shell is not None and not shell.start(h,delta,len(ks)): shell = None
-    if bloch is not None and shell is None:
+    if shell is not None: from scipy.special import expit
+    if bloch is not None:
         # everything stays on the device: the eigenvectors are the biggest
         # array here and they exist only to be summed away, so they never
         # come back to the host (see dmtk/fulldmjax.py)
         from .dmtk.fulldmjax import full_dm_gpu
         dirs = [[0.,0.,0.]] if ds is None else ds # the undirected dm is d=0
         dm = fac*full_dm_gpu(bloch[0],bloch[1],ks,dirs,fermi=fermi,delta=delta)
-        if ds is None: return dm[0] # the single array
-        return {tuple(d): dm[i] for (i,d) in enumerate(ds)}
+        outd = {tuple(d): dm[i] for (i,d) in enumerate(dirs)}
+        if shell is not None: # the band energies, and the shell on the host
+            from .htk.eigenvectors import (peigvalsh_bloch, hk_matrix_batch,
+                    parallel_diagonalization)
+            es = np.asarray(peigvalsh_bloch(hk,ks))-fermi
+            shell.energies(es,expit(-es/delta))
+            sel = np.nonzero(np.any(np.abs(es)<shell.tol,axis=1))[0]
+            if len(sel)>0:
+                e2,v2 = parallel_diagonalization(hk_matrix_batch(hk,ks[sel]))
+                e2 = np.asarray(e2)-fermi
+                shell.collect(ks[sel],e2,np.asarray(v2),expit(-e2/delta))
+            shell.fill(outd)
+        if ds is None: return outd[(0.,0.,0.)] # the single array
+        return outd
     dm = None # accumulator, one slot per batch
     for i0 in range(0,len(ks),batch_size): # loop over batches of kpoints
         kbatch = ks[i0:i0+batch_size]
@@ -160,8 +175,9 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
                         np.array(d,dtype=np.float64),delta=delta) # one per kpoint, in parallel
                 batch_total[idir] = np.sum(contribs,axis=0) # pool the batch's contributions
         if shell is not None: # the occupations of the kernels above
-            from scipy.special import expit
-            shell.collect(kbatch,es_batch,vs_batch,expit(-es_batch/delta))
+            occ = expit(-es_batch/delta)
+            shell.energies(es_batch,occ)
+            shell.collect(kbatch,es_batch,vs_batch,occ)
         dm = batch_total if dm is None else dm+batch_total # pool across batches
     dm = dm*fac # renormalize
     if ds is None:

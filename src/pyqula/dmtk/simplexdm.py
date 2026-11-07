@@ -701,10 +701,12 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
     h at a filling a scftk.superscf.ShellFilling, which fills the shell of
     levels at zero energy in part when the charge jumps across the
     requested one there, as in densitymatrix.full_dm_accumulate, since the
-    triangle of a BdG h is the step of exact diagonalization. When it
-    fills the shell, the density matrix is the one of exact
-    diagonalization at T on the same mesh with the shell filled; when it
-    does not, it is the triangle density matrix of before"""
+    triangle of a BdG h is the step of exact diagonalization. When the
+    triangle density matrix misses the charge inside a jump at zero
+    energy (shell.test), the density matrix is the one of exact
+    diagonalization at T on the same mesh, with its shell filled if it
+    still misses the charge; otherwise it is the triangle density matrix
+    of before"""
     check_hamiltonian(h,"the simplex density matrix")
     if bloechl is None: bloechl = bloechl_default
     if not h.has_eh: shell = None # a normal state holds its charge already
@@ -732,6 +734,7 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
             wk = w[i0:i0+len(U)]
             ks = mesh.ks[i0:i0+len(U)]
             if shell is not None: # the occupations of the weights, in [0,1]
+                shell.energies(es[i0:i0+len(U)],wk*nkp)
                 shell.collect(ks,es[i0:i0+len(U)],U,wk*nkp)
             active = np.nonzero(np.any(wk!=0.,axis=0))[0] # bands with weight
             if len(active)==0: return
@@ -748,21 +751,23 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
         return dm
     dm = build(w)
     if shell is not None and shell.test(dm):
-        # the shell at zero energy is filled in part. The triangle of a BdG
-        # h is meant to be the step of exact diagonalization, but at T>0
-        # the simplices with an edge on a level at zero have a density of
-        # states at mu, and their Bloechl term moves the weight c_dim to
-        # their far vertices (1/24 of a level at E = 0.29 and 0.77 in the
-        # Zeeman state of future_development/tetrahedron_density_matrix.md).
-        # So the filled density matrix is built on the occupations of
-        # exact diagonalization, the Fermi-Dirac weight at T on the mesh,
-        # as densitymatrix.full_dm_accumulate does, and the two agree. A
-        # shell that is not filled leaves the weights of before
+        # the triangle misses the charge inside a jump at zero energy. The
+        # triangle of a BdG h is meant to be the step of exact
+        # diagonalization, but at T>0 the simplices with an edge on a level
+        # at zero have a density of states at mu, and their Bloechl term
+        # moves the weight c_dim to their far vertices (1/24 of a level at
+        # E = 0.29 and 0.77 in the Zeeman state of
+        # future_development/tetrahedron_density_matrix.md), which is not
+        # the step. So the density matrix is built on the
+        # occupations of exact diagonalization, the Fermi-Dirac weight at T
+        # on the mesh, as densitymatrix.full_dm_accumulate does, and it is
+        # taken whether the fill then fills its shell or finds the charge
+        # held by those occupations: in both cases it is the one of "ed"
         from scipy.special import expit
         delta = T if T>0. else 1e-15 # as densitymatrix.full_dm
-        shell.levels = []
-        dm_ed = shell.fill(build(expit(-es/delta)/nkp))
-        if shell.fired: dm = dm_ed
+        shell.restart()
+        dm = shell.fill(build(expit(-es/delta)/nkp))
+    elif shell is not None: shell.fill(dm) # not filled: only its energy
     if counted: return dm,mesh.ndiag
     return dm
 
