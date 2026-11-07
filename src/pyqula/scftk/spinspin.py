@@ -1222,6 +1222,19 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # them closed over anything from this function's scope.
     callback_mf = _callback_mf_constrains(h1, constrains)
 
+    # a Bogoliubov-de Gennes h1 at a filling, with exact diagonalization:
+    # the Fermi level is found on the charge of the paired state, as an
+    # offset from the one of the normal state that is converged in the
+    # loop below together with the mean field, the same as in
+    # densitydensity.densitydensity (superscf.BdGFermiLevel). The KPM
+    # engine keeps the normal-state level (kpmtk LaggedFermi)
+    bdg_fermi = None
+    fermi_offset = [0.] # its unknown, a closure cell like lam_state
+    if has_eh and mu is None and not use_kpm:
+        from .superscf import BdGFermiLevel
+        bdg_fermi = BdGFermiLevel(h1, filling,
+                lambda hh, f: hh.get_fermi4filling(f, nk=hh.nk, T=T))
+
     def callback_h(hh):
         if mu is None:
             # T, because the density matrix is built with the Fermi-Dirac
@@ -1420,6 +1433,11 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             h.fermi = fermi
             h.shift_fermi(-fermi) # cheap (adds a constant to the diagonal);
                                    # the eigenvectors above are unaffected by it
+        elif bdg_fermi is not None:
+            h = bdg_fermi.shift(h, fermi_offset[0])
+            dm_lab = _get_dm(h)
+            # the offset of the next call, as lam_state above
+            fermi_offset[0] = bdg_fermi.step(fermi_offset[0], dm_lab)
         else:
             h = callback_h(h)
             dm_lab = _get_dm(h)
@@ -1514,6 +1532,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         if use_kpm and lagged is not None:
             # the filling error of the lagged Fermi level, see LaggedFermi
             diff = max(diff, lagged.error)
+        if bdg_fermi is not None: # the charge of the paired state
+            diff = max(diff, bdg_fermi.residual)
         mf = mix_mf(mfnew, mf, mix=mix)
         if callback_mf is not None: mf = callback_mf(mf)
         if verbose > 0: print("ERROR in the SCF cycle", ite, diff)
@@ -1554,6 +1574,12 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 # above), so this is exactly equivalent to just continuing
                 # the outer fixed-point loop for another iteration from
                 # here, bounded by the same maxite check below as always.
+            elif bdg_fermi is not None:
+                # the last call moved the offset one more step, so its
+                # charge is checked again, as for the array filling above
+                if bdg_fermi.residual < maxerror:
+                    scf.converged = True
+                    break
             else:
                 scf.converged = True
                 break
@@ -1563,6 +1589,9 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             break
         ite += 1
     scf.iterations, scf.residual = ite, diff # as reached, for the error
+    if bdg_fermi is not None: # the charge of the paired state, N-N0
+        scf.charge_error = bdg_fermi.error
+        bdg_fermi.warn(maxerror)
 
     if use_sparse_dm and not use_kpm:
         # scf.dm is a public field (Vinteraction/SzSz/SxSx/SySy's SCF

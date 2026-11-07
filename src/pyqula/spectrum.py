@@ -503,7 +503,8 @@ def get_fermi4filling(h,filling,nk=8,T=0.):
     """Return the fermi energy for a certain filling. For a non-Hermitian
     Hamiltonian it cuts the real parts of the complex eigenvalues, which
     is how the states are occupied in densitymatrix.biorthogonal_dm"""
-    if h.has_eh: # this is an approximation, accurate version to be written 
+    if h.has_eh: # the normal state; a BdG mean field corrects it on the
+        # charge of the paired state, see scftk.superscf.BdGFermiLevel
         h0 = h.copy()
         h0.remove_nambu()
         return get_fermi4filling(h0,filling,nk=nk,T=T) # workaround

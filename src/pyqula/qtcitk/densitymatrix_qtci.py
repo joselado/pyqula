@@ -177,7 +177,9 @@ def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6):
     and the eigenpairs are kept, so that the density matrix of h shifted
     by this level does not diagonalize the same points again. For a
     Bogoliubov-de Gennes Hamiltonian the count is done on the normal
-    state, the same approximation spectrum.get_fermi4filling makes"""
+    state, the same approximation spectrum.get_fermi4filling makes; a mean
+    field corrects it on the charge of the paired state
+    (scftk.superscf.BdGFermiLevel)"""
     global _last_mesh
     if h.has_eh:
         h0 = h.copy()
@@ -291,7 +293,12 @@ def get_dm_qtci(h,v,nk=None,fermi=0.0,T=1e-7,tolerance=1e-6,bloechl=None,
     bloechl=None takes dmtk.simplexdm.bloechl_default. With counted=True
     also returns the number of diagonalizations and the bond dimensions of
     the cross interpolations"""
-    if h.has_eh: needed = required_elements_eh(v)
+    if h.has_eh:
+        # and the diagonal of the onsite matrix, whose electron block is
+        # the charge a Bogoliubov-de Gennes mean field holds at a filling
+        # (scftk.superscf.get_charge_bdg), also on sites with no interaction
+        needed = set(required_elements_eh(v))
+        needed |= {((0,0,0),i,i) for i in range(h.intra.shape[0])}
     else: needed = required_elements(v)
     if fermi!=0.:
         h = h.copy()

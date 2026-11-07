@@ -2,13 +2,14 @@
 U, s-wave) from the three density-matrix integrations of Vinteraction,
 "ed", "triangle" and "qtci". The paired state is gapped, so on the same
 mesh the three must agree: exactly for the triangle (every triangle is
-full or empty), to the interpolation tolerance for qtci. With mu=None the
-Fermi level comes from the normal state, and the energy adds back mu times
-the requested charge, so it is the grand potential Omega = <H - mu N> plus
-a constant: it is stationary in the pairing amplitude at fixed mu, and it
-obeys Hellmann-Feynman in U. Before this was settled qtci added mu times
-the charge of the paired state instead, which differs from "ed" by 1.9e-2
-here."""
+full or empty), to the interpolation tolerance for qtci. At a fixed mu the
+energy is the grand potential Omega = <H - mu N>: it is stationary in the
+pairing amplitude, and it obeys Hellmann-Feynman in U. With mu=None the
+Fermi level is found on the charge of the paired state
+(scftk.superscf.BdGFermiLevel), so the paired state holds the requested
+filling, and the energy Omega + mu N0 is the expectation value <H> at
+that filling. Before, the Fermi level came from the normal state, and the
+paired state held 0.606 electrons per cell instead of 0.600 here."""
 import numpy as np
 import pytest
 
@@ -28,9 +29,9 @@ def _h0():
     return h
 
 
-def _scf(integration, mu=None, U=U):
+def _scf(integration, mu=None, U=U, filling=FILLING):
     np.random.seed(1)
-    scf = Vinteraction(_h0(), U=U, filling=FILLING, mu=mu, mf="swave",
+    scf = Vinteraction(_h0(), U=U, filling=filling, mu=mu, mf="swave",
             nk=NK, integration=integration, solver="broyden_mixing",
             maxerror=1e-10, load_mf=False, write=False, verbose=0)
     assert scf.converged
@@ -87,30 +88,78 @@ def test_bdg_total_energy_is_the_same_for_the_three_integrations_at_fixed_mu():
 
 
 def test_bdg_total_energy_is_the_same_for_the_three_integrations_at_a_filling():
-    """With mu=None, "ed" counts the eigenvalues of the normal state on the
-    mesh while "triangle" and "qtci" integrate them on the triangles, so the
-    Fermi levels differ by 3e-2 at nk=16 and the energies by 2e-4, which is
-    second order (the energy is stationary in mu up to N - N0). The two
-    triangle paths share their Fermi search and agree to the interpolation
-    tolerance. Adding mu times the charge of the paired state instead of
-    the requested one moved qtci by 1.9e-2"""
-    e = {i: _scf(i).total_energy for i in ("ed", "triangle", "qtci")}
-    assert abs(e["triangle"]-e["ed"]) < 1e-3
+    """With mu=None the Fermi level holds the charge of the paired state,
+    which is gapped and so continuous in mu on the mesh of "ed" as on the
+    triangles: the three find the same Fermi level and the same energy.
+    With the Fermi level of the normal state, the staircase count of "ed"
+    put it 3e-2 away from the triangle at nk=16, and the energies 2e-4"""
+    scf = {i: _scf(i) for i in ("ed", "triangle", "qtci")}
+    e = {i: s.total_energy for (i, s) in scf.items()}
+    mu = {i: s.hamiltonian.fermi for (i, s) in scf.items()}
+    assert abs(e["triangle"]-e["ed"]) < 1e-8
     assert abs(e["qtci"]-e["triangle"]) < 1e-6
+    assert abs(mu["triangle"]-mu["ed"]) < 1e-8
+    assert abs(mu["qtci"]-mu["triangle"]) < 1e-6
+
+
+@pytest.mark.parametrize("filling", [0.3, 0.2])
+@pytest.mark.parametrize("integration", ["ed", "triangle", "qtci"])
+def test_bdg_mean_field_holds_the_filling_and_its_energy_is_h(integration,
+        filling):
+    """With mu=None the paired state holds the requested charge, filling
+    times the number of electron states (2*filling here, spinful), and the
+    reported energy is Omega at the converged Fermi level plus mu times
+    that charge, which is now <H> = Omega + mu N, with Omega written out by
+    hand from the projector on the mesh. h.get_filling() reads the same
+    charge back"""
+    scf = _scf(integration, filling=filling)
+    h = scf.hamiltonian
+    om, charge = _omega(h, _free(h.fermi))
+    tol = 1e-6 if integration=="qtci" else 1e-8
+    assert abs(charge-2*filling) < tol
+    assert abs(scf.charge_error) < tol
+    assert abs(scf.total_energy-(om+h.fermi*charge)) < tol
+    assert abs(h.get_filling(nk=NK)-filling) < 1e-6
+
+
+def test_bdg_mean_field_holds_the_filling_through_vjinteraction():
+    """h.get_mean_field_hamiltonian of a spinful Hamiltonian goes through
+    VJinteraction, which finds its Fermi level in the same way"""
+    np.random.seed(1)
+    hscf = _h0().get_mean_field_hamiltonian(U=U, filling=FILLING,
+            mf="swave", nk=NK, maxerror=1e-9, verbose=0)
+    assert abs(hscf.get_filling(nk=NK)-FILLING) < 1e-6
+    ref = _scf("ed").hamiltonian # the same state through Vinteraction
+    assert abs(hscf.fermi-ref.fermi) < 1e-6
 
 
 @pytest.mark.parametrize("integration", ["ed", "triangle", "qtci"])
-def test_bdg_total_energy_is_the_grand_potential_plus_mu_times_the_filling(
+def test_bdg_mean_field_without_pairing_keeps_the_normal_fermi_level(
         integration):
-    """The reported energy at mu=None is Omega at the converged Fermi level
-    plus mu times the requested charge, filling times the number of
-    electron states, and not mu times the charge of the paired state"""
-    scf = _scf(integration)
+    """A Nambu Hamiltonian with a repulsive U converges to a state with no
+    pairing, where the paired charge is the normal one: the Fermi level is
+    the one of the normal state, as before, and the energy is Omega at
+    that level plus mu N0, the same number a run at that fixed mu gives"""
+    np.random.seed(1)
+    kw = dict(U=2.0, mf="ferro", nk=NK, integration=integration,
+            solver="broyden_mixing", maxerror=1e-10, load_mf=False,
+            write=False, verbose=0)
+    scf = Vinteraction(_h0(), filling=FILLING, **kw)
+    assert scf.converged
     h = scf.hamiltonian
-    om, charge = _omega(h, _free(h.fermi))
-    assert abs(charge-2*FILLING) > 1e-3 # the two charges do differ
-    tol = 1e-6 if integration=="qtci" else 1e-9
-    assert abs(scf.total_energy-(om+h.fermi*2*FILLING)) < tol
+    hn = h.copy()
+    hn.shift_fermi(h.fermi) # undo the shift, the search is on h itself
+    if integration=="triangle":
+        from pyqula.dmtk import simplexdm
+        mu0 = simplexdm.get_fermi4filling(hn, FILLING, nk=NK, T=1e-7)
+    elif integration=="qtci":
+        from pyqula.qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
+        mu0 = get_fermi4filling_qtci(hn, FILLING, nk=NK, T=1e-7)
+    else: mu0 = hn.get_fermi4filling(FILLING, nk=NK, T=1e-7)
+    assert abs(h.fermi-mu0) < 1e-10
+    fixed = Vinteraction(_h0(), filling=FILLING, mu=h.fermi, mf=scf.mf, **{
+        k: v for (k, v) in kw.items() if k!="mf"})
+    assert abs(scf.total_energy-(fixed.total_energy+h.fermi*2*FILLING)) < 1e-9
 
 
 def test_bdg_total_energy_is_stationary_in_the_pairing_at_fixed_mu():

@@ -812,13 +812,163 @@ the triangle is within 4e-6 of the reference and `"ed"` within 3e-5. The
 charge of the paired state of `"ed"`, 0.6012 at nk = 16 and 0.6044 at
 nk = 64, moves with that staircase too, and it is not a second bug.
 
-`tests/scf/test_densitydensity_bdg_energy.py` checks this at nk = 16: the
+`tests/scf/test_densitydensity_bdg_energy.py` checked this at nk = 16: the
 three integrations agree to 1e-8 (triangle) and 1e-6 (qtci) at fixed mu,
 and to 1e-3 and 1e-6 at a filling; the reported energy at `mu=None` is
 Omega at the converged level plus mu N0, with Omega written out by hand
 from the projector on the mesh, for each integration; when the pairing
 is scaled by 1 + x at fixed mu, dOmega/dx = 3e-10 and d<H>/dx = -8e-3; and
-dOmega/dU = <n_up n_dn> to 1e-6.
+dOmega/dU = <n_up n_dn> to 1e-6. The checks at a filling changed with the
+next section.
+
+## The Fermi level of a superconductor
+
+The question is how to find the Fermi level of a BdG mean field at a
+filling, so that the paired state holds the requested charge, and not the
+normal state. Then N = N0, and the reported energy Omega + mu N0 is <H> at
+that charge.
+
+Two designs were possible. The first is a root find of mu on the charge of
+the paired state at each iteration, which costs a few more density
+matrices per iteration. The second takes one step in mu per iteration and
+converges it together with the mean field. We built the second, because
+it costs no extra density matrix. The chemical potential is written as
+mu = mu_n + x. Here mu_n is the Fermi level of the normal state of the
+current Hamiltonian, found with the count of the integration in use, as
+before, and x is an offset. Each density matrix gives the charge of the
+paired state, N = Tr rho_e(0,0,0), the trace of its electron block, which
+all three integrations compute (qtci now always computes the diagonal of
+the onsite block for a BdG Hamiltonian, also on sites with no
+interaction). The next offset is x - g (N - N0)/(2 kappa), with
+kappa = dN/dmu of the normal state, from two Fermi searches at filling
+0.25 and 0.35 on the first Hamiltonian, and g a gain, 1 at the start. The
+plain loop holds the size of this step to `maxerror`, together with the
+change of the mean field. Broyden mixing and the scipy solvers take x as
+the last entry of their vector, so their fixed point has the step at rest.
+This is `scftk.superscf.BdGFermiLevel`. It is used by `densitydensity`
+(`Vinteraction`, `hubbard`) for `"ed"`, `"triangle"` and `"qtci"`, and by
+`VJinteraction`, the engine of `h.get_mean_field_hamiltonian()` for a
+spinful Hamiltonian, for `"ed"`. `spectrum.get_fermi4filling` and the two
+Fermi searches of the simplices are unchanged, since other code calls them
+outside the mean field.
+
+Writing mu around mu_n has two reasons. The Hartree shift moves mu_n, so
+the offset only carries the effect of the pairing, of order Delta^2/W.
+And when the pairing vanishes, the paired charge at mu_n is the normal
+one, so x = 0 is exactly the old Fermi level. Three safeguards come from
+the states without a gap on the mesh. The reason for all three is that
+the charge of `"ed"` in such a state is a staircase in mu, and the one of
+the triangles has kinks where the electron and hole bands cross. So no
+offset may hold N0, and a fixed step oscillates around a jump. First, the
+offset is clipped to a window |x| <= 2 Delta^3/(Delta^2 + Delta_s^2), with
+Delta the largest anomalous entry of the Hamiltonian and
+Delta_s = 1e-3 W, W = (electron states)/kappa. The window is 2 Delta for a
+sizable pairing, and it closes as Delta^3 when the pairing dies out, so
+that the old Fermi level comes back. Second, the gain halves each time
+N - N0 changes sign, and grows back by 1.5 while it does not. Third, after
+eight changes of sign with |N - N0| above 1e-6 (below that it is the noise
+of qtci), the step gives up and sets x = 0 for the rest of the loop, which
+is then the old loop. A gapped state settles in one or two changes of sign.
+In all these cases the loop converges with the charge error of the old
+Fermi level, and it prints one line when that error is above
+100 maxerror. The error is also in `scf.charge_error`.
+
+The three safeguards came out of failures. A window of 2 Delta that sets x
+back to zero when it leaves it gave a cycle of period three for qtci at
+nk = 8, where the gap is not resolved and the paired charge wants an
+offset of -0.3 with Delta = 0.1. A window that does not close made the
+loop slow when the pairing dies, since x stays at the edge of a shrinking
+window and moves mu across the levels of the mesh (more than 400
+iterations against 41 for the Zeeman case below). And the halving gain
+alone froze x at a wrong value on the ferromagnetic chain of
+`tests/scf/test_unconventional_superconductivity.py`, a triplet with
+nodes on the mesh points at nk = 6, which then did not converge in 1000
+iterations; with the give-up it converges in 51, against 50 before.
+
+For concreteness we take again U = -2 on the spinful square lattice, with
+`solver="broyden_mixing"` and `maxerror=1e-10` (1e-8 for qtci). The
+charge per cell and the energy, before and now:
+
+| nk | filling | N before (`"ed"`, triangle) | N now | E before (`"ed"`, triangle) | E now (all three) |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 0.3 | 0.60124, 0.61141 | 0.6 | -1.6209185, -1.6210916 | -1.6209165 |
+| 32 | 0.3 | 0.60010, 0.60773 | 0.6 | -1.6206118, -1.6206856 | -1.6206118 |
+| 64 | 0.3 | 0.60442, 0.60636 | 0.6 | -1.6206583, -1.6206841 | -1.6206342 |
+| 16 | 0.2 | 0.41174, 0.41443 | 0.4 | -1.2282869, -1.2283682 | -1.2281283 |
+
+Before, qtci gave the numbers of the triangle. Now N - N0 is below 1e-9
+for `"ed"` and the triangle, and about 1e-8 for qtci, which is its
+interpolation floor. The three integrations give the same Fermi level and
+the same energy, to 1e-10 for `"ed"` and the triangle, since the paired
+state is gapped: every triangle is full or empty, and the charge of
+`"ed"` is continuous in mu, so the staircase of the normal state no
+longer enters. The triangle on a 256 x 256 mesh gives E = -1.6206340 at
+filling 0.3, and nk = 128 gives the same to 5e-12, so this is the
+converged <H> at the requested charge, with mu = -1.68034 and
+Delta = 0.2130. It lies 4.7e-5 above the Omega + mu N0 = -1.6206807 of the
+hand-written mean field above, which was at the normal-state Fermi level
+and so at the charge 0.606. At nk = 64 the three are within 2e-7 of it.
+Before, the triangle was 4e-6 and `"ed"` 3e-5 away from the old
+reference.
+
+Other states, all at nk = 16:
+
+- U = -6 at filling 0.1, a strongly paired state: the old Fermi level put
+  0.334 electrons per cell instead of 0.2, an error of 0.134. Now the
+  error is 3e-11. The energy goes from -0.85288 to -0.83832.
+- A d-wave state from V1 = -2 with U = 1 at filling 0.4, started from a
+  `"dx2y2"` pairing: the old charge was 0.871 instead of 0.8, now it is
+  0.8 to 1e-10. It needs 57 Broyden iterations for `"ed"` and 43 for the
+  triangle, against 13 and 13 before.
+- U = -1 with the triangle at filling 0.3. The old Fermi level held 0.633,
+  and on this mesh the pairing died. At the charge 0.600 it survives, with
+  Delta = 0.029. The old code at the new mu, fixed, finds the same state
+  and the same energy to 1e-10, so this is the charge and not a second
+  difference.
+- No pairing, U = 2 with Nambu: the Fermi level and the energy are the
+  old ones, to 3e-12.
+- s-wave with a Zeeman field 0.3, larger than the gap, where the pairing
+  dies: with Broyden, `"ed"` goes from 41 to 64 iterations and the
+  triangle from 19 to 25, to the old state and the old charge.
+- Attractive V1 = -2.5 on the spinful chain at filling 0.3: before, the
+  extended s-wave singlet from `mf="swave"` held 0.514 electrons per cell
+  and the triplet from `mf="pwave"` 0.713, instead of 0.6. At 0.6 both
+  guesses go to the same triplet, E = -1.7771730 for both, in about 250
+  plain iterations against 50 before, because the state from the singlet
+  guess is not stable there and moves slowly to the triplet. So the
+  singlet test of `tests/scf/test_bond_pairing_prefactor.py` runs at
+  filling 0.2 now, where the singlet is the converged state.
+- qtci at nk = 8 (U = -2, filling 0.3), where the gap is not resolved: the
+  old loop lost the pairing (Delta = 7e-4). Now the offset stays at the
+  edge of its window, Delta = 0.233 against 0.213 on a converged mesh, and
+  the loop says that the charge is not held.
+
+The cost per iteration is the one of before, one density matrix and one
+normal-state Fermi search, plus two Fermi searches at the start. What
+changes is the number of iterations, because the loop has one more
+unknown. For the s-wave state at filling 0.3 Broyden needs 27, 28 and 31
+iterations at nk = 16, 32 and 64 with `"ed"`, against 21, 22 and 22, and
+about 24 for qtci against 22. The wall time, on four idle cores, moves
+with the iterations: at nk = 64 it is 3.1 s against 2.1 s for `"ed"`,
+5.0 s against 3.8 s for the triangle, and 24 s against 22 s for qtci.
+`VJinteraction` with plain mixing needs about the same number of
+iterations as before (185 against 188 at nk = 16).
+
+`tests/scf/test_densitydensity_bdg_energy.py` checks now, at nk = 16: the
+paired state holds the requested filling (0.3 and 0.2) to 1e-8 (1e-6 for
+qtci) for each integration, and `h.get_filling()` reads it back to 1e-6;
+the energy is Omega + mu N with N the charge of the projector, written out
+by hand, so <H>; the three integrations agree at a filling to 1e-8 in the
+energy and in the Fermi level (1e-6 for qtci); `VJinteraction` holds the
+filling too; and a Nambu state without pairing keeps the normal-state
+Fermi level to 1e-10, with the energy of a run at that fixed mu plus
+mu N0. The checks at fixed mu are unchanged.
+
+Not touched. The KPM engines keep the normal-state Fermi level for a
+Nambu Hamiltonian (`LaggedFermi.shift` searches it each iteration on the
+electron-only Hamiltonian), and `VJinteraction` refuses a dense Nambu
+Hamiltonian with `integration="kpm"`. `densitydensity_jax` has no BdG
+path at all.
 
 ## What wins and what loses
 
@@ -853,12 +1003,27 @@ loaded.
   conductivity of a metal needs its Fermi-sea term with the step on the
   simplices. Neither is built.
 - Non-Hermitian Hamiltonians are refused. Bogoliubov-de Gennes ones are
-  accepted now, with the Fermi level of the normal state, so the paired
-  state does not hold the requested charge (0.606 instead of 0.600 for
-  U = -2 at filling 0.3 on the square lattice). A Fermi search on the charge
-  of the paired state itself would hold it, and then the reported energy
-  would also be <H>; it is not built, here or in "ed"
-  (`spectrum.get_fermi4filling` makes the same approximation).
+  accepted, and their Fermi level is found on the charge of the paired
+  state (see "The Fermi level of a superconductor").
+- In a BdG state without a gap the triangle charge is wrong, because the
+  electron and hole bands cross at zero energy and the linear
+  interpolation of the sorted bands mixes them. With no pairing at all,
+  U = 2 on the square lattice at filling 0.3 and nk = 16 holds 0.633
+  instead of 0.600 (`"ed"` holds 0.602, its staircase), and with a Zeeman
+  field 0.3 it holds 0.586. This was there before the change of the Fermi
+  level, and it is not fixed.
+- qtci with V1 on a BdG Hamiltonian (V1 = -1.5 on the square lattice)
+  stops with "Non-Hermitian BdG mean field", in the old code as in the new.
+- A state with a Bogoliubov Fermi surface, or one whose pairing dies in the
+  loop, converges more slowly with the BdG Fermi level (239 against 41
+  Broyden iterations in the Zeeman case). The root find per iteration, the
+  other design, should not have this problem, at a few density matrices
+  per iteration. It was not built.
+- Numbers of the user guide that come from a BdG mean field at a filling
+  move with the BdG Fermi level, and the guide was not updated: the
+  self-consistent Delta_0 of the triangular s-wave state of the mean-field
+  chapter, and the gaps and moments of the triplet and non-unitary
+  examples.
 - `VJinteraction`, the default engine of `h.get_mean_field_hamiltonian`
   for a spinful Hamiltonian, does not take `"triangle"`. The entry point
   routes it to `Vinteraction`, which has no exchange terms J.

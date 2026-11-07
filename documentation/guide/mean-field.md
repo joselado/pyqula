@@ -258,7 +258,12 @@ h.get_kdos_bands(operator="electron",nk=400,
 ```
 
 The guess `mf="swave"` starts from a uniform singlet pairing, and the loop
-finds its self-consistent value. The electron spectral function, with
+finds its self-consistent value. The loop also finds the Fermi energy at
+which the paired state holds the requested filling, here 0.45 of the
+electron states, so `h.get_filling()` gives 0.45 back. This is not the
+Fermi energy of the normal state at the same filling, because the pairing
+changes the occupation of the states near the Fermi energy.
+The electron spectral function, with
 `operator="electron"` so that the hole copy of the bands is not shown, is the
 band of the triangular lattice with a gap at the Fermi energy. The gap grows
 with $|U|$. `h.get_kdos_bands()` is explained in
@@ -267,10 +272,10 @@ with $|U|$. `h.get_kdos_bands()` is explained in
 ![Electron spectral function of the self-consistent s-wave superconductor on the triangular lattice.](img/meanfield_swave.png#only-light)
 ![Electron spectral function of the self-consistent s-wave superconductor on the triangular lattice.](img/meanfield_swave-dark.png#only-dark)
 
-The self-consistent pairing is $\Delta_0=0.30$, so the gap at the Fermi
-energy goes from $-0.30$ to $0.30$. Away from the Fermi energy the spectral
-function follows the normal band, with its minimum at K at $-1.85$. The faint
-band above, with its minimum at $0.9$ at M, is the hole copy: its electron
+The self-consistent pairing is $\Delta_0=0.29$, so the gap at the Fermi
+energy goes from $-0.29$ to $0.29$. Away from the Fermi energy the spectral
+function follows the normal band, with its minimum at K at $-1.90$. The faint
+band above, with its minimum at $0.92$ at M, is the hole copy: its electron
 weight is small, but not zero. ARPES measures this spectral function below the
 Fermi energy.
 
@@ -390,8 +395,8 @@ it is unitary, are computed in [Superconductivity](superconductivity.md).
 
 For the figure the loop uses `nk=20` instead of `nk=40`, to keep it short, and
 the script fixes the random seed.
-The smallest gap is $0.42$ with `nk=20` and about
-$0.40$ with `nk=40`, so the k-mesh changes it by a few percent. The figure shows the two
+The smallest gap is $0.39$ with `nk=20` and about
+$0.38$ with `nk=40`, so the k-mesh changes it by a few percent. The figure shows the two
 copies of the triangular band, split by the exchange field. Both have a gap
 at the Fermi energy, and the smallest one is on the band that crosses the
 Fermi energy between $\Gamma$ and K. The moment is $-0.43$ along $z$, opposite

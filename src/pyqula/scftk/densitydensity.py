@@ -538,7 +538,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         T=1e-7, # temperature
         integration="ed", # one of get_integration_names()
         tolerance=1e-6, # qtci-only: crossinterpolate2 convergence tolerance
-        callback_h=None,write=None,**kwargs):
+        callback_h=None,fermi_level=None,write=None,**kwargs):
     """Perform the SCF mean field
 
     mix: the linear-mixing factor. solver="plain" and solver="linear"
@@ -551,7 +551,17 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
 
     write: False keeps the converged mean field out of MF.pkl in the
     working directory. With load_mf=True an MF.pkl already there is still
-    read as the starting guess."""
+    read as the starting guess.
+
+    fermi_level: None, or an object that sets the chemical potential of
+    each Hamiltonian from one extra unknown x of the loop, such as
+    superscf.BdGFermiLevel: fermi_level.shift(h,x) before the density
+    matrix, then fermi_level.step(x,dm) gives the x of the next iteration
+    and leaves a charge error in fermi_level.error. The plain loop takes
+    that step and holds its size, fermi_level.residual, to maxerror
+    together with the change of the mean field; the other solvers take x
+    as the last entry of their vector, so their fixed point has the step
+    at rest."""
     write = filewrite.resolve(write,True) # the call, else the global switch
     reject_leftover_kwargs(kwargs)
     if verbose>1: info=True
@@ -577,8 +587,8 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
     ii = 0
     fs.rmfile("STOP") # remove stop file
     hop0 = hamiltonian2dict(h1) # create dictionary
-    def f(mf,h=h1):
-      """Function to minimize"""
+    def f(mf,x=0.,h=h1):
+      """Function to minimize; x is the unknown of fermi_level"""
 #      print("Iteration #",ii) # Iteration
       # Shallow copy, not deepcopy: `mf0` exists only to restore the incoming
       # guess in the STOP-file branch at the end of this function, and `mf` is
@@ -606,6 +616,7 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
       set_hoppings(h,hop) # set the new hoppings in the Hamiltonian
       if callback_h is not None:
           h = callback_h(h) # callback for the Hamiltonian
+      if fermi_level is not None: h = fermi_level.shift(h,x)
       t0 = time.perf_counter() # time
       # get_dm itself decides which kwargs (e.g. tolerance) are safe to
       # forward to which backend, so this call never needs to know that
@@ -632,6 +643,10 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
       scf.dm = dm # store density matrix
       scf.v = v # store interaction
       scf.tol = maxerror # maximum error
+      if fermi_level is not None: # the step of the chemical potential
+          scf.x, scf.x_next = x, fermi_level.step(x,dm)
+          scf.charge_error = fermi_level.error
+          scf.fermi_residual = fermi_level.residual
       return scf
     if solver=="plain":
       if mix is None: mix = 0.3 # default linear mixing
@@ -639,11 +654,15 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
 #      from .mixing import Mixing
 #      Mxg = Mixing() # initialize
       ite = 0 # start counter
+      x = 0. # the unknown of fermi_level
       while do_scf:
-        scf = f(mf) # new vector
+        scf = f(mf,x) # new vector
         mfnew = scf.mf # new vector
         t0 = time.perf_counter() # time
         diff = diff_mf(mfnew,mf) # mix mean field
+        if fermi_level is not None: # the charge is held as well
+            diff = max(diff,scf.fermi_residual)
+            x = scf.x_next # an already damped step
 #        mix = Mxg.get_mix(diff) # add error
 #        print("Mixing",mix)
         mf = mix_mf(mfnew,mf,mix=mix) # mix mean field
@@ -655,12 +674,17 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
             print("ERROR in the SCF cycle",ite,diff)
         #print("Mixing",dmix)
         if diff<maxerror: 
-            scf = f(mfnew) # last iteration, with the unmixed mean field
-            scf.converged = True # converged
-            scf.iterations, scf.residual = ite, diff # as reached
-            if write: inout.save(scf.mf,mf_file) # save the mean field
-         #   scf.hamiltonian.check(tol=100*maxerror) # perform some sanity checks
-            return scf
+            scf = f(mfnew,x) # last iteration, with the unmixed mean field
+            # the charge of this last density matrix is checked again: it
+            # is computed at the next x, which a mean field that has
+            # stopped moving leaves within the tolerance, and the loop
+            # goes on otherwise
+            if fermi_level is None or scf.fermi_residual<maxerror:
+                scf.converged = True # converged
+                scf.iterations, scf.residual = ite, diff # as reached
+                if write: inout.save(scf.mf,mf_file) # save the mean field
+                return scf
+            x = scf.x_next
         if maxite is not None: # maximum number of iterations reached
             if ite>=maxite:
                 scf.converged = False # no convergence
@@ -670,18 +694,28 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
         ite += 1 # increase number of iterations
     else: # use different solvers
         scf = f(mf) # perform one iteration
-        fmf2a = get_mf2array(scf) # convert MF to array
-        fa2mf = get_array2mf(scf) # convert array to MF
+        fmf2a_mf = get_mf2array(scf) # convert MF to array
+        fa2mf_mf = get_array2mf(scf) # convert array to MF
+        # with a fermi_level, its unknown is the last entry of the vector,
+        # and the entry of the new vector is its step
+        if fermi_level is None:
+            fmf2a, fa2mf = fmf2a_mf, fa2mf_mf
+            def fscf(a): return f(fa2mf(a))
+            def fnew(scf1): return fmf2a(scf1.mf)
+        else:
+            def fmf2a(mf,x=0.): return np.append(fmf2a_mf(mf),x)
+            def fa2mf(a): return fa2mf_mf(a[:-1])
+            def fscf(a): return f(fa2mf(a),a[-1])
+            def fnew(scf1): return fmf2a(scf1.mf,scf1.x_next)
         def fsol(x): # define the function to solve
-            mf1 = fa2mf(x) # convert to a MF
-            scf1 = f(mf1) # compute function
-            xn = fmf2a(scf1.mf) # new vector
+            scf1 = fscf(x) # compute function
+            xn = fnew(scf1) # new vector
             diff = x - xn # difference vector
             if verbose>0:
                 print("ERROR",np.max(np.abs(diff)))
                 print()
             return x - xn # return vector
-        x0 = fmf2a(scf.mf) # initial guess
+        x0 = fnew(scf) # initial guess
         if mix is not None and solver not in ("broyden_mixing","linear"):
             # as densitydensity_jax warns for its own non-mixing solvers
             warnings.warn("mix=%r has no effect for solver=%r (only "
@@ -728,15 +762,14 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
             raise ValueError("unknown solver; the accepted ones are 'plain', "
                     "'krylov', 'anderson', 'broyden1', 'linear' and "
                     "'broyden_mixing'")
-        mf = fa2mf(x) # transform to MF
-        scf = f(mf) # compute the SCF with the solution
+        scf = fscf(x) # compute the SCF with the solution
         if solver=="broyden_mixing":
             scf.converged = converged # store convergence flag
             scf.iterations = ite
-            scf.residual = np.max(np.abs(x - fmf2a(scf.mf))) # reached error
+            scf.residual = np.max(np.abs(x - fnew(scf))) # reached error
         else: # the scipy solvers raise NoConvergence when they fail
             scf.converged = True
-            scf.residual = np.max(np.abs(x - fmf2a(scf.mf))) # reached error
+            scf.residual = np.max(np.abs(x - fnew(scf))) # reached error
         scf.error = maxerror # store the error
         if write: inout.save(scf.mf,mf_file) # save the mean field
         return scf # return the mean field
@@ -798,35 +831,49 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         simplexdm.check_hamiltonian(h,"integration=\"triangle\"")
     h = h.get_multicell()
     h = h.get_dense()
+    def search(h,filling):
+        """Fermi level that holds `filling` in h, with the count of the
+        integration in use. T, because the density matrix below is built
+        with the Fermi-Dirac weight at this same T: a Fermi level located
+        by a T=0 eigenvalue count would hold a different number of
+        electrons than `filling` asks for. For a Bogoliubov-de Gennes h
+        each of them counts the normal state"""
+        if integration=="qtci":
+            # on the triangles of the reconstructed mesh get_dm_qtci
+            # integrates on, which also keeps the eigenpairs for it
+            from ..qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
+            return get_fermi4filling_qtci(h,filling,nk=h.nk,T=T,
+                    tolerance=kwargs.get("tolerance",1e-6))
+        elif integration=="triangle":
+            # on the simplices the density matrix is integrated on, where
+            # the charge is a continuous function of the Fermi level, so
+            # the density matrix holds exactly the requested filling
+            from ..dmtk import simplexdm
+            return simplexdm.get_fermi4filling(h,filling,nk=h.nk,T=T)
+        else: return h.get_fermi4filling(filling,nk=h.nk,T=T)
+    # a Bogoliubov-de Gennes h at a filling: the Fermi level is found on
+    # the charge of the paired state, as an offset from the one of the
+    # normal state that the loop converges together with the mean field
+    # (superscf.BdGFermiLevel)
+    fermi_level = None
+    if mu is None and h.has_eh:
+        from .superscf import BdGFermiLevel
+        fermi_level = BdGFermiLevel(h,filling,search)
     def callback_h(h):
         """Set the filling"""
-        if mu is None:
-          # T, because the density matrix below is built with the
-          # Fermi-Dirac weight at this same T: a Fermi level located by a
-          # T=0 eigenvalue count would hold a different number of
-          # electrons than `filling` asks for
-          if integration=="qtci":
-              # on the triangles of the reconstructed mesh get_dm_qtci
-              # integrates on, which also keeps the eigenpairs for it
-              from ..qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
-              fermi = get_fermi4filling_qtci(h,filling,nk=h.nk,T=T,
-                      tolerance=kwargs.get("tolerance",1e-6))
-          elif integration=="triangle":
-              # on the simplices the density matrix is integrated on, where
-              # the charge is a continuous function of the Fermi level, so
-              # the density matrix holds exactly the requested filling
-              from ..dmtk import simplexdm
-              fermi = simplexdm.get_fermi4filling(h,filling,nk=h.nk,T=T)
-          else:
-              fermi = h.get_fermi4filling(filling,nk=h.nk,T=T)
+        if fermi_level is not None: pass # shifted by fermi_level instead
+        elif mu is None:
+          fermi = search(h,filling)
           if verbose>1: print("Fermi energy",fermi)
           h.fermi = fermi
           h.shift_fermi(-fermi) # shift by the fermi energy
         else: h.shift_fermi(-mu) # shift by mu
         return h
-#    callback_h = None
     scf = generic_densitydensity(h,callback_h=callback_h,verbose=verbose,
-            **kwargs)
+            fermi_level=fermi_level,**kwargs)
+    if fermi_level is not None: # the charge of the paired state, N-N0
+        scf.charge_error = fermi_level.error
+        fermi_level.warn(kwargs.get("maxerror",1e-5))
     # Now compute the total energy
     h = scf.hamiltonian
     # scf.dm is user-visible, while the loop above only ever computed the
@@ -877,16 +924,16 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     if mu is None:
         # add back mu N with N the requested charge, filling times the
         # number of electron states (electron_dimension, not the
-        # Nambu-doubled h.intra.shape[0]), for every integration. In a
-        # normal state this is the charge the density matrix holds (to
-        # 1e-12 for "triangle", to the interpolation tolerance for "qtci").
-        # In a superconductor it is not: the Fermi level comes from the
-        # normal state, and the paired state at that level holds another
-        # charge (0.606 instead of 0.600 for U=-2 at filling 0.3 on the
-        # square lattice). Then Omega + mu N with the requested N is the
-        # quantity that is stationary in the pairing amplitude at fixed mu
-        # and obeys Hellmann-Feynman in U, while mu times the actual charge
-        # gives <H>, which is neither (future_development/
+        # Nambu-doubled h.intra.shape[0]), for every integration. This is
+        # the charge the density matrix holds: in a normal state to 1e-12
+        # for "triangle" and to the interpolation tolerance for "qtci", and
+        # in a superconductor to the tolerance of the loop, since its Fermi
+        # level is found on the charge of the paired state
+        # (superscf.BdGFermiLevel). So the energy is <H> at that charge.
+        # Before, the Fermi level of a superconductor came from the normal
+        # state, the paired state held another charge (0.606 instead of
+        # 0.600 for U=-2 at filling 0.3 on the square lattice), and this
+        # was Omega + mu N0 rather than <H> (future_development/
         # tetrahedron_density_matrix.md)
         etot += h.fermi*electron_dimension(h)*filling
     etot += get_dc_energy(scf.v,dm_dc,non_hermitian=h.non_hermitian) # add the double counting energy

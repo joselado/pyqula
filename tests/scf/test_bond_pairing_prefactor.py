@@ -84,9 +84,9 @@ def _energy(H, H0, W, nk, cfock=1.0, cpair=1.0):
     return (e0 + eint).real
 
 
-def _check(guess, triplet, tmp_path, monkeypatch):
+def _check(guess, triplet, tmp_path, monkeypatch, filling=0.3):
     monkeypatch.chdir(tmp_path)
-    nk, filling = 20, 0.3
+    nk = 20
     h = geometry.chain().get_hamiltonian()
     h.setup_nambu_spinor()
     s = meanfield.Vinteraction(h.copy(), V1=-2.5, filling=filling, nk=nk,
@@ -138,8 +138,13 @@ def _check(guess, triplet, tmp_path, monkeypatch):
 
 
 def test_extended_swave_bond_pairing_is_stationary(tmp_path, monkeypatch):
-    """Attractive V1 on a doped chain, singlet (extended s-wave) state"""
-    _check("swave", False, tmp_path, monkeypatch)
+    """Attractive V1 on a doped chain, singlet (extended s-wave) state, at
+    filling 0.2. At filling 0.3, with the Fermi level found on the charge
+    of the paired state, the loop goes from this guess to the triplet,
+    which is lower there; the Fermi level of the normal state held 0.514
+    electrons per cell instead of 0.6, where the singlet was the
+    converged state"""
+    _check("swave", False, tmp_path, monkeypatch, filling=0.2)
 
 
 def test_triplet_bond_pairing_is_stationary(tmp_path, monkeypatch):

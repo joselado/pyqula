@@ -173,3 +173,155 @@ def get_mf_bdg(v,dm,compute_anomalous=True,compute_normal=True,**kwargs):
                 np.round(mf[(0,0,0)],2))
     return mf # return mean field matrix
 
+
+
+def get_charge_bdg(dm):
+    """Number of electrons per unit cell held by a Nambu density matrix:
+    the trace of the electron block of its onsite matrix dm[(0,0,0)],
+    sum_i <c^dag_i c_i>. Every density-matrix integration of the mean
+    field ("ed", "triangle", "qtci") computes these diagonal entries for a
+    Bogoliubov-de Gennes Hamiltonian, dense or sparse"""
+    from ..superconductivity import get_eh_sector
+    m = get_eh_sector(dm[(0,0,0)],i=0,j=0)
+    return float(np.real(m.diagonal().sum()))
+
+
+
+class BdGFermiLevel:
+    """The Fermi level of a Bogoliubov-de Gennes mean field at a fixed
+    filling, found on the charge of the paired state itself.
+
+    The Fermi level that holds `filling` in the normal state (the
+    electron-only Hamiltonian, spectrum.get_fermi4filling) does not hold it
+    in the paired state: for U=-2 at filling 0.3 on the square lattice the
+    paired state holds 0.606 electrons per cell instead of 0.600. So the
+    chemical potential is written as mu = mu_n + x, with mu_n the Fermi
+    level of the normal state of the current Hamiltonian (search(h,filling),
+    the search of the integration in use) and x an offset that is one more
+    unknown of the self-consistent loop. Each density matrix gives the
+    charge N of the paired state (get_charge_bdg), and the offset of the
+    next iteration is x - gain*damping*(N-N0)/kappa, with N0 the requested
+    charge and kappa the compressibility dN/dmu of the normal state at the
+    first Hamiltonian. This is one step per iteration and no extra density
+    matrix; the loop holds the size of the step (residual) to its tolerance
+    together with the change of the mean field, so at convergence a gapped
+    paired state holds N0. A mixing solver takes x as one more entry of its
+    vector.
+
+    Writing mu around mu_n rather than on its own keeps the uniform
+    Hartree shift, which moves mu_n, out of the offset. The offset is also
+    clipped to a window |x| <= 2 Delta^3/(Delta^2 + Delta_s^2), with Delta
+    the pairing amplitude of the Hamiltonian (the largest entry of its
+    anomalous blocks) and Delta_s = small*W, W = (electron states)/kappa an
+    energy scale of the bands. So the window is 2 Delta for a sizable
+    pairing, and closes as Delta^3 when the pairing dies out: a Hamiltonian
+    with no pairing gets exactly the Fermi level of the normal state, as
+    before. The gain halves each time the charge error changes sign, and
+    grows back by regain up to 1 while it does not. This matters for a
+    Nambu Hamiltonian whose state has no gap on the mesh (no pairing, a
+    pairing that dies out, a Bogoliubov Fermi surface, or a gap the mesh
+    does not resolve): there the charge of "ed" is a staircase in mu and
+    the one of the triangles has the kinks of the crossing electron and
+    hole bands, so no offset may hold N0. The halving gain lets the offset
+    settle at a jump instead of oscillating around it, and the window keeps
+    it from running away. When the error has changed sign patience times
+    (errors below flip_floor are not counted, they are the noise of the
+    interpolation of qtci), the step gives up: the offset is set to zero
+    for the rest of the loop, which is then the loop with the Fermi level
+    of the normal state, as before. A state with a gap settles in a few
+    changes of sign at most. In all these cases the loop converges with a
+    charge error, which stays in error, and warn says so.
+
+    Use: shift(h,x) on each Hamiltonian before its density matrix (it sets
+    h.fermi), then step(x,dm) for the offset of the next iteration, which
+    also leaves the charge error N-N0 in error and the size of the step in
+    residual."""
+    damping = 0.5 # with kappa off by up to a factor 4 the step still converges
+    # the pairing moves the Fermi level by roughly Delta^2/W, so a window of
+    # 2 Delta is generous (U=-2 at filling 0.3: Delta=0.21, x=-0.03; U=-6 at
+    # filling 0.1: Delta=1.38)
+    bound_factor = 2.
+    halve = 0.5 # factor of the gain when the error changes sign
+    regain = 1.5 # growth of the gain while the error keeps its sign
+    small = 1e-3 # a pairing below small*W closes the window
+    patience = 8 # changes of sign of the error before giving up
+    flip_floor = 1e-6 # smaller errors are noise, and their signs not counted
+
+    def __init__(self,h,filling,search):
+        self.filling = filling
+        self.search = search # search(h,filling): Fermi level of the normal state
+        self.charge0 = filling*(h.intra.shape[0]//2) # electron states per cell
+        self.kappa = None # set on the first Hamiltonian
+        self.bound = 0. # the window of the last Hamiltonian
+        self.x = 0. # the offset the last Hamiltonian was shifted by
+        self.error = 0.
+        self.residual = 0.
+        self.gain, self.last = 1., None
+        self.flips, self.frozen = 0, False
+
+    def compressibility(self,h,df=0.05):
+        """dN/dmu of the normal state of h around the requested filling,
+        from two Fermi searches: a finite difference of the charge over a
+        window of 2*df in filling, wide enough to span many levels of an
+        exact-diagonalization mesh, whose Fermi level is a staircase"""
+        df = min(df,self.filling/2.,(1.-self.filling)/2.)
+        if df<=0.: return 1.0 # empty or full, nothing to hold
+        dmu = self.search(h,self.filling+df) - self.search(h,self.filling-df)
+        dmu = max(dmu,1e-6) # a degenerate level: a small, safe step
+        return 2.*df*(h.intra.shape[0]//2)/dmu
+
+    def shift(self,h,x):
+        """Shift h by the chemical potential mu_n + x, with x clipped to
+        the window of the pairing amplitude of h"""
+        mu = self.search(h,self.filling)
+        if self.kappa is None: self.kappa = self.compressibility(h)
+        d = pairing_amplitude(h)
+        dmin = self.small*(h.intra.shape[0]//2)/self.kappa # small, in units of W
+        self.bound = self.bound_factor*d*d**2/(d**2+dmin**2)
+        self.x = float(np.clip(x,-self.bound,self.bound))
+        if self.frozen: self.x = 0. # given up, see step
+        h.fermi = mu + self.x
+        h.shift_fermi(-h.fermi)
+        return h
+
+    def step(self,x,dm):
+        """Offset of the next iteration, from the density matrix of the
+        Hamiltonian shift(h,x) gave"""
+        self.error = get_charge_bdg(dm) - self.charge0
+        if self.last is not None: # halve on a change of sign, else grow
+            if self.last*self.error<0.:
+                self.gain = self.halve*self.gain
+                if min(abs(self.last),abs(self.error))>self.flip_floor:
+                    self.flips += 1
+            else: self.gain = min(1.,self.regain*self.gain)
+        self.last = self.error
+        if self.flips>=self.patience: self.frozen = True
+        if self.frozen: xnew = 0. # the Fermi level of the normal state
+        else:
+            xnew = self.x - self.gain*self.damping*self.error/self.kappa
+            xnew = float(np.clip(xnew,-self.bound,self.bound)) # the window
+        self.residual = abs(xnew-x)
+        return xnew
+
+    def warn(self,maxerror):
+        """Say so when a converged loop does not hold the charge, which is
+        the case of a state with no gap on the mesh"""
+        if abs(self.error)>100*maxerror:
+            print("The paired state holds the requested charge to %.1e "
+                    "electrons per cell, not to the tolerance: its "
+                    "quasiparticle spectrum has no gap on this mesh, see "
+                    "scftk.superscf.BdGFermiLevel"%abs(self.error))
+
+
+
+def pairing_amplitude(h):
+    """Largest modulus of the anomalous (electron-hole) blocks of the
+    hoppings of a Nambu Hamiltonian, onsite and between cells"""
+    from ..superconductivity import get_eh_sector
+    from .. import algebra
+    out = 0.
+    for m in h.get_dict().values():
+        a = get_eh_sector(algebra.todense(m),i=0,j=1)
+        out = max(out,float(np.max(np.abs(a))))
+    return out
+

@@ -530,7 +530,8 @@ def get_fermi4filling(h,filling,nk=20,T=0.):
     the simplex integration of the density matrix, on the uniform nk^dim
     mesh. See the module comment, point 3. For a Bogoliubov-de Gennes
     Hamiltonian the count is done on the normal state, the same
-    approximation spectrum.get_fermi4filling makes"""
+    approximation spectrum.get_fermi4filling makes; a mean field corrects
+    it on the charge of the paired state (scftk.superscf.BdGFermiLevel)"""
     if h.has_eh:
         h0 = h.copy()
         h0.remove_nambu()
