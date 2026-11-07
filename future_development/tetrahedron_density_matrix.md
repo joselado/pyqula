@@ -1474,11 +1474,10 @@ jump of the staircase? The maintainer picked to fill the shell at zero
 energy in part, inside the density matrix. The shell is the set of BdG
 levels with |E| < tol, with tol = max(40 T, 1e-6/(kappa Nk)), meaning
 every level whose Fermi-Dirac weight is not a step (to 4e-18), with a
-floor far below the level spacing 1/(kappa Nk) when T = 0. The jump is
-read on the levels within 5 T of zero, the ones the Fermi-Dirac weight
-fills in part, by more than 1/150. This is where the Fermi search of the
-normal state puts a degenerate star that it fills in part: within
-T ln 15 < 3 T when one electron or more of 16 states is in it.
+floor far below the level spacing 1/(kappa Nk) when T = 0. At T > 0
+the fill is then a shift of the chemical potential at T inside the
+shell, which is what a finite T does anyway, and at T = 0 it fills the
+degenerate star at zero energy in part.
 
 The occupations of the shell are the ones of a chemical potential
 shifted inside it by mu', to first order. At each k the levels of the
@@ -1561,11 +1560,61 @@ density matrix is bit for bit the one of before.
   weights at two evaluations, the loop went to the state of `"ed"`,
   -0.4670675939, 8.6e-3 higher.
 - N0 lies strictly between the charges of the shell emptied and filled in
-  charge, and the jump, the charge of the levels within 5 T, is more than
-  10 times kappa 2 (5 T), the charge a smooth density of states puts in
-  that window. A gapped state has no level there, and a smearing that
-  resolves the level spacing makes the charge continuous, so neither is
-  touched.
+  charge, meaning that the shell can hold it.
+
+A first version also asked for a jump of the charge: the charge of the
+levels within 5 T had to be more than 10 times kappa 2 (5 T), the charge
+a smooth density of states puts in that window. Its purpose was to keep
+gapped states unchanged, which the arming does now. In the Zeeman state
+at nk = 16 that test went round a cycle of two iterations for T between
+1.4e-3 and 1.6e-3: the review measured the jump at 11.8 and 7.8 times the
+smooth charge in turn, so the fill fired every second iteration, and its
+Hartree term moved the star relative to the window of 5 T, and the
+review found the plain loop not converged in 3000 iterations at
+T = 1.5e-3, against 322 before the fill. In our scan with Broyden mixing,
+"ed" holds N0 at T = 1e-3 and 1.1e-3, misses it by 1.6e-3 at 1.2e-3,
+does not converge in 1000 iterations from 1.3e-3 to 1.7e-3, and misses
+it by 1.6e-3 again from 1.8e-3 up, the miss of the rounded Fermi search;
+the triangle misses it from 1.2e-3 and does not converge from 1.5e-3 to
+1.7e-3. Without the test every point of the scan holds N0.
+
+Without the jump test, the Zeeman state at nk = 16 from T = 1e-3 to
+3e-3 in steps of 1e-4 converges at every point and holds N0 to 1e-16:
+with Broyden mixing in 49 to 93 iterations with `"ed"` (62 at
+T = 1.5e-3) and 41 to 47 with the triangle (43), with the plain loop in
+327 to 333 and 341 to 346. E(T) is smooth, from -1.6264072422 at
+T = 1e-3 through -1.6264074157 at 1.5e-3 to -1.6264110314 at 3e-3 with
+`"ed"`; there the triangle is 2.4e-6 above, from the step band energy
+at T > 0 (see below). The test is not needed for gapped states: a dead
+state with a gap has no level within 40 T, so the charges of the shell
+emptied and filled are the same and N0 cannot lie between them.
+
+Of the 91 cases of all the review rounds, 83 are the same to the last
+digit as with the jump test. The Zeeman state at T = 1e-4 with the
+triangle goes from 134 iterations back to 113, the number before the
+fill, with the energy within 7.5e-12. Four states with a dead pairing at
+T > 0 now hold N0, where the jump test never fired: U = -0.5 at nk = 32
+and T = 2e-3 with `"ed"` (the charge error goes from -3.9e-4 to 1e-16
+and the energy moves by 8.4e-7), and U = -1 at T = 1e-2 with nk = 64
+(9.8e-5, 3.3e-7) and nk = 96 (4.3e-5, -1.6e-8), and at T = 2e-2 with
+nk = 96 (4.3e-5, -7.4e-8). U = -0.5 at nk = 20 and T = 2e-3, whose
+pairing lives, is filled once on the way and ends within 3.7e-12.
+
+Two states near Tc, where the pairing goes below T on the way to
+convergence, end on another branch, and we accept this. U = -0.45 at
+nk = 32 and T = 1e-3 with `"ed"` ended dead (Delta = 5e-11, charge
+error -3.9e-4) and now ends with the pairing alive, Delta = 1.7e-3 above
+T, so not armed at the end, with a charge error of 2.8e-4 that the
+offset does not hold and an energy 3.1e-6 lower, after three fills on
+the way, in 30 iterations against 23. The triangle has a live state
+there too, Delta = 2.65e-3, before as now. U = -1 at nk = 96 and
+T = 1e-2 with the triangle ended with Delta = 2.6e-3, below T, and the
+charge held to 4e-12, and now the fill fires 16 times, the pairing dies
+(1.5e-14) and the energy is 1.4e-6 higher; this is the state of `"ed"`
+at the same parameters, the same Fermi level -1.3578242865 and an energy
+within 1.9e-8. The energies cannot decide which branch is the right one
+at T > 0, since the reported one is the step band energy and not a free
+energy.
 
 When the triangle density matrix passes the three conditions, it is
 rebuilt on the occupations of exact diagonalization, the Fermi-Dirac
@@ -1706,8 +1755,9 @@ T = 1e-7 and 1e-3, U = -6 at filling 0.1, U = -0.45 to -0.6 at nk = 16 to
 spinless p-wave chain, and the chain with V1 = 1 with both integrations,
 with Broyden mixing and the plain loop. For the version in the code we
 measured again the 70 cases of the second review, in the same way.
-Every case that is not filled is the same to the last digit, armed or
-not: the s-wave states with U = -0.5 at nk = 32 and T = 1e-3 and 2e-3,
+With the jump test, every case that was not filled was the same to the
+last digit, armed or not (without it, see the jump test above): the
+s-wave states with U = -0.5 at nk = 32 and T = 1e-3 and 2e-3,
 with U = -1 at T = 1e-2 and nk = 64 and 96 and at T = 2e-2, the chain
 with V1 = 1 with both integrations and the Rashba state among them. The
 Zeeman state, iterations before and after, the charge error
@@ -1721,7 +1771,7 @@ and Fermi level after, the same for `"ed"` and the triangle:
 | 32 | 1e-7 | `"ed"` | 36, 34 | | -3.9e-4 | -1.6273027010 | -1.638774186 |
 | 32 | 1e-7 | triangle | 36, 34 | | -3.9e-4 | -1.6273027010 | -1.638774186 |
 | 16 | 1e-4 | `"ed"` | 48, 46 | | 1.6e-3 | -1.6264072342 | -1.604449432 |
-| 16 | 1e-4 | triangle | 113, 134 | | 1.6e-3 | -1.6264072342 | -1.604449432 |
+| 16 | 1e-4 | triangle | 113, 113 | | 1.6e-3 | -1.6264072342 | -1.604449432 |
 | 16 | 1e-3 | `"ed"` | 61, 60 | | 1.6e-3 | -1.6264072422 | -1.604633875 |
 | 16 | 1e-3 | triangle | 41, 41 | | 1.6e-3 | -1.6264072378 | -1.604633875 |
 | 16 | 0 | `"ed"` | 781, 38 | | 2.0e-3 | -1.6264072342 | -1.604429365 |
@@ -1736,17 +1786,12 @@ step band energy at T > 0 (see above). Most of the cost of the gapless state is
 still the motion of x while the pairing lives (see "The staircase of the
 offset"); with `"ed"` at T = 0 the loop no longer runs into the staircase
 of the smearing of 1e-15, and goes from 781 iterations to 38. The
-triangle at T = 1e-4 is the one row that got slower, 134 iterations
-against 113 before and 43 in the first version. The reason is the gate:
-at T > 0 it arms on a pairing below T, here 1e-4, and the pairing of
-this run decays slowly through that value. From iteration 44 to 130 it
-stays between 4e-6 and 1e-4, the shell is armed in 31 of those
-iterations and not in the others, so the map switches between the two,
-and Broyden mixing goes round. The first version armed on the window
-below 40 T, a pairing up to about 5e-3 here, so it was armed before the
-pairing came down to that range. The window against 40 T armed live
-states and moved U = -0.5 at nk = 32 and T = 1e-3 by 6e-7 through a fill,
-so going back to it is not a cheap fix, and the row stays as it is.
+triangle at T = 1e-4 took 134 iterations with the jump test, against
+113 before the fill and 43 in the first version. The pairing of this run
+decays slowly through T = 1e-4: from iteration 44 to 130 it stays
+between 4e-6 and 1e-4, and the shell was filled in some of those
+iterations and not in others, among them four armed ones where the jump
+test failed. Without the jump test it takes 113, as before the fill.
 
 The filling sweep of the second review puts N0 on a whole number of
 states of the mesh, 0.30078125 at nk = 16, where the normal Fermi search
@@ -1815,16 +1860,17 @@ integrations, and exactly zero when the shell is not filled; that the
 energy moves by mu dN to 1e-10 between filling 154/512, a whole number
 of states at nk = 16, and 1e-7 electrons per cell below it, with both
 integrations at T = 1e-7 and 1e-3; that a state whose shell is not
-filled (the s-wave state with `"ed"` and the triangle, the U = -0.5
-state at T = 1e-3 with the triangle, and the one at T = 2e-3 with
-`"ed"`, which is armed and never filled) has
+filled (the s-wave state with `"ed"` and the triangle, and the
+U = -0.5 state at T = 1e-3 with the triangle) has
 the same iterations, energy and density matrix, bit for bit, as with the
 shell switched off; that the chain with V1 = 1 with Nambu ends in the
 state of the normal chain, with `"ed"` and with the triangle; and that
 the filled density matrix is Hermitian, particle-hole symmetric (the
 hole occupations are 1 minus the electron ones of the other spin) and
 the same to 1e-12, at T = 1e-7 and at T = 0, when the diagonalization
-mixes the degenerate levels at zero energy with a random unitary.
+mixes the degenerate levels at zero energy with a random unitary; and
+that the Zeeman state at T = 1.5e-3, where the jump test went round a
+cycle, converges and holds N0 to 1e-10 with both integrations.
 
 ### qtci from a random guess
 
@@ -1939,6 +1985,29 @@ loaded.
   U = -3 at nk = 16 (levels at +-6.24e-4, a charge error of 1.5625e-3),
   keeps its charge error, since there is no degenerate level at mu to
   fill; and qtci does not fill the shell.
+- The Fermi search of the normal state at T > 0,
+  `spectrum.get_fermi_energy_T`, aims at the target rounded to a whole
+  number of states of the mesh, int(round(len(es)*filling)), and this
+  rounding is the staircase that the shell fills at T > 0. It came in
+  with the finite-T search of the second audit (finding 19 of
+  `bug_audit_2.md`) to keep the convention of the T = 0 cut, which does
+  not pin mu to a partly filled level; the third audit took the other
+  choice for qtci (`get_fermi4filling_qtci` bisects the Fermi-Dirac count
+  to the filling itself). We measured what an exact target would buy,
+  with the search patched in one process and the code before the fill,
+  no shell, on the Zeeman state at nk = 16 with `"ed"`. It holds N0 at
+  every T from 1e-7 to 3e-3: the charge error is 3.5e-12 at T = 1e-7,
+  6e-14 at 1e-5 and below 2e-15 from 1e-4 up, in 39 to 68 Broyden
+  iterations and 327 to 356 plain ones. So with `"ed"` the fill would be
+  needed only at T = 0. The triangle would not gain, since its BdG Fermi
+  level is a count at T = 0 by design (`simplexdm.get_fermi4filling`).
+  The price is that every normal mean field at T > 0 whose charge is not
+  a whole number of states of the mesh would change, and with the step
+  band energy the two routes report different energies for the same
+  state, -1.6264115558 against -1.6264074157 at T = 1.5e-3 (4.1e-6) and
+  7.0e-6 at 3e-3, since the step band energy moves by (N0 - N_step)
+  times the place of mu. Not changed, since `spectrum.py` serves every
+  normal mean field.
 - qtci with V1 on a BdG Hamiltonian stopped with "Non-Hermitian BdG mean
   field" from a random guess. This is closed (see "qtci from a random
   guess"): the onsite diagonal of the qtci density matrix had an
