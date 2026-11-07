@@ -563,7 +563,7 @@ mesh, so it is the interpolation error alone. "Sum" is the time of the
 tetrahedron sum alone, which is the same for the two methods, since qtci
 sums the same 6 n^3 tetrahedra on the reconstructed mesh. Four cores of a
 workstation that other jobs kept busy (load 6 to 9 on 16 cores), so the
-times are indicative. The largest memory was 1.9 GB, at R = 7.
+times are indicative. The largest resident memory was 1.9 GB, at R = 7.
 
 | model | R | mesh | method | diagonalizations (share) | rank | error | time (s) | sum (s) |
 |---|---|---|---|---|---|---|---|---|

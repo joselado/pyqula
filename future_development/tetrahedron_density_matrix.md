@@ -656,7 +656,8 @@ the cubic Hubbard ferromagnet (U = 10, filling 0.3, T = 1e-3, a metal with
 m = 0.590 and about 0.005 minority electrons) reaches the tetrahedron state
 of the same mesh: m, mu and E agree to 1e-14 there, and the test asks for
 1e-6. A partly polarized state, U = 7 (m = 0.279), agrees as well, to
-1e-14, but takes 140 s per integration, so it is not in the tests.
+1e-14, but took 140 s per integration on a loaded machine, so it is not in
+the tests.
 
 The question for the benchmark is whether the nk^3 growth of the mesh makes
 qtci pay. One iteration of the mean field, the Fermi search and the
@@ -676,7 +677,7 @@ mesh. The rank is the largest bond dimension of the TCI of the energies and
 of the one of the X fields. Four cores of a workstation that other jobs
 kept busy (load 6 to 9 on 16 cores).
 
-| model | R | mesh | method | diagonalizations (share) | rank E, X | error | time (s) | memory (GB) |
+| model | R | mesh | method | diagonalizations (share) | rank E, X | error | time (s) | resident memory (GB) |
 |---|---|---|---|---|---|---|---|---|
 | cubic | 5 | 32^3 | tetrahedron | 65536 (2) | | | 0.62 | 0.4 |
 | cubic | 5 | 32^3 | qtci | 3210 (0.098) | 11, 1 | 2e-16 | 0.82 | 0.4 |
