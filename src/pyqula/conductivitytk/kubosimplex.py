@@ -252,8 +252,9 @@ def simplices(dim,nk):
 # form over the actual frequency window (_vertex_error: eps times the sum
 # over the leaves of the Newton table of |coefficient| |psi_K[leaf]| at the
 # farthest frequency), and when it is above _tol of the peak of the
-# simplex, the whole simplex is one point source evaluated per frequency
-# with simplexdos._dd, as the direct kernel does. In 2D the loss is
+# simplex, the nodes of its Newton table that cancel too much are point
+# sources evaluated per frequency with simplexdos._dd, as the direct
+# kernel does, see _decompose. In 2D the loss is
 # quadratic: on the spinful Haldane model at delta = 1e-3 the rule keeps
 # 0.3%, 1.1% and 3.2% of the forward triangle pairs whole at nk = 128, 256
 # and 512, and without it the sum is still within 1.5e-12 of a longdouble
@@ -276,24 +277,38 @@ def simplices(dim,nk):
 # 2D models of the tests at nk = 512 and the window [0, 7] t, the binned
 # triangles (all the reverse terms) stop after 8 terms on average.
 # On the 3D test model at nk = 48 and delta = 1e-2 this leaves 7% of the
-# simplex pairs kept whole, against 35% without the bins.
+# simplex pairs with nodes evaluated per frequency, against 35% without
+# the bins.
 #
-# A simplex kept whole is close to some frequency of the window, but far
-# from most of them, and there the same expansion around the center of
-# its bin holds. So the simplices kept whole also add their moments, to
-# _kmax terms, to a second set of moments of their bin, and a bin keeps
-# the largest distance R of their nodes from its center. At a frequency
-# with (w - C)^2 + delta^2 >= (R/_rho)^2 all of them converge at a rate
-# _rho or better, and the bin gives their sum; at the others each one is
-# evaluated by simplexdos._dd. One decision per bin and frequency serves
-# both, so no simplex is counted twice or left out. The kept-whole
-# triangles of the spinful Haldane model at nk = 512 sit in 17 bins and
-# are evaluated one by one at 0.7% of the (simplex, frequency) pairs.
+# A simplex with nodes evaluated per frequency is close to some frequency
+# of the window, but far from most of them. Such a simplex was first kept
+# whole, which in 3D made the tetrahedra with a close edge or face expensive,
+# since they are wide (a median distance of 0.23 t from the center of
+# their bin on the layered model of the tests at nk = 24). It is now split
+# along its Newton table as long as the parts stay within its rounding
+# budget, so that only the close edges and faces are evaluated per
+# frequency, and these are shared by the neighboring tetrahedra. With
+# _budget = 1/100 the 7000 kept tetrahedra of that model become 4742 edges
+# and 4679 faces after the merge, and the rest goes to the vertex form.
+#
+# A point source, a Taylor series or a node evaluated per frequency, is
+# narrow, of spread below delta for the first, so far from it the
+# expansion around the center of its energy bin holds as well, with the
+# logarithmic terms of orders below K (_add_node_moments). The point
+# sources form sets, by bin and with the two kinds apart, and a set keeps
+# the moments of its sources and the largest distance R of their nodes
+# from its center C. At a frequency with (w - C)^2 + delta^2 >= (R/_rho)^2
+# all of them converge at a rate _rho or better and the set gives their
+# sum, with the orders that its own rate R/|z - C| needs; at the others
+# each source is evaluated one by one. One decision per set and frequency
+# serves both, so no source is counted twice or left out.
 
 _alpha = 1. # see above
 _nmax = 200 # largest order of the Taylor series of a point source
 _tol = 3e-11 # largest rounding error of a simplex in its vertex form,
 # relative to its peak, before it is evaluated per frequency instead
+_budget = 1e-2 # fraction of _tol left to the rounding of such a simplex,
+# once its nodes that cancel too much are evaluated per frequency
 _direct = 10 # type of a point source evaluated by simplexdos._dd
 _nbins = 512 # energy bins of the far simplices
 _rho = 0.5 # a simplex goes to its bin when its nodes are within _rho times
@@ -317,6 +332,51 @@ def _sort_nodes(e,k,nv):
 
 
 @jit(nopython=True,cache=True)
+def _leaf_bound(e,lo,hi,K,harm,wlo,whi,delta):
+    """m! times a bound of |psi_K[e_lo..e_hi]| over the frequencies
+    [wlo,whi], m = hi-lo < K: psi_(K-m) at the farthest frequency, and
+    -ln x at least at |x| = delta"""
+    m = hi-lo
+    X = max(abs(e[lo]-wlo),abs(e[hi]-whi),abs(e[lo]-whi),abs(e[hi]-wlo),
+            delta)
+    if m==K-1: return max(abs(np.log(X)),abs(np.log(delta)))+np.pi # -ln x
+    # x^(K-m-1) (ln x - H)/(K-m-1)!, largest at X
+    P = abs(np.log(X))+np.pi+harm[K-m-1]
+    for i in range(K-m-1): P *= X/(i+1)
+    return P
+
+
+@jit(nopython=True,cache=True)
+def _node_sum(e,lo0,hi0,f0,K,tolc,fact,harm,wlo,whi,delta,slo,shi,sco):
+    """sum over the leaves (vertices and close clusters) of the Newton
+    table of f0 psi_K[e_lo0..e_hi0] of |coefficient| times the bound of
+    |psi_K[leaf]| over the window; eps times this bounds the rounding
+    error of its vertex form"""
+    top = 1
+    slo[0] = lo0
+    shi[0] = hi0
+    sco[0] = f0
+    err = 0.
+    while top>0:
+        top -= 1
+        lo = slo[top]
+        hi = shi[top]
+        f = sco[top]
+        sp = e[hi]-e[lo]
+        if lo==hi or sp<tolc: # a leaf
+            err += abs(f)*_leaf_bound(e,lo,hi,K,harm,wlo,whi,delta)/fact[hi-lo]
+            continue
+        slo[top] = lo+1
+        shi[top] = hi
+        sco[top] = f/sp
+        slo[top+1] = lo
+        shi[top+1] = hi-1
+        sco[top+1] = -f/sp
+        top += 2
+    return err
+
+
+@jit(nopython=True,cache=True)
 def _vertex_error(e,nv,tolc,fact,harm,wlo,whi,delta,slo,shi,sco):
     """bound on the rounding error of the vertex form of K! psi_K[e], the
     Newton table of _simplex_sources, over the frequencies [wlo,whi]:
@@ -327,69 +387,99 @@ def _vertex_error(e,nv,tolc,fact,harm,wlo,whi,delta,slo,shi,sco):
     simplex that is one close cluster has no cancellation."""
     K = nv-1
     if e[K]-e[0]<tolc: return 0.
-    top = 1
-    slo[0] = 0
-    shi[0] = K
-    sco[0] = fact[K]
-    err = 0.
-    ld = abs(np.log(delta))
-    while top>0:
-        top -= 1
-        lo = slo[top]
-        hi = shi[top]
-        f = sco[top]
-        sp = e[hi]-e[lo]
-        if lo==hi or sp<tolc: # a leaf, psi_(K-m) at the farthest frequency
-            m = hi-lo
-            X = max(abs(e[lo]-wlo),abs(e[hi]-whi),abs(e[lo]-whi),
-                    abs(e[hi]-wlo),delta)
-            if m==K-1: P = max(abs(np.log(X)),ld)+np.pi # -ln x
-            else: # x^(K-m-1) (ln x - H)/(K-m-1)!, largest at X
-                P = abs(np.log(X))+np.pi+harm[K-m-1]
-                for i in range(K-m-1): P *= X/(i+1)
-            err += abs(f)*P/fact[m]
-            continue
-        slo[top] = lo+1
-        shi[top] = hi
-        sco[top] = f/sp
-        slo[top+1] = lo
-        shi[top+1] = hi-1
-        sco[top+1] = -f/sp
-        top += 2
+    err = _node_sum(e,0,K,fact[K],K,tolc,fact,harm,wlo,whi,delta,slo,shi,sco)
     return 4.4e-16*err*(e[K]-e[0]+np.pi*delta)/np.pi
 
 
 @jit(nopython=True,cache=True)
-def _simplex_sources(mode,e,kv,nv,wbar,tolc,Av,p,n,ep,tp,yp,ca,fact,
-        slo,shi,sco,direct):
-    """sources of one simplex and one pair, with the sorted node energies
-    e[0..nv-1] at the k-points kv. mode=0 only counts the point sources,
-    mode=1 writes them to (ep,tp,yp,ca) from index n on, mode=2 adds the
-    vertex coefficients of psi_K, K = nv-1, to Av[k,p,c]. A point source
-    of type m is the cluster of m+1 nodes ep + yp[0..m], and stands for
-    psi_K over them. slo, shi and sco are work space for the stack of the
-    Newton table. With direct=True the whole simplex is one point source of
-    type _direct+K, evaluated per frequency. Returns the new n."""
+def _node_mean(e,lo,hi):
+    """mean of the nodes e_lo..e_hi, the center of a point source"""
+    cm = 0.
+    for i in range(lo,hi+1): cm += e[i]
+    return cm/(hi-lo+1)
+
+
+@jit(nopython=True,cache=True)
+def _decompose(e,nv,tolc,fact,harm,wlo,whi,delta,tol,slo,shi,sco,sbu,sh,
+        work):
+    """the nodes of the Newton table of K! psi_K[e], K = nv-1, that are
+    evaluated per frequency, for a simplex whose vertex form loses more
+    than tol of its peak somewhere on [wlo,whi]. A node is numbered as in a
+    binary heap, the whole simplex 1 and the children of node h, without
+    its first node and without its last, 2h and 2h+1; the result has the
+    bit h-1 set for every node evaluated per frequency. The rounding budget
+    of the simplex is _budget tol of its peak, in the units of _node_sum.
+    Top down, a node whose vertex form stays within its budget is left in
+    vertex form, a node whose two children, evaluated per frequency, would
+    each stay within half of it is split with half of it for each child,
+    and the others (an edge at least, whose children are vertices) are
+    evaluated per frequency. Since the budgets of the leaves add up to that
+    of the simplex, the vertex form of the rest and the rounding of the
+    split nodes stay within it."""
     K = nv-1
-    if direct:
-        if mode==1:
-            cm = 0.
-            for i in range(nv): cm += e[i]
-            cm /= nv
-            ep[n] = cm
-            tp[n] = _direct+K
-            for i in range(4): yp[n,i] = e[i]-cm if i<nv else 0.
-            for c in range(wbar.shape[0]): ca[n,c] = fact[K]*wbar[c]
-        return n+1
     top = 1
     slo[0] = 0
     shi[0] = K
-    sco[0] = fact[K] # K! psi_K[e_0..e_K] is the simplex average
+    sco[0] = fact[K]
+    sbu[0] = _budget*tol*np.pi/(4.4e-16*(e[K]-e[0]+np.pi*delta))
+    sh[0] = 1
+    code = 0
     while top>0:
         top -= 1
         lo = slo[top]
         hi = shi[top]
         f = sco[top]
+        b = sbu[top]
+        h = sh[top]
+        s = e[hi]-e[lo]
+        if lo==hi or s<tolc: continue # a vertex or a close cluster
+        if _node_sum(e,lo,hi,f,K,tolc,fact,harm,wlo,whi,delta,work[0],
+                work[1],work[2])<=b:
+            continue # in vertex form
+        if hi-lo==1 or abs(f)/s*max(
+                _leaf_bound(e,lo+1,hi,K,harm,wlo,whi,delta),
+                _leaf_bound(e,lo,hi-1,K,harm,wlo,whi,delta)
+                )/fact[hi-lo-1]>0.5*b:
+            code |= 1<<(h-1) # evaluated per frequency
+            continue
+        slo[top] = lo+1
+        shi[top] = hi
+        sco[top] = f/s
+        sbu[top] = 0.5*b
+        sh[top] = 2*h
+        slo[top+1] = lo
+        shi[top+1] = hi-1
+        sco[top+1] = -f/s
+        sbu[top+1] = 0.5*b
+        sh[top+1] = 2*h+1
+        top += 2
+    return code
+
+
+@jit(nopython=True,cache=True)
+def _simplex_sources(mode,e,kv,nv,wbar,tolc,Av,p,n,ep,tp,yp,ca,fact,
+        slo,shi,sco,sh,code):
+    """sources of one simplex and one pair, with the sorted node energies
+    e[0..nv-1] at the k-points kv. mode=0 only counts the point sources,
+    mode=1 writes them to (ep,tp,yp,ca) from index n on, mode=2 adds the
+    vertex coefficients of psi_K, K = nv-1, to Av[k,p,c]. A point source of
+    type m is the cluster of m+1 nodes ep + yp[0..m], and stands for psi_K
+    over them; of type _direct+m it is evaluated per frequency. slo, shi,
+    sco and sh are the stack of the Newton table, and code the nodes
+    evaluated per frequency, see _decompose (0 for none). Returns the new
+    n."""
+    K = nv-1
+    top = 1
+    slo[0] = 0
+    shi[0] = K
+    sco[0] = fact[K] # K! psi_K[e_0..e_K] is the simplex average
+    sh[0] = 1
+    while top>0:
+        top -= 1
+        lo = slo[top]
+        hi = shi[top]
+        f = sco[top]
+        h = sh[top]
         if lo==hi: # a vertex
             if mode==2:
                 for c in range(wbar.shape[0]): Av[kv[lo],p,c] += f*wbar[c]
@@ -397,24 +487,41 @@ def _simplex_sources(mode,e,kv,nv,wbar,tolc,Av,p,n,ep,tp,yp,ca,fact,
         s = e[hi]-e[lo]
         if s<tolc: # a close cluster, its Taylor series
             if mode==1:
-                cm = 0.
-                for i in range(lo,hi+1): cm += e[i]
-                cm /= (hi-lo+1)
+                cm = _node_mean(e,lo,hi)
                 ep[n] = cm
                 tp[n] = hi-lo
                 for i in range(4):
                     yp[n,i] = e[lo+i]-cm if lo+i<=hi else 0.
                 for c in range(wbar.shape[0]): ca[n,c] = f*wbar[c]
             n += 1
-        else: # (psi_K[e_(lo+1)..e_hi] - psi_K[e_lo..e_(hi-1)])/s
-            slo[top] = lo+1
-            shi[top] = hi
-            sco[top] = f/s
-            slo[top+1] = lo
-            shi[top+1] = hi-1
-            sco[top+1] = -f/s
-            top += 2
+            continue
+        if h<=7 and (code>>(h-1))&1: # evaluated per frequency
+            n = _direct_node(mode,e,lo,hi,f,wbar,n,ep,tp,yp,ca)
+            continue
+        # (psi_K[e_(lo+1)..e_hi] - psi_K[e_lo..e_(hi-1)])/s
+        slo[top] = lo+1
+        shi[top] = hi
+        sco[top] = f/s
+        sh[top] = 2*h
+        slo[top+1] = lo
+        shi[top+1] = hi-1
+        sco[top+1] = -f/s
+        sh[top+1] = 2*h+1
+        top += 2
     return n
+
+
+@jit(nopython=True,cache=True)
+def _direct_node(mode,e,lo,hi,f,wbar,n,ep,tp,yp,ca):
+    """f psi_K[e_lo..e_hi] as a point source evaluated per frequency, see
+    _simplex_sources. Returns the new n."""
+    if mode==1:
+        cm = _node_mean(e,lo,hi)
+        ep[n] = cm
+        tp[n] = _direct+hi-lo
+        for i in range(4): yp[n,i] = e[lo+i]-cm if lo+i<=hi else 0.
+        for c in range(wbar.shape[0]): ca[n,c] = f*wbar[c]
+    return n+1
 
 
 @jit(nopython=True,cache=True)
@@ -435,15 +542,14 @@ def _bins_of(cm,bins,nb):
 
 @jit(nopython=True,cache=True)
 def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
-        wlo,whi,delta,tol,flag,Af,Ar,ep,tp,yp,ca,bins,M,jmap,Mk,Rk):
+        wlo,whi,delta,tol,flag,Af,Ar,ep,tp,yp,ca,bins,M):
     """the sources of the simplices i0..i1-1, see _sources_jit, from point
     index n on. mode=0 also decides the branch of every simplex and pair,
     flag[it,p,0] forward and flag[it,p,1] reverse: 0 for the vertex form,
-    1 when it is kept whole, 2 when it goes to its energy bin. mode=3 adds
+    2 when it goes to its energy bin, and -code when the nodes code of its
+    Newton table (see _decompose) are evaluated per frequency. mode=3 adds
     the binned simplices to the moments M[j,k,c] of the bins, whose
-    centers are bins[0] + (j+1/2) bins[1], and the simplices kept whole to
-    the moments Mk[jmap[j],k,c] of their bin, of which Rk[jmap[j]] keeps
-    the largest distance of a node from the center. Returns the new n."""
+    centers are bins[0] + (j+1/2) bins[1]. Returns the new n."""
     nv = simplices.shape[1]
     npair = dE.shape[1]
     nc = W.shape[2]
@@ -454,6 +560,10 @@ def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
     slo = np.zeros(2*nv,dtype=np.int64) # stack of the Newton table
     shi = np.zeros(2*nv,dtype=np.int64)
     sco = np.zeros(2*nv)
+    sbu = np.zeros(2*nv)
+    sh = np.zeros(2*nv,dtype=np.int64)
+    work = (np.zeros(2*nv,dtype=np.int64),np.zeros(2*nv,dtype=np.int64),
+            np.zeros(2*nv)) # stack of _node_sum
     for it in range(i0,i1): # loop over simplices
         for p in range(npair): # loop over stored pairs
             if mode>0: # the branches are known, skip what this mode leaves
@@ -487,37 +597,31 @@ def _chunk_sources(mode,i0,i1,n,simplices,dE,W,trans,diag,tolc,fact,harm,
                     D = max(wlo-C,C-whi,0.)
                     if rad*rad<=_rho*_rho*(D*D+delta*delta): flag[it,p,r] = 2
                     elif _vertex_error(e,nv,tolc,fact,harm,wlo,whi,delta,
-                            slo,shi,sco)>tol: flag[it,p,r] = 1
+                            slo,shi,sco)>tol: # some nodes per frequency
+                        flag[it,p,r] = -_decompose(e,nv,tolc,fact,harm,wlo,
+                                whi,delta,tol,slo,shi,sco,sbu,sh,work)
                     else: flag[it,p,r] = 0
-                if mode==3:
+                if mode==3 and flag[it,p,r]==2:
                     rad = max(abs(e[0]-C),abs(e[nv-1]-C))
-                    if flag[it,p,r]==2:
-                        D = max(wlo-C,C-whi,0.)
-                        _add_moments(e,nv,C,wbar if r==0 else wrev,M,j,fact,
-                                rad/np.sqrt(D*D+delta*delta))
-                    elif jmap[j]>=0: # kept whole, at the rate _rho at most
-                        jk = jmap[j]
-                        _add_moments(e,nv,C,wbar if r==0 else wrev,Mk,jk,
-                                fact,_rho)
-                        Rk[jk] = max(Rk[jk],rad)
+                    D = max(wlo-C,C-whi,0.)
+                    _add_moments(e,nv,C,wbar if r==0 else wrev,M,j,fact,
+                            rad/np.sqrt(D*D+delta*delta))
                     continue
                 if flag[it,p,r]==2: continue
                 n = _simplex_sources(mode,e,kv,nv,wbar if r==0 else wrev,
                         tolc,Af if r==0 else Ar,p,n,ep,tp,yp,ca,fact,
-                        slo,shi,sco,flag[it,p,r]==1)
+                        slo,shi,sco,sh,-min(flag[it,p,r],0))
     return n
 
 
 @jit(nopython=True,cache=True)
 def _wanted(mode,f):
     """whether a simplex pair of branch f has something for the pass mode:
-    the count (0) takes all, the point sources (1) the vertex form and the
-    kept whole, the vertex sources (2) the vertex form, the moments (3) the
-    binned and the kept whole"""
+    the count (0) takes all, the point sources (1) and the vertex sources
+    (2) those not binned, the moments (3) the binned"""
     if mode==0: return True
-    if mode==1: return f!=2
-    if mode==2: return f==0
-    return f!=0
+    if mode<=2: return f!=2
+    return f==2
 
 
 @jit(nopython=True,cache=True)
@@ -549,6 +653,41 @@ def _add_moments(e,nv,C,wbar,M,j,fact,r):
         for c in range(wbar.shape[0]): M[j,k,c] += f*wbar[c]
 
 
+@jit(nopython=True,cache=True)
+def _add_node_moments(e,lo,hi,K,C,f,wbar,M,L,j,fact):
+    """add f psi_K[e_lo..e_hi] to the moments of bin j, of center C, to
+    the order of M, the rate _rho: with y = e - C, m = hi-lo and
+    u = 1/(z - C), psi_K[e_lo..e_hi] = sum_n psi_K^(m+n)(C) h_n(y)/(m+n)!,
+    whose terms of order i = m+n < K are psi_(K-i)(C - z) h_n(y)/i!, kept
+    in L[j,i], and of order i = K+k are k!/(k+K)! h_n(y) u^(k+1), kept in
+    M[j,k]; for m = K these are the terms of _add_moments"""
+    m = hi-lo
+    y0 = e[lo]-C
+    y1 = e[lo+1]-C if m>0 else 0.
+    y2 = e[lo+2]-C if m>1 else 0.
+    y3 = e[lo+3]-C if m>2 else 0.
+    H0 = 1.; H1 = 1.; H2 = 1.; H3 = 1. # h_n(y_0..y_i), i = 0..3
+    g = 1. # k!/(k+K)!
+    for i in range(K): g /= (i+1)
+    kmax = M.shape[1]
+    for n in range(K-m+kmax):
+        if n>0:
+            H0 = y0*H0
+            H1 = H0+y1*H1
+            H2 = H1+y2*H2
+            H3 = H2+y3*H3
+        hn = H0 if m==0 else (H1 if m==1 else (H2 if m==2 else H3))
+        i = m+n
+        if i<K: # a logarithmic term
+            a = f*hn/fact[i]
+            for c in range(wbar.shape[0]): L[j,i,c] += a*wbar[c]
+            continue
+        k = i-K
+        if k>0: g *= k/(k+K)
+        a = f*g*hn
+        for c in range(wbar.shape[0]): M[j,k,c] += a*wbar[c]
+
+
 @jit(nopython=True,parallel=True,cache=True)
 def _sources_jit(mode,simplices,dE,W,trans,diag,tolc,fact,harm,wlo,whi,
         delta,tol,chunk,start,flag,ep,tp,yp,ca,bins,nbins):
@@ -556,33 +695,30 @@ def _sources_jit(mode,simplices,dE,W,trans,diag,tolc,fact,harm,wlo,whi,
     simplex sum, in parallel over chunks of simplices; the point sources of
     chunk ic go from start[ic] on. Clusters of spread below tolc are Taylor
     expanded. A simplex whose vertex form would lose more than tol of its
-    peak at a frequency of [wlo,whi] is kept whole, as a point source
-    evaluated per frequency, and a simplex far from the window goes to the
-    moments of its energy bin; the count decides this and stores it in
+    peak at a frequency of [wlo,whi] has the nodes of its Newton table that
+    cancel too much evaluated per frequency, as point sources, and a
+    simplex far from the window goes to the moments of its energy bin; the count decides this and stores it in
     flag. Returns the number of point sources of every chunk."""
     ns = simplices.shape[0]
     nchunk = (ns+chunk-1)//chunk
     count = np.zeros(nchunk,dtype=np.int64)
     A0 = np.zeros((1,1,1),dtype=np.complex128) # the vertices are not written
     M0 = np.zeros((nbins,1,1),dtype=np.complex128) # nor the moments
-    j0 = np.zeros(1,dtype=np.int64); R0 = np.zeros(1)
     for ic in prange(nchunk): # parallel loop over chunks of simplices
         n0 = start[ic] if mode==1 else 0
         n = _chunk_sources(mode,ic*chunk,min(ns,(ic+1)*chunk),n0,simplices,
                 dE,W,trans,diag,tolc,fact,harm,wlo,whi,delta,tol,flag,A0,A0,
-                ep,tp,yp,ca,bins,M0,j0,M0,R0)
+                ep,tp,yp,ca,bins,M0)
         count[ic] = n-n0
     return count
 
 
 @jit(nopython=True,parallel=True,cache=True)
 def _moments_jit(simplices,dE,W,trans,diag,fact,harm,wlo,whi,delta,flag,
-        bins,M,jmap,Mk,Rk):
-    """Moments M[g,j,k,c] of the binned simplices and Mk[g,jmap[j],k,c] of
-    the simplices kept whole, with the largest radius Rk[g,jmap[j]] of the
-    latter, group g of the simplices in its own copy, in parallel over the
-    groups; [wlo,whi] is the frequency window, which sets how many moments
-    each binned simplex needs"""
+        bins,M):
+    """Moments M[g,j,k,c] of the binned simplices, group g of the
+    simplices in its own copy, in parallel over the groups; [wlo,whi] is
+    the frequency window, which sets how many moments each simplex needs"""
     ns = simplices.shape[0]
     ng = M.shape[0]
     e0 = np.zeros(1); t0 = np.zeros(1,dtype=np.int64)
@@ -591,7 +727,7 @@ def _moments_jit(simplices,dE,W,trans,diag,fact,harm,wlo,whi,delta,flag,
     for g in prange(ng): # parallel loop over groups of simplices
         _chunk_sources(3,(g*ns)//ng,((g+1)*ns)//ng,0,simplices,dE,W,trans,
                 diag,0.,fact,harm,wlo,whi,delta,0.,flag,A0,A0,e0,t0,y0,c0,
-                bins,M[g],jmap,Mk[g],Rk[g])
+                bins,M[g])
 
 
 @jit(nopython=True,parallel=True,cache=True)
@@ -606,11 +742,10 @@ def _vertex_sources_jit(simplices,dE,W,trans,diag,tolc,fact,harm,flag,
         e0 = np.zeros(1); t0 = np.zeros(1,dtype=np.int64)
         y0 = np.zeros((1,4)); c0 = np.zeros((1,1),dtype=np.complex128)
         M0 = np.zeros((1,1,1),dtype=np.complex128)
-        j0 = np.zeros(1,dtype=np.int64); R0 = np.zeros(1)
         _chunk_sources(2,0,simplices.shape[0],0,simplices,dE[:,p:p+1],
                 W[:,p:p+1],trans,diag[p:p+1],tolc,fact,harm,0.,0.,1.,0.,
                 flag[:,p:p+1],Af[:,p:p+1],Ar[:,p:p+1],e0,t0,y0,c0,
-                np.zeros(2),M0,j0,M0,R0)
+                np.zeros(2),M0)
 
 
 @jit(nopython=True,cache=True)
@@ -677,18 +812,19 @@ def _point_value(m,K,x,y0,y1,y2,y3,harm):
 
 @jit(nopython=True,parallel=True,cache=True)
 def _evaluate_sources_jit(ev,cv,K,ep,tp,yp,ca,omegas,delta,nchunk,harm,
-        fact,Cb,Mb,jp,Ck,qk,Mk):
+        fact,Cb,Mb,jp,Cs,Rs,Ms,Ls):
     """Sum of all sources at every frequency. The parallel loop runs over
     (frequency, chunk of sources), each task writing its own partial sum,
-    so the result does not depend on the number of threads. A simplex kept
-    whole, in the bin jp of centers Ck, is evaluated per frequency near its
-    bin, and through the moments Mk of the bin where all of its simplices
-    converge at a rate _rho or better, (w - Ck)^2 + delta^2 >= qk."""
+    so the result does not depend on the number of threads. A point
+    source in the set jp, of center Cs and radius Rs, is evaluated one by
+    one near its set, and through the moments (Ms,Ls) of the set where all
+    of its sources converge at a rate _rho or better,
+    (w - Cs)^2 + delta^2 >= (Rs/_rho)^2."""
     nw = omegas.shape[0]
     nc = cv.shape[1]
     nvs = ev.shape[0]
     nps = ep.shape[0]
-    nkb = Ck.shape[0]
+    nkb = Cs.shape[0]
     part = np.zeros((nw,nchunk,nc),dtype=np.complex128)
     for task in prange(nw*nchunk): # parallel loop over frequency and chunk
         iw = task//nchunk
@@ -700,8 +836,8 @@ def _evaluate_sources_jit(ev,cv,K,ep,tp,yp,ca,omegas,delta,nchunk,harm,
         d = np.zeros(5,dtype=np.complex128)
         far = np.zeros(nkb,dtype=np.bool_) # one decision for both loops
         for jb in range(nkb):
-            dw = omegas[iw]-Ck[jb]
-            far[jb] = dw*dw+delta*delta>=qk[jb]
+            dw = omegas[iw]-Cs[jb]
+            far[jb] = dw*dw+delta*delta>=(Rs[jb]/_rho)**2
         i0 = (ic*nvs)//nchunk
         i1 = ((ic+1)*nvs)//nchunk
         for i in range(i0,i1): # vertex sources
@@ -710,8 +846,8 @@ def _evaluate_sources_jit(ev,cv,K,ep,tp,yp,ca,omegas,delta,nchunk,harm,
         i0 = (ic*nps)//nchunk
         i1 = ((ic+1)*nps)//nchunk
         for i in range(i0,i1): # point sources
-            if tp[i]>=_direct: # a whole simplex, the rule per frequency
-                if far[jp[i]]: continue # in the moments of its bin
+            if far[jp[i]]: continue # in the moments of its set
+            if tp[i]>=_direct: # the rule per frequency
                 m = tp[i]-_direct
                 x = ep[i]-omegas[iw]
                 for v in range(m+1): t[v] = x+yp[i,v] # sorted, as yp
@@ -726,19 +862,44 @@ def _evaluate_sources_jit(ev,cv,K,ep,tp,yp,ca,omegas,delta,nchunk,harm,
                     hs = 0j
                     for k in range(Mb.shape[1]-1,-1,-1): hs = hs*u+Mb[jb,k,c]
                     acc[c] += hs*u
-            for jb in range(nkb): # the far simplices kept whole
+            for jb in range(nkb): # the point sources of the far sets
                 if not far[jb]: continue
-                u = 1./(z-Ck[jb])
+                u = 1./(z-Cs[jb])
+                r = Rs[jb]*abs(u) # the rate of the set at this frequency
+                kk = Ms.shape[1]
+                if r<1e-18: kk = 1
+                elif r<_rho: kk = min(kk,int(np.ceil(np.log(1e-18)/np.log(r))))
                 for c in range(nc):
                     hs = 0j
-                    for k in range(Mk.shape[1]-1,-1,-1): hs = hs*u+Mk[jb,k,c]
+                    for k in range(kk-1,-1,-1): hs = hs*u+Ms[jb,k,c]
                     acc[c] += hs*u
+                for i in range(Ls.shape[1]): # psi_(K-i)(Cs - z) terms
+                    f = _vertex_value(K-i,Cs[jb]-z)
+                    for c in range(nc): acc[c] += Ls[jb,i,c]*f
         for c in range(nc): part[iw,ic,c] = acc[c]
     out = np.zeros((nw,nc),dtype=np.complex128)
     for iw in range(nw):
         for ic in range(nchunk):
             for c in range(nc): out[iw,c] += part[iw,ic,c]
     return out
+
+
+@jit(nopython=True,parallel=True,cache=True)
+def _point_moments_jit(ep,tp,yp,ca,order,start,Cs,K,fact,Ms,Ls,Rs):
+    """Moments (Ms,Ls)[s] of the point sources of set s, order[start[s]]
+    to order[start[s+1]-1], around its center Cs[s], with the largest
+    distance Rs[s] of their nodes from it, in parallel over the sets, each
+    one in a fixed order, so that the result does not depend on the number
+    of threads. A point source of type m or _direct+m stands for psi_K
+    over the m+1 nodes ep + yp[0..m]"""
+    for s in prange(Cs.shape[0]): # parallel loop over sets
+        e = np.zeros(4)
+        for q in range(start[s],start[s+1]):
+            i = order[q]
+            m = tp[i]%_direct
+            for v in range(m+1): e[v] = ep[i]+yp[i,v]
+            _add_node_moments(e,0,m,K,Cs[s],1.,ca[i],Ms,Ls,s,fact)
+            Rs[s] = max(Rs[s],abs(e[0]-Cs[s]),abs(e[m]-Cs[s]))
 
 
 def _merge(keys,*cs):
@@ -768,17 +929,18 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
     """All the sources of the simplex sum for the frequencies in
     window = (wmin,wmax), see _sources_jit: vertex sources (energies ev,
     coefficients cv of psi_K), point sources (energies ep, types tp,
-    shapes yp, coefficients ca), energy bins (centers Cb, moments Mb), and
-    for the point sources of the simplices kept whole their bin jp (-1 for
-    the others), with the centers Ck, the moments Mk and the bound qk of
-    the far frequencies of these bins"""
+    shapes yp, coefficients ca), energy bins of the far simplices (centers
+    Cb, moments Mb), and the sets of the point sources, the set jp of
+    every point source, with the centers Cs, the radii Rs and the moments
+    Ms and Ls of the sets, see _point_moments_jit"""
     if alpha is None: alpha = _alpha
     if tol is None: tol = _tol
     npts,npair = dE.shape
     ns = simplices.shape[0]
     nc = W.shape[2]
     tolc = float(alpha*delta)
-    flag = np.zeros((ns,npair,2),dtype=np.int8) # simplices kept whole
+    flag = np.zeros((ns,npair,2),dtype=np.int8) # the branches, see
+    # _chunk_sources
     chunk = 256
     nchunk = (ns+chunk-1)//chunk
     args = (simplices,dE,W,trans,diag,tolc,_dos_fact,_dos_harm,
@@ -799,20 +961,9 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
     # number of threads
     ng = max(1,min(16,ns//4096))
     M = np.zeros((ng,_nbins,_kmax,nc),dtype=np.complex128)
-    # the bins of the simplices kept whole, with the expression of the pass
-    kept = tp>=_direct
-    kb = np.unique(_bins_of(ep[kept],bins,_nbins))
-    jmap = np.full(_nbins,-1,dtype=np.int64)
-    jmap[kb] = np.arange(len(kb))
-    Mk = np.zeros((ng,len(kb),_kmax,nc),dtype=np.complex128)
-    Rk = np.zeros((ng,len(kb)))
     _moments_jit(simplices,dE,W,trans,diag,_dos_fact,_dos_harm,
-            float(window[0]),float(window[1]),float(delta),flag,bins,M,
-            jmap,Mk,Rk)
+            float(window[0]),float(window[1]),float(delta),flag,bins,M)
     M = M.sum(axis=0)
-    Mk = np.ascontiguousarray(Mk.sum(axis=0))
-    Ck = bins[0]+(kb+0.5)*bins[1]
-    qk = (Rk.max(axis=0)/_rho)**2 # far: (w - Ck)^2 + delta^2 >= qk
     used = np.nonzero(np.any(M!=0.,axis=(1,2)))[0]
     Cb = bins[0]+(used+0.5)*bins[1]
     Mb = np.ascontiguousarray(M[used])
@@ -831,11 +982,21 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
             yp],axis=1),ca)
     tp = keys[:,0].astype(np.int64)
     ep = keys[:,1].copy()
-    jp = np.full(len(tp),-1,dtype=np.int64)
-    kept = tp>=_direct
-    jp[kept] = jmap[_bins_of(ep[kept],bins,_nbins)]
-    return (ev[:,0].copy(),cv,ep,tp,np.ascontiguousarray(keys[:,2:]),ca,
-            Cb,Mb,jp,Ck,qk,Mk)
+    yp = np.ascontiguousarray(keys[:,2:])
+    # the sets of the point sources: the Taylor series and those evaluated
+    # per frequency apart, since the latter are wider, and by energy bin
+    sk,jp = np.unique((tp>=_direct)*_nbins+_bins_of(ep,bins,_nbins),
+            return_inverse=True)
+    jp = jp.ravel().astype(np.int64)
+    Cs = bins[0]+(sk%_nbins+0.5)*bins[1]
+    order = np.argsort(jp,kind="stable")
+    start = np.searchsorted(jp[order],np.arange(len(sk)+1)).astype(np.int64)
+    K = simplices.shape[1]-1
+    Ms = np.zeros((len(sk),_kmax,nc),dtype=np.complex128)
+    Ls = np.zeros((len(sk),K,nc),dtype=np.complex128)
+    Rs = np.zeros(len(sk))
+    _point_moments_jit(ep,tp,yp,ca,order,start,Cs,K,_dos_fact,Ms,Ls,Rs)
+    return (ev[:,0].copy(),cv,ep,tp,yp,ca,Cb,Mb,jp,Cs,Rs,Ms,Ls)
 
 
 def _sigma_sources(simplices,dE,W,trans,diag,omegas,delta):
@@ -843,8 +1004,8 @@ def _sigma_sources(simplices,dE,W,trans,diag,omegas,delta):
     import numba
     omegas = np.asarray(omegas,dtype=np.float64)
     window = (np.min(omegas),np.max(omegas)) if len(omegas) else (0.,0.)
-    ev,cv,ep,tp,yp,ca,Cb,Mb,jp,Ck,qk,Mk = simplex_sources(simplices,dE,W,
-            trans,diag,delta,window)
+    ev,cv,ep,tp,yp,ca,Cb,Mb,jp,Cs,Rs,Ms,Ls = simplex_sources(simplices,dE,
+            W,trans,diag,delta,window)
     K = simplices.shape[1]-1 # 1, 2 or 3 in 1D, 2D or 3D
     nw = len(omegas)
     nsrc = len(ev)+len(ep)
@@ -852,7 +1013,7 @@ def _sigma_sources(simplices,dE,W,trans,diag,omegas,delta):
     nchunk = max(1,min(nsrc//1024,-(-4*numba.get_num_threads()//max(nw,1))))
     return _evaluate_sources_jit(ev,np.ascontiguousarray(cv),K,ep,tp,yp,
             np.ascontiguousarray(ca),omegas,delta,nchunk,_dos_harm,_dos_fact,
-            Cb,Mb,jp,Ck,qk,Mk)
+            Cb,Mb,jp,Cs,Rs,Ms,Ls)
 
 
 _kernels = {

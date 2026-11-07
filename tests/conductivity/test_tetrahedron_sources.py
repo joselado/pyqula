@@ -1,8 +1,9 @@
 """The source kernel of the simplex optical conductivity on tetrahedra.
 
 The source kernel builds the sum over simplices once for all frequencies
-(vertex sources, Taylor series of close clusters, and the simplices whose
-vertex form would cancel too much kept whole and evaluated per frequency),
+(vertex sources, Taylor series of close clusters, and the edges and faces
+whose vertex form would cancel too much evaluated per frequency, each
+point source summed with the others of its energy bin far from it),
 and the direct kernel evaluates every simplex at every frequency with the
 divided differences of simplexdos._dd. They are the same integral of the
 same interpolant, so they agree to rounding. The invariant checked here is
@@ -150,6 +151,32 @@ def test_exactly_confluent_tetrahedra_are_exact():
     d2 = (d1-p2(xa))/(b-a)
     d3 = (d2-p1(xa)/2.)/(b-a)
     assert np.allclose(s[:, 1], 6*d3, rtol=1e-11, atol=0.)
+
+
+def test_a_tetrahedron_with_close_nodes_is_split():
+    """A tetrahedron with a close pair or two, of spread a few delta, would
+    lose too much in its vertex form far from resonance. It is not kept
+    whole: its Newton table is split, so that only its close edges and
+    faces are evaluated per frequency (types _direct+1 and _direct+2) and
+    the rest goes to the vertex form, and the sum is still the one of the
+    direct kernel to 1e-12 of its peak"""
+    delta = 1e-3
+    ws = np.linspace(0., 4., 81)
+    for e in [[0.5, 1.2, 1.202, 2.1], [0.5, 1.2, 1.203, 1.205],
+              [1., 1.004, 1.5, 1.503]]:
+        E = np.array([e])
+        sim = np.arange(4).reshape(1, 4).astype(np.int64)
+        W = np.ones((4, 1, 1), dtype=np.complex128)
+        src = kubosimplex.simplex_sources(sim, E.reshape(-1, 1), W,
+                np.zeros(1, dtype=np.int64), np.array([True]), delta,
+                (ws.min(), ws.max()))
+        tp = src[3]
+        d = kubosimplex._direct
+        assert np.any(tp >= d) # some nodes are evaluated per frequency
+        assert np.all((tp < d) | (tp == d+1) | (tp == d+2)) # but not all
+        s = _one_by_one(E, ws, delta, "sources")[:, 0]
+        ref = _one_by_one(E, ws, delta, "simplices")[:, 0]
+        assert np.max(np.abs(s-ref)) < 1e-12*np.max(np.abs(ref))
 
 
 def _dense(m):
