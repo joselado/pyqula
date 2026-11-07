@@ -171,11 +171,13 @@ def test_the_gather_keeps_the_pairs_a_finite_temperature_adds():
     f1 = pairchi._occupations(e1, DELTA)
     f2 = pairchi._occupations(e2, DELTA)
     df = f1[:, None] - f2[None, :]
-    exact = int(np.sum(df != 0.))  # this module's rule
+    fp1 = pairchi._fermi_derivative(f1, DELTA)
+    # this module's rule: a factor that is exactly zero
+    exact = int(np.sum(pairchi.pair_factors(e1, e2, f1, f2, fp1,
+                                            DELTA)[0] != 0.))
     cutoff = int(np.sum(np.abs(df) >= DELTA/100.))  # an absolute cutoff
     assert cutoff < exact, "the two selection rules agree here, so this "\
                            "system cannot tell them apart"
-    fp1 = pairchi._fermi_derivative(f1, DELTA)
     facs = pairchijax.band_pair_plan(e1, e2, f1, f2, fp1, DELTA)[2]
     assert int(np.sum(np.asarray(facs) != 0.)) == exact
 

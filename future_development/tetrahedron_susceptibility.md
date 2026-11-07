@@ -497,8 +497,8 @@ missing term f' i delta/(i delta - omega). At the nested q = (1/4, 1/4) of
 a nk = 8 mesh at T = 0.1, where E(k) = E(k+q) on mesh points, the routes
 differed by 7e-3 to 0.25. So the pair basis was inconsistent with the site
 basis, and a metal on the pair route had no Pauli term in its static
-uniform response; in the public route T defaults to delta, so f' was
-finite there.
+uniform response. The public route sets T = delta, so the missing term
+was finite on every public call in a metal.
 
 `_accumulate` now applies the rule of `chiAB.lindhard_pair`: a pair with
 abs(e1_n - e2_m) < `chiAB.DEGENERATE_TOL` gets i delta f'(e1_n) in place of
