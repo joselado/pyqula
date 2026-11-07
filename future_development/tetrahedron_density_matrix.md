@@ -945,9 +945,27 @@ corrects it on the paired charge. With it the triangle and qtci give the
 pairing of `"ed"` on the same mesh, and a Nambu state without pairing the
 magnetization of the normal state with `"ed"` at T = 0. The normal
 triangle (mz = 0 there) is out of reach: the charge of the sorted BdG
-bands is a staircase. The numbers of the reproducers before and after
-are in the report of this change; the tests are in
-`tests/scf/test_densitydensity_bdg_energy.py`.
+bands is a staircase. The reproducers, before and after:
+
+- The charge per state of the triangle at the Fermi level of its search,
+  with no pairing, for 0.35: before 0.3477, 0.3604 and 0.3528 at nk = 16,
+  32 and 64; now 0.3633, 0.3486 and 0.3499, the same as exact
+  diagonalization to 1e-5. This is the staircase of the step: at nk = 16
+  a shell of degenerate levels sits on the Fermi level and holds half.
+- qtci at nk = 32: 0.3613 before, 0.3486 now, the number of the triangle.
+- A Nambu mean field with U = 1 from `mf="potential"`, nk = 32, filling
+  0.35, no pairing: the triangle held 0.3604 with E = -1.403163; now
+  0.3486 with E = -1.402939, against 0.3501 and -1.402938 for `"ed"`.
+- s-wave, U = -1, filling 0.3, nk = 24: before `"ed"` gave |F| = 0.0298
+  with charge 0.3039 per state, and the triangle |F| = 0 with 0.2865; now
+  both give |F| = 0.0283, charge 0.3000 and E = -1.5263868.
+- U = 2 from `mf="ferro"`, filling 0.35, nk = 64: the Nambu triangle had
+  mz = 0.00586 and E = -1.280984, now mz = 0.00293 and E = -1.280962, the
+  energy of `"ed"` (mz = 0.00220 at T = 1e-7, 0.00282 at T = 0). The normal
+  triangle has mz = 0 and E = -1.281071; the staircase of the step makes
+  this small ferromagnet, in `"ed"` as in the Nambu triangle.
+
+The tests are in `tests/scf/test_densitydensity_bdg_energy.py`.
 
 Other states, all at nk = 16:
 
