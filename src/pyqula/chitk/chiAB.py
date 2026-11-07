@@ -13,7 +13,8 @@ def chiAB(h,q=None,nk=60,**kwargs):
         return chiAB_q(h,q=q,nk=nk,**kwargs)
     else:
         qs = h.geometry.get_kmesh(nk=nk) # get the kmesh
-        if kwargs.get("integration","grid")=="triangle":
+        if kwargs.get("integration","grid")=="triangle" and \
+                kwargs.get("eigen",None) is None:
             # every q of the mesh takes its bands at k+q from the same
             # diagonalization of the k-mesh, done once on first use
             from .simplexchi import MeshEigen
@@ -67,8 +68,11 @@ def chiAB_q(h,energies=np.linspace(-3.0,3.0,100),q=[0.,0.,0.],nk=60,
          either way, and the result is complex128 either way
        - eigen: a chitk.simplexchi.MeshEigen of h and nk, the
          diagonalization of the k-mesh shared by the q on the mesh, which
-         chiAB passes to every q of the local response (q=None) with
-         integration="triangle". Only integration="triangle" takes it
+         chiAB and the local RPA response (chitk.rpa._local_rpa_response)
+         pass to every q of the local response (q=None) with
+         integration="triangle". Only integration="triangle" takes it, and
+         only a MeshEigen of this same h object, unchanged since it
+         diagonalized the mesh
 
        Each pair of states a (at k) and b (at k+q) contributes
        (f_a-f_b)<a|A|b><b|B|a>/(e_a-e_b-omega+i*delta). A degenerate pair,

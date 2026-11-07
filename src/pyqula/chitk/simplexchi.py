@@ -1256,13 +1256,18 @@ def _eigen(hkgen,ks,batch,vectors):
         else: yield i0,(peigvalsh(hks),None)
 
 
-mesh_q_tol = 1e-8 # q*nk within this of integers is a q on the mesh
+mesh_q_tol = 1e-12 # q*nk within this of integers, relative to the size of
+# q*nk, is a q on the mesh. The rounding of a q of klist.kmesh, i/nk from a
+# linspace, is a few machine epsilons of q*nk, so 1e-12 takes every q of
+# the mesh and leaves the snap of a q off the mesh by eps (a change of
+# chi of order eps) at the level of the rounding of the sum itself
 
 
 def mesh_shift(q,dim,nk):
     """The index map of a q on the uniform nk^dim mesh, or None.
 
-    For q with every component times nk an integer to mesh_q_tol, k+q is
+    For q with every component times nk an integer to mesh_q_tol (relative
+    to the largest component of q*nk, one at least), k+q is
     the mesh point (k+q) mod 1, whose Bloch Hamiltonian is the one at k+q
     up to the phases exp(2 pi i G.R) = 1, so the bands at k+q are those of
     the mesh, reindexed. Returns perm with ks[perm] = (ks+q) mod 1 for ks
@@ -1274,10 +1279,23 @@ def mesh_shift(q,dim,nk):
     if np.any(np.abs(qv[dim:])>mesh_q_tol): return None
     s = qv[:dim]*nk
     si = np.rint(s)
-    if np.max(np.abs(s-si))>mesh_q_tol: return None
+    tol = mesh_q_tol*max(1.,np.max(np.abs(s)))
+    if np.max(np.abs(s-si))>tol: return None
     idx = np.arange(nk**dim).reshape((nk,)*dim)
     shift = tuple(-int(x) for x in si) # np.roll(a,-s)[i] = a[i+s]
     return np.roll(idx,shift,axis=tuple(range(dim))).ravel()
+
+
+def _hoppings(h):
+    """the Bloch hoppings of h, {lattice vector: dense copy}"""
+    from .. import algebra
+    return {d: np.array(algebra.todense(m),dtype=np.complex128)
+            for d,m in h.get_multihopping().get_dict().items()}
+
+
+def _same_hoppings(a,b):
+    """whether two _hoppings dicts are the same, entry by entry"""
+    return a.keys()==b.keys() and all(np.array_equal(a[d],b[d]) for d in a)
 
 
 class MeshEigen:
@@ -1286,17 +1304,37 @@ class MeshEigen:
     the eigenvectors when one copy of them fits max_memory_gb. chiAB with
     q=None and integration="triangle" passes one to every chi_triangle of
     its q-mesh, and chi_triangle builds its own for a single q on the
-    mesh. ndiag counts the diagonalizations it has done"""
+    mesh. ndiag counts the diagonalizations it has done.
+
+    It belongs to one Hamiltonian object: check(h, nk) refuses another
+    object, even one with the same shape, and the same object once its
+    hoppings changed after the diagonalization"""
     def __init__(self,h,nk):
         self.h = h
         self.nk = nk
         self.E = None # (nk^dim, n) band energies
         self.U = None # (nk^dim, n, n) eigenvectors as columns, or None
+        self.hoppings = None # the hoppings of h when diagonalized
         self.ndiag = 0
+    def check(self,h,nk):
+        """Raise ValueError unless this is the mesh of h on nk^dim"""
+        if h is not self.h:
+            raise ValueError("eigen must be a MeshEigen of the Hamiltonian "
+                    "of this call, h, built as MeshEigen(h,nk); got one of "
+                    "another Hamiltonian object")
+        if nk!=self.nk:
+            raise ValueError("eigen must hold the mesh of this call, nk="
+                    +str(nk)+", got nk="+str(self.nk))
+        if self.hoppings is not None and \
+                not _same_hoppings(self.hoppings,_hoppings(h)):
+            raise ValueError("eigen must hold the bands of h as it is now; "
+                    "h was changed in place after its MeshEigen "
+                    "diagonalized the mesh, so build a new MeshEigen(h,nk)")
     def get(self,batch):
         """(E, U), diagonalizing the mesh on the first call"""
         if self.E is None:
             from ..dostk.simplexdos import uniform_mesh
+            self.hoppings = _hoppings(self.h)
             h = self.h
             if h.is_sparse: h = h.get_dense()
             ks = uniform_mesh(h.dimensionality,self.nk)
@@ -1394,9 +1432,10 @@ def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
     A q on the mesh (q = None, q = 0, every component times nk an integer)
     takes the bands at k+q from those at k, an index map of the mesh
     (mesh_shift), so the mesh is diagonalized once, nk^dim times instead
-    of 2 nk^dim. eigen, a MeshEigen of the same h and nk, shares that
-    diagonalization between calls, as chiAB does over the q of the local
-    response. reuse_mesh=False diagonalizes k+q anyway, the route of a
+    of 2 nk^dim. eigen, a MeshEigen of the same h object and nk, shares
+    that diagonalization between calls, as chiAB does over the q of the
+    local response; a MeshEigen of another Hamiltonian, or of this one
+    changed in place since, raises ValueError (MeshEigen.check). reuse_mesh=False diagonalizes k+q anyway, the route of a
     generic q, kept as the reference of the tests"""
     check_hamiltonian(h)
     if not delta>=0.:
@@ -1409,6 +1448,7 @@ def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
                 "function; integration='triangle' accepts "+str(list(modes)))
     T = 0. if T is None else abs(float(T))
     energies = np.atleast_1d(np.asarray(energies,dtype=np.float64))
+    if eigen is not None: eigen.check(h,nk) # the mesh of this h only
     if h.is_sparse: h = h.get_dense()
     dim = h.dimensionality
     from ..dostk.simplexdos import uniform_mesh
@@ -1433,12 +1473,6 @@ def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
     perm = mesh_shift(q,dim,nk) if reuse_mesh else None
     if perm is not None: # a q on the mesh: k+q is a mesh point
         if eigen is None: eigen = MeshEigen(h,nk)
-        if eigen.nk!=nk or eigen.h.dimensionality!=dim \
-                or eigen.h.intra.shape[0]!=n:
-            raise ValueError("eigen must hold the mesh of this call, nk="
-                    +str(nk)+" in "+str(dim)+"D with "+str(n)+" bands, got "
-                    "nk="+str(eigen.nk)+" in "+str(eigen.h.dimensionality)
-                    +"D with "+str(eigen.h.intra.shape[0])+" bands")
         ndiag0 = eigen.ndiag
         E1,U1 = eigen.get(batch)
         E2 = E1[perm]

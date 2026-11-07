@@ -56,9 +56,19 @@ def _local_rpa_response(h,f,**kwargs):
     averaged bare response has no reason to keep the pole structure of any
     single q. The bare response (V=None) is averaged by chiAB itself over
     the same mesh, so this is only for the dressed one; a 0D geometry and
-    nk=1 have a single q-point and are unchanged."""
-    qs = h.geometry.get_kmesh(nk=kwargs.get("nk",60)) # chiAB's own mesh
-    out = [f(q) for q in qs] # dressed at every q
+    nk=1 have a single q-point and are unchanged.
+
+    f is called as f(q, **kw), with kw the keyword arguments of the bare
+    response. With integration="triangle" kw carries one
+    chitk.simplexchi.MeshEigen, so every q of the mesh takes its bands
+    from a single diagonalization of the k-mesh, as in chiAB."""
+    nk = kwargs.get("nk",60)
+    qs = h.geometry.get_kmesh(nk=nk) # chiAB's own mesh
+    if kwargs.get("integration","grid")=="triangle" and \
+            kwargs.get("eigen",None) is None:
+        from .simplexchi import MeshEigen
+        kwargs = dict(kwargs,eigen=MeshEigen(h,nk))
+    out = [f(q,**kwargs) for q in qs] # dressed at every q
     return out[0][0],np.mean([o[1] for o in out],axis=0)
 
 
@@ -69,8 +79,8 @@ def chi_AB_RPA(h,V=None,q=None,**kwargs):
     averaged afterwards, see _local_rpa_response"""
     from ..chi import chiAB # get response function
     if V is not None and q is None: # the local dressed response
-        return _local_rpa_response(h,lambda qi: chi_AB_RPA(h,V=V,q=qi,
-                                                            **kwargs),**kwargs)
+        return _local_rpa_response(h,lambda qi,**kw: chi_AB_RPA(h,V=V,
+                                                    q=qi,**kw),**kwargs)
     es,chis = chiAB(h,mode="matrix",q=q,**kwargs) # non-interacting response
     iden = np.identity(chis[0].shape[0],dtype=np.complex128) # identity
     if V is not None: # finite interaction, RPA summation
@@ -131,8 +141,8 @@ def chi_ops_RPA(h,ops=None,V=None,pAs=None,pBs=None,q=None,**kwargs):
     if V is not None and q is None: # the local dressed response
         if mode_rpa=="vectorized" and (pAs is None or pBs is None):
             pAs,pBs = build_ops_projectors(h,ops) # once, not at every q
-        return _local_rpa_response(h,lambda qi: chi_ops_RPA(h,ops=ops,V=V,
-                    pAs=pAs,pBs=pBs,q=qi,**kwargs),**kwargs)
+        return _local_rpa_response(h,lambda qi,**kw: chi_ops_RPA(h,ops=ops,
+                    V=V,pAs=pAs,pBs=pBs,q=qi,**kw),**kwargs)
     # storage for the full response
     if mode_rpa=="sequential": # one by one
         chis = [[None for i in range(nop)] for j in range(nop)]
