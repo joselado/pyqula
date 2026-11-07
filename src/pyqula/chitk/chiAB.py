@@ -270,7 +270,9 @@ def lindhard_pair(ea,eb,oa,ob,beta,delta):
     isothermal compressibility, or the Pauli term for a spin operator,
     what a q->0 Stoner criterion needs), and zero for |omega| >> delta, as
     charge conservation requires at q=0 exactly, with delta setting the
-    crossover. chitk/chijax.py's pair_plan does the same.
+    crossover. chitk/chijax.py's pair_plan does the same, and so do the
+    pair-basis kernels (chitk/pairchi.py's _accumulate and
+    chitk/pairchijax.py's band_pair_plan).
 
     This is the delta -> 0 static limit, the one a converged static
     calculation wants. When delta is instead large enough to resolve the

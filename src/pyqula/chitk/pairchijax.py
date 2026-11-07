@@ -11,6 +11,8 @@ index of the site-basis route replaced by the interaction's pair index:
 
     chi0[P,P',w] += sum_nm (f_n-f_m) M_P conj(M_P')/(e1_n-e2_m-w+i*delta)
 
+(with the degenerate pair rule of the numba kernel, see below)
+
 with M_P = conj(u1[n,iP]) u2[m,jP] phase_P. Flattening the band pair
 g=(n,m) and writing T[P,g] = M_P, D[g,w] = (f_n-f_m)/(e1_n-e2_m-w+i*delta),
 
@@ -26,11 +28,13 @@ the kernel once for a whole k-mesh; and the frequency axis is mapped over
 with jax.lax.map rather than vmap, which would materialize one scaled copy
 of T per frequency at once.
 
-One thing differs from chijax and matters for correctness: the numba
-kernel here skips a band pair on `df == 0.` exactly, not on the
-site-basis rule `|fac| < chiAB.PAIR_TOL*delta`, and it has no degenerate
-pair term. That is a different set of survivors, so the gather below
-reproduces this module's own rule and the two must not be unified.
+The selection of the band pairs is this module's own, the rule of the
+numba kernel: a degenerate pair, |e1_n - e2_m| < chiAB.DEGENERATE_TOL,
+carries i*delta*f'(e1_n) in place of f_n - f_m, as on the site-basis
+route, and a pair is skipped only when that factor is exactly zero, not
+on the site-basis rule `|fac| < chiAB.PAIR_TOL*delta`. Both build the
+factors with pairchi.pair_factors, so the two kernels keep the same set
+of survivors.
 
 Memory, since the pair basis is the wide one: the operator tensor is
 (npair, G) with G up to nb^2, and the result is (npair, npair, nw). Both
@@ -56,17 +60,21 @@ import jax.numpy as jnp
 from .chijax import _chi_dtypes, PAIR_PAD_QUANTUM
 
 
-def band_pair_plan(e1,e2,f1,f2,pair_pad=None):
+def band_pair_plan(e1,e2,f1,f2,fp1,delta,pair_pad=None):
     """Return (ns, ms, facs, dE), the gathered and padded list of band
     pairs (n,m) that contribute at one k-point.
 
-    The selection is `_accumulate`'s own: a pair enters unless its
-    occupation difference is exactly zero. Padding entries carry facs=0,
-    so they contribute exactly zero while keeping every device-side shape
-    constant -- see the module docstring."""
+    The selection is `_accumulate`'s own: the factors of
+    pairchi.pair_factors, f_n - f_m or i*delta*fp1[n] for a degenerate
+    pair, and a pair enters unless its factor is exactly zero. fp1 is the
+    derivative of the Fermi function at e1 (pairchi._fermi_derivative).
+    Padding entries carry facs=0, so they contribute exactly zero while
+    keeping every device-side shape constant -- see the module
+    docstring."""
+    from .pairchi import pair_factors
     nb = len(e1)
-    df = np.asarray(f1)[:,None] - np.asarray(f2)[None,:] # (nb,nb)
-    idx = np.flatnonzero((df!=0.).ravel()) # the pairs the loop does not skip
+    fac,dEab = pair_factors(e1,e2,f1,f2,fp1,delta) # (nb,nb) each
+    idx = np.flatnonzero((fac!=0.).ravel()) # the pairs the loop does not skip
     count = len(idx)
     if pair_pad is None: # quantize, so nearby k-points share a compilation
         pair_pad = int(np.ceil(max(count,1)/PAIR_PAD_QUANTUM)*PAIR_PAD_QUANTUM)
@@ -77,8 +85,9 @@ def band_pair_plan(e1,e2,f1,f2,pair_pad=None):
     idx_pad = np.concatenate([idx,np.zeros(pair_pad-count,dtype=idx.dtype)])
     ns = idx_pad//nb # index into the first set of states
     ms = idx_pad%nb # index into the second set
-    facs = np.concatenate([df.ravel()[idx],np.zeros(pair_pad-count)])
-    dE = np.asarray(e1)[ns] - np.asarray(e2)[ms]
+    facs = np.concatenate([fac.ravel()[idx],
+                           np.zeros(pair_pad-count,dtype=np.complex128)])
+    dE = dEab.ravel()[idx_pad] # zero for a degenerate pair
     return ns,ms,facs,dE
 
 
@@ -127,7 +136,7 @@ def pair_chi0_kmesh_gpu(hks1,hks2,phases,iP,jP,energies,T,delta,
     either way: they are cheap, and doing them in double keeps single
     precision's error at the rounding of the contraction rather than
     compounding it with eigenvector error."""
-    from .pairchi import _occupations
+    from .pairchi import _occupations, _fermi_derivative, pair_factors
     _,cdt = _chi_dtypes(chi_prec) # only the tensor and the GEMM are rounded
     es1k,wsk1 = jnp.linalg.eigh(jnp.asarray(hks1)) # batched over the mesh
     es2k,wsk2 = jnp.linalg.eigh(jnp.asarray(hks2))
@@ -137,9 +146,11 @@ def pair_chi0_kmesh_gpu(hks1,hks2,phases,iP,jP,energies,T,delta,
     nb = np.shape(hks1)[1]
     f1 = [_occupations(es1k_h[ik],T) for ik in range(nk)]
     f2 = [_occupations(es2k_h[ik],T) for ik in range(nk)]
+    fp1 = [_fermi_derivative(f1[ik],T) for ik in range(nk)]
     if pair_pad is None: # one padded length for the whole mesh, so that
         # the kernel compiles once rather than once per k-point
-        counts = [int(np.sum(f1[ik][:,None]-f2[ik][None,:]!=0.))
+        counts = [int(np.sum(pair_factors(es1k_h[ik],es2k_h[ik],f1[ik],
+                                          f2[ik],fp1[ik],delta)[0]!=0.))
                   for ik in range(nk)]
         pair_pad = int(np.ceil(max(max(counts),1)/PAIR_PAD_QUANTUM)
                        *PAIR_PAD_QUANTUM)
@@ -153,7 +164,7 @@ def pair_chi0_kmesh_gpu(hks1,hks2,phases,iP,jP,energies,T,delta,
     out = None
     for ik in range(nk): # loop over k, everything stays on the device
         ns,ms,facs,dE = band_pair_plan(es1k_h[ik],es2k_h[ik],f1[ik],f2[ik],
-                                       pair_pad=pair_pad)
+                                       fp1[ik],delta,pair_pad=pair_pad)
         # eigenvectors come back as columns; the kernel wants states as rows
         Tm = _pair_operator_tensor(wsk1[ik].T.astype(cdt),
                                    wsk2[ik].T.astype(cdt),iP,jP,

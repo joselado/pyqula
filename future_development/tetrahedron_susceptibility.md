@@ -469,10 +469,70 @@ resolves. The kernels alone, at one k-point, take 0.9 to 1.3 times the
 old time for this 4-band cell, and 1.5 times for a 64-band supercell at
 T = delta = 0.1, where the most new pairs enter (1.05 to 1.4 at T = 0.01).
 That cost is the pairs the old cutoff dropped although they contribute,
-so a large cell at high T pays it in full. The pair-basis kernel
-of `chitk/pairchi.py` has its own rule, it skips only f_n - f_m = 0
-exactly, so it keeps every pair this cutoff dropped, but it has no
-degenerate pair term either; that was not changed.
+so a large cell at high T pays it in full.
+
+### The degenerate pairs of the pair basis
+
+The pair-basis kernel of `chitk/pairchi.py`, the route of every
+interaction that couples different sites, skipped every pair with
+f_n - f_m = 0 exactly and had no degenerate pair term. So the question is
+whether the two routes give the same bare response where both are
+defined. The pair operator c^dag_a c_b of one site has the response of the
+projector |a><b| in `chiAB_q`, so we compare `pair_chi0` with `chiAB_q`
+given those projectors, on the same mesh, the same q, delta and an
+explicit T on both sides (T = None means T = delta in `chiAB_q` and a
+step in `pair_chi0`). The models are spinful metals: a square lattice
+with onsite energy 0.4 t and a honeycomb with 0.3 t, each without and
+with an exchange field 0.3 t along z, at nk = 24 and T = 0.05.
+
+At a generic q, (0.137, 0.211), the two routes agree to 7e-16 at every
+frequency and both delta. At q = 0 every pair is degenerate, n = m and the
+spin-degenerate partners, and the pair basis lost the whole Fermi-surface
+term: at omega = 0 the difference is 0.205 on the square lattice, which is
+its whole bare chi_0 there since it has one band per spin, 0.242 with the
+exchange field, and 0.030 and 0.060 on the honeycomb, the same at
+delta = 1e-2 and 1e-1. At finite omega it decays as delta/omega, 4.0e-2 at
+omega = 5 delta and 2.0e-3 at omega = 100 delta, which is exactly the
+missing term f' i delta/(i delta - omega). At the nested q = (1/4, 1/4) of
+a nk = 8 mesh at T = 0.1, where E(k) = E(k+q) on mesh points, the routes
+differed by 7e-3 to 0.25. So the pair basis was inconsistent with the site
+basis, and a metal on the pair route had no Pauli term in its static
+uniform response; in the public route T defaults to delta, so f' was
+finite there.
+
+`_accumulate` now applies the rule of `chiAB.lindhard_pair`: a pair with
+abs(e1_n - e2_m) < `chiAB.DEGENERATE_TOL` gets i delta f'(e1_n) in place of
+f_n - f_m and a zero energy difference, and a pair is skipped only when
+that factor is exactly zero, so the pair-basis rule for the other pairs
+did not change. For a step occupation f' is zero. The jax kernel
+(`pairchijax.band_pair_plan`) builds its pair list from the same factors,
+`pairchi.pair_factors`; it ran on jax's CPU backend only, where it agrees
+with the numba kernel to 1.3e-15 on the four metals at q = 0 and at the
+generic q. After the change the two routes agree to 1.6e-15 in every
+case above, and `tests/chi/test_pair_chi0_degenerate_pairs.py` checks it
+to 1e-12, at q = 0, a generic q and the nested q, static and dynamic,
+plus the public `h.get_spinchi_full(RPA=False)` against `pair_chi_rpa`
+with a zero interaction.
+
+The Goldstone mode does not move, and it should not. The field of the
+uniform spin rotation, the generator in the pair basis, has the matrix
+element (E_m - E_n) G_nm between two states, which is zero on a
+degenerate pair, so the new term never acts on it. We measured
+||M v||/||v||, with M = 1 + K chi_0 at q = 0 and omega = 0 and v = K
+times the rotation of the pair expectation values, on ferromagnetic
+metals ordered by U and V1: a doped chain (two-site cell, U = 2, V1 = 0.5,
+filling 0.3, nk = 40, also tilted by 0.37 rad), a square lattice (U = 4,
+V1 = 0.5, filling 0.3, nk = 16) with the mean field at T = 1e-7 and at
+T = 2e-2, and a metallic 120-degree spiral on the 3x3 triangular cell
+(U = 8, V1 = 0.5, filling 0.4, T = 0.05, nk = 3). The residual is the
+same before and after to every printed digit: 1.681e-1 and 1.705e-2 at
+delta = 1e-2 and 1e-3 on the chain, 8.551e-2 and 8.582e-3 on the square
+lattice at T = 2e-2, and 1.7262701793e-4 on the spiral at delta = 1e-3,
+proportional to delta in each case, while the new term moves chi_0 of
+the spiral by 1.3e-2 out of 9.3e-2. What does move is the rest of the
+spectrum of M: on the chain at T = 2e-2, which is paramagnetic, its
+smallest eigenvalue goes from 0.683 to 0.262, since the Stoner
+denominator now has the Pauli term in it.
 
 ## What is left open
 

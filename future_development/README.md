@@ -260,8 +260,13 @@ already reached once.
   delta = 1e-2 for the dynamic response, the grid converges exponentially and
   wins. An odd nk is needed at a commensurate nesting vector. The delta/100
   pair cutoff of the library grid, which biased it by up to 2e-3 at q = 0,
-  is replaced by a bound on what the pair contributes. Open: the cost of the
-  dynamic response, a high-T hybrid and the pair-basis route.
+  is replaced by a bound on what the pair contributes. The pair basis of
+  `chitk/pairchi.py` had no degenerate pair term, so at q = 0 a metal lost
+  its whole Fermi-surface term there (0.205 on a square metal, which is all
+  of its static chi_0 at q = 0); it now uses the site-basis rule, the two routes agree
+  to 2e-15, and the Goldstone residual of ferromagnetic and spiral metals
+  does not move. Open: the cost of the dynamic response, a high-T hybrid
+  and the triangle on the pair-basis route.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products

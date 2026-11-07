@@ -9,9 +9,10 @@ padding are both places where a wrong index would still produce a
 plausible-looking response, so these tests diff against the numba kernel
 rather than against expectations.
 
-The selection rule is this module's own and differs from the site-basis
-kernel's: `_accumulate` drops a band pair on `f_n - f_m == 0` exactly,
-where an absolute cutoff such as delta/100 would drop more. Reproducing
+The selection rule is this module's own: `_accumulate` drops a band pair
+only when its factor (f_n - f_m, or i*delta*f' for a degenerate pair, as
+on the site-basis route) is exactly zero, where an absolute cutoff such as
+delta/100 would drop more. Reproducing
 the wrong one would be invisible at zero temperature and wrong at finite
 temperature, so both are covered below.
 
@@ -151,7 +152,7 @@ def test_single_precision_is_close_to_double_but_not_identical(system):
 
 
 def test_the_gather_keeps_the_pairs_a_finite_temperature_adds():
-    """_accumulate skips a band pair only when f_n-f_m is exactly zero, not
+    """_accumulate skips a band pair only when its factor is exactly zero, not
     when it is small. Borrowing an absolute cutoff such as delta/100
     instead would agree at T=None and quietly drop contributions here"""
     pytest.importorskip("jax")
@@ -174,7 +175,8 @@ def test_the_gather_keeps_the_pairs_a_finite_temperature_adds():
     cutoff = int(np.sum(np.abs(df) >= DELTA/100.))  # an absolute cutoff
     assert cutoff < exact, "the two selection rules agree here, so this "\
                            "system cannot tell them apart"
-    facs = pairchijax.band_pair_plan(e1, e2, f1, f2)[2]
+    fp1 = pairchi._fermi_derivative(f1, DELTA)
+    facs = pairchijax.band_pair_plan(e1, e2, f1, f2, fp1, DELTA)[2]
     assert int(np.sum(np.asarray(facs) != 0.)) == exact
 
 
@@ -211,7 +213,8 @@ def test_too_small_a_pair_pad_raises_instead_of_truncating():
     e = np.linspace(-1., 1., 6)
     f = pairchi._occupations(e, None)
     with pytest.raises(ValueError, match="pair_pad"):
-        pairchijax.band_pair_plan(e, e, f, f, pair_pad=1)
+        pairchijax.band_pair_plan(e, e, f, f, pairchi._fermi_derivative(f, None),
+                                  DELTA, pair_pad=1)
 
 
 def test_one_compilation_covers_a_whole_q_scan():

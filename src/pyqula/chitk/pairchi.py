@@ -75,6 +75,9 @@ from numba import jit
 
 from .. import algebra
 from .. import gpu
+# the threshold below which a pair of states counts as degenerate, shared
+# with the site-basis kernels so that both routes treat the same pairs
+from .chiAB import DEGENERATE_TOL
 
 
 def _chi_prec(chi_prec):
@@ -155,7 +158,8 @@ def ladder_kernel(pairs, xvals, diag, Wq):
 
 
 @jit(nopython=True, cache=True)
-def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, f1, f2):
+def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, f1, f2,
+                fp1):
     """Add one k-point's contribution to the pair response.
 
     chi0[P,P',w] += sum_{nm} (f_n - f_m) M_P conj(M_P') / (e1_n-e2_m-w+i d)
@@ -164,7 +168,18 @@ def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, f1, f2):
     indices the pair operator connects, phase_P its Bloch phase, and f1/f2
     the occupations of the two sets of states. The indices are spin-orbital
     ones and carry no assumption about a spin quantization axis, which is
-    what lets a non-collinear state through."""
+    what lets a non-collinear state through.
+
+    A degenerate pair, |e1_n - e2_m| < chiAB.DEGENERATE_TOL, gets
+    f_n - f_m replaced by i*delta*f'(e1_n), fp1 the derivative of the
+    Fermi function at e1, the rule of the site-basis kernels
+    (chiAB.lindhard_pair, see there for the physics): it stands for the
+    intraband continuum around it on the k-mesh, and gives the static
+    Pauli term f' at omega=0 and zero for |omega| >> delta. Without it
+    this kernel dropped the whole Fermi-surface term at q=0, which the
+    site basis keeps: 0.205 on a square-lattice metal at T=0.05 and
+    nk=24, all of its static chi_0 there. For a step occupation fp1 is zero. A pair whose
+    factor is exactly zero is skipped."""
     npair = iP.shape[0]
     nb = e1.shape[0]
     nw = omegas.shape[0]
@@ -172,14 +187,18 @@ def _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, omegas, delta, f1, f2):
     for n in range(nb):
         fn = f1[n]
         for m in range(nb):
-            fm = f2[m]
-            df = fn - fm
-            if df == 0.: continue
+            de = e1[n] - e2[m]
+            if np.abs(de) < DEGENERATE_TOL: # degenerate pair
+                fac = 1j*delta*fp1[n]
+                de = 0.
+            else:
+                fac = (fn - f2[m]) + 0j
+            if fac == 0.: continue
             for P in range(npair):
                 M[P] = np.conj(u1[n, iP[P]])*u2[m, jP[P]]*phase[P]
             for w in range(nw):
-                den = e1[n] - e2[m] - omegas[w] + 1j*delta
-                pref = df/den
+                den = de - omegas[w] + 1j*delta
+                pref = fac/den
                 for P in range(npair):
                     if M[P] == 0.: continue
                     for Pp in range(npair):
@@ -193,6 +212,34 @@ def _occupations(e, T):
     temperature, the same choice chitk/chiAB.py and chitk/chijax.py make."""
     if T is None or T == 0.: return np.where(e < 0., 1.0, 0.0)
     return 0.5*(1. - np.tanh(0.5*e/T))
+
+
+def _fermi_derivative(f, T):
+    """The derivative of the Fermi function, -f(1-f)/T, from the
+    occupations f at temperature T, the f' of the degenerate pairs (see
+    _accumulate). For a step, T=None or T=0, it is zero: the derivative of
+    a step is a delta function at the Fermi energy, which a mesh point
+    never samples."""
+    f = np.asarray(f, dtype=np.float64)
+    if T is None or T == 0.: return np.zeros(f.shape)
+    return -f*(1. - f)/T
+
+
+def pair_factors(e1, e2, f1, f2, fp1, delta):
+    """Return (fac, de), the (nb,nb) occupation factors and energy
+    differences of every band pair (n,m), with the degenerate pair rule of
+    _accumulate: |e1_n - e2_m| < chiAB.DEGENERATE_TOL gives
+    fac = i*delta*fp1[n] and de = 0, any other pair f1_n - f2_m and
+    e1_n - e2_m. The device kernel (pairchijax.band_pair_plan) builds its
+    pair list from this."""
+    fac = (np.asarray(f1)[:, None]
+           - np.asarray(f2)[None, :]).astype(np.complex128)
+    de = np.asarray(e1)[:, None] - np.asarray(e2)[None, :]
+    deg = np.abs(de) < DEGENERATE_TOL
+    fac[deg] = (1j*delta*np.broadcast_to(np.asarray(fp1)[:, None],
+                                         fac.shape))[deg]
+    de[deg] = 0.
+    return fac, de
 
 
 def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20, T=None,
@@ -252,8 +299,9 @@ def pair_chi0(h, pairs, q=None, energies=None, delta=1e-2, nk=20, T=None,
         # convention the Hamiltonian's own hoppings use
         phase = np.array([g.bloch_phase(d, k + q) for d in ds],
                          dtype=np.complex128)
+        f1 = _occupations(e1, T)
         _accumulate(chi0, e1, u1, e2, u2, iP, jP, phase, energies, delta,
-                    _occupations(e1, T), _occupations(e2, T))
+                    f1, _occupations(e2, T), _fermi_derivative(f1, T))
     return chi0/len(ks)
 
 
