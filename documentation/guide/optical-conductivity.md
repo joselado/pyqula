@@ -255,7 +255,7 @@ The keywords of the two integrations are
 the resolvent exactly over each one. At $\eta=10^{-2}t$ on a stack of
 Chern insulators it needs about 100 times fewer k-points than the grid for
 the same accuracy at the absorption edge. Most of the work is done once for
-all frequencies, so 400 frequencies cost three to four times as much as 40,
+all frequencies, so 400 frequencies cost two to four times as much as 40,
 not ten times. A full script is in
 `examples/2d/optical_conductivity_triangle/main.py`.
 

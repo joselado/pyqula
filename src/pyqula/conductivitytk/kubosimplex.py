@@ -695,8 +695,9 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
     ep = np.zeros(npoint); tp = np.zeros(npoint,dtype=np.int64)
     yp = np.zeros((npoint,4)); ca = np.zeros((npoint,nc),dtype=np.complex128)
     _sources_jit(1,*args,start,flag,ep,tp,yp,ca,bins,_nbins)
-    import numba
-    ng = max(1,min(numba.get_num_threads(),ns//4096))
+    # a fixed number of groups, so that the result does not depend on the
+    # number of threads
+    ng = max(1,min(16,ns//4096))
     M = np.zeros((ng,_nbins,_kmax,nc),dtype=np.complex128)
     _moments_jit(simplices,dE,W,trans,diag,_dos_fact,_dos_harm,flag,bins,M)
     M = M.sum(axis=0)
