@@ -1014,6 +1014,21 @@ q with 64 bands and 32 site operators. So even for a large unit cell on a
 coarse mesh the shared diagonalization is a small saving, and what it
 buys is the count, nk^dim instead of 2 nk^(2 dim), not the wall time.
 
+A larger cell gives the same answer. For a spinless 10x10 honeycomb
+supercell, 200 bands with an onsite 0.3, the local response, static,
+`mode="trace"`, delta = T = 1e-2 on three cores, the codes before and
+after give the same value to 2e-16. At nk = 2 they take 215 s and 214 s.
+At nk = 3, run one after the other on the same cores, they take 887 s and
+845 s, so 5 percent, with 9 diagonalizations of the mesh instead of 162.
+A first run of the two at the same time on different cores gave 3360 s
+and 920 s, but there one diagonalization of the old run took 2.5 s
+against 0.009 s, so the old run was starved by the load, and that pair is
+not a measurement. The time per q, about 95 s at nk = 3, is again the
+triangle kernel. The kernel of one q grows with the square of the number
+of bands n, over its band pairs, and a diagonalization with its cube, so
+the fraction saved grows roughly like n: 1 percent at 64 bands, 5 percent
+at 200. It pays in wall time only for cells of many hundreds of bands.
+
 ## What is left open
 
 - The cost of the dynamic response at finite T, now 3.5 to 6 times the
