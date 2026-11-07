@@ -276,15 +276,20 @@ class ShellFilling:
     level spacing makes the charge continuous, and then there is no jump
     to fill. test(dm) says whether this holds.
 
-    An armed shell also gives band, the band energy per unit cell of the
-    density matrix that the routine returns, (Tr H rho + Tr h_e)/2 with
-    the occupations of that density matrix on every level, filled or not.
-    The mean field reports it instead of the step band energy, so that the
-    energy is the one of the state the loop holds, in one convention on
-    both sides of a filling where the fill switches on: dE/dN0 is then
-    the chemical potential. It needs only the band energies of the mesh,
-    which the density matrix routines pass along with the eigenpairs of
-    the shell, so it costs no extra diagonalization.
+    A fill also gives correction, (1/2) Tr H (rho_filled - rho) per unit
+    cell, with rho the density matrix before the fill and H the
+    Hamiltonian it was built from, the change of the band energy made by
+    the fill. The mean field adds it to the step band energy of the
+    library, which is what a normal state reports at every T. It is
+    identically zero when the shell is not filled, so a shell that is
+    armed and never filled reports exactly the energy of before, and at
+    the start of the fill it starts from the charge error that triggers
+    it, 1e-12 per cell, so the energy has no jump there and dE/dN0 is the
+    chemical potential. A first version reported Tr H rho of the density
+    matrix whenever the shell was armed, which changed the convention at
+    the gate where nothing physical happens: the s-wave state with U=-0.5
+    at nk=32 with "ed" is armed at T=1.4e-3 with Delta=7.6e-4 alive, and
+    its energy jumped by 6.1e-6 between T=1.3e-3 and 1.4e-3.
 
     The fill moves the chemical potential by mu = y*Ts inside the shell,
     which the mean field adds to the Fermi level of the Hamiltonian it
@@ -292,9 +297,9 @@ class ShellFilling:
     describe the same state.
 
     Use: armed = start(h,T,nkpoints) before a density matrix, and when
-    armed, energies(es,occ) on the band energies and occupations of every
-    batch, collect(ks,es,vs,occ) on the eigenpairs of those that have
-    levels in the shell, and fill(dm) at the end."""
+    armed, collect(ks,es,vs,occ) on the eigenpairs of every batch (only
+    the k-points with levels in the shell are kept), and fill(dm) at the
+    end."""
     width = 40. # the shell is |E| < width*T
     jump_width = 5. # the jump is read on |E| < jump_width*T
     floor = 1e-6 # at T=0, the shell in units of the level spacing
@@ -311,9 +316,9 @@ class ShellFilling:
         self._reset()
 
     def _reset(self):
-        self.fired, self.fraction, self.mu, self.band = False, None, 0., None
+        self.fired, self.fraction, self.mu = False, None, 0.
         self.levels, self.groups = [], []
-        self.sum_energy = 0. # sum of occupations times band energies
+        self.correction = 0. # the change of the band energy made by the fill
 
     def start(self,h,T,nkpoints):
         """Before the density matrix of h on a mesh of nkpoints, at T.
@@ -329,17 +334,15 @@ class ShellFilling:
             return False # the pairing lives, the offset holds the charge
         pe = np.array(algebra.todense(operators.get_electron(h))).diagonal()
         self.tau = 2.*pe.real-1. # +1 on the electron components, -1 holes
-        intra = np.array(algebra.todense(h.intra)).diagonal().real
-        self.trace_e = float(np.sum(pe.real*intra)) # Tr h_e
         return True
 
-    def energies(self,es,occ):
-        """Add the band energies es and occupations occ of a batch"""
-        self.sum_energy += float(np.sum(occ*es))
+    def held_already(self,dm):
+        """Whether dm holds charge0 already, so that it is not filled"""
+        return abs(get_charge_bdg(dm)-self.charge0)<=self.held
 
     def restart(self):
         """Forget the batches, to collect a density matrix again"""
-        self.levels, self.groups, self.sum_energy = [], [], 0.
+        self.levels, self.groups = [], []
 
     def collect(self,ks,es,vs,occ):
         """Keep the shell of a batch: es (nb,n), vs (nb,n,n) with the
@@ -388,8 +391,8 @@ class ShellFilling:
         """Whether fill(dm) fills the shell"""
         from scipy.special import expit
         if len(self.levels)==0: return False # no level at zero energy
+        if self.held_already(dm): return False
         n = get_charge_bdg(dm)
-        if abs(n-self.charge0)<=self.held: return False # held already
         nk = float(self.nkpoints)
         self._group()
         old, c0, c1, jump = 0., 0., 0., 0.
@@ -427,26 +430,18 @@ class ShellFilling:
             out.append((R,on))
         return out,charge
 
-    def _band(self,change=0.):
-        """the band energy of the density matrix, with the change of the
-        sum of occupations times energies made by the fill"""
-        self.band = (self.sum_energy/self.nkpoints+change+self.trace_e)/2.
-
     def fill(self,dm):
         """Fill the shell in part so that dm holds charge0, if test(dm)
-        passes; dm is changed in place and returned. Sets band either way"""
-        if not self.test(dm):
-            self._band()
-            return dm
+        passes; dm is changed in place and returned. Sets correction,
+        (1/2) Tr H (rho_filled - rho), the change of the band energy"""
+        if not self.test(dm): return dm
         from scipy.optimize import brentq
         nk = float(self.nkpoints)
         def error(y): return self._occupations(y)[1]+self.c0-self.charge0
         b = 2.*self.width # every level of the shell is within width*ts
         while error(-b)>=0. or error(b)<=0.: # q below 1 needs more
             b *= 4.
-            if b>1e12: # the charge of the shell is too small
-                self._band()
-                return dm
+            if b>1e12: return dm # the charge of the shell is too small
         y = brentq(error,-b,b,xtol=1e-14,rtol=1e-14,maxiter=500)
         change = 0.
         for ((ks,es,em,vs,occ,Q),(R,on)) in zip(self.groups,
@@ -459,7 +454,7 @@ class ShellFilling:
                 new = np.einsum("gin,gn,gjn->ij",ws.conj(),on*ph[:,None],ws)
                 old = np.einsum("gin,gn,gjn->ij",vs.conj(),occ*ph[:,None],vs)
                 dm[d] = dm[d]+new-old
-        self._band(change/nk)
+        self.correction = change/nk/2. # the band energy is half the trace
         self.fired, self.mu = True, y*self.ts
         self.fraction = (self.charge0-self.c0)/(self.c1-self.c0) # filled
         return dm
@@ -565,9 +560,9 @@ class BdGFermiLevel:
     Use: shift(h,x) on each Hamiltonian before its density matrix (it sets
     h.fermi), then step(x,dm) for the offset of the next iteration, which
     also leaves the charge error N-N0 in error and the size of the step in
-    residual. Pass shell to the density matrix; when shell.band is not
-    None (the shell was armed), report it as the band energy of the last
-    Hamiltonian, and shift that Hamiltonian with shell.move_fermi."""
+    residual. Pass shell to the density matrix, add shell.correction to
+    the band energy of the last Hamiltonian, and shift that Hamiltonian
+    with shell.move_fermi."""
     damping = 0.5 # with kappa off by up to a factor 4 the step still converges
     # the pairing moves the Fermi level by roughly Delta^2/W, so a window of
     # 2 Delta is generous (U=-2 at filling 0.3: Delta=0.21, x=-0.03; U=-6 at

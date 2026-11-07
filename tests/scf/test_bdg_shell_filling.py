@@ -80,30 +80,42 @@ def test_the_gapless_state_holds_the_charge_with_ed_and_the_triangle(zeeman,
         dm = get_dm(scf.hamiltonian, _onsite(scf.hamiltonian), nk=NK, T=T,
                 integration="ed")
         assert abs(superscf.get_charge_bdg(dm)-n0) < 1e-8
-    assert abs(ed.total_energy-tri.total_energy) < 1e-10
+    # the step band energy counts at T=0 weights, whose charge misses N0
+    # at T=1e-3, and the normal Fermi level of "ed" and of the triangle
+    # differ by 2.8e-7 (the fill makes up the difference), so there the
+    # two energies differ by 4.4e-9
+    assert abs(ed.total_energy-tri.total_energy) < (1e-10 if T<1e-6 else 1e-8)
     assert abs(ed.hamiltonian.fermi-tri.hamiltonian.fermi) < 1e-8
 
 
 @pytest.mark.parametrize("T", [1e-7, 1e-3])
-def test_the_energy_of_the_fill_is_the_one_of_its_density_matrix(zeeman, T):
-    """Once the shell is armed, the band energy is the one of the density
-    matrix that is returned, (Tr H rho + Tr h_e)/2 per cell summed over the
-    hoppings of H, filled or not, at T=1e-3 too, where the Fermi-Dirac
-    weight is not a step on many levels"""
+@pytest.mark.parametrize("integration", ["ed", "triangle"])
+def test_the_energy_of_the_fill_is_the_change_of_its_density_matrix(zeeman,
+        T, integration):
+    """The fill adds to the step band energy the change it makes, (1/2)
+    Tr H (rho_filled - rho) per cell summed over the hoppings of H, with
+    rho the density matrix of exact diagonalization before the fill (also
+    for the triangle, which is rebuilt on those occupations when it
+    fills), at T=1e-3 too, where the Fermi-Dirac weight is not a step on
+    many levels. A density matrix that is not filled adds exactly zero"""
     def check(h, filled):
         hd = {d: np.array(algebra.todense(m))
                 for (d, m) in h.get_dict().items()}
-        ee = get_eh_sector(hd[(0, 0, 0)], i=0, j=0)
+        v = {d: np.zeros((2, 2)) for d in hd}
         shell = _shell(h)
-        dm = get_dm(h, {d: np.zeros((2, 2)) for d in hd}, nk=NK, T=T,
-                integration="ed", shell=shell)
-        if filled: assert shell.fired
-        band = (sum(np.sum(hd[d]*dm[d]) for d in hd).real
-                + np.trace(ee).real)/2.
-        assert abs(band-shell.band) < 1e-12
-    check(_unfilled(zeeman[("ed", T)]), True)
-    # the Hamiltonian the loop returns holds the charge by itself
-    check(zeeman[("ed", T)].hamiltonian, None)
+        dm = get_dm(h, v, nk=NK, T=T, integration=integration, shell=shell)
+        if filled is not None: assert shell.fired == filled
+        if not shell.fired:
+            assert shell.correction == 0.
+            return
+        dm0 = get_dm(h, v, nk=NK, T=T, integration="ed")
+        change = sum(np.sum(hd[d]*(dm[d]-dm0[d])) for d in hd).real/2.
+        assert abs(change-shell.correction) < 1e-12
+        assert abs(shell.correction) > 0. # it does something
+    check(_unfilled(zeeman[(integration, T)]), True)
+    # the Hamiltonian the loop returns holds the charge by itself to 1e-8,
+    # and is filled or not depending on the last digits
+    check(zeeman[(integration, T)].hamiltonian, None)
 
 
 @pytest.mark.parametrize("T", [1e-7, 1e-3])
@@ -113,8 +125,9 @@ def test_the_energy_is_continuous_across_a_whole_charge(integration, T):
     of the mesh, and the normal Fermi search holds it without the fill;
     1e-7 electrons per cell below, the fill holds it. The energy has to
     move by mu dN between the two. With the step band energy for the held
-    state and the band energy of the filled one it jumped by 2e-7, and
-    the triangle kept its own charge miss at the whole charge"""
+    state and the band energy of the filled one it jumped by 3.3e-7 at
+    T=1e-3, and the triangle kept its own charge miss at the whole charge
+    and jumped by 2.1e-7"""
     out = []
     for filling in (154./512., 154./512.-5e-8):
         np.random.seed(1)
@@ -143,7 +156,10 @@ def _no_shell(monkeypatch):
     dict(integration="ed"), dict(integration="triangle"),
     # the pairing lives, Delta=3.1e-3 of the order of T, and the charge
     # misses N0 by 3.5e-3; at T=0 weights this state moved by 2e-10
-    dict(integration="triangle", U=-0.5, nk=32, T=1e-3)])
+    dict(integration="triangle", U=-0.5, nk=32, T=1e-3),
+    # the pairing dies, the shell is armed and never filled; when the band
+    # energy of an armed shell was Tr H rho, this energy moved by 8.6e-6
+    dict(integration="ed", U=-0.5, nk=32, T=2e-3)])
 def test_a_state_whose_shell_is_not_filled_does_not_change(case,
         monkeypatch):
     """The same iterations, energy and density matrix, bit for bit, as

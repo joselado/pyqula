@@ -119,12 +119,11 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     Gennes h at a filling, which fills the shell of levels at zero energy
     in part when the charge jumps across the requested one there. While
     the pairing lives, shell.start says so and the density matrix is the
-    one without shell. Once it has died, the shell takes the band
-    energies of every batch and the eigenpairs of the k-points with levels
-    in the shell. On the device
-    route the density matrix stays on the device, and the shell takes the
-    band energies of the mesh from one more pass of eigenvalues there and
-    diagonalizes again only its own k-points, on the host."""
+    one without shell. Once it has died, the shell takes the eigenpairs
+    of the k-points with levels in it. On the device route the density
+    matrix stays on the device, and when it misses the charge the shell
+    finds its k-points from one more pass of eigenvalues there and
+    diagonalizes again only those, on the host."""
     if h.non_hermitian: # left and right eigenvectors, see biorthogonal_dm
         return biorthogonal_dm(h,ds=ds,nk=nk,fermi=fermi,delta=delta)
     from .htk.eigenvectors import peigh_bloch, bloch_on_gpu
@@ -142,11 +141,11 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
         dirs = [[0.,0.,0.]] if ds is None else ds # the undirected dm is d=0
         dm = fac*full_dm_gpu(bloch[0],bloch[1],ks,dirs,fermi=fermi,delta=delta)
         outd = {tuple(d): dm[i] for (i,d) in enumerate(dirs)}
-        if shell is not None: # the band energies, and the shell on the host
+        if shell is not None and not shell.held_already(outd):
+            # the k-points of the shell, and their eigenpairs on the host
             from .htk.eigenvectors import (peigvalsh_bloch, hk_matrix_batch,
                     parallel_diagonalization)
             es = np.asarray(peigvalsh_bloch(hk,ks))-fermi
-            shell.energies(es,expit(-es/delta))
             sel = np.nonzero(np.any(np.abs(es)<shell.tol,axis=1))[0]
             if len(sel)>0:
                 e2,v2 = parallel_diagonalization(hk_matrix_batch(hk,ks[sel]))
@@ -176,7 +175,6 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
                 batch_total[idir] = np.sum(contribs,axis=0) # pool the batch's contributions
         if shell is not None: # the occupations of the kernels above
             occ = expit(-es_batch/delta)
-            shell.energies(es_batch,occ)
             shell.collect(kbatch,es_batch,vs_batch,occ)
         dm = batch_total if dm is None else dm+batch_total # pool across batches
     dm = dm*fac # renormalize

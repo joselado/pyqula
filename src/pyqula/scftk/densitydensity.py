@@ -943,13 +943,13 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         etot = simplexdm.band_energy(h,nk=h.nk)
     else:
         etot = h.get_total_energy(nk=h.nk)
-    if fermi_level is not None and fermi_level.shell.band is not None:
-        # once the shell is armed (the pairing dead), the band energy of the
-        # density matrix the loop holds, Tr H rho with its own occupations,
-        # filled or not, instead of the step band energy above, so that
-        # the energy is continuous where the fill switches on
+    if fermi_level is not None:
+        # the change of the band energy made by the fill of the shell of a
+        # gapless state, (1/2) Tr H (rho_filled - rho), zero when it does
+        # not fill, so that the energy is the step band energy above
+        # otherwise and continuous where the fill starts
         # (superscf.ShellFilling)
-        etot = fermi_level.shell.band
+        etot += fermi_level.shell.correction
     if mu is None:
         # add back mu N with N the requested charge, filling times the
         # number of electron states (electron_dimension, not the
@@ -980,7 +980,7 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     scf.total_energy = etot
     if fermi_level is not None: # the shift of the chemical potential of a
         fermi_level.shell.move_fermi(h) # filled shell, after the energy
-        scf.shell = fermi_level.shell # its fill, fired, mu and energy
+        scf.shell = fermi_level.shell # its fill, fired, mu and correction
     if verbose>1:
       print("##################")
       print("Total energy",etot)

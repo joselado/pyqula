@@ -734,7 +734,6 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
             wk = w[i0:i0+len(U)]
             ks = mesh.ks[i0:i0+len(U)]
             if shell is not None: # the occupations of the weights, in [0,1]
-                shell.energies(es[i0:i0+len(U)],wk*nkp)
                 shell.collect(ks,es[i0:i0+len(U)],U,wk*nkp)
             active = np.nonzero(np.any(wk!=0.,axis=0))[0] # bands with weight
             if len(active)==0: return
@@ -767,7 +766,6 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
         delta = T if T>0. else 1e-15 # as densitymatrix.full_dm
         shell.restart()
         dm = shell.fill(build(expit(-es/delta)/nkp))
-    elif shell is not None: shell.fill(dm) # not filled: only its energy
     if counted: return dm,mesh.ndiag
     return dm
 

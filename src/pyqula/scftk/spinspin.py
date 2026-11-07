@@ -1655,8 +1655,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
                 radius=kpm_radius)
     else:
         etot = h.get_total_energy(nk=h.nk)
-    if bdg_fermi is not None and bdg_fermi.shell.band is not None:
-        etot = bdg_fermi.shell.band # see densitydensity.densitydensity
+    if bdg_fermi is not None:
+        etot += bdg_fermi.shell.correction # see densitydensity.densitydensity
     if mu is None:
         if array_filling:
             # per-site generalization of the scalar correction below: h.fermi
