@@ -225,6 +225,26 @@ def test_sources_agree_with_the_direct_kernel_on_a_3d_mesh():
         assert np.max(np.abs(s1-s2)) < 1e-11*scale
 
 
+def test_the_source_sum_stays_at_the_rounding_of_the_direct_kernel():
+    """At nk = 24 the vertex sources cancel by a factor of about 5e3 at
+    every frequency, so a plain running sum over them lost 2.2e-13 of the
+    largest entry against the direct kernel (7e-13 at nk = 48), a loss
+    that grew with nk. The sums are now compensated, and the two kernels
+    agree to 6e-14, which includes the 3e-14 of the direct kernel itself"""
+    h = _layered_haldane()
+    nk = 24
+    ks = kubo._kmesh(h, nk)
+    es, vs, cellvol, scale = kubo._bands_and_velocities(h, ks)
+    pairs, dE, W, comps, trans = kubosimplex.pair_fields(es, vs, 1e-3,
+            1e-6*scale, False, True)
+    pairs, dE, W = kubosimplex._prune(pairs, dE, W)
+    args = (3, nk, pairs, dE, W, comps, trans, np.linspace(0.1, 4., 40),
+            1e-2, cellvol)
+    s1 = kubosimplex._sigma_from_fields(*args, kernel="sources")
+    s2 = kubosimplex._sigma_from_fields(*args, kernel="simplices")
+    assert np.max(np.abs(s1-s2)) < 1.2e-13*np.max(np.abs(s2))
+
+
 def test_the_source_sum_does_not_depend_on_the_number_of_threads():
     """The sum over the sources is split in tasks whose partial sums are
     added in a fixed order. The number of tasks was set from the number of
