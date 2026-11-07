@@ -249,7 +249,10 @@ already reached once.
   0.334 instead of 0.2). The BdG triangle is the step of exact
   diagonalization on the same mesh, so its Fermi search counts that step
   now (the old triangle count lost the pairing of U = -1 and made a Nambu
-  ferromagnet). Open: VJinteraction with the triangle, a slower loop when
+  ferromagnet). A qtci BdG mean field from a random guess stopped at the
+  Hermiticity check, from an imaginary onsite diagonal of the size of the
+  interpolation error; that diagonal is kept real now, and the loop
+  reaches the state of "ed". Open: VJinteraction with the triangle, a slower loop when
   the pairing dies. RPA chi(q) is built, see
   `tetrahedron_susceptibility.md`. The anomalous Hall of metals with the
   same occupations is built, see the next entry.

@@ -1163,6 +1163,58 @@ anomalous entries with the Nambu indices directly now, the same number to
 Fermi search of the normal state, about 40% of an iteration of this
 one-site cell, which was not touched.
 
+### qtci from a random guess
+
+Why did qtci with V1 on a BdG Hamiltonian stop with "Non-Hermitian BdG
+mean field" from a random guess, and not from the s-wave or p-wave one?
+The case is `Vinteraction(V1=-1.5, filling=0.3, nk=8,
+integration="qtci")` on the spinful Nambu square lattice, plain loop,
+`mf=None` after `np.random.seed(0)`, 1 or 2. The qtci density matrix is
+Hermitian by construction, since of (d,i,j) and (-d,j,i) only one entry is
+interpolated and the other is its conjugate. The exception is the onsite
+diagonal entry, which is its own partner. Its field |u_i(k)|^2 is real, but
+it is interpolated in the stacked complex TCI together with the other
+fields, so it came out with an imaginary part of the size of the
+interpolation error, and the loop wrote x and then conj(x) on the same
+place. At tolerance=1e-6 this imaginary part was 5e-8, 2e-8 and 5e-9 for
+the seeds 0, 1 and 2 at the iteration that failed, and the rest of the
+electron block was Hermitian to zero exactly. The Hartree term sums it
+over the neighbors and the spins, so the onsite mean field got an
+imaginary diagonal about 12 times larger, 6.4e-8 per entry for seed 2, on
+the electron and on the hole block. The check of `get_mf_bdg` is a norm of
+1e-7 on the whole mean field, and this crossed it, 1.3e-7, after 228 to
+311 iterations. The s-wave and p-wave states have fields of a low rank,
+16 and 17, whose imaginary diagonal is at rounding, so the loop from
+those guesses never saw it; the state from a random guess has a rank of
+51. A normal-state qtci mean field has no such check, so there the
+imaginary part went into the Hamiltonian silently.
+
+Now `dm_entries_qtci` keeps only the real part of the onsite diagonal
+entries, which is the Hermitian part of a matrix whose other entries are
+Hermitian already. The mean field is then Hermitian to zero exactly at
+every iteration, and the loop converges from the three seeds: in 503, 537
+and 481 iterations to E = -2.33065877, -2.33065918 and -2.33065857,
+against -2.33065878, -2.33065852 and -2.33065854 for `"ed"` from the same
+guesses in 446, 506 and 472 iterations. So qtci is on the state of `"ed"`
+to 1e-8, 7e-7 and 3e-8, below the interpolation tolerance. The spread of
+`"ed"` over the seeds, 2.6e-7, is where the loop stops at maxerror. Note
+that `np.random.seed` does not fix a qtci run: the pivots of the cross
+interpolation are drawn with the `random` module of Python, so the same
+seed gives a slightly different qtci energy from one run to the next, and
+the test seeds both. Broyden mixing
+from seed 0 fails in the same way before the change (226 evaluations) and
+converges after it (230 evaluations, E = -2.33065804), with no gain in
+time over the plain loop. `tests/scf/test_qtci_bdg_random_guess.py`
+checks that the onsite diagonal of the qtci density matrix is exactly real
+on the paired state `"ed"` reaches from seed 0, with a BdG mean field
+Hermitian to 1e-12, and that qtci from seed 0 reaches the energy of
+`"ed"` to 1e-6. Both fail before the change: on that frozen state the
+imaginary part was 7e-10 to 1e-9 and the non-Hermitian part of the mean field
+1.7e-8, from stacked fields of rank 51. A frozen state with real or
+low-rank fields does not show it: the s-wave and p-wave states (rank 16
+and 17) and a random BdG Hamiltonian on the 8x8 mesh give an imaginary
+part at rounding, 1e-16.
+
 ## What wins and what loses
 
 The wins. The filling is exact and the Fermi level continuous. A metal at
@@ -1203,18 +1255,14 @@ loaded.
   without a gap it keeps the staircase of `"ed"`. A triangle integration
   of a gapless BdG state with the continuous charge of the normal state
   would need the electron and hole bands unsorted. Not tried.
-- qtci with V1 on a BdG Hamiltonian stops with "Non-Hermitian BdG mean
-  field" from a random guess. The exact case: `Vinteraction(V1=-1.5,
-  filling=0.3, nk=8, integration="qtci")` on the spinful Nambu square
-  lattice, plain loop, `mf=None` (the random guess) after
-  `np.random.seed(0)`, 1 or 2; `"ed"` from the same guesses converges in
-  443 to 503 iterations to E = -2.3306585. From `mf="swave"` qtci runs: 43
-  iterations, E = -2.3214147, the same as `"ed"` to the printed digits, and
-  from `mf="pwave"` 51 iterations and E = -2.3306601, also the same as
-  `"ed"`. A run of the maintainer with 54 plain iterations and
+- qtci with V1 on a BdG Hamiltonian stopped with "Non-Hermitian BdG mean
+  field" from a random guess. This is closed (see "qtci from a random
+  guess"): the onsite diagonal of the qtci density matrix had an
+  imaginary part of the size of the interpolation error, and now only its
+  real part is kept. A run of the maintainer with 54 plain iterations and
   E = -2.3214034 against -2.3214029 for `"ed"` was close to the s-wave
-  one, but its guess was not recorded, and its numbers were not
-  reproduced here. So the stop is real, and it depends on the guess.
+  state, but its guess was not recorded, and its numbers were not
+  reproduced here.
 - A state with a Bogoliubov Fermi surface, or one whose pairing dies in the
   loop, converges more slowly with the BdG Fermi level than with the
   Fermi level of the normal state (57 against 41 Broyden iterations in

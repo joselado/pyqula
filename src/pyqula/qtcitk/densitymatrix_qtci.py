@@ -18,7 +18,15 @@
 # share one cache of diagonalizations, and the triangle weights of
 # simplexdm, with the Bloechl term, are applied to the reconstructed mesh.
 # Of the entries (d,i,j) and (-d,j,i), complex conjugates of each other,
-# only one is interpolated.
+# only one is interpolated, so the density matrix is Hermitian by
+# construction. The onsite diagonal entries, their own partners, are real,
+# and only their real part is kept: the TCI of the stacked complex fields
+# gives them an imaginary part of the size of its error (5e-9 to 8e-8 at
+# tolerance=1e-6 in a BdG mean field on the square lattice), which the
+# Hartree term carries into the onsite mean field, about 12 times larger
+# there, and which stopped that mean field from a random guess at the
+# Hermiticity check of scftk.superscf.get_mf_bdg
+# (future_development/tetrahedron_density_matrix.md).
 #
 # The fields are interpolated together, one TCI for the energies and one
 # for all the X_n, with the field index as an extra tensor site
@@ -252,6 +260,11 @@ def dm_entries_qtci(h,needed,nk=None,T=1e-7,tolerance=1e-6,bloechl=None,
         w = simplexdm.simplex_weights(dim,n,es,mu=0.,T=T,bloechl=bloechl)
         vals = np.einsum("kn,kne->e",w,X.reshape(n**dim,nb,ne),optimize=True)
         for (d,i,j),x in zip(entries,vals):
+            # an onsite diagonal entry is its own partner and is real,
+            # but the stacked complex TCI gives it an imaginary part of
+            # the size of its error; the Hartree term would carry it into
+            # the onsite mean field, which would then be non-Hermitian
+            if d==(0,0,0) and i==j: x = x.real
             dm[d][i,j] = x
             dm[tuple(-y for y in d)][j,i] = np.conj(x)
     # only the entries asked for, as the other backends that compute a
