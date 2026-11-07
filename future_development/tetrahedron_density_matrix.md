@@ -1105,10 +1105,10 @@ d-wave 20, Zeeman 113 and 100. A step that goes to zero when the clipped
 step leaves the window: with damping 0.5 Zeeman 46 and 41 but d-wave 26
 from a small guess (delta = 0.01), and with damping 1 Zeeman 118 and 179.
 The rule on the whole window with damping 1 is the only one that is below
-the old count for the three states with `"ed"` and with the triangle. The give-up kept as a one-time switch
-inside the solver step gives about the same counts (d-wave 24 to 15 over
-the guesses, Zeeman 59 and 55, qtci Zeeman 81), but it is a memory again,
-so it was not taken.
+the old count for the three states with `"ed"` and with the triangle. The
+give-up kept as a one-time switch inside the solver step gives about the
+same counts (d-wave 24 to 15 over the guesses, Zeeman 59 and 55, qtci
+Zeeman 81), but it is a memory again, so it was not taken.
 
 Broyden iterations at nk = 16, `maxerror=1e-10`, before and after, with
 the total energy and the paired charge N of both:
@@ -1127,16 +1127,20 @@ three integrations also agree with each other to 1e-10. The Zeeman case
 does not: its `"ed"` and triangle energies differ by 8.1e-7 and its Fermi
 levels by 6.5e-4, before as now, since the state has no gap and the Fermi
 level sits on a different place of the staircase. Two runs from the same
-guess give the same count and the same energy to the last digit. Over
-the d-wave guesses with delta = 0.01, 0.05, 0.2, 0.3 and 0.5 `"ed"` needed
-44, 50, 43, 63 and 23 iterations before and needs 23, 21, 19, 18 and 15
-now. The s-wave state at nk = 32 and 64 needs 23 and 24, against 28 and
+guess give the same count and the same energy to the last digit, on a
+fixed number of BLAS threads; the test asks for the same count and the
+energy to 1e-12, since a threaded BLAS may order its sums differently.
+Over the d-wave guesses with delta = 0.01, 0.05, 0.2, 0.3 and 0.5 `"ed"`
+needed 44, 50, 43, 63 and 23 iterations before and needs 23, 21, 19, 18
+and 15 now. The s-wave state at nk = 32 and 64 needs 23 and 24, against 28 and
 31. qtci with the s-wave state at nk = 8, where the gap is barely resolved,
 converges in 16 iterations against 22, to the same energy. Two cases got
-slower: the Zeeman case with qtci (321 against 300,
-where the interpolation noise of the charge keeps the window open longer)
-and the Zeeman case with `"ed"` at nk = 32 (53 against 42). At nk = 64 the
-Zeeman case does not converge in 1000 iterations, before as now. The wall
+slower: the Zeeman case with qtci (321 against 300, where the
+interpolation noise of the charge keeps the window open longer) and the
+Zeeman case with `"ed"` at nk = 32 (53 against 42). At nk = 64 the Zeeman
+case does not converge in 1000 iterations, before as now. Why the Zeeman
+case is slow, and what was done about it, is in "The gapless Zeeman state"
+below. The wall
 time follows the iterations: on three reserved cores of a loaded
 workstation the d-wave state takes 0.44 s against 1.7 s with `"ed"`, and
 the s-wave state at nk = 64 3.5 s against 5.3 s.
@@ -1162,6 +1166,140 @@ anomalous entries with the Nambu indices directly now, the same number to
 0.10 ms, from 12% of an iteration to below 1%. The rest of `shift` is the
 Fermi search of the normal state, about 40% of an iteration of this
 one-site cell, which was not touched.
+
+#### The gapless Zeeman state
+
+Why does the Zeeman state need 57 Broyden iterations at nk = 16 and 53 at
+nk = 32, while the gapped states need 13 to 26, and why does it not
+converge at all at nk = 64? The state is the s-wave one with U = -2 at
+filling 0.3 on the spinful square lattice, with a Zeeman field B = 0.3
+that kills the pairing, `mf="swave"`, `maxerror=1e-10` and T = 1e-7. We
+logged x, the window and the charge error N - N0 at each evaluation of
+one Broyden run, with the residual split into its mean-field part and its
+offset part. As references we ran the same loop with the offset held at
+x = 0, which is the Fermi level of the normal state as before the BdG
+Fermi level, the same Hamiltonian without Nambu from a ferromagnetic
+guess, and the plain loop. Broyden iterations with `"ed"`, before the
+restart described below, and the iterations of the plain loop:
+
+| nk | T | with the offset | x = 0 | no Nambu | plain loop |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 1e-7 | 57 | 41 | 7 | 350 |
+| 32 | 1e-7 | 53 | 30 | 7 | 273 |
+| 64 | 1e-7 | > 300 | > 300 | > 300 | > 1000 |
+| 16 | 1e-3 | 52 | 35 | 12 | |
+| 32 | 1e-3 | 47 | 23 | 7 | |
+| 64 | 1e-3 | 23 | 22 | 13 | |
+
+All runs at a mesh end in the same state, the normal one with the charge
+error of the staircase (1.6e-3 per cell at nk = 16, -3.9e-4 at nk = 32).
+Three different things make them slow.
+
+The offset has no fixed point while the pairing lives. The charge of the
+paired state jumps by a shell of k-states when mu crosses a level, and N0
+falls inside the jump. At nk = 16 the charge error goes between -0.014,
++0.017 and +0.033 per cell while x moves by 1e-2, and at nk = 32 between
+-4.3e-3 and +3.5e-3. The Newton step, 0.05 and 0.016 long, takes x from
+one side of the jump to the other at every evaluation. The window is
+4 Delta wide, and Delta goes down slowly from the guess, so the rule on
+the whole window fires only at evaluation 12 to 22, when Delta is 0.01 to
+0.03. This is the difference between the first two columns, 16 iterations
+at nk = 16 and 23 at nk = 32. A window that closes faster cannot fix it.
+The gapped states need |x| up to 0.33 Delta (U = -1 at nk = 24, x =
+-0.0095 with Delta = 0.028) and |x| W/Delta^2 up to 80, while x in the
+oscillation of the Zeeman case has |x|/Delta from 0.05 to above 1 and
+|x| W/Delta^2 from 3 to a few hundred, so the two ranges overlap. One
+offset and one density matrix do not tell a gapped shell from a flipping
+one.
+
+With x = 0 the map is still almost discontinuous in the pairing. A level
+of the normal state that sits on mu_n, filled in part by the smearing, is
+pushed off it by the pairing: the BdG levels of the pair (k up, -k down)
+are at -B +- sqrt(xi^2 + Delta^2), so the one at zero moves by
+Delta^2/(2B). This shift crosses T at Delta of about 2.4e-4. In the run at
+x = 0 and nk = 16 the charge error goes from +1.6e-3 at Delta below 4e-5
+to -1.4e-2 above 3.5e-4, and the Hartree part of the mean field jumps
+with it: the residual goes from 1.2e-3 to 3.4e-2 in one step. The
+Broyden step that extrapolates the decay of the pairing lands in this
+range, and the secant pairs on the two sides of the jump give a model
+that is wrong on both. Without Nambu there is no pairing and no such
+jump, and 7 iterations suffice.
+
+At nk = 64 the normal state itself has no fixed point that a mixing
+reaches at T = 1e-7. The run without Nambu ends in a cycle of period 10,
+with the residual repeating 1.076e-3, 5.149e-3, 3.092e-3, ... and the
+step-size scale moving, not stuck at its floor. The plain loop does not
+converge in 1000 iterations either, with Nambu or without, and a memory
+of 3 instead of 8 does not help. At T = 1e-3 the same states converge in
+13, 23 and 22 iterations, to the same charge error. So the failure at
+nk = 64 is the map of the normal state at T = 0, and the BdG Fermi level
+plays no role in it. At nk = 16 and 32 a smearing of 1e-3 does not
+change the picture: the charge error is still the one of the staircase,
+and the counts stay high.
+
+Is it the history of Broyden? A shorter memory makes it worse: m = 3
+gives 80 and 60 at x = 0, and 308 and 327 with the offset; m = 16 gives
+63 and 52 with the offset. Scaling the offset entry of the vector by 0.1
+or 0.01, or leaving it out of the threshold of the warm-up, moves the
+counts by at most 7. What helps is to
+drop the secant pairs that straddle a jump. `broyden_mixing_solve` now
+takes `restart=4.`: when the residual of one multisecant step is more than
+4 times the one of the step before, it forgets its memory and seeds it
+again with one Pratt step from the current point, as at the end of the
+warm-up. None of the gapped states below restarts. Broyden iterations at
+`maxerror=1e-10`, before and after the restart:
+
+| state | integration | nk | before | now |
+|---|---|---:|---:|---:|
+| s-wave, U = -2, filling 0.3 | `"ed"`, triangle, qtci | 16 | 23, 23, 23 | 23, 23, 23 |
+| s-wave, U = -2, filling 0.3 | `"ed"` | 32, 64 | 23, 24 | 23, 24 |
+| d-wave, V1 = -2, U = 1 | `"ed"`, triangle, qtci | 16 | 20, 20, 20 | 20, 20, 20 |
+| s-wave, U = -1, filling 0.3 | `"ed"` | 16, 24 | 13, 16 | 13, 16 |
+| s-wave, U = -6, filling 0.1 | `"ed"` | 16 | 26 | 26 |
+| s-wave, U = -2, filling 0.2 | `"ed"` | 16 | 13 | 13 |
+| Zeeman | `"ed"`, triangle | 16 | 57, 57 | 41, 41 |
+| Zeeman | `"ed"` | 32 | 53 | 36 |
+| Zeeman | qtci | 16 | 69 to 346 | 50 to 85 |
+| Zeeman | `"ed"` | 64 | > 1000 | > 1000 |
+
+The gapped rows have the same energy to the last digit, so the restart
+never happened there. The same holds for the smooth problems of
+`scftk/broydenmixing.py`: the three seeds of the Lieb flake (57, 67 and
+132), the honeycomb antiferromagnet with U = 3 (30, and 132 with
+`mix=0.1`), the honeycomb CDW with V1 = 2 (31) and the 3x3 honeycomb
+antiferromagnet (51). The Zeeman states with `"ed"` and the triangle end
+in the same state as before, with the energy to 2e-11 and the charge
+error to 2e-12. With `"ed"` and the triangle a factor 2 gives the same
+counts as 4, and a factor 10 gives 42, 41 and 43. With the offset held at
+zero the restart gives 36 and 28, so the cost of the offset in a gapless
+state is now 5 and 8 iterations instead of 16 and 23. The plain loop
+does not use Broyden mixing and is unchanged: 350 iterations at nk = 16,
+with the same energy to the last digit.
+
+The qtci count of the Zeeman state is not reproducible from one run to
+the next, with the same guess, the same seed and three BLAS threads: four
+runs of the code before gave 69, 74, 101 and 346 iterations, and three
+runs now 50, 65 and 85. The 300 and 321 of the table above, with the
+adaptive and with the solver step, are in the same range, so they do not
+say that one step is faster than the other. The reason is that the
+residual sits at 1e-9 to 1e-8, the
+interpolation noise of qtci at a Fermi surface, while `maxerror=1e-10`
+asks for less, so the loop stops when the noise happens to dip below the
+tolerance. One run before even stopped at an energy 3.6e-6 below the
+others. The gapped qtci states converge in 23 and 20 iterations every
+time. A qtci run of a metal needs a `maxerror` above its noise floor.
+
+What the restart does not touch is the case at nk = 64, which is the
+normal state at T = 0, and the pairing that dies slowly: the residual of
+the pairing goes down by a factor 0.88 to 0.93 per step of the warm-up,
+so about 14 of the 36 to 41 iterations are spent before the multisecant
+phase starts. That is a pairing near its critical field, which decays
+slowly in any linear mixing.
+
+`tests/scf/test_bdg_fermi_level_solvers.py` checks that the restart gives
+the Zeeman state at nk = 16 in fewer iterations than without it, with the
+same energy and charge error to 1e-8, and that the d-wave state has the
+same count and the same energy to 1e-12 with and without it.
 
 ### qtci from a random guess
 
@@ -1207,8 +1345,9 @@ converges after it (230 evaluations, E = -2.33065804), with no gain in
 time over the plain loop. `tests/scf/test_qtci_bdg_random_guess.py`
 checks that the onsite diagonal of the qtci density matrix is exactly real
 on the paired state `"ed"` reaches from seed 0, with a BdG mean field
-Hermitian to 1e-12, and that qtci from seed 0 reaches the energy of
-`"ed"` to 1e-6. Both fail before the change: on that frozen state the
+Hermitian to 1e-12. The whole loop from a random guess, about 500
+iterations, is too long for the suite. The check fails before the
+change: on that frozen state the
 imaginary part was 7e-10 to 1e-9 and the non-Hermitian part of the mean field
 1.7e-8, from stacked fields of rank 51. A frozen state with real or
 low-rank fields does not show it: the s-wave and p-wave states (rank 16
@@ -1264,11 +1403,20 @@ loaded.
   state, but its guess was not recorded, and its numbers were not
   reproduced here.
 - A state with a Bogoliubov Fermi surface, or one whose pairing dies in the
-  loop, converges more slowly with the BdG Fermi level than with the
-  Fermi level of the normal state (57 against 41 Broyden iterations in
-  the Zeeman case at nk = 16, 53 against 42 with the old step at nk = 32). The root find per iteration, the
-  other design, should not have this problem, at a few density matrices
-  per iteration. It was not built.
+  loop, still converges more slowly with the BdG Fermi level than with
+  the Fermi level of the normal state, since no offset holds the charge
+  on the staircase of the mesh (see "The gapless Zeeman state"). With the
+  restart of Broyden mixing the Zeeman case needs 41 iterations at
+  nk = 16 and 36 at nk = 32. With the offset held at zero it needs 36 and
+  28. Before the restart it needed 57 and 53, against 41 and 30 at zero
+  offset. The root find per iteration, the other design, would put mu on
+  the level the smearing fills in part, so it should not have this
+  problem, at a few density matrices per iteration. It was not built.
+  At nk = 64 the Zeeman case does not converge with either Fermi level,
+  because the normal state at T = 1e-7 does not converge on that mesh,
+  without Nambu too; at T = 1e-3 it converges in 23 iterations. The qtci
+  count of this state is not reproducible at `maxerror=1e-10`, which is
+  below the noise of its residual.
 - The user guide moved with the BdG Fermi level. The figures of the s-wave
   and triplet examples of the mean-field chapter were made again, and the
   numbers in the text are the new ones: Delta_0 from 0.30 to 0.29, the

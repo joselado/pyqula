@@ -116,6 +116,38 @@ def test_a_gapless_state_gives_the_same_result_with_the_solver_step(
     assert abs(new.hamiltonian.fermi-old.hamiltonian.fermi) < 1e-8
 
 
+def _no_restart(monkeypatch):
+    """Broyden mixing without the restart on a jump of the map"""
+    from pyqula.scftk import broydenmixing
+    solve = broydenmixing.broyden_mixing_solve
+    monkeypatch.setattr(broydenmixing, "broyden_mixing_solve",
+            lambda *a, **k: solve(*a, restart=None, **k))
+
+
+def test_the_restart_of_broyden_mixing_on_a_jump(monkeypatch):
+    """In the Zeeman case the pairing dies and the paired charge jumps by a
+    shell of k-states as the trial pairing goes through about 1e-4, where
+    the level on the Fermi level is pushed off it. Broyden mixing drops its
+    secant pairs when the residual jumps up, and reaches the same state in
+    fewer iterations (41 against 57 when measured). In the d-wave state the
+    map has no jump, the restart never happens, and the run is the same to
+    the last iteration"""
+    def zeeman():
+        np.random.seed(1)
+        return Vinteraction(_h0(0.3), U=-2., filling=0.3, mf="swave",
+                nk=NK, solver="broyden_mixing", maxerror=1e-10,
+                load_mf=False, write=False, verbose=0)
+    new = [zeeman(), _dwave()]
+    _no_restart(monkeypatch)
+    old = [zeeman(), _dwave()]
+    for scf in new+old: assert scf.converged
+    assert abs(new[0].total_energy-old[0].total_energy) < 1e-8
+    assert abs(new[0].charge_error-old[0].charge_error) < 1e-8
+    assert new[0].iterations < old[0].iterations
+    assert new[1].iterations == old[1].iterations
+    assert abs(new[1].total_energy-old[1].total_energy) < 1e-12
+
+
 def test_no_gap_warning_after_the_maxite_cut(capsys):
     """A loop stopped at maxite says nothing about the gap of its state,
     so the warning of a charge that is not held is not printed"""
