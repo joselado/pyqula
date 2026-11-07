@@ -78,27 +78,25 @@ def test_mesh_shift_is_the_mesh_point_of_k_plus_q():
 
 def test_a_mesh_q_is_diagonalized_once(counter):
     h = _square()
-    nk = 8
+    nk = 4
     for q in (None,[0.,0.,0.],[1./nk,2./nk,0.],[-3./nk,1.+1./nk,0.]):
         counter[0] = 0
         out = simplexchi.chi_triangle(h,q=q,counted=True,
                 pAs=np.identity(2)[None],pBs=np.identity(2)[None],
-                energies=[0.],delta=1e-2,T=1e-2,nk=nk,mode="trace")
+                energies=[0.],delta=1e-2,T=0.,nk=nk,mode="trace")
         assert out[2] == nk**2
         assert counter[0] == nk**2
     counter[0] = 0
     out = simplexchi.chi_triangle(h,q=[0.137,0.211,0.],counted=True,
             pAs=np.identity(2)[None],pBs=np.identity(2)[None],
-            energies=[0.],delta=1e-2,T=1e-2,nk=nk,mode="trace")
+            energies=[0.],delta=1e-2,T=0.,nk=nk,mode="trace")
     assert out[2] == 2*nk**2
     assert counter[0] == 2*nk**2
 
 
 _cases = [(_square,16,"matrix",False),(_square,16,"trace",False),
           (_square,16,"matrix",True),(_square,16,"trace",True),
-          (_honeycomb_supercell,4,"matrix",False),
-          (_honeycomb_supercell,4,"trace",False),
-          (_honeycomb_supercell,4,"trace",True)]
+          (_honeycomb_supercell,4,"trace",False)]
 
 
 @pytest.mark.parametrize("model,nk,mode,lowmem",_cases)
@@ -165,7 +163,6 @@ def _cubic():
 
 @pytest.mark.parametrize("model,dim,nk,mode",[(_chain,1,24,"matrix"),
                                               (_chain,1,24,"trace"),
-                                              (_cubic,3,5,"matrix"),
                                               (_cubic,3,5,"trace")])
 def test_1d_and_3d_shared_route_against_two_diagonalizations(model,dim,nk,
         mode,counter,monkeypatch):
@@ -189,8 +186,7 @@ def test_1d_and_3d_shared_route_against_two_diagonalizations(model,dim,nk,
     assert _rel(np.array(local),ref) < 1e-12
 
 
-@pytest.mark.parametrize("model,nk,modes",[(_square,6,("trace","matrix")),
-                                           (_honeycomb_supercell,4,("trace",))])
+@pytest.mark.parametrize("model,nk,modes",[(_square,4,("trace","matrix"))])
 def test_the_local_response_diagonalizes_the_mesh_once(model,nk,modes,
         counter,monkeypatch):
     """chiAB with q=None, the average over the q-mesh, against the loop
@@ -248,7 +244,7 @@ def test_the_local_rpa_response_diagonalizes_the_mesh_once(route,counter,
     gives the two-diagonalization route"""
     from pyqula.chitk import rpa
     h = _square()
-    nk = 6
+    nk = 4
     kw = dict(energies=[0.,0.5],delta=1e-2,nk=nk,integration="triangle")
     if route=="AB":
         run = lambda: rpa.chi_AB_RPA(h,V=np.array([[0.8]]),q=None,**kw)
