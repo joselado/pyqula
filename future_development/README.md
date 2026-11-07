@@ -254,6 +254,19 @@ already reached once.
   `tetrahedron_susceptibility.md`. The anomalous Hall of metals with the
   same occupations is built, see the next entry.
 
+- [`simplex_fermi_search.md`](simplex_fermi_search.md) -- the Fermi search
+  of the triangle and tetrahedron integration, `fermi_from_energies`, now a
+  safeguarded Newton iteration with the simplex DOS from a kernel that
+  returns charge and DOS together. It takes 3 or 4 evaluations in a metal
+  instead of about 11, and 1 in an insulator, and agrees with the old
+  brentq level to 1e-14 in metals. It is 17 to 29 times faster in 2D at
+  nk = 256 and 102 times faster at 32^3 and T = 1e-2 (20.8 s to 0.2 s). The
+  triangle mean field of the square lattice goes from 0.22 to 0.07 s per
+  iteration at nk = 128. In a gap the level is the middle between the
+  vertex energies at every T, because the cut Fermi function makes the
+  charge exactly flat there too; at T>0 the old search put it up to 2.4e-3
+  off the middle, with no effect on the density matrix.
+
 - [`triangle_anomalous_hall.md`](triangle_anomalous_hall.md) -- the
   Fermi-sea anomalous Hall conductivity of a 2D metal,
   `h.get_anomalous_hall_conductivity()`, the Kubo Berry curvature in the
