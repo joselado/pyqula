@@ -370,6 +370,129 @@ The grid row stops at nk = 1024 because `multi_ldos` in mode "diagonalization" k
 eigenvector of the mesh as a Python list; at nk = 2048 that is 8M arrays. The triangle path
 keeps only the band energies and the site weights.
 
+## One interpolation of all the fields (7 November 2026)
+
+The qtci tables above ran one cross interpolation per field (each band
+energy, each weight), all sharing one cache of diagonalizations. The other
+choice is one interpolation of all the fields at once
+(`qtcitk/meshfields.qtci_stacked_fields`), with the field index as one more
+tensor site, as the mean-field density matrix does. The question is which
+one needs fewer diagonalizations at the same error, without losing wall
+time. The stacked TCI shares its pivots in k between the fields, so bands
+with the same kinks ask for the same k-points. Its tolerance is relative to
+the largest value of any field, and its rank grows with the number of
+fields.
+
+The models are the graphene and the four-band model of the sections above
+(the four-band one with the sz weight, eight fields), the LDOS of gapped
+graphene of the section on the local density of states (six fields), and a
+2x2 and a 4x4 supercell of graphene with a sublattice imbalance of 0.3 and
+a random onsite energy of width 0.2 t (8 and 32 bands). delta = 1e-3,
+tolerance 1e-6, 321 energies (341 for the four-band model, 161 for the
+LDOS). The error is max|rho_qtci - rho_triangle| / max|rho_triangle| over
+the energies (and the sites), with the triangle on the same 2^R mesh, so it
+is only the interpolation error. As a reference, the triangle itself moves
+by 1.2e-3 from nk = 256 to 512 on graphene (1.0e-3 from 512 to 1024, the
+van Hove peak), 5.1e-3 on the four-band sz DOS, 1.2e-3 on the LDOS and
+3.7e-2 on the 2x2 supercell, 8.5e-3 on the 4x4 one and 5.4e-2 on the LDOS
+of the 2x2 one, all from 256 to 512. So every
+interpolation error below is at least 30 times smaller than the error of
+the mesh. The rank is the largest rank of one field for the per-field
+form, the largest bond dimension for the stacked one. Wall times of the
+whole call, 321 energies included, on two cores of a workstation that
+other jobs kept busy (load 5 to 10).
+
+| model | R | form | diagonalizations (share) | rank | error | time (s) |
+|---|---|---|---|---|---|---|
+| graphene | 8 | triangle | 65.5k (1) | | | 6.3 |
+| graphene | 8 | per field | 30.5k (0.47) | 46 | 6.8e-6 | 8.2 |
+| graphene | 8 | stacked | 22.3k (0.34) | 45 | 6.3e-6 | 6.8 |
+| graphene | 9 | triangle | 262k (1) | | | 21.2 |
+| graphene | 9 | per field | 41.9k (0.16) | 47 | 8.2e-6 | 22.4 |
+| graphene | 9 | stacked | 32.7k (0.12) | 45 | 8.3e-6 | 21.5 |
+| graphene | 10 | triangle | 1.05M (1) | | | 76.1 |
+| graphene | 10 | per field | 52.7k (0.05) | 46 | 1.0e-5 | 76.3 |
+| graphene | 10 | stacked | 36.0k (0.03) | 47 | 6.0e-6 | 75.2 |
+| four bands, sz | 8 | triangle | 65.5k (1) | | | 13.2 |
+| four bands, sz | 8 | per field | 60.1k (0.92) | 70 | 2.6e-5 | 23.4 |
+| four bands, sz | 8 | stacked | 32.2k (0.49) | 120 | 1.6e-5 | 23.5 |
+| four bands, sz | 9 | triangle | 262k (1) | | | 61.7 |
+| four bands, sz | 9 | per field | 156k (0.60) | 73 | 2.1e-5 | 69.7 |
+| four bands, sz | 9 | stacked | 42.5k (0.16) | 121 | 1.5e-5 | 63.0 |
+| LDOS, gapped graphene | 8 | triangle | 65.5k (1) | | | 3.3 |
+| LDOS, gapped graphene | 8 | per field | 46.9k (0.72) | 52 | 6.8e-6 | 6.5 |
+| LDOS, gapped graphene | 8 | stacked | 19.9k (0.30) | 55 | 1.2e-5 | 3.9 |
+| LDOS, gapped graphene | 9 | triangle | 262k (1) | | | 11.2 |
+| LDOS, gapped graphene | 9 | per field | 93.8k (0.36) | 54 | 3.3e-5 | 17.9 |
+| LDOS, gapped graphene | 9 | stacked | 27.3k (0.10) | 57 | 1.3e-5 | 16.4 |
+| supercell 2x2 | 8 | triangle | 65.5k (1) | | | 21.5 |
+| supercell 2x2 | 8 | per field | 65.5k (1.00) | 116 | 7.2e-6 | 35.3 |
+| supercell 2x2 | 8 | stacked | 63.8k (0.97) | 203 | 1.3e-5 | 29.0 |
+| supercell 2x2 | 9 | triangle | 262k (1) | | | 76.4 |
+| supercell 2x2 | 9 | per field | 245k (0.93) | 132 | 5.3e-6 | 111 |
+| supercell 2x2 | 9 | stacked | 203k (0.77) | 220 | 1.0e-5 | 112 |
+| supercell 4x4 | 8 | triangle | 65.5k (1) | | | 93.5 |
+| supercell 4x4 | 8 | per field | 65.5k (1) | 165 | 5.9e-6 | 163 |
+| supercell 4x4 | 8 | stacked, cap 400 | 65.5k (1) | 402 | 2.7e-4 | 132 |
+| supercell 4x4 | 8 | stacked, cap 800 | 65.5k (1) | 588 | 4.7e-6 | 288 |
+| supercell 4x4, again | 8 | per field | 65.5k (1) | 165 | 5.4e-6 | 178 |
+| supercell 4x4, again | 8 | stacked, cap 800 | 65.5k (1) | 589 | 4.8e-6 | 310 |
+| supercell 4x4 | 8 | stacked, cap 800, tolerance 1e-7 | 65.5k (1) | 678 | 4.5e-7 | 175 |
+| LDOS, supercell 2x2 | 8 | triangle | 65.5k (1) | | | 15.6 |
+| LDOS, supercell 2x2 | 8 | per field | 65.5k (1) | 152 | 8.9e-6 | 151 |
+| LDOS, supercell 2x2 | 8 | stacked, cap 400 | 65.3k (1.00) | 400 | 1.3e-4 | 52.3 |
+| LDOS, supercell 2x2 | 8 | stacked, cap 800 | 65.5k (1.00) | 502 | 1.0e-5 | 76.1 |
+
+What we read from it:
+
+- With few fields the stacked form wins in diagonalizations, at the same
+  error: 1.3 to 1.5 times fewer on graphene (two fields), 3.7 times fewer on
+  the sz DOS at R = 9 (42.5k against 156k, eight fields) and 3.4 times fewer
+  on the LDOS at R = 9 (27.3k against 93.8k, six fields). In wall time the
+  two forms are within 10% on the DOS, because the simplex sum at 321
+  energies is most of the time and the diagonalizations of two or four
+  bands are cheap; the interpolation alone takes 6 s against 16 s on the sz DOS at
+  R = 9 and 1.6 s against 4.8 s on the LDOS.
+- On the disordered supercells qtci saves little or nothing in either
+  form: 77 to 100% of the mesh is diagonalized, because the random onsite
+  energy turns the band crossings into narrow anticrossings, kinks of the
+  bands ordered by energy. The plain triangle on the same mesh is then as
+  fast or faster.
+- The stacked rank grows with the number of fields. On the 4x4 supercell
+  (32 band energies) it stopped at the cap of 400 of one field, before its
+  tolerance, with an error of 2.7e-4, 45 times the per-field one. With a
+  cap of 800 it reaches rank 588 and the per-field error, 4.7e-6, but the
+  interpolation then takes 190 s against 86 s, and the whole call 288 s
+  against 163 s. A second run gave 200 s against 101 s for the
+  interpolation and 310 s against 178 s for the call. The stacked form at a
+  tolerance of 1e-7 took only 99 s for the interpolation in one run; we do
+  not trust that number, because on another machine the stacked TCI ran the
+  same six sweeps at 1e-6 and 1e-7, at rank 586 and 680, in 291 s and
+  266 s, while one TCI per field took 178 s there.
+- The LDOS of the 2x2 supercell has more fields (72, the 8 band energies
+  and 64 site weights), and there the stacked form at a cap of 800 is the
+  faster one: rank 502, the per-field error, 76 s against 151 s. So what
+  decides is not the number of fields alone. In principle one TCI per field
+  costs the number of fields times the cost of one field, while the cost of
+  the stacked TCI grows faster than linearly with its rank, and the 32 band
+  energies of the 4x4 cell are few fields of high rank (165 each).
+
+So the answer differs by model for the DOS: the stacked form needs up to
+3.7 times fewer diagonalizations with a few fields, and on the 32-band
+supercell it is 1.7 to 1.8 times slower for the whole call at the same
+error, and 2.0 to 2.2 times for the interpolation alone. The qtci DOS keeps
+one interpolation per field (`meshfields.qtci_fields`) as the default. The
+qtci LDOS, where the stacked form won or tied on every model (3.4 times
+fewer diagonalizations on gapped graphene at R = 9, twice as fast on the
+supercell), uses it now, with a rank cap of 800
+(`meshfields.stacked_maxbonddim`, shared with the qtci optical
+conductivity). There is no keyword to choose the form for the DOS: the
+stacked form wins by more than a factor 2 on some models (in
+diagonalizations), but on the 32-band supercell it loses by 1.7 to 1.8 in
+the wall time of the call, not by more than 2, and qtci saves nothing on
+that model in either form. The graphene tables above keep the numbers of
+the per-field form, which is still the one of the DOS.
+
 ## Limits of the linear interpolation that were found on the way
 
 - **Flat simplices.** A simplex whose vertices all sit at one energy is a delta function in
@@ -419,4 +542,6 @@ keeps only the band energies and the site weights.
   interpolation of the fields is one function, `qtcitk/meshfields.qtci_fields`, called by
   the qtci DOS, the qtci LDOS and `kubosimplex.sigma_qtci`. The DOS and LDOS give the same
   numbers bit by bit as before. The direct kernel of `kubosimplex.py` calls `_dd` from
-  here. `conductivitytk/shgsimplex.py` still has its own copy of the interpolation.
+  here. Since 7 November 2026 `conductivitytk/shgsimplex.py` calls `qtci_fields` too,
+  and the qtci DOS, LDOS and optical conductivity call `qtci_stacked_fields` (see the
+  section on one interpolation of all the fields).

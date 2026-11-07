@@ -55,7 +55,9 @@ analogue of the analytic tetrahedron method of Lambin and Vigneron, PRB 29,
 
 The triangle method alone gives about a factor 1000 in diagonalizations
 against the uniform mesh at equal error. QTCI of the smooth fields (dE and
-the weights, one interpolation each, sharing one cache of diagonalizations)
+the weights, one interpolation each, sharing one cache of diagonalizations;
+the code now runs one interpolation of all of them, see the section on one
+interpolation of all the fields)
 adds a factor 2 at 1e-3 and about 15 at 3e-4, because the number of
 diagonalizations saturates with R: ranks stay at about 43 for dE and 60 for
 the weight. At delta = 1e-2 the triangle result at nk = 512 agrees with the
@@ -78,6 +80,109 @@ the triangle result by 8e-13 and the qtci result by 7e-8, so on the models
 tried the unaveraged fields were smooth as well (possibly because eigh
 returns pure spin states for a spin-block Hamiltonian; not checked). Only
 the direct basis-rotation test exercises the averaging.
+
+## One interpolation of all the fields (7 November 2026)
+
+The qtci path first ran one cross interpolation per field: dE of every
+pair, and the real and imaginary part of every weight, all sharing one
+cache of diagonalizations. Now it runs one interpolation of all of them at
+once (`qtcitk/meshfields.qtci_stacked_fields`), with the field index as one
+more tensor site, as the mean-field density matrix already does. The
+question is which form needs fewer diagonalizations at the same error, and
+whether it costs wall time.
+
+What changes is this. One TCI per field puts its pivots where that field
+needs them, and two fields share a diagonalization only when they happen to
+pick the same k-point. The stacked TCI shares its pivots in k between all
+the fields, so fields with the same kinks (the K points, the band edge) ask
+for the same k-points. Its tolerance is relative to the largest value of
+any field, not of each field, and its rank is roughly that of all the
+fields together, so it grows with their number.
+
+The models are the gapped honeycomb lattice (sublattice imbalance 0.3, two
+bands, five fields), the three-band MoS2 model of `qtci_shg.md`
+(`three_band_tmdc`, spinless, ten fields) and a 2x2 supercell of the
+gapped honeycomb lattice with a random onsite energy of width 0.2 t (eight
+bands, 80 fields). T = 1e-3, delta = 1e-3, tolerance 1e-6, 48 frequencies
+on [0.65, 3] t, 28 on [0.8, 3.5] eV and 28 on [0.3, 3] t. The error is
+max|sigma_qtci - sigma_triangle| / max|sigma_triangle| over the frequencies
+and the components, with the triangle on the same 2^R mesh, so it is only
+the interpolation error. As a reference for what "equal error" means, the
+triangle itself moves by 2.9e-3 and 7.9e-4 from nk = 256 to 512 and from
+512 to 1024 on the honeycomb lattice, by 2.1e-3 and 4.6e-4 on MoS2, and by
+2.6e-2 and 8.0e-3 from 128 to 256 and from 256 to 512 on the supercell. So
+every interpolation error below is at least 20 times smaller than the error
+of the mesh, and both forms give the same spectrum at the level the mesh
+allows. The rank is the largest rank of one field for the per-field form,
+and the largest bond dimension for the stacked one. Wall times of the whole
+call on two cores of a workstation that other jobs kept busy (load 5 to
+10), so they are good to about 20%.
+
+| model | R | form | diagonalizations (share) | rank | error | time (s) |
+|---|---|---|---|---|---|---|
+| gapped honeycomb | 8 | triangle | 65.5k (1) | | | 0.7 |
+| gapped honeycomb | 8 | per field | 51.2k (0.78) | 65 | 1.3e-5 | 4.0 |
+| gapped honeycomb | 8 | stacked | 27.9k (0.43) | 100 | 1.0e-5 | 2.0 |
+| gapped honeycomb | 9 | triangle | 262k (1) | | | 2.7 |
+| gapped honeycomb | 9 | per field | 109k (0.41) | 67 | 3.7e-5 | 8.1 |
+| gapped honeycomb | 9 | stacked | 34.2k (0.13) | 101 | 1.3e-5 | 4.4 |
+| gapped honeycomb | 10 | triangle | 1.05M (1) | | | 11.2 |
+| gapped honeycomb | 10 | per field | 150k (0.14) | 66 | 1.9e-5 | 12.8 |
+| gapped honeycomb | 10 | stacked | 43.7k (0.04) | 102 | 1.5e-5 | 8.2 |
+| MoS2 | 8 | triangle | 65.5k (1) | | | 2.0 |
+| MoS2 | 8 | per field | 65.4k (1.00) | 114 | 3.2e-5 | 25.0 |
+| MoS2 | 8 | stacked | 62.1k (0.95) | 214 | 2.2e-5 | 21.6 |
+| MoS2 | 9 | triangle | 262k (1) | | | 8.9 |
+| MoS2 | 9 | per field | 229k (0.88) | 118 | 1.6e-5 | 46.7 |
+| MoS2 | 9 | stacked | 145k (0.55) | 220 | 3.4e-5 | 24.4 |
+| supercell 2x2 | 7 | triangle | 16.4k (1) | | | 1.1 |
+| supercell 2x2 | 7 | per field | 16.4k (1) | 119 | 6.6e-7 | 50.2 |
+| supercell 2x2 | 7 | stacked, cap 400 | 16.4k (1) | 400 | 5.2e-5 | 25.5 |
+| supercell 2x2 | 7 | stacked, cap 800 | 16.4k (1) | 460 | 1.2e-5 | 44.3 |
+| supercell 2x2 | 8 | triangle | 65.5k (1) | | | 5.0 |
+| supercell 2x2 | 8 | per field | 65.5k (1) | 161 | 4.8e-6 | 192 |
+| supercell 2x2 | 8 | stacked, cap 400 | 65.2k (0.99) | 400 | 2.2e-4 | 46.8 |
+| supercell 2x2 | 8 | stacked, cap 800 | 65.4k (1.00) | 572 | 2.0e-5 | 102 |
+| supercell 2x2 | 7 | stacked, cap 800, tolerance 1e-7 | 16.4k (1) | 525 | 1.6e-6 | 74.8 |
+| supercell 2x2 | 8 | stacked, cap 800, tolerance 1e-7 | 65.5k (1.00) | 700 | 1.1e-6 | 120 |
+
+What we read from it:
+
+- With few fields the stacked form wins. On the gapped honeycomb lattice it
+  needs 3.2 times fewer diagonalizations at R = 9 and 3.4 times fewer at
+  R = 10 (43.7k against 150k), and its count grows slowly with R (28k, 34k,
+  44k), while the per-field count still grows by 1.4 to 2.1 per step. On MoS2
+  it needs 1.6 times fewer at R = 9. The errors are the same within a
+  factor 3 either way, and the stacked call is 1.2 to 2 times faster, because
+  it runs one interpolation instead of five or ten.
+- On the disordered supercell neither form saves anything: both diagonalize
+  the whole mesh at R = 7 and 8. The random onsite energy turns every band
+  crossing into a narrow anticrossing, a kink of the fields ordered by band
+  index, and the interpolation has to resolve every one of them. The plain
+  triangle on the same mesh takes 5 s, against 100 to 200 s for qtci, so
+  there the triangle is the right choice.
+- The stacked rank grows with the number of fields. At the cap of 400 of
+  one field, the stacked interpolation of the 80 supercell fields stopped
+  at the cap, before its tolerance, with an error of 2.2e-4 at R = 8, 47
+  times the per-field one. With a cap of 800 it reaches rank 460 and 572
+  and an error of 1.2e-5 and 2.0e-5, which is the error it gives on the
+  other models at this tolerance, in half the time of the per-field form
+  at R = 8. The per-field error on this model is smaller, 6.6e-7 and
+  4.8e-6, because each of the 80 fields is converged relative to its own
+  maximum. To compare at equal error, the stacked form at a tolerance of
+  1e-7 gives 1.6e-6 and 1.1e-6, as small as the per-field
+  form, in 75 s against 50 s at R = 7 and 120 s against 192 s at R = 8. So
+  at equal error the two forms are within a factor 1.6 in time either way
+  on this model.
+
+So the qtci optical conductivity uses the stacked form now, with a rank cap
+of 800 (`meshfields.stacked_maxbonddim`, shared with the qtci LDOS), and
+the per-field form stays in `meshfields.qtci_fields` for the qtci DOS and
+the second-harmonic conductivity. There is no keyword to choose: on no model
+did the stacked form lose by more than a factor 2 in diagonalizations or
+in time once the cap was raised, and at equal tolerance its error stays at
+the level the tolerance asks for. The test that compares qtci with the
+triangle on the same mesh passes unchanged.
 
 ## The band window for large unit cells
 
@@ -537,8 +642,15 @@ time.
   large unit cells is the answer to this.
 - **Many bands.** The fields are ordered by band index, so they have kinks
   where bands cross. The triangle sum still converges (the crossings are a
-  set of measure zero), but the QTCI rank grows. Not measured beyond two
-  bands.
+  set of measure zero), but the QTCI rank grows. Measured on a 2x2
+  supercell with a random onsite energy (eight bands, 80 fields, see the
+  section on one interpolation of all the fields): qtci diagonalizes the
+  whole mesh at R = 7 and 8 in both forms, so it saves nothing there and
+  the plain triangle is 20 to 40 times faster. Band tracking by overlap of
+  eigenvectors would remove the kinks of the anticrossings; not built. With
+  more fields than this (a 4x4 cell has about 1300) the stacked rank would
+  pass the cap of 800, which the 80 fields of the 2x2 cell did not reach
+  (572 at R = 8); not measured.
 - **Metals.** The occupation factors jump at the Fermi surface within a
   width T. The vertex-mean weight is first order there, and in the qtci path
   the step costs rank. The Drude term is the same in all three

@@ -205,7 +205,11 @@ already reached once.
   supercells up to 32 bands. A band window (`ewindow=`, or `nv`/`nc`) keeps
   only the bands near E_F, with exact Re sigma below the window and a
   Kramers-Kronig bias of Im sigma, measured; it brings a 1084-orbital
-  twisted bilayer from 16 GB at nk = 6 to 2.9 GB at nk = 36. In 3D the
+  twisted bilayer from 16 GB at nk = 6 to 2.9 GB at nk = 36. The qtci path
+  now runs one interpolation of all the fields at once, with 3.4 times fewer
+  diagonalizations than one per field on the gapped honeycomb lattice at
+  nk = 1024 and the same error; on a disordered supercell both forms
+  diagonalize the whole mesh and the plain triangle is faster. In 3D the
   Kubo velocities and the tetrahedra are built: at delta = 1e-2 t on a
   stack of Chern insulators the tetrahedra need about 100 times fewer
   k-points than the grid at the absorption edge (8e-2 at nk = 24 against
@@ -267,7 +271,9 @@ already reached once.
   grid. The sum is now built once for all frequencies (15 times faster on
   MoS2), so the triangle beats the grid in wall time on both models, by 5 to
   20 times on MoS2. QTCI saves diagonalizations only for two bands and never
-  wall time. Open: QTCI for many bands, metals, an exact three-band product,
+  wall time; it calls the shared per-field helper of `qtcitk/meshfields.py`
+  now, and the stacked form of the linear response and the LDOS was not tried
+  for it. Open: QTCI for many bands, metals, an exact three-band product,
   and 3D.
 
 - [`kpm_optical_conductivity.md`](kpm_optical_conductivity.md) -- the
@@ -282,6 +288,11 @@ already reached once.
   integration of the DOS (`h.get_dos(integration="triangle")`, `"qtci"`)
   needs 250 to 1000 times fewer diagonalizations than the uniform mesh at
   delta = 1e-3 t and is exact at delta = 0, and qtci adds 4 to 65 on top.
+  One interpolation of all the fields at once needs 1.3 to 3.7 times fewer
+  diagonalizations than one per field at the same error, and is twice as
+  slow on a 32-band supercell, so the qtci LDOS uses it and the qtci DOS
+  keeps one per field. On disordered supercells qtci saves nothing in
+  either form.
   The triangle bulk Green's function loses to
   `bloch_selfenergy(mode="adaptive")` at equal accuracy in 1D and 2D, so it
   is wired in only for 3D crystals, as `bloch_selfenergy(mode="triangle")`.

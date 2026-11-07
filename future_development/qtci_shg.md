@@ -224,6 +224,30 @@ So for the SHG the triangle method is the gain. QTCI on top of it saves
 diagonalizations for a two-band model, by about the same factor as for the
 linear response, and saves nothing for the three-band model up to R = 9.
 
+The interpolation itself was a private copy in `shgsimplex.py`. Since 7
+November 2026 it calls the shared `qtcitk/meshfields.qtci_fields`, one
+interpolation per field, as the DOS and the optical conductivity did. The
+two filters of the copy stay in `shgsimplex.sigma_qtci`: a part of a weight
+below 1e-10 of its term is set to zero, and a field equal or opposite to
+another one on the coarse scan is interpolated once. The spectrum moves only
+within the interpolation tolerance. Against the old copy, the largest change
+is 7e-6 of the largest entry at tolerance 1e-6 and 1.8e-8 at 1e-8 on the
+gapped honeycomb lattice at nk = 128, and 6e-7 and 7e-12 on MoS2 at
+nk = 64, with the same number of diagonalizations. At these meshes the
+interpolation visits every k-point, so this checks the filters and the
+assembly of the fields, not the sharing of pivots.
+
+The qtci optical conductivity and the qtci LDOS moved on the same day to
+one interpolation of all the fields at once (`qtci_stacked_fields`), which
+needs 1.6 to 3.7 times fewer diagonalizations when there are a few fields,
+at the same error, while the qtci DOS kept one interpolation per field,
+because on a 32-band supercell the stacked form was about twice as slow
+(the tables are in `qtci_optical_response.md` and `qtci_dos_green.md`). For
+the SHG this was not tried. With 25 terms on MoS2,
+each with a real and an imaginary part, the stacked rank would be large,
+and on the 80 fields of a supercell in the linear case it needed a rank cap
+of 800 instead of 400.
+
 ## What is left open
 
 - **Cost of the simplex sum (built, 6 November 2026).** The direct sum ran
