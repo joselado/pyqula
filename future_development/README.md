@@ -213,9 +213,14 @@ already reached once.
   Kubo velocities and the tetrahedra are built: at delta = 1e-2 t on a
   stack of Chern insulators the tetrahedra need about 100 times fewer
   k-points than the grid at the absorption edge (8e-2 at nk = 24 against
-  nk = 160), 40 times less wall time there, and reach 1e-2 at nk = 64 to
-  96, out of reach of the grid. Open: many bands, metals, SHG, the source
-  kernel for tetrahedra and qtci in 3D.
+  nk = 160), and reach 1e-2 at nk = 64 to 96, out of reach of the grid.
+  The source kernel now takes tetrahedra too, at 1e-11 of the peak of each
+  one: the vertex form cancels like (|x|/s)^3 in 3D, so the tetrahedra
+  where that matters are kept whole and summed per frequency, and those
+  far from the frequency window go to energy bins. It is 4 to 14 times
+  faster than the direct sum (7 at nk = 64 and 400 frequencies), and 130
+  times faster than the grid at the same largest error. Open: many bands,
+  metals, SHG, the tetrahedra kept whole near the window, and qtci in 3D.
 
 - [`tetrahedron_density_matrix.md`](tetrahedron_density_matrix.md) -- the
   triangle and tetrahedron density matrix of the mean field,

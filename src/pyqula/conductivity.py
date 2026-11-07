@@ -179,10 +179,12 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       needs nk = 8192. It converges at second order in 1/nk, so for a
       smooth integrand (delta larger than the band features, or a
       frequency inside a gap) the grid, which converges exponentially
-      there, is the better choice. In 3D every tetrahedron is summed at
-      every frequency (the direct kernel of kubosimplex.py), so the cost
-      is the number of tetrahedra, 6 nk^3, times the band pairs times the
-      frequencies. "qtci" (2D only, 3D raises NotImplementedError) does the
+      there, is the better choice. The sum over the simplices is built
+      once for all frequencies, also in 3D, where the tetrahedra whose
+      vertex form would cancel too much (4% to 20% of them on the meshes
+      measured) are summed at every frequency, so it is 4 to 14 times
+      faster than summing every tetrahedron at every frequency.
+      "qtci" (2D only, 3D raises NotImplementedError) does the
       same on a 2^R x 2^R mesh, nk rounded up to a power of two, where the
       transition energies and weights are reconstructed from a quantics
       tensor cross interpolation instead of computed on every point: for

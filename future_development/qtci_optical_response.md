@@ -396,10 +396,9 @@ the reduced mesh, with the vertex average of the weights and the
 Hermite-Genocchi simplex average of the resolvent, 3! psi_3[e_0..e_3]. The
 direct kernel of `kubosimplex.py` already took any number of vertices,
 since its divided differences are those of `simplexdos._dd`. The source
-kernel does not: it is written out for segments and triangles only (the
-branches of `_simplex_sources` and the Taylor series of `_point_value` stop
-at three vertices). So in 3D the default kernel is the direct one, and
-`kernel="sources"` raises NotImplementedError. `integration="qtci"` in 3D
+kernel was first written for segments and triangles only, so 3D used the
+direct kernel; it now takes tetrahedra too and is the default in 3D, see
+"The source kernel on tetrahedra" below. `integration="qtci"` in 3D
 raises NotImplementedError, from `kubo.py`, so the qtci path itself was not
 touched. In 3D sigma is a conductivity, in units of e^2/(hbar a).
 
@@ -469,12 +468,153 @@ to nk of about 450, 9e7 points), while the tetrahedra reach it at nk = 64 to
 96. Along z, where the velocity is small and the grid error is largest, the
 gain is the largest. The median error, away from the edge, gains less: the
 grid at nk = 160 is about the tetrahedra at nk = 24 (along z) to 48 (in the
-plane), 300 to 40 times fewer points. In wall time the tetrahedra pay for
+plane), 300 to 40 times fewer points. The times of this table are those of
 the direct kernel, about 1.7 microseconds per k-point and frequency for the
-one band pair of this model on four cores, against 0.3 for the grid, so the gain in time is about 40 at a largest error of
-8e-2, and it shrinks as the number of frequencies grows. With many bands
-the diagonalization dominates again and the gain in k-points is a gain in
-time.
+one band pair of this model on four cores, against 0.3 for the grid, so the
+gain in time was about 40 at a largest error of 8e-2, shrinking as the
+number of frequencies grows. The source kernel below brings it to about 130
+at 40 frequencies and 80 at 400. With many bands the diagonalization
+dominates again and the gain in k-points is a gain in time.
+
+### The source kernel on tetrahedra (7 November 2026)
+
+The question was whether the source kernel, which gave 10 to 50 in 2D,
+also gains in 3D, and at what precision.
+
+What was built. The branch of a simplex is now its Newton table, read from
+the top, for any number of vertices. The divided difference over the sorted
+nodes of spread s is the difference of the two divided differences with one
+node less, divided by s, and a cluster of nodes with s < delta is not split
+further but kept as one Taylor series point for psi_K over it. So one code
+path (`_simplex_sources` and `_point_value` in `kubosimplex.py`) takes
+segments, triangles and tetrahedra, and two, three or four equal nodes, or
+two equal pairs, end in a point whose series stops at its first term. The
+series over four nodes converges at a rate of at least 3/4 on resonance, so
+it runs up to about 130 terms there and a few far from it.
+
+This alone is not enough in 3D. The vertex form of a simplex is a sum of
+large terms that cancel, and at a frequency far from the simplex it loses
+eps (|x|/s)^3 of a tetrahedron, against (|x|/s)^2 of a triangle. On random
+tetrahedra with energies in [0.2, 3] t and frequencies in [0, 4] t, the
+plain source kernel lost up to 2e-9 of the peak of a tetrahedron at
+delta = 1e-2 t, 4e-7 at delta = 1e-3 t, and more than the whole value at
+delta = 1e-6 t for a spread of a few delta (mpmath at 80 digits confirmed
+that the direct kernel is the exact one there). A rule that does not see
+the frequency cannot avoid this, so the sources now see the frequency
+window, and there are two new kinds of source.
+
+- A simplex kept whole. For every simplex and pair we bound the rounding
+  error of its vertex form over the window (`_vertex_error`: eps times the
+  sum over the leaves of the Newton table of the coefficient times the
+  largest |psi_K| on the window). Above 3e-11 of the peak of the simplex,
+  the simplex is one point source evaluated per frequency with
+  `simplexdos._dd`, the rule of the direct kernel.
+- A bin of far simplices. A simplex whose nodes lie within half the
+  distance from the center C of its energy bin to the window (512 bins
+  over the range of +-dE) is expanded around C,
+  K! psi_K[e] = sum_k K! k!/(k+K)! h_k(e - C) (z - C)^-(k+1),
+  which converges at a rate 1/2 or better at every frequency of the
+  window and has no cancellation. The bin keeps the sum of these moments
+  to order 60, so it costs 60 terms per frequency whatever the number of
+  simplices in it. This takes all the reverse terms at -dE of a positive
+  window, and the transitions far above it.
+
+The build runs in parallel over chunks of simplices; the vertex
+coefficients are added in one serial pass, since the simplices that share
+a vertex add to one entry.
+
+The precision (`tests/conductivity/test_tetrahedron_sources.py`). We take
+random tetrahedra, generic, and with two, three or four nodes or two pairs
+exactly equal, or within 1e-14, 1e-9, 1e-5, 0.3 delta, delta and 3 delta of
+each other, at delta = 1e-2, 1e-3 and 1e-6, on frequencies that include the
+node energies, so that the peak is sampled; and the same tetrahedra at
+negative energies with the window [0, 4] t, where most of them go to the
+bins. The two kernels agree to 1e-11 of the peak of each tetrahedron
+(of its largest value on the window, for the negative ones), except at 3
+entries out of about 3.5e4 at delta = 1e-2, and at a few far ones, where
+they differ by up to 2.8e-11. There mpmath at 150 digits shows that the
+source kernel is exact to 2e-16 and that the difference is the direct
+kernel's own: its exact branch takes spreads up to 20 times |c - z|, and
+near resonance for a tetrahedron of spread about delta, or at the far end
+of the window for a wide one, this loses up to 3e-11. So the floor is
+1e-11 against mpmath at those entries, and 1e-11 against the direct kernel
+at all the others. A bound of 1e-10 instead of 3e-11 left 1.5e-11 in the
+source kernel itself. On the layered model below the full sums of the two
+kernels agree to 2.6e-13, 7.6e-13 and 2.6e-12 of the largest entry at
+nk = 24, 48 and 64.
+
+What it costs. A simplex kept whole costs as much per frequency as in the
+direct kernel, so the gain is set by how many are left. Fraction of the
+simplex pairs kept whole (a pair is a tetrahedron with the transition at
+dE, or the reverse one at -dE), on the layered model with the window
+[0.1, 4] t:
+
+| nk | delta | without bins | with bins |
+|---|---|---|---|
+| 24 | 1e-2 | 23% | 4% |
+| 24 | 1e-3 | 55% | 17% |
+| 48 | 1e-2 | 35% | 7% |
+| 48 | 1e-3 | 58% | 20% |
+| 64 | 1e-2 | 44% | 9% |
+
+The tetrahedra kept whole are forward terms inside the window, 8% to 13%
+of them at delta = 1e-2 (17% at nk = 64) and 34% to 39% at
+delta = 1e-3. The fraction grows
+with nk, since the spreads shrink like 1/nk while the loss grows like
+(|x|/s)^3, and it grows as delta falls, since the bound compares with the
+peak, about 1/delta for a narrow tetrahedron.
+
+The measurement. The layered Haldane model of the 3D table above,
+delta = 1e-2 t, T = 1e-3 t, the interband part, frequencies on [0.1, 4] t,
+four cores of one workstation with other jobs on its other cores. Both
+kernels run on the same pair fields, interleaved in one session; "fields"
+is the diagonalization, the velocities and the pair fields, common to
+both, so the time of a calculation is fields plus kernel. Times in
+seconds, the smaller of two runs (one run of the direct kernel at nk = 64
+and 400 frequencies).
+
+| nk | k-points | fields | frequencies | direct | sources | gain |
+|---|---|---|---|---|---|---|
+| 24 | 13824 | 0.17 | 40 | 1.06 | 0.18 | 6 |
+| 24 | 13824 | 0.17 | 400 | 10.6 | 0.75 | 14 |
+| 48 | 110592 | 1.3 | 40 | 7.6 | 1.46 | 5.2 |
+| 48 | 110592 | 1.3 | 400 | 75.7 | 7.7 | 9.8 |
+| 64 | 262144 | 3.0 | 40 | 15.7 | 3.85 | 4.1 |
+| 64 | 262144 | 3.0 | 400 | 155.7 | 21.8 | 7.1 |
+
+The grid at the same largest error. In the 3D table above, the tetrahedra
+at nk = 24 have a largest error of 5.0e-2, 8.7e-2 and 0.12 for xx, xy and
+zz, and the grid needs nk = 160 (4.1e6 points) for 8.0e-2, 7.7e-2 and 0.15.
+In the same session the whole public call with the tetrahedra at nk = 24
+took 0.36 s at 40 frequencies and 0.93 s at 400, and the grid at nk = 160
+took 45.8 s and 71.6 s. The finer tetrahedron meshes have no grid
+counterpart that fits in memory, as said above.
+
+What this means. With the source kernel the tetrahedra pay much less per
+frequency: about 0.12 to 0.19 microseconds per k-point and frequency on
+four cores at nk = 24 to 64, plus a build of 0.1 to 1.9 s, against 1.5
+to 1.9 for the direct kernel. So the gain grows with the number of frequencies,
+14 at nk = 24 and 400 frequencies, and falls slowly with nk, 7 at nk = 64,
+because more tetrahedra are kept whole on finer meshes. Without the bins
+the same calls at 400 frequencies took 3.3, 30 and 59 s, a gain of 2.7 to
+3.8 against the direct kernel of that session: the bins are what makes the source kernel pay in 3D. Against the grid
+at the same largest error the tetrahedra are now about 130 times faster at
+40 frequencies and 80 times at 400, instead of 40 with the direct kernel.
+In 2D the source kernel has not become faster: on 512^2 meshes at 141
+frequencies, delta = 1e-3 t, the gapped honeycomb takes 0.59 s against
+0.57 s before, and the spinful Haldane model 2.24 s against 1.83 s, since
+some triangles are now kept whole. The two versions agree to 9e-13 and
+1.8e-12 of the largest entry there, the level of the earlier source kernel
+against the longdouble reference (1.7e-12 at 512^2 in "Precision of the
+two kernels").
+
+What is still open. The tetrahedra kept whole are forward terms near the
+window, about a third of them at delta = 1e-3, and they are now the cost. Two routes could reduce it: keep only the close edge of such a
+tetrahedron per frequency, so that the rest cancels like (|x|/s)^2 and the
+edges, shared by four to six tetrahedra, merge; or split the window per
+simplex into the frequencies near it, done exactly, and those far from it,
+done by the bins, which is the far-field expansion of the open item on the
+cost per frequency below.
 
 ## What is left open
 
@@ -597,11 +737,12 @@ time.
   because most triangles are far from most frequencies and take a short
   series instead of three logarithms. These are 14 threads of one
   workstation at a load of 7 to 22 from other jobs, so only the ratios
-  mean something. What is still open: an edge or a triangle with s
-  between delta and a few delta could be kept as a point source that
-  decides per frequency between its series and its divided difference.
-  That would remove the residual of the source kernel at a cost in
-  evaluation that was not measured.
+  mean something. The open point of this paragraph, a simplex kept as a
+  point source that decides per frequency between its series and its
+  divided difference, was built on 7 November 2026 for whole simplices,
+  with a bound of the loss over the frequency window that decides which
+  simplices need it; see "The source kernel on tetrahedra" in the 3D
+  section.
 
   Binning the joint DOS on a fine energy grid was not built. It is
   approximate, with an error of order (bin/delta)^2, so agreement at 1e-10

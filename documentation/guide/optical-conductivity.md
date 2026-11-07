@@ -254,8 +254,9 @@ The keywords of the two integrations are
 `"triangle"` cuts each cube of the mesh into six tetrahedra and integrates
 the resolvent exactly over each one. At $\eta=10^{-2}t$ on a stack of
 Chern insulators it needs about 100 times fewer k-points than the grid for
-the same accuracy at the absorption edge. Its cost grows with the number of
-frequencies, so in 3D ask only for the frequencies you need. A full script is in
+the same accuracy at the absorption edge. Most of the work is done once for
+all frequencies, so 400 frequencies cost three to four times as much as 40,
+not ten times. A full script is in
 `examples/2d/optical_conductivity_triangle/main.py`.
 
 ## Second-harmonic generation
