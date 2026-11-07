@@ -826,7 +826,9 @@ next section.
 The question is how to find the Fermi level of a BdG mean field at a
 filling, so that the paired state holds the requested charge, and not the
 normal state. Then N = N0, and the reported energy Omega + mu N0 is <H> at
-that charge.
+that charge. When the loop cannot hold the charge (a state without a gap
+on the mesh, see below), the reported energy stays Omega + mu N0, which
+differs from <H> by mu (N - N0), with N - N0 in `scf.charge_error`.
 
 Two designs were possible. The first is a root find of mu on the charge of
 the paired state at each iteration, which costs a few more density

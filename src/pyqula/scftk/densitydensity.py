@@ -930,6 +930,10 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         # in a superconductor to the tolerance of the loop, since its Fermi
         # level is found on the charge of the paired state
         # (superscf.BdGFermiLevel). So the energy is <H> at that charge.
+        # When the step of the Fermi level gives up (a state without a gap
+        # on the mesh) the charge is not held, and this is Omega + mu N0,
+        # which differs from <H> by mu (N - N0), with N - N0 in
+        # scf.charge_error.
         # Before, the Fermi level of a superconductor came from the normal
         # state, the paired state held another charge (0.606 instead of
         # 0.600 for U=-2 at filling 0.3 on the square lattice), and this
