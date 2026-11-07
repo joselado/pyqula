@@ -1,6 +1,7 @@
 # Linear-simplex (segment, triangle, tetrahedron) integration of the density
 # of states and of the bulk Green's function, and its quantics tensor cross
-# interpolation (QTCI) variant in 2D.
+# interpolation (QTCI) variant, in 2D and 3D for the DOS and in 2D for the
+# LDOS.
 #
 # The band energies E_n(k) and the weights w_n(k) (one, an operator
 # expectation value, or the projector u_n u_n^dagger) are interpolated
@@ -511,16 +512,19 @@ from ..qtcitk.meshfields import qtci_stacked_fields,stacked_maxbonddim
 
 
 def dos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
-        tolerance=1e-6):
+        tolerance=1e-6,ordering=None):
     """Density of states with the triangle integration on a 2^R x 2^R mesh
-    (nk rounded up to a power of two), with the band energies (and the
+    in 2D, the tetrahedron integration on a 2^R x 2^R x 2^R mesh in 3D (nk
+    rounded up to a power of two), with the band energies (and the
     weights, with an operator) reconstructed from a QTCI of each field
-    instead of computed at every point"""
+    instead of computed at every point. ordering is the bit ordering of
+    the quantics mesh, see qtcitk.meshfields"""
     check_broadening(delta)
-    if h.dimensionality!=2:
+    dim = h.dimensionality
+    if dim not in (2,3):
         raise NotImplementedError("the qtci integration of the DOS is only "
-                "implemented in 2D, got dimensionality "
-                +str(h.dimensionality)+"; use integration='triangle'")
+                "implemented in 2D and 3D, got dimensionality "
+                +str(dim)+"; use integration='triangle'")
     R = max(1,int(np.ceil(np.log2(nk))))
     fields = _Fields(h,kind=_mesh_kind(operator),operator=operator)
     nb = h.intra.shape[0]
@@ -529,12 +533,13 @@ def dos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
         if operator is None: return es
         return np.concatenate([es,W[:,:,0].real],axis=1)
     nf = nb if operator is None else 2*nb
-    vals,ncalls,ranks = qtci_fields(evaluate,R,nf,tolerance=tolerance)
+    vals,ncalls,ranks = qtci_fields(evaluate,R,nf,tolerance=tolerance,
+            dim=dim,ordering=ordering)
     es = np.ascontiguousarray(vals[:,:nb])
     if operator is None: W = np.ones((len(es),nb,1),dtype=np.complex128)
     else: W = vals[:,nb:,None].astype(np.complex128)
     energies = np.asarray(energies,dtype=np.float64)
-    ds = simplex_dos_from_fields(2,2**R,es,W,energies,delta)
+    ds = simplex_dos_from_fields(dim,2**R,es,W,energies,delta)
     return energies,ds,fields.ndiag,ranks
 
 
@@ -578,8 +583,8 @@ def ldos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
     check_broadening(delta)
     if h.dimensionality!=2:
         raise NotImplementedError("the qtci integration of the LDOS is only "
-                "implemented in 2D, got dimensionality "
-                +str(h.dimensionality)+"; use integration='triangle'")
+                "implemented in 2D, not in "+str(h.dimensionality)+"D; use "
+                "integration='triangle'")
     R = max(1,int(np.ceil(np.log2(nk))))
     fields = _Fields(h,kind="site",operator=operator)
     nb = h.intra.shape[0]

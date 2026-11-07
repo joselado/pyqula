@@ -188,8 +188,8 @@ def dos_kmesh(h,nk=100,delta=None,random=False,ks=None,
     nk mesh and integrates the resolvent over each one exactly, so the
     mesh only has to resolve the bands, not delta, and delta=0 (the
     default for this integration) is the exact limit. "qtci" is the
-    triangle integration in 2D on a 2^R mesh whose band energies come from
-    a quantics tensor cross interpolation, with the given tolerance. Both
+    triangle integration in 2D (tetrahedron in 3D) on a 2^R mesh whose
+    band energies come from a quantics tensor cross interpolation, with the given tolerance. Both
     take an operator= with a matrix, whose expectation value weights each
     state; ks and random are for "grid" only."""
     write = filewrite.resolve(write,True) # the call, else the global switch

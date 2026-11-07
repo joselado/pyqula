@@ -364,8 +364,9 @@ def get_dm(h,v,nk=None,integration="ed",tolerance=1e-6,**kwargs):
     integration: one of get_integration_names().
     "ed" (default) computes it by exact diagonalization on a
     k-mesh (h.get_density_matrix), with nk defaulting to 1 if not given.
-    "qtci" is the triangle integration below on a 2^R x 2^R mesh (nk
-    rounded up to a power of two) whose band energies and band projectors
+    "qtci" is the triangle integration below on a 2^R x 2^R mesh in 2D,
+    the tetrahedron one on a 2^R x 2^R x 2^R mesh in 3D (nk rounded up
+    to a power of two), whose band energies and band projectors
     are reconstructed from quantics cross interpolations instead of a
     diagonalization at every point, see qtcitk.densitymatrix_qtci.get_dm_qtci;
     it computes only the entries the mean field reads, and nk defaults to
@@ -1021,11 +1022,11 @@ def Vinteraction(h,V1=0.0,V2=0.0,V3=0.0,U=0.0,
     integration: one of scftk.densitydensity.get_integration_names().
     "ed" (default) computes the density matrix at each SCF
     step by exact diagonalization on a k-mesh. "qtci" is "triangle" on a
-    2^R x 2^R mesh whose band energies and band projectors come from
+    2^R x 2^R (2D) or 2^R x 2^R x 2^R (3D) mesh whose band energies and band projectors come from
     quantics cross interpolations (qutecipy) instead of a diagonalization
     at every point -- see scftk.densitydensity.get_dm and
-    qtcitk.densitymatrix_qtci.get_dm_qtci; only 2D Hamiltonians are
-    supported for "qtci". "triangle" integrates the Fermi step exactly
+    qtcitk.densitymatrix_qtci.get_dm_qtci; only 2D and 3D Hamiltonians
+    are supported for "qtci". "triangle" integrates the Fermi step exactly
     over the bands interpolated linearly in the triangles (2D),
     tetrahedra (3D) or segments (1D) of the same k-mesh, the case where
     it pays being a metal at low temperature, see dmtk.simplexdm.

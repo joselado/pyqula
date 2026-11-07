@@ -3,7 +3,8 @@
 # field (integration="qtci").
 #
 # This is the triangle integration of dmtk/simplexdm.py on a uniform
-# 2^R x 2^R mesh whose fields come from a cross interpolation instead of a
+# 2^R x 2^R mesh in 2D (the tetrahedron one on a 2^R x 2^R x 2^R mesh in
+# 3D, with three quantics coordinates) whose fields come from a cross interpolation instead of a
 # diagonalization at every point. The density matrix at a lattice vector d,
 #   dm[d]_ij = int dk sum_n f(E_n(k)) e^{2 pi i k.d} conj(u_n,i(k)) u_n,j(k),
 # has a Fermi step that no smooth quadrature resolves, but it is the
@@ -63,18 +64,18 @@ DEFAULT_NK = 8
 
 
 def mesh_exponent(nk):
-    """R of the 2^R x 2^R mesh for a requested nk, rounded up"""
+    """R of the 2^R mesh for a requested nk, rounded up"""
     if nk is None: nk = DEFAULT_NK
     return max(1,int(np.ceil(np.log2(nk))))
 
 
 def check_hamiltonian(h,what):
     """Refuse what the qtci density matrix does not cover"""
-    if h.dimensionality!=2:
-        raise NotImplementedError(what+" is only implemented in 2D (the "
-                "quantics interpolation runs on a 2^R x 2^R mesh), got "
-                "dimensionality %d; use integration=\"triangle\""
-                %h.dimensionality)
+    if h.dimensionality not in (2,3):
+        raise NotImplementedError(what+" is only implemented in 2D and 3D "
+                "(the quantics interpolation runs on a 2^R x 2^R or "
+                "2^R x 2^R x 2^R mesh), got dimensionality %d; use "
+                "integration=\"triangle\""%h.dimensionality)
     if getattr(h,"non_hermitian",False):
         raise NotImplementedError(what+" needs a Hermitian Hamiltonian; a "
                 "non-Hermitian one is solved with its biorthogonal density "
@@ -82,12 +83,14 @@ def check_hamiltonian(h,what):
 
 
 class _Eigen():
-    """Eigenpairs of h at the points of the 2^R x 2^R mesh, each point
-    diagonalized once; ndiag counts the diagonalizations"""
+    """Eigenpairs of h at the points of the 2^R mesh (2^R x 2^R in 2D,
+    2^R x 2^R x 2^R in 3D), each point diagonalized once; ndiag counts the
+    diagonalizations"""
     def __init__(self,h,R):
         if h.is_sparse: h = h.get_dense()
         self.hkgen = h.get_hk_gen()
         self.R = R
+        self.dim = h.dimensionality
         self.n = 2**R
         self.nb = h.intra.shape[0]
         self.es = {} # (i,j) -> energies
@@ -102,12 +105,12 @@ class _Eigen():
         return es,U
     def __call__(self,ks):
         """energies (m,nb) and eigenvectors (m,nb,nb) at the mesh points ks"""
-        ij = [tuple(q) for q in np.rint(np.asarray(ks)[:,:2]*self.n
+        ij = [tuple(q) for q in np.rint(np.asarray(ks)[:,:self.dim]*self.n
             ).astype(np.int64).tolist()]
         new = [q for q in dict.fromkeys(ij) if q not in self.es]
         if new:
             knew = np.zeros((len(new),3))
-            knew[:,:2] = np.array(new,dtype=np.float64)/self.n
+            knew[:,:self.dim] = np.array(new,dtype=np.float64)/self.n
             es,U = self._diagonalize(knew)
             for q,e,u in zip(new,es,U):
                 self.es[q] = e
@@ -145,7 +148,7 @@ def _shift_from(h,last,R,tolerance):
 
 
 def _energies(h,R,tolerance):
-    """band energies of h reconstructed on the 2^R x 2^R mesh, with the
+    """band energies of h reconstructed on the 2^R mesh, with the
     eigenpair cache they were computed with, the number of
     diagonalizations this call did and the bond dimensions of the TCI.
     When h is the Hamiltonian of the last Fermi search shifted by a
@@ -157,14 +160,14 @@ def _energies(h,R,tolerance):
     eigen = _Eigen(h,R)
     nb = eigen.nb
     es,ncalls,ranks = qtci_stacked_fields(lambda ks: eigen(ks)[0],R,nb,
-            tolerance=tolerance)
+            tolerance=tolerance,dim=h.dimensionality)
     return np.ascontiguousarray(es),eigen,eigen.ndiag,ranks
 
 
 def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6):
     """Fermi energy that holds `filling` (a fraction of the states) under
     the qtci density matrix: the triangle charge of the band energies
-    reconstructed on the 2^R x 2^R mesh, which is continuous in the Fermi
+    reconstructed on the 2^R mesh, which is continuous in the Fermi
     level, so the filling is reached exactly on that mesh. The energies
     and the eigenpairs are kept, so that the density matrix of h shifted
     by this level does not diagonalize the same points again. For a
@@ -180,7 +183,7 @@ def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6):
     from ..dmtk import simplexdm
     R = mesh_exponent(nk)
     es,eigen,nd,ranks = _energies(h,R,tolerance)
-    mu = simplexdm.fermi_from_energies(2,2**R,es,filling,T=T)
+    mu = simplexdm.fermi_from_energies(h.dimensionality,2**R,es,filling,T=T)
     data = _bloch_data(h)
     # the eigenvectors are kept for the next call only below the memory
     # limit of the triangle mesh; above it the density matrix starts over
@@ -214,6 +217,7 @@ def dm_entries_qtci(h,needed,nk=None,T=1e-7,tolerance=1e-6,bloechl=None,
     if bloechl is None: bloechl = simplexdm.bloechl_default
     R = mesh_exponent(nk)
     n = 2**R
+    dim = h.dimensionality
     es,eigen,ndiag,eranks = _energies(h,R,tolerance)
     nd0 = eigen.ndiag
     entries = _canonical_entries(needed)
@@ -236,9 +240,9 @@ def dm_entries_qtci(h,needed,nk=None,T=1e-7,tolerance=1e-6,bloechl=None,
     xranks = []
     if ne>0:
         X,ncalls,xranks = qtci_stacked_fields(evaluate,R,nb*ne,
-                tolerance=tolerance,dtype=np.complex128)
-        w = simplexdm.simplex_weights(2,n,es,mu=0.,T=T,bloechl=bloechl)
-        vals = np.einsum("kn,kne->e",w,X.reshape(n*n,nb,ne),optimize=True)
+                tolerance=tolerance,dtype=np.complex128,dim=dim)
+        w = simplexdm.simplex_weights(dim,n,es,mu=0.,T=T,bloechl=bloechl)
+        vals = np.einsum("kn,kne->e",w,X.reshape(n**dim,nb,ne),optimize=True)
         for (d,i,j),x in zip(entries,vals):
             dm[d][i,j] = x
             dm[tuple(-y for y in d)][j,i] = np.conj(x)
@@ -257,7 +261,7 @@ def get_dm_qtci(h,v,nk=None,fermi=0.0,T=1e-7,tolerance=1e-6,bloechl=None,
     """qtci analogue of scftk.densitydensity.get_dm: a dictionary
     {direction: matrix} with the density matrix of h at zero chemical
     potential (fermi shifts it), computing only the entries the interaction
-    v requires, from the triangle weights on the 2^R x 2^R mesh (nk rounded
+    v requires, from the simplex weights on the 2^R mesh (nk rounded
     up to a power of two) with the band energies and the band projectors
     reconstructed from quantics cross interpolations (see the module
     comment). So this is integration="triangle" at the same mesh, up to
@@ -312,7 +316,7 @@ def band_energy_qtci(h,nk=None,tolerance=1e-6,bloechl=None):
     """Sum of the band energies below zero per unit cell, with the triangle
     weights at T=0 (and the Bloechl term, bloechl=None takes
     dmtk.simplexdm.bloechl_default) on the band energies reconstructed on
-    the 2^R x 2^R mesh, as simplexdm.band_energy does on the exact ones.
+    the 2^R mesh, as simplexdm.band_energy does on the exact ones.
     For a Bogoliubov-de Gennes Hamiltonian it is the electronic energy,
     E = (sum_{E<0} E_BdG + Tr h_e)/2, with Tr h_e the onsite trace of the
     electron block, which is the mean of Tr h_e(k) over the zone"""
@@ -321,7 +325,8 @@ def band_energy_qtci(h,nk=None,tolerance=1e-6,bloechl=None):
     if bloechl is None: bloechl = simplexdm.bloechl_default
     R = mesh_exponent(nk)
     es,eigen,nd,ranks = _energies(h,R,tolerance)
-    e = simplexdm.band_energy_from_energies(2,2**R,es,bloechl=bloechl)
+    e = simplexdm.band_energy_from_energies(h.dimensionality,2**R,es,
+            bloechl=bloechl)
     if h.has_eh:
         from .. import operators, algebra
         pe = np.array(algebra.todense(operators.get_electron(h)))

@@ -76,8 +76,8 @@ def test_get_dm_qtci_handles_symmetry_protected_zero_entries():
     assert np.max(np.abs(off_diag_spin)) < 1e-10
 
 
-def test_get_dm_qtci_rejects_non_2d():
-    """get_dm_qtci interpolates on a 2D mesh; anything else must fail
+def test_get_dm_qtci_rejects_1d():
+    """get_dm_qtci interpolates on a 2D or 3D mesh; a chain must fail
     loudly rather than silently integrating over the wrong domain."""
     h = geometry.chain().get_hamiltonian()
     v = {(0, 0, 0): np.zeros((1, 1), dtype=np.complex128)}
