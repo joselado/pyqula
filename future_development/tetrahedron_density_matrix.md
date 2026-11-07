@@ -847,7 +847,9 @@ filling plus and minus 0.05 on the first Hamiltonian, and g a gain, 1 at
 the start. The
 plain loop holds the size of this step to `maxerror`, together with the
 change of the mean field. Broyden mixing and the scipy solvers take x as
-the last entry of their vector, so their fixed point has the step at rest.
+the last entry of their vector, so their fixed point has the step at rest,
+and they take a step without the gain (see "The step under the
+quasi-Newton solvers").
 This is `scftk.superscf.BdGFermiLevel`. It is used by `densitydensity`
 (`Vinteraction`, `hubbard`) for `"ed"`, `"triangle"` and `"qtci"`, and by
 `VJinteraction`, the engine of `h.get_mean_field_hamiltonian()` for a
@@ -976,8 +978,10 @@ Other states, all at nk = 16:
   error is 3e-11. The energy goes from -0.85288 to -0.83832.
 - A d-wave state from V1 = -2 with U = 1 at filling 0.4, started from a
   `"dx2y2"` pairing: the old charge was 0.871 instead of 0.8, now it is
-  0.8 to 1e-10. It needs 57 Broyden iterations for `"ed"` and 43 for the
-  triangle, against 13 and 13 before.
+  0.8 to 1e-10. It needed 57 Broyden iterations for `"ed"` and 43 for the
+  triangle, against 13 and 13 before, from a guess that was not recorded.
+  From the guess `add_pairing(mode="dx2y2", delta=0.1)` it needed 48 and
+  45, and now 20 and 20 (see "The step under the quasi-Newton solvers").
 - U = -1 with the triangle at filling 0.3. The old Fermi level held 0.633,
   and on this mesh the pairing died. At the charge 0.600 it survives, with
   Delta = 0.029. The old code at the new mu, fixed, finds the same state
@@ -989,7 +993,9 @@ Other states, all at nk = 16:
 - s-wave with a Zeeman field 0.3, larger than the gap, where the pairing
   dies: with Broyden, `"ed"` goes from 41 to 89 iterations, to the old
   state and the old charge. The triangle goes from 19 to 109 iterations,
-  and now ends at the charge of `"ed"` (0.6016) instead of 0.5859.
+  and now ends at the charge of `"ed"` (0.6016) instead of 0.5859. With the step
+  of the solvers it is 57 for both (see "The step under the quasi-Newton
+  solvers").
 - Attractive V1 = -2.5 on the spinful chain at filling 0.3: before, the
   extended s-wave singlet from `mf="swave"` held 0.514 electrons per cell
   and the triplet from `mf="pwave"` 0.713, instead of 0.6. At 0.6 both
@@ -1008,6 +1014,8 @@ changes is the number of iterations, because the loop has one more
 unknown. For the s-wave state at filling 0.3 Broyden needs 27, 28 and 31
 iterations at nk = 16, 32 and 64 with `"ed"`, against 21, 22 and 22, and
 about 24 for qtci against 22; at filling 0.2, 11 to 19 against 9 to 11.
+With the step of the solvers it is now 23, 23 and 24 (see the next
+section).
 The wall time moves with the iterations. It was measured on four reserved
 cores of a workstation that had other jobs, with the old and the new code
 run one after the other: at nk = 64 and filling 0.3 it is 3.1 s against
@@ -1039,6 +1047,117 @@ Nambu Hamiltonian (`LaggedFermi.shift` searches it each iteration on the
 electron-only Hamiltonian), and `VJinteraction` refuses a dense Nambu
 Hamiltonian with `integration="kpm"`. `densitydensity_jax` has no BdG
 path at all.
+
+### The step under the quasi-Newton solvers
+
+Why did one more unknown cost so many Broyden iterations, 48 instead of
+13 for the d-wave state? The step of x was taken inside the function the
+solver evaluates, and that step has a memory: its gain halves on each
+change of sign of N - N0, and the give-up counts the steps held by the
+window and the changes of sign at the smallest gain. So every trial
+vector of Broyden mixing, and of the scipy solvers, moved the gain, and
+the entry of x in the new vector, x - g (N - N0)/(2 kappa), was a
+different number at each call for the same vector. A multisecant update
+fits a linear model of that map, and a map that changes with the history
+cannot be fitted. We checked this on the code before the change, logging
+the state of `BdGFermiLevel` at each evaluation of one Broyden run at
+nk = 16, `maxerror=1e-10`, spinful square lattice, `"ed"`:
+
+- s-wave, U = -2, filling 0.3: the gain takes 7 values, from 1 down to
+  0.28, in 29 evaluations. No give-up.
+- d-wave, V1 = -2 and U = 1 at filling 0.4, from the guess
+  `h.add_pairing(mode="dx2y2", delta=0.1)` taken as a mean field (the
+  difference of the two Hamiltonians, since `mf="dx2y2"` is not a guess
+  mode of `meanfield.guess`): the gain takes 17 values, down to 0.18, in
+  50 evaluations. No give-up.
+- s-wave, U = -2, with a Zeeman field 0.3: the gain goes down to 1/64,
+  there are 6 changes of sign at the smallest gain, and the window holds
+  the step 8 times in a row, so the step gives up.
+
+So now `BdGFermiLevel.step(x, dm, adaptive=False)` is the step of the
+solvers, and `generic_densitydensity` calls it for every solver except
+`"plain"`. It depends only on x and the density matrix of the Hamiltonian
+at x: the Newton step dx = -(N - N0)/kappa, with no gain and no damping,
+clipped to the window of the pairing amplitude of h, which depends only on
+h. The give-up has no stateless form, so it is replaced by one rule: when
+|dx| is longer than the whole window, 2 bound, no offset in the window
+holds the charge on the linear estimate, wherever x is, and the step goes
+to x = 0, the Fermi level of the normal state. In a state whose pairing
+dies, the charge error is a staircase of about one k-shell, 0.03 electrons
+per cell at nk = 16, while the window closes as Delta^3, so this rule
+takes over after a few tens of iterations and x stays at zero, which is
+where the give-up of the plain loop ends too. The plain loop keeps its
+gain, its damping and its give-up, since they came out of the failures of
+the plain loop recorded above. `VJinteraction` has no call site to change:
+its numpy engine refuses `solver=` and always runs plain mixing, and its
+jax engine refuses a Nambu Hamiltonian.
+
+Three other stateless steps were tried, all at nk = 16. The clipped step
+with the damping of the plain loop, 0.5, and no rule for the window: the
+d-wave state needs 24, but the Zeeman case gets worse, 114 for `"ed"`
+against 89, because x bangs on the two edges of the shrinking window and
+spoils the secant model of the pairing. The same with a damping of 1:
+d-wave 20, Zeeman 113 and 100. A step that goes to zero when the clipped
+step leaves the window: with damping 0.5 Zeeman 46 and 41 but d-wave 26
+from a small guess (delta = 0.01), and with damping 1 Zeeman 118 and 179.
+The rule on the whole window with damping 1 is the only one that is below
+the old count for the three states with `"ed"` and with the triangle. The give-up kept as a one-time switch
+inside the solver step gives about the same counts (d-wave 24 to 15 over
+the guesses, Zeeman 59 and 55, qtci Zeeman 81), but it is a memory again,
+so it was not taken.
+
+Broyden iterations at nk = 16, `maxerror=1e-10`, before and after, with
+the total energy and the paired charge N of both:
+
+| state | integration | before | now | E | N |
+|---|---|---:|---:|---|---|
+| s-wave | `"ed"`, triangle, qtci | 27, 27, 27 | 23, 23, 23 | -1.62091646 | 0.6 |
+| d-wave | `"ed"`, triangle, qtci | 48, 45, 59 | 20, 20, 20 | -3.73712961 | 0.8 |
+| Zeeman | `"ed"` | 89 | 57 | -1.62640723 | 0.6015625 |
+| Zeeman | triangle | 110 | 57 | -1.62640643 | 0.6015625 |
+| Zeeman | qtci | 300 | 321 | -1.62640643 | 0.6015625 |
+
+Before and after give the same energy to 1.5e-11 and the same N to 3e-10
+in every row, so the fixed point did not move. For the gapped states the
+three integrations also agree with each other to 1e-10. The Zeeman case
+does not: its `"ed"` and triangle energies differ by 8.1e-7 and its Fermi
+levels by 6.5e-4, before as now, since the state has no gap and the Fermi
+level sits on a different place of the staircase. Two runs from the same
+guess give the same count and the same energy to the last digit. Over
+the d-wave guesses with delta = 0.01, 0.05, 0.2, 0.3 and 0.5 `"ed"` needed
+44, 50, 43, 63 and 23 iterations before and needs 23, 21, 19, 18 and 15
+now. The s-wave state at nk = 32 and 64 needs 23 and 24, against 28 and
+31. qtci with the s-wave state at nk = 8, where the gap is barely resolved,
+converges in 16 iterations against 22, to the same energy. Two cases got
+slower: the Zeeman case with qtci (321 against 300,
+where the interpolation noise of the charge keeps the window open longer)
+and the Zeeman case with `"ed"` at nk = 32 (53 against 42). At nk = 64 the
+Zeeman case does not converge in 1000 iterations, before as now. The wall
+time follows the iterations: on three reserved cores of a loaded
+workstation the d-wave state takes 0.44 s against 1.7 s with `"ed"`, and
+the s-wave state at nk = 64 3.5 s against 5.3 s.
+
+`tests/scf/test_bdg_fermi_level_solvers.py` checks that the solver step
+gives the same next offset for the same offset and density matrix,
+whatever was evaluated in between, while the adaptive step does not; that
+the d-wave state needs fewer Broyden iterations with the solver step than
+with the adaptive step forced on the solver, at the same energy to 1e-8
+and the same charge, with the same count twice in a row; and that in the
+Zeeman case both give the same energy, charge error and Fermi level to
+1e-8.
+
+Two smaller changes went with it. `BdGFermiLevel.warn` printed "its
+quasiparticle spectrum has no gap on this mesh" after a loop stopped at
+`maxite`, for instance `Vinteraction(V1=-1.5, filling=0.3, nk=8,
+maxite=10)` on the Nambu square lattice, where the charge error of 7e-3 is
+only the error of an unconverged loop. Now it prints only for a converged
+loop. And `pairing_amplitude(h)`, called by `shift` on every iteration,
+reordered and densified every hopping through `get_eh_sector`; it reads the
+anomalous entries with the Nambu indices directly now, the same number to
+1e-14. In the plain s-wave loop at nk = 16 one call went from 1.46 ms to
+0.10 ms, from 12% of an iteration to below 1%. The rest of `shift` is the
+Fermi search of the normal state, about 40% of an iteration of this
+one-site cell, which was not touched.
 
 ## What wins and what loses
 
@@ -1080,11 +1199,22 @@ loaded.
   without a gap it keeps the staircase of `"ed"`. A triangle integration
   of a gapless BdG state with the continuous charge of the normal state
   would need the electron and hole bands unsorted. Not tried.
-- qtci with V1 on a BdG Hamiltonian (V1 = -1.5 on the square lattice)
-  stops with "Non-Hermitian BdG mean field", in the old code as in the new.
+- qtci with V1 on a BdG Hamiltonian stops with "Non-Hermitian BdG mean
+  field" from a random guess. The exact case: `Vinteraction(V1=-1.5,
+  filling=0.3, nk=8, integration="qtci")` on the spinful Nambu square
+  lattice, plain loop, `mf=None` (the random guess) after
+  `np.random.seed(0)`, 1 or 2; `"ed"` from the same guesses converges in
+  443 to 503 iterations to E = -2.3306585. From `mf="swave"` qtci runs: 43
+  iterations, E = -2.3214147, the same as `"ed"` to the printed digits, and
+  from `mf="pwave"` 51 iterations and E = -2.3306601, also the same as
+  `"ed"`. A run of the maintainer with 54 plain iterations and
+  E = -2.3214034 against -2.3214029 for `"ed"` was close to the s-wave
+  one, but its guess was not recorded, and its numbers were not
+  reproduced here. So the stop is real, and it depends on the guess.
 - A state with a Bogoliubov Fermi surface, or one whose pairing dies in the
-  loop, converges more slowly with the BdG Fermi level (239 against 41
-  Broyden iterations in the Zeeman case). The root find per iteration, the
+  loop, converges more slowly with the BdG Fermi level than with the
+  Fermi level of the normal state (57 against 41 Broyden iterations in
+  the Zeeman case at nk = 16, 53 against 42 with the old step at nk = 32). The root find per iteration, the
   other design, should not have this problem, at a few density matrices
   per iteration. It was not built.
 - The user guide moved with the BdG Fermi level. The figures of the s-wave
