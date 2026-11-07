@@ -961,12 +961,12 @@ moments of the bins 0.006 s. Two simple changes were tried and dropped: a
 sort by energy first with the ties sorted in numba was slower than the
 lexicographic sort (0.017 s against 0.012 s), and 6 groups of moments
 instead of 16 saved 0.008 s but would cap the parallel pass at 6 threads.
-Two were kept: the merge of the vertex sources takes the default sort
-instead of the stable one, since equal keys only need a deterministic
-order (0.055 s against 0.077 s for the 2.1M keys of the 2D model), and
-the test for vanishing vertex coefficients runs on a float view of the
-array. The merge is shared with `shgsimplex.py`, whose results move at
-the rounding level too.
+One was kept: the test for vanishing vertex coefficients runs on a float
+view of the array. The default sort instead of the stable one in the
+merge of the vertex sources saved 0.022 s on the 2.1M keys of the 2D
+model, but numpy picks the default sort by CPU and version, so the order
+of equal keys, and the last digits, could differ between machines; the
+merge keeps the stable sort. The merge is shared with `shgsimplex.py`.
 
 The cost. Three cores of the workstation with other jobs on the machine,
 the kernels loaded in one process and called in turn on the same saved

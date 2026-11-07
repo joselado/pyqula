@@ -312,7 +312,9 @@ def simplices(dim,nk):
 # the error of the source kernel grew from 2e-13 to 7e-13 of the largest
 # entry between nk = 24 and 48, against the 3e-14 to 7e-14 of the direct
 # kernel. The sum per frequency is now compensated (_kadd), which brings
-# it to the level of the direct kernel on that model. What is left is the
+# it to the level of the direct kernel on that model. In 2D the source
+# kernel stays above the direct one (3.5e-13 against 4e-14 at 128^2 and
+# delta = 1e-3), from the vertex form below _tol. What is left is the
 # rounding of each term and the vertex form of the simplices below _tol,
 # up to 4e-13 on a 3D metal, where _tol = 3e-12 would give 1e-14 at 1.7
 # to 2.8 times the cost (future_development/qtci_optical_response.md).
@@ -991,10 +993,10 @@ def _merge(keys,*cs):
         out = _merge(keys[:,None],*cs)
         return (out[0][:,0],)+out[1:]
     if keys.shape[0]==0: return (keys,)+cs
-    # equal keys need no fixed order, only a deterministic one (the sort
-    # does not depend on the number of threads), and the default sort is
-    # faster than the stable one
-    if keys.shape[1]==1: order = np.argsort(keys[:,0])
+    # a stable sort, so that equal keys keep their order on every machine:
+    # the default sort is deterministic too, but numpy picks it by CPU and
+    # version, and the order of equal keys moves the last digits
+    if keys.shape[1]==1: order = np.argsort(keys[:,0],kind="stable")
     else: order = np.lexsort(keys.T[::-1])
     keys = keys[order]
     cs = [c[order] for c in cs]

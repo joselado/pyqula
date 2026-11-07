@@ -230,7 +230,8 @@ def test_the_source_sum_stays_at_the_rounding_of_the_direct_kernel():
     every frequency, so a plain running sum over them lost 2.2e-13 of the
     largest entry against the direct kernel (7e-13 at nk = 48), a loss
     that grew with nk. The sums are now compensated, and the two kernels
-    agree to 6e-14, which includes the 3e-14 of the direct kernel itself"""
+    agree to 6e-14, which includes the 3e-14 of the direct kernel itself;
+    the bound leaves room for the order of the sum on another machine"""
     h = _layered_haldane()
     nk = 24
     ks = kubo._kmesh(h, nk)
