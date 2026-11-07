@@ -262,8 +262,13 @@ already reached once.
   ferromagnet). A qtci BdG mean field from a random guess stopped at the
   Hermiticity check, from an imaginary onsite diagonal of the size of the
   interpolation error; that diagonal is kept real now, and the loop
-  reaches the state of "ed". Open: VJinteraction with the triangle, a slower loop when
-  the pairing dies. RPA chi(q) is built, see
+  reaches the state of "ed". A gapless BdG state whose pairing has died
+  out (a Zeeman field above the gap) now holds the filling exactly: "ed"
+  and the triangle fill the shell at zero energy in part inside the
+  density matrix, and then give the same state (they differed by 8.1e-7
+  in the energy); a gapless state with the pairing alive is not touched.
+  Open: VJinteraction with the triangle, a slower loop when the pairing
+  dies, the shell of a gapless state with the pairing alive. RPA chi(q) is built, see
   `tetrahedron_susceptibility.md`. The anomalous Hall of metals with the
   same occupations is built, see the next entry.
 
