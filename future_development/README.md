@@ -268,7 +268,8 @@ already reached once.
   density matrix, and then give the same state (they differed by 8.1e-7
   in the energy); a gapless state with the pairing alive is not touched.
   Open: VJinteraction with the triangle, a slower loop when the pairing
-  dies, the shell of a gapless state with the pairing alive. RPA chi(q) is built, see
+  dies, the shell of a gapless state with the pairing alive, and a gapless
+  state whose Fermi level falls between two levels instead of on one. RPA chi(q) is built, see
   `tetrahedron_susceptibility.md`. The anomalous Hall of metals with the
   same occupations is built, see the next entry.
 

@@ -1472,21 +1472,26 @@ same count and the same energy to 1e-12 with and without it.
 How do we hold the charge of a gapless state, where N0 falls inside a
 jump of the staircase? The maintainer picked to fill the shell at zero
 energy in part, inside the density matrix. The shell is the set of BdG
-levels with |E| < tol, with tol = max(5 T, 1e-9/(kappa Nk)), meaning the
-levels that the Fermi-Dirac weight at T fills in part, by more than
-1/150, with a floor far below the level spacing 1/(kappa Nk) when T = 0.
-This is where the Fermi search of the normal state puts a degenerate star
-that it fills in part: within T ln 15 < 3 T when one electron or more of
-16 states is in it.
+levels with |E| < tol, with tol = max(40 T, 1e-6/(kappa Nk)), meaning
+every level whose Fermi-Dirac weight is not a step (to 4e-18), with a
+floor far below the level spacing 1/(kappa Nk) when T = 0. The jump is
+read on the levels within 5 T of zero, the ones the Fermi-Dirac weight
+fills in part, by more than 1/150. This is where the Fermi search of the
+normal state puts a degenerate star that it fills in part: within
+T ln 15 < 3 T when one electron or more of 16 states is in it.
 
 The occupations of the shell are the ones of a chemical potential
-shifted inside it, to first order. At each k the shell Hamiltonian
-diag(E) - mu' Q is diagonalized, with Q = V^dag tau_z V the charge in the
-shell (tau_z = P_e - P_h, V the eigenvectors of the shell), and its
-eigenvectors get the Fermi-Dirac occupations of their eigenvalues at T.
-mu' is set so that the trace of the electron block is exactly N0, a root
-find on these small matrices that costs no diagonalization of the mesh.
-In a shell degenerate at zero energy, as the star of the Zeeman state,
+shifted inside it by mu', to first order. At each k the levels of the
+shell are grouped in multiplets degenerate to the rounding of the
+energies, 1e-12, each multiplet takes the mean of its energies (and zero
+when it is at zero within that rounding), and the shell Hamiltonian
+sum_m E_m P_m - mu' Q is diagonalized, with P_m the projector of the
+multiplet and Q = V^dag tau_z V the charge in the shell (tau_z = P_e -
+P_h, V the eigenvectors of the shell). Its eigenvectors get the
+Fermi-Dirac occupations of their eigenvalues at T (at T = 0 at a smearing
+of tol/40). mu' is set so that the trace of the electron block is exactly
+N0, a root find on these small matrices that costs no diagonalization of
+the mesh. In a multiplet at zero energy, as the star of the Zeeman state,
 this is the design that was signed off: the vectors of charge 1 get one
 occupation f and their partners, of charge -1, get 1 - f, uniformly over
 the degenerate subspace. Note that there the electron level of the star
@@ -1494,8 +1499,14 @@ and the hole level of a partner are degenerate at the same k, and the
 diagonalization mixes them at will, so a uniform f on the whole multiplet
 would break the particle-hole symmetry; the charge Q is what separates
 them. The partner of a vector at k sits at -k with the opposite energy
-and charge, so it gets 1 - f, and the filled density matrix depends only
-on the shell, not on the basis inside it.
+and charge, so it gets 1 - f. Since the shell Hamiltonian is built from
+projectors, the filled density matrix does not depend on the eigenbasis
+the diagonalization picks inside a multiplet. Without the grouping it
+did at T = 0: there the smearing of the shell is about 1e-12, the 1e-16
+rounding of the degenerate energies entered the Fermi-Dirac weight as an
+argument of order 1e-4, and a random unitary inside the star moved the
+filled density matrix by 3.6e-7 with `"ed"` and 5.5e-7 with the
+triangle. Now it moves it by less than 1e-12, also at T = 0.
 
 Why not a single f for the whole shell, as in the design? Because a shell
 whose levels are split by more than T then loses the order of their
@@ -1503,137 +1514,170 @@ energies. The chain with V1 = 1 at half filling from a ferromagnetic
 guess, nk = 20, of `tests/scf/test_bdg_total_energy.py`, has a degenerate
 shell at mu that has to split for its normal state to form. With one f
 the Nambu state ended at E = -0.4620676 against -0.4670676 for the
-normal state, and the test failed. With the shifted chemical potential, a
-shell that already holds N0 has mu' = 0 and is left as it is, and the
-Nambu chain ends in the normal state, in the same 78 iterations.
+normal state. With the shifted chemical potential the shell keeps the
+order of its levels.
 
-The jump test is that the shell is filled only when N0 lies strictly
-between the charges of the shell emptied and filled in charge, and when
-the jump is more than 10 kappa 2 tol, the charge a smooth density of
-states puts in the window. A gapped state has no level in the shell, so
-it cannot fire there. One more condition came out of a failure: the
-shell is filled only once the window of the offset x (see "The Fermi
-level of a superconductor") is narrower than the shell, which is the case
-when the pairing has died out or was never there. While the pairing
-lives, the offset is what holds the charge. The ferromagnetic triplet
-chain of `tests/scf/test_unconventional_superconductivity.py` (nk = 6,
-Delta = 1.73, plain loop, a random guess) shows why. There the level at
-the node k = 1/2 converges to mu from below, by a factor 0.6 per
-iteration. Once in the shell it was filled to hold N0, the mean field
-pushed it 0.18 away from mu, and the loop went round a cycle of 22
-iterations, which did not converge in 1000 for four seeds out of four
-with a shell of 40 T, and for two out of four with a shell of about
-15 T. A narrower shell only moves the problem, since the level keeps
-approaching mu. Before, the loop converged in
-73 to 79 iterations with a charge error of 0.1 per cell, since the plain
-loop gives the offset up there, and with the condition it does again,
-for six seeds out of six, to the same energies. What separates the two
-cases is that the star of the Zeeman state stays at mu while it is
-filled, because the Fermi search of the normal state follows it, while
-nothing holds the level of the triplet chain at mu. So a Bogoliubov Fermi
-surface or a gap the mesh does not resolve, with the pairing alive, is
-not touched (see "What is left open").
+The shell is filled only when three conditions hold, and otherwise the
+density matrix is bit for bit the one of before.
 
-The band energy is the step band energy plus
-(1/2) sum (n - theta(-E)) <w|H|w> over the shell, with n the new
-occupation, so the reported energy is the expectation value of H in the
-filled density matrix and stays variational. The density matrix keeps
-the eigenpairs of the shell while it goes over the mesh, and adds the
-change of the shell at the end. This is `scftk.superscf.ShellFilling`.
-`BdGFermiLevel` owns one, and `generic_densitydensity` and
-`VJinteraction` pass it to `get_dm` as `shell=`. A density matrix called
-without it is the one of before. qtci does not use it.
+- The window of the offset x (see "The Fermi level of a superconductor")
+  is narrower than the shell, which is the case when the pairing has
+  died out or was never there. While the pairing lives, the offset is
+  what holds the charge. The ferromagnetic triplet chain of
+  `tests/scf/test_unconventional_superconductivity.py` (nk = 6,
+  Delta = 1.73, plain loop, a random guess) shows why. There the level
+  at the node k = 1/2 converges to mu from below, by a factor 0.6 per
+  iteration. Once in the shell it was filled to hold N0, the mean field
+  pushed it 0.18 away from mu, and the loop went round a cycle of 22
+  iterations, which did not converge in 1000 for four seeds out of four.
+  Before, and with the condition, it converges in 73 to 80 iterations
+  with a charge error of 0.1 per cell, since the plain loop gives the
+  offset up there. What separates it from the Zeeman state is that the
+  star of the Zeeman state stays at mu while it is filled, because the
+  Fermi search of the normal state follows it, while nothing holds the
+  level of the triplet chain at mu.
+- The density matrix misses N0 by more than 1e-9 per cell. A shell whose
+  charge is held already is left alone. This matters for the triangle:
+  the chain with V1 = 1 above, with Nambu and the triangle, holds its
+  charge with its own weights and ends at E = -0.4756336249, the energy
+  of the normal chain with the triangle. When the fill replaced those
+  weights at two evaluations, the loop went to the state of `"ed"`,
+  -0.4670675939, 8.6e-3 higher.
+- N0 lies strictly between the charges of the shell emptied and filled in
+  charge, and the jump, the charge of the levels within 5 T, is more than
+  10 times kappa 2 (5 T), the charge a smooth density of states puts in
+  that window. A gapped state has no level there, and a smearing that
+  resolves the level spacing makes the charge continuous, so neither is
+  touched.
 
-The triangle needed one more change. At T > 0 its weights for a BdG
-Hamiltonian are not the step when a level sits on zero: the simplices
-with an edge on that level have a density of states at mu, and their
-Bloechl term moves 1/24 of a level to their far vertices, at E = 0.29 and
-0.77 in the Zeeman state at nk = 16. Without the Bloechl term the weights
-are the step to 2e-7. This is what put the triangle in another state than
-`"ed"` at nk = 16, 8.1e-7 away in the energy and 6.5e-4 in the Fermi
-level, and not the place of the Fermi level on the staircase as written
-in "The step under the quasi-Newton solvers". So when a level sits in the
-shell and the window of the offset has closed, the triangle takes its
-weights at T = 0, which are the step. Otherwise its weights are the ones
-of before.
+When the triangle fills its shell, its density matrix is built on the
+occupations of exact diagonalization, the Fermi-Dirac weight at T on the
+same mesh, and not on its own weights. The reason is that at T > 0 the
+triangle weights of a BdG Hamiltonian are not the step when a level sits
+on zero: the simplices with an edge on that level have a density of
+states at mu, and their Bloechl term moves 1/24 of a level to their far
+vertices, at E = 0.29 and 0.77 in the Zeeman state at nk = 16. Without
+the Bloechl term the weights are the step to 2e-7. This is what put the
+triangle in another state than `"ed"` at nk = 16, 8.1e-7 away in the
+energy and 6.5e-4 in the Fermi level, and not the place of the Fermi
+level on the staircase as written in "The step under the quasi-Newton
+solvers". A triangle density matrix whose shell is not filled keeps its
+own weights. A first version took the weights at T = 0 on the whole mesh
+whenever a level was in the shell, filled or not, and that moved gapped
+states with the pairing alive: the s-wave state with U = -0.5 at nk = 32
+and T = 1e-3 went from Delta = 3.12124e-3 and E = -1.4821049867843 to
+3.12187e-3 and -1.4821049866146, and stopped depending on T.
 
-We measured it on three reserved cores of a loaded workstation, before
-and after, with `maxerror=1e-10`, T = 1e-7, `mf="swave"` (the d-wave
-guess of `tests/scf/test_bdg_fermi_level_solvers.py` for the d-wave
-state), with `"ed"` and the triangle, Broyden mixing and the plain loop.
-In every gapped state the shell never fired, and the iterations, the
-energy, the charge and the Fermi level are the same to the last digit
-(the difference of the energies is exactly zero), for both integrations
-and both solvers:
+The band energy of the mean field is the step band energy, and when the
+shell is filled the fill adds (1/2) sum (n <w|H|w> - theta(-E) E) over the
+shell. Since the shell holds every level whose Fermi-Dirac weight is not
+a step, this is the band energy of the filled density matrix itself,
+Tr H rho, with nothing left out, and so the reported energy is the
+expectation value of H in the state the loop holds. With a shell of 5 T,
+as in a first version, the levels between 5 T and 40 T were left out: at
+T = 1e-3 the band energy of the filled density matrix differed from the
+reported one by 1.95e-8. The fill also moves the chemical potential by
+mu', which the mean field adds to the Fermi level of the Hamiltonian it
+returns, shifted by it, so that this Hamiltonian holds N0 by itself at
+its T (to 1e-8 in the test). `"ed"` and the triangle find the Fermi level
+of the normal state at different places of the staircase, the triangle
+by a count at T = 0, and mu' makes up the difference, so the two report
+the same Fermi level.
 
-| state | nk | Broyden | plain |
-|---|---:|---:|---:|
-| s-wave, U = -2, filling 0.3 | 16, 32, 64 | 23, 23, 24 | 212, 204, 206 |
-| d-wave, V1 = -2, U = 1, filling 0.4 | 16 | 20 | 87 |
-| s-wave, U = -1, filling 0.3 | 16, 24 | 13, 16 | 106, 138 |
-| s-wave, U = -6, filling 0.1 | 16 | 26 | 84 |
+This is `scftk.superscf.ShellFilling`. `BdGFermiLevel` owns one, and
+`generic_densitydensity` and `VJinteraction` pass it to `get_dm` as
+`shell=`; the SCF object of `Vinteraction` keeps it as `scf.shell`.
+`shell.start` says whether the window of the offset has closed. While it
+is open the density matrix is the one without shell, on the device route
+too. Once it has closed, `"ed"` computes the density matrix on the CPU,
+since the shell needs the eigenvectors of the batches. A density matrix
+called without shell is the one of before. qtci does not use it.
 
-The Zeeman state, iterations before and after, the charge error N - N0
-per cell, and the energy after, which is the same for `"ed"` and the
-triangle:
+The fill needs a degenerate level sitting on mu, and it does nothing
+when the Fermi level of the normal state falls between two levels. The
+reviewer's example: Rashba coupling 0.5 with an in-plane field of 0.6,
+U = -3, nk = 16, T = 1e-7, `"ed"`. The pairing dies, but mu sits between
+two levels at +-6.24e-4, the shell stays empty, and the charge error of
+1.5625e-3 per cell stays, before as now (109 iterations,
+E = -1.9128268877). There the step of the charge is a jump of the Fermi
+search of the normal state, which rounds the target to a whole number of
+states on purpose, and not of the paired state.
 
-| nk | integration | Broyden | plain | N - N0 before | N - N0 after | E after |
-|---:|---|---:|---:|---:|---:|---|
-| 16 | `"ed"` | 41, 38 | 350, 354 | 1.6e-3 | 1e-16 | -1.626407234195 |
-| 16 | triangle | 41, 38 | 355, 356 | 1.6e-3 | 1e-16 | -1.626407234195 |
-| 32 | `"ed"` | 36, 34 | 273, 274 | -3.9e-4 | 1e-16 | -1.627302701005 |
-| 32 | triangle | 36, 34 | 274, 275 | -3.9e-4 | 1e-16 | -1.627302701005 |
+We measured it on three reserved cores of a loaded workstation, against
+the code before the fill, with `maxerror=1e-10` and T = 1e-7 unless said.
+Every case whose shell is not filled has the same iterations, energy,
+charge and Fermi level to the last digit (the difference of the energies
+is exactly zero), with both integrations: the s-wave states with U = -2 at
+nk = 16, 32 and 64, U = -1 at nk = 16 and 24, U = -0.7 at nk = 24 at
+T = 1e-7 and 1e-3, U = -6 at filling 0.1, U = -0.45 to -0.6 at nk = 16 to
+32 and T = 5e-4 to 2e-3, the d-wave state with a Zeeman field 0, 0.15 and
+0.3, the Rashba state above, the triplet chain over four seeds, the
+spinless p-wave chain, and the chain with V1 = 1 with both integrations,
+with Broyden mixing and the plain loop. The Zeeman state, iterations
+before and after, the charge error N - N0 per cell before (after it is
+1e-16 in every row), and the energy and Fermi level after, the same for
+`"ed"` and the triangle:
 
-`"ed"` and the triangle now agree to 7e-16 in the energy and to 6e-15 in
-the Fermi level, against 8.1e-7 and 6.5e-4 before at nk = 16. The energy
-of `"ed"` moved by 3e-12 only, although the charge moved by 1.6e-3 per
-cell, since the charge goes into a star at zero energy. The shell fires in
-the last 9 of 38 Broyden evaluations at nk = 16 and 7 of 34 at nk = 32,
-once the pairing has died and x is at zero, and in 217 of 354 and 181 of
-274 plain ones. Broyden needs what the stand-in needed, 38 and 34, so most
-of the cost of the gapless state is still the motion of x while the
-pairing lives (see "The staircase of the offset"). The plain loop needs 1
-to 4 iterations more, out of about 300, to the same state. Without the
-condition on the window and with a shell of 40 T it needed 343 and 272,
-but that version broke the triplet chain above. `VJinteraction` with
-plain mixing, the engine of `h.get_mean_field_hamiltonian()` for this
-Hamiltonian, gives the same state and the same counts as the plain loop of
-`Vinteraction` with `"ed"`: 354 and 274 iterations against 350 and 273,
-with the charge held instead of the errors 1.6e-3 and -3.9e-4. At nk = 64
-the Zeeman state still does not converge in 1000 Broyden iterations, as
-before, since the normal state there cycles between two treads whose
-stars are not in the shell (see "The gapless Zeeman state").
+| nk | T | integration | Broyden | plain | N - N0 before | E after | mu after |
+|---:|---:|---|---:|---:|---:|---|---|
+| 16 | 1e-7 | `"ed"` | 41, 38 | 350, 351 | 1.6e-3 | -1.6264072342 | -1.604429385 |
+| 16 | 1e-7 | triangle | 41, 38 | 355, 351 | 1.6e-3 | -1.6264072342 | -1.604429385 |
+| 32 | 1e-7 | `"ed"` | 36, 34 | 273, 274 | -3.9e-4 | -1.6273027010 | -1.638774186 |
+| 32 | 1e-7 | triangle | 36, 34 | 274, 274 | -3.9e-4 | -1.6273027010 | -1.638774186 |
+| 16 | 1e-4 | `"ed"` | 48, 48 | | 1.6e-3 | -1.6264072342 | -1.604449432 |
+| 16 | 1e-4 | triangle | 113, 43 | | 1.6e-3 | -1.6264072342 | -1.604449432 |
+| 16 | 1e-3 | `"ed"` | 61, 32 | | 1.6e-3 | -1.6264072182 | -1.604633875 |
+| 16 | 1e-3 | triangle | 41, 41 | | 1.6e-3 | -1.6264072182 | -1.604633875 |
+| 16 | 0 | `"ed"` | 781, 38 | | 2.0e-3 | -1.6264072342 | -1.604429365 |
+| 16 | 0 | triangle | 37, 38 | | 1.6e-3 | -1.6264072342 | -1.604429365 |
+
+Before, `"ed"` and the triangle differed by 8.1e-7 in the energy and
+6.5e-4 in the Fermi level at every T. The energy of `"ed"` at T = 1e-7
+moved by 3e-12 only, although the charge moved by 1.6e-3 per cell, since
+the charge goes into a star at zero energy. At T = 1e-3 it moved by
+3.7e-8, since now the energy is the one of the filled density matrix,
+the Fermi-Dirac tail included. Most of the cost of the gapless state is
+still the motion of x while the pairing lives (see "The staircase of the
+offset"); with `"ed"` at T = 0 the loop no longer runs into the staircase
+of the smearing of 1e-15, and goes from 781 iterations to 38.
+`VJinteraction` with plain mixing, the engine of
+`h.get_mean_field_hamiltonian()` for this Hamiltonian, holds the charge
+too. At nk = 64 the Zeeman state still does not converge in 1000 Broyden
+iterations, as before, since the normal state there cycles between two
+treads whose stars are not at mu (see "The gapless Zeeman state").
 
 A Nambu state without pairing at a fractional charge on the mesh now
 holds that charge, which the normal state cannot. For U = 2 from
 `mf="ferro"` at filling 0.35, nk = 64 and T = 0, the requested charge is
-2867.2 electrons on the mesh. The Nambu state fills a star at zero energy
-in part and has mz = 0.00225 with `"ed"` and with the triangle, against
-0.00282 for the normal state, which the Nambu `"ed"` also had before
-(0.00293 for the Nambu triangle). The energy is the same in all of them
-to 1e-10, -1.2809620317, since the star is at zero energy: the mean field
-at T = 0 on this mesh does not fix the magnetization inside the star. So
+2867.2 electrons on the mesh. The normal state holds 2869.536: its Fermi
+search rounds the target to a whole number of states, on purpose, and
+the smearing of 1e-15 reads the rounding of the degenerate energies of a
+star of one spin that sits on mu. The Nambu state fills that star in
+part and holds 2867.2. Since the star is of one spin, the occupation of
+the other spin is the one of the normal state, and the magnetization
+moves by exactly the charge difference: mz = 0.0022461 against 0.0028164
+for the normal state, which the Nambu `"ed"` also had before. The energy
+is the same to 1e-10, -1.2809620317, since the star is at zero energy.
 `test_nambu_normal_state_has_the_magnetization_of_the_normal_state` in
-`tests/scf/test_densitydensity_bdg_energy.py`, which compared the
-magnetization to 1e-6, compares the energy to 1e-8 now, checks that the
-charge is held, and compares the magnetization only to 1e-3, the size of
-the star, which still rules out the ferromagnet of 0.006 that it was
-written for.
+`tests/scf/test_densitydensity_bdg_energy.py` checks this relation: one
+spin with the occupation of the normal state to 1e-8, the other moved by
+the charge difference to 1e-8, the charge held to 1e-10 and the energy to
+1e-8.
 
-`tests/scf/test_bdg_shell_filling.py` checks that the Zeeman state holds
-N0 to 1e-10 with `"ed"` and with the triangle, with the same energy to
-1e-10 and the same Fermi level to 1e-8; that the band energy is the
-expectation value of H in the filled density matrix, summed over the
-hoppings, to 1e-12; that the s-wave state never fires and has the same
-iterations, energy and density matrix as with the filling switched off,
-to 1e-12, and the same density matrix bit for bit on its converged
-Hamiltonian; and that the filled density matrix is Hermitian, particle-
-hole symmetric (the hole occupations are 1 minus the electron ones of the
-other spin) and the same to 1e-10 when the diagonalization mixes the
-degenerate levels at zero energy with a random unitary. The difference
-there, 2e-11, is the rounding of the degenerate energies, 1e-16, read by
-the Fermi-Dirac weight at T = 1e-7. tests/scf and tests/superfluid pass,
-482 tests.
+`tests/scf/test_bdg_shell_filling.py` checks, at T = 1e-7 and 1e-3, that
+the Zeeman state holds N0 to 1e-10 with `"ed"` and with the triangle,
+with the same energy to 1e-10 and the same Fermi level to 1e-8, and that
+the returned Hamiltonian holds N0 by itself; that the band energy is the
+one of the filled density matrix, summed over the hoppings, to 1e-12;
+that a state whose shell is not filled (the s-wave state with `"ed"` and
+the triangle, and the U = -0.5 state at T = 1e-3 with the triangle) has
+the same iterations, energy and density matrix, bit for bit, as with the
+shell switched off; that the chain with V1 = 1 with Nambu ends in the
+state of the normal chain, with `"ed"` and with the triangle; and that
+the filled density matrix is Hermitian, particle-hole symmetric (the
+hole occupations are 1 minus the electron ones of the other spin) and
+the same to 1e-12, at T = 1e-7 and at T = 0, when the diagonalization
+mixes the degenerate levels at zero energy with a random unitary.
 
 ### qtci from a random guess
 
@@ -1729,20 +1773,21 @@ loaded.
   of a gapless BdG state with the continuous charge of the normal state
   would need the electron and hole bands unsorted. Not tried.
 - The partly filled shell of a gapless BdG state is built (see "The
-  shell filled in part"): once the window of the offset has closed, "ed"
-  and the triangle fill the shell of levels within 5 T of zero at a
-  chemical potential shifted inside it, so that the charge is exactly N0.
-  The Zeeman state holds N0 to 1e-16 at nk = 16 and 32, and "ed" and the
-  triangle give the same energy and Fermi level to 1e-14, where they
-  differed by 8.1e-7 and 6.5e-4. Every gapped state is the same to the
-  last digit. What it leaves open: a gapless state whose pairing lives (a
-  Bogoliubov Fermi surface, a node on the mesh) is not touched, since
-  there a level is not held at mu while it is filled, and filling it made
-  the triplet chain go round a cycle; qtci does not fill the shell; and a
-  Nambu state without pairing at a fractional charge on the mesh now
-  holds that charge, which the normal state cannot, so the two differ
-  inside the star at zero energy (mz = 0.00225 against 0.00282 for U = 2
-  at filling 0.35, nk = 64, at the same energy to 1e-10).
+  shell filled in part"): once the window of the offset has closed, and
+  when the density matrix misses N0 inside a jump of its charge, "ed" and
+  the triangle fill the levels within 40 T of zero at a chemical
+  potential shifted inside the shell, so that the charge is exactly N0.
+  The Zeeman state holds N0 to 1e-16 from T = 0 to 1e-3, and "ed" and the
+  triangle give the same energy and Fermi level, where they differed by
+  8.1e-7 and 6.5e-4. Every state whose shell is not filled is the same to
+  the last digit. What it leaves open: a gapless state whose pairing
+  lives (a Bogoliubov Fermi surface, a node on the mesh) is not touched,
+  since there a level is not held at mu while it is filled, and filling
+  it made the triplet chain go round a cycle; a state whose Fermi level
+  falls between two levels, as Rashba 0.5 with an in-plane field 0.6 and
+  U = -3 at nk = 16 (levels at +-6.24e-4, a charge error of 1.5625e-3),
+  keeps its charge error, since there is no degenerate level at mu to
+  fill; and qtci does not fill the shell.
 - qtci with V1 on a BdG Hamiltonian stopped with "Non-Hermitian BdG mean
   field" from a random guess. This is closed (see "qtci from a random
   guess"): the onsite diagonal of the qtci density matrix had an
