@@ -433,10 +433,9 @@ pieces, fewer on finer meshes.
 At finite T with delta >= T the frequencies share the nodes of the
 quadrature in x, so each node only adds pieces, with the weight of the
 node in their coefficients, and the same kernel applies. With delta < T
-the nodes include the resonance of each frequency, nothing is shared,
-and the call goes to the reference kernel. This is also the static
-response at finite T, delta = 0 at one frequency, where there is
-nothing to share anyway.
+the nodes include the resonance of each frequency, and at first the call
+went to the reference kernel; the section on fewer pieces at finite
+temperature below says how the source kernel now takes this case too.
 
 The numba loops split their range statically, so the bins, the near sums
 and the simplices are dealt to the threads in tasks of about equal work;
@@ -465,9 +464,9 @@ the numbers to read. The gain is a factor 11 to 94 at T = 0 and 15 to
 the pieces. The T = 0 cost now grows like the number of simplices, a
 factor 3.1 to 3.8 per doubling of nk. At delta = 1e-2 the source kernel
 takes 0.3, 1.4, 5.0 and 11 s at T = 0 and 6.3, 17, 36 and 99 s at T =
-1e-3, more than at delta = 1e-3; we think this is the Taylor branch of
-the near pieces, whose rule compares the spread with |c - z| and so
-expands more clusters at a larger delta, but we did not check it. The
+1e-3, more than at delta = 1e-3. We first thought this was the Taylor
+branch of the near pieces; the section on fewer pieces at finite
+temperature below shows that it was the load of the machine. The
 errors against nk = 2048 are those of the first table to two digits,
 at both temperatures and both broadenings.
 
@@ -477,7 +476,9 @@ simplex at nk = 256 and 512, against 0.45 at T = 0, and each piece is
 tiled and enters the moments once. Before, the ratio looked smaller at
 large nk only because the T = 0 cost carried the bincount. On a profile
 at nk = 512 the tiling takes about 40 percent of the finite-T time, the
-moments 20 percent and the near pieces 35 percent.
+moments 20 percent and the near pieces 35 percent. The section on
+fewer pieces at finite temperature below divides the pieces of this case
+by 2.8 and the time by 2.5 to 3.
 
 Now the triangle against the grid at equal accuracy, at T = 1e-3. The
 grid is the same Lindhard sum on the uniform mesh, with the band
@@ -498,6 +499,129 @@ is better than any grid we ran. At T = 0 the same triangle takes 0.16 s.
 At delta = 1e-2 the grid still wins: 9.3e-4 in 1.4 s at nk = 1024,
 against 8.4e-4 in 17 s for the triangle at nk = 512, and 6.9e-5 in 4.5
 s at nk = 2048, which the triangle does not reach below nk = 2048.
+
+### Fewer pieces at finite temperature
+
+We will now see where the pieces of the finite-T response come from, and
+three changes that remove most of them without changing the quadrature.
+
+Where are the pieces? On a simplex the T=0 response R0(x) at chemical
+potential x only depends on x through the tiling of A and B. The knots of
+the integral over x include every vertex energy of both bands, so inside
+one piece of x between two knots every vertex keeps its side of x. When
+both bands keep one side on the whole simplex, the whole simplex is in A
+(every E_n < x < every E_m) or in B, or A and B are empty, and R0 does
+not depend on x there. These are the pieces of x between the energy
+ranges of the two bands on the simplex, and at T = 1e-2 they are most of
+the window of 40 T. The quadrature still put 12 graded nodes on each of
+them, and each node tiled the simplex again into the same piece. We now
+evaluate such a piece of x once, with the weight f(a) - f(b), which is
+the sum of the 12 node weights to 1e-15 (the rule is exact for the
+degree-6 g'), and the pieces of A and of B of one pair are summed into
+one evaluation each. Both kernels do this, and a test checks the single
+evaluation against the node sum to 1e-13.
+
+The pieces of x where the tiling moves are left. On the square lattice
+at q = (0.3, 0.1), D = E_n - E_m is of order one on most simplices, so
+usually only one band crosses the window there and the other band stays
+on one side. The region is then the part E < x or E > x of the moving
+band. In 2D the part with two vertices needs two triangles and the part
+with one vertex needs one; in 3D the part with three vertices needs
+three tetrahedra. The source kernel writes such a region as the whole
+simplex minus the other part when the other part has fewer pieces. The
+whole simplex goes into the single evaluation of A or B of the pair, so
+per node only a corner is left. A corner also has a smaller spread of
+D, so its pieces fall in finer bins and fewer of them are summed
+exactly near each frequency. The reference kernel keeps the plain
+tiling, so the agreement of the two kernels tests this one.
+
+The third change is the case delta < T. The reference kernel adds to
+the knots the energies where a cut through an edge meets the resonance
+D = w of each frequency, so its nodes depend on the frequency. These
+knots only fall in pieces of x where the tiling moves, and only for the
+frequencies inside the range of D on the simplex. The source kernel keeps the shared nodes for all frequencies and adds, for
+each such simplex and frequency, the quadrature on the refined pieces of
+x minus the one on the shared pieces of x, evaluated directly. This is
+the reference result to rounding: on the square lattice at nk = 256,
+delta = 1e-3 and T = 1e-2 the two agree to 5e-15. The static response
+at finite T (delta = 0, one frequency) goes the same way and costs what
+the reference kernel costs, within 10 percent at nk = 384 on a desktop.
+
+The pieces on the square lattice at nk = 512, 60 frequencies, counted
+in the kernel (the exact near evaluations are summed over the
+frequencies):
+
+| case | pieces | per simplex | near evaluations |
+|---|---|---|---|
+| T = 0 | 2.4e5 | 0.45 | 2.8e5 |
+| T = 1e-3, before | 7.2e6 | 13.6 | 8.3e6 |
+| T = 1e-3, one evaluation per fixed piece of x | 3.7e6 | 7.0 | 3.5e6 |
+| T = 1e-3, and the complement tiling | 2.6e6 | 4.9 | 1.6e6 |
+| T = 1e-2, before | 4.0e7 | 77 | 5.1e7 |
+| T = 1e-2, one evaluation per fixed piece of x | 1.0e7 | 19 | 9.5e6 |
+| T = 1e-2, and the complement tiling | 6.9e6 | 13 | 4.1e6 |
+
+The wall times on four cores of the shared workstation (load 5 to 8),
+square lattice, q = (0.3, 0.1), 60 frequencies from 0.02 t to 6 t. Each
+cell was run with the code before these changes ("before"), with the
+first and the third change but plain tiling ("fixed x"), and with all
+three ("all"), next to each other in one session. The table gives the
+last of three passes; "before" and "fixed x" were also run in two
+earlier passes. The first pass was up to 25 percent faster for both
+codes at delta = 1e-3, and the old code at delta = T = 1e-2, nk = 1024
+took 205 s in the first two passes and 157 s in the last; the other
+cells agree between the passes to 5 percent. Before, delta < T went to
+the reference kernel; we ran it at nk = 256 only, where it took 529 s
+(first pass).
+
+| nk | delta | T | before (s) | fixed x (s) | all (s) | T = 0 (s) | all / T = 0 |
+|---|---|---|---|---|---|---|---|
+| 256 | 1e-3 | 1e-3 | 4.7 | 3.0 | 1.9 | 0.31 | 6.0 |
+| 256 | 1e-3 | 1e-2 | 529 (reference kernel) | 7.6 | 5.5 | 0.31 | 18 |
+| 256 | 1e-2 | 1e-3 | 5.0 | 3.2 | 2.0 | 0.32 | 6.2 |
+| 256 | 1e-2 | 1e-2 | 21.9 | 6.2 | 3.9 | 0.32 | 12 |
+| 512 | 1e-3 | 1e-3 | 11.3 | 5.6 | 4.1 | 0.88 | 4.6 |
+| 512 | 1e-3 | 1e-2 | not run | 18.3 | 13.5 | 0.88 | 15 |
+| 512 | 1e-2 | 1e-3 | 11.5 | 5.6 | 3.9 | 0.96 | 4.1 |
+| 512 | 1e-2 | 1e-2 | 62.4 | 15.1 | 10.6 | 0.96 | 11 |
+| 1024 | 1e-3 | 1e-3 | 30.8 | 12.8 | 10.2 | 2.82 | 3.6 |
+| 1024 | 1e-3 | 1e-2 | not run | 63.1 | 38.7 | 2.82 | 14 |
+| 1024 | 1e-2 | 1e-3 | 32.4 | 12.9 | 10.6 | 3.03 | 3.5 |
+| 1024 | 1e-2 | 1e-2 | 157 | 40.8 | 32.8 | 3.03 | 11 |
+
+The T = 0 column is the same in the three codes to 5 percent, since T =
+0 does not go through any of the changes. All of them give the same
+numbers: the largest difference between the new and the old code, over
+every cell, is 2.9e-13 of the largest abs(chi_0) (at delta = T = 1e-2),
+and 4e-14 or less at T = 1e-3; at delta < T the new source kernel agrees
+with the old reference kernel to 5e-15. So at T = 1e-3 the gain is a
+factor 2.5 to 3, and finite T now costs 3.5 to 6 times T = 0, against 10
+to 16 before. At delta = T = 1e-2 the gain is a factor 5 to 6, and
+finite T costs 11 to 12 times T = 0, against 65 to 75 before. With
+delta < T the gain is a factor 97 at nk = 256, and the cost is 14 to 18
+times T = 0. The ratio to T = 0 falls with nk.
+
+What about the larger cost at delta = 1e-2 than at 1e-3, which the
+section on the cost of the dynamic response saw? In this session the two
+broadenings cost the same at T = 0 (0.31 and 0.32 s at nk = 256, 2.8
+and 3.0 s at nk = 1024) and at T = 1e-3 (11.3 and 11.5 s at nk = 512
+with the old code). A profile at nk = 512 gives the same near
+evaluations at both, 3.53e6 and 3.48e6, and the same time in them. So
+the difference seen before was the load of the machine in a run that was
+not interleaved, and not the Taylor branch.
+
+We also tried to move work from the near evaluations to the moments, by
+summing a bin by its moments from 2 b on instead of 3 b, with 60 terms
+instead of 40. The near evaluations fall by a third and the moments
+cost 55 percent more, and the total did not move, so we kept 3 b.
+
+What is left at finite T is the 12 graded nodes on every piece of x where
+the tiling moves. Fewer nodes, or fewer multiples of T among the knots,
+would change the quadrature itself, and the section on finite
+temperature above says that the shorter list of multiples loses 1e-6
+relative; we did not do it. On a profile at nk = 512 and T = 1e-3 the
+tiling now takes about half of the kernel, the moments and the near
+pieces a quarter each.
 
 ## The tests
 
@@ -530,10 +654,16 @@ once numba has compiled the kernels:
   combinations that are not built raise;
 - the source kernel gives the reference kernel, which evaluates every
   piece at every frequency, to 1e-10 of the largest value: at delta =
-  1e-3 and at delta = 0, at T = 0 and at finite T with delta = T, on the
-  square lattice, on a spinful honeycomb metal with the degenerate pairs
-  of the spin copies, on a chain and on a cubic metal, and the names of
-  the kernels come from their registry.
+  1e-3 and at delta = 0, at T = 0, at finite T with delta = T and with
+  delta < T (delta = 1e-3 at T = 1e-2 and 5e-3, the static response at
+  delta = 0), on the square lattice, on a spinful honeycomb metal with
+  the degenerate pairs of the spin copies, on a chain and on a cubic
+  metal, and the names of the kernels come from their registry;
+- a piece of x where the tiling does not move, evaluated once times
+  f(a) - f(b), is the sum over its 12 graded nodes to 1e-13, for
+  triangles and tetrahedra, in A and in B, at delta = 1e-3 and 0. Both
+  kernels take this shortcut, so the agreement of the two kernels does
+  not test it.
 
 With these, `tests/chi` passes, 196 tests.
 
@@ -662,13 +792,12 @@ denominator now has the Pauli term in it.
 
 ## What is left open
 
-- The cost of the dynamic response at finite T, about 10 times the
-  T = 0 one. The pieces of every node of the quadrature in x are tiled
-  and summed separately, and a node of one simplex shares nothing with
-  the next node. With delta < T nothing is shared between the
-  frequencies either, and the call goes to the reference kernel. The
-  tetrahedra in 3D have not been timed with the source kernel, and the
-  larger cost at delta = 1e-2 than at 1e-3 was not looked into.
+- The cost of the dynamic response at finite T, now 3.5 to 6 times the
+  T = 0 one at T = 1e-3 and 11 to 18 times at T = 1e-2. What is left is
+  the 12 graded nodes on every piece of x where the tiling moves; fewer
+  nodes or fewer multiples of T would change the quadrature, and were
+  not tried. The tetrahedra in 3D have not been timed with the source
+  kernel.
 - A hybrid for high T: the plain Fermi occupation on the simplices far
   from the Fermi level, where the triangle buys nothing, would keep the
   exponential convergence of the grid there, as in the density-matrix

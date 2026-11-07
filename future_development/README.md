@@ -281,8 +281,15 @@ already reached once.
   its whole Fermi-surface term there (0.205 on a square metal, which is all
   of its static chi_0 at q = 0); it now uses the site-basis rule, the two routes agree
   to 2e-15, and the Goldstone residual of ferromagnetic and spiral metals
-  does not move. Open: finite T still costs 10 times T = 0, a high-T
-  hybrid and the triangle on the pair-basis route.
+  does not move. At finite T a piece of x where the tiling does not move
+  is evaluated once, a one-band region is the simplex minus a corner, and
+  delta < T goes through the source kernel too, with a correction for
+  each frequency whose resonance crosses a simplex: at T = 1e-3 finite T
+  now costs 3.5 to 6 times T = 0 (10 to 16 before), at T = 1e-2 11 to 18
+  times (65 to 75 before), delta < T is 97 times faster at nk = 256, the
+  same numbers to 3e-13. The larger cost at delta = 1e-2 was the load of
+  the machine. Open: the 12 nodes per moving piece of x, a high-T hybrid and the
+  triangle on the pair-basis route.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
   the second-harmonic conductivity. Single resonances and same-pair products
