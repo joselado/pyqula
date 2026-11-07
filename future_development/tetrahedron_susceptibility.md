@@ -89,6 +89,55 @@ Then they are contracted with the matrix elements of each batch of
 k-points. The cost is the one of the grid for the eigenvectors, plus the
 weights, whose cost grows with the number of frequencies.
 
+### A mesh q on a band crossing
+
+We will now see why the response at a mesh q can jump when q moves off
+it by a tiny amount, and why this is not a defect of the multiplet
+average. The model is the 2x2 honeycomb supercell with onsite energy
+0.3 t, spinless and spinful, at nk = 4 and q0 = (1/4, 1/2). At this q
+every point k + q of the mesh sits on a twofold crossing of the folded
+bands. Off the mesh the crossings split linearly, by about 5 eps for
+q0 + eps (0.6, 0.8). We scanned eps from 1e-12 to 1e-2 at delta = T = 0
+and at delta = T = 1e-2, `mode="matrix"`. In units of the largest entry,
+chi changes by 1.28 eps up to eps = 3.2e-9, by 8.9e-3 at eps = 1e-8 and
+by 9.5e-3 from 1e-7 to 1e-3, the same in the four cases. The step comes
+where the splitting crosses the multiplet tolerance, 1e-8 times the
+largest band energy, 3.3e-8 here. The pairs that are degenerate on a
+whole simplex also change at that eps, from 16 to 12, but they play no
+role: with only the multiplet tolerance raised to 1e-3, chi is linear in
+eps up to 1e-5, static and at omega = 0.3, at both delta.
+
+So the question is which side is wrong, and the answer is neither, since
+the split side has no limit. Approaching q0 along u, the limit depends on
+u: at eps = 1e-6, chi along u and along -u differ by 1.7e-2 to 2.3e-2,
+and eight directions spread by up to 2.3e-2. The value at q0, which is
+the multiplet average, is the mean of the two one-sided limits and also
+the mean of the eight directions, to 5e-8. The reason for this is the
+sorted interpolation. The two bands of a crossing take different values
+at the other vertices of each triangle, so their weights W_m and W_(m+1)
+at the vertex differ by an amount of order one. Their matrix elements
+G_m and G_(m+1) depend on the basis inside the pair, and the direction
+of the splitting picks that basis. So the split response carries the
+term (W_m - W_(m+1)) (G_m - G_(m+1))/2, which flips sign from u to -u,
+and the multiplet average sets it to zero. A different tolerance does not
+help: at 1e-5 and 1e-3 the same step of 9e-3 to 1e-2 appears at eps =
+3e-6 and 3e-4, where the splitting crosses it. A smooth blend between the
+averaged and the split weights over a window of splittings would turn the
+step into a slope of the jump over the window, with a width that has no
+physical scale, and the direction dependence would remain outside the
+window. We did not build it.
+
+The step is an error of the mesh, of the order of the error of the
+method. At nk = 4, 8, 16 and 32 and the same q0, the two sides differ by
+1.9e-2, 5.8e-3, 1.5e-3 and 3.8e-4 of the largest entry, falling as nk^-2,
+while that entry moves from 0.1771 to 0.1840, 0.1845 and 0.1847. This is
+the kink of the crossing bands listed in what is left open, seen as a
+direction dependence at a mesh q. So `simplexchi.py` does not change, and
+the multiplet average stays the value at a mesh q, since it does not
+depend on the basis and it is the mean of the limits. One point,
+k + q = (3/4, 1/2), splits only quadratically, by 1e-11 at eps = 1e-6,
+and stays averaged in the whole scan.
+
 ## Finite temperature
 
 f(E) = int dx (-f'(x)) theta(x - E), and the same x enters both steps. So
@@ -984,6 +1033,12 @@ buys is the count, nk^dim instead of 2 nk^(2 dim), not the wall time.
 - Bands that cross are interpolated with a kink, as in the simplex DOS,
   which costs an error of order one in a window of width v/nk around
   the crossing. The models here have no crossing near the Fermi level.
+  At a mesh q where every k + q falls on a crossing, the same kink makes
+  the response depend on the direction from which q is approached, by a
+  step that falls as nk^-2 (see a mesh q on a band crossing). Choosing
+  the basis of a degenerate pair per simplex, so that it follows the
+  eigenvectors at the other vertices, would remove both, but it makes the
+  matrix elements a quantity per simplex instead of per vertex. Not built.
 - At T = 0 and a perfect nesting vector the response is infinite, and the
   triangle returns a finite number that grows with nk instead of
   refusing. A check for pieces with D = 0 on an edge at w = 0 and T = 0
