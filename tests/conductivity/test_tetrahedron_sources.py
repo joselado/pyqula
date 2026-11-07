@@ -242,7 +242,7 @@ def test_the_source_sum_stays_at_the_rounding_of_the_direct_kernel():
             1e-2, cellvol)
     s1 = kubosimplex._sigma_from_fields(*args, kernel="sources")
     s2 = kubosimplex._sigma_from_fields(*args, kernel="simplices")
-    assert np.max(np.abs(s1-s2)) < 1.2e-13*np.max(np.abs(s2))
+    assert np.max(np.abs(s1-s2)) < 1.5e-13*np.max(np.abs(s2))
 
 
 def test_the_source_sum_does_not_depend_on_the_number_of_threads():

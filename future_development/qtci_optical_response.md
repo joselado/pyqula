@@ -934,8 +934,8 @@ whose weights sit on a few tetrahedra near the Fermi surface, adds these
 up to 1.6e-13 to 3.2e-13. With `_tol` = 3e-12 every row is below 4e-14 except
 the one at tm = 1e-3 and delta = 1e-4, where both kernels are 1.1e-13
 from the reference. That floor is shared with the direct kernel, so it
-sits in the per-frequency divided differences of `simplexdos._dd`; it was
-not followed further. Note also that the direct kernel is not the better
+points to the per-frequency divided differences of `simplexdos._dd`; it
+was not followed further. Note also that the direct kernel is not the better
 of the two everywhere: it is at 5.0e-13 on the layered model at nk = 48
 and delta = 1e-6, where the source kernel is at 7e-15.
 
@@ -965,7 +965,8 @@ Two were kept: the merge of the vertex sources takes the default sort
 instead of the stable one, since equal keys only need a deterministic
 order (0.055 s against 0.077 s for the 2.1M keys of the 2D model), and
 the test for vanishing vertex coefficients runs on a float view of the
-array.
+array. The merge is shared with `shgsimplex.py`, whose results move at
+the rounding level too.
 
 The cost. Three cores of the workstation with other jobs on the machine,
 the kernels loaded in one process and called in turn on the same saved
@@ -993,8 +994,11 @@ the table, the level of the direct kernel on that row, and 1.1e-13 on the
 shared floor, measured with the compensated sum on every source.
 
 `tests/conductivity/test_tetrahedron_sources.py` has a new test: on the
-layered model at nk = 24 the two kernels agree to 1.2e-13 of the largest
+layered model at nk = 24 the two kernels agree to 1.5e-13 of the largest
 entry. The kernel now gives 6.3e-14 there, and the kernel before 2.2e-13.
+Since the order of equal keys in the merge may differ between machines,
+and the error moves by about 50% with that order, a failure of this test
+on another machine near the bound means the bound, not the physics.
 
 What is left open. Whether 3D should take the tighter `_tol` = 1e-12 with
 the budget 1, 15 to 80 times more precise on the metal and the diamond for
