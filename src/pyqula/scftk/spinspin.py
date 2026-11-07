@@ -1696,4 +1696,6 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             from .superscf import get_dc_energy_anomalous
             etot += get_dc_energy_anomalous(compute_mf(scf.dm), scf.dm)
     scf.total_energy = etot.real
+    if bdg_fermi is not None: # the shift of the chemical potential of a
+        bdg_fermi.shell.move_fermi(h) # filled shell, after the energy
     return scf

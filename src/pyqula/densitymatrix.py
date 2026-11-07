@@ -117,9 +117,12 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
 
     shell: None, or a scftk.superscf.ShellFilling for a Bogoliubov-de
     Gennes h at a filling, which fills the shell of levels at zero energy
-    in part when the charge jumps across the requested one there. It takes
-    the eigenpairs of the shell from the batches below, so it stays on the
-    CPU."""
+    in part when the charge jumps across the requested one there. While
+    the window of its offset is open (the pairing lives), shell.start
+    says so and the density matrix is the one without shell, on the
+    device route too. Once the window has closed, the shell takes its
+    eigenpairs from the batches below, so the density matrix is computed
+    on the CPU."""
     if h.non_hermitian: # left and right eigenvectors, see biorthogonal_dm
         return biorthogonal_dm(h,ds=ds,nk=nk,fermi=fermi,delta=delta)
     from .htk.eigenvectors import peigh_bloch, bloch_on_gpu
@@ -127,7 +130,7 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     ks = np.array(h.geometry.get_kmesh(nk=nk)) # get the mesh
     fac = 1./len(ks) # normalization
     bloch = bloch_on_gpu(hk) # the device route, where it is worth taking
-    if shell is not None: shell.start(h,delta,len(ks))
+    if shell is not None and not shell.start(h,delta,len(ks)): shell = None
     if bloch is not None and shell is None:
         # everything stays on the device: the eigenvectors are the biggest
         # array here and they exist only to be summed away, so they never

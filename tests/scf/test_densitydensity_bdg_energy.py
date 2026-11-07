@@ -236,14 +236,17 @@ def test_nambu_normal_state_has_the_magnetization_of_the_normal_state(
     out of reach of a sorted BdG spectrum.
 
     At filling 0.35 the requested charge is 2867.2 electrons on the mesh,
-    and a star of k-points sits at zero energy. The normal state cannot
-    hold a fractional charge, while the Nambu one fills the star in part
-    and holds it exactly (scftk.superscf.ShellFilling). How the star is
-    filled moves the magnetization, mz=0.00220 against 0.00282, but not the
-    energy, which is the same to 1e-10, since the star is at zero energy:
-    the mean field at T=0 does not fix the magnetization inside it. So the
-    energy is compared tightly, and the magnetization only to the size of
-    the star, which still rules out the ferromagnet of before"""
+    and a star of k-points of one spin sits at zero energy. The normal
+    state at T=0 holds 2869.536 electrons: the Fermi search rounds the
+    target to a whole number of states, and the smearing of 1e-15 reads
+    the rounding of the degenerate energies of the star. The Nambu state
+    fills the star in part and holds the requested charge exactly
+    (scftk.superscf.ShellFilling). Since the star is of one spin, the
+    occupation of the other spin is the one of the normal state, and the
+    whole charge difference sits in the spin of the star, which moves the
+    magnetization by exactly that difference (mz=0.0022461 against
+    0.0028164); the energy does not move, since the star is at zero
+    energy"""
     nk = 64 # at nk=32 the normal state at T=0 does not converge
     out = []
     for nambu, integ in ((False, "ed"), (True, integration)):
@@ -259,5 +262,10 @@ def test_nambu_normal_state_has_the_magnetization_of_the_normal_state(
     normal, nambu = out
     assert abs(nambu.charge_error) < 1e-10 # the charge is held
     assert abs(nambu.total_energy-normal.total_energy) < 1e-8
-    mz = [abs(np.mean(s.hamiltonian.extract("mz"))) for s in out]
-    assert abs(mz[1]-mz[0]) < 1e-3 # the size, the ferro guess picks a sign
+    # the occupations of the two spins, per cell
+    na = np.real(normal.dm[(0, 0, 0)].diagonal())
+    nb = np.real(get_eh_sector(nambu.dm[(0, 0, 0)], i=0, j=0).diagonal())
+    dn = 0.7-np.sum(na) # the requested charge minus the normal one
+    d = np.sort(np.abs(nb-na)) # one spin unchanged, the other takes dn
+    assert d[0] < 1e-8
+    assert abs(d[1]-abs(dn)) < 1e-8

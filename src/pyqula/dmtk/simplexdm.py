@@ -701,7 +701,10 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
     h at a filling a scftk.superscf.ShellFilling, which fills the shell of
     levels at zero energy in part when the charge jumps across the
     requested one there, as in densitymatrix.full_dm_accumulate, since the
-    triangle of a BdG h is the step of exact diagonalization"""
+    triangle of a BdG h is the step of exact diagonalization. When it
+    fills the shell, the density matrix is the one of exact
+    diagonalization at T on the same mesh with the shell filled; when it
+    does not, it is the triangle density matrix of before"""
     check_hamiltonian(h,"the simplex density matrix")
     if bloechl is None: bloechl = bloechl_default
     if not h.has_eh: shell = None # a normal state holds its charge already
@@ -716,41 +719,50 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
         if keep: stored.append(U)
     es = np.concatenate(es_all)
     nkp = len(mesh.ks)
-    Tw = T # the temperature of the weights
-    if shell is not None:
-        shell.start(h,T,nkp)
-        # a level in the shell, at zero energy: at T>0 the simplices with
-        # an edge on it have a density of states at mu, and their Bloechl
-        # term moves the weight c_dim to their far vertices, far from mu
-        # (1/24 of a level at E = 0.29 and 0.77 in the Zeeman state of
-        # future_development/tetrahedron_density_matrix.md), which is not
-        # the step of exact diagonalization. At T=0 it is the step. Only
-        # when the shell may be filled, once the window of the offset has
-        # closed (see superscf.ShellFilling)
-        if shell.window<=shell.tol and np.any(np.abs(es)<shell.tol): Tw = 0.
-    w = simplex_weights(mesh.dim,nk,es,mu=0.,T=Tw,bloechl=bloechl)
+    if shell is not None and not shell.start(h,T,nkp): shell = None
+    w = simplex_weights(mesh.dim,nk,es,mu=0.,T=T,bloechl=bloechl)
     from ..dostk.simplexdos import _degeneracy_tol
     _multiplet_average_real(es,w,_degeneracy_tol(es))
-    dm = {d: np.zeros((n,n),dtype=np.complex128) for d in ds}
     dvecs = np.array(ds,dtype=np.float64).reshape(len(ds),3)
-    def add(i0,U):
-        wk = w[i0:i0+len(U)]
-        ks = mesh.ks[i0:i0+len(U)]
-        if shell is not None: # the occupations of the weights, in [0,1]
-            shell.collect(ks,es[i0:i0+len(U)],U,wk*nkp)
-        active = np.nonzero(np.any(wk!=0.,axis=0))[0] # bands with weight
-        if len(active)==0: return
-        Ua = U[:,:,active]
-        wa = wk[:,active]
-        ph = np.exp(2j*np.pi*(ks@dvecs.T)) # (k,d)
-        for idd,d in enumerate(ds):
-            A = Ua.conj()*(wa*ph[:,idd][:,None])[:,None,:]
-            dm[d] += np.einsum("kin,kjn->ij",A,Ua,optimize=True)
-    if keep:
-        for i0,U in zip(range(0,len(mesh.ks),mesh.batch),stored): add(i0,U)
-    else: # second pass
-        for i0,es2,U in mesh.eigenpairs(): add(i0,U)
-    if shell is not None: shell.fill(dm) # the shell at zero energy
+    def build(w):
+        """the density matrix of the weights w, which also hands the
+        eigenpairs of the shell to it"""
+        dm = {d: np.zeros((n,n),dtype=np.complex128) for d in ds}
+        def add(i0,U):
+            wk = w[i0:i0+len(U)]
+            ks = mesh.ks[i0:i0+len(U)]
+            if shell is not None: # the occupations of the weights, in [0,1]
+                shell.collect(ks,es[i0:i0+len(U)],U,wk*nkp)
+            active = np.nonzero(np.any(wk!=0.,axis=0))[0] # bands with weight
+            if len(active)==0: return
+            Ua = U[:,:,active]
+            wa = wk[:,active]
+            ph = np.exp(2j*np.pi*(ks@dvecs.T)) # (k,d)
+            for idd,d in enumerate(ds):
+                A = Ua.conj()*(wa*ph[:,idd][:,None])[:,None,:]
+                dm[d] += np.einsum("kin,kjn->ij",A,Ua,optimize=True)
+        if keep:
+            for i0,U in zip(range(0,len(mesh.ks),mesh.batch),stored): add(i0,U)
+        else: # second pass
+            for i0,es2,U in mesh.eigenpairs(): add(i0,U)
+        return dm
+    dm = build(w)
+    if shell is not None and shell.test(dm):
+        # the shell at zero energy is filled in part. The triangle of a BdG
+        # h is meant to be the step of exact diagonalization, but at T>0
+        # the simplices with an edge on a level at zero have a density of
+        # states at mu, and their Bloechl term moves the weight c_dim to
+        # their far vertices (1/24 of a level at E = 0.29 and 0.77 in the
+        # Zeeman state of future_development/tetrahedron_density_matrix.md).
+        # So the filled density matrix is built on the occupations of
+        # exact diagonalization, the Fermi-Dirac weight at T on the mesh,
+        # as densitymatrix.full_dm_accumulate does, and the two agree. A
+        # shell that is not filled leaves the weights of before
+        from scipy.special import expit
+        delta = T if T>0. else 1e-15 # as densitymatrix.full_dm
+        shell.levels = []
+        dm_ed = shell.fill(build(expit(-es/delta)/nkp))
+        if shell.fired: dm = dm_ed
     if counted: return dm,mesh.ndiag
     return dm
 

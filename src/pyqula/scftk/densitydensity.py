@@ -944,9 +944,10 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
     else:
         etot = h.get_total_energy(nk=h.nk)
     if fermi_level is not None:
-        # the step band energy above, corrected on the shell that the last
-        # density matrix filled in part, so that it is the band energy of
-        # the same occupations (zero when the shell was not filled)
+        # the step band energy above, plus the change of the band energy
+        # of the last density matrix when it filled its shell in part, so
+        # that the energy follows the density matrix (zero when the shell
+        # was not filled)
         etot += fermi_level.shell.energy
     if mu is None:
         # add back mu N with N the requested charge, filling times the
@@ -976,6 +977,9 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
         etot += get_dc_energy_anomalous(mf,scf.dm)
     etot = etot.real
     scf.total_energy = etot
+    if fermi_level is not None: # the shift of the chemical potential of a
+        fermi_level.shell.move_fermi(h) # filled shell, after the energy
+        scf.shell = fermi_level.shell # its fill, fired, mu and energy
     if verbose>1:
       print("##################")
       print("Total energy",etot)
