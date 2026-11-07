@@ -223,3 +223,33 @@ def test_sources_agree_with_the_direct_kernel_on_a_3d_mesh():
         scale = np.max(np.abs(s2))
         assert np.max(np.abs(s2[:, 2, 2])) > 1e-3*scale # z is compared
         assert np.max(np.abs(s1-s2)) < 1e-11*scale
+
+
+def test_the_source_sum_does_not_depend_on_the_number_of_threads():
+    """The sum over the sources is split in tasks whose partial sums are
+    added in a fixed order. The number of tasks was set from the number of
+    threads, so at a few frequencies one and three threads gave results
+    that differ at 2e-13; now it is a fixed count and the two agree to
+    the last bit"""
+    import numba
+    if numba.config.NUMBA_NUM_THREADS < 2:
+        pytest.skip("needs at least two numba threads")
+    h = _layered_haldane()
+    nk = 24
+    ks = kubo._kmesh(h, nk)
+    es, vs, cellvol, scale = kubo._bands_and_velocities(h, ks)
+    pairs, dE, W, comps, trans = kubosimplex.pair_fields(es, vs, 0.01,
+            1e-6*scale, True, True)
+    pairs, dE, W = kubosimplex._prune(pairs, dE, W)
+    args = (3, nk, pairs, dE, W, comps, trans, np.linspace(0., 4., 3),
+            1e-2, cellvol)
+    n0 = numba.get_num_threads()
+    try:
+        out = []
+        for n in (1, min(3, numba.config.NUMBA_NUM_THREADS)):
+            numba.set_num_threads(n)
+            out.append(kubosimplex._sigma_from_fields(*args,
+                    kernel="sources"))
+    finally:
+        numba.set_num_threads(n0)
+    assert np.array_equal(out[0], out[1])

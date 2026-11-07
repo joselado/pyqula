@@ -255,8 +255,8 @@ def simplices(dim,nk):
 # simplex, the nodes of its Newton table that cancel too much are point
 # sources evaluated per frequency with simplexdos._dd, as the direct
 # kernel does, see _decompose. In 2D the loss is
-# quadratic: on the spinful Haldane model at delta = 1e-3 the rule keeps
-# 0.3%, 1.1% and 3.2% of the forward triangle pairs whole at nk = 128, 256
+# quadratic: on the spinful Haldane model at delta = 1e-3 the rule catches
+# 0.3%, 1.1% and 3.2% of the forward triangle pairs at nk = 128, 256
 # and 512, and without it the sum is still within 1.5e-12 of a longdouble
 # reference instead of 7e-13. At delta = 1e-5 it matters: 2.4e-10 without
 # it at nk = 128, 2.8e-12 with it. In 3D the loss is cubic. Without this
@@ -306,10 +306,12 @@ def simplices(dim,nk):
 _alpha = 1. # see above
 _nmax = 200 # largest order of the Taylor series of a point source
 _tol = 3e-11 # largest rounding error of a simplex in its vertex form,
-# relative to its peak, before it is evaluated per frequency instead
+# relative to its peak, before its nodes that cancel too much are
+# evaluated per frequency
 _budget = 1e-2 # fraction of _tol left to the rounding of such a simplex,
 # once its nodes that cancel too much are evaluated per frequency
 _direct = 10 # type of a point source evaluated by simplexdos._dd
+_ntasks = 64 # tasks of the sum over sources, see _sigma_sources
 _nbins = 512 # energy bins of the far simplices
 _rho = 0.5 # a simplex goes to its bin when its nodes are within _rho times
 # the distance from the bin center to the frequency window
@@ -697,8 +699,8 @@ def _sources_jit(mode,simplices,dE,W,trans,diag,tolc,fact,harm,wlo,whi,
     expanded. A simplex whose vertex form would lose more than tol of its
     peak at a frequency of [wlo,whi] has the nodes of its Newton table that
     cancel too much evaluated per frequency, as point sources, and a
-    simplex far from the window goes to the moments of its energy bin; the count decides this and stores it in
-    flag. Returns the number of point sources of every chunk."""
+    simplex far from the window goes to the moments of its energy bin;
+    the count decides this and stores it in flag. Returns the number of point sources of every chunk."""
     ns = simplices.shape[0]
     nchunk = (ns+chunk-1)//chunk
     count = np.zeros(nchunk,dtype=np.int64)
@@ -1001,7 +1003,6 @@ def simplex_sources(simplices,dE,W,trans,diag,delta,window,alpha=None,
 
 def _sigma_sources(simplices,dE,W,trans,diag,omegas,delta):
     """The output of _sigma_simplices, from the sources"""
-    import numba
     omegas = np.asarray(omegas,dtype=np.float64)
     window = (np.min(omegas),np.max(omegas)) if len(omegas) else (0.,0.)
     ev,cv,ep,tp,yp,ca,Cb,Mb,jp,Cs,Rs,Ms,Ls = simplex_sources(simplices,dE,
@@ -1009,8 +1010,11 @@ def _sigma_sources(simplices,dE,W,trans,diag,omegas,delta):
     K = simplices.shape[1]-1 # 1, 2 or 3 in 1D, 2D or 3D
     nw = len(omegas)
     nsrc = len(ev)+len(ep)
-    # enough tasks to keep every thread busy when there are few frequencies
-    nchunk = max(1,min(nsrc//1024,-(-4*numba.get_num_threads()//max(nw,1))))
+    # enough tasks to keep up to _ntasks/4 threads busy when there are few
+    # frequencies. A fixed count, not the number of threads, so that the
+    # order of the partial sums, and so the result to the last bit, does
+    # not depend on the number of threads
+    nchunk = max(1,min(nsrc//1024,-(-_ntasks//max(nw,1))))
     return _evaluate_sources_jit(ev,np.ascontiguousarray(cv),K,ep,tp,yp,
             np.ascontiguousarray(ca),omegas,delta,nchunk,_dos_harm,_dos_fact,
             Cb,Mb,jp,Cs,Rs,Ms,Ls)
