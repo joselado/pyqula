@@ -599,6 +599,14 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
     prefactor is tau^l, the static result of Ezawa, and at l = 1 it is the
     intraband part of optical_conductivity. Ezawa writes
     1/(i omega + 1/tau)^l, which agrees with this only at omega = 0.
+    The normalization is j_{l omega}(t) = sigma (E/2)^l exp(-i l omega t)
+    + c.c., the one of the second harmonic in nonlinearkernel. Only the
+    l omega harmonic of order l is returned: not the rectified part at
+    l = 2, nor the omega part at l = 3. For fields at different
+    frequencies the p-th factor is 1/(1/tau - i(omega_1+...+omega_p)),
+    symmetrized over the orderings of the fields, which this routine does
+    not offer (nonlinear_conductivity broadens every field frequency
+    instead of using a relaxation time, a different phenomenology).
 
     The physics: an X-wave form factor is a k-space harmonic of order l+1,
     so its (l+1)-th derivative is the first that is a nonzero constant while
