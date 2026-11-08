@@ -143,8 +143,7 @@ The keywords are
 Degenerate bands, as in a $PT$-symmetric antiferromagnet where every band is
 doubly degenerate, are handled: the result does not depend on how the
 states inside a degenerate pair are chosen. The 2D, 1D and 3D cases are all
-covered, except for the third-order Drude term, which is 1D and 2D only. A
-runnable script is in `examples/2d/nonlinear_hall/main.py`. The X-wave index
+covered. A runnable script is in `examples/2d/nonlinear_hall/main.py`. The X-wave index
 of an altermagnet from the nonlinear spin current is in
 [Altermagnets](altermagnets.md).
 

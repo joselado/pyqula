@@ -117,8 +117,7 @@ Open, in the order of their value:
 - The pinned timings on an idle machine of "What to optimize if time is left" are owed: the
   general kernel against the numba SHG kernel at 24 bands, the device crossover, the dc routine
   at `nk=200`, the fourth-order memory.
-- The third-order $\tau^2$ (Berry curvature quadrupole) and $\tau^0$ dc terms, and the 3D
-  third-order Drude term, are not built.
+- The third-order $\tau^2$ (Berry curvature quadrupole) and $\tau^0$ dc terms are not built.
 - The multiplet restriction of the velocity in the injection rate is not pinned by a test:
   every fixture that pins $\eta$ has two bands. Replacing the masked velocity by the full one
   moves $\eta$ by more than 100 % on a four-band bilayer and every test still passes, while the
@@ -531,11 +530,15 @@ vertex in the recursion) is not built.
 ### 3D
 
 `nonlineardc` is three-dimensional through the vertices of `shg.py`, whose
-`_derivative_tensors` and `kubo._cell_factors` already handle $a_3$. `nonlineardrude` stays
-two-dimensional: lifting it would need a three-index Taylor recursion and a `zzz` test on a
-dispersing 3D model, and the decoupled-layers test of the first draft would have passed on
-the cell-volume change alone without testing anything. The 3D Drude term comes from
-`nonlineardc`.
+`_derivative_tensors` and `kubo._cell_factors` already handle $a_3$. `nonlineardrude` is
+three-dimensional too: its Taylor recursion runs over three Cartesian indices, restricted to
+the periodic ones, so a 1D or 2D cell does the same work and gives the same numbers as with
+two indices. The third-order Drude term of `nonlineardc` uses it in 3D. A decoupled-layers
+test alone would pass on the cell-volume change without testing the $z$ index, so
+`tests/conductivity/test_nonlinear_dc3_3d.py` compares a one-band model dispersing along $z$
+with its $2\times2\times2$ supercell on the same k-points: the one band goes through the
+closed-form derivative, the supercell through the three-index recursion with folded bands
+degenerate on whole planes.
 
 ## The two-frequency kernel: photocurrents and sum frequency
 
@@ -896,5 +899,4 @@ String options go through registries (`get_term_names()`, `get_qmd_conventions()
 - Routing `shg_conductivity` through the general kernel: `shg.py` keeps the numba kernel and
   the triangle and qtci integrations, which are SHG-only.
 - A triangle or qtci integration of the general kernel; the grid is the only integration.
-- The 3D lift of `nonlineardrude.py`; `nonlineardc` covers the 3D Drude term.
 - The third-order $\tau^2$ (Berry curvature quadrupole) and $\tau^0$ dc terms.

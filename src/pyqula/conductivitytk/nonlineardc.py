@@ -101,8 +101,8 @@ is the prefactor chain of nonlineardrude._sigma, (-1)^(l+1) tau^l = +tau^3
 at l = 3, with the fourth band derivative from the Rayleigh-Schroedinger
 recursion of nonlineardrude._Channel on the whole Hamiltonian, so it holds
 for any multiband model in the charge channel; in the Kato block form the
-recursion gives the multiplet trace exactly. That recursion has two
-Cartesian indices, so this term is built in 1D and 2D only.
+recursion gives the multiplet trace exactly. The recursion runs over the
+three Cartesian indices, so this term is built in 1D, 2D and 3D.
 
 The tau^1 term is the Berry connection polarizability (BCP) term of Liu et
 al., arXiv:2106.04931 (Lai et al., Nat. Nanotechnol. 16, 869 (2021)). Their
@@ -418,22 +418,19 @@ def _drude3_tensor(h,nk,T,degeneracy_tol):
     the whole Hamiltonian (charge channel). The fourth derivative is
     symmetric in its four indices, so each multiset of indices is computed
     once"""
-    if h.dimensionality==3: raise NotImplementedError("the third-order "
-            "Drude term is implemented in 1D and 2D only: the band "
-            "derivatives of nonlineardrude._Channel come from a Taylor "
-            "recursion in two Cartesian indices")
     ks = uniform_mesh(h.dimensionality,nk)
     chan = nonlineardrude._Channel(h.get_multicell(),ks,
             degeneracy_tol=degeneracy_tol)
     f = kubo._fermi(chan.es,T)
-    norm = 1./(len(ks)*nonlineardrude._cell_volume(h))
+    norm = 1./(len(ks)*kubo._cell_factors(h)[2])
     chan.prepare(4)
     out = np.zeros((3,3,3,3))
     done = dict()
     for idx in np.ndindex(3,3,3,3):
         key = tuple(sorted(idx))
         if key not in done:
-            if 2 in key: done[key] = 0. # no k_z in 1D and 2D
+            if any(i>=h.dimensionality for i in key): # not periodic
+                done[key] = 0.
             else: done[key] = np.sum(f*chan.derivative(list(key)))*norm
         out[idx] = done[key]
     return out
@@ -464,8 +461,8 @@ def nonlinear_dc_conductivity(h,order=2,term="all",tau=1.,qmd="shibata",
     """Second-order dc conductivity sigma_abc, J_a = sigma_abc E_b E_c,
     decomposed in powers of the relaxation time tau, see the module
     docstring for the formulas. At order=3, the third-order
-    sigma_abcd, J_a = sigma_abcd E_b E_c E_d, with term "drude" (tau^3,
-    1D and 2D), "bcp" (tau^1, the Berry connection polarizability term) or
+    sigma_abcd, J_a = sigma_abcd E_b E_c E_d, with term "drude" (tau^3),
+    "bcp" (tau^1, the Berry connection polarizability term) or
     "all" (a dict with "drude", "bcp" and "total"), components of four
     labels such as "xxyy", the charge channel only, and qmd= unused.
 

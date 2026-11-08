@@ -125,6 +125,7 @@ import numpy as np
 from .. import algebra
 from .. import klist
 from .kubo import _fermi
+from .kubo import _cell_factors
 from ..check import require_spin
 
 
@@ -175,7 +176,7 @@ def _bloch_series(hm):
     """Decompose a multicell Hamiltonian into (integer directions, Cartesian
     lattice vectors, matrices): the terms of H(k) = sum_R m_R e^{i k.R}"""
     g = hm.geometry
-    avecs = np.array([g.a1,g.a2,np.zeros(3)])
+    avecs = np.array([g.a1,g.a2,g.a3])
     dirs = [(0,0,0)]
     ms = [np.asarray(algebra.todense(hm.intra))]
     for t in hm.hopping:
@@ -194,6 +195,7 @@ class _Channel():
 
     def __init__(self,hm,ks,degeneracy_tol=1e-8):
         self.hm = hm
+        self.dim = hm.dimensionality
         self.ks = np.array(ks,dtype=np.float64)
         self.dirs,self.rcart,self.ms = _bloch_series(hm)
         self.nbands = self.ms.shape[1]
@@ -213,18 +215,34 @@ class _Channel():
             for (lo,hi) in self._chunks():
                 self.es[lo:hi] = np.linalg.eigvalsh(self._hk(lo,hi))
 
-    def _chunks(self):
+    def _alphas(self,N):
+        """The multi-indices (p,q,r) of the Taylor coefficients up to total
+        order N, ordered by total order. Only the periodic directions get a
+        nonzero index: r = 0 below 3D and q = r = 0 in 1D, so a 1D or 2D
+        cell does the same work as with a two-index recursion"""
+        out = []
+        for n in range(N+1):
+            for p in range(n+1):
+                if self.dim<2: qs = [0] if p==n else []
+                elif self.dim<3: qs = [n-p]
+                else: qs = range(n-p+1)
+                for q in qs: out.append((p,q,n-p-q))
+        return out
+
+    def _chunks(self,nalpha=1):
         """Split the k-mesh into blocks small enough that the Taylor
         coefficient matrices of one block fit comfortably in memory.
 
-        The perturbation theory below holds ~(N+1)(N+2)/2 Hamiltonian
-        Taylor matrices and as many eigenvector ones, each (nk, nb, nb)
-        complex -- ~56 arrays at N = 6, so ~900 bytes per k-point per nb^2.
-        At the ~100 orbitals of a real superlattice cell that is gigabytes
-        for a full mesh, so k is processed in blocks and only the (much
-        smaller) eigenvalue coefficients are kept."""
+        The perturbation theory below holds, per multi-index of _alphas,
+        one Hamiltonian Taylor matrix, one eigenvector coefficient and one
+        effective-Hamiltonian coefficient, each (nk, nb, nb) complex; with
+        the temporaries that is ~64 bytes per k-point per nb^2 per
+        multi-index. There are 28 multi-indices at N = 6 in 2D and 84 in
+        3D, and at the ~100 orbitals of a real superlattice cell that is
+        gigabytes for a full mesh, so k is processed in blocks and only
+        the (much smaller) eigenvalue coefficients are kept."""
         nb = self.nbands
-        per = max(1,int(_CHUNK_BYTES/max(1.,1000.*nb*nb)))
+        per = max(1,int(_CHUNK_BYTES/max(1.,64.*nalpha*nb*nb)))
         return [(lo,min(lo+per,len(self.ks)))
                 for lo in range(0,len(self.ks),per)]
 
@@ -252,38 +270,43 @@ class _Channel():
         finite-difference scheme manufactures a spurious nonzero value there
         and so destroys the very thing being measured."""
         counts = [list(axes).count(a) for a in range(3)]
-        if counts[2]!=0: return np.zeros(self.es.shape) # 2D: no k_z
+        # no momentum along a direction that is not periodic
+        if any(counts[a]>0 for a in range(self.dim,3)):
+            return np.zeros(self.es.shape)
         if self.nbands==1:
             w = np.ones(len(self.rcart),dtype=np.complex128)
             for a in axes: w = w*(1.j*self.rcart[:,a])
             return np.real(self.ph@(self.coeffs*w))[:,None]
-        p,q = counts[0],counts[1]
-        c = self._eigenvalue_taylor(p+q)[(p,q)]
-        # the Taylor coefficient is the derivative divided by p! q!
-        return c*float(math.factorial(p)*math.factorial(q))
+        c = self._eigenvalue_taylor(sum(counts))[tuple(counts)]
+        # the Taylor coefficient is the derivative divided by p! q! r!
+        return c*float(math.factorial(counts[0])*math.factorial(counts[1])
+                *math.factorial(counts[2]))
 
     def _hamiltonian_taylor(self,N,lo,hi):
-        """Hc[(p,q)] = (1/(p! q!)) d^(p+q)H/dKx^p dKy^q on the mesh.
+        """Hc[(p,q,r)] = (1/(p! q! r!)) d^(p+q+r)H/dKx^p dKy^q dKz^r on the
+        mesh, for the multi-indices of _alphas.
 
         Straight from the Bloch series: each term m_R e^{i k.R} contributes
-        m_R (i R_x)^p (i R_y)^q/(p! q!) e^{i k.R}. Exact, and vectorized over
-        the whole k-mesh in one matrix product per (p,q)."""
+        m_R (i R_x)^p (i R_y)^q (i R_z)^r/(p! q! r!) e^{i k.R}. Exact, and
+        vectorized over the whole k-mesh in one matrix product per
+        multi-index."""
         out = dict()
-        for n in range(N+1):
-            for p in range(n+1):
-                q = n-p
-                w = ((1.j*self.rcart[:,0])**p)*((1.j*self.rcart[:,1])**q)
-                w = w/float(math.factorial(p)*math.factorial(q))
-                out[(p,q)] = np.einsum("kh,hij->kij",self.ph[lo:hi]*w,self.ms)
+        for (p,q,r) in self._alphas(N):
+            w = ((1.j*self.rcart[:,0])**p)*((1.j*self.rcart[:,1])**q)
+            if r>0: w = w*((1.j*self.rcart[:,2])**r)
+            w = w/float(math.factorial(p)*math.factorial(q)
+                    *math.factorial(r))
+            out[(p,q,r)] = np.einsum("kh,hij->kij",self.ph[lo:hi]*w,self.ms)
         return out
 
     def _eigenvalue_taylor(self,N):
-        """Taylor coefficients c[(p,q)][k,n] of the band energies,
+        """Taylor coefficients c[(p,q,r)][k,n] of the band energies,
 
-          eps_n(k+d) = sum_{p,q} c[(p,q)] dx^p dy^q,
+          eps_n(k+d) = sum_{p,q,r} c[(p,q,r)] dx^p dy^q dz^r,
 
         by Rayleigh-Schroedinger perturbation theory carried out in the ring
-        of truncated two-variable Taylor series. Writing
+        of truncated Taylor series in the three Cartesian components of d
+        (only the periodic ones, see _alphas). Writing
         H(k+d) = sum_a Hc[a] d^a and expanding the eigenpair as
         eps = sum_a e[a] d^a, v = sum_a v[a] d^a with the intermediate
         normalization u^dag v[a] = 0 for a != 0, the eigenvalue equation
@@ -303,10 +326,10 @@ class _Channel():
         nonsense -- see the error message for the way out."""
         if N<=self._taylor_order: return self._taylor
         nk,nb = self.es.shape
-        alphas = [(p,n-p) for n in range(N+1) for p in range(n+1)]
+        alphas = self._alphas(N)
         e = {a:np.zeros((nk,nb)) for a in alphas}
-        e[(0,0)] = self.es.copy()
-        for (lo,hi) in self._chunks():
+        e[(0,0,0)] = self.es.copy()
+        for (lo,hi) in self._chunks(len(alphas)):
             for (a,c) in self._taylor_chunk(N,lo,hi,alphas).items():
                 e[a][lo:hi] = c
         self._taylor = e
@@ -347,31 +370,30 @@ class _Channel():
         near = np.abs(de)<self.degeneracy_tol*self.scale # same block
         inv = np.where(near,0.,1./np.where(near,1.,de)) # reduced resolvent
         out = {a:np.zeros((hi-lo,nb)) for a in alphas}
-        out[(0,0)] = es
+        out[(0,0,0)] = es
         # V[a][k,i,n]: i the orbital index, n the band being expanded.
         # E[a][k,m,n]: the effective-Hamiltonian coefficients, nonzero only
         # within a degenerate group (the identity for a simple spectrum).
         v = {a:np.zeros((hi-lo,nb,nb),dtype=np.complex128) for a in alphas}
         E = {a:np.zeros((hi-lo,nb,nb),dtype=np.complex128) for a in alphas}
-        v[(0,0)] = ws
+        v[(0,0,0)] = ws
         wsc = np.conjugate(ws)
-        for n in range(1,N+1):
-            for p in range(n+1):
-                a = (p,n-p)
-                hv = np.zeros((hi-lo,nb,nb),dtype=np.complex128)
-                ve = np.zeros((hi-lo,nb,nb),dtype=np.complex128)
-                for (p2,q2) in alphas:
-                    if (p2,q2)==(0,0): continue
-                    b = (a[0]-p2,a[1]-q2)
-                    if b[0]<0 or b[1]<0: continue
-                    hv = hv+np.einsum("kij,kjn->kin",hc[(p2,q2)],v[b])
-                    ve = ve+np.einsum("kim,kmn->kin",v[b],E[(p2,q2)])
-                Ea = np.einsum("kim,kin->kmn",wsc,hv) # <m|.|n>
-                E[a] = np.where(near,Ea,0.) # keep only within a group
-                out[a] = np.real(np.einsum("kmm->km",Ea))
-                r = ve-hv # no component inside the group, by construction
-                proj = np.einsum("kim,kin->kmn",wsc,r)
-                v[a] = np.einsum("kim,kmn->kin",ws,proj*inv)
+        for a in alphas: # by total order, so every v[b] below is done
+            if a==(0,0,0): continue
+            hv = np.zeros((hi-lo,nb,nb),dtype=np.complex128)
+            ve = np.zeros((hi-lo,nb,nb),dtype=np.complex128)
+            for a2 in alphas:
+                if a2==(0,0,0): continue
+                b = tuple(a[i]-a2[i] for i in range(3))
+                if min(b)<0: continue
+                hv = hv+np.einsum("kij,kjn->kin",hc[a2],v[b])
+                ve = ve+np.einsum("kim,kmn->kin",v[b],E[a2])
+            Ea = np.einsum("kim,kin->kmn",wsc,hv) # <m|.|n>
+            E[a] = np.where(near,Ea,0.) # keep only within a group
+            out[a] = np.real(np.einsum("kmm->km",Ea))
+            r = ve-hv # no component inside the group, by construction
+            proj = np.einsum("kim,kin->kmn",wsc,r)
+            v[a] = np.einsum("kim,kmn->kin",ws,proj*inv)
         return out
 
 
@@ -381,18 +403,17 @@ def _kmesh(h,nk):
 
 
 def _cell_volume(h):
-    """Unit cell volume (area in 2D, length in 1D)"""
-    g = h.geometry
-    if h.dimensionality==1: return np.sqrt(g.a1.dot(g.a1))
-    return np.linalg.norm(np.cross(g.a1,g.a2))
+    """Unit cell volume (volume in 3D, area in 2D, length in 1D)"""
+    return _cell_factors(h)[2]
 
 
 def _channels(h,nk,degeneracy_tol=1e-8):
     """The two spin channels, set up on a shared k-mesh, plus the 1/(N_k
     V_cell) normalization of the Brillouin-zone integral"""
-    if h.dimensionality not in (1,2): raise NotImplementedError(
-        "the nonlinear Drude conductivity is implemented for dimensionality "
-        "1 and 2 only")
+    if h.dimensionality not in (1,2,3): raise ValueError(
+        "the nonlinear Drude conductivity needs a periodic Hamiltonian "
+        "(dimensionality 1, 2 or 3), got dimensionality "
+        +str(h.dimensionality))
     ks = _kmesh(h,nk)
     chans = [(s,_Channel(hm,ks,degeneracy_tol=degeneracy_tol))
              for (s,hm) in _spin_channels(h)]

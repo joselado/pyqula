@@ -406,8 +406,8 @@ def test_block_trace_in_degenerate_multiplets():
 def test_tau_powers_and_3d():
     """term="all" carries tau^3 and tau^1, total is their sum and the
     symmetric field indices give equal components; layers stacked along a3
-    with no hopping between them give the 2D BCP term divided by the layer
-    spacing, with the z components zero"""
+    with no hopping between them give the 2D BCP and Drude terms divided by
+    the layer spacing, with the z components zero"""
     h = _tilted_dirac()
     kw = dict(nk=40,T=0.2,components=["xxyy","xyxy","xyyx","yxxx"])
     a1 = nonlineardc.nonlinear_dc_conductivity(h,order=3,tau=1.,**kw)
@@ -436,8 +436,14 @@ def test_tau_powers_and_3d():
     assert big>1e-4
     for x in comps: assert abs(s3[x]-s2[x]/c)<1e-10*big
     for x in ["zxxx","xzzz"]: assert abs(s3[x])<1e-12*big
-    with pytest.raises(NotImplementedError,match="1D and 2D"):
-        nonlineardc.nonlinear_dc_conductivity(h3,order=3,term="drude",nk=4)
+    d2 = nonlineardc.nonlinear_dc_conductivity(h,order=3,term="drude",nk=30,
+            T=0.2,components=comps)
+    d3 = nonlineardc.nonlinear_dc_conductivity(h3,order=3,term="drude",
+            nk=30,T=0.2,components=comps+["zzzz","xxzz"])
+    big = max(abs(d2[x]) for x in comps)
+    assert big>1e-4
+    for x in comps: assert abs(d3[x]-d2[x]/c)<1e-10*big
+    for x in ["zzzz","xxzz"]: assert abs(d3[x])<1e-12*big
 
 
 def test_options():

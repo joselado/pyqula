@@ -632,7 +632,8 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
     Parameters
     ----------
     h : Hamiltonian
-      a 1D or 2D spinful Hamiltonian in which spin is a good quantum number
+      a 1D, 2D or 3D spinful Hamiltonian in which spin is a good quantum
+      number
       (no spin-orbit coupling; this is checked, and a spin-mixing
       Hamiltonian is rejected rather than silently mistreated)
     field : str
@@ -932,7 +933,7 @@ def nonlinear_dc_conductivity(h,order=2,term="all",tau=1.,qmd="shibata",
     -----------
     order=3 has two terms, in the charge channel only:
 
-      drude (tau^3)  tau^3 < f d_a d_b d_c d_d eps >, 1D and 2D only
+      drude (tau^3)  tau^3 < f d_a d_b d_c d_d eps >
       bcp   (tau^1)  the Berry connection polarizability term of Liu et
                      al., arXiv:2106.04931, from Gt and the band
                      velocities and inverse masses
