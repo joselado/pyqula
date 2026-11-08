@@ -47,7 +47,7 @@ def convergence_radius(h,order=2,nk=100,degeneracy_tol=1e-6):
     nonlineardc.py). The mesh sum has its poles exactly there, so this is
     the radius of convergence of its Laurent series. Infinity for a
     single band"""
-    _check_order(order)
+    _check_order(order,h)
     tms,dirs,d,hkgen,cellvol,scale = shg._derivative_tensors(h)
     ks = kubo._kmesh(h,nk)
     gmin = np.inf
@@ -60,10 +60,14 @@ def convergence_radius(h,order=2,nk=100,degeneracy_tol=1e-6):
     return gmin/order
 
 
-def _check_order(order):
+def _check_order(order,h=None):
     if not isinstance(order,(int,np.integer)) or order<1: raise ValueError(
         "the order of the nonlinear conductivity is a positive integer, "
         "got "+repr(order))
+    if h is not None and h.has_eh: raise NotImplementedError("the dc "
+        "Laurent coefficients of the nonlinear conductivity are not "
+        "implemented for Nambu (superconducting) Hamiltonians: the charge "
+        "current operator there is not i[H,r]")
 
 
 def laurent_coefficients(h,order=2,radius=None,npoints=24,nk=100,T=0.05,
@@ -91,7 +95,7 @@ def laurent_coefficients(h,order=2,radius=None,npoints=24,nk=100,T=0.05,
     With the mapping tau^n -> 1/(n! delta^n) and tau -> 1/delta, A_-2 is
     sigma^ND/(2 tau^2) and A_-1 is sigma^BCD/tau at second order and A_-3
     is sigma^ND3/(6 tau^3) at third (see the header of this module)"""
-    _check_order(order)
+    _check_order(order,h)
     if not isinstance(npoints,(int,np.integer)) or npoints<1:
         raise ValueError("npoints is the number of points of the contour, "
             "a positive integer, got "+repr(npoints))

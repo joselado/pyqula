@@ -277,3 +277,14 @@ def test_degenerate_multiplets():
         assert scale>1e-3
         for c in COMPS2:
             assert np.max(np.abs(A4[c]-2.*A[c]))<1e-12*scale
+
+
+def test_nambu_refused_with_the_routine_name():
+    """A Nambu Hamiltonian is refused by the contour routines themselves,
+    with their own name, not by the kernel underneath"""
+    h = geometry.honeycomb_lattice().get_hamiltonian()
+    h.setup_nambu_spinor()
+    for f in (nonlineardcfit.convergence_radius,
+              nonlineardcfit.laurent_coefficients):
+        with pytest.raises(NotImplementedError,match="dc Laurent"):
+            f(h,nk=4)

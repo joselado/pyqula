@@ -137,7 +137,8 @@ def _axis(c):
     raise ValueError("Unknown Cartesian component "+str(c))
 
 
-def _check_spin_conserving(h,tol=1e-8):
+def _check_spin_conserving(h,tol=1e-8,what="the nonlinear Drude formula "
+        "of arXiv:2411.16036"):
     """Check that every hopping matrix is block diagonal in spin.
 
     Without this, remove_spin() would silently discard the spin off-diagonal
@@ -152,18 +153,17 @@ def _check_spin_conserving(h,tol=1e-8):
         off = np.abs(m[0::2,1::2]).max()+np.abs(m[1::2,0::2]).max()
         if off>tol: raise ValueError(
             "spin is not a good quantum number in this Hamiltonian (spin "
-            "off-diagonal terms of size "+str(off)+"); the nonlinear Drude "
-            "formula of arXiv:2411.16036 assumes a spin-diagonal Hamiltonian")
+            "off-diagonal terms of size "+str(off)+"); "+what+" assumes a "
+            "spin-diagonal Hamiltonian")
 
 
-def _spin_channels(h):
+def _spin_channels(h,what="the nonlinear Drude conductivity"):
     """Return [(s, hs)] with s = +-1 and hs the spinless Hamiltonian of that
-    spin channel"""
-    require_spin(h,"the nonlinear Drude conductivity, whose two spin "
-        "channels have to be resolved,")
-    if h.has_eh: raise NotImplementedError(
-        "not implemented for Nambu (superconducting) Hamiltonians")
-    _check_spin_conserving(h)
+    spin channel; what names the routine in the error messages"""
+    require_spin(h,what+", whose two spin channels have to be resolved,")
+    if h.has_eh: raise NotImplementedError(what+" is not implemented for "
+        "Nambu (superconducting) Hamiltonians")
+    _check_spin_conserving(h,what=what)
     out = []
     for (s,channel) in [(1,"up"),(-1,"dn")]:
         hs = h.copy()

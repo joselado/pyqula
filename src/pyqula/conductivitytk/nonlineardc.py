@@ -387,7 +387,8 @@ def _channel_tensors(h,nk,T,channel,degeneracy_tol,kernel=_batch_tensors):
     if channel=="charge":
         return _mesh_tensors(h,nk,T,degeneracy_tol,kernel=kernel)
     out = {s:_mesh_tensors(hs,nk,T,degeneracy_tol,kernel=kernel)
-           for (s,hs) in nonlineardrude._spin_channels(h)}
+           for (s,hs) in nonlineardrude._spin_channels(h,
+               what="the spin channel of the nonlinear dc conductivity")}
     return {key:nonlineardrude._combine({s:out[s][key] for s in out},
             channel) for key in out[1]}
 

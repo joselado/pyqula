@@ -824,3 +824,17 @@ def test_options():
         nonlineardc.berry_curvature_dipole(h1,nk=4)
     assert set(nonlineardc.get_term_names())=={"drude","bcd","qmd",
             "qmd_hall","qmd_disp","qmd_intra","all"}
+
+
+def test_spin_channel_refusals_name_the_dc_routine():
+    """The spin channel of the dc routine refuses a spinless or a
+    spin-mixing Hamiltonian naming the dc conductivity, not the nonlinear
+    Drude formula it borrows the spin blocks from"""
+    g = geometry.honeycomb_lattice()
+    h0 = g.get_hamiltonian(has_spin=False)
+    with pytest.raises(ValueError,match="spin channel of the nonlinear dc"):
+        nonlineardc.nonlinear_dc_conductivity(h0,channel="spin",nk=4)
+    h1 = g.get_hamiltonian()
+    h1.add_rashba(0.3)
+    with pytest.raises(ValueError,match="spin channel of the nonlinear dc"):
+        nonlineardc.nonlinear_dc_conductivity(h1,channel="spin",nk=4)
