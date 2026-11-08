@@ -4,8 +4,9 @@ term (tau^3) and the Berry connection polarizability term (tau^1) of Liu et
 al., arXiv:2106.04931.
 
 The Drude term is pinned against nonlinear_drude_conductivity on a
-spin-conserving magnet and against a Fermi-surface form built from the
-vertices of shg.py on a Rashba metal. The BCP term, computed in a
+spin-conserving magnet and on a honeycomb cell of area 3 sqrt(3)/2, and
+against a Fermi-surface form built from the vertices of shg.py on a Rashba
+metal. The BCP term, computed in a
 Fermi-surface form after two integrations by parts and a symmetrization, is
 pinned against the semiclassical current of Liu et al., Eq. (j3), evaluated
 directly with spectral k-derivatives of the band-resolved polarizability, and
@@ -174,7 +175,8 @@ def test_third_order_drude_matches_nonlinear_drude():
     nonlinear_drude_conductivity at l = 3, which runs the two spin blocks
     separately, on the d-wave altermagnet whose spin bands cross on the
     diagonals (the Kato block form on the whole Hamiltonian against two
-    nondegenerate problems). On a Rashba metal, where spin is not
+    nondegenerate problems), and on the strained spinful honeycomb metal,
+    whose cell is not of unit area. On a Rashba metal, where spin is not
     conserved and nonlinear_drude_conductivity refuses, against the
     Fermi-surface form <f'' u_a u_d u_bc> - <w u_ad u_bc> (two integrations
     by parts) built from the vertices of shg.py, which shares nothing with
@@ -194,6 +196,20 @@ def test_third_order_drude_matches_nonlinear_drude():
                 current=c[0],channel="charge",nk=120,T=T,tau=tau)
         assert abs(s2[c]-ref)<1e-8*scale
     assert abs(s2["xxxx"])>1e-1*scale # a longitudinal response
+    # the same identity on the honeycomb lattice, whose cell has the area
+    # 3 sqrt(3)/2: every other magnitude check of the tau^3 term is on a
+    # cell of unit area, where a missing 1/V_cell goes unnoticed
+    h = _gapped_honeycomb(s=0.15)
+    h.turn_spinful()
+    cs = ["xxxx","yxxy","xyyy"]
+    s = nonlineardc.nonlinear_dc_conductivity(h,order=3,term="drude",
+            tau=tau,nk=30,T=T,components=cs)
+    scale = max(abs(s[c]) for c in cs)
+    assert scale>1e-2
+    for c in cs:
+        ref = nonlineardrude.nonlinear_drude_conductivity(h,field=c[1:],
+                current=c[0],channel="charge",nk=30,T=T,tau=tau)
+        assert abs(s[c]-ref)<1e-8*scale
     h = _rashba_square_metal()
     nk = 240
     s = nonlineardc.nonlinear_dc_conductivity(h,order=3,term="drude",tau=tau,

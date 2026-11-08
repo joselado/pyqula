@@ -4,10 +4,12 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 # Third-harmonic generation of doped graphene. Light at frequency w gives
 # a current at 3w at third order in the field,
-#   J_a(3w) = (1/4) Re[sigma_abcd(w,w,w) E0_b E0_c E0_d exp(-3 i w t)],
-# and graphene, unlike hBN, has it since the third order does not need
-# broken inversion. The point group D6h leaves one independent in-plane
-# number: sigma_xxxx = sigma_yyyy = sigma_xxyy + sigma_xyxy + sigma_xyyx,
+#   J_a(3w) = (1/4) Re[sigma_abcd(w,w,w) E0_b E0_c E0_d exp(-3 i w t)].
+# The third order does not need broken inversion, so it is allowed in every
+# crystal. Graphene has no second harmonic, but it has a third harmonic,
+# and so does hBN. The point group D6h of graphene leaves one independent
+# in-plane number,
+#   sigma_xxxx = sigma_yyyy = sigma_xxyy + sigma_xyxy + sigma_xyyx,
 # and the three last ones are equal since the fields are at the same
 # frequency, so each one is sigma_xxxx/3.
 # Every frequency carries the broadening delta, and the Fermi surface needs

@@ -14,6 +14,8 @@ and asserts that the result equals the conductivitytk routine with the same
 keywords. It then asserts, keyword by keyword, that the conductivitytk
 routine changes when that keyword is left at its default, so that a
 forgotten keyword makes the equality fail rather than pass by accident.
+The last test checks the arguments that the public routines refuse before
+forwarding.
 """
 import inspect
 
@@ -172,7 +174,9 @@ def test_every_keyword_reaches_the_conductivitytk_routine(name,module,
         monkeypatch):
     """A spy in place of the conductivitytk routine receives every keyword
     of the public signature with the value passed, also the ones the
-    result does not depend on (degeneracy_tol of the recursion)"""
+    result does not depend on (degeneracy_tol of the recursion). order is
+    checked by the public routine before it forwards, so it gets a valid
+    value away from its default instead of a sentinel"""
     received = {}
     def spy(h,**kwargs):
         received.update(kwargs)
@@ -181,9 +185,48 @@ def test_every_keyword_reaches_the_conductivitytk_routine(name,module,
     signature = inspect.signature(getattr(conductivity,name)).parameters
     kwargs = {k:("sentinel",k) for (k,p) in signature.items()
             if k!="h" and p.kind is p.POSITIONAL_OR_KEYWORD}
+    if "order" in kwargs: kwargs["order"] = 3
     h = _hamiltonian()
     assert getattr(conductivity,name)(h,**kwargs)=="spy"
     assert received==kwargs
     received.clear()
     assert getattr(h,"get_"+name)(**kwargs)=="spy"
     assert received==kwargs
+
+
+def test_public_arguments_are_checked():
+    """Inputs that the signatures accept but the formulas cannot take are
+    refused by the public routines with a message naming what they need:
+    an order that is not a positive integer (a float is not rounded), an
+    empty list of components, a scalar in place of the array of
+    frequencies, and T=None in the dc routines, which are Fermi-surface
+    sums with no broadening to default to. A numpy integer is an order"""
+    h = _hamiltonian()
+    c = conductivity
+    kw = dict(energies=[1.],nk=4)
+    for order in [2.,True,"2"]:
+        for f in [c.nonlinear_conductivity,c.nonlinear_susceptibility,
+                c.nonlinear_dc_conductivity]:
+            with pytest.raises(TypeError,match="positive integer"):
+                f(h,order=order,nk=4)
+    for order in [0,-1]:
+        with pytest.raises(ValueError,match="positive integer"):
+            c.nonlinear_conductivity(h,order=order,**kw)
+    (w,s) = c.nonlinear_conductivity(h,order=np.int64(2),components="xxx",
+            **kw)
+    assert np.all(np.isfinite(s))
+    for f in [c.nonlinear_conductivity,c.nonlinear_susceptibility,
+            c.shift_current,c.injection_current]:
+        with pytest.raises(ValueError,match="at least one component"):
+            f(h,components=[],**kw)
+        with pytest.raises(ValueError,match="1D array"):
+            f(h,energies=1.,nk=4,components="xxx")
+    with pytest.raises(ValueError,match="at least one component"):
+        c.nonlinear_dc_conductivity(h,components=[],nk=4)
+    with pytest.raises(ValueError,match="at least one component"):
+        h.get_nonlinear_conductivity(components=[],**kw)
+    for f in [c.nonlinear_dc_conductivity,c.berry_curvature_dipole,
+            lambda h,**kw: h.get_nonlinear_dc_conductivity(**kw),
+            lambda h,**kw: h.get_berry_curvature_dipole(**kw)]:
+        with pytest.raises(ValueError,match="T>0, got T=None"):
+            f(h,T=None,nk=4)

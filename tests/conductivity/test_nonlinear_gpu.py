@@ -72,17 +72,21 @@ def _device(f):
 def test_gpu_path_matches_numpy(order,frequencies,monkeypatch):
     """Double precision on the device equals numpy to 1e-12, for harmonic
     generation and for a general frequency tuple, whose orderings of the
-    fields are all distinct. nk=7 with 49 k-points and 3 frequencies
-    with k-batches of 15 points and frequency chunks of 2 rows makes the
-    device pad both the last k-batch and the last frequency chunk"""
+    fields are all distinct. nk=7 with 49 k-points and 5 frequencies
+    with k-batches of 15 points and frequency chunks of 3 rows makes the
+    device pad both the last k-batch and the last frequency chunk. The
+    last chunk holds two different frequencies and one pad row, so taking
+    the wrong rows of the padded chunk gives a wrong number; with a
+    single real row and its copy as the pad, either slice would agree"""
     h = _gapped_honeycomb()
-    kw = dict(order=order,energies=[0.2,1.0,2.0],frequencies=frequencies,
-            nk=7,delta=0.1,components=_in_plane(order))
+    kw = dict(order=order,energies=[0.2,0.6,1.0,1.5,2.0],
+            frequencies=frequencies,nk=7,delta=0.1,
+            components=_in_plane(order))
     (w,s0) = nlk.nonlinear_conductivity(h,**kw)
     s0 = np.array(list(s0.values()))
     assert np.max(np.abs(s0))>1e-2 # not a tensor forced to zero
     calls = _spy(monkeypatch)
-    monkeypatch.setattr(nlk,"_device_chunks",lambda *args: (15,2))
+    monkeypatch.setattr(nlk,"_device_chunks",lambda *args: (15,3))
     (w,s1) = _device(lambda: nlk.nonlinear_conductivity(h,**kw))
     s1 = np.array(list(s1.values()))
     assert calls==[("double",15)]*3 + [("double",4)] # 49 k-points
@@ -102,7 +106,13 @@ def test_single_precision_matches_double(order,monkeypatch):
     largest component at w=1 and w=2). So the tolerance at each frequency
     is 20 eps32 ((t/|w + i delta|)^n + max|sigma|), with t=1. TF32
     products, a 1e-3 relative error, would miss it by a factor of 50 or
-    more"""
+    more.
+
+    The error of the single-precision eigenpairs alone already makes the
+    result differ from numpy, so a second run takes the eigenpairs in
+    double and keeps prec="single" for the rest. Its error is then that
+    of the recursion, the vertices and the traces, which in float32 stays
+    far above the 1e-12 of a recursion run in double"""
     h = _gapped_honeycomb()
     delta = 0.1
     E = np.array([0.2,1.0,2.0])
@@ -121,6 +131,18 @@ def test_single_precision_matches_double(order,monkeypatch):
     err = np.max(np.abs(s1-s0),axis=1)
     assert np.all(err<tol),(err,tol)
     assert np.all(err>0.) # it did run in single precision
+    f = eigenvectorsjax.peigh_gpu # the spy, which calls the real solver
+    def double_eigenpairs(hks,**kwargs):
+        kwargs["prec"] = "double"
+        return f(hks,**kwargs)
+    monkeypatch.setattr(eigenvectorsjax,"peigh_gpu",double_eigenpairs)
+    (w,s2) = _device(lambda: nlk.nonlinear_conductivity(h,prec="single",
+            **kw))
+    s2 = np.array(list(s2.values())).T
+    assert calls[-1][0]=="double" # the eigenpairs were in double
+    err2 = np.max(np.abs(s2-s0),axis=1)
+    assert np.all(err2<tol),(err2,tol)
+    assert np.all(err2>1e-9*scale),err2 # the recursion ran in complex64
 
 
 def test_single_precision_warns_at_low_frequency():

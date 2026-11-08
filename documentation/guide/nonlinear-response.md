@@ -347,7 +347,8 @@ equal, and each one is $\sigma_{xxxx}/3$. The code gives this ratio to
 $10^{-15}$ on any mesh. $|\sigma_{xxxx}|$ is $40$ in units of
 $e^4a^2/(\hbar t^2)$ at $\hbar\omega=0.1t$, where the Fermi surface dominates,
 and falls by four orders of magnitude up to $\hbar\omega=3t$. `nk=200`
-changes it by less than $0.3\%$. A runnable script is in
+changes it by less than $0.03\%$ below $\hbar\omega=t$, and by at most
+$0.4\%$, around $\hbar\omega=1.9t$. A runnable script is in
 `examples/2d/third_harmonic/main.py`.
 
 The dc limit needs care. `energies=[0.]` gives the static response with the

@@ -123,18 +123,25 @@ The spin splitting of an X-wave magnet is a lattice harmonic of order $l+1$
 in $\mathbf k$: $k_xk_y$ for d-wave, $k_xk_y(k_x^2-k_y^2)$ for g-wave,
 $k_xk_y(3k_x^2-k_y^2)(k_x^2-3k_y^2)$ for i-wave. In the semiclassical
 Boltzmann theory, with relaxation time $\tau$ and frequency $\omega$, the
-current of spin $s$ at order $l=l_1+l_2$ in the field,
-$j_b = \sigma_s^{x^{l_1}y^{l_2};b} E_x^{l_1}E_y^{l_2}$, has the conductivity
+current of spin $s$ at order $l=l_1+l_2$ in the field is
+$j_b = \sum_{l_1}\binom{l}{l_1}\sigma_s^{x^{l_1}y^{l_2};b} E_x^{l_1}E_y^{l_2}$.
+The binomial counts the orderings of the field indices that give the same
+component, so at $l=2$ the mixed term is $2\sigma_s^{xy;b}E_xE_y$. The
+conductivity is
 
 $$
 \sigma_s^{x^{l_1} y^{l_2};b} =
-\frac{(-e/\hbar)^{l+1}}{(i\omega + 1/\tau)^{l}}
+(-e/\hbar)^{l+1} \prod_{p=1}^{l}\frac{1}{1/\tau - ip\omega}
 \int \frac{d^D k}{(2\pi)^D}\, f_s^{(0)}(\mathbf k)\,
 \frac{\partial^{l+1} \epsilon_s(\mathbf k)}{\partial k_x^{l_1}\, \partial k_y^{l_2}\, \partial k_b} ,
 $$
 
 where $\epsilon_s(\mathbf k)$ is the band of spin $s$, $f_s^{(0)}$ its Fermi
-occupation, and $b$ the direction of the current. The spin and charge
+occupation, and $b$ the direction of the current. For a field
+$E(t)=\mathrm{Re}\,E e^{-i\omega t}$ this is the current at the harmonic
+$l\omega$, and each step of the expansion in the field gives one factor
+$1/(1/\tau - ip\omega)$. In the static limit $\omega=0$ the prefactor is
+$\tau^l$. The spin and charge
 conductivities are
 
 $$

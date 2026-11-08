@@ -9,6 +9,9 @@ static polarizability of kubo.py), each Fermi-surface form against a
 Fermi-sea form, and the terms together against the selection rules of PT,
 time reversal, C3 and inversion, a rotation of the crystal, the Neel-angle
 law of Ezawa's altermagnet and Shibata's benchmark value of the intra term.
+A supercell pins the block traces in degenerate multiplets, and a 3D model
+with the three planes of the Berry curvature finite pins the pseudovector
+convention of berry_curvature_dipole against the dipole term.
 """
 import numpy as np
 import pytest
@@ -725,6 +728,65 @@ def test_decoupled_layers_in_3d():
         for x in ["xyy","xxx","yxx"]:
             assert abs(s3[term][x]-s2[term][x]/c)<1e-10*big
         for x in ["zxx","xzz"]: assert abs(s3[term][x])<1e-12*big
+
+
+def test_supercell_gives_the_same_terms():
+    """The 2x2 supercell of the tilted Dirac metal at nk=40 is the same set
+    of k-points as the primitive cell at nk=80, so every term agrees to
+    rounding. The folded bands of the supercell are degenerate along whole
+    lines of the zone, with other bands coupled to the multiplet, which is
+    where the off-diagonal blocks of Gt, G and Omega inside a multiplet
+    enter. The fixtures of test_block_trace_is_basis_independent cannot see
+    those blocks: the velocity is a multiple of the identity in the
+    Kramers pairs, and the Ezawa crossing has no third band"""
+    comps = ["xxx","xyy","yxx","yyy","xxy","yxy"]
+    h = _tilted_dirac(mu=0.6)
+    hs = h.get_supercell(2)
+    for term in TERMS:
+        a = nonlineardc.nonlinear_dc_conductivity(h,term=term,nk=80,T=0.1,
+                components=comps)
+        b = nonlineardc.nonlinear_dc_conductivity(hs,term=term,nk=40,
+                T=0.1,components=comps)
+        big = max(abs(a[c]) for c in comps)
+        assert big>1e-4
+        for c in comps: assert abs(a[c]-b[c])<1e-12*big,(term,c,a[c],b[c])
+
+
+def test_berry_curvature_dipole_3d_pseudovector():
+    """In 3D berry_curvature_dipole returns D[a,b] = <w u_a Omega_b>, with
+    the curvature as a pseudovector, Omega_x = Omega_yz, Omega_y = Omega_zx
+    and Omega_z = Omega_xy. Against the bcd term of
+    nonlinear_dc_conductivity, sigma_abb = tau <w u_b Omega_ab>, this
+    gives sigma_xyy = tau D[y,z], sigma_yzz = tau D[z,x], sigma_zxx = tau
+    D[x,y] and, with Omega_ba = -Omega_ab, sigma_yxx = -tau D[x,z],
+    sigma_zyy = -tau D[y,x], sigma_xzz = -tau D[z,y]. The layers of the
+    tilted Dirac model are coupled along z and along (1,0,1), so that the
+    three planes of the curvature are finite and a wrong sign of any one
+    of them shows up; the uncoupled layers of test_decoupled_layers_in_3d
+    only have Omega_z"""
+    h2 = _tilted_dirac(mu=0.6)
+    g = geometry.cubic_lattice()
+    h = g.get_hamiltonian(has_spin=True)
+    dd = {R:np.asarray(v) for (R,v) in h2.get_multihopping().get_dict().items()}
+    tz = -0.4j*sx - 0.3*sz + 0.2*s0 # sin kz sx and cos kz sz
+    dd[(0,0,1)] = tz
+    dd[(0,0,-1)] = np.conjugate(tz).T
+    dd[(1,0,1)] = 0.15*sy
+    dd[(-1,0,-1)] = np.conjugate(0.15*sy).T
+    h.set_multihopping(MultiHopping(dd))
+    kw = dict(nk=16,T=0.1)
+    tau = 1.3
+    D = nonlineardc.berry_curvature_dipole(h,**kw)
+    assert D.shape==(3,3)
+    s = nonlineardc.nonlinear_dc_conductivity(h,term="bcd",tau=tau,
+            components=["xyy","yzz","zxx","yxx","zyy","xzz"],**kw)
+    ix = "xyz".index
+    for (c,a,b,sign) in [("xyy","y","z",1.),("yzz","z","x",1.),
+            ("zxx","x","y",1.),("yxx","x","z",-1.),("zyy","y","x",-1.),
+            ("xzz","z","y",-1.)]:
+        ref = sign*tau*D[ix(a),ix(b)]
+        assert abs(ref)>1e-2*np.max(np.abs(D)) # every plane is finite
+        assert abs(s[c]-ref)<1e-10*np.max(np.abs(D)),(c,s[c],ref)
 
 
 def test_options():

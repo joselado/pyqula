@@ -1491,7 +1491,7 @@ Compute the $l$-th order nonlinear Drude conductivity
 $\sigma^{x^{l_1}y^{l_2};b}$ of a collinear magnet, the current along $b$
 of order $E^l$ in the electric field, for spin $s$,
 
-$$\sigma_s^{x^{l_1}y^{l_2};b} = \frac{(-e/\hbar)^{l+1}}{(i\omega+1/\tau)^l}
+$$\sigma_s^{x^{l_1}y^{l_2};b} = (-e/\hbar)^{l+1}\prod_{p=1}^{l}\frac{1}{1/\tau-ip\omega}
 \int\frac{d^Dk}{(2\pi)^D}\, f^{(0)}_s\,
 \frac{\partial^{l+1}\epsilon_s}{\partial k_x^{l_1}\partial k_y^{l_2}\partial k_b},$$
 
@@ -1511,7 +1511,9 @@ Optional arguments
 - T = 0.01: temperature of the occupations
 - mu = 0.0: chemical potential
 - tau = 1.0: relaxation time $\tau$; the $l$-th order scales as $\tau^l$
-- omega = 0.0: frequency, which enters as $1/(i\omega + 1/\tau)^l$
+- omega = 0.0: frequency of the field, which enters as
+  $\prod_{p=1}^{l}1/(1/\tau - ip\omega)$; the result is the current at
+  the harmonic $l\omega$
 - degeneracy_tol = 1e-8: relative band spacing below which bands are taken
   as degenerate
 

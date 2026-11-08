@@ -10,7 +10,8 @@ recursion at any order and frequency tuple, the third-order static limit
 against the finite-field polarization, the rotation of a rank-4
 tensor, the D6h relation of graphene's third harmonic, the permutation
 symmetry of the fields, a stack of decoupled layers in 3D, and exact spin
-degeneracy.
+degeneracy. The SI susceptibility is checked against its formula written
+out at second and third order.
 """
 import itertools
 import math
@@ -458,6 +459,35 @@ def test_susceptibility_reduces_to_shg():
     (w,chi2) = nlk.nonlinear_susceptibility(h,order=2,energies=E,nk=8,
             delta=delta,components="xxx",length_unit=1.45,energy_unit=2.33)
     assert np.allclose(chi2,ref,rtol=1e-14,atol=0.)
+
+
+@pytest.mark.parametrize("order,frequencies",[(2,(1,-1)),(2,(1,2)),
+        (3,None)])
+def test_susceptibility_against_the_hand_formula(order,frequencies):
+    """chi^(n) = sigma^(n)/(-i Omega epsilon_0) with Omega = w1 + ... + wn
+    the sum of the complex field frequencies w_j = c_j w + i delta, in SI
+    units: e a^(n+1-d)/(epsilon_0 t^n) in nm^(n+2-d)/V^(n-1), with a in
+    Angstrom and t in eV, written out here at each order. A rectified and
+    a sum-frequency call pin Omega and the frequencies= of the rebuilt
+    omegas, and the third order with a and t away from one pins the
+    powers of a and t, which the second harmonic alone does not"""
+    h = _gapped_honeycomb()
+    E = np.array([0.4,0.9])
+    delta,a,t = 0.1,1.45,2.33
+    comps = ["xxx","yyy","xxy"] if order==2 else ["xxxx","yyxx","xyyy"]
+    kw = dict(order=order,energies=E,frequencies=frequencies,nk=10,
+            delta=delta,components=comps)
+    (w,s) = nlk.nonlinear_conductivity(h,**kw)
+    (w,chi) = nlk.nonlinear_susceptibility(h,length_unit=a,energy_unit=t,
+            **kw)
+    c = np.ones(order) if frequencies is None else np.array(frequencies)
+    Om = np.sum(E[:,None]*c[None,:] + 1j*delta,axis=1)
+    e,eps0,d = 1.602176634e-19,8.8541878128e-12,2
+    fac = e/eps0*(a*1e-10)**(order+1-d)/t**order/(1e-9)**(order+2-d)
+    assert max(np.max(np.abs(s[x])) for x in comps)>1e-3
+    ref = {x:s[x]/(-1j*Om)*fac for x in comps}
+    scale = max(np.max(np.abs(ref[x])) for x in comps)
+    for x in comps: assert np.max(np.abs(chi[x]-ref[x]))<1e-12*scale
 
 
 def test_options():

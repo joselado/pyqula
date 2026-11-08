@@ -572,19 +572,33 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
     collinear magnet, the quantity whose lowest nonvanishing order measures
     the X-wave index of an altermagnet.
 
-    The current is expanded in the electric field as
+    The routine returns the symmetric tensor component sigma_{b a1..al}
+    with l1 of the field indices a_j equal to x and l2 = l - l1 equal to
+    y. binom(l,l1) orderings of the field indices give that component, so
+    the current at order l is
 
-      j_b = sum_{l1,l2} sigma^{x^l1 y^l2 ; b} (E_x)^l1 (E_y)^l2,
+      j_b = sum_{l1} binom(l,l1) sigma^{x^l1 y^l2 ; b} (E_x)^l1 (E_y)^l2,
 
-    and solving the semiclassical Boltzmann equation recursively gives, for
-    each spin channel s (spin must be a good quantum number),
+    and at l = 2 the mixed term is 2 sigma^{xy;b} E_x E_y. At l = 2 and
+    l = 3, in the charge channel and at omega = 0, sigma^{x^l1 y^l2 ; b}
+    is the Drude term of nonlinear_dc_conductivity with the labels in any
+    order. Solving the semiclassical Boltzmann equation recursively gives,
+    for each spin channel s (spin must be a good quantum number),
 
-      sigma_s^{x^l1 y^l2 ; b} = (-e/hbar)^(l+1)/(i omega + 1/tau)^l
+      sigma_s^{x^l1 y^l2 ; b} = (-e/hbar)^(l+1)
+            * prod_{p=1..l} 1/(1/tau - i p omega)
             * Int d^Dk/(2 pi)^D f_s^(0) d^(l+1) eps_s
                                 / (dk_x^l1 dk_y^l2 dk_b),   l = l1+l2
 
     with sigma_spin = (sigma_up - sigma_dn)/2 and sigma_charge = sigma_up +
     sigma_dn (Ezawa, Phys. Rev. B 111, 125420 (2025), arXiv:2411.16036).
+    omega is the frequency of the field E(t) = Re[E exp(-i omega t)], in
+    the convention of optical_conductivity, and sigma is the current at
+    the harmonic l omega: the p-th step of the recursion acts on the part
+    of the distribution that oscillates at p omega. At omega = 0 the
+    prefactor is tau^l, the static result of Ezawa, and at l = 1 it is the
+    intraband part of optical_conductivity. Ezawa writes
+    1/(i omega + 1/tau)^l, which agrees with this only at omega = 0.
 
     The physics: an X-wave form factor is a k-space harmonic of order l+1,
     so its (l+1)-th derivative is the first that is a nonzero constant while
@@ -639,7 +653,9 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
     tau : float
       relaxation time; the l-th order response scales as tau^l
     omega : float
-      frequency of the applied field, entering as 1/(i omega + 1/tau)^l
+      frequency of the applied field, entering as
+      prod_{p=1..l} 1/(1/tau - i p omega); the result is the current at
+      the harmonic l omega
     degeneracy_tol : float
       multiorbital cells only. The band derivatives are obtained exactly,
       by Rayleigh-Schroedinger perturbation theory in a truncated Taylor
@@ -685,6 +701,45 @@ def fermi_volume(h,nk=100,T=0.01,mu=0.,channel="charge"):
 from .conductivitytk import nonlinearkernel
 from .conductivitytk import nonlineardc
 from .conductivitytk import photocurrent
+
+
+# Argument guards of the public nonlinear routines below. They run before
+# the conductivitytk routines, so that an input the signatures accept but
+# the formulas cannot take is refused with a message, rather than with an
+# error from deep inside numpy or with a silently different result.
+
+def _check_order(order,what):
+    """order is a positive integer (a float or a bool is refused, rather
+    than rounded)"""
+    if isinstance(order,bool) or not isinstance(order,(int,np.integer)):
+        raise TypeError("the order of "+what+" is a positive integer, got "
+                +repr(order))
+    if order<1: raise ValueError("the order of "+what+" is a positive "
+            "integer, got order="+str(order))
+
+
+def _check_energies(energies,what):
+    """energies is None or a 1D array of frequencies"""
+    if energies is None: return
+    if np.ndim(energies)!=1: raise ValueError(what+" takes energies as a "
+            "1D array of frequencies, got "+repr(energies)+"; for a single "
+            "frequency w use energies=[w]")
+
+
+def _check_components(components,what):
+    """components is None, one label string, or a nonempty list of them"""
+    if components is None or isinstance(components,str): return
+    if len(components)==0: raise ValueError(what+" needs at least one "
+            "component, such as \"xyy\", got an empty list; components=None "
+            "gives every component")
+
+
+def _check_temperature(T,what):
+    """T is given, since the dc routines are Fermi-surface sums and have no
+    broadening to default to (their positivity is checked further in)"""
+    if T is None: raise ValueError(what+" is a Fermi-surface sum, whose "
+            "weight -df/dE is zero on a k-mesh at T=0: it needs T>0, got "
+            "T=None")
 
 
 def nonlinear_conductivity(h,order=2,energies=None,frequencies=None,nk=20,
@@ -796,6 +851,10 @@ def nonlinear_conductivity(h,order=2,energies=None,frequencies=None,nk=20,
     (energies, sigma) with sigma a complex array of len(energies) if
     components is a single string, and a dict {component: array} otherwise.
     """
+    what = "the nonlinear conductivity"
+    _check_order(order,what)
+    _check_energies(energies,what)
+    _check_components(components,what)
     return nonlinearkernel.nonlinear_conductivity(h,order=order,
             energies=energies,frequencies=frequencies,nk=nk,T=T,delta=delta,
             components=components,degeneracy_tol=degeneracy_tol,prec=prec)
@@ -818,6 +877,10 @@ def nonlinear_susceptibility(h,order=2,length_unit=1.0,energy_unit=1.0,
     (energies=[0.]) of an insulator is finite, since Omega = n i delta
     there. Every other keyword is that of nonlinear_conductivity, with the
     same return layout."""
+    what = "the nonlinear susceptibility"
+    _check_order(order,what)
+    _check_energies(kwargs.get("energies",None),what)
+    _check_components(kwargs.get("components",None),what)
     return nonlinearkernel.nonlinear_susceptibility(h,order=order,
             length_unit=length_unit,energy_unit=energy_unit,**kwargs)
 
@@ -934,6 +997,10 @@ def nonlinear_dc_conductivity(h,order=2,term="all",tau=1.,qmd="shibata",
     {component: value}. With term="all", a dict keyed by the term names
     whose values have that layout.
     """
+    what = "the nonlinear dc conductivity"
+    _check_order(order,what)
+    _check_temperature(T,what)
+    _check_components(components,what)
     return nonlineardc.nonlinear_dc_conductivity(h,order=order,term=term,
             tau=tau,qmd=qmd,channel=channel,nk=nk,T=T,components=components,
             degeneracy_tol=degeneracy_tol)
@@ -952,11 +1019,13 @@ def berry_curvature_dipole(h,nk=100,T=0.05,channel="charge",
     arXiv:1508.00571). In 2D it is the array [D_x, D_y], with
     sigma^bcd_xyy = tau D_y and sigma^bcd_yxx = -tau D_x in
     nonlinear_dc_conductivity. In 3D it is the tensor D[a,b] with the
-    pseudovector Omega_x = Omega_yz, Omega_y = Omega_zx, Omega_z = Omega_xy.
-    D is an in-plane pseudovector, so it vanishes under a C3 rotation and
+    pseudovector Omega_x = Omega_yz, Omega_y = Omega_zx, Omega_z = Omega_xy,
+    D[a,b] = <w u_a Omega_b>, so that sigma^bcd_xyy = tau D[y,z] and
+    sigma^bcd_yxx = -tau D[x,z], and cyclically. D is an in-plane pseudovector, so it vanishes under a C3 rotation and
     needs a crystal with at most one mirror. In units of a^(3-d), a length
     in 2D and dimensionless in 3D, with the keywords and the mesh rule of
     nonlinear_dc_conductivity, T > 0 included."""
+    _check_temperature(T,"the Berry curvature dipole")
     return nonlineardc.berry_curvature_dipole(h,nk=nk,T=T,channel=channel,
             degeneracy_tol=degeneracy_tol)
 
@@ -987,6 +1056,8 @@ def shift_current(h,energies=None,nk=20,T=None,delta=0.1,components=None,
     t), keywords as nonlinear_conductivity, T defaulting to delta.
     Returns (energies, array) for one component string and (energies,
     dict) otherwise."""
+    _check_energies(energies,"the shift current")
+    _check_components(components,"the shift current")
     return photocurrent.shift_current(h,energies=energies,nk=nk,T=T,
             delta=delta,components=components,
             degeneracy_tol=degeneracy_tol,prec=prec)
@@ -1022,6 +1093,8 @@ def injection_current(h,energies=None,nk=20,T=None,delta=0.1,
     a^(3-d)/hbar^2 (a rate of the second-order current), T defaulting to
     delta, keywords as nonlinear_conductivity. Returns (energies, array)
     for one component string and (energies, dict) otherwise."""
+    _check_energies(energies,"the injection current")
+    _check_components(components,"the injection current")
     return photocurrent.injection_current(h,energies=energies,nk=nk,T=T,
             delta=delta,components=components,
             degeneracy_tol=degeneracy_tol)
