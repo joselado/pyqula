@@ -369,6 +369,21 @@ def test_permutation_symmetry():
         assert _close(sp,s["xxyy"],1e-12)
 
 
+@pytest.mark.parametrize("mult,comp",[((1,-1),"xxx"),((1,1,0),"xxxx")])
+def test_zero_frequency_row_does_not_change_the_others(mult,comp):
+    """The default energy grid starts at w = 0, where every field of an
+    unequal tuple such as (1,-1) or (1,1,0) sits at i delta. Two fields are
+    of the same frequency class only when they agree in every row, so
+    adding the row w = 0 must leave the other rows as they are, to
+    rounding"""
+    h = _gapped_honeycomb()
+    kw = dict(order=len(mult),frequencies=mult,nk=8,delta=0.1,
+            components=comp)
+    (w,s0) = nlk.nonlinear_conductivity(h,energies=[0.,0.7,1.3],**kw)
+    (w,s) = nlk.nonlinear_conductivity(h,energies=[0.7,1.3],**kw)
+    assert _close(s0[1:],s,1e-12)
+
+
 def test_complex_frequencies_accepted():
     """The internal entry point takes the complex frequencies as they are,
     including Im w < 0 (half of the circle of the Laurent extraction), and
