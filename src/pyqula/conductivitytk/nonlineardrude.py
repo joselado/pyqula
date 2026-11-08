@@ -377,7 +377,7 @@ class _Channel():
         v = {a:np.zeros((hi-lo,nb,nb),dtype=np.complex128) for a in alphas}
         E = {a:np.zeros((hi-lo,nb,nb),dtype=np.complex128) for a in alphas}
         v[(0,0,0)] = ws
-        wsc = np.conjugate(ws)
+        wsh = np.conjugate(np.swapaxes(ws,1,2)) # the bras <m|, (k,m,i)
         for a in alphas: # by total order, so every v[b] below is done
             if a==(0,0,0): continue
             hv = np.zeros((hi-lo,nb,nb),dtype=np.complex128)
@@ -386,14 +386,16 @@ class _Channel():
                 if a2==(0,0,0): continue
                 b = tuple(a[i]-a2[i] for i in range(3))
                 if min(b)<0: continue
-                hv = hv+np.einsum("kij,kjn->kin",hc[a2],v[b])
-                ve = ve+np.einsum("kim,kmn->kin",v[b],E[a2])
-            Ea = np.einsum("kim,kin->kmn",wsc,hv) # <m|.|n>
+                # batched matrix products (matmul, not einsum, which does
+                # not reach BLAS here: measured 4.6x at nk=100)
+                hv = hv+np.matmul(hc[a2],v[b])
+                ve = ve+np.matmul(v[b],E[a2])
+            Ea = np.matmul(wsh,hv) # <m|.|n>
             E[a] = np.where(near,Ea,0.) # keep only within a group
-            out[a] = np.real(np.einsum("kmm->km",Ea))
+            out[a] = np.real(np.diagonal(Ea,axis1=1,axis2=2))
             r = ve-hv # no component inside the group, by construction
-            proj = np.einsum("kim,kin->kmn",wsc,r)
-            v[a] = np.einsum("kim,kmn->kin",ws,proj*inv)
+            proj = np.matmul(wsh,r)
+            v[a] = np.matmul(ws,proj*inv)
         return out
 
 
