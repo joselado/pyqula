@@ -1510,7 +1510,8 @@ Optional arguments
 - nk = 100: k-points per direction
 - T = 0.01: temperature of the occupations
 - mu = 0.0: chemical potential
-- tau = 1.0: relaxation time $\tau$; the $l$-th order scales as $\tau^l$
+- tau = 1.0: relaxation time $\tau$; at $\omega=0$ the $l$-th order scales
+  as $\tau^l$
 - omega = 0.0: frequency of the field, which enters as
   $\prod_{p=1}^{l}1/(1/\tau - ip\omega)$; the result is the current at
   the harmonic $l\omega$

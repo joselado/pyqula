@@ -651,7 +651,8 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
       chemical potential (pyqula puts the Fermi level at zero, so this is
       measured from there)
     tau : float
-      relaxation time; the l-th order response scales as tau^l
+      relaxation time; at omega = 0 the l-th order response scales as
+      tau^l
     omega : float
       frequency of the applied field, entering as
       prod_{p=1..l} 1/(1/tau - i p omega); the result is the current at
