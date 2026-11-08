@@ -255,10 +255,11 @@ def _batch_sum(xp,es,f,verts,omegas,labels,terms,suffixes,dtype):
 # products on an Ampere or later card in TF32, with a ten-bit mantissa
 # (see bsetk/chebyshevjax.py).
 
-_device_bytes = 1e9 # device memory budget of the rho of one k-batch and
-                    # frequency chunk, see _device_sum. The compiled sweep
-                    # needs about as much again in work buffers, and the
-                    # card may be shared with other jax processes
+_device_bytes = 1e9 # device memory budget of one k-batch and frequency
+                    # chunk, see _device_chunks, which counts the vertices
+                    # and the work buffers of the sweep (measured 2.5 to 3.2
+                    # times the density matrices); the card may be shared
+                    # with other jax processes, see _device_budget
 
 
 @functools.lru_cache(maxsize=None)
@@ -283,14 +284,31 @@ def _device_kernels():
     return jax.jit(vertices),jax.jit(sweep,static_argnums=(5,))
 
 
+def _device_budget():
+    """Bytes for one k-batch and frequency chunk on the device:
+    _device_bytes, capped by half of the free memory of the card when jax
+    reports it (None on some backends)"""
+    import jax
+    budget = _device_bytes
+    st = jax.devices()[0].memory_stats()
+    if st and "bytes_limit" in st:
+        budget = min(budget,0.5*(st["bytes_limit"]-st["bytes_in_use"]))
+    return max(budget,1e8)
+
+
 def _device_chunks(nk,n,nvertices,nsuffixes,nw,itemsize):
-    """k-points per batch and frequency rows per chunk of the device
-    sweep. The k-batch is the one of the CPU path; the vmapped sweep then
-    holds the density matrices of every suffix for every row of the chunk,
-    so the chunk is what fits in _device_bytes"""
-    kbatch = min(nk,_batch_size(n,nvertices,nsuffixes))
-    per_kw = (nsuffixes + 6)*n*n*itemsize # one k-point and one row
-    wchunk = int(min(nw,max(1,_device_bytes/(kbatch*per_kw))))
+    """k-points per batch and frequency rows per chunk of the device sweep,
+    chosen so that the whole footprint fits in _device_budget(): the vertex
+    kernel holds hk, its product with the bras and hv, three arrays of
+    (nvertices,kbatch,n,n); the sweep keeps hv, dE and df resident and
+    needs about 3.5 density matrices per suffix and frequency row (the
+    measured 3.2 with a margin)"""
+    budget = _device_budget()
+    unit = n*n*itemsize # one (n,n) matrix
+    kbatch = max(1,min(nk,int(budget/((3*nvertices+2)*unit)),
+            int(budget/((nvertices+2+3.5*nsuffixes)*unit))))
+    resident = (nvertices+2)*kbatch*unit
+    wchunk = max(1,int(min(nw,(budget-resident)/(3.5*nsuffixes*kbatch*unit))))
     return kbatch,wchunk
 
 

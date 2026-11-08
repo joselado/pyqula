@@ -184,3 +184,30 @@ def test_gpu_switch_restores(monkeypatch):
     assert calls==[] # back on the CPU
     assert np.array_equal(s0,s2)
     assert np.allclose(s1,s0,rtol=1e-12,atol=0.)
+
+
+def test_empty_energy_list_on_the_device():
+    """An empty list of energies gives empty arrays on the device, as on
+    the CPU; the frequency chunk of the device sweep is never zero rows"""
+    h = _gapped_honeycomb()
+    kw = dict(order=2,energies=[],nk=4,delta=0.1,components=["xxx","yxy"])
+    (w0,s0) = nlk.nonlinear_conductivity(h,**kw)
+    (w1,s1) = _device(lambda: nlk.nonlinear_conductivity(h,**kw))
+    assert len(w0)==len(w1)==0
+    for c in kw["components"]: assert s0[c].shape==s1[c].shape==(0,)
+
+
+@pytest.mark.parametrize("order,nvertices,nsuffixes",[(2,9,6),(4,40,30)])
+def test_device_chunks_fit_the_budget(order,nvertices,nsuffixes,monkeypatch):
+    """The device chunks count the vertex kernel (three arrays of the size
+    of hv) and the sweep (hv, dE, df and 3.5 density matrices per suffix
+    and row), so both footprints stay below the budget, and a chunk is
+    never empty"""
+    monkeypatch.setattr(nlk,"_device_budget",lambda: 1e9)
+    n,itemsize = 72,16
+    unit = n*n*itemsize
+    kb,wc = nlk._device_chunks(1600,n,nvertices,nsuffixes,100,itemsize)
+    assert kb>=1 and wc>=1
+    assert 3*nvertices*kb*unit<=1e9
+    assert ((nvertices+2)*kb + 3.5*nsuffixes*kb*wc)*unit<=1e9
+    assert nlk._device_chunks(1600,n,nvertices,nsuffixes,0,itemsize)[1]==1
