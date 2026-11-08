@@ -337,24 +337,32 @@ def _device_sum(tms,dirs,d,hkgen,ks,vertices,T,omegas,labels,terms,
             vertices]) # hoppings of every vertex, (nvert,nhop,n,n)
     W = jnp.asarray(W,dtype=dtype)
     ws = np.array(omegas,dtype=dtype)
-    acc = np.zeros((len(omegas),len(labels)),dtype=np.complex128)
+    tflat = tms.reshape(len(tms),-1) # (nhop,n*n), for the Bloch sum
+    acc = [0.]*len(range(0,len(ws),wchunk)) # one device array per chunk
     for i0 in range(0,len(ks),kbatch): # loop over batches of k-points
         kb = np.array(ks[i0:i0+kbatch])
-        es,wb = eigenvectorsjax.peigh_gpu(hk_matrix_batch(hkgen,kb),
-                prec=prec)
-        f = _pad(kubo._fermi(es,T),kbatch,fill=0.) # empty padded k-points
-        es,wb,kb = _pad(es,kbatch),_pad(wb,kbatch),_pad(kb,kbatch)
         ph = kubo._bloch_phases(dirs,kb)
+        # H(k) = sum_R t(R) exp(2 pi i k.R), the vertex with no derivative,
+        # as one matrix product rather than a Python loop over k-points
+        hks = (ph@tflat).reshape(len(kb),nb,nb)
+        es,wb = eigenvectorsjax.peigh_gpu(hks,prec=prec)
+        f = _pad(kubo._fermi(es,T),kbatch,fill=0.) # empty padded k-points
+        es,wb,ph = _pad(es,kbatch),_pad(wb,kbatch),_pad(ph,kbatch)
         hv = fvertices(jnp.asarray(ph,dtype=dtype),W,
                 jnp.asarray(wb,dtype=dtype))
         dE = jnp.asarray(es[:,:,None] - es[:,None,:],dtype=dtype)
         df = jnp.asarray(f[:,None,:] - f[:,:,None],dtype=dtype)
         fd = jnp.asarray(f,dtype=dtype)
-        for j0 in range(0,len(ws),wchunk): # loop over chunks of frequencies
+        for (ic,j0) in enumerate(range(0,len(ws),wchunk)): # frequency chunks
             wj = ws[j0:j0+wchunk]
+            # summed on the device and fetched once at the end, so that the
+            # host builds the next k-batch while the card is still busy
             out = sweep(hv,dE,df,fd,jnp.asarray(_pad(wj,wchunk)),program)
-            acc[j0:j0+len(wj)] += np.asarray(out,dtype=np.complex128)[:len(wj)]
-    return acc
+            acc[ic] = acc[ic] + out.astype(jnp.complex128) # summed in double
+    out = [np.asarray(a,dtype=np.complex128) for a in acc]
+    out = np.concatenate(out) if out else np.zeros((0,len(labels)),
+            dtype=np.complex128) # no frequency at all
+    return out[:len(ws)]
 
 
 def nonlinear_response(h,order,omegas,components,nk=20,T=0.1,
