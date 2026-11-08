@@ -39,8 +39,8 @@ All nine packages of the plan landed, none was cut.
   degenerate as the fixture that reaches the degeneracy filter.
 - `gpu` (`57f1c19`, 9 tests): the recursion under jax jit and vmap, routed on `gpu.get_gpu()`.
 - `dc3` (`8248cf1`, 6 tests): `order=3` of `nonlinear_dc_conductivity`, the $\tau^3$ Drude term
-  for any multiband charge channel (1D and 2D, since it reuses the two-index recursion of
-  `nonlineardrude`) and the $\tau^1$ Berry connection polarizability term of Liu et al.,
+  for any multiband charge channel (1D to 3D; the recursion of `nonlineardrude` runs over three
+  indices since `5b55594`) and the $\tau^1$ Berry connection polarizability term of Liu et al.,
   derived again from their Eq. (j3). Their field-corrected band energy has the opposite sign to
   the Stark shift of the second order, because the semiclassical band energy leaves out the
   potential energy of the shifted wave-packet center; the module docstring records it.
@@ -109,27 +109,139 @@ frequencies the device in single precision is 3.5x faster at 2 bands, 25x at 8 a
 at 24 bands and above, and in double precision 4 to 6x from 24 bands on (on this card double is
 1/70 of single, so the double numbers say nothing about a data-centre card). With one frequency
 the crossover is between 2 and 8 bands in single precision and between 24 and 64 bands in
-double. The kernel compiles once per call shape, 0.1 to 1 s, which a single call pays on top of
-the times above.
+double. The kernel compiles once per call shape, 0.1 to 1 s at a few bands and up to 2.8 s in
+single and 8.8 s in double at 100 bands, which a single call pays on top of the times above.
+
+### The debug pass
+
+The night ended with a debug pass and an optimization pass, every run on the workstation, on
+the CPU and on the card. The debug pass found one wrong number in a public routine. The rest
+were tests that could not fail, inputs that crashed, refusals that named the wrong routine and
+docs that said something the code does not do. All of them are fixed:
+
+- The nonlinear Drude conductivity was wrong at $\omega \neq 0$ (`83d8f6b`). The prefactor was
+  Ezawa's $(-1)^{l+1}/(i\omega + 1/\tau)^l$. At $l = 1$ this is the complex conjugate of
+  `kubo.optical_conductivity` in the $e^{-i\omega t}$ convention of the package, and at
+  $l \ge 2$ it is not the $l\omega$ harmonic of the relaxation-time Boltzmann equation in either
+  convention. The prefactor is now $(-1)^{l+1}\prod_{p=1}^{l} 1/(1/\tau - ip\omega)$, one factor
+  per step of the Boltzmann recursion. We checked it against a time-domain solution of the
+  Boltzmann equation on a spinful chain with complex $t_2$ ($\tau = 4$, $\omega = 0.5$): at
+  $3\omega$ the reference is $1.18567+0.99266i$, the new form gives $1.18569+0.99267i$ and the
+  old one $7.631-1.388i$. The agreement at $l = 1$ to 3 is 2e-5 to 2e-4, the size of the
+  finite-field correction, and at $l = 1$ the result now equals the intraband Kubo conductivity.
+  At $\omega = 0$ the factor is still $\tau^l$, so every static number, the X-wave counting and
+  the altermagnet guide included, is unchanged. The public docstring and the altermagnet guide
+  also wrote the current without the binomial, so every mixed term was off by
+  $\binom{l}{l_1}$; both now follow the code (`ac25e44`, `760a24d`).
+- The multiplet restriction of the velocity in the injection rate had no test, since every
+  fixture that pinned $\eta$ had two bands, where $r^c_{nn} = 0$ makes the masked and the full
+  commutator the same. The four-band bilayer with a Haldane term now compares $\eta/\delta$ with
+  `shg.sigma2_length_diagonal` (`2066f0a`): the code agrees to 1.5e-16, while the full velocity
+  moves `yxx` by 58 to 390 % with a change of sign, and fails the test.
+- Other tests that could not fail, each now failing on the mutant it guards: $D_y$ of the Berry
+  curvature dipole, on the tilted Dirac model rotated by 0.4 rad where $D_y = 0.0056$
+  (`d171801`); the row $\omega = 0$ of a grid with unequal fields, (1,-1) and (1,1,0), which must
+  leave the other rows the same (`13dc267`); and in `ac25e44` the 3D pseudovector convention of
+  the dipole, the cell volume of the $\tau^3$ Drude term on the honeycomb cell, the off-diagonal
+  blocks of degenerate multiplets, a padded device frequency chunk with two real rows, the
+  recursion in complex64 at `prec="single"`, and the susceptibility at the sum and difference
+  frequencies and at third order.
+- Inputs the API accepted and then crashed on or answered silently wrong: a float or a bool
+  `order`, an empty component list, scalar energies, `T=None` in the dc routines, and an empty
+  energy list on the device. They are refused with a message saying what is needed, and the empty
+  list gives empty arrays on the device as on the CPU (`ac25e44`, `1dd4b5c`, `6691af1`).
+  `get_term_names(4)` returned the second-order list; the orders now come from one registry
+  (`1dd4b5c`). The spin-channel and Nambu refusals named the wrong routine (`78f885e`).
+- `order=3` with the default `term="all"` refused a 3D Hamiltonian, because the Drude recursion
+  knew two Cartesian indices. It now runs in 3D. In 1D and 2D, 177 numbers of the Drude routines
+  are the same bit for bit, and a one-band tetragonal model agrees with its 2x2x2 supercell to
+  1e-12 of the largest of its 81 components (`5b55594`).
+- The device budget counted only the density matrices of a chunk, so the real peak was 1.8 to
+  2.5 GB against a 1 GB budget, and a shared card ran out of memory. It now counts the vertex
+  kernel and the sweep, capped at half of the free memory of the card: order 2 with 72 bands
+  peaks at 0.76 GB, before 2.18 GB, and order 4 with 18 bands at 0.98 GB, before 2.48 GB
+  (`6691af1`).
+- The guide said that `nk=200` moves the third harmonic by less than 0.3 %; it is 0.39 % near
+  $\omega = 1.9t$. The third-harmonic example said that hBN has no third harmonic, while the third
+  order is allowed in every crystal (`ac25e44`).
+
+The whole suite ran on the workstation on the tree before these fixes (`d66e8e5`): 3271 passed,
+3 skipped and 28 failed. Seventeen are the known GPU failures, single-precision polarizability
+and spin response, the classical-spin GPU switch and one excitonic single-precision spinful
+test, all present before this work. The other eleven are the reference-entry checks of
+`tests/documentation`, which failed only because that copy of the tree had no guide pages.
+On the tree with every fix, `tests/conductivity` and `tests/documentation` together give 259
+passed, 1 skipped (WannierBerri, not installed there) and 1 failed, the known excitonic
+single-precision spinful device test, and the reference-entry checks pass with the guide pages
+in place. `tests/nonlinearconductivity` gives 68 passed. The suite now collects 3323 tests.
+
+### The optimization pass
+
+The timings are on the six performance cores and the RTX A2000 of the workstation, the minimum
+of 3 repeats after a warm-up. The machine was never idle (a load of 2 to 35 all night, other jobs
+at the same priority), so a single number is indicative, and only a ratio measured in one
+process at one time is solid.
+
+- The dc routine at `nk=200` with 24 bands, the target of the plan being 30 s. The dc terms are
+  many small batched matrix products next to the numba diagonalization, which already uses every
+  core, so a threaded BLAS there only competes with it. With BLAS on one thread inside the mesh
+  loop (`ba81101`) the second order goes from 52 to 62 s down to 25 to 31 s, the same result to the
+  last bit. The third order took 270 to 278 s before this change and was not timed after it.
+- The device path (`e2bca0e`). $H(k)$ is now one product of the Bloch phases and the stacked
+  hoppings, not a Python loop over the k-points, and the frequency chunks are summed on the card
+  and fetched once. Against the old file on five models at orders 2 and 3, the difference is at
+  most 1.6e-15 in double and exactly 0 in single. Old against new in one process, at 100 bands
+  and second order: one frequency in single from 1.04 s to 0.91 s, 100 frequencies from 3.32 s to
+  2.88 s, and one frequency in double from 4.08 s to 3.79 s. At 24 bands there is a single
+  k-batch, so nothing is gained. The first call compiles in 0.7 to 2.8 s in single and 8.8 s in
+  double at 100 bands.
+- The device against numpy at `nk=40` confirms the table above: at 24 bands and 100 frequencies
+  5.1 s against 0.091 s in single and 0.99 s in double, at 64 bands 50.6 s against 1.12 s and
+  10.7 s. At 100 bands and 100 frequencies the card takes 2.6 s in single and 27 s in double at
+  second order, 5.5 s and 79 s at third, and the numpy run did not end within 37 min under load.
+- The general kernel against the numba SHG kernel, 24 bands, `nk=40`, 100 frequencies: one
+  component takes 5.0 s against 3.0 s, and all 27 components 47 to 50 s against 5.5 to 7.0 s. So
+  the general kernel is 1.7 times slower for one component and 7 to 9 times for the full tensor,
+  above the factor 3 of the plan. Third order takes 10.4 s for one component and 253 s for all
+  81, fourth order 17.7 s for one.
+- Fourth order with 100 bands, all 243 components at `nk=6`: the process peaks at 1.33 GB of
+  resident memory, at 2.8 s per k-point under load.
 
 Open, in the order of their value:
 
-- The pinned timings on an idle machine of "What to optimize if time is left" are owed: the
-  general kernel against the numba SHG kernel at 24 bands, the device crossover, the dc routine
-  at `nk=200`, the fourth-order memory.
+- One design choice was taken during the night without the maintainer: the nonlinear Drude
+  conductivity at $\omega \neq 0$ and $l \ge 2$ keeps the harmonic product above, which agrees
+  with the Boltzmann solution and with the Kubo conductivity at $l = 1$. The alternative is to
+  refuse $\omega \neq 0$ at $l \ge 2$ and keep only the static limit, which is the only part
+  common to Ezawa's form and ours.
+- The CPU path of the general kernel fights the BLAS threads at many bands. A stacked complex
+  product of shape (568,100,100) takes 2.88 s with the default BLAS pool, 0.10 s on one thread and
+  0.046 s with a pool of 12 threads, and at 100 bands, second order, one frequency, the kernel
+  takes 21 to 46 s as shipped against 4.5 s on one BLAS thread. At 64 bands the default pool is
+  faster than one thread (0.051 s against 0.087 s for (1600,64,64)), so the fix is not one BLAS
+  thread as in the dc loop; a fixed pool of the size of the performance cores is the candidate.
+  Not built.
+- A pool over the frequency rows of the general kernel was prototyped: one component at second
+  order from 6.8 s to 2.0 s, at fourth order from 21.0 s to 5.95 s, all 27 components from 49.6 s
+  to 15.9 s. Not landed. With it the full tensor would be about 3 times the SHG kernel, at the
+  threshold of the plan, so the numba equal-frequency path is not needed yet.
+- The $\tau^3$ Drude term with matrix products in place of `einsum` took 11.7 s against 53.7 s at
+  `nk=100` in a prototype. Not landed.
+- The idle-machine timings of "What to optimize if time is left" are still owed: every number
+  above was taken under load. The contour with 12 points instead of 24 was not measured.
+- A single small call is faster on the CPU than on the card: the first device call compiles for
+  0.7 to 8.8 s, against 0.25 to 0.6 s for the whole CPU call in the cases the debug pass
+  measured.
 - The third-order $\tau^2$ (Berry curvature quadrupole) and $\tau^0$ dc terms are not built.
-- The multiplet restriction of the velocity in the injection rate is not pinned by a test:
-  every fixture that pins $\eta$ has two bands. Replacing the masked velocity by the full one
-  moves $\eta$ by more than 100 % on a four-band bilayer and every test still passes, while the
-  code matches the length-gauge diagonal on that bilayer to 2.5e-16. A four-band fixture is the
-  missing test.
-- GPU: no test checks that the single-precision recursion runs in complex64, and no test has a
-  padded frequency chunk with two or more real rows; the device memory budget counts only the
-  density matrices of the chunk, so the peak footprint is a few GB.
-- The cell volume of the third-order Drude term is not pinned by a test, since every magnitude
-  fixture has unit cell area (a brute force on the strained honeycomb lattice agrees to 7e-14).
-- The user-facing notebook of the README bullet and a figure for the guide page are not made;
-  `jupyter-notebooks/` and `documentation/figures/` were outside the integration package.
+- Thin guards, checked and left as they are: the frequency sum of a suffix is pinned only by the
+  isolated-molecule length-gauge test; no fixture has near-degeneracies between 1e-14 and 1e-6
+  of the scale, so the degeneracy tolerance of the injection rate is not exercised; the CPGE
+  trace cannot see a cyclic relabelling of the indices, a property of the trace itself; and the
+  WannierBerri benchmark cannot see the $\eta/\delta$ split of the shift current, since
+  $\eta_{xxx}$ vanishes there by time reversal (the split is pinned in the photocurrent tests).
+- The README bullet "Nonlinear transport, photocurrents and higher harmonics" has no notebook,
+  so the README sentence "one executed notebook for each entry" is off by one, and the guide page
+  has no figure.
 - The spin current at finite frequency, spin photocurrents, and a triangle or qtci integration of
   the general kernel stay parked, as below.
 

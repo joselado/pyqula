@@ -203,7 +203,11 @@ already reached once.
   curvature dipole, the shift and injection currents and why the shift current is the total minus
   eta/delta, the Laurent structure of the dc limit with the measured A_0 that matches no
   convention, the external benchmarks (WannierBerri, the quantized CPGE of a Weyl model), the GPU
-  crossover, and what is open (the third-order tau^2 and tau^0 terms, spin photocurrents, pinned
+  crossover, the debug pass (the finite-frequency prefactor of the nonlinear Drude conductivity
+  was wrong and is fixed, the tests that could not fail now can) and the optimization pass (the
+  dc loop on one BLAS thread, 2x; the device memory budget; the timings before and after on the
+  CPU and the card), and what is open (the BLAS threads of the CPU kernel, the row pool and the
+  matmul Drude prototypes, the third-order tau^2 and tau^0 terms, spin photocurrents, pinned
   timings on an idle machine, the user notebook and figure).
 
 - [`qtci_optical_response.md`](qtci_optical_response.md) -- where QTCI helps
