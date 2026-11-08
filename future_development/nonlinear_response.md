@@ -110,7 +110,9 @@ at 24 bands and above, and in double precision 4 to 6x from 24 bands on (on this
 1/70 of single, so the double numbers say nothing about a data-centre card). With one frequency
 the crossover is between 2 and 8 bands in single precision and between 24 and 64 bands in
 double. The kernel compiles once per call shape, 0.1 to 1 s at a few bands and up to 2.8 s in
-single and 8.8 s in double at 100 bands, which a single call pays on top of the times above.
+single and 8.8 s in double at 100 bands, which a single call pays on top of the times above. The
+compiled graph grows with the number of requested components, and the debug pass measured 3 to
+42 s for the first call of a full tensor.
 
 ### The debug pass
 
@@ -187,6 +189,11 @@ process at one time is solid.
   core, so a threaded BLAS there only competes with it. With BLAS on one thread inside the mesh
   loop (`ba81101`) the second order goes from 52 to 62 s down to 25 to 31 s, the same result to the
   last bit. The third order took 270 to 278 s before this change and was not timed after it.
+- The Taylor recursion of the band derivatives (`7c144ba`). Its batched contractions were
+  `einsum` calls, which do not reach BLAS here, and are now `matmul` on the stacked matrices.
+  The $\tau^3$ Drude tensor at `nk=100` with 24 bands goes from 51.9 to 52.6 s down to 10.8 to
+  11.3 s, at load 5; only the order of the sums changes, at most 2e-13 relative on the 177
+  numbers of the Drude routines recorded for the 3D lift.
 - The device path (`e2bca0e`). $H(k)$ is now one product of the Bloch phases and the stacked
   hoppings, not a Python loop over the k-points, and the frequency chunks are summed on the card
   and fetched once. Against the old file on five models at orders 2 and 3, the difference is at
@@ -225,8 +232,6 @@ Open, in the order of their value:
   order from 6.8 s to 2.0 s, at fourth order from 21.0 s to 5.95 s, all 27 components from 49.6 s
   to 15.9 s. Not landed. With it the full tensor would be about 3 times the SHG kernel, at the
   threshold of the plan, so the numba equal-frequency path is not needed yet.
-- The $\tau^3$ Drude term with matrix products in place of `einsum` took 11.7 s against 53.7 s at
-  `nk=100` in a prototype. Not landed.
 - The idle-machine timings of "What to optimize if time is left" are still owed: every number
   above was taken under load. The contour with 12 points instead of 24 was not measured.
 - A single small call is faster on the CPU than on the card: the first device call compiles for
