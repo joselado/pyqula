@@ -809,6 +809,11 @@ def test_options():
         f(h,components="xy",nk=4)
     with pytest.raises(NotImplementedError,match="order=2"):
         f(h,order=4,nk=4)
+    for order in (1,4): # the term list exists only at the supported orders
+        with pytest.raises(NotImplementedError,match="order=2 and order=3"):
+            nonlineardc.get_term_names(order)
+    with pytest.raises(ValueError,match="Fermi-surface"): # not a TypeError
+        nonlineardc.nonlinear_dc_conductivity(h,T=None,nk=4)
     hn = _gapped_honeycomb(mu=0.9)
     hn.turn_spinful()
     hn.setup_nambu_spinor()

@@ -206,11 +206,21 @@ _terms3 = {
     "bcp": (_bcp,1),
     }
 
-_orders = (2,3) # order=
+_registries = {2:_terms, 3:_terms3} # order= -> the terms at that order
+_orders = tuple(_registries) # order=
+
+
+def _check_order(order):
+    """Refuse an order outside the registries, with the accepted values"""
+    if order not in _registries: raise NotImplementedError("the nonlinear "
+            "dc conductivity in powers of tau is implemented at "
+            +" and ".join("order="+str(o) for o in _orders)+", got order="
+            +str(order))
 
 
 def get_term_names(order=2):
     """Accepted values of term= in nonlinear_dc_conductivity at order="""
+    _check_order(order)
     if order==3: return list(_terms3)+["all"]
     return ["drude","bcd","qmd"]+[t for t in _terms if t.startswith("qmd_")]\
             +["all"]
@@ -343,11 +353,8 @@ def _check(h,T,channel,order=2):
     if h.dimensionality not in (1,2,3): raise ValueError("the nonlinear "
             "dc conductivity needs a periodic Hamiltonian (dimensionality "
             "1, 2 or 3), got dimensionality "+str(h.dimensionality))
-    if order not in _orders: raise NotImplementedError("the nonlinear dc "
-            "conductivity in powers of tau is implemented at "
-            +" and ".join("order="+str(o) for o in _orders)+", got order="
-            +str(order))
-    if not T>0.: raise ValueError("the nonlinear dc conductivity is a "
+    _check_order(order)
+    if T is None or not T>0.: raise ValueError("the nonlinear dc conductivity is a "
             "Fermi-surface sum, whose weight -df/dE is zero on a k-mesh at "
             "T=0: it needs T>0, got T="+str(T))
     if channel not in _channels: raise ValueError("unknown channel "
