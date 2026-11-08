@@ -239,6 +239,33 @@ def test_injection_is_the_length_gauge_diagonal():
     assert dshift<0.05*dpole
 
 
+def test_injection_with_more_than_two_coupled_bands():
+    """eta/delta equals the n = m part of the length gauge on the
+    noncentrosymmetric bilayer with a Haldane term, four bands coupled at
+    the same k. With two coupled bands [r^c, P h^a P]_nm and [r^c, h^a]_nm
+    are the same, since r^c_nn = 0, so only a third band coupled to both
+    sees that injection_rate restricts the velocity to the multiplets: the
+    full velocity moved yxx by 60 to 390 % here, changed its sign at
+    w = 1.2 and 2.8, and gave a finite xxx, xyy and yxy where the length
+    gauge is zero"""
+    hb = _bilayer(m2=0.8)
+    hb.add_haldane(0.1)
+    ws = np.array([1.2,2.1,2.8])
+    finite = ["yxx","yyy","xxy"]
+    zero = ["xxx","xyy","yxy"]
+    (w,eta) = photocurrent.injection_current(hb,energies=ws,nk=24,T=0.,
+            delta=0.1,components=finite+zero)
+    D = shg.sigma2_length_diagonal(hb,ws,-ws,nk=24,delta=0.1,
+            components=finite+zero)
+    ref = max(np.max(np.abs(D[c])) for c in finite)
+    for c in finite:
+        assert np.min(np.abs(eta[c]/0.1))>1e-3
+        assert np.allclose(eta[c]/0.1,D[c],rtol=0.,atol=1e-10*ref)
+    for c in zero:
+        assert np.max(np.abs(D[c]))<1e-12*ref
+        assert np.max(np.abs(eta[c]/0.1))<1e-10*ref
+
+
 def test_supercell_gives_the_same_photocurrents():
     """The 2x2 supercell of the Haldane-gapped lattice at nk=24 is the same
     set of k-points as the primitive cell at nk=48, so the total, the
