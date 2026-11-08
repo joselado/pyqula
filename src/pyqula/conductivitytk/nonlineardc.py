@@ -327,6 +327,17 @@ def _batch_size(n):
     return int(max(64,min(8192,2e8/(2000.*n*n))))
 
 
+def _single_blas_thread():
+    """Context in which BLAS runs on one thread (a no-op without
+    threadpoolctl)"""
+    try:
+        import threadpoolctl
+        return threadpoolctl.threadpool_limits(1)
+    except ImportError:
+        import contextlib
+        return contextlib.nullcontext()
+
+
 def _mesh_tensors(h,nk,T,degeneracy_tol,kernel=_batch_tensors):
     """The normalized mesh sums of kernel over the uniform nk^dim mesh, for
     one Hamiltonian (one spin channel, or the charge channel)"""
@@ -336,12 +347,15 @@ def _mesh_tensors(h,nk,T,degeneracy_tol,kernel=_batch_tensors):
     nb = _batch_size(n)
     parallel.set_num_threads() # threads of the numba diagonalization
     acc = None
-    for i0 in range(0,len(ks),nb): # loop over batches of k-points
-        es,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,
-                ks[i0:i0+nb])
-        t = kernel(es,h1,h2,T,degeneracy_tol*scale)
-        if acc is None: acc = t
-        else: acc = {key:acc[key]+t[key] for key in acc}
+    # the batched products are many small matrices, where a threaded BLAS
+    # only competes with the numba threads (measured 2x slower at nk=200)
+    with _single_blas_thread():
+        for i0 in range(0,len(ks),nb): # loop over batches of k-points
+            es,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,
+                    ks[i0:i0+nb])
+            t = kernel(es,h1,h2,T,degeneracy_tol*scale)
+            if acc is None: acc = t
+            else: acc = {key:acc[key]+t[key] for key in acc}
     return {key:v/(len(ks)*cellvol) for (key,v) in acc.items()}
 
 
