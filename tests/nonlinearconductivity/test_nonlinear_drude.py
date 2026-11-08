@@ -215,9 +215,10 @@ def test_iwave_absolute_scale_extrapolates_to_the_analytic_360():
 @pytest.mark.parametrize("wave,l",[("d",1),("f",2),("g",3)])
 def test_tau_and_omega_scaling(wave,l):
     """The l-th order Drude response carries the factor
-    1/(i omega + 1/tau)^l and nothing else that depends on tau or omega, so
-    it scales as tau^l in the static limit and follows the complex
-    Lorentzian at finite frequency. A response assigned the wrong order --
+    prod_{p=1..l} 1/(1/tau - i p omega), one factor per step of the
+    Boltzmann recursion in the exp(-i omega t) convention, and nothing else
+    that depends on tau or omega, so it scales as tau^l in the static limit
+    and follows that product at finite frequency. A response assigned the wrong order --
     off by one in the count of field powers -- would fail this even though
     it might still pass the selection-rule test."""
     h = _model(wave)
@@ -228,7 +229,8 @@ def test_tau_and_omega_scaling(wave,l):
     w,tau = 0.7,1.3
     sw = conductivity.nonlinear_drude_conductivity(h,tau=tau,omega=w,**kw)
     s0 = conductivity.nonlinear_drude_conductivity(h,tau=tau,omega=0.,**kw)
-    assert np.isclose(sw/s0,(1./tau)**l/(1j*w+1./tau)**l,rtol=1e-10)
+    want = np.prod([(1./tau)/(1./tau-1j*p*w) for p in range(1,l+1)])
+    assert np.isclose(sw/s0,want,rtol=1e-10)
 
 
 def test_cartesian_derivative_matches_hk_derivative():
