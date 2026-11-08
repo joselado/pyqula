@@ -739,7 +739,7 @@ def test_options():
     with pytest.raises(ValueError,match="xyy"):
         f(h,components="xy",nk=4)
     with pytest.raises(NotImplementedError,match="order=2"):
-        f(h,order=3,nk=4)
+        f(h,order=4,nk=4)
     hn = _gapped_honeycomb(mu=0.9)
     hn.turn_spinful()
     hn.setup_nambu_spinor()

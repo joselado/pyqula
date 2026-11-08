@@ -1,6 +1,8 @@
-"""Second-order dc conductivity of a metal, decomposed in powers of the
-relaxation time: the nonlinear Drude term (tau^2), the Berry curvature
-dipole (tau^1) and the quantum-metric terms (tau^0).
+"""Second- and third-order dc conductivity of a metal, decomposed in powers
+of the relaxation time: at second order the nonlinear Drude term (tau^2),
+the Berry curvature dipole (tau^1) and the quantum-metric terms (tau^0); at
+third order the nonlinear Drude term (tau^3) and the Berry connection
+polarizability term (tau^1).
 
 The derivations, the sign chain and the comparison of the conventions in
 use are in future_development/nonlinear_response.md, section "The
@@ -86,6 +88,59 @@ spectrum this is the formula above, and for an exact spin degeneracy
 without spin-orbit coupling it is the sum of the two spin copies. In
 general it is a regularization, tested by rotating the basis inside every
 multiplet by a random unitary, not a non-Abelian derivation.
+
+Third order
+-----------
+J_a = sigma_abcd E_b E_c E_d with sigma symmetric in bcd. Two terms are
+built, the tau^3 and the tau^1 one; the Berry curvature quadrupole (tau^2)
+and the tau^0 term are not (see future_development/nonlinear_response.md).
+
+  sigma^ND3_abcd = tau^3 < f d_a d_b d_c d_d eps >
+
+is the prefactor chain of nonlineardrude._sigma, (-1)^(l+1) tau^l = +tau^3
+at l = 3, with the fourth band derivative from the Rayleigh-Schroedinger
+recursion of nonlineardrude._Channel on the whole Hamiltonian, so it holds
+for any multiband model in the charge channel; in the Kato block form the
+recursion gives the multiplet trace exactly. That recursion has two
+Cartesian indices, so this term is built in 1D and 2D only.
+
+The tau^1 term is the Berry connection polarizability (BCP) term of Liu et
+al., arXiv:2106.04931 (Lai et al., Nat. Nanotechnol. 16, 869 (2021)). Their
+BCP G_ab = 2 Re sum_m A^a_nm A^b_mn/(eps_n - eps_m) is Gt above, and their
+units (e = hbar = 1, k' = -E, j = -int r' f) are ours. In the semiclassics
+of Gao, Yang and Niu (arXiv:1402.2538) the field shifts the wave-packet
+center by A^(1)_a = Gt_ab E_b, which gives the field-induced curvature
+Omega^(1)_ab = d_a A^(1)_b - d_b A^(1)_a, and corrects the band energy by
+eps^(2) = -(1/2) E.Gt.E. Note the sign: the Stark shift of the state is
++(1/2) E.Gt.E (the static polarizability check of the second order), and
+the semiclassical band energy leaves out the potential energy E.A^(1) =
+E.Gt.E of the shifted center. With f = sum_p (tau E.d)^p f0(eps~), the
+terms linear in tau are their Eq. (j3),
+
+  j = -tau int [ v (E.d)(eps^(2) f0') + d eps^(2) (E.d) f0
+                 + E x Omega^(1) (E.d) f0 ],
+
+and after the symmetrization over bcd two of the three Fermi-sea pieces of
+their Eq. (chiI) cancel, leaving (with Gt = G)
+
+  sigma^BCP_abcd = tau Sym_bcd [ -< f d_b d_c Gt_ad >
+                                 + (1/2) < f'' u_a u_b Gt_cd > ]
+                 = tau Sym_bcd [ -< f'' u_b u_c Gt_ad > + < w u_bc Gt_ad >
+                                 + (1/2) < f'' u_a u_b Gt_cd > ],
+
+the second line after two integrations by parts on the mesh, which is the
+form computed here, from es, h1 and h2 only. At tau^0 the same semiclassics
+gives the second-order qmd="gao" term. The relaxation goes to f0(eps~),
+the choice of Liu et al., which is what gives the first term of Eq. (j3);
+relaxing to f0(eps) instead would drop it. Products of three
+band-diagonal quantities in a multiplet become the block trace
+Tr_P[(1/2){U_x,U_y} Gt_zt], with the bcd symmetrization on top: basis
+independent, and the sum of the copies for an exact spin degeneracy.
+
+The third-order recursion of nonlinearkernel does not check the BCP term
+through a Laurent coefficient: a one-pole term carries 1/(p delta) with
+p = 1..3 at third order, and the coefficients of 1/delta mix several tau
+structures. Only A_-3 = sigma^ND3/(6 tau^3) is asserted there.
 """
 import numpy as np
 
@@ -131,10 +186,46 @@ _qmd = {
 _channels = ("charge","spin","up","dn") # channel=, see nonlineardrude._combine
 
 
-def get_term_names():
-    """Accepted values of term= in nonlinear_dc_conductivity"""
+def _bcp(t):
+    """The tau^1 term at third order, sigma[a,b,c,d] symmetric in bcd, from
+    t["M"][x,y,z,s] = <f'' Tr[(1/2){U_x,U_y} Gt_zs]> and
+    t["N"][x,y,z,s] = <w Tr[u_xy Gt_zs]>"""
+    M,N = t["M"],t["N"]
+    # -<f'' u_b u_c Gt_ad> + <w u_bc Gt_ad> + (1/2)<f'' u_a u_b Gt_cd>
+    s = (-np.transpose(M,(2,0,1,3)) + np.transpose(N,(2,0,1,3))
+         + 0.5*M)
+    return _symmetrize_fields(s)
+
+
+def _drude3(t): return t["dddd"]
+
+
+# term= registry at third order, as _terms
+_terms3 = {
+    "drude": (_drude3,3),
+    "bcp": (_bcp,1),
+    }
+
+_orders = (2,3) # order=
+
+
+def get_term_names(order=2):
+    """Accepted values of term= in nonlinear_dc_conductivity at order="""
+    if order==3: return list(_terms3)+["all"]
     return ["drude","bcd","qmd"]+[t for t in _terms if t.startswith("qmd_")]\
             +["all"]
+
+
+def get_orders():
+    """Accepted values of order= in nonlinear_dc_conductivity"""
+    return list(_orders)
+
+
+def _symmetrize_fields(s):
+    """Average of a (3,3,3,3) tensor over the permutations of its last three
+    (field) indices"""
+    perms = [(0,1,2,3),(0,1,3,2),(0,2,1,3),(0,2,3,1),(0,3,1,2),(0,3,2,1)]
+    return sum(np.transpose(s,p) for p in perms)/6.
 
 
 def get_qmd_conventions():
@@ -202,6 +293,23 @@ def _batch_tensors(es,h1,h2,T,tol):
                 uOmega=tr(w,b["Omega"]))
 
 
+def _batch_tensors3(es,h1,h2,T,tol):
+    """The k-sums (not normalized) of the block traces of the third-order
+    BCP term on one batch of k-points, each a (3,3,3,3) array:
+    M[x,y,z,s] = sum f'' Tr[(1/2)(U_x U_y + U_y U_x) Gt_zs] and
+    N[x,y,z,s] = sum w Tr[u_xy Gt_zs]. The blocks live inside a multiplet,
+    where the weights are common, so the matrix products stay inside it"""
+    w,f2 = _weights(es,T)
+    b = _band_blocks(es,h1,h2,tol)
+    U = b["u"]
+    UU = U[:,:,None]@U[:,None,:] # U_x U_y, (nk,3,3,n,n)
+    UU = 0.5*(UU + np.swapaxes(UU,1,2))
+    def tr(wt,X,Y): # sum_k sum_n wt_n (X_xy Y_zs)_nn
+        return np.real(np.einsum("kn,kxynm,kzsmn->xyzs",wt,X,Y,
+                optimize=True))
+    return dict(M=tr(f2,UU,b["Gt"]),N=tr(w,b["ubc"],b["Gt"]))
+
+
 def _batch_size(n):
     """k-points per batch: the vertices of shg._eigenbasis_derivatives and
     the blocks above hold about a hundred (n,n) complex matrices per
@@ -235,8 +343,9 @@ def _check(h,T,channel,order=2):
     if h.dimensionality not in (1,2,3): raise ValueError("the nonlinear "
             "dc conductivity needs a periodic Hamiltonian (dimensionality "
             "1, 2 or 3), got dimensionality "+str(h.dimensionality))
-    if order!=2: raise NotImplementedError("the nonlinear dc conductivity "
-            "in powers of tau is implemented at order=2, got order="
+    if order not in _orders: raise NotImplementedError("the nonlinear dc "
+            "conductivity in powers of tau is implemented at "
+            +" and ".join("order="+str(o) for o in _orders)+", got order="
             +str(order))
     if not T>0.: raise ValueError("the nonlinear dc conductivity is a "
             "Fermi-surface sum, whose weight -df/dE is zero on a k-mesh at "
@@ -244,6 +353,9 @@ def _check(h,T,channel,order=2):
     if channel not in _channels: raise ValueError("unknown channel "
             +repr(channel)+" of the nonlinear dc conductivity, accepted "
             "values are "+", ".join(get_channel_names()))
+    if order==3 and channel!="charge": raise NotImplementedError("the "
+            "third-order dc conductivity is implemented in the charge "
+            "channel only, got channel="+repr(channel))
 
 
 def _channel_tensors(h,nk,T,channel,degeneracy_tol,kernel=_batch_tensors):
@@ -264,26 +376,31 @@ def _default_labels(h):
     return "xyz"[:h.dimensionality]
 
 
-def _components(h,components):
-    """(list of labels, list of index triplets, single) for components=,
-    a string such as "xyy", a list of them, or None for every component
-    along the periodic directions"""
+def _components(h,components,order=2):
+    """(list of labels, list of index tuples, single) for components=,
+    a string such as "xyy" ("xxyy" at third order), a list of them, or None
+    for every component along the periodic directions"""
     single = isinstance(components,str)
     if components is None:
         lab = _default_labels(h)
-        components = [a+b+c for a in lab for b in lab for c in lab]
+        components = [""]
+        for i in range(order+1):
+            components = [c+a for c in components for a in lab]
     if single: components = [components]
+    example = {2:"'xyy'",3:"'xxyy'"}[order]
+    name = {2:"second",3:"third"}[order]
     trip = []
     for comp in components:
-        if not isinstance(comp,str) or len(comp)!=3: raise ValueError(
-            "a component of the second-order conductivity is three "
-            "Cartesian labels such as 'xyy', got "+repr(comp))
+        if not isinstance(comp,str) or len(comp)!=order+1: raise ValueError(
+            "a component of the "+name+"-order conductivity is "
+            +str(order+1)+" Cartesian labels such as "+example+", got "
+            +repr(comp))
         trip.append(tuple(kubo._index(s) for s in comp))
     return components,trip,single
 
 
 def _pick(tensor,components,trip,single):
-    """The requested components of a (3,3,3) tensor"""
+    """The requested components of a (3,)*(order+1) tensor"""
     if single: return tensor[trip[0]]
     return {c:tensor[t] for (c,t) in zip(components,trip)}
 
@@ -295,11 +412,62 @@ def _term_tensor(t,term,tau,qmd):
     return fun(t)*tau**power
 
 
+def _drude3_tensor(h,nk,T,degeneracy_tol):
+    """tau^3-free third-order Drude tensor <f d_a d_b d_c d_d eps>, a
+    (3,3,3,3) array, from the band derivatives of nonlineardrude._Channel on
+    the whole Hamiltonian (charge channel). The fourth derivative is
+    symmetric in its four indices, so each multiset of indices is computed
+    once"""
+    if h.dimensionality==3: raise NotImplementedError("the third-order "
+            "Drude term is implemented in 1D and 2D only: the band "
+            "derivatives of nonlineardrude._Channel come from a Taylor "
+            "recursion in two Cartesian indices")
+    ks = uniform_mesh(h.dimensionality,nk)
+    chan = nonlineardrude._Channel(h.get_multicell(),ks,
+            degeneracy_tol=degeneracy_tol)
+    f = kubo._fermi(chan.es,T)
+    norm = 1./(len(ks)*nonlineardrude._cell_volume(h))
+    chan.prepare(4)
+    out = np.zeros((3,3,3,3))
+    done = dict()
+    for idx in np.ndindex(3,3,3,3):
+        key = tuple(sorted(idx))
+        if key not in done:
+            if 2 in key: done[key] = 0. # no k_z in 1D and 2D
+            else: done[key] = np.sum(f*chan.derivative(list(key)))*norm
+        out[idx] = done[key]
+    return out
+
+
+def _order3(h,term,tau,nk,T,components,degeneracy_tol):
+    """nonlinear_dc_conductivity at order=3"""
+    if term not in get_term_names(3): raise ValueError("unknown term "
+            +repr(term)+" of the third-order dc conductivity, accepted "
+            "values are "+", ".join(get_term_names(3)))
+    components,trip,single = _components(h,components,order=3)
+    t = dict()
+    if term in ("drude","all"):
+        t["dddd"] = _drude3_tensor(h,nk,T,degeneracy_tol)
+    if term in ("bcp","all"):
+        t.update(_mesh_tensors(h,nk,T,degeneracy_tol,kernel=_batch_tensors3))
+    def tensor(p):
+        fun,power = _terms3[p]
+        return fun(t)*tau**power
+    if term!="all": return _pick(tensor(term),components,trip,single)
+    out = {p:tensor(p) for p in _terms3}
+    out["total"] = out["drude"] + out["bcp"]
+    return {p:_pick(v,components,trip,single) for (p,v) in out.items()}
+
+
 def nonlinear_dc_conductivity(h,order=2,term="all",tau=1.,qmd="shibata",
         channel="charge",nk=100,T=0.05,components=None,degeneracy_tol=1e-6):
     """Second-order dc conductivity sigma_abc, J_a = sigma_abc E_b E_c,
     decomposed in powers of the relaxation time tau, see the module
-    docstring for the formulas.
+    docstring for the formulas. At order=3, the third-order
+    sigma_abcd, J_a = sigma_abcd E_b E_c E_d, with term "drude" (tau^3,
+    1D and 2D), "bcp" (tau^1, the Berry connection polarizability term) or
+    "all" (a dict with "drude", "bcp" and "total"), components of four
+    labels such as "xxyy", the charge channel only, and qmd= unused.
 
     term is "drude" (tau^2), "bcd" (tau^1), "qmd" (tau^0, in the
     convention qmd=), one of the quantum-metric pieces "qmd_hall",
@@ -312,6 +480,7 @@ def nonlinear_dc_conductivity(h,order=2,term="all",tau=1.,qmd="shibata",
     mesh whose energy spacing is below T are needed; convergence is
     checked by doubling nk at fixed T."""
     _check(h,T,channel,order=order)
+    if order==3: return _order3(h,term,tau,nk,T,components,degeneracy_tol)
     if term not in get_term_names(): raise ValueError("unknown term "
             +repr(term)+" of the nonlinear dc conductivity, accepted values "
             "are "+", ".join(get_term_names()))
