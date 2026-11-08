@@ -12,9 +12,21 @@ f-wave magnets", arXiv:2411.16036 (Phys. Rev. B 111, 125420 (2025)), Eq.
 each spin channel s = +-1 is an independent single-band problem, solving the
 semiclassical Boltzmann equation recursively in the electric field gives
 
-  sigma_s^{x^l1 y^l2 ; b} =  (-e/hbar)^(l1+l2+1) / (i w + 1/tau)^(l1+l2)
-                             * Int d^D k f_s^(0) d^(l1+l2+1) eps_s
-                                         / (dk_x^l1 dk_y^l2 dk_b)
+  sigma_s^{x^l1 y^l2 ; b} =  (-e/hbar)^(l+1) prod_{p=1..l} 1/(1/tau - i p w)
+                             * Int d^D k f_s^(0) d^(l+1) eps_s
+                                         / (dk_x^l1 dk_y^l2 dk_b),
+
+with l = l1+l2. Here w is the frequency of the applied field E(t) =
+Re[E e^{-i w t}], in the exp(-i w t) convention of kubo.py and
+nonlinearkernel.py, and sigma is the response at the harmonic l w: the
+p-th step of the recursion, (1/tau - i p w) f_p = (e/hbar) E d_k f_{p-1},
+acts on the part of the distribution that oscillates at p w. At w = 0 the
+prefactor is tau^l, which is Ezawa's static result. At l = 1 it is the
+intraband part of kubo.optical_conductivity. Ezawa writes
+1/(i w + 1/tau)^l instead, which at l = 1 is the complex conjugate (the
+exp(+i w t) convention) and at l >= 2 is not the harmonic l w of the
+relaxation-time Boltzmann equation in either convention. Only the static
+limit, which is what the X-wave counting uses, is common to both.
 
 This is the symmetric tensor component sigma_{b a1...al} with l1 of the
 field indices a_j equal to x and l2 = l - l1 equal to y, which is what
@@ -437,7 +449,10 @@ def _combine(out,channel):
 def _sigma(chans,norm,axes,b,channel,T,mu,tau,omega):
     """One tensor component, from already-built channels"""
     l = len(axes)
-    pref = (-1.)**(l+1)/(1j*omega+1./tau)**l # e = hbar = 1
+    # e = hbar = 1; the recursion of the Boltzmann equation, one factor per
+    # harmonic p w (see the module docstring)
+    pref = (-1.)**(l+1)
+    for p in range(1,l+1): pref = pref/(1./tau-1j*p*omega)
     out = dict()
     for (s,c) in chans:
         f = _fermi(c.es-mu,T)
