@@ -359,7 +359,8 @@ def test_normalized_metric_is_the_polarizability():
     assert np.allclose(chi[:2,:2],ref[:2,:2],atol=1e-6*chi[0,0])
 
 
-def test_bcd_fermi_surface_equals_fermi_sea():
+@pytest.mark.parametrize("theta",[0.,0.4])
+def test_bcd_fermi_surface_equals_fermi_sea(theta):
     """D_a = <w u_a Omega> against two Fermi-sea forms: <f d_a Omega>, with
     Omega from anomaloushall.band_curvature_mesh and d_a a spectral
     derivative on the periodic mesh, and the derivative of the anomalous
@@ -367,8 +368,11 @@ def test_bcd_fermi_surface_equals_fermi_sea():
     of the Fermi sea alone, built by multiplying every hopping by
     exp(i dk.R). The BCD term itself is tau D_y in xyy, -tau D_x in yxx,
     tau D_x/2 in xxy and xyx, -tau D_y/2 in yxy and yyx, and zero in xxx
-    and yyy"""
+    and yyy. The unrotated model has the mirror y -> -y, so D_y = 0 there;
+    rotated by theta = 0.4 rad it has no mirror left and D_y is finite,
+    which pins the sign and the index of the y component"""
     h = _tilted_dirac(mu=0.6)
+    h.geometry = sculpt.rotate(h.geometry,theta)
     T,nk = 0.05,200
     D = nonlineardc.berry_curvature_dipole(h,nk=nk,T=T)
     D2 = nonlineardc.berry_curvature_dipole(h,nk=2*nk,T=T)
@@ -379,6 +383,7 @@ def test_bcd_fermi_surface_equals_fermi_sea():
     dom = _spectral_derivative(h,om,nk)
     sea = np.array([np.sum(f*dom[a]) for a in range(2)])/(len(es)*cellvol)
     assert np.allclose(D,sea,atol=1e-6*np.max(np.abs(D)))
+    if theta!=0.: assert abs(D[1])>1e-3 # no mirror, so D_y is finite
     def shifted(dK): # every hopping times exp(i dK.R), so H(k+dK)
         dd = h.get_multihopping().get_dict()
         dd = {R:np.asarray(m)*np.exp(1j*np.dot(dK,R)) for (R,m) in dd.items()}
@@ -386,8 +391,9 @@ def test_bcd_fermi_surface_equals_fermi_sea():
         hs.set_multihopping(MultiHopping(dd))
         return anomaloushall.band_curvature_mesh(hs,nk=nk)[0]
     eps = 1e-4
+    avecs = np.array([h.geometry.a1,h.geometry.a2,np.zeros(3)])
     for a in range(2):
-        dK = np.zeros(3) ; dK[a] = eps
+        dK = eps*avecs[:,a] # a Cartesian shift dk along a, as dk.a_i
         F = [np.sum(kubo._fermi(shifted(s*dK),T)*om) for s in [1.,-1.]]
         fd = -(F[0]-F[1])/(2.*eps)/(len(es)*cellvol)
         assert abs(fd-D[a])<1e-4*np.max(np.abs(D))
@@ -403,6 +409,7 @@ def test_bcd_fermi_surface_equals_fermi_sea():
            "yxy":-tau*D[1]/2.,"yyx":-tau*D[1]/2.,
            "xxx":0.,"yyy":0.}
     assert abs(D[0])>1e-3 # the tilt along x gives D_x, which xxy and xyx carry
+    if theta!=0.: assert abs(s["xyy"])>1e-4 and abs(s["yxy"])>1e-4 # carry D_y
     for c in labels:
         assert abs(s[c]-ref[c])<1e-12*np.max(np.abs(D))
 
