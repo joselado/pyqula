@@ -154,20 +154,34 @@ require *imaginary* hoppings (measured `max|Im H| = 0.5`) while d, g and i
 wave are exactly real. Consequence for fixtures: an f- or g-wave test case
 cannot be built from a real C3 model.
 
-## Also not built
+## Also not built in this module
 
-- **Ezawa's second-order charge response**, [arXiv:2409.09241][e2409]:
-  quantum-metric intrinsic (tau^0), Berry-curvature dipole (tau^1) and
-  nonlinear Drude (tau^2) channels for a d-wave altermagnet with Rashba
-  coupling, with a `cos(Phi)` in-plane Neel-angle law as the acceptance
-  test. It is d-wave-only — it keys off the quadratic form factor — so it
-  cannot see a g- or i-wave altermagnet at all, which is why it was not the
-  route taken. It would reuse `kubo._bands_and_velocities` almost unchanged.
-  Unlike the present module it requires broken inversion symmetry, hence the
-  Rashba term, and it is the right formalism whenever spin-orbit coupling is
-  present (where `nonlineardrude` correctly refuses to run).
-- **3D**, blocked by `current.derivative` having no 3D branch. Ezawa gives
-  3D models for every wave.
+- **Ezawa's second-order charge response**, [arXiv:2409.09241][e2409], is
+  built since 7 November 2026, not here but in `conductivitytk/nonlineardc.py`
+  (`h.get_nonlinear_dc_conductivity()`): the nonlinear Drude (tau^2), Berry
+  curvature dipole (tau^1) and quantum-metric (tau^0) terms of any multiband
+  Hamiltonian, spin-orbit coupling included, from the band velocities, the
+  inverse masses and the quantum geometry of the Fermi surface. The fixture
+  is his d-wave altermagnet with Rashba coupling built by hand with a
+  d_{x^2-y^2} form factor (hopping -J n.sigma along x and +J n.sigma along
+  y), since `specialhamiltonian.dwave_altermagnet` is d_xy and moves the
+  zeros of his law. `tests/conductivity/test_nonlinear_dc.py` checks the
+  cos(Phi) Neel-angle law of the Drude and quantum-metric terms at J = 0.01,
+  the exact zeros for n along x and z, the linearity and the sign flip in J,
+  and the cos(3 Phi) harmonic, which is third order in J (11 % of the
+  amplitude of the quantum-metric term at J = 0.05). His absolute
+  prefactors are not used: his Eq. (HallAna) carries a tau in a tau^0
+  quantity, and his Berry curvature dipole is a factor 2 larger than Sodemann
+  and Fu's by a double-counted symmetrization. The Drude term agrees with
+  `nonlinear_drude_conductivity` at l = 2 in the charge and spin channels.
+  The details are in `nonlinear_response.md`.
+- **3D.** The 3D second-order Drude term (and the other second-order terms)
+  comes from `nonlineardc`, whose vertices handle a third lattice vector,
+  checked on decoupled layers. This module stays two-dimensional:
+  `current.derivative` has no 3D branch, and lifting it would need a
+  three-index Taylor recursion and a `zzz` test on a dispersing 3D model.
+  The third-order Drude term of `nonlineardc` reuses this recursion, so it is
+  1D and 2D too. Ezawa gives 3D models for every wave.
 - **Restricting the perturbation expansion to bands near the Fermi level.**
   The cost is `~nb^2.8 nk^2` and is dominated by expanding every band, but only
   bands within a few `T` of the chemical potential carry weight. Rewriting

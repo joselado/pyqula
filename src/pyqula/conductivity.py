@@ -287,10 +287,13 @@ from .conductivitytk import shg
 def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
         components=None,gauge="velocity",degeneracy_tol=1e-6,
         integration="grid",tolerance=1e-6):
-    """Second-harmonic conductivity sigma_abc(2w;w,w) of a 1D or 2D
+    """Second-harmonic conductivity sigma_abc(2w;w,w) of a 1D, 2D or 3D
     periodic Hamiltonian, the second-order current at twice the frequency
     of the field, J_a(2w) = sigma_abc(2w;w,w) E_b(w) E_c(w), symmetrized
-    in b and c.
+    in b and c. The rectified current sigma_abc(0;w,-w), the sum and
+    difference frequencies and the higher orders come from
+    nonlinear_conductivity, whose n = 2, frequencies=(1,1) case is this
+    quantity on the same mesh.
 
     Formula
     -------
@@ -341,7 +344,9 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     Hamiltonian's units t, lengths in the geometry's units a, the
     chemical potential at zero, and the retarded branch with time
     dependence exp(-i w t). sigma is then in units of e^3 a^(3-d)/(hbar t)
-    with d the dimensionality. The sign follows from q = -e, since the
+    with d the dimensionality, so in 3D it is a bulk conductivity per unit
+    cell volume, and a stack of decoupled layers with spacing c gives the
+    2D value of one layer divided by c. The sign follows from q = -e, since the
     response is odd in the charge. The spin degeneracy is whatever the
     Hamiltonian has: a spinless model gives the response of one spin
     species. The static limit is pinned in tests/conductivity against the
@@ -351,7 +356,7 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
     Parameters
     ----------
     h : Hamiltonian
-      the (1D or 2D) periodic Hamiltonian, not Nambu
+      the (1D, 2D or 3D) periodic Hamiltonian, not Nambu
     energies : array
       fundamental frequencies hbar*w (default np.linspace(0.,4.,100))
     nk : int
@@ -391,7 +396,8 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       weights come from a quantics tensor cross interpolation instead of a
       diagonalization at every point. Both need delta > 0 and the velocity
       gauge, and neither removes the mesh requirement set by T at a Fermi
-      surface
+      surface. In 3D only "grid" is implemented, and the other two raise
+      NotImplementedError
     tolerance : float
       relative tolerance of the tensor cross interpolation of each field,
       only used by integration="qtci"
@@ -674,6 +680,351 @@ def fermi_volume(h,nk=100,T=0.01,mu=0.,channel="charge"):
     results of arXiv:2411.16036 are expressed in terms of, so ratios of a
     conductivity to it are free of the (2 pi)^D convention."""
     return nonlineardrude.fermi_volume(h,nk=nk,T=T,mu=mu,channel=channel)
+
+
+from .conductivitytk import nonlinearkernel
+from .conductivitytk import nonlineardc
+from .conductivitytk import photocurrent
+
+
+def nonlinear_conductivity(h,order=2,energies=None,frequencies=None,nk=20,
+        T=None,delta=0.1,components=None,degeneracy_tol=1e-6,
+        prec="double"):
+    """n-th order conductivity sigma_{b a1..an}(w1,...,wn) of a 1D, 2D or 3D
+    periodic Hamiltonian, the current at the sum frequency w1 + ... + wn
+    driven by n fields, at any order and for any tuple of frequencies.
+
+    Formula
+    -------
+    The velocity-gauge density-matrix recursion of Passos et al., PRB 97,
+    235446 (2018), arXiv:1712.04924, Eqs. (rho) and (responsefunction),
+    with hbar = 1 and carrier charge q = -e. With rho^(0) = diag(f) and
+    every w_j already complex,
+
+      rho^{a1..ap}_nm = sum_{m'=1}^{p} (1/m'!) [h^{a1..am'},
+                        rho^{a(m'+1)..ap}]_nm / (w1 + ... + wp - (E_n - E_m))
+      sigma_{b a1..an} = (i^n q^(n+1)/(w1...wn)) (1/(N_k V_cell)) sum_k
+                         sum_{p=0}^{n} (1/p!) Tr[h^{b a1..ap} rho^{a(p+1)..an}]
+
+    averaged over the orderings of the pairs (a_j,w_j), so that sigma is
+    symmetric under their exchange. h^{a1..am} are the eigenbasis matrix
+    elements of the m-th Cartesian k-derivative of the Peierls-coupled
+    Bloch Hamiltonian, with the full bond vector R + r_j - r_i as in
+    optical_conductivity, so the result is exact for the tight-binding
+    model with any number of bands. The apparent 1/(w1...wn) divergence
+    cancels between the terms. At n = 1 this is optical_conductivity, and
+    at n = 2 with frequencies=(1,1) it is shg_conductivity, on the same
+    mesh.
+
+    Field convention
+    ----------------
+    J_b(w) = Int prod_j dw_j/(2 pi) sigma_{b a1..an}(w1..wn)
+    E_a1(w1)...E_an(wn) 2 pi delta(w - sum_j w_j), with time dependence
+    exp(-i w t) (Passos et al., Eq. (defresponsefunction)). For a real
+    field E(t) = Re E0 exp(-i w t) this means
+
+      second harmonic   J(t) = (1/2) Re[sigma(w,w) E0 E0 exp(-2 i w t)]
+      rectified current J    = (1/2) sigma(w,-w) E0 E0^*
+      static field      J    = sigma(0,...,0) E^n
+
+    and at third order the third harmonic is (1/4) Re[sigma(w,w,w) E0^3
+    exp(-3 i w t)].
+
+    Broadening
+    ----------
+    Every field frequency carries the same broadening, w_j = c_j*w +
+    i delta, so a pole at a sum of m frequencies carries i m delta. This
+    is the adiabatic switching of Passos et al., not a relaxation time.
+    In particular energies=[0.] gives the dc value of this phenomenology
+    at finite delta, which is not the tau-expanded dc conductivity of
+    nonlinear_dc_conductivity and cannot be read at delta = 1/tau: at dc
+    the n-field Drude term goes as 1/(n! delta^n) where the relaxation
+    time gives tau^n, a term with one intraband pole as 1/delta where the
+    relaxation time gives tau, and the delta^0 coefficient matches none of
+    the quantum-metric conventions (see future_development/
+    nonlinear_response.md, "The dc limit and its Laurent structure").
+
+    The recursion never divides by a band energy difference, so
+    degenerate bands, band crossings and metals are allowed. A metal needs
+    T > 0 and a mesh whose energy spacing v 2 pi/(nk a) is below both T
+    and delta.
+
+    Units
+    -----
+    hbar = e = 1, energies in units of the hopping t, lengths in the
+    units a of the geometry, the chemical potential at zero (use
+    h.shift_fermi). sigma is per unit cell volume (area in 2D, length in
+    1D), in units of e^(n+1) a^(n+1-d)/(hbar t^(n-1)). The response goes
+    as q^(n+1), so the even orders change sign with the charge of the
+    carriers and the odd ones do not. The spin degeneracy is whatever the
+    Hamiltonian has.
+
+    Parameters
+    ----------
+    h : Hamiltonian
+      the (1D, 2D or 3D) periodic Hamiltonian, not Nambu
+    order : int
+      the order n of the response, any positive integer
+    energies : array
+      the frequency hbar*w (default np.linspace(0.,4.,100))
+    frequencies : tuple or None
+      the multipliers c_j of the n fields, w_j = c_j*w. None is all ones
+      (harmonic generation); (1,-1) the rectified current; (1,2) the sum
+      frequency w + 2w; (1,1,0) the field-induced second harmonic and
+      (1,-1,0) the jerk current, where the static field carries i delta
+    nk : int
+      number of k-points per periodic direction
+    T : float
+      temperature of the Fermi occupations, delta by default
+    delta : float
+      the broadening of every field frequency, positive
+    components : str, list of str or None
+      strings of n+1 Cartesian labels, the current first, such as "xyy"
+      at second order and "xxyy" at third; None gives all 3^(n+1)
+    degeneracy_tol : float
+      accepted for the uniform signature of the nonlinear routines; the
+      recursion does not use it
+    prec : str
+      "double", or "single" on the GPU (pyqula.gpu.set_gpu(True)). The
+      1/(w1...wn) prefactor cancels terms of order one when a field
+      frequency is below delta, so single precision is meaningful only
+      for |c_j w| above delta; the float32 error then grows as
+      (t/|w + i delta|)^n, and the routine warns otherwise
+
+    Returns
+    -------
+    (energies, sigma) with sigma a complex array of len(energies) if
+    components is a single string, and a dict {component: array} otherwise.
+    """
+    return nonlinearkernel.nonlinear_conductivity(h,order=order,
+            energies=energies,frequencies=frequencies,nk=nk,T=T,delta=delta,
+            components=components,degeneracy_tol=degeneracy_tol,prec=prec)
+
+
+def nonlinear_susceptibility(h,order=2,length_unit=1.0,energy_unit=1.0,
+        **kwargs):
+    """n-th order susceptibility chi^(n) in SI units, from
+    nonlinear_conductivity through J = dP/dt: the polarization at the sum
+    frequency Omega = w1 + ... + wn (every w_j with its broadening) is
+    P = J/(-i Omega), so
+
+      chi^(n) = sigma^(n)/(-i Omega epsilon_0),
+
+    which at n = 2 and frequencies=(1,1) is shg_susceptibility.
+    length_unit is the length unit of the geometry in Angstrom and
+    energy_unit the energy unit of the Hamiltonian in eV; the result is in
+    nm^(n+2-d)/V^(n-1), so nm^2/V for the sheet susceptibility of a 2D
+    system at second order and nm^3/V^2 at third. The static limit
+    (energies=[0.]) of an insulator is finite, since Omega = n i delta
+    there. Every other keyword is that of nonlinear_conductivity, with the
+    same return layout."""
+    return nonlinearkernel.nonlinear_susceptibility(h,order=order,
+            length_unit=length_unit,energy_unit=energy_unit,**kwargs)
+
+
+def nonlinear_dc_conductivity(h,order=2,term="all",tau=1.,qmd="shibata",
+        channel="charge",nk=100,T=0.05,components=None,degeneracy_tol=1e-6):
+    """dc nonlinear conductivity of a metal in the relaxation-time
+    approximation, decomposed in powers of tau: at second order
+    J_a = sigma_abc E_b E_c, symmetric in bc, and at third order
+    J_a = sigma_abcd E_b E_c E_d, symmetric in bcd.
+
+    Second order
+    ------------
+    With u^n_a = h^a_nn the band velocity, u^n_ab the inverse mass,
+    Omega^n_ab the Berry curvature, G^n_ab the quantum metric and
+    Gt^n_ab = 2 Re sum_m h^a_nm h^b_mn/(E_n - E_m)^3 the band-normalized
+    metric (the Berry connection polarizability), w_n = -f'(E_n) the
+    Fermi-surface weight and <X> = (1/(N_k V_cell)) sum_k sum_n X_n,
+
+      drude (tau^2)  -tau^2 < w u_a u_bc >
+      bcd   (tau^1)  (tau/2) < w (u_c Omega_ab + u_b Omega_ac) >
+      qmd   (tau^0)  the quantum-metric term in the convention qmd=, from
+        qmd_hall     - < w [u_a Gt_bc - (1/2)(u_b Gt_ca + u_c Gt_ab)] >
+        qmd_disp     - < w u_a Gt_bc >
+        qmd_intra    -(1/2) < w d_a G_bc > = -(1/2) < f'' u_a G_bc >
+
+    The three terms are told apart in an experiment by how they scale with
+    the linear conductivity, which goes as tau. The Drude term needs broken
+    time reversal and broken inversion. The Berry curvature dipole term
+    (Sodemann and Fu, arXiv:1508.00571, with their factor 2 for a dc
+    field) needs broken inversion and is allowed with time reversal; in
+    2D sigma_xyy = tau D_y and sigma_yxx = -tau D_x with the dipole of
+    berry_curvature_dipole. The quantum-metric term needs broken time
+    reversal and survives where PT symmetry kills the Berry curvature.
+
+    Three conventions of the tau^0 term are in use, and they differ by
+    gauge-invariant pieces: qmd="shibata" (default) is hall + intra, the
+    clean limit of the velocity-gauge Keldysh calculation of Shibata,
+    arXiv:2606.22359; "gao" is hall alone (Gao, Yang and Niu,
+    arXiv:1402.2538); "kaplan" is hall + disp, Kaplan, Holder and Yan,
+    arXiv:2211.17213, with the coefficient as they write it. Their
+    dispersion current uses a field-corrected band energy that is twice
+    the second-order Stark shift (q^2/2) E.Gt.E, so the physical
+    dispersion current with an unshifted distribution is half of
+    qmd_disp. The hall piece is purely transverse, sigma_aaa = 0.
+
+    Third order
+    -----------
+    order=3 has two terms, in the charge channel only:
+
+      drude (tau^3)  tau^3 < f d_a d_b d_c d_d eps >, 1D and 2D only
+      bcp   (tau^1)  the Berry connection polarizability term of Liu et
+                     al., arXiv:2106.04931, from Gt and the band
+                     velocities and inverse masses
+
+    and term="all" gives a dict with "drude", "bcp" and "total". The tau^2
+    (Berry curvature quadrupole) and tau^0 terms at third order are not
+    built.
+
+    Degenerate bands
+    ----------------
+    Every sum over m leaves out the degenerate multiplet of n (bands
+    closer than degeneracy_tol times the hopping scale), and a product of
+    two band-diagonal quantities inside a multiplet is replaced by the
+    trace over the multiplet. This is basis independent, and exact for a
+    spin degeneracy without spin-orbit coupling. A PT-symmetric magnet is
+    Kramers degenerate at every k and is handled in this way.
+
+    Temperature and mesh
+    --------------------
+    Every term is a Fermi-surface sum, so T > 0 is required, and nk has to
+    make the energy spacing of the mesh, v 2 pi/(nk a), smaller than T.
+    The way to check this is to double nk at fixed T.
+
+    Units
+    -----
+    hbar = e = 1, energies in units of t, lengths in units of a, tau in
+    units of hbar/t and the chemical potential at zero (h.shift_fermi(-mu)
+    puts it at mu). sigma is per unit cell volume, in units of
+    e^(n+1) a^(n+1-d)/(hbar t^(n-1)), the units of nonlinear_conductivity.
+
+    Parameters
+    ----------
+    h : Hamiltonian
+      the (1D, 2D or 3D) periodic Hamiltonian, not Nambu
+    order : int
+      2 or 3 (nonlineardc.get_orders())
+    term : str
+      "all" (a dict with each term, each with its power of tau included,
+      and their sum "total"), or one term: at second order "drude", "bcd",
+      "qmd", "qmd_hall", "qmd_disp" or "qmd_intra", at third order
+      "drude" or "bcp"
+    tau : float
+      relaxation time
+    qmd : str
+      "shibata" (default), "gao" or "kaplan", the convention of the
+      quantum-metric term at second order
+    channel : str
+      "charge" for any Hamiltonian, or "spin", "up", "dn" for a
+      spin-conserving one, at second order
+    nk : int
+      number of k-points per periodic direction
+    T : float
+      temperature, positive
+    components : str, list of str or None
+      labels such as "xyy" (or "xxyy" at third order), the current first;
+      None gives every component along the periodic directions
+    degeneracy_tol : float
+      relative tolerance below which two bands form a multiplet
+
+    Returns
+    -------
+    For one component string, its value; for a list or None, a dict
+    {component: value}. With term="all", a dict keyed by the term names
+    whose values have that layout.
+    """
+    return nonlineardc.nonlinear_dc_conductivity(h,order=order,term=term,
+            tau=tau,qmd=qmd,channel=channel,nk=nk,T=T,components=components,
+            degeneracy_tol=degeneracy_tol)
+
+
+def berry_curvature_dipole(h,nk=100,T=0.05,channel="charge",
+        degeneracy_tol=1e-6):
+    """Berry curvature dipole, the Fermi-surface average of the Berry
+    curvature weighted with the band velocity,
+
+      D_a = (1/(N_k V_cell)) sum_k sum_n (-f'(E_n)) u^n_a Omega^n_xy
+          = (1/(N_k V_cell)) sum_k sum_n f(E_n) d_a Omega^n_xy,
+
+    the quantity behind the nonlinear Hall effect of a time-reversal
+    symmetric metal with broken inversion (Sodemann and Fu,
+    arXiv:1508.00571). In 2D it is the array [D_x, D_y], with
+    sigma^bcd_xyy = tau D_y and sigma^bcd_yxx = -tau D_x in
+    nonlinear_dc_conductivity. In 3D it is the tensor D[a,b] with the
+    pseudovector Omega_x = Omega_yz, Omega_y = Omega_zx, Omega_z = Omega_xy.
+    D is an in-plane pseudovector, so it vanishes under a C3 rotation and
+    needs a crystal with at most one mirror. In units of a^(3-d), a length
+    in 2D and dimensionless in 3D, with the keywords and the mesh rule of
+    nonlinear_dc_conductivity, T > 0 included."""
+    return nonlineardc.berry_curvature_dipole(h,nk=nk,T=T,channel=channel,
+            degeneracy_tol=degeneracy_tol)
+
+
+def shift_current(h,energies=None,nk=20,T=None,delta=0.1,components=None,
+        degeneracy_tol=1e-6,prec="double"):
+    """Shift-current conductivity of the bulk photovoltaic effect, the
+    part of the rectified current under light that stays finite as the
+    broadening goes to zero,
+
+      sigma^shift_abc(w) = sigma_abc(0;w,-w) - eta_abc(w)/delta,
+
+    with J_a = (1/2) sigma^shift_abc E0_b E0_c^* for the field
+    E(t) = Re E0 exp(-i w t). The rectified total is
+    nonlinear_conductivity at frequencies=(1,-1), and eta is the injection
+    rate of injection_current, the pole of that total, both at the same
+    delta, nk and T. The split is done in this way because only the total
+    is gauge invariant; the velocity-gauge diagonal is not the pole. The
+    shift current needs broken inversion and is allowed with time
+    reversal, where eta vanishes for linear light and the shift current is
+    the whole real, bc-symmetric response.
+
+    The total is Hermitian in b and c, sigma_acb = sigma_abc^*. With broken
+    time reversal the 1/delta pole amplifies the aliasing of the mesh, so
+    a larger nk is needed than for the second harmonic. In a metal the
+    total also holds Fermi-surface terms that eta does not, and the
+    remainder is then not only the shift current. Units e^3 a^(3-d)/(hbar
+    t), keywords as nonlinear_conductivity, T defaulting to delta.
+    Returns (energies, array) for one component string and (energies,
+    dict) otherwise."""
+    return photocurrent.shift_current(h,energies=energies,nk=nk,T=T,
+            delta=delta,components=components,
+            degeneracy_tol=degeneracy_tol,prec=prec)
+
+
+def injection_current(h,energies=None,nk=20,T=None,delta=0.1,
+        components=None,degeneracy_tol=1e-6):
+    """Injection rate eta_abc(w) of the bulk photovoltaic effect, the
+    current that grows linearly in time under light,
+    dJ_a/dt = eta_abc E0_b E0_c^* for E(t) = Re E0 exp(-i w t), until the
+    relaxation stops it. From the golden rule,
+
+      eta_abc = (pi q^3/2) (1/(N_k V_cell)) sum_k sum_{n != m} (f_n - f_m)
+                (v^a_mm - v^a_nn) r^b_mn r^c_nm L_delta(w - (E_m - E_n))
+
+    with r^a_nm = h^a_nm/(i (E_n - E_m)) the interband Berry connection and
+    L_delta a Lorentzian of width delta; inside a degenerate multiplet the
+    velocity difference becomes a commutator with the velocity restricted
+    to the multiplet, which is basis independent.
+
+    eta is complex, with eta_acb = eta_abc^*. Its real part, symmetric in
+    b and c, is the linear injection, under linearly polarized light; it
+    vanishes with time reversal. Its imaginary part, antisymmetric in b
+    and c, is the circular injection, eta^circ_abc = Im eta_abc, under
+    circularly polarized light; it is allowed with time reversal once
+    inversion is broken, and its trace over a window where one Weyl node
+    absorbs is quantized. For E0 = (1, i, 0)/sqrt(2) the rate is
+    dJ_a/dt = (Re eta_axx + Re eta_ayy)/2 + Im eta_axy.
+
+    With the adiabatic switching of nonlinear_conductivity the rate
+    integrates to J = eta |E0|^2/(2 delta), so eta = delta sigma^pole with
+    sigma^pole the pole part of sigma_abc(0;w,-w). Units e^3
+    a^(3-d)/hbar^2 (a rate of the second-order current), T defaulting to
+    delta, keywords as nonlinear_conductivity. Returns (energies, array)
+    for one component string and (energies, dict) otherwise."""
+    return photocurrent.injection_current(h,energies=energies,nk=nk,T=T,
+            delta=delta,components=components,
+            degeneracy_tol=degeneracy_tol)
 
 
 # integration="kpm": the Chebyshev double expansion of conductivitytk/kpmkubo.py.

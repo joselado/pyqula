@@ -1583,7 +1583,8 @@ Optional arguments:
 
 Returns `(energies,sigma)`, with `sigma` a complex array of length `nw` for one
 component and a dictionary of such arrays for a list. The unit is
-$e^3a^{3-d}/(\hbar t)$. 3D and Nambu Hamiltonians raise `NotImplementedError`.
+$e^3a^{3-d}/(\hbar t)$. Nambu Hamiltonians raise `NotImplementedError`, and
+so does `integration="triangle"` or `"qtci"` in 3D.
 
 ## h.get_shg_susceptibility()
 Return the second-harmonic susceptibility
@@ -1592,6 +1593,105 @@ for a 2D system (the sheet susceptibility). Arguments `length_unit=1.0`, the
 length unit of the geometry in Å, `energy_unit=1.0`, the energy unit of the
 Hamiltonian in eV, and every argument of `h.get_shg_conductivity()`. Returns
 `(energies,chi)` in the same layout.
+
+## h.get_nonlinear_conductivity()
+Compute the $n$-th order conductivity $\sigma_{ba_1\dots a_n}(\omega_1,\dots,\omega_n)$,
+the current at $\omega_1+\dots+\omega_n$ driven by $n$ fields, at any order
+and in 1D, 2D and 3D. Every field frequency carries the broadening $\delta$,
+written $\delta$ here because $\eta$ is the injection rate below.
+At `energies=[0.]` it is the static response with this broadening, not the
+relaxation-time result of `h.get_nonlinear_dc_conductivity()`. See
+[Any order and any frequency](nonlinear-response.md#any-order-and-any-frequency).
+
+Optional arguments:
+
+- order=2: the order $n$
+- energies=None: the frequencies $\omega$
+- frequencies=None: the multipliers $c_j$ of the field frequencies,
+  $\omega_j=c_j\omega$; `None` is all ones (the $n$-th harmonic), `(1,-1)` the
+  rectified current, `(1,2)` a sum frequency
+- nk=20: k-points per direction
+- T=None: temperature (by default equal to `delta`)
+- delta=0.1: broadening $\delta$ of each frequency
+- components=None: strings of $n+1$ labels, the current first, such as
+  `"xyy"` or `"xxyy"`, a list of them, or all $3^{n+1}$
+- prec="double": `"single"` on the GPU (`gpu.set_gpu(True)`), meaningful only
+  when every field frequency is larger than `delta`
+
+Returns `(energies,sigma)`, with `sigma` a complex array of length `nw` for one
+component and a dictionary of such arrays for a list. The unit is
+$e^{n+1}a^{n+1-d}/(\hbar t^{n-1})$. Nambu Hamiltonians raise
+`NotImplementedError`.
+
+## h.get_nonlinear_susceptibility()
+Return the $n$-th order susceptibility $\chi^{(n)}=\sigma^{(n)}/(-i\Omega\epsilon_0)$
+in SI units, with $\Omega$ the sum of the field frequencies, in
+nm$^{n+2-d}$/V$^{n-1}$. Arguments `order=2`, `length_unit=1.0` (the length
+unit of the geometry in Å), `energy_unit=1.0` (the energy unit of the
+Hamiltonian in eV), and every argument of `h.get_nonlinear_conductivity()`.
+Returns `(energies,chi)` in the same layout.
+
+## h.get_nonlinear_dc_conductivity()
+Compute the dc nonlinear conductivity of a metal in the relaxation-time
+approximation, $J_a=\sigma_{abc}E_bE_c$, as the nonlinear Drude term
+($\tau^2$), the Berry curvature dipole term ($\tau$) and the quantum-metric
+term ($\tau^0$); at third order, $J_a=\sigma_{abcd}E_bE_cE_d$, the nonlinear
+Drude term ($\tau^3$) and the Berry connection polarizability term ($\tau$).
+See [Nonlinear transport of a metal](nonlinear-response.md#nonlinear-transport-of-a-metal).
+
+Optional arguments:
+
+- order=2: 2 or 3
+- term="all": `"all"` gives every term and their sum `"total"`; or one of
+  `"drude"`, `"bcd"`, `"qmd"`, `"qmd_hall"`, `"qmd_disp"`, `"qmd_intra"` at
+  second order, `"drude"`, `"bcp"` at third
+- tau=1.0: relaxation time $\tau$, in units of $\hbar/t$
+- qmd="shibata": convention of the quantum-metric term, `"shibata"`, `"gao"`
+  or `"kaplan"`
+- channel="charge": `"charge"`, or `"spin"`, `"up"`, `"dn"` for a Hamiltonian
+  that conserves spin (second order only)
+- nk=100: k-points per direction
+- T=0.05: temperature, must be positive
+- components=None: one component such as `"xyy"` (or `"xxyy"` at third
+  order), a list of them, or every component along the periodic directions
+- degeneracy_tol=1e-6: relative band spacing below which bands are taken as
+  degenerate
+
+Returns a number for one component and a dictionary of numbers for a list;
+with `term="all"`, a dictionary of these, one per term. The unit is
+$e^{n+1}a^{n+1-d}/(\hbar t^{n-1})$.
+
+## h.get_berry_curvature_dipole()
+Return the Berry curvature dipole $D_a$, the Fermi-surface average of the
+band velocity times the Berry curvature, behind the nonlinear Hall effect of
+a metal with time reversal. In 2D an array $[D_x,D_y]$, in units of $a$, with
+$\sigma_{xyy}=\tau D_y$ and $\sigma_{yxx}=-\tau D_x$; in 3D a $3\times3$ array
+$D_{ab}$ with the curvature as a pseudovector. Arguments `nk=100`, `T=0.05`,
+`channel="charge"` and `degeneracy_tol=1e-6`, as in
+`h.get_nonlinear_dc_conductivity()`. See
+[The Berry curvature dipole](nonlinear-response.md#the-berry-curvature-dipole).
+
+## h.get_shift_current()
+Compute the shift-current conductivity $\sigma^{\rm shift}_{abc}(\omega)$ of the
+bulk photovoltaic effect, the dc current
+$J_a=\frac12\sigma^{\rm shift}_{abc}E_{0b}E^*_{0c}$ under light that stays finite
+when the broadening goes to zero. It is the rectified conductivity
+$\sigma_{abc}(0;\omega,-\omega)$ minus the injection pole
+$\eta_{abc}/\delta$, with $\delta$ the broadening `delta` of the calculation, see
+[Photocurrents](nonlinear-response.md#photocurrents). Arguments
+`energies=None`, `nk=20`, `T=None`, `delta=0.1`, `components=None` and
+`prec="double"`, as in `h.get_nonlinear_conductivity()`. Returns
+`(energies,sigma)` in the same layout, in units of $e^3a^{3-d}/(\hbar t)$.
+
+## h.get_injection_current()
+Compute the injection rate $\eta_{abc}(\omega)$ of the bulk photovoltaic
+effect, $dJ_a/dt=\eta_{abc}E_{0b}E^*_{0c}$, with each transition broadened
+into a Lorentzian of width `delta`. $\eta$ is complex: its real part is the
+injection under linearly polarized light, zero with time reversal, and its
+imaginary part the injection under circularly polarized light. Arguments
+`energies=None`, `nk=20`, `T=None`, `delta=0.1` and `components=None`. Returns
+`(energies,eta)` in the layout of `h.get_nonlinear_conductivity()`, in units
+of $e^3a^{3-d}/\hbar^2$.
 
 ## h.get_excitonic_optical_conductivity()
 Compute the optical conductivity $\sigma_{ab}(\omega)$ of an insulator with

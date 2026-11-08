@@ -266,6 +266,38 @@ so a second call on the same mesh does not compile again; single precision is th
 times faster than the CPU, for the absorption and for the SHG of the tetralayer at nk=48. The
 numbers and what is left on the host are in `future_development/kpm_excitonic_optics.md`.
 
+### 7. The general nonlinear response recursion: **done**
+
+`h.get_nonlinear_conductivity()` and everything built on it (`h.get_nonlinear_susceptibility()`,
+`h.get_shift_current()`, the rectified and sum-frequency conductivities of
+`conductivitytk/photocurrent.py`) runs its density-matrix recursion on the device with the
+switch on (`conductivitytk/nonlinearkernel.py`, maintainer's go-ahead of 2026-11-07). The
+recursion is written once as functional array code; under the switch it runs under jax jit and
+vmap over a k-batch, with the eigenpairs from the device solver, the last k-batch and frequency
+chunk padded with zero-occupation copies so that a call compiles once, and every contraction at
+the highest matmul precision. `prec="single"` is per call, through `gpu.resolve_prec`, and the
+kernel warns when a field frequency is below the broadening, where the $1/(\omega_1\cdots
+\omega_n)$ prefactor cancels terms of order one. On an RTX A2000, honeycomb supercells, `nk=40`,
+$\omega$ from 0.2 to 2 at $\delta = 0.1$, one component, timed while the machine was shared:
+
+| bands | order | frequencies | numpy | device single | device double | err32 |
+|---|---|---|---|---|---|---|
+| 2 | 2 | 100 | 0.045 s | 0.013 s | 0.091 s | 2e-6 |
+| 8 | 2 | 100 | 0.55 s | 0.022 s | 0.29 s | 2e-6 |
+| 24 | 2 | 100 | 4.7 s | 0.092 s | 1.06 s | 7e-6 |
+| 24 | 3 | 100 | 9.6 s | 0.15 s | 1.57 s | 1e-5 |
+| 64 | 2 | 1 | 1.8 s | 0.40 s | 1.22 s | 3e-6 |
+| 100 | 2 | 1 | 4.9 s | 0.93 s | 3.96 s | 1e-6 |
+
+Double precision on the device agrees with numpy to 1e-15 to 1.5e-14. With many frequencies
+single precision wins from 2 bands on and by 50 to 65x from 24 bands; double wins 4 to 6x from
+24 bands, a number that says nothing about a data-centre card. With one frequency the
+crossover is a few bands in single and 24 to 64 bands in double. The pinned timing on an idle
+machine and the full table are in `future_development/nonlinear_response.md`. The dc routines
+(`nonlinear_dc_conductivity`, `berry_curvature_dipole`) and the injection rate stay on the CPU:
+they are a few einsums per k-batch after the diagonalization, which already goes to the device
+through Tier 2.
+
 ## Proposed phased plan
 
 Each tier is independent and needs explicit user confirmation before implementation, same
@@ -342,6 +374,8 @@ process as the CPU perf plan.
   the CPU placement is now local to those modules.
 - **Tier 4 — research spike only, not committed work**: sparse/Green's-function GPU
   feasibility (item 3 above). Write up findings before proposing an implementation tier.
+- **The nonlinear response recursion** (item 7 above). **Done**, on the maintainer's
+  go-ahead of 2026-11-07 for the nonlinear-response build.
 - **The RPA response kernel** (`chitk/chiAB.py::chiAB_matrix`, the `N^4` Lindhard
   contraction behind every spin/charge RPA entry point) has its own plan and its own
   measurements in `future_development/gpu_rpa_spin_response.md`. It follows the conventions

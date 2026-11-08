@@ -192,8 +192,19 @@ already reached once.
   default and the length gauge only a check, the two-gauge and finite-field measurements that pin
   it, the order-of-magnitude check of monolayer MoS2 against Trolle et al. with the three-band TMD
   model, the excitonic SHG from the Tamm-Dancoff BSE and how it was checked, and what is open
-  (fitted interlayer couplings for TMD multilayers, full non-Tamm-Dancoff excitons, 3D, sum- and
-  difference-frequency and shift currents).
+  (fitted interlayer couplings for TMD multilayers, full non-Tamm-Dancoff excitons, the triangle
+  and qtci integrations in 3D). The grid SHG is 3D since 7 November 2026, and the sum and
+  difference frequencies and the photocurrents moved to `nonlinear_response.md`.
+
+- [`nonlinear_response.md`](nonlinear_response.md) -- the nonlinear electrical response, built on
+  7 and 8 November 2026: the general velocity-gauge recursion at any order and any tuple of
+  frequencies (CPU and GPU), the second- and third-order dc conductivity of a metal in powers of
+  tau with the three quantum-metric conventions and why `shibata` is the default, the Berry
+  curvature dipole, the shift and injection currents and why the shift current is the total minus
+  eta/delta, the Laurent structure of the dc limit with the measured A_0 that matches no
+  convention, the external benchmarks (WannierBerri, the quantized CPGE of a Weyl model), the GPU
+  crossover, and what is open (the third-order tau^2 and tau^0 terms, spin photocurrents, pinned
+  timings on an idle machine, the user notebook and figure).
 
 - [`qtci_optical_response.md`](qtci_optical_response.md) -- where QTCI helps
   the k-integral of the optical conductivity and where it does not: QTCI of
@@ -381,6 +392,8 @@ already reached once.
   deliberately unbuilt (the paper's linear i-wave result does not
   reproduce, with the Brillouin-zone-domain trap that produced a false
   positive), and why a gapped system returns an exact zero at every order.
+  Ezawa's second-order charge response and the 3D Drude term are built in
+  `nonlineardc` (see `nonlinear_response.md`); this module stays 2D.
 
 - [`notebook_physics_review.md`](notebook_physics_review.md) -- a physics
   review of all 93 executed notebooks against their own figures and printed

@@ -7,11 +7,134 @@ to pass, and the split of the work into packages. An implementer should be able 
 from this file without reading the papers again; the papers are cited so that a prefactor
 can be traced when a check fails. The plan was reviewed the same evening by an independent
 critic who ran the formulas on the fixtures; the fifteen points of that review were all
-accepted and are folded in below, with the measurements that decided them. Nothing of the
-plan has been built yet: the build waits for the maintainer's go-ahead, and the GPU package
-waits for its own, as the gpu-backend skill requires for every tier.
+accepted and are folded in below, with the measurements that decided them. The maintainer
+gave the go-ahead for the build and for the GPU work in the evening of 7 November 2026, and
+the whole plan was built that night; the next section says what landed and what is open. The
+sections after it are the plan as it was written, kept as the record of the derivations and
+the checks.
 
-## Status on 7 November 2026
+## Status on 8 November 2026: what landed
+
+All nine packages of the plan landed, none was cut.
+
+- `kernel` (`3b3f280`, `conductivitytk/nonlinearkernel.py`, 22 tests): the general recursion,
+  1D to 3D, any order, any tuple of complex frequencies. First order agrees with
+  `kubo.optical_conductivity` to the aliasing of the mesh (6e-13 at `nk=48` on the gapped
+  honeycomb lattice), second order at $(1,1)$ with `shg.py` to rounding, and the velocity gauge
+  with an independent length gauge on a crystal of isolated molecules to 1e-13 at orders 1 to 4.
+- `dc2` (`3b3f280`, `conductivitytk/nonlineardc.py`, 16 tests): the second-order dc terms with
+  the three conventions, the channels and the block traces, checked as listed in "The checks".
+  Ezawa's Neel-angle law holds at $J = 0.01$; at $J = 0.05$ a $\cos3\Phi$ harmonic, third order in
+  $J$, is 11 % of the amplitude of the quantum-metric term, so the test uses the smaller $J$.
+- `shg-twofreq-3d` (`3b3f280`, `shg.py`): the length gauge at two frequencies
+  (`sigma2_length`, `sigma2_length_diagonal`) and the 3D grid SHG with the decoupled-layers test;
+  `"triangle"` and `"qtci"` still raise in 3D.
+- `photocurrent` (`212dc58`, `conductivitytk/photocurrent.py`, 15 tests): injection, shift and
+  rectified total, and the sum frequencies. The injection rate uses a multiplet-block form,
+  $\Delta^a_{mn}r^c_{nm} \to [r^c, Ph^aP]_{nm}$: the plain diagonal formula was 4.3 % off in
+  $\eta$ and 24 % off in the shift current for the Haldane model folded into a $2\times2$
+  supercell, and the block form agrees with the primitive cell to 1e-14.
+- `dc-crosscheck` (`9c8f0f8`, `conductivitytk/nonlineardcfit.py`, 6 tests): the contour
+  extraction of the Laurent coefficients, with a doubled tilted Dirac model whose bands are all
+  degenerate as the fixture that reaches the degeneracy filter.
+- `gpu` (`57f1c19`, 9 tests): the recursion under jax jit and vmap, routed on `gpu.get_gpu()`.
+- `dc3` (`8248cf1`, 6 tests): `order=3` of `nonlinear_dc_conductivity`, the $\tau^3$ Drude term
+  for any multiband charge channel (1D and 2D, since it reuses the two-index recursion of
+  `nonlineardrude`) and the $\tau^1$ Berry connection polarizability term of Liu et al.,
+  derived again from their Eq. (j3). Their field-corrected band energy has the opposite sign to
+  the Stark shift of the second order, because the semiclassical band energy leaves out the
+  potential energy of the shifted wave-packet center; the module docstring records it.
+- `cpge` (`4056db9`, 2 tests): the trace of the circular injection on a two-node cubic Weyl
+  model, averaged over a frequency window with a Hann weight at $\delta = 0.004$, gives
+  $16\pi S/(q^3C) = 0.9768$, $0.9932$ and $0.9924$ at `nk` = 30, 60 and 120, about 0.7 % low from
+  the Lorentzian tails, and $0.0015$ when both nodes absorb.
+- `wannierberri` (`e1fed36`): the Berry curvature dipole of the tilted Dirac model agrees with
+  WannierBerri to 0.02 % ($D_x = -1.44279\times10^{-2}$ against $-1.44303\times10^{-2}$), and the
+  shift current of the gapped honeycomb lattice to 0.6 to 2.5 % at $\delta = 0.04$, a difference
+  that halves with $\delta$, so it is broadening and not a prefactor. The sign is opposite since
+  WannierBerri uses $e > 0$. The test skips where WannierBerri is not installed, which is the case
+  in the standard environment.
+- `integration`: the six public functions of `conductivity.py` with the delegators
+  `h.get_nonlinear_conductivity()`, `h.get_nonlinear_susceptibility()`,
+  `h.get_nonlinear_dc_conductivity()`, `h.get_berry_curvature_dipole()`, `h.get_shift_current()`
+  and `h.get_injection_current()`, the guide page `documentation/guide/nonlinear-response.md`,
+  the reference entries, the README bullet and the examples `examples/2d/nonlinear_hall`,
+  `examples/2d/shift_current` and `examples/2d/third_harmonic`. The rectified total with its
+  split and the sum frequency stay in `photocurrent.py` (`rectified_conductivity`,
+  `sum_frequency_conductivity`) without a delegator; the second is
+  `h.get_nonlinear_conductivity(frequencies=(c1,c2))`.
+
+What $A_0$ is, measured by the contour at `nk=150` and identical at `nk=300` ($T = 0.05$, radius
+$0.12$, 24 points), against the three conventions:
+
+| model | component | $A_{-2}$ | $\sigma^{ND}/2$ | $A_{-1}$ | $\sigma^{BCD}$ | $A_0$ | shibata | gao | kaplan |
+|---|---|---|---|---|---|---|---|---|---|
+| tilted Dirac | xxx | -9.819936e-3 | -9.819936e-3 | 0 | 0 | 2.504e-2 | 2.683e-3 | 0 | -1.669e-2 |
+| tilted Dirac | yxx | 0 | 0 | 1.442798e-2 | 1.442798e-2 | 0 | 0 | 0 | 0 |
+| tilted Dirac | xyy | -2.727775e-3 | -2.727775e-3 | 0 | 0 | -2.377e-3 | -1.072e-2 | -1.027e-2 | -2.239e-2 |
+| tilted Dirac | xxy | 0 | 0 | -7.213991e-3 | -7.213991e-3 | 0 | 0 | 0 | 0 |
+| real two-band | xxx | -4.542947e-4 | -4.542947e-4 | 0 | 0 | 1.345e-4 | -4.397e-4 | 0 | -8.967e-5 |
+| real two-band | xyy | 2.644602e-3 | 2.644602e-3 | 0 | 0 | 1.366e-3 | 2.106e-2 | 9.440e-3 | 2.112e-2 |
+| real two-band | yxy | 2.644602e-3 | 2.644602e-3 | 0 | 0 | -1.279e-2 | -2.411e-3 | -4.720e-3 | -2.484e-3 |
+
+Here 0 means below $10^{-16}$, and the imaginary parts are below $10^{-16}$ too. At third order
+on the real two-band model, `xxxx`, $A_{-3} = -2.594542\times10^{-3} = \sigma^{ND,3}/(6\tau^3)$ and
+$A_{-1} = 5.97\times10^{-4}$, at both meshes. So the pole coefficients are the relaxation-time
+terms to rounding, and $A_0$ matches no convention, on either model, in any component: the
+adiabatic switching is a fourth phenomenology at $\tau^0$, as the plan expected.
+
+GPU, measured on the RTX A2000 (a float32 card) with the honeycomb supercells of 2 to 100
+bands, `nk=40`, $\omega$ from 0.2 to 2 at $\delta = 0.1$, one component, against numpy on the
+performance cores. The machine was shared with the other agents of the night, so the timings
+are indicative only. The 64- and 100-band runs at 100 frequencies, and the 100-band run at third
+order with one frequency, overlapped loads of 5 to 24, so their CPU times are inflated; the
+last row of the table is one of them and is kept only for the device times.
+
+| bands | order | frequencies | numpy | device single | device double | error single |
+|---|---|---|---|---|---|---|
+| 2 | 2 | 100 | 0.045 s | 0.013 s | 0.091 s | 2.0e-6 |
+| 8 | 2 | 100 | 0.55 s | 0.022 s | 0.29 s | 2.0e-6 |
+| 8 | 3 | 1 | 0.050 s | 0.016 s | 0.048 s | 6.7e-6 |
+| 24 | 2 | 1 | 0.20 s | 0.053 s | 0.35 s | 5.8e-6 |
+| 24 | 2 | 100 | 4.7 s | 0.092 s | 1.06 s | 7.2e-6 |
+| 24 | 3 | 100 | 9.6 s | 0.15 s | 1.57 s | 1.2e-5 |
+| 64 | 2 | 1 | 1.8 s | 0.40 s | 1.22 s | 3.2e-6 |
+| 100 | 2 | 1 | 4.9 s | 0.93 s | 3.96 s | 1.4e-6 |
+| 100 | 3 | 100 | (1649 s, loaded) | 5.8 s | 75 s | 3.5e-6 |
+
+The device in double precision agrees with numpy to 1e-15 to 1.5e-14 relative at every size.
+Single precision is 4.5e-7 to 1.4e-5 of the largest component at these frequencies, which is
+the expected $\epsilon_{32}(t/|\omega + i\delta|)^n$ scale. The conclusions: with 100
+frequencies the device in single precision is 3.5x faster at 2 bands, 25x at 8 and 50 to 65x
+at 24 bands and above, and in double precision 4 to 6x from 24 bands on (on this card double is
+1/70 of single, so the double numbers say nothing about a data-centre card). With one frequency
+the crossover is between 2 and 8 bands in single precision and between 24 and 64 bands in
+double. The kernel compiles once per call shape, 0.1 to 1 s, which a single call pays on top of
+the times above.
+
+Open, in the order of their value:
+
+- The pinned timings on an idle machine of "What to optimize if time is left" are owed: the
+  general kernel against the numba SHG kernel at 24 bands, the device crossover, the dc routine
+  at `nk=200`, the fourth-order memory.
+- The third-order $\tau^2$ (Berry curvature quadrupole) and $\tau^0$ dc terms, and the 3D
+  third-order Drude term, are not built.
+- The multiplet restriction of the velocity in the injection rate is not pinned by a test:
+  every fixture that pins $\eta$ has two bands. Replacing the masked velocity by the full one
+  moves $\eta$ by more than 100 % on a four-band bilayer and every test still passes, while the
+  code matches the length-gauge diagonal on that bilayer to 2.5e-16. A four-band fixture is the
+  missing test.
+- GPU: no test checks that the single-precision recursion runs in complex64, and no test has a
+  padded frequency chunk with two or more real rows; the device memory budget counts only the
+  density matrices of the chunk, so the peak footprint is a few GB.
+- The cell volume of the third-order Drude term is not pinned by a test, since every magnitude
+  fixture has unit cell area (a brute force on the strained honeycomb lattice agrees to 7e-14).
+- The user-facing notebook of the README bullet and a figure for the guide page are not made;
+  `jupyter-notebooks/` and `documentation/figures/` were outside the integration package.
+- The spin current at finite frequency, spin photocurrents, and a triangle or qtci integration of
+  the general kernel stay parked, as below.
+
+## What existed before the build, 7 November 2026
 
 Three pieces exist.
 

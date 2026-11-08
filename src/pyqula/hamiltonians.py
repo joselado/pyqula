@@ -247,6 +247,42 @@ class Hamiltonian():
         from . import conductivity
         return conductivity.shg_susceptibility(h,**kwargs)
 
+    def get_nonlinear_conductivity(h,**kwargs):
+        """n-th order conductivity sigma_{b a1..an}(w1..wn) at any order and
+        tuple of frequencies, see conductivity.nonlinear_conductivity"""
+        from . import conductivity
+        return conductivity.nonlinear_conductivity(h,**kwargs)
+
+    def get_nonlinear_susceptibility(h,**kwargs):
+        """n-th order susceptibility chi^(n) in SI units, see
+        conductivity.nonlinear_susceptibility"""
+        from . import conductivity
+        return conductivity.nonlinear_susceptibility(h,**kwargs)
+
+    def get_nonlinear_dc_conductivity(h,**kwargs):
+        """dc nonlinear conductivity of a metal in powers of the relaxation
+        time, see conductivity.nonlinear_dc_conductivity"""
+        from . import conductivity
+        return conductivity.nonlinear_dc_conductivity(h,**kwargs)
+
+    def get_berry_curvature_dipole(h,**kwargs):
+        """Berry curvature dipole of the Fermi surface, see
+        conductivity.berry_curvature_dipole"""
+        from . import conductivity
+        return conductivity.berry_curvature_dipole(h,**kwargs)
+
+    def get_shift_current(h,**kwargs):
+        """Shift-current conductivity of the bulk photovoltaic effect, see
+        conductivity.shift_current"""
+        from . import conductivity
+        return conductivity.shift_current(h,**kwargs)
+
+    def get_injection_current(h,**kwargs):
+        """Injection rate of the bulk photovoltaic effect, see
+        conductivity.injection_current"""
+        from . import conductivity
+        return conductivity.injection_current(h,**kwargs)
+
     def get_excitonic_optical_conductivity(h,**kwargs):
         """Optical conductivity with excitons, from the Tamm-Dancoff BSE,
         see conductivity.excitonic_optical_conductivity"""

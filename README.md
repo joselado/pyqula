@@ -153,6 +153,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - RKKY interaction between magnetic impurities [[notebook]](jupyter-notebooks/functionalities/response_functions/05_rkky.ipynb)
 - Second-harmonic generation in crystals without inversion [[notebook]](jupyter-notebooks/functionalities/response_functions/06_second_harmonic_generation.ipynb)
 - Excitonic optical absorption and second-harmonic generation [[notebook]](jupyter-notebooks/functionalities/response_functions/07_excitonic_optics.ipynb)
+- Nonlinear transport, photocurrents and higher harmonics
 
 ## Spectral functions ##
 - Spectral functions in infinite geometries [[notebook]](jupyter-notebooks/functionalities/spectral_functions/01_spectral_infinite.ipynb)

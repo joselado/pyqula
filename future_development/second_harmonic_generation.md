@@ -110,12 +110,23 @@ independent check (`gauge="length"`, cold insulators only).
   with the all-band kernel="none" comparison against this velocity gauge on the monolayer up to
   nk=120 and on the tetralayer up to nk=96 recorded in `kpm_excitonic_optics.md`; the iterative
   and quantics solvers, which return only a few excitons, are not needed for it.
-- Three-dimensional Hamiltonians are rejected, as in the linear Kubo code, because
-  `kubo._setup` has no 3D branch.
+- Three-dimensional Hamiltonians are accepted since 7 November 2026 with `integration="grid"`:
+  `_derivative_tensors` and `kubo._cell_factors` handle the third lattice vector, and a stack of
+  decoupled layers gives the 2D value of one layer divided by the spacing, which is the test in
+  `tests/conductivity/test_shg.py`. `"triangle"` and `"qtci"` still raise `NotImplementedError`
+  in 3D. The earlier statement that `kubo._setup` had no 3D branch was stale.
 - The length gauge leaves out the Fermi-surface terms, so it is a check for cold insulators only;
   the velocity gauge includes them, but a metal has not been checked against an independent
   reference.
-- Only SHG, chi(2w;w,w), is exposed. The recursion gives sum- and difference-frequency generation,
-  and the shift and injection currents at w1 = -w2, with the same kernel and two different
-  frequencies; the broadening convention at w1 + w2 -> 0 then needs care (Passos et al., the
-  section on relaxation parameters).
+- Sum- and difference-frequency generation and the photocurrents are built since 7 November 2026,
+  on a general kernel rather than inside this one. `conductivitytk/nonlinearkernel.py` runs the
+  recursion of Passos et al. at any order and for any tuple of complex frequencies
+  (`h.get_nonlinear_conductivity(frequencies=(1,2))` for w + 2w), and agrees with `shg.py` at
+  `frequencies=(1,1)` to rounding on the same mesh; `shg.py` gained the length gauge at two
+  frequencies (`sigma2_length`, `sigma2_length_diagonal`) as its independent check. The broadening
+  question at w1 + w2 -> 0 is settled there: every field carries i delta, the rectified total
+  sigma(w,-w) has the pole eta/delta, and the shift current is the total minus eta/delta with eta
+  from its golden-rule closed form (`conductivitytk/photocurrent.py`), because the velocity-gauge
+  diagonal is not gauge invariant. `shg.py` keeps its numba kernel and the triangle and qtci
+  integrations, which are SHG-only. The derivations and measurements are in
+  `nonlinear_response.md`.

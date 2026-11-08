@@ -296,6 +296,11 @@ centrosymmetric crystal. This is why SHG is used to count layers in 2H
 stacks of transition metal dichalcogenides: an odd number of layers gives a
 signal, an even number gives almost none.
 
+The second harmonic is one case of the second-order response. The dc
+current under light (the shift and injection currents), the sum and
+difference frequencies, the nonlinear transport of a metal and the third
+harmonic are in [Nonlinear response](nonlinear-response.md).
+
 The calculation uses the velocity operator of the tight-binding model, the
 same as in [The Kubo formula](#the-kubo-formula), and also the second and
 third derivatives of $H(\mathbf k)$ with respect to $\mathbf k$. With these
@@ -378,7 +383,9 @@ gives the response of one spin. Excitonic effects are not included, and in
 a TMD they move the resonances and change their weight.
 `h.get_shg_conductivity()` returns $\sigma_{abc}$ in units of
 $e^3 a^{3-d}/(\hbar t)$, with $a$ the length unit of the geometry and $d$
-the dimension.
+the dimension. The second harmonic works in one, two and three
+dimensions, and in three dimensions it is a bulk quantity, as the linear
+conductivity.
 
 ## Excitonic effects
 
@@ -525,7 +532,9 @@ bands, `kernel`, `screening` and `gauge`. A few things to keep in mind:
 See `examples/2d/optical_conductivity/main.py`,
 `examples/1d/optical_conductivity_chain/main.py` and
 `examples/2d/second_harmonic_generation/main.py` and
-`examples/2d/excitonic_optics/main.py` for runnable scripts, and
+`examples/2d/excitonic_optics/main.py` for runnable scripts (and
+`examples/2d/shift_current/main.py` and `examples/2d/third_harmonic/main.py`
+for the photocurrents and the third harmonic), and
 `01_optical_conductivity.ipynb` and `02_drude_weight_f_sum_rule.ipynb` in
 `jupyter-notebooks/functionalities/response_functions/` for executed
 notebooks.

@@ -79,6 +79,7 @@ nav:
       - Entanglement: entanglement.md
   - Response:
       - Optical conductivity: optical-conductivity.md
+      - Nonlinear response: nonlinear-response.md
       - Charge response and RKKY: charge-response.md
       - Spin response and magnons: spin-response.md
       - Excitons: excitons.md
