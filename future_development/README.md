@@ -498,14 +498,15 @@ already reached once.
   density, now closed on the real axis with exact_at; nothing is open.
 
 - [`spinon_response.md`](spinon_response.md) -- the dynamical spin response
-  of the spinon mean field: the bond decoupling, the held ansatz and the
+  of the spinon mean field: the bond decoupling, the held ansatz (phases
+  or the whole pattern), the Weiss field for a Zeeman field and the
   spin-channel RPA that were built for cells of about 200 sites, checked
   against arXiv:2503.13831 (hopping, static bubble at K and M, both critical
   couplings); what the Hartree-Fock spinon saddle and its pair ladder do
   instead (unstable, measured); the cost at 196 sites; and everything left
-  unbuilt with what is known about it: the Zeeman field under the bond
-  decoupling, the constraint projection, Popov-Fedotov (not a free
-  addition), the structure factor at a lattice momentum, the Z2 ansatz,
+  unbuilt with what is known about it: the longitudinal response in a
+  field, the constraint projection, Popov-Fedotov (not a free addition),
+  the structure factor at a lattice momentum, the Z2 ansatz,
   exact projection on small clusters, variational Monte Carlo, Schwinger
   bosons.
 

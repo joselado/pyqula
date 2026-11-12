@@ -52,6 +52,15 @@ lattice: t/J = 0.198, a static bubble of 0.389/J at K and 0.425/J at M,
 and the instability to 120 degree order at J2/J1 = 0.0716
 (tests/spinon/test_spinon_bond_rpa.py).
 
+ansatz= holds a hopping pattern in the bond loop, its phases
+(hold="phases") or its relative amplitudes too (hold="pattern", one global
+amplitude, the choice for a cell with inequivalent sites, where free
+amplitudes dimerize). weiss= adds the Weiss field sum_j J_ij <S_j> of the
+magnetic channel of that paper to the bond loop, by default only when
+there is a Zeeman field; the static RPA is then the derivative of the
+moment of the loop with the field, and the uniform transverse mode is at
+the bare Zeeman energy (both in tests/spinon/test_spinon_bond_rpa.py).
+
 gutzwiller= multiplies the exchange in the mean field and in the vertex,
 the approximate account of the Gutzwiller projection of that paper, which
 uses 2 (the local moment S^2 is 3/8 in the unprojected state and 3/4 in
@@ -68,6 +77,10 @@ from .meanfield import VJinteraction
 # 3J/8 chi_ij, and the bond decoupling wants J/2 chi_ij
 _DECOUPLINGS = {"hartree-fock": 1.0, "bond": 4./3.}
 
+# what ansatz= holds, hold= of get_mean_field_hamiltonian: True when the
+# relative amplitudes are frozen too
+_HOLDS = {"phases": False, "pattern": True}
+
 # keyword arguments of the spin response that chitk.localspinchi takes
 _LOCAL_CHI_KWARGS = {"q", "energies", "nk", "delta", "T"}
 
@@ -76,6 +89,12 @@ def get_decoupling_names():
     """Names accepted by decoupling= of
     SpinonHamiltonian.get_mean_field_hamiltonian"""
     return list(_DECOUPLINGS)
+
+
+def get_hold_names():
+    """Names accepted by hold= of
+    SpinonHamiltonian.get_mean_field_hamiltonian"""
+    return list(_HOLDS)
 
 
 def _is_zero(x):
@@ -105,28 +124,82 @@ def _ansatz_phases(ansatz, n, tol=1e-12):
     return out
 
 
-def _bond_projection(phases=None):
+def _ansatz_pattern(ansatz, exchange, n):
+    """The hoppings of the family that hold="pattern" keeps, {(n1,n2,n3):
+    N x N matrix}: the ansatz times the exchange of each bond, with which
+    t_ij = c J_ij P_ij has the single free amplitude c. exchange is the
+    spin-orbital interaction of scftk.spinspin._build_v. Returns the
+    family and the ansatz itself, both without onsite elements."""
+    from .scftk.mfconstrains import obj2mf
+    from .chitk.spinchi import V2K_matrix
+    J = {tuple(int(i) for i in d): 2.*V2K_matrix(np.asarray(
+            algebra.todense(m))).real for d, m in exchange.items()}
+    P, W = {}, {}
+    for d, m in obj2mf(ansatz).items():
+        key = tuple(int(i) for i in d)
+        m = np.array(np.asarray(algebra.todense(m))[0::2, 0::2])
+        if key == (0, 0, 0): np.fill_diagonal(m, 0.)
+        P[key] = m
+        W[key] = m*J[key] if key in J else np.zeros_like(m)
+    norm = sum(np.sum(np.real(np.conj(P[d])*W[d])) for d in P)
+    if abs(norm) < 1e-12:
+        raise ValueError("hold='pattern' needs an ansatz with hoppings on "
+                "bonds that have an exchange, and this one has none: the "
+                "sum of J_ij |P_ij|^2 over the bonds is zero")
+    return W, P, norm
+
+
+def _bond_projection(phases=None, pattern=None, weiss=False):
     """Return the function that restricts a mean field to the bond
     channel: its spin-singlet part, the same for the two spins and with no
-    element between them. With phases (see _ansatz_phases) every hopping
-    also keeps the phase it has in the ansatz, with a real amplitude, and
-    a hopping absent from the ansatz stays zero; the onsite energies are
-    not touched by that."""
+    element between them.
+
+    With phases (see _ansatz_phases) every hopping also keeps the phase it
+    has in the ansatz, with a real amplitude, and a hopping absent from
+    the ansatz stays zero. With pattern (see _ansatz_pattern) the hoppings
+    are c J_ij P_ij with one real amplitude c, the one that makes the bond
+    functional stationary in that family,
+    c = sum Re(P*_ij s_ij) / sum J_ij |P_ij|^2 for the mean field s. The
+    onsite energies are not touched by either.
+
+    With weiss the spin part of the onsite mean field is kept, the field
+    of the neighboring moments, with the factor 3/4 that undoes the 4/3 of
+    the exchange in the bond loop, so that it is sum_j J_ij <S_j>."""
+    def singlet(m): return (m[0::2, 0::2] + m[1::2, 1::2])/2.
     def f(mf):
+        dense = {tuple(int(i) for i in d): np.asarray(algebra.todense(m))
+                 for d, m in mf.items()}
+        if pattern is not None:
+            W, P, norm = pattern
+            c = sum(np.sum(np.real(np.conj(P[d])*singlet(dense[d])))
+                    for d in P if d in dense)/norm
         out = {}
         for d, m in mf.items():
-            m = np.asarray(algebra.todense(m))
-            s = (m[0::2, 0::2] + m[1::2, 1::2])/2. # spin-singlet part
-            if phases is not None:
-                key = tuple(int(i) for i in d)
+            key = tuple(int(i) for i in d)
+            m = dense[key]
+            s = singlet(m) # spin-singlet part
+            onsite = np.diag(s).copy()
+            if pattern is not None:
+                s = c*W[key] if key in W else np.zeros_like(s)
+            elif phases is not None:
                 p = phases.get(key, None)
-                onsite = np.diag(s).copy()
                 if p is None: s = np.zeros_like(s)
                 else: s = p*np.real(np.conj(p)*s)
-                if key == (0, 0, 0): np.fill_diagonal(s, onsite)
+            if key == (0, 0, 0) and (pattern is not None
+                                     or phases is not None):
+                s = np.array(s)
+                np.fill_diagonal(s, onsite)
             new = np.zeros(m.shape, dtype=np.complex128)
             new[0::2, 0::2] = s
             new[1::2, 1::2] = s
+            if weiss and key == (0, 0, 0):
+                up = 2*np.arange(m.shape[0]//2)
+                dn = up + 1
+                dz = (m[up, up] - m[dn, dn])/2. # spin part of the diagonal
+                new[up, up] += 0.75*dz
+                new[dn, dn] -= 0.75*dz
+                new[up, dn] += 0.75*m[up, dn]
+                new[dn, up] += 0.75*m[dn, up]
             out[d] = new
         return out
     return f
@@ -205,7 +278,7 @@ class SpinonHamiltonian(Hamiltonian):
 
     def get_mean_field_hamiltonian(self, return_total_energy=False,
             decoupling="hartree-fock", gutzwiller=1.0, ansatz=None,
-            **kwargs):
+            hold="phases", weiss=None, **kwargs):
         """Self-consistent spinon mean field of the exchange J1/J2/J3/Jr,
         at one fermion per site. See the class docstring for the keyword
         arguments shared with meanfield.VJinteraction.
@@ -214,22 +287,43 @@ class SpinonHamiltonian(Hamiltonian):
         of spinon.get_decoupling_names(): "hartree-fock" (the default) or
         "bond", the bond channel alone with t_ij = J_ij chi_ij / 2 and no
         magnetic channel (see the module docstring). The "bond" one takes
-        an isotropic exchange only, no density-density interaction, no
-        Zeeman field, and integration="ed". Its total energy
-        (return_total_energy=True) is the saddle-point value of the bond
-        functional, -J_ij |chi_ij|^2 / 2 per bond (times gutzwiller), not
-        the expectation value of the Heisenberg model in the state, which
-        is 3/4 of it at gutzwiller=1.
+        an isotropic exchange only, no density-density interaction, and
+        integration="ed". Its total energy (return_total_energy=True) is
+        the saddle-point value of the bond functional,
+        -J_ij |chi_ij|^2 / 2 per bond (times gutzwiller), not the
+        expectation value of the Heisenberg model in the state, which is
+        3/4 of it at gutzwiller=1; it is not available with a Weiss field
+        or a Zeeman field, where the loop has no consistent functional.
+
+        weiss, for decoupling="bond", adds the field of the neighboring
+        moments to the mean field, sum_j J_ij <S_j> acting on S_i, which is
+        the magnetic saddle point of arXiv:2503.13831. None (the default)
+        means True when the Hamiltonian depends on the spin (a Zeeman
+        field was added) and False otherwise, so that without a field the
+        loop cannot leave the spin liquid for a magnetic order, and with
+        one the induced moment feels the exchange. With the Weiss field
+        the static spin-channel RPA is the derivative of the moment of
+        this loop with the field, and the uniform transverse mode is at
+        the bare Zeeman energy, as the exact one. weiss=True without a
+        field lets the loop order magnetically where get_rpa_stiffness is
+        negative, from a guess mf= that has a moment.
 
         gutzwiller multiplies every exchange coupling, in the mean field
         and in the vertex of the spin response.
 
         ansatz, for decoupling="bond", is a hopping pattern (a
         Hamiltonian, a dictionary of hopping matrices or the matrix of the
-        cell, as mf=) that the loop holds: every hopping keeps the phase
-        it has in the ansatz and converges a real amplitude, and a hopping
-        that is zero in the ansatz stays zero. It is also the initial
-        guess when mf is not given. Without it the loop is free to leave a
+        cell, as mf=) that the loop holds. hold says how much of it, one of
+        spinon.get_hold_names(). With hold="phases" (the default) every
+        hopping keeps the phase it has in the ansatz and converges its own
+        real amplitude, and a hopping that is zero in the ansatz stays
+        zero; with inequivalent bonds the amplitudes can still go to a
+        dimerized state. With hold="pattern" the relative amplitudes are
+        held too: the hoppings are t_ij = c J_ij P_ij, the ansatz P times
+        the exchange of each bond, and the loop converges the single
+        amplitude c (and the Lagrange multiplier of every site), which is
+        the stationary point of the bond functional inside that family.
+        The ansatz is also the initial guess when mf is not given. Without it the loop is free to leave a
         named state for another one of lower mean-field energy, e.g. the
         pi-flux state of the triangular lattice for the chiral one.
 
@@ -257,7 +351,27 @@ class SpinonHamiltonian(Hamiltonian):
                     "of decoupling='bond' only, got decoupling=%r; pass "
                     "the pattern as the initial guess mf= instead"
                     % (decoupling,))
-        if bond: self._require_bond_decoupling(kwargs)
+        if hold not in _HOLDS:
+            raise ValueError("unknown hold %r of the ansatz; the accepted "
+                    "ones are %s" % (hold,
+                    ", ".join(repr(d) for d in get_hold_names())))
+        if _HOLDS[hold] and ansatz is None:
+            raise ValueError("hold='pattern' holds the hopping pattern "
+                    "given as ansatz=, and no ansatz was given")
+        if weiss is not None and not bond:
+            raise NotImplementedError("weiss= switches the magnetic "
+                    "channel of decoupling='bond', got decoupling=%r, "
+                    "which always has it" % (decoupling,))
+        if bond:
+            from .chitk.localspinchi import is_spin_degenerate
+            self._require_bond_decoupling(kwargs)
+            field = not is_spin_degenerate(self)
+            if weiss is None: weiss = field
+            if return_total_energy and (weiss or field):
+                raise NotImplementedError("return_total_energy is not "
+                        "implemented for decoupling='bond' with a Weiss "
+                        "field or a Zeeman field: the Hartree-Fock energy "
+                        "of the loop is not the one of this mean field")
         kw = dict(kwargs)
         scale = gutzwiller*_DECOUPLINGS[decoupling]
         for name in ("J1", "J2", "J3", "J1x", "J1y", "J1z"):
@@ -266,11 +380,17 @@ class SpinonHamiltonian(Hamiltonian):
         if Jr is not None:
             kw["Jr"] = lambda *args, **kws: scale*Jr(*args, **kws)
         if bond:
-            phases = None if ansatz is None else _ansatz_phases(ansatz,
-                    len(self.geometry.r))
+            phases, pattern = None, None
+            if ansatz is not None:
+                phases = _ansatz_phases(ansatz, len(self.geometry.r))
+            if _HOLDS[hold]:
+                pattern = _ansatz_pattern(ansatz,
+                        self._bond_exchange(self, 1.0, kwargs),
+                        len(self.geometry.r))
             from .scftk.spinspin import _compose_callbacks
             kw["callback_mf"] = _compose_callbacks(
-                    kw.get("callback_mf", None), _bond_projection(phases))
+                    kw.get("callback_mf", None),
+                    _bond_projection(phases, pattern, bool(weiss)))
             if ansatz is not None and kw.get("mf", None) is None:
                 from .scftk.mfconstrains import obj2mf
                 kw["mf"] = {d: np.array(algebra.todense(m),
@@ -289,13 +409,13 @@ class SpinonHamiltonian(Hamiltonian):
             scf.hamiltonian.constraint_lambda = np.asarray(scf.lam)
             scf.hamiltonian.gutzwiller = gutzwiller
             if bond:
+                scf.hamiltonian.weiss = bool(weiss)
                 self._record_bond_exchange(scf.hamiltonian, gutzwiller,
                                            kwargs)
         return _mean_field_scf_result(scf, return_total_energy)
 
     def _require_bond_decoupling(self, kwargs):
         """Raise for what decoupling="bond" does not take"""
-        from .chitk.localspinchi import is_spin_degenerate
         for name in ("J1x", "J1y", "J1z"):
             if not _is_zero(kwargs.get(name, 0.0)):
                 raise NotImplementedError("decoupling='bond' is implemented "
@@ -313,28 +433,29 @@ class SpinonHamiltonian(Hamiltonian):
             raise NotImplementedError("decoupling='bond' is implemented "
                     "with integration='ed' only, got integration=%r"
                     % (integration,))
-        if not is_spin_degenerate(self):
-            raise NotImplementedError("decoupling='bond' is not implemented "
-                    "for a Hamiltonian that depends on the spin (a Zeeman "
-                    "field or an exchange field): it has no magnetic "
-                    "channel, so the field of the neighboring spins would "
-                    "be missing; use decoupling='hartree-fock'")
 
     @staticmethod
-    def _record_bond_exchange(h, gutzwiller, kwargs):
+    def _bond_exchange(h, gutzwiller, kwargs):
+        """The exchange J1/J2/J3/Jr of kwargs times gutzwiller, as the
+        spin-orbital interaction of one spin channel
+        (scftk.spinspin._build_v)"""
+        from .scftk.spinspin import _build_v
+        Jr = kwargs.get("Jr", None)
+        Jrg = None if Jr is None else \
+                (lambda *args, **kws: gutzwiller*Jr(*args, **kws))
+        return _build_v(h, gutzwiller*kwargs.get("J1", 0.0),
+                gutzwiller*kwargs.get("J2", 0.0),
+                gutzwiller*kwargs.get("J3", 0.0), Jrg,
+                rcut=kwargs.get("rcut", None))
+
+    @classmethod
+    def _record_bond_exchange(cls, h, gutzwiller, kwargs):
         """Store on the converged Hamiltonian the exchange it was
         converged with, as the three spin channels the site-basis spin
         vertex is built from (chitk.spinchi._channel_spin_U), replacing
         the ones the loop recorded, which carry the factor 4/3 of the
         bond decoupling."""
-        from .scftk.spinspin import _build_v
-        Jr = kwargs.get("Jr", None)
-        Jrg = None if Jr is None else \
-                (lambda *args, **kws: gutzwiller*Jr(*args, **kws))
-        v = _build_v(h, gutzwiller*kwargs.get("J1", 0.0),
-                gutzwiller*kwargs.get("J2", 0.0),
-                gutzwiller*kwargs.get("J3", 0.0), Jrg,
-                rcut=kwargs.get("rcut", None))
+        v = cls._bond_exchange(h, gutzwiller, kwargs)
         h.V = v
         h.Vchannels = {"x": v, "y": v, "z": v, "d": None}
         h.site_spin_vertex = True

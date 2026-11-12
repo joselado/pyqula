@@ -17,8 +17,23 @@ suggestions that were not built, with what is known about each one.
   `callback_mf` hook of `VJinteraction`: the mean field is projected on its
   spin-singlet part and the exchange is multiplied by 4/3, since the singlet
   Fock term of $J\vec S_i\cdot\vec S_j$ is $3J\chi_{ij}/8$.
-- `ansatz=` holds a hopping pattern: every hopping keeps the phase of the
-  ansatz with a real amplitude, and a hopping absent from it stays zero.
+- `ansatz=` holds a hopping pattern. With `hold="phases"` every hopping
+  keeps the phase of the ansatz with its own real amplitude, and a hopping
+  absent from it stays zero. With `hold="pattern"` the hoppings are
+  $t_{ij}=cJ_{ij}P_{ij}$ with one amplitude, the stationary point of the
+  bond functional in that family,
+  $c=\sum J_{ij}\mathrm{Re}(\bar P_{ij}\chi_{ij})/\sum J_{ij}|P_{ij}|^2$.
+- `weiss=` adds the Weiss field $\sum_jJ_{ij}\langle\vec S_j\rangle$ to
+  the bond loop, by default only with a Zeeman field. The callback keeps the
+  onsite spin part of the Hartree-Fock mean field with the factor 3/4 that
+  undoes the 4/3 of the loop. For this the `callback_mf` of `VJinteraction`
+  acts on the newly computed mean field only, not on the mixed one: a
+  rescaling applied at both places is applied twice, and the loop then
+  never converges. Two exact checks pass on the chain: the static RPA at
+  $q=0$ is the derivative of the moment of the loop with the field
+  ($-0.71704$ against $-0.71703$), and the uniform transverse mode is at
+  the bare Zeeman energy for $J=1$ and $J=0.5$, where it is 50 percent
+  higher without the Weiss field in the loop.
 - `gutzwiller=` multiplies the exchange in the mean field and in the vertex.
   The paper uses 2.
 - The spin response of a bond state is dressed in the site basis with the
@@ -107,20 +122,19 @@ cells. The second group does not scale, or is a new formalism.
 
 ### Inside the mean-field machinery
 
-- **Zeeman field under the bond decoupling.** It raises
-  `NotImplementedError` now. The saddle of the paper has a Weiss field
-  $\sum_j J_{ij}\vec m_j$ next to the bond field, which is zero in the
-  liquid and finite in a field. The projection callback can keep the onsite
-  spin part of the mean field with the factor 3/4 that undoes the 4/3 of
-  the loop. The test is ready-made: the static RPA response at $q=0$ must
-  equal the derivative of the magnetization of that loop with the field.
-  With the Weiss field in the loop, the liquid is lost again wherever the
-  stiffness is negative, so it should be an option and not the default.
+- **The longitudinal response in a field.** With a Zeeman field the state
+  is polarized, and a longitudinal perturbation changes the bond field and
+  the Lagrange multipliers at first order. The spin vertex alone does not
+  have this coupling, so the dressed $S_z$ response in a field is
+  approximate. The transverse one is not affected. The total energy of a
+  bond loop with a Weiss or a Zeeman field raises `NotImplementedError`,
+  because the Hartree-Fock energy of the engine is not the one of this
+  mean field.
 - **Constraint projection of the response.** A Gaussian fluctuation of the
   Lagrange multiplier removes the density from the bubble,
   $\chi_{SS}-\chi_{Sn}\chi_{nn}^{-1}\chi_{nS}$. By spin symmetry $\chi_{Sn}$
   vanishes at zero field, even with inequivalent sites, so this only
-  matters together with the item above. It is our own derivation and was
+  matters in a field, together with the item above. It is our own derivation and was
   not checked against a paper.
 - **Popov-Fedotov chemical potential.** The imaginary potential $i\pi T/2$
   on each site cancels the empty against the doubly occupied states in the
@@ -144,21 +158,20 @@ cells. The second group does not scale, or is a new formalism.
   two sites, and the convention was checked there (the contraction is an
   eigenvector of the bubble). A method that takes $\vec Q$ would be the
   natural way to compare a 200-site cell with neutron scattering.
-- **More ways of holding an ansatz.** `ansatz=` freezes the phases and lets
-  every amplitude relax, so a cell with inequivalent sites still dimerizes.
-  This was measured with the first-neighbor exchange modulated by 30
-  percent along $a_1$ and the uniform real pattern as ansatz. On 36 sites
-  the loop converges in 220 iterations to hoppings between 0.000 and 0.645,
-  a dimerized state. On 196 sites it does not converge in 600 iterations
-  (error 0.25, 486 s). The same cells without the modulation converge in 14
-  iterations (36 sites) and in 15 s (196 sites). So for a large cell with
-  inequivalent sites only the cost was shown to be fine, not the mean field.
-  Two things would help: freezing the relative amplitudes too (one global
-  amplitude $c$ with $t_{ij}=cJ_{ij}p_{ij}/2$, stationary for
-  $c=\sum J_{ij}\mathrm{Re}(\bar p_{ij}\chi_{ij})/\sum J_{ij}$), and
-  symmetrizing the mean field with the symmetry group of the ansatz. Which
-  restricted family is the right spin liquid of an inhomogeneous model is a
-  physics choice and was left to the maintainer. A small library of named
+- **More ways of holding an ansatz.** `hold="phases"` lets every amplitude
+  relax, so a cell with inequivalent sites dimerizes. This was measured
+  with the first-neighbor exchange modulated by 30 percent along $a_1$ and
+  the uniform real pattern as ansatz. On 36 sites the loop converges in 220
+  iterations to hoppings between 0.000 and 0.645, a dimerized state. On 196
+  sites it does not converge in 600 iterations (error 0.25, 486 s).
+  `hold="pattern"` was built for this: the same two cells converge in 20
+  iterations (1 s) and in 23 iterations (28 s), with $t_{ij}/J_{ij}=0.162$
+  and 0.164 on every bond, the occupation right to $10^{-5}$ and Lagrange
+  multipliers that differ by 0.09 between the sites. What is left is the
+  family itself: one amplitude times $J_{ij}$ is the simplest choice, and
+  it is not self-consistent bond by bond. Symmetrizing the mean field with
+  the symmetry group of the ansatz, or one amplitude per class of bonds,
+  are the next options. A small library of named
   patterns (uniform, $\pi$-flux of the square and triangular lattices) would
   spare the user the sign bookkeeping of the guide snippet.
 - **The fast bubble everywhere.** `get_magnon_bands` and
@@ -221,9 +234,6 @@ everywhere, with its minimum 0.042 at M (`nk=31`).
 
 ## Where to start next
 
-Holding the amplitudes of an ansatz is the first step for cells with
-inequivalent sites, which is the case the 200-site condition is about. The
-Zeeman field under the bond decoupling, with the static test, is the
-smallest step and makes the feature complete for the existing spinon
-examples. The structure factor at a lattice momentum is the one a user with
-a large cell will ask for after that.
+The structure factor at a lattice momentum is the one a user with a large
+cell will ask for first. The fast bubble for `get_magnon_bands` is the next
+one, since the pole search still uses the old bubble.

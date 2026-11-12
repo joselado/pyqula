@@ -3,6 +3,7 @@ import pytest
 
 from pyqula import geometry
 from pyqula.spinon import SpinonHamiltonian, get_decoupling_names
+from pyqula.spinon import get_hold_names
 
 # The bond decoupling of SpinonHamiltonian (decoupling="bond") and the
 # spin-channel RPA on top of it follow Willsher and Knolle,
@@ -284,10 +285,28 @@ def test_decoupling_names_and_guards(triangular):
     with pytest.raises(ValueError, match="has_spin=True"):
         h.get_mean_field_hamiltonian(J1=1.0, decoupling="bond",
                 ansatz=g.get_hamiltonian(has_spin=False))
+    assert get_hold_names() == ["phases", "pattern"]
+    ansatz = g.get_hamiltonian(has_spin=True)
+    with pytest.raises(ValueError, match="'phases', 'pattern'"):
+        h.get_mean_field_hamiltonian(J1=1.0, decoupling="bond",
+                                     ansatz=ansatz, hold="amplitudes")
+    with pytest.raises(ValueError, match="no ansatz"):
+        h.get_mean_field_hamiltonian(J1=1.0, decoupling="bond",
+                                     hold="pattern")
+    with pytest.raises(ValueError, match="J_ij"):
+        h.get_mean_field_hamiltonian(J2=1.0, decoupling="bond",
+                                     ansatz=ansatz, hold="pattern")
+    with pytest.raises(NotImplementedError, match="weiss"):
+        h.get_mean_field_hamiltonian(J1=1.0, weiss=True)
     hz = SpinonHamiltonian(g)
     hz.add_zeeman([0., 0., 0.2])
-    with pytest.raises(NotImplementedError, match="Zeeman"):
-        hz.get_mean_field_hamiltonian(J1=1.0, decoupling="bond")
+    for kw in (dict(), dict(weiss=False)): # a Zeeman field, a Weiss field
+        with pytest.raises(NotImplementedError, match="return_total_energy"):
+            hz.get_mean_field_hamiltonian(J1=1.0, decoupling="bond",
+                    return_total_energy=True, **kw)
+    with pytest.raises(NotImplementedError, match="return_total_energy"):
+        h.get_mean_field_hamiltonian(J1=1.0, decoupling="bond", weiss=True,
+                                     return_total_energy=True)
 
 
 def test_pair_ladder_is_refused_on_a_bond_state():
@@ -306,3 +325,99 @@ def test_pair_ladder_is_refused_on_a_bond_state():
             mix=0.3, maxerror=1e-5, maxite=2000)
     with pytest.raises(ValueError, match="decoupling='bond'"):
         hf.get_rpa_stiffness([0.1, 0., 0.])
+
+
+def test_pattern_hold_agrees_with_phases_hold_for_equivalent_bonds(triangular):
+    """With all the bonds of the ansatz equivalent, the single amplitude
+    of hold="pattern" is the one every bond converges to on its own"""
+    g = geometry.chain()
+    ansatz = g.get_hamiltonian(has_spin=True)
+    h = bond_field(g, J1=1.0, nk=400, ansatz=ansatz, hold="pattern")
+    assert np.allclose(hoppings(h), 1./np.pi, atol=1e-3), hoppings(h)
+    g, ansatz = triangular
+    h = bond_field(g, J1=1.0, J2=0.125, ansatz=ansatz, nk=20, maxerror=1e-6,
+                   hold="pattern")
+    t = hoppings(h)
+    assert len(t) == 12 and np.ptp(t) < 1e-10
+    assert abs(t[0] - np.mean(hoppings(dirac(triangular, J2=0.125)[0]))) < 2e-4
+
+
+def test_pattern_hold_with_inequivalent_bonds():
+    """A chain of four sites with a modulated exchange. With
+    hold="phases" the amplitudes are free and the loop goes to dimers,
+    one bond in two close to zero. With hold="pattern" every hopping
+    stays J_ij times one amplitude, with one fermion on every site."""
+    g = geometry.chain().get_supercell(4)
+    x0, L = np.mean(g.r[:, 0]), np.linalg.norm(g.a1)
+    def J(r1, r2):
+        d = np.linalg.norm(np.array(r1) - np.array(r2))
+        if abs(d - 1.) > 1e-3: return 0.
+        return 1. + 0.3*np.cos(2.*np.pi*((r1[0] + r2[0])/2. - x0)/L)
+    def ratios(h): # t_ij / J_ij on every bond
+        out = []
+        for d, m in h.get_multihopping().get_dict().items():
+            m = np.array(m)[0::2, 0::2]
+            for i in range(4):
+                for j in range(4):
+                    Jij = J(g.r[i], g.r[j] + d[0]*g.a1)
+                    if Jij != 0.: out.append(m[i, j]/Jij)
+        return np.array(out)
+    kw = dict(Jr=J, rcut=1.5, ansatz=g.get_hamiltonian(has_spin=True),
+              nk=50, maxerror=1e-6, T=0.02)
+    h = bond_field(g, hold="pattern", **kw)
+    r = ratios(h)
+    assert len(r) == 8 and np.ptp(r.real) < 1e-10, r
+    assert 0.2 < abs(r[0]) < 0.4 and np.max(np.abs(r.imag)) < 1e-12
+    assert np.allclose(h.local_occupation, 1.0, atol=1e-4)
+    free = np.abs(ratios(bond_field(g, hold="phases", **kw)))
+    assert free.min() < 0.05 and free.max() > 0.4, free
+
+
+def chain_in_field(b, J1=1.0, T=0.1, weiss=None):
+    g = geometry.chain()
+    h = SpinonHamiltonian(g)
+    if b != 0.: h.add_zeeman([0., 0., b])
+    return h.get_mean_field_hamiltonian(J1=J1, decoupling="bond", nk=100,
+            ansatz=g.get_hamiltonian(has_spin=True), T=T, mix=0.3,
+            maxerror=1e-9, maxite=3000, weiss=weiss)
+
+
+def test_static_rpa_is_the_derivative_of_the_weiss_loop():
+    """With the Weiss field in the loop, the moment induced by a small
+    Zeeman field b sigma_z = 2 b S_z is the static RPA response of the
+    state without field: d<sigma_z>/db = 4 chi_zz(q=0,w=0). Without the
+    Weiss field it is the bare one. This fixes the vertex J(q) and the
+    weight of the Weiss field independently of any reference."""
+    h0 = chain_in_field(0.)
+    assert h0.weiss is False
+    kw = dict(q=[0., 0., 0.], energies=[0.], delta=1e-5, nk=100, T=0.1)
+    chi = h0.get_spinchi_full(**kw)[1][0][2, 2].real
+    chi0 = h0.get_spinchi_full(RPA=False, **kw)[1][0][2, 2].real
+    assert abs(chi) > 0.1 and abs(chi - chi0) > 0.05
+    db = 0.005
+    def slope(weiss):
+        mp = chain_in_field(db, weiss=weiss).get_magnetization()[0][2]
+        mm = chain_in_field(-db, weiss=weiss).get_magnetization()[0][2]
+        return (mp - mm)/(2.*db)
+    assert chain_in_field(db).weiss is True
+    assert abs(slope(None) - 4.*chi) < 2e-4, (slope(None), 4.*chi)
+    assert abs(slope(False) - 4.*chi0) < 2e-4, (slope(False), 4.*chi0)
+
+
+@pytest.mark.parametrize("J1", [1.0, 0.5])
+def test_uniform_transverse_mode_is_at_the_zeeman_energy(J1):
+    """The total spin commutes with the exchange, so the uniform
+    transverse mode of a Heisenberg model in a field is at the Zeeman
+    energy 2b whatever J is. The RPA on the loop with the Weiss field
+    keeps this exactly: the Weiss field shifts the spinon splitting away
+    from 2b and the vertex brings the pole back. Without the Weiss field
+    in the loop the pole is displaced."""
+    b = 0.1
+    es = np.linspace(0., 0.6, 121)
+    def peak(weiss):
+        h = chain_in_field(b, J1=J1, T=0.02, weiss=weiss)
+        chi = h.get_spinchi_full(q=[0., 0., 0.], energies=es, delta=0.005,
+                                 nk=100, T=0.02)[1]
+        return es[np.argmax(np.abs(chi[:, 0, 0].imag))]
+    assert abs(peak(None) - 2.*b) < 1.5*(es[1] - es[0]), peak(None)
+    assert abs(peak(False) - 2.*b) > 0.05, peak(False)

@@ -620,13 +620,16 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     out of MF.pkl); this loop writes no file whatever its value.
 
     callback_mf, if given, is a function taking the mean-field dictionary
-    {(n1,n2,n3): matrix} of one iteration and returning the one the loop
-    should use instead, applied after `constrains` (SzSz takes the same
-    argument). It is how a caller restricts the decoupling to a subspace
-    that no named constrain describes, e.g. spinon.SpinonHamiltonian's
-    bond-only decoupling. The matrices are the engine's own, sparse on
-    the sparse KPM path. Not available with use_jax=True, for the same
-    reason `constrains` is not."""
+    {(n1,n2,n3): matrix} computed from the density matrix of one iteration
+    and returning the one the loop should use instead, applied after
+    `constrains`. It acts on that newly computed mean field only, not on
+    the mixed one that `constrains` are applied to again, so it can be any
+    map and not only a projection (a rescaling of one channel, say). It is
+    how a caller changes the decoupling in a way that no named constrain
+    describes, e.g. spinon.SpinonHamiltonian's bond-only decoupling. The
+    matrices are the engine's own, sparse on the sparse KPM path. Not
+    available with use_jax=True, for the same reason `constrains` is
+    not."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy/non-jax below -- checked first so the NotImplemented-sentinel contract holds regardless of use_jax
     if use_jax:
         from .densitydensity import require_hermitian
@@ -1235,9 +1238,11 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # right here -- now module-level (see their definitions above, right
     # before _run_anisotropic_scf), unchanged in behavior since none of
     # them closed over anything from this function's scope.
-    # the caller's own callback_mf (see VJinteraction) after the constrains
-    callback_mf = _compose_callbacks(_callback_mf_constrains(h1, constrains),
-            callback_mf)
+    # the caller's own callback_mf (see VJinteraction) acts on the mean
+    # field computed from the density matrix only, after the constrains,
+    # and not on the mixed one, so it need not be a projection
+    callback_new = callback_mf
+    callback_mf = _callback_mf_constrains(h1, constrains)
 
     # a Bogoliubov-de Gennes h1 at a filling, with exact diagonalization:
     # the Fermi level is found on the charge of the paired state, as an
@@ -1462,6 +1467,7 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             dm_lab = _get_dm(h)
         mfnew = compute_mf(dm_lab)
         if callback_mf is not None: mfnew = callback_mf(mfnew)
+        if callback_new is not None: mfnew = callback_new(mfnew)
         scf = SCF()
         scf.hamiltonian = h
         # z-channel matrix only (for a normal-state VJinteraction this

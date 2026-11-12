@@ -163,7 +163,16 @@ phase that it has in the ansatz, a hopping that is zero in the ansatz stays
 zero, and the loop converges the amplitudes. The amplitudes are free. When
 all the bonds of the pattern are equivalent they stay equal, as below. In a
 cell with inequivalent sites or bonds the loop can still go to a dimerized
-state, so look at the converged hoppings.
+state. With `hold="pattern"` the relative amplitudes are held too. The
+hoppings are then
+
+$$
+t_{ij}=c\,J_{ij}\,P_{ij} ,
+$$
+
+with $P_{ij}$ the ansatz, and the loop converges only the amplitude $c$ and
+the Lagrange multiplier of each site. This is the choice for a large cell
+with inequivalent sites.
 
 As an example we take the $J_1$-$J_2$ Heisenberg model in the triangular
 lattice, and the $\pi$-flux pattern, which has flux $\pi$ in the up triangles
@@ -199,9 +208,11 @@ second-neighbor bonds are zero in the ansatz, so $J_2$ does not change the
 spinon bands. It enters in the spin response below. The keywords are:
 
 - `decoupling`: `"hartree-fock"` (the default, with the magnetic channel) or
-  `"bond"`. The bond one takes an isotropic exchange and no Zeeman field.
+  `"bond"`. The bond one takes an isotropic exchange.
 - `ansatz`: the hopping pattern to hold, a Hamiltonian or a dictionary of
   hopping matrices. Without it the pattern can change during the loop.
+- `hold`: `"phases"` (the default) holds the phases of the ansatz and leaves
+  the amplitudes free. `"pattern"` holds the relative amplitudes too.
 - `gutzwiller`: a factor that multiplies the exchange everywhere. Without the
   constraint the local moment is $\langle\vec S_i^2\rangle=3/8$ instead of
   $3/4$, and a factor of 2 accounts for this in an approximate way. It
@@ -258,6 +269,32 @@ lattice, which is a plane wave on the two sites of the cell.
     ```python
     --8<-- "pseudofermions_spinliquid.py"
     ```
+
+A Zeeman field enters as in the previous section, with `h.add_zeeman()`
+before the mean-field calculation. The loop then adds the field of the
+neighboring moments, the Weiss field
+$\sum_j J_{ij}\langle\vec S_j\rangle$ acting on $\vec S_i$, so that the
+induced moment feels the exchange:
+
+```python
+h = SpinonHamiltonian(g)
+h.add_zeeman([0.,0.,0.1])
+h2 = h.get_mean_field_hamiltonian(J1=1.0,J2=0.125,decoupling="bond",
+        ansatz=ansatz,nk=20,T=0.02)
+m = h2.get_magnetization() # induced <sigma> per site
+(es,chi) = h2.get_spinchi_full(q=[0.,0.,0.],energies=np.linspace(0.,0.6,121),
+        delta=0.01,nk=31)
+```
+
+The induced moment is $\langle\sigma_z\rangle=-0.010$ on each site. Without
+the Weiss field (`weiss=False`) it would be $-0.013$, so the antiferromagnetic
+exchange reduces it. The uniform transverse response, the $S_x$ elements of
+`chi` summed over the two sites, has its peak at $0.195$, one energy step
+from the Zeeman energy $2b_z=0.2$. This is as it must be: the total spin
+commutes with the exchange, so the exchange cannot move this mode. Without the Weiss field the peak is at
+$0.24$. The keyword `weiss` is `True` by default when there is a field and
+`False` when there is none, so that without a field the loop cannot leave
+the liquid for a magnetic order.
 
 The random phase approximation is uncontrolled, like the mean field. It keeps
 the constraint of one fermion per site only on average, so the free spinons

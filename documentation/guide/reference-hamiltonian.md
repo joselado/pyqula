@@ -1949,10 +1949,16 @@ the couplings are given to `h.get_mean_field_hamiltonian()` as `J1`, `J2`,
   hopping and magnetic channels. `"bond"` keeps the hopping channel alone,
   with $|t_{ij}|=J_{ij}|\chi_{ij}|/2$ and no magnetic mean field, the mean
   field of arXiv:2503.13831. It takes an isotropic exchange (`J1`, `J2`,
-  `J3`, `Jr`), no Zeeman field and `integration="ed"`
+  `J3`, `Jr`) and `integration="ed"`
 - ansatz=None: with `decoupling="bond"`, a hopping pattern (a Hamiltonian or
   a dictionary of hopping matrices) that the loop holds. Each hopping keeps
   the phase of the ansatz, and a hopping that is zero there stays zero
+- hold="phases": `"phases"` leaves the amplitude of each hopping of the
+  ansatz free. `"pattern"` holds the relative amplitudes too,
+  $t_{ij}=c\,J_{ij}P_{ij}$ with $P_{ij}$ the ansatz and one amplitude $c$
+- weiss=None: with `decoupling="bond"`, add the Weiss field
+  $\sum_j J_{ij}\langle\vec S_j\rangle$ to the mean field. `None` means
+  `True` with a Zeeman field and `False` without one
 - gutzwiller=1.0: a factor that multiplies the exchange, in the mean field
   and in the spin response
 - `h2.get_spinchi_full(q=...,energies=...,delta=...,nk=...,RPA=True)`: the
