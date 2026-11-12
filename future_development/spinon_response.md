@@ -252,6 +252,25 @@ and it does not move between `nk=61` and `nk=91`. The stiffness at
 $J_2=0.125J_1$ was scanned on a 12 x 12 mesh of momenta: it is positive
 everywhere, with its minimum 0.042 at M (`nk=31`).
 
+## State of the documentation and of the tests
+
+The work is in three commits on master, `c0922af`, `cd5a60d` and `cc23757`
+(12 November 2026). Of the five documentation surfaces, three moved: the
+guide page `pseudofermions.md` with its figure, the reference entry of
+`SpinonHamiltonian`, and two examples
+(`examples/spinon/dirac_spin_liquid_rpa`, `examples/spinon/spin_liquid_large_cell`).
+There is no README bullet and no notebook for the bond decoupling and its
+response, and the PDF of the guide was not rebuilt; the website builds in
+strict mode.
+
+The whole suite was not run after these commits. What ran: `tests/spinon`,
+`tests/chi`, `tests/kondolattice` and `tests/magnon` after the first commit
+(348 passed), the exchange and constrained mean-field tests of `tests/scf`
+(110 and 19 passed), and after the last one `tests/spinon`,
+`tests/documentation` and five files of `tests/chi` (84 passed).
+`tests/spinon/test_spinon_bond_rpa.py` takes 2 to 4 minutes, and its
+slowest test 20 to 45 s depending on the load.
+
 ## Where to start next
 
 The structure factor at a lattice momentum is the one a user with a large
