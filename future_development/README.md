@@ -510,5 +510,16 @@ already reached once.
   exact projection on small clusters, variational Monte Carlo, Schwinger
   bosons.
 
+- [`kondo_tunneling.md`](kondo_tunneling.md) -- tunneling spectra with a
+  Kondo peak for the two pseudofermion mean fields: the second and third
+  order of arXiv:1505.04430 on the spinon state, reduced with Wick's
+  theorem to the local spectral matrices of the site (our derivation,
+  checked against sums over the Fock space, against dmrgpy and against the
+  spin 1/2 of the paper), and the cotunneling spectrum of the Kondo lattice
+  (arXiv:0910.1138, arXiv:1001.4530); what they give (no zero-bias peak on a
+  spinon continuum, a peak on a site with a level at the Fermi energy), the
+  cost at 196 sites, and what is left: the README bullet and notebooks, the
+  spinon Kondo-Heisenberg loop, the leading logarithms, the potential term.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

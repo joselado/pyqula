@@ -172,3 +172,15 @@ class KondoLatticeHamiltonian(Hamiltonian):
             scf.hamiltonian.hybridization = scf.hybridization
             scf.hamiltonian.constraint_lambda = scf.constraint_lambda
         return _mean_field_scf_result(scf, return_total_energy)
+
+    def get_cotunneling_didv(self, **kwargs):
+        """Cotunneling STM dI/dV of a converged Kondo lattice mean field,
+        resolved by Kondo pair: the tip tunnels into psi = tc*c + tf*f
+        (Maltseva, Dzero and Coleman, arXiv:0910.1138), giving
+        tc^2 N_cc + tf^2 N_ff + 2 tc tf N_cf at the site under the tip.
+        Call it on the Hamiltonian returned by get_mean_field_hamiltonian.
+        Returns (energies, dIdV), plus the cc, ff and interference parts
+        with return_parts=True; see kondotk.cotunneling.cotunneling_didv
+        for the keywords (tc, tf, J, nk, delta, T, site)."""
+        from .kondotk import cotunneling
+        return cotunneling.cotunneling_didv(self, **kwargs)

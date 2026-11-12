@@ -14,7 +14,7 @@ with exactly one fermion on each site, because a spin one half has no charge
 fluctuations. You can think of the pseudofermion as the spin part of an
 electron, with the charge frozen. We use it first for the Heisenberg model,
 where it gives spinons, and then for the Kondo lattice, where it gives heavy
-fermions.
+fermions. For both we also compute what a tunneling microscope measures.
 
 ## Spinon mean field for Heisenberg models
 
@@ -312,6 +312,141 @@ the energy of the sharp mode along a q-path. See
 `examples/spinon/spin_liquid_large_cell/main.py` for a cell of 36
 inequivalent sites with `hold="pattern"` and a Zeeman field.
 
+## Tunneling spectrum of the spinons
+
+We will now see what a tunneling microscope measures above one site of the
+spin model, when the spins sit on a metallic substrate. The electron that
+tunnels can flip the spin of the site, and it pays the energy of the spin
+excitation with the bias. We follow the perturbation theory of
+arXiv:1505.04430 in the exchange between the tunneling electron and the
+spin. To second order the conductance is
+
+$$
+\frac{dI}{dV}(eV)\propto\int d\omega\, S_i(\omega)
+\left[\Theta(eV-\omega)+\Theta(-eV-\omega)\right],
+\qquad
+S_i(\omega)=\sum_a\int\frac{dt}{2\pi}e^{i\omega t}
+\langle S^a_i(t)S^a_i(0)\rangle ,
+$$
+
+where $S_i(\omega)$ is the local spin spectrum of site $i$ and $\Theta$ is a
+step broadened by the temperature. So each spin excitation of energy $\omega$
+opens a step at $eV=\pm\omega$, and $dI/dV$ is the integral of the spin
+spectrum up to the bias. This is inelastic tunneling spectroscopy. For
+spinons a spin flip moves a spinon from an occupied state to an empty one,
+so $S_i(\omega)$ is the convolution of the occupied and the empty local
+density of states of the site.
+
+To third order the electron also scatters with the electrons of the
+substrate before or after the spin flip. This adds to each step a logarithm,
+
+$$
+J\rho_s\,\ln\frac{\omega_0}{|eV-\omega|} ,
+$$
+
+with $J\rho_s$ the dimensionless exchange with the substrate and $\omega_0$
+its band cutoff. If the spin can flip at no cost, $\omega=0$, the logarithm
+is at zero bias. This is what is called the Kondo peak. With spinons the
+three spin operators of this term are again products of the local density
+of states, so the method only needs the spinon states on the site of the tip.
+`h2.get_kondo_spectrum()` computes both orders for a converged spinon
+Hamiltonian `h2`.
+
+The simplest case is one site without exchange. Its spinon level is at the
+Fermi energy and holds one fermion, so this is a free spin:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.spinon import SpinonHamiltonian
+g = geometry.chain()
+g.dimensionality = 0 # one isolated site
+h1 = SpinonHamiltonian(g)
+kT = 8.617333262e-2 # 1 K in meV
+(es,didv) = h1.get_kondo_spectrum(np.array([0.,4.]),site=0,Jrho_s=-0.05,T=kT,
+        omega0=20.,Gamma0=5e-3)
+```
+
+Here the energies are in meV, with the parameters of the spin one half of
+arXiv:1505.04430. `didv` is in units of $e^2T_0^2/\hbar$, with $T_0$ the
+tunneling strength. Twice `didv` divided by $2\pi$ is $1.137$ at zero bias
+and $0.884$ at 4 mV, and the paper has $1.13$ and $0.886$. The factor of two
+is the price of the mean field: the free fermion can also be empty or doubly
+occupied, these two states carry no spin, and the local moment is
+$\langle S^2\rangle=3/8$ instead of $3/4$. Without the Kondo term
+(`order=2`) the spectrum is flat, $0.75$ in the same units.
+
+We now take two chains. The first one is the uniform Heisenberg chain. The
+second one is a chain of trimers, with exchange $1$ inside a trimer and
+$0.1$ between two trimers:
+
+```python
+energies = np.linspace(-1.5,1.5,301)
+h = SpinonHamiltonian(geometry.chain())
+h2 = h.get_mean_field_hamiltonian(J1=1.0,decoupling="bond",nk=60,T=0.01)
+(es,dchain) = h2.get_kondo_spectrum(energies,site=0,Jrho_s=-0.05,T=0.005,
+        omega0=2.0,nk=400)
+
+g = geometry.chain().get_supercell(3) # the sites are at x = -1, 0, 1
+def J(r1,r2):
+    if abs(np.linalg.norm(r1-r2)-1.)>1e-3: return 0. # first neighbors only
+    inside = abs((r1[0]+r2[0])/2.)<1. # a bond inside the cell
+    return 1.0 if inside else 0.1
+h = SpinonHamiltonian(g)
+h2 = h.get_mean_field_hamiltonian(Jr=J,rcut=1.5,decoupling="bond",
+        ansatz=g.get_hamiltonian(has_spin=True),hold="phases",nk=60,T=0.01)
+(es,dtrimer) = h2.get_kondo_spectrum(energies,Jrho_s=-0.05,T=0.005,
+        omega0=2.0,nk=400)
+```
+
+`dchain` is one array, and `dtrimer` has one row for each site of the cell.
+In the uniform chain the spinon band crosses the Fermi energy, so the spin
+spectrum grows linearly from zero energy. The conductance then starts as the
+square of the bias: it is $0.0005$ at zero bias and $0.015$ at $eV=0.1J$.
+There is no spin flip at zero energy, and the third order adds no peak. You
+can think of it this way: in the mean field the other spinons already screen
+the spin of the site.
+
+The trimers are different. A trimer has three spinon levels and three
+spinons, so its middle level, at the Fermi energy, holds one spinon. This
+spinon can flip at no cost. On the two end sites `dtrimer` has a maximum at
+zero bias, $0.805$ against $0.727$ at $eV=0.1J$, and the second order alone
+is flat there, $0.589$. On the middle site the spectrum is zero at low bias,
+because the level at the Fermi energy has no weight on it. So a zero-bias
+peak in this approximation says that the site has a spinon level at the
+Fermi energy, a free moment, and a continuum of spinons gives none. At a
+bias above the spinon bandwidth every spin flip is open and all the sites
+reach $2\pi\cdot 3/8$.
+
+Note that the level has to be sharper than the temperature. Here the
+mean-field loop decouples the trimers completely: the hopping between two
+of them converges to $2\times10^{-4}$, so these are isolated trimers. With
+an exchange of $0.3$ between the trimers the hopping is $0.054$, the level
+becomes a narrow band, and the end sites have no maximum at zero bias:
+$0.018$ there against $0.64$ at $eV=0.1J$.
+
+The keywords are:
+
+- `site`: the site under the tip, or a list of sites. By default every site
+  of the cell, one row each.
+- `Jrho_s`: the dimensionless exchange with the substrate, negative for an
+  antiferromagnetic one, as in the paper.
+- `order`: 2 for the steps alone, 3 (default) to add the Kondo term.
+- `T`: the temperature of the tip and the substrate, in the units of the
+  exchange. `Ts` is the temperature of the spinon occupations, equal to `T`
+  by default; use the temperature of the mean-field loop.
+- `omega0`, `Gamma0`: the band cutoff and the lifetime broadening of the
+  logarithm.
+- `nk`: the k-mesh. The spacing of the spinon levels must be smaller than `T`.
+- `de`: the step of the energy grid, `T/4` by default.
+
+A Zeeman field, added with `h.add_zeeman()` before the mean-field
+calculation, splits the peak, as it does for a spin. This is perturbation
+theory in $J\rho_s$, on top of the mean field: it does not describe the
+screening of the moment below the Kondo temperature, and the Gutzwiller
+projection is not included. See `examples/spinon/kondo_spectrum/main.py` for
+a runnable script.
+
 ## Kondo lattice
 
 The Kondo lattice has a local moment on each site, coupled by exchange to a
@@ -440,3 +575,72 @@ solution that a small $J$ gives.
 See `examples/kondolattice/chain/main.py` for a runnable script, and the
 notebook
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/14_kondo_lattice.ipynb`.
+
+## Tunneling spectrum of the Kondo lattice
+
+We will now see the tunneling spectrum of the heavy-fermion state. A tip above
+a site can tunnel into the conduction electron, with amplitude $t_c$. It can
+also tunnel through a spin flip of the local moment, which in the mean field
+is a tunneling into the f fermion, with amplitude $t_f$. The tip then couples
+to the combination
+
+$$
+\psi_j=t_c\,c_j+t_f\,f_j ,
+$$
+
+and the conductance is its spectral function (arXiv:0910.1138 and
+arXiv:1001.4530),
+
+$$
+\frac{dI}{dV}(eV)\propto t_c^2N_{cc}(eV)+t_f^2N_{ff}(eV)+2t_ct_fN_{cf}(eV) ,
+$$
+
+where $N_{cc}$ and $N_{ff}$ are the local density of states of the
+conduction and of the f fermion, and $N_{cf}=-\mathrm{Im}\,G_{cf}/\pi$ is
+their interference. The two paths interfere, and this is what gives the
+asymmetric line shape that STM sees in heavy-fermion compounds.
+`h2.get_cotunneling_didv()` computes it for a converged `h2`:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.kondolattice import KondoLatticeHamiltonian
+hc = geometry.chain().get_hamiltonian(has_spin=True)
+h = KondoLatticeHamiltonian(hc)
+h2 = h.get_mean_field_hamiltonian(J=1.5, filling=0.15, nk=150,
+        mf=([0.3+0.0j], [0.0]))
+energies = np.linspace(-0.4, 0.6, 201)
+(es, didv, parts) = h2.get_cotunneling_didv(energies=energies, tc=1.0, tf=0.3,
+        nk=2000, delta=0.01, T=0.01, site=0, return_parts=True)
+```
+
+The energy is measured from the chemical potential, and a positive energy is
+tunneling into empty states. `didv` is the spectrum of the site, summed over
+the two spins, and `parts` has its three terms, `"cc"`, `"ff"` and `"cf"`.
+Here $V=0.374$, and the hybridization opens a gap between $eV=0$ and
+$eV=0.2$. With $t_f=0$ the spectrum is the conduction density of states. It
+has a peak of height $0.72$ at the upper edge of the gap and no peak at the
+lower edge, where it is about $0.3$ and the states are mostly f. With
+$t_f=0.3$ the upper peak grows to $2.1$, because there the two paths add.
+With $t_f=-0.3$ they cancel at the upper edge, and the peak is at the lower
+edge, with height $2.5$. So the sign of $t_f/t_c$ decides on which side of the gap the peak is.
+Inside the gap only the broadening is left, $0.08$ at $eV=0.1$.
+
+The keywords are:
+
+- `tc`, `tf`: the two tunneling amplitudes.
+- `J`: when it is given, `tf` is the amplitude of the spin-flip tunneling
+  itself, and the amplitude into the f fermion of each site is
+  $t_fV_j^*/J$, so it follows the hybridization of the site. Give the $J$ of
+  the mean-field calculation.
+- `site`: the Kondo site under the tip, or a list. By default every site.
+- `energies`: a uniform grid. By default `ne` points between `-emax` and
+  `emax`.
+- `delta`: the broadening of the levels.
+- `T`: the temperature of the tip. It must be larger than the energy step.
+- `nk`: the k-mesh. The level spacing must be smaller than `delta`.
+
+This is the spectrum of the mean field, so above the temperature where $V$
+vanishes it is only the conduction band. See
+`examples/kondolattice/cotunneling_didv/main.py` for a runnable script, which
+also compares the gap and the line shape with their closed forms.

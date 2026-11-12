@@ -515,6 +515,19 @@ class SpinonHamiltonian(Hamiltonian):
                 spinchi._full_spin_U(self), q, **kwargs)
         return ev[0].real
 
+    def get_kondo_spectrum(self, energies, **kwargs):
+        """Tunneling spectrum of a tip above a site of the spinon mean
+        field, (energies, dIdV): the inelastic steps of the spin flips of
+        the spinons and, at third order, the Kondo logarithm of the
+        exchange with the electrons of the substrate, arXiv:1505.04430,
+        with the spin correlators of the spinons. A zero-bias peak
+        appears on a site that has a spinon level at the Fermi energy,
+        and a continuum of spinons gives none. See
+        kondotk.spinonspectrum.kondo_spectrum for the keyword arguments
+        (site, Jrho_s, T, omega0, Gamma0, T0, order, nk, de, Ts)."""
+        from .kondotk import spinonspectrum
+        return spinonspectrum.kondo_spectrum(self, energies, **kwargs)
+
     def get_transverse_spinchi(self, **kwargs):
         self._refuse_pair_ladder("get_transverse_spinchi")
         return super().get_transverse_spinchi(**kwargs)

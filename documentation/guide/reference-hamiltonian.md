@@ -1969,6 +1969,12 @@ the couplings are given to `h.get_mean_field_hamiltonian()` as `J1`, `J2`,
   `decoupling="bond"`, the smallest eigenvalue of the static kernel
   $1+J(\vec q)\chi_0(\vec q,0)$. It is 1 without exchange and negative when
   the spin liquid is unstable to magnetic order with wavevector `q`
+- `h2.get_kondo_spectrum(energies,site=None,Jrho_s=-0.05,T=0.01,omega0=1.0,Gamma0=1e-5,order=3,nk=20)`:
+  tunneling spectrum of a tip above a site, the steps of the spin flips of
+  the spinons (`order=2`) plus the Kondo logarithm of the exchange
+  $J\rho_s$ with the substrate (`order=3`), arXiv:1505.04430. Returns
+  `(energies,dIdV)`, one row per site, or one array for a single `site`. A
+  zero-bias peak needs a spinon level at the Fermi energy
 
 ## KondoLatticeHamiltonian(hc)
 Abrikosov pseudofermion (Read-Newns) mean-field Hamiltonian of a Kondo
@@ -1988,6 +1994,11 @@ and $J$ is given to `h.get_mean_field_hamiltonian()` as `J`.
     should be 1.0)
   - `h2.hybridization`: $V_j$ on each localized site
   - `h2.constraint_lambda`: the Lagrange multiplier of each site
+- `h2.get_cotunneling_didv(energies=None,tc=1.0,tf=1.0,J=None,nk=20,delta=1e-2,T=0.0,site=None,return_parts=False)`:
+  tunneling spectrum $t_c^2N_{cc}+t_f^2N_{ff}+2t_ct_fN_{cf}$ of a tip that
+  tunnels into the conduction electron and into the f fermion of a site.
+  Returns `(energies,dIdV)`, one row per Kondo site, and the three terms
+  with `return_parts=True`. With `J` the f amplitude is $t_fV_j^*/J$.
 
 ## GrapheneGeometry(g)
 A `Geometry` for graphene multilayers `g` (bilayer, twisted bilayer,
