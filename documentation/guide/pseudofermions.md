@@ -283,18 +283,24 @@ h2 = h.get_mean_field_hamiltonian(J1=1.0,J2=0.125,decoupling="bond",
         ansatz=ansatz,nk=20,T=0.02)
 m = h2.get_magnetization() # induced <sigma> per site
 (es,chi) = h2.get_spinchi_full(q=[0.,0.,0.],energies=np.linspace(0.,0.6,121),
-        delta=0.01,nk=31)
+        delta=0.01,nk=31,T=0.02)
 ```
 
 The induced moment is $\langle\sigma_z\rangle=-0.010$ on each site. Without
 the Weiss field (`weiss=False`) it would be $-0.013$, so the antiferromagnetic
 exchange reduces it. The uniform transverse response, the $S_x$ elements of
-`chi` summed over the two sites, has its peak at $0.195$, one energy step
-from the Zeeman energy $2b_z=0.2$. This is as it must be: the total spin
-commutes with the exchange, so the exchange cannot move this mode. Without the Weiss field the peak is at
+`chi` summed over the two sites, has its peak at $0.2$. This is the Zeeman
+energy $2b_z$, as it must be: the total spin commutes with the exchange, so
+the exchange cannot move this mode. For this the response needs the
+temperature of the loop, `T=0.02`. Without the Weiss field the peak is at
 $0.24$. The keyword `weiss` is `True` by default when there is a field and
 `False` when there is none, so that without a field the loop cannot leave
-the liquid for a magnetic order.
+the liquid for a magnetic order. If the stiffness is negative, a field with
+the Weiss field drives the loop to a magnetic order, so check the stiffness
+first. In a field the response along the field is
+only approximate: a perturbation along the moment also changes the
+hoppings, and the approximation does not include this. The transverse
+response does not have this problem.
 
 The random phase approximation is uncontrolled, like the mean field. It keeps
 the constraint of one fermion per site only on average, so the free spinons
@@ -302,7 +308,9 @@ have half of the total weight of a spin one half. On a lattice with nesting,
 like the antiferromagnetic chain at $q=\pi$, the kernel is negative at low
 temperature and the approximation cannot be used. `h2.get_magnon_bands()` gives
 the energy of the sharp mode along a q-path. See
-`examples/spinon/dirac_spin_liquid_rpa/main.py` for a runnable script.
+`examples/spinon/dirac_spin_liquid_rpa/main.py` for a runnable script, and
+`examples/spinon/spin_liquid_large_cell/main.py` for a cell of 36
+inequivalent sites with `hold="pattern"` and a Zeeman field.
 
 ## Kondo lattice
 

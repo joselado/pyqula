@@ -369,17 +369,34 @@ def test_pattern_hold_with_inequivalent_bonds():
     assert len(r) == 8 and np.ptp(r.real) < 1e-10, r
     assert 0.2 < abs(r[0]) < 0.4 and np.max(np.abs(r.imag)) < 1e-12
     assert np.allclose(h.local_occupation, 1.0, atol=1e-4)
+    # the amplitude is the stationary point of the bond functional in the
+    # family: with F(c) = c E1 + 2 c^2 sum_bonds J_ij, c^2 is minus the
+    # hopping energy of the converged state over 4 sum_bonds J_ij
+    hk, ks = h.get_hk_gen(), h.geometry.get_kmesh(nk=50)
+    onsite = np.diag(np.diag(np.array(h.get_multihopping().get_dict()[(0, 0, 0)])))
+    ehop = 0.
+    for k in ks:
+        m = np.array(hk(k))
+        e, u = np.linalg.eigh(m)
+        rho = (u/(np.exp(e/0.02) + 1.))@u.conj().T
+        ehop += np.trace(rho@(m - onsite)).real/len(ks)
+    sumJ = sum(J(g.r[i], g.r[(i+1) % 4] + (g.a1 if i == 3 else 0.))
+               for i in range(4))
+    assert abs(r[0].real**2 + ehop/(4.*sumJ)) < 1e-7, (r[0], ehop, sumJ)
     free = np.abs(ratios(bond_field(g, hold="phases", **kw)))
     assert free.min() < 0.05 and free.max() > 0.4, free
 
 
-def chain_in_field(b, J1=1.0, T=0.1, weiss=None):
+def chain_in_field(b, J1=1.0, T=0.1, weiss=None, gutzwiller=1.0):
+    """The uniform chain in a Zeeman field b, a number (along z) or a
+    vector"""
     g = geometry.chain()
     h = SpinonHamiltonian(g)
-    if b != 0.: h.add_zeeman([0., 0., b])
+    if np.any(np.array(b) != 0.):
+        h.add_zeeman(b if np.ndim(b) == 1 else [0., 0., b])
     return h.get_mean_field_hamiltonian(J1=J1, decoupling="bond", nk=100,
             ansatz=g.get_hamiltonian(has_spin=True), T=T, mix=0.3,
-            maxerror=1e-9, maxite=3000, weiss=weiss)
+            maxerror=1e-9, maxite=3000, weiss=weiss, gutzwiller=gutzwiller)
 
 
 def test_static_rpa_is_the_derivative_of_the_weiss_loop():
@@ -402,22 +419,58 @@ def test_static_rpa_is_the_derivative_of_the_weiss_loop():
     assert chain_in_field(db).weiss is True
     assert abs(slope(None) - 4.*chi) < 2e-4, (slope(None), 4.*chi)
     assert abs(slope(False) - 4.*chi0) < 2e-4, (slope(False), 4.*chi0)
+    # a field in a generic direction: the moment is along it, with the
+    # same slope, which also runs the spin-flip part of the Weiss field
+    b = np.array([0.003, -0.002, 0.003])
+    m = np.array(chain_in_field(b).get_magnetization()[0])
+    assert np.allclose(m, 4.*chi*b, atol=1e-6), (m, 4.*chi*b)
 
 
-@pytest.mark.parametrize("J1", [1.0, 0.5])
-def test_uniform_transverse_mode_is_at_the_zeeman_energy(J1):
+@pytest.mark.parametrize("J1,gutzwiller", [(1.0, 1.0), (0.5, 1.0), (1.0, 2.0)])
+def test_uniform_transverse_mode_is_at_the_zeeman_energy(J1, gutzwiller):
     """The total spin commutes with the exchange, so the uniform
     transverse mode of a Heisenberg model in a field is at the Zeeman
     energy 2b whatever J is. The RPA on the loop with the Weiss field
     keeps this exactly: the Weiss field shifts the spinon splitting away
-    from 2b and the vertex brings the pole back. Without the Weiss field
-    in the loop the pole is displaced."""
+    from 2b and the vertex brings the pole back, also with the Gutzwiller
+    factor. Without the Weiss field in the loop the pole is displaced."""
     b = 0.1
     es = np.linspace(0., 0.6, 121)
     def peak(weiss):
-        h = chain_in_field(b, J1=J1, T=0.02, weiss=weiss)
+        h = chain_in_field(b, J1=J1, T=0.02, weiss=weiss,
+                           gutzwiller=gutzwiller)
         chi = h.get_spinchi_full(q=[0., 0., 0.], energies=es, delta=0.005,
                                  nk=100, T=0.02)[1]
         return es[np.argmax(np.abs(chi[:, 0, 0].imag))]
     assert abs(peak(None) - 2.*b) < 1.5*(es[1] - es[0]), peak(None)
     assert abs(peak(False) - 2.*b) > 0.05, peak(False)
+
+
+def test_weiss_field_without_zeeman_field_follows_the_stiffness(triangular):
+    """weiss=True without a field gives the magnetic channel back. From a
+    guess with a small staggered field, the two-site chain, whose
+    stiffness is negative at q=pi, goes to the Neel state. The pi-flux
+    state at J2 = 0 has a positive stiffness at M, the momentum of a
+    moment that alternates between its two sites, and goes back to zero
+    moment (its instability is at K, which this cell cannot hold)."""
+    def seeded(pattern, scale=1.):
+        out = {tuple(int(i) for i in d): scale*np.array(m, dtype=np.complex128)
+               for d, m in pattern.items()}
+        out[(0, 0, 0)] = out[(0, 0, 0)] + 1e-3*np.diag([1., -1., -1., 1.])
+        return out
+    g = geometry.chain().get_supercell(2)
+    a = g.get_hamiltonian(has_spin=True)
+    kw = dict(J1=1.0, ansatz=a, hold="pattern", nk=100, T=0.02,
+              maxerror=1e-5, maxite=2000)
+    assert bond_field(g, **kw).get_rpa_stiffness([0., 0., 0.], nk=101,
+                                                 T=0.02) < -0.5
+    m = bond_field(g, mf=seeded(a.get_dict()), weiss=True,
+                   **kw).get_magnetization()[:, 2]
+    assert abs(m[0]) > 0.5 and abs(m[0] + m[1]) < 1e-3, m
+    g, ansatz = triangular
+    assert dirac(triangular)[0].get_rpa_stiffness(M, nk=31, delta=1e-3,
+                                                  T=1e-3) > 0.1
+    h = bond_field(g, J1=1.0, ansatz=ansatz, weiss=True, nk=20,
+                   mf=seeded(ansatz, 0.2), T=0.02, maxerror=1e-5,
+                   maxite=3000)
+    assert np.max(np.abs(h.get_magnetization())) < 1e-3

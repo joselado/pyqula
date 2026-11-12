@@ -23,6 +23,9 @@ suggestions that were not built, with what is known about each one.
   $t_{ij}=cJ_{ij}P_{ij}$ with one amplitude, the stationary point of the
   bond functional in that family,
   $c=\sum J_{ij}\mathrm{Re}(\bar P_{ij}\chi_{ij})/\sum J_{ij}|P_{ij}|^2$.
+  The stationarity was checked on a modulated chain of four sites from the
+  converged state alone: $c^2$ equals minus its hopping energy over
+  $4\sum_{\rm bonds}J_{ij}$ to $10^{-10}$.
 - `weiss=` adds the Weiss field $\sum_jJ_{ij}\langle\vec S_j\rangle$ to
   the bond loop, by default only with a Zeeman field. The callback keeps the
   onsite spin part of the Hartree-Fock mean field with the factor 3/4 that
@@ -33,7 +36,24 @@ suggestions that were not built, with what is known about each one.
   $q=0$ is the derivative of the moment of the loop with the field
   ($-0.71704$ against $-0.71703$), and the uniform transverse mode is at
   the bare Zeeman energy for $J=1$ and $J=0.5$, where it is 50 percent
-  higher without the Weiss field in the loop.
+  higher without the Weiss field in the loop. Both also hold for a field
+  in a generic direction (the moment is $4\chi\vec b$ to $4\times10^{-8}$)
+  and with `gutzwiller=2`. The response has to take the temperature of the
+  loop: with the default `T=delta` the peak of the $\pi$-flux state moved
+  from 0.200 to 0.195. Three more things were seen. A field on a liquid with
+  a negative stiffness drives the loop to a magnetic order: 36 sites with
+  the uniform pattern ($-0.85$ at K) gave moments from $-0.88$ to $0.69$.
+  With `weiss=True` and no field, a small staggered seed orders the
+  two-site chain and decays on the $\pi$-flux state, as the stiffness says,
+  but a seed of 0.1 takes the $\pi$-flux state at $J_2=0.125J_1$ (stiffness
+  0.04 at M) to fully polarized sublattices: the stiffness is a linear
+  stability, and the classical state is always another solution of the
+  Weiss loop. A 36-site $\pi$-flux cell with $J_1$ and $J_2=0.11J_1$
+  modulated by 20 percent, held with `hold="pattern"`, converges in 5 s,
+  has a positive stiffness at the momenta that were tried (smallest 0.059),
+  and in a field has moments between $-0.016$ and $-0.004$ and the
+  transverse peak at the Zeeman energy
+  (`examples/spinon/spin_liquid_large_cell/main.py`).
 - `gutzwiller=` multiplies the exchange in the mean field and in the vertex.
   The paper uses 2.
 - The spin response of a bond state is dressed in the site basis with the

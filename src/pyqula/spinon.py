@@ -305,8 +305,10 @@ class SpinonHamiltonian(Hamiltonian):
         the static spin-channel RPA is the derivative of the moment of
         this loop with the field, and the uniform transverse mode is at
         the bare Zeeman energy, as the exact one. weiss=True without a
-        field lets the loop order magnetically where get_rpa_stiffness is
-        negative, from a guess mf= that has a moment.
+        field gives the magnetic channel back to the loop: from a guess
+        mf= with a small moment it orders where get_rpa_stiffness is
+        negative and returns to the liquid where it is positive, and a
+        guess with a large moment can order it anywhere.
 
         gutzwiller multiplies every exchange coupling, in the mean field
         and in the vertex of the spin response.
