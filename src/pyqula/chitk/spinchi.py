@@ -56,7 +56,14 @@ def _use_pair_basis(H):
     is exactly the Fock rung of the exchange bonds. For a V1-ordered
     ferromagnet the site vertex is identically zero and gives no magnon
     at all. So the public entry points take this route instead of
-    returning either number."""
+    returning either number.
+
+    A Hamiltonian marked H.site_spin_vertex=True keeps the site-basis
+    vertex. Its mean field has no Fock rung of the exchange in the spin
+    channel for the ladder to match: the bond-only spinon saddle of
+    spinon.SpinonHamiltonian, whose fluctuation in the spin channel is the
+    random phase approximation with the vertex J(q), arXiv:2503.13831."""
+    if getattr(H,"site_spin_vertex",False): return False
     return len(_interaction_matrices(H))>0 and not _is_site_local(H)
 
 

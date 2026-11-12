@@ -1945,6 +1945,24 @@ the couplings are given to `h.get_mean_field_hamiltonian()` as `J1`, `J2`,
     2, it should be 1.0)
   - `h2.constraint_lambda`: the Lagrange multiplier of each site (a local
     chemical potential)
+- decoupling="hartree-fock": `"hartree-fock"` decouples the exchange in the
+  hopping and magnetic channels. `"bond"` keeps the hopping channel alone,
+  with $|t_{ij}|=J_{ij}|\chi_{ij}|/2$ and no magnetic mean field, the mean
+  field of arXiv:2503.13831. It takes an isotropic exchange (`J1`, `J2`,
+  `J3`, `Jr`), no Zeeman field and `integration="ed"`
+- ansatz=None: with `decoupling="bond"`, a hopping pattern (a Hamiltonian or
+  a dictionary of hopping matrices) that the loop holds. Each hopping keeps
+  the phase of the ansatz, and a hopping that is zero there stays zero
+- gutzwiller=1.0: a factor that multiplies the exchange, in the mean field
+  and in the spin response
+- `h2.get_spinchi_full(q=...,energies=...,delta=...,nk=...,RPA=True)`: the
+  spin response, as `h.get_spinchi_full()`. After `decoupling="bond"`,
+  `RPA=True` dresses the free spinon response $\chi_0$ with the exchange,
+  $\chi=\chi_0[1+J(\vec q)\chi_0]^{-1}$, and `RPA=False` returns $\chi_0$
+- `h2.get_rpa_stiffness(q,nk=60,delta=1e-3,T=None)`: after
+  `decoupling="bond"`, the smallest eigenvalue of the static kernel
+  $1+J(\vec q)\chi_0(\vec q,0)$. It is 1 without exchange and negative when
+  the spin liquid is unstable to magnetic order with wavevector `q`
 
 ## KondoLatticeHamiltonian(hc)
 Abrikosov pseudofermion (Read-Newns) mean-field Hamiltonian of a Kondo

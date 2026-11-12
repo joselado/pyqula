@@ -497,5 +497,17 @@ already reached once.
   field), the S^zS^z chain that needs a small T, and the broadened Chern
   density, now closed on the real axis with exact_at; nothing is open.
 
+- [`spinon_response.md`](spinon_response.md) -- the dynamical spin response
+  of the spinon mean field: the bond decoupling, the held ansatz and the
+  spin-channel RPA that were built for cells of about 200 sites, checked
+  against arXiv:2503.13831 (hopping, static bubble at K and M, both critical
+  couplings); what the Hartree-Fock spinon saddle and its pair ladder do
+  instead (unstable, measured); the cost at 196 sites; and everything left
+  unbuilt with what is known about it: the Zeeman field under the bond
+  decoupling, the constraint projection, Popov-Fedotov (not a free
+  addition), the structure factor at a lattice momentum, the Z2 ansatz,
+  exact projection on small clusters, variational Monte Carlo, Schwinger
+  bosons.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

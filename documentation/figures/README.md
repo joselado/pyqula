@@ -93,6 +93,6 @@ a few slow scripts, timed on one core:
 `geometry_chern_density` and `transport_stmtip` about 20 minutes,
 `transport_device` 17, `relaxation_twisted` 10, `spin_tdhf` 8, `spin_rpa`
 and `spin_pair` 6, `transport_andreev` 5, `spin_plasmon` 3.5,
-`realspace_marker` 3, `qpi_impurity` 2.5 (with 3 GB of memory, a dense
+`realspace_marker` and `pseudofermions_spinliquid` 3, `qpi_impurity` 2.5 (with 3 GB of memory, a dense
 diagonalization of 9522 sites) and `transport_magnetoresistance` 2. Since
 the scripts are independent, they can run side by side, one per core.

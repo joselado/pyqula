@@ -127,6 +127,146 @@ See `examples/spinon/heisenberg_chain/main.py` and
 and the notebook
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/13_spinon_rvb.ipynb`.
 
+## Spin liquid ansatz and its spin response
+
+We will now see how to keep the mean field in a chosen spin liquid, and how
+to compute its dynamical spin response. The mean field of the previous
+section has a magnetic channel. When the unit cell allows a magnetic order,
+the loop usually finds it, and the spin liquid is lost. To study the liquid
+itself we keep only the bond channel. With one fermion per site the exchange
+is exactly
+
+$$
+\vec S_i\cdot\vec S_j=-\tfrac12\,\hat\chi^\dagger_{ij}\hat\chi_{ij}+\tfrac14 ,
+\qquad
+\hat\chi_{ij}=\sum_s f^\dagger_{i,s}f_{j,s} ,
+$$
+
+and its decoupling gives spinons that hop between the sites with the
+amplitude
+
+$$
+|t_{ij}|=\tfrac12 J_{ij}\,|\chi_{ij}| ,\qquad \chi_{ij}=\langle\hat\chi_{ij}\rangle ,
+$$
+
+meaning that there is no magnetic mean field at all. This is the mean field
+of arXiv:2503.13831, and we select it with `decoupling="bond"`. In the first
+neighbor chain it gives $|t|=J/\pi$, where the default decoupling gives
+$3J/(4\pi)$.
+
+The bond mean field alone does not fix the spin liquid either. A free loop
+goes to the state of lowest mean-field energy, which is often not the one we
+want: in the chain with two sites per cell it is a dimerized state, and in
+the triangular lattice it is a state that breaks time reversal. So we give
+the hopping pattern of the liquid with `ansatz`. Every hopping keeps the
+phase that it has in the ansatz, a hopping that is zero in the ansatz stays
+zero, and the loop converges the amplitudes. The amplitudes are free. When
+all the bonds of the pattern are equivalent they stay equal, as below. In a
+cell with inequivalent sites or bonds the loop can still go to a dimerized
+state, so look at the converged hoppings.
+
+As an example we take the $J_1$-$J_2$ Heisenberg model in the triangular
+lattice, and the $\pi$-flux pattern, which has flux $\pi$ in the up triangles
+and zero in the down ones. Its spinons have Dirac cones, so this is a Dirac
+spin liquid. The pattern needs two sites per cell:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.spinon import SpinonHamiltonian
+
+g0 = geometry.triangular_lattice()
+g = g0.get_supercell((2,1)) # two sites, the cell of the pi-flux pattern
+a = g.get_hamiltonian(has_spin=True) # first-neighbor hoppings, all +1
+ansatz = dict()
+for (d,m) in a.get_dict().items(): # put the signs of the pi-flux pattern
+    m = np.array(m)
+    for i in range(2):
+        for j in range(2):
+            dr = g.r[j] + d[0]*g.a1 + d[1]*g.a2 - g.r[i] # the bond
+            if abs(dr[1])<1e-6: continue # a bond along a1 keeps +1
+            p = i if dr[1]>0 else i + int(round(dr[0]-0.5)) # its lower end
+            m[2*i:2*i+2,2*j:2*j+2] *= (-1)**p
+    ansatz[d] = m
+
+h = SpinonHamiltonian(g)
+h2 = h.get_mean_field_hamiltonian(J1=1.0,J2=0.125,decoupling="bond",
+        ansatz=ansatz,gutzwiller=2.0,nk=20,T=0.02)
+```
+
+The converged hoppings are real and all have the same modulus, $0.395J$. The
+second-neighbor bonds are zero in the ansatz, so $J_2$ does not change the
+spinon bands. It enters in the spin response below. The keywords are:
+
+- `decoupling`: `"hartree-fock"` (the default, with the magnetic channel) or
+  `"bond"`. The bond one takes an isotropic exchange and no Zeeman field.
+- `ansatz`: the hopping pattern to hold, a Hamiltonian or a dictionary of
+  hopping matrices. Without it the pattern can change during the loop.
+- `gutzwiller`: a factor that multiplies the exchange everywhere. Without the
+  constraint the local moment is $\langle\vec S_i^2\rangle=3/8$ instead of
+  $3/4$, and a factor of 2 accounts for this in an approximate way. It
+  doubles the energies and does not change the stability.
+- `T`: the temperature of the loop. For Dirac spinons a small temperature,
+  as here, keeps the two sites equivalent on a k-mesh.
+
+The spinons of the mean field do not interact. The exchange between them
+comes back in the spin response, in the random phase approximation,
+
+$$
+\chi(\vec q,\omega)=\chi_0(\vec q,\omega)
+\left[1+J(\vec q)\,\chi_0(\vec q,\omega)\right]^{-1} ,
+$$
+
+where $\chi_0$ is the response of the free spinons, the two-spinon continuum,
+and $J(\vec q)$ is the Fourier transform of the exchange. Both are matrices
+in the sites of the cell. `h2.get_spinchi_full()` returns $\chi$, and
+$\chi_0$ with `RPA=False`:
+
+```python
+energies = np.linspace(0.,3.,100)
+K = [2/3,1/3,0.] # the K point of the lattice, in the vectors of the supercell
+(es,chi0) = h2.get_spinchi_full(q=K,energies=energies,delta=0.05,nk=31,RPA=False)
+(es,chi) = h2.get_spinchi_full(q=K,energies=energies,delta=0.05,nk=31)
+r = h2.get_rpa_stiffness(K,nk=31,delta=1e-3,T=2e-3)
+```
+
+Each `chi[n]` is a matrix between $S_x$, $S_y$ and $S_z$ of every site, as in
+[Spin response and magnons](spin-response.md). Its imaginary part is what
+inelastic neutron scattering measures. `h2.get_rpa_stiffness(q)` is the
+smallest eigenvalue of the static kernel $1+J(\vec q)\chi_0(\vec q,0)$. It is
+1 without exchange, and it goes to zero when the liquid becomes unstable to
+magnetic order with wavevector $\vec q$. A negative value means that the
+liquid is not a stable state of the model. Here it is $0.12$ at K. Use an odd
+`nk` in the response, so that the Dirac points are not on the k-mesh.
+
+![Imaginary part of the spin response of the Dirac spin liquid of the triangular lattice along Gamma, K, M, Gamma, for free spinons and in the random phase approximation.](img/pseudofermions_spinliquid.png#only-light)
+![Imaginary part of the spin response of the Dirac spin liquid of the triangular lattice along Gamma, K, M, Gamma, for free spinons and in the random phase approximation.](img/pseudofermions_spinliquid-dark.png#only-dark)
+
+On the left, the free spinons give only a continuum, with most of its weight
+above $1.5J$. On the right, the exchange pulls the weight down into a sharp
+mode below the continuum, a bound state of two spinons with spin one. Its
+energy is $0.64J$ at K. It gets softer towards M, where the continuum reaches
+zero energy because of the Dirac cones. When $J_2$ decreases the mode at K
+goes down, and it reaches zero at $J_2=0.0716J_1$, the transition to the
+$120^\circ$ order. At M it reaches zero at $J_2=0.176J_1$, the transition to
+the stripe order. Between the two values the liquid is stable in this
+approximation. The figure shows the response at each momentum of the
+lattice, which is a plane wave on the two sites of the cell.
+
+??? example "Code of this figure (documentation/figures/pseudofermions_spinliquid.py)"
+
+    ```python
+    --8<-- "pseudofermions_spinliquid.py"
+    ```
+
+The random phase approximation is uncontrolled, like the mean field. It keeps
+the constraint of one fermion per site only on average, so the free spinons
+have half of the total weight of a spin one half. On a lattice with nesting,
+like the antiferromagnetic chain at $q=\pi$, the kernel is negative at low
+temperature and the approximation cannot be used. `h2.get_magnon_bands()` gives
+the energy of the sharp mode along a q-path. See
+`examples/spinon/dirac_spin_liquid_rpa/main.py` for a runnable script.
+
 ## Kondo lattice
 
 The Kondo lattice has a local moment on each site, coupled by exchange to a

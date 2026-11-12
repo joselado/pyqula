@@ -396,7 +396,7 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
         integration="ed", scale=None, npol=None, ne=None, cores=None,
         kpm_prec=None, kpm_radius=None, use_jax=False, solver=None,
         gmres_tol=None, gmres_restart=None, kick_steps=None, rcut=None,
-        write=None):
+        write=None, callback_mf=None):
     """Self-consistent mean field combining density-density interactions
     (U onsite Hubbard, V1/V2/V3/Vr neighbor-shell -- same convention as
     Vinteraction) with spin-spin exchange in a single SCF loop. rcut is
@@ -617,7 +617,16 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
 
     write is accepted so that every mean-field entry point takes it, as
     the spinless and KPM loops do (there it keeps the converged mean field
-    out of MF.pkl); this loop writes no file whatever its value."""
+    out of MF.pkl); this loop writes no file whatever its value.
+
+    callback_mf, if given, is a function taking the mean-field dictionary
+    {(n1,n2,n3): matrix} of one iteration and returning the one the loop
+    should use instead, applied after `constrains` (SzSz takes the same
+    argument). It is how a caller restricts the decoupling to a subspace
+    that no named constrain describes, e.g. spinon.SpinonHamiltonian's
+    bond-only decoupling. The matrices are the engine's own, sparse on
+    the sparse KPM path. Not available with use_jax=True, for the same
+    reason `constrains` is not."""
     if not h0.has_spin: return NotImplemented # only for spinful systems, same as SzSz/SxSx/SySy/non-jax below -- checked first so the NotImplemented-sentinel contract holds regardless of use_jax
     if use_jax:
         from .densitydensity import require_hermitian
@@ -632,6 +641,11 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
                     "apply constrains (they need concrete numpy arrays each "
                     "iteration, incompatible with jax tracing); use the "
                     "default (numpy) engine instead")
+        if callback_mf is not None:
+            raise NotImplementedError("VJinteraction's use_jax=True cannot "
+                    "apply a callback_mf (it needs concrete numpy arrays "
+                    "each iteration, incompatible with jax tracing); use "
+                    "the default (numpy) engine instead")
         if is_iterable(filling):
             raise NotImplementedError("VJinteraction's use_jax=True does "
                     "not support a per-site (array) filling, got %r; use "
@@ -713,7 +727,8 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
             maxerror, maxite, T, verbose, constrains, vd=vd,
             vz_exchange=vz_exchange, vd_reference=vd_reference,
             integration=integration, scale=scale, npol=npol, ne=ne,
-            cores=cores, kpm_prec=kpm_prec, kpm_radius=kpm_radius)
+            cores=cores, kpm_prec=kpm_prec, kpm_radius=kpm_radius,
+            callback_mf=callback_mf)
     if dense_nambu_kpm: scf.hamiltonian.turn_dense() # in place, so V,
     # Vchannels and fermi stay on it
     return scf
@@ -905,7 +920,7 @@ def _rot_dm(dd, R):
 def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
         maxerror, maxite, T, verbose, constrains, vd=None, vz_exchange=None,
         vd_reference=None, integration="ed", scale=None, npol=None, ne=None, cores=None,
-        kpm_prec=None, kpm_radius=None):
+        kpm_prec=None, kpm_radius=None, callback_mf=None):
     """Shared SCF core for Jinteraction/VJinteraction: decouples the
     z-channel matrix `vz` directly (Hartree-Fock density-density in the
     lab/computational spin basis) and the x/y-channel matrices `vx`/`vy`
@@ -1220,7 +1235,9 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
     # right here -- now module-level (see their definitions above, right
     # before _run_anisotropic_scf), unchanged in behavior since none of
     # them closed over anything from this function's scope.
-    callback_mf = _callback_mf_constrains(h1, constrains)
+    # the caller's own callback_mf (see VJinteraction) after the constrains
+    callback_mf = _compose_callbacks(_callback_mf_constrains(h1, constrains),
+            callback_mf)
 
     # a Bogoliubov-de Gennes h1 at a filling, with exact diagonalization:
     # the Fermi level is found on the charge of the paired state, as an
