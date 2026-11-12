@@ -38,34 +38,16 @@ loop (the loop shifts the Fermi energy to zero)."""
 import numpy as np
 from scipy import linalg
 
-from .. import check
 from ..kpointstk import kmesh as kmeshtk
+from . import pairs as pairstk
 
 
 def _get_pairs_and_check(h):
     """Return the Kondo pairs of h, or raise if h is not a Kondo lattice"""
-    if not hasattr(h, "_kondo_pairs"):
-        raise TypeError("the cotunneling dI/dV needs a KondoLatticeHamiltonian "
-                "(or the Hamiltonian returned by its "
-                "get_mean_field_hamiltonian), which carries the list of "
-                "Kondo pairs; got "+type(h).__name__)
-    check.require_spin(h, "the cotunneling dI/dV")
-    if h.has_eh:
-        raise ValueError("the cotunneling dI/dV needs a Hamiltonian without "
-                "the Nambu degree of freedom")
-    return list(h._kondo_pairs)
+    return pairstk.get_pairs(h, "the cotunneling dI/dV")
 
 
-def _select_sites(site, npairs):
-    """Indices of the Kondo pairs that are computed"""
-    if site is None: return list(range(npairs))
-    sites = [int(site)] if np.ndim(site) == 0 else [int(s) for s in site]
-    for s in sites:
-        if not -npairs <= s < npairs:
-            raise ValueError("site="+str(s)+" is not a Kondo pair of this "
-                    "Hamiltonian, which has "+str(npairs)+" pairs (0 to "
-                    +str(npairs-1)+")")
-    return [s % npairs for s in sites]
+_select_sites = pairstk.select_sites
 
 
 def _tf_per_site(tf, J, h, sites):

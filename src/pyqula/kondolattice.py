@@ -184,3 +184,32 @@ class KondoLatticeHamiltonian(Hamiltonian):
         for the keywords (tc, tf, J, nk, delta, T, site)."""
         from .kondotk import cotunneling
         return cotunneling.cotunneling_didv(self, **kwargs)
+
+    def get_composite_spectral_function(self, **kwargs):
+        """Momentum-resolved spectral functions of the conduction electron
+        c and of the composite fermion F = (2/3) (sigma.S) c, an electron
+        together with a spin flip of the moment, and the propagator g_F of
+        the composite fermion without its hybridization: the matrix
+        spectral function of Chen, Stoudenmire, Komijani and Coleman,
+        arXiv:2302.09701, in the mean field, where F is the f fermion
+        times an amplitude. Call it on the Hamiltonian returned by
+        get_mean_field_hamiltonian. Returns (ks, energies, out) with out a
+        dictionary with "cc", "FF", "cF" and "gF"; see
+        kondotk.compositespectrum.composite_spectral_function for the
+        keywords (kpath, energies, delta, J, hybridization_scale, site,
+        nk)."""
+        from .kondotk import compositespectrum
+        return compositespectrum.composite_spectral_function(self, **kwargs)
+
+    def get_moment_spinchi(self, **kwargs):
+        """Dynamical spin susceptibility of the local moments of a
+        converged Kondo lattice mean field, the convolution of two f
+        propagators, dressed with a residual interaction U(q) in the
+        random phase approximation, 1/(1/chi - U): the mean-field and RPA
+        susceptibilities of arXiv:2302.09701. Call it on the Hamiltonian
+        returned by get_mean_field_hamiltonian. Returns (energies, chi)
+        with one matrix between the moments of the unit cell per energy;
+        see kondotk.momentchi.moment_spinchi for the keywords (q,
+        energies, U, nk, delta, T, hybridization_scale)."""
+        from .kondotk import momentchi
+        return momentchi.moment_spinchi(self, **kwargs)

@@ -1999,6 +1999,23 @@ and $J$ is given to `h.get_mean_field_hamiltonian()` as `J`.
   tunnels into the conduction electron and into the f fermion of a site.
   Returns `(energies,dIdV)`, one row per Kondo site, and the three terms
   with `return_parts=True`. With `J` the f amplitude is $t_fV_j^*/J$.
+- `h2.get_composite_spectral_function(kpath=None,energies=None,delta=2e-2,J=None,hybridization_scale=1.0,site=None,green=False,nk=100)`:
+  spectral functions along a k-path of the conduction electron $c$ and of
+  the composite fermion $F=\tfrac23(\vec\sigma\cdot\vec S)c$, an electron
+  together with a spin flip, arXiv:2302.09701. Returns `(ks,energies,A)`,
+  where `A` is a dictionary with `"cc"`, `"FF"`, `"cF"` and the Green
+  function `"gF"` of the composite fermion without hybridization. In the
+  mean field $F$ is the f fermion, or $(4V^*/3J)f$ with `J`.
+  `hybridization_scale` multiplies $V$, 1.5 in that work. It works in any
+  dimensionality; a finite system has one k-point
+- `h2.get_moment_spinchi(q=None,energies=...,U=None,nk=60,delta=0.05,T=None,hybridization_scale=1.0)`:
+  transverse spin susceptibility of the local moments, the product of two
+  f propagators, arXiv:2302.09701. `U` is a residual interaction $U'(q)$,
+  a number, a matrix or a function of `q`, dressed as
+  $\chi_{\rm RPA}=1/(1/\chi-U')$. Returns `(energies,chi)`, one matrix
+  between the moments of the unit cell per energy. The spectral weight at
+  positive frequency is the imaginary part. It works in any
+  dimensionality; a finite system ignores `q`
 
 ## GrapheneGeometry(g)
 A `Geometry` for graphene multilayers `g` (bilayer, twisted bilayer,

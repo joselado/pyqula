@@ -521,5 +521,18 @@ already reached once.
   cost at 196 sites, and what is left: the README bullet and notebooks, the
   spinon Kondo-Heisenberg loop, the leading logarithms, the potential term.
 
+- [`kondo_composite_fermion.md`](kondo_composite_fermion.md) -- the two
+  comparisons of arXiv:2302.09701 between matrix product states and the
+  mean field of the Kondo chain: the matrix spectral function of the
+  conduction electron and the composite fermion, and the spin
+  susceptibility of the moments with a residual interaction in the RPA.
+  The conventions that had to be settled ($J=2J'$, the amplitude of $F$ in
+  $f$, the 3/2 rescale of $V$, two places where the printed mean field of
+  the paper was not followed), the exact 4-site ring they were checked
+  against, the instability of the paper's $U'$ at weak coupling without
+  the rescale, the cost at 200 Kondo pairs, and what is left: the matrix
+  product side, the three-fermion continuum of $F$, unfolding, the README
+  bullet and notebook.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

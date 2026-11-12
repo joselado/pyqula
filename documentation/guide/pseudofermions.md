@@ -14,7 +14,9 @@ with exactly one fermion on each site, because a spin one half has no charge
 fluctuations. You can think of the pseudofermion as the spin part of an
 electron, with the charge frozen. We use it first for the Heisenberg model,
 where it gives spinons, and then for the Kondo lattice, where it gives heavy
-fermions. For both we also compute what a tunneling microscope measures.
+fermions. For both we also compute what a tunneling microscope measures. For the
+Kondo lattice we also compute the spectral function of the composite fermion
+and the spin susceptibility of the moments.
 
 ## Spinon mean field for Heisenberg models
 
@@ -644,3 +646,326 @@ This is the spectrum of the mean field, so above the temperature where $V$
 vanishes it is only the conduction band. See
 `examples/kondolattice/cotunneling_didv/main.py` for a runnable script, which
 also compares the gap and the line shape with their closed forms.
+
+## Composite fermion of the Kondo lattice
+
+We will now see the spectral function of the Kondo lattice resolved in
+momentum, for the conduction electron and for the composite fermion. This is
+the comparison that arXiv:2302.09701 makes between matrix product states and
+the mean field of the Kondo chain. That work writes the Kondo term with the
+Pauli matrices,
+
+$$
+H=\sum_k\epsilon_k c^\dagger_kc_k
++J'\sum_j \left(c^\dagger_j\vec\sigma c_j\right)\cdot\vec S_j ,
+$$
+
+so its coupling is $J'=J/2$ in terms of the Coqblin-Schrieffer $J$ of this
+page. There are two ways to add an electron to a site. We can add a
+conduction electron, with $c^\dagger_j$. We can also add an electron and flip
+the moment of the site at the same time. The operator of the second process
+is what is called the composite fermion,
+
+$$
+F_{j\alpha}=\frac{2}{3}\sum_\beta
+\left(\vec\sigma\cdot\vec S_j\right)_{\alpha\beta}c_{j\beta} .
+$$
+
+It has charge $e$ and spin one half, as the electron. It is also the operator
+that the Kondo term couples to the electron, because the equation of motion
+of the electron is
+$i\partial_t c_k=\epsilon_kc_k+\tfrac{3}{2}J'F_k$. The two operators give a
+$2\times2$ matrix of retarded Green functions and its spectral functions,
+
+$$
+G_{AB}(k,t)=-i\theta(t)\langle\{A_k(t),B^\dagger_k(0)\}\rangle ,
+\qquad
+A_{cc}=-\frac{1}{\pi}\mathrm{Im}\,G_{cc},
+\qquad
+A_{FF}=-\frac{1}{\pi}\mathrm{Im}\,G_{FF} ,
+$$
+
+with $A$ and $B$ equal to $c$ or $F$. $A_{cc}$ is what ARPES measures.
+$A_{FF}$ is the weight of the states that we reach through a spin flip.
+
+In the mean field the moment is made of f fermions, and the Kondo term is
+the hybridization $V_j$. The same equation of motion is then
+$i\partial_t c_k=\epsilon_kc_k+V^*f_k$, meaning that the composite fermion
+is the f fermion times an amplitude,
+
+$$
+F_j=\frac{2V_j^*}{3J'}f_j=\frac{4V_j^*}{3J}f_j .
+$$
+
+So the mean field gives this matrix from the two hybridized bands, and
+`h2.get_composite_spectral_function()` computes it along a k-path:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.kondolattice import KondoLatticeHamiltonian
+hc = geometry.chain().get_hamiltonian(has_spin=True)
+h = KondoLatticeHamiltonian(hc)
+Jp = 2.0 # J' of the Kondo term above, in units of t
+h2 = h.get_mean_field_hamiltonian(J=2*Jp, filling=0.5, nk=200,
+        mf=([Jp+0.0j], [0.0]))
+energies = np.linspace(-6., 6., 300)
+(ks, es, A) = h2.get_composite_spectral_function(energies=energies, nk=200,
+        delta=0.05, hybridization_scale=1.5)
+```
+
+`ks` are the k-points and `es` the energies, measured from the chemical
+potential. `A["cc"]` and `A["FF"]` are the two spectral functions, arrays
+over momentum and energy, averaged over the two spins. `A["cF"]` is the mixed
+one. `A["gF"]` is $g_F=1/[G^{-1}]_{FF}$, the Green function of the composite
+fermion without its hybridization with the electrons.
+
+Here the conduction band is half filled, which is the Kondo insulator. For a
+band with particle-hole symmetry, as the one of the chain, half filling is
+the one case where a chemical potential inside the flat f-level is safe: the
+chemical potential and $\lambda$ are both zero by symmetry. The loop gives $V=1.88$, and `hybridization_scale=1.5` multiplies it by
+$3/2$ before the spectrum is computed, for the reason given below.
+
+![Spectral functions of the conduction electron and of the composite fermion of the half-filled Kondo chain, over momentum and energy.](img/pseudofermions_composite.png#only-light)
+![Spectral functions of the conduction electron and of the composite fermion of the half-filled Kondo chain, over momentum and energy.](img/pseudofermions_composite-dark.png#only-dark)
+
+The two spectral functions show the same two bands,
+$E_\pm(k)=\tfrac12[\epsilon_k\pm\sqrt{\epsilon_k^2+4V^2}]$, with
+$\epsilon_k=2t\cos k$ and the rescaled $V=2.82$. The upper band goes from
+$3.99$ at $k=0$ to $1.99$ at $k=\pi$, and the lower band is its mirror image.
+The gap is indirect, $3.98$ between $k=0$ and $k=\pi$. What separates the two
+panels is the weight. At $k=0$ the upper band is mostly conduction electron,
+with a peak of $4.1$ in $A_{cc}$ against $2.1$ in $A_{FF}$. At $k=\pi$ it is
+the opposite, and at $k=\pi/2$, where $\epsilon_k=0$, the two are equal. In
+the mean field $g_F$ is one pole at the f-level for every $k$, so the
+composite fermion has no dispersion of its own.
+
+??? example "Code of this figure (documentation/figures/pseudofermions_composite.py)"
+
+    ```python
+    --8<-- "pseudofermions_composite.py"
+    ```
+
+The mean field has the right two bands, but its hybridization is too small.
+At strong coupling the loop gives $V=J'$, and the exact energy to add an
+electron to a Kondo singlet is $3J'/2$. So arXiv:2302.09701 multiplies $V$ by
+$3/2$ when it compares with matrix product states, and
+`hybridization_scale=1.5` does the same here. With it, the upper band at
+$J'=2t$ is at $1.99$, $2.82$ and $3.99$ for the three momenta of a ring of 4
+sites. The exact poles of $A_{FF}$ of that ring are at $2.14$, $2.88$ and
+$3.96$. This rescale is put by hand, it is not a result of the mean field.
+
+The keywords are:
+
+- `kpath`, `nk`: the k-points, as in `h.get_bands()`.
+- `energies`: the energies. By default `ne` points between `-emax` and `emax`.
+- `delta`: the broadening of the levels.
+- `hybridization_scale`: a factor that multiplies $V$. 1 is the mean field
+  itself and 1.5 is the comparison above. The f-level is not changed, so the
+  f occupation stays at one only at half filling.
+- `J`: by default the composite fermion is the f fermion, $F=f$, and $A_{FF}$
+  integrates to one. With the $J$ of the mean-field calculation,
+  $F=(4V^*/3J)f$ and $A_{FF}$ integrates to $|4V/3J|^2$.
+- `site`: a Kondo site of the unit cell, or a list. By default the average
+  over the sites of the cell.
+- `green`: with `True`, `A` has the complex Green functions `"cc"`, `"cF"`,
+  `"Fc"` and `"FF"` instead of the spectral functions.
+
+With `J` and `green=True` the Green functions obey the relations that the
+equation of motion gives for the exact problem,
+$G_{cc}=g_c+g_c\tfrac32J'G_{FF}\tfrac32J'g_c$ and
+$G_{cF}=g_c\tfrac32J'G_{FF}$, with $g_c=1/(\omega-\epsilon_k)$. See
+`examples/kondolattice/composite_spectral_function/main.py` for a runnable
+script, which checks them and compares with the exact energy of one site.
+
+## Spin susceptibility of the local moments
+
+We will now see the dynamical spin susceptibility of the local moments of
+the Kondo lattice, which is what inelastic neutron scattering measures. We
+take the transverse response between the moments $i$ and $j$ of the unit
+cell,
+
+$$
+\chi_{ij}(q,\omega)=\langle\langle S^-_j;S^+_i\rangle\rangle_{q,\omega} ,
+$$
+
+where $S^+$ creates the excitation, on the moment of the first index, and
+$S^-$ removes it, on the moment of the second. In the mean field the moment is
+$\vec S_j=\tfrac12f^\dagger_j\vec\sigma f_j$, so a spin flip creates a
+particle and a hole in the hybridized bands. The susceptibility is then the
+product of two f propagators. For the half-filled chain it is
+
+$$
+\chi(q,\omega)=\frac{1}{N}\sum_k w^-_k\,w^+_{k+q}
+\left[\frac{1}{\omega-\Delta_{k,q}}-\frac{1}{\omega+\Delta_{k,q}}\right],
+\qquad
+\Delta_{k,q}=E_+(k+q)-E_-(k) ,
+$$
+
+where $w^\pm_k$ is the weight of the f fermion in the band $E_\pm(k)$. This
+is a continuum of pairs of quasiparticles with spin one half, without a sharp
+mode. You can think of it as the spin flip breaking in two halves.
+
+The mean field leaves out the interaction between the particle and the hole.
+arXiv:2302.09701 puts it back as a residual interaction $U'(q)$ in the random
+phase approximation,
+
+$$
+\chi_{\rm RPA}(q,\omega)=\frac{1}{1/\chi(q,\omega)-U'(q)} .
+$$
+
+A negative $U'$ is an attraction, and it binds the particle and the hole in
+a magnon below the continuum. `h2.get_moment_spinchi()` computes the two
+susceptibilities, for the same half-filled chain as above:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.kondolattice import KondoLatticeHamiltonian
+hc = geometry.chain().get_hamiltonian(has_spin=True)
+h = KondoLatticeHamiltonian(hc)
+Jp = 2.0 # J' of the Kondo term, in units of t
+h2 = h.get_mean_field_hamiltonian(J=2*Jp, filling=0.5, nk=200,
+        mf=([Jp+0.0j], [0.0]))
+energies = np.linspace(0., 6., 200)
+(es, chi0) = h2.get_moment_spinchi(q=[0.5,0.,0.], energies=energies,
+        nk=200, delta=0.05)
+(es, chi) = h2.get_moment_spinchi(q=[0.5,0.,0.], energies=energies,
+        nk=200, delta=0.05, U=-2.0)
+```
+
+`q` is in units of the reciprocal lattice vector, so this is $q=\pi$. `chi0`
+is the mean-field response and `chi` the one with $U'=-2t$. Each one is a
+matrix between the moments of the unit cell for every frequency, $1\times1$
+here. The spectral weight at positive frequency is the imaginary part,
+`chi[:,0,0].imag`, and the real part at zero frequency is negative.
+
+![Imaginary part of the spin susceptibility of the moments of the Kondo chain over momentum and frequency, in the mean field and with the residual interaction.](img/pseudofermions_momentchi.png#only-light)
+![Imaginary part of the spin susceptibility of the moments of the Kondo chain over momentum and frequency, in the mean field and with the residual interaction.](img/pseudofermions_momentchi-dark.png#only-dark)
+
+The figure repeats the two calls for 61 momenta, with $V=1.88$. In the mean
+field there is only the continuum. It starts at the direct gap $2V=3.75$ at
+$q=0$ and at the indirect gap $2.25$ at $q=\pi$. With $U'=-2t$ a sharp mode
+appears below it, at $3.46$ for $q=0$ and at $1.96$ for $q=\pi$. This is the
+magnon that the matrix product states of arXiv:2302.09701 show at $J'=2t$.
+
+??? example "Code of this figure (documentation/figures/pseudofermions_momentchi.py)"
+
+    ```python
+    --8<-- "pseudofermions_momentchi.py"
+    ```
+
+$U'$ is a parameter of the comparison, the mean field does not give it. That
+work takes $U'=-2t$ for $J'=2t$, and $U'(q)=-0.75t\sin(q/2)$ for $J'=0.9t$,
+where the magnon merges with the continuum at small $q$. The second one is
+`U=lambda q: -0.75*np.sin(np.pi*q[0])` here. The approximation is valid while
+$1-U'\chi(q,0)>0$. When this reaches zero the magnon is at zero frequency,
+meaning that the mean field is unstable to magnetic order with wavevector
+$q$. For $J'=0.9t$ and $U'=-0.75t$ at $q=\pi$ this number is $-0.01$ with the
+$V$ of the loop, and $0.54$ with `hybridization_scale=1.5`.
+
+The mean field also loses spectral weight. The local response, integrated
+over positive frequency, gives $1/4$ for each moment, and a spin one half has
+$\langle S^-S^+\rangle=1/2$. The reason for this is that the constraint of
+one fermion per site holds only on average.
+
+The keywords are:
+
+- `q`: the momentum, in units of the reciprocal lattice vectors. `None` is
+  the local response, the average over the momenta of the k-mesh.
+- `U`: the residual interaction $U'$. A number, a matrix between the moments
+  of the unit cell, or a function of `q` that returns one of them. By default
+  there is none.
+- `nk`: the k-mesh.
+- `delta`: the broadening of the frequency.
+- `T`: the temperature of the occupations, equal to `delta` by default.
+- `hybridization_scale`: the factor that multiplies $V$, as above.
+
+A Zeeman field, a supercell and a hopping between the moments are all
+included, because the response is built from the bands of the full
+Hamiltonian. See `examples/kondolattice/moment_spinchi/main.py` for a
+runnable script.
+
+## Kondo lattices in two dimensions and in finite systems
+
+We will now see that the two calculations above are not specific to the
+chain. `h2.get_composite_spectral_function()` and `h2.get_moment_spinchi()`
+take a Kondo lattice of any dimensionality, from a finite system to a 3D
+crystal, with any number of Kondo sites in the unit cell. The momenta
+`kpath` and `q` are in units of the reciprocal lattice vectors, so only
+their number of components changes. Let us take the square lattice at half
+filling, with the same $J'=2t$:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.kondolattice import KondoLatticeHamiltonian
+hc = geometry.square_lattice().get_hamiltonian(has_spin=True)
+h = KondoLatticeHamiltonian(hc)
+Jp = 2.0 # J' of the Kondo term, in units of t
+h2 = h.get_mean_field_hamiltonian(J=2*Jp, filling=0.5, nk=40,
+        mf=([Jp+0.0j], [0.0]))
+kpath = [[0.,0.,0.], [0.5,0.,0.], [0.5,0.5,0.]] # Gamma, X and M
+(ks, es, A) = h2.get_composite_spectral_function(kpath=kpath,
+        energies=np.linspace(-6., 6., 300), delta=0.05)
+(ws, chi) = h2.get_moment_spinchi(q=[0.5,0.5,0.],
+        energies=np.linspace(0., 5., 150), nk=30, delta=0.05, U=-2.0)
+```
+
+`A["cc"]` and `A["FF"]` have one row for each of the three momenta, and
+`chi` is the susceptibility at M with the residual interaction $U'=-2t$.
+
+![Spectral function of the composite fermion and spin susceptibility of the moments of the Kondo square lattice along the path Gamma, X, M, Gamma.](img/pseudofermions_kondo2d.png#only-light)
+![Spectral function of the composite fermion and spin susceptibility of the moments of the Kondo square lattice along the path Gamma, X, M, Gamma.](img/pseudofermions_kondo2d-dark.png#only-dark)
+
+The figure repeats the two calls along the path $\Gamma$, X, M, $\Gamma$.
+The loop gives $V=1.79$, and the bands are again
+$E_\pm(k)=\tfrac12[\epsilon_k\pm\sqrt{\epsilon_k^2+4V^2}]$, now with
+$\epsilon_k=2t(\cos k_x+\cos k_y)$. The upper band is at $4.68$ at $\Gamma$,
+at $1.79$ at X and at $0.68$ at M. The composite fermion has little weight
+at $\Gamma$, $0.15$ of the one of the conduction electron, the same weight
+at X, where $\epsilon_k=0$, and most of the weight at M. The gap is indirect,
+$1.36$ between M and $\Gamma$. In the susceptibility the magnon is at $3.32$
+at $\Gamma$, at $1.98$ at X and at $1.21$ at M, below the continuum, which
+starts at $1.36$ at M. Its minimum is at M, the wavevector of the
+antiferromagnetic order of the square lattice.
+
+??? example "Code of this figure (documentation/figures/pseudofermions_kondo2d.py)"
+
+    ```python
+    --8<-- "pseudofermions_kondo2d.py"
+    ```
+
+A finite system has no momentum. The spectral functions are then the local
+ones of each Kondo site, which is what STM measures, and the susceptibility
+is a matrix between the moments. Let us take a honeycomb flake of 24 sites:
+
+```python
+import numpy as np
+from pyqula import islands
+from pyqula.kondolattice import KondoLatticeHamiltonian
+g = islands.get_geometry(name="honeycomb", n=2, nedges=6) # 24 sites
+h = KondoLatticeHamiltonian(g.get_hamiltonian(has_spin=True))
+n = len(g.r)
+Jp = 2.0 # J' of the Kondo term, in units of t
+h2 = h.get_mean_field_hamiltonian(J=2*Jp, filling=0.5,
+        mf=([Jp+0.0j]*n, [0.0]*n))
+(ks, es, A) = h2.get_composite_spectral_function(
+        energies=np.linspace(-6., 6., 301), delta=0.05, site=list(range(n)))
+(ws, chi) = h2.get_moment_spinchi(energies=np.linspace(0., 6., 301),
+        delta=0.05)
+```
+
+`A["FF"]` has the shape (24, 1, 301): one row for each site, one k-point and
+the energies. `chi` has the shape (301, 24, 24). Here $V$ goes from $1.82$
+to $1.88$ between the sites, because the sites of the edge have fewer
+neighbors, and the gap of the flake is $1.86$. In a finite system `kpath`
+and `q` are ignored.
+
+With several Kondo sites the residual interaction can be a matrix between
+the moments of the cell, and the dressing is
+$\chi_{\rm RPA}=\chi(1-U'\chi)^{-1}$. A band without particle-hole symmetry,
+as the one of the triangular lattice, needs a filling away from one half,
+as explained in the section on the Kondo lattice. See
+`examples/kondolattice/composite_fermion_2d/main.py` and
+`examples/kondolattice/composite_fermion_0d/main.py` for runnable scripts.
