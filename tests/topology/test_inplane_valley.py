@@ -401,29 +401,100 @@ def test_inplane_valley_of_a_twisted_bilayer_needs_a_tripled_cell():
     assert np.max(np.abs(Mx@My-1j*Mz))<1e-8
 
 
-def test_sparse_inplane_valley_is_the_dense_one():
-    """A sparse Hamiltonian, with and without the electron-hole degree of
-    freedom, gets the same operators and the same valley exchange as the
-    dense one, as sparse matrices."""
+def _route_geometry(name):
+    """Small honeycomb geometries of every dimensionality"""
+    from pyqula import islands
+    if name=="island": return islands.get_geometry(name="honeycomb",n=2,
+            nedges=6)
+    if name=="zigzag": return geometry.honeycomb_zigzag_ribbon(2).supercell(3)
+    if name=="armchair": return geometry.honeycomb_armchair_ribbon(2)
+    if name=="cell": return geometry.honeycomb_lattice().supercell(3)
+    if name=="stack": # the cell repeated along z, ten bonds apart
+        g = geometry.honeycomb_lattice().supercell(3)
+        g.dimensionality = 3
+        return g
+
+
+def _route_hamiltonian(g,space,sparse):
+    """A spinless, spinful or Nambu Hamiltonian of g, sparse or dense"""
+    h = g.get_hamiltonian(has_spin=(space!="spinless"))
+    if sparse: h.turn_sparse()
+    if space=="nambu": h.setup_nambu_spinor()
+    return h
+
+
+def _dense(m):
     from scipy.sparse import issparse
-    g3 = geometry.honeycomb_lattice().supercell(3)
-    k = [0.07,0.19,0.]
+    return m.toarray() if issparse(m) else np.array(m)
+
+
+@pytest.mark.parametrize("sparse",[False,True])
+@pytest.mark.parametrize("space",["spinless","spinful","nambu"])
+@pytest.mark.parametrize("name",["island","zigzag","armchair","cell","stack"])
+def test_inplane_valley_through_every_route(name,space,sparse):
+    """The operators and the valley exchange are the same physics through
+    every way of storing the Hamiltonian: a flake, a ribbon, a cell and a
+    stack of cells, spinless, spinful and with the electron-hole degree of
+    freedom, dense and sparse. A sparse Hamiltonian gets sparse matrices
+    equal to the dense ones, a spinful one the spinless operator on each
+    spin, the Nambu one the Nambu form of the spinful one with the same
+    expectation values, and an in-plane angle the combination of tau_x and
+    tau_y."""
+    from scipy.sparse import issparse
+    from pyqula.operatortk.inplane_valley import get_inplane_valley
+    g = _route_geometry(name)
+    k = [[0.,0.,0.],[0.13,0.,0.],[0.13,0.21,0.],[0.13,0.21,0.34]][
+            g.dimensionality]
     v = [0.2,0.1,0.15]
-    for nambu in [False,True]:
-        hd = g3.get_hamiltonian(has_spin=True)
-        hs = g3.get_hamiltonian(has_spin=True)
-        hs.turn_sparse()
-        if nambu:
-            for h in [hd,hs]: h.setup_nambu_spinor() ; h.add_swave(0.1)
-        for name in ["valley_x","valley_y"]:
-            ms = hs.get_operator(name).m(None,k=k)
-            assert issparse(ms)
-            md = np.array(hd.get_operator(name).m(None,k=k))
-            assert np.max(np.abs(ms.toarray()-md))<1e-12
-        hd.add_valley_exchange(v) ; hs.add_valley_exchange(v)
-        assert hs.is_sparse and issparse(hs.intra)
-        d = hs.get_hk_gen()(k).toarray() - np.array(hd.get_hk_gen()(k))
+    def matrix(h,opname):
+        op = h.get_operator(opname)
+        return op.matrix if h.dimensionality==0 else op.m(None,k=k)
+    h = _route_hamiltonian(g,space,sparse)
+    hd = _route_hamiltonian(g,space,False) # the dense reference
+    h0 = _route_hamiltonian(g,"spinless",False)
+    ms = {}
+    for opname in ["valley_x","valley_y"]:
+        m = matrix(h,opname)
+        assert issparse(m)==sparse
+        ms[opname] = _dense(m)
+        assert np.max(np.abs(ms[opname]-_dense(matrix(hd,opname))))<1e-12
+        assert np.max(np.abs(ms[opname]-ms[opname].conj().T))<1e-12
+        if space=="spinful": # the spinless operator on each spin
+            m0 = np.kron(_dense(matrix(h0,opname)),np.eye(2))
+            assert np.max(np.abs(ms[opname]-m0))<1e-12
+    ma = get_inplane_valley(h,angle=0.7) # a generic in-plane direction
+    if h.dimensionality>0: ma = ma(None,k=k)
+    comb = np.cos(0.7)*ms["valley_x"] + np.sin(0.7)*ms["valley_y"]
+    assert np.max(np.abs(_dense(ma)-comb))<1e-12
+    # a valley exchange, in the Hamiltonian
+    h.add_valley_exchange(v) ; hd.add_valley_exchange(v)
+    assert h.is_sparse==sparse and issparse(h.intra)==sparse
+    d = _dense(h.get_hk_gen()(k)) - _dense(hd.get_hk_gen()(k))
+    assert np.max(np.abs(d))<1e-12
+    hn = _route_hamiltonian(g,"spinful" if space=="nambu" else space,False)
+    hn.add_valley_exchange(v) # the normal state with the same exchange
+    if space=="nambu": # the Nambu form of the normal Hamiltonian
+        ref = hn.copy() ; ref.setup_nambu_spinor()
+        d = _dense(h.get_hk_gen()(k)) - _dense(ref.get_hk_gen()(k))
         assert np.max(np.abs(d))<1e-12
+    if name=="stack": return # the texture is the one of the cell
+    # and the texture it creates
+    (f,fn) = (_texture(h),_texture(hn))
+    assert np.max(np.abs(fn))>0.02
+    assert np.max(np.abs(f-fn))<1e-8
+
+
+def test_stack_of_cells_has_the_operators_of_one_layer():
+    """Layers ten bonds apart are not coupled, so the operators of the
+    three-dimensional stack are those of the two-dimensional cell, at any
+    momentum along the stack."""
+    g2 = _route_geometry("cell")
+    g3 = _route_geometry("stack")
+    (h2,h3) = [g.get_hamiltonian(has_spin=False) for g in (g2,g3)]
+    for kz in [0.,0.37]:
+        m2 = _valley_matrices(h2,k=[0.13,0.21,0.])
+        m3 = _valley_matrices(h3,k=[0.13,0.21,kz])
+        for (a,b) in zip(m2,m3): assert np.max(np.abs(a-b))<1e-12
 
 
 def test_inplane_valley_in_nambu_space_is_the_one_of_the_normal_state():

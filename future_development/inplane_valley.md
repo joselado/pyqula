@@ -40,7 +40,10 @@ With the electron-hole degree of freedom the operators and the exchange
 are the Nambu form of the normal-state ones, built with
 `setup_nambu_spinor()`; before, both raised a shape error there. A sparse
 Hamiltonian, with or without the electron-hole degree of freedom, gets the
-same matrices as the dense one.
+same matrices as the dense one, as sparse matrices; before, the operator
+of a sparse Hamiltonian came back dense. One test runs every route: a
+flake, a zigzag and an armchair ribbon, a cell and a three-dimensional
+stack of cells, each spinless, spinful and Nambu, each dense and sparse.
 
 The second convention was the maintainer's choice of 13 November 2026,
 over the plain origin of coordinates, where a shift by $\mathbf d$ rotates
