@@ -82,6 +82,19 @@ measured:
 - With the first atom on sublattice B, $\tau_x\tau_y=-i\tau_z$, and the
   construction needed the first two atoms to be first neighbors.
 
+## The normalization of tau_z on a buckled lattice
+
+The Haldane hopping is the coupling times the $z$ component of the cross
+product of the two bonds it goes through, so it scales with the square of
+the in-plane bond length. With the factor $1/4.5$ of the flat lattice,
+$\tau_z$ of `geometry.buckled_honeycomb_lattice()` had eigenvalues
+$\pm8/9$ on the Dirac points, and `add_valley_exchange([0,0,vz])` opened a
+gap $8v_z/9$. `operatortk.valley.valley_coupling` now divides by the
+squared in-plane bond length. It returns exactly $1/4.5$ for a flat
+lattice, and also when the geometry has no first neighbors or in-plane
+bond lengths that differ, so nothing else changes. The Haldane term itself
+(`kanemele.haldane`) was not touched.
+
 ## Twisted bilayers
 
 Each layer finds its own $\mathbf K$. The moire cell of
@@ -115,10 +128,6 @@ Checked with the old and the new operator, which agree away from the edges:
 
 ## Open
 
-- **$\tau_z$ on the buckled lattice** has eigenvalues $\pm8/9$ on the Dirac
-  points instead of $\pm1$: the factor $1/4.5$ of its second-neighbor
-  hopping is the one of the flat lattice. $\tau_x$ and $\tau_y$ are
-  normalized there. Not touched.
 - **A sublattice-diagonal operator.** $2\cos(\mathbf Q\cdot\mathbf r_i)$
   onsite is $\tau_x\sigma_0$ on the Dirac points, the density wave at
   $\mathbf Q$, the part of the intervalley coherence that STM sees on the

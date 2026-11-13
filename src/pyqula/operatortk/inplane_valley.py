@@ -1,6 +1,7 @@
 import numpy as np
 from .. import check
 from .sharpen import get_sharpen
+from .valley import valley_coupling
 
 # The in-plane valley pseudospin (tau_x, tau_y) is a plane wave on the
 # first-neighbor bonds of the honeycomb lattice,
@@ -250,7 +251,7 @@ def add_valley_exchange(h,v):
             "add_valley_exchange needs real vx and vy, since a complex "
             "one would add a non-Hermitian term, got "+repr(v))
     h.turn_multicell()
-    if vz!=0.: h.add_modified_haldane(vz/4.5)
+    if vz!=0.: h.add_modified_haldane(vz*valley_coupling(h.geometry))
     if vx!=0. or vy!=0.:
         ho = _inplane_valley_hamiltonian(h,amplitude=np.sqrt(vx**2+vy**2),
                 angle=np.arctan2(vy,vx)) # vx*tau_x + vy*tau_y

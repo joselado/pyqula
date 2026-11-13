@@ -355,12 +355,12 @@ def test_inplane_valley_on_buckled_and_stacked_honeycombs(builder,nlayers):
     """Each bond takes K from its own in-plane direction and from the
     sublattice labels of its two sites, so a buckled honeycomb and every
     layer of a stack get the full Pauli algebra with the tau_z of the same
-    labels, tau_x tau_y = i tau_z on the Dirac points, and an in-plane v
-    opens the gap |v|. The AA stack labels its second layer the other way
-    around, which exchanges the valleys there for tau_z and tau_y alike.
-    The tau_z of the buckled lattice has eigenvalues +-0.89 instead of +-1
-    (its second-neighbor hopping is normalized for the flat lattice), so it
-    is compared after normalizing it."""
+    labels, tau_x tau_y = i tau_z on the Dirac points, and v.tau opens the
+    gap |v|. The AA stack labels its second layer the other way around,
+    which exchanges the valleys there for tau_z and tau_y alike. The
+    buckled lattice has a shorter in-plane bond, which the normalization
+    of tau_z has to follow: with the one of the flat lattice its
+    eigenvalues were +-8/9."""
     g3 = builder().supercell(3)
     h = g3.get_hamiltonian(has_spin=False)
     hk0 = np.array(h.get_hk_gen()([0.,0.,0.]))
@@ -371,10 +371,9 @@ def test_inplane_valley_on_buckled_and_stacked_honeycombs(builder,nlayers):
     I = np.eye(V.shape[1])
     assert np.max(np.abs(Mx@Mx-I))<1e-8
     assert np.max(np.abs(My@My-I))<1e-8
-    Mz = Mz/np.sqrt(np.trace(Mz@Mz).real/V.shape[1])
     assert np.max(np.abs(Mz@Mz-I))<1e-8
     assert np.max(np.abs(Mx@My-1j*Mz))<1e-8
-    v = np.array([0.18,0.24,0.])
+    v = np.array([0.1,0.15,0.25])
     h.add_valley_exchange(list(v))
     es = np.linalg.eigvalsh(np.array(h.get_hk_gen()([0.,0.,0.])))
     assert abs(np.min(np.abs(es))-np.linalg.norm(v))<1e-8
