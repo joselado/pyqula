@@ -75,3 +75,41 @@ def test_vjinteraction_kpm_refuses_a_scale_short_of_the_shifted_spectrum(
     with pytest.raises(ValueError, match="does not cover the spectrum"):
         VJinteraction(h, U=1.0, filling=0.1, nk=10, npol=100, scale=2.5,
                 maxite=3, integration="kpm", verbose=0)
+
+
+# The occupied window of the density matrix, and the cumulative density of
+# states of the Fermi count and the energy, stop at -0.99*scale, where the
+# Chebyshev weight is singular. A given scale that covered the spectrum but
+# left the band edge in the last 1% used to lose that weight silently: a
+# chain with spectrum [-2,2] at scale=2.0 gave an onsite occupation of
+# 0.4547 instead of 0.5 (bug_audit_6.md #9). Such a scale is refused now.
+
+def _chain():
+    """Spinless first-neighbor chain, spectrum exactly [-2,2]"""
+    return geometry.chain().get_hamiltonian(has_spin=False)
+
+
+@pytest.mark.parametrize("scale", [2.0, 2.01])
+def test_a_scale_inside_the_window_margin_is_refused(scale):
+    h = _chain()
+    v = h.geometry.get_hamiltonian(has_spin=False).get_hopping_dict()
+    with pytest.raises(ValueError, match="spectral radius"):
+        get_dm_kpm(h, v, nk=20, npol=100, scale=scale)
+
+
+def test_the_fermi_search_refuses_a_scale_inside_the_margin():
+    from pyqula.kpmtk.densitymatrix_kpm import get_fermi4filling_kpm
+    with pytest.raises(ValueError, match="spectral radius"):
+        get_fermi4filling_kpm(_chain(), 0.5, nk=20, npol=100, scale=2.0)
+
+
+def test_a_scale_outside_the_margin_gives_the_exact_density_matrix():
+    """2.05 leaves the band edge inside the window, so the entries agree
+    with exact diagonalization"""
+    h = _chain()
+    v = h.geometry.get_hamiltonian(has_spin=False).get_hopping_dict()
+    ds = sorted({d for (d, i, j) in required_elements(v)})
+    dm = get_dm_kpm(h, v, nk=40, npol=200, scale=2.05)
+    dm_ed = h.get_density_matrix(ds=ds, nk=40)
+    for (d, i, j) in required_elements(v):
+        assert abs(dm[d][i, j] - dm_ed[d][i, j]) < 1e-2, (d, i, j)

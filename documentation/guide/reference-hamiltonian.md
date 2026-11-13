@@ -1890,9 +1890,10 @@ Optional arguments:
   `g.get_hamiltonian()` the memory grows linearly with the number of sites.
   A Nambu Hamiltonian also works, sparse or dense, and a dense one comes back dense. With
   `"kpm"`: `scale` is the energy window (found automatically if not given;
-  if given, it must contain the whole spectrum, or it raises `ValueError`),
-  `npol` the number of Chebyshev moments, `ne` the number of energies in the
-  occupied window, `cores` the number of parallel workers, and `kpm_radius`
+  if given, it must exceed the spectral radius by more than 1%, or it raises
+  `ValueError`), `npol` the number of Chebyshev moments, `ne` the number of
+  energies in the occupied window, `cores` the number of numba threads of
+  the recursion during the call, and `kpm_radius`
   the number of hops around each site that are kept (`None` for the whole
   system). A finite `kpm_radius` makes the time linear in the number of
   sites, and it is accurate for a gapped state or at finite temperature

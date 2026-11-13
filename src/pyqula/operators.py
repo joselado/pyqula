@@ -453,7 +453,11 @@ def get_velocity(h):
   if h.dimensionality==1:
     vk = current.current_operator(h)
     def f(w,k=[0.,0.,0.]):
-        return vk(k)@w
+        # current.derivative inherits the type of h.intra, an np.matrix on
+        # a dense Hamiltonian, and matrix@vector is then a (1,n) matrix:
+        # an elementwise product with it is a matrix product, which made
+        # get_vev("current") raise a shape error. Return the shape of w
+        return np.asarray(vk(k)@w).reshape(np.shape(w))
     return f
   elif h.dimensionality in (2,3):
     # the Cartesian band speed |<v>|, with v_alpha = i[H,r_alpha] built by

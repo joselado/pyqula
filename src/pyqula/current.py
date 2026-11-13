@@ -6,10 +6,16 @@ from .algebra import braket_wAw
 
 
 def current_operator(h):
-  """Get the current operator"""
+  """Get the current operator. In 1D it is the Cartesian velocity along
+  a1, dH/dk with k in inverse units of length, in units of the hopping
+  times the unit of length: the derivative per cell dH/dtheta (theta the
+  Bloch phase) times |a1|, so that a state gives the same number whatever
+  cell describes it, as the 2D and 3D velocities do (bug_audit_6.md #11)"""
   h = h.get_multicell()
+  fac = 1.
+  if h.dimensionality==1: fac = float(np.linalg.norm(h.geometry.a1))
   def fj(k0):
-      return derivative(h,k0,order=[1])
+      return fac*derivative(h,k0,order=[1])
   return fj
 
 

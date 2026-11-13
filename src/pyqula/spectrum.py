@@ -98,8 +98,9 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
   if reciprocal: R = h.geometry.get_k2K() # get matrix
   else:  R = np.array(np.identity(3)) # get identity
   # setup a reasonable value for delta
-  # setup the operator
-  operator = operator2list(operator) # convert into a list
+  # setup the operator, resolving names as get_bands does: a bare string
+  # used to reach op.braket and raise AttributeError
+  operator = [h.get_operator(o) for o in operator2list(operator)]
   rows = [[] for i in nindex] # kx, ky, energy and operators, per band
   xys = [(x,y) for x in kxs for y in kys] # all kpoint pairs
   ks = np.array([np.array(R)@np.array([x,y,0.]) for (x,y) in xys]) # change of basis
@@ -132,7 +133,9 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
         if i>0: # positive
           row = [x,y,epos[i-1]]
           for op in operator: # loop over operators
-            row.append(op.braket(wfpos[i-1]).real) # expectation value
+            # at the k-point of the state, for an operator that depends on
+            # it (velocity, valley), as get_bands does
+            row.append(op.braket(wfpos[i-1],k=ks[ik]).real) # expectation value
           rows[j].append(row)
         if i<0: # negative
           row = [x,y,eneg[abs(i)-1]]
@@ -140,7 +143,7 @@ def selected_bands2d(h,output_file="BANDS2D_",nindex=[-1,1],
             # wfneg, not wfpos: the energy stored above is the valence
             # one, so the expectation value has to come from the valence
             # eigenvector (the i>0 branch above is the same code on epos)
-            row.append(op.braket(wfneg[abs(i)-1]).real) # expectation value
+            row.append(op.braket(wfneg[abs(i)-1],k=ks[ik]).real) # expectation value
           rows[j].append(row)
   if write:
     fs.rmglob(output_file+"*") # delete previous files
@@ -177,8 +180,13 @@ def ev2d(h,nk=50,nsuper=1,reciprocal=False,
   if kreverse: kxs,kys = -kxs,-kys
   if reciprocal: R = h.geometry.get_k2K() # get matrix
   else:  R = np.array(np.identity(3)) # get identity
-  # setup the operator
-  operator = operator2list(operator) # convert into a list
+  # setup the operator: names resolved as get_vev does, and on a Nambu
+  # Hamiltonian the hole-hole block dropped (operators.vev_operator). The
+  # sum below runs over every negative-energy BdG state at k, which at
+  # zero pairing holds the occupied electrons at k and the holes of the
+  # empty states at -k, so a normal observable came out as S(k)+S(-k)
+  operator = [operators.vev_operator(h,h.get_operator(o))
+          for o in operator2list(operator)]
   rows = [] # kx, ky and the expectation values
   xys = [(x,y) for x in kxs for y in kys] # all kpoint pairs
   ks = np.array([R@np.array([x,y,0.]) for (x,y) in xys]) # change of basis
@@ -198,7 +206,8 @@ def ev2d(h,nk=50,nsuper=1,reciprocal=False,
       for op in operator: # loop over operators
           # op.braket, as selected_bands2d does: braket_wAw takes a matrix
           # and turns an operators.Operator into a zero-dimensional array
-          row.append(sum([op.braket(w) for w in wfneg]).real) # expectation value
+          row.append(sum([op.braket(w,k=ks[ik])
+              for w in wfneg]).real) # expectation value
       rows.append(row)
   if write:
     fo = open("EV2D.OUT","w") # open file

@@ -123,7 +123,7 @@ def solve_qtt(h,V=None,Q=None,nk=16,nv=None,nc=None,kernel="full",
             "the mesh gives nk lattice vectors, so the kernel's rank would "
             "grow with the mesh. Build the screened interaction "
             "separately, truncate it with "
-            "ScreenedInteraction.get_dict(cutoff=...), and pass the result "
+            "ScreenedInteraction.get_dict(tol=...), and pass the result "
             "as V=")
     nk = int(nk)
     if nk&(nk-1)!=0 or nk<2:

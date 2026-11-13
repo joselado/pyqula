@@ -200,18 +200,25 @@ class ScreenedInteraction():
 
         It is not free, though. W(q) on an nk-point mesh determines W(d)
         on exactly nk lattice vectors, so the tail beyond the mesh
-        supercell is aliased back in. Entries whose largest element is
-        below tol are dropped."""
+        supercell is aliased back in. On an even mesh the lattice vector
+        -nk/2 of the zone boundary is the same mesh vector as +nk/2, and
+        its weight is split in half between the two (see
+        _boundary_images), so that W(d) = W(-d)^dagger holds for every
+        vector and W(q) is Hermitian at every q, not only on the mesh.
+        Entries whose largest element is below tol are dropped."""
         nq = len(self.qs)
-        ds = _mesh_vectors(self.nkmesh,self.geometry.dimensionality)
+        dim = self.geometry.dimensionality
+        ds = _mesh_vectors(self.nkmesh,dim)
         # every lattice vector at once, as one matrix product over q
         ph = np.conj(bloch_phases(self.geometry,self.qs,ds)) # (nq,nd)
         Wq = np.asarray(self.Wq,dtype=np.complex128)
         ms = (ph.T@Wq.reshape(nq,-1)).reshape((len(ds),)+Wq.shape[1:])/nq
         out = dict()
         for d,m in zip(ds,ms):
-            if np.max(np.abs(m))>tol: out[d] = m
-        return out
+            images = _boundary_images(d,self.nkmesh,dim)
+            for di in images: # split the weight of a zone-boundary vector
+                out[di] = out.get(di,0.) + m/len(images)
+        return {d:m for d,m in out.items() if np.max(np.abs(m))>tol}
     def __str__(self):
         return ("ScreenedInteraction(%s, %s channel, %d q-points, "
                 "min eig eps = %s)"%(self.screening,self.channel,
@@ -223,7 +230,8 @@ def _mesh_vectors(nkmesh,dim):
     nk_i values -nk_i//2 ... nk_i-nk_i//2-1 along each periodic direction,
     and 0 along the rest. Centering matters -- the aliased tail of the
     inverse transform is then split symmetrically around the cell instead
-    of being dumped entirely on one side."""
+    of being dumped entirely on one side. For an even nk_i the range holds
+    -nk_i/2 but not +nk_i/2; _boundary_images restores the symmetry."""
     rngs = []
     for i in range(3):
         if i<dim:
@@ -235,6 +243,23 @@ def _mesh_vectors(nkmesh,dim):
         for d1 in rngs[1]:
             for d2 in rngs[2]: out.append((d0,d1,d2))
     return out
+
+
+def _boundary_images(d,nkmesh,dim):
+    """The lattice vectors that share the weight of the mesh vector d.
+
+    Along a periodic direction with an even nk_i, the component -nk_i/2
+    and the component +nk_i/2 give the same phase at every mesh q, so the
+    inverse transform cannot tell them apart. Both are returned, and the
+    caller gives each 1/len of the weight (1/2^k for k such directions).
+    Any other d is returned alone."""
+    from itertools import product
+    choices = []
+    for i in range(3):
+        n = int(nkmesh[i]) if i<dim else 1
+        if i<dim and n%2==0 and d[i]==-(n//2): choices.append((d[i],-d[i]))
+        else: choices.append((d[i],))
+    return list(product(*choices))
 
 
 @jit(nopython=True,parallel=True,cache=True)

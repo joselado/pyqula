@@ -68,6 +68,23 @@ already reached once.
   density of states). It also records what was checked and found right, and
   where a sixth sweep should start.
 
+- [`bug_audit_6.md`](bug_audit_6.md) -- the sixth sweep, on the list the
+  fifth one left for the next sweep: thirteen findings, **all closed**, each with
+  a regression test that fails on the unfixed source (a KPM Fermi count that
+  aliased a large `npol` at finite temperature, NaN at `delta=0` in the
+  direct density-matrix routes, `get_vev` of an operator without a matrix at
+  the wrong temperature, `spectrum.ev2d` counting twice on Nambu, the 1D
+  current on a dense Hamiltonian, two embedding self-energies conjugated the
+  wrong way, a screened interaction that was not Hermitian off an even
+  mesh, and a given KPM scale within 1% of the spectral radius, now
+  refused, `cores=` of the KPM engines, now a thread count, the 1D
+  velocity, now Cartesian, a defect ignored with `selfenergy=`, now
+  refused, and one contract for the callable self-energies of both
+  embeddings, under which the non-analytic semimetal one gives the right
+  LDOS and is refused by the density matrix); five of them were the
+  maintainer's decisions. Read its user-visible changes before upgrading. Most of the
+  embedding and BSE items were not reached and are listed for the next sweep.
+
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
   be made the other: three findings that are decisions rather than repairs (the

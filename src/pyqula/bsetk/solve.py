@@ -120,7 +120,7 @@ class BSE():
             raise ValueError("solver='iterative' does not take a screened "
                 "interaction, which is tabulated on the mesh rather than "
                 "given in real space. Truncate it in real space with "
-                "ScreenedInteraction.get_dict(cutoff=...) and pass that as "
+                "ScreenedInteraction.get_dict(tol=...) and pass that as "
                 "V=, or use solver='dense'")
         if neig is None:
             # the quantics solver returns the lowest exciton only (see

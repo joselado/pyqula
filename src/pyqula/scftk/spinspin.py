@@ -532,7 +532,7 @@ def VJinteraction(h0, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None,
     estimated automatically when None; npol: number of Chebyshev moments,
     defaulting to kpmtk.densitymatrix_kpm.DEFAULT_NPOL when None; ne:
     number of energies sampled in the occupied window; cores: number of
-    parallel workers of the Fermi search on the CPU); kpm_prec is the
+    numba threads of the Chebyshev recursion during the call); kpm_prec is the
     precision of the Chebyshev recursion, None for single on the GPU and
     double on the CPU (kpmtk.densitymatrix_kpm.resolve_kpm_prec);
     kpm_radius truncates the recursion of every starting orbital to the

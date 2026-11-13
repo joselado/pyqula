@@ -28,7 +28,16 @@ class Embedding():
         self.boundary_embedding_generator = None
         self.mode = "bulk" # mode
         self.nsuper = None # supercell between original Hamiltonian
-        if m is not None: 
+        if m is not None and selfenergy is not None:
+            # the boundary embedding of selfenergy= is built from h alone,
+            # so a defect passed as m used to be dropped without a word
+            # (bug_audit_6.md #12)
+            raise ValueError("Embedding takes either a defect m, embedded "
+                    "in the infinite crystal h, or a boundary selfenergy= "
+                    "of the finite system h, not both: with selfenergy= the "
+                    "defect would be ignored. Put the defect into h itself "
+                    "and pass only selfenergy=")
+        if m is not None:
             if isinstance(m, Hamiltonian):
 #                print("Picking intracell in embedding")
                 m = m.intra # get the intracell

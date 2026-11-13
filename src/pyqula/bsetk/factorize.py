@@ -196,7 +196,7 @@ def _direct_factors(pb,W,block):
             "does not factorize into a fixed number of lattice terms -- "
             "inverse transforming it over the mesh gives nk real-space "
             "vectors, so the factorization rank would grow with the mesh "
-            "and the whole point would be lost. Call .get_dict(cutoff=...) "
+            "and the whole point would be lost. Call .get_dict(tol=...) "
             "on it first to truncate it in real space, and read that "
             "method's note on the truncation error")
     g = pb.geometry

@@ -6,6 +6,14 @@ from . import parallel
 delta_dm = 1e-6 # default energy smearing for density matrix
 # ds not None does not use it yet
 
+def nonzero_smearing(delta):
+    """delta, or 1e-15 when it is zero: the occupation 1/(1+exp(e/delta))
+    of a level exactly at the Fermi energy is 0/0 at delta=0, a NaN in
+    every entry it reaches, so a zero smearing stands for a very small
+    one, the T=0 limit. Every route that builds the occupations from a
+    smearing applies it at its entry."""
+    return 1e-15 if delta==0. else delta
+
 dm_mode = "accumulate" # default mode to compute density matrix
 
 # accumulate is the new mode, it may be worth checking
@@ -66,7 +74,7 @@ def full_dm(h,T=None,dm_mode=dm_mode,delta=None,**kwargs):
     # no smearing given: the T a self-consistent h was converged at, so the
     # observables read the occupations the loop converged, else delta_dm
     if T is None: T = default_smearing(h)
-    if T==0.: T = 1e-15 # just very small 
+    T = nonzero_smearing(T) # just very small
     if dm_mode=="accumulate":
         return full_dm_accumulate(h,delta=T,**kwargs)
     elif dm_mode=="simultaneous":
@@ -124,6 +132,7 @@ def full_dm_accumulate(h,nk=10,fermi=0.0,
     matrix stays on the device, and when it misses the charge the shell
     finds its k-points from one more pass of eigenvalues there and
     diagonalizes again only those, on the host."""
+    delta = nonzero_smearing(delta) # a level at the Fermi energy, see there
     if h.non_hermitian: # left and right eigenvectors, see biorthogonal_dm
         return biorthogonal_dm(h,ds=ds,nk=nk,fermi=fermi,delta=delta)
     from .htk.eigenvectors import peigh_bloch, bloch_on_gpu
@@ -225,6 +234,7 @@ def full_dm_accumulate_sparse(h,pairs,nk=10,fermi=0.0,
 
     A non-Hermitian Hamiltonian gets the full biorthogonal density matrix
     of every direction in pairs, see biorthogonal_dm."""
+    delta = nonzero_smearing(delta) # a level at the Fermi energy, see there
     if h.non_hermitian: # every entry, which is more than was asked for
         return biorthogonal_dm(h,ds=list(pairs),nk=nk,fermi=fermi,
                 delta=delta)
@@ -310,6 +320,7 @@ def full_dm_accumulate_sparse_with_fermi(h,pairs,filling,nk=10,
     eigenvalues and left and right eigenvectors: the Fermi energy cuts the
     real parts of the eigenvalues, and the density matrix is the
     biorthogonal one (see biorthogonal_dm)."""
+    delta = nonzero_smearing(delta) # a level at the Fermi energy, see there
     from .htk.eigenvectors import peigh_bloch
     # the T-aware Fermi search, because the density matrix below weights
     # the states with the Fermi-Dirac occupation at this same `delta`: a
@@ -473,6 +484,7 @@ def full_dm_simultaneous(h,nk=10,fermi=0.0,
     This can become memore expesive for large kmesh and moderate
     matrices. A non-Hermitian Hamiltonian gets its biorthogonal density
     matrix, see biorthogonal_dm, which already works this way"""
+    delta = nonzero_smearing(delta) # a level at the Fermi energy, see there
     if h.non_hermitian:
         return biorthogonal_dm(h,ds=ds,nk=nk,fermi=fermi,delta=delta)
     from .klist import kmesh

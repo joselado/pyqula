@@ -46,13 +46,18 @@ def kresolved_orbital_vev(h,operator,nk=30,fermi=0.0,T=None,delta=None,
     spectrum.ev whenever both can be applied. Sum the result to get the
     total expectation value, or pass it through h.full2profile to resolve
     it by site."""
-    from .densitymatrix import delta_dm
+    from .densitymatrix import default_smearing
     from .htk.eigenvectors import peigh_bloch
     if T is not None and delta is not None and T!=delta:
         raise TypeError("kresolved_orbital_vev got both T="+str(T)+" and "
                 "delta="+str(delta)+", which are the same energy smearing "
                 "under two names; pass only one")
-    smearing = T if T is not None else (delta if delta is not None else delta_dm)
+    # no smearing given: the temperature a self-consistent h was converged
+    # at, as full_dm does, else delta_dm. A fixed delta_dm here read a
+    # mean-field output at another temperature than spectrum.ev, so the
+    # same operator gave two numbers depending on whether it had a matrix
+    smearing = T if T is not None else (delta if delta is not None
+            else default_smearing(h))
     if smearing==0.: smearing = 1e-15 # just very small, as full_dm does
     op = h.get_operator(operator) # resolve names and matrices alike
     if op is None:

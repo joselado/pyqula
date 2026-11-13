@@ -12,7 +12,8 @@ class Embedded_Hamiltonian():
         self.delta = delta
     def get_density_matrix(self,delta=None,**kwargs):
         """Return the density matrix, in the index convention of
-        Hamiltonian.get_density_matrix (see get_dm)"""
+        Hamiltonian.get_density_matrix (see get_dm). It needs a selfenergy
+        analytic in the upper half plane, see get_dm"""
         if delta is None: delta = self.delta # default broadening
         return get_dm(self,delta=delta,**kwargs)
     def get_gf(self,**kwargs):
@@ -39,19 +40,42 @@ class Embedded_Hamiltonian():
 
 
 
+def _dagger(s):
+    """Hermitian conjugate of a matrix, sparse or dense, or of a number"""
+    if np.isscalar(s): return np.conjugate(s)
+    return s.conj().T
+
+
 def object2selfenergy(self,H,delta=1e-4,**kwargs):
-    if self is None: # no selfenergy provided 
+    """The selfenergy as a function of energy= and delta=. A matrix or a
+    callable is the retarded selfenergy, and for delta<0 the advanced one
+    is returned, its continuation Sigma(z) = Sigma(z^*)^dagger, the same
+    contract as the boundary embedding (embeddingtk/boundaryembedding.py):
+    the Hermitian conjugate, not the element-wise one, whatever the
+    symmetries of the Hamiltonian. A callable is evaluated at complex
+    energies by the density matrix, so it has to be analytic in the upper
+    half plane, as a causal selfenergy is; one that is not carries
+    analytic=False (embeddingtk.selfenergies.semimetal) and get_dm refuses
+    it (bug_audit_6.md #13)"""
+    if self is None: # no selfenergy provided
         return lambda **kwargs: 0.
     elif algebra.ismatrix(self): # matrix provided
-      if H.intra.shape[0]==self.shape[0]: 
+      if H.intra.shape[0]==self.shape[0]:
         def f(delta=delta,**kwargs):
-            if delta>0.: return self
-            else: return np.conjugate(self)
+            if delta<0.: return _dagger(self) # advanced selfenergy
+            return self # retarded selfenergy
         return f
       else: # unrecognized
           raise ValueError("the selfenergy matrix does not have the same "
                   "dimension as the Hamiltonian")
-    elif callable(self): return self # assume that it returns a matrix
+    elif callable(self): # the retarded selfenergy as a function of energy
+        def f(energy=0.,delta=delta,**kwargs):
+            if delta<0.: # advanced, the continuation below the real axis
+                return _dagger(self(energy=np.conjugate(energy),
+                    delta=-delta,**kwargs))
+            return self(energy=energy,delta=delta,**kwargs)
+        f.analytic = getattr(self,"analytic",True)
+        return f
     else: 
         raise TypeError("the selfenergy must be a matrix of the same "
                 "dimension as the Hamiltonian, or a callable returning one")
@@ -74,7 +98,22 @@ def get_dm(self,delta=1e-2,emin=-10.,eps=1e-4,**kwargs):
 
     eps: absolute tolerance of the adaptive contour integral, kept apart
         from the keywords that go to get_gf
+
+    The integral runs on a contour of complex energies, which needs a
+    selfenergy analytic in the upper half plane. A constant matrix is, and
+    so is a causal callable; one marked analytic=False, such as the
+    semimetal selfenergy -i Gamma |E|, gave entries off by 0.3 against the
+    real-axis integral, and is refused (bug_audit_6.md #13). This holds for
+    Embedded_Hamiltonian and for the boundary embedding of Embedding.
     """
+    if getattr(getattr(self,"selfenergy",None),"analytic",True) is False:
+        raise NotImplementedError("the density matrix of an embedded "
+                "system is a contour integral over complex energies, which "
+                "needs a selfenergy analytic in the upper half plane, and "
+                "this one is marked analytic=False (the semimetal "
+                "selfenergy -i Gamma |E| has no analytic continuation). "
+                "Use get_ldos and get_gf, which work at real energies, or "
+                "a selfenergy analytic in the upper half plane")
     fa = lambda e: self.get_gf(energy=e,delta=delta,**kwargs) # advanced
     fr = lambda e: self.get_gf(energy=e,delta=-delta,**kwargs) # retarded
     from ..integration import complex128contour

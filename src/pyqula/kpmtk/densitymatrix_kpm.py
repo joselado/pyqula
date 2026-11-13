@@ -26,6 +26,7 @@
 # convention than v's -- see required_elements_eh's docstring -- but reuse
 # the exact same per-k Bloch KPM engine (_dm_kpm_from_needed) once the
 # needed (direction,row,col) entries are known.
+from contextlib import contextmanager
 import numpy as np
 from numba import jit
 from scipy.sparse import csr_matrix
@@ -184,6 +185,71 @@ def _estimate_kpm_scale(hk_gen,ks):
     return 1.1*max(estimate_bandwidth(hk_gen(k)) for k in ks)
 
 
+@contextmanager
+def _numba_threads(cores):
+    """Run the block inside with cores numba threads, and restore the
+    previous count on exit; None leaves the count alone. The KPM recursion
+    runs on numba threads (pairmomentsnumba) and never on the process pool
+    of parallel.pcall, so cores= of the KPM routes is a thread count. It
+    used to call parallel.set_cores every iteration, which re-forked a pool
+    that received no task and left the package-wide core count behind
+    (bug_audit_6.md #10). parallel.set_enabled(False) still clamps it to 1,
+    and numba caps it at the threads it was started with"""
+    if cores is None:
+        yield
+        return
+    import numba
+    if (isinstance(cores, (bool, np.bool_))
+            or not isinstance(cores, (int, np.integer)) or cores < 1):
+        raise ValueError("cores, the numba threads of the KPM recursion, "
+                "must be a whole number of at least 1, got %r" % (cores,))
+    n = min(int(cores), numba.config.NUMBA_NUM_THREADS)
+    if not parallel.enabled: n = 1
+    old = numba.get_num_threads()
+    numba.set_num_threads(n)
+    try:
+        yield
+    finally:
+        numba.set_num_threads(old)
+
+
+# The occupied window of the density matrix and the cumulative density of
+# states of the Fermi count and of the energy stop at -+_WINDOW*scale,
+# where the Chebyshev weight 1/sqrt(1-x^2) becomes singular, so a state
+# between _WINDOW*scale and scale is never integrated. The estimated scale
+# is 1.1 times the Gershgorin bound and always leaves that margin; a scale
+# given by the caller is checked by _check_scale_margin
+_WINDOW = 0.99
+
+
+def _check_scale_margin(ms, scale, given):
+    """Raise if a scale given by the caller leaves part of the spectrum of
+    H(k) between _WINDOW*scale and scale, the margin that the occupied
+    window never integrates (a chain with spectrum [-2,2] at scale=2.0 lost
+    0.045 of its onsite occupation there, with no error). ms are the
+    matrices H(k)/scale. The Gershgorin bound settles almost every case at
+    no cost; only when it reaches the margin is the spectral radius found
+    exactly, so a valid scale between the radius and the bound is kept"""
+    if not given: return
+    from .bandwidth import estimate_bandwidth
+    for m in ms:
+        if estimate_bandwidth(m) <= _WINDOW: continue
+        if m.shape[0] <= 200:
+            r = np.max(np.abs(np.linalg.eigvalsh(m.toarray())))
+        else:
+            from scipy.sparse.linalg import eigsh
+            r = np.max(np.abs(eigsh(m, k=1, which="LM",
+                return_eigenvectors=False, tol=1e-10)))
+        if r > _WINDOW:
+            raise ValueError("the KPM scale=%g is within %g%% of the "
+                    "spectral radius %g of H(k): the occupied window stops "
+                    "at -+%g*scale, where the Chebyshev weight is singular, "
+                    "so the states beyond it would be lost. Pass a scale "
+                    "above %g, or leave scale=None to have it estimated"
+                    % (scale, 100*(1-_WINDOW), r*scale, _WINDOW,
+                       r*scale/_WINDOW))
+
+
 def _check_scale_covers_spectrum(mus, scale, given, kpm_prec="double"):
     """Raise if Chebyshev moments of H(k)/scale show part of its spectrum
     outside [-1,1]. For a Hermitian matrix with its spectrum inside that
@@ -267,8 +333,9 @@ def _dm_kpm_from_needed(h, needed, nk=DEFAULT_NK, scale=None,
     loop ran the same recursion two or more times per site, and on a
     1728-orbital island took 27 s per evaluation against 1.6 s for the
     jax block in double precision and 0.46 s in single on a consumer card
-    (future_development/gpu_kpm_mean_field.md). cores no longer splits
-    the k-mesh here; it still sets the package-wide core count.
+    (future_development/gpu_kpm_mean_field.md). cores is the number of
+    numba threads of that recursion during the call, see _numba_threads;
+    it starts no process pool and leaves the package-wide counts alone.
 
     trace=True also returns the trace moments of H(k), see
     _kpm_pair_values, as (dm, trace). radius truncates the recursion to
@@ -381,8 +448,8 @@ def _kpm_pair_values(h, pairs, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
                 "scale; check that this Hamiltonian actually has "
                 "hopping/onsite terms in this sector")
     Tsafe = abs(T) if T != 0. else 1e-15
-    upper = min(0.99*scale, 30.*Tsafe)
-    xin = np.linspace(-0.99*scale, upper, ne)
+    upper = min(_WINDOW*scale, 30.*Tsafe)
+    xin = np.linspace(-_WINDOW*scale, upper, ne)
     weights = expit(-xin/Tsafe)  # Fermi-Dirac occupation at temperature T
 
     # 2*npol moments, the length kpmnumba's own moment routines return
@@ -403,25 +470,28 @@ def _kpm_pair_values(h, pairs, nk=DEFAULT_NK, scale=None, npol=DEFAULT_NPOL,
     # profile of its moments, weighted by the occupation and integrated
     cint = np.trapezoid(basis*weights[None, :], x=xin, axis=1)/np.pi
 
-    if cores is not None: parallel.set_cores(cores)
     pair_values = _pair_values_of(h, radius)
     ms = [csr_matrix(hk_gen(k))/scale for k in ks]
     norb = ms[0].shape[0]
     # the pair (i,j) holds <e_i|T_n(H(k))|e_j>: the recursion starts from
     # e_j and is read on row i, which is the element dm[i,j] (see
     # densitymatrix.py's restricted_dm for the convention)
-    if trace:
-        # every diagonal pair once, so the summed diagonal moments are the trace
-        keys = pairs[:, 0]*norb + pairs[:, 1]
-        every = np.union1d(keys, np.arange(norb, dtype=np.int64)*(norb + 1))
-        both = np.stack([every//norb, every % norb], axis=1)
-        vals, mumax, tr = pair_values(ms, both, cint, kpm_prec=kpm_prec,
-                trace=True)
-        vals = vals[:, np.searchsorted(every, keys)]
-        mus = np.mean(tr, axis=0)/norb # k-average of the moments
-    else:
-        vals, mumax = pair_values(ms, pairs, cint, kpm_prec=kpm_prec)
+    with _numba_threads(cores):
+        if trace:
+            # every diagonal pair once, so the summed diagonal moments are
+            # the trace
+            keys = pairs[:, 0]*norb + pairs[:, 1]
+            every = np.union1d(keys,
+                    np.arange(norb, dtype=np.int64)*(norb + 1))
+            both = np.stack([every//norb, every % norb], axis=1)
+            vals, mumax, tr = pair_values(ms, both, cint, kpm_prec=kpm_prec,
+                    trace=True)
+            vals = vals[:, np.searchsorted(every, keys)]
+            mus = np.mean(tr, axis=0)/norb # k-average of the moments
+        else:
+            vals, mumax = pair_values(ms, pairs, cint, kpm_prec=kpm_prec)
     _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
+    _check_scale_margin(ms, scale, given)
     vals = vals.conj()
     vals[:, diagonal] = vals[:, diagonal].real # a diagonal entry is its own conjugate
     if trace: return ks, vals, (scale, mus.real)
@@ -540,14 +610,15 @@ def _kpm_trace(h, nk, scale, npol, cores, kpm_prec=None, radius=None):
                 "scale; check that this Hamiltonian actually has "
                 "hopping/onsite terms in this sector")
     kpm_prec = resolve_kpm_prec(kpm_prec)
-    if cores is not None: parallel.set_cores(cores)
     ms = [csr_matrix(hk_gen(k))/scale for k in ks]
     N = ms[0].shape[0]
     pairs = np.stack([np.arange(N), np.arange(N)], axis=1)
-    _, mumax, tr = _pair_values_of(h, radius)(ms, pairs, np.zeros(2*npol),
-            kpm_prec=kpm_prec, trace=True)
+    with _numba_threads(cores):
+        _, mumax, tr = _pair_values_of(h, radius)(ms, pairs,
+                np.zeros(2*npol), kpm_prec=kpm_prec, trace=True)
     musk = tr/N
     _check_scale_covers_spectrum([mumax], scale, given, kpm_prec=kpm_prec)
+    _check_scale_margin(ms, scale, given)
     return scale, np.mean(musk, axis=0).real # k-average of the moments
 
 
@@ -555,7 +626,7 @@ def _dos_profile(mus, ne):
     """The Jackson-kernel density of states per orbital of the moments mus,
     on the reduced-energy grid xs ([-0.99,0.99], ne points): returns
     (xs, ys)"""
-    xs = np.linspace(-1.0, 1.0, ne, endpoint=True)*0.99  # reduced energies
+    xs = np.linspace(-1.0, 1.0, ne, endpoint=True)*_WINDOW  # reduced energies
     ys = generate_profile(mus, xs, kernel="jackson").real
     return xs, ys
 
@@ -598,15 +669,18 @@ def _filling_count(scale, xs, ys, T=0.):
     with a step count instead, the converged filling drifts away from the
     requested one wherever the density of states is not symmetric about
     mu, the defect repaired in spectrum.get_fermi_energy_T for the
-    exact-diagonalization path. The convolution is sampled in units of T
-    around mu rather than on the energy grid: a Fermi-Dirac weight
-    evaluated on the grid itself is a step whenever T is below the grid
-    spacing, as the mean field's default T=1e-7 always is, which made the
-    count a staircase in mu, pinned the Fermi level to a grid point that
-    jumped by a whole grid step as the mean field moved, and made the KPM
-    loop cycle at a floor instead of converging. With the cumulative
-    density of states interpolated linearly the count is continuous in mu
-    at any T, and below the grid spacing it is the T=0 count. The count is
+    exact-diagonalization path. The convolution is not sampled on the
+    energy grid: a Fermi-Dirac weight evaluated on the grid itself is a
+    step whenever T is below the grid spacing, as the mean field's default
+    T=1e-7 always is, which made the count a staircase in mu, pinned the
+    Fermi level to a grid point that jumped by a whole grid step as the
+    mean field moved, and made the KPM loop cycle at a floor instead of
+    converging. Nor is it sampled on a grid in units of T around mu: a
+    large npol resolves a level into a step narrower than such a grid's
+    spacing, and the quadrature then misses a fraction of a state. With
+    the cumulative density of states interpolated linearly the convolution
+    is a closed form, exact for that interpolation, continuous in mu at
+    any T, and equal to the T=0 count below the grid spacing. The count is
     monotonic in mu, so its inversion brackets it on the sampled window
     and bisects."""
     cdf = _cumulative_trapz(ys, xs)
@@ -617,12 +691,16 @@ def _filling_count(scale, xs, ys, T=0.):
         def fermi(filling): return scale*np.interp(filling, cdf, xs)
         return count, fermi
     Tr = T/scale # the grid is in reduced energies, so the temperature is too
-    u = np.linspace(-40.,40.,801) # energies around mu, in units of T
-    w = expit(u)*expit(-u) # -df/du, the derivative of the Fermi function
-    w = w/np.trapezoid(w,u)
+    # the cumulative density of states is linear between grid points, so
+    # its convolution with -df/dx is a closed form, with no quadrature
+    # grid of its own: integrating by parts, the count is the sum over the
+    # segments of slope*int f(x'-x) dx', and int f(y) dy = -Tr*log(1+e^(-y/Tr)).
+    # A quadrature in units of T aliases the steps of a large npol, which
+    # are narrower than its spacing, into an error of a fraction of a state.
+    slope = np.diff(cdf)/np.diff(xs)
     def nelec(x): # occupied fraction at the reduced chemical potential x
-        occ = np.interp(x+Tr*u,xs,cdf,left=0.,right=1.)
-        return np.trapezoid(occ*w,u)
+        L = np.logaddexp(0., -(xs - x)/Tr)
+        return np.sum(slope*Tr*(L[:-1] - L[1:]))
     def count(mu): return nelec(mu/scale)
     lo,hi = xs[0]-40.*Tr, xs[-1]+40.*Tr # well outside the window at this T
     def fermi(filling):
