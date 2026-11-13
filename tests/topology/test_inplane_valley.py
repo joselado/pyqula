@@ -1,6 +1,9 @@
 import numpy as np
+import pytest
 
 from pyqula import geometry
+from pyqula import sculpt
+from pyqula import spectrum
 
 
 def _folded_dirac_subspace(h0):
@@ -44,11 +47,11 @@ def test_inplane_valley_pseudospin_algebra():
 
 def test_kekule_gapped_states_are_valley_x_eigenstates():
     """Gapping the Dirac points (exactly at the folded K,K' point, k=Gamma
-    of the tripled cell) with a chiral Kekule mass added through
-    add_valley_exchange (the 3-registry-symmetrized construction, the
-    only one guaranteed to be exactly C3-covariant in real space -- see
-    operatortk/inplane_valley.py) must produce the gap-edge eigenstates
-    as exact +-1 eigenvectors of the tau_x ("valley_x") operator."""
+    of the tripled cell) with a Kekule mass added through
+    add_valley_exchange (a first-neighbor hopping modulated by a plane
+    wave of wavevector K-K', see operatortk/inplane_valley.py) must
+    produce the gap-edge eigenstates as exact +-1 eigenvectors of the
+    tau_x ("valley_x") operator."""
     g3 = geometry.honeycomb_lattice().supercell(3)
     h = g3.get_hamiltonian(has_spin=False)
     h.add_valley_exchange([0.4,0.,0.])
@@ -81,3 +84,378 @@ def test_add_valley_exchange_matches_operator_convention():
     gap = np.linalg.norm(v)
     near_gap = np.abs(np.abs(es)-gap)<1e-6
     assert np.sum(near_gap)==4 # the 4 folded Dirac states
+
+
+# what follows pins the properties that the pseudospin algebra at the
+# Dirac point cannot see: the three tests above pass for any pair of
+# operators that flips the valley, also for one that breaks time reversal
+# or that is wrong at the edges of a finite system
+
+
+def _valley_matrices(h,k=[0.,0.,0.]):
+    """Return (tau_x,tau_y,tau_z) of h at k as dense arrays"""
+    names = ["valley_x","valley_y","valley"]
+    if h.dimensionality==0:
+        return [np.array(h.get_operator(n).matrix) for n in names]
+    return [np.array(h.get_operator(n).m(None,k=k)) for n in names]
+
+
+def _texture(h):
+    """Return tau_x + i tau_y on every site, summed over the occupied
+    states"""
+    vx = spectrum.real_space_vev(h,operator=h.get_operator("valley_x"),
+            write=False)
+    vy = spectrum.real_space_vev(h,operator=h.get_operator("valley_y"),
+            write=False)
+    return vx + 1j*vy
+
+
+def _disk(radius,center_sublattice=1):
+    """Return a honeycomb disk centred on an atom of the given sublattice,
+    with that atom at the origin, and its index. The squared distances
+    between sites are integers, so a radius whose square is not one leaves
+    no site on the rim for the rounding to decide"""
+    g = geometry.honeycomb_lattice().supercell(int(2*radius)+4)
+    g.set_finite() ; g.center()
+    i0 = [i for i in g.get_central(n=4)
+            if g.sublattice[i]==center_sublattice][0]
+    sculpt.shift(g,r=g.r[i0].copy())
+    g = sculpt.intersec(g,lambda r: r.dot(r)<radius**2)
+    g = sculpt.remove_unibonded(g,iterative=True)
+    return g,int(np.argmin(np.linalg.norm(g.r,axis=1)))
+
+
+def _shuffled(g,seed=0):
+    """Return the same geometry with its atoms in a random order, and the
+    permutation"""
+    p = np.random.default_rng(seed).permutation(len(g.r))
+    go = g.copy()
+    go.r = g.r[p].copy() ; go.r2xyz()
+    go.sublattice = np.array(g.sublattice)[p]
+    go.has_fractional = False
+    return go,p
+
+
+def test_inplane_valley_is_time_reversal_even():
+    """Time reversal exchanges K and K', so it flips tau_z and leaves
+    tau_x and tau_y: for a spinless real Hamiltonian they are real
+    symmetric hoppings, tau(-k) = conj(tau(k)), and a valley exchange in
+    the plane keeps the Hamiltonian real."""
+    g3 = geometry.honeycomb_lattice().supercell(3)
+    h = g3.get_hamiltonian(has_spin=False)
+    k = np.array([0.13,0.31,0.])
+    for name in ["valley_x","valley_y"]:
+        op = h.get_operator(name)
+        m0 = np.array(op.m(None,k=[0.,0.,0.]))
+        assert np.max(np.abs(m0.imag))<1e-12
+        assert np.max(np.abs(m0-m0.T))<1e-12
+        mk,mmk = np.array(op.m(None,k=k)),np.array(op.m(None,k=-k))
+        assert np.max(np.abs(mmk-mk.conj()))<1e-12
+    h.add_valley_exchange([0.2,0.3,0.])
+    hk,hmk = np.array(h.get_hk_gen()(k)),np.array(h.get_hk_gen()(-k))
+    assert np.max(np.abs(hmk-hk.conj()))<1e-12
+
+
+def test_inplane_valley_is_right_handed_for_any_atom_order():
+    """tau_x tau_y = i tau_z on the Dirac point, the full Pauli algebra and
+    not only the anticommutators, and the operators of a geometry with its
+    atoms in another order are the same operators with their rows
+    permuted: neither the handedness nor the axes follow which atom
+    happens to come first."""
+    g3 = geometry.honeycomb_lattice().supercell(3)
+    h0 = g3.get_hamiltonian(has_spin=False)
+    ms0 = _valley_matrices(h0)
+    for seed in range(3):
+        g,p = _shuffled(g3,seed=seed)
+        h = g.get_hamiltonian(has_spin=False)
+        V = _folded_dirac_subspace(h.get_multicell())
+        ms = _valley_matrices(h)
+        (Mx,My,Mz) = [V.conj().T@m@V for m in ms]
+        assert np.max(np.abs(Mx@My-1j*Mz))<1e-8
+        for (m,m0) in zip(ms,ms0):
+            assert np.max(np.abs(m-m0[np.ix_(p,p)]))<1e-10
+
+
+def test_inplane_valley_exchange_gaps_the_whole_brillouin_zone():
+    """v_x tau_x + v_y tau_y is a mass of the Dirac equation, the Kekule
+    mass: the gap is |v| at the Dirac point and nowhere smaller. An
+    in-plane valley operator that commutes with the Dirac Hamiltonian
+    instead passes every test at the Dirac point and closes the gap away
+    from it."""
+    g3 = geometry.honeycomb_lattice().supercell(3)
+    h = g3.get_hamiltonian(has_spin=False)
+    h.add_valley_exchange([0.18,0.24,0.]) # |v| = 0.3
+    hk = h.get_hk_gen()
+    gap = min([np.min(np.abs(np.linalg.eigvalsh(hk(k))))
+            for k in g3.get_kmesh(nk=12)])
+    assert abs(gap-0.3)<1e-8
+
+
+def test_kekule_distortion_is_an_inplane_valley_exchange():
+    """A plain Kekule distortion of strength t, h.add_kekule(t), built by
+    an independent routine that paints the bonds of one hexagon out of
+    three, is a uniform first-neighbor hopping 2t/3 plus an in-plane valley
+    exchange of modulus |t| exactly, on every bond."""
+    t = 0.3
+    g3 = geometry.honeycomb_lattice().supercell(3)
+    h0 = g3.get_hamiltonian(has_spin=False).get_multicell()
+    h = h0.copy() ; h.add_kekule(t)
+    k = [0.07,0.19,0.]
+    (mx,my,mz) = _valley_matrices(h0,k=k)
+    hk0 = np.array(h0.get_hk_gen()(k))
+    dm = np.array(h.get_hk_gen()(k)) - (1.+2.*t/3.)*hk0 # the modulation
+    vx = np.trace(mx@dm).real/np.trace(mx@mx).real
+    vy = np.trace(my@dm).real/np.trace(my@my).real
+    assert np.max(np.abs(dm-vx*mx-vy*my))<1e-10
+    assert abs(np.sqrt(vx**2+vy**2)-abs(t))<1e-10
+
+
+def test_translation_rotates_the_inplane_valley_by_120_degrees():
+    """A translation by a lattice vector of the primitive cell is a
+    rotation of (tau_x,tau_y) by 120 degrees, since the operators carry
+    the momentum K-K': shifting the atoms of a Kekule cell by one
+    primitive vector gives tau_x cos(2 pi/3) +- tau_y sin(2 pi/3)."""
+    g0 = geometry.honeycomb_lattice()
+    g3 = g0.supercell(3)
+    gs = g3.copy() ; sculpt.shift(gs,r=g0.a1)
+    (mx,my,mz) = _valley_matrices(g3.get_hamiltonian(has_spin=False))
+    (sx,sy,sz) = _valley_matrices(gs.get_hamiltonian(has_spin=False))
+    (c,s) = (np.cos(2.*np.pi/3.),np.sin(2.*np.pi/3.))
+    d = [np.max(np.abs(sx-c*mx-sign*s*my)) for sign in [1.,-1.]]
+    assert min(d)<1e-10 and max(d)>1e-2
+    assert np.max(np.abs(sz-mz))<1e-10 # tau_z does not see the shift
+
+
+def test_small_shift_of_the_geometry_keeps_the_valley_axes():
+    """The phase of the operators is measured from the lattice site
+    closest to the origin of coordinates, so a shift of the geometry that
+    is small on the scale of the bond changes nothing. The flakes tested
+    have their origin where it usually is, at the same distance from
+    several sites (a bond midpoint, a hexagon center), which is where a
+    rule that took the closest site to the last digit would jump by 120
+    degrees. Recentering a flake after removing an atom is such a shift."""
+    from pyqula import islands
+    for rot in [0.,np.pi/6.]:
+        g = islands.get_geometry(name="honeycomb",n=4,nedges=6,rot=rot)
+        (mx,my,mz) = _valley_matrices(g.get_hamiltonian(has_spin=False))
+        rng = np.random.default_rng(1)
+        for i in range(4):
+            d = 0.1*rng.uniform(-1.,1.,3) ; d[2] = 0.
+            gs = g.copy() ; sculpt.shift(gs,r=d)
+            (sx,sy,sz) = _valley_matrices(gs.get_hamiltonian(has_spin=False))
+            assert np.max(np.abs(sx-mx))<1e-10
+            assert np.max(np.abs(sy-my))<1e-10
+        i0 = int(g.get_central()[0])
+        gv = g.remove(i0)
+        gc = gv.copy() ; gc.center() # the center of mass moved
+        assert 1e-4<np.max(np.abs(gc.r-gv.r))<0.1
+        keep = [i for i in range(len(g.r)) if i!=i0]
+        (vx,vy,vz) = _valley_matrices(gc.get_hamiltonian(has_spin=False))
+        assert np.max(np.abs(vx-mx[np.ix_(keep,keep)]))<1e-10
+        assert np.max(np.abs(vy-my[np.ix_(keep,keep)]))<1e-10
+
+
+def test_flake_operator_is_the_bulk_operator_on_its_bonds():
+    """The operators of a finite flake are those of the infinite lattice
+    restricted to the bonds the flake has: T = tau_x + i tau_y has modulus
+    2/3 on every bond, also on those at the edge, and cutting a flake out
+    of a larger one cuts the operator with it."""
+    (gb,ib) = _disk(8.2)
+    gs = sculpt.intersec(gb,lambda r: r.dot(r)<5.2**2)
+    gs = sculpt.remove_unibonded(gs,iterative=True)
+    idx = [int(np.argmin(np.linalg.norm(gb.r-r,axis=1))) for r in gs.r]
+    assert np.max(np.abs(gb.r[idx]-gs.r))<1e-8
+    (bx,by,bz) = _valley_matrices(gb.get_hamiltonian(has_spin=False))
+    hs = gs.get_hamiltonian(has_spin=False)
+    (mx,my,mz) = _valley_matrices(hs)
+    assert np.max(np.abs(mx-bx[np.ix_(idx,idx)]))<1e-10
+    assert np.max(np.abs(my-by[np.ix_(idx,idx)]))<1e-10
+    bonds = np.abs(np.array(hs.intra))>0.5 # the first neighbors
+    T = mx + 1j*my
+    assert np.max(np.abs(np.abs(T[bonds])-2./3.))<1e-10
+    assert np.max(np.abs(T[~bonds]))<1e-12
+
+
+@pytest.mark.parametrize("sublattice,winding",[(1,-1),(-1,1)])
+def test_vacancy_creates_a_vortex_of_the_inplane_valley(sublattice,winding):
+    """A vacancy scatters between the valleys and creates a vortex of
+    (tau_x,tau_y). On a disk centred on the vacancy the texture it
+    induces, f = tau_x + i tau_y, obeys f(C3 r) = exp(i 2 pi m/3) f(r)
+    exactly, which leaves the angular harmonics m, m+-3, m+-6..., and far
+    from the vacancy the harmonic exp(i m theta) dominates, with m=-1 for
+    a vacancy on sublattice +1 and m=+1 on sublattice -1: the two
+    sublattices see the Dirac points with opposite chirality."""
+    (g,i0) = _disk(11.2,center_sublattice=sublattice)
+    gv = g.remove(i0) # same coordinates, so the same valley axes
+    f0 = _texture(g.get_hamiltonian(has_spin=False))
+    f = _texture(gv.get_hamiltonian(has_spin=False))
+    df = f - np.delete(f0,i0) # the part created by the vacancy
+    c3 = np.array([[-0.5,-np.sqrt(3.)/2.,0.],[np.sqrt(3.)/2.,-0.5,0.],
+        [0.,0.,1.]])
+    perm = [int(np.argmin(np.linalg.norm(gv.r-r,axis=1))) for r in gv.r@c3.T]
+    assert np.max(np.abs(gv.r[perm]-gv.r@c3.T))<1e-8
+    assert np.max(np.abs(df[perm]-np.exp(2j*np.pi*winding/3.)*df))<1e-8
+    rr = np.linalg.norm(gv.r,axis=1)
+    theta = np.arctan2(gv.r[:,1],gv.r[:,0])
+    assert np.max(np.abs(df[rr<1.1]))>0.1 # large next to the vacancy
+    ring = (rr>6.2)&(rr<9.1) # far from the vacancy and from the edge
+    cm = {m: abs(np.mean(df[ring]*np.exp(-1j*m*theta[ring])))
+            for m in range(-5,6)}
+    others = max([cm[m] for m in cm if m!=winding])
+    assert cm[winding]>5e-4
+    assert others<cm[winding]/3.
+    forbidden = max([cm[m] for m in cm if (m-winding)%3!=0])
+    assert forbidden<1e-8 # the harmonics that C3 does not allow
+
+
+def test_zigzag_edge_has_no_net_inplane_valley_and_armchair_does():
+    """An armchair edge mixes the two valleys and a zigzag edge does not.
+    In a zigzag ribbon the texture rotates by 120 degrees from one cell to
+    the next, so it adds to zero over the three cells of the Kekule
+    period, while its modulus at the edge is large. In an armchair ribbon
+    it is the same in every cell, large at the edge, and of the same
+    modulus at the two edges, which a rotation by 180 degrees maps on each
+    other."""
+    gz = geometry.honeycomb_zigzag_ribbon(4)
+    nz = len(gz.r)
+    fz = _texture(gz.supercell(6).get_hamiltonian(has_spin=False))
+    fz = fz.reshape((6,nz)) # cell, site in the cell
+    assert np.max(np.abs(fz))>0.1
+    assert np.max(np.abs(fz[0]+fz[1]+fz[2]))<1e-8
+    rot = np.abs(fz[1]/fz[0]-np.exp(2j*np.pi/3.))<1e-6
+    rotm = np.abs(fz[1]/fz[0]-np.exp(-2j*np.pi/3.))<1e-6
+    assert np.all(rot) or np.all(rotm)
+    ga = geometry.honeycomb_armchair_ribbon(6)
+    na = len(ga.r)
+    gas = ga.supercell(4)
+    fa = _texture(gas.get_hamiltonian(has_spin=False)).reshape((4,na))
+    assert np.max(np.abs(fa-fa[0][None,:]))<1e-8 # the same in every cell
+    across = ga.r[:,int(np.argmin(np.abs(ga.a1[:2])))] # across the ribbon
+    across = across - np.mean(across)
+    top = np.abs(across-np.max(across))<1e-3
+    bottom = np.abs(across-np.min(across))<1e-3
+    assert np.sum(top)==np.sum(bottom) and np.sum(top)>0
+    assert np.min(np.abs(fa[0][top]))>0.1
+    assert abs(np.mean(np.abs(fa[0][top]))-np.mean(np.abs(fa[0][bottom])))<1e-8
+
+
+def _aa_bilayer():
+    from pyqula import specialgeometry
+    return specialgeometry.multilayer_graphene(l=[0,0])
+
+
+def _ab_bilayer():
+    from pyqula import specialgeometry
+    return specialgeometry.multilayer_graphene(l=[0,1])
+
+
+@pytest.mark.parametrize("builder,nlayers",[
+    (geometry.buckled_honeycomb_lattice,1),(_aa_bilayer,2),(_ab_bilayer,2)])
+def test_inplane_valley_on_buckled_and_stacked_honeycombs(builder,nlayers):
+    """Each bond takes K from its own in-plane direction and from the
+    sublattice labels of its two sites, so a buckled honeycomb and every
+    layer of a stack get the full Pauli algebra with the tau_z of the same
+    labels, tau_x tau_y = i tau_z on the Dirac points, and an in-plane v
+    opens the gap |v|. The AA stack labels its second layer the other way
+    around, which exchanges the valleys there for tau_z and tau_y alike.
+    The tau_z of the buckled lattice has eigenvalues +-0.89 instead of +-1
+    (its second-neighbor hopping is normalized for the flat lattice), so it
+    is compared after normalizing it."""
+    g3 = builder().supercell(3)
+    h = g3.get_hamiltonian(has_spin=False)
+    hk0 = np.array(h.get_hk_gen()([0.,0.,0.]))
+    (es,vs) = np.linalg.eigh(hk0)
+    V = vs[:,np.abs(es)<1e-6]
+    assert V.shape[1]==4*nlayers # the layers are not coupled
+    (Mx,My,Mz) = [V.conj().T@m@V for m in _valley_matrices(h)]
+    I = np.eye(V.shape[1])
+    assert np.max(np.abs(Mx@Mx-I))<1e-8
+    assert np.max(np.abs(My@My-I))<1e-8
+    Mz = Mz/np.sqrt(np.trace(Mz@Mz).real/V.shape[1])
+    assert np.max(np.abs(Mz@Mz-I))<1e-8
+    assert np.max(np.abs(Mx@My-1j*Mz))<1e-8
+    v = np.array([0.18,0.24,0.])
+    h.add_valley_exchange(list(v))
+    es = np.linalg.eigvalsh(np.array(h.get_hk_gen()([0.,0.,0.])))
+    assert abs(np.min(np.abs(es))-np.linalg.norm(v))<1e-8
+
+
+def test_inplane_valley_of_a_twisted_bilayer_needs_a_tripled_cell():
+    """In a twisted bilayer each layer has its own K. The moire cell does
+    not hold a period of the plane wave K-K' of the layers, so it is
+    refused, and three moire cells do: there the two decoupled layers get
+    the full Pauli algebra, each with the K of its own orientation."""
+    from pyqula import specialgeometry
+    g = specialgeometry.twisted_bilayer(1)
+    with pytest.raises(ValueError,match="multiple of 3"):
+        g.get_hamiltonian(has_spin=False).get_operator("valley_x")
+    g3 = g.get_supercell(3)
+    h = g3.get_hamiltonian(has_spin=False) # first neighbors: decoupled layers
+    hk0 = np.array(h.get_hk_gen()([0.,0.,0.]))
+    (es,vs) = np.linalg.eigh(hk0)
+    V = vs[:,np.abs(es)<1e-6]
+    assert V.shape[1]==8 # the Dirac points of the two layers
+    (Mx,My,Mz) = [V.conj().T@m@V for m in _valley_matrices(h)]
+    I = np.eye(8)
+    assert np.max(np.abs(Mx@Mx-I))<1e-8
+    assert np.max(np.abs(My@My-I))<1e-8
+    assert np.max(np.abs(Mx@My-1j*Mz))<1e-8
+
+
+def test_sparse_inplane_valley_is_the_dense_one():
+    """A sparse Hamiltonian, with and without the electron-hole degree of
+    freedom, gets the same operators and the same valley exchange as the
+    dense one, as sparse matrices."""
+    from scipy.sparse import issparse
+    g3 = geometry.honeycomb_lattice().supercell(3)
+    k = [0.07,0.19,0.]
+    v = [0.2,0.1,0.15]
+    for nambu in [False,True]:
+        hd = g3.get_hamiltonian(has_spin=True)
+        hs = g3.get_hamiltonian(has_spin=True)
+        hs.turn_sparse()
+        if nambu:
+            for h in [hd,hs]: h.setup_nambu_spinor() ; h.add_swave(0.1)
+        for name in ["valley_x","valley_y"]:
+            ms = hs.get_operator(name).m(None,k=k)
+            assert issparse(ms)
+            md = np.array(hd.get_operator(name).m(None,k=k))
+            assert np.max(np.abs(ms.toarray()-md))<1e-12
+        hd.add_valley_exchange(v) ; hs.add_valley_exchange(v)
+        assert hs.is_sparse and issparse(hs.intra)
+        d = hs.get_hk_gen()(k).toarray() - np.array(hd.get_hk_gen()(k))
+        assert np.max(np.abs(d))<1e-12
+
+
+def test_inplane_valley_in_nambu_space_is_the_one_of_the_normal_state():
+    """With the electron-hole degree of freedom and no pairing nothing
+    physical changes: a valley exchange added to the Nambu Hamiltonian is
+    the Nambu form of the normal Hamiltonian that has it, and the texture
+    it creates is the same."""
+    g3 = geometry.honeycomb_lattice().supercell(3)
+    v = [0.2,0.1,0.15]
+    hn = g3.get_hamiltonian(has_spin=True)
+    hn.add_valley_exchange(v)
+    hs = g3.get_hamiltonian(has_spin=True)
+    hs.setup_nambu_spinor()
+    hs.add_valley_exchange(v)
+    ref = hn.copy() ; ref.setup_nambu_spinor()
+    k = [0.07,0.19,0.]
+    d = np.array(hs.get_hk_gen()(k)) - np.array(ref.get_hk_gen()(k))
+    assert np.max(np.abs(d))<1e-10
+    fn,fs = _texture(hn),_texture(hs)
+    assert np.max(np.abs(fn))>0.1
+    assert np.max(np.abs(fn-fs))<1e-8
+
+
+def test_inplane_valley_refuses_a_lattice_that_is_not_one_honeycomb():
+    """Two sublattices whose bonds do not point in three directions 120
+    degrees apart have no K point to take the wavevector from"""
+    g = geometry.square_lattice().get_supercell(2)
+    g.get_sublattice()
+    g.set_finite()
+    h = g.get_hamiltonian(has_spin=False)
+    with pytest.raises(ValueError,match="honeycomb"):
+        h.get_operator("valley_x")
+    with pytest.raises(ValueError,match="honeycomb"):
+        h.add_valley_exchange([0.1,0.,0.])

@@ -8,15 +8,16 @@ from pyqula import spectrum
 
 import numpy as np
 
-# A single vacancy in a honeycomb flake is expected to create a vortex in
-# the in-plane valley pseudospin (tau_x,tau_y), since removing one atom is
-# the extreme case of an atomically-sharp, intervalley-scattering defect.
-#
+# A vacancy scatters electrons between the two valleys, so it creates a
+# vortex of the in-plane valley pseudospin (tau_x,tau_y) around it.
+# Here the system is periodic: a 3x3 supercell of the honeycomb lattice
+# with one vacancy. In this cell the two valleys fold to the same point.
+# The three neighbors of the vacancy have arrows 120 degrees apart.
 
 g = geometry.honeycomb_lattice()
 g = g.get_supercell(3)
 central = g.get_central()[0]
-gv = g.remove(central) # flake with a single vacancy
+gv = g.remove(central) # cell with a single vacancy
 
 hv = gv.get_hamiltonian(has_spin=False) # defective
 
@@ -36,6 +37,5 @@ ax.set_aspect("equal")
 ax.set_xlabel("x")
 ax.set_ylabel("y")
 ax.set_title("Vacancy-induced in-plane valley (tau_x,tau_y) vortex")
-ax.legend()
 plt.tight_layout()
 plt.show()

@@ -534,5 +534,18 @@ already reached once.
   product side, the three-fermion continuum of $F$, unfolding, the README
   bullet and notebook.
 
+- [`inplane_valley.md`](inplane_valley.md) -- the check of `valley_x`,
+  `valley_y` and `add_valley_exchange`, and their replacement by a closed
+  form, a first-neighbor hopping modulated by a plane wave of wavevector
+  $K-K'$. It records the two conventions of the closed form (which $K$,
+  and the lattice site the phase is measured from, with the rule for
+  equally close sites and the failure that made it tolerant), the three
+  defects measured in the construction it replaced (a calibration fixed by
+  eigenvector phases, wrong bonds at the edges of a finite system, a
+  handedness that followed the atom order), the textures that were
+  verified (vacancy vortex, zigzag and armchair edges), and what is open:
+  a sublattice-diagonal operator and a texture averaged over the Kekule
+  cell.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

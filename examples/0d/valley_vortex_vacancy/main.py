@@ -8,16 +8,18 @@ from pyqula import spectrum
 
 import numpy as np
 
-# A single vacancy in a honeycomb flake is expected to create a vortex in
-# the in-plane valley pseudospin (tau_x,tau_y), since removing one atom is
-# the extreme case of an atomically-sharp, intervalley-scattering defect.
+# A vacancy in a honeycomb flake scatters electrons between the two
+# valleys, so it creates a vortex of the in-plane valley pseudospin
+# (tau_x,tau_y) around it. The arrows wind once around the vacancy, with
+# winding -1 for a vacancy on one sublattice and +1 on the other.
 #
-# The raw in-plane valley expectation value is dominated by the flake's
-# own zigzag-edge valley texture (edge states are strongly valley
-# polarized), which has nothing to do with the vacancy. To isolate the
-# vacancy's own contribution we compute the same quantity on the pristine
-# flake and subtract it off, exactly as the vacancy DOS examples in
-# examples/embedding/ compare a pristine and a defective system.
+# The largest arrows are at the zigzag edges of the flake. They have
+# nothing to do with the vacancy, and they carry almost no net valley
+# coherence: they rotate by about 120 degrees from one cell of the edge
+# to the next (exactly 120 degrees in a long zigzag edge).
+# To keep only the part created by the vacancy, we compute the same
+# quantity on the pristine flake and subtract it. The two flakes have the
+# same coordinates, so their valley axes are the same.
 
 g = islands.get_geometry(name="honeycomb",n=8,nedges=6,rot=0.0) # pristine flake
 central = g.get_central()[0]

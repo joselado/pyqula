@@ -258,9 +258,35 @@ give the full valley vector $(\tau_x,\tau_y,\tau_z)$, in the same way as
 $(S_x,S_y,S_z)$ for the spin. While $\tau_z$ measures in which valley a state
 is, $\tau_x$ and $\tau_y$ measure the coherent mixing of the two valleys, the
 intervalley coherence, which is what a Kekulé bond order or an
-intervalley-coherent state has. They are built from a Kekulé coupling, which
-connects $K$ and $K'$, averaged over the three Kekulé patterns so that the
-operator has the $C_3$ symmetry of the lattice around every site.
+intervalley-coherent state has.
+
+An operator that takes an electron from $K'$ to $K$ carries the momentum
+$\mathbf Q=\mathbf K-\mathbf K'$. The simplest one is a first-neighbor
+hopping modulated by a plane wave of this momentum,
+
+$$
+\tau_x + i\tau_y = \frac{2}{3}\sum_{\langle ij\rangle}
+e^{i\mathbf Q\cdot\mathbf r_{ij}}
+\left(c^\dagger_i c_j + c^\dagger_j c_i\right) ,
+$$
+
+where the sum is over the first-neighbor bonds, and
+$\mathbf r_{ij}=(\mathbf r_i+\mathbf r_j)/2$ is the middle of the bond. So
+$\tau_x$ is the real hopping $\frac{2}{3}\cos(\mathbf Q\cdot\mathbf r_{ij})$,
+a Kekulé pattern, and $\tau_y$ is the same with a sine. The three bonds of a
+site have phases $120$ degrees apart and add to zero, so pristine graphene
+has no in-plane valley. The factor $2/3$ is the normalization: at the Dirac
+points $\tau_x^2=\tau_y^2=\tau_z^2=1$ and $\tau_x\tau_y=i\tau_z$, as
+for the Pauli matrices.
+
+The phase of the plane wave needs an origin. We measure $\mathbf r_{ij}$
+from the site of the honeycomb lattice that is closest to the origin of
+coordinates. A translation of the lattice by a lattice vector of the
+primitive cell rotates $(\tau_x,\tau_y)$ by $120$ degrees, and a shift much
+smaller than a bond changes nothing. So the direction of $\tau_x$ depends on
+which site is the origin, in the same way as the phase of a charge density
+wave. The angle between two textures has a meaning only if they are computed
+with the same coordinates, as for a flake with and without a vacancy.
 
 ```python
 from pyqula import geometry
@@ -291,14 +317,23 @@ dvy = spectrum.real_space_vev(hv,operator=hv.get_operator("valley_y"))
 
 `dvx` and `dvy` contain the expectation value of each component on every
 site, summed over the occupied states. If you draw $(\tau_x,\tau_y)$ as an
-arrow on each site, the largest arrows, up to $0.29$, are at the edges of
-the flake, because the zigzag edges have their own valley texture. Around
-the vacancy the arrows are up to $0.20$, and they wind once: when we go
-counterclockwise around the vacancy, on a ring of radius 1 to 3, the arrow
-turns once clockwise, a winding number of $-1$. To keep only the part created by the
-vacancy, we compute the same quantity on the pristine flake and subtract it,
-as `examples/0d/valley_vortex_vacancy/main.py` does. After this the arrows at
-the edges are below $0.002$, and the winding $-1$ around the vacancy stays.
+arrow on each site, the largest arrows, up to $0.23$, are at the edges of
+the flake. Around the vacancy the arrows are up to $0.20$, and they wind
+once: when we go counterclockwise around the vacancy, on a ring of radius 1
+to 3, the arrow turns once clockwise, a winding number of $-1$. A vacancy on
+the other sublattice gives the winding $+1$. To keep only the part created by
+the vacancy, we compute the same quantity on the pristine flake and subtract
+it, as `examples/0d/valley_vortex_vacancy/main.py` does. After this the
+arrows at the edges are below $0.002$, and the winding $-1$ around the
+vacancy stays.
+
+The edges of this flake are zigzag, and a zigzag edge does not mix the two
+valleys. The arrows at the edge are large, but they rotate from one cell of
+the edge to the next: by $118$ degrees in the middle of these short edges,
+and by exactly $120$ degrees in a long zigzag edge, where they add to zero
+over three cells. An armchair edge mixes the two valleys: there the arrows
+point in the same direction along the whole edge, and the edge has a net
+intervalley coherence.
 
 The valley vector can also enter the Hamiltonian. `h.add_valley_exchange(v)`,
 with $\vec v=(v_x,v_y,v_z)$, adds the term

@@ -1,192 +1,244 @@
 import numpy as np
-from .. import algebra
-from .. import kekule
+from .. import check
 from .sharpen import get_sharpen
 
-# The in-plane valley pseudospin (tau_x, tau_y) is built from a chiral
-# Kekule coupling (kekule.chiral_kekule), the real-space analogue of the
-# second-neighbor modified-Haldane coupling used for the out-of-plane
-# valley operator (tau_z, see operatortk/valley.py): a first-neighbor bond
-# texture that mixes the K and K' Dirac points.
+# The in-plane valley pseudospin (tau_x, tau_y) is a plane wave on the
+# first-neighbor bonds of the honeycomb lattice,
 #
-# A single, uniform chiral-Kekule texture only keeps 1/3 of all hexagons
-# as "Kekule centers" (see kekule.kekule_registries): every atom ends up
-# with exactly 2 of its 3 bonds "active", an intrinsically lopsided
-# pattern that is only exactly C3-symmetric around the special retained
-# hexagon-center points, never around a generic atomic site. Used
-# directly as a measurement operator this leaves a lattice-scale
-# artifact in any measured texture (e.g. it broke the C3 symmetry
-# expected around a point defect in examples/2d/valley_vortex).
+#   T = tau_x + i tau_y ,   T_ij = (2/3) exp(i Q.(r_i+r_j)/2) ,   Q = K-K',
 #
-# The honeycomb lattice actually has 3 inequivalent such registries
-# (translates of each other by one hexagon-lattice step,
-# kekule.kekule_registries returns all 3). A C3 rotation about any atom
-# permutes the 3 registries cyclically (verified numerically: rotating
-# the default registry's Bloch matrix by 120 deg about an arbitrary
-# atom reproduces a DIFFERENT registry's matrix exactly). That makes
-# T = H(registry0) + w*H(registryA) + w^2*H(registryB), w=exp(i 2 pi/3),
-# transform under that same rotation as T -> w*T (a pure phase, exact to
-# machine precision) -- i.e. T is a proper complex "tau_x + i*tau_y"-like
-# object, and its Hermitian real/imaginary parts
-#   tau_x = (T + T^dagger)/2,  tau_y = (T - T^dagger)/(2i)
-# are two EXACTLY C3-covariant, Hermitian operators, by construction,
-# with no free parameter and no dependence on which registry happens to
-# be labeled "the" default one (registryA/B are derived analytically,
-# not by an arbitrary search).
+# for every pair of first neighbors i,j, with (r_i+r_j)/2 the midpoint of
+# the bond. A term that takes an electron from K' to K has to carry the
+# momentum Q, and this is the simplest one on the first neighbors: the
+# Kekule bond order. Its Hermitian parts are two real symmetric hoppings,
 #
-# A single (t1,t2) chiral-Kekule amplitude pair still needs to be
-# calibrated so that tau_x, built this way, is *purely* tau_x (not
-# mixed with tau_z or with extraneous sublattice dressing) when
-# restricted to the low-energy K,K' subspace -- this is the same
-# calibration idea used before (projecting onto the folded K,K'
-# zero-energy subspace of a Kekule-commensurate (3x3) supercell of
-# graphene at Gamma), just re-solved for the new construction. Only one
-# calibration constant pair is needed now (not two): tau_y is already
-# the Hermitian partner of tau_x from the same (t1,t2), not an
-# independently-calibrated operator.
+#   tau_x = (2/3) cos(Q.r_mid) ,   tau_y = (2/3) sin(Q.r_mid) ,
 #
-# Why there is no sublattice-diagonal (second-neighbor) variant of this
-# operator, analogous to how tau_z is built from second-neighbor
-# modified-Haldane hopping instead of first-neighbor Kekule: it was
-# tried (project a chiral, registry-gated second-neighbor/NNN texture
-# the same way, i.e. T2 = h(reg0) + w*h(regA) + w^2*h(regB) built from
-# same-sublattice bonds instead of first-neighbor ones) and it comes out
-# EXACTLY zero on the folded K,K' subspace, for every amplitude/chirality
-# ansatz tried -- not a calibration failure, a structural one. The reason:
-# a first-neighbor bond borders 2 hexagons, and chiral_kekule's tau_x
-# depends on that -- a given bond is "active" (nonzero) in 2 of the 3
-# registries, using a DIFFERENT flanking hexagon (hence a different local
-# chirality sign) in each, and that per-bond richness is what survives
-# the w+w^2+1=0 cancellation. A second-neighbor bond's short diagonal
-# belongs to exactly 1 hexagon, so the direct analog is only active in 1
-# of 3 registries with one fixed convention -- and numerically, even a
-# SINGLE registry's contribution alone is already proportional to the
-# identity on the zero-mode subspace (no pseudospin content at all, not
-# just no valley-off-diagonal part), so three identical copies cancel
-# trivially regardless of amplitude/chirality/bond-direction choices.
-# This is not a fundamental no-go: a generic (e.g. random) Hermitian
-# operator restricted to second-neighbor same-sublattice bonds DOES have
-# nonzero K-K' matrix elements when checked the same way. It just has no
-# simple closed-form bond-texture construction the way the first-neighbor
-# and modified-Haldane cases do -- reaching it would need either a longer
-# range (e.g. 4th-neighbor same-sublattice shell) or a texture solved for
-# numerically on a Kekule-commensurate cell rather than a hand-written
-# bond function, neither of which was pursued here.
-
-_calibration_cache = {}
-_registry_hamiltonian_cache = {}
-
-
-def _registry_hamiltonians(h,t1,t2):
-    """Return (ho0,hoA,hoB): the 3 registry-specific chiral-Kekule
-    Hamiltonians (see module docstring) for h's geometry, painted with
-    the given (t1,t2) amplitudes. This is the common first step of the
-    3-registry construction, shared by _calibrate_tau, _build_tau_T_gen
-    and add_valley_exchange (previously reimplemented independently in
-    each, which meant a fix to the construction had to be applied by
-    hand in three places). Cached by (geometry, t1, t2, Hamiltonian
-    shape): t1,t2 only ever take the one calibrated value in practice,
-    so get_valley_taux and get_valley_tauy on the same h -- which
-    happens whenever both are requested (e.g. real_space_vev for the
-    full in-plane texture) -- hit the cache on the second call instead
-    of repainting the whole Hamiltonian again."""
-    key = (kekule._geometry_key(h.geometry),complex(t1),complex(t2),
-            h.has_spin,h.dimensionality,np.shape(h.intra))
-    if key in _registry_hamiltonian_cache: return _registry_hamiltonian_cache[key]
-    (cs0,csA,csB) = kekule.kekule_registries(h.geometry)
-    def build(cs):
-        ho = h.copy() ; ho.turn_multicell() ; ho.clean()
-        fun = kekule.chiral_kekule(ho.geometry,t1=t1,t2=t2,registry=cs)
-        ho.add_hopping_matrix(kekule.bond_function_to_matrix(fun))
-        return ho
-    out = (build(cs0),build(csA),build(csB))
-    _registry_hamiltonian_cache[key] = out
-    return out
+# the first-neighbor counterpart of the second-neighbor modified Haldane
+# coupling that gives tau_z (operatortk/valley.py). What the closed form
+# guarantees:
+#
+# - The three bonds of a site carry phases 120 degrees apart, so they add
+#   to zero: a pristine lattice has no in-plane valley, and T picks up a
+#   pure phase under a C3 rotation about any site.
+# - On the Dirac points tau_x, tau_y and tau_z square to one, anticommute,
+#   and tau_x tau_y = i tau_z; the 2/3 is what makes the squares one, so
+#   v.tau opens a gap |v|.
+# - tau_x and tau_y are real, as time reversal requires for a spinless
+#   real Hamiltonian: it exchanges K and K', and leaves tau_x and tau_y.
+# - A finite system gets the operator of the infinite lattice restricted
+#   to the bonds it has, so equivalent edges are treated alike.
+#
+# Two conventions fix what the closed form leaves free:
+#
+# - K is taken from the bond that goes from a B site to its A neighbor
+#   (sublattice +1), rotated by 90 degrees. The sublattice labels fix the
+#   sign of tau_z in the same way, so the three operators are right-handed
+#   whatever the order of the atoms. Each bond finds K from its own
+#   direction, so every layer of a multilayer gets the K of its own
+#   orientation and labels.
+# - The phase is measured from the site of the honeycomb lattice that is
+#   closest to the origin of coordinates, whether an atom sits there or
+#   not (how equally close sites are told apart is in _lattice_origins).
+#   A small shift of the geometry then changes nothing, and a shift by a
+#   lattice vector rotates (tau_x,tau_y) by 120 degrees: a translation is
+#   a rotation of the in-plane valley. Two geometries with nearly the
+#   same coordinates (a flake and the same flake with a vacancy,
+#   recentered or not) share the same axes.
+#
+# This replaced a construction that summed a chiral Kekule coupling over
+# the three Kekule registries and calibrated its two amplitudes
+# numerically. In the bulk it was the same operator to 1e-3, but the
+# calibration target was written in a basis whose phases came from the
+# diagonalization (another LAPACK driver gave another operator), the
+# bonds at the edge of a finite system missed the hexagons outside it,
+# and the sign of tau_y followed the order of the atoms.
 
 
-def _calibrate_tau():
-    """Return the (t1,t2) chiral-Kekule amplitude pair that gives a pure
-    tau_x (and, as its Hermitian partner, tau_y) valley pseudospin
-    operator under the 3-registry construction"""
-    if "t1t2" in _calibration_cache: return _calibration_cache["t1t2"]
-    from .. import geometry as geometrymod
-    g3 = geometrymod.honeycomb_lattice().supercell(3) # Kekule-commensurate cell
-    h0 = g3.get_hamiltonian(has_spin=False)
-    h0.turn_multicell()
-    hk0 = h0.get_hk_gen()([0.,0.,0.])
-    (es,vs) = algebra.eigh(hk0)
-    inds = np.where(np.abs(es)<1e-6)[0] # the folded K,K' zero modes
-    V = vs[:,inds]
-    hz = h0.copy() ; hz.clean() ; hz.add_modified_haldane(1.0/4.5)
-    hkz = hz.get_hk_gen()([0.,0.,0.])
-    Mz = V.conj().T@hkz@V
-    (ez,uz) = np.linalg.eigh(Mz) # sort into the two valleys
-    W = V@uz
-    sub = np.diag(g3.sublattice.astype(np.complex128))
-    def sublattice_sort(Wsub):
-        Ms = Wsub.conj().T@sub@Wsub
-        (es_s,us_s) = np.linalg.eigh(Ms) # sort into A,B sublattice
-        return Wsub@us_s
-    Wfull = np.concatenate([sublattice_sort(W[:,:2]),sublattice_sort(W[:,2:])],
-            axis=1) # basis ordered as (valley,sublattice)
-    w = np.exp(1j*2.*np.pi/3.)
-    def taux_bloch(t1,t2):
-        (ho0,hoA,hoB) = _registry_hamiltonians(h0,t1,t2)
-        k0 = [0.,0.,0.]
-        T = ho0.get_hk_gen()(k0) + w*hoA.get_hk_gen()(k0) + w**2*hoB.get_hk_gen()(k0)
-        return (T+T.conj().T)/2.
-    sx = np.array([[0,1],[1,0]],dtype=np.complex128)
-    sy = np.array([[0,-1j],[1j,0]],dtype=np.complex128)
-    basis4 = [np.kron(sx,sx),np.kron(sy,sx),np.kron(sx,sy),np.kron(sy,sy)]
-    def coeffs(t1,t2):
-        M = Wfull.conj().T@taux_bloch(t1,t2)@Wfull
-        return np.array([np.trace(M@b.conj().T)/4.0 for b in basis4])
-    basis_inputs = [(1.0,0.0),(1j,0.0),(0.0,1.0),(0.0,1j)]
-    Rmat = np.array([coeffs(t1,t2) for (t1,t2) in basis_inputs]).T
-    Rinv = np.linalg.inv(Rmat)
-    c = Rinv@np.array([1.,0.,0.,0.]) # solve for pure tau_x sigma_x
-    t1,t2 = c[0]+1j*c[1], c[2]+1j*c[3]
-    out = (t1,t2)
-    _calibration_cache["t1t2"] = out
-    return out
+def _first_neighbor_pairs(rs1,rs2):
+    """Return the indices (ii,jj) of the pairs rs1[i],rs2[j] at distance 1"""
+    from scipy.spatial import cKDTree
+    near = cKDTree(rs1).query_ball_tree(cKDTree(rs2),np.sqrt(1.01))
+    ii = np.repeat(np.arange(len(rs1)),[len(x) for x in near])
+    jj = np.array([j for x in near for j in x],dtype=int)
+    dr = rs1[ii] - rs2[jj]
+    keep = np.sum(dr*dr,axis=1)>0.99 # drop the pairs closer than a bond
+    return ii[keep],jj[keep]
 
 
-def _build_tau_T_gen(h,t1,t2):
-    """Return hkgen_T(k), a k-dependent generator for the
-    3-registry-symmetrized complex combination T = tau_x + i*tau_y (see
-    module docstring). The 3 registry Hamiltonians (and their
-    k-generators) are built once, up front -- not on every call --
-    since hkgen_T is typically evaluated at many k-points (e.g.
-    get_bands sweeping a k-path) and rebuilding the whole multicell
-    Hamiltonian (re-painting every bond) per k-point would defeat the
-    point of caching the registries."""
-    (ho0,hoA,hoB) = _registry_hamiltonians(h,t1,t2)
-    w = np.exp(1j*2.*np.pi/3.)
-    (hk0,hkA,hkB) = (ho0.get_hk_gen(),hoA.get_hk_gen(),hoB.get_hk_gen())
-    def hkgen_T(k):
-        return hk0(k) + w*hkA(k) + w**2*hkB(k)
-    return hkgen_T
+# how the lattice site that the phase is measured from is chosen, see
+# _lattice_origins: in units of the bond length, and in radians
+_ORIGIN_WINDOW = 0.3
+_ORIGIN_DIRECTION = 0.1
+
+_WHAT = "the in-plane valley operators (valley_x, valley_y) and the " \
+        "in-plane part (vx,vy) of add_valley_exchange"
+
+
+def _bond_wavevectors(r1,r2,sub1,sub2):
+    """Return Q = K-K' for each of the bonds r1[i],r2[i], whose ends are
+    on the sublattices sub1[i],sub2[i]. K is the in-plane direction of the
+    bond from the B site to the A site (sublattice +1) rotated by 90
+    degrees, of length 4 pi/(3 sqrt(3) a) for an in-plane bond length a;
+    of the three bonds of a site, which give equivalent K points, the one
+    with the smallest polar angle is used. Each bond finds K from its own
+    direction, so that neither the order of the atoms nor the other layers
+    of the geometry enter."""
+    if np.any(sub1*sub2>0): raise ValueError(_WHAT+" need a honeycomb "
+            "lattice, whose first neighbors are on opposite sublattices, "
+            "and this geometry has first neighbors on the same one")
+    dr = np.sign(sub1)[:,None]*(r1-r2) # the bond from B to A
+    zs = dr[:,0] + 1j*dr[:,1]
+    rot = np.exp(2j*np.pi/3.*np.arange(3))
+    z0 = _smallest_polar_angle(zs[:,None]*rot[None,:]) # of the three bonds
+    k = 4.*np.pi/(3.*np.sqrt(3.))*1j*z0/np.abs(z0)**2 # rotated 90 degrees
+    return 2.*np.array([k.real,k.imag,0.*k.real]).T
+
+
+def _smallest_polar_angle(cand):
+    """Return, for each row of the complex array cand, the entry with the
+    smallest polar angle in [0,2 pi), with an entry a rounding error below
+    the x axis counted as on it"""
+    angles = (np.angle(cand)+1e-6)%(2.*np.pi)
+    return cand[np.arange(len(cand)),np.argmin(angles,axis=1)]
+
+
+def _lattice_origins(r1,r2):
+    """Return, for each of the bonds r1[i],r2[i], the site of the
+    honeycomb lattice of that bond from which the phase is measured, as a
+    complex number x+iy: the site closest to the origin of coordinates.
+    The lattice is the infinite one that the bond belongs to, so the site
+    does not have to be an atom of the geometry.
+
+    The usual origins of coordinates (a hexagon center, a bond midpoint)
+    are at the same distance from several sites, and a rule that took the
+    closest one to the last digit would change site, and rotate the valley
+    axes by 120 degrees, under the smallest shift of the geometry, as
+    recentering a flake after removing an atom. So every site within
+    _ORIGIN_WINDOW of the closest distance competes, and the one furthest
+    along a fixed direction a little above the x axis wins. The direction
+    is not one of a lattice in its usual orientations, so two competing
+    sites are not level along it."""
+    z1 = r1[:,0] + 1j*r1[:,1]
+    dz = z1 - (r2[:,0] + 1j*r2[:,1]) # the bond
+    w = np.exp(2j*np.pi/3.)
+    (u1,u2) = (dz*(1.-w),dz*(1.-w*w)) # lattice vectors
+    det = u1.real*u2.imag - u1.imag*u2.real
+    cand = []
+    for z in (z1,z1-dz): # the two sublattices
+        m = np.round((-z.real*u2.imag + z.imag*u2.real)/det)
+        n = np.round((-u1.real*z.imag + u1.imag*z.real)/det)
+        for dm in (-1,0,1): # the cells around the closest one
+            for dn in (-1,0,1): cand.append(z + (m+dm)*u1 + (n+dn)*u2)
+    cand = np.array(cand).T # bond, candidate
+    dist = np.abs(cand)
+    out = dist>np.min(dist,axis=1)[:,None]+_ORIGIN_WINDOW # do not compete
+    along = cand*np.exp(-1j*_ORIGIN_DIRECTION) # real part: along it
+    score = np.where(out,-np.inf,along.real)
+    level = score>np.max(score,axis=1)[:,None]-1e-6
+    score = np.where(level,along.imag,-np.inf) # two level sites: the left one
+    return cand[np.arange(len(cand)),np.argmax(score,axis=1)]
+
+
+def _bond_phases(r1,r2,sub1,sub2):
+    """Return Q.(r_mid - r_0) for each of the bonds r1[i],r2[i], with
+    r_mid the midpoint of the bond and r_0 the lattice site closest to the
+    origin of coordinates"""
+    qs = _bond_wavevectors(r1,r2,sub1,sub2)
+    z0 = _lattice_origins(r1,r2)
+    rmid = (r1+r2)/2.
+    return (rmid[:,0]-z0.real)*qs[:,0] + (rmid[:,1]-z0.imag)*qs[:,1]
+
+
+def _check_valley_geometry(g):
+    """Raise unless the in-plane valley operators can be defined on g: a
+    sublattice, first neighbors on opposite sublattices in directions 120
+    degrees apart, and for a periodic geometry a cell that holds a whole
+    period of the plane wave"""
+    check.require_sublattice(g,"the in-plane valley")
+    rs = np.asarray(g.r)
+    sub = np.asarray(g.sublattice)
+    lattice_vectors = [g.a1,g.a2,g.a3][:g.dimensionality]
+    shifts = [np.zeros(3)]
+    for a in lattice_vectors: # the cell and its neighboring replicas
+        shifts = [s+n*np.asarray(a) for s in shifts for n in (-1,0,1)]
+    r2 = np.concatenate([rs+s for s in shifts])
+    sub2 = np.tile(sub,len(shifts))
+    (ii,jj) = _first_neighbor_pairs(rs,r2)
+    if len(ii)==0: raise ValueError(_WHAT+" need a honeycomb lattice with "
+            "bond length 1, and this geometry has no first neighbors")
+    qs = _bond_wavevectors(rs[ii],r2[jj],sub[ii],sub2[jj])
+    # the three bonds of a site are 120 degrees apart when they all find
+    # the same K
+    (sites,first) = np.unique(ii,return_index=True)
+    qsite = np.zeros((len(rs),3))
+    qsite[sites] = qs[first]
+    if np.max(np.abs(qs-qsite[ii]))>1e-3: raise ValueError(_WHAT+" need a "
+            "honeycomb lattice: the bonds of a site have to point in "
+            "three directions 120 degrees apart, and in this geometry "
+            "they do not")
+    # a periodic geometry has to hold a whole period of the plane wave,
+    # which is the Kekule cell: Q.a must be a multiple of 2 pi
+    for (i,a) in enumerate(lattice_vectors):
+        n = qs@np.asarray(a)/(2.*np.pi)
+        if np.max(np.abs(n-np.round(n)))>1e-3: raise ValueError(_WHAT+
+            " need a Kekule-commensurate geometry when periodic: a "
+            "supercell of the primitive honeycomb cell whose size is a "
+            "multiple of 3. Lattice vector a%d=%s is not commensurate "
+            "with it; use e.g. g.get_supercell(3) (or any other multiple "
+            "of 3) first."%(i+1,a))
+
+
+def _bond_wave(sub,amplitude=1.0,angle=0.0,sparse=False):
+    """Return the matrix generator fm(rs1,rs2) of the hopping
+    amplitude*(2/3)*cos(Q.r_mid - angle) on the first-neighbor bonds,
+    which is amplitude*(cos(angle) tau_x + sin(angle) tau_y), as sparse
+    matrices if sparse=True and dense arrays otherwise. sub is the
+    sublattice of the sites, the same for rs1 and rs2, which are the cell
+    and one of its replicas"""
+    from scipy.sparse import csc_matrix
+    sub = np.asarray(sub)
+    def fm(rs1,rs2):
+        rs1,rs2 = np.asarray(rs1),np.asarray(rs2)
+        (ii,jj) = _first_neighbor_pairs(rs1,rs2)
+        phis = _bond_phases(rs1[ii],rs2[jj],sub[ii],sub[jj])
+        data = amplitude*2./3.*np.cos(phis-angle) + 0j
+        m = csc_matrix((data,(ii,jj)),shape=(len(rs1),len(rs2)))
+        if sparse: return m
+        return m.toarray()
+    return fm
+
+
+def _inplane_valley_hamiltonian(h,amplitude=1.0,angle=0.0):
+    """Return a copy of h whose only term is
+    amplitude*(cos(angle) tau_x + sin(angle) tau_y)"""
+    _check_valley_geometry(h.geometry)
+    ho = h.copy() ; ho.turn_multicell() ; ho.clean()
+    fm = _bond_wave(h.geometry.sublattice,amplitude=amplitude,angle=angle,
+            sparse=ho.is_sparse)
+    # the normal state with the degrees of freedom of h, sparse if h is
+    hn = h.geometry.get_hamiltonian(has_spin=h.has_spin,is_multicell=True,
+            is_sparse=h.is_sparse,mgenerator=fm)
+    if h.has_eh: hn.setup_nambu_spinor() # and then its Nambu form
+    ho.set_multihopping(hn.get_multihopping())
+    return ho
 
 
 def add_valley_exchange(h,v):
     """Add a valley-space exchange term v=(vx,vy,vz).(tau_x,tau_y,tau_z)
     to the Hamiltonian, the valley-pseudospin analogue of add_exchange
     for real spin. vz is added as a modified-Haldane (second-neighbor)
-    coupling; vx,vy are added as a chiral Kekule (first-neighbor)
-    coupling, symmetrized over the 3 inequivalent Kekule registries
-    (see module docstring) so the added term is exactly C3-covariant
-    about every atom, not just about the special retained-hexagon-center
-    points a single uniform Kekule texture would be tied to.
+    coupling; vx,vy are added as a first-neighbor hopping modulated by a
+    plane wave of wavevector K-K' (see the comment at the top of this
+    module), which opens a gap |v| at the Dirac points.
 
     Just like the valley operators themselves (get_operator("valley"/
-    "valley_x"/"valley_y")), this is only periodic on a
+    "valley_x"/"valley_y")), the in-plane part is only periodic on a
     Kekule-commensurate geometry (e.g. h.geometry already a 3x3, or
     other multiple-of-3, supercell of the primitive honeycomb cell) for
     dimensionality>0 Hamiltonians; for 0-dimensional (finite flake)
     Hamiltonians no such commensurability is required."""
-    if not h.geometry.has_sublattice: raise ValueError(
-            "valley exchange requires a honeycomb-like geometry with a"
-            " sublattice index")
+    check.require_sublattice(h,"a valley exchange")
     if callable(v): raise TypeError("add_valley_exchange takes a uniform "
             "valley exchange v=(vx,vy,vz), three numbers, not a function "
             "of position: its in-plane part is a Kekule bond texture "
@@ -194,56 +246,38 @@ def add_valley_exchange(h,v):
     if np.shape(v)!=(3,): raise ValueError("add_valley_exchange takes "
             "v=(vx,vy,vz), three numbers, got "+repr(v))
     (vx,vy,vz) = v
+    if np.iscomplexobj(np.array([vx,vy])): raise ValueError(
+            "add_valley_exchange needs real vx and vy, since a complex "
+            "one would add a non-Hermitian term, got "+repr(v))
     h.turn_multicell()
     if vz!=0.: h.add_modified_haldane(vz/4.5)
     if vx!=0. or vy!=0.:
-        (t1,t2) = _calibrate_tau()
-        (ho0,hoA,hoB) = _registry_hamiltonians(h,t1,t2)
-        w = np.exp(1j*2.*np.pi/3.)
-        mhT = ho0.get_multihopping() + w*hoA.get_multihopping() \
-                + w**2*hoB.get_multihopping()
-        mhTd = mhT.get_dagger()
-        mh_taux = (mhT+mhTd)*0.5
-        mh_tauy = (mhT-mhTd)*(-0.5j)
-        mh = vx*mh_taux + vy*mh_tauy
-        # MultiHopping.get_dagger() writes the dagger of every block at
-        # -R, so mh is Hermitian by construction for real vx and vy; the
-        # check stays as a guard rather than silently add a
-        # non-Hermitian term to h.
-        if not mh.is_hermitian(): raise RuntimeError(
-                "add_valley_exchange: the constructed valley-exchange "
-                "term is not Hermitian, which needs real vx and vy")
-        h.set_multihopping(h.get_multihopping()+mh)
+        ho = _inplane_valley_hamiltonian(h,amplitude=np.sqrt(vx**2+vy**2),
+                angle=np.arctan2(vy,vx)) # vx*tau_x + vy*tau_y
+        h.set_multihopping(h.get_multihopping()+ho.get_multihopping())
 
 
 def get_inplane_valley(h,angle=0.0,delta=None,**kwargs):
     """Return a callable that calculates the in-plane valley (tau_x/tau_y)
-    expectation value, using a chiral Kekule coupling symmetrized over
-    the 3 inequivalent Kekule-hexagon registries (see module docstring)
-    so the result is exactly C3-covariant about every atom. angle=0
-    gives tau_x, angle=pi/2 gives tau_y, any other angle a linear
+    expectation value, a first-neighbor hopping modulated by a plane wave
+    of wavevector K-K' (see the comment at the top of this module).
+    angle=0 gives tau_x, angle=pi/2 gives tau_y, any other angle a linear
     combination (a rotation of the in-plane pseudospin axis).
 
-    Just like the out-of-plane valley operator (get_valley), the chiral
-    Kekule coupling this is built from is only periodic on a
-    Kekule-commensurate geometry (e.g. h.geometry already a 3x3, or
-    other multiple-of-3, supercell of the primitive honeycomb cell) for
-    dimensionality>0 Hamiltonians; for 0-dimensional (finite flake)
-    Hamiltonians no such commensurability is required."""
-    if not h.geometry.has_sublattice: raise ValueError(
-            "in-plane valley operator requires a honeycomb-like geometry"
-            " with a sublattice index")
-    (t1,t2) = _calibrate_tau()
-    hkgen_T = _build_tau_T_gen(h,t1,t2)
+    Just like the out-of-plane valley operator (get_valley), this is
+    only periodic on a Kekule-commensurate geometry (e.g. h.geometry
+    already a 3x3, or other multiple-of-3, supercell of the primitive
+    honeycomb cell) for dimensionality>0 Hamiltonians; for 0-dimensional
+    (finite flake) Hamiltonians no such commensurability is required."""
+    ho = _inplane_valley_hamiltonian(h,angle=angle)
+    hkgen = ho.get_hk_gen() # cos(angle)*tau_x + sin(angle)*tau_y
     sharpen = get_sharpen(delta=delta) # renormalize eigenvalues to +-1
-    phase = np.exp(-1j*angle) # tau(angle) = Re(e^{-i*angle} T), see below
     def fun(m=None,k=None):
         if h.dimensionality>0 and k is None: # requires a kpoint
             raise ValueError("the in-plane valley operator of a periodic "
                     "Hamiltonian has to be evaluated at a k-point, and none "
                     "was given")
-        T = phase*hkgen_T(k) # evaluate Hamiltonian
-        hk = (T+T.conj().T)/2. # cos(angle)*tau_x + sin(angle)*tau_y
+        hk = hkgen(k) # evaluate the operator
         hk = sharpen(hk) # sharpen the valley
         if m is None: return hk # just return the valley operator
         else: return hk@m # return the projector
