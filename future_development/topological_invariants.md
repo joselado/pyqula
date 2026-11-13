@@ -658,23 +658,24 @@ There are four candidates, and each one follows the `new-feature` checklist: one
 `topologytk/`, a delegator on `Hamiltonian`, one test against an independent route, and the
 five documentation surfaces.
 
-- **Multipole chiral number** (Benalcazar and Cerjan, arXiv:2109.06892, PRL 128, 127601). It
-  is a real-space integer for chiral-symmetric systems (class AIII and BDI), built from the
-  sublattice quadrupole operators $e^{2\pi i xy/L_xL_y}$ projected on the two sublattices of
-  the chiral operator, and it counts the zero-energy states at each corner. This is the
-  quantity STM sees as a zero-bias peak at a corner. It fits pyqula well for three reasons:
-  it works on `square_2OTI`, where the $C_n$ corner-charge formula does not apply because of
-  the $\pi$ flux; it gives an integer $N_{xy}$ to set against $q_{xy}=1/2$ on the same model;
-  and it replaces the real-space corner check that was tried and not finished in the nested
-  Wilson loop section. It needs no symmetry primitive, only the chiral operator that
-  `h.get_winding_number()` already takes as `chiral=`, and a supercell like the Bott index, so it would live
-  next to `topologytk/bott.py`. The survey found no open-source implementation, so the independent
-  route is spectral: the number of exact zero modes per corner of an open flake, resolved by
-  sublattice, and the multipole winding number of Lin and Lee (arXiv:2401.03699,
-  Commun. Phys. 7, 393), which uses a twisted boundary at a corner. The test invariants are
-  $N_{xy}=1$ for $\delta>0$ and 0 for $\delta<0$, an $N_{xy}$ that does not change under a
-  chiral-preserving disorder smaller than the gap, and a stacked pair of BBH models giving 2,
-  where $q_{xy}$ reads 0. Cost: small to medium.
+- **Multipole chiral number** (Benalcazar and Cerjan, arXiv:2109.06892, PRL 128, 127601).
+  Built on 13 November 2026 as `h.get_multipole_chiral_number(cells=(Lx,Ly),chiral=S)` in
+  `topologytk/multipolechiral.py`, on a supercell like the Bott index. The paper defines it on
+  the torus and computes it on the open flake, so both are there (`boundary=`). $x,y$ count
+  the unit cells from a corner; a centered origin gives 0 in the topological phase. The
+  determinant of $\bar Q_A\bar Q_B^\dagger$ is one, so the number is an integer for any
+  sample, and a sample that is too small gives a wrong integer, not a fraction. On
+  `square_2OTI` it is 0 for $\delta<0$ and 1 for $\delta=0.5$ from $L=6$ to 14, also for
+  $8\times12$; at $\delta=0.2$ the torus gives 1 from $L=6$ and the flake only from $L=10$.
+  It equals the zero modes of the open flake, A minus B, at the corners $(0,0)$ and $(L,L)$,
+  checked at $\delta=0.5$ for $L=10$ and 14. Chiral bond disorder up to 0.4 of each bond
+  keeps it at 1, two coupled copies give 2. `g.get_sublattice()` has a random global sign,
+  so `chiral=None` pins the first orbital on A. An independent review re-derived the
+  formula from the TeX and the fully dimerized limit by hand,
+  $N_{xy}=\mathrm{round}((L_x-1)(L_y-1)/L_xL_y)$ with the corner origin, which is why a
+  sample needs at least 4 cells along each direction. Not done: the multipole winding number of
+  Lin and Lee (arXiv:2401.03699), the octupole $N_{xyz}$, the $N_{xy}=4$ phases of the paper,
+  the README bullet and a notebook.
 - **Corner charge and filling anomaly from $C_n$ eigenvalues** (Benalcazar, Li and Hughes,
   arXiv:1809.02142, PRB 99, 245151). The corner charge $Q_n$ in units of $e/n$ comes from
   the rotation invariants $[\Pi_p]=\#\Pi_p-\#\Gamma_p$ of the occupied bands, for instance

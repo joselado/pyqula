@@ -466,9 +466,12 @@ already reached once.
   the Chern number modulo $n$ and the parity $Z_2$, are built too
   (5 November 2026), and so is the corner charge for $C_2$, $C_4$ and $C_6$,
   checked against flakes, and the $Z_4$ indicator in three dimensions, the
-  symmetry branch of the section on higher-order topology, which lists what
-  is left there: the multipole chiral number, the octupole moment, the $C_3$
-  corner charge and a real-space check of the hinge modes.
+  symmetry branch of the section on higher-order topology. The multipole
+  chiral number of a chiral higher-order insulator is built too
+  (13 November 2026), on the torus and on the open flake, held to the
+  sublattice-resolved zero modes at the corners of a flake; what is left of
+  that section is the octupole moment, the $C_3$ corner charge and a
+  real-space check of the hinge modes.
 
 - [`unfolding.md`](unfolding.md) -- a check of `operator="unfold"` through
   every mode of the routines that take it (bands, kdos, DOS, the Fermi

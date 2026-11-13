@@ -265,6 +265,97 @@ The Hamiltonian has to be two dimensional, and the Fermi energy at zero; a
 level exactly at zero, as at the Dirac points of the clean honeycomb
 lattice, raises an error.
 
+## Multipole chiral number of a higher-order insulator
+
+We will now see an integer that counts the zero-energy states at the corners
+of a two-dimensional insulator with chiral symmetry. Chiral symmetry means
+that the states of every unit cell split into two sublattices A and B, and
+that the Hamiltonian only connects A with B. In the basis (A,B) the
+Hamiltonian is
+
+$$
+H = \begin{pmatrix} 0 & h \\ h^\dagger & 0 \end{pmatrix} .
+$$
+
+The singular value decomposition $h = U_A \Sigma U_B^\dagger$ pairs every
+state of A with one state of B, the two halves of the levels $\pm\Sigma$.
+The sample is a supercell of $L_x\times L_y$ unit cells, and $x$ and $y$
+count its unit cells from one corner, from $0$ to $L-1$. The sublattice
+quadrupole operator $Q_s$, with $s={\rm A,B}$, is diagonal, and its entry
+for a state of the sublattice $s$ in the unit cell $(x,y)$ is the phase
+$e^{-2\pi i xy/L_xL_y}$. With the projected operators
+$\bar Q_s = U_s^\dagger Q_s U_s$, the multipole chiral number is
+
+$$
+N_{xy} = \frac{1}{2\pi i}\, {\rm Tr}\, \log \left( \bar Q_A \bar Q_B^\dagger \right) .
+$$
+
+Every unit cell has as many states on A as on B, so the determinant of
+$\bar Q_A \bar Q_B^\dagger$ is exactly one, and the phases of its eigenvalues
+add up to $2\pi N_{xy}$, meaning that $N_{xy}$ is an integer for any sample.
+In a trivial insulator the states of A and of B see the quadrupole phase in
+the same way, and $N_{xy}=0$. In a higher-order insulator they do not, and
+$N_{xy}$ is the number of zero modes at each corner of the open flake. They
+all sit on one sublattice: on A at the corner $(0,0)$ and at the opposite
+one when $N_{xy}>0$, on B when $N_{xy}<0$, and on the other sublattice at
+the two other corners. In STM they give a peak at zero bias at the corners
+of a flake. The quadrupole moment $q_{xy}$ of the nested Wilson loop adds
+up modulo one, so two copies of a quadrupole insulator give $q_{xy}=0$,
+while they give $N_{xy}=2$ and two zero modes per corner.
+
+We take the model of Benalcazar, Bernevig and Hughes, with the hopping
+$1-\delta$ inside the unit cell and $1+\delta$ between unit cells. It has
+$N_{xy}=1$ for $\delta>0$ and $N_{xy}=0$ for $\delta<0$. The sample is
+periodic, closed into a torus as for the Bott index, and the chiral
+operator is the sublattice $(-1)^{n_x+n_y}$, with $(n_x,n_y)$ the position
+of the site on the square lattice.
+
+```python
+from pyqula import specialhamiltonian
+import numpy as np
+h = specialhamiltonian.square_2OTI(0.5) # BBH model, delta=0.5
+h = h.get_supercell((10,10)) # periodic sample of 10x10 unit cells
+r = h.geometry.r - h.geometry.r[0] # positions from the first site
+S = np.diag((-1.)**np.round(r[:,0]+r[:,1])) # sublattice, first site on A
+N = h.get_multipole_chiral_number(cells=(10,10),chiral=S) # N_xy
+```
+
+This gives $N_{xy}=1$, and $\delta=-0.5$ gives $N_{xy}=0$. The open flake
+of the same $10\times10$ unit cells has four states at zero energy, within
+$3\times10^{-5}$, one at each corner. On the A sublattice minus the B
+sublattice they count $+1$ at the corners $(0,0)$ and $(L,L)$ and $-1$ at
+the other two, so the corner count is $N_{xy}$. Random complex hoppings on
+the bonds, which keep the chiral symmetry, leave $N_{xy}=1$ as long as the
+gap stays open. Two copies of the model coupled by a Rashba term give
+$N_{xy}=2$.
+
+The number is returned as a real number, not rounded, but it is an integer
+by construction. So a sample smaller than the localization length of the
+corner modes gives a wrong integer, not a fraction, and you should compare
+two sizes. For $\delta=0.2$ the torus gives $1$ already for $6\times6$ unit
+cells, while the open flake gives $0$ for $6\times6$ and $8\times8$ and $1$
+from $10\times10$.
+
+The keywords are:
+- cells: the number of unit cells $(L_x,L_y)$ of the sample along its two
+  lattice vectors, as in `h.get_supercell(cells)`, at least 4 each
+- chiral=None: the chiral operator, a matrix, a name or an operator that
+  acts inside each unit cell; the default is the sublattice of the
+  geometry, with the first orbital on A. Exchanging A and B changes the
+  sign of $N_{xy}$
+- boundary="periodic": the sample closed into a torus; "open" takes the
+  open flake instead
+- tol=1e-8: on the torus, the smallest distance to zero of an energy level
+  that is accepted
+
+It raises `ValueError` if the Hamiltonian is not two dimensional, if the
+sample has fewer than 4 unit cells along a direction, if the chiral operator
+does not anticommute with it, if a unit cell has more states on one
+sublattice than on the other, and on the torus if a level is at zero
+energy, where the gap is closed. A gap that closes at a momentum the torus
+of $L_x\times L_y$ cells does not sample is not detected, which is one more
+reason to compare two sizes.
+
 ## Topological surface states
 
 The invariant predicts states at the edge. The direct way to see them is the

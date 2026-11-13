@@ -1134,6 +1134,42 @@ Optional arguments:
 It raises `ValueError` if the Hamiltonian is not two dimensional or has a
 level at zero energy.
 
+## h.get_multipole_chiral_number()
+Return the multipole chiral number of a two-dimensional chiral-symmetric
+sample, a supercell of $L_x\times L_y$ unit cells,
+
+$$N_{xy} = \frac{1}{2\pi i}\,{\rm Tr}\log\left(\bar Q_A\bar Q_B^\dagger\right),
+\qquad \bar Q_s = U_s^\dagger Q_s U_s ,$$
+
+with $U_s$ the states of the sublattice $s$ from the singular value
+decomposition of the block of the Hamiltonian between A and B, and $Q_s$ the
+phase $e^{-2\pi i xy/L_xL_y}$ of the unit cell $(x,y)$, counted from a corner
+of the sample, on the sublattice $s$. It is an integer for any sample, and
+in a sample larger than the localization length of the corner modes it is
+the number of zero modes at each corner of the open flake, on A at the
+corner $(0,0)$ when it is positive. Returns a float, not rounded. See
+[Topology in real space](real-space-topology.md).
+
+Arguments:
+- cells: the number of unit cells $(L_x,L_y)$ of the sample, as in
+  `h.get_supercell(cells)`, at least 4 each; required
+
+Optional arguments:
+- chiral=None: the chiral operator, a matrix, a name or an operator acting
+  inside each unit cell; the default is the sublattice of the geometry,
+  with the first orbital on A
+- boundary="periodic": the sample closed into a torus; "open" takes the
+  open flake
+- tol=1e-8: on the torus, the smallest distance to zero of an energy level
+  that is accepted; a closing at a momentum the torus does not sample is
+  not detected
+
+It raises `ValueError` if the Hamiltonian is not two dimensional, if the
+sample has fewer than 4 unit cells along a direction, if the chiral operator
+does not anticommute with it, if a unit cell has more states on one
+sublattice than on the other, and on the torus if a level is at zero energy,
+and `TypeError` if the chiral operator is a plain function.
+
 ## h.get_spin_bott_index()
 Return the spin Bott index $(B_+-B_-)/2$ of a two-dimensional spinful
 periodic supercell at $k=0$, with the occupied states split by the sign of
