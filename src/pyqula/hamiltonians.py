@@ -164,6 +164,12 @@ class Hamiltonian():
         from .topologytk.bott import bott_index
         return bott_index(h,**kwargs)
 
+    def get_kpm_chern_marker(h,**kwargs):
+        """Local Chern marker of a flake from the KPM projector, at a cost
+        linear in the number of sites, see topologytk/kpmchern.py"""
+        from .topologytk.kpmchern import kpm_chern_marker
+        return kpm_chern_marker(h,**kwargs)
+
     def get_multipole_chiral_number(h,**kwargs):
         """Multipole chiral number N_xy of a supercell of a chiral-symmetric
         two-dimensional insulator, see topologytk/multipolechiral.py"""

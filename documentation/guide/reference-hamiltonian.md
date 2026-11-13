@@ -1134,6 +1134,36 @@ Optional arguments:
 It raises `ValueError` if the Hamiltonian is not two dimensional or has a
 level at zero energy.
 
+## h.get_kpm_chern_marker()
+Return the local Chern marker of every site of a finite flake, at a cost
+linear in the number of sites,
+
+$$C_a = \frac{2\pi}{A_a}\sum_{\alpha\in a}{\rm Im}\left[PX_aP,PY_aP\right]_{\alpha\alpha},$$
+
+with $P$ the projector on the states below zero energy from a Chebyshev
+expansion, $X_a$ and $Y_a$ the positions measured from the site $a$, every
+matrix restricted to the sites within `radius` hops of $a$, and $A_a$ the
+area of the site. Deep in the bulk of an insulator it tends to the marker
+of `topology.real_space_chern()`, exponentially with the radius. The same
+marker is `topology.real_space_chern(h,mode="kpm")`. Returns the positions
+and the marker. See [Topology in real space](real-space-topology.md).
+
+Optional arguments:
+- radius=6: the sites around each site that enter its marker, in hops of
+  the Hamiltonian
+- npol=200: the number of Chebyshev polynomials of the projector
+- kpm_radius=None: the hops around each orbital kept in the Chebyshev
+  recursion, equal to `radius` if None
+- operator=None: weight the marker with an operator, as for
+  `topology.real_space_chern()`, with each site as the origin of the
+  positions
+- scale=None: the bound of the spectrum, estimated if None; a given one
+  has to exceed the spectral radius by more than 1%
+
+It raises `ValueError` if the Hamiltonian is not zero dimensional, or if a
+given `scale` is within 1% of the spectral radius. A large flake should be
+built with `g.get_hamiltonian(is_sparse=True)`.
+
 ## h.get_multipole_chiral_number()
 Return the multipole chiral number of a two-dimensional chiral-symmetric
 sample, a supercell of $L_x\times L_y$ unit cells,

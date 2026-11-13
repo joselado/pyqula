@@ -173,8 +173,10 @@ already reached once.
   `integration="kpm"` was closed on 16 October 2026). Its last section is what else the recursion makes linear in
   the number of sites: the LDOS map of every site (`mode="KPM"` of
   `h.get_ldos()` and `h.get_multildos()`), built and exact on the light
-  cone of the expansion, with the error measured below it, and the three
-  surveyed and not built, the KPM Chern marker, the Kubo-Bastin
+  cone of the expansion, with the error measured below it; the local KPM
+  Chern marker (`h.get_kpm_chern_marker()`, 13 November 2026), held to the
+  dense marker in the bulk and close to linear in the number of sites up to
+  $4\times10^4$; and the two surveyed and not built, the Kubo-Bastin
   conductivity and the Chebyshev time evolution, with what each needs.
 - [`magnons_screening.md`](magnons_screening.md) -- why the screened
   interaction must NOT be used in the magnon RPA kernel on its own, with

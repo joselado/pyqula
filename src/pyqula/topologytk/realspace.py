@@ -19,7 +19,7 @@ import numpy as np
 from .. import densitymatrix
 
 
-def real_space_chern(h,operator=None,write=None):
+def real_space_chern(h,operator=None,write=None,mode="dense",**kwargs):
     """Local Chern marker of a finite (0d) Hamiltonian, one value per site.
 
     The occupied states are those below zero energy, so a Hamiltonian whose
@@ -32,11 +32,36 @@ def real_space_chern(h,operator=None,write=None):
     sum_i c_i A_i / sum_i A_i, with A_i = site_areas(h.geometry).
 
     - operator: restrict the marker to a subspace, as for h.get_chern()
+    - mode: "dense" diagonalizes the Hamiltonian, a cost that grows as the
+      cube of the number of sites; "kpm" builds the marker of each site from
+      the KPM projector around it, at a cost linear in the number of sites,
+      and takes the keywords radius, npol, kpm_radius, scale and kpm_prec
+      of kpmchern.kpm_chern_marker (see there)
 
     Returns the positions and the marker, and writes REAL_SPACE_CHERN.OUT
     unless write=False
     """
+    if mode not in _MODES:
+        raise ValueError("mode must be one of %s, got %r"
+                % (", ".join(repr(m) for m in get_modes()), mode))
     write = filewrite.resolve(write,True) # the call, else the global switch
+    (r,C) = _MODES[mode](h,operator=operator,**kwargs)
+    if write: h.geometry.write_profile(C,name="REAL_SPACE_CHERN.OUT")
+    return r,C
+
+
+def _kpm_chern(h,operator=None,**kwargs):
+    """The marker of each site from the KPM projector around it"""
+    from .kpmchern import kpm_chern_marker
+    return kpm_chern_marker(h,operator=operator,**kwargs)
+
+
+def _dense_chern(h,operator=None,**kwargs):
+    """The marker of each site from the dense projector"""
+    if len(kwargs)>0:
+        raise TypeError("real_space_chern with mode=\"dense\" got the "
+                "unexpected keywords %s, which only mode=\"kpm\" takes"
+                % sorted(kwargs))
     if h.dimensionality!=0:
         raise ValueError("the real-space Chern number is only defined for 0d "
                 "Hamiltonians")
@@ -58,8 +83,16 @@ def real_space_chern(h,operator=None,write=None):
     C = 2*np.pi*np.ravel(np.array(C)).imag # marker of each orbital, times an area
     C = h.full2profile(C) # sum over the orbitals of each site
     C = C/site_areas(h.geometry) # divide by the area of each site
-    if write: h.geometry.write_profile(C,name="REAL_SPACE_CHERN.OUT")
     return h.geometry.r,C # return result
+
+
+# the ways real_space_chern computes the marker, selected by mode=
+_MODES = {"dense": _dense_chern, "kpm": _kpm_chern}
+
+
+def get_modes():
+    """Names accepted as the mode of real_space_chern"""
+    return list(_MODES)
 
 
 def _diagonal_of_product(A,B):

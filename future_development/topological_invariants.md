@@ -554,17 +554,7 @@ numerics in arXiv:1709.05853) counts the eigenvalues at 1 of $P-D_a^*PD_a$ restr
 disk around a point $a$, with $D_a=(z-a)/\lvert z-a\rvert$, and its parity is the $Z_2$; it
 is the smallest correct disordered $Z_2$ found, and no public code for it was found.
 
-The KPM stochastic Chern marker (arXiv:1905.02215, with the KPM Kubo-Bastin conductivity of
-arXiv:1410.8140) expands $P=\theta(E_F-H)$ in Chebyshev polynomials, applies it to random
-vectors on a region, and evaluates $2\pi i\,\mathrm{Tr}_A[PXP,PYP]$, at a cost linear in
-the number of sites, with a stochastic error $\sqrt{\xi^d/(R\lvert S\rvert)}$. The
-expansion coefficient $\mu_0=1-\arccos(\epsilon)/\pi$ is misprinted in the TeX of
-1905.02215. What `kpmtk` lacks is the primitive that applies the expanded $P$ to a vector
-and returns vectors rather than moments; with it, the Streda formula
-$C=(h/e)\,\partial N/\partial B$ from KPM state counts at commensurate fluxes and Kitaev's
-formula $C=12\pi i\sum_{j\in A,k\in B,l\in C}(P_{jk}P_{kl}P_{lj}-P_{jl}P_{lk}P_{kj})$
-(cond-mat/0506438) come almost for free. Oracle: the Zenodo record 2667604 of the paper
-(BSD-2, on top of Kwant).
+The KPM local Chern marker is built, close to linear in the number of sites; the measurements, and the stochastic route of arXiv:1905.02215 with the Streda and Kitaev formulas it would give, are in "The local Chern marker, built" of [`sparse_kpm_mean_field.md`](sparse_kpm_mean_field.md).
 
 The spectral localizer (arXiv:1502.03498; sparse numerics arXiv:2601.13598; gapless systems
 arXiv:2112.08623) is the one tool that works in every tenfold class, in any dimension, with

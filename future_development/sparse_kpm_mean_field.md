@@ -627,20 +627,55 @@ the load of the machine (10 to 15), while the full recursion grows as the
 square and would take about 40 minutes at 125,000 sites. The maps agree
 with the full recursion to $10^{-15}$ where both were run.
 
+### The local Chern marker, built
+
+`h.get_kpm_chern_marker()` and `mode="kpm"` of `topology.real_space_chern()`
+(`topologytk/kpmchern.py`, 13 November 2026) take the local route: the
+Bianco-Resta marker of a site, $2\pi\,{\rm Im}[PX_aP,PY_aP]_{\alpha\alpha}$,
+from the projector on its ball of `radius` hops, with the positions relative
+to the site, so that the error of the expanded projector, which is not
+idempotent, is not multiplied by the distance to an origin. Only the rows of
+$PX_aP$ and $PY_aP$ of the orbitals of the site enter, so a site costs the
+square of its ball, and the entries are those of `get_dm_kpm_sparse` between
+sites within $2R$ hops, for compact groups of 4096 sites at a time so that
+the memory is that of a group; the recursion and `_step_row` are untouched.
+On a Haldane flake of 984 sites ($t_2=0.1$, gap 1.04, the 84 sites within a
+quarter of its radius as the bulk, dense marker 0.9997) the largest bulk
+error against the dense marker is 0.30, 0.12, 0.049, 0.020, 0.0079 and
+0.0012 at radius 2 to 6 and 8, and it is the error of the ball alone: the
+exact projector on the same balls gives the same numbers, and the KPM marker
+differs from it by 0.39, 0.020, 2.1e-3, 2.6e-4, 4.2e-5 and 1.4e-5 at `npol`
+10, 25, 50, 100, 200 and 400, and by 6.8e-3, 7.0e-4 and 3.1e-5 at
+`kpm_radius` 2, 4 and 12 (radius 4, `npol=200`), so the default `kpm_radius`
+is the radius. A flipped $t_2$ flips every value to roundoff, a sublattice
+mass of 0.9 leaves 0.019 and 0.004 in the bulk at radius 4 and 6, and on a
+Kane-Mele flake of 432 sites with `operator=sz` (dense 1.993) the error is
+0.24, 0.099 and 0.017 at radius 3, 4 and 6. The sum rule is lost: the dense
+marker sums to zero over the flake, and the local one, with the exact
+projector as with the KPM one, to about 0.85 times the number of sites,
+since the edge states are gapless and a ball does not see the compensation
+along the edge. The cost was measured on spinless Haldane flakes at radius 3
+and `npol=100`, two threads: 1.50, 1.77 and 2.34 ms per site at 2470, 9956
+and 39976 sites, of which the recursion is 1.14, 1.25 and 1.68 ms (the
+largest one ran beside another job), with no growth of the memory beyond
+that of the Hamiltonian. The first version took 1.96 and 4.92 ms per site
+at the first two sizes: a dense `intra`, which `g.get_hamiltonian()`
+builds by default, cost a pass over its $N^2$ entries in every group of
+4096 sites (22 of 38 s at 9956 sites), and the marker now takes one
+sparse copy first. The 27 GB seen at $4\times10^4$ sites was the dense
+Hamiltonian itself, which needs `is_sparse=True` at that size. The README
+bullet and its notebook are not written. The
+stochastic route of arXiv:1905.02215, random vectors
+on a region with a stochastic error $\sqrt{\xi^d/(R\lvert S\rvert)}$ (oracle
+Zenodo 2667604, BSD-2 on top of Kwant, its $\mu_0=1-\arccos(\epsilon)/\pi$
+misprinted in the TeX), stays unbuilt: it needs the expanded projector applied to a block of vectors and
+returned as vectors, the accumulation $\sum_n c_nV_n$ in `_step_row` instead
+of the read on the rows, and with it the Streda formula
+$C=(h/e)\,\partial N/\partial B$ from KPM state counts at commensurate fluxes
+and Kitaev's formula (cond-mat/0506438) would come almost for free.
+
 ### Surveyed and not built
 
-- The KPM local Chern marker: tier 3 of
-  [`topological_invariants.md`](topological_invariants.md), with its
-  reference (arXiv:1905.02215) and oracle (Zenodo 2667604). Two routes now
-  exist. The stochastic one of the paper needs a primitive the recursion
-  does not have, the expanded projector applied to a block of vectors and
-  returned as vectors, which is the accumulation $\sum_n c_nV_n$ in
-  `_step_row` instead of the read on the rows. The local one is the
-  Bianco-Resta marker from the projector entries within twice a radius of
-  each site, which `get_dm_kpm_sparse` already computes in linear memory;
-  the KPM projector at zero temperature is not idempotent, so the marker
-  of a site should be taken with positions relative to that site, and the
-  radius converges only in a gapped state.
 - The Kubo-Bastin conductivity of a disordered sample (arXiv:1410.8140,
   KITE arXiv:1910.05194, `kwant.kpm.conductivity` as the BSD benchmark):
   the two-index moments $\mathrm{Tr}[v_aT_n(H)v_bT_m(H)]$ from a stochastic

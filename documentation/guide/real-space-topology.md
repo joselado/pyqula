@@ -151,6 +151,98 @@ See
 `jupyter-notebooks/functionalities/topological_characterization/05_real_space_chern_amorphous.ipynb`
 for the maps of the Chern density and the two transitions.
 
+### The marker of a large flake
+
+The marker above needs the projector on the occupied states as a dense
+matrix. The cost grows as the cube of the number of sites, so a flake of
+$10^4$ sites is already very slow. We will now see how to compute the
+marker at a cost linear in the number of sites.
+
+The idea is that the marker is local. In an insulator the projector
+$P_{ij}$ decays exponentially with the distance between the sites $i$ and
+$j$. So the marker of a site only needs the projector between the sites
+close to it. We take the sites within $R$ hops of the Hamiltonian around
+the site $a$, the ball of $a$, and compute
+
+$$
+C_a = \frac{2\pi}{A_a}\sum_{\alpha\in a}{\rm Im}\,\left[P X_a P,\, P Y_a P\right]_{\alpha\alpha} ,
+\qquad X_a = X - x_a ,\quad Y_a = Y - y_a ,
+$$
+
+with every matrix restricted to the ball of $a$, and $A_a$ the area of the
+site. This is the marker of `topology.real_space_chern()`, with the
+positions measured from the site $a$. For a true projector the origin of
+the positions does not matter. Here the entries of $P$ come from a
+Chebyshev expansion of the step function $\theta(-H)$, as in
+[Kernel polynomial method](kpm.md), and the expanded $P$ is not exactly a
+projector. With a fixed origin, its error would be multiplied by the
+distance to that origin. With every site as its own origin, the error stays
+local. Only the entries of $P$ between sites at most $2R$ hops apart are
+computed, so the cost is the number of sites times a constant set by $R$.
+This is what `h.get_kpm_chern_marker()` computes.
+
+```python
+from pyqula import islands
+from pyqula import topology
+import numpy as np
+g = islands.get_geometry(name="honeycomb",n=12,nedges=4,rot=0.0,clean=False) # 984 sites
+h = g.get_hamiltonian(has_spin=False) # spinless honeycomb flake
+h.add_haldane(0.1) # Haldane coupling, gap of about 1
+(r,c) = h.get_kpm_chern_marker(radius=6,npol=200) # local marker, per site
+(r,c0) = topology.real_space_chern(h) # the dense marker, for comparison
+r = np.array(r)
+bulk = np.sum(r**2,axis=1) < np.max(np.sum(r**2,axis=1))/16 # inner sites
+```
+
+In the bulk the two markers agree. For the 84 sites within a quarter of
+the radius of this flake, the dense marker gives $0.9997$ and the KPM one
+$0.992$. The difference comes from the ball, and it falls by about a factor
+$2.5$ for every hop: the largest difference in the bulk is $0.30$, $0.049$,
+$0.008$ and $0.001$ for $R=2$, $4$, $6$ and $8$. A smaller gap means a
+projector that decays more slowly, and so a larger radius for the same
+accuracy. With $t_2\to-t_2$ every value changes sign, and with a large
+sublattice mass, $M=0.9$, the bulk marker goes to zero. The same marker is
+`topology.real_space_chern(h,mode="kpm",radius=6)`, which takes the same
+keywords.
+
+The price is the sum over the flake. The dense marker adds up to zero, the
+edge giving back what the bulk carries. The edge states are gapless, so the
+projector decays slowly along the edge, and a ball of finite radius does
+not see this compensation. For this flake the sum of the local marker is
+about $0.85$ times the number of sites, against zero for the dense one. So
+this marker is for the bulk, and for the regions where the gap is open, not
+for the edge. In `examples/2d/kpm_chern_marker/main.py` a flake of 6180
+sites has a Haldane insulator in its left half and a large sublattice mass
+in its right half. Away from the edge and from the boundary between the
+halves, the marker is $0.992$ on the left and $0.004$ on the right, so the
+map shows where the invariant is carried.
+
+The keywords are:
+- radius=6: the sites around each site that enter its marker, in hops of
+  the Hamiltonian. The bulk error falls exponentially with it.
+- npol=200: the number of Chebyshev polynomials of the projector. The step
+  of the expanded $\theta(-H)$ has a width of roughly $\pi s/2n_{\rm pol}$,
+  with $s$ the bound of the spectrum, and it has to be much smaller than the
+  gap.
+- kpm_radius=None: the hops around each orbital kept in the Chebyshev
+  recursion, equal to `radius` by default.
+- operator=None: weight the marker with an operator, as for
+  `topology.real_space_chern()`, for example `h.get_operator("sz")` for a
+  spinful flake. The two agree when the operator commutes with the
+  Hamiltonian. When it does not, as $s_z$ with Rashba coupling, the dense
+  marker depends on the origin of the positions, and this one takes each
+  site as its own origin.
+- scale=None: the bound $s$ of the spectrum, estimated if None. A given $s$
+  has to exceed the spectral radius by more than 1%, because the occupied
+  window stops at $-0.99s$.
+
+It raises `ValueError` if the Hamiltonian is not zero dimensional, or if a
+given `scale` is within 1% of the spectral radius.
+
+For a large flake, build the Hamiltonian sparse, with
+`g.get_hamiltonian(is_sparse=True)`. The default is a dense matrix, which
+for $4\times10^4$ sites already takes 24 GB before any marker is computed.
+
 ### Where local markers are useful
 
 The real-space Berry curvature and the Chern marker are examples of a
