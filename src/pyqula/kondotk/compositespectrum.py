@@ -84,16 +84,22 @@ from . import pairs as pairstk
 
 def composite_amplitude(h, pairs, J):
     """Amplitude z_j of the f fermion in the composite fermion F_j = z_j f_j
-    of every Kondo pair: 1 with J=None, and 4 conj(V_j)/(3J) with J the
-    Coqblin-Schrieffer coupling of the self-consistent loop, where V_j is
-    the hybridization that h holds."""
+    of every Kondo pair: 1 with J=None, and 4 conj(V_j)/(3J_j) with J_j
+    the Coqblin-Schrieffer coupling of the onsite bond of the moment and
+    V_j its hybridization, the one that h holds. J is a number, or the
+    function J(rc, rm) of the self-consistent loop, read at rc = rm. The
+    composite fermion is the one of the site, (2/3)(sigma.S_j)c_j, so only
+    the onsite bond enters even when the moment is coupled to other sites
+    too, and a moment without an onsite coupling has no amplitude here."""
     if J is None: return np.ones(len(pairs), dtype=np.complex128)
-    if J == 0.0:
+    Jm = pairstk.onsite_coupling(J, h, pairs)
+    if not callable(J) and J == 0.0:
         raise ValueError("J=0 makes the amplitude 4V/(3J) of the composite "
                 "fermion undefined; pass the Coqblin-Schrieffer coupling "
                 "used in the self-consistent loop, or J=None for an "
                 "amplitude of 1")
-    return 4.*np.conjugate(pairstk.pair_hybridization(h, pairs))/(3.*J)
+    pairstk.require_onsite_coupling(Jm, "the composite fermion")
+    return 4.*np.conjugate(pairstk.pair_hybridization(h, pairs))/(3.*Jm)
 
 
 def _default_energies(es, delta, ne, emax):
@@ -125,7 +131,10 @@ def composite_spectral_function(h, kpath=None, energies=None, delta=2e-2,
         identification of the paper). Or the Coqblin-Schrieffer coupling of
         the self-consistent loop, twice the J of the paper, and F is
         (4 conj(V)/(3J)) f, the amplitude that the equation of motion of c
-        gives, so that A_FF integrates to |4V/(3J)|^2.
+        gives, so that A_FF integrates to |4V/(3J)|^2. With a coupling to
+        other sites, pass the same function J(rc, rm) as to the loop: V
+        and J are then those of the onsite bond of the moment, and a moment
+        without one raises.
     hybridization_scale: factor that multiplies the hybridization V of the
         mean field before the spectrum is computed. The paper uses 1.5 to
         compare with the matrix product states, since the mean field gives

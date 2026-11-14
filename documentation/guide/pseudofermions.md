@@ -529,7 +529,9 @@ are the heavy quasiparticles.
 
 The keywords and caveats are:
 
-- `J`: the Coqblin-Schrieffer coupling above.
+- `J`: the Coqblin-Schrieffer coupling above. A function of two positions
+  gives a coupling between different sites, see
+  [Kondo coupling between different sites](#kondo-coupling-between-different-sites).
 - `filling`: sets the chemical potential once, from the bands with $V=0$, and
   then keeps it fixed. The number of electrons can change while $V$ and
   $\lambda$ converge. The constraint $\langle n_f\rangle=1$ is imposed by
@@ -1069,3 +1071,104 @@ as the one of the triangular lattice, needs a filling away from one half,
 as explained in the section on the Kondo lattice. See
 `examples/kondolattice/composite_fermion_2d/main.py` and
 `examples/kondolattice/composite_fermion_0d/main.py` for runnable scripts.
+
+## Kondo coupling between different sites
+
+We will now see how to couple a moment to the conduction electrons of other
+sites, in the same unit cell or in another one. So far each moment was
+coupled only to the conduction electron of its own site. In a real
+heavy-fermion compound the moment sits on an f orbital, and it hybridizes
+with the conduction orbitals of the neighboring atoms too. We write the
+Kondo term with one coupling for each pair of a conduction site $i$ and a
+moment $j$,
+
+$$
+H_K=\sum_{ij}\frac{J_{ij}}{N}\sum_{ab}S_{ab}(j)\,c^\dagger_{ib}c_{ia} ,
+$$
+
+where $i$ and $j$ can be in different unit cells. The onsite model of the
+previous sections is the case $J_{ij}=J\delta_{ij}$. We decouple each pair,
+a Kondo bond, on its own, so each bond has its own hybridization field
+
+$$
+V_{ij}=-\frac{J_{ij}}{2}\sum_a\langle c^\dagger_{ia}f_{ja}\rangle ,
+$$
+
+which enters the Hamiltonian as $V_{ij}f^\dagger_jc_i+\mathrm{h.c.}$. The
+multiplier $\lambda_j$ stays one for each moment. In a lattice with one
+moment per cell, the bonds to the cells $R$ give a hybridization that
+depends on the momentum,
+
+$$
+V(k)=\sum_R V_R\,e^{ikR} ,
+$$
+
+meaning that the hybridization gap can change along the Brillouin zone, and
+can close where $V(k)=0$. The way we give the coupling is a function
+`J(rc, rm)` of the position `rc` of a conduction site and the position `rm`
+of the site that holds the moment, instead of a number. Let us take the
+half-filled chain, with the coupling only to the two first neighbors:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.kondolattice import KondoLatticeHamiltonian
+
+hc = geometry.chain().get_hamiltonian(has_spin=True) # conduction electrons
+h = KondoLatticeHamiltonian(hc)
+
+def J1(rc, rm): # Kondo coupling to the two first neighbors only
+    if abs(np.linalg.norm(rc - rm) - 1.0) < 1e-6: return 2.0
+    return 0.0
+
+h2 = h.get_mean_field_hamiltonian(J=J1, filling=0.5, nk=200, mf=(1.0, 0.0))
+h2.kondo_bonds   # [(0, 0, (-1,0,0), 2.0), (0, 0, (1,0,0), 2.0)]
+h2.hybridization # one field per bond, in the same order
+```
+
+Each bond is `(c, m, R, J)`: the conduction site `c` of the cell `R`, the
+moment `m` of the cell 0, and the coupling. The bonds are sorted by moment,
+and then by distance, so the onsite bond comes first when there is one.
+Here the loop gives $V_{-1}=0.498i$ and $V_{+1}=-0.498i$, so
+$V(k)=0.995\sin k$. The relative sign of the two fields does not depend on
+the phase of the f fermions, so this is a physical result: the
+hybridization is odd in $k$.
+
+![Bands of the half-filled Kondo chain with an onsite coupling and with a coupling to the two neighbors, colored by the weight of each state on the conduction and on the f-sites.](img/pseudofermions_kondobonds.png#only-light)
+![Bands of the half-filled Kondo chain with an onsite coupling and with a coupling to the two neighbors, colored by the weight of each state on the conduction and on the f-sites.](img/pseudofermions_kondobonds-dark.png#only-dark)
+
+The left panel is the onsite coupling $J=4$, as a reference. The
+hybridization is the same at every $k$, and an indirect gap of $2.25$ opens
+around the chemical potential: a Kondo insulator. In the right panel the coupling is
+$J=2$ on each of the two neighbors. The conduction band crosses the f-level
+at $k=\pm\pi/2$, where $\sin k$ is largest, so the hybridization opens a gap
+of $1.99$ there. At $k=0$ and $k=\pi$ the hybridization vanishes, and the
+f-level stays at the chemical potential, in red. So the state is not an
+insulator any more: the two bands touch the chemical potential at those two
+points. ARPES would see the f-level reach the chemical potential at $k=0$
+and $k=\pi$, and STM would see no full gap.
+
+You can think of a coupling to another site as a hybridization with a
+displaced conduction electron. As a reference, a moment coupled only to the
+conduction site of the next cell is the onsite model with the conduction
+sites relabeled, and gives exactly the same bands and the same energy.
+
+The keywords are:
+
+- `J`: a number for the onsite coupling, or a function `J(rc, rm)` that
+  returns the coupling of the bond. It does not have to be symmetric in its
+  two arguments, since the two ends of a bond are different particles. A
+  bond with zero coupling is dropped.
+- `rcut`: largest distance of a bond, only with a function `J`. It is $5$
+  by default in a periodic system, and every pair in a finite system.
+- `mf`: the initial $(V,\lambda)$, with one $V$ for each bond and one
+  $\lambda$ for each moment, or a number for all of them.
+
+The spectral functions, the tunneling spectrum and the susceptibility of the
+moments of the sections above take this Hamiltonian as it is, since they
+use its Bloch Hamiltonian with all the bonds. `hybridization_scale`
+multiplies the field of every bond. Their own `J=`, which sets the
+amplitude of the composite fermion of a site, takes the same number or
+function, and uses the onsite bond of each moment. A moment without an
+onsite coupling has no such amplitude, so pass `J=None` there. See
+`examples/kondolattice/kondo_bonds/main.py` for a runnable version.

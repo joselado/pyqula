@@ -637,6 +637,24 @@ already reached once.
   product side, the three-fermion continuum of $F$, unfolding, the README
   bullet and notebook.
 
+- [`kondo_bonds.md`](kondo_bonds.md) -- interactions between different
+  cells, 14 November 2026. First the Kondo lattice: `J` as a function
+  `J(rc, rm)` with `rcut`, one hybridization field per bond in
+  `h2.kondo_bonds`, the convention of the bond of the cell R (the element
+  of `dm[-R]`, as in the Fock term), the convergence check relative to the
+  largest field, and how the spectral functions, the cotunneling and the
+  moment RPA take it; checked against the onsite model relabeled, a Bloch
+  matrix by hand, a doubled cell and a finite cluster, and the half-filled
+  chain coupled to its neighbors gives an odd hybridization
+  $V(k)\propto\sin k$ and no full gap. Then the electronic side: the
+  neighbor shells V1/V2/V3 and J1/J2/J3 were built only two cells away,
+  which dropped the third shell of a small cell (the one-site chain, thin
+  or skewed cells) in every mean field, RPA, BSE and spinon route, while
+  Vr/Jr were right; one shared builder with a range per lattice direction
+  repairs all six. Open: the composite fermion of a bond, the notebook,
+  and the classical spin, Ising and lattice-gas couplings given as a
+  function, which still stop one cell away.
+
 - [`inplane_valley.md`](inplane_valley.md) -- the check of `valley_x`,
   `valley_y` and `add_valley_exchange`, and their replacement by a closed
   form, a first-neighbor hopping modulated by a plane wave of wavevector

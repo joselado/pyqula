@@ -5,7 +5,10 @@ minimal model of heavy-fermion compounds.
 Each localized moment is represented as S_j = 1/2 f_j^dagger sigma f_j
 (Abrikosov pseudofermions), subject to the hard local constraint
 f_j^dagger f_j = 1, and exchange-coupled to a conduction electron at the
-same site through the Coqblin-Schrieffer Kondo interaction. Following
+same site through the Coqblin-Schrieffer Kondo interaction -- or, with J
+given as a function of two positions, to the conduction electrons of other
+sites and of other unit cells, one hybridization field per bond (see
+scftk/kondolattice.py). Following
 P. Coleman, "Heavy Fermions: electrons at the edge of magnetism",
 arXiv:cond-mat/0612006, Sec. II.C ("The Large N Kondo Lattice", Eq.
 65-99), this is decoupled in the large-N (here N=2, spin-1/2) saddle-point
@@ -83,7 +86,8 @@ class KondoLatticeHamiltonian(Hamiltonian):
     site of `hc`'s geometry, offset in z purely so the two sublattices do
     not spatially overlap) is fused on top of `hc` with zero bare hopping
     -- see the module docstring for the physics. The Kondo coupling is
-    supplied entirely through get_mean_field_hamiltonian's `J` kwarg::
+    supplied entirely through get_mean_field_hamiltonian's `J` kwarg, a
+    number for an onsite coupling::
 
         from pyqula import geometry
         from pyqula.kondolattice import KondoLatticeHamiltonian
@@ -97,6 +101,28 @@ class KondoLatticeHamiltonian(Hamiltonian):
         h2.hybridization      # converged V_j per localized site
         h2.constraint_lambda  # converged per-site Lagrange multipliers
 
+    or a function J(rc, rm) of the position rc of a conduction site and the
+    position rm of the site that holds a moment, for a coupling between
+    different sites, in the same cell or in different cells (every bond up
+    to the distance rcut, 5.0 by default for a periodic system and every
+    pair for a finite one; a bond with J=0 is dropped)::
+
+        def J(rc, rm): # onsite 1.5, and 0.4 to the first neighbors
+            d = np.linalg.norm(rc - rm)
+            if d < 1e-3: return 1.5
+            if abs(d - 1.0) < 1e-3: return 0.4
+            return 0.0
+        h2 = h.get_mean_field_hamiltonian(J=J, filling=0.15, nk=150,
+                                          mf=(0.3, 0.0))
+        h2.kondo_bonds    # the bonds (c, m, R, J_b): the moment m of the
+                          # cell 0 and the conduction site c of the cell R
+        h2.hybridization  # one converged V_b per bond, in the same order
+
+    The bonds are sorted by moment and then by distance, so for a number J
+    there is one bond per moment and hybridization keeps one V per moment.
+    The seed mf=(V, lam) takes one V per bond and one lam per moment, or a
+    number for all of them.
+
     `filling` sets a lattice-wide chemical potential ONCE, from the bare
     (V=0, lam=0) conduction+f bands, and holds it fixed through the SCF
     loop (Hamiltonian.get_fermi4filling's usual fraction-of-all-spin-
@@ -109,9 +135,15 @@ class KondoLatticeHamiltonian(Hamiltonian):
     previous run's converged (or intermediate) `(h2.hybridization,
     h2.constraint_lambda)` pair instead of the default all-zero guess (see
     the module docstring for why a nonzero seed is generally needed at
-    all). `nk=`, `mix=`, `maxerror=`, `maxite=`, `T=` are forwarded to the
-    SCF loop (scftk.kondolattice.kondo_lattice_mean_field)
+    all). `rcut=`, `nk=`, `mix=`, `maxerror=`, `maxite=`, `T=` are
+    forwarded to the SCF loop (scftk.kondolattice.kondo_lattice_mean_field)
     unchanged.
+
+    The routines below work with any of these couplings, since they take
+    the Bloch Hamiltonian of the converged mean field with all its bonds.
+    Their own `J=` keyword, which sets the amplitude of the composite
+    fermion of a site, takes the same number or function and uses the
+    onsite bond of each moment.
 
     An external Zeeman/magnetic field couples EXACTLY to both fermion
     species here (the conduction electron and the localized moment
@@ -170,6 +202,7 @@ class KondoLatticeHamiltonian(Hamiltonian):
         if scf.converged:
             scf.hamiltonian.local_occupation = scf.local_occupation
             scf.hamiltonian.hybridization = scf.hybridization
+            scf.hamiltonian.kondo_bonds = scf.kondo_bonds
             scf.hamiltonian.constraint_lambda = scf.constraint_lambda
         return _mean_field_scf_result(scf, return_total_energy)
 

@@ -1,7 +1,17 @@
 """What the routines of kondotk read from a Kondo lattice mean field: the
-list of Kondo pairs (c_j, f_j), the hybridization V_j that the Hamiltonian
+list of Kondo pairs (c_j, f_j), one per moment, the moment f_j and the
+conduction site it sits on, the hybridization V_j that the Hamiltonian
 holds between the two orbitals of a pair, and a copy of the Hamiltonian
-with that hybridization rescaled.
+with the hybridization rescaled.
+
+The Kondo coupling does not have to be onsite (see scftk.kondolattice): a
+moment can be coupled to conduction electrons of other sites and of other
+cells, each bond with its own field. The pairs stay one per moment, since
+the moment, the tip of a cotunneling spectrum and the composite fermion
+are all at one site. What depends on the bonds is read from the
+Hamiltonian: the hybridization of the onsite bond is the element
+[f_j, c_j] of the intracell matrix, and every other bond is an element
+between a c and an f orbital of some direction.
 
 The hybridization is read from the matrix elements of the Hamiltonian, not
 from the `hybridization` attribute of a converged loop, so a Hamiltonian
@@ -50,28 +60,63 @@ def _intra(h):
 
 
 def pair_hybridization(h, pairs):
-    """Hybridization V_j of every Kondo pair, read from the Hamiltonian:
-    the average over the two spins of the element [f_j, c_j]."""
+    """Hybridization V_j of the onsite bond of every Kondo pair, read from
+    the Hamiltonian: the average over the two spins of the element
+    [f_j, c_j] of the intracell matrix."""
     m = _intra(h)
     return np.array([(m[2*fi, 2*ci] + m[2*fi+1, 2*ci+1])/2.
             for (ci, fi) in pairs])
 
 
+def onsite_coupling(J, h, pairs):
+    """The Kondo coupling of the onsite bond of every pair, from the J= of
+    a routine: a number, or a function J(rc, rm) of the position of the
+    conduction site and of the site that holds the moment, the one given
+    to the self-consistent loop, evaluated at rc = rm."""
+    if not callable(J): return np.full(len(pairs), float(J))
+    r = np.array(h.geometry.r)
+    out = []
+    for m, (ci, fi) in enumerate(pairs):
+        Jm = J(r[ci], r[ci])
+        if not np.isfinite(Jm) or np.imag(Jm) != 0.0:
+            raise ValueError("the Kondo coupling J(rc, rm) must be a real "
+                    "and finite number; got %s at the moment %d" % (Jm, m))
+        out.append(float(np.real(Jm)))
+    return np.array(out)
+
+
+def require_onsite_coupling(Jm, what):
+    """Raise if a moment has no onsite coupling, for an amplitude that is
+    divided by it"""
+    bad = np.nonzero(Jm == 0.0)[0]
+    if len(bad) > 0:
+        raise ValueError(what+" with J= needs the onsite Kondo coupling of "
+                "the moment, J(rm, rm), and it is J=0 at the moment %d; the "
+                "amplitude 4V/(3J) of the composite fermion of a site is "
+                "fixed by its onsite bond, so with a coupling to other "
+                "sites only pass J=None for an amplitude of 1"
+                % int(bad[0]))
+
+
 def scale_hybridization(h, scale, pairs):
-    """Return h with the hybridization of every Kondo pair multiplied by
-    scale (a copy, h itself when scale is 1). The f levels and the
-    conduction bands are not touched."""
+    """Return h with the hybridization of every Kondo bond multiplied by
+    scale (a copy, h itself when scale is 1): every element between a c and
+    an f orbital, in every direction, so that a bond to another site or to
+    another cell is scaled as the onsite one. The f levels, the hoppings
+    between the moments and the conduction bands are not touched."""
     if scale == 1.0: return h
     if not np.isfinite(scale) or scale <= 0.0:
         raise ValueError("hybridization_scale must be a positive number, "
                 "the factor that multiplies the hybridization V; got "
                 +str(scale))
-    hop = dict(h.get_multihopping().get_dict())
-    m = _intra(h)
-    for (ci, fi) in pairs: # the 2x2 spin blocks between c and f of a pair
-        m[2*ci:2*ci+2, 2*fi:2*fi+2] *= scale
-        m[2*fi:2*fi+2, 2*ci:2*ci+2] *= scale
-    hop[(0, 0, 0)] = m
+    isf = np.zeros(h.intra.shape[0], dtype=bool) # the f orbitals
+    for (ci, fi) in pairs: isf[[2*fi, 2*fi+1]] = True
+    cf = np.outer(~isf, isf) | np.outer(isf, ~isf) # between a c and an f
+    hop = dict()
+    for d, m in h.get_multihopping().get_dict().items():
+        m = np.array(algebra.todense(m), dtype=np.complex128)
+        m[cf] *= scale
+        hop[d] = m
     out = h.copy()
     out.set_multihopping(MultiHopping(hop))
     if hasattr(h, "hybridization"):

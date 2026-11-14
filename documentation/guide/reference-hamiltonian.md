@@ -2136,27 +2136,37 @@ Fermi liquid) state. See [Pseudofermion mean field](pseudofermions.md).
 It is imported with `from pyqula.kondolattice import KondoLatticeHamiltonian`,
 and $J$ is given to `h.get_mean_field_hamiltonian()` as `J`.
 
-- `h.get_mean_field_hamiltonian(J=...,filling=...,mf=(V,lam),nk=...,...)`:
+- `h.get_mean_field_hamiltonian(J=...,filling=...,mf=(V,lam),nk=...,rcut=None,...)`:
   finds the hybridization and the Lagrange multiplier of the constraint
-  self-consistently. Returns the self-consistent Hamiltonian (it raises an
-  error if the loop does not converge), with three more attributes:
+  self-consistently. `J` is a number for an onsite coupling, or a function
+  `J(rc,rm)` of the position of a conduction site and of the site of a
+  moment, for a coupling between different sites and different cells, up
+  to the distance `rcut`. Returns the self-consistent Hamiltonian (it
+  raises an error if the loop does not converge), with four more
+  attributes:
   - `h2.local_occupation`: $\langle n_f\rangle$ on each localized site (it
     should be 1.0)
-  - `h2.hybridization`: $V_j$ on each localized site
+  - `h2.kondo_bonds`: the Kondo bonds `(c,m,R,J)`, the conduction site `c`
+    of the cell `R` coupled with `J` to the moment `m` of the cell 0; one
+    onsite bond per moment for a number `J`
+  - `h2.hybridization`: $V$ on each bond, in the order of `h2.kondo_bonds`
   - `h2.constraint_lambda`: the Lagrange multiplier of each site
 - `h2.get_cotunneling_didv(energies=None,tc=1.0,tf=1.0,J=None,nk=20,delta=1e-2,T=0.0,site=None,return_parts=False)`:
   tunneling spectrum $t_c^2N_{cc}+t_f^2N_{ff}+2t_ct_fN_{cf}$ of a tip that
   tunnels into the conduction electron and into the f fermion of a site.
   Returns `(energies,dIdV)`, one row per Kondo site, and the three terms
-  with `return_parts=True`. With `J` the f amplitude is $2t_fV_j^*/J$.
+  with `return_parts=True`. With `J` the f amplitude is $2t_fV_j^*/J$,
+  with the onsite bond of the site.
 - `h2.get_composite_spectral_function(kpath=None,energies=None,delta=2e-2,J=None,hybridization_scale=1.0,site=None,green=False,nk=100)`:
   spectral functions along a k-path of the conduction electron $c$ and of
   the composite fermion $F=\tfrac23(\vec\sigma\cdot\vec S)c$, an electron
   together with a spin flip, arXiv:2302.09701. Returns `(ks,energies,A)`,
   where `A` is a dictionary with `"cc"`, `"FF"`, `"cF"` and the Green
   function `"gF"` of the composite fermion without hybridization. In the
-  mean field $F$ is the f fermion, or $(4V^*/3J)f$ with `J`.
-  `hybridization_scale` multiplies $V$, 1.5 in that work. It works in any
+  mean field $F$ is the f fermion, or $(4V^*/3J)f$ with `J`, with the
+  onsite bond of the site.
+  `hybridization_scale` multiplies $V$ of every bond, 1.5 in that work.
+  It works in any
   dimensionality; a finite system has one k-point
 - `h2.get_moment_spinchi(q=None,energies=...,U=None,nk=60,delta=0.05,T=None,hybridization_scale=1.0)`:
   transverse spin susceptibility of the local moments, the product of two

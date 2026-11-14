@@ -62,20 +62,23 @@ def _tf_per_site(tf, J, h, sites):
     field [c, H_I] is conj(V) f (V_j enters the Hamiltonian as
     V_j f^dag c + h.c.), so (sigma.S)c is 2 conj(V)/J f and the amplitude
     into the f fermion is 2 tf conj(V_j)/J, the one that
-    compositespectrum.composite_amplitude uses for the same operator."""
+    compositespectrum.composite_amplitude uses for the same operator.
+
+    The tip is above one site, so V_j and J are those of the onsite bond of
+    the moment, read from the Hamiltonian (pairs.pair_hybridization) and
+    from J (a number, or the function J(rc, rm) of the loop at rc = rm),
+    also when the moment is coupled to other sites."""
     tfs = np.full(len(sites), tf, dtype=np.complex128)
     if J is None: return tfs
-    if not hasattr(h, "hybridization"):
-        raise ValueError("J is given, so the amplitude 2*tf*conj(V)/J needs "
-                "the converged hybridization, and this Hamiltonian has no "
-                "`hybridization`; use the Hamiltonian returned by "
-                "get_mean_field_hamiltonian, or pass J=None")
-    if J == 0.0:
+    if not callable(J) and J == 0.0:
         raise ValueError("J=0 makes the amplitude 2*tf*conj(V)/J undefined; "
                 "pass the Coqblin-Schrieffer coupling used in the "
                 "self-consistent loop")
-    V = np.asarray(h.hybridization, dtype=np.complex128)
-    return 2.*tfs*np.conjugate(V[sites])/J
+    pairs = pairstk.get_pairs(h, "the cotunneling dI/dV")
+    Jm = pairstk.onsite_coupling(J, h, pairs)[sites]
+    pairstk.require_onsite_coupling(Jm, "the cotunneling dI/dV")
+    V = pairstk.pair_hybridization(h, pairs)[sites]
+    return 2.*tfs*np.conjugate(V)/Jm
 
 
 def _thermal_kernel(T, de):
@@ -114,6 +117,8 @@ def cotunneling_didv(h, energies=None, tc=1.0, tf=1.0, J=None, nk=20,
         the f amplitude is 2*tf*conj(V_j)/J, with V_j the converged
         hybridization of the site and J the Coqblin-Schrieffer coupling of
         the self-consistent loop, twice the Heisenberg coupling of the paper.
+        With a coupling to other sites, pass the same function J(rc, rm) as
+        to the loop: V_j and J are then those of the onsite bond.
     nk: k-mesh for each periodic direction (ignored for a finite system).
     delta: Lorentzian broadening of the levels, in the units of h.
     T: temperature of the thermal broadening, with kB=1 (a convolution with
