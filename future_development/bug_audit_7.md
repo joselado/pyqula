@@ -589,7 +589,10 @@ Each change of the code has a test that fails on `8518a8e`.
   $1.3\times10^{-4}$ at `delta=1e-3`. A negative broadening gives the advanced
   function, and a broadening that is zero to rounding raises. The four modes
   that stop in 3D now say to use `mode="triangle"`, as the `gf_mode` of an
-  Embedding. A mesh shared by the whole contour is open in
+  Embedding. An Embedding of a 3D crystal takes `gf_mode="triangle"` by
+  default, by choice of the maintainer: its old default, `"renormalization"`,
+  always raised in 3D. At `nk=100` this keeps the eigenvectors of $10^6$
+  k-points. A mesh shared by the whole contour is open in
   `qtci_dos_green.md`.
 - **The single product of `get_dm` for one direction stays.** Both routes do the
   same number of multiplications there, and the single product is the one that
@@ -645,9 +648,7 @@ Each change of the code has a test that fails on `8518a8e`.
 - The port of the energy bins of `kubosimplex.py` to the default SHG source
   kernel, which waits for a sign-off (`qtci_shg.md`).
 - One diagonalization of the mesh for the whole density-matrix contour of a 3D
-  embedding, which now pays one per point, and `gf_mode="triangle"` as the
-  default of a 3D Embedding, whose present default always raises: a change of a
-  default, and at `nk=100` it keeps the eigenvectors of $10^6$ k-points.
+  embedding, which now pays one per point.
 - A memory cap on the shell vectors of the BdG shell filling, and the projector
   route of the density matrix with several directions on many threads.
 - The qtci LDOS with an operator takes 20% to 44% more points than before for

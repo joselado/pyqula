@@ -24,7 +24,10 @@ class Embedding():
         self.has_gf_generator = False
         self.has_spin = self.H.has_spin
         self.has_eh = self.H.has_eh
-        self.gf_mode = "renormalization" # mode for Green's functions
+        # mode for Green's functions: the renormalization selfenergy is
+        # built for 1d and 2d, and a 3d crystal takes the tetrahedra
+        if self.dimensionality==3: self.gf_mode = "triangle"
+        else: self.gf_mode = "renormalization"
         self.boundary_embedding_generator = None
         self.mode = "bulk" # mode
         self.nsuper = None # supercell between original Hamiltonian

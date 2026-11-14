@@ -106,9 +106,8 @@ def get_dm(self,delta=1e-2,emin=-10.,eps=1e-4,**kwargs):
     real-axis integral, and is refused (bug_audit_6.md #13). This holds for
     Embedded_Hamiltonian and for the boundary embedding of Embedding.
 
-    For an Embedding in a 3d crystal, set eb.gf_mode = "triangle" first:
-    the default gf_mode="renormalization" stops in 3d, and the tetrahedra
-    are the only bulk Green's function there. They take the complex
+    An Embedding in a 3d crystal takes gf_mode="triangle" by default, since
+    the tetrahedra are the only bulk Green's function there. They take the complex
     energy of each contour point as a real energy with a broadening. The
     contour took 60 and 76 points at the default eps on
     the two diamond crystals that were measured, and each point

@@ -151,10 +151,19 @@ def test_the_density_matrix_of_a_3d_embedding_with_the_tetrahedra():
     assert np.allclose(dm, rho.T, atol=1e-3, rtol=0.)
 
 
-def test_a_3d_embedding_with_the_default_mode_names_the_tetrahedra():
-    """The default gf_mode of an Embedding, "renormalization", stops in
-    3d, and its message did not say which mode works there"""
+def test_a_3d_embedding_takes_the_tetrahedra_by_default():
+    """The default gf_mode of an Embedding was "renormalization" in every
+    dimension, which stops in 3d, so a 3d Embedding raised unless the mode
+    was set by hand. A 3d crystal takes the tetrahedra by default: the
+    density matrix of a pristine insulator, one band of two occupied, is
+    Hermitian with trace one up to the tails of the broadening, and a 2d
+    crystal keeps the renormalization"""
     h = geometry.diamond_lattice_minimal().get_hamiltonian(has_spin=False)
+    h.add_sublattice_imbalance(1.0)
     eb = embedding.Embedding(h)
-    with pytest.raises(NotImplementedError, match="gf_mode='triangle'"):
-        eb.get_density_matrix(nk=4)
+    assert eb.gf_mode == "triangle"
+    dm = np.array(eb.get_density_matrix(delta=1e-3, nk=4))
+    assert np.max(np.abs(dm - dm.conj().T)) < 1e-8
+    assert abs(np.trace(dm).real - 1.) < 1e-2
+    h2 = geometry.honeycomb_lattice().get_hamiltonian(has_spin=False)
+    assert embedding.Embedding(h2).gf_mode == "renormalization"
