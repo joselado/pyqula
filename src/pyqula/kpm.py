@@ -157,21 +157,20 @@ def tdos(m_in,scale=10.,npol=None,ne=500,kernel="jackson",
 def moments_to_dos(mus,scale=10.,ne=500,ewindow=None,kernel="jackson",
         x=None):
   """Turn the Chebyshev moments of m/scale into a density on an energy
-  grid, ne points spanning the spectrum or the window ewindow,
-  interpolated onto the energies x when they are given"""
+  grid, ne points spanning the spectrum or the window ewindow, or at
+  exactly the energies x when they are given (ne and ewindow are then not
+  used, and the density is zero outside [-scale,scale])"""
+  if x is not None: # the series at the energies asked for, no grid
+    xs = np.array(x,dtype=float).reshape(-1)/scale
+    ys = generate_profile(mus,xs,kernel=kernel).real/scale
+    return x,ys.reshape(np.shape(x))
   if ewindow is None or abs(ewindow)>scale: # no window provided
     xs = np.linspace(-1.0,1.0,ne,endpoint=True)*1.01 # energies
   else:
     xx = abs(ewindow/scale) # scale
     xs = np.linspace(-xx,xx,ne,endpoint=True)*1.01 # energies
   ys = generate_profile(mus,xs,kernel=kernel).real
-  (xs,ys) = (scale*xs,ys/scale)
-  if x is not None:
-    from scipy.interpolate import interp1d
-    f = interp1d(xs,ys,bounds_error=False,fill_value=0.)
-#    f = interp1d(xs,ys,bounds_error=False,fill_value=[ys[0],ys[-1]])
-    return x,f(x)
-  else: return xs,ys
+  return scale*xs,ys/scale
 
 
 def factored_moments(m,U,n=200,**kwargs):

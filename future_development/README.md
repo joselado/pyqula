@@ -650,5 +650,18 @@ already reached once.
   a sublattice-diagonal operator and a texture averaged over the Kekule
   cell.
 
+- [`internal_consistency.md`](internal_consistency.md) -- the survey of 13
+  November 2026 of what is still not uniform across the public keywords and
+  defaults, nothing of it changed: the same keyword that gives a different
+  number (`T=None` with five meanings, `delta=None`, the four meanings of
+  `ewindow`, a `channel` default, `fermi=` against `mu=`), the same choice
+  spelled differently (`mode=` against `integration=` and their case, the
+  return containers, the anisotropic exchange `J1x` against `Jx1`, and two
+  lines of `CLAUDE.md` that say the mutators return what they modify, which
+  they do not), the spellings for one sweep, and three candidate rules for
+  the default temperature, the first decision. It also records two bugs of
+  the KPM density of states found on the way and repaired: a value that
+  depended on how many energies were asked, and a refused `npol`.
+
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

@@ -386,7 +386,7 @@ def convolve(x,y,delta=None):
 
 
 def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
-        delta=0.01,nk=100,operator=None,
+        delta=0.01,npol=None,nk=100,operator=None,
         random=True,energies=None,info=False,write=None,
         **kwargs):
   """Density of states from a stochastic Chebyshev expansion, averaged
@@ -399,20 +399,27 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   1.85 scale/delta, and the width narrows as sqrt(1-(E/scale)^2) away
   from E=0. The Jackson kernel makes each peak nearly a Gaussian, about
   1.5 times taller than the Lorentzian of the same half width.
+  npol: the number of polynomials, given directly; when it is given it
+  wins over delta.
+  energies: the Chebyshev series is evaluated at exactly these energies,
+  so the value at one energy does not depend on which other energies are
+  asked. Without them the DOS is returned on ne points over ewindow.
   scale: the whole spectrum must lie inside [-scale,scale]; it is raised to
   twice the largest energy asked for when it is smaller"""
   write = filewrite.resolve(write,True) # the call, else the global switch
   operator = h.get_operator(operator)
   if energies is not None: # energies provided
-      ewindow = np.max(np.abs(energies)) # true window
-      ne = len(energies) # number of energies
-      if scale<ewindow: scale = ewindow*2 # redefine
+      energies = np.array(energies,dtype=float).reshape(-1)
+      emax = np.max(np.abs(energies)) # largest energy asked for
+      if scale<emax: scale = emax*2 # redefine
+      ne = len(energies) # one value per energy asked for
   hkgen = h.get_hk_gen() # get generator
   ks = kmesh(h.dimensionality,nk=nk) # klist
   if random: ks = [np.random.random(3) for k in ks]
   ytot = np.zeros(ne) # initialize
   from .kpmtk.kernels import jackson_npol
-  npol = jackson_npol(scale,delta) # number of polynomials
+  if npol is None: npol = jackson_npol(scale,delta) # number of polynomials
+  npol = int(npol)
   # dos_kpm's stochastic trace estimator (kpm.pdos) draws random vectors
   # confined to (and renormalized within) the operator's subspace, so it
   # converges to Tr[P f(H)]/Tr[P], the *per-state* projected DOS averaged
@@ -442,7 +449,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
     if info: print("Doing",k)
     hk = hkgen(k) # get Hamiltonian
     (x,y) = kpm.pdos(hk,scale=scale,npol=npol,ne=ne,operator=None,
-                   P = op,
+                   P = op,x=energies,
                    ewindow=ewindow,**kwargs) # compute
     return (x,y)
   from . import parallel
@@ -461,12 +468,10 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
     out = parallel.pcall(f,ks) # compute all
     ytot = np.mean([out[i][1] for i in range(numk)],axis=0) # average DOS
     x = out[0][0] # energies
-  if energies is not None: # energies provided
-      from scipy.interpolate import interp1d
-      finter = interp1d(x,ytot,kind="linear",bounds_error=False,
-                    fill_value=0.) # interpolation
-      x = energies # redefine x
-      ytot = finter(energies) # redefine y
+  # with energies given, x is already those energies: pdos evaluates the
+  # series there. It used to return ne=len(energies) points spread over
+  # max|E| and interpolate from them, so one energy gave exactly zero and a
+  # few energies gave a DOS several times too small
   ytot = ytot*norm_dim # by the (projected) dimension
   if write: np.savetxt("DOS.OUT",np.array([x,ytot]).T) # save in file
   return (x,ytot)
