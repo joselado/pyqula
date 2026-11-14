@@ -662,10 +662,136 @@ so the error changes from run to run. The energies now enter the interpolation m
 from their mean over the Brillouin zone, $\mathrm{Re\,Tr}(H_0)/n$, which is exact since the
 hoppings to other cells average to zero, and the mean is added back after. The error is now
 1e-6 to 8e-6 at the three shifts. The rescaling of every field to order one before the
-stacking, the other half of the finding, is not done here. The same normalization in
+stacking, the other half of the finding, was not done in this repair; it was decided and
+built on 14 November 2026, one scale per family and not one per field, see the next
+paragraphs. The same normalization in
 `kubosimplex.sigma_qtci`, where $W$ goes as a length squared, was repaired on 14 November
 2026, with the transition energies and the weights each divided by its own maximum
 (`qtci_optical_response.md`).
+
+**The unit of energy in the qtci LDOS (decided and built, 14 November 2026).** With the
+Hamiltonian, the energies and delta all multiplied by a factor lam, the LDOS is the same
+LDOS divided by lam, and the triangle sum on the full mesh has this to $10^{-14}$. The qtci
+LDOS did not have it. The band energies go as lam and the site weights do not, so the unit
+of energy decided which of the two got the tolerance. On the same graphene (nk = 128,
+delta = 1e-3 in units of the hopping, tolerance 1e-6, the error against the triangle on the
+same mesh, three seeds of the pivot search each):
+
+| lam | error before | error now |
+|---|---|---|
+| 1 | 2.1e-6 to 5.0e-6 | 6.7e-6 to 1.3e-5 |
+| 30 | 4.4e-6 to 5.6e-6 | 6.5e-6 to 1.3e-5 |
+| 1/30 | 2.8e-5 to 6.9e-5 | 4.7e-6 to 7.6e-6 |
+| 1000 | 1.9e-4 to 2.1e-4 | 3.1e-6 to 1.3e-5 |
+| 0.001 | 1.6e-3 to 8.7e-3 | 1.1e-5 to 1.7e-5 |
+
+A model written in meV is the row lam = 1000. Now the energies, measured from the zone
+mean, and the weights are two families of `qtci_stacked_fields`: the keyword `families`
+divides each family by its largest value on the coarse scan before the interpolation and
+multiplies it back after. `kubosimplex.sigma_qtci` calls the same keyword for its
+transition energies and weights, so there is one implementation of the scale. The finding
+asked for every field at order one. This is not what is built: a scale per field brings a
+weight that is zero up to rounding (a band with no weight on a site) to order one, and
+the interpolation then follows the noise at full rank.
+
+At lam = 1 the error is larger than before. Over eight seeds it is 3.9e-6 to 1.6e-5 with
+the scale (median 9.4e-6) against 1.7e-6 to 5.0e-6 without it (median 3.0e-6), so the
+factor 3 is not the scatter of the seeds. We looked at which family limits the map. With
+the energies scaled to a largest value kappa and the weights to 1, by hand and with the
+largest values of the full mesh, four seeds each (no scale at all is kappa = 3 here):
+
+| kappa | error of the energies | error of the weights | error of the LDOS | rank |
+|---|---|---|---|---|
+| 3, no scale | 0.8e-6 to 1.6e-6 | 2.9e-6 to 3.9e-6 | 2.1e-6 to 5.0e-6 | 54 to 55 |
+| 1 | 1.2e-6 to 2.5e-6 | 1.0e-6 to 1.3e-6 | 2.8e-6 to 5.5e-6 | 58 to 59 |
+| 10 | 1.1e-6 to 1.7e-6 | 1.1e-5 to 1.6e-5 | 3.8e-6 to 1.6e-5 | 53 to 55 |
+| 100 | 1.1e-6 to 1.3e-6 | 0.8e-4 to 1.8e-4 | 3.4e-6 to 8.9e-6 | 48 to 50 |
+| 3000, the bandwidth over delta | 0.9e-6 to 1.5e-6 | 1.8e-3 to 3.1e-3 | 1.6e-4 to 2.1e-4 | 42 to 43 |
+
+The field errors are relative to the largest value of the family. The energies are
+resolved to the tolerance at every kappa, and the weights to kappa times the tolerance, as
+they should. The largest error of the LDOS does not follow either of them until kappa is
+the bandwidth over delta, where the weights take over. Below that it moves between 2e-6
+and 1.6e-5 with no order in kappa. The row kappa = 1 is the family scale applied by hand,
+and it gives 2.8e-6 to 5.5e-6, where the public route gives 6.7e-6 to 1.4e-5 with the same
+four seeds. The two differ in the scale of the weights by 3%: the public route takes the
+largest value of the coarse scan, 0.969, and not the one of the full mesh, 0.998. So the
+factor 3 at lam = 1 is real for this model and this scale, but it is not a loss of
+resolution of the energies or of the weights. The largest error of the map depends on
+where the errors of the energies fall against the peaks of width delta, and a change of
+3% in a scale moves it as much as the factor in question. The seeds only move the global
+pivot search, so their scatter is smaller than this. All these errors are 100 times below
+the 1.2e-3 that the triangle LDOS itself moves from nk = 256 to 512, and the scale costs
+3 to 4 in the rank. `tests/ldos/test_ldos_qtci_energy_unit.py` pins the invariance at
+lam = 1e4 and 1e-4. There the old code is off by 8e-3 and 7e-3 and the new one by 5e-6 to
+1e-5 and by 8e-6 to 2e-5 over five seeds, against a bound of 2e-4.
+
+**The zero of energy in the qtci DOS (built, 14 November 2026).** The qtci DOS runs one
+interpolation per field, each relative to its own largest value, so it does not depend on
+the unit of energy. It did depend on the zero, as the LDOS did before its repair. With
+every onsite energy shifted by c and the energies of the DOS shifted alike (the same
+graphene, nk = 128, delta = 1e-3, three seeds), the error against the triangle was 7e-6
+at c = 0, 3.6e-4 to 3.7e-4 at c = 100 and 4e-2 to 7e-2 at c = 1e4, with ranks 43, 31 and
+16. The DOS now measures the band energies from the zone mean too
+(`meshfields.zone_mean_energy`, shared with the LDOS), and the error is 2e-6 to 8e-6 at
+the three shifts, with rank 43.
+
+Measured from the mean, a flat band at the mean is rounding noise, and one interpolation
+per field normalizes it by its own largest value. This was already so without a shift for
+a flat band at zero: the flat band of the Lieb lattice took the full rank and every point
+of the mesh (rank 64 and 4096 of 4096 diagonalizations at nk = 64, rank 256 and 65536 of
+65536 at nk = 256). With the centring alone it would be so at every shift. `qtci_fields`
+now takes the keyword `families` too: a field below 1e-12 of the largest field of its
+family on the whole coarse scan is set to zero, as a field that vanishes there. On the
+Lieb lattice the flat band then has rank 0 at c = 0 and at c = 5, with 3965 of 4096
+diagonalizations at nk = 64 and 16827 of 65536 at nk = 256, and the error against the
+triangle is 5e-8 and 1.6e-7 (delta = 1e-2). `tests/dos/test_dos_qtci_energy_shift.py`
+pins the shift at c = 100 and 1e4, where the old code is off by 5e-4 and 5e-2 against a
+bound of 7e-5, and the flat band at both shifts, where the old code has rank 64 at c = 0.
+
+**A centre per band, and weights without a scale (after a review, 14 November 2026).** The
+two paragraphs above describe the first shape of this repair, and its numbers. A review
+found two defects in it, and the shape that is in the code is this one. First, the zone
+mean loosens a band that is far from it. With an onsite energy of 20 on one sublattice and
+0 on the other, the lower band lies within 0.45 of zero and 10 below the mean, so its
+tolerance was relative to 10.45: the qtci DOS was off by 2.0e-4 to 2.6e-4, against 3.8e-6
+to 7.6e-6 in the committed code. Second, the scale of the weights family of the LDOS
+brought a family of rounding noise to order one. With `operator="sz"` and no magnetism
+every weight vanishes up to rounding, and the LDOS at nk = 256 took 65536 of 65536 points
+at rank 512, against 18405 points at rank 45 in the committed code.
+
+Now the band energies are the centred fields of both routes (keyword `centred` of
+`qtci_fields` and of `qtci_stacked_fields`): each band is measured from the middle of its
+own range on the coarse scan, and the middle is added back after. Its tolerance is then
+relative to its width, whatever its position and whatever constant is added to the onsite
+energies, and the zone mean is not used any more. A centred field below 1e-12 of the band
+energies before the shift is a constant, a flat band, and is not interpolated. In the LDOS
+the band energies are also the one family that is scaled, by the largest of the centred
+values, and a family that is rounding noise as a whole (every band flat) is not scaled. The
+site weights have no unit, so they are in no family and enter as they are, as in the
+committed code. Measured on the new code:
+
+| case | committed code | first shape | now |
+|---|---|---|---|
+| DOS, band far from the mean, error | 3.8e-6 to 7.6e-6 | 2.0e-4 to 2.6e-4 | 2.0e-6 to 3.6e-6 |
+| DOS of graphene, shift 0, 100 and 1e4, error | 7e-6, 3.7e-4, 4e-2 to 7e-2 | 2e-6 to 8e-6 | 1.7e-6 to 1.4e-5 |
+| DOS of the Lieb lattice, nk = 256, points at shift 0 and 5 | 65536 and 18388 | 16827 and 16827 | 19524 and 21304 |
+| LDOS of graphene, lam = 1, error over eight seeds | 1.7e-6 to 5.0e-6 | 3.9e-6 to 1.6e-5 | 1.0e-6 to 3.7e-6 |
+| LDOS of graphene, lam = 1e4 and 1e-4, error | 8e-3 and 7e-3 | 5e-6 to 2e-5 | 1.8e-6 to 3.1e-6 and 1.2e-6 to 6.5e-6 |
+| LDOS with sz, no magnetism, nk = 256, points and rank | 18405, 45 | 65536, 512 | 22218, 47 |
+| LDOS with sz, exchange (0.3, 0.4, 0), nk = 256, points and rank | 25802, 51 | 65536, 565 | 37096, 67 |
+
+So the factor 3 of the first shape at lam = 1 is gone: the error is now at the level of the
+committed code or below it, at every unit. The two last rows are a cost. The energies are
+now resolved against the width of a band and not against the largest distance from the
+mean, which is 2 to 4 times tighter on these models, and the LDOS with sz takes 20% and
+44% more points than the committed code for the same `tolerance`. The error of these two
+cases against the triangle was not measured. The interpolation without the two keywords
+gives the same numbers as the committed code bit for bit, on a synthetic set of fields.
+`tests/dos/test_dos_qtci_energy_shift.py` has the band far from the mean (2.6e-4 on the
+first shape against a bound of 3e-5), and `tests/ldos/test_ldos_qtci_energy_unit.py` the
+sz weights without magnetism (65536 points on the first shape against a bound of half the
+mesh).
 
 **The simplex sum at finite delta.** The kernel gathered the weights of the p vertices of
 every simplex at every energy, for every channel. It now adds the simplex average of the
@@ -777,7 +903,8 @@ first pass stand: no cache of the tetrahedra (the first pass measured the
 build at 5% of a sweep of 20 Fermi levels at nk = 64, and a cache keeps 3.2 GB alive at
 R = 8), no cache of the eigenvectors of the 3D selfenergy, the vertex form for every kind,
 one degeneracy tolerance for the whole mesh of the Green's function, and the energies of
-the qtci LDOS centred without a rescaling of the weights.
+the qtci LDOS centred without a rescaling of the weights (the last one was decided again
+on 14 November 2026: the energies and the weights are scaled as two families, see above).
 
 **The large cases, on a compute node (14 November 2026).** The cases that do not fit in the
 6 GB of the shared machine were run on a compute node with 32 GB, with two numba threads and
@@ -806,6 +933,8 @@ than the old one, not only with two.
 **The energy sweeps of the embedding (14 November 2026).** With `gf_mode="triangle"`, `Embedding.multildos`, `Embedding.multidos` and `embedding.dos_impurity` called the selfenergy of one energy at every energy, so they diagonalized the nk^3 mesh at every energy. They now take the bulk selfenergy of the whole sweep from `green.supercell_selfenergy_batch`, which calls `bloch_selfenergy_batch`, and then do the Dyson step energy by energy. Every other `gf_mode` still goes energy by energy and keeps only the map of each energy, because the Green's functions of a large supercell at every energy of a sweep take a lot of memory (about 180 MB for the 7x7 honeycomb supercell and 100 energies of `examples/embedding/honeycomb_supercell_multildos`), so outside the tetrahedra nothing moves. The batch saves the diagonalization and not the simplex sum, which is still done per energy. On spinful diamond with a sublattice imbalance of 0.3 (4 orbitals) at nk = 40, one energy takes 1.33 s and the mesh is about 0.3 s of it, so the gain is small: with 10 energies `multildos` went from 11.3 s to 9.5 s and `dos_impurity` from 11.2 s to 8.7 s. The diagonalization weighs more with more orbitals. On a 2x2x2 supercell of the cubic lattice (16 orbitals) with an onsite modulation 0.3 cos(1.3x+0.7y+0.4z), which makes the eight sites different, and an onsite defect of 2 on one site, at nk = 24 and 10 energies, `multildos` went from 20.1 s to 7.7 s and `dos_impurity` from 19.2 s to 7.2 s, with a peak of 0.55 GB before and 0.61 GB after. These are the smallest of three runs with two threads on a shared machine, old and new back to back, so the ratio is what matters; the old code here is the tree with the batch of `bloch_selfenergy_batch` already in it, so the ratio is the one of the sweeps alone. The maps and the DOS agree with the old code to 1e-15 relative. The tests are in `tests/embedding/test_embedding_energy_sweep.py` (nine tests: the sweep against the single-energy calls to 1e-10 for the tetrahedra and exactly for the other modes, with a name, a potential, a bond matrix and an Operator object, and a count of the calls of `green_triangle`, one per sweep where the old code makes one per energy) and in `tests/green/test_supercell_selfenergy_sweeps.py`. `Embedding.multildos` now also takes `energies=`, the name of the grid in `h.get_multildos` and in `Embedding.multidos`; before, it took the keyword and returned its default grid of 20 energies. `green.green_operator_batch` does the same for the trace of `get_dos(mode="Green", gmode="triangle")`. It agrees with the loop to 2e-15 on spinful diamond at nk = 6, and `dos.py` does not call it yet. A complex energy in `mode="triangle"` now raises a `ValueError`; it was cast to its real part with only a ComplexWarning, so `Embedding.get_gf` at a complex128 energy returned the bulk at the real energy and the Dyson step at the complex one.
 
 **The LDOS of an embedding with an operator (14 November 2026).** `Embedding.get_ldos` and `Embedding.get_gf` weighted the Green's function on one side, $-\mathrm{Im}\,\mathrm{diag}(AG)/\pi$, while every mode of `h.get_ldos()` returns $-\mathrm{Im}\,\mathrm{diag}(GA+AG)/(2\pi)$. Summed over the orbitals of a site the two are the same when $A$ is local to each site, because the trace over the orbitals of the site of $A_iG_{ii}$ and of $G_{ii}A_i$ is the same, and they are different for a bond operator. On the pristine honeycomb lattice with Rashba 0.3 and an exchange field (0.1, 0.2, 0.3), at E = 0.4, delta = 0.1 and nk = 12, they agree to 1e-17 for sx, sy and sz. They differ by 2.9e-2 for a random Hermitian matrix and by 5.5e-3 for the intracell hopping, with the same sum over the sites. The map is now `ldos.green2ldos` of the unweighted Green's function, and `get_gf(operator=A)` returns $(GA+AG)/2$, so its diagonal still gives the map. With `gf_mode="full"` the pristine embedding is the same k-sum as `h.get_ldos(mode="green")`, and the two now agree to 1e-10 for sz, sx, the random matrix and the hopping. A named operator with `nsuper=2` was built on the primitive cell and stopped with a dimension mismatch. A name, a potential or a callable is now built on the embedded cell, the supercell of the defect and the outer `nsuper`, and a matrix has to be the one of that cell. This is checked in three ways: a bond matrix of the 2x2 supercell at `nsuper=2` and nk = 12 agrees with `h.supercell(2).get_ldos(mode="green", nk=6)` to 4e-16, where the one-sided weight is off by 0.31; a potential f(r) with a defect gives f(r_i) times the plain map; and `Embedding(h, m=..., nsuper=2)` gives the map of the embedding of `h.supercell(2)` itself. An operator without a matrix, such as the valley operator, is refused with a message. The tests are in `tests/ldos/test_embedding_gf_operator.py`, where ten of the fifteen tests fail on the old code. The defect of the older tests of that file was selected with x = 0, where the honeycomb lattice has no site, so it was no defect; it is now on the first site.
+
+**The complex energies of the tetrahedra (14 November 2026).** The repair above made `mode="triangle"` of the Bloch selfenergy raise for a complex energy, with a message that sent the caller to another mode. In 3D there is no other mode: `"adaptive"`, `"renormalization"`, `"full"` and `"full_adaptive"` all stop at dimensionality 3. So the density matrix of a 3D embedding, a contour integral at complex energies, could not be computed at all, and it never could. The Green's function depends on $z = E + i\delta$ alone, and `green_triangle` at the energy $\mathrm{Re}\,z$ with the broadening $\mathrm{Im}\,z$ is exactly the resolvent of the interpolated bands at $z$. So `_triangle_green` now takes a complex energy as the real energy with its imaginary part added to delta, and below the real axis, the other half of the contour, it returns $G(z^*)^\dagger$, since the Bloch Hamiltonian is Hermitian. A negative delta at a real energy gives the advanced function in the same way, as in the other modes, where it raised. On the real axis, $\mathrm{Im}\,z = 0$, it raises a `ValueError` that names the energy and the delta that were passed, also when the imaginary part of the energy cancels delta up to a few ulps. The four modes that stop in 3D now say in their message to use `mode='triangle'`, which an Embedding takes as `eb.gf_mode='triangle'`; its default, `"renormalization"`, is one of them. The kernel takes one broadening per call, so the energies of a batch are grouped by $|\mathrm{Im}\,z|$: a sweep at real energies is one call and one diagonalization with the same numbers as before, and each point of a contour is its own call. On spinless diamond with a sublattice imbalance of 1, the Green's function at $z = 0.3 + 0.85i$ differs from the mean of $(z-H_k)^{-1}$ over a $16^3$ mesh by 1.4e-2, 4.2e-3 and 1.1e-3 at nk = 6, 12 and 24, the second order of the tetrahedra. For a pristine insulator every band of the interpolant is full or empty in every tetrahedron, so the contour has to give the mean of the occupied projectors over the same mesh up to the tails of delta: `Embedding.get_density_matrix` with `gf_mode="triangle"` at nk = 6 is off by 1.3e-3 at delta = 1e-2 and by 1.3e-4 at delta = 1e-3, linear in delta as a Lorentzian tail is. In the diamond metal with the Fermi level in the lower band it is within 1.1e-3 to 3.1e-3 of the triangle density matrix at T = 0 on the same mesh, at delta = 1e-2. The contour takes 76 points for the insulator and 60 for the metal at the default `eps`, each one a call of the tetrahedra at the price of one energy. The whole contour takes 0.4 to 0.7 s at nk = 6 and 4.5 s at nk = 20, and one point takes 0.66 s at nk = 40, so the contour takes about ten minutes at the default nk = 100 by the scaling with nk^3, which was not run. The docstring of the density matrix says to pass an nk that resolves the bands. The batch of the 1D decimation had the same cast: `bloch_selfenergy_batch` turned a complex array into real energies with only a ComplexWarning. No routine of the library calls it with complex energies; they now go through the loop of the single calls. `get_dos(mode="Green", gmode="triangle")` now calls `green.green_operator_batch`, one diagonalization for the sweep: 3.91 s against 2.90 s on four-orbital diamond at nk = 30 with 10 energies, and 5.47 s against 1.90 s on a 16-orbital cubic supercell with an onsite modulation at nk = 16, the smallest of three runs back to back at two threads, with the same DOS to 7e-15. The tests are in `tests/green/test_bloch_selfenergy_batch.py` (ten new test cases, which fail on the code before, with the mesh mean in both half planes), `tests/embedding/test_embedding_density_matrix.py` (the pristine insulator in 3D, which raised before) and `tests/dos/test_dos_green_triangle_sweep.py` (one call of the tetrahedra per sweep, the single-energy traces, and the tetrahedron DOS of `mode="ED"` to 1e-10).
 
 ## Limits of the linear interpolation that were found on the way
 
@@ -845,20 +974,30 @@ than the old one, not only with two.
   simplex only visits the energies inside its range. Since 13 November 2026 the weights
   enter through one matrix product after the simplex averages (see the repairs of the
   seventh bug audit), so what is left per energy is the simplex average itself.
-- **The density-matrix contour of an embedding with the tetrahedra.** Since 14 November 2026
-  the energy sweeps of the embedding take the bulk selfenergy of a sweep from one
-  diagonalization of the mesh (see the repairs of the seventh bug audit).
-  `Embedding.get_density_matrix` does not, and it cannot use the tetrahedra at all: it is an
-  adaptive contour integral at complex energies, with points that are not known in advance,
-  while `mode="triangle"` takes real energies and a positive delta only, and now raises for a
-  complex energy. A resolvent of the tetrahedra at complex energies would be needed for the
-  contour; it is not built. `get_dos(mode="Green", gmode="triangle")` still goes energy by
-  energy until `dos.py` calls `green.green_operator_batch`.
-- **One normalization of the stacked fields of the qtci DOS and LDOS.** The qtci LDOS now
-  centres the band energies before the stacked interpolation, and `kubosimplex.sigma_qtci`
-  divides the transition energies and the weights each by its own maximum since 14 November
-  2026. Rescaling each field of the DOS and the LDOS to order one before the stacking is
-  exact and cheap; it is not done.
+- **One diagonalization for the density-matrix contour of an embedding.** The contour of
+  `Embedding.get_density_matrix` works with the tetrahedra since 14 November 2026 (see the
+  complex energies of the tetrahedra above), with one diagonalization of the mesh per
+  contour point, 60 to 76 points. The points are not known in advance and each one has its
+  own imaginary part, while the kernel of `green_triangle` takes one broadening for all its
+  energies. A mesh shared by the whole contour needs a broadening per energy in that kernel,
+  or the eigenpairs of the mesh kept between the calls of one contour. Not built: the
+  diagonalization is the smaller part of a point on cells of a few orbitals (0.3 s of 1.33 s
+  on four-orbital diamond at nk = 40), so it would pay on larger cells only.
+- **One normalization of the fields of the qtci DOS and LDOS (done, 14 November 2026).**
+  Both routes measure each band energy from the middle of its own range, the LDOS divides
+  the band energies by the largest of them, the weights enter as they are, and a flat band
+  is not interpolated; see "A centre per band, and weights without a scale" in the repairs
+  of the seventh bug audit. Four things are left. The LDOS with an operator takes 20% to
+  44% more points than before for the same `tolerance` on the two cases measured, since
+  the energies are resolved against the width of a band; the error it buys there was not
+  measured. An operator with a large norm loosens the energies of the LDOS, as it did
+  before, since the weights are not divided by it. The weights of the DOS with an
+  operator that vanish up to rounding (sz without magnetism) are still interpolated as
+  noise, one field at a time, as before; no case was measured. And
+  `qtcitk/densitymatrix_qtci.py` gives the
+  raw band energies to one stacked interpolation, so a constant shift of the onsite
+  energies should loosen the mean-field density matrix in the same way; this is read from
+  the code and not run.
 - **The exact DOS of the interpolant at delta = 0 as a function.** The delta = 0 result is a
   piecewise-linear function in 2D (piecewise quadratic in 3D) with breakpoints at the vertex
   energies. Returning it as such, or its integral (the number of states below E, which gives

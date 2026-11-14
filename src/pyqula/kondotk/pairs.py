@@ -9,6 +9,7 @@ whose V_j was set by hand works too. The mean-field term is
 V_j f^dag_j c_j + h.c., so V_j is the element [f_j, c_j] of the intracell
 matrix."""
 import numpy as np
+from scipy import linalg
 
 from .. import algebra
 from .. import check
@@ -76,3 +77,45 @@ def scale_hybridization(h, scale, pairs):
     if hasattr(h, "hybridization"):
         out.hybridization = scale*np.asarray(h.hybridization)
     return out
+
+
+def is_spin_degenerate(h):
+    """True if h is the same for the two spins and does not mix them, the
+    case of a Kondo lattice mean field without a Zeeman field or a
+    spin-orbit coupling"""
+    from ..chitk.localspinchi import is_spin_degenerate
+    return is_spin_degenerate(h)
+
+
+def spin_components(m, degenerate):
+    """Eigenstates of the spinful matrix m, as (energies, components,
+    multiplicity): components is the list of the amplitudes [site, state]
+    of the spin components that are kept, and every state counts
+    multiplicity times.
+
+    In general these are the two spin components of the states of m. With
+    degenerate=True, m is the same for the two spins and does not mix them,
+    so the block of one spin is diagonalized, a matrix of half the size,
+    and each of its states comes twice, once per spin."""
+    if degenerate:
+        es, vs = linalg.eigh(m[0::2, 0::2])
+        return es, [vs], 2.
+    es, vs = linalg.eigh(m)
+    return es, [vs[0::2, :], vs[1::2, :]], 1.
+
+
+def pair_weights(m, ci, fi, degenerate):
+    """Return (energies, wcc, wff, wcf): the eigenvalues of the Bloch
+    matrix m and the weights [pair, state] of every eigenstate on the two
+    orbitals of the Kondo pairs (ci[j], fi[j]), summed over the spin,
+
+        wcc = sum_s |<c_js|n>|^2 , wff = sum_s |<f_js|n>|^2 ,
+        wcf = sum_s <c_js|n> <n|f_js> ,
+
+    from one diagonalization, of half the size with degenerate=True (see
+    spin_components)."""
+    es, comps, mult = spin_components(m, degenerate)
+    wcc = mult*sum(np.abs(u[ci, :])**2 for u in comps)
+    wff = mult*sum(np.abs(u[fi, :])**2 for u in comps)
+    wcf = mult*sum(u[ci, :]*np.conjugate(u[fi, :]) for u in comps)
+    return es, wcc, wff, wcf

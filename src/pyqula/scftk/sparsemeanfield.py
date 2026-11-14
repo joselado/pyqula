@@ -14,6 +14,8 @@ import numpy as np
 from scipy.sparse import csr_matrix, coo_matrix, diags
 from scipy.spatial import cKDTree
 
+from ..specialhopping import require_pair_interaction
+
 
 def _minus(d): return (-d[0], -d[1], -d[2])
 
@@ -113,11 +115,17 @@ def interaction(h, V1=0.0, V2=0.0, V3=0.0, U=None, Vr=None, rcut=None,
             rcut = 5.0 # as specialhopping.distance_cut_interaction
         tol = 1e-6 # a shell sitting exactly at rcut is kept whole
         r = np.array(g.r, dtype=float)
+        raw = dict() # Vr of every pair of sites
         for d, (i, j, d2) in site_pairs(g, float(rcut) + tol).items():
             R = d[0]*np.array(g.a1) + d[1]*np.array(g.a2) + d[2]*np.array(g.a3)
             x = np.array([Vr(r[a], r[b] + R) for (a, b) in zip(i, j)],
-                    dtype=np.complex128)/2.
-            add(d, i, j, x)
+                    dtype=np.complex128)
+            raw[d] = (i, j, x)
+        # a pair has one coupling, real and finite, as in the dense builder,
+        # checked before anything is stored
+        require_pair_interaction({d: csr_matrix((x, (i, j)), shape=(n, n))
+                for d, (i, j, x) in raw.items()}, name=name)
+        for d, (i, j, x) in raw.items(): add(d, i, j, x/2.)
     if (0, 0, 0) not in rows: add((0, 0, 0), np.zeros(0, int), np.zeros(0, int),
             np.zeros(0))
     s = 2 if h.has_spin else 1 # spin entries per site

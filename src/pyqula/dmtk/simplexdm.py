@@ -60,6 +60,16 @@
 # quadrature error, against an adaptive quadrature, is below 3e-9 in
 # units of the simplex volume for T from 1e-4 to 0.3 of the energy spread
 # of the simplex, with 8 nodes per piece. T=0 is the step itself.
+# When no vertex energy is within the cutoff of the Fermi function, 40 T
+# of mu, the T=0 weight is one polynomial of degree dim+1 over the whole
+# window, and the pieces are not needed: the three-node Gauss rule of the
+# weight -f'(x), the nodes mu and mu +- pi sqrt(7/5) T with the weights
+# 32/42 and 5/42, integrates a polynomial of degree 5 exactly. It holds
+# the Sommerfeld series, w + (pi^2 T^2/6) w'' + (7 pi^4 T^4/360) w'''',
+# which ends there, without a derivative. This is every simplex cut by the
+# Fermi surface at a low T, such as the T = 1e-7 of the mean field, where
+# the pieces cost 208 evaluations for the same number
+# (future_development/tetrahedron_density_matrix.md).
 # This is not the uniform mesh at temperature T: the mesh only has to
 # resolve the bands, not the Fermi function, so the same mesh serves every
 # T, T=0 included.
@@ -149,6 +159,11 @@ _tcut = 40. # beyond |x| = 40 T the Fermi function is 1 or 0 to 4e-18
 # the extra breakpoints of the finite-T integral, in units of T
 _tbreaks = np.array([1.,2.,3.,4.,6.,8.,10.,12.,14.,18.,24.,32.,_tcut])
 _block = 1024 # simplices per parallel task of the weight and charge kernels
+# the Gauss rule of the weight -f'(x): the nodes 0 and +-_fnode T, with the
+# weights 1 - 2 _fweight and _fweight, reproduce its moments 1,
+# pi^2 T^2/3 and 7 pi^4 T^4/15, so a polynomial of degree 5 is exact
+_fnode = np.pi*np.sqrt(7./5.)
+_fweight = 5./42.
 
 
 default_nk = 20 # mesh of get_dm when the caller gives none
@@ -277,6 +292,18 @@ def _knots(e,p,T,tbreaks,kn):
 
 
 @jit(nopython=True,cache=True)
+def _window_is_clear(e,p,L):
+    """whether no vertex energy (measured from mu) is inside the window
+    |x| < L of the Fermi function, so that the T=0 weights, their sum and
+    the T=0 DOS are each one polynomial of x over the whole window. The
+    weights and the charge kernel ask this same function, so that they
+    take the same rule on every simplex"""
+    for j in range(p):
+        if e[j]>-L and e[j]<L: return False
+    return True
+
+
+@jit(nopython=True,cache=True)
 def _weights_T(e,p,T,gx,gw,tbreaks,out,tmp,kn):
     """weights at temperature T for sorted vertex energies e (measured from
     mu), into out; returns the occupied fraction and the density of states
@@ -287,13 +314,25 @@ def _weights_T(e,p,T,gx,gw,tbreaks,out,tmp,kn):
     int_a^b (-f'(x)) g(x) dx, with g the T=0 weights and the T=0 DOS at
     mu = x, by Gauss-Legendre quadrature in phi = f(|x|), in which
     -f'(x) dx = |dphi|. The weights and the DOS are read at the same nodes,
-    in one pass over the knots"""
+    in one pass over the knots. With no vertex in the window g is one
+    polynomial, and the three nodes of the Gauss rule of -f' are exact"""
     for j in range(p): out[j] = 0.
     L = tbreaks[-1]*T
     if e[0]>=L: return 0.,0.
     if e[p-1]<=-L:
         for j in range(p): out[j] = 1./p
         return 1.,0.
+    if _window_is_clear(e,p,L):
+        dos = 0.
+        for q in range(-1,2):
+            c = 1.-2.*_fweight if q==0 else _fweight
+            x = q*_fnode*T
+            _step_weights(e,p,x,tmp)
+            for j in range(p): out[j] += c*tmp[j]
+            dos += c*_step_dos(e,p,x)
+        s = 0.
+        for j in range(p): s += out[j]
+        return s,dos
     ftop = _fermi(e[p-1],T) # the constant piece above the top vertex
     for j in range(p): out[j] = ftop/p
     dos = 0.
@@ -411,6 +450,14 @@ def _charge_dos_T(e,p,T,gx,gw,tbreaks,kn):
     L = tbreaks[-1]*T
     if e[0]>=L: return 0.,0.
     if e[p-1]<=-L: return 1.,0.
+    if _window_is_clear(e,p,L): # the three nodes, as in _weights_T
+        c = 0.; d = 0.
+        for q in range(-1,2):
+            cq = 1.-2.*_fweight if q==0 else _fweight
+            x = q*_fnode*T
+            c += cq*_step_fraction(e,p,x)
+            d += cq*_step_dos(e,p,x)
+        return c,d
     ftop = _fermi(e[p-1],T)
     if e[p-1]<=e[0]: return ftop,ftop*(1.-ftop)/T
     c = ftop; d = 0.
@@ -827,11 +874,13 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
             # the weighted projector of each k-point, which does not depend
             # on the direction, P_k[i,j] = sum_n conj(U_kin) w_kn U_kjn, and
             # then every direction in one product with the Bloch phases.
-            # With one direction this costs more than the sum over k and n
-            # in one product, by the batch of small products and the
-            # projectors (0.141 s against 0.108 s at n = 32), and
-            # with nine directions it is 1.4 times faster than one product
-            # per direction (future_development/tetrahedron_density_matrix.md)
+            # With one direction there is nothing to share: both routes
+            # do the same K n_a n^2 multiplications, and the sum over k
+            # and n above is one large product, which BLAS threads, where
+            # this is a batch of small ones (0.141 s against 0.108 s at
+            # n = 32). With D directions one product per direction costs
+            # D times that and this route once, 1.4 times faster at nine
+            # (future_development/tetrahedron_density_matrix.md)
             P = np.matmul(Ua.conj()*wa[:,None,:],np.transpose(Ua,(0,2,1)))
             out = ph.T@P.reshape(len(P),n*n) # (d,n*n)
             for idd,d in enumerate(ds): dm[d] += out[idd].reshape(n,n)

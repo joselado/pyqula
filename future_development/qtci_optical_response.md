@@ -1284,7 +1284,8 @@ the first table the two unseeded pairs give 2.7e-5 and 6.9e-6 before
 against 4.7e-6 and 7.5e-6 now, so the factor 5.8 of that table was the
 scatter of the old code. On the other disorder, with two seeds, the error
 is about 2 times larger now, and the two ranges do not overlap. Two seeds
-do not settle it, and it is left open. The diagonalizations stay within
+do not settle it; five seeds and the decision are in the paragraph "The
+scale per family stays" below. The diagonalizations stay within
 10% and the rank goes up by 2%. The time of the supercell call did not
 repeat either: 1.45 and 1.39 times slower in the two unseeded pairs, but
 30 and 33 s before against 21 and 42 s now in the seeded ones, on a shared
@@ -1324,6 +1325,53 @@ per family does not hurt a metal, and it helps the full tensor by about
 10 at low T: the intraband weight, of order 1/(4T), took the
 shared tolerance away from the energies, and now it does not. The
 independence of the unit of length holds regardless.
+
+**The scale per family stays (decided 14 November 2026).** Without it the
+result depends on the unit of length, by 9e-2 at a lattice constant of
+256, and a test pins this. What was open is its cost on a disordered
+supercell, where two seeds gave an error 2 times larger. We ran five seeds
+on that supercell (the 2x2 cell of the other disorder, R = 7, T = delta =
+1e-3, tolerance 1e-6), and looked at the two families of fields apart.
+The row without the scale is the present code with every scale set to 1,
+which is the arithmetic of the code before the repair. The errors of the
+fields are relative to the largest value of the family on the full mesh
+(6.03 for dE, 4.13 for W):
+
+| code | error of sigma | median | error of dE | error of W | rank | time (s) |
+|---|---|---|---|---|---|---|
+| one shared scale | 4.3e-6 to 2.0e-5 | 6.5e-6 | 1.1e-6 to 2.3e-6 | 2.2e-6 to 2.8e-6 | 459 to 464 | 25 to 35 |
+| scale per family | 8.6e-6 to 1.6e-5 | 1.4e-5 | 1.2e-6 to 2.3e-6 | 1.5e-6 to 1.8e-6 | 466 to 468 | 18 to 37 |
+
+With five seeds the two ranges of the error of sigma overlap, and the
+largest error is the one without the scale. The median is still 2 times
+larger with the scale. The fields say that this is not a loss of the
+interpolation: the transition energies are resolved the same, and the
+weights better, as the scale intends. The largest error of sigma over the
+frequencies does not follow the largest error of the fields; it depends on
+where the errors of the energies fall against the resonances, at
+delta = 1e-3. The qtci LDOS shows the same thing with a scan of the
+relative scale of its two families (`qtci_dos_green.md`): there the error
+of the map stays in one band of scatter while the error of the weights
+moves by 100. Both codes diagonalize every point of this mesh, and the
+times on a shared machine with two threads do not show the factor 1.4 of
+the unseeded pairs. A timing on an idle machine was not done; it would
+only say what the 2% in the rank cost. All these errors are 3 orders of
+magnitude below what the mesh leaves: the triangle itself moves by 2.6e-2
+from nk = 128 to 256 on the supercell of "One interpolation of all the
+fields".
+
+Since 14 November 2026 the scale is not in `sigma_qtci` any more. It is
+the keyword `families` of `qtcitk/meshfields.qtci_stacked_fields`, which
+divides each family by its largest value on its own coarse scan, and the
+qtci LDOS calls it too, for its band energies only. A family that is
+rounding noise as a whole would be brought to order one by its own scale;
+here that needs every weight or every transition energy to vanish up to
+rounding, so a conductivity that is zero, and it was so before the move
+too. This is read from the code and not run. The scale
+of W is now the largest real or imaginary part of the stored fields and
+not the largest modulus, so it can be smaller by up to a factor of the
+square root of 2. On this supercell the seeds 0 and 1 give the errors of
+the table of the review again, 8.6e-6 and 1.05e-5.
 
 The commit message of `b3569bc` says that the stacked form with the cap of
 800 reaches the per-field error on the 80 supercell fields; its own table

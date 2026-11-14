@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from pyqula import geometry
 from pyqula import embedding
@@ -115,3 +116,45 @@ def test_defect_density_matrix_is_in_the_full_dm_convention():
     rho = _finite_chain_defect_block(h, hd, 601)
     assert np.max(np.abs(rho - rho.T)) > 0.05 # the two conventions differ
     assert np.allclose(dm, rho.T, atol=1e-3, rtol=0.)
+
+
+def test_the_density_matrix_of_a_3d_embedding_with_the_tetrahedra():
+    """In 3d the tetrahedra (gf_mode="triangle") are the only bulk Green's
+    function of an embedding, and they refused the complex energies of the
+    density-matrix contour, so a 3d embedding had no density matrix. A
+    complex energy is now the real energy with its imaginary part as the
+    broadening. For a pristine insulator every band of the interpolant is
+    full or empty in every tetrahedron, so the contour gives the mean of
+    the occupied projectors over the same mesh, up to the tails of the
+    broadening delta, in the full_dm convention (the transpose)"""
+    h = geometry.diamond_lattice_minimal().get_hamiltonian(has_spin=True)
+    h.add_sublattice_imbalance(0.2)
+    # a staggered field with a y component, so that the density matrix is
+    # complex and its transpose is another matrix
+    h.add_antiferromagnetism([[0.3, 0.8, 0.2], [0.3, 0.8, 0.2]])
+    nk = 6
+    eb = embedding.Embedding(h)
+    eb.gf_mode = "triangle"
+    dm = np.array(eb.get_density_matrix(delta=1e-3, nk=nk))
+    hk = h.get_hk_gen()
+    ks = np.linspace(0., 1., nk, endpoint=False)
+    rho = 0.
+    for a in ks:
+        for b in ks:
+            for c in ks:
+                e, v = np.linalg.eigh(_dense(hk([a, b, c])))
+                assert np.min(np.abs(e)) > 0.5 # a gap around the Fermi level
+                vo = v[:, e < 0.]
+                rho = rho + vo @ vo.conj().T
+    rho = rho/nk**3
+    assert np.max(np.abs(rho - rho.T)) > 0.05 # the two conventions differ
+    assert np.allclose(dm, rho.T, atol=1e-3, rtol=0.)
+
+
+def test_a_3d_embedding_with_the_default_mode_names_the_tetrahedra():
+    """The default gf_mode of an Embedding, "renormalization", stops in
+    3d, and its message did not say which mode works there"""
+    h = geometry.diamond_lattice_minimal().get_hamiltonian(has_spin=False)
+    eb = embedding.Embedding(h)
+    with pytest.raises(NotImplementedError, match="gf_mode='triangle'"):
+        eb.get_density_matrix(nk=4)

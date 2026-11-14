@@ -77,7 +77,6 @@ of every c and every F of the cell, and g_F is the inverse of its FF
 block, the Schur complement G_FF - G_Fc G_cc^-1 G_cF. The routine returns
 the elements that are diagonal in the pair."""
 import numpy as np
-from scipy import linalg
 
 from .. import algebra
 from . import pairs as pairstk
@@ -151,7 +150,8 @@ def composite_spectral_function(h, kpath=None, energies=None, delta=2e-2,
 
     Each one is the average over the two spin components, so that A_cc
     integrates to one, and diagonal in the Kondo pair. One diagonalization
-    per k-point is done."""
+    per k-point is done, of the block of one spin when the Hamiltonian is
+    the same for the two spins and does not mix them."""
     what = "the composite fermion spectral function"
     pairs = pairstk.get_pairs(h, what)
     sites = pairstk.select_sites(site, len(pairs))
@@ -174,10 +174,13 @@ def composite_spectral_function(h, kpath=None, energies=None, delta=2e-2,
                 dtype=float)
     hkgen = h.get_hk_gen()
     nsel = len(sites)
+    degenerate = pairstk.is_spin_degenerate(h) # one spin block is enough
     out = None
     for ik, k in enumerate(kpath):
         hk = np.asarray(algebra.todense(hkgen(k)))
-        es, vs = linalg.eigh(hk) # one diagonalization
+        # weights of every eigenstate on c and f of each pair, over spin,
+        # from one diagonalization
+        es, wcc, wff, wcf = pairstk.pair_weights(hk, ci, fi, degenerate)
         if out is None:
             if energies is None:
                 energies = _default_energies(es, delta, ne, emax)
@@ -185,16 +188,6 @@ def composite_spectral_function(h, kpath=None, energies=None, delta=2e-2,
             shape = (nsel, len(kpath), len(energies))
             out = {key: np.zeros(shape, dtype=np.complex128)
                     for key in ("cc", "FF", "cF", "Fc", "gF")}
-        # weights of every eigenstate on c and f of each pair, over spin
-        wcc = np.zeros((nsel, len(es)))
-        wff = np.zeros((nsel, len(es)))
-        wcf = np.zeros((nsel, len(es)), dtype=np.complex128)
-        for s in (0, 1):
-            pc = vs[2*ci+s, :]
-            pf = vs[2*fi+s, :]
-            wcc += np.abs(pc)**2
-            wff += np.abs(pf)**2
-            wcf += pc*np.conjugate(pf)
         # poles of the two spin components, averaged
         pole = 0.5/(energies[:, None] + 1j*delta - es[None, :])
         out["cc"][:, ik, :] = wcc@pole.T
@@ -202,8 +195,9 @@ def composite_spectral_function(h, kpath=None, energies=None, delta=2e-2,
         out["cF"][:, ik, :] = np.conjugate(z)[:, None]*(wcf@pole.T)
         out["Fc"][:, ik, :] = z[:, None]*(np.conjugate(wcf)@pole.T)
         # the f block alone: the composite fermion without hybridization
-        ef, vf = linalg.eigh(hk[np.ix_(forb, forb)])
-        wf = np.abs(vf[2*fpos, :])**2 + np.abs(vf[2*fpos+1, :])**2
+        ef, comps, mult = pairstk.spin_components(hk[np.ix_(forb, forb)],
+                degenerate)
+        wf = mult*sum(np.abs(u[fpos, :])**2 for u in comps)
         pole = 0.5/(energies[:, None] + 1j*delta - ef[None, :])
         out["gF"][:, ik, :] = (np.abs(z)**2)[:, None]*(wf@pole.T)
     if not green: # the spectral functions

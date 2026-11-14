@@ -132,32 +132,6 @@ def _exchange_matrices(exchange):
             algebra.todense(m))).real for d, m in exchange.items()}
 
 
-def _require_reciprocal_exchange(J, tol=1e-8):
-    """Raise if the exchange of some bond depends on the end it is seen
-    from, J[d][i,j] != J[-d][j,i], beyond tol times the largest exchange.
-    A missing -d counts as no exchange. The tolerance is the relative one
-    of the reciprocity check of the hoppings in htk/g2h.py."""
-    worst, where = 0., None
-    for d, m in J.items():
-        back = J.get(tuple(-i for i in d), np.zeros_like(m)).T
-        diff = np.abs(m - back)
-        i, j = np.unravel_index(np.argmax(diff), diff.shape)
-        if diff[i, j] > worst:
-            worst, where = diff[i, j], (d, i, j, m[i, j], back[i, j])
-    scale = max([np.max(np.abs(m)) for m in J.values()] + [0.])
-    if worst > tol*scale:
-        d, i, j, forward, backward = where
-        raise ValueError("the exchange is not reciprocal: J = %g from site "
-                "%d to site %d of the cell (%d,%d,%d), and J = %g for the "
-                "same bond from its other end, a mismatch of %.3g; a spin "
-                "model needs J_ij = J_ji on every bond, so Jr(r1,r2) must "
-                "be symmetric in its two arguments and periodic in the unit "
-                "cell, Jr(r_i, r_j+R) = Jr(r_j, r_i-R) for every lattice "
-                "vector R (write a modulation with the fractional "
-                "coordinates of the cell)"
-                % (forward, i, j, d[0], d[1], d[2], backward, worst))
-
-
 def _bond_field_energy(h, J, gutzwiller):
     """The bond field part of the bond functional at the hoppings of h,
     the sum over the bonds of 2|t_ij|^2/(gutzwiller J_ij), with t_ij the
@@ -438,9 +412,10 @@ class SpinonHamiltonian(Hamiltonian):
                         "field or a Zeeman field: the energy of this "
                         "decoupling is the bond functional of the "
                         "hoppings, which has no term for the moments")
-        # the exchange of every bond, as the caller gives it
+        # the exchange of every bond, as the caller gives it. The builder
+        # raises here for a Jr that is not reciprocal
+        # (specialhopping.require_pair_interaction), before the loop
         J = _exchange_matrices(self._bond_exchange(self, 1.0, kwargs))
-        _require_reciprocal_exchange(J)
         kw = dict(kwargs)
         scale = gutzwiller*_DECOUPLINGS[decoupling]
         for name in ("J1", "J2", "J3", "J1x", "J1y", "J1z"):

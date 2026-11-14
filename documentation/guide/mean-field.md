@@ -315,7 +315,9 @@ neighbors, with each bond counted once. The keywords of
   $V_1$ for first neighbors and zero beyond is the same calculation as `V1`.
   The pair of a site with itself is included, so $V_r(0)$ acts as an onsite
   $U=V_r(0)$; a function meant only for bonds must return zero at zero
-  distance.
+  distance. A pair of sites has one interaction, so `Vr` must give the same
+  real number from the two ends of a pair. A modulation of `Vr` must then
+  have the period of the unit cell, otherwise you get an error.
 - `rcut`: the range of `Vr`, 5 by default in a periodic system. Whole shells
   of pairs at the same distance are kept or dropped, so the interaction keeps
   the symmetry of the lattice. In a finite system all pairs are kept.

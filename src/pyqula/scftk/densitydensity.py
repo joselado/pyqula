@@ -254,7 +254,7 @@ def dm_sparse_pairs(v,ds,n,has_spin=True):
     return pairs
 
 
-def add_pair_interaction(v,g,Vr,rcut=None):
+def add_pair_interaction(v,g,Vr,rcut=None,name="Vr"):
     """Add the pair interaction Vr(r_i,r_j) of every pair of sites up to
     rcut (specialhopping.distance_cut_interaction) to the interaction
     dictionary v of a mean-field calculation, in place, and return v.
@@ -277,9 +277,15 @@ def add_pair_interaction(v,g,Vr,rcut=None):
     the Sz_i Sz_j sign pattern, an onsite (Jr(0)/2) S_i.S_i; see
     spinspin._build_v for what that is at the mean-field level. A
     function meant as a bond coupling only has to return zero at zero
-    distance."""
+    distance.
+
+    A pair has one coupling: a Vr that gives two numbers for the two ends
+    of a pair, or one that is not real and finite, raises
+    (specialhopping.require_pair_interaction, with name the keyword of the
+    caller, Vr or Jr, in the message)."""
     from .. import specialhopping
-    for d,m in specialhopping.distance_cut_interaction(g,Vr,rcut=rcut).items():
+    for d,m in specialhopping.distance_cut_interaction(g,Vr,rcut=rcut,
+            name=name).items():
         v[d] = v[d] + m/2. if d in v else m/2.
     return v
 

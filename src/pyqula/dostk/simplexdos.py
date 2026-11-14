@@ -564,6 +564,17 @@ def dos_triangle_counted(h,energies,nk=100,delta=0.,operator=None):
 # number: it was twice as fast as one per field for the 72 fields of the
 # LDOS of an 8-band supercell, and about half as fast for the 32 band
 # energies of a 32-band supercell, see future_development/qtci_dos_green.md
+#
+#
+# The tolerance of an interpolation is relative to the largest value of
+# what it interpolates, so the result should not depend on the zero or on
+# the unit of energy. In both routes the band energies are the centred
+# fields: each band is measured from the middle of its own range on the
+# coarse scan, so its tolerance is relative to its width and not to its
+# position, and a flat band is recognized as a constant. In the LDOS the
+# band energies are also one family, divided by the largest of them, since
+# they share the interpolation with the site weights, which have no unit
+# and are left as they are.
 from ..qtcitk.meshfields import qtci_fields
 from ..qtcitk.meshfields import qtci_stacked_fields,stacked_maxbonddim
 
@@ -574,8 +585,13 @@ def dos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
     in 2D, the tetrahedron integration on a 2^R x 2^R x 2^R mesh in 3D (nk
     rounded up to a power of two), with the band energies (and the
     weights, with an operator) reconstructed from a QTCI of each field
-    instead of computed at every point. ordering is the bit ordering of
-    the quantics mesh, see qtcitk.meshfields"""
+    instead of computed at every point. The tolerance is relative to the
+    largest value of each field, with each band energy measured from the
+    middle of its own range on a coarse scan: it is then relative to the
+    width of the band, whatever the position of the band and whatever
+    constant is added to the onsite energies. A flat band is a constant
+    and is not interpolated. ordering is the bit ordering of the quantics
+    mesh, see qtcitk.meshfields"""
     check_broadening(delta)
     dim = h.dimensionality
     if dim not in (2,3):
@@ -591,7 +607,7 @@ def dos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
         return np.concatenate([es,W[:,:,0].real],axis=1)
     nf = nb if operator is None else 2*nb
     vals,ncalls,ranks = qtci_fields(evaluate,R,nf,tolerance=tolerance,
-            dim=dim,ordering=ordering)
+            dim=dim,ordering=ordering,centred=np.arange(nb))
     es = np.ascontiguousarray(vals[:,:nb])
     if operator is None: W = np.ones((len(es),nb,1),dtype=np.complex128)
     else: W = vals[:,nb:,None].astype(np.complex128)
@@ -636,11 +652,15 @@ def ldos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
     """The local DOS of ldos_triangle_counted on a 2^R x 2^R mesh (nk
     rounded up to a power of two), with the band energies and the weight of
     every band on every site reconstructed from one QTCI of all the fields
-    at once, in 2D. The tolerance is relative to the largest value of any
-    field. The band energies enter that interpolation measured from their
-    mean over the Brillouin zone, Re Tr(H_0)/n, and the mean is added back
-    afterwards, so a constant shift of every onsite energy does not loosen
-    the tolerance of the weights"""
+    at once, in 2D. The tolerance of that interpolation is relative to
+    the largest value it meets, so the band energies enter it without a
+    zero and without a unit: each band is measured from the middle of its
+    own range on a coarse scan, and all of them are divided by the largest
+    of these values. A constant shift of every onsite energy and a change
+    of the unit of energy then do not move the tolerance. The weights have
+    no unit and enter as they are, so weights that vanish up to rounding
+    (the sz weights without magnetism) stay rounding noise and cost
+    nothing"""
     check_broadening(delta)
     if h.dimensionality!=2:
         raise NotImplementedError("the qtci integration of the LDOS is only "
@@ -650,16 +670,14 @@ def ldos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
     fields = _Fields(h,kind="site",operator=operator)
     nb = h.intra.shape[0]
     ns = fields.sites.shape[1]
-    from .. import algebra
-    # the mean of the band energies, exact: the hoppings to other cells
-    # average to zero over the Brillouin zone
-    e0 = float(np.trace(algebra.todense(h.intra)).real)/nb
     def evaluate(ks):
         es,W = fields(ks)
-        return np.concatenate([es-e0,W.real.reshape(len(es),nb*ns)],axis=1)
+        return np.concatenate([es,W.real.reshape(len(es),nb*ns)],axis=1)
+    bands = np.arange(nb) # the band energies, the first nb fields
     vals,ncalls,ranks = qtci_stacked_fields(evaluate,R,nb*(1+ns),
-            tolerance=tolerance,maxbonddim=stacked_maxbonddim)
-    es = np.ascontiguousarray(vals[:,:nb]+e0)
+            tolerance=tolerance,maxbonddim=stacked_maxbonddim,
+            centred=bands,families=[bands])
+    es = np.ascontiguousarray(vals[:,:nb])
     W = np.ascontiguousarray(vals[:,nb:].reshape(len(es),nb,ns)
             ).astype(np.complex128)
     energies = np.asarray(energies,dtype=np.float64)

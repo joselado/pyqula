@@ -415,32 +415,9 @@ def test_non_reciprocal_exchange_raises():
             SpinonHamiltonian(g).get_mean_field_hamiltonian(Jr=J, rcut=1.5,
                     nk=10, **kw)
         assert "mismatch of 0.4" in str(err.value), str(err.value)
-        # the message names the exchange of the bond from its two ends
-        assert "J = 1.2" in str(err.value) and "J = 0.8" in str(err.value)
-
-
-def test_reciprocity_check_compares_the_two_ends_of_every_bond():
-    """The check compares J[d][i,j] with J[-d][j,i]. A direction whose
-    opposite is absent is a bond seen from one end only, so it is a
-    mismatch, and so is a cell matrix that is not symmetric. The tolerance
-    is relative to the largest exchange."""
-    from pyqula.spinon import _require_reciprocal_exchange
-    m = np.array([[0., 1.], [0.5, 0.]])
-    off = np.array([[0., 1.], [0., 0.]])
-    _require_reciprocal_exchange({}) # no exchange at all
-    _require_reciprocal_exchange({(0, 0, 0): m + m.T, (1, 0, 0): m,
-                                  (-1, 0, 0): m.T})
-    for J in ({(1, 0, 0): m}, # the opposite direction is absent
-              {(0, 0, 0): m}, # not symmetric inside the cell
-              {(1, 0, 0): m, (-1, 0, 0): m}): # not transposed
-        with pytest.raises(ValueError, match="not reciprocal"):
-            _require_reciprocal_exchange(J)
-    # 1e-4 on an exchange of 1e6 is roundoff, 1e-10 on one of 1e-6 is not
-    _require_reciprocal_exchange({(1, 0, 0): 1e6*m,
-                                  (-1, 0, 0): 1e6*m.T + 1e-4*off})
-    with pytest.raises(ValueError, match="not reciprocal"):
-        _require_reciprocal_exchange({(1, 0, 0): 1e-6*m,
-                                      (-1, 0, 0): 1e-6*m.T + 1e-10*off})
+        # the message names the exchange of the bond from its two ends,
+        # with the keyword it was given with
+        assert "Jr = 1.2" in str(err.value) and "Jr = 0.8" in str(err.value)
 
 
 def modulated_dimer_chain():
@@ -564,9 +541,9 @@ def chain_in_field(b, J1=1.0, T=0.1, weiss=None, gutzwiller=1.0):
 def test_bond_states_take_the_fast_routes_of_the_bubble(triangular):
     """The bubble of chitk.localspinchi dresses a spin-degenerate bond
     state block by block when its vertex has one block per spin component,
-    and contracts the two spins apart for a state in a field along z; both
-    checks are structural, so a converged bond state must pass them
-    exactly"""
+    and contracts the two spins apart for a state in a field, along z or
+    not; the checks are structural, so a converged bond state must pass
+    them exactly"""
     from pyqula.chitk import localspinchi, rpa, spinchi
     h = dirac(triangular)[0]
     n = len(h.geometry.r)
@@ -577,6 +554,17 @@ def test_bond_states_take_the_fast_routes_of_the_bubble(triangular):
     hz = chain_in_field(0.1)
     assert hz.weiss is True
     assert localspinchi._route(hz) == localspinchi._COLLINEAR
+    assert localspinchi._route_frame(hz) == (localspinchi._COLLINEAR, None)
+    # a field that is not along z: the Zeeman and the Weiss field of the
+    # converged state are along one direction, so the route is the
+    # collinear one in the spin frame of the field
+    b = np.array([0.06, -0.03, 0.07])
+    hn = chain_in_field(b)
+    assert hn.weiss is True
+    assert localspinchi._route(hn) == localspinchi._COLLINEAR
+    route, (U, R) = localspinchi._route_frame(hn)
+    assert np.allclose(np.abs(R[:, 2]), np.abs(b)/np.linalg.norm(b),
+                       atol=1e-8)
 
 
 def test_static_rpa_is_the_derivative_of_the_weiss_loop():

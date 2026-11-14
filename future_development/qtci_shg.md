@@ -540,3 +540,35 @@ of 800 instead of 400.
   delta = 1e-7 on the three flat bands of the tests (energies 0.5 and 0.7), in both kernels.
   The series now keeps its first-order term there too, which costs one more term per
   cluster, and the test above includes the exactly flat bands.
+- **The two points the review left to a decision (decided 14 November 2026).** The
+  first-order term of the series for equal nodes stays. It is not a new branch: the case
+  of equal nodes now keeps the term that the series of close nodes already keeps, for the
+  same reason, the rounded mean. It costs one more term per such cluster, and
+  `test_bands_flatter_than_the_broadening` pins it in both kernels, where the exactly flat
+  bands lose 1.1e-9 of the largest value without it.
+
+  The default source kernel keeps its rule on delta, and the port of the energy bins is
+  not started. The loss is a fraction of the peak of the spectrum, 5e-11 at the delta of
+  an optical spectrum and up to 5e-9 at delta = 1e-6 and 2e-7 at delta = 1e-7, and only
+  for bands whose spread on a triangle is between delta/4 and a few delta. It is seen in
+  the values far from the resonances of such bands, and the docstring of
+  `shg_conductivity` says so. The route to the root that the review named does not remove
+  a tuned number. `kubosimplex.py` still decides with a budget which simplices leave the
+  vertex form (`_tol = 3e-11` of the peak of the simplex, and `_budget = 1e-2` of it for
+  the split along the Newton table). Its energy bins and its sets of point sources only
+  make that budget cheap, where the budget of 3e-9 tried here cost 2.6 times. So the port
+  is the cure that was dropped plus the far field that pays for it, and it is a rewrite of
+  the default kernel: the moments of a prism piece around the centre of an energy bin, for
+  the two families of coefficients (plain and times 1/z), the sets of point sources with
+  one decision per set and frequency, the split of a kept simplex, and the compensated
+  sum. It needs its own review, and timing tables up to nk = 1024 that do not fit a shared
+  workstation, so it waits for a sign-off. A rule with no budget at all exists in
+  principle: every cluster by its series far from a frequency, summed through the bins,
+  and by its divided difference close to it, which are the branches of the direct sum. It
+  gives up the vertex form, which merges the simplices that share a k-point, and its cost
+  was not estimated by a run. A keyword on the public call that selects the direct sum was
+  considered and not added: the direct sum is about 100 times slower (38 s against 0.31 s
+  at nk = 64 and 66 frequencies on the three-band model), and it would put a choice of
+  kernel on a public method for one corner. `_sigma_from_fields(kernel="simplices")` stays
+  the exact reference. What would decide the port is a calculation that needs the response
+  far from the resonances of nearly flat bands at a delta of 1e-6 or below.

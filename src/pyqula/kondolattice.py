@@ -10,7 +10,7 @@ P. Coleman, "Heavy Fermions: electrons at the edge of magnetism",
 arXiv:cond-mat/0612006, Sec. II.C ("The Large N Kondo Lattice", Eq.
 65-99), this is decoupled in the large-N (here N=2, spin-1/2) saddle-point
 approximation into a self-consistent hybridization field
-V_j = -(J/2) <f_j^dagger c_j> (a composite fermion, "half electron, half
+V_j = -(J/2) <c_j^dagger f_j> (a composite fermion, "half electron, half
 spin-flip", Eq. 100-102) plus a Lagrange multiplier lam_j enforcing
 <f_j^dagger f_j> = 1 -- see scftk/kondolattice.py for the SCF
 loop and the exact equations it implements.

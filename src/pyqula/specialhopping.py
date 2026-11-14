@@ -152,10 +152,129 @@ def distance_hopping_matrix(vs,ds):
         return distance_hopping_matrix_jit(r1,r2,vs,ds*ds,out) 
     return mgenerator
 
-def distance_cut_interaction(g,Vr,rcut=None):
+def _show_coupling(x):
+    """A coupling as text: a real one as a number"""
+    return "%g"%x.real if x.imag==0. else str(x)
+
+
+def _pair_text(d,i,j):
+    return ("from site %d to site %d of the cell (%d,%d,%d)"
+            % (i,j,d[0],d[1],d[2]))
+
+
+def require_pair_interaction(v,name="Vr",tol=1e-8):
+    """Raise unless v is an interaction that a pair of sites can have: every
+    entry finite, real, and the same from the two ends of the pair
+    (require_reciprocal_interaction). v is a {direction: matrix} dictionary
+    between the sites, dense or sparse, and name is the keyword the caller
+    gave the interaction with (Vr, Jr), for the message.
+
+    The order matters. An infinite entry (a Coulomb tail without a soft
+    core at zero distance) would be the scale of the two relative
+    tolerances and switch them off, and a NaN hides the largest mismatch.
+    The coupling of n_i n_j or of S_i.S_j is a real number, and for a real
+    v the transpose of the reciprocity check is the right comparison: with
+    a complex one a purely imaginary coupling would pass it, and a
+    Hermitian one would fail it for the wrong reason."""
+    from scipy.sparse import csr_matrix
+    v = {tuple(int(x) for x in d): csr_matrix(m).tocoo() for d,m in v.items()}
+    for d,m in v.items():
+        bad = np.nonzero(~np.isfinite(m.data))[0]
+        if len(bad)>0:
+            k = bad[0]
+            raise ValueError(("%s is not finite: %s = %s %s; a function "
+                "that diverges at zero distance must return a number there "
+                "(a soft core, or zero for a coupling between different "
+                "sites only)") % (name,name,_show_coupling(m.data[k]),
+                _pair_text(d,m.row[k],m.col[k])))
+    scale = max([np.max(np.abs(m.data)) for m in v.values() if m.nnz>0]+[0.])
+    for d,m in v.items():
+        if m.nnz==0: continue
+        k = np.argmax(np.abs(m.data.imag))
+        if np.abs(m.data[k].imag)>tol*scale:
+            raise ValueError(("%s must be real: %s = %s %s; the coupling "
+                "of n_i n_j or of S_i.S_j between two sites is a real "
+                "number") % (name,name,_show_coupling(m.data[k]),
+                _pair_text(d,m.row[k],m.col[k])))
+    require_reciprocal_interaction(v,name=name,tol=tol)
+
+
+def require_reciprocal_interaction(v,name="Vr",tol=1e-8):
+    """Raise if the interaction of some pair of sites depends on the end it
+    is seen from, v[d][i,j] != v[-d][j,i], beyond tol times the largest
+    entry. v is a {direction: matrix} dictionary between the sites, dense
+    or sparse, real and finite (require_pair_interaction checks the three
+    together), and a missing -d counts as no interaction. name is the
+    keyword the caller gave the interaction with (Vr, Jr), for the message.
+
+    n_i n_j and S_i.S_j are symmetric, so a pair has one coupling. What
+    reads v does not agree on a v that has two: the Hartree-Fock mean field
+    visits a pair from both ends and so averages them, and the
+    Bethe-Salpeter kernel, the RPA vertex V(q) and the held pattern of a
+    spinon mean field take one direction each, which gives a kernel or a
+    Hamiltonian that is not Hermitian. A function symmetric in its two
+    arguments fails this when it is not periodic in the unit cell (a
+    modulation written with a Cartesian coordinate whose period is not
+    the one of the cell), since the pair is then built from two different
+    cells. The tolerance is the relative one of the reciprocity check of
+    the hoppings in htk/g2h.py."""
+    from scipy.sparse import csr_matrix
+    v = {tuple(int(x) for x in d): csr_matrix(m) for d,m in v.items()}
+    worst,where,scale = 0.,None,0.
+    for d,m in v.items():
+        if m.nnz>0: scale = max(scale,np.max(np.abs(m.data)))
+        back = v.get((-d[0],-d[1],-d[2]),None)
+        diff = m.tocoo() if back is None else (m - back.T).tocoo()
+        if diff.nnz==0: continue
+        k = np.argmax(np.abs(diff.data))
+        if np.abs(diff.data[k])>worst:
+            worst,where = np.abs(diff.data[k]),(d,diff.row[k],diff.col[k])
+    if worst>tol*scale:
+        d,i,j = where
+        back = v.get((-d[0],-d[1],-d[2]),None)
+        forward = _show_coupling(v[d][i,j])
+        backward = _show_coupling(0.j if back is None else back[j,i])
+        raise ValueError(("%s is not reciprocal: %s = %s %s, and %s = %s "
+            "for the same pair from its other end, a mismatch of %.3g; a "
+            "pair of sites has one coupling, so %s(r1,r2) must be symmetric "
+            "in its two arguments and periodic in the unit cell, "
+            "%s(r_i, r_j+R) = %s(r_j, r_i-R) for every lattice vector R "
+            "(write a modulation with the fractional coordinates of the "
+            "cell)") % (name,name,forward,_pair_text(d,i,j),name,backward,
+            worst,name,name,name))
+
+
+def _interaction_matrices(g,Vr,**kwargs):
+    """Vr on every pair of sites that the multicell builder keeps, as a
+    spinless {direction: matrix} dictionary. The builder is the one of the
+    hoppings, and its warning for a function that is not reciprocal gives
+    the advice of a hopping (non_hermitian=True), which is wrong for an
+    interaction: require_pair_interaction raises for it instead. That
+    check of the hoppings also subtracts the values of the two ends, which
+    numpy warns about for an infinite one; require_pair_interaction says
+    what to do with it, so the warning is not shown."""
+    import warnings
+    with warnings.catch_warnings(), np.errstate(invalid="ignore"):
+        warnings.filterwarnings("ignore",message="the hopping function tij "
+                "is not reciprocal")
+        hv = g.get_hamiltonian(has_spin=False,is_multicell=True,tij=Vr,
+                **kwargs)
+    return {tuple(int(x) for x in d): np.array(m,dtype=np.complex128)
+            for d,m in hv.get_hopping_dict().items()}
+
+
+def distance_cut_interaction(g,Vr,rcut=None,name="Vr",onsite=True):
     """The pair interaction Vr(r1,r2) between every pair of sites closer
     than rcut (a pair at exactly rcut is kept), as a spinless
     {direction: matrix} dictionary with m[i,j] = Vr(r_i, r_j + R_d)
+
+    A pair has one coupling, a real and finite number, so Vr must give the
+    same one from the two ends of a pair, Vr(r_i, r_j+R) = Vr(r_j, r_i-R);
+    otherwise this raises (require_pair_interaction), with name the keyword
+    of the caller in the message. onsite=False drops the pair of a site
+    with itself before that check, for a caller that does not use it (the
+    Bethe-Salpeter kernel, since an electron does not interact with
+    itself), so that a tail that diverges at zero distance is taken there.
 
     rcut=None keeps every pair of a finite (0d) geometry, whatever its
     distance, and means rcut=5.0 for a periodic one, the range the
@@ -169,12 +288,14 @@ def distance_cut_interaction(g,Vr,rcut=None):
     lattice. Here every cell that can hold a pair within rcut is built,
     and then every pair beyond rcut is dropped, so each distance shell is
     kept or dropped whole."""
+    def checked(out): # what every exit returns
+        if not onsite: np.fill_diagonal(out[(0,0,0)],0.)
+        require_pair_interaction(out,name=name)
+        return out
     nd = g.dimensionality
     if rcut is None:
         if nd==0: # a finite system has no fringe, every pair is kept
-            hv = g.get_hamiltonian(has_spin=False,is_multicell=True,tij=Vr)
-            return {tuple(int(x) for x in d): np.array(m,dtype=np.complex128)
-                    for d,m in hv.get_hopping_dict().items()}
+            return checked(_interaction_matrices(g,Vr))
         rcut = 5.0
     rcut = float(rcut)
     if not rcut>0.:
@@ -188,23 +309,22 @@ def distance_cut_interaction(g,Vr,rcut=None):
         span = np.max(np.linalg.norm(r[:,None,:]-r[None,:,:],axis=2))
         ncells = int(np.ceil((rcut+span)*np.max(np.linalg.norm(B,axis=0))))+1
     else: ncells = 0
-    hv = g.get_hamiltonian(has_spin=False,is_multicell=True,tij=Vr,
-            cutoff=ncells,rcut=rcut+10*tol)
     out = dict()
-    for d,m in hv.get_hopping_dict().items():
-        d = tuple(int(x) for x in d)
+    for d,m in _interaction_matrices(g,Vr,cutoff=ncells,
+            rcut=rcut+10*tol).items():
         R = d[0]*g.a1 + d[1]*g.a2 + d[2]*g.a3
         dist = np.linalg.norm(r[None,:,:]+R-r[:,None,:],axis=2) # |r_j+R-r_i|
-        m = np.array(m,dtype=np.complex128)
         m[dist>rcut+tol] = 0.
-        if np.max(np.abs(m))>0. or d==(0,0,0): out[d] = m
-    return out
+        # != and not a maximum: a NaN must stay, for the check to see it
+        if np.any(m!=0.) or d==(0,0,0): out[d] = m
+    return checked(out)
 
 
-def add_distance_cut_interaction(v,g,Vr,rcut=None):
+def add_distance_cut_interaction(v,g,Vr,rcut=None,name="Vr",onsite=True):
     """Add the Vr interaction of distance_cut_interaction to the spinless
     {direction: matrix} dictionary v, in place, and return v"""
-    for d,m in distance_cut_interaction(g,Vr,rcut=rcut).items():
+    for d,m in distance_cut_interaction(g,Vr,rcut=rcut,name=name,
+            onsite=onsite).items():
         v[d] = v[d] + m if d in v else m
     return v
 

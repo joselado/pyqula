@@ -98,8 +98,11 @@ already reached once.
   susceptibility that diagonalizes $2n_k^{2d}$ times. All of them were
   repaired on 13 and 14 November 2026 except the default SHG source kernel
   on nearly flat bands, and two optimizations in part; the record lists what
-  the repairs found and what is left open, among it the generic `Vr` and
-  `Jr` that average a function that is not reciprocal.
+  the repairs found, the decisions of 14 November 2026 on what they left
+  open (the generic `Vr` and `Jr` raise when they are not reciprocal, the
+  Kondo-lattice loop reads its density matrix the right way, a 3D
+  embedding has a density matrix, the qtci DOS and LDOS do not depend on
+  the zero or the unit of energy), and what is still open.
 
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
@@ -331,8 +334,11 @@ already reached once.
   the finite-temperature weights in closed form (16 to 19 times faster at
   32^3), contracts every hopping direction with one product, sizes the
   batches by the matrix and repaired the charge of the BdG shell fill; the
-  208-node quadrature is now the main 3D cost at T = 1e-7 (the moment formula
-  is not built).
+  decisions of 14 November 2026: a simplex with no vertex within 40 T of mu
+  takes three nodes of the Gauss rule of -f' instead of 208, exact to
+  rounding, 6 to 34 times faster in the Fermi search and 3 to 10 in the
+  weights at T = 1e-7; the shell vectors keep no cap, and `get_dm` keeps its
+  single product for one direction.
 
 - [`simplex_fermi_search.md`](simplex_fermi_search.md) -- the Fermi search
   of the triangle and tetrahedron integration, `fermi_from_energies`, now a
@@ -454,7 +460,13 @@ already reached once.
   the eigenvectors instead of the band projectors, the 3D self-energy of a
   whole energy sweep from one diagonalization of the mesh, a batch of
   diagonalizations that shrinks as one over the square of the cell size,
-  and the tetrahedra built in place.
+  and the tetrahedra built in place. Since the decisions of 14 November
+  2026 the tetrahedra take a complex energy as a real energy with a
+  broadening, so a 3D embedding has a density matrix (one diagonalization
+  per contour point, 60 to 76 points), `get_dos(mode="Green",
+  gmode="triangle")` sweeps from one diagonalization, and the qtci DOS and
+  LDOS measure each band from the middle of its own range, so they do not
+  depend on the zero or the unit of energy.
 
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
   X-wave nonlinear Drude spin conductivity covers, the measured performance
@@ -590,7 +602,12 @@ already reached once.
   field, the constraint projection, Popov-Fedotov (not a free addition),
   the structure factor at a lattice momentum, the Z2 ansatz,
   exact projection on small clusters, variational Monte Carlo, Schwinger
-  bosons.
+  bosons. Decisions of 14 November 2026: `Vr` and `Jr` raise in every
+  builder when they are not reciprocal, a field in any direction takes the
+  collinear route of the bubble (27.6 s to 4.3 s at 196 sites), the binned
+  local response of `q=None` is left unbuilt with its reason, and the
+  36-site example keeps its origin. Open: the default `nk=60` with `q=None`
+  in 2D.
 
 - [`kondo_tunneling.md`](kondo_tunneling.md) -- tunneling spectra with a
   Kondo peak for the two pseudofermion mean fields: the second and third
@@ -602,6 +619,10 @@ already reached once.
   spinon continuum, a peak on a site with a level at the Fermi energy), the
   cost at 196 sites, and what is left: the README bullet and notebooks, the
   spinon Kondo-Heisenberg loop, the leading logarithms, the potential term.
+  Decisions of 14 November 2026: the Kondo-lattice loop reads the density
+  matrix the right way, which matters with a complex hopping between the
+  moments, and the two k-loops diagonalize one spin block (3.1 s to 0.6 s at
+  196 pairs).
 
 - [`kondo_composite_fermion.md`](kondo_composite_fermion.md) -- the two
   comparisons of arXiv:2302.09701 between matrix product states and the

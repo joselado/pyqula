@@ -29,7 +29,11 @@ Each optimization was timed with the old and the new code back to back, the
 large cases on a compute node, and gives the same numbers to rounding. The repairs
 found thirteen more problems, listed in "What the repairs found", and the last
 section lists what is left open. The repairs were committed on 14 November
-2026.
+2026 (`8518a8e`), and after them the whole suite passes on a compute node, on
+the old and the new code, with the tests marked slow. The choices that the
+repairs left open were decided the same day, see "The decisions of 14 November
+2026": eight of them changed the code, and one of those repaired a bug of the
+Kondo-lattice loop with a complex hopping between the moments.
 
 ## Potential bugs
 
@@ -84,8 +88,9 @@ The two of high severity first, then the medium ones.
   $10^{-8}$, and the message names the worst bond. The old example raises.
   Open: the generic `Vr` and `Jr` of `VJinteraction` and `Vinteraction`
   (`densitydensity.add_pair_interaction`, shared with the BSE and the density
-  response) still average a function that is not reciprocal, with no error. No
-  raise was added there, and that case needs a decision.
+  response) still averaged a function that is not reciprocal, with no error.
+  Decided on 14 November 2026: they raise too, see "The decisions of 14
+  November 2026".
 - **The total energy of `hold="pattern"` on inequivalent bonds is not the one
   of the docstring** (`spinon.py:372`, from `cd5a60d`). The code returns
   $-2A+B$, with $-2A$ the band energy at the held hoppings and
@@ -214,7 +219,7 @@ an entry says otherwise, so the ratios are what matters.
   Done with the cache: every point of the mesh is diagonalized once. On the
   square Kondo lattice at `nk=8` it gives 0.70 s against 0.22 s with one energy
   and 7.4 s against 7.1 s with 200, where the pair loop dominates. The binned
-  route was not built. Record in `spinon_response.md`.
+  route is not built, by decision of 14 November 2026. Record in `spinon_response.md`.
 - **The 3D triangle self-energy diagonalizes the mesh again at every
   energy** (`greentk/selfenergy.py:14-34`, from `95ccd07`).
   `bloch_selfenergy(mode="triangle")` calls `green_triangle` with one energy,
@@ -358,8 +363,9 @@ an entry says otherwise, so the ratios are what matters.
   two spin blocks costs 4 times less.
   Done: a Hamiltonian that does not mix the spins diagonalizes the two spin
   blocks apart. At 196 sites in a field along $z$: 27.1 s and 1.71 GB before,
-  4.0 s and 0.78 GB after, agreeing to $2\times10^{-15}$. A field in another
-  direction still takes the general route. Record in `spinon_response.md`.
+  4.0 s and 0.78 GB after, agreeing to $2\times10^{-15}$. Since the decisions
+  of 14 November 2026 a field in any direction takes this route, in its own spin
+  frame. Record in `spinon_response.md`.
 - **A k-dependent operator is rebuilt once per occupied state**
   (`vev.py:86`, `spectrum.py:209`, from `01cbbe6`). For valley, valley_x,
   valley_y and velocity, `kresolved_orbital_vev` and `ev2d` rebuild the Bloch
@@ -464,7 +470,8 @@ What was done with each one is at the end of its line.
   spectrum of a degenerate state from one spin block, 3.9 s to 2.7 s at 196
   sites, and the bare moment response from $S^+$ alone, 2.4 s to 0.93 s. The
   same half block in the k-loops of `cotunneling.py` and of the composite
-  spectrum was not claimed by the finding and was not done.
+  spectrum was not claimed by the finding; it was done in the decisions of 14
+  November 2026.
 - `inplane_valley.py:95`: a vertical first-neighbor bond gives 0/0 and NaN
   entries with no error. Repaired: the vertical bonds are left out, and the
   operators of a stack are those of its layers pulled apart.
@@ -498,9 +505,11 @@ What was done with each one is at the end of its line.
 - **A complex energy in `mode="triangle"` of the Bloch selfenergy was cast to
   its real part** with only a ComplexWarning, so `Embedding.get_gf` at a
   complex128 energy returned the bulk at the real energy and the Dyson step at
-  the complex one. It raises a `ValueError` now. No public routine returned a
-  wrong number through it: the density-matrix contour, the one caller with a
-  complex energy, stopped at its first advanced point.
+  the complex one. It raised a `ValueError` after the repair, and since the
+  decisions of 14 November it is taken as the real energy with the broadening
+  Im z, see `qtci_dos_green.md`. No public routine returned a wrong number
+  through the cast: the density-matrix contour, the one caller with a complex
+  energy, stopped at its first advanced point.
 - **The tests of the embedding with an operator had no defect**: the defect
   was selected at $x=0$, where the honeycomb lattice has no site. It is on the
   first site now.
@@ -524,29 +533,130 @@ What was done with each one is at the end of its line.
   call was for another Hamiltonian. Both repaired, each with a test that fails
   without the repair.
 - **The generic `Vr` and `Jr` average a function that is not reciprocal**,
-  see the reciprocity entry above. Open, it needs a decision.
+  see the reciprocity entry above. Decided, it raises.
 - **The Kondo-lattice loop uses the density matrix transposed**
   (`scftk/kondolattice.py`), so a complex hybridization relaxes to a real one.
   The solutions are right, since each $V_j$ can be made real with the phase of
-  its own f fermion. Recorded in `kondo_tunneling.md` with a candidate edit,
-  not run.
+  its own f fermion, but not with a complex hopping between the moments.
+  Repaired in the decisions of 14 November 2026.
+- **The conftest of the vendored qutecipy tests marked every test of the
+  session slow** (`tests/qutecipy/conftest.py`, from `8568da9`), since its
+  `pytest_collection_modifyitems` receives the items of the whole session. So
+  `pytest tests -m "not slow"`, the command its own docstring gives, selected
+  nothing, and a pytest plugin that skips slow tests skipped every test
+  collected next to `tests/qutecipy`. Found by the whole-suite run of 14
+  November. Repaired: the conftest marks the tests of its own directory only,
+  and `tests/guards/test_slow_marker_scope.py` fails on the old conftest.
+
+## The decisions of 14 November 2026
+
+The choices that the repairs left open were decided on 14 November 2026, after
+the commit of the repairs (`8518a8e`), in three groups by the files they touch.
+Each change of the code has a test that fails on `8518a8e`.
+
+- **The default SHG source kernel stays as it is.** The route of
+  `kubosimplex.py` keeps a tuned budget and only makes it cheap with the energy
+  bins, so the port is a rewrite of the default kernel and waits for a
+  sign-off. The reasons are in `qtci_shg.md`.
+- **The first-order term for equal nodes stays.** It is the term the series of
+  close nodes already keeps, and a test pins it in both kernels.
+- **The scale per family of the qtci conductivity stays.** Five seeds on the
+  disordered supercell give an error of $4.3\times10^{-6}$ to
+  $2.0\times10^{-5}$ without it and $8.6\times10^{-6}$ to $1.6\times10^{-5}$
+  with it, and the fields are resolved as well or better. Reverting it brings
+  back the dependence on the unit of length. The scale now lives in the keyword
+  `families` of `qtcitk/meshfields.py`, which the LDOS uses for its band
+  energies. Its time on an idle machine is not measured.
+- **The qtci DOS and LDOS measure each band from the middle of its own range**
+  (the low finding on `simplexdos.py:595`), not with one scale per field. The
+  qtci LDOS depended on the unit of energy, by $2\times10^{-4}$ for a model in
+  meV, and the qtci DOS on the zero of energy, by $3.7\times10^{-4}$ at a shift
+  of 100. Now the tolerance of a band is relative to its width, whatever its
+  position. The LDOS divides the band energies by the largest of them and leaves
+  the site weights as they are, since they have no unit. A flat band is not
+  interpolated. A first shape, with the zone mean and a scale of the weights,
+  was repaired after a review: it loosened a band far from the mean by 50 times
+  and brought weights of rounding noise to order one, so that the LDOS with
+  `operator="sz"` on a non-magnetic lattice took the whole mesh.
+- **`get_dos(mode="Green", gmode="triangle")` sweeps from one
+  diagonalization**, through `green.green_operator_batch`. It is 1.3 times
+  faster on four-orbital diamond at `nk=30` and 2.9 times on a 16-orbital cubic
+  supercell at `nk=16`, with the same DOS to $7\times10^{-15}$.
+- **The tetrahedra take a complex energy as the real energy with its imaginary
+  part as the broadening**, so a 3D embedding has a density matrix, which no
+  mode gave before. The contour pays one diagonalization of the mesh per point,
+  60 to 76 points, and the pristine insulator gives the occupied projector to
+  $1.3\times10^{-4}$ at `delta=1e-3`. A negative broadening gives the advanced
+  function, and a broadening that is zero to rounding raises. The four modes
+  that stop in 3D now say to use `mode="triangle"`, as the `gf_mode` of an
+  Embedding. A mesh shared by the whole contour is open in
+  `qtci_dos_green.md`.
+- **The single product of `get_dm` for one direction stays.** Both routes do the
+  same number of multiplications there, and the single product is the one that
+  BLAS threads. The projector route with several directions on many threads is
+  still not measured.
+- **The finite-temperature weights take the three nodes of the Gauss rule of
+  $-f'$** on a simplex with no vertex within $40T$ of $\mu$, exact to rounding,
+  in the weights and in the charge kernel. At $T=10^{-7}$ the Fermi search is 6
+  to 34 times faster and the weights 3 to 10. The shell vectors keep no cap,
+  since no run has needed one. Record in `tetrahedron_density_matrix.md`.
+- **`Embedding.multildos` keeps honouring `energies=`.** `Embedding.multidos`
+  and `h.get_multildos()` use the same name for the grid.
+- **The generic `Vr` and `Jr` raise too when they are not reciprocal.** What
+  reads the interaction does not agree on a function with two values: the
+  Hartree-Fock field averages the two ends of a pair, and the BSE kernel and the
+  $V(q)$ of the RPA take one end each, which is not Hermitian. One check,
+  `specialhopping.require_pair_interaction`, runs in the builder that the mean
+  field, the BSE kernel, the density response and `Jr` share, and in the sparse
+  builder, and the spinon path has no check of its own any more. It asks that
+  every value is finite, real and the same from the two ends of a pair. Before,
+  a ramp that is symmetric in its two arguments and not periodic gave no warning
+  and a mismatch of 0.4 in the BSE kernel. The review of the decision found that
+  an imaginary `Vr` went through and that an infinite value at zero distance
+  switched the check off; both raise now. The BSE kernel drops the pair of a
+  site with itself before the check, so it still takes a Coulomb tail without a
+  soft core. A periodic modulation passes.
+- **The Kondo-lattice loop reads the element $[c,f]$ of the density matrix.**
+  A complex seed keeps its phase. With a complex hopping between the moments
+  the old loop returned a state that was not a solution, with $V$ off by
+  $4.5\times10^{-2}$ and the energy 0.036 too high; with a real $V$ nothing
+  moves. Record in `kondo_tunneling.md`.
+- **The k-loops of `cotunneling.py` and of the composite spectrum diagonalize
+  one spin block** of a spin-degenerate state, in one function shared by the
+  two loops. With 196 Kondo pairs the cotunneling spectrum goes from 3.12 s to
+  0.57 s and the composite spectrum from 3.17 s to 0.65 s, agreeing to
+  $2\times10^{-13}$.
+- **A field in any direction takes the collinear route of the spin bubble**, in
+  its own spin frame, when every hopping depends on the spin through
+  $\hat n\cdot\vec\sigma$ alone. At 196 sites in a field $(0.2,-0.1,0.25)$:
+  27.6 s and 1.77 GB before, 4.3 s and 0.86 GB after, agreeing to
+  $1.3\times10^{-15}$. A field that turns from site to site takes the general
+  route.
+- **The binned local response of `q=None` is not built.** It covers only the
+  bare response, changes the numbers at the level of the bin and needs a new
+  option. The docstrings and the guide now say that the cost of `q=None` grows
+  as the square of the number of k-points.
+- **The origin of the 36-site spinon example stays off the symmetry points.**
+  Counted again, the state in the field has 36 different moments with it and 12
+  with the origin at the center. Record in `spinon_response.md`.
 
 ## What is left open
 
-- The default SHG source kernel and nearly flat bands at small `delta`, with
-  the alternatives in `qtci_shg.md`.
-- `get_dos(mode="Green", gmode="triangle")`, a two-line edit that waits for
-  `dos.py`, and the density-matrix contour of a triangle embedding.
-- The moment formula of the finite-temperature weights, now the main cost of a
-  3D triangle iteration at $T=10^{-7}$, a memory cap on the shell vectors of
-  the BdG shell filling, and the one-product density matrix with many threads.
-- The rescaling of every field to order one in the qtci DOS and LDOS, and the
-  error and the time of the per-family scale of the qtci conductivity on a
-  disordered supercell, which two seeds do not settle.
-- The reciprocity of the generic `Vr` and `Jr`, and the transposed density
-  matrix of the Kondo-lattice loop.
-- The binned local response of `q=None`, a rotation of a field off $z$ to the
-  collinear spinon route, and the half block in the k-loops of
-  `cotunneling.py` and of the composite spectrum.
-- The whole suite was not run after the repairs; each group ran the files it
-  touched and their neighbours, on the old and the new code.
+- The port of the energy bins of `kubosimplex.py` to the default SHG source
+  kernel, which waits for a sign-off (`qtci_shg.md`).
+- One diagonalization of the mesh for the whole density-matrix contour of a 3D
+  embedding, which now pays one per point, and `gf_mode="triangle"` as the
+  default of a 3D Embedding, whose present default always raises: a change of a
+  default, and at `nk=100` it keeps the eigenvectors of $10^6$ k-points.
+- A memory cap on the shell vectors of the BdG shell filling, and the projector
+  route of the density matrix with several directions on many threads.
+- The qtci LDOS with an operator takes 20% to 44% more points than before for
+  the same tolerance, since the energies are resolved against the width of a
+  band, and an operator with a large norm loosens its energies. The weights of
+  the qtci DOS that vanish up to rounding are still interpolated. The time of the
+  per-family scale of the qtci conductivity on an idle machine is not measured,
+  and the raw band energies of the qtci density matrix, which a constant shift
+  should loosen as it did the DOS, were read and not run.
+- The binned local response of `q=None`, not built by decision
+  (`spinon_response.md`), and the default `nk=60` of `get_moment_spinchi` with
+  `q=None`, about 6 hours in 2D by extrapolation.

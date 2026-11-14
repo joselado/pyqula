@@ -85,7 +85,9 @@ def moment_spinchi(h, q=None, energies=np.linspace(0.0, 4.0, 200), U=None,
     h: Hamiltonian of a Kondo lattice mean field, the one returned by
         KondoLatticeHamiltonian.get_mean_field_hamiltonian (spinful).
     q: momentum in units of the reciprocal lattice vectors. None is the
-        local response, the average over the q of the k-mesh. A finite (0D)
+        local response, the average over the q of the k-mesh, whose cost
+        grows as the square of the number of k-points (every pair of a k
+        and a q of the mesh is contracted at every energy). A finite (0D)
         system has no momentum and gives the same response for any q.
     energies: frequencies.
     U: residual interaction U'(q) of the paper, dressed in the random phase
@@ -137,9 +139,7 @@ def _moment_response(chi, q, U, nf):
     interaction U, see moment_spinchi"""
     # U S_q.S_-q is the exchange 2U between the spin components
     W = np.kron(np.identity(3), 2.*_residual_at_q(U, q, nf))
-    chi = localspinchi._dyson(chi, W)
-    x, y = slice(0, nf), slice(nf, 2*nf)
     # S^+ = Sx + i Sy on the first index, S^- = Sx - i Sy on the second:
     # in the pair sum of this library the operator of the first index takes
     # the occupied state to the empty one, so S^+ is the one that excites
-    return chi[:, x, x] + chi[:, y, y] - 1j*chi[:, x, y] + 1j*chi[:, y, x]
+    return localspinchi._raising_part(localspinchi._dyson(chi, W))

@@ -36,8 +36,8 @@ inverted per energy and a cell of a few hundred Kondo pairs is affordable.
 Energies are measured from the chemical potential of the self-consistent
 loop (the loop shifts the Fermi energy to zero)."""
 import numpy as np
-from scipy import linalg
 
+from .. import algebra
 from ..kpointstk import kmesh as kmeshtk
 from . import pairs as pairstk
 
@@ -126,7 +126,8 @@ def cotunneling_didv(h, energies=None, tc=1.0, tf=1.0, J=None, nk=20,
     Returns (energies, dIdV) with dIdV of shape (number of pairs selected,
     number of energies), or one array when site is a single index, plus the
     dictionary of parts (same shape) when return_parts=True. One
-    diagonalization per k-point is done."""
+    diagonalization per k-point is done, of the block of one spin when the
+    Hamiltonian is the same for the two spins and does not mix them."""
     pairs = _get_pairs_and_check(h)
     sites = _select_sites(site, len(pairs))
     if delta <= 0.0:
@@ -140,9 +141,13 @@ def cotunneling_didv(h, energies=None, tc=1.0, tf=1.0, J=None, nk=20,
     hkgen = h.get_hk_gen()
     ks = kmeshtk.kmesh(h.dimensionality, nk=nk)
     nsel = len(sites)
+    degenerate = pairstk.is_spin_degenerate(h) # one spin block is enough
     spectra = None # cc, ff, cf (complex) on the padded energy grid
     for k in ks:
-        es, vs = linalg.eigh(np.asarray(hkgen(k))) # one diagonalization
+        # weights of every eigenstate on c and f of each pair, over spin,
+        # from one diagonalization
+        es, wcc, wff, wcf = pairstk.pair_weights(
+                np.asarray(algebra.todense(hkgen(k))), ci, fi, degenerate)
         if spectra is None:
             energies = _energy_grid(energies, es, delta, ne, emax)
             de = (energies[-1]-energies[0])/(len(energies)-1)
@@ -150,16 +155,6 @@ def cotunneling_didv(h, energies=None, tc=1.0, tf=1.0, J=None, nk=20,
             pad = 0 if kernel is None else (len(kernel)-1)//2
             egrid = energies[0]+de*np.arange(-pad, len(energies)+pad)
             spectra = np.zeros((3, nsel, len(egrid)), dtype=np.complex128)
-        # weights of every eigenstate on c and f of each pair, over spin
-        wcc = np.zeros((nsel, len(es)))
-        wff = np.zeros((nsel, len(es)))
-        wcf = np.zeros((nsel, len(es)), dtype=np.complex128)
-        for s in (0, 1):
-            pc = vs[2*ci+s, :]
-            pf = vs[2*fi+s, :]
-            wcc += np.abs(pc)**2
-            wff += np.abs(pf)**2
-            wcf += pc*np.conjugate(pf)
         lor = (delta/np.pi)/((egrid[:, None]-es[None, :])**2+delta**2)
         spectra[0] += wcc@lor.T
         spectra[1] += wff@lor.T

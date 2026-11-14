@@ -10,8 +10,10 @@ The Coqblin-Schrieffer Kondo interaction at site j, Eq. 73,
     H_I(j) = (J/N) S_ab(j) c^dagger_jb c_ja,   S_ab(j) = f^dagger_ja f_jb - (n_f/N) delta_ab
 
 is Hubbard-Stratonovich decoupled (Eq. 76-78) into a hybridization field
-V_j = -(J/N) <f^dagger_ja c_ja> (summed over a, the N=2 spin components for
-a spin-1/2 local moment) coupling the localized f-pseudofermion to the
+V_j = -(J/N) <c^dagger_ja f_ja> (summed over a, the N=2 spin components for
+a spin-1/2 local moment; the stationary point in conj(V_j) of the mean-field
+energy below, where V_j multiplies f^dagger_j c_j) coupling the localized
+f-pseudofermion to the
 conduction electron at the same site, plus a Lagrange multiplier lam_j
 enforcing the local constraint <f^dagger_ja f_ja> = Q (=1 for N=2), giving
 the mean-field Hamiltonian (Eq. 81/83)
@@ -51,7 +53,7 @@ def hs_constant(V, J):
     Decoupling -g X^dagger X (g = J/N, X = sum_a c^dagger_a f_a) as
     Vbar X + X^dagger V + |V|^2/g reproduces the interaction only with the
     constant |V|^2/g = N|V|^2/J -- the same g = J/N that the SCF update
-    V <- -(J/N)<f^dagger c> below already uses, so the two have to carry
+    V <- -(J/N)<c^dagger f> below already uses, so the two have to carry
     the same N."""
     if J == 0.0: return 0.0 # no interaction, no constant
     return N_SPIN*np.sum(np.abs(V)**2)/J
@@ -153,7 +155,13 @@ def kondo_lattice_mean_field(h0, pairs, J=1.0, filling=0.5, mf=None, nk=8,
         dm = h.get_density_matrix(nk=nk, T=T, ds=[(0, 0, 0)])[(0, 0, 0)]
         nfocc = np.array([(dm[2*fi, 2*fi] + dm[2*fi+1, 2*fi+1]).real
                 for (ci, fi) in pairs])
-        A = np.array([dm[2*fi, 2*ci] + dm[2*fi+1, 2*ci+1]
+        # sum_s <c^dagger_s f_s>: get_density_matrix returns the transpose
+        # of the density matrix, dm[i,j] = <c^dagger_i c_j>, so this is the
+        # element [c,f]. With [f,c] the target is conj(V), which is the same
+        # for a real V, relaxes a complex seed to a real one, and is not a
+        # solution when the phases of V cannot be removed (a complex
+        # hopping between the moments)
+        A = np.array([dm[2*ci, 2*fi] + dm[2*ci+1, 2*fi+1]
                 for (ci, fi) in pairs])
         return h, dm, A, nfocc
 

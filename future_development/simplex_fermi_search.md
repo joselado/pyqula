@@ -177,8 +177,12 @@ rounding. On the cubic spinful ferromagnet at 32^3 and T = 1e-7, the three
 charge evaluations of the search are now the largest part of an
 iteration, 0.74 s of 1.2 s: at that temperature every simplex cut by the
 Fermi surface is integrated at 208 nodes, where the exact moment formula
-of a polynomial piece would need none. It was not built, since it moves
-the charge and the weights together by up to the quadrature error.
+of a polynomial piece would need none. It was not built then, since it moves
+the charge and the weights together by up to the quadrature error. Since
+14 November 2026 the charge and the weights take three nodes on such a
+simplex, through one shared test, and the search at T = 1e-7 is 6 to 34
+times faster (see "Three nodes when no vertex is in the window" in
+`tetrahedron_density_matrix.md`).
 
 The review of these repairs changed one thing in the search. The next
 density matrix recognizes the searched Hamiltonian on its Bloch matrices,

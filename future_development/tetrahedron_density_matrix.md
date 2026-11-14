@@ -2064,7 +2064,9 @@ loaded.
   19 times faster at 32^3 (see "The weights in closed form"); what is
   left of a 3D mean field at T > 0 is the quadrature of the charge and of
   the weights at 208 nodes per simplex cut by the Fermi surface, which the
-  moment formula of that section would remove at T = 1e-7.
+  moment formula of that section removes at T = 1e-7: since 14 November
+  2026 three nodes do it (see "Three nodes when no vertex is in the
+  window").
 - Bands that cross are interpolated with a kink, as in the simplex DOS.
 - qtci for a metal is built, as the triangle on a quantics-interpolated
   mesh (see qtci above). What is open there: on a two-orbital model it
@@ -2173,7 +2175,9 @@ w(T) = w0 + (pi^2 T^2/6) w0'' + (7 pi^4 T^4/360) w0''''. That would replace
 the 200 evaluations by one at T = 1e-7, but it changes the weights by the
 quadrature error, up to 3e-9 of the simplex volume, and it has to move the
 charge kernel and the weights together, or the density matrix misses the
-charge of the Newton search at 1e-12. It was not built.
+charge of the Newton search at 1e-12. It was not built then. It is built
+since 14 November 2026, as a three-node rule that needs no derivative, see
+"Three nodes when no vertex is in the window".
 
 ### One diagonalization per iteration
 
@@ -2394,3 +2398,136 @@ matrices equal to 4e-14. So for a Hubbard U alone the single product is
 1.15 to 1.2 times faster at n = 36 and n = 2 and the same at n = 8, and
 the branch stays. It selects on the number of directions that are asked
 for, not on a size.
+
+## What was decided after the seventh audit
+
+The audit left three choices open in this construction: the moment
+formula of the weights at T > 0, a memory cap on the shell vectors, and
+the branch of `get_dm` on one direction. They were decided on 14 November
+2026. The first one changed the code.
+
+### Three nodes when no vertex is in the window
+
+The weight at temperature T is the T = 0 weight convolved with -f'(x).
+Between two vertex energies the T = 0 weight is a polynomial in mu, of
+degree dim + 1 at most (the volume of a sub-simplex is a product of dim
+edge fractions, times one barycentric coordinate). So when no vertex
+energy is within 40 T of mu, the weight is one polynomial g over the whole
+window where -f' is not zero, and the convolution is the Sommerfeld
+series, which ends: g + (pi^2 T^2/6) g'' + (7 pi^4 T^4/360) g''''. We do
+not write the derivatives. The three-node Gauss rule of the weight -f',
+with the nodes mu and mu +- pi sqrt(7/5) T and the weights 32/42 and 5/42,
+reproduces the moments 1, pi^2 T^2/3 and 7 pi^4 T^4/15, so it integrates
+a polynomial of degree 5 exactly, with three evaluations of the closed
+form at T = 0. The same holds for the occupied fraction of the charge
+kernel (degree dim) and for the density of states (degree dim - 1).
+
+`_weights_T` and `_charge_dos_T` take this rule when `_window_is_clear`
+says that no vertex is inside the window, and the pieces of
+Gauss-Legendre quadrature otherwise. Both ask the same function, so the
+weights and the charge of the Fermi search take the same rule on every
+simplex, and the density matrix holds the charge of the search. At
+T = 1e-7 every simplex cut by the Fermi surface is of this kind, so the
+208 evaluations per simplex and band become 3.
+
+Against an adaptive quadrature, on random simplices with a clear window,
+the three nodes are exact to rounding (2e-16) for T up to 1/85 of the
+energy spread of the simplex, close to the largest T that leaves the
+window clear, 1/80. The pieces have an error that grows as T^2 there: up
+to 4e-13 of the simplex volume at T = 1e-3 of the spread, 3e-12 at 1/300
+and 1.6e-11 at 1/85. So the weights change by far less than the 3e-9
+that bounds the error of the pieces up to T = 0.3 of the spread, and they
+change toward the exact number. The two rules meet at the edge of the
+window with a jump of at most 1.7e-11 of the volume of one simplex (200
+random simplices in each dimension), the error of the pieces there. A simplex is 1/nk^dim of
+the zone or less, so in the charge per cell the jump is below the 1e-12
+of the Fermi search on any mesh with more than 17 simplices, and it goes
+as T^2: at T = 1e-7 it is zero to rounding.
+
+The time of the Fermi search (`fermi_from_energies`) and of the weights
+with the Bloechl term (`simplex_weights`) on given band energies, the
+committed code against the new one in one process, back to back, the
+smallest of three, with numba at two threads on a shared desktop:
+
+| case | T | search before (s) | after (s) | speedup | weights before (s) | after (s) | speedup |
+|---|---|---|---|---|---|---|---|
+| cubic, one band, 32^3 | 1e-7 | 0.343 | 0.053 | 6.4 | 0.149 | 0.028 | 5.4 |
+| cubic, one band, 32^3 | 1e-3 | 0.286 | 0.145 | 2.0 | 0.119 | 0.076 | 1.6 |
+| cubic, one band, 32^3 | 3e-2 | 0.349 | 0.349 | 1.0 | 0.185 | 0.177 | 1.0 |
+| cubic, one band, 64^3 | 1e-7 | 0.911 | 0.097 | 9.4 | 0.518 | 0.179 | 2.9 |
+| eight cosine bands, 20^3 | 1e-7 | 0.832 | 0.024 | 34 | 0.316 | 0.033 | 9.6 |
+| eight cosine bands, 20^3 | 1e-3 | 0.856 | 0.346 | 2.5 | 0.326 | 0.148 | 2.2 |
+| eight cosine bands, 2D, nk = 96 | 1e-7 | 0.057 | 0.005 | 12 | 0.038 | 0.011 | 3.5 |
+| eight cosine bands, 2D, nk = 96 | 1e-3 | 0.059 | 0.039 | 1.5 | 0.037 | 0.027 | 1.4 |
+
+The Fermi level is the same to 1.4e-14 and the weights to 1.3e-15 in
+every row, and at T = 3e-2, where every simplex has a vertex in the
+window, the numbers are identical. The eight bands are a made-up
+metal, (n - 3.5) 0.6 - sum_i cos(2 pi k_i (1 + n mod 2) + 0.3 n), which
+only serves to have several bands at the Fermi level. A whole mean-field
+iteration was not timed again. What is left at T = 1e-7 is the T = 0
+kernel itself and the diagonalization.
+
+`tests/scf/test_simplex_weights_fermi_gauss.py` compares the weights, the
+occupied fraction and the density of states of a clear window with the
+Sommerfeld series, built from a fit of the polynomial and the moments of
+-f' and not from the three nodes, to 1e-13, in 1D, 2D and 3D and for T
+from 1e-6 to 1/100 of the spread; the three weight cases fail on the
+committed code, by 1e-12 to 1e-11. It also bounds the jump at the edge of
+the window by 1e-10 of the simplex volume. On a mesh in each dimension
+it checks, simplex by simplex, that the weights sum to the charge that
+the charge kernel gives for that simplex, to 2e-14 of its volume, and
+that the level found holds the filling. This is done at T = 1e-7, where
+every cut simplex takes the three nodes, at T = 2e-2, where every one
+takes the pieces, and at a temperature set from the mesh, 40 T the median
+distance from the Fermi level to the nearest vertex of the simplices that
+hold it, where both rules are in use; the test counts them. With the
+charge kernel put on the pieces alone, this check fails by 8e-12 in 2D
+and by 2e-13 in 3D. In 1D it cannot fail, since the occupied fraction of
+a segment is linear in mu and both rules give the same charge; there the
+comparison of the single simplices with the Sommerfeld series is the
+guard. A first version of the mesh check compared only the sum over the
+mesh at fixed temperatures, which in 1D never had both rules in use and
+could not see a mismatch of 1e-12 per simplex.
+
+The form with one rule everywhere was considered and not built: the
+three nodes on the polynomial of the piece that holds mu, plus the pieces
+only for the difference beyond the vertices in the window. It has no jump
+at all. But the polynomial of a thin piece, two vertex energies 1e-12
+apart around mu, has coefficients of order 1e12, and the two terms would
+cancel to nothing in double precision. So the rule is used only where it
+is the whole answer.
+
+### The shell vectors keep no cap
+
+`ShellFilling.collect` still keeps the shell vectors of every k-point
+with a level within 40 T of zero. What it holds is bounded by the
+eigenvectors of the whole mesh times the fraction of the levels inside
+the shell, so it only passes `max_memory_gb` when the eigenvectors
+themselves do not fit and 40 T is comparable to the bandwidth. A cap
+means a second way to run above it: the shell k-points diagonalized once
+more for the fill, which for the triangle that does not keep its
+eigenvectors is a third pass over most of the mesh, in most iterations.
+That is a gate on a memory size with a slower route behind it, and no run
+has needed it. What would decide it is such a run: a Nambu cell whose
+eigenvectors pass `max_memory_gb`, above its critical temperature, that
+goes out of memory in `collect`. The device route shows the form it would
+take, since it already diagonalizes only the shell k-points on the host
+before its fill.
+
+### The single product for one direction stays
+
+With one direction the two routes of `get_dm` do the same number of
+multiplications, K n_a n^2 for K k-points and n_a bands with weight: the
+projector route only pays, since it has nothing to share, and it does its
+part as a batch of small products on one thread, where the single product
+over k and n is one large call that BLAS spreads over the threads. With D
+directions one product per direction costs D times that, and the
+projector route once plus D K n^2. So the branch is on whether there is
+something to share, not on a measured size, and it is what a Hubbard U
+alone runs. It stays, with this count in the comment of the code. What is
+still not measured is the projector route with several directions on many
+threads, where the old route threads and the new one does not: the timing
+of the review, with 7 to 9 directions and with 2 and 3, at 4 or more BLAS
+threads on an idle machine. If one product per direction wins there, the
+projector route goes and the one-direction case stops being a branch.

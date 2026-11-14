@@ -28,12 +28,27 @@ def Uq(q):
     return -0.5*np.cos(2*np.pi*q[0]) - 0.3*np.cos(2*np.pi*q[1])
 
 
-@pytest.mark.parametrize("field", [None, [0., 0., 0.2], [0.1, 0.05, 0.2]])
+def turning(r):
+    """A field that turns from site to site, so that the Hamiltonian has
+    two spin directions and takes the general route of the bubble. A
+    uniform field in any direction takes the collinear one, in its own
+    spin frame."""
+    return [0.15, 0., 0.] if r[0] > 0. else [0., 0., 0.2]
+
+
+FIELDS = [None, [0., 0., 0.2], [0.1, 0.05, 0.2], turning]
+FIELD_IDS = ["none", "z", "tilted", "turning"]
+
+
+@pytest.mark.parametrize("field", FIELDS, ids=FIELD_IDS)
 @pytest.mark.parametrize("U", [None, -0.5, Uq],
                          ids=["bare", "number", "function"])
 def test_local_moment_response_is_the_average_over_the_mesh(hsquare, field, U):
     h = hsquare.copy()
     if field is not None: h.add_zeeman(field)
+    if field is turning:
+        from pyqula.chitk import localspinchi
+        assert localspinchi._route(h) == localspinchi._SPINFUL
     kw = dict(energies=np.linspace(0., 5., 6), nk=3, delta=0.1, T=0.05, U=U)
     e, out = h.get_moment_spinchi(**kw)
     ref = np.mean([h.get_moment_spinchi(q=q, **kw)[1]
@@ -42,7 +57,7 @@ def test_local_moment_response_is_the_average_over_the_mesh(hsquare, field, U):
     assert np.allclose(out, ref, atol=1e-12)
 
 
-@pytest.mark.parametrize("field", [None, [0., 0., 0.2], [0.1, 0.05, 0.2]])
+@pytest.mark.parametrize("field", FIELDS, ids=FIELD_IDS)
 def test_bare_moment_response_is_the_combination_of_the_spin_blocks(hsquare,
                                                                      field):
     """Without the residual interaction only S^+ is contracted; the result

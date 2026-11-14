@@ -20,10 +20,18 @@ convergence tests.
     python -m pytest tests/qutecipy          # run them
     python -m pytest tests -m "not slow"     # skip them (and the rest of the slow suite)
 """
+import pathlib
+
 import pytest
+
+HERE = pathlib.Path(__file__).resolve().parent
 
 
 def pytest_collection_modifyitems(items):
-    """Mark every test in this directory `slow`."""
+    """Mark every test in this directory `slow`. The hook receives the items
+    of the whole session, not only the ones of this directory, so the test
+    path is checked: marking them all made `pytest tests -m "not slow"`
+    deselect the whole suite."""
     for item in items:
-        item.add_marker(pytest.mark.slow)
+        if HERE in pathlib.Path(item.path).resolve().parents:
+            item.add_marker(pytest.mark.slow)

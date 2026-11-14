@@ -82,7 +82,7 @@ def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, nd=None, rcut=None):
     if Jr is not None: # every pair within rcut, whole distance shells,
         # halved as J1/J2/J3 are, see densitydensity.add_pair_interaction
         from .densitydensity import add_pair_interaction
-        add_pair_interaction(v, h.geometry, Jr, rcut=rcut)
+        add_pair_interaction(v, h.geometry, Jr, rcut=rcut, name="Jr")
     for d in v:
         m = v[d]
         n = m.shape[0]

@@ -299,8 +299,10 @@ These come from the seventh bug audit (`bug_audit_7.md`).
   36 sites are different (6 in the first version). The origin is now
   displaced by $a_1/6+a_2/3$ of the lattice, which leaves 36 different
   sites and moves the stiffness by $10^{-6}$. The generic `Vr`/`Jr` of
-  `VJinteraction` and `Vinteraction` still averages a function that is
-  not reciprocal, with no error; that case is open.
+  `VJinteraction` and `Vinteraction` still averaged a function that is
+  not reciprocal, with no error; it raises too since the decisions below,
+  from one check in the builder, and the spinon path has no check of its
+  own any more.
 - **The energy of the bond loop is the bond functional.** The engine
   returned its Hartree-Fock energy, $-2A+B'$ in the notation of the audit,
   with $A=\sum_b2|t_b|^2/(gJ_b)$ and $B'$ its double counting, which is the
@@ -354,8 +356,9 @@ ratio is what matters.
   is different for them (a Zeeman field along $z$, the Zeeman and Weiss
   path of the bond loop) now diagonalizes the two spin blocks apart and
   contracts four $N\times N$ blocks, $C^{ss'}$, instead of $3N$ columns. A
-  field in another direction is not rotated to $z$ and takes the general
-  route. At 196 sites in a field along $z$ (1 k-point, 3 energies) it goes
+  field in another direction was not rotated to $z$ and took the general
+  route; it takes the collinear one in its own spin frame since the
+  decisions below. At 196 sites in a field along $z$ (1 k-point, 3 energies) it goes
   from 27.1 s and 1.71 GB to 4.0 s and 0.78 GB, agreeing to $2\times
   10^{-15}$, and it agrees with `chitk.chiAB` to $10^{-12}$. Timed again
   in the review of the same day, with more load on the machine: 42.8 s
@@ -398,8 +401,9 @@ ratio is what matters.
   spin and gives each orbital state the weight $2|u_i|^2$. At 196 sites
   (`nk=4`, 401 energies) `kondo_spectrum` goes from 3.9 s to 2.7 s. The
   same half block in the k-loops of `kondotk/cotunneling.py` and of the
-  composite spectrum, and a batched diagonalization of the k-points, were
-  not done. The batched numba diagonalization of
+  composite spectrum was not done then; it is done since the decisions
+  below (`kondo_tunneling.md`). A batched diagonalization of the k-points
+  was not done. The batched numba diagonalization of
   `documentation/gpu_porting_plan.md` (2.77 s for 16 matrices of 512 on 8
   threads) is not clearly faster than one threaded LAPACK call per
   k-point at these sizes; this was read there, not measured again.
@@ -423,6 +427,145 @@ a copy of the tree, and each change makes a test fail. Six of them passed
 every test before the review and only fail the tests it added: the two of
 the reciprocity check, the three of the structural check of the vertex
 and the $q$ of the residual interaction.
+
+## Decisions of 14 November 2026
+
+These close what the repairs above left open in this file. Two changed the
+code, one is left open with its reason, and one keeps a choice of the
+review. All timings are on a shared workstation with two threads, the old
+and the new code back to back.
+
+- **`Vr` and `Jr` must be reciprocal in every builder.** One check,
+  `specialhopping.require_reciprocal_interaction`, runs where a function of
+  two positions becomes an interaction: in
+  `specialhopping.distance_cut_interaction` (the mean field, the
+  Bethe-Salpeter kernel, the density response and `Jr`) and in the sparse
+  builder of `scftk/sparsemeanfield.py`. It raises a `ValueError` that
+  names the keyword (`Vr` or `Jr`), the pair, its two values and the
+  mismatch, with the relative tolerance $10^{-8}$ of the spinon check. The
+  spinon path has no check of its own any more: its `Jr` goes through the
+  same builder, before the loop starts. A raise was chosen over a
+  symmetrization because what reads the interaction does not agree on a
+  function with two values: the Hartree-Fock field averages the two ends
+  of a pair, and the Bethe-Salpeter kernel and the $V(q)$ of the RPA take
+  one end each, which is not Hermitian. A symmetrized function would also
+  be a model that nobody wrote, since the usual cause is a modulation that
+  does not have the period of the cell. Measured before the change, on a
+  chain of four sites: the ramp $1+0.1x$, symmetric in its two arguments
+  and not periodic, gave no warning at all and a kernel of
+  `density_interaction` with a mismatch of 0.4; a function modulated with
+  the first position alone gave the warning of the hopping builder, whose
+  advice (`non_hermitian=True`) is wrong for an interaction. The builder
+  silences that warning now, since the raise replaces it. Every `Vr` and
+  `Jr` of the tests, the examples, the guide figures and the notebooks is a
+  function of the distance or a periodic modulation, and still runs.
+  The review of the same day found two holes in this check, both closed.
+  The comparison of the two ends takes no conjugate, and the warning that
+  the builder silences compared with the conjugate, so an imaginary `Vr`
+  (`0.3j` on first neighbors) went through with no message at all, and a
+  Hermitian complex one raised with the message of a pair with two
+  values. And an infinite value at zero distance was the scale of the
+  relative tolerance, so no mismatch was ever above it, while a NaN hid
+  the largest one. The builders now call
+  `specialhopping.require_pair_interaction`, which asks three things in
+  this order: every value finite, every value real, and the same value
+  from the two ends. The coupling of $n_in_j$ or of
+  $\vec S_i\cdot\vec S_j$ is a real number, so a complex one raises with
+  a message that says so. An infinite or NaN value raises where the pair
+  of a site with itself is used, as an onsite $U$ in the mean field and
+  in the density response. The Bethe-Salpeter kernel does not use that
+  pair, so `density_interaction` asks the builder to drop it before the
+  check (`onsite=False`): a Coulomb tail without a soft core is taken
+  there, as before, and its other pairs are checked.
+  `tests/scf/test_vr_reciprocal.py` has 48 tests over nine routes, the
+  two sparse mean fields through the call of the engine itself: both
+  functions that are not reciprocal, an imaginary and a Hermitian complex
+  one, an infinite value at zero distance with and without a mismatch, a
+  NaN between two sites, a periodic modulation that every route must
+  take (the loops for two iterations), the check itself on dense and
+  sparse matrices (moved from the spinon tests), a finite system and a
+  Coulomb tail. On the code of 8518a8e 10 of the first 16 failed; the 27
+  cases of the complex, infinite and NaN values fail on the tree before
+  the review.
+- **A field in any direction takes the collinear route.** The route was
+  for a field along $z$ only, so the cost depended on a direction that has
+  no physical meaning in a spin-rotation invariant model.
+  `localspinchi._spin_axis` finds the direction $\hat n$ when every hopping
+  matrix depends on the spin through $\hat n\cdot\vec\sigma$ alone. The
+  Bloch matrix is then rotated with one $2\times2$ matrix $U$ on the spin of
+  every site, $U^\dagger\hat n\cdot\vec\sigma U=\sigma_z$, the four blocks
+  are contracted in that frame, and the response is rotated back,
+  $\chi_{ab}=\sum_{cd}R_{ac}R_{bd}\chi'_{cd}$ with
+  $U^\dagger\sigma_aU=\sum_bR_{ab}\sigma_b$, before the dressing, since the
+  vertex is given in the lab frame. With $S_z$ conserved nothing is rotated
+  and the code path is the one of before. $\chi^{+-}$ in a rotated frame
+  builds the four blocks and combines them after the rotation, since $S^+$
+  of the lab is not one pair of spins there. At 196 sites in a field
+  $(0.2,-0.1,0.25)$ (1 k-point, 3 energies) the bubble goes from 27.6 s and
+  1.77 GB to 4.3 s and 0.86 GB, agreeing to $1.3\times10^{-15}$. A
+  Hamiltonian with two spin directions (a Rashba coupling, a field that
+  turns from site to site) takes the general route.
+  The direction is looked for once per call, and only when the two
+  cheaper checks fail, with the hopping matrices read one at a time. The
+  first version held the spin coefficients of every hopping matrix at
+  once and ran twice: 15 hopping matrices of memory on top of reading
+  them on a 72-site honeycomb cell with a Rashba coupling, where the
+  search now adds nothing to the peak. On 288 sites the review measured
+  149 MB, and the peak is now 69 MB, which is what reading the nine
+  hopping matrices costs.
+  `tests/chi/test_local_spin_chi_axis.py` has 15 tests, against the general
+  route and `chitk.chiAB` for a direction that is not an axis: bare,
+  dressed with a vertex that is weaker along $z$ and antisymmetric between
+  $x$ and $y$, the static kernel, the local response, $\chi^{+-}$ of a
+  subset of sites, a complex spin-dependent hopping along one direction
+  (a Kane-Mele coupling rotated by hand), and $\chi_{nn}=\chi_{zz}$ of the
+  same field along $z$. Six fail on the code before, the ones that ask for
+  the route; the eight that compare numbers pass on both, as a change of
+  route must. A bond state converged in a field $(0.06,-0.03,0.07)$ with
+  its Weiss field takes the route too, with the frame of the field (an
+  assert in `tests/spinon/test_spinon_bond_rpa.py`), so the tolerance
+  $10^{-10}$ of the direction holds on a converged state. The tilted
+  field was the case of the general route in three older tests, of the
+  local response and of $\chi^{+-}$ in `tests/chi/test_local_spin_chi_routes.py`
+  and `tests/kondolattice/test_moment_spinchi_routes.py`. They have a
+  fourth case now, a field that turns from site to site, which is on the
+  general route (7 more tests).
+- **The binned local response of `q=None` is not built.** The local
+  response contracts every pair of a $k$ and a $q$ of the mesh at every
+  energy, so its cost grows as $n_k^{2d}$. From the 7.4 s at `nk=8` on the
+  square Kondo lattice (200 energies) this is about 5 minutes at `nk=20`
+  and about 6 hours at the default `nk=60` (extrapolated, not run). A route
+  through the local spectral matrices on an energy grid scales as $n_k^d$,
+  but it is not the same calculation with a faster loop. It covers only
+  the bare response, since the dressed one needs every $q$ on its own. It
+  changes the numbers at the level of the bin, so it brings a new knob for
+  the accuracy. And between different sites it holds one spectral matrix,
+  2 x 2 in spin, per pair of sites and per bin, which is 5 GB for 200
+  moments and 2000 bins. So it is a new option of the public calls, and it waits for a
+  case that needs it: the bare local response of a 2D or 3D lattice with a
+  small cell on a mesh beyond about `nk=20`. What changed now is only the
+  text: the docstrings and the guide say that the cost of `q=None` grows as
+  the square of the number of k-points. Whether the default `nk=60` of
+  `get_moment_spinchi` should be smaller when `q=None` in 2D is not
+  decided.
+- **The modulation of the 36-site example keeps its origin off the
+  symmetry points.** The guide points to this example for a cell of 36
+  inequivalent sites, and the numbers above belong to this origin. Run
+  again after the changes of this section, the example gives the same
+  numbers (smallest stiffness 0.060 at $q=0$, moments between $-0.0128$
+  and $-0.0074$, peak at 0.20). Counted on the converged state in the
+  field: 36 different moments with this origin and 12 with the origin at
+  the center of the cell. The price is one line that displaces the origin,
+  and its comment says why.
+
+What ran after these changes and their review: the two new files,
+`tests/spinon` (40 passed), `tests/chi/test_local_spin_chi.py` and the
+routes file (41),
+`tests/kondolattice` (88 passed, 10 skipped by their parametrization),
+`tests/kondotunneling` (26), the files of `tests/scf`, `tests/bse`,
+`tests/chi`, `tests/magnon` and `tests/conductivity` that pass a `Vr` or a
+`Jr` or use the bubble, and `tests/documentation` (14). The whole suite was
+not run.
 
 ## State of the documentation and of the tests
 

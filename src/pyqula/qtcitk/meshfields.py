@@ -128,12 +128,22 @@ class _MeshCache():
         self.slot = np.full(layout.n**layout.dim,-1,dtype=np.int64)
         self.vals = None
         self.count = 0
+        self.shift = None # one number per field each, see set_map
+        self.scale = None
+    def set_map(self,shift,scale):
+        """From now on the cache holds (field - shift)/scale, with one
+        shift and one scale per field: the values already stored, and
+        those still to be evaluated"""
+        self.vals[:self.count] = (self.vals[:self.count]-shift)/scale
+        self.shift = shift
+        self.scale = scale
     def ensure(self,lin):
         u = np.unique(np.asarray(lin,dtype=np.int64).ravel())
         new = u[self.slot[u]<0]
         if len(new)==0: return
         v = np.asarray(self.evaluate(self.layout.ks(new)))
         v = v.reshape(len(new),-1)
+        if self.scale is not None: v = (v-self.shift)/self.scale
         if self.vals is None:
             self.vals = np.zeros((max(len(new),1024),v.shape[1]),dtype=v.dtype)
         if self.count+len(new)>len(self.vals): # grow the storage
@@ -196,8 +206,23 @@ def _coarse_points(layout,ncoarse):
     return idx,lin
 
 
+# a field or a family that is below this fraction of what it was before
+# its centre was subtracted, on the whole coarse scan, is rounding noise
+_noise = 1e-12
+
+
+def _midrange(f0,centred):
+    """One shift per field: the middle of the range of each centred field
+    on the coarse scan f0 (points,fields), 0 for the other fields"""
+    shift = np.zeros(f0.shape[1])
+    if centred is not None and len(centred):
+        fc = f0[:,np.asarray(centred,dtype=np.int64)].real
+        shift[centred] = 0.5*(np.max(fc,axis=0)+np.min(fc,axis=0))
+    return shift
+
+
 def qtci_fields(evaluate,R,nfield,tolerance=1e-6,maxbonddim=400,ncoarse=32,
-        dtype=np.float64,dim=2,ordering=None):
+        dtype=np.float64,dim=2,ordering=None,centred=None):
     """Reconstruct the fields evaluate(ks) -> (len(ks),nfield) on the
     2^R x 2^R mesh (2^R x 2^R x 2^R with dim=3; row-major, as klist.kmesh)
     from one quantics tensor cross interpolation per field. Every field
@@ -211,16 +236,35 @@ def qtci_fields(evaluate,R,nfield,tolerance=1e-6,maxbonddim=400,ncoarse=32,
     (n^dim,nfield), the number of distinct k-points evaluated and the
     largest bond dimension per field. The fields are real by default;
     dtype=np.complex128 interpolates complex fields, one TCI per field
-    instead of one for the real part and one for the imaginary part."""
+    instead of one for the real part and one for the imaginary part.
+
+    centred is an array of indices of real fields that are defined up to
+    a constant, the band energies. The tolerance of a field is relative
+    to its largest value, so a band far from zero would be resolved
+    against its position and not against its width. Each centred field is
+    interpolated measured from the middle of its range on the coarse scan,
+    and the middle is added back after. A centred field that is then
+    below 1e-12 of the largest centred field before the shift is a
+    constant up to rounding, a flat band: it is set to its middle and not
+    interpolated, since alone it would be noise of order one, at full
+    rank"""
     from ..qutecipytk import crossinterpolate2
     layout = _Layout(R,dim,ordering)
     cache = _MeshCache(evaluate,layout)
     idx0,lin0 = _coarse_points(layout,ncoarse)
     f0 = cache.get(lin0,slice(None))
+    floor = np.zeros(nfield) # largest value of a field that counts as zero
+    shift = None
+    if centred is not None and len(centred):
+        centred = np.asarray(centred,dtype=np.int64)
+        shift = _midrange(f0,centred)
+        floor[centred] = _noise*np.max(np.abs(f0[:,centred]))
+        cache.set_map(shift,np.ones(nfield))
+        f0 = f0-shift
     out = np.zeros((layout.n**dim,nfield),dtype=dtype)
     ranks = []
     for f in range(nfield):
-        if np.max(np.abs(f0[:,f]))==0.:
+        if np.max(np.abs(f0[:,f]))<=floor[f]:
             ranks.append(0); continue
         i0 = int(np.argmax(np.abs(f0[:,f])))
         piv = [layout.encode(idx0[i0])]
@@ -229,11 +273,13 @@ def qtci_fields(evaluate,R,nfield,tolerance=1e-6,maxbonddim=400,ncoarse=32,
                 maxbonddim=maxbonddim,pivotsearch="full")
         ranks.append(int(max(rk)) if len(rk) else 0)
         out[:,f] = layout.to_mesh(_fulltensor(tci))
+    if shift is not None: out = out+shift
     return out,cache.count,ranks
 
 
 def qtci_stacked_fields(evaluate,R,nfield,tolerance=1e-6,maxbonddim=400,
-        ncoarse=32,dtype=np.float64,dim=2,ordering=None):
+        ncoarse=32,dtype=np.float64,dim=2,ordering=None,centred=None,
+        families=None):
     """The fields of qtci_fields from one quantics tensor cross
     interpolation of all of them at once: the field index is an extra
     tensor site, placed before the bits of the mesh, so every field
@@ -244,18 +290,57 @@ def qtci_stacked_fields(evaluate,R,nfield,tolerance=1e-6,maxbonddim=400,
     interpolates the rounding noise at full rank. The coarse scan seeds one
     pivot per field at its largest value. dim and ordering are those of
     qtci_fields. Returns the fields (n^dim,nfield), the number of distinct
-    k-points evaluated and the bond dimensions"""
+    k-points evaluated and the bond dimensions.
+
+    centred is as in qtci_fields: the real fields that are defined up to
+    a constant, the band energies, each measured from the middle of its
+    range on the coarse scan.
+
+    families is for fields that have a unit of their own (band energies,
+    transition energies, velocity products): a list of arrays of field
+    indices, one array per family. Each family is divided by its largest
+    value on the coarse scan before the interpolation and multiplied back
+    after it, so the tolerance is relative to the largest field of each
+    family and the result does not depend on the unit of the family. One
+    scale per family and not one per field: a scale per field would bring
+    the fields that are zero up to rounding to order one. For the same
+    reason a family that is rounding noise as a whole is not scaled: one
+    that vanishes on the scan, and one of centred fields that is below
+    1e-12 of what it was before the shift (every band flat). A family
+    that is not centred has no such reference, so the caller gives one
+    only when its fields cannot all be noise. A field in no family is not
+    scaled: the site weights of the LDOS, which have no unit. With
+    centred=None and families=None the fields are interpolated as they
+    are"""
     from ..qutecipytk import crossinterpolate2
     layout = _Layout(R,dim,ordering,nfield=nfield)
     cache = _MeshCache(evaluate,layout)
     idx0,lin0 = _coarse_points(layout,ncoarse)
-    f0 = np.abs(cache.get(lin0,slice(None))) # (points,fields)
+    f0 = cache.get(lin0,slice(None)) # (points,fields)
+    shift = None
+    if centred is not None or families is not None:
+        raw = np.abs(f0)
+        shift = _midrange(f0,centred)
+        f0 = f0-shift
+        scale = np.ones(nfield)
+        for family in ([] if families is None else families):
+            family = np.asarray(family,dtype=np.int64)
+            if len(family)==0: continue
+            largest = np.max(np.abs(f0[:,family]))
+            if largest>_noise*np.max(raw[:,family]): scale[family] = largest
+        cache.set_map(shift,scale)
+        f0 = f0/scale
+    f0 = np.abs(f0)
     if np.max(f0)==0.:
-        return np.zeros((layout.n**dim,nfield),dtype=dtype),cache.count,[]
-    piv = [layout.encode(idx0[int(np.argmax(f0[:,f]))],f)
-            for f in range(nfield) if np.max(f0[:,f])>0.]
-    tci,rk,errors = crossinterpolate2(dtype,_evaluator(cache,layout),
-            layout.localdims,initialpivots=piv,tolerance=tolerance,
-            maxbonddim=maxbonddim,pivotsearch="full")
-    out = layout.to_mesh(_fulltensor(tci),nfield=nfield)
-    return out,cache.count,[int(x) for x in rk]
+        out = np.zeros((layout.n**dim,nfield),dtype=dtype)
+        ranks = []
+    else:
+        piv = [layout.encode(idx0[int(np.argmax(f0[:,f]))],f)
+                for f in range(nfield) if np.max(f0[:,f])>0.]
+        tci,rk,errors = crossinterpolate2(dtype,_evaluator(cache,layout),
+                layout.localdims,initialpivots=piv,tolerance=tolerance,
+                maxbonddim=maxbonddim,pivotsearch="full")
+        out = layout.to_mesh(_fulltensor(tci),nfield=nfield)
+        ranks = [int(x) for x in rk]
+    if shift is not None: out = out*scale+shift
+    return out,cache.count,ranks

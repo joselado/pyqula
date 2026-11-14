@@ -53,7 +53,9 @@ The couplings are `J1`, `J2`, `J3` for first, second and third neighbors, and
 up to `rcut`, including the pair of a site with itself. So a coupling meant
 only for bonds must return zero at zero distance; a value $J_r(0)$ is an
 onsite term $\frac{1}{2}J_r(0)\,\vec S_i\cdot\vec S_i$, which at the mean-field
-level acts as a Hubbard $U=-\frac{3}{4}J_r(0)$.
+level acts as a Hubbard $U=-\frac{3}{4}J_r(0)$. As for `Vr`, `Jr` must give
+the same number from the two ends of a pair, so a modulation of the exchange
+must have the period of the unit cell.
 
 As an example, a ferromagnetic $S^zS^z$ coupling on a chain away from half
 filling:

@@ -1160,12 +1160,6 @@ def sigma_triangle(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
             energies,delta,cellvol)
 
 
-def _family_scale(x):
-    """Largest absolute value of a family of fields, 1 if it vanishes"""
-    s = float(np.max(np.abs(x))) if x.size else 0.
-    return s if s>0. else 1.
-
-
 def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
         tolerance=1e-6,window=None):
     """Optical conductivity tensor with the simplex integration on a
@@ -1173,10 +1167,10 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     fields dE and W are not computed on every point but reconstructed from
     a quantics tensor cross interpolation of all of them at once (the
     field index is one more tensor site). The transition energies and the
-    weights are each divided by their largest value on the coarse scan
-    first, so the tolerance is relative to the largest field of each
-    family, and does not depend on the unit of length, see
-    conductivity.optical_conductivity"""
+    weights are two families of that interpolation, each divided by its
+    largest value on the coarse scan first, so the tolerance is relative
+    to the largest field of each family, and does not depend on the unit
+    of length, see conductivity.optical_conductivity"""
     check_broadening(delta)
     if h.dimensionality!=2:
         raise NotImplementedError("integration='qtci' of the optical "
@@ -1210,15 +1204,6 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     pairs,dE0,W0,comps,trans = pair_fields(es0,vs0,T,tol,intraband,interband,
             axes=axes)
     pairs,dE0,W0 = _prune(pairs,dE0,W0)
-    # one scale per family of fields, the largest value on the coarse scan:
-    # the stacked TCI measures its tolerance against the largest field of
-    # all, and W goes as a length squared while dE does not, so on a shared
-    # scale a large lattice constant would loosen the tolerance of dE and a
-    # small one that of W. Each family is divided by its own scale before
-    # the interpolation and multiplied back after it, so the result does
-    # not depend on the unit of length
-    sE = _family_scale(dE0[:,pairs[:,0]!=pairs[:,1]])
-    sW = _family_scale(W0)
     # the independent real fields: dE of the off-diagonal pairs, and the
     # real and imaginary parts of W for a <= b (W for (b,a) is its conjugate)
     fields = []
@@ -1228,29 +1213,39 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
             if a>b: continue
             fields.append(("re",p,c))
             if a!=b: fields.append(("im",p,c))
+    # two families of fields, the transition energies and the weights: the
+    # stacked TCI measures its tolerance against the largest field of all,
+    # and W goes as a length squared while dE does not, so on a shared
+    # scale a large lattice constant would loosen the tolerance of dE and a
+    # small one that of W. qtci_stacked_fields divides each family by its
+    # largest value on the coarse scan, so the result does not depend on
+    # the unit of length
+    isdE = np.array([kind=="dE" for (kind,p,c) in fields],dtype=np.bool_)
+    families = [np.flatnonzero(isdE),np.flatnonzero(~isdE)]
     def evaluate(ks): # every field at the k-points ks
         es,vs = bands(ks)
         _,dEk,Wk,_,_ = pair_fields(es,vs,T,tol,intraband,interband,
                 axes=axes,pairs=pairs)
         out = np.zeros((len(ks),len(fields)))
         for f,(kind,p,c) in enumerate(fields):
-            if kind=="dE": out[:,f] = dEk[:,p]/sE
-            elif kind=="re": out[:,f] = Wk[:,p,c].real/sW
-            else: out[:,f] = Wk[:,p,c].imag/sW
+            if kind=="dE": out[:,f] = dEk[:,p]
+            elif kind=="re": out[:,f] = Wk[:,p,c].real
+            else: out[:,f] = Wk[:,p,c].imag
         return out
     # one TCI of all the fields: it shares the pivots in k, so it needs
     # fewer diagonalizations than one TCI per field when the fields are few,
     # and its rank grows with their number, hence the larger rank cap
     # (future_development/qtci_optical_response.md)
     vals,ncalls,ranks = qtci_stacked_fields(evaluate,R,len(fields),
-            tolerance=tolerance,ncoarse=nc0,maxbonddim=stacked_maxbonddim)
+            tolerance=tolerance,ncoarse=nc0,maxbonddim=stacked_maxbonddim,
+            families=families)
     npts = n*n
     dE = np.zeros((npts,len(pairs)),dtype=np.float64)
     W = np.zeros((npts,len(pairs),len(comps)),dtype=np.complex128)
     for f,(kind,p,c) in enumerate(fields):
-        if kind=="dE": dE[:,p] = vals[:,f]*sE
-        elif kind=="re": W[:,p,c] += vals[:,f]*sW
-        else: W[:,p,c] += 1j*vals[:,f]*sW
+        if kind=="dE": dE[:,p] = vals[:,f]
+        elif kind=="re": W[:,p,c] += vals[:,f]
+        else: W[:,p,c] += 1j*vals[:,f]
     for c,(a,b) in enumerate(comps): # the (b,a) components, by conjugation
         if a>b: W[:,:,c] = np.conjugate(W[:,:,trans[c]])
     return _sigma_from_fields(2,n,pairs,dE,W,comps,trans,energies,delta,cellvol)

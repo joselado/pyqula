@@ -471,9 +471,10 @@ are written with pseudofermions as before, and the exchange is decoupled into
 a hybridization field
 
 $$
-V_j=-\frac{J}{2}\sum_a\langle f^\dagger_{ja}c_{ja}\rangle ,
+V_j=-\frac{J}{2}\sum_a\langle c^\dagger_{ja}f_{ja}\rangle ,
 $$
 
+which enters the mean-field Hamiltonian as $V_jf^\dagger_jc_j+\mathrm{h.c.}$,
 together with a Lagrange multiplier $\lambda_j$ that keeps one fermion per
 f-site. You can think of $V_j$ as the amplitude for a conduction electron to
 turn into a spin flip of the local moment and back. This is the Read-Newns
@@ -872,7 +873,9 @@ one fermion per site holds only on average.
 The keywords are:
 
 - `q`: the momentum, in units of the reciprocal lattice vectors. `None` is
-  the local response, the average over the momenta of the k-mesh.
+  the local response, the average over the momenta of the k-mesh. Its cost
+  grows as the square of the number of k-points, so take a small `nk` in two
+  and three dimensions.
 - `U`: the residual interaction $U'$. A number, a matrix between the moments
   of the unit cell, or a function of `q` that returns one of them. By default
   there is none.

@@ -2013,7 +2013,8 @@ Optional arguments:
   positions, as `Vr`. A site with itself is included, so `Jr(0)` is an
   onsite term $J_r(0)\,\vec S_i\cdot\vec S_i/2$, which at the mean-field
   level is a Hubbard $U=-3J_r(0)/4$; an exchange between bonds must be zero
-  at zero distance
+  at zero distance. `Vr` and `Jr` must give the same number from the two
+  ends of a pair, so a modulation must have the period of the unit cell
 - rcut=None: range of `Vr` and `Jr`, every pair of sites closer than
   `rcut`, a site with itself included (`Vr(0)` is an onsite $U=V_r(0)$);
   `None` means 5 in a periodic system and all pairs in a finite one

@@ -182,10 +182,11 @@ not run. The website builds in strict mode and the PDF of the guide builds.
   supported by its second reader, and the half block of a spin-degenerate
   mean field was claimed only for `spinonspectrum.py`. The same half block
   would work here when the mean field is spin degenerate, one
-  diagonalization of half the size per k-point. It is not built and not
-  measured.
+  diagonalization of half the size per k-point. It was not built then; it
+  is built since the decisions below.
 - **The loop does not keep a complex $V$** (seen in the review, not
-  repaired: `scftk/kondolattice.py` is outside this group). A seed
+  repaired then: `scftk/kondolattice.py` was outside that group; repaired
+  in the decisions below). A seed
   $0.3e^{0.7i}$ on the staggered chain converges to the same real $V$ as a
   real seed. The reason is the update $V\leftarrow-\frac J2\sum_s$
   `dm[f,c]`: on a converged state whose f fermions were given a phase by
@@ -194,3 +195,57 @@ not run. The website builds in strict mode and the PDF of the guide builds.
   $V_j$ can be made real with the phase of its own f fermion, so the
   solution that the loop finds is right. Whether a model exists in the
   package where this choice of phase is not possible was not checked.
+
+## Decisions of 14 November 2026
+
+These close the two items that the repairs above left open here.
+
+- **The loop takes the density matrix the right way.** The mean-field term
+  is $V_jf^\dagger_jc_j+{\rm h.c.}$, so the self-consistency equation, the
+  stationary point of the energy in $\bar V_j$, is
+  $V_j=-\frac J2\sum_s\langle c^\dagger_{js}f_{js}\rangle$.
+  `get_density_matrix` returns the transpose of the density matrix,
+  `dm[i,j]` $=\langle c^\dagger_ic_j\rangle$, so this is the element
+  `dm[c,f]`, and the loop read `dm[f,c]`, whose target is $\bar V_j$. For a
+  real $V$ the two are the same number, which is why every result so far
+  stands. Two cases tell them apart. A seed $0.3e^{0.7i}$ on the chain
+  ($J=1.5$, filling 0.15, `nk=40`) relaxed to the real $V=0.3737$; it now
+  converges to $0.3737e^{0.7i}$ with the same energy. And the question
+  left open above has an answer: the phase cannot be removed when the
+  moments are coupled by a complex hopping, which the guide allows
+  ("a hopping between the moments"). On a chain of two Kondo pairs per
+  cell with a hopping $0.2e^{0.9i}$ between the two moments of the cell
+  and $0.2$ between cells ($J=2$, filling 0.15, `nk=30`, $T=0.02$), the
+  old loop reported convergence at $V=(0.432-0.022i,\,-0.432-0.022i)$,
+  which is the conjugate of the order parameter of that state, off by
+  $4.5\times10^{-2}$, with the energy $-2.7311$. The loop now gives
+  $|V|=0.451$ on both sites with $V_1\bar V_0=0.203e^{2.69i}$, equal to
+  the order parameter taken from the eigenstates to $2\times10^{-6}$, with
+  the energy $-2.7676$, lower by $0.036$, and two seeds with different
+  phases agree on the energy and on $V_1\bar V_0$. So with a complex
+  hopping between the moments the old loop returned a state that was not
+  a solution; with a real one, or none, nothing moves. The module
+  docstring and the guide had the formula with $f^\dagger c$; both are
+  corrected. `tests/kondolattice/test_kondolattice_complex_hybridization.py`
+  has the two tests, and both fail on the code before.
+- **The half block in the two k-loops.** A mean field without a Zeeman
+  field is the same for the two spins and does not mix them, so the
+  cotunneling spectrum and the composite spectrum now diagonalize the
+  block of one spin, half the size, and count every state twice, as
+  `spinonspectrum.py` does. The two loops built the same weights with the
+  same lines; they are now one function, `kondotk.pairs.pair_weights`,
+  which also serves the f block of $g_F$. With 196 Kondo pairs on the
+  square lattice ($784\times784$, $V$ set by hand, 4 k-points, 401
+  energies, a shared workstation with two threads, the smallest of three
+  runs): the cotunneling spectrum goes from 3.12 s to 0.57 s and the
+  composite spectrum from 3.17 s to 0.65 s, agreeing to $2\times10^{-13}$
+  on values up to 12. A Hamiltonian with a field or a spin-orbit coupling
+  takes the full matrix as before. `tests/kondotunneling/test_kondo_half_block.py`
+  has four tests: the cotunneling spectrum against the Green's function
+  inverted at every energy, with and without a field, every output of the
+  two routines with the half block against the full matrix forced on the
+  same Hamiltonian, and the size of the matrices that are diagonalized.
+  Three fail on the code before; the one with a field passes on both.
+  A block per spin for a field along $z$, two diagonalizations of half the
+  size, is not built here: the bubble of `chitk/localspinchi.py` has it,
+  and here it would save a factor 4 where the half block saves 8.

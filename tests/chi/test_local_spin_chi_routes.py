@@ -27,8 +27,8 @@ def honeycomb(field=None):
 
 def general_route(h, q, **kw):
     """The bubble of the spinful route, which every Hamiltonian can take"""
-    energies, T, sites, route = localspinchi._arguments(h, ES, kw["delta"],
-            kw.get("T", None), None)
+    energies, T, sites, route, frame = localspinchi._arguments(h, ES,
+            kw["delta"], kw.get("T", None), None)
     acc = localspinchi._bubble_at_q(h, localspinchi._SPINFUL,
             np.array(q, dtype=np.float64), energies, kw["nk"], kw["delta"],
             T, sites)
@@ -74,8 +74,8 @@ def test_collinear_route_on_the_real_axis():
     kw = dict(q=[0., 0., 0.], nk=4, delta=0., T=1e-3)
     with np.errstate(all="ignore"): # a wrong code gives 0/0
         out = localspinchi.bare_spin_chi(h, energies=[0., 1e-7], **kw)[1]
-        energies, T, sites, route = localspinchi._arguments(h, [0., 1e-7],
-                0., 1e-3, None)
+        energies, T, sites, route, frame = localspinchi._arguments(h,
+                [0., 1e-7], 0., 1e-3, None)
         ref = localspinchi._bubble_at_q(h, localspinchi._SPINFUL,
                 np.zeros(3), energies, 4, 0., 1e-3, sites)
     assert np.all(np.isfinite(out)) and np.max(np.abs(out[0])) > 0.05
@@ -140,19 +140,32 @@ def test_vertex_that_tells_the_components_apart_takes_the_full_kernel(kind):
     assert np.allclose(ev, full[np.argsort(full.real)], atol=1e-12)
 
 
+def turning(r):
+    """A field that turns from site to site, so that the Hamiltonian has
+    two spin directions and takes the general route. A uniform field in
+    any direction takes the collinear one, in its own spin frame."""
+    return [0.2, 0., 0.] if r[0] > 0. else [0., 0., 0.3]
+
+
+FIELDS = [None, [0., 0., 0.3], [0.2, -0.1, 0.3], turning]
+FIELD_IDS = ["none", "z", "tilted", "turning"]
+
+
 def raising_from_blocks(chi, m):
     """chi^xx + chi^yy - i chi^xy + i chi^yx from the full response"""
     x, y = slice(0, m), slice(m, 2*m)
     return chi[:, x, x] + chi[:, y, y] - 1j*chi[:, x, y] + 1j*chi[:, y, x]
 
 
-@pytest.mark.parametrize("field", [None, [0., 0., 0.3], [0.2, -0.1, 0.3]])
+@pytest.mark.parametrize("field", FIELDS, ids=FIELD_IDS)
 @pytest.mark.parametrize("q", [[0.13, 0.31, 0.], None])
 def test_raising_response_is_the_combination_of_the_blocks(field, q):
     """bare_raising_chi contracts the matrix element of S^+ alone, on the
     three routes and for the sites asked for; it is the combination of the
     blocks of the full response"""
     h = honeycomb(field)
+    if field is turning:
+        assert localspinchi._route(h) == localspinchi._SPINFUL
     sites = [3, 0]
     kw = dict(q=q, energies=ES, delta=0.05, nk=3, sites=sites)
     out = localspinchi.bare_raising_chi(h, **kw)[1]
@@ -162,12 +175,14 @@ def test_raising_response_is_the_combination_of_the_blocks(field, q):
     assert np.allclose(out, ref, atol=1e-12)
 
 
-@pytest.mark.parametrize("field", [None, [0., 0., 0.3], [0.2, -0.1, 0.3]])
+@pytest.mark.parametrize("field", FIELDS, ids=FIELD_IDS)
 def test_local_response_is_the_average_over_the_mesh_on_every_route(field):
     """q=None takes the states at k+q from one diagonalization of the
     mesh; it is the average of the response at each q of the mesh, also
     dressed, on the three routes"""
     h = honeycomb(field)
+    if field is turning:
+        assert localspinchi._route(h) == localspinchi._SPINFUL
     n = len(h.geometry.r)
     V = isotropic_vertex(n, np.random.default_rng(2))
     kw = dict(energies=ES, delta=0.05, nk=3)

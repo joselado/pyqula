@@ -512,9 +512,8 @@ def _mode_ed(h,energies,write,**kwargs): # exact diagonalization
 
 
 def _mode_green(h,energies,write,**kwargs): # Green function formalism
-  def fun(e):
-      return green.green_operator(h,e=e,**kwargs)
-  ds = parallel.pcall(fun,energies) # compute DOS with an operator
+  # the whole sweep in one call: gmode="triangle" diagonalizes its mesh once
+  ds = green.green_operator_batch(h,energies,**kwargs) # DOS with an operator
   # green_operator returns the raw -Im[Tr G], not yet a DOS value;
   # apply the same 1/pi normalization dos_kmesh (mode="ED") does
   ds = np.array(ds)/np.pi

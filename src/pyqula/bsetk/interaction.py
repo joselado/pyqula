@@ -294,11 +294,14 @@ def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None,rcut=None):
     Vr, if given, is a function of TWO position vectors, Vr(r1,r2),
     exactly as Vinteraction's own Vr: it is passed to
     Geometry.get_hamiltonian as tij, which calls it once per pair of sites.
-    A Coulomb tail is therefore written Vr=lambda r1,r2: e2/abs(r1-r2),
-    and must stay finite at r1==r2 -- get_hamiltonian evaluates the
-    diagonal too. The same-site diagonal it produces is discarded below
-    (an electron does not interact with itself), so a soft cutoff there is
-    only needed to avoid a division by zero, not to get the physics right.
+    A Coulomb tail is therefore written
+    Vr=lambda r1,r2: e2/np.linalg.norm(r1-r2). get_hamiltonian evaluates
+    the pair of a site with itself too, and that value is discarded (an
+    electron does not interact with itself) before Vr is checked. So the
+    function only must not raise there: an infinite value is taken, and a
+    soft cutoff is not needed to get the physics right. Every other pair
+    must be finite, real and the same from its two ends, or this raises
+    (specialhopping.require_pair_interaction).
 
     rcut is the range of the Vr tail: every pair of sites up to that
     distance interacts and every pair beyond it does not, so the tail keeps
@@ -315,7 +318,10 @@ def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None,rcut=None):
     v = {tuple(int(x) for x in d): np.array(m,dtype=np.complex128)
             for d,m in hv.get_hopping_dict().items()} # spinless
     if Vr is not None:
-        specialhopping.add_distance_cut_interaction(v,h.geometry,Vr,rcut=rcut)
+        # onsite=False: the pair of a site with itself is dropped before
+        # Vr is checked, so a tail that diverges at zero distance is taken
+        specialhopping.add_distance_cut_interaction(v,h.geometry,Vr,rcut=rcut,
+                onsite=False)
     # drop the same-site self-interaction: get_hamiltonian(tij=Vr)
     # evaluates the interaction for every pair of sites including a site
     # with itself, and an electron does not interact with itself. The
