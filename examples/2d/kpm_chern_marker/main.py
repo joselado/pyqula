@@ -4,7 +4,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 
 # Local Chern marker of a large honeycomb flake, from the KPM projector.
 # The left half is a Haldane insulator, with Chern number C=1. The right half
-# has a large sublattice mass M=0.9, above 3*sqrt(3)*t2, so it is a trivial
+# has a large sublattice mass M=0.9, above 4.5*t2, so it is a trivial
 # insulator, with C=0. The marker of each site only needs the projector
 # between the sites close to it, so the cost is linear in the number of
 # sites, and the map shows where the invariant is carried.

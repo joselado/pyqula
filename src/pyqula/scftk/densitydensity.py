@@ -736,12 +736,23 @@ def generic_densitydensity(h0,mf=None,mix=None,v=None,nk=8,solver="plain",
                     "solver=\"plain\", solver=\"linear\" and "
                     "solver=\"broyden_mixing\" use linear mixing)"%(mix,solver),stacklevel=2)
         # these methods do seem too efficient, but lets have them anyway.
-        # The scipy solvers stop when the largest entry of fsol is below
-        # f_tol, so f_tol=maxerror is the criterion of the plain loop and of
-        # broyden_mixing, and scf.converged means the same for all of them.
-        # krylov and anderson used the scipy default (6e-6) and broyden1
-        # and linear 100*maxerror, while the loop was marked converged, so
-        # a BdG state stopped short of its charge was told it had no gap
+        # Every loop is held to the same number, maxerror, but each one
+        # measures the residual in its own norm. The scipy solvers stop
+        # when the largest entry of fsol is below f_tol (the max-norm over
+        # the real and imaginary parts of every entry), broyden_mixing when
+        # the L2 norm of the same vector is below tol, and the plain loop
+        # when diff_mf, the mean modulus of the change of each matrix
+        # summed over the directions, is below maxerror. So for one entry
+        # of an n x n matrix that changes by delta the plain loop reads
+        # delta/n^2 and the other two delta, and for every entry of nd
+        # directions changing by delta (real and imaginary) the plain loop
+        # reads nd sqrt(2) delta, scipy delta and broyden_mixing
+        # delta sqrt(2 nd) n. scf.converged says that the loop met maxerror
+        # in its own norm, and scf.residual below is the max-norm for both
+        # broyden_mixing and scipy. Before, krylov and anderson used the
+        # scipy default (6e-6) and broyden1 and linear 100*maxerror, while
+        # the loop was marked converged, so a BdG state stopped short of
+        # its charge was told it had no gap
         if solver=="krylov":
             from scipy.optimize import newton_krylov
             x = newton_krylov(fsol,x0,rdiff=1e-3,f_tol=maxerror) # use the solver
@@ -865,13 +876,17 @@ def densitydensity(h,filling=0.5,mu=None,verbose=0,use_jax=False,**kwargs):
             # integrates on, which also keeps the eigenpairs for it
             from ..qtcitk.densitymatrix_qtci import get_fermi4filling_qtci
             return get_fermi4filling_qtci(h,filling,nk=h.nk,T=T,
-                    tolerance=kwargs.get("tolerance",1e-6))
+                    tolerance=kwargs.get("tolerance",1e-6),keep_mesh=True)
         elif integration=="triangle":
             # on the simplices the density matrix is integrated on, where
             # the charge is a continuous function of the Fermi level, so
-            # the density matrix holds exactly the requested filling
+            # the density matrix holds exactly the requested filling. The
+            # search keeps its mesh (band energies, eigenvectors and
+            # simplices) for the density matrix of h shifted by this level,
+            # which follows, see dmtk.simplexdm._last_search
             from ..dmtk import simplexdm
-            return simplexdm.get_fermi4filling(h,filling,nk=h.nk,T=T)
+            return simplexdm.get_fermi4filling(h,filling,nk=h.nk,T=T,
+                    keep_mesh=True)
         else: return h.get_fermi4filling(filling,nk=h.nk,T=T)
     # a Bogoliubov-de Gennes h at a filling: the Fermi level is found on
     # the charge of the paired state, as an offset from the one of the

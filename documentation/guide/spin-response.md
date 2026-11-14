@@ -482,6 +482,133 @@ See `examples/2d/magnon_bands_tdhf/main.py` for a runnable script, and
 `jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/18_magnons_tdhf.ipynb`
 for an executed notebook.
 
+### Chern number of a magnon band
+
+We will now see how to compute the Chern number of a magnon band, with
+`h.get_magnon_chern()`. For an electron band the Chern number counts the
+winding of the Bloch state over the Brillouin zone. What plays the role of
+the Bloch state for a magnon? In time-dependent Hartree-Fock a magnon with
+momentum $\mathbf Q$ is a sum of electron-hole pairs, an electron in an empty
+band $c$ at $\mathbf k+\mathbf Q$ and a hole in an occupied band $v$ at
+$\mathbf k$, with the amplitudes $X_{vc}(\mathbf k)$. The pairs are built
+again at every $\mathbf Q$, so we write the magnon in the orbitals instead,
+
+$$
+\Phi_{\mathbf Q}(\mathbf k;\alpha,\beta)=\sum_{vc}X_{vc}(\mathbf k)\,
+u_{c,\mathbf k+\mathbf Q}(\alpha)\,u^*_{v,\mathbf k}(\beta) ,
+$$
+
+where $u_{n,\mathbf k}(\alpha)$ is the Bloch state of band $n$ on the orbital
+$\alpha$, spin included. This is the amplitude of the operator
+$c^\dagger_{\alpha,\mathbf k+\mathbf Q}c_{\beta,\mathbf k}$ in the magnon, so
+it does not depend on the phases of the Bloch states. A magnon with a
+de-excitation part $Y$ gets a second block, built in the same way. The Chern
+number of a group of magnon bands is then
+
+$$
+C=\frac{1}{2\pi}\sum_{\square}F_{\square} ,
+$$
+
+where $F_\square$ is the Berry flux of $\Phi_{\mathbf Q}$ through one
+plaquette of a mesh of $\mathbf Q$, from the overlaps of the states at its
+four corners. The sign is the one of `h.get_chern()`. The magnon bands are
+what inelastic neutron scattering measures, and a band with a Chern number
+gives chiral magnon states at the edges of the magnet.
+
+We take a ferromagnet on the honeycomb lattice, with a second-neighbor
+hopping $t'=0.3t$, a Kane-Mele spin-orbit coupling $\lambda=0.15t$ and a
+Zeeman field $B=3t$, with $U=8t$ at half filling. The field polarizes the
+magnet along $-z$ and gives the magnons a gap, and the product of $\lambda$
+and $t'$ plays the role of a Dzyaloshinskii-Moriya interaction:
+
+```python
+from pyqula import geometry
+g = geometry.honeycomb_lattice()
+h = g.get_hamiltonian(tij=[1.0,0.3]) # first and second neighbor hopping
+h.add_kane_mele(0.15) # spin-orbit coupling, conserves Sz
+h.add_zeeman([0.,0.,3.0]) # a field, so that the magnon has a gap
+nk = 8 # the mean field and the magnons share this mesh
+hmf = h.get_mean_field_hamiltonian(U=8.0,filling=0.5,mf="ferro",nk=nk)
+c0 = hmf.get_magnon_chern(bands=[0],nq=8,nk=nk) # the lower magnon band
+c1 = hmf.get_magnon_chern(bands=[1],nq=8,nk=nk) # the upper magnon band
+c01 = hmf.get_magnon_chern(bands=[0,1],nq=8,nk=nk) # the two together
+```
+
+The magnet is saturated, `hmf.get_vev("sz")` is $-1$ on both sites. Each
+result is a float that is an integer up to roundoff: `c0` is $+1$, `c1` is
+$-1$ and `c01` is $0$. With `add_kane_mele(-0.15)` the two signs flip. The
+integers are the same with `nq=12`, and with a mean field and magnons at
+`nk=12`. The snippet takes about 12 seconds.
+
+The number alone does not say if it can be trusted. With `full_output=True`
+the method returns a record instead:
+
+```python
+r = hmf.get_magnon_chern(bands=[0],nq=8,nk=nk,full_output=True)
+print(r.chern,r.gap,r.bound,r.max_flux) # the integer and what it rests on
+```
+
+`r.energies` has the energies of the band at the points `r.qs` of the mesh,
+from $4.55t$ to $4.80t$ here. `r.gap` is $0.33t$, the smallest distance to
+the other magnon band on the mesh. `r.bound` is $2.75t$, the smallest
+distance below the Stoner continuum, the electron-hole pairs with a spin
+flip. `r.max_flux` is $0.54$, about $0.17\pi$, the largest Berry flux of one
+plaquette, and `r.fluxes` has all of them.
+
+![Berry curvature of the lower and the upper magnon band of the honeycomb ferromagnet over the Brillouin zone, from the fluxes of the record on a mesh of 12 by 12 points.](img/spin_magnonchern.png#only-light)
+![Berry curvature of the lower and the upper magnon band of the honeycomb ferromagnet over the Brillouin zone, from the fluxes of the record on a mesh of 12 by 12 points.](img/spin_magnonchern-dark.png#only-dark)
+
+The figure takes `nq=12` and shows `r.fluxes` divided by the area of a
+plaquette, the Berry curvature, whose mean over the zone is $C$. The
+curvature of the lower band is positive and sits around K and K', at
+$(1/3,1/3)$ and $(2/3,2/3)$ in units of the reciprocal lattice vectors,
+with a largest value of $7.3$. This is where the two magnon bands come
+closest, $0.26t$ apart on this mesh. The upper band has the opposite
+curvature at the same points, so the two together give zero. The largest
+flux of a plaquette is $0.32$, about $0.10\pi$, so the mesh resolves the
+bands.
+
+??? example "Code of this figure (documentation/figures/spin_magnonchern.py)"
+
+    ```python
+    --8<-- "spin_magnonchern.py"
+    ```
+
+The integer is the Chern number of the band only under four conditions:
+
+- The band is separated from the other magnon bands at every $\mathbf Q$,
+  and it is below the Stoner continuum. A band that touches another one at a
+  point of the mesh raises `ValueError`. A touching between two points of
+  the mesh is not seen, also not in `r.gap`, which is measured on the points
+  of the mesh, so a second `nq` is the check. The default `nq=12` holds
+  $\Gamma$, M and K of a hexagonal zone, where a symmetry can force two
+  bands to touch.
+- The magnons are converged in `nk`, the mesh of the mean field and of the
+  magnon problem, and the integer does not change with `nq`.
+- The Berry flux of every plaquette is below $\pi$. A flux close to $\pi$ in
+  `r.max_flux` means that `nq` has to grow. A group of $n$ bands that share
+  one state, as a spin triplet, has $n$ times the flux of one band.
+- The mean-field state is stable. A complex or a negative magnon energy
+  raises `ValueError`. A magnet with no gap at $Q=0$ and no net moment, an
+  antiferromagnet without a field, needs `shift=`, a mesh that avoids $Q=0$:
+  its Goldstone mode has no eigenvector there, and whether the mesh with
+  $Q=0$ raises depends on the sign of the small residual of the mean field.
+
+The keywords are:
+
+- `bands`: the group of bands, counted from the lowest magnon, a contiguous
+  list; `[0]` by default.
+- `nq`: the points of the mesh of $\mathbf Q$ along each reciprocal lattice
+  vector, 12 by default.
+- `shift`: the offset of the mesh, in units of the reciprocal lattice
+  vectors.
+- `nk`, `V`, `channel`, `metal`: as in `h.get_magnon_energies()`.
+- `full_output`: return the record instead of the number.
+
+See `examples/2d/magnon_chern/main.py` for a runnable script, and
+`jupyter-notebooks/functionalities/topological_characterization/15_magnon_exciton_chern.ipynb`
+for an executed notebook.
+
 ## Charge response and plasmons
 
 The same RPA can be done in the charge channel, with

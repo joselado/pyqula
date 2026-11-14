@@ -32,10 +32,10 @@ def test_the_operator_weighted_map_is_the_operator_weighted_ldos(tmp_path,
     """The weight of an eigenstate used to be the vector A|psi>, which was
     then multiplied elementwise by |psi(i)|^2 -- a quantity that changes
     when |psi> is multiplied by a global phase, so not an observable at
-    all. It is now the expectation value <psi|A|psi>, the same convention
-    get_ldos uses in mode='arpack', which makes the map written at a given
-    energy the array get_ldos returns at that energy -- for a k-dependent
-    operator too."""
+    all. It is now the local matrix element Re[conj(psi(a)) (A psi)(a)]
+    summed over the orbitals of each site, the convention of get_ldos in
+    every mode, which makes the map written at a given energy the array
+    get_ldos returns at that energy -- for a k-dependent operator too."""
     monkeypatch.chdir(tmp_path)
     g = geometry.honeycomb_zigzag_ribbon(4)
     h = g.get_hamiltonian()

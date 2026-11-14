@@ -56,14 +56,25 @@ from .valley import valley_coupling
 # and the sign of tau_y followed the order of the atoms.
 
 
+# a first-neighbor bond whose in-plane length is below this, in units of
+# the bond length, is a vertical bond between layers, not a honeycomb bond
+_VERTICAL = 1e-3
+
+
 def _first_neighbor_pairs(rs1,rs2):
-    """Return the indices (ii,jj) of the pairs rs1[i],rs2[j] at distance 1"""
+    """Return the indices (ii,jj) of the pairs rs1[i],rs2[j] at distance 1
+    that have an in-plane part. A vertical bond of the same length, between
+    two layers stacked on top of each other (specialgeometry.multilayer with
+    its default dz, or the bilayers of a (111) diamond film), has no
+    in-plane direction to give K, and the plane wave lives on the bonds of
+    each layer, so it is left out, as a longer interlayer bond is"""
     from scipy.spatial import cKDTree
     near = cKDTree(rs1).query_ball_tree(cKDTree(rs2),np.sqrt(1.01))
     ii = np.repeat(np.arange(len(rs1)),[len(x) for x in near])
     jj = np.array([j for x in near for j in x],dtype=int)
     dr = rs1[ii] - rs2[jj]
     keep = np.sum(dr*dr,axis=1)>0.99 # drop the pairs closer than a bond
+    keep &= np.hypot(dr[:,0],dr[:,1])>_VERTICAL # and the vertical bonds
     return ii[keep],jj[keep]
 
 
@@ -167,22 +178,23 @@ def _check_valley_geometry(g):
     sub2 = np.tile(sub,len(shifts))
     (ii,jj) = _first_neighbor_pairs(rs,r2)
     if len(ii)==0: raise ValueError(_WHAT+" need a honeycomb lattice with "
-            "bond length 1, and this geometry has no first neighbors")
+            "bond length 1, and this geometry has no first neighbors with "
+            "an in-plane part")
     qs = _bond_wavevectors(rs[ii],r2[jj],sub[ii],sub2[jj])
     # the three bonds of a site are 120 degrees apart when they all find
-    # the same K
+    # the same K; the guards are written so that a NaN fails them
     (sites,first) = np.unique(ii,return_index=True)
     qsite = np.zeros((len(rs),3))
     qsite[sites] = qs[first]
-    if np.max(np.abs(qs-qsite[ii]))>1e-3: raise ValueError(_WHAT+" need a "
-            "honeycomb lattice: the bonds of a site have to point in "
-            "three directions 120 degrees apart, and in this geometry "
+    if not np.all(np.abs(qs-qsite[ii])<=1e-3): raise ValueError(_WHAT+
+            " need a honeycomb lattice: the bonds of a site have to point "
+            "in three directions 120 degrees apart, and in this geometry "
             "they do not")
     # a periodic geometry has to hold a whole period of the plane wave,
     # which is the Kekule cell: Q.a must be a multiple of 2 pi
     for (i,a) in enumerate(lattice_vectors):
         n = qs@np.asarray(a)/(2.*np.pi)
-        if np.max(np.abs(n-np.round(n)))>1e-3: raise ValueError(_WHAT+
+        if not np.all(np.abs(n-np.round(n))<=1e-3): raise ValueError(_WHAT+
             " need a Kekule-commensurate geometry when periodic: a "
             "supercell of the primitive honeycomb cell whose size is a "
             "multiple of 3. Lattice vector a%d=%s is not commensurate "
@@ -273,16 +285,27 @@ def get_inplane_valley(h,angle=0.0,delta=None,**kwargs):
     ho = _inplane_valley_hamiltonian(h,angle=angle)
     hkgen = ho.get_hk_gen() # cos(angle)*tau_x + sin(angle)*tau_y
     sharpen = get_sharpen(delta=delta) # renormalize eigenvalues to +-1
+    if h.dimensionality==0: return sharpen(hkgen(None)) # return a matrix
+    # the k-point and the matrix of the last call: an expectation value or
+    # a band structure applies the operator to every state of a k-point in
+    # turn, and rebuilding the Bloch sum (and with delta its
+    # diagonalization) for each state cost one build per state instead of
+    # one per k-point. The pair is kept and read as one object, so that two
+    # threads cannot take the matrix of one k-point for another
+    last = [None]
     def fun(m=None,k=None):
-        if h.dimensionality>0 and k is None: # requires a kpoint
+        if k is None: # requires a kpoint
             raise ValueError("the in-plane valley operator of a periodic "
                     "Hamiltonian has to be evaluated at a k-point, and none "
                     "was given")
-        hk = hkgen(k) # evaluate the operator
-        hk = sharpen(hk) # sharpen the valley
-        if m is None: return hk # just return the valley operator
+        key = tuple(np.asarray(k,dtype=float).ravel())
+        kept = last[0]
+        if kept is None or kept[0]!=key:
+            kept = (key,sharpen(hkgen(k))) # evaluate and sharpen
+            last[0] = kept
+        hk = kept[1]
+        if m is None: return hk.copy() # a fresh matrix, as before
         else: return hk@m # return the projector
-    if h.dimensionality==0: return fun() # return a matrix
     return fun # return function
 
 

@@ -37,7 +37,8 @@ about 200 sites.
   arXiv:0910.1138, and Figgins and Morr, arXiv:1001.4530, TeX of both read).
   By default `tf` is the amplitude of the f fermion, as in the second
   paper. With `J=` it is the bare spin-flip amplitude of the first one, and
-  the f amplitude is $t_fV_j^*/J$.
+  the f amplitude is $2t_fV_j^*/J$, with $J$ the Coqblin-Schrieffer coupling
+  of the loop (see the repairs below).
 
 ## What was measured
 
@@ -140,3 +141,56 @@ Cotunneling spectrum, on the chain at $J=1.5$, filling 0.15 ($V=0.374$):
 They pass, together with `tests/documentation` (14), `tests/spinon` and
 `tests/kondolattice`. The suite collects 3410 tests now; the whole suite was
 not run. The website builds in strict mode and the PDF of the guide builds.
+
+## Repairs of the seventh bug audit
+
+- **The amplitude with `J=` was half of the right one** (finding kondo#0,
+  14 November 2026). The loop takes the exchange
+  $H_I=\frac J2\vec S\cdot(c^\dagger\vec\sigma c)$, so $J/2$ is the
+  Heisenberg coupling $J'$ of Maltseva, Dzero and Coleman, and
+  $[c,H_I]=\frac J2(\vec\sigma\cdot\vec S)c$. In the mean field
+  $[c,H_I]$ is $V^*f$, so the spin-flip operator $(\vec\sigma\cdot\vec S)c$
+  of the paper is $2V^*f/J$, and the f amplitude is $2t_fV_j^*/J$. The
+  code had $t_fV_j^*/J$, so with `J=` the f part was 4 times too small and
+  the interference part 2 times. The default `J=None` was not affected,
+  and no example or guide snippet passes `J`. The composite fermion of
+  `compositespectrum` already used the right factor, $F=\frac23
+  (\vec\sigma\cdot\vec S)c=\frac{4V^*}{3J}f$.
+  `test_J_gives_the_amplitude_of_the_spin_flip_operator` compares the
+  amplitude, on the two inequivalent sites of the staggered chain ($J=1.5$,
+  filling 0.15, $nk=50$), with $2H_{cf}/J$ read from the converged
+  Hamiltonian and with $\frac32$ times the composite amplitude, and the
+  whole spectrum with the one of the explicit amplitude. It fails on the
+  old code by $0.38$ and passes to $10^{-12}$. The old test passed the
+  formula of the code by hand, so it could not see the factor.
+  Both references of that test carry the same $2/J$ as the code, so the
+  review added two tests that do not.
+  `test_J_amplitude_is_the_order_parameter_of_the_mean_field` uses the
+  relation of the paper itself, $(\vec\sigma\cdot\vec S)c\to
+  -\sum_s\langle f_s^\dagger c_s\rangle f$, an expectation value of the
+  converged state where no coupling enters. Taken from the eigenstates on
+  the mesh and at the temperature of the loop ($nk=50$, $T=0.02$), it
+  agrees with the amplitude to $9\times10^{-9}$, and the old code is off by
+  $0.38$.
+  `test_J_spectrum_does_not_depend_on_the_phase_of_the_f_fermion` gives
+  each f fermion a phase by hand and asks for the same spectrum, which
+  holds because the amplitude follows $V_j^*$ and not $V_j$. A copy of the
+  code without the conjugate passed every test before, since the loop
+  always returns a real $V$, and it fails this one.
+- **The k-loop of the spectrum** (finding kondo#2 of the spinon group) was
+  left as it is. The batched diagonalization of that finding was not
+  supported by its second reader, and the half block of a spin-degenerate
+  mean field was claimed only for `spinonspectrum.py`. The same half block
+  would work here when the mean field is spin degenerate, one
+  diagonalization of half the size per k-point. It is not built and not
+  measured.
+- **The loop does not keep a complex $V$** (seen in the review, not
+  repaired: `scftk/kondolattice.py` is outside this group). A seed
+  $0.3e^{0.7i}$ on the staggered chain converges to the same real $V$ as a
+  real seed. The reason is the update $V\leftarrow-\frac J2\sum_s$
+  `dm[f,c]`: on a converged state whose f fermions were given a phase by
+  hand, this target is the complex conjugate of the $V$ in the Hamiltonian,
+  to $7\times10^{-9}$, so the density matrix is used transposed. Each
+  $V_j$ can be made real with the phase of its own f fermion, so the
+  solution that the loop finds is right. Whether a model exists in the
+  package where this choice of phase is not possible was not checked.

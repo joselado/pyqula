@@ -145,3 +145,97 @@ Checked with the old and the new operator, which agree away from the edges:
   over the Kekule cell removes it; no routine does this.
 - **`real_space_vev` is at the Gamma point only**, so a periodic texture
   needs a supercell in place of a k-mesh.
+
+## Repairs of the seventh bug audit
+
+Done on 14 November 2026, on the findings nov13#0, nov13#1, nov13#3 and
+nov13#4 of `future_development/bug_audit_7.md`.
+
+- **Vertical bonds gave NaN.** A first-neighbor bond with no in-plane
+  part, between two layers on top of each other at the bond length, gave
+  $\mathbf K=0/0$, and both guards of the geometry let the NaN through, so
+  `valley_x`, `valley_y` and `add_valley_exchange` came back with NaN
+  entries and no error. `specialgeometry.multilayer(g,l=[0,0])` at its
+  default `dz=[0,0,1]` gave 36 NaN entries of 1296 in the 3x3 cell, and the
+  (111) diamond film `geometry.buckled_honeycomb_lattice(2)` 14. Such a bond
+  has no direction to give $\mathbf K$, and the plane wave lives on the
+  bonds of each layer, so `_first_neighbor_pairs` now leaves out the bonds
+  whose in-plane length is below `_VERTICAL = 1e-3`, as a longer interlayer
+  bond already was. The two guards are written so that a NaN fails them.
+  `test_vertical_bonds_carry_no_inplane_valley` checks that both geometries
+  give the operators of the same layers pulled apart by two bond lengths,
+  to $10^{-12}$. Raising for these geometries instead was the other option.
+  With the vertical bonds left out no NaN reaches the guards, so a copy of
+  the code with the old guards, `np.max(...)>1e-3`, passed every test.
+  `test_bond_without_inplane_direction_cannot_pass_the_guards` lets the
+  vertical bonds through again (`_VERTICAL=-1`) and asks for the error on
+  the AA stack; the old guards fail it.
+  `valley_coupling` of $\tau_z$ (`operatortk/valley.py`) had the same blind
+  spot: on the film of two buckled layers it took the vertical bonds as
+  in-plane bonds of length 0, so the lengths differed, it returned the flat
+  $1/4.5$, and $\tau_z$ had the eigenvalues $\pm8/9$ on the Dirac states
+  ($\pm1$ with the layers pulled apart). It now leaves the vertical bonds
+  out too, and the eigenvalues are $\pm1$. `test_vertical_bonds_do_not_change_tauz`
+  compares the film with the same layers pulled apart: $2\times10^{-2}$ on
+  the code before, $5\times10^{-17}$ after.
+- **`delta=` was dropped on a sparse Hamiltonian.** Since the operators of
+  a sparse Hamiltonian are sparse, the sharpening $e\to e/(|e|+\delta)$
+  returned them untouched, and a dense and a sparse Hamiltonian of the same
+  geometry gave operators that differ by up to 0.32 at $\delta=0.1$ (0.12 for
+  `valley_x` on the 3x3 cell at $k=(0.1,0.2)$). `sharpen.py` now
+  diagonalizes the matrix dense (`algebra.eigh` refuses one above
+  `algebra.maxsize`) and returns the result in the storage of the input.
+  This also repairs `valley` ($\tau_z$), which had the same skip.
+  `test_sharpened_valley_is_the_same_dense_and_sparse` compares the two
+  storages and the eigenvalue map, on a flake and on the 3x3 cell.
+- **The ev2d tests sampled one k-point.** With `nk=2` the four points of
+  `linspace(-1,1,nk)+k0` differ by integers, so the test that a
+  k-dependent operator is applied at the k-point of each state could not
+  see an operator applied at a fixed mesh point. The tests use `nk=4` now
+  (`nk=3` has the same defect), and a copy of the code that applies the
+  operator at the first mesh point fails the new test and passes the old one.
+- **One Bloch sum per state.** An expectation value, `ev2d` and
+  `get_bands` apply the operator to every state of a k-point in turn, and
+  the operator rebuilt its Bloch sum, and with `delta` its diagonalization,
+  for each state. `get_inplane_valley` now keeps the matrix of the last
+  k-point and hands out a copy when the matrix itself is asked for. The
+  results are the same to the last digit. On a 9x9 honeycomb cell (162
+  sites, spinless, two threads, the best of three runs, the old and the new
+  code back to back on a shared machine, so the ratios are what matters):
+
+  | call | old | new |
+  | --- | --- | --- |
+  | `h.get_vev("valley_x",nk=10)` | 4.91 s | 1.27 s |
+  | the same with `delta=0.1`, `nk=3` | 21.0 s | 0.36 s |
+  | `spectrum.ev2d(h,operator="valley_x",nk=8)` | 3.31 s | 0.78 s |
+  | `h.get_bands(operator="valley_x")` at four k-points | 0.49 s | 0.18 s |
+
+  The peak memory is 0.44 GB in both. The same rebuild was in `valley`
+  ($\tau_z$, `operatortk/valley.py`) and in the two- and three-dimensional
+  `velocity` (`operators.get_velocity`), which now keep the matrix and the
+  velocities of the last k-point in the same way. On the same cell, the
+  best of two runs, the committed tree against the working tree, with the
+  same results byte for byte and 0.38 GB in both:
+
+  | call | old | new |
+  | --- | --- | --- |
+  | `h.get_vev("valley",nk=10)` | 6.05 s | 1.14 s |
+  | the same with `delta=0.1`, `nk=3` | 17.6 s | 0.40 s |
+  | `h.get_vev("velocity",nk=4)` | 5.46 s | 0.50 s |
+  | `h.get_bands(operator="valley")` at four k-points | 0.59 s | 0.20 s |
+
+  `test_tauz_kept_between_calls_is_the_one_of_each_k_point` and
+  `test_velocity_kept_between_calls_is_the_one_of_each_k_point` go back and
+  forth between k-points and compare with a new operator.
+
+  The review timed the change alone, the committed tree against the
+  committed tree with only `inplane_valley.py` and `sharpen.py` replaced,
+  since the working tree had other changes: on the same cell
+  `h.get_vev("valley_x",nk=10)` went from 4.38 s to 1.08 s, and with
+  `delta=0.1` at `nk=2` from 7.14 s to 0.17 s (the best of three pairs, two
+  threads, shared machine, 0.38 GB in both). The two results are the same
+  byte for byte. The k-point and its matrix are kept as one object, so that
+  two threads that share an operator cannot take the matrix of one k-point
+  for another, and a flake, which has no k-point, does not go through it.
+  `test_operator_kept_between_calls_is_the_one_of_each_k_point` fails on a
+  copy that hands out the kept matrix itself, and on a copy that ignores k.

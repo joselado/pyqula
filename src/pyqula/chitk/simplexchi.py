@@ -1358,6 +1358,32 @@ class MeshEigen:
         return self.E,self.U
 
 
+def _nonzero_rows(ops,nz,idx):
+    """The operators ops[idx] restricted to their nonzero rows, nz[i] the
+    mask of the nonzero rows of ops[i]: rows[c] holds the row indices of
+    ops[idx[c]] and sub[c] = ops[idx[c]][rows[c]], padded with zero rows
+    to a common count, one at least"""
+    r = max(1,int(np.max(nz[idx].sum(axis=1),initial=0)))
+    rows = np.zeros((len(idx),r),dtype=np.int64)
+    sub = np.zeros((len(idx),r,ops.shape[2]),dtype=np.complex128)
+    for c,i in enumerate(idx):
+        x = np.flatnonzero(nz[i])
+        rows[c,:len(x)] = x
+        sub[c,:len(x)] = ops[i][x]
+    return rows,sub
+
+
+def _sandwich(U,rows,sub,V):
+    """U^dag A_c V as [k,c,n,m], for U and V of shape (k,n,n) with the
+    eigenvectors as columns and the operators A_c given by their nonzero
+    rows (_nonzero_rows). A site projector times a local operator has only
+    the rows of its site, r of them, so the product costs 2 r n^2 per k
+    and operator instead of 2 n^3, and 2 n^3 summed over the sites. The
+    padding rows are zero and add nothing"""
+    Ur = U[:,rows,:] # (k,c,r,n), the rows of every operator
+    return np.conj(np.transpose(Ur,(0,1,3,2))) @ (sub[None] @ V[:,None])
+
+
 def _chi_simplices(dim,nk,E1,E2,energies,delta,T,elements,diag,ni,nj):
     """the weights of every vertex at every frequency (pair_weights), then
     contracted with the matrix elements. Returns the response and the
@@ -1387,7 +1413,8 @@ def _chi_sources(dim,nk,E1,E2,energies,delta,T,elements,diag,ni,nj):
     """the matrix elements contracted first, G[k,n,m,c] for the components
     c = i (diag) or (i,j), then the source kernel (response_sources), by
     blocks of components that keep G, and the moments of the bins, below
-    max_memory_gb/4. The pieces are rebuilt for every block. Returns the
+    max_memory_gb/4. The pieces are rebuilt for every block, and the
+    matrix elements of the operators of the block only. Returns the
     response and the number of passes over the matrix elements"""
     from ..dostk.simplexdos import _degeneracy_tol
     nkk,n = E1.shape
@@ -1403,9 +1430,11 @@ def _chi_sources(dim,nk,E1,E2,energies,delta,T,elements,diag,ni,nj):
     for c0 in range(0,len(comps),cblock):
         cs = comps[c0:c0+cblock]
         ia = np.array([c[0] for c in cs]); ib = np.array([c[1] for c in cs])
+        ua,ja = np.unique(ia,return_inverse=True) # the operators of the block
+        ub,jb = np.unique(ib,return_inverse=True)
         G = np.zeros((nkk,n*n,len(cs)),dtype=np.complex128)
-        for i0,MA,MB in elements():
-            G[i0:i0+len(MA)] = np.transpose(MA[:,ia]*MB[:,ib],(0,2,1))
+        for i0,MA,MB in elements(ua,ub):
+            G[i0:i0+len(MA)] = np.transpose(MA[:,ja]*MB[:,jb],(0,2,1))
         npass += 1
         G = G.reshape(nkk,n,n,len(cs))
         # the multiplet average of the weights, moved to G
@@ -1519,23 +1548,44 @@ def chi_triangle(h,q=None,energies=np.linspace(-3.,3.,100),nk=60,
                         _eigen(hkgen,kq,batch,True)):
                     yield i0,u1,u2
         npair = 2
-    def elements(): # <n,k|A_i|m,k+q> as [k,i,nm], <m,k+q|B_j|n,k> as [k,j,nm]
+    nzA = np.any(pAs!=0.,axis=2) # the nonzero rows of every operator
+    nzB = np.any(pBs!=0.,axis=2)
+    def elements(ia=None,ib=None):
+        """<n,k|A_i|m,k+q> as [k,i,nm] and <m,k+q|B_j|n,k> as [k,j,nm] per
+        batch of k, for the operators ia and ib, all of them when None"""
+        ia = np.arange(ni) if ia is None else ia
+        ib = np.arange(nj) if ib is None else ib
+        rA,sA = _nonzero_rows(pAs,nzA,ia)
+        rB,sB = _nonzero_rows(pBs,nzB,ib)
         for i0,U1,U2 in vectors():
             kb = len(U1)
-            MA = np.conj(np.transpose(U1,(0,2,1)))[:,None] @ (
-                    pAs[None] @ U2[:,None])
-            MB = np.conj(np.transpose(U2,(0,2,1)))[:,None] @ (
-                    pBs[None] @ U1[:,None])
-            MA = MA.reshape(kb,ni,n*n)
-            MB = np.transpose(MB,(0,1,3,2)).reshape(kb,nj,n*n)
+            MA = _sandwich(U1,rA,sA,U2).reshape(kb,len(ia),n*n)
+            MB = _sandwich(U2,rB,sB,U1) # [k,j,m,n]
+            MB = np.transpose(MB,(0,1,3,2)).reshape(kb,len(ib),n*n)
             yield i0,MA,MB
+    def traced(ia=None,ib=None):
+        """the mean over the sites i of the products M^ii_nm as [k,0,nm],
+        the one component of mode="trace", against B = 1, in the layout of
+        elements. A kernel can only ask for that component, so ia and ib
+        are not read"""
+        for i0,MA,MB in elements():
+            P = np.mean(MA*MB,axis=1,keepdims=True)
+            yield i0,P,np.ones_like(P)
     if kernel is None: kernel = default_kernel
     if kernel not in _kernels:
         raise ValueError("unknown kernel "+repr(kernel)+" of the triangle "
                 "response, accepted values are "+", ".join(_kernels))
-    out,npass = _kernels[kernel](dim,nk,E1,E2,energies,delta,T,elements,
-            diag,ni,nj)
+    if mode=="trace":
+        # the kernels are linear in the products of the matrix elements,
+        # so the mean over the sites goes before them: one component in
+        # place of one per site, and in the source kernel one pass over
+        # the matrix elements in place of one per block of sites
+        out,npass = _kernels[kernel](dim,nk,E1,E2,energies,delta,T,traced,
+                True,1,1)
+        out = out[:,0]
+    else:
+        out,npass = _kernels[kernel](dim,nk,E1,E2,energies,delta,T,
+                elements,diag,ni,nj)
     if not keep: ndiag += npair*len(ks)*npass
-    if mode=="trace": out = np.mean(out,axis=1)
     if counted: return energies,out,ndiag
     return energies,out

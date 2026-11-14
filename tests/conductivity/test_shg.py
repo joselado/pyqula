@@ -14,11 +14,14 @@ the two fields, against Kleinman symmetry in the static limit, and through
 its diagonal part against the closed-form injection rate; the 3D grid
 against stacks of honeycomb layers.
 """
+import itertools
+
 import numpy as np
 import pytest
 
 from pyqula import geometry
 from pyqula import sculpt
+from pyqula import strain
 from pyqula import conductivity
 from pyqula import specialhamiltonian
 from pyqula import multihopping
@@ -592,3 +595,125 @@ def test_shg_3d_rejects_qtci(integration):
     h = _stack(_gapped_honeycomb())
     with pytest.raises(NotImplementedError,match="3D"):
         h.get_shg_conductivity(energies=[1.],nk=4,integration=integration)
+
+
+def test_only_the_asked_vertices_are_built():
+    """_eigenbasis_derivatives builds only the vertices its caller reads,
+    and leaves the rest zero. Every vertex that is built is the same array,
+    bit for bit, as in the full build, so the results of the callers do
+    not change. A planar cell has every z derivative exactly zero; a
+    bilayer (the two layers at z = +1 and -1) does not, so the z vertices
+    are built there"""
+    for h in [_gapped_honeycomb(),_bilayer(V=0.2)]:
+        tms,dirs,d,hkgen,cellvol,scale = shg._derivative_tensors(h)
+        ks = np.random.default_rng(3).random((7,3))
+        es,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,ks)
+        planar = not np.any(d[:,2]!=0.)
+        if planar: # the z vertices are not built, and they are zero
+            assert np.all(h1[:,2]==0.) and np.all(h2[:,:,2]==0.)
+            assert np.all(h3[:,:,:,2]==0.)
+        else: assert np.max(np.abs(h1[:,2]))>0.
+        for vertices in [shg.vertex_keys(1),shg.vertex_keys(2),
+                shg.triplet_vertices([(0,1,1)]),
+                shg.triplet_vertices([(2,0,0),(1,1,2)])]:
+            e,x1,x2,x3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,ks,
+                    vertices=vertices)
+            assert np.array_equal(e,es)
+            orders = set(len(v) for v in vertices)
+            assert (x2 is None)==(2 not in orders)
+            assert (x3 is None)==(3 not in orders)
+            full = {1:h1,2:h2,3:h3}
+            part = {1:x1,2:x2,3:x3}
+            for v in shg.vertex_keys(3):
+                if part[len(v)] is None: continue
+                for p in set(itertools.permutations(v)):
+                    idx = (slice(None),)+p
+                    if v in vertices:
+                        assert np.array_equal(part[len(v)][idx],
+                                full[len(v)][idx])
+                    else: assert np.all(part[len(v)][idx]==0.)
+
+
+def _tilted_bilayer():
+    """Two honeycomb layers at z = +-1 joined by a vertical hopping and by
+    a tilted one, between sites of the two layers at an in-plane distance
+    of one bond, with four different onsite energies and a uniaxial strain
+    along a generic in-plane direction: an insulator with no symmetry and
+    no degeneracy, where the derivative vertices with mixed indices, h^xz,
+    h^yz and h^xyz, are finite and no component of the response vanishes"""
+    g = geometry.honeycomb_lattice()
+    g.x = np.array([-0.5,0.5,0.5,-0.5])
+    g.y = np.zeros(4)
+    g.z = np.array([1.,1.,-1.,-1.])
+    g.xyz2r()
+    g.has_sublattice = False
+    g.get_fractional()
+    def tij(r1,r2):
+        dr = r1 - r2
+        if abs(dr[2])<1e-3 and abs(np.linalg.norm(dr)-1.)<1e-3: return 1.0
+        if abs(abs(dr[2])-2.)<1e-3:
+            if np.linalg.norm(dr[:2])<1e-3: return 0.3 # vertical
+            if abs(np.linalg.norm(dr[:2])-1.)<1e-3: return 0.2 # tilted
+        return 0.
+    h = g.get_hamiltonian(has_spin=False,tij=tij)
+    h.add_onsite([0.7,-0.3,0.4,-0.9])
+    strain.uniaxial_strain(h,d=np.array([1.,0.4,0.]),s=0.3)
+    return h
+
+
+def _strained_haldane_metal(mu=0.9):
+    """The honeycomb lattice with a staggered mass and a Haldane term, a
+    uniaxial strain along a generic direction and the Fermi level in the
+    conduction band: no inversion, no time reversal and no C3, so that
+    every dc term and the injection current are finite"""
+    h = _haldane_gapped_honeycomb()
+    strain.uniaxial_strain(h,d=np.array([1.,0.4,0.]),s=0.15)
+    h.shift_fermi(-mu)
+    return h
+
+
+def _vertex_readers(route):
+    """The results of one caller of shg._eigenbasis_derivatives, as a list
+    of arrays: the second-harmonic paths on the tilted bilayer, with
+    components of three different Cartesian indices, which read three
+    different second derivatives, and the injection current and the dc
+    terms on the strained Haldane metal"""
+    from pyqula.conductivitytk import photocurrent, nonlineardc
+    es = [0.4,0.9,1.6]
+    if route in ["velocity","length","triangle"]:
+        comps = ["xyz","zxy","yzx","zzz","xxy"]
+        kw = dict(gauge=route) if route!="triangle" else dict(
+                integration="triangle") # the fields of the simplex kernels
+        h = _tilted_bilayer()
+        # one component per call, so that each call builds the vertices
+        # of one triplet only
+        return [conductivity.shg_conductivity(h,energies=es,nk=6,delta=0.1,
+                T=0.,components=[c],**kw)[1][c] for c in comps]
+    h = _strained_haldane_metal()
+    if route=="injection":
+        comps = ["xxy","yxy","xyx","yyy"]
+        (w,s) = photocurrent.injection_current(h,energies=es,nk=6,T=0.1,
+                delta=0.1,components=comps)
+        return [s[c] for c in comps]
+    if route=="dipole":
+        return [nonlineardc.berry_curvature_dipole(h,nk=6,T=0.1)]
+    s = nonlineardc.nonlinear_dc_conductivity(h,term=route,nk=6,T=0.1)
+    if route!="all": s = {route:s}
+    return [np.array([s[p][c] for c in sorted(s[p])]) for p in sorted(s)]
+
+
+@pytest.mark.parametrize("route",["velocity","length","triangle",
+        "injection","dipole","drude","qmd","all"])
+def test_callers_ask_for_every_vertex_they_read(route,monkeypatch):
+    """Each caller of _eigenbasis_derivatives asks only for the vertices
+    its formulas read. With the full build in their place, the one that
+    every caller had before, its result is the same bit for bit; a caller
+    that left out a vertex it reads would take zeros for it"""
+    got = _vertex_readers(route)
+    assert min(np.max(np.abs(x)) for x in got)>1e-6 # not a comparison of zeros
+    build = shg._eigenbasis_derivatives
+    def build_all(tms,dirs,d,hkgen,kb,vertices=None):
+        return build(tms,dirs,d,hkgen,kb)
+    monkeypatch.setattr(shg,"_eigenbasis_derivatives",build_all)
+    ref = _vertex_readers(route)
+    for (x,y) in zip(got,ref): assert np.array_equal(x,y)

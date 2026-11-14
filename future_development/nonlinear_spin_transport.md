@@ -175,13 +175,15 @@ cannot be built from a real C3 model.
   and Fu's by a double-counted symmetrization. The Drude term agrees with
   `nonlinear_drude_conductivity` at l = 2 in the charge and spin channels.
   The details are in `nonlinear_response.md`.
-- **3D.** The 3D second-order Drude term (and the other second-order terms)
-  comes from `nonlineardc`, whose vertices handle a third lattice vector,
-  checked on decoupled layers. This module stays two-dimensional:
-  `current.derivative` has no 3D branch, and lifting it would need a
-  three-index Taylor recursion and a `zzz` test on a dispersing 3D model.
-  The third-order Drude term of `nonlineardc` reuses this recursion, so it is
-  1D and 2D too. Ezawa gives 3D models for every wave.
+- **3D.** This module is 3D since `5b55594`: the Taylor recursion of the
+  band energies runs over three indices (p,q,r), the Bloch series uses the
+  third lattice vector, and a 3D Hamiltonian is accepted. The second-order
+  terms come from `nonlineardc` as well, and its third-order Drude term
+  reuses this recursion, so it is 3D too (`nonlinear_response.md`). The
+  sweep of `nonlinear_drude_components` and `nonlinear_drude_orders` ran
+  over x and y only until the seventh bug audit, see "Repairs of the
+  seventh bug audit" below. What is still missing is a 3D model of every
+  wave from Ezawa in `specialhamiltoniantk/xwave.py`.
 - **Restricting the perturbation expansion to bands near the Fermi level.**
   The cost is `~nb^2.8 nk^2` and is dominated by expanding every band, but only
   bands within a few `T` of the chemical potential carry weight. Rewriting
@@ -245,6 +247,36 @@ metallic state. Anyone using this as a fingerprint for a gapped material has
 to dope it first — and then show that the magnetic order survives the
 doping, which for a Lieb-mechanism half-filled bipartite magnet is not
 automatic.
+
+## Repairs of the seventh bug audit
+
+The 3D lift of `5b55594` let a 3D Hamiltonian in, but the sweep of
+`nonlinear_drude_components` and `nonlinear_drude_orders` still ran the
+field powers over x and y and the current over x and y. So a spin splitting
+odd in k_z gave exactly zero at every order. On the cubic lattice with
+hopping -1, onsite 0.5 and the splitting s J sin kx sin kz (J = 0.3,
+nk = 40, T = 0.1), the old sweep gave at most 2.8e-17 at every order up to 3,
+while the single component sigma^{x;z} is 4.4e-3: a d-wave magnet read as
+"no response". In 3D the sweep now runs over x, y and z, both for the
+field powers and for the current; in 1D and 2D the keys are the ones it
+always had. The keys of a 3D call are `"x^l1 y^l2 z^l3;b"`, 9 at l = 1 and
+30 at l = 3. The order expansion was already done to the full 3D order, so
+the sweep now reads the z coefficients it was computing anyway.
+`tests/conductivity/test_nonlineardrude_3d_sweep.py` pins it with a
+symmetry: on the cubic lattice the xz magnet is the xy one with y and z
+exchanged, so the two sweeps must agree, and with the old sweep they do not
+(2.8e-17 against 4.4e-3 at l = 1). It also checks that the keys up to
+third order are the expected ones and that each equals
+the single-component call, and that the largest component with the current
+along z equals the largest one with the current along x, which the x and z
+symmetry of that magnet demands. The review broke the sweep twice in a
+scratch copy, with a current that stops at y and with a field label that
+has too many powers of z, and the file fails for both; the symmetry test of the
+orders alone passes the second one, since it only compares maxima.
+A third break, a sweep over z in every dimension, passed the two older test
+files of this module, so nothing pinned that the 1D and 2D keys stay the
+ones of x and y. The file now has a test of the keys of a chain and of a
+square lattice up to third order, and it fails for that break.
 
 [e2411]: https://arxiv.org/abs/2411.16036
 [e2602]: https://arxiv.org/abs/2602.19034

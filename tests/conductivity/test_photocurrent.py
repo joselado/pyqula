@@ -517,3 +517,50 @@ def test_options():
         photocurrent.shift_current(hn,energies=[1.],nk=4)
     with pytest.raises(NotImplementedError,match="Nambu"):
         photocurrent.sum_frequency_conductivity(hn,(1,2),energies=[1.],nk=4)
+
+
+def test_injection_rate_shares_its_commutators():
+    """injection_rate builds r^b once per b and [r^c, P h^a P] once per
+    (a,c) for all the triplets at once. Each triplet alone, where nothing
+    is shared, gives the same weights, on a supercell whose folded bands
+    are degenerate along lines (so the multiplet blocks are there); only
+    the final product with the Lorentzians may round differently when it
+    has one column instead of 27"""
+    h = _haldane().get_supercell(2)
+    tms,dirs,d,hkgen,cellvol,scale = shg._derivative_tensors(h)
+    ks = kubo._kmesh(h,6)
+    es,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,ks)
+    f = kubo._fermi(es,0.05)
+    ws = np.linspace(0.5,4.,7)
+    trip = photocurrent._triplets(photocurrent._all_components())
+    tol = 1e-6*scale
+    eta = photocurrent.injection_rate(es,h1,f,ws,0.1,trip,tol)
+    assert np.max(np.abs(eta))>0.
+    for (t,abc) in enumerate(trip):
+        one = photocurrent.injection_rate(es,h1,f,ws,0.1,[abc],tol)
+        assert np.max(np.abs(one[:,0]-eta[:,t]))<=1e-14*np.max(np.abs(eta))
+
+
+def test_injection_current_does_not_depend_on_the_batch():
+    """The k-points of injection_current go in batches sized by their
+    memory, thousands for a few bands. The k-sum is linear, so batches of
+    7 k-points, which do not divide the mesh, give the same rate to
+    rounding, and the batch stays within its budget"""
+    h = _haldane()
+    ws = np.linspace(0.5,4.,9)
+    comps = ["xxy","yxy","xyx"]
+    (w,e0) = photocurrent.injection_current(h,energies=ws,nk=12,T=0.05,
+            components=comps)
+    old = photocurrent._batch_size
+    try:
+        photocurrent._batch_size = lambda n,nw,nt: 7
+        (w,e1) = photocurrent.injection_current(h,energies=ws,nk=12,T=0.05,
+                components=comps)
+    finally: photocurrent._batch_size = old
+    scale = max(np.max(np.abs(e0[c])) for c in comps)
+    assert scale>0.
+    for c in comps: assert np.max(np.abs(e1[c]-e0[c]))<1e-13*scale
+    for (n,nw,nt) in [(2,351,3),(18,50,27),(200,100,27)]:
+        nb = photocurrent._batch_size(n,nw,nt)
+        assert nb>=1 and (nb==1 or nb*(16.*(40+nt)+24.*nw)*n*n<=2e8)
+    assert photocurrent._batch_size(2,351,3)>1000 # not a fixed 64

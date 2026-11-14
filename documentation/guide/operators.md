@@ -17,7 +17,10 @@ With `h.get_bands()` this gives one extra array, the value $O_n(\mathbf k)$
 of each state, so you can color the band structure with it. With
 `h.get_dos()` each state enters the density of states with weight
 $O_n(\mathbf k)$, so you get, for example, the spin-up minus spin-down
-density of states. Operators can also be added and multiplied, and some of
+density of states. With `h.get_ldos()` and `h.get_multildos()` each site
+$i$ gets the local part of this weight,
+$\textrm{Re}\,\Psi_n^*(i)\,(O\Psi_n)(i)$, and the sum over the sites gives
+back $O_n(\mathbf k)$. Operators can also be added and multiplied, and some of
 them depend on $\mathbf k$ or are not even linear, as we see below.
 
 See the executed notebooks

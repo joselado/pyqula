@@ -300,6 +300,94 @@ See `examples/2d/exciton_bands/main.py` for a runnable script, with the
 exciton band of a gapped honeycomb lattice below its electron-hole
 continuum.
 
+### Chern number of an exciton band
+
+We will now see how to compute the Chern number of an exciton band, with
+`h.get_exciton_chern()`. The exciton at momentum $\mathbf Q$ is a sum of
+electron-hole pairs, an electron in the empty band $c$ at $\mathbf k+\mathbf Q$
+and a hole in the occupied band $v$ at $\mathbf k$, with the amplitudes
+$A_{vc}(\mathbf k)$. As for a magnon in
+[Spin susceptibility, RPA and magnons](spin-response.md#chern-number-of-a-magnon-band),
+we write it in the orbitals,
+
+$$
+\Phi_{\mathbf Q}(\mathbf k;\alpha,\beta)=\sum_{vc}A_{vc}(\mathbf k)\,
+u_{c,\mathbf k+\mathbf Q}(\alpha)\,u^*_{v,\mathbf k}(\beta) ,
+$$
+
+with $u_{n,\mathbf k}(\alpha)$ the Bloch state of band $n$ on the orbital
+$\alpha$. This state does not depend on the phases of the Bloch states, so it
+plays the role of a Bloch state for the exciton. The Chern number is the sum
+of its Berry fluxes through the plaquettes of a mesh of $\mathbf Q$, over
+$2\pi$, with the sign of `h.get_chern()`. Here the position of the exciton is
+the one of its electron. The Chern number does not depend on this choice,
+the flux of a single plaquette does.
+
+The simplest exciton with a Chern number is a Frenkel exciton, an excitation
+that hops from molecule to molecule. We take the kagome lattice and keep only
+the hoppings inside the up triangles, so each triangle is a molecule with
+three levels, with a flux $\phi=0.3$ through it. The lowest level is filled.
+A density interaction $V_1=1$ between neighbors binds the electron and the
+hole on one molecule, and moves the bound pair to the next molecules:
+
+```python
+import numpy as np
+from pyqula import geometry
+from pyqula.multihopping import MultiHopping
+from pyqula.bsetk.interaction import density_interaction
+phi = 0.3 # flux through each up triangle
+H = np.zeros((3,3),dtype=np.complex128) # one up triangle, a molecule
+for (i,j) in [(0,1),(1,2),(2,0)]:
+    H[j,i] = -np.exp(1j*phi/3.) # hopping with a Peierls phase
+    H[i,j] = np.conj(H[j,i])
+H += 0.5*np.identity(3) # one level below the Fermi energy, two above
+g = geometry.kagome_lattice()
+h = g.get_hamiltonian(has_spin=False)
+h.set_multihopping(MultiHopping({(0,0,0):H})) # only the hopping in the cell
+W = density_interaction(h,V1=1.0) # density interaction between neighbors
+c = h.get_exciton_chern(bands=[0],nq=8,V=W,nk=6,tda=True) # lowest exciton
+```
+
+The levels of the molecule are $-1.49t$, $1.32t$ and $1.67t$, and `c` is
+$-1$ for the lowest exciton band. It is the same at `nq=6` with `nk=4` and
+`nk=6`, at `nq=12`, and with the full Bethe-Salpeter equation, `tda=False`.
+The opposite flux gives $+1$. With no flux the molecule has time-reversal
+symmetry, the two lowest excitons touch at $\mathbf Q=0$, and the method
+raises `ValueError`, since the lowest band is not separated from the next
+one. `full_output=True` returns the record of `h.get_magnon_chern()`: here
+the band goes from $1.48t$ to $1.81t$, `gap` is $0.35t$, the distance to the
+next exciton, and `bound` is $1.00t$, the distance below the lowest
+electron-hole transition. The conditions on the integer are the ones of the
+magnon band: a band isolated over the zone and bound, converged in `nk` and
+`nq`, and a stable mean-field state.
+
+![Energy and Berry curvature of the lowest Frenkel exciton of the kagome lattice with a flux, over the Brillouin zone, on a mesh of 12 by 12 points.](img/excitons_chern.png#only-light)
+![Energy and Berry curvature of the lowest Frenkel exciton of the kagome lattice with a flux, over the Brillouin zone, on a mesh of 12 by 12 points.](img/excitons_chern-dark.png#only-dark)
+
+The figure takes `nq=12` and reads the energies and the fluxes of the
+record. The exciton band goes from $1.48t$ at $\Gamma$, the corners of the
+map, to $1.82t$, and it has a second minimum around $(2/3,1/3)$. The Berry
+curvature is negative in a broad region around $\Gamma$, at the corners and
+along the edges of the map, and weakly positive around $(2/3,1/3)$. The
+total is $C=-1$, as on the coarser mesh of the snippet, and the largest
+flux of a plaquette is $0.20$, far below $\pi$.
+
+??? example "Code of this figure (documentation/figures/excitons_chern.py)"
+
+    ```python
+    --8<-- "excitons_chern.py"
+    ```
+
+Each point of the mesh is one dense Bethe-Salpeter calculation, so the cost
+grows as `nq` squared. Only the dense solver is built for this, and
+`solver="iterative"` and `solver="qtt"` raise `NotImplementedError`. The
+keywords are `bands`, `nq`, `shift` and `full_output`, as in
+`h.get_magnon_chern()`, and `V`, `nk`, `nv`, `nc`, `kernel` and `tda`, as in
+`h.get_bse()`. See `examples/2d/exciton_chern/main.py` for a runnable script,
+and
+`jupyter-notebooks/functionalities/topological_characterization/15_magnon_exciton_chern.ipynb`
+for an executed notebook.
+
 ### Exciton spectral functions
 
 We will now see how to compute the exciton bands as a spectral function, in

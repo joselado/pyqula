@@ -28,6 +28,7 @@ def valley_coupling(g):
   jj = np.array([j for x in near for j in x],dtype=int)
   dr = rs[ii] - r2[jj]
   dr = dr[np.sum(dr*dr,axis=1)>0.99] # the first-neighbor bonds
+  dr = dr[np.hypot(dr[:,0],dr[:,1])>1e-3] # not the vertical bonds between layers
   if len(dr)==0: return 1.0/4.5
   a2 = dr[:,0]**2 + dr[:,1]**2 # squared in-plane bond lengths
   if np.max(a2)-np.min(a2)>1e-6: return 1.0/4.5 # not one bond length
@@ -45,14 +46,22 @@ def get_valley(h,delta=None,**kwargs):
   ho.add_modified_haldane(valley_coupling(h.geometry)) # tau_z
   hkgen = ho.get_hk_gen() # get generator for the hk Hamiltonian
   sharpen = get_sharpen(delta=delta) # renormalize eigenvalues to +-1
+  if h.dimensionality==0: return sharpen(hkgen(None)) # return a matrix
+  # the k-point and the matrix of the last call, kept and read as one
+  # object: the states of one k-point come in turn, so this is one build
+  # (and with delta one diagonalization) per k-point instead of per state
+  last = [None]
   def fun(m=None,k=None):
-      if h.dimensionality>0 and k is None: # requires a kpoint
+      if k is None: # requires a kpoint
         raise ValueError("the valley operator of a periodic Hamiltonian has "
                 "to be evaluated at a k-point, and none was given")
-      hk = hkgen(k) # evaluate Hamiltonian
-      hk = sharpen(hk) # sharpen the valley
-      if m is None: return hk # just return the valley operator
+      key = tuple(np.asarray(k,dtype=float).ravel())
+      kept = last[0]
+      if kept is None or kept[0]!=key: # one build per k-point
+        kept = (key,sharpen(hkgen(k))) # evaluate and sharpen
+        last[0] = kept
+      hk = kept[1]
+      if m is None: return hk.copy() # a fresh matrix, as before
       else: return hk@m # return the projector
-  if h.dimensionality==0: return fun() # return a matrix
   return fun # return function
 

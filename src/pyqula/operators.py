@@ -471,10 +471,18 @@ def get_velocity(h):
     # out with three different speeds.
     from .conductivitytk.kubo import _setup,_velocities
     hm,orders,hkgen,jac,dr,cellvol,scale = _setup(h)
+    # the k-point and the velocities of the last call, kept and read as
+    # one object: the states of one k-point come in turn
+    last = [None]
     def f(w,k=[0.,0.,0.]):
-      hk = hkgen(k) # Bloch Hamiltonian at this k-point
-      v = _velocities(hm,orders,jac,dr,hk,k) # Cartesian velocity operators
-      vs = np.array([braket_wAw(w,v[a]).real for a in range(3)])
+      key = tuple(np.asarray(k,dtype=float).ravel())
+      kept = last[0]
+      if kept is None or kept[0]!=key: # one build per k-point, not per state
+        hk = hkgen(k) # Bloch Hamiltonian at this k-point
+        kept = (key,_velocities(hm,orders,jac,dr,hk,k)) # Cartesian velocities
+        last[0] = kept
+      v = kept[1]
+      vs =np.array([braket_wAw(w,v[a]).real for a in range(3)])
       return np.sqrt(vs.dot(vs))*w # return the modulus of the velocity
     return Operator(f)
   else:

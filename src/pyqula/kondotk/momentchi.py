@@ -51,7 +51,6 @@ part of the static response is negative, and the spectral weight at
 positive frequency is +Im chi/pi."""
 import numpy as np
 
-from .. import algebra
 from ..chitk import localspinchi
 from . import pairs as pairstk
 
@@ -116,25 +115,29 @@ def moment_spinchi(h, q=None, energies=np.linspace(0.0, 4.0, 200), U=None,
         raise ValueError("delta must be positive, the broadening of the "
                 "frequency; got "+str(delta))
     h = pairstk.scale_hybridization(h, hybridization_scale, pairs)
-    if q is None: # the local response, every q dressed on its own
-        qs = h.geometry.get_kmesh(nk=nk)
-        out = [_moment_spinchi_q(h, pairs, qi, energies, U, nk, delta, T)
-                for qi in qs]
-        return energies, np.mean(out, axis=0)
-    return energies, _moment_spinchi_q(h, pairs, q, energies, U, nk, delta, T)
-
-
-def _moment_spinchi_q(h, pairs, q, energies, U, nk, delta, T):
-    """The response at one q, see moment_spinchi"""
     fsites = [fi for (ci, fi) in pairs]
-    nf = len(fsites)
+    if U is None: # the bare response needs the matrix elements of S^+ alone
+        return localspinchi.bare_raising_chi(h, q=q, energies=energies,
+                nk=nk, delta=delta, T=T, sites=fsites)
+    if q is None: # the local response, every q dressed on its own
+        out, nq = 0., 0
+        for qi, chi in localspinchi.bare_spin_chi_on_mesh(h,
+                energies=energies, nk=nk, delta=delta, T=T, sites=fsites):
+            out = out + _moment_response(chi, qi, U, len(fsites))
+            nq += 1
+        return energies, out/nq
     chi = localspinchi.bare_spin_chi(h, q=q, energies=energies, nk=nk,
             delta=delta, T=T, sites=fsites)[1] # (energies, 3nf, 3nf)
-    if U is not None:
-        # U S_q.S_-q is the exchange 2U between the spin components
-        W = np.kron(np.identity(3), 2.*_residual_at_q(U, q, nf))
-        iden = np.identity(3*nf, dtype=np.complex128)
-        chi = np.array([c@algebra.inv(iden - W@c) for c in chi])
+    return energies, _moment_response(chi, q, U, len(fsites))
+
+
+def _moment_response(chi, q, U, nf):
+    """The transverse response of the moments at one q from the bare
+    response chi of their spin operators dressed with the residual
+    interaction U, see moment_spinchi"""
+    # U S_q.S_-q is the exchange 2U between the spin components
+    W = np.kron(np.identity(3), 2.*_residual_at_q(U, q, nf))
+    chi = localspinchi._dyson(chi, W)
     x, y = slice(0, nf), slice(nf, 2*nf)
     # S^+ = Sx + i Sy on the first index, S^- = Sx - i Sy on the second:
     # in the pair sum of this library the operator of the first index takes

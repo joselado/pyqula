@@ -7,7 +7,11 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/../../../src")
 #
 # The cell has 36 sites of the triangular lattice. The exchange has first
 # neighbors J1 and second neighbors J2 = 0.11 J1, and both change by 20
-# percent across the cell. We keep only the bond channel of the exchange
+# percent across the cell, along its two vectors. The modulation is written
+# with the fractional coordinates of the bond, so it has the period of the
+# cell, and a bond has the same exchange seen from its two ends, as a spin
+# model needs. Its origin is not a symmetry point of the lattice, so the 36
+# sites are all different. We keep only the bond channel of the exchange
 # (decoupling="bond") and take the pi-flux pattern as ansatz, with flux pi
 # in the up triangles and zero in the down ones (a Dirac spin liquid).
 #
@@ -32,13 +36,15 @@ from pyqula.spinon import SpinonHamiltonian
 g0 = geometry.triangular_lattice()
 g = g0.get_supercell((6,6)) # 36 sites
 n = len(g.r)
-center = np.mean(g.r,axis=0)
-L = np.linalg.norm(g.a1) # length of the cell
+# origin of the modulation, away from the symmetry points of the lattice
+origin = np.mean(g.r,axis=0) + g0.a1/6. + g0.a2/3.
+cell = np.linalg.inv(np.array([g.a1[:2],g.a2[:2]]).T) # to fractional coordinates
 def J(r1,r2):
-    """Exchange of first and second neighbors, modulated along a1"""
+    """Exchange of first and second neighbors, modulated with the period
+    of the cell along its two vectors"""
     d = np.linalg.norm(r1-r2)
-    x = (r1[0]+r2[0])/2. - center[0] # position of the bond
-    mod = 1.0 + 0.2*np.cos(2*np.pi*x/L)
+    u = cell@((r1+r2)/2. - origin)[:2] # fractional coordinates of the bond
+    mod = 1.0 + 0.1*(np.cos(2*np.pi*u[0]) + np.cos(2*np.pi*u[1]))
     if abs(d-1.)<1e-3: return mod # first neighbors
     if abs(d-np.sqrt(3.))<1e-3: return 0.11*mod # second neighbors
     return 0.

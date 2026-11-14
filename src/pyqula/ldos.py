@@ -423,14 +423,19 @@ def get_ldos_tb(h,e=0.0,delta=None,nrep=5,nk=None,ks=None,mode="arpack",
 
     operator: None, or an operator spec (a name, a matrix, an Operator).
         The LDOS is then resolved with that operator instead of being the
-        plain charge one. The two modes weight it differently, and both
-        integrate over sites to the same operator-resolved DOS:
-        mode="arpack" uses <psi|A|psi> times the local density |psi(i)|^2,
-        while mode="green" uses the local matrix element
-        Re<psi|A|psi>_i -- the genuinely local quantity, which is what
-        differs for states that are not eigenstates of A. A k-dependent
-        operator is only available in mode="arpack", since mode="green"
-        has already integrated over the Brillouin zone.
+        plain charge one. Every mode and every integration weights a state
+        psi with the local matrix element Re<psi|P_i A|psi>, the sum over
+        the orbitals of site i of Re[conj(psi(a)) (A psi)(a)], which for
+        a Hermitian A is -Im diag(G A + A G)/(2 pi) on the site (the two
+        differ for an A that is not Hermitian). It is the local spin
+        density for a spin operator, it sums over a degenerate multiplet
+        to a trace that does not depend on the basis, and the map summed
+        over the sites is the operator-resolved DOS. An operator that is
+        not linear in the state is evaluated state by state and cannot be
+        basis independent in a degenerate multiplet. A k-dependent
+        operator is only available in mode="arpack" with
+        integration="grid", since mode="green" has already integrated over
+        the Brillouin zone.
 
     integration: how mode="arpack" (or "diagonalization") integrates over
         k, one of get_integration_names(). "grid" averages over the
@@ -595,12 +600,14 @@ def multi_ldos_tb(h,energies=np.linspace(-1.0,1.0,100),delta=None,
       options of get_ldos in that mode (delta or npol, kpm_radius, scale,
       kpm_prec).
   operator: None, or an operator spec (a name, a matrix, an Operator).
-      With mode="diagonalization" each eigenstate is weighted with its
-      expectation value <psi|A|psi>, which is the same convention get_ldos
-      uses in mode="arpack" (see ldostk.ldoswaves), so the map written for
-      a given energy is what get_ldos returns at that energy; with
-      mode="KPM" the map is the local matrix element Re(A rho)_ii, as in
-      get_ldos with mode="green" or "KPM".
+      In every mode and integration the map is the local matrix element
+      Re<psi|P_i A|psi> of each eigenstate on site i, Re(A rho)_ii summed
+      over the orbitals of the site, the convention of get_ldos in all its
+      modes, so the map written for a given energy is what get_ldos
+      returns at that energy, and its sum over the sites is the
+      operator-resolved DOS. An operator that is not linear in the state
+      is evaluated state by state and cannot be basis independent in a
+      degenerate multiplet.
   integration: for mode="diagonalization", one of get_integration_names().
       "triangle" and "qtci" are the simplex integrations of get_ldos on the
       uniform nk^d mesh, with delta=0 (the exact limit) by default: one
@@ -674,17 +681,17 @@ def _multi_ldos_diagonalization(h,energies,delta=0.01,nk=100,num_bands=20,
   """The maps of multi_ldos_tb from the eigenstates, one per energy, and
   the DOS they add up to, on a grid ten times finer"""
   print("Calculating eigenvectors in LDOS")
-  ps = [] # weights
-  evals,ws = [],[] # empty list
+  evals,ds = [],[] # eigenvalues and the weight of each state per orbital
   ks = klist.kmesh(h.dimensionality,nk=nk) # get grid
   if random:
       ks = [np.random.random(3) for k in ks] # random vectors
       print("RANDOM vectors in LDOS")
   hk = h.get_hk_gen() # get generator
-  def get_weight(v,k):
-      """Weight of this eigenstate, its expectation value of the operator"""
-      if operator is None: return 1.0 # no operator, plain charge LDOS
-      return np.real(operator.braket(v,k=k)) # expectation value
+  def get_density(v,k):
+      """Weight of this eigenstate on each orbital: |v(a)|^2, or with an
+      operator the local matrix element Re[conj(v(a)) (O v)(a)]"""
+      if operator is None: return (np.conjugate(v)*v).real # plain charge
+      return np.real(np.conjugate(v)*np.asarray(operator(v,k=k)).reshape(-1))
   if h.is_sparse: # sparse Hamiltonian
     from .bandstructure import smalleig
     print("SPARSE Matrix")
@@ -692,8 +699,7 @@ def _multi_ldos_diagonalization(h,energies,delta=0.01,nk=100,num_bands=20,
       print("Diagonalizing in LDOS, SPARSE mode")
       e,w = smalleig(hk(k),numw=num_bands,evecs=True,e0=np.mean(energies))
       evals += [ie for ie in e]
-      ws += [iw for iw in w]
-      ps += [get_weight(iw,k) for iw in w] # weights
+      ds += [get_density(iw,k) for iw in w]
   else:
     print("Diagonalizing in LDOS, DENSE mode")
     # the k-points are diagonalized in batches with the same numba-parallel
@@ -706,22 +712,19 @@ def _multi_ldos_diagonalization(h,energies,delta=0.01,nk=100,num_bands=20,
       for (ii,k) in enumerate(kb): # loop over kpoints of the batch
         w = vs[ii].transpose() # rows are the eigenvectors
         evals += [ie for ie in es[ii]]
-        ws += [iw for iw in w]
-        ps += [get_weight(iw,k) for iw in w] # weights
-  ds = np.array([(np.conjugate(v)*v).real for v in ws]) # calculate densities
-  del ws # remove the wavefunctions
+        ds += [get_density(iw,k) for iw in w]
+  ds = np.array(ds) # (states, orbitals)
   # The accumulation over eigenstates is bilinear, so the whole double loop
   # over energies and eigenstates is a single matrix product: the weight
-  # matrix W[ie,n] = delta/((e-E_n)^2+delta^2)*p_n times the densities.
+  # matrix W[ie,n] = delta/((e-E_n)^2+delta^2) times the densities.
   # It is done in blocks of energies so that W stays small.
   evals = np.array(evals) # eigenvalues of the whole mesh
-  ps = np.array(ps) # weights of the whole mesh
   nkp = len(ks) # number of kpoints in the mesh
   outs = [] # LDOS at each energy
   eblock = max(1,int(1e6//max(len(evals),1))) # energies per block
   for i0 in range(0,len(energies),eblock): # loop over blocks of energies
       eb = np.array(energies[i0:i0+eblock]) # energies of this block
-      w = delta/((eb[:,None]-evals[None,:])**2 + delta**2)*ps[None,:]
+      w = delta/((eb[:,None]-evals[None,:])**2 + delta**2)
       # 1/pi is the normalization of the Lorentzian and 1/nkp the average
       # over the Brillouin zone, the same two factors get_ldos applies
       out = (w@ds)/(np.pi*nkp) # LDOS of this block of energies

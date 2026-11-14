@@ -24,6 +24,24 @@ def hamiltonian(spin_dependent):
     return h
 
 
+def test_pairs_of_zero_factor_are_left_out_on_the_real_axis():
+    """With delta=0 a pair of states with the same occupation has a zero
+    factor and an energy difference that a real frequency can hit, which
+    gave 0/0. At q=0 every state paired with itself has de=0, so w=0 hits
+    all of them; the result is finite there and is the limit w -> 0 of the
+    response, since the dropped pairs contribute nothing at any w"""
+    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+    h.add_sublattice_imbalance(0.6) # gapped at half filling
+    h.add_zeeman([0.1, -0.2, 0.3]) # a generic direction
+    q = [0., 0., 0.]
+    with np.errstate(all="ignore"): # a wrong code gives 0/0
+        out = localspinchi.bare_spin_chi(h, q=q, energies=[0., 1e-7], nk=4,
+                                         delta=0., T=1e-3)[1]
+    assert np.all(np.isfinite(out[0]))
+    assert np.max(np.abs(out[0])) > 0.05
+    assert np.max(np.abs(out[0] - out[1])) < 1e-5
+
+
 @pytest.mark.parametrize("spin_dependent", [False, True])
 @pytest.mark.parametrize("q", [[0.13, 0.31, 0.], [0., 0., 0.], [0.5, 0., 0.]])
 @pytest.mark.parametrize("T", [None, 0.3])

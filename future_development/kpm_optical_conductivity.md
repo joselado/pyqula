@@ -263,5 +263,23 @@ The bands win in three places, and we record them plainly.
   but it was not run here. The checks are against the band path of `conductivity.py`, against
   the Chern number, and against the f-sum rule.
 - `intraband=False` and `interband=False` are not available with `integration="kpm"`, since
-  the expansion never builds eigenstates. An unknown `integration=` name gets the error of
-  `kubo.py`, whose list does not include "kpm".
+  the expansion never builds eigenstates. An unknown `integration=` name raises an error that
+  lists every accepted name, "kpm" included.
+
+## Repairs of the seventh bug audit
+
+The circular dichroism, the off-diagonal part i Im sigma^A_xy of the
+absorptive tensor that the module advertises, was never tested. The only
+comparison of `absorptive()` with the band path looked at the diagonal,
+on a real Hamiltonian, where sigma^A_xy vanishes anyway, and the Haldane
+test goes through `bastin()`. So an exchange of the two Cartesian indices
+in the assignment of `absorptive()` would flip the sign of the dichroism
+and pass every test. The code itself is right: on the Haldane model
+(t2 = 0.2, Fermi level shifted by 0.3, nk = 12, T = 0.05, delta = 0.1, the
+Lorentz kernel and the exact trace) the KPM value of sigma^A_xy follows the
+Hermitian part (sigma_xy + conj(sigma_yx))/2 of the band path to 2.1e-2,
+against a peak of 0.68, while its transpose is 1.37 away.
+`test_kpm_circular_dichroism_matches_the_band_calculation` in
+`tests/conductivity/test_kpm_conductivity.py` now pins it. On a copy of the
+code with the two indices exchanged it fails, while the diagonal test
+passes.

@@ -2051,16 +2051,20 @@ loaded.
 - `VJinteraction`, the default engine of `h.get_mean_field_hamiltonian`
   for a spinful Hamiltonian, does not take `"triangle"`. The entry point
   routes it to `Vinteraction`, which has no exchange terms J.
-- The Fermi search and the density matrix diagonalize the mesh twice per
-  iteration, as `"ed"` does. Sharing the eigenvectors would save a factor 2.
+- The Fermi search and the density matrix diagonalized the mesh twice per
+  iteration, as `"ed"` does. They share it now, one diagonalization per
+  iteration (see "One diagonalization per iteration").
 - A 3D mean-field benchmark of the tetrahedra against a dense mesh was not
   run; the tetrahedron density matrix is only checked against a dense mesh
   on a cubic metal, in the tests. The 3D qtci is measured against the
   tetrahedra on the same mesh (qtci in 3D above). The slow
   finite-temperature Fermi search of the tetrahedra (33 s at 32^3) is
   solved by the Newton search of `simplex_fermi_search.md` (0.20 s at
-  32^3 and T = 1e-2); what is left of a 3D mean field at T > 0 is the
-  weights themselves.
+  32^3 and T = 1e-2). The weights at T > 0 are now in closed form, 16 to
+  19 times faster at 32^3 (see "The weights in closed form"); what is
+  left of a 3D mean field at T > 0 is the quadrature of the charge and of
+  the weights at 208 nodes per simplex cut by the Fermi surface, which the
+  moment formula of that section would remove at T = 1e-7.
 - Bands that cross are interpolated with a kink, as in the simplex DOS.
 - qtci for a metal is built, as the triangle on a quantics-interpolated
   mesh (see qtci above). What is open there: on a two-orbital model it
@@ -2075,3 +2079,318 @@ loaded.
 - At T well above the mesh spacing v_F/nk, a hybrid that uses the plain
   Fermi occupation on the simplices far from mu would keep the exponential
   convergence of exact diagonalization there. Not tried.
+
+## Repairs of the seventh bug audit
+
+The seventh audit (`bug_audit_7.md`) found two bugs and six optimization
+opportunities in this construction. What was repaired, and what was
+measured, is below. The timings are the best of three holds, with numba and
+BLAS at two threads on a shared desktop, the code before a change and after
+it run back to back in each hold, so the ratio is what matters and not the
+seconds. Each change was timed against the tree just before it, not
+against the last commit, so that the gain of each one is its own: the
+weights against the working tree before this audit, the iteration and the
+Hall loop against the tree with the closed-form weights, and so on. The
+machine was loaded by other jobs, and the same code varied by up to 40%
+between holds.
+
+### The fill of a shell with fractional charges
+
+`ShellFilling.fill` solved for the offset y with the charge of the emptied
+shell counted twice: `test()` stores c0, the total charge with the shell
+emptied in charge, and the root equation added c0 to the charge of the
+filled shell, which holds that same part again. So the filled density
+matrix held N0 minus the electron weight of the shell vectors of negative
+charge, and when N0 was within that weight of the bottom of the jump the
+bracket never closed and the fill did nothing. On one Nambu site with two
+levels at zero energy of charge +1/2 and -1/2, both empty, the shell can
+hold 0.25 to 0.75 electrons; at N0 = 0.6 the fill gave 0.35, and at
+N0 = 0.4 it did not fire. The weight is zero when every shell vector has
+charge exactly +1 or -1, which is the case of every state of
+`test_bdg_shell_filling.py`, since there the pairing is dead. It is not
+zero when the edge of the shell cuts an electron-hole pair while the
+pairing is still alive, as in a Zeeman field, where the second reader
+estimated the miss at 1e-9 to 1e-7 per cell. Now the fill solves
+S(y) + (n - old) = N0, with n - old the charge of the density matrix
+without its shell, so the bracket is the one that `test()` checks.
+`tests/scf/test_bdg_shell_fractional_charge.py` builds two such shells by
+hand (the two halves above and two k-points with random unitary bases) and
+asks that the fill fires and holds N0 to 1e-12 at seven charges across the
+jump; it fails on the committed code and passes now, and the 21 tests of
+`test_bdg_shell_filling.py` pass unchanged.
+
+### The norms of the solvers
+
+The comment above the scipy solvers in `scftk/densitydensity.py` said that
+f_tol = maxerror is the criterion of the plain loop and of Broyden mixing,
+and that `scf.converged` means the same for all of them. The three loops
+hold the same number in three norms: the plain loop the mean modulus of the
+change per entry summed over the directions (`diff_mf`), Broyden mixing the
+L2 norm of the real and imaginary vector, and scipy its max-norm. For one
+entry of an 8 x 8 matrix changing by 1e-6, with two directions, they read
+1.6e-8, 1e-6 and 1e-6, and for every real entry changing by 1e-6 they read
+2e-6, 1e-6 and 1.1e-5. The behaviour is deliberate and stays; only the
+comment was corrected.
+
+### The weights in closed form
+
+At T > 0 every simplex cut by the Fermi surface needs the T = 0 weights at
+the 8 Gauss-Legendre nodes of each of its 26 pieces, about 200 evaluations,
+and each evaluation built its barycentric vertices as small arrays and took
+the volume of each tetrahedron from `np.linalg.det`, three times in the
+prism. The density of states of the Bloechl term then walked the same nodes
+a second time. Now `_step_weights` writes the weights out as products of the
+edge fractions, with no array and no determinant, the density of states is
+read at the same nodes in the same pass (`_weights_T` returns both), and
+the work arrays of the kernel are allocated once per block of 1024
+simplices instead of once per simplex. The quadrature is the same, so the
+weights are the same to rounding: the largest difference over the mesh was
+3e-20, for weights of order 1/nk^dim.
+
+| case | T | before (s) | after (s) | speedup |
+|---|---|---|---|---|
+| cubic, one band, 32^3 | 0 | 0.080 | 0.026 | 3.0 |
+| cubic, one band, 32^3 | 1e-7 | 2.84 | 0.176 | 16 |
+| cubic, one band, 32^3 | 1e-3 | 2.97 | 0.158 | 19 |
+| honeycomb 2 x 2, 8 bands, nk = 96 | 0 | 0.022 | 0.0091 | 2.4 |
+| honeycomb 2 x 2, 8 bands, nk = 96 | 1e-7 | 0.044 | 0.012 | 3.6 |
+| honeycomb 2 x 2, 8 bands, nk = 96 | 1e-3 | 0.048 | 0.013 | 3.7 |
+
+The time is that of `simplex_weights` with the Bloechl term on given band
+energies; the peak memory was 0.37 GB in both trees. T = 1e-7 is the
+default of every triangle mean field, so this is the case that matters.
+`tests/scf/test_simplex_weights_closed_form.py` compares the closed form
+with a numpy copy of the old decomposition, with determinants, on random,
+tied and nearly tied vertex energies and with the level exactly on a
+vertex, to 1e-14, and the weights of a whole 2D and 3D mesh to 1e-14; and
+at T > 0 it compares the occupied fraction and the density of states of
+the fused pass with the charge kernel of the Fermi search, which reads the
+same nodes, to 1e-13.
+
+The audit also proposed an exact moment formula for a simplex with no
+vertex within 40 T of mu, where the T = 0 weight is one polynomial and
+w(T) = w0 + (pi^2 T^2/6) w0'' + (7 pi^4 T^4/360) w0''''. That would replace
+the 200 evaluations by one at T = 1e-7, but it changes the weights by the
+quadrature error, up to 3e-9 of the simplex volume, and it has to move the
+charge kernel and the weights together, or the density matrix misses the
+charge of the Newton search at 1e-12. It was not built.
+
+### One diagonalization per iteration
+
+The loop of `densitydensity` finds the Fermi level of h and then asks for
+the density matrix of h shifted by it, and the two built their own mesh:
+the search diagonalized the whole mesh for the energies, and `get_dm`
+diagonalized it again for the eigenvectors, and a third time when the
+eigenvectors of the whole mesh do not fit in `max_memory_gb`, since its
+first pass kept only the energies. Both also built the simplices. On the
+CPU the eigenvalues cost as much as the eigenpairs, since the kernel of
+`peigvalsh` calls eigh. Now the search of the loop is asked to keep its
+mesh (`keep_mesh=True`, which only `densitydensity` passes): it computes
+the eigenpairs when they fit, and leaves its band energies, its
+eigenvectors and its simplices in `simplexdm._last_search`. The next
+`get_dm` takes the record, and uses it when its Hamiltonian is the
+searched one plus a constant times the identity on the same mesh, checked
+on the Bloch matrices as qtci already did (`simplexdm.identity_shift`,
+which `densitymatrix_qtci._shift_from` now calls). It takes the record
+whether it matches or not, so no eigenvector is held past one iteration,
+and a search that is not asked keeps nothing. An iteration now
+diagonalizes the mesh once where it did twice, or twice where it did three
+times, and builds the simplices once. The qtci search keeps the simplices
+for its next density matrix in the same way, next to the eigenpairs it
+already kept, and the density matrix drops them after use; this was not
+timed, and `test_the_qtci_search_hands_its_simplices_to_one_density_matrix`
+counts one build for a search and its density matrix and no simplices
+left in the record.
+
+One iteration, the Fermi search at filling 0.3 and T = 1e-7 and the
+density matrix of the shifted h, with every lattice vector of the
+hoppings:
+
+| case | before (s) | after (s) | speedup |
+|---|---|---|---|
+| honeycomb 3 x 3, spinful, exchange 0.3, n = 36, nk = 48 | 1.12 | 0.85 | 1.3 |
+| the same, eigenvectors not kept (`max_memory_gb = 0`) | 1.27 | 1.25 | 1.0 |
+| cubic, spinful, exchange 0.5, n = 2, 32^3 | 0.75 | 0.67 | 1.1 |
+| the same, eigenvectors not kept | 0.72 | 0.70 | 1.0 |
+
+The density matrices agree to 1.1e-16, and the peak memory was the same,
+0.49 to 0.53 GB. The machine was loaded and the spread between holds was
+up to 40%, so the case without the eigenvectors, where the count of
+diagonalizations went from three to two, is within the noise here. The
+cubic case gains little because its diagonalization is cheap: a profile
+of the new code puts 0.74 s of its 1.2 s in the three charge evaluations
+of the Fermi search and 0.37 s in the weights, both at the 208 quadrature
+nodes of every simplex cut by the Fermi surface. So at T = 1e-7 the exact
+moment formula above, which needs no node at all there, is what is left
+to gain in 3D. `tests/scf/test_simplex_shared_mesh.py` checks that the
+density matrix of the shifted h is the one computed from scratch to
+1e-12, with no diagonalization when the eigenvectors are kept and one pass
+when they are not, that another Hamiltonian or another mesh starts from
+scratch and leaves no record, and that one plain iteration of a Hubbard
+mean field diagonalizes the mesh once and builds the simplices once.
+
+The anomalous Hall conductivity at several Fermi levels built the
+tetrahedra once per level. Now `anomalous_hall_conductivity` builds them
+once and passes them to `simplex_weights` (the keyword `simplex_mesh`,
+which `simplex_charge_dos`, `fermi_from_energies` and
+`band_energy_from_energies` take too, refused when its shape is not the
+one of the mesh). The result is bit-identical. On the 3D Haldane stack
+with the interlayer mass 0.05 at nk = 48, each extra Fermi level went
+from 0.113 s to 0.102 s, and 20 levels from 4.98 s to 4.33 s, with the
+same peak memory of 0.43 GB; the weight kernel itself is most of a level,
+as the second reader expected. `test_a_fermi_array_builds_the_tetrahedra_once`
+in `tests/topology/test_anomalous_hall_3d.py` counts one build for three
+levels and asks for exactly the single calls.
+
+### The contraction of the density matrix
+
+`get_dm` contracted every lattice vector d separately, one product of
+(n, K n_a) by (K n_a, n) per direction, with n_a the bands that carry
+weight, although the weighted projector it contracts,
+P_k = sum_n conj(u_n) w_n u_n^T, does not depend on d. Now P_k is built
+once per batch and all the directions come from one product with the
+Bloch phases. With one direction, a Hubbard U alone, this costs more than
+the single product over k and n, by the batch of small products and the
+projectors: in the timing of the second reader at n = 32 and one
+direction, the contraction alone took 0.141 s against 0.108 s, 1.3 times
+slower. So with one direction the phase goes
+into the weights as before, and the projectors are built only when there
+are several directions.
+
+| case | directions | before (s) | after (s) | speedup |
+|---|---|---|---|---|
+| honeycomb 3 x 3, spinful, onsite 0.5, n = 36, nk = 48 | 9 | 0.745 | 0.538 | 1.4 |
+| square, spinful, n = 2, nk = 192 | 9 | 0.113 | 0.090 | 1.3 |
+| cubic 2 x 2 x 2, spinless, n = 8, 20^3 | 7 | 0.334 | 0.265 | 1.3 |
+
+The time is that of `get_dm` at T = 1e-7, diagonalization included; the
+cases with one direction run the same code as before. The density
+matrices agree to 1.1e-15, and the peak memory went from 0.51 to 0.53 GB.
+The batch of `_Mesh` was a fixed 2^14 k-points, so at n = 64 one batch
+held about 4 GB in its Bloch matrices, eigenvectors and products (counted
+from the code). It is now kept near 2^22 complex numbers per array, 64 MB,
+as `simplexdos._Fields` does since the audit of the DOS, which only
+changes the order of the sums. Measured on a 5 x 5 spinful square cell
+with an exchange field, n = 50, at nk = 128 with the onsite matrix only
+(one hold): the peak memory of `get_dm` went from 2.27 GB to 1.16 GB, of
+which 0.66 GB are the eigenvectors of the whole mesh it keeps, the time
+from 9.8 s to 7.9 s, and the density matrix agrees to 3.6e-16.
+`tests/scf/test_simplex_dm_contraction.py` compares `get_dm` on a
+two-orbital honeycomb metal with ten directions, and with one, against the
+direct sum with numpy's own eigh, at T = 0 and 1e-2 and with batches of 37
+k-points that do not divide the mesh, to 1e-12, and checks the size of the
+batch at n = 2 and 50.
+
+### The contraction of the shell
+
+`ShellFilling.fill` added the change of the shell to every direction with
+a three-operand `np.einsum` without `optimize`, which runs as one loop
+without BLAS. Now the new and the old vectors of the shell are put side by
+side as the columns of one matrix, with the new occupations and minus the
+old ones as weights, and each direction is one product. On a synthetic
+shell of 256 k-points with 16 levels each, n = 160 and three directions,
+the fill, its root search included, went from 3.32 s to 0.53 s, with the
+same density matrix to 1.3e-16 and a peak memory of 0.29 GB against 0.23
+GB, the two copies of the side-by-side matrix. The fill fires only when
+the shell is armed, at T > 0 with the pairing dead, so this matters for a
+Nambu mean field above Tc on a large cell.
+`test_the_fill_changes_every_direction_by_the_change_of_its_shell` in
+`tests/scf/test_bdg_shell_fractional_charge.py` compares the update of
+four directions with the direct einsum, to 1e-14.
+
+### Not changed
+
+`ShellFilling.collect` keeps the shell vectors of every k-point with a
+level within 40 T until the fill, with no cap. The audit proposed to keep
+only the m x m blocks and diagonalize the shell k-points again for the
+update. Since an armed fill at T > 0 fires in most iterations, this is a
+second pass over most of the mesh in exactly the regime where the memory
+is large, and the triangle with its eigenvectors kept stores the whole
+mesh already. A cap like `max_memory_gb` with a second pass above it is
+the cheap form; it was not built.
+
+### The review of the repairs
+
+A second pass read each repair again and broke each one on purpose in a
+copy of the tree, to see whether its test fails. Seven mutations were
+caught by the tests as they were: a wrong coefficient in the prism of the
+closed form, the conjugate Bloch phase in the projector route, the shift
+of the band energies dropped from the record of the search, a batch 4
+times larger, the tetrahedra built again for every Fermi level, a qtci
+record that never keeps its simplices, and the sign of the old
+occupations in the fill of the shell. Five mutations passed the test that
+is meant to pin them, so those tests were extended. Three of the five
+passed every case that the tests had before:
+
+- The Bloch phase dropped when there is one direction. The only single
+  direction of the test was the onsite one, whose phase is 1. The
+  contraction test has now a case with one bond alone.
+- The check of the hoppings deleted in `identity_shift`. The other
+  Hamiltonian of the test differed from the searched one in its onsite
+  matrix only. Now a Hamiltonian with another second-neighbor hopping and
+  the same onsite matrix has to start from scratch, in the triangle and in
+  qtci.
+- The sign of the Bloch phase in the fill of the shell, which also passed
+  the 21 tests of `test_bdg_shell_filling.py`. The two k-points of the test
+  were 0 and 1/2, where the phase is real. They are generic now, and the
+  change of the density matrix at d and at -d has to be a Hermitian pair.
+
+The other two were caught, but only by a test of something else:
+
+- The vertex weights at T > 0 in the reverse order inside each simplex.
+  The weights file pinned only their sum and the density of states at
+  T > 0. The mutation failed the contraction test at T = 1e-2 and the
+  shared mesh test at T = 1e-3, because the reversed weights depend on the
+  order of tied vertex energies, which the rounding of two eigensolvers
+  sets differently. Now
+  `test_finite_temperature_weights_are_the_smeared_decomposition` compares
+  each vertex weight with an adaptive quadrature of the old decomposition
+  in the variable f(x), to 1e-8, at T = 1e-3, 3e-2 and 0.3 on simplices
+  with an energy spread of about 0.3.
+- The occupied fraction in place of the density of states in the Bloechl
+  term at T > 0. It passed the four new test files, whose mesh test had no
+  Bloechl term, and failed three older tests of
+  `test_densitydensity_triangle.py` (the 3D metal against exact
+  diagonalization, the insulator, and the corrected against the plain
+  mean field). Now
+  `test_mesh_weights_with_the_bloechl_term_assemble_the_simplices` sums the
+  weights and the Bloechl term simplex by simplex, in 2D and in 3D, at
+  T = 0 and 2e-2, to 1e-14.
+
+Two small things were repaired in the shared mesh. A search asked to keep
+its mesh on a Hamiltonian that carries no Bloch matrices computed and
+stored eigenvectors that no density matrix could take; now it stores
+nothing and computes the energies only. And the simplices kept by a qtci
+search stayed in its record when the next call was for another
+Hamiltonian; now the record loses them at the next call in any case, as
+the record of the triangle does.
+
+One caveat on the contraction of the density matrix. Its gain of 1.3 to
+1.4 with 7 to 9 directions was measured with BLAS at two threads. The
+projectors are built by a batched `np.matmul`, which runs on one thread,
+and the old route was one large product per direction, which BLAS spreads
+over the threads, next to a few copies that do not. So with many threads
+the gain is smaller, and with two or three directions the two routes
+should come close; this was not measured.
+
+The timing of the closed-form weights was run again, the committed tree
+against the working tree back to back in three holds, at two threads on
+the shared desktop, so the ratio is what matters. On the cubic band at
+32^3 the smallest times were 0.088 s and 0.024 s at T = 0 (3.6 times),
+2.25 s and 0.122 s at T = 1e-7 (18 times, and 14, 19 and 16 in the three
+holds) and 2.25 s and 0.122 s at T = 1e-3 (18 times). The weights agree to
+1.4e-20 and the peak memory was 0.37 GB in both trees. So the ratio of 16
+to 19 holds.
+
+The branch of `get_dm` on one direction was timed as well: `get_dm` at
+T = 1e-7 with the onsite matrix alone, the working tree against a copy
+that takes the projector route in every case, back to back in four holds
+with the order of the two alternated. The smallest times were 0.449 s
+with the branch and 0.518 s without it on the honeycomb 3 x 3 spinful
+cell (n = 36, nk = 48), 0.089 s and 0.087 s on a square 2 x 2 spinful cell
+(n = 8, nk = 96), and 0.054 s and 0.064 s on the spinful square lattice
+(n = 2, nk = 192), with the same peak memory of 0.51 GB and the density
+matrices equal to 4e-14. So for a Hubbard U alone the single product is
+1.15 to 1.2 times faster at n = 36 and n = 2 and the same at n = 8, and
+the branch stays. It selects on the number of directions that are asked
+for, not on a size.

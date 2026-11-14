@@ -28,9 +28,10 @@ def test_operator_changes_the_answer():
 
 
 def test_the_two_modes_agree_for_a_spin_diagonal_operator():
-    """A Zeeman-polarized lattice's eigenstates are eigenstates of sz, so
-    the local matrix element and the global-expectation weighting -- the
-    two conventions the two modes use -- have to coincide."""
+    """Both modes use the local matrix element Re<psi|P_i A|psi>, so they
+    agree for any operator (test_ldos_operator_local.py checks operators
+    that do not commute with H). Here the eigenstates are eigenstates of
+    sz, where it is also the old product <psi|sz|psi> |psi(i)|^2."""
     h = _polarized_lattice()
     green = h.get_ldos(mode="green", operator="sz", **ARGS)[2]
     ed = h.get_ldos(mode="arpack", operator="sz", **ARGS)[2]

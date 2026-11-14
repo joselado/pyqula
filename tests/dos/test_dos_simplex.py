@@ -103,27 +103,31 @@ def test_zero_delta_is_the_limit_of_finite_delta():
     assert np.max(np.abs(d0-d1)) < 1e-5*np.max(d0)
 
 
-def test_operator_weight_of_a_zeeman_split_copy():
-    """With an exchange field J along z the spin-up and spin-down copies of
-    graphene are the spinless DOS shifted by -+J, so the sz-weighted DOS is
-    the difference of two shifted spinless DOS, and the unweighted one
-    their sum. J is larger than half the bandwidth so that the two copies
-    do not cross: the bands are ordered by energy at each k, and where two
-    copies cross that ordering puts a kink inside the triangles, which the
+@pytest.mark.parametrize("axis",[2,1])
+def test_operator_weight_of_a_zeeman_split_copy(axis):
+    """With an exchange field J along an axis the copies of graphene with
+    the spin up and down along it are the spinless DOS shifted by +J and
+    -J (add_exchange adds J s), so the spin-weighted DOS is d0(E-J) -
+    d0(E+J), with this sign, and the unweighted one is their sum. The
+    axis y checks the operator branch with sy, which is imaginary and
+    antisymmetric, so a transposed or conjugated operator flips the sign.
+    J is larger than half the bandwidth so that the two copies do not
+    cross: the bands are ordered by energy at each k, and where two copies
+    cross that ordering puts a kink inside the triangles, which the
     linear interpolation only resolves as the mesh is refined"""
     J = 3.5
     h0 = _graphene()
     h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
-    h.add_exchange([0.,0.,J])
+    m = np.zeros(3); m[axis] = J
+    h.add_exchange(m)
     es = np.linspace(-6.5,6.5,131)+0.0037
     kw = dict(integration="triangle",nk=61,delta=0.,write=False)
-    _,dp = h0.get_dos(energies=es+J,**kw)
-    _,dm = h0.get_dos(energies=es-J,**kw)
+    _,dp = h0.get_dos(energies=es+J,**kw) # the copy shifted by -J
+    _,dm = h0.get_dos(energies=es-J,**kw) # the copy shifted by +J
     _,dtot = h.get_dos(energies=es,**kw)
-    _,dsz = h.get_dos(energies=es,operator="sz",**kw)
+    _,ds = h.get_dos(energies=es,operator=["sx","sy","sz"][axis],**kw)
     assert np.max(np.abs(dtot-(dp+dm))) < 1e-10
-    err = min(np.max(np.abs(dsz-(dp-dm))),np.max(np.abs(dsz-(dm-dp))))
-    assert err < 1e-10
+    assert np.max(np.abs(ds-(dm-dp))) < 1e-10
     assert np.max(np.abs(dp-dm)) > 0.1 # the test is not vacuous
 
 

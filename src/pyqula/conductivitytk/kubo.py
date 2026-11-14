@@ -14,8 +14,11 @@ from ..htk.eigenvectors import hk_matrix_batch, parallel_diagonalization
 
 _kbatch = 64 # k-points whose Bloch matrices are held in memory at once by
              # the batched loops below (same convention as ldos.py and
-             # densitymatrix.py): the k-sums are all linear, so the batch
-             # size bounds the memory footprint without affecting the result
+             # densitymatrix.py). It bounds the Bloch matrices and the
+             # eigenvectors; what the k-sums of the grid conductivity and
+             # the Drude weight hold is bounded by their slabs, _slab_size
+_slab_bytes = 2e8 # bytes of velocities and occupation weights held at once
+                  # by the k-sums, see _mesh_sum
 
 
 def _setup(h):
@@ -424,15 +427,56 @@ def _sigma_jit(dE,ratio,vs,omegas,delta):
     return 1j*out
 
 
+def _slab_size(n):
+    """k-points per slab of the mesh sums with n bands: the velocities
+    (48 n^2 bytes per k-point) and the occupation weights with their
+    temporaries (about 41 n^2) of one slab fit in _slab_bytes, but a slab
+    is never smaller than one batch of the diagonalization, _kbatch, which
+    holds as much per k-point already and keeps the threads of the batched
+    eigh busy"""
+    return max(_kbatch,int(_slab_bytes//(100.*n*n)))
+
+
+def _mesh_sum(h,ks,window,degeneracy_tol,term):
+    """sum over the k-points ks of term(es,vs,scale), with es and vs the
+    bands and velocity matrix elements of a slab of ks and scale the
+    energy scale of h, together with the cell volume. The sum is linear in
+    k, so it is added up one slab at a time, and the memory does not grow
+    with the mesh beyond the k-points themselves (24 bytes each).
+
+    With a band window the range of bands is fixed on the whole mesh
+    (kubowindow.py), so the bands and velocities of the window are found
+    on the whole mesh first, nw^2 per k-point, and only the sum runs by
+    slabs."""
+    if window is not None:
+        esw,vsw,cellvol,scale = mesh_bands(h,ks,window,degeneracy_tol)
+        size = _slab_size(esw.shape[1])
+        slabs = ((esw[i:i+size],vsw[i:i+size])
+                for i in range(0,len(ks),size))
+    else:
+        setup = _setup(h)
+        setup = (setup,_hopping_arrays(setup[0]))
+        cellvol,scale = setup[0][5],setup[0][6]
+        size = _slab_size(setup[0][0].intra.shape[0])
+        slabs = (_bands_and_velocities(h,ks[i:i+size],setup=setup)[:2]
+                for i in range(0,len(ks),size))
+    out = 0.
+    for es,vs in slabs: # one slab at a time
+        out = out + term(es,vs,scale)
+        del es,vs # freed before the next slab is built
+    return out,cellvol
+
+
 def _sigma_grid(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
         tolerance=None,window=None):
     """Optical conductivity tensor as a plain sum over the uniform mesh"""
     ks = _kmesh(h,nk)
-    es,vs,cellvol,scale = mesh_bands(h,ks,window,degeneracy_tol)
-    ratio,dE = _response_weights(es,T,degeneracy_tol*scale,
-            intraband=intraband,interband=interband)
-    parallel.set_num_threads() # set the number of threads for numba
-    sigma = _sigma_jit(dE,ratio,vs,energies,delta)
+    def term(es,vs,scale): # the Kubo sum over the k-points of a slab
+        ratio,dE = _response_weights(es,T,degeneracy_tol*scale,
+                intraband=intraband,interband=interband)
+        parallel.set_num_threads() # set the number of threads for numba
+        return _sigma_jit(dE,ratio,vs,energies,delta)
+    sigma,cellvol = _mesh_sum(h,ks,window,degeneracy_tol,term)
     return sigma/(len(ks)*cellvol) # (1/V) sum_k, with V = N_k * V_cell
 
 
@@ -508,14 +552,15 @@ def drude_weight(h,nk=20,T=None,degeneracy_tol=1e-6):
     """Drude (intraband) weight tensor, see conductivity.drude_weight"""
     if T is None: T = 0.05
     ks = _kmesh(h,nk)
-    es,vs,cellvol,scale = _bands_and_velocities(h,ks)
-    ratio,dE = _response_weights(es,T,degeneracy_tol*scale,
-            intraband=True,interband=False)
     # D_ab = (1/V) sum_k sum_{nm in a degenerate block} (-df/dE) v^a_nm v^b_mn
     # The trace over each degenerate block makes this real and basis
     # independent within the block (it is Tr[P v_a P v_b P], with P the
     # projector onto the block); the imaginary residue is numerical noise.
-    D = np.einsum("knm,kanm,kbmn->ab",ratio,vs,vs,optimize=True)
+    def term(es,vs,scale): # the k-points of one slab
+        ratio,dE = _response_weights(es,T,degeneracy_tol*scale,
+                intraband=True,interband=False)
+        return np.einsum("knm,kanm,kbmn->ab",ratio,vs,vs,optimize=True)
+    D,cellvol = _mesh_sum(h,ks,None,degeneracy_tol,term)
     return D.real/(len(ks)*cellvol)
 
 

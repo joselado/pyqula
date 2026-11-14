@@ -778,6 +778,45 @@ Optional arguments:
 - relative=True: divide by the largest transition energy, to compare models
   with different bandwidths
 
+## h.get_magnon_chern()
+Return the Chern number of a group of magnon bands of time-dependent
+Hartree-Fock, from the Berry fluxes of the magnon states through the
+plaquettes of a mesh of $\mathbf Q$, with the sign of `h.get_chern()`. Call
+it on a two-dimensional magnetic mean-field state converged on the same `nk`.
+See [Spin susceptibility, RPA and magnons](spin-response.md#chern-number-of-a-magnon-band).
+
+Optional arguments:
+
+- bands=(0,): the group of bands, counted from the lowest magnon, a
+  contiguous list; a degenerate group goes in whole
+- nq=12: the points of the mesh of $\mathbf Q$ along each reciprocal
+  lattice vector
+- shift=(0.,0.): the offset of the mesh, in units of the reciprocal lattice
+  vectors; a magnet with no gap at $Q=0$ and no net moment needs one
+- tol=1e-6: the smallest overlap of the states at two neighboring points of
+  the mesh that is accepted
+- full_output=False: return the record below instead of the number
+- nk=10, V=None, channel="auto", nv, nc, check_su2, metal: as in
+  `h.get_magnon_energies()`
+- metric=None: the inner product of the overlaps, `None` (Euclidean) or
+  `"casida"`; the integer does not depend on it
+
+Returns a float, an integer up to roundoff. With `full_output=True` it
+returns a record with the fields `chern`; `fluxes`, the Berry flux of each
+plaquette, an `(nq,nq)` array; `max_flux`, the largest flux in modulus, where
+a value close to $\pi$ means that `nq` has to grow; `qs`, the points of the
+mesh, `(nq,nq,3)`; `energies`, the energies of the group at `qs`,
+`(nq,nq,n)`; `gap`, the smallest distance to the other magnons on the mesh;
+`bound`, the smallest distance of the top of the group below the Stoner
+continuum; and `min_overlap`.
+
+It raises `ValueError` when the group touches another magnon at a point of
+the mesh, when the states at two neighboring points are almost orthogonal,
+when the mean-field state is unstable (a complex or a negative magnon
+energy), when `bands` is not contiguous, and when the Hamiltonian is not
+two-dimensional. A spinon mean field converged with `decoupling="bond"`
+raises `NotImplementedError`.
+
 ## h.get_densitychi_RPA()
 Compute the RPA charge response
 
@@ -899,6 +938,31 @@ energy. The energy is complex at a q-point where the mean-field state is
 unstable. Note that `nv` and `nc` must not cut a degenerate group of bands
 (a spinful Hamiltonian without spin-orbit coupling or magnetism needs even
 `nv` and `nc`); otherwise a warning is printed.
+
+## h.get_exciton_chern()
+Return the Chern number of a group of exciton bands of the Bethe-Salpeter
+equation, from the Berry fluxes of the exciton states through the plaquettes
+of a mesh of $\mathbf Q$, with the sign of `h.get_chern()`. Call it on a
+two-dimensional mean-field state. See
+[Excitons](excitons.md#chern-number-of-an-exciton-band).
+
+Optional arguments:
+
+- bands=(0,): the group of bands, counted from the lowest exciton of
+  positive energy, a contiguous list
+- nq=12, shift=(0.,0.), tol=1e-6, full_output=False: as in
+  `h.get_magnon_chern()`
+- V=None, nk=10, nv=None, nc=None, kernel="full", tda=False, screening,
+  max_memory: as in `h.get_bse()`; only the dense solver
+- metric=None: as in `h.get_magnon_chern()`; the integer does not depend on
+  it
+
+Returns a float, or with `full_output=True` the record of
+`h.get_magnon_chern()`, where `bound` is the distance below the lowest
+electron-hole transition. It raises `ValueError` in the cases of
+`h.get_magnon_chern()`, also when an exciton binds below zero energy or has
+a negative norm, and `NotImplementedError` for `solver="iterative"` and
+`solver="qtt"`.
 
 ## h.get_exciton_kdos_bands()
 Return the exciton density of states $A(\mathbf Q,\omega)$ along a q-path,
@@ -1289,7 +1353,8 @@ Optional arguments:
 Return the Chern number modulo $n$, an integer between 0 and $n-1$, of a
 two-dimensional insulator with a $C_n$ rotation about the $z$ axis, from the
 rotation eigenvalues of the occupied bands at the rotation-invariant
-momenta. A Chern number $-1$ gives $n-1$. See
+momenta. A Chern number $-1$ gives $n-1$. The sign is the one of
+`h.get_chern()`, so it changes when $\vec a_1$ and $\vec a_2$ are exchanged. See
 [Topological invariants](topological-invariants.md).
 
 Optional arguments:
@@ -1321,7 +1386,9 @@ insulator, and $z_4=2$ with a zero Chern vector is an axion insulator. See
 [Topological invariants](topological-invariants.md).
 
 Optional arguments:
-- center=None: the inversion center, found automatically by default
+- center=None: the inversion center, found automatically by default. With a
+  nonzero weak index $\kappa_1$ depends on it: moving it by $\vec a_i/2$
+  changes $\kappa_1$ by $2\nu_i$ modulo 4
 - nocc=None: as in `h.get_symmetry_eigenvalues()`
 
 ## h.get_parity_z2()
@@ -1589,12 +1656,15 @@ Returns a complex number
 ## h.get_nonlinear_drude_components()
 All components of the $l$-th order nonlinear Drude conductivity, as a
 dictionary `{"x^l1 y^l2;b": value}`. It uses one k-mesh for all components,
-so it is faster than separate calls.
+so it is faster than separate calls. For a 3D Hamiltonian the keys are
+`{"x^l1 y^l2 z^l3;b": value}`, with the fields and the current along $x$,
+$y$ and $z$.
 
 ## h.get_nonlinear_drude_orders()
 For each order $l = 0$ to `lmax`, the largest
-$|\sigma^{x^{l_1}y^{l_2};b}|$ over the components of that order. The lowest
-$l$ with a nonzero value is the wave index.
+$|\sigma^{x^{l_1}y^{l_2};b}|$ over the components of that order, and over
+the components with $z$ too for a 3D Hamiltonian. The lowest $l$ with a
+nonzero value is the wave index.
 
 Optional arguments
 
@@ -2028,6 +2098,18 @@ the couplings are given to `h.get_mean_field_hamiltonian()` as `J1`, `J2`,
   `True` with a Zeeman field and `False` without one
 - gutzwiller=1.0: a factor that multiplies the exchange, in the mean field
   and in the spin response
+- `Jr`: a function `Jr(r1,r2)` of the two positions, the exchange of any
+  bond. A bond must have the same exchange seen from its two ends,
+  $J_r(\mathbf r_i,\mathbf r_j+\mathbf R)=J_r(\mathbf r_j,\mathbf r_i-\mathbf R)$
+  for every lattice vector $\mathbf R$, otherwise the call raises an error.
+  So a modulation of the exchange is written with the fractional
+  coordinates of the cell
+- return_total_energy=False: with `decoupling="bond"`, the energy is the
+  bond functional at the converged hoppings, the hopping energy plus
+  $2|t_{ij}|^2/(gJ_{ij})$ for each bond, with $g$ the `gutzwiller` factor.
+  It is stationary in the hoppings, so the energies of two hopping
+  patterns on the same exchange can be compared. It is not available with a Weiss field or
+  a Zeeman field
 - `h2.get_spinchi_full(q=...,energies=...,delta=...,nk=...,RPA=True)`: the
   spin response, as `h.get_spinchi_full()`. After `decoupling="bond"`,
   `RPA=True` dresses the free spinon response $\chi_0$ with the exchange,
@@ -2065,7 +2147,7 @@ and $J$ is given to `h.get_mean_field_hamiltonian()` as `J`.
   tunneling spectrum $t_c^2N_{cc}+t_f^2N_{ff}+2t_ct_fN_{cf}$ of a tip that
   tunnels into the conduction electron and into the f fermion of a site.
   Returns `(energies,dIdV)`, one row per Kondo site, and the three terms
-  with `return_parts=True`. With `J` the f amplitude is $t_fV_j^*/J$.
+  with `return_parts=True`. With `J` the f amplitude is $2t_fV_j^*/J$.
 - `h2.get_composite_spectral_function(kpath=None,energies=None,delta=2e-2,J=None,hybridization_scale=1.0,site=None,green=False,nk=100)`:
   spectral functions along a k-path of the conduction electron $c$ and of
   the composite fermion $F=\tfrac23(\vec\sigma\cdot\vec S)c$, an electron

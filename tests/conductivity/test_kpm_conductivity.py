@@ -69,6 +69,28 @@ def test_kpm_absorption_matches_the_band_calculation():
         assert np.max(np.abs(s1[:,a,a].imag)) < 1e-10*np.max(ref)
 
 
+def test_kpm_circular_dichroism_matches_the_band_calculation():
+    """The off-diagonal absorptive tensor, the Hermitian part
+    (sigma_xy + conj(sigma_yx))/2, is i Im sigma^A_xy, the circular
+    dichroism, which a time-reversal-symmetric cell does not have. On the
+    Haldane model it is as large as sigma_xx, and the KPM value follows
+    the band one to the kernel line shape. Its transpose has the opposite
+    sign, so an exchange of the two Cartesian indices fails here"""
+    h = _haldane(0.2)
+    ws = np.linspace(0.,4.,21)
+    kw = dict(energies=ws,nk=12,T=0.05,delta=0.1)
+    ws,s0 = h.get_optical_conductivity(**kw)
+    ws,s1 = h.get_optical_conductivity(integration="kpm",kernel="lorentz",
+            trace="exact",**kw)
+    ref = (s0[:,0,1]+np.conj(s0[:,1,0]))/2.
+    scale = np.max(np.abs(ref))
+    assert scale > 0.5*np.max(np.abs(s0[:,0,0].real)) # a real signal
+    assert np.max(np.abs(ref.real)) < 1e-10*scale # i Im, by C3
+    assert np.max(np.abs(s1[:,0,1]-ref)) < 0.06*scale
+    assert np.max(np.abs(s1[:,0,1]-np.conj(ref))) > scale # not transposed
+    assert np.max(np.abs(s1[:,1,0]-np.conj(s1[:,0,1]))) < 1e-10*scale
+
+
 def test_random_vectors_agree_with_the_exact_trace():
     """The stochastic trace is unbiased: with fixed seeds the estimate lies
     within a few standard errors of the exact trace, and the error bar

@@ -1001,6 +1001,36 @@ the single-precision device paths of `test_chi_gpu.py` and
 `test_pairchi_gpu.py`, which fail in the same way with the code before
 these changes, and do not touch the triangle.
 
+`tests/chi/test_chi_simplex_elements.py` and
+`tests/chi/test_chi_simplex_trace.py` came with the seventh bug audit (see
+the repairs of the seventh bug audit below), and add 22 tests to the
+count above:
+
+- on a spinful honeycomb metal with Rashba coupling, an exchange field
+  along a generic direction and a sublattice imbalance, with A and B
+  different (site spin operators, one of them not Hermitian, and a dense
+  operator), `mode="matrix"`, `"diagonal"` and `"trace"` are the weights
+  of `pair_weights` contracted with M written out from its definition, to
+  1e-9 of the largest entry, with both kernels, at a generic and at a
+  mesh q, also with the eigenvectors recomputed at every pass;
+- on the same model, with the memory limit lowered until the source
+  kernel takes the nine components of `mode="matrix"` two per block, the
+  response is still that of the definition. The second block is then
+  (0,2),(1,0), so its B operators are not in order and skip one;
+- on the spinless honeycomb metal at T = 0.1 t, `mode="matrix"` at
+  nk = 32 is the converged grid at nk = 48 to 4e-3 of the largest entry,
+  and the off-diagonal entries to 10 percent of their own size, which is
+  less than the change from exchanging chi_ij and chi_ji;
+- U^dag A V from the nonzero rows of the operators is the dense product to
+  1e-14, for operators with the rows of one site, a dense one, a single
+  entry and a zero operator;
+- `mode="trace"` is the mean of `mode="diagonal"` to 1e-12 of the largest
+  value on the spinful 2x2 honeycomb supercell, with both kernels, at
+  T = 0 and at finite T, with delta < T and with delta = 0;
+- with the eigenvectors recomputed at every pass, the trace makes one pass
+  over the matrix elements in the source kernel, 2 nk^2 diagonalizations,
+  and the diagonal more.
+
 ## What wins and what loses
 
 The wins. The static response at low temperature, which is what the RPA
@@ -1263,6 +1293,126 @@ triangle kernel. The kernel of one q grows with the square of the number
 of bands n, over its band pairs, and a diagonalization with its cube, so
 the fraction saved grows roughly like n: 1 percent at 64 bands, 5 percent
 at 200. It pays in wall time only for cells of many hundreds of bands.
+
+## Repairs of the seventh bug audit
+
+We will now see three changes of the seventh bug audit to
+`chitk/simplexchi.py`: the trace taken before the kernel, the matrix
+elements from the nonzero rows of the operators, and a test of the matrix
+elements on models with several bands. The response does not move beyond
+rounding.
+
+### The trace before the kernel
+
+`mode="trace"` is the mode of `h.get_chi()`. It sent every site through
+the kernel as its own component, and took the mean over the sites at the
+end. The kernel is linear in the products of the matrix elements,
+G[k,n,m,i] = <n,k|A_i|m,k+q><m,k+q|B_i|n,k>: the multiplet average, the
+coefficients of the pieces, the moments of the bins and the near and far
+sums are all linear in G, and the tiling and the bins depend only on the
+band energies. So the mean over the sites can be taken on G, before the
+kernel, and the trace is one component instead of one per site.
+`chi_triangle` now does this for both kernels. The trace also makes one
+pass over the matrix elements instead of one per block of components, so
+when the eigenvectors do not fit `max_memory_gb` the diagonalizations of
+the other passes are gone too.
+
+The work of a component is most of the work of a piece once there are
+more than about ten components, since the moments of a piece cost 120
+complex products per component in 2D. On the spinful 4x4 honeycomb
+supercell, 64 bands and 32 sites with an onsite 0.3, at the mesh q
+(1/6, 2/6) and nk = 6, static and at w = 0.5, delta = T = 1e-2, one q
+took 28.7 s before and 9.9 s after, 2.9 times less, and the peak memory
+went from 717 MB to 560 MB. These are the smallest of three runs of the
+two codes back to back on two threads. The machine was shared with other
+jobs, so the ratio is what counts. The two agree to 4e-16 of the largest
+value.
+
+The review of the repair ran three more pairs of the same case: 22.6,
+32.1 and 30.8 s before against 9.5, 11.5 and 10.8 s after, with the same
+peak memory and the same agreement. The ratio inside a pair is 2.4 to
+2.8, and the smallest times give 2.4, so the gain is 2.4 to 2.9 times on
+this cell. In the reference kernel the trace is one component too, but
+that kernel still passes once per block of frequencies.
+
+### The matrix elements from the nonzero rows
+
+The matrix elements U1^dag A_i U2 were dense products of n x n matrices
+for every operator, 2 n^3 complex products per k and operator, so
+2 ni n^3 for ni site operators. A site projector times a local operator,
+which is what `chiAB_q` and `rpa.build_ops_projectors` pass, has only the
+r rows of its site. Restricted to them the product costs 2 r n^2, and
+2 n^3 summed over the sites. `chi_triangle` now finds the nonzero rows of
+every operator once and contracts on them (`simplexchi._nonzero_rows` and
+`_sandwich`). Operators with fewer rows are padded with zero rows, so a
+dense operator given through `pAs` costs what it cost before. In each
+block of components the source kernel now builds only the operators of
+that block. Keeping the matrix elements of the whole mesh from one block
+to the next was not done, since on the 10x10 cell they take 1.15 GB,
+above the `max_memory_gb`/4 that the blocks keep.
+
+A block of several components is the case where this needs care: the
+operators of a block are fewer than the components, and a block that
+starts in the middle of a row of (i,j) has its B operators out of order.
+The first tests had either one block or one component per block, where
+the map from the components to the operators of the block is the
+identity, and a wrong map (the index minus the first operator of the
+block) passed all of them. The test with two components per block, added
+in the review, fails on it.
+
+On the spinless 10x10 honeycomb supercell, 200 bands and 200 sites with an
+onsite 0.3, at the mesh q (1/3, 2/3) and nk = 3, static, delta = T = 1e-2,
+`mode="trace"`, one q takes 26.1 s with the trace before the kernel alone
+and 14.5 s with the rows too, 1.8 times less, at the same peak memory of
+1.5 GB, and the two results are the same bit by bit. These two codes
+differ only in `simplexchi.py`. The same code before the rows took 39.5
+to 41.4 s in three other runs at a similar load, so the spread between
+runs of one code is large on this machine, and the 1.8 is the safe
+number. The code before both changes did not finish this q in the 230 s
+we allowed a run. Where the kernel is most of the time, the gain is not
+seen in the wall time: on the spinful 4x4 cell in `mode="matrix"`, sz on
+the 32 sites, nk = 4, static at T = 0, with 11 blocks of components, the
+smallest of three runs is 18.3 s before and 16.2 s after, but runs of the
+same code spread by 30 to 40 percent, so there is no change we can
+measure at this load. The products themselves, for the 32 site
+operators of that cell at 16 k-points, take 0.082 s dense and 0.013 s
+from the rows. On the spinful 2x2 cell, 16 bands, one run each gives
+2.1 s and 2.2 s, within the noise. The local response of the 10x10 cell,
+845 s on three cores before (see the local response), was not timed
+again, since with the code before it takes longer than a run may take
+on this machine. The record of the audit, `bug_audit_7.md`, has the two
+changes together on a compute node with 4 threads: one q goes from
+128.6 s to 11.9 s and the local response from 1119 s to 93 s, 11 and 12
+times less, the peak memory from 3.2 GB to 1.7 GB, and the two codes
+agree to 7e-15.
+
+The review ran one more pair on the 10x10 cell, 40.7 s with the trace
+before the kernel alone and 16.8 s with the rows too, the same bit by
+bit, so the 1.8 holds as the lower number. It also changed the final code
+on purpose in a copy, one change at a time: the conjugation dropped in
+`_sandwich`, the transpose of the B factor dropped, one nonzero row left
+out, a nonzero row in place of the zero padding, the A and B operators of
+a block exchanged, and the mean of the products replaced by the product
+of the means in the trace. Each one fails the tests of the section on the
+tests. With the trace sent through the kernel site by site again, the
+values agree and only the count of the passes fails, as it should.
+
+### The matrix elements on several bands
+
+The only comparison of the triangle with the grid was on a one-band
+model, where the matrix elements are one at every k. Every test on
+several bands was either a sum rule, which does not see the orientation
+of the elements, or a comparison of two routes that share them. So the
+orientation of the two factors, the conjugation of the eigenvectors and
+the (i,j) layout of `mode="matrix"`, which is what the RPA reads, were
+not tested. `tests/chi/test_chi_simplex_elements.py` closes this gap (see
+the tests above). The code was right, and the new tests pass on the code
+before. We checked that they fail on four changed copies of it: with the
+transpose of the B factor dropped, with U^T in place of U^dag, with chi_ij
+exchanged with chi_ji in the source kernel, and with A exchanged with B.
+The first three fail both the comparison with the definition and the
+comparison with the grid. The fourth fails the comparison with the
+definition only, since the grid test has A = B.
 
 ## What is left open
 

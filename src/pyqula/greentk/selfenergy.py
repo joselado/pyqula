@@ -11,13 +11,15 @@ _selfenergy_modes = ("adaptive","renormalization","full","full_adaptive",
         "triangle")
 
 
-def _triangle_green(h,nk=100,energy=0.0,delta=1e-2,gtype="bulk"):
+def _triangle_green(h,energies,nk=100,delta=1e-2,gtype="bulk"):
   """Bulk Green's function and selfenergy of a 3d crystal from the
   tetrahedron integration of the band projectors on the uniform nk^3 mesh
-  (dostk/simplexdos.green_triangle). The mesh only has to resolve the
-  bands, not delta. In 1d and 2d the decimation of mode="adaptive" is
-  faster at equal accuracy (future_development/qtci_dos_green.md), so
-  this mode is only offered in 3d."""
+  (dostk/simplexdos.green_triangle), at every energy of energies from one
+  diagonalization of the mesh: two (len(energies),n,n) arrays. The mesh
+  only has to resolve the bands, not delta. In 1d and 2d the decimation
+  of mode="adaptive" is faster at equal accuracy
+  (future_development/qtci_dos_green.md), so this mode is only offered in
+  3d."""
   if h.dimensionality!=3:
       raise ValueError("mode='triangle' of the Bloch selfenergy is only for "
               "3d crystals, got dimensionality "+str(h.dimensionality)+
@@ -28,10 +30,18 @@ def _triangle_green(h,nk=100,energy=0.0,delta=1e-2,gtype="bulk"):
               "function only, got gtype="+repr(gtype))
   from ..dostk.simplexdos import green_triangle
   h = h.get_dense()
-  g = green_triangle(h,[energy],nk=nk,delta=delta)[0]
-  e = np.identity(g.shape[0])*(energy + delta*1j)
-  selfenergy = e - algebra.todense(h.intra) - algebra.inv(g)
-  return g,selfenergy
+  energies = np.atleast_1d(np.asarray(energies))
+  if np.iscomplexobj(energies):
+      raise ValueError("mode='triangle' takes real energies, with the "
+              "broadening in delta; a complex energy, as in the "
+              "density-matrix contour of an embedding, needs another mode")
+  energies = energies.astype(np.float64)
+  g = green_triangle(h,energies,nk=nk,delta=delta)
+  intra = algebra.todense(h.intra)
+  iden = np.identity(g.shape[1])
+  selfenergy = np.array([iden*(e + delta*1j) - intra - algebra.inv(ge)
+                         for (e,ge) in zip(energies,g)])
+  return g,selfenergy.reshape(g.shape)
 
 
 def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
@@ -45,7 +55,9 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
       raise ValueError("unknown mode "+repr(mode)+" for the Bloch "
               "selfenergy, accepted values are "+", ".join(_selfenergy_modes))
   if mode=="triangle": # 3d only, see _triangle_green
-      return _triangle_green(h,nk=nk,energy=energy,delta=delta,gtype=gtype)
+      g,selfenergy = _triangle_green(h,[energy],nk=nk,delta=delta,
+              gtype=gtype)
+      return g[0],selfenergy[0]
   from ..htk.kchain import detect_longest_hopping
   if detect_longest_hopping(h)==1:
       def gr(h):
@@ -195,7 +207,7 @@ def bloch_selfenergy(h,nk=100,energy = 0.0, delta = 1e-2,
 
 
 def bloch_selfenergy_batch(h,energies,delta=1e-2,mode="adaptive",
-                           gtype="bulk",error=1e-3,**kwargs):
+                           gtype="bulk",error=1e-3,nk=100,**kwargs):
     """`bloch_selfenergy` at a whole set of energies at once, returned as
     two (len(energies),n,n) arrays -- the Green's function and the
     selfenergy, in the same order the scalar function returns them.
@@ -210,14 +222,20 @@ def bloch_selfenergy_batch(h,energies,delta=1e-2,mode="adaptive",
     sideband sweep of `keldyshtk.current.dc_current`, tens of thousands of
     times per dI/dV point.
 
+    The tetrahedron integration of a 3d crystal (`mode="triangle"`, on the
+    nk^3 mesh) also batches: one diagonalization of the mesh serves every
+    energy, where a loop would diagonalize the whole mesh once per energy.
+
     Everything else falls back to a plain loop over `bloch_selfenergy`, so
     this is always safe to call: the same numbers either way, and a
     speedup only where there is one to be had."""
     from ..htk.kchain import detect_longest_hopping
+    if mode=="triangle": # 3d only, see _triangle_green
+        return _triangle_green(h,energies,nk=nk,delta=delta,gtype=gtype)
     energies = np.asarray(energies,dtype=np.float64)
     if not (h.dimensionality==1 and mode=="adaptive"
                 and detect_longest_hopping(h)==1):
-        out = [bloch_selfenergy(h,energy=e,delta=delta,mode=mode,
+        out = [bloch_selfenergy(h,nk=nk,energy=e,delta=delta,mode=mode,
                                 gtype=gtype,error=error,**kwargs)
                for e in energies]
         return (np.array([o[0] for o in out]),np.array([o[1] for o in out]))

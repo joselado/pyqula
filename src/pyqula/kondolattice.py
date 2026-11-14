@@ -213,3 +213,15 @@ class KondoLatticeHamiltonian(Hamiltonian):
         energies, U, nk, delta, T, hybridization_scale)."""
         from .kondotk import momentchi
         return momentchi.moment_spinchi(self, **kwargs)
+
+    def get_moment_magnon_chern(self, window, **kwargs):
+        """Chern number of a band of the magnon of the moments, the spin
+        exciton of the local moments of a converged two-dimensional Kondo
+        lattice mean field, from the null vectors of the RPA kernel with
+        the residual interaction U(q) at its zeros inside the frequency
+        window. Call it on the Hamiltonian returned by
+        get_mean_field_hamiltonian; see chitk.kernelchern.moment_rpa_chern
+        for the keywords (U, bands, nq, nk, T, channel,
+        hybridization_scale, shift, tol, full_output)."""
+        from .chitk import kernelchern
+        return kernelchern.moment_rpa_chern(self, window, **kwargs)

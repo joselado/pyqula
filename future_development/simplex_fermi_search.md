@@ -159,3 +159,32 @@ density matrix and the diagonalization, and not by the search.
 32^3 and finite temperature, and a factor 20 between T>0 and T=0. Both
 numbers are from the old search. That file is outside this change, so it
 was left as it is.
+
+## Repairs of the seventh bug audit
+
+The seventh audit (`bug_audit_7.md`) changed what this search shares with
+the density matrix; the measurements are in "Repairs of the seventh bug
+audit" of `tetrahedron_density_matrix.md`. `fermi_from_energies`,
+`simplex_charge_dos` and `simplex_weights` take the simplices of the mesh
+from the caller (`simplex_mesh`), and the search of a mean-field
+iteration keeps its band energies, its eigenvectors and its simplices for
+the density matrix of the shifted Hamiltonian, so an iteration
+diagonalizes the mesh once and builds the simplices once. The weights
+that this search was built to match, the sum of `simplex_weights`, are
+now written in closed form at the same quadrature nodes, so the charge of
+the density matrix and the charge of the Newton search still agree to
+rounding. On the cubic spinful ferromagnet at 32^3 and T = 1e-7, the three
+charge evaluations of the search are now the largest part of an
+iteration, 0.74 s of 1.2 s: at that temperature every simplex cut by the
+Fermi surface is integrated at 208 nodes, where the exact moment formula
+of a polynomial piece would need none. It was not built, since it moves
+the charge and the weights together by up to the quadrature error.
+
+The review of these repairs changed one thing in the search. The next
+density matrix recognizes the searched Hamiltonian on its Bloch matrices,
+so when the Hamiltonian carries none, a search asked to keep its mesh now
+stores nothing and computes the energies only, where it computed and
+stored eigenvectors that nothing could take
+(`test_a_search_that_cannot_recognize_its_hamiltonian_keeps_nothing` in
+`tests/scf/test_simplex_shared_mesh.py`). The rest is in "The review of
+the repairs" of `tetrahedron_density_matrix.md`.

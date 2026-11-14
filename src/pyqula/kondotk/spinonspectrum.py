@@ -148,7 +148,9 @@ def local_spectral_components(h, sites, nk, T, de, degenerate=False):
     bin, not a density, so its sum over the energies is the integral.
 
     With degenerate=True only the first component is computed, which is
-    the case of a Hamiltonian that is the same for the two spins.
+    the case of a Hamiltonian that is the same for the two spins. The bands
+    of one spin are then enough: every orbital state u comes twice, once
+    for each spin, with the same energy, so it has the weight 2|u_i|^2.
 
     Every state is shared between its two neighboring points of the grid,
     in proportion to the distance, which keeps its energy to second order
@@ -162,12 +164,15 @@ def local_spectral_components(h, sites, nk, T, de, degenerate=False):
     occ = np.zeros((len(sites)*ncomp, L))
     emp = np.zeros((len(sites)*ncomp, L))
     for k in ks:
-        es, vs = algebra.eigh(algebra.todense(hk(np.array(k))))
-        es, vs = np.asarray(es).real, np.asarray(vs)
-        a, b = vs[2*sites, :], vs[2*sites + 1, :] # [site, state], up/down
-        if degenerate:
-            comps = (np.abs(a)**2 + np.abs(b)**2)[:, None, :]
+        m = np.asarray(algebra.todense(hk(np.array(k))))
+        if degenerate: # the bands of one spin, each one twice
+            es, vs = algebra.eigh(m[0::2, 0::2])
+            es, vs = np.asarray(es).real, np.asarray(vs)
+            comps = 2.*np.abs(vs[sites, :][:, None, :])**2
         else:
+            es, vs = algebra.eigh(m)
+            es, vs = np.asarray(es).real, np.asarray(vs)
+            a, b = vs[2*sites, :], vs[2*sites + 1, :] # [site, state], up/down
             ab = np.conj(a)*b
             comps = np.stack([np.abs(a)**2 + np.abs(b)**2, 2*ab.real,
                               2*ab.imag, np.abs(a)**2 - np.abs(b)**2],

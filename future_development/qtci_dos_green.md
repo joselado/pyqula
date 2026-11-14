@@ -287,8 +287,9 @@ the tolerance; error=1e-5 or tighter is the better default at small delta.
 The LDOS on site i is the DOS with the projector on site i as the weight. So the weight of
 band n on site i is the sum of |u_n,a|^2 over the orbitals a of that site, its spin and
 Nambu components included, averaged over degenerate multiplets like the other weights. With
-an operator it is multiplied by <u_n|O|u_n>, which is the convention of the diagonalization
-mode of `get_ldos`. The simplex kernel already sums one channel per weight, so one
+an operator it is the local matrix element Re<u_n|P_i O|u_n>, the convention of every mode
+of `get_ldos` since 13 November 2026 (it was <u_n|O|u_n> times the density on the site
+before, see the section on the repairs of the seventh bug audit). The simplex kernel already sums one channel per weight, so one
 diagonalization of the mesh and one simplex sum give every site at every energy. The code is
 `simplexdos.ldos_triangle_counted` and `simplexdos.ldos_qtci_counted`, reached as
 `h.get_ldos(integration="triangle")` (modes "arpack" and "diagonalization"),
@@ -617,6 +618,195 @@ So 3D is where qtci saves most k-points, but not wall time: the
 tetrahedron sum on the full reconstructed mesh is what costs, for both
 methods, and what is left to win is the diagonalization of a few bands.
 
+## Repairs of the seventh bug audit (13 November 2026)
+
+The audit is `bug_audit_7.md`. All timings below were taken on a shared machine with two
+numba and BLAS threads, the old code (HEAD at `9bcf52d`) and the new one run back to back,
+three times each, keeping the smallest wall time; only the ratio means something. The
+tests named here are in `tests/ldos/test_ldos_operator_local.py`,
+`tests/dos/test_simplex_sum_order.py`, `tests/dos/test_simplex_tetrahedra.py`,
+`tests/ldos/test_ldos_simplex.py`, `tests/dos/test_dos_simplex.py` and
+`tests/green/test_bloch_selfenergy_batch.py`.
+
+**The LDOS with an operator.** The weight of state n on site i was
+$\langle u_n|O|u_n\rangle\,|u_n(i)|^2$ in the diagonalization modes (grid, triangle, qtci,
+`get_multildos`). This product is quadratic in the projector of one state, so inside a
+degenerate multiplet it depends on the basis the diagonalization returns, and the multiplet
+average of the triangle code does not remove that. On the Néel state of spinful graphene
+(`add_antiferromagnetism(0.5)`, every band a pair) a seed exchange of $10^{-10}$ only picks the
+basis inside each pair, and the $s_z$ map at E = 1.2, delta = 0.05, nk = 30 was 0.270 on site
+A with the seed along z and $6.6\times10^{-5}$ with the seed along x (triangle), 0.232 against
+$6.0\times10^{-5}$ in grid mode. The weight is now the local matrix element
+$\mathrm{Re}[u_n^*(a)\,(O u_n)(a)]$ summed over the orbitals of the site, which is linear in the
+projector, so its sum over a multiplet is the trace $\mathrm{Re\,Tr}(P_M P_i O)$, and it is
+$-\mathrm{Im}\,\mathrm{diag}(GO+OG)/2\pi$, what `mode="green"` and the KPM map already returned. The
+convention was chosen during the audit, which records the alternatives it rejected. Both seeds now
+give the same staggered map to $10^{-7}$ in grid, triangle and `get_multildos`, and in qtci at
+nk = 32. With Rashba coupling and a tilted exchange field `mode="arpack"` and `mode="green"`
+agree to $10^{-6}$ for $s_x$, $s_z$ and a random Hermitian matrix, the $s_z$ map is the local spin
+density $|u(i\uparrow)|^2-|u(i\downarrow)|^2$ to $10^{-10}$, and the map summed over the sites is
+`h.get_dos(operator=...)` on the same mesh to rounding. On a lattice polarized along z the
+states are eigenstates of $s_z$ and the map is the old one. The sparse branch of
+`get_multildos`, which keeps the `num_bands` states closest to the energy, gives the local
+spin density of those states to $10^{-8}$. Eight of the twelve tests of
+`test_ldos_operator_local.py` fail on the old code; the sum rules and the polarized lattice
+hold for both conventions.
+
+**The qtci LDOS with an energy offset.** The one interpolation of all the fields measures
+its error against the largest value of any field, so the band energies set the absolute
+tolerance of the site weights. On graphene with a sublattice imbalance of 0.3, nk = 128,
+delta = 1e-3 and the default tolerance 1e-6, the error against the triangle LDOS was 2e-6 to
+8e-6 of the largest LDOS, 7e-5 to 1.5e-4 with every onsite energy shifted by 30 (four runs)
+and 3e-4 to 6e-4 shifted by 100 (three runs); the global pivot search draws random numbers,
+so the error changes from run to run. The energies now enter the interpolation measured
+from their mean over the Brillouin zone, $\mathrm{Re\,Tr}(H_0)/n$, which is exact since the
+hoppings to other cells average to zero, and the mean is added back after. The error is now
+1e-6 to 8e-6 at the three shifts. The rescaling of every field to order one before the
+stacking, the other half of the finding, is not done here. The same normalization in
+`kubosimplex.sigma_qtci`, where $W$ goes as a length squared, was repaired on 14 November
+2026, with the transition energies and the weights each divided by its own maximum
+(`qtci_optical_response.md`).
+
+**The simplex sum at finite delta.** The kernel gathered the weights of the p vertices of
+every simplex at every energy, for every channel. It now adds the simplex average of the
+resolvent onto the vertices first,
+$A_n(k,E)=\sum_{s\ni k} \langle 1/(E+i\delta-E_n)\rangle_s$, and then contracts with the
+weights of every mesh point in one matrix product, $\sum_{k,n} A_n(k,E)\,W_n(k)/p$, the same
+sum in another order. A parallel task owns one band, one energy and one slice of the
+simplices, and adds into its own row of mesh points. The energies go in blocks that keep the
+resolvent near 64 MB. When a block has fewer bands times energies than there are threads,
+the simplices are cut in slices, one per thread, so one band at one energy also uses every
+thread; the kernel then holds one complex number per mesh point and thread. On a 3x3
+honeycomb supercell (18 orbitals) with an onsite modulation,
+nk = 90 and 200 energies: the DOS (one channel) 6.8 s before and 6.6 s after, the LDOS of
+the 18 sites 11.0 s and 6.9 s. The simplex averages themselves are not cheaper, so the gain
+is the channel part, and with one channel there is none: the resident memory of the DOS went
+from 0.39 GB to 0.47 GB, for the vertex resolvent of one block of energies. On the one-band
+cubic lattice at nk = 128 (12.6M tetrahedra) and 6 energies the DOS took 31.8 s and 1.73 GB
+before and 24.9 s and 0.99 GB after, with a spread of 25 to 37 s between the three runs of
+the new code, so in 3D the one-channel sum is not slower either.
+
+**The 3D Green's function.** `green_triangle` kept the band projector of every band at every
+k, $n^3$ numbers per k-point, about 8 GB at nk = 100 and n = 8. It now keeps the eigenvectors,
+$n^2$ per k-point, averages the vertex resolvent $A_n$ over each multiplet instead of the
+projectors (the two give the same sum), and builds the projectors for one chunk of the mesh at
+a time. On a 2x2x2 cubic supercell (8 orbitals), one energy: nk = 40 took 5.3 s and 1.44 GB
+before and 2.6 s and 0.57 GB after, nk = 60 16.9 s and 3.9 GB before and 9.1 s and 0.80 GB
+after, and nk = 100, the default of `bloch_selfenergy`, runs in 38 s and 2.0 GB after; the old
+code needs 15.8 GB there (see the large cases below).
+
+**Sweeps of the 3D selfenergy.** `bloch_selfenergy(mode="triangle")` diagonalizes the mesh at
+every call. `bloch_selfenergy_batch(h,energies,mode="triangle",nk=...)` now calls
+`green_triangle` once for all the energies. On spinful diamond with a sublattice imbalance of
+0.3, nk = 40 and 10 energies, the batch took 16.6 s before (a loop of single calls) and 6.7 s
+after. One call at one energy went from 2.0 s to 1.1 s and one call at 10 energies from 7.7 s
+to 6.1 s, from the simplex sum above. In 3D the simplex sum costs about as much as the mesh,
+not ten times less as in 2D. The energy sweeps of the embedding now go through the batch
+too, see the end of this section.
+
+**The batch of the diagonalization.** `_Fields` diagonalized 2^15 k-points per batch
+whatever the number of orbitals, except for the LDOS. The batch now goes down as $1/n^2$, so
+the Bloch matrices and the eigenvectors of one batch stay near 64 MB. The triangle DOS at
+delta = 0 of a 5x5 honeycomb supercell (50 orbitals) at nk = 200 took 17.9 s and 1.95 GB
+before and 15.7 s and 0.53 GB after; the operator-weighted DOS of a 4x4 supercell (32
+orbitals) 14.4 s and 3.5 GB before and 14.1 s and 0.78 GB after. With an operator at 50
+orbitals the old code did not finish in 230 s under a cap of 6 GB, and the new one took 23 s
+and 0.81 GB.
+
+**The tetrahedra.** The (6 nk^3, 4) array of vertex indices was built as a list of six stacks,
+a concatenation and a copy, about three times the array at its peak. It is now filled in place,
+with the same order. At nk = 128 the build took 2.0 s with a peak of 1.33 GB before and 0.55 s
+with 0.55 GB after, for an array of 0.40 GB; at R = 8 the peak is 4.4 GB in place of
+10.0 GB (see the large cases below). The array is still rebuilt at every call. In
+`h.get_anomalous_hall_conductivity(nk=64)` of a stack of Haldane layers with 20 Fermi levels
+(one build per level) the 20 builds took 4.6 s of 23.0 s before and 1.2 s of 22.2 s after. A
+cache keyed by the mesh would save that 1.2 s, but it would keep 3.2 GB alive between calls
+at R = 8, so it was not added; passing the tetrahedra from the caller to each Fermi level is a
+change of `topologytk/anomaloushall.py`.
+
+**The sign of the operator-weighted DOS.** The test of the Zeeman-split copy of graphene
+accepted both signs of the $s_z$-weighted DOS. It now asserts $d_0(E-J)-d_0(E+J)$, and a
+second case puts the exchange along y and weights with $s_y$, which is imaginary and
+antisymmetric. With the operator transposed in a copy of the code the $s_y$ case fails, while
+$s_z$, real and diagonal, cannot see the transpose.
+
+**The review of these repairs (14 November 2026).** A second pass read every repair again,
+broke each repaired line on purpose in a copy of the tree, and ran the tests on that copy.
+The old code was also used as a reference: 36 arrays (the 1D, 2D and 3D Green's function, the
+DOS with and without an operator at delta = 0 and 0.05 in 1D, 2D and 3D, the LDOS without
+an operator, the 3D selfenergy, the tetrahedra) agree between the two trees to
+$2\times10^{-14}$. Three things changed.
+
+The first is the parallel loop of the vertex resolvent. The first version had one task per
+band and energy. On a mesh above $2^{22}$ points a block holds one energy, so a one-band
+model ran on one thread, and a sweep of energies lost the parallel loop over energies that
+the old kernel had. On the one-band cubic lattice at nk = 162 (25.5M tetrahedra), 4
+energies and delta = 0.05 it took 46 s against 33 s for the old kernel. This was measured
+with two threads only; with more threads the old kernel uses one per energy, and the first
+version stayed on one. With the slices of the simplices described above
+it takes 29 s, with a peak of 1.6 GB against 3.1 GB for the old code. The kernel also adds
+directly into its output now, so it no longer holds a second copy of each row. The other
+ratios hold with the final kernel: the LDOS sum of 18 sites 11.3 s before and 6.7 s after,
+the one-channel DOS 6.2 s and 6.2 s, the batched 3D selfenergy of spinful diamond at nk = 40
+and 10 energies 17.4 s and 6.5 s, the Green's function at 8 orbitals and nk = 40 5.2 s
+and 1.44 GB before and 2.4 s and 0.58 GB after. The timings of the batch of the
+diagonalization and of the tetrahedra were not repeated. The sliced kernel was timed here
+with two threads; with eight threads see the large cases below.
+
+The second is a test that did nothing. The test of the multiplet average of the Green's
+function used the spin pairs of the diamond lattice, which are degenerate at every k. There
+the vertex resolvents of a pair are equal, so the average changes nothing, and the test
+passed with the average removed. The average matters at a point degeneracy of the mesh,
+where the neighbouring points are not degenerate. Graphene with K on the mesh does not work
+either: the two K points cancel each other for the basis LAPACK returns. The new test uses
+the chain written with two sites per cell at an even nk, whose two bands touch at the zone
+boundary only. It fails without the average, and it also asserts that the two sites have
+the same local Green's function. The old code gives the same matrix on that chain to
+rounding.
+
+The third is `delta_discard` of the grid LDOS (`ldostk/ldoswaves.py`), which drops the
+states far from the energies of the maps. The window was
+$[\min E-d\,\delta,\ \min E+d\,\delta]$, so with several energies the states at the upper
+energies were dropped. It is now $[\min E-d\,\delta,\ \max E+d\,\delta]$. The test in
+`tests/ldos/test_ldos_delta_discard.py` asserts that the discard changes each map by less
+than the Lorentzian tail $1/(\pi d^2\delta)$; it fails on the old window.
+
+The keyword `nk` of `bloch_selfenergy_batch` is now in its signature and not read from the
+other keywords, and a test checks that the fallback loop receives it. The decisions of the
+first pass stand: no cache of the tetrahedra (the first pass measured the
+build at 5% of a sweep of 20 Fermi levels at nk = 64, and a cache keeps 3.2 GB alive at
+R = 8), no cache of the eigenvectors of the 3D selfenergy, the vertex form for every kind,
+one degeneracy tolerance for the whole mesh of the Green's function, and the energies of
+the qtci LDOS centred without a rescaling of the weights.
+
+**The large cases, on a compute node (14 November 2026).** The cases that do not fit in the
+6 GB of the shared machine were run on a compute node with 32 GB, with two numba threads and
+one BLAS thread. The old tree is `9bcf52d`, and the new one is the same tree with only the
+four files of these repairs (`simplexdos.py`, `selfenergy.py`, `ldos.py`, `ldoswaves.py`).
+Each case ran twice, old and new back to back, and the checksums of the two trees agree
+to all printed digits in every case. The smallest wall time of the two runs and the peak
+resident memory:
+
+| Case | Old | New |
+|---|---|---|
+| `simplices(3,256)`, the R = 8 mesh, an array of 3.2 GB | 25.0 s, 10.0 GB | 4.9 s, 4.4 GB |
+| `green_triangle`, 2x2x2 cubic supercell (8 orbitals), nk = 100, one energy | 88.8 s, 15.8 GB | 29.6 s, 2.0 GB |
+| triangle DOS at delta = 0, 7x7 honeycomb supercell (98 orbitals), nk = 200, 11 energies | 33.8 s, 6.1 GB | 31.7 s, 0.54 GB |
+| the same with `operator="sublattice"` | 47.3 s, 23.8 GB | 44.9 s, 0.73 GB |
+
+So at the default nk = 100 of the 3D selfenergy the Green's function now fits in 2 GB, and
+it is three times faster, because the old code spent its time filling the projectors. The
+batch of the diagonalization buys memory and not time: with an operator, 98 orbitals need
+33 times less memory. The sliced vertex kernel was run on the same node with eight numba
+threads, on the one-band cubic lattice at delta = 0.05: at nk = 128 and 12 energies it took
+22.2 s before and 12.2 s after, and at nk = 162 and 4 energies 24.9 s before and 9.0 s
+after, with a peak of 2.4 GB against 3.0 GB. So with many threads the new kernel is faster
+than the old one, not only with two.
+
+**The energy sweeps of the embedding (14 November 2026).** With `gf_mode="triangle"`, `Embedding.multildos`, `Embedding.multidos` and `embedding.dos_impurity` called the selfenergy of one energy at every energy, so they diagonalized the nk^3 mesh at every energy. They now take the bulk selfenergy of the whole sweep from `green.supercell_selfenergy_batch`, which calls `bloch_selfenergy_batch`, and then do the Dyson step energy by energy. Every other `gf_mode` still goes energy by energy and keeps only the map of each energy, because the Green's functions of a large supercell at every energy of a sweep take a lot of memory (about 180 MB for the 7x7 honeycomb supercell and 100 energies of `examples/embedding/honeycomb_supercell_multildos`), so outside the tetrahedra nothing moves. The batch saves the diagonalization and not the simplex sum, which is still done per energy. On spinful diamond with a sublattice imbalance of 0.3 (4 orbitals) at nk = 40, one energy takes 1.33 s and the mesh is about 0.3 s of it, so the gain is small: with 10 energies `multildos` went from 11.3 s to 9.5 s and `dos_impurity` from 11.2 s to 8.7 s. The diagonalization weighs more with more orbitals. On a 2x2x2 supercell of the cubic lattice (16 orbitals) with an onsite modulation 0.3 cos(1.3x+0.7y+0.4z), which makes the eight sites different, and an onsite defect of 2 on one site, at nk = 24 and 10 energies, `multildos` went from 20.1 s to 7.7 s and `dos_impurity` from 19.2 s to 7.2 s, with a peak of 0.55 GB before and 0.61 GB after. These are the smallest of three runs with two threads on a shared machine, old and new back to back, so the ratio is what matters; the old code here is the tree with the batch of `bloch_selfenergy_batch` already in it, so the ratio is the one of the sweeps alone. The maps and the DOS agree with the old code to 1e-15 relative. The tests are in `tests/embedding/test_embedding_energy_sweep.py` (nine tests: the sweep against the single-energy calls to 1e-10 for the tetrahedra and exactly for the other modes, with a name, a potential, a bond matrix and an Operator object, and a count of the calls of `green_triangle`, one per sweep where the old code makes one per energy) and in `tests/green/test_supercell_selfenergy_sweeps.py`. `Embedding.multildos` now also takes `energies=`, the name of the grid in `h.get_multildos` and in `Embedding.multidos`; before, it took the keyword and returned its default grid of 20 energies. `green.green_operator_batch` does the same for the trace of `get_dos(mode="Green", gmode="triangle")`. It agrees with the loop to 2e-15 on spinful diamond at nk = 6, and `dos.py` does not call it yet. A complex energy in `mode="triangle"` now raises a `ValueError`; it was cast to its real part with only a ComplexWarning, so `Embedding.get_gf` at a complex128 energy returned the bulk at the real energy and the Dyson step at the complex one.
+
+**The LDOS of an embedding with an operator (14 November 2026).** `Embedding.get_ldos` and `Embedding.get_gf` weighted the Green's function on one side, $-\mathrm{Im}\,\mathrm{diag}(AG)/\pi$, while every mode of `h.get_ldos()` returns $-\mathrm{Im}\,\mathrm{diag}(GA+AG)/(2\pi)$. Summed over the orbitals of a site the two are the same when $A$ is local to each site, because the trace over the orbitals of the site of $A_iG_{ii}$ and of $G_{ii}A_i$ is the same, and they are different for a bond operator. On the pristine honeycomb lattice with Rashba 0.3 and an exchange field (0.1, 0.2, 0.3), at E = 0.4, delta = 0.1 and nk = 12, they agree to 1e-17 for sx, sy and sz. They differ by 2.9e-2 for a random Hermitian matrix and by 5.5e-3 for the intracell hopping, with the same sum over the sites. The map is now `ldos.green2ldos` of the unweighted Green's function, and `get_gf(operator=A)` returns $(GA+AG)/2$, so its diagonal still gives the map. With `gf_mode="full"` the pristine embedding is the same k-sum as `h.get_ldos(mode="green")`, and the two now agree to 1e-10 for sz, sx, the random matrix and the hopping. A named operator with `nsuper=2` was built on the primitive cell and stopped with a dimension mismatch. A name, a potential or a callable is now built on the embedded cell, the supercell of the defect and the outer `nsuper`, and a matrix has to be the one of that cell. This is checked in three ways: a bond matrix of the 2x2 supercell at `nsuper=2` and nk = 12 agrees with `h.supercell(2).get_ldos(mode="green", nk=6)` to 4e-16, where the one-sided weight is off by 0.31; a potential f(r) with a defect gives f(r_i) times the plain map; and `Embedding(h, m=..., nsuper=2)` gives the map of the embedding of `h.supercell(2)` itself. An operator without a matrix, such as the valley operator, is refused with a message. The tests are in `tests/ldos/test_embedding_gf_operator.py`, where ten of the fifteen tests fail on the old code. The defect of the older tests of that file was selected with x = 0, where the honeycomb lattice has no site, so it was no defect; it is now on the first site.
+
 ## Limits of the linear interpolation that were found on the way
 
 - **Flat simplices.** A simplex whose vertices all sit at one energy is a delta function in
@@ -652,7 +842,23 @@ methods, and what is left to win is the diagonalization of a few bands.
   the far field of a group of simplices with close centers c could be summed once per group
   (a one-dimensional fast multipole in energy), leaving the exact sum for the simplices
   within a few spreads of E. Not built. At delta = 0 the problem does not exist, since each
-  simplex only visits the energies inside its range.
+  simplex only visits the energies inside its range. Since 13 November 2026 the weights
+  enter through one matrix product after the simplex averages (see the repairs of the
+  seventh bug audit), so what is left per energy is the simplex average itself.
+- **The density-matrix contour of an embedding with the tetrahedra.** Since 14 November 2026
+  the energy sweeps of the embedding take the bulk selfenergy of a sweep from one
+  diagonalization of the mesh (see the repairs of the seventh bug audit).
+  `Embedding.get_density_matrix` does not, and it cannot use the tetrahedra at all: it is an
+  adaptive contour integral at complex energies, with points that are not known in advance,
+  while `mode="triangle"` takes real energies and a positive delta only, and now raises for a
+  complex energy. A resolvent of the tetrahedra at complex energies would be needed for the
+  contour; it is not built. `get_dos(mode="Green", gmode="triangle")` still goes energy by
+  energy until `dos.py` calls `green.green_operator_batch`.
+- **One normalization of the stacked fields of the qtci DOS and LDOS.** The qtci LDOS now
+  centres the band energies before the stacked interpolation, and `kubosimplex.sigma_qtci`
+  divides the transition energies and the weights each by its own maximum since 14 November
+  2026. Rescaling each field of the DOS and the LDOS to order one before the stacking is
+  exact and cheap; it is not done.
 - **The exact DOS of the interpolant at delta = 0 as a function.** The delta = 0 result is a
   piecewise-linear function in 2D (piecewise quadratic in 3D) with breakpoints at the vertex
   energies. Returning it as such, or its integral (the number of states below E, which gives

@@ -16,11 +16,22 @@ HEXAGON = np.array([1.5, 0., 0.]) # a hexagon center of honeycomb_lattice()
 BOND = np.zeros(3) # the bond center of honeycomb_lattice()
 
 
-def _qwz(m):
+def _swap_lattice_vectors(g):
+    """The same crystal with a1 and a2 exchanged, a left-handed pair"""
+    g.a1, g.a2 = np.array(g.a2).copy(), np.array(g.a1).copy()
+    g.update_reciprocal()
+    g.has_fractional = False
+    g.get_fractional()
+    return g
+
+
+def _qwz(m, swap=False):
     """Spinful square lattice with a spin-dependent hopping t s_z, Rashba
     coupling and an exchange m s_z: the Qi-Wu-Zhang model, C4 symmetric
     with the rotation acting on the spin"""
-    h = geometry.square_lattice().get_hamiltonian().get_multicell()
+    g = geometry.square_lattice()
+    if swap: _swap_lattice_vectors(g)
+    h = g.get_hamiltonian().get_multicell()
     sz = np.diag([1., -1.])
     for t in h.hopping: t.m = np.array(t.m)@sz
     h.add_rashba(1.0)
@@ -28,10 +39,12 @@ def _qwz(m):
     return h
 
 
-def _haldane(t2, spin=False):
+def _haldane(t2, spin=False, swap=False):
     """Haldane model; spinful, the exchange 4 and the onsite 4 leave a
     single occupied band, so the (-1)^F factor is tested at odd filling"""
-    h = geometry.honeycomb_lattice().get_hamiltonian(has_spin=spin)
+    g = geometry.honeycomb_lattice()
+    if swap: _swap_lattice_vectors(g)
+    h = g.get_hamiltonian(has_spin=spin)
     h.add_haldane(t2)
     if spin:
         h.add_exchange([0., 0., 4.])
@@ -65,6 +78,44 @@ def test_chern_mod_n_of_haldane(t2, spin, tmp_path, monkeypatch):
     for (n, center) in [(6, HEXAGON), (3, HEXAGON), (3, g.r[0]), (2, BOND),
                         (2, HEXAGON)]:
         assert topology.chern_mod_n(h, n=n, center=center) == c % n
+
+
+@pytest.mark.parametrize("model,args", [("haldane", 0.1), ("haldane", -0.1),
+                                        ("qwz", 1.), ("qwz", -1.)])
+def test_chern_mod_n_follows_the_order_of_the_lattice_vectors(model, args,
+        tmp_path, monkeypatch):
+    """Exchanging a1 and a2 flips h.get_chern(), and chern_mod_n follows it
+    for every rotation, so the two agree on a left-handed pair too; C2 alone
+    cannot see the sign, so C3, C4 and C6 are the cases that matter"""
+    monkeypatch.chdir(tmp_path)
+    if model == "haldane":
+        h, hs = _haldane(args), _haldane(args, swap=True)
+        rotations = [(6, HEXAGON), (3, HEXAGON), (3, hs.geometry.r[0]),
+                     (2, BOND)]
+    else:
+        h, hs = _qwz(args), _qwz(args, swap=True)
+        rotations = [(4, np.zeros(3)), (2, np.zeros(3))]
+    assert np.cross(hs.geometry.a1, hs.geometry.a2)[2] < 0. # left-handed
+    c = int(round(h.get_chern(nk=40)))
+    cs = int(round(hs.get_chern(nk=40)))
+    assert abs(c) == 1 and cs == -c # get_chern follows the order
+    for (n, center) in rotations:
+        assert topology.chern_mod_n(hs, n=n, center=center) == cs % n
+        assert topology.chern_mod_n(h, n=n, center=center) == c % n
+
+
+def test_chern_mod_n_on_a_left_handed_supercell(tmp_path, monkeypatch):
+    """geometry.honeycomb_lattice(4) comes with a left-handed pair of
+    lattice vectors, so the sign convention matters for a builder of the
+    package too, not only for a hand-made cell"""
+    monkeypatch.chdir(tmp_path)
+    h = geometry.honeycomb_lattice(4).get_hamiltonian(has_spin=False)
+    h.add_haldane(0.1)
+    g = h.geometry
+    assert np.cross(g.a1, g.a2)[2] < 0.
+    c = int(round(h.get_chern(nk=20)))
+    assert abs(c) == 1
+    assert topology.chern_mod_n(h, n=3, center=g.r[0]) == c % 3
 
 
 @pytest.mark.parametrize("spin", [False, True])
@@ -374,7 +425,34 @@ def test_corner_charge_of_the_kekule_honeycomb(delta, expected):
     g = geometry.honeycomb_lattice_C6()
     h = g.get_hamiltonian(has_spin=False)
     h.add_kekule(delta)
-    assert abs(h.get_corner_charge() - expected) < 1e-8
+    # n=6 explicitly: Q2 = 3 Q6 modulo 1 maps 1/2 and 0 onto themselves, so
+    # a fallback of the default to C2 would give the same numbers
+    assert abs(h.get_corner_charge(n=6) - expected) < 1e-8
+    assert abs(h.get_corner_charge() - expected) < 1e-8 # the default is C6
+
+
+def test_corner_charge_of_a_metal_near_k_raises():
+    """With the Fermi level at 2.41 the Kekule honeycomb has five occupied
+    states at Gamma and at the three M points but six at K, a band that
+    crosses only near K. The C6 index uses the C3 eigenvalues at K, so this
+    has to raise as a metal, not return a corner charge"""
+    from pyqula.topologytk.symmetryeigenvalues import invariant_momenta
+    g = geometry.honeycomb_lattice_C6()
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_kekule(0.3)
+    h.add_onsite(-2.41)
+    gamma = np.zeros(3)
+    k2 = [k for k in invariant_momenta(h, rotation_operation(2))
+          if not np.allclose(k, gamma)]
+    K = [k for k in invariant_momenta(h, rotation_operation(3))
+         if not np.allclose(k, gamma)][0]
+    nG = len(h.get_symmetry_eigenvalues(rotation_operation(6), gamma))
+    nM = [len(h.get_symmetry_eigenvalues(rotation_operation(2), k))
+          for k in k2]
+    nK = len(h.get_symmetry_eigenvalues(rotation_operation(3), K))
+    assert nM == [nG]*3 and nK != nG # only K tells the metal apart
+    with pytest.raises(ValueError, match="not an insulator"):
+        h.get_corner_charge(n=6)
 
 
 # Z4 indicator: kappa_1 of Khalaf, Po, Vishwanath and Watanabe
@@ -405,6 +483,32 @@ def _doubled(h, lam=0.8, gamma=0.1):
     return h2
 
 
+def _bond_center_kappa1(bond, s):
+    """kappa_1 of _diamond(bond, s) about the bond center (r0+r1)/2, from
+    the four first-neighbor hoppings alone. At a TRIM K = m/2 the Kane-Mele
+    term cancels between R and -R, so H(K) = f_K sigma_x with
+    f_K = sum_b t_b (-1)^(m.R_b) real. The inversion about the bond center
+    exchanges the two sites, sigma_x, so the occupied Kramers pair has the
+    parity -sign(f_K), n_+ - n_- = -2 sign(f_K), and
+    kappa_1 = -(1/2) sum_K sign(f_K) modulo 4. This is the sign of kappa_1
+    by a route that does not use the symmetry eigenvalues"""
+    g = geometry.diamond_lattice_minimal()
+    A = np.array([g.a1, g.a2, g.a3])
+    bonds = []
+    for n in np.ndindex(3, 3, 3):
+        d = g.r[1] + (np.array(n) - 1)@A - g.r[0]
+        if abs(np.linalg.norm(d) - 1.) < 1e-4:
+            bonds.append((np.array(n) - 1, d))
+    dvec = bonds[bond][1]
+    total = 0
+    for m in np.ndindex(2, 2, 2):
+        f = sum((s if np.linalg.norm(np.cross(d, dvec)) < 1e-4 else 1.)
+                *(-1)**int(np.dot(m, R)) for (R, d) in bonds)
+        assert abs(f) > 0.1 # the gap is open at every TRIM
+        total += int(np.sign(f))
+    return (-total//2) % 4
+
+
 @pytest.mark.parametrize("bond,s", [(0, 0.7), (2, 1.3), (1, 3.5)])
 def test_kappa1_and_the_z2_indices(bond, s, tmp_path, monkeypatch):
     """kappa_1 = nu_0 mod 2; two copies of a strong topological insulator
@@ -416,6 +520,16 @@ def test_kappa1_and_the_z2_indices(bond, s, tmp_path, monkeypatch):
     z2 = topology.z2_invariant_3d(h, nk=20, nt=20)
     k1 = h.get_z4_indicator()
     assert k1 % 2 == z2[0]
+    # moving the inversion center by a_i/2 changes kappa_1 by 2 nu_i
+    # modulo 4, with nu_i the weak index of the Wannier flow
+    g = h.geometry
+    c0 = (np.array(g.r[0]) + np.array(g.r[1]))/2. # a bond center
+    k0 = h.get_z4_indicator(center=c0)
+    assert k0 % 2 == z2[0]
+    assert k0 == _bond_center_kappa1(bond, s) # the sign, independently
+    for (a, nu) in zip([g.a1, g.a2, g.a3], z2[1]):
+        ka = h.get_z4_indicator(center=c0 + np.array(a)/2.)
+        assert (ka - k0) % 4 == (2*nu) % 4
     hd = _doubled(h)
     assert hd.has_time_reversal_symmetry()
     assert topology.z2_invariant_3d(hd, nk=20, nt=20) == (0, (0, 0, 0))
@@ -431,7 +545,9 @@ def test_axion_insulator_from_a_magnetized_strong_insulator(J, tmp_path,
     zero Chern vector, while the gap stays open"""
     monkeypatch.chdir(tmp_path)
     h = _diamond(2, 1.3)
-    assert h.get_z4_indicator() == 1 # kappa_1, with time reversal
+    # kappa_1 with time reversal: a strong phase, odd. Its value, 1 or 3,
+    # depends on the inversion center, since a weak index is not zero
+    assert h.get_z4_indicator() % 2 == 1
     h.add_exchange([0., 0., J])
     assert not h.has_time_reversal_symmetry()
     assert h.get_z4_indicator() == 2 # z_4, without

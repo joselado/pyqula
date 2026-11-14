@@ -838,3 +838,49 @@ def test_spin_channel_refusals_name_the_dc_routine():
     h1.add_rashba(0.3)
     with pytest.raises(ValueError,match="spin channel of the nonlinear dc"):
         nonlineardc.nonlinear_dc_conductivity(h1,channel="spin",nk=4)
+
+
+def test_batch_of_k_points_fits_its_memory_budget():
+    """One batch of the mesh loop holds about 2000 n^2 bytes per k-point,
+    so its size has to follow the budget down to a single k-point. A floor
+    of 64 k-points overrode the budget above 40 bands, and a batch took 1.3
+    GB at 100 bands and 8 GB at 250. The k-sum is linear, so the result
+    does not depend on the size of the batch"""
+    for n in [2,20,50,100,200,300]: # one k-point fits up to 316 bands
+        nb = nonlineardc._batch_size(n)
+        assert nb>=1
+        assert nb*2000.*n*n<=2e8 # the budget, nonlineardc._batch_bytes
+    h = _gapped_honeycomb(haldane=0.1,s=0.15,mu=0.9) # every term finite
+    t0 = _all_terms(h,nk=12,T=0.1)
+    old = nonlineardc._batch_size
+    try:
+        nonlineardc._batch_size = lambda n: 5 # several uneven batches
+        t1 = _all_terms(h,nk=12,T=0.1)
+    finally: nonlineardc._batch_size = old
+    scale = max(np.max(np.abs(t0[p])) for p in t0) # some terms vanish
+    assert scale>0.
+    for p in t0: assert np.max(np.abs(t1[p]-t0[p]))<1e-12*scale
+
+
+def test_each_term_builds_only_what_it_reads():
+    """A single term= builds only the mesh tensors it reads (the dipole
+    and the Berry curvature dipole only the curvature, the Drude term only
+    the inverse mass), and h3 is never built. The arrays it reads are made
+    by the same operations as in the full build, so every term is the same
+    number, bit for bit, as the entry of term="all"; and the batch kernel
+    with a subset of keys gives the same arrays as the full one"""
+    h = _gapped_honeycomb(haldane=0.1,s=0.15,mu=0.9)
+    for qmd in nonlineardc.get_qmd_conventions():
+        full = nonlineardc.nonlinear_dc_conductivity(h,nk=10,T=0.1,qmd=qmd)
+        for p in ["drude","bcd","qmd"]:
+            one = nonlineardc.nonlinear_dc_conductivity(h,term=p,nk=10,T=0.1,
+                    qmd=qmd)
+            for c in one: assert one[c]==full[p][c]
+    tms,dirs,d,hkgen,cellvol,scale = shg._derivative_tensors(h)
+    ks = uniform_mesh(2,6)
+    es,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,ks)
+    t0 = nonlineardc._batch_tensors(es,h1,h2,0.1,1e-6*scale)
+    for keys in [("uOmega",),("uu",),("uG2","uGt")]:
+        t1 = nonlineardc._batch_tensors(es,h1,h2,0.1,1e-6*scale,keys=keys)
+        assert set(t1)==set(keys)
+        for k in keys: assert np.array_equal(t1[k],t0[k])

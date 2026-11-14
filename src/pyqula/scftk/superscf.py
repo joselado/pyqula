@@ -378,7 +378,9 @@ class ShellFilling:
             es = np.array([l[1] for l in ls])
             vs = np.array([l[2] for l in ls])
             occ = np.array([l[3] for l in ls])
-            Q = np.einsum("gim,i,gin->gmn",vs.conj(),self.tau,vs)
+            Q = np.matmul(np.transpose(vs.conj(),(0,2,1)),
+                    self.tau[:,None]*vs) # V^dag tau_z V
+            Q = np.ascontiguousarray(Q)
             self.groups.append((ks,es,self._multiplets(es),vs,occ,Q))
 
     def _charges(self,q):
@@ -407,7 +409,11 @@ class ShellFilling:
                 e = np.linalg.eigvalsh(Rz.conj().T@(em[ig][:,None]*Rz))
                 c = np.sum(expit(-e/self.ts)*(1.+q[ig][z])/2.)/nk
                 c0, c1 = c0+c, c1+c
-        self.c0, self.c1 = c0+n-old, c1+n-old
+        # the charge of dm without its shell, to which a fill adds the
+        # charge of the filled shell, _occupations(y)[1]; c0 and c1 are
+        # the totals with the shell emptied and filled in charge
+        self.base = n-old
+        self.c0, self.c1 = c0+self.base, c1+self.base
         return bool(self.c0<self.charge0<self.c1) # the shell can hold N0
 
     def _occupations(self,y):
@@ -430,7 +436,12 @@ class ShellFilling:
         if not self.test(dm): return dm
         from scipy.optimize import brentq
         nk = float(self.nkpoints)
-        def error(y): return self._occupations(y)[1]+self.c0-self.charge0
+        # the charge after the fill minus N0. It goes from c0 - N0 < 0 at
+        # y to minus infinity to c1 - N0 > 0 at plus infinity, so test()
+        # guarantees the bracket. Adding c0 instead of base counted the
+        # charge of the emptied shell twice, which lands on N0 minus that
+        # charge when the shell vectors carry a fractional charge
+        def error(y): return self._occupations(y)[1]+self.base-self.charge0
         b = 2.*self.width # every level of the shell is within width*ts
         while error(-b)>=0. or error(b)<=0.: # q below 1 needs more
             b *= 4.
@@ -439,14 +450,21 @@ class ShellFilling:
         change = 0.
         for ((ks,es,em,vs,occ,Q),(R,on)) in zip(self.groups,
                 self._occupations(y)[0]):
-            ws = np.einsum("gim,gmn->gin",vs,R) # eigenvectors at y
+            ws = np.matmul(vs,R) # eigenvectors at y
             change += np.sum(on*np.einsum("gm,gmn->gn",es,np.abs(R)**2))
             change -= np.sum(occ*es)
+            # the change of the density matrix, the new occupations of ws
+            # minus the old ones of vs, as one product over the k-points
+            # and the levels: B holds the vectors as columns (n, 2 g m).
+            # A three-operand einsum did this as one loop without BLAS,
+            # 12 times slower at n = 160, and the whole fill 6 times
+            # (future_development/tetrahedron_density_matrix.md)
+            n = vs.shape[1]
+            B = np.concatenate([ws,vs],axis=2).transpose(1,0,2).reshape(n,-1)
+            c = np.concatenate([on,-occ],axis=1) # (g, 2m)
             for d in dm:
                 ph = np.exp(2j*np.pi*(ks@np.array(d,dtype=float)))/nk
-                new = np.einsum("gin,gn,gjn->ij",ws.conj(),on*ph[:,None],ws)
-                old = np.einsum("gin,gn,gjn->ij",vs.conj(),occ*ph[:,None],vs)
-                dm[d] = dm[d]+new-old
+                dm[d] = dm[d]+(B.conj()*(c*ph[:,None]).reshape(-1))@B.T
         self.correction = change/nk/2. # the band energy is half the trace
         self.fired, self.mu = True, y*self.ts
         self.fraction = (self.charge0-self.c0)/(self.c1-self.c0) # filled

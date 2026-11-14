@@ -53,13 +53,14 @@ The keywords are
 - `num_bands`: compute only this many states around `e`, for large
   Hamiltonians.
 
-With an operator $A$, the two modes do not compute exactly the same thing.
-`mode="arpack"` weights each eigenstate with its expectation value,
-$\langle\Psi|A|\Psi\rangle\,|\Psi(n)|^2$. `mode="green"` and `mode="KPM"` use
-the local matrix element $\textrm{Re}\,\Psi^*(n)(A\Psi)(n)$. The two agree
-for a state that is an eigenstate of $A$, and summed over the sites both
-give the same total. For a state whose spin, say, changes from site to site,
-only the local matrix element shows this change in the map. An operator that depends on momentum, such as `"valley"`, only
+With an operator $A$, every mode uses the local matrix element. A state
+$\Psi$ adds $\textrm{Re}\,\Psi^*(n)(A\Psi)(n)$ to site $n$, summed over the
+spin and Nambu components of the site. For a spin operator this is the local
+spin density, what a spin-polarized STM tip measures. Summed over the sites,
+the map gives the density of states weighted by $A$, as
+`h.get_dos(operator=...)` returns it. For a state that is an eigenstate of
+$A$ the weight is $\langle\Psi|A|\Psi\rangle\,|\Psi(n)|^2$. For a state whose
+spin changes from site to site, the map shows this change. An operator that depends on momentum, such as `"valley"`, only
 works with `mode="arpack"`, because the Green's function has already summed
 over the Brillouin zone.
 
@@ -106,8 +107,8 @@ of the atomic map is 13.3 at both $\omega=-2t$ and $\omega=2t$, the same as
 the sum of the tight-binding map, because the density of states is the same
 at the two energies. The interference is still in the shape: the maximum of
 the map is 2.6 times higher at $\omega=-2t$ than at $\omega=2t$. With
-an operator, `h.get_multildos()` uses the expectation value
-$\langle\Psi|A|\Psi\rangle$ times $|\Psi(n)|^2$, as `mode="arpack"` above.
+an operator, `h.get_multildos()` uses the same local matrix element as
+`h.get_ldos()`.
 `projection="atomic"` does not accept an operator.
 
 ![Local density of states of the zigzag ribbon at zero energy in real space, and resolved in position across the ribbon and energy.](img/ldos_zigzag.png#only-light)

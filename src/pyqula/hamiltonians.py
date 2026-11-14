@@ -474,6 +474,12 @@ class Hamiltonian():
         bsetk.spinflip.magnon_energies"""
         from . import bse
         return bse.magnon_energies(self,**kwargs)
+    def get_magnon_chern(self,**kwargs):
+        """Return the Chern number of a group of magnon bands of
+        time-dependent Hartree-Fock on this magnetic mean field, on a mesh
+        of Q; see bsetk/topology.py (magnon_chern and mode_chern)"""
+        from . import bse
+        return bse.magnon_chern(self,**kwargs)
     def get_goldstone_residual(self,**kwargs):
         """Return how far this magnetic mean field is from having a
         zero-energy magnon at Q=0, as the Goldstone theorem requires of
@@ -533,6 +539,12 @@ class Hamiltonian():
         flat (qs,es) arrays, same convention as get_bands"""
         from . import bse
         return bse.exciton_bands(self,**kwargs)
+    def get_exciton_chern(self,**kwargs):
+        """Return the Chern number of a group of exciton bands of the
+        Bethe-Salpeter equation on this mean field, on a mesh of Q; see
+        bsetk/topology.py (exciton_chern and mode_chern)"""
+        from . import bse
+        return bse.exciton_chern(self,**kwargs)
     def get_exciton_kdos_bands(self,**kwargs):
         """Return the exciton density of states A(Q,w) along a q-path,
         projected with an operator on the electron or on the hole, as flat

@@ -379,6 +379,66 @@ def test_inplane_valley_on_buckled_and_stacked_honeycombs(builder,nlayers):
     assert abs(np.min(np.abs(es))-np.linalg.norm(v))<1e-8
 
 
+def _pulled_apart(g):
+    """The same geometry with the sites above the middle height moved up by
+    two bond lengths, so that the vertical first-neighbor bonds between the
+    layers are gone and every in-plane bond is the same"""
+    go = g.copy()
+    z = np.array(go.r)[:,2]
+    go.r = np.array(go.r) + 2.*np.outer(z>np.mean(z),[0.,0.,1.])
+    go.r2xyz()
+    return go
+
+
+@pytest.mark.parametrize("builder",["aa_dz1","buckled_film"])
+def test_vertical_bonds_carry_no_inplane_valley(builder):
+    """A vertical bond as long as the in-plane one, between two layers on
+    top of each other, has no in-plane direction to take K from. It gave
+    K = 0/0, and the operators came back with NaN entries and no error.
+    The plane wave lives on the bonds of each layer, so the operators of
+    the stack are those of the same layers pulled apart, where the
+    vertical bonds are not first neighbors any more. The AA stack of
+    multilayer at its default dz=1 and the (111) diamond film of two
+    buckled layers both have such bonds"""
+    from pyqula import specialgeometry
+    if builder=="aa_dz1":
+        g = specialgeometry.multilayer(geometry.honeycomb_lattice(),l=[0,0])
+    else: g = geometry.buckled_honeycomb_lattice(2)
+    g = g.supercell(3)
+    go = _pulled_apart(g)
+    assert np.max(np.abs(np.array(g.r)[:,:2]-np.array(go.r)[:,:2]))<1e-12
+    k = [0.1,0.2,0.]
+    (h,ho) = [x.get_hamiltonian(has_spin=False) for x in (g,go)]
+    for name in ["valley_x","valley_y"]:
+        (m,mo) = [_dense(x.get_operator(name).m(None,k=k)) for x in (h,ho)]
+        assert np.all(np.isfinite(m))
+        assert np.max(np.abs(m-mo))<1e-12
+        assert np.max(np.abs(mo))>0.1 # really there
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_valley_exchange([0.1,0.2,0.])
+    assert np.all(np.isfinite(np.array(h.get_hk_gen()(k))))
+
+
+def test_bond_without_inplane_direction_cannot_pass_the_guards(monkeypatch):
+    """The guards of the geometry are written so that a NaN fails them.
+    With the vertical bonds let through again, the AA stack at dz=1 has
+    bonds with K = 0/0, and it has to raise and not hand back operators
+    with NaN entries, which is what the guards written as max(...)>tol
+    did"""
+    from pyqula import specialgeometry
+    from pyqula.operatortk import inplane_valley
+    monkeypatch.setattr(inplane_valley,"_VERTICAL",-1.) # keep every bond
+    g = specialgeometry.multilayer(geometry.honeycomb_lattice(),l=[0,0])
+    h = g.supercell(3).get_hamiltonian(has_spin=False)
+    for name in ["valley_x","valley_y"]:
+        with np.errstate(invalid="ignore",divide="ignore"):
+            with pytest.raises(ValueError,match="120 degrees apart"):
+                h.get_operator(name)
+    with np.errstate(invalid="ignore",divide="ignore"):
+        with pytest.raises(ValueError,match="120 degrees apart"):
+            h.add_valley_exchange([0.1,0.2,0.])
+
+
 def test_inplane_valley_of_a_twisted_bilayer_needs_a_tripled_cell():
     """In a twisted bilayer each layer has its own K. The moire cell does
     not hold a period of the plane wave K-K' of the layers, so it is
@@ -484,6 +544,58 @@ def test_inplane_valley_through_every_route(name,space,sparse):
     assert np.max(np.abs(f-fn))<1e-8
 
 
+@pytest.mark.parametrize("name",["island","cell"])
+def test_sharpened_valley_is_the_same_dense_and_sparse(name):
+    """delta= renormalizes the eigenvalues e of the valley operators to
+    e/(|e|+delta). On a sparse Hamiltonian it was dropped without a word,
+    since the sharpening returned a sparse matrix untouched; now a sparse
+    and a dense Hamiltonian of the same geometry give the same sharpened
+    operator, in the storage of each"""
+    from scipy.sparse import issparse
+    g = _route_geometry(name)
+    k = [[0.,0.,0.],None,[0.13,0.21,0.]][g.dimensionality]
+    delta = 0.1
+    def matrix(h,opname,**kw):
+        op = h.get_operator(opname,**kw)
+        return op.matrix if h.dimensionality==0 else op.m(None,k=k)
+    hd = _route_hamiltonian(g,"spinless",False)
+    hs = _route_hamiltonian(g,"spinless",True)
+    for opname in ["valley_x","valley_y","valley"]:
+        raw = _dense(matrix(hd,opname))
+        md = matrix(hd,opname,delta=delta)
+        ms = matrix(hs,opname,delta=delta)
+        assert issparse(ms)==issparse(matrix(hs,opname)) # same storage
+        assert not issparse(md)
+        assert np.max(np.abs(_dense(ms)-_dense(md)))<1e-12
+        (e0,v0) = np.linalg.eigh(raw) # the same eigenvectors, renormalized
+        ref = (v0*(e0/(np.abs(e0)+delta))[None,:])@v0.conj().T
+        assert np.max(np.abs(_dense(md)-ref))<1e-10
+        assert np.max(np.abs(_dense(md)-raw))>1e-2 # delta does something
+
+
+@pytest.mark.parametrize("delta",[None,0.1])
+def test_operator_kept_between_calls_is_the_one_of_each_k_point(delta):
+    """The operator keeps its matrix at the last k-point, since the states
+    of one k-point are visited one after the other. Going back and forth
+    between k-points, and writing into a returned matrix, must give the
+    matrix that a new operator builds at that k-point"""
+    from pyqula.operatortk.inplane_valley import get_inplane_valley
+    h = geometry.honeycomb_lattice().supercell(3).get_hamiltonian(
+            has_spin=False)
+    op = get_inplane_valley(h,angle=0.4,delta=delta)
+    ks = [[0.1,0.2,0.],[0.31,-0.12,0.],[0.1,0.2,0.],np.array([0.1,0.2,0.]),
+          [0.31,-0.12,0.]]
+    v = np.random.default_rng(1).normal(size=h.intra.shape[0])
+    for k in ks:
+        ref = get_inplane_valley(h,angle=0.4,delta=delta)(None,k=k)
+        m = op(None,k=k)
+        assert np.max(np.abs(m-ref))<1e-12
+        assert np.max(np.abs(op(v,k=k)-ref@v))<1e-12
+        m[:,:] = 0. # the caller owns the matrix it gets
+    m1 = op(None,k=ks[0])
+    assert np.max(np.abs(m1-op(None,k=ks[1])))>1e-2 # it does depend on k
+
+
 def test_stack_of_cells_has_the_operators_of_one_layer():
     """Layers ten bonds apart are not coupled, so the operators of the
     three-dimensional stack are those of the two-dimensional cell, at any
@@ -529,3 +641,62 @@ def test_inplane_valley_refuses_a_lattice_that_is_not_one_honeycomb():
         h.get_operator("valley_x")
     with pytest.raises(ValueError,match="honeycomb"):
         h.add_valley_exchange([0.1,0.,0.])
+
+
+@pytest.mark.parametrize("delta",[None,0.1])
+def test_tauz_kept_between_calls_is_the_one_of_each_k_point(delta):
+    """tau_z keeps its matrix at the last k-point, as the in-plane
+    operators do. Going back and forth between k-points, and writing into
+    a returned matrix, must give the matrix that a new operator builds at
+    that k-point"""
+    from pyqula.operatortk.valley import get_valley
+    h = geometry.honeycomb_lattice().supercell(3).get_hamiltonian(
+            has_spin=False)
+    op = get_valley(h,delta=delta)
+    ks = [[0.1,0.2,0.],[0.31,-0.12,0.],[0.1,0.2,0.],np.array([0.1,0.2,0.]),
+          [0.31,-0.12,0.]]
+    v = np.random.default_rng(2).normal(size=h.intra.shape[0])
+    for k in ks:
+        ref = _dense(get_valley(h,delta=delta)(None,k=k))
+        m = op(None,k=k)
+        assert np.max(np.abs(_dense(m)-ref))<1e-12
+        assert np.max(np.abs(np.asarray(op(v,k=k)).ravel()-ref@v))<1e-12
+        m[:,:] = 0. # the caller owns the matrix it gets
+    m1 = _dense(op(None,k=ks[0]))
+    assert np.max(np.abs(m1-_dense(op(None,k=ks[1]))))>1e-2 # it depends on k
+
+
+def test_velocity_kept_between_calls_is_the_one_of_each_k_point():
+    """The velocity of a 2D Hamiltonian keeps the velocity matrices of the
+    last k-point. The speed of several states, going back and forth
+    between k-points, must be the one that a new operator gives"""
+    h = geometry.honeycomb_lattice().supercell(2).get_hamiltonian()
+    h.add_rashba(0.2)
+    op = h.get_operator("velocity")
+    ks = [[0.1,0.2,0.],[0.31,-0.12,0.],[0.1,0.2,0.],[0.31,-0.12,0.]]
+    rng = np.random.default_rng(3)
+    for k in ks:
+        ref = h.get_operator("velocity")
+        for i in range(3):
+            w = rng.normal(size=h.intra.shape[0]) \
+                    + 1j*rng.normal(size=h.intra.shape[0])
+            w = w/np.linalg.norm(w)
+            got = np.asarray(op.m(w,k=k)).ravel()
+            exp = np.asarray(ref.m(w,k=k)).ravel()
+            assert np.max(np.abs(got-exp))<1e-12
+
+
+def test_vertical_bonds_do_not_change_tauz():
+    """tau_z is normalized with the in-plane bond length, which a vertical
+    bond between two buckled layers does not have. Counted as a bond of
+    in-plane length 0 it made the bond lengths look different, and tau_z
+    fell back to the normalization of a flat lattice, with eigenvalues
+    +-8/9 on the Dirac states of the (111) diamond film. The tau_z of the
+    film must be the one of the same layers pulled apart"""
+    g = geometry.buckled_honeycomb_lattice(2).supercell(3)
+    go = _pulled_apart(g)
+    k = [0.1,0.2,0.]
+    (h,ho) = [x.get_hamiltonian(has_spin=False) for x in (g,go)]
+    (m,mo) = [_dense(x.get_operator("valley").m(None,k=k)) for x in (h,ho)]
+    assert np.max(np.abs(mo))>0.1 # really there
+    assert np.max(np.abs(m-mo))<1e-12

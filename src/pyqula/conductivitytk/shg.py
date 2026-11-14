@@ -65,27 +65,67 @@ def _cartesian_derivative(tms,d,ph,axes):
     return np.einsum("kh,hnm->knm",ph,w,optimize=True)
 
 
-def _eigenbasis_derivatives(tms,dirs,d,hkgen,kb):
+def vertex_keys(order):
+    """The sorted Cartesian index tuples of every derivative of H up to
+    order, the default set of vertices of _eigenbasis_derivatives"""
+    keys = []
+    for a in range(3):
+        keys.append((a,))
+        for b in range(a,3):
+            if order>=2: keys.append((a,b))
+            for c in range(b,3):
+                if order>=3: keys.append((a,b,c))
+    return keys
+
+
+def triplet_vertices(trip):
+    """The vertices that the second-order formulas read for the Cartesian
+    triplets (a,b,c) of trip: h^a, h^b, h^c, h^ab, h^ac, h^bc and h^abc,
+    as sorted index tuples"""
+    keys = set()
+    for t in trip:
+        a,b,c = (int(i) for i in t)
+        for v in [(a,),(b,),(c,),(a,b),(a,c),(b,c),(a,b,c)]:
+            keys.add(tuple(sorted(v)))
+    return keys
+
+
+def _eigenbasis_derivatives(tms,dirs,d,hkgen,kb,vertices=None):
     """Band energies es[k,n] and the eigenbasis matrix elements of the
     first, second and third Cartesian derivatives of H on a batch of
     k-points: h1[k,a,n,m], h2[k,a,b,n,m] and h3[k,a,b,c,n,m]. The second
     and third are symmetric in their Cartesian indices, so only the sorted
-    combinations are built and the rest are copies."""
+    combinations are built and the rest are copies.
+
+    vertices, if given, is the set of sorted Cartesian index tuples that the
+    caller reads, such as vertex_keys(1) or triplet_vertices(trip); every
+    other entry stays zero, and h2 or h3 is None when no vertex of that
+    order is asked for. A derivative along an axis on which every bond
+    vector vanishes (z in a planar cell) is exactly zero, so it is left
+    zero without being built."""
+    if vertices is None: vertices = vertex_keys(3)
+    vertices = set(vertices)
+    flat = [a for a in range(3) if not np.any(d[:,a]!=0.)] # zero derivatives
     hks = hk_matrix_batch(hkgen,kb) # H(k) for the batch, densified
     es,wb = parallel_diagonalization(hks) # batched numba eigh
     wc = np.conjugate(wb).transpose(0,2,1) # the bras <n|
     ph = kubo._bloch_phases(dirs,kb)
     nk,n = es.shape
+    orders = set(len(v) for v in vertices)
     h1 = np.zeros((nk,3,n,n),dtype=np.complex128)
-    h2 = np.zeros((nk,3,3,n,n),dtype=np.complex128)
-    h3 = np.zeros((nk,3,3,3,n,n),dtype=np.complex128)
+    h2 = np.zeros((nk,3,3,n,n),dtype=np.complex128) if 2 in orders else None
+    h3 = np.zeros((nk,3,3,3,n,n),dtype=np.complex128) if 3 in orders else None
     def rot(m): return wc@m@wb # into the eigenbasis
+    def build(v): # whether vertex v is asked for and can be nonzero
+        return v in vertices and not any(a in flat for a in v)
     for a in range(3):
-        h1[:,a] = rot(_cartesian_derivative(tms,d,ph,[a]))
+        if build((a,)): h1[:,a] = rot(_cartesian_derivative(tms,d,ph,[a]))
         for b in range(a,3):
-            m2 = rot(_cartesian_derivative(tms,d,ph,[a,b]))
-            h2[:,a,b] = m2 ; h2[:,b,a] = m2
+            if build((a,b)):
+                m2 = rot(_cartesian_derivative(tms,d,ph,[a,b]))
+                h2[:,a,b] = m2 ; h2[:,b,a] = m2
             for c in range(b,3):
+                if not build((a,b,c)): continue
                 m3 = rot(_cartesian_derivative(tms,d,ph,[a,b,c]))
                 for (i,j,l) in set([(a,b,c),(a,c,b),(b,a,c),(b,c,a),
                                     (c,a,b),(c,b,a)]):
@@ -285,9 +325,13 @@ def _sigma2_grid(h,energies,nk,T,delta,trip,gauge,degeneracy_tol,
     ks = kubo._kmesh(h,nk)
     parallel.set_num_threads() # set the number of threads for numba
     acc = np.zeros((len(energies),len(full)),dtype=np.complex128)
+    if gauge=="length": vertices = vertex_keys(2) # h3 is not read
+    else: # rho1^c for every c, and the vertices of the triplets
+        vertices = set(vertex_keys(1)) | triplet_vertices(full)
     for i0 in range(0,len(ks),_kbatch): # loop over batches of k-points
         kb = ks[i0:i0+_kbatch]
-        es,h1,h2,h3 = _eigenbasis_derivatives(tms,dirs,d,hkgen,kb)
+        es,h1,h2,h3 = _eigenbasis_derivatives(tms,dirs,d,hkgen,kb,
+                vertices=vertices)
         f = kubo._fermi(es,T)
         acc += _gauges[gauge](es,f,h1,h2,h3,energies,delta,triplets,
                 pairs,ipair,full,degeneracy_tol*scale)
@@ -391,7 +435,8 @@ def _sigma2_length_grid(h,w1s,w2s,nk,delta,components,degeneracy_tol):
     acc = np.zeros((2,2,len(w1s),len(full)),dtype=np.complex128)
     for i0 in range(0,len(ks),_kbatch): # loop over batches of k-points
         kb = ks[i0:i0+_kbatch]
-        es,h1,h2,h3 = _eigenbasis_derivatives(tms,dirs,d,hkgen,kb)
+        es,h1,h2,h3 = _eigenbasis_derivatives(tms,dirs,d,hkgen,kb,
+                vertices=vertex_keys(2)) # the length gauge reads h1 and h2
         f = kubo._fermi(es,0.)
         tol = degeneracy_tol*scale
         acc[0] += np.array(_sigma2_length2(es,f,h1,h2,w1s,w2s,delta,full,

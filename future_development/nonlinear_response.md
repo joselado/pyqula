@@ -581,10 +581,16 @@ Derivations and sign chain.
     longitudinal dispersion term $-\langle w\,u_a\tilde G_{bc}\rangle$. Their dispersion
     current comes from the field-corrected band velocity $\partial_k\varepsilon'$ with
     their Eq. (energy_renorm) $\varepsilon' = \varepsilon + e^2 G^{ab}E_aE_b$ and $G$ equal to
-    our $\tilde G$. The second-order Stark shift is $\frac{e^2}{2}\tilde G^{ab}E_aE_b$ (the
-    polarizability check above), so with $f_0(\varepsilon)$ unshifted the dispersion current
-    is $-\frac12\langle w\,u_a\tilde G_{bc}\rangle$, half of theirs, and with
-    $f_0(\varepsilon')$ it cancels against the shifted distribution as a total derivative.
+    our $\tilde G$. A band energy $\varepsilon + \lambda\,\tilde G^{ab}E_aE_b$ with
+    $f_0(\varepsilon)$ unshifted gives the current $\lambda\,\sigma^{disp}$. The second-order
+    Stark shift of the state is $+\frac{e^2}{2}\tilde G^{ab}E_aE_b$ (the polarizability check
+    above), but the semiclassical band energy of the wave packet, the one of the third-order
+    term (Liu et al., Eq. (Ecorr)), is $-\frac12\tilde G^{ab}E_aE_b$, since it leaves out the
+    potential energy $E\cdot\tilde G\cdot E$ of the shifted center. With that energy the
+    dispersion current is $+\frac12\langle w\,u_a\tilde G_{bc}\rangle = -\frac12\sigma^{disp}$,
+    and with $f_0(\varepsilon')$ it cancels against the shifted distribution as a total
+    derivative. An earlier version of this item took the Stark shift as the band energy and
+    gave $+\frac12\sigma^{disp}$, with the wrong sign (corrected in the seventh bug audit).
     The convention is kept as the paper writes it and documented with this factor; no fourth
     convention is added.
   - `shibata` (arXiv:2606.22359, Eqs. (intraQMD-band) and (interQMD-band), the velocity-gauge
@@ -1017,3 +1023,75 @@ String options go through registries (`get_term_names()`, `get_qmd_conventions()
   the triangle and qtci integrations, which are SHG-only.
 - A triangle or qtci integration of the general kernel; the grid is the only integration.
 - The third-order $\tau^2$ (Berry curvature quadrupole) and $\tau^0$ dc terms.
+
+## Repairs of the seventh bug audit
+
+- **The sign of the dispersion current (fixed, 14 November 2026).** The module docstring,
+  `conductivity.py` and the `kaplan` item above took the second-order Stark shift of the
+  state, $+\frac12 E\cdot\tilde G\cdot E$, as the band energy of the dispersion current,
+  and so said that the physical dispersion current with an unshifted $f_0$ is
+  $+\frac12\sigma^{disp}$. The semiclassical band energy that the same module uses at
+  third order is $-\frac12 E\cdot\tilde G\cdot E$ (Liu et al., Eq. (Ecorr), read in the
+  TeX source), and a band energy $\varepsilon + \lambda E\cdot\tilde G\cdot E$ gives the
+  current $\lambda\sigma^{disp}$, so the statement is now $-\frac12\sigma^{disp}$ in the
+  three places. No computed number changes, since `qmd_disp` is returned as Kaplan,
+  Holder and Yan write it.
+- **The batch of the dc mesh loop (fixed).** `_batch_size` had a floor of 64 k-points,
+  which overrode its own budget of 2e8 bytes above about 40 bands: one batch took about
+  1.3 GB at 100 bands and 8 GB at 250. The floor is now one k-point. Above 40 bands each
+  k-point costs many n^3 products, so a smaller batch costs no time. A test checks the
+  budget from 2 to 300 bands and that batches of 5 k-points give every term to 1e-12 of
+  the largest one; on the old code it fails at 50 bands. On the 8x8 honeycomb supercell
+  (128 bands) at nk = 8, one batch of 64 k-points before, the process peaked at 2.25 GB
+  and took 5.0 s; with batches of 6 k-points it peaks at 0.50 GB and takes 3.9 s. The same fixed batch is in
+  `nonlineardcfit.convergence_radius` (4096 k-points of H(k)), which is not in this pass.
+- **Only what the term reads (built).** Every dc call built the derivative vertices up to
+  third order and the three sums Y(p) of `_band_blocks`, whatever term was asked for, and
+  h3 was never read. `shg._eigenbasis_derivatives` now takes the set of vertices its
+  caller reads (`shg.vertex_keys(order)` or `shg.triplet_vertices(trip)`) and leaves the
+  others zero, or None for a whole order, and it skips the derivatives along an axis on
+  which every bond vector vanishes (z in a planar cell), which are exactly zero. The
+  `_terms` registry now lists the mesh tensors each term reads, and `_band_blocks` and
+  `_batch_tensors` build only those: the dipole and `bcd` build the curvature, `drude` the
+  inverse mass, and no call builds h3. The arrays that are built come from the same
+  operations, so every term is the same number bit for bit; a test compares each term
+  with the entry of `term="all"` exactly. Wall time on the 18-band Haldane-gapped
+  honeycomb 3x3 supercell at nk = 40 and T = 0.05, two threads, the smallest of three
+  holds of the lock, old and new back to back in each (the machine was shared, so the
+  ratio is what matters): `berry_curvature_dipole` 1.24 s to 0.53 s (2.3x), `term="drude"`
+  1.29 s to 0.57 s (2.3x), `term="all"` 1.20 s to 0.91 s (1.3x). The largest peak memory
+  of the process over the holds went from 569 MB to 489 MB.
+- **The injection current (built).** `injection_current` built every vertex up to third
+  order and used only the velocity; it now asks for `vertex_keys(1)`. `injection_rate`
+  built r^b and the commutator [r^c, P h^a P] once per triplet; they are now built once per
+  b and once per (a,c) and shared, which gives the same weights (a test compares every
+  triplet alone with the 27 together). The mesh went in fixed batches of 64 k-points; it now
+  goes in batches sized by bytes (`photocurrent._batch_size`, 2e8 bytes, thousands of
+  k-points for a few bands), and a test checks that batches of 7 give the same rate to
+  1e-13. Wall times, as above: on the 18-band supercell at nk = 30 with 50 frequencies,
+  all 27 components 1.10 s to 0.56 s (2.0x) and three components 0.50 s to 0.23 s (2.2x);
+  on the two-band Weyl model of the CPGE test at nk = 40, 351 frequencies and the three
+  cyclic components, whose (a,c) pairs are all distinct, 4.40 s to 1.65 s (2.7x). The
+  largest peak memory went from 381 MB to 457 MB and from 358 MB to 471 MB, from the larger
+  batches and the shared commutators. The batch alone, on the Weyl model in the new code
+  with the batch forced back to 64 k-points against 5487, in one hold: 2.59 s against
+  1.56 s (1.7x), the same rate to 2.5e-15.
+- **Review of these repairs (14 November 2026).** The timing of the dc terms was repeated on
+  the same model (18-band Haldane-gapped honeycomb 3x3 supercell, nk = 40, T = 0.05, two
+  threads), the committed tree against the committed tree with only the five source files
+  of this pass replaced, so that the changes of the other passes do not enter. The smallest
+  of three holds of the lock, old and new back to back in each, on a shared machine:
+  `berry_curvature_dipole` 1.18 s to 0.35 s (3.4x), `term="drude"` 1.15 s to 0.42 s (2.7x),
+  `term="all"` 1.34 s to 0.90 s (1.5x), with the six output arrays the same byte for byte
+  and the peak memory from 540 MB to 489 MB in the second and third holds (610 MB and 573 MB
+  in the first one, which also compiled the numba kernels). The ratios are the ones recorded
+  above or better. Each change was also broken on purpose in a copy of the tree. With the
+  blocks of
+  `uGt` and `uG2` exchanged in `_tensor_blocks`, three tests of the quantum-metric terms
+  fail (the two forms of the intraband term, the Fermi-sea forms and the two-band
+  benchmark); the new test of this pass does not, since it compares a term with the entry of
+  `term="all"`, which reads the same map. With the commutator of `injection_rate` kept per a
+  and not per (a,c), five tests fail. A new test in `tests/conductivity/test_shg.py` runs
+  the injection current, the dipole and the dc terms on a strained Haldane metal, where all
+  of them are finite, with the full build of the vertices in place of the subset each one
+  asks for, and requires the same result bit for bit.

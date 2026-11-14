@@ -5,10 +5,10 @@
 #
 # The grid method of kubo.py samples 1/(omega + i delta - dE_nm(k)) on the
 # mesh, so it needs a mesh whose energy spacing is below delta. Here the
-# transition energy dE_nm(k) and the weight W^ab_nm(k) = ratio_nm v^a_nm v^b_mn
-# are interpolated linearly inside each simplex of the mesh (segments in 1D,
-# triangles in 2D, tetrahedra in 3D), and the resolvent is integrated over
-# the simplex exactly. The mesh then only has to resolve the smooth
+# transition energy dE_nm(k) is interpolated linearly inside each simplex of
+# the mesh (segments in 1D, triangles in 2D, tetrahedra in 3D), the weight
+# W^ab_nm(k) = ratio_nm v^a_nm v^b_mn is averaged over its vertices, and the
+# resolvent is integrated over the simplex exactly. The mesh then only has to resolve the smooth
 # functions dE and W, not the broadening, and every frequency comes from the
 # same mesh.
 #
@@ -1152,9 +1152,18 @@ def sigma_triangle(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     es,vs,cellvol,scale = kubo.mesh_bands(h,ks,window,degeneracy_tol)
     pairs,dE,W,comps,trans = pair_fields(es,vs,T,degeneracy_tol*scale,
             intraband,interband)
+    # the velocities are 48 n^2 bytes per k-point, and the source build
+    # below, where the memory peaks, needs only the pair fields
+    del es,vs
     pairs,dE,W = _prune(pairs,dE,W)
     return _sigma_from_fields(h.dimensionality,nk,pairs,dE,W,comps,trans,
             energies,delta,cellvol)
+
+
+def _family_scale(x):
+    """Largest absolute value of a family of fields, 1 if it vanishes"""
+    s = float(np.max(np.abs(x))) if x.size else 0.
+    return s if s>0. else 1.
 
 
 def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
@@ -1163,8 +1172,11 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     2^R x 2^R mesh (nk rounded up to a power of two), where the smooth
     fields dE and W are not computed on every point but reconstructed from
     a quantics tensor cross interpolation of all of them at once (the
-    field index is one more tensor site, so the tolerance is relative to
-    the largest field), see conductivity.optical_conductivity"""
+    field index is one more tensor site). The transition energies and the
+    weights are each divided by their largest value on the coarse scan
+    first, so the tolerance is relative to the largest field of each
+    family, and does not depend on the unit of length, see
+    conductivity.optical_conductivity"""
     check_broadening(delta)
     if h.dimensionality!=2:
         raise NotImplementedError("integration='qtci' of the optical "
@@ -1198,6 +1210,15 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     pairs,dE0,W0,comps,trans = pair_fields(es0,vs0,T,tol,intraband,interband,
             axes=axes)
     pairs,dE0,W0 = _prune(pairs,dE0,W0)
+    # one scale per family of fields, the largest value on the coarse scan:
+    # the stacked TCI measures its tolerance against the largest field of
+    # all, and W goes as a length squared while dE does not, so on a shared
+    # scale a large lattice constant would loosen the tolerance of dE and a
+    # small one that of W. Each family is divided by its own scale before
+    # the interpolation and multiplied back after it, so the result does
+    # not depend on the unit of length
+    sE = _family_scale(dE0[:,pairs[:,0]!=pairs[:,1]])
+    sW = _family_scale(W0)
     # the independent real fields: dE of the off-diagonal pairs, and the
     # real and imaginary parts of W for a <= b (W for (b,a) is its conjugate)
     fields = []
@@ -1213,9 +1234,9 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
                 axes=axes,pairs=pairs)
         out = np.zeros((len(ks),len(fields)))
         for f,(kind,p,c) in enumerate(fields):
-            if kind=="dE": out[:,f] = dEk[:,p]
-            elif kind=="re": out[:,f] = Wk[:,p,c].real
-            else: out[:,f] = Wk[:,p,c].imag
+            if kind=="dE": out[:,f] = dEk[:,p]/sE
+            elif kind=="re": out[:,f] = Wk[:,p,c].real/sW
+            else: out[:,f] = Wk[:,p,c].imag/sW
         return out
     # one TCI of all the fields: it shares the pivots in k, so it needs
     # fewer diagonalizations than one TCI per field when the fields are few,
@@ -1227,9 +1248,9 @@ def sigma_qtci(h,energies,nk,T,delta,intraband,interband,degeneracy_tol,
     dE = np.zeros((npts,len(pairs)),dtype=np.float64)
     W = np.zeros((npts,len(pairs),len(comps)),dtype=np.complex128)
     for f,(kind,p,c) in enumerate(fields):
-        if kind=="dE": dE[:,p] = vals[:,f]
-        elif kind=="re": W[:,p,c] += vals[:,f]
-        else: W[:,p,c] += 1j*vals[:,f]
+        if kind=="dE": dE[:,p] = vals[:,f]*sE
+        elif kind=="re": W[:,p,c] += vals[:,f]*sW
+        else: W[:,p,c] += 1j*vals[:,f]*sW
     for c,(a,b) in enumerate(comps): # the (b,a) components, by conjugation
         if a>b: W[:,:,c] = np.conjugate(W[:,:,trans[c]])
     return _sigma_from_fields(2,n,pairs,dE,W,comps,trans,energies,delta,cellvol)

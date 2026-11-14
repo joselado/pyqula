@@ -112,6 +112,26 @@ def test_decoupled_metal_layers_give_the_2d_result_per_spacing():
         assert abs(2.*t3-tm) < 1e-12, (T, t3, tm)
 
 
+def test_a_fermi_array_builds_the_tetrahedra_once(monkeypatch):
+    """The tetrahedra of the mesh, 192 bytes per k-point, are built once
+    for every Fermi level of the array, and the array gives exactly the
+    single calls"""
+    from pyqula.dostk import simplexdos
+    h3 = _stack(_haldane(), c=2., tm=0.05)
+    fs = np.array([-0.5, 0.1, 0.5])
+    kw = dict(nk=10, T=1e-3)
+    one = [h3.get_anomalous_hall_conductivity(fermi=f, **kw) for f in fs]
+    count = [0]
+    build = simplexdos.simplices
+    def counted(*a, **k):
+        count[0] += 1
+        return build(*a, **k)
+    monkeypatch.setattr(simplexdos, "simplices", counted)
+    many = h3.get_anomalous_hall_conductivity(fermi=fs, **kw)
+    assert count[0] == 1
+    assert np.array_equal(many, np.array(one))
+
+
 def test_coupled_layers_converge_to_the_kz_slices():
     """With the kz dependent mass the crystal is a 3D metal at fermi=0.5.
     sigma_xy is the mean over kz of the 2D result of each slice, divided by

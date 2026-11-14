@@ -388,6 +388,32 @@ def supercell_selfenergy(h,e=0.0,delta=1e-3,nk=100,nsuper=[1,1],
   return g,selfe
 
 
+def supercell_selfenergy_batch(h,energies,delta=1e-3,nk=100,nsuper=[1,1],
+                             gtype="bulk",
+                             gf_mode="renormalization"):
+  """supercell_selfenergy at every energy of energies: the Green's
+  functions and the selfenergies, two sequences in the order of energies.
+
+  The tetrahedra of a 3d crystal (gf_mode="triangle", a single cell,
+  the only case in 3d) go through
+  greentk.selfenergy.bloch_selfenergy_batch, which diagonalizes the nk^3
+  mesh once for the whole sweep, where one call per energy diagonalizes
+  it at every energy. Every other mode calls supercell_selfenergy one
+  energy at a time through parallel.pcall, with the same numbers. All
+  the matrices of the sweep are kept, so the sweeps of the embedding
+  call this only for the tetrahedra, whose cell is small, and go energy
+  by energy otherwise."""
+  h = h.get_dense() # dense mode, once for the whole sweep
+  if gf_mode=="triangle" and nsuper==1: # one diagonalization of the mesh
+      from .greentk.selfenergy import bloch_selfenergy_batch
+      return bloch_selfenergy_batch(h,energies,delta=delta,nk=nk,
+              mode=gf_mode,gtype=gtype)
+  from . import parallel
+  out = parallel.pcall(lambda e: supercell_selfenergy(h,e=e,delta=delta,
+      nk=nk,nsuper=nsuper,gtype=gtype,gf_mode=gf_mode),energies)
+  return [o[0] for o in out],[o[1] for o in out]
+
+
 
 
 
@@ -474,9 +500,37 @@ def green_operator(h0,operator=None,e=0.0,delta=1e-3,nk=100,
 #            out /= len(ks) # normalize
         else: # operator is a matrix
             op = operator.get_matrix()
-            g = bloch_selfenergy(h,energy=e,delta=delta,nk=nk,mode=gmode)[0] 
+            g = bloch_selfenergy(h,energy=e,delta=delta,nk=nk,mode=gmode)[0]
             out = -np.trace(np.array(g)@op).imag
     return out
+
+
+def green_operator_batch(h0,energies,operator=None,delta=1e-3,nk=100,
+        gmode="adaptive"):
+    """green_operator at every energy of energies, as an array.
+
+    With gmode="triangle" (3d) the Green's functions of the whole sweep
+    come from greentk.selfenergy.bloch_selfenergy_batch, one
+    diagonalization of the nk^3 mesh instead of one per energy. Every
+    other mode calls green_operator energy by energy through
+    parallel.pcall, the same numbers as before."""
+    if gmode!="triangle":
+        from . import parallel
+        return np.array(parallel.pcall(lambda e: green_operator(h0,
+            operator=operator,e=e,delta=delta,nk=nk,gmode=gmode),energies))
+    op = None
+    if operator is not None:
+        op = h0.get_operator(operator).get_matrix(required=False)
+        if op is None: # the same refusal as green_operator
+            raise NotImplementedError("green_operator needs an operator with "
+                    "a matrix representation, a momentum-dependent one is not "
+                    "implemented")
+        op = algebra.todense(op)
+    from .greentk.selfenergy import bloch_selfenergy_batch
+    gs = bloch_selfenergy_batch(h0.get_dense(),energies,delta=delta,nk=nk,
+            mode=gmode)[0]
+    if op is None: return np.array([-np.trace(g).imag for g in gs])
+    return np.array([-np.trace(g@op).imag for g in gs])
 
 
 

@@ -197,10 +197,12 @@ def _weights_jit(es,f,h1,h2,h3,trip,Ti,Tii,Tiii,Tiv,Tv,nterm,tol):
 
 # ------------------------------------------------------------ divided differences
 
-_ratio = 0.25 # a cluster of nodes with a span below this fraction of delta
-              # is done by its Taylor series, which converges at least as
-              # _ratio^k; a wider one by the recursion, which then divides
-              # by a span of at least _ratio times delta
+_ratio = 0.25 # the direct sum does a cluster of nodes of span s at a
+              # distance y of its mean from the pole by its Taylor series,
+              # which converges as (s/y)^k, when s < _ratio y, and a wider
+              # one by the recursion, which then divides by a span of at
+              # least _ratio y, per frequency. The source kernel compares s
+              # with _ratio delta instead, see there
 
 
 @jit(nopython=True,cache=True)
@@ -219,7 +221,9 @@ def _taylor_coefficient(p,d,y):
     # psi_d^(p) = (p-d)!/(z-x)^(p-d+1), divided by p!
     fac = 1.
     for q in range(p-d+1,p+1): fac *= q
-    return u**(p-d+1)/fac
+    out = u # u^(p-d+1) by products, a complex power is a log and an exp
+    for q in range(p-d): out = out*u
+    return out/fac
 
 
 @jit(nopython=True,cache=True)
@@ -233,8 +237,10 @@ def _dd_taylor(x,i,j,d,z,hbuf):
     m = m/(r+1)
     y = m-z
     span = x[j]-x[i]
-    rho = span/abs(z.imag) # an upper bound of span/abs(y), independent of w
-    if rho<1e-12: K = 0
+    rho = span/abs(y) # below _ratio, see _small
+    # equal nodes still take the first order: their rounded mean can be off
+    # by eps abs(m), (0.7 + 0.7 + 0.7)/3 is not 0.7, see h_1 below
+    if rho<1e-12: K = 1
     else: K = min(hbuf.shape[0]-1,int(np.log(1e-17)/np.log(rho))+4)
     for k in range(K+1): hbuf[k] = 0.
     hbuf[0] = 1.
@@ -244,14 +250,18 @@ def _dd_taylor(x,i,j,d,z,hbuf):
     out = 0j
     k0 = 0 # first k with r+k >= d, below it the coefficients are logarithms
     while r+k0<d and k0<=K:
-        if k0!=1: out += _taylor_coefficient(r+k0,d,y)*hbuf[k0]
+        out += _taylor_coefficient(r+k0,d,y)*hbuf[k0]
         k0 += 1
     if k0>K: return out
     u = -1./y # 1/(z-m)
     up = _taylor_coefficient(r+k0,d,y) # psi_d^(p)/p! at p = r+k0
     for k in range(k0,K+1):
         p = r+k
-        if k!=1: out += up*hbuf[k] # h_1 = sum of the deviations = 0
+        # h_1, the sum of the deviations, vanishes for the exact mean but not
+        # for the rounded m, which is off by eps abs(m): on resonance, where
+        # abs(y) is about delta, skipping it lost eps abs(m)/delta (2e-10 of
+        # a triangle at m = 0.5 and delta = 1e-6), so it is kept
+        out += up*hbuf[k]
         # psi_d^(p+1)/(p+1)! = psi_d^(p)/p! * u (p-d+1)/(p+1)
         up = up*u*(p-d+1)/(p+1)
     return out
@@ -259,11 +269,18 @@ def _dd_taylor(x,i,j,d,z,hbuf):
 
 @jit(nopython=True,cache=True)
 def _small(x,i,j,z):
-    """whether the Taylor series applies to the cluster of nodes x_i..x_j.
-    The distance of a real node to the pole is at least delta = Im z, so
-    the test uses delta and not abs(m - z): then the branch does not depend
-    on w, and the source kernel below takes exactly the same branches"""
-    return x[j]-x[i]<_ratio*abs(z.imag)
+    """whether the Taylor series applies to the cluster of nodes x_i..x_j:
+    its span is below _ratio times the distance of its mean m to the pole.
+    The rule depends on w. A rule on delta alone, span < _ratio delta,
+    sends a nearly flat cluster far from resonance to the recursion, which
+    then loses eps (abs(m - z)/span)^r in a divided difference of order r
+    (4e-4 of a triangle of spread delta at abs(m - z) = 0.5 and delta =
+    1e-6, and more than the whole value of a prism piece)"""
+    m = 0.
+    for q in range(i,j+1): m += x[q]
+    m = m/(j-i+1)
+    s = x[j]-x[i] # compared in squares, abs(m - z) needs a square root
+    return s*s<_ratio*_ratio*((m-z.real)**2+z.imag*z.imag)
 
 
 @jit(nopython=True,cache=True)
@@ -389,9 +406,10 @@ def _shg_simplex_jit(sims,es,Wt,terms,omegas,delta,tol):
 
 # ------------------------------------------------------------ source kernel
 #
-# The branches of _shg_simplex_jit depend on the vertex energies, on delta
-# and on the degeneracy tolerance, never on w: _small compares the span of a
-# cluster of nodes with delta, and the exact cases B = 0 and B = A are
+# The source kernel fixes the branches once for all frequencies: a cluster
+# of nodes goes to its Taylor series when its span is below _ratio delta,
+# whatever w (the distance of a real node to the pole is at least delta, so
+# the series converges at every w), and the exact cases B = 0 and B = A are
 # decided from the vertex energies. Every divided difference is linear in
 # the values it combines, so the whole sum over simplices and terms is a
 # sum of fixed coefficients times a few functions of y = e - z at fixed
@@ -411,8 +429,24 @@ def _shg_simplex_jit(sims,es,Wt,terms,omegas,delta,tol):
 # with exactly the same energy are merged. The terms of the cases B = 0 and
 # B = A carry a factor 1/z, kept as a second family of coefficients. Then
 # each frequency costs one sum over the sources. This is the same sum as
-# _shg_simplex_jit, term by term, with the additions in another order and
-# with the pairs below in closed form, so the two agree to rounding.
+# _shg_simplex_jit, term by term, with the additions in another order, the
+# pairs below in closed form, and the branch of a cluster decided on delta
+# and not per frequency.
+#
+# That last difference costs precision, and it is not repaired here. A
+# cluster wider than _ratio delta goes to the recursion at every w, and far
+# from its mean, at a distance abs(x) much larger than its span s, the
+# recursion loses eps (abs(x)/s)^r in a divided difference of order r. At
+# the delta of an optical spectrum this is small: on the three-band model
+# of the tests at nk = 64 and delta = 1e-3 the sum is within 5e-11 of the
+# direct sum, which decides per frequency. It matters for nearly flat
+# bands at a small delta: three bands of spread delta on a 2x2 mesh at
+# delta = 1e-6 lose 9e-10 to 5e-9 of the largest value, which is 4e-4 to
+# all of the value off resonance. Summing the
+# simplices whose fixed branches cancel too much at every frequency cures
+# that, but it cost 2.6 times the old time at delta = 1e-3 for no gain
+# there, so it was not kept (future_development/qtci_shg.md). For a small
+# delta or flat bands, kernel="simplices" of _sigma_from_fields is exact.
 #
 # Most clusters are pairs, and their number grows as nk^3 at fixed delta
 # (the triangles times the chance that two nodes are closer than
@@ -461,8 +495,8 @@ def _cluster_sources(x,i,j,d,delta,c,fam,cm,cf,cl,cc,ncl,hbuf):
     for q in range(i,j+1): m += x[q]
     m = m/(r+1)
     span = x[j]-x[i]
-    rho = span/delta # as in _dd_taylor
-    if rho<1e-12: K = 0
+    rho = span/delta # abs(m - z) >= delta: the series converges at every w
+    if rho<1e-12: K = 1 # equal nodes take the first order, see _dd_taylor
     else: K = min(hbuf.shape[0]-1,int(np.log(1e-17)/np.log(rho))+4)
     for k in range(K+1): hbuf[k] = 0.
     hbuf[0] = 1.
@@ -473,7 +507,7 @@ def _cluster_sources(x,i,j,d,delta,c,fam,cm,cf,cl,cc,ncl,hbuf):
     for b in range(L): cc[ncl,b] = 0.
     scale = 1./delta**(r-d+1)
     for k in range(K+1):
-        if k==1: continue # h_1 = 0
+        # k = 1 is kept: h_1 vanishes only for the exact mean, see _dd_taylor
         p = r+k
         if p<d: # p = 1 < d = 2 (not reached for r >= 2)
             cc[ncl,1] += hbuf[k]
@@ -488,7 +522,8 @@ def _cluster_sources(x,i,j,d,delta,c,fam,cm,cf,cl,cc,ncl,hbuf):
 
 @jit(nopython=True,cache=True)
 def _dd_sources(x,lab,n,d,delta,s,fam,cn,cm,cf,cl,cc,ncl,C,hbuf):
-    """s times psi_d[x_0..x_n] as sources, with the branches of _dd_psi:
+    """s times psi_d[x_0..x_n] as sources, with the branches on delta of
+    this kernel (_dd_psi decides per frequency instead):
     the coefficient of psi_d at node q is added to cn[lab[q],fam], the
     clusters are appended from index ncl on. Returns the new ncl"""
     for i in range(1,n+1): # insertion sort, carrying the labels along
@@ -505,7 +540,7 @@ def _dd_sources(x,lab,n,d,delta,s,fam,cn,cm,cf,cl,cc,ncl,C,hbuf):
             c = C[i,j]
             if c==0.: continue
             if r==0: cn[lab[i],fam] += c # a node
-            elif x[j]-x[i]<_ratio*delta: # a cluster, as in _small
+            elif x[j]-x[i]<_ratio*delta: # a cluster, the rule on delta
                 ncl = _cluster_sources(x,i,j,d,delta,c,fam,cm,cf,cl,cc,ncl,
                         hbuf)
             else: # F[i,j] = (F[i+1,j]-F[i,j-1])/(x_j-x_i)
@@ -881,10 +916,12 @@ def _fields(tms,dirs,d,hkgen,ks,T,trip,cat,tol):
     nb = Ti.shape[0]
     es = np.zeros((len(ks),nb))
     W = np.zeros((len(ks),len(terms),len(trip)),dtype=np.complex128)
+    vertices = shg.triplet_vertices(trip) # the only ones _weights_jit reads
     parallel.set_num_threads() # set the number of threads for numba
     for i0 in range(0,len(ks),shg._kbatch): # loop over batches of k-points
         kb = ks[i0:i0+shg._kbatch]
-        e,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,kb)
+        e,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,kb,
+                vertices=vertices)
         f = kubo._fermi(e,T)
         es[i0:i0+len(kb)] = e
         W[i0:i0+len(kb)] = _weights_jit(e,f,h1,h2,h3,trip,Ti,Tii,Tiii,Tiv,

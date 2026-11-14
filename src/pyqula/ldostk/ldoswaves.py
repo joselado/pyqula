@@ -25,17 +25,26 @@ def ldos_waves_from_eigsystem(eig,eigvec,es,delta,operator=None,
   """Same as ldos_waves, but starting from an already-diagonalized
   (eig, eigvec) pair -- rows of eigvec are the eigenvectors, as returned
   by waves.get_waves -- instead of diagonalizing internally. This lets
-  callers batch the diagonalization step themselves (see ldos.ldosmap)."""
+  callers batch the diagonalization step themselves (see ldos.ldosmap).
+
+  With an operator O the weight of state n on orbital a is the local
+  matrix element Re[conj(u_n(a)) (O u_n)(a)], which sums over the orbitals
+  to <u_n|O|u_n> and over a degenerate multiplet to a trace, so it does
+  not depend on the basis the diagonalization returns. Without an
+  operator it is |u_n(a)|^2."""
   es = np.array(es) # array with energies
   ds = [] # empty list
-  if operator is None: weights = eig.real*0. + 1.0 # initialize as 1
-  else: weights = [operator.braket(v,k=k) for v in eigvec] # weights
+  weights = np.ones(len(eig)) # one per state, zeroed by delta_discard
   if delta_discard is not None: # discard too far values
-      ewin = [np.min(es)-delta_discard*delta,np.min(es)+delta_discard*delta]
+      ewin = [np.min(es)-delta_discard*delta,np.max(es)+delta_discard*delta]
       for i in range(len(weights)):
           e = eig[i]
           if not ewin[0]<e<ewin[1]: weights[i] = 0.0
-  v2s = [(np.conjugate(v)*v).real for v in eigvec] # square of the wavefunction
+  if operator is None: # square of the wavefunction
+      v2s = [(np.conjugate(v)*v).real for v in eigvec]
+  else: # local matrix element of the operator
+      v2s = [np.real(np.conjugate(v)*np.asarray(operator(v,k=k)).reshape(-1))
+              for v in eigvec]
   ds = [[0.0 for i in range(np.array(eigvec).shape[1])] for e in es] # initialize
   ds = ldos_waves_jit(np.array(es),
           np.array(eigvec).T,np.array(eig),np.array(weights),

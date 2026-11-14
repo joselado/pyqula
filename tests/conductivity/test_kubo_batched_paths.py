@@ -213,3 +213,48 @@ def test_sigma_is_invariant_under_a_degenerate_subspace_rotation():
     s0,s1 = sigma(vs),sigma(vsr)
     assert np.max(np.abs(vsr-vs)) > 0.1 # the rotation really did something
     assert np.max(np.abs(s1-s0)) < 1e-12*np.max(np.abs(s0))
+
+
+@pytest.mark.parametrize("window",[None,dict(nv=2,nc=2)])
+def test_slabs_of_the_mesh_give_the_whole_mesh_sum(window,monkeypatch):
+    """The grid conductivity and the Drude weight add up the mesh one slab
+    of k-points at a time, which bounds their memory. The sum is linear
+    in k, so with a slab of 7 k-points, which does not divide the 81 of
+    the mesh, both agree with the sum of the same three functions over
+    the whole mesh at once, to the order of the summation. With a band
+    window the bands are found on the whole mesh and only the sum runs
+    by slabs. Without a window no call may ask for the bands of more than
+    one slab, which is what bounds the memory."""
+    h = _model2d()
+    ks = kubo._kmesh(h,9)
+    ws = np.linspace(0.,4.,12)
+    T,delta,tol = 0.1,0.1,1e-6
+    kw = dict(energies=ws,nk=9,T=T,delta=delta,degeneracy_tol=tol)
+    if window is None:
+        es,vs,cellvol,scale = kubo._bands_and_velocities(h,ks)
+    else:
+        from pyqula.conductivitytk import kubowindow
+        es,vs,cellvol,scale,_ = kubowindow.bands_and_velocities(h,ks,
+                kubowindow.get_window(**window),tol_rel=tol)
+        kw.update(window)
+    ratio,dE = kubo._response_weights(es,T,tol*scale)
+    ref = kubo._sigma_jit(dE,ratio,vs,ws,delta)/(len(ks)*cellvol)
+    monkeypatch.setattr(kubo,"_slab_size",lambda n: 7)
+    asked = [] # k-points of every call for bands and velocities
+    bands = kubo._bands_and_velocities
+    def recorded(h,ks,**kwargs):
+        asked.append(len(ks))
+        return bands(h,ks,**kwargs)
+    monkeypatch.setattr(kubo,"_bands_and_velocities",recorded)
+    out = conductivity.optical_conductivity(h,**kw)[1]
+    assert np.max(np.abs(out-ref)) < 1e-12*np.max(np.abs(ref))
+    if window is None:
+        assert max(asked)==7 and sum(asked)==len(ks) # slab by slab
+        del asked[:]
+        ratio,dE = kubo._response_weights(es,T,tol*scale,
+                intraband=True,interband=False)
+        ref = np.einsum("knm,kanm,kbmn->ab",ratio,vs,vs,optimize=True)
+        ref = ref.real/(len(ks)*cellvol)
+        out = conductivity.drude_weight(h,nk=9,T=T,degeneracy_tol=tol)
+        assert np.max(np.abs(out-ref)) < 1e-12*np.max(np.abs(ref))
+        assert max(asked)==7 and sum(asked)==len(ks)

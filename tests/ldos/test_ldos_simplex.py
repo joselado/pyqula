@@ -36,9 +36,10 @@ def test_triangle_ldos_agrees_with_the_diagonalization_at_large_delta():
 
 
 def test_triangle_ldos_with_an_operator_agrees_with_the_diagonalization():
-    """With an operator each band is weighted with <u_n|A|u_n> times its
-    density on the site, the convention of mode='arpack'. The exchange
-    field is along a generic direction, so that sz varies with k"""
+    """With an operator each band is weighted on each site with the local
+    matrix element Re<u_n|P_i A|u_n>, the convention of mode='arpack'. The
+    exchange field is along a generic direction, so that sz varies with k
+    and the eigenstates are not eigenstates of sz"""
     h = _graphene(has_spin=True)
     h.add_rashba(0.2)
     h.add_exchange([0.1,0.2,0.3])
@@ -178,3 +179,31 @@ def test_the_integration_is_checked():
     with pytest.raises(NotImplementedError,match="2D"):
         geometry.chain().get_hamiltonian().get_ldos(e=0.,
                 integration="qtci",write=False)
+
+
+def test_a_constant_shift_does_not_loosen_the_qtci_ldos():
+    """The one interpolation of all the fields measures its error against
+    the largest value of any field, so raw band energies near 100 set an
+    absolute tolerance on the site weights about 30 times larger than band
+    energies near 3: at the default tolerance of 1e-6 the error against
+    the triangle was 2e-6 to 8e-6 unshifted and 3e-4 to 6e-4 with every
+    onsite energy shifted by 100. The energies are interpolated around
+    their mean, so the shifted error stays at 1e-6 to 5e-6. The global
+    pivot search of the interpolation draws random numbers and its pivots
+    differ by rounding, so the two maps are compared through their error
+    and not with each other"""
+    import random
+    random.seed(0) # the pivot search uses the random module
+    out = []
+    for c in (0.,100.):
+        h = _graphene()
+        if c!=0.: h.add_onsite(c)
+        es = np.linspace(-3.5,3.5,101)+c+0.0037
+        _,dt,_,_ = simplexdos.ldos_triangle_counted(h,es,nk=128,delta=1e-3)
+        _,dq,_,_ = simplexdos.ldos_qtci_counted(h,es,nk=128,delta=1e-3)
+        out.append((dt,dq))
+    (dt0,dq0),(dt1,dq1) = out
+    scale = np.max(np.abs(dt0))
+    assert np.max(np.abs(dt1-dt0)) < 1e-8*scale # the shift is exact
+    for dt,dq in out: # 3.6 times the largest error measured, 8.3e-6
+        assert np.max(np.abs(dq-dt)) < 3e-5*scale

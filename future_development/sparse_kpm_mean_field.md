@@ -639,7 +639,7 @@ $PX_aP$ and $PY_aP$ of the orbitals of the site enter, so a site costs the
 square of its ball, and the entries are those of `get_dm_kpm_sparse` between
 sites within $2R$ hops, for compact groups of 4096 sites at a time so that
 the memory is that of a group; the recursion and `_step_row` are untouched.
-On a Haldane flake of 984 sites ($t_2=0.1$, gap 1.04, the 84 sites within a
+On a Haldane flake of 984 sites ($t_2=0.1$, bulk gap $9t_2=0.9$, the 84 sites within a
 quarter of its radius as the bulk, dense marker 0.9997) the largest bulk
 error against the dense marker is 0.30, 0.12, 0.049, 0.020, 0.0079 and
 0.0012 at radius 2 to 6 and 8, and it is the error of the ball alone: the

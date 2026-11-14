@@ -68,12 +68,16 @@ convention:
                                      (fullcurrent2-metric), as written
 
 The hall piece is purely transverse, sigma^hall_aaa = 0. The disp piece
-is Kaplan-Holder-Yan's dispersion current with their literal coefficient.
-The second-order Stark shift of a band is (q^2/2) E.Gt.E, half of their
-Eq. (energy_renorm), so with an unshifted f0 the physical dispersion current
-is half of sigma^disp, and with the shifted f0 it cancels as a total
-derivative. It is kept as the paper writes it, with this factor recorded
-here.
+is Kaplan-Holder-Yan's dispersion current with their literal coefficient,
+the velocity of their field-corrected energy eps + E.Gt.E, Eq.
+(energy_renorm). A band energy eps + lam E.Gt.E with an unshifted f0
+gives the current lam sigma^disp. The semiclassical band energy of the
+third-order term below (Gao, Yang and Niu; Liu et al.) has lam = -1/2:
+the Stark shift of the state, +(1/2) E.Gt.E, minus the potential energy
+E.Gt.E of the shifted wave-packet center. So with that energy and an
+unshifted f0 the dispersion current is -(1/2) sigma^disp, and with the
+shifted f0 it cancels as a total derivative. It is kept as the paper
+writes it, with this factor recorded here.
 
 Degenerate multiplets
 ---------------------
@@ -167,14 +171,17 @@ def _qmd_intra(t): return -0.5*t["uG2"]
 
 
 # term= registry: the function giving the term without its power of tau,
-# and that power
+# that power, and the mesh tensors of _batch_tensors that the function reads
 _terms = {
-    "drude": (_drude,2),
-    "bcd": (_bcd,1),
-    "qmd_hall": (_qmd_hall,0),
-    "qmd_disp": (_qmd_disp,0),
-    "qmd_intra": (_qmd_intra,0),
+    "drude": (_drude,2,("uu",)),
+    "bcd": (_bcd,1,("uOmega",)),
+    "qmd_hall": (_qmd_hall,0,("uGt",)),
+    "qmd_disp": (_qmd_disp,0,("uGt",)),
+    "qmd_intra": (_qmd_intra,0,("uG2",)),
     }
+
+# the block of _band_blocks that each tensor of _batch_tensors traces
+_tensor_blocks = {"uu":"ubc","uGt":"Gt","uG2":"G","uOmega":"Omega"}
 
 # qmd= registry: the quantum-metric pieces of each convention
 _qmd = {
@@ -258,26 +265,32 @@ def _multiplets(es,tol):
     return lab[:,:,None]==lab[:,None,:]
 
 
-def _band_blocks(es,h1,h2,tol):
+def _band_blocks(es,h1,h2,tol,blocks=None):
     """The block matrices of the module docstring on a batch of k-points,
     from the output of shg._eigenbasis_derivatives. Returns a dict with the
     multiplet mask "same" (nk,n,n), the velocity "u" (nk,3,n,n), and
     "ubc", "G", "Gt" and "Omega", each (nk,3,3,n,n); all of them are kept
     only between two states of the same multiplet, and their diagonals are
-    the band quantities u^n_a, u^n_bc, G^n_bc, Gt^n_bc and Omega^n_bc."""
+    the band quantities u^n_a, u^n_bc, G^n_bc, Gt^n_bc and Omega^n_bc.
+    blocks, if given, lists the ones to build among the last four, and
+    only the sums Y(p) they need are formed (h2 is read by "ubc" only)"""
+    if blocks is None: blocks = ("ubc","G","Gt","Omega")
     same = _multiplets(es,tol)
     de = es[:,:,None] - es[:,None,:] # eps_nm
     inv = np.where(same,0.,1./np.where(same,1.,de)) # 1/eps_nm, m not in P(n)
-    def Y(p): # Y[k,b,c,n,m'] = sum_m h^b_nm h^c_mm'/eps_nm^p
-        return (h1[:,:,None]*(inv**p)[:,None,None])@h1[:,None,:]
+    ys = {} # Y[k,b,c,n,m'] = sum_m h^b_nm h^c_mm'/eps_nm^p, built once per p
+    def Y(p):
+        if p not in ys:
+            ys[p] = (h1[:,:,None]*(inv**p)[:,None,None])@h1[:,None,:]
+        return ys[p]
     def sym(y): return y + np.swapaxes(y,1,2) # (b,c) + (c,b)
-    y1,y2,y3 = Y(1),Y(2),Y(3)
     mask = same[:,None,None]
     out = dict(same=same,u=np.where(same[:,None],h1,0.))
-    out["ubc"] = np.where(mask,h2 + sym(y1),0.)
-    out["G"] = np.where(mask,sym(y2)/2.,0.)
-    out["Gt"] = np.where(mask,sym(y3),0.)
-    out["Omega"] = np.where(mask,1j*(y2 - np.swapaxes(y2,1,2)),0.)
+    if "ubc" in blocks: out["ubc"] = np.where(mask,h2 + sym(Y(1)),0.)
+    if "G" in blocks: out["G"] = np.where(mask,sym(Y(2))/2.,0.)
+    if "Gt" in blocks: out["Gt"] = np.where(mask,sym(Y(3)),0.)
+    if "Omega" in blocks:
+        out["Omega"] = np.where(mask,1j*(Y(2) - np.swapaxes(Y(2),1,2)),0.)
     return out
 
 
@@ -287,20 +300,22 @@ def _weights(es,T):
     return f*(1.-f)/T,f*(1.-f)*(1.-2.*f)/T**2
 
 
-def _batch_tensors(es,h1,h2,T,tol):
+def _batch_tensors(es,h1,h2,T,tol,keys=None):
     """The k-sums (not normalized) of the block traces that the five terms
     are made of, on one batch of k-points, each a (3,3,3) array:
     uu[a,b,c] = sum w Tr[U_a u_bc], uGt[a,b,c] = sum w Tr[U_a Gt_bc],
     uG2[a,b,c] = sum f'' Tr[U_a G_bc] and uOmega[c,a,b] = sum w
     Tr[U_c Omega_ab]. The weight is common to a multiplet, so taking it
-    on either index of the block is the same"""
+    on either index of the block is the same. keys, if given, lists the
+    tensors to build (see _term_keys), and only their blocks are formed"""
+    if keys is None: keys = tuple(_tensor_blocks)
     w,f2 = _weights(es,T)
-    b = _band_blocks(es,h1,h2,tol)
+    b = _band_blocks(es,h1,h2,tol,blocks=[_tensor_blocks[k] for k in keys])
     def tr(wt,X): # sum_k sum_{n,m in P} wt_n U_a[m,n] X_bc[n,m]
         return np.real(np.einsum("kn,kamn,kbcnm->abc",wt,b["u"],X,
                 optimize=True))
-    return dict(uu=tr(w,b["ubc"]),uGt=tr(w,b["Gt"]),uG2=tr(f2,b["G"]),
-                uOmega=tr(w,b["Omega"]))
+    weight = {"uu":w,"uGt":w,"uG2":f2,"uOmega":w}
+    return {k:tr(weight[k],b[_tensor_blocks[k]]) for k in keys}
 
 
 def _batch_tensors3(es,h1,h2,T,tol):
@@ -310,7 +325,7 @@ def _batch_tensors3(es,h1,h2,T,tol):
     N[x,y,z,s] = sum w Tr[u_xy Gt_zs]. The blocks live inside a multiplet,
     where the weights are common, so the matrix products stay inside it"""
     w,f2 = _weights(es,T)
-    b = _band_blocks(es,h1,h2,tol)
+    b = _band_blocks(es,h1,h2,tol,blocks=("ubc","Gt"))
     U = b["u"]
     UU = U[:,:,None]@U[:,None,:] # U_x U_y, (nk,3,3,n,n)
     UU = 0.5*(UU + np.swapaxes(UU,1,2))
@@ -320,11 +335,16 @@ def _batch_tensors3(es,h1,h2,T,tol):
     return dict(M=tr(f2,UU,b["Gt"]),N=tr(w,b["ubc"],b["Gt"]))
 
 
+_batch_bytes = 2e8 # memory budget of one batch of k-points
+
+
 def _batch_size(n):
     """k-points per batch: the vertices of shg._eigenbasis_derivatives and
     the blocks above hold about a hundred (n,n) complex matrices per
-    k-point"""
-    return int(max(64,min(8192,2e8/(2000.*n*n))))
+    k-point, so one k-point takes about 2000 n^2 bytes. The batch fits in
+    _batch_bytes down to a single k-point: above about 40 bands each
+    k-point costs many n^3 products, so a small batch costs no time"""
+    return int(max(1,min(8192,_batch_bytes/(2000.*n*n))))
 
 
 def _single_blas_thread():
@@ -338,13 +358,19 @@ def _single_blas_thread():
         return contextlib.nullcontext()
 
 
-def _mesh_tensors(h,nk,T,degeneracy_tol,kernel=_batch_tensors):
+def _mesh_tensors(h,nk,T,degeneracy_tol,kernel=_batch_tensors,keys=None):
     """The normalized mesh sums of kernel over the uniform nk^dim mesh, for
-    one Hamiltonian (one spin channel, or the charge channel)"""
+    one Hamiltonian (one spin channel, or the charge channel). keys, if
+    given, is passed to kernel (_batch_tensors) and lists the tensors to
+    build; h2 is built only when one of them reads it"""
     tms,dirs,d,hkgen,cellvol,scale = shg._derivative_tensors(h)
     ks = uniform_mesh(h.dimensionality,nk)
     n = tms.shape[1]
     nb = _batch_size(n)
+    kw = {} if keys is None else {"keys":keys}
+    if keys is None or "uu" in keys: order = 2 # the inverse mass reads h2
+    else: order = 1
+    vertices = shg.vertex_keys(order) # h3 is never read
     parallel.set_num_threads() # threads of the numba diagonalization
     acc = None
     # the batched products are many small matrices, where a threaded BLAS
@@ -352,8 +378,8 @@ def _mesh_tensors(h,nk,T,degeneracy_tol,kernel=_batch_tensors):
     with _single_blas_thread():
         for i0 in range(0,len(ks),nb): # loop over batches of k-points
             es,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,
-                    ks[i0:i0+nb])
-            t = kernel(es,h1,h2,T,degeneracy_tol*scale)
+                    ks[i0:i0+nb],vertices=vertices)
+            t = kernel(es,h1,h2,T,degeneracy_tol*scale,**kw)
             if acc is None: acc = t
             else: acc = {key:acc[key]+t[key] for key in acc}
     return {key:v/(len(ks)*cellvol) for (key,v) in acc.items()}
@@ -379,14 +405,15 @@ def _check(h,T,channel,order=2):
             "channel only, got channel="+repr(channel))
 
 
-def _channel_tensors(h,nk,T,channel,degeneracy_tol,kernel=_batch_tensors):
+def _channel_tensors(h,nk,T,channel,degeneracy_tol,kernel=_batch_tensors,
+        keys=None):
     """Mesh tensors in the requested channel. The charge channel works on
     the whole Hamiltonian, spin-orbit coupling included; the spin channels
     need spin to be conserved, and run on the two spin blocks of
     nonlineardrude._spin_channels, combined as nonlineardrude._combine"""
     if channel=="charge":
-        return _mesh_tensors(h,nk,T,degeneracy_tol,kernel=kernel)
-    out = {s:_mesh_tensors(hs,nk,T,degeneracy_tol,kernel=kernel)
+        return _mesh_tensors(h,nk,T,degeneracy_tol,kernel=kernel,keys=keys)
+    out = {s:_mesh_tensors(hs,nk,T,degeneracy_tol,kernel=kernel,keys=keys)
            for (s,hs) in nonlineardrude._spin_channels(h,
                what="the spin channel of the nonlinear dc conductivity")}
     return {key:nonlineardrude._combine({s:out[s][key] for s in out},
@@ -430,8 +457,17 @@ def _pick(tensor,components,trip,single):
 def _term_tensor(t,term,tau,qmd):
     """The (3,3,3) tensor of one term, with its power of tau"""
     if term=="qmd": return sum(_term_tensor(t,p,tau,qmd) for p in _qmd[qmd])
-    fun,power = _terms[term]
+    fun,power,_ = _terms[term]
     return fun(t)*tau**power
+
+
+def _term_keys(term,qmd):
+    """The mesh tensors of _batch_tensors that term= reads, in the
+    convention qmd="""
+    if term=="all": names = ["drude","bcd"]+list(_qmd[qmd])
+    elif term=="qmd": names = list(_qmd[qmd])
+    else: names = [term]
+    return tuple(sorted(set(k for p in names for k in _terms[p][2])))
 
 
 def _drude3_tensor(h,nk,T,degeneracy_tol):
@@ -507,7 +543,8 @@ def nonlinear_dc_conductivity(h,order=2,term="all",tau=1.,qmd="shibata",
             "convention qmd="+repr(qmd)+", accepted values are "
             +", ".join(get_qmd_conventions()))
     components,trip,single = _components(h,components)
-    t = _channel_tensors(h,nk,T,channel,degeneracy_tol)
+    t = _channel_tensors(h,nk,T,channel,degeneracy_tol,
+            keys=_term_keys(term,qmd)) # only the tensors this term reads
     if term!="all":
         return _pick(_term_tensor(t,term,tau,qmd),components,trip,single)
     out = {p:_term_tensor(t,p,tau,qmd) for p in ["drude","bcd","qmd"]}
@@ -526,7 +563,8 @@ def berry_curvature_dipole(h,nk=100,T=0.05,channel="charge",
     if h.dimensionality==1: raise ValueError("the Berry curvature dipole "
             "needs a 2D or 3D periodic Hamiltonian, a 1D one has no Berry "
             "curvature")
-    t = _channel_tensors(h,nk,T,channel,degeneracy_tol)["uOmega"]
+    t = _channel_tensors(h,nk,T,channel,degeneracy_tol,
+            keys=("uOmega",))["uOmega"]
     if h.dimensionality==2: return np.array([t[0,0,1],t[1,0,1]])
     planes = [(1,2),(2,0),(0,1)] # Omega_x, Omega_y, Omega_z
     return np.array([[t[a,p,q] for (p,q) in planes] for a in range(3)])

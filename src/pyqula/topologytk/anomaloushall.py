@@ -165,20 +165,23 @@ def band_curvature_mesh(h,nk=default_nk,degeneracy_tol=1e-6,direction="xy"):
     return es,om,cellvol,tol
 
 
-def _grid_weights(dim,es,nk,fermi,T,tol,bloechl):
+def _grid_weights(dim,es,nk,fermi,T,tol,bloechl,simplex_mesh=None):
     """Fermi occupations on the uniform mesh, divided by the number of
-    k-points (bloechl does not apply)"""
+    k-points (bloechl and simplex_mesh do not apply)"""
     x = es-fermi
     if T<=0.: f = np.where(x<0.,1.,0.)
     else: f = 1./(1.+np.exp(np.clip(x/T,-500.,500.)))
     return f/nk**dim
 
 
-def _triangle_weights(dim,es,nk,fermi,T,tol,bloechl):
+def _triangle_weights(dim,es,nk,fermi,T,tol,bloechl,simplex_mesh=None):
     """Linear triangle (2D) or tetrahedron (3D) weights, averaged over the
-    degenerate multiplets"""
+    degenerate multiplets. simplex_mesh: None, or the simplices of the mesh
+    from dostk.simplexdos.simplices(dim,nk), built once by the caller for
+    every Fermi level"""
     from ..dmtk.simplexdm import simplex_weights, _multiplet_average_real
-    w = simplex_weights(dim,nk,es,mu=fermi,T=T,bloechl=bloechl)
+    w = simplex_weights(dim,nk,es,mu=fermi,T=T,bloechl=bloechl,
+            simplex_mesh=simplex_mesh)
     _multiplet_average_real(es,w,tol)
     return w
 
@@ -260,8 +263,12 @@ def anomalous_hall_conductivity(h,fermi=0.,T=0.,nk=default_nk,
     wf = _integrations[integration]
     dim = h.dimensionality
     fermis = np.atleast_1d(np.array(fermi,dtype=np.float64))
-    out = np.array([np.sum(wf(dim,es,nk,float(mu),T,tol,bloechl)*om)
-        for mu in fermis])
+    simplex_mesh = None
+    if integration=="triangle": # one build of the simplices for every level
+        from ..dostk.simplexdos import simplices
+        simplex_mesh = simplices(dim,nk)
+    out = np.array([np.sum(wf(dim,es,nk,float(mu),T,tol,bloechl,
+        simplex_mesh=simplex_mesh)*om) for mu in fermis])
     # (1/2 pi) int d^2k = (2 pi/A_cell) mean_k in 2D, and
     # (1/(2 pi)^2) int d^3k = (2 pi/V_cell) mean_k in 3D
     out = out*2.*np.pi/cellvol

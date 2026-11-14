@@ -932,8 +932,9 @@ metal and the diamond is not the budget but the vertex bound `_tol`: each
 tetrahedron in vertex form may lose 3e-11 of its own peak, and the metal,
 whose weights sit on a few tetrahedra near the Fermi surface, adds these
 up to 1.6e-13 to 3.2e-13. With `_tol` = 3e-12 every row is below 4e-14 except
-the one at tm = 1e-3 and delta = 1e-4, where both kernels are 1.1e-13
-from the reference. That floor is shared with the direct kernel, so it
+the two at tm = 1e-3 and delta = 1e-4 and 1e-6, where both kernels are
+1.1e-13 and about 5.5e-14 from the reference. That floor is shared with
+the direct kernel, so it
 points to the per-frequency divided differences of `simplexdos._dd`; it
 was not followed further. Note also that the direct kernel is not the better
 of the two everywhere: it is at 5.0e-13 on the layered model at nk = 48
@@ -1220,3 +1221,181 @@ pass, would be the next thing to try.
   Also open: qtci in 3D, a choice of the tetrahedron diagonal adapted to the
   lattice (the shortest one in reciprocal space), and the SHG and the
   excitonic optics in 3D, whose velocities now exist.
+
+## Repairs of the seventh bug audit
+
+**The qtci fields did not share one unit.** The stacked interpolation
+measures its tolerance against the largest field of all. The weights
+W = ratio v^a v^b go as a length squared and the transition energies dE
+do not, so the lattice constant decided which family got the tolerance.
+The 2D conductivity itself does not depend on the unit of length (v goes
+as a length, the cell area as a length squared), and the triangle sum on
+the full mesh does not move to 1e-14 when every position and lattice
+vector is multiplied by 100 or 0.01. The qtci result did move. On the
+gapped honeycomb lattice (sublattice imbalance 0.3, nk = 64, T = 0.01,
+delta = 0.02, tolerance 1e-6, 28 frequencies on [0.3, 3] t) the error
+against the triangle on the same mesh was 7.7e-7 at the unit lattice
+constant, 9.2e-2 with every length times 256 and 3.0e-2 with every length
+divided by 256. `sigma_qtci` now divides dE and W each by its largest
+value on the coarse scan before the interpolation and multiplies it back
+after, the way the qtci LDOS measures its energies from their zone mean
+(`qtci_dos_green.md`). The error is then 1.3e-7 at every one of these
+scales. One scale per family and not one per field: one per field
+normalizes the fields that are zero up to rounding by their own maximum,
+and the interpolation then resolves that noise at full rank (see "One
+interpolation of all the fields"). `tests/conductivity/test_optical_qtci_length_unit.py`
+pins the invariance at 100 and 0.01, where the old code is 8e-3 and 2e-3
+off.
+
+Since the smaller family now gets its own tolerance, the cost moves. On
+the models of "One interpolation of all the fields", T = delta = 1e-3,
+tolerance 1e-6, the same machine and load for both rows of a model:
+
+| model | R | code | diagonalizations (share) | rank | error | time (s) |
+|---|---|---|---|---|---|---|
+| gapped honeycomb | 8 | before | 25.9k (0.40) | 98 | 2.0e-5 | 2.4 |
+| gapped honeycomb | 8 | now | 29.5k (0.45) | 101 | 1.6e-5 | 2.5 |
+| MoS2 (eV, angstrom) | 8 | before | 61.7k (0.94) | 214 | 7.9e-5 | 9.2 |
+| MoS2 (eV, angstrom) | 8 | now | 60.7k (0.93) | 219 | 3.1e-5 | 8.1 |
+| supercell 2x2 | 7 | before | 16.4k (1) | 453 | 2.7e-5 | 40.2 |
+| supercell 2x2 | 7 | now | 16.4k (1) | 463 | 4.7e-6 | 58.4 |
+
+These rows are one run each, and one run does not settle an error here:
+the pivot search of the cross interpolation draws from Python's `random`
+module, which nothing seeds, so two runs of the same code do not give the
+same interpolation. That is also why the "before" rows are not the ones of
+the table of "One interpolation of all the fields". The review repeated the
+rows with `random.seed` set to 0, 1 and 2 before the call, the old and the
+new code one after the other:
+
+| model | R | error before | error now | rank before | rank now |
+|---|---|---|---|---|---|
+| gapped honeycomb | 8 | 7.6e-6 to 1.7e-5 | 1.3e-5 to 2.0e-5 | 100 | 100 to 102 |
+| MoS2 (eV, angstrom) | 8 | 3.4e-5 to 4.3e-5 | 1.0e-5 to 2.4e-5 | 211 to 212 | 216 to 218 |
+| supercell 2x2, another disorder, two seeds | 7 | 4.3e-6 to 5.3e-6 | 8.6e-6 to 1.1e-5 | 459 to 460 | 467 to 468 |
+
+A second pair of unseeded runs of the supercell of the first table gave
+6.9e-6 before and 7.5e-6 now. So what holds over the repeats is less than
+the first table says. On the honeycomb lattice at the unit lattice constant
+the error does not move. On MoS2, whose lattice constant of 3.19 angstrom
+makes W ten times larger than in units of the lattice constant, it goes
+down by about 2. On the supercell it does not go down. On the disorder of
+the first table the two unseeded pairs give 2.7e-5 and 6.9e-6 before
+against 4.7e-6 and 7.5e-6 now, so the factor 5.8 of that table was the
+scatter of the old code. On the other disorder, with two seeds, the error
+is about 2 times larger now, and the two ranges do not overlap. Two seeds
+do not settle it, and it is left open. The diagonalizations stay within
+10% and the rank goes up by 2%. The time of the supercell call did not
+repeat either: 1.45 and 1.39 times slower in the two unseeded pairs, but
+30 and 33 s before against 21 and 42 s now in the seeded ones, on a shared
+machine, so its cost is not settled. On the case of the test (nk = 64,
+T = 0.01, delta = 0.02) the scatter is small: 1.29e-7 at each of five
+seeds and each of the three units of length, against 8e-3 to 1.9e-2 (times
+100) and 2.2e-3 to 2.9e-3 (divided by 100) in the old code, so the
+tolerance of 1e-5 of the test has a margin of 77.
+
+All three models are insulators. In a metal the scale has a limit in
+principle: at a T below the spacing of the coarse scan, the scan can miss
+the Fermi-surface peak of the intraband weight, so the largest W of the
+scan is too small, the scaled weights pass 1 on the fine mesh, and the
+energies get a looser tolerance than the weights, by that factor. The
+review of the repair measured it, on the gapped honeycomb lattice with the
+Fermi level shifted by 0.9 into a band (R = 8, delta = 0.02, tolerance
+1e-6, 31 frequencies on [0, 3] t, the error against the triangle on the
+same mesh in units of its peak, the old and the new code back to back, one
+run each):
+
+| T | terms | error before | error now | time before (s) | time now (s) |
+|---|---|---|---|---|---|
+| 0.002 | all | 1.8e-5 | 6.7e-7 | 6.3 | 6.7 |
+| 0.002 | interband | 3.1e-6 | 1.4e-6 | 4.6 | 3.9 |
+| 0.002 | intraband | 1.0e-8 | 1.0e-8 | 3.3 | 3.0 |
+| 0.02 | all | 3.3e-7 | 1.6e-7 | 6.7 | 7.0 |
+| 0.02 | interband | 1.1e-6 | 1.6e-6 | 3.2 | 3.9 |
+| 0.02 | intraband | 5.3e-8 | 4.2e-8 | 2.5 | 2.8 |
+
+At T = 0.002 the thermal width of the Fermi surface is roughly 100 times
+below the spacing of the coarse scan, so the scan should miss the peak
+there; the largest W of the scan was not compared with the one of the fine
+mesh. With three seeds of the pivot search at that T the full tensor is at
+6.9e-6 to 1.6e-5 before and at 7.7e-7 to 1.0e-6 now, and the interband
+part at 2.3e-6 to 3.0e-6 before and at 1.8e-6 to 3.9e-6 now. So the scale
+per family does not hurt a metal, and it helps the full tensor by about
+10 at low T: the intraband weight, of order 1/(4T), took the
+shared tolerance away from the energies, and now it does not. The
+independence of the unit of length holds regardless.
+
+The commit message of `b3569bc` says that the stacked form with the cap of
+800 reaches the per-field error on the 80 supercell fields; its own table
+gave 1.2e-5 against 6.6e-7 at R = 7. That text lives only in the commit
+message, so nothing tracked was wrong. After this repair the supercell
+error at R = 7 is 4.7e-6 to 1.1e-5 over the runs above, not lower than
+before, so it is still above the per-field one.
+
+**The triangle path kept the velocity elements through the source build.**
+`sigma_triangle` now drops the velocity matrix elements, 48 n^2 bytes per
+k-point, once the pair fields are built, since the source build, where the
+memory peaks, needs only the fields. On a 4x4 supercell of the gapped
+honeycomb lattice (32 bands, random onsite of width 0.4, nk = 40) the
+increase of the peak memory during the call goes from 237 MB to 178 MB,
+with 75 MB of velocities, in each of three runs, the time stays at 2.5 to
+2.8 s, and the result is the same to the last bit. The
+per-batch pair fields of the audit were not built: the pair fields are
+not where the peak is, so they would save nothing more.
+
+**The grid sum held the whole mesh.** `kubo._sigma_grid` and
+`kubo.drude_weight` held the velocity matrix elements of the whole mesh
+(48 n^2 bytes per k-point) and the occupation weights with their
+temporaries (about 41 n^2), although only the diagonalization ran in
+batches. The k-sum is linear, so it now runs one slab of k-points at a
+time, with the slab sized for 2e8 bytes (500k k-points at n = 2) and
+never smaller than the 64 k-points of one diagonalization batch, which
+hold as much per k-point already (so 64 at n = 200). On the stacked
+Haldane crystal of `test_optical_3d.py` (n = 2, tm = 0.05, nk = 128, so
+2.1M k-points, 8 frequencies, delta = 1e-2,
+T = 1e-3) the peak memory goes from 1219 MB to 595 MB, and the wall time
+stays the same, 63.4 s before and 64.7 s now (the smallest of three runs
+each, back to back on a shared machine, so the ratio is what counts). The
+results agree to 2.4e-13. The Drude weight of the same crystal at
+nk = 128 (T = 0.05) goes from 2136 MB to 876 MB, since its einsum on the
+whole mesh had a large intermediate, at the same time (56.2 s and 56.9 s),
+and agrees to 1.7e-14. With a band window the range of bands is still
+fixed on the whole mesh (`kubowindow.py`), so there the bands of the
+window are kept for the whole mesh and only the sum runs by slabs.
+`test_kubo_batched_paths.py` checks the slabs against the whole-mesh sum
+with a slab of 7 k-points on an 81-point mesh, and that no call asks for
+the bands of more than one slab, so a sum that goes back to the whole mesh
+fails it too. What remains is the k-mesh
+itself, 24 bytes per k-point, and its builder: `klist.kmesh` builds a 3D
+mesh as a Python list, and the timings above replace it by a vectorized
+equivalent that gives the same array. With the list, the same call at
+nk = 128 peaked at 966 MB, in a run of the slab loop just before its last
+change, which frees a slab before the next one is built and does not touch
+the mesh. The nk of about 450 that "3D crystals" calls out of reach of the
+grid in memory (9e7 points) was not run, and with the list it stays out
+of reach whatever the slabs do.
+
+The review ran the pair again as a caller gets it, with the list builder
+of `klist.kmesh`, at nk = 96 (0.88M k-points), the old and the new code
+back to back, three times. The peak of the conductivity call goes from
+727 MB (727 to 741 MB) to 566 MB every time, and the time from
+22.1 s to 21.2 s, the smallest of the three each, so the ratio of the
+times holds at 0.96. The two results agree to 7.7e-14. The Drude weight at
+nk = 96 goes from 1211 MB to 831 MB and from 27.6 s to 23.5 s, measured once.
+One more pair at nk = 96 with the vectorized mesh gives the same peaks,
+722 MB and 566 MB, so at this size the builder of the mesh does not
+matter and the gain is 0.78 of the peak with either one. The peak of the
+new code at nk = 96 is the one at nk = 128 with the vectorized mesh above,
+to 30 MB: it is the slab, and it no longer grows with the mesh. What grows
+is the list, which takes over between these two meshes (966 MB at
+nk = 128). The factor 2 at nk = 128 with the vectorized mesh was not run
+again. After the review `klist.kmesh` builds the 3D mesh as an array, the
+same points in the same order to the last bit (a test of
+`tests/geometry/test_kmesh_endpoint.py` compares it with the nested loops):
+at nk = 128 the builder alone goes from 715 MB and 3.6 s to 189 MB and
+0.04 s, so a caller now gets the factor 2 of the vectorized mesh above.
+
+**A count in "The budget on more models".** The paragraph after the
+budget table said every row is below 4e-14 at `_tol` = 3e-12 except one;
+there are two, at tm = 1e-3 and delta = 1e-4 and 1e-6, and the text now
+says so.

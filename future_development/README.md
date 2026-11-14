@@ -85,6 +85,22 @@ already reached once.
   maintainer's decisions. Read its user-visible changes before upgrading. Most of the
   embedding and BSE items were not reached and are listed for the next sweep.
 
+- [`bug_audit_7.md`](bug_audit_7.md) -- a second reading of the 178 commits
+  of 4 to 13 November 2026, done by reading the code only: nine potential
+  bugs and seventeen optimization opportunities that a refuting reader
+  confirmed at medium or high severity, and thirty-one low ones in one line
+  each. Among the bugs: an LDOS with an operator that depends on the basis
+  inside a degenerate multiplet, a spinon exchange that is not reciprocal in
+  the 36-site example, a cotunneling operator off by a factor 2 with `J=`,
+  and a nonlinear Drude term that covers only $x$ and $y$ in 3D. Among the
+  optimizations: memory that grows with the k-mesh in the spin
+  susceptibility and in the grid Kubo conductivity, and a local moment
+  susceptibility that diagonalizes $2n_k^{2d}$ times. All of them were
+  repaired on 13 and 14 November 2026 except the default SHG source kernel
+  on nearly flat bands, and two optimizations in part; the record lists what
+  the repairs found and what is left open, among it the generic `Vr` and
+  `Jr` that average a function that is not reciprocal.
+
 - [`audit_open_decisions.md`](audit_open_decisions.md) -- everything the second
   sweep did NOT fix, and the calls that were made one way and could reasonably
   be made the other: three findings that are decisions rather than repairs (the
@@ -227,7 +243,10 @@ already reached once.
   dc loop on one BLAS thread, 2x; the device memory budget; the timings before and after on the
   CPU and the card), and what is open (the BLAS threads of the CPU kernel, the row pool and the
   matmul Drude prototypes, the third-order tau^2 and tau^0 terms, spin photocurrents, pinned
-  timings on an idle machine, the user notebook and figure).
+  timings on an idle machine, the user notebook and figure). In the seventh bug audit the sign
+  of the unshifted dispersion current became -1/2 qmd_disp, the dc batch follows its memory
+  budget down to one k-point, and each dc term and the injection current build only what they
+  read (2.3x to 3.4x for the dipole, 2x to 2.7x for the injection current).
 
 - [`qtci_optical_response.md`](qtci_optical_response.md) -- where QTCI helps
   the k-integral of the optical conductivity and where it does not: QTCI of
@@ -308,7 +327,12 @@ already reached once.
   dies, the shell of a gapless state with the pairing alive, and a gapless
   state whose Fermi level falls between two levels instead of on one. RPA chi(q) is built, see
   `tetrahedron_susceptibility.md`. The anomalous Hall of metals with the
-  same occupations is built, see the next entry.
+  same occupations is built, see the next entry. The seventh bug audit wrote
+  the finite-temperature weights in closed form (16 to 19 times faster at
+  32^3), contracts every hopping direction with one product, sizes the
+  batches by the matrix and repaired the charge of the BdG shell fill; the
+  208-node quadrature is now the main 3D cost at T = 1e-7 (the moment formula
+  is not built).
 
 - [`simplex_fermi_search.md`](simplex_fermi_search.md) -- the Fermi search
   of the triangle and tetrahedron integration, `fermi_from_energies`, now a
@@ -321,7 +345,10 @@ already reached once.
   iteration at nk = 128. In a gap the level is the middle between the
   vertex energies at every T, because the cut Fermi function makes the
   charge exactly flat there too; at T>0 the old search put it up to 2.4e-3
-  off the middle, with no effect on the density matrix.
+  off the middle, with no effect on the density matrix. Since the seventh
+  bug audit the search and the density matrix of one mean-field iteration
+  share their eigenpairs and simplices, so an iteration diagonalizes the mesh
+  once.
 
 - [`triangle_anomalous_hall.md`](triangle_anomalous_hall.md) -- the
   Fermi-sea anomalous Hall conductivity of a 2D metal,
@@ -365,7 +392,9 @@ already reached once.
   now costs 3.5 to 6 times T = 0 (10 to 16 before), at T = 1e-2 11 to 18
   times (65 to 75 before), delta < T is 97 times faster at nk = 256, the
   same numbers to 3e-13. The larger cost at delta = 1e-2 was the load of
-  the machine. Open: the 12 nodes per moving piece of x, a high-T hybrid and the
+  the machine. The seventh bug audit put the trace before the kernel and took
+  the matrix elements from the nonzero rows of the operators, 11 times less
+  per q on a 200-band cell. Open: the 12 nodes per moving piece of x, a high-T hybrid and the
   triangle on the pair-basis route.
 
 - [`qtci_shg.md`](qtci_shg.md) -- the triangle and qtci k-integrations of
@@ -379,7 +408,14 @@ already reached once.
   wall time; it calls the shared per-field helper of `qtcitk/meshfields.py`
   now, and the stacked form of the linear response and the LDOS was not tried
   for it. Open: QTCI for many bands, metals, an exact three-band product,
-  and 3D.
+  and 3D. The seventh bug audit made the Taylor rule of the direct sum per
+  frequency again (9e-15 against mpmath, it was 5.5e-4 far from resonance),
+  kept the first-order term of the series in both kernels, also for an
+  exactly flat band, and built only the derivative vertices the weights read
+  (2.3x on the fields for xxx). The source kernel keeps its rule on delta and
+  loses up to 5e-9 of the peak at delta = 1e-6 on nearly flat bands; the open
+  item is the port of the energy bins and the Newton-table split of
+  `kubosimplex.py`.
 
 - [`kpm_optical_conductivity.md`](kpm_optical_conductivity.md) -- the
   Chebyshev (KPM) Kubo conductivity of `integration="kpm"` and
@@ -391,8 +427,12 @@ already reached once.
 
 - [`qtci_dos_green.md`](qtci_dos_green.md) -- the triangle and tetrahedron
   integration of the DOS (`h.get_dos(integration="triangle")`, `"qtci"`)
-  needs 250 to 1000 times fewer diagonalizations than the uniform mesh at
-  delta = 1e-3 t and is exact at delta = 0, and qtci adds 4 to 65 on top.
+  needs fewer diagonalizations than the uniform mesh, by a factor of 250 to
+  400 on graphene at delta = 1e-3 t, about 40 on a gapped four-band model
+  and 16 on its sz-projected DOS, and about 1000 on a 3D cubic band at
+  delta = 1e-2 t and an error of 1e-3; it is exact at delta = 0. qtci adds
+  6 to 65 on graphene and 1.7 to 9 on the four-band model, the larger
+  factors at the smaller errors.
   One interpolation of all the fields at once needs 1.3 to 3.7 times fewer
   diagonalizations than one per field at the same error, and is twice as
   slow on a 32-band supercell, so the qtci LDOS uses it and the qtci DOS
@@ -407,7 +447,14 @@ already reached once.
   `bloch_selfenergy(mode="adaptive")` at equal accuracy in 1D and 2D, so it
   is wired in only for 3D crystals, as `bloch_selfenergy(mode="triangle")`.
   Open: the cost per energy at finite delta, band crossings, a tetrahedron
-  sum on the tensor train for 3D qtci, the qtci LDOS in 3D.
+  sum on the tensor train for 3D qtci, the qtci LDOS in 3D. Its section on
+  the seventh bug audit (13 and 14 November 2026) records the repairs: the
+  LDOS with an operator as the local matrix element in every mode, the
+  simplex sum at finite delta in vertex form, the 3D Green's function from
+  the eigenvectors instead of the band projectors, the 3D self-energy of a
+  whole energy sweep from one diagonalization of the mesh, a batch of
+  diagonalizations that shrinks as one over the square of the cell size,
+  and the tetrahedra built in place.
 
 - [`nonlinear_spin_transport.md`](nonlinear_spin_transport.md) -- what the
   X-wave nonlinear Drude spin conductivity covers, the measured performance
@@ -415,8 +462,9 @@ already reached once.
   deliberately unbuilt (the paper's linear i-wave result does not
   reproduce, with the Brillouin-zone-domain trap that produced a false
   positive), and why a gapped system returns an exact zero at every order.
-  Ezawa's second-order charge response and the 3D Drude term are built in
-  `nonlineardc` (see `nonlinear_response.md`); this module stays 2D.
+  Ezawa's second-order charge response is built in `nonlineardc` (see
+  `nonlinear_response.md`); this module is 3D since `5b55594`, and its
+  component sweep covers $z$ since the seventh bug audit.
 
 - [`notebook_physics_review.md`](notebook_physics_review.md) -- a physics
   review of all 93 executed notebooks against their own figures and printed
@@ -473,7 +521,19 @@ already reached once.
   (13 November 2026), on the torus and on the open flake, held to the
   sublattice-resolved zero modes at the corners of a flake; what is left of
   that section is the octupole moment, the $C_3$ corner charge and a
-  real-space check of the hinge modes.
+  real-space check of the hinge modes. The section on collective modes
+  (13 November 2026) records the Chern number of an exciton, a magnon and
+  the spin exciton of a Kondo lattice, built the same day in three routes:
+  the eigenvectors of the BSE and of the magnon problem lifted to the orbital
+  pair basis (`h.get_magnon_chern()`, `h.get_exciton_chern()`), the null
+  vectors of the RPA kernel (`get_moment_magnon_chern()` on the Kondo
+  lattice), and the response function wound as a Green's function, a
+  module-level check. It records the measurements, the seven design
+  decisions taken that evening and what they leave unbuilt: route 2 as a
+  `method=` of `get_magnon_chern`, a spinon Chern method, route 3 as a
+  method, a comparison of two meshes with no solve, a gap diagnostic between
+  the points of the mesh, the thermal Hall convention and an external check
+  of the sign.
 
 - [`unfolding.md`](unfolding.md) -- a check of `operator="unfold"` through
   every mode of the routines that take it (bands, kdos, DOS, the Fermi

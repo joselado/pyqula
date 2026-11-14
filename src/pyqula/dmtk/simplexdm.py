@@ -148,6 +148,7 @@ _gx,_gw = np.polynomial.legendre.leggauss(_ngl)
 _tcut = 40. # beyond |x| = 40 T the Fermi function is 1 or 0 to 4e-18
 # the extra breakpoints of the finite-T integral, in units of T
 _tbreaks = np.array([1.,2.,3.,4.,6.,8.,10.,12.,14.,18.,24.,32.,_tcut])
+_block = 1024 # simplices per parallel task of the weight and charge kernels
 
 
 default_nk = 20 # mesh of get_dm when the caller gives none
@@ -161,47 +162,21 @@ def bloechl_coefficient(dim):
 
 
 # ------------------------------------------------------------ T=0 kernel
-
-@jit(nopython=True,cache=True)
-def _sub(out,c,b0,b1,b2,b3,p):
-    """add vol*mean(barycentric rows) of the sub-simplex with barycentric
-    vertices b0..b3 (the first p used) to out, return vol"""
-    if p==2:
-        vol = abs(b0[0]*b1[1]-b0[1]*b1[0])
-    elif p==3:
-        vol = abs(b0[0]*(b1[1]*b2[2]-b1[2]*b2[1])
-                 -b0[1]*(b1[0]*b2[2]-b1[2]*b2[0])
-                 +b0[2]*(b1[0]*b2[1]-b1[1]*b2[0]))
-    else:
-        m = np.empty((4,4))
-        for j in range(4):
-            m[0,j] = b0[j]; m[1,j] = b1[j]; m[2,j] = b2[j]; m[3,j] = b3[j]
-        vol = abs(np.linalg.det(m))
-    for j in range(p):
-        s = b0[j]+b1[j]
-        if p>2: s += b2[j]
-        if p>3: s += b3[j]
-        out[j] += c*vol*s/p
-    return vol
-
-
-@jit(nopython=True,cache=True)
-def _cut(i,j,ei,ej,mu,p):
-    """barycentric coordinates of the point E_L = mu on the edge (i,j),
-    with ei <= mu < ej"""
-    b = np.zeros(p)
-    a = (mu-ei)/(ej-ei)
-    b[i] = 1.-a
-    b[j] = a
-    return b
-
-
-@jit(nopython=True,cache=True)
-def _vert(i,p):
-    b = np.zeros(p)
-    b[i] = 1.
-    return b
-
+#
+# The occupied part of a simplex is cut into sub-simplices whose vertices
+# are vertices of the simplex and points E_L = mu on its edges: the corner
+# of the lowest vertex, its complement (everything but the corner of the
+# highest vertex), and in 3D for e1 <= mu < e2 a prism of three
+# tetrahedra. The point on the edge (i,j), with e_i <= mu < e_j, has the
+# barycentric coordinates 1 - a on i and a on j, a = (mu - e_i)/(e_j - e_i).
+# A sub-simplex of volume v (in units of the simplex) adds v times the mean
+# of the barycentric coordinates of its vertices to the weights. Every
+# volume is a product of the edge fractions a, so the weights are written
+# out in closed form, with no array and no determinant: a first version
+# built each barycentric vertex as an array and took the volume of a
+# tetrahedron from np.linalg.det, which made the 3D weights at T>0, about
+# 200 evaluations per simplex cut by the Fermi surface, 35 times slower
+# than at T=0 (future_development/tetrahedron_density_matrix.md).
 
 @jit(nopython=True,cache=True)
 def _step_weights(e,p,mu,out):
@@ -213,32 +188,43 @@ def _step_weights(e,p,mu,out):
     if mu>=e[p-1]:
         for j in range(p): out[j] = 1./p
         return 1.
-    z = np.zeros(p)
-    if p==2: # e0 < mu < e1
-        _sub(out,1.,_vert(0,p),_cut(0,1,e[0],e[1],mu,p),z,z,p)
+    if p==2: # the segment from vertex 0 to the cut, e0 < mu < e1
+        a = (mu-e[0])/(e[1]-e[0])
+        out[0] = a*(2.-a)/2.
+        out[1] = a*a/2.
     elif p==3:
-        if mu<e[1]: # the corner of vertex 0
-            _sub(out,1.,_vert(0,p),_cut(0,1,e[0],e[1],mu,p),
-                    _cut(0,2,e[0],e[2],mu,p),z,p)
-        else: # everything but the corner of vertex 2
-            for j in range(p): out[j] = 1./p
-            _sub(out,-1.,_vert(2,p),_cut(0,2,e[0],e[2],mu,p),
-                    _cut(1,2,e[1],e[2],mu,p),z,p)
+        if mu<e[1]: # the corner of vertex 0, volume a1 a2
+            a1 = (mu-e[0])/(e[1]-e[0]); a2 = (mu-e[0])/(e[2]-e[0])
+            v = a1*a2/3.
+            out[0] = v*(3.-a1-a2); out[1] = v*a1; out[2] = v*a2
+        else: # everything but the corner of vertex 2, volume b0 b1
+            b0 = (e[2]-mu)/(e[2]-e[0]); b1 = (e[2]-mu)/(e[2]-e[1])
+            v = b0*b1/3.
+            out[0] = 1./3.-v*b0; out[1] = 1./3.-v*b1
+            out[2] = 1./3.-v*(3.-b0-b1)
     else:
-        if mu<e[1]: # the corner of vertex 0
-            _sub(out,1.,_vert(0,p),_cut(0,1,e[0],e[1],mu,p),
-                    _cut(0,2,e[0],e[2],mu,p),_cut(0,3,e[0],e[3],mu,p),p)
+        if mu<e[1]: # the corner of vertex 0, volume a1 a2 a3
+            a1 = (mu-e[0])/(e[1]-e[0]); a2 = (mu-e[0])/(e[2]-e[0])
+            a3 = (mu-e[0])/(e[3]-e[0])
+            v = a1*a2*a3/4.
+            out[0] = v*(4.-a1-a2-a3); out[1] = v*a1
+            out[2] = v*a2; out[3] = v*a3
         elif mu<e[2]: # a prism (v0,p02,p03)-(v1,p12,p13), three tetrahedra
-            v0 = _vert(0,p); v1 = _vert(1,p)
-            p02 = _cut(0,2,e[0],e[2],mu,p); p03 = _cut(0,3,e[0],e[3],mu,p)
-            p12 = _cut(1,2,e[1],e[2],mu,p); p13 = _cut(1,3,e[1],e[3],mu,p)
-            _sub(out,1.,v0,p02,p03,v1,p)
-            _sub(out,1.,p02,p03,v1,p12,p)
-            _sub(out,1.,p03,v1,p12,p13,p)
-        else: # everything but the corner of vertex 3
-            for j in range(p): out[j] = 1./p
-            _sub(out,-1.,_vert(3,p),_cut(0,3,e[0],e[3],mu,p),
-                    _cut(1,3,e[1],e[3],mu,p),_cut(2,3,e[2],e[3],mu,p),p)
+            a02 = (mu-e[0])/(e[2]-e[0]); a03 = (mu-e[0])/(e[3]-e[0])
+            a12 = (mu-e[1])/(e[2]-e[1]); a13 = (mu-e[1])/(e[3]-e[1])
+            vA = a02*a03/4. # (v0,p02,p03,v1)
+            vB = a03*(1.-a02)*a12/4. # (p02,p03,v1,p12)
+            vC = (1.-a03)*a12*a13/4. # (p03,v1,p12,p13)
+            out[0] = vA*(3.-a02-a03)+vB*(2.-a02-a03)+vC*(1.-a03)
+            out[1] = vA+vB*(2.-a12)+vC*(3.-a12-a13)
+            out[2] = vA*a02+vB*(a02+a12)+vC*a12
+            out[3] = vA*a03+vB*a03+vC*(a03+a13)
+        else: # everything but the corner of vertex 3, volume b0 b1 b2
+            b0 = (e[3]-mu)/(e[3]-e[0]); b1 = (e[3]-mu)/(e[3]-e[1])
+            b2 = (e[3]-mu)/(e[3]-e[2])
+            v = b0*b1*b2/4.
+            out[0] = 0.25-v*b0; out[1] = 0.25-v*b1; out[2] = 0.25-v*b2
+            out[3] = 0.25-v*(4.-b0-b1-b2)
     s = 0.
     for j in range(p): s += out[j]
     return s
@@ -272,29 +258,6 @@ def _fermi(x,T):
 
 
 @jit(nopython=True,cache=True)
-def _piece(e,p,a,b,T,gx,gw,out,tmp,dos):
-    """add int_a^b (-f'(x)) g(x) dx to out, with g the T=0 weights (or the
-    T=0 DOS when dos, into out[0]) at mu = x, for a<b on one side of 0. The
-    variable is phi = f(|x|), in which -f'(x) dx = |dphi|"""
-    if b<=0.: # mirror: x = -u, u in [-b,-a]
-        sgn = -1.
-        u0 = -b; u1 = -a
-    else:
-        sgn = 1.
-        u0 = a; u1 = b
-    f0 = _fermi(u0,T); f1 = _fermi(u1,T) # f0 > f1
-    h = (f0-f1)/2.; c = (f0+f1)/2.
-    if h<=0.: return
-    for q in range(gx.shape[0]):
-        phi = c+h*gx[q]
-        x = sgn*T*(np.log1p(-phi)-np.log(phi))
-        if dos: out[0] += gw[q]*h*_step_dos(e,p,x)
-        else:
-            _step_weights(e,p,x,tmp)
-            for j in range(p): out[j] += gw[q]*h*tmp[j]
-
-
-@jit(nopython=True,cache=True)
 def _knots(e,p,T,tbreaks,kn):
     """sorted breakpoints of the finite-T integral inside [e0, e_(p-1)]
     clipped to |x| <= tcut T: the vertex energies, 0 and +-tbreaks*T.
@@ -316,35 +279,45 @@ def _knots(e,p,T,tbreaks,kn):
 @jit(nopython=True,cache=True)
 def _weights_T(e,p,T,gx,gw,tbreaks,out,tmp,kn):
     """weights at temperature T for sorted vertex energies e (measured from
-    mu), into out; returns the occupied fraction"""
+    mu), into out; returns the occupied fraction and the density of states
+    of the simplex at temperature T (zero for a flat simplex, whose
+    Bloechl term vanishes anyway).
+
+    Each piece between two knots a < b, on one side of 0, adds
+    int_a^b (-f'(x)) g(x) dx, with g the T=0 weights and the T=0 DOS at
+    mu = x, by Gauss-Legendre quadrature in phi = f(|x|), in which
+    -f'(x) dx = |dphi|. The weights and the DOS are read at the same nodes,
+    in one pass over the knots"""
     for j in range(p): out[j] = 0.
     L = tbreaks[-1]*T
-    if e[0]>=L: return 0.
+    if e[0]>=L: return 0.,0.
     if e[p-1]<=-L:
         for j in range(p): out[j] = 1./p
-        return 1.
+        return 1.,0.
     ftop = _fermi(e[p-1],T) # the constant piece above the top vertex
     for j in range(p): out[j] = ftop/p
+    dos = 0.
     if e[p-1]>e[0]:
         m = _knots(e,p,T,tbreaks,kn)
         for i in range(m-1):
-            if kn[i+1]>kn[i]:
-                _piece(e,p,kn[i],kn[i+1],T,gx,gw,out,tmp,False)
+            a = kn[i]; b = kn[i+1]
+            if b<=a: continue
+            if b<=0.: # mirror: x = -u, u in [-b,-a]
+                sgn = -1.; u0 = -b; u1 = -a
+            else:
+                sgn = 1.; u0 = a; u1 = b
+            f0 = _fermi(u0,T); f1 = _fermi(u1,T) # f0 > f1
+            h = (f0-f1)/2.; c = (f0+f1)/2.
+            if h<=0.: continue
+            for q in range(gx.shape[0]):
+                phi = c+h*gx[q]
+                x = sgn*T*(np.log1p(-phi)-np.log(phi))
+                _step_weights(e,p,x,tmp)
+                for j in range(p): out[j] += gw[q]*h*tmp[j]
+                dos += gw[q]*h*_step_dos(e,p,x)
     s = 0.
     for j in range(p): s += out[j]
-    return s
-
-
-@jit(nopython=True,cache=True)
-def _dos_T(e,p,T,gx,gw,tbreaks,tmp,kn):
-    """density of states of the simplex at temperature T"""
-    L = tbreaks[-1]*T
-    if e[0]>=L or e[p-1]<=-L or e[p-1]<=e[0]: return 0.
-    acc = np.zeros(1)
-    m = _knots(e,p,T,tbreaks,kn)
-    for i in range(m-1):
-        if kn[i+1]>kn[i]: _piece(e,p,kn[i],kn[i+1],T,gx,gw,acc,tmp,True)
-    return acc[0]
+    return s,dos
 
 
 @jit(nopython=True,cache=True)
@@ -367,22 +340,23 @@ def _simplex_weights_jit(sim,es,mu,T,bcoef,gx,gw,tbreaks,out):
     weight in units of the simplex volume, with the Bloechl term when
     bcoef != 0"""
     ns = sim.shape[0]; p = sim.shape[1]; nb = es.shape[1]
-    for it in prange(ns):
+    nblk = (ns+_block-1)//_block
+    for ib in prange(nblk): # the work arrays once per block of simplices
         e = np.zeros(p); perm = np.zeros(p,dtype=np.int64)
         w = np.zeros(p); tmp = np.zeros(p)
         kn = np.zeros(p+3+2*tbreaks.shape[0])
-        for n in range(nb):
-            _sorted_vertices(es,sim,it,n,mu,e,perm,p)
-            if T>0.: _weights_T(e,p,T,gx,gw,tbreaks,w,tmp,kn)
-            else: _step_weights(e,p,0.,w)
-            if bcoef!=0.:
-                if T>0.: D = _dos_T(e,p,T,gx,gw,tbreaks,tmp,kn)
-                else: D = _step_dos(e,p,0.)
-                if D!=0.:
+        for it in range(ib*_block,min(ns,(ib+1)*_block)):
+            for n in range(nb):
+                _sorted_vertices(es,sim,it,n,mu,e,perm,p)
+                if T>0.: frac,D = _weights_T(e,p,T,gx,gw,tbreaks,w,tmp,kn)
+                else:
+                    _step_weights(e,p,0.,w)
+                    D = _step_dos(e,p,0.) if bcoef!=0. else 0.
+                if bcoef!=0. and D!=0.:
                     es_sum = 0.
                     for i in range(p): es_sum += e[i]
                     for j in range(p): w[j] += bcoef*D*(es_sum-p*e[j])
-            for j in range(p): out[it,n,perm[j]] = w[j]
+                for j in range(p): out[it,n,perm[j]] = w[j]
 
 
 @jit(nopython=True,parallel=True,cache=True)
@@ -407,8 +381,7 @@ def _multiplet_average_real(es,w,tol):
 # of states, at each trial level. The kernel below gives both in one pass
 # over the simplices. The occupied fraction of a simplex is the closed form
 # of sum_j w_j, so no weight array is formed, and at T>0 the fraction and
-# the DOS are read at the same quadrature nodes and knots as _weights_T and
-# _dos_T.
+# the DOS are read at the same quadrature nodes and knots as _weights_T.
 
 @jit(nopython=True,cache=True)
 def _step_fraction(e,p,mu):
@@ -432,8 +405,8 @@ def _step_fraction(e,p,mu):
 @jit(nopython=True,cache=True)
 def _charge_dos_T(e,p,T,gx,gw,tbreaks,kn):
     """occupied fraction and DOS of the simplex at temperature T, for sorted
-    vertex energies measured from mu, with the knots and nodes of _weights_T
-    and _dos_T. A flat simplex is a step, f(e - mu), whose derivative
+    vertex energies measured from mu, with the knots and nodes of
+    _weights_T. A flat simplex is a step, f(e - mu), whose derivative
     f(1-f)/T is its DOS"""
     L = tbreaks[-1]*T
     if e[0]>=L: return 0.,0.
@@ -445,7 +418,7 @@ def _charge_dos_T(e,p,T,gx,gw,tbreaks,kn):
     for i in range(m-1):
         a = kn[i]; b = kn[i+1]
         if b<=a: continue
-        if b<=0.: # mirror, as in _piece
+        if b<=0.: # mirror, as in _weights_T
             sgn = -1.; u0 = -b; u1 = -a
         else:
             sgn = 1.; u0 = a; u1 = b
@@ -458,9 +431,6 @@ def _charge_dos_T(e,p,T,gx,gw,tbreaks,kn):
             c += gw[q]*h*_step_fraction(e,p,x)
             d += gw[q]*h*_step_dos(e,p,x)
     return c,d
-
-
-_block = 1024 # simplices per task of the charge kernel
 
 
 @jit(nopython=True,parallel=True,cache=True)
@@ -501,14 +471,35 @@ def _charge_dos_jit(sim,es,mu,T,gx,gw,tbreaks):
 _chunk = 2**18 # simplices per call of the weight kernel
 
 
-def simplex_weights(dim,nk,es,mu=0.,T=0.,bloechl=False):
+def _simplices(dim,nk,simplex_mesh=None):
+    """the simplices of the uniform nk^dim mesh and their volume fraction,
+    dostk.simplexdos.simplices(dim,nk), or simplex_mesh when the caller has
+    built that pair already. In 3D the pair is 192 bytes per k-point, so a
+    caller that integrates the same mesh several times (several Fermi
+    levels, or the Fermi search and the density matrix of one mean-field
+    iteration) builds it once and passes it down"""
+    if simplex_mesh is None:
+        from ..dostk.simplexdos import simplices
+        return simplices(dim,nk)
+    sim,frac = simplex_mesh
+    per_cell = {1:1,2:2,3:6}.get(dim,0) # simplices per cell of the mesh
+    if sim.ndim!=2 or sim.shape!=(per_cell*nk**dim,dim+1):
+        raise ValueError("the simplices passed do not belong to the "
+                "nk^dim mesh with nk="+str(nk)+" and dim="+str(dim)+": got "
+                "an array of shape "+str(sim.shape)+", built by "
+                "dostk.simplexdos.simplices(dim,nk)")
+    return sim,frac
+
+
+def simplex_weights(dim,nk,es,mu=0.,T=0.,bloechl=False,simplex_mesh=None):
     """Occupation weights w[k,n] of every state of the uniform nk^dim mesh
     (row-major, as klist.kmesh), from the linear simplex integration of the
     Fermi function at chemical potential mu and temperature T. Summed over
     k and n they give the number of electrons per unit cell. A fully
-    occupied state has w = 1/nk^dim, the weight of the uniform mesh."""
-    from ..dostk.simplexdos import simplices
-    sim,frac = simplices(dim,nk)
+    occupied state has w = 1/nk^dim, the weight of the uniform mesh.
+    simplex_mesh: None, or the pair dostk.simplexdos.simplices(dim,nk)
+    built by the caller, so that it is not built again"""
+    sim,frac = _simplices(dim,nk,simplex_mesh)
     es = np.ascontiguousarray(es,dtype=np.float64)
     nb = es.shape[1]
     T = 0. if T is None else float(abs(T))
@@ -524,17 +515,18 @@ def simplex_weights(dim,nk,es,mu=0.,T=0.,bloechl=False):
     return w.reshape(es.shape)*frac
 
 
-def simplex_charge(dim,nk,es,mu=0.,T=0.):
+def simplex_charge(dim,nk,es,mu=0.,T=0.,simplex_mesh=None):
     """Electrons per unit cell at chemical potential mu and temperature T,
     the sum of simplex_weights without forming them"""
-    return simplex_charge_dos(dim,nk,es,mu=mu,T=T)[0]
+    return simplex_charge_dos(dim,nk,es,mu=mu,T=T,
+            simplex_mesh=simplex_mesh)[0]
 
 
-def simplex_charge_dos(dim,nk,es,mu=0.,T=0.):
+def simplex_charge_dos(dim,nk,es,mu=0.,T=0.,simplex_mesh=None):
     """Electrons per unit cell and density of states per unit cell, dN/dmu,
-    at chemical potential mu and temperature T, in one pass"""
-    from ..dostk.simplexdos import simplices
-    sim,frac = simplices(dim,nk)
+    at chemical potential mu and temperature T, in one pass. simplex_mesh
+    as in simplex_weights"""
+    sim,frac = _simplices(dim,nk,simplex_mesh)
     es = np.ascontiguousarray(es,dtype=np.float64)
     T = 0. if T is None else float(abs(T))
     return _charge_and_dos(sim,frac,es,float(mu),T)
@@ -560,7 +552,7 @@ def _staircase_guess(es,target):
     return float(s[i]+a*(s[i+1]-s[i]))
 
 
-def fermi_from_energies(dim,nk,es,filling,T=0.):
+def fermi_from_energies(dim,nk,es,filling,T=0.,simplex_mesh=None):
     """Chemical potential at which the simplex integration holds the
     fraction `filling` of the states. N(mu) is continuous, so the requested
     charge is reached exactly; when it is reached on a whole interval (a
@@ -574,9 +566,9 @@ def fermi_from_energies(dim,nk,es,filling,T=0.):
     within the cutoff of the Fermi function (tcut T, zero at T=0), and the
     DOS is exactly zero there. A level on such an interval that holds the
     charge returns its middle, which is the middle of the gap between the
-    vertex energies on each side, at every T"""
+    vertex energies on each side, at every T. simplex_mesh as in
+    simplex_weights"""
     from ..filling import check_filling
-    from ..dostk.simplexdos import simplices
     check_filling(filling)
     es = np.ascontiguousarray(es,dtype=np.float64)
     nb = es.shape[1]
@@ -586,7 +578,7 @@ def fermi_from_energies(dim,nk,es,filling,T=0.):
     pad = 1e-6+50.*T
     if target<=0.: return emin-pad
     if target>=nb: return emax+pad
-    sim,frac = simplices(dim,nk)
+    sim,frac = _simplices(dim,nk,simplex_mesh)
     tol = 1e-12*nb
     L = _tbreaks[-1]*T # beyond L the Fermi function is a step
     lo,hi = emin-pad,emax+pad # N(lo) = 0 and N(hi) = nb, exactly
@@ -650,7 +642,11 @@ class _Mesh():
         from ..dostk.simplexdos import uniform_mesh
         self.ks = uniform_mesh(self.dim,nk)
         self.n = h.intra.shape[0]
-        self.batch = batch
+        # a batch holds a few arrays of n^2 numbers per k-point (the Bloch
+        # matrices, the eigenvectors, the weighted projectors), so it is
+        # kept near 2^22 complex numbers each, 64 MB; a fixed 2^14
+        # k-points held about 4 GB at n = 64
+        self.batch = max(1,min(batch,2**22//(self.n*self.n)))
         self.ndiag = 0
     def _hk(self,ks):
         from ..dostk.simplexdos import _hk_batch
@@ -671,9 +667,51 @@ class _Mesh():
             es,U = parallel_diagonalization(self._hk(self.ks[i0:i0+self.batch]))
             self.ndiag += len(es)
             yield i0,es,U
+    def fits(self):
+        """whether the eigenvectors of the whole mesh fit in max_memory_gb"""
+        return len(self.ks)*self.n*self.n*16 <= max_memory_gb*1e9
+    def bloch_data(self):
+        """the Bloch matrices and lattice vectors of h, or None"""
+        return getattr(self.hkgen,"bloch_data",None)
 
 
-def get_fermi4filling(h,filling,nk=20,T=0.):
+def identity_shift(data,data0):
+    """c when the Bloch data (matrices, lattice vectors) data is data0 plus
+    c times the identity in the onsite matrix, to 1e-12 of the largest
+    entry; None otherwise, or when either is None"""
+    if data is None or data0 is None: return None
+    ms,ds = data
+    ms0,ds0 = data0
+    if ms.shape!=ms0.shape or not np.array_equal(ds,ds0): return None
+    diff = ms-ms0
+    onsite = np.all(ds==0.,axis=1)
+    if np.any(diff[~onsite]!=0.): return None
+    d0 = np.sum(diff[onsite],axis=0)
+    c = d0[0,0].real
+    scale = 1e-12*max(1.,np.max(np.abs(ms0)))
+    if np.max(np.abs(d0-c*np.identity(len(d0))))>scale: return None
+    return c
+
+
+# The Fermi search and the density matrix of one mean-field iteration work
+# on the same mesh: the loop finds the Fermi level of h and then asks for
+# the density matrix of h shifted by that level. The shift moves every band
+# energy by the same constant and leaves the eigenvectors alone. So a
+# search asked to keep its mesh (keep_mesh=True, which only the loop of
+# scftk.densitydensity passes) leaves in _last_search its band energies,
+# its eigenvectors when those of the whole mesh fit in max_memory_gb (the
+# eigenvalues cost as much as the eigenpairs on the CPU, since the kernel
+# of peigvalsh calls eigh), and its simplices. The next get_dm takes the
+# record, and uses it when its Hamiltonian is the searched one plus a
+# constant times the identity, checked on the Bloch matrices
+# (identity_shift). It takes it whether it matches or not, so nothing is
+# held past one iteration. An iteration then diagonalizes the mesh once
+# where it did twice, or twice where it did three times when the
+# eigenvectors do not fit, and builds the simplices once.
+_last_search = None
+
+
+def get_fermi4filling(h,filling,nk=20,T=0.,keep_mesh=False):
     """Fermi energy that holds `filling` (a fraction of the states) under
     the simplex integration of the density matrix, on the uniform nk^dim
     mesh. See the module comment, point 3. For a Bogoliubov-de Gennes
@@ -681,13 +719,47 @@ def get_fermi4filling(h,filling,nk=20,T=0.):
     diagonalization on the same mesh (see the module comment), so the
     count is the one of exact diagonalization on the normal state,
     spectrum.get_fermi4filling; a mean field corrects it on the charge of
-    the paired state (scftk.superscf.BdGFermiLevel)"""
+    the paired state (scftk.superscf.BdGFermiLevel). keep_mesh=True keeps
+    the mesh for the get_dm that follows (see _last_search above)"""
+    global _last_search
+    _last_search = None # a search starts over
     if h.has_eh:
         from ..spectrum import get_fermi4filling as get_fermi4filling_ed
         return get_fermi4filling_ed(h,filling,nk=nk,T=0.) # the step
     check_hamiltonian(h,"the simplex Fermi level")
     mesh = _Mesh(h,nk)
-    return fermi_from_energies(mesh.dim,nk,mesh.energies(),filling,T=T)
+    # the mesh is kept only when the next get_dm can recognize h, which it
+    # does on the Bloch matrices; without them nothing is stored
+    data = mesh.bloch_data() if keep_mesh else None
+    smesh = _simplices(mesh.dim,nk) if data is not None else None
+    stored = None
+    if data is not None and mesh.fits(): # the eigenpairs, for get_dm
+        stored = []; es_all = []
+        for i0,es,U in mesh.eigenpairs():
+            es_all.append(es); stored.append(U)
+        es = np.concatenate(es_all)
+    else: es = mesh.energies()
+    mu = fermi_from_energies(mesh.dim,nk,es,filling,T=T,simplex_mesh=smesh)
+    if data is not None:
+        _last_search = dict(nk=nk,dim=mesh.dim,batch=mesh.batch,
+                bloch=(data[0].copy(),data[1].copy()),es=es,U=stored,
+                simplex_mesh=smesh)
+    return mu
+
+
+def _take_search(mesh):
+    """(band energies, eigenvectors per batch or None, simplices) of the
+    last Fermi search that kept its mesh, when the Hamiltonian of mesh is
+    the searched one plus a constant times the identity on the same mesh;
+    None otherwise. The record is forgotten either way"""
+    global _last_search
+    last, _last_search = _last_search, None
+    if last is None: return None
+    if (last["nk"],last["dim"],last["batch"])!=(mesh.nk,mesh.dim,mesh.batch):
+        return None
+    c = identity_shift(mesh.bloch_data(),last["bloch"])
+    if c is None: return None
+    return last["es"]+c,last["U"],last["simplex_mesh"]
 
 
 def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
@@ -713,16 +785,24 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
     mesh = _Mesh(h,nk)
     ds = [tuple(int(x) for x in d) for d in ds]
     n = mesh.n
-    keep = len(mesh.ks)*n*n*16 <= max_memory_gb*1e9
-    stored = []
-    es_all = []
-    for i0,es,U in mesh.eigenpairs():
-        es_all.append(es)
-        if keep: stored.append(U)
-    es = np.concatenate(es_all)
+    searched = _take_search(mesh) # the mesh of the Fermi search of h
+    if searched is not None: # h is the searched one, shifted
+        es,stored,smesh = searched
+        del searched
+    else:
+        smesh = None # built by simplex_weights
+        stored = [] if mesh.fits() else None
+        es_all = []
+        for i0,es,U in mesh.eigenpairs():
+            es_all.append(es)
+            if stored is not None: stored.append(U)
+        es = np.concatenate(es_all)
+    keep = stored is not None # else a second pass for the eigenvectors
     nkp = len(mesh.ks)
     if shell is not None and not shell.start(h,T,nkp): shell = None
-    w = simplex_weights(mesh.dim,nk,es,mu=0.,T=T,bloechl=bloechl)
+    w = simplex_weights(mesh.dim,nk,es,mu=0.,T=T,bloechl=bloechl,
+            simplex_mesh=smesh)
+    smesh = None # not held during the contraction
     from ..dostk.simplexdos import _degeneracy_tol
     _multiplet_average_real(es,w,_degeneracy_tol(es))
     dvecs = np.array(ds,dtype=np.float64).reshape(len(ds),3)
@@ -740,9 +820,21 @@ def get_dm(h,ds,nk=20,T=0.,bloechl=None,counted=False,shell=None):
             Ua = U[:,:,active]
             wa = wk[:,active]
             ph = np.exp(2j*np.pi*(ks@dvecs.T)) # (k,d)
-            for idd,d in enumerate(ds):
-                A = Ua.conj()*(wa*ph[:,idd][:,None])[:,None,:]
-                dm[d] += np.einsum("kin,kjn->ij",A,Ua,optimize=True)
+            if len(ds)==1: # the phase goes into the weights, one product
+                A = Ua.conj()*(wa*ph[:,0][:,None])[:,None,:]
+                dm[ds[0]] += np.einsum("kin,kjn->ij",A,Ua,optimize=True)
+                return
+            # the weighted projector of each k-point, which does not depend
+            # on the direction, P_k[i,j] = sum_n conj(U_kin) w_kn U_kjn, and
+            # then every direction in one product with the Bloch phases.
+            # With one direction this costs more than the sum over k and n
+            # in one product, by the batch of small products and the
+            # projectors (0.141 s against 0.108 s at n = 32), and
+            # with nine directions it is 1.4 times faster than one product
+            # per direction (future_development/tetrahedron_density_matrix.md)
+            P = np.matmul(Ua.conj()*wa[:,None,:],np.transpose(Ua,(0,2,1)))
+            out = ph.T@P.reshape(len(P),n*n) # (d,n*n)
+            for idd,d in enumerate(ds): dm[d] += out[idd].reshape(n,n)
         if keep:
             for i0,U in zip(range(0,len(mesh.ks),mesh.batch),stored): add(i0,U)
         else: # second pass
@@ -792,8 +884,10 @@ def band_energy(h,nk=20,bloechl=None):
     return e
 
 
-def band_energy_from_energies(dim,nk,es,bloechl=True):
+def band_energy_from_energies(dim,nk,es,bloechl=True,simplex_mesh=None):
     """band_energy from the band energies es[k,n] of the uniform nk^dim
-    mesh (row-major, as klist.kmesh), measured from the Fermi level"""
-    w = simplex_weights(dim,nk,es,mu=0.,T=0.,bloechl=bloechl)
+    mesh (row-major, as klist.kmesh), measured from the Fermi level.
+    simplex_mesh as in simplex_weights"""
+    w = simplex_weights(dim,nk,es,mu=0.,T=0.,bloechl=bloechl,
+            simplex_mesh=simplex_mesh)
     return float(np.sum(w*es))

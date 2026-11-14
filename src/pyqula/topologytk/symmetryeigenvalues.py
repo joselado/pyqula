@@ -15,8 +15,11 @@ source: eqs. ChernC2, ChernC4, ChernC3 and ChernC6)
 L. Fu and C. L. Kane, Topological insulators with inversion symmetry,
 Phys. Rev. B 76, 045302 (2007), cond-mat/0611341 (the parity Z2)
 
-The rotations are about the z axis, counterclockwise for n>0, and with this
-orientation the Chern number modulo n has the sign of h.get_chern().
+The rotations are about the z axis, counterclockwise for n>0, so their
+eigenvalues give the Chern number of the Cartesian orientation. The Chern
+number modulo n is returned with the sign of h.get_chern(), which follows the
+order of the lattice vectors: on a left-handed pair, (a1 x a2).z < 0, the
+sign is flipped.
 """
 import numpy as np
 
@@ -141,7 +144,8 @@ def chern_mod_n(h, n=None, center=(0., 0., 0.), nocc=None):
     center: a point of the rotation axis, in Cartesian coordinates
 
     Returns an integer between 0 and n-1. It has the sign convention of
-    h.get_chern(), so a Chern number -1 gives n-1."""
+    h.get_chern(), so a Chern number -1 gives n-1, and like h.get_chern() it
+    changes sign when a1 and a2 are exchanged."""
     if h.dimensionality != 2:
         raise ValueError("the Chern number modulo n needs a two-dimensional "
           +"Hamiltonian, and this one has dimensionality "
@@ -194,7 +198,12 @@ def chern_mod_n(h, n=None, center=(0., 0., 0.), nocc=None):
     _check_filling(counts)
     if h.has_spin and n != 2: # (-1)^F once per occupied band
         val *= (-1)**len(ev)
-    x = np.angle(val)/(2*np.pi)*n # C modulo n, up to roundoff
+    # the rotation is counterclockwise in Cartesian space, so the eigenvalues
+    # give the Chern number of the Cartesian orientation, while get_chern
+    # follows the order of a1 and a2
+    g = h.geometry
+    orientation = np.sign(np.cross(g.a1, g.a2)[2])
+    x = orientation*np.angle(val)/(2*np.pi)*n # C modulo n, up to roundoff
     if abs(x - np.round(x)) > 1e-4:
         raise ValueError("the product of the rotation eigenvalues is "
           +str(val)+", not an n-th root of unity, so the occupied states "
@@ -284,7 +293,19 @@ def z4_indicator(h, center=None, nocc=None):
     numbers, z_4 = 2 is the axion insulator, with chiral hinge modes. Note that for the same time-reversal-symmetric insulator
     z_4 = 2 kappa_1, so the two numbers are not the same quantity.
 
-    center: the inversion center, searched as in parity_z2 by default
+    The value depends on the inversion center when a weak index is not zero,
+    unlike parity_z2. Moving the center by half a lattice vector a_i swaps
+    n_+ and n_- at the four momenta with n_i = 1, which changes kappa_1 by
+    2 nu_i modulo 4 (and z_4 by twice the Chern number of the plane of
+    those four momenta, modulo 4). So for a weak or a strong phase with a
+    nonzero weak index only kappa_1 modulo 2, the strong index nu_0, is a
+    property of the phase, and kappa_1 = 2 is read as a second-order
+    insulator only when every Z2 index is zero, where those centers give the
+    same value.
+
+    center: the inversion center, in Cartesian coordinates. By default the
+        first one found among the candidates of parity_z2, so with a
+        nonzero weak index the value follows that choice
 
     Returns kappa_1 for a spinful Hamiltonian with time reversal, and z_4
     otherwise, an integer between 0 and 3."""
@@ -435,6 +456,10 @@ def corner_charge(h, n=None, center=(0., 0., 0.), nocc=None):
     c2 = [count(2, k) for k in k2]
     counts = {(0., 0.): int(np.sum(c2g))}
     for (k, c) in zip(k2, c2): counts[tuple(np.round(k[:2], 4))] = int(np.sum(c))
+    if n == 6: # the C6 index uses K too, so its filling is checked as well
+        K = fixed(3)[0]
+        c3k = count(3, K)
+        counts[tuple(np.round(K[:2], 4))] = int(np.sum(c3k))
     _check_filling(counts)
     for (k, c) in zip(k2, c2): # (-1)^{2 p} = prod zeta(X)/zeta(Gamma)
         if (c[1] - c2g[1]) % 2 != 0:
@@ -454,8 +479,7 @@ def corner_charge(h, n=None, center=(0., 0., 0.), nocc=None):
         x1 = count(2, X)[0] - c2g[0]
         q = (x1 + 2*(cm4[0] - cg4[0]) + 3*(cm4[1] - cg4[1]))/4.
     else:
-        K = fixed(3)[0]
         m1 = c2[0][0] - c2g[0]
-        k1 = count(3, K)[0] - count(3, gamma)[0]
+        k1 = c3k[0] - count(3, gamma)[0]
         q = m1/4. + k1/6.
     return float((-q) % 1.)

@@ -39,7 +39,10 @@
 # The weights are averaged over the vertices of each simplex and over
 # degenerate multiplets at each vertex, as in kubosimplex.py: a single
 # w_n inside a degenerate multiplet depends on the basis eigh picks, the
-# multiplet average does not.
+# multiplet average does not. This holds because every weight is linear
+# in the projector u_n u_n^dagger, so its sum over a multiplet is a trace:
+# 1, <u_n|O|u_n>, the projector itself, and the site weight
+# Re<u_n|P_i O|u_n> (|u_n|^2 on the site without an operator).
 import numpy as np
 from numba import jit, prange
 
@@ -202,37 +205,69 @@ def _simplex_average(es,sim,it,n,E,s,t,harm,fact,h,d):
 
 
 @jit(nopython=True,parallel=True,cache=True)
-def _simplex_sum(sim,es,W,energies,delta,harm,fact):
-    """sum over simplices and bands of the vertex-averaged weight times the
-    exact simplex average of the resolvent, at every energy. Not
-    normalized: the caller multiplies by the volume fraction of a simplex"""
+def _vertex_resolvent(sim,esT,energies,delta,nrep,harm,fact):
+    """A[n,ie,r,k], the sum over the simplices that have the mesh point k
+    as a vertex of the exact simplex average of 1/(E_ie + i delta - E_n),
+    from the band energies esT[n,k] (one row per band). The simplices are
+    cut in nrep slices and r is the slice, so the sum over r is the sum
+    over all the simplices.
+
+    The sum over simplices of the vertex-averaged weight times that average
+    is sum_(k,n) A[n,ie,k] W[k,n,c] / p, so the weights enter through one
+    matrix product, once per mesh point and not once per vertex of every
+    simplex at every energy. Each parallel task owns one band, one energy
+    and one slice, and adds into its own row of mesh points, so no two
+    tasks write the same entry"""
     ns = sim.shape[0]
     p = sim.shape[1]
-    nb = es.shape[1]
-    nc = W.shape[2]
+    nb = esT.shape[0]
+    nkp = esT.shape[1]
     ne = energies.shape[0]
     s = -delta
-    out = np.zeros((ne,nc),dtype=np.complex128)
-    for ie in prange(ne): # parallel loop over energies
+    A = np.zeros((nb,ne,nrep,nkp),dtype=np.complex128)
+    for task in prange(nb*ne*nrep): # bands, energies and slices
+        n = task//(ne*nrep)
+        ie = (task//nrep)%ne
+        r = task%nrep
         E = energies[ie]
+        e = esT[n]
+        acc = A[n,ie,r]
         t = np.zeros(p+1)
         h = np.zeros(_nterms+1)
         d = np.zeros(p+1,dtype=np.complex128)
-        acc = np.zeros(nc,dtype=np.complex128)
-        for it in range(ns): # loop over simplices
-            for n in range(nb): # loop over bands
-                a = _simplex_average(es,sim,it,n,E,s,t,harm,fact,h,d)
-                for c in range(nc):
-                    wbar = 0j
-                    for v in range(p): wbar += W[sim[it,v],n,c]
-                    acc[c] += wbar*a/p
-        out[ie] = acc
-    return out
+        for it in range((r*ns)//nrep,((r+1)*ns)//nrep): # simplices
+            for v in range(p): t[v] = e[sim[it,v]]-E
+            _sort_small(t,p)
+            a = fact[p-1]*_dd(p-1,t,p,s,harm,fact,h,d) # simplex average
+            for v in range(p): acc[sim[it,v]] += a
+    return A
+
+
+_block = 2**22 # complex numbers in one block of A, 64 MB
+
+
+def _vertex_resolvent_blocks(sim,esT,energies,delta):
+    """the vertex resolvent A[n,ie,k] of _vertex_resolvent, one block of
+    energies at a time: yields (slice of the energies, A of that slice).
+    A block holds near _block numbers, and at least one energy. When a
+    block has fewer bands times energies than there are threads, the
+    simplices are cut in slices so that every thread has a task; the
+    kernel then holds one row of mesh points per thread"""
+    import numba
+    nb,nkp = esT.shape
+    ne = len(energies)
+    size = max(1,min(ne,_block//(nkp*nb))) # energies per block
+    for i in range(0,ne,size):
+        b = slice(i,min(ne,i+size))
+        nrep = max(1,numba.get_num_threads()//(nb*(b.stop-b.start)))
+        A = _vertex_resolvent(sim,esT,energies[b],float(delta),nrep,
+                _harm,_fact)
+        yield b,(A.sum(axis=2) if nrep>1 else A[:,:,0])
 
 
 @jit(nopython=True,parallel=True,cache=True)
 def _simplex_dos0(sim,es,W,energies,nchunk,harm,fact):
-    """the delta = 0 limit of -Im/pi of _simplex_sum, for sorted energies.
+    """the delta = 0 limit of -Im/pi of simplex_sum, for sorted energies.
     A simplex only contributes at the energies between its lowest and its
     highest vertex, which are found by bisection, so the cost is set by the
     number of simplices and not by their product with the energies"""
@@ -283,20 +318,33 @@ def simplices(dim,nk):
     if dim!=3:
         raise ValueError("the simplex integration needs a dimensionality of "
                 "1, 2 or 3, got "+str(dim))
-    i,j,l = np.meshgrid(np.arange(nk),np.arange(nk),np.arange(nk),
-            indexing="ij")
-    i = i.ravel(); j = j.ravel(); l = l.ravel()
-    def idx(a,b,c): return ((i+a)%nk)*nk*nk + ((j+b)%nk)*nk + (l+c)%nk
-    out = []
+    return _tetrahedra(nk),1./(6*nk**3)
+
+
+def _tetrahedra(nk):
+    """the vertex indices of the six tetrahedra of every cube, ordered by
+    permutation first: tetrahedron perm*nk^3 + cube goes from the corner
+    000 of the cube to 111 along the axes in the order perm. The array is
+    filled in place, so the peak memory is the array and a few index
+    vectors, not three copies of it"""
     import itertools
-    for perm in itertools.permutations(range(3)): # path 000 -> 111
+    nc = nk**3
+    cube = np.arange(nc,dtype=np.int64) # row-major index of the corner 000
+    strides = (nk*nk,nk,1)
+    # part of the row-major index along each axis, at the corner (0) and
+    # one step further (1), periodic
+    part = []
+    for ax,x in enumerate((cube//(nk*nk),(cube//nk)%nk,cube%nk)):
+        part.append((x*strides[ax],((x+1)%nk)*strides[ax]))
+    out = np.empty((6*nc,4),dtype=np.int64)
+    for ip,perm in enumerate(itertools.permutations(range(3))):
+        rows = out[ip*nc:(ip+1)*nc]
+        rows[:,0] = cube
         v = [0,0,0]
-        verts = [idx(*v)]
-        for ax in perm:
+        for iv,ax in enumerate(perm): # path 000 -> 111
             v[ax] = 1
-            verts.append(idx(*v))
-        out.append(np.stack(verts,axis=1))
-    return np.concatenate(out).astype(np.int64),1./(6*nk**3)
+            rows[:,iv+1] = part[0][v[0]] + part[1][v[1]] + part[2][v[2]]
+    return out
 
 
 def uniform_mesh(dim,nk):
@@ -351,21 +399,25 @@ class _Fields():
     """Diagonalizes H(k) on batches of k-points and returns the band
     energies es[k,n] and the weights W[k,n,c] the simplex sum needs:
     kind="dos" gives W = 1, kind="operator" the multiplet-averaged
-    <u_n|O|u_n>, kind="green" the multiplet-averaged projector
-    u_n,i u_n,j^* flattened over (i,j), and kind="site" the
-    multiplet-averaged density of u_n on each site, its spin and Nambu
-    components summed, times <u_n|O|u_n> with an operator. ndiag counts
-    the diagonalizations"""
+    <u_n|O|u_n>, and kind="site" the multiplet-averaged density of u_n on
+    each site, its spin and Nambu components summed, or with an operator
+    the local matrix element Re<u_n|P_i O|u_n>, which sums over the sites
+    to <u_n|O|u_n>. kind="green" returns the eigenvectors U[k,i,n] in
+    place of W, n times smaller than the band projectors, and
+    green_triangle averages over the multiplets on the resolvent instead.
+    ndiag counts the diagonalizations"""
     def __init__(self,h,kind="dos",operator=None,batch=2**15):
         if h.is_sparse: h = h.get_dense()
         self.hkgen = h.get_hk_gen()
         self.kind = kind
-        self.batch = batch
         self.ndiag = 0
         self.op = None
+        n = h.intra.shape[0]
+        # keep the Bloch matrices and the eigenvectors of one batch, n^2
+        # per k-point each, near 2^22 complex numbers (64 MB)
+        self.batch = max(1,min(batch,2**22//(n*n)))
         if kind=="site": # orbital -> site, the resummation of the LDOS maps
             from ..increase_hilbert import full2profile
-            n = h.intra.shape[0]
             iden = np.identity(n)
             self.sites = np.array([full2profile(h,iden[i]) for i in range(n)],
                     dtype=np.float64) # (orbitals, sites)
@@ -383,7 +435,7 @@ class _Fields():
         from ..htk.eigenvectors import parallel_diagonalization, peigvalsh
         ks = np.asarray(ks,dtype=np.float64)
         parallel.set_num_threads()
-        ess = []; Ws = []
+        ess = Ws = None # filled batch by batch, never concatenated
         for i0 in range(0,len(ks),self.batch):
             hks = _hk_batch(self.hkgen,ks[i0:i0+self.batch])
             if self.kind=="dos":
@@ -396,20 +448,21 @@ class _Fields():
                             optimize=True).real
                     W = w[:,:,None].astype(np.complex128)
                 elif self.kind=="site": # density on each site
-                    rho = (U.real**2 + U.imag**2) # (k,orbital,band)
-                    if self.op is not None: # times <u_n|O|u_n>
-                        rho = rho*np.einsum("kin,ij,kjn->kn",U.conj(),
-                                self.op,U,optimize=True).real[:,None,:]
+                    if self.op is None: # |u_n(a)|^2, (k,orbital,band)
+                        rho = (U.real**2 + U.imag**2)
+                    else: # the local element Re[conj(u_n(a)) (O u_n)(a)]
+                        rho = (U.conj()*np.matmul(self.op,U)).real
                     W = np.einsum("kin,ic->knc",rho,self.sites,
                             optimize=True).astype(np.complex128)
-                else: # projector P_n[i,j] = U[i,n] U[j,n]^*
-                    n = U.shape[1]
-                    W = np.einsum("kin,kjn->knij",U,U.conj(),optimize=True)
-                    W = np.ascontiguousarray(W.reshape(len(es),n,n*n))
-                _multiplet_average(es,W,_degeneracy_tol(es))
-            ess.append(es); Ws.append(W)
+                else: W = U # the eigenvectors, (k,orbital,band)
+                if self.kind!="green":
+                    _multiplet_average(es,W,_degeneracy_tol(es))
+            if ess is None:
+                ess = np.empty((len(ks),)+es.shape[1:],dtype=es.dtype)
+                Ws = np.empty((len(ks),)+W.shape[1:],dtype=W.dtype)
+            ess[i0:i0+len(es)] = es; Ws[i0:i0+len(es)] = W
         self.ndiag += len(ks)
-        return np.concatenate(ess),np.concatenate(Ws)
+        return ess,Ws
 
 
 # ------------------------------------------------------------ integration
@@ -419,10 +472,14 @@ def simplex_sum(dim,nk,es,W,energies,delta):
     zone (normalized to one), from the fields on the uniform nk^dim mesh,
     at every energy: a (len(energies),nc) complex array"""
     sim,frac = simplices(dim,nk)
+    esT = np.ascontiguousarray(np.transpose(es)) # one row per band
+    energies = np.asarray(energies,dtype=np.float64)
+    out = np.zeros((len(energies),W.shape[2]),dtype=np.complex128)
     parallel.set_num_threads()
-    out = _simplex_sum(sim,np.ascontiguousarray(es),np.ascontiguousarray(W),
-            np.asarray(energies,dtype=np.float64),float(delta),_harm,_fact)
-    return out*frac
+    for b,A in _vertex_resolvent_blocks(sim,esT,energies,delta):
+        for n in range(len(esT)): # A[n] is (energies, mesh points)
+            out[b] += A[n] @ W[:,n,:]
+    return out*(frac/sim.shape[1])
 
 
 def simplex_dos_from_fields(dim,nk,es,W,energies,delta):
@@ -556,11 +613,12 @@ def ldos_triangle_counted(h,energies,nk=100,delta=0.,operator=None):
     nk^d mesh, at every energy: (energies, ldos, ndiag, mesh) with ldos a
     (len(energies),nsites) array and mesh the (dim, nk, band energies) that
     dos_from_band_mesh takes. The weight of band n on site i is the
-    multiplet-averaged sum of |u_n,a|^2 over the orbitals a of site i,
-    times <u_n|O|u_n> with an operator (the convention of the
-    diagonalization mode of ldos.get_ldos). One diagonalization of the mesh
-    gives every site and every energy, and the sum over sites is the
-    triangle DOS to rounding"""
+    multiplet-averaged sum of |u_n,a|^2 over the orbitals a of site i, or
+    with an operator of the local matrix element Re[conj(u_n,a) (O u_n)_a]
+    (the convention of every mode of ldos.get_ldos). One diagonalization
+    of the mesh gives every site and every energy, and the sum over sites
+    is the triangle DOS to rounding, or with an operator the triangle DOS
+    weighted by <u_n|O|u_n>"""
     check_broadening(delta)
     dim = h.dimensionality
     if dim not in (1,2,3):
@@ -579,7 +637,10 @@ def ldos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
     rounded up to a power of two), with the band energies and the weight of
     every band on every site reconstructed from one QTCI of all the fields
     at once, in 2D. The tolerance is relative to the largest value of any
-    field"""
+    field. The band energies enter that interpolation measured from their
+    mean over the Brillouin zone, Re Tr(H_0)/n, and the mean is added back
+    afterwards, so a constant shift of every onsite energy does not loosen
+    the tolerance of the weights"""
     check_broadening(delta)
     if h.dimensionality!=2:
         raise NotImplementedError("the qtci integration of the LDOS is only "
@@ -589,12 +650,16 @@ def ldos_qtci_counted(h,energies,nk=128,delta=0.,operator=None,
     fields = _Fields(h,kind="site",operator=operator)
     nb = h.intra.shape[0]
     ns = fields.sites.shape[1]
+    from .. import algebra
+    # the mean of the band energies, exact: the hoppings to other cells
+    # average to zero over the Brillouin zone
+    e0 = float(np.trace(algebra.todense(h.intra)).real)/nb
     def evaluate(ks):
         es,W = fields(ks)
-        return np.concatenate([es,W.real.reshape(len(es),nb*ns)],axis=1)
+        return np.concatenate([es-e0,W.real.reshape(len(es),nb*ns)],axis=1)
     vals,ncalls,ranks = qtci_stacked_fields(evaluate,R,nb*(1+ns),
             tolerance=tolerance,maxbonddim=stacked_maxbonddim)
-    es = np.ascontiguousarray(vals[:,:nb])
+    es = np.ascontiguousarray(vals[:,:nb]+e0)
     W = np.ascontiguousarray(vals[:,nb:].reshape(len(es),nb,ns)
             ).astype(np.complex128)
     energies = np.asarray(energies,dtype=np.float64)
@@ -617,7 +682,13 @@ def green_triangle(h,energies,nk=100,delta=1e-2):
     z = E + i delta, from the simplex integration of the multiplet-averaged
     band projectors on the uniform nk^d mesh, at every energy: a
     (len(energies),n,n) array. One diagonalization of the mesh serves every
-    energy"""
+    energy.
+
+    The mesh keeps the eigenvectors, n^2 numbers per k-point, and not the
+    projectors, n^3. The sum over a multiplet M of A_n P_n, with P_n the
+    projector averaged over M, is the sum of P_n times A_n averaged over
+    M, so the average is taken on the vertex resolvent A and the
+    projectors are built for one chunk of the mesh at a time"""
     if not delta>0.:
         raise ValueError("the simplex Green's function needs a positive "
                 "broadening delta, got delta="+str(delta)+"; at delta=0 "
@@ -627,7 +698,22 @@ def green_triangle(h,energies,nk=100,delta=1e-2):
         raise ValueError("the simplex Green's function needs a periodic "
                 "Hamiltonian of dimensionality 1, 2 or 3, got "+str(dim))
     fields = _Fields(h,kind="green")
-    es,W = fields(uniform_mesh(dim,nk))
-    n = h.intra.shape[0]
-    g = simplex_sum(dim,nk,es,W,np.atleast_1d(energies),delta)
-    return g.reshape(len(g),n,n)
+    es,U = fields(uniform_mesh(dim,nk)) # U[k,i,n]
+    nkp,n,nb = U.shape
+    sim,frac = simplices(dim,nk)
+    energies = np.atleast_1d(np.asarray(energies,dtype=np.float64))
+    tol = _degeneracy_tol(es)
+    esT = np.ascontiguousarray(np.transpose(es)) # one row per band
+    g = np.zeros((len(energies),n*n),dtype=np.complex128)
+    chunk = max(1,_block//(nb*n*n)) # k-points per chunk of projectors
+    parallel.set_num_threads()
+    for b,A in _vertex_resolvent_blocks(sim,esT,energies,delta):
+        A = np.ascontiguousarray(np.transpose(A,(2,0,1))) # A[k,n,ie]
+        _multiplet_average(es,A,tol) # in place of averaging the projectors
+        for k0 in range(0,nkp,chunk):
+            Uc = U[k0:k0+chunk]
+            P = np.einsum("kin,kjn->knij",Uc,Uc.conj(),optimize=True)
+            g[b] += A[k0:k0+chunk].reshape(-1,A.shape[2]).T @ \
+                    P.reshape(-1,n*n)
+    g *= frac/sim.shape[1]
+    return g.reshape(len(energies),n,n)

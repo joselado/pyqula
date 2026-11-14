@@ -36,7 +36,9 @@ _sigma returns. The current is then
 
 since binom(l,l1) orderings of the field indices give the same component;
 an expansion without the binomial undercounts every mixed term (at l = 2,
-sigma^{xy;b} enters j_b with a factor 2). The spin and charge responses are
+sigma^{xy;b} enters j_b with a factor 2). In 3D a third count l3 of field
+indices equal to z joins them, with the multinomial l!/(l1! l2! l3!) in
+place of the binomial. The spin and charge responses are
 
   sigma_spin   = (sigma_up - sigma_dn)/2,
   sigma_charge =  sigma_up + sigma_dn.
@@ -505,31 +507,46 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
 def nonlinear_drude_components(h,l,channel="spin",nk=100,T=0.01,mu=0.,
         tau=1.,omega=0.,degeneracy_tol=1e-8):
     """Every component of the l-th order conductivity, as
-    {"x^l1 y^l2;b": value}: the l field powers split between x and y, times
-    the two current directions. They share one k-mesh, one set of Bloch
-    phases and one perturbation expansion, so this is much cheaper than the
-    equivalent individual calls."""
+    {"x^l1 y^l2 z^l3;b": value}: the l field powers split between the
+    directions, times the current directions. The directions are x and y
+    in 1D and 2D, and x, y and z in 3D, where a spin splitting that
+    involves k_z (a d_xz form factor) responds only in components with a
+    z. They share one k-mesh, one set of Bloch phases and one perturbation
+    expansion, so this is much cheaper than the equivalent individual
+    calls."""
     chans,norm = _channels(h,nk,degeneracy_tol=degeneracy_tol)
     if channel=="spin": _spin_splitting_guard(chans)
     return _components(chans,norm,l,channel,T,mu,tau,omega)
 
 
+def _directions(chans):
+    """Cartesian directions of the sweep of _components: x and y below 3D,
+    the keys the sweep always had (the y components of a 1D cell are
+    zero), and x, y and z in 3D"""
+    return "xyz" if chans[0][1].dim==3 else "xy"
+
+
 def _components(chans,norm,l,channel,T,mu,tau,omega):
     """Components of one order, from already-built channels"""
+    dirs = _directions(chans)
     out = dict()
     for l1 in range(l+1):
-        field = "x"*l1+"y"*(l-l1)
-        axes = [_axis(c) for c in field]
-        for b in ["x","y"]:
-            out[field+";"+b] = _sigma(chans,norm,axes,_axis(b),channel,T,mu,
-                    tau,omega)
+        # powers of E_y; the rest of the l powers are E_z, none below 3D
+        l2s = range(l-l1+1) if "z" in dirs else [l-l1]
+        for l2 in l2s:
+            field = "x"*l1+"y"*l2+"z"*(l-l1-l2)
+            axes = [_axis(c) for c in field]
+            for b in dirs:
+                out[field+";"+b] = _sigma(chans,norm,axes,_axis(b),channel,
+                        T,mu,tau,omega)
     return out
 
 
 def nonlinear_drude_orders(h,lmax=6,channel="spin",nk=100,T=0.01,mu=0.,
         tau=1.,omega=0.,degeneracy_tol=1e-8):
     """Selection-rule sweep: for each order l = 0..lmax, the largest
-    |sigma^{x^l1 y^l2 ; b}| over all of that order's components.
+    |sigma^{x^l1 y^l2 z^l3 ; b}| over all of that order's components, those
+    of nonlinear_drude_components (l3 = 0 and b in x, y below 3D).
 
     The lowest l at which this is nonzero is the order of the magnet, and so
     a direct readout of the X-wave index -- d gives 1, f gives 2, g gives 3

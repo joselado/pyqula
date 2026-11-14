@@ -171,8 +171,9 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       "grid" (default) sums the formula over the uniform nk mesh, which
       needs a mesh whose transition-energy spacing is below delta.
       "triangle" splits the mesh into simplices (segments in 1D, triangles
-      in 2D, six tetrahedra per cube in 3D), interpolates the transition energies and the weights
-      linearly inside each one, and integrates the resolvent over it
+      in 2D, six tetrahedra per cube in 3D), interpolates the transition
+      energies linearly inside each one, takes the weights as their
+      average over its vertices, and integrates the resolvent over it
       exactly (conductivitytk/kubosimplex.py). The mesh then only has to
       resolve the bands, not the broadening: at delta = 1e-3 t on a gapped
       honeycomb, nk = 256 gives 1e-3 relative accuracy where the grid
@@ -180,10 +181,12 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       smooth integrand (delta larger than the band features, or a
       frequency inside a gap) the grid, which converges exponentially
       there, is the better choice. The sum over the simplices is built
-      once for all frequencies, also in 3D, where the tetrahedra whose
-      vertex form would cancel too much (4% to 20% of them on the meshes
-      measured) are summed at every frequency, so it is 4 to 14 times
-      faster than summing every tetrahedron at every frequency.
+      once for all frequencies, also in 3D. The tetrahedra far from every
+      frequency are expanded around the center of an energy bin. A
+      tetrahedron whose vertex form would cancel too much is split, and
+      only its close edges and faces are kept as point sources; a set of
+      point sources gives its sum through its moments at a frequency far
+      from it, and its sources are evaluated one by one only at the others.
       "qtci" (2D only, 3D raises NotImplementedError) does the
       same on a 2^R x 2^R mesh, nk rounded up to a power of two, where the
       transition energies and weights are reconstructed from a quantics
@@ -197,8 +200,10 @@ def optical_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       grid sum in all three.
     tolerance : float
       relative tolerance of the tensor cross interpolation of the fields,
-      one interpolation of all of them at once, so relative to the
-      largest field; only used by integration="qtci"
+      one interpolation of all of them at once, with the transition
+      energies and the weights each divided by their largest value on a
+      coarse scan, so relative to the largest field of each family; only
+      used by integration="qtci"
     ewindow : float, pair or None
       band window, for large unit cells: only the bands close to the Fermi
       level are diagonalized (a subset eigensolver, or a shift-invert one
@@ -380,8 +385,9 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       "grid" (default) sums the formula over the uniform nk mesh, which
       needs a mesh whose transition-energy spacing is below delta.
       "triangle" splits the mesh into simplices, interpolates the band
-      energies and the weights linearly inside each one and integrates the
-      resonant factors 1/(w - E_nm) and 1/(2w - E_mn) over it exactly
+      energies linearly inside each one, takes the weights as their
+      average over its vertices and integrates the resonant factors
+      1/(w - E_nm) and 1/(2w - E_mn) over it exactly
       (conductivitytk/shgsimplex.py), so the mesh only has to resolve the
       bands, not the broadening. In a two-band model every resonant
       factor is integrated exactly on the interpolated bands; the products
@@ -391,7 +397,16 @@ def shg_conductivity(h,energies=None,nk=20,T=None,delta=0.1,
       converge at second order in 1/nk. The 1/w^2 prefactor of the
       velocity gauge amplifies the O(1/nk^2) error at small w, so below
       the absorption edge the grid, which converges exponentially there,
-      is the better choice. "qtci" (2D only) does the same on a 2^R x 2^R
+      is the better choice. The sum over the simplices is built once for
+      all frequencies, and its rounding error is a fraction of the
+      largest value of the spectrum, not of the value at each frequency:
+      5e-11 on a three-band model at delta = 1e-3 and nk = 64, and, for
+      bands whose spread on a triangle is of the order of delta, 5e-9 at
+      delta = 1e-6 and 2e-7 at delta = 1e-7. So for nearly flat bands at
+      a very small delta the values far from the resonances, many orders
+      of magnitude below the peak, are not resolved (see
+      future_development/qtci_shg.md).
+      "qtci" (2D only) does the same on a 2^R x 2^R
       mesh, nk rounded up to a power of two, whose band energies and
       weights come from a quantics tensor cross interpolation instead of a
       diagonalization at every point. Both need delta > 0 and the velocity
@@ -684,15 +699,18 @@ def nonlinear_drude_conductivity(h,field="x",current="x",channel="spin",
 
 def nonlinear_drude_components(h,l,**kwargs):
     """Every component of the l-th order nonlinear Drude conductivity, as
-    a dict {"x^l1 y^l2;b": value}. Sharing one k-mesh and one set of Bloch
-    phases makes this much cheaper than the equivalent individual calls to
-    nonlinear_drude_conductivity, which it otherwise matches exactly."""
+    a dict {"x^l1 y^l2 z^l3;b": value}: the field powers and the current
+    run over x and y in 1D and 2D, and over x, y and z in 3D. Sharing one
+    k-mesh and one set of Bloch phases makes this much cheaper than the
+    equivalent individual calls to nonlinear_drude_conductivity, which it
+    otherwise matches exactly."""
     return nonlineardrude.nonlinear_drude_components(h,l,**kwargs)
 
 
 def nonlinear_drude_orders(h,lmax=6,**kwargs):
     """X-wave selection-rule sweep: for each order l = 0..lmax, the largest
-    |sigma^{x^l1 y^l2 ; b}| over that order's components. The lowest l with
+    |sigma^{x^l1 y^l2 z^l3 ; b}| over that order's components (l3 = 0 and b
+    in x, y below 3D). The lowest l with
     a nonzero entry is the wave index readout (d:1, f:2, g:3, i:5). A p-wave
     magnet has no nonzero entry at all, and the l = 0 entry is zero for
     every Hamiltonian; see nonlinear_drude_conductivity. Returns a list of
@@ -932,10 +950,11 @@ def nonlinear_dc_conductivity(h,order=2,term="all",tau=1.,qmd="shibata",
     arXiv:2606.22359; "gao" is hall alone (Gao, Yang and Niu,
     arXiv:1402.2538); "kaplan" is hall + disp, Kaplan, Holder and Yan,
     arXiv:2211.17213, with the coefficient as they write it. Their
-    dispersion current uses a field-corrected band energy that is twice
-    the second-order Stark shift (q^2/2) E.Gt.E, so the physical
-    dispersion current with an unshifted distribution is half of
-    qmd_disp. The hall piece is purely transverse, sigma_aaa = 0.
+    dispersion current uses the field-corrected band energy
+    eps + E.Gt.E. The semiclassical band energy of the third-order term
+    below is eps - (1/2) E.Gt.E, and with it and an unshifted
+    distribution the dispersion current is -(1/2) qmd_disp. The hall
+    piece is purely transverse, sigma_aaa = 0.
 
     Third order
     -----------

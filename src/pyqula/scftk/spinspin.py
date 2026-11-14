@@ -1697,6 +1697,8 @@ def _run_anisotropic_scf(h1, vx, vy, vz, mf, filling, mu, mix, nk,
             # comment in densitydensity.densitydensity
             from .densitydensity import electron_dimension
             etot += h.fermi*electron_dimension(h)*filling
+    # the band energy before the double counting, read by spinon.py
+    scf.band_energy = np.real(etot)
     dme = electron_sector(scf.dm)
     if vz_active:
         etot += get_dc_energy(vz, dme, non_hermitian=non_hermitian)

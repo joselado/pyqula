@@ -21,11 +21,19 @@ suggestions that were not built, with what is known about each one.
   keeps the phase of the ansatz with its own real amplitude, and a hopping
   absent from it stays zero. With `hold="pattern"` the hoppings are
   $t_{ij}=cJ_{ij}P_{ij}$ with one amplitude, the stationary point of the
-  bond functional in that family,
-  $c=\sum J_{ij}\mathrm{Re}(\bar P_{ij}\chi_{ij})/\sum J_{ij}|P_{ij}|^2$.
-  The stationarity was checked on a modulated chain of four sites from the
-  converged state alone: $c^2$ equals minus its hopping energy over
-  $4\sum_{\rm bonds}J_{ij}$ to $10^{-10}$.
+  bond functional in that family. In the form of the code it is
+  $c=\sum\mathrm{Re}(\bar P_{ij}s_{ij})/\sum J_{ij}|P_{ij}|^2$, with
+  $s_{ij}=-(gJ_{ij}/2)\bar\chi_{ij}$ the singlet mean field, that is
+  $c=-\frac{g}{2}\sum J_{ij}\mathrm{Re}(P_{ij}\chi_{ij})/\sum J_{ij}|P_{ij}|^2$,
+  with $g$ the `gutzwiller` factor and both sums over the bonds. There is
+  no conjugate on $P$, because $t_{ij}$ multiplies $f^\dagger_if_j$, whose
+  average is $\chi_{ij}$. The hopping energy at this $c$ is
+  $-4c^2\sum J_{ij}|P_{ij}|^2/g$, so
+  $c^2=-g\,E_{\rm hop}/(4\sum J_{ij}|P_{ij}|^2)$. At $|P|=1$ and $g=1$ this
+  is $c^2=-E_{\rm hop}/(4\sum_{\rm bonds}J_{ij})$, which was checked on a
+  modulated chain of four sites from the converged state alone, to
+  $10^{-10}$. The energy returned is half of the hopping energy,
+  $-2c^2\sum J_{ij}|P_{ij}|^2/g$ (see the repairs of 14 November below).
 - `weiss=` adds the Weiss field $\sum_jJ_{ij}\langle\vec S_j\rangle$ to
   the bond loop, by default only with a Zeeman field. The callback keeps the
   onsite spin part of the Hartree-Fock mean field with the factor 3/4 that
@@ -49,11 +57,19 @@ suggestions that were not built, with what is known about each one.
   0.04 at M) to fully polarized sublattices: the stiffness is a linear
   stability, and the classical state is always another solution of the
   Weiss loop. A 36-site $\pi$-flux cell with $J_1$ and $J_2=0.11J_1$
-  modulated by 20 percent, held with `hold="pattern"`, converges in 5 s,
-  has a positive stiffness at the momenta that were tried (smallest 0.059),
-  and in a field has moments between $-0.016$ and $-0.004$ and the
-  transverse peak at the Zeeman energy
-  (`examples/spinon/spin_liquid_large_cell/main.py`).
+  modulated by 20 percent along both cell vectors,
+  $1+0.1[\cos(2\pi u_1)+\cos(2\pi u_2)]$ with $u$ the fractional
+  coordinates of the bond measured from a point that is not a symmetry
+  point of the lattice, so that the 36 sites are all different, held with
+  `hold="pattern"` (`nk=3`, `T=0.02`),
+  has a positive stiffness at the five momenta that were tried (smallest
+  0.060, at $q=0$), and in a field $b=0.1$ has 36 different moments between
+  $-0.0128$ and $-0.0074$ and the transverse peak at the Zeeman energy 0.20
+  (`examples/spinon/spin_liquid_large_cell/main.py`, 16 s for the whole
+  example). The first version of this example modulated the Cartesian $x$
+  of the bond, which is not periodic in this cell, and the numbers it gave
+  (smallest stiffness 0.059, moments from $-0.016$ to $-0.004$) are void;
+  see the repairs of 14 November below.
 - `gutzwiller=` multiplies the exchange in the mean field and in the vertex.
   The paper uses 2.
 - The spin response of a bond state is dressed in the site basis with the
@@ -148,8 +164,9 @@ cells. The second group does not scale, or is a new formalism.
   have this coupling, so the dressed $S_z$ response in a field is
   approximate. The transverse one is not affected. The total energy of a
   bond loop with a Weiss or a Zeeman field raises `NotImplementedError`,
-  because the Hartree-Fock energy of the engine is not the one of this
-  mean field.
+  because the bond functional that the energy is now (see the repairs
+  below) has no term for the Weiss field, and no functional of that loop
+  was written.
 - **Constraint projection of the response.** A Gaussian fluctuation of the
   Lagrange multiplier removes the density from the bubble,
   $\chi_{SS}-\chi_{Sn}\chi_{nn}^{-1}\chi_{nS}$. By spin symmetry $\chi_{Sn}$
@@ -251,6 +268,161 @@ peak moves by one energy step (0.24 to 0.21) and by 5 percent in height,
 and it does not move between `nk=61` and `nk=91`. The stiffness at
 $J_2=0.125J_1$ was scanned on a 12 x 12 mesh of momenta: it is positive
 everywhere, with its minimum 0.042 at M (`nk=31`).
+
+## Repairs of 14 November 2026
+
+These come from the seventh bug audit (`bug_audit_7.md`).
+
+- **The exchange must be reciprocal.** $\vec S_i\cdot\vec S_j$ is symmetric,
+  so no spin model has $J[\vec d]\neq J[-\vec d]^T$. The 36-site example
+  had one: its modulation was a cosine of the Cartesian $x$ with period
+  $L=6$, and a translation by $a_2'=(-3,3\sqrt3)$ shifts $x$ by $-L/2$, so
+  the bonds that cross the $a_2'$ boundary were 0.4 apart seen from their
+  two ends. The Hartree-Fock field averaged the two directions, while
+  `hold="pattern"` and the RPA vertex took one each, and the converged
+  Hamiltonian of `hold="pattern"` was not Hermitian, by 0.079.
+  `get_mean_field_hamiltonian` now builds the exchange of every bond once
+  and raises a `ValueError` when $|J[\vec d]_{ij}-J[-\vec d]_{ji}|$ is above
+  $10^{-8}$ times the largest exchange, for both decouplings and every
+  hold, naming the worst bond. The test is a ramp $1+0.1x$ on a chain of
+  four sites, symmetric in its two arguments and not periodic (mismatch
+  0.4). A second test calls the check itself, with a direction whose
+  opposite is absent, a cell matrix that is not symmetric and the two
+  sides of the relative tolerance; without it a check that skipped a
+  missing direction, or one with an absolute tolerance, passed every test.
+  The trimer exchange of the Kondo spectrum example and its test,
+  and the four-site cosine of the pattern test, are reciprocal and still
+  run. The example now modulates the fractional coordinates of the bond
+  along both cell vectors (numbers above). With the origin of the
+  modulation at the center of the cell the exchange keeps the inversion
+  and the two mirrors that exchange the cell vectors, and only 12 of the
+  36 sites are different (6 in the first version). The origin is now
+  displaced by $a_1/6+a_2/3$ of the lattice, which leaves 36 different
+  sites and moves the stiffness by $10^{-6}$. The generic `Vr`/`Jr` of
+  `VJinteraction` and `Vinteraction` still averages a function that is
+  not reciprocal, with no error; that case is open.
+- **The energy of the bond loop is the bond functional.** The engine
+  returned its Hartree-Fock energy, $-2A+B'$ in the notation of the audit,
+  with $A=\sum_b2|t_b|^2/(gJ_b)$ and $B'$ its double counting, which is the
+  value of nothing when $\chi_b$ is not proportional to $J_bP_b$. The
+  energy is now $E_{\rm band}+\sum_b2|t_b|^2/(gJ_b)$, with $E_{\rm band}$
+  the hopping energy of the engine at zero temperature with the Lagrange
+  multipliers undone, for the free loop and for both holds. At a free
+  fixed point it is the old number bond by bond (the dimer $-J/4$, the
+  uniform chain $-2J/\pi^2$ and the $\pi$-flux state against the chiral
+  one did not move). On a chain of two sites with $J=1.3$ and $0.7$ held
+  with `hold="pattern"` (`nk=100`, `T=0.01`, gap 0.42) the new energy is
+  $-0.48726=-4c^2/g$ to $10^{-10}$ and the old one was $-0.39327$; with
+  `gutzwiller=2` they are $-0.97452$ and $-0.78654$. The difference,
+  $B'-A=0.0940$, is the one of the closed form of the dimerized chain at
+  $t_2/t_1=0.538$, where $|\chi|=0.923$ and $0.280$ on the two bonds. With
+  `hold="phases"` and a twisted $\pi$-flux ansatz the old energy was
+  $8\times10^{-5}$ above the functional. The new energy is half of the
+  hopping energy to $4\times10^{-6}$ at `T=0.01` and to $2\times10^{-8}$ at
+  `T=0.005`, since the hopping energy is summed at zero temperature.
+  $E_{\rm band}$ is the band energy of the engine before its double
+  counting, which `scftk/spinspin.py` now keeps as `scf.band_energy`, so no
+  diagonalization is added; the 41 tests of `tests/spinon` pass with it as
+  with the energy rebuilt from the converged Hamiltonian. The multiplier is
+  undone as the engine does it, $+2\sum_i\lambda_i
+  n_i$ with $n_i=1/2$ per spin: on the uniform state of the triangular
+  lattice ($\lambda=-0.14gJ$) the old and the new energies agree to
+  $10^{-12}$, and a uniform onsite energy $\epsilon$ moves the multiplier
+  and the energy by $\epsilon$ per site. On a metal this zero-temperature
+  sum also carries $\lambda(N-N_0)$, with $N_0$ the number of negative
+  levels of the mesh at zero temperature: $3\times10^{-4}$ there at
+  `nk=30`, as before the change.
+
+The bubble of `chitk/localspinchi.py` and the moment response of
+`kondotk/momentchi.py` were made cheaper at the same time, with the same
+numbers. All timings are on a shared workstation with two threads, the
+smallest of three runs of the old and the new code back to back, so the
+ratio is what matters.
+
+- **A running sum over the k-mesh.** The bubble kept one array per
+  k-point and per q and then stacked them. It now adds each k-point into
+  one array, and the dressing writes into a preallocated one. On 49 sites
+  with a field that mixes the spins (9 k-points, 81 energies) the peak
+  memory goes from 848 to 475 MB, with the same numbers to the last bit and
+  27.4 s against 25.5 s. At 196 sites with a Zeeman or Weiss field and 9
+  k-points the old code needs about 8 GB for the list alone. A smaller case
+  of the same kind ran on a compute node with one thread: 98 sites in a
+  field that mixes the spins, 49 k-points and 61 energies. The peak memory
+  goes from 8.1 GB to 1.3 GB, the time stays at 1335 s, and the two arrays
+  are the same to the last bit.
+- **The collinear route.** A Hamiltonian that does not mix the spins but
+  is different for them (a Zeeman field along $z$, the Zeeman and Weiss
+  path of the bond loop) now diagonalizes the two spin blocks apart and
+  contracts four $N\times N$ blocks, $C^{ss'}$, instead of $3N$ columns. A
+  field in another direction is not rotated to $z$ and takes the general
+  route. At 196 sites in a field along $z$ (1 k-point, 3 energies) it goes
+  from 27.1 s and 1.71 GB to 4.0 s and 0.78 GB, agreeing to $2\times
+  10^{-15}$, and it agrees with `chitk.chiAB` to $10^{-12}$. Timed again
+  in the review of the same day, with more load on the machine: 42.8 s
+  against 7.2 s, a ratio of 5.9 where the first timing gave 6.8, with the
+  same memory.
+- **The dressing of a degenerate bubble.** A vertex with the same block
+  for the three components and none between them, a structural check that
+  the exchange of a bond state passes exactly, now dresses the
+  $N\times N$ block alone, with a linear solve instead of an inverse and a
+  product. The static kernel takes the eigenvalues of that block, each one
+  three times. At 196 sites (1 k-point, 41 energies) the dressed response
+  goes from 22.6 s to 13.2 s, and the static kernel from 1.17 s to 0.54 s,
+  agreeing to $2\times10^{-14}$; the peak memory was 1.07 GB and 1.16 GB.
+  A vertex that tells the components apart, an exchange weaker along $z$
+  or an antisymmetric one between $x$ and $y$, must take the
+  $3N\times3N$ route. The review added a test of both against
+  `chi_ops_RPA`, since a structural check that had lost one of its two
+  conditions passed every test before.
+- **One diagonalization of the mesh for the local response.** With
+  `q=None`, $k+q$ is a point of the mesh, so every point is diagonalized
+  once and the states at $k+q$ are taken from it, for `spin_chi` and for
+  `moment_spinchi`. On the square Kondo lattice at `nk=8` (64 q and 64 k)
+  this gives 7.4 s against 7.1 s with 200 energies, where the contraction
+  dominates, and 0.70 s against 0.22 s with one energy. The contraction
+  itself still scales as $n_k^{2d}$ times the energies; only a binned
+  route through the local spectral matrices would change that, at the
+  price of the binning. The test of the moment response dresses every $q$
+  with a residual interaction that depends on $q$; with a number alone, a
+  loop that dressed every $q$ with the interaction of $q=0$ passed.
+- **The bare moment response contracts $S^+$ alone.** Without the residual
+  interaction `moment_spinchi` returns only $\chi^{+-}$, so it now contracts
+  the matrix element of $S^+$ (`localspinchi.bare_raising_chi`): a third of
+  the columns on the general route, $C^{ud}$ alone on the collinear one and
+  twice $\chi^{zz}$ on the degenerate one. On a $3\times3$ Kondo cell (9
+  moments, `nk=6`, 200 energies) it goes from 2.4 s to 0.93 s in a field
+  that mixes the spins and from 2.6 s to 0.48 s in a field along $z$,
+  agreeing to $10^{-14}$.
+- **The Kondo spectrum of a degenerate state from one spin.**
+  `local_spectral_components` diagonalizes the $N\times N$ block of one
+  spin and gives each orbital state the weight $2|u_i|^2$. At 196 sites
+  (`nk=4`, 401 energies) `kondo_spectrum` goes from 3.9 s to 2.7 s. The
+  same half block in the k-loops of `kondotk/cotunneling.py` and of the
+  composite spectrum, and a batched diagonalization of the k-points, were
+  not done. The batched numba diagonalization of
+  `documentation/gpu_porting_plan.md` (2.77 s for 16 matrices of 512 on 8
+  threads) is not clearly faster than one threaded LAPACK call per
+  k-point at these sizes; this was read there, not measured again.
+
+The new tests are in `tests/spinon/test_spinon_bond_rpa.py` (the raise,
+the check itself, the energy of both holds, the multiplier, and an assert
+that a converged bond state takes the fast routes of the bubble),
+`tests/chi/test_local_spin_chi_routes.py` and
+`tests/kondolattice/test_moment_spinchi_routes.py`. What ran after these
+changes and their review: `tests/spinon` (41 passed),
+`tests/chi/test_local_spin_chi.py` and the routes file (38),
+`tests/kondolattice` except `test_kondolattice.py` and
+`test_kondolattice_energy.py` (74 passed, 10 skipped by their
+parametrization), `tests/kondotunneling/test_spinon_kondo_spectrum.py` (8),
+and the collective-mode neighbours `tests/chi/test_kernel_chern.py`,
+`tests/chi/test_response_winding.py` and
+`tests/magnon/test_magnon_chern_routes.py` (44). The bug tests, five with
+their parameters, fail on the code before the change. In the review 19
+lines of the repairs and of the new routes were changed one at a time on
+a copy of the tree, and each change makes a test fail. Six of them passed
+every test before the review and only fail the tests it added: the two of
+the reciprocity check, the three of the structural check of the vertex
+and the $q$ of the residual interaction.
 
 ## State of the documentation and of the tests
 

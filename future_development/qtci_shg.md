@@ -263,7 +263,8 @@ of 800 instead of 400.
   once the Taylor test compares the span of a cluster with delta and not
   with its distance to the pole. This change of the test moves the direct
   sum only by rounding (2.8e-10 of the largest entry on MoS2 at nk = 256),
-  and it makes the two kernels take the same branches. So we run the
+  and it makes the two kernels take the same branches (no longer: the direct sum decides
+  per frequency again since the seventh bug audit, see its repairs below). So we run the
   recursion of the divided differences backwards once, and the whole sum
   becomes a list of sources in x = e - z at a single z: psi_d at the nodes,
   indexed by k-point and node type and merged by energy; pairs of nodes
@@ -357,3 +358,185 @@ of 800 instead of 400.
 - **Shift current and sum frequencies.** With two different frequencies the
   products have resonances at w1, w2 and w1 + w2. In principle the same
   prism construction applies to each product; not built.
+
+## Repairs of the seventh bug audit
+
+- **The Taylor rule of the direct sum (fixed, 14 November 2026); the source kernel keeps
+  its rule (measured, not changed).** Since the source kernel was built, both kernels
+  sent a cluster of nodes to its Taylor series when its span was below delta/4, and to
+  the recursion of the divided differences otherwise, whatever the frequency. Far from
+  resonance, at a distance abs(x) from z much larger than the span s, the recursion loses
+  eps (abs(x)/s)^r in a divided difference of order r: r = 2 for a single resonance on a
+  triangle and r = 3 for a prism piece. One triangle at energies 0.5, 0.5 + 0.4 s, 0.5 + s
+  and one at 0.5, 0.5 + 0.02 s, 0.5 + s, at w = 0 and delta = 1e-6, against a 200-point
+  Gauss-Legendre quadrature: the single resonance lost up to 5.5e-4 of its value, at s
+  from 0.26 to 2 delta, and the product 1.1e3 times its value at s = delta and still 2e-2
+  of it at s = 30 delta. At delta = 1e-3 the product lost up to 1.2e-6 of its value. On
+  resonance there was a second loss: the series skipped its first-order term, which
+  vanishes only for the exact mean of the nodes, while the rounded mean is off by
+  eps abs(m). That is eps abs(m)/delta relative where abs(y) is about delta, 2.4e-10 of a
+  triangle at m = 0.5 and delta = 1e-6 against mpmath at 50 digits.
+
+  The direct sum (`kernel="simplices"`) now decides per frequency, with the rule of the
+  first version of this module: a cluster of nodes of span s at a distance y of its mean
+  from the pole goes to its series when s < y/4, and the series keeps its first-order term
+  in both kernels. Over the two shapes, spreads from 0.3 to 10 delta, far from resonance
+  and on it, the worst error of the single resonance against mpmath is now 9e-15, against
+  5.5e-4 before. It costs more per simplex, since a far cluster now takes a series of 15
+  to 30 terms instead of three or four logarithms: one product of three bands, on one
+  core, took 15 microseconds near resonance and 9.5 far from it, against 3.2 and 3.0 with
+  the rule on delta. Two smaller ratios were tried and dropped. With s < y/10 the far
+  product took 22 microseconds, and with s < 10^(-3/r) y at order r (4.2 and 7.7
+  microseconds) a prism piece on resonance lost 4e-11 of its value.
+
+  The source kernel, the default, cannot decide per frequency, and it keeps the rule on
+  delta. At the delta of an optical spectrum its loss is small: on the three-band model of
+  the tests at nk = 64 and delta = 1e-3 (66 frequencies on [0.5, 7] t), the old direct sum
+  is within 5.0e-12 of the new one and the source kernel within 5.1e-11. It matters for
+  nearly flat bands at a small delta. We built a cure and did not keep it. While building
+  the sources, it bounded for every simplex and term the rounding error of the fixed
+  branches over the frequency window, eps times the sum over the leaves of the Newton table
+  of abs(coefficient) times a bound of the leaf on the window. When this was above a budget
+  times a lower bound of the peak of the term on the simplex (pi/(s + pi delta) for one
+  resonance, divided by 2(G + s) + 4 delta for a product, with G the largest distance
+  between the two resonant energies), the simplex and term made no sources and were summed
+  at every frequency with the rule of the direct sum. This is the rule of kubosimplex.py
+  before its energy bins. A scan on the same model, nk = 32, 20 frequencies, two threads,
+  against the direct sum (the time is the source sum with its build, the row without a
+  budget the old kernel):
+
+  | delta | budget | fraction summed per frequency | time (s) | error / max abs(sigma) |
+  |---|---|---|---|---|
+  | 1e-3 | 3e-11 | 10.2% | 1.58 | 2.1e-13 |
+  | 1e-3 | 3e-10 | 4.8% | 0.85 | 3.4e-13 |
+  | 1e-3 | 3e-9 | 0.56% | 0.21 | 4.9e-12 |
+  | 1e-3 | 3e-8 | 0 | 0.12 | 2.6e-11 |
+  | 1e-3 | none | 0 | 0.12 | 2.6e-11 |
+  | 1e-5 | 3e-11 | 10.2% | 1.65 | 2.1e-13 |
+  | 1e-5 | 3e-10 | 5.0% | 0.83 | 3.0e-13 |
+  | 1e-5 | 3e-9 | 1.6% | 0.36 | 2.3e-12 |
+  | 1e-5 | 3e-8 | 0.63% | 0.23 | 1.9e-11 |
+  | 1e-5 | none | 0 | 0.10 | 7.5e-11 |
+
+  And at nk = 64, delta = 1e-3, 66 frequencies:
+
+  | budget | fraction | time (s) | error / max abs(sigma) |
+  |---|---|---|---|
+  | 3e-9 | 0.68% | 0.96 | 5.0e-11 |
+  | 6e-9 | 0.31% | 0.59 | 2.0e-11 |
+  | 1e-8 | 0.11% | 0.47 | 4.2e-11 |
+  | 2e-8 | 0.01% | 0.32 | 3.1e-11 |
+  | none | 0 | 0.31 | 5.1e-11 |
+
+  On three nearly flat bands of spread 0.45, 1 and 3 delta on the 2x2 mesh, at delta =
+  1e-6, the old source kernel loses 3.0e-9, 5.4e-9 and 8.6e-10 of the largest value over
+  the window; a budget of 3e-9 leaves 1e-14, 6e-9 leaves 5e-11 at the spread of 3 delta,
+  and 1e-8 leaves 1e-9 there. Relative to the value at each frequency, which is what a
+  user reads off resonance, the source kernel there is off by 4e-4 at w = 0, by 1e-2 at
+  w = 2 t and by more than the value at w = 0.3 t, where the terms nearly cancel, against
+  1e-15 to 9e-11 for the direct sum. So no budget both cures the flat bands and keeps the cost:
+  3e-9 cures them and costs 2.6 times the old time at nk = 64 and delta = 1e-3 (the
+  smallest of three lock holds, 0.95 s against 0.36 s), for no gain in precision there,
+  since what is left at 5e-11 is the rounding of the vertex form of simplices below that
+  budget (only 3e-11 or less brings it to 2e-13, at 14 times the cost). The open options
+  are: a budget of 3e-9 at that cost, the energy bins and the split along the Newton table
+  of kubosimplex.py, which keep the far simplices cheap, or leaving it. For a small delta
+  or flat bands, `kernel="simplices"` of `_sigma_from_fields` is exact, but the public
+  call cannot select it. The direct sum,
+  now the exact reference, is slower with the rule per frequency: 38 s against 9.3 s for
+  that model at nk = 64 and 66 frequencies (the smallest of three holds).
+
+  Two tests pin the repair. One triangle and one prism against the quadrature to 1e-11 of
+  the value, far from resonance and on it, at delta = 1e-6; with the old rule it failed
+  at 2.8e-10 at its first case. And the three nearly flat bands against the quadrature of
+  every triangle, the direct sum to 1e-11 of the largest value over a window with
+  frequencies far from the bands and on them; with the old rule it lost 6.1e-10 to 1.8e-9.
+- **Only the vertices the weights read (built, 14 November 2026).** The fields of the
+  triangle and qtci paths built and rotated all 19 Cartesian derivatives of H per batch
+  of k-points (3 first, 6 second, 10 third), while `_weights_jit` reads only h^a, h^b,
+  h^c, h^ab, h^ac, h^bc and h^abc of the requested triplets: 3 of 19 for `xxx`.
+  `shg._eigenbasis_derivatives` now takes the set of vertices to build
+  (`shg.triplet_vertices(trip)` here), and it leaves zero, without building them, the
+  derivatives along an axis on which every bond vector vanishes, so a planar cell never
+  builds its z vertices. The grid path of `shg_conductivity` asks for the vertices of its
+  triplets and h^c for every c in the velocity gauge, and for orders 1 and 2 in the length
+  gauge. The arrays that are built are the same, bit for bit, as in the full build (a test
+  checks every vertex on a planar cell and on a bilayer, whose z vertices are not zero).
+  Wall time of `_fields`, two threads, the smallest of three lock holds with old and new
+  back to back in each, on a shared machine: gapped honeycomb, `xxx`, nk = 256, 3.33 s to
+  1.42 s (2.3x); three-band triangular lattice, the six in-plane triplets, nk = 128,
+  0.97 s to 0.76 s (1.3x), where more vertices are read and the weights take a larger
+  part. The largest peak memory of the process over the holds was 428 MB before and 466
+  MB after, so the skipped vertices do not lower the peak of this small model; the cause
+  of the 38 MB was not looked into.
+- **The description of the method in the docstrings (fixed).** The docstrings of
+  `optical_conductivity` and `shg_conductivity` in `conductivity.py` said that the triangle
+  integration interpolates the weights linearly inside each simplex. The code takes one
+  weight per simplex, the average over its vertices, times the exact simplex average of
+  the resonant factor; the docstrings now say so. The one of `optical_conductivity` also
+  described the 3D source kernel of its first version, with the kept tetrahedra summed
+  whole at every frequency and a gain of 4 to 14; it now describes the energy bins, the
+  split of a kept tetrahedron into its close edges and faces, and the sets of point
+  sources that give their sum through their moments far from a frequency, without a
+  gain, since the direct kernel was not timed again. No number changes.
+- **Review of these repairs (14 November 2026).** Each repair was broken on purpose in a
+  copy of the tree, to see which test fails (the rule of `_small` alone in one copy; the two
+  first-order terms together in another, where the direct sum reads only the first and the
+  source kernel only the second). With the rule on delta
+  alone back in `_small`, the two tests of the repair fail, at 2.8e-10 of a triangle far
+  from resonance and at 6e-10 of the largest value of the three bands. With the first-order
+  term of the series skipped in the direct sum they fail too, but by little: 5.5e-11 of a
+  triangle and 1.5e-11 of the three bands, against a tolerance of 1e-11. With the term
+  skipped in the source kernel no test failed, since no test had bands flat enough for the
+  source kernel to be exact. A third test now pins the term in both kernels: three bands of
+  spread 0.1 and 0.2 delta at delta = 1e-7, where every triangle is one cluster that both
+  kernels do by its series at every frequency, against the quadrature of every triangle. Both
+  kernels give it to 7e-14 and 2e-14 of the largest value; without the first-order term
+  either one is off by 2.8e-10, and the committed code fails it for both.
+
+  The loss of the source kernel was measured again on the three nearly flat bands of the
+  tests, relative to the largest value over the window, with the direct sum next to it:
+
+  | delta | spread | source kernel | direct sum |
+  |---|---|---|---|
+  | 1e-6 | 0.1 delta | 7.0e-15 | 6.8e-15 |
+  | 1e-6 | 0.45 delta | 3.0e-9 | 9.8e-15 |
+  | 1e-6 | 1 delta | 5.4e-9 | 3.1e-15 |
+  | 1e-6 | 3 delta | 8.6e-10 | 3.0e-14 |
+  | 1e-7 | 0.1 delta | 6.5e-14 | 6.5e-14 |
+  | 1e-7 | 0.45 delta | 9.1e-8 | 2.1e-14 |
+  | 1e-7 | 1 delta | 1.8e-7 | 5.7e-13 |
+  | 1e-7 | 3 delta | 5.7e-9 | 6.1e-13 |
+
+  So the loss of the default kernel is a fraction of the peak of the spectrum that grows 30
+  times at a spread of delta or below, and 7 times at 3 delta, when delta goes down 10
+  times, and it is exact below a spread of delta/4.
+  The decision of the review is to keep the source kernel as it is. A budget that sends
+  some simplices to a sum per frequency is a tuned threshold: 3e-9 costs 2.6 times at the
+  delta of an optical spectrum for no gain there, and 6e-9 does not cure the spread of
+  3 delta. The cure that keeps the cost is the one of kubosimplex.py, the energy bins of the
+  far simplices and the split along the Newton table, where a cluster is a series far from
+  it and a divided difference close to it. It is not ported, and it is the open item of this
+  note. Until then the docstring of `shg_conductivity` says what the triangle integration
+  does not resolve: values many orders of magnitude below the peak, for nearly flat bands at
+  a very small delta.
+
+  A test now checks the callers of the vertices and not only the builder. For the grid in
+  both gauges, the triangle integration, the injection current, the Berry curvature dipole
+  and the dc terms, the result with the full build of the 19 vertices in place of the
+  subset is the same bit for bit. The second-harmonic routes run on a bilayer with a tilted
+  interlayer hopping and a uniaxial strain, where the vertices with mixed indices (h^xz,
+  h^yz, h^xyz) are finite, one component per call. With h^ac left out of
+  `triplet_vertices` the triangle route of this test fails, and so does the comparison of
+  the triangle integration with the grid for three bands. In the grid the partner
+  component with b and c exchanged asks for the same vertex, so there the omission changes
+  nothing.
+
+  The review found the same loss in one more place and repaired it. For a cluster of
+  equal nodes (a span below 1e-12 of the distance to the pole, in practice an exactly flat
+  transition energy) both kernels kept only the leading term of the series. The rounded
+  mean of equal nodes is not always the node: (0.7 + 0.7 + 0.7)/3 is 0.7 minus 1.1e-16. So
+  an exactly flat band lost eps abs(m)/delta on resonance, 1.1e-9 of the largest value at
+  delta = 1e-7 on the three flat bands of the tests (energies 0.5 and 0.7), in both kernels.
+  The series now keeps its first-order term there too, which costs one more term per
+  cluster, and the test above includes the exactly flat bands.

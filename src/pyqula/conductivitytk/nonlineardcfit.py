@@ -51,7 +51,8 @@ def convergence_radius(h,order=2,nk=100,degeneracy_tol=1e-6):
     tms,dirs,d,hkgen,cellvol,scale = shg._derivative_tensors(h)
     ks = kubo._kmesh(h,nk)
     gmin = np.inf
-    nb = 4096
+    n = tms.shape[1]
+    nb = int(max(1,min(4096,2e8/(48.*n*n)))) # H(k), its list copy and eigvalsh
     for i0 in range(0,len(ks),nb): # loop over batches of k-points
         es = np.linalg.eigvalsh(hk_matrix_batch(hkgen,ks[i0:i0+nb]))
         gaps = np.diff(es,axis=1)

@@ -56,7 +56,10 @@
 # the density matrix of the shifted Hamiltonian reuses both: one
 # diagonalization per visited k-point serves the two passes of an
 # iteration. The match is checked on the Bloch matrices themselves
-# (_shift_from), so any other Hamiltonian starts from scratch.
+# (_shift_from), so any other Hamiltonian starts from scratch. The loop
+# also asks the search to keep the simplices of the mesh (keep_mesh), 192
+# bytes per point in 3D, which the next density matrix takes and drops, so
+# that they are built once per iteration and not held past it.
 #
 # The bands are ordered by energy at each k, so two bands that cross give
 # fields with a kink, which costs rank, as in the qtci DOS.
@@ -144,40 +147,36 @@ def _shift_from(h,last,R,tolerance):
     identity, on the same mesh and at the same tolerance; None otherwise"""
     if last is None or last["R"]!=R or last["tolerance"]!=tolerance:
         return None
-    data = _bloch_data(h)
-    if data is None: return None
-    ms,ds = data
-    ms0,ds0 = last["bloch"]
-    if ms.shape!=ms0.shape or not np.array_equal(ds,ds0): return None
-    diff = ms-ms0
-    onsite = np.all(ds==0.,axis=1)
-    if np.any(diff[~onsite]!=0.): return None
-    d0 = np.sum(diff[onsite],axis=0)
-    c = d0[0,0].real
-    scale = 1e-12*max(1.,np.max(np.abs(ms0)))
-    if np.max(np.abs(d0-c*np.identity(len(d0))))>scale: return None
-    return c
+    from ..dmtk.simplexdm import identity_shift
+    return identity_shift(_bloch_data(h),last["bloch"])
 
 
 def _energies(h,R,tolerance):
     """band energies of h reconstructed on the 2^R mesh, with the
     eigenpair cache they were computed with, the number of
-    diagonalizations this call did and the bond dimensions of the TCI.
-    When h is the Hamiltonian of the last Fermi search shifted by a
-    constant, that search's energies and eigenpairs are reused"""
+    diagonalizations this call did, the bond dimensions of the TCI and the
+    simplices of the mesh or None. When h is the Hamiltonian of the last
+    Fermi search shifted by a constant, that search's energies and
+    eigenpairs are reused, and so are its simplices when it kept them
+    (keep_mesh), for one call only: they are 192 bytes per point in 3D,
+    so the record loses them here whether h is that Hamiltonian or not"""
     c = _shift_from(h,_last_mesh,R,tolerance)
     if c is not None:
         m = _last_mesh
-        return m["es"]+c,m["eigen"],0,m["ranks"]
+        smesh, m["simplex_mesh"] = m.get("simplex_mesh"), None
+        return m["es"]+c,m["eigen"],0,m["ranks"],smesh
+    if _last_mesh is not None: # another Hamiltonian: the simplices kept
+        _last_mesh["simplex_mesh"] = None # for the one next call are dropped
     eigen = _Eigen(h,R)
     nb = eigen.nb
     es,ncalls,ranks = qtci_stacked_fields(lambda ks: eigen(ks)[0],R,nb,
             tolerance=tolerance,dim=h.dimensionality,
             maxbonddim=stacked_maxbonddim)
-    return np.ascontiguousarray(es),eigen,eigen.ndiag,ranks
+    return np.ascontiguousarray(es),eigen,eigen.ndiag,ranks,None
 
 
-def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6):
+def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6,
+        keep_mesh=False):
     """Fermi energy that holds `filling` (a fraction of the states) under
     the qtci density matrix: the triangle charge of the band energies
     reconstructed on the 2^R mesh, which is continuous in the Fermi
@@ -188,7 +187,11 @@ def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6):
     exact diagonalization (see dmtk/simplexdm.py), so the count is the one
     of exact diagonalization on the normal state of the same 2^R x 2^R
     mesh, spectrum.get_fermi4filling; a mean field corrects it on the
-    charge of the paired state (scftk.superscf.BdGFermiLevel)"""
+    charge of the paired state (scftk.superscf.BdGFermiLevel).
+    keep_mesh=True also keeps the simplices of the mesh, for the one
+    density matrix of h shifted by this level that follows (the loop of
+    scftk.densitydensity passes it), so that they are built once per
+    iteration; the eigenpairs are kept in any case"""
     global _last_mesh
     if h.has_eh:
         from ..spectrum import get_fermi4filling as get_fermi4filling_ed
@@ -197,15 +200,19 @@ def get_fermi4filling_qtci(h,filling,nk=None,T=1e-7,tolerance=1e-6):
     check_hamiltonian(h,"the qtci Fermi level")
     from ..dmtk import simplexdm
     R = mesh_exponent(nk)
-    es,eigen,nd,ranks = _energies(h,R,tolerance)
-    mu = simplexdm.fermi_from_energies(h.dimensionality,2**R,es,filling,T=T)
+    dim = h.dimensionality
+    es,eigen,nd,ranks,smesh = _energies(h,R,tolerance)
+    if smesh is None: smesh = simplexdm._simplices(dim,2**R)
+    mu = simplexdm.fermi_from_energies(dim,2**R,es,filling,T=T,
+            simplex_mesh=smesh)
     data = _bloch_data(h)
     # the eigenvectors are kept for the next call only below the memory
     # limit of the triangle mesh; above it the density matrix starts over
     keep = len(eigen.U)*eigen.nb**2*16 <= simplexdm.max_memory_gb*1e9
     if data is not None and keep:
         _last_mesh = dict(R=R,tolerance=tolerance,es=es,eigen=eigen,
-                ranks=ranks,bloch=(data[0].copy(),data[1].copy()))
+                ranks=ranks,bloch=(data[0].copy(),data[1].copy()),
+                simplex_mesh=smesh if keep_mesh else None)
     return mu
 
 
@@ -233,7 +240,7 @@ def dm_entries_qtci(h,needed,nk=None,T=1e-7,tolerance=1e-6,bloechl=None,
     R = mesh_exponent(nk)
     n = 2**R
     dim = h.dimensionality
-    es,eigen,ndiag,eranks = _energies(h,R,tolerance)
+    es,eigen,ndiag,eranks,smesh = _energies(h,R,tolerance)
     nd0 = eigen.ndiag
     entries = _canonical_entries(needed)
     nb = eigen.nb
@@ -257,7 +264,8 @@ def dm_entries_qtci(h,needed,nk=None,T=1e-7,tolerance=1e-6,bloechl=None,
         X,ncalls,xranks = qtci_stacked_fields(evaluate,R,nb*ne,
                 tolerance=tolerance,dtype=np.complex128,dim=dim,
                 maxbonddim=stacked_maxbonddim)
-        w = simplexdm.simplex_weights(dim,n,es,mu=0.,T=T,bloechl=bloechl)
+        w = simplexdm.simplex_weights(dim,n,es,mu=0.,T=T,bloechl=bloechl,
+                simplex_mesh=smesh)
         vals = np.einsum("kn,kne->e",w,X.reshape(n**dim,nb,ne),optimize=True)
         for (d,i,j),x in zip(entries,vals):
             # an onsite diagonal entry is its own partner and is real,
@@ -350,9 +358,9 @@ def band_energy_qtci(h,nk=None,tolerance=1e-6,bloechl=None):
     from ..dmtk import simplexdm
     if bloechl is None: bloechl = simplexdm.bloechl_default
     R = mesh_exponent(nk)
-    es,eigen,nd,ranks = _energies(h,R,tolerance)
+    es,eigen,nd,ranks,smesh = _energies(h,R,tolerance)
     e = simplexdm.band_energy_from_energies(h.dimensionality,2**R,es,
-            bloechl=bloechl)
+            bloechl=bloechl,simplex_mesh=smesh)
     if h.has_eh:
         from .. import operators, algebra
         pe = np.array(algebra.todense(operators.get_electron(h)))

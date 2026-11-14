@@ -63,6 +63,7 @@ from .bsetk.bands import exciton_bands
 from .bsetk.spectral import exciton_kdos_bands, exciton_structure_factor
 from .bsetk.spinflip import (goldstone_residual, magnon_bands_tdhf,
                              magnon_energies)
+from .bsetk.topology import exciton_chern, magnon_chern
 
 
 def get_bse(h,**kwargs):

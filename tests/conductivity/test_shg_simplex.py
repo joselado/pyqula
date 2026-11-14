@@ -218,12 +218,14 @@ def _kernels_on_the_same_fields(h,trip,nk,ws,delta):
 
 def test_source_kernel_equals_the_direct_sum():
     """The source kernel builds the coefficients of the simplex sum once
-    and then sums them per frequency. It takes the same branches as the
-    direct sum, so the two agree to rounding, not to the discretization
-    error. A two-band model (only single resonances and the exact product
-    cases) and a three-band one (products of three different bands, with
-    the prism pieces), at a broadening below the energy spacing of the
-    mesh, where many nodes fall in the Taylor clusters"""
+    and then sums them per frequency. It decides its Taylor branches on
+    delta and the direct sum per frequency, so at this broadening they
+    agree to the rounding loss of the source kernel far from resonance, a
+    few 1e-11, not to the discretization error. A two-band model (only
+    single resonances and the exact product cases) and a three-band one
+    (products of three different bands, with the prism pieces), at a
+    broadening below the energy spacing of the mesh, where many nodes fall
+    in the Taylor clusters"""
     cases = [(_gapped_honeycomb(),[(0,0,0)],40,[0.35,0.8,1.5,2.6]),
             (_triangular_three_sublattice(),[(0,0,0),(1,0,1)],24,
                 [1.2,2.0,3.0,4.5])]
@@ -240,3 +242,93 @@ def test_source_kernel_equals_the_direct_sum():
         shgsimplex._sigma_from_fields(2,4,None,None,None,[1.],1e-2,1.,1e-6,
                 kernel="direct")
     for name in shgsimplex._kernels: assert name in str(err.value)
+
+
+def test_nearly_flat_simplices_far_from_resonance():
+    """A simplex whose energies spread by s, with delta/4 < s much smaller
+    than its distance abs(x) to the frequency. A switch to the Taylor
+    series decided on s compared with delta alone sends it to the plain
+    divided difference, which cancels terms of size (abs(x)/s)^r there: at
+    omega = 0, delta = 1e-6 and abs(x) = 0.5 it lost 4e-4 of a single
+    resonance and more than the whole value of a product of two. The
+    direct sum decides per frequency and must give the quadrature value
+    to rounding, far from resonance and on it"""
+    delta = 1e-6
+    x,F,hb = _buffers()
+    for shape in [(0.,0.4,1.),(0.,0.02,1.)]:
+        for r in [0.3,0.45,1.,3.,10.]:
+            s = r*delta
+            e = 0.5+s*np.array(shape)
+            E = lambda u,v: e[0]+(e[1]-e[0])*u+(e[2]-e[0])*v
+            for omega in [0.,0.5+0.5*s]: # far from the triangle, and on it
+                z = omega+1j*delta
+                ref = _quadrature(lambda u,v: 1./(z-E(u,v)))
+                got = shgsimplex._single_average(e.copy(),3,z,x,F,hb)
+                assert abs(got-ref)<1e-11*abs(ref)
+                c = e+0.3*s # C - A constant, so the prism average is exact
+                ref = _quadrature(lambda u,v: 1./((z-E(u,v))
+                        *(2*z-2*(E(u,v)+0.3*s))))
+                got = shgsimplex._product_average(e.copy(),c.copy(),3,z,
+                        x,F,hb)
+                assert abs(got-ref)<1e-11*abs(ref)
+
+
+def _nearly_flat_bands(r,delta):
+    """Three nearly flat bands of spread r delta on the 2x2 mesh, with a
+    single resonance, a resonance at 2w and a product of three bands whose
+    two energies differ by a constant (so that the prism average is
+    exact), at frequencies far from the bands and on them. Returns the
+    arguments of a simplex kernel and the sum over the triangles of the
+    quadrature of each one"""
+    nk = 2
+    sims,_ = shgsimplex.simplices(2,nk)
+    f = np.array([0.,0.4,1.,0.7]) # a profile on the four mesh points
+    terms = np.array([(shgsimplex._SINGLE,0,1,0,0),
+                      (shgsimplex._DOUBLE,0,2,0,0),
+                      (shgsimplex._PRODUCT,0,1,0,2)],dtype=np.int64)
+    W = np.ones((nk*nk,len(terms),1),dtype=np.complex128)
+    s = r*delta
+    es = np.stack([0.*f,0.5+s*f,1.4+2.*s*f],axis=1) # C - A = 0.2
+    ws = np.array([0.,0.3,0.5+0.5*s,0.7+0.5*s,2.])
+    ref = np.zeros(len(ws),dtype=np.complex128)
+    for sim in sims:
+        A = es[sim,1] ; B = es[sim,2]
+        def lin(e): return lambda u,v: e[0]+(e[1]-e[0])*u+(e[2]-e[0])*v
+        EA,EB = lin(A),lin(B)
+        for (i,w) in enumerate(ws):
+            z = w+1j*delta
+            ref[i] += _quadrature(lambda u,v: 1./(z-EA(u,v))
+                    + 1./(2*z-EB(u,v))
+                    + 1./((z-EA(u,v))*(2*z-EB(u,v))))
+    return (2,nk,es,terms,W,ws,delta,1e-12),ref
+
+
+def test_direct_sum_on_nearly_flat_bands():
+    """Three nearly flat bands on the 2x2 mesh against the quadrature of
+    every triangle: the direct sum, which decides its branches per
+    frequency, agrees with it to 1e-11 of the largest value over
+    frequencies far from the bands and on them. With the rule on delta
+    alone it lost 6e-10 to 2e-9. The source kernel keeps that rule and its
+    loss, 9e-10 to 5e-9 here (see the comment of its module)"""
+    for r in [0.45,1.,3.]:
+        args,ref = _nearly_flat_bands(r,1e-6)
+        got = shgsimplex._kernels["simplices"](*args)
+        assert np.max(np.abs(got[:,0]-ref))<1e-11*np.max(np.abs(ref))
+
+
+@pytest.mark.parametrize("kernel",["sources","simplices"])
+def test_bands_flatter_than_the_broadening(kernel):
+    """Bands whose spread is below delta/4, and exactly flat ones: every
+    triangle is one cluster of nodes that both kernels do by its Taylor
+    series at every frequency, so both give the quadrature value to 1e-11
+    of the largest one, on resonance too. The series is around the rounded
+    mean of the nodes, for which the sum of the deviations is eps abs(m)
+    and not zero, also for equal nodes ((0.7 + 0.7 + 0.7)/3 is not 0.7),
+    so its first-order term has to be kept: without it the value on
+    resonance is off by eps abs(m)/delta, 3e-11 of it at delta = 1e-6 and
+    ten times more at the delta = 1e-7 of this test"""
+    delta = 1e-7
+    for r in [0.,0.1,0.2]:
+        args,ref = _nearly_flat_bands(r,delta)
+        got = shgsimplex._kernels[kernel](*args)
+        assert np.max(np.abs(got[:,0]-ref))<1e-11*np.max(np.abs(ref))

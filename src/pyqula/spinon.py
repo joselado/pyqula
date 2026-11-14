@@ -124,16 +124,66 @@ def _ansatz_phases(ansatz, n, tol=1e-12):
     return out
 
 
-def _ansatz_pattern(ansatz, exchange, n):
+def _exchange_matrices(exchange):
+    """The exchange J_ij of every bond, {(n1,n2,n3): N x N real matrix},
+    from the spin-orbital interaction of scftk.spinspin._build_v"""
+    from .chitk.spinchi import V2K_matrix
+    return {tuple(int(i) for i in d): 2.*V2K_matrix(np.asarray(
+            algebra.todense(m))).real for d, m in exchange.items()}
+
+
+def _require_reciprocal_exchange(J, tol=1e-8):
+    """Raise if the exchange of some bond depends on the end it is seen
+    from, J[d][i,j] != J[-d][j,i], beyond tol times the largest exchange.
+    A missing -d counts as no exchange. The tolerance is the relative one
+    of the reciprocity check of the hoppings in htk/g2h.py."""
+    worst, where = 0., None
+    for d, m in J.items():
+        back = J.get(tuple(-i for i in d), np.zeros_like(m)).T
+        diff = np.abs(m - back)
+        i, j = np.unravel_index(np.argmax(diff), diff.shape)
+        if diff[i, j] > worst:
+            worst, where = diff[i, j], (d, i, j, m[i, j], back[i, j])
+    scale = max([np.max(np.abs(m)) for m in J.values()] + [0.])
+    if worst > tol*scale:
+        d, i, j, forward, backward = where
+        raise ValueError("the exchange is not reciprocal: J = %g from site "
+                "%d to site %d of the cell (%d,%d,%d), and J = %g for the "
+                "same bond from its other end, a mismatch of %.3g; a spin "
+                "model needs J_ij = J_ji on every bond, so Jr(r1,r2) must "
+                "be symmetric in its two arguments and periodic in the unit "
+                "cell, Jr(r_i, r_j+R) = Jr(r_j, r_i-R) for every lattice "
+                "vector R (write a modulation with the fractional "
+                "coordinates of the cell)"
+                % (forward, i, j, d[0], d[1], d[2], backward, worst))
+
+
+def _bond_field_energy(h, J, gutzwiller):
+    """The bond field part of the bond functional at the hoppings of h,
+    the sum over the bonds of 2|t_ij|^2/(gutzwiller J_ij), with t_ij the
+    spinon hopping (the spin-up block of h) and J the exchange of
+    _exchange_matrices. Every bond is met twice, once from each end, which
+    gives the factor 2. Onsite elements and bonds without exchange are
+    left out."""
+    out = 0.
+    for d, m in h.get_multihopping().get_dict().items():
+        key = tuple(int(i) for i in d)
+        if key not in J: continue
+        t = np.asarray(algebra.todense(m))[0::2, 0::2]
+        Jd = np.array(J[key])
+        if key == (0, 0, 0): np.fill_diagonal(Jd, 0.)
+        bond = Jd != 0.
+        out += np.sum(np.abs(t[bond])**2/Jd[bond])
+    return out/gutzwiller
+
+
+def _ansatz_pattern(ansatz, J, n):
     """The hoppings of the family that hold="pattern" keeps, {(n1,n2,n3):
     N x N matrix}: the ansatz times the exchange of each bond, with which
-    t_ij = c J_ij P_ij has the single free amplitude c. exchange is the
-    spin-orbital interaction of scftk.spinspin._build_v. Returns the
-    family and the ansatz itself, both without onsite elements."""
+    t_ij = c J_ij P_ij has the single free amplitude c. J is the exchange
+    of every bond, from _exchange_matrices. Returns the family and the
+    ansatz itself, both without onsite elements."""
     from .scftk.mfconstrains import obj2mf
-    from .chitk.spinchi import V2K_matrix
-    J = {tuple(int(i) for i in d): 2.*V2K_matrix(np.asarray(
-            algebra.todense(m))).real for d, m in exchange.items()}
     P, W = {}, {}
     for d, m in obj2mf(ansatz).items():
         key = tuple(int(i) for i in d)
@@ -289,11 +339,24 @@ class SpinonHamiltonian(Hamiltonian):
         magnetic channel (see the module docstring). The "bond" one takes
         an isotropic exchange only, no density-density interaction, and
         integration="ed". Its total energy (return_total_energy=True) is
-        the saddle-point value of the bond functional,
-        -J_ij |chi_ij|^2 / 2 per bond (times gutzwiller), not the
-        expectation value of the Heisenberg model in the state, which is
-        3/4 of it at gutzwiller=1; it is not available with a Weiss field
-        or a Zeeman field, where the loop has no consistent functional.
+        the bond functional at the converged hoppings: the hopping energy
+        of the spinons plus 2|t_ij|^2/(gutzwiller J_ij) per bond. For a
+        free loop this is -J_ij |chi_ij|^2/2 per bond (times gutzwiller).
+        With an ansatz it is the stationary value of the functional in the
+        held family, -2|t_ij|^2/(gutzwiller J_ij) per bond, which is
+        -2 c^2 sum J_ij |P_ij|^2/gutzwiller for hold="pattern"; it is
+        above the value of the free loop unless the held pattern is a
+        solution of the free loop. The hopping energy is summed at zero
+        temperature, so these closed forms hold up to order T^2. It is
+        not the expectation value of the Heisenberg model, which is
+        -3 J_ij |chi_ij|^2/8 per bond at gutzwiller=1 (3/4 of the returned
+        energy only at a free solution). It is not available with a Weiss
+        field or a Zeeman field, where the loop has no consistent
+        functional.
+
+        The exchange must be reciprocal, J_ij = J_ji on every bond, for
+        both decouplings: a Jr that is not symmetric in its two arguments
+        or not periodic in the unit cell raises a ValueError.
 
         weiss, for decoupling="bond", adds the field of the neighboring
         moments to the mean field, sum_j J_ij <S_j> acting on S_i, which is
@@ -372,8 +435,12 @@ class SpinonHamiltonian(Hamiltonian):
             if return_total_energy and (weiss or field):
                 raise NotImplementedError("return_total_energy is not "
                         "implemented for decoupling='bond' with a Weiss "
-                        "field or a Zeeman field: the Hartree-Fock energy "
-                        "of the loop is not the one of this mean field")
+                        "field or a Zeeman field: the energy of this "
+                        "decoupling is the bond functional of the "
+                        "hoppings, which has no term for the moments")
+        # the exchange of every bond, as the caller gives it
+        J = _exchange_matrices(self._bond_exchange(self, 1.0, kwargs))
+        _require_reciprocal_exchange(J)
         kw = dict(kwargs)
         scale = gutzwiller*_DECOUPLINGS[decoupling]
         for name in ("J1", "J2", "J3", "J1x", "J1y", "J1z"):
@@ -386,9 +453,7 @@ class SpinonHamiltonian(Hamiltonian):
             if ansatz is not None:
                 phases = _ansatz_phases(ansatz, len(self.geometry.r))
             if _HOLDS[hold]:
-                pattern = _ansatz_pattern(ansatz,
-                        self._bond_exchange(self, 1.0, kwargs),
-                        len(self.geometry.r))
+                pattern = _ansatz_pattern(ansatz, J, len(self.geometry.r))
             from .scftk.spinspin import _compose_callbacks
             kw["callback_mf"] = _compose_callbacks(
                     kw.get("callback_mf", None),
@@ -399,7 +464,16 @@ class SpinonHamiltonian(Hamiltonian):
                         dtype=np.complex128)
                         for d, m in obj2mf(ansatz).items()}
         n = len(self.geometry.r)
-        scf = VJinteraction(self, filling=np.full(n, 0.5), **kw)
+        filling = np.full(n, 0.5)
+        scf = VJinteraction(self, filling=filling, **kw)
+        if scf.converged and bond and return_total_energy:
+            # the bond functional at the converged hoppings, in place of
+            # the Hartree-Fock energy of the engine: scf.band_energy is the
+            # hopping energy of the engine before its double counting, the
+            # occupied levels at zero temperature with the Lagrange
+            # multipliers undone
+            scf.total_energy = (scf.band_energy
+                    + _bond_field_energy(scf.hamiltonian, J, gutzwiller))
         if scf.converged:
             # local_occupation in the <n_i> in [0,2] electron-count
             # convention (matching f_i^dagger f_i directly -- the target is
@@ -544,3 +618,7 @@ class SpinonHamiltonian(Hamiltonian):
     def get_goldstone_residual(self, **kwargs):
         self._refuse_pair_ladder("get_goldstone_residual")
         return super().get_goldstone_residual(**kwargs)
+
+    def get_magnon_chern(self, **kwargs):
+        self._refuse_pair_ladder("get_magnon_chern")
+        return super().get_magnon_chern(**kwargs)

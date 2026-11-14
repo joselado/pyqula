@@ -111,14 +111,35 @@ def injection_rate(es,h1,f,w,delta,triplets,tol):
     pairs = np.nonzero(fnm) # only pairs with an occupation difference enter
     e = eps[pairs] # (npair,)
     weights = np.zeros((len(e),len(triplets)),dtype=np.complex128)
+    rbs = {} # r^b_mn at [k,n,m], built once per b
+    def rb_mn(b):
+        if b not in rbs: rbs[b] = np.swapaxes(h1[:,b],1,2)*inv/1j
+        return rbs[b]
+    Drcs = {} # [r^c, P h^a P], built once per (a,c)
+    def Drc(a,c):
+        if (a,c) not in Drcs:
+            rc = -h1[:,c]*inv/1j # r^c_nm at [k,n,m], 1/(E_n - E_m) = -inv
+            va = h1[:,a]*(~keep) # velocity inside the multiplets, P h^a P
+            # [r^c, P h^a P]_nm, Delta^a_mn r^c_nm if nondegenerate
+            Drcs[(a,c)] = rc@va - va@rc
+        return Drcs[(a,c)]
     for (t,(a,b,c)) in enumerate(triplets):
-        rb_mn = np.swapaxes(h1[:,b],1,2)*inv/1j # r^b_mn at [k,n,m]
-        rc = -h1[:,c]*inv/1j # r^c_nm at [k,n,m], 1/(E_n - E_m) = -inv
-        va = h1[:,a]*(~keep) # velocity inside the multiplets, P h^a P
-        Drc = rc@va - va@rc # [r^c, P h^a P]_nm, Delta^a_mn r^c_nm if nondegenerate
-        weights[:,t] = (fnm*rb_mn*Drc)[pairs]
+        weights[:,t] = (fnm*rb_mn(b)*Drc(a,c))[pairs]
     L = (delta/np.pi)/((w[:,None] - e[None,:])**2 + delta**2) # (nw,npair)
     return np.pi*_charge**3/2.*(L@weights)
+
+
+_batch_bytes = 2e8 # memory budget of one batch of k-points of injection_current
+
+
+def _batch_size(n,nw,nt):
+    """k-points per batch of injection_current for n bands, nw frequencies
+    and nt triplets: per k-point the velocities, the eigenvectors and the
+    pair arrays of injection_rate hold about (40 + nt) complex (n,n)
+    matrices, and the Lorentzians nw real numbers per pair. A fixed batch
+    of 64 k-points made a few-band 3D mesh a loop of many small batches"""
+    per_k = (16.*(40+nt) + 24.*nw)*n*n # 24: L and its two temporaries
+    return int(max(1,min(8192,_batch_bytes/per_k)))
 
 
 def injection_current(h,energies=None,nk=20,T=None,delta=0.1,
@@ -159,9 +180,10 @@ def injection_current(h,energies=None,nk=20,T=None,delta=0.1,
     tol = degeneracy_tol*scale
     parallel.set_num_threads() # set the number of threads for numba
     acc = np.zeros((len(energies),len(triplets)),dtype=np.complex128)
-    for i0 in range(0,len(ks),kubo._kbatch): # loop over batches of k-points
+    nb = _batch_size(tms.shape[1],len(energies),len(triplets))
+    for i0 in range(0,len(ks),nb): # loop over batches of k-points
         es,h1,h2,h3 = shg._eigenbasis_derivatives(tms,dirs,d,hkgen,
-                ks[i0:i0+kubo._kbatch])
+                ks[i0:i0+nb],vertices=shg.vertex_keys(1)) # h1 only
         acc += injection_rate(es,h1,kubo._fermi(es,T),energies,delta,
                 triplets,tol)
     acc = acc/(len(ks)*cellvol) # (1/V) sum_k, V = N_k V_cell

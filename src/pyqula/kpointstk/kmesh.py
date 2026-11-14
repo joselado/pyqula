@@ -17,11 +17,10 @@ def kmesh(dimensionality,nk=10,nsuper=1,
           kp.append([k1,0.,0.]) # store
     elif dimensionality==2:
         kp = kmesh2d(nk,nsuper,endpoint=endpoint) # get 2D kmesh
-    elif dimensionality==3:
-        for k1 in np.linspace(0.,nsuper,nk[0],endpoint=endpoint):
-          for k2 in np.linspace(0.,nsuper,nk[1],endpoint=endpoint):
-            for k3 in np.linspace(0.,nsuper,nk[2],endpoint=endpoint):
-              kp.append([k1,k2,k3]) # store
+    elif dimensionality==3: # k1 slowest and k3 fastest, as nested loops
+        axes = [np.linspace(0.,nsuper,n,endpoint=endpoint) for n in nk]
+        return np.stack(np.meshgrid(*axes,indexing="ij"),
+                axis=-1).reshape(-1,3)
     else:
         raise ValueError("a k-mesh needs a dimensionality between 0 and 3")
     kp = [np.array(k) for k in kp] # to array

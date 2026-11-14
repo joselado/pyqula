@@ -23,3 +23,21 @@ def test_the_default_mesh_is_unchanged():
     for dim in [1, 2, 3]:
         assert np.max(np.abs(np.array(kmesh(dim, nk=4))
                              - np.array(kmesh(dim, nk=4, endpoint=False)))) == 0
+
+
+def test_the_3d_mesh_is_the_one_of_three_nested_loops():
+    """The 3D mesh is built with numpy arrays: it must keep the order of
+    the nested loops it replaced, k1 slowest and k3 fastest, bit for bit,
+    for a different nk in each direction"""
+    for nsuper in [1, 2]:
+        for endpoint in [False, True]:
+            nk = [5, 4, 3]
+            ref = []
+            for k1 in np.linspace(0., nsuper, nk[0], endpoint=endpoint):
+                for k2 in np.linspace(0., nsuper, nk[1], endpoint=endpoint):
+                    for k3 in np.linspace(0., nsuper, nk[2],
+                                          endpoint=endpoint):
+                        ref.append([k1, k2, k3])
+            got = kmesh(3, nk=np.array(nk), nsuper=nsuper, endpoint=endpoint)
+            assert got.shape == (60, 3)
+            assert np.array_equal(got, np.array(ref))

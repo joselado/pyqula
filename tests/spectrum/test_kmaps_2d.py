@@ -68,8 +68,8 @@ def test_ev2d_agrees_between_sparse_and_dense(tmp_path, monkeypatch):
     hs = h.copy()
     hs.turn_sparse()
     op = h.get_operator("sz")
-    spectrum.ev2d(h, nk=3, operator=[op])
+    spectrum.ev2d(h, nk=4, operator=[op])
     dense = np.genfromtxt("EV2D.OUT")
-    spectrum.ev2d(hs, nk=3, operator=[op])
+    spectrum.ev2d(hs, nk=4, operator=[op])
     sparse = np.genfromtxt("EV2D.OUT")
     assert np.max(np.abs(dense-sparse)) < 1e-8

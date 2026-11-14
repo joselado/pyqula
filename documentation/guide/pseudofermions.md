@@ -633,8 +633,8 @@ The keywords are:
 - `tc`, `tf`: the two tunneling amplitudes.
 - `J`: when it is given, `tf` is the amplitude of the spin-flip tunneling
   itself, and the amplitude into the f fermion of each site is
-  $t_fV_j^*/J$, so it follows the hybridization of the site. Give the $J$ of
-  the mean-field calculation.
+  $2t_fV_j^*/J$, so it follows the hybridization of the site. Give the $J$ of
+  the mean-field calculation, the Coqblin-Schrieffer coupling above.
 - `site`: the Kondo site under the tip, or a list. By default every site.
 - `energies`: a uniform grid. By default `ne` points between `-emax` and
   `emax`.
@@ -885,6 +885,103 @@ A Zeeman field, a supercell and a hopping between the moments are all
 included, because the response is built from the bands of the full
 Hamiltonian. See `examples/kondolattice/moment_spinchi/main.py` for a
 runnable script.
+
+### Chern number of the magnon of the moments
+
+We will now see that the magnon of the moments can carry a Chern number,
+with `h2.get_moment_magnon_chern()`. A mode of the RPA response is a zero of
+the kernel
+
+$$
+K(\mathbf q,\omega)=\chi(\mathbf q,\omega)^{-1}-U'(\mathbf q) ,
+$$
+
+a matrix between the moments of the unit cell. At the energy of the mode
+$K$ has a null vector $\psi_i(\mathbf q)$, the amplitude of the magnon on the
+moment $i$. This vector plays the role of the Bloch state, and the Chern
+number of the magnon band is the sum of its Berry fluxes through the
+plaquettes of a mesh of $\mathbf q$, over $2\pi$, with the sign of
+`h.get_chern()`. The zeros are counted in a window of frequencies
+$(\omega_a,\omega_b)$ that you choose: both ends in gaps of the magnon
+spectrum at every $\mathbf q$, $\omega_a$ above zero and $\omega_b$ below the
+continuum.
+
+With one moment per cell the kernel is a number, so its null vector carries
+no Chern number, and in the raising channel, the default, the result is zero
+by construction. The chain above has no Chern number for a second reason: it
+is one dimensional, and the method raises `ValueError`. So we take the
+honeycomb lattice, two moments per cell, with $J=4$ at half filling, a
+Haldane term $t_2=0.2$ on the conduction electrons, which breaks time
+reversal, and $U'=-4$:
+
+```python
+from pyqula import geometry
+from pyqula.kondolattice import KondoLatticeHamiltonian
+hc = geometry.honeycomb_lattice().get_hamiltonian(has_spin=True)
+hc.add_haldane(0.2) # breaks time reversal of the conduction electrons
+h = KondoLatticeHamiltonian(hc) # two moments per unit cell
+h2 = h.get_mean_field_hamiltonian(J=4.0, filling=0.5, nk=12,
+        mf=([1.0+0j]*2, [0.0]*2))
+c = h2.get_moment_magnon_chern((0.3, 1.43), U=-4.0, nk=8, nq=12)
+```
+
+`c` is $+1$. One magnon is bound below the continuum: on this mesh its band
+goes from $0.590$ to $1.357$, the next band starts at $1.506$ and the
+continuum at $1.695$, so the window $(0.3,1.43)$ holds this band alone. With
+`full_output=True` the record of `h.get_magnon_chern()` comes back: `gap` is
+$0.073$, here the distance to the upper end of the window, and `bound` is
+$0.75$, the distance below the continuum. The integer is the same with
+`nq=6` and with `nk=10`, and $t_2=-0.2$ gives $-1$. For $t_2=\pm0.1$ the band
+reaches $1.465$ and the next one starts at $1.547$, so the window is
+$(0.3,1.506)$, and the result is $\pm1$. So the Chern number is the sign of
+$t_2$ in every case we ran; this is measured, not derived. With $t_2=0$ the
+two magnon bands touch at K and K', at $1.5305$, and there is no Chern
+number.
+
+![Energy and Berry curvature of the magnon of the moments of the honeycomb Kondo lattice with a Haldane term, over the Brillouin zone, on a mesh of 12 by 12 points.](img/pseudofermions_kondochern.png#only-light)
+![Energy and Berry curvature of the magnon of the moments of the honeycomb Kondo lattice with a Haldane term, over the Brillouin zone, on a mesh of 12 by 12 points.](img/pseudofermions_kondochern-dark.png#only-dark)
+
+The figure reads the energies and the fluxes of the record of the snippet.
+The magnon has its minimum, $0.590$, at $\Gamma$, the corners of the map,
+and its maximum, $1.357$, at K and K', at $(1/3,1/3)$ and $(2/3,2/3)$. Its
+Berry curvature is positive and sits around K and K', the points where the
+two bands touch when $t_2=0$. The largest flux of a plaquette is $0.61$,
+about $0.19\pi$.
+
+??? example "Code of this figure (documentation/figures/pseudofermions_kondochern.py)"
+
+    ```python
+    --8<-- "pseudofermions_kondochern.py"
+    ```
+
+$U'$ is a parameter of the model, as in the section above, so the integer is
+a property of the model with that $U'$. With $U'=-1.5$ or $-2.5$ the magnon
+reaches the continuum and there is no window. The moments have spin-rotation
+symmetry here, so the magnon is a spin triplet, the same mode for $S^+$,
+$S^-$ and $S_z$. The raising channel holds one copy of it. The full channel,
+`channel="full"`, holds three copies with the same vector, so the flux of
+each plaquette is three times larger, and the integer it returns depends on
+the mesh: for $t_2=0.2$ it gives $3$, $1$, $1$ and $3$ at `nq=6`, 8, 10 and
+12, with no error, while the raising channel gives $1$ on each of these
+meshes. So a spin triplet is read in the raising channel.
+
+The keywords are:
+
+- `window`: the frequencies $(\omega_a,\omega_b)$ between which the zeros
+  are counted.
+- `U`: the residual interaction $U'$, as in `h2.get_moment_spinchi()`.
+- `bands`: the zeros of the window, counted from the lowest, a contiguous
+  list; all of them by default.
+- `nq`, `shift`: the mesh of $\mathbf q$, 12 points along each direction by
+  default.
+- `nk`: the k-mesh of the susceptibility.
+- `T`: the temperature of the occupations, zero by default.
+- `channel`: `"raising"` by default, `"lowering"` or `"full"`.
+- `hybridization_scale`: the factor that multiplies $V$, as above.
+- `full_output`: return the record instead of the number.
+
+See `examples/kondolattice/moment_magnon_chern/main.py` for a runnable
+script.
 
 ## Kondo lattices in two dimensions and in finite systems
 

@@ -8,7 +8,7 @@ Chebyshev expansion of the projector. Each one is held to its own
 reference, the ball to the dense marker and the expansion to the local
 marker of the exact projector on the same balls.
 
-Measured on the Haldane flake below (984 sites, t2=0.1, gap 1.04, the 84
+Measured on the Haldane flake below (984 sites, t2=0.1, bulk gap 0.9, the 84
 sites within a quarter of its radius as the bulk): the largest bulk error
 of the ball is 0.30, 0.12, 0.049, 0.020, 0.0079 and 0.0012 at radius 2, 3,
 4, 5, 6 and 8, a factor of about 2.5 per hop, and the KPM marker differs
@@ -131,8 +131,9 @@ def test_sign_flips_with_t2(haldane, radius4):
 
 
 def test_trivial_mass():
-    """A sublattice mass above 3*sqrt(3)*t2 closes and reopens the gap,
-    and the bulk marker goes to zero"""
+    """A sublattice mass above 4.5*t2 (0.45 here; add_haldane(t2) has the
+    second-neighbor amplitude (sqrt(3)/2)*t2, so the gap is 9*t2) closes
+    and reopens the gap, and the bulk marker goes to zero"""
     h = _flake(t2=0.1, mass=0.9)
     r, c0 = topology.real_space_chern(h, write=False)
     _, c = h.get_kpm_chern_marker(radius=4, npol=100)

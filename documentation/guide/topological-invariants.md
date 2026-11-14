@@ -301,6 +301,23 @@ goes as $1/n_k^2$.
 See `examples/2d/anomalous_hall/main.py` for a script that plots
 $\sigma_{xy}$ against the Fermi energy.
 
+### Chern number of collective modes
+
+The collective modes of a mean-field state have bands too, and a band of
+modes separated from the others has a Chern number, with the state of the
+mode at each momentum in place of the Bloch state and the plaquette sum and
+the sign of `h.get_chern()`. pyqula computes it for a magnon band with
+`h.get_magnon_chern()`, see
+[Chern number of a magnon band](spin-response.md#chern-number-of-a-magnon-band),
+for an exciton band with `h.get_exciton_chern()`, see
+[Chern number of an exciton band](excitons.md#chern-number-of-an-exciton-band),
+and for the magnon of the local moments of a Kondo lattice with
+`h2.get_moment_magnon_chern()`, see
+[Chern number of the magnon of the moments](pseudofermions.md#chern-number-of-the-magnon-of-the-moments).
+In the three cases the integer is the Chern number only when the band is
+isolated from the other modes and from the electron-hole continuum over the
+whole Brillouin zone.
+
 ## Z2 invariant
 
 With time-reversal symmetry the Chern number is zero. The invariant that
@@ -819,10 +836,15 @@ z4 = h.get_z4_indicator() # Z4 indicator, without time reversal
 
 The strong topological insulator of the previous section gives
 $\kappa_1=3$. With the bond weaker than the other three, the weak
-topological insulator $0;(111)$, it gives $\kappa_1=2$: a weak topological
-insulator can also have $\kappa_1=2$, so the $Z_2$ indices of
-`h.get_topological_invariant()` are needed to tell it from a second-order
-one. Without time reversal the states are no longer Kramers pairs,
+topological insulator $0;(111)$, it gives $\kappa_1=2$. These values are for
+the inversion center that the method finds first. When a weak index $\nu_i$
+is not zero, moving the center by half a lattice vector $\vec a_i/2$ changes
+$\kappa_1$ by $2\nu_i$ modulo 4, so about the center of the bond inside the
+cell the two phases give $1$ and $0$. Only $\kappa_1$ modulo 2, the strong
+index, and $\kappa_1=2$ with all the $Z_2$ indices zero do not depend on the
+center. So a weak topological insulator can also have $\kappa_1=2$, and the
+$Z_2$ indices of `h.get_topological_invariant()` are needed to tell it from
+a second-order one. Without time reversal the states are no longer Kramers pairs,
 and the indicator is
 
 $$
@@ -841,7 +863,8 @@ gap closes somewhere else in the Brillouin zone, at Weyl points. This is
 what happens in this model near the transitions between its phases, once
 the exchange field is large.
 
-- `center`: the inversion center, found automatically by default.
+- `center`: the inversion center, found automatically by default. With a
+  nonzero weak index the value of $\kappa_1$ depends on it.
 - `nocc`: use the lowest `nocc` bands instead of the bands below zero
   energy.
 
