@@ -259,6 +259,139 @@ all frequencies, so 400 frequencies cost two to four times as much as 40,
 not ten times. A full script is in
 `examples/2d/optical_conductivity_triangle/main.py`.
 
+## Large systems
+
+We will now see how to compute the conductivity of a system that is too
+large for a band structure: a disordered supercell with $10^4$ to $10^6$
+orbitals, or a big flake. The way we do this is by never diagonalizing.
+The absorptive part of the tensor, the part that takes energy from the
+field, is written with two delta functions of the Hamiltonian,
+
+$$
+\sigma^{H}_{ab}(\omega) = \frac{\pi}{V}\int dE\,\frac{f(E)-f(E+\omega)}{\omega}\,
+{\rm Tr}\left[v_b\,\delta(E-H)\,v_a\,\delta(E+\omega-H)\right] ,
+$$
+
+with $V$ the volume of the supercell. In the eigenbasis this is the
+delta-function part of the Kubo formula above. Each delta function is
+expanded in Chebyshev polynomials of $H$, as in
+[Kernel polynomial method](kpm.md), and the trace is estimated with a few
+random vectors. Then the cost and the memory grow linearly with the number
+of orbitals. The reactive part follows from the absorption at all
+frequencies, by the Kramers-Kronig relation,
+
+$$
+\sigma_{ab}(\omega) = \frac{i}{\pi}\int d\omega'\,
+\frac{\sigma^{H}_{ab}(\omega')}{\omega+i0^+-\omega'} ,
+$$
+
+meaning that the full complex tensor is fixed by the absorption, as it is
+in an experiment. This is `integration="kpm"`:
+
+```python
+import numpy as np
+from pyqula import geometry
+g = geometry.honeycomb_lattice().get_supercell(30) # 1800 sites
+h = g.get_hamiltonian(has_spin=False,is_sparse=True)
+h.add_sublattice_imbalance(0.5) # gap of 1
+h.add_onsite(lambda r: 0.6*(np.random.random()-0.5)) # onsite disorder
+ws = np.linspace(0.,4.,100) # frequencies
+(ws,s) = h.get_optical_conductivity(energies=ws,integration="kpm",
+                                    delta=0.05,ntries=4)
+```
+
+`s` is the same complex array of shape `(nw,3,3)` as in the band modes,
+here at the Gamma point of the supercell.
+
+![Real and imaginary part of the optical conductivity of a disordered gapped honeycomb supercell of 1800 sites against frequency, from the Chebyshev expansion.](img/optical_kpm.png#only-light)
+![Real and imaginary part of the optical conductivity of a disordered gapped honeycomb supercell of 1800 sites against frequency, from the Chebyshev expansion.](img/optical_kpm-dark.png#only-dark)
+
+${\rm Re}\,\sigma_{xx}$ is zero below the gap, starts at $\omega\approx0.9$
+and has its maximum, $0.38\,e^2/\hbar$, at $\omega=2.2$. The wiggles are
+the levels of a finite cell seen with four random vectors.
+${\rm Im}\,\sigma_{xx}$ is negative below the gap, as for a dielectric,
+with its minimum at the absorption edge, and it changes sign near the
+maximum of the absorption. With `kernel="lorentz"` the line of each
+transition is the Lorentzian of the band modes, and on a small cell the two
+agree to a few percent, for the real and the imaginary part, with the Fermi
+level in a gap or in a band. A full script, with the DC conductivities
+below, is `examples/2d/kpm_conductivity/main.py`, and an executed notebook is
+`jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/06_kpm_conductivity.ipynb`.
+
+??? example "Code of this figure (documentation/figures/optical_kpm.py)"
+
+    ```python
+    --8<-- "optical_kpm.py"
+    ```
+
+The keywords of this mode are
+
+- `nk=1`: k-points per direction. A large supercell at the Gamma point is
+  the usual choice.
+- `delta`: the half width of the line of one transition. It sets the number
+  of polynomials, and the cost grows as $1/\delta^2$.
+- `kernel`: `"jackson"` (default), a Gaussian line, or `"lorentz"`, a
+  Lorentzian line.
+- `ntries`: the number of random vectors. At $10^5$ orbitals one or two are
+  enough, because the trace of a large cell self-averages.
+- `trace`: `"exact"` uses every basis vector, for a small system.
+- `return_error`: also return the statistical error over the random vectors.
+- `reactive`: `False` returns only the absorptive part, at a lower cost.
+
+The DC tensor of a large system is `h.get_dc_conductivity()`. By default it
+uses the Kubo-Bastin formula, which keeps the states of the Fermi sea. So
+with the Fermi level in the gap of a Chern insulator it gives the quantized
+Hall conductivity:
+
+```python
+g = geometry.honeycomb_lattice().get_supercell(10) # 200 sites
+h = g.get_hamiltonian(has_spin=False,is_sparse=True)
+h.add_haldane(0.2) # Chern insulator, C=1
+s = h.get_dc_conductivity(fermi=0.,delta=0.1,ntries=2) # 3x3 tensor
+print(2*np.pi*s[0,1]) # -C, the Hall conductivity in units of e^2/h
+```
+
+This prints $-0.96$, which is $-C$ within the error of two random vectors
+on 200 sites. The same plateau is the $\omega\to0$ limit of
+${\rm Re}\,\sigma_{xy}(\omega)$ from `integration="kpm"`, which never uses
+the Kubo-Bastin formula, so the two are an independent check of each other.
+
+For the longitudinal conductivity of a metal, `mode="singleshot"` uses the
+Kubo-Greenwood formula at zero temperature,
+
+$$
+\sigma_{aa}(E_F) = \frac{1}{\pi V}\,
+{\rm Tr}\left[v_a\,{\rm Im}\,G\,v_a\,{\rm Im}\,G\right] ,
+\qquad G = \left(E_F + i\delta/2 - H\right)^{-1} ,
+$$
+
+with one Chebyshev series of $G$ for each Fermi level. Each delta function
+is a Lorentzian of half width $\delta/2$, so $\delta$ keeps its meaning, and
+a clean metal gives the Drude value $D/\delta$. The cost grows as $1/\delta$
+and not as $1/\delta^2$, so this mode reaches the small broadening that a
+weakly disordered metal needs:
+
+```python
+np.random.seed(1)
+g = geometry.honeycomb_lattice().get_supercell(40) # 3200 sites
+h = g.get_hamiltonian(has_spin=False,is_sparse=True)
+h.add_onsite(lambda r: 3.0*(np.random.random()-0.5)) # Anderson disorder
+s = h.get_dc_conductivity(fermi=[0.,1.],delta=0.05,mode="singleshot",
+                          component="xx",ntries=16,seed=1) # sigma_xx at two E_F
+```
+
+This gives $\sigma_{xx}=0.10$ at $E_F=0$ and $0.13$ at $E_F=1$, with an
+error of about 10% from the 16 random vectors, and the Kubo-Bastin mode
+gives the same numbers. What matters is that the result no longer changes
+with $\delta$. At $E_F=1$ the values for $\delta=0.1$, $0.05$ and $0.02$
+agree within the error. At the Dirac point $\delta=0.02$ gives $0.07$,
+lower by about two error bars, so there the convergence is not settled
+with this cell. If the result still changes, the broadening is larger than
+the scattering rate, and $\delta$ has to go down, with a larger cell to
+keep the level spacing below $\delta$. This mode returns only the diagonal
+of the tensor, the off-diagonal entries are NaN, and it does not take a
+temperature.
+
 ## Second-harmonic generation
 
 We will now see the response at second order in the field. A crystal

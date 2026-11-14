@@ -62,7 +62,7 @@ def test_kpm_absorption_matches_the_band_calculation():
     ws = np.linspace(0.,4.,21)
     ws,s0 = h.get_optical_conductivity(energies=ws,nk=2,T=0.05,delta=0.05)
     ws,s1 = h.get_optical_conductivity(energies=ws,nk=2,T=0.05,delta=0.05,
-            integration="kpm",kernel="lorentz",trace="exact")
+            integration="kpm",kernel="lorentz",trace="exact",reactive=False)
     for a in range(2):
         ref = s0[:,a,a].real
         assert np.max(np.abs(s1[:,a,a].real-ref)) < 0.05*np.max(ref)
@@ -81,7 +81,7 @@ def test_kpm_circular_dichroism_matches_the_band_calculation():
     kw = dict(energies=ws,nk=12,T=0.05,delta=0.1)
     ws,s0 = h.get_optical_conductivity(**kw)
     ws,s1 = h.get_optical_conductivity(integration="kpm",kernel="lorentz",
-            trace="exact",**kw)
+            trace="exact",reactive=False,**kw)
     ref = (s0[:,0,1]+np.conj(s0[:,1,0]))/2.
     scale = np.max(np.abs(ref))
     assert scale > 0.5*np.max(np.abs(s0[:,0,0].real)) # a real signal
@@ -91,13 +91,124 @@ def test_kpm_circular_dichroism_matches_the_band_calculation():
     assert np.max(np.abs(s1[:,1,0]-np.conj(s1[:,0,1]))) < 1e-10*scale
 
 
+def test_kramers_kronig_weights_transform_a_lorentzian():
+    """The principal value weights of the reactive part are exact for a
+    function linear between the nodes; on a Lorentzian line of half width
+    d sampled every d/8 the transform is the dispersive Lorentzian to a few
+    parts in a thousand of its peak, frequencies on a node included"""
+    d,w0,h = 0.05,0.7,0.05/8.
+    xs = h*np.arange(-int(8./h),int(8./h)+1)
+    fs = d/((xs-w0)**2+d**2)/np.pi
+    ws = np.concatenate([np.linspace(-1.,3.,401),xs[1500:1510]])
+    out = kpmkubo._kk_weights(xs,ws,h)@fs
+    ref = (ws-w0)/((ws-w0)**2+d**2)
+    assert np.max(np.abs(out-ref)) < 5e-3*np.max(np.abs(ref))
+
+
+@pytest.mark.parametrize("shift",[0.,1.2])
+def test_kpm_full_conductivity_matches_the_band_calculation(shift):
+    """The reactive part is the Kramers-Kronig transform of the absorptive
+    one, so the full complex sigma_xx(w), real and imaginary parts, follows
+    the band calculation to the same few percent as the absorption (3% of
+    the peak, against 2.6% for the absorptive part alone, in the gap), and
+    its Hermitian part is the absorptive part exactly. With the Fermi level
+    in a band the Drude peak dominates, and its reactive tail is held to 4%"""
+    h = _disordered_cell()
+    h.shift_fermi(shift)
+    ws = np.linspace(0.,4.,21)
+    kw = dict(energies=ws,nk=2,T=0.05,delta=0.05)
+    ws,s0 = h.get_optical_conductivity(**kw)
+    ws,s1 = h.get_optical_conductivity(integration="kpm",kernel="lorentz",
+            trace="exact",**kw)
+    ws,sa = h.get_optical_conductivity(integration="kpm",kernel="lorentz",
+            trace="exact",reactive=False,**kw)
+    for a in range(2):
+        ref = s0[:,a,a]
+        scale = np.max(np.abs(ref))
+        assert np.max(np.abs(ref.imag)) > 0.3*scale # a real signal
+        assert np.max(np.abs(s1[:,a,a]-ref)) < 0.05*scale
+    herm = (s1+np.conj(np.transpose(s1,(0,2,1))))/2.
+    assert np.max(np.abs(herm-sa)) < 1e-10*np.max(np.abs(sa))
+
+
+@pytest.mark.parametrize("t2",[0.2,-0.2])
+def test_kpm_hall_conductivity_at_zero_frequency_is_the_chern_number(t2,
+        tmp_path,monkeypatch):
+    """At w -> 0 the reactive part of sigma_xy is the DC Hall conductivity,
+    the Kramers-Kronig integral of the circular dichroism over all
+    frequencies, so 2 pi Re sigma_xy(0) = -C in the gap. This route never
+    goes through the Kubo-Bastin formula, so it is an independent check of
+    both"""
+    monkeypatch.chdir(tmp_path) # topology.chern writes *.OUT files to cwd
+    h = _haldane(t2)
+    c = round(topology.chern(h,nk=20))
+    assert c != 0
+    ws,s = h.get_optical_conductivity(energies=[0.,0.02],nk=12,T=0.02,
+            delta=0.1,integration="kpm",trace="exact")
+    assert np.allclose(2.*np.pi*s[:,0,1].real,-c,atol=0.02)
+    assert np.allclose(s[:,1,0].real,-s[:,0,1].real,atol=1e-3)
+
+
+def test_singleshot_matches_the_lorentzian_kubo_greenwood_formula():
+    """mode="singleshot" is pi sum_nm |v_nm|^2 L(E-E_n) L(E-E_m)/V with L a
+    Lorentzian of half width delta/2: with the exact trace the Chebyshev
+    series of Im G gives it to its truncation, at every Fermi level, for
+    both directions of a cell without any symmetry between them"""
+    rng = np.random.default_rng(1)
+    g = geometry.honeycomb_lattice().get_supercell(3)
+    h = g.get_hamiltonian(has_spin=False)
+    h.add_sublattice_imbalance(0.2)
+    h.intra = h.intra + np.diag(0.6*(rng.random(len(g.r))-0.5))
+    fermis = np.array([-2.,-1.2,0.9,1.7])
+    delta = 0.1
+    s = h.get_dc_conductivity(fermi=fermis,nk=2,delta=delta,
+            mode="singleshot",trace="exact")
+    st = kpmkubo._Bounds(h,nk=2)
+    eta = delta/2.
+    L = lambda x: (eta/np.pi)/(x**2+eta**2)
+    ref = np.zeros((len(fermis),3))
+    for k in st.ks:
+        es,U = np.linalg.eigh(st.ops.hamiltonian(k).toarray())
+        for al in st.dirs:
+            v = U.conj().T@st.ops.velocity(k,al).toarray()@U
+            for j,E in enumerate(fermis):
+                ref[j,al] += np.pi*np.sum(np.abs(v)**2*
+                        np.outer(L(E-es),L(E-es)))
+    ref /= st.V
+    for al in st.dirs:
+        assert np.max(np.abs(s[:,al,al]-ref[:,al])) < 1e-7*np.max(ref)
+    assert np.all(np.isnan(s[:,0,1])) # not computed
+    assert np.all(s[:,2,2]==0.) # no current along z
+    # the random vectors are unbiased
+    se,ee = h.get_dc_conductivity(fermi=fermis,nk=2,delta=delta,
+            mode="singleshot",ntries=16,seed=3,return_error=True)
+    assert np.all(np.abs(se[:,0,0]-s[:,0,0]) < 4.*ee[:,0,0])
+
+
+def test_singleshot_drude_conductivity_of_a_clean_chain():
+    """A clean ring has the Drude weight D = |v_F|/pi = 2/pi at half
+    filling, and with each delta function a Lorentzian of half width
+    delta/2 the single-shot conductivity is D/delta, the Drude peak of the
+    band modes at w = 0. On 400 sites the level spacing, 0.03, is far below
+    the half width 0.1, so the ring is the infinite chain"""
+    g = geometry.chain().get_supercell(400)
+    h = g.get_hamiltonian(has_spin=False,is_sparse=True)
+    delta = 0.2
+    s = h.get_dc_conductivity(fermi=0.,delta=delta,mode="singleshot",
+            component="xx",trace="exact") # per unit length of the ring
+    D = 2./np.pi # 2 Fermi points, |v_F| = 2 t, divided by 2 pi
+    assert abs(s-D/delta) < 0.01*D/delta
+
+
 def test_random_vectors_agree_with_the_exact_trace():
     """The stochastic trace is unbiased: with fixed seeds the estimate lies
     within a few standard errors of the exact trace, and the error bar
     shrinks with the number of random vectors"""
     h = _disordered_cell()
     ws = np.linspace(0.5,2.5,9)
-    kw = dict(energies=ws,nk=1,T=0.05,delta=0.2,npol=40)
+    # the reactive part is linear in the moments, so it is unbiased when
+    # the absorptive one is, and it is left out to keep the test fast
+    kw = dict(energies=ws,nk=1,T=0.05,delta=0.2,npol=40,reactive=False)
     ws,ex = kpmkubo.optical_conductivity(h,trace="exact",**kw)
     errs = []
     for ntries in [4,16]:
@@ -173,3 +284,11 @@ def test_unsupported_options_raise():
         h.get_optical_conductivity(integration="kpm",trace="hutch")
     with pytest.raises(NotImplementedError):
         h.get_optical_conductivity(integration="kpm",intraband=False)
+    with pytest.raises(ValueError,match="singleshot"):
+        h.get_dc_conductivity(mode="greenwood")
+    with pytest.raises(ValueError,match="longitudinal"):
+        h.get_dc_conductivity(mode="singleshot",component="xy")
+    with pytest.raises(NotImplementedError,match="zero-temperature"):
+        h.get_dc_conductivity(mode="singleshot",T=0.1)
+    with pytest.raises(ValueError,match="npol"):
+        h.get_dc_conductivity(mode="singleshot",npol=100)

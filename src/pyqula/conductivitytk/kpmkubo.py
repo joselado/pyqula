@@ -385,12 +385,10 @@ def _vector_moments(H,vs,X,a,b,M,memory):
     return mu
 
 
-class _Setup():
-    """Everything the moments need: the operators, the k-points, the
-    rescaling and the number of moments"""
-    def __init__(self,h,nk=1,delta=0.1,npol=None,kernel="jackson",
-            lorentz_lambda=3.,scale=None,volume=None):
-        _check_kernel(kernel)
+class _Bounds():
+    """The operators, the k-points, the rescaling H~ = (H - b)/a and the
+    volume, which every Chebyshev route of this module needs"""
+    def __init__(self,h,nk=1,scale=None,volume=None):
         self.ops = _Operators(h)
         self.ks = _kpoints(h,nk)
         self.dirs = self.ops.dirs
@@ -404,6 +402,17 @@ class _Setup():
             if self.a<=max(abs(self.emin),abs(self.emax)): raise ValueError(
                 "scale="+str(scale)+" does not cover the spectrum, "
                 "which spans ["+str(self.emin)+","+str(self.emax)+"]")
+        if volume is None: volume = self.ops.cellvol
+        self.V = len(self.ks)*volume
+
+
+class _Setup(_Bounds):
+    """Everything the double moments need: the bounds, and the kernel and
+    number of moments of the resolution"""
+    def __init__(self,h,nk=1,delta=0.1,npol=None,kernel="jackson",
+            lorentz_lambda=3.,scale=None,volume=None):
+        _check_kernel(kernel)
+        super().__init__(h,nk=nk,scale=scale,volume=volume)
         if npol is None:
             npol = npol_from_delta(self.a,delta,kernel=kernel,
                     lorentz_lambda=lorentz_lambda)
@@ -413,8 +422,6 @@ class _Setup():
         self.g = _kernels[kernel](self.M,lorentz_lambda)
         self.delta = line_width(self.a,self.npol,kernel=kernel,
                 lorentz_lambda=lorentz_lambda)
-        if volume is None: volume = self.ops.cellvol
-        self.V = len(self.ks)*volume
 
 
 def moments(setup,ntries=10,trace="stochastic",seed=None,memory=2.):
@@ -543,6 +550,47 @@ def absorptive(st,mu,energies,fermi=0.,T=0.,ne=None):
     return out
 
 
+def _kk_weights(grid,ws,h):
+    """Weights K[i,j] of the principal value integral
+    P int F(x)/(w_i - x) dx = sum_j K[i,j] F(x_j) for F sampled on the
+    uniform grid x_j of spacing h and linear between the nodes. Each hat
+    function integrates to [g(d+h) - 2 g(d) + g(d-h)]/h with d = w - x_j and
+    g(u) = u ln|u|, which is finite everywhere, so a frequency on a node
+    needs no special care"""
+    def g(u):
+        with np.errstate(divide="ignore",invalid="ignore"):
+            out = u*np.log(np.abs(u))
+        return np.where(u==0.,0.,out)
+    d = np.asarray(ws,dtype=np.float64)[:,None] - grid[None,:]
+    return (g(d+h) - 2.*g(d) + g(d-h))/h
+
+
+def reactive_part(st,mu,energies,fermi=0.,T=0.,ne=None,spacing=None):
+    """Anti-Hermitian (reactive) part of sigma_ab(w), (nw,3,3), from one set
+    of moments, as the Kramers-Kronig transform of the absorptive part,
+
+      sigma^R_ab(w) = (i/pi) P int dw' sigma^H_ab(w')/(w - w'),
+
+    which makes sigma = sigma^H + sigma^R the retarded function whose
+    Hermitian part is exactly absorptive(). The absorptive part is sampled
+    on a uniform grid of spacing delta/8 (0.4% error on a Lorentzian line)
+    up to the bandwidth, where it vanishes, and continued to negative
+    frequencies by sigma^H_ab(-w) = sigma^H_ba(w), which the moments obey
+    exactly since mu^ba = (mu^ab)^T. The grid sits at half-integer
+    multiples of the spacing, so no node falls on w = 0, where at T = 0 the
+    occupation factor of absorptive() is zero and would cut a notch in a
+    Drude peak"""
+    h = st.delta/8. if spacing is None else float(spacing)
+    wmax = (st.emax-st.emin) + 20.*st.delta # absorptive() is zero beyond
+    nw = int(np.ceil(wmax/h))
+    xs = h*(np.arange(nw+1)+0.5)
+    sH = absorptive(st,mu,xs,fermi=fermi,T=T,ne=ne)
+    full = np.concatenate([np.transpose(sH[::-1],(0,2,1)),sH]) # -wmax..wmax
+    K = _kk_weights(np.concatenate([-xs[::-1],xs]),energies,h)
+    out = np.tensordot(K,full,axes=(1,0)) # (nw,3,3)
+    return 1j*out/np.pi
+
+
 def bastin(st,mu,fermis,T=0.,ne=None):
     """DC conductivity tensor (Kubo-Bastin), (len(fermis),3,3) real, from
     one set of moments (see the module docstring)"""
@@ -586,6 +634,77 @@ def bastin(st,mu,fermis,T=0.,ne=None):
     return out
 
 
+def _imaginary_resolvent(H,D,zs,a,b,memory,nb=32):
+    """Generator of (j0, Y), with Y[j] = Im G(zs[j0+j]) D, of shape
+    (nz,n,ncol), for G(z) = (z - H)^-1 and the energies in batches that fit
+    in the memory budget (GB).
+
+    With G(z) = (1/a) sum_n (2-delta_n0) q^n/r T_n(H~) (the series and its
+    truncation are those of bsetk/chebyshev.py) and T_n(H~) a Hermitian
+    polynomial with real coefficients, the Hermitian operator
+    Im G = (G - G^dagger)/2i is the series with the real coefficients
+    Im[(2-delta_n0) q^n/(a r)], so one recursion serves every energy of a
+    batch. No kernel is needed: Im z damps the series by itself"""
+    from ..bsetk.chebyshev import _coefficients,_series,number_of_moments
+    n,nc = D.shape
+    N = number_of_moments(zs,b,a)
+    nzb = int(max(1,min(len(zs),np.floor(memory*1e9/(16.*n*nc)))))
+    buf = np.empty((nb,n*nc),dtype=np.complex128)
+    for j0 in range(0,len(zs),nzb):
+        z = zs[j0:j0+nzb]
+        r,q = _coefficients(z,b,a)
+        Y = np.zeros((n*nc,len(z)),dtype=np.complex128)
+        i,n0 = 0,0
+        for t in _chebyshev_vectors(H,D,a,b,N):
+            buf[i] = t.ravel()
+            i += 1
+            if i==nb: # a block of moments, summed as one matrix product
+                Y += buf.T@(_series(r,q,np.arange(n0,n0+nb)).imag/a)
+                n0 += nb
+                i = 0
+        if i>0: Y += buf[:i].T@(_series(r,q,np.arange(n0,n0+i)).imag/a)
+        yield j0,np.transpose(Y.reshape((n,nc,len(z))),(2,0,1))
+
+
+def singleshot(st,fermis,eta,ntries=10,trace="stochastic",seed=None,
+        memory=2.):
+    """Generator of the longitudinal Kubo-Greenwood conductivity at zero
+    temperature, one array (len(fermis),nd) per random vector,
+
+      sigma_aa(E) = pi Tr[v_a delta(E-H) v_a delta(E-H)]/V
+                  = (1/pi) Tr[v_a Im G v_a Im G]/V,  G = (E + i eta - H)^-1,
+
+    the w -> 0, T -> 0 limit of the absorptive part with each delta a
+    Lorentzian of half width eta (the single-shot method of Ferreira and
+    Mucciolo, PRL 115, 106601, arXiv:1507.00488). Per random vector r, with
+    A = Im G v_a r and B = Im G r, the trace is <A|v_a B>, so the cost is
+    the recursion of nd+1 vectors per energy batch, linear in the number
+    of moments, which grows as a/eta"""
+    parallel.set_num_threads()
+    rng = np.random.default_rng(seed)
+    zs = np.asarray(fermis,dtype=np.float64) + 1j*eta
+    nd = len(st.dirs)
+    probes = [_probe_blocks(st.ops.n,trace,ntries,rng) for k in st.ks]
+    Hs = [_CSR(st.ops.hamiltonian(k)) for k in st.ks]
+    vs = [[_CSR(st.ops.velocity(k,al)) for al in st.dirs] for k in st.ks]
+    for blocks in zip(*probes): # loop over samples
+        out = np.zeros((len(zs),nd))
+        for ik in range(len(st.ks)):
+            for X in blocks[ik]:
+                ncol = X.shape[1]
+                # one recursion for (v_1 X, ..., v_nd X, X)
+                D = np.concatenate([v.dot(X) for v in vs[ik]]+[X],axis=1)
+                for j0,Y in _imaginary_resolvent(Hs[ik],D,zs,st.a,st.b,
+                        memory):
+                    for j in range(len(Y)):
+                        B = np.ascontiguousarray(Y[j][:,nd*ncol:])
+                        for ia in range(nd):
+                            A = Y[j][:,ia*ncol:(ia+1)*ncol]
+                            vB = vs[ik][ia].dot(B)
+                            out[j0+j,ia] += np.vdot(A,vB).real
+        yield out/(np.pi*st.V)
+
+
 # ---------------------------------------------------------------------------
 # public entry points
 
@@ -614,7 +733,7 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
         component=None,npol=None,ntries=10,kernel="jackson",
         lorentz_lambda=3.,trace="stochastic",seed=None,fermi=0.,
         scale=None,memory=2.,volume=None,ne=None,return_error=False,
-        intraband=True,interband=True):
+        intraband=True,interband=True,reactive=True):
     """
     integration="kpm"
     -----------------
@@ -622,12 +741,16 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
     at the Gamma point or a few k-points, or a finite flake), the
     Chebyshev double expansion of conductivitytk/kpmkubo.py. It never
     diagonalizes, and its cost and memory are linear in the number of
-    orbitals. It returns the absorptive (Hermitian) part of the tensor,
-    sigma^H_ab = (sigma_ab + sigma_ba^*)/2: Re sigma_aa(w) on the
-    diagonal and i Im sigma^A_ab(w), the circular dichroism, off the
-    diagonal. The reactive part (Im sigma_aa, Re sigma_xy at w > 0) is not
-    computed; the DC Hall conductivity is kpmkubo.dc_conductivity
-    (h.get_dc_conductivity). Keywords of this mode:
+    orbitals. It returns the full complex tensor sigma_ab(w), as the band
+    modes do. The absorptive (Hermitian) part,
+    sigma^H_ab = (sigma_ab + sigma_ba^*)/2, comes from the double moments
+    (Re sigma_aa(w) on the diagonal, i Im sigma^A_ab(w), the circular
+    dichroism, off the diagonal), and the reactive part (Im sigma_aa(w),
+    the finite-frequency Hall conductivity Re sigma_xy(w)) from its
+    Kramers-Kronig transform over all frequencies, so the two are
+    consistent by construction. The DC Hall conductivity is also
+    kpmkubo.dc_conductivity (h.get_dc_conductivity). Keywords of this
+    mode:
 
     nk : int
       k-points per periodic direction, default 1 (the Gamma point)
@@ -664,6 +787,12 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
       also return the standard error over the random vectors
     intraband, interband
       must be True, the expansion does not separate the two channels
+    reactive : bool
+      add the reactive part (default True). It samples the absorptive
+      part on a grid of spacing delta/8 over the whole spectrum, once for
+      the mean of the moments, or once per random vector with
+      return_error=True. reactive=False returns the absorptive part
+      alone, at the cost of the requested frequencies only
     """
     _check_channels(intraband,interband)
     _check_trace(trace)
@@ -672,10 +801,20 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
     if T is None: T = delta # same default as kubo.optical_conductivity
     st = _Setup(h,nk=nk,delta=delta,npol=npol,kernel=kernel,
             lorentz_lambda=lorentz_lambda,scale=scale,volume=volume)
-    samples = [absorptive(st,mu,energies,fermi=fermi,T=T,ne=ne)
-            for mu in moments(st,ntries=ntries,trace=trace,seed=seed,
-                memory=memory)]
+    samples,musum = [],0.
+    for mu in moments(st,ntries=ntries,trace=trace,seed=seed,memory=memory):
+        s = absorptive(st,mu,energies,fermi=fermi,T=T,ne=ne)
+        # the transform is linear in the moments, so without error bars it
+        # is done once, on their mean
+        if reactive and return_error:
+            s = s + reactive_part(st,mu,energies,fermi=fermi,T=T,
+                    ne=ne)
+        samples.append(s)
+        musum = musum + mu
     sigma,err = _mean_and_error(samples)
+    if reactive and not return_error:
+        sigma = sigma + reactive_part(st,musum/len(samples),
+                energies,fermi=fermi,T=T,ne=ne)
     if component is not None:
         from .kubo import _index
         i,j = _index(component[0]),_index(component[1])
@@ -684,22 +823,86 @@ def optical_conductivity(h,energies=None,nk=1,T=None,delta=0.1,
     return energies,sigma
 
 
-def dc_conductivity(h,fermi=0.,nk=1,T=None,delta=0.1,npol=None,ntries=10,
-        kernel="jackson",lorentz_lambda=3.,trace="stochastic",seed=None,
-        scale=None,memory=2.,volume=None,ne=None,component=None,
-        return_error=False):
-    """DC conductivity tensor sigma_ab(fermi,T) of a large sparse
-    Hamiltonian by the Kubo-Bastin formula with a Chebyshev double
-    expansion (Garcia, Covaci and Rappoport, PRL 114, 116602 (2015)).
+def _dc_bastin(h,fermi,nk,T,delta,npol,ntries,kernel,lorentz_lambda,trace,
+        seed,scale,memory,volume,ne):
+    """Samples of the Kubo-Bastin tensor, (len(fermi),3,3) each"""
+    if T is None: T = delta
+    if kernel is None: kernel = "jackson"
+    st = _Setup(h,nk=nk,delta=delta,npol=npol,kernel=kernel,
+            lorentz_lambda=lorentz_lambda,scale=scale,volume=volume)
+    return [bastin(st,mu,fermi,T=T,ne=ne)
+            for mu in moments(st,ntries=ntries,trace=trace,seed=seed,
+                memory=memory)]
 
-    It holds the Fermi sea part, so sigma_xy gives the quantized Hall
+
+def _dc_singleshot(h,fermi,nk,T,delta,npol,ntries,kernel,lorentz_lambda,
+        trace,seed,scale,memory,volume,ne):
+    """Samples of the single-shot Kubo-Greenwood tensor, (len(fermi),3,3)
+    each, with the longitudinal components on the diagonal and NaN off it"""
+    if T is not None and T!=0.: raise NotImplementedError(
+        "mode='singleshot' is the zero-temperature Kubo-Greenwood formula, "
+        "so T must be None or 0, got T="+str(T)+"; use mode='bastin' for a "
+        "finite temperature")
+    for name,value in [("npol",npol),("kernel",kernel),("ne",ne)]:
+        if value is not None: raise ValueError(
+            name+" does not apply to mode='singleshot', whose resolution is "
+            "delta alone (each delta function is a Lorentzian of half width "
+            "delta/2, with no kernel); got "+name+"="+str(value))
+    if not np.isfinite(delta) or delta<=0.: raise ValueError(
+        "delta is the half width of the line of a transition and must be a "
+        "finite positive number, got "+str(delta))
+    st = _Bounds(h,nk=nk,scale=scale,volume=volume)
+    fermis = np.atleast_1d(np.array(fermi,dtype=np.float64))
+    out = []
+    for s in singleshot(st,fermis,delta/2.,ntries=ntries,trace=trace,
+            seed=seed,memory=memory):
+        sigma = np.full((len(fermis),3,3),np.nan)
+        for i in range(3): sigma[:,i,i] = 0. # no current along i
+        for ia,al in enumerate(st.dirs): sigma[:,al,al] = s[:,ia]
+        out.append(sigma)
+    return out
+
+
+_dc_modes = {"bastin":_dc_bastin,"singleshot":_dc_singleshot}
+
+
+def get_dc_mode_names():
+    """Accepted values of mode= in dc_conductivity"""
+    return list(_dc_modes)
+
+
+def dc_conductivity(h,fermi=0.,nk=1,T=None,delta=0.1,npol=None,ntries=10,
+        kernel=None,lorentz_lambda=3.,trace="stochastic",seed=None,
+        scale=None,memory=2.,volume=None,ne=None,component=None,
+        return_error=False,mode="bastin"):
+    """DC conductivity tensor sigma_ab(fermi,T) of a large sparse
+    Hamiltonian from a Chebyshev expansion, by one of two routes.
+
+    mode="bastin" (default) is the Kubo-Bastin formula with a double
+    expansion (Garcia, Covaci and Rappoport, PRL 114, 116602 (2015)). It
+    holds the Fermi sea part, so sigma_xy gives the quantized Hall
     conductivity of a Chern insulator, sigma_xy 2 pi = -C in units of
     e^2/hbar (the sign convention of conductivity.py). sigma_xx is the DC
     longitudinal conductivity, limited by the KPM resolution in a clean
-    system: the Drude peak of width delta gives D/delta.
+    system: the Drude peak of width delta gives D/delta. Its cost grows as
+    npol^2.
+
+    mode="singleshot" is the Kubo-Greenwood formula at zero temperature,
+    sigma_aa(E) = (1/pi) Tr[v_a Im G v_a Im G]/V with
+    G = (E + i delta/2 - H)^-1, from one Chebyshev series per Fermi level
+    with the exact coefficients of the resolvent (Ferreira and Mucciolo,
+    arXiv:1507.00488). It gives the longitudinal components only (the
+    off-diagonal ones are NaN), at a cost linear in the number of moments,
+    so it reaches a small delta at a few Fermi levels. Each delta function
+    is a Lorentzian of half width delta/2, so delta keeps its meaning, the
+    half width of the line of a transition, and a clean metal gives D/delta
+    as in the band modes. It never goes through the Fermi sea integral of
+    the Bastin formula.
 
     Parameters
     ----------
+    mode : str
+      "bastin" or "singleshot", see above
     fermi : float or array
       Fermi level(s). The moments do not depend on it, so an array costs
       almost nothing more
@@ -707,20 +910,29 @@ def dc_conductivity(h,fermi=0.,nk=1,T=None,delta=0.1,npol=None,ntries=10,
       k-points per periodic direction (Gamma-centered mesh); the default 1
       is the Gamma point of a large cell
     T : float
-      temperature of the Fermi function, default delta
+      temperature of the Fermi function, default delta for "bastin"; the
+      "singleshot" mode is at zero temperature only
     delta, npol, kernel, lorentz_lambda
       the resolution: npol polynomials (2 npol moments), or the npol for
-      which a transition line has half width delta
+      which a transition line has half width delta, and the kernel,
+      "jackson" (default) or "lorentz". With "lorentz" the Kubo-Bastin
+      sigma_xx is wrong (-3 in the gap of a Chern insulator, measured on
+      14 November 2026, see future_development/kpm_optical_conductivity.md),
+      while sigma_xy is right, so keep the default. The "singleshot" mode
+      takes delta alone
     ntries, trace, seed
       number of random vectors, "stochastic" or "exact" trace, and the
       seed of the random vectors
     scale, memory, volume, ne
       half width of the rescaled spectrum (default from Lanczos, padded by
-      5%), the memory budget in GB for the stored polynomials, the volume
-      that normalizes a finite system (default 1) and the number of energy
-      nodes of the integral (default 4 times the moments)
+      5%), the memory budget in GB for the stored polynomials (for
+      "singleshot", the stored vectors of the Fermi levels, which then run
+      in batches), the volume that normalizes a finite system (default 1)
+      and the number of energy nodes of the integral (default 4 times the
+      moments, "bastin" only)
     component : str or None
-      e.g. "xy" to return only that component
+      e.g. "xy" to return only that component ("xx", "yy" or "zz" for
+      "singleshot")
     return_error : bool
       also return the standard error over the random vectors
 
@@ -730,12 +942,15 @@ def dc_conductivity(h,fermi=0.,nk=1,T=None,delta=0.1,npol=None,ntries=10,
     real; with return_error=True the tuple (sigma, error)
     """
     _check_trace(trace)
-    if T is None: T = delta
-    st = _Setup(h,nk=nk,delta=delta,npol=npol,kernel=kernel,
-            lorentz_lambda=lorentz_lambda,scale=scale,volume=volume)
-    samples = [bastin(st,mu,fermi,T=T,ne=ne)
-            for mu in moments(st,ntries=ntries,trace=trace,seed=seed,
-                memory=memory)]
+    if mode not in _dc_modes: raise ValueError("unknown mode "+repr(mode)
+            +" for the DC conductivity, accepted values are "
+            +", ".join(get_dc_mode_names()))
+    if mode=="singleshot" and component is not None and \
+            component[0]!=component[1]: raise ValueError(
+        "mode='singleshot' gives only the longitudinal components (xx, yy, "
+        "zz), not "+repr(component)+"; use mode='bastin' for the Hall part")
+    samples = _dc_modes[mode](h,fermi,nk,T,delta,npol,ntries,kernel,
+            lorentz_lambda,trace,seed,scale,memory,volume,ne)
     sigma,err = _mean_and_error(samples)
     if np.ndim(fermi)==0: sigma,err = sigma[0],err[0]
     if component is not None:

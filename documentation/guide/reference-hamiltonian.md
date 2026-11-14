@@ -1693,13 +1693,80 @@ Optional arguments:
   the resolvent exactly over the triangles of the mesh (tetrahedra in 3D),
   for a broadening below the mesh resolution; `"qtci"` does the same on a $2^R\times2^R$ mesh built
   from a quantics tensor cross interpolation, 2D only. See
-  [Small broadening](optical-conductivity.md#small-broadening)
+  [Small broadening](optical-conductivity.md#small-broadening). `"kpm"`
+  expands the absorption in Chebyshev polynomials and takes the reactive
+  part from its Kramers-Kronig transform, at a cost linear in the number of
+  orbitals, for a large supercell or flake. See
+  [Large systems](optical-conductivity.md#large-systems)
 - tolerance=1e-6: relative accuracy of the interpolation, only for `"qtci"`
+
+With `integration="kpm"` the defaults change to `nk=1`, and the keywords are
+`delta` (the half width of the line of one transition, which sets the number
+of polynomials), `kernel="jackson"` or `"lorentz"`, `ntries=10` random
+vectors, `trace="stochastic"` or `"exact"`, `seed=None`, `fermi=0.`,
+`return_error=False` to also return the statistical error, and
+`reactive=True`, which with `False` returns only the absorptive part. It
+does not separate the intraband and interband parts.
 
 Returns `(energies,sigma)`, with `sigma` complex of shape `(nw,3,3)`, or
 `(nw,)` with `component`. The unit is $e^2/\hbar$ times $a^{2-d}$ in $d$
 dimensions, so $e^2/h$ is $1/(2\pi)$ in 2D. Nambu Hamiltonians, and
 `"qtci"` in 3D, raise `NotImplementedError`.
+
+## h.get_dc_conductivity()
+Compute the DC conductivity tensor $\sigma_{ab}$ of a large sparse
+Hamiltonian from a Chebyshev expansion, without diagonalizing. The default
+is the Kubo-Bastin formula, which keeps the Fermi sea, so in the gap of a
+Chern insulator $2\pi\sigma_{xy}=-C$. `mode="singleshot"` is the
+Kubo-Greenwood formula at zero temperature,
+$\sigma_{aa}=\frac{1}{\pi V}{\rm Tr}[v_a{\rm Im}G\,v_a{\rm Im}G]$ with
+$G=(E_F+i\delta/2-H)^{-1}$, for the longitudinal conductivity at a small
+broadening. See [Large systems](optical-conductivity.md#large-systems).
+
+Optional arguments:
+
+- fermi=0.: the Fermi level, or an array of them at almost no extra cost
+- mode="bastin": `"bastin"` or `"singleshot"`
+- nk=1: k-points per direction
+- T=None: temperature, by default equal to `delta`; `"singleshot"` is at
+  zero temperature only
+- delta=0.1: the half width of the line of one transition, which sets the
+  resolution
+- kernel=None: the Jackson kernel, `"bastin"` only. `"lorentz"` is accepted,
+  but in this mode it gives a wrong $\sigma_{xx}$ (the Hall part is right),
+  so keep the default
+- ntries=10, trace="stochastic", seed=None: the random vectors, or
+  `trace="exact"` for every basis vector
+- component=None: for example `"xy"` to return only that component;
+  `"singleshot"` gives only `"xx"`, `"yy"` and `"zz"`
+- return_error=False: also return the statistical error
+
+Returns a real array of shape `(3,3)`, or `(len(fermi),3,3)` for an array of
+Fermi levels, in the units of `h.get_optical_conductivity()`. With
+`"singleshot"` the off-diagonal entries are NaN.
+
+## h.get_orbital_magnetization()
+Compute the total orbital magnetization of a finite flake,
+$M_z={\rm Tr}[f(H)\,m_z]$ with $m_z=-\frac{1}{2}(\mathbf r\times\mathbf v)_z$,
+for electrons, from a Chebyshev expansion at a cost linear in the number of
+sites. In the bulk gap of a Chern insulator $dM_z/dE_F=CA/(2\pi)$, with $A$
+the area of the flake. See
+[Orbital magnetization of a flake](real-space-topology.md#orbital-magnetization-of-a-flake).
+
+Optional arguments:
+
+- fermi=0.: the Fermi level, or an array of them
+- T=0.: temperature
+- mode="kpm": `"kpm"` or `"ED"`, the eigenstates of a small flake
+- delta=0.01: the resolution of the expansion, well below the gap and $T$
+- ntries=10, trace="stochastic", seed=None: the random vectors, or
+  `trace="exact"` for every basis vector
+- volume=None: divide by this volume, for example the area; by default the
+  total moment
+- return_error=False: also return the statistical error
+
+Returns a float, or an array for an array of Fermi levels. A periodic or a
+Nambu Hamiltonian raises `NotImplementedError`.
 
 ## h.get_shg_conductivity()
 Compute the second-harmonic conductivity $\sigma_{abc}(2\omega;\omega,\omega)$,

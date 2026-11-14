@@ -677,7 +677,8 @@ and Kitaev's formula (cond-mat/0506438) would come almost for free.
 ### Surveyed and not built
 
 - The Kubo-Bastin conductivity of a disordered sample (arXiv:1410.8140,
-  KITE arXiv:1910.05194, `kwant.kpm.conductivity` as the BSD benchmark):
+  `kwant.kpm.conductivity` as the BSD benchmark; built since, on 6 November
+  2026, see `kpm_optical_conductivity.md`):
   the two-index moments $\mathrm{Tr}[v_aT_n(H)v_bT_m(H)]$ from a stochastic
   trace, linear in the sites and quadratic in the number of moments, with
   the velocity $i[H,r]$ that `conductivity.py` already builds. Oracles: the

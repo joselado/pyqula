@@ -107,9 +107,10 @@ $\mathrm{Tr}[O\,\delta(E-H)]=\sum_{\alpha=1}^{n_0}\langle u_\alpha|
 \delta(E-H)|u_\alpha\rangle$ with $u_\alpha$ the columns of $P^\dagger$, the
 primitive Bloch states (norm squared $N_\mathrm{rep}$ each). That is $n_0$
 Chebyshev expansions from deterministic start vectors and no stochastic
-trace, which is how KITE computes the ARPES spectral function (Joao et al.,
-arXiv:1910.05194, Sec. 4.4.1, Eqs. 41-43, with Bloch states as the start
-vectors). An `Operator` now carries an optional `factor`, a function of $k$
+trace: the diagonal of the moments between Bloch states,
+$\langle\mathbf k,\alpha|T_n(H)|\mathbf k,\beta\rangle$, of Joao, Viana Parente Lopes
+and Ferreira (J. Phys. Mater. 5, 045002, arXiv:2110.00574, read from the TeX).
+An `Operator` now carries an optional `factor`, a function of $k$
 returning $U$ with $O=UU^\dagger$; `bloch_projector` sets it to $P^\dagger$,
 a copy keeps it, and a product, multiple or sum drops it (so `unfold*sz` is
 refused by the KPM rather than expanded wrongly). `kpm.factored_moments` and
@@ -119,7 +120,7 @@ refused by the KPM rather than expanded wrongly). `kpm.factored_moments` and
 factor. `P` or `frand` with a factored operator raises.
 
 The oracle, in `tests/unfolding/test_unfolding_kpm.py`, is stronger than a
-benchmark against KITE: the recursion moments equal
+benchmark against another code: the recursion moments equal
 $\sum_m w_m T_j(E_m/s)$ from an eigendecomposition to 1e-10, spinless,
 spinful and Nambu, and a clean supercell at $k_S=Mk_0$ gives exactly
 $N_\mathrm{rep}$ times the primitive cell's own exact KPM trace at $k_0$ for

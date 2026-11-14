@@ -3,8 +3,9 @@
 The unfolding operator is O(k) = U U^dagger with U = P^dagger, whose n0
 columns are the Bloch states of the primal cell, so its weight in the
 density of states is sum_a <u_a|delta(E-H)|u_a>: one Chebyshev expansion
-per column and no random vectors, which is how KITE computes the
-momentum-resolved spectral function (arXiv:1910.05194, Sec. 4.4.1). The
+per column and no random vectors, the momentum-resolved spectral
+function from Bloch states as starting vectors (Joao, Viana Parente Lopes
+and Ferreira, arXiv:2110.00574). The
 oracle is an exact diagonalization: the moments of the expansion are
 sum_m w_m T_j(E_m/scale) with w_m = <m|O|m>, to rounding."""
 

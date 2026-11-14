@@ -171,6 +171,8 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Locally resolved expectation values [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/03_locally_resolved_expectation_values.ipynb)
 - Operator resolved spectral functions [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/04_operator_resolved_spectral_functions.ipynb)
 - Reaching system sizes up to 10000000 atoms on a single-core laptop [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/05_kpm_large_systems.ipynb)
+- Kubo conductivity of large disordered systems [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/06_kpm_conductivity.ipynb)
+- Orbital magnetization of large flakes [[notebook]](jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/07_kpm_orbital_magnetization.ipynb)
 
 ## Wannierization ##
 - Maximally-localized Wannier functions for a selected range of bands [[notebook]](jupyter-notebooks/functionalities/wannierization/01_maximally_localized_wannier.ipynb)

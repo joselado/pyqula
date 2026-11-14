@@ -170,6 +170,13 @@ class Hamiltonian():
         from .topologytk.kpmchern import kpm_chern_marker
         return kpm_chern_marker(h,**kwargs)
 
+    def get_orbital_magnetization(h,**kwargs):
+        """Total orbital magnetization of a finite flake, from a Chebyshev
+        expansion at a cost linear in the number of orbitals, or from the
+        eigenstates, see topologytk/orbitalmagnetization.py"""
+        from .topologytk.orbitalmagnetization import orbital_magnetization
+        return orbital_magnetization(h,**kwargs)
+
     def get_multipole_chiral_number(h,**kwargs):
         """Multipole chiral number N_xy of a supercell of a chiral-symmetric
         two-dimensional insulator, see topologytk/multipolechiral.py"""

@@ -16,8 +16,8 @@ with v_a = (1/hbar) dH/dK_a the velocity operator (K the Cartesian crystal
 momentum), f the Fermi function at temperature T, and eta = delta a
 phenomenological (Lorentzian) broadening. It is the same expression given
 in the Kubo-Bastin/Chebyshev literature (Garcia, Covaci & Rappoport, PRL
-114, 116602 (2015); KITE, Joao et al., R. Soc. Open Sci. 7, 191809 (2020),
-arXiv:1910.05194), specialized to a clean periodic crystal where the
+114, 116602 (2015), arXiv:1410.8140), specialized to a clean periodic
+crystal where the
 Chebyshev machinery is unnecessary and the Lehmann representation can be
 summed directly.
 
@@ -120,8 +120,8 @@ References
   -- the anomalous Hall conductivity and its sign convention.
 * S. Tsirkin, npj Comput. Mater. 7, 33 (2021) (WannierBerri)
   -- same formula, used here as the structural reference.
-* J. H. Garcia, L. Covaci, T. G. Rappoport, PRL 114, 116602 (2015), and
-  S. M. Joao et al., arXiv:1910.05194 (KITE) -- Kubo-Bastin formulation.
+* J. H. Garcia, L. Covaci, T. G. Rappoport, PRL 114, 116602 (2015),
+  arXiv:1410.8140 -- Kubo-Bastin formulation.
 """
 import numpy as np
 

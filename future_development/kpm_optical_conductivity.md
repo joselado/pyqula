@@ -6,9 +6,12 @@ Since 6 November 2026 `conductivitytk/kpmkubo.py` computes it from a Chebyshev e
 the Hamiltonian with random vectors. Two entry points use it:
 
 - `h.get_optical_conductivity(integration="kpm", ...)` gives the absorptive part of
-  sigma_ab(w), so Re sigma_xx(w) and the circular dichroism Im sigma^A_xy(w).
+  sigma_ab(w), so Re sigma_xx(w) and the circular dichroism Im sigma^A_xy(w), and since
+  14 November 2026 also the reactive part, see the section on it at the end.
 - `h.get_dc_conductivity(fermi=..., ...)` gives the DC tensor from the Kubo-Bastin formula,
-  with the Fermi sea, so sigma_xy is the Hall conductivity of a Chern insulator.
+  with the Fermi sea, so sigma_xy is the Hall conductivity of a Chern insulator, and since
+  14 November 2026 `mode="singleshot"` gives the longitudinal part from the Kubo-Greenwood
+  formula, see the section on it at the end.
 
 This note records the formulas, what was measured, where the band path is still the better
 choice, and what is not built.
@@ -253,15 +256,14 @@ The bands win in three places, and we record them plainly.
   natural path is the block recursion of `kpmtk/pairmomentsjax.py` with a zgemm on the device,
   behind `gpu.get_gpu()`. A consumer card is a float32 card, and whether single precision is
   enough for the double moments was not measured.
-- The reactive part at finite frequency, Im sigma_xx(w) and Re sigma_xy(w) for w > 0, that is,
-  the Kubo-Bastin Hall conductivity at finite frequency. The same moments give it, either from a
-  Hilbert transform of the absorptive part or from the finite-frequency kernel
-  (f(E) - f(E'))/(E' - E)/(w + i eta - (E' - E)) on a double energy grid. Neither is built.
+- The reactive part at finite frequency was built on 14 November 2026, see the section on it
+  below.
 - The second harmonic (SHG). It needs a triple expansion, Tr[v_a T_n v_b T_m v_c T_l], as in
-  KITE. The cost goes as N npol^3, so it needs a different contraction.
-- KITE (Joao et al., R. Soc. Open Sci. 7, 191809 (2020)) was the reference for the conventions,
-  but it was not run here. The checks are against the band path of `conductivity.py`, against
-  the Chern number, and against the f-sum rule.
+  the second-order formula of Joao and Lopes (J. Phys.: Condens. Matter 32, 125901,
+  arXiv:1810.03732, read from the TeX). The cost goes as N npol^3, so it needs a different
+  contraction.
+- No other code was run as a reference. The checks are against the band path of
+  `conductivity.py`, against the Chern number, and against the f-sum rule.
 - `intraband=False` and `interband=False` are not available with `integration="kpm"`, since
   the expansion never builds eigenstates. An unknown `integration=` name raises an error that
   lists every accepted name, "kpm" included.
@@ -283,3 +285,88 @@ against a peak of 0.68, while its transpose is 1.37 away.
 `tests/conductivity/test_kpm_conductivity.py` now pins it. On a copy of the
 code with the two indices exchanged it fails, while the diagonal test
 passes.
+
+## The reactive part, built on 14 November 2026
+
+`integration="kpm"` now returns the full complex tensor, as the band modes do, and
+`reactive=False` gives back the absorptive part alone. The reactive part is the
+Kramers-Kronig transform of the absorptive one,
+
+    sigma^R_ab(w) = (i/pi) P int dw' sigma^H_ab(w')/(w - w'),
+
+so sigma = sigma^H + sigma^R is the retarded function whose Hermitian part is exactly
+`absorptive()`. This was chosen over the first-order formula of Joao and Lopes
+(arXiv:1810.03732, read from the TeX), which contracts the moments with a delta on one index
+and the resolvent at E +- w on the other and adds the diamagnetic term, all over w: that one
+has a different line shape on the
+Hermitian part than our two-delta absorptive part, and its two terms cancel as w -> 0, where
+the weight is exact only for a converged k-integral. The transform has neither problem.
+
+`reactive_part()` samples `absorptive()` on a uniform grid of spacing delta/8 up to the
+bandwidth plus 20 delta, where it vanishes, and continues it to negative frequencies with
+sigma^H_ab(-w) = sigma^H_ba(w), which the moments obey exactly since mu^ba = (mu^ab)^T. The
+principal value uses hat functions, whose weights [g(d+h) - 2g(d) + g(d-h)]/h with
+g(u) = u ln|u| are finite everywhere. On a Lorentzian of half width d the error is 7.6e-2,
+2.1e-2, 5.4e-3 and 3.6e-3 of the peak for a spacing d/2, d/4, d/6 and d/8. Without error bars
+the transform is done once, on the mean of the moments; with `return_error=True` it is done
+per random vector. Its cost is that of `absorptive()` on the grid, about 1300 frequencies at
+delta = 0.05: 20 s on the 18-orbital cell of the tests at nk=2, almost all of the call, and
+the same order as one vector of the moments at 10^5 orbitals.
+
+What was measured, with the Lorentz kernel and the exact trace:
+
+- The 18-orbital disordered cell at nk=2, delta=0.05, T=0.05: the full sigma_xx(w) follows
+  the band path to 3.0% of the peak, against 2.6% for the absorptive part alone, and the
+  imaginary part to 2.5%. At delta=0.1 it is 5.2%, the line shape of the kernel (4.5% for the
+  absorptive part in the table above).
+- The Haldane model (t2=0.2, Fermi level shifted by 0.3), nk=12, delta=0.1: 2 pi Re
+  sigma_xy(w=0) = -1.007 against -0.998 from the bands and -C = -1. This is the Hall
+  plateau from the Kramers-Kronig integral of the circular dichroism, a route that never uses
+  the Kubo-Bastin formula, and the test holds both signs of t2 to 0.02 with the Jackson
+  kernel.
+
+## The single-shot longitudinal conductivity, built on 14 November 2026
+
+`h.get_dc_conductivity(mode="singleshot")` is the Kubo-Greenwood formula at zero
+temperature, sigma_aa(E) = (1/pi) Tr[v_a Im G v_a Im G]/V with G = (E + i delta/2 - H)^-1,
+the route of Ferreira and Mucciolo (PRL 115, 106601, arXiv:1507.00488). Im G is the series with the
+real coefficients Im[(2 - delta_n0) q^n/(a r)] of the resolvent of `bsetk/chebyshev.py`, so
+one recursion of the block (v_1 X, ..., v_nd X, X) serves every Fermi level of a batch, and
+the cost is linear in the number of moments, about 20 a/eta. Each delta is a Lorentzian of half
+width delta/2, so delta keeps its meaning, and the off-diagonal entries are NaN.
+
+What was measured:
+
+- With the exact trace it equals pi sum_nm |v_nm|^2 L(E-E_n) L(E-E_m)/V from the
+  eigenstates to 1e-9 on the disordered cell at nk=2, both directions, four Fermi levels.
+- A clean ring of 400 sites at half filling gives D/delta with D = 2/pi to 1% (delta=0.2).
+- Disordered graphene, 3200 sites, uniform onsite disorder of width 3, 16 vectors:
+  sigma_xx = 0.102 +- 0.007, 0.099 +- 0.012 and 0.073 +- 0.011 at E_F = 0 for delta = 0.1,
+  0.05 and 0.02, and 0.141, 0.133 and 0.124 at E_F = 1 (+- 0.01 to 0.04); the Kubo-Bastin
+  mode with the Jackson kernel gives 0.100 +- 0.029 and 0.121 +- 0.023 at delta = 0.05. With 4
+  vectors the error bar was too small (0.083 +- 0.009 at E_F = 0), as for the optical
+  conductivity above. Whether the drop at the Dirac point at delta = 0.02 is real needs a
+  larger cell.
+- At disorder of width 1.5 the result still changes with delta (0.55 and 0.32 at E_F = 0.5
+  for delta = 0.05 and 0.02): the broadening is above the scattering rate there.
+
+## The Kubo-Bastin sigma_xx with the Lorentz kernel is wrong (found 14 November 2026, open)
+
+With `kernel="lorentz"`, `h.get_dc_conductivity()` gives a large negative sigma_xx, while the
+Hall part stays right:
+
+- The Haldane model in its gap (t2=0.2, Fermi level shifted by 0.3, nk=12, npol=200, exact
+  trace, T=0.01): 2 pi sigma_xy = -1.003 with the Lorentz kernel and -1.001 with Jackson, but
+  sigma_xx = -3.08 with Lorentz, against 0 in a gap and below 1e-4 with Jackson.
+- The 18-orbital cell with sublattice imbalance 0.2 and disorder of width 0.6, at four Fermi
+  levels in the bands (nk=2, delta=0.1, exact trace, T=0.05): `bastin()` gives -2.34, -4.66,
+  -3.76 and -3.69, while `absorptive()` at w=0 from the same Lorentz moments gives 2.97, 0.65,
+  1.55 and 1.62, close to the band path (2.73, 0.53, 1.57, 1.57). With Jackson the two agree
+  to all digits shown (4.64, 0.68, 2.13, 2.49 at T=0.05).
+
+The likely cause, not verified: the Bastin integrand carries 1/(1-e^2)^2, and its energy
+window starts at the bottom of the spectrum padded by 10 delta, which here is clamped at
+e = -1 + 1e-6. The Lorentz kernel leaves Lorentzian tails all the way to e = -1, where the
+factor is 1e12, while the Gaussian tails of Jackson vanish there. The existing Hall test uses
+Jackson, so nothing caught it. Not repaired: the options are a guard that refuses the Lorentz
+kernel in the Bastin route, or an integration that handles the end point.

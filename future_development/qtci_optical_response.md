@@ -1209,7 +1209,8 @@ pass, would be the next thing to try.
   the k-space path to a few thousand orbitals per cell. For 10^4 to 10^6
   sites (a large disordered sample, a moire cell at small angle) the next
   step is a real-space Kubo-Greenwood path with the Chebyshev expansion of
-  `kpmtk/`, in the spirit of KITE. It has no k-mesh and no band labels,
+  `kpmtk/`, as in Garcia, Covaci and Rappoport (arXiv:1410.8140). It has
+  no k-mesh and no band labels,
   and it will be cross-checked against this windowed path on the cells
   where both run.
 - **3D, what is still open (built otherwise, 7 November 2026, see "3D

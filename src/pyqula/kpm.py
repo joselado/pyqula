@@ -179,10 +179,11 @@ def factored_moments(m,U,n=200,**kwargs):
 
   This is the trace of an operator of rank r that is given as U U^dagger,
   which takes r Chebyshev recursions, one per column, where the trace of a
-  general operator takes a stochastic average over random vectors. It is
-  how KITE computes the momentum-resolved spectral function, from Bloch
-  states as starting vectors (Joao et al., R. Soc. Open Sci. 7, 191809
-  (2020), arXiv:1910.05194, Sec. 4.4.1, Eqs. 41-43). The columns run as
+  general operator takes a stochastic average over random vectors. With
+  Bloch states as the columns it is the momentum-resolved spectral
+  function, the diagonal of the moments <k,a|T_j(H)|k,b> between Bloch
+  states of Joao, Viana Parente Lopes and Ferreira, J. Phys. Mater. 5,
+  045002 (2022), arXiv:2110.00574. The columns run as
   one batch, one per numba thread or on the device, see
   get_moments_batch. Returns an (r,2n) array with the moments of each
   column normalized to one, and the squared norms of the columns, which

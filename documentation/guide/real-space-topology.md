@@ -243,6 +243,90 @@ For a large flake, build the Hamiltonian sparse, with
 `g.get_hamiltonian(is_sparse=True)`. The default is a dense matrix, which
 for $4\times10^4$ sites already takes 24 GB before any marker is computed.
 
+### Orbital magnetization of a flake
+
+We will now see the orbital magnetization, the magnetic moment of the
+currents that circulate in the ground state. In a finite flake the position
+operator is well defined, and the total moment is the expectation value of
+the moment of the current,
+
+$$
+M_z = {\rm Tr}\left[f(H)\,m_z\right] ,
+\qquad m_z = -\frac{1}{2}\left(\mathbf r\times\mathbf v\right)_z
+= -\frac{i}{2}\left(xHy-yHx\right) ,
+$$
+
+with $\mathbf v=i[H,\mathbf r]$ the velocity, $f$ the Fermi function and the
+electrons of charge $-e$ ($\hbar=e=1$). The total does not depend on the
+origin of the positions. It is what a magnetometer measures, and it is
+zero with time-reversal symmetry. We expand $f(H)$ in Chebyshev
+polynomials, as in [Kernel polynomial method](kpm.md), so the cost grows
+linearly with the number of sites.
+
+The derivative with the Fermi level connects it to the Chern number. In the
+bulk gap of a Chern insulator only the edge states change with $E_F$, and
+the Streda relation gives
+
+$$
+\frac{dM_z}{dE_F} = \frac{C\,A}{2\pi} ,
+$$
+
+with $A$ the area of the flake and $C$ the Chern number of `h.get_chern()`
+for the periodic model. This is `h.get_orbital_magnetization()`:
+
+```python
+from pyqula import islands
+import numpy as np
+g = islands.get_geometry(name="honeycomb",n=10,nedges=6) # 600 sites
+h = g.get_hamiltonian(has_spin=False,is_sparse=True)
+h.add_haldane(0.2) # Chern insulator, C=1
+efs = np.linspace(-0.3,0.3,7) # Fermi levels inside the bulk gap
+m = h.get_orbital_magnetization(fermi=efs,T=0.02,trace="exact") # total moment
+slope = np.polyfit(efs,m,1)[0] # dM/dE_F
+area = len(g.r)*3*np.sqrt(3)/4 # area of the flake
+print(2*np.pi*slope/area) # close to C=1
+```
+
+`m` is the total moment at each Fermi level.
+
+![Orbital magnetization per area of a Haldane flake of 600 sites against the Fermi level, with the bulk gap shaded and the Streda slope C over 2 pi as a dashed line.](img/realspace_orbital_magnetization.png#only-light)
+![Orbital magnetization per area of a Haldane flake of 600 sites against the Fermi level, with the bulk gap shaded and the Streda slope C over 2 pi as a dashed line.](img/realspace_orbital_magnetization-dark.png#only-dark)
+
+Inside the bulk gap, shaded, the moment grows linearly with $E_F$, and the
+slope gives $0.91$ times $C$, against the dashed line of slope $C/2\pi$.
+The edge current flows a little inside the edge, so it encloses less than
+the whole area, and the ratio goes to 1 as the flake grows: it is $0.82$,
+$0.87$, $0.91$ and $0.93$ for 96, 266, 600 and 1176 sites. Outside the gap
+the bulk bands take over and the moment turns back. With $t_2\to-t_2$ the
+moment changes sign at every Fermi level. A full script is
+`examples/2d/kpm_orbital_magnetization/main.py`, and an executed notebook,
+with the derivative $dM_z/dE_F$ across the phase diagram of the Haldane
+model, is
+`jupyter-notebooks/functionalities/chebyshev_kpm_algorithms/07_kpm_orbital_magnetization.ipynb`.
+
+??? example "Code of this figure (documentation/figures/realspace_orbital_magnetization.py)"
+
+    ```python
+    --8<-- "realspace_orbital_magnetization.py"
+    ```
+
+The keywords are:
+- fermi=0.: the Fermi level, or an array of them at almost no extra cost.
+- T=0.: the temperature of the Fermi function.
+- delta=0.01: the resolution of the Chebyshev expansion. The Fermi step is
+  smoothed over about `delta`, so it has to be well below the gap and $T$.
+- ntries=10, trace="stochastic": the random vectors of the trace, or
+  `trace="exact"`, every basis vector, for a flake of a few thousand sites.
+- mode="kpm": or `"ED"`, the eigenstates, for a small flake.
+- volume=None: divide by a volume, for example the area, to get the moment
+  per unit area. By default it is the total moment.
+
+The random vectors converge slowly for this quantity. The operator $m_z$
+grows with the distance to the center of the flake, so one vector has an
+error of the order of the moment itself, at any size. For $1\%$ you need
+roughly $10^4$ vectors, and the slope in the gap needs about ten times
+fewer. For a flake of a few thousand sites `trace="exact"` is cheaper.
+
 ### Where local markers are useful
 
 The real-space Berry curvature and the Chern marker are examples of a

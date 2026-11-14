@@ -428,8 +428,30 @@ already reached once.
   `h.get_dc_conductivity()`: the double-moment formulas, the sign of the
   Kubo-Bastin expression, delta as the line width, and the checks against
   the bands, the f-sum rule and the Chern number up to 10^6 orbitals, with
-  where a k-mesh still wins. Open: the GPU, the Hall response at finite
-  frequency and the SHG.
+  where a k-mesh still wins. Since 14 November 2026 also the reactive part
+  (a Kramers-Kronig transform, with the Hall plateau at w -> 0 as a second
+  route) and the single-shot Kubo-Greenwood sigma_xx. Open: the GPU, the
+  SHG, and a wrong Kubo-Bastin sigma_xx with the Lorentz kernel (measured,
+  not repaired).
+
+- [`chebyshev_methods.md`](chebyshev_methods.md) -- the Chebyshev methods
+  of seven papers, each read from its TeX source (the Kubo-Bastin moments,
+  the single-shot Kubo-Greenwood conductivity, the first- and second-order
+  optical response, the moments between Bloch states and the disorder
+  self-energy, the conductance with absorbing potentials, the
+  Fourier-Chebyshev contraction and the orbital magnetization), against what
+  pyqula has, 14 November 2026: what is covered, what was built that day (the
+  reactive part and the single-shot conductivity, measured in
+  `kpm_optical_conductivity.md`, and `h.get_orbital_magnetization()`, with
+  its Streda slope against the Chern number and the finding that its
+  stochastic trace does not self-average), and what is open (a periodic
+  orbital field, the Fourier-Chebyshev contraction, random twists for the
+  KPM conductivity, an exact Lorentzian for the KPM DOS, the disorder
+  self-energy). It also records a defect found on the way: `h.add_peierls()`
+  on a periodic 2D supercell gives a non-Hermitian Bloch Hamiltonian, or the
+  wrong flux at the boundary, unless $B(\mathbf a_2)_y\Delta x$ is an
+  integer on every crossing bond, a stronger condition than the guide
+  states, and it makes a sparse Hamiltonian dense. Not repaired.
 
 - [`qtci_dos_green.md`](qtci_dos_green.md) -- the triangle and tetrahedron
   integration of the DOS (`h.get_dos(integration="triangle")`, `"qtci"`)
@@ -556,7 +578,8 @@ already reached once.
   eigenvectors made orthonormal inside degenerate levels (scipy routes a
   complex Hermitian matrix to the non-Hermitian driver, so every sum over a
   level double counted), an exact KPM route to unfolding from the primitive
-  Bloch states as start vectors (the KITE construction), and a Fermi-surface
+  Bloch states as start vectors (the moments between Bloch states of
+  arXiv:2110.00574), and a Fermi-surface
   and QPI mesh drawn in the primitive zone and mapped with $M$, for any
   supercell. It also records the two spectral functions of a non-Hermitian
   Hamiltonian (right-eigenvector weights, the default, and the biorthogonal
