@@ -386,7 +386,7 @@ def convolve(x,y,delta=None):
 
 
 def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
-        delta=0.01,npol=None,nk=100,operator=None,
+        delta=0.01,nk=100,operator=None,
         random=True,energies=None,info=False,write=None,
         **kwargs):
   """Density of states from a stochastic Chebyshev expansion, averaged
@@ -398,15 +398,18 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   kpmtk.kernels.jackson_npol). It sets the number of polynomials, about
   1.85 scale/delta, and the width narrows as sqrt(1-(E/scale)^2) away
   from E=0. The Jackson kernel makes each peak nearly a Gaussian, about
-  1.5 times taller than the Lorentzian of the same half width.
-  npol: the number of polynomials, given directly; when it is given it
-  wins over delta.
+  1.5 times taller than the Lorentzian of the same half width. The number
+  of polynomials is not an input: it always follows from scale and delta.
   energies: the Chebyshev series is evaluated at exactly these energies,
   so the value at one energy does not depend on which other energies are
   asked. Without them the DOS is returned on ne points over ewindow.
   scale: the whole spectrum must lie inside [-scale,scale]; it is raised to
   twice the largest energy asked for when it is smaller"""
   write = filewrite.resolve(write,True) # the call, else the global switch
+  if "npol" in kwargs: # it would reach kpm.pdos a second time
+      raise TypeError("get_dos(mode=\"KPM\") sets the number of polynomials "
+              "from scale and delta; pass delta for the energy resolution, "
+              "not npol="+str(kwargs["npol"]))
   operator = h.get_operator(operator)
   if energies is not None: # energies provided
       energies = np.array(energies,dtype=float).reshape(-1)
@@ -418,8 +421,7 @@ def dos_kpm(h,scale=10.0,ewindow=4.0,ne=10000,
   if random: ks = [np.random.random(3) for k in ks]
   ytot = np.zeros(ne) # initialize
   from .kpmtk.kernels import jackson_npol
-  if npol is None: npol = jackson_npol(scale,delta) # number of polynomials
-  npol = int(npol)
+  npol = int(jackson_npol(scale,delta)) # number of polynomials
   # dos_kpm's stochastic trace estimator (kpm.pdos) draws random vectors
   # confined to (and renormalized within) the operator's subspace, so it
   # converges to Tr[P f(H)]/Tr[P], the *per-state* projected DOS averaged

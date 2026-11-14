@@ -1,7 +1,7 @@
 import numpy as np
+import pytest
 
 from pyqula import geometry
-from pyqula.kpmtk.kernels import jackson_npol
 
 
 def _gapped_honeycomb():
@@ -12,12 +12,12 @@ def _gapped_honeycomb():
     return h
 
 
-def _kpm_dos(h, energies, **kwargs):
+def _kpm_dos(h, energies, delta=0.05, **kwargs):
     """The KPM DOS on a fixed k-mesh, with the random vectors of the
     stochastic trace drawn from the same seed on every call"""
     np.random.seed(7)
     return h.get_dos(mode="KPM", energies=energies, nk=20, random=False,
-            delta=0.05, write=False, **kwargs)
+            delta=delta, write=False, **kwargs)
 
 
 def test_kpm_dos_at_an_energy_does_not_depend_on_the_other_energies():
@@ -39,15 +39,15 @@ def test_kpm_dos_at_an_energy_does_not_depend_on_the_other_energies():
     assert abs(d_one[0]-d_dense[i]) < 1e-10
 
 
-def test_kpm_dos_takes_npol_as_the_resolution():
-    """npol gives the number of Chebyshev polynomials directly, and the
-    npol that delta stands for gives the same DOS as delta itself. It used
-    to raise a TypeError, since npol was computed from delta and passed a
-    second time"""
+def test_kpm_dos_takes_its_resolution_from_delta_alone():
+    """The number of polynomials follows from scale and delta and is not
+    an input, so npol= is refused with a message that says to pass delta.
+    It used to crash with a TypeError of a keyword given twice, since npol
+    was computed from delta and passed a second time"""
     h = _gapped_honeycomb()
     es = np.linspace(-3., 3., 61)
-    (_, d_delta) = _kpm_dos(h, es)
-    (_, d_npol) = _kpm_dos(h, es, npol=jackson_npol(10.0, 0.05))
-    assert np.max(np.abs(d_delta-d_npol)) < 1e-10
-    (_, d_coarse) = _kpm_dos(h, es, npol=40)
-    assert np.max(np.abs(d_coarse-d_delta)) > 1e-3 # npol is really used
+    (_, d_fine) = _kpm_dos(h, es)
+    (_, d_coarse) = _kpm_dos(h, es, delta=0.5)
+    assert np.max(np.abs(d_coarse-d_fine)) > 1e-3 # delta is really used
+    with pytest.raises(TypeError, match="pass delta"):
+        _kpm_dos(h, es, npol=40)

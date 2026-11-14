@@ -660,8 +660,10 @@ already reached once.
   lines of `CLAUDE.md` that say the mutators return what they modify, which
   they do not), the spellings for one sweep, and three candidate rules for
   the default temperature, the first decision. It also records two bugs of
-  the KPM density of states found on the way and repaired: a value that
-  depended on how many energies were asked, and a refused `npol`.
+  the KPM density of states found on the way: a value that depended on how
+  many energies were asked, repaired, and an `npol=` that crashed, which
+  is not an input any more (the number of polynomials follows from `scale`
+  and `delta`).
 
 Related, living elsewhere for historical reasons:
 `documentation/gpu_porting_plan.md` (jax/GPU roadmap).

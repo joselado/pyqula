@@ -174,8 +174,10 @@ interpolation, which also removes the interpolation error of the KPM
 k-resolved DOS, the other caller that passes energies.
 
 The second is that `h.get_dos(mode="KPM",npol=400)` raised a `TypeError`,
-since `npol` was computed from `delta` and then passed a second time. Now
-`npol` is accepted and wins over `delta`.
+since `npol` was computed from `delta` and then passed a second time. On 14
+November 2026 the maintainer chose that `npol` is not an input of
+`get_dos(mode="KPM")`: the number of polynomials always follows from `scale`
+and `delta`, and an `npol=` raises a `TypeError` that says to pass `delta`.
 
 The test is `tests/kpm/test_kpm_dos_energies.py`. It fails on the unfixed
 source, where three energies gave 0.042 against 0.327 on the dense grid of the
