@@ -263,6 +263,63 @@ def _interaction_matrices(g,Vr,**kwargs):
             for d,m in hv.get_hopping_dict().items()}
 
 
+def cells_within(g,rcut):
+    """The lattice vectors R = n1 a1 + n2 a2 + n3 a3 of every cell that can
+    hold a site closer than rcut to a site of the cell 0, as a list of
+    (n1,n2,n3), the cell 0 first. Along each periodic direction the range
+    is the extent of the unit cell plus rcut, in units of the spacing of
+    the lattice planes of that direction: a pair at a distance d <= rcut
+    has n_k = (d + r_i - r_j).b_k, so |n_k| <= rcut |b_k| + max|(r_i-r_j).b_k|.
+    Each direction gets its own range, so a long and thin supercell does not
+    pay the range of its long side along the short one."""
+    import itertools
+    nd = g.dimensionality
+    if nd==0: return [(0,0,0)]
+    r = np.array(g.r)
+    A = np.array([g.a1,g.a2,g.a3][:nd]) # periodic lattice vectors
+    B = np.linalg.pinv(A) # cell index of a vector R is R@B
+    frac = r@B # fractional coordinates of the sites
+    extent = np.max(frac,axis=0) - np.min(frac,axis=0)
+    # the margin covers the tolerance on the shell distances (1e-4 on the
+    # squared distance in distance_hopping_matrix) and the rounding
+    ncell = np.floor(extent + rcut*np.linalg.norm(B,axis=0) + 1e-3)
+    ranges = [range(-int(n),int(n)+1) for n in ncell] + [range(1)]*(3-nd)
+    cells = [tuple(int(x) for x in c) for c in itertools.product(*ranges)]
+    cells.remove((0,0,0))
+    return [(0,0,0)] + cells
+
+
+def shell_interaction(g,vs,nd=None):
+    """The coupling vs[n] between every pair of sites at the distance of
+    the (n+1)-th neighbor shell of g (g.neighbor_distances()), as a
+    spinless {direction: matrix} dictionary with m[i,j] the coupling of
+    the pair (r_i, r_j + R_d), with every cell that holds such a pair.
+
+    This is the V1/V2/V3 (and J1/J2/J3) shells of the interactions. They
+    used to be built with the multicell builder of get_hamiltonian, which
+    looks two cells away by default (nc=2), shorter than the third shell
+    on a small cell: on the one-site chain it dropped V3 entirely, with no
+    warning, in the mean field, the RPA and the Bethe-Salpeter kernel. Here
+    the cells are those within the farthest shell with a nonzero coupling
+    (cells_within), as for the Vr tail. A direction with no coupling is
+    left out, the cell 0 is always there.
+
+    nd: the shell distances, if the caller already has them."""
+    if nd is None: nd = g.neighbor_distances()
+    nd = np.array(nd,dtype=np.float64)[0:len(vs)]
+    vs = np.array(vs)[0:len(nd)]
+    used = [d for (d,v) in zip(nd,vs) if v!=0.]
+    cells = cells_within(g,max(used)) if len(used)>0 else [(0,0,0)]
+    mgenerator = distance_hopping_matrix(vs,nd)
+    r = np.array(g.r,dtype=np.float64)
+    out = dict()
+    for d in cells:
+        R = d[0]*np.array(g.a1) + d[1]*np.array(g.a2) + d[2]*np.array(g.a3)
+        m = np.array(mgenerator(r,r+R),dtype=np.complex128)
+        if d==(0,0,0) or np.any(m!=0.): out[d] = m
+    return out
+
+
 def distance_cut_interaction(g,Vr,rcut=None,name="Vr",onsite=True):
     """The pair interaction Vr(r1,r2) between every pair of sites closer
     than rcut (a pair at exactly rcut is kept), as a spinless

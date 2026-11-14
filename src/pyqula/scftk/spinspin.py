@@ -73,12 +73,9 @@ def _build_v(h, J1=0.0, J2=0.0, J3=0.0, Jr=None, nd=None, rcut=None):
     A Jr meant as a bond coupling only has to return zero at zero
     distance."""
     if nd is None: nd = h.geometry.neighbor_distances() # distances to the neighbor shells
-    mgenerator = specialhopping.distance_hopping_matrix(
-            [J1/2., J2/2., J3/2.], nd[0:3])
-    hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
-            mgenerator=mgenerator)
-    v = {tuple(d): np.array(m, dtype=np.complex128)
-            for d, m in hv.get_hopping_dict().items()}
+    # every cell that holds a pair of the three shells, however far
+    v = specialhopping.shell_interaction(h.geometry, [J1/2., J2/2., J3/2.],
+            nd)
     if Jr is not None: # every pair within rcut, whole distance shells,
         # halved as J1/J2/J3 are, see densitydensity.add_pair_interaction
         from .densitydensity import add_pair_interaction
@@ -349,11 +346,8 @@ def _build_density_v(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, Vr=None, nd=None,
     from .. import specialhopping
     from .densitydensity import obj2geometryarray
     if nd is None: nd = h.geometry.neighbor_distances()
-    mgenerator = specialhopping.distance_hopping_matrix(
-            [V1/2., V2/2., V3/2.], nd[0:3])
-    hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
-            mgenerator=mgenerator)
-    v = hv.get_hopping_dict()
+    v = specialhopping.shell_interaction(h.geometry, [V1/2., V2/2., V3/2.],
+            nd)
     if Vr is not None: # every pair within rcut, whole distance shells,
         # halved as V1/V2/V3 are, see densitydensity.add_pair_interaction
         from .densitydensity import add_pair_interaction

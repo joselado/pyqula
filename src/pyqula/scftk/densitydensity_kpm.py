@@ -349,10 +349,7 @@ def Vinteraction_kpm(h, V1=0.0, V2=0.0, V3=0.0, U=0.0, constrains=[],
     h = h.get_dense()
     nd = h.geometry.neighbor_distances()
     from .. import specialhopping
-    mgenerator = specialhopping.distance_hopping_matrix([V1/2.,V2/2.,V3/2.],nd[0:3])
-    hv = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
-            mgenerator=mgenerator)
-    v = hv.get_hopping_dict()
+    v = specialhopping.shell_interaction(h.geometry,[V1/2.,V2/2.,V3/2.],nd)
     if Vr is not None: # every pair within rcut, halved as in Vinteraction
         from .densitydensity import add_pair_interaction
         add_pair_interaction(v,h.geometry,Vr,rcut=rcut)

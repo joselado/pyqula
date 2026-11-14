@@ -312,11 +312,8 @@ def density_interaction(h,U=0.,V1=0.,V2=0.,V3=0.,Vr=None,rcut=None):
     """
     from .. import specialhopping
     nd = h.geometry.neighbor_distances() # neighbor shell distances
-    mgenerator = specialhopping.distance_hopping_matrix([V1,V2,V3],nd[0:3])
-    hv = h.geometry.get_hamiltonian(has_spin=False,is_multicell=True,
-            mgenerator=mgenerator)
-    v = {tuple(int(x) for x in d): np.array(m,dtype=np.complex128)
-            for d,m in hv.get_hopping_dict().items()} # spinless
+    # spinless, in every cell that holds a pair of the three shells
+    v = specialhopping.shell_interaction(h.geometry,[V1,V2,V3],nd)
     if Vr is not None:
         # onsite=False: the pair of a site with itself is dropped before
         # Vr is checked, so a tail that diverges at zero distance is taken

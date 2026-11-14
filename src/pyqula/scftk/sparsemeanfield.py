@@ -80,10 +80,11 @@ def interaction(h, V1=0.0, V2=0.0, V3=0.0, U=None, Vr=None, rcut=None,
     site. The pairs come from a KD-tree instead of evaluating every pair of
     sites.
 
-    Two differences with the dense builder, both where it truncates: the
-    shells reach every cell that holds one, while the dense one only looks
-    two cells away, and Vr on a finite system needs an explicit rcut, since
-    rcut=None means every pair there, which is N^2 bonds."""
+    One difference with the dense builder: Vr on a finite system needs an
+    explicit rcut, since rcut=None means every pair there, which is N^2
+    bonds. The shells reach every cell that holds one in both builders
+    (specialhopping.shell_interaction); the dense one used to look only two
+    cells away, which dropped the third shell of a small cell."""
     g = h.geometry
     n = len(g.r) # number of sites
     rows, cols, vals = dict(), dict(), dict()

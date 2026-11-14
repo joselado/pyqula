@@ -44,11 +44,9 @@ def _density_v(h,V1=0.,V2=0.,V3=0.,U=0.,Vr=None,nd=None,rcut=None):
     a_spin = -2U -- same physical U, same decomposition, opposite channel."""
     from .. import specialhopping
     if nd is None: nd = h.geometry.neighbor_distances()
-    mgenerator = specialhopping.distance_hopping_matrix(
-            [V1,V2,V3], nd[0:3]) # per bond, not the halved SCF storage
-    hv = h.geometry.get_hamiltonian(has_spin=False, is_multicell=True,
-            mgenerator=mgenerator)
-    v = hv.get_hopping_dict()
+    # per bond, not the halved SCF storage, in every cell that holds a pair
+    # of the three shells
+    v = specialhopping.shell_interaction(h.geometry, [V1,V2,V3], nd)
     if Vr is not None: # every pair within rcut, whole distance shells
         specialhopping.add_distance_cut_interaction(v, h.geometry, Vr,
                 rcut=rcut)
