@@ -779,6 +779,12 @@ class Hamiltonian():
       return multicell.supercell_hamiltonian(self,nsuper=ns,**kwargs)
     def supercell(self,*args,**kwargs):
       return self.get_supercell(*args,**kwargs)
+    def get_ultracell(self,hs,emax=None):
+      """The supercell hs of this unit cell, with any modulation added to
+      it, solved in the Bloch states of this unit cell with energy up to
+      emax (the ultra long-range method); see ultracell.Ultracell"""
+      from .ultracell import Ultracell
+      return Ultracell(self,hs,emax=emax)
     def set_finite_system(self,**kwargs):
       """ Transforms the system into a finite system"""
       return set_finite_system(self,**kwargs) 

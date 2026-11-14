@@ -474,6 +474,23 @@ Optional arguments
 
 Needs a spinful Hamiltonian
 
+## h.get_ultracell()
+Solve a supercell of this unit cell, with a modulation added to it, in the
+Bloch states of the unit cell (the ultra long-range method). Returns an
+`Ultracell`, whose methods are on [Other classes](reference-other.md). See
+[Long-range modulations](ultracell.md).
+
+Arguments:
+
+- hs: the supercell, built with `h.get_supercell()` and modified with the
+  usual methods. It must be diagonal, $n_1\times n_2\times n_3$ copies of the
+  unit cell, and keep every site
+
+Optional arguments:
+
+- emax=None: keep the states of the unit cell with energy up to `emax`;
+  `None` keeps all of them, and the result is the supercell exactly
+
 ## h.add_pairing()
 Add a superconducting pairing term with a given symmetry. The Hamiltonian
 becomes a Bogoliubov-de Gennes (BdG) Hamiltonian if it is not already (see

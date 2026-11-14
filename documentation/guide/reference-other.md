@@ -517,3 +517,89 @@ the sign of each value, so the spins are exactly $\pm1$, and raises
 Optional arguments:
 
 - name="SPIN.OUT": file name
+
+## Ultracell functions and methods
+
+An `Ultracell` is a supercell `hs` of a unit cell `h`, solved in the Bloch
+states of `h` with energy up to `emax`, and built by
+`u = h.get_ultracell(hs,emax=None)`. At a momentum $\mathbf k_S$ of the
+supercell its matrix is
+
+$$
+H_{\mathbf q m,\mathbf q'm'} = \delta_{\mathbf q\mathbf q'}\,\delta_{mm'}\,
+\varepsilon_m(\mathbf p_{\mathbf q})
++ \langle \mathbf p_{\mathbf q},m|\,\delta H\,|\mathbf p_{\mathbf q'},m'\rangle ,
+$$
+
+with $\mathbf p_{\mathbf q}$ the momenta of the unit cell that fold onto
+$\mathbf k_S$ and $\delta H$ the modulation. See
+[Long-range modulations](ultracell.md).
+
+### u.get_kdos_bands()
+The unfolded spectral function along a k-path of the unit cell, per unit
+cell. Without a modulation it is `h.get_kdos_bands()` of the unit cell.
+
+Optional arguments:
+
+- kpath: the k-path of the unit cell (generated if not given)
+- energies, delta, nk: energies, broadening $\delta$ and number of k-points
+- write=True: also write `KDOS_BANDS.OUT`
+
+Returns the position along the k-path, the energy and the spectral weight
+
+### u.get_dos()
+The density of states per unit cell.
+
+Optional arguments:
+
+- energies: the energies
+- delta=None: broadening; `None` takes the one `h.get_dos()` would use on
+  the mesh of the unit cell that the folded momenta form
+- nk=10: k-mesh of the ultracell in each direction
+- write=True: also write `DOS.OUT`
+
+Returns the energies and the density of states
+
+### u.get_ldos()
+The local density of states on each site of the supercell, with the
+normalization of `h.get_ldos()`.
+
+Optional arguments:
+
+- e=0.0: the energy
+- delta=0.001: broadening
+- nk=10: k-mesh of the ultracell in each direction
+- write=True: also write `LDOS.OUT`
+
+Returns `x`, `y` and the value on each site
+
+### u.get_vev()
+The expectation value on each site of the supercell, with the Fermi level at
+zero energy, as `h.get_vev()`. Without an operator it is the occupation of
+each site.
+
+Optional arguments:
+
+- operator=None: a name such as `"sz"`, or a matrix of the supercell
+- nk=10: k-mesh of the ultracell in each direction
+
+Returns an array over the sites of the supercell. Not available with Nambu
+
+### u.get_harmonics()
+The Fourier components over the cells of a quantity $f$ given on the sites of
+the supercell,
+$f_{\mathbf Q}(s)=\frac1N\sum_{\mathbf R}e^{-i\mathbf Q\cdot\mathbf R}f(\mathbf R,s)$,
+with $s$ a site of the unit cell. The phase of $f_{\mathbf Q}$ is measured
+from the cell the supercell builder calls $\mathbf R=0$; its modulus does not
+depend on it.
+
+Arguments:
+
+- values: one value per site of the supercell
+
+Returns the wavevectors $\mathbf Q$, in reduced coordinates of the unit
+cell, and the components, one column per site of the unit cell
+
+### u.get_hk_gen()
+The function of a momentum of the ultracell, in reduced coordinates of the
+supercell, that returns the ultracell matrix.

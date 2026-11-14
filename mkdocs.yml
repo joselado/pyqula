@@ -66,6 +66,7 @@ nav:
       - Spectral functions: spectral-functions.md
       - Quasiparticle interference: qpi.md
       - Band unfolding: unfolding.md
+      - Long-range modulations: ultracell.md
       - Altermagnets: altermagnets.md
   - Interactions:
       - Superconductivity: superconductivity.md

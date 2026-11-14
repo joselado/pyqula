@@ -103,6 +103,7 @@ From the [Jyvaskyla Summer School 2022](https://github.com/joselado/jyvaskyla_su
 - Spin splitting of collinear magnets and altermagnets [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/11_altermagnet_spin_splitting.ipynb)
 - Nonlinear spin conductivity and the X-wave index of altermagnets [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/12_nonlinear_spin_conductivity.ipynb)
 - Three-band model of transition metal dichalcogenides [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/13_three_band_tmdc.ipynb)
+- Ultra long-range modulations of the electronic structure [[notebook]](jupyter-notebooks/functionalities/single_particle_hamiltonians/14_ultracell_long_range.ipynb)
 
 ## Interacting mean-field Hamiltonians ##
 - Selfconsistent mean-field calculations with local/non-local interactions [[notebook]](jupyter-notebooks/functionalities/interacting_mean_field_hamiltonians/01_local_nonlocal_scf.ipynb)
