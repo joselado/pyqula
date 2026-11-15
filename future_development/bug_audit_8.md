@@ -15,6 +15,15 @@ moments, fix the normalization of `kpm.dos` and the occupied states of `kpm.tota
 give the crystal field, a pairing of known range and the Kane-Mele and Haldane second
 neighbors every cell within their range.
 
+The two optimizations were timed after they landed, at two threads, on a machine with a load
+of about 4, so the times are a ratio and not a reference. The ultracell matrix of spinful
+graphene with Rashba coupling on 24x24 cells (2304 orbitals, 1420 kept states at `emax=1.0`)
+is the same to the last bit, and the peak of its build goes from 9.1 to 7.5 matrices of the size
+of the result; the build goes from 0.66 to 0.59 s, and the call with the eigenstates stays at
+3.7 s, since the dense eigh dominates it. The spinful interaction of `Vinteraction_kpm` built
+with `np.kron` is identical to the double loop, and on 576 sites and 7 directions it takes
+0.09 s instead of 2.7 s.
+
 What follows is what was found and left: the findings that the verifier also judged real. Each
 entry gives the place, what is wrong and the concrete case. They were found by reading and none
 was run. Some are repairs outside the files of their area, some need a decision of the
