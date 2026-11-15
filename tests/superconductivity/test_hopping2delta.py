@@ -64,3 +64,31 @@ def test_hopping2deltaud_with_an_antisymmetric_hopping_is_a_pure_triplet():
         m = np.array(algebra.todense(h.get_hk_gen()(k)))
         assert np.max(np.abs(extract_singlet_pairing(m))) < 1e-12
         assert np.max(np.abs(extract_triplet_pairing(m)[2])) > 0.05
+
+
+def test_updn_block_is_the_double_loop_over_the_pairs():
+    """updn_block puts [[mud_ij,0],[0,mdu_ij]] on every pair of sites with
+    one of the two at least 1e-6, as the double loop over the pairs of
+    sites that it replaces did: a small entry is kept when its partner is
+    large, and dropped when both are small"""
+    import numpy as np
+    from pyqula.sctk.fastdeltaud import updn_block
+    rng = np.random.default_rng(1)
+    n = 7
+    mud = (rng.random((n, n)) - 0.5) + 1j*(rng.random((n, n)) - 0.5)
+    mdu = (rng.random((n, n)) - 0.5) + 1j*(rng.random((n, n)) - 0.5)
+    mud[rng.random((n, n)) < 0.4] = 0.
+    mdu[rng.random((n, n)) < 0.4] = 0.
+    mud[0, 1], mdu[0, 1] = 1e-8, 0.3 # kept, its partner is large
+    mud[2, 3], mdu[2, 3] = 1e-8, 0. # dropped, both below 1e-6
+    ref = np.zeros((2*n, 2*n), dtype=complex)
+    for i in range(n):
+        for j in range(n):
+            if abs(mud[i, j]) < 1e-6 and abs(mdu[i, j]) < 1e-6: continue
+            ref[2*i, 2*j] = mud[i, j]
+            ref[2*i+1, 2*j+1] = mdu[i, j]
+    out = updn_block(np.matrix(mud), np.matrix(mdu)).toarray()
+    assert out.shape == (2*n, 2*n)
+    assert np.array_equal(out, ref)
+    assert out[0, 2] == 1e-8 # the pair (0,1) is kept
+    assert out[4, 6] == 0. # the pair (2,3) is dropped

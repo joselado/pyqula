@@ -4,6 +4,24 @@ from scipy.sparse import bmat
 from .reorder import reorder
 from .. import algebra
 
+
+def updn_block(mud,mdu,tol=1e-6):
+    """The 2n x 2n up-down pairing block of n sites, the 2x2 block
+    [[mud_ij,0],[0,mdu_ij]] of each pair of sites with |mud_ij| or
+    |mdu_ij| at least tol, as a sparse matrix. It is built in one coo
+    construction from the nonzero pairs, the same values as the double
+    loop over the n x n pairs and the n x n list of blocks of bmat that
+    it replaces"""
+    mud,mdu = np.asarray(mud),np.asarray(mdu) # not an np.matrix
+    n = mud.shape[0] # number of sites
+    i,j = np.nonzero((np.abs(mud)>=tol) | (np.abs(mdu)>=tol)) # paired sites
+    rows = np.concatenate([2*i,2*i+1]) # up-dn, then dn-up
+    cols = np.concatenate([2*j,2*j+1])
+    data = np.concatenate([mud[i,j],mdu[i,j]])
+    return sp.coo_matrix((data,(rows,cols)),shape=(2*n,2*n),
+            dtype=np.complex128)
+
+
 def hopping2deltaud(H,T):
     """Given a hopping object T, return H plus the up-down pairing
 
@@ -23,14 +41,8 @@ def hopping2deltaud(H,T):
     T.turn_multicell() # multicell mode
     n = len(H.geometry.r) # number of sites
     def t2h(mud,mdu): # pairing matrix from its up-dn and dn-up site blocks
-      pout = [[None for i in range(n)] for j in range(n)] # initialize
-      for i in range(n): pout[i][i] = sp.identity(2)*0.
-      for i in range(n): # loop over sites
-        for j in range(n): # loop over sites
-            if np.abs(mud[i,j])<1e-6 and np.abs(mdu[i,j])<1e-6: continue
-            pout[i][j] = sp.csc_matrix([[mud[i,j],0.],[0.,mdu[i,j]]])
+      pout = updn_block(mud,mdu) # 2n x 2n electron-hole block
       diag = sp.identity(2*n)*0. # zero matrix
-      pout = bmat(pout) # convert to block matrix
       mout = [[diag,pout],[None,diag]] # output matrix
       mout = bmat(mout) # return full matrix
       return reorder(mout) # reorder the entries properly
