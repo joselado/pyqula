@@ -307,8 +307,12 @@ def shell_interaction(g,vs,nd=None):
     (cells_within), as for the Vr tail. A direction with no coupling is
     left out, the cell 0 is always there.
 
-    nd: the shell distances, if the caller already has them."""
-    if nd is None: nd = g.neighbor_distances()
+    nd: the shell distances, if the caller already has them. Without them
+    as many shells as couplings are asked for; the default of
+    neighbor_distances is four, so a fifth coupling was dropped. A shell
+    that the geometry does not have (a finite system with few distances)
+    has no pair, and its coupling is left out."""
+    if nd is None: nd = g.neighbor_distances(n=len(vs))
     nd = np.array(nd,dtype=np.float64)[0:len(vs)]
     vs = np.array(vs)[0:len(nd)]
     used = [d for (d,v) in zip(nd,vs) if v!=0.]
