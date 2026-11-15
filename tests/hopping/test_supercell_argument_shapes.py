@@ -59,14 +59,16 @@ def test_more_than_three_components_are_refused():
         h.get_supercell([2, 2, 1, 1])
 
 
-def test_a_supercell_matrix_is_refused_with_a_message_naming_the_geometry():
-    """geometry.get_supercell accepts a 3x3 matrix (a non-orthogonal
-    supercell); the Hamiltonian builder cannot, and used to fail with a
-    TypeError about scalar array indices."""
+def test_a_diagonal_supercell_matrix_is_the_repetitions():
+    """A 3x3 matrix used to be refused by the Hamiltonian builder; a
+    diagonal one must give the spectrum of the same repetitions
+    (tests/hopping/test_supercell_matrix.py has the general matrices)."""
     h = geometry.honeycomb_lattice().get_hamiltonian()
-    m = np.array([[2, 0, 0], [0, 2, 0], [0, 0, 1]])
-    with pytest.raises(NotImplementedError, match="get_supercell"):
-        h.get_supercell(m)
+    m = np.array([[2, 0, 0], [0, 3, 0], [0, 0, 1]])
+    k = [0.21, 0.37, 0.]
+    e1 = np.linalg.eigvalsh(h.get_supercell(m).get_dense().get_hk_gen()(k))
+    e2 = np.linalg.eigvalsh(h.get_supercell([2, 3]).get_dense().get_hk_gen()(k))
+    assert np.allclose(e1, e2, atol=1e-10)
 
 
 def test_the_padded_supercell_reproduces_the_primitive_spectrum():

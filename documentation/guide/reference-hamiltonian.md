@@ -474,6 +474,22 @@ Optional arguments
 
 Needs a spinful Hamiltonian
 
+## h.get_supercell()
+The same Hamiltonian written on a larger cell, with every term of `h` (spin-orbit
+coupling, exchange fields, complex hoppings, pairing) copied to each cell.
+
+Arguments
+
+- nsuper: a number or one number per direction multiplies the lattice vectors.
+  A 3x3 integer matrix $M$ gives a general supercell, with lattice vectors
+  $\mathbf a'_i=\sum_j M_{ij}\mathbf a_j$, for example `[[2,1,0],[-1,1,0],[0,0,1]]`
+  for the $\sqrt3\times\sqrt3$ cell of the honeycomb lattice
+
+At a momentum $\mathbf k_S$ of the supercell the bands are those of `h` at the
+$|\det M|$ momenta $M^{-1}(\mathbf k_S+\mathbf q)$ that fold onto it.
+
+Returns a new Hamiltonian, stored sparse
+
 ## h.get_ultracell()
 Solve a supercell of this unit cell, with a modulation added to it, in the
 Bloch states of the unit cell (the ultra long-range method). Returns an
@@ -483,8 +499,8 @@ Bloch states of the unit cell (the ultra long-range method). Returns an
 Arguments:
 
 - hs: the supercell, built with `h.get_supercell()` and modified with the
-  usual methods. It must be diagonal, $n_1\times n_2\times n_3$ copies of the
-  unit cell, and keep every site
+  usual methods. It can be along any integer matrix $M$, and it must keep
+  every site
 
 Optional arguments:
 

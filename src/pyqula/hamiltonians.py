@@ -758,11 +758,16 @@ class Hamiltonian():
         """Check if two hamiltonians are the same"""
         return hamiltonianmode.same_hamiltonian(self,*args,**kwargs)
     def get_supercell(self,nsuper,**kwargs):
-      """ Creates a supercell of a one dimensional system"""
+      """The supercell of nsuper repetitions along the lattice vectors (a
+      number, or one per direction), or along the rows of an integer 3x3
+      matrix M, A_supercell = M A, for any M (htk.supercell.matrix_supercell)"""
       # the contract is a new Hamiltonian, so the no-op cases return a copy
       # and never an alias of self, which the caller would then mutate
       if nsuper is None: return self.copy() # do nothing
       if self.dimensionality==0: return self.copy() # nothing to replicate
+      if np.array(nsuper).shape==(3,3): # a supercell matrix, A_S = M A
+          from .htk.supercell import matrix_supercell
+          return matrix_supercell(self,nsuper,**kwargs)
       try: 
           nsuper[0] # check if it is a tuple 
           ns = nsuper # array as input
@@ -1400,11 +1405,6 @@ def normalize_nsuper(h,nsuper):
   the supercell builder, and a three-component one on a 2d Hamiltonian
   built matrices of n1*n2*n3 cells next to a geometry of n1*n2, with
   nothing downstream noticing."""
-  if np.array(nsuper).shape==(3,3): # a supercell matrix
-      raise NotImplementedError("a non-orthogonal (3x3 matrix) supercell is "
-              "only implemented for the geometry, g.get_supercell(m); for a "
-              "Hamiltonian give the number of repetitions along each lattice "
-              "vector instead")
   ns = [n for n in nsuper] # as a list
   if len(ns)>3:
       raise ValueError("nsuper has "+str(len(ns))+" components, but a "

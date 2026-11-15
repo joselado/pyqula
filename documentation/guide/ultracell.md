@@ -111,12 +111,10 @@ An example is the $\sqrt3\times\sqrt3$ cell of a Kekule order of graphene. Its
 lattice vectors are $\mathbf A_S=M\mathbf A$ with an integer matrix $M$, and the
 momenta that fold onto $\mathbf k_S$ are then
 $\mathbf p_{\mathbf q}=M^{-1}(\mathbf k_S+\mathbf q)$. `h.get_supercell()` takes
-only the number of repetitions, so we build such a cell from the geometry, and
-add to it the same terms as to `h`:
+the matrix $M$ in place of the number of repetitions:
 
 ```python
-gs = g.get_supercell([[2,1,0],[-1,1,0],[0,0,1]]) # the sqrt3 x sqrt3 cell
-hs = gs.get_hamiltonian() # the same model as h, on the supercell
+hs = h.get_supercell([[2,1,0],[-1,1,0],[0,0,1]]) # the sqrt3 x sqrt3 cell
 u = h.get_ultracell(hs) # the momenta fold with the matrix of the cell
 ```
 

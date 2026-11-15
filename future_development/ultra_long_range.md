@@ -235,11 +235,16 @@ bound with a cut, for $\sqrt3\times\sqrt3$ and a seven-cell rotated honeycomb ce
 seven-cell and a sheared six-cell triangular cell, all with $P$ and $Q$ not the identity,
 and a chain; the unfolded spectral function against `operator="unfold"` and the
 harmonics of a plane wave on the cells; the rebuilt basis against the block of each
-momentum; the V1 mean field of the Kekule cell against "ed". `h.get_supercell()` takes
-only repetitions, so a non-diagonal supercell is built from its geometry,
-`g.get_supercell(M).get_hamiltonian()`, with the same terms added; a supercell
-Hamiltonian of a general `h` along a matrix $M$ is not built (the inverse of the
-averaged hoppings would give it).
+momentum; the V1 mean field of the Kekule cell against "ed". The same night
+`h.get_supercell(M)` learned any matrix (`htk/supercell.py`, `matrix_supercell`): every
+hopping of the unit cell from the cell $\mathbf R$ to $\mathbf R+\mathbf d$ goes to the
+copies in the cell $\mathbf R_j$ of the supercell with $\mathbf R+\mathbf d=\mathbf
+R_j+\mathbf DM$, found with the same diagonal form, which is the inverse of the averaged
+hoppings. Its test is the spectrum at a generic $\mathbf k_S$ against the unit cell at the
+folded momenta, with Rashba coupling, an exchange field, Haldane hoppings with a
+sublattice imbalance (without the imbalance, inversion maps $\mathbf k$ to $-\mathbf k$
+and a reversed direction of every hopping went unnoticed), s-wave pairing, a chain and a
+two-cell cubic supercell.
 
 ## The method, and what it becomes in a tight-binding basis
 

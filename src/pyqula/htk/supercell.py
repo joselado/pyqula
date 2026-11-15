@@ -40,3 +40,86 @@ def bulk2film(hin,n=10):
 
 
 
+
+
+def matrix_supercell(hin,M,sparse=True):
+    """The supercell Hamiltonian of h along an integer matrix M, with the
+    lattice vectors A_S = M A (rows, M of shape 3x3, the identity beyond the
+    dimensionality), for any M, diagonal or not.
+
+    The geometry is g.get_supercell(M), which records the cell R and the
+    unit-cell site of every site. A hopping of the unit cell from orbital a
+    of the cell R to orbital b of the cell R+d becomes, for every copy i of
+    a, the element between i and the copy j of b in the cell R_j with
+    R + d = R_j + D M, in the hopping of the supercell in the direction D.
+    The copies are found with the diagonal form P M Q = diag(n), in which
+    the cells of the supercell are a grid in R Q (ultracelltk/basis.py).
+    Spin and the electron-hole degree of freedom go with each site, as in
+    the unit cell. Returns a sparse Hamiltonian unless sparse=False, as
+    h.get_supercell does for repetitions"""
+    from scipy.sparse import coo_matrix, csc_matrix
+    from ..unfolding import get_supercell_map
+    from ..ultracelltk.basis import supercell_shape, pad3
+    from ..multicell import Hopping
+    h = hin.get_multicell() # a copy
+    if h.dimensionality==0: return h
+    dim = h.dimensionality
+    gs = h.geometry.get_supercell(np.array(M,dtype=int),store_primal=True)
+    Ms,replicas,primal = get_supercell_map(gs,h.geometry)
+    M3,P,Q,n = supercell_shape(Ms,dim)
+    Minv = np.linalg.inv(M3.astype(float))
+    N = int(np.prod(n)) # cells of the supercell
+    norb = h.intra.shape[0] # orbitals of the unit cell
+    nat0 = len(h.geometry.r)
+    if norb%nat0!=0 or len(gs.r)!=N*nat0:
+        raise ValueError("the supercell of matrix "+str(M3.tolist())+" has "
+                +str(len(gs.r))+" sites for "+str(N)+" cells of "+str(nat0)
+                +" sites, or the unit cell has no whole number of orbitals "
+                "per site")
+    f = norb//nat0 # orbitals per site (spin, electron-hole)
+    nats = len(gs.r)
+    rep3 = np.zeros((nats,3),dtype=int)
+    replicas = np.array(replicas,dtype=int).reshape(nats,-1)
+    rep3[:,0:replicas.shape[1]] = replicas[:,0:3]
+    primal = np.array(primal,dtype=int)
+    R = np.repeat(rep3,f,axis=0) # the cell of every orbital
+    alpha = np.repeat(primal*f,f) + np.tile(np.arange(f),nats)
+    def cell_index(Rs): # the cell inside the supercell, from the grid R Q
+        return np.ravel_multi_index(np.mod(Rs@Q,n[None,:]).T,tuple(n))
+    table = -np.ones((N,norb),dtype=int) # orbital of (cell, unit-cell orbital)
+    table[cell_index(R),alpha] = np.arange(len(alpha))
+    if np.any(table<0):
+        raise ValueError("the supercell does not hold every orbital of every "
+                "one of its cells")
+    copies = np.array([np.nonzero(alpha==a)[0] for a in range(norb)]) # (norb,N)
+    entries = dict() # direction D of the supercell -> (rows, cols, data)
+    for d,m in h.get_multihopping().get_dict().items():
+        m = coo_matrix(m)
+        if m.nnz==0: continue
+        rows = copies[m.row].ravel() # every copy i of a, entry by entry
+        Rt = R[rows] + pad3(d).astype(int)[None,:] # the cell R+d
+        cols = table[cell_index(Rt),np.repeat(m.col,N)] # the copy j of b
+        D = np.round((Rt-R[cols])@Minv).astype(int) # R+d = R_j + D M
+        data = np.repeat(m.data,N)
+        keys,inv = np.unique(D,axis=0,return_inverse=True)
+        inv = np.ravel(inv)
+        for ik,key in enumerate(keys):
+            s = inv==ik
+            e = entries.setdefault(tuple(int(x) for x in key),([],[],[]))
+            e[0].append(rows[s]) ; e[1].append(cols[s]) ; e[2].append(data[s])
+    dimS = len(alpha)
+    def matrix(D):
+        rows,cols,data = entries.get(D,([],[],[]))
+        if len(rows)==0: m = csc_matrix((dimS,dimS),dtype=np.complex128)
+        else: m = csc_matrix(coo_matrix((np.concatenate(data),
+                (np.concatenate(rows),np.concatenate(cols))),
+                shape=(dimS,dimS)))
+        return m if sparse else m.todense()
+    hr = h.copy()
+    hr.geometry = gs
+    hr.is_multicell = True
+    hr.is_sparse = bool(sparse)
+    hr.intra = matrix((0,0,0))
+    hr.hopping = [Hopping(d=np.array(D),m=matrix(D)) for D in entries
+            if D!=(0,0,0)]
+    return hr
